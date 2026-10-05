@@ -41,6 +41,7 @@ import {
   type CuentaMp,
 } from '@/lib/caja/cliente'
 import { Badge, Button, Field, Icono, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
+import { HeaderAcciones } from '@/components/layout/acciones'
 
 
 /** Un renglón del pedido. */
@@ -842,7 +843,7 @@ export function SiNo({ pregunta, valor, onCambio }: { pregunta: string; valor: b
  * feria: efectivo y transferencia van a las cuentas de feria (precio final, sin descuento extra).
  */
 export function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reglas) => void }) {
-  const [abierto, setAbierto] = useState(false)
+  const [abierto, setAbierto] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   // La cuenta de GN donde se ASIENTA la transferencia. Cualquiera de las dos ESPERA el pago en Mercado
@@ -865,7 +866,7 @@ export function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: 
   }
   const opciones = reglas.medios?.transferencia.opciones ?? []
   return (
-    <Plegable abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Formas de pago" ayuda="A qué cuenta van las transferencias y el modo feria. Sólo lo cambia un admin.">
+    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Formas de pago" ayuda="A qué cuenta van las transferencias, el modo feria y los billetes. Sólo lo cambia un admin.">
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
         <Field label="Las transferencias se asientan en (cuenta de Gestión Nube)">
           <Select value={String(reglas.transferenciaA ?? '')} disabled={guardando} onChange={(e) => guardar({ transferenciaA: Number(e.target.value) })} style={{ maxWidth: 420 }}>
@@ -904,18 +905,23 @@ export { textoDiferencia }
 
 /** Un dato del turno: rótulo chico arriba, el número grande abajo, en su color. */
 export function Dato({ rotulo, valor, tono = 'neutral', detalle }: { rotulo: string; valor: React.ReactNode; tono?: 'neutral' | 'brand' | 'success' | 'danger' | 'warning'; detalle?: React.ReactNode }) {
-  const fondo = { neutral: color.bg, brand: color.brandBg, success: color.successBg, danger: color.dangerBg, warning: color.warningBg }[tono]
   const tinta = { neutral: color.ink, brand: color.brand, success: color.successInk, danger: color.dangerInk, warning: color.warningInk }[tono]
   return (
-    <div style={{ background: fondo, borderRadius: radius.lg, padding: `${space[2]} ${space[3]}`, display: 'grid', gap: space[0.5], minWidth: 0 }}>
-      <span style={{ fontSize: font.xs, color: color.mut, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: weight.semibold }}>{rotulo}</span>
-      <span style={{ fontSize: font.xl, fontWeight: weight.bold, color: tinta, fontVariantNumeric: 'tabular-nums' }}>{valor}</span>
+    <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: `${space[3]}px ${space[3] + 2}px`, display: 'grid', gap: space[0.5], minWidth: 0 }}>
+      <span style={{ fontSize: font.sm, color: color.mut, fontWeight: weight.semibold }}>{rotulo}</span>
+      <span style={{ fontSize: font.xl + 2, fontWeight: weight.heavy, letterSpacing: '-0.01em', color: tinta, fontVariantNumeric: 'tabular-nums' }}>{valor}</span>
       {detalle && <span style={{ fontSize: font.xs, color: color.mut }}>{detalle}</span>}
     </div>
   )
 }
 const tonoDiferencia = (d: number) => (Math.abs(d) < 0.005 ? 'success' : 'danger') as 'success' | 'danger'
-const grillaDatos: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: space[2] }
+/** Para la tabla de los turnos cerrados (prototipo): cuadrado verde, hasta $1.000 ámbar, más rojo. */
+const tintaDiferencia = (d: number) => (Math.abs(d) < 0.005 ? color.successInk : Math.abs(d) <= 1000 ? color.warningInk : color.dangerInk)
+const grillaDatos: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: space[2] + 2 }
+/** Las tablas chicas de la pestaña: forma de pago y últimos turnos. */
+const th: React.CSSProperties = { textAlign: 'left', fontSize: font.xs, textTransform: 'uppercase', letterSpacing: '0.06em', color: color.mut, fontWeight: weight.semibold, padding: `0 ${space[2]}px ${space[1.5]}px 0`, borderBottom: `1px solid ${color.line}`, whiteSpace: 'nowrap' }
+const td: React.CSSProperties = { padding: `${space[2]}px ${space[2]}px ${space[2]}px 0`, borderBottom: `1px solid ${color.bg2}`, whiteSpace: 'nowrap' }
+const der: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
 
 /** El turno que se acaba de cerrar: Esperado · Contado · Diferencia, ⛔ una frase. */
 export function AvisoCierre({ t }: { t: Turno }) {
@@ -1019,7 +1025,7 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
             <Input value={nota} onChange={(e) => setNota(e.target.value)} autoComplete="off" />
           </Field>
           {r?.cobrosGN === null && <span style={{ color: color.warningInk }}>Cobros de Gestión Nube: sin leer. Se releen al cerrar.</span>}
-          {!!r?.esperando.length && <span style={{ color: color.warningInk }}>Transferencias en espera: {r.esperando.length}. Si llegan después, ⛔ entran en el cierre.</span>}
+          {!!r?.esperando.length && <span style={{ color: color.warningInk }}>Transferencias en espera: {r.esperando.length}. Si llegan después, no entran en el cierre.</span>}
         </div>
       }
       onUsar={async (total, conteo) => {
@@ -1093,7 +1099,7 @@ export function SalidaModal({ onCerrar, onListo }: { onCerrar: () => void; onLis
  * venta en el local. Suma al efectivo esperado: la plata está en el cajón (Bruno, 4-oct).
  */
 export function CobrosGN({ r }: { r: ResumenTurno }) {
-  if (r.cobrosGN === null) return <span style={{ color: color.warningInk }}>Cobros de Gestión Nube: sin leer (⛔ suman al esperado).</span>
+  if (r.cobrosGN === null) return <Notice tone="warning">Cobros de Gestión Nube: sin leer. No suman al esperado.</Notice>
   if (r.cobrosGN.length === 0) return null
   return (
     <div style={{ display: 'grid', gap: space[0.5] }}>
@@ -1110,7 +1116,7 @@ export function CobrosGN({ r }: { r: ResumenTurno }) {
 }
 
 /** Lo que hay que saber del turno abierto, en datos: lo comparten la pestaña y el POS. */
-export function ResumenTurnoDatos({ turno }: { turno: Turno }) {
+export function ResumenTurnoDatos({ turno, conTabla = false }: { turno: Turno; /** La pestaña muestra la tabla por cuenta a la vista; el POS, sólo en «Ver detalle». */ conTabla?: boolean }) {
   const [verDetalle, setVerDetalle] = useState(false)
   const r = turno.resumen
   const intermedios = turno.conteos?.intermedios ?? []
@@ -1131,9 +1137,31 @@ export function ResumenTurnoDatos({ turno }: { turno: Turno }) {
           />
         )}
       </div>
-      {r.esperando.length > 0 && <span style={{ color: color.warningInk }}>Transferencias en espera: {r.esperando.length} (⛔ suman hasta que lleguen)</span>}
-      {r.sinGN.length > 0 && <span style={{ color: color.warningInk }}>Cobradas sin llegar a Gestión Nube: {r.sinGN.length} (suman al turno)</span>}
+      {r.esperando.length > 0 && <Notice tone="warning">Transferencias en espera: {r.esperando.length}. No suman hasta que lleguen.</Notice>}
+      {r.sinGN.length > 0 && <Notice tone="warning">Cobradas sin llegar a Gestión Nube: {r.sinGN.length}. Suman al turno.</Notice>}
       <CobrosGN r={r} />
+      {conTabla && r.porCuenta.length > 0 && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={th}>Cuenta</th>
+                <th style={{ ...th, ...der }}>Cobros</th>
+                <th style={{ ...th, ...der }}>Monto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {r.porCuenta.map((c) => (
+                <tr key={c.cuenta}>
+                  <td style={td}>{c.nombre}</td>
+                  <td style={{ ...td, ...der }}>{c.cobros}</td>
+                  <td style={{ ...td, ...der, fontWeight: weight.semibold }}>{plata(c.monto)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <div>
         <Button size="sm" variant="ghost" onClick={() => setVerDetalle(!verDetalle)}>
           {verDetalle ? 'Ocultar detalle' : 'Ver detalle'}
@@ -1141,7 +1169,7 @@ export function ResumenTurnoDatos({ turno }: { turno: Turno }) {
       </div>
       {verDetalle && (
         <div style={{ display: 'grid', gap: space[1], maxWidth: 560 }}>
-          {r.porCuenta.map((c) => (
+          {!conTabla && r.porCuenta.map((c) => (
             <div key={c.cuenta} style={{ display: 'flex', gap: space[3], borderTop: `1px solid ${color.line}`, paddingTop: space[1] }}>
               <span style={{ flex: 1 }}>{c.nombre}</span>
               <span style={{ color: color.mut }}>{c.cobros === 1 ? '1 cobro' : `${c.cobros} cobros`}</span>
@@ -1176,59 +1204,37 @@ export function ResumenTurnoDatos({ turno }: { turno: Turno }) {
  */
 export function TurnoCaja({
   turno,
-  ultimos,
   billetes,
   esMio,
+  antes,
   onCambio,
   onCerrado,
 }: {
   turno: Turno | null
-  ultimos: Turno[]
   billetes: number[]
   /** Fase C: el conteo intermedio lo hace sólo la cuenta que abrió la caja (el servidor contesta 403). */
   esMio: boolean
+  /** Lo que va primero en el header de la sección («Abrir POS»): un solo portal, en orden. */
+  antes?: React.ReactNode
   onCambio: (t?: Turno) => void
   onCerrado: (t: Turno) => void
 }) {
   const [abierto, setAbierto] = useState<null | 'abrir' | 'contar' | 'salida' | 'cerrar'>(null)
   const [cerrado, setCerrado] = useState<Turno | null>(null)
-  const [verUltimos, setVerUltimos] = useState(false)
-
-  const ultimosPlegable = ultimos.length > 0 && (
-    <Plegable abierto={verUltimos} onToggle={() => setVerUltimos(!verUltimos)} titulo="Últimos turnos" ayuda="Los turnos cerrados: esperado, contado y diferencia del efectivo.">
-      <div style={{ display: 'grid', gap: space[1], fontSize: font.sm }}>
-        {ultimos.map((t) => {
-          const d = t.resumen?.diferencia ?? Number(t.contado) - Number(t.esperado)
-          return (
-            <div key={t.id} style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', borderTop: `1px solid ${color.line}`, paddingTop: space[1] }}>
-              <span style={{ minWidth: 160 }}>
-                {diaAr(t.abierto_en)} {horaAr(t.abierto_en)}–{t.cerrado_en ? horaAr(t.cerrado_en) : ''}
-              </span>
-              <span style={{ color: color.mut, minWidth: 110 }}>{t.abierto_por ?? ''}</span>
-              <span>Esperado {plata(Number(t.esperado))}</span>
-              <span>Contado {plata(Number(t.contado))}</span>
-              <b style={{ color: tonoDiferencia(d) === 'success' ? color.successInk : color.dangerInk }}>{textoDiferencia(d)}</b>
-              {t.nota && <span style={{ color: color.mut }}>«{t.nota}»</span>}
-            </div>
-          )
-        })}
-      </div>
-    </Plegable>
-  )
 
   if (!turno) {
     return (
       <>
+        {antes && <HeaderAcciones>{antes}</HeaderAcciones>}
         {cerrado && <AvisoCierre t={cerrado} />}
-        <SectionCard
-          title="Sin turno abierto"
-          actions={
-            <Button tone="success" variant="solid" onClick={() => setAbierto('abrir')}>
+        <SectionCard>
+          <div style={{ display: 'grid', justifyItems: 'start', gap: space[2] }}>
+            <b style={{ fontSize: font.lg + 1, color: color.ink }}>Sin turno abierto</b>
+            <span style={{ color: color.mut, fontSize: font.base }}>El POS cobra con un turno abierto.</span>
+            <Button tone="brand" variant="solid" onClick={() => setAbierto('abrir')}>
               Abrir turno
             </Button>
-          }
-        >
-          <span style={{ color: color.mut, fontSize: font.sm }}>Sin turno abierto la Caja ⛔ cobra.</span>
+          </div>
         </SectionCard>
         {abierto === 'abrir' && (
           <AbrirTurnoModal
@@ -1241,32 +1247,31 @@ export function TurnoCaja({
             }}
           />
         )}
-        {ultimosPlegable}
       </>
     )
   }
 
   return (
     <>
+      <HeaderAcciones>
+        {antes}
+        {esMio && (
+          <Button variant="outline" onClick={() => setAbierto('contar')}>
+            Contar billetes
+          </Button>
+        )}
+        <Button variant="outline" onClick={() => setAbierto('salida')}>
+          Cargar salida
+        </Button>
+        <Button tone="danger" variant="outline" onClick={() => setAbierto('cerrar')}>
+          Cerrar turno
+        </Button>
+      </HeaderAcciones>
       <SectionCard
-        title={`Turno abierto · desde ${horaAr(turno.abierto_en)} · ${turno.abierto_por ?? ''}`}
-        actions={
-          <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-            {esMio && (
-              <Button size="sm" variant="outline" onClick={() => setAbierto('contar')}>
-                Contar billetes
-              </Button>
-            )}
-            <Button size="sm" variant="outline" onClick={() => setAbierto('salida')}>
-              Cargar salida
-            </Button>
-            <Button size="sm" tone="danger" variant="outline" onClick={() => setAbierto('cerrar')}>
-              Cerrar turno
-            </Button>
-          </div>
-        }
+        title="Turno abierto"
+        actions={<span style={{ color: color.mut, fontSize: font.base }}>desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}</span>}
       >
-        <ResumenTurnoDatos turno={turno} />
+        <ResumenTurnoDatos turno={turno} conTabla />
       </SectionCard>
       <ModalesTurno
         que={abierto}
@@ -1283,8 +1288,47 @@ export function TurnoCaja({
           onCerrado(t)
         }}
       />
-      {ultimosPlegable}
     </>
+  )
+}
+
+/** Los turnos cerrados, en tabla (prototipo): cuándo, quién, esperado, contado y la diferencia en su color. */
+export function UltimosTurnos({ ultimos }: { ultimos: Turno[] }) {
+  const [abierto, setAbierto] = useState(false)
+  if (ultimos.length === 0) return null
+  return (
+    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Últimos turnos" ayuda="Los turnos cerrados: esperado, contado y diferencia del efectivo.">
+      <div style={{ overflowX: 'auto', fontSize: font.base }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={th}>Cierre</th>
+              <th style={th}>Cuenta</th>
+              <th style={{ ...th, ...der }}>Esperado</th>
+              <th style={{ ...th, ...der }}>Contado</th>
+              <th style={{ ...th, ...der }}>Diferencia</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ultimos.map((t) => {
+              const d = t.resumen?.diferencia ?? Number(t.contado) - Number(t.esperado)
+              return (
+                <tr key={t.id} title={t.nota ? `Nota: ${t.nota}` : undefined}>
+                  <td style={td}>
+                    {diaAr(t.abierto_en)} {horaAr(t.abierto_en)}–{t.cerrado_en ? horaAr(t.cerrado_en) : ''}
+                    {t.nota && <span style={{ color: color.mut }}> · «{t.nota}»</span>}
+                  </td>
+                  <td style={td}>{t.abierto_por ?? ''}</td>
+                  <td style={{ ...td, ...der }}>{plata(Number(t.esperado))}</td>
+                  <td style={{ ...td, ...der }}>{plata(Number(t.contado))}</td>
+                  <td style={{ ...td, ...der, fontWeight: weight.bold, color: tintaDiferencia(d) }}>{textoDiferencia(d)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Plegable>
   )
 }
 
@@ -1354,6 +1398,7 @@ export function ProductosFeria({ reglas, onGuardadas }: { reglas: Reglas; onGuar
 
   return (
     <Plegable
+      variante="tarjeta"
       abierto={abierto}
       onToggle={() => setAbierto(!abierto)}
       titulo={`Productos de feria (${lista.length})`}
@@ -1363,9 +1408,9 @@ export function ProductosFeria({ reglas, onGuardadas }: { reglas: Reglas; onGuar
         {lista.length === 0 ? (
           <span style={{ color: color.mut, fontSize: font.sm }}>Productos de feria: ninguno.</span>
         ) : (
-          <div style={{ display: 'grid', gap: space[1] }}>
+          <div style={{ display: 'grid', gap: space[1.5] }}>
             {lista.map((p) => (
-              <div key={p.id} style={{ display: 'flex', gap: space[2], alignItems: 'center', borderBottom: `1px solid ${color.line}`, paddingBottom: space[1] }}>
+              <div key={p.id} style={{ display: 'flex', gap: space[2], alignItems: 'center', border: `1px solid ${color.line}`, borderRadius: radius.md, padding: `${space[1.5]}px ${space[2] + 2}px` }}>
                 <Badge tone="warning">Feria</Badge>
                 <span style={{ flex: 1 }}>{p.nombre || `Producto ${p.id}`}</span>
                 <Button size="sm" variant="ghost" disabled={guardando} onClick={() => guardar(lista.filter((x) => x.id !== p.id))}>
@@ -1432,6 +1477,7 @@ async function logoDesdeArchivo(archivo: File): Promise<LogoTicket> {
 /** Sólo admin: el logo que va arriba del ticket (Bruno, 5-oct). Sin logo, el ticket lleva el nombre. */
 export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | null; onGuardado: (l: LogoTicket | null) => void }) {
   const [abierto, setAbierto] = useState(false)
+  const archivo = useRef<HTMLInputElement>(null)
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   async function guardar(l: LogoTicket | null) {
@@ -1440,7 +1486,7 @@ export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | n
     try {
       const r = await guardarLogo(l)
       onGuardado(r.ticket_logo)
-      setMsg(l ? 'Logo guardado: sale en el próximo ticket.' : 'Logo sacado: el ticket lleva el nombre.')
+      setMsg(l ? 'Logo guardado: sale en el próximo ticket.' : 'Logo eliminado: el ticket lleva el nombre.')
     } catch (e) {
       setMsg((e as Error).message)
     } finally {
@@ -1448,7 +1494,7 @@ export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | n
     }
   }
   return (
-    <Plegable abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Logo del ticket" ayuda="PNG o JPG; se achica a 400 px de ancho. Sólo lo cambia un admin.">
+    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Logo del ticket" ayuda="PNG o JPG; se achica a 400 px de ancho. Sólo lo cambia un admin.">
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
         {inicial ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -1457,10 +1503,14 @@ export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | n
           <span style={{ color: color.mut, fontSize: font.sm }}>Logo: ninguno (el ticket lleva el nombre).</span>
         )}
         <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+          <Button size="sm" variant="outline" loading={guardando} onClick={() => archivo.current?.click()}>
+            Cargar logo
+          </Button>
           <input
+            ref={archivo}
             type="file"
             accept="image/png,image/jpeg"
-            disabled={guardando}
+            hidden
             onChange={async (e) => {
               const f = e.target.files?.[0]
               e.target.value = ''
@@ -1474,7 +1524,7 @@ export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | n
           />
           {inicial && (
             <Button size="sm" variant="ghost" disabled={guardando} onClick={() => guardar(null)}>
-              Sacar logo
+              Eliminar logo
             </Button>
           )}
         </div>
@@ -1490,6 +1540,7 @@ export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | n
  * Cargar una cuenta nueva (con su llave) sigue siendo en Pagos recibidos.
  */
 export function DeteccionTransferencias({ admin }: { admin: boolean }) {
+  const [abierto, setAbierto] = useState(false)
   const [datos, setDatos] = useState<{ enUso: CuentaMp | null; cuentas?: CuentaMp[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -1510,25 +1561,29 @@ export function DeteccionTransferencias({ admin }: { admin: boolean }) {
       setGuardando(false)
     }
   }
+  const enUso = datos ? (datos.enUso?.nombre ?? 'ninguna cuenta (cargarla en Pagos recibidos)') : '…'
   return (
-    <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', background: color.brandBg, border: `1px solid ${color.brandBorder}`, borderRadius: radius.lg, padding: `${space[2]} ${space[3]}` }}>
-      <span style={{ display: 'grid', placeItems: 'center', width: 32, height: 32, borderRadius: radius.md, background: color.surface, color: color.brand }}>
-        <Icono nombre="transferencia" size={18} />
-      </span>
-      <span style={{ color: color.ink2 }}>
-        Las transferencias se detectan en: <b style={{ color: color.ink }}>{datos ? (datos.enUso?.nombre ?? 'ninguna cuenta (cargarla en Pagos recibidos)') : '…'}</b>
-      </span>
-      {admin && datos?.cuentas && datos.cuentas.length > 1 && (
-        <Select value={String(datos.enUso?.cuenta_id ?? '')} disabled={guardando} onChange={(e) => usar(Number(e.target.value))} style={{ maxWidth: 320 }} aria-label="Cambiar la cuenta de Mercado Pago">
-          {datos.cuentas.map((x) => (
-            <option key={x.cuenta_id} value={x.cuenta_id}>
-              {x.nombre}
-            </option>
-          ))}
-        </Select>
-      )}
-      {error && <span style={{ color: color.dangerInk, fontSize: font.sm }}>{error}</span>}
-    </div>
+    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Las transferencias se detectan en" ayuda={`${enUso} · la misma cuenta que usa Pagos recibidos.`}>
+      <div style={{ display: 'grid', gap: space[2], maxWidth: 560 }}>
+        {admin && datos?.cuentas && datos.cuentas.length > 1 ? (
+          <Field label="Cuenta de Mercado Pago">
+            <Select value={String(datos.enUso?.cuenta_id ?? '')} disabled={guardando} onChange={(e) => usar(Number(e.target.value))} style={{ maxWidth: 320 }}>
+              {datos.cuentas.map((x) => (
+                <option key={x.cuenta_id} value={x.cuenta_id}>
+                  {x.nombre}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
+          <span style={{ display: 'inline-flex', gap: space[2], alignItems: 'center', color: color.ink2 }}>
+            <Icono nombre="transferencia" size={16} /> Cuenta de Mercado Pago: <b style={{ color: color.ink }}>{enUso}</b>
+          </span>
+        )}
+        <span style={{ fontSize: font.sm, color: color.mut }}>Toda transferencia queda esperando el pago, sin ticket, hasta que aparece en esta cuenta.</span>
+        {error && <span style={{ color: color.dangerInk, fontSize: font.sm }}>{error}</span>}
+      </div>
+    </Plegable>
   )
 }
 
@@ -1552,7 +1607,7 @@ export function PoliticaCambio({ inicial, onGuardada }: { inicial: string | null
     }
   }
   return (
-    <Plegable abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Política de cambio del ticket" ayuda="El texto que sale al pie de cada ticket. Sólo lo cambia un admin.">
+    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Política de cambio del ticket" ayuda="El texto que sale al pie de cada ticket. Sólo lo cambia un admin.">
       <div style={{ display: 'grid', gap: space[2], maxWidth: 560 }}>
         <textarea
           value={texto}

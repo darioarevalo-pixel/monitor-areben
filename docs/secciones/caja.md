@@ -155,12 +155,21 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   cualquiera con permiso de Caja. Las transferencias que esperan se siguen EN EL POS (imprime el ticket
   cuando llega). Sin el shell, el POS fuerza la marca Zattia antes de montar (el precio sale de sus
   datos) y pide él las promos de la Agenda.
+- 🔑 **La pestaña, rediseño fase 2 (5-oct, prototipo aprobado)**: las acciones del turno («Contar
+  billetes», «Cargar salida», «Cerrar turno») van al HEADER con `HeaderAcciones`, en UN portal que arma
+  `TurnoCaja` (con «Abrir POS» primero, por la prop `antes`); la tarjeta muestra los mosaicos y la tabla
+  por cuenta a la vista. La configuración son `Plegable variante="tarjeta"` apilados (Formas de pago
+  abierto de entrada) y «Últimos turnos» es una tabla (`UltimosTurnos`), al final. 🔑 **«Así sale el
+  ticket (80 mm)»** (`VistaTicket.tsx`, sólo admin) dibuja en SVG las MISMAS `ops` de `armarTicket` con un
+  ticket de MUESTRA y el logo y la política guardados: ⛔ un HTML propio, que diría otra cosa que el papel.
 - ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
   turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
 - ⚠️ Varias partes por transferencia en una venta se esperan como UNA transferencia por la suma.
 
 ## Pendiente
 
+- Rediseño fase 2 (la pestaña): ⛔ vista en prod — con turno y sin turno, los 6 plegables, cambiar la
+  política y verla en la vista previa, y los mosaicos del POS con el `Dato` nuevo.
 - F5: ⛔ probado con una transferencia real (la verificación del plan).
 - ⚠️ La carrera de dos pantallas cruzando la MISMA venta la cubre el `.eq('estado','esperando_pago')`
   del update, y ⛔ tiene test (el mock de la base es secuencial).
