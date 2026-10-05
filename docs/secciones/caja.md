@@ -45,11 +45,23 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - 🔑 **Se busca también por NOMBRE y talle** (`lib/caja/buscar.core.js`): sólo si el código y el SKU ⛔
   encontraron nada y hay letras. Cada palabra es comienzo de una del nombre o el talle entero, en
   cualquier orden. Elegir de la lista trae la variante por `product_id`+`size_id`, ⛔ por barcode.
-- 🔑 **La lista aparece MIENTRAS se escribe** (`action=buscar`, Bruno 4-oct): con 3 caracteres y alguna
-  letra (un código numérico del lector ⛔ la abre), con foto y precio de etiqueta. Por defecto sólo lo
-  que hay en el LOCAL (stock de anoche: ⛔ pega a GN, tipear ⛔ gasta el cupo); «Mostrar sin stock»
-  suma el resto para venderlo igual. ⛔ Muestra el número de anoche (confundía: lo vendido hoy ⛔ está):
-  el stock real lo dice el renglón al elegirla. El Enter sigue buscando por código primero.
+- 🔑 **La lista aparece MIENTRAS se escribe, POR PRODUCTO** (`action=buscar`, Bruno 4 y 5-oct): desde 2
+  caracteres con alguna letra (un código numérico del lector ⛔ la abre). La tarjeta es el PRODUCTO
+  (`productosPorStock`, tope por producto) con «Elegir variante» ⇒ modal con las variantes del LOCAL y
+  el resto tras «Mostrar sin stock»; con una sola variante va directo. Stock de anoche: ⛔ pega a GN,
+  tipear ⛔ gasta el cupo, y ⛔ se muestra el número (confundía). Enter con UN producto a la vista abre
+  el modal; si no, busca por código primero. 🔴 `inventario` se lee **paginado**: PostgREST corta en
+  1.000 filas callado y «top» salía recortado.
+- 🔑 **La foto es la del COLOR** (Bruno, 5-oct): `image_url` de cada variante del audit de TN
+  (`traerAudit(..., { variantes: true })`), cruzada por SKU (TN y GN usan el mismo); sin foto propia, la
+  del producto.
+- 🔑 **Productos de FERIA TRABADOS** (Bruno, 5-oct): un admin los marca en la pestaña
+  (`caja_config.reglas.feriaProductos: [{ id, nombre }]`, por `bajadas`). Precio final: sólo efectivo o
+  transferencia, a la cuenta de feria, sin el % de la forma de pago. Pedido mixto = cada prenda con su
+  regla: `pagosDeMedio` arma `[{ cuenta de feria, base: lo de feria }, { cuenta normal }]` y 🔴 el
+  servidor lo EXIGE con `exigirFeria` (400). Con feria, débito/crédito y «Varios pagos» se traban. El
+  descuento a mano a la venta se reparte como siempre. ⚠️ Mixto por transferencia son DOS pagos de
+  transferencia: choca con «una sola transferencia por venta» cuando toda transferencia espere.
 - 🔑 **La cajera ve CUATRO formas de pago; la cuenta de GN es INTERNA** (Bruno, 4-oct). `cuentaDeMedio`
   (`core.core.js`) la resuelve con `caja_config.reglas.medios` (`sql/migrate-caja-medios.sql`):
   Efectivo 12921 · Débito 20196 · Transferencia ⇒ `transferenciaA` (13015 Areben Comercial, espera MP |
@@ -70,6 +82,14 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - ⚠️ Cada unidad viaja en su renglón con `quantity: 1`: con cantidad > 1, cómo toma GN el descuento
   en pesos ⛔ está medido.
 - ⚠️ La política de cambio del pie del ticket la escribe un admin desde la pantalla (`caja_config`).
+- 🔑 **El ticket es el de GN** (Bruno, 5-oct): logo, `Comprobante: #N`, `Fecha:` con el día, `Cliente:`,
+  `Cant. x Precio / Descripción / Total`, TOTAL, RECIBIMOS, SALDO (y VUELTO), política y fecha de
+  registro. ⛔ Las formas de pago abajo. Los descuentos siguen en su renglón (sin ellos el total ⛔ cierra).
+  **Logo**: `caja_config.ticket_logo` (`sql/migrate-caja-logo.sql`), lo sube un admin; la pantalla lo
+  achica a 400 px y lo pasa a PNG con fondo blanco. Sin la columna, el ticket sale con el nombre.
+- 🔑 **El turno en TÉRMINOS** (Bruno, 5-oct): `Esperado · Contado · Diferencia`, ⛔ «tenía que haber… se
+  contaron…». Abrir, contar, cargar salida y cerrar son MODALES (`ModalesTurno`), los mismos en la
+  pestaña y en el POS, que ⛔ repite la tarjeta del turno.
 - 🔑 **Por Transferencia la venta ESPERA el pago (F5)**: la cuenta con `esperaPago` en `caja_config`
   (hoy sólo 13015) deja la venta en `esperando_pago` —⛔ GN, ⛔ ticket, ⛔ mail— hasta que aparece en
   MP un pago aprobado del **monto exacto** (`espera_monto`, sólo la parte de la transferencia).
@@ -113,9 +133,11 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   total con el MISMO núcleo** y, si ⛔ es el fondo o el contado, 400: el turno ⛔ queda con un conteo
   que dice una cosa y un monto que dice otra. El input se sigue pudiendo escribir a mano: entonces va
   sin billetes. Los billetes son `caja_config.reglas.billetes` (los cambia un admin en «Formas de
-  pago»); sin la lista, $20.000 a $100 sin monedas. **Los números se recuerdan**: cada cambio se anota
-  en la PC (`caja:conteo:zattia:<apertura|intermedio:id|cierre:id>`) y la calculadora arranca con lo
-  más nuevo entre eso y lo guardado en la base (el último intermedio, si ⛔ la apertura).
+  pago»); sin la lista, $20.000 a $100 sin monedas. 🔑 **Cada conteo arranca VACÍO** (Bruno, 5-oct:
+  traía el anterior): sólo vuelve el borrador SIN usar del mismo momento (`caja:conteo:zattia:<apertura|
+  intermedio:id|cierre:id>`, 12 h), y se olvida (`olvidarConteo`) cuando el servidor contestó. El botón
+  ES la acción —«Abrir turno», «Guardar conteo», «Cerrar turno»— y al abrir/cerrar se puede escribir el
+  total a mano (viaja sin billetes).
   `abierto_por_usuario` (`perfil.email`, si ⛔ `name`: el perfil ⛔ trae el usuario) es para la fase C.
 - 🔑 **Se cobra en el POS, ⛔ en la pestaña (fase C, Bruno 5-oct)**: `/pos` es una rama de
   `app/[[...seccion]]/page.tsx` (⛔ una ruta de Next: el tope de Hobby), sin menú, con el formato del POS

@@ -6,6 +6,7 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
+import type { LogoTicket } from '@/lib/caja/ticket'
 
 export type ReglaCuenta = { nombre: string; descuento: number; efectivo?: boolean; esperaPago?: boolean }
 export type Medio = 'efectivo' | 'transferencia' | 'debito' | 'credito'
@@ -22,7 +23,8 @@ export type ProductoFeria = { id: number; nombre: string }
 export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number; feria?: boolean; billetes?: number[]; feriaProductos?: ProductoFeria[] }
 /** Un descuento a mano, a una prenda o a toda la venta. */
 export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
-export type Config = { reglas: Reglas; politica_cambio: string | null }
+/** `ticket_logo`: el logo del ticket (null sin logo, o sin `sql/migrate-caja-logo.sql`). */
+export type Config = { reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null }
 
 /** Una cuenta de cobro de GN. `regla` en null ⇒ la Caja ⛔ la cobra (sin %, o con recargo). */
 export type CuentaGN = { id: number; nombre: string; regla: ReglaCuenta | null }
@@ -181,5 +183,6 @@ export const reintentarVenta = (id: string) => post<Resultado>({ action: 'reinte
 export const guardarPolitica = (texto: string) => post<{ politica_cambio: string | null }>({ action: 'politica', texto }, 'No se pudo guardar la política de cambio.')
 
 /** Sólo admin: a qué cuenta van las transferencias y el modo feria (bajadas de línea). */
+export const guardarLogo = (logo: LogoTicket | null) => post<{ ticket_logo: LogoTicket | null }>({ action: 'logo', logo }, 'No se pudo guardar el logo.')
 export const guardarBajadas = (b: { transferenciaA?: number; feria?: boolean; billetes?: number[]; feriaProductos?: ProductoFeria[] }) =>
   post<{ reglas: Reglas }>({ action: 'bajadas', ...b }, 'No se pudo guardar.')

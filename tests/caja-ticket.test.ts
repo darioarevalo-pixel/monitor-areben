@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { armarTicket, fechaTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
+import { armarTicket, fechaConDia, fechaTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
 import { REGLAS_INICIALES, cobro, nombreParaTicket, renglones } from '@/lib/caja/core.core.js'
 
 const medir = (txt: string) => txt.match(/.{1,40}/g) || ['']
@@ -46,7 +46,7 @@ function montoDe(ops: { k: string }[], concepto: string): string | undefined {
 describe('caja · ticket contra la pantalla de cobro de GN', () => {
   it('«Variante Única» ⛔ se imprime al lado del nombre; un talle real sí', () => {
     const base = ticket([{ precio: 4990 }], [{ cuenta: 12921 }])
-    expect(base.txt).toContain('PRENDA 1 · S')
+    expect(base.txt).toContain('PRENDA 1 - S')
     const unica = ticket([{ precio: 4990 }], [{ cuenta: 12921 }], {
       renglones: [{ nombre: 'ACCESORIO NRO 1', talle: 'Variante Única', cantidad: 1, precio: 4990, importe: 4990 }],
     })
@@ -60,29 +60,33 @@ describe('caja · ticket contra la pantalla de cobro de GN', () => {
     expect(montoDe(ops, 'Descuento 15%')).toBe('-$748,50')
     expect(montoDe(ops, 'Redondeo')).toBe('-$41,50')
     expect(montoDe(ops, 'TOTAL')).toBe('$4.200')
-    expect(montoDe(ops, 'Efectivo')).toBe('$4.200')
+    expect(montoDe(ops, 'RECIBIMOS')).toBe('$4.200')
+    expect(montoDe(ops, 'SALDO')).toBe('$0')
     expect(txt).toContain('COMPROBANTE')
     expect(txt).toContain('DOCUMENTO NO VÁLIDO COMO FACTURA')
-    expect(txt).toContain('#30048')
-    expect(txt).toContain('Gracias por tu compra')
+    expect(txt).toContain('Comprobante: #30048')
+    expect(txt).toContain('Cliente: Consumidor Final')
+    expect(txt).toContain('Gracias por tu compra!')
+    // ⛔ Las formas de pago abajo (Bruno, 5-oct: «es raro»).
+    expect(montoDe(ops, 'Efectivo')).toBeUndefined()
   })
 
   it('cascada (Bruno, 4-oct): el de la prenda, «Descuento en la venta», y el de la forma de pago sin la cuenta', () => {
     const { ops, txt } = ticket([{ precio: 10000, rebaja: { tipo: 'pct', valor: 20 } }], [{ cuenta: 20595 }], {}, { tipo: 'pct', valor: 10 })
-    expect(montoDe(ops, '1 × $10.000')).toBe('$10.000')
+    expect(montoDe(ops, '1 x $10.000')).toBe('$10.000')
     expect(montoDe(ops, 'Descuento')).toBe('-$2.000')
     expect(montoDe(ops, 'Subtotal')).toBe('$8.000')
     expect(montoDe(ops, 'Descuento en la venta')).toBe('-$800')
     expect(montoDe(ops, 'Descuento 10%')).toBe('-$720')
     expect(montoDe(ops, 'TOTAL')).toBe('$6.500')
-    expect(montoDe(ops, 'Transferencia')).toBe('$6.500')
+    expect(montoDe(ops, 'RECIBIMOS')).toBe('$6.500')
     expect(txt.join('|')).not.toMatch(/CG|Transferencia CG/)
   })
 
-  it('con «paga con» sale el vuelto del efectivo', () => {
+  it('con «paga con»: RECIBIMOS lo entregado y el VUELTO', () => {
     const { ops } = ticket([{ precio: 4990 }], [{ cuenta: 12921 }], { pagaCon: 5000 })
-    expect(montoDe(ops, 'Paga con')).toBe('$5.000')
-    expect(montoDe(ops, 'Vuelto')).toBe('$800')
+    expect(montoDe(ops, 'RECIBIMOS')).toBe('$5.000')
+    expect(montoDe(ops, 'VUELTO')).toBe('$800')
   })
 
   it('🔴 el redondeo PARA ARRIBA se llama «Recargo por redondeo» (Bruno, 4-oct)', () => {
@@ -97,14 +101,15 @@ describe('caja · ticket contra la pantalla de cobro de GN', () => {
     const { ops, c } = ticket([{ precio: 20000 }], [{ cuenta: 12921, base: 10000 }, { cuenta: 20196 }], { pagaCon: 10000 })
     expect(montoDe(ops, 'Descuento 15%')).toBe('-$1.500')
     expect(montoDe(ops, 'Descuento 10%')).toBe('-$1.000')
-    expect(montoDe(ops, 'Tarjeta de débito')).toBe('$9.000')
     expect(montoDe(ops, 'TOTAL')).toBe(plata(c.total))
-    expect(montoDe(ops, 'Vuelto')).toBe('$1.500') // 10.000 − 8.500 de efectivo, ⛔ − el total
+    // RECIBIMOS = los $9.000 del débito + los $10.000 que entregó en efectivo.
+    expect(montoDe(ops, 'RECIBIMOS')).toBe('$19.000')
+    expect(montoDe(ops, 'VUELTO')).toBe('$1.500') // 10.000 − 8.500 de efectivo, ⛔ − el total
   })
 
   it('🔴 sin número de GN sale igual, con el provisorio y diciendo que está pendiente', () => {
     const { txt } = ticket([{ precio: 4990 }], [{ cuenta: 12921 }], { numero: null })
-    expect(txt).toContain(`Provisorio ${numeroProvisorio(ID)}`)
+    expect(txt).toContain(`Comprobante: Provisorio ${numeroProvisorio(ID)}`)
     expect(txt).toContain('Venta pendiente en Gestión Nube')
     expect(txt.some((t) => /^#\d/.test(t))).toBe(false)
   })
@@ -119,7 +124,18 @@ describe('caja · ticket contra la pantalla de cobro de GN', () => {
     expect(ultimaY).toBeLessThan(largo.alto)
   })
 
-  it('fecha y hora de Argentina, ⛔ la del navegador', () => {
+  it('fecha y hora de Argentina, ⛔ la del navegador; la fecha con el día', () => {
     expect(fechaTicket(AHORA)).toBe('04/10/2026 19:04')
+    expect(fechaConDia(AHORA)).toBe('domingo 04/10/2026')
+    expect(fechaConDia(Date.parse('2026-10-05T02:30:00Z'))).toBe('domingo 04/10/2026') // 23:30 del domingo en AR
+  })
+
+  it('el mail como cliente, y el logo arriba centrado en vez del nombre', () => {
+    const { ops, txt } = ticket([{ precio: 4990 }], [{ cuenta: 12921 }], { cliente: 'ana@mail.com', logo: { src: 'data:image/png;base64,AAA', ancho: 400, alto: 200 } })
+    expect(txt).toContain('Cliente: ana@mail.com')
+    expect(txt).not.toContain('ZATTIA')
+    const img = ops.find((o) => o.k === 'img') as unknown as { x: number; w: number; h: number }
+    expect(img).toMatchObject({ w: 44, h: 22 })
+    expect(img.x).toBe(18) // (80 − 44) / 2
   })
 })

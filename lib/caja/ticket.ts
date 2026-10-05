@@ -1,11 +1,13 @@
 /**
  * El ticket de la Caja, en el rollo de 80 mm de la térmica del local.
  *
- * # Qué copia del ticket de GN
+ * # Igual al ticket de GN (Bruno, 5-oct: «igualala a la de GN, y de ahí metemos cambios»)
  *
- * El del POS de GN: «COMPROBANTE», «DOCUMENTO NO VÁLIDO COMO FACTURA», el número de la venta, la
- * fecha, los renglones, subtotal, descuento, total, con qué pagó y el vuelto, la política de cambio
- * y «Gracias por tu compra». ⛔ Es factura: la Caja ⛔ factura en AFIP (la API de GN tampoco).
+ * Logo (o el nombre), «COMPROBANTE», «DOCUMENTO NO VÁLIDO COMO FACTURA», `Comprobante: #N` (el
+ * número de la venta, se mantiene), `Fecha:` con el día, `Cliente:`, el encabezado `Cant. x Precio /
+ * Descripción / Total`, los renglones, TOTAL, RECIBIMOS, SALDO (y el vuelto si hubo), la política
+ * de cambio, «Gracias por tu compra!» y la fecha y hora de registro. ⛔ Las formas de pago abajo
+ * (Bruno: «es raro»). ⛔ Es factura: la Caja ⛔ factura en AFIP (la API de GN tampoco).
  *
  * # 🔑 Los números salen del MISMO cobro que vio la cajera
  *
@@ -15,7 +17,8 @@
  *
  * 🔑 **Los descuentos en cascada, cada uno en su renglón** (Bruno, 4-oct): el de la prenda debajo de
  * la prenda, «Descuento en la venta» después del subtotal, y el de la forma de pago como «Descuento
- * 15%» — ⛔ «Descuento Transferencia CG»: la cuenta de GN ⛔ se le muestra al cliente.
+ * 15%» — ⛔ «Descuento Transferencia CG»: la cuenta de GN ⛔ se le muestra al cliente. Sin ellos el
+ * TOTAL ⛔ cierra con los renglones.
  *
  * 🔴 **El redondeo para arriba se llama «Recargo por redondeo»** (Bruno, 4-oct): es como figura en los
  * tickets de GN. El que baja va como «Redondeo» con su menos.
@@ -27,7 +30,7 @@
  * con forma de número de GN: después no se podría buscar.
  */
 
-import { abrirRollo, COLA, M, MIN, type Medidor, type OpBase } from '../rollo80'
+import { abrirRollo, COLA, M, MIN, W, type Medidor, type OpBase } from '../rollo80'
 import { imprimirPdf } from '../etiquetas/pdf'
 import { OFFSET_AR_MS } from '../envios/portal.core.js'
 import { talleVisible } from './ticket-mail.core.js'
@@ -52,7 +55,15 @@ export type DatosTicket = {
   /** Con cuánto pagó en efectivo; `null` si ⛔ se anotó. */
   pagaCon: number | null
   politica: string | null
+  /** El logo del ticket (Configuración de la Caja): data URL y su tamaño en píxeles. Sin logo, el nombre. */
+  logo?: LogoTicket | null
+  /** El mail del ticket, si se cargó; si no, «Consumidor Final». */
+  cliente?: string | null
 }
+
+export type LogoTicket = { src: string; ancho: number; alto: number }
+/** El logo, como lo dibuja jsPDF: `x`/`y`/`w`/`h` en mm. */
+export type OpImagen = { k: 'img'; src: string; x: number; y: number; w: number; h: number }
 
 /** Pesos argentinos; los centavos sólo si hay (GN escribe $748,50 y $4.200). */
 export function plata(n: number): string {
@@ -70,6 +81,13 @@ export function fechaTicket(ahoraMs: number): string {
   return `${ar.slice(8, 10)}/${ar.slice(5, 7)}/${ar.slice(0, 4)} ${ar.slice(11, 16)}`
 }
 
+const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+/** La fecha con el día, de Argentina: «sábado 04/10/2026». */
+export function fechaConDia(ahoraMs: number): string {
+  const ar = new Date(ahoraMs + OFFSET_AR_MS)
+  return `${DIAS[ar.getUTCDay()]} ${fechaTicket(ahoraMs).slice(0, 10)}`
+}
+
 /** El vuelto de lo que se pagó en efectivo. Sin `pagaCon`, o si ⛔ hay pago en efectivo, `null`. */
 export function vueltoDelTicket(pagaCon: number | null, montoEfectivo: number): number | null {
   if (pagaCon == null || !(montoEfectivo > 0)) return null
@@ -85,8 +103,8 @@ export function armarTicket(
   efectivo: (cuenta: number) => boolean,
   ahoraMs: number,
   partir: Medidor,
-): { ops: OpBase[]; alto: number } {
-  const ops: OpBase[] = []
+): { ops: (OpBase | OpImagen)[]; alto: number } {
+  const ops: (OpBase | OpImagen)[] = []
   let y = M
 
   const escribir = (txt: string, tam: number, bold: boolean, align: 'izq' | 'centro' = 'izq', gris?: number) => {
@@ -107,25 +125,39 @@ export function armarTicket(
     y += 2.5
   }
 
-  escribir('ZATTIA', 16, true, 'centro')
-  y += 1
-  escribir('COMPROBANTE', 11, true, 'centro')
-  escribir('DOCUMENTO NO VÁLIDO COMO FACTURA', 8, false, 'centro', 80)
-  y += 1.5
-  if (t.numero != null) {
-    escribir(`#${t.numero}`, 13, true, 'centro')
+  // El logo: 44 mm de ancho como mucho y 22 de alto, centrado.
+  if (t.logo && t.logo.ancho > 0 && t.logo.alto > 0) {
+    const w = Math.min(44, (22 * t.logo.ancho) / t.logo.alto)
+    const h = (w * t.logo.alto) / t.logo.ancho
+    ops.push({ k: 'img', src: t.logo.src, x: (W - w) / 2, y, w, h })
+    y += h + 2
   } else {
-    escribir(`Provisorio ${numeroProvisorio(t.id)}`, 12, true, 'centro')
-    escribir('Venta pendiente en Gestión Nube', 9, false, 'centro', 60)
+    escribir('ZATTIA', 16, true, 'centro')
+    y += 1
   }
-  escribir(fechaTicket(ahoraMs), 9, false, 'centro', 60)
+  escribir('COMPROBANTE', 12, true, 'centro')
+  regla()
+  escribir('DOCUMENTO NO VÁLIDO COMO FACTURA', 8, false, 'centro', 60)
+  regla()
+  if (t.numero != null) {
+    escribir(`Comprobante: #${t.numero}`, 10, true)
+  } else {
+    escribir(`Comprobante: Provisorio ${numeroProvisorio(t.id)}`, 10, true)
+    escribir('Venta pendiente en Gestión Nube', 9, false, 'izq', 60)
+  }
+  escribir(`Fecha: ${fechaConDia(ahoraMs)}`, 10, false)
+  escribir(`Cliente: ${t.cliente?.trim() || 'Consumidor Final'}`, 10, false)
   regla()
 
+  escribir('Cant. x Precio', 9, true)
+  escribir('Descripción', 9, true)
+  escribir('Total', 9, true)
+  regla()
   for (const r of t.renglones) {
     const talle = talleVisible(r.talle)
-    escribir(talle ? `${r.nombre} · ${talle}` : r.nombre, 9, false)
     const lista = Math.round(r.cantidad * r.precio * 100) / 100
-    par(`${r.cantidad} × ${plata(r.precio)}`, plata(lista), 9)
+    par(`${r.cantidad} x ${plata(r.precio)}`, plata(lista), 9)
+    escribir(talle ? `${r.nombre} - ${talle}` : r.nombre, 9, false)
     if (lista - r.importe > 0.004) par('Descuento', `-${plata(lista - r.importe)}`, 9)
     y += 0.8
   }
@@ -140,23 +172,24 @@ export function armarTicket(
     if (p.redondeo < 0) par('Redondeo', `-${plata(p.redondeo)}`, 10)
   }
   y += 1
-  par('TOTAL', plata(t.total), 14, true)
-  regla()
-
-  for (const p of t.pagos) par(t.nombreCuenta(p.cuenta), plata(p.monto), 10)
+  par('TOTAL', plata(t.total), 12, true)
+  // RECIBIMOS: lo que entregó (con el efectivo, «paga con» + el resto); SALDO: lo que queda debiendo.
   const enEfectivo = t.pagos.filter((p) => efectivo(p.cuenta)).reduce((s, p) => s + p.monto, 0)
   const v = vueltoDelTicket(t.pagaCon, enEfectivo)
-  if (v != null && t.pagaCon != null) {
-    par('Paga con', plata(t.pagaCon), 10)
-    par('Vuelto', plata(v), 11, true)
-  }
+  const recibimos = v != null && t.pagaCon != null ? Math.round((t.total - enEfectivo + t.pagaCon) * 100) / 100 : t.total
+  par('RECIBIMOS', plata(recibimos), 12, true)
+  par('SALDO', plata(0), 12, true)
+  if (v != null && v > 0) par('VUELTO', plata(v), 12, true)
+  regla()
 
   if (t.politica) {
-    regla()
-    escribir(t.politica, 8, false, 'izq', 60)
+    escribir(t.politica, 9, false)
+    y += 2
   }
-  y += 3
-  escribir('Gracias por tu compra', 10, true, 'centro')
+  escribir('Gracias por tu compra!', 10, false, 'centro')
+  regla()
+  escribir('Fecha y hora de registro:', 8, false, 'centro', 60)
+  escribir(fechaTicket(ahoraMs), 8, false, 'centro', 60)
 
   return { ops, alto: Math.max(MIN, y + COLA) }
 }
@@ -165,5 +198,12 @@ export function armarTicket(
 export async function imprimirTicket(t: DatosTicket, efectivo: (cuenta: number) => boolean, ahoraMs: number) {
   const rollo = await abrirRollo()
   const pagina = armarTicket(t, efectivo, ahoraMs, rollo.medir)
-  imprimirPdf(rollo.documento([pagina]))
+  imprimirPdf(
+    rollo.documento<OpImagen>([pagina], (pdf, op) => {
+      if (op.k !== 'img') return false
+      const tipo = /^data:image\/jpe?g/i.test(op.src) ? 'JPEG' : 'PNG'
+      pdf.addImage(op.src, tipo, op.x, op.y, op.w, op.h)
+      return true
+    }),
+  )
 }

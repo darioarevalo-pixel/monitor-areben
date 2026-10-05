@@ -26,6 +26,7 @@
 //        `conteo` (fase B, 5-oct): `{ [billete]: cantidad }` de la calculadora; el servidor rearma el
 //        total con `lib/caja/conteo.core.js` y, si ⛔ es el fondo o el contado, 400.
 //   POST ?recurso=caja  { action: 'politica', texto }      → sólo admin: la política de cambio del ticket
+//   POST ?recurso=caja  { action: 'logo', logo: { src, ancho, alto } | null } → sólo admin: el logo del ticket (sql/migrate-caja-logo.sql)
 //   POST ?recurso=caja  { action: 'bajadas', transferenciaA?, feria?, billetes?, feriaProductos? } → sólo admin: a qué cuenta van las
 //        transferencias, el modo feria (bajadas de línea: ⛔ las decide la cajera) y los billetes de la calculadora
 //
@@ -251,7 +252,12 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      if (accion === 'config') return res.status(200).json(await leerConfig())
+      if (accion === 'config') {
+        // El logo del ticket va aparte y tolerante: sin la columna (falta `sql/migrate-caja-logo.sql`)
+        // la Caja carga igual y el ticket sale con el nombre.
+        const logo = await sb.from('caja_config').select('ticket_logo').eq('store', store).maybeSingle()
+        return res.status(200).json({ ...(await leerConfig()), ticket_logo: logo.error ? null : (logo.data && logo.data.ticket_logo) || null })
+      }
 
       if (accion === 'referencias') {
         try {
@@ -347,6 +353,24 @@ export default async function handler(req, res) {
         const { error } = await sb.from('caja_config').update({ politica_cambio: texto, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
         if (error) throw new Error(error.message)
         return res.status(200).json({ politica_cambio: texto })
+      }
+      if (accion === 'logo') {
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia el logo del ticket.' })
+        let logo = null
+        if (b.logo != null) {
+          const src = String(b.logo.src || '')
+          const ancho = Number(b.logo.ancho)
+          const alto = Number(b.logo.alto)
+          if (!/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(src)) return res.status(400).json({ error: 'El logo tiene que ser un PNG o un JPG.' })
+          if (src.length > 300_000) return res.status(400).json({ error: 'El logo pesa demasiado (más de 300 KB).' })
+          if (!Number.isInteger(ancho) || !Number.isInteger(alto) || ancho <= 0 || alto <= 0 || ancho > 2000 || alto > 2000) return res.status(400).json({ error: 'Falta el tamaño del logo.' })
+          logo = { src, ancho, alto }
+        }
+        await leerConfig() // la fila tiene que existir: la siembra si ⛔ hay
+        const { error } = await sb.from('caja_config').update({ ticket_logo: logo, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
+        if (error && /ticket_logo/.test(error.message || '')) return res.status(409).json({ error: 'Falta correr sql/migrate-caja-logo.sql en la base de Zattia.' })
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ ticket_logo: logo })
       }
       if (accion === 'bajadas') {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia a dónde van las transferencias o el modo feria.' })
@@ -595,7 +619,7 @@ export default async function handler(req, res) {
         if (ya.data.estado === 'cancelada') return res.status(200).json({ venta: ya.data })
         return res.status(409).json({ error: 'La transferencia ya llegó: la venta está cobrada y no se cancela desde acá.', venta: ya.data })
       }
-      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, cruzar, cancelar, politica, bajadas, abrir-turno, salida, contar, cerrar-turno)' })
+      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, cruzar, cancelar, politica, logo, bajadas, abrir-turno, salida, contar, cerrar-turno)' })
     }
     return res.status(405).json({ error: 'Método no permitido' })
   } catch (e) {

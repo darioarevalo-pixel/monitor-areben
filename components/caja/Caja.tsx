@@ -21,7 +21,7 @@ import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { leerConfig, leerPendientes, leerTurno, type Config, type Turno, type Venta } from '@/lib/caja/cliente'
 import { ButtonLink, Notice, space } from '@/components/ui'
-import { Bajadas, Pendientes, PoliticaCambio, ProductosFeria, TurnoCaja } from '@/components/caja/partes'
+import { Bajadas, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TurnoCaja } from '@/components/caja/partes'
 
 export function Caja() {
   const { perfil } = useSesion()
@@ -102,6 +102,7 @@ export function Caja() {
       {admin && config?.reglas.medios && <Bajadas reglas={config.reglas} onGuardadas={(rg) => setConfig({ ...config, reglas: rg })} />}
       {admin && config?.reglas.medios && <ProductosFeria reglas={config.reglas} onGuardadas={(rg) => setConfig({ ...config, reglas: rg })} />}
       {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
+      {admin && config && <LogoDelTicket inicial={config.ticket_logo ?? null} onGuardado={(l) => setConfig({ ...config, ticket_logo: l })} />}
     </div>
   )
 }

@@ -507,6 +507,8 @@ function POS() {
       nombreCuenta,
       pagaCon: venta.paga_con,
       politica: config?.politica_cambio ?? null,
+      logo: config?.ticket_logo ?? null,
+      cliente: venta.email,
     }
   }
 

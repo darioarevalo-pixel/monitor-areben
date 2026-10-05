@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { NOMBRE_MEDIO } from '@/lib/caja/core.core.js'
-import { numeroProvisorio, plata } from '@/lib/caja/ticket'
+import { numeroProvisorio, plata, type LogoTicket } from '@/lib/caja/ticket'
 import { BILLETES_INICIALES, billetesDe } from '@/lib/caja/conteo.core.js'
 import { CalculadoraBilletes, olvidarConteo } from '@/components/caja/CalculadoraBilletes'
 import { aNumero as aNumeroTxt, textoDiferencia } from '@/lib/caja/textos'
@@ -35,6 +35,7 @@ import {
   type ProductoLista,
   type ProductoFeria,
   buscarNombre,
+  guardarLogo,
 } from '@/lib/caja/cliente'
 import { Badge, Button, Field, Icono, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
 
@@ -1360,6 +1361,89 @@ export function ProductosFeria({ reglas, onGuardadas }: { reglas: Reglas; onGuar
           </div>
         )}
         {msg && <Notice tone="danger">{msg}</Notice>}
+      </div>
+    </Plegable>
+  )
+}
+
+/** El archivo elegido, achicado a 400 px de ancho y pasado a PNG: lo que se guarda y se imprime. */
+async function logoDesdeArchivo(archivo: File): Promise<LogoTicket> {
+  const url = URL.createObjectURL(archivo)
+  try {
+    const img = await new Promise<HTMLImageElement>((ok, mal) => {
+      const i = new Image()
+      i.onload = () => ok(i)
+      i.onerror = () => mal(new Error('No se pudo leer la imagen.'))
+      i.src = url
+    })
+    const escala = Math.min(1, 400 / img.naturalWidth)
+    const ancho = Math.max(1, Math.round(img.naturalWidth * escala))
+    const alto = Math.max(1, Math.round(img.naturalHeight * escala))
+    const lienzo = document.createElement('canvas')
+    lienzo.width = ancho
+    lienzo.height = alto
+    const ctx = lienzo.getContext('2d')
+    if (!ctx) throw new Error('No se pudo preparar la imagen.')
+    // Fondo blanco: la térmica imprime negro sobre blanco, y un PNG transparente sale negro en jsPDF.
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, ancho, alto)
+    ctx.drawImage(img, 0, 0, ancho, alto)
+    return { src: lienzo.toDataURL('image/png'), ancho, alto }
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+/** Sólo admin: el logo que va arriba del ticket (Bruno, 5-oct). Sin logo, el ticket lleva el nombre. */
+export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | null; onGuardado: (l: LogoTicket | null) => void }) {
+  const [abierto, setAbierto] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  async function guardar(l: LogoTicket | null) {
+    setGuardando(true)
+    setMsg(null)
+    try {
+      const r = await guardarLogo(l)
+      onGuardado(r.ticket_logo)
+      setMsg(l ? 'Logo guardado: sale en el próximo ticket.' : 'Logo sacado: el ticket lleva el nombre.')
+    } catch (e) {
+      setMsg((e as Error).message)
+    } finally {
+      setGuardando(false)
+    }
+  }
+  return (
+    <Plegable abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Logo del ticket" ayuda="PNG o JPG; se achica a 400 px de ancho. Sólo lo cambia un admin.">
+      <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
+        {inicial ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={inicial.src} alt="Logo del ticket" style={{ maxWidth: 220, maxHeight: 110, objectFit: 'contain', border: `1px solid ${color.line}`, borderRadius: radius.md, padding: space[2], background: '#fff' }} />
+        ) : (
+          <span style={{ color: color.mut, fontSize: font.sm }}>Logo: ninguno (el ticket lleva el nombre).</span>
+        )}
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            disabled={guardando}
+            onChange={async (e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (!f) return
+              try {
+                await guardar(await logoDesdeArchivo(f))
+              } catch (err) {
+                setMsg((err as Error).message)
+              }
+            }}
+          />
+          {inicial && (
+            <Button size="sm" variant="ghost" disabled={guardando} onClick={() => guardar(null)}>
+              Sacar logo
+            </Button>
+          )}
+        </div>
+        {msg && <span style={{ fontSize: font.sm, color: color.mut }}>{msg}</span>}
       </div>
     </Plegable>
   )

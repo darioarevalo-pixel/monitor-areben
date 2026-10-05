@@ -240,6 +240,19 @@ describe('caja · formas de pago y descuentos a mano (Bruno, 4-oct)', () => {
     expect((base.config as { reglas: Fila }).reglas).toMatchObject({ transferenciaA: 20595, feria: true })
   })
 
+  it('logo del ticket: sólo admin, PNG o JPG, y vuelve en la configuración', async () => {
+    const logo = { src: 'data:image/png;base64,iVBORw0KGgo=', ancho: 400, alto: 120 }
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'logo', logo }))).code).toBe(403)
+    conSesion(ADMIN_)
+    expect((await correr(req('POST', {}, { action: 'logo', logo: { ...logo, src: 'data:text/html;base64,PHNjcmlwdD4=' } }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'logo', logo: { ...logo, ancho: 0 } }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'logo', logo }))).code).toBe(200)
+    expect((await correr(req('GET', { action: 'config' }))).body).toMatchObject({ ticket_logo: logo })
+    expect((await correr(req('POST', {}, { action: 'logo', logo: null }))).code).toBe(200)
+    expect((await correr(req('GET', { action: 'config' }))).body).toMatchObject({ ticket_logo: null })
+  })
+
   it('🔴 productos de feria trabados: un admin los marca y el servidor EXIGE la cuenta de feria', async () => {
     conSesion(CAJERA)
     expect((await correr(req('POST', {}, { action: 'bajadas', feriaProductos: [{ id: 7, nombre: 'CORSET' }] }))).code).toBe(403)
