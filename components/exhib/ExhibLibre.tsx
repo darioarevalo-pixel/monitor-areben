@@ -609,13 +609,18 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
                 en la mano: «yo no la frenaría a la chica que escanea, luego prefiero hacer el
                 balance yo mismo» (Bruno). Lo que corresponde decirle es **pasala de nuevo**, que la
                 prenda todavía está ahí; quién era se resuelve después, mirando el recorrido. */}
+            {/* 🔴 **Rojo y «pasala de nuevo», SIEMPRE** (5-oct-2026, Bruno: «hacé que avise cuando
+                el código no lee bien»). Antes, si el código ⛔ se parecía a nada, el cartel decía
+                «está colgado y el sistema no lo tiene» — y eso es justo lo que parece una lectura
+                CORTADA: medido sobre 1.461 escaneos, las que fallan tras 15–60 s sin escanear
+                pierden el COMIENZO del código (`R358BL` = `RTO0358BL` sin «TO0»), 11 de 67, contra
+                4 de 1.312 con el lector en uso. La voz ya decía «de nuevo»; la pantalla la
+                contradecía y dejaba seguir. */}
             {fb?.tipo === 'no-cruzo' && (
-              <Notice tone="warning" icon="⚠">
-                <div style={{ fontWeight: 700 }}>{fb.e.codigo_crudo} no quedó identificado</div>
+              <Notice tone="danger" icon="✕">
+                <div style={{ fontWeight: 800, fontSize: 18 }}>NO LEYÓ — pasala de nuevo</div>
                 <div>
-                  {fb.parecidos
-                    ? `Queda anotado igual, con este lugar. Ese código da con ${fb.parecidos} ${fb.parecidos === 1 ? 'prenda' : 'prendas'}: si podés, pasá la prenda de nuevo con el lector.`
-                    : 'Queda anotado igual, con este lugar: está colgado y el sistema no lo tiene.'}
+                  Entró «{fb.e.codigo_crudo}» y no es ninguna prenda: casi siempre el lector cortó el código. Volvé a pasar la misma. Si sale esto otra vez, seguí: queda anotado.
                 </div>
               </Notice>
             )}

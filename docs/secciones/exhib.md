@@ -499,6 +499,11 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
   «ese código no está en la lista» y el dato se perdía. Una prenda colgada que ⛔ no figura con stock
   en el Local —stock mal cargado, prenda de otra marca, devolución sin ingresar— **es el hallazgo
   que nadie puede reconstruir después**, porque el salón ya se caminó.
+  🔴 **Pero el CARTEL dice «NO LEYÓ — pasala de nuevo», en rojo, SIEMPRE** (5-oct-2026). Antes, sin
+  parecidos, decía «está colgado y el sistema no lo tiene» y contradecía la voz. 📊 Medido sobre 1.461
+  escaneos: tras **15–60 s sin escanear fallan 11 de 67 (16 %)**, con el lector en uso **4 de 1.312**,
+  y lo que falla **pierde el COMIENZO del código** (`R358BL` = `RTO0358BL` sin «TO0») ⇒ es el lector
+  que se duerme, ⛔ una prenda que no figura. Si sale dos veces seguidas, ahí sí es hallazgo.
 - 🔑 **El escaneo guarda TODAS las categorías TN del producto (`cleanCats`), ⛔ no la primera.** Es
   la columna entera del pedido: el perchero de tops contra lo que TN dice de cada prenda. Con
   `cleanCats[0]` la comparación ⛔ no se puede hacer.
