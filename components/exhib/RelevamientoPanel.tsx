@@ -107,11 +107,11 @@ export function RelevamientoPanel({
             <div key={m.codigo} style={{ borderBottom: `1px solid ${color.line}`, padding: '6px 2px' }}>
               <div style={{ display: 'flex', gap: space[3], alignItems: 'baseline', flexWrap: 'wrap' }}>
                 <b style={{ minWidth: 44 }}>{m.codigo}</b>
-                <span style={{ fontSize: font.sm, color: color.mut }}>{m.estructura}</span>
+                <span style={{ fontSize: font.sm, color: color.mut }}>{m.largo ? `${m.estructura}, doble largo` : m.estructura}</span>
                 {m.barras.map((b) => (
                   <Button key={b.pos} size="sm" variant="ghost" onClick={() => ver(`${m.codigo}-${b.pos}`)} disabled={!b.relevada || !b.prendas.length}>
                     {m.estructura === 'doble' ? `${PALABRA_DE[b.pos]} ` : ''}
-                    {b.relevada ? `${b.prendas.length} perchas` : 'sin relevar'}
+                    {b.relevada ? `${b.perchas} perchas · ${b.prendas.length} colores` : 'sin relevar'}
                   </Button>
                 ))}
               </div>

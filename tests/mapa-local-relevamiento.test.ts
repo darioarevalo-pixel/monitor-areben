@@ -32,6 +32,16 @@ describe('leerEspacio', () => {
     expect(leerEspacio('D12')).toMatchObject({ codigo: 'D12', pos: 'simple' })
     expect(leerEspacio('isla')).toMatchObject({ codigo: 'ISLA', pared: 'isla', pos: 'simple' })
   })
+  it('doble largo: «D07-08» es el módulo D07 que sigue en el D08', () => {
+    expect(leerEspacio('D07-08 arriba')).toMatchObject({ codigo: 'D07', numero: 7, pos: 'alta', largo: true })
+    expect(leerEspacio('d7-8')).toMatchObject({ codigo: 'D07', pos: 'simple', largo: true })
+    expect(leerEspacio('D07+D08 abajo')).toMatchObject({ codigo: 'D07', pos: 'baja', largo: true })
+    expect(leerEspacio('D07 arriba')).toMatchObject({ largo: false })
+    expect(lugarDe({ pared: 'der', numero: 9, pos: 'baja', largo: true })).toBe('D09-10 abajo')
+    // Un perchero ocupa dos lugares SEGUIDOS: lo demás ⛔ es un espacio.
+    for (const s of ['D07-09', 'D07-06', 'D07-07 arriba']) expect(leerEspacio(s)).toBeNull()
+  })
+
   it('lo que ⛔ es un espacio del mapa da null', () => {
     for (const s of ['vidriera', 'mesa 1', '', 'D0', 'D', 'perchero tops', 'D01 al costado', 'X01']) expect(leerEspacio(s)).toBeNull()
   })
@@ -173,6 +183,42 @@ describe('mapaDesdeRelevamiento', () => {
     const { mapa } = mapaDesdeRelevamiento(armarRelevamiento(escaneos), base, TIPOS_INICIALES)
     const d01 = mapa.modulos.find((m) => m.codigo === 'D01')!
     expect(d01.niveles.map((n) => [n.pos, n.cupo])).toEqual([['alta', 2], ['baja', 1]])
+  })
+
+  it('🔑 el cupo son las PERCHAS (cada talle colgado), ⛔ los colores', () => {
+    // A en tres talles del mismo color + un código que ⛔ cruzó: 4 perchas, 1 color. A escaneada dos veces = 1 percha.
+    const r = armarRelevamiento([esc('D02', 'A', 'S'), esc('D02', 'A', 'M'), esc('D02', 'A', 'L'), esc('D02', 'A', 'L'), esc('D02', null, 'M', { variante_id: '?ZZ9' })])
+    const b = r.modulos[0].barras[0]
+    expect([b.perchas, b.prendas.length]).toEqual([4, 1])
+    const { mapa } = mapaDesdeRelevamiento(r, base, TIPOS_INICIALES)
+    expect(mapa.modulos.find((m) => m.codigo === 'D02')!.niveles.map((n) => n.cupo)).toEqual([4])
+  })
+
+  it('🔑 un perchero DOBLE LARGO queda como UN módulo del doble de ancho y el siguiente desaparece', () => {
+    const r = armarRelevamiento([esc('D07-08 arriba', 'A'), esc('D07-08 abajo', 'B'), esc('D09', 'C')])
+    expect(r.modulos.find((m) => m.codigo === 'D07')).toMatchObject({ largo: true, estructura: 'doble' })
+    const { mapa, cambios } = mapaDesdeRelevamiento(r, base, TIPOS_INICIALES)
+    const cods = mapa.modulos.map((m) => m.codigo)
+    expect(cods).toContain('D07')
+    expect(cods).not.toContain('D08')
+    expect(mapa.modulos.find((m) => m.codigo === 'D07')!.anchoCm).toBe(150)
+    expect(mapa.modulos.find((m) => m.codigo === 'D09')!.anchoCm).toBe(base.modulos.find((m) => m.codigo === 'D09')!.anchoCm)
+    expect(cambios).toContainEqual(expect.objectContaining({ codigo: 'D08', texto: 'D08 pasa a ser parte de D07 (perchero doble largo)' }))
+    // Y caminado de nuevo como un módulo, vuelve a uno (el D08 ⛔ reaparece solo: nadie lo caminó).
+    const vuelta = mapaDesdeRelevamiento(armarRelevamiento([esc('D07 arriba', 'A')]), mapa, TIPOS_INICIALES).mapa
+    expect(vuelta.modulos.find((m) => m.codigo === 'D07')!.anchoCm).toBe(75)
+  })
+
+  it('🔴 la isla conserva su ancho: ⛔ es un largo que se deshace', () => {
+    const conIsla = { ...base, modulos: base.modulos.map((m) => (m.pared === 'isla' ? { ...m, anchoCm: 185 } : m)) }
+    const { mapa } = mapaDesdeRelevamiento(armarRelevamiento([esc('ISLA', 'A')]), conIsla, TIPOS_INICIALES)
+    expect(mapa.modulos.find((m) => m.pared === 'isla')!.anchoCm).toBe(185)
+  })
+
+  it('el cierre ⛔ da «sin relevar» al módulo que quedó dentro de un largo', () => {
+    const c = cierreDelRelevamiento([esc('D07-08 arriba', 'A'), esc('D07-08 abajo', 'B')], [], base)
+    expect(c.sinRelevar).not.toContain('D08')
+    expect(c.sinRelevar).toContain('D09')
   })
 
   it('🔴 la altura sin relevar queda como estaba en el mapa', () => {

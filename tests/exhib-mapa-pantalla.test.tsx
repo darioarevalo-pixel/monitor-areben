@@ -72,7 +72,36 @@ describe('ElegirEspacio', () => {
     expect(elegidos).toEqual(['I02 abajo', 'ISLA'])
   })
 
+  it('doble largo: «D07-08 arriba», y el mapa que ya lo sabe lo propone', async () => {
+    const { host, elegidos } = await montar()
+    await click(host, 'D')
+    await click(host, '07')
+    expect(boton(host, 'Un módulo').getAttribute('aria-pressed')).toBe('true')
+    await click(host, 'Doble largo (07 + 08)')
+    await click(host, 'Arriba')
+    expect(elegidos).toEqual(['D07-08 arriba'])
+
+    const largo = { ...MAPA_INICIAL, modulos: MAPA_INICIAL.modulos.map((m) => (m.codigo === 'D07' ? { ...m, anchoCm: 150 } : m)) }
+    const host2 = document.createElement('div')
+    const elegidos2: string[] = []
+    // Controlado, como en la pantalla: el lugar elegido vuelve como `lugar`.
+    const { useState } = await import('react')
+    const Controlado = () => {
+      const [lugar, setLugar] = useState('')
+      return <ElegirEspacio mapa={largo} lugar={lugar} onElegir={(l) => (elegidos2.push(l), setLugar(l))} />
+    }
+    await act(async () => createRoot(host2).render(<Controlado />))
+    await click(host2, 'D')
+    await click(host2, '07–08')
+    expect(boton(host2, 'Doble largo (07 + 08)').getAttribute('aria-pressed')).toBe('true')
+    await click(host2, 'Abajo')
+    // Ya con la altura elegida, desmarcar el largo reescribe el lugar de la misma barra.
+    await click(host2, 'Un módulo')
+    expect(elegidos2).toEqual(['D07-08 abajo', 'D07 abajo'])
+  })
+
   it('«Pasar a abajo» es la otra altura del mismo módulo', () => {
+    expect(otraAltura('D07-08 arriba')).toEqual({ label: 'Pasar a abajo', lugar: 'D07-08 abajo' })
     expect(otraAltura('D01 arriba')).toEqual({ label: 'Pasar a abajo', lugar: 'D01 abajo' })
     expect(otraAltura('D01 abajo')).toEqual({ label: 'Pasar a arriba', lugar: 'D01 arriba' })
     expect(otraAltura('D06')).toBeNull()

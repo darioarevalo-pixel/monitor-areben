@@ -24,8 +24,14 @@ import type { LineaBarra, MapaLocal, Modulo, Nivel, Pared } from './tipos'
 /** La altura de la barra tal como se elige en el salón. `simple` = el módulo tiene una sola barra. */
 export type PosEspacio = 'alta' | 'baja' | 'simple'
 
-/** Un espacio del local leído del texto del lugar. */
-export type Espacio = { codigo: string; pared: Pared; numero: number; pos: PosEspacio }
+/**
+ * Un espacio del local leído del texto del lugar.
+ *
+ * 🔑 `largo` = **perchero de DOBLE LARGO**: ocupa este número y el siguiente (`D07-08` es un solo
+ * perchero que va del D07 al D08). Pedido de Bruno el 5-oct-2026: el primer relevamiento ⛔ sabía
+ * cómo partirlos y se cargaron con un solo número. En el mapa es UN módulo, con el código del primero.
+ */
+export type Espacio = { codigo: string; pared: Pared; numero: number; pos: PosEspacio; largo: boolean }
 
 /** Las palabras que se dicen en el salón para cada barra. `arriba` es lo que escriben los botones. */
 const PALABRA: Record<string, PosEspacio> = { arriba: 'alta', alta: 'alta', abajo: 'baja', baja: 'baja', simple: 'simple' }
@@ -39,28 +45,30 @@ export function codigoDe(pared: Pared, numero: number): string {
   return `${pared === 'der' ? 'D' : 'I'}${String(numero).padStart(2, '0')}`
 }
 
-/** El texto del lugar para un espacio: `D01 arriba`, `D01 abajo`, o `D01` si es simple. */
-export function lugarDe(e: Pick<Espacio, 'pared' | 'numero' | 'pos'>): string {
-  const cod = codigoDe(e.pared, e.numero)
+/** El texto del lugar para un espacio: `D01 arriba`, `D01 abajo`, `D01` si es simple, `D07-08 arriba` si es largo. */
+export function lugarDe(e: Pick<Espacio, 'pared' | 'numero' | 'pos'> & { largo?: boolean }): string {
+  const cod = codigoDe(e.pared, e.numero) + (e.largo && e.pared !== 'isla' ? `-${String(e.numero + 1).padStart(2, '0')}` : '')
   return e.pos === 'simple' ? cod : `${cod} ${PALABRA_DE[e.pos]}`
 }
 
 /**
  * El espacio que nombra `lugar`, o `null` si es otra cosa («vidriera», «mesa»).
  *
- * Acepta `D01 arriba`, `d1 abajo`, `D01 alta`, `D01` (simple) e `ISLA`. 🔑 Sin palabra de altura
- * es **simple**: los botones escriben `D01` sólo cuando se eligió simple.
+ * Acepta `D01 arriba`, `d1 abajo`, `D01 alta`, `D01` (simple), `D07-08 arriba` (largo) e `ISLA`.
+ * 🔑 Sin palabra de altura es **simple**: los botones escriben `D01` sólo cuando se eligió simple.
+ * ⚠️ Un largo que ⛔ sigue al número (`D07-09`) ⛔ es un espacio: un perchero ocupa dos lugares seguidos.
  */
 export function leerEspacio(lugar: string): Espacio | null {
   const t = String(lugar || '').trim().toLowerCase().replace(/\s+/g, ' ')
   const isla = /^isla(?: (arriba|alta|abajo|baja|simple))?$/.exec(t)
-  if (isla) return { codigo: 'ISLA', pared: 'isla', numero: 0, pos: isla[1] ? PALABRA[isla[1]] : 'simple' }
-  const m = /^([di]) ?-?0*(\d{1,2})(?: (arriba|alta|abajo|baja|simple))?$/.exec(t)
+  if (isla) return { codigo: 'ISLA', pared: 'isla', numero: 0, pos: isla[1] ? PALABRA[isla[1]] : 'simple', largo: false }
+  const m = /^([di]) ?-?0*(\d{1,2})(?: ?[-+] ?[di]?0*(\d{1,2}))?(?: (arriba|alta|abajo|baja|simple))?$/.exec(t)
   if (!m) return null
   const numero = Number(m[2])
   if (!numero) return null
+  if (m[3] && Number(m[3]) !== numero + 1) return null
   const pared: Pared = m[1] === 'd' ? 'der' : 'izq'
-  return { codigo: codigoDe(pared, numero), pared, numero, pos: m[3] ? PALABRA[m[3]] : 'simple' }
+  return { codigo: codigoDe(pared, numero), pared, numero, pos: m[4] ? PALABRA[m[4]] : 'simple', largo: !!m[3] }
 }
 
 /** La prenda de un escaneo (producto×color), con la misma clave que `prendasDelLocal`. */
@@ -78,8 +86,14 @@ export type BarraRelevada = {
    * ella: al guardar queda como estaba en el mapa, y el cierre la nombra «sin relevar».
    */
   relevada: boolean
-  /** Prendas distintas (producto×color) escaneadas en esta barra: son las perchas ocupadas. */
+  /** Prendas distintas (producto×color) escaneadas en esta barra. */
   prendas: PrendaVista[]
+  /**
+   * 🔑 **Las PERCHAS que había**: cada variante (talle) que pasó por el lector, se haya identificado o
+   * no. ⛔ Es `prendas.length`: se cuelgan varios talles del mismo color y cada uno ocupa su percha
+   * (medido el 5-oct-2026: D03 abajo, 26 perchas y 7 colores). Es el cupo que se guarda (Bruno: «sí, perchas»).
+   */
+  perchas: number
   /** Los modelos que quedan en esta barra al guardar (ver `enDosBarras`). */
   modelos: string[]
   tipos: string[]
@@ -92,6 +106,8 @@ export type ModuloRelevado = {
   numero: number
   /** Cómo lo declaró quien lo caminó. */
   estructura: 'doble' | 'simple'
+  /** Perchero de doble largo: ocupa este número y el siguiente (ver `Espacio.largo`). */
+  largo: boolean
   barras: BarraRelevada[]
 }
 
@@ -120,7 +136,7 @@ const ORDEN_PARED: Record<Pared, number> = { izq: 0, isla: 1, der: 2 }
  * modelo son), y los de Stunned tampoco: el mapa es de Zattia (`seChequea`).
  */
 export function armarRelevamiento(escaneos: EscaneoLibre[]): Relevamiento {
-  type Acum = { pared: Pared; numero: number; pos: Map<PosEspacio, Map<string, { p: PrendaVista; veces: number; nc: boolean | null }>> }
+  type Acum = { pared: Pared; numero: number; largo: boolean; pos: Map<PosEspacio, Map<string, { p: PrendaVista; veces: number; nc: boolean | null }>>; perchas: Map<PosEspacio, Set<string>> }
   const porModulo = new Map<string, Acum>()
   const otros = new Set<string>()
 
@@ -131,9 +147,13 @@ export function armarRelevamiento(escaneos: EscaneoLibre[]): Relevamiento {
       continue
     }
     let m = porModulo.get(esp.codigo)
-    if (!m) porModulo.set(esp.codigo, (m = { pared: esp.pared, numero: esp.numero, pos: new Map() }))
+    if (!m) porModulo.set(esp.codigo, (m = { pared: esp.pared, numero: esp.numero, largo: false, pos: new Map(), perchas: new Map() }))
+    // Con una sola lectura «largo» alcanza: quien lo caminó dijo que el perchero sigue en el número siguiente.
+    if (esp.largo) m.largo = true
     let barra = m.pos.get(esp.pos)
     if (!barra) m.pos.set(esp.pos, (barra = new Map()))
+    if (!m.perchas.has(esp.pos)) m.perchas.set(esp.pos, new Set())
+    m.perchas.get(esp.pos)!.add(e.variante_id || e.codigo_crudo)
     const clave = claveDe(e)
     if (!clave || !seChequea('zattia', { sku: e.sku || '' })) continue
     const ya = barra.get(clave)
@@ -187,6 +207,7 @@ export function armarRelevamiento(escaneos: EscaneoLibre[]): Relevamiento {
       pared: a.pared,
       numero: a.numero,
       estructura: posiciones[0] === 'simple' ? 'simple' : 'doble',
+      largo: a.largo,
       barras: posiciones.map((pos) => {
         const vistas = [...(a.pos.get(pos)?.values() ?? [])]
         const id = `${codigo} ${PALABRA_DE[pos] || 'simple'}`.trim()
@@ -196,6 +217,7 @@ export function armarRelevamiento(escaneos: EscaneoLibre[]): Relevamiento {
           pos,
           relevada: a.pos.has(pos),
           prendas: vistas.map((v) => v.p).sort((x, y) => x.nombre.localeCompare(y.nombre) || x.color.localeCompare(y.color)),
+          perchas: a.perchas.get(pos)?.size ?? 0,
           modelos,
           tipos: [...new Set(vistas.map((v) => v.p.tipo))].sort(),
           linea: lineas.size === 1 ? (lineas.has(true) ? 'nc' : 'sale') : 'ambas',
@@ -273,7 +295,8 @@ export function cierreDelRelevamiento(escaneos: EscaneoLibre[], items: ExhibItem
 
   // Las barras a medio caminar (doble con una sola altura) también: de esa altura ⛔ se sabe nada.
   const r = armarRelevamiento(escaneos)
-  const caminados = new Set(r.modulos.map((m) => m.codigo))
+  // Un largo camina también el número siguiente: es el mismo perchero.
+  const caminados = new Set(r.modulos.flatMap((m) => (m.largo ? [m.codigo, codigoDe(m.pared, m.numero + 1)] : [m.codigo])))
   const medias = r.modulos.flatMap((m) => m.barras.filter((b) => !b.relevada).map((b) => `${m.codigo} ${PALABRA_DE[b.pos]}`))
   const sinRelevar = mapa ? [...mapa.modulos.map((m) => m.codigo).filter((c) => !caminados.has(leerEspacio(c)?.codigo ?? c)), ...medias] : null
 
@@ -298,8 +321,9 @@ export type CambioDeMapa = { codigo: string; que: 'nuevo' | 'estructura' | 'barr
  * con **los modelos exactos que se escanearon** (`Nivel.modelos`).
  *
  * - La estructura de cada módulo caminado es la que declaró quien lo caminó (simple o doble).
- * - 🔑 **El cupo es lo que había colgado** (prendas distintas escaneadas): es el dato del salón. Un
- *   color del mismo modelo que entre nuevo ⛔ tiene lugar hasta que Bruno le dé.
+ * - 🔑 **El cupo son las PERCHAS que había colgadas** (`BarraRelevada.perchas`): es el dato del salón.
+ * - 🔑 **Un perchero largo** (`D07-08`) queda como UN módulo `D07` del doble de ancho, y el `D08` que
+ *   hubiera en el mapa **desaparece**: es el mismo perchero.
  * - Los tipos y la línea se deducen de lo escaneado. Con `modelos` puestos ⛔ deciden qué entra
  *   (`aceptaEn`); quedan para dibujar y para las alertas de altura.
  * - Del mapa de antes se conservan el ancho, la altura de cada barra que ya existía, la tabla de
@@ -312,6 +336,8 @@ export function mapaDesdeRelevamiento(r: Relevamiento, base: MapaLocal | null, t
   const previos = new Map((base?.modulos ?? []).map((m) => [m.codigo, m]))
   const cambios: CambioDeMapa[] = []
   const relevados = new Map<string, Modulo>()
+  /** Los módulos que quedaron DENTRO de un perchero largo caminado: dejan de existir en el mapa. */
+  const absorbidos = new Set<string>()
 
   for (const mr of r.modulos) {
     const antes = previos.get(mr.codigo)
@@ -319,13 +345,23 @@ export function mapaDesdeRelevamiento(r: Relevamiento, base: MapaLocal | null, t
       const nivelAntes = antes?.niveles.find((n) => n.pos === b.pos)
       // La barra que nadie caminó queda como estaba; si no existía, vacía y sin cupo fijo.
       if (!b.relevada) return nivelAntes ?? { pos: b.pos, alturaCm: ALTURA[b.pos], linea: 'ambas', tipos: [], cupo: null }
-      const n: Nivel = { pos: b.pos, alturaCm: nivelAntes?.alturaCm ?? ALTURA[b.pos], linea: b.linea, tipos: b.tipos, cupo: b.prendas.length }
+      const n: Nivel = { pos: b.pos, alturaCm: nivelAntes?.alturaCm ?? ALTURA[b.pos], linea: b.linea, tipos: b.tipos, cupo: b.perchas }
       return b.modelos.length ? { ...n, modelos: b.modelos } : n
     })
-    relevados.set(mr.codigo, { codigo: mr.codigo, pared: mr.pared, orden: 0, anchoCm: antes?.anchoCm ?? ANCHO_DEFAULT, niveles })
+    // El ancho lo dice quien lo caminó: largo = dos módulos; uno que era largo y se caminó sin serlo vuelve a uno.
+    const anchoAntes = antes?.anchoCm ?? ANCHO_DEFAULT
+    // 🔴 La isla ⛔ entra: mide lo que mide (185 cm) y ⛔ es un largo (lo cacé guardando el mapa real).
+    const anchoCm = mr.pared === 'isla' ? anchoAntes : mr.largo ? Math.max(anchoAntes, ANCHO_DEFAULT * 2) : anchoAntes >= ANCHO_DEFAULT * 2 ? ANCHO_DEFAULT : anchoAntes
+    relevados.set(mr.codigo, { codigo: mr.codigo, pared: mr.pared, orden: 0, anchoCm, niveles })
+    if (mr.largo) {
+      const siguiente = codigoDe(mr.pared, mr.numero + 1)
+      absorbidos.add(siguiente)
+      if (previos.has(siguiente)) cambios.push({ codigo: siguiente, que: 'estructura', texto: `${siguiente} pasa a ser parte de ${mr.codigo} (perchero doble largo)` })
+    }
 
-    const total = mr.barras.reduce((s, b) => s + b.prendas.length, 0)
-    if (!antes) cambios.push({ codigo: mr.codigo, que: 'nuevo', texto: `${mr.codigo} es nuevo (${mr.estructura}, ${total} perchas)` })
+    const total = mr.barras.reduce((s, b) => s + b.perchas, 0)
+    const etiqueta = mr.largo ? `${mr.estructura}, doble largo` : mr.estructura
+    if (!antes) cambios.push({ codigo: mr.codigo, que: 'nuevo', texto: `${mr.codigo} es nuevo (${etiqueta}, ${total} perchas)` })
     else {
       const eraDoble = antes.niveles.some((n) => n.pos === 'alta' || n.pos === 'baja')
       const eraSimple = antes.niveles.every((n) => n.pos === 'simple')
@@ -333,10 +369,11 @@ export function mapaDesdeRelevamiento(r: Relevamiento, base: MapaLocal | null, t
       if (ahoraDoble !== eraDoble || (!ahoraDoble && !eraSimple)) {
         cambios.push({ codigo: mr.codigo, que: 'estructura', texto: `${mr.codigo} pasa a ${mr.estructura}` })
       }
+      if (anchoCm !== antes.anchoCm) cambios.push({ codigo: mr.codigo, que: 'estructura', texto: `${mr.codigo} pasa a ${mr.largo ? 'doble largo' : 'largo de un módulo'} (${anchoCm} cm)` })
       cambios.push({
         codigo: mr.codigo,
         que: 'barras',
-        texto: `${mr.codigo}: ${mr.barras.map((b) => `${PALABRA_DE[b.pos] || 'simple'} ${b.relevada ? b.prendas.length : 'sin relevar'}`).join(' · ')}`,
+        texto: `${mr.codigo}: ${mr.barras.map((b) => `${PALABRA_DE[b.pos] || 'simple'} ${b.relevada ? b.perchas : 'sin relevar'}`).join(' · ')}`,
       })
     }
   }
@@ -357,7 +394,10 @@ export function mapaDesdeRelevamiento(r: Relevamiento, base: MapaLocal | null, t
     if (despues) return despues.x.orden - 0.5 + esp!.numero / 1000
     return 10_000 + ORDEN_PARED[m.pared] * 100 + (esp?.numero ?? 0)
   }
+  // 🔴 Un largo gana sobre el siguiente aunque el siguiente se haya caminado suelto en el mismo recorrido:
+  // quien lo marcó largo dijo que es UN perchero.
   const modulos = [...(base?.modulos ?? []).filter((m) => !relevados.has(m.codigo)), ...relevados.values()]
+    .filter((m) => !absorbidos.has(m.codigo))
     .map((m) => ({ m, k: clave(m) }))
     .sort((a, b) => a.k - b.k || a.m.codigo.localeCompare(b.m.codigo))
     .map(({ m }, i) => ({ ...m, orden: i + 1 }))

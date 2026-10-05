@@ -6,8 +6,8 @@ import { leerEspacio, lugarDe, type PosEspacio } from '@/lib/mapa-local/relevami
 import type { MapaLocal, Pared } from '@/lib/mapa-local/tipos'
 
 /**
- * **Elegir el espacio con botones**, en «Chequeo + mapa»: lado → número → simple o doble → arriba o
- * abajo. Lo pidió Bruno el 5-oct-2026: *«que vaya eligiendo entre los D o I, y el número. Que elija
+ * **Elegir el espacio con botones**, en «Chequeo + mapa»: lado → número → largo → simple o doble →
+ * arriba o abajo. Lo pidió Bruno el 5-oct-2026: *«que vaya eligiendo entre los D o I, y el número. Que elija
  * si hay doble altura o simple, y que vaya escaneando»*.
  *
  * 🔑 **Escribe el MISMO texto del lugar** (`D01 arriba`) que se guarda en cada escaneo: los botones son
@@ -17,6 +17,10 @@ import type { MapaLocal, Pared } from '@/lib/mapa-local/tipos'
  * 🔑 **Simple o doble lo dice quien está parado ahí**, ⛔ el mapa: el mapa guardado está viejo (por
  * eso se releva). El mapa sólo propone los números que conoce y la estructura que tenía.
  *
+ * 🔑 **Largo** (5-oct-2026): un perchero de DOBLE LARGO ocupa este número y el siguiente, y se escanea
+ * entero como uno (`D07-08 arriba`). El primer relevamiento ⛔ tenía cómo decirlo y se cargó con un solo
+ * número. El mapa propone el largo que conoce; lo confirma quien está parado ahí.
+ *
  * ⚠️ Botones grandes y ⛔ chips: se tocan con el lector en la otra mano.
  */
 export function ElegirEspacio({ mapa, lugar, onElegir }: { mapa: MapaLocal | null; lugar: string; onElegir: (lugar: string) => void }) {
@@ -24,6 +28,7 @@ export function ElegirEspacio({ mapa, lugar, onElegir }: { mapa: MapaLocal | nul
   const [pared, setPared] = useState<Pared | null>(actual?.pared ?? null)
   const [numero, setNumero] = useState<number | null>(actual?.numero ?? null)
   const [doble, setDoble] = useState<boolean | null>(actual ? actual.pos !== 'simple' : null)
+  const [largo, setLargo] = useState<boolean>(actual?.largo ?? false)
   const [otro, setOtro] = useState(false)
 
   // Si el lugar cambió por otro lado (se escribió a mano, se retomó, «Pasar a abajo»), los botones
@@ -35,6 +40,7 @@ export function ElegirEspacio({ mapa, lugar, onElegir }: { mapa: MapaLocal | nul
       setPared(actual.pared)
       setNumero(actual.numero)
       setDoble(actual.pos !== 'simple')
+      setLargo(actual.largo)
       setOtro(false)
     }
   }
@@ -46,11 +52,15 @@ export function ElegirEspacio({ mapa, lugar, onElegir }: { mapa: MapaLocal | nul
   }, [mapa, pared])
 
   /** Lo que el mapa guardado dice de este módulo: sólo para proponer, ⛔ decide. */
+  const moduloDelMapa = (p: Pared, n: number) => mapa?.modulos.find((x) => x.codigo === lugarDe({ pared: p, numero: n, pos: 'simple' }))
   const dobleSegunMapa = (p: Pared, n: number): boolean | null => {
-    const cod = lugarDe({ pared: p, numero: n, pos: 'simple' })
-    const m = mapa?.modulos.find((x) => x.codigo === cod)
+    const m = moduloDelMapa(p, n)
     return m ? m.niveles.some((x) => x.pos === 'alta' || x.pos === 'baja') : null
   }
+  /** Largo según el mapa: el doble de ancho que un módulo (150 cm). La isla ⛔ cuenta: es otra cosa. */
+  const largoSegunMapa = (p: Pared, n: number): boolean => (moduloDelMapa(p, n)?.anchoCm ?? 0) >= 150
+  const dos = (n: number) => String(n).padStart(2, '0')
+  const etiquetaNumero = (n: number) => (pared && pared !== 'isla' && largoSegunMapa(pared, n) ? `${dos(n)}–${dos(n + 1)}` : dos(n))
 
   function elegirPared(p: Pared) {
     setPared(p)
@@ -63,24 +73,35 @@ export function ElegirEspacio({ mapa, lugar, onElegir }: { mapa: MapaLocal | nul
     }
     setNumero(null)
     setDoble(null)
+    setLargo(false)
   }
 
   function elegirNumero(n: number) {
     setNumero(n)
     setOtro(false)
     const d = pared ? dobleSegunMapa(pared, n) : null
+    const l = pared ? largoSegunMapa(pared, n) : false
     setDoble(d)
+    setLargo(l)
     // Simple según el mapa: ya se puede escanear. Si en el salón es doble, se toca «Doble».
-    if (pared && d === false) onElegir(lugarDe({ pared, numero: n, pos: 'simple' }))
+    if (pared && d === false) onElegir(lugarDe({ pared, numero: n, pos: 'simple', largo: l }))
+  }
+
+  /** Cambiar el largo con la altura ya elegida reescribe el lugar: se sigue escaneando en la misma barra. */
+  function elegirLargo(l: boolean) {
+    setLargo(l)
+    if (!pared || numero == null || doble == null) return
+    if (!doble) onElegir(lugarDe({ pared, numero, pos: 'simple', largo: l }))
+    else if (posActual) onElegir(lugarDe({ pared, numero, pos: posActual, largo: l }))
   }
 
   function elegirEstructura(d: boolean) {
     setDoble(d)
-    if (pared && numero != null && !d) onElegir(lugarDe({ pared, numero, pos: 'simple' }))
+    if (pared && numero != null && !d) onElegir(lugarDe({ pared, numero, pos: 'simple', largo }))
   }
 
   function elegirAltura(pos: PosEspacio) {
-    if (pared && numero != null) onElegir(lugarDe({ pared, numero, pos }))
+    if (pared && numero != null) onElegir(lugarDe({ pared, numero, pos, largo }))
   }
 
   const grande = { minWidth: 56, height: 48, fontSize: font.lg } as const
@@ -112,7 +133,7 @@ export function ElegirEspacio({ mapa, lugar, onElegir }: { mapa: MapaLocal | nul
         fila(
           'Número',
           <>
-            {numeros.map((n) => opcion(numero === n && !otro, String(n).padStart(2, '0'), () => elegirNumero(n)))}
+            {numeros.map((n) => opcion(numero === n && !otro, etiquetaNumero(n), () => elegirNumero(n)))}
             {/* Un número que el mapa ⛔ tiene es justo lo que el relevamiento viene a encontrar. */}
             {otro || (numero != null && !numeros.includes(numero)) ? (
               <Input
@@ -135,6 +156,15 @@ export function ElegirEspacio({ mapa, lugar, onElegir }: { mapa: MapaLocal | nul
             ) : (
               opcion(false, 'otro número', () => setOtro(true), { fontSize: font.base })
             )}
+          </>,
+        )}
+
+      {pared && pared !== 'isla' && numero != null &&
+        fila(
+          'Largo',
+          <>
+            {opcion(!largo, 'Un módulo', () => elegirLargo(false))}
+            {opcion(largo, `Doble largo (${dos(numero)} + ${dos(numero + 1)})`, () => elegirLargo(true))}
           </>,
         )}
 
