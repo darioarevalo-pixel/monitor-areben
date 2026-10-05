@@ -9,6 +9,8 @@
 //   GET  ?recurso=caja&action=buscar&q=…         → la lista MIENTRAS se escribe, POR PRODUCTO: { conStock, sinStock, masCon, masSin }
 //        de `{ product_id, product_name, local, variantes[] }` (`productosPorStock`)
 //        con el stock del local de anoche (⛔ pega a GN: tipear ⛔ gasta el cupo de 60/min)
+//   GET  ?recurso=caja&action=cuentas-mp          → { enUso, cuentas? }: dónde se detectan las transferencias
+//        (la cuenta de MP en uso de Pagos recibidos, `mp_cuenta_uso`); la lista sólo para admin
 //   GET  ?recurso=caja&action=pendientes          → las ventas que ⛔ llegaron a GN
 //   GET  ?recurso=caja&action=pedidos-web         → los pedidos de TN por empaquetar (v2, W1):
 //        { pedidos, porSku, noLeidas, leidoEn } — ver lib/caja/pedidos-web.core.js
@@ -25,6 +27,7 @@
 //   POST ?recurso=caja  { action: 'cerrar-turno', id, contado, nota?, conteo? } → cierra con el efectivo contado
 //        `conteo` (fase B, 5-oct): `{ [billete]: cantidad }` de la calculadora; el servidor rearma el
 //        total con `lib/caja/conteo.core.js` y, si ⛔ es el fondo o el contado, 400.
+//   POST ?recurso=caja  { action: 'usar-mp', cuenta_id } → sólo admin: cambia la cuenta de MP en uso (la MISMA de Pagos recibidos)
 //   POST ?recurso=caja  { action: 'politica', texto }      → sólo admin: la política de cambio del ticket
 //   POST ?recurso=caja  { action: 'logo', logo: { src, ancho, alto } | null } → sólo admin: el logo del ticket (sql/migrate-caja-logo.sql)
 //   POST ?recurso=caja  { action: 'bajadas', transferenciaA?, feria?, billetes?, feriaProductos? } → sólo admin: a qué cuenta van las
@@ -49,8 +52,8 @@
 // 🔑 EL TURNO ES DE LA CAJA (v2, W3, Bruno 4-oct): la API de GN ⛔ tiene turnos y el de GN se deja de
 // usar. Sin turno abierto ⛔ se cobra (409): cada venta queda en el turno donde se cobró (`turno_id`).
 //
-// 🔑 LA TRANSFERENCIA SE ESPERA (F5). Si el cobro tiene un pago en una cuenta con `esperaPago`
-// (Transferencia), la venta queda en `esperando_pago` y ⛔ sale a GN ni se imprime: la pantalla pide
+// 🔑 LA TRANSFERENCIA SE ESPERA (F5), SIEMPRE (Bruno, 5-oct): si el cobro tiene un pago por
+// TRANSFERENCIA —la cuenta de GN que sea: normal, feria, Caja Gerencia— (`montoAEsperar`), la venta queda en `esperando_pago` y ⛔ sale a GN ni se imprime: la pantalla pide
 // `cruzar` cada pocos segundos, que lee Mercado Pago con la MISMA lectura de Pagos recibidos y busca
 // el monto exacto (`cruzarTransferencia`). Recién con el pago encontrado la venta pasa a `borrador` y
 // se manda. El id del pago de MP queda en la fila con índice ÚNICO: un pago confirma UNA venta.
@@ -62,7 +65,7 @@ import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
 import { MODO_LOCAL_ZATTIA, REGLAS_INICIALES, armarVentaGN, cobro, exigirFeria, medioDeCuenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { cruzarTransferencia } from '../lib/pagos-recibidos/core.core.js'
-import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
+import { cuentasDe, pagosDelDia, ponerEnUso, usosDe } from './_pagos-recibidos.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
 import { filtrarPorNombre, ordenParaLaBase, palabrasDeBusqueda, productosPorStock } from '../lib/caja/buscar.core.js'
@@ -321,6 +324,14 @@ export default async function handler(req, res) {
         return res.status(200).json(r || vacio)
       }
 
+      if (accion === 'cuentas-mp') {
+        // Dónde se detectan las transferencias (Bruno, 5-oct): la cuenta de MP en uso de Pagos
+        // recibidos. Todos ven cuál es; la lista para cambiarla, sólo admin.
+        const { cuentas } = await cuentasDe(sb, store)
+        const enUso = cuentas.find((x) => x.enUso) || null
+        return res.status(200).json({ enUso: enUso && { cuenta_id: enUso.cuenta_id, nombre: enUso.nombre }, ...(esAdmin(perfil) ? { cuentas: cuentas.map((x) => ({ cuenta_id: x.cuenta_id, nombre: x.nombre })) } : {}) })
+      }
+
       if (accion === 'pendientes') {
         const { data, error } = await sb.from('caja_venta').select(COLUMNAS)
           .eq('store', store).in('estado', [...SIN_LLEGAR, 'esperando_pago']).order('creada_en', { ascending: true }).limit(100)
@@ -341,7 +352,7 @@ export default async function handler(req, res) {
         if (ultimos.error) throw new Error(ultimos.error.message)
         return res.status(200).json({ turno: turno ? await conResumen(turno) : null, ultimos: ultimos.data || [] })
       }
-      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, pendientes, pedidos-web, turno)' })
+      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, cuentas-mp, pendientes, pedidos-web, turno)' })
     }
 
     if (req.method === 'POST') {
@@ -353,6 +364,15 @@ export default async function handler(req, res) {
         const { error } = await sb.from('caja_config').update({ politica_cambio: texto, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
         if (error) throw new Error(error.message)
         return res.status(200).json({ politica_cambio: texto })
+      }
+      if (accion === 'usar-mp') {
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia la cuenta de Mercado Pago.' })
+        const idMp = Number(b.cuenta_id)
+        const { cuentas, enUso } = await cuentasDe(sb, store)
+        if (!cuentas.some((x) => x.cuenta_id === idMp)) return res.status(404).json({ error: 'Esa cuenta de Mercado Pago no está cargada (se carga en Pagos recibidos).' })
+        if (enUso !== idMp) await ponerEnUso(sb, store, idMp, perfil)
+        const x = cuentas.find((y) => y.cuenta_id === idMp)
+        return res.status(200).json({ enUso: { cuenta_id: idMp, nombre: x.nombre } })
       }
       if (accion === 'logo') {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia el logo del ticket.' })
@@ -619,7 +639,7 @@ export default async function handler(req, res) {
         if (ya.data.estado === 'cancelada') return res.status(200).json({ venta: ya.data })
         return res.status(409).json({ error: 'La transferencia ya llegó: la venta está cobrada y no se cancela desde acá.', venta: ya.data })
       }
-      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, cruzar, cancelar, politica, logo, bajadas, abrir-turno, salida, contar, cerrar-turno)' })
+      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, cruzar, cancelar, usar-mp, politica, logo, bajadas, abrir-turno, salida, contar, cerrar-turno)' })
     }
     return res.status(405).json({ error: 'Método no permitido' })
   } catch (e) {

@@ -21,7 +21,7 @@ import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { leerConfig, leerPendientes, leerTurno, type Config, type Turno, type Venta } from '@/lib/caja/cliente'
 import { ButtonLink, Notice, space } from '@/components/ui'
-import { Bajadas, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TurnoCaja } from '@/components/caja/partes'
+import { Bajadas, DeteccionTransferencias, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TurnoCaja } from '@/components/caja/partes'
 
 export function Caja() {
   const { perfil } = useSesion()
@@ -82,6 +82,7 @@ export function Caja() {
         </HeaderAcciones>
       )}
       {errTurno && <Notice tone="danger">No se pudo leer el turno: {errTurno}</Notice>}
+      <DeteccionTransferencias admin={admin} />
       {turno && !esMio && <Notice tone="neutral">Turno de {turno.abierto_por ?? 'otra cuenta'}: POS sólo para esa cuenta.</Notice>}
       {turno !== undefined && (
         <TurnoCaja

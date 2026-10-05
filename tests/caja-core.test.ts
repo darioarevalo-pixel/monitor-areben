@@ -7,6 +7,7 @@ import {
   cobro,
   cuentaDeMedio,
   exigirFeria,
+  montoAEsperar,
   pagosDeMedio,
   subtotalDeFeria,
   medioDeCuenta,
@@ -430,6 +431,45 @@ describe('caja · productos de feria trabados', () => {
     const F = { ...R, feria: true } as R_
     expect(pagosDeMedio('efectivo', q(mixto, F))).toEqual([{ cuenta: FERIA_EFECTIVO }])
     expect(() => pagosDeMedio('debito', q(mixto, F))).toThrow(/efectivo o transferencia/)
+  })
+})
+
+/**
+ * TODA transferencia espera el pago (Bruno, 5-oct): en modo feria una venta de $200 por transferencia
+ * se dio por cobrada y fue directo a GN, porque la 25868 ⛔ tenía `esperaPago`.
+ */
+describe('caja · la transferencia se espera siempre', () => {
+  type R_ = Parameters<typeof cuentaDeMedio>[1]['reglas']
+  const R = { ...(REGLAS_INICIALES as unknown as R_), feriaProductos: [{ id: 1, nombre: 'TOP FERIA' }] } as R_
+  const filas = renglones([{ product_id: 2, size_id: 1, cantidad: 1, precio: 200 }])
+
+  it('🔴 la de feria (25868) y la de Caja Gerencia (20595) también esperan', () => {
+    for (const cuenta of [FERIA_TRANSFERENCIA, 20595, TRANSFERENCIA]) {
+      const c = cobro({ filas, pagos: [{ cuenta }], reglas: R, descuentoVenta: null })
+      expect(montoAEsperar(c.pagos, R)).toBe(c.total)
+    }
+  })
+
+  it('efectivo y tarjeta ⛔ esperan', () => {
+    for (const cuenta of [EFECTIVO, FERIA_EFECTIVO, DEBITO]) {
+      const c = cobro({ filas, pagos: [{ cuenta }], reglas: R, descuentoVenta: null })
+      expect(montoAEsperar(c.pagos, R)).toBe(0)
+    }
+  })
+
+  it('🔑 mixto de feria por transferencia: UNA transferencia por la suma ⇒ $28.000', () => {
+    const mixto = renglones([
+      { product_id: 1, size_id: 1, cantidad: 1, precio: 10000 },
+      { product_id: 2, size_id: 1, cantidad: 1, precio: 20000 },
+    ])
+    const c = cobro({ filas: mixto, pagos: [{ cuenta: FERIA_TRANSFERENCIA, base: 10000 }, { cuenta: TRANSFERENCIA }], reglas: R, descuentoVenta: null })
+    expect(montoAEsperar(c.pagos, R)).toBe(28000)
+  })
+
+  it('varios pagos: sólo la parte por transferencia', () => {
+    const f = renglones([{ product_id: 2, size_id: 1, cantidad: 1, precio: 20000 }])
+    const c = cobro({ filas: f, pagos: [{ cuenta: EFECTIVO, base: 10000 }, { cuenta: TRANSFERENCIA }], reglas: R, descuentoVenta: null })
+    expect(montoAEsperar(c.pagos, R)).toBe(9000)
   })
 })
 

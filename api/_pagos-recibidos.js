@@ -91,7 +91,11 @@ async function quienEs(token) {
 }
 
 /** Las cuentas de la marca, con su período de uso. ⛔ Sin la llave. */
-async function cuentasDe(sb, store) {
+/**
+ * Las cuentas cargadas (sin la llave) y cuál está en uso. La Caja la usa también (`api/_caja.js`):
+ * la cuenta donde se detectan las transferencias es la MISMA que mira Pagos recibidos.
+ */
+export async function cuentasDe(sb, store) {
   const [c, u] = await Promise.all([
     sb.from('mp_cuentas').select('cuenta_id, nombre').eq('store', store),
     sb.from('mp_cuenta_uso').select('cuenta_id, desde').eq('store', store).order('desde'),
@@ -112,7 +116,8 @@ async function cuentasDe(sb, store) {
   return { cuentas, usos, enUso };
 }
 
-async function ponerEnUso(sb, store, cuentaId, perfil) {
+/** Pone una cuenta ya cargada en uso desde ahora. Sólo admin: lo chequea quien llama. */
+export async function ponerEnUso(sb, store, cuentaId, perfil) {
   const { error } = await sb.from('mp_cuenta_uso').insert({ store, cuenta_id: cuentaId, puesta_por: perfil.name || null });
   if (error) throw error;
 }

@@ -50,6 +50,11 @@ function consulta(tabla: string) {
       base.turnos.push(t)
       return { data: [t], error: null }
     }
+    if (accion.tipo === 'insert' && tabla === 'mp_cuenta_uso') {
+      const u = { desde: new Date().toISOString(), ...accion.fila }
+      base.usos.push(u)
+      return { data: [u], error: null }
+    }
     if (accion.tipo === 'insert' && tabla === 'caja_turno_mov') {
       const m = { id: `m${base.movs.length + 1}`, creado_en: new Date().toISOString(), ...accion.fila }
       base.movs.push(m)
@@ -238,6 +243,21 @@ describe('caja · formas de pago y descuentos a mano (Bruno, 4-oct)', () => {
     const r = await correr(req('POST', {}, { action: 'bajadas', transferenciaA: 20595, feria: true }))
     expect(r.code).toBe(200)
     expect((base.config as { reglas: Fila }).reglas).toMatchObject({ transferenciaA: 20595, feria: true })
+  })
+
+  it('cuenta de MP donde se detectan las transferencias: la MISMA de Pagos recibidos; cambiarla, sólo admin', async () => {
+    base.llaves = [{ cuenta_id: CUENTA_MP, token: 'APP_USR-llave', nombre: 'BDIACCESORIOS', store: 'zattia' }, { cuenta_id: 999, token: 'APP_USR-otra', nombre: 'AREBEN', store: 'zattia' }]
+    conSesion(CAJERA)
+    const c = await correr(req('GET', { action: 'cuentas-mp' }))
+    expect(c.body).toEqual({ enUso: { cuenta_id: CUENTA_MP, nombre: 'BDIACCESORIOS' } })
+    expect(JSON.stringify(c.body)).not.toContain('APP_USR')
+    expect((await correr(req('POST', {}, { action: 'usar-mp', cuenta_id: 999 }))).code).toBe(403)
+    conSesion(ADMIN_)
+    expect((await correr(req('GET', { action: 'cuentas-mp' }))).body).toMatchObject({ cuentas: [{ cuenta_id: CUENTA_MP }, { cuenta_id: 999, nombre: 'AREBEN' }] })
+    expect((await correr(req('POST', {}, { action: 'usar-mp', cuenta_id: 12345 }))).code).toBe(404)
+    const r = await correr(req('POST', {}, { action: 'usar-mp', cuenta_id: 999 }))
+    expect(r.body).toEqual({ enUso: { cuenta_id: 999, nombre: 'AREBEN' } })
+    expect(base.usos.at(-1)).toMatchObject({ store: 'zattia', cuenta_id: 999 })
   })
 
   it('logo del ticket: sólo admin, PNG o JPG, y vuelve en la configuración', async () => {
@@ -596,11 +616,21 @@ describe('caja · F5 transferencia', () => {
     expect(base.ventas.get(ID)).toMatchObject({ estado: 'esperando_pago', espera_monto: 13900, total: 22400 })
   })
 
-  it('dos pagos por transferencia en una venta ⇒ 400: el cruce busca UNA', async () => {
+  it('dos pagos por transferencia en una venta ⇒ se espera UNA por la suma (Bruno, 5-oct)', async () => {
     conSesion(CAJERA)
-    const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 13015, base: 10000 }, { cuenta: 13015 }], total: 23000 }))
-    expect(r.code).toBe(400)
-    expect(base.ventas.size).toBe(0)
+    // $10.000 −10 % = $9.000; $15.490 −10 % = $13.941 ⇒ $13.900. Una transferencia de $22.900.
+    const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 13015, base: 10000 }, { cuenta: 13015 }], total: 22900 }))
+    expect(r.code).toBe(200)
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'esperando_pago', espera_monto: 22900 })
+    expect(gn.posts).toHaveLength(0)
+  })
+
+  it('🔴 la de feria (25868) también espera: ⛔ va directo a GN', async () => {
+    conSesion(CAJERA)
+    const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25868 }], total: 25500, pagaCon: null }))
+    expect(r.code).toBe(200)
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'esperando_pago', espera_monto: 25500 })
+    expect(gn.posts).toHaveLength(0)
   })
 
   it('sin cuenta de MP conectada ⇒ lo dice y sigue esperando', async () => {

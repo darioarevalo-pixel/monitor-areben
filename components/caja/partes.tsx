@@ -36,6 +36,9 @@ import {
   type ProductoFeria,
   buscarNombre,
   guardarLogo,
+  leerCuentasMp,
+  usarCuentaMp,
+  type CuentaMp,
 } from '@/lib/caja/cliente'
 import { Badge, Button, Field, Icono, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
 
@@ -812,7 +815,9 @@ export function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: 
   const [abierto, setAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-  const NOMBRE_TRANSF: Record<number, string> = { 13015: 'Areben Comercial (se confirma sola con Mercado Pago)', 20595: 'Caja Gerencia (se confirma a mano)' }
+  // La cuenta de GN donde se ASIENTA la transferencia. Cualquiera de las dos ESPERA el pago en Mercado
+  // Pago (Bruno, 5-oct): dónde se detecta lo dice «Las transferencias se detectan en».
+  const NOMBRE_TRANSF: Record<number, string> = { 13015: 'Areben Comercial', 20595: 'Caja Gerencia' }
   const [billetesTxt, setBilletesTxt] = useState(() => billetesDe(reglas).join(', '))
   async function guardar(b: { transferenciaA?: number; feria?: boolean; billetes?: number[] }) {
     setGuardando(true)
@@ -832,7 +837,7 @@ export function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: 
   return (
     <Plegable abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Formas de pago" ayuda="A qué cuenta van las transferencias y el modo feria. Sólo lo cambia un admin.">
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
-        <Field label="Las transferencias van a">
+        <Field label="Las transferencias se asientan en (cuenta de Gestión Nube)">
           <Select value={String(reglas.transferenciaA ?? '')} disabled={guardando} onChange={(e) => guardar({ transferenciaA: Number(e.target.value) })} style={{ maxWidth: 420 }}>
             {opciones.map((id) => (
               <option key={id} value={id}>
@@ -1446,6 +1451,54 @@ export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | n
         {msg && <span style={{ fontSize: font.sm, color: color.mut }}>{msg}</span>}
       </div>
     </Plegable>
+  )
+}
+
+/**
+ * Dónde se detectan las transferencias (Bruno, 5-oct: «tiene que ir cambiando»): la cuenta de Mercado
+ * Pago en uso de Pagos recibidos —la MISMA, ⛔ una copia—. Todos ven cuál es; cambiarla, sólo admin.
+ * Cargar una cuenta nueva (con su llave) sigue siendo en Pagos recibidos.
+ */
+export function DeteccionTransferencias({ admin }: { admin: boolean }) {
+  const [datos, setDatos] = useState<{ enUso: CuentaMp | null; cuentas?: CuentaMp[] } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [guardando, setGuardando] = useState(false)
+  useEffect(() => {
+    leerCuentasMp()
+      .then(setDatos)
+      .catch((e) => setError((e as Error).message))
+  }, [])
+  async function usar(id: number) {
+    setGuardando(true)
+    setError(null)
+    try {
+      const r = await usarCuentaMp(id)
+      setDatos((d) => ({ ...d, enUso: r.enUso }))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setGuardando(false)
+    }
+  }
+  return (
+    <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', background: color.brandBg, border: `1px solid ${color.brandBorder}`, borderRadius: radius.lg, padding: `${space[2]} ${space[3]}` }}>
+      <span style={{ display: 'grid', placeItems: 'center', width: 32, height: 32, borderRadius: radius.md, background: color.surface, color: color.brand }}>
+        <Icono nombre="transferencia" size={18} />
+      </span>
+      <span style={{ color: color.ink2 }}>
+        Las transferencias se detectan en: <b style={{ color: color.ink }}>{datos ? (datos.enUso?.nombre ?? 'ninguna cuenta (cargarla en Pagos recibidos)') : '…'}</b>
+      </span>
+      {admin && datos?.cuentas && datos.cuentas.length > 1 && (
+        <Select value={String(datos.enUso?.cuenta_id ?? '')} disabled={guardando} onChange={(e) => usar(Number(e.target.value))} style={{ maxWidth: 320 }} aria-label="Cambiar la cuenta de Mercado Pago">
+          {datos.cuentas.map((x) => (
+            <option key={x.cuenta_id} value={x.cuenta_id}>
+              {x.nombre}
+            </option>
+          ))}
+        </Select>
+      )}
+      {error && <span style={{ color: color.dangerInk, fontSize: font.sm }}>{error}</span>}
+    </div>
   )
 }
 

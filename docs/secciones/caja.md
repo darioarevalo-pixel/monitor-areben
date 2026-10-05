@@ -60,12 +60,12 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   transferencia, a la cuenta de feria, sin el % de la forma de pago. Pedido mixto = cada prenda con su
   regla: `pagosDeMedio` arma `[{ cuenta de feria, base: lo de feria }, { cuenta normal }]` y 🔴 el
   servidor lo EXIGE con `exigirFeria` (400). Con feria, débito/crédito y «Varios pagos» se traban. El
-  descuento a mano a la venta se reparte como siempre. ⚠️ Mixto por transferencia son DOS pagos de
-  transferencia: choca con «una sola transferencia por venta» cuando toda transferencia espere.
+  descuento a mano a la venta se reparte como siempre. Mixto por transferencia son DOS pagos de
+  transferencia y UNA transferencia de la clienta: se espera la suma (`montoAEsperar`).
 - 🔑 **La cajera ve CUATRO formas de pago; la cuenta de GN es INTERNA** (Bruno, 4-oct). `cuentaDeMedio`
   (`core.core.js`) la resuelve con `caja_config.reglas.medios` (`sql/migrate-caja-medios.sql`):
-  Efectivo 12921 · Débito 20196 · Transferencia ⇒ `transferenciaA` (13015 Areben Comercial, espera MP |
-  20595 Caja Gerencia, a mano: lo baja un ADMIN, ⛔ la cajera) · Crédito ⇒ 25172 (−10 %) sólo si la
+  Efectivo 12921 · Débito 20196 · Transferencia ⇒ `transferenciaA` (13015 Areben Comercial | 20595 Caja
+  Gerencia: dónde se ASIENTA en GN, lo baja un ADMIN, ⛔ la cajera; las dos esperan el pago) · Crédito ⇒ 25172 (−10 %) sólo si la
   Agenda tiene promo de crédito HOY **y** la cajera contesta que la tarjeta es de ese banco; 25173 «6
   cuotas» si pasa $250.000 y lo pide; si no 25188 (lista). **Modo feria** (admin): efectivo y
   transferencia van a las de feria (precio final). El servidor rechaza una cuenta sin forma de pago.
@@ -90,9 +90,13 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - 🔑 **El turno en TÉRMINOS** (Bruno, 5-oct): `Esperado · Contado · Diferencia`, ⛔ «tenía que haber… se
   contaron…». Abrir, contar, cargar salida y cerrar son MODALES (`ModalesTurno`), los mismos en la
   pestaña y en el POS, que ⛔ repite la tarjeta del turno.
-- 🔑 **Por Transferencia la venta ESPERA el pago (F5)**: la cuenta con `esperaPago` en `caja_config`
-  (hoy sólo 13015) deja la venta en `esperando_pago` —⛔ GN, ⛔ ticket, ⛔ mail— hasta que aparece en
-  MP un pago aprobado del **monto exacto** (`espera_monto`, sólo la parte de la transferencia).
+- 🔑 **TODA transferencia ESPERA el pago (F5; Bruno, 5-oct)**: la regla es la FORMA de pago
+  (`montoAEsperar` ⇒ `medioDeCuenta === 'transferencia'`), ⛔ el `esperaPago` de cada cuenta —sólo lo
+  tenía la 13015 y en modo feria una venta de $200 fue directo a GN—. Deja la venta en `esperando_pago` —⛔ GN, ⛔ ticket, ⛔ mail— hasta que aparece en
+  MP un pago aprobado del **monto exacto** (`espera_monto`: la SUMA de las partes por transferencia).
+  🔑 **Dónde se detecta** es la cuenta de MP en uso de **Pagos recibidos** (`mp_cuenta_uso`, la MISMA):
+  la Caja la muestra («Las transferencias se detectan en») y un admin la cambia (`usar-mp`, que llama
+  a `ponerEnUso` de `api/_pagos-recibidos.js`). Cargar una cuenta nueva sigue en Pagos recibidos.
   Sola, sólo sin duda: UN pago posterior y ninguna otra venta esperando ese monto. Con duda (o un
   pago de hasta 10 min ANTES de confirmar) elige la cajera. ⛔ Alcanza el comprobante del teléfono.
 - 🔴 **Un pago de MP confirma UNA venta**: `mp_pago_id` con índice único. Y **sólo `cruzar` saca
@@ -153,8 +157,7 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   datos) y pide él las promos de la Agenda.
 - ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
   turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
-- ⚠️ Una sola transferencia por venta (`montoAEsperar`). Otra cuenta que espere: `jsonb_set` en
-  `caja_config` (ver `sql/migrate-caja-transferencia.sql`); ⛔ hay pantalla para eso.
+- ⚠️ Varias partes por transferencia en una venta se esperan como UNA transferencia por la suma.
 
 ## Pendiente
 

@@ -93,6 +93,7 @@ import {
   ResumenCobro,
   SiNo,
   AvisoCierre,
+  DeteccionTransferencias,
   ModalesTurno,
   UltimaVenta,
   VariosPagos,
@@ -882,6 +883,7 @@ function POS() {
                     </div>
                   )}
 
+                  {pagos.some((p) => p.medio === 'transferencia') && <DeteccionTransferencias admin={false} />}
                   {elCobro.error && <Notice tone="warning">{elCobro.error}</Notice>}
 
                   {c && enEfectivo > 0 && (

@@ -28,7 +28,7 @@ Plan aprobado: `~/.claude/plans/te-pongo-en-modo-concurrent-moler.md`. Lo dictad
   transferencia a las cuentas de feria, sin promo por forma de pago; pedido mixto = cada prenda su regla.
 - Ticket **igual al de GN** (se mantiene nro de venta, fecha y día), **logo PNG** en la configuración,
   ⛔ medios de pago abajo.
-- ▶️ **DESPUÉS de esta vuelta — TRANSFERENCIAS** (dictado 5-oct): (1) **toda transferencia ESPERA el
+- 🏁 **HECHO en la rama `caja`, ⛔ deployado ni caminado** · **TRANSFERENCIAS** (dictado 5-oct): (1) **toda transferencia ESPERA el
   pago**, la cuenta que sea (normal, feria 25868, CG 20595): forma de pago transferencia ⇒ se espera
   (hoy `montoAEsperar` mira `esperaPago` por cuenta y sólo la 13015 lo tiene ⇒ una venta de $200 en
   feria se cobró directo, anulada en GN). (2) **Elegir desde la Caja la cuenta de MP donde se detecta**

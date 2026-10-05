@@ -183,6 +183,10 @@ export const reintentarVenta = (id: string) => post<Resultado>({ action: 'reinte
 export const guardarPolitica = (texto: string) => post<{ politica_cambio: string | null }>({ action: 'politica', texto }, 'No se pudo guardar la política de cambio.')
 
 /** Sólo admin: a qué cuenta van las transferencias y el modo feria (bajadas de línea). */
+/** La cuenta de Mercado Pago donde se detectan las transferencias (la de Pagos recibidos). `cuentas` sólo llega a un admin. */
+export type CuentaMp = { cuenta_id: number; nombre: string }
+export const leerCuentasMp = () => get<{ enUso: CuentaMp | null; cuentas?: CuentaMp[] }>('action=cuentas-mp', 'No se pudo leer la cuenta de Mercado Pago.')
+export const usarCuentaMp = (cuenta_id: number) => post<{ enUso: CuentaMp }>({ action: 'usar-mp', cuenta_id }, 'No se pudo cambiar la cuenta de Mercado Pago.')
 export const guardarLogo = (logo: LogoTicket | null) => post<{ ticket_logo: LogoTicket | null }>({ action: 'logo', logo }, 'No se pudo guardar el logo.')
 export const guardarBajadas = (b: { transferenciaA?: number; feria?: boolean; billetes?: number[]; feriaProductos?: ProductoFeria[] }) =>
   post<{ reglas: Reglas }>({ action: 'bajadas', ...b }, 'No se pudo guardar.')
