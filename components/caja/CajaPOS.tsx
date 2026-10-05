@@ -57,6 +57,7 @@ import { avisoDeRenglon } from '@/lib/caja/pedidos-web.core.js'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { imprimirTicket, plata, type DatosTicket } from '@/lib/caja/ticket'
+import { CLAVE_MAIL, CLAVE_VISTA, leerMail, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
 import {
   buscarNombre,
   buscarProducto,
@@ -493,6 +494,36 @@ function POS() {
   const pagaConN = aNumero(pagaCon)
   const vuelto = pagaConN != null && enEfectivo > 0 ? Math.round((pagaConN - enEfectivo) * 100) / 100 : null
   const emailOk = !bor.email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bor.email.trim())
+
+  // 🔑 La pantalla de la clienta (rediseño, fase 3): se le publican los números del POS, ⛔ los recalcula.
+  const vistaCliente = JSON.stringify(
+    vistaParaCliente({
+      carrito: bor.renglones.map((r) => ({ nombre: r.variante.product_name, talle: r.variante.size_name, cantidad: r.cantidad, precio: r.precio, foto: r.foto })),
+      filas,
+      aPagar,
+      cobro: c,
+      medio: !varios && pagos[0]?.medio ? NOMBRE_MEDIO[pagos[0].medio] : null,
+      email: bor.email,
+      ultima: ultima ? { numero: ultima.venta.gn_number, email: ultima.venta.email } : null,
+    }),
+  )
+  useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE_VISTA, vistaCliente)
+    } catch {
+      /* sin localStorage: la pantalla de la clienta ⛔ se entera */
+    }
+  }, [vistaCliente])
+  // Y el mail que escribe la clienta llega al campo «Mail para el ticket».
+  useEffect(() => {
+    const oir = (e: StorageEvent) => {
+      if (e.key !== CLAVE_MAIL) return
+      const m = leerMail(e.newValue)
+      if (m) setBor((b) => ({ ...b, email: m.no ? '' : m.email.trim() }))
+    }
+    window.addEventListener('storage', oir)
+    return () => window.removeEventListener('storage', oir)
+  }, [])
   const puedeConfirmar = !!turno && !!c && !enviando && emailOk && !faltaContestar && (vuelto == null || vuelto >= 0)
 
   function datosTicket(venta: Venta): DatosTicket {

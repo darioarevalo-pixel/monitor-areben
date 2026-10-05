@@ -34,6 +34,7 @@ const PanelWhatsApp = dynamic(() => import('@/components/panel/PanelWhatsApp').t
 
 /** El POS de la Caja (`/pos`, fase C): con `dynamic` por lo mismo, arrastra el cobro entero. */
 const CajaPOS = dynamic(() => import('@/components/caja/CajaPOS').then((m) => m.CajaPOS), { loading: Cargando })
+const CajaCliente = dynamic(() => import('@/components/caja/CajaCliente').then((m) => m.CajaCliente), { loading: Cargando })
 
 /**
  * Sección por defecto. **Es Inicio, y es una decisión de producto, no una herencia.**
@@ -218,6 +219,10 @@ export default function Seccion() {
     if (!puedeVerAlguna(perfil, 'zattia', ['caja'])) {
       return <div style={{ padding: 16, fontSize: 13 }}>Tu usuario no tiene acceso a la Caja.</div>
     }
+    // `/pos/cliente`: la pantalla de la clienta (rediseño, fase 3). Sólo muestra lo que publica el POS
+    // del MISMO equipo y le devuelve el mail: ⛔ cobra ni escribe en la base.
+    const sub = Array.isArray(partes) ? partes[1] : undefined
+    if (sub === 'cliente') return <CajaCliente />
     return (
       <ToastProvider>
         <ConfirmProvider>

@@ -162,6 +162,13 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   abierto de entrada) y «Últimos turnos» es una tabla (`UltimosTurnos`), al final. 🔑 **«Así sale el
   ticket (80 mm)»** (`VistaTicket.tsx`, sólo admin) dibuja en SVG las MISMAS `ops` de `armarTicket` con un
   ticket de MUESTRA y el logo y la política guardados: ⛔ un HTML propio, que diría otra cosa que el papel.
+- 🔑 **La pantalla de la clienta (`/pos/cliente`, rediseño fase 3 = V1)**: su compra en vivo, el total
+  y el mail para el ticket. 🔴 **⛔ calcula**: el POS publica en `localStorage` (`caja:cliente:zattia`)
+  la `VistaCliente` armada con SUS `filas` y SU `cobro` (`lib/caja/pantalla-cliente.ts`), y la pantalla
+  la muestra; el mail vuelve por `caja:cliente-mail:zattia` al campo «Mail para el ticket». 🔴 **Es otra
+  ventana del MISMO equipo** (segundo monitor o tablet espejada): una tablet suelta ⛔ ve nada hasta que
+  el pedido viaje al servidor. Pide el permiso de Caja y ⛔ escribe en la base. La marca vive en
+  `lib/caja/marca.ts` hasta la V4.
 - ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
   turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
 - ⚠️ Varias partes por transferencia en una venta se esperan como UNA transferencia por la suma.
@@ -170,6 +177,8 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 
 - Rediseño fase 2 (la pestaña): ⛔ vista en prod — con turno y sin turno, los 6 plegables, cambiar la
   política y verla en la vista previa, y los mosaicos del POS con el `Dato` nuevo.
+- Rediseño fase 3 (`/pos/cliente`): ⛔ vista en prod con el POS al lado (agregar, cobrar, el mail de
+  vuelta). ⛔ Decidido: tablet SUELTA (pide el pedido en el servidor) o segundo monitor.
 - F5: ⛔ probado con una transferencia real (la verificación del plan).
 - ⚠️ La carrera de dos pantallas cruzando la MISMA venta la cubre el `.eq('estado','esperando_pago')`
   del update, y ⛔ tiene test (el mock de la base es secuencial).
