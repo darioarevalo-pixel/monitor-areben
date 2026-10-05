@@ -49,7 +49,7 @@ import { imagenDe } from '@/lib/tn'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
-import { NOMBRE_MEDIO, cobro, cuentaDeMedio, nombreParaTicket, pesosDeRebaja, renglones } from '@/lib/caja/core.core.js'
+import { MSJ_FERIA, NOMBRE_MEDIO, cobro, cuentaDeMedio, idsDeFeria, nombreParaTicket, pagosDeMedio, pesosDeRebaja, renglones, subtotalDeFeria } from '@/lib/caja/core.core.js'
 import { hoyIso, promosDe } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
@@ -79,7 +79,7 @@ import {
   type Variante,
   type Venta,
 } from '@/lib/caja/cliente'
-import { Button, ButtonLink, Field, Icono, Input, Notice, SectionCard, color, font, radius, space, weight } from '@/components/ui'
+import { Button, ButtonLink, Field, Icono, Input, Modal, Notice, SectionCard, color, font, radius, space, weight } from '@/components/ui'
 import { useConfirmar } from '@/components/ui/Confirm'
 import {
   CampoRebaja,
@@ -106,6 +106,14 @@ import {
 type Borrador = { id: string; renglones: Renglon[]; email: string; descuentoVenta?: Rebaja | null }
 
 const CLAVE = 'caja:borrador:zattia'
+
+/** El color y el ícono de cada forma de pago en el cobro, como las tarjetas del POS de GN. */
+const ESTILO_MEDIO: Record<Medio, { icono: 'efectivo' | 'transferencia' | 'tarjeta'; fondo: string; tinta: string }> = {
+  efectivo: { icono: 'efectivo', fondo: color.successBg, tinta: color.successInk },
+  transferencia: { icono: 'transferencia', fondo: color.brandBg, tinta: color.brand },
+  debito: { icono: 'tarjeta', fondo: color.warningBg, tinta: color.warningInk },
+  credito: { icono: 'tarjeta', fondo: color.bg2, tinta: color.ink2 },
+}
 const nuevoId = () => crypto.randomUUID()
 /** El instante de impresión: el ticket lo sella con la hora de Argentina. */
 const ahora = () => Date.now()
@@ -433,8 +441,13 @@ function POS() {
   const hayCredito = pagos.some((p) => p.medio === 'credito')
   const preguntaBanco = hayCredito && promoCredito.length > 0
   const preguntaCuotas = hayCredito && !!reglas?.medios && aPagar != null && aPagar > reglas.medios.credito.minSeisCuotas
-  const cuentaDe = (medio: Medio, rg: Reglas) =>
-    cuentaDeMedio(medio, { reglas: rg, total: aPagar ?? 0, promoCreditoHoy: promoCredito.length > 0, esDelBanco: esDelBanco === true, seisCuotas: seisCuotas === true })
+  const respuestas = { promoCreditoHoy: promoCredito.length > 0, esDelBanco: esDelBanco === true, seisCuotas: seisCuotas === true }
+  const cuentaDe = (medio: Medio, rg: Reglas) => cuentaDeMedio(medio, { reglas: rg, total: aPagar ?? 0, ...respuestas })
+  // 🔑 Productos de feria trabados (Bruno, 5-oct): la MISMA regla que exige el servidor (`exigirFeria`).
+  const feriaIds = useMemo(() => idsDeFeria(reglas), [reglas])
+  const hayFeria = !!filas && subtotalDeFeria(filas, reglas) > 0
+  /** Los pagos de UNA forma de pago: con prendas de feria, la parte de feria va a su cuenta. */
+  const pagosDe = (medio: Medio, rg: Reglas) => (filas ? pagosDeMedio(medio, { filas, reglas: rg, total: aPagar ?? 0, ...respuestas }) : [{ cuenta: cuentaDe(medio, rg) }])
 
   /** El total de cada forma de pago pagando todo con ella: lo que muestran las tarjetas. */
   const totalPorMedio = (() => {
@@ -442,7 +455,7 @@ function POS() {
     if (!filas || !reglas?.medios) return m
     for (const medio of MEDIOS) {
       try {
-        m[medio] = cobro({ filas, pagos: [{ cuenta: cuentaDe(medio, reglas) }], reglas, descuentoVenta }).total
+        m[medio] = cobro({ filas, pagos: pagosDe(medio, reglas), reglas, descuentoVenta }).total
       } catch {
         /* sin regla: la tarjeta muestra — */
       }
@@ -455,10 +468,13 @@ function POS() {
     if (!filas || !reglas?.medios || pagos.some((p) => p.medio == null)) return { c: null, pedidos: [], error: null as string | null }
     try {
       const rg = reglas
-      const pedidos = pagos.map((p, i) => {
-        const cuenta = cuentaDe(p.medio as Medio, rg)
-        return i === pagos.length - 1 ? { cuenta } : { cuenta, base: aNumero(p.base) ?? 0 }
-      })
+      // Un solo pago: el armado de la forma de pago (con la traba de feria). Varios: lo que repartió la cajera.
+      const pedidos = !varios
+        ? pagosDe(pagos[0].medio as Medio, rg)
+        : pagos.map((p, i) => {
+            const cuenta = cuentaDe(p.medio as Medio, rg)
+            return i === pagos.length - 1 ? { cuenta } : { cuenta, base: aNumero(p.base) ?? 0 }
+          })
       return { c: cobro({ filas, pagos: pedidos, reglas: rg, descuentoVenta }), pedidos, error: null }
     } catch (e) {
       return { c: null, pedidos: [], error: (e as Error).message }
@@ -641,6 +657,8 @@ function POS() {
         .pos-der { position: sticky; top: ${space[4]}; max-height: calc(100vh - 2 * ${space[4]}); overflow: auto; }
         .caja-tarjeta { transition: border-color .12s, box-shadow .12s; }
         .caja-tarjeta:hover, .caja-tarjeta:focus-visible { border-color: ${color.brandBorder} !important; box-shadow: 0 2px 8px rgba(16,24,40,.08); }
+        .cobro-grid { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: ${space[4]}; }
+        @media (max-width: 900px) { .cobro-grid { grid-template-columns: 1fr; } }
         @media (max-width: 900px) { .pos-grid { grid-template-columns: 1fr; } .pos-der { position: static; max-height: none; } }
       `}</style>
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', padding: `${space[2]} ${space[4]}`, background: color.surface, borderBottom: `1px solid ${color.line}` }}>
@@ -722,104 +740,166 @@ function POS() {
             </div>
           )}
 
-          {mostrarCobro ? (
-            <SectionCard
-              title="Cobrar"
-              actions={
-                <Button size="sm" variant="outline" onClick={() => setEnCobro(false)}>
-                  Volver al pedido
-                </Button>
+          {mostrarCobro && (
+            <Modal
+              abierto
+              onCerrar={() => setEnCobro(false)}
+              titulo="Cobro de la venta"
+              ancho="xl"
+              cerrarConFondo={false}
+              pie={
+                <>
+                  <Button variant="outline" onClick={() => setEnCobro(false)}>
+                    Volver
+                  </Button>
+                  <Button size="lg" tone="success" variant="solid" disabled={!puedeConfirmar} loading={enviando} onClick={confirmar} iconLeft={<Icono nombre="check" />}>
+                    Finalizar venta {c ? plata(c.total) : ''}
+                  </Button>
+                </>
               }
             >
-              {sinMedios ? (
-                <Notice tone="danger">Faltan las formas de pago de la Caja: hay que correr sql/migrate-caja-medios.sql.</Notice>
-              ) : !varios ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: space[2] }}>
-                  {MEDIOS.map((medio) => {
-                    const activa = pagos[0].medio === medio
-                    const regla = reglas?.medios ? reglas.cuentas[(() => { try { return cuentaDe(medio, reglas) } catch { return 0 } })()] : undefined
-                    return (
-                      <button
-                        key={medio}
-                        type="button"
-                        onClick={() => setPagos([{ medio, base: '' }])}
-                        style={{
-                          height: 'auto',
-                          textAlign: 'left',
-                          padding: space[3],
-                          borderRadius: radius.lg,
-                          border: `2px solid ${activa ? color.brand : color.line}`,
-                          background: activa ? color.brandBg : color.surface,
-                          cursor: 'pointer',
+              <div className="cobro-grid">
+                {/* Izquierda: el resumen, como el de GN. */}
+                <div style={{ display: 'grid', gap: space[3], alignContent: 'start', border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: space[4], background: color.surface }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <b style={{ fontSize: font.lg, color: color.ink }}>Resumen de la venta</b>
+                    <span style={{ color: color.mut, fontSize: font.sm }}>{prendas === 1 ? '1 prenda' : `${prendas} prendas`}</span>
+                  </div>
+                  <div style={{ background: color.bg, borderRadius: radius.md, padding: `${space[2]} ${space[3]}`, color: color.ink2, fontSize: font.sm }}>
+                    Cliente: {bor.email.trim() || 'Consumidor final'}
+                  </div>
+                  <div style={{ display: 'grid', gap: space[2], fontSize: font.sm }}>
+                    {bor.renglones.map((r, i) => (
+                      <div key={claveDe(r.variante)} style={{ display: 'flex', justifyContent: 'space-between', gap: space[2] }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: weight.semibold, color: color.ink, textTransform: 'uppercase' }}>{r.variante.product_name}</div>
+                          <div style={{ color: color.mut }}>
+                            {r.variante.size_name} · ×{r.cantidad}
+                          </div>
+                        </div>
+                        <b style={{ color: color.ink, fontVariantNumeric: 'tabular-nums' }}>{filas?.[i] ? plata(filas[i].importe) : '—'}</b>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ borderTop: `1px solid ${color.line}`, paddingTop: space[2] }}>
+                    {c ? (
+                      <ResumenCobro c={c} nombreCuenta={nombreCuenta} />
+                    ) : (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.md }}>
+                        <span>Subtotal</span>
+                        <span>{aPagar != null ? plata(aPagar) : '—'}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Derecha: las formas de pago, con la cuenta debajo (Bruno, 5-oct). */}
+                <div style={{ display: 'grid', gap: space[3], alignContent: 'start', border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: space[4], background: color.surface }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+                    <div>
+                      <b style={{ fontSize: font.lg, color: color.ink }}>Formas de pago</b>
+                      <div style={{ color: color.mut, fontSize: font.sm }}>{varios ? 'Repartir el subtotal entre formas de pago' : 'Elegir con qué paga el total'}</div>
+                    </div>
+                    {!sinMedios && (
+                      <Button
+                        variant={varios ? 'soft' : 'outline'}
+                        tone={varios ? 'brand' : 'neutral'}
+                        size="sm"
+                        aria-pressed={varios}
+                        disabled={hayFeria && !varios}
+                        title={hayFeria ? 'Con prendas de feria, un solo pago: efectivo o transferencia' : undefined}
+                        onClick={() => {
+                          setVarios(!varios)
+                          setPagos(varios ? [{ medio: null, base: '' }] : [{ medio: pagos[0].medio, base: '' }, { medio: null, base: '' }])
                         }}
                       >
-                        <div style={{ fontSize: font.md, fontWeight: weight.semibold, color: color.ink }}>{NOMBRE_MEDIO[medio]}</div>
-                        <div style={{ fontSize: font.sm, color: color.mut }}>{regla && regla.descuento > 0 ? `${regla.descuento}% de descuento` : 'sin descuento'}</div>
-                        <div style={{ fontSize: font['2xl'], fontWeight: weight.bold, color: color.ink, marginTop: space[1] }}>
-                          {totalPorMedio[medio] != null ? plata(totalPorMedio[medio]) : '—'}
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : (
-                <VariosPagos pagos={pagos} setPagos={setPagos} montos={c?.pagos.map((p) => p.monto) ?? null} />
-              )}
+                        Varios pagos
+                      </Button>
+                    )}
+                  </div>
+                  {sinMedios ? (
+                    <Notice tone="danger">Formas de pago sin cargar: correr sql/migrate-caja-medios.sql.</Notice>
+                  ) : !varios ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: space[2] }}>
+                      {MEDIOS.map((medio) => {
+                        const activa = pagos[0].medio === medio
+                        const trabada = hayFeria && (medio === 'debito' || medio === 'credito')
+                        const cuenta = reglas?.medios ? (() => { try { return cuentaDe(medio, reglas) } catch { return 0 } })() : 0
+                        const regla = cuenta ? reglas?.cuentas[cuenta] : undefined
+                        const estilo = ESTILO_MEDIO[medio]
+                        return (
+                          <button
+                            key={medio}
+                            type="button"
+                            onClick={() => setPagos([{ medio, base: '' }])}
+                            aria-pressed={activa}
+                            disabled={trabada}
+                            title={trabada ? MSJ_FERIA : undefined}
+                            className="caja-tarjeta"
+                            style={{
+                              height: 'auto',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: space[3],
+                              textAlign: 'left',
+                              padding: space[3],
+                              borderRadius: radius.lg,
+                              border: `2px solid ${activa ? color.success : color.line}`,
+                              background: activa ? color.successBg : color.surface,
+                              cursor: trabada ? 'not-allowed' : 'pointer',
+                              opacity: trabada ? 0.45 : 1,
+                            }}
+                          >
+                            <span style={{ display: 'grid', placeItems: 'center', width: 40, height: 40, borderRadius: radius.md, background: estilo.fondo, color: estilo.tinta, flexShrink: 0 }}>
+                              <Icono nombre={estilo.icono} size={22} />
+                            </span>
+                            <span style={{ flex: 1, minWidth: 0, display: 'grid', gap: space[0.5] }}>
+                              <span style={{ fontSize: font.md, fontWeight: weight.semibold, color: color.ink }}>{NOMBRE_MEDIO[medio]}</span>
+                              <span style={{ fontSize: font.xs, color: color.mut }}>{regla?.nombre ?? '—'}</span>
+                              {trabada ? (
+                                <span style={{ fontSize: font.xs, color: color.warningInk, fontWeight: weight.semibold }}>Con prendas de feria: ⛔</span>
+                              ) : (
+                                regla && regla.descuento > 0 && <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{regla.descuento}% de descuento{hayFeria ? ' (sin la feria)' : ''}</span>
+                              )}
+                            </span>
+                            <span style={{ fontSize: font.lg, fontWeight: weight.bold, color: color.ink, fontVariantNumeric: 'tabular-nums' }}>
+                              {totalPorMedio[medio] != null ? plata(totalPorMedio[medio]) : '—'}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <VariosPagos pagos={pagos} setPagos={setPagos} montos={c?.pagos.map((p) => p.monto) ?? null} />
+                  )}
 
-              {!sinMedios && (preguntaBanco || preguntaCuotas) && (
-                <div style={{ display: 'grid', gap: space[2], marginTop: space[3] }}>
-                  {preguntaBanco && <SiNo pregunta={`¿Es tarjeta de ${bancosPromo}?`} valor={esDelBanco} onCambio={setEsDelBanco} />}
-                  {preguntaCuotas && <SiNo pregunta="¿En 6 cuotas?" valor={seisCuotas} onCambio={setSeisCuotas} />}
-                </div>
-              )}
+                  {!sinMedios && (preguntaBanco || preguntaCuotas) && (
+                    <div style={{ display: 'grid', gap: space[2] }}>
+                      {preguntaBanco && <SiNo pregunta={`¿Es tarjeta de ${bancosPromo}?`} valor={esDelBanco} onCambio={setEsDelBanco} />}
+                      {preguntaCuotas && <SiNo pregunta="¿En 6 cuotas?" valor={seisCuotas} onCambio={setSeisCuotas} />}
+                    </div>
+                  )}
 
-              {!sinMedios && (
-                <div style={{ marginTop: space[3] }}>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setVarios(!varios)
-                      setPagos(varios ? [{ medio: null, base: '' }] : [{ medio: pagos[0].medio, base: '' }, { medio: null, base: '' }])
-                    }}
-                  >
-                    {varios ? 'Un solo pago' : 'Varios pagos'}
-                  </Button>
-                </div>
-              )}
+                  {elCobro.error && <Notice tone="warning">{elCobro.error}</Notice>}
 
-              {elCobro.error && (
-                <div style={{ marginTop: space[3] }}>
-                  <Notice tone="warning">{elCobro.error}</Notice>
-                </div>
-              )}
-
-              {c && (
-                <div style={{ display: 'grid', gap: space[3], marginTop: space[4] }}>
-                  <ResumenCobro c={c} nombreCuenta={nombreCuenta} />
-                  {enEfectivo > 0 && (
-                    <div style={{ display: 'flex', gap: space[4], alignItems: 'end', flexWrap: 'wrap' }}>
+                  {c && enEfectivo > 0 && (
+                    <div style={{ display: 'flex', gap: space[4], alignItems: 'end', flexWrap: 'wrap', background: color.bg, borderRadius: radius.lg, padding: space[3] }}>
                       <Field label={`Paga con (efectivo: ${plata(enEfectivo)})`}>
                         <Input inputMode="decimal" autoComplete="off" value={pagaCon} onChange={(e) => setPagaCon(e.target.value)} placeholder="$" style={{ fontSize: font.xl, width: 180 }} />
                       </Field>
                       {vuelto != null && (
-                        <div style={{ fontSize: font['3xl'], fontWeight: weight.heavy, color: vuelto < 0 ? color.danger : color.ink }}>
+                        <div style={{ fontSize: font['2xl'], fontWeight: weight.heavy, color: vuelto < 0 ? color.danger : color.successInk }}>
                           {vuelto < 0 ? `Faltan ${plata(-vuelto)}` : `Vuelto ${plata(vuelto)}`}
                         </div>
                       )}
                     </div>
                   )}
                   {!emailOk && <Notice tone="warning">Mail del pedido inválido.</Notice>}
-                  <div>
-                    <Button size="lg" tone="success" disabled={!puedeConfirmar} loading={enviando} onClick={confirmar}>
-                      Confirmar {plata(c.total)}
-                    </Button>
-                  </div>
                 </div>
-              )}
-            </SectionCard>
-          ) : (
-            <SectionCard title="Escanear o buscar">
+              </div>
+            </Modal>
+          )}
+          <SectionCard title="Escanear o buscar">
               {/* 🔴 Sin <form>: el Enter del lector lo toma el campo. Con un form, el botón «Agregar» en
                   `loading` (deshabilitado) hacía que el navegador IGNORE el Enter, y el segundo escaneo
                   quedaba escrito sin entrar (visto en prod, 4-oct). */}
@@ -893,7 +973,6 @@ function POS() {
                 />
               )}
             </SectionCard>
-          )}
         </div>
 
         <div className="pos-der">
@@ -916,6 +995,7 @@ function POS() {
                     <FilaRenglon
                       key={claveDe(r.variante)}
                       r={r}
+                      feria={feriaIds.has(Number(r.variante.product_id))}
                       cargandoPrecios={!datos || !tnIdx}
                       onCantidad={(n) => (n <= 0 ? sacarRenglon(i) : cambiarRenglon(i, { cantidad: n }))}
                       onPrecio={(p) => cambiarRenglon(i, { precio: p })}

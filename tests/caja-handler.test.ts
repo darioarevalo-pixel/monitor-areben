@@ -239,6 +239,26 @@ describe('caja · formas de pago y descuentos a mano (Bruno, 4-oct)', () => {
     expect(r.code).toBe(200)
     expect((base.config as { reglas: Fila }).reglas).toMatchObject({ transferenciaA: 20595, feria: true })
   })
+
+  it('🔴 productos de feria trabados: un admin los marca y el servidor EXIGE la cuenta de feria', async () => {
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'bajadas', feriaProductos: [{ id: 7, nombre: 'CORSET' }] }))).code).toBe(403)
+    conSesion(ADMIN_)
+    expect((await correr(req('POST', {}, { action: 'bajadas', feriaProductos: [{ id: 'x' }] }))).code).toBe(400)
+    const r = await correr(req('POST', {}, { action: 'bajadas', feriaProductos: [{ id: 7, nombre: 'CORSET' }, { id: 7, nombre: 'CORSET' }] }))
+    expect(r.code).toBe(200)
+    expect((base.config as { reglas: Fila }).reglas).toMatchObject({ feriaProductos: [{ id: 7, nombre: 'CORSET' }] })
+    conSesion(CAJERA)
+    // A la cuenta de efectivo normal, con su −15 %: ⛔.
+    const mal = await correr(req('POST', {}, VENTA))
+    expect(mal.code).toBe(400)
+    expect(mal.body).toMatchObject({ error: expect.stringMatching(/feria/) })
+    expect(gn.posts).toHaveLength(0)
+    // A la de feria, precio final: $25.490 ⇒ $25.500 redondeado.
+    const bien = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25867 }], total: 25500, pagaCon: 25500 }))
+    expect(bien.code).toBe(200)
+    expect((gn.posts[0] as { payments: Fila[] }).payments).toEqual([expect.objectContaining({ amount: 25500, account_id: 25867 })])
+  })
 })
 
 describe('caja · confirmar', () => {

@@ -26,7 +26,7 @@
 //        `conteo` (fase B, 5-oct): `{ [billete]: cantidad }` de la calculadora; el servidor rearma el
 //        total con `lib/caja/conteo.core.js` y, si ⛔ es el fondo o el contado, 400.
 //   POST ?recurso=caja  { action: 'politica', texto }      → sólo admin: la política de cambio del ticket
-//   POST ?recurso=caja  { action: 'bajadas', transferenciaA?, feria?, billetes? } → sólo admin: a qué cuenta van las
+//   POST ?recurso=caja  { action: 'bajadas', transferenciaA?, feria?, billetes?, feriaProductos? } → sólo admin: a qué cuenta van las
 //        transferencias, el modo feria (bajadas de línea: ⛔ las decide la cajera) y los billetes de la calculadora
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=caja` (12 funciones de Hobby).
@@ -59,7 +59,7 @@ import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
-import { MODO_LOCAL_ZATTIA, REGLAS_INICIALES, armarVentaGN, cobro, medioDeCuenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
+import { MODO_LOCAL_ZATTIA, REGLAS_INICIALES, armarVentaGN, cobro, exigirFeria, medioDeCuenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { cruzarTransferencia } from '../lib/pagos-recibidos/core.core.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
@@ -359,6 +359,20 @@ export default async function handler(req, res) {
           nuevas.transferenciaA = t
         }
         if (b.feria != null) nuevas.feria = b.feria === true
+        // Los productos de feria trabados: `[{ id, nombre }]`, la lista entera (la pantalla manda todo).
+        if (b.feriaProductos != null) {
+          if (!Array.isArray(b.feriaProductos) || b.feriaProductos.length > 2000) return res.status(400).json({ error: 'La lista de productos de feria es inválida.' })
+          const vistos = new Set()
+          const lista = []
+          for (const x of b.feriaProductos) {
+            const idP = Number(x && x.id)
+            if (!Number.isInteger(idP) || idP <= 0) return res.status(400).json({ error: 'Un producto de feria sin id.' })
+            if (vistos.has(idP)) continue
+            vistos.add(idP)
+            lista.push({ id: idP, nombre: String((x && x.nombre) || '').slice(0, 200) })
+          }
+          nuevas.feriaProductos = lista
+        }
         if (b.billetes != null) {
           try {
             nuevas.billetes = normalizarBilletes(b.billetes)
@@ -473,6 +487,9 @@ export default async function handler(req, res) {
           if (reglas.medios) for (const p of b.pagos || []) {
             if (!medioDeCuenta(p.cuenta, reglas)) throw new Error(`La cuenta ${p.cuenta} no es una forma de pago de la Caja.`)
           }
+          // 🔴 Productos de feria trabados (Bruno, 5-oct): sólo efectivo o transferencia, la parte de
+          // feria a la cuenta de feria. La pantalla ya los arma así; acá se EXIGE (si no, `curl`).
+          if (reglas.medios) exigirFeria({ filas, pagos: b.pagos || [], reglas })
           c = cobro({ filas, pagos: b.pagos, reglas, descuentoVenta: b.descuentoVenta ?? null })
           espera = montoAEsperar(c.pagos, reglas)
           payload = armarVentaGN({ filas, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: id, fecha: fechaLocal(new Date()) })

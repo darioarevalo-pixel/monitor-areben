@@ -6,6 +6,9 @@ import {
   armarVentaGN,
   cobro,
   cuentaDeMedio,
+  exigirFeria,
+  pagosDeMedio,
+  subtotalDeFeria,
   medioDeCuenta,
   nombreParaTicket,
   redondeo,
@@ -358,3 +361,75 @@ describe('caja · descuentos a mano', () => {
     expect(() => cobro({ filas, pagos: [{ cuenta: EFECTIVO }], reglas: R } as never)).toThrow(/null si no hay/)
   })
 })
+
+/**
+ * Productos de feria TRABADOS (Bruno, 5-oct): sólo efectivo o transferencia, a la cuenta de feria y sin
+ * el % de la forma de pago; pedido mixto = cada prenda con su regla. Oráculo, a mano: feria $10.000 +
+ * normal $20.000 en efectivo ⇒ $10.000 (feria, 0 %) + $17.000 (efectivo, −15 %) = $27.000.
+ */
+describe('caja · productos de feria trabados', () => {
+  type R_ = Parameters<typeof cuentaDeMedio>[1]['reglas']
+  const R = { ...(REGLAS_INICIALES as unknown as R_), feriaProductos: [{ id: 1, nombre: 'TOP FERIA' }] } as R_
+  const no = { promoCreditoHoy: false, esDelBanco: false, seisCuotas: false }
+  const mixto = renglones([
+    { product_id: 1, size_id: 1, cantidad: 1, precio: 10000 },
+    { product_id: 2, size_id: 1, cantidad: 1, precio: 20000 },
+  ])
+  const q = (filas: ReturnType<typeof renglones>, reglas: R_ = R) => ({ filas, reglas, total: subtotal(filas), ...no })
+
+  it('🔑 mixto en efectivo: la feria a la cuenta de feria sin %, el resto con su −15 % ⇒ $27.000', () => {
+    const pagos = pagosDeMedio('efectivo', q(mixto))
+    expect(pagos).toEqual([{ cuenta: FERIA_EFECTIVO, base: 10000 }, { cuenta: EFECTIVO }])
+    const c = cobro({ filas: mixto, pagos, reglas: R, descuentoVenta: null })
+    expect(c.pagos.map((p) => p.monto)).toEqual([10000, 17000])
+    expect(c.total).toBe(27000)
+    expect(() => exigirFeria({ filas: mixto, pagos, reglas: R })).not.toThrow()
+  })
+
+  it('mixto en transferencia ⇒ $10.000 + $18.000', () => {
+    const pagos = pagosDeMedio('transferencia', q(mixto))
+    expect(pagos).toEqual([{ cuenta: FERIA_TRANSFERENCIA, base: 10000 }, { cuenta: TRANSFERENCIA }])
+    expect(cobro({ filas: mixto, pagos, reglas: R, descuentoVenta: null }).total).toBe(28000)
+  })
+
+  it('sólo feria ⇒ un pago a la cuenta de feria, precio final', () => {
+    const solo = renglones([{ product_id: 1, size_id: 1, cantidad: 2, precio: 10000 }])
+    const pagos = pagosDeMedio('efectivo', q(solo))
+    expect(pagos).toEqual([{ cuenta: FERIA_EFECTIVO }])
+    expect(cobro({ filas: solo, pagos, reglas: R, descuentoVenta: null }).total).toBe(20000)
+  })
+
+  it('🔴 con una prenda de feria, débito y crédito ⛔ se ofrecen', () => {
+    expect(() => pagosDeMedio('debito', q(mixto))).toThrow(/efectivo o transferencia/)
+    expect(() => pagosDeMedio('credito', q(mixto))).toThrow(/efectivo o transferencia/)
+  })
+
+  it('el descuento a mano a la venta se reparte como siempre: 10 % ⇒ $9.000 + $15.300', () => {
+    const pagos = pagosDeMedio('efectivo', q(mixto))
+    const c = cobro({ filas: mixto, pagos, reglas: R, descuentoVenta: { tipo: 'pct', valor: 10 } })
+    expect(c.pagos.map((p) => p.monto)).toEqual([9000, 15300])
+  })
+
+  it('🔴 el servidor rechaza lo que saltea la traba', () => {
+    // Todo a la cuenta normal con su −15 %: la feria se llevaría el descuento.
+    expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: EFECTIVO }], reglas: R })).toThrow(/cuenta de feria/)
+    // La feria por débito.
+    expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: FERIA_EFECTIVO, base: 10000 }, { cuenta: DEBITO }], reglas: R })).toThrow(/efectivo o transferencia/)
+    // Una base de feria que ⛔ es la de las prendas de feria (le pasa una normal sin descuento).
+    expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: FERIA_EFECTIVO, base: 25000 }, { cuenta: EFECTIVO }], reglas: R })).toThrow(/sólo las prendas de feria/)
+  })
+
+  it('sin prendas de feria ⛔ cambia nada', () => {
+    const normal = renglones([{ product_id: 2, size_id: 1, cantidad: 1, precio: 20000 }])
+    expect(subtotalDeFeria(normal, R)).toBe(0)
+    expect(pagosDeMedio('debito', q(normal))).toEqual([{ cuenta: DEBITO }])
+    expect(() => exigirFeria({ filas: normal, pagos: [{ cuenta: DEBITO }], reglas: R })).not.toThrow()
+  })
+
+  it('modo feria global + prenda trabada: todo a la de feria, débito sigue trabado', () => {
+    const F = { ...R, feria: true } as R_
+    expect(pagosDeMedio('efectivo', q(mixto, F))).toEqual([{ cuenta: FERIA_EFECTIVO }])
+    expect(() => pagosDeMedio('debito', q(mixto, F))).toThrow(/efectivo o transferencia/)
+  })
+})
+

@@ -33,6 +33,8 @@ import {
   type Venta,
   type PedidosWeb,
   type ProductoLista,
+  type ProductoFeria,
+  buscarNombre,
 } from '@/lib/caja/cliente'
 import { Badge, Button, Field, Icono, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
 
@@ -360,8 +362,11 @@ export function FilaRenglon({
   onSacar,
   avisoWeb,
   mirandoWeb,
+  feria = false,
 }: {
   r: Renglon
+  /** Producto de feria trabado (Bruno, 5-oct): precio final, sólo efectivo o transferencia. */
+  feria?: boolean
   cargandoPrecios: boolean
   onCantidad: (n: number) => void
   onPrecio: (p: number | null) => void
@@ -385,7 +390,9 @@ export function FilaRenglon({
       <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start' }}>
         <Foto src={r.foto} ancho={56} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: weight.bold, color: color.ink, textTransform: 'uppercase', fontSize: font.sm }}>{r.variante.product_name}</div>
+          <div style={{ fontWeight: weight.bold, color: color.ink, textTransform: 'uppercase', fontSize: font.sm }}>
+            {r.variante.product_name} {feria && <Badge tone="warning">Feria</Badge>}
+          </div>
           <div style={{ color: color.ink2, fontSize: font.sm }}>{r.variante.size_name}</div>
           <div style={{ color: color.mut2, fontSize: font.xs }}>{r.variante.sku ?? r.variante.barcode ?? ''}</div>
         </div>
@@ -1265,6 +1272,97 @@ export function ModalesTurno({
   if (que === 'salida') return <SalidaModal onCerrar={onCerrar} onListo={onCambio} />
   if (que === 'cerrar') return <CerrarTurnoModal turno={turno} billetes={billetes} onCerrar={onCerrar} onCerrado={onCerrado} />
   return null
+}
+
+/**
+ * Sólo admin: los PRODUCTOS DE FERIA TRABADOS (Bruno, 5-oct). Su precio es final: en la Caja se cobran
+ * sólo en efectivo o transferencia, a la cuenta de feria, sin el % de la forma de pago. Se guarda la
+ * lista entera en `caja_config.reglas.feriaProductos`; la regla vive en `lib/caja/core.core.js`.
+ */
+export function ProductosFeria({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reglas) => void }) {
+  const [abierto, setAbierto] = useState(false)
+  const [q, setQ] = useState('')
+  const [resultado, setResultado] = useState<ProductoLista[] | null>(null)
+  const [guardando, setGuardando] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const lista = reglas.feriaProductos ?? []
+  const ids = new Set(lista.map((p) => p.id))
+
+  useEffect(() => {
+    const t = q.trim()
+    if (t.length < 2) return
+    let vivo = true
+    const reloj = setTimeout(() => {
+      buscarNombre(t)
+        .then((r) => vivo && setResultado([...r.conStock, ...r.sinStock]))
+        .catch((e) => vivo && setMsg((e as Error).message))
+    }, 250)
+    return () => {
+      vivo = false
+      clearTimeout(reloj)
+    }
+  }, [q])
+
+  async function guardar(nueva: ProductoFeria[]) {
+    setGuardando(true)
+    setMsg(null)
+    try {
+      const r = await guardarBajadas({ feriaProductos: nueva })
+      onGuardadas(r.reglas)
+    } catch (e) {
+      setMsg((e as Error).message)
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <Plegable
+      abierto={abierto}
+      onToggle={() => setAbierto(!abierto)}
+      titulo={`Productos de feria (${lista.length})`}
+      ayuda="Precio final: sólo efectivo o transferencia, a la cuenta de feria, sin descuento por forma de pago. Sólo lo cambia un admin."
+    >
+      <div style={{ display: 'grid', gap: space[3], maxWidth: 640 }}>
+        {lista.length === 0 ? (
+          <span style={{ color: color.mut, fontSize: font.sm }}>Productos de feria: ninguno.</span>
+        ) : (
+          <div style={{ display: 'grid', gap: space[1] }}>
+            {lista.map((p) => (
+              <div key={p.id} style={{ display: 'flex', gap: space[2], alignItems: 'center', borderBottom: `1px solid ${color.line}`, paddingBottom: space[1] }}>
+                <Badge tone="warning">Feria</Badge>
+                <span style={{ flex: 1 }}>{p.nombre || `Producto ${p.id}`}</span>
+                <Button size="sm" variant="ghost" disabled={guardando} onClick={() => guardar(lista.filter((x) => x.id !== p.id))}>
+                  Sacar
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        <Field label="Agregar un producto">
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre del producto" autoComplete="off" spellCheck={false} />
+        </Field>
+        {q.trim().length >= 2 && resultado && (
+          <div style={{ display: 'grid', gap: space[1] }}>
+            {resultado.length === 0 && <span style={{ color: color.mut, fontSize: font.sm }}>Resultados: ninguno.</span>}
+            {resultado.map((p) => (
+              <div key={p.product_id} style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+                <span style={{ flex: 1 }}>{p.product_name}</span>
+                {ids.has(p.product_id) ? (
+                  <Badge tone="warning">Feria</Badge>
+                ) : (
+                  <Button size="sm" variant="outline" disabled={guardando} onClick={() => guardar([...lista, { id: p.product_id, nombre: p.product_name }])}>
+                    Agregar
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {msg && <Notice tone="danger">{msg}</Notice>}
+      </div>
+    </Plegable>
+  )
 }
 
 /** Sólo admin: el texto de la política de cambio que va al pie del ticket. */

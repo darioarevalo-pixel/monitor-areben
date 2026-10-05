@@ -693,6 +693,28 @@ const TRAZOS = {
       <path d="M15.5 9.5l5 5M20.5 9.5l-5 5" />
     </>
   ),
+  /** Efectivo — billete. */
+  efectivo: (
+    <>
+      <path d="M3.5 7h17v10h-17z" />
+      <circle cx="12" cy="12" r="2.4" />
+      <path d="M6.5 10v4M17.5 10v4" />
+    </>
+  ),
+  /** Tarjeta — tarjeta con la banda. */
+  tarjeta: (
+    <>
+      <path d="M3.5 6.5h17v11h-17z" />
+      <path d="M3.5 10h17M7 14.5h3.5" />
+    </>
+  ),
+  /** Transferencia — dos flechas opuestas. */
+  transferencia: (
+    <>
+      <path d="M5 8.5h13M14.5 5l3.5 3.5-3.5 3.5" />
+      <path d="M19 15.5H6M9.5 12L6 15.5 9.5 19" />
+    </>
+  ),
   /** Buscar — lupa. */
   lupa: (
     <>

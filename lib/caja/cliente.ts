@@ -17,7 +17,9 @@ export type Medios = {
 }
 /** `medios` ⛔ está hasta que se corre `sql/migrate-caja-medios.sql`. */
 /** `billetes`: los de la calculadora (fase B); sin la lista, `BILLETES_INICIALES` de `conteo.core.js`. */
-export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number; feria?: boolean; billetes?: number[] }
+/** `feriaProductos` (Bruno, 5-oct): los productos de feria trabados —sólo efectivo o transferencia, a la cuenta de feria—. */
+export type ProductoFeria = { id: number; nombre: string }
+export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number; feria?: boolean; billetes?: number[]; feriaProductos?: ProductoFeria[] }
 /** Un descuento a mano, a una prenda o a toda la venta. */
 export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 export type Config = { reglas: Reglas; politica_cambio: string | null }
@@ -179,5 +181,5 @@ export const reintentarVenta = (id: string) => post<Resultado>({ action: 'reinte
 export const guardarPolitica = (texto: string) => post<{ politica_cambio: string | null }>({ action: 'politica', texto }, 'No se pudo guardar la política de cambio.')
 
 /** Sólo admin: a qué cuenta van las transferencias y el modo feria (bajadas de línea). */
-export const guardarBajadas = (b: { transferenciaA?: number; feria?: boolean; billetes?: number[] }) =>
+export const guardarBajadas = (b: { transferenciaA?: number; feria?: boolean; billetes?: number[]; feriaProductos?: ProductoFeria[] }) =>
   post<{ reglas: Reglas }>({ action: 'bajadas', ...b }, 'No se pudo guardar.')
