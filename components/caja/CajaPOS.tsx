@@ -79,7 +79,7 @@ import {
   type Variante,
   type Venta,
 } from '@/lib/caja/cliente'
-import { Button, ButtonLink, Field, Icono, Input, Modal, Notice, SectionCard, color, font, radius, space, weight } from '@/components/ui'
+import { Badge, Button, ButtonLink, Card, Field, Icono, Input, Modal, Notice, SectionCard, color, font, radius, shadow, space, weight } from '@/components/ui'
 import { useConfirmar } from '@/components/ui/Confirm'
 import {
   CampoRebaja,
@@ -116,6 +116,10 @@ const ESTILO_MEDIO: Record<Medio, { icono: 'efectivo' | 'transferencia' | 'tarje
   credito: { icono: 'tarjeta', fondo: color.bg2, tinta: color.ink2 },
 }
 const nuevoId = () => crypto.randomUUID()
+/** Un número al texto que lee `aNumero`: el punto es de miles, la coma es decimal. */
+const aTexto = (n: number) => String(n).replace('.', ',')
+/** Los billetes redondos con que suele pagar, arriba de lo que va en efectivo (hasta tres). */
+const billetesRapidos = (efectivo: number) => [...new Set([10000, 20000, 50000].map((b) => Math.ceil(efectivo / b) * b))].filter((v) => v > efectivo).slice(0, 3)
 /** El instante de impresión: el ticket lo sella con la hora de Argentina. */
 const ahora = () => Date.now()
 
@@ -654,46 +658,63 @@ function POS() {
 
   return (
     <div style={{ minHeight: '100vh', background: color.bg }}>
-      {/* La izquierda se estira; la derecha (el pedido) queda fija a la vista. En el teléfono, una abajo de la otra. */}
+      {/* La izquierda se estira; la derecha (el pedido) queda fija a la vista, con el total siempre abajo.
+          En el teléfono, una abajo de la otra. La cabecera mide 56 px: el pedido se calcula contra eso. */}
       <style>{`
-        .pos-grid { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: ${space[4]}; padding: ${space[4]}; align-items: start; }
-        .pos-der { position: sticky; top: ${space[4]}; max-height: calc(100vh - 2 * ${space[4]}); overflow: auto; }
+        .pos-top { display: flex; align-items: center; flex-wrap: wrap; gap: ${space[2]}px ${space[3]}px; min-height: 56px; padding: ${space[2]}px ${space[4]}px; background: ${color.sideBg}; color: ${color.sideInk}; }
+        .pos-top .pos-tbtn { height: 36px; padding: 0 ${space[3]}px; border-radius: ${radius.md}px; border: 1px solid ${color.sideLine}; background: transparent; color: ${color.sideInk}; font-size: ${font.base}px; font-weight: ${weight.semibold}; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: ${space[2]}px; }
+        .pos-top .pos-tbtn:hover { background: ${color.sideHover}; }
+        .pos-top .pos-tbtn.icono { width: 36px; padding: 0; }
+        .pos-top .pos-tbtn[aria-pressed="true"] { color: ${color.sideAccent}; border-color: ${color.sideAccent}; }
+        .pos-top .pos-tbtn.peligro { color: ${color.dangerBorder}; border-color: ${color.dangerBorder}; }
+        .pos-grid { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: ${space[4]}px; padding: ${space[4]}px; align-items: start; }
+        .pos-der { position: sticky; top: ${space[4]}px; max-height: calc(100vh - 56px - ${2 * space[4]}px); display: flex; flex-direction: column; min-height: 0; }
+        .pos-renglones { flex: 1; min-height: 0; overflow: auto; }
         .caja-tarjeta { transition: border-color .12s, box-shadow .12s; }
-        .caja-tarjeta:hover, .caja-tarjeta:focus-visible { border-color: ${color.brandBorder} !important; box-shadow: 0 2px 8px rgba(16,24,40,.08); }
-        .cobro-grid { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: ${space[4]}; }
+        .caja-tarjeta:hover, .caja-tarjeta:focus-visible { border-color: ${color.brandBorder} !important; box-shadow: ${shadow.md}; }
+        .caja-sacar:hover { background: ${color.dangerBg} !important; color: ${color.danger} !important; }
+        .pos-buscar { position: relative; flex: 1; min-width: 0; }
+        .pos-buscar svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: ${color.mut}; pointer-events: none; }
+        .cobro-grid { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: ${space[4]}px; }
+        @media (max-width: 1100px) { .pos-grid { grid-template-columns: minmax(0, 1fr) 360px; } .pos-turno { display: none; } }
         @media (max-width: 900px) { .cobro-grid { grid-template-columns: 1fr; } }
-        @media (max-width: 900px) { .pos-grid { grid-template-columns: 1fr; } .pos-der { position: static; max-height: none; } }
+        @media (max-width: 860px) { .pos-grid { grid-template-columns: 1fr; } .pos-der { position: static; max-height: none; } }
       `}</style>
-      <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', padding: `${space[2]} ${space[4]}`, background: color.surface, borderBottom: `1px solid ${color.line}` }}>
-        <ButtonLink href="/caja" variant="outline" size="sm" aria-label="Volver" title="Volver">
+      <header className="pos-top">
+        <ButtonLink href="/caja" className="pos-tbtn icono" aria-label="Volver" title="Volver" style={{ height: 36 }}>
           <Icono nombre="atras" size={18} />
         </ButtonLink>
-        <span style={{ fontSize: font.md, color: color.ink2 }}>
-          <b style={{ color: color.brand }}>Caja Zattia</b> · turno desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}
+        {/* El chip de la marca (prototipo del 5-oct). El POS es sólo de Zattia: multimarca es otra fase. */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 28, padding: '0 11px 0 5px', borderRadius: radius.pill, background: color.brandBg, color: color.brand, fontWeight: weight.bold, fontSize: font.base, whiteSpace: 'nowrap' }}>
+          <b style={{ width: 19, height: 19, borderRadius: radius.pill, background: color.brand, color: color.brandBg, display: 'grid', placeItems: 'center', fontSize: font.xs }}>Z</b>
+          Caja Zattia
+        </span>
+        <span className="pos-turno" style={{ fontSize: font.base, color: color.sideInk2, whiteSpace: 'nowrap' }}>
+          turno desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
-          <Button
-            size="sm"
-            variant={conSonido ? 'soft' : 'outline'}
-            tone={conSonido ? 'brand' : 'neutral'}
+          <button
+            type="button"
+            className="pos-tbtn icono"
             onClick={() => cambiarSonido(!conSonido)}
             aria-pressed={conSonido}
             aria-label={conSonido ? 'Con sonido' : 'Sin sonido'}
             title={conSonido ? 'Con sonido' : 'Sin sonido'}
+            style={{ height: 36 }}
           >
             <Icono nombre={conSonido ? 'sonido' : 'silencio'} size={18} />
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setPanelTurno('contar')}>
+          </button>
+          <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('contar')} style={{ height: 36 }}>
             Contar billetes
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setPanelTurno('salida')}>
+          </button>
+          <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('salida')} style={{ height: 36 }}>
             Cargar salida
-          </Button>
-          <Button size="sm" variant="outline" tone="danger" onClick={() => setPanelTurno('cerrar')}>
+          </button>
+          <button type="button" className="pos-tbtn peligro" onClick={() => setPanelTurno('cerrar')} style={{ height: 36 }}>
             Cerrar turno
-          </Button>
+          </button>
         </div>
-      </div>
+      </header>
 
       <ModalesTurno
         que={panelTurno}
@@ -726,21 +747,14 @@ function POS() {
           <PedidosWebSinArmar datos={pedidosWeb} error={errPedidos} />
 
           {ultima && (
-            <div style={{ display: 'grid', gap: space[2] }}>
-              <UltimaVenta venta={ultima.venta} onReimprimir={() => imprimirTicket(ultima.ticket, esEfectivo, ahora())} />
-              <div>
-                <Button
-                  tone="brand"
-                  variant="solid"
-                  onClick={() => {
-                    setUltima(null)
-                    enfocar()
-                  }}
-                >
-                  Agregar otra venta
-                </Button>
-              </div>
-            </div>
+            <UltimaVenta
+              venta={ultima.venta}
+              onReimprimir={() => imprimirTicket(ultima.ticket, esEfectivo, ahora())}
+              onOtra={() => {
+                setUltima(null)
+                enfocar()
+              }}
+            />
           )}
 
           {mostrarCobro && (
@@ -768,14 +782,16 @@ function POS() {
                     <b style={{ fontSize: font.lg, color: color.ink }}>Resumen de la venta</b>
                     <span style={{ color: color.mut, fontSize: font.sm }}>{prendas === 1 ? '1 prenda' : `${prendas} prendas`}</span>
                   </div>
-                  <div style={{ background: color.bg, borderRadius: radius.md, padding: `${space[2]} ${space[3]}`, color: color.ink2, fontSize: font.sm }}>
+                  <div style={{ background: color.bg, borderRadius: radius.md, padding: `${space[2]}px ${space[3]}px`, color: color.ink2, fontSize: font.sm, overflowWrap: 'anywhere' }}>
                     Cliente: {bor.email.trim() || 'Consumidor final'}
                   </div>
                   <div style={{ display: 'grid', gap: space[2], fontSize: font.sm }}>
                     {bor.renglones.map((r, i) => (
                       <div key={claveDe(r.variante)} style={{ display: 'flex', justifyContent: 'space-between', gap: space[2] }}>
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: weight.semibold, color: color.ink, textTransform: 'uppercase' }}>{r.variante.product_name}</div>
+                          <div style={{ fontWeight: weight.semibold, color: color.ink, textTransform: 'uppercase' }}>
+                            {r.variante.product_name} {feriaIds.has(Number(r.variante.product_id)) && <Badge tone="warning">Feria</Badge>}
+                          </div>
                           <div style={{ color: color.mut }}>
                             {r.variante.size_name} · ×{r.cantidad}
                           </div>
@@ -823,7 +839,9 @@ function POS() {
                   {sinMedios ? (
                     <Notice tone="danger">Formas de pago sin cargar: correr sql/migrate-caja-medios.sql.</Notice>
                   ) : !varios ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: space[2] }}>
+                    <div style={{ display: 'grid', gap: space[2] }}>
+                    {hayFeria && <Notice tone="warning">Hay prendas de feria: van a precio final. Se cobra con efectivo o transferencia; la parte de feria va a su cuenta, sin el %.</Notice>}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: space[2] }}>
                       {MEDIOS.map((medio) => {
                         const activa = pagos[0].medio === medio
                         const trabada = hayFeria && (medio === 'debito' || medio === 'credito')
@@ -860,17 +878,18 @@ function POS() {
                               <span style={{ fontSize: font.md, fontWeight: weight.semibold, color: color.ink }}>{NOMBRE_MEDIO[medio]}</span>
                               <span style={{ fontSize: font.xs, color: color.mut }}>{regla?.nombre ?? '—'}</span>
                               {trabada ? (
-                                <span style={{ fontSize: font.xs, color: color.warningInk, fontWeight: weight.semibold }}>Con prendas de feria: ⛔</span>
+                                <span style={{ fontSize: font.xs, color: color.warningInk, fontWeight: weight.bold }}>No va con prendas de feria</span>
                               ) : (
                                 regla && regla.descuento > 0 && <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{regla.descuento}% de descuento{hayFeria ? ' (sin la feria)' : ''}</span>
                               )}
                             </span>
                             <span style={{ fontSize: font.lg, fontWeight: weight.bold, color: color.ink, fontVariantNumeric: 'tabular-nums' }}>
-                              {totalPorMedio[medio] != null ? plata(totalPorMedio[medio]) : '—'}
+                              {!trabada && totalPorMedio[medio] != null ? plata(totalPorMedio[medio]) : '—'}
                             </span>
                           </button>
                         )
                       })}
+                    </div>
                     </div>
                   ) : (
                     <VariosPagos pagos={pagos} setPagos={setPagos} montos={c?.pagos.map((p) => p.monto) ?? null} />
@@ -889,10 +908,21 @@ function POS() {
                   {c && enEfectivo > 0 && (
                     <div style={{ display: 'flex', gap: space[4], alignItems: 'end', flexWrap: 'wrap', background: color.bg, borderRadius: radius.lg, padding: space[3] }}>
                       <Field label={`Paga con (efectivo: ${plata(enEfectivo)})`}>
-                        <Input inputMode="decimal" autoComplete="off" value={pagaCon} onChange={(e) => setPagaCon(e.target.value)} placeholder="$" style={{ fontSize: font.xl, width: 180 }} />
+                        <Input inputMode="decimal" autoComplete="off" value={pagaCon} onChange={(e) => setPagaCon(e.target.value)} placeholder="$" style={{ fontSize: font.xl, fontWeight: weight.bold, height: 46, width: 180 }} />
                       </Field>
+                      {/* Atajos del billete con que paga: sólo escriben el «Paga con», el vuelto lo saca la cuenta de siempre. */}
+                      <div style={{ display: 'flex', gap: space[1.5], flexWrap: 'wrap' }}>
+                        <Button size="sm" variant="outline" onClick={() => setPagaCon(aTexto(enEfectivo))}>
+                          Justo
+                        </Button>
+                        {billetesRapidos(enEfectivo).map((b) => (
+                          <Button key={b} size="sm" variant="outline" onClick={() => setPagaCon(aTexto(b))}>
+                            {plata(b)}
+                          </Button>
+                        ))}
+                      </div>
                       {vuelto != null && (
-                        <div style={{ fontSize: font['2xl'], fontWeight: weight.heavy, color: vuelto < 0 ? color.danger : color.successInk }}>
+                        <div style={{ fontSize: font['3xl'], fontWeight: weight.heavy, fontVariantNumeric: 'tabular-nums', color: vuelto < 0 ? color.danger : color.successInk }}>
                           {vuelto < 0 ? `Faltan ${plata(-vuelto)}` : `Vuelto ${plata(vuelto)}`}
                         </div>
                       )}
@@ -903,11 +933,13 @@ function POS() {
               </div>
             </Modal>
           )}
-          <SectionCard title="Escanear o buscar">
+          <SectionCard title="Escanear o buscar" actions={<span style={{ fontSize: font.sm, color: color.mut }}>Variantes: ↑/↓ y Enter</span>}>
               {/* 🔴 Sin <form>: el Enter del lector lo toma el campo. Con un form, el botón «Agregar» en
                   `loading` (deshabilitado) hacía que el navegador IGNORE el Enter, y el segundo escaneo
                   quedaba escrito sin entrar (visto en prod, 4-oct). */}
               <div style={{ display: 'flex', gap: space[2] }}>
+                <label className="pos-buscar">
+                <Icono nombre="lupa" size={20} />
                 <Input
                   ref={scanRef}
                   autoFocus
@@ -927,9 +959,11 @@ function POS() {
                   autoCorrect="off"
                   autoCapitalize="off"
                   spellCheck={false}
-                  style={{ fontSize: font.xl, flex: 1 }}
+                  aria-label="Código de barras, SKU o nombre y talle"
+                  style={{ fontSize: font.xl, width: '100%', height: 52, paddingLeft: 44, borderRadius: radius.xl }}
                 />
-                <Button onClick={() => escanear(codigo)} loading={buscando > 0}>
+                </label>
+                <Button tone="brand" variant="solid" onClick={() => escanear(codigo)} loading={buscando > 0} style={{ height: 52 }}>
                   Agregar
                 </Button>
               </div>
@@ -938,8 +972,19 @@ function POS() {
                   <Notice tone={aviso.tono}>{aviso.texto}</Notice>
                 </div>
               )}
+              {/* Sin lista a la vista: qué se puede hacer acá (prototipo del 5-oct). */}
+              {!(sugeridas && sugeridas.q === codigo.trim()) && !candidatos && !aviso && (
+                <div style={{ display: 'grid', justifyItems: 'center', textAlign: 'center', gap: space[1.5], padding: `${space[6]}px ${space[4]}px ${space[5]}px`, color: color.mut, fontSize: font.base }}>
+                  <span style={{ color: color.mut2 }}>
+                    <Icono nombre="etiquetas" size={40} />
+                  </span>
+                  <strong style={{ color: color.ink2, fontSize: font.lg }}>Escanear la etiqueta o escribir el nombre</strong>
+                  <span>La lista aparece sola desde 2 letras. Con el lector, Enter agrega.</span>
+                </div>
+              )}
               {sugeridas && sugeridas.q === codigo.trim() && !candidatos && (
                 <GrillaProductos
+                  feria={feriaIds}
                   con={sugeridas.conStock}
                   masCon={sugeridas.masCon}
                   sin={sugeridas.sinStock}
@@ -980,62 +1025,67 @@ function POS() {
         </div>
 
         <div className="pos-der">
-          <SectionCard
-            title={`Pedido · ${prendas === 1 ? '1 prenda' : `${prendas} prendas`}`}
-            actions={
-              bor.renglones.length > 0 ? (
+          {/* El pedido (prototipo del 5-oct): los renglones se desplazan y el pie —mail, total y «Continuar al
+              cobro»— queda siempre a la vista. */}
+          <Card style={{ padding: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3], padding: `${space[3]}px ${space[4]}px`, borderBottom: `1px solid ${color.line}` }}>
+              <h2 style={{ margin: 0, fontSize: font.lg, fontWeight: weight.bold, color: color.ink }}>{`Pedido · ${prendas === 1 ? '1 prenda' : `${prendas} prendas`}`}</h2>
+              {bor.renglones.length > 0 && (
                 <Button size="sm" variant="ghost" onClick={vaciar}>
                   Vaciar pedido
                 </Button>
-              ) : undefined
-            }
-          >
-            {bor.renglones.length === 0 ? (
-              <span style={{ color: color.mut }}>Pedido vacío: escanear o buscar una prenda.</span>
-            ) : (
-              <div style={{ display: 'grid', gap: space[3] }}>
-                <div style={{ display: 'grid', gap: space[2] }}>
-                  {bor.renglones.map((r, i) => (
-                    <FilaRenglon
-                      key={claveDe(r.variante)}
-                      r={r}
-                      feria={feriaIds.has(Number(r.variante.product_id))}
-                      cargandoPrecios={!datos || !tnIdx}
-                      onCantidad={(n) => (n <= 0 ? sacarRenglon(i) : cambiarRenglon(i, { cantidad: n }))}
-                      onPrecio={(p) => cambiarRenglon(i, { precio: p })}
-                      onRebaja={(rb) => cambiarRenglon(i, { rebaja: rb })}
-                      importe={filas?.[i]?.importe ?? null}
-                      onSacar={() => sacarRenglon(i)}
-                      avisoWeb={avisoWeb(r.variante, r.stock, r.cantidad)}
-                      mirandoWeb={!pedidosWeb && !errPedidos}
-                    />
-                  ))}
-                </div>
+              )}
+            </div>
+            <div className="pos-renglones" style={{ padding: `0 ${space[4]}px` }}>
+              {bor.renglones.length === 0 ? (
+                <div style={{ padding: `${space[6]}px 0`, textAlign: 'center', color: color.mut, fontSize: font.base }}>Pedido vacío: escanear o buscar una prenda.</div>
+              ) : (
+                bor.renglones.map((r, i) => (
+                  <FilaRenglon
+                    key={claveDe(r.variante)}
+                    r={r}
+                    feria={feriaIds.has(Number(r.variante.product_id))}
+                    cargandoPrecios={!datos || !tnIdx}
+                    onCantidad={(n) => (n <= 0 ? sacarRenglon(i) : cambiarRenglon(i, { cantidad: n }))}
+                    onPrecio={(p) => cambiarRenglon(i, { precio: p })}
+                    onRebaja={(rb) => cambiarRenglon(i, { rebaja: rb })}
+                    importe={filas?.[i]?.importe ?? null}
+                    onSacar={() => sacarRenglon(i)}
+                    avisoWeb={avisoWeb(r.variante, r.stock, r.cantidad)}
+                    mirandoWeb={!pedidosWeb && !errPedidos}
+                  />
+                ))
+              )}
+            </div>
+            {bor.renglones.length > 0 && (
+              <div style={{ flexShrink: 0, display: 'grid', gap: space[2], padding: `${space[3]}px ${space[4]}px ${space[4]}px`, borderTop: `1px solid ${color.line}`, background: color.bg }}>
                 <Field label="Mail para el ticket (opcional)">
                   <Input type="email" autoComplete="off" spellCheck={false} value={bor.email} invalid={!emailOk} onChange={(e) => setBor((b) => ({ ...b, email: e.target.value }))} placeholder="nombre@mail.com" />
                 </Field>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.md, color: color.ink2 }}>
                   <span>Subtotal</span>
-                  <b>{filas ? plata(filas.reduce((s, f) => s + f.importe, 0)) : '—'}</b>
+                  <b style={{ fontVariantNumeric: 'tabular-nums' }}>{filas ? plata(filas.reduce((s, f) => s + f.importe, 0)) : '—'}</b>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
                   <span style={{ color: color.mut }}>Descuento</span>
                   <CampoRebaja valor={descuentoVenta} onCambio={(rb) => setBor((b) => ({ ...b, descuentoVenta: rb }))} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: color.brandBg, border: `1px solid ${color.brandBorder}`, borderRadius: radius.lg, padding: `${space[3]} ${space[4]}`, fontSize: font['2xl'], fontWeight: weight.heavy }}>
-                  <span style={{ color: color.ink }}>TOTAL</span>
-                  <span style={{ color: color.brand, fontVariantNumeric: 'tabular-nums' }}>{mostrarCobro && c ? plata(c.total) : aPagar != null ? plata(aPagar) : '—'}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: space[2], borderTop: `1px dashed ${color.line2}` }}>
+                  <span style={{ fontWeight: weight.heavy, fontSize: font.md, letterSpacing: '.05em', color: color.ink }}>TOTAL</span>
+                  <span style={{ fontSize: 36, fontWeight: weight.heavy, letterSpacing: '-.02em', lineHeight: 1, color: color.brand, fontVariantNumeric: 'tabular-nums' }}>
+                    {mostrarCobro && c ? plata(c.total) : aPagar != null ? plata(aPagar) : '—'}
+                  </span>
                 </div>
                 {!mostrarCobro && <span style={{ color: color.mut, fontSize: font.sm }}>El descuento de la forma de pago se ve al cobrar.</span>}
                 {sinPrecio && <Notice tone="warning">Prenda sin precio: escribirlo en el renglón.</Notice>}
                 {!mostrarCobro && (
-                  <Button size="lg" tone="success" variant="solid" fullWidth disabled={!puedeCobrar} onClick={() => setEnCobro(true)}>
-                    Continuar al cobro <span style={{ fontSize: font.xs, opacity: 0.8, marginLeft: space[1] }}>Alt+C</span>
+                  <Button size="lg" tone="success" variant="solid" fullWidth disabled={!puedeCobrar} onClick={() => setEnCobro(true)} style={{ height: 52 }}>
+                    Continuar al cobro <span style={{ fontSize: font.xs, fontWeight: weight.semibold, border: '1px solid currentColor', opacity: 0.85, borderRadius: 5, padding: '1px 6px', marginLeft: space[1] }}>Alt+C</span>
                   </Button>
                 )}
               </div>
             )}
-          </SectionCard>
+          </Card>
         </div>
       </div>
     </div>

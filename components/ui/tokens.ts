@@ -61,6 +61,14 @@ export const color = {
   warningBg: 'var(--mo-warning-bg)',
   warningBorder: 'var(--mo-warning-border)',
   warningInk: 'var(--mo-warning-ink)',
+
+  // Barra oscura — la del sidebar del shell. El POS de la Caja la usa de cabecera (no tiene shell).
+  sideBg: 'var(--mo-side-bg)',
+  sideHover: 'var(--mo-side-hover)',
+  sideInk: 'var(--mo-side-ink)',
+  sideInk2: 'var(--mo-side-ink2)',
+  sideLine: 'var(--mo-side-line)',
+  sideAccent: 'var(--mo-side-accent)',
 } as const
 
 /**

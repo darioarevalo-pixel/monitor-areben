@@ -87,35 +87,7 @@ export function ListaPrendas({
     const { precio, foto } = precioYFoto(v.product_id)
     if (grilla) {
       return (
-        <button
-          key={claveDe(v)}
-          type="button"
-          onClick={() => onElegir(v)}
-          style={{
-            height: 'auto',
-            display: 'grid',
-            gap: space[1],
-            padding: space[2],
-            textAlign: 'left',
-            alignContent: 'start',
-            border: `1px solid ${color.line}`,
-            borderRadius: radius.md,
-            background: color.surface,
-            cursor: 'pointer',
-            opacity: apagada ? 0.6 : 1,
-          }}
-        >
-          {foto ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={foto} alt="" style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover', borderRadius: radius.md }} />
-          ) : (
-            <div style={{ width: '100%', aspectRatio: '4 / 5', borderRadius: radius.md, background: color.bg2 }} />
-          )}
-          <span style={{ fontWeight: weight.semibold, color: color.ink, fontSize: font.sm }}>
-            {v.product_name} · {v.size_name}
-          </span>
-          <span style={{ fontWeight: weight.bold, color: color.ink }}>{precio ? plata(precio) : '—'}</span>
-        </button>
+        <TarjetaProducto key={claveDe(v)} nombre={`${v.product_name} · ${v.size_name}`} precio={precio} foto={foto} apagada={apagada} cta={apagada ? 'Sin stock en el local ›' : 'Agregar al pedido +'} onClick={() => onElegir(v)} />
       )
     }
     return (
@@ -159,7 +131,7 @@ export function ListaPrendas({
   // En grilla, los textos y el botón ocupan la fila entera.
   const ancho = grilla ? { gridColumn: '1 / -1' } : undefined
   return (
-    <div style={{ marginTop: space[3], display: 'grid', gap: space[2], ...(grilla ? { gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' } : {}) }}>
+    <div style={{ marginTop: space[3], display: 'grid', gap: grilla ? space[3] : space[2], ...(grilla ? { gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' } : {}) }}>
       {titulo && <span style={{ ...ancho, color: color.mut, fontSize: font.sm }}>{titulo}</span>}
       {con.length === 0 && !verSin && <span style={{ ...ancho, color: color.mut, fontSize: font.sm }}>Ninguna con stock en el local.</span>}
       {con.map((v) => fila(v, false))}
@@ -185,6 +157,51 @@ export function Foto({ src, ancho = '100%', proporcion = '4 / 5' }: { src: strin
 }
 
 /**
+ * La tarjeta de un producto en el POS (prototipo del 5-oct): la foto a sangre arriba —con «Feria» encima
+ * si es de feria—, el nombre, el precio y lo que pasa al tocarla. Sin stock en el local, la foto en gris.
+ */
+export function TarjetaProducto({ nombre, precio, foto, cta, apagada, feria = false, onClick }: { nombre: string; precio: number | null; foto: string | null; cta: string; apagada: boolean; feria?: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="caja-tarjeta"
+      style={{
+        height: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: 0,
+        textAlign: 'left',
+        overflow: 'hidden',
+        border: `1px solid ${color.line}`,
+        borderRadius: radius.xl,
+        background: color.surface,
+        cursor: 'pointer',
+      }}
+    >
+      <span style={{ position: 'relative', display: 'block', filter: apagada ? 'grayscale(.9)' : undefined, opacity: apagada ? 0.55 : 1 }}>
+        {foto ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={foto} alt="" loading="lazy" style={{ display: 'block', width: '100%', aspectRatio: '4 / 5', objectFit: 'cover' }} />
+        ) : (
+          <span style={{ display: 'block', width: '100%', aspectRatio: '4 / 5', background: color.bg2 }} />
+        )}
+        {feria && (
+          <span style={{ position: 'absolute', top: space[2], left: space[2] }}>
+            <Badge tone="warning">Feria</Badge>
+          </span>
+        )}
+      </span>
+      <span style={{ display: 'grid', gap: 3, padding: `${space[2]}px ${space[3]}px ${space[3]}px` }}>
+        <span style={{ fontWeight: weight.semibold, color: color.ink, fontSize: font.base, lineHeight: 1.25 }}>{nombre}</span>
+        <span style={{ fontWeight: weight.bold, color: color.ink, fontSize: font.lg, fontVariantNumeric: 'tabular-nums' }}>{precio ? plata(precio) : '—'}</span>
+        <span style={{ marginTop: space[1], fontSize: font.sm, fontWeight: weight.bold, color: apagada ? color.mut : color.brand }}>{cta}</span>
+      </span>
+    </button>
+  )
+}
+
+/**
  * La grilla del POS POR PRODUCTO, como la de GN (Bruno, 5-oct): foto, nombre, precio y «Elegir
  * variante» (o «Agregar al pedido» si tiene una sola). Los productos sin stock en el local, tras
  * «Mostrar sin stock». ⛔ Lleva el número de stock: es el de anoche y confundía (Bruno, 4-oct).
@@ -198,6 +215,7 @@ export function GrillaProductos({
   onVerSin,
   precioYFoto,
   onElegir,
+  feria,
 }: {
   con: ProductoLista[]
   masCon: number
@@ -207,52 +225,29 @@ export function GrillaProductos({
   onVerSin: () => void
   precioYFoto: (productId: number) => { precio: number | null; foto: string | null }
   onElegir: (p: ProductoLista) => void
+  /** Los productos de feria trabados: la tarjeta lo dice antes de agregarla. */
+  feria?: Set<number>
 }) {
   const ancho = { gridColumn: '1 / -1' }
   const tarjeta = (p: ProductoLista, apagada: boolean) => {
     const { precio, foto } = precioYFoto(p.product_id)
     const una = p.variantes.length === 1
-    return (
-      <button
-        key={p.product_id}
-        type="button"
-        onClick={() => onElegir(p)}
-        className="caja-tarjeta"
-        style={{
-          height: 'auto',
-          display: 'grid',
-          gap: space[1],
-          padding: space[2],
-          textAlign: 'left',
-          alignContent: 'start',
-          border: `1px solid ${color.line}`,
-          borderRadius: radius.lg,
-          background: color.surface,
-          cursor: 'pointer',
-          opacity: apagada ? 0.6 : 1,
-        }}
-      >
-        <Foto src={foto} />
-        <span style={{ fontWeight: weight.semibold, color: color.ink, fontSize: font.sm, lineHeight: 1.25 }}>{p.product_name}</span>
-        <span style={{ fontWeight: weight.bold, color: color.brand, fontSize: font.md }}>{precio ? plata(precio) : '—'}</span>
-        <span
-          style={{
-            fontSize: font.xs,
-            fontWeight: weight.semibold,
-            borderRadius: radius.md,
-            padding: `${space[1]} ${space[2]}`,
-            background: una ? color.brandBg : color.warningBg,
-            color: una ? color.brand : color.warningInk,
-          }}
-        >
-          {una ? 'Agregar al pedido +' : `Elegir variante (${p.variantes.length}) ›`}
-        </span>
-      </button>
-    )
+    const cta = apagada ? 'Sin stock en el local ›' : una ? 'Agregar al pedido +' : `Elegir variante (${p.variantes.length}) ›`
+    return <TarjetaProducto key={p.product_id} nombre={p.product_name} precio={precio} foto={foto} cta={cta} apagada={apagada} feria={!!feria?.has(Number(p.product_id))} onClick={() => onElegir(p)} />
   }
   const totalSin = sin.length + masSin
+  const enLocal = con.length + masCon
   return (
-    <div style={{ marginTop: space[3], display: 'grid', gap: space[2], gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
+    <div style={{ marginTop: space[3], display: 'grid', gap: space[3], gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+      {enLocal > 0 && (
+        <div style={{ ...ancho, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: `${space[1]}px ${space[3]}px`, fontSize: font.sm, color: color.mut }}>
+          <span>
+            <b style={{ color: color.ink, fontSize: font.md }}>{enLocal === 1 ? '1 producto' : `${enLocal} productos`}</b> en el local
+          </span>
+          {/* La misma condición que el Enter del campo (CajaPOS): uno solo, sin más ni sin stock detrás. */}
+          {con.length === 1 && !masCon && !totalSin && <span>Enter abre las variantes</span>}
+        </div>
+      )}
       {con.length === 0 && !verSin && <span style={{ ...ancho, color: color.mut, fontSize: font.sm }}>Con stock en el local: ninguno.</span>}
       {con.map((p) => tarjeta(p, false))}
       {masCon > 0 && <span style={{ ...ancho, color: color.mut, fontSize: font.sm }}>Y {masCon} más: sumar el color o el talle para achicar la lista.</span>}
@@ -335,9 +330,14 @@ export function ElegirVariante({
   return (
     <Modal abierto onCerrar={onCerrar} titulo="Elegir variante">
       <div style={{ display: 'grid', gap: space[3] }} onKeyDown={mover}>
-        <div style={{ display: 'flex', gap: space[3], alignItems: 'center' }}>
-          <Foto src={fotoDe(producto.variantes[0])} ancho={56} />
-          <b style={{ fontSize: font.lg, color: color.ink }}>{producto.product_name}</b>
+        <div style={{ display: 'flex', gap: space[4], alignItems: 'center' }}>
+          <Foto src={fotoDe(producto.variantes[0])} ancho={96} />
+          <div style={{ minWidth: 0 }}>
+            <b style={{ display: 'block', fontSize: font.xl, color: color.ink }}>{producto.product_name}</b>
+            <span style={{ fontSize: font.base, color: color.mut }}>
+              {precio ? plata(precio) : 'Sin precio'} · {con.length === 1 ? '1 variante en el local' : `${con.length} variantes en el local`}
+            </span>
+          </div>
         </div>
         <div ref={lista} style={{ display: 'grid', gap: space[2] }}>
           {con.map((v, i) => fila(v, i, false))}
@@ -389,44 +389,62 @@ export function FilaRenglon({
   const lista = r.precio != null ? Math.round(r.cantidad * r.precio * 100) / 100 : null
   // Con descuento a mano: el de lista tachado y el que queda al lado (Bruno, 5-oct).
   const conRebaja = !!r.rebaja && importe != null && lista != null && lista - importe > 0.004
+  const paso = (delta: number, etiqueta: string, signo: string) => (
+    <button type="button" onClick={() => onCantidad(r.cantidad + delta)} aria-label={etiqueta} style={{ height: 28, width: 28, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', color: color.ink2, fontSize: font.lg, cursor: 'pointer' }}>
+      {signo}
+    </button>
+  )
   return (
-    <div style={{ display: 'grid', gap: space[2], padding: space[3], border: `1px solid ${color.line}`, borderRadius: radius.lg, background: color.surface }}>
-      <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start' }}>
-        <Foto src={r.foto} ancho={56} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: weight.bold, color: color.ink, textTransform: 'uppercase', fontSize: font.sm }}>
-            {r.variante.product_name} {feria && <Badge tone="warning">Feria</Badge>}
-          </div>
-          <div style={{ color: color.ink2, fontSize: font.sm }}>{r.variante.size_name}</div>
-          <div style={{ color: color.mut2, fontSize: font.xs }}>{r.variante.sku ?? r.variante.barcode ?? ''}</div>
-        </div>
-        <Button size="sm" variant="ghost" onClick={onSacar} aria-label={`Eliminar ${r.variante.product_name} · ${r.variante.size_name}`} title="Eliminar">
-          <Icono nombre="cruz" />
-        </Button>
+    <div style={{ display: 'grid', gridTemplateColumns: '48px minmax(0, 1fr) auto', columnGap: space[3], rowGap: space[1.5], padding: `${space[3]}px 0`, borderBottom: `1px solid ${color.bg2}` }}>
+      <div style={{ gridRow: 'span 2' }}>
+        <Foto src={r.foto} ancho={48} proporcion="1 / 1" />
       </div>
-      <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', fontSize: font.xs, color: color.mut }}>
-        {quedan < 0 ? (
-          <Badge tone="danger">Local: sin stock en Gestión Nube</Badge>
-        ) : quedan === 0 ? (
-          <Badge tone="warning">ÚLTIMA</Badge>
-        ) : (
-          <span>Local: quedan {quedan}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontWeight: weight.semibold, color: color.ink, fontSize: font.base, lineHeight: 1.25 }}>
+          {r.variante.product_name} {feria && <Badge tone="warning">Feria</Badge>}
+        </div>
+        <div style={{ color: color.mut, fontSize: font.sm }}>
+          {r.variante.size_name}
+          {(r.variante.sku ?? r.variante.barcode) && <span style={{ color: color.mut2 }}> · {r.variante.sku ?? r.variante.barcode}</span>}
+        </div>
+      </div>
+      <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+        {conRebaja && <s style={{ display: 'block', color: color.mut2, fontSize: font.xs }}>{plata(lista as number)}</s>}
+        <b style={{ fontSize: font.md, color: conRebaja ? color.successInk : color.ink }}>{importe != null ? plata(importe) : lista != null ? plata(lista) : '—'}</b>
+      </div>
+      <div style={{ gridColumn: '2 / 4', display: 'grid', gap: space[1.5], justifyItems: 'start' }}>
+        {/* 🔑 Ubicaciones depósito: dónde buscarla atrás. Va EN EL RENGLÓN porque la mayoría se escanea y
+            ⛔ pasa por la búsqueda (Bruno, 5-oct). Sin estante ⛔ se dice nada: está todo en percha. */}
+        {!!r.stock.atras?.length && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: font.sm, fontWeight: weight.semibold, color: color.brand, background: color.brandBg, border: `1px solid ${color.brandBorder}`, padding: '2px 8px', borderRadius: radius.pill }}>
+            <Icono nombre="ubicaciones" size={13} />
+            Ubicación: {r.stock.atras.join(' · ')}
+          </span>
         )}
-        {/* En el local «depósito» es el de atrás de la percha, que ya está en `local`. El Depósito de GN
-            (18210) ⛔ vende desde la caja: sólo repone. */}
-        <span>· Para reponer: {r.stock.deposito}</span>
-        {/* Ubicaciones depósito: dónde buscarla atrás. Sin estante ⛔ se dice nada: está todo en percha. */}
-        {!!r.stock.atras?.length && <b style={{ color: color.ink }}>· Ubicación: {r.stock.atras.join(' · ')}</b>}
-        {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· Stock de anoche (Gestión Nube sin respuesta)</span>}
-      </div>
-      {r.fueraDeTn && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio del espejo: producto sin cruce con Tienda Nube.</div>}
-      {mirandoWeb && <div style={{ fontSize: font.xs, color: color.mut }}>Pedidos web: leyendo…</div>}
-      {avisoWeb && (
-        <div>
-          <Badge tone={avisoWeb.tipo === 'sin_stock' ? 'danger' : 'warning'}>{avisoWeb.texto}</Badge>
+        <div style={{ display: 'flex', gap: space[1.5], alignItems: 'center', flexWrap: 'wrap', fontSize: font.xs, color: color.mut }}>
+          {quedan < 0 ? (
+            <Badge tone="danger">Local: sin stock en Gestión Nube</Badge>
+          ) : quedan === 0 ? (
+            <Badge tone="warning">ÚLTIMA</Badge>
+          ) : (
+            <span>Local: quedan {quedan}</span>
+          )}
+          {/* En el local «depósito» es el de atrás de la percha, que ya está en `local`. El Depósito de GN
+              (18210) ⛔ vende desde la caja: sólo repone. */}
+          <span>· Para reponer: {r.stock.deposito}</span>
+          {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· Stock de anoche (Gestión Nube sin respuesta)</span>}
         </div>
-      )}
-      <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+        {r.fueraDeTn && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio del espejo: producto sin cruce con Tienda Nube.</div>}
+        {mirandoWeb && <div style={{ fontSize: font.xs, color: color.mut }}>Pedidos web: leyendo…</div>}
+        {avisoWeb && <Badge tone={avisoWeb.tipo === 'sin_stock' ? 'danger' : 'warning'}>{avisoWeb.texto}</Badge>}
+      </div>
+      {/* Los controles van a lo ancho del renglón: con el precio editable ⛔ entran debajo del nombre. */}
+      <div style={{ gridColumn: '1 / -1', display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', height: 30, border: `1px solid ${color.line2}`, borderRadius: radius.md, background: color.surface, flexShrink: 0 }}>
+          {paso(-1, 'Una menos', '−')}
+          <span style={{ minWidth: 28, textAlign: 'center', fontWeight: weight.semibold, fontSize: font.base, fontVariantNumeric: 'tabular-nums' }}>{r.cantidad}</span>
+          {paso(1, 'Una más', '+')}
+        </div>
         <Input
           inputMode="decimal"
           autoComplete="off"
@@ -438,25 +456,20 @@ export function FilaRenglon({
             if (texto != null) onPrecio(aNumero(texto))
             setTexto(null)
           }}
-          style={{ width: 110, textAlign: 'right', color: color.brand, fontWeight: weight.semibold }}
+          style={{ width: 84, height: 30, textAlign: 'right', color: color.brand, fontWeight: weight.semibold, fontSize: font.base }}
           aria-label="Precio"
         />
-        <CampoRebaja valor={r.rebaja ?? null} onCambio={onRebaja} />
-      </div>
-      <div style={{ display: 'flex', gap: space[2], alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: space[1], alignItems: 'center' }}>
-          <Button size="sm" variant="outline" onClick={() => onCantidad(r.cantidad - 1)} aria-label="Una menos">
-            −
-          </Button>
-          <span style={{ minWidth: 32, textAlign: 'center', fontWeight: weight.bold }}>{r.cantidad}</span>
-          <Button size="sm" variant="outline" onClick={() => onCantidad(r.cantidad + 1)} aria-label="Una más">
-            +
-          </Button>
-        </div>
-        <div style={{ display: 'flex', gap: space[2], alignItems: 'baseline', fontVariantNumeric: 'tabular-nums' }}>
-          {conRebaja && <s style={{ color: color.mut, fontSize: font.sm }}>{plata(lista as number)}</s>}
-          <b style={{ fontSize: font.md, color: conRebaja ? color.successInk : color.ink }}>{importe != null ? plata(importe) : lista != null ? plata(lista) : '—'}</b>
-        </div>
+        <CampoRebaja valor={r.rebaja ?? null} onCambio={onRebaja} chico />
+        <button
+          type="button"
+          onClick={onSacar}
+          className="caja-sacar"
+          aria-label={`Sacar ${r.variante.product_name} · ${r.variante.size_name} del pedido`}
+          title="Sacar del pedido"
+          style={{ marginLeft: 'auto', height: 30, width: 30, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', borderRadius: radius.md, color: color.mut2, cursor: 'pointer', flexShrink: 0 }}
+        >
+          <Icono nombre="cruz" size={16} />
+        </button>
       </div>
     </div>
   )
@@ -527,21 +540,38 @@ export function ResumenCobro({ c, nombreCuenta }: { c: { subtotal: number; aVent
   )
 }
 
-export function UltimaVenta({ venta, onReimprimir }: { venta: Venta; onReimprimir: () => void }) {
+/**
+ * La venta recién cobrada (prototipo del 5-oct): verde con el tilde si llegó a GN; roja si quedó
+ * pendiente. «Agregar otra venta» va en el mismo panel.
+ */
+export function UltimaVenta({ venta, onReimprimir, onOtra }: { venta: Venta; onReimprimir: () => void; onOtra?: () => void }) {
   const enGn = venta.estado === 'en_gn'
+  const tono = enGn ? { fg: color.successInk, bg: color.successBg, borde: color.successBorder } : { fg: color.dangerInk, bg: color.dangerBg, borde: color.dangerBorder }
   return (
-    <Notice tone={enGn ? 'success' : 'danger'}>
-      <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
-        <span>
-          {enGn
-            ? `Venta #${venta.gn_number} · ${plata(venta.total)} · en Gestión Nube`
-            : `Venta provisoria ${numeroProvisorio(venta.id)} · ${plata(venta.total)} · pendiente en Gestión Nube (${venta.ultimo_error ?? 'sin respuesta'}) · reintento automático`}
+    <section
+      aria-label="Última venta"
+      style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', padding: `${space[3]}px ${space[4]}px`, border: `1px solid ${tono.borde}`, borderRadius: radius['2xl'], background: `linear-gradient(0deg, ${color.surface}, ${tono.bg})` }}
+    >
+      <span style={{ width: 40, height: 40, borderRadius: radius.pill, display: 'grid', placeItems: 'center', flexShrink: 0, background: tono.bg, color: tono.fg, border: `1px solid ${tono.borde}` }}>
+        <Icono nombre={enGn ? 'check' : 'cruz'} size={22} />
+      </span>
+      <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+        <b style={{ display: 'block', fontSize: font.lg, color: color.ink }}>
+          {enGn ? `Venta #${venta.gn_number} · ${plata(venta.total)}` : `Venta provisoria ${numeroProvisorio(venta.id)} · ${plata(venta.total)}`}
+        </b>
+        <span style={{ fontSize: font.base, color: enGn ? color.ink2 : color.dangerInk }}>
+          {enGn ? 'en Gestión Nube' : `pendiente en Gestión Nube (${venta.ultimo_error ?? 'sin respuesta'}) · reintento automático`}
         </span>
-        <Button size="sm" variant="outline" onClick={onReimprimir}>
-          Reimprimir ticket
-        </Button>
       </div>
-    </Notice>
+      <Button variant="outline" onClick={onReimprimir}>
+        Reimprimir ticket
+      </Button>
+      {onOtra && (
+        <Button tone="brand" variant="solid" onClick={onOtra}>
+          Agregar otra venta
+        </Button>
+      )}
+    </section>
   )
 }
 
@@ -761,7 +791,7 @@ export function Pendientes({ ventas, onCambio }: { ventas: Venta[]; onCambio: ()
  * Un descuento a mano: % o $ (Bruno, 4-oct). Vacío = sin descuento. El tope (⛔ más que el importe)
  * lo pone el núcleo, y la pantalla muestra su error.
  */
-export function CampoRebaja({ valor, onCambio }: { valor: Rebaja | null; onCambio: (rb: Rebaja | null) => void }) {
+export function CampoRebaja({ valor, onCambio, chico = false }: { valor: Rebaja | null; onCambio: (rb: Rebaja | null) => void; /** El del renglón del pedido: más angosto. */ chico?: boolean }) {
   const [texto, setTexto] = useState<string | null>(null)
   const tipo = valor?.tipo ?? 'pct'
   const fijar = (t: string, tp: Rebaja['tipo']) => {
@@ -780,10 +810,10 @@ export function CampoRebaja({ valor, onCambio }: { valor: Rebaja | null; onCambi
           if (texto != null) fijar(texto, tipo)
           setTexto(null)
         }}
-        style={{ width: 100, textAlign: 'right' }}
+        style={chico ? { width: 90, height: 30, textAlign: 'right', fontSize: font.base } : { width: 100, textAlign: 'right' }}
         aria-label="Descuento"
       />
-      <Select value={tipo} onChange={(e) => valor && onCambio({ ...valor, tipo: e.target.value as Rebaja['tipo'] })} style={{ width: 64 }} aria-label="En % o en $" disabled={!valor}>
+      <Select value={tipo} onChange={(e) => valor && onCambio({ ...valor, tipo: e.target.value as Rebaja['tipo'] })} style={chico ? { width: 54, height: 30 } : { width: 64 }} aria-label="En % o en $" disabled={!valor}>
         <option value="pct">%</option>
         <option value="pesos">$</option>
       </Select>
