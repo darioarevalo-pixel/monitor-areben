@@ -875,7 +875,7 @@ function FilaRenglon({
               (18210) ⛔ vende desde la caja: sólo repone. */}
           <span>· {r.stock.deposito} para reponer</span>
           {/* Ubicaciones depósito: dónde buscarla atrás. Sin estante ⛔ se dice nada: está todo en percha. */}
-          {!!r.stock.atras?.length && <b style={{ color: color.ink }}>· atrás: {r.stock.atras.join(' · ')}</b>}
+          {!!r.stock.atras?.length && <b style={{ color: color.ink }}>· ubicación: {r.stock.atras.join(' · ')}</b>}
           {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· stock de anoche (Gestión Nube no contestó)</span>}
         </div>
         {r.fueraDeTn && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio del espejo: el producto no cruza con Tienda Nube.</div>}
@@ -912,8 +912,8 @@ function FilaRenglon({
         <CampoRebaja valor={r.rebaja ?? null} onCambio={onRebaja} />
         {r.rebaja && importe != null && <span style={{ fontSize: font.sm, color: color.mut }}>queda {plata(importe)}</span>}
       </div>
-      <Button size="sm" variant="ghost" tone="danger" onClick={onSacar}>
-        Sacar
+      <Button size="sm" variant="ghost" tone="danger" onClick={onSacar} aria-label={`Eliminar ${r.variante.product_name} · ${r.variante.size_name}`}>
+        Eliminar
       </Button>
     </div>
   )
@@ -945,8 +945,8 @@ function VariosPagos({ pagos, setPagos, montos }: { pagos: PagoUI[]; setPagos: (
             )}
             <b style={{ minWidth: 100 }}>{montos?.[i] != null ? `cobra ${plata(montos[i])}` : ''}</b>
             {pagos.length > 2 && (
-              <Button size="sm" variant="ghost" onClick={() => setPagos(pagos.filter((_, j) => j !== i))}>
-                Sacar
+              <Button size="sm" variant="ghost" onClick={() => setPagos(pagos.filter((_, j) => j !== i))} aria-label={`Eliminar el pago ${p.medio ? NOMBRE_MEDIO[p.medio] : 'sin forma de pago'}`}>
+                Eliminar
               </Button>
             )}
           </div>
@@ -995,7 +995,7 @@ function UltimaVenta({ venta, onReimprimir }: { venta: Venta; onReimprimir: () =
             : `Venta ${numeroProvisorio(venta.id)} cobrada (${plata(venta.total)}) pero PENDIENTE en Gestión Nube: ${venta.ultimo_error ?? 'no contestó'}. Se reintenta sola.`}
         </span>
         <Button size="sm" variant="outline" onClick={onReimprimir}>
-          Imprimir ticket otra vez
+          Reimprimir ticket
         </Button>
       </div>
     </Notice>
@@ -1080,9 +1080,9 @@ function EsperaTransferencia({ venta, onLlego, onCambio }: { venta: Venta; onLle
           </b>
           {seguro ? (
             <>
-              <span style={{ fontSize: font.sm }}>¿Cancelar la venta? ⛔ Se cobra.</span>
+              <span style={{ fontSize: font.sm }}>¿Cancelar la venta? No se cobra.</span>
               <Button size="sm" tone="danger" loading={trabajando === 'cancelar'} onClick={cancelar}>
-                Sí, cancelar
+                Cancelar la venta
               </Button>
               <Button size="sm" variant="outline" onClick={() => setSeguro(false)}>
                 No
@@ -1095,7 +1095,7 @@ function EsperaTransferencia({ venta, onLlego, onCambio }: { venta: Venta; onLle
           )}
         </div>
         <span style={{ fontSize: font.sm }}>
-          El ticket sale solo cuando la transferencia aparece en Mercado Pago. ⛔ Alcanza con el comprobante del teléfono.
+          El ticket sale solo cuando la transferencia aparece en Mercado Pago. No alcanza con el comprobante del teléfono.
           {venta.total !== monto && ` El resto (${plata(venta.total - monto)}) se cobra aparte.`}
         </span>
         {cruce?.estado === 'elegir' && (
@@ -1107,7 +1107,7 @@ function EsperaTransferencia({ venta, onLlego, onCambio }: { venta: Venta; onLle
                 <span>a las {hora(p.cuando)}</span>
                 <span style={{ color: color.mut }}>{TEXTO_ORIGEN[p.origen] ?? p.origen}</span>
                 <Button size="sm" tone="success" loading={trabajando === p.id} disabled={!!trabajando} onClick={() => elegir(p.id)}>
-                  Es ésta
+                  Elegir
                 </Button>
               </div>
             ))}
@@ -1455,7 +1455,7 @@ function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | nul
                 onClick={() => setVerDetalle(!verDetalle)}
                 style={{ height: 'auto', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: color.mut, fontSize: font.sm }}
               >
-                {verDetalle ? '▾ ocultar detalle' : '▸ ver detalle'}
+                {verDetalle ? '▾ Ocultar detalle' : '▸ Ver detalle'}
               </button>
             )}
           </div>

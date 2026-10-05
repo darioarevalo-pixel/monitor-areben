@@ -97,7 +97,7 @@ async function leerPedidosWeb(sobre, ahora) {
     const qs = new URLSearchParams({ ordenes: '1', modo: 'lista', store: STORE, from: diaArgentino(ahora - b * DIA_MS), to: diaArgentino(ahora - a * DIA_MS), limite: '200' })
     const r = await fetch(`${AUDIT}?${qs}`, { headers: { 'x-monitor-auth': sobre } })
     const d = await r.json().catch(() => null)
-    if (!r.ok || !d || !d.ok) throw new Error(`Tienda Nube ⛔ contestó los pedidos (${(d && d.error) || r.status}).`)
+    if (!r.ok || !d || !d.ok) throw new Error(`Tienda Nube no contestó los pedidos (${(d && d.error) || r.status}).`)
     return d
   }))
   const porNumero = new Map()
@@ -252,14 +252,14 @@ export default async function handler(req, res) {
           // La elegida de la lista: por la variante EXACTA. Re-escanear su barcode volvía a dar la lista
           // si el código lo comparten varias prendas.
           variantes = await variantesExactas(sb, pid, sid)
-          if (!variantes.length) return res.status(404).json({ error: 'Esa prenda ⛔ está en el inventario.' })
+          if (!variantes.length) return res.status(404).json({ error: 'Esa prenda no está en el inventario.' })
         } else {
           if (!codigo) return res.status(400).json({ error: 'Falta el código.' })
           variantes = await variantesDelCodigo(sb, codigo)
           let mas = 0
           const palabras = palabrasDeBusqueda(codigo)
           if (!variantes.length && palabras.length) ({ grupos: variantes, mas } = await variantesDelNombre(sb, palabras))
-          if (!variantes.length) return res.status(404).json({ error: palabras.length ? `Ninguna prenda se llama «${codigo}».` : `El código ${codigo} ⛔ está en el inventario.` })
+          if (!variantes.length) return res.status(404).json({ error: palabras.length ? `Ninguna prenda se llama «${codigo}».` : `El código ${codigo} no está en el inventario.` })
           // Con la lista va el stock del LOCAL de anoche: alcanza para elegir; el vivo se lee al elegir.
           if (variantes.length > 1) return res.status(200).json({ candidatos: variantes.map(v => ({ ...v.variante, local: v.espejo.local })), mas })
         }
@@ -328,11 +328,11 @@ export default async function handler(req, res) {
       if (accion === 'bajadas') {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia a dónde van las transferencias o el modo feria.' })
         const { reglas } = await leerConfig()
-        if (!reglas.medios) return res.status(409).json({ error: 'La Caja todavía ⛔ tiene las formas de pago: falta correr sql/migrate-caja-medios.sql.' })
+        if (!reglas.medios) return res.status(409).json({ error: 'La Caja todavía no tiene las formas de pago: falta correr sql/migrate-caja-medios.sql.' })
         const nuevas = { ...reglas }
         if (b.transferenciaA != null) {
           const t = Number(b.transferenciaA)
-          if (!reglas.medios.transferencia.opciones.includes(t)) return res.status(400).json({ error: `La cuenta ${b.transferenciaA} ⛔ es de transferencias.` })
+          if (!reglas.medios.transferencia.opciones.includes(t)) return res.status(400).json({ error: `La cuenta ${b.transferenciaA} no es de transferencias.` })
           nuevas.transferenciaA = t
         }
         if (b.feria != null) nuevas.feria = b.feria === true
@@ -388,7 +388,7 @@ export default async function handler(req, res) {
         const id = String(b.id || '')
         if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido: lo genera la pantalla (uuid).' })
         const email = b.email == null || b.email === '' ? null : String(b.email).trim().toLowerCase()
-        if (email && !MAIL.test(email)) return res.status(400).json({ error: 'El mail ⛔ es válido.' })
+        if (email && !MAIL.test(email)) return res.status(400).json({ error: 'El mail no es válido.' })
 
         // Idempotente: si la venta ya se guardó (doble click, reintento de la pantalla) se manda la
         // guardada y ⛔ se rearma.
@@ -409,7 +409,7 @@ export default async function handler(req, res) {
           // 🔑 La cajera elige una forma de pago; detrás va una cuenta. Una cuenta que ⛔ está detrás de
           // ninguna forma de pago ⛔ se cobra (Mercado Pago, Naranja X…: fuera de la Caja).
           if (reglas.medios) for (const p of b.pagos || []) {
-            if (!medioDeCuenta(p.cuenta, reglas)) throw new Error(`La cuenta ${p.cuenta} ⛔ es una forma de pago de la Caja.`)
+            if (!medioDeCuenta(p.cuenta, reglas)) throw new Error(`La cuenta ${p.cuenta} no es una forma de pago de la Caja.`)
           }
           c = cobro({ filas, pagos: b.pagos, reglas, descuentoVenta: b.descuentoVenta ?? null })
           espera = montoAEsperar(c.pagos, reglas)
@@ -418,7 +418,7 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: e.message })
         }
         if (Number(b.total) !== c.total) {
-          return res.status(409).json({ error: `El total de la pantalla ($${b.total}) ⛔ coincide con el del servidor ($${c.total}). Recargá la Caja: puede haber cambiado un descuento.`, total: c.total })
+          return res.status(409).json({ error: `El total de la pantalla ($${b.total}) no coincide con el del servidor ($${c.total}). Recargá la Caja: puede haber cambiado un descuento.`, total: c.total })
         }
         const pagaCon = b.pagaCon == null || b.pagaCon === '' ? null : Number(b.pagaCon)
         // Lo que el ticket por mail necesita y la plata ⛔: el nombre de la prenda, el talle y la foto
@@ -450,7 +450,7 @@ export default async function handler(req, res) {
         if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido.' })
         const { data, error } = await sb.from('caja_venta').select(COLUMNAS_ENVIO).eq('id', id).eq('store', store).maybeSingle()
         if (error) throw new Error(error.message)
-        if (!data) return res.status(404).json({ error: 'La venta ⛔ existe.' })
+        if (!data) return res.status(404).json({ error: 'La venta no existe.' })
         if (data.estado === 'en_gn') return res.status(200).json({ venta: sinPayload(data) })
         // 🔴 Reintentar ⛔ saltea el cruce: una venta que espera la transferencia sale a GN sólo con el pago.
         if (!SIN_LLEGAR.includes(data.estado)) return res.status(409).json({ error: data.estado === 'cancelada' ? 'La venta está cancelada.' : 'La venta espera la transferencia: se manda sola cuando llega.' })
@@ -462,11 +462,11 @@ export default async function handler(req, res) {
         if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido.' })
         const v = await sb.from('caja_venta').select(COLUMNAS_ENVIO).eq('id', id).eq('store', store).maybeSingle()
         if (v.error) throw new Error(v.error.message)
-        if (!v.data) return res.status(404).json({ error: 'La venta ⛔ existe.' })
+        if (!v.data) return res.status(404).json({ error: 'La venta no existe.' })
         if (v.data.estado !== 'esperando_pago') return res.status(200).json({ venta: sinPayload(v.data), cruce: { estado: v.data.estado === 'cancelada' ? 'cancelada' : 'ya' } })
 
         const usos = await usosDe(sb, store)
-        if (!usos.length) return res.status(200).json({ venta: sinPayload(v.data), cruce: { estado: 'sin_cuenta', motivo: 'Pagos recibidos ⛔ tiene una cuenta de Mercado Pago conectada: la transferencia ⛔ se puede ver. Cancelá y cobrá por otra cuenta.' } })
+        if (!usos.length) return res.status(200).json({ venta: sinPayload(v.data), cruce: { estado: 'sin_cuenta', motivo: 'Pagos recibidos no tiene una cuenta de Mercado Pago conectada: la transferencia no se puede ver. Cancelá y cobrá por otra cuenta.' } })
         const dia = diaArgentino(Date.parse(v.data.creada_en))
         const [{ pagos }, reclamados, competidoras] = await Promise.all([
           pagosDelDia(sb, usos, dia),
@@ -512,9 +512,9 @@ export default async function handler(req, res) {
         // ⛔ estaba esperando: o ya llegó el pago (y salió a GN) o ⛔ existe. ⛔ Se cancela una venta cobrada.
         const ya = await sb.from('caja_venta').select(COLUMNAS).eq('id', id).eq('store', store).maybeSingle()
         if (ya.error) throw new Error(ya.error.message)
-        if (!ya.data) return res.status(404).json({ error: 'La venta ⛔ existe.' })
+        if (!ya.data) return res.status(404).json({ error: 'La venta no existe.' })
         if (ya.data.estado === 'cancelada') return res.status(200).json({ venta: ya.data })
-        return res.status(409).json({ error: 'La transferencia ya llegó: la venta está cobrada y ⛔ se cancela desde acá.', venta: ya.data })
+        return res.status(409).json({ error: 'La transferencia ya llegó: la venta está cobrada y no se cancela desde acá.', venta: ya.data })
       }
       return res.status(400).json({ error: 'action inválida (confirmar, reintentar, cruzar, cancelar, politica, abrir-turno, salida, cerrar-turno)' })
     }
