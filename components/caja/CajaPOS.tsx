@@ -76,7 +76,7 @@ import {
   type Variante,
   type Venta,
 } from '@/lib/caja/cliente'
-import { Button, ButtonLink, Field, Input, Notice, SectionCard, color, font, radius, space, weight } from '@/components/ui'
+import { Button, ButtonLink, Field, Icono, Input, Notice, SectionCard, color, font, radius, space, weight } from '@/components/ui'
 import { useConfirmar } from '@/components/ui/Confirm'
 import {
   CampoRebaja,
@@ -87,13 +87,13 @@ import {
   PedidosWebSinArmar,
   ResumenCobro,
   SiNo,
-  TurnoCaja,
+  AvisoCierre,
+  ModalesTurno,
   UltimaVenta,
   VariosPagos,
   aNumero,
   claveDe,
   horaAr,
-  textoDiferencia,
   type PagoUI,
   type Renglon,
 } from '@/components/caja/partes'
@@ -531,13 +531,9 @@ function POS() {
   // ── Fase C: el POS ──
   const { confirmar: preguntar } = useConfirmar()
   const [enCobro, setEnCobro] = useState(false)
-  const [panelTurno, setPanelTurno] = useState<null | 'contar' | 'cerrar'>(null)
-  // Cada click vuelve a montar el turno: «Contar billetes» con el panel ya abierto reabre la calculadora.
-  const [vez, setVez] = useState(0)
-  const verTurno = (que: 'contar' | 'cerrar') => {
-    setPanelTurno(que)
-    setVez((v) => v + 1)
-  }
+  // «Contar billetes», «Cargar salida» y «Cerrar turno» abren SÓLO su modal (Bruno, 5-oct: la tarjeta del
+  // turno repetida arriba duplicaba la información de la pestaña).
+  const [panelTurno, setPanelTurno] = useState<null | 'contar' | 'salida' | 'cerrar'>(null)
   const [cerradoAca, setCerradoAca] = useState<Turno | null>(null)
 
   // Sin el shell, las promos de la Agenda (la del crédito de hoy) las pide el POS.
@@ -575,13 +571,8 @@ function POS() {
   if (!turno) {
     return marco(
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
-        {cerradoAca && (
-          <Notice tone={cerradoAca.resumen?.diferencia ? 'warning' : 'success'}>
-            Caja cerrada a las {cerradoAca.cerrado_en ? horaAr(cerradoAca.cerrado_en) : ''}: tenía que haber {plata(Number(cerradoAca.esperado))} en efectivo, se contaron{' '}
-            {plata(Number(cerradoAca.contado))}. <b>{textoDiferencia(cerradoAca.resumen?.diferencia ?? 0)}</b>.
-          </Notice>
-        )}
-        <Notice tone="warning">No hay un turno abierto: el POS no cobra. El turno se abre en la pestaña Caja.</Notice>
+        {cerradoAca && <AvisoCierre t={cerradoAca} />}
+        <Notice tone="warning">Sin turno abierto: el POS ⛔ cobra. Abrir turno desde la pestaña Caja.</Notice>
         <div>
           <ButtonLink href="/caja" variant="solid" tone="brand">
             Ir a la Caja
@@ -593,9 +584,11 @@ function POS() {
   if (!puedeUsarPOS(turno, perfil)) {
     return marco(
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
-        <Notice tone="warning">La caja la abrió {turno.abierto_por ?? 'otra cuenta'}: solo esa cuenta puede usar el POS.</Notice>
+        <Notice tone="warning">Turno de {turno.abierto_por ?? 'otra cuenta'}: POS sólo para esa cuenta.</Notice>
         <div>
-          <ButtonLink href="/caja">Volver al monitor</ButtonLink>
+          <ButtonLink href="/caja" iconLeft={<Icono nombre="atras" />}>
+            Caja
+          </ButtonLink>
         </div>
       </div>,
     )
@@ -612,48 +605,51 @@ function POS() {
         @media (max-width: 900px) { .pos-grid { grid-template-columns: 1fr; } .pos-der { position: static; max-height: none; } }
       `}</style>
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', padding: `${space[2]} ${space[4]}`, background: color.surface, borderBottom: `1px solid ${color.line}` }}>
-        <ButtonLink href="/caja" variant="ghost" size="sm">
-          Volver al monitor
+        <ButtonLink href="/caja" variant="outline" size="sm" aria-label="Volver" title="Volver">
+          <Icono nombre="atras" size={18} />
         </ButtonLink>
-        <span style={{ fontSize: font.md }}>
-          <b>Caja Zattia</b> · turno desde las {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}
+        <span style={{ fontSize: font.md, color: color.ink2 }}>
+          <b style={{ color: color.brand }}>Caja Zattia</b> · turno desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}
         </span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-          <Button size="sm" variant="ghost" onClick={() => cambiarSonido(!conSonido)} aria-pressed={conSonido}>
-            {conSonido ? 'Con sonido' : 'Sin sonido'}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
+          <Button
+            size="sm"
+            variant={conSonido ? 'soft' : 'outline'}
+            tone={conSonido ? 'brand' : 'neutral'}
+            onClick={() => cambiarSonido(!conSonido)}
+            aria-pressed={conSonido}
+            aria-label={conSonido ? 'Con sonido' : 'Sin sonido'}
+            title={conSonido ? 'Con sonido' : 'Sin sonido'}
+          >
+            <Icono nombre={conSonido ? 'sonido' : 'silencio'} size={18} />
           </Button>
-          <Button size="sm" variant="outline" onClick={() => verTurno('contar')}>
+          <Button size="sm" variant="outline" onClick={() => setPanelTurno('contar')}>
             Contar billetes
           </Button>
-          <Button size="sm" variant="outline" onClick={() => verTurno('cerrar')}>
-            Cerrar caja
+          <Button size="sm" variant="outline" onClick={() => setPanelTurno('salida')}>
+            Cargar salida
+          </Button>
+          <Button size="sm" variant="outline" tone="danger" onClick={() => setPanelTurno('cerrar')}>
+            Cerrar turno
           </Button>
         </div>
       </div>
 
-      {panelTurno && (
-        <div style={{ display: 'grid', gap: space[2], padding: `${space[4]} ${space[4]} 0` }}>
-          <TurnoCaja
-            key={`${panelTurno}-${vez}`}
-            turno={turno}
-            ultimos={[]}
-            billetes={billetesDe(config?.reglas)}
-            esMio
-            abrirCon={panelTurno}
-            onCambio={(t) => (t === undefined ? refrescarTurno() : setTurno(t))}
-            onCerrado={(t) => {
-              setCerradoAca(t)
-              setPanelTurno(null)
-              setTurno(null)
-            }}
-          />
-          <div>
-            <Button size="sm" variant="ghost" onClick={() => setPanelTurno(null)}>
-              Ocultar el turno
-            </Button>
-          </div>
-        </div>
-      )}
+      <ModalesTurno
+        que={panelTurno}
+        turno={turno}
+        billetes={billetesDe(config?.reglas)}
+        onCerrar={() => setPanelTurno(null)}
+        onCambio={(t) => {
+          setPanelTurno(null)
+          setTurno(t)
+        }}
+        onCerrado={(t) => {
+          setCerradoAca(t)
+          setPanelTurno(null)
+          setTurno(null)
+        }}
+      />
 
       <div className="pos-grid">
         <div style={{ display: 'grid', gap: space[4], minWidth: 0 }}>
@@ -664,7 +660,7 @@ function POS() {
             ))}
           {sinLlegar > 0 && (
             <Notice tone="danger">
-              {sinLlegar === 1 ? 'Una venta cobrada todavía no llegó' : `${sinLlegar} ventas cobradas todavía no llegaron`} a Gestión Nube: se reintentan en la pestaña Caja.
+              Cobradas sin llegar a Gestión Nube: {sinLlegar}. Reintentar desde la pestaña Caja.
             </Notice>
           )}
           <PedidosWebSinArmar datos={pedidosWeb} error={errPedidos} />
@@ -774,7 +770,7 @@ function POS() {
                       )}
                     </div>
                   )}
-                  {!emailOk && <Notice tone="warning">El mail del pedido no es válido: corregilo a la derecha.</Notice>}
+                  {!emailOk && <Notice tone="warning">Mail del pedido inválido.</Notice>}
                   <div>
                     <Button size="lg" tone="success" disabled={!puedeConfirmar} loading={enviando} onClick={confirmar}>
                       Confirmar {plata(c.total)}
@@ -854,7 +850,7 @@ function POS() {
             }
           >
             {bor.renglones.length === 0 ? (
-              <span style={{ color: color.mut }}>Escaneá una prenda para empezar.</span>
+              <span style={{ color: color.mut }}>Pedido vacío: escanear o buscar una prenda.</span>
             ) : (
               <div style={{ display: 'grid', gap: space[3] }}>
                 <div style={{ display: 'grid', gap: space[2] }}>
@@ -889,7 +885,7 @@ function POS() {
                   <span>{mostrarCobro && c ? plata(c.total) : aPagar != null ? plata(aPagar) : '—'}</span>
                 </div>
                 {!mostrarCobro && <span style={{ color: color.mut, fontSize: font.sm }}>El descuento de la forma de pago se ve al cobrar.</span>}
-                {sinPrecio && <Notice tone="warning">Hay una prenda sin precio: escribilo en el renglón para poder cobrar.</Notice>}
+                {sinPrecio && <Notice tone="warning">Prenda sin precio: escribirlo en el renglón.</Notice>}
                 {!mostrarCobro && (
                   <Button size="lg" tone="brand" variant="solid" fullWidth disabled={!puedeCobrar} onClick={() => setEnCobro(true)}>
                     Continuar al cobro (Alt+C)

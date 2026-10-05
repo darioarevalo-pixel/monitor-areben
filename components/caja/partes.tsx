@@ -9,7 +9,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { NOMBRE_MEDIO } from '@/lib/caja/core.core.js'
 import { numeroProvisorio, plata } from '@/lib/caja/ticket'
 import { BILLETES_INICIALES, billetesDe } from '@/lib/caja/conteo.core.js'
-import { CalculadoraBilletes } from '@/components/caja/CalculadoraBilletes'
+import { CalculadoraBilletes, olvidarConteo } from '@/components/caja/CalculadoraBilletes'
+import { aNumero as aNumeroTxt, textoDiferencia } from '@/lib/caja/textos'
 import {
   cancelarVenta,
   cruzarVenta,
@@ -19,7 +20,6 @@ import {
   sacarEfectivo,
   cerrarTurno,
   contarBilletes,
-  type Conteo,
   type Turno,
   type ResumenTurno,
   reintentarVenta,
@@ -33,7 +33,7 @@ import {
   type Venta,
   type PedidosWeb,
 } from '@/lib/caja/cliente'
-import { Badge, Button, Field, Input, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
+import { Badge, Button, Field, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
 
 
 /** Un renglón del pedido. */
@@ -45,10 +45,7 @@ export type PagoUI = { medio: Medio | null; base: string }
 export const MEDIOS: Medio[] = ['efectivo', 'transferencia', 'debito', 'credito']
 export const claveDe = (v: Variante) => `${v.product_id}_${v.size_id}`
 
-export const aNumero = (s: string) => {
-  const n = Number(String(s).replace(/\./g, '').replace(',', '.'))
-  return Number.isFinite(n) && String(s).trim() !== '' ? n : null
-}
+export const aNumero = aNumeroTxt
 
 /**
  * Las prendas para elegir, con foto, precio de etiqueta y el stock del local (de anoche: el vivo se
@@ -343,8 +340,8 @@ export function UltimaVenta({ venta, onReimprimir }: { venta: Venta; onReimprimi
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
         <span>
           {enGn
-            ? `Venta #${venta.gn_number} en Gestión Nube · ${plata(venta.total)}.`
-            : `Venta ${numeroProvisorio(venta.id)} cobrada (${plata(venta.total)}) pero PENDIENTE en Gestión Nube: ${venta.ultimo_error ?? 'no contestó'}. Se reintenta sola.`}
+            ? `Venta #${venta.gn_number} · ${plata(venta.total)} · en Gestión Nube`
+            : `Venta provisoria ${numeroProvisorio(venta.id)} · ${plata(venta.total)} · pendiente en Gestión Nube (${venta.ultimo_error ?? 'sin respuesta'}) · reintento automático`}
         </span>
         <Button size="sm" variant="outline" onClick={onReimprimir}>
           Reimprimir ticket
@@ -543,7 +540,7 @@ export function Pendientes({ ventas, onCambio }: { ventas: Venta[]; onCambio: ()
     <Notice tone="danger">
       <div style={{ display: 'grid', gap: space[2] }}>
         <b>
-          {ventas.length === 1 ? 'Una venta cobrada todavía no está' : `${ventas.length} ventas cobradas todavía no están`} en Gestión Nube
+          Cobradas sin llegar a Gestión Nube: {ventas.length}
         </b>
         {ventas.map((v) => (
           <div key={v.id} style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm }}>
@@ -676,27 +673,205 @@ export function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: 
 
 export const horaAr = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
 export const diaAr = (iso: string) => new Date(iso).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
-export const textoDiferencia = (d: number) => (d === 0 ? 'Cuadrado' : d > 0 ? `Sobran ${plata(d)}` : `Faltan ${plata(-d)}`)
+export { textoDiferencia }
+
+/** Un dato del turno: rótulo chico arriba, el número grande abajo, en su color. */
+export function Dato({ rotulo, valor, tono = 'neutral', detalle }: { rotulo: string; valor: React.ReactNode; tono?: 'neutral' | 'brand' | 'success' | 'danger' | 'warning'; detalle?: React.ReactNode }) {
+  const fondo = { neutral: color.bg, brand: color.brandBg, success: color.successBg, danger: color.dangerBg, warning: color.warningBg }[tono]
+  const tinta = { neutral: color.ink, brand: color.brand, success: color.successInk, danger: color.dangerInk, warning: color.warningInk }[tono]
+  return (
+    <div style={{ background: fondo, borderRadius: radius.lg, padding: `${space[2]} ${space[3]}`, display: 'grid', gap: space[0.5], minWidth: 0 }}>
+      <span style={{ fontSize: font.xs, color: color.mut, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: weight.semibold }}>{rotulo}</span>
+      <span style={{ fontSize: font.xl, fontWeight: weight.bold, color: tinta, fontVariantNumeric: 'tabular-nums' }}>{valor}</span>
+      {detalle && <span style={{ fontSize: font.xs, color: color.mut }}>{detalle}</span>}
+    </div>
+  )
+}
+const tonoDiferencia = (d: number) => (Math.abs(d) < 0.005 ? 'success' : 'danger') as 'success' | 'danger'
+const grillaDatos: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: space[2] }
+
+/** El turno que se acaba de cerrar: Esperado · Contado · Diferencia, ⛔ una frase. */
+export function AvisoCierre({ t }: { t: Turno }) {
+  const d = t.resumen?.diferencia ?? Number(t.contado) - Number(t.esperado)
+  return (
+    <SectionCard title={`Turno cerrado ${t.cerrado_en ? horaAr(t.cerrado_en) : ''}`}>
+      <div style={grillaDatos}>
+        <Dato rotulo="Esperado" valor={plata(Number(t.esperado))} />
+        <Dato rotulo="Contado" valor={plata(Number(t.contado))} />
+        <Dato rotulo="Diferencia" valor={textoDiferencia(d)} tono={tonoDiferencia(d)} />
+      </div>
+    </SectionCard>
+  )
+}
+
+/** Abrir el turno: la calculadora con el fondo inicial, y el botón abre (un solo paso, Bruno 5-oct). */
+export function AbrirTurnoModal({ billetes, onCerrar, onAbierto }: { billetes: number[]; onCerrar: () => void; onAbierto: (t: Turno) => void }) {
+  const [trabajando, setTrabajando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <CalculadoraBilletes
+      momento="apertura"
+      billetes={billetes}
+      titulo="Abrir turno · fondo inicial"
+      accion="Abrir turno"
+      aMano
+      trabajando={trabajando}
+      error={error}
+      onCerrar={onCerrar}
+      onUsar={async (total, conteo) => {
+        setTrabajando(true)
+        setError(null)
+        try {
+          const r = await abrirTurno(total, conteo)
+          olvidarConteo('apertura')
+          onAbierto(r.turno)
+        } catch (e) {
+          setError((e as Error).message)
+        } finally {
+          setTrabajando(false)
+        }
+      }}
+    />
+  )
+}
+
+/** El conteo intermedio: ⛔ cierra ni mueve plata. Sólo la cuenta que abrió la caja (el servidor da 403). */
+export function ConteoModal({ turno, billetes, onCerrar, onListo }: { turno: Turno; billetes: number[]; onCerrar: () => void; onListo: (t: Turno) => void }) {
+  const [trabajando, setTrabajando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const momento = `intermedio:${turno.id}`
+  return (
+    <CalculadoraBilletes
+      momento={momento}
+      billetes={billetes}
+      titulo="Contar billetes"
+      accion="Guardar conteo"
+      esperado={turno.resumen?.efectivo.esperado ?? null}
+      trabajando={trabajando}
+      error={error}
+      onCerrar={onCerrar}
+      onUsar={async (_total, conteo) => {
+        if (!conteo) return
+        setTrabajando(true)
+        setError(null)
+        try {
+          const x = await contarBilletes(turno.id, conteo)
+          olvidarConteo(momento)
+          onListo(x.turno)
+        } catch (e) {
+          setError((e as Error).message)
+        } finally {
+          setTrabajando(false)
+        }
+      }}
+    />
+  )
+}
+
+/** Cerrar el turno: se cuenta el efectivo (con el fondo) y el botón cierra. */
+export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { turno: Turno; billetes: number[]; onCerrar: () => void; onCerrado: (t: Turno) => void }) {
+  const [nota, setNota] = useState('')
+  const [trabajando, setTrabajando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const r = turno.resumen
+  const momento = `cierre:${turno.id}`
+  return (
+    <CalculadoraBilletes
+      momento={momento}
+      billetes={billetes}
+      titulo="Cerrar turno · efectivo con el fondo"
+      accion="Cerrar turno"
+      aMano
+      esperado={r?.efectivo.esperado ?? null}
+      trabajando={trabajando}
+      error={error}
+      onCerrar={onCerrar}
+      extra={
+        <div style={{ display: 'grid', gap: space[1], fontSize: font.sm }}>
+          <Field label="Nota (opcional)">
+            <Input value={nota} onChange={(e) => setNota(e.target.value)} autoComplete="off" />
+          </Field>
+          {r?.cobrosGN === null && <span style={{ color: color.warningInk }}>Cobros de Gestión Nube: sin leer. Se releen al cerrar.</span>}
+          {!!r?.esperando.length && <span style={{ color: color.warningInk }}>Transferencias en espera: {r.esperando.length}. Si llegan después, ⛔ entran en el cierre.</span>}
+        </div>
+      }
+      onUsar={async (total, conteo) => {
+        setTrabajando(true)
+        setError(null)
+        try {
+          const x = await cerrarTurno(turno.id, total, nota.trim(), conteo)
+          olvidarConteo(momento)
+          onCerrado(x.turno)
+        } catch (e) {
+          setError((e as Error).message)
+        } finally {
+          setTrabajando(false)
+        }
+      }}
+    />
+  )
+}
+
+/** Cargar una salida de efectivo, con su motivo. */
+export function SalidaModal({ onCerrar, onListo }: { onCerrar: () => void; onListo: (t: Turno) => void }) {
+  const [monto, setMonto] = useState('')
+  const [motivo, setMotivo] = useState('')
+  const [trabajando, setTrabajando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const montoN = aNumero(monto)
+  async function cargar() {
+    setTrabajando(true)
+    setError(null)
+    try {
+      const x = await sacarEfectivo(montoN as number, motivo.trim())
+      onListo(x.turno)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setTrabajando(false)
+    }
+  }
+  return (
+    <Modal
+      abierto
+      onCerrar={onCerrar}
+      titulo="Cargar salida"
+      cerrarConFondo={false}
+      pie={
+        <>
+          <Button variant="outline" onClick={onCerrar}>
+            Volver
+          </Button>
+          <Button tone="success" loading={trabajando} disabled={montoN == null || montoN <= 0 || !motivo.trim()} onClick={cargar}>
+            Cargar salida
+          </Button>
+        </>
+      }
+    >
+      <div style={{ display: 'grid', gap: space[3] }}>
+        <Field label="Monto">
+          <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" autoComplete="off" placeholder="$" data-foco />
+        </Field>
+        <Field label="Motivo">
+          <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} autoComplete="off" placeholder="Retiro para gerencia, compra de…" />
+        </Field>
+        {error && <Notice tone="danger">{error}</Notice>}
+      </div>
+    </Modal>
+  )
+}
 
 /**
- * v2, W3: el TURNO PROPIO de la Caja (Bruno, 4-oct). Se abre con el fondo, se saca efectivo con
- * motivo, y se cierra contando sólo el efectivo. Sin turno abierto ⛔ se cobra. El turno de Gestión
- * Nube se deja de usar. Un día puede tener dos turnos: se cierra uno y se abre el otro.
- */
-/**
  * W3b: el efectivo que entró como COBRO en Gestión Nube (el pedido web que se paga al retirar), ⛔ como
- * venta en el local. Suma al efectivo que tiene que haber: la plata está en el cajón (Bruno, 4-oct).
+ * venta en el local. Suma al efectivo esperado: la plata está en el cajón (Bruno, 4-oct).
  */
 export function CobrosGN({ r }: { r: ResumenTurno }) {
-  if (r.cobrosGN === null) {
-    return <span style={{ color: color.warning }}>No se pudieron leer los cobros de Gestión Nube: el efectivo de la caja no los incluye.</span>
-  }
+  if (r.cobrosGN === null) return <span style={{ color: color.warningInk }}>Cobros de Gestión Nube: sin leer (⛔ suman al esperado).</span>
   if (r.cobrosGN.length === 0) return null
   return (
     <div style={{ display: 'grid', gap: space[0.5] }}>
       <span>
-        {r.cobrosGN.length === 1 ? 'Un cobro' : `${r.cobrosGN.length} cobros`} en efectivo cargado{r.cobrosGN.length === 1 ? '' : 's'} en Gestión Nube (pedidos, no ventas del local):{' '}
-        <b>{plata(r.efectivo.cobradoGN)}</b> — suman al efectivo de la caja.
+        Cobros en efectivo en Gestión Nube (pedidos web): {r.cobrosGN.length} · <b>{plata(r.efectivo.cobradoGN)}</b>
       </span>
       {r.cobrosGN.map((c) => (
         <span key={c.id} style={{ color: color.mut }}>
@@ -707,12 +882,76 @@ export function CobrosGN({ r }: { r: ResumenTurno }) {
   )
 }
 
+/** Lo que hay que saber del turno abierto, en datos: lo comparten la pestaña y el POS. */
+export function ResumenTurnoDatos({ turno }: { turno: Turno }) {
+  const [verDetalle, setVerDetalle] = useState(false)
+  const r = turno.resumen
+  const intermedios = turno.conteos?.intermedios ?? []
+  const ultimoConteo = intermedios.length ? intermedios[intermedios.length - 1] : null
+  if (!r) return null
+  return (
+    <div style={{ display: 'grid', gap: space[3], fontSize: font.sm }}>
+      <div style={grillaDatos}>
+        <Dato rotulo="Ventas" valor={plata(r.total)} tono="brand" detalle={r.ventas === 1 ? '1 venta' : `${r.ventas} ventas`} />
+        <Dato rotulo="Efectivo esperado" valor={plata(r.efectivo.esperado)} tono="success" detalle={`Fondo ${plata(r.efectivo.fondo)}`} />
+        <Dato rotulo="Salidas" valor={plata(r.efectivo.salidas)} detalle={(turno.salidas ?? []).length === 1 ? '1 salida' : `${(turno.salidas ?? []).length} salidas`} />
+        {ultimoConteo && (
+          <Dato
+            rotulo={`Último conteo ${horaAr(ultimoConteo.en)}`}
+            valor={plata(ultimoConteo.total)}
+            tono={ultimoConteo.diferencia != null ? tonoDiferencia(ultimoConteo.diferencia) : 'neutral'}
+            detalle={ultimoConteo.diferencia != null ? `Diferencia: ${textoDiferencia(ultimoConteo.diferencia)}` : undefined}
+          />
+        )}
+      </div>
+      {r.esperando.length > 0 && <span style={{ color: color.warningInk }}>Transferencias en espera: {r.esperando.length} (⛔ suman hasta que lleguen)</span>}
+      {r.sinGN.length > 0 && <span style={{ color: color.warningInk }}>Cobradas sin llegar a Gestión Nube: {r.sinGN.length} (suman al turno)</span>}
+      <CobrosGN r={r} />
+      <div>
+        <Button size="sm" variant="ghost" onClick={() => setVerDetalle(!verDetalle)}>
+          {verDetalle ? 'Ocultar detalle' : 'Ver detalle'}
+        </Button>
+      </div>
+      {verDetalle && (
+        <div style={{ display: 'grid', gap: space[1], maxWidth: 560 }}>
+          {r.porCuenta.map((c) => (
+            <div key={c.cuenta} style={{ display: 'flex', gap: space[3], borderTop: `1px solid ${color.line}`, paddingTop: space[1] }}>
+              <span style={{ flex: 1 }}>{c.nombre}</span>
+              <span style={{ color: color.mut }}>{c.cobros === 1 ? '1 cobro' : `${c.cobros} cobros`}</span>
+              <b style={{ minWidth: 110, textAlign: 'right' }}>{plata(c.monto)}</b>
+            </div>
+          ))}
+          <div style={{ borderTop: `2px solid ${color.line}`, paddingTop: space[1], display: 'grid', gap: space[0.5] }}>
+            <span>Fondo {plata(r.efectivo.fondo)}</span>
+            <span>+ Efectivo cobrado {plata(r.efectivo.cobrado)}</span>
+            {r.efectivo.cobradoGN > 0 && <span>+ Cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</span>}
+            <span>− Salidas {plata(r.efectivo.salidas)}</span>
+            <b>= Efectivo esperado {plata(r.efectivo.esperado)}</b>
+          </div>
+          {(turno.salidas ?? []).map((m) => (
+            <span key={m.id} style={{ color: color.mut }}>
+              Salida {horaAr(m.creado_en)} · {plata(m.monto)} · {m.motivo} {m.usuario ? `(${m.usuario})` : ''}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * v2, W3: el TURNO PROPIO de la Caja (Bruno, 4-oct), en la pestaña. Se abre con el fondo, se carga
+ * efectivo que sale con su motivo, y se cierra contando sólo el efectivo. Sin turno abierto ⛔ se
+ * cobra. Un día puede tener dos turnos: se cierra uno y se abre el otro.
+ *
+ * Abrir, contar, cargar salida y cerrar son MODALES (fase C, Bruno 5-oct): los mismos que usa el
+ * POS, que ⛔ repite esta tarjeta.
+ */
 export function TurnoCaja({
   turno,
   ultimos,
   billetes,
   esMio,
-  abrirCon,
   onCambio,
   onCerrado,
 }: {
@@ -721,113 +960,57 @@ export function TurnoCaja({
   billetes: number[]
   /** Fase C: el conteo intermedio lo hace sólo la cuenta que abrió la caja (el servidor contesta 403). */
   esMio: boolean
-  /** Desde el POS: entra con la calculadora del conteo abierta, o con el cierre a la vista. */
-  abrirCon?: 'contar' | 'cerrar'
   onCambio: (t?: Turno) => void
   onCerrado: (t: Turno) => void
 }) {
-  const [fondo, setFondo] = useState('')
-  // Fase B: la calculadora abierta, y el conteo que completó el fondo o el contado. Viaja sólo si el
-  // input sigue diciendo SU total: si después se escribió otro número a mano, va sin billetes.
-  const [calc, setCalc] = useState<null | 'apertura' | 'intermedio' | 'cierre'>(abrirCon === 'contar' && esMio ? 'intermedio' : null)
-  const [conteoFondo, setConteoFondo] = useState<{ conteo: Conteo; total: number } | null>(null)
-  const [conteoCierre, setConteoCierre] = useState<{ conteo: Conteo; total: number } | null>(null)
-  const [errCalc, setErrCalc] = useState<string | null>(null)
-  const [modo, setModo] = useState<'nada' | 'salida' | 'cerrar'>(abrirCon === 'cerrar' ? 'cerrar' : 'nada')
-  const [monto, setMonto] = useState('')
-  const [motivo, setMotivo] = useState('')
-  const [contado, setContado] = useState('')
-  const [nota, setNota] = useState('')
-  const [trabajando, setTrabajando] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [abierto, setAbierto] = useState<null | 'abrir' | 'contar' | 'salida' | 'cerrar'>(null)
   const [cerrado, setCerrado] = useState<Turno | null>(null)
-  const [verDetalle, setVerDetalle] = useState(false)
   const [verUltimos, setVerUltimos] = useState(false)
 
-  async function hacer(f: () => Promise<void>) {
-    setTrabajando(true)
-    setError(null)
-    try {
-      await f()
-    } catch (e) {
-      setError((e as Error).message)
-      onCambio(undefined)
-    } finally {
-      setTrabajando(false)
-    }
-  }
-
   const ultimosPlegable = ultimos.length > 0 && (
-    <Plegable abierto={verUltimos} onToggle={() => setVerUltimos(!verUltimos)} titulo="Últimos turnos" ayuda="Los turnos cerrados: el efectivo que tenía que haber, el que se contó y la diferencia.">
+    <Plegable abierto={verUltimos} onToggle={() => setVerUltimos(!verUltimos)} titulo="Últimos turnos" ayuda="Los turnos cerrados: esperado, contado y diferencia del efectivo.">
       <div style={{ display: 'grid', gap: space[1], fontSize: font.sm }}>
-        {ultimos.map((t) => (
-          <div key={t.id} style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', borderTop: `1px solid ${color.line}`, paddingTop: space[1] }}>
-            <span style={{ minWidth: 160 }}>
-              {diaAr(t.abierto_en)} {horaAr(t.abierto_en)}–{t.cerrado_en ? horaAr(t.cerrado_en) : ''}
-            </span>
-            <span style={{ color: color.mut, minWidth: 110 }}>{t.abierto_por ?? ''}</span>
-            <span>Esperado {plata(Number(t.esperado))}</span>
-            <span>Contado {plata(Number(t.contado))}</span>
-            <b>{textoDiferencia(t.resumen?.diferencia ?? Number(t.contado) - Number(t.esperado))}</b>
-            {t.nota && <span style={{ color: color.mut }}>«{t.nota}»</span>}
-          </div>
-        ))}
+        {ultimos.map((t) => {
+          const d = t.resumen?.diferencia ?? Number(t.contado) - Number(t.esperado)
+          return (
+            <div key={t.id} style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', borderTop: `1px solid ${color.line}`, paddingTop: space[1] }}>
+              <span style={{ minWidth: 160 }}>
+                {diaAr(t.abierto_en)} {horaAr(t.abierto_en)}–{t.cerrado_en ? horaAr(t.cerrado_en) : ''}
+              </span>
+              <span style={{ color: color.mut, minWidth: 110 }}>{t.abierto_por ?? ''}</span>
+              <span>Esperado {plata(Number(t.esperado))}</span>
+              <span>Contado {plata(Number(t.contado))}</span>
+              <b style={{ color: tonoDiferencia(d) === 'success' ? color.successInk : color.dangerInk }}>{textoDiferencia(d)}</b>
+              {t.nota && <span style={{ color: color.mut }}>«{t.nota}»</span>}
+            </div>
+          )
+        })}
       </div>
     </Plegable>
   )
 
   if (!turno) {
-    const fondoN = aNumero(fondo)
     return (
       <>
-        {cerrado && (
-          <Notice tone={cerrado.resumen?.diferencia ? 'warning' : 'success'}>
-            Turno cerrado a las {cerrado.cerrado_en ? horaAr(cerrado.cerrado_en) : ''}: tenía que haber {plata(Number(cerrado.esperado))} en efectivo, se
-            contaron {plata(Number(cerrado.contado))}. <b>{textoDiferencia(cerrado.resumen?.diferencia ?? 0)}</b>.
-          </Notice>
-        )}
-        <SectionCard title="Abrir turno">
-          <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <Field label="Fondo: el efectivo con que arranca la caja">
-              <Input value={fondo} onChange={(e) => setFondo(e.target.value)} inputMode="decimal" placeholder="$" style={{ maxWidth: 200 }} />
-            </Field>
-            <Button variant="outline" onClick={() => setCalc('apertura')}>
-              Contar billetes
-            </Button>
-            <Button
-              tone="success"
-              loading={trabajando}
-              disabled={fondoN == null || fondoN < 0}
-              onClick={() =>
-                hacer(async () => {
-                  const r = await abrirTurno(fondoN as number, conteoFondo && conteoFondo.total === fondoN ? conteoFondo.conteo : null)
-                  setFondo('')
-                  setConteoFondo(null)
-                  setCerrado(null)
-                  onCambio(r.turno)
-                })
-              }
-            >
+        {cerrado && <AvisoCierre t={cerrado} />}
+        <SectionCard
+          title="Sin turno abierto"
+          actions={
+            <Button tone="success" variant="solid" onClick={() => setAbierto('abrir')}>
               Abrir turno
             </Button>
-          </div>
-          {conteoFondo && conteoFondo.total === fondoN && (
-            <p style={{ margin: `${space[2]} 0 0`, color: color.mut, fontSize: font.sm }}>Con el conteo de billetes: queda guardado en el turno.</p>
-          )}
-          <p style={{ margin: `${space[2]} 0 0`, color: color.mut, fontSize: font.sm }}>Sin un turno abierto la Caja no cobra.</p>
-          {error && <Notice tone="danger">{error}</Notice>}
+          }
+        >
+          <span style={{ color: color.mut, fontSize: font.sm }}>Sin turno abierto la Caja ⛔ cobra.</span>
         </SectionCard>
-        {calc === 'apertura' && (
-          <CalculadoraBilletes
-            momento="apertura"
+        {abierto === 'abrir' && (
+          <AbrirTurnoModal
             billetes={billetes}
-            titulo="Contar el fondo"
-            accion="Usar este total"
-            onCerrar={() => setCalc(null)}
-            onUsar={(total, conteo) => {
-              setFondo(String(total))
-              setConteoFondo({ conteo, total })
-              setCalc(null)
+            onCerrar={() => setAbierto(null)}
+            onAbierto={(t) => {
+              setAbierto(null)
+              setCerrado(null)
+              onCambio(t)
             }}
           />
         )}
@@ -836,211 +1019,68 @@ export function TurnoCaja({
     )
   }
 
-  const r = turno.resumen
-  const contadoN = aNumero(contado)
-  const montoN = aNumero(monto)
-  const intermedios = turno.conteos?.intermedios ?? []
-  const ultimoConteo = intermedios.length ? intermedios[intermedios.length - 1] : null
-  // La calculadora del turno arranca con el último conteo guardado (o el del fondo).
-  const conteoBase = ultimoConteo ?? turno.conteos?.apertura ?? null
   return (
     <>
       <SectionCard
-        title={`Turno abierto desde las ${horaAr(turno.abierto_en)}`}
+        title={`Turno abierto · desde ${horaAr(turno.abierto_en)} · ${turno.abierto_por ?? ''}`}
         actions={
-          <div style={{ display: 'flex', gap: space[2] }}>
+          <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
             {esMio && (
-              <Button size="sm" variant="outline" onClick={() => { setErrCalc(null); setCalc('intermedio') }}>
+              <Button size="sm" variant="outline" onClick={() => setAbierto('contar')}>
                 Contar billetes
               </Button>
             )}
-            <Button size="sm" variant="outline" onClick={() => setModo(modo === 'salida' ? 'nada' : 'salida')}>
+            <Button size="sm" variant="outline" onClick={() => setAbierto('salida')}>
               Cargar salida
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setModo(modo === 'cerrar' ? 'nada' : 'cerrar')}>
+            <Button size="sm" tone="danger" variant="outline" onClick={() => setAbierto('cerrar')}>
               Cerrar turno
             </Button>
           </div>
         }
       >
-        <div style={{ display: 'grid', gap: space[2], fontSize: font.sm }}>
-          <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap' }}>
-            <span>Abrió {turno.abierto_por ?? ''}</span>
-            {r && <span>{r.ventas === 1 ? '1 venta' : `${r.ventas} ventas`} · {plata(r.total)}</span>}
-            {r && (
-              <b>Efectivo en la caja: {plata(r.efectivo.esperado)}</b>
-            )}
-            {r && (
-              <button
-                onClick={() => setVerDetalle(!verDetalle)}
-                style={{ height: 'auto', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: color.mut, fontSize: font.sm }}
-              >
-                {verDetalle ? '▾ Ocultar detalle' : '▸ Ver detalle'}
-              </button>
-            )}
-          </div>
-          {r && verDetalle && (
-            <div style={{ display: 'grid', gap: space[1], maxWidth: 560 }}>
-              {r.porCuenta.map((c) => (
-                <div key={c.cuenta} style={{ display: 'flex', gap: space[3], borderTop: `1px solid ${color.line}`, paddingTop: space[1] }}>
-                  <span style={{ flex: 1 }}>{c.nombre}</span>
-                  <span style={{ color: color.mut }}>{c.cobros === 1 ? '1 cobro' : `${c.cobros} cobros`}</span>
-                  <b style={{ minWidth: 110, textAlign: 'right' }}>{plata(c.monto)}</b>
-                </div>
-              ))}
-              <div style={{ borderTop: `2px solid ${color.line}`, paddingTop: space[1], display: 'grid', gap: space[0.5] }}>
-                <span>
-                  Fondo {plata(r.efectivo.fondo)} + efectivo cobrado {plata(r.efectivo.cobrado)}
-                  {r.efectivo.cobradoGN > 0 && <> + cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</>} − salidas {plata(r.efectivo.salidas)}
-                </span>
-                <b>= efectivo que tiene que haber: {plata(r.efectivo.esperado)}</b>
-              </div>
-              {(turno.salidas ?? []).map((m) => (
-                <span key={m.id} style={{ color: color.mut }}>
-                  Salida {horaAr(m.creado_en)} · {plata(m.monto)} · {m.motivo} {m.usuario ? `(${m.usuario})` : ''}
-                </span>
-              ))}
-            </div>
-          )}
-          {ultimoConteo && (
-            <span>
-              Último conteo {horaAr(ultimoConteo.en)}: {plata(ultimoConteo.total)}
-              {ultimoConteo.esperado != null && (
-                <>
-                  {' '}· tenía que haber {plata(ultimoConteo.esperado)} · <b>{textoDiferencia(ultimoConteo.diferencia ?? 0)}</b>
-                </>
-              )}
-              {ultimoConteo.por ? <span style={{ color: color.mut }}> ({ultimoConteo.por})</span> : null}
-            </span>
-          )}
-          {r && r.esperando.length > 0 && (
-            <span style={{ color: color.warning }}>
-              {r.esperando.length === 1 ? 'Una venta espera' : `${r.esperando.length} ventas esperan`} la transferencia: no suma hasta que llegue.
-            </span>
-          )}
-          {r && r.sinGN.length > 0 && (
-            <span style={{ color: color.warning }}>
-              {r.sinGN.length === 1 ? 'Una venta cobrada todavía no está' : `${r.sinGN.length} ventas cobradas todavía no están`} en Gestión Nube (suman al turno igual).
-            </span>
-          )}
-          {r && <CobrosGN r={r} />}
-
-          {modo === 'salida' && (
-            <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap', borderTop: `1px solid ${color.line}`, paddingTop: space[2] }}>
-              <Field label="Monto">
-                <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="$" style={{ maxWidth: 160 }} />
-              </Field>
-              <Field label="Motivo">
-                <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Retiro para gerencia, compra de…" style={{ minWidth: 260 }} />
-              </Field>
-              <Button
-                loading={trabajando}
-                disabled={montoN == null || montoN <= 0 || !motivo.trim()}
-                onClick={() =>
-                  hacer(async () => {
-                    const x = await sacarEfectivo(montoN as number, motivo.trim())
-                    setMonto('')
-                    setMotivo('')
-                    setModo('nada')
-                    onCambio(x.turno)
-                  })
-                }
-              >
-                Registrar salida
-              </Button>
-            </div>
-          )}
-
-          {modo === 'cerrar' && r && (
-            <div style={{ display: 'grid', gap: space[2], borderTop: `1px solid ${color.line}`, paddingTop: space[2], maxWidth: 560 }}>
-              <span>Contá el efectivo de la caja (con el fondo incluido) y escribí cuánto hay.</span>
-              <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                <Field label="Efectivo contado">
-                  <Input value={contado} onChange={(e) => setContado(e.target.value)} inputMode="decimal" placeholder="$" style={{ maxWidth: 180 }} />
-                </Field>
-                <Button variant="outline" onClick={() => setCalc('cierre')}>
-                  Contar billetes
-                </Button>
-                <Field label="Nota (opcional)">
-                  <Input value={nota} onChange={(e) => setNota(e.target.value)} style={{ minWidth: 240 }} />
-                </Field>
-              </div>
-              {contadoN != null && contadoN >= 0 && (
-                <span>
-                  Tiene que haber {plata(r.efectivo.esperado)} ⇒ <b>{textoDiferencia(Math.round((contadoN - r.efectivo.esperado) * 100) / 100)}</b>
-                </span>
-              )}
-              {r.cobrosGN !== null && r.cobrosGN.length > 0 && <CobrosGN r={r} />}
-              {r.cobrosGN === null && <span style={{ color: color.warning }}>Al cerrar se vuelven a leer los cobros de Gestión Nube: si sigue sin contestar, el cierre queda sin ellos.</span>}
-              {r.esperando.length > 0 && <span style={{ color: color.warning }}>Hay transferencias esperando: si llegan después del cierre, quedan en este turno pero no en el cierre.</span>}
-              <div>
-                <Button
-                  tone="success"
-                  loading={trabajando}
-                  disabled={contadoN == null || contadoN < 0}
-                  onClick={() =>
-                    hacer(async () => {
-                      const x = await cerrarTurno(turno.id, contadoN as number, nota.trim(), conteoCierre && conteoCierre.total === contadoN ? conteoCierre.conteo : null)
-                      setContado('')
-                      setConteoCierre(null)
-                      setNota('')
-                      setModo('nada')
-                      setCerrado(x.turno)
-                      onCerrado(x.turno)
-                    })
-                  }
-                >
-                  Cerrar turno
-                </Button>
-              </div>
-            </div>
-          )}
-          {error && <Notice tone="danger">{error}</Notice>}
-        </div>
+        <ResumenTurnoDatos turno={turno} />
       </SectionCard>
-      {calc === 'intermedio' && (
-        <CalculadoraBilletes
-          momento={`intermedio:${turno.id}`}
-          billetes={billetes}
-          guardado={conteoBase}
-          titulo="Contar billetes"
-          accion="Guardar conteo"
-          trabajando={trabajando}
-          error={errCalc}
-          onCerrar={() => setCalc(null)}
-          onUsar={async (_total, conteo) => {
-            setTrabajando(true)
-            setErrCalc(null)
-            try {
-              const x = await contarBilletes(turno.id, conteo)
-              setCalc(null)
-              onCambio(x.turno)
-            } catch (e) {
-              setErrCalc((e as Error).message)
-            } finally {
-              setTrabajando(false)
-            }
-          }}
-        />
-      )}
-      {calc === 'cierre' && (
-        <CalculadoraBilletes
-          momento={`cierre:${turno.id}`}
-          billetes={billetes}
-          guardado={conteoBase}
-          titulo="Contar el efectivo del cierre"
-          accion="Usar este total"
-          onCerrar={() => setCalc(null)}
-          onUsar={(total, conteo) => {
-            setContado(String(total))
-            setConteoCierre({ conteo, total })
-            setCalc(null)
-          }}
-        />
-      )}
+      <ModalesTurno
+        que={abierto}
+        turno={turno}
+        billetes={billetes}
+        onCerrar={() => setAbierto(null)}
+        onCambio={(t) => {
+          setAbierto(null)
+          onCambio(t)
+        }}
+        onCerrado={(t) => {
+          setAbierto(null)
+          setCerrado(t)
+          onCerrado(t)
+        }}
+      />
       {ultimosPlegable}
     </>
   )
+}
+
+/** Los tres modales del turno abierto, para la pestaña y el POS. */
+export function ModalesTurno({
+  que,
+  turno,
+  billetes,
+  onCerrar,
+  onCambio,
+  onCerrado,
+}: {
+  que: null | 'abrir' | 'contar' | 'salida' | 'cerrar'
+  turno: Turno
+  billetes: number[]
+  onCerrar: () => void
+  onCambio: (t: Turno) => void
+  onCerrado: (t: Turno) => void
+}) {
+  if (que === 'contar') return <ConteoModal turno={turno} billetes={billetes} onCerrar={onCerrar} onListo={onCambio} />
+  if (que === 'salida') return <SalidaModal onCerrar={onCerrar} onListo={onCambio} />
+  if (que === 'cerrar') return <CerrarTurnoModal turno={turno} billetes={billetes} onCerrar={onCerrar} onCerrado={onCerrado} />
+  return null
 }
 
 /** Sólo admin: el texto de la política de cambio que va al pie del ticket. */

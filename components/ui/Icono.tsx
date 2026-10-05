@@ -673,6 +673,33 @@ const TRAZOS = {
       <path d="M7.2 14.4h9.6v5.7H7.2z" />
     </>
   ),
+  /** Volver — flecha a la izquierda. */
+  atras: (
+    <>
+      <path d="M19 12H5.5M11 5.5L4.5 12l6.5 6.5" />
+    </>
+  ),
+  /** Con sonido — parlante con ondas. */
+  sonido: (
+    <>
+      <path d="M4 9.5h3.6L12.4 5.6v12.8L7.6 14.5H4z" />
+      <path d="M15.6 9a4.2 4.2 0 0 1 0 6M18.2 6.5a7.8 7.8 0 0 1 0 11" />
+    </>
+  ),
+  /** Sin sonido — parlante con una cruz. */
+  silencio: (
+    <>
+      <path d="M4 9.5h3.6L12.4 5.6v12.8L7.6 14.5H4z" />
+      <path d="M15.5 9.5l5 5M20.5 9.5l-5 5" />
+    </>
+  ),
+  /** Buscar — lupa. */
+  lupa: (
+    <>
+      <circle cx="10.8" cy="10.8" r="6" />
+      <path d="M15.2 15.2l4.6 4.6" />
+    </>
+  ),
   /** Listo — tilde. */
   check: (
     <>

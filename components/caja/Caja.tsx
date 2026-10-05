@@ -82,7 +82,7 @@ export function Caja() {
         </HeaderAcciones>
       )}
       {errTurno && <Notice tone="danger">No se pudo leer el turno: {errTurno}</Notice>}
-      {turno && !esMio && <Notice tone="neutral">La caja la abrió {turno.abierto_por ?? 'otra cuenta'}: sólo esa cuenta puede usar el POS.</Notice>}
+      {turno && !esMio && <Notice tone="neutral">Turno de {turno.abierto_por ?? 'otra cuenta'}: POS sólo para esa cuenta.</Notice>}
       {turno !== undefined && (
         <TurnoCaja
           turno={turno}
@@ -95,7 +95,7 @@ export function Caja() {
       )}
       {esperando > 0 && (
         <Notice tone="warning">
-          {esperando === 1 ? 'Una venta espera' : `${esperando} ventas esperan`} la transferencia: se sigue en el POS, que imprime el ticket cuando llega.
+          Transferencias en espera: {esperando}. Se siguen en el POS (ticket al llegar).
         </Notice>
       )}
       {otras.length > 0 && <Pendientes ventas={otras} onCambio={refrescarPendientes} />}

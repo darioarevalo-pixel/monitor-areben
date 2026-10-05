@@ -58,18 +58,20 @@ async function montar(el: React.ReactElement) {
 }
 
 describe('POS (/pos)', () => {
-  it('🔑 la cuenta que abrió la caja ve el POS: escanear, el pedido y «Cerrar caja»', async () => {
+  it('🔑 la cuenta que abrió la caja ve el POS: escanear, el pedido y «Cerrar turno»', async () => {
     const t = await montar(<CajaPOS />)
     expect(t).toContain('Escanear o buscar')
     expect(t).toContain('Pedido (0)')
-    expect(t).toContain('Cerrar caja')
-    expect(t).toContain('Volver al monitor')
+    expect(t).toContain('Cerrar turno')
+    // Sólo una flecha (Bruno, 5-oct), ⛔ «Volver al monitor».
+    expect(t).not.toContain('Volver al monitor')
+    expect(document.querySelector('a[aria-label="Volver"]')?.getAttribute('href')).toBe('/caja')
   })
 
   it('🔴 otra cuenta ⇒ «la abrió Sofi», sin escanear ni cobrar', async () => {
     sesion.perfil = { ...sesion.perfil, name: 'Ana', email: 'ana@zattia.com' }
     const t = await montar(<CajaPOS />)
-    expect(t).toContain('La caja la abrió Sofi: solo esa cuenta puede usar el POS.')
+    expect(t).toContain('Turno de Sofi: POS sólo para esa cuenta.')
     expect(t).not.toContain('Escanear o buscar')
   })
 
@@ -82,7 +84,7 @@ describe('POS (/pos)', () => {
   it('sin turno abierto ⇒ lo dice y manda a la Caja', async () => {
     turno = null
     const t = await montar(<CajaPOS />)
-    expect(t).toContain('No hay un turno abierto')
+    expect(t).toContain('Sin turno abierto')
     expect(document.querySelector('a[href="/caja"]')).toBeTruthy()
   })
 })
@@ -101,7 +103,7 @@ describe('pestaña Caja', () => {
     raiz = createRoot(caja)
     t = await montar(<Caja />)
     expect(document.querySelector('a[href="/pos"]')).toBeNull()
-    expect(t).toContain('sólo esa cuenta puede usar el POS')
+    expect(t).toContain('POS sólo para esa cuenta')
     // Cerrar la caja, sí: «desde los dos lados». Contar billetes, ⛔ (el servidor da 403).
     expect(t).toContain('Cerrar turno')
     expect(t).not.toContain('Contar billetes')

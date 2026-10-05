@@ -13,6 +13,32 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## ▶️ CAJA + POS: LA VUELTA DEL 5-OCT — 5-oct-2026 (dictado por Bruno, con capturas del POS de GN)
+
+Plan aprobado: `~/.claude/plans/te-pongo-en-modo-concurrent-moler.md`. Lo dictado, en corto:
+- Textos en **términos/infinitivo**, ⛔ frases que narran el resultado («tenía que haber X y había X. Cuadrado»).
+- «Contar billetes» ⛔ arranca con el conteo anterior. Calculadora + **abrir turno en un paso**.
+- POS y Caja: **más color y diseño**. Sólo una **flecha ←**. Sonido como **botón con ícono**.
+- Búsqueda **dinámica** (sin Enter), primero **por producto** y después **variante** (modal, sin stock
+  tras un botón), **foto del color** desde TN, tarjetas **más chicas**. ⛔ Categorías de GN.
+- Desde el POS, «Contar billetes» ⛔ repite la tarjeta del turno. ⛔ Sugerencias del navegador al tipear.
+- Descuento por prenda: **precio de lista tachado** y el que queda a la derecha.
+- Cobro en **modal como GN**; se eligen las 4 formas de pago con la cuenta debajo (decidido).
+- 🔴 **Productos de FERIA TRABADOS desde el monitor** (lista que marca un admin): sólo efectivo o
+  transferencia a las cuentas de feria, sin promo por forma de pago; pedido mixto = cada prenda su regla.
+- Ticket **igual al de GN** (se mantiene nro de venta, fecha y día), **logo PNG** en la configuración,
+  ⛔ medios de pago abajo.
+- ▶️ **DESPUÉS de esta vuelta — TRANSFERENCIAS** (dictado 5-oct): (1) **toda transferencia ESPERA el
+  pago**, la cuenta que sea (normal, feria 25868, CG 20595): forma de pago transferencia ⇒ se espera
+  (hoy `montoAEsperar` mira `esperaPago` por cuenta y sólo la 13015 lo tiene ⇒ una venta de $200 en
+  feria se cobró directo, anulada en GN). (2) **Elegir desde la Caja la cuenta de MP donde se detecta**
+  («Las transferencias se detectan en: …»), usando la MISMA elección de Pagos recibidos (`mp_cuenta_uso`,
+  action `usar`, sólo admin); cargar cuentas nuevas sigue en Pagos recibidos. Hoy hay una: BDIACCESORIOS
+  (136578181). (3) Corregir `NOMBRE_TRANSF` en Bajadas («Areben Comercial (se confirma sola…)» es falso).
+  (4) El turno abierto 5-oct 15:40 es de PRUEBA (suma 2 ventas anuladas en GN): cerrarlo y ⛔ tomar sus números.
+
+---
+
 ## ▶️ CHEQUEO DE EXHIBICIÓN + MAPA: RELEVAR EL LOCAL POR BARRA — 5-oct-2026 (dictado por Bruno)
 
 Bruno: *«cambiamos cosas pero físicamente, en sistema todavía no cambió nada… lo de mapa no podemos
