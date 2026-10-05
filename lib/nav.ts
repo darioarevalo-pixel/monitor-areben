@@ -507,7 +507,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   exhib: 'Recorrido con lector para verificar qué está colgado en el local.',
   'mapa-local': 'Qué va en cada perchero del salón y cuánto entra.',
   'ubicaciones-local': 'En qué estante del depósito de atrás del local está cada producto.',
-  caja: 'Cobrar en el local: se escanea, se elige cómo paga, sale el vuelto y el ticket, y la venta queda en Gestión Nube.',
+  caja: 'El turno de la caja del local: abrirlo con el fondo, contar los billetes y cerrarlo. Se cobra en el POS, con «Abrir POS».',
   'pagos-recibidos': 'Los pagos que entraron hoy a la cuenta de Mercado Pago del local. Se entrega la compra cuando el pago aparece acá, no por lo que muestra el teléfono de la clienta.',
   conteo: 'Conteo de fundas por escaneo, agrupado por modelo de celular. Cerrás un modelo y ajusta contra el stock vivo de GN.',
   'conteo-deposito': 'Conteo físico del depósito a mano, con ajuste de stock por diferencia.',

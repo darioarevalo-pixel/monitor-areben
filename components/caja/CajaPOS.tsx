@@ -562,7 +562,7 @@ function POS() {
   }, [puedeCobrar])
 
   async function vaciar() {
-    if (!(await preguntar({ titulo: 'Vaciar pedido', mensaje: `Se sacan las ${prendas === 1 ? 'una prenda' : `${prendas} prendas`} del pedido. No se cobró nada.`, ok: 'Vaciar pedido', tono: 'warning' }))) return
+    if (!(await preguntar({ titulo: 'Vaciar pedido', mensaje: `Se ${prendas === 1 ? 'saca la prenda' : `sacan las ${prendas} prendas`} del pedido. No se cobró nada.`, ok: 'Vaciar pedido', tono: 'warning' }))) return
     // El id ⛔ se renueva: ⛔ se mandó nada con él.
     setBor((b) => ({ ...b, renglones: [], email: '', descuentoVenta: null }))
     setEnCobro(false)
