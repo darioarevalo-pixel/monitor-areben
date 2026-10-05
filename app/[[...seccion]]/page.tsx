@@ -35,6 +35,7 @@ const PanelWhatsApp = dynamic(() => import('@/components/panel/PanelWhatsApp').t
 /** El POS de la Caja (`/pos`, fase C): con `dynamic` por lo mismo, arrastra el cobro entero. */
 const CajaPOS = dynamic(() => import('@/components/caja/CajaPOS').then((m) => m.CajaPOS), { loading: Cargando })
 const CajaCliente = dynamic(() => import('@/components/caja/CajaCliente').then((m) => m.CajaCliente), { loading: Cargando })
+const CajaTotem = dynamic(() => import('@/components/caja/CajaTotem').then((m) => m.CajaTotem), { loading: Cargando })
 
 /**
  * Sección por defecto. **Es Inicio, y es una decisión de producto, no una herencia.**
@@ -223,6 +224,8 @@ export default function Seccion() {
     // del MISMO equipo y le devuelve el mail: ⛔ cobra ni escribe en la base.
     const sub = Array.isArray(partes) ? partes[1] : undefined
     if (sub === 'cliente') return <CajaCliente />
+    // `/pos/totem`: el verificador de precios (fase 4). Sólo lectura.
+    if (sub === 'totem') return <CajaTotem />
     return (
       <ToastProvider>
         <ConfirmProvider>

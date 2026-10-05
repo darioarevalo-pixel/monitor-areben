@@ -169,6 +169,11 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   ventana del MISMO equipo** (segundo monitor o tablet espejada): una tablet suelta ⛔ ve nada hasta que
   el pedido viaje al servidor. Pide el permiso de Caja y ⛔ escribe en la base. La marca vive en
   `lib/caja/marca.ts` hasta la V4.
+- 🔑 **El tótem (`/pos/totem`, rediseño fase 4 = V2)**: se escanea una prenda y se ve foto, talles
+  del local (el stock de ANOCHE, por `buscarNombre`), precio de lista y **precio en efectivo**, que sale
+  de `cobro()` con `pagosDeMedio('efectivo')` (`lib/caja/totem.ts`): el % de la cuenta, el redondeo y
+  la traba de feria —una prenda de feria muestra su precio FINAL—. ⛔ «precio × 0,85» a mano. La prenda
+  se resuelve con `buscarProducto`, como el POS (UNA lectura de GN por escaneo). Sólo lectura.
 - ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
   turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
 - ⚠️ Varias partes por transferencia en una venta se esperan como UNA transferencia por la suma.
@@ -179,6 +184,8 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   política y verla en la vista previa, y los mosaicos del POS con el `Dato` nuevo.
 - Rediseño fase 3 (`/pos/cliente`): ⛔ vista en prod con el POS al lado (agregar, cobrar, el mail de
   vuelta). ⛔ Decidido: tablet SUELTA (pide el pedido en el servidor) o segundo monitor.
+- Rediseño fase 4 (`/pos/totem`): ⛔ visto en prod con el lector real. ⛔ Decidido (paso 0 de V2): si
+  es la misma tablet que la de la clienta, y si escanea con la cámara.
 - F5: ⛔ probado con una transferencia real (la verificación del plan).
 - ⚠️ La carrera de dos pantallas cruzando la MISMA venta la cubre el `.eq('estado','esperando_pago')`
   del update, y ⛔ tiene test (el mock de la base es secuencial).
