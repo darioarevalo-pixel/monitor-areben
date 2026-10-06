@@ -28,6 +28,8 @@ import { sembrarEnMaestra } from './_agenda.js';
 // 🔑 Qué siembra cada fila del cajón —el evento sí, su hija ⛔ no, la solicitud suelta como
 // siempre— vive en el núcleo y ⛔ no en el `for` de abajo: así el test llama a la MISMA función.
 import { KINDS_QUE_SIEMBRAN, siembraDeSesion } from '../lib/sesionfotos/evento.core.js';
+// 🆕 6-oct-2026: la puerta de SÓLO lectura por la que Maketa ve las sesiones de fotos.
+import { HEADER_LLAVE_MAKETA, KINDS_PARA_MAKETA, esLlaveDeMaketa, paraMaketa } from '../lib/solicitudes/para-maketa.core.js';
 
 function cfgFor(store) {
   // Stunned comparte la base de Zattia: la traducción la hace el núcleo, no un `||` acá.
@@ -100,8 +102,33 @@ async function idsNuevos(supabase, store, solicitudes) {
   return new Set(ids.filter((id) => !existen.has(id)));
 }
 
+/**
+ * 🆕 **Lo que lee Maketa, con su llave** (6-oct-2026). ⛔ No pasa por `exigirUsuario`: no hay una
+ * persona del otro lado, hay otra app. Sólo GET, sólo las sesiones de fotos, sólo la proyección.
+ * 📌 El porqué entero en `lib/solicitudes/para-maketa.core.js`.
+ */
+async function leerParaMaketa(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'La llave de Maketa sólo lee.' });
+  if (!esLlaveDeMaketa(req.headers[HEADER_LLAVE_MAKETA], process.env.MAKETA_LLAVE)) {
+    return res.status(403).json({ error: 'Llave de Maketa inválida.' });
+  }
+  const store = String(req.query.store || '').toLowerCase();
+  if (!baseDeLinea(store)) return res.status(400).json({ error: 'store inválido (usá bdi, zattia o stunned)' });
+  const cfg = cfgFor(store);
+  if (!cfg.url || !cfg.key) return res.status(500).json({ error: `Faltan credenciales de Supabase para ${store}.` });
+  const supabase = createClient(cfg.url, cfg.key);
+  // `desde` (YYYY-MM-DD) recorta lo viejo: Maketa pregunta por lo que viene, ⛔ por el historial.
+  const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.desde || '')) ? String(req.query.desde) : null;
+  let q = supabase.from('solicitudes').select('kind, datos').eq('store', store).in('kind', KINDS_PARA_MAKETA);
+  if (desde) q = q.gte('fecha', desde);
+  const { data, error } = await q.order('fecha', { ascending: true }).limit(500);
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(200).json({ ok: true, list: (data || []).map((r) => paraMaketa(store, r.kind, r.datos)) });
+}
+
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'GET, POST, OPTIONS')) return;
+  if ((req.headers || {})[HEADER_LLAVE_MAKETA] !== undefined) return leerParaMaketa(req, res);
   const perfil = await exigirUsuario(req, res);
   if (!perfil) return;
 
