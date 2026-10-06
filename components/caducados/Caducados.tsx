@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useCaducadosData } from '@/components/caducados/useCaducadosData'
 import { generarReporteCaducados } from '@/components/caducados/reporteCaducados'
-import { eliminarDeTn, motivoLegible, puedeEliminarTn } from '@/components/caducados/eliminarTn'
+import { eliminarDeTn, motivoLegible, puedeEliminarTn, traerEliminados, type Eliminado } from '@/components/caducados/eliminarTn'
 import { candidatos, coincide, depositosOrdenados, diasDesde, pendientesTn, type TnProductoCad } from '@/lib/caducados'
 import { invalidarAudit, traerAudit } from '@/lib/tn-audit'
 import { bustAudit } from '@/lib/tncat/cliente'
@@ -51,7 +51,7 @@ import {
  * criterio (días sin venta) y las dos acciones van al header, y el stock por depósito se
  * lee como una lista de etiquetas en vez de un renglón corrido.
  */
-type Pestana = 'tn' | 'gn'
+type Pestana = 'tn' | 'gn' | 'eliminados'
 
 export function Caducados() {
   const { marca, perfil } = useSesion()
@@ -69,6 +69,8 @@ export function Caducados() {
   const [tnVersion, setTnVersion] = useState(0)
   const [marcados, setMarcados] = useState<Set<string>>(new Set())
   const [eliminando, setEliminando] = useState<string | null>(null)
+  const [hist, setHist] = useState<{ marca: string; filas: Eliminado[] } | null>(null)
+  const [histError, setHistError] = useState<string | null>(null)
 
   // La tienda entera con variantes (para el stock en TN y los códigos). Comparte caché con Tienda Nube.
   // `tnVersion` sube después de eliminar: la lista se vuelve a pedir a la tienda (no al caché).
@@ -81,6 +83,22 @@ export function Caducados() {
       vivo = false
     }
   }, [marca, tnVersion])
+
+  // El historial se pide al abrir la pestaña y de nuevo después de cada eliminación.
+  useEffect(() => {
+    if (tab !== 'eliminados') return
+    let vivo = true
+    traerEliminados(marca)
+      .then((filas) => vivo && setHist({ marca, filas }))
+      .catch((e) => vivo && setHistError((e as Error).message))
+    return () => {
+      vivo = false
+    }
+  }, [tab, marca, tnVersion])
+  const histFilas = useMemo(
+    () => (hist && hist.marca === marca ? hist.filas.filter((h) => coincide(buscar, h.nombre, h.quien)) : null),
+    [hist, marca, buscar],
+  )
 
   const corte = Math.max(1, dias)
   // Caducados sobre TODOS los productos de GN, activos o no. Cada pestaña recorta lo suyo.
@@ -209,6 +227,7 @@ export function Caducados() {
         items={[
           { key: 'tn', label: 'Tienda Nube', badge: tnRes ? tnFilas.length || undefined : undefined, hint: 'Caducados que siguen cargados en la tienda' },
           { key: 'gn', label: 'Gestión Nube', badge: cad ? gn.length || undefined : undefined, hint: 'Caducados que siguen activos en Gestión Nube' },
+          { key: 'eliminados', label: 'Eliminados', hint: 'Lo que se eliminó de Tienda Nube con el botón: qué, quién y cuándo' },
         ]}
       />
 
@@ -216,7 +235,41 @@ export function Caducados() {
         <BuscarInput value={buscar} onChange={setBuscar} placeholder="Filtrar por palabra o categoría (ej: top)" />
       </div>
 
-      {cargando ? (
+      {tab === 'eliminados' ? (
+        histError ? (
+          <Notice tone="danger" icon="⚠">No se pudo leer el historial: {histError}</Notice>
+        ) : !histFilas ? (
+          <Esqueleto forma="tabla" filas={6} />
+        ) : histFilas.length === 0 ? (
+          <EmptyState icon="🗂️" title="Todavía no se eliminó nada con el botón" hint={buscar ? 'Con este filtro no hay ninguno.' : 'Lo que se elimine de Tienda Nube desde esta sección queda anotado acá.'} dashed />
+        ) : (
+          <>
+            <p style={{ fontSize: font.base, color: color.ink2, marginBottom: space[3] }}>
+              <b>{histFilas.length}</b> {histFilas.length === 1 ? 'producto eliminado' : 'productos eliminados'} de Tienda Nube. De cada uno hay una copia guardada.
+            </p>
+            <TableWrap maxHeight={620}>
+              <THead>
+                <Tr>
+                  <Th>Producto</Th>
+                  <Th>Quién</Th>
+                  <Th>Cuándo</Th>
+                </Tr>
+              </THead>
+              <TBody>
+                {histFilas.map((h) => (
+                  <Tr key={h.id + h.cuando}>
+                    <Td strong>{h.nombre}</Td>
+                    <Td style={{ color: color.mut }}>{h.quien}</Td>
+                    <Td style={{ color: color.mut }}>
+                      {new Date(h.cuando).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </Td>
+                  </Tr>
+                ))}
+              </TBody>
+            </TableWrap>
+          </>
+        )
+      ) : cargando ? (
         <Esqueleto forma="tabla" filas={8} />
       ) : tab === 'tn' ? (
         tnError ? (

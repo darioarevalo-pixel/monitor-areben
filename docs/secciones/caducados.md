@@ -36,12 +36,14 @@ Tienda Nube y Gestión Nube por familia («top», «jean»…).
   `node scripts/check-tn-eliminar.mjs`): relee el producto en la tienda y se saltea si cambió de
   nombre, si tiene stock en TN o si no se pudo guardar el respaldo. Lo de la pantalla es comodidad.
 - **Respaldo**: el JSON entero de TN en el KV de bdi-catalogo, `tn-eliminado:<store>:<id>`, y el
-  registro en la lista `tn-eliminados:<store>` (quién, cuándo). ⚠️ Las fotos quedan como LINKS al
+  registro en la lista `tn-eliminados:<store>` (quién, cuándo), que muestra la pestaña
+  **Eliminados** (`GET tn-categorias?accion=eliminados`). Lo eliminado ANTES del botón (5 tops el
+  5/6-oct: ALASKA, ALO, AMELIA, ANGIE, BALI) no está ahí. ⚠️ Las fotos quedan como LINKS al
   CDN de TN: no está medido si sobreviven a la eliminación. No hay pantalla para recuperar.
 
 ## Lo que falta
 
 - **GN**: confirmar si la API deja desactivar (hoy el aviso dice que no). Si no, sigue a mano.
-- Una pantalla para ver el registro y recuperar un producto desde su respaldo.
+- Recuperar un producto desde su respaldo (la pestaña Eliminados hoy sólo muestra).
 - ⛔ Desde una sesión de Claude Code en modo automático **no se puede eliminar en serie** en la
   tienda (ni por Chrome, ni por Lumi, ni con reglas `allow`): por eso el botón.

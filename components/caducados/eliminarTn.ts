@@ -65,3 +65,13 @@ export async function eliminarDeTn(
   }
   return out
 }
+
+export type Eliminado = { id: string; nombre: string; quien: string; cuando: string }
+
+/** El historial de lo eliminado con el botón, lo último primero. Sólo lee. */
+export async function traerEliminados(store: Linea): Promise<Eliminado[]> {
+  const r = await apiFetch(`${URL_TN}?store=${store}&accion=eliminados&nc=${Date.now()}`)
+  const d = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
+  return (d.eliminados || []) as Eliminado[]
+}
