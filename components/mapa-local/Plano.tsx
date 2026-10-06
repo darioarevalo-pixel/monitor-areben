@@ -7,7 +7,8 @@ import type { Modulo, Pared } from '@/lib/mapa-local/tipos'
 /**
  * El plano del local visto desde arriba, según el plano de la obra: la vidriera arriba, la pared
  * derecha larga (D01–D12) de la entrada hacia el fondo, la pared izquierda corta (I01–I02) en la
- * entrada, la isla en el medio del recorrido, y al fondo los cambiadores y el depósito.
+ * entrada, la isla en el medio del recorrido, y al fondo los cambiadores y el depósito, que es un
+ * pasillo largo: llega hasta la altura de D12.
  * ⚠️ Es un esquema para ubicarse, ⛔ no está a escala.
  */
 
@@ -50,6 +51,10 @@ function posiciones(modulos: Modulo[]) {
 
 export function Plano({ modulos, estados, graves, elegido, onElegir }: Props) {
   const pos = posiciones(modulos)
+  // El depósito arranca un mínimo espacio debajo del último módulo de la pared derecha.
+  const finesDer = modulos.filter((m) => m.pared === 'der' && pos[m.codigo]).map((m) => pos[m.codigo].y + pos[m.codigo].h)
+  const finDer = finesDer.length ? Math.max(...finesDer) : 392
+  const dep = { y: finDer + 8, h: H - 14 - (finDer + 8) }
   const texto = { fontSize: 11, fill: color.mut, fontFamily: 'inherit' } as const
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 340, display: 'block' }} role="img" aria-label="Plano del local">
@@ -60,8 +65,17 @@ export function Plano({ modulos, estados, graves, elegido, onElegir }: Props) {
       <text x={110} y={302} textAnchor="middle" style={texto}>Mostrador</text>
       <rect x={14} y={400} width={120} height={146} rx={4} style={{ fill: color.bg2, stroke: color.line }} />
       <text x={74} y={476} textAnchor="middle" style={texto}>Cambiadores</text>
-      <rect x={160} y={420} width={126} height={126} rx={4} style={{ fill: color.bg2, stroke: color.line }} />
-      <text x={223} y={486} textAnchor="middle" style={texto}>Depósito</text>
+      {/* El depósito llega hasta la altura del último módulo de la derecha (D12), con un mínimo
+          espacio. Adentro, las estanterías de «Ubicaciones depósito»: 2 a la izquierda, al fondo, y 4 a
+          la derecha (la forma vive en `DEPOSITO` de `lib/ubicaciones-local/core.core.js`). */}
+      <rect x={160} y={dep.y} width={126} height={dep.h} rx={4} style={{ fill: color.bg2, stroke: color.line }} />
+      {Array.from({ length: 4 }, (_, i) => (
+        <rect key={`d${i}`} x={268} y={dep.y + 8 + (i * (dep.h - 16)) / 4} width={10} height={(dep.h - 16) / 4 - 3} rx={1} style={{ fill: color.line2 }} />
+      ))}
+      {Array.from({ length: 2 }, (_, i) => (
+        <rect key={`i${i}`} x={168} y={dep.y + 8 + ((i + 2) * (dep.h - 16)) / 4} width={10} height={(dep.h - 16) / 4 - 3} rx={1} style={{ fill: color.line2 }} />
+      ))}
+      <text x={223} y={dep.y + dep.h / 2 + 4} textAnchor="middle" style={texto}>Depósito</text>
       {modulos.map((m) => {
         const p = pos[m.codigo]
         if (!p) return null

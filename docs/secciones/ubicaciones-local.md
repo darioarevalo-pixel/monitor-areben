@@ -21,6 +21,19 @@ por `api/datos.js?recurso=ubicaciones-local` · tablas `ubicacion_local` (la fot
   «atrás: A1 · A2» al escanear una prenda.
 - El Local que baja la pantalla es **el del Chequeo de exhibición** (`bajarExhib` + `armarProdMap`).
 
+## La forma del depósito (6-oct-2026)
+
+Un pasillo con estanterías enfrentadas: **2 módulos a la izquierda y 4 a la derecha, de 6 estantes**
+(Bruno). Vive en `DEPOSITO` (`core.core.js`) y de ahí salen el **Mapa** (`MapaDeposito.tsx`), el
+botón «Todo el depósito» de Etiquetas y el dibujo dentro del rectángulo del Mapa del local.
+
+- 🔑 **El nombre dice dónde ir**: lado + módulo + estante ⇒ `D3C`. Módulo **desde la puerta**,
+  estante con letra **desde el piso** (`A` abajo, `F` arriba). Izquierda/derecha, parado en el
+  pasillo **mirando a la puerta**.
+- ⚠️ ⛔ Son los `D01`–`D12` del salón: aquellos llevan dos dígitos y ninguna letra al final.
+- ⚠️ Que los 2 de la izquierda estén **al fondo** salió de las fotos, ⛔ de Bruno.
+- Un estante con otro nombre (`A1`) se escanea igual y sale en «Fuera del mapa».
+
 ## Reglas que el código no dice
 
 - 🔑 **Percha + atrás son UN stock** («Local» en GN), y ⛔ eso no se separa (Bruno, 4-oct). Acá se
@@ -40,7 +53,7 @@ por `api/datos.js?recurso=ubicaciones-local` · tablas `ubicacion_local` (la fot
 
 ## Pendiente
 
-- La **carga inicial** la hace el local: imprimir las etiquetas de estante (Etiquetas → Libre),
+- La **carga inicial** la hace el local: imprimir las etiquetas de estante (Etiquetas → «Todo el depósito»),
   etiquetar las bolsas por producto y el primer escaneo total.
 - **Novedad**: no hace falta mientras la vea sólo Bruno.
 - **F4**: la Caja dice «atrás: A1 · A2».

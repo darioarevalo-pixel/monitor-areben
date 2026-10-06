@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparLecturas, claveDe, controles, indexarLocal, leerCodigo, resolverEnLocal, nombresDeEstantes, TOPE_ESTANTES, ubicacionesDe } from '@/lib/ubicaciones-local/core.core.js'
+import { agruparLecturas, claveDe, controles, DEPOSITO, estantesDelDeposito, indexarLocal, leerCodigo, partesDeEstante, rangosDelDeposito, resolverEnLocal, nombresDeEstantes, TOPE_ESTANTES, ubicacionesDe } from '@/lib/ubicaciones-local/core.core.js'
 import { skuBase } from '@/lib/conteo-estandar/core'
 
 /**
@@ -142,5 +142,34 @@ describe('resolverEnLocal: la bolsa se reconoce en el teléfono, con la regla de
   it('lo que no tiene SKU o no está en el Local da null', () => {
     expect(resolverEnLocal(idx, leer('7790003'))).toBeNull()
     expect(resolverEnLocal(idx, leer('ZZZ-9999'))).toBeNull()
+  })
+})
+
+describe('el depósito: 2 módulos a la izquierda, 4 a la derecha, 6 estantes cada uno', () => {
+  it('36 estantes, por pared, módulo y desde el piso', () => {
+    const t = estantesDelDeposito()
+    expect(t).toHaveLength(36)
+    expect(t.slice(0, 7)).toEqual(['I1A', 'I1B', 'I1C', 'I1D', 'I1E', 'I1F', 'I2A'])
+    expect(t.at(-1)).toBe('D4F')
+  })
+  it('el rango por letra imprime un módulo: D1A-F = D1A-D1F', () => {
+    expect(nombresDeEstantes('D1A-F').nombres).toEqual(['D1A', 'D1B', 'D1C', 'D1D', 'D1E', 'D1F'])
+    expect(nombresDeEstantes('d1a-d1c').nombres).toEqual(['D1A', 'D1B', 'D1C'])
+    expect(nombresDeEstantes('D1C-A D1A-D2F').invalidos).toEqual(['D1C-A', 'D1A-D2F'])
+  })
+  it('🔑 lo que se tipea para el depósito entero da EXACTAMENTE sus 36 estantes, y entra en una tanda', () => {
+    const r = nombresDeEstantes(rangosDelDeposito())
+    expect(r).toEqual({ nombres: estantesDelDeposito(), invalidos: [], recortado: false })
+    expect(r.nombres.length).toBeLessThanOrEqual(TOPE_ESTANTES)
+  })
+  it('dónde queda cada estante; lo que ⛔ es del mapa da null', () => {
+    expect(partesDeEstante('D3C')).toEqual({ lado: 'D', modulo: 3, nivel: 3 })
+    expect(partesDeEstante('i2f')).toEqual({ lado: 'I', modulo: 2, nivel: 6 })
+    // ⚠️ los módulos de percha del salón (D01–D12) ⛔ son estantes del depósito
+    for (const n of ['A1', 'REJA', 'D5A', 'I3A', 'D1G', 'D0A', 'D01', 'D12', '']) expect(partesDeEstante(n)).toBeNull()
+  })
+  it('la forma: lo que dijo Bruno el 6-oct', () => {
+    expect(DEPOSITO.niveles).toBe(6)
+    expect(DEPOSITO.paredes.map((p) => [p.lado, p.modulos])).toEqual([['I', 2], ['D', 4]])
   })
 })

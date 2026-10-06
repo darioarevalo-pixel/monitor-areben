@@ -9,6 +9,7 @@ import { armarProdMap, construirItems } from '@/lib/exhib/core'
 import { haceCuanto } from '@/lib/buzon/core'
 import { avisar, prepararSonido } from '@/lib/sonido'
 import { DIAS_ESTANTE_VIEJO, cmpSku, indexarLocal, leerCodigo, resolverEnLocal } from '@/lib/ubicaciones-local/core.core.js'
+import { MapaDeposito } from './MapaDeposito'
 import { eliminarEstante, guardarEstante, leerControles, leerFoto, resolverEnServidor, type Controles, type Foto } from '@/lib/ubicaciones-local/cliente'
 
 /**
@@ -50,7 +51,7 @@ function guardarLS(e: EnCurso) {
   }
 }
 
-type Vista = 'escanear' | 'estantes' | 'controles'
+type Vista = 'escanear' | 'mapa' | 'estantes' | 'controles'
 
 export function UbicacionesLocal() {
   const { marca } = useSesion()
@@ -93,16 +94,18 @@ export function UbicacionesLocal() {
   const items = [
     // Mientras carga se muestra: la vista arranca en Escanear y la pestaña ⛔ puede faltar debajo de ella.
     ...(puedeEscanear || !foto ? [{ key: 'escanear', label: 'Escanear' }] : []),
+    { key: 'mapa', label: 'Mapa' },
     { key: 'estantes', label: 'Estantes', badge: foto ? foto.estantes.length : undefined },
     { key: 'controles', label: 'Controles' },
   ]
-  const actual: Vista = vista === 'escanear' && foto && !puedeEscanear ? 'estantes' : vista
+  const actual: Vista = vista === 'escanear' && foto && !puedeEscanear ? 'mapa' : vista
 
   return (
     <div style={{ display: 'grid', gap: space[4] }}>
       {error && <Notice tone="danger">{error}</Notice>}
       <Tabs items={items} value={actual} onChange={(k) => setVista(k as Vista)} />
       {actual === 'escanear' && <Escanear foto={foto} indice={indice} listo={crudos.inv.length > 0} alGuardar={recargar} />}
+      {actual === 'mapa' && <MapaDeposito foto={foto} indice={indice} />}
       {actual === 'estantes' && <Estantes foto={foto} indice={indice} puedeEscanear={puedeEscanear} alCambiar={recargar} />}
       {actual === 'controles' && <VistaControles indice={indice} />}
     </div>

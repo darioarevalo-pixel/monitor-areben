@@ -28,7 +28,7 @@ import {
   variantesSinCodigo,
 } from '@/lib/etiquetas/core'
 import { buildEstantesPdf, buildEtiquetasPdf, buildLibrePdf, buildSkuGrandePdf, imprimirPdf, SKU_POR_BOLSA, type BolsaSku, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
-import { nombresDeEstantes, TOPE_ESTANTES } from '@/lib/ubicaciones-local/core.core.js'
+import { estantesDelDeposito, nombresDeEstantes, rangosDelDeposito, TOPE_ESTANTES } from '@/lib/ubicaciones-local/core.core.js'
 import {
   admiteFormasDePago,
   CONFIG_SKU_DEFAULT,
@@ -1611,7 +1611,7 @@ function EstantesEditor() {
 
   const imprimir = async () => {
     if (invalidos.length) {
-      await avisar(`No entiendo ${invalidos.length === 1 ? 'este nombre' : 'estos nombres'}: ${invalidos.join(', ')}. Usá letras y números (hasta 8), o un rango como A1-A12.`)
+      await avisar(`No entiendo ${invalidos.length === 1 ? 'este nombre' : 'estos nombres'}: ${invalidos.join(', ')}. Usá letras y números (hasta 8), o un rango como D1A-F.`)
       return
     }
     const pdf = await buildEstantesPdf(nombres)
@@ -1630,14 +1630,20 @@ function EstantesEditor() {
           <label style={{ fontSize: 12, color: color.mut, display: 'block' }}>
             Estantes
             <br />
-            <input value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="ej. A1-A12, B1-B6" className="mo-input" style={{ width: '100%', maxWidth: 360 }} />
+            <input value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="ej. D1A-F, D2A-F" className="mo-input" style={{ width: '100%', maxWidth: 360 }} />
           </label>
+          {/* 🔑 El depósito entero sale de la forma que dibuja el mapa (`DEPOSITO`): ⛔ se tipea a mano. */}
+          <div style={{ marginTop: 6 }}>
+            <Button variant="ghost" size="sm" onClick={() => setTexto(rangosDelDeposito())}>
+              Todo el depósito ({estantesDelDeposito().length})
+            </Button>
+          </div>
           <div style={{ fontSize: 12, color: invalidos.length ? color.danger : color.mut2, marginTop: 6 }}>
             {invalidos.length
               ? `No entiendo: ${invalidos.join(', ')}`
               : nombres.length
                 ? `${nombres.length} ${nombres.length === 1 ? 'etiqueta' : 'etiquetas'}: ${nombres.join(' · ')}${recortado ? ` (se imprimen las primeras ${TOPE_ESTANTES})` : ''}`
-                : 'Separados por coma, o un rango como A1-A12.'}
+                : 'Lado + módulo + estante desde el piso (D3C). Separados por coma, o un módulo entero: D1A-F.'}
           </div>
           <div style={{ marginTop: 14 }}>
             <Button variant="solid" tone="brand" disabled={!nombres.length} onClick={() => void imprimir()}>
