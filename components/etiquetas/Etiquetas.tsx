@@ -71,6 +71,13 @@ const keyCampaniaTirada = (marca: Marca) => `monitor_eti_campania_tirada_${marca
  * (el depósito de atrás del local de Zattia): es lo que se escanea ahí.
  */
 const conClave = (marca: Marca) => marca === 'zattia'
+
+/**
+ * 🔑 **Donde la bolsa lleva la clave, la etiqueta es UNA SOLA y no tiene opciones** (Bruno, 6-oct-2026):
+ * la de 10 × 15 con el código de producto, una por producto. Las tres tildes eran para elegir qué
+ * colores listar, y la etiqueta ya ⛔ no lista colores.
+ */
+const CONFIG_BOLSA_CLAVE: ConfigSku = { grupo: false, grande: true, elegir: false }
 function lsGet<T>(key: string, fallback: T): T {
   try {
     const r = localStorage.getItem(key)
@@ -203,7 +210,8 @@ export function Etiquetas() {
   const [cant, setCant] = useState<Record<Slot, Cantidades>>({ dep: {}, loc: {}, promo: {}, sku: {}, cola: {} })
   const [autoClear, setAutoClear] = useState(true)
   const [fpLines, setFpLines] = useState<LineaEtiqueta[]>(FP_DEFAULT)
-  const [cfgSku, setCfgSku] = useState<ConfigSku>(CONFIG_SKU_DEFAULT)
+  const [cfgGuardada, setCfgSku] = useState<ConfigSku>(CONFIG_SKU_DEFAULT)
+  const cfgSku = conClave(marca) ? CONFIG_BOLSA_CLAVE : cfgGuardada
   // Carga en un IIFE async (no setState sincrónico en el effect: dispararía cascada
   // y lo marca el CI) y sin leer localStorage en el SSR (evita el mismatch de
   // hidratación). Mismas claves del legacy → el flip preserva lo guardado.
@@ -439,6 +447,7 @@ export function Etiquetas() {
           varsSku={varsSku}
           cfgSku={cfgSku}
           setCfgSku={guardarCfgSku}
+          bolsaPorClave={conClave(marca)}
           onImprimirSku={(lista) => void imprimirSku(lista)}
           ctx={ctxDe(sub)}
           fpLines={fpLines}
@@ -522,6 +531,7 @@ function ModoPanel({
   varsSku,
   cfgSku,
   setCfgSku,
+  bolsaPorClave = false,
   onImprimirSku,
   ctx,
   fpLines,
@@ -551,6 +561,8 @@ function ModoPanel({
   varsSku: VarianteEti[]
   cfgSku: ConfigSku
   setCfgSku: (campo: keyof ConfigSku, on: boolean) => void
+  /** La bolsa lleva el código de producto (Zattia): una etiqueta por producto, sin opciones de color. */
+  bolsaPorClave?: boolean
   onImprimirSku: (lista: VarianteEti[]) => void
   /** El mismo contexto con el que se imprime, para que la vista previa no pueda mostrar otra cosa. */
   ctx: CtxEtiqueta
@@ -626,6 +638,12 @@ function ModoPanel({
     // 🔑 **La pestaña de SKU imprime la BOLSA, no la prenda.** Un producto de cuatro colores son
     // cuatro bolsas en el depósito, y hasta ahora había que escanear las cuatro. Lo que se imprime
     // lo deciden las opciones de arriba; lo que quedó tildado se ve abajo y se puede reimprimir.
+    if (modoV === 'sku' && bolsaPorClave) {
+      onImprimirSku([v])
+      setFeedback({ ok: true, html: `✓ Imprimiendo la etiqueta de bolsa · ${v.name || ''}` })
+      inp.focus()
+      return
+    }
     if (modoV === 'sku') {
       const hermanas = cfgSku.grupo ? hermanasDe(varsSku, v) : [v]
       const elegidas = conStock(hermanas, v)
@@ -687,7 +705,12 @@ function ModoPanel({
       <Card style={cardScanStyle}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>⚡ Impresión rápida (escáner)</div>
         <div style={{ fontSize: 12, color: color.mut, marginBottom: 10 }}>
-          {modo === 'sku' ? (
+          {modo === 'sku' && bolsaPorClave ? (
+            <>
+              Escaneá el código de barras de cualquier prenda: imprime <b>la etiqueta de bolsa de su producto</b> al instante —el código de
+              producto, sus barras y el nombre—, la misma para todos los colores.
+            </>
+          ) : modo === 'sku' ? (
             cfgSku.elegir ? (
               <>Escaneá el código de barras de una prenda: abre la lista de SKU del producto para que elijas cuáles imprimir.</>
             ) : (
@@ -717,7 +740,7 @@ function ModoPanel({
           style={{ width: 320, maxWidth: '100%', fontSize: 15, padding: '9px 12px', border: `2px solid ${scanBorder}`, borderRadius: 8, boxSizing: 'border-box' }}
         />
         {feedback && <div style={{ fontSize: 13, marginTop: 8, color: feedback.ok ? color.success : color.danger }}>{feedback.html}</div>}
-        {modo === 'sku' && <OpcionesSku cfg={cfgSku} set={setCfgSku} />}
+        {modo === 'sku' && !bolsaPorClave && <OpcionesSku cfg={cfgSku} set={setCfgSku} />}
       </Card>
 
       {modo === 'sku' && bolsa && (
