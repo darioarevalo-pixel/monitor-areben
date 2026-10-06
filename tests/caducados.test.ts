@@ -157,3 +157,15 @@ describe('normNombre / coincide', () => {
     expect(coincide('', 'x')).toBe(true)
   })
 })
+
+describe('eliminar de Tienda Nube — quién ve el botón', () => {
+  it('sólo Darío y Bruno, y siendo admin; la cuenta técnica CRM no', async () => {
+    const { puedeEliminarTn } = await import('@/components/caducados/eliminarTn')
+    const p = (name: string, admin = true) => ({ name, admin, cuenta: null, acceso: {} })
+    expect(puedeEliminarTn(p('Dario Arevalo'))).toBe(true)
+    expect(puedeEliminarTn(p('Bruno Arevalo'))).toBe(true)
+    expect(puedeEliminarTn(p('CRM'))).toBe(false)
+    expect(puedeEliminarTn(p('Dario Arevalo', false))).toBe(false)
+    expect(puedeEliminarTn(null)).toBe(false)
+  })
+})

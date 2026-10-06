@@ -27,12 +27,21 @@ Tienda Nube y Gestión Nube por familia («top», «jean»…).
 - **El cruce con TN es por nombre EXACTO**, a propósito distinto de `matchTn`: ver `normNombre`.
 - **Eliminar en TN no tiene vuelta atrás y TN no guarda historial.**
 
+## Eliminar de Tienda Nube (6-oct-2026)
+
+- Botón en la pestaña TN, **sólo Darío y Bruno** (`puedeEliminarTn`; no alcanza `admin`: la cuenta
+  técnica «CRM» también lo es). Escribe por `bdi-catalogo/api/tn-categorias.js` acción `eliminar`,
+  de a 10 por pedido.
+- 🔴 **Los frenos viven en el SERVIDOR** (`bdi-catalogo/api/_tn-eliminar.js`, probado con
+  `node scripts/check-tn-eliminar.mjs`): relee el producto en la tienda y se saltea si cambió de
+  nombre, si tiene stock en TN o si no se pudo guardar el respaldo. Lo de la pantalla es comodidad.
+- **Respaldo**: el JSON entero de TN en el KV de bdi-catalogo, `tn-eliminado:<store>:<id>`, y el
+  registro en la lista `tn-eliminados:<store>` (quién, cuándo). ⚠️ Las fotos quedan como LINKS al
+  CDN de TN: no está medido si sobreviven a la eliminación. No hay pantalla para recuperar.
+
 ## Lo que falta
 
-- **Botón «Eliminar de Tienda Nube»** (sólo Darío y Bruno), con respaldo previo de nombre, fotos,
-  descripción y precio + registro de quién/cuándo. La escritura va por `bdi-catalogo` (la clave de
-  TN vive ahí), que ⛔ está en el techo de 12 funciones: entra como acción de un endpoint existente.
-  ⛔ Leer `docs/secciones/tncat.md` antes: un POST con acción desconocida recategoriza la tienda.
 - **GN**: confirmar si la API deja desactivar (hoy el aviso dice que no). Si no, sigue a mano.
+- Una pantalla para ver el registro y recuperar un producto desde su respaldo.
 - ⛔ Desde una sesión de Claude Code en modo automático **no se puede eliminar en serie** en la
   tienda (ni por Chrome, ni por Lumi, ni con reglas `allow`): por eso el botón.
