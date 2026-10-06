@@ -55,9 +55,9 @@ export const ETIQUETA: Record<ModoEtiqueta, { emoji: string; nombre: string; dic
     alEscanear: 'precio rebajado (antes/ahora)',
   },
   sku: {
-    emoji: '🔢',
-    nombre: 'SKU',
-    dice: 'Sólo el SKU, grande y centrado. Es la que se pega en la bolsa del depósito, y se puede imprimir en 5 × 2,5 cm o en 10 × 15 cm.',
+    emoji: '🛍️',
+    nombre: 'Bolsa',
+    dice: 'La que se pega en la bolsa del depósito. En Zattia, la de 10 × 15 cm lleva el código de producto grande, sus barras y el nombre, sin colores. Se puede imprimir en 5 × 2,5 cm o en 10 × 15 cm.',
     alEscanear: 'sólo el SKU',
   },
 }

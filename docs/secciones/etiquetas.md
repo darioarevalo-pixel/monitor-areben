@@ -160,6 +160,12 @@ venga vinculada con los precios definidos en monitor»*.
   por SKU»*). Los SKU arrancan en 46 puntos y bajan de a uno hasta entrar a lo alto y a lo ancho; el
   nombre del producto va abajo, en cuerpo fijo y gris, sólo para confirmar que la bolsa es la
   correcta. ⛔ **No lleva código de barras**: con cuatro SKU adentro no se sabría cuál se escanea.
+- 🔑 **En Zattia la pestaña se llama «Bolsa» y la de 10 × 15 dice el CÓDIGO DE PRODUCTO, ⛔ no los SKU
+  con su color** (Bruno, 6-oct-2026). Arriba va la clave (`RBT-0137`, el SKU sin color) grande, abajo
+  sus barras para «Ubicaciones depósito» y el nombre. La mayoría de las bolsas mezcla colores: listarlos
+  obligaba a reimprimir cada vez que la bolsa se rearmaba. Sale **una hoja por producto**, sin
+  `repartirSku`. **BDI no cambia**: sigue con los SKU y sin barras (ahí un producto de GN puede juntar
+  dos claves).
 - 🔑 **Los SKU de más se reparten PAREJO entre las etiquetas, no llenando la primera**
   (`repartirSku`). Cortando de a seis, diez colores daban una hoja apretadísima y otra con dos SKU
   enormes: la misma bolsa con dos etiquetas que no se parecían en nada.

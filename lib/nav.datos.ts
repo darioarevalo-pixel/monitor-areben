@@ -383,7 +383,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "etiquetas",
     "area": "local",
     "label": "Etiquetas",
-    "info": "Etiquetas nombradas por lo que dicen (información de producto · precio · precio rebajado · SKU · precio de campaña · libre), y la cola de lo que hay que reetiquetar.",
+    "info": "Etiquetas nombradas por lo que dicen (información de producto · precio · precio rebajado · bolsa · precio de campaña · libre), y la cola de lo que hay que reetiquetar.",
     "brands": [
       "bdi",
       "zattia"
@@ -406,8 +406,8 @@ export const PERM_CAT: PermCat[] = [
       },
       {
         "key": "sku",
-        "label": "SKU",
-        "info": "Sólo el SKU, grande y centrado."
+        "label": "Bolsa",
+        "info": "La que se pega en la bolsa del depósito. En Zattia lleva el código de producto en barras."
       },
       {
         "key": "libre",

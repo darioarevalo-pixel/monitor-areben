@@ -456,9 +456,12 @@ function dibujarBolsa(pdf: Pdf, bolsa: BolsaSku, JsBarcode: any | null) {
   const { W, Hh, M } = BOLSA
   const CX = W / 2
   const ancho = W - M * 2
-  const vs = bolsa.variantes
   // Con barras, la hoja ya viene partida por clave (`partirPorClave`): la de la primera es la de todas.
-  const barras = JsBarcode ? claveDe(vs[0]?.sku) || null : null
+  const barras = JsBarcode ? claveDe(bolsa.variantes[0]?.sku) || null : null
+  // 🔑 **Con barras, arriba va el CÓDIGO DE PRODUCTO, ⛔ no los SKU con su color** (Bruno, 6-oct-2026).
+  // La mayoría de las bolsas mezcla colores: listarlos obligaba a imprimir la etiqueta según lo que
+  // tenía adentro, y la bolsa se rearma. La ubicación es por producto; el color se ve en la prenda.
+  const vs: VarianteEti[] = barras ? [{ ...bolsa.variantes[0], sku: barras, size: '' }] : bolsa.variantes
 
   // El pie se mide PRIMERO: el lugar que ocupa es el que los SKU no tienen, y son ellos los que se
   // achican. Al revés, un nombre de dos renglones les comía el borde de abajo sin avisar.
@@ -538,9 +541,10 @@ export async function buildSkuGrandePdf(bolsas: BolsaSku[], opts: { conClave?: b
   const hojas: BolsaSku[] = []
   for (const b of bolsas || []) {
     const conSku = (b.variantes || []).filter((v) => (v.sku || '').trim())
-    for (const producto of opts.conClave ? partirPorClave(conSku) : [conSku]) {
-      for (const tanda of repartirSku(producto)) hojas.push({ producto: b.producto, variantes: tanda })
-    }
+    // Con clave sale UNA hoja por producto: la etiqueta dice el código, ⛔ no los colores, así que
+    // repartir los SKU en tandas daría dos etiquetas idénticas para la misma bolsa.
+    if (opts.conClave) for (const producto of partirPorClave(conSku)) hojas.push({ producto: b.producto, variantes: producto })
+    else for (const tanda of repartirSku(conSku)) hojas.push({ producto: b.producto, variantes: tanda })
   }
   if (!hojas.length) return null
   const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: 'portrait' })

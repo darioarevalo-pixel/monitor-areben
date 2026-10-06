@@ -1791,7 +1791,7 @@ function OpcionesSku({ cfg, set }: { cfg: ConfigSku; set: (campo: keyof ConfigSk
         Imprimir también <b>los otros colores del mismo producto</b> — una etiqueta por bolsa, sin escanear color por color
       </Tilde>
       <Tilde on={cfg.grande} set={(x) => set('grande', x)}>
-        Usar la etiqueta <b>grande de 10 × 15 cm</b> — todos los SKU juntos en una sola, en vez de una de 5 × 2,5 por color
+        Usar la etiqueta <b>grande de 10 × 15 cm</b> — una sola por bolsa, en vez de una de 5 × 2,5 por color
       </Tilde>
       <Tilde on={cfg.elegir} set={(x) => set('elegir', x)}>
         Elegir los colores <b>antes de imprimir</b> — el escaneo abre la lista y no imprime hasta que se lo pida
