@@ -21,6 +21,6 @@ export const MARCA_CAJA = {
    * (la de 97.765 seguidores, id 17841464104146773 en `areben-marketing`). Vacío ⇒ ⛔ se muestra.
    */
   instagram: '@zattia_co' as string,
-  /** El nombre del local en la cabecera de la clienta («Local Centro»…). Vacío ⇒ ⛔ se muestra: falta que Bruno lo diga. */
-  local: '' as string,
+  /** El nombre en la cabecera de la clienta y arriba de la bienvenida: SIEMPRE el de la marca (Bruno, 6-oct). */
+  local: datos.nombre as string,
 } as const
