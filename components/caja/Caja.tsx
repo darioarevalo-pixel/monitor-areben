@@ -22,6 +22,7 @@ import { leerConfig, leerPendientes, leerTurno, type Config, type Turno, type Ve
 import { ButtonLink, Notice, color, font, space, weight } from '@/components/ui'
 import { Bajadas, DeteccionTransferencias, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TurnoCaja, UltimosTurnos } from '@/components/caja/partes'
 import { VistaTicket } from '@/components/caja/VistaTicket'
+import { PromosCaja } from '@/components/caja/PromosCaja'
 
 export function Caja() {
   const { perfil } = useSesion()
@@ -98,6 +99,7 @@ export function Caja() {
         )}
         {admin && config?.reglas.medios && <Bajadas reglas={config.reglas} onGuardadas={(rg) => setConfig({ ...config, reglas: rg })} />}
         <DeteccionTransferencias admin={admin} />
+        {config?.reglas.medios && <PromosCaja reglas={config.reglas} admin={admin} onGuardadas={(rg) => setConfig({ ...config, reglas: rg })} />}
         {admin && config?.reglas.medios && <ProductosFeria reglas={config.reglas} onGuardadas={(rg) => setConfig({ ...config, reglas: rg })} />}
         {admin && config && <LogoDelTicket inicial={config.ticket_logo ?? null} onGuardado={(l) => setConfig({ ...config, ticket_logo: l })} />}
         {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}

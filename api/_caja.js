@@ -28,6 +28,7 @@
 //        `conteo` (fase B, 5-oct): `{ [billete]: cantidad }` de la calculadora; el servidor rearma el
 //        total con `lib/caja/conteo.core.js` y, si ⛔ es el fondo o el contado, 400.
 //   POST ?recurso=caja  { action: 'usar-mp', cuenta_id } → sólo admin: cambia la cuenta de MP en uso (la MISMA de Pagos recibidos)
+//   POST ?recurso=caja  { action: 'promos', promos }       → sólo admin: la lista entera de promos (W5), en `caja_config.reglas.promos`
 //   POST ?recurso=caja  { action: 'politica', texto }      → sólo admin: la política de cambio del ticket
 //   POST ?recurso=caja  { action: 'logo', logo: { src, ancho, alto } | null } → sólo admin: el logo del ticket (sql/migrate-caja-logo.sql)
 //   POST ?recurso=caja  { action: 'bajadas', transferenciaA?, feria?, billetes?, feriaProductos? } → sólo admin: a qué cuenta van las
@@ -63,7 +64,7 @@ import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
-import { REGLAS_INICIALES, armarVentaGN, cobro, exigirFeria, medioDeCuenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
+import { REGLAS_INICIALES, armarVentaGN, cobro, exigirFeria, idsDeFeria, medioDeCuenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { cruzarTransferencia } from '../lib/pagos-recibidos/core.core.js'
 import { cuentasDe, pagosDelDia, ponerEnUso, usosDe } from './_pagos-recibidos.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
@@ -75,6 +76,7 @@ import { MARCA_POR_DEFECTO, marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
 import { cobrosDeGN, diferencia, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
 import { billetesDe, limpiarConteo, normalizarBilletes, totalDeConteo } from '../lib/caja/conteo.core.js'
+import { aplicarPromos, normalizarPromos } from '../lib/caja/promos.core.js'
 
 // 🔑 La marca es CONFIGURACIÓN (rediseño, fase 5): el nombre, el local, el depósito y el modo Local
 // salen de `lib/caja/marcas.core.js`. Habilitada hoy: sólo Zattia.
@@ -394,6 +396,22 @@ export default async function handler(req, res) {
         if (error) throw new Error(error.message)
         return res.status(200).json({ ticket_logo: logo })
       }
+      if (accion === 'promos') {
+        // 🔑 W5 (Bruno, 5-oct): las promos son configuración, como los productos de feria: van en
+        // `reglas` (⛔ tabla propia: ⛔ SQL). La pantalla manda la lista ENTERA.
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin carga las promos.' })
+        const { reglas } = await leerConfig()
+        let promos
+        try {
+          promos = normalizarPromos(b.promos)
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
+        const nuevas = { ...reglas, promos }
+        const { error } = await sb.from('caja_config').update({ reglas: nuevas, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ reglas: nuevas })
+      }
       if (accion === 'bajadas') {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia a dónde van las transferencias o el modo feria.' })
         const { reglas } = await leerConfig()
@@ -525,9 +543,18 @@ export default async function handler(req, res) {
         // 🔑 Fase C (Bruno, 5-oct): cobra sólo la cuenta que abrió la caja. Cerrarla queda abierto a todos.
         if (!puedeUsarPOS(turno, perfil)) return res.status(403).json({ error: `La caja la abrió ${turno.abierto_por || 'otra cuenta'}: sólo esa cuenta puede cobrar.`, otraCuenta: true })
         const { reglas } = await leerConfig()
-        let filas, c, payload, espera
+        let filas, c, payload, espera, conPromo
         try {
-          filas = renglones(b.items)
+          // 🔑 W5: las promos se aplican ACÁ también, con las de la base y la fecha argentina: la
+          // pantalla manda los renglones con el descuento A MANO nada más. Las categorías de TN las
+          // manda la pantalla (el servidor ⛔ tiene el catálogo de TN): mentirlas da, a lo sumo, una
+          // promo — lo mismo que ya puede hacer la cajera con un descuento a mano.
+          const crudos = (Array.isArray(b.items) ? b.items : []).map((it) => ({
+            ...it,
+            categorias: Array.isArray(it && it.categorias) ? it.categorias.slice(0, 30).map((x) => String(x).slice(0, 80)) : [],
+          }))
+          conPromo = aplicarPromos({ items: crudos, promos: reglas.promos, feriaIds: idsDeFeria(reglas), hoy: fechaLocal(new Date()) })
+          filas = renglones(conPromo.items)
           // 🔑 La cajera elige una forma de pago; detrás va una cuenta. Una cuenta que ⛔ está detrás de
           // ninguna forma de pago ⛔ se cobra (Mercado Pago, Naranja X…: fuera de la Caja).
           if (reglas.medios) for (const p of b.pagos || []) {
@@ -536,7 +563,9 @@ export default async function handler(req, res) {
           // 🔴 Productos de feria trabados (Bruno, 5-oct): sólo efectivo o transferencia, la parte de
           // feria a la cuenta de feria. La pantalla ya los arma así; acá se EXIGE (si no, `curl`).
           if (reglas.medios) exigirFeria({ filas, pagos: b.pagos || [], reglas })
-          c = cobro({ filas, pagos: b.pagos, reglas, descuentoVenta: b.descuentoVenta ?? null })
+          // El descuento a mano a la venta REEMPLAZA a la promo de compra (Bruno, 5-oct).
+          const promoVenta = conPromo.venta ? { tipo: 'pesos', valor: conPromo.venta.pesos } : null
+          c = cobro({ filas, pagos: b.pagos, reglas, descuentoVenta: b.descuentoVenta ?? promoVenta })
           espera = montoAEsperar(c.pagos, reglas)
           payload = armarVentaGN({ filas, pagos: c.pagos, modoLocal: marca.modoLocal, integrationId: id, fecha: fechaLocal(new Date()) })
         } catch (e) {
@@ -552,7 +581,8 @@ export default async function handler(req, res) {
         const aTexto = (x, max) => (typeof x === 'string' ? x.trim().slice(0, max) : '') || null
         const conNombre = filas.map((f, i) => {
           const it = b.items[i] || {}
-          return { ...f, nombre: aTexto(it.nombre, 120), talle: aTexto(it.talle, 60), foto: /^https:\/\//.test(String(it.foto || '')) ? aTexto(it.foto, 500) : null }
+          const promos = conPromo.items[i].promos
+          return { ...f, nombre: aTexto(it.nombre, 120), talle: aTexto(it.talle, 60), foto: /^https:\/\//.test(String(it.foto || '')) ? aTexto(it.foto, 500) : null, ...(promos ? { promos } : {}) }
         })
         const pagosConNombre = c.pagos.map(p => ({ ...p, nombre: nombreParaTicket(p.cuenta, reglas) }))
         const fila = {

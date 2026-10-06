@@ -368,8 +368,11 @@ export function FilaRenglon({
   avisoWeb,
   mirandoWeb,
   feria = false,
+  promos = null,
 }: {
   r: Renglon
+  /** Las promos que le tocaron a esta prenda (W5), o null. Las aplica `aplicarPromos`, ⛔ la cajera. */
+  promos?: string[] | null
   /** Producto de feria trabado (Bruno, 5-oct): precio final, sólo efectivo o transferencia. */
   feria?: boolean
   cargandoPrecios: boolean
@@ -389,7 +392,7 @@ export function FilaRenglon({
   const quedan = r.stock.local - r.cantidad
   const lista = r.precio != null ? Math.round(r.cantidad * r.precio * 100) / 100 : null
   // Con descuento a mano: el de lista tachado y el que queda al lado (Bruno, 5-oct).
-  const conRebaja = !!r.rebaja && importe != null && lista != null && lista - importe > 0.004
+  const conRebaja = (!!r.rebaja || !!promos?.length) && importe != null && lista != null && lista - importe > 0.004
   const paso = (delta: number, etiqueta: string, signo: string) => (
     <button type="button" onClick={() => onCantidad(r.cantidad + delta)} aria-label={etiqueta} style={{ height: 28, width: 28, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', color: color.ink2, fontSize: font.lg, cursor: 'pointer' }}>
       {signo}
@@ -402,7 +405,8 @@ export function FilaRenglon({
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontWeight: weight.semibold, color: color.ink, fontSize: font.base, lineHeight: 1.25 }}>
-          {r.variante.product_name} {feria && <Badge tone="warning">Feria</Badge>}
+          {r.variante.product_name} {feria && <Badge tone="warning">Feria</Badge>}{' '}
+          {!!promos?.length && <Badge tone="success">{promos.join(' + ')}</Badge>}
         </div>
         <div style={{ color: color.mut, fontSize: font.sm }}>
           {r.variante.size_name}

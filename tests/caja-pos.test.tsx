@@ -89,6 +89,19 @@ describe('POS (/pos)', () => {
   })
 })
 
+describe('POS · promos (W5)', () => {
+  it('🔑 la promo sale en el renglón con su nombre y baja el subtotal (2x1: $10.000 + $8.000 ⇒ $10.000)', async () => {
+    const { leerConfig } = await import('@/lib/caja/cliente')
+    const promo = { id: 'p1', nombre: '2x1 primavera', tipo: 'nxm', lleva: 2, paga: 1, alcance: { tipo: 'todo' }, desde: '2026-01-01', hasta: null, activa: true }
+    vi.mocked(leerConfig).mockResolvedValueOnce({ reglas: { redondeo: 100, cuentas: {}, promos: [promo] }, politica_cambio: null } as never)
+    const renglon = (id: number, precio: number) => ({ variante: { product_id: id, size_id: 1, product_name: `PRENDA ${id}`, size_name: 'M', sku: null, barcode: null }, stock: { local: 3, deposito: 0, fuente: 'vivo' }, cantidad: 1, precio, fueraDeTn: false, foto: null, rebaja: null })
+    disco.set('caja:borrador:zattia', JSON.stringify({ id: 'b1', renglones: [renglon(1, 10000), renglon(2, 8000)], email: '' }))
+    const t = await montar(<CajaPOS />)
+    expect(t).toContain('2x1 primavera')
+    expect(t).toMatch(/Subtotal\s*\$\s?10\.000/)
+  })
+})
+
 describe('pestaña Caja', () => {
   it('«Abrir POS» sólo para la cuenta que abrió; se cobra en el POS, ⛔ acá', async () => {
     let t = await montar(<Caja />)

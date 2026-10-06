@@ -180,6 +180,18 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   el tótem y el nombre del ticket sin logo salen de ahí (`lib/caja/marca.ts` le suma el color). 🔴
   **Habilitada: sólo Zattia.** Para BDI faltan sus ids de GN, sus cuentas y las tablas de la Caja en su
   base. ⚠️ Siguen fijos a Zattia: los tokens de GN, `ticket-mail.core.js` y `cliente.ts`.
+- 🔑 **Las PROMOS (v2, W5, Bruno 4 y 5-oct)** (`lib/caja/promos.core.js`, `components/caja/PromosCaja.tsx`):
+  NxM · 2ª unidad al X % · X % sobre un alcance (todo, **categorías de Tienda Nube** —la de GN está
+  vacía en el 85 %— o productos) · $ fijos por compra desde X. Las carga un ADMIN en la pestaña
+  (acción `promos`, la lista entera en `caja_config.reglas.promos`: ⛔ tabla, ⛔ SQL); el resto las ve.
+  Decidido por Bruno: **una promo por prenda, la que más ahorra** (se elige de a una la que más ahorra
+  sobre las prendas libres) · **se suma al % de la forma de pago** (la de prenda sale como la `rebaja`
+  en pesos del renglón, la de compra como descuento a la venta: la cascada de `cobro()`) · en NxM **gratis
+  la más barata** · **feria ⛔ entra** · **el descuento a mano REEMPLAZA a la promo** (en la prenda y en
+  la venta). 🔴 **La pantalla manda SÓLO el descuento a mano**; el servidor aplica las promos con las de
+  la base y `fechaLocal` (Argentina). Las categorías de TN las manda la pantalla (el servidor ⛔ tiene
+  el catálogo): mentirlas da, a lo sumo, una promo, lo mismo que un descuento a mano. El nombre de la
+  promo queda en `caja_venta.renglones[].promos` y sale en el ticket («Promo 3x2» en vez de «Descuento»).
 - ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
   turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
 - ⚠️ Varias partes por transferencia en una venta se esperan como UNA transferencia por la suma.
@@ -204,3 +216,6 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   ⚠️ Dos `contar` a la vez pueden pisarse los intermedios (se lee y se escribe la lista entera): un
   turno cuenta dos o tres veces, ⛔ se cubrió. El `.is('cerrado_en', null)` del update ⛔ tiene test.
 - ⛔ Probado `--kiosk-printing` en la PC del local (imprimir sin diálogo).
+- W5 (promos): ⛔ vistas en prod (cargar una, verla en el POS y en el ticket). ⛔ Tocadas: el tótem
+  (muestra lista y contado SIN promo), el mail del ticket (`areben-mailer`: dice «Descuento», ⛔ el
+  nombre) y la pantalla de la clienta (ve el importe con la promo, ⛔ el nombre).

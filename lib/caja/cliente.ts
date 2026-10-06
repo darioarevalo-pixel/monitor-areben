@@ -20,7 +20,11 @@ export type Medios = {
 /** `billetes`: los de la calculadora (fase B); sin la lista, `BILLETES_INICIALES` de `conteo.core.js`. */
 /** `feriaProductos` (Bruno, 5-oct): los productos de feria trabados —sólo efectivo o transferencia, a la cuenta de feria—. */
 export type ProductoFeria = { id: number; nombre: string }
-export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number; feria?: boolean; billetes?: number[]; feriaProductos?: ProductoFeria[] }
+/** Una promo del local (W5). La regla vive en `lib/caja/promos.core.js`; ésta es la forma que guarda. */
+export type TipoPromo = 'nxm' | 'segunda_unidad' | 'pct' | 'monto_minimo'
+export type AlcancePromo = { tipo: 'todo' } | { tipo: 'categorias'; categorias: string[] } | { tipo: 'productos'; productos: ProductoFeria[] }
+export type PromoCaja = { id: string; nombre: string; tipo: TipoPromo; lleva?: number; paga?: number; pct?: number; minimo?: number; pesos?: number; alcance: AlcancePromo; desde: string; hasta: string | null; activa: boolean }
+export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number; feria?: boolean; billetes?: number[]; feriaProductos?: ProductoFeria[]; promos?: PromoCaja[] }
 /** Un descuento a mano, a una prenda o a toda la venta. */
 export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 /** `ticket_logo`: el logo del ticket (null sin logo, o sin `sql/migrate-caja-logo.sql`). */
@@ -40,7 +44,7 @@ export type Producto = { variante: Variante; stock: Stock } | { candidatos: Cand
 /** `esperando_pago`: cobrada por transferencia, el pago todavía ⛔ apareció en MP (F5). `cancelada`: ⛔ llegó y la cajera la canceló. */
 export type EstadoVenta = 'borrador' | 'enviando' | 'en_gn' | 'error' | 'esperando_pago' | 'cancelada'
 /** Un renglón como quedó guardado: con lo que necesita el ticket. */
-export type RenglonGuardado = { product_id: number; size_id: number; cantidad: number; precio: number; importe?: number; nombre: string | null; talle: string | null }
+export type RenglonGuardado = { product_id: number; size_id: number; cantidad: number; precio: number; importe?: number; nombre: string | null; talle: string | null; promos?: string[] }
 export type PagoGuardado = { cuenta: number; base: number; rebaja?: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
 export type Venta = {
   id: string
@@ -154,7 +158,8 @@ export type PedidoWeb = {
 export type PedidosWeb = { pedidos: PedidoWeb[]; porSku: Record<string, Array<{ numero: number; cantidad: number; sinPagar: boolean }>>; noLeidas: number; leidoEn: string; guardada?: boolean }
 export const leerPedidosWeb = () => get<PedidosWeb>('action=pedidos-web', 'No se pudieron leer los pedidos web.')
 
-export type ItemConfirmar = { product_id: number; size_id: number; cantidad: number; precio: number; rebaja?: Rebaja | null; nombre?: string; talle?: string; foto?: string | null }
+/** `rebaja` es SÓLO la de la cajera: la promo la aplica el servidor (con `categorias`, las de Tienda Nube). */
+export type ItemConfirmar = { product_id: number; size_id: number; cantidad: number; precio: number; rebaja?: Rebaja | null; categorias?: string[]; nombre?: string; talle?: string; foto?: string | null }
 export type PagoConfirmar = { cuenta: number; base?: number }
 
 /** `reintentable` sólo importa si la venta quedó en `error`. */
@@ -188,5 +193,7 @@ export type CuentaMp = { cuenta_id: number; nombre: string }
 export const leerCuentasMp = () => get<{ enUso: CuentaMp | null; cuentas?: CuentaMp[] }>('action=cuentas-mp', 'No se pudo leer la cuenta de Mercado Pago.')
 export const usarCuentaMp = (cuenta_id: number) => post<{ enUso: CuentaMp }>({ action: 'usar-mp', cuenta_id }, 'No se pudo cambiar la cuenta de Mercado Pago.')
 export const guardarLogo = (logo: LogoTicket | null) => post<{ ticket_logo: LogoTicket | null }>({ action: 'logo', logo }, 'No se pudo guardar el logo.')
+/** Sólo admin: la lista ENTERA de promos (W5). */
+export const guardarPromos = (promos: PromoCaja[]) => post<{ reglas: Reglas }>({ action: 'promos', promos }, 'No se pudieron guardar las promos.')
 export const guardarBajadas = (b: { transferenciaA?: number; feria?: boolean; billetes?: number[]; feriaProductos?: ProductoFeria[] }) =>
   post<{ reglas: Reglas }>({ action: 'bajadas', ...b }, 'No se pudo guardar.')

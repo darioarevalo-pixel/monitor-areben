@@ -45,7 +45,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { construirPrecios } from '@/lib/etiquetas/core'
-import { imagenDe } from '@/lib/tn'
+import { imagenDe, matchTn } from '@/lib/tn'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
@@ -55,6 +55,7 @@ import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
 import { avisoDeRenglon } from '@/lib/caja/pedidos-web.core.js'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
+import { aplicarPromos } from '@/lib/caja/promos.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { imprimirTicket, plata, type DatosTicket } from '@/lib/caja/ticket'
 import { CLAVE_MAIL, CLAVE_VISTA, leerMail, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
@@ -339,6 +340,15 @@ function POS() {
     [datos, tnIdx],
   )
 
+  /** Las categorías de Tienda Nube del producto (las promos por categoría, W5). La de GN está vacía en el 85 %. */
+  const categoriasDe = useCallback(
+    (productId: number): string[] => {
+      const p = datos?.allProductos.find((x) => String(x.id) === String(productId))
+      return (p && tnIdx && matchTn(p, tnIdx)?.categories) || []
+    },
+    [datos, tnIdx],
+  )
+
   // 🔑 La foto del COLOR (Bruno, 5-oct): Tienda Nube trae la foto de cada variante con su SKU, que es el
   // mismo de GN. Sin foto propia, la del producto.
   const [fotoSku, setFotoSku] = useState<Record<string, string>>({})
@@ -423,12 +433,23 @@ function POS() {
 
   // ── El cobro: el mismo núcleo que el servidor ──
   const sinPrecio = bor.renglones.some((r) => !(r.precio && r.precio > 0))
-  const items = bor.renglones.map((r) => ({ product_id: r.variante.product_id, size_id: r.variante.size_id, cantidad: r.cantidad, precio: r.precio ?? 0, rebaja: r.rebaja ?? null }))
-  const descuentoVenta = bor.descuentoVenta ?? null
+  // Lo que viaja al servidor: el descuento A MANO y las categorías de Tienda Nube; la promo la aplica él.
+  const items = bor.renglones.map((r) => ({ product_id: r.variante.product_id, size_id: r.variante.size_id, cantidad: r.cantidad, precio: r.precio ?? 0, rebaja: r.rebaja ?? null, categorias: categoriasDe(r.variante.product_id) }))
+  // 🔑 W5: las promos, con el MISMO núcleo que el servidor (`aplicarPromos`). La de compra la
+  // reemplaza el descuento a mano a la venta (Bruno, 5-oct).
+  const conPromo = (() => {
+    try {
+      return aplicarPromos({ items, promos: reglas?.promos, feriaIds: idsDeFeria(reglas), hoy: hoyIso() })
+    } catch {
+      return { items, venta: null, aplicadas: [] }
+    }
+  })()
+  const descuentoManual = bor.descuentoVenta ?? null
+  const descuentoVenta: Rebaja | null = descuentoManual ?? (conPromo.venta ? { tipo: 'pesos', valor: conPromo.venta.pesos } : null)
   const armado = (() => {
     try {
       if (!bor.renglones.length || sinPrecio) return { filas: null, error: null as string | null }
-      return { filas: renglones(items), error: null }
+      return { filas: renglones(conPromo.items), error: null }
     } catch (e) {
       return { filas: null, error: (e as Error).message }
     }
@@ -537,6 +558,7 @@ function POS() {
         cantidad: r.cantidad,
         precio: r.precio ?? 0,
         importe: filas?.[i]?.importe ?? Math.round(r.cantidad * (r.precio ?? 0) * 100) / 100,
+        promos: (conPromo.items[i] as { promos?: string[] } | undefined)?.promos ?? null,
       })),
       subtotal: venta.subtotal,
       pagos: venta.pagos,
@@ -559,6 +581,7 @@ function POS() {
         cantidad: r.cantidad,
         precio: r.precio,
         importe: r.importe ?? Math.round(r.cantidad * r.precio * 100) / 100,
+        promos: r.promos ?? null,
       })),
     }
   }
@@ -584,7 +607,7 @@ function POS() {
         items: bor.renglones.map((r, i) => ({ ...items[i], nombre: r.variante.product_name, talle: r.variante.size_name, foto: r.foto })),
         pagos: pedidos,
         total: c.total,
-        descuentoVenta,
+        descuentoVenta: descuentoManual,
         email: bor.email.trim() || null,
         pagaCon: enEfectivo > 0 ? pagaConN : null,
       })
@@ -1082,6 +1105,7 @@ function POS() {
                     onPrecio={(p) => cambiarRenglon(i, { precio: p })}
                     onRebaja={(rb) => cambiarRenglon(i, { rebaja: rb })}
                     importe={filas?.[i]?.importe ?? null}
+                    promos={(conPromo.items[i] as { promos?: string[] } | undefined)?.promos ?? null}
                     onSacar={() => sacarRenglon(i)}
                     avisoWeb={avisoWeb(r.variante, r.stock, r.cantidad)}
                     mirandoWeb={!pedidosWeb && !errPedidos}
@@ -1100,8 +1124,14 @@ function POS() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
                   <span style={{ color: color.mut }}>Descuento</span>
-                  <CampoRebaja valor={descuentoVenta} onCambio={(rb) => setBor((b) => ({ ...b, descuentoVenta: rb }))} />
+                  <CampoRebaja valor={descuentoManual} onCambio={(rb) => setBor((b) => ({ ...b, descuentoVenta: rb }))} />
                 </div>
+                {!descuentoManual && conPromo.venta && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[2], fontSize: font.sm }}>
+                    <Badge tone="success">{conPromo.venta.nombre}</Badge>
+                    <b style={{ color: color.successInk, fontVariantNumeric: 'tabular-nums' }}>−{plata(conPromo.venta.pesos)}</b>
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: space[2], borderTop: `1px dashed ${color.line2}` }}>
                   <span style={{ fontWeight: weight.heavy, fontSize: font.md, letterSpacing: '.05em', color: color.ink }}>TOTAL</span>
                   <span style={{ fontSize: 36, fontWeight: weight.heavy, letterSpacing: '-.02em', lineHeight: 1, color: color.brand, fontVariantNumeric: 'tabular-nums' }}>

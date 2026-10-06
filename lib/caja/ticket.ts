@@ -39,7 +39,8 @@ import { MARCA_POR_DEFECTO, marcaDeCaja } from './marcas.core.js'
 const NOMBRE_POR_DEFECTO = marcaDeCaja(MARCA_POR_DEFECTO)?.nombre ?? ''
 
 /** `importe` es lo que queda después del descuento a mano de esa prenda (si lo hubo). */
-export type RenglonTicket = { nombre: string; talle?: string | null; cantidad: number; precio: number; importe: number }
+/** `promos`: las que le tocaron (W5): el descuento del renglón sale con su nombre, ⛔ «Descuento». */
+export type RenglonTicket = { nombre: string; talle?: string | null; cantidad: number; precio: number; importe: number; promos?: string[] | null }
 /** `rebaja` = la parte de este pago del descuento a mano a la VENTA (0 o ausente si ⛔ hubo). */
 export type PagoTicket = { cuenta: number; rebaja?: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
 
@@ -163,7 +164,7 @@ export function armarTicket(
     const lista = Math.round(r.cantidad * r.precio * 100) / 100
     par(`${r.cantidad} x ${plata(r.precio)}`, plata(lista), 9)
     escribir(talle ? `${r.nombre} - ${talle}` : r.nombre, 9, false)
-    if (lista - r.importe > 0.004) par('Descuento', `-${plata(lista - r.importe)}`, 9)
+    if (lista - r.importe > 0.004) par(r.promos?.length ? `Promo ${r.promos.join(' + ')}` : 'Descuento', `-${plata(lista - r.importe)}`, 9)
     y += 0.8
   }
   regla()

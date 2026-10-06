@@ -301,6 +301,47 @@ describe('caja · formas de pago y descuentos a mano (Bruno, 4-oct)', () => {
   })
 })
 
+describe('caja · promos (W5)', () => {
+  const ADMIN_ = { name: 'admin', admin: true, cuenta: null, acceso: {}, funcion: [] }
+  const pct = { id: 'p1', nombre: '20% corset', tipo: 'pct', pct: 20, desde: '2026-01-01', alcance: { tipo: 'productos', productos: [{ id: 7, nombre: 'CORSET' }] } }
+  const minimo = { id: 'p2', nombre: '$2.000 desde $20.000', tipo: 'monto_minimo', minimo: 20000, pesos: 2000, desde: '2026-01-01', alcance: { tipo: 'todo' } }
+
+  it('sólo un admin las carga, y el servidor las valida', async () => {
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'promos', promos: [pct] }))).code).toBe(403)
+    conSesion(ADMIN_)
+    expect((await correr(req('POST', {}, { action: 'promos', promos: [{ ...pct, pct: 0 }] }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'promos', promos: [pct] }))).code).toBe(200)
+    expect((base.config as { reglas: Fila }).reglas).toMatchObject({ promos: [{ id: 'p1', pct: 20, activa: true, hasta: null }] })
+  })
+
+  it('🔑 el SERVIDOR aplica la promo: $25.490 −20 % = $20.392, en efectivo −15 % ⇒ $17.300', async () => {
+    conSesion(ADMIN_)
+    await correr(req('POST', {}, { action: 'promos', promos: [pct] }))
+    conSesion(CAJERA)
+    // El total de antes (sin promo) ya ⛔ coincide: 409 y ⛔ sale nada.
+    expect((await correr(req('POST', {}, VENTA))).code).toBe(409)
+    expect(gn.posts).toHaveLength(0)
+    const r = await correr(req('POST', {}, { ...VENTA, total: 17300, pagaCon: 17300 }))
+    expect(r.code).toBe(200)
+    const p = gn.posts[0] as { items: Fila[]; payments: Fila[] }
+    expect(p.payments).toEqual([expect.objectContaining({ amount: 17300, account_id: 12921 })])
+    expect(p.items).toEqual([expect.objectContaining({ unit_price: 25490, discount: 8190 })])
+    expect((base.ventas.get(ID) as { renglones: Fila[] }).renglones[0]).toMatchObject({ promos: ['20% corset'], rebaja: 5098 })
+  })
+
+  it('la de compra va como descuento a la venta, y el descuento a mano la REEMPLAZA', async () => {
+    conSesion(ADMIN_)
+    await correr(req('POST', {}, { action: 'promos', promos: [minimo] }))
+    conSesion(CAJERA)
+    // $25.490 − $2.000 = $23.490 × 0,85 = $19.966,50 ⇒ $20.000
+    expect((await correr(req('POST', {}, { ...VENTA, total: 20000, pagaCon: 20000 }))).code).toBe(200)
+    // Con $1.000 a mano: $24.490 × 0,85 = $20.816,50 ⇒ $20.800
+    const otra = { ...VENTA, id: '4f1c2b9e-6a4d-4c1e-9b7a-2d5e8f0a1b3c', descuentoVenta: { tipo: 'pesos', valor: 1000 }, total: 20800, pagaCon: 20800 }
+    expect((await correr(req('POST', {}, otra))).code).toBe(200)
+  })
+})
+
 describe('caja · confirmar', () => {
   it('guarda, manda a GN el descuento en pesos y queda en_gn con su número', async () => {
     conSesion(CAJERA)
