@@ -9,20 +9,31 @@ import { CUENTAS } from '@/lib/cuentas'
 import { fetchAll } from '@/lib/supabase/rest'
 import { esVentaTecnica } from '@/lib/etl/helpers'
 import type { Marca } from '@/lib/nav'
-import type { StockPorDeposito, UltimaVenta } from '@/lib/caducados'
+import type { ProductoGn, StockPorDeposito, UltimaVenta } from '@/lib/caducados'
 
-type FilaInv = { product_id: number | string; available_quantity: number | null; store_name: string | null }
+type FilaInv = { product_id: number | string; available_quantity: number | null; store_name: string | null; sku?: string | null }
+type FilaProducto = { id: number | string; name: string | null; category: string | null; active: number | boolean | null }
 type FilaVenta = { id: number; date_sale: string | null; channel: string | null; channel_id?: number | string | null }
 type FilaDetalle = { sale_id: number; product_id: number | string }
 
-export async function cargarDatosCaducados(marca: Marca): Promise<{ stock: StockPorDeposito; ultimaVenta: UltimaVenta }> {
+export type DatosCaducados = {
+  stock: StockPorDeposito
+  ultimaVenta: UltimaVenta
+  /** TODOS los productos del espejo, activos o no: la pestaña de TN necesita los inactivos. */
+  productosGn: ProductoGn[]
+  /** pid → códigos de sus variantes (para cruzar con las variantes de TN). */
+  skus: Record<string, string[]>
+}
+
+export async function cargarDatosCaducados(marca: Marca): Promise<DatosCaducados> {
   const cuenta = CUENTAS[marca]
 
   // Stock por depósito (todos los depósitos presentes).
   const stock: StockPorDeposito = {}
+  const skus: Record<string, string[]> = {}
   let inv: FilaInv[] = []
   try {
-    inv = await fetchAll<FilaInv>(cuenta, 'inventario', 'select=product_id,available_quantity,store_name')
+    inv = await fetchAll<FilaInv>(cuenta, 'inventario', 'select=product_id,available_quantity,store_name,sku')
   } catch {
     inv = []
   }
@@ -33,7 +44,16 @@ export async function cargarDatosCaducados(marca: Marca): Promise<{ stock: Stock
     if (!stock[p]) stock[p] = { total: 0, stores: {} }
     stock[p].total += q
     stock[p].stores[sn] = (stock[p].stores[sn] || 0) + q
+    const sku = String(r.sku || '').trim()
+    if (sku) (skus[p] ??= []).push(sku)
   })
+
+  // Todos los productos, con su estado. El ETL baja sólo los activos (`active=eq.1`), y la pestaña
+  // de TN tiene que ver también los que ya se desactivaron en GN pero siguen en la tienda.
+  // ⛔ Si esto falla, se tira: una pestaña de TN armada sin los inactivos se ve "limpia" y miente.
+  const productosGn: ProductoGn[] = (
+    await fetchAll<FilaProducto>(cuenta, 'productos', 'select=id,name,category,active&order=id')
+  ).map((p) => ({ id: String(p.id), name: p.name || '—', category: p.category, active: p.active === true || Number(p.active) === 1 }))
 
   // Última venta por producto — ventana amplia (~2 años) para la última venta real.
   //
@@ -65,5 +85,5 @@ export async function cargarDatosCaducados(marca: Marca): Promise<{ stock: Stock
     /* si falla, queda sin fechas */
   }
 
-  return { stock, ultimaVenta }
+  return { stock, ultimaVenta, productosGn, skus }
 }

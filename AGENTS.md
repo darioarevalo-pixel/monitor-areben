@@ -245,6 +245,9 @@ ya tienen ficha:
 - Parte de la mañana (el mail diario, ⛔ es pantalla) → **leer `docs/secciones/parte-manana.md`**
   antes de tocar `lib/parte/`, `scripts/parte-manana.mjs` o `parte-manana.yml`. ⛔ Lo dispara un
   reloj de AFUERA: los crons de GitHub de este repo llegan horas tarde.
+- Productos caducados → **leer `docs/secciones/caducados.md`** antes de tocar `components/caducados/`
+  o `lib/caducados.ts`. ⛔ **La pestaña de TN incluye lo desactivado en GN**, y un gemelo de nombre
+  vendido dentro de los 30 días (el plazo de cambio) frena la publicación.
 - Por producto y Ganadores por tanda → **leer `docs/secciones/productos.md`** antes de tocar
   `components/productos/`, `lib/productos.ts` o `lib/ganadores/`. ⛔ **`sales30` y compañía SUMAN
   el mayorista** (88 % de las unidades de BDI); el corte vive en `ventasMin`/`ventasMay` del ETL.

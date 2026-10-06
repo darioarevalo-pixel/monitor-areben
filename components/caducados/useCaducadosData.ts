@@ -1,8 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { cargarDatosCaducados } from '@/components/caducados/datosCaducados'
-import type { StockPorDeposito, UltimaVenta } from '@/lib/caducados'
+import { cargarDatosCaducados, type DatosCaducados } from '@/components/caducados/datosCaducados'
 import type { Marca } from '@/lib/nav'
 
 /**
@@ -11,7 +10,7 @@ import type { Marca } from '@/lib/nav'
  * en effect) para no romper el CI, igual que `useTnImages`. `recargar()` fuerza una
  * bajada nueva (lo usa el botón "Traer stock de GN" después de disparar el sync).
  */
-type Datos = { stock: StockPorDeposito; ultimaVenta: UltimaVenta }
+type Datos = DatosCaducados
 
 const cache: Partial<Record<Marca, Datos>> = {}
 const enVuelo: Partial<Record<Marca, Promise<void>>> = {}
