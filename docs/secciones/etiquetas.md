@@ -166,6 +166,10 @@ venga vinculada con los precios definidos en monitor»*.
   obligaba a reimprimir cada vez que la bolsa se rearmaba. Sale **una hoja por producto**, sin
   `repartirSku`. **BDI no cambia**: sigue con los SKU y sin barras (ahí un producto de GN puede juntar
   dos claves).
+- 🔑 **El orden de la de código es código · barras · nombre, centrado a lo alto** (Bruno, 6-oct-2026):
+  las barras **pegadas al código y de 28 mm** —el lector se apunta adonde se mira y la altura perdona el
+  ángulo y la bolsa arrugada; el borde de abajo es el que se dobla— y el nombre en **18 pt negrita**,
+  que se lee sin acercarse. Es `dibujarBolsaClave`; la de BDI sigue en `dibujarBolsa`.
 - 🔑 **Los SKU de más se reparten PAREJO entre las etiquetas, no llenando la primera**
   (`repartirSku`). Cortando de a seis, diez colores daban una hoja apretadísima y otra con dos SKU
   enormes: la misma bolsa con dos etiquetas que no se parecían en nada.

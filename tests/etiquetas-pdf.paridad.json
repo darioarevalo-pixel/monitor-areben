@@ -227,33 +227,21 @@
   "sku-grande-clave": [
     "nuevo({\"unit\":\"mm\",\"format\":[100,150],\"orientation\":\"portrait\"})",
     "color(0)",
-    "text(\"RBT-0137\"@50,55.78 center/top helvetica/bold 21)",
-    "img(PNG@8,116.38 84x16)",
-    "trazo(170)",
-    "grosor(0.3)",
-    "line(8,134.88→92,134.88)",
-    "color(90)",
-    "text(\"REMERA BASIC\"@50,137.38 center/top helvetica/normal 11)"
+    "text(\"RBT-0137\"@50,42.03 center/top helvetica/bold 21)",
+    "img(PNG@8,56.85 84x28)",
+    "text(\"REMERA ⏎ BASIC\"@50,92.85 center/top helvetica/bold 18)"
   ],
   "sku-grande-clave-mezcla": [
     "nuevo({\"unit\":\"mm\",\"format\":[100,150],\"orientation\":\"portrait\"})",
     "color(0)",
-    "text(\"RBT-0137\"@50,55.78 center/top helvetica/bold 21)",
-    "img(PNG@8,116.38 84x16)",
-    "trazo(170)",
-    "grosor(0.3)",
-    "line(8,134.88→92,134.88)",
-    "color(90)",
-    "text(\"REMERA BASIC\"@50,137.38 center/top helvetica/normal 11)",
+    "text(\"RBT-0137\"@50,42.03 center/top helvetica/bold 21)",
+    "img(PNG@8,56.85 84x28)",
+    "text(\"REMERA ⏎ BASIC\"@50,92.85 center/top helvetica/bold 18)",
     "addPage(100x150|portrait)",
     "color(0)",
-    "text(\"RBT-0140\"@50,55.78 center/top helvetica/bold 21)",
-    "img(PNG@8,116.38 84x16)",
-    "trazo(170)",
-    "grosor(0.3)",
-    "line(8,134.88→92,134.88)",
-    "color(90)",
-    "text(\"REMERA BASIC\"@50,137.38 center/top helvetica/normal 11)"
+    "text(\"RBT-0140\"@50,42.03 center/top helvetica/bold 21)",
+    "img(PNG@8,56.85 84x28)",
+    "text(\"REMERA ⏎ BASIC\"@50,92.85 center/top helvetica/bold 18)"
   ],
   "estantes": [
     "nuevo({\"unit\":\"mm\",\"format\":[100,150],\"orientation\":\"portrait\"})",

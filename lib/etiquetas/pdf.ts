@@ -381,12 +381,10 @@ const BOLSA = {
   fsPie: 11,
   gapPie: 5,
   /**
-   * Las barras con la CLAVE del producto (`RBT-0137`), justo arriba del pie: es lo que lee el lector
-   * en «Ubicaciones depósito». Anchas a propósito: la bolsa es esmerilada y se escanea apilada.
+   * El ancho de las barras de la CLAVE (`dibujarBolsaClave`): es lo que lee el lector en «Ubicaciones
+   * depósito». Anchas a propósito: la bolsa es esmerilada y se escanea apilada.
    */
   barW: 84,
-  barH: 16,
-  gapBarras: 4,
 }
 
 /**
@@ -395,6 +393,9 @@ const BOLSA = {
  * puntos, que es lo que se lee parado frente al estante.
  */
 export const SKU_POR_BOLSA = 6
+
+/** La de código de producto (`dibujarBolsaClave`): barras altas pegadas al código y el nombre legible. */
+const BOLSA_CLAVE = { barH: 28, gapCodigo: 6, gapNombre: 8, fsNombre: 18 }
 
 /**
  * Cómo se reparten los SKU de un producto en varias etiquetas: **parejo, no llenando la primera**.
@@ -451,6 +452,55 @@ function anchoMayor(pdf: Pdf, vs: VarianteEti[], fs: number): number {
   return vs.reduce((m: number, v) => Math.max(m, pdf.getTextWidth(v.sku || '')), 0)
 }
 
+/**
+ * La etiqueta de bolsa con el CÓDIGO DE PRODUCTO (Zattia): código · barras · nombre, de arriba abajo y
+ * centrado a lo alto.
+ *
+ * 🔑 **Ni colores ni SKU** (Bruno, 6-oct-2026): la mayoría de las bolsas mezcla colores y se rearma, y
+ * la ubicación es por producto. 🔑 **Las barras van pegadas al código y altas**: el lector se apunta
+ * adonde se mira, la altura es lo que perdona el lector torcido y la bolsa arrugada, y el borde de abajo
+ * es el que se dobla. 🔑 **El nombre se lee sin acercarse** —en 11 puntos no—, pero es lo último: sólo
+ * confirma que la bolsa es la correcta.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function dibujarBolsaClave(pdf: Pdf, producto: string, clave: string, JsBarcode: any) {
+  const { W, Hh, M } = BOLSA
+  const CX = W / 2
+  const ancho = W - M * 2
+  const { barH, gapCodigo, gapNombre, fsNombre } = BOLSA_CLAVE
+
+  pdf.setFont('helvetica', 'bold')
+  let fs = BOLSA.fsMax
+  const anchoCon = (n: number) => {
+    pdf.setFontSize(n)
+    return pdf.getTextWidth(clave)
+  }
+  while (fs > BOLSA.fsMin && anchoCon(fs) > ancho) fs -= 1
+  pdf.setFontSize(fsNombre)
+  const nombre = pdf.splitTextToSize((producto || '—').toUpperCase(), ancho).slice(0, 2)
+  const altoCodigo = fs * 0.42
+  const altoNombre = nombre.length * (fsNombre * 0.42)
+  const alto = altoCodigo + gapCodigo + barH + gapNombre + altoNombre
+  let y = Math.max(M, (Hh - alto) / 2)
+
+  pdf.setTextColor(0)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(fs)
+  pdf.text(clave, CX, y, { align: 'center', baseline: 'top' })
+  y += altoCodigo + gapCodigo
+  try {
+    const canvas = document.createElement('canvas')
+    JsBarcode(canvas, clave, { format: 'CODE128', displayValue: false, width: 2, height: 60, margin: 0 })
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - BOLSA.barW / 2, y, BOLSA.barW, barH)
+  } catch {
+    // Sin barras la etiqueta igual dice el código arriba: el hueco queda, el producto no se pierde.
+  }
+  y += barH + gapNombre
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(fsNombre)
+  pdf.text(nombre, CX, y, { align: 'center', baseline: 'top' })
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function dibujarBolsa(pdf: Pdf, bolsa: BolsaSku, JsBarcode: any | null) {
   const { W, Hh, M } = BOLSA
@@ -458,10 +508,8 @@ function dibujarBolsa(pdf: Pdf, bolsa: BolsaSku, JsBarcode: any | null) {
   const ancho = W - M * 2
   // Con barras, la hoja ya viene partida por clave (`partirPorClave`): la de la primera es la de todas.
   const barras = JsBarcode ? claveDe(bolsa.variantes[0]?.sku) || null : null
-  // 🔑 **Con barras, arriba va el CÓDIGO DE PRODUCTO, ⛔ no los SKU con su color** (Bruno, 6-oct-2026).
-  // La mayoría de las bolsas mezcla colores: listarlos obligaba a imprimir la etiqueta según lo que
-  // tenía adentro, y la bolsa se rearma. La ubicación es por producto; el color se ve en la prenda.
-  const vs: VarianteEti[] = barras ? [{ ...bolsa.variantes[0], sku: barras, size: '' }] : bolsa.variantes
+  if (barras) return dibujarBolsaClave(pdf, bolsa.producto, barras, JsBarcode)
+  const vs = bolsa.variantes
 
   // El pie se mide PRIMERO: el lugar que ocupa es el que los SKU no tienen, y son ellos los que se
   // achican. Al revés, un nombre de dos renglones les comía el borde de abajo sin avisar.
@@ -469,8 +517,7 @@ function dibujarBolsa(pdf: Pdf, bolsa: BolsaSku, JsBarcode: any | null) {
   pdf.setFontSize(BOLSA.fsPie)
   const pie = pdf.splitTextToSize((bolsa.producto || '—').toUpperCase(), ancho).slice(0, 2)
   const altoPie = pie.length * (BOLSA.fsPie * 0.42) + BOLSA.gapPie
-  const altoBarras = barras ? BOLSA.barH + BOLSA.gapBarras : 0
-  const disponible = Hh - M * 2 - altoPie - altoBarras
+  const disponible = Hh - M * 2 - altoPie
 
   let fs = BOLSA.fsMax
   while (fs > BOLSA.fsMin && (altoBloques(vs, fs) > disponible || anchoMayor(pdf, vs, fs) > ancho)) fs -= 1
@@ -496,20 +543,6 @@ function dibujarBolsa(pdf: Pdf, bolsa: BolsaSku, JsBarcode: any | null) {
   })
 
   const yPie = Hh - M - pie.length * (BOLSA.fsPie * 0.42)
-  // 📌 Sin el número abajo de las barras: los SKU de arriba ya lo dicen, más grande.
-  if (barras) {
-    const yBarras = yPie - BOLSA.gapPie - BOLSA.barH
-    try {
-      const canvas = document.createElement('canvas')
-      JsBarcode(canvas, barras, { format: 'CODE128', displayValue: false, width: 2, height: 60, margin: 0 })
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - BOLSA.barW / 2, yBarras, BOLSA.barW, BOLSA.barH)
-    } catch {
-      pdf.setTextColor(0)
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(BOLSA.fsPie)
-      pdf.text(barras, CX, yBarras, { align: 'center', baseline: 'top' })
-    }
-  }
   pdf.setDrawColor(170)
   pdf.setLineWidth(0.3)
   pdf.line(M, yPie - BOLSA.gapPie / 2, W - M, yPie - BOLSA.gapPie / 2)
