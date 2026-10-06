@@ -198,6 +198,9 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 
 ## Pendiente
 
+- Casilla «Quiero recibir novedades y promos» de `/pos/cliente`: destildada y ⛔ se guarda (Bruno, 6-oct).
+  Viaja en `caja:cliente-mail:zattia` como `novedades`; falta que el POS la lea, una columna en
+  `caja_venta`, sumarla a `ticketParaMail`, y que `areben-mailer` tome `tnAcceptsMkt` de ahí (hoy SIEMPRE true).
 - Rediseño fase 2 (la pestaña): ⛔ vista en prod — con turno y sin turno, los 6 plegables, cambiar la
   política y verla en la vista previa, y los mosaicos del POS con el `Dato` nuevo.
 - Rediseño fase 3 (`/pos/cliente`): ⛔ vista en prod con el POS al lado (agregar, cobrar, el mail de

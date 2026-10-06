@@ -107,13 +107,13 @@ describe('CajaCliente', () => {
     })
     const gmail = [...caja.querySelectorAll('button')].find((b) => b.textContent === '@gmail.com')!
     await act(async () => gmail.click())
-    // La casilla de novedades viene tildada; destildada, viaja junto al mail.
+    // La casilla de novedades viene destildada; tildada, viaja junto al mail.
     const novedades = caja.querySelector('input[type=checkbox]') as HTMLInputElement
-    expect(novedades.checked).toBe(true)
+    expect(novedades.checked).toBe(false)
     await act(async () => novedades.click())
     const enviar = [...caja.querySelectorAll('button')].find((b) => b.textContent === 'Enviar')!
     await act(async () => enviar.click())
-    expect(leerMail(disco.get(CLAVE_MAIL) ?? null)).toMatchObject({ email: 'ana@gmail.com', no: false, novedades: false })
+    expect(leerMail(disco.get(CLAVE_MAIL) ?? null)).toMatchObject({ email: 'ana@gmail.com', no: false, novedades: true })
   })
 
   it('se entera de cada cambio del POS (evento storage)', async () => {

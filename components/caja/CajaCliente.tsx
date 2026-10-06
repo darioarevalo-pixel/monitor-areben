@@ -256,7 +256,8 @@ export function PedirMail({ email }: { email: string }) {
   const [estado, setEstado] = useState<'pedir' | 'no' | 'corregir'>('pedir')
   const [error, setError] = useState<string | null>(null)
   // Como el prototipo aprobado: tildada de entrada. Viaja con el mail (ver `MailCliente`).
-  const [novedades, setNovedades] = useState(true)
+  // Destildada (Bruno, 6-oct): ⛔ se guarda en ningún lado todavía; tildada sería un consentimiento que nadie dio.
+  const [novedades, setNovedades] = useState(false)
   const grande: React.CSSProperties = { height: 56, borderRadius: radius.xl, fontWeight: weight.bold, fontSize: font.xl, cursor: 'pointer' }
   const link: React.CSSProperties = { height: 'auto', background: 'none', border: 'none', padding: 0, color: MARCA_CAJA.acento, fontWeight: weight.bold, fontSize: font.lg, cursor: 'pointer', justifySelf: 'start' }
 
