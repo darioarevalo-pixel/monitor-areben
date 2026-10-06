@@ -84,6 +84,7 @@ import {
 } from '@/lib/caja/cliente'
 import { Badge, Button, ButtonLink, Card, Field, Icono, Input, Modal, Notice, SectionCard, color, font, radius, shadow, space, weight } from '@/components/ui'
 import { useConfirmar } from '@/components/ui/Confirm'
+import { ModalVarianteContext } from '@/components/ui/Modal'
 import {
   CampoRebaja,
   EsperaTransferencia,
@@ -111,12 +112,15 @@ type Borrador = { id: string; renglones: Renglon[]; email: string; descuentoVent
 
 const CLAVE = 'caja:borrador:zattia'
 
-/** El color y el ícono de cada forma de pago en el cobro, como las tarjetas del POS de GN. */
+/**
+ * El color y el ícono de cada forma de pago en el cobro, como las tarjetas del POS de GN (prototipo del
+ * 6-oct): Débito celeste y Crédito rosa (`app/tokens.css`), para que las dos tarjetas ⛔ se confundan.
+ */
 const ESTILO_MEDIO: Record<Medio, { icono: 'efectivo' | 'transferencia' | 'tarjeta'; fondo: string; tinta: string }> = {
   efectivo: { icono: 'efectivo', fondo: color.successBg, tinta: color.successInk },
   transferencia: { icono: 'transferencia', fondo: color.brandBg, tinta: color.brand },
-  debito: { icono: 'tarjeta', fondo: color.warningBg, tinta: color.warningInk },
-  credito: { icono: 'tarjeta', fondo: color.bg2, tinta: color.ink2 },
+  debito: { icono: 'tarjeta', fondo: 'var(--mo-info-bg)', tinta: 'var(--mo-info)' },
+  credito: { icono: 'tarjeta', fondo: 'var(--mo-pink-bg)', tinta: 'var(--mo-pink)' },
 }
 const nuevoId = () => crypto.randomUUID()
 /** Un número al texto que lee `aNumero`: el punto es de miles, la coma es decimal. */
@@ -352,13 +356,23 @@ function POS() {
   // 🔑 La foto del COLOR (Bruno, 5-oct): Tienda Nube trae la foto de cada variante con su SKU, que es el
   // mismo de GN. Sin foto propia, la del producto.
   const [fotoSku, setFotoSku] = useState<Record<string, string>>({})
+  // Y el NOMBRE del color de cada variante (la misma lectura): «Color · Talle» en «Elegir variante».
+  const [colorSku, setColorSku] = useState<Record<string, string>>({})
   useEffect(() => {
     let vivo = true
     traerAudit<ProductoFchk>('zattia', { variantes: true })
       .then((ps) => {
         const m: Record<string, string> = {}
-        for (const p of ps) for (const v of p.variantes ?? []) if (v.sku && v.image_url) m[v.sku.toLowerCase().trim()] = v.image_url
-        if (vivo) setFotoSku(m)
+        const cs: Record<string, string> = {}
+        for (const p of ps)
+          for (const v of p.variantes ?? []) {
+            if (v.sku && v.image_url) m[v.sku.toLowerCase().trim()] = v.image_url
+            if (v.sku && v.color) cs[v.sku.toLowerCase().trim()] = v.color
+          }
+        if (vivo) {
+          setFotoSku(m)
+          setColorSku(cs)
+        }
       })
       .catch(() => {
         /* sin el detalle de TN, la foto del producto */
@@ -371,8 +385,15 @@ function POS() {
     (v: Variante) => (v.sku && fotoSku[v.sku.toLowerCase().trim()]) || precioYFoto(v.product_id).foto,
     [fotoSku, precioYFoto],
   )
+  const colorDe = useCallback((v: Variante) => (v.sku && colorSku[v.sku.toLowerCase().trim()]) || null, [colorSku])
+
+  // 🔑 El punto de Gestión Nube de la cabecera: la ÚLTIMA respuesta que la pantalla ya tuvo de GN (⛔ se
+  // le pregunta nada nuevo). El stock de una prenda leído en vivo o del espejo (`stock.fuente`), y la
+  // venta que llegó o quedó pendiente. Antes de la primera señal, las cobradas sin llegar.
+  const [gnSenal, setGnSenal] = useState<{ ok: boolean; que: string } | null>(null)
 
   function agregar(variante: Variante, stock: Stock) {
+    setGnSenal(stock.fuente === 'vivo' ? { ok: true, que: 'el stock de la última prenda se leyó en vivo' } : { ok: false, que: `el stock de la última prenda es el de anoche${stock.motivo ? ` (${stock.motivo})` : ''}` })
     setBor((b) => {
       const i = b.renglones.findIndex((r) => claveDe(r.variante) === claveDe(variante))
       if (i >= 0) {
@@ -520,7 +541,7 @@ function POS() {
   // 🔑 La pantalla de la clienta (rediseño, fase 3): se le publican los números del POS, ⛔ los recalcula.
   const vistaCliente = JSON.stringify(
     vistaParaCliente({
-      carrito: bor.renglones.map((r) => ({ nombre: r.variante.product_name, talle: r.variante.size_name, cantidad: r.cantidad, precio: r.precio, foto: r.foto })),
+      carrito: bor.renglones.map((r) => ({ nombre: r.variante.product_name, talle: r.variante.size_name, color: colorDe(r.variante), cantidad: r.cantidad, precio: r.precio, foto: r.foto })),
       filas,
       aPagar,
       cobro: c,
@@ -627,6 +648,7 @@ function POS() {
         return
       }
       const ticket = datosTicket(r.venta)
+      setGnSenal(r.venta.estado === 'en_gn' ? { ok: true, que: 'la última venta llegó' } : { ok: false, que: `la última venta quedó pendiente${r.venta.ultimo_error ? ` (${r.venta.ultimo_error})` : ''}` })
       setUltima({ venta: r.venta, ticket })
       avisar(r.venta.estado === 'en_gn' ? 'ok' : 'ojo')
       imprimirTicket(ticket, esEfectivo, ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
@@ -710,9 +732,15 @@ function POS() {
   }
 
   const sinLlegar = pendientes.filter((v) => v.estado !== 'esperando_pago').length
+  const gnOk = gnSenal ? gnSenal.ok : sinLlegar === 0
+  const gnPorque = gnSenal ? `Gestión Nube: ${gnSenal.que}.` : sinLlegar ? `Gestión Nube: ${sinLlegar} cobradas sin llegar.` : 'Gestión Nube: sin ventas pendientes.'
+  const subtotalFilas = filas ? filas.reduce((s, f) => s + f.importe, 0) : null
 
   return (
-    <div style={{ minHeight: '100vh', background: color.bg }}>
+    // 🔑 Todos los diálogos que se abren desde el POS —también los del turno y la calculadora, que se arman
+    // en otros archivos— toman el aspecto de la Caja (`Modal` con `variante="pos"`, opt-in).
+    <ModalVarianteContext.Provider value="pos">
+    <div style={{ minHeight: '100vh', background: 'var(--mo-canvas)' }}>
       {/* La izquierda se estira; la derecha (el pedido) queda fija a la vista, con el total siempre abajo.
           En el teléfono, una abajo de la otra. La cabecera mide 56 px: el pedido se calcula contra eso. */}
       <style>{`
@@ -722,7 +750,13 @@ function POS() {
         .pos-top .pos-tbtn.icono { width: 36px; padding: 0; }
         .pos-top .pos-tbtn[aria-pressed="true"] { color: ${color.sideAccent}; border-color: ${color.sideAccent}; }
         .pos-top .pos-tbtn.peligro { color: ${color.dangerBorder}; border-color: ${color.dangerBorder}; }
-        .pos-grid { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: ${space[4]}px; padding: ${space[4]}px; align-items: start; }
+        .pos-gn { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: ${color.sideInk2}; white-space: nowrap; }
+        .pos-gn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #17b26a; box-shadow: 0 0 0 3px rgba(23,178,106,.22); }
+        .pos-gn.off::before { background: var(--mo-warning-solid); box-shadow: 0 0 0 3px rgba(220,104,3,.25); }
+        .pos-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: ${space[4]}px; padding: ${space[4]}px; align-items: start; }
+        .pos-scan { border: 1.5px solid ${color.line2} !important; }
+        .pos-scan:focus { border-color: ${color.brandSolid} !important; box-shadow: 0 0 0 4px ${color.brandRing} !important; }
+        .pos-alt { font-size: ${font.xs}px; font-weight: ${weight.semibold}; background: rgba(255,255,255,.22); border-radius: 5px; padding: 1px 6px; margin-left: ${space[1]}px; }
         .pos-der { position: sticky; top: ${space[4]}px; max-height: calc(100vh - 56px - ${2 * space[4]}px); display: flex; flex-direction: column; min-height: 0; }
         .pos-renglones { flex: 1; min-height: 0; overflow: auto; }
         .caja-tarjeta { transition: border-color .12s, box-shadow .12s; }
@@ -731,7 +765,7 @@ function POS() {
         .pos-buscar { position: relative; flex: 1; min-width: 0; }
         .pos-buscar svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: ${color.mut}; pointer-events: none; }
         .cobro-grid { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: ${space[4]}px; }
-        @media (max-width: 1100px) { .pos-grid { grid-template-columns: minmax(0, 1fr) 360px; } .pos-turno { display: none; } }
+        @media (max-width: 1100px) { .pos-grid { grid-template-columns: minmax(0, 1fr) 350px; } .pos-turno { display: none; } }
         @media (max-width: 900px) { .cobro-grid { grid-template-columns: 1fr; } }
         @media (max-width: 860px) { .pos-grid { grid-template-columns: 1fr; } .pos-der { position: static; max-height: none; } }
       `}</style>
@@ -746,6 +780,9 @@ function POS() {
         </span>
         <span className="pos-turno" style={{ fontSize: font.base, color: color.sideInk2, whiteSpace: 'nowrap' }}>
           turno desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}
+        </span>
+        <span className={`pos-gn${gnOk ? '' : ' off'}`} title={gnPorque} role="status">
+          {gnOk ? 'Gestión Nube' : 'Gestión Nube sin respuesta'}
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
           <button
@@ -788,7 +825,7 @@ function POS() {
       />
 
       <div className="pos-grid">
-        <div style={{ display: 'grid', gap: space[4], minWidth: 0 }}>
+        <div style={{ display: 'grid', gap: space[3], minWidth: 0 }}>
           {pendientes
             .filter((v) => v.estado === 'esperando_pago')
             .map((v) => (
@@ -804,6 +841,8 @@ function POS() {
           {ultima && (
             <UltimaVenta
               venta={ultima.venta}
+              nombreCuenta={nombreCuenta}
+              esEfectivo={esEfectivo}
               onReimprimir={() => imprimirTicket(ultima.ticket, esEfectivo, ahora())}
               onOtra={() => {
                 setUltima(null)
@@ -893,13 +932,16 @@ function POS() {
                   </div>
                   {sinMedios ? (
                     <Notice tone="danger">Formas de pago sin cargar: correr sql/migrate-caja-medios.sql.</Notice>
-                  ) : !varios ? (
+                  ) : (
+                    // Con «Varios pagos» las cuatro tarjetas siguen a la vista, apagadas (prototipo del 6-oct):
+                    // las formas de pago se eligen en cada fila de abajo.
                     <div style={{ display: 'grid', gap: space[2] }}>
                     {hayFeria && <Notice tone="warning">Hay prendas de feria: van a precio final. Se cobra con efectivo o transferencia; la parte de feria va a su cuenta, sin el %.</Notice>}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: space[2] }}>
                       {MEDIOS.map((medio) => {
-                        const activa = pagos[0].medio === medio
+                        const activa = !varios && pagos[0].medio === medio
                         const trabada = hayFeria && (medio === 'debito' || medio === 'credito')
+                        const apagada = trabada || varios
                         const cuenta = reglas?.medios ? (() => { try { return cuentaDe(medio, reglas) } catch { return 0 } })() : 0
                         const regla = cuenta ? reglas?.cuentas[cuenta] : undefined
                         const estilo = ESTILO_MEDIO[medio]
@@ -909,8 +951,8 @@ function POS() {
                             type="button"
                             onClick={() => setPagos([{ medio, base: '' }])}
                             aria-pressed={activa}
-                            disabled={trabada}
-                            title={trabada ? MSJ_FERIA : undefined}
+                            disabled={apagada}
+                            title={trabada ? MSJ_FERIA : varios ? 'Con «Varios pagos», la forma de pago se elige en cada pago' : undefined}
                             className="caja-tarjeta"
                             style={{
                               height: 'auto',
@@ -921,9 +963,9 @@ function POS() {
                               padding: space[3],
                               borderRadius: radius.lg,
                               border: `2px solid ${activa ? color.success : color.line}`,
-                              background: activa ? color.successBg : color.surface,
-                              cursor: trabada ? 'not-allowed' : 'pointer',
-                              opacity: trabada ? 0.45 : 1,
+                              background: activa ? color.successBg : apagada ? color.bg : color.surface,
+                              cursor: apagada ? 'not-allowed' : 'pointer',
+                              opacity: apagada ? 0.5 : 1,
                             }}
                           >
                             <span style={{ display: 'grid', placeItems: 'center', width: 40, height: 40, borderRadius: radius.md, background: estilo.fondo, color: estilo.tinta, flexShrink: 0 }}>
@@ -945,9 +987,8 @@ function POS() {
                         )
                       })}
                     </div>
+                    {varios && <VariosPagos pagos={pagos} setPagos={setPagos} montos={c?.pagos.map((p) => p.monto) ?? null} subtotal={subtotalFilas} />}
                     </div>
-                  ) : (
-                    <VariosPagos pagos={pagos} setPagos={setPagos} montos={c?.pagos.map((p) => p.monto) ?? null} />
                   )}
 
                   {!sinMedios && (preguntaBanco || preguntaCuotas) && (
@@ -1015,7 +1056,8 @@ function POS() {
                   autoCapitalize="off"
                   spellCheck={false}
                   aria-label="Código de barras, SKU o nombre y talle"
-                  style={{ fontSize: font.xl, width: '100%', height: 52, paddingLeft: 44, borderRadius: radius.xl }}
+                  className="pos-scan"
+                  style={{ fontSize: 17, width: '100%', height: 52, paddingLeft: 44, borderRadius: radius.xl }}
                 />
                 </label>
                 <Button tone="brand" variant="solid" onClick={() => escanear(codigo)} loading={buscando > 0} style={{ height: 52 }}>
@@ -1030,9 +1072,10 @@ function POS() {
               {/* Sin lista a la vista: qué se puede hacer acá (prototipo del 5-oct). */}
               {!(sugeridas && sugeridas.q === codigo.trim()) && !candidatos && !aviso && (
                 <div style={{ display: 'grid', justifyItems: 'center', textAlign: 'center', gap: space[1.5], padding: `${space[6]}px ${space[4]}px ${space[5]}px`, color: color.mut, fontSize: font.base }}>
-                  <span style={{ color: color.mut2 }}>
-                    <Icono nombre="etiquetas" size={40} />
-                  </span>
+                  {/* El lector de códigos (el ícono del prototipo; el kit ⛔ lo tiene). */}
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ color: color.mut2 }}>
+                    <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M14 8v8M17 8v8" />
+                  </svg>
                   <strong style={{ color: color.ink2, fontSize: font.lg }}>Escanear la etiqueta o escribir el nombre</strong>
                   <span>La lista aparece sola desde 2 letras. Con el lector, Enter agrega.</span>
                 </div>
@@ -1055,6 +1098,8 @@ function POS() {
                   producto={eligiendo}
                   precio={precioYFoto(eligiendo.product_id).precio}
                   fotoDe={fotoDe}
+                  colorDe={colorDe}
+                  feria={feriaIds.has(Number(eligiendo.product_id))}
                   onElegir={elegirCandidato}
                   onCerrar={() => {
                     setEligiendo(null)
@@ -1085,11 +1130,9 @@ function POS() {
           <Card style={{ padding: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3], padding: `${space[3]}px ${space[4]}px`, borderBottom: `1px solid ${color.line}` }}>
               <h2 style={{ margin: 0, fontSize: font.lg, fontWeight: weight.bold, color: color.ink }}>{`Pedido · ${prendas === 1 ? '1 prenda' : `${prendas} prendas`}`}</h2>
-              {bor.renglones.length > 0 && (
-                <Button size="sm" variant="ghost" onClick={vaciar}>
-                  Vaciar pedido
-                </Button>
-              )}
+              <Button size="sm" variant="ghost" onClick={vaciar} disabled={bor.renglones.length === 0}>
+                Vaciar pedido
+              </Button>
             </div>
             <div className="pos-renglones" style={{ padding: `0 ${space[4]}px` }}>
               {bor.renglones.length === 0 ? (
@@ -1113,14 +1156,14 @@ function POS() {
                 ))
               )}
             </div>
-            {bor.renglones.length > 0 && (
-              <div style={{ flexShrink: 0, display: 'grid', gap: space[2], padding: `${space[3]}px ${space[4]}px ${space[4]}px`, borderTop: `1px solid ${color.line}`, background: color.bg }}>
+            {/* El pie SIEMPRE a la vista (prototipo del 6-oct): con el pedido vacío, TOTAL $0 y el cobro apagado. */}
+            <div style={{ flexShrink: 0, display: 'grid', gap: space[2], padding: `${space[3]}px ${space[4]}px ${space[4]}px`, borderTop: `1px solid ${color.line}`, background: color.bg }}>
                 <Field label="Mail para el ticket (opcional)">
                   <Input type="email" autoComplete="off" spellCheck={false} value={bor.email} invalid={!emailOk} onChange={(e) => setBor((b) => ({ ...b, email: e.target.value }))} placeholder="nombre@mail.com" />
                 </Field>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.md, color: color.ink2 }}>
                   <span>Subtotal</span>
-                  <b style={{ fontVariantNumeric: 'tabular-nums' }}>{filas ? plata(filas.reduce((s, f) => s + f.importe, 0)) : '—'}</b>
+                  <b style={{ fontVariantNumeric: 'tabular-nums' }}>{bor.renglones.length === 0 ? plata(0) : subtotalFilas != null ? plata(subtotalFilas) : '—'}</b>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
                   <span style={{ color: color.mut }}>Descuento</span>
@@ -1135,22 +1178,22 @@ function POS() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: space[2], borderTop: `1px dashed ${color.line2}` }}>
                   <span style={{ fontWeight: weight.heavy, fontSize: font.md, letterSpacing: '.05em', color: color.ink }}>TOTAL</span>
                   <span style={{ fontSize: 36, fontWeight: weight.heavy, letterSpacing: '-.02em', lineHeight: 1, color: color.brand, fontVariantNumeric: 'tabular-nums' }}>
-                    {mostrarCobro && c ? plata(c.total) : aPagar != null ? plata(aPagar) : '—'}
+                    {bor.renglones.length === 0 ? plata(0) : mostrarCobro && c ? plata(c.total) : aPagar != null ? plata(aPagar) : '—'}
                   </span>
                 </div>
                 {!mostrarCobro && <span style={{ color: color.mut, fontSize: font.sm }}>El descuento de la forma de pago se ve al cobrar.</span>}
                 {sinPrecio && <Notice tone="warning">Prenda sin precio: escribirlo en el renglón.</Notice>}
                 {!mostrarCobro && (
                   <Button size="lg" tone="success" variant="solid" fullWidth disabled={!puedeCobrar} onClick={() => setEnCobro(true)} style={{ height: 52 }}>
-                    Continuar al cobro <span style={{ fontSize: font.xs, fontWeight: weight.semibold, border: '1px solid currentColor', opacity: 0.85, borderRadius: 5, padding: '1px 6px', marginLeft: space[1] }}>Alt+C</span>
+                    Continuar al cobro <span className="pos-alt">Alt+C</span>
                   </Button>
                 )}
               </div>
-            )}
           </Card>
         </div>
       </div>
     </div>
+    </ModalVarianteContext.Provider>
   )
 }
 

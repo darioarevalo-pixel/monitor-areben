@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { NOMBRE_MEDIO } from '@/lib/caja/core.core.js'
+import { NOMBRE_MEDIO, medioDeCuenta } from '@/lib/caja/core.core.js'
 import { numeroProvisorio, plata, type LogoTicket } from '@/lib/caja/ticket'
 import { BILLETES_INICIALES, billetesDe } from '@/lib/caja/conteo.core.js'
 import { CalculadoraBilletes, olvidarConteo } from '@/components/caja/CalculadoraBilletes'
@@ -40,7 +40,7 @@ import {
   usarCuentaMp,
   type CuentaMp,
 } from '@/lib/caja/cliente'
-import { Badge, Button, Field, Icono, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
+import { Badge, Button, Card, Field, Icono, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
 import { HeaderAcciones } from '@/components/layout/acciones'
 
 
@@ -239,7 +239,7 @@ export function GrillaProductos({
   const totalSin = sin.length + masSin
   const enLocal = con.length + masCon
   return (
-    <div style={{ marginTop: space[3], display: 'grid', gap: space[3], gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+    <div style={{ marginTop: space[3], display: 'grid', gap: space[3], gridTemplateColumns: 'repeat(auto-fill, minmax(164px, 1fr))' }}>
       {enLocal > 0 && (
         <div style={{ ...ancho, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: `${space[1]}px ${space[3]}px`, fontSize: font.sm, color: color.mut }}>
           <span>
@@ -256,7 +256,7 @@ export function GrillaProductos({
       {verSin && masSin > 0 && <span style={{ ...ancho, color: color.mut, fontSize: font.sm }}>Y {masSin} más sin stock.</span>}
       {!verSin && totalSin > 0 && (
         <div style={ancho}>
-          <Button variant="ghost" size="sm" onClick={onVerSin}>
+          <Button variant="outline" size="sm" onClick={onVerSin}>
             Mostrar sin stock ({totalSin})
           </Button>
         </div>
@@ -266,26 +266,39 @@ export function GrillaProductos({
 }
 
 /**
- * «Elegir variante» (Bruno, 5-oct, como el modal de GN): la foto de cada color si Tienda Nube la
- * tiene, las variantes del local primero y el resto tras «Mostrar sin stock». Con el teclado: ↑/↓ y
- * Enter.
+ * «Elegir variante» (Bruno, 5-oct, como el modal de GN; aspecto del prototipo del 6-oct): arriba la
+ * foto grande DEL COLOR de la fila elegida, el nombre y el SKU; abajo una fila por variante con el
+ * color en un círculo, «Color · Talle» y el precio. Las del local primero y el resto tras «Mostrar sin
+ * stock». Con el teclado: ↑/↓ y Enter.
+ *
+ * 🔑 **El círculo es la FOTO del color** (Tienda Nube por SKU): ni GN ni TN traen el hex del color, y un
+ * hex inventado por nombre mentiría. Sin foto, un círculo gris. ⚠️ La «Ubicación» ⛔ va acá: la lista de
+ * la búsqueda ⛔ trae los estantes (los trae la lectura de la prenda al elegirla, y el renglón los dice).
  */
 export function ElegirVariante({
   producto,
   precio,
   fotoDe,
+  colorDe,
+  feria = false,
   onElegir,
   onCerrar,
 }: {
   producto: ProductoLista
   precio: number | null
   fotoDe: (v: Variante) => string | null
+  /** El nombre del color de la variante en Tienda Nube (por SKU), o null. */
+  colorDe?: (v: Variante) => string | null
+  /** Producto de feria trabado: lo dice antes de agregarlo. */
+  feria?: boolean
   onElegir: (v: Variante) => void
   onCerrar: () => void
 }) {
   const con = producto.variantes.filter((v) => (v.local ?? 0) > 0)
   const sin = producto.variantes.filter((v) => !((v.local ?? 0) > 0))
   const [verSin, setVerSin] = useState(con.length === 0)
+  // La fila con el foco: la resalta y le pone su foto arriba («la foto es la del color elegido»).
+  const [sel, setSel] = useState<string | null>(null)
   const lista = useRef<HTMLDivElement>(null)
   const mover = (e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
@@ -295,62 +308,86 @@ export function ElegirVariante({
     const j = e.key === 'ArrowDown' ? Math.min(botones.length - 1, i + 1) : Math.max(0, i - 1)
     botones[j]?.focus()
   }
-  const fila = (v: Candidato, i: number, apagada: boolean) => (
-    <button
-      key={claveDe(v)}
-      type="button"
-      data-variante
-      data-foco={i === 0 && !apagada ? true : undefined}
-      onClick={() => onElegir(v)}
-      className="caja-tarjeta"
-      style={{
-        height: 'auto',
-        display: 'flex',
-        alignItems: 'center',
-        gap: space[3],
-        padding: space[2],
-        textAlign: 'left',
-        border: `1px solid ${color.line}`,
-        borderRadius: radius.lg,
-        background: color.surface,
-        cursor: 'pointer',
-        opacity: apagada ? 0.6 : 1,
-      }}
-    >
-      <Foto src={fotoDe(v)} ancho={48} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: weight.semibold, color: color.ink, fontSize: font.md }}>{v.size_name}</div>
-        <div style={{ fontSize: font.xs, color: color.mut }}>{v.sku ?? v.barcode ?? ''}</div>
-      </div>
-      <div style={{ display: 'grid', justifyItems: 'end', gap: space[0.5] }}>
-        <b style={{ color: color.brand }}>{precio ? plata(precio) : '—'}</b>
-        {apagada ? <Badge tone="neutral">sin stock</Badge> : <Badge tone="success">en el local</Badge>}
-      </div>
-    </button>
-  )
+  const visibles = verSin ? [...con, ...sin] : con
+  const elegida = visibles.find((v) => claveDe(v) === sel) ?? visibles[0] ?? producto.variantes[0]
+  /** «Color · Talle»; si el talle de GN ya trae el color («Bordó - S»), tal cual. */
+  const rotulo = (v: Variante) => {
+    const c = colorDe?.(v)?.trim()
+    return c && !v.size_name.toLowerCase().includes(c.toLowerCase()) ? `${c} · ${v.size_name}` : v.size_name
+  }
+  const fila = (v: Candidato, i: number, apagada: boolean) => {
+    const marcada = claveDe(v) === claveDe(elegida)
+    const foto = fotoDe(v)
+    return (
+      <button
+        key={claveDe(v)}
+        type="button"
+        role="option"
+        aria-selected={marcada}
+        data-variante
+        data-foco={i === 0 && !apagada ? true : undefined}
+        onClick={() => onElegir(v)}
+        onFocus={() => setSel(claveDe(v))}
+        style={{
+          height: 'auto',
+          minHeight: 48,
+          display: 'grid',
+          gridTemplateColumns: '22px minmax(0, 1fr) auto',
+          alignItems: 'center',
+          gap: space[2] + 2,
+          padding: `${space[1]}px ${space[3]}px`,
+          textAlign: 'left',
+          fontSize: font.md,
+          border: marcada ? `1.5px solid ${color.brandSolid}` : `1px ${apagada ? 'dashed' : 'solid'} ${color.line}`,
+          borderRadius: radius.lg,
+          background: marcada ? color.brandBg : apagada ? color.bg : color.surface,
+          color: apagada ? color.mut : color.ink,
+          cursor: 'pointer',
+          outline: 'none',
+        }}
+      >
+        {foto ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={foto} alt="" loading="lazy" style={{ width: 20, height: 20, borderRadius: radius.pill, objectFit: 'cover', border: '1px solid rgba(0,0,0,.12)' }} />
+        ) : (
+          <i style={{ display: 'block', width: 20, height: 20, borderRadius: radius.pill, background: color.bg2, border: '1px solid rgba(0,0,0,.12)' }} />
+        )}
+        <span style={{ minWidth: 0 }}>
+          <b style={{ fontWeight: weight.semibold }}>{rotulo(v)}</b>
+          {apagada && <span style={{ fontSize: font.sm, color: color.mut }}> · sin stock en el local</span>}
+        </span>
+        <span style={{ fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums' }}>{precio ? plata(precio) : '—'}</span>
+      </button>
+    )
+  }
   return (
-    <Modal abierto onCerrar={onCerrar} titulo="Elegir variante">
-      <div style={{ display: 'grid', gap: space[3] }} onKeyDown={mover}>
-        <div style={{ display: 'flex', gap: space[4], alignItems: 'center' }}>
-          <Foto src={fotoDe(producto.variantes[0])} ancho={96} />
+    <Modal abierto onCerrar={onCerrar} titulo="Elegir variante" variante="pos">
+      <div style={{ display: 'grid', gap: space[3] + 2 }} onKeyDown={mover}>
+        <div style={{ display: 'flex', gap: space[3] + 2, alignItems: 'center' }}>
+          <Foto src={fotoDe(elegida)} ancho={96} />
           <div style={{ minWidth: 0 }}>
-            <b style={{ display: 'block', fontSize: font.xl, color: color.ink }}>{producto.product_name}</b>
-            <span style={{ fontSize: font.base, color: color.mut }}>
-              {precio ? plata(precio) : 'Sin precio'} · {con.length === 1 ? '1 variante en el local' : `${con.length} variantes en el local`}
-            </span>
+            <h4 style={{ margin: 0, fontSize: font.xl, color: color.ink }}>
+              {producto.product_name} {feria && <Badge tone="warning">Feria</Badge>}
+            </h4>
+            <p style={{ margin: '2px 0 0', fontSize: font.base, color: color.mut }}>
+              {(elegida.sku ?? elegida.barcode) && <>{elegida.sku ?? elegida.barcode} · </>}
+              <b style={{ color: color.ink, fontVariantNumeric: 'tabular-nums' }}>{precio ? plata(precio) : 'Sin precio'}</b>
+            </p>
+            <p style={{ margin: '2px 0 0', fontSize: font.sm, color: color.mut }}>La foto es la del color elegido.</p>
           </div>
         </div>
-        <div ref={lista} style={{ display: 'grid', gap: space[2] }}>
+        <div ref={lista} role="listbox" aria-label="Variantes" style={{ display: 'grid', gap: space[1.5] }}>
           {con.map((v, i) => fila(v, i, false))}
           {verSin && sin.map((v, i) => fila(v, i, true))}
         </div>
         {!verSin && sin.length > 0 && (
           <div>
-            <Button variant="ghost" size="sm" onClick={() => setVerSin(true)}>
+            <Button variant="outline" size="sm" onClick={() => setVerSin(true)}>
               Mostrar sin stock ({sin.length})
             </Button>
           </div>
         )}
+        <span style={{ fontSize: font.sm, color: color.mut }}>↑/↓ para moverse · Enter agrega · Esc cierra</span>
       </div>
     </Modal>
   )
@@ -480,8 +517,24 @@ export function FilaRenglon({
   )
 }
 
-export function VariosPagos({ pagos, setPagos, montos }: { pagos: PagoUI[]; setPagos: (p: PagoUI[]) => void; montos: number[] | null }) {
+/**
+ * «Varios pagos» (prototipo del 6-oct): una fila por pago —forma de pago · la parte del subtotal · X—, y
+ * abajo cuánto falta repartir. El último pago se lleva el resto (`cobro()`), así que su monto ⛔ se escribe.
+ */
+export function VariosPagos({ pagos, setPagos, montos, subtotal = null }: { pagos: PagoUI[]; setPagos: (p: PagoUI[]) => void; montos: number[] | null; /** El subtotal a precio de lista: contra eso se reparte. */ subtotal?: number | null }) {
   const cambiar = (i: number, cambio: Partial<PagoUI>) => setPagos(pagos.map((p, j) => (j === i ? { ...p, ...cambio } : p)))
+  // Lo que se lleva el último: el subtotal menos lo escrito en los demás. ⛔ Es plata nueva: el cobro lo
+  // calcula `cobro()`; esto sólo dice si el reparto cierra.
+  const resto = subtotal != null ? Math.round((subtotal - pagos.slice(0, -1).reduce((s, p) => s + (aNumero(p.base) ?? 0), 0)) * 100) / 100 : null
+  const ultimoSinMedio = pagos[pagos.length - 1]?.medio == null
+  const estado =
+    resto == null
+      ? null
+      : resto <= 0
+        ? { ok: false, texto: resto < 0 ? `Sobran ${plata(-resto)}` : 'El último pago queda en $0' }
+        : ultimoSinMedio
+          ? { ok: false, texto: `Falta repartir ${plata(resto)}` }
+          : { ok: true, texto: 'Repartido completo' }
   return (
     <div style={{ display: 'grid', gap: space[2] }}>
       <span style={{ fontSize: font.sm, color: color.mut }}>
@@ -490,57 +543,76 @@ export function VariosPagos({ pagos, setPagos, montos }: { pagos: PagoUI[]; setP
       {pagos.map((p, i) => {
         const ultimo = i === pagos.length - 1
         return (
-          <div key={i} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
-            <Select value={p.medio ?? ''} onChange={(e) => cambiar(i, { medio: (e.target.value || null) as Medio | null })} style={{ width: 220 }}>
-              <option value="">Forma de pago…</option>
-              {MEDIOS.map((m) => (
-                <option key={m} value={m}>
-                  {NOMBRE_MEDIO[m]}
-                </option>
-              ))}
-            </Select>
-            {ultimo ? (
-              <span style={{ width: 140, color: color.mut }}>el resto</span>
-            ) : (
-              <Input inputMode="decimal" value={p.base} onChange={(e) => cambiar(i, { base: e.target.value })} placeholder="$ del subtotal" style={{ width: 140 }} />
-            )}
-            <b style={{ minWidth: 100 }}>{montos?.[i] != null ? `cobra ${plata(montos[i])}` : ''}</b>
-            {pagos.length > 2 && (
-              <Button size="sm" variant="ghost" onClick={() => setPagos(pagos.filter((_, j) => j !== i))} aria-label={`Eliminar el pago ${p.medio ? NOMBRE_MEDIO[p.medio] : 'sin forma de pago'}`}>
-                Eliminar
-              </Button>
-            )}
+          <div key={i} style={{ display: 'grid', gap: space[0.5] }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 150px 30px', gap: space[2], alignItems: 'center' }}>
+              <Select value={p.medio ?? ''} onChange={(e) => cambiar(i, { medio: (e.target.value || null) as Medio | null })} aria-label={`Forma de pago ${i + 1}`}>
+                <option value="">Forma de pago…</option>
+                {MEDIOS.map((m) => (
+                  <option key={m} value={m}>
+                    {NOMBRE_MEDIO[m]}
+                  </option>
+                ))}
+              </Select>
+              {ultimo ? (
+                <span style={{ color: color.mut, fontSize: font.base, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{resto != null && resto > 0 ? `el resto: ${plata(resto)}` : 'el resto'}</span>
+              ) : (
+                <Input inputMode="decimal" autoComplete="off" value={p.base} onChange={(e) => cambiar(i, { base: e.target.value })} placeholder="$ del subtotal" aria-label={`Monto del pago ${i + 1}`} style={{ textAlign: 'right' }} />
+              )}
+              {pagos.length > 2 ? (
+                <button
+                  type="button"
+                  className="caja-sacar"
+                  onClick={() => setPagos(pagos.filter((_, j) => j !== i))}
+                  aria-label={`Eliminar el pago ${p.medio ? NOMBRE_MEDIO[p.medio] : 'sin forma de pago'}`}
+                  title="Eliminar este pago"
+                  style={{ height: 30, width: 30, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', borderRadius: radius.md, color: color.mut2, cursor: 'pointer' }}
+                >
+                  <Icono nombre="cruz" size={16} />
+                </button>
+              ) : (
+                <span />
+              )}
+            </div>
+            {montos?.[i] != null && <span style={{ fontSize: font.sm, color: color.mut, fontVariantNumeric: 'tabular-nums' }}>cobra {plata(montos[i])}</span>}
           </div>
         )
       })}
-      <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
         <Button size="sm" variant="outline" onClick={() => setPagos([...pagos.slice(0, -1), { medio: null, base: '' }, pagos[pagos.length - 1]])}>
           Agregar pago
         </Button>
+        {estado && <span style={{ fontSize: font.base, fontWeight: weight.semibold, fontVariantNumeric: 'tabular-nums', color: estado.ok ? color.successInk : color.warningInk }}>{estado.texto}</span>}
       </div>
     </div>
   )
 }
 
+/**
+ * Los números del cobro (prototipo del 6-oct): los descuentos en verde, el redondeo en gris y el Total
+ * grande debajo de una línea punteada. Los números son los de `cobro()`: acá ⛔ se calcula nada.
+ */
 export function ResumenCobro({ c, nombreCuenta }: { c: { subtotal: number; aVenta: number; total: number; pagos: { cuenta: number; porcentaje: number; descuento: number; redondeo: number; monto: number }[] }; nombreCuenta: (id: number) => string }) {
-  const linea = (izq: string, der: string, fuerte = false) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fuerte ? font['2xl'] : font.md, fontWeight: fuerte ? weight.bold : weight.normal }}>
+  const linea = (izq: string, der: string, tinta: string = color.ink2) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[2], fontSize: font.md, color: tinta }}>
       <span>{izq}</span>
-      <span>{der}</span>
+      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{der}</span>
     </div>
   )
   return (
-    <div style={{ display: 'grid', gap: space[1], maxWidth: 420 }}>
+    <div style={{ display: 'grid', gap: space[1.5] }}>
       {linea('Subtotal', plata(c.subtotal))}
-      {c.aVenta > 0 && linea('Descuento en la venta', `-${plata(c.aVenta)}`)}
+      {c.aVenta > 0 && linea('Descuento en la venta', `−${plata(c.aVenta)}`, color.successInk)}
       {c.pagos.map((p, i) => (
-        <div key={i}>
-          {p.descuento > 0 && linea(`Descuento ${p.porcentaje}%${c.pagos.length > 1 ? ` (${nombreCuenta(p.cuenta)})` : ''}`, `-${plata(p.descuento)}`)}
-          {p.redondeo > 0 && linea('Recargo por redondeo', `+${plata(p.redondeo)}`)}
-          {p.redondeo < 0 && linea('Redondeo', `-${plata(p.redondeo)}`)}
+        <div key={i} style={{ display: 'grid', gap: space[1.5] }}>
+          {p.descuento > 0 && linea(`Descuento ${p.porcentaje}%${c.pagos.length > 1 ? ` · ${nombreCuenta(p.cuenta)}` : ''}`, `−${plata(p.descuento)}`, color.successInk)}
+          {p.redondeo > 0 && linea('Recargo por redondeo', `+${plata(p.redondeo)}`, color.mut)}
+          {p.redondeo < 0 && linea('Redondeo', `−${plata(-p.redondeo)}`, color.mut)}
         </div>
       ))}
-      {linea('Total', plata(c.total), true)}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: space[2], borderTop: `1px dashed ${color.line2}` }}>
+        <span style={{ fontWeight: weight.heavy, fontSize: font.md, letterSpacing: '.05em', color: color.ink }}>Total</span>
+        <strong style={{ fontSize: 32, fontWeight: weight.heavy, letterSpacing: '-.02em', lineHeight: 1, color: color.ink, fontVariantNumeric: 'tabular-nums' }}>{plata(c.total)}</strong>
+      </div>
     </div>
   )
 }
@@ -549,24 +621,56 @@ export function ResumenCobro({ c, nombreCuenta }: { c: { subtotal: number; aVent
  * La venta recién cobrada (prototipo del 5-oct): verde con el tilde si llegó a GN; roja si quedó
  * pendiente. «Agregar otra venta» va en el mismo panel.
  */
-export function UltimaVenta({ venta, onReimprimir, onOtra }: { venta: Venta; onReimprimir: () => void; onOtra?: () => void }) {
+export function UltimaVenta({
+  venta,
+  onReimprimir,
+  onOtra,
+  nombreCuenta,
+  esEfectivo,
+}: {
+  venta: Venta
+  onReimprimir: () => void
+  onOtra?: () => void
+  /** El MEDIO de una cuenta (`nombreParaTicket`): con él, la línea dice cómo pagó. */
+  nombreCuenta?: (id: number) => string
+  /** Las cuentas de efectivo: el vuelto es lo que pagó de más sobre ellas. */
+  esEfectivo?: (id: number) => boolean
+}) {
   const enGn = venta.estado === 'en_gn'
   const tono = enGn ? { fg: color.successInk, bg: color.successBg, borde: color.successBorder } : { fg: color.dangerInk, bg: color.dangerBg, borde: color.dangerBorder }
+  const medios = nombreCuenta ? [...new Set(venta.pagos.map((p) => nombreCuenta(p.cuenta)))].join(' + ') : ''
+  const enEfectivo = esEfectivo ? venta.pagos.filter((p) => esEfectivo(p.cuenta)).reduce((s, p) => s + p.monto, 0) : 0
+  const vuelto = venta.paga_con != null && enEfectivo > 0 ? Math.round((venta.paga_con - enEfectivo) * 100) / 100 : 0
   return (
     <section
       aria-label="Última venta"
-      style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', padding: `${space[3]}px ${space[4]}px`, border: `1px solid ${tono.borde}`, borderRadius: radius['2xl'], background: `linear-gradient(0deg, ${color.surface}, ${tono.bg})` }}
+      style={{ display: 'flex', alignItems: 'center', gap: space[3] + 2, flexWrap: 'wrap', padding: `${space[3] + 2}px ${space[4]}px`, border: `1px solid ${tono.borde}`, borderRadius: radius['2xl'], background: `linear-gradient(0deg, ${color.surface}, ${tono.bg})` }}
     >
       <span style={{ width: 40, height: 40, borderRadius: radius.pill, display: 'grid', placeItems: 'center', flexShrink: 0, background: tono.bg, color: tono.fg, border: `1px solid ${tono.borde}` }}>
         <Icono nombre={enGn ? 'check' : 'cruz'} size={22} />
       </span>
-      <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+      <div style={{ flex: '1 1 200px', minWidth: 0 }}>
         <b style={{ display: 'block', fontSize: font.lg, color: color.ink }}>
           {enGn ? `Venta #${venta.gn_number} · ${plata(venta.total)}` : `Venta provisoria ${numeroProvisorio(venta.id)} · ${plata(venta.total)}`}
         </b>
-        <span style={{ fontSize: font.base, color: enGn ? color.ink2 : color.dangerInk }}>
+        <span style={{ display: 'block', fontSize: font.base, color: enGn ? color.ink2 : color.dangerInk }}>
           {enGn ? 'en Gestión Nube' : `pendiente en Gestión Nube (${venta.ultimo_error ?? 'sin respuesta'}) · reintento automático`}
         </span>
+        {(medios || vuelto > 0 || venta.email) && (
+          <span style={{ display: 'block', fontSize: font.base, color: color.ink2 }}>
+            {[
+              medios && <span key="m">{medios}</span>,
+              vuelto > 0 && (
+                <span key="v" style={{ color: color.successInk, fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums' }}>
+                  Vuelto {plata(vuelto)}
+                </span>
+              ),
+              venta.email && <span key="c">{venta.email}</span>,
+            ]
+              .filter(Boolean)
+              .flatMap((x, i) => (i ? [' · ', x] : [x]))}
+          </span>
+        )}
       </div>
       <Button variant="outline" onClick={onReimprimir}>
         Reimprimir ticket
@@ -826,17 +930,28 @@ export function CampoRebaja({ valor, onCambio, chico = false }: { valor: Rebaja 
   )
 }
 
-/** Una pregunta de Sí/No del cobro con tarjeta de crédito. */
+/** Una pregunta de Sí/No del cobro con tarjeta de crédito: un control segmentado sobre fondo gris. */
 export function SiNo({ pregunta, valor, onCambio }: { pregunta: string; valor: boolean | null; onCambio: (v: boolean) => void }) {
+  const opcion = (v: boolean, texto: string) => {
+    const activa = valor === v
+    return (
+      <button
+        type="button"
+        aria-pressed={activa}
+        onClick={() => onCambio(v)}
+        style={{ height: 30, minWidth: 48, padding: `0 ${space[3]}px`, border: 0, borderRadius: radius.sm, background: activa ? color.brandSolid : 'transparent', color: activa ? '#fff' : color.ink2, fontWeight: weight.semibold, fontSize: font.base, cursor: 'pointer' }}
+      >
+        {texto}
+      </button>
+    )
+  }
   return (
-    <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
-      <span style={{ fontWeight: weight.semibold, color: color.ink }}>{pregunta}</span>
-      <Button size="sm" variant={valor === true ? 'solid' : 'outline'} onClick={() => onCambio(true)}>
-        Sí
-      </Button>
-      <Button size="sm" variant={valor === false ? 'solid' : 'outline'} onClick={() => onCambio(false)}>
-        No
-      </Button>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[2] + 2, flexWrap: 'wrap', fontSize: font.md, fontWeight: weight.semibold, color: color.ink2, padding: `${space[2]}px ${space[3]}px`, background: color.bg, borderRadius: radius.md }}>
+      <span>{pregunta}</span>
+      <div role="group" aria-label={pregunta} style={{ display: 'inline-flex', gap: 2, padding: 2, background: color.surface, border: `1px solid ${color.line2}`, borderRadius: radius.md }}>
+        {opcion(true, 'Sí')}
+        {opcion(false, 'No')}
+      </div>
     </div>
   )
 }
@@ -914,14 +1029,14 @@ export function Dato({ rotulo, valor, tono = 'neutral', detalle }: { rotulo: str
     <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: `${space[3]}px ${space[3] + 2}px`, display: 'grid', gap: space[0.5], minWidth: 0 }}>
       <span style={{ fontSize: font.sm, color: color.mut, fontWeight: weight.semibold }}>{rotulo}</span>
       <span style={{ fontSize: font.xl + 2, fontWeight: weight.heavy, letterSpacing: '-0.01em', color: tinta, fontVariantNumeric: 'tabular-nums' }}>{valor}</span>
-      {detalle && <span style={{ fontSize: font.xs, color: color.mut }}>{detalle}</span>}
+      {detalle && <span style={{ fontSize: font.sm, color: color.mut }}>{detalle}</span>}
     </div>
   )
 }
-const tonoDiferencia = (d: number) => (Math.abs(d) < 0.005 ? 'success' : 'danger') as 'success' | 'danger'
-/** Para la tabla de los turnos cerrados (prototipo): cuadrado verde, hasta $1.000 ámbar, más rojo. */
+/** La diferencia del efectivo, en su color (prototipo): cuadrado verde, hasta $1.000 ámbar, más rojo. */
+const tonoDiferencia = (d: number) => (Math.abs(d) < 0.005 ? 'success' : Math.abs(d) <= 1000 ? 'warning' : 'danger') as 'success' | 'warning' | 'danger'
 const tintaDiferencia = (d: number) => (Math.abs(d) < 0.005 ? color.successInk : Math.abs(d) <= 1000 ? color.warningInk : color.dangerInk)
-const grillaDatos: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: space[2] + 2 }
+const grillaDatos: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: space[2] + 2 }
 /** Las tablas chicas de la pestaña: forma de pago y últimos turnos. */
 const th: React.CSSProperties = { textAlign: 'left', fontSize: font.xs, textTransform: 'uppercase', letterSpacing: '0.06em', color: color.mut, fontWeight: weight.semibold, padding: `0 ${space[2]}px ${space[1.5]}px 0`, borderBottom: `1px solid ${color.line}`, whiteSpace: 'nowrap' }
 const td: React.CSSProperties = { padding: `${space[2]}px ${space[2]}px ${space[2]}px 0`, borderBottom: `1px solid ${color.bg2}`, whiteSpace: 'nowrap' }
@@ -1018,6 +1133,7 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
       billetes={billetes}
       titulo="Cerrar turno · efectivo con el fondo"
       accion="Cerrar turno"
+      tono="danger"
       aMano
       esperado={r?.efectivo.esperado ?? null}
       trabajando={trabajando}
@@ -1079,7 +1195,7 @@ export function SalidaModal({ onCerrar, onListo }: { onCerrar: () => void; onLis
           <Button variant="outline" onClick={onCerrar}>
             Volver
           </Button>
-          <Button tone="success" loading={trabajando} disabled={montoN == null || montoN <= 0 || !motivo.trim()} onClick={cargar}>
+          <Button variant="solid" tone="brand" loading={trabajando} disabled={montoN == null || montoN <= 0 || !motivo.trim()} onClick={cargar}>
             Cargar salida
           </Button>
         </>
@@ -1120,7 +1236,17 @@ export function CobrosGN({ r }: { r: ResumenTurno }) {
 }
 
 /** Lo que hay que saber del turno abierto, en datos: lo comparten la pestaña y el POS. */
-export function ResumenTurnoDatos({ turno, conTabla = false }: { turno: Turno; /** La pestaña muestra la tabla por cuenta a la vista; el POS, sólo en «Ver detalle». */ conTabla?: boolean }) {
+export function ResumenTurnoDatos({
+  turno,
+  conTabla = false,
+  reglas = null,
+}: {
+  turno: Turno
+  /** La pestaña muestra la tabla por cuenta a la vista; el POS, sólo en «Ver detalle». */
+  conTabla?: boolean
+  /** Para decir la FORMA de pago de cada cuenta (la cuenta de GN es interna); sin reglas, el nombre. */
+  reglas?: Reglas | null
+}) {
   const [verDetalle, setVerDetalle] = useState(false)
   const r = turno.resumen
   const intermedios = turno.conteos?.intermedios ?? []
@@ -1132,14 +1258,12 @@ export function ResumenTurnoDatos({ turno, conTabla = false }: { turno: Turno; /
         <Dato rotulo="Ventas" valor={plata(r.total)} tono="brand" detalle={r.ventas === 1 ? '1 venta' : `${r.ventas} ventas`} />
         <Dato rotulo="Efectivo esperado" valor={plata(r.efectivo.esperado)} tono="success" detalle={`Fondo ${plata(r.efectivo.fondo)}`} />
         <Dato rotulo="Salidas" valor={plata(r.efectivo.salidas)} detalle={(turno.salidas ?? []).length === 1 ? '1 salida' : `${(turno.salidas ?? []).length} salidas`} />
-        {ultimoConteo && (
-          <Dato
-            rotulo={`Último conteo ${horaAr(ultimoConteo.en)}`}
-            valor={plata(ultimoConteo.total)}
-            tono={ultimoConteo.diferencia != null ? tonoDiferencia(ultimoConteo.diferencia) : 'neutral'}
-            detalle={ultimoConteo.diferencia != null ? `Diferencia: ${textoDiferencia(ultimoConteo.diferencia)}` : undefined}
-          />
-        )}
+        <Dato
+          rotulo={ultimoConteo ? `Último conteo ${horaAr(ultimoConteo.en)}` : 'Último conteo'}
+          valor={ultimoConteo ? plata(ultimoConteo.total) : '—'}
+          tono={ultimoConteo?.diferencia != null ? tonoDiferencia(ultimoConteo.diferencia) : 'neutral'}
+          detalle={!ultimoConteo ? 'Sin contar todavía' : ultimoConteo.diferencia != null ? textoDiferencia(ultimoConteo.diferencia) : undefined}
+        />
       </div>
       {r.esperando.length > 0 && <Notice tone="warning">Transferencias en espera: {r.esperando.length}. No suman hasta que lleguen.</Notice>}
       {r.sinGN.length > 0 && <Notice tone="warning">Cobradas sin llegar a Gestión Nube: {r.sinGN.length}. Suman al turno.</Notice>}
@@ -1149,19 +1273,27 @@ export function ResumenTurnoDatos({ turno, conTabla = false }: { turno: Turno; /
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th style={th}>Cuenta</th>
+                <th style={th}>Forma de pago</th>
                 <th style={{ ...th, ...der }}>Cobros</th>
                 <th style={{ ...th, ...der }}>Monto</th>
               </tr>
             </thead>
             <tbody>
-              {r.porCuenta.map((c) => (
-                <tr key={c.cuenta}>
-                  <td style={td}>{c.nombre}</td>
-                  <td style={{ ...td, ...der }}>{c.cobros}</td>
-                  <td style={{ ...td, ...der, fontWeight: weight.semibold }}>{plata(c.monto)}</td>
-                </tr>
-              ))}
+              {r.porCuenta.map((c) => {
+                // Una fila por CUENTA (los números son los del resumen): la forma de pago adelante y la
+                // cuenta atrás, porque dos cuentas pueden ser la misma forma (crédito con promo y de lista).
+                const medio = medioDeCuenta(c.cuenta, reglas)
+                return (
+                  <tr key={c.cuenta}>
+                    <td style={td}>
+                      {medio ? NOMBRE_MEDIO[medio] : c.nombre}
+                      {medio && <span style={{ color: color.mut }}> · {c.nombre}</span>}
+                    </td>
+                    <td style={{ ...td, ...der }}>{c.cobros}</td>
+                    <td style={{ ...td, ...der }}>{plata(c.monto)}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -1209,6 +1341,7 @@ export function ResumenTurnoDatos({ turno, conTabla = false }: { turno: Turno; /
 export function TurnoCaja({
   turno,
   billetes,
+  reglas = null,
   esMio,
   antes,
   onCambio,
@@ -1216,6 +1349,8 @@ export function TurnoCaja({
 }: {
   turno: Turno | null
   billetes: number[]
+  /** Para la tabla del turno: la forma de pago de cada cuenta. */
+  reglas?: Reglas | null
   /** Fase C: el conteo intermedio lo hace sólo la cuenta que abrió la caja (el servidor contesta 403). */
   esMio: boolean
   /** Lo que va primero en el header de la sección («Abrir POS»): un solo portal, en orden. */
@@ -1229,17 +1364,24 @@ export function TurnoCaja({
   if (!turno) {
     return (
       <>
-        {antes && <HeaderAcciones>{antes}</HeaderAcciones>}
+        {/* Sin turno ⛔ hay «Abrir POS»: el POS ⛔ cobra sin turno y nadie es su dueño (`puedeUsarPOS`).
+            El header lleva «Abrir turno» en outline; la acción sólida es la de la tarjeta. */}
+        <HeaderAcciones>
+          {antes}
+          <Button variant="outline" onClick={() => setAbierto('abrir')}>
+            Abrir turno
+          </Button>
+        </HeaderAcciones>
         {cerrado && <AvisoCierre t={cerrado} />}
-        <SectionCard>
-          <div style={{ display: 'grid', justifyItems: 'start', gap: space[2] }}>
+        <Card padding={4} style={tarjetaTurno}>
+          <div style={{ display: 'grid', justifyItems: 'start', gap: space[2], padding: space[1] }}>
             <b style={{ fontSize: font.lg + 1, color: color.ink }}>Sin turno abierto</b>
             <span style={{ color: color.mut, fontSize: font.base }}>El POS cobra con un turno abierto.</span>
             <Button tone="brand" variant="solid" onClick={() => setAbierto('abrir')}>
               Abrir turno
             </Button>
           </div>
-        </SectionCard>
+        </Card>
         {abierto === 'abrir' && (
           <AbrirTurnoModal
             billetes={billetes}
@@ -1267,16 +1409,18 @@ export function TurnoCaja({
         <Button variant="outline" onClick={() => setAbierto('salida')}>
           Cargar salida
         </Button>
-        <Button tone="danger" variant="outline" onClick={() => setAbierto('cerrar')}>
+        {/* Borde neutro y texto rojo (prototipo): avisa sin competir con la acción sólida. */}
+        <Button variant="outline" onClick={() => setAbierto('cerrar')} style={{ '--_fg': color.danger } as React.CSSProperties}>
           Cerrar turno
         </Button>
       </HeaderAcciones>
-      <SectionCard
-        title="Turno abierto"
-        actions={<span style={{ color: color.mut, fontSize: font.base }}>desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}</span>}
-      >
-        <ResumenTurnoDatos turno={turno} conTabla />
-      </SectionCard>
+      <Card padding={4} style={tarjetaTurno}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2] + 2, flexWrap: 'wrap' }}>
+          <b style={{ fontSize: font.lg, color: color.ink }}>Turno abierto</b>
+          <span style={{ color: color.mut, fontSize: font.base }}>desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}</span>
+        </div>
+        <ResumenTurnoDatos turno={turno} conTabla reglas={reglas} />
+      </Card>
       <ModalesTurno
         que={abierto}
         turno={turno}
@@ -1295,6 +1439,9 @@ export function TurnoCaja({
     </>
   )
 }
+
+/** La tarjeta del turno, más liviana que un `SectionCard` (prototipo `.turno-card`): 16 de aire, 12 entre partes. */
+const tarjetaTurno: React.CSSProperties = { display: 'grid', gap: space[3] }
 
 /** Los turnos cerrados, en tabla (prototipo): cuándo, quién, esperado, contado y la diferencia en su color. */
 export function UltimosTurnos({ ultimos }: { ultimos: Turno[] }) {
@@ -1502,7 +1649,7 @@ export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | n
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
         {inicial ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={inicial.src} alt="Logo del ticket" style={{ maxWidth: 220, maxHeight: 110, objectFit: 'contain', border: `1px solid ${color.line}`, borderRadius: radius.md, padding: space[2], background: '#fff' }} />
+          <img src={inicial.src} alt="Logo del ticket" style={{ maxWidth: 160, maxHeight: 48, objectFit: 'contain', justifySelf: 'start', border: `1px solid ${color.line}`, borderRadius: radius.sm, padding: space[1], background: '#fff' }} />
         ) : (
           <span style={{ color: color.mut, fontSize: font.sm }}>Logo: ninguno (el ticket lleva el nombre).</span>
         )}

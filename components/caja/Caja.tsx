@@ -23,6 +23,7 @@ import { ButtonLink, Notice, color, font, space, weight } from '@/components/ui'
 import { Bajadas, DeteccionTransferencias, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TurnoCaja, UltimosTurnos } from '@/components/caja/partes'
 import { VistaTicket } from '@/components/caja/VistaTicket'
 import { PromosCaja } from '@/components/caja/PromosCaja'
+import { ModalVarianteContext } from '@/components/ui/Modal'
 
 export function Caja() {
   const { perfil } = useSesion()
@@ -78,7 +79,9 @@ export function Caja() {
     </ButtonLink>
   ) : null
 
+  // Los diálogos del turno con el aspecto del POS (X, pie gris), igual que en `/pos`.
   return (
+    <ModalVarianteContext.Provider value="pos">
     <div className={admin && config ? 'caja-grilla con-ticket' : 'caja-grilla'} style={{ display: 'grid', gap: space[4], maxWidth: 1240, alignItems: 'start' }}>
       {/* Una columna debajo de 1100 px; arriba, la vista previa del ticket a la derecha (sólo admin). */}
       <style>{`@media (min-width: 1100px) { .caja-grilla.con-ticket { grid-template-columns: minmax(0, 1fr) 320px; } .caja-ticket { position: sticky; top: 0; } }`}</style>
@@ -91,6 +94,7 @@ export function Caja() {
           <TurnoCaja
             turno={turno}
             billetes={billetesDe(config?.reglas)}
+            reglas={config?.reglas ?? null}
             esMio={esMio}
             antes={abrirPOS}
             onCambio={(t) => (t === undefined ? refrescarTurno() : setTurno(t))}
@@ -112,5 +116,6 @@ export function Caja() {
         </aside>
       )}
     </div>
+    </ModalVarianteContext.Provider>
   )
 }

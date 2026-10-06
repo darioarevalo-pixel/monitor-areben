@@ -10,12 +10,47 @@
 import { useEffect, useState } from 'react'
 import { leerConfig } from '@/lib/caja/cliente'
 import { plata, type LogoTicket } from '@/lib/caja/ticket'
-import { CLAVE_MAIL, CLAVE_VISTA, enmascarar, leerVista, mailValido, type VistaCliente } from '@/lib/caja/pantalla-cliente'
+import { CLAVE_MAIL, CLAVE_VISTA, enmascarar, leerVista, mailValido, nombreDeColor, type MailCliente, type VistaCliente } from '@/lib/caja/pantalla-cliente'
+import { talleVisible } from '@/lib/caja/ticket-mail.core.js'
 import { MARCA_CAJA } from '@/lib/caja/marca'
-import { Foto } from '@/components/caja/partes'
 import { Icono, color, font, radius, space, weight } from '@/components/ui'
 
 const DOMINIOS = ['@gmail.com', '@hotmail.com', '@yahoo.com.ar', '.com']
+
+/**
+ * Lo que la pantalla de la clienta y el tótem no pueden poner en línea: las animaciones del prototipo
+ * aprobado (`entra` el renglón nuevo, `pop` el tilde, `latido` el cuadro del tótem) y el foco del mail.
+ * Con `prefers-reduced-motion: reduce`, quietas.
+ */
+export const ESTILOS_CLIENTA = `
+@keyframes caja-entra { from { opacity: 0; transform: translateY(6px); } }
+@keyframes caja-pop { from { opacity: 0; transform: scale(.6); } }
+@keyframes caja-latido { 50% { transform: scale(1.06); box-shadow: 0 0 0 18px ${MARCA_CAJA.acentoBg}; } }
+.caja-entra { animation: caja-entra .3s ease-out; }
+.caja-pop { animation: caja-pop .35s cubic-bezier(.2, 1.4, .4, 1); }
+.caja-latido { animation: caja-latido 2.4s ease-in-out infinite; }
+.caja-mail { border: 1.5px solid ${color.line2}; }
+.caja-mail:focus { outline: none; border-color: ${MARCA_CAJA.acento}; box-shadow: 0 0 0 4px ${MARCA_CAJA.acentoBg}; }
+@media (prefers-reduced-motion: reduce) { .caja-entra, .caja-pop, .caja-latido { animation: none !important; } }
+`
+
+/** El fondo detrás de una foto de prenda: un degradé suave del acento, ⛔ el gris plano. */
+export const FONDO_FOTO = `linear-gradient(160deg, ${color.surface}, ${MARCA_CAJA.acentoBg})`
+
+/** La foto de una prenda sobre el degradé, con sombra: las miniaturas de la compra y la foto del tótem. */
+export function FotoPrenda({ src, ancho = '100%', proporcion = '4 / 5', sombra = 'chica' }: { src: string | null; ancho?: number | string; proporcion?: string; sombra?: 'chica' | 'grande' }) {
+  const caja: React.CSSProperties = {
+    width: ancho,
+    aspectRatio: proporcion,
+    borderRadius: sombra === 'grande' ? radius.xl : radius.lg,
+    flexShrink: 0,
+    background: FONDO_FOTO,
+    boxShadow: sombra === 'grande' ? '0 14px 28px rgba(16, 24, 40, .22)' : '0 4px 12px rgba(16, 24, 40, .16)',
+    display: 'block',
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return src ? <img src={src} alt="" loading="lazy" style={{ ...caja, objectFit: 'cover' }} /> : <div style={caja} />
+}
 
 /** Lee lo que publica el POS, y se entera de cada cambio (el evento `storage` llega de la OTRA ventana). */
 export function useVistaCliente(): VistaCliente {
@@ -38,9 +73,11 @@ export function useVistaCliente(): VistaCliente {
   return vista
 }
 
-function devolverMail(email: string, no = false) {
+function devolverMail(email: string, no = false, novedades?: boolean) {
   try {
-    localStorage.setItem(CLAVE_MAIL, JSON.stringify({ email, no, en: Date.now() }))
+    // `novedades` viaja de más: el POS de hoy lee sólo `email` y `no` (ver `MailCliente`).
+    const m: MailCliente = { email, no, ...(novedades === undefined ? {} : { novedades }), en: Date.now() }
+    localStorage.setItem(CLAVE_MAIL, JSON.stringify(m))
   } catch {
     /* sin localStorage: el mail lo pide la cajera */
   }
@@ -82,7 +119,8 @@ export function CajaCliente() {
   const logo = useLogo()
   return (
     <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: color.surface, color: color.ink }}>
-      <CabeceraMarca logo={logo} derecha={vista.estado === 'compra' ? 'Tu compra' : ''} />
+      <style>{ESTILOS_CLIENTA}</style>
+      <CabeceraMarca logo={logo} derecha={vista.estado === 'compra' ? 'Tu compra' : MARCA_CAJA.local} />
       <main style={{ flex: 1, minHeight: 0, display: 'flex' }}>
         {vista.estado === 'vacio' && <Bienvenida />}
         {vista.estado === 'gracias' && <Gracias numero={vista.numero} email={vista.email} />}
@@ -92,14 +130,31 @@ export function CajaCliente() {
   )
 }
 
+/** Las prendas del panel de campaña: siluetas como las del prototipo (la bienvenida ⛔ tiene fotos: no hay compra todavía). */
+const SILUETAS: { d: string; fondo: string; alto: string }[] = [
+  { d: 'M9 2h6l-1 5 5 14H5l5-14-1-5Z', fondo: '#b5603d', alto: '70%' },
+  { d: 'M9 3h6l2 3 4 2-2 13H5L3 8l4-2 2-3Z M12 6v15M9 3l3 5 3-5', fondo: '#b08968', alto: '85%' },
+  { d: 'M8 3c1 2 2.5 3 4 3s3-1 4-3l3 3-1 15H6L5 6l3-3Z', fondo: '#7a2741', alto: '70%' },
+]
+
 function Bienvenida() {
   return (
     <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
       <div style={{ padding: 'clamp(24px, 5vw, 64px)', display: 'grid', alignContent: 'center', gap: space[3] }}>
+        {MARCA_CAJA.local && <p style={{ margin: 0, color: MARCA_CAJA.acento, fontWeight: weight.bold, fontSize: 'clamp(15px, 1.6vw, 22px)' }}>{MARCA_CAJA.local}</p>}
         <h1 style={{ margin: 0, fontSize: 'clamp(30px, 4.2vw, 56px)', lineHeight: 1.05, letterSpacing: '-0.03em', textWrap: 'balance' }}>¡Hola! Te damos la bienvenida a {MARCA_CAJA.nombre}</h1>
         <p style={{ margin: 0, fontSize: 'clamp(16px, 1.6vw, 22px)', color: color.mut }}>Cuando empecemos tu compra, la vas a ver acá.</p>
       </div>
-      <div aria-hidden style={{ minHeight: 220, background: `linear-gradient(150deg, ${MARCA_CAJA.acentoBg}, ${MARCA_CAJA.acento})` }} />
+      <div
+        aria-hidden
+        style={{ minHeight: 220, background: `linear-gradient(150deg, ${MARCA_CAJA.acentoBg}, ${MARCA_CAJA.acento})`, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 'clamp(24px, 4vw, 56px) clamp(12px, 2vw, 28px) 0', overflow: 'hidden' }}
+      >
+        {SILUETAS.map((s) => (
+          <svg key={s.fondo} viewBox="0 0 24 24" fill={s.fondo} stroke="rgba(16, 24, 40, .35)" strokeWidth={0.6} strokeLinejoin="round" style={{ width: '30%', height: s.alto, filter: 'drop-shadow(0 10px 18px rgba(0, 0, 0, .25))' }}>
+            <path d={s.d} />
+          </svg>
+        ))}
+      </div>
     </div>
   )
 }
@@ -114,13 +169,14 @@ function Gracias({ numero, email }: { numero: number | null; email: string | nul
         {numero && email ? ' · ' : ''}
         {email ? `el ticket te llega a ${enmascarar(email)}` : ''}
       </p>
+      {MARCA_CAJA.instagram && <p style={{ margin: 0, color: MARCA_CAJA.acento, fontWeight: weight.bold, fontSize: 'clamp(16px, 1.7vw, 22px)' }}>Seguinos en {MARCA_CAJA.instagram}</p>}
     </div>
   )
 }
 
 function Tilde() {
   return (
-    <div style={{ width: 88, height: 88, borderRadius: '50%', background: MARCA_CAJA.acentoBg, color: MARCA_CAJA.acento, display: 'grid', placeItems: 'center' }}>
+    <div className="caja-pop" style={{ width: 88, height: 88, borderRadius: '50%', background: MARCA_CAJA.acentoBg, color: MARCA_CAJA.acento, display: 'grid', placeItems: 'center' }}>
       <Icono nombre="check" size={44} />
     </div>
   )
@@ -136,14 +192,11 @@ function Compra({ v }: { v: Extract<VistaCliente, { estado: 'compra' }> }) {
         </h2>
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           {v.renglones.map((r, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '64px 1fr auto', gap: space[3], alignItems: 'center', padding: `${space[2] + 2}px 0`, borderBottom: `1px solid ${color.bg2}` }}>
-              <Foto src={r.foto} ancho={64} proporcion="1" />
+            <div key={i} className="caja-entra" style={{ display: 'grid', gridTemplateColumns: '64px 1fr auto', gap: space[3], alignItems: 'center', padding: `${space[2] + 2}px 0`, borderBottom: `1px solid ${color.bg2}` }}>
+              <FotoPrenda src={r.foto} ancho={64} proporcion="1" />
               <div style={{ minWidth: 0 }}>
                 <strong style={{ display: 'block', fontSize: font.xl }}>{r.nombre}</strong>
-                <span style={{ color: color.mut, fontSize: font.lg }}>
-                  {r.talle}
-                  {r.cantidad > 1 ? ` · ×${r.cantidad}` : ''}
-                </span>
+                <span style={{ color: color.mut, fontSize: font.lg }}>{[r.color && nombreDeColor(r.color), talleVisible(r.talle), r.cantidad > 1 && `×${r.cantidad}`].filter(Boolean).join(' · ')}</span>
               </div>
               <div style={{ textAlign: 'right', fontWeight: weight.bold, fontSize: font.xl, fontVariantNumeric: 'tabular-nums' }}>
                 {r.importe < r.lista && <s style={{ display: 'block', fontWeight: weight.medium, color: color.mut2, fontSize: font.md }}>{plata(r.lista)}</s>}
@@ -202,6 +255,8 @@ export function PedirMail({ email }: { email: string }) {
   const [borrador, setBorrador] = useState('')
   const [estado, setEstado] = useState<'pedir' | 'no' | 'corregir'>('pedir')
   const [error, setError] = useState<string | null>(null)
+  // Como el prototipo aprobado: tildada de entrada. Viaja con el mail (ver `MailCliente`).
+  const [novedades, setNovedades] = useState(true)
   const grande: React.CSSProperties = { height: 56, borderRadius: radius.xl, fontWeight: weight.bold, fontSize: font.xl, cursor: 'pointer' }
   const link: React.CSSProperties = { height: 'auto', background: 'none', border: 'none', padding: 0, color: MARCA_CAJA.acento, fontWeight: weight.bold, fontSize: font.lg, cursor: 'pointer', justifySelf: 'start' }
 
@@ -242,7 +297,7 @@ export function PedirMail({ email }: { email: string }) {
     if (!mailValido(m)) return setError('Revisá el mail: falta algo.')
     setError(null)
     setEstado('pedir')
-    devolverMail(m)
+    devolverMail(m, false, novedades)
   }
   return (
     <div style={{ display: 'grid', gap: space[3] }}>
@@ -258,7 +313,8 @@ export function PedirMail({ email }: { email: string }) {
         value={borrador}
         onChange={(e) => setBorrador(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && enviar()}
-        style={{ height: 56, border: `1.5px solid ${color.line2}`, borderRadius: radius.xl, padding: `0 ${space[4]}px`, fontSize: font.xl + 2, background: color.surface, width: '100%' }}
+        className="caja-mail"
+        style={{ height: 56, borderRadius: radius.xl, padding: `0 ${space[4]}px`, fontSize: font.xl + 2, background: color.surface, width: '100%' }}
       />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: space[2] }}>
         {DOMINIOS.map((d) => (
@@ -272,6 +328,10 @@ export function PedirMail({ email }: { email: string }) {
         ))}
       </div>
       {error && <p style={{ margin: 0, color: color.dangerInk, fontSize: font.md }}>{error}</p>}
+      <label style={{ display: 'flex', gap: space[2] + 2, alignItems: 'center', fontSize: font.lg, color: color.ink2, cursor: 'pointer' }}>
+        <input type="checkbox" checked={novedades} onChange={(e) => setNovedades(e.target.checked)} style={{ width: 22, height: 22, margin: 0, accentColor: MARCA_CAJA.acento, flex: 'none' }} />
+        Quiero recibir novedades y promos
+      </label>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: space[2] }}>
         <button
           style={{ ...grande, border: `1.5px solid ${color.line2}`, background: color.surface, color: color.ink2 }}

@@ -9,7 +9,7 @@
  * scrollear el fondo, devolver el foco a donde estaba, y en el teléfono apoyarse abajo
  * para que llegue el pulgar.
  */
-import { useCallback, useEffect, useRef } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 export type ModalProps = {
@@ -35,13 +35,27 @@ export type ModalProps = {
    * seguía siendo una salida y el cartel no bloqueaba nada.
    */
   cerrarConEscape?: boolean
+  /**
+   * `pos` es el aspecto de los diálogos de la Caja (prototipo del POS, 6-oct): X para cerrar en la
+   * cabecera, línea bajo el título, pie gris con línea arriba, título de 17 px, radio 16, y anchos
+   * 560 (normal) y 1040 (xl). 🔴 **OPT-IN**: `Modal` lo usan ~65 pantallas y ellas quedan iguales.
+   * Sin la prop, lo toma de `ModalVarianteContext` —así el POS lo pide UNA vez para todos los diálogos
+   * que monta adentro, también los que arman otros archivos—.
+   */
+  variante?: ModalVariante
   children: React.ReactNode
 }
 
+export type ModalVariante = 'normal' | 'pos'
+/** El aspecto de los `Modal` de un árbol entero (el POS lo pone una vez arriba). */
+export const ModalVarianteContext = createContext<ModalVariante>('normal')
+
 export function Modal({
   abierto, onCerrar, titulo, pie, ancho = 'normal',
-  cerrarConFondo = true, cerrarConEscape = true, children,
+  cerrarConFondo = true, cerrarConEscape = true, variante, children,
 }: ModalProps) {
+  const delArbol = useContext(ModalVarianteContext)
+  const pos = (variante ?? delArbol) === 'pos'
   const caja = useRef<HTMLDivElement>(null)
   const foco = useRef<Element | null>(null)
 
@@ -77,7 +91,8 @@ export function Modal({
     // esté más arriba en el diálogo se lleva el foco que un campo pidió explícitamente.
     const primero =
       caja.current?.querySelector<HTMLElement>('[data-foco]') ??
-      caja.current?.querySelector<HTMLElement>('button, input, select, textarea, a[href]')
+      // La X de la cabecera (`pos`) ⛔ se lleva el foco: un Enter cerraría el diálogo.
+      caja.current?.querySelector<HTMLElement>('button:not(.mo-modal-x), input, select, textarea, a[href]')
     primero?.focus()
 
     return () => {
@@ -93,7 +108,7 @@ export function Modal({
     <div className="mo-backdrop" onMouseDown={(e) => cerrarConFondo && e.target === e.currentTarget && cerrar()}>
       <div
         ref={caja}
-        className={`mo-modal${ancho === 'ancho' ? ' mo-modal--wide' : ancho === 'xl' ? ' mo-modal--xl' : ''}`}
+        className={`mo-modal${ancho === 'ancho' ? ' mo-modal--wide' : ancho === 'xl' ? ' mo-modal--xl' : ''}${pos ? ' mo-modal--pos' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={typeof titulo === 'string' ? titulo : undefined}
@@ -101,6 +116,13 @@ export function Modal({
         {titulo != null && (
           <div className="mo-modal-head">
             <div className="mo-modal-title">{titulo}</div>
+            {pos && (
+              <button type="button" className="mo-modal-x" onClick={cerrar} aria-label="Cerrar" title="Cerrar" style={{ height: 32 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
         )}
         <div className="mo-modal-body">{children}</div>

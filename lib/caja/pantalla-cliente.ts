@@ -24,7 +24,8 @@ export const CLAVE_VISTA = 'caja:cliente:zattia'
 /** Lo que la clienta le devuelve al POS: su mail (o que no quiere ticket por mail). */
 export const CLAVE_MAIL = 'caja:cliente-mail:zattia'
 
-export type RenglonCliente = { nombre: string; talle: string; cantidad: number; lista: number; importe: number; foto: string | null }
+/** `color`: el de la variante en Tienda Nube («CHOCOLATE»), cruzado por SKU; ausente si el POS ⛔ lo mandó. */
+export type RenglonCliente = { nombre: string; talle: string; color?: string | null; cantidad: number; lista: number; importe: number; foto: string | null }
 
 export type VistaCliente =
   | { estado: 'vacio' }
@@ -46,8 +47,15 @@ export type VistaCliente =
     }
   | { estado: 'gracias'; numero: number | null; email: string | null }
 
-/** Lo que devuelve la clienta. `no` = no quiere el ticket por mail. */
-export type MailCliente = { email: string; no?: boolean; en: number }
+/**
+ * Lo que devuelve la clienta. `no` = no quiere el ticket por mail. `novedades` = tildó «Quiero recibir
+ * novedades y promos» (ausente en lo que publicaba la pantalla vieja: el POS de hoy ⛔ lo lee).
+ *
+ * ⚠️ Hoy el consentimiento ⛔ llega a ningún lado: el POS se queda sólo con el mail, `caja_venta` ⛔
+ * tiene columna para guardarlo y el mailer da de alta al contacto del POS con `tnAcceptsMkt: true`
+ * SIEMPRE (`areben-mailer`, `app/api/externo/ticket/route.ts`). Viaja acá para que el resto lo tome.
+ */
+export type MailCliente = { email: string; no?: boolean; novedades?: boolean; en: number }
 
 const centavos = (n: number) => Math.round(n * 100) / 100
 
@@ -56,7 +64,7 @@ const centavos = (n: number) => Math.round(n * 100) / 100
  * carrito) y `cobro` el de `cobro()`; `aPagar` = subtotal − descuento a la venta.
  */
 export function vistaParaCliente(a: {
-  carrito: { nombre: string; talle: string; cantidad: number; precio: number | null; foto: string | null }[]
+  carrito: { nombre: string; talle: string; color?: string | null; cantidad: number; precio: number | null; foto: string | null }[]
   filas: { importe: number }[] | null
   aPagar: number | null
   cobro: { total: number; pagos: { descuento: number; redondeo: number }[] } | null
@@ -67,7 +75,7 @@ export function vistaParaCliente(a: {
   if (!a.carrito.length) return a.ultima ? { estado: 'gracias', numero: a.ultima.numero, email: a.ultima.email } : { estado: 'vacio' }
   const renglones = a.carrito.map((r, i) => {
     const lista = centavos(r.cantidad * (r.precio ?? 0))
-    return { nombre: r.nombre, talle: r.talle, cantidad: r.cantidad, lista, importe: a.filas?.[i]?.importe ?? lista, foto: r.foto }
+    return { nombre: r.nombre, talle: r.talle, ...(r.color ? { color: r.color } : {}), cantidad: r.cantidad, lista, importe: a.filas?.[i]?.importe ?? lista, foto: r.foto }
   })
   const subtotal = centavos(renglones.reduce((s, r) => s + r.importe, 0))
   const aPagar = a.aPagar ?? subtotal
@@ -84,6 +92,30 @@ export function vistaParaCliente(a: {
     email: a.email,
   }
 }
+
+/**
+ * Del audit de Tienda Nube (`traerAudit(..., { variantes: true })`), la foto y el color de cada variante
+ * por SKU (TN y GN usan el mismo, en minúscula). Lo usan el tótem y, para mandarle el color a esta
+ * pantalla, el POS (que ya arma la foto así).
+ */
+export function porSku(ps: { variantes?: { sku?: string | null; image_url?: string | null; color?: string | null }[] }[]): {
+  foto: Record<string, string>
+  color: Record<string, string>
+} {
+  const foto: Record<string, string> = {}
+  const color: Record<string, string> = {}
+  for (const p of ps)
+    for (const v of p.variantes ?? []) {
+      const k = v.sku?.toLowerCase().trim()
+      if (!k) continue
+      if (v.image_url) foto[k] = v.image_url
+      if (v.color?.trim()) color[k] = v.color.trim()
+    }
+  return { foto, color }
+}
+
+/** «CHOCOLATE» ⇒ «Chocolate»: el color como lo lee la clienta. */
+export const nombreDeColor = (c: string) => c.trim().toLowerCase().replace(/(^|[\s/-])\p{L}/gu, (x) => x.toUpperCase())
 
 /** `juan••••@gmail.com`: el mail a la vista del mostrador, sin mostrarlo entero. */
 export function enmascarar(mail: string): string {

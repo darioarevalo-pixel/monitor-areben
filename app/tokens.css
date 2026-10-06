@@ -77,6 +77,14 @@
   --mo-success-border: #abefc6;
   --mo-success-ink: #067647;
 
+  /* Las formas de pago del cobro de la Caja (prototipo del POS, 6-oct): Débito celeste y Crédito
+     rosa, para distinguir las cuatro tarjetas de un golpe de vista. ⛔ Son de estado: no se usan
+     para avisos (el celeste NO es «información» en el resto del monitor). */
+  --mo-info: #026aa2;
+  --mo-info-bg: #f0f9ff;
+  --mo-pink: #c11574;
+  --mo-pink-bg: #fdf2fa;
+
   /**
    * ── Identidad de marca (BDI / Zattia) ──
    * NO son colores del sistema: son etiquetas de identidad. Aparecen en las listas que

@@ -21,7 +21,7 @@ vi.stubGlobal('localStorage', {
 })
 
 const carrito = [
-  { nombre: 'BLAZER NEREA', talle: 'M', cantidad: 1, precio: 20000, foto: null },
+  { nombre: 'BLAZER NEREA', talle: 'M', color: 'CHOCOLATE', cantidad: 1, precio: 20000, foto: null },
   { nombre: 'TOP MORA', talle: 'S', cantidad: 2, precio: 12000, foto: null },
 ]
 const filas = renglones([
@@ -95,6 +95,9 @@ describe('CajaCliente', () => {
     expect(t).toContain('Tu compra · 3 prendas')
     expect(t).toContain('BLAZER NEREA')
     expect(t).toContain('$40.000')
+    // El renglón: «color · talle · ×n».
+    expect(t).toContain('Chocolate · M')
+    expect(t).toContain('S · ×2')
 
     const input = caja.querySelector('input[type=email]') as HTMLInputElement
     const escribir = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
@@ -104,9 +107,13 @@ describe('CajaCliente', () => {
     })
     const gmail = [...caja.querySelectorAll('button')].find((b) => b.textContent === '@gmail.com')!
     await act(async () => gmail.click())
+    // La casilla de novedades viene tildada; destildada, viaja junto al mail.
+    const novedades = caja.querySelector('input[type=checkbox]') as HTMLInputElement
+    expect(novedades.checked).toBe(true)
+    await act(async () => novedades.click())
     const enviar = [...caja.querySelectorAll('button')].find((b) => b.textContent === 'Enviar')!
     await act(async () => enviar.click())
-    expect(leerMail(disco.get(CLAVE_MAIL) ?? null)?.email).toBe('ana@gmail.com')
+    expect(leerMail(disco.get(CLAVE_MAIL) ?? null)).toMatchObject({ email: 'ana@gmail.com', no: false, novedades: false })
   })
 
   it('se entera de cada cambio del POS (evento storage)', async () => {
@@ -117,5 +124,6 @@ describe('CajaCliente', () => {
     await act(async () => window.dispatchEvent(new StorageEvent('storage', { key: CLAVE_VISTA, newValue: nuevo })))
     expect(caja.textContent).toContain('¡Gracias por tu compra!')
     expect(caja.textContent).toContain('Venta #30051')
+    expect(caja.textContent).toContain('Seguinos en @zattia_co')
   })
 })

@@ -13,6 +13,20 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## ▶️ CAJA + POS: IGUALARLO AL PROTOTIPO — 6-oct-2026 (dictado por Bruno)
+
+Comparado el código contra el prototipo aprobado (claude.ai/artifact/4kagmCwHoKFMExKM9obMce). Bruno:
+- ⛔ **Colores por marca: desestimado por ahora**, alcanza con UNO solo (el del monitor).
+- Sí: modal de **variante** como el prototipo (círculo de color, «Color · Talle», chip de ubicación,
+  ↑/↓·Enter·Esc) · **modales** con X, línea bajo el título y pie gris · **colores de los medios**
+  (débito celeste, crédito rosa; con «Varios pagos» las tarjetas quedan a la vista) · **calculadora**
+  en tabla con chip del billete y −/+, y al cerrar 3 mosaicos Esperado/Contado/Diferencia.
+- Del header del POS **sólo el punto verde/naranja de Gestión Nube** (el texto del chip queda).
+- Sí: el **pie del pedido siempre visible** (botón apagado) · **animaciones** (entra, pop, latido) ·
+  tablet/tótem: casilla de novedades, «Seguinos en @», prendas en la bienvenida, colores en el tótem ·
+  pestaña Caja: «Abrir POS»/«Abrir turno» en el header sin turno, «Último conteo» con «—»,
+  tabla «Forma de pago · Ventas · Monto», tarjeta del turno más liviana.
+
 ## ▶️ CAJA + POS: LA VUELTA DEL 5-OCT — 5-oct-2026 (dictado por Bruno, con capturas del POS de GN)
 
 Plan aprobado: `~/.claude/plans/te-pongo-en-modo-concurrent-moler.md`. Lo dictado, en corto:

@@ -61,6 +61,22 @@ describe('CalculadoraBilletes', () => {
     expect(onUsar).toHaveBeenCalledWith(64500, { 20000: 3, 10000: 0, 2000: 0, 1000: 4, 500: 1, 200: 0, 100: 0 })
   })
 
+  it('el contador − / + suma de a un billete, ⛔ baja de cero, y viaja igual que lo tipeado', () => {
+    const onUsar = montar()
+    const mas = document.querySelector('button[aria-label="Un billete de $1.000 más"]') as HTMLButtonElement
+    const menos = document.querySelector('button[aria-label="Un billete de $1.000 menos"]') as HTMLButtonElement
+    act(() => menos.click())
+    expect(input(1000).value).toBe('')
+    act(() => mas.click())
+    act(() => mas.click())
+    act(() => menos.click())
+    expect(input(1000).value).toBe('1')
+    tipear(1000, '3')
+    act(() => mas.click())
+    act(() => boton('Abrir turno').click())
+    expect(onUsar).toHaveBeenCalledWith(4000, { 20000: 0, 10000: 0, 2000: 0, 1000: 4, 500: 0, 200: 0, 100: 0 })
+  })
+
   it('el input sólo deja dígitos: «-2» es 2, ⛔ resta', () => {
     montar()
     tipear(1000, '-2')

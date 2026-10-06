@@ -16,4 +16,11 @@ export const MARCA_CAJA = {
   /** El color de identidad: en la pantalla de la clienta y el tótem es el color principal. */
   acento: color.brand,
   acentoBg: color.brandBg,
+  /**
+   * El Instagram, para «Seguinos en …» de la pantalla de gracias. `@zattia_co` es la cuenta de la marca
+   * (la de 97.765 seguidores, id 17841464104146773 en `areben-marketing`). Vacío ⇒ ⛔ se muestra.
+   */
+  instagram: '@zattia_co' as string,
+  /** El nombre del local en la cabecera de la clienta («Local Centro»…). Vacío ⇒ ⛔ se muestra: falta que Bruno lo diga. */
+  local: '' as string,
 } as const

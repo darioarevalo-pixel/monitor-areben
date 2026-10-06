@@ -18,6 +18,12 @@ vi.mock('@/components/fundas/useDatosMonitor', () => ({ useDatosMonitor: () => (
 vi.mock('@/components/productos/useTnImages', () => ({ useTnPromo: () => ({}) }))
 vi.mock('@/lib/etiquetas/core', () => ({ construirPrecios: () => ({ precios: { 5: 18900 }, fueraDeTn: new Set() }) }))
 vi.mock('@/lib/tn', () => ({ imagenDe: () => null }))
+vi.mock('@/lib/tn-audit', () => ({
+  traerAudit: () =>
+    Promise.resolve([
+      { id: 1, name: 'BLAZER NEREA', variantes: [{ sku: 'RBT-0137', color: 'NEGRO', image_url: 'negro.jpg' }, { sku: 'RBT-0138', color: 'CHOCOLATE', image_url: null }] },
+    ]),
+}))
 vi.mock('@/lib/caja/cliente', () => ({
   leerConfig: () => Promise.resolve({ reglas: REGLAS_INICIALES, politica_cambio: null, ticket_logo: null }),
   buscarProducto: (codigo: string) =>
@@ -77,6 +83,13 @@ describe('CajaTotem', () => {
     expect(t).toContain('$18.900')
     expect(t).toContain('$16.100')
     expect(t).toContain('Ahorrás $2.800')
+    // Con las reglas iniciales transferencia es 10 % ⇒ ⛔ «o transferencia».
+    expect(t).toContain('En efectivo')
+    expect(t).not.toContain('o transferencia')
+    // La fila de colores del audit de TN, y la foto del color escaneado.
+    expect(t).toContain('Negro')
+    expect(t).toContain('Chocolate')
+    expect(caja.querySelector('img')?.getAttribute('src')).toBe('negro.jpg')
     const s = [...caja.querySelectorAll('span')].find((x) => x.textContent === 'S')!
     expect(s.style.textDecoration).toBe('line-through')
   })
