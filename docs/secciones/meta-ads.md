@@ -2403,8 +2403,12 @@ sí se puede desde el monitor.
 - ▶️ 🔴 **Cargar los umbrales y crear las reglas** mirando el calibrador. Son 10 minutos y es lo que
   destraba las automatizaciones, los escalones (que sin `roas_objetivo` ni `techo_diario_crudo` no
   pueden armar nada) y el freno de emergencia.
-- ▶️ **Nunca se escribió un escalón, ni se apagó un aviso de la poda, ni se apretó «Empezar» en una
-  tanda de piezas.** Cada una de esas tres primeras veces **vale como la verificación** de su tanda —
+- 🏁 **La tanda de piezas SE EJERCIÓ el 8-oct-2026** (plan #28, 2 videos de BDI, por el API desde la Mac):
+  subida al Blob por el camino de cliente (`upload()` con `x-monitor-auth`), 10 pasos en ~2 min, y la
+  relectura dio conjuntos PAUSED con su presupuesto y avisos con su texto y destino por pieza. 🔴 **Sin
+  `textos`/`ajustes` por pieza, el aviso sale con el copy Y EL DESTINO del modelo** — el 1er intento
+  (#27, cancelado) iba a publicar dos videos nuevos con el texto de «Blue Cases» y el link a Girlhood.
+- ▶️ **Nunca se escribió un escalón ni se apagó un aviso de la poda.** Cada una de esas dos primeras veces **vale como la verificación** de su tanda —
   hasta entonces están escritas, probadas y sin ejercer.
 - ▶️ Los 5 avisos que la poda propone apagar ($60.666 en 7 días, cero compras) — lo decide Bruno.
 - ▶️ Publicar los 2 informes de BDI, que están en borrador.

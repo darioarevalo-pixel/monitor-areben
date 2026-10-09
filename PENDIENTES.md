@@ -13,6 +13,105 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## ▶️ META: LO QUE EL MONITOR TODAVÍA ⛔ NO PUEDE HACER — 8-oct-2026 (pedido por Bruno)
+
+🔑 Bruno, 8-oct: *«anotalo como pendiente, y sumemos cosas que no podemos hacer, como cambiar público
+o esas cosas»*. Salió de armar los tests de BDI: los videos de Rosario necesitan un público de
+Rosario + 20 km, y el monitor ⛔ no lo puede poner. **Verificado leyendo el código el 8-oct**:
+las acciones sueltas son sólo `estado` · `presupuesto` · `nombre` · `duplicar`
+(`lib/meta-ads/acciones.core.js`), y los planes crean copiando de un objeto que ya existe.
+
+| # | lo que ⛔ se puede | dónde se ve | qué destraba |
+|---|---|---|---|
+| 1 | 🔴 **Cambiar el PÚBLICO** de un conjunto — ubicación (ciudad + radio, «personas que viven acá»), edad, género, intereses — ⛔ ni al crearlo ni después | `receta.core.js` copia el `targeting` de la referencia tal cual; ninguna acción tiene `targeting` | los tests de LOCAL (Rosario), y probar un público sin armar el conjunto a mano |
+| 2 | 🔴 **Promocionar una publicación EXISTENTE** (posteo de IG/FB) | el monitor sólo LEE `effective_object_story_id`; crea avisos nuevos con `object_story_spec` | **el test de Zattia del 12-oct** («una publicación que rindió») ⇒ ese va por Ads Manager |
+| 3 | **Elegir el OBJETIVO** de una campaña nueva (ventas / tráfico / alcance) | `crear` toma el `objective` de la campaña de la referencia | una campaña de tráfico o de alcance sin tener una parecida de donde copiar |
+| 4 | **Programar inicio y fin** | todo nace PAUSED y `start_time` ⛔ se copia | lanzar una tanda el lunes 00:00 sin que alguien la prenda a mano ese día |
+| 5 | **Editar el texto o la pieza** de un aviso que ya existe | ⛔ hay acción sobre el creativo | corregir un copy sin crear un aviso nuevo (y perder su historia) |
+| 6 | **Crear públicos** (personalizados, similares, «interactuaron con IG») | no hay nada que escriba `customaudiences` | tests como el #334 (interacción IG) |
+| 7 | **Stunned con avisos de Instagram**: duplicar algo con avisos en su cuenta | la cuenta de IG ⛔ está asignada al system user (candado 5 de la ficha) | operar Stunned entero desde el monitor |
+
+⛔ **A propósito, ⛔ no son pendientes**: **eliminar** (el monitor ⛔ borra; las copias las borra Bruno)
+y **la puja** (`bid_strategy`, fuera por diseño: presupuesto y puja tienen que vivir al mismo nivel).
+▶️ **El primero que conviene construir es el 1** (ubicación al crear), y en segundo lugar el 2. Cada
+uno es tocar lo que escribe en Meta ⇒ se prueba con `validate_only` y con `crear-y-borrar-meta.mjs`
+**antes** de usarlo con plata (ver «Cómo se prueba» en `docs/secciones/meta-ads.md`).
+
+## ▶️ PAUTA 8-OCT: EL SALE TERMINA ESTA SEMANA Y VIENEN TRES TESTS — 8-oct-2026 (dictado por Bruno)
+
+🔑 Bruno, 8-oct: *«esta semana se termina el sale … ahora tengo que testear en bdi, en stunned
+tráfico y en zattia una publicación que rindió»*.
+- 📅 **Fecha (Bruno, 8-oct): el SALE termina el DOM 11-oct** —*«si no me equivoco, o por lo menos la
+  difusión sí, capaz dejamos algunos percheros pequeños»*— ⇒ la **difusión** se corta el dom 11; puede
+  quedar un resto de SALE en percheros chicos. ⚠️ Por eso, desde el lun 12, las compras de Zattia
+  pueden traer todavía algo de SALE: **el test se juzga por unidades de NUEVA TEMPORADA**, ⛔ no por
+  compras totales.
+- ⚠️ **La vara ROAS ≥ 5 de abajo VENCE con el SALE**: cuando vuelven los precios de lista, Zattia
+  vuelve a juzgarse por el techo ($3.851) y por si vende nueva temporada (regla del 1-oct).
+- 🔴 **Al terminar el SALE, los avisos de FERIA llevan a precios que ya no existen** ⇒ se apagan o se
+  cambian ese mismo día. **Son SÓLO corsets-feria y sweaters-feria.** 🔴 Corregido por Bruno el 8-oct:
+  *«las blusas no son de feria … shorts denim no es de feria»* — meta-blusas, meta-shorts y
+  shorts-denim-ss27 son **NUEVA TEMPORADA** (que la TANDA 2 se llame «FERIA + DENIM SS27» ⛔ no hace
+  feria a todo lo que cuelga de ella: **se lee el nombre del CONJUNTO**).
+- ▶️ Tres tests: **BDI** (una tanda nueva) · **Stunned** (tráfico al perfil, contra BROAD - PERFIL IG)
+  · **Zattia** (promocionar una publicación orgánica que rindió).
+- 🔑 **BDI, 4 videos con Bruno hablando (decidido 8-oct), se lanzan el LUN 12:**
+  - **VENTAS, BROAD** (como TANDA 10), $10.000/día × 2 días, puerta normal: **1 «fundas de Pinterest»** y
+    **2 «moda en fundas»** ⇒ `TANDA 16 - 12/10 · …`, veredicto **jue 15**.
+  - **TRÁFICO AL PERFIL DE IG, Rosario +20 km**, $5.000/día c/u, **sin corte** (ver 🏁 abajo): **3 «la pared más viral de
+    Rosario»** y **4 «sos de Rosario y buscás una funda nueva»**. ⛔ Sin contraseña de canje (Bruno).
+    Vara Meta: **$/visita al perfil** (mejor de agosto $11). Vara negocio: **tickets de «Mi Local»** contra
+    el mismo día de la semana de las 4 semanas previas (base ~17/día; ⛔ se lee si no pasa de ~20).
+    Por qué tráfico (Bruno: *«la última vez que hice tráfico le fue bien al local»*): medido, con
+    `BDI ACCESORIOS - TRAFICO - MAYO` prendida (3-23 ago) el local hizo 24,3 · 21,8 · 22,6 tickets/día
+    contra ~17 en jun-jul, y 14,8 la semana después de apagarla. ⚠️ Confundido con el Día del Niño (16-ago)
+    y con la pauta de ventas subiendo de $10k a $57k/día ⇒ indicio, ⛔ no prueba.
+    🔴 **Nombre SIN «TEST»/«TANDA»**: la puerta del parte los juzgaría por compras y los mandaría a morir.
+  - 🏁 **8-oct: los 2 de VENTAS creados por el monitor** (plan #28, `meta_ads_decision` 354-355), PAUSADOS,
+    $10.000/día, texto y destino propios (Pinterest → /fundas/ · Moda en fundas → /new-in/). ▶️ **PRENDER el lun 12.**
+  - 🏁 **8-oct: los 2 de ROSARIO PUBLICADOS Y ACTIVOS** (`BDI ACCESORIOS - TRAFICO - OCTUBRE`, `meta_ads_decision`
+    356-357), visitas al perfil, $5.000/día c/u. 🔑 **Bruno, 8-oct: ⛔ NO se apagan a las dos semanas** — quedan prendidos
+    (sin fecha de fin) y lo único que se mira es **si aumentó el flujo en el local** (tickets de «Mi Local»).
+    🔴 **Corrige lo que estaba escrito acá**: el rechazo *«la cuenta no cumple los requisitos para visitas al
+    perfil»* salió de RECREAR por API el conjunto viejo (`TEST BROAD BDI - 19/05`); armado desde Ads Manager con
+    destino «Instagram o Facebook» **SÍ publicó**. ⇒ ⛔ concluir «la cuenta no puede» de un `validate_only`.
+    Campaña asignada a BDI en el monitor (`asignar-linea` pide `store=bdi`, si no: 400).
+
+## ▶️ PAUTA 8-OCT: EL SALE DE ZATTIA SE JUZGA POR ROAS ≥ 5 (LIQUIDAR STOCK) — 8-oct-2026 (decidido por Bruno)
+
+🔑 **Medido (TN, 27-sep → 7-oct, costo de GN):** el 95% de las unidades online salieron con
+descuento — **$10.300/u cobrado contra $8.418/u de costo** (lista $24.819, −58%). Sin IVA queda ≈ el
+costo ⇒ después de comisión e IIBB, **~−$1.000 por pedido ANTES de la pauta**. ⇒ en el SALE Zattia
+⛔ **no tiene techo**: cualquier CPA es pérdida de margen. (Supone `unit_cost` sin IVA.)
+🔑 **Decisión de Bruno (8-oct, opción «A»): el SALE es para LIQUIDAR STOCK —recuperar caja—**, y se
+juzga por **ROAS de Meta ≥ 5** (la pauta ⛔ se lleva más del 20% de lo que factura), ⛔ no por el
+%techo. El 5 lo propuse yo como ejemplo y quedó como vara de trabajo: ▶️ **Bruno lo puede mover.**
+⚠️ **Esto corre la regla del 1-oct** («una compra de feria ⛔ no cuenta como acierto»): mientras dure
+el SALE, la feria SÍ es el objetivo. La regla del 4-oct (⛔ pausar sin mirar unidades online + local)
+**sigue en pie**.
+🔴 **La vara ROAS ≥ 5 es SÓLO para los avisos de FERIA** (corsets-feria, sweaters-feria). Los de
+nueva temporada (meta-blusas, meta-shorts, shorts-denim-ss27) siguen con la regla del 1-oct: **¿vende
+nueva temporada, online y en el local?** ⚠️ Su ROAS de Meta igual viene inflado de SALE: el 95% de
+las unidades online fueron con descuento, compre lo que compre quien clickeó el aviso de temporada.
+⇒ el 8-oct los juzgué mal con el ROAS; **re-leídos con la regla correcta, las tres manos se
+sostienen** (ver abajo), pero el motivo es otro.
+
+Ejecutado (`meta_ads_decision` 349-353; Zattia queda en **~$25.500/día**, debajo de los ~$30.000 de gerencia):
+- corsets-feria **+20% → $8.400** — ROAS 7d 11,8 · 3d 9,9. Online 0 → 41 → 15 → 20 u, local ~1 → 3/día.
+- meta-shorts **pausada** — ROAS 3d 2,2, ayer 0. Chequeo del 4-oct hecho DESPUÉS de pausar: shorts a
+  precio lleno online 0 u desde el 1-oct; local lleno 1,0/día antes → 3,5 (1-4 oct) → 1,3 (5-7 oct), de
+  vuelta a la base. shorts-denim-ss27 sigue cubriendo el producto.
+- meta-blusas (NUEVA TEMPORADA) **−20% → $4.480** — lo que la sostiene: blusas a precio lleno online
+  **1 u en 18 días**, local estable ~2/día con o sin pauta ⇒ el aviso ⛔ vende temporada online.
+- shorts-denim-ss27 (NUEVA TEMPORADA) **sin tocar** — shorts a precio lleno online 0 u desde el 1-oct
+  (su ROAS 3d 6,6 es SALE). ✅ Bruno, 8-oct: **se deja hasta el LUN 12** y ahí se juzga sin SALE.
+- sweaters-feria (ROAS 3d 4,7, en el piso) **sin tocar**.
+
+🔴 **El parte todavía juzga Zattia por %techo de lista** ⇒ va a seguir proponiendo al revés (pedía +20%
+a meta-blusas y −20% a sweaters). ▶️ Hasta que el parte sepa del SALE, Zattia se lee con ROAS a mano.
+🔴 **Píxel de Zattia**: el 5 y el 7-oct Meta vio checkouts normales pero la compra cayó a 20%/50% (la
+pauta explicó 33% y 45% de los pedidos, normal 73%). ▶️ Mirar Purchase en el Administrador de eventos.
+
 ## ▶️ CAJA + POS: IGUALARLO AL PROTOTIPO — 6-oct-2026 (dictado por Bruno)
 
 Comparado el código contra el prototipo aprobado (claude.ai/artifact/4kagmCwHoKFMExKM9obMce). Bruno:
@@ -77,7 +176,9 @@ el mapa) ⛔ sirve mientras tanto. La dirección se da vuelta: **el escaneo RELE
   dio igual. ▶️ **Falta la MANO**: que el local camine un módulo doble con «Chequeo + mapa» y que Bruno
   lo abra desde la lista y lo guarde como mapa. ⛔ Visto en prod con un recorrido de verdad todavía.
 
-## ▶️ TEST BDI: GENTE QUE INTERACTUÓ EN INSTAGRAM, CON UN AVISO GANADOR — 2-oct-2026 (dictado por Bruno)
+## 🏁 TEST BDI: GENTE QUE INTERACTUÓ EN INSTAGRAM, CON UN AVISO GANADOR — 2-oct-2026 (dictado por Bruno) · DESCARTADO el 8-oct
+
+🏁 **Nunca se creó** — Bruno, 8-oct: *«el 334 no se creó, era una idea»* (`meta_ads_decision` #348, la #334 revocada).
 
 Bruno: *«pautar meta con gente que interactuó en instagram es malo como público?»* → *«sí, BDI
 probaría, con algún anuncio ganador»*. **Nunca se probó**: desde mayo ningún conjunto apuntó a
