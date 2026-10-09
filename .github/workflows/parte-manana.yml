@@ -90,7 +90,7 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          MAIL_HALLAZGOS_A: ${{ vars.MAIL_HALLAZGOS_A }}
+          MAIL_PARTE_A: ${{ vars.MAIL_PARTE_A }}
           # Lectura del PENDIENTES.md de areben-marketing (privado). Sin él, el bloque lo dice.
           PENDIENTES_TOKEN: ${{ secrets.PENDIENTES_TOKEN }}
           ENTRADA_SIMULACRO: ${{ inputs.simulacro }}

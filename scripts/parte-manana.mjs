@@ -42,7 +42,9 @@ const SIMULACRO = process.argv.includes('--simulacro') || process.env.ENTRADA_SI
 // `--html <archivo>` guarda el HTML del mail: es como se MIRA antes de mandarlo (el workflow lo sube
 // como artefacto de la corrida, porque Zattia sólo se lee desde Actions).
 const HTML_A = process.argv.includes('--html') ? process.argv[process.argv.indexOf('--html') + 1] : process.env.PARTE_HTML || null
-const MAIL_A = process.env.MAIL_HALLAZGOS_A || 'brunoarevalo@arebensrl.com'
+// Una casilla por destinatario, separadas por coma. Va un mail a cada uno: si una rebota, la otra igual llega.
+const MAIL_A = (process.env.MAIL_PARTE_A || 'brunoarevalo@arebensrl.com,darioarevalo@arebensrl.com')
+  .split(',').map((s) => s.trim()).filter(Boolean)
 const HOY = diaArgentino(Date.now())
 const AYER = sumarDias(HOY, -1)
 
@@ -285,13 +287,15 @@ async function main() {
   if (HTML_A) { writeFileSync(HTML_A, parte.html); console.log(`  HTML guardado en ${HTML_A}`) }
 
   if (SIMULACRO) {
-    console.log(`\nMail [SIMULACRO, no se manda] → ${MAIL_A}\n  ${parte.asunto}\n`)
+    console.log(`\nMail [SIMULACRO, no se manda] → ${MAIL_A.join(', ')}\n  ${parte.asunto}\n`)
     console.log(parte.texto.split('\n').map((l) => `  | ${l}`).join('\n'))
   } else {
-    const r = await mandarMail({ para: MAIL_A, asunto: parte.asunto, texto: parte.texto, html: parte.html })
-    if (r.ok) console.log(`\nMail mandado a ${MAIL_A}: «${parte.asunto}» (${r.id})`)
-    else if (!r.configurado) anotar('mandar el parte', 'faltan AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY')
-    else anotar('mandar el parte', r.motivo)
+    for (const para of MAIL_A) {
+      const r = await mandarMail({ para, asunto: parte.asunto, texto: parte.texto, html: parte.html })
+      if (r.ok) console.log(`\nMail mandado a ${para}: «${parte.asunto}» (${r.id})`)
+      else if (!r.configurado) { anotar('mandar el parte', 'faltan AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY'); break }
+      else anotar(`mandar el parte a ${para}`, r.motivo)
+    }
   }
 
   console.log(`\nListo en ${((Date.now() - t0) / 1000).toFixed(1)} s.`)

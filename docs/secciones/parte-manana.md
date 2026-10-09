@@ -1,7 +1,7 @@
 # Parte de la mañana — ficha
 
-**No es una pantalla: es un mail.** Sale todas las mañanas a la casilla de Bruno
-(`vars.MAIL_HALLAZGOS_A`) y junta en un solo lugar lo que ordena el día. Lo pidió Bruno el
+**No es una pantalla: es un mail.** Sale todas las mañanas a Bruno y a Darío (desde el 9-oct-2026;
+`vars.MAIL_PARTE_A` las pisa, separadas por coma, un mail a cada una) y junta en un solo lugar lo que ordena el día. Lo pidió Bruno el
 30-sep-2026: *«un mail de todo lo importante… un panorama real de todo, cosas que están
 incompletas, cosas sin terminar, como un estado del día… para empezar a ordenar la mañana»*.
 
