@@ -37,7 +37,9 @@ import {
   type CanalVista,
   type ModoVidaUtil,
 } from '@/lib/productos'
-import { imagenDe, imagenesDe, type IndiceTn } from '@/lib/tn'
+import { imagenesDe, type IndiceTn } from '@/lib/tn'
+import { useFotosIngreso, type IndiceIngreso } from '@/components/productos/useFotosIngreso'
+import { fotosConRespaldo } from '@/lib/recepciones/fotos.core.js'
 import { paginar, sortList, totalPaginas } from '@/lib/tabla'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
@@ -121,6 +123,8 @@ export function ProductosTable() {
   const { datos, error, progreso, origen, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
   const { marca } = useSesion()
   const tnIdx = useTnImages(linea)
+  // Respaldo: la foto de Ingresos para lo que Tienda Nube todavía no tiene (9-oct-2026).
+  const fotosIngreso = useFotosIngreso(linea)
   // El índice completo de TN (el mismo payload que las fotos, ya bajado) para saber qué producto
   // tiene una oferta puesta HOY, incluidas las que se cargaron a mano y la bitácora no conoce.
   const promoIdx = useTnPromo(linea)
@@ -307,7 +311,7 @@ export function ProductosTable() {
             <HeaderAcciones>
               <BotonActualizarInventario />
               {/* Pasar lo filtrado de a uno, foto grande, ⭐ deslizando. Vive en components/destacados/. */}
-              <BotonAsignacionRapida productos={ordenada} tnIdx={tnIdx} destacados={destacados} />
+              <BotonAsignacionRapida productos={ordenada} tnIdx={tnIdx} fotosIngreso={fotosIngreso} destacados={destacados} />
               {/*
                 El PDF queda: sigue siendo la forma de mirar la selección en papel o de mandársela a
                 alguien. "Mandar a liquidación" es el camino nuevo —la campaña se guarda en la base y
@@ -542,6 +546,7 @@ export function ProductosTable() {
                         modoVU={modoVU}
                         canal={canal}
                         tnIdx={tnIdx}
+                        fotosIngreso={fotosIngreso}
                         enSale={vendido?.porPid.get(p.id) ?? null}
                         ofertaHoy={enOfertaHoy.has(p.id)}
                         datos={d}
@@ -578,6 +583,7 @@ function FilaProducto({
   modoVU,
   canal,
   tnIdx,
+  fotosIngreso,
   enSale,
   ofertaHoy,
   datos,
@@ -594,6 +600,7 @@ function FilaProducto({
   modoVU: ModoVidaUtil
   canal: CanalVista
   tnIdx: IndiceTn | null
+  fotosIngreso: IndiceIngreso | null
   /** Lo que este producto vendió con la oferta puesta, o `null` si nunca estuvo en una campaña. */
   enSale: EnSale | null
   /** Tiene una oferta puesta hoy en Tienda Nube, la haya escrito el Monitor o no. */
@@ -613,7 +620,9 @@ function FilaProducto({
 }) {
   const meta = [p.sku, p.proveedor].filter(Boolean).join(' · ')
   const lsStr = canal === 'mayorista' ? '—' : formatLifespan(vidaUtilConCanal(p, modoVU, canal), p.stock)
-  const foto = tnIdx ? imagenDe(p, tnIdx) : null
+  // 🔑 Tienda Nube gana siempre; la de Ingresos sólo tapa el hueco y se rotula, porque es provisoria.
+  const fotos = fotosConRespaldo(p, tnIdx ? imagenesDe(p, tnIdx) : [], fotosIngreso)
+  const foto = fotos.miniatura
   // Se atenúa pero **el checkbox sigue vivo**: el mismo tilde alimenta "Generar sale", y un
   // producto que ya está en la campaña puede querer salir igual en el PDF. Mandarlo dos veces no
   // rompe nada — `sumar-items` no pisa lo que ya está y avisa cuántos ya estaban.
@@ -651,10 +660,15 @@ function FilaProducto({
                 src={foto}
                 loading="lazy"
                 alt={p.name}
-                onClick={() => onFoto(imagenesDe(p, tnIdx!))}
+                onClick={() => onFoto(fotos.imagenes)}
+                title={fotos.origen === 'ingreso' ? 'Foto de Ingresos: provisoria hasta que tenga foto en Tienda Nube' : undefined}
                 style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 6, background: color.bg2, border: `1px solid ${color.line}`, cursor: 'zoom-in', display: 'block' }}
               />
-            ) : (
+            ) : null}
+            {foto && fotos.origen === 'ingreso' ? (
+              <span style={{ display: 'block', width: 60, textAlign: 'center', fontSize: 9, color: color.mut2, marginTop: 2 }}>de ingreso</span>
+            ) : null}
+            {!foto ? (
               <span
                 style={{
                   display: 'flex',
@@ -671,7 +685,7 @@ function FilaProducto({
               >
                 sin foto
               </span>
-            )}
+            ) : null}
           </span>
         </Td>
         <Td tall style={{ maxWidth: 240 }}>

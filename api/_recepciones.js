@@ -2,6 +2,7 @@
 //
 //   GET ?recurso=recepciones&store=bdi|zattia[&dias=90]  → { ok, recepciones, eventos }
 //   GET ?recurso=recepciones&store=…&oc=<store:oc_id>    → { ok, recepcion, lineas }
+//   GET ?recurso=recepciones&store=…&fotos=1             → { ok, fotos } (nombre, sku y foto por renglón)
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=recepciones`. El plan
 // Hobby de Vercel admite 12 funciones y hay 7 usadas.
@@ -14,8 +15,16 @@ import { exigirUsuario } from './_auth.js'
 import { esAdmin, marcaDePermisos, puedeSub, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDelMonitor, cfgDeMarca } from './_recepciones-base.js'
 import { leerEspejo, productoDeLinea, estaEnEspejo } from '../lib/recepciones/espejo.core.js'
+import { leerTodo } from '../lib/supabase/paginar.core.js'
 
 const PARA_VER = ['recepciones']
+/**
+ * Las fotos de Ingresos se piden desde **Por producto**, de respaldo cuando Tienda Nube todavía no
+ * tiene foto (ver `lib/recepciones/fotos.core.js`). Quien ve esa sección no necesariamente ve
+ * Ingresos ⇒ alcanza con cualquiera de las dos. 🔑 Viajan sólo nombre, SKU y la URL de la foto:
+ * ⛔ nada de proveedor ni de cantidades.
+ */
+const PARA_VER_FOTOS = ['productos', 'recepciones']
 /** El sub que destapa de quién vino cada orden. Sin él, la sección contesta todo menos eso. */
 const SUB_PROVEEDORES = 'proveedores'
 
@@ -66,6 +75,34 @@ export default async function handler(req, res) {
 
   const store = String(req.query.store || '').toLowerCase()
   if (!['bdi', 'zattia'].includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' })
+
+  if (req.query.fotos) {
+    if (!puedeVerAlguna(perfil, store, PARA_VER_FOTOS)) {
+      return res.status(403).json({ error: 'No tenés acceso a los productos de esta marca.' })
+    }
+    const cfgF = cfgDelMonitor()
+    if (!cfgF.url || !cfgF.key) return res.status(500).json({ error: 'Faltan credenciales de Supabase.' })
+    const sbF = createClient(cfgF.url, cfgF.key)
+    try {
+      const [ocs, lineas] = await Promise.all([
+        leerTodo(sbF, 'recepcion_oc', (q) => q.select('id, confirmada_at, recibido_en').eq('store', store).order('id')),
+        // 🔴 Paginado y con orden estable: PostgREST corta en 1.000 sin avisar, y los renglones con
+        // foto son los ÚLTIMOS (las fotos llegan desde el 1-sep).
+        leerTodo(sbF, 'recepcion_linea', (q) =>
+          q.select('oc_ref, nombre, sku, imagen_url, imagen_thumb_url').eq('store', store).not('imagen_url', 'is', null).order('id')),
+      ])
+      const cuando = new Map((ocs || []).map((o) => [o.id, o.confirmada_at || o.recibido_en || '']))
+      // De la más vieja a la más nueva: el índice se queda con la última foto de cada producto.
+      const fotos = (lineas || [])
+        .map((l) => ({ nombre: l.nombre, sku: l.sku, imagen_url: l.imagen_url, imagen_thumb_url: l.imagen_thumb_url, _t: cuando.get(l.oc_ref) || '' }))
+        .sort((a, b) => (a._t < b._t ? -1 : a._t > b._t ? 1 : 0))
+        .map(({ _t, ...f }) => f)
+      return res.status(200).json({ ok: true, fotos })
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message })
+    }
+  }
+
   if (!puedeVerAlguna(perfil, store, PARA_VER)) {
     return res.status(403).json({ error: 'No tenés acceso a las recepciones de esta marca.' })
   }

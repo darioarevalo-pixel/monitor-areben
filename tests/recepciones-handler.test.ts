@@ -13,7 +13,7 @@ const base = { tablas: {} as Record<string, Fila[]> }
 function consulta(tabla: string) {
   const q: Record<string, unknown> = {}
   const filas = () => base.tablas[tabla] ?? []
-  for (const m of ['select', 'order', 'gte', 'limit', 'eq', 'in'] as const) q[m] = () => q
+  for (const m of ['select', 'order', 'gte', 'limit', 'eq', 'in', 'not', 'range'] as const) q[m] = () => q
   q.then = (resolve: (v: { data: Fila[]; error: null }) => unknown) => resolve({ data: filas(), error: null })
   q.maybeSingle = async () => ({ data: filas()[0] ?? null, error: null })
   return q
@@ -117,5 +117,27 @@ describe('el proveedor no viaja para quien no lo puede ver', () => {
     expect(res.code).toBe(200)
     expect(JSON.stringify(res.body)).not.toContain('EFFIE')
     expect(res.body?.puede).toEqual({ proveedores: false })
+  })
+})
+
+describe('las fotos de respaldo para Por producto (?fotos=1)', () => {
+  const PRODUCTOS = { name: 'Sofia', admin: false, cuenta: null, acceso: { bdi: { productos: true } }, funcion: [] }
+  const NADA = { name: 'Local', admin: false, cuenta: null, acceso: { bdi: { caja: true } }, funcion: [] }
+  const LINEA = { oc_ref: 'bdi:801', store: 'bdi', nombre: 'TOP AURA', sku: 'TAU-1', imagen_url: 'https://i/g.webp', imagen_thumb_url: 'https://i/c.webp', cantidad_pedida: 9 }
+
+  it('quien ve Por producto las recibe sin ver Ingresos, y ⛔ sin proveedor ni cantidades', async () => {
+    base.tablas.recepcion_linea = [LINEA]
+    sesionDe(PRODUCTOS)
+    const res = await correr({ store: 'bdi', fotos: '1' })
+    expect(res.code).toBe(200)
+    expect(res.body?.fotos).toEqual([{ nombre: 'TOP AURA', sku: 'TAU-1', imagen_url: 'https://i/g.webp', imagen_thumb_url: 'https://i/c.webp' }])
+    const texto = JSON.stringify(res.body)
+    expect(texto).not.toContain('EFFIE')
+    expect(texto).not.toContain('cantidad')
+  })
+
+  it('sin Por producto ni Ingresos: 403', async () => {
+    sesionDe(NADA)
+    expect((await correr({ store: 'bdi', fotos: '1' })).code).toBe(403)
   })
 })

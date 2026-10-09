@@ -37,6 +37,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, color, font, radius, space, useToast } from '@/components/ui'
 import { antiguedad } from '@/lib/productos'
 import { imagenesDe, type IndiceTn } from '@/lib/tn'
+import { fotosConRespaldo } from '@/lib/recepciones/fotos.core.js'
+import type { IndiceIngreso } from '@/components/productos/useFotosIngreso'
 import { alternarEstrella, armarMazo, marcadas, mover, tieneEstrella } from '@/lib/destacados/mazo'
 import type { Destacados } from './useDestacados'
 
@@ -56,11 +58,14 @@ const UMBRAL_PX = 70
 export function BotonAsignacionRapida({
   productos,
   tnIdx,
+  fotosIngreso = null,
   destacados,
 }: {
   /** Lo que la tabla tiene filtrado, en su orden. */
   productos: ProductoMazo[]
   tnIdx: IndiceTn | null
+  /** Respaldo para lo que Tienda Nube todavía no tiene foto. Ver `lib/recepciones/fotos.core.js`. */
+  fotosIngreso?: IndiceIngreso | null
   destacados: Destacados
 }) {
   const [abierto, setAbierto] = useState(false)
@@ -76,7 +81,7 @@ export function BotonAsignacionRapida({
         ⭐ Asignación rápida
       </Button>
       {abierto && tnIdx && (
-        <MazoEstrellas productos={productos} tnIdx={tnIdx} destacados={destacados} onCerrar={() => setAbierto(false)} />
+        <MazoEstrellas productos={productos} tnIdx={tnIdx} fotosIngreso={fotosIngreso} destacados={destacados} onCerrar={() => setAbierto(false)} />
       )}
     </>
   )
@@ -85,17 +90,19 @@ export function BotonAsignacionRapida({
 export function MazoEstrellas({
   productos,
   tnIdx,
+  fotosIngreso = null,
   destacados,
   onCerrar,
 }: {
   productos: ProductoMazo[]
   tnIdx: IndiceTn
+  fotosIngreso?: IndiceIngreso | null
   destacados: Destacados
   onCerrar: () => void
 }) {
   const toast = useToast()
   // Decisión 1: se arma una sola vez, al abrir. Y lo que ya tenía ⭐ al abrir, para el conteo final.
-  const [cartas] = useState(() => armarMazo(productos, (p) => imagenesDe(p, tnIdx)))
+  const [cartas] = useState(() => armarMazo(productos, (p) => fotosConRespaldo(p, imagenesDe(p, tnIdx), fotosIngreso).imagenes))
   const [teniaAlAbrir] = useState(() => new Set(destacados.porProducto.keys()))
   const [i, setI] = useState(0)
   const [foto, setFoto] = useState(0)
