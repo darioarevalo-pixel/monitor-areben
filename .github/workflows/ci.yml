@@ -35,9 +35,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -73,9 +73,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -87,7 +87,7 @@ jobs:
       # Se cachea por día: así Supabase recibe una descarga diaria y no una por push.
       - name: Caché del fixture (una descarga por día)
         id: cache-fixture
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: tests/fixtures
           key: fixture-etl-${{ hashFiles('scripts/fixture-etl.mjs') }}-${{ github.run_id }}
