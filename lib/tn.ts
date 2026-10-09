@@ -37,7 +37,12 @@ export type TnProducto = {
   variantes_sin_foto?: string[]
 }
 
-export type IndiceTn = { bySku: Record<string, TnProducto>; byName: Record<string, TnProducto> }
+export type IndiceTn = {
+  bySku: Record<string, TnProducto>
+  byName: Record<string, TnProducto>
+  /** Sólo en el índice de fotos: los que están en la tienda SIN foto. Ver `matchTn`. */
+  sinFoto?: { bySku: Record<string, true>; byName: Record<string, true> }
+}
 
 /** El producto GN mínimo para matchear: SKU y nombre. */
 export type ClaveGN = { sku?: string | null; name?: string | null }
