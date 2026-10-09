@@ -49,7 +49,8 @@ import type { Bloque, GalleryItem, Ingreso, VistaIngresos } from '@/lib/ingresos
 import { nuevoId, useIngresos } from './useIngresos'
 import { useSubirGaleria } from './useSubirGaleria'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { Card, color as paleta, useConfirmar } from '@/components/ui'
+import { Button, Card, color as paleta, useConfirmar, useToast } from '@/components/ui'
+import { ingresosPorLlegar } from '@/lib/ingresos/hoja'
 
 const VISTA_KEY = 'monitor_ing_vista'
 
@@ -202,6 +203,11 @@ export function Ingresos() {
         {data.length
           ? <>📦 <b>{res.enCamino}</b> en camino · <b>{res.unidades.toLocaleString('es-AR')}</b> unidades</>
           : 'Todavía no cargaste ingresos. Tocá "+ Agregar ingreso" para empezar. 📦'}
+        {res.enCamino > 0 && (
+          <span style={{ marginLeft: 10 }}>
+            <BotonHoja ingresos={ingresosPorLlegar(data)} etiqueta="🖨 Hoja para la pizarra" archivo="importaciones-por-llegar" />
+          </span>
+        )}
       </div>
 
       {/* La bajada del nombre comercial. Va acá, siempre visible y no adentro del ⓘ, porque las
@@ -903,7 +909,10 @@ function IngresoLector({ g, onMedia, guardar, indiceGN }: { g: Ingreso; onMedia:
     <div style={{ border: `1px solid ${paleta.line}`, borderLeft: `4px solid ${e.color}`, borderRadius: 10, padding: '10px 12px', marginBottom: 9, background: '#fff' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>{g.desc || '(sin descripción)'}</div>
-        <EstadoBadge g={g} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <BotonHoja ingresos={[g]} etiqueta="🖨 Hoja" archivo={`importacion-${g.fecha || g.id}`} />
+          <EstadoBadge g={g} />
+        </div>
       </div>
       {meta ? <div style={{ fontSize: 12, color: paleta.mut, marginTop: 5 }}>{meta}</div> : null}
       {bloques.map((b) => (
@@ -923,7 +932,10 @@ function IngresoResumen({ g, onMedia, indiceGN }: { g: Ingreso; onMedia: (m: Med
     <div style={{ border: `1px solid ${paleta.line}`, borderLeft: `4px solid ${e.color}`, borderRadius: 10, padding: '10px 12px', marginBottom: 9, background: '#fff' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>{g.desc || '(sin descripción)'}</div>
-        <EstadoBadge g={g} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <BotonHoja ingresos={[g]} etiqueta="🖨 Hoja" archivo={`importacion-${g.fecha || g.id}`} />
+          <EstadoBadge g={g} />
+        </div>
       </div>
       {meta ? <div style={{ fontSize: 12, color: paleta.mut, marginTop: 5 }}>{meta}</div> : null}
       {(g.bloques || []).map((b) => (
@@ -931,6 +943,32 @@ function IngresoResumen({ g, onMedia, indiceGN }: { g: Ingreso; onMedia: (m: Med
       ))}
       <div style={{ textAlign: 'right', fontSize: 13, color: paleta.ink, marginTop: 8 }}>Total importación: <b>{totalU(g).toLocaleString('es-AR')}</b> u.</div>
     </div>
+  )
+}
+
+/**
+ * Baja la hoja A4 apaisada para imprimir y colgar en la pizarra: una tarjeta por diseño con foto,
+ * nombre y cuántas vienen de cada modelo, cada material en hoja nueva (`lib/ingresos/hoja.ts`).
+ */
+function BotonHoja({ ingresos, etiqueta, archivo }: { ingresos: Ingreso[]; etiqueta: string; archivo: string }) {
+  const [armando, setArmando] = useState(false)
+  const toast = useToast()
+  const onClick = async () => {
+    setArmando(true)
+    try {
+      const { descargarHojaIngresos } = await import('@/lib/ingresos/pdf')
+      const hubo = await descargarHojaIngresos(ingresos, `${archivo}.pdf`)
+      if (!hubo) toast.info('No hay diseños cargados para imprimir.')
+    } catch (e) {
+      toast.error(`No se pudo armar la hoja: ${(e as Error).message}`)
+    } finally {
+      setArmando(false)
+    }
+  }
+  return (
+    <Button size="sm" variant="outline" loading={armando} disabled={armando} onClick={onClick} title="PDF horizontal para imprimir: foto, nombre y cantidades por modelo">
+      {armando ? 'Armando…' : etiqueta}
+    </Button>
   )
 }
 

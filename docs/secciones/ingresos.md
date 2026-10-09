@@ -98,6 +98,19 @@ curl -s 'https://bdi-catalogo.vercel.app/api/ingresos?store=bdi' \
 ⛔ **La primera pasada va con UN diseño, no con 34**: es la única forma de descubrir un error de
 forma sin haber reescrito el KV entero.
 
+## La hoja para la pizarra
+
+Botón **«🖨 Hoja para la pizarra»** (todas las que no arribaron) y **«🖨 Hoja»** en cada importación:
+un PDF A4 **apaisado** para imprimir y colgar en el corcho. Una tarjeta por diseño —foto, nombre,
+total y cuántas vienen de cada modelo—, numeradas, de a 8 por hoja. Lógica en `lib/ingresos/hoja.ts`
+(test `tests/ingresos-hoja.test.ts`), dibujo en `lib/ingresos/pdf.ts`. Sólo lee: no toca el KV.
+
+- 🔑 **Cada material arranca en hoja nueva**: lo que se cuelga junto es lo del mismo material.
+- Un diseño **sin nombre comercial** sale como «Diseño N (sin nombre)», ⛔ no se saltea: la foto
+  sola ya sirve en el corcho, y el hueco a la vista empuja a cargar el nombre.
+- Si todos los modelos son de la misma marca («iPhone …») se dice una vez y la tarjeta muestra sólo
+  «16 Pro»: el nombre entero no entra dos veces por renglón en 6 cm.
+
 ## Reglas que el código no dice
 
 - 🔑 **Dos permisos, no uno** (`ingresos.nombre` / `ingresos.editar`). El chico existe porque "poner
