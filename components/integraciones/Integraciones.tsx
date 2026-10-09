@@ -25,6 +25,7 @@ import { proponerMapeo, type GnVar, type TnVar } from '@/lib/sku-map/proponer'
 import type { MatchMetodo, SkuMapRow } from '@/lib/sku-map/tipos'
 import { importarOrden, leerOrdenes, leerProcesados } from '@/lib/sync-tn/cliente'
 import { TEXTO_MOTIVO, planificar } from '@/lib/sync-tn/core'
+import { armarFilasStock, FILTRO_SKU_STUNNED, stockGnPorSku, stockTnPorSku } from '@/lib/sync-tn/stock-plan.core.js'
 import { aplicarResultadoTanda, candidatasDeStock, enTandas, marcarSinConfirmar, type DryRow, type RespStock } from '@/lib/sync-tn/stock.core'
 import { CFG_STUNNED, CORTE_STUNNED } from '@/lib/sync-tn/config'
 // La MISMA función que usa `api/crear-venta.js` para escribir la nota en GN: lo que se ve acá es
@@ -34,17 +35,8 @@ import type { MotivoCola, PlanSync, PlanVenta } from '@/lib/sync-tn/tipos'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Badge as BadgeKit, Button, ConfirmDetalle, EmptyState, Esqueleto, Notice, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space, useConfirmar } from '@/components/ui'
 
-// Qué variantes de `inventario` (la copia de GN de Zattia) son de Stunned. Es un filtro por
-// PREFIJO DE SKU porque `inventario` no trae la marca.
-//
-// 🔴 `CAM-` está por la CAMPERA WEAR, que rompió la convención: nació `CAM-0001` en vez de
-// `STU-CAM-0001`, así que con el filtro viejo (`STU*`) quedaba invisible para el mapeo y sus 4
-// talles nunca se emparejaban. El arreglo de fondo es el SKU, no esto; mientras tanto, acá.
-//
-// ⚠️ **El guion de `CAM-` NO es decorado.** Zattia tiene variantes cuyo SKU es un nombre suelto
-// —"CAMPERA ROCK - VERDE INGLÉS"—, así que `CAM*` las arrastraría a un mapeo que es de `stunned`.
-// `CAM-*` no las toca. Antes de sumar un prefijo acá, mirar contra qué más matchea.
-const FILTRO_SKU_STUNNED = 'or=(sku.ilike.STU*,sku.ilike.CAM-*)'
+// El filtro de qué variantes son de Stunned (`FILTRO_SKU_STUNNED`) y por qué lleva `CAM-` viven en
+// `lib/sync-tn/stock-plan.core.js`: lo comparte el cron diario de stock.
 
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 const TN_STOCK_API = 'https://bdi-catalogo.vercel.app/api/tn-categorias' // acción 'stock'
@@ -282,38 +274,19 @@ export function Integraciones() {
         setDryMsg('No hay variantes validadas. Validá el mapeo primero (pestaña Mapeo → "Validar verdes").')
         return
       }
-      // GN: stock por SKU = suma de available_quantity de todas las ubicaciones (Depósito + Local).
-      // Traigo también product_name para mostrar de qué producto es cada SKU.
+      // GN = suma de todas las ubicaciones; la regla vive en `stock-plan.core.js`, que es la MISMA
+      // que usa el cron diario (`scripts/sync-stock-stunned.mjs`).
       const inv = await sbFetch<{ sku: string | null; product_name: string | null; available_quantity: number | null }>(
         CUENTAS.zattia,
         'inventario',
         `select=sku,product_name,available_quantity&${FILTRO_SKU_STUNNED}`,
       )
-      const gnStock = new Map<string, number>()
-      const nombrePorSku = new Map<string, string>()
-      for (const r of inv) {
-        if (!r.sku) continue
-        gnStock.set(r.sku, (gnStock.get(r.sku) || 0) + (Number(r.available_quantity) || 0))
-        if (r.product_name && !nombrePorSku.has(r.sku)) nombrePorSku.set(r.sku, r.product_name)
-      }
       // TN: stock por SKU (de las variantes). refresh=1 evita el caché de 1h del endpoint —
       // clave para que, tras aplicar, el dry-run lea el stock REAL y no el viejo.
       const d = await apiFetch(`${AUDIT}?store=${STORE}&variantes=1&refresh=1&nc=${Date.now()}`)
         .then((r) => r.json())
         .catch(() => ({}))
-      const tnStock = new Map<string, number | null>()
-      for (const p of (d?.products || []) as TnAuditProducto[]) {
-        for (const v of p.variantes || []) {
-          if (v.sku) tnStock.set(v.sku, v.stock ?? null)
-        }
-      }
-      const dry: DryRow[] = validadas.map((m) => {
-        const gn = gnStock.get(m.sku) ?? 0
-        const tn = tnStock.has(m.sku) ? tnStock.get(m.sku)! : null
-        const delta = tn == null ? null : gn - tn
-        return { sku: m.sku, nombre: nombrePorSku.get(m.sku) ?? null, tnProductId: m.tn_product_id ?? null, tnVariantId: m.tn_variant_id ?? null, gn, tn, delta }
-      })
-      dry.sort((a, b) => a.sku.localeCompare(b.sku))
+      const dry: DryRow[] = armarFilasStock(validadas, stockGnPorSku(inv), stockTnPorSku((d?.products || []) as TnAuditProducto[]))
       setDryRows(dry)
       const cambian = dry.filter((x) => x.delta != null && x.delta !== 0).length
       setDryMsg(

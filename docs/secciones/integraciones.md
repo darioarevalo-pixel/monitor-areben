@@ -71,6 +71,19 @@ el token de ventas de GN.
 - ⚠️ El dry-run de ventas corta a los **31 días** de rango: TN es lento y el endpoint corta a los
   20 s.
 
+## El stock se sincroniza SOLO, todos los días (9-oct-2026)
+
+- 🔑 **`sync-stock-stunned.yml` pone TN = GN sin botón**, cuando termina bien el sync diario de
+  Zattia (`workflow_run`: lee el espejo recién bajado). Script `scripts/sync-stock-stunned.mjs`; la
+  regla —qué filas y cuándo frenar— es `lib/sync-tn/stock-plan.core.js`, la MISMA que usa el botón.
+- 🔴 **El freno**: inventario de Stunned vacío, o más del 30% de las variantes con stock en TN
+  pasando a 0 (y más de 5) ⇒ no escribe nada y sale en rojo. Al final relee TN con `refresh=1` y
+  sale en rojo si algo quedó distinto: el rojo es el aviso.
+- 🔑 **Entra a `tn-categorias` con `x-stock-cron-key`** (`STOCK_CRON_KEY`, en los secrets de GitHub
+  y en el Vercel de bdi-catalogo), que abre SÓLO `accion:'stock'` con `?store=stunned`. El token de
+  TN de Stunned está marcado «Sensitive» en Vercel y no se puede leer: por eso la llave.
+- A mano: Actions → «Stock de Stunned en Tienda Nube» → Run workflow (por defecto, simulacro).
+
 ## Lo que ya se rompió acá
 
 - 🔴 Hasta el **13-ago-2026** `liberar` sólo exigía estar logueado: cualquiera podía soltar una

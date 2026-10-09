@@ -1,0 +1,56 @@
+name: Stock de Stunned en Tienda Nube
+
+# Pone el stock de la Tienda Nube de Stunned igual al de Gestión Nube, todos los días y sin que nadie
+# apriete nada: es «Aplicar las N con diferencia» de Integraciones → Stock, corrido por el reloj.
+#
+# 🔑 **No tiene horario propio: corre cuando TERMINA BIEN el sync diario de Zattia**, que es el que
+# baja el inventario de GN al espejo. Con un horario suelto podía leer el espejo de ayer —los crons
+# de GitHub de este repo llegan horas tarde— o leerlo a mitad de escritura. Si el sync falla, esto
+# no corre: mejor un día sin actualizar que la tienda escrita con un inventario roto.
+# (El sync diario también lo dispara el reloj de MAKETA a la mañana, así que esto corre 1-2 veces
+# por día. Escribir dos veces el mismo stock es inocuo.)
+#
+# 🔴 **Escribe en la TIENDA VIVA.** El freno, las tandas y la verificación están en
+# `scripts/sync-stock-stunned.mjs`; cualquier cosa rara sale en rojo, y el rojo es el aviso.
+
+on:
+  workflow_run:
+    workflows: ['Sync diario — Zattia']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      simulacro:
+        description: 'true = dice qué escribiría pero no toca la tienda'
+        required: false
+        default: 'true'
+
+concurrency:
+  group: stock-stunned
+  cancel-in-progress: false
+
+jobs:
+  stock:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Poner TN = GN
+        env:
+          ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
+          STOCK_CRON_KEY: ${{ secrets.STOCK_CRON_KEY }}
+          ENTRADA_SIMULACRO: ${{ inputs.simulacro }}
+        run: |
+          args=""
+          [ "$ENTRADA_SIMULACRO" = "true" ] && args="--simulacro"
+          node scripts/sync-stock-stunned.mjs $args

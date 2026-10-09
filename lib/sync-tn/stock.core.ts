@@ -18,6 +18,8 @@
  * lo único que el handler devuelve en `errores[]`.
  */
 
+import { candidatasDeStock as candidatasJs } from './stock-plan.core.js'
+
 /** Una fila del dry-run de stock: qué tiene GN, qué tiene TN, y qué pasó si se intentó escribir. */
 export type DryRow = {
   sku: string
@@ -42,12 +44,8 @@ export type RespStock = {
 /** Identidad de una fila para TN: es lo que viaja en el update y lo único que vuelve en `errores[]`. */
 export const claveTn = (pid: unknown, vid: unknown) => `${String(pid)}|${String(vid)}`
 
-/**
- * Las filas que el botón masivo escribiría: hay diferencia contra TN **y** se sabe a qué variante
- * de TN escribirle. Una fila sin `tn` (TN no gestiona stock ahí) tiene `delta` nulo y no entra.
- */
-export const candidatasDeStock = (rows: DryRow[]): DryRow[] =>
-  rows.filter((r) => r.delta != null && r.delta !== 0 && r.tnProductId != null && r.tnVariantId != null)
+/** Las filas que el botón masivo escribiría. La regla es la del cron diario: vive en `stock-plan.core.js`. */
+export const candidatasDeStock = (rows: DryRow[]): DryRow[] => candidatasJs(rows) as DryRow[]
 
 /** Parte una lista en tandas de `tam`. Con `tam` inválido devuelve una sola tanda: nunca un bucle infinito. */
 export function enTandas<T>(xs: T[], tam: number): T[][] {
