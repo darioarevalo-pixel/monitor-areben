@@ -7,7 +7,7 @@
  */
 
 import { agregarImagenFit, compartirODescargarPDF, precargarImagenes } from '../pdf'
-import { COLUMNAS, FILAS, fechaCorta, paginasHoja, type Pagina, type Tarjeta } from './hoja'
+import { GRILLA, fechaCorta, paginasHoja, type ModoHoja, type Pagina, type Tarjeta } from './hoja'
 import type { Ingreso } from './tipos'
 
 const W = 297
@@ -20,16 +20,19 @@ const PIE = 6
 const num = (n: number) => n.toLocaleString('es-AR')
 
 /** Baja el PDF (o abre compartir en el celular). Devuelve false si no había ningún diseño. */
-export async function descargarHojaIngresos(ingresos: Ingreso[], nombreArchivo: string): Promise<boolean> {
-  const pdf = await armarHojaIngresos(ingresos)
+export async function descargarHojaIngresos(ingresos: Ingreso[], nombreArchivo: string, modo: ModoHoja = 'cantidades'): Promise<boolean> {
+  const pdf = await armarHojaIngresos(ingresos, modo)
   if (!pdf) return false
   await compartirODescargarPDF(pdf, nombreArchivo, 'Importaciones por llegar')
   return true
 }
 
 /** El jsPDF armado, o null si no hay ningún diseño. Separado de la descarga para poder mirarlo. */
-export async function armarHojaIngresos(ingresos: Ingreso[]) {
-  const paginas = paginasHoja(ingresos)
+export async function armarHojaIngresos(ingresos: Ingreso[], modo: ModoHoja = 'cantidades') {
+  const paginas = paginasHoja(ingresos, modo)
+  const { columnas: COLUMNAS, filas: FILAS } = GRILLA[modo]
+  // Sólo imágenes no lleva encabezado: la hoja entera es para las fotos.
+  const cab = modo === 'imagenes' ? 0 : CAB
   if (!paginas.length) return null
   const { jsPDF } = await import('jspdf')
   const fotos = await precargarImagenes(paginas.flatMap((p) => p.tarjetas.map((t) => t.img)))
@@ -38,13 +41,16 @@ export async function armarHojaIngresos(ingresos: Ingreso[]) {
 
   paginas.forEach((p, i) => {
     if (i > 0) pdf.addPage('a4', 'landscape')
-    encabezado(pdf, p)
+    if (modo !== 'imagenes') encabezado(pdf, p)
     const cellW = (W - 2 * M - (COLUMNAS - 1) * GAP) / COLUMNAS
-    const cellH = (H - M - CAB - PIE - M / 2 - (FILAS - 1) * GAP) / FILAS
+    const cellH = (H - M - cab - PIE - M / 2 - (FILAS - 1) * GAP) / FILAS
     p.tarjetas.forEach((t, k) => {
       const x = M + (k % COLUMNAS) * (cellW + GAP)
-      const y = M + CAB + Math.floor(k / COLUMNAS) * (cellH + GAP)
-      tarjeta(pdf, t, x, y, cellW, cellH, fotos.get(t.img) ?? '', p.marcaModelos)
+      const y = M + cab + Math.floor(k / COLUMNAS) * (cellH + GAP)
+      const foto = fotos.get(t.img) ?? ''
+      if (modo === 'imagenes') agregarImagenFit(pdf, foto, x, y, cellW, cellH)
+      else if (modo === 'disenos') tarjetaDiseno(pdf, t, x, y, cellW, cellH, foto)
+      else tarjeta(pdf, t, x, y, cellW, cellH, foto, p.marcaModelos)
     })
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(7)
@@ -90,6 +96,32 @@ function encabezado(pdf: any, p: Pagina) {
   pdf.line(M, M + 17, W - M, M + 17)
 }
 
+/** Foto grande, número y nombre: el papel para elegir, sin cantidades. */
+function tarjetaDiseno(pdf: any, t: Tarjeta, x: number, y: number, w: number, h: number, foto: string) {
+  const pad = 2
+  const altoFoto = h - 10
+  pdf.setDrawColor(215)
+  pdf.setLineWidth(0.3)
+  pdf.roundedRect(x, y, w, h, 2, 2)
+  pdf.setFillColor(246, 247, 249)
+  pdf.rect(x + pad, y + pad, w - 2 * pad, altoFoto - pad, 'F')
+  if (foto) agregarImagenFit(pdf, foto, x + pad, y + pad, w - 2 * pad, altoFoto - pad)
+  numero(pdf, t.numero, x + pad, y + pad)
+  pdf.setFontSize(10)
+  pdf.setFont('helvetica', t.sinNombre ? 'italic' : 'bold')
+  pdf.setTextColor(t.sinNombre ? 140 : 20)
+  pdf.text(pdf.splitTextToSize(t.sinNombre ? `${t.nombre} (sin nombre)` : t.nombre, w - 2 * pad)[0], x + w / 2, y + h - 3.5, { align: 'center' })
+}
+
+function numero(pdf: any, n: number, x: number, y: number) {
+  pdf.setFillColor(20, 20, 20)
+  pdf.circle(x + 4, y + 4, 3.2, 'F')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8)
+  pdf.setTextColor(255)
+  pdf.text(String(n), x + 4, y + 5.1, { align: 'center' })
+}
+
 function tarjeta(pdf: any, t: Tarjeta, x: number, y: number, w: number, h: number, foto: string, marca: string) {
   pdf.setDrawColor(215)
   pdf.setLineWidth(0.3)
@@ -111,12 +143,7 @@ function tarjeta(pdf: any, t: Tarjeta, x: number, y: number, w: number, h: numbe
   }
 
   // El número en un círculo arriba a la izquierda, encima de la foto.
-  pdf.setFillColor(20, 20, 20)
-  pdf.circle(x + pad + 4, y + pad + 4, 3.2, 'F')
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(8)
-  pdf.setTextColor(255)
-  pdf.text(String(t.numero), x + pad + 4, y + pad + 5.1, { align: 'center' })
+  numero(pdf, t.numero, x + pad, y + pad)
 
   let ty = y + pad + altoFoto + 5
   pdf.setFontSize(10.5)

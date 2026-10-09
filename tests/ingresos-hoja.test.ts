@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fechaCorta, ingresosPorLlegar, marcaComun, paginasHoja, POR_HOJA, tarjetasDe } from '@/lib/ingresos/hoja'
+import { fechaCorta, ingresosPorLlegar, marcaComun, paginasHoja, POR_HOJA, porHoja, tarjetasDe } from '@/lib/ingresos/hoja'
 import type { Bloque, Ingreso } from '@/lib/ingresos/tipos'
 
 function bloque(nombre: string, nDisenos: number, modelos = ['iPhone 15', 'iPhone 16 Pro']): Bloque {
@@ -64,5 +64,18 @@ describe('hoja para la pizarra', () => {
   it('fecha corta', () => {
     expect(fechaCorta('2026-10-20')).toBe('20/10/2026')
     expect(fechaCorta('')).toBe('')
+  })
+
+  it('sólo diseños: misma partición por material, de a 10', () => {
+    const p = paginasHoja([ingreso({ bloques: [bloque('ENCAPSULADO', 12), bloque('IMD', 3)] })], 'disenos')
+    expect(p.map((x) => [x.material, x.tarjetas.length])).toEqual([['ENCAPSULADO', 10], ['ENCAPSULADO', 2], ['IMD', 3]])
+  })
+
+  it('sólo imágenes: todo de corrido, sin cortar por material, y sin foto no entra', () => {
+    const b1 = bloque('ENCAPSULADO', 12)
+    b1.disenos[0].img = ''
+    const p = paginasHoja([ingreso({ bloques: [b1, bloque('IMD', 10)] })], 'imagenes')
+    expect(porHoja('imagenes')).toBe(18)
+    expect(p.map((x) => x.tarjetas.length)).toEqual([18, 3])
   })
 })

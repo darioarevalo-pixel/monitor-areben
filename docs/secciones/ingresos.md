@@ -108,6 +108,11 @@ total y cuántas vienen de cada modelo—, numeradas, de a 8 por hoja. Lógica e
 - 🔑 **Cada material arranca en hoja nueva**: lo que se cuelga junto es lo del mismo material.
 - Un diseño **sin nombre comercial** sale como «Diseño N (sin nombre)», ⛔ no se saltea: la foto
   sola ya sirve en el corcho, y el hueco a la vista empuja a cargar el nombre.
+- 🆕 **Tres variantes** (menú del botón, `ModoHoja`): **Con cantidades** (4 × 2), **Sólo diseños**
+  (foto, número y nombre, 5 × 2) y **Sólo imágenes** (6 × 3, sin texto ni encabezado, de corrido
+  ⛔ sin cortar por material: es para el paneo de colecciones; lo sin foto se saltea).
+- 🆕 **Las arribadas van abajo, plegadas** («✓ Arribadas (n)», de la más nueva a la más vieja), en
+  las tres vistas: arriba se mira lo que viene.
 - Si todos los modelos son de la misma marca («iPhone …») se dice una vez y la tarjeta muestra sólo
   «16 Pro»: el nombre entero no entra dos veces por renglón en 6 cm.
 

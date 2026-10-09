@@ -49,8 +49,8 @@ import type { Bloque, GalleryItem, Ingreso, VistaIngresos } from '@/lib/ingresos
 import { nuevoId, useIngresos } from './useIngresos'
 import { useSubirGaleria } from './useSubirGaleria'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { Button, Card, color as paleta, useConfirmar, useToast } from '@/components/ui'
-import { ingresosPorLlegar } from '@/lib/ingresos/hoja'
+import { Button, Card, Plegable, color as paleta, useConfirmar, useToast } from '@/components/ui'
+import { ingresosPorLlegar, type ModoHoja } from '@/lib/ingresos/hoja'
 
 const VISTA_KEY = 'monitor_ing_vista'
 
@@ -107,6 +107,7 @@ export function Ingresos() {
 
   const [vista, setVistaState] = useState<VistaIngresos>('lector')
   const [media, setMedia] = useState<Media | null>(null)
+  const [verArribadas, setVerArribadas] = useState(false)
   const [pasteTarget, setPasteTarget] = useState<{ gid: string; bid: string; did: string } | null>(null)
 
   // Vista inicial de localStorage (en effect, no en render: evita el mismatch de SSR).
@@ -173,10 +174,25 @@ export function Ingresos() {
 
   const ordenados = ordenarPorFecha(data)
   const res = resumen(data)
+  /**
+   * Las arribadas van abajo y plegadas: ya están en el depósito, y arriba se mira lo que viene. En la
+   * vista Editar quedan igual en su plegable —abrirlo es un clic— para poder corregir un estado.
+   */
+  const arribadas = ordenados.filter((g) => g.estado === 'arribado').reverse()
+  const porLlegar = ordenados.filter((g) => g.estado !== 'arribado')
+
+  const tarjetaDe = (g: Ingreso) =>
+    vistaEfectiva === 'editar' ? (
+      <IngresoEditar key={g.id} g={g} guardar={guardar} onMedia={setMedia} pasteTarget={pasteTarget} onPasteSel={setPasteTarget} indiceGN={indiceGN} />
+    ) : vistaEfectiva === 'resumen' ? (
+      <IngresoResumen key={g.id} g={g} onMedia={setMedia} indiceGN={indiceGN} />
+    ) : (
+      <IngresoLector key={g.id} g={g} onMedia={setMedia} guardar={puedeNombre ? guardar : null} indiceGN={indiceGN} />
+    )
 
   // Agrupar por mes de llegada (encabezados), respetando el orden.
   const grupos: { mes: string; items: Ingreso[] }[] = []
-  ordenados.forEach((g) => {
+  porLlegar.forEach((g) => {
     const mes = mesDe(g)
     const ultimo = grupos[grupos.length - 1]
     if (ultimo && ultimo.mes === mes) ultimo.items.push(g)
@@ -205,7 +221,7 @@ export function Ingresos() {
           : 'Todavía no cargaste ingresos. Tocá "+ Agregar ingreso" para empezar. 📦'}
         {res.enCamino > 0 && (
           <span style={{ marginLeft: 10 }}>
-            <BotonHoja ingresos={ingresosPorLlegar(data)} etiqueta="🖨 Hoja para la pizarra" archivo="importaciones-por-llegar" />
+            <BotonHoja ingresos={ingresosPorLlegar(data)} etiqueta="🖨 Hoja para la pizarra ▾" archivo="importaciones-por-llegar" />
           </span>
         )}
       </div>
@@ -248,18 +264,23 @@ export function Ingresos() {
             <div style={{ fontSize: 12, fontWeight: 700, color: paleta.mut2, letterSpacing: 0, margin: '14px 0 6px' }}>
               🗓️ {grp.mes}
             </div>
-            {grp.items.map((g) =>
-              vistaEfectiva === 'editar' ? (
-                <IngresoEditar key={g.id} g={g} guardar={guardar} onMedia={setMedia} pasteTarget={pasteTarget} onPasteSel={setPasteTarget} indiceGN={indiceGN} />
-              ) : vistaEfectiva === 'resumen' ? (
-                <IngresoResumen key={g.id} g={g} onMedia={setMedia} indiceGN={indiceGN} />
-              ) : (
-                <IngresoLector key={g.id} g={g} onMedia={setMedia} guardar={puedeNombre ? guardar : null} indiceGN={indiceGN} />
-              ),
-            )}
+            {grp.items.map(tarjetaDe)}
           </div>
         ))}
       </div>
+
+      {arribadas.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <Plegable
+            abierto={verArribadas}
+            onToggle={() => setVerArribadas((v) => !v)}
+            titulo={`✓ Arribadas (${arribadas.length})`}
+            ayuda="Las que ya llegaron al depósito, de la más nueva a la más vieja. No entran en la hoja para la pizarra general."
+          >
+            <div style={{ marginTop: 8 }}>{arribadas.map(tarjetaDe)}</div>
+          </Plegable>
+        </div>
+      )}
 
       <datalist id="ing-modelos">
         {MODELOS_AUTOCOMPLETE.map((m) => (
@@ -910,7 +931,7 @@ function IngresoLector({ g, onMedia, guardar, indiceGN }: { g: Ingreso; onMedia:
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>{g.desc || '(sin descripción)'}</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <BotonHoja ingresos={[g]} etiqueta="🖨 Hoja" archivo={`importacion-${g.fecha || g.id}`} />
+          <BotonHoja ingresos={[g]} etiqueta="🖨 Hoja ▾" archivo={`importacion-${g.fecha || g.id}`} />
           <EstadoBadge g={g} />
         </div>
       </div>
@@ -933,7 +954,7 @@ function IngresoResumen({ g, onMedia, indiceGN }: { g: Ingreso; onMedia: (m: Med
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>{g.desc || '(sin descripción)'}</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <BotonHoja ingresos={[g]} etiqueta="🖨 Hoja" archivo={`importacion-${g.fecha || g.id}`} />
+          <BotonHoja ingresos={[g]} etiqueta="🖨 Hoja ▾" archivo={`importacion-${g.fecha || g.id}`} />
           <EstadoBadge g={g} />
         </div>
       </div>
@@ -950,15 +971,23 @@ function IngresoResumen({ g, onMedia, indiceGN }: { g: Ingreso; onMedia: (m: Med
  * Baja la hoja A4 apaisada para imprimir y colgar en la pizarra: una tarjeta por diseño con foto,
  * nombre y cuántas vienen de cada modelo, cada material en hoja nueva (`lib/ingresos/hoja.ts`).
  */
+const MODOS_HOJA: { modo: ModoHoja; label: string; hint: string; sufijo: string }[] = [
+  { modo: 'cantidades', label: 'Con cantidades', hint: 'Foto, nombre y cuántas vienen de cada modelo', sufijo: '' },
+  { modo: 'disenos', label: 'Sólo diseños', hint: 'Foto grande, número y nombre, sin cantidades', sufijo: '-disenos' },
+  { modo: 'imagenes', label: 'Sólo imágenes', hint: 'Las fotos de corrido, sin texto, para el paneo', sufijo: '-imagenes' },
+]
+
 function BotonHoja({ ingresos, etiqueta, archivo }: { ingresos: Ingreso[]; etiqueta: string; archivo: string }) {
   const [armando, setArmando] = useState(false)
+  const [abierto, setAbierto] = useState(false)
   const toast = useToast()
-  const onClick = async () => {
+  const elegir = async (m: (typeof MODOS_HOJA)[number]) => {
+    setAbierto(false)
     setArmando(true)
     try {
       const { descargarHojaIngresos } = await import('@/lib/ingresos/pdf')
-      const hubo = await descargarHojaIngresos(ingresos, `${archivo}.pdf`)
-      if (!hubo) toast.info('No hay diseños cargados para imprimir.')
+      const hubo = await descargarHojaIngresos(ingresos, `${archivo}${m.sufijo}.pdf`, m.modo)
+      if (!hubo) toast.info(m.modo === 'imagenes' ? 'No hay diseños con foto para imprimir.' : 'No hay diseños cargados para imprimir.')
     } catch (e) {
       toast.error(`No se pudo armar la hoja: ${(e as Error).message}`)
     } finally {
@@ -966,9 +995,29 @@ function BotonHoja({ ingresos, etiqueta, archivo }: { ingresos: Ingreso[]; etiqu
     }
   }
   return (
-    <Button size="sm" variant="outline" loading={armando} disabled={armando} onClick={onClick} title="PDF horizontal para imprimir: foto, nombre y cantidades por modelo">
-      {armando ? 'Armando…' : etiqueta}
-    </Button>
+    <span style={{ position: 'relative', display: 'inline-block' }} onMouseLeave={() => setAbierto(false)}>
+      <Button size="sm" variant="outline" loading={armando} disabled={armando} onClick={() => setAbierto((a) => !a)} title="PDF horizontal para imprimir">
+        {armando ? 'Armando…' : etiqueta}
+      </Button>
+      {abierto && (
+        <div
+          role="menu"
+          style={{ position: 'absolute', top: '100%', left: 0, zIndex: 20, background: '#fff', border: `1px solid ${paleta.line2}`, borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,.12)', padding: 4, minWidth: 230 }}
+        >
+          {MODOS_HOJA.map((m) => (
+            <button
+              key={m.modo}
+              role="menuitem"
+              onClick={() => void elegir(m)}
+              style={{ display: 'block', width: '100%', height: 'auto', textAlign: 'left', background: 'none', border: 'none', borderRadius: 6, padding: '7px 10px', cursor: 'pointer' }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 600, color: paleta.ink }}>{m.label}</div>
+              <div style={{ fontSize: 11, color: paleta.mut }}>{m.hint}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
   )
 }
 

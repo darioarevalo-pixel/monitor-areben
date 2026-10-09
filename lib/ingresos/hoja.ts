@@ -13,10 +13,23 @@
 import { celdaGet, estadoDe, ordenarPorFecha, totalDiseno } from './core'
 import type { Bloque, Ingreso } from './tipos'
 
-/** Tarjetas por hoja: 4 columnas × 2 filas entran en un A4 apaisado con la foto grande. */
-export const COLUMNAS = 4
-export const FILAS = 2
-export const POR_HOJA = COLUMNAS * FILAS
+/**
+ * Tres papeles para tres usos:
+ * - `cantidades`: la tarjeta completa, para saber qué llega (4 × 2 por hoja).
+ * - `disenos`: foto, número y nombre, sin cantidades (5 × 2).
+ * - `imagenes`: sólo las fotos, de corrido y sin texto, para hacer el paneo y armar colecciones
+ *   (6 × 3). Acá ⛔ no se corta por material: lo que se busca es ver todo junto.
+ */
+export type ModoHoja = 'cantidades' | 'disenos' | 'imagenes'
+
+export const GRILLA: Record<ModoHoja, { columnas: number; filas: number }> = {
+  cantidades: { columnas: 4, filas: 2 },
+  disenos: { columnas: 5, filas: 2 },
+  imagenes: { columnas: 6, filas: 3 },
+}
+export const porHoja = (modo: ModoHoja) => GRILLA[modo].columnas * GRILLA[modo].filas
+/** La de cantidades, que es la de siempre. */
+export const POR_HOJA = porHoja('cantidades')
 
 export type LineaModelo = { modelo: string; cantidad: number }
 
@@ -98,14 +111,16 @@ export function tarjetasDe(b: Bloque): { tarjetas: Tarjeta[]; marca: string } {
   return { tarjetas, marca }
 }
 
-/** Todas las hojas de las importaciones dadas, en su orden: importación → material → de a 8. */
-export function paginasHoja(ingresos: Ingreso[]): Pagina[] {
+/** Todas las hojas de las importaciones dadas, en su orden: importación → material → de a N. */
+export function paginasHoja(ingresos: Ingreso[], modo: ModoHoja = 'cantidades'): Pagina[] {
+  if (modo === 'imagenes') return paginasDeImagenes(ingresos)
+  const N = porHoja(modo)
   const paginas: Pagina[] = []
   ingresos.forEach((g, gi) => {
     ;(g.bloques || []).forEach((b) => {
       const { tarjetas, marca } = tarjetasDe(b)
       if (!tarjetas.length) return
-      const partes = Math.ceil(tarjetas.length / POR_HOJA)
+      const partes = Math.ceil(tarjetas.length / N)
       const unidadesMaterial = tarjetas.reduce((s, t) => s + t.total, 0)
       for (let p = 0; p < partes; p++) {
         paginas.push({
@@ -119,11 +134,35 @@ export function paginasHoja(ingresos: Ingreso[]): Pagina[] {
           marcaModelos: marca,
           parte: p + 1,
           partes,
-          tarjetas: tarjetas.slice(p * POR_HOJA, (p + 1) * POR_HOJA),
+          tarjetas: tarjetas.slice(p * N, (p + 1) * N),
         })
       }
     })
   })
+  return paginas
+}
+
+/** Las fotos de todas las importaciones de corrido. Sin foto no hay nada que mirar: se saltea. */
+function paginasDeImagenes(ingresos: Ingreso[]): Pagina[] {
+  const todas = ingresos.flatMap((g) => (g.bloques || []).flatMap((b) => tarjetasDe(b).tarjetas)).filter((t) => t.img)
+  const N = porHoja('imagenes')
+  const partes = Math.ceil(todas.length / N)
+  const paginas: Pagina[] = []
+  for (let p = 0; p < partes; p++) {
+    paginas.push({
+      ingresoId: '',
+      titulo: '',
+      proveedor: '',
+      fecha: '',
+      estado: '',
+      material: '',
+      unidadesMaterial: 0,
+      marcaModelos: '',
+      parte: p + 1,
+      partes,
+      tarjetas: todas.slice(p * N, (p + 1) * N),
+    })
+  }
   return paginas
 }
 
