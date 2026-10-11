@@ -18,9 +18,10 @@ import { useSesion } from '@/components/SesionProvider'
 import { esAdmin } from '@/lib/permisos'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
+import { nombreParaTicket } from '@/lib/caja/core.core.js'
 import { leerConfig, leerPendientes, leerTurno, type Config, type Turno, type Venta } from '@/lib/caja/cliente'
-import { ButtonLink, Notice, color, font, space, weight } from '@/components/ui'
-import { Bajadas, DeteccionTransferencias, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TransferenciasEnEspera, TurnoCaja, UltimosTurnos } from '@/components/caja/partes'
+import { Button, ButtonLink, Notice, color, font, space, weight } from '@/components/ui'
+import { Bajadas, DeteccionTransferencias, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TransferenciasEnEspera, TurnoCaja, UltimosTurnos, VentasDelTurno, diaAr } from '@/components/caja/partes'
 import { VistaTicket } from '@/components/caja/VistaTicket'
 import { PromosCaja } from '@/components/caja/PromosCaja'
 import { ModalVarianteContext } from '@/components/ui/Modal'
@@ -69,6 +70,9 @@ export function Caja() {
     return () => clearInterval(t)
   }, [refrescarTurno])
 
+  // Ventas del turno, venta por venta (Bruno, 11-oct): el abierto (sin id) o uno de «Últimos turnos».
+  const [verVentas, setVerVentas] = useState<{ turnoId?: string; titulo: string } | null>(null)
+
   if (errCarga) return <Notice tone="danger">{errCarga}</Notice>
   const esMio = !!turno && puedeUsarPOS(turno, perfil)
   const otras = pendientes.filter((v) => v.estado !== 'esperando_pago')
@@ -78,6 +82,14 @@ export function Caja() {
       Abrir POS
     </ButtonLink>
   ) : null
+  const antes = turno ? (
+    <>
+      {abrirPOS}
+      <Button variant="outline" onClick={() => setVerVentas({ titulo: 'Ventas del turno abierto' })}>
+        Ventas del turno
+      </Button>
+    </>
+  ) : abrirPOS
 
   // Los diálogos del turno con el aspecto del POS (X, pie gris), igual que en `/pos`.
   return (
@@ -102,7 +114,7 @@ export function Caja() {
             reglas={config?.reglas ?? null}
             esMio={esMio}
             admin={admin}
-            antes={abrirPOS}
+            antes={antes}
             onCambio={(t) => (t === undefined ? refrescarTurno() : setTurno(t))}
             onCerrado={refrescarTurno}
           />
@@ -113,7 +125,8 @@ export function Caja() {
         {admin && config?.reglas.medios && <ProductosFeria reglas={config.reglas} version={config.versiones?.feriaProductos} campanias={config.campaniasLiq ?? []} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
         {admin && config && <LogoDelTicket inicial={config.ticket_logo ?? null} onGuardado={(l) => setConfig({ ...config, ticket_logo: l })} />}
         {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
-        <UltimosTurnos ultimos={ultimosTurnos} />
+        <UltimosTurnos ultimos={ultimosTurnos} onVerVentas={(t) => setVerVentas({ turnoId: t.id, titulo: `Ventas del turno del ${diaAr(t.abierto_en)}${t.abierto_por ? ` · ${t.abierto_por}` : ''}` })} />
+        {verVentas && <VentasDelTurno turnoId={verVentas.turnoId} titulo={verVentas.titulo} nombreCuenta={(id) => nombreParaTicket(id, config?.reglas ?? null)} onCerrar={() => setVerVentas(null)} />}
       </div>
       {admin && config && (
         <aside className="caja-ticket" style={{ display: 'grid', gap: space[2] + 2 }}>

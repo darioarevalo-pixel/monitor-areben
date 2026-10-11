@@ -5,7 +5,7 @@
  * y la pestaña Caja del monitor, que es el informativo del turno (`Caja.tsx`).
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { NOMBRE_MEDIO, medioDeCuenta } from '@/lib/caja/core.core.js'
 import { numeroProvisorio, plata, type LogoTicket } from '@/lib/caja/ticket'
 import { BILLETES_INICIALES, billetesDe } from '@/lib/caja/conteo.core.js'
@@ -890,25 +890,30 @@ const ESTADO_VENTA: Record<string, { texto: string; tono: 'success' | 'danger' |
 /**
  * B1 (auditoría, 11-oct): las ventas del turno, de la más nueva a la más vieja, con «Reimprimir».
  * Antes sólo quedaba la última, en memoria. La que espera la transferencia o se canceló ⛔ tiene ticket.
+ * 🔑 También en la PESTAÑA (Bruno, 11-oct): el turno abierto y cada uno de «Últimos turnos» (`turnoId`),
+ * sin «Reimprimir» —el ticket se arma en el POS, con la impresora del local—.
  */
-export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar }: { nombreCuenta: (id: number) => string; onReimprimir: (v: Venta) => void; onCerrar: () => void }) {
+export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar, turnoId, titulo = 'Ventas del turno' }: { nombreCuenta: (id: number) => string; /** Sin él, ⛔ hay «Reimprimir». */ onReimprimir?: (v: Venta) => void; onCerrar: () => void; /** Sin él, el turno abierto. */ turnoId?: string; titulo?: string }) {
   const [ventas, setVentas] = useState<Venta[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let vivo = true
-    leerVentasTurno()
+    leerVentasTurno(turnoId)
       .then((r) => vivo && setVentas(r.ventas))
       .catch((e) => vivo && setError((e as Error).message))
     return () => {
       vivo = false
     }
-  }, [])
+  }, [turnoId])
   const th: React.CSSProperties = { textAlign: 'left', padding: `${space[1]}px ${space[2]}px`, color: color.mut, fontWeight: weight.semibold, fontSize: font.sm, borderBottom: `1px solid ${color.line}` }
   const td: React.CSSProperties = { padding: `${space[2]}px`, borderBottom: `1px solid ${color.line}`, fontSize: font.base, verticalAlign: 'middle' }
   const der: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
   const cobradas = (ventas ?? []).filter((v) => v.estado !== 'cancelada' && v.estado !== 'esperando_pago' && v.estado !== 'descartada')
+  // Venta por venta (Bruno, 11-oct): las prendas de cada una se abren tocando la cantidad.
+  const [abierta, setAbierta] = useState<string | null>(null)
+  const columnas = onReimprimir ? 7 : 6
   return (
-    <Modal abierto onCerrar={onCerrar} titulo="Ventas del turno" ancho="xl">
+    <Modal abierto onCerrar={onCerrar} titulo={titulo} ancho="xl">
       {error && <Notice tone="danger">{error}</Notice>}
       {!ventas && !error && <span style={{ color: color.mut }}>Leyendo las ventas…</span>}
       {ventas && !ventas.length && <span style={{ color: color.mut }}>Sin ventas en el turno.</span>}
@@ -927,7 +932,7 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar }: { nombr
                   <th style={th}>Forma de pago</th>
                   <th style={{ ...th, ...der }}>Total</th>
                   <th style={th}>Estado</th>
-                  <th style={th} />
+                  {onReimprimir && <th style={th} />}
                 </tr>
               </thead>
               <tbody>
@@ -944,25 +949,56 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar }: { nombr
                     v.resolucion?.tipo === 'descartada' && `descartada: «${v.resolucion.nota}»`,
                     v.mp_cruce === 'admin' && `transferencia confirmada a mano (${v.confirmacion?.por ?? 'admin'})`,
                   ].filter(Boolean) as string[]
+                  const verPrendas = abierta === v.id
                   return (
-                    <tr key={v.id}>
+                    <Fragment key={v.id}>
+                    <tr>
                       <td style={td}>{hora(v.creada_en)}</td>
                       <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>{v.gn_number ? `#${v.gn_number}` : `Provisoria ${numeroProvisorio(v.id)}`}</td>
-                      <td style={{ ...td, ...der }}>{prendas || '—'}</td>
+                      <td style={{ ...td, ...der }}>
+                        {prendas ? (
+                          <Button size="sm" variant="ghost" aria-expanded={verPrendas} onClick={() => setAbierta(verPrendas ? null : v.id)}>
+                            {prendas} {verPrendas ? '▾' : '▸'}
+                          </Button>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       <td style={td}>{[...new Set(v.pagos.map((p) => nombreCuenta(p.cuenta)))].join(' + ')}</td>
                       <td style={{ ...td, ...der, fontWeight: weight.semibold }}>{plata(v.total)}</td>
                       <td style={td}>
                         <Badge tone={e.tono}>{e.texto}</Badge>
                         {marcas.length > 0 && <div style={{ fontSize: font.xs, color: color.warningInk, marginTop: 2 }}>{marcas.join(' · ')}</div>}
                       </td>
-                      <td style={{ ...td, textAlign: 'right' }}>
+                      {onReimprimir && <td style={{ ...td, textAlign: 'right' }}>
                         {conTicket && (
                           <Button size="sm" variant="outline" onClick={() => onReimprimir(v)}>
                             Reimprimir
                           </Button>
                         )}
-                      </td>
+                      </td>}
                     </tr>
+                    {verPrendas && (
+                      <tr>
+                        <td colSpan={columnas} style={{ ...td, background: color.bg2 }}>
+                          <div style={{ display: 'grid', gap: 2, fontSize: font.sm }}>
+                            {(v.renglones ?? []).map((r, i) => (
+                              <div key={i} style={{ display: 'flex', gap: space[3], justifyContent: 'space-between' }}>
+                                <span>
+                                  {r.cantidad > 1 ? `${r.cantidad} × ` : ''}
+                                  {r.nombre ?? `Producto ${r.product_id}`}
+                                  {r.talle ? <span style={{ color: color.mut }}> · {r.talle}</span> : null}
+                                  {r.promos?.length ? <span style={{ color: color.successInk }}> · {r.promos.join(' · ')}</span> : null}
+                                  {r.precio_lista != null && r.precio_lista !== r.precio && <span style={{ color: color.warningInk }}> · etiqueta {plata(r.precio_lista)}</span>}
+                                </span>
+                                <span style={der}>{plata(r.importe ?? r.cantidad * r.precio)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   )
                 })}
               </tbody>
@@ -1829,7 +1865,7 @@ export function TurnoCaja({
 const tarjetaTurno: React.CSSProperties = { display: 'grid', gap: space[3] }
 
 /** Los turnos cerrados, en tabla (prototipo): cuándo, quién, esperado, contado y la diferencia en su color. */
-export function UltimosTurnos({ ultimos }: { ultimos: Turno[] }) {
+export function UltimosTurnos({ ultimos, onVerVentas }: { ultimos: Turno[]; /** La lista de ventas de ESE turno (Bruno, 11-oct). */ onVerVentas?: (t: Turno) => void }) {
   const [abierto, setAbierto] = useState(false)
   if (ultimos.length === 0) return null
   return (
@@ -1843,6 +1879,7 @@ export function UltimosTurnos({ ultimos }: { ultimos: Turno[] }) {
               <th style={{ ...th, ...der }}>Esperado</th>
               <th style={{ ...th, ...der }}>Contado</th>
               <th style={{ ...th, ...der }}>Diferencia</th>
+              {onVerVentas && <th style={th} />}
             </tr>
           </thead>
           <tbody>
@@ -1858,6 +1895,13 @@ export function UltimosTurnos({ ultimos }: { ultimos: Turno[] }) {
                   <td style={{ ...td, ...der }}>{plata(Number(t.esperado))}</td>
                   <td style={{ ...td, ...der }}>{plata(Number(t.contado))}</td>
                   <td style={{ ...td, ...der, fontWeight: weight.bold, color: tintaDiferencia(d) }}>{textoDiferencia(d)}</td>
+                  {onVerVentas && (
+                    <td style={{ ...td, textAlign: 'right' }}>
+                      <Button size="sm" variant="outline" onClick={() => onVerVentas(t)}>
+                        Ventas
+                      </Button>
+                    </td>
+                  )}
                 </tr>
               )
             })}

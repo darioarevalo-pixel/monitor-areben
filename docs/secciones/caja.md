@@ -268,6 +268,11 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - 🔑 **«Ventas del turno»** (botón del POS, B1, `action=ventas`): las del turno abierto con su estado y
   «Reimprimir» (el ticket sale de la fila). La que espera la transferencia o se canceló ⛔ tiene ticket.
   ⛔ Reenvía el mail todavía.
+  🔑 **También en la PESTAÑA** (Bruno, 11-oct): «Ventas del turno» en el header con turno abierto, y
+  «Ventas» en cada fila de «Últimos turnos» (`action=ventas&turno=<id>`). Lo ve cualquiera con permiso
+  de Caja, como el resto de la pestaña. Tocar la cantidad de prendas abre la venta renglón por renglón
+  (talle, promo, el precio de la etiqueta si se cambió). En la pestaña ⛔ hay «Reimprimir»: el ticket
+  se imprime desde el POS.
 - ⚠️ Varias partes por transferencia en una venta se esperan como UNA transferencia por la suma.
 - 🔑 **«Varios pagos» se escribe en lo que PAGA la clienta** con cada forma de pago (ya con su %), ⛔ en la
   parte del subtotal a lista: `baseParaMonto` hace la vuelta. Un monto múltiplo de $100 da exacto.

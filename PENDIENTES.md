@@ -128,8 +128,9 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
   sola · **descartar** una venta rechazada lo hace sólo un admin · la gift card va después.
 - 🏁 11-oct: turno de prueba del 5-oct CERRADO (con nota) y `sql/migrate-caja-auditoria.sql` CORRIDA en Zattia
   (verificada leyendo el esquema). ▶️ Falta: caminar la lista C en prod y la semana en paralelo con el POS de GN.
-- ▶️ **«Ventas del turno» también en la PESTAÑA Caja** (Bruno, 11-oct): hoy sólo está en el POS y lo ve la
-  cuenta que abrió la caja. Que un admin vea venta por venta el turno abierto y los de «Últimos turnos».
+- 🏁 **«Ventas del turno» también en la PESTAÑA Caja** (Bruno, 11-oct): botón en el header (turno abierto) y
+  «Ventas» en cada fila de «Últimos turnos»; cada venta se abre renglón por renglón. Sin «Reimprimir» en la
+  pestaña. ▶️ Bruno: mirarlo con un admin.
 - ▶️ En el local (Bruno): una venta real de punta a punta (feria + común + promo), una transferencia real
   (Darío ⇒ Transferencia CG), lector y `--kiosk-printing` en la PC, la cajera con su cuenta, la semana en
   paralelo. Verificar: las 7 ventas de prueba (4 al 6-oct) eliminadas en GN y la automation TICKET de
