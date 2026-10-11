@@ -20,7 +20,7 @@ import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { leerConfig, leerPendientes, leerTurno, type Config, type Turno, type Venta } from '@/lib/caja/cliente'
 import { ButtonLink, Notice, color, font, space, weight } from '@/components/ui'
-import { Bajadas, DeteccionTransferencias, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TurnoCaja, UltimosTurnos } from '@/components/caja/partes'
+import { Bajadas, DeteccionTransferencias, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TransferenciasEnEspera, TurnoCaja, UltimosTurnos } from '@/components/caja/partes'
 import { VistaTicket } from '@/components/caja/VistaTicket'
 import { PromosCaja } from '@/components/caja/PromosCaja'
 import { ModalVarianteContext } from '@/components/ui/Modal'
@@ -88,23 +88,29 @@ export function Caja() {
       <div style={{ display: 'grid', gap: space[3], minWidth: 0 }}>
         {errTurno && <Notice tone="danger">No se pudo leer el turno: {errTurno}</Notice>}
         {turno && !esMio && <Notice tone="neutral">Turno de {turno.abierto_por ?? 'otra cuenta'}: POS sólo para esa cuenta.</Notice>}
-        {otras.length > 0 && <Pendientes ventas={otras} onCambio={refrescarPendientes} />}
-        {esperando > 0 && <Notice tone="warning">Transferencias en espera: {esperando}. Se siguen en el POS (ticket al llegar).</Notice>}
+        {otras.length > 0 && <Pendientes ventas={otras} admin={admin} esMio={esMio} onCambio={() => { refrescarPendientes(); refrescarTurno() }} />}
+        {/* B3: el admin confirma a mano la que el cruce ⛔ ve; el resto, sólo el aviso. */}
+        {admin ? (
+          <TransferenciasEnEspera ventas={pendientes.filter((v) => v.estado === 'esperando_pago')} onCambio={() => { refrescarPendientes(); refrescarTurno() }} />
+        ) : (
+          esperando > 0 && <Notice tone="warning">Transferencias en espera: {esperando}. Se siguen en el POS (ticket al llegar).</Notice>
+        )}
         {turno !== undefined && (
           <TurnoCaja
             turno={turno}
             billetes={billetesDe(config?.reglas)}
             reglas={config?.reglas ?? null}
             esMio={esMio}
+            admin={admin}
             antes={abrirPOS}
             onCambio={(t) => (t === undefined ? refrescarTurno() : setTurno(t))}
             onCerrado={refrescarTurno}
           />
         )}
-        {admin && config?.reglas.medios && <Bajadas reglas={config.reglas} onGuardadas={(rg) => setConfig({ ...config, reglas: rg })} />}
+        {admin && config?.reglas.medios && <Bajadas reglas={config.reglas} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
         <DeteccionTransferencias admin={admin} />
-        {config?.reglas.medios && <PromosCaja reglas={config.reglas} admin={admin} onGuardadas={(rg) => setConfig({ ...config, reglas: rg })} />}
-        {admin && config?.reglas.medios && <ProductosFeria reglas={config.reglas} onGuardadas={(rg) => setConfig({ ...config, reglas: rg })} />}
+        {config?.reglas.medios && <PromosCaja reglas={config.reglas} admin={admin} version={config.versiones?.promos} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
+        {admin && config?.reglas.medios && <ProductosFeria reglas={config.reglas} version={config.versiones?.feriaProductos} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
         {admin && config && <LogoDelTicket inicial={config.ticket_logo ?? null} onGuardado={(l) => setConfig({ ...config, ticket_logo: l })} />}
         {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
         <UltimosTurnos ultimos={ultimosTurnos} />

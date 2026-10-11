@@ -71,7 +71,9 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   transferencia, a la cuenta de feria, sin el % de la forma de pago. Pedido mixto = cada prenda con su
   regla: `pagosDeMedio` arma `[{ cuenta de feria, base: lo de feria }, { cuenta normal }]` y 🔴 el
   servidor lo EXIGE con `exigirFeria` (400). Con feria, débito/crédito y «Varios pagos» se traban. El
-  descuento a mano a la venta se reparte como siempre. Mixto por transferencia son DOS pagos de
+  descuento a mano a la venta se reparte como siempre; 🔴 **la promo de monto mínimo ⛔** (A9, 11-oct):
+  viaja como `{ tipo: 'pesos', valor, sinFeria: true }` y `cobro()` ⛔ le da parte al pago de la cuenta
+  de feria (`rebajaDeVenta`). Mixto por transferencia son DOS pagos de
   transferencia y UNA transferencia de la clienta: se espera la suma (`montoAEsperar`).
 - 🔑 **La cajera ve CUATRO formas de pago; la cuenta de GN es INTERNA** (Bruno, 4-oct). `cuentaDeMedio`
   (`core.core.js`) la resuelve con `caja_config.reglas.medios` (`sql/migrate-caja-medios.sql`):
@@ -79,14 +81,23 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   Gerencia: dónde se ASIENTA en GN, lo baja un ADMIN, ⛔ la cajera; las dos esperan el pago) · Crédito ⇒ 25172 (−10 %) sólo si la
   Agenda tiene promo de crédito HOY **y** la cajera contesta que la tarjeta es de ese banco; 25173 «6
   cuotas» si pasa $250.000 y lo pide; si no 25188 (lista). **Modo feria** (admin): efectivo y
-  transferencia van a las de feria (precio final). El servidor rechaza una cuenta sin forma de pago.
+  transferencia van a las de feria (precio final). El servidor rechaza una cuenta sin forma de pago, y
+  🔴 **exige la que corresponde HOY** (`exigirCuentas`, A6, 11-oct): con el modo feria sólo las de feria, sin
+  él la normal (y la de feria sólo con prendas de feria), la transferencia a `transferenciaA`, el −10 % de
+  crédito sólo si la Agenda tiene promo de crédito hoy (la lee el SERVIDOR de `agenda_promos`, base de BDI,
+  con `promosDeCreditoEnMostrador` de `lib/agenda/promos.core.js`, la MISMA del POS) y las 6 cuotas sólo
+  arriba del mínimo (`aPagarDe`). Una pantalla abierta desde antes del cambio da 400 «Recargá la Caja».
+  ⚠️ «¿Es de ese banco?» ⛔ se verifica.
 - 🔑 **El ticket (papel y mail) dice el MEDIO y «Descuento 15%»**, ⛔ «Descuento Transferencia CG».
   La fila guarda en `pagos[].nombre` el medio (`nombreParaTicket`). El mail lo arma `areben-mailer`
   (`lib/email/ticket.ts`): un cambio de renglones allá se deploya a mano (`vercel --prod`).
 - 🔑 **Descuentos a mano en CASCADA** (Bruno, 4-oct): por prenda (`items[].rebaja`, % o $) ⇒ a la
   venta (`descuentoVenta`, obligatorio en `cobro`: null si ⛔ hay) ⇒ el de la forma de pago, y después
   el redondeo. El de la venta se reparte entre los pagos (`pagos[].rebaja`): ⛔ tiene columna propia.
-  ⚠️ Hoy cualquier cajera puede poner un descuento a mano: permiso o tope, a decidir.
+  🔑 **Libre pero A LA VISTA (B5, Bruno 11-oct)**: ⛔ permiso ni tope. La fila guarda `a_mano` = { venta,
+  prendas, precios } en pesos (`precios` = lo que se bajó del precio de la etiqueta: la pantalla manda
+  `precioLista` y el renglón guarda `precio_lista` si cambió), el turno lo suma (`resumen.aMano`) y la lista
+  de ventas del turno lo marca.
 - 🔑 **«ubicación: A1 · A2»** (`stock.atras`; Bruno, 5-oct: en pantalla «ubicación», ⛔ «atrás»): los estantes de Ubicaciones depósito por `claveDe(sku)`. Si la
   consulta falla, sale vacío y la venta sigue igual; sin estante ⛔ se dice nada (todo en percha).
 - 🔴 El stock se lee con `GN_TOKEN_ZATTIA`; `GN_TOKEN_VENTAS` ⛔ lee `inventario` (caía al espejo, callado).
@@ -114,6 +125,13 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   lee cada 5 s) — antes sólo el de la venta y un pago después de medianoche ⛔ cruzaba nunca (A4). Y un
   pago ANTERIOR a la venta (la cancelada y vuelta a escanear) se OFRECE para elegir desde la medianoche
   de ese día (`antesManual`, obligatorio en `cruzarTransferencia`), ⛔ entra solo.
+  🔴 **Sola, sólo si llegó dentro de los 15 min de la venta (A5, 11-oct, `VENTANA_SOLA_MS`)**: los totales
+  van redondeados a $100 y MP ⛔ dice quién transfiere ⇒ una transferencia AJENA del mismo monto horas
+  después confirmaba sola. Más tarde, la elige la cajera viendo la hora y los últimos 4 del número de
+  operación. 🔑 La competidora (otra venta esperando el mismo monto) cuenta sólo si es de las últimas 12 h.
+- 🔑 **Confirmar a mano (B3, sólo admin, en la pestaña)**: la que el cruce ⛔ ve nunca (Caja Gerencia es la
+  cuenta de un particular) se confirma con el comprobante (`confirmar-transferencia`): `mp_cruce = 'admin'`
+  y `confirmacion` = { por, en, comprobante }. Sale a GN como con el cruce; el POS imprime al verla.
 - 🔴 **Un pago de MP confirma UNA venta**: `mp_pago_id` con índice único. Y **sólo `cruzar` saca
   una venta de `esperando_pago`**: `reintentar`, el respaldo de la cola y `enviarVenta` se niegan.
 - ⚠️ `cancelada` = esperaba y ⛔ llegó. Cancelar una que ya cruzó ⇒ 409. Hay que volver a escanear.
@@ -132,7 +150,12 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - 🔑 **El TURNO es de la Caja (v2, W3, Bruno 4-oct)** (`lib/caja/cierre.core.js`, `caja_turno` +
   `caja_turno_mov`, `sql/migrate-caja-turno.sql`): la API de GN ⛔ tiene turnos y **el de GN se deja de
   usar**. Se abre con el fondo, se anotan salidas de efectivo (motivo + monto) y se cierra contando
-  **sólo el efectivo**: `esperado = fondo + efectivo cobrado (cuentas con efectivo: true) − salidas`.
+  **sólo el efectivo**: `esperado = fondo + efectivo cobrado (cuentas con efectivo: true) + aportes − salidas`.
+  🔑 **Salidas y APORTES (A8 + B4, Bruno 11-oct)**: los carga la cuenta que abrió el turno o un admin
+  (`puedeMoverEfectivo`) — antes cualquiera con permiso de Caja, y otra cuenta podía tapar un faltante. El
+  aporte es el efectivo que ENTRA (el cambio que trae alguien). ⛔ Se borran: se ANULAN con motivo
+  (`anular-mov`, queda tachado) — un admin, o la dueña lo que cargó ella (`puedeAnularMov`), sólo en el
+  turno abierto. `usuario_cuenta` = el mail del padrón de quien lo cargó.
   🔴 **Sin turno abierto ⛔ se cobra** (409 `sinTurno`). Un solo turno abierto por marca (índice único
   parcial). La venta es del turno donde se COBRÓ (`caja_venta.turno_id`). El cierre guarda la foto
   (`esperado`, `resumen`) y ⛔ se reabre. Un día puede tener dos turnos.
@@ -216,14 +239,38 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   queda corto, el cierre diría que sobra y ⛔ se reabre ⇒ 409 `sinCobrosGN`. Cerrar igual es explícito
   («Cerrar sin los cobros de Gestión Nube») y **con nota obligatoria**; la foto queda con `cobrosGN: null`.
   Leer más de 5 páginas de cobros también cuenta como «⛔ contestó» (antes cortaba callado).
+- 🔴 **La carrera confirmar / cerrar turno (A7, 11-oct)**: un trigger (`sql/migrate-caja-auditoria.sql`)
+  frena insertar una venta o un movimiento en un turno CERRADO y toma el turno `for share`; el cierre
+  cierra PRIMERO y relee: si entró algo entre la foto y el cierre, la foto se rehace (`cambioAlCerrar`). La
+  venta frenada contesta 409 `sinTurno` y ⛔ queda guardada (se cobra en el turno nuevo).
+- 🔴 **La venta anulada a mano en GN deja de sumar (A12, 11-oct)**: GN ⛔ anula por API y la anulada
+  DESAPARECE de `ventas/obtener` (⛔ viene con estado). El turno lee ENTEROS los días de sus ventas `en_gn`
+  (`anuladasEnGN`) y las que faltan van aparte (`resumen.anuladasGN`). ⛔ Se pudo leer ⇒ `null` y el cierre
+  frena como con los cobros web (cerrar igual, con nota). ⛔ Se persiste: es una lectura.
+- 🔑 **Resolver una venta que GN RECHAZÓ (B2)**: sólo la `error` ⛔ reintentable (una reintentable puede
+  estar en GN por un timeout: cargarla a mano la duplicaría). «Cargada a mano en GN» (con su número; la
+  dueña del turno o un admin) ⇒ `en_gn` y sigue sumando; «Descartar» (sólo admin) ⇒ `descartada`, ⛔ suma.
+  Las dos con nota, en `resolucion`. Con eso el respaldo de la cola deja de salir en rojo.
 - 🔑 **Cerrar turno pide confirmación** con Esperado · Contado · Diferencia, y con la calculadora vacía
   el botón queda apagado (A10): un $0 de verdad se escribe en el total a mano.
 - 🔑 **«Ventas del turno»** (botón del POS, B1, `action=ventas`): las del turno abierto con su estado y
   «Reimprimir» (el ticket sale de la fila). La que espera la transferencia o se canceló ⛔ tiene ticket.
   ⛔ Reenvía el mail todavía.
 - ⚠️ Varias partes por transferencia en una venta se esperan como UNA transferencia por la suma.
+- 🔑 **«Varios pagos» se escribe en lo que PAGA la clienta** con cada forma de pago (ya con su %), ⛔ en la
+  parte del subtotal a lista: `baseParaMonto` hace la vuelta. Un monto múltiplo de $100 da exacto.
+- 🔑 **Robustez (auditoría, 11-oct)**: topes de entrada en `renglones` (60 renglones, 50 por renglón, precio
+  > 0 —un precio 0 por `curl` regalaba la prenda—) y en `pagaCon`/movimientos · el SKU con guiones se busca
+  TAL CUAL antes que normalizado · la búsqueda tras el 409 lee hasta 5 páginas · un `enviando` de menos de
+  1 min es otro envío en vuelo y ⛔ se vuelve a mandar · `promos` y `bajadas` escriben sólo si la fila ⛔
+  cambió (y con `version`, si la LISTA que editó la pantalla cambió: 409) · el precio de una prenda
+  escaneada antes de que cargaran los datos se completa al llegar · el selector %/$ del descuento se elige
+  antes de escribir · el tótem distingue «no está» de «no se pudo consultar» y muestra la promo.
 
 ## Pendiente
+
+- 🔴 `sql/migrate-caja-auditoria.sql` va ANTES del deploy de la fase 2 (las columnas nuevas viajan en cada
+  venta y en cada movimiento).
 
 - Casilla «Quiero recibir novedades y promos» de `/pos/cliente`: destildada y ⛔ se guarda (Bruno, 6-oct).
   Viaja en `caja:cliente-mail:zattia` como `novedades`; falta que el POS la lea, una columna en

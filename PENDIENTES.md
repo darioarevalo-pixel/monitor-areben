@@ -112,6 +112,18 @@ a meta-blusas y −20% a sweaters). ▶️ Hasta que el parte sepa del SALE, Zat
 🔴 **Píxel de Zattia**: el 5 y el 7-oct Meta vio checkouts normales pero la compra cayó a 20%/50% (la
 pauta explicó 33% y 45% de los pedidos, normal 73%). ▶️ Mirar Purchase en el Administrador de eventos.
 
+## ▶️ CAJA + POS: REEMPLAZAR AL POS DE GN — 11-oct-2026 (decidido por Bruno)
+
+Auditoría: `~/Documents/reunion-gerencia/2026-10-11-POS-auditoria-y-gift-card.md`. Fase 2 (A5–A12, B2–B4,
+robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo quedó. Decidido el 11-oct:
+- **A8: la salida (y el aporte) la carga la cuenta que abrió el turno o un admin** — ⛔ otra cajera.
+- **B5: el descuento a mano y el cambio de precio, LIBRES pero A LA VISTA** — ⛔ permiso ni tope: la venta
+  lo guarda y el turno lo suma («Hecho a mano»).
+- Elegido sin preguntar (cambiable): la transferencia que llega más de **15 min** después ⛔ se confirma
+  sola · **descartar** una venta rechazada lo hace sólo un admin · la gift card va después.
+- ▶️ Falta: correr `sql/migrate-caja-auditoria.sql`, deployar, caminar la lista C en prod y la semana en
+  paralelo con el POS de GN.
+
 ## ▶️ CAJA + POS: IGUALARLO AL PROTOTIPO — 6-oct-2026 (dictado por Bruno)
 
 Comparado el código contra el prototipo aprobado (claude.ai/artifact/4kagmCwHoKFMExKM9obMce). Bruno:

@@ -17,7 +17,7 @@ vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zatt
 vi.mock('@/components/fundas/useDatosMonitor', () => ({ useDatosMonitor: () => ({ datos: { allProductos: [{ id: 5 }] } }) }))
 vi.mock('@/components/productos/useTnImages', () => ({ useTnPromo: () => ({}) }))
 vi.mock('@/lib/etiquetas/core', () => ({ construirPrecios: () => ({ precios: { 5: 18900 }, fueraDeTn: new Set() }) }))
-vi.mock('@/lib/tn', () => ({ imagenDe: () => null }))
+vi.mock('@/lib/tn', () => ({ imagenDe: () => null, matchTn: () => null }))
 vi.mock('@/lib/tn-audit', () => ({
   traerAudit: () =>
     Promise.resolve([
@@ -27,7 +27,8 @@ vi.mock('@/lib/tn-audit', () => ({
 vi.mock('@/lib/caja/cliente', () => ({
   leerConfig: () => Promise.resolve({ reglas: REGLAS_INICIALES, politica_cambio: null, ticket_logo: null }),
   buscarProducto: (codigo: string) =>
-    codigo === BLAZER.barcode ? Promise.resolve({ variante: BLAZER, stock: { local: 3, deposito: 0, fuente: 'vivo' } }) : Promise.reject(new Error('El código no está en el inventario.')),
+    codigo === BLAZER.barcode ? Promise.resolve({ variante: BLAZER, stock: { local: 3, deposito: 0, fuente: 'vivo' } }) : codigo === 'CAIDO' ? Promise.reject(Object.assign(new Error('Gestión Nube no contestó'), { status: 502 }))
+      : Promise.reject(Object.assign(new Error('El código no está en el inventario.'), { status: 404 })),
   buscarNombre: () =>
     Promise.resolve({
       conStock: [{ product_id: 5, product_name: 'BLAZER NEREA', local: 4, variantes: ['S', 'M', 'L'].map((t) => ({ ...BLAZER, size_name: t, local: todoSinStock ? 0 : stockDe[t] })) }],
@@ -96,6 +97,12 @@ describe('CajaTotem', () => {
 
   it('un código que no existe', async () => {
     expect(await escanear('000')).toContain('No encontramos esta prenda')
+  })
+
+  it('robustez: GN caído ⛔ dice «no encontramos»: dice que no se pudo consultar', async () => {
+    const t = await escanear('CAIDO')
+    expect(t).toContain('No pudimos consultar el precio')
+    expect(t).not.toContain('No encontramos esta prenda')
   })
 
   it('todo sin stock en el local: lo dice, ⛔ muestra precio', async () => {

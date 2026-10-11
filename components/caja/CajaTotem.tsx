@@ -19,7 +19,8 @@ import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { construirPrecios } from '@/lib/etiquetas/core'
-import { imagenDe } from '@/lib/tn'
+import { imagenDe, matchTn } from '@/lib/tn'
+import { hoyIso } from '@/lib/agenda'
 import { buscarNombre, buscarProducto, leerConfig, type Config, type Variante } from '@/lib/caja/cliente'
 import { plata } from '@/lib/caja/ticket'
 import { coloresDelProducto, precioTotem, tallesDelLocal, TOTEM_MS, type PrecioTotem } from '@/lib/caja/totem'
@@ -45,7 +46,8 @@ function Trazo({ d }: { d: keyof typeof TRAZO }) {
     </svg>
   )
 }
-type Estado = { que: 'espera' } | { que: 'buscando' } | { que: 'no' } | { que: 'ok'; r: Resultado }
+/** `no`: la prenda ⛔ está (404). `falla`: ⛔ se pudo consultar (GN, la red): son cosas distintas (robustez, 11-oct). */
+type Estado = { que: 'espera' } | { que: 'buscando' } | { que: 'no' } | { que: 'falla' } | { que: 'ok'; r: Resultado }
 
 export function CajaTotem() {
   const { marca, setMarca } = useSesion()
@@ -95,8 +97,9 @@ function Totem() {
   const precioYFoto = useCallback(
     (productId: number) => {
       const p = datos?.allProductos.find((x) => String(x.id) === String(productId))
-      if (!p || !tnIdx) return { precio: null, foto: null }
-      return { precio: construirPrecios([p], tnIdx).precios[p.id] || null, foto: imagenDe(p, tnIdx) }
+      if (!p || !tnIdx) return { precio: null, foto: null, categorias: [] as string[] }
+      // Las categorías de Tienda Nube: las promos por categoría (las mismas que manda el POS).
+      return { precio: construirPrecios([p], tnIdx).precios[p.id] || null, foto: imagenDe(p, tnIdx), categorias: matchTn(p, tnIdx)?.categories ?? [] }
     },
     [datos, tnIdx],
   )
@@ -112,7 +115,7 @@ function Totem() {
       const lista = await buscarNombre(variante.product_name).catch(() => null)
       const prod = lista && [...lista.conStock, ...lista.sinStock].find((p) => p.product_id === variante.product_id)
       if (vuelta.current !== n) return
-      const { precio, foto } = precioYFoto(variante.product_id)
+      const { precio, foto, categorias } = precioYFoto(variante.product_id)
       const cols = coloresDelProducto(audit, variante.sku)
       setEstado({
         que: 'ok',
@@ -121,14 +124,15 @@ function Totem() {
           foto: cols.foto || foto,
           colores: cols.colores,
           colorActual: cols.actual,
-          precio: precioTotem({ product_id: variante.product_id, size_id: variante.size_id, precio, reglas: config?.reglas ?? null }),
+          precio: precioTotem({ product_id: variante.product_id, size_id: variante.size_id, precio, reglas: config?.reglas ?? null, hoy: hoyIso(), categorias }),
           talles: prod ? tallesDelLocal(prod.variantes) : [],
         },
       })
       volverEn(TOTEM_MS.encontrada)
-    } catch {
+    } catch (e) {
       if (vuelta.current !== n) return
-      setEstado({ que: 'no' })
+      const status = (e as { status?: number }).status
+      setEstado({ que: status === 404 || (e as Error).message === 'sin prenda' ? 'no' : 'falla' })
       volverEn(TOTEM_MS.noEncontrada)
     }
   }
@@ -163,23 +167,24 @@ function Totem() {
         {estado.que === 'ok' ? (
           <Prenda r={estado.r} />
         ) : (
-          <Espera no={estado.que === 'no'} buscando={estado.que === 'buscando'} />
+          <Espera no={estado.que === 'no'} falla={estado.que === 'falla'} buscando={estado.que === 'buscando'} />
         )}
       </main>
     </div>
   )
 }
 
-function Espera({ no, buscando }: { no: boolean; buscando: boolean }) {
+function Espera({ no: noEsta, falla, buscando }: { no: boolean; falla: boolean; buscando: boolean }) {
+  const no = noEsta || falla
   return (
     <div style={{ flex: 1, display: 'grid', placeItems: 'center', alignContent: 'center', textAlign: 'center', gap: space[4], padding: space[8], background: `radial-gradient(circle at 50% 40%, ${MARCA_CAJA.acentoBg}, ${color.surface} 60%)` }}>
       <div className={no ? undefined : 'caja-latido'} style={{ width: 'clamp(88px, 11vw, 140px)', aspectRatio: '1', borderRadius: 28, background: no ? color.bg2 : MARCA_CAJA.acento, color: no ? color.mut : color.surface, display: 'grid', placeItems: 'center' }}>
         <Trazo d={no ? 'alerta' : 'lector'} />
       </div>
       <h1 style={{ margin: 0, fontSize: 'clamp(30px, 4.6vw, 60px)', letterSpacing: '-0.03em', maxWidth: '18ch', textWrap: 'balance' }}>
-        {no ? 'No encontramos esta prenda' : buscando ? 'Buscando…' : 'Escaneá una prenda para ver su precio'}
+        {falla ? 'No pudimos consultar el precio' : no ? 'No encontramos esta prenda' : buscando ? 'Buscando…' : 'Escaneá una prenda para ver su precio'}
       </h1>
-      <p style={{ margin: 0, fontSize: 'clamp(16px, 1.8vw, 24px)', color: color.mut }}>{no ? 'Consultá en caja y te ayudamos.' : 'Acercá la etiqueta al lector.'}</p>
+      <p style={{ margin: 0, fontSize: 'clamp(16px, 1.8vw, 24px)', color: color.mut }}>{falla ? 'Probá de nuevo en un momento o consultá en caja.' : no ? 'Consultá en caja y te ayudamos.' : 'Acercá la etiqueta al lector.'}</p>
     </div>
   )
 }
@@ -247,7 +252,7 @@ function Prenda({ r }: { r: Resultado }) {
               <span>Precio de lista</span>
               <b style={{ fontSize: font['2xl'] + 4, fontVariantNumeric: 'tabular-nums' }}>{plata(precio.lista)}</b>
             </div>
-            <Precio rotulo={precio.conTransferencia ? 'En efectivo o transferencia' : 'En efectivo'} monto={precio.efectivo} pie={precio.ahorro > 0 ? `Ahorrás ${plata(precio.ahorro)}` : ''} />
+            <Precio rotulo={precio.conTransferencia ? 'En efectivo o transferencia' : 'En efectivo'} monto={precio.efectivo} pie={[precio.promo, precio.ahorro > 0 ? `Ahorrás ${plata(precio.ahorro)}` : ''].filter(Boolean).join(' · ')} />
           </>
         )}
       </div>

@@ -10,28 +10,36 @@ import { coloresDelProducto, precioTotem, tallesDelLocal } from '@/lib/caja/tote
  */
 const R = REGLAS_INICIALES as unknown as Reglas
 
+const HOY = '2026-10-11'
+
 describe('precioTotem', () => {
+  it('🔑 robustez: con la promo del local, el MISMO precio que cobra la caja (y su nombre)', () => {
+    const conPromo = { ...R, promos: [{ id: 'p', nombre: '20% en todo', tipo: 'pct', pct: 20, alcance: { tipo: 'todo' }, desde: '2026-01-01', hasta: null, activa: true }] } as Reglas
+    // 18.900 − 20 % = 15.120 ⇒ −15 % efectivo = 12.852 ⇒ redondeo 12.900.
+    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: conPromo, hoy: HOY, categorias: [] })).toMatchObject({ efectivo: 12900, promo: '20% en todo' })
+  })
+
   it('el precio en efectivo es el del cobro: 15 % y redondeo a $100', () => {
     // Transferencia es 10 % ($17.000) ⇒ ⛔ vale lo mismo: el rótulo dice sólo «En efectivo».
-    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: R })).toEqual({ feria: false, lista: 18900, efectivo: 16100, ahorro: 2800, conTransferencia: false })
+    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: R, hoy: HOY, categorias: [] })).toEqual({ feria: false, lista: 18900, efectivo: 16100, ahorro: 2800, conTransferencia: false, promo: null })
   })
 
   it('«o transferencia» sólo si el cobro por transferencia da el MISMO total', () => {
     const t = 13015 // `transferenciaA` de las reglas iniciales
     const igual = { ...R, cuentas: { ...R.cuentas, [t]: { ...R.cuentas[t], descuento: 15 } } } as Reglas
-    const p = precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: igual })
+    const p = precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: igual, hoy: HOY, categorias: [] })
     expect(p && !p.feria && p.conTransferencia).toBe(true)
   })
 
   it('una prenda de feria: precio final, sin el % de la forma de pago', () => {
     const conFeria = { ...R, feriaProductos: [{ id: 5, nombre: 'Blazer' }] } as Reglas
-    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: conFeria })).toEqual({ feria: true, lista: 18900, final: 18900 })
+    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: conFeria, hoy: HOY, categorias: [] })).toEqual({ feria: true, lista: 18900, final: 18900 })
   })
 
   it('sin precio o sin formas de pago ⛔ inventa un número', () => {
-    expect(precioTotem({ product_id: 5, size_id: 1, precio: null, reglas: R })).toBeNull()
-    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: { ...R, medios: undefined } as Reglas })).toBeNull()
-    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: null })).toBeNull()
+    expect(precioTotem({ product_id: 5, size_id: 1, precio: null, reglas: R, hoy: HOY, categorias: [] })).toBeNull()
+    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: { ...R, medios: undefined } as Reglas, hoy: HOY, categorias: [] })).toBeNull()
+    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: null, hoy: HOY, categorias: [] })).toBeNull()
   })
 })
 

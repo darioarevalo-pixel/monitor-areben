@@ -11,6 +11,7 @@
  */
 
 import { cobro, idsDeFeria, pagosDeMedio, renglones } from '@/lib/caja/core.core.js'
+import { aplicarPromos } from '@/lib/caja/promos.core.js'
 import type { Reglas } from '@/lib/caja/cliente'
 
 /**
@@ -18,19 +19,28 @@ import type { Reglas } from '@/lib/caja/cliente'
  * transferencia». Se pregunta al núcleo, ⛔ se supone: con las reglas iniciales efectivo es 15 % y
  * transferencia 10 %, y decir «o transferencia» ahí sería prometer un precio que la caja ⛔ cobra.
  */
+/** `promo`: el nombre de la promo del local que le toca a la prenda sola (W5), o null. */
 export type PrecioTotem =
   | { feria: true; lista: number; final: number }
-  | { feria: false; lista: number; efectivo: number; ahorro: number; conTransferencia: boolean }
+  | { feria: false; lista: number; efectivo: number; ahorro: number; conTransferencia: boolean; promo: string | null }
 
-/** El precio de una prenda para el tótem; `null` si no tiene precio o la Caja no tiene formas de pago. */
-export function precioTotem(a: { product_id: number; size_id: number; precio: number | null; reglas: Reglas | null }): PrecioTotem | null {
+/**
+ * El precio de una prenda para el tótem; `null` si no tiene precio o la Caja no tiene formas de pago.
+ * 🔑 Robustez (auditoría, 11-oct): con las PROMOS del local, como el POS (`aplicarPromos`, el MISMO núcleo):
+ * antes el tótem decía un precio más alto que el que cobraba la caja. `hoy` y `categorias` (las de Tienda
+ * Nube) son los mismos datos que usa el POS.
+ */
+export function precioTotem(a: { product_id: number; size_id: number; precio: number | null; reglas: Reglas | null; hoy: string; categorias: string[] }): PrecioTotem | null {
   if (a.precio == null || !(a.precio > 0) || !a.reglas?.medios) return null
-  const filas = renglones([{ product_id: a.product_id, size_id: a.size_id, cantidad: 1, precio: a.precio }])
   const reglas = a.reglas
   const precio = a.precio
+  const conPromo = aplicarPromos({ items: [{ product_id: a.product_id, size_id: a.size_id, cantidad: 1, precio, categorias: a.categorias }], promos: reglas.promos, feriaIds: idsDeFeria(reglas), hoy: a.hoy })
+  const filas = renglones(conPromo.items)
+  const descuentoVenta = conPromo.venta ? { tipo: 'pesos' as const, valor: conPromo.venta.pesos, sinFeria: true } : null
+  const nombres = [...(conPromo.items[0].promos ?? []), ...(conPromo.venta ? [conPromo.venta.nombre] : [])]
   const totalCon = (medio: 'efectivo' | 'transferencia') => {
     const pagos = pagosDeMedio(medio, { filas, reglas, total: precio, promoCreditoHoy: false, esDelBanco: false, seisCuotas: false })
-    return cobro({ filas, pagos, reglas, descuentoVenta: null }).total
+    return cobro({ filas, pagos, reglas, descuentoVenta }).total
   }
   const total = totalCon('efectivo')
   if (idsDeFeria(reglas).has(a.product_id)) return { feria: true, lista: a.precio, final: total }
@@ -40,7 +50,7 @@ export function precioTotem(a: { product_id: number; size_id: number; precio: nu
   } catch {
     /* sin cuenta de transferencia configurada: el rótulo dice sólo «En efectivo» */
   }
-  return { feria: false, lista: a.precio, efectivo: total, ahorro: Math.round((a.precio - total) * 100) / 100, conTransferencia: transferencia === total }
+  return { feria: false, lista: a.precio, efectivo: total, ahorro: Math.round((a.precio - total) * 100) / 100, conTransferencia: transferencia === total, promo: nombres.length ? nombres.join(' + ') : null }
 }
 
 /** Los talles del producto en el local (stock de anoche): sin repetir, en el orden de la lista. */

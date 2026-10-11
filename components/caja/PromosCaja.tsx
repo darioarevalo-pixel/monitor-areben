@@ -12,7 +12,7 @@ import { useTnPromo } from '@/components/productos/useTnImages'
 import { NOMBRE_TIPO, normCategoria } from '@/lib/caja/promos.core.js'
 import { hoyIso } from '@/lib/agenda'
 import { plata } from '@/lib/caja/ticket'
-import { buscarNombre, guardarPromos, type AlcancePromo, type ProductoLista, type PromoCaja, type Reglas, type TipoPromo } from '@/lib/caja/cliente'
+import { buscarNombre, guardarPromos, type AlcancePromo, type ProductoLista, type PromoCaja, type Reglas, type TipoPromo, type Versiones } from '@/lib/caja/cliente'
 import { Badge, Button, Field, Input, Notice, Plegable, Select, color, font, radius, space } from '@/components/ui'
 
 const TIPOS: TipoPromo[] = ['nxm', 'segunda_unidad', 'pct', 'monto_minimo']
@@ -55,7 +55,7 @@ function aPromo(f: Form): PromoCaja {
   return p
 }
 
-export function PromosCaja({ reglas, admin, onGuardadas }: { reglas: Reglas; admin: boolean; onGuardadas: (r: Reglas) => void }) {
+export function PromosCaja({ reglas, admin, version, onGuardadas }: { reglas: Reglas; admin: boolean; /** La de la lista que se está editando: si otro admin la cambió, el servidor contesta 409 (⛔ se pisa). */ version?: string; onGuardadas: (r: Reglas, v?: Versiones) => void }) {
   const [abierto, setAbierto] = useState(false)
   const [form, setForm] = useState<Form | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -68,8 +68,8 @@ export function PromosCaja({ reglas, admin, onGuardadas }: { reglas: Reglas; adm
     setGuardando(true)
     setMsg(null)
     try {
-      const r = await guardarPromos(nueva)
-      onGuardadas(r.reglas)
+      const r = await guardarPromos(nueva, version)
+      onGuardadas(r.reglas, r.versiones)
       despues?.()
     } catch (e) {
       setMsg((e as Error).message)

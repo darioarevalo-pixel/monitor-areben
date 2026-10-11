@@ -49,8 +49,8 @@ import { imagenDe, matchTn } from '@/lib/tn'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
-import { MSJ_FERIA, NOMBRE_MEDIO, cobro, cuentaDeMedio, idsDeFeria, nombreParaTicket, pagosDeMedio, pesosDeRebaja, renglones, subtotalDeFeria } from '@/lib/caja/core.core.js'
-import { hoyIso, promosDe } from '@/lib/agenda'
+import { MSJ_FERIA, NOMBRE_MEDIO, aPagarDe, baseParaMonto, cobro, cuentaDeMedio, idsDeFeria, nombreParaTicket, pagosDeMedio, renglones, subtotalDeFeria } from '@/lib/caja/core.core.js'
+import { hoyIso, promosDeCreditoEnMostrador } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
 import { avisoDeRenglon } from '@/lib/caja/pedidos-web.core.js'
@@ -332,7 +332,8 @@ function POS() {
   // 🔑 La promo bancaria de crédito de HOY sale de la Agenda (la misma de la banda de promos), ⛔ se le
   // pregunta a la cajera si hay: sólo si la tarjeta es de ese banco.
   const promoCredito = useMemo(
-    () => promosDe(promos, hoyIso(), { canal: 'mostrador', marca: 'zattia' }).filter((p) => p.medio === 'credito' && p.beneficio.tipo === 'descuento'),
+    // La MISMA pregunta que hace el servidor antes de aceptar la cuenta del −10 % (A6).
+    () => promosDeCreditoEnMostrador(promos, hoyIso(), 'zattia'),
     [promos],
   )
   const bancosPromo = promoCredito.map((p) => p.banco).join(' o ')
@@ -392,6 +393,24 @@ function POS() {
     [fotoSku, precioYFoto],
   )
   const colorDe = useCallback((v: Variante) => (v.sku && colorSku[v.sku.toLowerCase().trim()]) || null, [colorSku])
+  // Robustez (auditoría, 11-oct): una prenda escaneada ANTES de que cargaran los precios quedaba sin
+  // precio para siempre. Cuando llegan, se completa la que nunca tuvo uno (⛔ la que la cajera borró).
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setBor((b) => {
+        let cambio = false
+        const rs = b.renglones.map((r) => {
+          if (r.precio != null || r.precioLista != null) return r
+          const pf = precioYFoto(r.variante.product_id)
+          if (pf.precio == null) return r
+          cambio = true
+          return { ...r, precio: pf.precio, precioLista: pf.precio, fueraDeTn: pf.fueraDeTn, foto: r.foto ?? pf.foto }
+        })
+        return cambio ? { ...b, renglones: rs } : b
+      })
+    }, 0)
+    return () => clearTimeout(t)
+  }, [precioYFoto])
 
   // 🔑 El punto de Gestión Nube de la cabecera: la ÚLTIMA respuesta que la pantalla ya tuvo de GN (⛔ se
   // le pregunta nada nuevo). El stock de una prenda leído en vivo o del espejo (`stock.fuente`), y la
@@ -430,7 +449,8 @@ function POS() {
         rs[i] = { ...rs[i], stock, cantidad: rs[i].cantidad + 1 }
         return { ...b, renglones: rs }
       }
-      return { ...b, renglones: [...b.renglones, { variante, stock, cantidad: 1, rebaja: null, ...precioYFoto(variante.product_id), foto: fotoDe(variante) }] }
+      const pf = precioYFoto(variante.product_id)
+      return { ...b, renglones: [...b.renglones, { variante, stock, cantidad: 1, rebaja: null, ...pf, precioLista: pf.precio, foto: fotoDe(variante) }] }
     })
     const enCarrito = (bor.renglones.find((r) => claveDe(r.variante) === claveDe(variante))?.cantidad ?? 0) + 1
     const web = avisoWeb(variante, stock, enCarrito)
@@ -495,7 +515,8 @@ function POS() {
     }
   })()
   const descuentoManual = bor.descuentoVenta ?? null
-  const descuentoVenta: Rebaja | null = descuentoManual ?? (conPromo.venta ? { tipo: 'pesos', valor: conPromo.venta.pesos } : null)
+  // La promo de compra va SIN la feria (A9): la prenda de feria tiene precio final. La a mano, sobre todo.
+  const descuentoVenta: (Rebaja & { sinFeria?: boolean }) | null = descuentoManual ?? (conPromo.venta ? { tipo: 'pesos', valor: conPromo.venta.pesos, sinFeria: true } : null)
   const armado = (() => {
     try {
       if (!bor.renglones.length || sinPrecio) return { filas: null, error: null as string | null }
@@ -507,10 +528,9 @@ function POS() {
   const filas = armado.filas
   // Lo que queda después de las rebajas a mano: es lo que decide si se ofrecen las 6 cuotas.
   const aPagar = (() => {
-    if (!filas) return null
-    const sub = filas.reduce((s, f) => s + f.importe, 0)
+    if (!filas || !reglas) return null
     try {
-      return Math.round((sub - pesosDeRebaja(descuentoVenta, sub)) * 100) / 100
+      return aPagarDe(filas, reglas, descuentoVenta)
     } catch {
       return null
     }
@@ -541,6 +561,16 @@ function POS() {
     return m
   })()
 
+  /** «Varios pagos»: lo que paga con una forma de pago ⇒ la parte del subtotal que reparte `cobro()`. */
+  const aBase = (medio: Medio, monto: number): number | null => {
+    if (!filas || !reglas?.medios) return null
+    try {
+      return baseParaMonto({ filas, reglas, descuentoVenta, cuenta: cuentaDe(medio, reglas), monto })
+    } catch {
+      return null
+    }
+  }
+
   const elCobro = (() => {
     if (armado.error) return { c: null, pedidos: [], error: armado.error }
     if (!filas || !reglas?.medios || pagos.some((p) => p.medio == null)) return { c: null, pedidos: [], error: null as string | null }
@@ -551,7 +581,7 @@ function POS() {
         ? pagosDe(pagos[0].medio as Medio, rg)
         : pagos.map((p, i) => {
             const cuenta = cuentaDe(p.medio as Medio, rg)
-            return i === pagos.length - 1 ? { cuenta } : { cuenta, base: aNumero(p.base) ?? 0 }
+            return i === pagos.length - 1 ? { cuenta } : { cuenta, base: aBase(p.medio as Medio, aNumero(p.base) ?? 0) ?? 0 }
           })
       return { c: cobro({ filas, pagos: pedidos, reglas: rg, descuentoVenta }), pedidos, error: null }
     } catch (e) {
@@ -664,7 +694,7 @@ function POS() {
       const r = await confirmarVenta({
         id: bor.id,
         // El nombre, el talle y la foto van para el ticket por mail; la plata ⛔ los mira.
-        items: bor.renglones.map((r, i) => ({ ...items[i], nombre: r.variante.product_name, talle: r.variante.size_name, foto: r.foto })),
+        items: bor.renglones.map((r, i) => ({ ...items[i], nombre: r.variante.product_name, talle: r.variante.size_name, foto: r.foto, precioLista: r.precioLista ?? null })),
         pagos: pedidos,
         total: c.total,
         descuentoVenta: descuentoManual,
@@ -759,7 +789,7 @@ function POS() {
     return marco(
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
         {cerradoAca && <AvisoCierre t={cerradoAca} />}
-        <Notice tone="warning">Sin turno abierto: el POS ⛔ cobra. Abrir turno desde la pestaña Caja.</Notice>
+        <Notice tone="warning">Sin turno abierto: el POS no cobra. Abrir turno desde la pestaña Caja.</Notice>
         <div>
           <ButtonLink href="/caja" variant="solid" tone="brand">
             Ir a la Caja
@@ -1052,7 +1082,7 @@ function POS() {
                         )
                       })}
                     </div>
-                    {varios && <VariosPagos pagos={pagos} setPagos={setPagos} montos={c?.pagos.map((p) => p.monto) ?? null} subtotal={subtotalFilas} />}
+                    {varios && <VariosPagos pagos={pagos} setPagos={setPagos} montos={c?.pagos.map((p) => p.monto) ?? null} subtotal={subtotalFilas} aBase={aBase} />}
                     </div>
                   )}
 

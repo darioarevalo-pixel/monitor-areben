@@ -28,7 +28,8 @@ export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; m
 /** Un descuento a mano, a una prenda o a toda la venta. */
 export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 /** `ticket_logo`: el logo del ticket (null sin logo, o sin `sql/migrate-caja-logo.sql`). */
-export type Config = { reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null }
+/** `versiones`: las de las listas que se guardan ENTERAS (promos, productos de feria): se mandan al guardar para ⛔ pisar a otro admin. */
+export type Config = { reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string } }
 
 /** Una cuenta de cobro de GN. `regla` en null ⇒ la Caja ⛔ la cobra (sin %, o con recargo). */
 export type CuentaGN = { id: number; nombre: string; regla: ReglaCuenta | null }
@@ -41,10 +42,14 @@ export type Stock = { local: number; deposito: number; fuente: 'vivo' | 'espejo'
 export type Candidato = Variante & { local?: number }
 export type Producto = { variante: Variante; stock: Stock } | { candidatos: Candidato[]; mas?: number }
 
-/** `esperando_pago`: cobrada por transferencia, el pago todavía ⛔ apareció en MP (F5). `cancelada`: ⛔ llegó y la cajera la canceló. */
-export type EstadoVenta = 'borrador' | 'enviando' | 'en_gn' | 'error' | 'esperando_pago' | 'cancelada'
+/** `esperando_pago`: cobrada por transferencia, el pago todavía ⛔ apareció en MP (F5). `cancelada`: ⛔ llegó y la cajera la canceló. `descartada`: GN la rechazó y se resolvió que ⛔ se cobró (B2). */
+export type EstadoVenta = 'borrador' | 'enviando' | 'en_gn' | 'error' | 'esperando_pago' | 'cancelada' | 'descartada'
+/** B2: cómo se resolvió una venta que GN rechazó. */
+export type Resolucion = { tipo: 'a_mano' | 'descartada'; por: string | null; en: string; nota: string; gn_number?: number }
+/** B5: lo hecho a mano en la venta, en pesos (a la venta, a las prendas, bajando el precio). */
+export type AMano = { venta: number; prendas: number; precios: number }
 /** Un renglón como quedó guardado: con lo que necesita el ticket. */
-export type RenglonGuardado = { product_id: number; size_id: number; cantidad: number; precio: number; importe?: number; nombre: string | null; talle: string | null; promos?: string[] }
+export type RenglonGuardado = { product_id: number; size_id: number; cantidad: number; precio: number; importe?: number; nombre: string | null; talle: string | null; promos?: string[]; /** B5: el de la etiqueta, si la cajera lo cambió. */ precio_lista?: number }
 export type PagoGuardado = { cuenta: number; base: number; rebaja?: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
 export type Venta = {
   id: string
@@ -66,7 +71,11 @@ export type Venta = {
   /** Lo que tiene que llegar por transferencia; null si la venta ⛔ espera. */
   espera_monto?: number | null
   mp_pago_id?: string | null
-  mp_cruce?: 'solo' | 'cajera' | null
+  mp_cruce?: 'solo' | 'cajera' | 'admin' | null
+  a_mano?: AMano | null
+  resolucion?: Resolucion | null
+  /** B3: la transferencia la confirmó un admin con el comprobante. */
+  confirmacion?: { por: string | null; en: string; comprobante: string } | null
 }
 
 async function leer<T>(r: Response, fallo: string): Promise<T> {
@@ -113,17 +122,22 @@ export type ResumenTurno = {
   total: number
   ventas: number
   /** `deEspera`: la parte en efectivo de las ventas que esperan la transferencia (A2): ya está en el cajón. */
-  efectivo: { fondo: number; cobrado: number; deEspera?: number; cobradoGN: number; salidas: number; esperado: number }
+  efectivo: { fondo: number; cobrado: number; deEspera?: number; cobradoGN: number; aportes?: number; salidas: number; esperado: number }
   /** W3b: el efectivo cobrado EN GN durante el turno que ⛔ es venta presencial. `null` = GN ⛔ contestó. */
   cobrosGN: CobroGN[] | null
   esperando: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
   sinGN: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
+  /** A12: las que se anularon a mano en GN (⛔ suman). `null` = ⛔ se pudo mirar. */
+  anuladasGN?: { id: string; total: number; creada_en: string; gn_number: number | null }[] | null
+  /** B5: lo hecho a mano en el turno. */
+  aMano?: { ventas: number } & AMano
 }
 /** Fase B: cuántos billetes de cada valor (`{ "20000": 3 }`). El total lo rearma el servidor. */
 export type Conteo = Record<string, number>
 export type ConteoGuardado = { billetes: Conteo; total: number; en: string; por: string | null; esperado?: number; diferencia?: number }
 export type Conteos = { apertura?: ConteoGuardado; intermedios?: ConteoGuardado[]; cierre?: ConteoGuardado }
-export type SalidaTurno = { id: string; monto: number; motivo: string; usuario: string | null; creado_en: string }
+/** Un movimiento de efectivo del turno: `salida` resta, `aporte` suma (B4). El anulado queda tachado. */
+export type SalidaTurno = { id: string; tipo?: 'salida' | 'aporte'; monto: number; motivo: string; usuario: string | null; usuario_cuenta?: string | null; creado_en: string; anulado_en?: string | null; anulado_por?: string | null; anulado_motivo?: string | null }
 export type Turno = {
   id: string
   abierto_en: string
@@ -143,7 +157,10 @@ export type Turno = {
 export const leerTurno = () => get<{ turno: Turno | null; ultimos: Turno[] }>('action=turno', 'No se pudo leer el turno.')
 export const abrirTurno = (fondo: number, conteo?: Conteo | null) =>
   post<{ turno: Turno }>({ action: 'abrir-turno', fondo, ...(conteo ? { conteo } : {}) }, 'No se pudo abrir el turno.')
-export const sacarEfectivo = (monto: number, motivo: string) => post<{ turno: Turno }>({ action: 'salida', monto, motivo }, 'No se pudo registrar la salida.')
+export const sacarEfectivo = (monto: number, motivo: string, tipo: 'salida' | 'aporte' = 'salida') =>
+  post<{ turno: Turno }>({ action: 'salida', monto, motivo, tipo }, tipo === 'aporte' ? 'No se pudo registrar el aporte.' : 'No se pudo registrar la salida.')
+/** B4: anula una salida o un aporte del turno abierto (⛔ se borra: queda tachado). */
+export const anularMovimiento = (id: string, motivo: string) => post<{ turno: Turno }>({ action: 'anular-mov', id, motivo }, 'No se pudo anular.')
 /** `sinCobrosGN`: cerrar aunque GN ⛔ contestó los cobros web (A3); el servidor exige la nota. */
 export const cerrarTurno = (id: string, contado: number, nota: string, conteo?: Conteo | null, sinCobrosGN = false) =>
   post<{ turno: Turno }>({ action: 'cerrar-turno', id, contado, nota, ...(conteo ? { conteo } : {}), ...(sinCobrosGN ? { sinCobrosGN: true } : {}) }, 'No se pudo cerrar el turno.')
@@ -166,7 +183,7 @@ export type PedidosWeb = { pedidos: PedidoWeb[]; porSku: Record<string, Array<{ 
 export const leerPedidosWeb = () => get<PedidosWeb>('action=pedidos-web', 'No se pudieron leer los pedidos web.')
 
 /** `rebaja` es SÓLO la de la cajera: la promo la aplica el servidor (con `categorias`, las de Tienda Nube). */
-export type ItemConfirmar = { product_id: number; size_id: number; cantidad: number; precio: number; rebaja?: Rebaja | null; categorias?: string[]; nombre?: string; talle?: string; foto?: string | null }
+export type ItemConfirmar = { product_id: number; size_id: number; cantidad: number; precio: number; rebaja?: Rebaja | null; categorias?: string[]; nombre?: string; talle?: string; foto?: string | null; /** B5: el de la etiqueta (para mostrar si la cajera lo cambió). */ precioLista?: number | null }
 export type PagoConfirmar = { cuenta: number; base?: number }
 
 /** `reintentable` sólo importa si la venta quedó en `error`. */
@@ -191,6 +208,12 @@ export const cruzarVenta = (id: string, pago?: string) =>
 export const cancelarVenta = (id: string) => post<{ venta: Venta }>({ action: 'cancelar', id }, 'No se pudo cancelar la venta.')
 
 export const reintentarVenta = (id: string) => post<Resultado>({ action: 'reintentar', id }, 'No se pudo reintentar la venta.')
+/** B2: la venta que GN RECHAZÓ: cargada a mano en GN (con su número) o descartada (sólo admin). */
+export const resolverVenta = (id: string, como: 'a_mano' | 'descartar', nota: string, gnNumber?: number) =>
+  post<{ venta: Venta }>({ action: 'resolver', id, como, nota, ...(gnNumber ? { gn_number: gnNumber } : {}) }, 'No se pudo resolver la venta.')
+/** B3: sólo admin: la transferencia que el cruce ⛔ ve, confirmada con el comprobante. */
+export const confirmarTransferencia = (id: string, comprobante: string) =>
+  post<Resultado>({ action: 'confirmar-transferencia', id, comprobante }, 'No se pudo confirmar la transferencia.')
 
 export const guardarPolitica = (texto: string) => post<{ politica_cambio: string | null }>({ action: 'politica', texto }, 'No se pudo guardar la política de cambio.')
 
@@ -201,6 +224,9 @@ export const leerCuentasMp = () => get<{ enUso: CuentaMp | null; cuentas?: Cuent
 export const usarCuentaMp = (cuenta_id: number) => post<{ enUso: CuentaMp }>({ action: 'usar-mp', cuenta_id }, 'No se pudo cambiar la cuenta de Mercado Pago.')
 export const guardarLogo = (logo: LogoTicket | null) => post<{ ticket_logo: LogoTicket | null }>({ action: 'logo', logo }, 'No se pudo guardar el logo.')
 /** Sólo admin: la lista ENTERA de promos (W5). */
-export const guardarPromos = (promos: PromoCaja[]) => post<{ reglas: Reglas }>({ action: 'promos', promos }, 'No se pudieron guardar las promos.')
-export const guardarBajadas = (b: { transferenciaA?: number; feria?: boolean; billetes?: number[]; feriaProductos?: ProductoFeria[] }) =>
-  post<{ reglas: Reglas }>({ action: 'bajadas', ...b }, 'No se pudo guardar.')
+/** `version`: la de la lista que se editó (`Config.versiones`); si otro admin la cambió, 409. */
+export type Versiones = NonNullable<Config['versiones']>
+export const guardarPromos = (promos: PromoCaja[], version?: string) =>
+  post<{ reglas: Reglas; versiones?: Versiones }>({ action: 'promos', promos, ...(version ? { version } : {}) }, 'No se pudieron guardar las promos.')
+export const guardarBajadas = (b: { transferenciaA?: number; feria?: boolean; billetes?: number[]; feriaProductos?: ProductoFeria[]; version?: string }) =>
+  post<{ reglas: Reglas; versiones?: Versiones }>({ action: 'bajadas', ...b }, 'No se pudo guardar.')

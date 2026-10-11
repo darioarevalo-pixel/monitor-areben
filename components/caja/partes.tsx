@@ -18,6 +18,11 @@ import {
   guardarPolitica,
   abrirTurno,
   sacarEfectivo,
+  anularMovimiento,
+  resolverVenta,
+  confirmarTransferencia,
+  type SalidaTurno,
+  type Versiones,
   cerrarTurno,
   leerVentasTurno,
   contarBilletes,
@@ -47,9 +52,9 @@ import { HeaderAcciones } from '@/components/layout/acciones'
 import { ConfirmDetalle, useConfirmar } from '@/components/ui/Confirm'
 
 
-/** Un renglón del pedido. */
-export type Renglon = { variante: Variante; stock: Stock; cantidad: number; precio: number | null; fueraDeTn: boolean; foto: string | null; rebaja?: Rebaja | null }
-/** La cajera elige la FORMA de pago; la cuenta de GN la resuelve `cuentaDeMedio` (Bruno, 4-oct). */
+/** Un renglón del pedido. `precioLista`: el de la etiqueta al escanear (B5: si la cajera lo cambia, queda a la vista). */
+export type Renglon = { variante: Variante; stock: Stock; cantidad: number; precio: number | null; fueraDeTn: boolean; foto: string | null; rebaja?: Rebaja | null; precioLista?: number | null }
+/** La cajera elige la FORMA de pago; la cuenta de GN la resuelve `cuentaDeMedio` (Bruno, 4-oct). `base`: con «Varios pagos», lo que PAGA con ella (texto). */
 export type PagoUI = { medio: Medio | null; base: string }
 
 /** Las cuatro formas de pago que ve la cajera, en el orden del mostrador. */
@@ -480,6 +485,8 @@ export function FilaRenglon({
           {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· Stock de anoche (Gestión Nube sin respuesta)</span>}
         </div>
         {r.fueraDeTn && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio del espejo: producto sin cruce con Tienda Nube.</div>}
+        {/* B5 (Bruno, 11-oct): cambiar el precio es libre, pero se ve (y queda en la venta). */}
+        {r.precioLista != null && r.precio != null && Math.abs(r.precioLista - r.precio) > 0.004 && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio cambiado: la etiqueta dice {plata(r.precioLista)}.</div>}
         {mirandoWeb && <div style={{ fontSize: font.xs, color: color.mut }}>Pedidos web: leyendo…</div>}
         {avisoWeb && <Badge tone={avisoWeb.tipo === 'sin_stock' ? 'danger' : 'warning'}>{avisoWeb.texto}</Badge>}
       </div>
@@ -521,14 +528,21 @@ export function FilaRenglon({
 }
 
 /**
- * «Varios pagos» (prototipo del 6-oct): una fila por pago —forma de pago · la parte del subtotal · X—, y
- * abajo cuánto falta repartir. El último pago se lleva el resto (`cobro()`), así que su monto ⛔ se escribe.
+ * «Varios pagos» (prototipo del 6-oct): una fila por pago —forma de pago · lo que PAGA la clienta con ella ·
+ * X—, y abajo si el reparto cierra. El último pago se lleva el resto (`cobro()`), así que su monto ⛔ se escribe.
+ * 🔑 Robustez (auditoría, 11-oct): se escribe lo que la clienta paga con esa forma de pago (ya con su
+ * descuento), ⛔ la parte del subtotal a precio de lista, que es lo que nadie tiene en la cabeza. `aBase`
+ * lo pasa a la parte del subtotal, que es lo que reparte `cobro()`.
  */
-export function VariosPagos({ pagos, setPagos, montos, subtotal = null }: { pagos: PagoUI[]; setPagos: (p: PagoUI[]) => void; montos: number[] | null; /** El subtotal a precio de lista: contra eso se reparte. */ subtotal?: number | null }) {
+export function VariosPagos({ pagos, setPagos, montos, subtotal = null, aBase }: { pagos: PagoUI[]; setPagos: (p: PagoUI[]) => void; montos: number[] | null; /** El subtotal a precio de lista: contra eso se reparte. */ subtotal?: number | null; /** Lo que paga con una forma de pago ⇒ la parte del subtotal (null si ⛔ se puede). */ aBase: (medio: Medio, monto: number) => number | null }) {
   const cambiar = (i: number, cambio: Partial<PagoUI>) => setPagos(pagos.map((p, j) => (j === i ? { ...p, ...cambio } : p)))
-  // Lo que se lleva el último: el subtotal menos lo escrito en los demás. ⛔ Es plata nueva: el cobro lo
+  // Lo que se lleva el último: el subtotal menos lo que cubren los demás. ⛔ Es plata nueva: el cobro lo
   // calcula `cobro()`; esto sólo dice si el reparto cierra.
-  const resto = subtotal != null ? Math.round((subtotal - pagos.slice(0, -1).reduce((s, p) => s + (aNumero(p.base) ?? 0), 0)) * 100) / 100 : null
+  const bases = pagos.slice(0, -1).map((p) => {
+    const m = aNumero(p.base)
+    return m != null && p.medio ? aBase(p.medio, m) : null
+  })
+  const resto = subtotal != null ? Math.round((subtotal - bases.reduce((s: number, b) => s + (b ?? 0), 0)) * 100) / 100 : null
   const ultimoSinMedio = pagos[pagos.length - 1]?.medio == null
   const estado =
     resto == null
@@ -541,7 +555,7 @@ export function VariosPagos({ pagos, setPagos, montos, subtotal = null }: { pago
   return (
     <div style={{ display: 'grid', gap: space[2] }}>
       <span style={{ fontSize: font.sm, color: color.mut }}>
-        En cada pago va la parte del subtotal que se paga con esa forma de pago; el último se lleva el resto. Cada uno se descuenta y se redondea por separado.
+        En cada pago va lo que la clienta paga con esa forma de pago (ya con su descuento); el último se lleva el resto. Cada uno se redondea por separado.
       </span>
       {pagos.map((p, i) => {
         const ultimo = i === pagos.length - 1
@@ -557,9 +571,9 @@ export function VariosPagos({ pagos, setPagos, montos, subtotal = null }: { pago
                 ))}
               </Select>
               {ultimo ? (
-                <span style={{ color: color.mut, fontSize: font.base, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{resto != null && resto > 0 ? `el resto: ${plata(resto)}` : 'el resto'}</span>
+                <span style={{ color: color.mut, fontSize: font.base, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{montos?.[i] != null ? `el resto: ${plata(montos[i])}` : 'el resto'}</span>
               ) : (
-                <Input inputMode="decimal" autoComplete="off" value={p.base} onChange={(e) => cambiar(i, { base: e.target.value })} placeholder="$ del subtotal" aria-label={`Monto del pago ${i + 1}`} style={{ textAlign: 'right' }} />
+                <Input inputMode="decimal" autoComplete="off" value={p.base} onChange={(e) => cambiar(i, { base: e.target.value })} placeholder="$ que paga" aria-label={`Lo que paga con el pago ${i + 1}`} style={{ textAlign: 'right' }} />
               )}
               {pagos.length > 2 ? (
                 <button
@@ -576,7 +590,7 @@ export function VariosPagos({ pagos, setPagos, montos, subtotal = null }: { pago
                 <span />
               )}
             </div>
-            {montos?.[i] != null && <span style={{ fontSize: font.sm, color: color.mut, fontVariantNumeric: 'tabular-nums' }}>cobra {plata(montos[i])}</span>}
+            {montos?.[i] != null && (ultimo || montos[i] !== aNumero(p.base)) && <span style={{ fontSize: font.sm, color: color.mut, fontVariantNumeric: 'tabular-nums' }}>cobra {plata(montos[i])}</span>}
           </div>
         )
       })}
@@ -794,6 +808,8 @@ export function EsperaTransferencia({ venta, onLlego, onCambio }: { venta: Venta
                 <span style={{ fontWeight: weight.semibold }}>{plata(p.monto)}</span>
                 <span>a las {hora(p.cuando)}</span>
                 <span style={{ color: color.mut }}>{TEXTO_ORIGEN[p.origen] ?? p.origen}</span>
+                {/* A5: para compararlo con el comprobante de la clienta (MP ⛔ dice quién transfirió). */}
+                <span style={{ color: color.mut, fontVariantNumeric: 'tabular-nums' }}>operación ····{String(p.id).slice(-4)}</span>
                 <Button size="sm" tone="success" loading={trabajando === p.id} disabled={!!trabajando} onClick={() => elegir(p.id)}>
                   Elegir
                 </Button>
@@ -867,6 +883,7 @@ const ESTADO_VENTA: Record<string, { texto: string; tono: 'success' | 'danger' |
   error: { texto: 'Pendiente en GN', tono: 'danger' },
   esperando_pago: { texto: 'Esperando transferencia', tono: 'warning' },
   cancelada: { texto: 'Cancelada', tono: 'neutral' },
+  descartada: { texto: 'Descartada', tono: 'neutral' },
 }
 
 /**
@@ -888,7 +905,7 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar }: { nombr
   const th: React.CSSProperties = { textAlign: 'left', padding: `${space[1]}px ${space[2]}px`, color: color.mut, fontWeight: weight.semibold, fontSize: font.sm, borderBottom: `1px solid ${color.line}` }
   const td: React.CSSProperties = { padding: `${space[2]}px`, borderBottom: `1px solid ${color.line}`, fontSize: font.base, verticalAlign: 'middle' }
   const der: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
-  const cobradas = (ventas ?? []).filter((v) => v.estado !== 'cancelada' && v.estado !== 'esperando_pago')
+  const cobradas = (ventas ?? []).filter((v) => v.estado !== 'cancelada' && v.estado !== 'esperando_pago' && v.estado !== 'descartada')
   return (
     <Modal abierto onCerrar={onCerrar} titulo="Ventas del turno" ancho="xl">
       {error && <Notice tone="danger">{error}</Notice>}
@@ -916,7 +933,16 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar }: { nombr
                 {ventas.map((v) => {
                   const e = ESTADO_VENTA[v.estado] ?? { texto: v.estado, tono: 'neutral' as const }
                   const prendas = (v.renglones ?? []).reduce((t, r) => t + r.cantidad, 0)
-                  const conTicket = v.estado !== 'cancelada' && v.estado !== 'esperando_pago'
+                  const conTicket = v.estado !== 'cancelada' && v.estado !== 'esperando_pago' && v.estado !== 'descartada'
+                  // B5: lo hecho a mano, a la vista. B2/B3: cómo se resolvió.
+                  const am = v.a_mano
+                  const marcas = [
+                    am && am.precios > 0 && `precio bajado ${plata(am.precios)}`,
+                    am && (am.venta > 0 || am.prendas > 0) && `descuento a mano ${plata(am.venta + am.prendas)}`,
+                    v.resolucion?.tipo === 'a_mano' && `cargada a mano en GN (${v.resolucion.por ?? ''})`,
+                    v.resolucion?.tipo === 'descartada' && `descartada: «${v.resolucion.nota}»`,
+                    v.mp_cruce === 'admin' && `transferencia confirmada a mano (${v.confirmacion?.por ?? 'admin'})`,
+                  ].filter(Boolean) as string[]
                   return (
                     <tr key={v.id}>
                       <td style={td}>{hora(v.creada_en)}</td>
@@ -926,6 +952,7 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar }: { nombr
                       <td style={{ ...td, ...der, fontWeight: weight.semibold }}>{plata(v.total)}</td>
                       <td style={td}>
                         <Badge tone={e.tono}>{e.texto}</Badge>
+                        {marcas.length > 0 && <div style={{ fontSize: font.xs, color: color.warningInk, marginTop: 2 }}>{marcas.join(' · ')}</div>}
                       </td>
                       <td style={{ ...td, textAlign: 'right' }}>
                         {conTicket && (
@@ -946,9 +973,10 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar }: { nombr
   )
 }
 
-export function Pendientes({ ventas, onCambio }: { ventas: Venta[]; onCambio: () => void }) {
+export function Pendientes({ ventas, onCambio, admin = false, esMio = false }: { ventas: Venta[]; onCambio: () => void; /** B2: descartar lo hace un admin. */ admin?: boolean; /** B2: «cargada a mano» también la cuenta que tiene la caja abierta. */ esMio?: boolean }) {
   const [trabajando, setTrabajando] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [resolviendo, setResolviendo] = useState<{ id: string; como: 'a_mano' | 'descartar' } | null>(null)
   async function reintentar(id: string) {
     setTrabajando(id)
     setError(null)
@@ -967,22 +995,156 @@ export function Pendientes({ ventas, onCambio }: { ventas: Venta[]; onCambio: ()
         <b>
           Cobradas sin llegar a Gestión Nube: {ventas.length}
         </b>
+        {ventas.map((v) => {
+          const rechazada = v.estado === 'error' && v.reintentable === false
+          return (
+            <div key={v.id} style={{ display: 'grid', gap: space[1] }}>
+              <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm }}>
+                <span style={{ fontFamily: 'monospace' }}>{numeroProvisorio(v.id)}</span>
+                <span>{plata(v.total)}</span>
+                <span style={{ color: color.mut }}>{new Date(v.creada_en).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}</span>
+                <span style={{ flex: 1, minWidth: 200 }}>{v.ultimo_error ?? (v.estado === 'enviando' ? 'mandándose…' : '')}</span>
+                {rechazada ? (
+                  <>
+                    {/* B2 (auditoría, 11-oct): la rechazada quedaba en rojo para siempre. */}
+                    {(admin || esMio) && (
+                      <Button size="sm" variant="outline" onClick={() => setResolviendo({ id: v.id, como: 'a_mano' })}>
+                        Cargada a mano en GN
+                      </Button>
+                    )}
+                    {admin && (
+                      <Button size="sm" variant="outline" tone="danger" onClick={() => setResolviendo({ id: v.id, como: 'descartar' })}>
+                        Descartar
+                      </Button>
+                    )}
+                    {!admin && !esMio && <Badge tone="danger">Hay que revisarla a mano</Badge>}
+                  </>
+                ) : (
+                  <Button size="sm" variant="outline" loading={trabajando === v.id} onClick={() => reintentar(v.id)}>
+                    Reintentar
+                  </Button>
+                )}
+              </div>
+              {resolviendo?.id === v.id && (
+                <ResolverVenta
+                  venta={v}
+                  como={resolviendo.como}
+                  onCerrar={() => setResolviendo(null)}
+                  onListo={() => {
+                    setResolviendo(null)
+                    onCambio()
+                  }}
+                />
+              )}
+            </div>
+          )
+        })}
+        {error && <span>{error}</span>}
+      </div>
+    </Notice>
+  )
+}
+
+/**
+ * B2: resolver una venta que GN RECHAZÓ. «Cargada a mano»: se cargó en GN a mano y acá queda con ese
+ * número (sigue sumando al turno: la clienta pagó). «Descartar»: ⛔ se cobró (deja de sumar). Las dos con nota.
+ */
+function ResolverVenta({ venta, como, onCerrar, onListo }: { venta: Venta; como: 'a_mano' | 'descartar'; onCerrar: () => void; onListo: () => void }) {
+  const [numero, setNumero] = useState('')
+  const [nota, setNota] = useState('')
+  const [trabajando, setTrabajando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const n = Number(numero.replace(/\D/g, ''))
+  const listo = nota.trim().length >= 3 && (como === 'descartar' || n > 0)
+  async function guardar() {
+    setTrabajando(true)
+    setError(null)
+    try {
+      await resolverVenta(venta.id, como, nota.trim(), como === 'a_mano' ? n : undefined)
+      onListo()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setTrabajando(false)
+    }
+  }
+  return (
+    <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm, paddingLeft: space[3] }}>
+      {como === 'a_mano' ? (
+        <Input value={numero} onChange={(e) => setNumero(e.target.value)} inputMode="numeric" autoComplete="off" placeholder="Nº de venta en GN" aria-label="Número de la venta en Gestión Nube" style={{ width: 150 }} />
+      ) : (
+        <span>
+          La venta deja de sumar al turno ({plata(venta.total)}).
+        </span>
+      )}
+      <Input value={nota} onChange={(e) => setNota(e.target.value)} autoComplete="off" placeholder={como === 'a_mano' ? 'Qué pasó' : 'Por qué se descarta'} aria-label="Nota" style={{ width: 240 }} />
+      <Button size="sm" tone={como === 'descartar' ? 'danger' : 'brand'} loading={trabajando} disabled={!listo} onClick={guardar}>
+        {como === 'a_mano' ? 'Guardar' : 'Descartar venta'}
+      </Button>
+      <Button size="sm" variant="outline" onClick={onCerrar}>
+        Volver
+      </Button>
+      {error && <span style={{ color: color.danger }}>{error}</span>}
+    </div>
+  )
+}
+
+/**
+ * B3 (auditoría, 11-oct): sólo admin, en la pestaña. La transferencia que el cruce ⛔ ve nunca (la de Caja
+ * Gerencia cae en la cuenta de un particular) se confirma A MANO con el comprobante: la venta sale a GN y
+ * el ticket lo imprime el POS, que la está siguiendo.
+ */
+export function TransferenciasEnEspera({ ventas, onCambio }: { ventas: Venta[]; onCambio: () => void }) {
+  const [abierta, setAbierta] = useState<string | null>(null)
+  const [comprobante, setComprobante] = useState('')
+  const [trabajando, setTrabajando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  if (!ventas.length) return null
+  async function confirmar(id: string) {
+    setTrabajando(true)
+    setError(null)
+    try {
+      await confirmarTransferencia(id, comprobante.trim())
+      setAbierta(null)
+      setComprobante('')
+      onCambio()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setTrabajando(false)
+    }
+  }
+  return (
+    <Notice tone="warning">
+      <div style={{ display: 'grid', gap: space[2] }}>
+        <b>Transferencias en espera: {ventas.length}</b>
+        <span style={{ fontSize: font.sm }}>Se siguen en el POS (ticket al llegar). Si la transferencia no aparece en Mercado Pago (por ejemplo, fue a Caja Gerencia), se confirma a mano con el comprobante.</span>
         {ventas.map((v) => (
-          <div key={v.id} style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm }}>
-            <span style={{ fontFamily: 'monospace' }}>{numeroProvisorio(v.id)}</span>
-            <span>{plata(v.total)}</span>
-            <span style={{ color: color.mut }}>{new Date(v.creada_en).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}</span>
-            <span style={{ flex: 1, minWidth: 200 }}>{v.ultimo_error ?? (v.estado === 'enviando' ? 'mandándose…' : '')}</span>
-            {v.reintentable === false ? (
-              <Badge tone="danger">Hay que revisarla a mano</Badge>
-            ) : (
-              <Button size="sm" variant="outline" loading={trabajando === v.id} onClick={() => reintentar(v.id)}>
-                Reintentar
-              </Button>
+          <div key={v.id} style={{ display: 'grid', gap: space[1], fontSize: font.sm }}>
+            <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontFamily: 'monospace' }}>{numeroProvisorio(v.id)}</span>
+              <span>{plata(v.espera_monto ?? v.total)}</span>
+              <span style={{ color: color.mut }}>{hora(v.creada_en)}{v.usuario ? ` · ${v.usuario}` : ''}</span>
+              {abierta !== v.id && (
+                <Button size="sm" variant="outline" onClick={() => { setAbierta(v.id); setComprobante(''); setError(null) }}>
+                  Confirmar a mano
+                </Button>
+              )}
+            </div>
+            {abierta === v.id && (
+              <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', paddingLeft: space[3] }}>
+                <Input value={comprobante} onChange={(e) => setComprobante(e.target.value)} autoComplete="off" placeholder="Nº de operación del comprobante" aria-label="Comprobante" style={{ width: 260 }} />
+                <Button size="sm" tone="success" loading={trabajando} disabled={comprobante.trim().length < 4} onClick={() => confirmar(v.id)}>
+                  Confirmar transferencia
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setAbierta(null)}>
+                  Volver
+                </Button>
+              </div>
             )}
           </div>
         ))}
-        {error && <span>{error}</span>}
+        {error && <span style={{ color: color.danger }}>{error}</span>}
       </div>
     </Notice>
   )
@@ -994,7 +1156,9 @@ export function Pendientes({ ventas, onCambio }: { ventas: Venta[]; onCambio: ()
  */
 export function CampoRebaja({ valor, onCambio, chico = false }: { valor: Rebaja | null; onCambio: (rb: Rebaja | null) => void; /** El del renglón del pedido: más angosto. */ chico?: boolean }) {
   const [texto, setTexto] = useState<string | null>(null)
-  const tipo = valor?.tipo ?? 'pct'
+  // Robustez (11-oct): el %/$ se elige ANTES de escribir. Arrancaba apagado y 5000 se tomaba como 5000 %.
+  const [tipoVacio, setTipoVacio] = useState<Rebaja['tipo']>('pct')
+  const tipo = valor?.tipo ?? tipoVacio
   const fijar = (t: string, tp: Rebaja['tipo']) => {
     const n = aNumero(t)
     onCambio(n != null && n > 0 ? { tipo: tp, valor: n } : null)
@@ -1014,7 +1178,17 @@ export function CampoRebaja({ valor, onCambio, chico = false }: { valor: Rebaja 
         style={chico ? { width: 90, height: 30, textAlign: 'right', fontSize: font.base } : { width: 100, textAlign: 'right' }}
         aria-label="Descuento"
       />
-      <Select value={tipo} onChange={(e) => valor && onCambio({ ...valor, tipo: e.target.value as Rebaja['tipo'] })} style={chico ? { width: 54, height: 30 } : { width: 64 }} aria-label="En % o en $" disabled={!valor}>
+      <Select
+        value={tipo}
+        onChange={(e) => {
+          const t = e.target.value as Rebaja['tipo']
+          setTipoVacio(t)
+          if (valor) onCambio({ ...valor, tipo: t })
+          else if (texto != null) fijar(texto, t)
+        }}
+        style={chico ? { width: 54, height: 30 } : { width: 64 }}
+        aria-label="En % o en $"
+      >
         <option value="pct">%</option>
         <option value="pesos">$</option>
       </Select>
@@ -1053,7 +1227,7 @@ export function SiNo({ pregunta, valor, onCambio }: { pregunta: string; valor: b
  * la cajera** (Bruno, 4-oct): «si dicen transfieran a cuenta Darío, va Caja Gerencia». Y el modo
  * feria: efectivo y transferencia van a las cuentas de feria (precio final, sin descuento extra).
  */
-export function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reglas) => void }) {
+export function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reglas, v?: Versiones) => void }) {
   const [abierto, setAbierto] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -1066,7 +1240,7 @@ export function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: 
     setMsg(null)
     try {
       const r = await guardarBajadas(b)
-      onGuardadas(r.reglas)
+      onGuardadas(r.reglas, r.versiones)
       if (r.reglas.billetes) setBilletesTxt(r.reglas.billetes.join(', '))
       setMsg(b.billetes ? 'Guardado: la calculadora cuenta con estos billetes.' : 'Guardado: vale desde la próxima venta.')
     } catch (e) {
@@ -1291,18 +1465,23 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
   )
 }
 
-/** Cargar una salida de efectivo, con su motivo. */
+/**
+ * Cargar efectivo que SALE (un gasto, un retiro) o que ENTRA (B4: el cambio que trae alguien), con su
+ * motivo. A8 (Bruno, 11-oct): lo carga la cuenta que abrió la caja o un admin (el servidor da 403).
+ */
 export function SalidaModal({ onCerrar, onListo }: { onCerrar: () => void; onListo: (t: Turno) => void }) {
+  const [tipo, setTipo] = useState<'salida' | 'aporte'>('salida')
   const [monto, setMonto] = useState('')
   const [motivo, setMotivo] = useState('')
   const [trabajando, setTrabajando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const montoN = aNumero(monto)
+  const accion = tipo === 'aporte' ? 'Cargar aporte' : 'Cargar salida'
   async function cargar() {
     setTrabajando(true)
     setError(null)
     try {
-      const x = await sacarEfectivo(montoN as number, motivo.trim())
+      const x = await sacarEfectivo(montoN as number, motivo.trim(), tipo)
       onListo(x.turno)
     } catch (e) {
       setError((e as Error).message)
@@ -1314,7 +1493,7 @@ export function SalidaModal({ onCerrar, onListo }: { onCerrar: () => void; onLis
     <Modal
       abierto
       onCerrar={onCerrar}
-      titulo="Cargar salida"
+      titulo="Cargar salida o aporte"
       cerrarConFondo={false}
       pie={
         <>
@@ -1322,17 +1501,30 @@ export function SalidaModal({ onCerrar, onListo }: { onCerrar: () => void; onLis
             Volver
           </Button>
           <Button variant="solid" tone="brand" loading={trabajando} disabled={montoN == null || montoN <= 0 || !motivo.trim()} onClick={cargar}>
-            Cargar salida
+            {accion}
           </Button>
         </>
       }
     >
       <div style={{ display: 'grid', gap: space[3] }}>
+        <div role="group" aria-label="Sale o entra efectivo" style={{ display: 'inline-flex', gap: 2, padding: 2, justifySelf: 'start', background: color.bg, border: `1px solid ${color.line2}`, borderRadius: radius.md }}>
+          {(['salida', 'aporte'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              aria-pressed={tipo === t}
+              onClick={() => setTipo(t)}
+              style={{ height: 32, padding: `0 ${space[3]}px`, border: 0, borderRadius: radius.sm, background: tipo === t ? color.brandSolid : 'transparent', color: tipo === t ? '#fff' : color.ink2, fontWeight: weight.semibold, fontSize: font.base, cursor: 'pointer' }}
+            >
+              {t === 'salida' ? 'Sale efectivo' : 'Entra efectivo (aporte)'}
+            </button>
+          ))}
+        </div>
         <Field label="Monto">
           <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" autoComplete="off" placeholder="$" data-foco />
         </Field>
         <Field label="Motivo">
-          <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} autoComplete="off" placeholder="Retiro para gerencia, compra de…" />
+          <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} autoComplete="off" placeholder={tipo === 'aporte' ? 'Cambio que trajo…' : 'Retiro para gerencia, compra de…'} />
         </Field>
         {error && <Notice tone="danger">{error}</Notice>}
       </div>
@@ -1361,17 +1553,73 @@ export function CobrosGN({ r }: { r: ResumenTurno }) {
   )
 }
 
+/**
+ * Un movimiento de efectivo del turno (B4). El anulado queda TACHADO con quién y por qué: ⛔ se borra.
+ * Anular pide el motivo; el servidor decide si esta cuenta puede (quien lo cargó, si abrió la caja, o un admin).
+ */
+function Movimiento({ m, puedeAnular, onCambio }: { m: SalidaTurno; puedeAnular: boolean; onCambio?: (t: Turno) => void }) {
+  const [anulando, setAnulando] = useState(false)
+  const [motivo, setMotivo] = useState('')
+  const [trabajando, setTrabajando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const nombre = (m.tipo ?? 'salida') === 'aporte' ? 'Aporte' : 'Salida'
+  async function anular() {
+    setTrabajando(true)
+    setError(null)
+    try {
+      const x = await anularMovimiento(m.id, motivo.trim())
+      setAnulando(false)
+      onCambio?.(x.turno)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setTrabajando(false)
+    }
+  }
+  const texto = `${nombre} ${horaAr(m.creado_en)} · ${plata(m.monto)} · ${m.motivo} ${m.usuario ? `(${m.usuario})` : ''}`
+  return (
+    <div style={{ display: 'grid', gap: space[1] }}>
+      <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', color: color.mut }}>
+        {m.anulado_en ? <s>{texto}</s> : <span>{texto}</span>}
+        {m.anulado_en && <span>Anulada por {m.anulado_por ?? '—'}: «{m.anulado_motivo}»</span>}
+        {!m.anulado_en && puedeAnular && onCambio && !anulando && (
+          <Button size="sm" variant="ghost" onClick={() => setAnulando(true)}>
+            Anular
+          </Button>
+        )}
+      </div>
+      {anulando && (
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+          <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} autoComplete="off" placeholder="Por qué se anula" aria-label="Por qué se anula" style={{ width: 240 }} />
+          <Button size="sm" tone="danger" loading={trabajando} disabled={!motivo.trim()} onClick={anular}>
+            Anular {nombre.toLowerCase()}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setAnulando(false)}>
+            Volver
+          </Button>
+          {error && <span style={{ color: color.danger }}>{error}</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Lo que hay que saber del turno abierto, en datos: lo comparten la pestaña y el POS. */
 export function ResumenTurnoDatos({
   turno,
   conTabla = false,
   reglas = null,
+  puedeAnular = false,
+  onCambio,
 }: {
   turno: Turno
   /** La pestaña muestra la tabla por cuenta a la vista; el POS, sólo en «Ver detalle». */
   conTabla?: boolean
   /** Para decir la FORMA de pago de cada cuenta (la cuenta de GN es interna); sin reglas, el nombre. */
   reglas?: Reglas | null
+  /** B4: la dueña del turno o un admin ven «Anular» en cada movimiento (el servidor decide cuál). */
+  puedeAnular?: boolean
+  onCambio?: (t: Turno) => void
 }) {
   const [verDetalle, setVerDetalle] = useState(false)
   const r = turno.resumen
@@ -1383,7 +1631,11 @@ export function ResumenTurnoDatos({
       <div style={grillaDatos}>
         <Dato rotulo="Ventas" valor={plata(r.total)} tono="brand" detalle={r.ventas === 1 ? '1 venta' : `${r.ventas} ventas`} />
         <Dato rotulo="Efectivo esperado" valor={plata(r.efectivo.esperado)} tono="success" detalle={`Fondo ${plata(r.efectivo.fondo)}`} />
-        <Dato rotulo="Salidas" valor={plata(r.efectivo.salidas)} detalle={(turno.salidas ?? []).length === 1 ? '1 salida' : `${(turno.salidas ?? []).length} salidas`} />
+        <Dato
+          rotulo={r.efectivo.aportes ? 'Salidas y aportes' : 'Salidas'}
+          valor={plata(r.efectivo.salidas)}
+          detalle={r.efectivo.aportes ? `Aportes ${plata(r.efectivo.aportes)}` : (() => { const n = (turno.salidas ?? []).filter((m) => !m.anulado_en && (m.tipo ?? 'salida') === 'salida').length; return n === 1 ? '1 salida' : `${n} salidas` })()}
+        />
         <Dato
           rotulo={ultimoConteo ? `Último conteo ${horaAr(ultimoConteo.en)}` : 'Último conteo'}
           valor={ultimoConteo ? plata(ultimoConteo.total) : '—'}
@@ -1393,6 +1645,22 @@ export function ResumenTurnoDatos({
       </div>
       {r.esperando.length > 0 && <Notice tone="warning">Transferencias en espera: {r.esperando.length}. No suman hasta que lleguen.</Notice>}
       {r.sinGN.length > 0 && <Notice tone="warning">Cobradas sin llegar a Gestión Nube: {r.sinGN.length}. Suman al turno.</Notice>}
+      {/* A12: GN ⛔ anula por API: la venta anulada a mano allá deja de sumar acá (la plata se devolvió). */}
+      {!!r.anuladasGN?.length && (
+        <Notice tone="warning">
+          Anuladas en Gestión Nube: {r.anuladasGN.map((v) => (v.gn_number ? `#${v.gn_number}` : numeroProvisorio(v.id))).join(' · ')} ({plata(r.anuladasGN.reduce((t, v) => t + v.total, 0))}). No suman al turno.
+        </Notice>
+      )}
+      {r.anuladasGN === null && <Notice tone="neutral">Ventas anuladas en Gestión Nube: sin mirar. Se miran al cerrar.</Notice>}
+      {/* B5 (Bruno, 11-oct): el descuento a mano y el cambio de precio son libres, pero a la vista. */}
+      {!!r.aMano?.ventas && (
+        <span style={{ color: color.ink2 }}>
+          Hecho a mano: {r.aMano.ventas === 1 ? '1 venta' : `${r.aMano.ventas} ventas`}
+          {r.aMano.venta > 0 && ` · descuento a la venta ${plata(r.aMano.venta)}`}
+          {r.aMano.prendas > 0 && ` · descuento a prendas ${plata(r.aMano.prendas)}`}
+          {r.aMano.precios > 0 && ` · precio bajado ${plata(r.aMano.precios)}`}
+        </span>
+      )}
       <CobrosGN r={r} />
       {conTabla && r.porCuenta.length > 0 && (
         <div style={{ overflowX: 'auto' }}>
@@ -1443,13 +1711,12 @@ export function ResumenTurnoDatos({
             <span>+ Efectivo cobrado {plata(r.efectivo.cobrado)}</span>
             {r.efectivo.cobradoGN > 0 && <span>+ Cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</span>}
             {!!r.efectivo.deEspera && <span>+ Efectivo de ventas que esperan la transferencia {plata(r.efectivo.deEspera)}</span>}
+            {!!r.efectivo.aportes && <span>+ Aportes {plata(r.efectivo.aportes)}</span>}
             <span>− Salidas {plata(r.efectivo.salidas)}</span>
             <b>= Efectivo esperado {plata(r.efectivo.esperado)}</b>
           </div>
           {(turno.salidas ?? []).map((m) => (
-            <span key={m.id} style={{ color: color.mut }}>
-              Salida {horaAr(m.creado_en)} · {plata(m.monto)} · {m.motivo} {m.usuario ? `(${m.usuario})` : ''}
-            </span>
+            <Movimiento key={m.id} m={m} puedeAnular={puedeAnular && !turno.cerrado_en} onCambio={onCambio} />
           ))}
         </div>
       )}
@@ -1470,12 +1737,15 @@ export function TurnoCaja({
   billetes,
   reglas = null,
   esMio,
+  admin = false,
   antes,
   onCambio,
   onCerrado,
 }: {
   turno: Turno | null
   billetes: number[]
+  /** A8: la salida o el aporte los carga la cuenta que abrió la caja o un admin. */
+  admin?: boolean
   /** Para la tabla del turno: la forma de pago de cada cuenta. */
   reglas?: Reglas | null
   /** Fase C: el conteo intermedio lo hace sólo la cuenta que abrió la caja (el servidor contesta 403). */
@@ -1533,9 +1803,11 @@ export function TurnoCaja({
             Contar billetes
           </Button>
         )}
-        <Button variant="outline" onClick={() => setAbierto('salida')}>
-          Cargar salida
-        </Button>
+        {(esMio || admin) && (
+          <Button variant="outline" onClick={() => setAbierto('salida')}>
+            Cargar salida o aporte
+          </Button>
+        )}
         {/* Borde neutro y texto rojo (prototipo): avisa sin competir con la acción sólida. */}
         <Button variant="outline" onClick={() => setAbierto('cerrar')} style={{ '--_fg': color.danger } as React.CSSProperties}>
           Cerrar turno
@@ -1546,7 +1818,7 @@ export function TurnoCaja({
           <b style={{ fontSize: font.lg, color: color.ink }}>Turno abierto</b>
           <span style={{ color: color.mut, fontSize: font.base }}>desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}</span>
         </div>
-        <ResumenTurnoDatos turno={turno} conTabla reglas={reglas} />
+        <ResumenTurnoDatos turno={turno} conTabla reglas={reglas} puedeAnular={esMio || admin} onCambio={onCambio} />
       </Card>
       <ModalesTurno
         que={abierto}
@@ -1637,7 +1909,7 @@ export function ModalesTurno({
  * sólo en efectivo o transferencia, a la cuenta de feria, sin el % de la forma de pago. Se guarda la
  * lista entera en `caja_config.reglas.feriaProductos`; la regla vive en `lib/caja/core.core.js`.
  */
-export function ProductosFeria({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reglas) => void }) {
+export function ProductosFeria({ reglas, version, onGuardadas }: { reglas: Reglas; version?: string; onGuardadas: (r: Reglas, v?: Versiones) => void }) {
   const [abierto, setAbierto] = useState(false)
   const [q, setQ] = useState('')
   const [resultado, setResultado] = useState<ProductoLista[] | null>(null)
@@ -1665,8 +1937,8 @@ export function ProductosFeria({ reglas, onGuardadas }: { reglas: Reglas; onGuar
     setGuardando(true)
     setMsg(null)
     try {
-      const r = await guardarBajadas({ feriaProductos: nueva })
-      onGuardadas(r.reglas)
+      const r = await guardarBajadas({ feriaProductos: nueva, version })
+      onGuardadas(r.reglas, r.versiones)
     } catch (e) {
       setMsg((e as Error).message)
     } finally {

@@ -7,6 +7,7 @@ import {
   cobro,
   cuentaDeMedio,
   aPagarDe,
+  baseParaMonto,
   exigirCuentas,
   exigirFeria,
   montoAEsperar,
@@ -598,5 +599,25 @@ describe('caja · topes de entrada (robustez, 11-oct)', () => {
     expect(() => renglones([{ product_id: 1, size_id: 1, cantidad: 1, precio: 0 }])).toThrow(/precio inválido/)
     expect(() => renglones([{ product_id: 1, size_id: 1, cantidad: 51, precio: 100 }])).toThrow(/cantidad inválida/)
     expect(() => renglones(Array.from({ length: 61 }, () => ({ product_id: 1, size_id: 1, cantidad: 1, precio: 100 })))).toThrow(/renglones/)
+  })
+})
+
+describe('caja · varios pagos en lo que PAGA la clienta (robustez, 11-oct)', () => {
+  type R_ = Parameters<typeof cuentaDeMedio>[1]['reglas']
+  const R = REGLAS_INICIALES as unknown as R_
+  const filas = renglones([{ product_id: 2, size_id: 1, cantidad: 1, precio: 50000 }])
+  it('🔑 paga $20.000 en efectivo (−15 %) y el resto con débito: el efectivo cobra EXACTO lo escrito', () => {
+    const base = baseParaMonto({ filas, reglas: R, descuentoVenta: null, cuenta: EFECTIVO, monto: 20000 })!
+    const c = cobro({ filas, pagos: [{ cuenta: EFECTIVO, base }, { cuenta: DEBITO }], reglas: R, descuentoVenta: null })
+    expect(c.pagos[0].monto).toBe(20000)
+    expect(c.pagos[1].base).toBeCloseTo(50000 - base, 2)
+  })
+  it('con un descuento a mano a la venta, también', () => {
+    const dv = { tipo: 'pct' as const, valor: 10 }
+    const base = baseParaMonto({ filas, reglas: R, descuentoVenta: dv, cuenta: EFECTIVO, monto: 15300 })!
+    expect(cobro({ filas, pagos: [{ cuenta: EFECTIVO, base }, { cuenta: DEBITO }], reglas: R, descuentoVenta: dv }).pagos[0].monto).toBe(15300)
+  })
+  it('sin monto ⇒ null', () => {
+    expect(baseParaMonto({ filas, reglas: R, descuentoVenta: null, cuenta: EFECTIVO, monto: 0 })).toBeNull()
   })
 })
