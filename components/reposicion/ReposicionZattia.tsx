@@ -10,7 +10,9 @@
  * `ventasStunned` en la config) y sus propios papeles, porque Stunned tiene su sector en el depósito.
  *
  * El cálculo vive en `lib/reposicion/porVentas.ts` (reglas y porqué, ahí). BDI no pasa por acá.
- * ⛔ No mueve stock: la transferencia en Gestión Nube la sigue cargando Lorena hasta el escaneo.
+ * **Armar con el lector** (12-oct-2026): Lorena escanea en la compu contra la lista y el Monitor hace
+ * la transferencia depósito → local en Gestión Nube (`ArmadoLector.tsx`, `api/_repo-armado.js`).
+ * Devolver al depósito todavía no mueve stock: Camila lo sigue cargando a mano (tanda 2).
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -30,13 +32,16 @@ import { reposicionPDFFilas } from '@/lib/reposicion/pdf'
 import { imprimirDevolucion } from '@/lib/reposicion/rollo'
 import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
-import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useToast } from '@/components/ui'
+import { ArmadoLector } from './ArmadoLector'
+import { abrirArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, type Armado } from '@/lib/reposicion/armado'
+import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 type Pestana = 'llevar' | 'devolver'
 
 export function ReposicionZattia({ allProductos }: { allProductos: Producto[] }) {
   const { marca, perfil } = useSesion()
   const toast = useToast()
+  const { confirmar } = useConfirmar()
   const rep = useReposicion(marca)
   const { cfg } = rep
   const { recargar, cargando: recargando } = useRecargarDatos()
@@ -94,6 +99,65 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     }
   }
 
+  // ── El armado con el lector (sólo «Llevar al local») ─────────────────────────────────────────
+  const [armado, setArmado] = useState<Armado | null>(null)
+  const [armando, setArmando] = useState(false)
+  const [abriendo, setAbriendo] = useState(false)
+  const traerArmado = async (l: LineaZ = linea) => {
+    try {
+      setArmado(await leerArmadoHoy(l, 'llevar'))
+    } catch {
+      setArmado(null)
+    }
+  }
+  useEffect(() => {
+    void (async () => {
+      await traerArmado(linea)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linea])
+  const armadoAbierto = armado && armado.estado === 'en_curso' ? armado : null
+  // 🔴 Recién transferido, la lista sigue igual hasta que se actualiza el stock: armarla de nuevo
+  // pediría dos veces lo mismo. Hasta que el stock sea posterior a la transferencia, no se arma.
+  const esperandoStock = armado?.estado === 'transferido' && !!armado.cerrado_en && (!rep.lastUpdate || rep.lastUpdate.getTime() < new Date(armado.cerrado_en).getTime())
+
+  const onArmar = async () => {
+    if (armadoAbierto) return setArmando(true)
+    const pedido = pedidoDesde(llevar, cantLlevar)
+    if (!pedido.length) return toast.aviso('No hay prendas para llevar.')
+    // Una lista armada con stock viejo pide lo que ya se llevó ayer.
+    if (edadMin != null && edadMin >= 360) {
+      const ok = await confirmar({
+        titulo: 'El stock es de ' + antiguedad,
+        tono: 'warning',
+        ok: 'Empezar igual',
+        mensaje: 'Conviene tocar «Cargar de Gestión Nube» antes de empezar, así la lista sale con el stock de ahora.',
+      })
+      if (!ok) return
+    }
+    setAbriendo(true)
+    try {
+      const d = await abrirArmado(linea, 'llevar', pedido)
+      setArmado(d.armado)
+      if (d.yaHabia) toast.aviso('Ya había un armado en curso: seguís con ése.')
+      setArmando(true)
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setAbriendo(false)
+    }
+  }
+
+  const onResolver = async (hecha: boolean) => {
+    if (!armado) return
+    try {
+      await resolverArmado(armado.id, hecha)
+      await traerArmado()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
   const [ahora, setAhora] = useState(() => Date.now())
   useEffect(() => {
     const t = setInterval(() => setAhora(Date.now()), 60_000)
@@ -129,6 +193,24 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
       </Notice>
     )
 
+  if (armando && armadoAbierto)
+    return (
+      <ArmadoLector
+        armado={armadoAbierto}
+        inv={inv}
+        onSalir={() => {
+          setArmando(false)
+          void traerArmado()
+        }}
+        onTerminado={(transferido) => {
+          setArmando(false)
+          void traerArmado()
+          // La transferencia ya está en GN; el espejo se pone al día solo con esto.
+          if (transferido) void onActualizar()
+        }}
+      />
+    )
+
   return (
     <>
       <HeaderAcciones>
@@ -147,7 +229,8 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
           <b>Devolver al depósito</b>: lo que está de más, hasta {cv.topeDevolucion} prendas por día, primero lo que no se vendió.
           <br />
           <br />
-          <b>No mueve stock.</b> El movimiento se sigue cargando en Gestión Nube.
+          <b>Armar con el lector</b>: se escanea cada prenda contra la lista y, al terminar, el Monitor hace la transferencia del depósito al local en
+          Gestión Nube con lo escaneado. Devolver al depósito todavía se carga a mano en Gestión Nube.
         </InfoPopover>
         <Button variant="ghost" onClick={() => setConfigOpen(true)}>
           Configurar
@@ -200,10 +283,23 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
                 ↺ Volver a lo calculado
               </Button>
             )}
-            <Button variant="solid" tone="brand" style={{ marginLeft: 'auto' }} onClick={() => void onImprimirLlevar()} disabled={!llevar.length}>
+            <Button variant="outline" style={{ marginLeft: 'auto' }} onClick={() => void onImprimirLlevar()} disabled={!llevar.length}>
               Imprimir lista (A4)
             </Button>
+            {armado?.estado !== 'revisar' && (
+              <Button
+                variant="solid"
+                tone="brand"
+                onClick={() => void onArmar()}
+                loading={abriendo}
+                disabled={!armadoAbierto && (!llevar.length || esperandoStock)}
+                title={esperandoStock ? 'Primero tocá «Cargar de Gestión Nube»: la lista todavía no tiene en cuenta lo que se acaba de pasar al local' : undefined}
+              >
+                {armadoAbierto ? 'Seguir armando' : 'Armar con el lector'}
+              </Button>
+            )}
           </div>
+          <EstadoArmado armado={armado} onResolver={(h) => void onResolver(h)} />
           {!llevar.length ? (
             <EmptyState icon="🎉" title="No hay prendas para llevar al local" hint="Todo está en su cantidad, o lo que falta no está en el depósito." dashed />
           ) : (
@@ -477,4 +573,54 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
       )}
     </Modal>
   )
+}
+
+const hhmm = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '')
+
+/** Cómo quedó el armado de hoy: en curso, hecho, o para revisar en Gestión Nube. */
+function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolver: (hecha: boolean) => void }) {
+  if (!armado) return null
+  const r = resumenArmado(armado.pedido, armado.escaneos || {})
+  const quien = armado.persona ? ` (${armado.persona})` : ''
+  const box = { marginBottom: space[3] }
+  if (armado.estado === 'en_curso')
+    return (
+      <div style={box}>
+        <Notice tone="brand" icon="📦">
+          Hay un armado en curso{quien}, empezado a las {hhmm(armado.creado_en)}: {r.escaneadas} de {r.pedidas} prendas escaneadas. Tocá «Seguir armando» para continuarlo.
+        </Notice>
+      </div>
+    )
+  if (armado.estado === 'transferido')
+    return (
+      <div style={box}>
+        <Notice tone="success" icon="✓">
+          Hoy ya se armó{quien}: {armado.transfer?.unidades ?? r.escaneadas} prendas pasaron al local a las {hhmm(armado.cerrado_en)}
+          {armado.transfer?.transfer_id ? ` (transferencia ${armado.transfer.transfer_id} en Gestión Nube)` : ''}. {' '}
+          La lista de abajo se pone al día cuando se actualiza el stock («Cargar de Gestión Nube»).
+        </Notice>
+      </div>
+    )
+  if (armado.estado === 'revisar' || armado.estado === 'transfiriendo')
+    return (
+      <div style={box}>
+        <Notice tone="danger" icon="⚠">
+          <div>
+            <b>No se sabe si la transferencia del armado{quien} se hizo.</b> {armado.error || 'Gestión Nube no contestó.'} Antes de seguir, fijate en Gestión Nube si
+            aparece una transferencia de hoy del depósito al local con {r.escaneadas} prendas.
+          </div>
+          {armado.estado === 'revisar' && (
+            <div style={{ display: 'flex', gap: space[2], marginTop: space[2], flexWrap: 'wrap' }}>
+              <Button size="sm" variant="solid" tone="brand" onClick={() => onResolver(true)}>
+                Sí, está en Gestión Nube
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => onResolver(false)}>
+                No está: volver a intentar
+              </Button>
+            </div>
+          )}
+        </Notice>
+      </div>
+    )
+  return null
 }

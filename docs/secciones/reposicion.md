@@ -15,7 +15,12 @@ contra las ventas reales; la conversación entera está en la nota viva de Darí
   (`ventasLocal(marca, días)`), hora del sync, guardado.
 - Config: KV de **bdi-catalogo** (`/api/reposicion` → `api/ingresos.js?kind=reposicion`), una clave
   por marca. Zattia guarda `ventas` y `ventasStunned` adentro del mismo objeto.
-- Tests: `reposicion-ventas` (Zattia) · `reposicion-core` (BDI) · `reposicion-sync-reloj`.
+- **Armar con el lector** (Zattia, 12-oct-2026): `components/reposicion/ArmadoLector.tsx` (la
+  pantalla de Lorena) · `lib/reposicion/armado.ts` (qué hacer con cada código + cliente) ·
+  `lib/reposicion/armado.core.js` (sanear y qué se transfiere, compartido con el servidor) ·
+  `api/_repo-armado.js` por `api/datos.js?recurso=repo-armado` · tabla `repo_armado` en la base de
+  ZATTIA (`sql/migrate-repo-armado.sql`, se corre en el SQL Editor: no hay `DATABASE_URL` en `.env`).
+- Tests: `reposicion-ventas` (Zattia) · `reposicion-core` (BDI) · `reposicion-sync-reloj` · `repo-armado`.
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -54,6 +59,25 @@ contra las ventas reales; la conversación entera está en la nota viva de Darí
   Caducados). El POST a bdi-catalogo lo acepta cualquiera del equipo.
 - ⚠️ Un día sin stock en el local cuenta como día sin venta: el sistema no guarda el stock día por día.
 
+## Armar con el lector (tanda 1 del escaneo, 12-oct-2026)
+
+Lorena escanea en la **COMPU** del depósito, con lector, contra la lista de «Llevar al local»
+**congelada al empezar**; al terminar, el Monitor hace la transferencia depósito → local en GN
+(`POST /inventario/transferencia`, Zattia: depósito 18210 → local 11780).
+
+- 🔑 **La transferencia sale al final y SÓLO con lo escaneado**, cortado en lo pedido (lo corta el
+  servidor también). Lo no escaneado se contesta «no estaba» / «para después» y no se mueve.
+- 🔴 **Nunca dos transferencias del mismo armado**: `en_curso → transfiriendo` con un update
+  condicionado antes de llamar a GN, índice de «uno abierto por lista», y ⛔ **el POST a GN no se
+  reintenta** salvo 429. Un 500 o un corte quedan en `revisar`: alguien mira GN y contesta.
+- 🔴 **Recién transferido, la lista sigue igual hasta el próximo sync**: «Armar» queda bloqueado
+  mientras el stock sea anterior a la transferencia (si no, se pide dos veces lo mismo).
+- Lo que sobra o no estaba pedido **frena la pantalla** (cartel rojo, ⛔ no el `Modal`: el Enter del
+  lector lo cerraba), igual que Conteo. La primera de una «para exhibir» se canta y se marca.
+- Lo escaneado vive en `localStorage` (`monitor_repo_armado_<id>`) y se sube cada 1,5 s.
+- GN es atómico: un 422 no movió nada; la pantalla muestra los renglones rechazados y ofrece
+  sacarlos (quedan `rechazada`: diferencia de stock para la tanda 3).
+
 ## Lo que ya se rompió acá
 
 - 4-sep-2026: «Actualizado» con el stock de ayer → la hora es la del **sync**, no la de la lectura
@@ -64,10 +88,9 @@ contra las ventas reales; la conversación entera está en la nota viva de Darí
 
 - ▶️ **Parte 2:** la lista de Lorena por correo a administración a las 7:00 (falta la dirección) y el
   estado de la reposición a Darío a las 10:00 (abre el local). `scripts/lib/mail.mjs`.
-- ▶️ **Parte 3:** escaneo contra el pedido + transferencia en GN (`POST /inventario/transferencia`,
-  probada el 11-oct con la clave nueva de Zattia; atómica, con `validate_only`), «no se encontró» →
-  diferencia de stock a contar, etiquetas mal puestas, **«para exhibir» al escanear** (alarma +
-  etiquetas de precio y formas de pago en la Zebra, que está con Lorena en el depósito).
+- ▶️ **Parte 3, en tandas** (Darío, 12-oct): ✅ T1 Lorena escanea + transferencia · ▶️ T2 Camila
+  (devolver) + la limpieza grande · ▶️ T3 «no estaba» → Conteo + correo de las 10:00 · ▶️ T4
+  etiquetas mal puestas + imprimir en la Zebra las de «para exhibir».
 - ▶️ Condiciones de Stunned. ▶️ Ubicaciones del depósito de Zattia (la sección Ubicaciones es sólo BDI).
 
 ## Cómo se prueba

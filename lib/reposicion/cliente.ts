@@ -17,10 +17,11 @@ const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion'
 /**
  * Inventario Local + Depósito, con `observation` (la ubicación en el estante). Port de
  * repoCargarInventario @12514. Antes la ubicación se pedía sólo en BDI; Zattia la empieza a cargar
- * en el depósito (oct-2026) y la lista de Lorena se ordena por ella apenas aparezca.
+ * en el depósito (oct-2026) y la lista de Lorena se ordena por ella apenas aparezca. El `barcode` lo
+ * usa el armado con el lector (12-oct-2026).
  */
 export async function leerInventario(marca: Marca): Promise<FilaInvRepo[]> {
-  return fetchAll<FilaInvRepo>(CUENTAS[marca], 'inventario', 'select=product_id,product_name,size_id,size_name,sku,available_quantity,store_name,observation')
+  return fetchAll<FilaInvRepo>(CUENTAS[marca], 'inventario', 'select=product_id,product_name,size_id,size_name,sku,barcode,available_quantity,store_name,observation')
 }
 
 /**

@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|caja&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|caja|repo-armado&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -56,6 +56,7 @@ import ubicacionesLocal from './_ubicaciones-local.js';
 import cobranzas from './_cobranzas.js';
 import pagosRecibidos from './_pagos-recibidos.js';
 import caja from './_caja.js';
+import repoArmado from './_repo-armado.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -218,6 +219,9 @@ const RECURSOS = {
   // Caja: el POS propio del local de Zattia. Cobra con el descuento de cada cuenta y manda la venta a
   // Gestión Nube con cola y reintento (tabla `caja_venta`, base de Zattia). ⛔ Archivo de ruta propio.
   caja,
+  // Reposición: el armado con el lector y la transferencia depósito → local en Gestión Nube (sólo
+  // Zattia, tabla `repo_armado`). Entra por acá como todo el resto (12 funciones de Hobby).
+  'repo-armado': repoArmado,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a

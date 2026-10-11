@@ -44,6 +44,8 @@ export type RepoItem = {
   name: string
   size: string
   sku: string
+  /** Código de barras de la variante (lo lee el armado con el lector). */
+  barcode?: string
   local: number
   deposito: number
   /** Categorías candidatas (GN + TN, ya filtradas). */

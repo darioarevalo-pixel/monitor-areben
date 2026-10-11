@@ -16,6 +16,7 @@ export type FilaInvRepo = {
   size_id: number | string
   size_name?: string
   sku?: string
+  barcode?: string | number | null
   available_quantity?: number
   store_name?: string
   observation?: string
@@ -62,6 +63,7 @@ export function construirInv(
         name: r.product_name || '—',
         size: r.size_name || '',
         sku: r.sku || '',
+        barcode: r.barcode ? String(r.barcode) : '',
         local: 0,
         deposito: 0,
         cats,
