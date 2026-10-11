@@ -22,8 +22,12 @@
 //   POST ?recurso=caja  { action: 'reintentar-pendientes' } → el POS, cada 3 min: manda las cobradas sin llegar a GN (auditoría E)
 //   POST ?recurso=caja  { action: 'cruzar', id, pago? }    → ¿llegó la transferencia? (F5) — `pago` lo elige la cajera
 //   POST ?recurso=caja  { action: 'cancelar', id }         → una venta que esperaba la transferencia y ⛔ llegó
+//   POST ?recurso=caja  { action: 'confirmar-transferencia', id, comprobante } → sólo admin: la transferencia que el cruce ⛔ ve (B3)
+//   POST ?recurso=caja  { action: 'resolver', id, como: 'a_mano' | 'descartar', nota, gn_number? } → la venta que GN RECHAZÓ (B2)
 //   POST ?recurso=caja  { action: 'abrir-turno', fondo, conteo? }   → abre el turno (uno solo abierto por marca)
-//   POST ?recurso=caja  { action: 'salida', monto, motivo } → saca efectivo del turno abierto
+//   POST ?recurso=caja  { action: 'salida', monto, motivo, tipo? } → saca (o con `tipo: 'aporte'`, suma) efectivo del turno abierto;
+//        la carga la cuenta que abrió el turno o un admin (A8)
+//   POST ?recurso=caja  { action: 'anular-mov', id, motivo } → anula una salida o un aporte del turno abierto (B4)
 //   POST ?recurso=caja  { action: 'contar', id, conteo }   → conteo intermedio de billetes: ⛔ cierra ni mueve plata
 //        🔑 `confirmar` y `contar` sólo los hace la cuenta que abrió el turno (`puedeUsarPOS`, fase C): 403
 //   POST ?recurso=caja  { action: 'cerrar-turno', id, contado, nota?, conteo?, sinCobrosGN? } → cierra con el efectivo contado
@@ -61,13 +65,15 @@
 // `cruzar` cada pocos segundos, que lee Mercado Pago con la MISMA lectura de Pagos recibidos y busca
 // el monto exacto (`cruzarTransferencia`). Recién con el pago encontrado la venta pasa a `borrador` y
 // se manda. El id del pago de MP queda en la fila con índice ÚNICO: un pago confirma UNA venta.
+import { createHash } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
-import { REGLAS_INICIALES, armarVentaGN, cobro, exigirFeria, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
+import { REGLAS_INICIALES, armarVentaGN, cobro, exigirCuentas, exigirFeria, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
+import { promosDeCreditoEnMostrador } from '../lib/agenda/promos.core.js'
 import { cruzarTransferencia } from '../lib/pagos-recibidos/core.core.js'
 import { cuentasDe, pagosDelDia, ponerEnUso, usosDe } from './_pagos-recibidos.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
@@ -77,7 +83,7 @@ import { COLUMNAS_VENTA as COLUMNAS, SIN_LLEGAR, enviarVenta, pendientesParaRein
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
-import { cobrosDeGN, diferencia, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
+import { anuladasEnGN, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
 import { billetesDe, limpiarConteo, normalizarBilletes, totalDeConteo } from '../lib/caja/conteo.core.js'
 import { aplicarPromos, normalizarPromos } from '../lib/caja/promos.core.js'
 
@@ -135,7 +141,9 @@ async function leerPedidosWeb(sobre, ahora, store = STORE) {
 const DIAS_COBROS_GN = 10
 /** 60 s por instancia y por turno: la pantalla del turno ⛔ le gasta el cupo a GN. El cierre lee fresco. */
 let cacheCobrosGN = null
-export const olvidarCobrosGN = () => { cacheCobrosGN = null }
+/** Lo mismo para las anuladas en GN (A12): una lectura de `ventas/obtener` por día del turno. */
+let cacheAnuladas = null
+export const olvidarCobrosGN = () => { cacheCobrosGN = null; cacheAnuladas = null }
 
 async function leerJson(r) {
   const t = await r.text()
@@ -160,13 +168,48 @@ export default async function handler(req, res) {
 
   /** La configuración del cobro. La primera vez se siembra con lo que muestra el POS de GN. */
   async function leerConfig() {
-    const { data, error } = await sb.from('caja_config').select('reglas, politica_cambio').eq('store', store).maybeSingle()
+    const { data, error } = await sb.from('caja_config').select('reglas, politica_cambio, actualizado_en').eq('store', store).maybeSingle()
     if (error) throw new Error(error.message)
     if (data) return data
     const fila = { store, reglas: REGLAS_INICIALES, politica_cambio: null, actualizado_por: perfil.name || null }
     const ins = await sb.from('caja_config').upsert(fila, { onConflict: 'store', ignoreDuplicates: true })
     if (ins.error) throw new Error(ins.error.message)
-    return { reglas: REGLAS_INICIALES, politica_cambio: null }
+    return { reglas: REGLAS_INICIALES, politica_cambio: null, actualizado_en: null }
+  }
+
+  /**
+   * Robustez (auditoría, 11-oct): `promos` y `bajadas` reescribían `reglas` ENTERO y dos admins a la vez
+   * se pisaban. Ahora se escribe sólo si la fila ⛔ cambió desde que se leyó (`actualizado_en`), y si
+   * cambió se vuelve a leer y a aplicar el cambio (que toca sólo SU clave). Con `version` (la de la
+   * lista que editó la pantalla, `versionDe`), si ESA lista cambió ⇒ `{ conflicto }`: la pantalla recarga.
+   * @param {(reglas: any) => any} mutar @param {{ clave: string, version: unknown } | null} lista
+   */
+  async function guardarReglas(mutar, lista) {
+    for (let i = 0; i < 4; i++) {
+      const fila = await leerConfig()
+      if (lista && lista.version != null && versionDe(fila.reglas, lista.clave) !== String(lista.version)) return { conflicto: true }
+      const nuevas = mutar(fila.reglas)
+      let q = sb.from('caja_config').update({ reglas: nuevas, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
+      q = fila.actualizado_en == null ? q.is('actualizado_en', null) : q.eq('actualizado_en', fila.actualizado_en)
+      const up = await q.select('reglas').maybeSingle()
+      if (up.error) throw new Error(up.error.message)
+      if (up.data) return { reglas: up.data.reglas }
+    }
+    return { conflicto: true }
+  }
+
+  /**
+   * ¿Hay HOY una promo bancaria de crédito con descuento en el mostrador? (A6) La lee el servidor de la
+   * Agenda —la MISMA de la banda de promos del POS—, ⛔ la manda la pantalla. La Agenda vive en la base
+   * de BDI (ver `cfgMaestra` en api/_agenda.js).
+   */
+  async function promoCreditoHoy() {
+    const url = process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co'
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY
+    const { data, error } = await createClient(url, key).from('agenda_promos')
+      .select('banco, medio, beneficio, regla, desde, hasta, canales, marcas, activa').eq('activa', true)
+    if (error) throw new Error('No se pudo leer la Agenda para ver la promo de crédito de hoy. Reintentar.')
+    return promosDeCreditoEnMostrador(data || [], fechaLocal(new Date()), store).length > 0
   }
 
   /** Las cuentas de GN (id y nombre), cacheadas por instancia. Lanza si GN ⛔ contesta. */
@@ -240,22 +283,57 @@ export default async function handler(req, res) {
     return { billetes: limpio, total, en: new Date().toISOString(), por: perfil.name || null }
   }
 
-  /** El turno con lo que cobró, por cuenta, y sus salidas. Los nombres de las cuentas, los de GN si contesta. */
+  /**
+   * Las ventas del turno que GN ya ⛔ tiene (A12): una anulada a mano en GN desaparece de `ventas/obtener`.
+   * Se leen ENTEROS los días de las ventas `en_gn` del turno; ⛔ se pudo ⇒ `null` (el cierre frena).
+   */
+  async function anuladasDelTurno(turno, ventas, fresco) {
+    const ahora = Date.now()
+    if (!fresco && cacheAnuladas && cacheAnuladas.turno === turno.id && ahora - cacheAnuladas.en < 60_000) return cacheAnuladas.datos
+    const enGN = ventas.filter((v) => v.estado === 'en_gn' && Number(v.gn_sale_id) > 0)
+    const dias = [...new Set(enGN.map((v) => fechaLocal(new Date(v.creada_en))))]
+    const tok = GN_TOKENS.zattia || token
+    try {
+      const ids = []
+      for (const dia of dias) {
+        for (let pag = 1; ; pag++) {
+          if (pag > 5) throw new Error('más de 5 páginas de ventas en un día')
+          const r = await gnFetch(`${GN_BASE}/ventas/obtener?from=${dia}&to=${dia}&per_page=200&page=${pag}`, { headers: cabeceras(tok) }, 1)
+          if (!r.ok) throw new Error(`GN ${r.status}`)
+          const d = await leerJson(r)
+          if (!d || !Array.isArray(d.data)) throw new Error('GN contestó otra cosa')
+          ids.push(...d.data.map((x) => Number(x && x.id)))
+          if (!(d.meta && d.meta.has_more_pages)) break
+        }
+      }
+      const datos = anuladasEnGN({ ventas: enGN, idsGN: ids })
+      cacheAnuladas = { turno: turno.id, en: ahora, datos }
+      return datos
+    } catch {
+      return null
+    }
+  }
+
+  /** El turno con lo que cobró, por cuenta, y sus movimientos. Los nombres de las cuentas, los de GN si contesta. */
   async function conResumen(turno, fresco = false) {
-    const [ventas, salidas, { reglas }] = await Promise.all([
-      sb.from('caja_venta').select('id, estado, pagos, total, creada_en').eq('turno_id', turno.id).limit(2000),
-      sb.from('caja_turno_mov').select('id, tipo, monto, motivo, usuario, creado_en').eq('turno_id', turno.id).order('creado_en', { ascending: true }),
+    const [ventas, movs, { reglas }] = await Promise.all([
+      sb.from('caja_venta').select('id, estado, pagos, total, creada_en, gn_sale_id, gn_number, a_mano').eq('turno_id', turno.id).limit(2000),
+      sb.from('caja_turno_mov').select(COLS_MOV).eq('turno_id', turno.id).order('creado_en', { ascending: true }),
       leerConfig(),
     ])
     if (ventas.error) throw new Error(ventas.error.message)
-    if (salidas.error) throw new Error(salidas.error.message)
+    if (movs.error) throw new Error(movs.error.message)
     const nombres = {}
     try {
       for (const c of await cuentasGN()) if (c.nombre) nombres[c.id] = c.nombre
     } catch { /* caen los nombres de las reglas */ }
-    const cobrosGN = await cobrosGNDelTurno(turno, reglas, fresco)
-    const resumen = resumenTurno({ turno, ventas: ventas.data || [], salidas: salidas.data || [], reglas, nombres, cobrosGN })
-    return { ...turno, resumen, salidas: salidas.data || [] }
+    const [cobrosGN, anuladasGN] = await Promise.all([
+      cobrosGNDelTurno(turno, reglas, fresco),
+      anuladasDelTurno(turno, ventas.data || [], fresco),
+    ])
+    const resumen = resumenTurno({ turno, ventas: ventas.data || [], movs: movs.data || [], reglas, nombres, cobrosGN, anuladasGN })
+    // `salidas` sigue siendo el nombre de la lista (la pantalla la lee así): son TODOS los movimientos.
+    return { ...turno, resumen, salidas: movs.data || [] }
   }
 
   // El ticket por mail (F4): sin `MAILER_URL` o `MAILER_TICKET_KEY` la venta sale igual, sin mail.
@@ -268,7 +346,10 @@ export default async function handler(req, res) {
         // El logo del ticket va aparte y tolerante: sin la columna (falta `sql/migrate-caja-logo.sql`)
         // la Caja carga igual y el ticket sale con el nombre.
         const logo = await sb.from('caja_config').select('ticket_logo').eq('store', store).maybeSingle()
-        return res.status(200).json({ ...(await leerConfig()), ticket_logo: logo.error ? null : (logo.data && logo.data.ticket_logo) || null })
+        const { actualizado_en: _v, ...conf } = await leerConfig()
+        // `versiones`: las de las listas que la pantalla manda ENTERAS, para ⛔ pisar la de otro admin.
+        const versiones = { promos: versionDe(conf.reglas, 'promos'), feriaProductos: versionDe(conf.reglas, 'feriaProductos') }
+        return res.status(200).json({ ...conf, versiones, ticket_logo: logo.error ? null : (logo.data && logo.data.ticket_logo) || null })
       }
 
       if (accion === 'referencias') {
@@ -419,23 +500,22 @@ export default async function handler(req, res) {
         // 🔑 W5 (Bruno, 5-oct): las promos son configuración, como los productos de feria: van en
         // `reglas` (⛔ tabla propia: ⛔ SQL). La pantalla manda la lista ENTERA.
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin carga las promos.' })
-        const { reglas } = await leerConfig()
         let promos
         try {
           promos = normalizarPromos(b.promos)
         } catch (e) {
           return res.status(400).json({ error: e.message })
         }
-        const nuevas = { ...reglas, promos }
-        const { error } = await sb.from('caja_config').update({ reglas: nuevas, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
-        if (error) throw new Error(error.message)
-        return res.status(200).json({ reglas: nuevas })
+        const g = await guardarReglas((reglas) => ({ ...reglas, promos }), { clave: 'promos', version: b.version })
+        if (g.conflicto) return res.status(409).json({ error: 'Otro admin cambió las promos recién. Recargá la Caja y volvé a cargar el cambio.', conflicto: true })
+        return res.status(200).json({ reglas: g.reglas, versiones: { promos: versionDe(g.reglas, 'promos'), feriaProductos: versionDe(g.reglas, 'feriaProductos') } })
       }
       if (accion === 'bajadas') {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia a dónde van las transferencias o el modo feria.' })
         const { reglas } = await leerConfig()
         if (!reglas.medios) return res.status(409).json({ error: 'La Caja todavía no tiene las formas de pago: falta correr sql/migrate-caja-medios.sql.' })
-        const nuevas = { ...reglas }
+        // Lo que cambia, validado UNA vez; se aplica sobre la fila que esté al guardar (`guardarReglas`).
+        const nuevas = {}
         if (b.transferenciaA != null) {
           const t = Number(b.transferenciaA)
           if (!reglas.medios.transferencia.opciones.includes(t)) return res.status(400).json({ error: `La cuenta ${b.transferenciaA} no es de transferencias.` })
@@ -463,9 +543,10 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: e.message })
           }
         }
-        const { error } = await sb.from('caja_config').update({ reglas: nuevas, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
-        if (error) throw new Error(error.message)
-        return res.status(200).json({ reglas: nuevas })
+        const deLista = b.feriaProductos != null ? { clave: 'feriaProductos', version: b.version } : null
+        const g = await guardarReglas((actual) => ({ ...actual, ...nuevas }), deLista)
+        if (g.conflicto) return res.status(409).json({ error: 'Otro admin cambió la configuración recién. Recargá la Caja y volvé a cargar el cambio.', conflicto: true })
+        return res.status(200).json({ reglas: g.reglas, versiones: { promos: versionDe(g.reglas, 'promos'), feriaProductos: versionDe(g.reglas, 'feriaProductos') } })
       }
       if (accion === 'abrir-turno') {
         const fondo = Number(b.fondo)
@@ -482,14 +563,40 @@ export default async function handler(req, res) {
         return res.status(200).json({ turno: await conResumen(ins.data) })
       }
       if (accion === 'salida') {
+        // B4: `tipo: 'aporte'` es el efectivo que ENTRA (el cambio que trae alguien): suma al esperado.
+        const tipo = b.tipo === 'aporte' ? 'aporte' : 'salida'
+        const nombre = tipo === 'aporte' ? 'El aporte' : 'La salida'
         const monto = Number(b.monto)
         const motivo = String(b.motivo ?? '').trim().slice(0, 200)
-        if (!Number.isFinite(monto) || monto <= 0) return res.status(400).json({ error: 'La salida tiene que ser un monto mayor a cero.' })
-        if (!motivo) return res.status(400).json({ error: 'Falta el motivo de la salida.' })
+        if (!Number.isFinite(monto) || monto <= 0 || monto > MAX_MOVIMIENTO) return res.status(400).json({ error: `${nombre} tiene que ser un monto mayor a cero.` })
+        if (!motivo) return res.status(400).json({ error: `Falta el motivo ${tipo === 'aporte' ? 'del aporte' : 'de la salida'}.` })
         const turno = await turnoAbierto()
         if (!turno) return res.status(409).json({ error: 'No hay un turno abierto.' })
-        const ins = await sb.from('caja_turno_mov').insert({ turno_id: turno.id, tipo: 'salida', monto, motivo, usuario: perfil.name || null })
+        // 🔑 A8 (Bruno, 11-oct): la cuenta que abrió el turno y los admins; ⛔ otra cuenta con permiso de Caja.
+        if (!puedeMoverEfectivo(turno, perfil, esAdmin(perfil))) return res.status(403).json({ error: `La caja la abrió ${turno.abierto_por || 'otra cuenta'}: sólo esa cuenta o un admin cargan efectivo que sale o entra.` })
+        const ins = await sb.from('caja_turno_mov').insert({ turno_id: turno.id, tipo, monto, motivo, usuario: perfil.name || null, usuario_cuenta: usuarioDe(perfil) })
+        if (ins.error && turnoCerrado(ins.error)) return res.status(409).json({ error: 'El turno se cerró recién. Recargá la Caja.' })
         if (ins.error) throw new Error(ins.error.message)
+        return res.status(200).json({ turno: await conResumen(turno) })
+      }
+      if (accion === 'anular-mov') {
+        // B4: ⛔ se borra: la fila queda tachada con quién, cuándo y por qué. Sólo en el turno ABIERTO: el
+        // cerrado ya tiene su foto.
+        const id = String(b.id || '')
+        const motivo = String(b.motivo ?? '').trim().slice(0, 200)
+        if (!id) return res.status(400).json({ error: 'Falta el movimiento.' })
+        if (!motivo) return res.status(400).json({ error: 'Falta por qué se anula.' })
+        const turno = await turnoAbierto()
+        if (!turno) return res.status(409).json({ error: 'No hay un turno abierto: el cerrado ya tiene su foto.' })
+        const mov = await sb.from('caja_turno_mov').select('id, turno_id, tipo, usuario, usuario_cuenta, anulado_en').eq('id', id).eq('turno_id', turno.id).maybeSingle()
+        if (mov.error) throw new Error(mov.error.message)
+        if (!mov.data) return res.status(404).json({ error: 'Ese movimiento no es del turno abierto.' })
+        if (!puedeAnularMov(mov.data, turno, perfil, esAdmin(perfil))) return res.status(403).json({ error: 'Lo anula quien lo cargó (si abrió la caja) o un admin.' })
+        if (!mov.data.anulado_en) {
+          const up = await sb.from('caja_turno_mov').update({ anulado_en: new Date().toISOString(), anulado_por: perfil.name || null, anulado_motivo: motivo })
+            .eq('id', id).is('anulado_en', null).select('id').maybeSingle()
+          if (up.error) throw new Error(up.error.message)
+        }
         return res.status(200).json({ turno: await conResumen(turno) })
       }
       // El conteo INTERMEDIO (fase B): cuántos billetes hay ahora contra lo que tiene que haber. ⛔ Cierra
@@ -526,23 +633,35 @@ export default async function handler(req, res) {
         // Fresco: un cobro cargado en GN hace un minuto tiene que entrar en la foto del cierre.
         const con = await conResumen(turno, true)
         // 🔴 Auditoría A3 (11-oct): sin los cobros de GN el esperado queda CORTO y el cierre dice que
-        // sobra plata, y ⛔ se reabre. Se frena; cerrar igual es una decisión explícita y con nota.
-        if (con.resumen.cobrosGN === null) {
-          if (b.sinCobrosGN !== true) return res.status(409).json({ error: 'Gestión Nube no contestó los cobros web en efectivo: sin ellos el esperado puede quedar corto. Reintentar en un minuto.', sinCobrosGN: true })
-          if (!nota) return res.status(400).json({ error: 'Para cerrar sin los cobros de Gestión Nube hace falta una nota.' })
+        // sobra plata, y ⛔ se reabre. Se frena; cerrar igual es una decisión explícita y con nota. Lo mismo
+        // si ⛔ se pudo mirar qué ventas se anularon en GN (A12): el esperado podría quedar LARGO.
+        if (con.resumen.cobrosGN === null || con.resumen.anuladasGN === null) {
+          if (b.sinCobrosGN !== true) return res.status(409).json({ error: 'Gestión Nube no contestó (los cobros web en efectivo o las ventas anuladas): sin eso el esperado puede quedar mal. Reintentar en un minuto.', sinCobrosGN: true })
+          if (!nota) return res.status(400).json({ error: 'Para cerrar sin lo de Gestión Nube hace falta una nota.' })
         }
-        const esperado = con.resumen.efectivo.esperado
-        const dif = diferencia(contado, esperado)
         // 🔑 La foto del cierre queda guardada: si después se toca una venta, el cierre ⛔ cambia.
-        const resumen = { ...con.resumen, salidas: con.salidas, diferencia: dif }
-        const cambios = { cerrado_en: new Date().toISOString(), cerrado_por: perfil.name || null, contado, esperado, resumen, nota }
-        if (c) cambios.conteos = { ...(turno.conteos || {}), cierre: { ...c, esperado, diferencia: dif } }
+        const foto = (x) => {
+          const esperado = x.resumen.efectivo.esperado
+          const dif = diferencia(contado, esperado)
+          const f = { esperado, resumen: { ...x.resumen, salidas: x.salidas, diferencia: dif } }
+          if (c) f.conteos = { ...(turno.conteos || {}), cierre: { ...c, esperado, diferencia: dif } }
+          return f
+        }
         const up = await sb.from('caja_turno')
-          .update(cambios)
+          .update({ cerrado_en: new Date().toISOString(), cerrado_por: perfil.name || null, contado, nota, ...foto(con) })
           .eq('id', id).is('cerrado_en', null).select(COLS_TURNO).maybeSingle()
         if (up.error) throw new Error(up.error.message)
         if (!up.data) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
-        return res.status(200).json({ turno: up.data })
+        // 🔴 A7 (11-oct): una venta (o una salida) que se guardó mientras se cerraba quedaba en el turno y
+        // ⛔ en su foto. Ya cerrado, ⛔ entra nada más (el trigger de sql/migrate-caja-auditoria.sql): se
+        // relee y, si cambió, la foto se rehace con lo que de verdad quedó adentro.
+        const despues = await conResumen(up.data)
+        if (JSON.stringify(despues.resumen) === JSON.stringify(con.resumen) && JSON.stringify(despues.salidas) === JSON.stringify(con.salidas)) {
+          return res.status(200).json({ turno: up.data })
+        }
+        const fix = await sb.from('caja_turno').update(foto(despues)).eq('id', id).select(COLS_TURNO).maybeSingle()
+        if (fix.error) throw new Error(fix.error.message)
+        return res.status(200).json({ turno: fix.data || up.data, cambioAlCerrar: true })
       }
 
       if (!token) return res.status(500).json({ error: 'Falta el token de Gestión Nube para escribir ventas.' })
@@ -575,7 +694,7 @@ export default async function handler(req, res) {
         // 🔑 Fase C (Bruno, 5-oct): cobra sólo la cuenta que abrió la caja. Cerrarla queda abierto a todos.
         if (!puedeUsarPOS(turno, perfil)) return res.status(403).json({ error: `La caja la abrió ${turno.abierto_por || 'otra cuenta'}: sólo esa cuenta puede cobrar.`, otraCuenta: true })
         const { reglas } = await leerConfig()
-        let filas, c, payload, espera, conPromo
+        let filas, c, payload, espera, conPromo, descuentoVenta
         try {
           // 🔑 W5: las promos se aplican ACÁ también, con las de la base y la fecha argentina: la
           // pantalla manda los renglones con el descuento A MANO nada más. Las categorías de TN las
@@ -595,9 +714,17 @@ export default async function handler(req, res) {
           // 🔴 Productos de feria trabados (Bruno, 5-oct): sólo efectivo o transferencia, la parte de
           // feria a la cuenta de feria. La pantalla ya los arma así; acá se EXIGE (si no, `curl`).
           if (reglas.medios) exigirFeria({ filas, pagos: b.pagos || [], reglas })
-          // El descuento a mano a la venta REEMPLAZA a la promo de compra (Bruno, 5-oct).
-          const promoVenta = conPromo.venta ? { tipo: 'pesos', valor: conPromo.venta.pesos } : null
-          c = cobro({ filas, pagos: b.pagos, reglas, descuentoVenta: b.descuentoVenta ?? promoVenta })
+          // El descuento a mano a la venta REEMPLAZA a la promo de compra (Bruno, 5-oct). La de la pantalla
+          // viaja como `{ tipo, valor }` y nada más; la promo, SIN la feria (A9).
+          const aManoVenta = b.descuentoVenta == null ? null : { tipo: b.descuentoVenta.tipo, valor: b.descuentoVenta.valor }
+          descuentoVenta = aManoVenta ?? (conPromo.venta ? { tipo: 'pesos', valor: conPromo.venta.pesos, sinFeria: true } : null)
+          // 🔴 A6 (11-oct): cada pago a la cuenta que corresponde HOY (modo feria, la de transferencias, la
+          // promo de crédito de la Agenda, el mínimo de 6 cuotas). La Agenda se lee sólo si hace falta.
+          if (reglas.medios) {
+            const usaPromo = (b.pagos || []).some((p) => Number(p && p.cuenta) === reglas.medios.credito.promo)
+            exigirCuentas({ filas, pagos: b.pagos || [], reglas, descuentoVenta, promoCreditoHoy: usaPromo ? await promoCreditoHoy() : false })
+          }
+          c = cobro({ filas, pagos: b.pagos, reglas, descuentoVenta })
           espera = montoAEsperar(c.pagos, reglas)
           payload = armarVentaGN({ filas, pagos: c.pagos, modoLocal: marca.modoLocal, integrationId: id, fecha: fechaLocal(new Date()) })
         } catch (e) {
@@ -607,6 +734,7 @@ export default async function handler(req, res) {
           return res.status(409).json({ error: `El total de la pantalla ($${b.total}) no coincide con el del servidor ($${c.total}). Recargá la Caja: puede haber cambiado un descuento.`, total: c.total })
         }
         const pagaCon = b.pagaCon == null || b.pagaCon === '' ? null : Number(b.pagaCon)
+        if (pagaCon != null && !(Number.isFinite(pagaCon) && pagaCon >= 0 && pagaCon <= MAX_MOVIMIENTO)) return res.status(400).json({ error: 'El monto con que paga no es válido.' })
         // Lo que el ticket por mail necesita y la plata ⛔: el nombre de la prenda, el talle y la foto
         // (los manda la pantalla), y la forma de pago de cada cuenta («Tarjeta de crédito»: la cuenta de
         // GN es interna, Bruno 4-oct). Van a la fila, ⛔ al payload de GN.
@@ -614,18 +742,30 @@ export default async function handler(req, res) {
         const conNombre = filas.map((f, i) => {
           const it = b.items[i] || {}
           const promos = conPromo.items[i].promos
-          return { ...f, nombre: aTexto(it.nombre, 120), talle: aTexto(it.talle, 60), foto: /^https:\/\//.test(String(it.foto || '')) ? aTexto(it.foto, 500) : null, ...(promos ? { promos } : {}) }
+          // B5: el precio de la etiqueta cuando la cajera lo cambió (lo manda la pantalla: es para mostrar).
+          const lista = Number(it.precioLista)
+          const cambiado = Number.isFinite(lista) && lista > 0 && Math.round(lista * 100) !== Math.round(f.precio * 100)
+          return { ...f, nombre: aTexto(it.nombre, 120), talle: aTexto(it.talle, 60), foto: /^https:\/\//.test(String(it.foto || '')) ? aTexto(it.foto, 500) : null, ...(promos ? { promos } : {}), ...(cambiado ? { precio_lista: lista } : {}) }
         })
+        // 🔑 B5 (Bruno, 11-oct): el descuento a mano y el cambio de precio son LIBRES, pero A LA VISTA: la
+        // fila guarda cuánto se rebajó a mano (a la venta, a las prendas, bajando el precio) y el turno lo suma.
+        const aMano = {
+          venta: b.descuentoVenta == null ? 0 : c.aVenta,
+          prendas: centavosJs(filas.reduce((s, f, i) => s + (conPromo.items[i].promos ? 0 : f.cantidad * f.precio - f.importe), 0)),
+          precios: centavosJs(conNombre.reduce((s, f) => s + (f.precio_lista ? Math.max(0, f.precio_lista - f.precio) * f.cantidad : 0), 0)),
+        }
         const pagosConNombre = c.pagos.map(p => ({ ...p, nombre: nombreParaTicket(p.cuenta, reglas) }))
         const fila = {
           id, store, estado: espera > 0 ? 'esperando_pago' : 'borrador', espera_monto: espera > 0 ? espera : null, renglones: conNombre, pagos: pagosConNombre, subtotal: c.subtotal, total: c.total,
-          paga_con: Number.isFinite(pagaCon) ? pagaCon : null, email, payload, usuario: perfil.name || null, turno_id: turno.id,
+          paga_con: Number.isFinite(pagaCon) ? pagaCon : null, email, payload, usuario: perfil.name || null, turno_id: turno.id, a_mano: aMano,
         }
         const ins = await sb.from('caja_venta').insert(fila).select(COLUMNAS_ENVIO).single()
         if (ins.error && ins.error.code === '23505') {
           // Otro «confirmar» con el mismo id la guardó entre la lectura y el insert: ése la manda.
           return res.status(409).json({ error: 'La venta ya se está mandando. Mirá Pendientes en unos segundos.' })
         }
+        // A7: el turno se cerró entre que se leyó y se guardó la venta (el trigger lo frena): ⛔ quedó guardada.
+        if (ins.error && turnoCerrado(ins.error)) return res.status(409).json({ error: 'El turno se cerró mientras se cobraba: la venta NO se guardó. Abrí el turno y cobrala de nuevo.', sinTurno: true })
         if (ins.error) throw new Error(ins.error.message)
         // La transferencia todavía ⛔ llegó: la venta espera, y la pantalla pide `cruzar`.
         if (ins.data.estado === 'esperando_pago') return res.status(200).json({ venta: sinPayload(ins.data) })
@@ -674,7 +814,10 @@ export default async function handler(req, res) {
           Promise.all(dias.map((dia) => pagosDelDia(sb, usos, dia))),
           sb.from('caja_venta').select('mp_pago_id').eq('store', store).not('mp_pago_id', 'is', null)
             .gte('creada_en', new Date(Date.parse(v.data.creada_en) - 2 * 86400000).toISOString()),
-          sb.from('caja_venta').select('id').eq('store', store).eq('estado', 'esperando_pago').eq('espera_monto', v.data.espera_monto).neq('id', id),
+          // Robustez (11-oct): sólo las de las últimas horas. Una venta vieja olvidada esperando el mismo
+          // monto trababa el cruce automático de TODAS las de ese monto, para siempre.
+          sb.from('caja_venta').select('id').eq('store', store).eq('estado', 'esperando_pago').eq('espera_monto', v.data.espera_monto).neq('id', id)
+            .gte('creada_en', new Date(Date.now() - COMPETIDORAS_MS).toISOString()),
         ])
         if (reclamados.error) throw new Error(reclamados.error.message)
         if (competidoras.error) throw new Error(competidoras.error.message)
@@ -704,6 +847,65 @@ export default async function handler(req, res) {
         return res.status(200).json({ ...(await enviar(tom.data)), cruce: { estado: 'llego', por: d.por, pago: d.pago } })
       }
 
+      if (accion === 'resolver') {
+        // B2 (auditoría, 11-oct): una venta que GN RECHAZÓ (`error` y ⛔ reintentable) quedaba en rojo para
+        // siempre. Dos salidas: «cargada a mano en GN» (con su número: sigue sumando al turno, la clienta
+        // pagó) o «descartar» (⛔ se cobró: deja de sumar). 🔴 Sólo la rechazada: una con error
+        // reintentable puede estar en GN (timeout) y cargarla a mano la DUPLICARÍA.
+        const id = String(b.id || '')
+        if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido.' })
+        const como = b.como === 'a_mano' ? 'a_mano' : b.como === 'descartar' ? 'descartada' : null
+        if (!como) return res.status(400).json({ error: 'Falta cómo se resuelve (a_mano o descartar).' })
+        const nota = String(b.nota ?? '').trim().slice(0, 300)
+        if (nota.length < 3) return res.status(400).json({ error: 'Falta una nota: qué pasó con la venta.' })
+        const admin = esAdmin(perfil)
+        // Descartar saca plata del esperado ⇒ sólo un admin (como anular un aporte). La cargada a mano ⛔
+        // mueve plata: también la cuenta que tiene la caja abierta.
+        if (como === 'descartada' && !admin) return res.status(403).json({ error: 'Descartar una venta lo hace un admin.' })
+        if (como === 'a_mano' && !admin) {
+          const t = await turnoAbierto()
+          if (!puedeUsarPOS(t, perfil)) return res.status(403).json({ error: 'Lo hace la cuenta que tiene la caja abierta, o un admin.' })
+        }
+        const gnNumber = Number(b.gn_number)
+        if (como === 'a_mano' && !(Number.isInteger(gnNumber) && gnNumber > 0)) return res.status(400).json({ error: 'Falta el número de la venta que se cargó en Gestión Nube.' })
+        const v = await sb.from('caja_venta').select(COLUMNAS).eq('id', id).eq('store', store).maybeSingle()
+        if (v.error) throw new Error(v.error.message)
+        if (!v.data) return res.status(404).json({ error: 'La venta no existe.' })
+        if (!(v.data.estado === 'error' && v.data.reintentable === false)) return res.status(409).json({ error: 'Se resuelve a mano sólo una venta que Gestión Nube rechazó. Ésta se sigue reintentando sola.', venta: v.data })
+        const ahora = new Date().toISOString()
+        const resolucion = { tipo: como, por: perfil.name || null, en: ahora, nota, ...(como === 'a_mano' ? { gn_number: gnNumber } : {}) }
+        const cambios = como === 'a_mano'
+          ? { estado: 'en_gn', gn_number: gnNumber, reintentable: null, en_gn_en: ahora, resolucion, actualizada_en: ahora }
+          : { estado: 'descartada', reintentable: null, resolucion, actualizada_en: ahora }
+        const up = await sb.from('caja_venta').update(cambios).eq('id', id).eq('estado', 'error').select(COLUMNAS).maybeSingle()
+        if (up.error) throw new Error(up.error.message)
+        if (!up.data) return res.status(409).json({ error: 'La venta cambió recién. Recargá la Caja.' })
+        return res.status(200).json({ venta: up.data })
+      }
+
+      if (accion === 'confirmar-transferencia') {
+        // B3 (auditoría, 11-oct): una transferencia que el cruce ⛔ ve nunca (la de Caja Gerencia es la cuenta
+        // de un particular, ⛔ cae en el MP de la empresa) quedaba sin salida. La confirma un ADMIN con el
+        // comprobante (número de operación o lo que lo identifique) y la venta sale a GN como con el cruce.
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Confirmar una transferencia a mano lo hace un admin.' })
+        const id = String(b.id || '')
+        if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido.' })
+        const comprobante = String(b.comprobante ?? '').trim().slice(0, 200)
+        if (comprobante.length < 4) return res.status(400).json({ error: 'Falta el comprobante: el número de operación o lo que identifique la transferencia.' })
+        const ahora = new Date().toISOString()
+        const tom = await sb.from('caja_venta')
+          .update({ estado: 'borrador', mp_cruce: 'admin', confirmacion: { por: perfil.name || null, en: ahora, comprobante }, actualizada_en: ahora })
+          .eq('id', id).eq('store', store).eq('estado', 'esperando_pago').select(COLUMNAS_ENVIO).maybeSingle()
+        if (tom.error) throw new Error(tom.error.message)
+        if (!tom.data) {
+          const ya = await sb.from('caja_venta').select(COLUMNAS).eq('id', id).eq('store', store).maybeSingle()
+          if (ya.error) throw new Error(ya.error.message)
+          if (!ya.data) return res.status(404).json({ error: 'La venta no existe.' })
+          return res.status(409).json({ error: ya.data.estado === 'cancelada' ? 'La venta está cancelada.' : 'La venta ya no espera la transferencia.', venta: ya.data })
+        }
+        return res.status(200).json(await enviar(tom.data))
+      }
+
       if (accion === 'cancelar') {
         const id = String(b.id || '')
         if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido.' })
@@ -720,7 +922,7 @@ export default async function handler(req, res) {
         if (ya.data.estado === 'cancelada') return res.status(200).json({ venta: ya.data })
         return res.status(409).json({ error: 'La transferencia ya llegó: la venta está cobrada y no se cancela desde acá.', venta: ya.data })
       }
-      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, reintentar-pendientes, cruzar, cancelar, usar-mp, politica, logo, bajadas, abrir-turno, salida, contar, cerrar-turno)' })
+      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, reintentar-pendientes, cruzar, cancelar, resolver, confirmar-transferencia, usar-mp, politica, logo, bajadas, abrir-turno, salida, anular-mov, contar, cerrar-turno)' })
     }
     return res.status(405).json({ error: 'Método no permitido' })
   } catch (e) {
@@ -732,12 +934,22 @@ const COLUMNAS_ENVIO = `${COLUMNAS}, payload`
 /** Cuántas ventas manda el POS por vuelta de `reintentar-pendientes`: cada una puede tardar hasta ~10 s. */
 const REINTENTOS_POR_VUELTA = 2
 // 🔴 `conteos` y `abierto_por_usuario` son de `sql/migrate-caja-conteos.sql`: sin correrlo, el turno ⛔ carga.
+const COLS_MOV = 'id, tipo, monto, motivo, usuario, usuario_cuenta, creado_en, anulado_en, anulado_por, anulado_motivo'
 const COLS_TURNO = 'id, abierto_en, abierto_por, abierto_por_usuario, fondo, cerrado_en, cerrado_por, contado, esperado, resumen, nota, conteos'
 /** Los conteos intermedios que guarda un turno: los últimos. Un turno normal cuenta dos o tres veces. */
 const MAX_INTERMEDIOS = 50
 const pesos = (n) => `$${Number(n).toLocaleString('es-AR')}`
+/** La versión de una lista de `reglas` (promos, productos de feria): cambia si cambia la lista. */
+export const versionDe = (reglas, clave) => createHash('sha1').update(JSON.stringify((reglas && reglas[clave]) || [])).digest('hex').slice(0, 12)
 const sinPayload = ({ payload: _p, ...v }) => v
+/** El tope de una salida o un aporte: lo que pasa de esto es un error de tipeo. */
+const MAX_MOVIMIENTO = 50_000_000
+const centavosJs = (n) => Math.round(n * 100) / 100
+/** El error del trigger de `sql/migrate-caja-auditoria.sql` (A7): el insert llegó con el turno ya cerrado. */
+const turnoCerrado = (e) => /caja_turno_cerrado/.test(String((e && e.message) || ''))
 
+/** Hasta cuánto atrás otra venta esperando el mismo monto obliga a elegir el pago a mano. */
+const COMPETIDORAS_MS = 12 * 3600 * 1000
 /** Cuántos días de Mercado Pago lee el cruce, desde el de la venta (A4). */
 const DIAS_CRUCE = 3
 /**
@@ -769,10 +981,14 @@ export function diasDelCruce(creada, ahora) {
 async function variantesDelCodigo(sb, codigo) {
   const COLS = 'product_id, product_name, size_id, size_name, sku, barcode, available_quantity, store_name'
   const nc = normCode(codigo)
+  const escapar = (x) => x.replace(/[\\%_]/g, (m) => `\\${m}`)
   const intentos = [
     () => sb.from('inventario').select(COLS).eq('barcode', codigo),
     () => sb.from('inventario').select(COLS).eq('barcode', nc),
-    () => sb.from('inventario').select(COLS).ilike('sku', nc.replace(/[\\%_]/g, (m) => `\\${m}`)),
+    // Robustez (11-oct): el SKU TAL CUAL antes que el normalizado: `normCode` le saca los guiones y
+    // `RVE-0047-NG` ⛔ se encontraba nunca por SKU.
+    () => sb.from('inventario').select(COLS).ilike('sku', escapar(String(codigo).trim())),
+    () => sb.from('inventario').select(COLS).ilike('sku', escapar(nc)),
   ]
   for (const q of intentos) {
     const { data, error } = await q().limit(50)

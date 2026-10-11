@@ -58,6 +58,7 @@ import {
   FUNCION_TECHO as FUNCION_TECHO_JS,
   veLoDeArriba as veLoDeArribaJs,
 } from './jerarquia.core.js'
+import { corre as correJs, promosDe as promosDeJs, promosDeCreditoEnMostrador as promosDeCreditoEnMostradorJs } from './promos.core.js'
 
 export const TIPOS_REGLA = TIPOS_REGLA_JS as { key: Regla['tipo']; label: string }[]
 export const CLAVES_TIPO_REGLA = CLAVES_TIPO_REGLA_JS as string[]
@@ -256,39 +257,12 @@ export function rotuloBeneficio(b: Promo['beneficio']): string {
   return `${b.n} cuotas ${b.sinInteres ? 'sin interés' : 'con interés'}`
 }
 
-/**
- * ¿Esta promo corre este día?
- *
- * Cruza **los dos ejes de vigencia**: la ventana (`desde`/`hasta`) y la regla. Que estén separados
- * es lo que permite contestar "ya venció" sin mirar la regla, y "hoy no toca" sin mirar la ventana.
- *
- * `hasta` en `null` es una promo sin fin anunciado, no una vencida: los bancos publican varias así.
- */
-export function corre(promo: Promo, fecha: FechaIso): boolean {
-  if (!promo.activa) return false
-  if (fecha < promo.desde) return false
-  if (promo.hasta && fecha > promo.hasta) return false
-  return aplicaEn(promo.regla, fecha)
-}
-
-/**
- * Las promos de un día, filtradas por canal y por marca, ordenadas por banco.
- *
- * `marcas` vacío en la promo quiere decir **las dos**: la promo la define el banco y lo normal es
- * que valga para todo lo que se cobre ahí. Tratar el vacío como "ninguna" escondería la mayoría.
- */
-export function promosDe(
-  promos: Promo[],
-  fecha: FechaIso,
-  opts: { canal?: Canal; marca?: Marca } = {},
-): Promo[] {
-  const { canal, marca } = opts
-  return promos
-    .filter((p) => corre(p, fecha))
-    .filter((p) => !canal || p.canales.includes(canal))
-    .filter((p) => !marca || p.marcas.length === 0 || p.marcas.includes(marca))
-    .sort((a, b) => a.banco.localeCompare(b.banco, 'es') || a.medio.localeCompare(b.medio))
-}
+// `corre` y `promosDe` viven en `promos.core.js` (JS plano): el handler de la Caja pregunta lo mismo
+// para aceptar la cuenta de la promo de crédito (auditoría A6, 11-oct). Ver su docblock.
+export const corre = correJs as (promo: Promo, fecha: FechaIso) => boolean
+export const promosDe = promosDeJs as (promos: Promo[], fecha: FechaIso, opts?: { canal?: Canal; marca?: Marca }) => Promo[]
+/** Las de crédito con descuento que corren hoy en el mostrador: las que habilitan la cuenta del −10 % de la Caja. */
+export const promosDeCreditoEnMostrador = promosDeCreditoEnMostradorJs as (promos: Promo[], fecha: FechaIso, marca: Marca) => Promo[]
 
 /**
  * ¿Este pendiente va este día?

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cobrosDeGN, diferencia, horaDeGN, puedeUsarPOS, resumenTurno, usuarioDe } from '@/lib/caja/cierre.core.js'
+import { anuladasEnGN, cobrosDeGN, diferencia, horaDeGN, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '@/lib/caja/cierre.core.js'
 
 /**
  * Caja v2 · W3: el turno propio (Bruno, 4-oct-2026). Se cuenta sólo el efectivo: fondo + lo cobrado
@@ -29,10 +29,10 @@ describe('resumenTurno', () => {
         v('en_gn', [{ cuenta: 20196, monto: 19900 }]),
         v('en_gn', [{ cuenta: 25867, monto: 6300 }, { cuenta: 20196, monto: 10000 }]), // pago partido
       ],
-      salidas: [{ monto: 5000 }, { monto: 1200.5 }],
-      reglas: REGLAS, nombres: {}, cobrosGN: [],
+      movs: [{ tipo: 'salida', monto: 5000 }, { tipo: 'salida', monto: 1200.5 }],
+      reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: [],
     })
-    expect(r.efectivo).toEqual({ fondo: 51900, cobrado: 48400, deEspera: 0, cobradoGN: 0, salidas: 6200.5, esperado: 94099.5 })
+    expect(r.efectivo).toEqual({ fondo: 51900, cobrado: 48400, deEspera: 0, cobradoGN: 0, aportes: 0, salidas: 6200.5, esperado: 94099.5 })
     expect(r.total).toBe(78300)
     expect(r.ventas).toBe(4)
     // Primero las de efectivo, después por monto.
@@ -52,7 +52,7 @@ describe('resumenTurno', () => {
         v('error', [{ cuenta: 12921, monto: 8000 }], '19:00'),
         v('borrador', [{ cuenta: 12921, monto: 2000 }], '18:30'),
       ],
-      salidas: [], reglas: REGLAS, nombres: {}, cobrosGN: [],
+      movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: [],
     })
     expect(r.efectivo.cobrado).toBe(10000)
     expect(r.efectivo.esperado).toBe(61900)
@@ -63,19 +63,19 @@ describe('resumenTurno', () => {
 
   it('🔴 A2: venta mixta efectivo + transferencia esperando ⇒ el EFECTIVO ya está en el cajón y suma; la transferencia ⛔', () => {
     const mixta = v('esperando_pago', [{ cuenta: 12921, monto: 5000 }, { cuenta: 13015, monto: 9000 }])
-    const r = resumenTurno({ turno: TURNO, ventas: [mixta], salidas: [], reglas: REGLAS, nombres: {}, cobrosGN: [] })
+    const r = resumenTurno({ turno: TURNO, ventas: [mixta], movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: [] })
     expect(r.efectivo.deEspera).toBe(5000)
     expect(r.efectivo.cobrado).toBe(0)
     expect(r.efectivo.esperado).toBe(56900)
     expect(r.total).toBe(0)
     expect(r.esperando.map((x) => x.total)).toEqual([14000])
     // Cancelada: la cajera devolvió el efectivo ⇒ ⛔ suma.
-    const can = resumenTurno({ turno: TURNO, ventas: [{ ...mixta, estado: 'cancelada' }], salidas: [], reglas: REGLAS, nombres: {}, cobrosGN: [] })
+    const can = resumenTurno({ turno: TURNO, ventas: [{ ...mixta, estado: 'cancelada' }], movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: [] })
     expect(can.efectivo.esperado).toBe(51900)
   })
 
   it('turno sin ventas: el esperado es el fondo', () => {
-    const r = resumenTurno({ turno: TURNO, ventas: [], salidas: [], reglas: REGLAS, nombres: {}, cobrosGN: [] })
+    const r = resumenTurno({ turno: TURNO, ventas: [], movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: [] })
     expect(r.efectivo.esperado).toBe(51900)
     expect(r.porCuenta).toEqual([])
   })
@@ -84,16 +84,95 @@ describe('resumenTurno', () => {
     const r = resumenTurno({
       turno: TURNO,
       ventas: [v('en_gn', [{ cuenta: 20196, monto: 1 }]), v('en_gn', [{ cuenta: 25188, monto: 1 }])],
-      salidas: [], reglas: REGLAS, nombres: { 20196: 'Debito' }, cobrosGN: [],
+      movs: [], reglas: REGLAS, nombres: { 20196: 'Debito' }, cobrosGN: [], anuladasGN: [],
     })
     expect(r.porCuenta.map((c) => c.nombre)).toEqual(['Debito', 'Cuenta 25188'])
   })
 
   it('parámetros obligatorios', () => {
-    expect(() => resumenTurno({ turno: TURNO, ventas: [], salidas: [], reglas: REGLAS } as never)).toThrow(/nombres/)
-    expect(() => resumenTurno({ turno: TURNO, ventas: [], reglas: REGLAS, nombres: {} } as never)).toThrow(/salidas/)
-    expect(() => resumenTurno({ turno: {}, ventas: [], salidas: [], reglas: REGLAS, nombres: {} } as never)).toThrow(/fondo/)
-    expect(() => resumenTurno({ turno: TURNO, ventas: [], salidas: [], reglas: REGLAS, nombres: {} } as never)).toThrow(/cobros de GN/)
+    expect(() => resumenTurno({ turno: TURNO, ventas: [], movs: [], reglas: REGLAS } as never)).toThrow(/nombres/)
+    expect(() => resumenTurno({ turno: TURNO, ventas: [], reglas: REGLAS, nombres: {} } as never)).toThrow(/movimientos/)
+    expect(() => resumenTurno({ turno: {}, ventas: [], movs: [], reglas: REGLAS, nombres: {} } as never)).toThrow(/fondo/)
+    expect(() => resumenTurno({ turno: TURNO, ventas: [], movs: [], reglas: REGLAS, nombres: {} } as never)).toThrow(/cobros de GN/)
+    expect(() => resumenTurno({ turno: TURNO, ventas: [], movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [] } as never)).toThrow(/anuladas en GN/)
+  })
+
+  it('B4: el aporte suma, la salida resta y lo ANULADO ⛔ cuenta', () => {
+    const r = resumenTurno({
+      turno: TURNO, ventas: [],
+      movs: [
+        { tipo: 'salida', monto: 3000 },
+        { tipo: 'aporte', monto: 10000 },
+        { tipo: 'salida', monto: 50000, anulado_en: '2026-10-11T15:00:00Z' },
+        { tipo: 'aporte', monto: 7000, anulado_en: '2026-10-11T15:00:00Z' },
+      ],
+      reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: [],
+    })
+    expect(r.efectivo).toMatchObject({ aportes: 10000, salidas: 3000, esperado: 51900 + 10000 - 3000 })
+  })
+
+  it('B2: la DESCARTADA ⛔ suma, como la cancelada', () => {
+    const r = resumenTurno({ turno: TURNO, ventas: [v('descartada', [{ cuenta: 12921, monto: 7000 }])], movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: [] })
+    expect(r.efectivo.esperado).toBe(51900)
+    expect(r.ventas).toBe(0)
+  })
+
+  it('🔴 A12: la venta que GN ya ⛔ tiene (anulada a mano) deja de sumar y se lista aparte', () => {
+    const anulada = { ...v('en_gn', [{ cuenta: 12921, monto: 7000 }]), id: 'x1', gn_number: 30500 }
+    const viva = { ...v('en_gn', [{ cuenta: 12921, monto: 2000 }]), id: 'x2' }
+    const r = resumenTurno({ turno: TURNO, ventas: [anulada, viva], movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: ['x1'] })
+    expect(r.efectivo.cobrado).toBe(2000)
+    expect(r.ventas).toBe(1)
+    expect(r.anuladasGN?.map((x) => x.gn_number)).toEqual([30500])
+    // Sin poder mirar GN: ⛔ se saca nada, y el resumen lo dice con null.
+    const sin = resumenTurno({ turno: TURNO, ventas: [anulada, viva], movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: null })
+    expect(sin.efectivo.cobrado).toBe(9000)
+    expect(sin.anuladasGN).toBeNull()
+  })
+
+  it('B5: lo hecho a mano queda a la vista (ventas y pesos)', () => {
+    const r = resumenTurno({
+      turno: TURNO,
+      ventas: [
+        { ...v('en_gn', [{ cuenta: 12921, monto: 7000 }]), a_mano: { venta: 500, prendas: 0, precios: 1000 } },
+        { ...v('en_gn', [{ cuenta: 12921, monto: 7000 }]), a_mano: { venta: 0, prendas: 0, precios: 0 } },
+        { ...v('cancelada', [{ cuenta: 12921, monto: 7000 }]), a_mano: { venta: 9000, prendas: 0, precios: 0 } },
+      ],
+      movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: [],
+    })
+    expect(r.aMano).toEqual({ ventas: 1, venta: 500, prendas: 0, precios: 1000 })
+  })
+})
+
+describe('anuladasEnGN', () => {
+  it('las en_gn cuyo id de GN ⛔ vino; las que ⛔ llegaron a GN ⛔ se miran', () => {
+    const ventas = [
+      { id: 'a', estado: 'en_gn', gn_sale_id: 1 },
+      { id: 'b', estado: 'en_gn', gn_sale_id: 2 },
+      { id: 'c', estado: 'error', gn_sale_id: null },
+      { id: 'd', estado: 'en_gn', gn_sale_id: null },
+    ]
+    expect(anuladasEnGN({ ventas, idsGN: [1, 99] })).toEqual(['b'])
+  })
+})
+
+describe('puedeMoverEfectivo / puedeAnularMov (A8, B4)', () => {
+  const turno = { abierto_por: 'Cajera', abierto_por_usuario: 'cajera@x.com' }
+  const duena = { name: 'Cajera', email: 'cajera@x.com' }
+  const otra = { name: 'Otra', email: 'otra@x.com' }
+  it('carga la dueña del turno o un admin; otra cuenta con permiso de Caja ⛔', () => {
+    expect(puedeMoverEfectivo(turno, duena, false)).toBe(true)
+    expect(puedeMoverEfectivo(turno, otra, false)).toBe(false)
+    expect(puedeMoverEfectivo(turno, otra, true)).toBe(true)
+    expect(puedeMoverEfectivo(null, duena, true)).toBe(false)
+  })
+  it('anula un admin, o la dueña lo que cargó ELLA', () => {
+    const suyo = { usuario_cuenta: 'cajera@x.com', usuario: 'Cajera' }
+    const deAdmin = { usuario_cuenta: 'bruno@x.com', usuario: 'Bruno' }
+    expect(puedeAnularMov(suyo, turno, duena, false)).toBe(true)
+    expect(puedeAnularMov(deAdmin, turno, duena, false)).toBe(false)
+    expect(puedeAnularMov(suyo, turno, otra, false)).toBe(false)
+    expect(puedeAnularMov(deAdmin, turno, otra, true)).toBe(true)
   })
 })
 
@@ -169,16 +248,16 @@ describe('resumenTurno con los cobros de GN', () => {
   const cobro = (monto: number, en: string) => ({ id: monto, venta: 1, tn: null, cliente: null, cuenta: 12921, monto, en })
   it('suman al esperado y van aparte del cobrado por la Caja, por hora', () => {
     const r = resumenTurno({
-      turno: TURNO, ventas: [v('en_gn', [{ cuenta: 12921, monto: 21700 }])], salidas: [{ monto: 5000 }],
-      reglas: REGLAS, nombres: {}, cobrosGN: [cobro(38241, '2026-10-03T16:52:40Z'), cobro(1000.5, '2026-10-03T13:00:00Z')],
+      turno: TURNO, ventas: [v('en_gn', [{ cuenta: 12921, monto: 21700 }])], movs: [{ tipo: 'salida', monto: 5000 }],
+      reglas: REGLAS, nombres: {}, cobrosGN: [cobro(38241, '2026-10-03T16:52:40Z'), cobro(1000.5, '2026-10-03T13:00:00Z')], anuladasGN: [],
     })
-    expect(r.efectivo).toEqual({ fondo: 51900, cobrado: 21700, deEspera: 0, cobradoGN: 39241.5, salidas: 5000, esperado: 107841.5 })
+    expect(r.efectivo).toEqual({ fondo: 51900, cobrado: 21700, deEspera: 0, cobradoGN: 39241.5, aportes: 0, salidas: 5000, esperado: 107841.5 })
     expect(r.porCuenta.map((c) => c.monto)).toEqual([21700]) // ⛔ se mezclan con las ventas de la Caja
     expect(r.total).toBe(21700)
     expect(r.cobrosGN!.map((c) => c.monto)).toEqual([1000.5, 38241])
   })
   it('GN ⛔ contestó (null): ⛔ suman y el resumen lo dice', () => {
-    const r = resumenTurno({ turno: TURNO, ventas: [], salidas: [], reglas: REGLAS, nombres: {}, cobrosGN: null })
+    const r = resumenTurno({ turno: TURNO, ventas: [], movs: [], reglas: REGLAS, nombres: {}, cobrosGN: null, anuladasGN: [] })
     expect(r.cobrosGN).toBeNull()
     expect(r.efectivo.esperado).toBe(51900)
   })

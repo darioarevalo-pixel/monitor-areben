@@ -17,6 +17,10 @@ const base = {
   // W3: el turno propio.
   turnos: [] as Fila[],
   movs: [] as Fila[],
+  // A6: las promos bancarias de la Agenda (base de BDI).
+  agenda: [] as Fila[],
+  alCerrar: null as null | (() => void),
+  antesDeInsertar: null as null | (() => void),
 }
 const gn = {
   posts: [] as Fila[],
@@ -24,6 +28,8 @@ const gn = {
   authInventario: [] as string[],
   respuestaPost: { status: 201, body: { data: { id: 1600001, number: 30100 } } as unknown },
   delDia: { data: [] as Fila[] },
+  // Las que GN CREÓ (POST 2xx): aparecen en `ventas/obtener` como en el real (A12 las busca ahí).
+  creadas: [] as Fila[],
   // W3b: `GET /ventas?account_id=…&include_payments=1` (los cobros de GN del turno).
   lista: { status: 200, body: { data: [] as Fila[], meta: { has_more_pages: false } } as unknown },
 }
@@ -38,10 +44,18 @@ function consulta(tabla: string) {
   const filas = (): Fila[] => {
     const todas = tabla === 'caja_venta' ? [...base.ventas.values()] : tabla === 'caja_config' ? (base.config ? [base.config] : [])
       : tabla === 'mp_cuenta_uso' ? base.usos : tabla === 'mp_cuentas' ? base.llaves
-      : tabla === 'caja_turno' ? base.turnos : tabla === 'caja_turno_mov' ? base.movs : base.inventario
+      : tabla === 'caja_turno' ? base.turnos : tabla === 'caja_turno_mov' ? base.movs
+      : tabla === 'agenda_promos' ? base.agenda : base.inventario
     return todas.filter((f) => filtros.every((p) => p(f)))
   }
   const ejecutar = () => {
+    // El trigger de sql/migrate-caja-auditoria.sql (A7): ⛔ entra una venta ni un movimiento a un turno cerrado.
+    if (accion.tipo === 'insert' && base.antesDeInsertar) { const h = base.antesDeInsertar; base.antesDeInsertar = null; h() }
+    if (accion.tipo === 'insert' && (tabla === 'caja_venta' || tabla === 'caja_turno_mov') && accion.fila.turno_id != null) {
+      const turnoId = accion.fila.turno_id
+      const t = base.turnos.find((x) => x.id === turnoId)
+      if (t && t.cerrado_en != null) return { data: null, error: { code: 'P0001', message: 'caja_turno_cerrado: el turno ya está cerrado' } }
+    }
     if (accion.tipo === 'insert' && tabla === 'caja_turno') {
       const nuevo = accion.fila
       // El índice único parcial: un solo turno abierto por marca.
@@ -71,6 +85,8 @@ function consulta(tabla: string) {
       const pid = accion.cambios.mp_pago_id
       if (pid != null && [...base.ventas.values()].some((f) => f.mp_pago_id === pid)) return { data: null, error: { code: '23505', message: 'duplicate key' } }
       const out = filas().map((f) => Object.assign(f, accion.tipo === 'update' ? accion.cambios : {}))
+      // A7: lo que pasa «mientras se cierra» (una venta que se guardó justo antes del cierre).
+      if (tabla === 'caja_turno' && accion.cambios.cerrado_en && out.length && base.alCerrar) { const h = base.alCerrar; base.alCerrar = null; h() }
       return { data: out, error: null }
     }
     return { data: filas(), error: null }
@@ -128,9 +144,15 @@ const respuesta = (status: number, body: unknown) => ({
 function conSesion(perfil: unknown) {
   vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: { method?: string; body?: string; headers?: Record<string, string> }) => {
     if (String(url).includes('gestionnube.com')) {
-      if (opts?.method === 'POST') { gn.posts.push(JSON.parse(String(opts.body))); return respuesta(gn.respuestaPost.status, gn.respuestaPost.body) }
+      if (opts?.method === 'POST') {
+        const cuerpo = JSON.parse(String(opts.body))
+        gn.posts.push(cuerpo)
+        const d = (gn.respuestaPost.body as { data?: Fila } | null)?.data
+        if (gn.respuestaPost.status < 300 && d) gn.creadas.push({ ...d, integration_id: cuerpo.integration_id })
+        return respuesta(gn.respuestaPost.status, gn.respuestaPost.body)
+      }
       gn.gets.push(String(url))
-      if (String(url).includes('/ventas/obtener')) return respuesta(200, gn.delDia)
+      if (String(url).includes('/ventas/obtener')) return respuesta(200, { ...gn.delDia, data: [...gn.delDia.data, ...gn.creadas] })
       if (String(url).includes('/ventas?')) return respuesta(gn.lista.status, gn.lista.body)
       if (String(url).includes('/ventas/referencias')) return respuesta(200, { cuentas: [{ id: 12921, name: 'Efectivo', balance: 114084283.83 }, { id: 99, name: 'Mercado Pago', balance: 5 }] })
       if (String(url).includes('/inventario/')) gn.authInventario.push(String(opts?.headers?.Authorization))
@@ -165,6 +187,8 @@ const req = (method: 'GET' | 'POST', query: Record<string, unknown>, body?: Reco
 })
 
 const CUENTA_MP = 136578181
+/** A6: una promo bancaria de crédito con descuento que corre TODOS los días en el mostrador. */
+const PROMO_CREDITO_HOY = { banco: 'Galicia', medio: 'credito', beneficio: { tipo: 'descuento', pct: 10 }, regla: { tipo: 'diaria' }, desde: '2026-01-01', hasta: null, canales: ['mostrador'], marcas: [], activa: true }
 const TURNO_ID = '11111111-2222-4333-8444-555555555555'
 const ID = '3f1c2b9e-6a4d-4c1e-9b7a-2d5e8f0a1b3c'
 // $25.490 en efectivo ⇒ $21.700 (la venta #30021 del POS de GN).
@@ -178,7 +202,7 @@ beforeEach(async () => {
   // Hay un turno abierto: las ventas de los tests de antes de W3 se cobran adentro de él.
   base.turnos = [{ id: TURNO_ID, store: 'zattia', fondo: 50000, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null, abierto_por: 'cajera', abierto_por_usuario: 'cajera' }]; base.movs = []
   mailer.posts = []; delete process.env.MAILER_URL; delete process.env.MAILER_TICKET_KEY
-  gn.posts = []; gn.gets = []; gn.authInventario = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }
+  gn.posts = []; gn.gets = []; gn.authInventario = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }; gn.creadas = []; base.agenda = []; base.alCerrar = null; base.antesDeInsertar = null
   gn.lista = { status: 200, body: { data: [], meta: { has_more_pages: false } } }
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
   process.env.ZATTIA_SUPABASE_SERVICE_KEY = 'k'
@@ -223,6 +247,7 @@ describe('caja · formas de pago y descuentos a mano (Bruno, 4-oct)', () => {
 
   it('la fila guarda el MEDIO, ⛔ el nombre de la cuenta de GN', async () => {
     conSesion(CAJERA)
+    base.agenda = [PROMO_CREDITO_HOY]
     const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25172 }], total: 22900, pagaCon: null }))
     expect(r.code).toBe(200)
     expect((base.ventas.get(ID)!.pagos as Fila[])[0]).toMatchObject({ cuenta: 25172, nombre: 'Tarjeta de crédito' })
@@ -675,6 +700,9 @@ describe('caja · F5 transferencia', () => {
 
   it('🔴 la de feria (25868) también espera: ⛔ va directo a GN', async () => {
     conSesion(CAJERA)
+    // Con el modo feria prendido (A6: sin él, la cuenta de feria ⛔ se acepta).
+    await correr(req('GET', { action: 'config' }))
+    ;(base.config as { reglas: Fila }).reglas = { ...((base.config as { reglas: Fila }).reglas), feria: true }
     const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25868 }], total: 25500, pagaCon: null }))
     expect(r.code).toBe(200)
     expect(base.ventas.get(ID)).toMatchObject({ estado: 'esperando_pago', espera_monto: 25500 })
@@ -816,7 +844,7 @@ describe('caja · turno propio (v2, W3)', () => {
     expect((await correr(req('POST', {}, { action: 'salida', monto: 5000, motivo: 'Retiro para gerencia' }))).code).toBe(200)
     const t = await correr(req('GET', { action: 'turno' }))
     const turno = t.body?.turno as { resumen: { efectivo: Fila } }
-    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 21700, deEspera: 0, cobradoGN: 0, salidas: 5000, esperado: 66700 })
+    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 21700, deEspera: 0, cobradoGN: 0, aportes: 0, salidas: 5000, esperado: 66700 })
     expect(JSON.stringify(t.body)).not.toMatch(/balance|114084283/)
 
     expect((await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID }))).code).toBe(400)
@@ -847,7 +875,7 @@ describe('caja · turno propio (v2, W3)', () => {
     ], meta: { has_more_pages: false } } }
     const t = await correr(req('GET', { action: 'turno' }))
     const turno = t.body?.turno as { resumen: { efectivo: Fila; cobrosGN: Fila[] } }
-    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 0, deEspera: 0, cobradoGN: 38241, salidas: 0, esperado: 88241 })
+    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 0, deEspera: 0, cobradoGN: 38241, aportes: 0, salidas: 0, esperado: 88241 })
     expect(turno.resumen.cobrosGN.map((c) => c.venta)).toEqual([29981])
     // Se pide por cada cuenta de efectivo, con los cobros, 10 días de ventas para atrás.
     const pedidas = gn.gets.filter((u) => u.includes('/ventas?'))
@@ -1056,8 +1084,11 @@ describe('caja · auditoría 11-oct (A1, A3, A4, E, B1)', () => {
     base.ventas.get(ID)!.creada_en = new Date(Date.now() - 26 * 3600_000).toISOString()
     base.mpPagos = [pagoMP(77, 22900)]
     const r = await correr(req('POST', {}, { action: 'cruzar', id: ID }))
-    expect(r.body?.cruce).toMatchObject({ estado: 'llego', por: 'solo' })
+    // Se leen los DOS días (A4), y como el pago llegó horas después, lo elige la cajera (A5).
     expect(mp.busquedas).toBe(2)
+    expect(r.body?.cruce).toMatchObject({ estado: 'elegir', candidatos: [{ id: '77' }] })
+    const e = await correr(req('POST', {}, { action: 'cruzar', id: ID, pago: '77' }))
+    expect(e.body?.cruce).toMatchObject({ estado: 'llego', por: 'cajera' })
   })
 
   it('🔑 A4: el pago de 2 h ANTES (venta re-escaneada) se ofrece, ⛔ entra solo', async () => {
@@ -1108,5 +1139,223 @@ describe('caja · auditoría 11-oct (A1, A3, A4, E, B1)', () => {
     expect(ventas.map((v) => v.id)).toEqual([ID])
     expect(ventas[0]).not.toHaveProperty('payload')
     expect((await correr(req('GET', { action: 'ventas', turno: 'x' }))).code).toBe(400)
+  })
+})
+
+describe('caja · auditoría 11-oct, fase 2 (A5–A12, B2–B5, robustez)', () => {
+  const ADMIN = { name: 'bruno', admin: true, cuenta: null, acceso: {}, funcion: [] }
+  const OTRA_CAJERA = { name: 'otra', admin: false, cuenta: null, acceso: { zattia: { caja: true } }, funcion: [] }
+  const conConfig = async (extra: Fila) => {
+    await correr(req('GET', { action: 'config' }))
+    ;(base.config as { reglas: Fila }).reglas = { ...((base.config as { reglas: Fila }).reglas), ...extra }
+  }
+
+  it('🔴 A6: el −10 % de crédito sin promo HOY en la Agenda ⇒ 400 y ⛔ sale a GN', async () => {
+    conSesion(CAJERA)
+    const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25172 }], total: 22900, pagaCon: null }))
+    expect(r.code).toBe(400)
+    expect(String(r.body?.error)).toMatch(/promo bancaria/)
+    expect(gn.posts).toHaveLength(0)
+    // Una promo de OTRO medio (débito) ⛔ habilita la de crédito.
+    base.agenda = [{ ...PROMO_CREDITO_HOY, medio: 'debito' }]
+    expect((await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25172 }], total: 22900, pagaCon: null }))).code).toBe(400)
+  })
+
+  it('🔴 A6: con el modo feria prendido, la pantalla vieja que manda el efectivo normal ⇒ 400', async () => {
+    conSesion(CAJERA)
+    await conConfig({ feria: true })
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(400)
+    expect(String(r.body?.error)).toMatch(/modo feria/)
+    expect(base.ventas.size).toBe(0)
+  })
+
+  it('🔴 A6: 6 cuotas debajo del mínimo ⇒ 400', async () => {
+    conSesion(CAJERA)
+    const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25173 }], total: 25500, pagaCon: null }))
+    expect(r.code).toBe(400)
+    expect(String(r.body?.error)).toMatch(/6 cuotas/)
+  })
+
+  it('🔑 A9: la promo de monto mínimo ⛔ descuenta la prenda de feria (servidor)', async () => {
+    conSesion(CAJERA)
+    await conConfig({
+      feriaProductos: [{ id: 1, nombre: 'TOP FERIA' }],
+      promos: [{ id: 'p1', nombre: '$2000 desde 15000', tipo: 'monto_minimo', minimo: 15000, pesos: 2000, alcance: { tipo: 'todo' }, desde: '2026-01-01', hasta: null, activa: true }],
+    })
+    const items = [{ product_id: 1, size_id: 1, cantidad: 1, precio: 10000 }, { product_id: 7, size_id: 8, cantidad: 1, precio: 20000 }]
+    // Feria $10.000 entera + (20.000 − 2.000) × 0,85 = 15.300 ⇒ $25.300.
+    const r = await correr(req('POST', {}, { ...VENTA, items, pagos: [{ cuenta: 25867, base: 10000 }, { cuenta: 12921 }], total: 25300, pagaCon: null }))
+    expect(r.code).toBe(200)
+    const pagos = base.ventas.get(ID)!.pagos as Fila[]
+    expect(pagos.map((p) => [p.cuenta, p.rebaja, p.monto])).toEqual([[25867, 0, 10000], [12921, 2000, 15300]])
+  })
+
+  it('🔴 robustez: precio 0 por `curl` ⇒ 400; pagaCon absurdo ⇒ 400', async () => {
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { ...VENTA, items: [{ product_id: 7, size_id: 8, cantidad: 1, precio: 0 }], total: 0 }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { ...VENTA, pagaCon: -5 }))).code).toBe(400)
+    expect(base.ventas.size).toBe(0)
+  })
+
+  it('🔑 B5: el precio cambiado y el descuento a mano quedan A LA VISTA en la fila y en el turno', async () => {
+    conSesion(CAJERA)
+    // Etiqueta $25.490, la cajera cobra $20.000 y le hace 10 % a la venta ⇒ (20.000 − 2.000) × 0,85 = 15.300.
+    const items = [{ product_id: 7, size_id: 8, cantidad: 1, precio: 20000, precioLista: 25490 }]
+    const r = await correr(req('POST', {}, { ...VENTA, items, total: 15300, pagaCon: null, descuentoVenta: { tipo: 'pct', valor: 10 } }))
+    expect(r.code).toBe(200)
+    const v = base.ventas.get(ID)!
+    expect((v.renglones as Fila[])[0]).toMatchObject({ precio: 20000, precio_lista: 25490 })
+    expect(v.a_mano).toEqual({ venta: 2000, prendas: 0, precios: 5490 })
+    const t = await correr(req('GET', { action: 'turno' }))
+    expect((t.body?.turno as { resumen: { aMano: Fila } }).resumen.aMano).toEqual({ ventas: 1, venta: 2000, prendas: 0, precios: 5490 })
+  })
+
+  it('🔴 A7: el turno se cerró entre la lectura y el insert ⇒ 409 y la venta ⛔ queda guardada', async () => {
+    conSesion(CAJERA)
+    // Otra pantalla cierra el turno justo antes de que la venta se inserte: el trigger lo frena.
+    base.antesDeInsertar = () => { base.turnos[0].cerrado_en = new Date().toISOString() }
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(409)
+    expect(r.body?.sinTurno).toBe(true)
+    expect(base.ventas.size).toBe(0)
+    expect(gn.posts).toHaveLength(0)
+  })
+
+  it('🔴 A7: una venta que entró mientras se cerraba ⇒ la foto se REHACE con ella', async () => {
+    conSesion(CAJERA)
+    base.alCerrar = () => {
+      base.ventas.set('tarde', { id: 'tarde', store: 'zattia', estado: 'borrador', turno_id: TURNO_ID, total: 4200, pagos: [{ cuenta: 12921, monto: 4200 }], creada_en: new Date().toISOString() })
+    }
+    const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 54200 }))
+    expect(c.code).toBe(200)
+    expect(c.body?.cambioAlCerrar).toBe(true)
+    expect(base.turnos[0]).toMatchObject({ esperado: 54200 })
+    expect((base.turnos[0].resumen as Fila).diferencia).toBe(0)
+  })
+
+  it('🔑 A8: la salida la carga la dueña del turno o un admin; OTRA cajera con permiso de Caja ⛔', async () => {
+    conSesion(OTRA_CAJERA)
+    const r = await correr(req('POST', {}, { action: 'salida', monto: 1000, motivo: 'tapar' }))
+    expect(r.code).toBe(403)
+    expect(base.movs).toHaveLength(0)
+    conSesion(ADMIN)
+    expect((await correr(req('POST', {}, { action: 'salida', monto: 1000, motivo: 'retiro' }))).code).toBe(200)
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'salida', monto: 500, motivo: 'bolsas' }))).code).toBe(200)
+    expect(base.movs.map((m) => [m.usuario, m.usuario_cuenta])).toEqual([['bruno', 'bruno'], ['cajera', 'cajera']])
+  })
+
+  it('🔑 B4: el aporte suma; anular deja la fila tachada y deja de contar; la dueña ⛔ anula lo del admin', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, { action: 'salida', tipo: 'aporte', monto: 10000, motivo: 'cambio que trajo Darío' }))
+    await correr(req('POST', {}, { action: 'salida', monto: 3000, motivo: 'bolsas' }))
+    let t = await correr(req('GET', { action: 'turno' }))
+    expect((t.body?.turno as { resumen: { efectivo: Fila } }).resumen.efectivo).toMatchObject({ aportes: 10000, salidas: 3000, esperado: 57000 })
+    conSesion(ADMIN)
+    await correr(req('POST', {}, { action: 'salida', monto: 2000, motivo: 'retiro' }))
+    conSesion(CAJERA)
+    const deAdmin = base.movs.find((m) => m.usuario === 'bruno')!
+    expect((await correr(req('POST', {}, { action: 'anular-mov', id: deAdmin.id, motivo: 'no' }))).code).toBe(403)
+    expect((await correr(req('POST', {}, { action: 'anular-mov', id: base.movs[1].id, motivo: '' }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'anular-mov', id: base.movs[1].id, motivo: 'eran 300, no 3000' }))).code).toBe(200)
+    expect(base.movs[1]).toMatchObject({ anulado_por: 'cajera', anulado_motivo: 'eran 300, no 3000' })
+    t = await correr(req('GET', { action: 'turno' }))
+    expect((t.body?.turno as { resumen: { efectivo: Fila } }).resumen.efectivo).toMatchObject({ aportes: 10000, salidas: 2000, esperado: 58000 })
+    expect(base.movs).toHaveLength(3) // ⛔ se borra
+  })
+
+  it('🔴 A12: la venta anulada a mano en GN deja de sumar; GN ⛔ contesta ⇒ el cierre frena', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, VENTA)) // $21.700 efectivo, en GN como 1600001
+    let t = await correr(req('GET', { action: 'turno' }))
+    expect((t.body?.turno as { resumen: { efectivo: Fila } }).resumen.efectivo).toMatchObject({ cobrado: 21700 })
+    // La anulan en GN: deja de venir en `ventas/obtener`.
+    gn.creadas = []
+    ;(await import('../api/_caja.js')).olvidarCobrosGN()
+    t = await correr(req('GET', { action: 'turno' }))
+    const r = (t.body?.turno as { resumen: { efectivo: Fila; anuladasGN: Fila[] } }).resumen
+    expect(r.efectivo).toMatchObject({ cobrado: 0, esperado: 50000 })
+    expect(r.anuladasGN.map((x) => x.gn_number)).toEqual([30100])
+  })
+
+  it('🔑 B2: la RECHAZADA por GN se carga a mano (sigue sumando) o se descarta (sólo admin, deja de sumar)', async () => {
+    conSesion(CAJERA)
+    gn.respuestaPost = { status: 422, body: { message: 'Sin stock' } }
+    await correr(req('POST', {}, VENTA))
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'error', reintentable: false })
+    expect((await correr(req('POST', {}, { action: 'resolver', id: ID, como: 'descartar', nota: 'se fue' }))).code).toBe(403)
+    expect((await correr(req('POST', {}, { action: 'resolver', id: ID, como: 'a_mano', nota: 'cargada' }))).code).toBe(400) // sin número
+    const r = await correr(req('POST', {}, { action: 'resolver', id: ID, como: 'a_mano', gn_number: 30777, nota: 'la cargué en GN' }))
+    expect(r.code).toBe(200)
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'en_gn', gn_number: 30777, resolucion: { tipo: 'a_mano', por: 'cajera', gn_number: 30777 } })
+    // Ya resuelta ⇒ ⛔ se resuelve otra vez.
+    conSesion(ADMIN)
+    expect((await correr(req('POST', {}, { action: 'resolver', id: ID, como: 'descartar', nota: 'otra vez' }))).code).toBe(409)
+  })
+
+  it('🔴 B2: la que tiene error REINTENTABLE ⛔ se resuelve a mano (puede estar en GN: duplicaría)', async () => {
+    conSesion(ADMIN)
+    base.turnos[0].abierto_por_usuario = 'bruno'; base.turnos[0].abierto_por = 'bruno'
+    gn.respuestaPost = { status: 429, body: {} }
+    await correr(req('POST', {}, VENTA))
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'error', reintentable: true })
+    expect((await correr(req('POST', {}, { action: 'resolver', id: ID, como: 'descartar', nota: 'probando' }))).code).toBe(409)
+  })
+
+  it('🔑 B2: descartada (admin) ⇒ deja de sumar al turno y sale de Pendientes', async () => {
+    conSesion(CAJERA)
+    gn.respuestaPost = { status: 422, body: { message: 'Sin stock' } }
+    await correr(req('POST', {}, VENTA))
+    conSesion(ADMIN)
+    expect((await correr(req('POST', {}, { action: 'resolver', id: ID, como: 'descartar', nota: 'la clienta se llevó la plata' }))).code).toBe(200)
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'descartada', resolucion: { tipo: 'descartada', por: 'bruno' } })
+    const t = await correr(req('GET', { action: 'turno' }))
+    expect((t.body?.turno as { resumen: { efectivo: Fila } }).resumen.efectivo).toMatchObject({ cobrado: 0 })
+    const p = await correr(req('GET', { action: 'pendientes' }))
+    expect(p.body?.ventas).toEqual([])
+  })
+
+  it('🔑 B3: un admin confirma a mano la transferencia con el comprobante ⇒ sale a GN; la cajera ⛔', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, TRANSF))
+    expect((await correr(req('POST', {}, { action: 'confirmar-transferencia', id: ID, comprobante: '123456789' }))).code).toBe(403)
+    conSesion(ADMIN)
+    expect((await correr(req('POST', {}, { action: 'confirmar-transferencia', id: ID, comprobante: 'x' }))).code).toBe(400)
+    const r = await correr(req('POST', {}, { action: 'confirmar-transferencia', id: ID, comprobante: 'op 123456789' }))
+    expect(r.code).toBe(200)
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'en_gn', mp_cruce: 'admin', confirmacion: { por: 'bruno', comprobante: 'op 123456789' } })
+    expect(gn.posts).toHaveLength(1)
+    // Otra vez ⇒ 409, ⛔ se manda dos veces.
+    expect((await correr(req('POST', {}, { action: 'confirmar-transferencia', id: ID, comprobante: 'op 123456789' }))).code).toBe(409)
+    expect(gn.posts).toHaveLength(1)
+  })
+
+  it('robustez: una venta VIEJA esperando el mismo monto ⛔ traba el cruce automático', async () => {
+    conSesion(CAJERA)
+    base.ventas.set('vieja', { id: 'vieja', store: 'zattia', estado: 'esperando_pago', espera_monto: 22900, creada_en: new Date(Date.now() - 3 * 86400_000).toISOString() })
+    await correr(req('POST', {}, TRANSF))
+    base.mpPagos = [pagoMP(77, 22900)]
+    const r = await correr(req('POST', {}, { action: 'cruzar', id: ID }))
+    expect(r.body?.cruce).toMatchObject({ estado: 'llego', por: 'solo' })
+  })
+
+  it('robustez: el SKU con guiones se encuentra tal cual', async () => {
+    conSesion(CAJERA)
+    base.inventario = [{ product_id: 7, product_name: 'TOP', size_id: 8, size_name: 'S', sku: 'RVE-0047-NG', barcode: '779', available_quantity: 1, store_name: 'Local' }]
+    const r = await correr(req('GET', { action: 'producto', codigo: 'RVE-0047-NG' }))
+    expect(r.code).toBe(200)
+    expect((r.body?.variante as Fila).sku).toBe('RVE-0047-NG')
+  })
+
+  it('robustez: dos admins con las promos ⇒ el segundo, con la versión vieja, 409', async () => {
+    conSesion(ADMIN)
+    const c = await correr(req('GET', { action: 'config' }))
+    const v0 = (c.body?.versiones as Fila).promos
+    const promo = { id: 'p1', nombre: '3x2', tipo: 'nxm', lleva: 3, paga: 2, alcance: { tipo: 'todo' }, desde: '2026-01-01', hasta: null, activa: true }
+    expect((await correr(req('POST', {}, { action: 'promos', promos: [promo], version: v0 }))).code).toBe(200)
+    const r = await correr(req('POST', {}, { action: 'promos', promos: [], version: v0 }))
+    expect(r.code).toBe(409)
+    expect(((base.config as { reglas: { promos: Fila[] } }).reglas.promos)).toHaveLength(1)
   })
 })

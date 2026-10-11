@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { VENTANA_ANTES_MS, cruzarTransferencia, limpiarPagos } from '@/lib/pagos-recibidos/core.core.js'
+import { VENTANA_ANTES_MS, VENTANA_SOLA_MS, cruzarTransferencia, limpiarPagos } from '@/lib/pagos-recibidos/core.core.js'
 
 /**
  * Caja F5: la transferencia que se confirma sola. Los pagos pasan por `limpiarPagos` con la forma
@@ -88,6 +88,17 @@ describe('cruzarTransferencia', () => {
     // Uno posterior sigue entrando solo aunque haya uno viejo del mismo monto.
     const conNuevo = [...pagos, { id: '2', monto: 21700, cuando: new Date(Date.parse(DESDE) + 60_000).toISOString(), origen: 'mp' }]
     expect(cruzarTransferencia({ monto: 21700, desde: DESDE, pagos: conNuevo, reclamados: [], competidoras: 0, antesManual: 24 * 3600_000 })).toMatchObject({ estado: 'llego', por: 'solo', pago: { id: '2' } })
+  })
+
+  it('🔴 A5: un pago del monto exacto que llega TARDE ⛔ entra solo: puede ser una transferencia ajena', () => {
+    const tarde = new Date(Date.parse(DESDE) + VENTANA_SOLA_MS + 60_000).toISOString()
+    const pagos = [{ id: '1', monto: 21700, cuando: tarde, origen: 'banco' }]
+    const r = cruzarTransferencia({ monto: 21700, desde: DESDE, pagos, reclamados: [], competidoras: 0, antesManual: VENTANA_ANTES_MS })
+    expect(r).toMatchObject({ estado: 'elegir', candidatos: [{ id: '1' }] })
+    expect(r.estado === 'elegir' && r.motivo).toMatch(/número de operación/)
+    // Dentro de la ventana, solo.
+    const aTiempo = [{ id: '1', monto: 21700, cuando: new Date(Date.parse(DESDE) + VENTANA_SOLA_MS - 1000).toISOString(), origen: 'banco' }]
+    expect(cruzarTransferencia({ monto: 21700, desde: DESDE, pagos: aTiempo, reclamados: [], competidoras: 0, antesManual: VENTANA_ANTES_MS })).toMatchObject({ estado: 'llego', por: 'solo' })
   })
 
   it('antesManual es obligatorio', () => {

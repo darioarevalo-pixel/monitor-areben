@@ -6,6 +6,8 @@ import {
   armarVentaGN,
   cobro,
   cuentaDeMedio,
+  aPagarDe,
+  exigirCuentas,
   exigirFeria,
   montoAEsperar,
   pagosDeMedio,
@@ -506,5 +508,95 @@ describe('mismaVenta (auditoría A1: el mismo id con OTRO pedido ⛔ es la misma
   it('parámetros obligatorios', () => {
     expect(() => mismaVenta(null as never, pedido)).toThrow()
     expect(() => mismaVenta(previa, null as never)).toThrow()
+  })
+})
+
+/**
+ * 🔴 Auditoría A9 (11-oct): la promo de monto mínimo se calcula SIN la feria y se repartía como un
+ * descuento a la venta: la prenda de feria (precio FINAL) se llevaba parte.
+ */
+describe('caja · A9: la promo de compra ⛔ toca la prenda de feria', () => {
+  type R_ = Parameters<typeof cuentaDeMedio>[1]['reglas']
+  const R = { ...(REGLAS_INICIALES as unknown as R_), feriaProductos: [{ id: 1, nombre: 'TOP FERIA' }] } as R_
+  const no = { promoCreditoHoy: false, esDelBanco: false, seisCuotas: false }
+  const mixto = renglones([
+    { product_id: 1, size_id: 1, cantidad: 1, precio: 10000 },
+    { product_id: 2, size_id: 1, cantidad: 1, precio: 20000 },
+  ])
+  const pagos = pagosDeMedio('efectivo', { filas: mixto, reglas: R, total: subtotal(mixto), ...no })
+
+  it('🔑 $2.000 de promo ⇒ la feria paga sus $10.000 enteros; el resto (20.000 − 2.000) con su −15 %', () => {
+    const c = cobro({ filas: mixto, pagos, reglas: R, descuentoVenta: { tipo: 'pesos', valor: 2000, sinFeria: true } })
+    expect(c.pagos.map((p) => [p.rebaja, p.monto])).toEqual([[0, 10000], [2000, 15300]])
+    expect(c.aVenta).toBe(2000)
+  })
+
+  it('el descuento A MANO a la venta sigue repartido sobre todo (Bruno, 5-oct)', () => {
+    const c = cobro({ filas: mixto, pagos, reglas: R, descuentoVenta: { tipo: 'pesos', valor: 3000 } })
+    expect(c.pagos.map((p) => p.rebaja)).toEqual([1000, 2000])
+  })
+
+  it('sin prendas de feria, `sinFeria` ⛔ cambia nada', () => {
+    const normal = renglones([{ product_id: 2, size_id: 1, cantidad: 1, precio: 20000 }])
+    const a = cobro({ filas: normal, pagos: [{ cuenta: EFECTIVO }], reglas: R, descuentoVenta: { tipo: 'pesos', valor: 2000, sinFeria: true } })
+    const b = cobro({ filas: normal, pagos: [{ cuenta: EFECTIVO }], reglas: R, descuentoVenta: { tipo: 'pesos', valor: 2000 } })
+    expect(a).toEqual(b)
+  })
+
+  it('el tope de 6 cuotas mira lo que se paga después de la promo', () => {
+    expect(aPagarDe(mixto, R, { tipo: 'pesos', valor: 2000, sinFeria: true })).toBe(28000)
+    expect(aPagarDe(mixto, R, null)).toBe(30000)
+  })
+})
+
+/**
+ * 🔴 Auditoría A6 (11-oct): el servidor aceptaba la cuenta que mandara la pantalla. Una pantalla vieja
+ * (antes de prender el modo feria), el −10 % de crédito sin promo del día y las 6 cuotas bajo el mínimo.
+ */
+describe('caja · A6: el servidor exige la cuenta que corresponde', () => {
+  type R_ = Parameters<typeof cuentaDeMedio>[1]['reglas']
+  const R = REGLAS_INICIALES as unknown as R_
+  const una = renglones([{ product_id: 2, size_id: 1, cantidad: 1, precio: 20000 }])
+  const cara = renglones([{ product_id: 2, size_id: 1, cantidad: 1, precio: 260000 }])
+  const ok = (filas: ReturnType<typeof renglones>, cuenta: number, reglas: R_ = R, promoCreditoHoy = false) =>
+    () => exigirCuentas({ filas, pagos: [{ cuenta }], reglas, descuentoVenta: null, promoCreditoHoy })
+
+  it('las de siempre pasan', () => {
+    for (const c of [EFECTIVO, TRANSFERENCIA, DEBITO, 25188]) expect(ok(una, c)).not.toThrow()
+  })
+  it('🔴 modo feria prendido: el efectivo y la transferencia normales ⛔ (la pantalla vieja)', () => {
+    const F = { ...R, feria: true } as R_
+    expect(ok(una, EFECTIVO, F)).toThrow(/modo feria/)
+    expect(ok(una, TRANSFERENCIA, F)).toThrow(/modo feria/)
+    expect(ok(una, FERIA_EFECTIVO, F)).not.toThrow()
+    expect(ok(una, DEBITO, F)).not.toThrow()
+  })
+  it('sin modo feria ni prendas de feria, la cuenta de feria ⛔', () => {
+    expect(ok(una, FERIA_EFECTIVO)).toThrow(/modo feria/)
+  })
+  it('la transferencia va a la cuenta que bajó el admin', () => {
+    expect(ok(una, 20595)).toThrow(/otra cuenta/)
+    expect(ok(una, 20595, { ...R, transferenciaA: 20595 } as R_)).not.toThrow()
+  })
+  it('🔴 el −10 % de crédito sólo con promo HOY', () => {
+    expect(ok(una, CREDITO_10)).toThrow(/promo bancaria/)
+    expect(ok(una, CREDITO_10, R, true)).not.toThrow()
+  })
+  it('🔴 6 cuotas sólo si pasa los $250.000', () => {
+    expect(ok(una, 25173)).toThrow(/6 cuotas/)
+    expect(ok(cara, 25173)).not.toThrow()
+    // Con un descuento a mano que la deja debajo, ⛔.
+    expect(() => exigirCuentas({ filas: cara, pagos: [{ cuenta: 25173 }], reglas: R, descuentoVenta: { tipo: 'pesos', valor: 20000 }, promoCreditoHoy: false })).toThrow(/6 cuotas/)
+  })
+  it('parámetros obligatorios', () => {
+    expect(() => exigirCuentas({ filas: una, pagos: [{ cuenta: EFECTIVO }], reglas: R, descuentoVenta: null } as never)).toThrow(/promo de crédito/)
+  })
+})
+
+describe('caja · topes de entrada (robustez, 11-oct)', () => {
+  it('🔴 precio 0 (un `curl`), cantidad absurda y demasiados renglones ⛔', () => {
+    expect(() => renglones([{ product_id: 1, size_id: 1, cantidad: 1, precio: 0 }])).toThrow(/precio inválido/)
+    expect(() => renglones([{ product_id: 1, size_id: 1, cantidad: 51, precio: 100 }])).toThrow(/cantidad inválida/)
+    expect(() => renglones(Array.from({ length: 61 }, () => ({ product_id: 1, size_id: 1, cantidad: 1, precio: 100 })))).toThrow(/renglones/)
   })
 })
