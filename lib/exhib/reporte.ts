@@ -1,0 +1,153 @@
+/**
+ * **El reporte del chequeo** (Darío, 11-oct-2026): al cerrar los recorridos del día, la app arma
+ * sola las dos listas que hasta el 10-oct se hacían a mano —lo **pendiente de exhibición** y las
+ * **variantes duplicadas**—, sólo de productos **regulares**, ordenadas por SKU.
+ *
+ * 🔑 **Un chequeo son VARIOS recorridos**: uno por sector («Tops», «Partes de abajo»), el mismo día.
+ * El 10-oct fueron dos (302 + 258 escaneos). Una prenda que se escaneó en cualquiera de los dos está
+ * exhibida, así que el reporte se arma sobre todos juntos y ⛔ recorrido por recorrido.
+ *
+ * 🔴 **Es una afirmación sobre TODO lo regular del local.** Darío definió que el chequeo recorre el
+ * sector regular entero (~40 min). Si un día se camina sólo un perchero, el reporte pide todo lo
+ * demás — por eso la pantalla dice cuánto pasó por el lector contra lo que hay.
+ *
+ * Qué entra (documento «Chequeo de exhibición — Zattia»):
+ * - **Regular** = precio de Tienda Nube conocido y ⛔ en oferta (`precioDeGondola`). Lo oculto en TN
+ *   cuenta según su precio. Sin precio de TN = sólo local (outlet, accesorios): afuera.
+ * - ⛔ Stunned (`seChequea`) y ⛔ lo que el Mapa del local marca que no va en percha (`cuelga`).
+ * - Los modelos «una sola variante» (`mapa.unaVariante`): con una exhibida, el resto ⛔ queda
+ *   pendiente; sin ninguna, queda pendiente UNA, en un renglón.
+ * - **Duplicada** = la misma variante leída más de una vez (en el mismo lugar o en dos). Los
+ *   percheros frontales repiten a propósito y la app ⛔ los conoce: lo marca la empleada en el ticket.
+ */
+
+import { colgadasDeMas } from './balance'
+import { exhibId, precioDeGondola, seChequea, tipoDePrenda } from './core'
+import { pasoPorElLector, unidadesVistas, type EscaneoLibre } from './libre'
+import type { ExhibItem } from './tipos'
+import type { MapaLocal } from '@/lib/mapa-local/tipos'
+
+/** ¿Es un producto regular de Zattia? Precio de TN conocido, sin oferta, y ⛔ Stunned. */
+export function esRegular(it: Pick<ExhibItem, 'sku' | 'precio' | 'promo'>): boolean {
+  if (!seChequea('zattia', it)) return false
+  const g = precioDeGondola(it)
+  if (g.lista == null && g.aCobrar == null) return false
+  return !g.enOferta
+}
+
+/** Un renglón de «Pendiente de exhibición». */
+export type Pendiente = {
+  /** `exhibId` de la variante, o `<productId>|*` si el modelo se exhibe con una sola variante. */
+  clave: string
+  sku: string
+  productId: string
+  nombre: string
+  /** `size_name` de GN («Negro - M»). Vacío si es «una cualquiera». */
+  variante: string
+  /** Unidades en el Local según el sistema (salón + depósito del local). */
+  enLocal: number
+  /** El modelo se exhibe con una sola variante y ⛔ hay ninguna: va UNA cualquiera. */
+  unaCualquiera: boolean
+}
+
+/** Un renglón de «Variantes duplicadas». */
+export type Duplicada = {
+  clave: string
+  sku: string
+  nombre: string
+  variante: string
+  /** Cuántas veces pasó por el lector, sumando todos los recorridos. Siempre 2 o más. */
+  veces: number
+  lugares: string[]
+  /** Prendas distintas leídas entre la primera y la última lectura: 0 = puede ser la misma pasada dos veces. */
+  otrasEnMedio: number
+}
+
+export type ReporteChequeo = {
+  pendientes: Pendiente[]
+  duplicadas: Duplicada[]
+  /** Variantes regulares con stock que pasaron por el lector, contra el total. */
+  vistas: number
+  total: number
+  /** Modelos «una sola variante» con una exhibida: sus otras variantes ⛔ se piden. */
+  porUnaVariante: number
+}
+
+/**
+ * Por SKU con los números en orden de número (`RTO-0100` después de `RTO-0099`); sin SKU, al final.
+ * Así cada tipo de prenda queda junto, como está ordenado el depósito del local.
+ */
+export function porSku(a: { sku: string; nombre: string; variante: string }, b: { sku: string; nombre: string; variante: string }): number {
+  if (!a.sku !== !b.sku) return a.sku ? -1 : 1
+  return (
+    a.sku.localeCompare(b.sku, 'es', { numeric: true, sensitivity: 'base' }) ||
+    a.nombre.localeCompare(b.nombre, 'es') ||
+    a.variante.localeCompare(b.variante, 'es', { numeric: true })
+  )
+}
+
+/**
+ * El reporte de un chequeo.
+ *
+ * @param escaneos los de TODOS los recorridos del chequeo, juntos.
+ * @param items el inventario del Local (con o sin stock: acá se filtra).
+ * @param mapa el Mapa del local guardado, por `unaVariante` y los tipos que ⛔ se cuelgan. Sin mapa, ninguno.
+ */
+export function reporteDelChequeo(
+  escaneos: EscaneoLibre[],
+  items: ExhibItem[],
+  mapa: Pick<Partial<MapaLocal>, 'unaVariante' | 'tipos'> | null,
+): ReporteChequeo {
+  const vistas = unidadesVistas(escaneos)
+  const modelosVistos = new Set(escaneos.filter((e) => pasoPorElLector(e) && e.encontrado && e.product_id).map((e) => String(e.product_id)))
+  const unaSola = new Set(mapa?.unaVariante ?? [])
+  const noCuelga = new Set((mapa?.tipos ?? []).filter((t) => t.cuelga === false).map((t) => t.tipo))
+
+  const pendientes = new Map<string, Pendiente>()
+  let total = 0
+  let vistasRegulares = 0
+  let porUnaVariante = 0
+  for (const it of items) {
+    if (!(it.qty > 0) || !esRegular(it) || noCuelga.has(tipoDePrenda(it.name))) continue
+    total++
+    if (vistas.has(exhibId(it))) {
+      vistasRegulares++
+      continue
+    }
+    if (unaSola.has(it.productId)) {
+      if (modelosVistos.has(it.productId)) {
+        porUnaVariante++
+        continue
+      }
+      const k = `${it.productId}|*`
+      const ya = pendientes.get(k)
+      if (ya) {
+        ya.enLocal += it.qty
+        // El SKU más bajo del modelo: es por donde se empieza a buscar en el depósito.
+        if (it.sku && (!ya.sku || porSku({ sku: it.sku, nombre: '', variante: '' }, { sku: ya.sku, nombre: '', variante: '' }) < 0)) ya.sku = it.sku
+      } else pendientes.set(k, { clave: k, sku: it.sku, productId: it.productId, nombre: it.name, variante: '', enLocal: it.qty, unaCualquiera: true })
+      continue
+    }
+    const k = exhibId(it)
+    pendientes.set(k, { clave: k, sku: it.sku, productId: it.productId, nombre: it.name, variante: it.size, enLocal: it.qty, unaCualquiera: false })
+  }
+
+  // Las duplicadas salen de la MISMA cuenta que el balance (`colgadasDeMas`), sobre todos los
+  // recorridos juntos: la prenda que está en «Tops» y en la vidriera ocupa dos perchas igual.
+  const primera = new Map<string, EscaneoLibre>()
+  for (const e of escaneos) if (pasoPorElLector(e) && e.encontrado && !primera.has(e.variante_id)) primera.set(e.variante_id, e)
+  const duplicadas: Duplicada[] = []
+  for (const c of colgadasDeMas(escaneos)) {
+    const e = primera.get(c.variante_id)
+    if (!e || !esRegular({ sku: e.sku || '', precio: e.precio, promo: e.promo })) continue
+    duplicadas.push({ clave: c.variante_id, sku: e.sku || '', nombre: c.nombre, variante: c.size, veces: c.unidades, lugares: [...c.lugares].sort(), otrasEnMedio: c.otrasEnMedio })
+  }
+
+  return {
+    pendientes: [...pendientes.values()].sort(porSku),
+    duplicadas: duplicadas.sort(porSku),
+    vistas: vistasRegulares,
+    total,
+    porUnaVariante,
+  }
+}

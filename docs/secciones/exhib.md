@@ -50,6 +50,24 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > se reintenta en cada tanda, y si el teléfono se recarga sin señal, reabrir sin el modo lo crearía
 > `libre`. Lo cuida `tests/exhib-cola-modo.test.tsx`.
 
+> 🧾 **«Reporte del chequeo» (11-oct-2026, Darío)** — arriba de «Recorridos anteriores», sólo para
+> quien tiene `mapa-local.editar` (el celular es para escanear). 🔑 **Un chequeo son los recorridos
+> cerrados de UN DÍA** (uno por sector: el 10-oct fueron «Tops» + «Partes de abajo»), tildados por
+> defecto; se destilda una prueba. Dos listas por SKU (`lib/exhib/reporte.ts`):
+> - **Pendiente de exhibición** = variante **regular** con stock en el Local que ⛔ pasó por el lector
+>   en ninguno. Regular = precio de TN conocido y ⛔ en oferta (`esRegular`): saca solas la feria, el
+>   outlet/accesorios (⛔ están en TN) y Stunned; además, los tipos que el mapa marca `cuelga: false`.
+>   Respeta «una sola variante» igual que el relevamiento.
+> - **Variantes duplicadas** = `colgadasDeMas` sobre los recorridos juntos, sólo regulares. ⛔ La app
+>   no sabe cuáles son frontales: lo marca la empleada en el ticket. «leídas seguidas» = 0 prendas en
+>   el medio (puede ser la misma pasada dos veces).
+> - 🖨️ **Ticket de 80 mm** (`lib/exhib/ticket.ts`): casillas «Exhibido / No encontrado» y «Retirado /
+>   Exhibición frontal» y el aviso de los frontales en negrita. ⛔ Sin stock ni ventas en el papel.
+> 📊 **Oráculo**: los dos recorridos del 10-oct contra el stock del 11-oct dan **76 pendientes de 64
+> productos (533 de 609 regulares vistas) y 23 duplicadas**; la lista hecha a mano el 10-oct dio 75/63.
+> 🔴 Afirma sobre **todo lo regular del local**: si un día se camina un solo perchero, pide el resto —
+> por eso dice «pasaron por el lector X de Y» arriba del botón de imprimir.
+
 **Son DOS recorridos distintos**, no dos vistas del mismo:
 
 | | **Por categoría** (el viejo) | **Libre por lugar** (19-sep-2026) |
@@ -68,17 +86,17 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 
 `components/exhib/` (`Exhib.tsx` 530 — el modo por categoría y el selector · `useExhib.ts` ·
 `ExhibLibre.tsx` · `useExhibLibre.ts` · **`useColaEscaneos.ts` la cola que usan LOS DOS** ·
-`ParaColgar.tsx` · **`BalanceSector.tsx`** el balance del sector · **`ElegirEspacio.tsx`** y **`RelevamientoPanel.tsx`** el «Chequeo + mapa» · `useEdadStock.ts` de cuándo es el stock, para el balance y el relevamiento) · **`lib/sonido.ts`** (el pitido/vibración/voz, compartido) · `lib/exhib/`
+`ParaColgar.tsx` · **`BalanceSector.tsx`** el balance del sector · **`ReporteChequeo.tsx`** el reporte del día · **`ElegirEspacio.tsx`** y **`RelevamientoPanel.tsx`** el «Chequeo + mapa» · `useEdadStock.ts` de cuándo es el stock, para el balance y el relevamiento) · **`lib/sonido.ts`** (el pitido/vibración/voz, compartido) · `lib/exhib/`
 (**`aviso.ts`** qué se oye en cada final · **`balance.ts`** el mandado del depósito · `core.ts` puro y
 compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta colgar** ·
-`datos.ts` la bajada · `cliente.ts` · `pdf.ts` · **`analisis.ts` el conteo del final** · `tipos.ts`) ·
+`datos.ts` la bajada · `cliente.ts` · `pdf.ts` · **`analisis.ts` el conteo del final** · **`reporte.ts`** + **`ticket.ts`** el reporte del chequeo y su ticket · `tipos.ts`) ·
 `api/_exhib.js` por `api/datos.js?recurso=exhib` · tablas `exhib_recorrido` y `exhib_escaneo`
 (`sql/migrate-exhib-libre.sql` + `sql/migrate-exhib-categoria.sql` + **`sql/migrate-exhib-cobertura.sql`
 ⏳ pendiente de correr**, **sólo en el Supabase de Zattia**) ·
 `tests/exhib-core.test.ts` + `tests/exhib-libre.test.ts` + `tests/exhib-colgar.test.ts` +
 `tests/exhib-analisis.test.ts` + **`tests/exhib-por-variante.test.ts`** (la regla de que una variante
 ⛔ no marca a sus hermanas, cruzando los cuatro módulos) + `tests/exhib-aviso.test.ts` +
-`tests/exhib-balance.test.ts`.
+`tests/exhib-balance.test.ts` + **`tests/exhib-reporte.test.ts`**.
 
 ## ⛔ Lo que comparte con otras secciones
 

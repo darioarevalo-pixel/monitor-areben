@@ -19,6 +19,7 @@ import { BalanceSector } from './BalanceSector'
 import { ElegirEspacio, otraAltura } from './ElegirEspacio'
 import { RelevamientoPanel } from './RelevamientoPanel'
 import { FinMapa } from './FinMapa'
+import { ReporteChequeo } from './ReporteChequeo'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 import { useActividad } from '@/components/mapa-local/useMapaLocalDatos'
@@ -449,6 +450,13 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               Hay un recorrido en curso con <b>{lib.escaneos.length}</b> {lib.escaneos.length === 1 ? 'escaneo' : 'escaneos'}
               {lib.sinSubir > 0 && <> · <b>{lib.sinSubir}</b> sin subir</>}. Tocá <b>Retomar</b> para seguir.
             </Notice>
+          )}
+
+          {/* 🔑 El reporte del chequeo (11-oct-2026): lo pendiente y lo duplicado de los recorridos
+              del día, con el ticket de 80 mm. Es de quien edita el Mapa del local, como el
+              relevamiento: el celular es para escanear. */}
+          {marca === 'zattia' && mapaGuardado?.puede.editar && previos && (
+            <ReporteChequeo marca={marca} previos={previos} items={items} mapa={mapaLocal} onTraerStock={onTraerStock} trayendo={trayendo} />
           )}
 
           <Subtitulo>Recorridos anteriores</Subtitulo>
