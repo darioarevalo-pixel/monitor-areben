@@ -121,8 +121,8 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
   lo guarda y el turno lo suma («Hecho a mano»).
 - Elegido sin preguntar (cambiable): la transferencia que llega más de **15 min** después ⛔ se confirma
   sola · **descartar** una venta rechazada lo hace sólo un admin · la gift card va después.
-- ▶️ Falta: correr `sql/migrate-caja-auditoria.sql`, deployar, caminar la lista C en prod y la semana en
-  paralelo con el POS de GN.
+- 🏁 11-oct: turno de prueba del 5-oct CERRADO (con nota) y `sql/migrate-caja-auditoria.sql` CORRIDA en Zattia
+  (verificada leyendo el esquema). ▶️ Falta: caminar la lista C en prod y la semana en paralelo con el POS de GN.
 
 ## ▶️ CAJA + POS: IGUALARLO AL PROTOTIPO — 6-oct-2026 (dictado por Bruno)
 
