@@ -2,6 +2,7 @@
 // para BDI o Zattia. Se elige con INPUT_STORE=bdi|zattia. NO toca ventas → es veloz.
 import { createClient } from '@supabase/supabase-js';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
+import { registrarCambiosDeStock } from './lib/stock-cambios.mjs';
 
 const STORE = (process.env.INPUT_STORE || process.argv[2] || 'bdi').toLowerCase();
 
@@ -160,6 +161,14 @@ async function sellarHora() {
   const inv = Array.from(seen.values());
   console.log(`[inventario] ${inv.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inv.length) { console.log('Nada que guardar.'); console.log(`\n[listo] — ${STORE}`); return; }
+  // Historia de stock (sólo Zattia, para separar los ingresos del local): ANTES del upsert, que pisa
+  // la foto anterior. Si falla, ⛔ se pone en rojo ESTE job: lo espera alguien desde Reposición y el
+  // stock sí se actualizó. El que avisa es el diario, que corre la misma función.
+  if (STORE === 'zattia') {
+    const historia = await registrarCambiosDeStock(supabase, inv, 'rapido');
+    if (historia.error) console.error(`[inventario] ⚠️ historia de stock: ${historia.error}`);
+    else console.log(`[inventario] historia: ${historia.cambios} variante(s) cambiaron desde la foto anterior.`);
+  }
   const BATCH = 500;
   for (let i = 0; i < inv.length; i += BATCH) {
     const lote = inv.slice(i, i + BATCH);

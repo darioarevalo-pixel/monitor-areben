@@ -7,6 +7,7 @@ import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
 import { refrescarVistas } from './lib/refrescar-vistas.mjs';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
 import { revisarCostos, sinCostoSiNoSeVe } from './lib/costos-espejo.mjs';
+import { registrarCambiosDeStock } from './lib/stock-cambios.mjs';
 
 /** Ver el comentario gemelo en sync-diario.js: lo que falló sin frenar el sync. */
 const problemas = [];
@@ -176,6 +177,12 @@ async function syncInventario(maps) {
   const inventario = Object.values(invMap);
   console.log(`[inventario] ${inventario.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inventario.length) return 0;
+
+  // Historia de stock: ANTES del upsert, que pisa la foto de ayer (scripts/lib/stock-cambios.mjs).
+  const historia = await registrarCambiosDeStock(supabase, inventario, 'diario');
+  if (historia.error) problemas.push(`historia de stock: ${historia.error}`);
+  else console.log(`[inventario] historia: ${historia.cambios} variante(s) cambiaron desde la foto anterior.`);
+
   let { error } = await supabase.from('inventario').upsert(inventario, { onConflict: 'product_id,size_id,store_name' });
   if (error && /sku|barcode|column/i.test(error.message)) {
     console.warn(`  ⚠️  columnas sku/barcode no existen aún, guardando sin ellas (${error.message})`);
