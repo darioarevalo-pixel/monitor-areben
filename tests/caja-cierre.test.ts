@@ -32,7 +32,7 @@ describe('resumenTurno', () => {
       salidas: [{ monto: 5000 }, { monto: 1200.5 }],
       reglas: REGLAS, nombres: {}, cobrosGN: [],
     })
-    expect(r.efectivo).toEqual({ fondo: 51900, cobrado: 48400, cobradoGN: 0, salidas: 6200.5, esperado: 94099.5 })
+    expect(r.efectivo).toEqual({ fondo: 51900, cobrado: 48400, deEspera: 0, cobradoGN: 0, salidas: 6200.5, esperado: 94099.5 })
     expect(r.total).toBe(78300)
     expect(r.ventas).toBe(4)
     // Primero las de efectivo, después por monto.
@@ -59,6 +59,19 @@ describe('resumenTurno', () => {
     expect(r.ventas).toBe(2)
     expect(r.esperando.map((x) => x.total)).toEqual([9000])
     expect(r.sinGN.map((x) => x.total)).toEqual([2000, 8000]) // por hora
+  })
+
+  it('🔴 A2: venta mixta efectivo + transferencia esperando ⇒ el EFECTIVO ya está en el cajón y suma; la transferencia ⛔', () => {
+    const mixta = v('esperando_pago', [{ cuenta: 12921, monto: 5000 }, { cuenta: 13015, monto: 9000 }])
+    const r = resumenTurno({ turno: TURNO, ventas: [mixta], salidas: [], reglas: REGLAS, nombres: {}, cobrosGN: [] })
+    expect(r.efectivo.deEspera).toBe(5000)
+    expect(r.efectivo.cobrado).toBe(0)
+    expect(r.efectivo.esperado).toBe(56900)
+    expect(r.total).toBe(0)
+    expect(r.esperando.map((x) => x.total)).toEqual([14000])
+    // Cancelada: la cajera devolvió el efectivo ⇒ ⛔ suma.
+    const can = resumenTurno({ turno: TURNO, ventas: [{ ...mixta, estado: 'cancelada' }], salidas: [], reglas: REGLAS, nombres: {}, cobrosGN: [] })
+    expect(can.efectivo.esperado).toBe(51900)
   })
 
   it('turno sin ventas: el esperado es el fondo', () => {
@@ -159,7 +172,7 @@ describe('resumenTurno con los cobros de GN', () => {
       turno: TURNO, ventas: [v('en_gn', [{ cuenta: 12921, monto: 21700 }])], salidas: [{ monto: 5000 }],
       reglas: REGLAS, nombres: {}, cobrosGN: [cobro(38241, '2026-10-03T16:52:40Z'), cobro(1000.5, '2026-10-03T13:00:00Z')],
     })
-    expect(r.efectivo).toEqual({ fondo: 51900, cobrado: 21700, cobradoGN: 39241.5, salidas: 5000, esperado: 107841.5 })
+    expect(r.efectivo).toEqual({ fondo: 51900, cobrado: 21700, deEspera: 0, cobradoGN: 39241.5, salidas: 5000, esperado: 107841.5 })
     expect(r.porCuenta.map((c) => c.monto)).toEqual([21700]) // ⛔ se mezclan con las ventas de la Caja
     expect(r.total).toBe(21700)
     expect(r.cobrosGN!.map((c) => c.monto)).toEqual([1000.5, 38241])

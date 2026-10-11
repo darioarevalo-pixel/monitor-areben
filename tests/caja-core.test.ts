@@ -11,6 +11,7 @@ import {
   pagosDeMedio,
   subtotalDeFeria,
   medioDeCuenta,
+  mismaVenta,
   nombreParaTicket,
   redondeo,
   renglones,
@@ -473,3 +474,37 @@ describe('caja · la transferencia se espera siempre', () => {
   })
 })
 
+
+describe('mismaVenta (auditoría A1: el mismo id con OTRO pedido ⛔ es la misma venta)', () => {
+  const previa = {
+    total: 17300,
+    renglones: [
+      { product_id: 1, size_id: 10, cantidad: 1, precio: 12000, importe: 12000 },
+      { product_id: 2, size_id: 20, cantidad: 2, precio: 4990, importe: 9980 },
+    ],
+    pagos: [{ cuenta: 12921, monto: 17300 }],
+  }
+  const pedido = {
+    total: 17300,
+    items: [
+      { product_id: 2, size_id: 20, cantidad: 2, precio: 4990, nombre: 'otro texto' },
+      { product_id: 1, size_id: 10, cantidad: 1, precio: 12000 },
+    ],
+    pagos: [{ cuenta: 12921, base: 0 }],
+  }
+  it('el mismo pedido en otro orden ⇒ la misma', () => {
+    expect(mismaVenta(previa, pedido)).toBe(true)
+  })
+  it('cambia el total, una prenda, una cantidad, un precio o la cuenta ⇒ otra', () => {
+    expect(mismaVenta(previa, { ...pedido, total: 22000 })).toBe(false)
+    expect(mismaVenta(previa, { ...pedido, items: [...pedido.items, { product_id: 3, size_id: 30, cantidad: 1, precio: 4700 }] })).toBe(false)
+    expect(mismaVenta(previa, { ...pedido, items: [{ ...pedido.items[0], cantidad: 3 }, pedido.items[1]] })).toBe(false)
+    expect(mismaVenta(previa, { ...pedido, items: [{ ...pedido.items[0], precio: 5000 }, pedido.items[1]] })).toBe(false)
+    expect(mismaVenta(previa, { ...pedido, pagos: [{ cuenta: 20196 }] })).toBe(false)
+    expect(mismaVenta(previa, { ...pedido, items: null })).toBe(false)
+  })
+  it('parámetros obligatorios', () => {
+    expect(() => mismaVenta(null as never, pedido)).toThrow()
+    expect(() => mismaVenta(previa, null as never)).toThrow()
+  })
+})

@@ -77,6 +77,7 @@ export function CalculadoraBilletes({
   esperado,
   extra,
   aMano = false,
+  vacioApagado = false,
   onUsar,
   onCerrar,
 }: {
@@ -94,6 +95,8 @@ export function CalculadoraBilletes({
   extra?: React.ReactNode
   /** Deja escribir el total sin contar billetes (abrir y cerrar): entonces viaja sin conteo. */
   aMano?: boolean
+  /** Sin billetes ni total a mano, el botón queda apagado (auditoría A10: cerraba con $0 sin contar). Un $0 de verdad se escribe. */
+  vacioApagado?: boolean
   trabajando?: boolean
   error?: string | null
   onUsar: (total: number, conteo: Conteo | null) => void
@@ -135,7 +138,7 @@ export function CalculadoraBilletes({
           <Button variant="outline" onClick={onCerrar}>
             Volver
           </Button>
-          <Button variant="solid" tone={tono} loading={trabajando} disabled={total == null} onClick={() => total != null && onUsar(total, manualN != null ? null : conteo)}>
+          <Button variant="solid" tone={tono} loading={trabajando} disabled={total == null || (vacioApagado && !manual.trim() && deBilletes === 0)} onClick={() => total != null && onUsar(total, manualN != null ? null : conteo)}>
             {accion}
           </Button>
         </>

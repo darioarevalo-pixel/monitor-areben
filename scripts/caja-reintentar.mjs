@@ -1,8 +1,10 @@
 // Respaldo de la cola de la Caja: reintenta las ventas que ⛔ llegaron a Gestión Nube.
 //
-// Lo PRIMARIO es la pantalla, que reintenta sola mientras está abierta. Esto cubre que la cierren
-// con una venta colgada. Lo corre `.github/workflows/caja-reintentar.yml`.
-// ⚠️ Los crons de GitHub de este repo llegan TARDE (a veces horas): es un respaldo, ⛔ un reloj.
+// Lo PRIMARIO es el POS, que reintenta solo cada 3 min mientras está abierto (`reintentar-pendientes`,
+// auditoría E, 11-oct). Esto cubre que lo cierren con una venta colgada. Lo corre
+// `.github/workflows/caja-reintentar.yml`.
+// ⚠️ Los crons de GitHub de este repo llegan TARDE: el `*/10` corrió ~3 veces por día (7 al 11-oct).
+// Es un respaldo, ⛔ un reloj.
 //
 // Manda con `lib/caja/enviar.core.js`, la MISMA función que el handler: el `payload` guardado y el
 // id como `integration_id` ⇒ si la pantalla la está mandando a la vez, GN contesta 409 y es «ya está».
@@ -14,7 +16,7 @@
 // ⛔ Imprime tokens ni el cuerpo de las ventas: sólo conteos y el número de la Caja.
 import { createClient } from '@supabase/supabase-js';
 import { GN_BASE, GN_TOKENS, PAUSA_GN, dormir, gnFetch } from '../api/_gn.js';
-import { COLUMNAS_VENTA, enviarVenta } from '../lib/caja/enviar.core.js';
+import { COLUMNAS_VENTA, SIN_LLEGAR, enviarVenta, pendientesParaReintentar } from '../lib/caja/enviar.core.js';
 import { mandarTicket } from '../lib/caja/ticket-mail.core.js';
 
 const url = process.env.ZATTIA_SUPABASE_URL;
@@ -25,19 +27,14 @@ const sb = createClient(url, key);
 // El ticket por mail (F4). Sin las dos variables, las ventas se reintentan igual y los tickets ⛔.
 const mailer = { url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch };
 
-// 🔴 Sólo las COBRADAS: una que espera la transferencia (F5) sale a GN cuando `cruzar` encuentra el
-// pago, y una cancelada ⛔ sale nunca. `.neq('en_gn')` las mandaba sin cruce.
-const SIN_LLEGAR = ['borrador', 'enviando', 'error'];
-
+// 🔴 Sólo las COBRADAS (`SIN_LLEGAR`): una que espera la transferencia (F5) sale a GN cuando `cruzar`
+// encuentra el pago, y una cancelada ⛔ sale nunca. `.neq('en_gn')` las mandaba sin cruce.
 // Las que se tocaron hace menos de 2 minutos pueden estar en vuelo desde la pantalla.
 const corte = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-const { data, error } = await sb.from('caja_venta').select(`${COLUMNAS_VENTA}, payload, actualizada_en`)
-  .eq('store', 'zattia').in('estado', SIN_LLEGAR).lt('actualizada_en', corte)
-  .order('creada_en', { ascending: true }).limit(50);
-if (error) { console.error('No se pudo leer caja_venta:', error.message); process.exit(1); }
-
-const pendientes = (data || []).filter(v => v.reintentable !== false);
-const rechazadas = (data || []).length - pendientes.length;
+let pendientes, rechazadas;
+try {
+  ({ pendientes, rechazadas } = await pendientesParaReintentar(sb, 'zattia', { corteMs: 2 * 60 * 1000, limite: 50, ahora: Date.now() }));
+} catch (e) { console.error('No se pudo leer caja_venta:', e.message); process.exit(1); }
 let ok = 0;
 for (const v of pendientes) {
   try {

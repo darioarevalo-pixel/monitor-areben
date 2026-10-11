@@ -69,6 +69,7 @@ import {
   leerPendientes,
   leerTurno,
   leerPedidosWeb,
+  reintentarPendientes,
   type Candidato,
   type Config,
   type ListaNombre,
@@ -101,6 +102,7 @@ import {
   ModalesTurno,
   UltimaVenta,
   VariosPagos,
+  VentasDelTurno,
   aNumero,
   claveDe,
   horaAr,
@@ -108,7 +110,11 @@ import {
   type Renglon,
 } from '@/components/caja/partes'
 
-type Borrador = { id: string; renglones: Renglon[]; email: string; descuentoVenta?: Rebaja | null }
+/**
+ * `enviado`: con este id ya se pidió `confirmar` (auditoría A1). Si la respuesta se perdió, la venta
+ * puede estar cobrada: «Vaciar pedido» ⛔ renueva el id, y un pedido distinto con él da 409 `yaCobrada`.
+ */
+type Borrador = { id: string; renglones: Renglon[]; email: string; descuentoVenta?: Rebaja | null; enviado?: boolean }
 
 const CLAVE = 'caja:borrador:zattia'
 
@@ -133,7 +139,7 @@ const ahora = () => Date.now()
 function leerBorrador(): Borrador {
   try {
     const d = JSON.parse(localStorage.getItem(CLAVE) || 'null') as Borrador | null
-    if (d && typeof d.id === 'string' && Array.isArray(d.renglones)) return { id: d.id, renglones: d.renglones, email: d.email || '', descuentoVenta: d.descuentoVenta ?? null }
+    if (d && typeof d.id === 'string' && Array.isArray(d.renglones)) return { id: d.id, renglones: d.renglones, email: d.email || '', descuentoVenta: d.descuentoVenta ?? null, enviado: d.enviado === true }
   } catch {
     /* sin localStorage: el carrito vive en memoria */
   }
@@ -391,6 +397,29 @@ function POS() {
   // le pregunta nada nuevo). El stock de una prenda leído en vivo o del espejo (`stock.fuente`), y la
   // venta que llegó o quedó pendiente. Antes de la primera señal, las cobradas sin llegar.
   const [gnSenal, setGnSenal] = useState<{ ok: boolean; que: string } | null>(null)
+  // 🔑 Auditoría E (11-oct): el POS manda SOLO las cobradas que ⛔ llegaron a GN, al abrir y cada 3 min.
+  // El respaldo de GitHub corre ~3 veces por día: con GN caído una venta quedaba horas afuera. El
+  // servidor elige cuáles (las rechazadas y las recién tocadas ⛔) y ⛔ duplica (el id es el de GN).
+  useEffect(() => {
+    let vivo = true
+    const vuelta = () =>
+      reintentarPendientes()
+        .then((r) => {
+          if (!vivo || !r.intentadas) return
+          if (r.llegaron) setGnSenal({ ok: true, que: `${r.llegaron === 1 ? 'llegó 1 venta pendiente' : `llegaron ${r.llegaron} ventas pendientes`}` })
+          refrescarPendientes()
+        })
+        .catch(() => {
+          /* sin turno, sin red o GN caído: la próxima vuelta reintenta y el cartel rojo sigue */
+        })
+    const t0 = setTimeout(vuelta, 5_000)
+    const t = setInterval(vuelta, 3 * 60_000)
+    return () => {
+      vivo = false
+      clearTimeout(t0)
+      clearInterval(t)
+    }
+  }, [refrescarPendientes])
 
   function agregar(variante: Variante, stock: Stock) {
     setGnSenal(stock.fuente === 'vivo' ? { ok: true, que: 'el stock de la última prenda se leyó en vivo' } : { ok: false, que: `el stock de la última prenda es el de anoche${stock.motivo ? ` (${stock.motivo})` : ''}` })
@@ -617,10 +646,20 @@ function POS() {
     refrescarTurno()
   }
 
+  /** El cobro de la clienta anterior ⛔ queda (auditoría A11): forma de pago, «paga con», las preguntas del crédito. */
+  function limpiarCobro() {
+    setPagos([{ medio: null, base: '' }])
+    setEsDelBanco(null)
+    setSeisCuotas(null)
+    setVarios(false)
+    setPagaCon('')
+  }
+
   async function confirmar() {
     if (!c) return
     setEnviando(true)
     setAviso(null)
+    setBor((b) => (b.enviado ? b : { ...b, enviado: true }))
     try {
       const r = await confirmarVenta({
         id: bor.id,
@@ -634,11 +673,7 @@ function POS() {
       })
       // La venta quedó guardada (en GN, pendiente o esperando la transferencia): el carrito se cierra y nace otro id.
       setBor({ id: nuevoId(), renglones: [], email: '', descuentoVenta: null })
-      setPagos([{ medio: null, base: '' }])
-      setEsDelBanco(null)
-      setSeisCuotas(null)
-      setVarios(false)
-      setPagaCon('')
+      limpiarCobro()
       setEnCobro(false)
       if (r.venta.estado === 'esperando_pago') {
         // ⛔ ticket todavía: sale cuando llega la transferencia (el cartel ámbar de arriba).
@@ -647,7 +682,8 @@ function POS() {
         refrescarTurno()
         return
       }
-      const ticket = datosTicket(r.venta)
+      // El ticket sale de la venta GUARDADA (sus renglones), ⛔ del carrito: A1 los mezclaba.
+      const ticket = ticketGuardado(r.venta)
       setGnSenal(r.venta.estado === 'en_gn' ? { ok: true, que: 'la última venta llegó' } : { ok: false, que: `la última venta quedó pendiente${r.venta.ultimo_error ? ` (${r.venta.ultimo_error})` : ''}` })
       setUltima({ venta: r.venta, ticket })
       avisar(r.venta.estado === 'en_gn' ? 'ok' : 'ojo')
@@ -657,6 +693,16 @@ function POS() {
     } catch (e) {
       // ⛔ se renueva el id: el reintento tiene que llevar el MISMO, por si GN ya la tiene.
       avisar('no')
+      // 🔴 A1: con este id ya se cobró OTRO pedido (la respuesta se había perdido). La cobrada pasa a
+      // «Última venta» para reimprimir, y el carrito de ahora queda con un id nuevo: si es otra venta, se cobra.
+      const yaCobrada = (e as { datos?: { yaCobrada?: boolean; venta?: Venta } }).datos
+      if (yaCobrada?.yaCobrada && yaCobrada.venta) {
+        setUltima({ venta: yaCobrada.venta, ticket: ticketGuardado(yaCobrada.venta) })
+        setBor((b) => ({ ...b, id: nuevoId(), enviado: false }))
+        setEnCobro(false)
+        refrescarPendientes()
+        refrescarTurno()
+      }
       if ((e as { datos?: { sinTurno?: boolean } }).datos?.sinTurno) refrescarTurno()
       setAviso({ tono: 'danger', texto: (e as Error).message })
     } finally {
@@ -672,6 +718,8 @@ function POS() {
   // turno repetida arriba duplicaba la información de la pestaña).
   const [panelTurno, setPanelTurno] = useState<null | 'contar' | 'salida' | 'cerrar'>(null)
   const [cerradoAca, setCerradoAca] = useState<Turno | null>(null)
+  // B1: la lista de ventas del turno, con «Reimprimir».
+  const [verVentas, setVerVentas] = useState(false)
 
   // Sin el shell, las promos de la Agenda (la del crédito de hoy) las pide el POS.
   const cargarAgenda = useAgenda((st) => st.cargar)
@@ -696,8 +744,10 @@ function POS() {
 
   async function vaciar() {
     if (!(await preguntar({ titulo: 'Vaciar pedido', mensaje: `Se ${prendas === 1 ? 'saca la prenda' : `sacan las ${prendas} prendas`} del pedido. No se cobró nada.`, ok: 'Vaciar pedido', tono: 'warning' }))) return
-    // El id ⛔ se renueva: ⛔ se mandó nada con él.
-    setBor((b) => ({ ...b, renglones: [], email: '', descuentoVenta: null }))
+    // 🔑 A1: el id se renueva sólo si ⛔ se mandó nada con él. Si se mandó y la respuesta se perdió, la
+    // venta puede estar cobrada: con el mismo id, el pedido nuevo da 409 y se ve cuál era.
+    setBor((b) => ({ ...b, id: b.enviado ? b.id : nuevoId(), renglones: [], email: '', descuentoVenta: null }))
+    limpiarCobro()
     setEnCobro(false)
     enfocar()
   }
@@ -732,6 +782,7 @@ function POS() {
   }
 
   const sinLlegar = pendientes.filter((v) => v.estado !== 'esperando_pago').length
+  const rechazadas = pendientes.filter((v) => v.estado !== 'esperando_pago' && v.reintentable === false).length
   const gnOk = gnSenal ? gnSenal.ok : sinLlegar === 0
   const gnPorque = gnSenal ? `Gestión Nube: ${gnSenal.que}.` : sinLlegar ? `Gestión Nube: ${sinLlegar} cobradas sin llegar.` : 'Gestión Nube: sin ventas pendientes.'
   const subtotalFilas = filas ? filas.reduce((s, f) => s + f.importe, 0) : null
@@ -796,6 +847,9 @@ function POS() {
           >
             <Icono nombre={conSonido ? 'sonido' : 'silencio'} size={18} />
           </button>
+          <button type="button" className="pos-tbtn" onClick={() => setVerVentas(true)} style={{ height: 36 }}>
+            Ventas del turno
+          </button>
           <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('contar')} style={{ height: 36 }}>
             Contar billetes
           </button>
@@ -807,6 +861,14 @@ function POS() {
           </button>
         </div>
       </header>
+
+      {verVentas && (
+        <VentasDelTurno
+          nombreCuenta={nombreCuenta}
+          onCerrar={() => setVerVentas(false)}
+          onReimprimir={(v) => imprimirTicket(ticketGuardado(v), esEfectivo, ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))}
+        />
+      )}
 
       <ModalesTurno
         que={panelTurno}
@@ -833,7 +895,10 @@ function POS() {
             ))}
           {sinLlegar > 0 && (
             <Notice tone="danger">
-              Cobradas sin llegar a Gestión Nube: {sinLlegar}. Reintentar desde la pestaña Caja.
+              Cobradas sin llegar a Gestión Nube: {sinLlegar}.{' '}
+              {rechazadas > 0
+                ? `${rechazadas === 1 ? 'Una la rechazó' : `${rechazadas} las rechazó`} Gestión Nube: revisar desde la pestaña Caja.`
+                : 'Se reintentan solas cada 3 min mientras el POS está abierto.'}
             </Notice>
           )}
           <PedidosWebSinArmar datos={pedidosWeb} error={errPedidos} />

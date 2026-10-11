@@ -12,19 +12,22 @@
 //   GET  ?recurso=caja&action=cuentas-mp          → { enUso, cuentas? }: dónde se detectan las transferencias
 //        (la cuenta de MP en uso de Pagos recibidos, `mp_cuenta_uso`); la lista sólo para admin
 //   GET  ?recurso=caja&action=pendientes          → las ventas que ⛔ llegaron a GN
+//   GET  ?recurso=caja&action=ventas&turno=…      → las ventas del turno (sin `turno`, el abierto), para reimprimir (B1)
 //   GET  ?recurso=caja&action=pedidos-web         → los pedidos de TN por empaquetar (v2, W1):
 //        { pedidos, porSku, noLeidas, leidoEn } — ver lib/caja/pedidos-web.core.js
 //   GET  ?recurso=caja&action=turno               → el turno abierto (o null) con su resumen y salidas, y
 //        los últimos cerrados (v2, W3), con el efectivo cobrado EN GN durante el turno (W3b) — ver lib/caja/cierre.core.js
 //   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, descuentoVenta, email?, pagaCon? }
 //   POST ?recurso=caja  { action: 'reintentar', id }
+//   POST ?recurso=caja  { action: 'reintentar-pendientes' } → el POS, cada 3 min: manda las cobradas sin llegar a GN (auditoría E)
 //   POST ?recurso=caja  { action: 'cruzar', id, pago? }    → ¿llegó la transferencia? (F5) — `pago` lo elige la cajera
 //   POST ?recurso=caja  { action: 'cancelar', id }         → una venta que esperaba la transferencia y ⛔ llegó
 //   POST ?recurso=caja  { action: 'abrir-turno', fondo, conteo? }   → abre el turno (uno solo abierto por marca)
 //   POST ?recurso=caja  { action: 'salida', monto, motivo } → saca efectivo del turno abierto
 //   POST ?recurso=caja  { action: 'contar', id, conteo }   → conteo intermedio de billetes: ⛔ cierra ni mueve plata
 //        🔑 `confirmar` y `contar` sólo los hace la cuenta que abrió el turno (`puedeUsarPOS`, fase C): 403
-//   POST ?recurso=caja  { action: 'cerrar-turno', id, contado, nota?, conteo? } → cierra con el efectivo contado
+//   POST ?recurso=caja  { action: 'cerrar-turno', id, contado, nota?, conteo?, sinCobrosGN? } → cierra con el efectivo contado
+//        Si GN ⛔ contestó los cobros del turno: 409 `sinCobrosGN`; con `sinCobrosGN: true` + nota, cierra igual.
 //        `conteo` (fase B, 5-oct): `{ [billete]: cantidad }` de la calculadora; el servidor rearma el
 //        total con `lib/caja/conteo.core.js` y, si ⛔ es el fondo o el contado, 400.
 //   POST ?recurso=caja  { action: 'usar-mp', cuenta_id } → sólo admin: cambia la cuenta de MP en uso (la MISMA de Pagos recibidos)
@@ -64,13 +67,13 @@ import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
-import { REGLAS_INICIALES, armarVentaGN, cobro, exigirFeria, idsDeFeria, medioDeCuenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
+import { REGLAS_INICIALES, armarVentaGN, cobro, exigirFeria, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { cruzarTransferencia } from '../lib/pagos-recibidos/core.core.js'
 import { cuentasDe, pagosDelDia, ponerEnUso, usosDe } from './_pagos-recibidos.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
 import { filtrarPorNombre, ordenParaLaBase, palabrasDeBusqueda, productosPorStock } from '../lib/caja/buscar.core.js'
-import { COLUMNAS_VENTA as COLUMNAS, enviarVenta } from '../lib/caja/enviar.core.js'
+import { COLUMNAS_VENTA as COLUMNAS, SIN_LLEGAR, enviarVenta, pendientesParaReintentar } from '../lib/caja/enviar.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
@@ -206,6 +209,8 @@ export default async function handler(req, res) {
           const d = await leerJson(r)
           ventas.push(...(d && Array.isArray(d.data) ? d.data : []))
           if (!(d && d.meta && d.meta.has_more_pages)) break
+          // Auditoría (11-oct): cortaba en 5 páginas CALLADO. Leído a medias es ⛔ leído: el cierre frena.
+          if (pag === 5) throw new Error('más de 5 páginas de cobros')
         }
       }
       const hasta = turno.cerrado_en || new Date(ahora).toISOString()
@@ -342,6 +347,20 @@ export default async function handler(req, res) {
         if (error) throw new Error(error.message)
         return res.status(200).json({ ventas: data || [] })
       }
+      if (accion === 'ventas') {
+        // B1 (auditoría, 11-oct): las ventas del turno, para reimprimir. Sin `turno`, el abierto.
+        let turnoId = String(req.query.turno || '')
+        if (turnoId && !UUID.test(turnoId)) return res.status(400).json({ error: 'id de turno inválido.' })
+        if (!turnoId) {
+          const t = await turnoAbierto()
+          if (!t) return res.status(200).json({ ventas: [] })
+          turnoId = t.id
+        }
+        const { data, error } = await sb.from('caja_venta').select(COLUMNAS)
+          .eq('store', store).eq('turno_id', turnoId).order('creada_en', { ascending: false }).limit(500)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ ventas: (data || []).map(sinPayload) })
+      }
       if (accion === 'pedidos-web') {
         try {
           return res.status(200).json(await leerPedidosWeb(req.headers && req.headers['x-monitor-auth'], Date.now(), store))
@@ -356,7 +375,7 @@ export default async function handler(req, res) {
         if (ultimos.error) throw new Error(ultimos.error.message)
         return res.status(200).json({ turno: turno ? await conResumen(turno) : null, ultimos: ultimos.data || [] })
       }
-      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, cuentas-mp, pendientes, pedidos-web, turno)' })
+      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, cuentas-mp, pendientes, ventas, pedidos-web, turno)' })
     }
 
     if (req.method === 'POST') {
@@ -501,13 +520,19 @@ export default async function handler(req, res) {
         if (b.contado === '' || b.contado == null || !Number.isFinite(contado) || contado < 0) return res.status(400).json({ error: 'Falta el efectivo contado.' })
         const c = await conteoContra(b.conteo, contado, 'el efectivo contado')
         if (c && c.error) return res.status(400).json({ error: c.error })
+        const nota = String(b.nota ?? '').trim().slice(0, 500) || null
         const turno = await turnoAbierto()
         if (!turno || turno.id !== id) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
         // Fresco: un cobro cargado en GN hace un minuto tiene que entrar en la foto del cierre.
         const con = await conResumen(turno, true)
+        // 🔴 Auditoría A3 (11-oct): sin los cobros de GN el esperado queda CORTO y el cierre dice que
+        // sobra plata, y ⛔ se reabre. Se frena; cerrar igual es una decisión explícita y con nota.
+        if (con.resumen.cobrosGN === null) {
+          if (b.sinCobrosGN !== true) return res.status(409).json({ error: 'Gestión Nube no contestó los cobros web en efectivo: sin ellos el esperado puede quedar corto. Reintentar en un minuto.', sinCobrosGN: true })
+          if (!nota) return res.status(400).json({ error: 'Para cerrar sin los cobros de Gestión Nube hace falta una nota.' })
+        }
         const esperado = con.resumen.efectivo.esperado
         const dif = diferencia(contado, esperado)
-        const nota = String(b.nota ?? '').trim().slice(0, 500) || null
         // 🔑 La foto del cierre queda guardada: si después se toca una venta, el cierre ⛔ cambia.
         const resumen = { ...con.resumen, salidas: con.salidas, diferencia: dif }
         const cambios = { cerrado_en: new Date().toISOString(), cerrado_por: perfil.name || null, contado, esperado, resumen, nota }
@@ -533,6 +558,13 @@ export default async function handler(req, res) {
         const previa = await sb.from('caja_venta').select(COLUMNAS_ENVIO).eq('id', id).maybeSingle()
         if (previa.error) throw new Error(previa.error.message)
         if (previa.data) {
+          // 🔴 Auditoría A1 (11-oct): con el MISMO id pero OTRO pedido (la respuesta se perdió y la cajera
+          // agregó una prenda) ⛔ es un reintento: devolver la vieja dejaba la prenda nueva sin cobrar.
+          if (!mismaVenta(previa.data, b)) {
+            const v = previa.data
+            const cual = v.gn_number ? `#${v.gn_number}` : `provisoria ${String(v.id).slice(0, 8).toUpperCase()}`
+            return res.status(409).json({ error: `Con este número ya se cobró la venta ${cual} por ${pesos(v.total)}, con otro pedido. Si el pedido de ahora es otro, cobralo como venta nueva.`, yaCobrada: true, venta: sinPayload(v) })
+          }
           if (!SIN_LLEGAR.includes(previa.data.estado)) return res.status(200).json({ venta: sinPayload(previa.data) })
           const out = await enviar(previa.data)
           return res.status(200).json(out)
@@ -612,6 +644,19 @@ export default async function handler(req, res) {
         return res.status(200).json(await enviar(data))
       }
 
+      if (accion === 'reintentar-pendientes') {
+        // 🔑 Auditoría E (11-oct): el POS reintenta SOLO cada 3 min mientras está abierto. El respaldo de
+        // la cola de GitHub corrió ~3 veces por día, ⛔ cada 10 min: con GN caído una venta quedaba horas
+        // afuera. De a una y pocas: el techo de la función es 30 s y el cupo de GN es compartido.
+        const { pendientes } = await pendientesParaReintentar(sb, store, { corteMs: 2 * 60 * 1000, limite: REINTENTOS_POR_VUELTA, ahora: Date.now() })
+        let llegaron = 0
+        for (const v of pendientes) {
+          const { venta } = await enviar(v)
+          if (venta && venta.estado === 'en_gn') llegaron++
+        }
+        return res.status(200).json({ intentadas: pendientes.length, llegaron })
+      }
+
       if (accion === 'cruzar') {
         const id = String(b.id || '')
         if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido.' })
@@ -622,17 +667,21 @@ export default async function handler(req, res) {
 
         const usos = await usosDe(sb, store)
         if (!usos.length) return res.status(200).json({ venta: sinPayload(v.data), cruce: { estado: 'sin_cuenta', motivo: 'Pagos recibidos no tiene una cuenta de Mercado Pago conectada: la transferencia no se puede ver. Cancelá y cobrá por otra cuenta.' } })
-        const dia = diaArgentino(Date.parse(v.data.creada_en))
-        const [{ pagos }, reclamados, competidoras] = await Promise.all([
-          pagosDelDia(sb, usos, dia),
+        // 🔴 Auditoría A4 (11-oct): ⛔ sólo el día de la venta. Un pago después de medianoche ⛔ cruzaba
+        // nunca: se leen los días desde el de la venta hasta hoy (tope DIAS_CRUCE, MP se lee cada 5 s).
+        const dias = diasDelCruce(Date.parse(v.data.creada_en), Date.now())
+        const [porDia, reclamados, competidoras] = await Promise.all([
+          Promise.all(dias.map((dia) => pagosDelDia(sb, usos, dia))),
           sb.from('caja_venta').select('mp_pago_id').eq('store', store).not('mp_pago_id', 'is', null)
             .gte('creada_en', new Date(Date.parse(v.data.creada_en) - 2 * 86400000).toISOString()),
           sb.from('caja_venta').select('id').eq('store', store).eq('estado', 'esperando_pago').eq('espera_monto', v.data.espera_monto).neq('id', id),
         ])
         if (reclamados.error) throw new Error(reclamados.error.message)
         if (competidoras.error) throw new Error(competidoras.error.message)
+        const vistos = new Set()
+        const pagos = porDia.flatMap((x) => x.pagos).filter((p) => !vistos.has(p.id) && vistos.add(p.id))
         const d = cruzarTransferencia({
-          monto: Number(v.data.espera_monto), desde: v.data.creada_en, pagos,
+          monto: Number(v.data.espera_monto), desde: v.data.creada_en, pagos, antesManual: ANTES_MANUAL_MS,
           reclamados: (reclamados.data || []).map(r => r.mp_pago_id), competidoras: (competidoras.data || []).length,
           elegido: b.pago == null ? null : String(b.pago),
         })
@@ -671,7 +720,7 @@ export default async function handler(req, res) {
         if (ya.data.estado === 'cancelada') return res.status(200).json({ venta: ya.data })
         return res.status(409).json({ error: 'La transferencia ya llegó: la venta está cobrada y no se cancela desde acá.', venta: ya.data })
       }
-      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, cruzar, cancelar, usar-mp, politica, logo, bajadas, abrir-turno, salida, contar, cerrar-turno)' })
+      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, reintentar-pendientes, cruzar, cancelar, usar-mp, politica, logo, bajadas, abrir-turno, salida, contar, cerrar-turno)' })
     }
     return res.status(405).json({ error: 'Método no permitido' })
   } catch (e) {
@@ -680,14 +729,37 @@ export default async function handler(req, res) {
 }
 
 const COLUMNAS_ENVIO = `${COLUMNAS}, payload`
+/** Cuántas ventas manda el POS por vuelta de `reintentar-pendientes`: cada una puede tardar hasta ~10 s. */
+const REINTENTOS_POR_VUELTA = 2
 // 🔴 `conteos` y `abierto_por_usuario` son de `sql/migrate-caja-conteos.sql`: sin correrlo, el turno ⛔ carga.
 const COLS_TURNO = 'id, abierto_en, abierto_por, abierto_por_usuario, fondo, cerrado_en, cerrado_por, contado, esperado, resumen, nota, conteos'
 /** Los conteos intermedios que guarda un turno: los últimos. Un turno normal cuenta dos o tres veces. */
 const MAX_INTERMEDIOS = 50
 const pesos = (n) => `$${Number(n).toLocaleString('es-AR')}`
-/** Los estados de una venta COBRADA que todavía ⛔ está en GN: los únicos que se mandan. */
-const SIN_LLEGAR = ['borrador', 'enviando', 'error']
 const sinPayload = ({ payload: _p, ...v }) => v
+
+/** Cuántos días de Mercado Pago lee el cruce, desde el de la venta (A4). */
+const DIAS_CRUCE = 3
+/**
+ * Hasta cuánto ANTES de la venta un pago se OFRECE para elegir (A4): la venta que se canceló y se volvió
+ * a escanear nace después del pago. Como se lee desde el día de la venta, en la práctica es desde su
+ * medianoche. ⛔ Entra solo nunca: lo elige la cajera.
+ */
+const ANTES_MANUAL_MS = 24 * 3600 * 1000
+/**
+ * Los días argentinos desde el de la venta hasta hoy. Con más de `DIAS_CRUCE`: el de la venta y los
+ * últimos (el pago que llega tarde llega HOY).
+ */
+export function diasDelCruce(creada, ahora) {
+  const hoy = diaArgentino(ahora)
+  const dias = []
+  for (let t = creada; t <= ahora + DIA_MS; t += DIA_MS) {
+    const d = diaArgentino(t)
+    if (!dias.includes(d)) dias.push(d)
+    if (d === hoy) break
+  }
+  return dias.length <= DIAS_CRUCE ? dias : [dias[0], ...dias.slice(-(DIAS_CRUCE - 1))]
+}
 
 /**
  * Las variantes del espejo (`inventario`) que corresponden al código del lector: barcode exacto,

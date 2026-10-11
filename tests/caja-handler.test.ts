@@ -816,7 +816,7 @@ describe('caja · turno propio (v2, W3)', () => {
     expect((await correr(req('POST', {}, { action: 'salida', monto: 5000, motivo: 'Retiro para gerencia' }))).code).toBe(200)
     const t = await correr(req('GET', { action: 'turno' }))
     const turno = t.body?.turno as { resumen: { efectivo: Fila } }
-    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 21700, cobradoGN: 0, salidas: 5000, esperado: 66700 })
+    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 21700, deEspera: 0, cobradoGN: 0, salidas: 5000, esperado: 66700 })
     expect(JSON.stringify(t.body)).not.toMatch(/balance|114084283/)
 
     expect((await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID }))).code).toBe(400)
@@ -847,7 +847,7 @@ describe('caja · turno propio (v2, W3)', () => {
     ], meta: { has_more_pages: false } } }
     const t = await correr(req('GET', { action: 'turno' }))
     const turno = t.body?.turno as { resumen: { efectivo: Fila; cobrosGN: Fila[] } }
-    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 0, cobradoGN: 38241, salidas: 0, esperado: 88241 })
+    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 0, deEspera: 0, cobradoGN: 38241, salidas: 0, esperado: 88241 })
     expect(turno.resumen.cobrosGN.map((c) => c.venta)).toEqual([29981])
     // Se pide por cada cuenta de efectivo, con los cobros, 10 días de ventas para atrás.
     const pedidas = gn.gets.filter((u) => u.includes('/ventas?'))
@@ -1002,5 +1002,111 @@ describe('caja · el POS es de la cuenta que abrió la caja (fase C)', () => {
     expect(base.turnos[0].abierto_por_usuario).toBe('otra@zattia.test')
     conSesion({ ...OTRA_CAJERA, email: 'Otra@Zattia.test' })
     expect((await correr(req('POST', {}, VENTA))).code).toBe(200)
+  })
+})
+
+describe('caja · auditoría 11-oct (A1, A3, A4, E, B1)', () => {
+  it('🔴 A1: el MISMO id con OTRO pedido ⇒ 409 con la venta guardada, ⛔ POST a GN y la fila intacta', async () => {
+    conSesion(CAJERA)
+    gn.respuestaPost = { status: 503, body: null } // la primera queda pendiente, como con la respuesta perdida
+    await correr(req('POST', {}, VENTA))
+    const antes = JSON.stringify(base.ventas.get(ID))
+    const otro = { ...VENTA, items: [...VENTA.items, { product_id: 9, size_id: 1, cantidad: 1, precio: 4990 }], total: 25900 }
+    const r = await correr(req('POST', {}, otro))
+    expect(r.code).toBe(409)
+    expect(r.body?.yaCobrada).toBe(true)
+    expect((r.body?.venta as Fila).total).toBe(21700)
+    expect(r.body?.venta).not.toHaveProperty('payload')
+    expect(gn.posts).toHaveLength(1)
+    expect(JSON.stringify(base.ventas.get(ID))).toBe(antes)
+    // El MISMO pedido sigue siendo un reintento: se manda la guardada.
+    gn.respuestaPost = { status: 201, body: { data: { id: 1600002, number: 30101 } } }
+    const igual = await correr(req('POST', {}, VENTA))
+    expect(igual.code).toBe(200)
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'en_gn', gn_number: 30101 })
+  })
+
+  it('🔴 A3: GN ⛔ contesta los cobros al cerrar ⇒ 409 y el turno sigue abierto; cerrar igual pide nota', async () => {
+    conSesion(CAJERA)
+    gn.lista = { status: 429, body: { message: 'x' } }
+    const r = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 50000 }))
+    expect(r.code).toBe(409)
+    expect(r.body?.sinCobrosGN).toBe(true)
+    expect(base.turnos[0].cerrado_en).toBeNull()
+    const sinNota = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 50000, sinCobrosGN: true }))
+    expect(sinNota.code).toBe(400)
+    expect(base.turnos[0].cerrado_en).toBeNull()
+    const ok = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 50000, sinCobrosGN: true, nota: 'GN caído' }))
+    expect(ok.code).toBe(200)
+    expect(base.turnos[0]).toMatchObject({ nota: 'GN caído', esperado: 50000 })
+    expect((base.turnos[0].resumen as Fila).cobrosGN).toBeNull()
+  })
+
+  it('🔴 A3: más de 5 páginas de cobros ⇒ ⛔ se lee a medias callado: el cierre frena', async () => {
+    conSesion(CAJERA)
+    gn.lista = { status: 200, body: { data: [], meta: { has_more_pages: true } } }
+    const r = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 50000 }))
+    expect(r.code).toBe(409)
+    expect(r.body?.sinCobrosGN).toBe(true)
+  })
+
+  it('🔑 A4: la venta de AYER cruza con el pago de HOY (se leen los dos días)', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, TRANSF))
+    base.ventas.get(ID)!.creada_en = new Date(Date.now() - 26 * 3600_000).toISOString()
+    base.mpPagos = [pagoMP(77, 22900)]
+    const r = await correr(req('POST', {}, { action: 'cruzar', id: ID }))
+    expect(r.body?.cruce).toMatchObject({ estado: 'llego', por: 'solo' })
+    expect(mp.busquedas).toBe(2)
+  })
+
+  it('🔑 A4: el pago de 2 h ANTES (venta re-escaneada) se ofrece, ⛔ entra solo', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, TRANSF))
+    base.mpPagos = [pagoMP(77, 22900, -2 * 3600_000)]
+    const r = await correr(req('POST', {}, { action: 'cruzar', id: ID }))
+    expect(r.body?.cruce).toMatchObject({ estado: 'elegir' })
+    expect(gn.posts).toHaveLength(0)
+  })
+
+  it('🔑 E: reintentar-pendientes manda las viejas reintentables; ⛔ las rechazadas, ⛔ las recién tocadas, ⛔ las que esperan', async () => {
+    conSesion(CAJERA)
+    const vieja = new Date(Date.now() - 10 * 60_000).toISOString()
+    const fila = (id: string, extra: Fila) => ({ id, store: 'zattia', estado: 'error', intentos: 1, total: 100, pagos: [], renglones: [], payload: { date_sale: '2026-10-11', id }, creada_en: vieja, actualizada_en: vieja, ...extra })
+    const ids = ['a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000003', 'a0000000-0000-4000-8000-000000000004']
+    base.ventas.set(ids[0], fila(ids[0], { reintentable: true }))
+    base.ventas.set(ids[1], fila(ids[1], { reintentable: false }))
+    base.ventas.set(ids[2], fila(ids[2], { reintentable: true, actualizada_en: new Date().toISOString() }))
+    base.ventas.set(ids[3], fila(ids[3], { estado: 'esperando_pago' }))
+    const r = await correr(req('POST', {}, { action: 'reintentar-pendientes' }))
+    expect(r.code).toBe(200)
+    expect(r.body).toEqual({ intentadas: 1, llegaron: 1 })
+    expect(gn.posts.map((p) => p.id)).toEqual([ids[0]])
+    expect(base.ventas.get(ids[0])).toMatchObject({ estado: 'en_gn' })
+  })
+
+  it('🔴 E: una venta que ya llegó a GN ⛔ vuelve a mandarse ni a quedar en error', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, VENTA))
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'en_gn' })
+    const { enviarVenta } = await import('../lib/caja/enviar.core.js')
+    const { createClient } = await import('@supabase/supabase-js')
+    // El envío viejo que tenía la fila en la mano (estado `error`) llega tarde.
+    const vieja = { ...base.ventas.get(ID)!, estado: 'error' }
+    const out = await enviarVenta(vieja, { sb: (createClient as (a: string, b: string) => unknown)('x', 'y'), gnFetch: fetch as never, base: 'https://api.gestionnube.com', token: 't' })
+    expect(out.venta).toMatchObject({ estado: 'en_gn' })
+    expect(gn.posts).toHaveLength(1)
+  })
+
+  it('B1: ventas devuelve las del turno abierto, sin payload, y ⛔ las de otro turno', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, VENTA))
+    base.ventas.set('otra', { id: 'otra', store: 'zattia', estado: 'en_gn', turno_id: 'otro-turno', total: 1 })
+    const r = await correr(req('GET', { action: 'ventas' }))
+    expect(r.code).toBe(200)
+    const ventas = r.body?.ventas as Fila[]
+    expect(ventas.map((v) => v.id)).toEqual([ID])
+    expect(ventas[0]).not.toHaveProperty('payload')
+    expect((await correr(req('GET', { action: 'ventas', turno: 'x' }))).code).toBe(400)
   })
 })

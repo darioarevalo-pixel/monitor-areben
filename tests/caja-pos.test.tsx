@@ -32,10 +32,13 @@ vi.mock('@/lib/caja/cliente', async (orig) => ({
   leerTurno: vi.fn(async () => ({ turno, ultimos: [] })),
   leerPendientes: vi.fn(async () => ({ ventas: [] })),
   leerPedidosWeb: vi.fn(async () => ({ pedidos: [], porSku: {}, noLeidas: 0, leidoEn: new Date().toISOString() })),
+  reintentarPendientes: vi.fn(async () => ({ intentadas: 0, llegaron: 0 })),
+  cerrarTurno: vi.fn(async () => ({ turno: { ...TURNO, cerrado_en: '2026-10-05T20:00:00.000Z' } })),
 }))
 
 const { CajaPOS } = await import('@/components/caja/CajaPOS')
 const { Caja } = await import('@/components/caja/Caja')
+const { CerrarTurnoModal } = await import('@/components/caja/partes')
 
 let raiz: Root
 beforeEach(() => {
@@ -120,5 +123,58 @@ describe('pestaña Caja', () => {
     // Cerrar la caja, sí: «desde los dos lados». Contar billetes, ⛔ (el servidor da 403).
     expect(t).toContain('Cerrar turno')
     expect(t).not.toContain('Contar billetes')
+  })
+})
+
+const boton = (texto: string) => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === texto) as HTMLButtonElement
+const borrador = () => JSON.parse(disco.get('caja:borrador:zattia') || 'null') as { id: string; renglones: unknown[]; enviado?: boolean }
+const PRENDA = { variante: { product_id: 1, size_id: 1, product_name: 'PRENDA 1', size_name: 'M', sku: null, barcode: null }, stock: { local: 3, deposito: 0, fuente: 'vivo' }, cantidad: 1, precio: 10000, fueraDeTn: false, foto: null, rebaja: null }
+
+describe('POS · auditoría 11-oct', () => {
+  it('🔑 A1: «Vaciar pedido» renueva el id sólo si con él ⛔ se mandó nada', async () => {
+    vi.stubGlobal('confirm', () => true)
+    disco.set('caja:borrador:zattia', JSON.stringify({ id: 'sin-mandar', renglones: [PRENDA], email: '' }))
+    await montar(<CajaPOS />)
+    await act(async () => boton('Vaciar pedido').click())
+    expect(borrador().renglones).toEqual([])
+    expect(borrador().id).not.toBe('sin-mandar')
+  })
+
+  it('🔴 A1: si ya se mandó (la respuesta pudo perderse), el id se QUEDA: el pedido nuevo da 409 y se ve cuál era', async () => {
+    vi.stubGlobal('confirm', () => true)
+    disco.set('caja:borrador:zattia', JSON.stringify({ id: 'mandada', renglones: [PRENDA], email: '', enviado: true }))
+    await montar(<CajaPOS />)
+    await act(async () => boton('Vaciar pedido').click())
+    expect(borrador().renglones).toEqual([])
+    expect(borrador().id).toBe('mandada')
+  })
+
+  it('B1: «Ventas del turno» está en la cabecera del POS', async () => {
+    const t = await montar(<CajaPOS />)
+    expect(t).toContain('Ventas del turno')
+  })
+})
+
+describe('Cerrar turno · auditoría A10', () => {
+  const RESUMEN = { porCuenta: [], total: 0, ventas: 0, efectivo: { fondo: 50000, cobrado: 0, deEspera: 0, cobradoGN: 0, salidas: 0, esperado: 50000 }, cobrosGN: [], esperando: [], sinGN: [] }
+  it('🔴 vacío ⇒ apagado; un $0 escrito ⇒ pide confirmación con los tres números y ⛔ cierra sin ella', async () => {
+    const { cerrarTurno } = await import('@/lib/caja/cliente')
+    const pregunta = vi.fn(() => false)
+    vi.stubGlobal('confirm', pregunta)
+    await montar(<CerrarTurnoModal turno={{ ...TURNO, resumen: RESUMEN } as never} billetes={[1000]} onCerrar={() => {}} onCerrado={() => {}} />)
+    expect(boton('Cerrar turno').disabled).toBe(true)
+    const aMano = document.querySelector('input[aria-label="Total a mano"]') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(aMano, '0')
+      aMano.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(boton('Cerrar turno').disabled).toBe(false)
+    await act(async () => boton('Cerrar turno').click())
+    expect(pregunta).toHaveBeenCalledTimes(1)
+    expect(String((pregunta.mock.calls[0] as unknown[])[0])).toContain('Cerrar turno')
+    expect(cerrarTurno).not.toHaveBeenCalled()
+    pregunta.mockReturnValue(true)
+    await act(async () => boton('Cerrar turno').click())
+    expect(cerrarTurno).toHaveBeenCalledWith('t1', 0, '', null, false)
   })
 })

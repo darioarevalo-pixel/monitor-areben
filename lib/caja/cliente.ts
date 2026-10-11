@@ -100,6 +100,11 @@ export const buscarNombre = (q: string) => get<ListaNombre>(`action=buscar&q=${e
 export const elegirVariante = (v: Variante) =>
   get<Producto>(`action=producto&product_id=${v.product_id}&size_id=${v.size_id}`, 'No se pudo traer la prenda.')
 export const leerPendientes = () => get<{ ventas: Venta[] }>('action=pendientes', 'No se pudieron leer las ventas pendientes.')
+/** B1: las ventas del turno (sin id, el abierto), de la más nueva a la más vieja: para reimprimir. */
+export const leerVentasTurno = (turnoId?: string) =>
+  get<{ ventas: Venta[] }>(`action=ventas${turnoId ? `&turno=${encodeURIComponent(turnoId)}` : ''}`, 'No se pudieron leer las ventas del turno.')
+/** E: el POS manda solo las cobradas que ⛔ llegaron a GN (cada 3 min mientras está abierto). */
+export const reintentarPendientes = () => post<{ intentadas: number; llegaron: number }>({ action: 'reintentar-pendientes' }, 'No se pudieron reintentar las ventas pendientes.')
 
 export type CobroGN = { id: number; venta: number | null; tn: string | null; cliente: string | null; cuenta: number; monto: number; en: string }
 /** v2, W3: el turno propio de la Caja (`lib/caja/cierre.core.js`). */
@@ -107,7 +112,8 @@ export type ResumenTurno = {
   porCuenta: { cuenta: number; nombre: string; efectivo: boolean; monto: number; cobros: number }[]
   total: number
   ventas: number
-  efectivo: { fondo: number; cobrado: number; cobradoGN: number; salidas: number; esperado: number }
+  /** `deEspera`: la parte en efectivo de las ventas que esperan la transferencia (A2): ya está en el cajón. */
+  efectivo: { fondo: number; cobrado: number; deEspera?: number; cobradoGN: number; salidas: number; esperado: number }
   /** W3b: el efectivo cobrado EN GN durante el turno que ⛔ es venta presencial. `null` = GN ⛔ contestó. */
   cobrosGN: CobroGN[] | null
   esperando: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
@@ -138,8 +144,9 @@ export const leerTurno = () => get<{ turno: Turno | null; ultimos: Turno[] }>('a
 export const abrirTurno = (fondo: number, conteo?: Conteo | null) =>
   post<{ turno: Turno }>({ action: 'abrir-turno', fondo, ...(conteo ? { conteo } : {}) }, 'No se pudo abrir el turno.')
 export const sacarEfectivo = (monto: number, motivo: string) => post<{ turno: Turno }>({ action: 'salida', monto, motivo }, 'No se pudo registrar la salida.')
-export const cerrarTurno = (id: string, contado: number, nota: string, conteo?: Conteo | null) =>
-  post<{ turno: Turno }>({ action: 'cerrar-turno', id, contado, nota, ...(conteo ? { conteo } : {}) }, 'No se pudo cerrar el turno.')
+/** `sinCobrosGN`: cerrar aunque GN ⛔ contestó los cobros web (A3); el servidor exige la nota. */
+export const cerrarTurno = (id: string, contado: number, nota: string, conteo?: Conteo | null, sinCobrosGN = false) =>
+  post<{ turno: Turno }>({ action: 'cerrar-turno', id, contado, nota, ...(conteo ? { conteo } : {}), ...(sinCobrosGN ? { sinCobrosGN: true } : {}) }, 'No se pudo cerrar el turno.')
 /** El conteo intermedio: ⛔ cierra nada, queda en el turno con lo que tenía que haber. */
 export const contarBilletes = (id: string, conteo: Conteo) => post<{ turno: Turno }>({ action: 'contar', id, conteo }, 'No se pudo guardar el conteo.')
 

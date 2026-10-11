@@ -19,8 +19,10 @@ import {
   abrirTurno,
   sacarEfectivo,
   cerrarTurno,
+  leerVentasTurno,
   contarBilletes,
   type Turno,
+  type Conteo,
   type ResumenTurno,
   reintentarVenta,
   type Candidato,
@@ -42,6 +44,7 @@ import {
 } from '@/lib/caja/cliente'
 import { Badge, Button, Card, Field, Icono, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
 import { HeaderAcciones } from '@/components/layout/acciones'
+import { ConfirmDetalle, useConfirmar } from '@/components/ui/Confirm'
 
 
 /** Un renglón del pedido. */
@@ -762,7 +765,10 @@ export function EsperaTransferencia({ venta, onLlego, onCambio }: { venta: Venta
           </b>
           {seguro ? (
             <>
-              <span style={{ fontSize: font.sm }}>¿Cancelar la venta? No se cobra.</span>
+              <span style={{ fontSize: font.sm }}>
+                ¿Cancelar la venta? No se cobra.
+                {venta.total > monto && <b> Devolver lo cobrado aparte ({plata(venta.total - monto)}).</b>}
+              </span>
               <Button size="sm" tone="danger" loading={trabajando === 'cancelar'} onClick={cancelar}>
                 Cancelar la venta
               </Button>
@@ -851,6 +857,92 @@ export function PedidosWebSinArmar({ datos, error }: { datos: PedidosWeb | null;
           ))}
       </div>
     </Notice>
+  )
+}
+
+const ESTADO_VENTA: Record<string, { texto: string; tono: 'success' | 'danger' | 'warning' | 'neutral' }> = {
+  en_gn: { texto: 'En Gestión Nube', tono: 'success' },
+  borrador: { texto: 'Pendiente en GN', tono: 'danger' },
+  enviando: { texto: 'Pendiente en GN', tono: 'danger' },
+  error: { texto: 'Pendiente en GN', tono: 'danger' },
+  esperando_pago: { texto: 'Esperando transferencia', tono: 'warning' },
+  cancelada: { texto: 'Cancelada', tono: 'neutral' },
+}
+
+/**
+ * B1 (auditoría, 11-oct): las ventas del turno, de la más nueva a la más vieja, con «Reimprimir».
+ * Antes sólo quedaba la última, en memoria. La que espera la transferencia o se canceló ⛔ tiene ticket.
+ */
+export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar }: { nombreCuenta: (id: number) => string; onReimprimir: (v: Venta) => void; onCerrar: () => void }) {
+  const [ventas, setVentas] = useState<Venta[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let vivo = true
+    leerVentasTurno()
+      .then((r) => vivo && setVentas(r.ventas))
+      .catch((e) => vivo && setError((e as Error).message))
+    return () => {
+      vivo = false
+    }
+  }, [])
+  const th: React.CSSProperties = { textAlign: 'left', padding: `${space[1]}px ${space[2]}px`, color: color.mut, fontWeight: weight.semibold, fontSize: font.sm, borderBottom: `1px solid ${color.line}` }
+  const td: React.CSSProperties = { padding: `${space[2]}px`, borderBottom: `1px solid ${color.line}`, fontSize: font.base, verticalAlign: 'middle' }
+  const der: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
+  const cobradas = (ventas ?? []).filter((v) => v.estado !== 'cancelada' && v.estado !== 'esperando_pago')
+  return (
+    <Modal abierto onCerrar={onCerrar} titulo="Ventas del turno" ancho="xl">
+      {error && <Notice tone="danger">{error}</Notice>}
+      {!ventas && !error && <span style={{ color: color.mut }}>Leyendo las ventas…</span>}
+      {ventas && !ventas.length && <span style={{ color: color.mut }}>Sin ventas en el turno.</span>}
+      {ventas && ventas.length > 0 && (
+        <div style={{ display: 'grid', gap: space[2] }}>
+          <span style={{ fontSize: font.sm, color: color.ink2 }}>
+            {cobradas.length === 1 ? '1 venta cobrada' : `${cobradas.length} ventas cobradas`} · {plata(cobradas.reduce((t, v) => t + v.total, 0))}
+          </span>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={th}>Hora</th>
+                  <th style={th}>Venta</th>
+                  <th style={{ ...th, ...der }}>Prendas</th>
+                  <th style={th}>Forma de pago</th>
+                  <th style={{ ...th, ...der }}>Total</th>
+                  <th style={th}>Estado</th>
+                  <th style={th} />
+                </tr>
+              </thead>
+              <tbody>
+                {ventas.map((v) => {
+                  const e = ESTADO_VENTA[v.estado] ?? { texto: v.estado, tono: 'neutral' as const }
+                  const prendas = (v.renglones ?? []).reduce((t, r) => t + r.cantidad, 0)
+                  const conTicket = v.estado !== 'cancelada' && v.estado !== 'esperando_pago'
+                  return (
+                    <tr key={v.id}>
+                      <td style={td}>{hora(v.creada_en)}</td>
+                      <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>{v.gn_number ? `#${v.gn_number}` : `Provisoria ${numeroProvisorio(v.id)}`}</td>
+                      <td style={{ ...td, ...der }}>{prendas || '—'}</td>
+                      <td style={td}>{[...new Set(v.pagos.map((p) => nombreCuenta(p.cuenta)))].join(' + ')}</td>
+                      <td style={{ ...td, ...der, fontWeight: weight.semibold }}>{plata(v.total)}</td>
+                      <td style={td}>
+                        <Badge tone={e.tono}>{e.texto}</Badge>
+                      </td>
+                      <td style={{ ...td, textAlign: 'right' }}>
+                        {conTicket && (
+                          <Button size="sm" variant="outline" onClick={() => onReimprimir(v)}>
+                            Reimprimir
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -1125,8 +1217,27 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
   const [nota, setNota] = useState('')
   const [trabajando, setTrabajando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // A3 (auditoría, 11-oct): GN ⛔ contestó los cobros web ⇒ el servidor frena; cerrar igual es explícito y con nota.
+  const [sinGN, setSinGN] = useState<{ total: number; conteo: Conteo | null } | null>(null)
+  const { confirmar } = useConfirmar()
   const r = turno.resumen
   const momento = `cierre:${turno.id}`
+
+  async function cerrar(total: number, conteo: Conteo | null, sinCobrosGN: boolean) {
+    setTrabajando(true)
+    setError(null)
+    try {
+      const x = await cerrarTurno(turno.id, total, nota.trim(), conteo, sinCobrosGN)
+      olvidarConteo(momento)
+      onCerrado(x.turno)
+    } catch (e) {
+      if ((e as { datos?: { sinCobrosGN?: boolean } }).datos?.sinCobrosGN) setSinGN({ total, conteo })
+      setError((e as Error).message)
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
   return (
     <CalculadoraBilletes
       momento={momento}
@@ -1135,31 +1246,46 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
       accion="Cerrar turno"
       tono="danger"
       aMano
+      vacioApagado
       esperado={r?.efectivo.esperado ?? null}
       trabajando={trabajando}
       error={error}
       onCerrar={onCerrar}
       extra={
         <div style={{ display: 'grid', gap: space[1], fontSize: font.sm }}>
-          <Field label="Nota (opcional)">
+          <Field label={sinGN ? 'Nota (obligatoria para cerrar sin los cobros de Gestión Nube)' : 'Nota (opcional)'}>
             <Input value={nota} onChange={(e) => setNota(e.target.value)} autoComplete="off" />
           </Field>
-          {r?.cobrosGN === null && <span style={{ color: color.warningInk }}>Cobros de Gestión Nube: sin leer. Se releen al cerrar.</span>}
+          {r?.cobrosGN === null && !sinGN && <span style={{ color: color.warningInk }}>Cobros de Gestión Nube: sin leer. Se releen al cerrar.</span>}
           {!!r?.esperando.length && <span style={{ color: color.warningInk }}>Transferencias en espera: {r.esperando.length}. Si llegan después, no entran en el cierre.</span>}
+          {sinGN && (
+            <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+              <Button size="sm" variant="outline" tone="danger" disabled={!nota.trim() || trabajando} onClick={() => void cerrar(sinGN.total, sinGN.conteo, true)}>
+                Cerrar sin los cobros de Gestión Nube
+              </Button>
+            </div>
+          )}
         </div>
       }
       onUsar={async (total, conteo) => {
-        setTrabajando(true)
-        setError(null)
-        try {
-          const x = await cerrarTurno(turno.id, total, nota.trim(), conteo)
-          olvidarConteo(momento)
-          onCerrado(x.turno)
-        } catch (e) {
-          setError((e as Error).message)
-        } finally {
-          setTrabajando(false)
-        }
+        // A10 (auditoría, 11-oct): el cierre ⛔ se reabre ⇒ ⛔ en un clic. Se confirma viendo los tres números.
+        const esperado = r?.efectivo.esperado ?? null
+        const dif = esperado == null ? null : Math.round((total - esperado) * 100) / 100
+        const ok = await confirmar({
+          titulo: 'Cerrar turno',
+          mensaje: (
+            <div style={{ display: 'grid', gap: space[2] }}>
+              {esperado != null && <ConfirmDetalle label="Esperado" valor={plata(esperado)} />}
+              <ConfirmDetalle label="Contado" valor={plata(total)} />
+              {dif != null && <ConfirmDetalle label="Diferencia" valor={textoDiferencia(dif)} />}
+              {total === 0 && !!esperado && <b style={{ color: color.dangerInk }}>Contado $0 contra {plata(esperado)} esperados.</b>}
+              <span>El cierre queda guardado y no se reabre.</span>
+            </div>
+          ),
+          ok: 'Cerrar turno',
+          tono: 'danger',
+        })
+        if (ok) await cerrar(total, conteo, false)
       }}
     />
   )
@@ -1316,6 +1442,7 @@ export function ResumenTurnoDatos({
             <span>Fondo {plata(r.efectivo.fondo)}</span>
             <span>+ Efectivo cobrado {plata(r.efectivo.cobrado)}</span>
             {r.efectivo.cobradoGN > 0 && <span>+ Cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</span>}
+            {!!r.efectivo.deEspera && <span>+ Efectivo de ventas que esperan la transferencia {plata(r.efectivo.deEspera)}</span>}
             <span>− Salidas {plata(r.efectivo.salidas)}</span>
             <b>= Efectivo esperado {plata(r.efectivo.esperado)}</b>
           </div>

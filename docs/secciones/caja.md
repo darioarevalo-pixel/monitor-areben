@@ -37,8 +37,19 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - 🔑 **El id de la venta es el `integration_id` de GN, nace con el carrito y vive en el
   `localStorage` con él.** Reintentar con el mismo id ⇒ GN contesta 409 = «ya está». Se renueva sólo
   cuando el servidor contestó: renovarlo antes de saber es la forma de duplicar una venta.
+  🔴 **El mismo id con OTRO pedido ⛔ es un reintento (auditoría A1, 11-oct)**: `mismaVenta`
+  (`core.core.js`) compara lo que MANDÓ la pantalla —total, prendas (producto, talle, cantidad, precio) y
+  cuentas— contra la fila, ⛔ recalcula. Distinto ⇒ 409 `yaCobrada` con la venta guardada: el POS la pone
+  en «Última venta» para reimprimir y deja el carrito con un id nuevo. El borrador anota `enviado`, y
+  «Vaciar pedido» renueva el id sólo si con él ⛔ se mandó nada. El ticket sale de la FILA guardada, ⛔
+  del carrito.
 - 🔑 **Con GN caído se cobra igual**: el ticket sale con el número provisorio (8 letras del id) y la
-  venta queda en el cartel rojo de Pendientes; la cola la reintenta cada 10 min.
+  venta queda en el cartel rojo de Pendientes. 🔑 **La reintenta el POS, cada 3 min mientras está
+  abierto** (`reintentar-pendientes`, auditoría E, 11-oct): de a 2 por vuelta (techo de 30 s), las que GN
+  ⛔ rechazó y las tocadas hace menos de 2 min ⛔ (`pendientesParaReintentar`, `enviar.core.js`, la
+  MISMA del respaldo). 🔴 El respaldo de GitHub dice `*/10` y corrió **~3 veces por día** (7 al 11-oct):
+  es para cuando nadie tiene el POS abierto, ⛔ un reloj. `enviarVenta` marca `enviando` sólo una que
+  SIGUE sin llegar y un error ⛔ pisa un `en_gn`: dos envíos a la vez ⛔ la vuelven a `error`.
 - 🔴 `referencias` trae el **saldo** de las cuentas de GN: al navegador va sólo id, nombre y regla.
 - 🔑 **El stock que se vende es el de LOCAL** (percha + el «depósito» de atrás del local). El Depósito de
   GN ⛔ se vende desde la caja: sale como «para reponer» (Bruno, 4-oct).
@@ -99,6 +110,10 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   a `ponerEnUso` de `api/_pagos-recibidos.js`). Cargar una cuenta nueva sigue en Pagos recibidos.
   Sola, sólo sin duda: UN pago posterior y ninguna otra venta esperando ese monto. Con duda (o un
   pago de hasta 10 min ANTES de confirmar) elige la cajera. ⛔ Alcanza el comprobante del teléfono.
+  🔑 **Se leen los días desde el de la venta hasta hoy** (tope 3: el de la venta y los últimos; MP se
+  lee cada 5 s) — antes sólo el de la venta y un pago después de medianoche ⛔ cruzaba nunca (A4). Y un
+  pago ANTERIOR a la venta (la cancelada y vuelta a escanear) se OFRECE para elegir desde la medianoche
+  de ese día (`antesManual`, obligatorio en `cruzarTransferencia`), ⛔ entra solo.
 - 🔴 **Un pago de MP confirma UNA venta**: `mp_pago_id` con índice único. Y **sólo `cruzar` saca
   una venta de `esperando_pago`**: `reintentar`, el respaldo de la cola y `enviarVenta` se niegan.
 - ⚠️ `cancelada` = esperaba y ⛔ llegó. Cancelar una que ya cruzó ⇒ 409. Hay que volver a escanear.
@@ -194,6 +209,18 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   promo queda en `caja_venta.renglones[].promos` y sale en el ticket («Promo 3x2» en vez de «Descuento»).
 - ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
   turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
+  🔴 **Salvo su parte en EFECTIVO (auditoría A2, 11-oct)**: el billete ya está en el cajón ⇒ suma al
+  esperado como `efectivo.deEspera`. Si se cancela deja de sumar, y el cartel dice «Devolver lo cobrado
+  aparte».
+- 🔴 **El cierre FRENA si GN ⛔ contestó los cobros web (auditoría A3, 11-oct)**: sin ellos el esperado
+  queda corto, el cierre diría que sobra y ⛔ se reabre ⇒ 409 `sinCobrosGN`. Cerrar igual es explícito
+  («Cerrar sin los cobros de Gestión Nube») y **con nota obligatoria**; la foto queda con `cobrosGN: null`.
+  Leer más de 5 páginas de cobros también cuenta como «⛔ contestó» (antes cortaba callado).
+- 🔑 **Cerrar turno pide confirmación** con Esperado · Contado · Diferencia, y con la calculadora vacía
+  el botón queda apagado (A10): un $0 de verdad se escribe en el total a mano.
+- 🔑 **«Ventas del turno»** (botón del POS, B1, `action=ventas`): las del turno abierto con su estado y
+  «Reimprimir» (el ticket sale de la fila). La que espera la transferencia o se canceló ⛔ tiene ticket.
+  ⛔ Reenvía el mail todavía.
 - ⚠️ Varias partes por transferencia en una venta se esperan como UNA transferencia por la suma.
 
 ## Pendiente
