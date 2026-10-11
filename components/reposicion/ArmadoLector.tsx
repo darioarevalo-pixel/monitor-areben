@@ -146,14 +146,14 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
     }
     setExtra(0)
     if (l.tipo === 'sobra') {
-      setCartel({ titulo: 'Esta prenda SOBRA', texto: `De ${l.linea.name}${talle(l.linea.size) ? ` ${talle(l.linea.size)}` : ''} ya están las ${l.linea.cant} que se pidieron.` })
-      avisar('no', 'Sobra. Dejala en el estante')
+      setCartel({ titulo: 'Prenda excedente', texto: `${l.linea.name}${talle(l.linea.size) ? ` ${talle(l.linea.size)}` : ''}: ya están las ${l.linea.cant}.` })
+      avisar('no', 'Excedente')
     } else if (l.tipo === 'no-pedida') {
-      setCartel({ titulo: 'Esta prenda NO está en la lista', texto: `${l.nombre} no se pidió hoy.` })
-      avisar('no', 'No está en la lista')
+      setCartel({ titulo: 'Prenda no solicitada', texto: `${l.nombre} no está en la reposición de hoy.` })
+      avisar('no', 'No solicitada')
     } else {
-      setCartel({ titulo: 'No reconozco este código', texto: `«${codigo.trim()}» no es ninguna prenda del depósito ni del local.` })
-      avisar('no', 'No reconozco el código')
+      setCartel({ titulo: 'Código desconocido', texto: `«${codigo.trim()}» no corresponde a ninguna prenda.` })
+      avisar('no', 'Código desconocido')
     }
   }
 
@@ -171,8 +171,8 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
     const ok = await confirmar({
       titulo: '¿Descartar este armado?',
       tono: 'danger',
-      ok: 'Descartar el armado',
-      mensaje: 'Se pierde lo escaneado y no se hace ninguna transferencia. Las prendas que ya juntaste van de vuelta al estante.',
+      ok: 'Descartar armado',
+      mensaje: 'Se pierde lo escaneado y no se transfiere nada.',
     })
     if (!ok) return
     try {
@@ -192,19 +192,16 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
         <Button variant="ghost" onClick={onSalir}>
-          ← Volver a la lista
+          ← Volver
         </Button>
         <span style={{ fontSize: font.lg, color: color.ink }}>
-          <b>{r.escaneadas}</b> de <b>{r.pedidas}</b> prendas
-        </span>
-        <span style={{ fontSize: font.sm, color: color.mut }}>
-          {r.completas} de {r.renglones} renglones completos
+          <b>{r.escaneadas}</b> / {r.pedidas} prendas
         </span>
         <span style={{ marginLeft: 'auto', fontSize: font.sm, color: guardado === 'error' ? color.danger : color.mut2 }}>
-          {guardado === 'ok' ? '✓ Guardado' : guardado === 'guardando' ? 'Guardando…' : 'Sin conexión: queda guardado en esta compu y se sube solo'}
+          {guardado === 'ok' ? '✓ Guardado' : guardado === 'guardando' ? 'Guardando…' : 'Sin conexión: guardado en esta compu'}
         </span>
         <Button variant="solid" tone="brand" onClick={() => setTerminar(true)} disabled={r.escaneadas === 0 && !Object.keys(faltantes).length}>
-          Terminar
+          Finalizar
         </Button>
       </div>
 
@@ -217,7 +214,7 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
         className="mo-input"
         type="text"
         autoComplete="off"
-        placeholder="Escaneá cada prenda que juntás…"
+        placeholder="Escanear prenda…"
         aria-label="Código de barras a escanear"
         onFocus={() => setEscuchando(true)}
         onBlur={() => setEscuchando(false)}
@@ -237,7 +234,7 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
           onClick={() => inputRef.current?.focus()}
           style={{ display: 'block', width: '100%', height: 'auto', marginTop: space[2], padding: space[2], border: `1px dashed ${color.warningInk}`, borderRadius: 8, background: 'transparent', color: color.warningInk, fontSize: font.md, cursor: 'pointer' }}
         >
-          El lector no está escribiendo acá. Hacé clic para seguir escaneando.
+          Lector inactivo: hacé clic acá para seguir.
         </button>
       )}
 
@@ -251,14 +248,14 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
       )}
       {completas.length > 0 && (
         <>
-          <h3 style={{ fontSize: font.md, margin: `${space[4]}px 0 ${space[2]}px`, color: color.success }}>Completos ({completas.length})</h3>
+          <h3 style={{ fontSize: font.md, margin: `${space[4]}px 0 ${space[2]}px`, color: color.success }}>Completas ({completas.length})</h3>
           <TablaRenglones lineas={completas} escaneos={escaneos} faltantes={faltantes} onSacar={sacarUna} />
         </>
       )}
 
       <div style={{ marginTop: space[5], display: 'flex', justifyContent: 'flex-end' }}>
         <Button variant="ghost" tone="danger" onClick={() => void onDescartar()}>
-          Descartar el armado
+          Descartar armado
         </Button>
       </div>
 
@@ -302,7 +299,7 @@ function UltimaLectura({ l }: { l: Extract<Lectura, { tipo: 'suma' }> | null }) 
   if (!l)
     return (
       <div style={{ marginTop: space[3], padding: space[4], border: `1px solid ${color.line}`, borderRadius: 'var(--mo-r-xl)', textAlign: 'center', color: color.mut, fontSize: font.md }}>
-        Escaneá una prenda para empezar.
+        Escaneá la primera prenda.
       </div>
     )
   const ok = l.faltan === 0
@@ -318,12 +315,12 @@ function UltimaLectura({ l }: { l: Extract<Lectura, { tipo: 'suma' }> | null }) 
         background: l.exhibir ? 'var(--mo-warning-bg, #FEF3C7)' : 'transparent',
       }}
     >
-      {l.exhibir && <div style={{ fontSize: font.lg, fontWeight: 800, color: color.warningInk, marginBottom: space[2] }}>PARA EXHIBIR: alarma + etiqueta de precio + etiqueta de formas de pago</div>}
+      {l.exhibir && <div style={{ fontSize: font.lg, fontWeight: 800, color: color.warningInk, marginBottom: space[2] }}>Para exhibir: alarma y etiquetas</div>}
       <div style={{ fontSize: 22, fontWeight: 700, color: color.ink }}>
         {l.linea.name} {talle(l.linea.size) && <span style={{ fontWeight: 400 }}>· {talle(l.linea.size)}</span>}
       </div>
       <div style={{ fontSize: font.lg, marginTop: space[1], color: ok ? color.success : color.ink2 }}>
-        {ok ? `✓ Completo: las ${l.linea.cant}` : `${l.n} de ${l.linea.cant} · faltan ${l.faltan}`}
+        {ok ? `✓ Completa (${l.linea.cant})` : `${l.n} / ${l.linea.cant}`}
       </div>
     </div>
   )
@@ -336,10 +333,10 @@ function TablaRenglones({ lineas, escaneos, faltantes, onSacar }: { lineas: Line
         <Tr>
           <Th width={130}>SKU</Th>
           <Th>Producto</Th>
-          <Th width={90}>Talle</Th>
-          <Th align="center" width={80}>Pedidas</Th>
-          <Th align="center" width={90}>Escaneadas</Th>
-          <Th width={150} />
+          <Th width={110}>Variante</Th>
+          <Th align="center" width={80}>Pedido</Th>
+          <Th align="center" width={90}>Escaneado</Th>
+          <Th width={60} />
         </Tr>
       </THead>
       <TBody>
@@ -357,7 +354,7 @@ function TablaRenglones({ lineas, escaneos, faltantes, onSacar }: { lineas: Line
                 )}
                 {faltantes[l.vid] === 'no-estaba' && (
                   <span style={{ marginLeft: 6 }}>
-                    <Badge tone="danger">no estaba</Badge>
+                    <Badge tone="danger">no encontrada</Badge>
                   </span>
                 )}
               </Td>
@@ -368,8 +365,8 @@ function TablaRenglones({ lineas, escaneos, faltantes, onSacar }: { lineas: Line
               </Td>
               <Td align="right">
                 {n > 0 && (
-                  <Button size="sm" variant="ghost" onMouseDown={(e) => e.preventDefault()} onClick={() => onSacar(l)} title="Si escaneaste una de más por error">
-                    Sacar una
+                  <Button size="sm" variant="ghost" onMouseDown={(e) => e.preventDefault()} onClick={() => onSacar(l)} title="Restar una (escaneo por error)" aria-label={`Restar una de «${l.name}»`}>
+                    −1
                   </Button>
                 )}
               </Td>
@@ -393,16 +390,15 @@ function CartelFreno({ cartel, extra, onSeguir }: { cartel: Cartel; extra: numbe
         <div style={{ fontSize: 56, lineHeight: 1 }}>✋</div>
         <div style={{ fontSize: 32, fontWeight: 800, marginTop: space[3] }}>{cartel.titulo}</div>
         <div style={{ fontSize: font.lg, marginTop: space[3] }}>{cartel.texto}</div>
-        <div style={{ fontSize: font.lg, marginTop: space[3], fontWeight: 600 }}>No la pongas con el pedido: dejala en el estante.</div>
+        <div style={{ fontSize: font.lg, marginTop: space[3], fontWeight: 600 }}>Dejala en el estante.</div>
         {extra > 0 && (
           <div style={{ fontSize: font.md, marginTop: space[3], padding: space[3], background: 'rgba(0,0,0,.2)', borderRadius: 'var(--mo-r-xl)' }}>
-            Además {extra === 1 ? 'se escaneó 1 prenda' : `se escanearon ${extra} prendas`} con este cartel abierto: no {extra === 1 ? 'se contó' : 'se contaron'}. Volvé a
-            escanear{extra === 1 ? 'la' : 'las'} después de cerrar el cartel.
+            {extra === 1 ? '1 lectura' : `${extra} lecturas`} con este aviso abierto: no {extra === 1 ? 'se contó' : 'se contaron'}. Volvé a escanear.
           </div>
         )}
         <div style={{ marginTop: space[5] }}>
           <Button variant="solid" tone="neutral" size="lg" onMouseDown={(e) => e.preventDefault()} onClick={onSeguir}>
-            Seguir escaneando
+            Continuar
           </Button>
         </div>
       </div>
@@ -463,12 +459,11 @@ function Terminar({ abierto, armado, escaneos, faltantes, setEscaneos, setFaltan
 
   if (hecho)
     return (
-      <Modal abierto={abierto} onCerrar={onTransferido} titulo="Listo: ya está en Gestión Nube" cerrarConFondo={false} pie={<Button variant="solid" tone="brand" onClick={onTransferido}>Volver a la lista</Button>}>
-        <p style={{ fontSize: font.md }}>
-          Se {hecho.unidades === 1 ? 'pasó 1 prenda' : `pasaron ${hecho.unidades ?? r.escaneadas} prendas`} del depósito al local
-          {hecho.transfer_id ? ` (transferencia ${hecho.transfer_id})` : ''}. No hace falta cargar nada en la app de Gestión Nube.
+      <Modal abierto={abierto} onCerrar={onTransferido} titulo="Transferencia realizada" cerrarConFondo={false} pie={<Button variant="solid" tone="brand" onClick={onTransferido}>Volver</Button>}>
+        <p style={{ fontSize: font.md, margin: 0 }}>
+          {hecho.unidades ?? r.escaneadas} {(hecho.unidades ?? r.escaneadas) === 1 ? 'prenda transferida' : 'prendas transferidas'} al local
+          {hecho.transfer_id ? ` · Transferencia ${hecho.transfer_id}` : ''}.
         </p>
-        <p style={{ fontSize: font.sm, color: color.mut }}>Ahora llevá las prendas al local.</p>
       </Modal>
     )
 
@@ -476,43 +471,42 @@ function Terminar({ abierto, armado, escaneos, faltantes, setEscaneos, setFaltan
     <Modal
       abierto={abierto}
       onCerrar={enviando ? () => {} : onCerrar}
-      titulo="Terminar el armado"
+      titulo="Finalizar armado"
       ancho="ancho"
       cerrarConFondo={false}
       pie={
         <>
           <Button variant="ghost" onClick={onCerrar} disabled={enviando}>
-            Seguir escaneando
+            Volver al escaneo
           </Button>
           {rechazados.length > 0 ? (
             <Button variant="solid" tone="brand" onClick={sacarRechazadas} loading={enviando}>
-              Sacarlas y transferir el resto
+              Excluirlas y transferir
             </Button>
           ) : (
             <Button variant="solid" tone="brand" onClick={() => void transferir()} loading={enviando} disabled={sinContestar.length > 0 || r.escaneadas === 0}>
-              Pasar {r.escaneadas} {r.escaneadas === 1 ? 'prenda' : 'prendas'} al local
+              Transferir {r.escaneadas} {r.escaneadas === 1 ? 'prenda' : 'prendas'}
             </Button>
           )}
         </>
       }
     >
       <p style={{ fontSize: font.md, marginTop: 0 }}>
-        Escaneaste <b>{r.escaneadas}</b> de <b>{r.pedidas}</b>. Al confirmar, el Monitor hace la transferencia del depósito al local en Gestión Nube con lo
-        escaneado. Lo que no escaneaste no se mueve.
+        <b>{r.escaneadas}</b> / {r.pedidas} prendas escaneadas. Se transfieren al local solo las escaneadas.
       </p>
 
       {incompletas.length > 0 && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', margin: `${space[3]}px 0` }}>
-            <span style={{ fontSize: font.md, fontWeight: 600, flex: '1 1 200px' }}>¿Qué pasó con lo que falta?</span>
+            <span style={{ fontSize: font.md, fontWeight: 600, flex: '1 1 200px' }}>Sin escanear</span>
             {incompletas.length > 1 && (
               <>
                 <span style={{ fontSize: font.sm, color: color.mut }}>Todas:</span>
                 <Button size="sm" variant="ghost" onClick={() => setFaltantes((f) => ({ ...f, ...Object.fromEntries(incompletas.map((l) => [l.vid, 'no-estaba' as const])) }))}>
-                  No estaban
+                  No encontradas
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setFaltantes((f) => ({ ...f, ...Object.fromEntries(incompletas.map((l) => [l.vid, 'despues' as const])) }))}>
-                  Para después
+                  Pendientes
                 </Button>
               </>
             )}
@@ -525,19 +519,19 @@ function Terminar({ abierto, armado, escaneos, faltantes, setEscaneos, setFaltan
               <div key={l.vid} style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', padding: `${space[2]}px 0`, borderBottom: `1px solid ${color.bg2}` }}>
                 <span style={{ flex: '1 1 240px', fontSize: font.md }}>
                   {l.name} {talle(l.size) && <span style={{ color: color.mut }}>· {talle(l.size)}</span>}
-                  <span style={{ color: color.danger, marginLeft: 8 }}>faltan {l.cant - n}</span>
+                  <span style={{ color: color.danger, marginLeft: 8 }}>{l.cant - n}</span>
                 </span>
                 <Button size="sm" variant={m === 'no-estaba' ? 'solid' : 'outline'} tone={m === 'no-estaba' ? 'danger' : 'neutral'} onClick={() => elegir('no-estaba')}>
-                  No estaba
+                  No encontrada
                 </Button>
                 <Button size="sm" variant={m === 'despues' ? 'solid' : 'outline'} tone={m === 'despues' ? 'brand' : 'neutral'} onClick={() => elegir('despues')}>
-                  Lo dejo para después
+                  Pendiente
                 </Button>
               </div>
             )
           })}
           {sinContestar.length > 0 && (
-            <p style={{ fontSize: font.sm, color: color.mut, marginTop: space[2] }}>Contestá {sinContestar.length === 1 ? 'el que queda' : `los ${sinContestar.length} que quedan`} para poder transferir.</p>
+            <p style={{ fontSize: font.sm, color: color.mut, marginTop: space[2] }}>Indicá qué pasó con {sinContestar.length === 1 ? 'la que queda' : `las ${sinContestar.length} que quedan`}.</p>
           )}
         </>
       )}
@@ -558,7 +552,7 @@ function Terminar({ abierto, armado, escaneos, faltantes, setEscaneos, setFaltan
                 ))}
               </ul>
             )}
-            {rechazados.length > 0 && <div style={{ marginTop: space[2] }}>Esas prendas dejalas aparte: hay una diferencia de stock para revisar.</div>}
+            {rechazados.length > 0 && <div style={{ marginTop: space[2] }}>Separalas: hay una diferencia de stock.</div>}
           </Notice>
         </div>
       )}

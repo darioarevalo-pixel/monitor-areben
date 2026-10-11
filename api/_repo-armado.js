@@ -88,7 +88,7 @@ export default async function handler(req, res) {
       const sentido = SENTIDOS.includes(b.sentido) ? b.sentido : null
       if (!id || !linea || !sentido) return res.status(400).json({ error: 'faltan id, línea o sentido' })
       const pedido = sanearPedido(b.pedido)
-      if (!pedido.length) return res.status(400).json({ error: 'La lista está vacía: no hay nada para armar.' })
+      if (!pedido.length) return res.status(400).json({ error: 'No hay prendas para reponer.' })
       const row = { id, store, linea, sentido, fecha: fechaAR(), persona: perfil.name || null, estado: 'en_curso', pedido }
       const { error } = await sb.from('repo_armado').insert(row)
       if (error) {
@@ -154,7 +154,7 @@ async function transferir(sb, res, armado, b, perfil) {
   const escaneos = sanearEscaneos(b.escaneos, armado.pedido)
   const faltantes = sanearFaltantes(b.faltantes, armado.pedido)
   const items = itemsTransferencia(armado.pedido, escaneos)
-  if (!items.length) return res.status(400).json({ error: 'No hay nada escaneado para transferir.' })
+  if (!items.length) return res.status(400).json({ error: 'No hay prendas escaneadas.' })
 
   // 🔴 El candado: de `en_curso` a `transfiriendo` en UN update condicionado. Si otro clic llegó
   // primero, acá no vuelve ninguna fila y no se llama a GN.
@@ -196,7 +196,7 @@ async function transferir(sb, res, armado, b, perfil) {
     datos = await resp.json().catch(() => null)
   } catch (e) {
     await marcar({ estado: 'revisar', error: `Se cortó la conexión con Gestión Nube: ${e instanceof Error ? e.message : e}` })
-    return res.status(502).json({ error: 'Se cortó la conexión con Gestión Nube y no se sabe si la transferencia se hizo. Hay que mirarla en Gestión Nube antes de seguir.', estado: 'revisar' })
+    return res.status(502).json({ error: 'Sin respuesta de Gestión Nube. Verificá si la transferencia figura antes de seguir.', estado: 'revisar' })
   }
 
   if (resp.ok && datos && (datos.executed === true || datos.transfer_id)) {
@@ -212,20 +212,20 @@ async function transferir(sb, res, armado, b, perfil) {
       if (it && it.status === 'error' && items[i]) rechazados.push({ vid: items[i].vid, reason: it.reason || null })
     })
     await marcar({ estado: 'en_curso', error: null })
-    return res.status(422).json({ error: 'Gestión Nube no aceptó algunas prendas. No se movió nada.', rechazados })
+    return res.status(422).json({ error: 'Gestión Nube rechazó estas prendas. No se transfirió nada.', rechazados })
   }
 
   if (resp.status === 429) {
     await marcar({ estado: 'en_curso', error: null })
-    return res.status(429).json({ error: 'Gestión Nube está ocupado. Esperá un minuto y volvé a intentar: no se movió nada.' })
+    return res.status(429).json({ error: 'Gestión Nube está ocupado. No se transfirió nada: reintentá en un minuto.' })
   }
 
   if (resp.status === 401 || resp.status === 403) {
     await marcar({ estado: 'en_curso', error: null })
-    return res.status(502).json({ error: 'La clave de Gestión Nube no tiene permiso para transferir. No se movió nada: avisale a Darío.' })
+    return res.status(502).json({ error: 'Sin permiso para transferir en Gestión Nube. No se transfirió nada.' })
   }
 
   const msg = (datos && (datos.message || datos.error)) || `HTTP ${resp.status}`
   await marcar({ estado: 'revisar', error: `Respuesta inesperada de Gestión Nube: ${String(msg).slice(0, 300)}` })
-  return res.status(502).json({ error: 'Gestión Nube contestó algo raro y no se sabe si la transferencia se hizo. Hay que mirarla en Gestión Nube antes de seguir.', estado: 'revisar' })
+  return res.status(502).json({ error: 'Respuesta inesperada de Gestión Nube. Verificá si la transferencia figura antes de seguir.', estado: 'revisar' })
 }

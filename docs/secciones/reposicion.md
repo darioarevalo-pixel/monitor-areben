@@ -30,6 +30,15 @@ contra las ventas reales; la conversación entera está en la nota viva de Darí
   un test).
 - `pdf.ts` es de las dos marcas: `FilaA4` **sin `local`** = papel sin columnas de stock (Zattia).
 
+## Las palabras de la pantalla (Darío, 12-oct-2026)
+
+«Se usa mucho texto y pocas palabras formales.» Pestañas **Reposición** / **Devolución**; columnas
+**Venta semanal · Stock ideal · Motivo**; botones **Iniciar armado · Finalizar · Transferir N
+prendas · Actualizar stock · Imprimir A4 / ticket**. El **Motivo** dice sólo lo que las columnas
+no dicen (vacío en el caso normal). **Una sola tabla** con el producto como separador: antes era una
+tabla por producto con los encabezados repetidos. Antes de sumar un texto, ver si ya lo dice otra
+columna.
+
 ## Reglas que el código no dice
 
 - 🔑 **«Local» en GN = lo colgado + el depósito del local.** Con 1 en Local, ese 1 es la exhibida, y

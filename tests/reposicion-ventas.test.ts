@@ -32,7 +32,7 @@ describe('objetivo: el mínimo depende de lo que vende (11-oct)', () => {
     const r = d(item({ vv: 38, s7: 16 }))
     expect(r.objetivo).toBe(6)
     expect(r.pico).toBe(true)
-    expect(r.porque).toContain('Esta semana vendió 16')
+    expect(r.porque).toBe('Pico de venta: 16 esta semana')
   })
   it('una sola venta en la semana no le sube el mínimo a lo que vende poco', () => {
     const r = d(item({ vv: 2, s7: 1 }))

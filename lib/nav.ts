@@ -500,7 +500,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   prm: 'La relación con cada proveedor: quién es, dónde queda, qué anotaste en cada visita, qué producto suyo te interesa y a qué precio, y qué quedó prometido de un lado y del otro. Al lado, lo que el sistema ya mide: si entrega lo que le pedimos y cómo vendió su mercadería. Lo de la calle se carga en Recorridas.',
   recepciones: 'Lo que entró de cada orden de compra: lo pedido contra lo contado, renglón por renglón, con lo que faltó y lo que sobró por separado, el cumplimiento de cada proveedor y los artículos que llegaron sin ficha en Gestión Nube. Llega sola cuando el sistema de Ingresos confirma una OC; acá no se carga nada a mano.',
   ubicaciones: 'Ubicación física (NN-N) de cada producto en el Depósito Minorista.',
-  reposicion: 'Reposición diaria del local: variantes bajo mínimo con stock en depósito.',
+  reposicion: 'Reposición diaria del local.',
   cobranzas: 'Compras online con pago manual: cuáles faltan cobrar, registrar el cobro y dejarlo listo para marcar pagado en Tienda Nube.',
   insumos: 'Lo que se consume y no se vende: bolsas, rollos, papel. Qué hay en cada lugar, cuánto sale y cuánto dura.',
   modelos: 'El padrón de las modelos: quién es cada una, cómo se la contacta, quién la representa, qué talle usa y cuánto mide. El talle y la altura de acá son los que salen a la descripción del producto cuando la modelo se elige en la sesión de fotos.',

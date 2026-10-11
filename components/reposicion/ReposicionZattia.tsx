@@ -15,7 +15,7 @@
  * Devolver al depósito todavía no mueve stock: Camila lo sigue cargando a mano (tanda 2).
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { useRecargarDatos } from '@/components/productos/BotonRecargar'
@@ -33,7 +33,7 @@ import { imprimirDevolucion } from '@/lib/reposicion/rollo'
 import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
 import { ArmadoLector } from './ArmadoLector'
-import { abrirArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, type Armado } from '@/lib/reposicion/armado'
+import { abrirArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, type Armado } from '@/lib/reposicion/armado'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 type Pestana = 'llevar' | 'devolver'
@@ -124,14 +124,14 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   const onArmar = async () => {
     if (armadoAbierto) return setArmando(true)
     const pedido = pedidoDesde(llevar, cantLlevar)
-    if (!pedido.length) return toast.aviso('No hay prendas para llevar.')
+    if (!pedido.length) return toast.aviso('No hay prendas para reponer.')
     // Una lista armada con stock viejo pide lo que ya se llevó ayer.
     if (edadMin != null && edadMin >= 360) {
       const ok = await confirmar({
-        titulo: 'El stock es de ' + antiguedad,
+        titulo: 'Stock desactualizado (' + antiguedad + ')',
         tono: 'warning',
-        ok: 'Empezar igual',
-        mensaje: 'Conviene tocar «Cargar de Gestión Nube» antes de empezar, así la lista sale con el stock de ahora.',
+        ok: 'Iniciar igual',
+        mensaje: 'Conviene actualizar el stock antes de iniciar el armado.',
       })
       if (!ok) return
     }
@@ -139,7 +139,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     try {
       const d = await abrirArmado(linea, 'llevar', pedido)
       setArmado(d.armado)
-      if (d.yaHabia) toast.aviso('Ya había un armado en curso: seguís con ése.')
+      if (d.yaHabia) toast.aviso('Ya había un armado en curso: se continúa ese.')
       setArmando(true)
     } catch (e) {
       toast.error((e as Error).message)
@@ -215,22 +215,16 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     <>
       <HeaderAcciones>
         <InfoPopover titulo="Reposición">
-          Las cantidades salen de lo que se vendió en el local y en Tienda Nube: manda lo más alto entre los últimos 7 días y los
-          últimos {cv.ventanaDias}, así lo que se dispara recibe más enseguida y una semana floja no lo devuelve.
+          <b>Stock ideal</b>: {cv.minimoBajo} por variante (1 exhibida + reserva); {cv.minimo} si vende {cv.umbralSemana} o más por semana. Lo que vende mucho
+          suma reserva para {cv.coberturaDias} días.
           <br />
           <br />
-          De cada variante tiene que haber como mínimo {cv.minimoBajo} en el local si vende menos de {cv.umbralSemana} por semana, y{' '}
-          {cv.minimo} si vende más. Lo que vende mucho tiene reserva para {cv.coberturaDias} días.
+          <b>Reposición</b>: lo que falta para llegar al stock ideal. Si el local está en 0, la primera va <b>para exhibir</b> (alarma y etiquetas).
+          <br />
+          <b>Devolución</b>: lo que supera el stock ideal, hasta {cv.topeDevolucion} prendas por día, primero lo que no se vende.
           <br />
           <br />
-          <b>Llevar al local</b>: {cv.loteMin > 1 ? `se pide cuando faltan al menos ${cv.loteMin}, o cuando quedó sólo la exhibida` : 'se repone lo que se vendió'}.
-          Lo que llega a un local en 0 sale marcado <b>para exhibir</b>: la primera va con alarma y las dos etiquetas.
-          <br />
-          <b>Devolver al depósito</b>: lo que está de más, hasta {cv.topeDevolucion} prendas por día, primero lo que no se vendió.
-          <br />
-          <br />
-          <b>Armar con el lector</b>: se escanea cada prenda contra la lista y, al terminar, el Monitor hace la transferencia del depósito al local en
-          Gestión Nube con lo escaneado. Devolver al depósito todavía se carga a mano en Gestión Nube.
+          Ventas del local y de Tienda Nube: últimos {cv.ventanaDias} días y última semana.
         </InfoPopover>
         <Button variant="ghost" onClick={() => setConfigOpen(true)}>
           Configurar
@@ -238,8 +232,8 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         <Button variant="ghost" onClick={() => void Promise.all([rep.traer(), recargar()])} loading={recargando} title="Vuelve a leer los datos ya sincronizados, sin ir a Gestión Nube">
           Recargar
         </Button>
-        <Button variant="outline" onClick={() => void onActualizar()} loading={syncing} title="Le pide el stock y el catálogo a Gestión Nube (~2 min)">
-          {syncing ? syncLabel || 'Actualizando…' : 'Cargar de Gestión Nube'}
+        <Button variant="outline" onClick={() => void onActualizar()} loading={syncing} title="Carga el stock de Gestión Nube (unos 2 minutos)">
+          {syncing ? syncLabel || 'Actualizando…' : 'Actualizar stock'}
         </Button>
       </HeaderAcciones>
 
@@ -256,14 +250,14 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
           value={tab}
           onChange={(k) => setTab(k as Pestana)}
           items={[
-            { key: 'llevar', label: 'Llevar al local', badge: totalLlevar || undefined },
-            { key: 'devolver', label: 'Devolver al depósito', badge: devolver.total || undefined },
+            { key: 'llevar', label: 'Reposición', badge: totalLlevar || undefined },
+            { key: 'devolver', label: 'Devolución', badge: devolver.total || undefined },
           ]}
         />
         <span style={{ marginLeft: 'auto', fontSize: font.sm, color: edadMin != null && edadMin >= 360 ? color.warningInk : color.mut2 }}>
           {rep.lastUpdate
-            ? `Stock de Gestión Nube: ${rep.lastUpdate.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} (${antiguedad})`
-            : 'Stock de Gestión Nube: sin datos de cuándo se sincronizó'}
+            ? `Stock ${antiguedad} · ${rep.lastUpdate.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+            : 'Stock sin fecha de actualización'}
         </span>
       </div>
 
@@ -271,20 +265,20 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
             <span style={{ fontSize: font.md, color: color.ink2 }}>
-              <b>{totalLlevar}</b> prendas para llevar · <b>{llevar.length}</b> variantes de <b>{new Set(llevar.map((f) => f.it.pid)).size}</b> productos
+              <b>{totalLlevar}</b> prendas · {llevar.length} variantes
             </span>
             {paraExhibir > 0 && (
-              <Badge tone="warning">
-                {paraExhibir} para dejar listas para exhibir: alarma + etiqueta de precio + etiqueta de formas de pago
-              </Badge>
+              <span title="La primera va con alarma, etiqueta de precio y etiqueta de formas de pago">
+                <Badge tone="warning">{paraExhibir} para exhibir</Badge>
+              </span>
             )}
             {Object.keys(manual).length > 0 && (
               <Button size="sm" variant="ghost" onClick={() => setManual({})}>
-                ↺ Volver a lo calculado
+                ↺ Restablecer cantidades
               </Button>
             )}
             <Button variant="outline" style={{ marginLeft: 'auto' }} onClick={() => void onImprimirLlevar()} disabled={!llevar.length}>
-              Imprimir lista (A4)
+              Imprimir A4
             </Button>
             {armado?.estado !== 'revisar' && (
               <Button
@@ -293,20 +287,20 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
                 onClick={() => void onArmar()}
                 loading={abriendo}
                 disabled={!armadoAbierto && (!llevar.length || esperandoStock)}
-                title={esperandoStock ? 'Primero tocá «Cargar de Gestión Nube»: la lista todavía no tiene en cuenta lo que se acaba de pasar al local' : undefined}
+                title={esperandoStock ? 'Actualizá el stock: la lista todavía no descuenta lo transferido' : undefined}
               >
-                {armadoAbierto ? 'Seguir armando' : 'Armar con el lector'}
+                {armadoAbierto ? 'Continuar armado' : 'Iniciar armado'}
               </Button>
             )}
           </div>
           <EstadoArmado armado={armado} onResolver={(h) => void onResolver(h)} />
           {!llevar.length ? (
-            <EmptyState icon="🎉" title="No hay prendas para llevar al local" hint="Todo está en su cantidad, o lo que falta no está en el depósito." dashed />
+            <EmptyState icon="🎉" title="No hay prendas para reponer" hint="El local tiene su stock ideal, o lo que falta no está en el depósito." dashed />
           ) : (
             <TablaVentas
               filas={llevar}
               cantidad={cantLlevar}
-              titulo="Llevar"
+              titulo="Reponer"
               editar={(f, v) =>
                 setManual((m) => {
                   const n = { ...m }
@@ -324,25 +318,25 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             <span style={{ fontSize: font.md, color: color.ink2 }}>
               {verTodo ? (
                 <>
-                  Lista entera: <b>{devolver.total}</b> prendas de más en el local
+                  <b>{devolver.total}</b> prendas en total
                 </>
               ) : (
                 <>
-                  Hoy: <b>{totalDevolverHoy}</b> prendas (tope {cv.topeDevolucion})
-                  {devolver.pendiente > 0 && <> · quedan {devolver.pendiente} para los próximos días</>}
+                  <b>{totalDevolverHoy}</b> prendas hoy
+                  {devolver.pendiente > 0 && <> · {devolver.pendiente} pendientes</>}
                 </>
               )}
             </span>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut, cursor: 'pointer' }}>
               <input type="checkbox" checked={verTodo} onChange={(e) => setVerTodo(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} />
-              Ver la lista entera (para la limpieza grande)
+              Ver todo
             </label>
             <Button variant="solid" tone="brand" style={{ marginLeft: 'auto' }} onClick={() => void onImprimirDevolver()} disabled={!devolver.filas.length}>
-              Imprimir (80 mm)
+              Imprimir ticket
             </Button>
           </div>
           {!devolver.filas.length ? (
-            <EmptyState icon="🎉" title="No hay prendas para devolver al depósito" hint="Nada está por encima de lo que se vende." dashed />
+            <EmptyState icon="🎉" title="No hay prendas para devolver" hint="Ninguna variante supera su stock ideal." dashed />
           ) : (
             <TablaVentas filas={devolver.filas} cantidad={(f) => (f as FilaVentas & { devolverHoy: number }).devolverHoy} titulo="Devolver" />
           )}
@@ -351,8 +345,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
 
       {exhibidos.length > 0 && (
         <p style={{ marginTop: space[4], fontSize: font.sm, color: color.mut }}>
-          {new Set(exhibidos.map((f) => f.it.pid)).size} productos van todos exhibidos y no entran en las listas (
-          {[...new Set(exhibidos.map((f) => f.d.modo.motivo))].join(', ')}).
+          Todo exhibido, fuera de las listas: {new Set(exhibidos.map((f) => f.it.pid)).size} productos · {[...new Set(exhibidos.map((f) => f.d.modo.motivo))].join(' · ')}
         </p>
       )}
 
@@ -370,7 +363,11 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   )
 }
 
-/** Tabla agrupada por producto. La cantidad es editable sólo en «Llevar». */
+/**
+ * UNA tabla para toda la lista, con el producto como separador (Darío, 12-oct: «muy repetitivo»:
+ * antes era una tabla por producto con los encabezados repetidos). La cantidad es editable sólo en
+ * «Reponer».
+ */
 function TablaVentas({ filas, cantidad, titulo, editar }: { filas: FilaVentas[]; cantidad: (f: FilaVentas) => number; titulo: string; editar?: (f: FilaVentas, v: string) => void }) {
   const grupos = useMemo(() => {
     const g: { pid: string; name: string; filas: FilaVentas[] }[] = []
@@ -382,71 +379,75 @@ function TablaVentas({ filas, cantidad, titulo, editar }: { filas: FilaVentas[];
     return g
   }, [filas])
   return (
-    <>
-      {grupos.map((g) => (
-        <div key={g.pid} style={{ marginBottom: space[4] }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', margin: `${space[3]}px 0 ${space[2]}px` }}>
-            <b style={{ fontSize: font.md, color: color.ink }}>{g.name}</b>
-            <span style={{ color: color.mut2, fontSize: font.sm }}>· {g.filas[0].it.cat}</span>
-            {g.filas[0].d.nuevo && <Badge tone="brand">nuevo</Badge>}
-          </div>
-          <TableWrap>
-            <THead>
-              <Tr>
-                <Th>Variante</Th>
-                <Th width={130}>SKU</Th>
-                <Th align="center" width={60}>Local</Th>
-                <Th align="center" width={70}>Depósito</Th>
-                <Th align="center" width={84}>Vende x sem.</Th>
-                <Th align="center" width={70}>Tiene que haber</Th>
-                <Th align="center" width={84}>{titulo}</Th>
-                <Th>Por qué</Th>
-              </Tr>
-            </THead>
-            <TBody>
-              {g.filas.map((f) => {
-                const n = cantidad(f)
-                return (
-                  <Tr key={f.it.vid}>
-                    <Td wrap>
-                      {f.it.size || '—'}
-                      {f.d.exhibir && titulo === 'Llevar' && (
-                        <span title="El local está en 0: la primera va con alarma, etiqueta de precio y de formas de pago" style={{ marginLeft: 6 }}>
-                          <Badge tone="warning">para exhibir</Badge>
-                        </span>
-                      )}
-                    </Td>
-                    <Td style={{ fontSize: font.sm, color: color.mut }}>{f.it.sku || '—'}</Td>
-                    <Td align="center" style={{ color: f.it.local <= 1 ? color.danger : color.ink2, fontWeight: 600 }}>{f.it.local}</Td>
-                    <Td align="center">{f.it.deposito}</Td>
-                    <Td align="center" style={{ color: f.d.vendidas ? color.success : color.mut2, fontWeight: 600 }}>{f.d.porSemana.toLocaleString('es-AR')}</Td>
-                    <Td align="center" style={{ color: color.mut2 }}>{f.d.objetivo ?? '—'}</Td>
-                    <Td align="center" tall>
-                      {editar ? (
-                        <input
-                          className="mo-input mo-input--num"
-                          type="number"
-                          min={0}
-                          max={f.it.deposito}
-                          inputMode="numeric"
-                          value={n}
-                          onChange={(e) => editar(f, e.target.value)}
-                          aria-label={`Prendas a llevar de ${f.it.name} ${f.it.size}`}
-                          style={{ width: 64, textAlign: 'center', padding: '0 6px', fontWeight: 700 }}
-                        />
-                      ) : (
-                        <b>{n}</b>
-                      )}
-                    </Td>
-                    <Td wrap style={{ fontSize: font.sm, color: color.mut }}>{f.d.porque}</Td>
-                  </Tr>
-                )
-              })}
-            </TBody>
-          </TableWrap>
-        </div>
-      ))}
-    </>
+    <TableWrap>
+      <THead>
+        <Tr>
+          <Th>Variante</Th>
+          <Th width={150}>SKU</Th>
+          <Th align="center" width={70}>Local</Th>
+          <Th align="center" width={80}>Depósito</Th>
+          <Th align="center" width={90}>Venta semanal</Th>
+          <Th align="center" width={80}>Stock ideal</Th>
+          <Th align="center" width={84}>{titulo}</Th>
+          <Th>Motivo</Th>
+        </Tr>
+      </THead>
+      <TBody>
+        {grupos.map((g) => (
+          <Fragment key={g.pid}>
+            <Tr>
+              <Td colSpan={8} style={{ background: color.bg2, paddingTop: space[2], paddingBottom: space[2] }}>
+                <b style={{ color: color.ink }}>{g.name}</b>
+                <span style={{ color: color.mut2, fontSize: font.sm }}> · {g.filas[0].it.cat}</span>
+                {g.filas[0].d.nuevo && (
+                  <span style={{ marginLeft: 6 }}>
+                    <Badge tone="brand">nuevo</Badge>
+                  </span>
+                )}
+              </Td>
+            </Tr>
+            {g.filas.map((f) => {
+              const n = cantidad(f)
+              return (
+                <Tr key={f.it.vid}>
+                  <Td wrap>
+                    {talle(f.it.size) || 'Única'}
+                    {f.d.exhibir && titulo === 'Reponer' && (
+                      <span title="Local en 0: la primera va con alarma, etiqueta de precio y etiqueta de formas de pago" style={{ marginLeft: 6 }}>
+                        <Badge tone="warning">para exhibir</Badge>
+                      </span>
+                    )}
+                  </Td>
+                  <Td style={{ fontSize: font.sm, color: color.mut }}>{f.it.sku || '—'}</Td>
+                  <Td align="center" style={{ color: f.it.local <= 1 ? color.danger : color.ink2, fontWeight: 600 }}>{f.it.local}</Td>
+                  <Td align="center">{f.it.deposito}</Td>
+                  <Td align="center" style={{ color: f.d.vendidas ? color.success : color.mut2, fontWeight: 600 }}>{f.d.porSemana.toLocaleString('es-AR')}</Td>
+                  <Td align="center" style={{ color: color.mut2 }}>{f.d.objetivo ?? '—'}</Td>
+                  <Td align="center" tall>
+                    {editar ? (
+                      <input
+                        className="mo-input mo-input--num"
+                        type="number"
+                        min={0}
+                        max={f.it.deposito}
+                        inputMode="numeric"
+                        value={n}
+                        onChange={(e) => editar(f, e.target.value)}
+                        aria-label={`Prendas a reponer de ${f.it.name} ${f.it.size}`}
+                        style={{ width: 64, textAlign: 'center', padding: '0 6px', fontWeight: 700 }}
+                      />
+                    ) : (
+                      <b>{n}</b>
+                    )}
+                  </Td>
+                  <Td wrap style={{ fontSize: font.sm, color: color.mut }}>{f.d.porque}</Td>
+                </Tr>
+              )
+            })}
+          </Fragment>
+        ))}
+      </TBody>
+    </TableWrap>
   )
 }
 
@@ -534,38 +535,36 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
   return (
     <Modal abierto={abierto} onCerrar={onClose} titulo={titulo} ancho="ancho" pie={<Button variant="solid" tone="brand" onClick={onClose}>Listo</Button>}>
       <div style={{ fontSize: 12, color: color.mut, marginBottom: 10 }}>
-        {puede ? 'Los cambios los ven todos.' : 'Esto lo pueden cambiar Darío y Bruno.'} <span style={{ color: shareStatus.color }}>{shareStatus.txt}</span>
+        {puede ? 'Los cambios se aplican para todo el equipo.' : 'Solo Darío y Bruno pueden editar.'} <span style={{ color: shareStatus.color }}>{shareStatus.txt}</span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(250px,1fr))', gap: 8, marginBottom: 14 }}>
-        {param('minimoBajo', 'Mínimo de lo que vende poco (con la exhibida)')}
-        {param('minimo', 'Mínimo de lo que vende (con la exhibida)')}
-        {param('umbralSemana', '«Vende» desde (unidades por semana)')}
-        {param('coberturaDias', 'Días de venta que cubre la reserva')}
-        {param('ventanaDias', 'Días de ventas que se miran (además de los últimos 7)')}
-        {param('loteMin', 'Traer como mínimo (salvo la última)')}
-        {param('topeDevolucion', 'Prendas por día para devolver')}
-        {param('diasNuevo', 'Días para dejar de ser nuevo')}
+        {param('minimoBajo', 'Mínimo, baja venta')}
+        {param('minimo', 'Mínimo, con venta')}
+        {param('umbralSemana', 'Con venta desde (por semana)')}
+        {param('coberturaDias', 'Días de reserva')}
+        {param('ventanaDias', 'Días de ventas analizados')}
+        {param('loteMin', 'Reposición mínima')}
+        {param('topeDevolucion', 'Devolución diaria máxima')}
+        {param('diasNuevo', 'Días como producto nuevo')}
       </div>
 
       {/* «Por categoría» se sacó el 11-oct-2026 (Darío): nada la usaba —las excepciones van por
           producto— y las categorías de Tienda Nube mezclan «BEST SELLERS» y «(sin categoría)». El
           cálculo todavía la entiende (`modosCat`), por si vuelve. */}
-      <div style={{ fontSize: 13, fontWeight: 700, margin: '6px 0' }}>Por producto</div>
-      <div style={{ fontSize: 11.5, color: color.mut2, marginBottom: 8 }}>
-        Lo que diga «SIN CAMBIO» (OUTLET) o empiece con ACCESORIO ya va todo exhibido por el nombre. Una marca acá le gana a eso.
-      </div>
+      <div style={{ fontSize: 13, fontWeight: 700, margin: '6px 0' }}>Excepciones por producto</div>
+      <div style={{ fontSize: 11.5, color: color.mut2, marginBottom: 8 }}>OUTLET y ACCESORIO ya van como «Todo exhibido».</div>
       {Object.keys(cv.modosProd).map((pid) => filaModo('modosProd', pid, productos.find(([p]) => p === pid)?.[1] ?? `Producto ${pid}`))}
       {puede && (
         <>
-          <input className="mo-input" value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar un producto para marcarlo…" style={{ margin: '6px 0' }} />
+          <input className="mo-input" value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar producto…" style={{ margin: '6px 0' }} />
           {encontrados
             .filter(([pid]) => !cv.modosProd[pid])
             .map(([pid, n]) => (
               <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '3px 8px' }}>
                 <span style={{ flex: 1 }}>{n}</span>
                 <Button size="sm" variant="ghost" onClick={() => { setModo('modosProd', pid, { modo: 'exhibido' }); setBuscar('') }}>
-                  Marcar
+                  Agregar
                 </Button>
               </div>
             ))}
@@ -577,17 +576,17 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
 
 const hhmm = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '')
 
-/** Cómo quedó el armado de hoy: en curso, hecho, o para revisar en Gestión Nube. */
+/** Cómo quedó el armado de hoy: en curso, transferido, o sin confirmar en Gestión Nube. */
 function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolver: (hecha: boolean) => void }) {
   if (!armado) return null
   const r = resumenArmado(armado.pedido, armado.escaneos || {})
-  const quien = armado.persona ? ` (${armado.persona})` : ''
+  const quien = armado.persona ? ` · ${armado.persona}` : ''
   const box = { marginBottom: space[3] }
   if (armado.estado === 'en_curso')
     return (
       <div style={box}>
         <Notice tone="brand" icon="📦">
-          Hay un armado en curso{quien}, empezado a las {hhmm(armado.creado_en)}: {r.escaneadas} de {r.pedidas} prendas escaneadas. Tocá «Seguir armando» para continuarlo.
+          Armado en curso{quien} · {r.escaneadas} de {r.pedidas} prendas escaneadas
         </Notice>
       </div>
     )
@@ -595,9 +594,8 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
     return (
       <div style={box}>
         <Notice tone="success" icon="✓">
-          Hoy ya se armó{quien}: {armado.transfer?.unidades ?? r.escaneadas} prendas pasaron al local a las {hhmm(armado.cerrado_en)}
-          {armado.transfer?.transfer_id ? ` (transferencia ${armado.transfer.transfer_id} en Gestión Nube)` : ''}. {' '}
-          La lista de abajo se pone al día cuando se actualiza el stock («Cargar de Gestión Nube»).
+          Reposición transferida a las {hhmm(armado.cerrado_en)}{quien} · {armado.transfer?.unidades ?? r.escaneadas} prendas
+          {armado.transfer?.transfer_id ? ` · Transferencia ${armado.transfer.transfer_id}` : ''}. Actualizá el stock para ver la lista nueva.
         </Notice>
       </div>
     )
@@ -606,16 +604,15 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
       <div style={box}>
         <Notice tone="danger" icon="⚠">
           <div>
-            <b>No se sabe si la transferencia del armado{quien} se hizo.</b> {armado.error || 'Gestión Nube no contestó.'} Antes de seguir, fijate en Gestión Nube si
-            aparece una transferencia de hoy del depósito al local con {r.escaneadas} prendas.
+            <b>Transferencia sin confirmar{quien}.</b> Verificá en Gestión Nube si figura la transferencia de hoy del depósito al local ({r.escaneadas} prendas).
           </div>
           {armado.estado === 'revisar' && (
             <div style={{ display: 'flex', gap: space[2], marginTop: space[2], flexWrap: 'wrap' }}>
               <Button size="sm" variant="solid" tone="brand" onClick={() => onResolver(true)}>
-                Sí, está en Gestión Nube
+                Figura en Gestión Nube
               </Button>
               <Button size="sm" variant="outline" onClick={() => onResolver(false)}>
-                No está: volver a intentar
+                No figura: reintentar
               </Button>
             </div>
           )}

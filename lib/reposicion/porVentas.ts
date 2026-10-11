@@ -127,8 +127,6 @@ export type Decision = {
 }
 
 const r1 = (n: number) => Math.round(n * 10) / 10
-/** «4,4», como se lee acá. */
-const num = (n: number) => n.toLocaleString('es-AR', { maximumFractionDigits: 1 })
 
 /**
  * La decisión para una variante.
@@ -152,14 +150,14 @@ export function decidir(it: RepoItem, cfg: RepoCfg, cv: CfgVentas, hoy: string):
   const base = { modo, vendidas, dias, porSemana, nuevo, exhibir: false }
 
   if (modo.modo === 'exhibido') {
-    return { ...base, pico, objetivo: null, llevar: 0, devolver: 0, porque: `Todo exhibido: ${modo.motivo}` }
+    return { ...base, pico, objetivo: null, llevar: 0, devolver: 0, porque: `Todo exhibido (${modo.motivo})` }
   }
 
   let objetivo: number
   let porque: string
   if (modo.modo === 'fija') {
     objetivo = Math.max(0, modo.n ?? cv.minimo)
-    porque = `Cantidad fija ${objetivo} (${modo.motivo})`
+    porque = 'Cantidad fija'
   } else {
     // Si «vende» o «vende poco» se decide con la ventana larga: una sola venta en la semana no
     // puede cambiarle el piso a una variante. La última semana sólo sube la reserva de lo que se
@@ -170,13 +168,9 @@ export function decidir(it: RepoItem, cfg: RepoCfg, cv: CfgVentas, hoy: string):
     const reserva = Math.max(piso - 1, resLargo, resCorto)
     objetivo = 1 + reserva
     pico = resCorto > Math.max(piso - 1, resLargo)
-    const ritmo = pico ? `Esta semana vendió ${it.s7}` : `Vende ${num(r1(porDiaLargo * 7))} por semana`
-    porque =
-      vendidas === 0
-        ? `No vendió en ${dias} días: mínimo ${objetivo}`
-        : objetivo > piso
-          ? `${ritmo}: 1 exhibida + ${reserva} de reserva`
-          : `${ritmo}: mínimo ${objetivo}`
+    // El motivo dice sólo lo que las columnas no dicen (Darío, 12-oct: «muy repetitivo»): la venta
+    // semanal y el stock ideal ya están al lado. El caso normal (el mínimo) va vacío.
+    porque = vendidas === 0 ? `Sin ventas en ${dias} días` : pico ? `Pico de venta: ${it.s7} esta semana` : objetivo > piso ? 'Reserva por ventas' : ''
   }
   // ⛔ Los «topes por producto» de la pantalla vieja NO se aplican acá (Darío, 11-oct-2026: «con
   // estos cambios queda completamente anticuado»): se pusieron para el mínimo fijo por categoría y
@@ -191,7 +185,7 @@ export function decidir(it: RepoItem, cfg: RepoCfg, cv: CfgVentas, hoy: string):
     if (falta >= cv.loteMin || it.local <= 1) llevar = Math.min(falta, it.deposito)
   }
   const devolver = !nuevo && it.local > objetivo ? it.local - objetivo : 0
-  if (nuevo && it.local > objetivo) porque += ` · nuevo (${vivo} días): no se devuelve todavía`
+  if (nuevo && it.local > objetivo) porque = [porque, 'Producto nuevo: no se devuelve'].filter(Boolean).join(' · ')
   // La columna «Vende x sem.» muestra el ritmo que decidió: el de la semana si se disparó, si no el largo.
   const ritmoSemana = r1((pico ? porDiaCorto : porDiaLargo) * 7)
   return { ...base, porSemana: ritmoSemana, pico, objetivo, llevar, devolver, porque, exhibir: llevar > 0 && it.local <= 0 }
