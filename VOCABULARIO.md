@@ -208,6 +208,12 @@ decidida en la §1**.
 | **Título de sección = sustantivo, ⛔ no frase** | `Pendientes` · `Retornos` · `Novedades` | `Qué falta ahora` · `Lo que tiene que volver` · `Lo que se viene` · `Lo que se escribe a mano` |
 | **Mayúscula sólo en la primera palabra** | `Nuevo pendiente` | `Nuevo Pendiente` |
 | **Sin jerga interna en pantalla** | la palabra del negocio | `sembrar` · `corrida` · `padrón` · `bitácora` · `copy` · `moodboard` |
+| **La palabra formal del oficio, ⛔ no la coloquial** | `Exhibido` · `Retirado` · `Pendiente de exhibición` · `Variantes duplicadas` | `Colgado` · `Lo saqué` · `Falta colgar` · `Sobra (repetido)` |
+
+🔴 **Darío, 11-oct: *«usamos pocas palabras formales y muchas palabras informales»*.** Salió del
+ticket del chequeo de exhibición. ⚠️ **⛔ No choca con «sin jerga»**: la palabra formal es la que
+usa el negocio y entiende cualquiera (`Exhibido`), la jerga es la de adentro de la app (`corrida`).
+Y ⛔ no toca el trato (3.1): lo que se formaliza es **la palabra**, ⛔ el voseo.
 
 🔴 **La jerga no se traduce a otra palabra: se dice QUÉ PASA.** 29-ago, y el oráculo fue Bruno
 leyendo el pendiente: *«no sé lo que es corrida de un reloj»*. Buscarle un sinónimo —«pasada»,
