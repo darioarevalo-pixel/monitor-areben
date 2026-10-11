@@ -3,6 +3,7 @@
 // La base (`createClient`) y GN (`fetch`) son falsos y ANOTAN lo que se les pide: el oráculo es el
 // cuerpo que viajó a GN y la fila que quedó, ⛔ lo que contestó el handler.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { REGLAS_INICIALES } from '@/lib/caja/core.core.js'
 
 type Fila = Record<string, unknown>
 
@@ -197,12 +198,14 @@ const VENTA = { action: 'confirmar', id: ID, items: [{ product_id: 7, size_id: 8
 beforeEach(async () => {
   base.ventas = new Map(); base.config = null; base.inventario = []
   base.usos = [{ store: 'zattia', cuenta_id: CUENTA_MP, desde: '2026-10-01T12:00:00.000Z' }]
-  base.llaves = [{ cuenta_id: CUENTA_MP, token: 'APP_USR-llave' }]
+  base.llaves = [{ store: 'zattia', cuenta_id: CUENTA_MP, nombre: 'BDIACCESORIOS', token: 'APP_USR-llave' }]
   base.mpPagos = []; mp.busquedas = 0
   // Hay un turno abierto: las ventas de los tests de antes de W3 se cobran adentro de él.
   base.turnos = [{ id: TURNO_ID, store: 'zattia', fondo: 50000, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null, abierto_por: 'cajera', abierto_por_usuario: 'cajera' }]; base.movs = []
   mailer.posts = []; delete process.env.MAILER_URL; delete process.env.MAILER_TICKET_KEY
-  gn.posts = []; gn.gets = []; gn.authInventario = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }; gn.creadas = []; base.agenda = []; base.alCerrar = null; base.antesDeInsertar = null
+  gn.posts = []; gn.gets = []; gn.authInventario = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }; gn.creadas = []; base.agenda = [];
+  // Bruno, 11-oct: la cuenta de MP del test asienta en Transferencia (13015, Areben Comercial).
+  base.config = { store: 'zattia', reglas: { ...REGLAS_INICIALES, transferenciaPorMp: { [CUENTA_MP]: 13015 } }, politica_cambio: null }; base.alCerrar = null; base.antesDeInsertar = null
   gn.lista = { status: 200, body: { data: [], meta: { has_more_pages: false } } }
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
   process.env.ZATTIA_SUPABASE_SERVICE_KEY = 'k'
@@ -267,14 +270,29 @@ describe('caja · formas de pago y descuentos a mano (Bruno, 4-oct)', () => {
     expect((base.ventas.get(ID)!.pagos as Fila[])[0]).toMatchObject({ rebaja: 800, descuento: 1080 })
   })
 
-  it('bajadas: sólo admin; la transferencia va sólo a una cuenta de transferencias', async () => {
+  it('🔑 bajadas (Bruno, 11-oct): la cuenta de GN de la transferencia es la de la cuenta de MP en uso', async () => {
     conSesion(CAJERA)
-    expect((await correr(req('POST', {}, { action: 'bajadas', transferenciaA: 20595 }))).code).toBe(403)
+    expect((await correr(req('POST', {}, { action: 'bajadas', transferenciaPorMp: { mp: CUENTA_MP, gn: 20595 } }))).code).toBe(403)
     conSesion(ADMIN_)
-    expect((await correr(req('POST', {}, { action: 'bajadas', transferenciaA: 12921 }))).code).toBe(400)
-    const r = await correr(req('POST', {}, { action: 'bajadas', transferenciaA: 20595, feria: true }))
+    expect((await correr(req('POST', {}, { action: 'bajadas', transferenciaPorMp: { mp: CUENTA_MP, gn: 12921 } }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'bajadas', transferenciaPorMp: { mp: 999, gn: 20595 } }))).code).toBe(404)
+    const r = await correr(req('POST', {}, { action: 'bajadas', transferenciaPorMp: { mp: CUENTA_MP, gn: 20595 } }))
     expect(r.code).toBe(200)
-    expect((base.config as { reglas: Fila }).reglas).toMatchObject({ transferenciaA: 20595, feria: true })
+    expect((base.config as { reglas: Fila }).reglas).toMatchObject({ transferenciaPorMp: { [CUENTA_MP]: 20595 } })
+    // La pantalla recibe la cuenta ya resuelta, y la venta por transferencia va a esa.
+    expect((r.body?.reglas as Fila).transferenciaA).toBe(20595)
+    conSesion(CAJERA)
+    expect(((await correr(req('GET', { action: 'config' }))).body?.reglas as Fila).transferenciaA).toBe(20595)
+    expect((await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 13015 }], total: 22900, pagaCon: null }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 20595 }], total: 22900, pagaCon: null }))).code).toBe(200)
+  })
+
+  it('sin mapeo para la cuenta de MP en uso, la transferencia ⛔ se cobra', async () => {
+    conSesion(CAJERA)
+    await correr(req('GET', { action: 'config' }))
+    ;(base.config as { reglas: Fila }).reglas = { ...((base.config as { reglas: Fila }).reglas), transferenciaPorMp: {} }
+    expect(((await correr(req('GET', { action: 'config' }))).body?.reglas as Fila).transferenciaA).toBeNull()
+    expect((await correr(req('POST', {}, TRANSF))).code).toBe(400)
   })
 
   it('cuenta de MP donde se detectan las transferencias: la MISMA de Pagos recibidos; cambiarla, sólo admin', async () => {
@@ -560,7 +578,7 @@ describe('caja · política de cambio del ticket', () => {
     conSesion(CAJERA)
     const r = await correr(req('POST', {}, { action: 'politica', texto: 'Sin cambios' }))
     expect(r.code).toBe(403)
-    expect(base.config).toBeNull()
+    expect(base.config?.politica_cambio ?? null).toBeNull()
   })
   it('un admin la guarda (sembrando la fila si ⛔ estaba) y config la devuelve', async () => {
     conSesion(ADMIN)
@@ -700,9 +718,9 @@ describe('caja · F5 transferencia', () => {
 
   it('🔴 la de feria (25868) también espera: ⛔ va directo a GN', async () => {
     conSesion(CAJERA)
-    // Con el modo feria prendido (A6: sin él, la cuenta de feria ⛔ se acepta).
+    // Una prenda de feria (A6: sin prendas de feria, la cuenta de feria ⛔ se acepta).
     await correr(req('GET', { action: 'config' }))
-    ;(base.config as { reglas: Fila }).reglas = { ...((base.config as { reglas: Fila }).reglas), feria: true }
+    ;(base.config as { reglas: Fila }).reglas = { ...((base.config as { reglas: Fila }).reglas), feriaProductos: [{ id: 7, nombre: 'FERIA' }] }
     const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25868 }], total: 25500, pagaCon: null }))
     expect(r.code).toBe(200)
     expect(base.ventas.get(ID)).toMatchObject({ estado: 'esperando_pago', espera_monto: 25500 })
@@ -1161,12 +1179,11 @@ describe('caja · auditoría 11-oct, fase 2 (A5–A12, B2–B5, robustez)', () =
     expect((await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25172 }], total: 22900, pagaCon: null }))).code).toBe(400)
   })
 
-  it('🔴 A6: con el modo feria prendido, la pantalla vieja que manda el efectivo normal ⇒ 400', async () => {
+  it('🔴 A6: una pantalla vieja que manda la transferencia a la cuenta de antes ⇒ 400', async () => {
     conSesion(CAJERA)
-    await conConfig({ feria: true })
-    const r = await correr(req('POST', {}, VENTA))
+    const r = await correr(req('POST', {}, { ...TRANSF, pagos: [{ cuenta: 20595 }] }))
     expect(r.code).toBe(400)
-    expect(String(r.body?.error)).toMatch(/modo feria/)
+    expect(String(r.body?.error)).toMatch(/otra cuenta/)
     expect(base.ventas.size).toBe(0)
   })
 

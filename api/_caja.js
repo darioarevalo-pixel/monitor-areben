@@ -38,8 +38,8 @@
 //   POST ?recurso=caja  { action: 'promos', promos }       → sólo admin: la lista entera de promos (W5), en `caja_config.reglas.promos`
 //   POST ?recurso=caja  { action: 'politica', texto }      → sólo admin: la política de cambio del ticket
 //   POST ?recurso=caja  { action: 'logo', logo: { src, ancho, alto } | null } → sólo admin: el logo del ticket (sql/migrate-caja-logo.sql)
-//   POST ?recurso=caja  { action: 'bajadas', transferenciaA?, feria?, billetes?, feriaProductos? } → sólo admin: a qué cuenta van las
-//        transferencias, el modo feria (bajadas de línea: ⛔ las decide la cajera) y los billetes de la calculadora
+//   POST ?recurso=caja  { action: 'bajadas', transferenciaPorMp?: { mp, gn }, billetes?, feriaProductos? } → sólo admin: a qué cuenta
+//        de GN va la transferencia de cada cuenta de MP (bajadas de línea: ⛔ las decide la cajera) y los billetes de la calculadora
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=caja` (12 funciones de Hobby).
 //
@@ -199,6 +199,25 @@ export default async function handler(req, res) {
   }
 
   /**
+   * Las reglas con las que se cobra HOY. 🔑 Bruno, 11-oct: la cuenta de GN de la transferencia SALE de la
+   * cuenta de Mercado Pago donde se detecta (la de Pagos recibidos en uso): la de Darío ⇒ Transferencia
+   * CG (20595), Areben Comercial ⇒ Transferencia (13015). El mapeo lo carga un admin en
+   * `reglas.transferenciaPorMp` ({ [cuenta de MP]: cuenta de GN }); sin mapeo para la cuenta en uso, la
+   * transferencia ⛔ se cobra (`transferenciaA: null` ⇒ `cuentaDeMedio` lo dice). ⛔ Hay modo feria
+   * general: la feria es por producto (`feriaProductos`).
+   */
+  async function reglasDeHoy(reglas) {
+    const { feria: _f, ...sinFeria } = reglas
+    let enUso = null
+    try {
+      ;({ enUso } = await cuentasDe(sb, store))
+    } catch { /* sin cuenta de MP: la transferencia ⛔ se cobra */ }
+    const mapa = reglas.transferenciaPorMp || {}
+    const gn = enUso != null ? Number(mapa[String(enUso)]) : NaN
+    return { ...sinFeria, transferenciaA: Number.isInteger(gn) && gn > 0 ? gn : null }
+  }
+
+  /**
    * ¿Hay HOY una promo bancaria de crédito con descuento en el mostrador? (A6) La lee el servidor de la
    * Agenda —la MISMA de la banda de promos del POS—, ⛔ la manda la pantalla. La Agenda vive en la base
    * de BDI (ver `cfgMaestra` en api/_agenda.js).
@@ -346,7 +365,8 @@ export default async function handler(req, res) {
         // El logo del ticket va aparte y tolerante: sin la columna (falta `sql/migrate-caja-logo.sql`)
         // la Caja carga igual y el ticket sale con el nombre.
         const logo = await sb.from('caja_config').select('ticket_logo').eq('store', store).maybeSingle()
-        const { actualizado_en: _v, ...conf } = await leerConfig()
+        const { actualizado_en: _v, ...leida } = await leerConfig()
+        const conf = { ...leida, reglas: await reglasDeHoy(leida.reglas) }
         // `versiones`: las de las listas que la pantalla manda ENTERAS, para ⛔ pisar la de otro admin.
         const versiones = { promos: versionDe(conf.reglas, 'promos'), feriaProductos: versionDe(conf.reglas, 'feriaProductos') }
         return res.status(200).json({ ...conf, versiones, ticket_logo: logo.error ? null : (logo.data && logo.data.ticket_logo) || null })
@@ -358,7 +378,7 @@ export default async function handler(req, res) {
         } catch (e) {
           return res.status(502).json({ error: e.message })
         }
-        const { reglas } = await leerConfig()
+        const reglas = await reglasDeHoy((await leerConfig()).reglas)
         const cuentas = cacheCuentas.map(c => {
           let regla = null
           try { regla = reglaDeCuenta(c.id, reglas) } catch { /* sin regla o con recargo: la Caja ⛔ la cobra */ }
@@ -508,20 +528,23 @@ export default async function handler(req, res) {
         }
         const g = await guardarReglas((reglas) => ({ ...reglas, promos }), { clave: 'promos', version: b.version })
         if (g.conflicto) return res.status(409).json({ error: 'Otro admin cambió las promos recién. Recargá la Caja y volvé a cargar el cambio.', conflicto: true })
-        return res.status(200).json({ reglas: g.reglas, versiones: { promos: versionDe(g.reglas, 'promos'), feriaProductos: versionDe(g.reglas, 'feriaProductos') } })
+        return res.status(200).json({ reglas: await reglasDeHoy(g.reglas), versiones: { promos: versionDe(g.reglas, 'promos'), feriaProductos: versionDe(g.reglas, 'feriaProductos') } })
       }
       if (accion === 'bajadas') {
-        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia a dónde van las transferencias o el modo feria.' })
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia a dónde van las transferencias, los productos de feria o los billetes.' })
         const { reglas } = await leerConfig()
         if (!reglas.medios) return res.status(409).json({ error: 'La Caja todavía no tiene las formas de pago: falta correr sql/migrate-caja-medios.sql.' })
         // Lo que cambia, validado UNA vez; se aplica sobre la fila que esté al guardar (`guardarReglas`).
         const nuevas = {}
-        if (b.transferenciaA != null) {
-          const t = Number(b.transferenciaA)
-          if (!reglas.medios.transferencia.opciones.includes(t)) return res.status(400).json({ error: `La cuenta ${b.transferenciaA} no es de transferencias.` })
-          nuevas.transferenciaA = t
+        // A qué cuenta de GN va la transferencia de UNA cuenta de Mercado Pago (Bruno, 11-oct): `{ mp, gn }`.
+        let parMp = null
+        if (b.transferenciaPorMp != null) {
+          const mp = Number(b.transferenciaPorMp.mp), gn = Number(b.transferenciaPorMp.gn)
+          if (!reglas.medios.transferencia.opciones.includes(gn)) return res.status(400).json({ error: `La cuenta ${b.transferenciaPorMp.gn} no es de transferencias.` })
+          const { cuentas } = await cuentasDe(sb, store)
+          if (!cuentas.some((x) => x.cuenta_id === mp)) return res.status(404).json({ error: 'Esa cuenta de Mercado Pago no está cargada (se carga en Pagos recibidos).' })
+          parMp = { mp, gn }
         }
-        if (b.feria != null) nuevas.feria = b.feria === true
         // Los productos de feria trabados: `[{ id, nombre }]`, la lista entera (la pantalla manda todo).
         if (b.feriaProductos != null) {
           if (!Array.isArray(b.feriaProductos) || b.feriaProductos.length > 2000) return res.status(400).json({ error: 'La lista de productos de feria es inválida.' })
@@ -544,9 +567,12 @@ export default async function handler(req, res) {
           }
         }
         const deLista = b.feriaProductos != null ? { clave: 'feriaProductos', version: b.version } : null
-        const g = await guardarReglas((actual) => ({ ...actual, ...nuevas }), deLista)
+        const g = await guardarReglas((actual) => {
+          const { feria: _f, transferenciaA: _t, ...resto } = actual
+          return { ...resto, ...nuevas, ...(parMp ? { transferenciaPorMp: { ...(actual.transferenciaPorMp || {}), [String(parMp.mp)]: parMp.gn } } : {}) }
+        }, deLista)
         if (g.conflicto) return res.status(409).json({ error: 'Otro admin cambió la configuración recién. Recargá la Caja y volvé a cargar el cambio.', conflicto: true })
-        return res.status(200).json({ reglas: g.reglas, versiones: { promos: versionDe(g.reglas, 'promos'), feriaProductos: versionDe(g.reglas, 'feriaProductos') } })
+        return res.status(200).json({ reglas: await reglasDeHoy(g.reglas), versiones: { promos: versionDe(g.reglas, 'promos'), feriaProductos: versionDe(g.reglas, 'feriaProductos') } })
       }
       if (accion === 'abrir-turno') {
         const fondo = Number(b.fondo)
@@ -693,7 +719,7 @@ export default async function handler(req, res) {
         if (!turno) return res.status(409).json({ error: 'No hay un turno abierto: abrí el turno para cobrar.', sinTurno: true })
         // 🔑 Fase C (Bruno, 5-oct): cobra sólo la cuenta que abrió la caja. Cerrarla queda abierto a todos.
         if (!puedeUsarPOS(turno, perfil)) return res.status(403).json({ error: `La caja la abrió ${turno.abierto_por || 'otra cuenta'}: sólo esa cuenta puede cobrar.`, otraCuenta: true })
-        const { reglas } = await leerConfig()
+        const reglas = await reglasDeHoy((await leerConfig()).reglas)
         let filas, c, payload, espera, conPromo, descuentoVenta
         try {
           // 🔑 W5: las promos se aplican ACÁ también, con las de la base y la fecha argentina: la

@@ -77,19 +77,25 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   transferencia y UNA transferencia de la clienta: se espera la suma (`montoAEsperar`).
 - 🔑 **La cajera ve CUATRO formas de pago; la cuenta de GN es INTERNA** (Bruno, 4-oct). `cuentaDeMedio`
   (`core.core.js`) la resuelve con `caja_config.reglas.medios` (`sql/migrate-caja-medios.sql`):
-  Efectivo 12921 · Débito 20196 · Transferencia ⇒ `transferenciaA` (13015 Areben Comercial | 20595 Caja
-  Gerencia: dónde se ASIENTA en GN, lo baja un ADMIN, ⛔ la cajera; las dos esperan el pago) · Crédito ⇒ 25172 (−10 %) sólo si la
+  Efectivo 12921 · Débito 20196 · Transferencia ⇒ `transferenciaA` · Crédito ⇒ 25172 (−10 %) sólo si la
   Agenda tiene promo de crédito HOY **y** la cajera contesta que la tarjeta es de ese banco; 25173 «6
-  cuotas» si pasa $250.000 y lo pide; si no 25188 (lista). **Modo feria** (admin): efectivo y
-  transferencia van a las de feria (precio final). El servidor rechaza una cuenta sin forma de pago, y
-  🔴 **exige la que corresponde HOY** (`exigirCuentas`, A6, 11-oct): con el modo feria sólo las de feria, sin
-  él la normal (y la de feria sólo con prendas de feria), la transferencia a `transferenciaA`, el −10 % de
-  crédito sólo si la Agenda tiene promo de crédito hoy (la lee el SERVIDOR de `agenda_promos`, base de BDI,
-  con `promosDeCreditoEnMostrador` de `lib/agenda/promos.core.js`, la MISMA del POS) y las 6 cuotas sólo
-  arriba del mínimo (`aPagarDe`). Una pantalla abierta desde antes del cambio da 400 «Recargá la Caja».
-  ⚠️ «¿Es de ese banco?» ⛔ se verifica.
-  🔴 **Con el modo feria, débito y crédito ⛔** (Bruno, 11-oct): todo se cobra sólo en efectivo o transferencia,
-  como las prendas de feria (`pagosDeMedio` y `exigirCuentas`); «Varios pagos» se traba igual.
+  cuotas» si pasa $250.000 y lo pide; si no 25188 (lista).
+  🔑 **La cuenta de GN de la TRANSFERENCIA sale de la cuenta de Mercado Pago en uso** (Bruno, 11-oct): la
+  de Darío ⇒ Transferencia CG (20595), Areben Comercial ⇒ Transferencia (13015). El mapeo lo carga un admin
+  en «Las transferencias se detectan en» (`reglas.transferenciaPorMp`, acción `bajadas`), y el SERVIDOR
+  resuelve `transferenciaA` (`reglasDeHoy`) para la pantalla y para cobrar. Sin mapeo para la cuenta en
+  uso, la transferencia ⛔ se cobra. Antes la elegía un admin aparte y quedó desparejo (MP de Darío,
+  asentando en Areben Comercial).
+  🔑 **⛔ Hay modo feria general** (Bruno, 11-oct): la feria es POR PRODUCTO. Un solo botón «Efectivo» (y
+  uno «Transferencia»): la Caja manda sola cada prenda a su cuenta —la de feria sin el %, la común con
+  el %—, ⛔ como el POS de GN, donde la cajera elegía entre «Efectivo feria» y «Efectivo». Un `feria: true`
+  viejo en la config ⛔ hace nada.
+  El servidor rechaza una cuenta sin forma de pago, y 🔴 **exige la que corresponde HOY** (`exigirCuentas`,
+  A6, 11-oct): la normal (y la de feria sólo con prendas de feria), la transferencia a `transferenciaA`, el
+  −10 % de crédito sólo si la Agenda tiene promo de crédito hoy (la lee el SERVIDOR de `agenda_promos`,
+  base de BDI, con `promosDeCreditoEnMostrador` de `lib/agenda/promos.core.js`, la MISMA del POS) y las 6
+  cuotas sólo arriba del mínimo (`aPagarDe`). Una pantalla abierta desde antes de un cambio da 400
+  «Recargá la Caja». ⚠️ «¿Es de ese banco?» ⛔ se verifica.
 - 🔑 **El ticket (papel y mail) dice el MEDIO y «Descuento 15%»**, ⛔ «Descuento Transferencia CG».
   La fila guarda en `pagos[].nombre` el medio (`nombreParaTicket`). El mail lo arma `areben-mailer`
   (`lib/email/ticket.ts`): un cambio de renglones allá se deploya a mano (`vercel --prod`).

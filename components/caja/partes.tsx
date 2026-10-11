@@ -1231,41 +1231,26 @@ export function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: 
   const [abierto, setAbierto] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-  // La cuenta de GN donde se ASIENTA la transferencia. Cualquiera de las dos ESPERA el pago en Mercado
-  // Pago (Bruno, 5-oct): dónde se detecta lo dice «Las transferencias se detectan en».
-  const NOMBRE_TRANSF: Record<number, string> = { 13015: 'Areben Comercial', 20595: 'Caja Gerencia' }
+  // La cuenta de GN de la transferencia ya ⛔ se elige acá: sale de la cuenta de Mercado Pago en uso
+  // (Bruno, 11-oct; «Las transferencias se detectan en»). ⛔ Hay modo feria: la feria es por producto.
   const [billetesTxt, setBilletesTxt] = useState(() => billetesDe(reglas).join(', '))
-  async function guardar(b: { transferenciaA?: number; feria?: boolean; billetes?: number[] }) {
+  async function guardar(b: { billetes?: number[] }) {
     setGuardando(true)
     setMsg(null)
     try {
       const r = await guardarBajadas(b)
       onGuardadas(r.reglas, r.versiones)
       if (r.reglas.billetes) setBilletesTxt(r.reglas.billetes.join(', '))
-      setMsg(b.billetes ? 'Guardado: la calculadora cuenta con estos billetes.' : 'Guardado: vale desde la próxima venta.')
+      setMsg('Guardado: la calculadora cuenta con estos billetes.')
     } catch (e) {
       setMsg((e as Error).message)
     } finally {
       setGuardando(false)
     }
   }
-  const opciones = reglas.medios?.transferencia.opciones ?? []
   return (
-    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Formas de pago" ayuda="A qué cuenta van las transferencias, el modo feria y los billetes. Sólo lo cambia un admin.">
+    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Billetes de la calculadora" ayuda="Con qué billetes cuenta la calculadora del turno. Sólo lo cambia un admin.">
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
-        <Field label="Las transferencias se asientan en (cuenta de Gestión Nube)">
-          <Select value={String(reglas.transferenciaA ?? '')} disabled={guardando} onChange={(e) => guardar({ transferenciaA: Number(e.target.value) })} style={{ maxWidth: 420 }}>
-            {opciones.map((id) => (
-              <option key={id} value={id}>
-                {NOMBRE_TRANSF[id] ?? reglas.cuentas[id]?.nombre ?? `Cuenta ${id}`}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <label style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
-          <input type="checkbox" checked={reglas.feria === true} disabled={guardando} onChange={(e) => guardar({ feria: e.target.checked })} />
-          <span>Modo feria: efectivo y transferencia van a las cuentas de feria, sin descuento (los precios de feria son finales)</span>
-        </label>
         <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <Field label={`Billetes de la calculadora (sin la lista: ${BILLETES_INICIALES.join(', ')})`}>
             <Input value={billetesTxt} onChange={(e) => setBilletesTxt(e.target.value)} style={{ minWidth: 320 }} />
@@ -2089,7 +2074,15 @@ export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | n
  * Pago en uso de Pagos recibidos —la MISMA, ⛔ una copia—. Todos ven cuál es; cambiarla, sólo admin.
  * Cargar una cuenta nueva (con su llave) sigue siendo en Pagos recibidos.
  */
-export function DeteccionTransferencias({ admin }: { admin: boolean }) {
+/** Cómo se llama en Gestión Nube la cuenta de transferencias (Bruno, 11-oct). */
+const NOMBRE_TRANSF_GN: Record<number, string> = { 13015: 'Transferencia (Areben Comercial)', 20595: 'Transferencia CG (Darío)' }
+
+/**
+ * Dónde se detectan las transferencias (la cuenta de Mercado Pago de Pagos recibidos) y, 🔑 Bruno 11-oct,
+ * la cuenta de Gestión Nube donde se ASIENTAN: sale de esa misma cuenta de MP (la de Darío ⇒
+ * Transferencia CG; Areben Comercial ⇒ Transferencia). El mapeo lo carga un admin.
+ */
+export function DeteccionTransferencias({ admin, reglas = null, onGuardadas }: { admin: boolean; reglas?: Reglas | null; onGuardadas?: (r: Reglas, v?: Versiones) => void }) {
   const [abierto, setAbierto] = useState(false)
   const [datos, setDatos] = useState<{ enUso: CuentaMp | null; cuentas?: CuentaMp[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -2111,7 +2104,22 @@ export function DeteccionTransferencias({ admin }: { admin: boolean }) {
       setGuardando(false)
     }
   }
+  async function asentarEn(gn: number) {
+    if (!datos?.enUso) return
+    setGuardando(true)
+    setError(null)
+    try {
+      const r = await guardarBajadas({ transferenciaPorMp: { mp: datos.enUso.cuenta_id, gn } })
+      onGuardadas?.(r.reglas, r.versiones)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setGuardando(false)
+    }
+  }
   const enUso = datos ? (datos.enUso?.nombre ?? 'ninguna cuenta (cargarla en Pagos recibidos)') : '…'
+  const gn = reglas?.transferenciaA ?? null
+  const opciones = reglas?.medios?.transferencia.opciones ?? []
   return (
     <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Las transferencias se detectan en" ayuda={`${enUso} · la misma cuenta que usa Pagos recibidos.`}>
       <div style={{ display: 'grid', gap: space[2], maxWidth: 560 }}>
@@ -2130,6 +2138,21 @@ export function DeteccionTransferencias({ admin }: { admin: boolean }) {
             <Icono nombre="transferencia" size={16} /> Cuenta de Mercado Pago: <b style={{ color: color.ink }}>{enUso}</b>
           </span>
         )}
+        {reglas && datos?.enUso && (admin && onGuardadas ? (
+          <Field label="Se asienta en Gestión Nube como">
+            <Select value={String(gn ?? '')} disabled={guardando} onChange={(e) => e.target.value && asentarEn(Number(e.target.value))} style={{ maxWidth: 320 }}>
+              {gn == null && <option value="">Elegir la cuenta de Gestión Nube…</option>}
+              {opciones.map((id) => (
+                <option key={id} value={id}>
+                  {NOMBRE_TRANSF_GN[id] ?? reglas.cuentas[id]?.nombre ?? `Cuenta ${id}`}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
+          <span style={{ color: color.ink2 }}>Se asienta en Gestión Nube como: <b style={{ color: color.ink }}>{gn != null ? (NOMBRE_TRANSF_GN[gn] ?? `Cuenta ${gn}`) : '—'}</b></span>
+        ))}
+        {reglas && datos?.enUso && gn == null && <Notice tone="warning">Falta a qué cuenta de Gestión Nube va esta cuenta de Mercado Pago: hasta elegirla, la Caja no cobra por transferencia.</Notice>}
         <span style={{ fontSize: font.sm, color: color.mut }}>Toda transferencia queda esperando el pago, sin ticket, hasta que aparece en esta cuenta.</span>
         {error && <span style={{ color: color.dangerInk, fontSize: font.sm }}>{error}</span>}
       </div>

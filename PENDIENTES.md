@@ -119,6 +119,11 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
 - **A8: la salida (y el aporte) la carga la cuenta que abrió el turno o un admin** — ⛔ otra cajera.
 - **B5: el descuento a mano y el cambio de precio, LIBRES pero A LA VISTA** — ⛔ permiso ni tope: la venta
   lo guarda y el turno lo suma («Hecho a mano»).
+- **La feria es POR PRODUCTO** (11-oct, 2ª vuelta): la prenda de feria a precio final, sin el %; la común con
+  su descuento. ⛔ Hay modo feria general: un solo «Efectivo» y la Caja reparte sola. ▶️ Marcar en la Caja
+  los productos de feria del local (hoy la lista está VACÍA).
+- **La cuenta de GN de la transferencia sale de la cuenta de MP en uso**: Darío ⇒ Transferencia CG,
+  Areben Comercial ⇒ Transferencia.
 - Elegido sin preguntar (cambiable): la transferencia que llega más de **15 min** después ⛔ se confirma
   sola · **descartar** una venta rechazada lo hace sólo un admin · la gift card va después.
 - 🏁 11-oct: turno de prueba del 5-oct CERRADO (con nota) y `sql/migrate-caja-auditoria.sql` CORRIDA en Zattia

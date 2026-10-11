@@ -24,7 +24,8 @@ export type ProductoFeria = { id: number; nombre: string }
 export type TipoPromo = 'nxm' | 'segunda_unidad' | 'pct' | 'monto_minimo'
 export type AlcancePromo = { tipo: 'todo' } | { tipo: 'categorias'; categorias: string[] } | { tipo: 'productos'; productos: ProductoFeria[] }
 export type PromoCaja = { id: string; nombre: string; tipo: TipoPromo; lleva?: number; paga?: number; pct?: number; minimo?: number; pesos?: number; alcance: AlcancePromo; desde: string; hasta: string | null; activa: boolean }
-export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number; feria?: boolean; billetes?: number[]; feriaProductos?: ProductoFeria[]; promos?: PromoCaja[] }
+/** `transferenciaA`: la cuenta de GN de la transferencia, YA resuelta por el servidor desde la cuenta de MP en uso (null sin mapeo). */
+export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number | null; transferenciaPorMp?: Record<string, number>; billetes?: number[]; feriaProductos?: ProductoFeria[]; promos?: PromoCaja[] }
 /** Un descuento a mano, a una prenda o a toda la venta. */
 export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 /** `ticket_logo`: el logo del ticket (null sin logo, o sin `sql/migrate-caja-logo.sql`). */
@@ -228,5 +229,5 @@ export const guardarLogo = (logo: LogoTicket | null) => post<{ ticket_logo: Logo
 export type Versiones = NonNullable<Config['versiones']>
 export const guardarPromos = (promos: PromoCaja[], version?: string) =>
   post<{ reglas: Reglas; versiones?: Versiones }>({ action: 'promos', promos, ...(version ? { version } : {}) }, 'No se pudieron guardar las promos.')
-export const guardarBajadas = (b: { transferenciaA?: number; feria?: boolean; billetes?: number[]; feriaProductos?: ProductoFeria[]; version?: string }) =>
+export const guardarBajadas = (b: { transferenciaPorMp?: { mp: number; gn: number }; billetes?: number[]; feriaProductos?: ProductoFeria[]; version?: string }) =>
   post<{ reglas: Reglas; versiones?: Versiones }>({ action: 'bajadas', ...b }, 'No se pudo guardar.')

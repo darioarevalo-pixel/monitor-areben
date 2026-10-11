@@ -289,10 +289,10 @@ describe('caja · cuentaDeMedio', () => {
     expect(() => cuentaDeMedio('transferencia', q(1000, {}, { ...R, transferenciaA: 12921 }))).toThrow(/transferencias/)
   })
 
-  it('modo feria: efectivo y transferencia van a las de precio final', () => {
+  it('🔑 ⛔ hay modo feria general (Bruno, 11-oct): un `feria: true` viejo en la config ⛔ cambia la cuenta', () => {
     const F = { ...R, feria: true }
-    expect(cuentaDeMedio('efectivo', q(1000, {}, F))).toBe(FERIA_EFECTIVO)
-    expect(cuentaDeMedio('transferencia', q(1000, {}, F))).toBe(FERIA_TRANSFERENCIA)
+    expect(cuentaDeMedio('efectivo', q(1000, {}, F))).toBe(EFECTIVO)
+    expect(cuentaDeMedio('transferencia', q(1000, {}, F))).toBe(TRANSFERENCIA)
     expect(cuentaDeMedio('debito', q(1000, {}, F))).toBe(DEBITO)
   })
 
@@ -431,9 +431,9 @@ describe('caja · productos de feria trabados', () => {
     expect(() => exigirFeria({ filas: normal, pagos: [{ cuenta: DEBITO }], reglas: R })).not.toThrow()
   })
 
-  it('modo feria global + prenda trabada: todo a la de feria, débito sigue trabado', () => {
+  it('la prenda de feria sigue trabada aunque la config traiga un `feria: true` viejo', () => {
     const F = { ...R, feria: true } as R_
-    expect(pagosDeMedio('efectivo', q(mixto, F))).toEqual([{ cuenta: FERIA_EFECTIVO }])
+    expect(pagosDeMedio('efectivo', q(mixto, F))).toEqual([{ cuenta: FERIA_EFECTIVO, base: 10000 }, { cuenta: EFECTIVO }])
     expect(() => pagosDeMedio('debito', q(mixto, F))).toThrow(/efectivo o transferencia/)
   })
 })
@@ -565,19 +565,9 @@ describe('caja · A6: el servidor exige la cuenta que corresponde', () => {
   it('las de siempre pasan', () => {
     for (const c of [EFECTIVO, TRANSFERENCIA, DEBITO, 25188]) expect(ok(una, c)).not.toThrow()
   })
-  it('🔴 modo feria prendido: el efectivo y la transferencia normales ⛔ (la pantalla vieja)', () => {
-    const F = { ...R, feria: true } as R_
-    expect(ok(una, EFECTIVO, F)).toThrow(/modo feria/)
-    expect(ok(una, TRANSFERENCIA, F)).toThrow(/modo feria/)
-    expect(ok(una, FERIA_EFECTIVO, F)).not.toThrow()
-    // Bruno, 11-oct: con el modo feria, débito y crédito ⛔ aunque no haya prendas marcadas de feria.
-    expect(ok(una, DEBITO, F)).toThrow(/efectivo o transferencia/)
-    expect(ok(una, 25188, F)).toThrow(/efectivo o transferencia/)
-    expect(() => pagosDeMedio('debito', { filas: una, reglas: F, total: 20000, promoCreditoHoy: false, esDelBanco: false, seisCuotas: false })).toThrow(/efectivo o transferencia/)
-    expect(() => pagosDeMedio('credito', { filas: una, reglas: F, total: 20000, promoCreditoHoy: false, esDelBanco: false, seisCuotas: false })).toThrow(/efectivo o transferencia/)
-  })
-  it('sin modo feria ni prendas de feria, la cuenta de feria ⛔', () => {
-    expect(ok(una, FERIA_EFECTIVO)).toThrow(/modo feria/)
+  it('sin prendas de feria, la cuenta de feria ⛔ (la prenda común lleva su descuento)', () => {
+    expect(ok(una, FERIA_EFECTIVO)).toThrow(/sólo para las prendas de feria/)
+    expect(ok(una, FERIA_TRANSFERENCIA)).toThrow(/sólo para las prendas de feria/)
   })
   it('la transferencia va a la cuenta que bajó el admin', () => {
     expect(ok(una, 20595)).toThrow(/otra cuenta/)
