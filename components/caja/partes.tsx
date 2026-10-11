@@ -590,7 +590,7 @@ export function VariosPagos({ pagos, setPagos, montos, subtotal = null, aBase }:
                 <span />
               )}
             </div>
-            {montos?.[i] != null && (ultimo || montos[i] !== aNumero(p.base)) && <span style={{ fontSize: font.sm, color: color.mut, fontVariantNumeric: 'tabular-nums' }}>cobra {plata(montos[i])}</span>}
+            {montos?.[i] != null && !ultimo && montos[i] !== aNumero(p.base) && <span style={{ fontSize: font.sm, color: color.mut, fontVariantNumeric: 'tabular-nums' }}>cobra {plata(montos[i])}</span>}
           </div>
         )
       })}

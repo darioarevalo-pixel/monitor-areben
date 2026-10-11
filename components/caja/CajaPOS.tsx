@@ -884,7 +884,7 @@ function POS() {
             Contar billetes
           </button>
           <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('salida')} style={{ height: 36 }}>
-            Cargar salida
+            Cargar salida o aporte
           </button>
           <button type="button" className="pos-tbtn peligro" onClick={() => setPanelTurno('cerrar')} style={{ height: 36 }}>
             Cerrar turno
@@ -1006,7 +1006,7 @@ function POS() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
                     <div>
                       <b style={{ fontSize: font.lg, color: color.ink }}>Formas de pago</b>
-                      <div style={{ color: color.mut, fontSize: font.sm }}>{varios ? 'Repartir el subtotal entre formas de pago' : 'Elegir con qué paga el total'}</div>
+                      <div style={{ color: color.mut, fontSize: font.sm }}>{varios ? 'Repartir lo que paga entre formas de pago' : 'Elegir con qué paga el total'}</div>
                     </div>
                     {!sinMedios && (
                       <Button
