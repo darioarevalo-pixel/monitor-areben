@@ -4,6 +4,8 @@
  * Port de `repoCfg` (index.html:11205) y `repoCfgLoad` (11310).
  */
 
+import type { CfgVentas } from './porVentas'
+
 export type RepoCfg = {
   /** clave (subcat/modelo/cat) → mínimo. */
   mins: Record<string, number>
@@ -17,6 +19,17 @@ export type RepoCfg = {
   /** categorías a ignorar al agrupar. */
   catsOff: string[]
   prioridadRetiro: 'deposito' | 'local'
+  /**
+   * Reposición según ventas (sólo Zattia, `porVentas.ts`). Opcional: lo guardado antes no lo trae
+   * y `cfgVentas()` rellena los defaults. ⚠️ Tiene que viajar en `leerRepoConfig`: la pantalla
+   * guarda la config ENTERA, y un campo que no se lee se pierde en el próximo guardado.
+   */
+  ventas?: Partial<CfgVentas>
+  /**
+   * Lo mismo para la línea Stunned (SKU `STU…`), que vive adentro de Zattia pero tiene sus propias
+   * condiciones (Darío, 11-oct-2026: «lo que precisa Stunned es diferente»). Ver `docs/lineas.md`.
+   */
+  ventasStunned?: Partial<CfgVentas>
 }
 
 export function repoCfgDefault(): RepoCfg {
@@ -54,4 +67,8 @@ export type RepoItem = {
    * pendientes hasta el próximo sync.
    */
   sinProducto: boolean
+  /** Ventas que descuentan del local en la ventana de `porVentas` (Zattia: local + Tienda Nube). */
+  vv?: number
+  /** Días que el producto lleva vivo (alta en GN). `null`/ausente = no se sabe. */
+  diasVivo?: number | null
 }

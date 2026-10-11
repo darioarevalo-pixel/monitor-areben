@@ -14,21 +14,27 @@ import type { FilaInvRepo } from './inventario'
 
 const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion'
 
-/** Inventario Local + Depósito. `observation` (ubicación) solo existe en BDI. Port de repoCargarInventario @12514. */
+/**
+ * Inventario Local + Depósito, con `observation` (la ubicación en el estante). Port de
+ * repoCargarInventario @12514. Antes la ubicación se pedía sólo en BDI; Zattia la empieza a cargar
+ * en el depósito (oct-2026) y la lista de Lorena se ordena por ella apenas aparezca.
+ */
 export async function leerInventario(marca: Marca): Promise<FilaInvRepo[]> {
-  const obsSel = marca === 'bdi' ? ',observation' : ''
-  return fetchAll<FilaInvRepo>(CUENTAS[marca], 'inventario', `select=product_id,product_name,size_id,size_name,sku,available_quantity,store_name${obsSel}`)
+  return fetchAll<FilaInvRepo>(CUENTAS[marca], 'inventario', 'select=product_id,product_name,size_id,size_name,sku,available_quantity,store_name,observation')
 }
 
 /**
- * Ventas que descuentan del Local en los últimos 7 días, por variante (`pid_sid`).
- * BDI: solo canal "Mi Local". Zattia: "Mi Local" + "Tienda Nube" (online vende del
- * local). Port de repoVentasLocal7d @12592.
+ * Ventas que descuentan del Local en los últimos `dias` días, por variante (`pid_sid`).
+ * BDI: solo canal "Mi Local". Zattia: "Mi Local" + "Tienda Nube" (el online se despacha desde el
+ * local). Port de repoVentasLocal7d @12592, generalizado para la reposición según ventas (60 días).
+ *
+ * El orden de los renglones va con desempate único (`sale_id,product_id,size_id`): ordenar sólo por
+ * `sale_id` deja empates que cruzan el borde de una página de 1.000 y se pisan.
  */
-export async function ventasLocal7d(marca: Marca): Promise<Record<string, number>> {
+export async function ventasLocal(marca: Marca, dias: number): Promise<Record<string, number>> {
   const out: Record<string, number> = {}
   try {
-    const desde = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+    const desde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10)
     const filtroCanal = marca === 'zattia' ? 'or=(channel.ilike.*local*,channel.ilike.*tienda*)' : 'channel=ilike.*local*'
     const ventas = await fetchAll<{ id: number }>(CUENTAS[marca], 'ventas', `select=id&${filtroCanal}&date_sale=gte.${desde}&order=id`)
     if (!ventas.length) return out
@@ -37,7 +43,7 @@ export async function ventasLocal7d(marca: Marca): Promise<Record<string, number
     const det = await fetchAll<{ sale_id: number; product_id: number | string; size_id: number | string; quantity?: number }>(
       CUENTAS[marca],
       'venta_detalles',
-      `select=sale_id,product_id,size_id,quantity&sale_id=gte.${minId}&order=sale_id`,
+      `select=sale_id,product_id,size_id,quantity&sale_id=gte.${minId}&order=sale_id,product_id,size_id`,
     )
     det.forEach((d) => {
       if (ids.has(String(d.sale_id))) {
@@ -49,6 +55,11 @@ export async function ventasLocal7d(marca: Marca): Promise<Record<string, number
     /* si falla, queda en 0 */
   }
   return out
+}
+
+/** Las de los últimos 7 días (la columna «7d local» de la pantalla de BDI). */
+export function ventasLocal7d(marca: Marca): Promise<Record<string, number>> {
+  return ventasLocal(marca, 7)
 }
 
 /**

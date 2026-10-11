@@ -248,6 +248,9 @@ ya tienen ficha:
 - Productos caducados → **leer `docs/secciones/caducados.md`** antes de tocar `components/caducados/`
   o `lib/caducados.ts`. ⛔ **La pestaña de TN incluye lo desactivado en GN**, y un gemelo de nombre
   vendido dentro de los 30 días (el plazo de cambio) frena la publicación.
+- Reposición → **leer `docs/secciones/reposicion.md`** antes de tocar `components/reposicion/` o
+  `lib/reposicion/`. ⛔ **La pantalla guarda la config ENTERA**: un campo que `leerRepoConfig` no
+  lee se borra. Zattia repone **según ventas** (`porVentas.ts`), BDI con mínimos — no se mezclan.
 - Por producto y Ganadores por tanda → **leer `docs/secciones/productos.md`** antes de tocar
   `components/productos/`, `lib/productos.ts` o `lib/ganadores/`. ⛔ **`sales30` y compañía SUMAN
   el mayorista** (88 % de las unidades de BDI); el corte vive en `ventasMin`/`ventasMay` del ETL.

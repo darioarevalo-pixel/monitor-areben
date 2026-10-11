@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
 import { leerRepoConfig } from '@/lib/reposicion/cfg'
-import { guardarRepoConfig, leerInventario, ultimaSincronizacion, ventasLocal7d } from '@/lib/reposicion/cliente'
+import { guardarRepoConfig, leerInventario, ultimaSincronizacion, ventasLocal, ventasLocal7d } from '@/lib/reposicion/cliente'
+import { cfgVentas } from '@/lib/reposicion/porVentas'
 import { repoCfgDefault, type RepoCfg } from '@/lib/reposicion/tipos'
 import type { FilaInvRepo } from '@/lib/reposicion/inventario'
 
@@ -21,6 +22,11 @@ export type EstadoReposicion = {
   cfg: RepoCfg
   rawInv: FilaInvRepo[]
   s7: Record<string, number>
+  /**
+   * Zattia: ventas por variante, una bajada por cada ventana de días configurada (Zattia y Stunned
+   * pueden mirar ventanas distintas; cada una divide por la suya). Vacío en BDI.
+   */
+  vvPorDias: Record<number, Record<string, number>>
   lastUpdate: Date | null
   cargando: boolean
   error: string | null
@@ -33,6 +39,7 @@ export function useReposicion(marca: Marca): EstadoReposicion {
   const [cfg, setCfg] = useState<RepoCfg>(() => repoCfgDefault())
   const [rawInv, setRawInv] = useState<FilaInvRepo[]>([])
   const [s7, setS7] = useState<Record<string, number>>({})
+  const [vvPorDias, setVvPorDias] = useState<Record<number, Record<string, number>>>({})
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -53,6 +60,12 @@ export function useReposicion(marca: Marca): EstadoReposicion {
         ventasLocal7d(marca),
         ultimaSincronizacion(marca),
       ])
+      // La ventana sale de la config, así que va después: si alguien la cambia, se respeta.
+      // La ventana sale de la config, así que va después. Si las dos líneas miran los mismos días, es
+      // una sola bajada.
+      const ventanas = marca === 'zattia' ? [...new Set([cfgVentas(config, 'zattia').ventanaDias, cfgVentas(config, 'stunned').ventanaDias])] : []
+      const mapas = await Promise.all(ventanas.map((d) => ventasLocal(marca, d)))
+      setVvPorDias(Object.fromEntries(ventanas.map((d, i) => [d, mapas[i]])))
       setCfg(config)
       setRawInv(inv)
       setS7(ventas)
@@ -88,5 +101,5 @@ export function useReposicion(marca: Marca): EstadoReposicion {
     [marca],
   )
 
-  return { cfg, rawInv, s7, lastUpdate, cargando, error, shareStatus, guardarCfg, traer }
+  return { cfg, rawInv, s7, vvPorDias, lastUpdate, cargando, error, shareStatus, guardarCfg, traer }
 }

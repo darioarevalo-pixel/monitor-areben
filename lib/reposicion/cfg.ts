@@ -26,6 +26,10 @@ export async function leerRepoConfig(marca: Marca): Promise<RepoCfg> {
         topes: c.topes || {},
         catsOff: c.catsOff || [],
         prioridadRetiro: c.prioridadRetiro === 'local' ? 'local' : 'deposito',
+        // Sin esta línea, el primer guardado desde la pantalla borraba los modos y parámetros:
+        // se guarda la config entera que se leyó, y lo que no se leyó no existe.
+        ...(c.ventas && typeof c.ventas === 'object' ? { ventas: c.ventas } : {}),
+        ...(c.ventasStunned && typeof c.ventasStunned === 'object' ? { ventasStunned: c.ventasStunned } : {}),
       }
     }
   } catch {

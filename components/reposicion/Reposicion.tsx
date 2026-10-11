@@ -14,6 +14,7 @@ import { reposicionPDF } from '@/lib/reposicion/pdf'
 import type { RepoCfg, RepoItem } from '@/lib/reposicion/tipos'
 import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
+import { ReposicionZattia } from './ReposicionZattia'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import {
@@ -40,6 +41,8 @@ export function Reposicion() {
   const { marca } = useSesion()
   const { datos } = useDatosMonitor()
   if (!datos) return <Esqueleto forma="tabla" filas={8} />
+  // Zattia repone según ventas, con dos listas (`ReposicionZattia`); BDI sigue con los mínimos.
+  if (marca === 'zattia') return <ReposicionZattia key={marca} allProductos={datos.allProductos ?? []} />
   return <Contenido key={marca} allProductos={datos.allProductos ?? []} />
 }
 

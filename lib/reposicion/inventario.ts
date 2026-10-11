@@ -21,9 +21,16 @@ export type FilaInvRepo = {
   observation?: string
 }
 
-export type ProductoGN = { id: string | number; category?: string | null; sku?: string | null; name?: string | null }
+export type ProductoGN = { id: string | number; category?: string | null; sku?: string | null; name?: string | null; diasVivo?: number | null }
 
-export function construirInv(inventario: FilaInvRepo[], prodById: Record<string, ProductoGN>, tnIdx: IndiceTn, s7: Record<string, number>): RepoItem[] {
+export function construirInv(
+  inventario: FilaInvRepo[],
+  prodById: Record<string, ProductoGN>,
+  tnIdx: IndiceTn,
+  s7: Record<string, number>,
+  /** Ventas en la ventana de la reposición según ventas (Zattia). Ausente en BDI. */
+  vv?: Record<string, number>,
+): RepoItem[] {
   const map: Record<string, RepoItem> = {}
   ;(inventario || []).forEach((r) => {
     const pid = String(r.product_id)
@@ -65,6 +72,7 @@ export function construirInv(inventario: FilaInvRepo[], prodById: Record<string,
         s7: s7[vid] || 0,
         ubic: r.observation || '',
         sinProducto,
+        ...(vv ? { vv: vv[vid] || 0, diasVivo: pReal?.diasVivo ?? null } : {}),
       }
     }
     if (r.observation && !map[vid].ubic) map[vid].ubic = r.observation
