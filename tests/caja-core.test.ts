@@ -570,7 +570,11 @@ describe('caja · A6: el servidor exige la cuenta que corresponde', () => {
     expect(ok(una, EFECTIVO, F)).toThrow(/modo feria/)
     expect(ok(una, TRANSFERENCIA, F)).toThrow(/modo feria/)
     expect(ok(una, FERIA_EFECTIVO, F)).not.toThrow()
-    expect(ok(una, DEBITO, F)).not.toThrow()
+    // Bruno, 11-oct: con el modo feria, débito y crédito ⛔ aunque no haya prendas marcadas de feria.
+    expect(ok(una, DEBITO, F)).toThrow(/efectivo o transferencia/)
+    expect(ok(una, 25188, F)).toThrow(/efectivo o transferencia/)
+    expect(() => pagosDeMedio('debito', { filas: una, reglas: F, total: 20000, promoCreditoHoy: false, esDelBanco: false, seisCuotas: false })).toThrow(/efectivo o transferencia/)
+    expect(() => pagosDeMedio('credito', { filas: una, reglas: F, total: 20000, promoCreditoHoy: false, esDelBanco: false, seisCuotas: false })).toThrow(/efectivo o transferencia/)
   })
   it('sin modo feria ni prendas de feria, la cuenta de feria ⛔', () => {
     expect(ok(una, FERIA_EFECTIVO)).toThrow(/modo feria/)

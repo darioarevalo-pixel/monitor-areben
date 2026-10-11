@@ -88,6 +88,8 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   con `promosDeCreditoEnMostrador` de `lib/agenda/promos.core.js`, la MISMA del POS) y las 6 cuotas sólo
   arriba del mínimo (`aPagarDe`). Una pantalla abierta desde antes del cambio da 400 «Recargá la Caja».
   ⚠️ «¿Es de ese banco?» ⛔ se verifica.
+  🔴 **Con el modo feria, débito y crédito ⛔** (Bruno, 11-oct): todo se cobra sólo en efectivo o transferencia,
+  como las prendas de feria (`pagosDeMedio` y `exigirCuentas`); «Varios pagos» se traba igual.
 - 🔑 **El ticket (papel y mail) dice el MEDIO y «Descuento 15%»**, ⛔ «Descuento Transferencia CG».
   La fila guarda en `pagos[].nombre` el medio (`nombreParaTicket`). El mail lo arma `areben-mailer`
   (`lib/email/ticket.ts`): un cambio de renglones allá se deploya a mano (`vercel --prod`).

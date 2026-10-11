@@ -544,6 +544,9 @@ function POS() {
   // 🔑 Productos de feria trabados (Bruno, 5-oct): la MISMA regla que exige el servidor (`exigirFeria`).
   const feriaIds = useMemo(() => idsDeFeria(reglas), [reglas])
   const hayFeria = !!filas && subtotalDeFeria(filas, reglas) > 0
+  // 🔴 Bruno, 11-oct: con el MODO FERIA prendido, todo sólo efectivo o transferencia (como las prendas de feria).
+  const modoFeria = reglas?.feria === true
+  const trabaFeria = hayFeria || modoFeria
   /** Los pagos de UNA forma de pago: con prendas de feria, la parte de feria va a su cuenta. */
   const pagosDe = (medio: Medio, rg: Reglas) => (filas ? pagosDeMedio(medio, { filas, reglas: rg, total: aPagar ?? 0, ...respuestas }) : [{ cuenta: cuentaDe(medio, rg) }])
 
@@ -1014,8 +1017,8 @@ function POS() {
                         tone={varios ? 'brand' : 'neutral'}
                         size="sm"
                         aria-pressed={varios}
-                        disabled={hayFeria && !varios}
-                        title={hayFeria ? 'Con prendas de feria, un solo pago: efectivo o transferencia' : undefined}
+                        disabled={trabaFeria && !varios}
+                        title={trabaFeria ? 'En feria, un solo pago: efectivo o transferencia' : undefined}
                         onClick={() => {
                           setVarios(!varios)
                           setPagos(varios ? [{ medio: null, base: '' }] : [{ medio: pagos[0].medio, base: '' }, { medio: null, base: '' }])
@@ -1031,11 +1034,12 @@ function POS() {
                     // Con «Varios pagos» las cuatro tarjetas siguen a la vista, apagadas (prototipo del 6-oct):
                     // las formas de pago se eligen en cada fila de abajo.
                     <div style={{ display: 'grid', gap: space[2] }}>
+                    {modoFeria && !hayFeria && <Notice tone="warning">Modo feria: se cobra sólo con efectivo o transferencia, a precio final.</Notice>}
                     {hayFeria && <Notice tone="warning">Hay prendas de feria: van a precio final. Se cobra con efectivo o transferencia; la parte de feria va a su cuenta, sin el %.</Notice>}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: space[2] }}>
                       {MEDIOS.map((medio) => {
                         const activa = !varios && pagos[0].medio === medio
-                        const trabada = hayFeria && (medio === 'debito' || medio === 'credito')
+                        const trabada = trabaFeria && (medio === 'debito' || medio === 'credito')
                         const apagada = trabada || varios
                         const cuenta = reglas?.medios ? (() => { try { return cuentaDe(medio, reglas) } catch { return 0 } })() : 0
                         const regla = cuenta ? reglas?.cuentas[cuenta] : undefined
