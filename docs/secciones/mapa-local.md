@@ -41,6 +41,11 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
 
 ## Reglas que el código no dice
 
+- 🔑 **`unaVariante`** (7-oct-2026): los modelos de los que se cuelga UNA sola variante porque ⛔ se
+  venden. Lo marca el relevamiento del Chequeo + mapa y lo lee su «Falta exhibir». Se conserva al
+  guardar un relevamiento (`mapaDesdeRelevamiento`) y lo sanea `validar.core.js`. ⛔ Cambia dónde
+  cae cada prenda en los percheros.
+
 - 🔑 **Se guarda el ARMADO, ⛔ no dónde cae cada prenda.** Cada prenda cae en una barra por su tipo
   y su línea, y se recalcula con el stock del espejo cada vez que se abre la pantalla. Guardar el
   resultado lo dejaría viejo con la primera venta. La ganancia es que lo que entra nuevo ya tiene

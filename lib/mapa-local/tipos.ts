@@ -93,6 +93,12 @@ export type MapaLocal = {
   tipos: TipoCfg[]
   /** Sin el campo valen `TEMPORADAS_INICIALES` (un mapa guardado antes del 1-oct-2026 ⛔ no lo trae). */
   temporadas?: Temporadas
+  /**
+   * Los modelos (`productId`) de los que se cuelga **una sola variante** a propósito porque ⛔ se
+   * venden (Darío, 7-oct-2026). La regla del local es 1 unidad de cada variante; éstos son la
+   * excepción. Lo lee el cierre del Chequeo + mapa (`cierreDelRelevamiento`). Sin el campo, ninguno.
+   */
+  unaVariante?: string[]
 }
 
 /**

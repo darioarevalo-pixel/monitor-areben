@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest'
 import { prendasDelLocal, ubicar, idNivel } from '../lib/mapa-local/core'
 import { MAPA_INICIAL, TIPOS_INICIALES } from '../lib/mapa-local/inicial'
-import { armarRelevamiento, cierreDelRelevamiento, leerEspacio, lugarDe, mapaDesdeRelevamiento } from '../lib/mapa-local/relevamiento'
+import { armarRelevamiento, cierreDelRelevamiento, conUnaVariante, leerEspacio, lugarDe, mapaDesdeRelevamiento } from '../lib/mapa-local/relevamiento'
 import { sanearMapa } from '../lib/mapa-local/validar.core.js'
 import type { EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
@@ -109,19 +109,47 @@ describe('armarRelevamiento', () => {
 describe('cierreDelRelevamiento', () => {
   const mapa = { modulos: [{ codigo: 'D01' }, { codigo: 'D02' }] } as MapaLocal
 
-  it('falta exhibir: con stock y ⛔ escaneado en NINGÚN lugar, por color y ⛔ por talle', () => {
-    const items = [item('A', 'Negro - S'), item('A', 'Negro - M'), item('A', 'Rojo - S', 2), item('A', 'Rojo - M', 3), item('B')]
+  it('🔑 falta exhibir POR VARIANTE: un talle colgado ⛔ tapa a los otros del mismo color', () => {
+    const items = [item('A', 'Negro - S'), item('A', 'Negro - M'), item('A', 'Rojo - S', 2), item('A', 'Rojo - M', 3), item('B'), item('C', 'Negro - L', 0)]
     const c = cierreDelRelevamiento([esc('D01', 'A', 'Negro - M'), esc('vidriera', 'B')], items, mapa)
-    // Negro se vio en otro talle; B está en la vidriera: lo único que falta es el rojo.
-    expect(c.faltaExhibir.map((f) => [f.clave, f.unidades])).toEqual([['A|rojo', 5]])
+    // El M negro está; B está en la vidriera; C ⛔ tiene stock. Falta cada variante restante de A.
+    expect(c.faltaExhibir.map((f) => [f.color, f.talle, f.unidades, f.modeloColgado])).toEqual([
+      ['negro', 'S', 1, true],
+      ['rojo', 'M', 3, true],
+      ['rojo', 'S', 2, true],
+    ])
   })
 
-  it('sobra: lo escaneado sin stock, y la misma prenda en dos lugares', () => {
-    const items = [item('A'), item('B')]
-    const c = cierreDelRelevamiento([esc('D01', 'A'), esc('D02', 'A'), esc('D01', 'B'), esc('D01', 'Z')], items, mapa)
+  it('el modelo sin nada colgado se distingue del que ya tiene lugar', () => {
+    const c = cierreDelRelevamiento([esc('D01', 'A', 'Negro - M')], [item('A', 'Negro - M'), item('A', 'Negro - S'), item('B', 'Negro - S')], mapa)
+    expect(c.faltaExhibir.map((f) => [f.productId, f.modeloColgado])).toEqual([
+      ['A', true],
+      ['B', false],
+    ])
+  })
+
+  it('🔑 «una sola variante»: con una colgada las otras ⛔ faltan; sin ninguna, falta UNA', () => {
+    const items = [item('A', 'Negro - S'), item('A', 'Negro - M', 2), item('A', 'Rojo - S'), item('B', 'Negro - S', 2), item('B', 'Rojo - M', 3)]
+    const conMarca = { ...mapa, unaVariante: ['A', 'B'] }
+    const c = cierreDelRelevamiento([esc('D01', 'A', 'Rojo - S')], items, conMarca)
+    expect(c.porUnaVariante).toBe(2)
+    expect(c.faltaExhibir.map((f) => [f.productId, f.unaVariante, f.unidades])).toEqual([['B', true, 5]])
+  })
+
+  it('lo que el mapa dice que ⛔ va en percha ⛔ falta', () => {
+    const conTipos = { ...mapa, tipos: [{ tipo: 'BOMBACHA', largo: 'L1', perchasPorM: 20, topePorM: null, cuelga: false }] } as MapaLocal
+    const c = cierreDelRelevamiento([], [item('A', 'M', 1, { name: 'BOMBACHA BORA' }), item('B')], conTipos)
+    expect(c.faltaExhibir.map((f) => f.productId)).toEqual(['B'])
+  })
+
+  it('sobra: la variante escaneada sin stock, y la misma variante en dos lugares', () => {
+    const items = [item('A'), item('B'), item('C', 'S'), item('C', 'M', 0)]
+    const c = cierreDelRelevamiento([esc('D01', 'A'), esc('D02', 'A'), esc('D01', 'B'), esc('D01', 'Z'), esc('D01', 'C', 'S'), esc('D02', 'C', 'M')], items, mapa)
+    // C en dos lugares ⛔ sobra: son dos talles distintos. Sí sobra su M, que está en cero.
     expect(c.sobran.map((s) => [s.clave, s.motivo, s.lugares])).toEqual([
-      ['A|', 'dos-lugares', ['D01', 'D02']],
-      ['Z|', 'sin-stock', ['D01']],
+      ['A|M', 'dos-lugares', ['D01', 'D02']],
+      ['C|M', 'sin-stock', ['D02']],
+      ['Z|M', 'sin-stock', ['D01']],
     ])
   })
 
@@ -231,6 +259,20 @@ describe('mapaDesdeRelevamiento', () => {
   it('simple → doble se anuncia como cambio de estructura', () => {
     const { cambios } = mapaDesdeRelevamiento(armarRelevamiento([esc('D06 arriba', 'A'), esc('D06 abajo', 'B')]), base, TIPOS_INICIALES)
     expect(cambios).toContainEqual(expect.objectContaining({ codigo: 'D06', que: 'estructura', texto: 'D06 pasa a doble' }))
+  })
+
+  it('marcar y desmarcar «una sola variante» ⛔ toca las barras', () => {
+    const m = conUnaVariante(base, '9', true)
+    expect(m.unaVariante).toEqual(['9'])
+    expect(m.modulos).toBe(base.modulos)
+    expect(conUnaVariante(m, '9', false).unaVariante).toEqual([])
+  })
+
+  it('los modelos «una sola variante» se conservan al guardar el relevamiento y pasan el saneo', () => {
+    const { mapa } = mapaDesdeRelevamiento(armarRelevamiento(escaneos), { ...base, unaVariante: ['A', '77'] }, TIPOS_INICIALES)
+    expect(mapa.unaVariante).toEqual(['A', '77'])
+    const s = sanearMapa(mapa)
+    expect(s.ok && s.mapa.unaVariante).toEqual(['77', 'A'])
   })
 
   it('sin mapa guardado sale sólo lo relevado, con la tabla del armado inicial', () => {

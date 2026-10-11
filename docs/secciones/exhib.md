@@ -36,6 +36,16 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 >    **falta exhibir** (con stock y escaneado en NINGÚN lugar, por modelo×color), **sobran** (sin stock
 >    o en dos lugares) y **«Guardar como mapa del local»** (pide `mapa-local.editar`). La lógica vive en
 >    `lib/mapa-local/relevamiento.ts`; ver `mapa-local.md`.
+> 🧮 **«Falta exhibir» del relevamiento va POR VARIANTE (7-oct-2026, Darío)**: la regla del local es
+> colgar **1 unidad de cada variante** (color + talle). Antes contaba por color y un talle colgado tapaba
+> a los demás: con el recorrido del 5-oct daba 74 «prendas» y por variante son **127**, de las cuales
+> **76 son de modelos que YA están colgados** (falta sumar el talle al lado). La lista sale agrupada
+> así: «Ya colgados: falta el talle o color» y «Sin nada colgado».
+> 🔑 **La excepción: «Una sola variante»** — los modelos que ⛔ se venden se cuelgan con una sola. Un
+> botón al lado de cada modelo lo marca en el Mapa del local (`mapa.unaVariante`, sin migración) y
+> desde ahí: con una colgada, las otras ⛔ faltan; con ninguna, falta UNA. Se marca y se saca desde
+> la misma pantalla (pide `mapa-local.editar`). Lo que el mapa dice que ⛔ va en percha
+> (`TipoCfg.cuelga = false`: lencería, cintos, accesorios) ⛔ falta nunca. «Sobra» también va por variante.
 > 🔴 **El modo viaja en el borrador del teléfono** (`AlAbrir` en `useColaEscaneos.ts`): la apertura
 > se reintenta en cada tanda, y si el teléfono se recarga sin señal, reabrir sin el modo lo crearía
 > `libre`. Lo cuida `tests/exhib-cola-modo.test.tsx`.

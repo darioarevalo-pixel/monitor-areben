@@ -230,14 +230,40 @@ export function armarRelevamiento(escaneos: EscaneoLibre[]): Relevamiento {
 }
 
 /** Una prenda con stock en el Local que ⛔ pasó por el lector en ningún lugar del recorrido. */
-export type FaltaExhibir = { clave: string; nombre: string; color: string; tipo: string; unidades: number }
+/**
+ * Una VARIANTE (color + talle) con stock en el Local que ⛔ pasó por el lector.
+ *
+ * 🔑 **La regla del local es colgar 1 unidad de CADA variante** (Darío, 7-oct-2026: «siempre en
+ * chequeo de exhibición es importante la variante»). Antes se contaba por color y un talle colgado
+ * tapaba a los demás.
+ * - `modeloColgado` = otra variante del mismo modelo SÍ se escaneó: el modelo ya tiene lugar, falta
+ *   sumar este talle/color al lado.
+ * - `unaVariante` = el modelo está marcado «se cuelga una sola variante» y no se vio ninguna: falta
+ *   colgar UNA cualquiera (`talle` y `color` vienen vacíos y `unidades` suma todas).
+ */
+export type FaltaExhibir = {
+  clave: string
+  productId: string
+  nombre: string
+  color: string
+  talle: string
+  tipo: string
+  unidades: number
+  modeloColgado: boolean
+  unaVariante: boolean
+}
 
-/** Lo escaneado que sobra: sin stock en el sistema, o la misma prenda colgada en dos lugares. */
-export type Sobra = { clave: string; nombre: string; color: string; motivo: 'sin-stock' | 'dos-lugares'; lugares: string[] }
+/** Lo escaneado que sobra: la variante sin stock en el sistema, o la misma variante colgada en dos lugares. */
+export type Sobra = { clave: string; nombre: string; color: string; talle: string; motivo: 'sin-stock' | 'dos-lugares'; lugares: string[] }
 
 export type CierreRelevamiento = {
   faltaExhibir: FaltaExhibir[]
   sobran: Sobra[]
+  /**
+   * Las variantes que ⛔ se piden porque su modelo está marcado «una sola variante» y ya hay una
+   * colgada. Se cuentan para que la pantalla diga cuántas se dejaron afuera a propósito.
+   */
+  porUnaVariante: number
   /**
    * Los módulos del mapa guardado que nadie caminó. 🔴 **Mientras haya alguno, «falta exhibir» es
    * PROVISORIO**: lo que falta puede estar colgado justo ahí. `null` = ⛔ hay mapa para saberlo.
@@ -247,50 +273,98 @@ export type CierreRelevamiento = {
   sinIdentificar: number
 }
 
+/** La variante: producto + talle tal como viene de Gestión Nube (`size_name`, que trae color y talle). */
+const varianteDe = (productId: string | number | null, size: string | null) => `${productId}|${size || ''}`
+
+/** El talle de `size_name` sin el color («Negro - M» → «M»). Sin guion, el texto entero es el talle. */
+function talleDe(size: string | null): string {
+  const s = String(size || '').trim()
+  const i = s.lastIndexOf(' - ')
+  return i >= 0 ? s.slice(i + 3).trim() : colorDeVariante(s) ? '' : s
+}
+
 /**
- * **El cierre, sólo al finalizar todo**: lo que falta exhibir y lo que sobra.
+ * **El cierre, sólo al finalizar todo**: lo que falta exhibir y lo que sobra, **por variante**.
  *
- * - **Falta** = producto×color con stock en el Local (`items`, sin Stunned) que ⛔ pasó por el
- *   lector en NINGÚN lugar del recorrido —barras, vidriera, mesas—. Por color y ⛔ por talle: se
- *   cuelga uno por color.
- * - **Sobra** = lo escaneado que el sistema tiene en cero, o la misma prenda en dos lugares.
+ * - **Falta** = variante con stock en el Local (`items`, sin Stunned) que ⛔ pasó por el lector en
+ *   NINGÚN lugar del recorrido —barras, vidriera, mesas—.
+ * - Los tipos que el mapa marca que ⛔ se cuelgan (`TipoCfg.cuelga`) ⛔ faltan nunca.
+ * - 🔑 **Los modelos «una sola variante»** (`mapa.unaVariante`, los que ⛔ se venden): con UNA
+ *   colgada, el resto ⛔ falta (`porUnaVariante`); con ninguna, falta UNA, en un solo renglón.
+ * - **Sobra** = la variante escaneada que el sistema tiene en cero, o la misma variante en dos lugares.
  *
  * ⚠️ Es una afirmación sobre el local ENTERO: sólo es firme si `sinRelevar` está vacío.
  */
-export function cierreDelRelevamiento(escaneos: EscaneoLibre[], items: ExhibItem[], mapa: Pick<MapaLocal, 'modulos'> | null): CierreRelevamiento {
-  const vistas = new Map<string, { nombre: string; color: string; lugares: Set<string>; conStock: boolean }>()
+export function cierreDelRelevamiento(
+  escaneos: EscaneoLibre[],
+  items: ExhibItem[],
+  mapa: (Pick<MapaLocal, 'modulos'> & Pick<Partial<MapaLocal>, 'unaVariante' | 'tipos'>) | null,
+): CierreRelevamiento {
+  const vistas = new Map<string, { nombre: string; size: string; lugares: Set<string>; conStock: boolean }>()
+  const modelosVistos = new Set<string>()
   let sinIdentificar = 0
   for (const e of escaneos) {
-    const clave = claveDe(e)
-    if (!clave) {
+    if (!claveDe(e)) {
       sinIdentificar++
       continue
     }
     if (!seChequea('zattia', { sku: e.sku || '' })) continue
+    const clave = varianteDe(e.product_id, e.size)
+    modelosVistos.add(String(e.product_id))
     let v = vistas.get(clave)
-    if (!v) vistas.set(clave, (v = { nombre: e.product_name || '', color: colorDeVariante(e.size), lugares: new Set(), conStock: false }))
+    if (!v) vistas.set(clave, (v = { nombre: e.product_name || '', size: e.size || '', lugares: new Set(), conStock: false }))
     v.lugares.add(e.lugar.trim())
   }
 
+  const unaSola = new Set(mapa?.unaVariante ?? [])
+  // Lo que el mapa dice que ⛔ va en percha (lencería, cintos, accesorios) ⛔ se pide colgar.
+  const noCuelga = new Set((mapa?.tipos ?? []).filter((t) => t.cuelga === false).map((t) => t.tipo))
   const faltan = new Map<string, FaltaExhibir>()
+  let porUnaVariante = 0
   for (const it of items) {
     if (!(it.qty > 0) || !seChequea('zattia', it)) continue
-    const clave = `${it.productId}|${colorDeVariante(it.size)}`
+    const clave = varianteDe(it.productId, it.size)
     const v = vistas.get(clave)
     if (v) {
       v.conStock = true
       continue
     }
+    if (noCuelga.has(tipoDePrenda(it.name))) continue
+    const colgado = modelosVistos.has(it.productId)
+    if (unaSola.has(it.productId)) {
+      if (colgado) {
+        porUnaVariante++
+        continue
+      }
+      // Ninguna colgada: falta UNA, cualquiera. Un solo renglón por modelo.
+      const k = `${it.productId}|*`
+      const ya = faltan.get(k)
+      if (ya) ya.unidades += it.qty
+      else faltan.set(k, { clave: k, productId: it.productId, nombre: it.name, color: '', talle: '', tipo: tipoDePrenda(it.name), unidades: it.qty, modeloColgado: false, unaVariante: true })
+      continue
+    }
     const ya = faltan.get(clave)
     if (ya) ya.unidades += it.qty
-    else faltan.set(clave, { clave, nombre: it.name, color: colorDeVariante(it.size), tipo: tipoDePrenda(it.name), unidades: it.qty })
+    else
+      faltan.set(clave, {
+        clave,
+        productId: it.productId,
+        nombre: it.name,
+        color: colorDeVariante(it.size),
+        talle: talleDe(it.size),
+        tipo: tipoDePrenda(it.name),
+        unidades: it.qty,
+        modeloColgado: colgado,
+        unaVariante: false,
+      })
   }
 
   const sobran: Sobra[] = []
   for (const [clave, v] of vistas) {
     const lugares = [...v.lugares].sort()
-    if (!v.conStock) sobran.push({ clave, nombre: v.nombre, color: v.color, motivo: 'sin-stock', lugares })
-    else if (lugares.length > 1) sobran.push({ clave, nombre: v.nombre, color: v.color, motivo: 'dos-lugares', lugares })
+    const base = { clave, nombre: v.nombre, color: colorDeVariante(v.size), talle: talleDe(v.size), lugares }
+    if (!v.conStock) sobran.push({ ...base, motivo: 'sin-stock' })
+    else if (lugares.length > 1) sobran.push({ ...base, motivo: 'dos-lugares' })
   }
 
   // Las barras a medio caminar (doble con una sola altura) también: de esa altura ⛔ se sabe nada.
@@ -300,10 +374,12 @@ export function cierreDelRelevamiento(escaneos: EscaneoLibre[], items: ExhibItem
   const medias = r.modulos.flatMap((m) => m.barras.filter((b) => !b.relevada).map((b) => `${m.codigo} ${PALABRA_DE[b.pos]}`))
   const sinRelevar = mapa ? [...mapa.modulos.map((m) => m.codigo).filter((c) => !caminados.has(leerEspacio(c)?.codigo ?? c)), ...medias] : null
 
-  const porNombre = <T extends { nombre: string; color: string }>(a: T, b: T) => a.nombre.localeCompare(b.nombre) || a.color.localeCompare(b.color)
+  const porNombre = <T extends { nombre: string; color: string; talle: string }>(a: T, b: T) =>
+    a.nombre.localeCompare(b.nombre) || a.color.localeCompare(b.color) || a.talle.localeCompare(b.talle)
   return {
     faltaExhibir: [...faltan.values()].sort((a, b) => a.tipo.localeCompare(b.tipo) || porNombre(a, b)),
     sobran: sobran.sort(porNombre),
+    porUnaVariante,
     sinRelevar,
     sinIdentificar,
   }
@@ -327,7 +403,7 @@ export type CambioDeMapa = { codigo: string; que: 'nuevo' | 'estructura' | 'barr
  * - Los tipos y la línea se deducen de lo escaneado. Con `modelos` puestos ⛔ deciden qué entra
  *   (`aceptaEn`); quedan para dibujar y para las alertas de altura.
  * - Del mapa de antes se conservan el ancho, la altura de cada barra que ya existía, la tabla de
- *   tipos y las temporadas.
+ *   tipos, las temporadas y los modelos «una sola variante».
  * - 🔴 **Un módulo que nadie caminó ⛔ se inventa ni se borra**: queda como estaba.
  * - `base` puede ser `null` (nadie guardó un mapa): sale sólo lo relevado, con la tabla del armado
  *   inicial (`tiposIniciales`).
@@ -404,5 +480,18 @@ export function mapaDesdeRelevamiento(r: Relevamiento, base: MapaLocal | null, t
 
   const mapa: MapaLocal = { version: 1, modulos, tipos: base?.tipos ?? tiposIniciales }
   if (base?.temporadas) mapa.temporadas = base.temporadas
+  if (base?.unaVariante?.length) mapa.unaVariante = base.unaVariante
   return { mapa, cambios }
+}
+
+/**
+ * El mapa con un modelo marcado (o desmarcado) «se cuelga una sola variante», **sin tocar nada más**.
+ * Se aplica sobre el mapa recién leído al guardar, como `conTemporadas`: así ⛔ pisa un cambio de
+ * barras guardado desde otra pantalla.
+ */
+export function conUnaVariante(mapa: MapaLocal, productId: string, marcar: boolean): MapaLocal {
+  const ids = new Set(mapa.unaVariante ?? [])
+  if (marcar) ids.add(productId)
+  else ids.delete(productId)
+  return { ...mapa, unaVariante: [...ids].sort() }
 }
