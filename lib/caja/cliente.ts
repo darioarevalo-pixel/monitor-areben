@@ -25,12 +25,14 @@ export type TipoPromo = 'nxm' | 'segunda_unidad' | 'pct' | 'monto_minimo'
 export type AlcancePromo = { tipo: 'todo' } | { tipo: 'categorias'; categorias: string[] } | { tipo: 'productos'; productos: ProductoFeria[] }
 export type PromoCaja = { id: string; nombre: string; tipo: TipoPromo; lleva?: number; paga?: number; pct?: number; minimo?: number; pesos?: number; alcance: AlcancePromo; desde: string; hasta: string | null; activa: boolean }
 /** `transferenciaA`: la cuenta de GN de la transferencia, YA resuelta por el servidor desde la cuenta de MP en uso (null sin mapeo). */
-export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number | null; transferenciaPorMp?: Record<string, number>; billetes?: number[]; feriaProductos?: ProductoFeria[]; promos?: PromoCaja[] }
+export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number | null; transferenciaPorMp?: Record<string, number>; billetes?: number[]; feriaProductos?: ProductoFeria[]; /** Las campañas de Liquidación que son feria (Bruno, 11-oct). */ feriaCampanias?: string[]; /** Los productos con el precio de esas campañas aplicado: los resuelve el servidor. */ feriaIdsCampania?: number[]; promos?: PromoCaja[] }
 /** Un descuento a mano, a una prenda o a toda la venta. */
 export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 /** `ticket_logo`: el logo del ticket (null sin logo, o sin `sql/migrate-caja-logo.sql`). */
 /** `versiones`: las de las listas que se guardan ENTERAS (promos, productos de feria): se mandan al guardar para ⛔ pisar a otro admin. */
-export type Config = { reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string } }
+/** `campaniasLiq`: sólo a un admin, para elegir cuáles son de feria. */
+export type CampaniaLiq = { id: string; nombre: string; estado: string }
+export type Config = { reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string }; campaniasLiq?: CampaniaLiq[] }
 
 /** Una cuenta de cobro de GN. `regla` en null ⇒ la Caja ⛔ la cobra (sin %, o con recargo). */
 export type CuentaGN = { id: number; nombre: string; regla: ReglaCuenta | null }
@@ -229,5 +231,5 @@ export const guardarLogo = (logo: LogoTicket | null) => post<{ ticket_logo: Logo
 export type Versiones = NonNullable<Config['versiones']>
 export const guardarPromos = (promos: PromoCaja[], version?: string) =>
   post<{ reglas: Reglas; versiones?: Versiones }>({ action: 'promos', promos, ...(version ? { version } : {}) }, 'No se pudieron guardar las promos.')
-export const guardarBajadas = (b: { transferenciaPorMp?: { mp: number; gn: number }; billetes?: number[]; feriaProductos?: ProductoFeria[]; version?: string }) =>
+export const guardarBajadas = (b: { transferenciaPorMp?: { mp: number; gn: number }; billetes?: number[]; feriaProductos?: ProductoFeria[]; feriaCampanias?: string[]; version?: string }) =>
   post<{ reglas: Reglas; versiones?: Versiones }>({ action: 'bajadas', ...b }, 'No se pudo guardar.')

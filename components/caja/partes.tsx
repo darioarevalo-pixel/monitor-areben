@@ -41,6 +41,7 @@ import {
   type PedidosWeb,
   type ProductoLista,
   type ProductoFeria,
+  type CampaniaLiq,
   buscarNombre,
   guardarLogo,
   leerCuentasMp,
@@ -1894,7 +1895,7 @@ export function ModalesTurno({
  * sólo en efectivo o transferencia, a la cuenta de feria, sin el % de la forma de pago. Se guarda la
  * lista entera en `caja_config.reglas.feriaProductos`; la regla vive en `lib/caja/core.core.js`.
  */
-export function ProductosFeria({ reglas, version, onGuardadas }: { reglas: Reglas; version?: string; onGuardadas: (r: Reglas, v?: Versiones) => void }) {
+export function ProductosFeria({ reglas, version, campanias = [], onGuardadas }: { reglas: Reglas; version?: string; /** Las de Liquidación: las tildadas son la feria (Bruno, 11-oct). */ campanias?: CampaniaLiq[]; onGuardadas: (r: Reglas, v?: Versiones) => void }) {
   const [abierto, setAbierto] = useState(false)
   const [q, setQ] = useState('')
   const [resultado, setResultado] = useState<ProductoLista[] | null>(null)
@@ -1918,6 +1919,19 @@ export function ProductosFeria({ reglas, version, onGuardadas }: { reglas: Regla
     }
   }, [q])
 
+  async function guardarCampanias(ids: string[]) {
+    setGuardando(true)
+    setMsg(null)
+    try {
+      const r = await guardarBajadas({ feriaCampanias: ids })
+      onGuardadas(r.reglas, r.versiones)
+    } catch (e) {
+      setMsg((e as Error).message)
+    } finally {
+      setGuardando(false)
+    }
+  }
+
   async function guardar(nueva: ProductoFeria[]) {
     setGuardando(true)
     setMsg(null)
@@ -1936,12 +1950,36 @@ export function ProductosFeria({ reglas, version, onGuardadas }: { reglas: Regla
       variante="tarjeta"
       abierto={abierto}
       onToggle={() => setAbierto(!abierto)}
-      titulo={`Productos de feria (${lista.length})`}
+      titulo={`Productos de feria (${new Set([...lista.map((p) => p.id), ...(reglas.feriaIdsCampania ?? [])]).size})`}
       ayuda="Precio final: sólo efectivo o transferencia, a la cuenta de feria, sin descuento por forma de pago. Sólo lo cambia un admin."
     >
       <div style={{ display: 'grid', gap: space[3], maxWidth: 640 }}>
+        {/* 🔑 Bruno, 11-oct: la feria es la de Liquidación. Es feria todo producto con el precio de una campaña
+            tildada APLICADO; al sacar la campaña, deja de serlo solo. */}
+        <Field label="Campañas de Liquidación que son feria">
+          <div style={{ display: 'grid', gap: space[1] }}>
+            {campanias.length === 0 && <span style={{ color: color.mut, fontSize: font.sm }}>Sin campañas en Liquidación.</span>}
+            {campanias.map((c) => {
+              const tildada = (reglas.feriaCampanias ?? []).includes(c.id)
+              return (
+                <label key={c.id} style={{ display: 'flex', gap: space[2], alignItems: 'center', fontSize: font.base }}>
+                  <input
+                    type="checkbox"
+                    checked={tildada}
+                    disabled={guardando}
+                    onChange={() => void guardarCampanias(tildada ? (reglas.feriaCampanias ?? []).filter((x) => x !== c.id) : [...(reglas.feriaCampanias ?? []), c.id])}
+                  />
+                  <span>{c.nombre}</span>
+                  <span style={{ color: color.mut, fontSize: font.sm }}>({c.estado})</span>
+                </label>
+              )
+            })}
+            {!!reglas.feriaIdsCampania?.length && <span style={{ color: color.mut, fontSize: font.sm }}>{reglas.feriaIdsCampania.length} productos con el precio de feria aplicado.</span>}
+          </div>
+        </Field>
+        <span style={{ fontWeight: weight.semibold, fontSize: font.sm, color: color.ink2 }}>Agregados a mano</span>
         {lista.length === 0 ? (
-          <span style={{ color: color.mut, fontSize: font.sm }}>Productos de feria: ninguno.</span>
+          <span style={{ color: color.mut, fontSize: font.sm }}>Ninguno.</span>
         ) : (
           <div style={{ display: 'grid', gap: space[1.5] }}>
             {lista.map((p) => (

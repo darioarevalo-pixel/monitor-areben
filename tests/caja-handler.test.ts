@@ -20,6 +20,8 @@ const base = {
   movs: [] as Fila[],
   // A6: las promos bancarias de la Agenda (base de BDI).
   agenda: [] as Fila[],
+  // La feria de Liquidación (Bruno, 11-oct).
+  liqItems: [] as Fila[],
   alCerrar: null as null | (() => void),
   antesDeInsertar: null as null | (() => void),
 }
@@ -46,7 +48,7 @@ function consulta(tabla: string) {
     const todas = tabla === 'caja_venta' ? [...base.ventas.values()] : tabla === 'caja_config' ? (base.config ? [base.config] : [])
       : tabla === 'mp_cuenta_uso' ? base.usos : tabla === 'mp_cuentas' ? base.llaves
       : tabla === 'caja_turno' ? base.turnos : tabla === 'caja_turno_mov' ? base.movs
-      : tabla === 'agenda_promos' ? base.agenda : base.inventario
+      : tabla === 'agenda_promos' ? base.agenda : tabla === 'liquidacion_items' ? base.liqItems : base.inventario
     return todas.filter((f) => filtros.every((p) => p(f)))
   }
   const ejecutar = () => {
@@ -1374,5 +1376,29 @@ describe('caja · auditoría 11-oct, fase 2 (A5–A12, B2–B5, robustez)', () =
     const r = await correr(req('POST', {}, { action: 'promos', promos: [], version: v0 }))
     expect(r.code).toBe(409)
     expect(((base.config as { reglas: { promos: Fila[] } }).reglas.promos)).toHaveLength(1)
+  })
+})
+
+describe('caja · la feria es la de Liquidación (Bruno, 11-oct)', () => {
+  const ADMIN = { name: 'bruno', admin: true, cuenta: null, acceso: {}, funcion: [] }
+  it('🔑 un producto con el precio de la campaña de feria APLICADO va a precio final; uno descartado ⛔', async () => {
+    base.liqItems = [
+      { liq_id: 'feria', store: 'zattia', pid: '7', estado: 'aplicado' },
+      { liq_id: 'feria', store: 'zattia', pid: '8', estado: 'descartado' },
+      { liq_id: 'otra', store: 'zattia', pid: '9', estado: 'aplicado' },
+    ]
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'bajadas', feriaCampanias: ['feria'] }))).code).toBe(403)
+    conSesion(ADMIN)
+    const g = await correr(req('POST', {}, { action: 'bajadas', feriaCampanias: ['feria'] }))
+    expect(g.code).toBe(200)
+    expect((g.body?.reglas as Fila).feriaIdsCampania).toEqual([7])
+    // Lo derivado ⛔ se guarda: se resuelve cada vez.
+    expect((base.config as { reglas: Fila }).reglas.feriaIdsCampania).toBeUndefined()
+    conSesion(CAJERA)
+    // $25.490 de feria en efectivo ⇒ a la de feria, sin el 15 %: $25.500 (redondeo). Con la cuenta común, 400.
+    expect((await correr(req('POST', {}, VENTA))).code).toBe(400)
+    const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25867 }], total: 25500, pagaCon: null }))
+    expect(r.code).toBe(200)
   })
 })

@@ -67,7 +67,11 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   (`traerAudit(..., { variantes: true })`), cruzada por SKU (TN y GN usan el mismo); sin foto propia, la
   del producto.
 - 🔑 **Productos de FERIA TRABADOS** (Bruno, 5-oct): un admin los marca en la pestaña
-  (`caja_config.reglas.feriaProductos: [{ id, nombre }]`, por `bajadas`). Precio final: sólo efectivo o
+  (`caja_config.reglas.feriaProductos: [{ id, nombre }]`, por `bajadas`).
+  🔑 **Y sobre todo, la feria es la de LIQUIDACIÓN** (Bruno, 11-oct): un admin tilda qué campañas son feria
+  (`reglas.feriaCampanias`) y el servidor resuelve `feriaIdsCampania` = los productos con el precio de esas
+  campañas APLICADO (`liquidacion_items.estado`). Al sacar la campaña, dejan de ser feria solos; si la
+  lectura falla, la Caja ⛔ cobra (fail cerrado). La lista a mano queda como agregado.  Precio final: sólo efectivo o
   transferencia, a la cuenta de feria, sin el % de la forma de pago. Pedido mixto = cada prenda con su
   regla: `pagosDeMedio` arma `[{ cuenta de feria, base: lo de feria }, { cuenta normal }]` y 🔴 el
   servidor lo EXIGE con `exigirFeria` (400). Con feria, débito/crédito y «Varios pagos» se traban. El

@@ -207,14 +207,42 @@ export default async function handler(req, res) {
    * general: la feria es por producto (`feriaProductos`).
    */
   async function reglasDeHoy(reglas) {
-    const { feria: _f, ...sinFeria } = reglas
+    const { feria: _f, feriaIdsCampania: _x, ...sinFeria } = reglas
     let enUso = null
     try {
       ;({ enUso } = await cuentasDe(sb, store))
     } catch { /* sin cuenta de MP: la transferencia ⛔ se cobra */ }
     const mapa = reglas.transferenciaPorMp || {}
     const gn = enUso != null ? Number(mapa[String(enUso)]) : NaN
-    return { ...sinFeria, transferenciaA: Number.isInteger(gn) && gn > 0 ? gn : null }
+    return { ...sinFeria, transferenciaA: Number.isInteger(gn) && gn > 0 ? gn : null, feriaIdsCampania: await idsDeCampanias(reglas.feriaCampanias) }
+  }
+
+  /**
+   * 🔑 La FERIA es la de LIQUIDACIÓN (Bruno, 11-oct: «tenés la lista, está todo en el monitor»): los
+   * productos con el precio de una campaña de feria APLICADO (`liquidacion_items.estado = 'aplicado'`).
+   * Qué campañas son de feria lo elige un admin (`reglas.feriaCampanias`); cuando la campaña se saca, sus
+   * productos dejan de ser feria solos. 🔴 Si la lectura falla, LANZA: cobrar una prenda de feria con el %
+   * de la forma de pago la deja debajo del costo.
+   */
+  async function idsDeCampanias(ids) {
+    const lista = Array.isArray(ids) ? ids.map(String).filter(Boolean) : []
+    if (!lista.length) return []
+    const pids = new Set()
+    for (let desde = 0; desde < 20_000; desde += 1000) {
+      const { data, error } = await sb.from('liquidacion_items').select('pid').eq('store', store).in('liq_id', lista).eq('estado', 'aplicado')
+        .order('pid').range(desde, desde + 999)
+      if (error) throw new Error(`No se pudieron leer los productos de feria de Liquidación (${error.message}).`)
+      for (const f of data || []) { const n = Number(f.pid); if (Number.isInteger(n) && n > 0) pids.add(n) }
+      if (!data || data.length < 1000) break
+    }
+    return [...pids]
+  }
+
+  /** Las campañas de Liquidación, para que un admin elija cuáles son de feria. */
+  async function campaniasLiq() {
+    const { data, error } = await sb.from('liquidaciones').select('id, nombre, estado').eq('store', store).order('created_at', { ascending: false }).limit(30)
+    if (error) return []
+    return (data || []).map((c) => ({ id: c.id, nombre: c.nombre, estado: c.estado }))
   }
 
   /**
@@ -366,7 +394,7 @@ export default async function handler(req, res) {
         // la Caja carga igual y el ticket sale con el nombre.
         const logo = await sb.from('caja_config').select('ticket_logo').eq('store', store).maybeSingle()
         const { actualizado_en: _v, ...leida } = await leerConfig()
-        const conf = { ...leida, reglas: await reglasDeHoy(leida.reglas) }
+        const conf = { ...leida, reglas: await reglasDeHoy(leida.reglas), ...(esAdmin(perfil) ? { campaniasLiq: await campaniasLiq() } : {}) }
         // `versiones`: las de las listas que la pantalla manda ENTERAS, para ⛔ pisar la de otro admin.
         const versiones = { promos: versionDe(conf.reglas, 'promos'), feriaProductos: versionDe(conf.reglas, 'feriaProductos') }
         return res.status(200).json({ ...conf, versiones, ticket_logo: logo.error ? null : (logo.data && logo.data.ticket_logo) || null })
@@ -537,6 +565,11 @@ export default async function handler(req, res) {
         // Lo que cambia, validado UNA vez; se aplica sobre la fila que esté al guardar (`guardarReglas`).
         const nuevas = {}
         // A qué cuenta de GN va la transferencia de UNA cuenta de Mercado Pago (Bruno, 11-oct): `{ mp, gn }`.
+        // Qué campañas de Liquidación son feria (Bruno, 11-oct): la lista entera de ids.
+        if (b.feriaCampanias != null) {
+          if (!Array.isArray(b.feriaCampanias) || b.feriaCampanias.length > 20) return res.status(400).json({ error: 'La lista de campañas de feria es inválida.' })
+          nuevas.feriaCampanias = [...new Set(b.feriaCampanias.map((x) => String(x).slice(0, 80)).filter(Boolean))]
+        }
         let parMp = null
         if (b.transferenciaPorMp != null) {
           const mp = Number(b.transferenciaPorMp.mp), gn = Number(b.transferenciaPorMp.gn)
@@ -568,7 +601,7 @@ export default async function handler(req, res) {
         }
         const deLista = b.feriaProductos != null ? { clave: 'feriaProductos', version: b.version } : null
         const g = await guardarReglas((actual) => {
-          const { feria: _f, transferenciaA: _t, ...resto } = actual
+          const { feria: _f, transferenciaA: _t, feriaIdsCampania: _x, ...resto } = actual
           return { ...resto, ...nuevas, ...(parMp ? { transferenciaPorMp: { ...(actual.transferenciaPorMp || {}), [String(parMp.mp)]: parMp.gn } } : {}) }
         }, deLista)
         if (g.conflicto) return res.status(409).json({ error: 'Otro admin cambió la configuración recién. Recargá la Caja y volvé a cargar el cambio.', conflicto: true })
