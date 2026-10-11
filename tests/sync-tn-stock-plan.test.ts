@@ -13,6 +13,12 @@ describe('planDeStock', () => {
     expect(p.candidatas.map((r: { sku: string; gn: number }) => [r.sku, r.gn])).toEqual([['STU-1', 5]])
   })
 
+  it('un negativo en GN se publica como 0 (TN rechaza < 0)', () => {
+    const p = planDeStock(val(2), [...inv([0], -1), ...inv([1], 2)], [{ variantes: [{ sku: 'STU-0', stock: 0 }, { sku: 'STU-1', stock: 2 }] }])
+    expect(p.candidatas).toEqual([])
+    expect(planDeStock(val(1), inv([0], -3), tn(1, 2)).candidatas.map((r: { gn: number }) => r.gn)).toEqual([0])
+  })
+
   it('frena si el inventario vino vacío', () => {
     expect(planDeStock(val(20), [], tn(20)).freno).toMatch(/VACÍO/)
   })
