@@ -13,7 +13,7 @@ import type { RepoItem } from './tipos'
 
 export { codigoArmado, fechaAR, motivoRechazo, resumenArmado, trabado, transferidoDe } from './armado.core.js'
 
-export type LineaPedido = { vid: string; pid: string; sid: string; sku: string; barcode: string; name: string; size: string; cant: number; exhibir: boolean }
+export type LineaPedido = { vid: string; pid: string; sid: string; sku: string; barcode: string; name: string; size: string; cant: number; exhibir: boolean; soloAlarma?: boolean }
 export type MotivoFaltante = 'no-estaba' | 'despues' | 'rechazada'
 export type EstadoArmado = 'en_curso' | 'transfiriendo' | 'transferido' | 'revisar' | 'cancelado'
 export type Sentido = 'llevar' | 'devolver'
@@ -61,13 +61,14 @@ export function pedidoDesde(filas: FilaVentas[], cantidad: (f: FilaVentas) => nu
       size: f.it.size,
       cant: cantidad(f),
       exhibir: f.d.exhibir,
+      soloAlarma: f.d.soloAlarma,
     }))
     .filter((l) => l.cant > 0)
 }
 
 /** Qué pasó con un código que pasó por el lector. */
 export type Lectura =
-  | { tipo: 'suma'; linea: LineaPedido; n: number; faltan: number; exhibir: boolean }
+  | { tipo: 'suma'; linea: LineaPedido; n: number; faltan: number; exhibir: boolean; soloAlarma: boolean }
   | { tipo: 'sobra'; linea: LineaPedido }
   | { tipo: 'no-pedida'; nombre: string }
   | { tipo: 'desconocido' }
@@ -98,7 +99,8 @@ export function leerCodigo(pedido: LineaPedido[], escaneos: Record<string, numbe
     if (!abierta) return { tipo: 'sobra', linea: enPedido[0] }
     const n = (escaneos[abierta.vid] || 0) + 1
     // La marca «para exhibir» va con la PRIMERA: es la que sale con alarma y etiquetas.
-    return { tipo: 'suma', linea: abierta, n, faltan: abierta.cant - n, exhibir: abierta.exhibir && n === 1 }
+    // «Sin etiqueta de precio» va con TODAS: cada una sale con alarma (todo exhibido).
+    return { tipo: 'suma', linea: abierta, n, faltan: abierta.cant - n, exhibir: abierta.exhibir && n === 1, soloAlarma: !!abierta.soloAlarma }
   }
   const otra = coinciden(inv.map((x) => ({ ...x, sku: x.sku || '', barcode: x.barcode || '' })), code)[0]
   return otra ? { tipo: 'no-pedida', nombre: `${otra.name}${talle(otra.size) ? ` ${talle(otra.size)}` : ''}` } : { tipo: 'desconocido' }
@@ -110,12 +112,12 @@ export function talle(size: string): string {
 }
 
 /**
- * Lo que dice la voz con una prenda bien escaneada: NADA, salvo «Para exhibir» (Darío, 12-oct-2026:
+ * Lo que dice la voz con una prenda bien escaneada: NADA, salvo «Para exhibir» o «Alarma» (Darío, 12-oct-2026:
  * repetir cada producto «lo hace extenso» — la prenda ya está en la mano). El caso normal va sólo
  * con el pitido: uno si faltan más de esa prenda, dos cuando queda completa.
  */
 export function frase(l: Extract<Lectura, { tipo: 'suma' }>): string | undefined {
-  return l.exhibir ? 'Para exhibir' : undefined
+  return l.exhibir ? 'Para exhibir' : l.soloAlarma ? 'Alarma' : undefined
 }
 
 // ─── El servidor ────────────────────────────────────────────────────────────────────────────────

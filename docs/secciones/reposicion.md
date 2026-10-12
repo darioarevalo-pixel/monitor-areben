@@ -147,6 +147,14 @@ La Zebra está en la **misma compu** donde Lorena escanea (Darío). Sólo en la 
 - ⛔ «feria» en pantalla no: se dice «campaña» (VOCABULARIO §5); en el papel sale el título de la campaña.
 - ⏭️ Imprimir de verdad no se ensaya desde una sesión de IA: se prueba en la compu del depósito.
 
+## Sin etiqueta de precio (Darío, 12-oct-2026)
+
+Configurar → «Sin etiqueta de precio»: productos que van a una caja de precio único (las bikinis «todo
+a $5.000»). Al escanear, **cada unidad** sale «Con alarma · sin etiqueta de precio» (voz: «Alarma»),
+y ninguna sale «para exhibir» ni con botón de etiquetas. ⛔ No cambia cuánto se lleva. Con fecha
+«hasta» se apaga sola. Guardado en `ventas.sinPrecio` (`{ pid: { hasta? } }`); la marca viaja en el
+pedido congelado (`soloAlarma`), así que un armado empezado antes del cambio no la tiene.
+
 ## El correo de las 10:00 (tanda 3, 12-oct-2026)
 
 A las 10:00 abre el local y la reposición tiene que estar ahí (Darío). Un correo a Darío

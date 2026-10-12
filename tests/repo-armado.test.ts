@@ -337,3 +337,15 @@ describe('trabado y código del armado', () => {
     expect(codigoArmado('ra1760000000_k3x9ab')).toBe('K3X9AB')
   })
 })
+
+describe('sin etiqueta de precio: cada unidad con alarma (Darío, 12-oct)', () => {
+  const pedido = [L({ cant: 3, soloAlarma: true })]
+  it('todas las unidades avisan, no sólo la primera', () => {
+    for (const n of [0, 1, 2]) {
+      const l = leerCodigo(pedido, n ? { '1_1': n } : {}, '779001', [])
+      expect(l.tipo === 'suma' && l.soloAlarma).toBe(true)
+      expect(l.tipo === 'suma' && l.exhibir).toBe(false)
+      if (l.tipo === 'suma') expect(frase(l)).toBe('Alarma')
+    }
+  })
+})

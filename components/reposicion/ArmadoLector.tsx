@@ -167,7 +167,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
       setEscaneos((e) => ({ ...e, [l.linea.vid]: l.n }))
       // Si estaba anotada como «no estaba», apareció: se saca la marca.
       if (faltantes[l.linea.vid]) setFaltantes(({ [l.linea.vid]: _, ...resto }) => resto)
-      avisar(l.exhibir ? 'mira' : l.faltan > 0 ? 'ok' : 'suma', frase(l))
+      avisar(l.exhibir || l.soloAlarma ? 'mira' : l.faltan > 0 ? 'ok' : 'suma', frase(l))
       return
     }
     setExtra(0)
@@ -393,6 +393,7 @@ function UltimaLectura({ l, et }: { l: Extract<Lectura, { tipo: 'suma' }> | null
       </div>
     )
   const ok = l.faltan === 0
+  const marca = l.exhibir || l.soloAlarma
   return (
     <div
       role="status"
@@ -401,10 +402,11 @@ function UltimaLectura({ l, et }: { l: Extract<Lectura, { tipo: 'suma' }> | null
         padding: space[4],
         borderRadius: 'var(--mo-r-xl)',
         textAlign: 'center',
-        border: `2px solid ${l.exhibir ? color.warningInk : ok ? color.successBorder : color.line}`,
-        background: l.exhibir ? 'var(--mo-warning-bg, #FEF3C7)' : 'transparent',
+        border: `2px solid ${marca ? color.warningInk : ok ? color.successBorder : color.line}`,
+        background: marca ? 'var(--mo-warning-bg, #FEF3C7)' : 'transparent',
       }}
     >
+      {l.soloAlarma && <div style={{ fontSize: font.lg, fontWeight: 800, color: color.warningInk, marginBottom: space[2] }}>Con alarma · sin etiqueta de precio</div>}
       {l.exhibir && <div style={{ fontSize: font.lg, fontWeight: 800, color: color.warningInk, marginBottom: space[2] }}>Para exhibir: alarma y etiquetas</div>}
       {l.exhibir && et && (
         <div style={{ marginBottom: space[2] }}>
@@ -445,6 +447,11 @@ function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, et 
                 {l.exhibir && (
                   <span style={{ marginLeft: 6 }}>
                     <Badge tone="warning">para exhibir</Badge>
+                  </span>
+                )}
+                {l.soloAlarma && (
+                  <span style={{ marginLeft: 6 }} title="Todas con alarma, ninguna con etiqueta de precio">
+                    <Badge tone="warning">con alarma, sin precio</Badge>
                   </span>
                 )}
                 {l.exhibir && et && (

@@ -50,6 +50,12 @@ export type CfgVentas = {
   diasNuevo: number
   modosCat: Record<string, MarcaModo>
   modosProd: Record<string, MarcaModo>
+  /**
+   * Productos que van SIN etiqueta de precio y con alarma en TODAS las unidades (Darío, 12-oct-2026:
+   * las bikinis en la caja «todo a $5.000», todo exhibido). No cambia cuánto se lleva: sólo el aviso
+   * a Lorena al escanear. `hasta` vencido = no existe.
+   */
+  sinPrecio: Record<string, { hasta?: string }>
 }
 
 /**
@@ -69,6 +75,7 @@ export const CFG_VENTAS_DEFAULT: CfgVentas = {
   diasNuevo: 21,
   modosCat: {},
   modosProd: {},
+  sinPrecio: {},
 }
 
 /** Las dos líneas de Zattia: cada una con su config (`ventas` / `ventasStunned`). */
@@ -78,7 +85,7 @@ export const CAMPO_LINEA: Record<LineaZ, 'ventas' | 'ventasStunned'> = { zattia:
 /** La config de ventas de una línea con los defaults rellenos (lo guardado puede ser de una versión anterior). */
 export function cfgVentas(cfg: RepoCfg, linea: LineaZ = 'zattia'): CfgVentas {
   const v = cfg[CAMPO_LINEA[linea]] || {}
-  return { ...CFG_VENTAS_DEFAULT, ...v, modosCat: { ...(v.modosCat || {}) }, modosProd: { ...(v.modosProd || {}) } }
+  return { ...CFG_VENTAS_DEFAULT, ...v, modosCat: { ...(v.modosCat || {}) }, modosProd: { ...(v.modosProd || {}) }, sinPrecio: { ...(v.sinPrecio || {}) } }
 }
 
 /**
@@ -117,6 +124,8 @@ export type Decision = {
   pico: boolean
   /** Va a un local en 0: la primera hay que dejarla lista para exhibir (alarma + precio + formas de pago). */
   exhibir: boolean
+  /** Sin etiqueta de precio: cada unidad que va al local sale con alarma, ninguna con etiquetas. */
+  soloAlarma: boolean
   nuevo: boolean
   /** Cuánto tiene que haber en el local. `null` = todo exhibido (no aplica). */
   objetivo: number | null
@@ -147,7 +156,9 @@ export function decidir(it: RepoItem, cfg: RepoCfg, cv: CfgVentas, hoy: string):
   let pico = false
   const porDia = Math.max(porDiaLargo, porDiaCorto)
   const porSemana = r1(porDia * 7)
-  const base = { modo, vendidas, dias, porSemana, nuevo, exhibir: false }
+  const sp = cv.sinPrecio[String(it.pid)]
+  const soloAlarma = !!sp && (!sp.hasta || sp.hasta >= hoy)
+  const base = { modo, vendidas, dias, porSemana, nuevo, exhibir: false, soloAlarma: false }
 
   if (modo.modo === 'exhibido') {
     return { ...base, pico, objetivo: null, llevar: 0, devolver: 0, porque: `Todo exhibido (${modo.motivo})` }
@@ -188,7 +199,7 @@ export function decidir(it: RepoItem, cfg: RepoCfg, cv: CfgVentas, hoy: string):
   if (nuevo && it.local > objetivo) porque = [porque, 'Producto nuevo: no se devuelve'].filter(Boolean).join(' · ')
   // La columna «Vende x sem.» muestra el ritmo que decidió: el de la semana si se disparó, si no el largo.
   const ritmoSemana = r1((pico ? porDiaCorto : porDiaLargo) * 7)
-  return { ...base, porSemana: ritmoSemana, pico, objetivo, llevar, devolver, porque, exhibir: llevar > 0 && it.local <= 0 }
+  return { ...base, porSemana: ritmoSemana, pico, objetivo, llevar, devolver, porque, exhibir: !soloAlarma && llevar > 0 && it.local <= 0, soloAlarma: soloAlarma && llevar > 0 }
 }
 
 export type FilaVentas = { it: RepoItem; d: Decision }

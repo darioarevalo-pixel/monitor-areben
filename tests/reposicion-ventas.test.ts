@@ -191,3 +191,24 @@ describe('el orden de las listas', () => {
     expect(listaLlevar(decidirTodo(inv, cfg(), HOY)).map((f) => f.it.sku)).toEqual(['RTO-0005', 'RTO-0009', 'RTO-0001'])
   })
 })
+
+describe('sin etiqueta de precio (bikinis en la caja «todo a $5.000», Darío 12-oct)', () => {
+  const c = cfg({}, { sinPrecio: { '1': {} } })
+  it('todo lo que se lleva va con alarma y nada «para exhibir» con etiquetas', () => {
+    const r = d(item({ local: 0 }), c)
+    expect(r.llevar).toBeGreaterThan(0)
+    expect(r.soloAlarma).toBe(true)
+    expect(r.exhibir).toBe(false)
+  })
+  it('no cambia cuánto se lleva', () => {
+    expect(d(item({ local: 0 }), c).llevar).toBe(d(item({ local: 0 })).llevar)
+  })
+  it('con la fecha vencida no aplica', () => {
+    const r = d(item({ local: 0 }), cfg({}, { sinPrecio: { '1': { hasta: '2026-10-10' } } }))
+    expect(r.soloAlarma).toBe(false)
+    expect(r.exhibir).toBe(true)
+  })
+  it('si no se lleva nada, no se marca', () => {
+    expect(d(item({ local: 5, deposito: 0 }), c).soloAlarma).toBe(false)
+  })
+})

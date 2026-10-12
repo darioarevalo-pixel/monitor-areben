@@ -82,6 +82,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   const cantLlevar = (f: FilaVentas) => manual[f.it.vid] ?? f.d.llevar
   const totalLlevar = llevar.reduce((s, f) => s + cantLlevar(f), 0)
   const paraExhibir = llevar.filter((f) => f.d.exhibir && cantLlevar(f) > 0).length
+  const conAlarma = llevar.filter((f) => f.d.soloAlarma).reduce((s, f) => s + cantLlevar(f), 0)
   const totalDevolverHoy = devolver.filas.reduce((s, f) => s + f.devolverHoy, 0)
 
   // Desde cuándo se espera un «Actualizar stock» que tardó más de lo normal (`null` = no se espera).
@@ -348,6 +349,11 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
                 <Badge tone="warning">{paraExhibir} para exhibir</Badge>
               </span>
             )}
+            {conAlarma > 0 && (
+              <span title="Todas con alarma, ninguna con etiqueta de precio">
+                <Badge tone="warning">{conAlarma} con alarma, sin precio</Badge>
+              </span>
+            )}
             {Object.keys(manual).length > 0 && (
               <Button size="sm" variant="ghost" onClick={() => setManual({})}>
                 ↺ Restablecer cantidades
@@ -490,6 +496,11 @@ function TablaVentas({ filas, cantidad, titulo, editar }: { filas: FilaVentas[];
                         <Badge tone="warning">para exhibir</Badge>
                       </span>
                     )}
+                    {f.d.soloAlarma && titulo === 'Reponer' && (
+                      <span title="Todas con alarma, ninguna con etiqueta de precio" style={{ marginLeft: 6 }}>
+                        <Badge tone="warning">con alarma, sin precio</Badge>
+                      </span>
+                    )}
                   </Td>
                   <Td style={{ fontSize: font.sm, color: color.mut }}>{f.it.sku || '—'}</Td>
                   <Td align="center" style={{ color: f.it.local <= 1 ? color.danger : color.ink2, fontWeight: 600 }}>{f.it.local}</Td>
@@ -544,6 +555,7 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
   guardarCampania: (id: string | null) => void
 }) {
   const [buscar, setBuscar] = useState('')
+  const [buscarSp, setBuscarSp] = useState('')
   // Las campañas vivas, las mismas que lista Etiquetas → Precio de campaña. Sólo con la ventana abierta.
   const { campanias } = useEtiquetasCampania('zattia', '', abierto)
   const productos = useMemo(() => {
@@ -551,6 +563,13 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
     filas.forEach((f) => m.set(f.it.pid, f.it.name))
     return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'))
   }, [filas])
+  const encontrarSp = (q: string) => (q.trim().length >= 2 ? productos.filter(([pid, n]) => !cv.sinPrecio[pid] && n.toLowerCase().includes(q.trim().toLowerCase())) : [])
+  const encontradosSp = encontrarSp(buscarSp)
+  const setSinPrecio = (pids: string[], v: { hasta?: string } | null) => {
+    const next = { ...cv.sinPrecio }
+    pids.forEach((pid) => (v ? (next[pid] = v) : delete next[pid]))
+    guardar({ ...cv, sinPrecio: next })
+  }
   const encontrados = buscar.trim().length >= 2 ? productos.filter(([, n]) => n.toLowerCase().includes(buscar.toLowerCase())).slice(0, 20) : []
 
   const setParam = (k: keyof Pick<CfgVentas, 'minimo' | 'minimoBajo' | 'umbralSemana' | 'coberturaDias' | 'ventanaDias' | 'loteMin' | 'topeDevolucion' | 'diasNuevo'>, v: string) => {
@@ -666,6 +685,55 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
                 </Button>
               </div>
             ))}
+        </>
+      )}
+
+      {/* Darío, 12-oct-2026: las bikinis van a una caja «todo a $5.000» → sin etiqueta de precio, y
+          como todo está exhibido, cada unidad va con alarma. No cambia cuánto se lleva. */}
+      <div style={{ fontSize: 13, fontWeight: 700, margin: '16px 0 6px' }}>Sin etiqueta de precio</div>
+      <div style={{ fontSize: 11.5, color: color.mut2, marginBottom: 8 }}>Al escanear, cada unidad se marca «con alarma, sin etiqueta de precio».</div>
+      {Object.keys(cv.sinPrecio).length > 1 && puede && (
+        <div style={{ marginBottom: 6 }}>
+          <Button size="sm" variant="ghost" onClick={() => setSinPrecio(Object.keys(cv.sinPrecio), null)}>
+            Sacar todos ({Object.keys(cv.sinPrecio).length})
+          </Button>
+        </div>
+      )}
+      {Object.entries(cv.sinPrecio).map(([pid, m]) => {
+        const nombre = productos.find(([p]) => p === pid)?.[1] ?? `Producto ${pid}`
+        return (
+          <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, padding: '5px 8px', border: `1px solid ${color.bg2}`, borderRadius: 6, marginBottom: 4 }}>
+            <span style={{ flex: '1 1 180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: color.mut }}>
+              hasta
+              <input type="date" defaultValue={m.hasta ?? ''} disabled={!puede} onChange={(e) => setSinPrecio([pid], { hasta: e.target.value || undefined })} style={{ padding: '2px 4px', border: `1px solid ${color.line2}`, borderRadius: 6 }} />
+            </label>
+            {puede && (
+              <Button size="sm" variant="ghost" onClick={() => setSinPrecio([pid], null)}>
+                Sacar
+              </Button>
+            )}
+          </div>
+        )
+      })}
+      {puede && (
+        <>
+          <input className="mo-input" value={buscarSp} onChange={(e) => setBuscarSp(e.target.value)} placeholder="Buscar producto…" style={{ margin: '6px 0' }} />
+          {encontradosSp.length > 1 && (
+            <div style={{ padding: '3px 8px' }}>
+              <Button size="sm" variant="solid" tone="brand" onClick={() => { setSinPrecio(encontradosSp.map(([pid]) => pid), {}); setBuscarSp('') }}>
+                Agregar los {encontradosSp.length}
+              </Button>
+            </div>
+          )}
+          {encontradosSp.slice(0, 40).map(([pid, n]) => (
+            <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '3px 8px' }}>
+              <span style={{ flex: 1 }}>{n}</span>
+              <Button size="sm" variant="ghost" onClick={() => { setSinPrecio([pid], {}); setBuscarSp('') }}>
+                Agregar
+              </Button>
+            </div>
+          ))}
         </>
       )}
     </Modal>
