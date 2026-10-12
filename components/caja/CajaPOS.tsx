@@ -259,6 +259,19 @@ function POS() {
       .catch((e) => setErrCarga(e.message))
   }, [])
 
+  /**
+   * 🔑 A6 (Bruno, 12-oct): la configuración y la promo de crédito de HOY se vuelven a leer al abrir el
+   * cobro y cuando el servidor rebota una venta. Antes se leían una vez al abrir la pantalla: una Caja
+   * abierta desde ayer ofrecía la promo de ayer y la cajera chocaba con el rebote. Va por detrás (⛔ frena
+   * «Cobrar») y, si falla, queda lo que había. Devuelve si algo cambió.
+   */
+  const refrescarReglas = useCallback(async () => {
+    const antes = JSON.stringify([config?.reglas ?? null, useAgenda.getState().promos])
+    const [nueva] = await Promise.all([leerConfig().catch(() => null), useAgenda.getState().cargar()])
+    if (nueva) setConfig(nueva)
+    return JSON.stringify([nueva?.reglas ?? config?.reglas ?? null, useAgenda.getState().promos]) !== antes
+  }, [config])
+
   const refrescarPendientes = useCallback(() => {
     leerPendientes()
       .then((r) => setPendientes(r.ventas))
@@ -736,6 +749,12 @@ function POS() {
         refrescarTurno()
       }
       if ((e as { datos?: { sinTurno?: boolean } }).datos?.sinTurno) refrescarTurno()
+      // A6: el servidor la rebotó (⛔ se guardó nada) ⇒ la Caja se pone al día sola y el carrito sigue.
+      const rebotada = !yaCobrada?.yaCobrada && [400, 409].includes((e as { status?: number }).status ?? 0)
+      if (rebotada && (await refrescarReglas())) {
+        setAviso({ tono: 'danger', texto: 'Cambió la configuración de la Caja y ya se actualizó: el pedido sigue igual. Revisá el cobro y confirmá de nuevo.' })
+        return
+      }
       setAviso({ tono: 'danger', texto: (e as Error).message })
     } finally {
       setEnviando(false)
@@ -763,16 +782,21 @@ function POS() {
   const puedeCobrar = bor.renglones.length > 0 && !sinPrecio
   // Si el pedido se vacía o queda una prenda sin precio, se vuelve al pedido.
   const mostrarCobro = enCobro && puedeCobrar
+  // A6: al abrir el cobro, la config y la promo de crédito de HOY (una Caja abierta desde ayer traía las de ayer).
+  const abrirCobro = useCallback(() => {
+    setEnCobro(true)
+    void refrescarReglas()
+  }, [refrescarReglas])
   // Alt+C: «Continuar al cobro», como el POS de GN.
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
       if (!e.altKey || e.code !== 'KeyC' || !puedeCobrar) return
       e.preventDefault()
-      setEnCobro(true)
+      abrirCobro()
     }
     window.addEventListener('keydown', tecla)
     return () => window.removeEventListener('keydown', tecla)
-  }, [puedeCobrar])
+  }, [puedeCobrar, abrirCobro])
 
   async function vaciar() {
     if (!(await preguntar({ titulo: 'Vaciar pedido', mensaje: `Se ${prendas === 1 ? 'saca la prenda' : `sacan las ${prendas} prendas`} del pedido. No se cobró nada.`, ok: 'Vaciar pedido', tono: 'warning' }))) return
@@ -1281,7 +1305,7 @@ function POS() {
                 {!mostrarCobro && <span style={{ color: color.mut, fontSize: font.sm }}>El descuento de la forma de pago se ve al cobrar.</span>}
                 {sinPrecio && <Notice tone="warning">Prenda sin precio: escribirlo en el renglón.</Notice>}
                 {!mostrarCobro && (
-                  <Button size="lg" tone="success" variant="solid" fullWidth disabled={!puedeCobrar} onClick={() => setEnCobro(true)} style={{ height: 52 }}>
+                  <Button size="lg" tone="success" variant="solid" fullWidth disabled={!puedeCobrar} onClick={abrirCobro} style={{ height: 52 }}>
                     Continuar al cobro <span className="pos-alt">Alt+C</span>
                   </Button>
                 )}

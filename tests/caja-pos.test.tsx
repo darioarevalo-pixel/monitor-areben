@@ -24,7 +24,10 @@ let turno: typeof TURNO | null = TURNO
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => sesion }))
 vi.mock('@/components/fundas/useDatosMonitor', () => ({ useDatosMonitor: () => ({ datos: null }) }))
 vi.mock('@/components/productos/useTnImages', () => ({ useTnPromo: () => null }))
-vi.mock('@/store/useAgenda', () => ({ useAgenda: (sel: (s: unknown) => unknown) => sel({ promos: [], cargar: async () => {} }) }))
+vi.mock('@/store/useAgenda', () => {
+  const st = { promos: [], cargar: async () => {} }
+  return { useAgenda: Object.assign((sel: (s: unknown) => unknown) => sel(st), { getState: () => st }) }
+})
 vi.mock('@/components/layout/acciones', () => ({ HeaderAcciones: ({ children }: { children: React.ReactNode }) => children }))
 vi.mock('@/lib/caja/cliente', async (orig) => ({
   ...(await orig<typeof import('@/lib/caja/cliente')>()),
@@ -34,6 +37,9 @@ vi.mock('@/lib/caja/cliente', async (orig) => ({
   leerPedidosWeb: vi.fn(async () => ({ pedidos: [], porSku: {}, noLeidas: 0, leidoEn: new Date().toISOString() })),
   reintentarPendientes: vi.fn(async () => ({ intentadas: 0, llegaron: 0 })),
   cerrarTurno: vi.fn(async () => ({ turno: { ...TURNO, cerrado_en: '2026-10-05T20:00:00.000Z' } })),
+  confirmarVenta: vi.fn(async () => {
+    throw Object.assign(new Error('Recargá la Caja: cambió una forma de pago (las transferencias van a otra cuenta).'), { status: 400, datos: {} })
+  }),
 }))
 
 const { CajaPOS } = await import('@/components/caja/CajaPOS')
@@ -176,5 +182,37 @@ describe('Cerrar turno · auditoría A10', () => {
     pregunta.mockReturnValue(true)
     await act(async () => boton('Cerrar turno').click())
     expect(cerrarTurno).toHaveBeenCalledWith('t1', 0, '', null, false)
+  })
+})
+
+describe('POS · A6: la pantalla se pone al día sola (Bruno, 12-oct)', () => {
+  it('🔑 abrir el cobro vuelve a leer la configuración (una Caja abierta desde ayer traía la de ayer)', async () => {
+    const { leerConfig } = await import('@/lib/caja/cliente')
+    disco.set('caja:borrador:zattia', JSON.stringify({ id: 'b-a6', renglones: [PRENDA], email: '' }))
+    await montar(<CajaPOS />)
+    const antes = vi.mocked(leerConfig).mock.calls.length
+    await act(async () => boton('Continuar al cobro Alt+C').click())
+    expect(vi.mocked(leerConfig).mock.calls.length).toBe(antes + 1)
+  })
+
+  it('🔴 el servidor la rebota y la config cambió ⇒ «ya se actualizó», el carrito y su id siguen', async () => {
+    const { leerConfig, confirmarVenta } = await import('@/lib/caja/cliente')
+    const { REGLAS_INICIALES } = await import('@/lib/caja/core.core.js')
+    const vieja = { reglas: { ...REGLAS_INICIALES, transferenciaA: null }, politica_cambio: null }
+    vi.mocked(leerConfig).mockResolvedValueOnce(vieja as never).mockResolvedValueOnce(vieja as never)
+      .mockResolvedValueOnce({ ...vieja, reglas: { ...vieja.reglas, redondeo: 10 } } as never)
+    disco.set('caja:borrador:zattia', JSON.stringify({ id: 'b-rebote', renglones: [PRENDA], email: '' }))
+    await montar(<CajaPOS />)
+    await act(async () => boton('Continuar al cobro Alt+C').click())
+    const debito = [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('Tarjeta de débito')) as HTMLButtonElement
+    await act(async () => debito.click())
+    const fin = [...document.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Finalizar venta')) as HTMLButtonElement
+    expect(fin.disabled).toBe(false)
+    await act(async () => fin.click())
+    await act(async () => {})
+    expect(vi.mocked(confirmarVenta)).toHaveBeenCalled()
+    expect(document.body.textContent).toContain('ya se actualizó')
+    expect(borrador().renglones).toHaveLength(1)
+    expect(borrador().id).toBe('b-rebote')
   })
 })

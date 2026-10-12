@@ -98,8 +98,10 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   A6, 11-oct): la normal (y la de feria sólo con prendas de feria), la transferencia a `transferenciaA`, el
   −10 % de crédito sólo si la Agenda tiene promo de crédito hoy (la lee el SERVIDOR de `agenda_promos`,
   base de BDI, con `promosDeCreditoEnMostrador` de `lib/agenda/promos.core.js`, la MISMA del POS) y las 6
-  cuotas sólo arriba del mínimo (`aPagarDe`). Una pantalla abierta desde antes de un cambio da 400
-  «Recargá la Caja». ⚠️ «¿Es de ese banco?» ⛔ se verifica.
+  cuotas sólo arriba del mínimo (`aPagarDe`). ⚠️ «¿Es de ese banco?» ⛔ se verifica.
+  🔑 **La pantalla se pone al día sola** (`refrescarReglas`, Bruno 12-oct): relee la config y la Agenda
+  **al abrir el cobro** (por detrás: ⛔ frena «Cobrar») y **cuando el servidor rebota** (400/409); si algo
+  cambió, avisa «ya se actualizó, revisá y confirmá de nuevo» con el carrito intacto (⛔ recargar la página).
 - 🔑 **El ticket (papel y mail) dice el MEDIO y «Descuento 15%»**, ⛔ «Descuento Transferencia CG».
   La fila guarda en `pagos[].nombre` el medio (`nombreParaTicket`). El mail lo arma `areben-mailer`
   (`lib/email/ticket.ts`): un cambio de renglones allá se deploya a mano (`vercel --prod`).
