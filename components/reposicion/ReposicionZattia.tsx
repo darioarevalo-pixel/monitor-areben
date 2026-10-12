@@ -351,7 +351,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             )}
             {conAlarma > 0 && (
               <span title="Todas con alarma, ninguna con etiqueta de precio">
-                <Badge tone="warning">{conAlarma} con alarma, sin precio</Badge>
+                <Badge tone="brand">{conAlarma} con alarma, sin precio</Badge>
               </span>
             )}
             {Object.keys(manual).length > 0 && (
@@ -498,7 +498,7 @@ function TablaVentas({ filas, cantidad, titulo, editar }: { filas: FilaVentas[];
                     )}
                     {f.d.soloAlarma && titulo === 'Reponer' && (
                       <span title="Todas con alarma, ninguna con etiqueta de precio" style={{ marginLeft: 6 }}>
-                        <Badge tone="warning">con alarma, sin precio</Badge>
+                        <Badge tone="brand">con alarma, sin precio</Badge>
                       </span>
                     )}
                   </Td>

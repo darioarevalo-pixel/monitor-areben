@@ -393,7 +393,9 @@ function UltimaLectura({ l, et }: { l: Extract<Lectura, { tipo: 'suma' }> | null
       </div>
     )
   const ok = l.faltan === 0
-  const marca = l.exhibir || l.soloAlarma
+  // «Para exhibir» en amarillo; «con alarma, sin precio» en índigo, para no confundirlas (Darío, 12-oct-2026).
+  const borde = l.exhibir ? color.warningInk : l.soloAlarma ? color.brand : ok ? color.successBorder : color.line
+  const fondo = l.exhibir ? 'var(--mo-warning-bg, #FEF3C7)' : l.soloAlarma ? color.brandBg : 'transparent'
   return (
     <div
       role="status"
@@ -402,11 +404,11 @@ function UltimaLectura({ l, et }: { l: Extract<Lectura, { tipo: 'suma' }> | null
         padding: space[4],
         borderRadius: 'var(--mo-r-xl)',
         textAlign: 'center',
-        border: `2px solid ${marca ? color.warningInk : ok ? color.successBorder : color.line}`,
-        background: marca ? 'var(--mo-warning-bg, #FEF3C7)' : 'transparent',
+        border: `2px solid ${borde}`,
+        background: fondo,
       }}
     >
-      {l.soloAlarma && <div style={{ fontSize: font.lg, fontWeight: 800, color: color.warningInk, marginBottom: space[2] }}>Con alarma · sin etiqueta de precio</div>}
+      {l.soloAlarma && <div style={{ fontSize: font.lg, fontWeight: 800, color: color.brand, marginBottom: space[2] }}>Con alarma · sin etiqueta de precio</div>}
       {l.exhibir && <div style={{ fontSize: font.lg, fontWeight: 800, color: color.warningInk, marginBottom: space[2] }}>Para exhibir: alarma y etiquetas</div>}
       {l.exhibir && et && (
         <div style={{ marginBottom: space[2] }}>
@@ -451,7 +453,7 @@ function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, et 
                 )}
                 {l.soloAlarma && (
                   <span style={{ marginLeft: 6 }} title="Todas con alarma, ninguna con etiqueta de precio">
-                    <Badge tone="warning">con alarma, sin precio</Badge>
+                    <Badge tone="brand">con alarma, sin precio</Badge>
                   </span>
                 )}
                 {l.exhibir && et && (
