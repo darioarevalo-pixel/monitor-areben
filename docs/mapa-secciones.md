@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-69 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+70 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -79,6 +79,7 @@ pone en cero el saldo del cadete. ⛔ TN no deja marcar pagado por API: el «pag
 
 **Dirección** — `gerencial` · `memo` (semanal, por `?recurso=memo`, sin `store`) ·
 `norte → components/norte + lib/norte` (cruza el ETL con el KV de `ingresos`, por `?recurso=norte`) ·
+`erp → components/erp + lib/erp + lib/arca` (ERP en construcción, sólo admin; hoy la pestaña Facturación con ARCA, por `?recurso=erp`, sin `store`: la factura es de Areben. Ficha: `docs/secciones/erp.md`).
 `acreedores → components/acreedores + lib/acreedores` (a quién le debemos y a qué cuenta transferirle,
 por `?recurso=acreedores`, sin `store`: la deuda es de la empresa. ⛔ **No tiene base propia**: el
 saldo lo calcula el dashboard y este handler se lo pide por HTTP — si lo rehiciera acá, las dos apps

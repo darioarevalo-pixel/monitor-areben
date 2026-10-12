@@ -861,6 +861,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "erp",
+    "area": "erp",
+    "label": "ERP",
+    "info": "Lo que el monitor va construyendo para reemplazar a Gestión Nube, mientras se construye: sólo lo ven los administradores. Facturación: el tope del mes (lo que entró a cuentas de Areben), lo ya facturado en Gestión Nube y en el monitor, y las ventas sin factura, que se facturan con ARCA en grupos. Mientras no se habilite, factura en el ambiente de prueba de ARCA, sin validez fiscal.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "acreedores",
     "area": "direccion",
     "label": "A quién le debemos",
@@ -1308,6 +1318,15 @@ export const NAV_CATS: NavCat[] = [
     "labels": {
       "acreedores": "Cobranza"
     }
+  },
+  {
+    "id": "erp",
+      "icono": "integraciones",
+    "label": "ERP",
+    "keys": [
+      "erp"
+    ],
+    "adminOnly": true
   },
   {
     "id": "config",

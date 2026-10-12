@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|caja|repo-armado|reportes&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|erp|caja|repo-armado|reportes&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -56,6 +56,7 @@ import mapaLocal from './_mapa-local.js';
 import ubicacionesLocal from './_ubicaciones-local.js';
 import cobranzas from './_cobranzas.js';
 import pagosRecibidos from './_pagos-recibidos.js';
+import erp from './_erp.js';
 import caja from './_caja.js';
 import repoArmado from './_repo-armado.js';
 import { soloMismoOrigen } from './_auth.js';
@@ -219,6 +220,8 @@ const RECURSOS = {
   // verifique el cobro sin mirar el teléfono de la clienta. ⛔ Sólo LEE, y de MP directo: no hay
   // tabla propia. El total y los otros días los ve sólo un admin (lo decide el handler).
   'pagos-recibidos': pagosRecibidos,
+  // ERP (sólo admin): lo que va a reemplazar a GN. Hoy, Facturación con ARCA.
+  erp,
   // Caja: el POS propio del local de Zattia. Cobra con el descuento de cada cuenta y manda la venta a
   // Gestión Nube con cola y reintento (tabla `caja_venta`, base de Zattia). ⛔ Archivo de ruta propio.
   caja,
