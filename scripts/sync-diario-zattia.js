@@ -4,6 +4,7 @@ import { resolve } from 'path';
 import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
 import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
 import { anotarAnuladasDelRegistro } from './lib/registro-anuladas.mjs';
+import { anotarAnuladasDeCaja } from '../lib/caja/anuladas.js';
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
 import { refrescarVistas } from './lib/refrescar-vistas.mjs';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
@@ -251,6 +252,16 @@ async function anotarAnuladas(idsGN, desde, corte) {
   } catch (e) {
     console.warn(`[registro] anulaciones omitidas por error: ${e.message}`);
     problemas.push(`registro de ventas: ${e.message}`);
+  }
+  // Lo mismo para las ventas de la Caja (`caja_venta.anulada_en_gn`, lib/caja/anuladas.js).
+  try {
+    const r = await anotarAnuladasDeCaja(supabase, idsGN, desde, corte);
+    if (r.anotadas) console.log(`[caja] ${r.anotadas} venta(s) de la Caja anuladas en GN: ${r.numeros.join(', ')}`);
+    if (r.sinColumna) console.warn('[caja] anuladas sin anotar: falta sql/migrate-caja-anulada-en-gn.sql en esta base');
+    if (r.frenado) { console.warn(`[caja] ${r.frenado}`); problemas.push(`caja: ${r.frenado}`); }
+  } catch (e) {
+    console.warn(`[caja] anulaciones omitidas por error: ${e.message}`);
+    problemas.push(`caja: ${e.message}`);
   }
 }
 

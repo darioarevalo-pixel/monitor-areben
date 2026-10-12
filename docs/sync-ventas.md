@@ -14,6 +14,7 @@ en cada mensaje de cada sesión.
 | **padrón de clientes** (la ficha, con el WhatsApp) | `scripts/sync-clientes.js` + `scripts/lib/clientes-espejo.mjs` |
 | borrado de las que GN ya no tiene | `scripts/lib/purga-ventas.mjs` |
 | **las ventas del monitor que GN ya no tiene ⇒ anuladas en `gn_venta_monitor`** (después de la purga, con la misma bajada) | `scripts/lib/registro-anuladas.mjs` |
+| **las ventas de la Caja que GN ya no tiene ⇒ `caja_venta.anulada_en_gn`** (en el mismo paso, con la misma bajada) | `lib/caja/anuladas.js` |
 | histórico anterior a la ventana | `scripts/purga-historica.js` (arranca en simulación) |
 | refresco de las vistas | `scripts/lib/refrescar-vistas.mjs` + `sql/migrate-refresco-vistas.sql` |
 | **foto diaria del stock** (libro de stock; gana la PRIMERA del día, la de las 06:40) | `scripts/lib/stock-foto.mjs` + `sql/migrate-stock-foto.sql` |

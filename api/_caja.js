@@ -92,6 +92,7 @@ import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
 import { anuladasEnGN, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
 import { billetesDe, limpiarConteo, totalDeConteo } from '../lib/caja/conteo.core.js'
+import { anotarAnuladasDelCierre } from '../lib/caja/anuladas.js'
 import { aplicarPromos, normalizarPromos } from '../lib/caja/promos.core.js'
 import { MAX_LOTE, csvDeLote, generarCodigos } from '../lib/caja/gift.core.js'
 
@@ -842,6 +843,7 @@ export default async function handler(req, res) {
         const turno = await turnoAbierto()
         if (!turno || turno.id !== id) return res.status(409).json({ error: 'Esa caja ya está cerrada. Recargá la Caja.' })
         // Fresco: un cobro cargado en GN hace un minuto tiene que entrar en la foto del cierre.
+        const corteGN = new Date()
         const con = await conResumen(turno, true)
         // 🔴 Auditoría A3 (11-oct): sin los cobros de GN el esperado queda CORTO y el cierre dice que
         // sobra plata, y ⛔ se reabre. Se frena; cerrar igual es una decisión explícita y con nota. Lo mismo
@@ -867,6 +869,14 @@ export default async function handler(req, res) {
         // ⛔ en su foto. Ya cerrado, ⛔ entra nada más (el trigger de sql/migrate-caja-auditoria.sql): se
         // relee y, si cambió, la foto se rehace con lo que de verdad quedó adentro.
         const despues = await conResumen(up.data)
+        // Las anuladas en GN quedan anotadas en la venta (`anulada_en_gn`, para el libro de stock). ⛔ Frena el cierre.
+        try {
+          const r = await anotarAnuladasDelCierre(sb, (despues.resumen.anuladasGN || []).map((v) => v.id), corteGN)
+          if (r.frenado) console.warn(`[caja] ${r.frenado}`)
+          if (r.sinColumna) console.warn('[caja] anuladas en GN sin anotar: falta sql/migrate-caja-anulada-en-gn.sql en esta base')
+        } catch (e) {
+          console.warn(`[caja] anuladas en GN sin anotar: ${e.message}`)
+        }
         if (JSON.stringify(despues.resumen) === JSON.stringify(con.resumen) && JSON.stringify(despues.salidas) === JSON.stringify(con.salidas)) {
           return res.status(200).json({ turno: up.data })
         }

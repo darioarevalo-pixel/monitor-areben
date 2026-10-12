@@ -304,7 +304,12 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
 - 🔴 **La venta anulada a mano en GN deja de sumar (A12, 11-oct)**: GN ⛔ anula por API y la anulada
   DESAPARECE de `ventas/obtener` (⛔ viene con estado). El turno lee ENTEROS los días de sus ventas `en_gn`
   (`anuladasEnGN`) y las que faltan van aparte (`resumen.anuladasGN`). ⛔ Se pudo leer ⇒ `null` y el cierre
-  frena como con los cobros web (cerrar igual, con nota). ⛔ Se persiste: es una lectura.
+  frena como con los cobros web (cerrar igual, con nota).
+  🔑 **Y queda ANOTADA en la venta** (libro de stock, 12-oct): `caja_venta.anulada_en_gn = { por: 'sync' | 'cierre',
+  en }`, ⛔ cambia `estado`. La anotan el cierre (con lo que ya leyó) y el sync diario (con la bajada del tramo de
+  repaso), con `lib/caja/anuladas.js` y la regla de `anuladasAMarcar` (margen de 15 min desde que LLEGÓ a GN, tope
+  de 20). La lee el libro de stock (`areben-libro-stock/lib/fuentes/caja.mjs`). Sin la columna, ⛔ anota y lo dice
+  en el log. `sql/migrate-caja-anulada-en-gn.sql` (las dos bases; marca además las 7 de prueba del 4 al 6-oct).
 - 🔑 **Resolver una venta que GN RECHAZÓ (B2)**: sólo la `error` ⛔ reintentable (una reintentable puede
   estar en GN por un timeout: cargarla a mano la duplicaría). «Cargada a mano en GN» (con su número; la
   dueña del turno o un admin) ⇒ `en_gn` y sigue sumando; «Descartar» (sólo admin) ⇒ `descartada`, ⛔ suma.
@@ -395,6 +400,9 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   `~/Documents/reunion-gerencia/2026-10-11-POS-auditoria-y-gift-card.md` § D.
 
 ## Pendiente
+
+- 🔴 `sql/migrate-caja-anulada-en-gn.sql` ⛔ corrida (la corre Bruno). Hasta entonces el cierre y el sync ⛔ anotan.
+  Al 12-oct GN tampoco devuelve **#30422 y #30423** (de hoy): las anota el próximo cierre o sync, si siguen así.
 
 - 🏁 `sql/migrate-caja-gift-card.sql` CORRIDA en Zattia (11-oct, `SOLO=ZATTIA node scripts/aplicar-sql.mjs`), verificada leyendo el esquema; BDI sin las tablas.
 
