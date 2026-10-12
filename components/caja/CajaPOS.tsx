@@ -896,7 +896,7 @@ function POS() {
           Caja {MARCA_CAJA.nombre}
         </span>
         <span className="pos-turno" style={{ fontSize: font.base, color: color.sideInk2, whiteSpace: 'nowrap' }}>
-          turno desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}
+          caja abierta desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}
         </span>
         <span className={`pos-gn${gnOk ? '' : ' off'}`} title={gnPorque} role="status">
           {gnOk ? 'Gestión Nube' : 'Gestión Nube sin respuesta'}

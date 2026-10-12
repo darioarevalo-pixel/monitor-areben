@@ -240,7 +240,7 @@ export default async function handler(req, res) {
     for (let desde = 0; desde < 20_000; desde += 1000) {
       const { data, error } = await sb.from('liquidacion_items').select('pid').eq('store', store).in('liq_id', lista).eq('estado', 'aplicado')
         .order('pid').range(desde, desde + 999)
-      if (error) throw new Error(`No se pudieron leer los productos de feria de Liquidación (${error.message}).`)
+      if (error) throw new Error(`No se pudieron leer los productos en oferta de Liquidación (${error.message}).`)
       for (const f of data || []) { const n = Number(f.pid); if (Number.isInteger(n) && n > 0) pids.add(n) }
       if (!data || data.length < 1000) break
     }
@@ -488,7 +488,7 @@ export default async function handler(req, res) {
       if (accion === 'ventas') {
         // B1 (auditoría, 11-oct): las ventas del turno, para reimprimir. Sin `turno`, el abierto.
         let turnoId = String(req.query.turno || '')
-        if (turnoId && !UUID.test(turnoId)) return res.status(400).json({ error: 'id de turno inválido.' })
+        if (turnoId && !UUID.test(turnoId)) return res.status(400).json({ error: 'id de caja inválido.' })
         if (!turnoId) {
           const t = await turnoAbierto()
           if (!t) return res.status(200).json({ ventas: [] })
@@ -619,7 +619,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ reglas: await reglasDeHoy(g.reglas), versiones: { promos: versionDe(g.reglas, 'promos'), feriaProductos: versionDe(g.reglas, 'feriaProductos') } })
       }
       if (accion === 'bajadas') {
-        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia a dónde van las transferencias, los productos de feria o los billetes.' })
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia a dónde van las transferencias, los productos en oferta o los billetes.' })
         const { reglas } = await leerConfig()
         if (!reglas.medios) return res.status(409).json({ error: 'La Caja todavía no tiene las formas de pago: falta correr sql/migrate-caja-medios.sql.' })
         // Lo que cambia, validado UNA vez; se aplica sobre la fila que esté al guardar (`guardarReglas`).
@@ -627,7 +627,7 @@ export default async function handler(req, res) {
         // A qué cuenta de GN va la transferencia de UNA cuenta de Mercado Pago (Bruno, 11-oct): `{ mp, gn }`.
         // Qué campañas de Liquidación son feria (Bruno, 11-oct): la lista entera de ids.
         if (b.feriaCampanias != null) {
-          if (!Array.isArray(b.feriaCampanias) || b.feriaCampanias.length > 20) return res.status(400).json({ error: 'La lista de campañas de feria es inválida.' })
+          if (!Array.isArray(b.feriaCampanias) || b.feriaCampanias.length > 20) return res.status(400).json({ error: 'La lista de campañas de oferta es inválida.' })
           nuevas.feriaCampanias = [...new Set(b.feriaCampanias.map((x) => String(x).slice(0, 80)).filter(Boolean))]
         }
         let parMp = null
@@ -640,12 +640,12 @@ export default async function handler(req, res) {
         }
         // Los productos de feria trabados: `[{ id, nombre }]`, la lista entera (la pantalla manda todo).
         if (b.feriaProductos != null) {
-          if (!Array.isArray(b.feriaProductos) || b.feriaProductos.length > 2000) return res.status(400).json({ error: 'La lista de productos de feria es inválida.' })
+          if (!Array.isArray(b.feriaProductos) || b.feriaProductos.length > 2000) return res.status(400).json({ error: 'La lista de productos en oferta es inválida.' })
           const vistos = new Set()
           const lista = []
           for (const x of b.feriaProductos) {
             const idP = Number(x && x.id)
-            if (!Number.isInteger(idP) || idP <= 0) return res.status(400).json({ error: 'Un producto de feria sin id.' })
+            if (!Number.isInteger(idP) || idP <= 0) return res.status(400).json({ error: 'Un producto en oferta sin id.' })
             if (vistos.has(idP)) continue
             vistos.add(idP)
             lista.push({ id: idP, nombre: String((x && x.nombre) || '').slice(0, 200) })
@@ -692,11 +692,11 @@ export default async function handler(req, res) {
       if (accion === 'salida') {
         // B4: `tipo: 'aporte'` es el efectivo que ENTRA (el cambio que trae alguien): suma al esperado.
         const tipo = b.tipo === 'aporte' ? 'aporte' : 'salida'
-        const nombre = tipo === 'aporte' ? 'El aporte' : 'La salida'
+        const nombre = tipo === 'aporte' ? 'El ingreso' : 'La salida'
         const monto = Number(b.monto)
         const motivo = String(b.motivo ?? '').trim().slice(0, 200)
         if (!Number.isFinite(monto) || monto <= 0 || monto > MAX_MOVIMIENTO) return res.status(400).json({ error: `${nombre} tiene que ser un monto mayor a cero.` })
-        if (!motivo) return res.status(400).json({ error: `Falta el motivo ${tipo === 'aporte' ? 'del aporte' : 'de la salida'}.` })
+        if (!motivo) return res.status(400).json({ error: `Falta el motivo ${tipo === 'aporte' ? 'del ingreso' : 'de la salida'}.` })
         const turno = await turnoAbierto()
         if (!turno) return res.status(409).json({ error: 'No hay una caja abierta.' })
         // 🔑 A8 (Bruno, 11-oct): la cuenta que abrió el turno y los admins; ⛔ otra cuenta con permiso de Caja.
@@ -730,7 +730,7 @@ export default async function handler(req, res) {
       // nada ni mueve plata: queda en `conteos.intermedios` para que se vea desde cualquier pantalla.
       if (accion === 'contar') {
         const id = String(b.id || '')
-        if (!UUID.test(id)) return res.status(400).json({ error: 'id de turno inválido.' })
+        if (!UUID.test(id)) return res.status(400).json({ error: 'id de caja inválido.' })
         if (b.conteo == null) return res.status(400).json({ error: 'Falta el conteo de billetes.' })
         const c = await conteoContra(b.conteo, null, '')
         if (c.error) return res.status(400).json({ error: c.error })
@@ -749,7 +749,7 @@ export default async function handler(req, res) {
       }
       if (accion === 'cerrar-turno') {
         const id = String(b.id || '')
-        if (!UUID.test(id)) return res.status(400).json({ error: 'id de turno inválido.' })
+        if (!UUID.test(id)) return res.status(400).json({ error: 'id de caja inválido.' })
         const contado = Number(b.contado)
         if (b.contado === '' || b.contado == null || !Number.isFinite(contado) || contado < 0) return res.status(400).json({ error: 'Falta el efectivo contado.' })
         const c = await conteoContra(b.conteo, contado, 'el efectivo contado')

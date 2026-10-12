@@ -116,7 +116,7 @@ export const elegirVariante = (v: Variante) =>
 export const leerPendientes = () => get<{ ventas: Venta[] }>('action=pendientes', 'No se pudieron leer las ventas pendientes.')
 /** B1: las ventas del turno (sin id, el abierto), de la más nueva a la más vieja: para reimprimir. */
 export const leerVentasTurno = (turnoId?: string) =>
-  get<{ ventas: Venta[] }>(`action=ventas${turnoId ? `&turno=${encodeURIComponent(turnoId)}` : ''}`, 'No se pudieron leer las ventas del turno.')
+  get<{ ventas: Venta[] }>(`action=ventas${turnoId ? `&turno=${encodeURIComponent(turnoId)}` : ''}`, 'No se pudieron leer las ventas de la caja.')
 /** E: el POS manda solo las cobradas que ⛔ llegaron a GN (cada 3 min mientras está abierto). */
 export const reintentarPendientes = () => post<{ intentadas: number; llegaron: number }>({ action: 'reintentar-pendientes' }, 'No se pudieron reintentar las ventas pendientes.')
 
@@ -159,16 +159,16 @@ export type Turno = {
   resumen?: ResumenTurno & { diferencia?: number }
   salidas?: SalidaTurno[]
 }
-export const leerTurno = () => get<{ turno: Turno | null; ultimos: Turno[] }>('action=turno', 'No se pudo leer el turno.')
+export const leerTurno = () => get<{ turno: Turno | null; ultimos: Turno[] }>('action=turno', 'No se pudo leer la caja.')
 export const abrirTurno = (fondo: number, conteo?: Conteo | null) =>
-  post<{ turno: Turno }>({ action: 'abrir-turno', fondo, ...(conteo ? { conteo } : {}) }, 'No se pudo abrir el turno.')
+  post<{ turno: Turno }>({ action: 'abrir-turno', fondo, ...(conteo ? { conteo } : {}) }, 'No se pudo abrir la caja.')
 export const sacarEfectivo = (monto: number, motivo: string, tipo: 'salida' | 'aporte' = 'salida') =>
-  post<{ turno: Turno }>({ action: 'salida', monto, motivo, tipo }, tipo === 'aporte' ? 'No se pudo registrar el aporte.' : 'No se pudo registrar la salida.')
+  post<{ turno: Turno }>({ action: 'salida', monto, motivo, tipo }, tipo === 'aporte' ? 'No se pudo registrar el ingreso.' : 'No se pudo registrar la salida.')
 /** B4: anula una salida o un aporte del turno abierto (⛔ se borra: queda tachado). */
 export const anularMovimiento = (id: string, motivo: string) => post<{ turno: Turno }>({ action: 'anular-mov', id, motivo }, 'No se pudo anular.')
 /** `sinCobrosGN`: cerrar aunque GN ⛔ contestó los cobros web (A3); el servidor exige la nota. */
 export const cerrarTurno = (id: string, contado: number, nota: string, conteo?: Conteo | null, sinCobrosGN = false) =>
-  post<{ turno: Turno }>({ action: 'cerrar-turno', id, contado, nota, ...(conteo ? { conteo } : {}), ...(sinCobrosGN ? { sinCobrosGN: true } : {}) }, 'No se pudo cerrar el turno.')
+  post<{ turno: Turno }>({ action: 'cerrar-turno', id, contado, nota, ...(conteo ? { conteo } : {}), ...(sinCobrosGN ? { sinCobrosGN: true } : {}) }, 'No se pudo cerrar la caja.')
 /** El conteo intermedio: ⛔ cierra nada, queda en el turno con lo que tenía que haber. */
 export const contarBilletes = (id: string, conteo: Conteo) => post<{ turno: Turno }>({ action: 'contar', id, conteo }, 'No se pudo guardar el conteo.')
 

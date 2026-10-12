@@ -16,7 +16,7 @@ import { useAgenda } from '@/store/useAgenda'
 
 const MEDIO_PROMO: Record<string, string> = { credito: 'Crédito', debito: 'Débito', app: 'App', qr: 'QR', transferencia: 'Transferencia' }
 
-/** El % de una cuenta de la Caja, o null si la forma de pago ⛔ se puede armar (falta configuración). */
+/** El % de la cuenta de una forma de pago, o null si ⛔ se puede armar (falta configuración). */
 function pctDe(medio: Medio, reglas: Reglas): number | null {
   try {
     const cuenta = cuentaDeMedio(medio, { reglas, total: 0, promoCreditoHoy: false, esDelBanco: false, seisCuotas: false })

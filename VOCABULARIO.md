@@ -1,10 +1,15 @@
 # VOCABULARIO — el glosario compartido de MAKETA y el monitor
 
-Versión: 2026-08-30
+Versión: 2026-10-12
 
 🔑 **Este archivo es el MISMO en los dos repos** (`areben-marketing` y `monitor-areben`), byte a
 byte. Si cambia acá, se copia allá en el mismo día y sube la `Versión:` de arriba. Cada repo tiene
 un test que lee esa línea, así que una copia que queda vieja **se cae sola**.
+🔴 **12-oct-2026: ⛔ se cayó sola.** Las dos copias decían `2026-08-30` y ya eran distintas: MAKETA había
+sumado «título en infinitivo» (6-oct) y el monitor «la palabra formal» (11-oct), cada uno en su repo.
+El test mira que la línea TENGA forma de fecha, ⛔ que sea la misma que la del otro repo (el CI de uno
+⛔ ve el otro). ⇒ **Quien edita este archivo lo copia al otro repo en el mismo commit de trabajo, y
+corre `diff` entre los dos** (§5 dice cómo).
 ⚠️ **Si cambia DOS VECES en el mismo día, la versión lleva una letra** (`2026-08-29b`): una fecha
 sola no distingue la copia de la mañana de la de la tarde, que es justo el día en que las dos se
 creen la fuente de verdad.
@@ -205,10 +210,19 @@ decidida en la §1**.
 | regla | ✅ | ⛔ |
 |---|---|---|
 | **Botón = verbo en infinitivo** | `Eliminar` · `Guardar` · `Publicar` | `Eliminá` · `Sacalo` · `Dale` |
-| **Título de sección = sustantivo, ⛔ no frase** | `Pendientes` · `Retornos` · `Novedades` | `Qué falta ahora` · `Lo que tiene que volver` · `Lo que se viene` · `Lo que se escribe a mano` |
+| **Título de sección = sustantivo, ⛔ no frase** (monitor) | `Pendientes` · `Retornos` · `Novedades` | `Qué falta ahora` · `Lo que tiene que volver` · `Lo que se viene` · `Lo que se escribe a mano` |
+| **Título de sección = verbo en infinitivo** (MAKETA, 🆕 6-oct-2026, Bruno) | `Asignar el trabajo` · `Ver el historial` · `Elegir la campaña` | `Lo que se habló y lo que pasó` · `Título, enlaces y texto` · `De qué campaña es` |
 | **Mayúscula sólo en la primera palabra** | `Nuevo pendiente` | `Nuevo Pendiente` |
 | **Sin jerga interna en pantalla** | la palabra del negocio | `sembrar` · `corrida` · `padrón` · `bitácora` · `copy` · `moodboard` |
 | **La palabra formal del oficio, ⛔ no la coloquial** | `Exhibido` · `Retirado` · `Pendiente de exhibición` · `Variantes duplicadas` | `Colgado` · `Lo saqué` · `Falta colgar` · `Sobra (repetido)` |
+
+🆕 **6-oct-2026 (MAKETA): el título de sección pasó de sustantivo a INFINITIVO** (Bruno: *«sumemos a todo esto
+las terminaciones en infinitivo… lo que se habló no me convence como sección, y así un montón de
+cosas»*). Lo cuida `tests/titulos-infinitivo.test.ts` de MAKETA sobre cada `<Seccion titulo>`. ⛔ **Siguen en
+sustantivo**: el título de cada PANTALLA (es el nombre del menú: `Tablero`, `Calendario`), las
+agrupaciones de una lista (`Próximas`, `Se pasaron`), los títulos de un gráfico y los carteles de error.
+▶️ **En el monitor sigue el sustantivo**: la regla vivía sólo en la copia de MAKETA (ver arriba, la
+versión). Si vale también acá, lo dice Bruno.
 
 🔴 **Darío, 11-oct: *«usamos pocas palabras formales y muchas palabras informales»*.** Salió del
 ticket del chequeo de exhibición. ⚠️ **⛔ No choca con «sin jerga»**: la palabra formal es la que
@@ -296,3 +310,35 @@ que contesta una app **sin ningún botón**. Por eso cada test lleva además la 
 donde algo deja de existir**, que tienen que **decir** la palabra. ⚠️ Y es una lista de archivos, ⛔
 no un total: un piso de «diez en todo `components`» deja que una pantalla entera se quede sin la
 palabra sin que nada falle.
+
+---
+
+## 5 · Los términos del negocio — cada pantalla dice la palabra que eligió el negocio
+
+🔴 **12-oct-2026, Bruno: *«siempre que hago código, siempre tengo que estar arreglando eso»*.** La §1
+cuida los VERBOS de los botones; las palabras del negocio (`caja` y ⛔ `turno`, `oferta` y ⛔ `feria`)
+⛔ estaban escritas en ningún lado que una sesión lea antes de escribir, y nada las controlaba: cada
+corrección de Bruno quedaba en el chat y la sesión siguiente la volvía a escribir mal.
+
+🔑 **Cada corrección de Bruno sobre una palabra es UNA FILA de esta tabla, en el momento** —⛔ un
+arreglo suelto en la pantalla—. La fila la lee el test de términos de cada repo
+(`tests/terminos.test.ts` en el monitor): saca del código **sólo el texto que lee una persona** (los
+strings y el texto de JSX con forma de frase, con el parser de TypeScript; ⛔ los nombres del código) de
+las carpetas de la fila, y falla con el archivo y la frase. Una fila nueva = el CI encuentra solo
+todas las pantallas viejas que lo dicen mal.
+
+| se dice | ⛔ no se dice | app | dónde | por qué / desde |
+|---|---|---|---|---|
+| `caja` (abrir, cerrar, cajas anteriores) | `turno` · `turnos` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct-2026: la cajera abre y cierra **la caja** |
+| `oferta` · `productos en oferta` | `feria` · `ferias` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct: «feria» es un nombre COMERCIAL de una campaña, ⛔ una regla de la caja |
+| `ingreso` · `+ Ingreso` | `aporte` · `aportes` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct: «+ Salida» y «+ Ingreso» |
+| `Confirmar transferencia` · `Transferencia pendiente` | `Validar transferencia` · `Validando` | monitor | `components/caja` · `lib/caja` | Bruno, 12-oct |
+
+⚠️ **Las excepciones van en el test, con su motivo, y se vacían solas**: un nombre que viene de otro
+sistema y se muestra tal cual (la cuenta «Feria TC» de Gestión Nube) ⛔ es una palabra de la Caja. Si
+la frase excusada deja de existir, el test pide sacar la excepción.
+
+🔑 **Y la sesión se entera ANTES que Bruno**: un hook de Claude Code (`PostToolUse` sobre `Edit`/`Write`
+de una pantalla) corre este test y el de vocabulario apenas se escribe el archivo, y además compara las
+dos copias de este archivo (`diff ~/Projects/areben-marketing/VOCABULARIO.md
+~/Projects/monitor-areben/VOCABULARIO.md`). Lo que el hook encuentra se arregla en el mismo turno.

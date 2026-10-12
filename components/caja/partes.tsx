@@ -1133,7 +1133,7 @@ function ResolverVenta({ venta, como, onCerrar, onListo }: { venta: Venta; como:
         <Input value={numero} onChange={(e) => setNumero(e.target.value)} inputMode="numeric" autoComplete="off" placeholder="Nº de venta en GN" aria-label="Número de la venta en Gestión Nube" style={{ width: 150 }} />
       ) : (
         <span>
-          La venta deja de sumar al turno ({plata(venta.total)}).
+          La venta deja de sumar a la caja ({plata(venta.total)}).
         </span>
       )}
       <Input value={nota} onChange={(e) => setNota(e.target.value)} autoComplete="off" placeholder={como === 'a_mano' ? 'Qué pasó' : 'Por qué se descarta'} aria-label="Nota" style={{ width: 240 }} />
@@ -1676,11 +1676,11 @@ export function ResumenTurnoDatos({
         />
       </div>
       {r.esperando.length > 0 && <Notice tone="warning">Transferencias en espera: {r.esperando.length}. No suman hasta que lleguen.</Notice>}
-      {r.sinGN.length > 0 && <Notice tone="warning">Cobradas sin llegar a Gestión Nube: {r.sinGN.length}. Suman al turno.</Notice>}
+      {r.sinGN.length > 0 && <Notice tone="warning">Cobradas sin llegar a Gestión Nube: {r.sinGN.length}. Suman a la caja.</Notice>}
       {/* A12: GN ⛔ anula por API: la venta anulada a mano allá deja de sumar acá (la plata se devolvió). */}
       {!!r.anuladasGN?.length && (
         <Notice tone="warning">
-          Anuladas en Gestión Nube: {r.anuladasGN.map((v) => (v.gn_number ? `#${v.gn_number}` : numeroProvisorio(v.id))).join(' · ')} ({plata(r.anuladasGN.reduce((t, v) => t + v.total, 0))}). No suman al turno.
+          Anuladas en Gestión Nube: {r.anuladasGN.map((v) => (v.gn_number ? `#${v.gn_number}` : numeroProvisorio(v.id))).join(' · ')} ({plata(r.anuladasGN.reduce((t, v) => t + v.total, 0))}). No suman a la caja.
         </Notice>
       )}
       {r.anuladasGN === null && <Notice tone="neutral">Ventas anuladas en Gestión Nube: sin mirar. Se miran al cerrar.</Notice>}
@@ -2034,7 +2034,7 @@ export function ProductosFeria({ reglas, version, campanias = [], onGuardadas }:
                 </label>
               )
             })}
-            {!!reglas.feriaIdsCampania?.length && <span style={{ color: color.mut, fontSize: font.sm }}>{reglas.feriaIdsCampania.length} productos con el precio de feria aplicado.</span>}
+            {!!reglas.feriaIdsCampania?.length && <span style={{ color: color.mut, fontSize: font.sm }}>{reglas.feriaIdsCampania.length} productos con el precio de oferta aplicado.</span>}
           </div>
         </Field>
         <span style={{ fontWeight: weight.semibold, fontSize: font.sm, color: color.ink2 }}>Agregados a mano</span>
