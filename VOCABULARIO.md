@@ -1,6 +1,6 @@
 # VOCABULARIO — el glosario compartido de MAKETA y el monitor
 
-Versión: 2026-10-12b
+Versión: 2026-10-12c
 
 🔑 **Este archivo es el MISMO en los dos repos** (`areben-marketing` y `monitor-areben`), byte a
 byte. Si cambia acá, se copia allá en el mismo día y sube la `Versión:` de arriba. Cada repo tiene
@@ -220,14 +220,20 @@ decidida en la §1**.
 Se probó en la Caja con el criterio «¿la sección es para mirar o para hacer?» y ⛔ era el suyo: «Logo del
 ticket», «Política de cambio», «Billetes de la calculadora» y «Promociones» se quedaron en sustantivo aunque
 se configuran. El infinitivo va cuando el texto ES la acción: *«eliminar es eliminar, como acción; cobrar
-lo mismo»*. ▶️ Lo de abajo (MAKETA, 6-oct) queda hasta que Bruno diga si MAKETA vuelve al sustantivo.
+lo mismo»*. 🏁 **Y MAKETA también vuelve al sustantivo** (Bruno, 12-oct): «Pendientes», «Bajada», «Trabajo (3/5)»,
+«Publicación», «Contenido», «Archivo», «Campaña», «Prioridad», «Aprobaciones», «Historial», «Temas
+propuestos», «Mi bloc», «Participantes», «Grabación», «Reunión anterior», «Resumen»; los paneles de alta,
+«Nueva campaña» / «Nueva pieza». ⛔ Volver a las FRASES de antes del 6-oct («Lo que se habló y lo que
+pasó»): son palabras sueltas. Queda en infinitivo «Archivar la pieza» (la sección ES la acción) y todo
+panel que abre UNA acción («Eliminar la idea»). Lo cuida `tests/titulos-sustantivo.test.ts` de MAKETA.
+⇒ Lo que sigue es la historia del 6-oct:
 
 🆕 **6-oct-2026 (MAKETA): el título de sección pasó de sustantivo a INFINITIVO** (Bruno: *«sumemos a todo esto
 las terminaciones en infinitivo… lo que se habló no me convence como sección, y así un montón de
-cosas»*). Lo cuida `tests/titulos-infinitivo.test.ts` de MAKETA sobre cada `<Seccion titulo>`. ⛔ **Siguen en
+cosas»*). Lo cuidaba `tests/titulos-infinitivo.test.ts` de MAKETA (12-oct: pasó a `titulos-sustantivo`). ⛔ **Siguen en
 sustantivo**: el título de cada PANTALLA (es el nombre del menú: `Tablero`, `Calendario`), las
 agrupaciones de una lista (`Próximas`, `Se pasaron`), los títulos de un gráfico y los carteles de error.
-▶️ **En el monitor ⛔ se adopta** (12-oct, ver arriba).
+🏁 **12-oct: ⛔ rige más, en ninguna de las dos apps** (ver arriba).
 
 🔴 **Darío, 11-oct: *«usamos pocas palabras formales y muchas palabras informales»*.** Salió del
 ticket del chequeo de exhibición. ⚠️ **⛔ No choca con «sin jerga»**: la palabra formal es la que
