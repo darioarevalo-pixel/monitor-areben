@@ -135,13 +135,31 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
   BDI con sus ids de GN (modo Local 18393, consumidor final 158744, depósito 13307), sus cuentas y SIN
   verificar la transferencia (va a la CG 20597); la oferta lleva el % de la forma de pago. «Formas de pago»
   (admin) cambia cuenta, %, cuotas, oferta y verificación por tienda. Logo: «Usar el de Tienda Nube».
-  Las 10 `sql/migrate-caja*.sql` CORRIDAS en BDI (esquema leído: igual al de Zattia) y
-  `sql/migrate-caja-v4-marcas.sql` en Zattia.
+  SQL: ver «Qué migración de la Caja tiene cada base» abajo.
   ▶️ **Manos de Bruno**: (1) crear en el mailer la automation «Ticket del local» de **BDI** (sin ella el mail
   del ticket de BDI ⛔ sale; la venta sí) · (2) confirmar si la cuenta de MP de BDI es la misma ⇒ si sí,
   prender «verificar» en Formas de pago · (3) ⚠️ **débito de BDI**: dictado 10 % como Zattia, pero en su POS
   de GN las 2 ventas de débito de sep-oct salieron SIN descuento · (4) cargar el logo (un clic) y caminar una
   venta real en BDI · (5) el permiso «Caja» de BDI para quien cobre allá.
+- 🔑 **Qué migración de la Caja tiene cada base** (las corre SÓLO Bruno desde el 12-oct; la sesión prepara
+  archivo, base, comando y consulta de verificación). Todos los `.sql` están en `origin/main`. Verificado el
+  12-oct leyendo el esquema (`node scripts/caja-esquema.mjs BDI|ZATTIA`): las 8 tablas `caja_*`, 2 triggers,
+  21 índices y RLS, iguales en las dos bases.
+  | archivo (orden) | ZATTIA | BDI |
+  |---|---|---|
+  | `migrate-caja.sql` | ✅ 4-oct (fecha del archivo) | ✅ 12-oct (sesión V4) |
+  | `migrate-caja-ticket-mail.sql` | ✅ 4-oct (fecha del archivo) | ✅ 12-oct |
+  | `migrate-caja-transferencia.sql` | ✅ 4-oct (fecha del archivo) | ✅ 12-oct |
+  | `migrate-caja-medios.sql` | ✅ 4-oct (fecha del archivo) | ✅ 12-oct (el `update` es de `zattia`: ⛔ toca nada) |
+  | `migrate-caja-turno.sql` | ✅ 4-oct (fecha del archivo) | ✅ 12-oct |
+  | `migrate-caja-conteos.sql` | ✅ 5-oct (fecha del archivo) | ✅ 12-oct |
+  | `migrate-caja-logo.sql` | ✅ 5-oct (fecha del archivo) | ✅ 12-oct |
+  | `migrate-caja-auditoria.sql` | ✅ 11-oct | ✅ 12-oct |
+  | `migrate-caja-gift-card.sql` | ✅ 11-oct | ✅ 12-oct |
+  | `migrate-caja-cobros.sql` | ✅ 12-oct | ✅ 12-oct |
+  | `migrate-caja-v4-marcas.sql` | ✅ 12-oct (sesión V4) | ⛔ no va: la fila de BDI nace con `REGLAS_INICIALES_BDI` |
+  ⚠️ «fecha del archivo» = cuándo entró al repo; el día exacto en que corrió en Zattia ⛔ quedó anotado, pero el
+  esquema de hoy confirma que las 10 están.
 - ⛔ **Vendedor en cada venta (W2): RETIRADO** (Bruno, 12-oct: «no tenemos esa dinámica de trabajo»).
   Alcanza con la cuenta que cobró (`caja_venta.usuario`).
 - **La cuenta de GN de la transferencia sale de la cuenta de MP en uso**: Darío ⇒ Transferencia CG,
