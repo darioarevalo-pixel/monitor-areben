@@ -159,6 +159,7 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
   | `migrate-caja-gift-card.sql` | ✅ 11-oct | ✅ 12-oct |
   | `migrate-caja-cobros.sql` | ✅ 12-oct | ✅ 12-oct |
   | `migrate-caja-v4-marcas.sql` | ✅ 12-oct (sesión V4) | ⛔ no va: la fila de BDI nace con `REGLAS_INICIALES_BDI` |
+  | `migrate-caja-anulada-en-gn.sql` | ✅ 12-oct (las 7 de prueba anotadas) | ✅ 12-oct |
   ⚠️ «fecha del archivo» = cuándo entró al repo; el día exacto en que corrió en Zattia ⛔ quedó anotado, pero el
   esquema de hoy confirma que las 10 están.
 - ⛔ **Vendedor en cada venta (W2): RETIRADO** (Bruno, 12-oct: «no tenemos esa dinámica de trabajo»).

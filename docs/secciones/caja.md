@@ -401,7 +401,7 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
 
 ## Pendiente
 
-- 🔴 `sql/migrate-caja-anulada-en-gn.sql` ⛔ corrida (la corre Bruno). Hasta entonces el cierre y el sync ⛔ anotan.
+- 🏁 `sql/migrate-caja-anulada-en-gn.sql` CORRIDA en las dos bases (12-oct), verificada leyendo la columna, el check y las 7 de prueba (`por: sync`).
   Al 12-oct GN tampoco devuelve **#30422 y #30423** (de hoy): las anota el próximo cierre o sync, si siguen así.
 
 - 🏁 `sql/migrate-caja-gift-card.sql` CORRIDA en Zattia (11-oct, `SOLO=ZATTIA node scripts/aplicar-sql.mjs`), verificada leyendo el esquema; BDI sin las tablas.
