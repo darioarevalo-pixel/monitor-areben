@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|caja|repo-armado&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|caja|repo-armado|reportes&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -24,6 +24,7 @@ import liquidacion from './_liquidacion.js';
 import atencion from './_atencion.js';
 import sistema from './_sistema.js';
 import organizacion from './_organizacion.js';
+import reportes from './_reportes.js';
 import agenda from './_agenda.js';
 import syncTn from './_sync-tn.js';
 import metaRentabilidad from './_meta-rentabilidad.js';
@@ -108,6 +109,8 @@ const RECURSOS = {
   // (12 funciones de Hobby, hay 7). Es la contracara de `agenda`: aquélla contesta "¿qué me toca
   // hoy?" y ésta "¿de quién es esto?".
   organizacion,
+  // «Ayuda / problemas» (Bruno, 12-oct): el botón de abajo a la derecha. Sin marca, como `organizacion`.
+  reportes,
   agenda,
   // Ledger del sync de ventas TN→GN (Stunned). Entra por acá y no por un archivo propio en `api/`
   // porque el repo está a 3 funciones del límite del plan Hobby.

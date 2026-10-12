@@ -13,6 +13,7 @@ import { PortalCadete } from '@/components/envios/PortalCadete'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { SeccionHeader } from '@/components/layout/SeccionHeader'
 import { CartelNovedad } from '@/components/novedades/CartelNovedad'
+import { BotonReportes } from '@/components/reportes/BotonReportes'
 import { Guia } from '@/components/ui/Guia'
 import { AccionesProvider } from '@/components/layout/acciones'
 import { ToastProvider } from '@/components/ui/Toast'
@@ -230,6 +231,7 @@ export default function Seccion() {
       <ToastProvider>
         <ConfirmProvider>
           <CajaPOS />
+          <BotonReportes seccion="pos" admin={esAdmin(perfil)} lado="izquierda" />
         </ConfirmProvider>
       </ToastProvider>
     )
@@ -283,6 +285,8 @@ export default function Seccion() {
             sólo el dibujo, y sin pasos registrados no pinta nada.
           */}
           <Guia />
+          {/* «Ayuda / problemas» (Bruno, 12-oct): fijo abajo a la derecha, estés donde estés. */}
+          <BotonReportes seccion={key} admin={esAdmin(perfil)} />
           <div className="shell-main">
             {/* Topbar: solo existe abajo de 900px (la regla vive en globals.css). Es la
                 puerta al menú cuando el sidebar se convirtió en cajón. */}
