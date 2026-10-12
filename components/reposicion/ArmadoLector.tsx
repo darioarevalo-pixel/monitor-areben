@@ -235,7 +235,18 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
         ref={inputRef}
         className="mo-input"
         type="text"
+        // Un campo de texto suelto con foco lo toman por usuario/contraseña los gestores de claves
+        // (Darío, 12-oct-2026: «me abre un espacio para rellenar una contraseña»). `name` propio y
+        // las marcas de cada gestor para que lo ignoren.
+        name="codigo-prenda"
         autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        data-1p-ignore=""
+        data-lpignore="true"
+        data-bwignore="true"
+        data-form-type="other"
         placeholder="Escanear prenda…"
         aria-label="Código de barras a escanear"
         onFocus={() => setEscuchando(true)}
