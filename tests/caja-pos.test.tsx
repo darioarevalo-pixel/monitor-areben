@@ -223,8 +223,8 @@ describe('POS · A6: la pantalla se pone al día sola (Bruno, 12-oct)', () => {
   })
 })
 
-describe('POS · paso «Confirmar transferencia» (Bruno, 12-oct)', () => {
-  it('🔑 con transferencia el botón dice «Confirmar transferencia» y, guardada, el cobro pasa a validar con los últimos pagos', async () => {
+describe('POS · paso «Validar transferencia» (Bruno, 12-oct)', () => {
+  it('🔑 con transferencia el botón dice «Validar transferencia» (13-oct) y, guardada, el cobro pasa a validar con los últimos pagos', async () => {
     const { leerConfig, confirmarVenta } = await import('@/lib/caja/cliente')
     const { REGLAS_INICIALES } = await import('@/lib/caja/core.core.js')
     const conf = { reglas: { ...REGLAS_INICIALES, transferenciaA: REGLAS_INICIALES.medios.transferencia.opciones[0] }, politica_cambio: null }
@@ -236,8 +236,8 @@ describe('POS · paso «Confirmar transferencia» (Bruno, 12-oct)', () => {
     await act(async () => boton('Continuar al cobro Alt+C').click())
     const transf = [...document.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Transferencia')) as HTMLButtonElement
     await act(async () => transf.click())
-    const fin = [...document.querySelectorAll('button')].find((b) => /^(Finalizar venta|Confirmar transferencia)/.test(b.textContent ?? '')) as HTMLButtonElement
-    expect(fin.textContent).toMatch(/^Confirmar transferencia/)
+    const fin = [...document.querySelectorAll('button')].find((b) => /^(Finalizar venta|Validar transferencia)/.test(b.textContent ?? '')) as HTMLButtonElement
+    expect(fin.textContent).toMatch(/^Validar transferencia/)
     await act(async () => fin.click())
     await act(async () => new Promise((r) => setTimeout(r, 10)))
     const t = document.body.textContent || ''
@@ -292,7 +292,7 @@ describe('POS · la transferencia que ⛔ llega justa (Bruno, 12-oct, segunda ta
     const { REGLAS_INICIALES } = await import('@/lib/caja/core.core.js')
     await montar(<EsperaTransferencia venta={VENTA as never} reglas={REGLAS_INICIALES as never} onLlego={onLlego} onCambio={() => {}} />)
     await act(async () => boton('Transfirió a otra cuenta').click())
-    const confirmar = () => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Confirmar transferencia') as HTMLButtonElement
+    const confirmar = () => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Validar transferencia') as HTMLButtonElement
     expect(confirmar().disabled).toBe(true)
     await act(async () => boton('Darío Arévalo').click())
     const banco = document.querySelector('input[placeholder^="Galicia"]') as HTMLInputElement

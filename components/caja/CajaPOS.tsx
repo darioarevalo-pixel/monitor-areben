@@ -217,12 +217,16 @@ function POS() {
   const [seisCuotas, setSeisCuotas] = useState<boolean | null>(null)
   const [varios, setVarios] = useState(false)
   const [pagaCon, setPagaCon] = useState('')
+  // 🎁 Regalo (Bruno, 13-oct): sale el ticket + el de cambio. La transferencia imprime al llegar ⇒ se
+  // recuerda qué ventas en espera eran regalo.
+  const [regalo, setRegalo] = useState(false)
+  const regalos = useRef(new Set<string>())
   const [codigo, setCodigo] = useState('')
   // Cuántas búsquedas hay en vuelo. 🔴 El campo ⛔ se deshabilita mientras busca: el lector tipea el
   // código siguiente enseguida, y con el campo bloqueado ese escaneo se PERDÍA (visto en prod, 4-oct).
   const [buscando, setBuscando] = useState(0)
   const [aviso, setAviso] = useState<{ tono: 'danger' | 'warning'; texto: string } | null>(null)
-  // Paso «Confirmar transferencia» (Bruno, 12-oct): la venta guardada que espera el pago, en su modal.
+  // Paso «Validar transferencia» (Bruno, 12-oct; 13-oct: ⛔ «Confirmar», que se lee como el final): la venta guardada que espera el pago, en su modal.
   const [validando, setValidando] = useState<Venta | null>(null)
   const [candidatos, setCandidatos] = useState<{ lista: Candidato[]; mas: number } | null>(null)
   // La lista que aparece MIENTRAS se escribe (Bruno, 4-oct). `vuelta` numera cada búsqueda: sólo se
@@ -647,7 +651,7 @@ function POS() {
     window.addEventListener('storage', oir)
     return () => window.removeEventListener('storage', oir)
   }, [])
-  // Con transferencia la venta ⛔ se finaliza al apretar: espera el pago (paso «Confirmar transferencia»).
+  // Con transferencia la venta ⛔ se finaliza al apretar: espera el pago (paso «Validar transferencia»).
   const porTransferencia = pagos.some((p) => p.medio === 'transferencia')
   const puedeConfirmar = !!turno && !!c && !enviando && emailOk && !faltaContestar && (vuelto == null || vuelto >= 0)
 
@@ -697,7 +701,7 @@ function POS() {
     const ticket = ticketGuardado(venta)
     setUltima({ venta, ticket })
     avisar(venta.estado === 'en_gn' ? 'ok' : 'ojo')
-    imprimirTicket(ticket, esEfectivo, ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
+    imprimirTicket(ticket, esEfectivo, ahora(), regalos.current.delete(venta.id) ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
     refrescarPendientes()
     refrescarTurno()
   }
@@ -746,6 +750,7 @@ function POS() {
     setSeisCuotas(null)
     setVarios(false)
     setPagaCon('')
+    setRegalo(false)
   }
 
   async function confirmar() {
@@ -753,6 +758,7 @@ function POS() {
     setEnviando(true)
     setAviso(null)
     setBor((b) => (b.enviado ? b : { ...b, enviado: true }))
+    const conRegalo = regalo
     try {
       const r = await confirmarVenta({
         id: bor.id,
@@ -772,6 +778,7 @@ function POS() {
         // ⛔ ticket todavía: sale cuando llega la transferencia. El cobro pasa al paso «Validar
         // transferencia»; «Seguir vendiendo» la deja en el cartel ámbar de arriba.
         setUltima(null)
+        if (conRegalo) regalos.current.add(r.venta.id)
         setValidando(r.venta)
         refrescarPendientes()
         refrescarTurno()
@@ -782,7 +789,7 @@ function POS() {
       setGnSenal(r.venta.estado === 'en_gn' ? { ok: true, que: 'la última venta llegó' } : { ok: false, que: `la última venta quedó pendiente${r.venta.ultimo_error ? ` (${r.venta.ultimo_error})` : ''}` })
       setUltima({ venta: r.venta, ticket })
       avisar(r.venta.estado === 'en_gn' ? 'ok' : 'ojo')
-      imprimirTicket(ticket, esEfectivo, ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
+      imprimirTicket(ticket, esEfectivo, ahora(), conRegalo ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
       refrescarPendientes()
       refrescarTurno()
     } catch (e) {
@@ -976,6 +983,7 @@ function POS() {
           nombreCuenta={nombreCuenta}
           onCerrar={() => setVerVentas(false)}
           onReimprimir={(v) => imprimirTicket(ticketGuardado(v), esEfectivo, ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))}
+          onTicketCambio={(v) => imprimirTicket(ticketGuardado(v), esEfectivo, ahora(), 'cambio').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket de cambio: ${(e as Error).message}` }))}
         />
       )}
 
@@ -1018,6 +1026,7 @@ function POS() {
               nombreCuenta={nombreCuenta}
               esEfectivo={esEfectivo}
               onReimprimir={() => imprimirTicket(ultima.ticket, esEfectivo, ahora())}
+              onTicketCambio={() => imprimirTicket(ultima.ticket, esEfectivo, ahora(), 'cambio').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket de cambio: ${(e as Error).message}` }))}
               onOtra={() => {
                 setUltima(null)
                 enfocar()
@@ -1026,7 +1035,7 @@ function POS() {
           )}
 
           {validando && (
-            <Modal abierto onCerrar={() => setValidando(null)} titulo="Confirmar transferencia" ancho="xl" cerrarConFondo={false}>
+            <Modal abierto onCerrar={() => setValidando(null)} titulo="Validar transferencia" ancho="xl" cerrarConFondo={false}>
               <EsperaTransferencia
                 venta={validando}
                 reglas={reglas}
@@ -1056,8 +1065,18 @@ function POS() {
                   <Button variant="outline" onClick={() => setEnCobro(false)}>
                     Volver
                   </Button>
+                  <Button
+                    variant={regalo ? 'solid' : 'outline'}
+                    tone={regalo ? 'brand' : undefined}
+                    aria-pressed={regalo}
+                    onClick={() => setRegalo((r) => !r)}
+                    iconLeft={regalo ? <Icono nombre="check" /> : undefined}
+                    title="Imprime el ticket y el ticket de cambio (sin precios)"
+                  >
+                    Regalo
+                  </Button>
                   <Button size="lg" tone="success" variant="solid" disabled={!puedeConfirmar} loading={enviando} onClick={confirmar} iconLeft={<Icono nombre="check" />}>
-                    {porTransferencia ? 'Confirmar transferencia' : 'Finalizar venta'} {c ? plata(c.total) : ''}
+                    {porTransferencia ? 'Validar transferencia' : 'Finalizar venta'} {c ? plata(c.total) : ''}
                   </Button>
                 </>
               }

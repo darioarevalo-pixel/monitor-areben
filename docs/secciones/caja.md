@@ -223,7 +223,11 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   pedido web que se paga al retirar se cobra **EN GN, a mano** —la API ⛔ deja agregarle un pago a una
   venta que ya existe (sólo `POST /ventas` con `payments[]`; medido en la doc el 4-oct)—. El turno lee
   de GN el efectivo que entró **como cobro, ⛔ como venta en el local**, y lo suma al esperado: cuentas
-  con `efectivo: true`, ⛔ canal 3 «Mi Local» (POS de GN), ⛔ `integration_source = 'monitor-caja'`.
+  con `efectivo: true`, ⛔ `integration_source = 'monitor-caja'` ni un `gn_sale_id` de `caja_venta` (`deCaja`).
+  🔑 **Desde el 13-oct también las VENTAS DEL POS DE GN** (canal 3, `pos: true`, listadas aparte): Bruno
+  abre las dos cajas en paralelo («si una venta no anda en una, que vaya a la otra») y el cajón es UNO ⇒
+  sin ellas el cierre daba un faltante falso. Las de la Caja se sacan por su id de GN, ⛔ sólo por la
+  marca: una reintentada en otro turno lleva la hora del reintento.
   Va al turno por la **hora del cobro** (`payments[].created_at`, SIN zona: es hora argentina).
   🔴 El filtro de `GET /ventas` es por **día de la venta** y el pedido se cobra hasta 5 días después ⇒
   se leen **10 días** para atrás. Caché de 60 s; el cierre lee fresco. GN caído ⇒ `cobrosGN: null`, el
@@ -398,6 +402,15 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
 - Falta (parte 2): activar en el POS, canjear, la venta en GN (Opción 1: producto «Gift card» al
   venderla, descuento en pesos al canjear), el ticket y la consulta de saldo. Diseño completo:
   `~/Documents/reunion-gerencia/2026-10-11-POS-auditoria-y-gift-card.md` § D.
+
+## Regalo y textos (13-oct-2026, Bruno)
+
+- 🎁 **«Regalo»** en el pie del cobro: imprime el ticket + el **ticket de cambio** en el mismo PDF
+  (`armarTicketCambio`, `lib/caja/ticket.ts`): logo, número, fecha, prendas con talle y la política;
+  ⛔ un solo precio. Con transferencia sale al llegar el pago (`regalos`, en memoria del POS: recargar la
+  página en la espera lo pierde ⇒ queda «Ticket de cambio» en Última venta y en Ventas).
+- El redondeo se llama **«Redondeo»** suba o baje (⛔ «Recargo por redondeo») en el ticket, el cobro y la
+  pantalla de la clienta. El paso de la transferencia vuelve a ser **«Validar transferencia»**.
 
 ## Pendiente
 

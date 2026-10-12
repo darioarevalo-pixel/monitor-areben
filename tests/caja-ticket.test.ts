@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { armarTicket, fechaConDia, fechaTicket, marcasDelTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
+import { armarTicket, armarTicketCambio, fechaConDia, fechaTicket, marcasDelTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
 import { REGLAS_INICIALES, cobro, nombreParaTicket, renglones } from '@/lib/caja/core.core.js'
 
 const medir = (txt: string) => txt.match(/.{1,40}/g) || ['']
@@ -89,11 +89,12 @@ describe('caja · ticket contra la pantalla de cobro de GN', () => {
     expect(montoDe(ops, 'VUELTO')).toBe('$800')
   })
 
-  it('🔴 el redondeo PARA ARRIBA se llama «Recargo por redondeo» (Bruno, 4-oct)', () => {
+  it('🔴 el redondeo PARA ARRIBA se llama «Redondeo», ⛔ «Recargo» (Bruno, 13-oct)', () => {
     // Feria Efectivo al 0 %: $4.990 ⇒ $5.000.
     const { ops, txt, c } = ticket([{ precio: 4990 }], [{ cuenta: 25867 }])
     expect(c.total).toBe(5000)
-    expect(montoDe(ops, 'Recargo por redondeo')).toBe('+$10')
+    expect(montoDe(ops, 'Redondeo')).toBe('+$10')
+    expect(txt.some((t) => /recargo/i.test(t))).toBe(false)
     expect(txt.some((t) => t.startsWith('Descuento'))).toBe(false)
   })
 
@@ -165,5 +166,24 @@ describe('el logo de la MARCA de lo que se vende (Bruno, 12-oct)', () => {
     const { ops, txt } = ticket([{ precio: 1000 }], [{ cuenta: 12921 }], { logo: Z, logoStunned: null, renglones: [r(false), r(true)] })
     expect(ops.filter((o) => o.k === 'img')).toHaveLength(0)
     expect(txt[0]).toBe('ZATTIA · STUNNED')
+  })
+})
+
+describe('ticket de cambio (regalo, Bruno 13-oct)', () => {
+  it('🔑 las prendas con su talle, el número y la política; ⛔ un solo precio', () => {
+    const filas = renglones([{ product_id: 1, size_id: 1, cantidad: 2, precio: 4990, rebaja: { tipo: 'pct', valor: 10 } }])
+    const c = cobro({ filas, pagos: [{ cuenta: 12921 }], reglas, descuentoVenta: null })
+    const datos: DatosTicket = {
+      numero: 30048, id: ID, subtotal: c.subtotal, pagos: c.pagos, total: c.total, nombreCuenta, pagaCon: 10000,
+      renglones: [{ nombre: 'TOP MONTANA', talle: 'M', cantidad: 2, precio: 4990, importe: c.subtotal }],
+      politica: 'Cambios dentro de los 30 días con este ticket.',
+    }
+    const txt = armarTicketCambio(datos, AHORA, medir).ops.filter((o) => o.k === 'txt').map((o) => (o as { txt: string }).txt)
+    expect(txt).toContain('TICKET DE CAMBIO')
+    expect(txt).toContain('Comprobante: #30048')
+    expect(txt).toContain('2 x TOP MONTANA - M')
+    expect(txt.join(' ')).toContain('Cambios dentro de los 30 días')
+    expect(txt.some((t) => t.includes('$'))).toBe(false)
+    expect(txt.some((t) => /TOTAL|Descuento|RECIBIMOS|VUELTO/.test(t))).toBe(false)
   })
 })

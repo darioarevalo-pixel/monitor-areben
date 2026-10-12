@@ -210,36 +210,38 @@ describe('cobrosDeGN', () => {
   })
 
   it('el cobro de la #29981 cae en el turno de la mañana, ⛔ en el de la tarde', () => {
-    const m = cobrosDeGN({ ventas: [VENTA_29981], ...MANANA, cuentas: CUENTAS })
-    expect(m).toEqual([{ id: 1344182, venta: 29981, tn: '7144', cliente: 'Melania Segovia', cuenta: 12921, monto: 38241, en: '2026-10-03T16:52:40.000Z' }])
-    expect(cobrosDeGN({ ventas: [VENTA_29981], desde: '2026-10-03T17:00:00.000Z', hasta: '2026-10-03T22:00:00.000Z', cuentas: CUENTAS })).toEqual([])
+    const m = cobrosDeGN({ ventas: [VENTA_29981], ...MANANA, cuentas: CUENTAS, deCaja: [] })
+    expect(m).toEqual([{ id: 1344182, venta: 29981, tn: '7144', cliente: 'Melania Segovia', cuenta: 12921, monto: 38241, en: '2026-10-03T16:52:40.000Z', pos: false }])
+    expect(cobrosDeGN({ ventas: [VENTA_29981], desde: '2026-10-03T17:00:00.000Z', hasta: '2026-10-03T22:00:00.000Z', cuentas: CUENTAS, deCaja: [] })).toEqual([])
   })
 
   it('el borde: desde entra, hasta ⛔ (dos turnos seguidos ⛔ cuentan el mismo cobro)', () => {
     const justo = { ...VENTA_29981, payments: [{ ...VENTA_29981.payments[0], created_at: '2026-10-03 14:00:00' }] }
-    expect(cobrosDeGN({ ventas: [justo], ...MANANA, cuentas: CUENTAS })).toEqual([])
-    expect(cobrosDeGN({ ventas: [justo], desde: '2026-10-03T17:00:00.000Z', hasta: '2026-10-03T22:00:00.000Z', cuentas: CUENTAS })).toHaveLength(1)
+    expect(cobrosDeGN({ ventas: [justo], ...MANANA, cuentas: CUENTAS, deCaja: [] })).toEqual([])
+    expect(cobrosDeGN({ ventas: [justo], desde: '2026-10-03T17:00:00.000Z', hasta: '2026-10-03T22:00:00.000Z', cuentas: CUENTAS, deCaja: [] })).toHaveLength(1)
   })
 
-  it('⛔ la venta presencial (canal Mi Local), ⛔ las de la Caja, ⛔ otra cuenta; y el mismo cobro una sola vez', () => {
+  it('🔑 la venta del POS de GN SÍ suma (las dos cajas, 13-oct); ⛔ las de la Caja, ⛔ otra cuenta; y el mismo cobro una sola vez', () => {
     const pago = (id: number, cuenta = 12921) => ({ id, amount: 1000, account_id: cuenta, created_at: '2026-10-03 10:00:00' })
     const r = cobrosDeGN({
       ventas: [
-        { number: 1, channel_id: 3, payments: [pago(1)] }, // POS de GN
-        { number: 2, channel_id: 16, integration_source: 'monitor-caja', payments: [pago(2)] }, // la Caja: ya suma
-        { number: 3, channel_id: 16, payments: [pago(3, 20196)] }, // débito
-        { number: 4, channel_id: 16, payments: [pago(4, 25867)] }, // feria efectivo: SÍ
-        { number: 4, channel_id: 16, payments: [pago(4, 25867)] }, // la misma venta, leída por las dos cuentas
-        { number: 5, channel_id: 12, payments: [pago(5)] }, // otro canal (Administración): SÍ
+        { id: 101, number: 1, channel_id: 3, payments: [pago(1)] }, // POS de GN: SÍ, marcada
+        { id: 102, number: 2, channel_id: 16, integration_source: 'monitor-caja', payments: [pago(2)] }, // la Caja: ya suma
+        { id: 106, number: 6, channel_id: 3, payments: [pago(6)] }, // la Caja sin la marca: la saca su id
+        { id: 103, number: 3, channel_id: 16, payments: [pago(3, 20196)] }, // débito
+        { id: 104, number: 4, channel_id: 16, payments: [pago(4, 25867)] }, // feria efectivo: SÍ
+        { id: 104, number: 4, channel_id: 16, payments: [pago(4, 25867)] }, // la misma venta, leída por las dos cuentas
+        { id: 105, number: 5, channel_id: 12, payments: [pago(5)] }, // otro canal (Administración): SÍ
       ],
-      ...MANANA, cuentas: CUENTAS,
+      ...MANANA, cuentas: CUENTAS, deCaja: [106],
     })
-    expect(r.map((c) => c.venta)).toEqual([4, 5])
+    expect(r.map((c) => [c.venta, c.pos])).toEqual([[1, true], [4, false], [5, false]])
   })
 
   it('parámetros obligatorios', () => {
     expect(() => cobrosDeGN({ ventas: [], ...MANANA } as never)).toThrow(/cuentas/)
-    expect(() => cobrosDeGN({ ventas: [], desde: 'x', hasta: MANANA.hasta, cuentas: [] })).toThrow(/horario/)
+    expect(() => cobrosDeGN({ ventas: [], ...MANANA, cuentas: [] } as never)).toThrow(/Caja/)
+    expect(() => cobrosDeGN({ ventas: [], desde: 'x', hasta: MANANA.hasta, cuentas: [], deCaja: [] })).toThrow(/horario/)
     expect(() => cobrosDeGN({ desde: MANANA.desde, hasta: MANANA.hasta, cuentas: [] } as never)).toThrow(/ventas/)
   })
 })

@@ -337,8 +337,14 @@ export default async function handler(req, res) {
           if (pag === 5) throw new Error('más de 5 páginas de cobros')
         }
       }
+      // Las de la Caja de los mismos días (cualquier turno): una reintentada lleva la hora del reintento.
+      const propias = await sb.from('caja_venta').select('gn_sale_id').not('gn_sale_id', 'is', null)
+        .gte('creada_en', new Date(Date.parse(turno.abierto_en) - (DIAS_COBROS_GN + 1) * DIA_MS).toISOString()).limit(5000)
+      if (propias.error) throw new Error(propias.error.message)
+      // PostgREST corta en 1.000 callado: leído a medias, una de la Caja sumaría dos veces.
+      if ((propias.data || []).length >= 1000) throw new Error('más de 1.000 ventas de la Caja en la ventana')
       const hasta = turno.cerrado_en || new Date(ahora).toISOString()
-      const datos = cobrosDeGN({ ventas, desde: turno.abierto_en, hasta, cuentas })
+      const datos = cobrosDeGN({ ventas, desde: turno.abierto_en, hasta, cuentas, deCaja: (propias.data || []).map((v) => Number(v.gn_sale_id)) })
       cacheCobrosGN = { turno: turno.id, en: ahora, datos }
       return datos
     } catch {

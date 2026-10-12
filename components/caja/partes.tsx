@@ -629,7 +629,7 @@ export function ResumenCobro({ c, nombreCuenta }: { c: { subtotal: number; aVent
       {c.pagos.map((p, i) => (
         <div key={i} style={{ display: 'grid', gap: space[1.5] }}>
           {p.descuento > 0 && linea(`Descuento ${p.porcentaje}%${c.pagos.length > 1 ? ` · ${nombreCuenta(p.cuenta)}` : ''}`, `−${plata(p.descuento)}`, color.successInk)}
-          {p.redondeo > 0 && linea('Recargo por redondeo', `+${plata(p.redondeo)}`, color.mut)}
+          {p.redondeo > 0 && linea('Redondeo', `+${plata(p.redondeo)}`, color.mut)}
           {p.redondeo < 0 && linea('Redondeo', `−${plata(-p.redondeo)}`, color.mut)}
         </div>
       ))}
@@ -648,12 +648,15 @@ export function ResumenCobro({ c, nombreCuenta }: { c: { subtotal: number; aVent
 export function UltimaVenta({
   venta,
   onReimprimir,
+  onTicketCambio,
   onOtra,
   nombreCuenta,
   esEfectivo,
 }: {
   venta: Venta
   onReimprimir: () => void
+  /** El ticket de cambio solo (regalo, Bruno 13-oct): sin precios. */
+  onTicketCambio?: () => void
   onOtra?: () => void
   /** El MEDIO de una cuenta (`nombreParaTicket`): con él, la línea dice cómo pagó. */
   nombreCuenta?: (id: number) => string
@@ -699,6 +702,11 @@ export function UltimaVenta({
       <Button variant="outline" onClick={onReimprimir}>
         Reimprimir ticket
       </Button>
+      {onTicketCambio && (
+        <Button variant="outline" onClick={onTicketCambio} title="Sin precios, para regalo">
+          Ticket de cambio
+        </Button>
+      )}
       {onOtra && (
         <Button tone="brand" variant="solid" onClick={onOtra}>
           Agregar otra venta
@@ -916,7 +924,7 @@ export function EsperaTransferencia({
                   })
                 }
               >
-                Confirmar transferencia
+                Validar transferencia
               </Button>
               <Button size="sm" variant="outline" onClick={() => setOtra(null)}>
                 Volver
@@ -1094,7 +1102,7 @@ function marcasDe(v: Venta): string[] {
 const numeroDeVenta = (v: Venta) => (v.gn_number ? `#${v.gn_number}` : `Provisoria ${numeroProvisorio(v.id)}`)
 
 /** El resumen de una venta (Bruno, 12-oct): qué se llevó, cómo pagó y quién la cobró, para identificarla rápido. */
-function ResumenVenta({ venta: v, nombreCuenta, onVolver, onReimprimir }: { venta: Venta; nombreCuenta: (id: number) => string; onVolver: () => void; onReimprimir?: () => void }) {
+function ResumenVenta({ venta: v, nombreCuenta, onVolver, onReimprimir, onTicketCambio }: { venta: Venta; nombreCuenta: (id: number) => string; onVolver: () => void; onReimprimir?: () => void; onTicketCambio?: () => void }) {
   const e = ESTADO_VENTA[v.estado] ?? { texto: v.estado, tono: 'neutral' as const }
   const marcas = marcasDe(v)
   const fila: React.CSSProperties = { display: 'flex', gap: space[3], justifyContent: 'space-between', fontSize: font.base }
@@ -1112,6 +1120,11 @@ function ResumenVenta({ venta: v, nombreCuenta, onVolver, onReimprimir }: { vent
         {onReimprimir && (
           <Button size="sm" variant="outline" onClick={onReimprimir} title="Reimprimir ticket">
             <Icono nombre="impresora" size={16} /> Reimprimir
+          </Button>
+        )}
+        {onTicketCambio && (
+          <Button size="sm" variant="outline" onClick={onTicketCambio} title="Sin precios, para regalo">
+            Ticket de cambio
           </Button>
         )}
       </div>
@@ -1172,7 +1185,7 @@ function ResumenVenta({ venta: v, nombreCuenta, onVolver, onReimprimir }: { vent
  */
 const CLAVE_PROVISORIAS = 'caja:ventas:provisorias-abiertas'
 
-export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar, turnoId, titulo = 'Ventas' }: { nombreCuenta: (id: number) => string; /** Sin él, ⛔ hay «Reimprimir». */ onReimprimir?: (v: Venta) => void; onCerrar: () => void; /** Sin él, el turno abierto. */ turnoId?: string; titulo?: string }) {
+export function VentasDelTurno({ nombreCuenta, onReimprimir, onTicketCambio, onCerrar, turnoId, titulo = 'Ventas' }: { nombreCuenta: (id: number) => string; /** Sin él, ⛔ hay «Reimprimir». */ onReimprimir?: (v: Venta) => void; /** El ticket de cambio solo (regalo); sin él, ⛔ está. */ onTicketCambio?: (v: Venta) => void; onCerrar: () => void; /** Sin él, el turno abierto. */ turnoId?: string; titulo?: string }) {
   const [ventas, setVentas] = useState<Venta[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [viendo, setViendo] = useState<Venta | null>(null)
@@ -1270,6 +1283,7 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar, turnoId, 
           nombreCuenta={nombreCuenta}
           onVolver={() => setViendo(null)}
           onReimprimir={onReimprimir && conTicket(viendo) ? () => onReimprimir(viendo) : undefined}
+          onTicketCambio={onTicketCambio && conTicket(viendo) ? () => onTicketCambio(viendo) : undefined}
         />
       )}
       {!viendo && ventas && ventas.length > 0 && (
@@ -1465,7 +1479,7 @@ export function TransferenciasEnEspera({ ventas, onCambio }: { ventas: Venta[]; 
               <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', paddingLeft: space[3] }}>
                 <Input value={comprobante} onChange={(e) => setComprobante(e.target.value)} autoComplete="off" placeholder="Nº de operación del comprobante" aria-label="Comprobante" style={{ width: 260 }} />
                 <Button size="sm" tone="success" loading={trabajando} disabled={comprobante.trim().length < 4} onClick={() => confirmar(v.id)}>
-                  Confirmar transferencia
+                  Validar transferencia
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setAbierta(null)}>
                   Volver
@@ -1790,21 +1804,30 @@ export function SalidaModal({ tipo, onCerrar, onListo }: { tipo: 'salida' | 'apo
 }
 
 /**
- * W3b: el efectivo que entró como COBRO en Gestión Nube (el pedido web que se paga al retirar), ⛔ como
- * venta en el local. Suma al efectivo esperado: la plata está en el cajón (Bruno, 4-oct).
+ * W3b: el efectivo que entró por Gestión Nube y ⛔ por la Caja. Suma al efectivo esperado: la plata está en
+ * el cajón (Bruno, 4-oct). Dos listas: las ventas hechas en el POS de GN (13-oct, las dos cajas en
+ * paralelo) y los cobros de pedidos web.
  */
 export function CobrosGN({ r }: { r: ResumenTurno }) {
   if (r.cobrosGN === null) return <Notice tone="warning">Cobros de Gestión Nube: sin leer. No suman al esperado.</Notice>
   if (r.cobrosGN.length === 0) return null
+  const grupos = [
+    { titulo: 'Ventas en efectivo en el POS de Gestión Nube', lista: r.cobrosGN.filter((c) => c.pos) },
+    { titulo: 'Cobros en efectivo de pedidos web (en Gestión Nube)', lista: r.cobrosGN.filter((c) => !c.pos) },
+  ].filter((g) => g.lista.length)
   return (
-    <div style={{ display: 'grid', gap: space[0.5] }}>
-      <span>
-        Cobros en efectivo en Gestión Nube (pedidos web): {r.cobrosGN.length} · <b>{plata(r.efectivo.cobradoGN)}</b>
-      </span>
-      {r.cobrosGN.map((c) => (
-        <span key={c.id} style={{ color: color.mut }}>
-          {horaAr(c.en)} · {c.venta ? `venta #${c.venta}` : 'venta'}{c.tn ? ` (pedido #${c.tn})` : ''}{c.cliente ? ` · ${c.cliente}` : ''} · {plata(c.monto)}
-        </span>
+    <div style={{ display: 'grid', gap: space[2] }}>
+      {grupos.map((g) => (
+        <div key={g.titulo} style={{ display: 'grid', gap: space[0.5] }}>
+          <span>
+            {g.titulo}: {g.lista.length} · <b>{plata(g.lista.reduce((s, c) => s + c.monto, 0))}</b>
+          </span>
+          {g.lista.map((c) => (
+            <span key={c.id} style={{ color: color.mut }}>
+              {horaAr(c.en)} · {c.venta ? `venta #${c.venta}` : 'venta'}{c.tn ? ` (pedido #${c.tn})` : ''}{c.cliente ? ` · ${c.cliente}` : ''} · {plata(c.monto)}
+            </span>
+          ))}
+        </div>
       ))}
     </div>
   )

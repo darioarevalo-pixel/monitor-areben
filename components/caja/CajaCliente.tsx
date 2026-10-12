@@ -234,7 +234,7 @@ function Compra({ v }: { v: Extract<VistaCliente, { estado: 'compra' }> }) {
           )}
           {v.redondeo !== 0 && (
             <div style={par}>
-              <span>{v.redondeo > 0 ? 'Recargo por redondeo' : 'Redondeo'}</span>
+              <span>Redondeo</span>
               <span>
                 {v.redondeo > 0 ? '+' : '−'}
                 {plata(Math.abs(v.redondeo))}

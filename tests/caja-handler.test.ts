@@ -959,7 +959,7 @@ describe('caja · turno propio (v2, W3)', () => {
   it('W3b: el efectivo cobrado EN GN durante el turno suma al esperado y entra en la foto del cierre', async () => {
     conSesion(CAJERA)
     // El turno abrió el 4-oct a las 9:00 (Argentina). Un pedido web cobrado a las 10:15 entra; uno de la
-    // víspera ⛔; una venta del POS de GN (canal 3) ⛔.
+    // víspera ⛔; una venta del POS de GN (canal 3) SÍ desde el 13-oct (las dos cajas en paralelo).
     const pago = (id: number, created_at: string) => ({ id, amount: 38241, account_id: 12921, created_at })
     gn.lista = { status: 200, body: { data: [
       { number: 29981, channel_id: 16, tn_order: '7144', client_name: 'Melania', payments: [pago(1, '2026-10-04 10:15:00')] },
@@ -968,15 +968,15 @@ describe('caja · turno propio (v2, W3)', () => {
     ], meta: { has_more_pages: false } } }
     const t = await correr(req('GET', { action: 'turno' }))
     const turno = t.body?.turno as { resumen: { efectivo: Fila; cobrosGN: Fila[] } }
-    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 0, deEspera: 0, cobradoGN: 38241, aportes: 0, salidas: 0, esperado: 88241 })
-    expect(turno.resumen.cobrosGN.map((c) => c.venta)).toEqual([29981])
+    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 0, deEspera: 0, cobradoGN: 76482, aportes: 0, salidas: 0, esperado: 126482 })
+    expect(turno.resumen.cobrosGN.map((c) => [c.venta, c.pos])).toEqual([[29981, false], [29990, true]])
     // Se pide por cada cuenta de efectivo, con los cobros, 10 días de ventas para atrás.
     const pedidas = gn.gets.filter((u) => u.includes('/ventas?'))
     expect(pedidas.some((u) => u.includes('account_id=12921') && u.includes('include_payments=1') && u.includes('dateFrom=2026-09-24'))).toBe(true)
 
-    const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 88241 }))
+    const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 126482 }))
     expect(c.code).toBe(200)
-    expect(base.turnos[0]).toMatchObject({ esperado: 88241, contado: 88241 })
+    expect(base.turnos[0]).toMatchObject({ esperado: 126482, contado: 126482 })
     expect((base.turnos[0].resumen as Fila).diferencia).toBe(0)
   })
 

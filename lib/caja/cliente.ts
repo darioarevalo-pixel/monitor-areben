@@ -137,7 +137,8 @@ export const leerVentasTurno = (turnoId?: string) =>
 /** E: el POS manda solo las cobradas que ⛔ llegaron a GN (cada 3 min mientras está abierto). */
 export const reintentarPendientes = () => post<{ intentadas: number; llegaron: number }>({ action: 'reintentar-pendientes' }, 'No se pudieron reintentar las ventas pendientes.')
 
-export type CobroGN = { id: number; venta: number | null; tn: string | null; cliente: string | null; cuenta: number; monto: number; en: string }
+/** `pos`: una venta hecha en el POS de GN (13-oct, las dos cajas en paralelo); si no, el cobro de un pedido web. */
+export type CobroGN = { id: number; venta: number | null; tn: string | null; cliente: string | null; cuenta: number; monto: number; en: string; pos?: boolean }
 /** v2, W3: el turno propio de la Caja (`lib/caja/cierre.core.js`). */
 export type ResumenTurno = {
   porCuenta: { cuenta: number; nombre: string; efectivo: boolean; monto: number; cobros: number }[]
@@ -225,7 +226,7 @@ export type Cruce =
 
 /** ¿Llegó la transferencia? Con `pago`, la cajera eligió cuál es. Si llegó, la venta ya salió a GN. */
 /**
- * Un pago reciente de la cuenta de MP (paso «Confirmar transferencia», Bruno 12-oct). `coincide`: cae en la
+ * Un pago reciente de la cuenta de MP (paso «Validar transferencia», Bruno 12-oct). `coincide`: cae en la
  * tolerancia del monto; `diferencia`: el pago menos lo esperado.
  */
 export type PagoReciente = PagoMP & { coincide: boolean; diferencia: number }
