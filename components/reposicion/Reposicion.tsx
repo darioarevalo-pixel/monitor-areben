@@ -105,7 +105,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
       setManual({})
       if (done) toast.ok('Stock actualizado')
       else
-        toast.aviso('La actualización sigue en curso: lo que ves puede no tener los movimientos de hoy. Tocá «Recargar» en un minuto.')
+        toast.aviso('La actualización está tardando más de lo normal: lo que ves puede no tener los movimientos de hoy. Tocá «Recargar» en un minuto.')
     } catch (e) {
       toast.error('No se pudo actualizar: ' + (e as Error).message)
     } finally {
