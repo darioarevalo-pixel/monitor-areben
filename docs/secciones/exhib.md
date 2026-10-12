@@ -66,8 +66,13 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 >   El lugar sale **sólo si está en dos** («en Tops y Vidriera»): por el nombre ya se sabe el sector.
 > - 🖨️ **Ticket de 80 mm** (`lib/exhib/ticket.ts`): casillas «Exhibido / No encontrado» y «Retirado /
 >   Exhibición frontal» y el aviso de los frontales en negrita. ⛔ Sin stock ni ventas en el papel.
+> - **Feria en el sector regular** (11-oct, Darío: *«se reporta, no se corrige»*) = prenda en promoción
+>   (de Zattia, ⛔ Stunned) que pasó por el lector, con el precio **congelado al escanear**. Como el
+>   chequeo recorre sólo lo regular, si se leyó estaba colgada ahí. Sale en pantalla con dónde y
+>   cuántas veces; ⛔ va al ticket (se decide después, ⛔ es tarea de la empleada).
 > 📊 **Oráculo**: los dos recorridos del 10-oct contra el stock del 11-oct dan **76 pendientes de 64
 > productos (533 de 609 regulares vistas) y 23 duplicadas**; la lista hecha a mano el 10-oct dio 75/63.
+> Feria en regulares: **11** (8 en Tops, 3 en Partes de abajo), las mismas que se contaron a mano.
 > 🔴 Afirma sobre **todo lo regular del local**: si un día se camina un solo perchero, pide el resto —
 > por eso dice «pasaron por el lector X de Y» arriba del botón de imprimir.
 

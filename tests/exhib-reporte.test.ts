@@ -89,6 +89,19 @@ describe('reporteDelChequeo', () => {
     ])
   })
 
+  it('feria en regulares: la que pasó por el lector, con dónde y cuántas veces; ⛔ lo regular ni Stunned', () => {
+    const stunned = variante({ barcode: '7', sku: 'STU-0001-NG', productId: 'stu', promo: 10000 })
+    const esc = [
+      escanear(negro, 'Tops', 0),
+      sumarUna(escanear(feria, 'Tops', 2), T0 + 6 * 60_000),
+      escanear(feria, 'Partes de abajo', 30),
+      escanear(stunned, 'Tops', 3),
+    ]
+    const r = reporteDelChequeo(esc, [...items, stunned], mapa)
+    expect(r.feria.map((f) => [f.sku, f.veces, f.lugares.join('+')])).toEqual([['RTO-0099-NG', 3, 'Partes de abajo+Tops']])
+    expect(reporteDelChequeo([escanear(negro, 'Tops', 0)], items, mapa).feria).toEqual([])
+  })
+
   it('ordena por SKU con los números en orden de número; sin SKU al final', () => {
     const fila = (sku: string) => ({ sku, nombre: 'A', variante: '' })
     expect([fila(''), fila('RTO-0100'), fila('RTO-0099'), fila('RBLU-0005')].sort(porSku).map((f) => f.sku)).toEqual(['RBLU-0005', 'RTO-0099', 'RTO-0100', ''])

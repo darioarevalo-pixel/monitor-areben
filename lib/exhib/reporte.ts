@@ -19,6 +19,10 @@
  *   pendiente; sin ninguna, queda pendiente UNA, en un renglón.
  * - **Duplicada** = la misma variante leída más de una vez (en el mismo lugar o en dos). Los
  *   percheros frontales repiten a propósito y la app ⛔ los conoce: lo marca la empleada en el ticket.
+ * - **Feria en regulares** (Darío, 11-oct-2026) = una prenda en promoción que pasó por el lector. El
+ *   chequeo recorre sólo el sector regular, así que si se leyó, estaba colgada ahí. ⛔ Se corrige en
+ *   el chequeo: se reporta para decidirlo después, y por eso ⛔ va al ticket de la empleada.
+ *   El 10-oct fueron 11 sin haber pasado la feria.
  */
 
 import { colgadasDeMas } from './balance'
@@ -63,9 +67,21 @@ export type Duplicada = {
   otrasEnMedio: number
 }
 
+/** Un renglón de «Feria en el sector regular»: una prenda en promoción que pasó por el lector. */
+export type FeriaEnRegulares = {
+  clave: string
+  sku: string
+  nombre: string
+  variante: string
+  /** Cuántas veces pasó por el lector, sumando todos los recorridos. */
+  veces: number
+  lugares: string[]
+}
+
 export type ReporteChequeo = {
   pendientes: Pendiente[]
   duplicadas: Duplicada[]
+  feria: FeriaEnRegulares[]
   /** Variantes regulares con stock que pasaron por el lector, contra el total. */
   vistas: number
   total: number
@@ -143,9 +159,20 @@ export function reporteDelChequeo(
     duplicadas.push({ clave: c.variante_id, sku: e.sku || '', nombre: c.nombre, variante: c.size, veces: c.unidades, lugares: [...c.lugares].sort(), otrasEnMedio: c.otrasEnMedio })
   }
 
+  // La feria con el precio CONGELADO al escanear: es el que tenía colgado en ese momento.
+  // Stunned y lo que ⛔ cruzó con TN (outlet, accesorios) tampoco son regulares, pero ⛔ son feria.
+  const feria: FeriaEnRegulares[] = []
+  for (const [id, e] of primera) {
+    const it = { sku: e.sku || '', precio: e.precio, promo: e.promo }
+    if (!seChequea('zattia', it) || !precioDeGondola(it).enOferta) continue
+    const lugares = [...new Set(escaneos.filter((x) => x.variante_id === id && pasoPorElLector(x) && x.lugar).map((x) => x.lugar))].sort()
+    feria.push({ clave: id, sku: e.sku || '', nombre: e.product_name || '—', variante: e.size || '', veces: vistas.get(id) || 1, lugares })
+  }
+
   return {
     pendientes: [...pendientes.values()].sort(porSku),
     duplicadas: duplicadas.sort(porSku),
+    feria: feria.sort(porSku),
     vistas: vistasRegulares,
     total,
     porUnaVariante,

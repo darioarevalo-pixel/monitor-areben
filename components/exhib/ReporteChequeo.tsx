@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Notice, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, useToast, weight } from '@/components/ui'
 import { leerRecorrido } from '@/lib/exhib/cliente'
 import type { EscaneoLibre, RecorridoLibre } from '@/lib/exhib/libre'
-import { reporteDelChequeo, type Duplicada, type Pendiente } from '@/lib/exhib/reporte'
+import { reporteDelChequeo, type Duplicada, type FeriaEnRegulares, type Pendiente } from '@/lib/exhib/reporte'
 import { imprimirTicket } from '@/lib/exhib/ticket'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import type { MapaLocal } from '@/lib/mapa-local/tipos'
@@ -15,6 +15,7 @@ import { useEdadStock } from './useEdadStock'
  * **El reporte del chequeo** (Darío, 11-oct-2026): lo pendiente de exhibición y las variantes
  * duplicadas de los recorridos de un día, sólo de regulares, y el ticket de 80 mm para la empleada.
  * La cuenta vive en `lib/exhib/reporte.ts` y el papel en `lib/exhib/ticket.ts`.
+ * La feria colgada en regulares se muestra sólo acá: se decide después, ⛔ es tarea del ticket.
  *
  * 🔑 **Un chequeo son los recorridos del DÍA** (uno por sector). Se tildan todos los cerrados de ese
  * día; se puede destildar uno que fue una prueba o un arranque en falso.
@@ -146,6 +147,7 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
 
           <ListaPendientes lista={reporte.pendientes} porUnaVariante={reporte.porUnaVariante} />
           <ListaDuplicadas lista={reporte.duplicadas} />
+          <ListaFeria lista={reporte.feria} />
         </>
       )}
     </div>
@@ -225,6 +227,44 @@ function ListaDuplicadas({ lista }: { lista: Duplicada[] }) {
         </TableWrap>
       ) : (
         <div style={{ color: color.mut, fontSize: font.sm }}>No hay variantes duplicadas.</div>
+      )}
+    </>
+  )
+}
+
+/** La feria que pasó por el lector en el sector regular: ⛔ se corrige en el chequeo, se decide después (Darío, 11-oct-2026). */
+function ListaFeria({ lista }: { lista: FeriaEnRegulares[] }) {
+  return (
+    <>
+      <Titulo>
+        Feria en el sector regular ({lista.length})
+        <span style={{ fontWeight: 400, fontSize: font.sm, color: color.mut }}> · para decidir después, no va en el ticket</span>
+      </Titulo>
+      {lista.length ? (
+        <TableWrap maxHeight={420}>
+          <THead>
+            <Tr>
+              <Th width={150}>SKU</Th>
+              <Th>Producto</Th>
+              <Th>Variante</Th>
+              <Th>Dónde</Th>
+              <Th align="center" width={70}>Veces</Th>
+            </Tr>
+          </THead>
+          <TBody>
+            {lista.map((f) => (
+              <Tr key={f.clave}>
+                <Td style={{ fontWeight: 600 }}>{f.sku || '—'}</Td>
+                <Td wrap>{f.nombre}</Td>
+                <Td wrap>{variante(f.variante)}</Td>
+                <Td wrap>{f.lugares.join(', ') || '—'}</Td>
+                <Td align="center">{f.veces}</Td>
+              </Tr>
+            ))}
+          </TBody>
+        </TableWrap>
+      ) : (
+        <div style={{ color: color.mut, fontSize: font.sm }}>No se escaneó feria.</div>
       )}
     </>
   )
