@@ -24,6 +24,7 @@ import {
   ErrorArmado,
   frase,
   guardarArmado,
+  leerArmadoHoy,
   leerCodigo,
   motivoRechazo,
   resumenArmado,
@@ -331,10 +332,11 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
           setTerminar(false)
           setTimeout(() => inputRef.current?.focus(), 0)
         }}
-        onTanda={(t) => {
+        onTanda={(t, nueva) => {
           setTransferido(transferidoDe(t))
           setTerminar(false)
-          toast.ok(`${t.tandas?.at(-1)?.unidades ?? ''} prendas transferidas al ${destino(armado.sentido)}${t.transfer_id ? ` · Transferencia ${t.transfer_id}` : ''}`)
+          if (nueva) toast.ok(`${t.tandas?.at(-1)?.unidades ?? ''} prendas transferidas al ${destino(armado.sentido)}${t.transfer_id ? ` · Transferencia ${t.transfer_id}` : ''}`)
+          else toast.ok(`Ya estaba transferido${t.transfer_id ? ` · Transferencia ${t.transfer_id}` : ''}`)
           setTimeout(() => inputRef.current?.focus(), 0)
         }}
         onTransferido={() => {
@@ -345,6 +347,7 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
           }
           onTerminado(true)
         }}
+        onSinConfirmar={() => onTerminado(false)}
       />
     </div>
   )
@@ -467,7 +470,7 @@ function CartelFreno({ cartel, extra, onSeguir }: { cartel: Cartel; extra: numbe
  * con todo contestado se transfiere. Si GN rechaza renglones (no movió nada), se muestran y se
  * pueden sacar para transferir el resto.
  */
-function Terminar({ abierto, seguir, transferido, armado, escaneos, faltantes, setEscaneos, setFaltantes, onCerrar, onTanda, onTransferido }: {
+function Terminar({ abierto, seguir, transferido, armado, escaneos, faltantes, setEscaneos, setFaltantes, onCerrar, onTanda, onTransferido, onSinConfirmar }: {
   abierto: boolean
   /** «Transferir y continuar»: no pregunta por lo que falta y el armado sigue abierto. */
   seguir: boolean
@@ -478,14 +481,19 @@ function Terminar({ abierto, seguir, transferido, armado, escaneos, faltantes, s
   setEscaneos: React.Dispatch<React.SetStateAction<Record<string, number>>>
   setFaltantes: React.Dispatch<React.SetStateAction<Record<string, MotivoFaltante>>>
   onCerrar: () => void
-  onTanda: (t: NonNullable<Armado['transfer']>) => void
+  /** `nueva` = false: no salió nada nuevo (la tanda ya estaba hecha y su respuesta se había perdido). */
+  onTanda: (t: NonNullable<Armado['transfer']>, nueva: boolean) => void
   onTransferido: () => void
+  /** Quedó sin confirmar: se vuelve a la lista, que muestra qué buscar en GN. */
+  onSinConfirmar: () => void
 }) {
   const lugar = destino(armado.sentido)
   const [enviando, setEnviando] = useState(false)
   const [rechazados, setRechazados] = useState<Rechazado[]>([])
   const [error, setError] = useState<string | null>(null)
   const [hecho, setHecho] = useState<{ transfer_id?: string | number | null; unidades?: number } | null>(null)
+  // Quedó sin confirmar en GN: ⛔ no se puede reintentar desde acá, hay que verificar en GN.
+  const [sinConfirmar, setSinConfirmar] = useState(false)
   const incompletas = seguir ? [] : armado.pedido.filter((l) => (escaneos[l.vid] || 0) < l.cant)
   const sinContestar = incompletas.filter((l) => !faltantes[l.vid])
   const r = resumenArmado(armado.pedido, escaneos)
@@ -498,15 +506,54 @@ function Terminar({ abierto, seguir, transferido, armado, escaneos, faltantes, s
     setRechazados([])
     try {
       const d = await transferirArmado(armado.id, esc, fal, seguir)
-      if (seguir) onTanda(d.transfer)
+      if (seguir) onTanda(d.transfer, !!d.tanda)
       else setHecho(d.transfer)
     } catch (e) {
       if (e instanceof ErrorArmado && e.status === 422 && Array.isArray(e.datos.rechazados)) setRechazados(e.datos.rechazados as Rechazado[])
-      setError((e as Error).message)
+      // 🔴 Sin respuesta clara (internet, servidor cortado, «ya se cerró»): puede haber salido igual.
+      // Antes de mostrar un error se mira cómo quedó el armado, para que nadie la repita a mano en
+      // la app de GN creyendo que falló (revisión del 12-oct-2026).
+      const incierto = e instanceof ErrorArmado && ![400, 422, 429].includes(e.status)
+      if (!incierto || !(await verComoQuedo(e as Error))) setError((e as Error).message)
     } finally {
       setEnviando(false)
     }
   }
+
+  /** Mira el armado en el servidor. `true` si ya se resolvió qué mostrar (hecho o sin confirmar). */
+  const verComoQuedo = async (e: Error): Promise<boolean> => {
+    let a: Armado | null
+    try {
+      a = await leerArmadoHoy(armado.linea, armado.sentido)
+    } catch {
+      setError(`${e.message} No se sabe si la transferencia salió: cuando vuelva la conexión, tocá de nuevo «Transferir» (no se repite: si ya salió, avisa).`)
+      return true
+    }
+    if (!a || a.id !== armado.id) return false
+    if (a.estado === 'transferido') {
+      setHecho(a.transfer ?? {})
+      return true
+    }
+    if (a.estado === 'revisar' || a.estado === 'transfiriendo') {
+      setSinConfirmar(true)
+      return true
+    }
+    // En curso: si una tanda de «Transferir y continuar» salió y su respuesta se perdió, ya figura.
+    if (seguir && a.transfer && (a.transfer.unidades ?? 0) > Object.values(transferido).reduce((x, n) => x + n, 0)) {
+      onTanda(a.transfer, true)
+      return true
+    }
+    return false
+  }
+
+  if (sinConfirmar)
+    return (
+      <Modal abierto={abierto} onCerrar={onSinConfirmar} titulo="Transferencia sin confirmar" cerrarConFondo={false} pie={<Button variant="solid" tone="brand" onClick={onSinConfirmar}>Volver a la lista</Button>}>
+        <p style={{ fontSize: font.md, margin: 0 }}>
+          Gestión Nube no confirmó la transferencia: <b>puede haberse hecho</b>. ⛔ No la hagas a mano en la app de Gestión Nube. En la lista figura qué buscar para verificarla.
+        </p>
+      </Modal>
+    )
 
   const sacarRechazadas = () => {
     const esc = { ...escaneos }

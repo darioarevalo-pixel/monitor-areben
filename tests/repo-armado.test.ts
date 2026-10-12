@@ -282,4 +282,58 @@ describe('api/_repo-armado.js', () => {
     expect(r.code).toBe(409)
     expect(tabla[0].estado).toBe('en_curso')
   })
+
+  // ── Revisión del 12-oct-2026: que una transferencia no quede trabada ni se repita ────────────────
+
+  it('🔴 si Gestión Nube no contesta a tiempo, queda para revisar (no trabada en «transfiriendo»)', async () => {
+    await abrir()
+    respuestaGN = () => {
+      throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' })
+    }
+    const r = await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 1 } })
+    expect(r.code).toBe(502)
+    expect(tabla[0]).toMatchObject({ estado: 'revisar', error: expect.stringMatching(/no contestó/) })
+  })
+
+  it('🔴 uno trabado en «transfiriendo» se puede resolver pasados 90 s, y antes no', async () => {
+    await abrir()
+    tabla[0].estado = 'transfiriendo'
+    tabla[0].transfer = { enCurso: { '10_3': 2 }, seguir: false }
+    tabla[0].actualizado_en = new Date(Date.now() - 20_000).toISOString()
+    expect((await correr({ action: 'resolver', id: 'ra1', hecha: true })).code).toBe(409)
+    tabla[0].actualizado_en = new Date(Date.now() - 5 * 60_000).toISOString()
+    const r = await correr({ action: 'resolver', id: 'ra1', hecha: true })
+    expect(r.code).toBe(200)
+    expect(tabla[0]).toMatchObject({ estado: 'transferido', transfer: { transferido: { '10_3': 2 } } })
+    expect(llamadasGN).toHaveLength(0)
+  })
+
+  it('la descripción en GN lleva el código del armado, y el armado guarda qué buscar', async () => {
+    await correr({ action: 'abrir', id: 'ra1760000000_k3x9ab', linea: 'zattia', sentido: 'llevar', pedido: PEDIDO })
+    respuestaGN = () => ({ status: 500, body: { message: 'boom' } })
+    await correr({ action: 'transferir', id: 'ra1760000000_k3x9ab', escaneos: { '10_3': 2 } })
+    expect(String(llamadasGN[0].body.description)).toMatch(/#K3X9AB \(2 u\)$/)
+    expect(tabla[0].transfer).toMatchObject({ descripcion: llamadasGN[0].body.description, unidadesEnCurso: 2 })
+  })
+
+  it('🔴 «Transferir y continuar» repetido porque se perdió la respuesta: no llama a GN y devuelve lo hecho', async () => {
+    await abrir()
+    await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 2 }, seguir: true })
+    const r = await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 2 }, seguir: true })
+    expect(r.code).toBe(200)
+    expect(r.body).toMatchObject({ ok: true, tanda: null, transfer: { unidades: 2 } })
+    expect(llamadasGN).toHaveLength(1)
+    expect(tabla[0].estado).toBe('en_curso')
+  })
+})
+
+describe('trabado y código del armado', () => {
+  it('trabado: sólo «transfiriendo» y pasados 90 s', async () => {
+    const { trabado, codigoArmado } = await import('@/lib/reposicion/armado.core.js')
+    const ahora = Date.parse('2026-10-13T10:00:00Z')
+    expect(trabado({ estado: 'transfiriendo', actualizado_en: '2026-10-13T09:58:00Z' }, ahora)).toBe(true)
+    expect(trabado({ estado: 'transfiriendo', actualizado_en: '2026-10-13T09:59:30Z' }, ahora)).toBe(false)
+    expect(trabado({ estado: 'revisar', actualizado_en: '2026-10-13T09:00:00Z' }, ahora)).toBe(false)
+    expect(codigoArmado('ra1760000000_k3x9ab')).toBe('K3X9AB')
+  })
 })

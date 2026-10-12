@@ -35,7 +35,7 @@ import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
 import { ArmadoLector } from './ArmadoLector'
 import { HistorialArmados } from './HistorialArmados'
-import { abrirArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, type Armado, type Sentido } from '@/lib/reposicion/armado'
+import { abrirArmado, codigoArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type Sentido } from '@/lib/reposicion/armado'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 type Pestana = 'llevar' | 'devolver' | 'historial'
@@ -116,6 +116,15 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linea])
   const abierto = (s: Sentido) => (armados[s]?.estado === 'en_curso' ? armados[s] : null)
+  // Mientras uno está «transfiriendo», se vuelve a mirar cada 30 s: o termina, o a los 90 s queda
+  // TRABADO y aparecen los botones para resolverlo (revisión del 12-oct-2026).
+  const hayTransfiriendo = armados.llevar?.estado === 'transfiriendo' || armados.devolver?.estado === 'transfiriendo'
+  useEffect(() => {
+    if (!hayTransfiriendo) return
+    const t = setInterval(() => void traerArmados(), 30_000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hayTransfiriendo, linea])
   // 🔴 Recién transferido (cualquiera de los dos), las listas siguen iguales hasta que se actualiza el
   // stock: armarlas de nuevo pediría dos veces lo mismo. Hasta que el stock sea posterior, no se arma.
   const transferidoDespues = (a: Armado | null) => a?.estado === 'transferido' && !!a.cerrado_en && (!rep.lastUpdate || rep.lastUpdate.getTime() < new Date(a.cerrado_en).getTime())
@@ -139,6 +148,8 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     try {
       const d = await abrirArmado(linea, sentido, pedido)
       setArmados((x) => ({ ...x, [sentido]: d.armado }))
+      // El que ya había puede estar sin confirmar en GN: ése no se abre, se resuelve con el cartel.
+      if (d.yaHabia && d.armado.estado !== 'en_curso') return toast.aviso('Hay una transferencia sin confirmar: verificala antes de iniciar otro armado.')
       if (d.yaHabia) toast.aviso('Ya había un armado en curso: se continúa ese.')
       setArmando(sentido)
     } catch (e) {
@@ -149,6 +160,16 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   }
 
   const onResolver = async (a: Armado, hecha: boolean) => {
+    // 🔴 «No figura» habilita a transferir de nuevo: si en realidad figuraba, las prendas viajan dos veces.
+    if (!hecha) {
+      const ok = await confirmar({
+        titulo: '¿Seguro que no figura?',
+        tono: 'danger',
+        ok: 'No figura',
+        mensaje: `Buscá en Gestión Nube una transferencia con «#${codigoArmado(a.id)}» en la descripción. Si figura y la volvés a hacer, las prendas se transfieren dos veces.`,
+      })
+      if (!ok) return
+    }
     try {
       await resolverArmado(a.id, hecha)
       await traerArmados()
@@ -159,7 +180,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
 
   /** El botón del armado de cada pestaña: Iniciar / Continuar (o nada si quedó sin confirmar). */
   const botonArmado = (sentido: Sentido, hayLista: boolean) =>
-    armados[sentido]?.estado === 'revisar' ? null : (
+    armados[sentido]?.estado === 'revisar' || armados[sentido]?.estado === 'transfiriendo' ? null : (
       <Button
         variant="solid"
         tone="brand"
@@ -614,25 +635,36 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
         </Notice>
       </div>
     )
-  if (armado.estado === 'revisar' || armado.estado === 'transfiriendo')
+  if (armado.estado === 'transfiriendo' && !trabado(armado))
+    return (
+      <div style={box}>
+        <Notice tone="brand" icon="⏳">
+          Transfiriendo en Gestión Nube{quien}…
+        </Notice>
+      </div>
+    )
+  if (armado.estado === 'revisar' || armado.estado === 'transfiriendo') {
+    const u = armado.transfer?.unidadesEnCurso
     return (
       <div style={box}>
         <Notice tone="danger" icon="⚠">
           <div>
-            <b>Transferencia sin confirmar{quien}.</b> Verificá en Gestión Nube si figura la transferencia de hoy {devolucion ? 'del local al depósito' : 'del depósito al local'}.
+            <b>Transferencia sin confirmar{quien}.</b> Puede haberse hecho: ⛔ no la hagas a mano. Buscá en Gestión Nube una transferencia{' '}
+            {devolucion ? 'del local al depósito' : 'del depósito al local'} de las {hhmm(armado.actualizado_en)}
+            {u ? ` de ${u} ${u === 1 ? 'prenda' : 'prendas'}` : ''} con <b>#{codigoArmado(armado.id)}</b> en la descripción.
           </div>
-          {armado.estado === 'revisar' && (
-            <div style={{ display: 'flex', gap: space[2], marginTop: space[2], flexWrap: 'wrap' }}>
-              <Button size="sm" variant="solid" tone="brand" onClick={() => onResolver(armado, true)}>
-                Figura en Gestión Nube
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => onResolver(armado, false)}>
-                No figura: reintentar
-              </Button>
-            </div>
-          )}
+          {armado.transfer?.descripcion && <div style={{ fontSize: font.sm, marginTop: space[1], opacity: 0.85 }}>Descripción: «{armado.transfer.descripcion}»</div>}
+          <div style={{ display: 'flex', gap: space[2], marginTop: space[2], flexWrap: 'wrap' }}>
+            <Button size="sm" variant="solid" tone="brand" onClick={() => onResolver(armado, true)}>
+              Figura en Gestión Nube
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => onResolver(armado, false)}>
+              No figura: reintentar
+            </Button>
+          </div>
         </Notice>
       </div>
     )
+  }
   return null
 }

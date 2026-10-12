@@ -92,6 +92,16 @@ Lorena escanea en la **COMPU** del depósito, con lector, contra la lista de «L
 - **Historial** (pestaña, `HistorialArmados.tsx`, `?action=historial`): un renglón por armado (sin
   los descartados) con horario, duración, pedidas/escaneadas/no encontradas y el detalle; arriba,
   **«Más veces no encontradas»** = la señal de stock mal cargado. Sólo cuenta armados transferidos.
+- 🔴 **Que no quede trabada** (revisión del 12-oct-2026): a GN se le esperan como mucho 20 s
+  (`PLAZO_GN_MS`, reintentos de 429 incluidos) porque el servidor se corta a los 30 s; si no contesta,
+  queda `revisar`. Un `transfiriendo` de más de 90 s (`trabado`, el servidor se cortó o no pudo anotar)
+  muestra los mismos botones que `revisar`. La lista lo vuelve a mirar cada 30 s.
+- 🔴 **Que nadie la repita a mano**: si la respuesta no llega (internet, servidor cortado, «ya se
+  cerró»), la pantalla mira cómo quedó el armado antes de mostrar un error: transferida → «realizada»;
+  sin confirmar → «⛔ no la hagas a mano» y vuelve a la lista. Reintentar «Transferir» es seguro: el
+  candado no deja que salga dos veces.
+- 🔑 **Qué buscar en GN**: la descripción lleva el código del armado (`… · Monitor #K3X9AB (12 u)`,
+  `codigoArmado`) y el cartel rojo lo muestra con la hora y las prendas. «No figura» pide confirmación.
 - Lo escaneado vive en `localStorage` (`monitor_repo_armado_<id>`) y se sube cada 1,5 s.
 - GN es atómico: un 422 no movió nada; la pantalla muestra los renglones rechazados y ofrece
   sacarlos (quedan `rechazada`: diferencia de stock para la tanda 3).

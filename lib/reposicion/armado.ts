@@ -11,7 +11,7 @@ import { normCode } from '@/lib/exhib/core'
 import type { FilaVentas, LineaZ } from './porVentas'
 import type { RepoItem } from './tipos'
 
-export { fechaAR, motivoRechazo, resumenArmado, transferidoDe } from './armado.core.js'
+export { codigoArmado, fechaAR, motivoRechazo, resumenArmado, trabado, transferidoDe } from './armado.core.js'
 
 export type LineaPedido = { vid: string; pid: string; sid: string; sku: string; barcode: string; name: string; size: string; cant: number; exhibir: boolean }
 export type MotivoFaltante = 'no-estaba' | 'despues' | 'rechazada'
@@ -37,6 +37,10 @@ export type Armado = {
     tandas?: { transfer_id: string | number | null; unidades: number; hora: string }[]
     /** Lo ya transferido por variante: no se vuelve a mandar ni se puede restar. */
     transferido?: Record<string, number>
+    /** La tanda que salió para GN y todavía no se anotó cómo terminó (para el cartel de «sin confirmar»). */
+    enCurso?: Record<string, number> | null
+    descripcion?: string | null
+    unidadesEnCurso?: number | null
   } | null
   error: string | null
   creado_en: string
@@ -129,7 +133,14 @@ export class ErrorArmado extends Error {
 }
 
 async function pedir<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await apiFetch(url, init)
+  let r: Response
+  try {
+    r = await apiFetch(url, init)
+  } catch {
+    // Sin internet el navegador tira su propio error, en inglés («Failed to fetch»). status 0 = no se
+    // sabe si el pedido llegó al servidor.
+    throw new ErrorArmado('Sin conexión a internet.', 0, {})
+  }
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new ErrorArmado((d && d.error) || 'No se pudo hablar con el servidor.', r.status, d || {})
   return d as T
