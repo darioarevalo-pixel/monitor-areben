@@ -320,7 +320,7 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   «Ventas» en cada fila de «Últimos turnos» (`action=ventas&turno=<id>`). Lo ve cualquiera con permiso
   de Caja, como el resto de la pestaña. En la pestaña ⛔ hay «Reimprimir»: el ticket se imprime desde el POS.
   🔑 **12-oct (Bruno, segunda tanda)**: «Reimprimir» es el **ícono de impresora**; las **provisorias** (sin
-  número de GN: esperando la transferencia, sin llegar a GN o canceladas) van en su sección **abajo**; el
+  número de GN: esperando la transferencia, sin llegar a GN o canceladas) van en su sección **abajo**, **plegada** (cada computadora recuerda si la cajera la abrió); el
   **ojo** abre el **resumen** (prendas, formas de pago, total, quién cobró, mail, marcas) en el MISMO modal
   —dos modales apilados se cierran juntos con Escape—. Reemplazó al desplegable de prendas.
 - ⚠️ Varias partes por transferencia en una venta se esperan como UNA transferencia por la suma.

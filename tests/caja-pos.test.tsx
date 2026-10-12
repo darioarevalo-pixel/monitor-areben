@@ -355,6 +355,11 @@ describe('Ventas de la caja (Bruno, 12-oct)', () => {
     const t = document.body.textContent || ''
     expect(t.indexOf('#30100')).toBeLessThan(t.indexOf('Provisorias (1)'))
     expect(t).toContain('transferencia a Darío Arévalo (Galicia)')
+    // Las provisorias arrancan plegadas: la que espera ⛔ se ve hasta abrirlas, y quedan abiertas.
+    expect(document.querySelectorAll('button[aria-label="Ver la venta"]')).toHaveLength(1)
+    await act(async () => [...document.querySelectorAll('button[aria-expanded]')].find((b) => b.textContent?.includes('Provisorias (1)'))!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(document.querySelectorAll('button[aria-label="Ver la venta"]')).toHaveLength(2)
+    expect(disco.get('caja:ventas:provisorias-abiertas')).toBe('1')
     // La impresora sólo en la que tiene ticket (la que espera ⛔).
     const imp = document.querySelectorAll('button[aria-label="Reimprimir ticket"]')
     expect(imp).toHaveLength(1)

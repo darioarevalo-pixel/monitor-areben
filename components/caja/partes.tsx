@@ -1146,10 +1146,30 @@ function ResumenVenta({ venta: v, nombreCuenta, onVolver, onReimprimir }: { vent
  * Bruno, 12-oct: «Reimprimir» es la impresora, las PROVISORIAS (sin número de GN) van en su sección abajo, y
  * el ojo abre el resumen de la venta (en el mismo modal: dos modales apilados cerrarían juntos con Escape).
  */
+const CLAVE_PROVISORIAS = 'caja:ventas:provisorias-abiertas'
+
 export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar, turnoId, titulo = 'Ventas' }: { nombreCuenta: (id: number) => string; /** Sin él, ⛔ hay «Reimprimir». */ onReimprimir?: (v: Venta) => void; onCerrar: () => void; /** Sin él, el turno abierto. */ turnoId?: string; titulo?: string }) {
   const [ventas, setVentas] = useState<Venta[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [viendo, setViendo] = useState<Venta | null>(null)
+  // Las provisorias arrancan plegadas y quedan como las dejó la cajera (Bruno, 12-oct).
+  // El modal se abre con un click ⇒ ⛔ se renderiza en el servidor y se lee el disco al montar.
+  const [verProvisorias, setVerProvisorias] = useState(() => {
+    try {
+      return localStorage.getItem(CLAVE_PROVISORIAS) === '1'
+    } catch {
+      return false /* sin localStorage: plegadas */
+    }
+  })
+  function plegarProvisorias() {
+    const abiertas = !verProvisorias
+    setVerProvisorias(abiertas)
+    try {
+      localStorage.setItem(CLAVE_PROVISORIAS, abiertas ? '1' : '0')
+    } catch {
+      /* sin localStorage: vale hasta cerrar */
+    }
+  }
   useEffect(() => {
     let vivo = true
     leerVentasTurno(turnoId)
@@ -1236,9 +1256,21 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar, turnoId, 
           {firmes.length > 0 ? tabla(firmes) : <span style={{ color: color.mut, fontSize: font.sm }}>Ninguna venta con número de Gestión Nube todavía.</span>}
           {provisorias.length > 0 && (
             <div style={{ display: 'grid', gap: space[1], marginTop: space[3] }}>
-              <b style={{ fontSize: font.sm, color: color.ink2 }}>Provisorias ({provisorias.length})</b>
-              <span style={{ fontSize: font.xs, color: color.mut }}>Sin número de Gestión Nube: esperan la transferencia, no llegaron a GN, o se cancelaron.</span>
-              {tabla(provisorias)}
+              <button
+                type="button"
+                onClick={plegarProvisorias}
+                aria-expanded={verProvisorias}
+                style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: space[1], fontSize: font.sm, fontWeight: weight.semibold, color: color.ink2 }}
+              >
+                <span aria-hidden style={{ display: 'inline-block', width: 12 }}>{verProvisorias ? '▾' : '▸'}</span>
+                Provisorias ({provisorias.length})
+              </button>
+              {verProvisorias && (
+                <>
+                  <span style={{ fontSize: font.xs, color: color.mut }}>Sin número de Gestión Nube: esperan la transferencia, no llegaron a GN, o se cancelaron.</span>
+                  {tabla(provisorias)}
+                </>
+              )}
             </div>
           )}
         </div>
