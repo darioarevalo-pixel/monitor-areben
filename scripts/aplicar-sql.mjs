@@ -10,7 +10,7 @@
 // generalizarlo sería cambiar algo que anda por algo que no aporta. Las migraciones nuevas
 // entran por acá.
 //
-// Lee DATABASE_URL_BDI / DATABASE_URL_ZATTIA del .env (una o ambas).
+// Lee DATABASE_URL_BDI / DATABASE_URL_ZATTIA del .env (una o ambas). Con `SOLO=ZATTIA` (o `BDI`), sólo esa.
 import { readFileSync } from 'fs'
 import pg from 'pg'
 
@@ -53,6 +53,8 @@ const targets = [
   ['BDI', env.DATABASE_URL_BDI],
   ['ZATTIA', env.DATABASE_URL_ZATTIA],
 ].filter(([, url]) => url)
+  // `SOLO=ZATTIA node scripts/aplicar-sql.mjs …`: una tabla de una sola marca (la Caja) ⛔ se crea en la otra.
+  .filter(([nombre]) => !process.env.SOLO || nombre === process.env.SOLO.toUpperCase())
 
 if (!targets.length) {
   console.error('Falta DATABASE_URL_BDI y/o DATABASE_URL_ZATTIA en .env')

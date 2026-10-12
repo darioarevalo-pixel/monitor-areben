@@ -302,7 +302,7 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 
 ## Pendiente
 
-- 🔴 `sql/migrate-caja-gift-card.sql` ⛔ corrida: sin ella «Generar lote» contesta 409 y lo dice.
+- 🏁 `sql/migrate-caja-gift-card.sql` CORRIDA en Zattia (11-oct, `SOLO=ZATTIA node scripts/aplicar-sql.mjs`), verificada leyendo el esquema; BDI sin las tablas.
 
 - 🔴 `sql/migrate-caja-auditoria.sql` va ANTES del deploy de la fase 2 (las columnas nuevas viajan en cada
   venta y en cada movimiento).
