@@ -32,6 +32,7 @@ import {
   reintentarVenta,
   type Candidato,
   type Cruce,
+  type PagoReciente,
   type Medio,
   type Rebaja,
   type Reglas,
@@ -709,8 +710,9 @@ const TEXTO_ORIGEN: Record<string, string> = { mp: 'desde Mercado Pago', banco: 
  * Una venta que espera la transferencia (F5). Pregunta cada 5 s si llegó; el servidor decide con
  * `cruzarTransferencia` y, si llegó, ya la mandó a GN ⇒ acá sólo se imprime (`onLlego`).
  */
-export function EsperaTransferencia({ venta, onLlego, onCambio }: { venta: Venta; onLlego: (v: Venta) => void; onCambio: () => void }) {
+export function EsperaTransferencia({ venta, onLlego, onCambio, onSeguir }: { venta: Venta; onLlego: (v: Venta) => void; onCambio: () => void; onSeguir?: () => void }) {
   const [cruce, setCruce] = useState<Cruce | null>(null)
+  const [recientes, setRecientes] = useState<{ lista: PagoReciente[]; cuenta: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState<string | null>(null)
   const [seguro, setSeguro] = useState(false)
@@ -733,6 +735,7 @@ export function EsperaTransferencia({ venta, onLlego, onCambio }: { venta: Venta
           return
         }
         setCruce(r.cruce)
+        if (r.recientes) setRecientes({ lista: r.recientes, cuenta: r.cuentaMp ?? null })
       } catch (e) {
         setError((e as Error).message)
       }
@@ -771,13 +774,24 @@ export function EsperaTransferencia({ venta, onLlego, onCambio }: { venta: Venta
   }
 
   const monto = venta.espera_monto ?? venta.total
+  // Los del monto exacto que el cruce ofrece para elegir (con duda); el resto de la lista es para mirar.
+  const elegibles = new Set(cruce?.estado === 'elegir' ? cruce.candidatos.map((p) => p.id) : [])
+  const lista: PagoReciente[] = [
+    ...(recientes?.lista ?? []),
+    ...(cruce?.estado === 'elegir' ? cruce.candidatos.filter((p) => !recientes?.lista.some((x) => x.id === p.id)).map((p) => ({ ...p, coincide: true })) : []),
+  ]
   return (
     <Notice tone="warning">
       <div style={{ display: 'grid', gap: space[2] }}>
         <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
           <b style={{ flex: 1, minWidth: 220 }}>
-            Esperando la transferencia de {plata(monto)} · venta {numeroProvisorio(venta.id)} de las {hora(venta.creada_en)}
+            {onSeguir ? 'Validando' : 'Esperando'} la transferencia de {plata(monto)} · venta {numeroProvisorio(venta.id)} de las {hora(venta.creada_en)}
           </b>
+          {onSeguir && !seguro && (
+            <Button size="sm" variant="outline" onClick={onSeguir}>
+              Seguir vendiendo mientras llega
+            </Button>
+          )}
           {seguro ? (
             <>
               <span style={{ fontSize: font.sm }}>
@@ -798,22 +812,30 @@ export function EsperaTransferencia({ venta, onLlego, onCambio }: { venta: Venta
           )}
         </div>
         <span style={{ fontSize: font.sm }}>
-          El ticket sale solo cuando la transferencia aparece en Mercado Pago. No alcanza con el comprobante del teléfono.
+          La venta se finaliza y sale el ticket cuando la transferencia aparece en Mercado Pago. No alcanza con el comprobante del teléfono.
           {venta.total !== monto && ` El resto (${plata(venta.total - monto)}) se cobra aparte.`}
         </span>
-        {cruce?.estado === 'elegir' && (
+        {cruce?.estado === 'elegir' && <span>{cruce.motivo}</span>}
+        {recientes && (
           <div style={{ display: 'grid', gap: space[1] }}>
-            <span>{cruce.motivo}</span>
-            {cruce.candidatos.map((p) => (
-              <div key={p.id} style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm }}>
-                <span style={{ fontWeight: weight.semibold }}>{plata(p.monto)}</span>
+            <span style={{ fontSize: font.sm, fontWeight: weight.semibold }}>
+              Últimos pagos en Mercado Pago{recientes.cuenta ? ` (${recientes.cuenta})` : ''}
+            </span>
+            {lista.length === 0 && <span style={{ fontSize: font.sm, color: color.mut }}>Todavía no entró ningún pago.</span>}
+            {lista.map((p) => (
+              <div key={p.id} style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm, color: p.coincide ? color.ink : color.mut }}>
+                <span style={{ fontWeight: p.coincide ? weight.heavy : weight.semibold, fontVariantNumeric: 'tabular-nums' }}>{plata(p.monto)}</span>
                 <span>a las {hora(p.cuando)}</span>
-                <span style={{ color: color.mut }}>{TEXTO_ORIGEN[p.origen] ?? p.origen}</span>
+                <span>{TEXTO_ORIGEN[p.origen] ?? p.origen}</span>
                 {/* A5: para compararlo con el comprobante de la clienta (MP ⛔ dice quién transfirió). */}
-                <span style={{ color: color.mut, fontVariantNumeric: 'tabular-nums' }}>operación ····{String(p.id).slice(-4)}</span>
-                <Button size="sm" tone="success" loading={trabajando === p.id} disabled={!!trabajando} onClick={() => elegir(p.id)}>
-                  Elegir
-                </Button>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>operación ····{String(p.id).slice(-4)}</span>
+                {p.coincide && !elegibles.has(p.id) && Date.parse(p.cuando) < Date.parse(venta.creada_en) && <Badge tone="neutral">de antes de la venta</Badge>}
+                {p.coincide && elegibles.has(p.id) && (
+                  <Button size="sm" tone="success" loading={trabajando === p.id} disabled={!!trabajando} onClick={() => elegir(p.id)}>
+                    Elegir
+                  </Button>
+                )}
+                {p.coincide && !elegibles.has(p.id) && Date.parse(p.cuando) >= Date.parse(venta.creada_en) && <Badge tone="success">monto exacto</Badge>}
               </div>
             ))}
           </div>

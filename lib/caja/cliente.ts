@@ -205,8 +205,10 @@ export type Cruce =
   | { estado: 'ya' | 'cancelada' }
 
 /** ¿Llegó la transferencia? Con `pago`, la cajera eligió cuál es. Si llegó, la venta ya salió a GN. */
+/** Un pago reciente de la cuenta de MP, sólo para mirar (paso «Validar transferencia», Bruno 12-oct). */
+export type PagoReciente = PagoMP & { coincide: boolean }
 export const cruzarVenta = (id: string, pago?: string) =>
-  post<Resultado & { cruce: Cruce }>({ action: 'cruzar', id, ...(pago ? { pago } : {}) }, 'No se pudo mirar Mercado Pago.')
+  post<Resultado & { cruce: Cruce; recientes?: PagoReciente[]; cuentaMp?: string | null }>({ action: 'cruzar', id, ...(pago ? { pago } : {}) }, 'No se pudo mirar Mercado Pago.')
 
 export const cancelarVenta = (id: string) => post<{ venta: Venta }>({ action: 'cancelar', id }, 'No se pudo cancelar la venta.')
 

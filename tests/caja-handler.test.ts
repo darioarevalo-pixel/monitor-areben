@@ -669,6 +669,8 @@ describe('caja · F5 transferencia', () => {
     const r = await correr(req('POST', {}, { action: 'cruzar', id: ID }))
     expect(r.code).toBe(200)
     expect(r.body?.cruce).toEqual({ estado: 'esperando' })
+    // Paso «Validar transferencia» (Bruno, 12-oct): los últimos pagos, sólo para mirar; el pendiente ⛔.
+    expect(r.body?.recientes).toEqual([expect.objectContaining({ id: '1', monto: 22800, coincide: false })])
     expect(mp.busquedas).toBe(1)
     expect(gn.posts).toHaveLength(0)
   })

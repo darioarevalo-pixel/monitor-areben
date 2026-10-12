@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { VENTANA_ANTES_MS, VENTANA_SOLA_MS, cruzarTransferencia, limpiarPagos } from '@/lib/pagos-recibidos/core.core.js'
+import { VENTANA_ANTES_MS, VENTANA_SOLA_MS, cruzarTransferencia, limpiarPagos, pagosRecientes } from '@/lib/pagos-recibidos/core.core.js'
 
 /**
  * Caja F5: la transferencia que se confirma sola. Los pagos pasan por `limpiarPagos` con la forma
@@ -108,5 +108,20 @@ describe('cruzarTransferencia', () => {
   it('sin monto o sin hora ⇒ error, ⛔ un cruce contra $0', () => {
     expect(() => cruzarTransferencia({ monto: 0, desde: DESDE, pagos: [], reclamados: [], competidoras: 0, antesManual: VENTANA_ANTES_MS })).toThrow()
     expect(() => cruzarTransferencia({ monto: 100, desde: 'x', pagos: [], reclamados: [], competidoras: 0, antesManual: VENTANA_ANTES_MS })).toThrow()
+  })
+})
+
+describe('pagosRecientes (paso «Validar transferencia», Bruno 12-oct)', () => {
+  const p = (id: string, monto: number, min: number) => ({ id, monto, cuando: new Date(Date.parse(DESDE) + min * 60000).toISOString(), origen: 'mp' })
+  it('🔑 el más nuevo primero, marca el del monto exacto y saca lo de antes de 30 min y lo ya tomado', () => {
+    const r = pagosRecientes({ monto: 4500, desde: DESDE, cuantos: 5, reclamados: ['tomado'], pagos: [p('viejo', 4500, -31), p('a', 12300, -5), p('b', 4500, 2), p('tomado', 4500, 3)] })
+    expect(r.map((x) => [x.id, x.coincide])).toEqual([['b', true], ['a', false]])
+  })
+  it('🔴 el tope corta a los OTROS: un pago del monto exacto entra siempre', () => {
+    const r = pagosRecientes({ monto: 4500, desde: DESDE, cuantos: 2, reclamados: [], pagos: [p('x', 4500, -20), p('o1', 100, 1), p('o2', 200, 2), p('o3', 300, 3)] })
+    expect(r.map((x) => x.id)).toEqual(['o3', 'x'])
+  })
+  it('sin cuántos mostrar ⇒ error (⛔ un default callado)', () => {
+    expect(() => pagosRecientes({ monto: 4500, desde: DESDE, cuantos: 0, reclamados: [], pagos: [] })).toThrow(/cuántos/)
   })
 })

@@ -143,6 +143,12 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   van redondeados a $100 y MP ⛔ dice quién transfiere ⇒ una transferencia AJENA del mismo monto horas
   después confirmaba sola. Más tarde, la elige la cajera viendo la hora y los últimos 4 del número de
   operación. 🔑 La competidora (otra venta esperando el mismo monto) cuenta sólo si es de las últimas 12 h.
+- 🔑 **Paso «Validar transferencia» (Bruno, 12-oct)**: con transferencia el botón dice «Validar
+  transferencia $X» (⛔ «Finalizar»: la venta no está cobrada). Guardada en `esperando_pago`, el cobro pasa
+  a un modal con `EsperaTransferencia` y los **últimos pagos** de la cuenta de MP (`pagosRecientes`: desde
+  30 min antes de la venta, 5, los del monto exacto siempre), **sólo para mirar**: confirma `cruzarTransferencia`.
+  «Seguir vendiendo mientras llega» la deja en el cartel ámbar de arriba. ⚠️ La cajera ve montos de otros
+  pagos de esa media hora (⛔ el total del día, que sigue siendo de admin).
 - 🔑 **Confirmar a mano (B3, sólo admin, en la pestaña)**: la que el cruce ⛔ ve nunca (Caja Gerencia es la
   cuenta de un particular) se confirma con el comprobante (`confirmar-transferencia`): `mp_cruce = 'admin'`
   y `confirmacion` = { por, en, comprobante }. Sale a GN como con el cruce; el POS imprime al verla.

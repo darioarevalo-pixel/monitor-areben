@@ -37,6 +37,7 @@ vi.mock('@/lib/caja/cliente', async (orig) => ({
   leerPedidosWeb: vi.fn(async () => ({ pedidos: [], porSku: {}, noLeidas: 0, leidoEn: new Date().toISOString() })),
   reintentarPendientes: vi.fn(async () => ({ intentadas: 0, llegaron: 0 })),
   cerrarTurno: vi.fn(async () => ({ turno: { ...TURNO, cerrado_en: '2026-10-05T20:00:00.000Z' } })),
+  cruzarVenta: vi.fn(async () => ({ venta: null, cruce: { estado: 'esperando' }, recientes: [{ id: '998812', monto: 12300, cuando: new Date().toISOString(), origen: 'banco', coincide: false }], cuentaMp: 'Areben Comercial' })),
   confirmarVenta: vi.fn(async () => {
     throw Object.assign(new Error('Recargá la Caja: cambió una forma de pago (las transferencias van a otra cuenta).'), { status: 400, datos: {} })
   }),
@@ -214,5 +215,32 @@ describe('POS · A6: la pantalla se pone al día sola (Bruno, 12-oct)', () => {
     expect(document.body.textContent).toContain('ya se actualizó')
     expect(borrador().renglones).toHaveLength(1)
     expect(borrador().id).toBe('b-rebote')
+  })
+})
+
+describe('POS · paso «Validar transferencia» (Bruno, 12-oct)', () => {
+  it('🔑 con transferencia el botón dice «Validar transferencia» y, guardada, el cobro pasa a validar con los últimos pagos', async () => {
+    const { leerConfig, confirmarVenta } = await import('@/lib/caja/cliente')
+    const { REGLAS_INICIALES } = await import('@/lib/caja/core.core.js')
+    const conf = { reglas: { ...REGLAS_INICIALES, transferenciaA: REGLAS_INICIALES.medios.transferencia.opciones[0] }, politica_cambio: null }
+    vi.mocked(leerConfig).mockResolvedValue(conf as never)
+    const venta = { id: '0d6c1c2e-1111-4222-8333-944445555666', estado: 'esperando_pago', espera_monto: 9000, total: 9000, creada_en: new Date().toISOString(), renglones: [], pagos: [] }
+    vi.mocked(confirmarVenta).mockResolvedValueOnce({ venta } as never)
+    disco.set('caja:borrador:zattia', JSON.stringify({ id: 'b-transf', renglones: [PRENDA], email: '' }))
+    await montar(<CajaPOS />)
+    await act(async () => boton('Continuar al cobro Alt+C').click())
+    const transf = [...document.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Transferencia')) as HTMLButtonElement
+    await act(async () => transf.click())
+    const fin = [...document.querySelectorAll('button')].find((b) => /^(Finalizar venta|Validar transferencia)/.test(b.textContent ?? '')) as HTMLButtonElement
+    expect(fin.textContent).toMatch(/^Validar transferencia/)
+    await act(async () => fin.click())
+    await act(async () => new Promise((r) => setTimeout(r, 10)))
+    const t = document.body.textContent || ''
+    expect(t).toContain('Validando la transferencia')
+    expect(t).toContain('Últimos pagos en Mercado Pago (Areben Comercial)')
+    expect(t).toContain('operación ····8812')
+    // «Seguir vendiendo» cierra el paso: la venta queda esperando en el cartel de arriba.
+    await act(async () => boton('Seguir vendiendo mientras llega').click())
+    expect(document.body.textContent).not.toContain('Validando la transferencia')
   })
 })

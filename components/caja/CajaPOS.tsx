@@ -218,6 +218,8 @@ function POS() {
   // código siguiente enseguida, y con el campo bloqueado ese escaneo se PERDÍA (visto en prod, 4-oct).
   const [buscando, setBuscando] = useState(0)
   const [aviso, setAviso] = useState<{ tono: 'danger' | 'warning'; texto: string } | null>(null)
+  // Paso «Validar transferencia» (Bruno, 12-oct): la venta guardada que espera el pago, en su modal.
+  const [validando, setValidando] = useState<Venta | null>(null)
   const [candidatos, setCandidatos] = useState<{ lista: Candidato[]; mas: number } | null>(null)
   // La lista que aparece MIENTRAS se escribe (Bruno, 4-oct). `vuelta` numera cada búsqueda: sólo se
   // pinta la última (una respuesta lenta ⛔ pisa a la que ya llegó), y el Enter la anula.
@@ -641,6 +643,8 @@ function POS() {
     window.addEventListener('storage', oir)
     return () => window.removeEventListener('storage', oir)
   }, [])
+  // Con transferencia la venta ⛔ se finaliza al apretar: espera el pago (paso «Validar transferencia»).
+  const porTransferencia = pagos.some((p) => p.medio === 'transferencia')
   const puedeConfirmar = !!turno && !!c && !enviando && emailOk && !faltaContestar && (vuelto == null || vuelto >= 0)
 
   function datosTicket(venta: Venta): DatosTicket {
@@ -721,8 +725,10 @@ function POS() {
       limpiarCobro()
       setEnCobro(false)
       if (r.venta.estado === 'esperando_pago') {
-        // ⛔ ticket todavía: sale cuando llega la transferencia (el cartel ámbar de arriba).
+        // ⛔ ticket todavía: sale cuando llega la transferencia. El cobro pasa al paso «Validar
+        // transferencia»; «Seguir vendiendo» la deja en el cartel ámbar de arriba.
         setUltima(null)
+        setValidando(r.venta)
         refrescarPendientes()
         refrescarTurno()
         return
@@ -945,7 +951,7 @@ function POS() {
       <div className="pos-grid">
         <div style={{ display: 'grid', gap: space[3], minWidth: 0 }}>
           {pendientes
-            .filter((v) => v.estado === 'esperando_pago')
+            .filter((v) => v.estado === 'esperando_pago' && v.id !== validando?.id)
             .map((v) => (
               <EsperaTransferencia key={v.id} venta={v} onLlego={llegoTransferencia} onCambio={refrescarPendientes} />
             ))}
@@ -972,6 +978,23 @@ function POS() {
             />
           )}
 
+          {validando && (
+            <Modal abierto onCerrar={() => setValidando(null)} titulo="Validar transferencia" ancho="xl" cerrarConFondo={false}>
+              <EsperaTransferencia
+                venta={validando}
+                onLlego={(v) => {
+                  setValidando(null)
+                  llegoTransferencia(v)
+                }}
+                onCambio={() => {
+                  setValidando(null)
+                  refrescarPendientes()
+                }}
+                onSeguir={() => setValidando(null)}
+              />
+            </Modal>
+          )}
+
           {mostrarCobro && (
             <Modal
               abierto
@@ -985,7 +1008,7 @@ function POS() {
                     Volver
                   </Button>
                   <Button size="lg" tone="success" variant="solid" disabled={!puedeConfirmar} loading={enviando} onClick={confirmar} iconLeft={<Icono nombre="check" />}>
-                    Finalizar venta {c ? plata(c.total) : ''}
+                    {porTransferencia ? 'Validar transferencia' : 'Finalizar venta'} {c ? plata(c.total) : ''}
                   </Button>
                 </>
               }
@@ -1119,7 +1142,7 @@ function POS() {
                     </div>
                   )}
 
-                  {pagos.some((p) => p.medio === 'transferencia') && <DeteccionTransferencias admin={false} />}
+                  {porTransferencia && <DeteccionTransferencias admin={false} />}
                   {elCobro.error && <Notice tone="warning">{elCobro.error}</Notice>}
 
                   {c && enEfectivo > 0 && (

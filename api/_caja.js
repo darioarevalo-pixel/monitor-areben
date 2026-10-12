@@ -78,7 +78,7 @@ import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
 import { REGLAS_INICIALES, armarVentaGN, cobro, exigirCuentas, exigirFeria, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { promosDeCreditoEnMostrador } from '../lib/agenda/promos.core.js'
-import { cruzarTransferencia } from '../lib/pagos-recibidos/core.core.js'
+import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { cuentasDe, pagosDelDia, ponerEnUso, usosDe } from './_pagos-recibidos.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
@@ -936,7 +936,14 @@ export default async function handler(req, res) {
           reclamados: (reclamados.data || []).map(r => r.mp_pago_id), competidoras: (competidoras.data || []).length,
           elegido: b.pago == null ? null : String(b.pago),
         })
-        if (d.estado !== 'llego') return res.status(200).json({ venta: sinPayload(v.data), cruce: d })
+        if (d.estado !== 'llego') {
+          // Paso «Validar transferencia» (Bruno, 12-oct): los últimos pagos de la cuenta, SÓLO para mirar —
+          // confirma `cruzarTransferencia`—, y en qué cuenta de MP se están mirando.
+          const recientes = pagosRecientes({ monto: Number(v.data.espera_monto), desde: v.data.creada_en, pagos, reclamados: (reclamados.data || []).map(r => r.mp_pago_id), cuantos: RECIENTES_CAJA })
+          let cuentaMp = null
+          try { cuentaMp = (await cuentasDe(sb, store)).enUso?.nombre ?? null } catch { /* el nombre es una ayuda */ }
+          return res.status(200).json({ venta: sinPayload(v.data), cruce: d, recientes, cuentaMp })
+        }
 
         // 🔑 Se toma el pago SÓLO si la venta sigue esperando: dos `cruzar` a la vez ⇒ uno lo toma.
         // El índice único de `mp_pago_id` frena que el MISMO pago confirme otra venta (23505).
@@ -1058,6 +1065,8 @@ const turnoCerrado = (e) => /caja_turno_cerrado/.test(String((e && e.message) ||
 
 /** Hasta cuánto atrás otra venta esperando el mismo monto obliga a elegir el pago a mano. */
 const COMPETIDORAS_MS = 12 * 3600 * 1000
+/** Cuántos pagos recientes se muestran al validar una transferencia (los del monto exacto, siempre). */
+const RECIENTES_CAJA = 5
 /** Cuántos días de Mercado Pago lee el cruce, desde el de la venta (A4). */
 const DIAS_CRUCE = 3
 /**
