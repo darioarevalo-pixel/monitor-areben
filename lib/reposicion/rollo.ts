@@ -3,8 +3,8 @@
  * hay impresora A4). La arma y la lleva Camila en el carro.
  *
  * Una fila por variante, en orden de SKU y agrupada por producto: el SKU y el talle a la izquierda,
- * cuántas devolver bien grande a la derecha y una casilla para tildar al cargarla en el carro. Al pie, el total y lo que
- * queda para otro día — sin eso, quien termina la lista cree que el local quedó limpio.
+ * cuántas devolver bien grande a la derecha y una casilla para tildar al cargarla en el carro. Arriba el
+ * total; al pie, la firma.
  */
 
 import { abrirRollo, COLA, M, MIN, W, type Medidor, type OpBase } from '../rollo80'
@@ -60,11 +60,11 @@ export function armarDevolucion(
     y += 2.5
   }
 
-  escribir('DEVOLVER AL DEPÓSITO', 13, true)
+  escribir('DEVOLUCIÓN AL DEPÓSITO', 13, true)
   if (linea) escribir(linea.toUpperCase(), 11, true)
   escribir(selloDeImpresion(ahoraMs), 9, false, 90)
   y += 0.5
-  escribir(`${total} prendas · ${new Set(filas.map((f) => f.it.pid)).size} productos`, 10, true)
+  escribir(`${total} prendas`, 10, true)
   regla()
 
   // Los títulos de las columnas.
@@ -97,9 +97,9 @@ export function armarDevolucion(
   })
 
   regla()
-  escribir(`Total: ${total} prendas`, 12, true)
-  y += 4
-  escribir('Armó: ______________________', 10, false)
+  // El total ya va arriba: al pie, sólo la firma (Darío, 12-oct: «muy repetitivo»).
+  y += 2
+  escribir('Preparó: ______________________', 10, false)
 
   return { ops, alto: Math.max(MIN, y + COLA) }
 }

@@ -82,24 +82,26 @@ async function hojaA4(filas: FilaA4[], marca: string, sincronizado?: Date | null
   let y = 16
   const fecha = new Date().toLocaleString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   const totalMover = filas.reduce((s, it) => s + it.mover, 0)
+  // BDI repone fundas (con stock en el papel); Zattia, prendas.
+  const conStock = filas.some((f) => f.local != null)
+  const unidad = conStock ? 'unidades' : 'prendas'
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(15)
-  pdf.text('Reposición de local — ' + marca.toUpperCase(), M, y)
+  pdf.text('Reposición del local · ' + marca.toUpperCase(), M, y)
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(9)
   pdf.setTextColor(120)
   y += 5
-  pdf.text(`${fecha} · ${filas.length} variantes · ${totalMover} u. a mover`, M, y)
+  pdf.text(`${fecha} · ${totalMover} ${unidad} · ${filas.length} variantes`, M, y)
   y += 4
   // La aclaración del "!" va en el papel: quien camina el depósito no estuvo en esta conversación.
   const cuando = sincronizado ? sincronizado.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null
-  const conStock = filas.some((f) => f.local != null)
   pdf.text(
     conStock
-      ? `${cuando ? `Stock de Gestión Nube: ${cuando}  ·  ` : ''}"!" = sin stock en el local (0 o 1): llevarlo primero`
+      ? `${cuando ? `Stock: ${cuando}  ·  ` : ''}"!" = local sin stock: reponer primero`
       : // Una sola casilla por renglón (Darío, 11-oct). Los signos van en palabras: Helvetica no
         // tiene ni ✓ ni ✗, y un glifo que falta sale como un cuadrado vacío en el papel.
-        `${cuando ? `Stock de Gestión Nube: ${cuando}  ·  ` : ''}En la casilla: tilde = la llevé · cruz = no estaba · un número = encontré menos`,
+        `${cuando ? `Stock: ${cuando}  ·  ` : ''}Casilla: tilde = completa · cruz = no encontrada · número = cantidad encontrada`,
     M,
     y,
   )
@@ -116,12 +118,12 @@ async function hojaA4(filas: FilaA4[], marca: string, sincronizado?: Date | null
     pdf.text('Producto · Variante', X.prod, y)
     if (conStock) {
       pdf.text('Local', X.loc, y)
-      pdf.text('Depós', X.dep, y)
+      pdf.text('Depósito', X.dep, y)
     }
-    pdf.text('Repone', X.rep, y)
+    pdf.text('Reponer', X.rep, y)
     if (conStock) {
-      pdf.text('Pickeado', X.pick, y)
-      pdf.text('No se encontró', X.nf, y)
+      pdf.text('Preparado', X.pick, y)
+      pdf.text('No encontrado', X.nf, y)
     } else pdf.text('Hecho', X.pick, y)
     pdf.setTextColor(0)
     pdf.setDrawColor(200)
@@ -134,7 +136,9 @@ async function hojaA4(filas: FilaA4[], marca: string, sincronizado?: Date | null
   filas.forEach((it, i) => {
     // Nombre COMPLETO en varias líneas (antes se truncaba a la 1ª con [0] → se perdía info).
     const anchoProd = (conStock ? X.loc : X.rep) - X.prod - 3
-    const lineas = pdf.splitTextToSize(`${it.name} · ${it.size || '—'}`, anchoProd)
+    // «Variante Única» no dice nada: va sólo el nombre.
+    const talle = /^variante\s+[uú]nica$/i.test((it.size || '').trim()) ? '' : it.size || '—'
+    const lineas = pdf.splitTextToSize(talle ? `${it.name} · ${talle}` : it.name, anchoProd)
     const notas: string[] = it.nota ? pdf.splitTextToSize(it.nota, anchoProd) : []
     const rowH = Math.max(conStock ? 6.6 : 8, lineas.length * 4 + notas.length * 3.4 + 2.6)
     if (y + rowH > 292) {
@@ -211,27 +215,27 @@ async function hojaA4(filas: FilaA4[], marca: string, sincronizado?: Date | null
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(9.5)
   pdf.setTextColor(0)
-  pdf.text('Preparó (encargada de reposición):', M, y)
+  pdf.text('Preparó:', M, y)
   pdf.setDrawColor(120)
-  pdf.line(M + 60, y + 1, M + 122, y + 1)
+  pdf.line(M + 17, y + 1, M + 122, y + 1)
   pdf.text('Fecha:', M + 128, y)
   pdf.line(M + 140, y + 1, RIGHT, y + 1)
   y += 11
   pdf.setFont('helvetica', 'bold')
-  pdf.text(`Total a reponer: ${totalMover} u.`, M, y)
+  pdf.text(`Total: ${totalMover} ${unidad}`, M, y)
   pdf.setFont('helvetica', 'normal')
-  pdf.text(conStock ? 'Pickeadas:' : 'Llevadas:', M + 60, y)
-  pdf.line(M + 78, y + 1, M + 100, y + 1)
+  pdf.text(conStock ? 'Preparadas:' : 'Repuestas:', M + 60, y)
+  pdf.line(M + 82, y + 1, M + 100, y + 1)
   pdf.text('No encontradas:', M + 105, y)
   pdf.line(M + 134, y + 1, M + 156, y + 1)
   y += 13
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(11)
-  pdf.text('Al finalizar, entregar este reporte a administración.', M, y)
+  pdf.text('Entregar a administración al finalizar.', M, y)
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(9.5)
   y += 11
-  pdf.text('Recibido por administración:', M, y)
-  pdf.line(M + 52, y + 1, M + 120, y + 1)
+  pdf.text('Recibió:', M, y)
+  pdf.line(M + 17, y + 1, M + 120, y + 1)
   await compartirODescargarPDF(pdf, `reposicion-${marca}-${new Date().toISOString().slice(0, 10)}.pdf`, 'Reposición de local')
 }
