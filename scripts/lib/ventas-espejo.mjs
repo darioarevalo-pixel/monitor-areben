@@ -169,23 +169,21 @@ export async function guardarVentasBatch(supabase, rawRows, { completo = true } 
     if (error) throw new Error(`Error guardando detalles: ${error.message}`)
   }
 
-  const c = await guardarCobros(supabase, raw)
+  const c = await guardarHijos(supabase, raw, 'ventas_cobros', filasDeCobros)
+  const f = await guardarHijos(supabase, raw, 'ventas_factura_gn', filasDeFacturaGN)
 
   return {
-    ventas: ventas.length, detalles: detalles.length, clientes: clientes.length, cobros: c.cobros,
-    ...(sinHora ? { sinHora } : {}), ...(c.sinCobros ? { sinCobros: true } : {}),
+    ventas: ventas.length, detalles: detalles.length, clientes: clientes.length, cobros: c.filas, facturasGN: f.filas,
+    ...(sinHora ? { sinHora } : {}), ...(c.sinTabla ? { sinCobros: true } : {}), ...(f.sinTabla ? { sinFacturasGN: true } : {}),
   }
 }
 
 /**
  * Los cobros de cada venta (`ventas_cobros`, sql/migrate-ventas-cobros.sql): de ellos sale el techo de
- * facturación del mes (`lib/arca/techo.core.js`). Cada venta releída REEMPLAZA sus cobros: así una que
- * se archivó o se editó en GN queda como GN la devuelve hoy.
+ * facturación del mes (`lib/arca/techo.core.js`).
  *
  * ⚠️ Sólo las ventas que trajeron `payments` (el pedido llevó `include_payments=1`). Una que no los
  * trae ⛔ se toca: si no, un pedido sin cobros (la purga histórica) le borraría los que tiene.
- * 🔴 Sin la tabla (la migración no corrió en esta base) las ventas se guardan igual y se avisa
- * (`sinCobros`), como con la hora: frenar el espejo de ventas es peor.
  */
 export function filasDeCobros(raw) {
   return raw.filter((v) => Array.isArray(v.payments)).flatMap((v) =>
@@ -193,21 +191,48 @@ export function filasDeCobros(raw) {
       venta_id: v.id, n, fecha: c.fecha ? String(c.fecha).slice(0, 10) : null, cuenta: c.cuenta, monto: c.monto,
     })))
 }
+filasDeCobros.aplica = (v) => Array.isArray(v.payments)
 
-const faltaLaTabla = (e) => e && (e.code === '42P01' || e.code === 'PGRST205' || /ventas_cobros/.test(e.message || ''))
+/**
+ * La factura que GN ya emitió (`ventas_factura_gn`, sql/migrate-ventas-factura-gn.sql): mientras GN
+ * siga facturando, lo pendiente del mes la descuenta. El monto es el total de la venta y la fecha la
+ * de la venta, como lo contaba el dashboard. Toda venta trae los campos de factura (vacíos si no tiene).
+ */
+export function filasDeFacturaGN(raw) {
+  return raw.flatMap((v) => {
+    const numero = String(v.invoice_number || v.bill_number || '').trim()
+    if (!numero) return []
+    const inv = v.invoice || {}
+    return [{
+      venta_id: v.id, numero, tipo: v.invoice_type || inv.type || null,
+      pto_vta: inv.sale_point ?? null, voucher: v.voucher ?? inv.voucher ?? null,
+      cae: v.bill_cae || inv.cae || null, estado: v.bill_status || inv.status || null,
+      fecha: v.date_sale ? String(v.date_sale).slice(0, 10) : null, monto: Number(v.total_price) || 0,
+    }]
+  })
+}
+filasDeFacturaGN.aplica = (v) => 'invoice_number' in v || 'bill_number' in v
 
-async function guardarCobros(supabase, raw) {
-  const ids = raw.filter((v) => Array.isArray(v.payments)).map((v) => v.id)
-  if (!ids.length) return { cobros: 0 }
-  const filas = filasDeCobros(raw)
+const faltaLaTabla = (e, tabla) => e && (e.code === '42P01' || e.code === 'PGRST205' || (e.message || '').includes(tabla))
+
+/**
+ * Cada venta releída REEMPLAZA sus filas en `tabla`: así una que se archivó, se editó o perdió la
+ * factura en GN queda como GN la devuelve hoy. Sólo las ventas donde `armar.aplica` (trajeron el dato).
+ * 🔴 Sin la tabla (la migración no corrió en esta base) las ventas se guardan igual y se avisa
+ * (`sinTabla`), como con la hora: frenar el espejo de ventas es peor.
+ */
+async function guardarHijos(supabase, raw, tabla, armar) {
+  const ids = raw.filter(armar.aplica).map((v) => v.id)
+  if (!ids.length) return { filas: 0 }
+  const filas = armar(raw.filter(armar.aplica))
   for (let i = 0; i < ids.length; i += 500) {
-    const { error } = await supabase.from('ventas_cobros').delete().in('venta_id', ids.slice(i, i + 500))
-    if (faltaLaTabla(error)) return { cobros: 0, sinCobros: true }
-    if (error) throw new Error(`Error limpiando cobros: ${error.message}`)
+    const { error } = await supabase.from(tabla).delete().in('venta_id', ids.slice(i, i + 500))
+    if (faltaLaTabla(error, tabla)) return { filas: 0, sinTabla: true }
+    if (error) throw new Error(`Error limpiando ${tabla}: ${error.message}`)
   }
   for (let i = 0; i < filas.length; i += 2000) {
-    const { error } = await supabase.from('ventas_cobros').insert(filas.slice(i, i + 2000))
-    if (error) throw new Error(`Error guardando cobros: ${error.message}`)
+    const { error } = await supabase.from(tabla).insert(filas.slice(i, i + 2000))
+    if (error) throw new Error(`Error guardando ${tabla}: ${error.message}`)
   }
-  return { cobros: filas.length }
+  return { filas: filas.length }
 }

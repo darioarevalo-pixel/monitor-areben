@@ -120,7 +120,7 @@ describe('guardarVentasBatch', () => {
       venta({ id: 2, client_id: 7, detalles: [{ id: 11, product_id: 101, quantity: 3 }] }),
     ])
 
-    expect(r).toEqual({ ventas: 2, detalles: 2, clientes: 1, cobros: 0 }) // sin `payments` en el crudo ⇒ 0 cobros
+    expect(r).toEqual({ ventas: 2, detalles: 2, clientes: 1, cobros: 0, facturasGN: 0 }) // sin `payments` ni factura en el crudo
     expect(sb.escrito.ventas).toHaveLength(2)
     expect(sb.escrito.venta_detalles).toHaveLength(2)
     expect(sb.escrito.clientes).toHaveLength(1) // el mismo cliente en dos ventas es uno solo

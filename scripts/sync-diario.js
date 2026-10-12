@@ -281,6 +281,7 @@ async function syncVentas(fromDate) {
     const r = await guardarVentasBatch(supabase, rows);
     if (r.sinHora && !problemas.some((p) => p.startsWith('ventas sin hora'))) problemas.push('ventas sin hora: falta correr sql/migrate-ventas-gn-hora.sql en esta base');
     if (r.sinCobros && !problemas.some((p) => p.startsWith('ventas sin cobros'))) problemas.push('ventas sin cobros: falta correr sql/migrate-ventas-cobros.sql en esta base');
+    if (r.sinFacturasGN && !problemas.some((p) => p.startsWith('ventas sin factura de GN'))) problemas.push('ventas sin factura de GN: falta correr sql/migrate-ventas-factura-gn.sql en esta base');
     console.log(`    ✓ ventas: ${r.ventas}, clientes: ${r.clientes}, detalles: ${r.detalles}`);
     totales.ventas   += r.ventas;
     totales.detalles += r.detalles;

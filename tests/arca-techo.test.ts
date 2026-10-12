@@ -70,3 +70,16 @@ describe('filasDeCobros (lo que el sync guarda en ventas_cobros)', async () => {
     expect(filasDeCobros([{ id: 3, archived: true, payments: [{ date_payment: '2026-10-01', account_name: 'X', amount: 1 }] }])).toEqual([])
   })
 })
+
+describe('filasDeFacturaGN (la factura que GN ya emitió)', async () => {
+  const { filasDeFacturaGN } = await import('../scripts/lib/ventas-espejo.mjs')
+  it('toma el número, el CAE y el punto de venta; el monto es el total y la fecha la de la venta', () => {
+    const v = { id: 9, date_sale: '2026-09-10', total_price: '15543', bill_number: '', invoice_number: 'B 00002-00012144', invoice_type: 'B',
+      voucher: 12144, bill_cae: '86406225653741', bill_status: 'APROBADO', invoice: { sale_point: 2 } }
+    expect(filasDeFacturaGN([v])).toEqual([{ venta_id: 9, numero: 'B 00002-00012144', tipo: 'B', pto_vta: 2, voucher: 12144,
+      cae: '86406225653741', estado: 'APROBADO', fecha: '2026-09-10', monto: 15543 }])
+  })
+  it('una venta sin factura no genera fila (y su fila vieja se borra al releerla)', () => {
+    expect(filasDeFacturaGN([{ id: 1, invoice_number: '', bill_number: '' }])).toEqual([])
+  })
+})
