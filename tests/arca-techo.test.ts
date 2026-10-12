@@ -50,3 +50,23 @@ describe('cobrosDeVentaGN', () => {
     expect(ventaCuenta(null)).toBe(false)
   })
 })
+
+describe('filasDeCobros (lo que el sync guarda en ventas_cobros)', async () => {
+  const { filasDeCobros } = await import('../scripts/lib/ventas-espejo.mjs')
+  it('una fila por cobro, numerada dentro de la venta, con el día del cobro', () => {
+    const raw = [{ id: 1, active: true, payments: [
+      { date_payment: '2026-09-30 18:20:00', account_name: 'Mercado Pago', amount: '100' },
+      { date_payment: '2026-10-01 09:00:00', account_name: 'Efectivo', amount: 50 },
+    ] }]
+    expect(filasDeCobros(raw)).toEqual([
+      { venta_id: 1, n: 0, fecha: '2026-09-30', cuenta: 'Mercado Pago', monto: 100 },
+      { venta_id: 1, n: 1, fecha: '2026-10-01', cuenta: 'Efectivo', monto: 50 },
+    ])
+  })
+  it('una venta que no trajo payments ⛔ genera filas (ni se le borran)', () => {
+    expect(filasDeCobros([{ id: 2, active: true }])).toEqual([])
+  })
+  it('una archivada trajo payments pero ⛔ cobra', () => {
+    expect(filasDeCobros([{ id: 3, archived: true, payments: [{ date_payment: '2026-10-01', account_name: 'X', amount: 1 }] }])).toEqual([])
+  })
+})

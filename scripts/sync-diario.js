@@ -257,7 +257,7 @@ async function syncVentas(fromDate) {
   const repasoDesde = fechaDesdeRepaso();
   const desde = fromDate < repasoDesde ? fromDate : repasoDesde;
 
-  const basePath = `ventas/obtener?from=${desde}&to=${today}&include_details=1&per_page=50`;
+  const basePath = `ventas/obtener?from=${desde}&to=${today}&include_details=1&include_payments=1&per_page=50`;
   console.log(`\n[ventas] Descargando desde ${desde} hasta ${today} (repaso de ${DIAS_REPASO} días)...`);
   // Lo creado después de esto puede no venir en la bajada: el registro ⛔ lo da por anulado.
   const corte = new Date();
@@ -280,6 +280,7 @@ async function syncVentas(fromDate) {
     }
     const r = await guardarVentasBatch(supabase, rows);
     if (r.sinHora && !problemas.some((p) => p.startsWith('ventas sin hora'))) problemas.push('ventas sin hora: falta correr sql/migrate-ventas-gn-hora.sql en esta base');
+    if (r.sinCobros && !problemas.some((p) => p.startsWith('ventas sin cobros'))) problemas.push('ventas sin cobros: falta correr sql/migrate-ventas-cobros.sql en esta base');
     console.log(`    ✓ ventas: ${r.ventas}, clientes: ${r.clientes}, detalles: ${r.detalles}`);
     totales.ventas   += r.ventas;
     totales.detalles += r.detalles;

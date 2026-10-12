@@ -14,6 +14,8 @@
  * agreguen, pasa a `true` y hereda todo.
  */
 
+import { cobrosDeVentaGN } from '../../lib/arca/techo.core.js'
+
 /** Si llega el mismo id dos veces en un lote, gana la última versión. */
 export function dedupById(arr) {
   const map = new Map()
@@ -167,5 +169,45 @@ export async function guardarVentasBatch(supabase, rawRows, { completo = true } 
     if (error) throw new Error(`Error guardando detalles: ${error.message}`)
   }
 
-  return { ventas: ventas.length, detalles: detalles.length, clientes: clientes.length, ...(sinHora ? { sinHora } : {}) }
+  const c = await guardarCobros(supabase, raw)
+
+  return {
+    ventas: ventas.length, detalles: detalles.length, clientes: clientes.length, cobros: c.cobros,
+    ...(sinHora ? { sinHora } : {}), ...(c.sinCobros ? { sinCobros: true } : {}),
+  }
+}
+
+/**
+ * Los cobros de cada venta (`ventas_cobros`, sql/migrate-ventas-cobros.sql): de ellos sale el techo de
+ * facturación del mes (`lib/arca/techo.core.js`). Cada venta releída REEMPLAZA sus cobros: así una que
+ * se archivó o se editó en GN queda como GN la devuelve hoy.
+ *
+ * ⚠️ Sólo las ventas que trajeron `payments` (el pedido llevó `include_payments=1`). Una que no los
+ * trae ⛔ se toca: si no, un pedido sin cobros (la purga histórica) le borraría los que tiene.
+ * 🔴 Sin la tabla (la migración no corrió en esta base) las ventas se guardan igual y se avisa
+ * (`sinCobros`), como con la hora: frenar el espejo de ventas es peor.
+ */
+export function filasDeCobros(raw) {
+  return raw.filter((v) => Array.isArray(v.payments)).flatMap((v) =>
+    cobrosDeVentaGN(v, null).map((c, n) => ({
+      venta_id: v.id, n, fecha: c.fecha ? String(c.fecha).slice(0, 10) : null, cuenta: c.cuenta, monto: c.monto,
+    })))
+}
+
+const faltaLaTabla = (e) => e && (e.code === '42P01' || e.code === 'PGRST205' || /ventas_cobros/.test(e.message || ''))
+
+async function guardarCobros(supabase, raw) {
+  const ids = raw.filter((v) => Array.isArray(v.payments)).map((v) => v.id)
+  if (!ids.length) return { cobros: 0 }
+  const filas = filasDeCobros(raw)
+  for (let i = 0; i < ids.length; i += 500) {
+    const { error } = await supabase.from('ventas_cobros').delete().in('venta_id', ids.slice(i, i + 500))
+    if (faltaLaTabla(error)) return { cobros: 0, sinCobros: true }
+    if (error) throw new Error(`Error limpiando cobros: ${error.message}`)
+  }
+  for (let i = 0; i < filas.length; i += 2000) {
+    const { error } = await supabase.from('ventas_cobros').insert(filas.slice(i, i + 2000))
+    if (error) throw new Error(`Error guardando cobros: ${error.message}`)
+  }
+  return { cobros: filas.length }
 }

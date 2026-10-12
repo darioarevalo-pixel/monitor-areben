@@ -19,6 +19,7 @@ en cada mensaje de cada sesión.
 | refresco de las vistas | `scripts/lib/refrescar-vistas.mjs` + `sql/migrate-refresco-vistas.sql` |
 | **foto diaria del stock** (libro de stock; gana la PRIMERA del día, la de las 06:40) | `scripts/lib/stock-foto.mjs` + `sql/migrate-stock-foto.sql` |
 | hora, pedido de TN e `integration_id` de cada venta | `scripts/lib/ventas-espejo.mjs` + `sql/migrate-ventas-gn-hora.sql` (⛔ antes del código; sin ella guarda sin hora y avisa) |
+| **cobros de cada venta** (fecha y cuenta de cada pago; de acá sale el techo de facturación) | `scripts/lib/ventas-espejo.mjs` (`include_payments=1`) + `sql/migrate-ventas-cobros.sql` (⛔ antes del código; sin ella guarda sin cobros y avisa) |
 | payload de la app | `lib/etl/`, cacheado en IndexedDB (`lib/cache.ts`) |
 
 ## Reglas que el código no dice

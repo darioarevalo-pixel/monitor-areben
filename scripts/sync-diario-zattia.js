@@ -273,7 +273,7 @@ async function syncVentas(fromDate) {
   const repasoDesde = fechaDesdeRepaso();
   const desde = fromDate < repasoDesde ? fromDate : repasoDesde;
 
-  const basePath = `ventas/obtener?from=${desde}&to=${today}&include_details=1&per_page=50`;
+  const basePath = `ventas/obtener?from=${desde}&to=${today}&include_details=1&include_payments=1&per_page=50`;
   console.log(`\n[ventas] Descargando desde ${desde} hasta ${today} (repaso de ${DIAS_REPASO} días)...`);
   // Lo creado después de esto puede no venir en la bajada: el registro ⛔ lo da por anulado.
   const corte = new Date();
@@ -285,6 +285,7 @@ async function syncVentas(fromDate) {
   // Cuando se agreguen las columnas, esto pasa a `true` y hereda todo.
   const guardado = await guardarVentasBatch(supabase, rows, { completo: false });
   if (guardado.sinHora) problemas.push('ventas sin hora: falta correr sql/migrate-ventas-gn-hora.sql en esta base');
+  if (guardado.sinCobros) problemas.push('ventas sin cobros: falta correr sql/migrate-ventas-cobros.sql en esta base');
   console.log(`[ventas] ${guardado.ventas} ventas (de ${rows.length} raw), ${guardado.detalles} detalles guardados.`);
 
   // Purga DESPUÉS del upsert (ver scripts/lib/purga-ventas.mjs: una venta que cambió de
