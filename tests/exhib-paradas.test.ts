@@ -14,8 +14,8 @@ const P = percherosDelChequeo(MAPA)
 const esc = (...lugares: string[]) => lugares.map((lugar) => ({ lugar }))
 
 describe('percherosDelChequeo', () => {
-  it('el orden del RECORRIDO (I, ISLA, D) y ⛔ el del mapa; el doble largo con los dos números', () => {
-    expect(P.map((p) => p.nombre)).toEqual(['I01', 'I02', 'ISLA', 'D01', 'D02', 'D07-08'])
+  it('el orden del RECORRIDO (I, ISLA, D) y ⛔ el del mapa; un doble largo sale como DOS percheros', () => {
+    expect(P.map((p) => p.nombre)).toEqual(['I01', 'I02', 'ISLA', 'D01', 'D02', 'D07', 'D08'])
     expect(percherosDelChequeo(null)).toEqual([])
   })
 })
@@ -31,9 +31,9 @@ describe('lugares', () => {
     expect(conFrontal('D03 arriba', true)).toBe('D03 arriba frontal')
     expect(conFrontal('D03 arriba frontal', false)).toBe('D03 arriba')
     expect(conFrontal('D03 arriba frontal', true)).toBe('D03 arriba frontal')
-    expect(esFrontal('D07-08 abajo frontal')).toBe(true)
+    expect(esFrontal('D08 abajo frontal')).toBe(true)
     expect(esFrontal('D01 arriba')).toBe(false)
-    expect(percheroDe('D07-08 abajo frontal')).toBe('D07')
+    expect(percheroDe('D08 abajo frontal')).toBe('D08')
     // Frontal ⛔ es otra barra: es la misma, con un atributo.
     expect(claveLugar('D03 arriba frontal')).toBe(claveLugar('D03 arriba'))
     expect(claveLugar('D03 arriba frontal')).not.toBe(claveLugar('D03 abajo frontal'))
@@ -49,13 +49,13 @@ describe('siguienteLugar', () => {
   it('de arriba a abajo del mismo perchero; después, el próximo sin escanear', () => {
     expect(siguienteLugar(P, 'D01 arriba', esc('D01 arriba'))).toBe('D01 abajo')
     expect(siguienteLugar(P, 'D01 arriba frontal', esc('D01 arriba frontal'))).toBe('D01 abajo')
-    expect(siguienteLugar(P, 'D01 abajo', esc('ISLA', 'D01 arriba', 'D01 abajo', 'D02 abajo frontal'))).toBe('D07-08 arriba')
+    expect(siguienteLugar(P, 'D01 abajo', esc('ISLA', 'D01 arriba', 'D01 abajo', 'D02 abajo frontal'))).toBe('D07 arriba')
   })
   it('al final vuelve al salteado; con todo hecho, ninguno', () => {
-    expect(siguienteLugar(P, 'D07-08 abajo', esc('I01 arriba', 'ISLA', 'D01 abajo', 'D02 arriba', 'D07-08 abajo'))).toBe('I02')
-    expect(siguienteLugar(P, 'D07-08 abajo', esc('I01 arriba frontal', 'I02', 'ISLA', 'D01 abajo', 'D02 arriba', 'D07 abajo'))).toBeNull()
+    expect(siguienteLugar(P, 'D08 abajo', esc('I01 arriba', 'ISLA', 'D01 abajo', 'D02 arriba', 'D07 abajo', 'D08 abajo'))).toBe('I02')
+    expect(siguienteLugar(P, 'D08 abajo', esc('I01 arriba frontal', 'I02', 'ISLA', 'D01 abajo', 'D02 arriba', 'D07 abajo', 'D08 abajo'))).toBeNull()
   })
   it('cuenta los percheros que faltan', () => {
-    expect(percherosPendientes(P, esc('I01 abajo frontal', 'ISLA'))).toBe(4)
+    expect(percherosPendientes(P, esc('I01 abajo frontal', 'ISLA'))).toBe(5)
   })
 })

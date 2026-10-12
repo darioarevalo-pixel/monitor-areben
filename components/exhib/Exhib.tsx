@@ -289,7 +289,7 @@ export function Exhib() {
             {/* Cerrar es lo que sella el recorrido con su hora. Va acá y ⛔ no al generar el PDF:
                 el reporte se puede volver a generar, el recorrido se cierra una sola vez. */}
             <Button variant="outline" onClick={() => void terminar()} loading={ex.subiendo}>
-              Terminar y guardar
+              Finalizar
             </Button>
             <Button
               variant="outline"

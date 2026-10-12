@@ -23,7 +23,7 @@ import type { MapaLocal } from '@/lib/mapa-local/tipos'
 export type Perchero = {
   /** `D01`, `ISLA`: la clave para saber si ya se escaneó. */
   codigo: string
-  /** Lo que se lee en la lista: `D07-08` si el mapa lo tiene de doble largo. */
+  /** Lo que se lee en la lista y se guarda: `D07`. Un doble largo del mapa sale como D07 y D08. */
   nombre: string
   isla: boolean
   /** El mapa le conoce dos barras: la flecha pasa de arriba a abajo antes de ir al siguiente. */
@@ -41,17 +41,17 @@ export function percherosDelChequeo(mapa: Pick<MapaLocal, 'modulos'> | null): Pe
   const out: (Perchero & { pared: keyof typeof ORDEN_PARED; numero: number })[] = []
   for (const m of mapa?.modulos ?? []) {
     const e = leerEspacio(m.codigo)
-    if (!e || vistos.has(e.codigo)) continue
-    vistos.add(e.codigo)
-    const largo = e.pared !== 'isla' && (m.anchoCm ?? 0) >= 150
-    out.push({
-      codigo: e.codigo,
-      nombre: lugarDe({ pared: e.pared, numero: e.numero, pos: 'simple', largo }),
-      isla: e.pared === 'isla',
-      doble: e.pared !== 'isla' && m.niveles.some((n) => n.pos === 'alta' || n.pos === 'baja'),
-      pared: e.pared,
-      numero: e.numero,
-    })
+    if (!e) continue
+    const doble = e.pared !== 'isla' && m.niveles.some((n) => n.pos === 'alta' || n.pos === 'baja')
+    // 🔑 Un perchero de DOBLE LARGO del mapa (`D07`, 150 cm) se ofrece como DOS: D07 y D08 (Darío,
+    // 12-oct-2026: «yo los separaría»). En el salón se escanea por número.
+    const numeros = e.pared !== 'isla' && (m.anchoCm ?? 0) >= 150 ? [e.numero, e.numero + 1] : [e.numero]
+    for (const numero of numeros) {
+      const codigo = lugarDe({ pared: e.pared, numero, pos: 'simple' })
+      if (vistos.has(codigo)) continue
+      vistos.add(codigo)
+      out.push({ codigo, nombre: codigo, isla: e.pared === 'isla', doble, pared: e.pared, numero })
+    }
   }
   out.sort((a, b) => ORDEN_PARED[a.pared] - ORDEN_PARED[b.pared] || a.numero - b.numero)
   return out.map(({ codigo, nombre, isla, doble }) => ({ codigo, nombre, isla, doble }))

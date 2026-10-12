@@ -70,18 +70,18 @@ export function UbicacionFlotante({ percheros, lugar, escaneos, onElegir }: { pe
             padding: `0 ${space[3]}px`,
             borderRadius: 12,
             border: `2px solid ${color.brand}`,
-            background: color.surface,
+            background: frontal ? color.brandBg : color.surface,
             color: color.ink,
             fontSize: font.xl,
+            minWidth: 0,
             fontWeight: weight.bold,
             cursor: 'pointer',
             boxShadow: 'var(--mo-sh-md)',
           }}
         >
-          <span>
-            📍 {sinFrontal(lugar) || 'Elegí dónde estás'}
-            {frontal && <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, background: color.brandBg, color: color.brand, border: `1px solid ${color.brandBorder}`, fontSize: font.sm, verticalAlign: 'middle' }}>FRONTAL</span>}
-          </span>
+          {/* Un solo renglón (Darío: «se hacen 2 renglones, queda feo»): que es frontal lo dicen el
+              botón prendido y el fondo de la ubicación. */}
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>📍 {sinFrontal(lugar) || 'Elegí dónde estás'}</span>
           <span style={{ fontSize: font.sm, fontWeight: weight.normal, color: color.mut, whiteSpace: 'nowrap' }}>
             {faltan ? `faltan ${faltan}` : 'todos hechos'} {abierta ? '▴' : '▾'}
           </span>

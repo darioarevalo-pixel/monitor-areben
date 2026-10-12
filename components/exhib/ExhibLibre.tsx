@@ -396,8 +396,9 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
         {fase === 'scan' && (
           <>
             <Button variant="ghost" tone="danger" onClick={() => void eliminar()}>Eliminar</Button>
-            <Button variant="outline" onClick={() => void bajarExcel(lib.escaneos, new Date().toISOString())}>Excel</Button>
-            <Button variant="solid" tone="brand" onClick={() => void terminar()} loading={lib.subiendo}>Terminar y guardar</Button>
+            {/* ⛔ Sin «Excel» mientras se escanea (Darío, 12-oct-2026): a la empleada ⛔ le sirve, y la
+                planilla de un recorrido se baja desde «Recorridos anteriores › Ver». */}
+            <Button variant="solid" tone="brand" onClick={() => void terminar()} loading={lib.subiendo}>Finalizar</Button>
           </>
         )}
         {fase === 'ver' && viendo && (

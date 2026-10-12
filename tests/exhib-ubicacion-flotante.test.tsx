@@ -56,7 +56,10 @@ describe('UbicacionFlotante', () => {
     await act(async () => a.botones().find((b) => b.textContent === 'Frontal')!.click())
     expect(a.elegidos.at(-1)).toBe('D01 arriba frontal')
     const b = await dibujar('D01 arriba frontal', [])
-    expect(b.host.textContent).toContain('FRONTAL')
+    // Un solo renglón: lo dice el botón prendido, ⛔ un cartel al lado del lugar.
+    expect(b.botones().find((x) => x.textContent === 'Frontal')!.getAttribute('aria-pressed')).toBe('true')
+    expect(b.host.textContent).toContain('📍 D01 arriba')
+    expect(b.host.textContent).not.toContain('D01 arriba frontal')
     await act(async () => b.botones().find((x) => x.textContent === 'Frontal')!.click())
     expect(b.elegidos.at(-1)).toBe('D01 arriba')
   })
