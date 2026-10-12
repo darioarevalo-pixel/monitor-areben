@@ -124,7 +124,7 @@ cambió el día—, baja todo como antes, en paralelo. «Recargar» y «Reintent
 - ▶️ **Parte 2:** la lista de Lorena por correo a administración a las 7:00 (falta la dirección) y el
   estado de la reposición a Darío a las 10:00 (abre el local). `scripts/lib/mail.mjs`.
 - ▶️ **Parte 3, en tandas** (Darío, 12-oct): ✅ T1 Lorena escanea + transferencia · ✅ T2 Camila
-  (devolver) + la limpieza grande · ▶️ T3 «no estaba» → Conteo + correo de las 10:00 · ▶️ T4
+  (devolver) + la limpieza grande · ▶️ T3 correo de las 10:00 (⛔ «no estaba» → Conteo: descartado por Darío, 12-oct) · ▶️ T4
   etiquetas mal puestas + imprimir en la Zebra las de «para exhibir».
 - ▶️ Condiciones de Stunned. ▶️ Ubicaciones del depósito de Zattia (la sección Ubicaciones es sólo BDI).
 
