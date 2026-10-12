@@ -49,6 +49,32 @@ export type FinDeEscaneo = {
    * —stock mal cargado, prenda de otra marca— y ⛔ no hay nada que reintentar.
    */
   parecidos?: number
+  /**
+   * 🗣️ **El nombre de la prenda, para decirlo** (Darío, 11-oct-2026). Cuando viene, se dice EN VEZ
+   * del número: *«en cada lectura, el celular dice el producto y la variante»*. Si dice el nombre,
+   * ya se sabe que la leyó, y además se nota una etiqueta puesta en la prenda equivocada. Los dos
+   * juntos eran demasiado largos para el ritmo del lector. Sin `nombre` (el modo por categoría)
+   * sigue el número.
+   */
+  nombre?: string
+  /** Esa variante YA se había leído en este recorrido (en este lugar o en otro): suena distinto y dice «otra vez». */
+  repetida?: boolean
+}
+
+/**
+ * La prenda como se dice: «blusa milano, negro, talle s». En minúscula porque algunas voces deletrean
+ * las palabras cortas en mayúscula («T-O-P»); «Variante Única» ⛔ se dice.
+ */
+export function nombreParaDecir(nombre: string, variante: string | null | undefined): string {
+  const partes = String(variante || '')
+    .split(/\s+-\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t && !/^variante [úu]nica$/i.test(t))
+  // El talle suelto («S», «38») va al FINAL y con su palabra: «S» sola se pierde, y GN a veces lo
+  // pone primero («S - BLANCO»). Se dice como se pide: el color y después el talle.
+  const esTalle = (t: string) => /^(x{0,3}s|m|x{0,3}l|\d{2})$/i.test(t)
+  const orden = [...partes.filter((t) => !esTalle(t)), ...partes.filter(esTalle).map((t) => `talle ${t}`)]
+  return [String(nombre || '').trim(), ...orden].filter(Boolean).join(', ').toLowerCase()
 }
 
 export type AvisoEscaneo = { aviso: Aviso; voz: string }
@@ -100,6 +126,14 @@ export function avisoDe(fin: FinDeEscaneo): AvisoEscaneo {
     // una unidad más, así que el número se repite. Decir «repetido» acá era pedirle a quien camina
     // que entienda la diferencia entre dos prendas iguales y un Enter duplicado.
     case 'doble-lectura':
+      if (fin.nombre !== undefined) {
+        // ⚠️ El rebote ⛔ habla: si hablara, cortaría el nombre que se está diciendo de la misma prenda.
+        if (fin.tipo === 'doble-lectura') return { aviso: 'ok', voz: '' }
+        // 🔑 La repetida suena DISTINTO (dos pitidos) y dice «otra vez» (Darío, 11-oct-2026): sin
+        // preguntas ni botones, la empleada ⛔ se frena y queda en el reporte como duplicada.
+        if (fin.repetida || fin.tipo === 'sumado') return { aviso: 'suma', voz: 'otra vez' }
+        return { aviso: 'ok', voz: fin.nombre }
+      }
       return { aviso: 'ok', voz: fin.avance ? enPalabras(fin.avance) : '' }
 
     // 🔴 **⛔ NO DETECTADA**: lo único que hay para hacer es **pasarla de nuevo**, y es lo único que

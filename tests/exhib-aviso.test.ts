@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { avisoDe, enPalabras } from '../lib/exhib/aviso'
+import { avisoDe, enPalabras, nombreParaDecir } from '../lib/exhib/aviso'
 
 describe('enPalabras — el número se canta, ⛔ no se lee', () => {
   it('los chicos', () => {
@@ -83,5 +83,39 @@ describe('avisoDe — son DOS avisos, y eso es todo lo que se oye', () => {
 
   it('un final que nadie sonorizó ⛔ no rompe el recorrido', () => {
     expect(avisoDe({ tipo: 'algo-nuevo' })).toEqual({ aviso: 'ok', voz: '' })
+  })
+})
+
+/**
+ * 🗣️ **El nombre en vez del número** (Darío, 11-oct-2026): en el chequeo libre se dice la prenda; la
+ * variante que ya se leyó en el recorrido suena distinto y dice «otra vez».
+ */
+describe('avisoDe con el nombre de la prenda', () => {
+  it('la detectó ⇒ dice la prenda, ⛔ el número', () => {
+    expect(avisoDe({ tipo: 'ok', avance: 12, nombre: 'blusa milano, negro, talle s' })).toEqual({ aviso: 'ok', voz: 'blusa milano, negro, talle s' })
+    expect(avisoDe({ tipo: 'stock-cero', avance: 12, nombre: 'top x' }).voz).toBe('top x')
+  })
+
+  it('ya leída ⇒ dos pitidos y «otra vez», en el mismo lugar o en otro', () => {
+    expect(avisoDe({ tipo: 'sumado', veces: 2, avance: 13, nombre: 'top x' })).toEqual({ aviso: 'suma', voz: 'otra vez' })
+    expect(avisoDe({ tipo: 'ok', avance: 13, nombre: 'top x', repetida: true })).toEqual({ aviso: 'suma', voz: 'otra vez' })
+  })
+
+  it('el rebote del lector ⛔ habla: cortaría el nombre de la misma prenda', () => {
+    expect(avisoDe({ tipo: 'doble-lectura', veces: 1, avance: 13, nombre: 'top x' })).toEqual({ aviso: 'ok', voz: '' })
+  })
+
+  it('⛔ la detectó ⇒ sigue «de nuevo»; sin nombre (por categoría) sigue el número', () => {
+    expect(avisoDe({ tipo: 'no-cruzo', nombre: '' })).toEqual({ aviso: 'no', voz: 'de nuevo' })
+    expect(avisoDe({ tipo: 'ok', avance: 12 }).voz).toBe('doce')
+  })
+})
+
+describe('nombreParaDecir', () => {
+  it('en minúscula, con el talle dicho y sin «Variante Única»', () => {
+    expect(nombreParaDecir('BLUSA MARLA', 'S - BLANCO')).toBe('blusa marla, blanco, talle s')
+    expect(nombreParaDecir('BERMUDA FOUR', '38')).toBe('bermuda four, talle 38')
+    expect(nombreParaDecir('BABY TEE EXPENSIVE', 'Variante Única')).toBe('baby tee expensive')
+    expect(nombreParaDecir('TOP ORSA', 'Chocolate')).toBe('top orsa, chocolate')
   })
 })

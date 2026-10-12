@@ -24,7 +24,7 @@ import { ElegirVoz } from './ElegirVoz'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 import { useActividad } from '@/components/mapa-local/useMapaLocalDatos'
-import { avisoDe } from '@/lib/exhib/aviso'
+import { avisoDe, nombreParaDecir } from '@/lib/exhib/aviso'
 import { avisar, estadoSonido, prepararSonido, type EstadoSonido } from '@/lib/sonido'
 
 /**
@@ -184,25 +184,25 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
    * además el único momento en que se comprueba que el teléfono **no está en silencio**, que es la
    * forma más fácil de que el recorrido entero pase mudo sin que nadie se entere.
    *
-   * ⚠️ Van espaciados ~1,2 s: encimados ⛔ no se distinguen, que es justo lo que se viene a probar.
+   * ⚠️ Van espaciados ~2,2 s (un nombre es más largo que un número): encimados ⛔ no se distinguen, que es justo lo que se viene a probar.
    */
   function escucharAvisos() {
     prepararSonido()
     // ⚠️ Se pregunta DESPUÉS de un respiro: reanudar el audio es asíncrono, y preguntando en el
     // mismo suspiro diría «bloqueado» sobre un teléfono que está por sonar perfecto.
     window.setTimeout(() => setAudio(estadoSonido()), 400)
-    // ⚠️ Son **dos**, y el primero va con avances crecientes: lo único que hay que reconocer de oído
-    // es que el número sube. Con todos en el mismo número la prueba ⛔ no enseñaría nada.
-    const demo: Array<{ tipo: string; avance?: number }> = [
-      { tipo: 'ok', avance: 12 },
-      { tipo: 'ok', avance: 13 },
+    // ⚠️ Son los tres que hay que reconocer de oído: el nombre, la repetida y la que ⛔ leyó.
+    const demo: Array<{ tipo: string; nombre?: string; repetida?: boolean }> = [
+      { tipo: 'ok', nombre: nombreParaDecir('BLUSA MILANO', 'NEGRO - S') },
+      { tipo: 'ok', nombre: nombreParaDecir('BLUSA MILANO', 'NEGRO - S'), repetida: true },
       { tipo: 'no-cruzo' },
     ]
     demo.forEach((d, i) => {
       window.setTimeout(() => {
         const a = avisoDe(d)
         avisar(a.aviso, a.voz)
-      }, i * 1200)
+        // Un nombre tarda más que un número: con 1,2 s el siguiente lo cortaba.
+      }, i * 2200)
     })
   }
 
@@ -210,7 +210,11 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     // ⚠️ `avance` y `parecidos` viajan adentro del resultado y ⛔ no se calculan acá: el primero sale
     // de la ref de la cola —la única que ya tiene el escaneo recién hecho— y el segundo decide entre
     // «no figura» y «pasala de nuevo».
-    const a = avisoDe(r)
+    // 🗣️ Dice la prenda en vez del número (Darío, 11-oct-2026). `it` puede faltar en un repetido
+    // que ⛔ cruzó: ahí el nombre sale del escaneo guardado.
+    const it = 'it' in r ? r.it : null
+    const nombre = it ? nombreParaDecir(it.name, it.size) : 'e' in r && r.e.product_name ? nombreParaDecir(r.e.product_name, r.e.size) : ''
+    const a = avisoDe({ ...r, nombre })
     avisar(a.aviso, a.voz)
     return r
   }
@@ -407,9 +411,10 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               {/* 🔑 Son dos cosas y se dicen en dos renglones: la persona que lo lee está por salir a
                   caminar el salón, ⛔ no estudiando la pantalla. */}
               <span>
-                Mientras escaneás <b>no hace falta mirar el teléfono</b>. Son dos avisos:<br />
-                • <b>Un pitido y un número</b> (doce, trece, catorce…) = la detectó. <b>Si el número sube, escaneó bien.</b><br />
-                • <b>Un pitido grave y «de nuevo»</b> = ⛔ no la detectó: pasá la prenda otra vez.
+                Mientras escaneás <b>no hace falta mirar el teléfono</b>. Son tres avisos:<br />
+                • <b>Un pitido y el nombre de la prenda</b> = la detectó. Si dice otra prenda, la etiqueta está cambiada.<br />
+                • <b>Dos pitidos y «otra vez»</b> = esa variante ya se escaneó. Seguí: queda en el reporte.<br />
+                • <b>Un pitido grave y «de nuevo»</b> = ⛔ no la detectó: pasá la prenda de nuevo.
               </span>
               <Button size="sm" variant="outline" onClick={escucharAvisos}>Escuchar los avisos</Button>
             </div>

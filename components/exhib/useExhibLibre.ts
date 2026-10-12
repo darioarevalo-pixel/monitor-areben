@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Marca } from '@/lib/nav'
 import { candidatosPorCodigo, coincidencias } from '@/lib/exhib/core'
 import { leerLugares } from '@/lib/exhib/cliente'
-import { aEscaneo, avanceDelRecorrido, contarEnLugar, lugaresSugeridos, nuevoRecorridoId, type EscaneoLibre } from '@/lib/exhib/libre'
+import { aEscaneo, avanceDelRecorrido, unidadesVistas, contarEnLugar, lugaresSugeridos, nuevoRecorridoId, type EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useColaEscaneos } from './useColaEscaneos'
 
@@ -21,7 +21,7 @@ const clave = (m: Marca) => 'monitor_exhib_libre_' + m
 /** Lo que contesta un escaneo, para el feedback de la pantalla. */
 export type ResultadoLibre =
   /** `avance` = unidades que van en el recorrido. Es el número que se canta. Ver `avisoDe`. */
-  | { tipo: 'ok'; it: ExhibItem; e: EscaneoLibre; avance: number }
+  | { tipo: 'ok'; it: ExhibItem; e: EscaneoLibre; avance: number; repetida: boolean }
   /** Ya estaba en este lugar y **se le sumó una unidad**: hay dos colgadas, y eso es el dato. */
   | { tipo: 'sumado'; it: ExhibItem | null; e: EscaneoLibre; veces: number; avance: number }
   /**
@@ -31,7 +31,7 @@ export type ResultadoLibre =
    */
   | { tipo: 'doble-lectura'; it: ExhibItem | null; e: EscaneoLibre; veces: number; avance: number }
   /** Existe y está colgada, pero el sistema la tiene en cero. Se guarda como `encontrado`, con qty 0. */
-  | { tipo: 'stock-cero'; it: ExhibItem; e: EscaneoLibre; avance: number }
+  | { tipo: 'stock-cero'; it: ExhibItem; e: EscaneoLibre; avance: number; repetida: boolean }
   /**
    * El código ⛔ no enganchó a UNA sola prenda. **Se guarda igual**, con el código crudo.
    *
@@ -70,7 +70,9 @@ export function useExhibLibre(marca: Marca, buscables: ExhibItem[]) {
       if (r.que === 'doble-lectura') return { tipo: 'doble-lectura', it, e, veces: r.veces, avance }
       if (r.que === 'sumado') return { tipo: 'sumado', it, e, veces: r.veces, avance }
       if (!it) return { tipo: 'no-cruzo', e }
-      return it.qty <= 0 ? { tipo: 'stock-cero', it, e, avance } : { tipo: 'ok', it, e, avance }
+      // 🔑 «Otra vez» es en TODO el recorrido: la misma variante en otro lugar también ocupa dos perchas.
+      const repetida = (unidadesVistas(cola.ref.current.escaneos).get(e.variante_id) ?? 0) > 1
+      return it.qty <= 0 ? { tipo: 'stock-cero', it, e, avance, repetida } : { tipo: 'ok', it, e, avance, repetida }
     },
     [cola],
   )

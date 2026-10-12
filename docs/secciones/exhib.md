@@ -78,6 +78,14 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > `localStorage` de ese teléfono (`monitor_voz`). Vale para TODAS las pantallas que usan `decir`.
 > Si ⛔ hay mejorada/premium, la pantalla dice cómo bajarla en Ajustes del iPhone.
 
+> 🗣️ **En el libre, la voz dice la PRENDA y ⛔ el número (11-oct-2026, Darío)** — «blusa milano,
+> negro, talle s» (`nombreParaDecir` en `aviso.ts`: minúscula, color antes que talle, «talle» delante).
+> Así se confirma que leyó Y se nota una etiqueta cambiada. 🔑 **La variante ya leída en el recorrido
+> (en cualquier lugar) suena con dos pitidos y dice «otra vez»**, sin frenar: queda como duplicada en
+> el reporte. El rebote del lector (<600 ms) ⛔ habla, para no cortar el nombre. ⚠️ Esto **reemplaza**
+> la regla del 20-sep «el número que sube es la confirmación» SÓLO en el libre; el modo por
+> categoría (sin `nombre`) sigue cantando el número. Lo de abajo sobre el número es historia.
+
 **Son DOS recorridos distintos**, no dos vistas del mismo:
 
 | | **Por categoría** (el viejo) | **Libre por lugar** (19-sep-2026) |
