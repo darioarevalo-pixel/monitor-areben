@@ -9,7 +9,7 @@ describe('reporteValido', () => {
     expect(reporteValido({ tipo: 'falta', texto: 'x', seccion: 'a'.repeat(200) }).seccion).toHaveLength(80)
   })
   it('🔴 sin tipo válido, sin texto o con texto de más ⇒ error con el motivo', () => {
-    expect(() => reporteValido({ tipo: 'otro', texto: 'x' })).toThrow(/falta o un problema/)
+    expect(() => reporteValido({ tipo: 'otro', texto: 'x' })).toThrow(/problema o una mejora/)
     expect(() => reporteValido({ tipo: 'falta', texto: '   ' })).toThrow(/Contá/)
     expect(() => reporteValido({ tipo: 'falta', texto: 'x'.repeat(4001) })).toThrow(/4000/)
     expect(() => reporteValido(null)).toThrow()

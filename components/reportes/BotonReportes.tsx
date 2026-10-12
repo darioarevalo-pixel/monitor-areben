@@ -39,7 +39,7 @@ export function BotonReportes({ seccion, admin, lado = 'derecha' }: { seccion: s
     try {
       await crearReporte({ tipo, texto, seccion, url: typeof window !== 'undefined' ? window.location.pathname + window.location.search : null })
       setTexto('')
-      setMsg({ tono: 'success', texto: 'Guardado. Gracias: queda registrado para revisarlo.' })
+      setMsg({ tono: 'success', texto: 'Guardado. Queda registrado para revisarlo.' })
       if (admin) setLista(await leerReportes())
     } catch (e) {
       setMsg({ tono: 'danger', texto: (e as Error).message })
@@ -66,7 +66,7 @@ export function BotonReportes({ seccion, admin, lado = 'derecha' }: { seccion: s
           setAbierto(true)
           setMsg(null)
         }}
-        title="Ayuda / problemas: dejá registrado algo que falta o un problema"
+        title="Reportar un problema o proponer una mejora"
         style={{
           position: 'fixed',
           bottom: 16,
@@ -84,19 +84,19 @@ export function BotonReportes({ seccion, admin, lado = 'derecha' }: { seccion: s
           cursor: 'pointer',
         }}
       >
-        ? Ayuda / problemas
+        Reportar un problema
       </button>
       {abierto && (
-        <Modal abierto onCerrar={() => setAbierto(false)} titulo="Ayuda / problemas" ancho={admin ? 'xl' : undefined}>
+        <Modal abierto onCerrar={() => setAbierto(false)} titulo="Reportar un problema" ancho={admin ? 'xl' : undefined}>
           <div style={{ display: 'grid', gap: space[3] }}>
             <div style={{ display: 'flex', gap: space[2] }}>
               {(['problema', 'falta'] as const).map((t) => (
                 <Button key={t} size="sm" variant={tipo === t ? 'solid' : 'outline'} tone={tipo === t ? 'brand' : 'neutral'} onClick={() => setTipo(t)} aria-pressed={tipo === t}>
-                  {t === 'problema' ? 'Pasó un problema' : 'Falta mejorar algo'}
+                  {t === 'problema' ? 'Algo no funciona' : 'Propuesta de mejora'}
                 </Button>
               ))}
             </div>
-            <Field label={tipo === 'problema' ? '¿Qué pasó? Contá qué estabas haciendo.' : '¿Qué falta o qué mejorarías?'}>
+            <Field label={tipo === 'problema' ? '¿Qué pasó? Contá qué estabas haciendo.' : '¿Qué mejorarías?'}>
               <textarea
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
@@ -106,7 +106,7 @@ export function BotonReportes({ seccion, admin, lado = 'derecha' }: { seccion: s
                 data-foco
               />
             </Field>
-            <span style={{ fontSize: font.sm, color: color.mut }}>Se guarda con la pantalla donde estás{seccion ? ` (${seccion})` : ''} y tu usuario.</span>
+            <span style={{ fontSize: font.sm, color: color.mut }}>Se guarda con tu usuario y la pantalla en la que estás.</span>
             <div>
               <Button tone="brand" variant="solid" loading={guardando} disabled={!texto.trim()} onClick={guardar}>
                 Guardar
@@ -115,14 +115,14 @@ export function BotonReportes({ seccion, admin, lado = 'derecha' }: { seccion: s
             {msg && <Notice tone={msg.tono}>{msg.texto}</Notice>}
             {admin && (
               <div style={{ display: 'grid', gap: space[1.5], borderTop: `1px solid ${color.line}`, paddingTop: space[3] }}>
-                <b style={{ fontSize: font.base }}>Reportes{lista ? ` (${abiertos.length} abiertos)` : ''}</b>
+                <b style={{ fontSize: font.base }}>Reportes{lista ? ` · ${abiertos.length} ${abiertos.length === 1 ? 'abierto' : 'abiertos'}` : ''}</b>
                 {errLista && <Notice tone="danger">{errLista}</Notice>}
                 {!lista && !errLista && <span style={{ fontSize: font.sm, color: color.mut }}>Leyendo…</span>}
-                {lista && lista.length === 0 && <span style={{ fontSize: font.sm, color: color.mut }}>Ninguno todavía.</span>}
+                {lista && lista.length === 0 && <span style={{ fontSize: font.sm, color: color.mut }}>Reportes: ninguno.</span>}
                 {(lista ?? []).map((r) => (
                   <div key={r.id} style={{ display: 'grid', gap: space[0.5], padding: space[2], border: `1px solid ${color.line}`, borderRadius: radius.md, opacity: r.estado === 'resuelto' ? 0.6 : 1 }}>
                     <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm }}>
-                      <Badge tone={r.tipo === 'problema' ? 'danger' : 'warning'}>{r.tipo === 'problema' ? 'Problema' : 'Falta'}</Badge>
+                      <Badge tone={r.tipo === 'problema' ? 'danger' : 'warning'}>{r.tipo === 'problema' ? 'Problema' : 'Mejora'}</Badge>
                       <b>{r.autor}</b>
                       <span style={{ color: color.mut }}>{fechaCorta(r.creado_en)}</span>
                       {r.seccion && <span style={{ color: color.mut }}>· {r.seccion}</span>}

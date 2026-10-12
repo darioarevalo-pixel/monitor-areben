@@ -451,7 +451,9 @@ export function FilaRenglon({
   return (
     // Compacto (Bruno, 12-oct): tres prendas tienen que entrar a la vista sin scroll ⇒ foto de 36 px y talle,
     // código, stock y ubicación en UNA línea; los avisos, sólo si hay alguno.
-    <div style={{ display: 'grid', gridTemplateColumns: '36px minmax(0, 1fr) auto', columnGap: space[2], rowGap: space[1], padding: `${space[1.5]}px 0`, borderBottom: `1px solid ${color.bg2}` }}>
+    // La cruz va ARRIBA a la derecha, al lado del importe (Bruno, 12-oct): en la fila de los controles la
+    // hacía partir en dos renglones.
+    <div style={{ display: 'grid', gridTemplateColumns: '36px minmax(0, 1fr) auto 24px', columnGap: space[2], rowGap: space[1], padding: `${space[1.5]}px 0`, borderBottom: `1px solid ${color.bg2}` }}>
       <div style={{ gridRow: 'span 2' }}>
         <Foto src={r.foto} ancho={36} proporcion="1 / 1" />
       </div>
@@ -463,6 +465,17 @@ export function FilaRenglon({
         {conRebaja && <s style={{ display: 'block', color: color.mut2, fontSize: font.xs }}>{plata(lista as number)}</s>}
         <b style={{ fontSize: font.md, color: conRebaja ? color.successInk : color.ink }}>{importe != null ? plata(importe) : lista != null ? plata(lista) : '—'}</b>
       </div>
+      <button
+        type="button"
+        onClick={onSacar}
+        className="caja-sacar"
+        aria-label={`Sacar ${r.variante.product_name} · ${r.variante.size_name} del pedido`}
+        title="Sacar del pedido"
+        // La cruz en ROJO siempre (Bruno, 12-oct), ⛔ sólo al pasar el mouse.
+        style={{ gridRow: 'span 2', alignSelf: 'start', height: 24, width: 24, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', borderRadius: radius.md, color: color.danger, cursor: 'pointer', padding: 0 }}
+      >
+        <Icono nombre="cruz" size={16} />
+      </button>
       <div style={{ display: 'flex', gap: space[1.5], alignItems: 'center', flexWrap: 'wrap', fontSize: font.xs, color: color.mut, minWidth: 0 }}>
         <span style={{ fontSize: font.sm }}>{r.variante.size_name}</span>
         {(r.variante.sku ?? r.variante.barcode) && <span style={{ color: color.mut2 }}>· {r.variante.sku ?? r.variante.barcode}</span>}
@@ -483,14 +496,14 @@ export function FilaRenglon({
       </div>
       {/* B5 (Bruno, 11-oct): cambiar el precio es libre, pero se ve (y queda en la venta). */}
       {((r.precioLista != null && r.precio != null && Math.abs(r.precioLista - r.precio) > 0.004) || mirandoWeb || avisoWeb) && (
-        <div style={{ gridColumn: '2 / 4', display: 'flex', gap: space[1.5], flexWrap: 'wrap', alignItems: 'center', fontSize: font.xs }}>
+        <div style={{ gridColumn: '2 / 5', display: 'flex', gap: space[1.5], flexWrap: 'wrap', alignItems: 'center', fontSize: font.xs }}>
           {r.precioLista != null && r.precio != null && Math.abs(r.precioLista - r.precio) > 0.004 && <span style={{ color: color.warningInk }}>Precio cambiado: la etiqueta dice {plata(r.precioLista)}.</span>}
           {mirandoWeb && <span style={{ color: color.mut }}>Pedidos web: leyendo…</span>}
           {avisoWeb && <Badge tone={avisoWeb.tipo === 'sin_stock' ? 'danger' : 'warning'}>{avisoWeb.texto}</Badge>}
         </div>
       )}
       {/* Los controles van a lo ancho del renglón: con el precio editable ⛔ entran debajo del nombre. */}
-      <div style={{ gridColumn: '1 / -1', display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ gridColumn: '1 / -1', display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'nowrap' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', height: 28, border: `1px solid ${color.line2}`, borderRadius: radius.md, background: color.surface, flexShrink: 0 }}>
           {paso(-1, 'Una menos', '−')}
           <span style={{ minWidth: 28, textAlign: 'center', fontWeight: weight.semibold, fontSize: font.base, fontVariantNumeric: 'tabular-nums' }}>{r.cantidad}</span>
@@ -511,17 +524,6 @@ export function FilaRenglon({
           aria-label="Precio"
         />
         <CampoRebaja valor={r.rebaja ?? null} onCambio={onRebaja} chico />
-        <button
-          type="button"
-          onClick={onSacar}
-          className="caja-sacar"
-          aria-label={`Sacar ${r.variante.product_name} · ${r.variante.size_name} del pedido`}
-          title="Sacar del pedido"
-          // La cruz en ROJO siempre (Bruno, 12-oct), ⛔ sólo al pasar el mouse.
-          style={{ marginLeft: 'auto', height: 28, width: 28, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', borderRadius: radius.md, color: color.danger, cursor: 'pointer', flexShrink: 0 }}
-        >
-          <Icono nombre="cruz" size={16} />
-        </button>
       </div>
     </div>
   )
@@ -1508,17 +1510,18 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
 }
 
 /**
- * Cargar efectivo que SALE (un gasto, un retiro) o que ENTRA (B4: el cambio que trae alguien), con su
- * motivo. A8 (Bruno, 11-oct): lo carga la cuenta que abrió la caja o un admin (el servidor da 403).
+ * Cargar efectivo que SALE (un gasto, un pago, un retiro) o que ENTRA (B4: el cambio que trae alguien), con
+ * su motivo. A8 (Bruno, 11-oct): lo carga la cuenta que abrió la caja o un admin (el servidor da 403).
+ * 🔑 Bruno, 12-oct: DOS botones, «+ Salida» y «+ Ingreso», y adentro el motivo; en pantalla «ingreso», en
+ * la base sigue `aporte`.
  */
-export function SalidaModal({ onCerrar, onListo }: { onCerrar: () => void; onListo: (t: Turno) => void }) {
-  const [tipo, setTipo] = useState<'salida' | 'aporte'>('salida')
+export function SalidaModal({ tipo, onCerrar, onListo }: { tipo: 'salida' | 'aporte'; onCerrar: () => void; onListo: (t: Turno) => void }) {
   const [monto, setMonto] = useState('')
   const [motivo, setMotivo] = useState('')
   const [trabajando, setTrabajando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const montoN = aNumero(monto)
-  const accion = tipo === 'aporte' ? 'Cargar aporte' : 'Cargar salida'
+  const accion = tipo === 'aporte' ? 'Cargar ingreso' : 'Cargar salida'
   async function cargar() {
     setTrabajando(true)
     setError(null)
@@ -1535,7 +1538,7 @@ export function SalidaModal({ onCerrar, onListo }: { onCerrar: () => void; onLis
     <Modal
       abierto
       onCerrar={onCerrar}
-      titulo="Salida, gasto o aporte"
+      titulo={tipo === 'aporte' ? 'Ingreso de efectivo' : 'Salida de efectivo'}
       cerrarConFondo={false}
       pie={
         <>
@@ -1549,24 +1552,11 @@ export function SalidaModal({ onCerrar, onListo }: { onCerrar: () => void; onLis
       }
     >
       <div style={{ display: 'grid', gap: space[3] }}>
-        <div role="group" aria-label="Sale o entra efectivo" style={{ display: 'inline-flex', gap: 2, padding: 2, justifySelf: 'start', background: color.bg, border: `1px solid ${color.line2}`, borderRadius: radius.md }}>
-          {(['salida', 'aporte'] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              aria-pressed={tipo === t}
-              onClick={() => setTipo(t)}
-              style={{ height: 32, padding: `0 ${space[3]}px`, border: 0, borderRadius: radius.sm, background: tipo === t ? color.brandSolid : 'transparent', color: tipo === t ? '#fff' : color.ink2, fontWeight: weight.semibold, fontSize: font.base, cursor: 'pointer' }}
-            >
-              {t === 'salida' ? 'Sale efectivo (salida, gasto, pago)' : 'Entra efectivo (aporte)'}
-            </button>
-          ))}
-        </div>
-        <Field label="Monto">
-          <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" autoComplete="off" placeholder="$" data-foco />
-        </Field>
         <Field label="Motivo">
-          <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} autoComplete="off" placeholder={tipo === 'aporte' ? 'Cambio que trajo…' : 'Retiro para gerencia, compra de…'} />
+          <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} autoComplete="off" placeholder={tipo === 'aporte' ? 'Cambio que trajo…' : 'Gasto, pago a un proveedor, retiro para gerencia…'} data-foco />
+        </Field>
+        <Field label="Monto">
+          <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" autoComplete="off" placeholder="$" />
         </Field>
         {error && <Notice tone="danger">{error}</Notice>}
       </div>
@@ -1604,7 +1594,7 @@ function Movimiento({ m, puedeAnular, onCambio }: { m: SalidaTurno; puedeAnular:
   const [motivo, setMotivo] = useState('')
   const [trabajando, setTrabajando] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const nombre = (m.tipo ?? 'salida') === 'aporte' ? 'Aporte' : 'Salida'
+  const nombre = (m.tipo ?? 'salida') === 'aporte' ? 'Ingreso' : 'Salida'
   async function anular() {
     setTrabajando(true)
     setError(null)
@@ -1674,9 +1664,9 @@ export function ResumenTurnoDatos({
         <Dato rotulo="Ventas" valor={plata(r.total)} tono="brand" detalle={r.ventas === 1 ? '1 venta' : `${r.ventas} ventas`} />
         <Dato rotulo="Efectivo esperado" valor={plata(r.efectivo.esperado)} tono="success" detalle={`Fondo ${plata(r.efectivo.fondo)}`} />
         <Dato
-          rotulo={r.efectivo.aportes ? 'Salidas y aportes' : 'Salidas'}
+          rotulo={r.efectivo.aportes ? 'Salidas e ingresos' : 'Salidas'}
           valor={plata(r.efectivo.salidas)}
-          detalle={r.efectivo.aportes ? `Aportes ${plata(r.efectivo.aportes)}` : (() => { const n = (turno.salidas ?? []).filter((m) => !m.anulado_en && (m.tipo ?? 'salida') === 'salida').length; return n === 1 ? '1 salida' : `${n} salidas` })()}
+          detalle={r.efectivo.aportes ? `Ingresos ${plata(r.efectivo.aportes)}` : (() => { const n = (turno.salidas ?? []).filter((m) => !m.anulado_en && (m.tipo ?? 'salida') === 'salida').length; return n === 1 ? '1 salida' : `${n} salidas` })()}
         />
         <Dato
           rotulo={ultimoConteo ? `Último conteo ${horaAr(ultimoConteo.en)}` : 'Último conteo'}
@@ -1753,7 +1743,7 @@ export function ResumenTurnoDatos({
             <span>+ Efectivo cobrado {plata(r.efectivo.cobrado)}</span>
             {r.efectivo.cobradoGN > 0 && <span>+ Cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</span>}
             {!!r.efectivo.deEspera && <span>+ Efectivo de ventas que esperan la transferencia {plata(r.efectivo.deEspera)}</span>}
-            {!!r.efectivo.aportes && <span>+ Aportes {plata(r.efectivo.aportes)}</span>}
+            {!!r.efectivo.aportes && <span>+ Ingresos {plata(r.efectivo.aportes)}</span>}
             <span>− Salidas {plata(r.efectivo.salidas)}</span>
             <b>= Efectivo esperado {plata(r.efectivo.esperado)}</b>
           </div>
@@ -1797,7 +1787,7 @@ export function TurnoCaja({
   onCambio: (t?: Turno) => void
   onCerrado: (t: Turno) => void
 }) {
-  const [abierto, setAbierto] = useState<null | 'abrir' | 'contar' | 'salida' | 'cerrar'>(null)
+  const [abierto, setAbierto] = useState<null | 'abrir' | 'contar' | 'salida' | 'ingreso' | 'cerrar'>(null)
   const [cerrado, setCerrado] = useState<Turno | null>(null)
 
   if (!turno) {
@@ -1846,9 +1836,14 @@ export function TurnoCaja({
           </Button>
         )}
         {(esMio || admin) && (
-          <Button variant="outline" onClick={() => setAbierto('salida')}>
-            + Salida, gasto o aporte
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => setAbierto('salida')}>
+              + Salida
+            </Button>
+            <Button variant="outline" onClick={() => setAbierto('ingreso')}>
+              + Ingreso
+            </Button>
+          </>
         )}
         {/* Borde neutro y texto rojo (prototipo): avisa sin competir con la acción sólida. */}
         <Button variant="outline" onClick={() => setAbierto('cerrar')} style={{ '--_fg': color.danger } as React.CSSProperties}>
@@ -1941,7 +1936,7 @@ export function ModalesTurno({
   onCambio,
   onCerrado,
 }: {
-  que: null | 'abrir' | 'contar' | 'salida' | 'cerrar'
+  que: null | 'abrir' | 'contar' | 'salida' | 'ingreso' | 'cerrar'
   turno: Turno
   billetes: number[]
   onCerrar: () => void
@@ -1949,7 +1944,7 @@ export function ModalesTurno({
   onCerrado: (t: Turno) => void
 }) {
   if (que === 'contar') return <ConteoModal turno={turno} billetes={billetes} onCerrar={onCerrar} onListo={onCambio} />
-  if (que === 'salida') return <SalidaModal onCerrar={onCerrar} onListo={onCambio} />
+  if (que === 'salida' || que === 'ingreso') return <SalidaModal tipo={que === 'ingreso' ? 'aporte' : 'salida'} onCerrar={onCerrar} onListo={onCambio} />
   if (que === 'cerrar') return <CerrarTurnoModal turno={turno} billetes={billetes} onCerrar={onCerrar} onCerrado={onCerrado} />
   return null
 }

@@ -777,7 +777,7 @@ function POS() {
   const [enCobro, setEnCobro] = useState(false)
   // «Contar billetes», «Cargar salida» y «Cerrar turno» abren SÓLO su modal (Bruno, 5-oct: la tarjeta del
   // turno repetida arriba duplicaba la información de la pestaña).
-  const [panelTurno, setPanelTurno] = useState<null | 'contar' | 'salida' | 'cerrar'>(null)
+  const [panelTurno, setPanelTurno] = useState<null | 'contar' | 'salida' | 'ingreso' | 'cerrar'>(null)
   const [cerradoAca, setCerradoAca] = useState<Turno | null>(null)
   // B1: la lista de ventas del turno, con «Reimprimir».
   const [verVentas, setVerVentas] = useState(false)
@@ -920,7 +920,10 @@ function POS() {
             Contar billetes
           </button>
           <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('salida')} style={{ height: 36 }}>
-            + Salida, gasto o aporte
+            + Salida
+          </button>
+          <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('ingreso')} style={{ height: 36 }}>
+            + Ingreso
           </button>
           <button type="button" className="pos-tbtn peligro" onClick={() => setPanelTurno('cerrar')} style={{ height: 36 }}>
             Cerrar caja
