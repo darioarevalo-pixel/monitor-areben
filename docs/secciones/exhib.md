@@ -112,7 +112,7 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > (D07, 150 cm) sale como DOS percheros, D07 y D08 (Darío: «yo los separaría»). El botón de cierre
 > dice **«Finalizar»** y ⛔ hay «Excel» mientras se escanea (se baja desde «Ver»). 🔴 **Del mapa se toman sólo
 > los NOMBRES**: el 10-oct se movió todo y el mapa ⛔ se actualizó, así que cada perchero ofrece
-> SIEMPRE Arriba / Abajo (+ «Única» si el mapa lo tiene de una barra) y elige quien está delante.
+> SIEMPRE Arriba / Abajo (⛔ «Única»: no se usa, Darío) y elige quien está delante.
 > 🔑 **Frontal es un botón al lado de la ubicación** que marca la BARRA de adelante (Darío: «D03
 > arriba es frontal y abajo normal»): se guarda `D03 arriba frontal`, lo repetido ahí ⛔ va a
 > «Variantes duplicadas» (`esFrontal` en `reporte.ts`) pero cuenta como exhibido, y se APAGA solo

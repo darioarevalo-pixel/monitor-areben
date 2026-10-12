@@ -52,8 +52,12 @@ describe('siguienteLugar', () => {
     expect(siguienteLugar(P, 'D01 abajo', esc('ISLA', 'D01 arriba', 'D01 abajo', 'D02 abajo frontal'))).toBe('D07 arriba')
   })
   it('al final vuelve al salteado; con todo hecho, ninguno', () => {
-    expect(siguienteLugar(P, 'D08 abajo', esc('I01 arriba', 'ISLA', 'D01 abajo', 'D02 arriba', 'D07 abajo', 'D08 abajo'))).toBe('I02')
-    expect(siguienteLugar(P, 'D08 abajo', esc('I01 arriba frontal', 'I02', 'ISLA', 'D01 abajo', 'D02 arriba', 'D07 abajo', 'D08 abajo'))).toBeNull()
+    expect(siguienteLugar(P, 'D08 abajo', esc('I01 arriba', 'ISLA', 'D01 abajo', 'D02 arriba', 'D07 abajo', 'D08 abajo'))).toBe('I02 arriba')
+    expect(siguienteLugar(P, 'D08 abajo', esc('I01 arriba frontal', 'I02 abajo', 'ISLA', 'D01 abajo', 'D02 arriba', 'D07 abajo', 'D08 abajo'))).toBeNull()
+  })
+  it('🔑 todo perchero tiene arriba y abajo, aunque el mapa diga una sola barra (I02)', () => {
+    expect(P.find((p) => p.codigo === 'I02')!.doble).toBe(true)
+    expect(siguienteLugar(P, 'I02 arriba', esc('I02 arriba'))).toBe('I02 abajo')
   })
   it('cuenta los percheros que faltan', () => {
     expect(percherosPendientes(P, esc('I01 abajo frontal', 'ISLA'))).toBe(5)

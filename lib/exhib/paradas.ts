@@ -26,7 +26,7 @@ export type Perchero = {
   /** Lo que se lee en la lista y se guarda: `D07`. Un doble largo del mapa sale como D07 y D08. */
   nombre: string
   isla: boolean
-  /** El mapa le conoce dos barras: la flecha pasa de arriba a abajo antes de ir al siguiente. */
+  /** Tiene arriba y abajo (todos menos la isla): la flecha pasa de arriba a abajo antes de ir al siguiente. */
   doble: boolean
 }
 
@@ -42,7 +42,9 @@ export function percherosDelChequeo(mapa: Pick<MapaLocal, 'modulos'> | null): Pe
   for (const m of mapa?.modulos ?? []) {
     const e = leerEspacio(m.codigo)
     if (!e) continue
-    const doble = e.pared !== 'isla' && m.niveles.some((n) => n.pos === 'alta' || n.pos === 'baja')
+    // 🔑 Todo perchero tiene Arriba y Abajo (Darío, 12-oct-2026: «Única no la usamos»): ⛔ se le cree al
+    // mapa, que tenía I02 con una sola barra.
+    const doble = e.pared !== 'isla'
     // 🔑 Un perchero de DOBLE LARGO del mapa (`D07`, 150 cm) se ofrece como DOS: D07 y D08 (Darío,
     // 12-oct-2026: «yo los separaría»). En el salón se escanea por número.
     const numeros = e.pared !== 'isla' && (m.anchoCm ?? 0) >= 150 ? [e.numero, e.numero + 1] : [e.numero]

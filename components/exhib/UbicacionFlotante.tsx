@@ -11,7 +11,7 @@ import { claveLugar, conFrontal, esFrontal, lugarDeParada, percherosHechos, perc
  * sigue. El botón **Frontal** marca la barra de adelante como exhibición frontal (lo repetido ahí ⛔
  * es duplicado) y se apaga solo al cambiar de barra. La lógica vive en `lib/exhib/paradas.ts`.
  *
- * 🔑 **Cada perchero ofrece SIEMPRE Arriba y Abajo** (y «Única» si el mapa lo tiene de una barra): el mapa
+ * 🔑 **Cada perchero ofrece SIEMPRE Arriba y Abajo** (⛔ «Única»: no se usa, Darío 12-oct): el mapa
  * guardado puede estar viejo (el 10-oct se movió todo y ⛔ se actualizó), así que elige quien está
  * delante, ⛔ el mapa.
  * 🔑 **Un perchero ya escaneado ⛔ se ofrece** al pasar a otro: queda tras «Ver los ya escaneados».
@@ -49,7 +49,7 @@ export function UbicacionFlotante({ percheros, lugar, escaneos, onElegir }: { pe
   }
 
   const posiciones = (p: Perchero): [PosParada, string][] =>
-    p.isla ? [['simple', 'ISLA']] : [...(p.doble ? [] : ([['simple', 'Única']] as [PosParada, string][])), ['alta', 'Arriba'], ['baja', 'Abajo']]
+    p.isla ? [['simple', 'ISLA']] : [['alta', 'Arriba'], ['baja', 'Abajo']]
   const frontal = esFrontal(lugar)
 
   return (
