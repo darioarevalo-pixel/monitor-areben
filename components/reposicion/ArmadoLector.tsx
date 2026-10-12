@@ -40,7 +40,7 @@ import type { RepoItem } from '@/lib/reposicion/tipos'
 import { Badge, Button, Modal, Notice, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 type Guardado = 'ok' | 'guardando' | 'error'
-type Cartel = { titulo: string; texto: string }
+type Cartel = { titulo: string; texto: string; nombre?: string }
 
 const claveLocal = (id: string) => `monitor_repo_armado_${id}`
 
@@ -161,7 +161,7 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
       setCartel({ titulo: 'Artículo excedente', texto: `${l.linea.name}${talle(l.linea.size) ? ` ${talle(l.linea.size)}` : ''}: ya están las ${l.linea.cant}.` })
       avisar('no', 'Excedente')
     } else if (l.tipo === 'no-pedida') {
-      setCartel({ titulo: 'Artículo NO solicitado', texto: `${l.nombre} no está en la ${devolucion ? 'devolución' : 'reposición'} de hoy.` })
+      setCartel({ titulo: 'Artículo NO solicitado', texto: `Este producto no se encuentra en la ${devolucion ? 'devolución' : 'reposición'} de hoy.`, nombre: l.nombre })
       avisar('no', 'No solicitado')
     } else {
       setCartel({ titulo: 'Código desconocido', texto: `«${codigo.trim()}» no corresponde a ninguna prenda.` })
@@ -444,8 +444,8 @@ function CartelFreno({ cartel, extra, onSeguir }: { cartel: Cartel; extra: numbe
       <div style={{ maxWidth: 600, textAlign: 'center' }}>
         <div style={{ fontSize: 56, lineHeight: 1 }}>✋</div>
         <div style={{ fontSize: 32, fontWeight: 800, marginTop: space[3] }}>{cartel.titulo}</div>
+        {cartel.nombre && <div style={{ fontSize: font.md, marginTop: space[2], opacity: 0.85 }}>{cartel.nombre}</div>}
         <div style={{ fontSize: font.lg, marginTop: space[3] }}>{cartel.texto}</div>
-        <div style={{ fontSize: font.lg, marginTop: space[3], fontWeight: 600 }}>Dejalo en el estante: está de más.</div>
         {extra > 0 && (
           <div style={{ fontSize: font.md, marginTop: space[3], padding: space[3], background: 'rgba(0,0,0,.2)', borderRadius: 'var(--mo-r-xl)' }}>
             {extra === 1 ? '1 lectura' : `${extra} lecturas`} con este aviso abierto: no {extra === 1 ? 'se contó' : 'se contaron'}. Volvé a escanear.
