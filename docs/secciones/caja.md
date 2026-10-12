@@ -33,7 +33,8 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - 🔴 **En el `POST /ventas`, `items[].discount` son PESOS; en las ventas del POS de GN, %.** Medido
   con ventas reales (#30046/#30047). Cualquier lector de ventas tiene que mirar `integration_source`.
 - 🔴 **GN ⛔ acepta descuento negativo** ⇒ el redondeo PARA ARRIBA se suma al `unit_price`, y en el
-  ticket se llama «Recargo por redondeo» (Bruno, 4-oct). Feria TC (recargo) ⛔ se cobra en la Caja.
+  ticket se llama «Recargo por redondeo» (Bruno, 4-oct). El recargo de la OFERTA con tarjeta viaja igual:
+  el total pasa la lista y lo que sobra se suma al `unit_price` (`armarVentaGN`).
 - 🔑 **El id de la venta es el `integration_id` de GN, nace con el carrito y vive en el
   `localStorage` con él.** Reintentar con el mismo id ⇒ GN contesta 409 = «ya está». Se renueva sólo
   cuando el servidor contestó: renovarlo antes de saber es la forma de duplicar una venta.
@@ -79,6 +80,18 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   viaja como `{ tipo: 'pesos', valor, sinFeria: true }` y `cobro()` ⛔ le da parte al pago de la cuenta
   de feria (`rebajaDeVenta`). Mixto por transferencia son DOS pagos de
   transferencia y UNA transferencia de la clienta: se espera la suma (`montoAEsperar`).
+- 🔑 **CÓMO SE COBRA LA OFERTA, por forma de pago (Bruno, 12-oct)** — en pantalla «oferta», en el código
+  sigue `feria`. Un admin lo elige en «Productos en oferta» ⇒ «Cómo se cobra la oferta» (`reglas.oferta`,
+  acción `bajadas`, `normalizarOferta`): efectivo/transferencia `final` (cuenta de feria, sin el %) ·
+  `descuento` (la oferta suma el % de la forma de pago: todo a la cuenta normal) · `no`; débito/crédito
+  `recargo` (cuenta **25869 «Feria TC»**, +`recargo` % SÓLO sobre la parte en oferta) · `descuento` · `no`.
+  Sin `reglas.oferta`, lo de antes: efectivo y transferencia a precio final, tarjetas no. 🔴 La 25869 es la
+  ÚNICA cuenta con recargo y su % sale de `reglas.oferta` (`reglaDeCuenta`); débito y crédito comparten esa
+  cuenta ⇒ el ticket dice «Tarjeta». ⚠️ Con un pedido mixto, `armarVentaGN` reparte el total por el peso de
+  cada prenda: el TOTAL cierra, pero el recargo ⛔ queda pegado sólo a la prenda en oferta en GN. ▶️ Verificar
+  en GN que la 25869 sirve también para débito (el token de GN de la Mac daba 401 el 12-oct). El texto de
+  las tarjetas («No aplica a productos en oferta», «+10% en productos en oferta») sale de la misma config.
+  Se muda a la lista de precios del local cuando exista (`PENDIENTES.md`).
 - 🔑 **La cajera ve CUATRO formas de pago; la cuenta de GN es INTERNA** (Bruno, 4-oct). `cuentaDeMedio`
   (`core.core.js`) la resuelve con `caja_config.reglas.medios` (`sql/migrate-caja-medios.sql`):
   Efectivo 12921 · Débito 20196 · Transferencia ⇒ `transferenciaA` · Crédito ⇒ 25172 (−10 %) sólo si la

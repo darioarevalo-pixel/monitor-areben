@@ -76,7 +76,7 @@ import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
-import { REGLAS_INICIALES, armarVentaGN, cobro, exigirCuentas, exigirFeria, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
+import { REGLAS_INICIALES, armarVentaGN, cobro, exigirCuentas, exigirFeria, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, normalizarOferta, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { promosDeCreditoEnMostrador } from '../lib/agenda/promos.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { cuentasDe, pagosDelDia, ponerEnUso, usosDe } from './_pagos-recibidos.js'
@@ -640,6 +640,14 @@ export default async function handler(req, res) {
             lista.push({ id: idP, nombre: String((x && x.nombre) || '').slice(0, 200) })
           }
           nuevas.feriaProductos = lista
+        }
+        // Cómo se cobra la oferta por forma de pago (Bruno, 12-oct): la configuración entera, validada.
+        if (b.oferta != null) {
+          try {
+            nuevas.oferta = normalizarOferta(b.oferta)
+          } catch (e) {
+            return res.status(400).json({ error: e.message })
+          }
         }
         if (b.billetes != null) {
           try {

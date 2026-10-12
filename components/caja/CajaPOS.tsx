@@ -49,7 +49,7 @@ import { imagenDe, matchTn } from '@/lib/tn'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
-import { MSJ_FERIA, NOMBRE_MEDIO, aPagarDe, baseParaMonto, cobro, cuentaDeMedio, idsDeFeria, nombreParaTicket, pagosDeMedio, renglones, subtotalDeFeria } from '@/lib/caja/core.core.js'
+import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, idsDeFeria, nombreParaTicket, pagosDeMedio, renglones, subtotalDeFeria } from '@/lib/caja/core.core.js'
 import { hoyIso, promosDeCreditoEnMostrador } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
@@ -1064,7 +1064,7 @@ function POS() {
                         size="sm"
                         aria-pressed={varios}
                         disabled={trabaFeria && !varios}
-                        title={trabaFeria ? 'En feria, un solo pago: efectivo o transferencia' : undefined}
+                        title={trabaFeria ? 'Con productos en oferta, un solo pago' : undefined}
                         onClick={() => {
                           setVarios(!varios)
                           setPagos(varios ? [{ medio: null, base: '' }] : [{ medio: pagos[0].medio, base: '' }, { medio: null, base: '' }])
@@ -1080,11 +1080,13 @@ function POS() {
                     // Con «Varios pagos» las cuatro tarjetas siguen a la vista, apagadas (prototipo del 6-oct):
                     // las formas de pago se eligen en cada fila de abajo.
                     <div style={{ display: 'grid', gap: space[2] }}>
-                    {hayFeria && <Notice tone="warning">Hay prendas de feria: van a precio final. Se cobra con efectivo o transferencia; la parte de feria va a su cuenta, sin el %.</Notice>}
+                    {hayFeria && <Notice tone="warning">Hay productos en oferta. {msjOferta(reglas)}.</Notice>}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: space[2] }}>
                       {MEDIOS.map((medio) => {
                         const activa = !varios && pagos[0].medio === medio
-                        const trabada = trabaFeria && (medio === 'debito' || medio === 'credito')
+                        // Lo que dice cada tarjeta con oferta sale de la configuración (Bruno, 12-oct: «es dinámico, obvio»).
+                        const modoOferta = hayFeria ? ofertaDe(reglas)[medio] : null
+                        const trabada = modoOferta === 'no'
                         const apagada = trabada || varios
                         const cuenta = reglas?.medios ? (() => { try { return cuentaDe(medio, reglas) } catch { return 0 } })() : 0
                         const regla = cuenta ? reglas?.cuentas[cuenta] : undefined
@@ -1096,7 +1098,7 @@ function POS() {
                             onClick={() => setPagos([{ medio, base: '' }])}
                             aria-pressed={activa}
                             disabled={apagada}
-                            title={trabada ? MSJ_FERIA : varios ? 'Con «Varios pagos», la forma de pago se elige en cada pago' : undefined}
+                            title={trabada ? msjOferta(reglas) : varios ? 'Con «Varios pagos», la forma de pago se elige en cada pago' : undefined}
                             className="caja-tarjeta"
                             style={{
                               height: 'auto',
@@ -1119,9 +1121,12 @@ function POS() {
                               <span style={{ fontSize: font.md, fontWeight: weight.semibold, color: color.ink }}>{NOMBRE_MEDIO[medio]}</span>
                               <span style={{ fontSize: font.xs, color: color.mut }}>{regla?.nombre ?? '—'}</span>
                               {trabada ? (
-                                <span style={{ fontSize: font.xs, color: color.warningInk, fontWeight: weight.bold }}>No va con prendas de feria</span>
+                                <span style={{ fontSize: font.xs, color: color.warningInk, fontWeight: weight.bold }}>No aplica a productos en oferta</span>
                               ) : (
-                                regla && regla.descuento > 0 && <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{regla.descuento}% de descuento{hayFeria ? ' (sin la oferta)' : ''}</span>
+                                <>
+                                  {regla && regla.descuento > 0 && <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{regla.descuento}% de descuento{modoOferta && modoOferta !== 'descuento' ? ' (sin la oferta)' : ''}</span>}
+                                  {modoOferta === 'recargo' && <span style={{ fontSize: font.xs, color: color.warningInk, fontWeight: weight.semibold }}>+{ofertaDe(reglas).recargo}% en productos en oferta</span>}
+                                </>
                               )}
                             </span>
                             <span style={{ fontSize: font.lg, fontWeight: weight.bold, color: color.ink, fontVariantNumeric: 'tabular-nums' }}>

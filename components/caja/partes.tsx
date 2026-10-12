@@ -6,7 +6,7 @@
  */
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { NOMBRE_MEDIO, medioDeCuenta } from '@/lib/caja/core.core.js'
+import { MODOS_OFERTA, NOMBRE_MEDIO, medioDeCuenta, msjOferta, ofertaDe } from '@/lib/caja/core.core.js'
 import { numeroProvisorio, plata, type LogoTicket } from '@/lib/caja/ticket'
 import { BILLETES_INICIALES, billetesDe } from '@/lib/caja/conteo.core.js'
 import { CalculadoraBilletes, olvidarConteo } from '@/components/caja/CalculadoraBilletes'
@@ -42,6 +42,8 @@ import {
   type PedidosWeb,
   type ProductoLista,
   type ProductoFeria,
+  type Oferta,
+  type ModoOferta,
   type CampaniaLiq,
   buscarNombre,
   guardarLogo,
@@ -2012,9 +2014,10 @@ export function ProductosFeria({ reglas, version, campanias = [], onGuardadas }:
       abierto={abierto}
       onToggle={() => setAbierto(!abierto)}
       titulo={`Productos en oferta (${new Set([...lista.map((p) => p.id), ...(reglas.feriaIdsCampania ?? [])]).size})`}
-      ayuda="Precio final: sólo efectivo o transferencia, a la cuenta de feria, sin descuento por forma de pago. Sólo lo cambia un admin."
+      ayuda={`${msjOferta(reglas)}. Sólo lo cambia un admin.`}
     >
       <div style={{ display: 'grid', gap: space[3], maxWidth: 640 }}>
+        <CobroDeOferta reglas={reglas} onGuardadas={onGuardadas} />
         {/* 🔑 Bruno, 11-oct: la feria es la de Liquidación. Es feria todo producto con el precio de una campaña
             tildada APLICADO; al sacar la campaña, deja de serlo solo. */}
         <Field label="Campañas de Liquidación que son oferta">
@@ -2077,6 +2080,68 @@ export function ProductosFeria({ reglas, version, campanias = [], onGuardadas }:
         {msg && <Notice tone="danger">{msg}</Notice>}
       </div>
     </Plegable>
+  )
+}
+
+const TEXTO_MODO: Record<ModoOferta, string> = {
+  final: 'Precio final, sin el %',
+  descuento: 'Con el descuento de la forma de pago',
+  recargo: 'Con recargo',
+  no: 'No se acepta',
+}
+
+/**
+ * Cómo se cobra la oferta, por forma de pago (Bruno, 12-oct): se acepta o no, con el descuento de la forma
+ * de pago o sin él, y el recargo de la tarjeta. La regla es `pagosDeMedio`/`exigirFeria` (`core.core.js`);
+ * acá sólo se elige. Va a mudarse a la lista de precios del local cuando exista.
+ */
+function CobroDeOferta({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reglas, v?: Versiones) => void }) {
+  const [o, setO] = useState<Oferta>(() => ofertaDe(reglas) as Oferta)
+  const [recargoTxt, setRecargoTxt] = useState(() => String(ofertaDe(reglas).recargo))
+  const [guardando, setGuardando] = useState(false)
+  const [msg, setMsg] = useState<{ tono: 'success' | 'danger'; texto: string } | null>(null)
+  const guardada = ofertaDe(reglas) as Oferta
+  const recargo = Number(recargoTxt.replace(',', '.'))
+  const cambio = (['efectivo', 'transferencia', 'debito', 'credito'] as const).some((m) => o[m] !== guardada[m]) || recargo !== guardada.recargo
+  async function guardar() {
+    setGuardando(true)
+    setMsg(null)
+    try {
+      const r = await guardarBajadas({ oferta: { ...o, recargo } })
+      onGuardadas(r.reglas, r.versiones)
+      setMsg({ tono: 'success', texto: `Guardado. ${msjOferta(r.reglas)}.` })
+    } catch (e) {
+      setMsg({ tono: 'danger', texto: (e as Error).message })
+    } finally {
+      setGuardando(false)
+    }
+  }
+  return (
+    <div style={{ display: 'grid', gap: space[2], border: `1px solid ${color.line}`, borderRadius: radius.md, padding: space[3] }}>
+      <span style={{ fontWeight: weight.semibold, fontSize: font.sm, color: color.ink2 }}>Cómo se cobra la oferta</span>
+      {(['efectivo', 'transferencia', 'debito', 'credito'] as const).map((medio) => (
+        <div key={medio} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ width: 150, fontSize: font.base }}>{NOMBRE_MEDIO[medio]}</span>
+          <Select value={o[medio]} disabled={guardando} onChange={(e) => setO({ ...o, [medio]: e.target.value as ModoOferta })} style={{ maxWidth: 280 }} aria-label={`Oferta con ${NOMBRE_MEDIO[medio]}`}>
+            {MODOS_OFERTA[medio].map((m) => (
+              <option key={m} value={m}>
+                {m === 'recargo' ? `${TEXTO_MODO.recargo} (+${recargoTxt || '?'} %)` : TEXTO_MODO[m]}
+              </option>
+            ))}
+          </Select>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <Field label="Recargo con tarjeta (%)">
+          <Input value={recargoTxt} onChange={(e) => setRecargoTxt(e.target.value)} inputMode="decimal" autoComplete="off" style={{ width: 90, textAlign: 'right' }} />
+        </Field>
+        <Button size="sm" loading={guardando} disabled={!cambio} onClick={guardar}>
+          Guardar
+        </Button>
+      </div>
+      <span style={{ color: color.mut, fontSize: font.sm }}>El recargo va sólo sobre los productos en oferta, a la cuenta «Feria TC» de Gestión Nube; el resto del pedido sigue con su regla.</span>
+      {msg && <Notice tone={msg.tono}>{msg.texto}</Notice>}
+    </div>
   )
 }
 

@@ -298,6 +298,19 @@ describe('caja · formas de pago y descuentos a mano (Bruno, 4-oct)', () => {
     expect((base.ventas.get(ID)!.pagos as Fila[])[0]).toMatchObject({ rebaja: 800, descuento: 1080 })
   })
 
+  it('🔑 bajadas (Bruno, 12-oct): cómo se cobra la oferta, sólo un admin y validado', async () => {
+    const oferta = { efectivo: 'final', transferencia: 'final', debito: 'recargo', credito: 'recargo', recargo: 10 }
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'bajadas', oferta }))).code).toBe(403)
+    conSesion(ADMIN_)
+    expect((await correr(req('POST', {}, { action: 'bajadas', oferta: { ...oferta, efectivo: 'recargo' } }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'bajadas', oferta: { ...oferta, recargo: 90 } }))).code).toBe(400)
+    const r = await correr(req('POST', {}, { action: 'bajadas', oferta }))
+    expect(r.code).toBe(200)
+    expect((base.config as { reglas: Fila }).reglas).toMatchObject({ oferta })
+    expect((r.body?.reglas as Fila).oferta).toEqual(oferta)
+  })
+
   it('🔑 bajadas (Bruno, 11-oct): la cuenta de GN de la transferencia es la de la cuenta de MP en uso', async () => {
     conSesion(CAJERA)
     expect((await correr(req('POST', {}, { action: 'bajadas', transferenciaPorMp: { mp: CUENTA_MP, gn: 20595 } }))).code).toBe(403)
@@ -363,7 +376,7 @@ describe('caja · formas de pago y descuentos a mano (Bruno, 4-oct)', () => {
     // A la cuenta de efectivo normal, con su −15 %: ⛔.
     const mal = await correr(req('POST', {}, VENTA))
     expect(mal.code).toBe(400)
-    expect(mal.body).toMatchObject({ error: expect.stringMatching(/feria/) })
+    expect(mal.body).toMatchObject({ error: expect.stringMatching(/oferta/) })
     expect(gn.posts).toHaveLength(0)
     // A la de feria, precio final: $25.490 ⇒ $25.500 redondeado.
     const bien = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25867 }], total: 25500, pagaCon: 25500 }))

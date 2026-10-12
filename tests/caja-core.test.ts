@@ -14,6 +14,8 @@ import {
   pagosDeMedio,
   subtotalDeFeria,
   medioDeCuenta,
+  normalizarOferta,
+  msjOferta,
   mismaVenta,
   nombreParaTicket,
   redondeo,
@@ -126,12 +128,14 @@ describe('caja · piezas', () => {
     expect(() => aplicarCuenta(10000, 13014, REGLAS_INICIALES)).toThrow(/no tiene regla/)
   })
 
-  it('🔴 Feria TC ⛔ se cobra: GN ⛔ acepta recargo por la API', () => {
-    expect(() => aplicarCuenta(10000, FERIA_TC, REGLAS_INICIALES)).toThrow(/no tiene regla/)
-    // ...y aunque alguien le cargue el recargo en la configuración, se rechaza con nombre.
-    const conRecargo = { redondeo: 100, cuentas: { [FERIA_TC]: { nombre: 'Feria TC', descuento: -10 } } }
-    expect(() => aplicarCuenta(10000, FERIA_TC, conRecargo)).toThrow(/Feria TC.*recargo/)
-    expect(() => cobro({ filas: renglones([prenda(10000)]), pagos: [{ cuenta: FERIA_TC }], reglas: conRecargo, descuentoVenta: null })).toThrow(/recargo/)
+  it('🔑 la oferta con tarjeta (Feria TC) lleva el recargo de `reglas.oferta`; otra cuenta con recargo ⛔', () => {
+    // Bruno, 12-oct: el % sale de la configuración de la oferta (10 sin configurar), ⛔ de `cuentas`.
+    expect(aplicarCuenta(10000, FERIA_TC, REGLAS_INICIALES)).toEqual({ porcentaje: -10, ajuste: -1000, neto: 11000 })
+    const R15 = { ...REGLAS_INICIALES, oferta: { recargo: 15 } } as unknown as typeof REGLAS_INICIALES
+    expect(aplicarCuenta(10000, FERIA_TC, R15).neto).toBe(11500)
+    // ...y cualquier OTRA cuenta con recargo cargado a mano se sigue rechazando con nombre.
+    const conRecargo = { redondeo: 100, cuentas: { 99: { nombre: 'Otra', descuento: -10 } } }
+    expect(() => aplicarCuenta(10000, 99, conRecargo)).toThrow(/Otra.*recargo/)
   })
 
   it('redondeo: al más cercano, el paso es obligatorio', () => {
@@ -405,8 +409,8 @@ describe('caja · productos de feria trabados', () => {
   })
 
   it('🔴 con una prenda de feria, débito y crédito ⛔ se ofrecen', () => {
-    expect(() => pagosDeMedio('debito', q(mixto))).toThrow(/efectivo o transferencia/)
-    expect(() => pagosDeMedio('credito', q(mixto))).toThrow(/efectivo o transferencia/)
+    expect(() => pagosDeMedio('debito', q(mixto))).toThrow(/productos en oferta se cobran con efectivo, transferencia$/)
+    expect(() => pagosDeMedio('credito', q(mixto))).toThrow(/productos en oferta se cobran con efectivo, transferencia$/)
   })
 
   it('el descuento a mano a la venta se reparte como siempre: 10 % ⇒ $9.000 + $15.300', () => {
@@ -417,11 +421,11 @@ describe('caja · productos de feria trabados', () => {
 
   it('🔴 el servidor rechaza lo que saltea la traba', () => {
     // Todo a la cuenta normal con su −15 %: la feria se llevaría el descuento.
-    expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: EFECTIVO }], reglas: R })).toThrow(/cuenta de feria/)
+    expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: EFECTIVO }], reglas: R })).toThrow(/cuenta de oferta/)
     // La feria por débito.
-    expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: FERIA_EFECTIVO, base: 10000 }, { cuenta: DEBITO }], reglas: R })).toThrow(/efectivo o transferencia/)
+    expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: FERIA_EFECTIVO, base: 10000 }, { cuenta: DEBITO }], reglas: R })).toThrow(/productos en oferta se cobran con efectivo, transferencia$/)
     // Una base de feria que ⛔ es la de las prendas de feria (le pasa una normal sin descuento).
-    expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: FERIA_EFECTIVO, base: 25000 }, { cuenta: EFECTIVO }], reglas: R })).toThrow(/sólo las prendas de feria/)
+    expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: FERIA_EFECTIVO, base: 25000 }, { cuenta: EFECTIVO }], reglas: R })).toThrow(/sólo los productos en oferta/)
   })
 
   it('sin prendas de feria ⛔ cambia nada', () => {
@@ -434,7 +438,68 @@ describe('caja · productos de feria trabados', () => {
   it('la prenda de feria sigue trabada aunque la config traiga un `feria: true` viejo', () => {
     const F = { ...R, feria: true } as R_
     expect(pagosDeMedio('efectivo', q(mixto, F))).toEqual([{ cuenta: FERIA_EFECTIVO, base: 10000 }, { cuenta: EFECTIVO }])
-    expect(() => pagosDeMedio('debito', q(mixto, F))).toThrow(/efectivo o transferencia/)
+    expect(() => pagosDeMedio('debito', q(mixto, F))).toThrow(/productos en oferta se cobran con efectivo, transferencia$/)
+  })
+
+  describe('🔑 cómo se cobra la oferta, por forma de pago (Bruno, 12-oct)', () => {
+    const conTarjeta = { ...R, oferta: { efectivo: 'final', transferencia: 'final', debito: 'recargo', credito: 'recargo', recargo: 10 } } as R_
+
+    it('crédito: +10 % SÓLO sobre la parte en oferta ⇒ $11.000 + $20.000 (la común a lista)', () => {
+      const pagos = pagosDeMedio('credito', q(mixto, conTarjeta))
+      expect(pagos).toEqual([{ cuenta: FERIA_TC, base: 10000 }, { cuenta: 25188 }])
+      const c = cobro({ filas: mixto, pagos, reglas: conTarjeta, descuentoVenta: null })
+      expect(c.pagos.map((p) => p.monto)).toEqual([11000, 20000])
+      expect(() => exigirFeria({ filas: mixto, pagos, reglas: conTarjeta })).not.toThrow()
+      expect(() => exigirCuentas({ filas: mixto, pagos, reglas: conTarjeta, descuentoVenta: null, promoCreditoHoy: false })).not.toThrow()
+    })
+
+    it('débito: la oferta +10 % y la común con su −10 % ⇒ $11.000 + $18.000', () => {
+      const pagos = pagosDeMedio('debito', q(mixto, conTarjeta))
+      expect(pagos).toEqual([{ cuenta: FERIA_TC, base: 10000 }, { cuenta: DEBITO }])
+      expect(cobro({ filas: mixto, pagos, reglas: conTarjeta, descuentoVenta: null }).pagos.map((p) => p.monto)).toEqual([11000, 18000])
+    })
+
+    it('🔴 todo en oferta con tarjeta: el total PASA la lista y a GN va en el precio (⛔ descuento negativo)', () => {
+      const solo = renglones([{ product_id: 1, size_id: 1, cantidad: 1, precio: 10000 }])
+      const pagos = pagosDeMedio('credito', q(solo, conTarjeta))
+      const c = cobro({ filas: solo, pagos, reglas: conTarjeta, descuentoVenta: null })
+      expect(c.total).toBe(11000)
+      const p = armarVentaGN({ filas: solo, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-12' })
+      expect(p.items).toEqual([expect.objectContaining({ unit_price: 11000, discount: 0 })])
+      expect(p.payments).toEqual([expect.objectContaining({ amount: 11000, account_id: FERIA_TC })])
+    })
+
+    it('«descuento»: la oferta suma el % de la forma de pago, todo a la cuenta normal ⇒ $25.500', () => {
+      const D = { ...R, oferta: { efectivo: 'descuento', transferencia: 'final', debito: 'no', credito: 'no', recargo: 10 } } as R_
+      const pagos = pagosDeMedio('efectivo', q(mixto, D))
+      expect(pagos).toEqual([{ cuenta: EFECTIVO }])
+      expect(cobro({ filas: mixto, pagos, reglas: D, descuentoVenta: null }).total).toBe(25500)
+      expect(() => exigirFeria({ filas: mixto, pagos, reglas: D })).not.toThrow()
+      // ...y ahí la cuenta de oferta ⛔: la oferta ya lleva el %.
+      expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: FERIA_EFECTIVO, base: 10000 }, { cuenta: EFECTIVO }], reglas: D })).toThrow(/se cobran con/)
+    })
+
+    it('🔴 el servidor rechaza la oferta con tarjeta si la configuración ⛔ la acepta', () => {
+      const pagos = [{ cuenta: FERIA_TC, base: 10000 }, { cuenta: 25188 }]
+      expect(() => exigirFeria({ filas: mixto, pagos, reglas: R })).toThrow(/se cobran con efectivo, transferencia$/)
+      // Y sin productos en oferta, la cuenta de oferta con tarjeta ⛔.
+      const normal = renglones([{ product_id: 2, size_id: 1, cantidad: 1, precio: 20000 }])
+      expect(() => exigirCuentas({ filas: normal, pagos: [{ cuenta: FERIA_TC }], reglas: conTarjeta, descuentoVenta: null, promoCreditoHoy: false })).toThrow(/sólo para los productos en oferta/)
+    })
+
+    it('el aviso dice lo que está configurado', () => {
+      expect(msjOferta(conTarjeta)).toBe('Los productos en oferta se cobran con efectivo, transferencia, débito (+10 %), crédito (+10 %)')
+      expect(msjOferta(R)).toBe('Los productos en oferta se cobran con efectivo, transferencia')
+    })
+
+    it('normalizarOferta: cada forma de pago con SUS opciones y un recargo entre 0 y 50', () => {
+      const ok = { efectivo: 'final', transferencia: 'descuento', debito: 'recargo', credito: 'no', recargo: 10 }
+      expect(normalizarOferta(ok)).toEqual(ok)
+      expect(() => normalizarOferta({ ...ok, efectivo: 'recargo' })).toThrow(/efectivo/)
+      expect(() => normalizarOferta({ ...ok, recargo: 0 })).toThrow(/recargo/)
+      expect(() => normalizarOferta({ ...ok, recargo: 60 })).toThrow(/recargo/)
+      expect(() => normalizarOferta({ efectivo: 'final' })).toThrow()
+    })
   })
 })
 
@@ -566,8 +631,8 @@ describe('caja · A6: el servidor exige la cuenta que corresponde', () => {
     for (const c of [EFECTIVO, TRANSFERENCIA, DEBITO, 25188]) expect(ok(una, c)).not.toThrow()
   })
   it('sin prendas de feria, la cuenta de feria ⛔ (la prenda común lleva su descuento)', () => {
-    expect(ok(una, FERIA_EFECTIVO)).toThrow(/sólo para las prendas de feria/)
-    expect(ok(una, FERIA_TRANSFERENCIA)).toThrow(/sólo para las prendas de feria/)
+    expect(ok(una, FERIA_EFECTIVO)).toThrow(/sólo para los productos en oferta/)
+    expect(ok(una, FERIA_TRANSFERENCIA)).toThrow(/sólo para los productos en oferta/)
   })
   it('la transferencia va a la cuenta que bajó el admin', () => {
     expect(ok(una, 20595)).toThrow(/otra cuenta/)
