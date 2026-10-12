@@ -67,12 +67,13 @@ export function UbicacionFlotante({ percheros, lugar, escaneos, onElegir }: { pe
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: space[2],
-            padding: `0 ${space[3]}px`,
+            padding: `0 ${space[2]}px`,
             borderRadius: 12,
             border: `2px solid ${color.brand}`,
             background: frontal ? color.brandBg : color.surface,
             color: color.ink,
-            fontSize: font.xl,
+            // 🔑 lg y ⛔ xl (Darío, 12-oct-2026): con Frontal y la flecha al lado, «D05 arriba» se cortaba.
+            fontSize: font.lg,
             minWidth: 0,
             fontWeight: weight.bold,
             cursor: 'pointer',
@@ -82,9 +83,7 @@ export function UbicacionFlotante({ percheros, lugar, escaneos, onElegir }: { pe
           {/* Un solo renglón (Darío: «se hacen 2 renglones, queda feo»): que es frontal lo dicen el
               botón prendido y el fondo de la ubicación. */}
           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>📍 {sinFrontal(lugar) || 'Elegí dónde estás'}</span>
-          <span style={{ fontSize: font.sm, fontWeight: weight.normal, color: color.mut, whiteSpace: 'nowrap' }}>
-            {faltan ? `faltan ${faltan}` : 'todos hechos'} {abierta ? '▴' : '▾'}
-          </span>
+          <span style={{ fontSize: font.sm, fontWeight: weight.normal, color: color.mut }}>{abierta ? '▴' : '▾'}</span>
         </button>
         {/* 🔑 Frontal es de la BARRA de adelante (Darío: «D03 arriba es frontal y abajo normal»):
             se prende acá y se apaga sola al pasar a otra barra. */}
@@ -94,7 +93,7 @@ export function UbicacionFlotante({ percheros, lugar, escaneos, onElegir }: { pe
           aria-pressed={frontal}
           disabled={!lugar.trim()}
           onClick={() => onElegir(conFrontal(lugar, !frontal))}
-          style={{ height: 'auto', minHeight: 52, fontSize: font.md, background: frontal ? undefined : color.surface, boxShadow: 'var(--mo-sh-md)' }}
+          style={{ height: 'auto', minHeight: 52, padding: `0 ${space[2]}px`, fontSize: font.base, background: frontal ? undefined : color.surface, boxShadow: 'var(--mo-sh-md)' }}
         >
           Frontal
         </Button>
@@ -105,13 +104,19 @@ export function UbicacionFlotante({ percheros, lugar, escaneos, onElegir }: { pe
             onClick={() => elegir(sigue)}
             title={`Pasar a ${sigue}`}
             aria-label={`Pasar a ${sigue}`}
-            style={{ minWidth: 64, height: 'auto', minHeight: 52, fontSize: font['2xl'], boxShadow: 'var(--mo-sh-md)' }}
+            style={{ minWidth: 52, height: 'auto', minHeight: 52, fontSize: font.xl, boxShadow: 'var(--mo-sh-md)' }}
           >
             →
           </Button>
         )}
       </div>
-      {sigue && !abierta && <div style={{ fontSize: font.xs, color: color.mut, marginTop: 4, textAlign: 'right' }}>→ {sigue}</div>}
+      {/* «faltan N» va abajo y ⛔ al lado del lugar: en el celular cortaba «D05 arriba» (Darío, 12-oct-2026). */}
+      {!abierta && (
+        <div style={{ fontSize: font.xs, color: color.mut, marginTop: 4, textAlign: 'right' }}>
+          {faltan ? `faltan ${faltan} percheros` : 'todos los percheros hechos'}
+          {sigue && <> · sigue {sigue}</>}
+        </div>
+      )}
 
       {abierta && (
         <div style={{ marginTop: space[2], padding: space[3], borderRadius: 12, border: `1px solid ${color.line}`, background: color.surface, boxShadow: 'var(--mo-sh-pop)', maxHeight: '60vh', overflowY: 'auto' }}>
