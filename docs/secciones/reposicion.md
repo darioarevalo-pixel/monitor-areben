@@ -105,6 +105,23 @@ fijo: **«Retirar solo de la reserva, nunca la exhibida.»** Lo que sobra está 
   ni descartar un armado con tandas (esas prendas ya cambiaron de depósito). Un `revisar` a mitad de una
   tanda guarda lo que iba en `transfer.enCurso` y `resolver` lo suma.
 
+## El correo de las 10:00 (tanda 3, 12-oct-2026)
+
+A las 10:00 abre el local y la reposición tiene que estar ahí (Darío). Un correo a Darío
+(`vars.MAIL_REPOSICION_A` lo pisa) con cada armado del día: estado, hora y quién, pedidas /
+llevadas / no encontradas, el número de transferencia en GN y **sólo los renglones que no salieron
+completos**, con «ya faltó N veces en 14 días».
+
+- `lib/reposicion/correo.core.js` (puro, `tests/reposicion-correo.test.ts`) ·
+  `scripts/reposicion-correo.mjs` (sólo lee `repo_armado`) · `.github/workflows/reposicion-correo.yml`.
+- 🔑 **El asunto avisa por la REPOSICIÓN** (sin iniciar / sin finalizar). La devolución puede
+  hacerse más tarde: su estado va adentro. Una transferencia **sin confirmar** avisa siempre.
+- Stunned aparece sólo si tuvo un armado ese día: no tiene rutina propia todavía.
+- 🔴 **El reloj es de Maketa** (`/api/cron/reposicion-monitor`, 13:00 UTC), igual que el parte de la
+  mañana: los crons de GitHub de este repo llegan horas tarde.
+- Para mirarlo sin mandarlo: `gh workflow run reposicion-correo.yml -f simulacro=true` (deja el HTML
+  como artefacto `correo-html`). Desde la Mac ⛔ se puede: el `.env` tiene sólo la clave anon de Zattia.
+
 ## La foto guardada (12-oct-2026)
 
 Al abrir, la pantalla pide la config y la **huella** (`huellaDatos`: la hora de cada sync de
@@ -121,10 +138,9 @@ cambió el día—, baja todo como antes, en paralelo. «Recargar» y «Reintent
 
 ## Pendiente
 
-- ▶️ **Parte 2:** la lista de Lorena por correo a administración a las 7:00 (falta la dirección) y el
-  estado de la reposición a Darío a las 10:00 (abre el local). `scripts/lib/mail.mjs`.
+- ▶️ **Parte 2:** la lista de Lorena por correo a administración a las 7:00 (falta la dirección) (el de las 10:00 ya está: ver arriba).
 - ▶️ **Parte 3, en tandas** (Darío, 12-oct): ✅ T1 Lorena escanea + transferencia · ✅ T2 Camila
-  (devolver) + la limpieza grande · ▶️ T3 correo de las 10:00 (⛔ «no estaba» → Conteo: descartado por Darío, 12-oct) · ▶️ T4
+  (devolver) + la limpieza grande · ✅ T3 correo de las 10:00 (⛔ «no estaba» → Conteo: descartado por Darío, 12-oct) · ▶️ T4
   etiquetas mal puestas + imprimir en la Zebra las de «para exhibir».
 - ▶️ Condiciones de Stunned. ▶️ Ubicaciones del depósito de Zattia (la sección Ubicaciones es sólo BDI).
 
