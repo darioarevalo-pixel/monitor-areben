@@ -14,7 +14,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  ambienteDeEntorno, CBTE, COND_IVA, DOC, cuitValido, desglosarIVA, detalleXml, fechaArca, leerCAE, leerConsulta,
+  ambienteDeEntorno, ptoVtaDe, CBTE, COND_IVA, DOC, cuitValido, desglosarIVA, detalleXml, fechaArca, leerCAE, leerConsulta,
   leerTA, leerUltimo, loteXml, numeroVisible, problemasDe, reconciliar, tags, taVigente, traXml, urlQR,
 } from '../lib/arca/arca.core.js'
 import { firmarTRA } from '../api/_arca.js'
@@ -193,4 +193,16 @@ describe('🔴 el freno de producción', () => {
     expect(ambienteDeEntorno({ ARCA_AMBIENTE: 'produccion', ARCA_PRODUCCION_HABILITADA: 'si' })).toBe('produccion')
   })
   it('un valor raro es error', () => expect(() => ambienteDeEntorno({ ARCA_AMBIENTE: 'prod' })).toThrow(/inválido/))
+})
+
+describe('ptoVtaDe', () => {
+  it('homologación: uno de prueba por marca', () => {
+    expect(ptoVtaDe('homologacion', 'bdi', {})).toBe(1)
+    expect(ptoVtaDe('homologacion', 'zattia', {})).toBe(2)
+  })
+  it('🔴 producción ⛔ tiene default', () => expect(() => ptoVtaDe('produccion', 'bdi', {})).toThrow(/ARCA_PTOVTA_BDI/))
+  it('🔴 producción ⛔ acepta los PV de GN', () => {
+    expect(() => ptoVtaDe('produccion', 'zattia', { ARCA_PTOVTA_ZATTIA: '5' })).toThrow(/de GN/)
+    expect(ptoVtaDe('produccion', 'zattia', { ARCA_PTOVTA_ZATTIA: '12' })).toBe(12)
+  })
 })
