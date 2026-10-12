@@ -131,6 +131,12 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
     inputRef.current?.focus()
   }, [])
 
+  const seguirTrasCartel = () => {
+    setCartel(null)
+    setExtra(0)
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
   // ── El lector ─────────────────────────────────────────────────────────────────────────────
   const onCodigo = (codigo: string) => {
     if (!codigo.trim()) return
@@ -152,11 +158,11 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
     }
     setExtra(0)
     if (l.tipo === 'sobra') {
-      setCartel({ titulo: 'Prenda excedente', texto: `${l.linea.name}${talle(l.linea.size) ? ` ${talle(l.linea.size)}` : ''}: ya están las ${l.linea.cant}.` })
+      setCartel({ titulo: 'Artículo excedente', texto: `${l.linea.name}${talle(l.linea.size) ? ` ${talle(l.linea.size)}` : ''}: ya están las ${l.linea.cant}.` })
       avisar('no', 'Excedente')
     } else if (l.tipo === 'no-pedida') {
-      setCartel({ titulo: 'Prenda no solicitada', texto: `${l.nombre} no está en la ${devolucion ? 'devolución' : 'reposición'} de hoy.` })
-      avisar('no', 'No solicitada')
+      setCartel({ titulo: 'Artículo NO solicitado', texto: `${l.nombre} no está en la ${devolucion ? 'devolución' : 'reposición'} de hoy.` })
+      avisar('no', 'No solicitado')
     } else {
       setCartel({ titulo: 'Código desconocido', texto: `«${codigo.trim()}» no corresponde a ninguna prenda.` })
       avisar('no', 'Código desconocido')
@@ -252,6 +258,14 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
         onFocus={() => setEscuchando(true)}
         onBlur={() => setEscuchando(false)}
         onKeyDown={(e) => {
+          // Con el cartel rojo: Escape o espacio lo cierran (Darío, 12-oct-2026). ⛔ Enter no: el
+          // lector manda Enter después de cada código y lo cerraría sin que nadie lo lea.
+          if (cartel && (e.key === 'Escape' || e.key === ' ')) {
+            e.preventDefault()
+            e.currentTarget.value = ''
+            seguirTrasCartel()
+            return
+          }
           if (e.key === 'Enter') {
             e.preventDefault()
             const v = e.currentTarget.value
@@ -299,11 +313,7 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
         <CartelFreno
           cartel={cartel}
           extra={extra}
-          onSeguir={() => {
-            setCartel(null)
-            setExtra(0)
-            setTimeout(() => inputRef.current?.focus(), 0)
-          }}
+          onSeguir={seguirTrasCartel}
         />
       )}
 
@@ -435,7 +445,7 @@ function CartelFreno({ cartel, extra, onSeguir }: { cartel: Cartel; extra: numbe
         <div style={{ fontSize: 56, lineHeight: 1 }}>✋</div>
         <div style={{ fontSize: 32, fontWeight: 800, marginTop: space[3] }}>{cartel.titulo}</div>
         <div style={{ fontSize: font.lg, marginTop: space[3] }}>{cartel.texto}</div>
-        <div style={{ fontSize: font.lg, marginTop: space[3], fontWeight: 600 }}>Dejala en el estante.</div>
+        <div style={{ fontSize: font.lg, marginTop: space[3], fontWeight: 600 }}>Dejalo en el estante: está de más.</div>
         {extra > 0 && (
           <div style={{ fontSize: font.md, marginTop: space[3], padding: space[3], background: 'rgba(0,0,0,.2)', borderRadius: 'var(--mo-r-xl)' }}>
             {extra === 1 ? '1 lectura' : `${extra} lecturas`} con este aviso abierto: no {extra === 1 ? 'se contó' : 'se contaron'}. Volvé a escanear.
@@ -445,6 +455,7 @@ function CartelFreno({ cartel, extra, onSeguir }: { cartel: Cartel; extra: numbe
           <Button variant="solid" tone="neutral" size="lg" onMouseDown={(e) => e.preventDefault()} onClick={onSeguir}>
             Continuar
           </Button>
+          <div style={{ fontSize: font.sm, marginTop: space[2], opacity: 0.85 }}>o apretá Esc o la barra espaciadora</div>
         </div>
       </div>
     </div>
