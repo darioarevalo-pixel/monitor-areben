@@ -74,8 +74,9 @@ describe('las formas de pago con que nace BDI (Bruno: «idénticas a Zattia»)',
     expect(pagosDeMedio('debito', { ...q, reglas: conOferta, filas })).toEqual([{ cuenta: 21667 }])
   })
 
-  it('🔑 la transferencia ⛔ espera: se confirma al cobrar', () => {
-    expect(montoAEsperar([{ cuenta: 20597, base: 10000, rebaja: 0, porcentaje: 10, descuento: 1000, redondeo: 0, monto: 9000 }], r)).toBe(0)
+  it('🔑 la transferencia ESPERA igual (Bruno, 12-oct: «que no se pierda la costumbre»); sin verificar, ⛔', () => {
+    expect(montoAEsperar([{ cuenta: 20597, base: 10000, rebaja: 0, porcentaje: 10, descuento: 1000, redondeo: 0, monto: 9000 }], r)).toBe(9000)
+    expect(montoAEsperar([{ cuenta: 20597, base: 10000, rebaja: 0, porcentaje: 10, descuento: 1000, redondeo: 0, monto: 9000 }], { ...r, verificarTransferencia: false })).toBe(0)
     expect(montoAEsperar([{ cuenta: 13015, base: 10000, rebaja: 0, porcentaje: 10, descuento: 1000, redondeo: 0, monto: 9000 }], REGLAS_INICIALES)).toBe(9000)
   })
 })

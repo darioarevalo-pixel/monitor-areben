@@ -1626,13 +1626,13 @@ describe('caja · BDI (V4)', () => {
   })
   afterEach(() => { delete process.env.GN_TOKEN_VENTAS_BDI; delete process.env.GN_TOKEN; delete process.env.SUPABASE_SERVICE_KEY })
 
-  it('la config nace con las formas de pago de BDI: SUS cuentas, sin verificar la transferencia', async () => {
+  it('la config nace con las formas de pago de BDI: SUS cuentas; sin cuenta de MP, la transferencia va a la CG', async () => {
     conSesion(CAJERA_BDI)
     const r = await correr(req('GET', { action: 'config', store: 'bdi' }))
     expect(r.code).toBe(200)
     const reglas = r.body!.reglas as { medios: { efectivo: { normal: number } }; transferenciaA: number; verificarTransferencia: boolean }
     expect(reglas.medios.efectivo.normal).toBe(14685)
-    expect(reglas.verificarTransferencia).toBe(false)
+    expect(reglas.verificarTransferencia).toBe(true)
     expect(reglas.transferenciaA).toBe(20597)
     expect(r.body!.marca).toEqual({ store: 'bdi', nombre: 'BDI', tienda: 'bdiaccesorios.com.ar' })
   })
@@ -1647,14 +1647,39 @@ describe('caja · BDI (V4)', () => {
     expect(base.ventas.get(ID_BDI)).toMatchObject({ store: 'bdi', estado: 'en_gn' })
   })
 
-  it('🔑 transferencia SIN verificar: a la CG (20597), directo a GN y ⛔ se mira Mercado Pago', async () => {
+  it('🔑 transferencia SIN cuenta de MP: espera igual, y la cajera la confirma («Transferencia confirmada»)', async () => {
     conSesion(CAJERA_BDI)
     // $25.490 − 10 % = $22.941 ⇒ $22.900.
     const r = await correr(req('POST', { store: 'bdi' }, { ...VENTA, id: ID_BDI, pagos: [{ cuenta: 20597 }], total: 22900, pagaCon: null }))
     expect(r.code).toBe(200)
-    expect(base.ventas.get(ID_BDI)).toMatchObject({ estado: 'en_gn', espera_monto: null })
+    expect(base.ventas.get(ID_BDI)).toMatchObject({ estado: 'esperando_pago', espera_monto: 22900 })
+    expect(gn.posts).toHaveLength(0)
+    const c = await correr(req('POST', { store: 'bdi' }, { action: 'cruzar', id: ID_BDI }))
+    expect((c.body!.cruce as { estado: string }).estado).toBe('sin_cuenta')
+    const ok = await correr(req('POST', { store: 'bdi' }, { action: 'confirmar-transferencia', id: ID_BDI, comprobante: '' }))
+    expect(ok.code).toBe(200)
+    expect(base.ventas.get(ID_BDI)).toMatchObject({ estado: 'en_gn', mp_cruce: 'cajera', confirmacion: expect.objectContaining({ sinCuentaMp: true }) })
     expect((gn.posts[0].payments as Fila[])[0]).toMatchObject({ account_id: 20597 })
     expect(mp.busquedas).toBe(0)
+  })
+
+  it('🔴 con cuenta de MP conectada, la cajera ⛔ confirma a mano: la confirma el cruce', async () => {
+    conSesion(CAJERA)
+    base.turnos = [{ id: TURNO_ID, store: 'zattia', fondo: 0, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null, abierto_por: 'cajera', abierto_por_usuario: 'cajera' }]
+    base.config = { store: 'zattia', reglas: { ...REGLAS_INICIALES, transferenciaPorMp: { [CUENTA_MP]: 13015 } }, politica_cambio: null }
+    await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 13015 }], total: 22900, pagaCon: null }))
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'esperando_pago' })
+    const r = await correr(req('POST', {}, { action: 'confirmar-transferencia', id: ID, comprobante: '1234' }))
+    expect(r.code).toBe(403)
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'esperando_pago' })
+  })
+
+  it('sin cuenta de MP, otra cuenta (⛔ la de la caja abierta) ⛔ confirma', async () => {
+    conSesion({ ...CAJERA_BDI, name: 'otra' })
+    base.ventas.set(ID_BDI, { id: ID_BDI, store: 'bdi', estado: 'esperando_pago', espera_monto: 22900, total: 22900, pagos: [], renglones: [], creada_en: new Date().toISOString() })
+    const r = await correr(req('POST', { store: 'bdi' }, { action: 'confirmar-transferencia', id: ID_BDI }))
+    expect(r.code).toBe(403)
+    expect(base.ventas.get(ID_BDI)).toMatchObject({ estado: 'esperando_pago' })
   })
 
   it('una cuenta de Zattia en la Caja de BDI ⇒ 400 y ⛔ sale nada', async () => {

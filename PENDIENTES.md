@@ -132,14 +132,15 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
   su descuento. ⛔ Hay modo feria general: un solo «Efectivo» y la Caja reparte sola. 🔑 Los productos de
   feria salen de LIQUIDACIÓN (las campañas tildadas como feria, con el precio aplicado).
 - 🏁 **V4 — BDI en la Caja + formas de pago por tienda (12-oct)**: hecho (ficha `docs/secciones/caja.md` § V4).
-  BDI con sus ids de GN (modo Local 18393, consumidor final 158744, depósito 13307), sus cuentas y SIN
-  verificar la transferencia (va a la CG 20597); la oferta lleva el % de la forma de pago. «Formas de pago»
+  BDI con sus ids de GN (modo Local 18393, consumidor final 158744, depósito 13307) y sus cuentas; la oferta
+  lleva el % de la forma de pago; débito 10 % (confirmado). La transferencia ESPERA igual y, mientras BDI ⛔
+  tenga cuenta de MP, la cajera toca «Transferencia confirmada» (va a la CG 20597); con la cuenta, automática. «Formas de pago»
   (admin) cambia cuenta, %, cuotas, oferta y verificación por tienda. Logo: «Usar el de Tienda Nube».
   SQL: ver «Qué migración de la Caja tiene cada base» abajo.
   ▶️ **Manos de Bruno**: (1) crear en el mailer la automation «Ticket del local» de **BDI** (sin ella el mail
-  del ticket de BDI ⛔ sale; la venta sí) · (2) confirmar si la cuenta de MP de BDI es la misma ⇒ si sí,
-  prender «verificar» en Formas de pago · (3) ⚠️ **débito de BDI**: dictado 10 % como Zattia, pero en su POS
-  de GN las 2 ventas de débito de sep-oct salieron SIN descuento · (4) cargar el logo (un clic) y caminar una
+  del ticket de BDI ⛔ sale; la venta sí) · (2) cuando BDI tenga cuenta de MP: cargarla en Pagos recibidos y
+  mapearla a su cuenta de GN en «Las transferencias se detectan en» ⇒ el cruce pasa a ser automático ·
+  (3) — · (4) cargar el logo (un clic) y caminar una
   venta real en BDI · (5) el permiso «Caja» de BDI para quien cobre allá.
 - 🔑 **Qué migración de la Caja tiene cada base** (las corre SÓLO Bruno desde el 12-oct; la sesión prepara
   archivo, base, comando y consulta de verificación). Todos los `.sql` están en `origin/main`. Verificado el

@@ -743,6 +743,7 @@ export function EsperaTransferencia({
   const [otra, setOtra] = useState<{ titular: string | null; banco: string } | null>(null)
   // El error de una ACCIÓN de la cajera va aparte: la consulta a MP de cada 5 s limpia el suyo y lo borraba.
   const [errorAccion, setErrorAccion] = useState<string | null>(null)
+  const [operacion, setOperacion] = useState('')
   const terminada = useRef(false)
   const verTodos = useRef(false)
 
@@ -865,17 +866,19 @@ export function EsperaTransferencia({
           )}
         </div>
         <span style={{ fontSize: font.sm }}>
-          La venta se finaliza y sale el ticket cuando la transferencia aparece en Mercado Pago. No alcanza con el comprobante del teléfono.
+          {cruce?.estado === 'sin_cuenta'
+            ? 'La venta se finaliza y sale el ticket cuando confirmás la transferencia.'
+            : 'La venta se finaliza y sale el ticket cuando la transferencia aparece en Mercado Pago. No alcanza con el comprobante del teléfono.'}
           {venta.total !== monto && ` El resto (${plata(venta.total - monto)}) se cobra aparte.`}
         </span>
         {/* Bruno, 12-oct: las tres salidas cuando la transferencia ⛔ llega justa. */}
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-          {!sumando && (
+          {!sumando && cruce?.estado !== 'sin_cuenta' && (
             <Button size="sm" variant="outline" disabled={!!trabajando} onClick={empezarASumar}>
               Completar con otro cobro
             </Button>
           )}
-          {!otra && titularesDe(reglas).length > 0 && (
+          {!otra && titularesDe(reglas).length > 0 && cruce?.estado !== 'sin_cuenta' && (
             <Button size="sm" variant="outline" disabled={!!trabajando} onClick={() => { setSumando(null); setOtra({ titular: null, banco: '' }) }}>
               Transfirió a otra cuenta
             </Button>
@@ -980,6 +983,23 @@ export function EsperaTransferencia({
           </div>
         )}
         {(cruce?.estado === 'sin_cuenta' || cruce?.estado === 'invalido') && <span>{cruce.motivo}</span>}
+        {/* V4 (Bruno, 12-oct): la tienda sin cuenta de MP conectada (BDI) espera igual y la cajera la confirma. */}
+        {cruce?.estado === 'sin_cuenta' && (
+          <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <Field label="N° de operación (opcional)">
+              <Input value={operacion} onChange={(e) => setOperacion(e.target.value)} autoComplete="off" style={{ width: 200 }} />
+            </Field>
+            <Button
+              size="sm"
+              tone="success"
+              loading={trabajando === 'confirmada'}
+              disabled={!!trabajando}
+              onClick={() => terminar('confirmada', async () => onLlego((await confirmarTransferencia(venta.id, operacion.trim())).venta))}
+            >
+              Transferencia confirmada
+            </Button>
+          </div>
+        )}
         {error && <span style={{ color: color.danger }}>{error}</span>}
         {errorAccion && <span style={{ color: color.danger }}>{errorAccion}</span>}
       </div>
@@ -2569,6 +2589,9 @@ export function DeteccionTransferencias({ admin, reglas = null, onGuardadas }: {
           <span style={{ color: color.ink2 }}>Se asienta en Gestión Nube como: <b style={{ color: color.ink }}>{gn != null ? (NOMBRE_TRANSF_GN[gn] ?? `Cuenta ${gn}`) : '—'}</b></span>
         ))}
         {reglas && datos?.enUso && gn == null && <Notice tone="warning">Falta a qué cuenta de Gestión Nube va esta cuenta de Mercado Pago: hasta elegirla, la Caja no cobra por transferencia.</Notice>}
+        {datos && !datos.enUso && reglas?.transferenciaA != null && (
+          <Notice tone="neutral">Sin cuenta conectada: la transferencia queda esperando y la cajera la confirma mirando el comprobante («Transferencia confirmada»). Va a {NOMBRE_TRANSF_GN[reglas.transferenciaA] ?? reglas.cuentas[reglas.transferenciaA]?.nombre ?? `Cuenta ${reglas.transferenciaA}`}. Al conectar la cuenta en Pagos recibidos, se confirma sola.</Notice>
+        )}
         <span style={{ fontSize: font.sm, color: color.mut }}>Toda transferencia queda esperando el pago, sin ticket, hasta que aparece en esta cuenta.</span>
         {error && <span style={{ color: color.dangerInk, fontSize: font.sm }}>{error}</span>}
       </div>

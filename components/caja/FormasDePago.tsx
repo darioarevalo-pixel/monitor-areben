@@ -135,10 +135,11 @@ export function FormasDePago({ reglas, onGuardadas }: { reglas: Reglas; onGuarda
           )}
         </div>
         <SiNo pregunta="¿La transferencia se verifica en Mercado Pago antes de dar la venta por cobrada?" valor={f.verificarTransferencia} onCambio={(v) => setF({ ...f, verificarTransferencia: v })} />
-        {!f.verificarTransferencia && (
-          <Field label="Sin verificar, las transferencias van a">
+        {/* V4 (Bruno, 12-oct): también con la espera prendida, mientras la tienda ⛔ tiene cuenta de MP conectada. */}
+        {(
+          <Field label={f.verificarTransferencia ? 'Sin cuenta de Mercado Pago conectada, las transferencias van a' : 'Sin verificar, las transferencias van a'}>
             <Select value={f.transferenciaFija == null ? '' : String(f.transferenciaFija)} disabled={guardando} onChange={(e) => setF({ ...f, transferenciaFija: e.target.value ? Number(e.target.value) : null })} style={{ maxWidth: 300 }}>
-              <option value="">Elegir…</option>
+              <option value="">{f.verificarTransferencia ? 'Ninguna (sin cuenta de MP, la transferencia no se cobra)' : 'Elegir…'}</option>
               {transferencias.map((t) => (
                 <option key={t} value={t}>
                   {nombre(t)}
@@ -149,7 +150,7 @@ export function FormasDePago({ reglas, onGuardadas }: { reglas: Reglas; onGuarda
         )}
         <span style={{ color: color.mut, fontSize: font.sm }}>
           {f.verificarTransferencia
-            ? 'La venta por transferencia espera a que el pago aparezca en la cuenta de Mercado Pago de «Las transferencias se detectan en».'
+            ? 'La venta por transferencia queda esperando hasta que el pago aparece en la cuenta de Mercado Pago de «Las transferencias se detectan en». Si la tienda todavía no tiene cuenta conectada, la cajera mira el comprobante y toca «Transferencia confirmada».'
             : 'La venta por transferencia se da por cobrada al confirmar, como el efectivo: la cajera mira el comprobante.'}
         </span>
         <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>

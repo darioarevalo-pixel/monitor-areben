@@ -25,10 +25,10 @@ describe('formasDePagoDe ⇄ aplicarFormasDePago', () => {
 
   it('ida y vuelta: BDI, sin oferta ni 6 cuotas y sin verificar', () => {
     const f = formasDePagoDe(REGLAS_INICIALES_BDI)
-    expect(f).toMatchObject({ efectivoOferta: null, seisCuotas: null, tarjetaOferta: null, verificarTransferencia: false, transferenciaFija: 20597 })
+    expect(f).toMatchObject({ efectivoOferta: null, seisCuotas: null, tarjetaOferta: null, verificarTransferencia: true, transferenciaFija: 20597 })
     const r = aplicarFormasDePago(REGLAS_INICIALES_BDI, f, GN_BDI)
     expect(r.medios).toEqual(JSON.parse(JSON.stringify(REGLAS_INICIALES_BDI.medios)))
-    expect(r.verificarTransferencia).toBe(false)
+    expect(r.verificarTransferencia).toBe(true)
     expect(r.transferenciaFija).toBe(20597)
   })
 
@@ -54,12 +54,14 @@ describe('formasDePagoDe ⇄ aplicarFormasDePago', () => {
     expect(() => aplicarFormasDePago(REGLAS_INICIALES_BDI, { ...f, transferenciaAreben: null, transferenciaCG: null }, GN_BDI)).toThrow(/al menos una/)
   })
 
-  it('sin verificar en Mercado Pago, la cuenta fija tiene que ser una de transferencia', () => {
-    const f = formasDePagoDe(REGLAS_INICIALES_BDI)
-    expect(() => aplicarFormasDePago(REGLAS_INICIALES_BDI, { ...f, transferenciaFija: 14685 }, GN_BDI)).toThrow(/a qué cuenta van/)
+  it('la cuenta fija tiene que ser una de transferencia; sin verificar, obligatoria', () => {
+    const f = { ...formasDePagoDe(REGLAS_INICIALES_BDI), verificarTransferencia: false }
+    expect(() => aplicarFormasDePago(REGLAS_INICIALES_BDI, { ...f, transferenciaFija: 14685 }, GN_BDI)).toThrow(/una de transferencia/)
     expect(aplicarFormasDePago(REGLAS_INICIALES_BDI, { ...f, transferenciaFija: 14701 }, GN_BDI).transferenciaFija).toBe(14701)
-    // Volver a verificar: la fija se descarta.
-    expect(aplicarFormasDePago(REGLAS_INICIALES_BDI, { ...f, verificarTransferencia: true }, GN_BDI).transferenciaFija).toBeNull()
+    expect(() => aplicarFormasDePago(REGLAS_INICIALES_BDI, { ...f, transferenciaFija: null }, GN_BDI)).toThrow(/a qué cuenta van/)
+    // Verificando, la fija queda: es la de mientras la tienda ⛔ tiene cuenta de MP (V4, BDI).
+    expect(aplicarFormasDePago(REGLAS_INICIALES_BDI, { ...f, verificarTransferencia: true }, GN_BDI).transferenciaFija).toBe(20597)
+    expect(aplicarFormasDePago(REGLAS_INICIALES, formasDePagoDe(REGLAS_INICIALES), null).transferenciaFija).toBeNull()
   })
 
   it('🔴 sacarle a Zattia la cuenta de oferta pasa esa oferta a «con el %»: la Caja ⛔ queda sin cobrar', () => {

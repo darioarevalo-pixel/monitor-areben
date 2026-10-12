@@ -225,8 +225,11 @@ export default async function handler(req, res) {
    * `reglas.transferenciaPorMp` ({ [cuenta de MP]: cuenta de GN }); sin mapeo para la cuenta en uso, la
    * transferencia ⛔ se cobra (`transferenciaA: null` ⇒ `cuentaDeMedio` lo dice). ⛔ Hay modo feria
    * general: la feria es por producto (`feriaProductos`).
-   * 🔑 V4 (Bruno, 12-oct): una tienda SIN verificación (`verificarTransferencia: false`, BDI) ⛔ mira MP:
-   * la cuenta de GN es `transferenciaFija`.
+   * 🔑 V4 (Bruno, 12-oct): una tienda SIN verificación (`verificarTransferencia: false`) ⛔ mira MP: la cuenta
+   * de GN es `transferenciaFija`. Y la que verifica pero TODAVÍA ⛔ tiene cuenta de MP conectada (BDI, 12-oct),
+   * o cuya cuenta en uso ⛔ tiene mapeo, también va a `transferenciaFija`: la venta espera igual y la cajera
+   * la confirma a mano («Transferencia confirmada»); cuando se conecte la cuenta, el cruce es automático.
+   * Zattia ⛔ tiene `transferenciaFija` ⇒ sin mapeo sigue sin cobrar transferencia, como antes.
    */
   async function reglasDeHoy(reglas) {
     const { feria: _f, feriaIdsCampania: _x, ...sinFeria } = reglas
@@ -241,7 +244,9 @@ export default async function handler(req, res) {
     } catch { /* sin cuenta de MP: la transferencia ⛔ se cobra */ }
     const mapa = reglas.transferenciaPorMp || {}
     const gn = enUso != null ? Number(mapa[String(enUso)]) : NaN
-    return { ...sinFeria, transferenciaA: Number.isInteger(gn) && gn > 0 ? gn : null, feriaIdsCampania: await idsDeCampanias(reglas.feriaCampanias) }
+    const fija = Number(reglas.transferenciaFija)
+    const a = Number.isInteger(gn) && gn > 0 ? gn : Number.isInteger(fija) && fija > 0 ? fija : null
+    return { ...sinFeria, transferenciaA: a, feriaIdsCampania: await idsDeCampanias(reglas.feriaCampanias) }
   }
 
   /**
@@ -1012,7 +1017,7 @@ export default async function handler(req, res) {
         if (v.data.estado !== 'esperando_pago') return res.status(200).json({ venta: sinPayload(v.data), cruce: { estado: v.data.estado === 'cancelada' ? 'cancelada' : 'ya' } })
 
         const mp = await pagosParaCruzar(v.data)
-        if (!mp) return res.status(200).json({ venta: sinPayload(v.data), cruce: { estado: 'sin_cuenta', motivo: 'Pagos recibidos no tiene una cuenta de Mercado Pago conectada: la transferencia no se puede ver. Cancelá y cobrá por otra cuenta.' } })
+        if (!mp) return res.status(200).json({ venta: sinPayload(v.data), cruce: { estado: 'sin_cuenta', motivo: 'Esta tienda todavía no tiene la cuenta de Mercado Pago conectada: mirá el comprobante en el teléfono de la clienta y, si está bien, tocá «Transferencia confirmada».' } })
         const { pagos, reclamados } = mp
         // Robustez (11-oct): sólo las de las últimas horas. Una venta vieja olvidada esperando el mismo
         // monto trababa el cruce automático de TODAS las de ese monto, para siempre. Con la tolerancia
@@ -1166,14 +1171,23 @@ export default async function handler(req, res) {
         // B3 (auditoría, 11-oct): una transferencia que el cruce ⛔ ve nunca (la de Caja Gerencia es la cuenta
         // de un particular, ⛔ cae en el MP de la empresa) quedaba sin salida. La confirma un ADMIN con el
         // comprobante (número de operación o lo que lo identifique) y la venta sale a GN como con el cruce.
-        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Confirmar una transferencia a mano lo hace un admin.' })
+        // 🔑 V4 (Bruno, 12-oct): en una tienda SIN cuenta de MP conectada (BDI, hasta que la tenga) la confirma la
+        // CAJERA de la caja abierta, mirando el comprobante («Transferencia confirmada»): la venta pasa igual por
+        // «esperando» para que no se pierda la costumbre. Con la cuenta conectada, sólo el cruce o un admin.
         const id = String(b.id || '')
         if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido.' })
+        const admin = esAdmin(perfil)
+        let sinCuentaMp = false
+        if (!admin) {
+          sinCuentaMp = (await usosDe(sb, store)).length === 0
+          if (!sinCuentaMp) return res.status(403).json({ error: 'Esta tienda ve las transferencias en Mercado Pago: la confirma el cruce, o un admin a mano.' })
+          if (!puedeUsarPOS(await turnoAbierto(), perfil)) return res.status(403).json({ error: 'La confirma la cuenta que tiene la caja abierta, o un admin.' })
+        }
         const comprobante = String(b.comprobante ?? '').trim().slice(0, 200)
-        if (comprobante.length < 4) return res.status(400).json({ error: 'Falta el comprobante: el número de operación o lo que identifique la transferencia.' })
+        if (admin && comprobante.length < 4) return res.status(400).json({ error: 'Falta el comprobante: el número de operación o lo que identifique la transferencia.' })
         const ahora = new Date().toISOString()
         const tom = await sb.from('caja_venta')
-          .update({ estado: 'borrador', mp_cruce: 'admin', confirmacion: { por: perfil.name || null, en: ahora, comprobante }, actualizada_en: ahora })
+          .update({ estado: 'borrador', mp_cruce: admin ? 'admin' : 'cajera', confirmacion: { por: perfil.name || null, en: ahora, comprobante: comprobante || null, ...(sinCuentaMp ? { sinCuentaMp: true } : {}) }, actualizada_en: ahora })
           .eq('id', id).eq('store', store).eq('estado', 'esperando_pago').select(COLUMNAS_ENVIO).maybeSingle()
         if (tom.error) throw new Error(tom.error.message)
         if (!tom.data) {

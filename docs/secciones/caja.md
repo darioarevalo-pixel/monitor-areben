@@ -350,12 +350,17 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   oferta a «con el %» (si no, la Caja ⛔ cobraría). Verificado: la config REAL de Zattia ida y vuelta, igual.
 - 🔑 **BDI nace con las de Zattia y SUS cuentas** (`REGLAS_INICIALES_BDI`): Efectivo 14685 (15 %) ·
   Transferencia AREBEN 14701 / CG 20597 (10 %) · Débito 21667 (10 %) · Crédito 25189 (0) · Crédito 10 % OFF
-  25176. ⛔ Feria, ⛔ Feria TC, ⛔ 6 cuotas: **la oferta lleva el % de la forma de pago** (Bruno). ⚠️ En el POS
-  de GN de BDI las 2 ventas de débito de sep-oct salieron SIN descuento: Bruno dictó «idénticas» ⇒ 10 %.
+  25176. ⛔ Feria, ⛔ Feria TC, ⛔ 6 cuotas: **la oferta lleva el % de la forma de pago** (Bruno). Débito 10 %
+  confirmado por Bruno (12-oct), aunque en el POS de GN de BDI salía sin descuento.
 - 🔑 **Verificación de transferencia POR TIENDA** (`reglas.verificarTransferencia`; sólo un `false` explícito
-  la apaga): sin ella, `montoAEsperar` da 0 ⇒ la venta va directo a GN como el efectivo, y la cuenta es
-  `transferenciaFija`. **BDI arranca SIN** (su cuenta de MP «creo que igual», Bruno: ⛔ confirmada) ⇒ CG 20597,
-  la que usa su local (53 de 53). Se prende en «Formas de pago».
+  la apaga): sin ella, `montoAEsperar` da 0 ⇒ la venta va directo a GN como el efectivo.
+  🔑 **BDI espera IGUAL aunque todavía ⛔ tenga cuenta de MP** (Bruno, 12-oct: «que no se pierda la costumbre
+  de ver ese estado»): la venta queda en `esperando_pago`, el cruce contesta `sin_cuenta` y la CAJERA de la
+  caja abierta toca **«Transferencia confirmada»** (N° de operación opcional) ⇒ `confirmar-transferencia` con
+  `mp_cruce = 'cajera'`, `mp_pago_id` null y `confirmacion.sinCuentaMp: true`. 🔴 Sólo si la tienda ⛔ tiene
+  cuenta de MP en uso (`usosDe` vacío); con cuenta, la cajera ⛔ (403): confirma el cruce o un admin. La cuenta
+  de GN sin MP (o con MP sin mapeo) es `transferenciaFija` (BDI: CG 20597, la de su local, 53 de 53); Zattia ⛔
+  la tiene ⇒ igual que antes. Cuando BDI conecte su cuenta en Pagos recibidos, el cruce es automático.
 - 🔑 **La marca de la PANTALLA**: `lib/caja/marca.ts` guarda la marca ACTIVA de la pestaña
   (`usarMarcaCaja`); de ella salen el `store` de cada pedido (`cliente.ts`), las claves del `localStorage`
   (`caja:borrador:<marca>`, `caja:conteo:<marca>:…`, `caja:cliente:<marca>`) y `MARCA_CAJA` (getters). La
