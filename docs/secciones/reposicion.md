@@ -115,7 +115,8 @@ completos**, con «ya faltó N veces en 14 días».
 - `lib/reposicion/correo.core.js` (puro, `tests/reposicion-correo.test.ts`) ·
   `scripts/reposicion-correo.mjs` (sólo lee `repo_armado`) · `.github/workflows/reposicion-correo.yml`.
 - ⛔ **Sin la devolución** («por ahora no», Darío 12-oct): el correo es sólo depósito → local.
-  El asunto avisa sin iniciar / sin finalizar / transferencia **sin confirmar**.
+  El asunto avisa sin iniciar / sin transferir / transferencia **sin confirmar**. Antes de
+  Finalizar los números dicen **Escaneadas** (no se movió nada); después, **Transferidas**.
 - ⏱️ **La duración** = de «Iniciar armado» a «Finalizar» (`creado_en` → `cerrado_en`): si se abre la
   lista y se empieza a juntar más tarde, la duración sale inflada.
 - 📅 **Lunes a sábado** (Zattia; BDI repone de lunes a viernes, pero no usa el armado con lector).

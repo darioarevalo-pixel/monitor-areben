@@ -17,9 +17,9 @@ const arm = (x: Record<string, unknown>) => ({
 describe('correo de la reposición', () => {
   it('finalizada: hora de Argentina, quién, números y sólo los renglones incompletos', () => {
     const c = armarCorreo({ hoy: HOY, armados: [arm({})], anteriores: [] })
-    expect(c.asunto).toBe('Reposición 13-oct: finalizada · 1 no encontrada')
-    expect(c.texto).toContain('Finalizada a las 09:08 · Lorena · 38 min')
-    expect(c.texto).toContain('Pedidas 4 · Llevadas 2 · No encontradas 1')
+    expect(c.asunto).toBe('Reposición 13-oct: transferida · 1 no encontrada')
+    expect(c.texto).toContain('Transferida a las 09:08 · Lorena · 38 min')
+    expect(c.texto).toContain('Pedidas 4 · Transferidas 2 · No encontradas 1')
     expect(c.texto).toContain('Transferencia en GN: 7750')
     expect(c.texto).not.toContain('RTO-1_1') // completa: no se lista
     // la no encontrada primero; «Variante Única» no se muestra
@@ -36,8 +36,9 @@ describe('correo de la reposición', () => {
 
   it('🔴 sin finalizar a las 10 (y uno que quedó abierto de ayer)', () => {
     const c = armarCorreo({ hoy: HOY, armados: [arm({ estado: 'en_curso', fecha: '2026-10-12', cerrado_en: null })], anteriores: [] })
-    expect(c.asunto).toBe('⚠️ Reposición 13-oct: sin finalizar')
-    expect(c.texto).toContain('Sin finalizar: iniciada a las 08:30 (iniciada el 12-oct) · Lorena')
+    expect(c.asunto).toBe('⚠️ Reposición 13-oct: sin transferir')
+    expect(c.texto).toContain('Sin transferir: iniciada a las 08:30 (iniciada el 12-oct) · Lorena')
+    expect(c.texto).toContain('Pedidas 4 · Escaneadas 2')
   })
 
   it('🔴 transferencia sin confirmar gana al resto', () => {
@@ -48,7 +49,7 @@ describe('correo de la reposición', () => {
 
   it('⛔ la devolución no va en el correo (Darío, 12-oct)', () => {
     const c = armarCorreo({ hoy: HOY, armados: [arm({}), arm({ id: 'd', sentido: 'devolver', estado: 'revisar' })], anteriores: [] })
-    expect(c.asunto).toBe('Reposición 13-oct: finalizada · 1 no encontrada')
+    expect(c.asunto).toBe('Reposición 13-oct: transferida · 1 no encontrada')
     expect(c.texto).not.toContain('DEVOLUCIÓN')
   })
 
