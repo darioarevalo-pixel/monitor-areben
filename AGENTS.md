@@ -335,6 +335,9 @@ vacío, leer `VOCABULARIO.md`** — el glosario compartido con MAKETA (`areben-m
 archivo en los dos repos**, clavado por `tests/vocabulario.test.ts`. **Eliminar / Sacar / Archivar /
 Descartar** según *¿sigue existiendo después?* (⛔ nunca «borrar» ni «quitar»), **Pendientes** (⛔ no
 «lo que falta»), botones en **infinitivo** y voseo sólo en las ayudas.
+🔴 **Las palabras del NEGOCIO van en la §5 de `VOCABULARIO.md`** (`caja` ⛔ `turno`, `oferta` ⛔ `feria`…):
+cada corrección de Bruno sobre una palabra es UNA FILA ahí, en el momento, y `tests/terminos.test.ts`
+la hace cumplir en todas las pantallas. Tocar `VOCABULARIO.md` = copiarlo a `areben-marketing` en el mismo trabajo.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
