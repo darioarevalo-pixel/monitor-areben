@@ -33,10 +33,11 @@ import { imprimirDevolucion } from '@/lib/reposicion/rollo'
 import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
 import { ArmadoLector } from './ArmadoLector'
+import { HistorialArmados } from './HistorialArmados'
 import { abrirArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, type Armado } from '@/lib/reposicion/armado'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
-type Pestana = 'llevar' | 'devolver'
+type Pestana = 'llevar' | 'devolver' | 'historial'
 
 export function ReposicionZattia({ allProductos }: { allProductos: Producto[] }) {
   const { marca, perfil } = useSesion()
@@ -252,6 +253,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
           items={[
             { key: 'llevar', label: 'Reposición', badge: totalLlevar || undefined },
             { key: 'devolver', label: 'Devolución', badge: devolver.total || undefined },
+            { key: 'historial', label: 'Historial' },
           ]}
         />
         <span style={{ marginLeft: 'auto', fontSize: font.sm, color: edadMin != null && edadMin >= 360 ? color.warningInk : color.mut2 }}>
@@ -261,7 +263,9 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         </span>
       </div>
 
-      {tab === 'llevar' ? (
+      {tab === 'historial' ? (
+        <HistorialArmados linea={linea} />
+      ) : tab === 'llevar' ? (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
             <span style={{ fontSize: font.md, color: color.ink2 }}>
@@ -343,7 +347,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         </>
       )}
 
-      {exhibidos.length > 0 && (
+      {tab !== 'historial' && exhibidos.length > 0 && (
         <p style={{ marginTop: space[4], fontSize: font.sm, color: color.mut }}>
           Todo exhibido, fuera de las listas: {new Set(exhibidos.map((f) => f.it.pid)).size} productos · {[...new Set(exhibidos.map((f) => f.d.modo.motivo))].join(' · ')}
         </p>

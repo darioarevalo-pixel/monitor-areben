@@ -134,6 +134,50 @@ export async function leerArmadoHoy(linea: LineaZ, sentido: Sentido): Promise<Ar
   return d.armado
 }
 
+/** Los últimos armados de la línea (sin los descartados), del más nuevo al más viejo. */
+export async function leerHistorial(linea: LineaZ, limit = 60): Promise<Armado[]> {
+  const d = await pedir<{ armados: Armado[] }>(`${API}&action=historial&linea=${linea}&limit=${limit}&nc=${Date.now()}`)
+  return d.armados || []
+}
+
+/** Lo que pasó con un renglón del pedido, para el detalle del historial. */
+export type EstadoRenglon = 'completa' | 'parcial' | MotivoFaltante | 'sin-respuesta'
+export function estadoRenglon(a: Pick<Armado, 'escaneos' | 'faltantes'>, l: LineaPedido): EstadoRenglon {
+  const n = a.escaneos?.[l.vid] || 0
+  if (n >= l.cant) return 'completa'
+  const f = a.faltantes?.[l.vid]
+  if (f) return f
+  return n > 0 ? 'parcial' : 'sin-respuesta'
+}
+
+/** Cuántas unidades quedaron sin escanear marcadas «no encontrada» (o rechazadas por GN). */
+export function noEncontradas(a: Pick<Armado, 'pedido' | 'escaneos' | 'faltantes'>): number {
+  return a.pedido.reduce((s, l) => {
+    const f = a.faltantes?.[l.vid]
+    return f === 'no-estaba' || f === 'rechazada' ? s + l.cant - (a.escaneos?.[l.vid] || 0) : s
+  }, 0)
+}
+
+/**
+ * Las variantes que más veces aparecieron como no encontradas: la señal de un stock mal cargado
+ * (el sistema dice que hay y en el estante no).
+ */
+export function masNoEncontradas(armados: Armado[], tope = 10): { vid: string; name: string; size: string; sku: string; veces: number; unidades: number }[] {
+  const m = new Map<string, { vid: string; name: string; size: string; sku: string; veces: number; unidades: number }>()
+  for (const a of armados) {
+    if (a.estado !== 'transferido') continue
+    for (const l of a.pedido) {
+      const f = a.faltantes?.[l.vid]
+      if (f !== 'no-estaba' && f !== 'rechazada') continue
+      const x = m.get(l.vid) ?? { vid: l.vid, name: l.name, size: l.size, sku: l.sku, veces: 0, unidades: 0 }
+      x.veces++
+      x.unidades += l.cant - (a.escaneos?.[l.vid] || 0)
+      m.set(l.vid, x)
+    }
+  }
+  return [...m.values()].sort((a, b) => b.veces - a.veces || b.unidades - a.unidades).slice(0, tope)
+}
+
 export async function abrirArmado(linea: LineaZ, sentido: Sentido, pedido: LineaPedido[]): Promise<{ armado: Armado; yaHabia?: boolean }> {
   const id = `ra${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   return escribir('abrir', { id, linea, sentido, pedido })

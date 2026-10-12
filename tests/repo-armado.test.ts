@@ -5,7 +5,7 @@
 // escaneado, nunca más de lo pedido**: mueve stock real en GN.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { itemsTransferencia, sanearEscaneos, sanearPedido } from '@/lib/reposicion/armado.core.js'
-import { frase, leerCodigo, type LineaPedido } from '@/lib/reposicion/armado'
+import { estadoRenglon, frase, leerCodigo, masNoEncontradas, noEncontradas, type Armado, type LineaPedido } from '@/lib/reposicion/armado'
 
 const L = (x: Partial<LineaPedido>): LineaPedido => ({ vid: '1_1', pid: '1', sid: '1', sku: 'RTO-1-NG', barcode: '779001', name: 'TOP ZOE', size: 'S', cant: 2, exhibir: false, ...x })
 
@@ -51,6 +51,27 @@ describe('lo puro', () => {
 
   it('por SKU también engancha (con o sin guiones)', () => {
     expect(leerCodigo([L({})], {}, 'rto1ng', []).tipo).toBe('suma')
+  })
+})
+
+describe('historial', () => {
+  const arm = (x: Partial<Armado>): Armado => ({ id: 'a', linea: 'zattia', sentido: 'llevar', fecha: '2026-10-13', persona: 'lorena', estado: 'transferido', pedido: [], escaneos: {}, faltantes: {}, transfer: null, error: null, creado_en: '', actualizado_en: '', cerrado_en: null, ...x })
+  const p = [L({ vid: '1_1', cant: 3 }), L({ vid: '2_1', name: 'BODY LIA', cant: 2 }), L({ vid: '3_1', cant: 1 })]
+
+  it('resultado por renglón y unidades no encontradas', () => {
+    const a = arm({ pedido: p, escaneos: { '1_1': 3, '2_1': 1 }, faltantes: { '2_1': 'no-estaba', '3_1': 'despues' } })
+    expect(p.map((l) => estadoRenglon(a, l))).toEqual(['completa', 'no-estaba', 'despues'])
+    expect(noEncontradas(a)).toBe(1)
+  })
+
+  it('lo que más veces no se encontró, sólo de armados transferidos', () => {
+    const a1 = arm({ pedido: p, faltantes: { '2_1': 'no-estaba' } })
+    const a2 = arm({ pedido: p, faltantes: { '2_1': 'rechazada', '3_1': 'no-estaba' } })
+    const a3 = arm({ pedido: p, estado: 'en_curso', faltantes: { '3_1': 'no-estaba' } })
+    expect(masNoEncontradas([a1, a2, a3]).map((x) => [x.vid, x.veces, x.unidades])).toEqual([
+      ['2_1', 2, 4],
+      ['3_1', 1, 1],
+    ])
   })
 })
 
@@ -112,6 +133,13 @@ beforeEach(() => {
   )
 })
 afterEach(() => vi.unstubAllGlobals())
+
+async function correrGet(query: Record<string, unknown>) {
+  const { default: handler } = await import('../api/_repo-armado.js')
+  const res = { code: 0, body: null as Record<string, unknown> | null, setHeader() {}, status(c: number) { res.code = c; return res }, json(b: unknown) { res.body = b as Record<string, unknown>; return res }, end() { return res } }
+  await (handler as (q: unknown, s: unknown) => Promise<void>)({ method: 'GET', headers: { 'x-monitor-auth': sobre({ user: 'lorena', pass: 'p' }) }, query: { store: 'zattia', ...query }, body: {} }, res)
+  return res
+}
 
 async function correr(body: Record<string, unknown>) {
   const { default: handler } = await import('../api/_repo-armado.js')
@@ -175,5 +203,14 @@ describe('api/_repo-armado.js', () => {
     expect(r.code).toBe(400)
     expect(llamadasGN).toHaveLength(0)
     expect(tabla[0].estado).toBe('en_curso')
+  })
+
+  it('el historial no muestra los descartados', async () => {
+    await abrir()
+    await correr({ action: 'cancelar', id: 'ra1' })
+    await correr({ action: 'abrir', id: 'ra2', linea: 'zattia', sentido: 'llevar', pedido: PEDIDO })
+    const r = await correrGet({ action: 'historial', linea: 'zattia' })
+    expect(r.code).toBe(200)
+    expect((r.body?.armados as { id: string }[]).map((a) => a.id)).toEqual(['ra2'])
   })
 })

@@ -83,6 +83,9 @@ Lorena escanea en la **COMPU** del depósito, con lector, contra la lista de «L
   mientras el stock sea anterior a la transferencia (si no, se pide dos veces lo mismo).
 - Lo que sobra o no estaba pedido **frena la pantalla** (cartel rojo, ⛔ no el `Modal`: el Enter del
   lector lo cerraba), igual que Conteo. La primera de una «para exhibir» se canta y se marca.
+- **Historial** (pestaña, `HistorialArmados.tsx`, `?action=historial`): un renglón por armado (sin
+  los descartados) con horario, duración, pedidas/escaneadas/no encontradas y el detalle; arriba,
+  **«Más veces no encontradas»** = la señal de stock mal cargado. Sólo cuenta armados transferidos.
 - Lo escaneado vive en `localStorage` (`monitor_repo_armado_<id>`) y se sube cada 1,5 s.
 - GN es atómico: un 422 no movió nada; la pantalla muestra los renglones rechazados y ofrece
   sacarlos (quedan `rechazada`: diferencia de stock para la tanda 3).

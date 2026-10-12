@@ -1,6 +1,7 @@
 // Reposición — el ARMADO con el lector y la transferencia en Gestión Nube (sql/migrate-repo-armado.sql).
 //
 //   GET  ?recurso=repo-armado&store=zattia&action=hoy&linea=zattia&sentido=llevar → el armado de hoy (o null)
+//   GET  ?recurso=repo-armado&store=zattia&action=historial&linea=zattia&limit=60   → los últimos armados, del más nuevo
 //   POST ?recurso=repo-armado  { action: 'abrir'|'guardar'|'cancelar'|'transferir'|'resolver', store, … }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` (12 funciones en Hobby).
@@ -66,7 +67,22 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      if (accion !== 'hoy') return res.status(400).json({ error: 'action inválida (usá hoy)' })
+      if (accion === 'historial') {
+        // El historial (Darío, 12-oct-2026): un renglón por armado, sin los descartados.
+        const linea = LINEAS.includes(req.query.linea) ? req.query.linea : 'zattia'
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 60, 1), 200)
+        const { data, error } = await sb
+          .from('repo_armado')
+          .select(COLUMNAS)
+          .eq('store', store)
+          .eq('linea', linea)
+          .neq('estado', 'cancelado')
+          .order('creado_en', { ascending: false })
+          .limit(limit)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ ok: true, armados: data || [] })
+      }
+      if (accion !== 'hoy') return res.status(400).json({ error: 'action inválida (usá hoy o historial)' })
       const linea = LINEAS.includes(req.query.linea) ? req.query.linea : 'zattia'
       const sentido = SENTIDOS.includes(req.query.sentido) ? req.query.sentido : 'llevar'
       // Primero uno abierto (de cualquier día: uno que quedó de ayer sin cerrar tiene que verse), y
