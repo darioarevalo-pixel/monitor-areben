@@ -564,6 +564,16 @@ export async function pasarAFallas(
 }
 
 /**
+ * El primer producto que ⛔ tiene artículo de Gestión Nube (nombre para el mensaje), o null si están
+ * todos. Las ventas técnicas de un reclamo se crean ENTERAS o no se crean.
+ */
+export function sinArticuloGN(unidades: { item: Pick<ItemReclamo, 'product_id' | 'size_id' | 'producto' | 'sku'> }[]): string | null {
+  const u = unidades.find((x) => !x.item.product_id || !x.item.size_id)
+  if (!u) return null
+  return `«${u.item.producto || u.item.sku || 'un producto'}»`
+}
+
+/**
  * Descuenta del stock la unidad de reemplazo que se le manda al cliente.
  *
  * **Es el agujero que tapa esta función**: cuando la salida es "le mandamos otra igual", esa
@@ -580,12 +590,13 @@ export async function descontarReemplazo(
   d: ReclamoRow,
   ctx: CtxVentaReclamo,
 ): Promise<{ id?: string; number?: string }> {
+  // 🔴 Entera o nada: hasta el 13-oct-2026 los productos sin artículo de GN se salteaban callados y el
+  // reemplazo quedaba como descontado con una prenda menos.
+  const sinGN = sinArticuloGN((d.items || []).map((i) => ({ item: i })))
+  if (sinGN) throw new Error(`${sinGN} no está linkeado a Gestión Nube, así que no se puede descontar el stock del reemplazo. Linkealo o cargalo a mano en GN.`)
   const items = (d.items || [])
-    .filter((i) => i.product_id && i.size_id)
     .map((i) => ({ product_id: i.product_id as string, size_id: i.size_id as string, quantity: Number(i.cantidad) || 1, unit_price: Number(i.precio) || 0 }))
-  if (!items.length) {
-    throw new Error('Estos productos no están linkeados a Gestión Nube, así que no se puede descontar el stock del reemplazo. Cargalo a mano en GN.')
-  }
+  if (!items.length) throw new Error('Este reclamo no tiene productos para descontar.')
   const r = await fetch(CREAR_VENTA_API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -643,19 +654,18 @@ export async function descontarRegaladas(
    */
   const traba = faltaAnularAntesDeDescontar(d)
   if (traba) throw new Error(traba)
+  // 🔴 Entera o nada: hasta el 13-oct-2026 las unidades sin artículo de GN se salteaban en la venta
+  // pero el sello de abajo las marcaba descontadas igual ⇒ el reclamo decía que habían salido y el
+  // stock de GN las seguía teniendo.
+  const sinGN = sinArticuloGN(faltan)
+  if (sinGN) throw new Error(`${sinGN} no está linkeado a Gestión Nube, así que no se puede descontar el stock. Linkealo o cargalo a mano en GN.`)
   const items = faltan
-    .filter((u) => u.item.product_id && u.item.size_id)
     .map((u) => ({
       product_id: u.item.product_id as string,
       size_id: u.item.size_id as string,
       quantity: Number(u.item.cantidad) || 1,
       unit_price: Number(u.item.precio) || 0,
     }))
-  // Mismo corte que `descontarReemplazo`: sin el artículo de GN no hay stock que mover, y fallar
-  // acá es mejor que dejar creer que se descontó.
-  if (!items.length) {
-    throw new Error('Estos productos no están linkeados a Gestión Nube, así que no se puede descontar el stock. Cargalo a mano en GN.')
-  }
   const r = await fetch(CREAR_VENTA_API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -740,8 +750,11 @@ export async function procesarCambio(
   orden: OrdenTN | null | undefined,
   ctx: CtxVentaReclamo,
 ): Promise<{ id?: string; number?: string }> {
-  const nuevos = (d.items_nuevos || []).filter((i) => i.product_id && i.size_id)
-  if (!nuevos.length) throw new Error('Lo que se lleva el cliente no está linkeado a Gestión Nube: sin eso la venta no puede descontar stock.')
+  const nuevos = d.items_nuevos || []
+  if (!nuevos.length) throw new Error('Falta cargar lo que se lleva el cliente.')
+  // Entera o nada, como el reemplazo y las regaladas: una prenda sin artículo de GN ⛔ se saltea callada.
+  const sinGN = sinArticuloGN(nuevos.map((i) => ({ item: i })))
+  if (sinGN) throw new Error(`${sinGN} no está linkeado a Gestión Nube: sin eso la venta no puede descontar stock.`)
   if (!d.forma_pago) throw new Error('Falta la forma de pago del cambio.')
 
   const cuenta = calcularCambio({

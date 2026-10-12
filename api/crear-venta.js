@@ -8,6 +8,9 @@ import { confirmar as confirmarLedger, liberar as liberarLedger, reservar as res
 // pantalla muestra EXACTAMENTE esta nota antes de que alguien apriete Importar: si fueran dos
 // implementaciones, la pantalla prometería una cosa y GN guardaría otra.
 import { notaTnImport } from '../lib/sync-tn/nota.core.js';
+// Cada venta que sale de acá se anota en `gn_venta_monitor` (prendas, depósito, hora, de qué flujo):
+// es lo que el libro de stock necesita para que el monitor tenga el dato sin GN. Ver api/_ventas-monitor.js.
+import { anotar, filaDeVenta, leer as leerRegistro, marcarAnulada } from './_ventas-monitor.js';
 
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
 
@@ -118,6 +121,17 @@ const TOKENS = {
   stunned: process.env.GN_TOKEN_VENTAS,
 };
 
+/**
+ * Los renglones que GN no acepta. 🔴 **Se rechaza el pedido entero, ⛔ se descartan callados**: hasta el
+ * 13-oct-2026 un renglón sin ids o con cantidad ≤ 0 se filtraba y la venta salía con el resto, así que
+ * el flujo que la pidió creía haber descontado prendas que nunca se mandaron (libro de stock, F2).
+ * `admiteNegativa`: sólo el reingreso manda cantidades negativas (suma stock).
+ */
+function renglonesInvalidos(items, admiteNegativa = false) {
+  if (!Array.isArray(items)) return [];
+  return items.filter(it => !(it && it.product_id && it.size_id && Number.isInteger(+it.quantity) && (admiteNegativa ? +it.quantity !== 0 : +it.quantity > 0)));
+}
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function gnFetch(url, opts, tries = 3) {
   let last;
@@ -173,6 +187,35 @@ export default async function handler(req, res) {
       const v = (d && d.data) ? d.data : d;
       if (!r.ok || !v) return res.status(200).json({ ok: true, existe: true, desconocido: true });
       return res.status(200).json({ ok: true, existe: true, active: v.active, archived: v.archived, sale_state_id: v.sale_state_id });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ── Anotar que una venta del monitor se anuló ──
+  // GN ⛔ anula por API: hoy la anula una persona en la web de GN, y acá queda ANOTADO en el registro
+  // (`gn_venta_monitor`) para que el monitor lo sepa sin preguntarle a GN. Mientras GN exista se le
+  // pregunta antes: una venta que GN todavía tiene activa ⛔ se marca anulada (sería afirmar algo falso
+  // sobre el stock). Una venta que el monitor no creó (o anterior al registro) contesta 404.
+  if (b.accion === 'anulada') {
+    const ventaId = parseInt(b.ventaId, 10);
+    if (!ventaId) return res.status(400).json({ error: 'ventaId inválido' });
+    try {
+      const fila = await leerRegistro(store, ventaId);
+      if (!fila) return res.status(404).json({ error: `La venta ${ventaId} no está en el registro del monitor.` });
+      if (fila.anulada_en) return res.status(200).json({ ok: true, ya: true, anulada_en: fila.anulada_en });
+      const r = await gnFetch(`${GN_BASE}/ventas/${ventaId}`, { headers: { Authorization: `Bearer ${TOKEN}`, Accept: 'application/json' } });
+      let activa = null;
+      if (r.status === 404) activa = false;
+      else if (r.ok) {
+        const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = null; }
+        const v = (d && d.data) ? d.data : d;
+        if (v) activa = !(v.active === false || v.archived === true);
+      }
+      if (activa === null) return res.status(502).json({ error: `No se pudo preguntarle a Gestión Nube por la venta ${ventaId} (contestó ${r.status}). Probá de nuevo.` });
+      if (activa) return res.status(409).json({ error: `Gestión Nube todavía tiene la venta ${fila.gn_number || ventaId} activa: anulala primero allá.` });
+      await marcarAnulada(store, ventaId, { usuario: perfil.name || perfil.user || null, nota: b.nota ? String(b.nota).slice(0, 300) : null });
+      return res.status(200).json({ ok: true });
     } catch (e) {
       return res.status(500).json({ error: e.message });
     }
@@ -236,7 +279,8 @@ export default async function handler(req, res) {
       }
       const v = (d && d.data) ? d.data : d;
       await confirmarLedger(store, tnOrder, { estado: 'ok', gn_venta_id: v && v.id, gn_number: v && v.number, store_id }).catch(() => {});
-      return res.status(200).json({ ok: true, store_id, venta: { id: v && v.id, number: v && v.number } });
+      const reg = await anotar(store, filaDeVenta({ store, venta: v, payload, b, usuario: perfil.name || perfil.user || null }));
+      return res.status(200).json({ ok: true, store_id, venta: { id: v && v.id, number: v && v.number }, ...reg });
     } catch (e) {
       // Red caída o timeout: NO se sabe si GN llegó a crear la venta. La reserva QUEDA puesta a
       // propósito, y sólo la suelta alguien que fue a mirar a GN (api/datos?recurso=sync-tn,
@@ -256,8 +300,10 @@ export default async function handler(req, res) {
     const paymentId = (CAMBIO_PAYMENT[store] || {})[forma];
     if (!channel) return res.status(400).json({ error: `Falta configurar el canal de venta real del cambio para ${store} (CAMBIO_CHANNEL). Corré scripts/gn-formas-pago.mjs y completá el id.` });
     if (!paymentId) return res.status(400).json({ error: `Falta configurar la forma de pago "${forma || '—'}" del cambio para ${store} (CAMBIO_PAYMENT).` });
-    const its = Array.isArray(b.items) ? b.items.filter(it => it && it.product_id && it.size_id && +it.quantity > 0) : [];
+    const its = Array.isArray(b.items) ? b.items : [];
     if (!its.length) return res.status(400).json({ error: 'items vacíos' });
+    const malos = renglonesInvalidos(its);
+    if (malos.length) return res.status(400).json({ error: `Hay ${malos.length} renglón(es) sin producto de GN o con cantidad inválida: la venta se crea entera o no se crea.`, detalle: malos.slice(0, 5) });
     const store_id = cfg.store[b.origen];
     const lineItems = its.map(it => ({ product_id: parseInt(it.product_id, 10), size_id: parseInt(it.size_id, 10), quantity: parseInt(it.quantity, 10), unit_price: Number(it.unit_price) || 0, store_id }));
     const payload = {
@@ -276,7 +322,8 @@ export default async function handler(req, res) {
       const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = t.slice(0, 500); }
       if (!r.ok) return res.status(r.status).json({ error: 'GN rechazó la venta del cambio', status: r.status, detalle: d });
       const v = (d && d.data) ? d.data : d;
-      return res.status(200).json({ ok: true, store_id, venta: { id: v && v.id, number: v && v.number } });
+      const reg = await anotar(store, filaDeVenta({ store, venta: v, payload, b, usuario: perfil.name || perfil.user || null }));
+      return res.status(200).json({ ok: true, store_id, venta: { id: v && v.id, number: v && v.number }, ...reg });
     } catch (e) {
       return res.status(500).json({ error: e.message });
     }
@@ -288,9 +335,10 @@ export default async function handler(req, res) {
   // así que se prueba con una "venta" de cantidad negativa + discount_inventory. SOLO esta acción admite
   // negativos; el camino normal (fotos/solicitudes/fallas) sigue exigiendo quantity > 0.
   const esReingreso = b.accion === 'reingreso';
-  const okQty = (it) => (esReingreso ? +it.quantity !== 0 : +it.quantity > 0);
-  const items = Array.isArray(b.items) ? b.items.filter(it => it && it.product_id && it.size_id && okQty(it)) : [];
+  const items = Array.isArray(b.items) ? b.items : [];
   if (!items.length) return res.status(400).json({ error: 'items vacíos' });
+  const malos = renglonesInvalidos(items, esReingreso);
+  if (malos.length) return res.status(400).json({ error: `Hay ${malos.length} renglón(es) sin producto de GN o con cantidad inválida: la venta se crea entera o no se crea.`, detalle: malos.slice(0, 5) });
 
   const store_id = cfg.store[b.origen];
   // El canje se corta ACÁ si la marca no tiene cliente configurado: caer al de fotos dejaría la
@@ -353,7 +401,8 @@ export default async function handler(req, res) {
     const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = t.slice(0, 500); }
     if (!r.ok) return res.status(r.status).json({ error: 'GN rechazó la venta', status: r.status, detalle: d });
     const v = (d && d.data) ? d.data : d;
-    return res.status(200).json({ ok: true, store_id, venta: { id: v && v.id, number: v && v.number } });
+    const reg = await anotar(store, filaDeVenta({ store, venta: v, payload, b, usuario: perfil.name || perfil.user || null }));
+    return res.status(200).json({ ok: true, store_id, venta: { id: v && v.id, number: v && v.number }, ...reg });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }

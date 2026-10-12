@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui'
 import { leerPrioridadRetiro } from '@/lib/sesionfotos/cfg'
 import type { Origen, VentaGN } from '@/lib/sesionfotos/tipos'
 import type { Credencial } from '@/lib/sesion'
+import { anotarAnulada } from '@/lib/sesionfotos/ventas'
 
 /**
  * Motor de carga/persistencia del historial de solicitudes, compartido por Sesión de
@@ -59,7 +60,7 @@ export function destinosDe(linea: Linea): { cajon: Linea; gn: Marca } {
 }
 
 /** Forma mínima que el motor necesita de cada solicitud. */
-type SolBase = { id: string; estado: string; ventas?: Partial<Record<Origen, VentaGN>> }
+type SolBase = { id: string; estado: string; ventas?: Partial<Record<Origen, VentaGN>>; items?: { origen: Origen }[] }
 
 export type ResultadoCrearGen =
   | { tipo: 'ya-tenia'; ventas: Partial<Record<Origen, VentaGN>>; estadoSol: string }
@@ -168,10 +169,15 @@ export function useHistorialSolicitudes<T extends SolBase>(linea: Linea, opts: O
       const fresca = await leerCajon<T>(kind, destinosDe(lineaAhora).cajon)
       if (!fresca.ok) return { tipo: 'no-leido' }
       const fresh = fresca.dato.find((x) => x.id === s.id) ?? null
-      if (fresh?.ventas && Object.keys(fresh.ventas).length) {
-        return { tipo: 'ya-tenia', ventas: fresh.ventas, estadoSol: fresh.estado }
+      // 🔑 Se saltean sólo los orígenes que YA tienen venta, ⛔ la solicitud entera. Hasta el 13-oct-2026
+      // bastaba una venta (la del local, por ejemplo) para contestar «ya tenía»: si la del depósito
+      // había fallado, el reintento ⛔ la creaba nunca y esas prendas quedaban sin descontar.
+      const yaHechas = fresh?.ventas || {}
+      const pendiente = s.items ? ({ ...s, items: s.items.filter((i) => !yaHechas[i.origen]?.id) } as T) : s
+      const { ventas, errores } = await crearVentas(pendiente, { store: destinosDe(lineaAhora).gn, cred })
+      if (fresh && Object.keys(yaHechas).length && !Object.keys(ventas).length && !errores.length) {
+        return { tipo: 'ya-tenia', ventas: yaHechas, estadoSol: fresh.estado }
       }
-      const { ventas, errores } = await crearVentas(s, { store: destinosDe(lineaAhora).gn, cred })
       if (Object.keys(ventas).length) {
         await persistir((l) => l.map((x) => (x.id === s.id ? ({ ...x, ventas: { ...(x.ventas || {}), ...ventas }, estado: estadoTrasVenta } as T) : x)))
       }
@@ -182,9 +188,15 @@ export function useHistorialSolicitudes<T extends SolBase>(linea: Linea, opts: O
 
   const cerrarAnuladas = useCallback(async (): Promise<number> => {
     if (!data) return 0
-    const cerrar = await idsParaCerrar(data, destinosDe(lineaRef.current).gn)
+    const gn = destinosDe(lineaRef.current).gn
+    const cerrar = await idsParaCerrar(data, gn)
     if (!cerrar.length) return 0
     await persistir((l) => l.map((x) => (cerrar.includes(x.id) ? ({ ...x, estado: 'cerrada' } as T) : x)))
+    // Que el monitor sepa por sí solo que esas prendas volvieron (libro de stock): cada venta anulada
+    // queda anotada en el registro. Si no se puede, la solicitud se cierra igual: GN ya la anuló.
+    for (const s of data.filter((x) => cerrar.includes(x.id))) {
+      for (const v of Object.values(s.ventas || {})) if (v?.id) await anotarAnulada(gn, v.id, `solicitud ${s.id} cerrada`)
+    }
     return cerrar.length
   }, [data, idsParaCerrar, persistir])
 

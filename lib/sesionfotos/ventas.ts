@@ -145,6 +145,21 @@ export async function consultarEstadoGN(store: string, ventaId: number | string)
   }
 }
 
+/**
+ * Anota en el registro del monitor (`gn_venta_monitor`) que la venta se anuló. El servidor le vuelve a
+ * preguntar a GN antes de anotar. Ventas anteriores al registro contestan 404: no es un error, no hay
+ * nada que anotar. Devuelve si quedó anotada.
+ */
+export async function anotarAnulada(store: string, ventaId: number | string, nota?: string): Promise<boolean> {
+  try {
+    const r = await apiFetch(SF_CREAR_VENTA_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'anulada', store, ventaId, nota }) })
+    const d = await r.json()
+    return !!d?.ok
+  } catch {
+    return false
+  }
+}
+
 /** ¿La venta está anulada en GN? Ante la duda (error/desconocido), NO. Port de _sfVentaAnulada @9972. */
 export function ventaAnulada(resp: EstadoVentaGN): boolean {
   if (!resp || !resp.ok) return false

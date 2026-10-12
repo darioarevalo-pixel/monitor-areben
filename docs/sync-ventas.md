@@ -71,6 +71,13 @@ juntas ya no entran. Por eso el refresco va **una llamada por vista**; el SQL le
 producto todavía no está en `productos`; van aparte de `allVariantes` a propósito, porque varias
 secciones joinean contra el producto. Los cachés de IndexedDB anteriores al campo no lo traen.
 
+🔑 **Las ventas que crea el MONITOR tienen su propio registro: `gn_venta_monitor`** (13-oct-2026,
+`sql/migrate-gn-venta-monitor.sql`, `api/_ventas-monitor.js`). `api/crear-venta.js` anota cada venta
+que crea —prendas, depósito, hora, flujo (`proposito`) y `ref` = el `integration_id`— y la acción
+`anulada` anota la anulación **sólo si GN ya ⛔ la tiene activa**. Es lo que el libro de stock lee
+para que el monitor tenga el dato sin GN. ⛔ Anotar nunca tumba la venta: si falla, la respuesta dice
+`registrada: false`. La Caja ⛔ pasa por acá: sus ventas viven en `caja_venta`.
+
 ## Lo que ya se rompió acá
 
 🔴 **El refresco de vistas estuvo roto una semana con el job en verde.** Los pasos que fallaban eran

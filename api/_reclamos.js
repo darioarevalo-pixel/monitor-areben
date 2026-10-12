@@ -826,6 +826,10 @@ export default async function handler(req, res) {
     // `crear-venta.js`, que es el único que sabe hablar con GN). A partir de acá el producto que
     // vuelve queda como pendiente de reingreso MANUAL: la API de GN no acepta una venta negativa.
     if (action === 'procesar') {
+      // 🔴 `gn_venta_id` es la venta ORIGINAL hasta acá y desde acá pasa a ser la del cambio (así la
+      // leen las pantallas). Para que la original ⛔ se pierda, el evento la guarda antes de pisarla
+      // (libro de stock, 13-oct-2026). La del cambio queda además en `gn_venta_monitor`.
+      const { data: antes } = await supabase.from('devoluciones').select('gn_venta_id, gn_venta_number').eq('id', id).single();
       const extra = {
         gn_venta_id: texto(b.gn_venta_id),
         gn_venta_number: texto(b.gn_venta_number),
@@ -835,7 +839,10 @@ export default async function handler(req, res) {
         // La venta original no se anula nunca en un cambio: el cliente se queda con su compra.
         stock_estado: 'no_aplica',
       };
-      await apilar(supabase, id, { estado: 'en_transito', at: ahora(), usuario, nota: `venta del cambio creada en GN${b.gn_venta_number ? ` (#${b.gn_venta_number})` : ''}` }, extra);
+      await apilar(supabase, id, {
+        estado: 'en_transito', at: ahora(), usuario, nota: `venta del cambio creada en GN${b.gn_venta_number ? ` (#${b.gn_venta_number})` : ''}`,
+        gn_venta_cambio_id: texto(b.gn_venta_id), gn_venta_original_id: antes?.gn_venta_id ?? null, gn_venta_original_number: antes?.gn_venta_number ?? null,
+      }, extra);
       return res.status(200).json({ ok: true });
     }
 
