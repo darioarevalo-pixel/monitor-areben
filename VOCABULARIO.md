@@ -343,7 +343,7 @@ todas las pantallas viejas que lo dicen mal.
 | `caja` (abrir, cerrar, cajas anteriores) | `turno` · `turnos` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct-2026: la cajera abre y cierra **la caja** |
 | `oferta` · `productos en oferta` | `feria` · `ferias` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct: «feria» es un nombre COMERCIAL de una campaña, ⛔ una regla de la caja |
 | `ingreso` · `+ Ingreso` | `aporte` · `aportes` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct: «+ Salida» y «+ Ingreso» |
-| `Confirmar transferencia` · `Transferencia pendiente` | `Validar transferencia` · `Validando` | monitor | `components/caja` · `lib/caja` | Bruno, 12-oct |
+| `Validar transferencia` · `Transferencia pendiente` | `Confirmar transferencia` · `Validando` | monitor | `components/caja` · `lib/caja` | Bruno, 12-oct; 13-oct: «validar» se entiende como el paso intermedio |
 
 ⚠️ **Las excepciones van en el test, con su motivo, y se vacían solas**: un nombre que viene de otro
 sistema y se muestra tal cual (la cuenta «Feria TC» de Gestión Nube) ⛔ es una palabra de la Caja. Si
