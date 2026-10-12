@@ -25,7 +25,7 @@ import { buscarParaImprimir, etiquetaDeExhibir, rotuloEtiqueta, type EtiquetaExh
 import { useEtiquetasTn } from '@/components/etiquetas/useEtiquetasTn'
 import { dibujoDeCampania, useEtiquetasCampania } from '@/components/etiquetas/useEtiquetasCampania'
 import type { Producto } from '@/lib/etl/tipos'
-import { Button, color, font, space, useToast } from '@/components/ui'
+import { Button, color, font, Modal, space, useToast } from '@/components/ui'
 
 function leerFormasDePago(): LineaEtiqueta[] {
   try {
@@ -126,14 +126,9 @@ export function BotonEtiquetasExhibir({ v, et, size = 'md' }: { v: VarianteEti; 
 export function ImpresionRapida({ vars, et, onCerrar }: { vars: VarianteEti[]; et: EtiquetasArmado; onCerrar: () => void }) {
   const [q, setQ] = useState('')
   const encontradas = useMemo(() => buscarParaImprimir(vars, q), [vars, q])
+  // Ventana aparte con la X arriba a la derecha (Darío, 12-oct-2026): abierta en la hoja tapaba la lista.
   return (
-    <div style={{ marginTop: space[3], padding: space[3], border: `1px solid ${color.line}`, borderRadius: 'var(--mo-r-xl)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: space[2], marginBottom: space[2] }}>
-        <b style={{ fontSize: font.md, flex: 1 }}>Impresión rápida</b>
-        <Button size="sm" variant="ghost" onClick={onCerrar}>
-          Cerrar
-        </Button>
-      </div>
+    <Modal abierto onCerrar={onCerrar} titulo="Impresión rápida" variante="pos">
       <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[2] }}>Etiqueta con código de barras, para una prenda mal etiquetada.</div>
       <input
         className="mo-input"
@@ -158,6 +153,6 @@ export function ImpresionRapida({ vars, et, onCerrar }: { vars: VarianteEti[]; e
           </Button>
         </div>
       ))}
-    </div>
+    </Modal>
   )
 }
