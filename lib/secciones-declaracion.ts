@@ -108,12 +108,11 @@ export const PROPIAS: Record<string, Propia> = {
     porque: 'no-dice-si-escribe',
   },
   exhib: {
+    // Darío, 12-oct-2026: corto, que lo lean las empleadas. El de antes hablaba del modo por
+    // categoría (oculto desde el 26-sep) y de un Excel para comparar.
     texto:
-    'Recorrer el Local con el lector confirmando que cada prenda con stock está colgada, de dos ' +
-    'maneras: por categoría de Tienda Nube, o LIBRE por lugar («perchero tops»). ⛔ El de categoría ' +
-    'no sale del teléfono. El libre SÍ guarda en la base, con el lugar de cada escaneo, y de ahí ' +
-    'sale el Excel para comparar. ⛔ No toca stock, ni Gestión Nube, ni Tienda Nube: las categorías ' +
-    'a corregir se anotan para editarlas a mano allá.',
+    'Se escanea todo lo colgado, perchero por perchero, de corrido. Al terminar, a los dueños les ' +
+    'llega un correo con lo que falta colgar y lo que sobra. Guarda dónde está cada prenda; no cambia el stock.',
     porque: 'no-dice-si-escribe',
   },
 }

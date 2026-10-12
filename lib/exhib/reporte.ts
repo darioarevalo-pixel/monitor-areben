@@ -17,8 +17,9 @@
  * - ⛔ Stunned (`seChequea`) y ⛔ lo que el Mapa del local marca que no va en percha (`cuelga`).
  * - Los modelos «una sola variante» (`mapa.unaVariante`): con una exhibida, el resto ⛔ queda
  *   pendiente; sin ninguna, queda pendiente UNA, en un renglón.
- * - **Duplicada** = la misma variante leída más de una vez (en el mismo lugar o en dos). Los
- *   percheros frontales repiten a propósito y la app ⛔ los conoce: lo marca la empleada en el ticket.
+ * - **Duplicada** = la misma variante leída más de una vez (en el mismo lugar o en dos), sin contar
+ *   lo escaneado en una exhibición FRONTAL (`D03 frontal`, desde el 12-oct-2026): ahí se repite a
+ *   propósito. Lo frontal que ⛔ se marcó al escanear lo sigue marcando la empleada en el ticket.
  * - **Feria en regulares** (Darío, 11-oct-2026) = una prenda en promoción que pasó por el lector. El
  *   chequeo recorre sólo el sector regular, así que si se leyó, estaba colgada ahí. ⛔ Se corrige en
  *   el chequeo: se reporta para decidirlo después, y por eso ⛔ va al ticket de la empleada.
@@ -26,6 +27,7 @@
  */
 
 import { colgadasDeMas } from './balance'
+import { esFrontal } from './paradas'
 import { exhibId, precioDeGondola, seChequea, tipoDePrenda } from './core'
 import { pasoPorElLector, unidadesVistas, type EscaneoLibre } from './libre'
 import type { ExhibItem } from './tipos'
@@ -204,7 +206,9 @@ export function reporteDelChequeo(
   const primera = new Map<string, EscaneoLibre>()
   for (const e of escaneos) if (pasoPorElLector(e) && e.encontrado && !primera.has(e.variante_id)) primera.set(e.variante_id, e)
   const duplicadas: Duplicada[] = []
-  for (const c of colgadasDeMas(escaneos)) {
+  // 🔑 Lo escaneado en una exhibición FRONTAL ⛔ cuenta para duplicadas: ahí se repite a propósito
+  // (Darío, 12-oct-2026). Igual cuenta como exhibido: `vistas` sale de todos los escaneos.
+  for (const c of colgadasDeMas(escaneos.filter((e) => !esFrontal(e.lugar)))) {
     const e = primera.get(c.variante_id)
     if (!e || !esRegular({ sku: e.sku || '', precio: e.precio, promo: e.promo })) continue
     duplicadas.push({ clave: c.variante_id, sku: e.sku || '', nombre: c.nombre, variante: c.size, veces: c.unidades, lugares: [...c.lugares].sort(), otrasEnMedio: c.otrasEnMedio })

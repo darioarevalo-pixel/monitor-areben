@@ -1,65 +1,136 @@
 /**
- * **Las paradas del chequeo con mapa** (Darío, 12-oct-2026): cada barra del local en el orden en que
- * se camina (el `orden` del Mapa del local guardado), para elegir el lugar con UN toque desde la
- * ubicación flotante (`UbicacionFlotante.tsx`) en vez de las cinco filas de botones de
+ * **Los percheros del chequeo con mapa** (Darío, 12-oct-2026): para elegir el lugar con UN toque desde
+ * la ubicación flotante (`UbicacionFlotante.tsx`) en vez de las cinco filas de botones de
  * `ElegirEspacio`.
  *
- * 🔑 La estructura (doble barra, doble largo) sale del mapa guardado: el chequeo semanal ⛔ la
- * releva. Si en el salón cambió, se corrige desde «Otro lugar…» (o con el chequeo sin mapa).
- * 🔑 **Lo ya escaneado se deja de ofrecer**: *«normalmente no se vuelve a un lugar donde ya
- * chequeaste»*. Un lugar está hecho si tiene al menos un escaneo en este recorrido.
+ * 🔴 **Del mapa guardado se toman SÓLO los nombres de los percheros**, ⛔ cómo están armados: el
+ * sábado 10-oct se cambiaron cosas de lugar y el mapa ⛔ se actualizó (*«si mañana quiero hacer un
+ * chequeo me liquida no poder hacerlo»*). Por eso cada perchero ofrece SIEMPRE Arriba / Abajo /
+ * Frontal, y elige quien está parada delante.
+ * 🔑 **El orden es el del recorrido, fijo** (Darío): I01 → I02 → … → ISLA → D01 → … → D12. ⛔ Es el
+ * `orden` del mapa, que es el de la clienta caminando y sirve para otra cosa.
+ * 🔑 **Frontal** = la exhibición que repite a propósito para que se vea lleno. Lo escaneado ahí se
+ * guarda como `D03 frontal` y lo repetido ⛔ sale como duplicado (`esFrontal` en `reporte.ts`).
+ * 🔑 **Un perchero ya escaneado se deja de ofrecer** al pasar a otro (*«normalmente no se vuelve a un
+ * lugar donde ya chequeaste»*).
  */
 
 import { leerEspacio, lugarDe, type PosEspacio } from '@/lib/mapa-local/relevamiento'
 import type { MapaLocal } from '@/lib/mapa-local/tipos'
 
-export type Parada = {
-  /** El texto que se guarda en cada escaneo: `D01 arriba`, `D07-08 abajo`, `ISLA`. */
-  lugar: string
-  /** El perchero, para agrupar en la lista: `D01`, `D07-08`, `ISLA`. */
-  modulo: string
-  pos: PosEspacio
+export type Perchero = {
+  /** `D01`, `ISLA`: la clave para saber si ya se escaneó. */
+  codigo: string
+  /** Lo que se lee en la lista: `D07-08` si el mapa lo tiene de doble largo. */
+  nombre: string
+  isla: boolean
+  /** El mapa le conoce dos barras: la flecha pasa de arriba a abajo antes de ir al siguiente. */
+  doble: boolean
 }
 
-/** Las barras del mapa en el orden en que se camina el local. */
-export function paradasDelMapa(mapa: Pick<MapaLocal, 'modulos'> | null): Parada[] {
-  const out: Parada[] = []
-  for (const m of [...(mapa?.modulos ?? [])].sort((a, b) => a.orden - b.orden)) {
+/** Las posiciones que se eligen en cada perchero. */
+export type PosParada = PosEspacio | 'frontal'
+
+const ORDEN_PARED = { izq: 0, isla: 1, der: 2 } as const
+
+/** Los percheros del mapa, en el orden del recorrido: izquierda, isla, derecha, cada pared por número. */
+export function percherosDelChequeo(mapa: Pick<MapaLocal, 'modulos'> | null): Perchero[] {
+  const vistos = new Set<string>()
+  const out: (Perchero & { pared: keyof typeof ORDEN_PARED; numero: number })[] = []
+  for (const m of mapa?.modulos ?? []) {
     const e = leerEspacio(m.codigo)
-    if (!e) continue
+    if (!e || vistos.has(e.codigo)) continue
+    vistos.add(e.codigo)
     const largo = e.pared !== 'isla' && (m.anchoCm ?? 0) >= 150
-    // Igual que `ElegirEspacio`: doble si el mapa le conoce una barra alta o baja.
-    const doble = e.pared !== 'isla' && m.niveles.some((n) => n.pos === 'alta' || n.pos === 'baja')
-    const modulo = lugarDe({ pared: e.pared, numero: e.numero, pos: 'simple', largo })
-    for (const pos of doble ? (['alta', 'baja'] as const) : (['simple'] as const)) {
-      out.push({ lugar: lugarDe({ pared: e.pared, numero: e.numero, pos, largo }), modulo, pos })
-    }
+    out.push({
+      codigo: e.codigo,
+      nombre: lugarDe({ pared: e.pared, numero: e.numero, pos: 'simple', largo }),
+      isla: e.pared === 'isla',
+      doble: e.pared !== 'isla' && m.niveles.some((n) => n.pos === 'alta' || n.pos === 'baja'),
+      pared: e.pared,
+      numero: e.numero,
+    })
   }
-  return out
+  out.sort((a, b) => ORDEN_PARED[a.pared] - ORDEN_PARED[b.pared] || a.numero - b.numero)
+  return out.map(({ codigo, nombre, isla, doble }) => ({ codigo, nombre, isla, doble }))
+}
+
+/** El texto del lugar que se guarda en cada escaneo: `D01 arriba`, `D07-08 abajo`, `D03 frontal`, `ISLA`. */
+export function lugarDeParada(p: Perchero, pos: PosParada): string {
+  if (pos === 'frontal') return `${p.nombre} frontal`
+  if (p.isla || pos === 'simple') return p.nombre
+  return `${p.nombre} ${pos === 'alta' ? 'arriba' : 'abajo'}`
+}
+
+/** ¿El lugar es una exhibición frontal? Ahí se repite a propósito: ⛔ es duplicado. */
+export function esFrontal(lugar: string | null | undefined): boolean {
+  return /\bfrontal\b/i.test(String(lugar || ''))
+}
+
+/** El perchero (`D01`, `ISLA`) que nombra un lugar, frontal incluido. `null` si ⛔ es del mapa. */
+export function percheroDe(lugar: string): string | null {
+  const sin = String(lugar || '').replace(/\bfrontal\b/i, '').trim()
+  return leerEspacio(sin)?.codigo ?? null
 }
 
 /**
- * La clave de un lugar para saber si dos textos nombran la misma barra: `D7 abajo`, `D07 baja` y
- * `D07-08 abajo` son lo mismo. Lo que ⛔ es del mapa, en minúscula y sin espacios de más.
+ * La clave de un lugar para comparar dos textos: `D7 abajo`, `D07 baja` y `D07-08 abajo` son la
+ * misma barra. Lo que ⛔ es del mapa, en minúscula y sin espacios de más.
  */
 export function claveLugar(lugar: string): string {
+  if (esFrontal(lugar)) {
+    const p = percheroDe(lugar)
+    if (p) return `${p}|frontal`
+  }
   const e = leerEspacio(lugar)
   if (e) return `${e.codigo}|${e.pos}`
   return String(lugar || '').trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
-/** Los lugares (por `claveLugar`) que ya tienen al menos un escaneo en el recorrido. */
+/** Los percheros (`D01`, `ISLA`) que ya tienen al menos un escaneo en el recorrido. */
+export function percherosHechos(escaneos: { lugar: string }[]): Set<string> {
+  const out = new Set<string>()
+  for (const e of escaneos) {
+    const p = percheroDe(e.lugar)
+    if (p) out.add(p)
+  }
+  return out
+}
+
+/** Los lugares exactos (por `claveLugar`) que ya tienen escaneos. */
 export function lugaresHechos(escaneos: { lugar: string }[]): Set<string> {
   return new Set(escaneos.map((e) => claveLugar(e.lugar)).filter(Boolean))
 }
 
-/**
- * La parada que sigue a `actual` y que todavía ⛔ se escaneó. Si ⛔ queda ninguna después, vuelve a
- * buscar desde el principio (una que se salteó). `null` = ya están todas.
- */
-export function siguienteParada(paradas: Parada[], actual: string, hechos: Set<string>): Parada | null {
-  const k = claveLugar(actual)
-  const i = paradas.findIndex((p) => claveLugar(p.lugar) === k)
-  const libre = (p: Parada) => !hechos.has(claveLugar(p.lugar)) && claveLugar(p.lugar) !== k
-  return paradas.slice(i + 1).find(libre) ?? paradas.slice(0, Math.max(i, 0)).find(libre) ?? null
+/** La primera posición de un perchero al llegar: arriba si el mapa le conoce dos barras. */
+function primera(p: Perchero): string {
+  return lugarDeParada(p, p.isla ? 'simple' : p.doble ? 'alta' : 'simple')
 }
+
+/**
+ * A dónde lleva la flecha: de `D01 arriba` a `D01 abajo` (si el mapa lo tiene doble y abajo ⛔ se
+ * escaneó), y si no, al próximo perchero sin escanear. Al final vuelve a uno salteado. `null` = ya
+ * están todos. Sin lugar todavía: el primero del recorrido.
+ */
+export function siguienteLugar(percheros: Perchero[], actual: string, escaneos: { lugar: string }[]): string | null {
+  const hechos = percherosHechos(escaneos)
+  const lugares = lugaresHechos(escaneos)
+  const cod = percheroDe(actual)
+  const i = cod ? percheros.findIndex((p) => p.codigo === cod) : -1
+  const aqui = i >= 0 ? percheros[i] : null
+  const e = leerEspacio(actual)
+  if (aqui && aqui.doble && e?.pos === 'alta') {
+    const abajo = lugarDeParada(aqui, 'baja')
+    if (!lugares.has(claveLugar(abajo))) return abajo
+  }
+  const libre = (p: Perchero) => p.codigo !== cod && !hechos.has(p.codigo)
+  const p = percheros.slice(i + 1).find(libre) ?? percheros.slice(0, Math.max(i, 0)).find(libre)
+  return p ? primera(p) : null
+}
+
+/** Cuántos percheros quedan sin escanear (el actual cuenta como hecho si ya tiene algo). */
+export function percherosPendientes(percheros: Perchero[], escaneos: { lugar: string }[]): number {
+  const hechos = percherosHechos(escaneos)
+  return percheros.filter((p) => !hechos.has(p.codigo)).length
+}
+

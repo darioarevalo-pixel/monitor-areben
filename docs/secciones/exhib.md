@@ -107,13 +107,16 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 
 > 📍 **Ubicación FLOTANTE en el chequeo con mapa (12-oct-2026, Darío)** — `UbicacionFlotante.tsx` +
 > `lib/exhib/paradas.ts`: fija arriba («📍 D03 arriba ▾ · faltan N» + flecha «→»). Tocándola se abre
-> la lista de barras en el `orden` del mapa guardado, agrupadas por perchero («D01 [Arriba] [Abajo]»);
-> un toque elige y cierra, y el foco vuelve al escaneo. La flecha salta a la próxima SIN escanear
-> (`siguienteParada`; al final vuelve a la salteada). 🔑 **Lo ya escaneado ⛔ se ofrece** (*«no se
-> vuelve a un lugar donde ya chequeaste»*), queda tras «Ver los ya escaneados». Arranca solo en la
-> primera barra. Doble barra y doble largo salen del MAPA (`paradasDelMapa`, misma regla que
-> `ElegirEspacio`); lo que ⛔ es del mapa va por «Otro lugar…». `claveLugar` iguala `D7 abajo` /
-> `D07-08 abajo`. Sin mapa guardado vuelven las cinco filas de `ElegirEspacio` y el campo de texto.
+> la lista de PERCHEROS en el **orden del recorrido, fijo: I01 → I02 → ISLA → D01 → … → D12**
+> (`percherosDelChequeo`; ⛔ el `orden` del mapa, que es el de la clienta). 🔴 **Del mapa se toman sólo
+> los NOMBRES**: el 10-oct se movió todo y el mapa ⛔ se actualizó, así que cada perchero ofrece
+> SIEMPRE Arriba / Abajo / **Frontal** (+ «Única» si el mapa lo tiene de una barra) y elige quien está
+> delante. 🔑 **Frontal** = repetición a propósito: se guarda `D03 frontal` y lo repetido ahí ⛔ va a
+> «Variantes duplicadas» (`esFrontal` en `reporte.ts`), pero cuenta como exhibido. Un perchero ya
+> escaneado ⛔ se ofrece al pasar a otro (tras «Ver los ya escaneados»). La flecha: arriba → abajo del
+> mismo si el mapa lo tiene doble, después el próximo sin escanear, al final el salteado
+> (`siguienteLugar`). Arranca sola en el primero, y el foco vuelve al escaneo al elegir. «Otro
+> lugar…» para lo que ⛔ es del mapa. Sin mapa guardado vuelven las cinco filas de `ElegirEspacio`.
 
 > 🗺️ **Desde el 12-oct-2026 el chequeo de siempre es CON MAPA** (Darío: «para que agarre costumbre
 > de usarlo siempre»): la empleada ⛔ elige, el botón es «Iniciar chequeo» y abre el «+ mapa». El

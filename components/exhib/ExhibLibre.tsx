@@ -25,7 +25,7 @@ import { FotoTicket } from './FotoTicket'
 import { diaDe, ReporteChequeo } from './ReporteChequeo'
 import { ElegirVoz } from './ElegirVoz'
 import { UbicacionFlotante } from './UbicacionFlotante'
-import { lugaresHechos, paradasDelMapa } from '@/lib/exhib/paradas'
+import { percherosDelChequeo } from '@/lib/exhib/paradas'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 import { useActividad } from '@/components/mapa-local/useMapaLocalDatos'
@@ -378,10 +378,9 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     return [...lib.sugerencias, ...cods.filter((c) => !lib.sugerencias.includes(c))]
   }, [mapaLocal, lib.sugerencias])
 
-  /** Las barras del mapa guardado en el orden del local, y las que ya tienen escaneos. */
-  const paradas = useMemo(() => paradasDelMapa(mapaLocal), [mapaLocal])
-  const hechos = useMemo(() => lugaresHechos(lib.escaneos), [lib.escaneos])
-  const usarFlotante = lib.conMapa && paradas.length > 0
+  /** Los percheros del mapa guardado, en el orden del recorrido (sólo los nombres: ver `paradas.ts`). */
+  const percheros = useMemo(() => percherosDelChequeo(mapaLocal), [mapaLocal])
+  const usarFlotante = lib.conMapa && percheros.length > 0
   const setLugar = lib.setLugar
   const elegirLugar = useCallback(
     (l: string) => {
@@ -551,7 +550,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
           {/* 🔑 Con el mapa guardado, la ubicación FLOTANTE (Darío, 12-oct-2026): un toque por barra
               en vez de cinco filas de botones. Sin mapa, los botones de siempre. */}
           {usarFlotante && (
-            <UbicacionFlotante paradas={paradas} lugar={lib.lugar} hechos={hechos} onElegir={elegirLugar} />
+            <UbicacionFlotante percheros={percheros} lugar={lib.lugar} escaneos={lib.escaneos} onElegir={elegirLugar} />
           )}
           {lib.conMapa && !usarFlotante && (
             <>

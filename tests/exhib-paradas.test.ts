@@ -1,44 +1,55 @@
 /**
- * Las paradas del chequeo con mapa (`lib/exhib/paradas.ts`, Darío 12-oct-2026). El mapa es el
- * guardado de Zattia al 12-oct: ISLA, D01-D06 dobles, I01/I02, D07 y D09 de doble largo.
+ * Los percheros del chequeo con mapa (`lib/exhib/paradas.ts`, Darío 12-oct-2026): el orden FIJO del
+ * recorrido (I → ISLA → D), del mapa sólo los nombres, y lo frontal ⛔ es duplicado.
  */
 import { describe, expect, it } from 'vitest'
-import { claveLugar, lugaresHechos, paradasDelMapa, siguienteParada } from '../lib/exhib/paradas'
+import { claveLugar, esFrontal, lugarDeParada, percheroDe, percherosDelChequeo, percherosPendientes, siguienteLugar } from '../lib/exhib/paradas'
 
 const mod = (orden: number, codigo: string, anchoCm: number, pos: string[]) => ({ orden, codigo, anchoCm, niveles: pos.map((p) => ({ pos: p })) })
+// El mapa guardado de Zattia al 12-oct, con su `orden` de clienta (ISLA primero, I01 en el medio).
 const MAPA = {
-  modulos: [mod(3, 'D02', 75, ['alta', 'baja']), mod(1, 'ISLA', 185, ['simple']), mod(2, 'D01', 75, ['alta', 'baja']), mod(4, 'I02', 75, ['frente']), mod(5, 'D07', 150, ['alta', 'baja'])],
+  modulos: [mod(1, 'ISLA', 185, ['simple']), mod(2, 'D01', 75, ['alta', 'baja']), mod(3, 'D02', 75, ['alta', 'baja']), mod(6, 'I01', 75, ['frente', 'baja']), mod(7, 'I02', 75, ['frente']), mod(10, 'D07', 150, ['alta', 'baja'])],
 } as never
+const P = percherosDelChequeo(MAPA)
+const esc = (...lugares: string[]) => lugares.map((lugar) => ({ lugar }))
 
-describe('paradasDelMapa', () => {
-  it('en el orden del local, arriba y abajo de cada doble, y el doble largo con los dos números', () => {
-    expect(paradasDelMapa(MAPA).map((p) => p.lugar)).toEqual(['ISLA', 'D01 arriba', 'D01 abajo', 'D02 arriba', 'D02 abajo', 'I02', 'D07-08 arriba', 'D07-08 abajo'])
-    expect(paradasDelMapa(null)).toEqual([])
+describe('percherosDelChequeo', () => {
+  it('el orden del RECORRIDO (I, ISLA, D) y ⛔ el del mapa; el doble largo con los dos números', () => {
+    expect(P.map((p) => p.nombre)).toEqual(['I01', 'I02', 'ISLA', 'D01', 'D02', 'D07-08'])
+    expect(percherosDelChequeo(null)).toEqual([])
   })
 })
 
-describe('claveLugar', () => {
-  it('distintas formas de escribir la misma barra son la misma', () => {
+describe('lugares', () => {
+  const d01 = P.find((p) => p.codigo === 'D01')!
+  it('arriba, abajo, frontal; la isla sin altura', () => {
+    expect(lugarDeParada(d01, 'alta')).toBe('D01 arriba')
+    expect(lugarDeParada(d01, 'frontal')).toBe('D01 frontal')
+    expect(lugarDeParada(P.find((p) => p.isla)!, 'simple')).toBe('ISLA')
+  })
+  it('frontal se reconoce y sigue siendo del perchero', () => {
+    expect(esFrontal('D07-08 frontal')).toBe(true)
+    expect(esFrontal('D01 arriba')).toBe(false)
+    expect(percheroDe('D07-08 frontal')).toBe('D07')
+    expect(claveLugar('d7 frontal')).toBe(claveLugar('D07-08 frontal'))
     expect(claveLugar('D7 abajo')).toBe(claveLugar('D07-08 abajo'))
-    expect(claveLugar('d07 baja')).toBe(claveLugar('D07 abajo'))
-    expect(claveLugar('D07 arriba')).not.toBe(claveLugar('D07 abajo'))
     expect(claveLugar('  Vidriera ')).toBe('vidriera')
   })
 })
 
-describe('siguienteParada', () => {
-  const P = paradasDelMapa(MAPA)
-  it('la próxima sin escanear, salteando las hechas', () => {
-    const hechos = lugaresHechos([{ lugar: 'ISLA' }, { lugar: 'D01 arriba' }, { lugar: 'D02 arriba' }])
-    expect(siguienteParada(P, 'D01 arriba', hechos)?.lugar).toBe('D01 abajo')
-    expect(siguienteParada(P, 'D01 abajo', hechos)?.lugar).toBe('D02 abajo')
+describe('siguienteLugar', () => {
+  it('sin lugar, el primero del recorrido', () => {
+    expect(siguienteLugar(P, '', [])).toBe('I01 arriba')
   })
-  it('al final vuelve a la que se salteó; con todo hecho, ninguna', () => {
-    const hechos = lugaresHechos(P.filter((p) => p.lugar !== 'D01 abajo'))
-    expect(siguienteParada(P, 'D07-08 abajo', hechos)?.lugar).toBe('D01 abajo')
-    expect(siguienteParada(P, 'D07-08 abajo', lugaresHechos(P))).toBeNull()
+  it('de arriba a abajo del mismo perchero; después, el próximo sin escanear', () => {
+    expect(siguienteLugar(P, 'D01 arriba', esc('D01 arriba'))).toBe('D01 abajo')
+    expect(siguienteLugar(P, 'D01 abajo', esc('ISLA', 'D01 arriba', 'D01 abajo', 'D02 frontal'))).toBe('D07-08 arriba')
   })
-  it('sin lugar todavía, la primera sin hacer', () => {
-    expect(siguienteParada(P, '', new Set())?.lugar).toBe('ISLA')
+  it('al final vuelve al salteado; con todo hecho, ninguno', () => {
+    expect(siguienteLugar(P, 'D07-08 abajo', esc('I01 arriba', 'ISLA', 'D01 abajo', 'D02 arriba', 'D07-08 abajo'))).toBe('I02')
+    expect(siguienteLugar(P, 'D07-08 abajo', esc('I01 frontal', 'I02', 'ISLA', 'D01 abajo', 'D02 arriba', 'D07 abajo'))).toBeNull()
+  })
+  it('cuenta los percheros que faltan', () => {
+    expect(percherosPendientes(P, esc('I01 frontal', 'ISLA'))).toBe(4)
   })
 })
