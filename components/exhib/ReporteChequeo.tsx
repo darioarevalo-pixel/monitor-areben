@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Notice, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, useToast, weight } from '@/components/ui'
+import { Button, KpiCard, Notice, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, useToast, weight } from '@/components/ui'
+import { COMPLETO_PCT } from '@/lib/exhib/correo.core.js'
 import { leerRecorrido, mandarCorreo } from '@/lib/exhib/cliente'
 import { altasDesde, paraElCorreo } from '@/lib/exhib/correo'
 import type { Cobertura, EscaneoLibre, RecorridoLibre } from '@/lib/exhib/libre'
@@ -44,10 +45,11 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
   const [dia, setDia] = useState<string | null>(null)
   const diaVisto = dia && dias.includes(dia) ? dia : (dias[0] ?? null)
   const delDia = useMemo(() => cerrados.filter((r) => diaDe(r.creado_en) === diaVisto).sort((a, b) => a.creado_en.localeCompare(b.creado_en)), [cerrados, diaVisto])
-  /** Los destildados (por id): lo que no está acá, cuenta. Así un recorrido nuevo del día entra solo. */
-  const [fuera, setFuera] = useState<Set<string>>(new Set())
-  const elegidos = useMemo(() => delDia.filter((r) => !fuera.has(r.id)), [delDia, fuera])
-
+  /**
+   * 🔑 Desde el 12-oct-2026 el chequeo es UN recorrido de corrido (Darío: «no me sirve a medias»):
+   * ⛔ se tildan recorridos. Si un día tiene varios (los de antes, por sector), entran todos.
+   */
+  const elegidos = delDia
   /** Los escaneos de cada recorrido, por id: un recorrido cerrado ⛔ cambia, así que se bajan una vez. */
   const [escaneos, setEscaneos] = useState<Record<string, EscaneoLibre[]>>({})
   const [error, setError] = useState<string | null>(null)
@@ -139,20 +141,23 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
 
   if (!dias.length) return null
   const pct = reporte && reporte.total ? Math.round((reporte.vistas / reporte.total) * 100) : 0
+  const completo = pct >= COMPLETO_PCT
+  const inicio = delDia[0]?.creado_en
+  const fin = delDia.at(-1)?.cerrado_en ?? null
+  const minutos = inicio && fin ? Math.round((Date.parse(fin) - Date.parse(inicio)) / 60000) : null
+  const personas = [...new Set(delDia.map((r) => r.persona || 'sin nombre'))].join(', ')
 
   return (
     <div style={{ marginBottom: space[5] }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', marginBottom: space[2] }}>
-        <b style={{ fontSize: font.md, color: color.ink }}>Reporte del chequeo</b>
+      {/* 🔑 Arriba, la RESPUESTA (Darío, 12-oct-2026: «mucho texto»): quién, cuándo y si se hizo completo. */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: space[2], flexWrap: 'wrap', marginBottom: space[2] }}>
+        <b style={{ fontSize: font.md, color: color.ink }}>Último chequeo</b>
         <select
           className="mo-input"
           value={diaVisto ?? ''}
-          onChange={(e) => {
-            setDia(e.target.value)
-            setFuera(new Set())
-          }}
+          onChange={(e) => setDia(e.target.value)}
           aria-label="Día del chequeo"
-          style={{ height: 32, width: 'auto', fontSize: font.sm }}
+          style={{ height: 30, width: 'auto', fontSize: font.sm }}
         >
           {dias.map((d) => (
             <option key={d} value={d}>
@@ -160,49 +165,32 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
             </option>
           ))}
         </select>
+        <span style={{ fontSize: font.sm, color: color.mut }}>
+          {personas}
+          {inicio && <> · {hora(inicio)}{fin ? ` a ${hora(fin)}` : ''}</>}
+          {minutos != null && <> ({minutos} min)</>}
+          {delDia.length > 1 && <> · {delDia.length} recorridos</>}
+        </span>
       </div>
-
-      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', marginBottom: space[3], fontSize: font.sm }}>
-        {delDia.map((r) => (
-          <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: color.ink2 }}>
-            <input
-              type="checkbox"
-              checked={!fuera.has(r.id)}
-              onChange={() =>
-                setFuera((prev) => {
-                  const s = new Set(prev)
-                  if (s.has(r.id)) s.delete(r.id)
-                  else s.add(r.id)
-                  return s
-                })
-              }
-            />
-            {hora(r.creado_en)} · {r.persona || 'sin nombre'} · {r.escaneos} escaneos
-          </label>
-        ))}
-      </div>
-
-      {/* 🔑 La foto del ticket tildado va ARRIBA: lo primero que se quiere saber de un día viejo es si se terminó. */}
-      <FotoTicket marca={marca} recorridos={delDia} onCobertura={onCobertura} />
 
       {error && <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>No se pudieron leer los recorridos: {error}</Notice>}
-      {!elegidos.length && <div style={{ color: color.mut, fontSize: font.sm }}>Tildá al menos un recorrido.</div>}
-      {elegidos.length > 0 && !reporte && !error && <div style={{ color: color.mut, fontSize: font.sm }}>Armando el reporte…</div>}
+      {!reporte && !error && <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[3] }}>Armando el reporte…</div>}
 
       {reporte && (
         <>
+          <Notice tone={completo ? 'success' : 'warning'} icon={completo ? '✓' : '⚠'} style={{ marginBottom: space[3] }}>
+            <span title="Variantes regulares con stock en el Local (sin feria, outlet, accesorios ni Stunned) que pasaron por el lector">
+              <b>{completo ? 'Completo' : 'Incompleto'}</b>: se escaneó el {pct} % de lo regular ({reporte.vistas} de {reporte.total})
+            </span>
+          </Notice>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: space[3], marginBottom: space[3] }}>
+            <KpiCard label="Pendientes" value={reporte.pendientes.length} tone={reporte.pendientes.length ? 'warning' : 'success'} />
+            <KpiCard label="Duplicadas" value={reporte.duplicadas.length} tone={reporte.duplicadas.length ? 'warning' : 'success'} />
+            <KpiCard label="Feria en regulares" value={reporte.feria.length} />
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[3], fontSize: font.sm, color: color.mut }}>
-            {/* 🔑 El total va a la vista: el reporte afirma sobre TODO lo regular del local, y un día
-                que se caminó un solo perchero se nota acá antes de imprimir 400 renglones. */}
-            <span title="Variantes regulares con stock en el Local (sin feria, outlet, accesorios ni Stunned)">
-              Pasaron por el lector <b style={{ color: color.ink }}>{reporte.vistas}</b> de <b style={{ color: color.ink }}>{reporte.total}</b> variantes regulares ({pct} %)
-            </span>
-            <span title="El local vende unas 160 prendas por día: con el stock viejo, el reporte puede pedir cosas que ya se vendieron." style={{ color: stockViejo ? color.warning : color.mut }}>
-              {textoStock}
-            </span>
-            <Button size="sm" variant="outline" onClick={() => void onTraerStock()} loading={trayendo}>
-              Actualizar stock
-            </Button>
             {/* ⛔ Se imprime mientras se trae el stock: el papel saldría con la foto vieja. */}
             <Button size="sm" variant="solid" tone="brand" onClick={() => void imprimir()} loading={imprimiendo} disabled={trayendo}>
               Imprimir ticket
@@ -211,14 +199,28 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
               Enviar por correo
             </Button>
             <span style={{ color: correo?.error && !correo.enviado_en ? color.danger : color.mut }} title={correo?.error || correo?.a?.join(', ') || undefined}>
-              {correo?.enviado_en ? `Correo enviado ${fechaYHora(correo.enviado_en)}` : correo?.error ? 'El correo no salió' : 'Correo sin enviar'}
+              {correo?.enviado_en ? `✓ Correo enviado ${fechaYHora(correo.enviado_en)}` : correo?.error ? 'El correo no salió' : 'Correo sin enviar'}
             </span>
           </div>
-          {trayendo && (
+
+          {/* 🔑 El stock sólo se nombra si se está trayendo o si algo anda mal: al día, ⛔ ocupa lugar. */}
+          {trayendo ? (
             <Notice tone="brand" icon="↻" style={{ marginBottom: space[3] }}>
               Actualizando el stock con Gestión Nube (2 a 4 minutos). Cuando termine, la lista se vuelve a armar sola y se puede imprimir.
             </Notice>
+          ) : (
+            stockViejo && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', marginBottom: space[3], fontSize: font.sm, color: color.warning }}>
+                <span title="El local vende unas 160 prendas por día: con el stock viejo, el reporte puede pedir cosas que ya se vendieron.">{textoStock}</span>
+                <Button size="sm" variant="outline" onClick={() => void onTraerStock()}>
+                  Actualizar stock
+                </Button>
+              </div>
+            )
           )}
+
+          {/* La foto del ticket tildado: la prueba de que se terminó de colgar y retirar. */}
+          <FotoTicket marca={marca} recorridos={delDia} onCobertura={onCobertura} />
 
           <ListaPendientes lista={reporte.pendientes} porUnaVariante={reporte.porUnaVariante} desde={desde} />
           <ListaDuplicadas lista={reporte.duplicadas} />
@@ -229,16 +231,21 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
   )
 }
 
-function Titulo({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontWeight: weight.bold, fontSize: font.base, color: color.ink, margin: `${space[3]}px 0 ${space[2]}px` }}>{children}</div>
+/** Una lista del reporte, PLEGADA: el resumen ya está en los tres números de arriba. */
+function Plegable({ titulo, children }: { titulo: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <details style={{ marginTop: space[2] }}>
+      <summary style={{ cursor: 'pointer', fontWeight: weight.bold, fontSize: font.base, color: color.ink, padding: `${space[2]}px 0` }}>{titulo}</summary>
+      <div style={{ marginTop: space[2] }}>{children}</div>
+    </details>
+  )
 }
 
 function ListaPendientes({ lista, porUnaVariante, desde }: { lista: Pendiente[]; porUnaVariante: number; desde: { desde: string; hayAnterior: boolean } | null }) {
   const cuantosNuevos = lista.filter((p) => p.nuevo).length
   const unaSola = lista.filter((p) => p.enLocal === 1).length
   return (
-    <>
-      <Titulo>
+    <Plegable titulo={<>
         Pendiente de exhibición ({lista.length})
         <span style={{ fontWeight: 400, fontSize: font.sm, color: color.mut }}>
           {cuantosNuevos > 0 && desde && (
@@ -250,7 +257,7 @@ function ListaPendientes({ lista, porUnaVariante, desde }: { lista: Pendiente[];
           {unaSola > 0 && <span title="El sistema dice que hay una sola unidad: si no aparece, revisar el stock"> · {unaSola} con 1 sola unidad</span>}
           {porUnaVariante > 0 && <> · {porUnaVariante} sin pedir por «una sola variante»</>}
         </span>
-      </Titulo>
+      </>}>
       {lista.length ? (
         <TableWrap maxHeight={420}>
           <THead>
@@ -281,7 +288,7 @@ function ListaPendientes({ lista, porUnaVariante, desde }: { lista: Pendiente[];
       ) : (
         <div style={{ color: color.mut, fontSize: font.sm }}>No hay variantes pendientes.</div>
       )}
-    </>
+    </Plegable>
   )
 }
 
@@ -297,8 +304,7 @@ function Etiqueta({ tono, titulo, children }: { tono: 'nuevo' | 'una'; titulo: s
 
 function ListaDuplicadas({ lista }: { lista: Duplicada[] }) {
   return (
-    <>
-      <Titulo>Variantes duplicadas ({lista.length})</Titulo>
+    <Plegable titulo={<>Variantes duplicadas ({lista.length})</>}>
       {lista.length ? (
         <TableWrap maxHeight={420}>
           <THead>
@@ -328,18 +334,17 @@ function ListaDuplicadas({ lista }: { lista: Duplicada[] }) {
       ) : (
         <div style={{ color: color.mut, fontSize: font.sm }}>No hay variantes duplicadas.</div>
       )}
-    </>
+    </Plegable>
   )
 }
 
 /** La feria que pasó por el lector en el sector regular: ⛔ se corrige en el chequeo, se decide después (Darío, 11-oct-2026). */
 function ListaFeria({ lista }: { lista: FeriaEnRegulares[] }) {
   return (
-    <>
-      <Titulo>
+    <Plegable titulo={<>
         Feria en el sector regular ({lista.length})
         <span style={{ fontWeight: 400, fontSize: font.sm, color: color.mut }}> · para decidir después, no va en el ticket</span>
-      </Titulo>
+      </>}>
       {lista.length ? (
         <TableWrap maxHeight={420}>
           <THead>
@@ -366,6 +371,6 @@ function ListaFeria({ lista }: { lista: FeriaEnRegulares[] }) {
       ) : (
         <div style={{ color: color.mut, fontSize: font.sm }}>No se escaneó feria.</div>
       )}
-    </>
+    </Plegable>
   )
 }

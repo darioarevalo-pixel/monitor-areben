@@ -375,16 +375,6 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
   return (
     <>
       <HeaderAcciones>
-        {fase === 'config' && (
-          <>
-            {lib.recorridoId && (
-              <Button variant="outline" onClick={() => { prepararSonido(); setFase('scan'); foco(scanRef) }}>Retomar</Button>
-            )}
-            <Button variant="solid" tone="brand" onClick={iniciar} disabled={cargando || !items.length || !!lib.recorridoId}>
-              Iniciar recorrido
-            </Button>
-          </>
-        )}
         {fase === 'scan' && (
           <>
             <Button variant="ghost" tone="danger" onClick={() => void eliminar()}>Eliminar</Button>
@@ -409,27 +399,76 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
             <Notice tone="danger" icon="⚠" style={{ marginBottom: space[4] }}>Error cargando inventario: {errorMsg}</Notice>
           ) : cargando ? (
             <Notice tone="neutral" icon="⏳" style={{ marginBottom: space[4] }}>Cargando inventario…</Notice>
+          ) : null}
+          {/* ⛔ El recuadro de «N variantes con stock · N en cero · N de Stunned» se sacó el 12-oct-2026
+              (Darío: «hay mucho texto»): a quien escanea ⛔ le sirve. Stunned y lo que está en cero se
+              siguen pudiendo escanear igual. */}
+
+          {/* 🔑 Para la empleada, de dónde viene: el último chequeo y si quedó completo (lo dice el
+              asunto del correo que salió al cerrarlo). Los dueños lo ven entero en el reporte. */}
+          {marca === 'zattia' && !mapaGuardado?.puede.editar && ultimoChequeo.length > 0 && (
+            <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
+              Último chequeo: {fechaDe(ultimoChequeo[0].creado_en)}
+              {(() => {
+                const asunto = ultimoChequeo.map((r) => r.cobertura?.correo?.asunto).find(Boolean) ?? ''
+                const m = asunto.match(/incompleto \((\d+) %\)/)
+                return m ? <b style={{ color: color.warning }}> · ⚠️ incompleto ({m[1]} %)</b> : asunto ? <b style={{ color: color.success }}> · completo</b> : null
+              })()}
+            </div>
+          )}
+
+          {/* 🔑 UN botón (Darío, 12-oct-2026): el chequeo es un solo recorrido, de corrido. */}
+          {lib.recorridoId ? (
+            <div style={{ marginBottom: space[4] }}>
+              <Button size="lg" variant="solid" tone="brand" fullWidth onClick={() => { prepararSonido(); setFase('scan'); foco(scanRef) }}>
+                Retomar el chequeo
+              </Button>
+              <div style={{ fontSize: font.sm, color: color.mut, marginTop: space[2] }}>
+                Hay uno en curso con <b>{lib.escaneos.length}</b> {lib.escaneos.length === 1 ? 'escaneo' : 'escaneos'}
+                {lib.sinSubir > 0 && <> · <b>{lib.sinSubir}</b> sin subir</>}.
+              </div>
+            </div>
           ) : (
-            <Notice tone="neutral" icon="🏷️" style={{ marginBottom: space[4] }}>
-              Escaneás lo que hay en cada lugar del local —un perchero, una mesa, la vidriera— y todo queda guardado con ese lugar.
-              Tenés <b>{items.length}</b> variantes con stock en Local contra las que cruzar
-              {/* 🔑 Las en cero se dicen acá: son la mitad del salón y **también se pueden escanear**.
-                  Callarlas dejaba creer que una prenda sin stock no se podía registrar. */}
-              {enCero > 0 && <> · <b>{enCero}</b> más figuran en cero y también se pueden escanear</>}.
-              {/* 🔑 Stunned se dice ACÁ y ⛔ no se calla: es otra tienda y la revisa otro sector, pero
-                  sus prendas están colgadas en el mismo salón. Quien camina tiene que saber que si
-                  escanea un buzo de Stunned el teléfono se lo va a tomar —y ⛔ no va a contar—, o el
-                  número de la cobertura se lee como si faltaran prendas que nadie tenía que mirar. */}
-              {deStunned > 0 && (
-                <>
-                  {' '}Las <b>{deStunned}</b> de <b>Stunned</b> ⛔ no se chequean acá (tienen su propia pantalla): si escaneás una, se registra pero ⛔ no cuenta.
-                </>
-              )}
-            </Notice>
+            <div style={{ marginBottom: space[4] }}>
+              <Button
+                size="lg"
+                variant="solid"
+                tone="brand"
+                fullWidth
+                onClick={iniciar}
+                disabled={cargando || !items.length}
+                title={`${items.length} variantes con stock en el Local${enCero ? ` · ${enCero} en cero (también se pueden escanear)` : ''}${deStunned ? ` · ${deStunned} de Stunned (se registran pero no cuentan)` : ''}`}
+              >
+                {conMapa ? 'Iniciar chequeo + mapa' : 'Iniciar chequeo'}
+              </Button>
+            </div>
+          )}
+
+          {/* 🔑 Quien ⛔ ve el reporte (la empleada) sube la foto del ticket tildado del último chequeo. */}
+          {marca === 'zattia' && !mapaGuardado?.puede.editar && ultimoChequeo.length > 0 && (
+            <FotoTicket marca={marca} recorridos={ultimoChequeo} onCobertura={ponerCobertura} titulo={`Ticket tildado del chequeo del ${fechaDe(ultimoChequeo[0].creado_en)}`} />
+          )}
+
+          {/* 🔑 El reporte del chequeo: de quien edita el Mapa del local (el celular es para escanear). */}
+          {marca === 'zattia' && mapaGuardado?.puede.editar && previos && (
+            <ReporteChequeo marca={marca} previos={previos} items={items} mapa={mapaLocal} onTraerStock={onTraerStock} trayendo={trayendo} onCobertura={ponerCobertura} />
+          )}
+
+          {/* 🔑 «Chequeo + mapa» es para ARMAR el Mapa del local, ⛔ el chequeo semanal: sólo para
+              quien lo edita, y chico (Darío, 12-oct-2026). */}
+          {marca === 'zattia' && !lib.recorridoId && mapaGuardado?.puede.editar && (
+            <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[4] }}>
+              <button type="button" onClick={() => setConMapa(!conMapa)} style={{ height: 'auto', background: 'none', border: 'none', padding: 0, color: color.brand, cursor: 'pointer', fontSize: font.sm, textDecoration: 'underline' }}>
+                {conMapa ? 'Volver al chequeo de siempre' : 'Chequeo + mapa (para armar el mapa del local)'}
+              </button>
+              {conMapa && <> · Elegís el espacio con botones (lado, número, simple o doble, arriba o abajo) y escaneás.</>}
+            </div>
           )}
 
           {/* 🔑 Los avisos se aprenden **antes** de caminar, ⛔ no en el primer perchero. */}
-          <Notice tone="neutral" icon="🔊" style={{ marginBottom: space[4] }}>
+          <details style={{ marginBottom: space[4] }}>
+            <summary style={{ cursor: 'pointer', fontSize: font.base, fontWeight: weight.semibold, color: color.ink, padding: `${space[2]}px 0` }}>🔊 Probar sonido y voz</summary>
+          <Notice tone="neutral" icon="🔊" style={{ marginTop: space[2] }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
               {/* 🔑 Son dos cosas y se dicen en dos renglones: la persona que lo lee está por salir a
                   caminar el salón, ⛔ no estudiando la pantalla. */}
@@ -454,46 +493,10 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               </div>
             )}
           </Notice>
+          </details>
 
-          {/* 🔑 Los dos modos, en la MISMA pantalla (Bruno, 5-oct-2026): «+ mapa» es el mismo
-              chequeo, eligiendo el espacio con botones, y al final arma el Mapa del local. */}
-          {marca === 'zattia' && !lib.recorridoId && (
-            <div style={{ marginBottom: space[4] }}>
-              <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginBottom: space[2] }}>
-                <Button variant={conMapa ? 'outline' : 'solid'} tone={conMapa ? undefined : 'brand'} aria-pressed={!conMapa} onClick={() => setConMapa(false)}>
-                  Chequeo
-                </Button>
-                <Button variant={conMapa ? 'solid' : 'outline'} tone={conMapa ? 'brand' : undefined} aria-pressed={conMapa} onClick={() => setConMapa(true)}>
-                  Chequeo + mapa
-                </Button>
-              </div>
-              <div style={{ fontSize: font.sm, color: color.mut }}>
-                {conMapa
-                  ? 'Elegís el espacio con botones (lado, número, simple o doble, arriba o abajo) y escaneás. Cuando terminás, tocás «Terminar y guardar» y listo.'
-                  : 'Escribís el lugar donde estás parado y escaneás.'}
-              </div>
-            </div>
-          )}
-
-          {lib.recorridoId && (
-            <Notice tone="brand" icon="↩" style={{ marginBottom: space[4] }}>
-              Hay un recorrido en curso con <b>{lib.escaneos.length}</b> {lib.escaneos.length === 1 ? 'escaneo' : 'escaneos'}
-              {lib.sinSubir > 0 && <> · <b>{lib.sinSubir}</b> sin subir</>}. Tocá <b>Retomar</b> para seguir.
-            </Notice>
-          )}
-
-          {/* 🔑 El reporte del chequeo (11-oct-2026): lo pendiente y lo duplicado de los recorridos
-              del día, con el ticket de 80 mm. Es de quien edita el Mapa del local, como el
-              relevamiento: el celular es para escanear. */}
-          {marca === 'zattia' && mapaGuardado?.puede.editar && previos && (
-            <ReporteChequeo marca={marca} previos={previos} items={items} mapa={mapaLocal} onTraerStock={onTraerStock} trayendo={trayendo} onCobertura={ponerCobertura} />
-          )}
-          {/* 🔑 Quien ⛔ ve el reporte (la empleada) igual sube la foto del ticket tildado del último chequeo. */}
-          {marca === 'zattia' && !mapaGuardado?.puede.editar && ultimoChequeo.length > 0 && (
-            <FotoTicket marca={marca} recorridos={ultimoChequeo} onCobertura={ponerCobertura} titulo={`Ticket tildado del chequeo del ${fechaDe(ultimoChequeo[0].creado_en)}`} />
-          )}
-
-          <Subtitulo>Recorridos anteriores</Subtitulo>
+          <details>
+            <summary style={{ cursor: 'pointer', fontSize: font.base, fontWeight: weight.semibold, color: color.ink, padding: `${space[2]}px 0` }}>Recorridos anteriores{previos?.length ? ` (${previos.length})` : ''}</summary>
           {previos === null ? (
             // 🔑 «No se pudo preguntar» ⛔ no es «no hay ninguno»: un cero acá se leería como que
             // nunca se hizo un recorrido, que es exactamente lo contrario de lo que pasa.
@@ -519,6 +522,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               </div>
             ))
           )}
+          </details>
         </Card>
       )}
 

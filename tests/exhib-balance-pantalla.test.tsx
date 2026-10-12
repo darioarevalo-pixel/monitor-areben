@@ -10,7 +10,7 @@ beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
 
-vi.mock('@/lib/sync-gn', () => ({ ultimoSyncStock: async () => new Date(Date.now() - 18 * 36e5) }))
+vi.mock('@/lib/reposicion/cliente', () => ({ ultimaSincronizacion: async () => new Date(Date.now() - 18 * 36e5) }))
 vi.mock('@/lib/exhib/cliente', () => ({
   guardarCobertura: vi.fn(async (_m: string, _id: string, tipos: string[]) => ({ tipos, por: 'bruno', cuando: new Date().toISOString() })),
   tacharPrenda: vi.fn(),

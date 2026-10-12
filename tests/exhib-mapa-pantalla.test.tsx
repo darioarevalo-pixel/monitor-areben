@@ -15,7 +15,7 @@ beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
 
-vi.mock('@/lib/sync-gn', () => ({ ultimoSyncStock: async () => new Date(Date.now() - 5 * 36e5) }))
+vi.mock('@/lib/reposicion/cliente', () => ({ ultimaSincronizacion: async () => new Date(Date.now() - 5 * 36e5) }))
 const guardarMapa = vi.fn(async (_m: MapaLocal, _b: string | null) => ({ actualizadoEn: '2026-10-05T15:00:00Z', actualizadoPor: 'bruno' }))
 vi.mock('@/lib/mapa-local/cliente', () => ({ guardarMapa: (m: MapaLocal, b: string | null) => guardarMapa(m, b), leerMapa: vi.fn() }))
 

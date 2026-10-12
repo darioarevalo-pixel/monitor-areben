@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { Marca } from '@/lib/nav'
-import { ultimoSyncStock } from '@/lib/sync-gn'
+import { ultimaSincronizacion } from '@/lib/reposicion/cliente'
 
 /**
  * 🔴 **De cuándo es el stock contra el que se está comparando.** El espejo se actualiza **una vez
@@ -15,11 +15,18 @@ import { ultimoSyncStock } from '@/lib/sync-gn'
  *
  * `undefined` = todavía ⛔ se sabe · `null` = ⛔ hay dato.
  */
+/*
+ * 🔴 **La hora sale de `sync_state` (`ultimaSincronizacion`) y ⛔ del último run del workflow**
+ * (Darío, 12-oct-2026: «Stock de hora desconocida»). El run más nuevo es el que está CORRIENDO
+ * mientras se actualiza —sin `conclusion`—, así que justo durante la actualización decía «hora
+ * desconocida»; y ⛔ veía el sync diario de la mañana, así que mandaba a actualizar un stock que
+ * ya era de las 8:40. `sync_state` es la hora en que se ESCRIBIÓ el inventario, de los dos syncs.
+ */
 export function useEdadStock(marca: Marca, items: unknown) {
   const [stockDe, setStockDe] = useState<{ fecha: Date; horas: number } | null | undefined>(undefined)
   useEffect(() => {
     let vivo = true
-    void ultimoSyncStock(marca).then((fecha) => {
+    void ultimaSincronizacion(marca).then((fecha) => {
       // ⚠️ La antigüedad se calcula **acá**, cuando se pregunta, y ⛔ no en el render: leer el reloj
       // mientras se dibuja da un número que cambia solo en cada re-dibujo (y el lint lo prohíbe).
       if (vivo) setStockDe(fecha ? { fecha, horas: (Date.now() - fecha.getTime()) / 36e5 } : null)

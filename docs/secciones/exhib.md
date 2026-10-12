@@ -101,6 +101,18 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > anterior = último día con ≥100 escaneos, `nuevosDesde`) y **«1 sola»** en lo pendiente, sólo en
 > pantalla y correo; y **el stock se trae solo** al abrir el reporte si la foto tiene >30 min.
 
+> 🧹 **Pantalla de inicio sin texto (12-oct-2026, Darío: «hay mucho texto»)** — dos personas, dos
+> cosas: la EMPLEADA ve «Último chequeo: fecha · completo/⚠️ incompleto (N %)» (sale del asunto de
+> `cobertura.correo`), UN botón grande «Iniciar chequeo» (los números de inventario/en cero/Stunned
+> quedaron en su `title`), la foto del ticket y «🔊 Probar sonido y voz» PLEGADO. ⛔ Ve «Chequeo +
+> mapa»: es para armar el mapa, sólo para quien lo edita, como link chico. Los DUEÑOS ven el
+> reporte con la respuesta arriba (completo/incompleto + quién, de qué hora a qué hora), tres
+> números (`KpiCard`), Imprimir/Enviar por correo, y las tres listas PLEGADAS. ⛔ Ya no se tildan
+> recorridos: el chequeo es uno solo (si un día tiene varios, entran todos). La línea del stock
+> aparece sólo si se está trayendo o si está viejo. 🔴 **La hora del stock sale de `sync_state`**
+> (`ultimaSincronizacion`, la misma de Reposición) y ⛔ del último run del workflow: ése, mientras
+> corre, ⛔ tiene hora («Stock de hora desconocida» justo al actualizar) y ⛔ ve el sync diario.
+
 > 🗣️ **La voz se elige (11-oct-2026, Darío: «demasiado eléctrica»)** — `lib/voces.ts` + `ElegirVoz.tsx`
 > al lado de «Escuchar los avisos». Antes sólo se pedía `lang es-AR` y el iPhone usaba la compacta.
 > Ahora gana la mejor en español (premium › mejorada › común; acento AR › latino › España), ⛔ se

@@ -10,7 +10,7 @@ beforeAll(() => {
 })
 
 let horasDelStock = 3
-vi.mock('@/lib/sync-gn', () => ({ ultimoSyncStock: async () => new Date(Date.now() - horasDelStock * 36e5) }))
+vi.mock('@/lib/reposicion/cliente', () => ({ ultimaSincronizacion: async () => new Date(Date.now() - horasDelStock * 36e5) }))
 vi.mock('@/lib/exhib/cliente', () => ({ leerRecorrido: async () => ({ escaneos: [] }) }))
 vi.mock('@/lib/supabase/rest', () => ({ fetchAll: async () => [] }))
 vi.mock('@/components/exhib/FotoTicket', () => ({ FotoTicket: () => null }))
