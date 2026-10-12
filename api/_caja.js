@@ -15,6 +15,8 @@
 //   GET  ?recurso=caja&action=ventas&turno=…      → las ventas del turno (sin `turno`, el abierto), para reimprimir (B1)
 //   GET  ?recurso=caja&action=pedidos-web         → los pedidos de TN por empaquetar (v2, W1):
 //        { pedidos, porSku, noLeidas, leidoEn } — ver lib/caja/pedidos-web.core.js
+//   GET  ?recurso=caja&action=gift-lotes          → sólo admin: los lotes de gift cards generados (W6)
+//   GET  ?recurso=caja&action=gift-lote&lote=…    → sólo admin: { nombre, csv } del lote, para la imprenta
 //   GET  ?recurso=caja&action=turno               → el turno abierto (o null) con su resumen y salidas, y
 //        los últimos cerrados (v2, W3), con el efectivo cobrado EN GN durante el turno (W3b) — ver lib/caja/cierre.core.js
 //   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, descuentoVenta, email?, pagaCon? }
@@ -35,6 +37,8 @@
 //        `conteo` (fase B, 5-oct): `{ [billete]: cantidad }` de la calculadora; el servidor rearma el
 //        total con `lib/caja/conteo.core.js` y, si ⛔ es el fondo o el contado, 400.
 //   POST ?recurso=caja  { action: 'usar-mp', cuenta_id } → sólo admin: cambia la cuenta de MP en uso (la MISMA de Pagos recibidos)
+//   POST ?recurso=caja  { action: 'gift-lote', cantidad, nota? } → sólo admin: genera N tarjetas INACTIVAS (W6,
+//        sql/migrate-caja-gift-card.sql); el código lo arma `lib/caja/gift.core.js` con `crypto.randomInt`
 //   POST ?recurso=caja  { action: 'promos', promos }       → sólo admin: la lista entera de promos (W5), en `caja_config.reglas.promos`
 //   POST ?recurso=caja  { action: 'politica', texto }      → sólo admin: la política de cambio del ticket
 //   POST ?recurso=caja  { action: 'logo', logo: { src, ancho, alto } | null } → sólo admin: el logo del ticket (sql/migrate-caja-logo.sql)
@@ -65,7 +69,7 @@
 // `cruzar` cada pocos segundos, que lee Mercado Pago con la MISMA lectura de Pagos recibidos y busca
 // el monto exacto (`cruzarTransferencia`). Recién con el pago encontrado la venta pasa a `borrador` y
 // se manda. El id del pago de MP queda en la fila con índice ÚNICO: un pago confirma UNA venta.
-import { createHash } from 'node:crypto'
+import { createHash, randomInt } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
@@ -86,6 +90,7 @@ import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedid
 import { anuladasEnGN, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
 import { billetesDe, limpiarConteo, normalizarBilletes, totalDeConteo } from '../lib/caja/conteo.core.js'
 import { aplicarPromos, normalizarPromos } from '../lib/caja/promos.core.js'
+import { MAX_LOTE, csvDeLote, generarCodigos } from '../lib/caja/gift.core.js'
 
 // 🔑 La marca es CONFIGURACIÓN (rediseño, fase 5): el nombre, el local, el depósito y el modo Local
 // salen de `lib/caja/marcas.core.js`. Habilitada hoy: sólo Zattia.
@@ -149,6 +154,10 @@ async function leerJson(r) {
   const t = await r.text()
   try { return JSON.parse(t) } catch { return t.slice(0, 300) }
 }
+
+/** PostgREST contesta 42P01 / PGRST205 cuando la tabla ⛔ existe (falta `sql/migrate-caja-gift-card.sql`). */
+const faltaGift = (e) => !!e && (e.code === '42P01' || e.code === 'PGRST205' || /caja_gift.*(does not exist|schema cache)|Could not find the table/i.test(e.message || ''))
+const FALTA_GIFT = 'Falta correr sql/migrate-caja-gift-card.sql en la base de Zattia.'
 
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res)
@@ -504,7 +513,23 @@ export default async function handler(req, res) {
         if (ultimos.error) throw new Error(ultimos.error.message)
         return res.status(200).json({ turno: turno ? await conResumen(turno) : null, ultimos: ultimos.data || [] })
       }
-      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, cuentas-mp, pendientes, ventas, pedidos-web, turno)' })
+      if (accion === 'gift-lotes' || accion === 'gift-lote') {
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Los lotes de gift cards los ve un admin.' })
+        if (accion === 'gift-lotes') {
+          const { data, error } = await sb.from('caja_gift_lote').select('id, cantidad, nota, creado_en, creado_por').eq('store', store).order('creado_en', { ascending: false }).limit(50)
+          if (faltaGift(error)) return res.status(409).json({ error: FALTA_GIFT })
+          if (error) throw new Error(error.message)
+          return res.status(200).json({ lotes: data || [] })
+        }
+        const lote = Number(req.query.lote)
+        if (!Number.isInteger(lote) || lote <= 0) return res.status(400).json({ error: 'Falta el lote.' })
+        const { data, error } = await sb.from('caja_gift_card').select('codigo').eq('store', store).eq('lote_id', lote).order('creada_en', { ascending: true }).order('codigo', { ascending: true }).limit(MAX_LOTE)
+        if (faltaGift(error)) return res.status(409).json({ error: FALTA_GIFT })
+        if (error) throw new Error(error.message)
+        if (!data || !data.length) return res.status(404).json({ error: 'Ese lote no tiene tarjetas.' })
+        return res.status(200).json({ nombre: `gift-cards-${store}-lote-${lote}.csv`, csv: csvDeLote(data) })
+      }
+      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, cuentas-mp, pendientes, ventas, pedidos-web, turno, gift-lotes, gift-lote)' })
     }
 
     if (req.method === 'POST') {
@@ -543,6 +568,30 @@ export default async function handler(req, res) {
         if (error && /ticket_logo/.test(error.message || '')) return res.status(409).json({ error: 'Falta correr sql/migrate-caja-logo.sql en la base de Zattia.' })
         if (error) throw new Error(error.message)
         return res.status(200).json({ ticket_logo: logo })
+      }
+      if (accion === 'gift-lote') {
+        // 🏁 W6 (Bruno, 11-oct): la tarjeta es FÍSICA ⇒ los códigos nacen acá, INACTIVOS, y van a la imprenta.
+        // 🔴 Al azar con `crypto.randomInt` (⛔ `Math.random`, ⛔ correlativos): un código adivinable es plata.
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Los lotes de gift cards los genera un admin.' })
+        const cantidad = Number(b.cantidad)
+        if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > MAX_LOTE) return res.status(400).json({ error: `La cantidad va de 1 a ${MAX_LOTE}.` })
+        const nota = String(b.nota ?? '').trim().slice(0, 200) || null
+        const lote = await sb.from('caja_gift_lote').insert({ store, cantidad, nota, creado_por: perfil.name || null }).select('id, cantidad, nota, creado_en, creado_por').single()
+        if (faltaGift(lote.error)) return res.status(409).json({ error: FALTA_GIFT })
+        if (lote.error) throw new Error(lote.error.message)
+        // Todo el lote en UN insert (todo o nada). Si un código chocó con uno de otro lote (1 en 10^12), se
+        // vuelve a sortear el lote entero.
+        for (let i = 0; i < 3; i++) {
+          const filas = generarCodigos(cantidad, randomInt).map((codigo) => ({ codigo, store, lote_id: lote.data.id }))
+          const ins = await sb.from('caja_gift_card').insert(filas)
+          if (!ins.error) return res.status(200).json({ lote: lote.data })
+          if (ins.error.code !== '23505') {
+            await sb.from('caja_gift_lote').delete().eq('id', lote.data.id)
+            throw new Error(ins.error.message)
+          }
+        }
+        await sb.from('caja_gift_lote').delete().eq('id', lote.data.id)
+        return res.status(500).json({ error: 'No se pudo generar el lote: los códigos chocaron tres veces. Probá de nuevo.' })
       }
       if (accion === 'promos') {
         // 🔑 W5 (Bruno, 5-oct): las promos son configuración, como los productos de feria: van en
@@ -981,7 +1030,7 @@ export default async function handler(req, res) {
         if (ya.data.estado === 'cancelada') return res.status(200).json({ venta: ya.data })
         return res.status(409).json({ error: 'La transferencia ya llegó: la venta está cobrada y no se cancela desde acá.', venta: ya.data })
       }
-      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, reintentar-pendientes, cruzar, cancelar, resolver, confirmar-transferencia, usar-mp, politica, logo, bajadas, abrir-turno, salida, anular-mov, contar, cerrar-turno)' })
+      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, reintentar-pendientes, cruzar, cancelar, resolver, confirmar-transferencia, usar-mp, politica, logo, gift-lote, bajadas, abrir-turno, salida, anular-mov, contar, cerrar-turno)' })
     }
     return res.status(405).json({ error: 'Método no permitido' })
   } catch (e) {

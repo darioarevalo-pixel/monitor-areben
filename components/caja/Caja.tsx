@@ -24,6 +24,7 @@ import { Button, ButtonLink, Notice, color, font, space, weight } from '@/compon
 import { Bajadas, DeteccionTransferencias, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TransferenciasEnEspera, TurnoCaja, UltimosTurnos, VentasDelTurno, diaAr } from '@/components/caja/partes'
 import { VistaTicket } from '@/components/caja/VistaTicket'
 import { PromosCaja } from '@/components/caja/PromosCaja'
+import { GiftCards } from '@/components/caja/GiftCards'
 import { ModalVarianteContext } from '@/components/ui/Modal'
 
 export function Caja() {
@@ -124,6 +125,7 @@ export function Caja() {
         {config?.reglas.medios && <PromosCaja reglas={config.reglas} admin={admin} version={config.versiones?.promos} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
         {admin && config?.reglas.medios && <ProductosFeria reglas={config.reglas} version={config.versiones?.feriaProductos} campanias={config.campaniasLiq ?? []} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
         {admin && config && <LogoDelTicket inicial={config.ticket_logo ?? null} onGuardado={(l) => setConfig({ ...config, ticket_logo: l })} />}
+        {admin && <GiftCards />}
         {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
         <UltimosTurnos ultimos={ultimosTurnos} onVerVentas={(t) => setVerVentas({ turnoId: t.id, titulo: `Ventas del turno del ${diaAr(t.abierto_en)}${t.abierto_por ? ` · ${t.abierto_por}` : ''}` })} />
         {verVentas && <VentasDelTurno turnoId={verVentas.turnoId} titulo={verVentas.titulo} nombreCuenta={(id) => nombreParaTicket(id, config?.reglas ?? null)} onCerrar={() => setVerVentas(null)} />}

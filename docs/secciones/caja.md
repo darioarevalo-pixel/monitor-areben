@@ -284,7 +284,25 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   escaneada antes de que cargaran los datos se completa al llegar · el selector %/$ del descuento se elige
   antes de escribir · el tótem distingue «no está» de «no se pudo consultar» y muestra la promo.
 
+## Gift card (W6) — parte 1: los lotes (11-oct-2026)
+
+- 🏁 **Es una TARJETA FÍSICA de PVC con código de barras** (Bruno, 11-oct). Los códigos los genera el
+  monitor (`lib/caja/gift.core.js`), nacen **inactivos** en `caja_gift_card` (sin monto, saldo ni
+  vencimiento) y el CSV va a la imprenta: «Gift cards» en la pestaña, sólo admin (`gift-lote`,
+  `gift-lotes`, `gift-lote&lote=`). **Vender = ACTIVAR** (parte 2): una tarjeta sin activar ⛔ vale nada.
+- 🔴 **El código es plata**: `GC` + 10 símbolos al azar (`crypto.randomInt`, ⛔ `Math.random`, ⛔
+  correlativos) + verificador Luhn mod 32 con el alfabeto de Crockford (sin I, L, O, U). Un símbolo mal
+  tipeado o dos vecinos cambiados ⇒ ⛔ es válido. Las barras llevan el código pelado; el número impreso,
+  `GC 1234 5678 9AB`. En pantalla y en el ticket, sólo los últimos 4.
+- 🔑 **`saldo >= 0` es un CHECK de la base**: el freno del doble canje (dos canjes a la vez ⇒ el
+  segundo falla), y `caja_gift_mov` tiene un canje por (tarjeta, venta) ⇒ reintentar ⛔ descuenta dos veces.
+- Falta (parte 2): activar en el POS, canjear, la venta en GN (Opción 1: producto «Gift card» al
+  venderla, descuento en pesos al canjear), el ticket y la consulta de saldo. Diseño completo:
+  `~/Documents/reunion-gerencia/2026-10-11-POS-auditoria-y-gift-card.md` § D.
+
 ## Pendiente
+
+- 🔴 `sql/migrate-caja-gift-card.sql` ⛔ corrida: sin ella «Generar lote» contesta 409 y lo dice.
 
 - 🔴 `sql/migrate-caja-auditoria.sql` va ANTES del deploy de la fase 2 (las columnas nuevas viajan en cada
   venta y en cada movimiento).

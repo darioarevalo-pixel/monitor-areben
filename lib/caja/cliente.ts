@@ -233,3 +233,10 @@ export const guardarPromos = (promos: PromoCaja[], version?: string) =>
   post<{ reglas: Reglas; versiones?: Versiones }>({ action: 'promos', promos, ...(version ? { version } : {}) }, 'No se pudieron guardar las promos.')
 export const guardarBajadas = (b: { transferenciaPorMp?: { mp: number; gn: number }; billetes?: number[]; feriaProductos?: ProductoFeria[]; feriaCampanias?: string[]; version?: string }) =>
   post<{ reglas: Reglas; versiones?: Versiones }>({ action: 'bajadas', ...b }, 'No se pudo guardar.')
+
+/** W6: un lote de gift cards (tarjetas físicas, nacen INACTIVAS). Sólo admin. */
+export type LoteGift = { id: number; cantidad: number; nota: string | null; creado_en: string; creado_por: string | null }
+export const leerLotesGift = () => get<{ lotes: LoteGift[] }>('action=gift-lotes', 'No se pudieron leer los lotes de gift cards.')
+export const generarLoteGift = (cantidad: number, nota: string) => post<{ lote: LoteGift }>({ action: 'gift-lote', cantidad, nota }, 'No se pudo generar el lote.')
+/** El CSV para la imprenta (código en las barras, número impreso). */
+export const csvLoteGift = (lote: number) => get<{ nombre: string; csv: string }>(`action=gift-lote&lote=${lote}`, 'No se pudo descargar el lote.')

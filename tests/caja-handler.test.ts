@@ -22,6 +22,10 @@ const base = {
   agenda: [] as Fila[],
   // La feria de Liquidación (Bruno, 11-oct).
   liqItems: [] as Fila[],
+  // W6: las gift cards (`null` = falta la migración).
+  giftLotes: [] as Fila[] | null,
+  giftCards: [] as Fila[],
+  giftChoques: 0,
   alCerrar: null as null | (() => void),
   antesDeInsertar: null as null | (() => void),
 }
@@ -43,15 +47,35 @@ const mailer = { posts: [] as Array<{ body: Fila; key?: string; url: string }> }
 
 function consulta(tabla: string) {
   const filtros: Array<(f: Fila) => boolean> = []
-  let accion: { tipo: 'select' } | { tipo: 'update'; cambios: Fila } | { tipo: 'insert'; fila: Fila } = { tipo: 'select' }
+  let accion: { tipo: 'select' } | { tipo: 'delete' } | { tipo: 'update'; cambios: Fila } | { tipo: 'insert'; fila: Fila } = { tipo: 'select' }
   const filas = (): Fila[] => {
     const todas = tabla === 'caja_venta' ? [...base.ventas.values()] : tabla === 'caja_config' ? (base.config ? [base.config] : [])
       : tabla === 'mp_cuenta_uso' ? base.usos : tabla === 'mp_cuentas' ? base.llaves
       : tabla === 'caja_turno' ? base.turnos : tabla === 'caja_turno_mov' ? base.movs
-      : tabla === 'agenda_promos' ? base.agenda : tabla === 'liquidacion_items' ? base.liqItems : base.inventario
+      : tabla === 'agenda_promos' ? base.agenda : tabla === 'liquidacion_items' ? base.liqItems
+      : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_gift_card' ? base.giftCards : base.inventario
     return todas.filter((f) => filtros.every((p) => p(f)))
   }
   const ejecutar = () => {
+    if (tabla.startsWith('caja_gift') && base.giftLotes === null) return { data: null, error: { code: 'PGRST205', message: `Could not find the table 'public.${tabla}' in the schema cache` } }
+    if (accion.tipo === 'delete') {
+      const fuera = new Set(filas())
+      if (tabla === 'caja_gift_lote') base.giftLotes = (base.giftLotes ?? []).filter((f) => !fuera.has(f))
+      return { data: [...fuera], error: null }
+    }
+    if (accion.tipo === 'insert' && tabla === 'caja_gift_lote') {
+      const l = { id: (base.giftLotes ?? []).length + 1, creado_en: new Date().toISOString(), ...accion.fila }
+      base.giftLotes!.push(l)
+      return { data: [l], error: null }
+    }
+    if (accion.tipo === 'insert' && tabla === 'caja_gift_card') {
+      // La clave primaria: un código repetido tira el insert ENTERO (todo o nada, como Postgres).
+      const nuevas = accion.fila as unknown as Fila[]
+      if (base.giftChoques > 0) { base.giftChoques--; return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "caja_gift_card_pkey"' } } }
+      if (nuevas.some((n) => base.giftCards.some((c) => c.codigo === n.codigo))) return { data: null, error: { code: '23505', message: 'duplicate key' } }
+      for (const n of nuevas) base.giftCards.push({ estado: 'inactiva', monto: null, saldo: null, vence_en: null, creada_en: new Date().toISOString(), ...n })
+      return { data: nuevas, error: null }
+    }
     // El trigger de sql/migrate-caja-auditoria.sql (A7): ⛔ entra una venta ni un movimiento a un turno cerrado.
     if (accion.tipo === 'insert' && base.antesDeInsertar) { const h = base.antesDeInsertar; base.antesDeInsertar = null; h() }
     if (accion.tipo === 'insert' && (tabla === 'caja_venta' || tabla === 'caja_turno_mov') && accion.fila.turno_id != null) {
@@ -114,6 +138,7 @@ function consulta(tabla: string) {
   q.range = () => q
   q.insert = (f: Fila) => { accion = { tipo: 'insert', fila: f }; return q }
   q.update = (c: Fila) => { accion = { tipo: 'update', cambios: c }; return q }
+  q.delete = () => { accion = { tipo: 'delete' }; return q }
   q.upsert = async (f: Fila) => { if (!base.config) base.config = f; return { error: null } }
   q.maybeSingle = async () => { const r = ejecutar(); return { data: r.data ? r.data[0] ?? null : null, error: r.error } }
   q.single = async () => { const r = ejecutar(); return { data: r.data ? r.data[0] ?? null : null, error: r.error } }
@@ -206,6 +231,7 @@ beforeEach(async () => {
   base.turnos = [{ id: TURNO_ID, store: 'zattia', fondo: 50000, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null, abierto_por: 'cajera', abierto_por_usuario: 'cajera' }]; base.movs = []
   mailer.posts = []; delete process.env.MAILER_URL; delete process.env.MAILER_TICKET_KEY
   gn.posts = []; gn.gets = []; gn.authInventario = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }; gn.creadas = []; base.agenda = [];
+  base.giftLotes = []; base.giftCards = []; base.giftChoques = 0
   // Bruno, 11-oct: la cuenta de MP del test asienta en Transferencia (13015, Areben Comercial).
   base.config = { store: 'zattia', reglas: { ...REGLAS_INICIALES, transferenciaPorMp: { [CUENTA_MP]: 13015 } }, politica_cambio: null }; base.alCerrar = null; base.antesDeInsertar = null
   gn.lista = { status: 200, body: { data: [], meta: { has_more_pages: false } } }
@@ -1400,5 +1426,55 @@ describe('caja · la feria es la de Liquidación (Bruno, 11-oct)', () => {
     expect((await correr(req('POST', {}, VENTA))).code).toBe(400)
     const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25867 }], total: 25500, pagaCon: null }))
     expect(r.code).toBe(200)
+  })
+})
+
+describe('caja · gift card, el lote (W6, Bruno 11-oct: tarjeta física)', () => {
+  const ADMIN = { name: 'bruno', admin: true, cuenta: null, acceso: {}, funcion: [] }
+  it('🔴 la cajera ⛔ genera ni descarga: 403 y ⛔ queda nada', async () => {
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'gift-lote', cantidad: 10 }))).code).toBe(403)
+    expect((await correr(req('GET', { action: 'gift-lotes' }))).code).toBe(403)
+    expect((await correr(req('GET', { action: 'gift-lote', lote: 1 }))).code).toBe(403)
+    expect(base.giftLotes).toEqual([])
+    expect(base.giftCards).toEqual([])
+  })
+  it('un admin genera N tarjetas INACTIVAS, sin monto, con códigos válidos y distintos; el CSV las trae todas', async () => {
+    const { esCodigo } = await import('@/lib/caja/gift.core.js')
+    conSesion(ADMIN)
+    const r = await correr(req('POST', {}, { action: 'gift-lote', cantidad: 300, nota: '  Imprenta X  ' }))
+    expect(r.code).toBe(200)
+    expect(base.giftLotes).toEqual([expect.objectContaining({ id: 1, store: 'zattia', cantidad: 300, nota: 'Imprenta X', creado_por: 'bruno' })])
+    expect(base.giftCards).toHaveLength(300)
+    expect(base.giftCards.every((c) => c.estado === 'inactiva' && c.monto == null && c.saldo == null && c.lote_id === 1 && esCodigo(c.codigo))).toBe(true)
+    expect(new Set(base.giftCards.map((c) => c.codigo)).size).toBe(300)
+    const l = await correr(req('GET', { action: 'gift-lotes' }))
+    expect(l.body).toMatchObject({ lotes: [{ id: 1, cantidad: 300 }] })
+    const c = await correr(req('GET', { action: 'gift-lote', lote: '1' }))
+    expect(c.code).toBe(200)
+    const renglones = String(c.body?.csv).trim().split('\n')
+    expect(renglones[0]).toBe('n,codigo,numero')
+    expect(renglones.slice(1).map((x) => x.split(',')[1]).sort()).toEqual(base.giftCards.map((x) => String(x.codigo)).sort())
+    expect(c.body?.nombre).toBe('gift-cards-zattia-lote-1.csv')
+  })
+  it('un choque de código se vuelve a sortear; tres seguidos ⇒ 500 y el lote ⛔ queda', async () => {
+    conSesion(ADMIN)
+    base.giftChoques = 1
+    expect((await correr(req('POST', {}, { action: 'gift-lote', cantidad: 5 }))).code).toBe(200)
+    expect(base.giftCards).toHaveLength(5)
+    base.giftChoques = 3
+    expect((await correr(req('POST', {}, { action: 'gift-lote', cantidad: 5 }))).code).toBe(500)
+    expect(base.giftLotes).toHaveLength(1)
+    expect(base.giftCards).toHaveLength(5)
+  })
+  it('cantidades fuera de rango ⇒ 400; sin la migración ⇒ 409 que lo dice', async () => {
+    conSesion(ADMIN)
+    for (const cantidad of [0, -1, 2.5, 2001, 'diez', null]) expect((await correr(req('POST', {}, { action: 'gift-lote', cantidad }))).code).toBe(400)
+    expect((await correr(req('GET', { action: 'gift-lote', lote: 'x' }))).code).toBe(400)
+    expect((await correr(req('GET', { action: 'gift-lote', lote: 9 }))).code).toBe(404)
+    base.giftLotes = null
+    const r = await correr(req('POST', {}, { action: 'gift-lote', cantidad: 5 }))
+    expect(r.code).toBe(409)
+    expect(r.body?.error).toMatch(/migrate-caja-gift-card\.sql/)
   })
 })
