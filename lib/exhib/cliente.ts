@@ -90,6 +90,14 @@ export async function cerrarRecorrido(marca: string, id: string, nota?: string):
 }
 
 /**
+ * El correo del chequeo a los dueños, con el reporte ya calculado (`paraElCorreo`). Una vez por
+ * recorrido salvo `reenviar`. Tira error si ⛔ salió (o si faltan las claves de correo en Vercel).
+ */
+export async function mandarCorreo(marca: string, id: string, reporte: unknown, reenviar = false): Promise<{ yaEstaba?: boolean; correo?: { enviado_en?: string; a?: string[] } }> {
+  return escribir(marca, 'correo', { id, reporte, reenviar })
+}
+
+/**
  * **El balance**: declarar que este recorrido cubrió estas categorías enteras.
  *
  * 🔑 El **quién** ⛔ no viaja: lo firma el servidor con la sesión, que es lo que lo vuelve

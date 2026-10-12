@@ -3,7 +3,7 @@
 //   GET  ?recurso=exhib&store=…&action=recorridos       → los recorridos, con cuántos escaneos tiene cada uno
 //   GET  ?recurso=exhib&store=…&action=recorrido&id=…   → UNO entero: cabecera + TODOS sus escaneos
 //   GET  ?recurso=exhib&store=…&action=lugares          → los lugares ya usados, para sugerir
-//   POST ?recurso=exhib&store=…  { action: 'abrir'|'escanear'|'cerrar'|'cobertura'|'tachar'|'repetida'|'foto-ticket'|'sacar-escaneo'|'eliminar', … }
+//   POST ?recurso=exhib&store=…  { action: 'abrir'|'escanear'|'cerrar'|'cobertura'|'tachar'|'repetida'|'foto-ticket'|'correo'|'sacar-escaneo'|'eliminar', … }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=exhib`. El plan Hobby de
 // Vercel admite 12 funciones y hay 7 usadas; una ruta nueva sería la octava por un solo recurso.
@@ -21,6 +21,9 @@ import { puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { pathnameDeBlob } from './_blob.js'
+import { armarCorreoChequeo, limpiarReporte } from '../lib/exhib/correo.core.js'
+// El mismo envío por SES que usan los correos de las 10:00 (`scripts/`): ⛔ hay otro.
+import { mandarMail } from '../scripts/lib/mail.mjs'
 
 const texto = (v) => (v == null || v === '' ? null : String(v))
 /**
@@ -345,6 +348,8 @@ export default async function handler(req, res) {
           repetidas: Array.isArray(antes.repetidas) ? antes.repetidas : [],
           // 🔴 La foto del ticket tildado también se conserva: es de la empleada, ⛔ del balance.
           ...(Array.isArray(antes.ticket) ? { ticket: antes.ticket } : {}),
+          // Y la constancia del correo a los dueños: si se pierde, el próximo cierre lo manda de nuevo.
+          ...(antes.correo ? { correo: antes.correo } : {}),
           por: perfil.name || null,
           cuando: new Date().toISOString(),
         }
@@ -388,6 +393,7 @@ export default async function handler(req, res) {
           tachadas: Array.isArray(antes.tachadas) ? antes.tachadas : [],
           repetidas: Array.isArray(antes.repetidas) ? antes.repetidas : [],
           ...(Array.isArray(antes.ticket) ? { ticket: antes.ticket } : {}),
+          ...(antes.correo ? { correo: antes.correo } : {}),
           // ⚠️ `por`/`cuando` son de la DECLARACIÓN del sector, ⛔ no de esta marca: cada una trae
           // los suyos. Pisarlos haría que «lo declaró Fulano» cambie por marcar una prenda.
           por: antes.por || null,
@@ -425,6 +431,40 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, cobertura })
       }
 
+      /**
+       * **El correo del chequeo a los dueños** (Darío, 12-oct-2026): lo pide el celular apenas cierra el
+       * recorrido, y el botón «Enviar por correo» del reporte para reenviarlo.
+       *
+       * 🔴 **El reporte viaja CALCULADO** (`reporteDelChequeo` es TypeScript y este handler ⛔ lo
+       * puede importar): acá sólo se acota (`limpiarReporte`). Quién y a qué hora salen de la fila.
+       * 🔑 **Una sola vez por recorrido** salvo `reenviar`: el celular lo pide en cada cierre y un
+       * reintento ⛔ tiene que llegar dos veces. La constancia vive en `cobertura.correo` (⛔ migración).
+       * ⚠️ Sin las claves de SES en Vercel contesta `configurado: false` y ⛔ un error: el cierre del
+       * recorrido ya pasó y eso es lo que importa en el local.
+       */
+      if (accion === 'correo') {
+        const recorrido = await recorridoDeLaMarca(String(b.id || ''))
+        if (!recorrido) return res.status(404).json({ error: 'Ese recorrido no está.' })
+        if (recorrido.estado !== 'cerrado') return res.status(400).json({ error: 'El recorrido todavía no se cerró.' })
+        const antes = recorrido.cobertura || {}
+        if (antes.correo && antes.correo.enviado_en && !b.reenviar) return res.status(200).json({ ok: true, yaEstaba: true, correo: antes.correo })
+
+        const c = armarCorreoChequeo({ recorrido, reporte: limpiarReporte(b.reporte) })
+        const para = String(process.env.MAIL_EXHIB_A || process.env.MAIL_REPOSICION_A || 'darioarevalo@arebensrl.com').split(',').map((x) => x.trim()).filter(Boolean)
+        const fallas = []
+        for (const a of para) {
+          const r = await mandarMail({ para: a, asunto: c.asunto, texto: c.texto, html: c.html })
+          if (!r.ok && !r.configurado) return res.status(200).json({ ok: false, configurado: false, error: 'Faltan las claves del servicio de correos (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) en Vercel.' })
+          if (!r.ok) fallas.push(`${a}: ${r.motivo}`)
+        }
+        const enviados = para.length - fallas.length
+        const correo = { ...(enviados ? { enviado_en: new Date().toISOString() } : antes.correo || {}), a: para, asunto: c.asunto, por: perfil.name || null, ...(fallas.length ? { error: fallas.join(' · ').slice(0, 400) } : {}) }
+        const { error } = await sb.from('exhib_recorrido').update({ cobertura: { ...antes, correo } }).eq('id', recorrido.id)
+        if (error) throw new Error(error.message)
+        if (!enviados) return res.status(502).json({ error: `No salió el correo: ${correo.error}` })
+        return res.status(200).json({ ok: true, correo })
+      }
+
       if (accion === 'sacar-escaneo') {
         const recorrido = await recorridoDeLaMarca(String(b.recorrido_id || ''))
         if (!recorrido) return res.status(404).json({ error: 'Ese recorrido no está.' })
@@ -456,7 +496,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true })
       }
 
-      return res.status(400).json({ error: `action inválida (usá abrir, escanear, cerrar, cobertura, tachar, repetida, foto-ticket, sacar-escaneo o eliminar)` })
+      return res.status(400).json({ error: `action inválida (usá abrir, escanear, cerrar, cobertura, tachar, repetida, foto-ticket, correo, sacar-escaneo o eliminar)` })
     }
 
     return res.status(405).json({ error: 'método no permitido' })

@@ -2,15 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Notice, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, useToast, weight } from '@/components/ui'
-import { CUENTAS } from '@/lib/cuentas'
-import { leerRecorrido } from '@/lib/exhib/cliente'
+import { leerRecorrido, mandarCorreo } from '@/lib/exhib/cliente'
+import { altasDesde, paraElCorreo } from '@/lib/exhib/correo'
 import type { Cobertura, EscaneoLibre, RecorridoLibre } from '@/lib/exhib/libre'
 import { nuevosDesde, reporteDelChequeo, type Duplicada, type FeriaEnRegulares, type Pendiente } from '@/lib/exhib/reporte'
 import { imprimirTicket } from '@/lib/exhib/ticket'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import type { MapaLocal } from '@/lib/mapa-local/tipos'
 import type { Marca } from '@/lib/nav'
-import { fetchAll } from '@/lib/supabase/rest'
 import { FotoTicket } from './FotoTicket'
 import { useEdadStock } from './useEdadStock'
 
@@ -30,6 +29,7 @@ const EN_AR = { timeZone: 'America/Argentina/Buenos_Aires' } as const
 /** El día del local (`YYYY-MM-DD` en hora de Buenos Aires). Lo usa también la foto del ticket de `ExhibLibre`. */
 export const diaDe = (iso: string) => new Date(iso).toLocaleDateString('en-CA', EN_AR)
 const fechaLarga = (dia: string) => new Date(`${dia}T12:00:00-03:00`).toLocaleDateString('es-AR', { ...EN_AR, weekday: 'long', day: '2-digit', month: '2-digit' })
+const fechaYHora = (iso: string) => `${diaCorto(diaDe(iso))} ${hora(iso)}`
 const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { ...EN_AR, hour: '2-digit', minute: '2-digit' })
 /** Con una foto del stock más nueva que esto, abrir el reporte ⛔ la vuelve a traer. */
 const FRESCO_MIN = 30
@@ -77,14 +77,7 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
   useEffect(() => {
     if (!desde) return
     let vivo = true
-    fetchAll<{ id: number | string; created_at: string | null }>(CUENTAS[marca], 'productos', `select=id,created_at&created_at=gte.${desde.desde}`)
-      .then((filas) => {
-        if (!vivo) return
-        const porProducto = new Map<string, string>()
-        for (const f of filas) if (f.created_at) porProducto.set(String(f.id), f.created_at.slice(0, 10))
-        setNuevos({ desde: desde.desde, porProducto })
-      })
-      .catch(() => vivo && setNuevos({ desde: desde.desde, porProducto: new Map() }))
+    void altasDesde(marca, desde.desde).then((porProducto) => vivo && setNuevos({ desde: desde.desde, porProducto }))
     return () => {
       vivo = false
     }
@@ -110,6 +103,27 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
     disparado.current = true
     void onTraerStock()
   }, [stockDe, trayendo, dias.length, onTraerStock])
+
+  /**
+   * 📬 El correo del chequeo (Darío, 12-oct-2026). Sale solo al cerrar el recorrido; esto es para
+   * reenviarlo o mandarlo si ⛔ salió. Se guarda en el ÚLTIMO recorrido del día (el que cerró).
+   */
+  const [mandando, setMandando] = useState(false)
+  const correo = [...delDia].reverse().map((r) => r.cobertura?.correo).find(Boolean) ?? null
+  async function mandarPorCorreo() {
+    const ultimo = elegidos.at(-1)
+    if (!ultimo || !nuevosAlDia || !desde) return
+    setMandando(true)
+    try {
+      const r = await mandarCorreo(marca, ultimo.id, paraElCorreo(elegidos.flatMap((x) => escaneos[x.id]), items, mapa, nuevosAlDia, desde), true)
+      toast.ok(`Correo enviado${r.correo?.a?.length ? ` a ${r.correo.a.join(', ')}` : ''}`)
+      if (r.correo) onCobertura(ultimo.id, { ...(ultimo.cobertura ?? { cats: [], por: null, cuando: new Date().toISOString() }), correo: r.correo })
+    } catch (e) {
+      toast.error('No salió el correo: ' + (e as Error).message)
+    } finally {
+      setMandando(false)
+    }
+  }
 
   async function imprimir() {
     if (!reporte) return
@@ -193,6 +207,12 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
             <Button size="sm" variant="solid" tone="brand" onClick={() => void imprimir()} loading={imprimiendo} disabled={trayendo}>
               Imprimir ticket
             </Button>
+            <Button size="sm" variant="outline" onClick={() => void mandarPorCorreo()} loading={mandando} disabled={trayendo}>
+              Enviar por correo
+            </Button>
+            <span style={{ color: correo?.error && !correo.enviado_en ? color.danger : color.mut }} title={correo?.error || correo?.a?.join(', ') || undefined}>
+              {correo?.enviado_en ? `Correo enviado ${fechaYHora(correo.enviado_en)}` : correo?.error ? 'El correo no salió' : 'Correo sin enviar'}
+            </span>
           </div>
           {trayendo && (
             <Notice tone="brand" icon="↻" style={{ marginBottom: space[3] }}>

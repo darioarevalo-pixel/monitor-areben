@@ -6,7 +6,9 @@ import { HeaderAcciones } from '@/components/layout/acciones'
 import { Button, Card, Field, Input, Notice, color, font, formatMoney, space, useConfirmar, useToast, weight } from '@/components/ui'
 import { descargarXlsx } from '@/lib/excel'
 import { candidatosPorCodigo, coincidencias, precioDeGondola } from '@/lib/exhib/core'
-import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
+import { leerRecorrido, leerRecorridos, mandarCorreo } from '@/lib/exhib/cliente'
+import { altasDesde, paraElCorreo } from '@/lib/exhib/correo'
+import { nuevosDesde } from '@/lib/exhib/reporte'
 import { agruparPorLugar, ANCHOS_EXPORT, balanceHecho, catsVisibles, compararConHistorial, filasExport, hallazgoDe, RAFAGA_MS, resumenRecorrido, separarEscaneoDelLugar, type Cobertura, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
 import { ParaColgar } from './ParaColgar'
@@ -277,6 +279,15 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
       return
     }
     toast.ok('Recorrido guardado')
+    // 📬 El correo a los dueños, apenas se cierra (Darío, 12-oct-2026: «que me reporten por correo»).
+    // ⛔ Se espera ni se avisa acá: la empleada ya terminó, y si falla se reenvía desde el reporte.
+    if (marca === 'zattia' && id && caminados.length) {
+      const hoy = diaDe(new Date().toISOString())
+      const nd = nuevosDesde(hoy, (previos ?? []).filter((r) => r.estado === 'cerrado').map((r) => ({ dia: diaDe(r.creado_en), escaneos: r.escaneos ?? 0 })))
+      void altasDesde(marca, nd.desde)
+        .then((nuevos) => mandarCorreo(marca, id, paraElCorreo(caminados, items, mapaLocal, nuevos, nd)))
+        .catch((e: Error) => console.warn('[exhib] el correo del chequeo no salió:', e.message))
+    }
     cargarPrevios()
     setCierreLugar(null)
     setCierreFinal(relevando ? [] : quedan)

@@ -58,6 +58,15 @@ function consulta(tabla: string) {
   return q
 }
 
+// El correo del chequeo: se anota qué se mandó, ⛔ sale nada (ver «el correo del chequeo»).
+const correos = { mandados: [] as { para: string; asunto: string }[], respuesta: { ok: true, id: 'm1' } as Record<string, unknown> }
+vi.mock('../scripts/lib/mail.mjs', () => ({
+  mandarMail: async (m: { para: string; asunto: string }) => {
+    correos.mandados.push({ para: m.para, asunto: m.asunto })
+    return correos.respuesta
+  },
+}))
+
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (t: string) => consulta(t) }) }))
 
 function resFalso() {
@@ -568,5 +577,68 @@ describe('el repetido: la fila del teléfono pisa a la de la base', () => {
     base.tablas.exhib_escaneo = [{ recorrido_id: REC, lugar: 'Vidriera', variante_id: 'v1', veces: 5 }]
     await correr(postear({ action: 'escanear', recorrido_id: REC, escaneos: [escaneo({ veces: 1 })] }))
     expect(subidas()).toHaveLength(1)
+  })
+})
+
+/**
+ * **El correo del chequeo** (Darío, 12-oct-2026): lo pide el celular al cerrar el recorrido, con el
+ * reporte ya calculado. Sale una vez por recorrido y queda la constancia en `cobertura.correo`.
+ */
+describe('el correo del chequeo', () => {
+  const guardada = () => base.escrituras.filter((e) => e.tabla === 'exhib_recorrido').at(-1)?.filas?.[0]?.cobertura as Record<string, unknown>
+  const REPORTE = { vistas: 9, total: 10, pendientes: [{ sku: 'RTO-1', nombre: 'TOP X', variante: 'NEGRO', enLocal: 1, nuevo: '2026-10-08' }], duplicadas: [], feria: [], escaneos: 9 }
+  beforeEach(() => {
+    correos.mandados = []
+    correos.respuesta = { ok: true, id: 'm1' }
+    process.env.MAIL_EXHIB_A = 'dario@x.com'
+    base.tablas.exhib_recorrido = [{ id: REC, store: 'zattia', modo: 'libre', estado: 'cerrado', persona: 'Camila', creado_en: '2026-10-13T12:00:00Z', cerrado_en: '2026-10-13T12:40:00Z', cobertura: { cats: [], ticket: [{ url: 'u' }], por: null, cuando: 'z' } }]
+  })
+
+  it('manda el correo y deja la constancia, sin pisar la foto del ticket', async () => {
+    const res = await correr(postear({ action: 'correo', id: REC, reporte: REPORTE }))
+    expect(res.code).toBe(200)
+    expect(correos.mandados).toEqual([{ para: 'dario@x.com', asunto: 'Chequeo de exhibición 13-oct: 1 pendientes · 0 duplicadas' }])
+    expect(guardada().correo).toMatchObject({ a: ['dario@x.com'], por: 'camilaquintana' })
+    expect(guardada().ticket).toHaveLength(1)
+  })
+
+  it('una sola vez por recorrido, salvo «reenviar»', async () => {
+    base.tablas.exhib_recorrido[0].cobertura = { correo: { enviado_en: '2026-10-13T12:41:00Z' } }
+    const res = await correr(postear({ action: 'correo', id: REC, reporte: REPORTE }))
+    expect(res.body).toMatchObject({ ok: true, yaEstaba: true })
+    expect(correos.mandados).toHaveLength(0)
+    await correr(postear({ action: 'correo', id: REC, reporte: REPORTE, reenviar: true }))
+    expect(correos.mandados).toHaveLength(1)
+  })
+
+  it('⛔ con el recorrido abierto', async () => {
+    base.tablas.exhib_recorrido[0].estado = 'en_curso'
+    const res = await correr(postear({ action: 'correo', id: REC, reporte: REPORTE }))
+    expect(res.code).toBe(400)
+    expect(correos.mandados).toHaveLength(0)
+  })
+
+  it('sin las claves de correo lo dice, y ⛔ anota nada', async () => {
+    correos.respuesta = { ok: false, configurado: false }
+    const res = await correr(postear({ action: 'correo', id: REC, reporte: REPORTE }))
+    expect(res.body).toMatchObject({ ok: false, configurado: false })
+    expect(base.escrituras).toHaveLength(0)
+  })
+
+  it('si SES rechaza, contesta error y guarda el motivo', async () => {
+    correos.respuesta = { ok: false, configurado: true, motivo: 'MessageRejected' }
+    const res = await correr(postear({ action: 'correo', id: REC, reporte: REPORTE }))
+    expect(res.code).toBe(502)
+    expect(guardada().correo).toMatchObject({ error: 'dario@x.com: MessageRejected' })
+    expect((guardada().correo as Record<string, unknown>).enviado_en).toBeUndefined()
+  })
+
+  it('🔴 el balance ⛔ borra la constancia del correo', async () => {
+    base.tablas.exhib_recorrido[0].cobertura = { cats: [], correo: { enviado_en: 'x' }, por: null, cuando: 'z' }
+    await correr(postear({ action: 'cobertura', id: REC, tipos: ['TOP'] }))
+    expect(guardada().correo).toEqual({ enviado_en: 'x' })
+    base.tablas.exhib_recorrido[0].cobertura = guardada()
+    await correr(postear({ action: 'tachar', id: REC, variante_id: 'b3', motivo: 'otro-lugar' }))
+    expect(guardada().correo).toEqual({ enviado_en: 'x' })
   })
 })

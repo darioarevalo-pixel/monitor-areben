@@ -293,6 +293,11 @@ export type Cobertura = {
    * ⚠️ Puede venir SOLA (sin `cats`/`tipos`): por eso «balance hecho» es `balanceHecho`, ⛔ `!!cobertura`.
    */
   ticket?: FotoTicket[]
+  /**
+   * **El correo del chequeo a los dueños** (Darío, 12-oct-2026): cuándo salió y a quién, o por qué ⛔.
+   * Lo escribe sólo el servidor (acción `correo`); se conserva al guardar el balance.
+   */
+  correo?: { enviado_en?: string; a?: string[]; asunto?: string; por?: string | null; error?: string }
   por: string | null
   cuando: string
 }
