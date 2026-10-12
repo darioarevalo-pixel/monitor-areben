@@ -11,7 +11,7 @@ import { normCode } from '@/lib/exhib/core'
 import type { FilaVentas, LineaZ } from './porVentas'
 import type { RepoItem } from './tipos'
 
-export { fechaAR, motivoRechazo, resumenArmado } from './armado.core.js'
+export { fechaAR, motivoRechazo, resumenArmado, transferidoDe } from './armado.core.js'
 
 export type LineaPedido = { vid: string; pid: string; sid: string; sku: string; barcode: string; name: string; size: string; cant: number; exhibir: boolean }
 export type MotivoFaltante = 'no-estaba' | 'despues' | 'rechazada'
@@ -28,7 +28,16 @@ export type Armado = {
   pedido: LineaPedido[]
   escaneos: Record<string, number>
   faltantes: Record<string, MotivoFaltante>
-  transfer: { transfer_id?: string | number | null; movement_id?: string | number | null; unidades?: number } | null
+  transfer: {
+    transfer_id?: string | number | null
+    movement_id?: string | number | null
+    /** Total transferido (todas las tandas). */
+    unidades?: number
+    /** «Transferir y continuar»: cada tanda con su transferencia de GN. */
+    tandas?: { transfer_id: string | number | null; unidades: number; hora: string }[]
+    /** Lo ya transferido por variante: no se vuelve a mandar ni se puede restar. */
+    transferido?: Record<string, number>
+  } | null
   error: string | null
   creado_en: string
   actualizado_en: string
@@ -190,6 +199,9 @@ export const resolverArmado = (id: string, hecha: boolean, transfer_id?: string)
 export type Rechazado = { vid: string; reason: string | null }
 
 /** Hace la transferencia en Gestión Nube con lo escaneado. 422 = GN rechazó renglones y no movió nada. */
-export async function transferirArmado(id: string, escaneos: Record<string, number>, faltantes: Record<string, MotivoFaltante>) {
-  return escribir<{ ok: true; transfer: NonNullable<Armado['transfer']> }>('transferir', { id, escaneos, faltantes })
+export async function transferirArmado(id: string, escaneos: Record<string, number>, faltantes: Record<string, MotivoFaltante>, seguir = false) {
+  return escribir<{ ok: true; transfer: NonNullable<Armado['transfer']>; tanda: { transfer_id: string | number | null; unidades: number } | null }>('transferir', { id, escaneos, faltantes, seguir })
 }
+
+/** «depósito» o «local»: adónde va lo que se arma. */
+export const destino = (sentido: Sentido) => (sentido === 'devolver' ? 'depósito' : 'local')

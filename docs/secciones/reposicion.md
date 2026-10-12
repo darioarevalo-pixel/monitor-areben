@@ -90,6 +90,21 @@ Lorena escanea en la **COMPU** del depósito, con lector, contra la lista de «L
 - GN es atómico: un 422 no movió nada; la pantalla muestra los renglones rechazados y ofrece
   sacarlos (quedan `rechazada`: diferencia de stock para la tanda 3).
 
+## Devolución con el lector (tanda 2, 12-oct-2026)
+
+Camila escanea en la **compu del local** la lista de «Devolución» y al **Finalizar** el Monitor
+transfiere **local → depósito** (decisión de Darío: la opción A, sin re-escanear al recibir). Aviso
+fijo: **«Retirar solo de la reserva, nunca la exhibida.»** Lo que sobra está en el depósito del local
+(la trastienda, ordenada por SKU), no colgado.
+
+- 🔑 **La limpieza grande** = la misma pantalla con «Ver todo» (sin tope diario) + **«Transferir y
+  continuar»**: pasa lo escaneado hasta ahí y la lista sigue abierta, para hacerla en varios viajes del
+  carro o en varios días. Una sola compu (Darío).
+- 🔴 **Cada tanda manda SÓLO la diferencia**: lo ya transferido vive en `transfer.transferido` y cada
+  tanda en `transfer.tandas`. El servidor no deja que lo escaneado baje de lo transferido (`conTransferido`),
+  ni descartar un armado con tandas (esas prendas ya cambiaron de depósito). Un `revisar` a mitad de una
+  tanda guarda lo que iba en `transfer.enCurso` y `resolver` lo suma.
+
 ## La foto guardada (12-oct-2026)
 
 Al abrir, la pantalla pide la config y la **huella** (`huellaDatos`: la hora de cada sync de
@@ -108,7 +123,7 @@ cambió el día—, baja todo como antes, en paralelo. «Recargar» y «Reintent
 
 - ▶️ **Parte 2:** la lista de Lorena por correo a administración a las 7:00 (falta la dirección) y el
   estado de la reposición a Darío a las 10:00 (abre el local). `scripts/lib/mail.mjs`.
-- ▶️ **Parte 3, en tandas** (Darío, 12-oct): ✅ T1 Lorena escanea + transferencia · ▶️ T2 Camila
+- ▶️ **Parte 3, en tandas** (Darío, 12-oct): ✅ T1 Lorena escanea + transferencia · ✅ T2 Camila
   (devolver) + la limpieza grande · ▶️ T3 «no estaba» → Conteo + correo de las 10:00 · ▶️ T4
   etiquetas mal puestas + imprimir en la Zebra las de «para exhibir».
 - ▶️ Condiciones de Stunned. ▶️ Ubicaciones del depósito de Zattia (la sección Ubicaciones es sólo BDI).

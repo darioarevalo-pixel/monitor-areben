@@ -116,6 +116,7 @@ let respuestaGN: () => { status: number; body: unknown } = () => ({ status: 201,
 beforeEach(() => {
   tabla.length = 0
   llamadasGN = []
+  respuestaGN = () => ({ status: 201, body: { executed: true, transfer_id: 7800, movement_id: 1 } })
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
   process.env.ZATTIA_SUPABASE_SERVICE_KEY = 'k'
   process.env.GN_TOKEN_ZATTIA = 'tok'
@@ -212,5 +213,52 @@ describe('api/_repo-armado.js', () => {
     const r = await correrGet({ action: 'historial', linea: 'zattia' })
     expect(r.code).toBe(200)
     expect((r.body?.armados as { id: string }[]).map((a) => a.id)).toEqual(['ra2'])
+  })
+
+  it('🔴 «Transferir y continuar»: cada tanda manda sólo la diferencia, y nunca dos veces la misma prenda', async () => {
+    await abrir()
+    respuestaGN = () => ({ status: 201, body: { executed: true, transfer_id: 8001 } })
+    const r1 = await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 1 }, seguir: true })
+    expect(r1.code).toBe(200)
+    expect(tabla[0].estado).toBe('en_curso')
+    // La pantalla «olvida» lo transferido (manda 0): el servidor no lo deja volver atrás.
+    await correr({ action: 'guardar', id: 'ra1', escaneos: {} })
+    expect((tabla[0].escaneos as Record<string, number>)['10_3']).toBe(1)
+    respuestaGN = () => ({ status: 201, body: { executed: true, transfer_id: 8002 } })
+    const r2 = await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 2, '11_4': 1 } })
+    expect(r2.code).toBe(200)
+    expect(llamadasGN.map((l) => l.body.items)).toEqual([
+      [{ product_id: 10, size_id: 3, quantity: 1 }],
+      [
+        { product_id: 10, size_id: 3, quantity: 1 },
+        { product_id: 11, size_id: 4, quantity: 1 },
+      ],
+    ])
+    expect(tabla[0]).toMatchObject({ estado: 'transferido', transfer: { unidades: 3, transfer_id: 8002 } })
+    expect((tabla[0].transfer as { tandas: unknown[] }).tandas).toHaveLength(2)
+  })
+
+  it('cerrar después de transferir todo en tandas no vuelve a llamar a GN', async () => {
+    await abrir()
+    await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 2 }, seguir: true })
+    const r = await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 2 } })
+    expect(r.code).toBe(200)
+    expect(llamadasGN).toHaveLength(1)
+    expect(tabla[0].estado).toBe('transferido')
+  })
+
+  it('la devolución va del local al depósito', async () => {
+    await correr({ action: 'abrir', id: 'rd1', linea: 'zattia', sentido: 'devolver', pedido: PEDIDO })
+    await correr({ action: 'transferir', id: 'rd1', escaneos: { '10_3': 1 } })
+    expect(llamadasGN[0].body).toMatchObject({ from_store_id: 11780, to_store_id: 18210 })
+    expect(String(llamadasGN[0].body.description)).toMatch(/^Devolución/)
+  })
+
+  it('no se puede descartar un armado con tandas ya transferidas', async () => {
+    await abrir()
+    await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 1 }, seguir: true })
+    const r = await correr({ action: 'cancelar', id: 'ra1' })
+    expect(r.code).toBe(409)
+    expect(tabla[0].estado).toBe('en_curso')
   })
 })

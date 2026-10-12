@@ -103,6 +103,7 @@ export function HistorialArmados({ linea }: { linea: LineaZ }) {
         <THead>
           <Tr>
             <Th width={110}>Fecha</Th>
+            <Th width={110}>Tipo</Th>
             <Th>Preparó</Th>
             <Th align="center" width={110}>Horario</Th>
             <Th align="center" width={80}>Duración</Th>
@@ -124,6 +125,7 @@ export function HistorialArmados({ linea }: { linea: LineaZ }) {
               <Fragment key={a.id}>
                 <Tr>
                   <Td>{fechaCorta(a.fecha)}</Td>
+                  <Td>{a.sentido === 'devolver' ? 'Devolución' : 'Reposición'}</Td>
                   <Td>{a.persona || '—'}</Td>
                   <Td align="center" style={{ color: color.mut }}>
                     {hora(a.creado_en)} – {hora(a.cerrado_en)}
@@ -139,7 +141,7 @@ export function HistorialArmados({ linea }: { linea: LineaZ }) {
                     {ne}
                   </Td>
                   <Td align="center" style={{ color: color.mut }}>
-                    {a.transfer?.transfer_id ?? '—'}
+                    {(a.transfer?.tandas?.length ?? 0) > 1 ? a.transfer!.tandas!.map((t) => t.transfer_id).join(', ') : (a.transfer?.transfer_id ?? '—')}
                   </Td>
                   <Td>
                     <Badge tone={e.tone}>{e.txt}</Badge>
@@ -152,7 +154,7 @@ export function HistorialArmados({ linea }: { linea: LineaZ }) {
                 </Tr>
                 {ver && (
                   <Tr>
-                    <Td colSpan={10} style={{ background: color.bg2, padding: space[3] }}>
+                    <Td colSpan={11} style={{ background: color.bg2, padding: space[3] }}>
                       <Detalle a={a} />
                     </Td>
                   </Tr>

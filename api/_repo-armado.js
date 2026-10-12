@@ -24,10 +24,13 @@ import {
   SENTIDOS,
   fechaAR,
   itemsTransferencia,
-  resumenArmado,
   sanearEscaneos,
   sanearFaltantes,
   sanearPedido,
+  conTransferido,
+  pendienteDeTransferir,
+  sumar,
+  transferidoDe,
 } from '../lib/reposicion/armado.core.js'
 
 /**
@@ -124,7 +127,8 @@ export default async function handler(req, res) {
     if (accion === 'guardar') {
       if (armado.estado !== 'en_curso') return res.status(409).json({ error: 'Este armado ya se cerró.', armado })
       const cambios = {
-        escaneos: sanearEscaneos(b.escaneos, armado.pedido),
+        // Lo ya transferido en una tanda anterior no puede volver atrás (ya está en el otro depósito).
+        escaneos: conTransferido(sanearEscaneos(b.escaneos, armado.pedido), transferidoDe(armado.transfer)),
         faltantes: sanearFaltantes(b.faltantes, armado.pedido),
         actualizado_en: new Date().toISOString(),
       }
@@ -135,6 +139,8 @@ export default async function handler(req, res) {
 
     if (accion === 'cancelar') {
       if (armado.estado !== 'en_curso') return res.status(409).json({ error: 'Sólo se puede descartar un armado en curso.', armado })
+      // Con tandas ya transferidas, esas prendas cambiaron de depósito: descartarlo las escondería del historial.
+      if (Object.keys(transferidoDe(armado.transfer)).length) return res.status(409).json({ error: 'Ya hay prendas transferidas: finalizá el armado.' })
       const { error } = await sb.from('repo_armado').update({ estado: 'cancelado', cerrado_en: new Date().toISOString() }).eq('id', armado.id).eq('estado', 'en_curso')
       if (error) throw new Error(error.message)
       return res.status(200).json({ ok: true })
@@ -144,12 +150,20 @@ export default async function handler(req, res) {
 
     if (accion === 'resolver') {
       // Después de un `revisar`: alguien miró en GN y dice si la transferencia está o no. Si está,
-      // el armado se cierra; si no, vuelve a `en_curso` para transferir de nuevo.
+      // la tanda que quedó en el aire (`enCurso`) se da por hecha; si no, vuelve a `en_curso` para
+      // transferir de nuevo. Si esa tanda era un «Transferir y continuar», el armado sigue abierto.
       if (armado.estado !== 'revisar') return res.status(409).json({ error: 'Este armado no está para revisar.', armado })
       const hecha = b.hecha === true
+      const t = armado.transfer || {}
+      const enCurso = t.enCurso || {}
+      const tandaRevisada = { transfer_id: String(b.transfer_id || '').trim() || null, unidades: Object.values(enCurso).reduce((x, n) => x + n, 0), hora: new Date().toISOString(), revisadaPor: perfil.name || null }
+      const transferHecha = { ...t, enCurso: null, seguir: null, transferido: sumar(transferidoDe(t), enCurso), tandas: [...(t.tandas || []), tandaRevisada] }
+      transferHecha.unidades = Object.values(transferHecha.transferido).reduce((x, n) => x + n, 0)
       const cambios = hecha
-        ? { estado: 'transferido', cerrado_en: new Date().toISOString(), error: null, transfer: { ...(armado.transfer || {}), revisadaPor: perfil.name || null, transfer_id: String(b.transfer_id || '').trim() || null } }
-        : { estado: 'en_curso', error: null }
+        ? t.seguir
+          ? { estado: 'en_curso', error: null, transfer: transferHecha }
+          : { estado: 'transferido', cerrado_en: new Date().toISOString(), error: null, transfer: transferHecha }
+        : { estado: 'en_curso', error: null, transfer: { ...t, enCurso: null, seguir: null } }
       const { error } = await sb.from('repo_armado').update({ ...cambios, actualizado_en: new Date().toISOString() }).eq('id', armado.id).eq('estado', 'revisar')
       if (error) throw new Error(error.message)
       return res.status(200).json({ ok: true })
@@ -161,40 +175,62 @@ export default async function handler(req, res) {
   }
 }
 
+/**
+ * Transfiere lo escaneado que todavía no pasó. Con `seguir` («Transferir y continuar», la limpieza
+ * grande: Darío, 12-oct-2026) el armado queda abierto para la próxima tanda del carro; sin `seguir`,
+ * se cierra. Lo ya transferido vive en `transfer.transferido` y cada tanda en `transfer.tandas`:
+ * 🔴 una prenda nunca viaja dos veces, porque cada tanda manda sólo la diferencia.
+ */
 async function transferir(sb, res, armado, b, perfil) {
   if (armado.estado !== 'en_curso') return res.status(409).json({ error: 'Este armado ya se cerró.', armado })
   const token = GN_TOKENS[armado.store]
   const dep = DEPOSITOS_GN[armado.store]
   if (!token || !dep) return res.status(500).json({ error: 'Falta la clave de Gestión Nube de Zattia en el servidor.' })
 
-  const escaneos = sanearEscaneos(b.escaneos, armado.pedido)
+  const seguir = b.seguir === true
+  const previo = armado.transfer || {}
+  const transferido = transferidoDe(previo)
+  const escaneos = conTransferido(sanearEscaneos(b.escaneos, armado.pedido), transferido)
   const faltantes = sanearFaltantes(b.faltantes, armado.pedido)
-  const items = itemsTransferencia(armado.pedido, escaneos)
-  if (!items.length) return res.status(400).json({ error: 'No hay prendas escaneadas.' })
+  const pendiente = pendienteDeTransferir(escaneos, transferido)
+  const items = itemsTransferencia(armado.pedido, pendiente)
+  const ahora = new Date().toISOString()
+
+  if (!items.length) {
+    // Todo lo escaneado ya pasó en tandas anteriores: cerrar no llama a GN.
+    if (!seguir && (previo.tandas || []).length) {
+      const { error } = await sb.from('repo_armado').update({ estado: 'transferido', escaneos, faltantes, cerrado_en: ahora, actualizado_en: ahora }).eq('id', armado.id).eq('estado', 'en_curso')
+      if (error) throw new Error(error.message)
+      return res.status(200).json({ ok: true, transfer: previo, tanda: null })
+    }
+    return res.status(400).json({ error: 'No hay prendas escaneadas para transferir.' })
+  }
+  const unidades = Object.values(pendiente).reduce((x, n) => x + n, 0)
 
   // 🔴 El candado: de `en_curso` a `transfiriendo` en UN update condicionado. Si otro clic llegó
-  // primero, acá no vuelve ninguna fila y no se llama a GN.
-  const ahora = new Date().toISOString()
+  // primero, acá no vuelve ninguna fila y no se llama a GN. Lo que va en esta tanda queda anotado
+  // (`enCurso`) por si GN no contesta y hay que resolverlo a mano.
   const tomado = await sb
     .from('repo_armado')
-    .update({ estado: 'transfiriendo', escaneos, faltantes, actualizado_en: ahora })
+    .update({ estado: 'transfiriendo', escaneos, faltantes, transfer: { ...previo, enCurso: pendiente, seguir }, actualizado_en: ahora })
     .eq('id', armado.id)
     .eq('estado', 'en_curso')
     .select('id')
   if (tomado.error) throw new Error(tomado.error.message)
   if (!tomado.data || !tomado.data.length) return res.status(409).json({ error: 'Este armado ya se está transfiriendo.' })
 
-  const [desde, hacia] = armado.sentido === 'devolver' ? [dep.local, dep.deposito] : [dep.deposito, dep.local]
-  const r = resumenArmado(armado.pedido, escaneos)
+  const devolucion = armado.sentido === 'devolver'
+  const [desde, hacia] = devolucion ? [dep.local, dep.deposito] : [dep.deposito, dep.local]
   const body = {
     from_store_id: desde,
     to_store_id: hacia,
     date: fechaAR(),
-    description: `Reposición ${armado.linea === 'stunned' ? 'Stunned ' : ''}${armado.fecha} · ${perfil.name || armado.persona || ''} · Monitor (${r.escaneadas} u)`.slice(0, 250),
+    description: `${devolucion ? 'Devolución' : 'Reposición'} ${armado.linea === 'stunned' ? 'Stunned ' : ''}${armado.fecha} · ${perfil.name || armado.persona || ''} · Monitor (${unidades} u)`.slice(0, 250),
     items: items.map((x) => x.item),
   }
 
   const marcar = (cambios) => sb.from('repo_armado').update({ ...cambios, actualizado_en: new Date().toISOString() }).eq('id', armado.id)
+  const sinTanda = { ...previo, enCurso: null, seguir: null }
 
   let resp
   let datos = null
@@ -216,9 +252,19 @@ async function transferir(sb, res, armado, b, perfil) {
   }
 
   if (resp.ok && datos && (datos.executed === true || datos.transfer_id)) {
-    const transfer = { transfer_id: datos.transfer_id ?? null, movement_id: datos.movement_id ?? null, unidades: r.escaneadas, items: body.items }
-    await marcar({ estado: 'transferido', transfer, error: null, cerrado_en: new Date().toISOString() })
-    return res.status(200).json({ ok: true, transfer })
+    const tanda = { transfer_id: datos.transfer_id ?? null, movement_id: datos.movement_id ?? null, unidades, hora: new Date().toISOString() }
+    const nuevoTransferido = sumar(transferido, pendiente)
+    const transfer = {
+      tandas: [...(previo.tandas || []), tanda],
+      transferido: nuevoTransferido,
+      // Lo que lee la pantalla de un vistazo: la última transferencia y el total.
+      transfer_id: tanda.transfer_id,
+      unidades: Object.values(nuevoTransferido).reduce((x, n) => x + n, 0),
+      enCurso: null,
+      seguir: null,
+    }
+    await marcar(seguir ? { estado: 'en_curso', transfer, error: null } : { estado: 'transferido', transfer, error: null, cerrado_en: new Date().toISOString() })
+    return res.status(200).json({ ok: true, transfer, tanda })
   }
 
   if (resp.status === 422 && datos && Array.isArray(datos.items)) {
@@ -227,17 +273,17 @@ async function transferir(sb, res, armado, b, perfil) {
     datos.items.forEach((it, i) => {
       if (it && it.status === 'error' && items[i]) rechazados.push({ vid: items[i].vid, reason: it.reason || null })
     })
-    await marcar({ estado: 'en_curso', error: null })
+    await marcar({ estado: 'en_curso', error: null, transfer: sinTanda })
     return res.status(422).json({ error: 'Gestión Nube rechazó estas prendas. No se transfirió nada.', rechazados })
   }
 
   if (resp.status === 429) {
-    await marcar({ estado: 'en_curso', error: null })
+    await marcar({ estado: 'en_curso', error: null, transfer: sinTanda })
     return res.status(429).json({ error: 'Gestión Nube está ocupado. No se transfirió nada: reintentá en un minuto.' })
   }
 
   if (resp.status === 401 || resp.status === 403) {
-    await marcar({ estado: 'en_curso', error: null })
+    await marcar({ estado: 'en_curso', error: null, transfer: sinTanda })
     return res.status(502).json({ error: 'Sin permiso para transferir en Gestión Nube. No se transfirió nada.' })
   }
 

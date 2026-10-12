@@ -19,6 +19,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   cancelarArmado,
+  destino,
+  transferidoDe,
   ErrorArmado,
   frase,
   guardarArmado,
@@ -72,7 +74,11 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
   const [cartel, setCartel] = useState<Cartel | null>(null)
   const [extra, setExtra] = useState(0)
   const [escuchando, setEscuchando] = useState(false)
-  const [terminar, setTerminar] = useState(false)
+  // «cerrar» = Finalizar; «seguir» = Transferir y continuar (la limpieza grande, en tandas del carro).
+  const [terminar, setTerminar] = useState<false | 'cerrar' | 'seguir'>(false)
+  // Lo ya transferido en tandas anteriores: no se puede restar ni se vuelve a mandar.
+  const [transferido, setTransferido] = useState<Record<string, number>>(() => transferidoDe(armado.transfer))
+  const devolucion = armado.sentido === 'devolver'
   const inputRef = useRef<HTMLInputElement>(null)
 
   // ── Guardar: en el aparato al instante, en la base cada 1,5 s ──────────────────────────────
@@ -149,7 +155,7 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
       setCartel({ titulo: 'Prenda excedente', texto: `${l.linea.name}${talle(l.linea.size) ? ` ${talle(l.linea.size)}` : ''}: ya están las ${l.linea.cant}.` })
       avisar('no', 'Excedente')
     } else if (l.tipo === 'no-pedida') {
-      setCartel({ titulo: 'Prenda no solicitada', texto: `${l.nombre} no está en la reposición de hoy.` })
+      setCartel({ titulo: 'Prenda no solicitada', texto: `${l.nombre} no está en la ${devolucion ? 'devolución' : 'reposición'} de hoy.` })
       avisar('no', 'No solicitada')
     } else {
       setCartel({ titulo: 'Código desconocido', texto: `«${codigo.trim()}» no corresponde a ninguna prenda.` })
@@ -158,7 +164,7 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
   }
 
   const sacarUna = (l: LineaPedido) => setEscaneos((e) => {
-    const n = Math.max(0, (e[l.vid] || 0) - 1)
+    const n = Math.max(transferido[l.vid] || 0, (e[l.vid] || 0) - 1)
     const { [l.vid]: _, ...resto } = e
     return n > 0 ? { ...resto, [l.vid]: n } : resto
   })
@@ -166,6 +172,8 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
   const r = resumenArmado(pedido, escaneos)
   const abiertas = pedido.filter((l) => (escaneos[l.vid] || 0) < l.cant)
   const completas = pedido.filter((l) => (escaneos[l.vid] || 0) >= l.cant)
+  const yaTransferidas = Object.values(transferido).reduce((x, n) => x + n, 0)
+  const porTransferir = r.escaneadas - yaTransferidas
 
   const onDescartar = async () => {
     const ok = await confirmar({
@@ -197,13 +205,27 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
         <span style={{ fontSize: font.lg, color: color.ink }}>
           <b>{r.escaneadas}</b> / {r.pedidas} prendas
         </span>
+        {yaTransferidas > 0 && <span style={{ fontSize: font.sm, color: color.mut }}>{yaTransferidas} ya transferidas</span>}
         <span style={{ marginLeft: 'auto', fontSize: font.sm, color: guardado === 'error' ? color.danger : color.mut2 }}>
           {guardado === 'ok' ? '✓ Guardado' : guardado === 'guardando' ? 'Guardando…' : 'Sin conexión: guardado en esta compu'}
         </span>
-        <Button variant="solid" tone="brand" onClick={() => setTerminar(true)} disabled={r.escaneadas === 0 && !Object.keys(faltantes).length}>
+        {devolucion && (
+          <Button variant="outline" onClick={() => setTerminar('seguir')} disabled={porTransferir <= 0} title="Transfiere lo escaneado hasta ahora y la lista sigue abierta">
+            Transferir y continuar
+          </Button>
+        )}
+        <Button variant="solid" tone="brand" onClick={() => setTerminar('cerrar')} disabled={r.escaneadas === 0 && !Object.keys(faltantes).length}>
           Finalizar
         </Button>
       </div>
+
+      {devolucion && (
+        <div style={{ marginBottom: space[3] }}>
+          <Notice tone="warning" icon="⚠">
+            <b>Retirar solo de la reserva, nunca la exhibida.</b>
+          </Notice>
+        </div>
+      )}
 
       <div style={{ height: 8, background: color.bg2, borderRadius: 4, overflow: 'hidden', marginBottom: space[3] }}>
         <div style={{ width: `${r.pedidas ? Math.round((r.escaneadas / r.pedidas) * 100) : 0}%`, height: '100%', background: 'var(--mo-brand-solid)' }} />
@@ -243,21 +265,24 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
       {abiertas.length > 0 && (
         <>
           <h3 style={{ fontSize: font.md, margin: `${space[4]}px 0 ${space[2]}px`, color: color.ink }}>Pendientes ({abiertas.length})</h3>
-          <TablaRenglones lineas={abiertas} escaneos={escaneos} faltantes={faltantes} onSacar={sacarUna} />
+          <TablaRenglones lineas={abiertas} escaneos={escaneos} faltantes={faltantes} transferido={transferido} onSacar={sacarUna} />
         </>
       )}
       {completas.length > 0 && (
         <>
           <h3 style={{ fontSize: font.md, margin: `${space[4]}px 0 ${space[2]}px`, color: color.success }}>Completas ({completas.length})</h3>
-          <TablaRenglones lineas={completas} escaneos={escaneos} faltantes={faltantes} onSacar={sacarUna} />
+          <TablaRenglones lineas={completas} escaneos={escaneos} faltantes={faltantes} transferido={transferido} onSacar={sacarUna} />
         </>
       )}
 
-      <div style={{ marginTop: space[5], display: 'flex', justifyContent: 'flex-end' }}>
-        <Button variant="ghost" tone="danger" onClick={() => void onDescartar()}>
-          Descartar armado
-        </Button>
-      </div>
+      {/* Con tandas ya transferidas no se puede descartar: esas prendas ya cambiaron de depósito. */}
+      {yaTransferidas === 0 && (
+        <div style={{ marginTop: space[5], display: 'flex', justifyContent: 'flex-end' }}>
+          <Button variant="ghost" tone="danger" onClick={() => void onDescartar()}>
+            Descartar armado
+          </Button>
+        </div>
+      )}
 
       {cartel && (
         <CartelFreno
@@ -272,7 +297,10 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
       )}
 
       <Terminar
-        abierto={terminar}
+        key={terminar || 'cerrado'}
+        abierto={!!terminar}
+        seguir={terminar === 'seguir'}
+        transferido={transferido}
         armado={armado}
         escaneos={escaneos}
         faltantes={faltantes}
@@ -280,6 +308,12 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
         setFaltantes={setFaltantes}
         onCerrar={() => {
           setTerminar(false)
+          setTimeout(() => inputRef.current?.focus(), 0)
+        }}
+        onTanda={(t) => {
+          setTransferido(transferidoDe(t))
+          setTerminar(false)
+          toast.ok(`${t.tandas?.at(-1)?.unidades ?? ''} prendas transferidas al ${destino(armado.sentido)}${t.transfer_id ? ` · Transferencia ${t.transfer_id}` : ''}`)
           setTimeout(() => inputRef.current?.focus(), 0)
         }}
         onTransferido={() => {
@@ -326,7 +360,7 @@ function UltimaLectura({ l }: { l: Extract<Lectura, { tipo: 'suma' }> | null }) 
   )
 }
 
-function TablaRenglones({ lineas, escaneos, faltantes, onSacar }: { lineas: LineaPedido[]; escaneos: Record<string, number>; faltantes: Record<string, MotivoFaltante>; onSacar: (l: LineaPedido) => void }) {
+function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar }: { lineas: LineaPedido[]; escaneos: Record<string, number>; faltantes: Record<string, MotivoFaltante>; transferido: Record<string, number>; onSacar: (l: LineaPedido) => void }) {
   return (
     <TableWrap>
       <THead>
@@ -364,7 +398,7 @@ function TablaRenglones({ lineas, escaneos, faltantes, onSacar }: { lineas: Line
                 {n}
               </Td>
               <Td align="right">
-                {n > 0 && (
+                {n > (transferido[l.vid] || 0) && (
                   <Button size="sm" variant="ghost" onMouseDown={(e) => e.preventDefault()} onClick={() => onSacar(l)} title="Restar una (escaneo por error)" aria-label={`Restar una de «${l.name}»`}>
                     −1
                   </Button>
@@ -411,23 +445,29 @@ function CartelFreno({ cartel, extra, onSeguir }: { cartel: Cartel; extra: numbe
  * con todo contestado se transfiere. Si GN rechaza renglones (no movió nada), se muestran y se
  * pueden sacar para transferir el resto.
  */
-function Terminar({ abierto, armado, escaneos, faltantes, setEscaneos, setFaltantes, onCerrar, onTransferido }: {
+function Terminar({ abierto, seguir, transferido, armado, escaneos, faltantes, setEscaneos, setFaltantes, onCerrar, onTanda, onTransferido }: {
   abierto: boolean
+  /** «Transferir y continuar»: no pregunta por lo que falta y el armado sigue abierto. */
+  seguir: boolean
+  transferido: Record<string, number>
   armado: Armado
   escaneos: Record<string, number>
   faltantes: Record<string, MotivoFaltante>
   setEscaneos: React.Dispatch<React.SetStateAction<Record<string, number>>>
   setFaltantes: React.Dispatch<React.SetStateAction<Record<string, MotivoFaltante>>>
   onCerrar: () => void
+  onTanda: (t: NonNullable<Armado['transfer']>) => void
   onTransferido: () => void
 }) {
+  const lugar = destino(armado.sentido)
   const [enviando, setEnviando] = useState(false)
   const [rechazados, setRechazados] = useState<Rechazado[]>([])
   const [error, setError] = useState<string | null>(null)
   const [hecho, setHecho] = useState<{ transfer_id?: string | number | null; unidades?: number } | null>(null)
-  const incompletas = armado.pedido.filter((l) => (escaneos[l.vid] || 0) < l.cant)
+  const incompletas = seguir ? [] : armado.pedido.filter((l) => (escaneos[l.vid] || 0) < l.cant)
   const sinContestar = incompletas.filter((l) => !faltantes[l.vid])
   const r = resumenArmado(armado.pedido, escaneos)
+  const porTransferir = r.escaneadas - Object.values(transferido).reduce((x, n) => x + n, 0)
   const porVid = useMemo(() => Object.fromEntries(armado.pedido.map((l) => [l.vid, l])), [armado.pedido])
 
   const transferir = async (esc = escaneos, fal = faltantes) => {
@@ -435,8 +475,9 @@ function Terminar({ abierto, armado, escaneos, faltantes, setEscaneos, setFaltan
     setError(null)
     setRechazados([])
     try {
-      const d = await transferirArmado(armado.id, esc, fal)
-      setHecho(d.transfer)
+      const d = await transferirArmado(armado.id, esc, fal, seguir)
+      if (seguir) onTanda(d.transfer)
+      else setHecho(d.transfer)
     } catch (e) {
       if (e instanceof ErrorArmado && e.status === 422 && Array.isArray(e.datos.rechazados)) setRechazados(e.datos.rechazados as Rechazado[])
       setError((e as Error).message)
@@ -461,7 +502,7 @@ function Terminar({ abierto, armado, escaneos, faltantes, setEscaneos, setFaltan
     return (
       <Modal abierto={abierto} onCerrar={onTransferido} titulo="Transferencia realizada" cerrarConFondo={false} pie={<Button variant="solid" tone="brand" onClick={onTransferido}>Volver</Button>}>
         <p style={{ fontSize: font.md, margin: 0 }}>
-          {hecho.unidades ?? r.escaneadas} {(hecho.unidades ?? r.escaneadas) === 1 ? 'prenda transferida' : 'prendas transferidas'} al local
+          {hecho.unidades ?? r.escaneadas} {(hecho.unidades ?? r.escaneadas) === 1 ? 'prenda transferida' : 'prendas transferidas'} al {lugar}
           {hecho.transfer_id ? ` · Transferencia ${hecho.transfer_id}` : ''}.
         </p>
       </Modal>
@@ -471,7 +512,7 @@ function Terminar({ abierto, armado, escaneos, faltantes, setEscaneos, setFaltan
     <Modal
       abierto={abierto}
       onCerrar={enviando ? () => {} : onCerrar}
-      titulo="Finalizar armado"
+      titulo={seguir ? 'Transferir y continuar' : 'Finalizar armado'}
       ancho="ancho"
       cerrarConFondo={false}
       pie={
@@ -484,15 +525,24 @@ function Terminar({ abierto, armado, escaneos, faltantes, setEscaneos, setFaltan
               Excluirlas y transferir
             </Button>
           ) : (
-            <Button variant="solid" tone="brand" onClick={() => void transferir()} loading={enviando} disabled={sinContestar.length > 0 || r.escaneadas === 0}>
-              Transferir {r.escaneadas} {r.escaneadas === 1 ? 'prenda' : 'prendas'}
+            <Button variant="solid" tone="brand" onClick={() => void transferir()} loading={enviando} disabled={sinContestar.length > 0 || (porTransferir <= 0 && (seguir || r.escaneadas === 0))}>
+              {porTransferir > 0 ? `Transferir ${porTransferir} ${porTransferir === 1 ? 'prenda' : 'prendas'}` : 'Cerrar armado'}
             </Button>
           )}
         </>
       }
     >
       <p style={{ fontSize: font.md, marginTop: 0 }}>
-        <b>{r.escaneadas}</b> / {r.pedidas} prendas escaneadas. Se transfieren al local solo las escaneadas.
+        {seguir ? (
+          <>
+            Se transfieren al {lugar} las <b>{porTransferir}</b> escaneadas desde la última transferencia. La lista sigue abierta.
+          </>
+        ) : (
+          <>
+            <b>{r.escaneadas}</b> / {r.pedidas} prendas escaneadas. Se transfieren al {lugar} solo las escaneadas
+            {r.escaneadas > porTransferir ? ` (${r.escaneadas - porTransferir} ya transferidas)` : ''}.
+          </>
+        )}
       </p>
 
       {incompletas.length > 0 && (

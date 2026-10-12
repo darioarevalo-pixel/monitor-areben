@@ -12,7 +12,8 @@
  * El cálculo vive en `lib/reposicion/porVentas.ts` (reglas y porqué, ahí). BDI no pasa por acá.
  * **Armar con el lector** (12-oct-2026): Lorena escanea en la compu contra la lista y el Monitor hace
  * la transferencia depósito → local en Gestión Nube (`ArmadoLector.tsx`, `api/_repo-armado.js`).
- * Devolver al depósito todavía no mueve stock: Camila lo sigue cargando a mano (tanda 2).
+ * Devolución (12-oct-2026): Camila escanea en la compu del local y el Monitor transfiere local →
+ * depósito; la limpieza grande es la misma pantalla con «Ver todo» y «Transferir y continuar».
  */
 
 import { Fragment, useEffect, useMemo, useState } from 'react'
@@ -34,7 +35,7 @@ import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
 import { ArmadoLector } from './ArmadoLector'
 import { HistorialArmados } from './HistorialArmados'
-import { abrirArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, type Armado } from '@/lib/reposicion/armado'
+import { abrirArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, type Armado, type Sentido } from '@/lib/reposicion/armado'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 type Pestana = 'llevar' | 'devolver' | 'historial'
@@ -100,33 +101,31 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     }
   }
 
-  // ── El armado con el lector (sólo «Llevar al local») ─────────────────────────────────────────
-  const [armado, setArmado] = useState<Armado | null>(null)
-  const [armando, setArmando] = useState(false)
+  // ── El armado con el lector: Reposición (Lorena) y Devolución (Camila) ───────────────────────
+  const [armados, setArmados] = useState<Record<Sentido, Armado | null>>({ llevar: null, devolver: null })
+  const [armando, setArmando] = useState<Sentido | null>(null)
   const [abriendo, setAbriendo] = useState(false)
-  const traerArmado = async (l: LineaZ = linea) => {
-    try {
-      setArmado(await leerArmadoHoy(l, 'llevar'))
-    } catch {
-      setArmado(null)
-    }
+  const traerArmados = async (l: LineaZ = linea) => {
+    const [a, b] = await Promise.all([leerArmadoHoy(l, 'llevar').catch(() => null), leerArmadoHoy(l, 'devolver').catch(() => null)])
+    setArmados({ llevar: a, devolver: b })
   }
   useEffect(() => {
     void (async () => {
-      await traerArmado(linea)
+      await traerArmados(linea)
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linea])
-  const armadoAbierto = armado && armado.estado === 'en_curso' ? armado : null
-  // 🔴 Recién transferido, la lista sigue igual hasta que se actualiza el stock: armarla de nuevo
-  // pediría dos veces lo mismo. Hasta que el stock sea posterior a la transferencia, no se arma.
-  const esperandoStock = armado?.estado === 'transferido' && !!armado.cerrado_en && (!rep.lastUpdate || rep.lastUpdate.getTime() < new Date(armado.cerrado_en).getTime())
+  const abierto = (s: Sentido) => (armados[s]?.estado === 'en_curso' ? armados[s] : null)
+  // 🔴 Recién transferido (cualquiera de los dos), las listas siguen iguales hasta que se actualiza el
+  // stock: armarlas de nuevo pediría dos veces lo mismo. Hasta que el stock sea posterior, no se arma.
+  const transferidoDespues = (a: Armado | null) => a?.estado === 'transferido' && !!a.cerrado_en && (!rep.lastUpdate || rep.lastUpdate.getTime() < new Date(a.cerrado_en).getTime())
+  const esperandoStock = transferidoDespues(armados.llevar) || transferidoDespues(armados.devolver)
 
-  const onArmar = async () => {
-    if (armadoAbierto) return setArmando(true)
-    const pedido = pedidoDesde(llevar, cantLlevar)
-    if (!pedido.length) return toast.aviso('No hay prendas para reponer.')
-    // Una lista armada con stock viejo pide lo que ya se llevó ayer.
+  const onArmar = async (sentido: Sentido) => {
+    if (abierto(sentido)) return setArmando(sentido)
+    const pedido = sentido === 'llevar' ? pedidoDesde(llevar, cantLlevar) : pedidoDesde(devolver.filas, (f) => (f as FilaVentas & { devolverHoy: number }).devolverHoy)
+    if (!pedido.length) return toast.aviso(sentido === 'llevar' ? 'No hay prendas para reponer.' : 'No hay prendas para devolver.')
+    // Una lista armada con stock viejo pide lo que ya se movió ayer.
     if (edadMin != null && edadMin >= 360) {
       const ok = await confirmar({
         titulo: 'Stock desactualizado (' + antiguedad + ')',
@@ -138,10 +137,10 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     }
     setAbriendo(true)
     try {
-      const d = await abrirArmado(linea, 'llevar', pedido)
-      setArmado(d.armado)
+      const d = await abrirArmado(linea, sentido, pedido)
+      setArmados((x) => ({ ...x, [sentido]: d.armado }))
       if (d.yaHabia) toast.aviso('Ya había un armado en curso: se continúa ese.')
-      setArmando(true)
+      setArmando(sentido)
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
@@ -149,15 +148,29 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     }
   }
 
-  const onResolver = async (hecha: boolean) => {
-    if (!armado) return
+  const onResolver = async (a: Armado, hecha: boolean) => {
     try {
-      await resolverArmado(armado.id, hecha)
-      await traerArmado()
+      await resolverArmado(a.id, hecha)
+      await traerArmados()
     } catch (e) {
       toast.error((e as Error).message)
     }
   }
+
+  /** El botón del armado de cada pestaña: Iniciar / Continuar (o nada si quedó sin confirmar). */
+  const botonArmado = (sentido: Sentido, hayLista: boolean) =>
+    armados[sentido]?.estado === 'revisar' ? null : (
+      <Button
+        variant="solid"
+        tone="brand"
+        onClick={() => void onArmar(sentido)}
+        loading={abriendo}
+        disabled={!abierto(sentido) && (!hayLista || esperandoStock)}
+        title={esperandoStock && !abierto(sentido) ? 'Actualizá el stock: la lista todavía no descuenta lo transferido' : undefined}
+      >
+        {abierto(sentido) ? 'Continuar armado' : 'Iniciar armado'}
+      </Button>
+    )
 
   const [ahora, setAhora] = useState(() => Date.now())
   useEffect(() => {
@@ -194,18 +207,19 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
       </Notice>
     )
 
-  if (armando && armadoAbierto)
+  const enArmado = armando ? abierto(armando) : null
+  if (enArmado)
     return (
       <ArmadoLector
-        armado={armadoAbierto}
+        armado={enArmado}
         inv={inv}
         onSalir={() => {
-          setArmando(false)
-          void traerArmado()
+          setArmando(null)
+          void traerArmados()
         }}
         onTerminado={(transferido) => {
-          setArmando(false)
-          void traerArmado()
+          setArmando(null)
+          void traerArmados()
           // La transferencia ya está en GN; el espejo se pone al día solo con esto.
           if (transferido) void onActualizar()
         }}
@@ -284,20 +298,9 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             <Button variant="outline" style={{ marginLeft: 'auto' }} onClick={() => void onImprimirLlevar()} disabled={!llevar.length}>
               Imprimir A4
             </Button>
-            {armado?.estado !== 'revisar' && (
-              <Button
-                variant="solid"
-                tone="brand"
-                onClick={() => void onArmar()}
-                loading={abriendo}
-                disabled={!armadoAbierto && (!llevar.length || esperandoStock)}
-                title={esperandoStock ? 'Actualizá el stock: la lista todavía no descuenta lo transferido' : undefined}
-              >
-                {armadoAbierto ? 'Continuar armado' : 'Iniciar armado'}
-              </Button>
-            )}
+            {botonArmado('llevar', llevar.length > 0)}
           </div>
-          <EstadoArmado armado={armado} onResolver={(h) => void onResolver(h)} />
+          <EstadoArmado armado={armados.llevar} onResolver={(a, h) => void onResolver(a, h)} />
           {!llevar.length ? (
             <EmptyState icon="🎉" title="No hay prendas para reponer" hint="El local tiene su stock ideal, o lo que falta no está en el depósito." dashed />
           ) : (
@@ -331,14 +334,19 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
                 </>
               )}
             </span>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut, cursor: 'pointer' }}>
+            <label
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut, cursor: 'pointer' }}
+              title="La limpieza grande: la lista entera, sin el tope diario. Se puede armar en varias tandas del carro"
+            >
               <input type="checkbox" checked={verTodo} onChange={(e) => setVerTodo(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} />
               Ver todo
             </label>
-            <Button variant="solid" tone="brand" style={{ marginLeft: 'auto' }} onClick={() => void onImprimirDevolver()} disabled={!devolver.filas.length}>
+            <Button variant="outline" style={{ marginLeft: 'auto' }} onClick={() => void onImprimirDevolver()} disabled={!devolver.filas.length}>
               Imprimir ticket
             </Button>
+            {botonArmado('devolver', devolver.filas.length > 0)}
           </div>
+          <EstadoArmado armado={armados.devolver} onResolver={(a, h) => void onResolver(a, h)} />
           {!devolver.filas.length ? (
             <EmptyState icon="🎉" title="No hay prendas para devolver" hint="Ninguna variante supera su stock ideal." dashed />
           ) : (
@@ -397,8 +405,9 @@ function TablaVentas({ filas, cantidad, titulo, editar }: { filas: FilaVentas[];
         </Tr>
       </THead>
       <TBody>
-        {grupos.map((g) => (
-          <Fragment key={g.pid}>
+        {grupos.map((g, i) => (
+          // Por SKU, un mismo producto puede quedar en dos grupos separados: la clave lleva la posición.
+          <Fragment key={`${g.pid}-${i}`}>
             <Tr>
               <Td colSpan={8} style={{ background: color.bg2, paddingTop: space[2], paddingBottom: space[2] }}>
                 <b style={{ color: color.ink }}>{g.name}</b>
@@ -581,16 +590,18 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
 const hhmm = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '')
 
 /** Cómo quedó el armado de hoy: en curso, transferido, o sin confirmar en Gestión Nube. */
-function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolver: (hecha: boolean) => void }) {
+function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolver: (a: Armado, hecha: boolean) => void }) {
   if (!armado) return null
   const r = resumenArmado(armado.pedido, armado.escaneos || {})
   const quien = armado.persona ? ` · ${armado.persona}` : ''
+  const devolucion = armado.sentido === 'devolver'
+  const ya = armado.transfer?.unidades ?? 0
   const box = { marginBottom: space[3] }
   if (armado.estado === 'en_curso')
     return (
       <div style={box}>
         <Notice tone="brand" icon="📦">
-          Armado en curso{quien} · {r.escaneadas} de {r.pedidas} prendas escaneadas
+          Armado en curso{quien} · {r.escaneadas} de {r.pedidas} prendas escaneadas{ya > 0 ? ` · ${ya} ya transferidas` : ''}
         </Notice>
       </div>
     )
@@ -598,8 +609,8 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
     return (
       <div style={box}>
         <Notice tone="success" icon="✓">
-          Reposición transferida a las {hhmm(armado.cerrado_en)}{quien} · {armado.transfer?.unidades ?? r.escaneadas} prendas
-          {armado.transfer?.transfer_id ? ` · Transferencia ${armado.transfer.transfer_id}` : ''}. Actualizá el stock para ver la lista nueva.
+          {devolucion ? 'Devolución transferida' : 'Reposición transferida'} a las {hhmm(armado.cerrado_en)}{quien} · {ya || r.escaneadas} prendas
+          {armado.transfer?.transfer_id ? ` · Transferencia ${(armado.transfer.tandas?.length ?? 0) > 1 ? armado.transfer.tandas!.map((t) => t.transfer_id).join(', ') : armado.transfer.transfer_id}` : ''}. Actualizá el stock para ver la lista nueva.
         </Notice>
       </div>
     )
@@ -608,14 +619,14 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
       <div style={box}>
         <Notice tone="danger" icon="⚠">
           <div>
-            <b>Transferencia sin confirmar{quien}.</b> Verificá en Gestión Nube si figura la transferencia de hoy del depósito al local ({r.escaneadas} prendas).
+            <b>Transferencia sin confirmar{quien}.</b> Verificá en Gestión Nube si figura la transferencia de hoy {devolucion ? 'del local al depósito' : 'del depósito al local'}.
           </div>
           {armado.estado === 'revisar' && (
             <div style={{ display: 'flex', gap: space[2], marginTop: space[2], flexWrap: 'wrap' }}>
-              <Button size="sm" variant="solid" tone="brand" onClick={() => onResolver(true)}>
+              <Button size="sm" variant="solid" tone="brand" onClick={() => onResolver(armado, true)}>
                 Figura en Gestión Nube
               </Button>
-              <Button size="sm" variant="outline" onClick={() => onResolver(false)}>
+              <Button size="sm" variant="outline" onClick={() => onResolver(armado, false)}>
                 No figura: reintentar
               </Button>
             </div>
