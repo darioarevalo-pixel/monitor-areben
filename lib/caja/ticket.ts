@@ -34,9 +34,7 @@ import { abrirRollo, COLA, M, MIN, W, type Medidor, type OpBase } from '../rollo
 import { imprimirPdf } from '../etiquetas/pdf'
 import { OFFSET_AR_MS } from '../envios/portal.core.js'
 import { talleVisible } from './ticket-mail.core.js'
-import { MARCA_POR_DEFECTO, marcaDeCaja } from './marcas.core.js'
-
-const NOMBRE_POR_DEFECTO = marcaDeCaja(MARCA_POR_DEFECTO)?.nombre ?? ''
+import { MARCA_CAJA } from './marca'
 
 /** `importe` es lo que queda después del descuento a mano de esa prenda (si lo hubo). */
 /** `promos`: las que le tocaron (W5): el descuento del renglón sale con su nombre, ⛔ «Descuento». */
@@ -66,7 +64,7 @@ export type DatosTicket = {
   logoStunned?: LogoTicket | null
   /** El mail del ticket, si se cargó; si no, «Consumidor Final». */
   cliente?: string | null
-  /** El nombre de la marca, si ⛔ hay logo (rediseño, fase 5); sin él, la marca por defecto de la Caja. */
+  /** El nombre de la marca, si ⛔ hay logo (rediseño, fase 5); sin él, la marca activa de la Caja (V4). */
   marca?: string
 }
 
@@ -77,7 +75,7 @@ export function marcasDelTicket(t: Pick<DatosTicket, 'renglones' | 'logo' | 'log
   const hayStunned = t.renglones.some((r) => r.stunned)
   const hayOtra = t.renglones.some((r) => !r.stunned)
   return [
-    ...(hayOtra || !hayStunned ? [{ nombre: t.marca ?? NOMBRE_POR_DEFECTO, logo: t.logo ?? null }] : []),
+    ...(hayOtra || !hayStunned ? [{ nombre: t.marca ?? MARCA_CAJA.nombre, logo: t.logo ?? null }] : []),
     ...(hayStunned ? [{ nombre: 'Stunned', logo: t.logoStunned ?? null }] : []),
   ]
 }

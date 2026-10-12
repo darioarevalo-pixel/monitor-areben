@@ -181,7 +181,7 @@ ya tienen ficha:
 - Cobranzas (órdenes de TN con pago manual) → **leer `docs/secciones/cobranzas.md`** antes de tocar
   `components/cobranzas/`, `lib/cobranzas/` o `api/_cobranzas.js`. ⛔ **Cobrar le pone en cero el
   saldo del cadete en `envios_reparto`**, y ⛔ TN no deja marcar pagado por API.
-- Caja (el POS propio del local de Zattia) → **leer `docs/secciones/caja.md`** antes de tocar
+- Caja (el POS propio del local, Zattia y BDI) → **leer `docs/secciones/caja.md`** antes de tocar
   `components/caja/`, `lib/caja/` o `api/_caja.js`. 🔴 **Cobra plata y escribe ventas en GN**: el
   total se rearma en el servidor con el MISMO núcleo, y el id de la venta deduplica el reintento.
 - Pagos recibidos (lo que entró a Mercado Pago, contra la app falsa) → **leer

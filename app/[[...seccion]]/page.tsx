@@ -126,7 +126,7 @@ export default function Seccion() {
   const esPanel = key === 'panel'
 
   /**
-   * `/pos` es el sexto: el POS de la Caja de Zattia (fase C, Bruno 5-oct), la pantalla del mostrador
+   * `/pos` es el sexto: el POS de la Caja del local (fase C, Bruno 5-oct; Zattia y BDI desde la V4), la pantalla del mostrador
    * con SOLO el cobro, sin menú ni acceso al resto del monitor. Pide sesión y el permiso de **Caja**
    * —el mismo `puedeVerAlguna` que `api/_caja.js`—, y adentro, que la cuenta sea la que abrió la caja
    * (`puedeUsarPOS`). ⛔ No es una ruta de Next: cada ruta es una función y el tope de Hobby está lleno.
@@ -218,7 +218,9 @@ export default function Seccion() {
   // El POS, igual que el panel: después del login y sin el shell. Lleva los dos providers porque el
   // shell los monta recién abajo («Vaciar pedido» pregunta antes).
   if (esPOS) {
-    if (!puedeVerAlguna(perfil, 'zattia', ['caja'])) {
+    // V4 (12-oct): la Caja es de Zattia y BDI; la marca la elige el POS (`?marca=` o la del shell) y el
+    // servidor vuelve a pedir el permiso de ESA marca en cada llamada.
+    if (!['zattia', 'bdi'].some((m) => puedeVerAlguna(perfil, m, ['caja']))) {
       return <div style={{ padding: 16, fontSize: 13 }}>Tu usuario no tiene acceso a la Caja.</div>
     }
     // `/pos/cliente`: la pantalla de la clienta (rediseño, fase 3). Sólo muestra lo que publica el POS

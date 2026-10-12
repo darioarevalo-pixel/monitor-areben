@@ -19,10 +19,13 @@
  * campo que ya existe. ⛔ Cambia nada del envío.
  */
 
+import { storeCaja } from '@/lib/caja/marca'
+
 /** Lo que el POS publica para la clienta. */
-export const CLAVE_VISTA = 'caja:cliente:zattia'
+/** V4: por marca (la activa de la pestaña, `storeCaja`). */
+export const claveVista = () => `caja:cliente:${storeCaja()}`
 /** Lo que la clienta le devuelve al POS: su mail (o que no quiere ticket por mail). */
-export const CLAVE_MAIL = 'caja:cliente-mail:zattia'
+export const claveMail = () => `caja:cliente-mail:${storeCaja()}`
 
 /** `color`: el de la variante en Tienda Nube («CHOCOLATE»), cruzado por SKU; ausente si el POS ⛔ lo mandó. */
 export type RenglonCliente = { nombre: string; talle: string; color?: string | null; cantidad: number; lista: number; importe: number; foto: string | null }

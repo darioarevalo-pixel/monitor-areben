@@ -14,6 +14,7 @@ import { hoyIso } from '@/lib/agenda'
 import { plata } from '@/lib/caja/ticket'
 import { buscarNombre, guardarPromos, type AlcancePromo, type ProductoLista, type PromoCaja, type Reglas, type TipoPromo, type Versiones } from '@/lib/caja/cliente'
 import { Badge, Button, Field, Input, Notice, Plegable, Select, color, font, radius, space } from '@/components/ui'
+import { storeCaja } from '@/lib/caja/marca'
 
 const TIPOS: TipoPromo[] = ['nxm', 'segunda_unidad', 'pct', 'monto_minimo']
 
@@ -130,7 +131,7 @@ export function PromosCaja({ reglas, admin, version, onGuardadas }: { reglas: Re
 
 function FormPromo({ form, setForm, guardando, onCancelar, onGuardar }: { form: Form; setForm: (f: Form) => void; guardando: boolean; onCancelar: () => void; onGuardar: () => void }) {
   const cambiar = (c: Partial<Form>) => setForm({ ...form, ...c })
-  const tnIdx = useTnPromo('zattia')
+  const tnIdx = useTnPromo(storeCaja())
   // Las categorías de Tienda Nube, las mismas que lee el POS (la de GN está vacía en el 85 %).
   const categorias = useMemo(() => {
     if (!tnIdx) return []

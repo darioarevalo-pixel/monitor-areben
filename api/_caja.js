@@ -74,9 +74,9 @@ import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
-import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
+import { GN_BASE, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
-import { REGLAS_INICIALES, armarVentaGN, cobro, exigirCuentas, exigirFeria, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, normalizarOferta, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
+import { armarVentaGN, cobro, exigirCuentas, exigirFeria, cuentaDeOferta, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, normalizarOferta, reglaDeCuenta, renglones, verificaTransferencias } from '../lib/caja/core.core.js'
 import { promosDeCreditoEnMostrador } from '../lib/agenda/promos.core.js'
 import { TOLERANCIA_TRANSFERENCIA, cruzarTransferencia, pagosRecientes, sumarCobros } from '../lib/pagos-recibidos/core.core.js'
 import { aOtraCuenta, mailOtraCuenta, titularDe } from '../lib/caja/otra-cuenta.core.js'
@@ -87,25 +87,31 @@ import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
 import { filtrarPorNombre, ordenParaLaBase, palabrasDeBusqueda, productosPorStock } from '../lib/caja/buscar.core.js'
 import { COLUMNAS_VENTA as COLUMNAS, SIN_LLEGAR, enviarVenta, pendientesParaReintentar } from '../lib/caja/enviar.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
-import { MARCA_POR_DEFECTO, marcaDeCaja } from '../lib/caja/marcas.core.js'
+import { MARCA_POR_DEFECTO, ladoDelEspejo, marcaDeCaja, tokenDe } from '../lib/caja/marcas.core.js'
+import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
 import { anuladasEnGN, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
 import { billetesDe, limpiarConteo, totalDeConteo } from '../lib/caja/conteo.core.js'
 import { aplicarPromos, normalizarPromos } from '../lib/caja/promos.core.js'
 import { MAX_LOTE, csvDeLote, generarCodigos } from '../lib/caja/gift.core.js'
 
-// 🔑 La marca es CONFIGURACIÓN (rediseño, fase 5): el nombre, el local, el depósito y el modo Local
-// salen de `lib/caja/marcas.core.js`. Habilitada hoy: sólo Zattia.
+// 🔑 La marca es CONFIGURACIÓN (rediseño, fase 5 + V4): el nombre, el local, el depósito, el modo Local,
+// los tokens de GN y la siembra de las formas de pago salen de `lib/caja/marcas.core.js`. Zattia y BDI
+// (V4, 12-oct). Cada marca tiene SU base (`cfgDeMarca`) y su `caja_config`.
 const STORE = MARCA_POR_DEFECTO
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/** El token que escribe ventas. `GN_TOKEN_VENTAS` es el de `crear-venta.js`; el de Zattia también puede (medido el 3-oct). */
-const tokenGN = () => process.env.GN_TOKEN_VENTAS || process.env.GN_TOKEN_ZATTIA
+/**
+ * El token que escribe ventas y el que lee el inventario, de ESA marca (`tokenVentas` / `tokenLectura` en
+ * `marcas.core.js`). Zattia: `GN_TOKEN_VENTAS` es el de `crear-venta.js` y el de Zattia también puede
+ * (medido el 3-oct); el de ventas ⛔ lee `inventario`. BDI: `GN_TOKEN_VENTAS_BDI` / `GN_TOKEN`.
+ */
+const tokensGN = (marca) => ({ ventas: tokenDe(marca.tokenVentas, process.env), lectura: tokenDe(marca.tokenLectura, process.env) })
 const cabeceras = (token) => ({ Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' })
 
-/** Las cuentas de GN, cacheadas por instancia: cambian una vez por año. */
-let cacheCuentas = null
+/** Las cuentas de GN POR MARCA (cada una es otra empresa en GN), cacheadas por instancia: cambian una vez por año. */
+const cacheCuentas = new Map()
 
 // Los pedidos web se leen del audit de bdi-catalogo (el mismo de Envíos y Cobranzas) en TRAMOS de 3
 // días: el audit corta en 200 órdenes y 10 días de Zattia eran 240 (medido el 4-oct) ⇒ de un saque
@@ -159,7 +165,7 @@ async function leerJson(r) {
 
 /** PostgREST contesta 42P01 / PGRST205 cuando la tabla ⛔ existe (falta `sql/migrate-caja-gift-card.sql`). */
 const faltaGift = (e) => !!e && (e.code === '42P01' || e.code === 'PGRST205' || /caja_gift.*(does not exist|schema cache)|Could not find the table/i.test(e.message || ''))
-const FALTA_GIFT = 'Falta correr sql/migrate-caja-gift-card.sql en la base de Zattia.'
+const FALTA_GIFT = 'Falta correr sql/migrate-caja-gift-card.sql en la base de la marca.'
 
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res)
@@ -167,25 +173,28 @@ export default async function handler(req, res) {
 
   const store = String(req.query.store || (req.body && req.body.store) || STORE).toLowerCase()
   const marca = marcaDeCaja(store)
-  if (!marca) return res.status(400).json({ error: 'La Caja es sólo de Zattia.' })
+  if (!marca) return res.status(400).json({ error: 'La Caja es de Zattia y BDI.' })
   // 🔴 `puedeVerAlguna` y ⛔ `puedeVer` pelado: es el gate del servidor (ver lib/permisos.core.js).
   if (!puedeVerAlguna(perfil, store, ['caja'])) return res.status(403).json({ error: 'No tenés acceso a la Caja.' })
 
   const cfg = cfgDeMarca(store)
-  if (!cfg.url || !cfg.key) return res.status(500).json({ error: 'Faltan credenciales de Supabase de Zattia.' })
+  if (!cfg.url || !cfg.key) return res.status(500).json({ error: `Faltan credenciales de Supabase de ${marca.nombre}.` })
   const sb = createClient(cfg.url, cfg.key)
-  const token = tokenGN()
+  const { ventas: token, lectura: tokenLectura } = tokensGN(marca)
   const accion = String(req.query.action || (req.body && req.body.action) || '')
 
-  /** La configuración del cobro. La primera vez se siembra con lo que muestra el POS de GN. */
+  /**
+   * La configuración del cobro. La primera vez se siembra con lo que muestra el POS de GN DE ESA MARCA
+   * (`marca.reglasIniciales`: las cuentas de Zattia ⛔ existen en el GN de BDI).
+   */
   async function leerConfig() {
     const { data, error } = await sb.from('caja_config').select('reglas, politica_cambio, actualizado_en').eq('store', store).maybeSingle()
     if (error) throw new Error(error.message)
     if (data) return data
-    const fila = { store, reglas: REGLAS_INICIALES, politica_cambio: null, actualizado_por: perfil.name || null }
+    const fila = { store, reglas: marca.reglasIniciales, politica_cambio: null, actualizado_por: perfil.name || null }
     const ins = await sb.from('caja_config').upsert(fila, { onConflict: 'store', ignoreDuplicates: true })
     if (ins.error) throw new Error(ins.error.message)
-    return { reglas: REGLAS_INICIALES, politica_cambio: null, actualizado_en: null }
+    return { reglas: marca.reglasIniciales, politica_cambio: null, actualizado_en: null }
   }
 
   /**
@@ -216,9 +225,16 @@ export default async function handler(req, res) {
    * `reglas.transferenciaPorMp` ({ [cuenta de MP]: cuenta de GN }); sin mapeo para la cuenta en uso, la
    * transferencia ⛔ se cobra (`transferenciaA: null` ⇒ `cuentaDeMedio` lo dice). ⛔ Hay modo feria
    * general: la feria es por producto (`feriaProductos`).
+   * 🔑 V4 (Bruno, 12-oct): una tienda SIN verificación (`verificarTransferencia: false`, BDI) ⛔ mira MP:
+   * la cuenta de GN es `transferenciaFija`.
    */
   async function reglasDeHoy(reglas) {
     const { feria: _f, feriaIdsCampania: _x, ...sinFeria } = reglas
+    // 🔑 V4: la tienda que ⛔ verifica en Mercado Pago manda la transferencia a SU cuenta fija.
+    if (!verificaTransferencias(reglas)) {
+      const fija = Number(reglas.transferenciaFija)
+      return { ...sinFeria, transferenciaA: Number.isInteger(fija) && fija > 0 ? fija : null, feriaIdsCampania: await idsDeCampanias(reglas.feriaCampanias) }
+    }
     let enUso = null
     try {
       ;({ enUso } = await cuentasDe(sb, store))
@@ -272,13 +288,14 @@ export default async function handler(req, res) {
 
   /** Las cuentas de GN (id y nombre), cacheadas por instancia. Lanza si GN ⛔ contesta. */
   async function cuentasGN() {
-    if (cacheCuentas) return cacheCuentas
+    if (cacheCuentas.has(store)) return cacheCuentas.get(store)
     const resp = await gnFetch(`${GN_BASE}/ventas/referencias`, { headers: cabeceras(token) }, 1)
     if (!resp.ok) throw new Error(`Gestión Nube contestó ${resp.status} al pedir las cuentas.`)
     const d = await leerJson(resp)
     // 🔴 Lista blanca: `cuentas` trae el SALDO de cada cuenta (`balance`), que ⛔ va al navegador.
-    cacheCuentas = (d && Array.isArray(d.cuentas) ? d.cuentas : []).map(c => ({ id: Number(c.id), nombre: String(c.name || '') }))
-    return cacheCuentas
+    const lista = (d && Array.isArray(d.cuentas) ? d.cuentas : []).map(c => ({ id: Number(c.id), nombre: String(c.name || '') }))
+    cacheCuentas.set(store, lista)
+    return lista
   }
 
   /** El turno abierto de la marca, o null. Hay uno solo: lo asegura el índice único parcial. */
@@ -296,7 +313,7 @@ export default async function handler(req, res) {
     const ahora = Date.now()
     if (!fresco && cacheCobrosGN && cacheCobrosGN.turno === turno.id && ahora - cacheCobrosGN.en < 60_000) return cacheCobrosGN.datos
     const cuentas = Object.entries(reglas.cuentas || {}).filter(([, r]) => r && r.efectivo).map(([id]) => Number(id))
-    const tok = GN_TOKENS.zattia || token
+    const tok = tokenLectura || token
     try {
       const ventas = []
       for (const cuenta of cuentas) {
@@ -350,7 +367,7 @@ export default async function handler(req, res) {
     if (!fresco && cacheAnuladas && cacheAnuladas.turno === turno.id && ahora - cacheAnuladas.en < 60_000) return cacheAnuladas.datos
     const enGN = ventas.filter((v) => v.estado === 'en_gn' && Number(v.gn_sale_id) > 0)
     const dias = [...new Set(enGN.map((v) => fechaLocal(new Date(v.creada_en))))]
-    const tok = GN_TOKENS.zattia || token
+    const tok = tokenLectura || token
     try {
       const ids = []
       for (const dia of dias) {
@@ -433,17 +450,31 @@ export default async function handler(req, res) {
         const conf = { ...leida, reglas: await reglasDeHoy(leida.reglas), ...(esAdmin(perfil) ? { campaniasLiq: await campaniasLiq() } : {}) }
         // `versiones`: las de las listas que la pantalla manda ENTERAS, para ⛔ pisar la de otro admin.
         const versiones = { promos: versionDe(conf.reglas, 'promos'), feriaProductos: versionDe(conf.reglas, 'feriaProductos') }
-        return res.status(200).json({ ...conf, versiones, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo) })
+        return res.status(200).json({ ...conf, versiones, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), marca: { store, nombre: marca.nombre, tienda: marca.tienda } })
+      }
+
+      if (accion === 'logo-tn') {
+        // V4 (Bruno, 12-oct): el logo por defecto es el de la Tienda Nube de la marca. La tienda pública lo
+        // trae en su HTML (`"logo": "https://acdn-us.mitiendanube.com/…png"`, verificado el 12-oct en las dos);
+        // la CDN contesta con CORS abierto ⇒ la pantalla lo achica y lo pasa a PNG como uno subido a mano.
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia el logo del ticket.' })
+        if (!marca.tienda) return res.status(404).json({ error: `${marca.nombre} no tiene Tienda Nube propia: el logo se sube a mano.` })
+        const r = await fetch(`https://${marca.tienda}/`, { signal: AbortSignal.timeout(10_000) }).catch(() => null)
+        const html = r && r.ok ? await r.text() : ''
+        const url = logoDeTienda(html)
+        if (!url) return res.status(502).json({ error: `No se encontró el logo en ${marca.tienda}.` })
+        return res.status(200).json({ url })
       }
 
       if (accion === 'referencias') {
+        let lista
         try {
-          await cuentasGN()
+          lista = await cuentasGN()
         } catch (e) {
           return res.status(502).json({ error: e.message })
         }
         const reglas = await reglasDeHoy((await leerConfig()).reglas)
-        const cuentas = cacheCuentas.map(c => {
+        const cuentas = lista.map(c => {
           let regla = null
           try { regla = reglaDeCuenta(c.id, reglas) } catch { /* sin regla o con recargo: la Caja ⛔ la cobra */ }
           return { ...c, regla }
@@ -458,14 +489,14 @@ export default async function handler(req, res) {
         if (pid > 0 && sid > 0) {
           // La elegida de la lista: por la variante EXACTA. Re-escanear su barcode volvía a dar la lista
           // si el código lo comparten varias prendas.
-          variantes = await variantesExactas(sb, pid, sid)
+          variantes = await variantesExactas(sb, marca, pid, sid)
           if (!variantes.length) return res.status(404).json({ error: 'Esa prenda no está en el inventario.' })
         } else {
           if (!codigo) return res.status(400).json({ error: 'Falta el código.' })
-          variantes = await variantesDelCodigo(sb, codigo)
+          variantes = await variantesDelCodigo(sb, marca, codigo)
           let mas = 0
           const palabras = palabrasDeBusqueda(codigo)
-          if (!variantes.length && palabras.length) ({ grupos: variantes, mas } = await variantesDelNombre(sb, palabras))
+          if (!variantes.length && palabras.length) ({ grupos: variantes, mas } = await variantesDelNombre(sb, marca, palabras))
           if (!variantes.length) return res.status(404).json({ error: palabras.length ? `Ninguna prenda se llama «${codigo}».` : `El código ${codigo} no está en el inventario.` })
           // Con la lista va el stock del LOCAL de anoche: alcanza para elegir; el vivo se lee al elegir.
           if (variantes.length > 1) return res.status(200).json({ candidatos: variantes.map(v => ({ ...v.variante, local: v.espejo.local })), mas })
@@ -475,7 +506,7 @@ export default async function handler(req, res) {
         try {
           // 🔴 Con el token de LECTURA de Zattia, ⛔ el de ventas: en producción `GN_TOKEN_VENTAS` caía
           // siempre al espejo (4-oct), y con éste `inventario/{id}` contesta 200 (es el de los Conteos).
-          const resp = await gnFetch(`${GN_BASE}/inventario/${variante.product_id}`, { headers: cabeceras(GN_TOKENS.zattia || token) }, 1)
+          const resp = await gnFetch(`${GN_BASE}/inventario/${variante.product_id}`, { headers: cabeceras(tokenLectura || token) }, 1)
           if (!resp.ok) throw new Error(`Gestión Nube contestó ${resp.status}`)
           const filas = filasVivas(await leerJson(resp), [marca.local, marca.deposito]).filter(f => Number(f.size_id) === variante.size_id)
           const de = (s) => filas.filter(f => f.store_id === s).reduce((t, f) => t + Number(f.available_quantity || 0), 0)
@@ -494,7 +525,7 @@ export default async function handler(req, res) {
         const vacio = { conStock: [], sinStock: [], masCon: 0, masSin: 0 }
         if (!palabras.length) return res.status(200).json(vacio)
         // Por PRODUCTO (Bruno, 5-oct): la tarjeta es el producto y la variante se elige en el modal.
-        const r = await variantesDelNombre(sb, palabras, productosPorStock, (x) => x.conStock.length + x.sinStock.length > 0)
+        const r = await variantesDelNombre(sb, marca, palabras, productosPorStock, (x) => x.conStock.length + x.sinStock.length > 0)
         return res.status(200).json(r || vacio)
       }
 
@@ -582,8 +613,9 @@ export default async function handler(req, res) {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia el logo del ticket.' })
         // Bruno, 12-oct: el ticket lleva el logo de la MARCA de lo que se vende ⇒ uno por marca. El de Stunned
         // va adentro de la misma columna (`ticket_logo.stunned`): ⛔ una migración para un campo.
-        const marcaLogo = b.marca == null ? 'zattia' : String(b.marca)
-        if (!['zattia', 'stunned'].includes(marcaLogo)) return res.status(400).json({ error: 'Marca de logo inválida.' })
+        // V4: el logo propio es el de la marca de la Caja (`store`); Stunned es una línea de Zattia.
+        const marcaLogo = b.marca == null ? store : String(b.marca)
+        if (![store, ...(store === 'zattia' ? ['stunned'] : [])].includes(marcaLogo)) return res.status(400).json({ error: 'Marca de logo inválida.' })
         let logo = null
         if (b.logo != null) {
           const src = String(b.logo.src || '')
@@ -596,14 +628,14 @@ export default async function handler(req, res) {
         }
         await leerConfig() // la fila tiene que existir: la siembra si ⛔ hay
         const previa = await sb.from('caja_config').select('ticket_logo').eq('store', store).maybeSingle()
-        if (previa.error && /ticket_logo/.test(previa.error.message || '')) return res.status(409).json({ error: 'Falta correr sql/migrate-caja-logo.sql en la base de Zattia.' })
+        if (previa.error && /ticket_logo/.test(previa.error.message || '')) return res.status(409).json({ error: `Falta correr sql/migrate-caja-logo.sql en la base de ${marca.nombre}.` })
         if (previa.error) throw new Error(previa.error.message)
         const actual = logosDeFila(previa.data && previa.data.ticket_logo)
-        const zattia = marcaLogo === 'zattia' ? logo : actual.ticket_logo
+        const propio = marcaLogo === store ? logo : actual.ticket_logo
         const stunned = marcaLogo === 'stunned' ? logo : actual.ticket_logo_stunned
-        const fila = zattia || stunned ? { ...(zattia || {}), ...(stunned ? { stunned } : {}) } : null
+        const fila = propio || stunned ? { ...(propio || {}), ...(stunned ? { stunned } : {}) } : null
         const { error } = await sb.from('caja_config').update({ ticket_logo: fila, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
-        if (error && /ticket_logo/.test(error.message || '')) return res.status(409).json({ error: 'Falta correr sql/migrate-caja-logo.sql en la base de Zattia.' })
+        if (error && /ticket_logo/.test(error.message || '')) return res.status(409).json({ error: `Falta correr sql/migrate-caja-logo.sql en la base de ${marca.nombre}.` })
         if (error) throw new Error(error.message)
         return res.status(200).json(logosDeFila(fila))
       }
@@ -645,6 +677,29 @@ export default async function handler(req, res) {
         if (g.conflicto) return res.status(409).json({ error: 'Otro admin cambió las promos recién. Recargá la Caja y volvé a cargar el cambio.', conflicto: true })
         return res.status(200).json({ reglas: await reglasDeHoy(g.reglas), versiones: { promos: versionDe(g.reglas, 'promos'), feriaProductos: versionDe(g.reglas, 'feriaProductos') } })
       }
+      if (accion === 'formas-pago') {
+        // 🔑 V4 (Bruno, 12-oct): las formas de pago son DATO DE LA TIENDA: cuenta de GN y % de cada una, las
+        // cuotas, las cuentas de la oferta y si la transferencia se verifica en Mercado Pago. Se valida
+        // contra las cuentas de GN de ESTA marca (`aplicarFormasDePago`) y se escribe con `guardarReglas`.
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia las formas de pago.' })
+        let lista
+        try {
+          lista = await cuentasGN()
+        } catch (e) {
+          return res.status(502).json({ error: e.message })
+        }
+        try {
+          aplicarFormasDePago((await leerConfig()).reglas, b.formas, lista)
+        } catch (e) {
+          return res.status(400).json({ error: e.message })
+        }
+        const g = await guardarReglas((actual) => {
+          const { feria: _f, transferenciaA: _t, feriaIdsCampania: _x, ...resto } = actual
+          return aplicarFormasDePago(resto, b.formas, lista)
+        }, null)
+        if (g.conflicto) return res.status(409).json({ error: 'Otro admin cambió la configuración recién. Recargá la Caja y volvé a cargar el cambio.', conflicto: true })
+        return res.status(200).json({ reglas: await reglasDeHoy(g.reglas), versiones: { promos: versionDe(g.reglas, 'promos'), feriaProductos: versionDe(g.reglas, 'feriaProductos') } })
+      }
       if (accion === 'bajadas') {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia a dónde van las transferencias o los productos en oferta.' })
         const { reglas } = await leerConfig()
@@ -683,6 +738,10 @@ export default async function handler(req, res) {
         if (b.oferta != null) {
           try {
             nuevas.oferta = normalizarOferta(b.oferta)
+            // V4: `final` / `recargo` piden la cuenta de oferta de ESA tienda (BDI ⛔ tiene).
+            for (const md of ['efectivo', 'transferencia', 'debito', 'credito']) {
+              if (nuevas.oferta[md] === 'final' || nuevas.oferta[md] === 'recargo') cuentaDeOferta(md, reglas)
+            }
           } catch (e) {
             return res.status(400).json({ error: e.message })
           }
@@ -1033,8 +1092,9 @@ export default async function handler(req, res) {
         // Darío y Bruno reciben un mail para verificar. El mail que ⛔ sale ⛔ frena la venta: queda anotado.
         const id = String(b.id || '')
         if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido.' })
-        const titular = titularDe(b.titular)
-        if (!titular) return res.status(400).json({ error: 'Falta a nombre de quién está la cuenta.' })
+        const reglasOtra = (await leerConfig()).reglas
+        const titular = titularDe(b.titular, reglasOtra)
+        if (!titular) return res.status(400).json({ error: 'Falta a nombre de quién está la cuenta (o la tienda no tiene su cuenta en «Formas de pago»).' })
         const banco = String(b.banco ?? '').trim().slice(0, 80)
         if (banco.length < 2) return res.status(400).json({ error: 'Falta el banco.' })
         const t = await turnoAbierto()
@@ -1045,7 +1105,7 @@ export default async function handler(req, res) {
         if (v.data.estado !== 'esperando_pago') return res.status(409).json({ error: v.data.estado === 'cancelada' ? 'La venta está cancelada.' : 'La venta ya no espera la transferencia.', venta: sinPayload(v.data) })
         let cambio
         try {
-          cambio = aOtraCuenta({ pagos: v.data.pagos || [], payload: v.data.payload, titular, reglas: (await leerConfig()).reglas })
+          cambio = aOtraCuenta({ pagos: v.data.pagos || [], payload: v.data.payload, titular, reglas: reglasOtra })
         } catch (e) {
           return res.status(409).json({ error: e.message })
         }
@@ -1169,10 +1229,16 @@ const centavosJs = (n) => Math.round(n * 100) / 100
 const turnoCerrado = (e) => /caja_turno_cerrado/.test(String((e && e.message) || ''))
 
 /**
- * Los logos del ticket guardados en `caja_config.ticket_logo`: el de Zattia es la fila misma ({ src, ancho,
- * alto }) y el de Stunned va en `.stunned` (Bruno, 12-oct). Al navegador van separados: el de Zattia
- * sigue siendo `ticket_logo` para la pantalla de la clienta y el tótem.
+ * Los logos del ticket guardados en `caja_config.ticket_logo`: el de la marca es la fila misma ({ src, ancho,
+ * alto }) y el de Stunned (sólo Zattia) va en `.stunned` (Bruno, 12-oct). Al navegador van separados: el de
+ * la marca sigue siendo `ticket_logo` para la pantalla de la clienta y el tótem.
  */
+/** La URL del logo en el HTML de una Tienda Nube pública, o null. Sólo de la CDN de TN. */
+export function logoDeTienda(html) {
+  const m = /"logo"\s*:\s*"(https:(?:\\\/|\/){2}[a-z0-9.-]*mitiendanube\.com[^"\s]+)"/i.exec(String(html || ''))
+  return m ? m[1].replace(/\\\//g, '/') : null
+}
+
 function logosDeFila(fila) {
   const uno = (x) => (x && typeof x.src === 'string' && x.src ? { src: x.src, ancho: Number(x.ancho), alto: Number(x.alto) } : null)
   return { ticket_logo: uno(fila), ticket_logo_stunned: uno(fila && fila.stunned) }
@@ -1212,7 +1278,7 @@ export function diasDelCruce(creada, ahora) {
  * barcode normalizado, y SKU — el mismo orden que el chequeo de exhibición (`coincidencias`).
  * Devuelve una entrada por variante (product_id + size_id), con su stock de anoche por si GN ⛔ contesta.
  */
-async function variantesDelCodigo(sb, codigo) {
+async function variantesDelCodigo(sb, marca, codigo) {
   const COLS = 'product_id, product_name, size_id, size_name, sku, barcode, available_quantity, store_name'
   const nc = normCode(codigo)
   const escapar = (x) => x.replace(/[\\%_]/g, (m) => `\\${m}`)
@@ -1227,16 +1293,16 @@ async function variantesDelCodigo(sb, codigo) {
   for (const q of intentos) {
     const { data, error } = await q().limit(50)
     if (error) throw new Error(error.message)
-    if (data && data.length) return agrupar(data)
+    if (data && data.length) return agrupar(data, marca)
   }
   return []
 }
 
-async function variantesExactas(sb, productId, sizeId) {
+async function variantesExactas(sb, marca, productId, sizeId) {
   const COLS = 'product_id, product_name, size_id, size_name, sku, barcode, available_quantity, store_name'
   const { data, error } = await sb.from('inventario').select(COLS).eq('product_id', productId).eq('size_id', sizeId).limit(50)
   if (error) throw new Error(error.message)
-  return agrupar(data || [])
+  return agrupar(data || [], marca)
 }
 
 /**
@@ -1244,7 +1310,7 @@ async function variantesExactas(sb, productId, sizeId) {
  * `buscar.core.js`. Si esa palabra ⛔ trae nada se prueba la siguiente: `ilike` ⛔ ignora las tildes,
  * y «corazon» ⛔ encuentra «CORAZÓN» (la de al lado sí puede).
  */
-async function variantesDelNombre(sb, palabras, armar = filtrarPorNombre, hay = (r) => r.grupos.length > 0) {
+async function variantesDelNombre(sb, marca, palabras, armar = filtrarPorNombre, hay = (r) => r.grupos.length > 0) {
   const COLS = 'product_id, product_name, size_id, size_name, sku, barcode, available_quantity, store_name'
   for (const p of ordenParaLaBase(palabras).slice(0, 3)) {
     // 🔴 PostgREST corta en 1.000 filas SIN avisar, y una fila es variante × sucursal: «top» pasaba de
@@ -1257,13 +1323,14 @@ async function variantesDelNombre(sb, palabras, armar = filtrarPorNombre, hay = 
       filas.push(...(data || []))
       if (!data || data.length < 1000) break
     }
-    const r = armar(agrupar(filas), palabras)
+    const r = armar(agrupar(filas, marca), palabras)
     if (hay(r)) return r
   }
   return armar === filtrarPorNombre ? { grupos: [], mas: 0 } : null
 }
 
-function agrupar(filas) {
+/** Por variante, con el stock de anoche del Local y del Depósito DE LA MARCA (`ladoDelEspejo`). */
+function agrupar(filas, marca) {
   const por = new Map()
   for (const f of filas) {
     const k = `${f.product_id}_${f.size_id}`
@@ -1273,10 +1340,8 @@ function agrupar(filas) {
         espejo: { local: 0, deposito: 0 },
       })
     }
-    const nombre = String(f.store_name || '').trim().toLowerCase()
-    const e = por.get(k).espejo
-    if (nombre === 'local') e.local += Number(f.available_quantity || 0)
-    else if (nombre.startsWith('deposito') || nombre.startsWith('depósito')) e.deposito += Number(f.available_quantity || 0)
+    const lado = ladoDelEspejo(marca, f.store_name)
+    if (lado) por.get(k).espejo[lado] += Number(f.available_quantity || 0)
   }
   return [...por.values()]
 }

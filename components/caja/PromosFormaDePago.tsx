@@ -13,6 +13,7 @@ import { hoyIso, promosDe, rotuloBeneficio, rotuloRegla } from '@/lib/agenda'
 import { NOMBRE_MEDIO, cuentaDeMedio, msjOferta } from '@/lib/caja/core.core.js'
 import type { Medio, Reglas } from '@/lib/caja/cliente'
 import { useAgenda } from '@/store/useAgenda'
+import { storeCaja } from '@/lib/caja/marca'
 
 const MEDIO_PROMO: Record<string, string> = { credito: 'Crédito', debito: 'Débito', app: 'App', qr: 'QR', transferencia: 'Transferencia' }
 
@@ -36,11 +37,11 @@ export function PromosFormaDePago({ reglas }: { reglas: Reglas }) {
   }, [cargado, cargar])
 
   const hoy = hoyIso()
-  // Las del mostrador de Zattia que siguen vigentes (la ventana), con las de HOY primero.
+  // Las del mostrador de la marca de la Caja (V4) que siguen vigentes (la ventana), con las de HOY primero.
   const vigentes = promos
     .filter((p) => p.activa && p.desde <= hoy && (!p.hasta || p.hasta >= hoy))
-    .filter((p) => (p.canales || []).includes('mostrador') && (!p.marcas || p.marcas.length === 0 || p.marcas.includes('zattia')))
-  const deHoy = new Set(promosDe(vigentes, hoy, { canal: 'mostrador', marca: 'zattia' }).map((p) => p.id))
+    .filter((p) => (p.canales || []).includes('mostrador') && (!p.marcas || p.marcas.length === 0 || p.marcas.includes(storeCaja())))
+  const deHoy = new Set(promosDe(vigentes, hoy, { canal: 'mostrador', marca: storeCaja() }).map((p) => p.id))
   const lista = [...vigentes].sort((a, b) => Number(deHoy.has(b.id)) - Number(deHoy.has(a.id)) || a.banco.localeCompare(b.banco, 'es'))
 
   return (

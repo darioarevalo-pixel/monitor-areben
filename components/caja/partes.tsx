@@ -8,7 +8,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { MODOS_OFERTA, NOMBRE_MEDIO, medioDeCuenta, msjOferta, ofertaDe } from '@/lib/caja/core.core.js'
 import { numeroProvisorio, plata, type LogoTicket } from '@/lib/caja/ticket'
-import { TITULARES } from '@/lib/caja/otra-cuenta.core.js'
+import { titularesDe } from '@/lib/caja/otra-cuenta.core.js'
 import { TOLERANCIA_TRANSFERENCIA } from '@/lib/pagos-recibidos/core.core.js'
 import { CalculadoraBilletes, olvidarConteo } from '@/components/caja/CalculadoraBilletes'
 import { aNumero as aNumeroTxt, textoDiferencia } from '@/lib/caja/textos'
@@ -51,6 +51,7 @@ import {
   type CampaniaLiq,
   buscarNombre,
   guardarLogo,
+  leerLogoTN,
   leerCuentasMp,
   usarCuentaMp,
   type CuentaMp,
@@ -716,12 +717,15 @@ const TEXTO_ORIGEN: Record<string, string> = { mp: 'desde Mercado Pago', banco: 
  */
 export function EsperaTransferencia({
   venta,
+  reglas,
   onLlego,
   onCambio,
   onSeguir,
   onCambiarPago,
 }: {
   venta: Venta
+  /** Las de la tienda: de ahí salen los titulares de «Transfirió a otra cuenta» (V4). */
+  reglas: Reglas | null
   onLlego: (v: Venta) => void
   onCambio: () => void
   onSeguir?: () => void
@@ -871,7 +875,7 @@ export function EsperaTransferencia({
               Completar con otro cobro
             </Button>
           )}
-          {!otra && (
+          {!otra && titularesDe(reglas).length > 0 && (
             <Button size="sm" variant="outline" disabled={!!trabajando} onClick={() => { setSumando(null); setOtra({ titular: null, banco: '' }) }}>
               Transfirió a otra cuenta
             </Button>
@@ -886,7 +890,7 @@ export function EsperaTransferencia({
           <div style={{ display: 'grid', gap: space[2], padding: space[2], border: `1px solid ${color.line2}`, borderRadius: radius.md, background: color.surface }}>
             <span style={{ fontSize: font.sm, fontWeight: weight.semibold }}>¿A nombre de quién está la cuenta a la que transfirió?</span>
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-              {TITULARES.map((t) => (
+              {titularesDe(reglas).map((t) => (
                 <Button key={t.id} size="sm" variant={otra.titular === t.id ? 'solid' : 'outline'} onClick={() => setOtra({ ...otra, titular: t.id })}>
                   {t.nombre}
                 </Button>
@@ -2292,6 +2296,15 @@ const TEXTO_MODO: Record<ModoOferta, string> = {
  * de pago o sin él, y el recargo de la tarjeta. La regla es `pagosDeMedio`/`exigirFeria` (`core.core.js`);
  * acá sólo se elige. Va a mudarse a la lista de precios del local cuando exista.
  */
+/** V4: `final` y `recargo` piden la cuenta de oferta de la tienda (BDI ⛔ tiene): sin ella ⛔ se ofrecen. */
+function modoPosible(m: ModoOferta, medio: Medio, reglas: Reglas): boolean {
+  const md = reglas.medios
+  if (!md) return false
+  if (m === 'final') return medio === 'efectivo' ? md.efectivo.feria != null : medio === 'transferencia' ? md.transferencia.feria != null : false
+  if (m === 'recargo') return md.tarjetaOferta != null
+  return true
+}
+
 function CobroDeOferta({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reglas, v?: Versiones) => void }) {
   const [o, setO] = useState<Oferta>(() => ofertaDe(reglas) as Oferta)
   const [recargoTxt, setRecargoTxt] = useState(() => String(ofertaDe(reglas).recargo))
@@ -2320,7 +2333,7 @@ function CobroDeOferta({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (
         <div key={medio} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ width: 150, fontSize: font.base }}>{NOMBRE_MEDIO[medio]}</span>
           <Select value={o[medio]} disabled={guardando} onChange={(e) => setO({ ...o, [medio]: e.target.value as ModoOferta })} style={{ maxWidth: 280 }} aria-label={`Oferta con ${NOMBRE_MEDIO[medio]}`}>
-            {MODOS_OFERTA[medio].map((m) => (
+            {MODOS_OFERTA[medio].filter((m) => modoPosible(m, medio, reglas) || m === o[medio]).map((m) => (
               <option key={m} value={m}>
                 {m === 'recargo' ? `${TEXTO_MODO.recargo} (+${recargoTxt || '?'} %)` : TEXTO_MODO[m]}
               </option>
@@ -2346,8 +2359,21 @@ function CobroDeOferta({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (
 async function logoDesdeArchivo(archivo: File): Promise<LogoTicket> {
   const url = URL.createObjectURL(archivo)
   try {
+    return await logoDesdeUrl(url)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+/**
+ * Una imagen (archivo local o la del logo de Tienda Nube, V4), achicada a 400 px y pasada a PNG con fondo
+ * blanco. La CDN de TN contesta con CORS abierto (`crossOrigin`): sin eso el lienzo ⛔ se puede exportar.
+ */
+async function logoDesdeUrl(url: string): Promise<LogoTicket> {
+  {
     const img = await new Promise<HTMLImageElement>((ok, mal) => {
       const i = new Image()
+      if (!url.startsWith('blob:')) i.crossOrigin = 'anonymous'
       i.onload = () => ok(i)
       i.onerror = () => mal(new Error('No se pudo leer la imagen.'))
       i.src = url
@@ -2365,8 +2391,6 @@ async function logoDesdeArchivo(archivo: File): Promise<LogoTicket> {
     ctx.fillRect(0, 0, ancho, alto)
     ctx.drawImage(img, 0, 0, ancho, alto)
     return { src: lienzo.toDataURL('image/png'), ancho, alto }
-  } finally {
-    URL.revokeObjectURL(url)
   }
 }
 
@@ -2374,7 +2398,7 @@ async function logoDesdeArchivo(archivo: File): Promise<LogoTicket> {
  * Sólo admin: el logo que va arriba del ticket (Bruno, 5-oct). Sin logo, el ticket lleva el nombre. Uno por
  * marca (Bruno, 12-oct): sale el de la marca de lo que se vende, y los dos si el ticket mezcla.
  */
-export function LogoDelTicket({ marca, nombre, inicial, onGuardado }: { marca: MarcaLogo; nombre: string; inicial: LogoTicket | null; onGuardado: (r: { ticket_logo: LogoTicket | null; ticket_logo_stunned: LogoTicket | null }) => void }) {
+export function LogoDelTicket({ marca, nombre, inicial, tienda = null, onGuardado }: { marca: MarcaLogo; nombre: string; inicial: LogoTicket | null; /** V4: la Tienda Nube de la marca: el logo por defecto sale de ahí. */ tienda?: string | null; onGuardado: (r: { ticket_logo: LogoTicket | null; ticket_logo_stunned: LogoTicket | null }) => void }) {
   const [abierto, setAbierto] = useState(false)
   const archivo = useRef<HTMLInputElement>(null)
   const [guardando, setGuardando] = useState(false)
@@ -2402,8 +2426,24 @@ export function LogoDelTicket({ marca, nombre, inicial, onGuardado }: { marca: M
           <span style={{ color: color.mut, fontSize: font.sm }}>Logo: ninguno (el ticket lleva el nombre).</span>
         )}
         <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+          {tienda && (
+            <Button
+              size="sm"
+              variant={inicial ? 'outline' : 'solid'}
+              loading={guardando}
+              onClick={async () => {
+                try {
+                  await guardar(await logoDesdeUrl((await leerLogoTN()).url))
+                } catch (err) {
+                  setMsg((err as Error).message)
+                }
+              }}
+            >
+              Usar el de Tienda Nube
+            </Button>
+          )}
           <Button size="sm" variant="outline" loading={guardando} onClick={() => archivo.current?.click()}>
-            Cargar logo
+            {tienda ? 'Cargar otro (para la térmica)' : 'Cargar logo'}
           </Button>
           <input
             ref={archivo}
@@ -2484,6 +2524,18 @@ export function DeteccionTransferencias({ admin, reglas = null, onGuardadas }: {
   const enUso = datos ? (datos.enUso?.nombre ?? 'ninguna cuenta (cargarla en Pagos recibidos)') : '…'
   const gn = reglas?.transferenciaA ?? null
   const opciones = reglas?.medios?.transferencia.opciones ?? []
+  // V4 (Bruno, 12-oct): la tienda que ⛔ verifica en Mercado Pago confirma la transferencia al cobrar.
+  if (reglas && reglas.verificarTransferencia === false) {
+    const nombreGN = gn != null ? (NOMBRE_TRANSF_GN[gn] ?? reglas.cuentas[gn]?.nombre ?? `Cuenta ${gn}`) : '—'
+    return (
+      <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Transferencias" ayuda="Esta tienda no las verifica en Mercado Pago: se dan por cobradas al confirmar.">
+        <div style={{ display: 'grid', gap: space[2], maxWidth: 560 }}>
+          <span style={{ color: color.ink2 }}>Se asientan en Gestión Nube como: <b style={{ color: color.ink }}>{nombreGN}</b></span>
+          <span style={{ fontSize: font.sm, color: color.mut }}>La cajera mira el comprobante en el teléfono de la clienta. Para verificarlas en Mercado Pago, cambiarlo en «Formas de pago».</span>
+        </div>
+      </Plegable>
+    )
+  }
   return (
     <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Las transferencias se detectan en" ayuda={`${enUso} · la misma cuenta que usa Pagos recibidos.`}>
       <div style={{ display: 'grid', gap: space[2], maxWidth: 560 }}>

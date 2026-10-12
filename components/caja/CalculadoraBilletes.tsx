@@ -23,12 +23,13 @@ import { plata } from '@/lib/caja/ticket'
 import { aNumero } from '@/lib/caja/textos'
 import type { Conteo } from '@/lib/caja/cliente'
 import { textoDiferencia } from '@/lib/caja/textos'
+import { storeCaja } from '@/lib/caja/marca'
 
 /** Lo tipeado, como texto: un input vacío es 0. */
 type Textos = Record<string, string>
 type Apunte = { conteo: Textos; en: string }
 
-const claveDe = (momento: string) => `caja:conteo:zattia:${momento}`
+const claveDe = (momento: string) => `caja:conteo:${storeCaja()}:${momento}`
 /** Un borrador más viejo que esto es de otro turno (la apertura ⛔ lleva el id: el turno ⛔ existe). */
 const VIDA_MS = 12 * 3_600_000
 

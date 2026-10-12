@@ -42,6 +42,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import type { Marca } from '@/lib/nav.datos'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { construirPrecios } from '@/lib/etiquetas/core'
@@ -58,8 +59,8 @@ import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { imprimirTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
-import { CLAVE_MAIL, CLAVE_VISTA, leerMail, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
-import { MARCA_CAJA } from '@/lib/caja/marca'
+import { claveMail, claveVista, leerMail, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
+import { MARCA_CAJA, marcaParaPOS, storeCaja, useMarcaDeLaUrl, usarMarcaCaja } from '@/lib/caja/marca'
 import {
   buscarNombre,
   buscarProducto,
@@ -118,7 +119,8 @@ import {
  */
 type Borrador = { id: string; renglones: Renglon[]; email: string; descuentoVenta?: Rebaja | null; enviado?: boolean }
 
-const CLAVE = 'caja:borrador:zattia'
+/** V4: el borrador es de la marca de la pestaña (`storeCaja`). */
+const claveCarrito = () => `caja:borrador:${storeCaja()}`
 
 /**
  * El color y el ícono de cada forma de pago en el cobro, como las tarjetas del POS de GN (prototipo del
@@ -140,7 +142,7 @@ const ahora = () => Date.now()
 
 function leerBorrador(): Borrador {
   try {
-    const d = JSON.parse(localStorage.getItem(CLAVE) || 'null') as Borrador | null
+    const d = JSON.parse(localStorage.getItem(claveCarrito()) || 'null') as Borrador | null
     if (d && typeof d.id === 'string' && Array.isArray(d.renglones)) return { id: d.id, renglones: d.renglones, email: d.email || '', descuentoVenta: d.descuentoVenta ?? null, enviado: d.enviado === true }
   } catch {
     /* sin localStorage: el carrito vive en memoria */
@@ -149,14 +151,14 @@ function leerBorrador(): Borrador {
 }
 function guardarBorrador(b: Borrador) {
   try {
-    localStorage.setItem(CLAVE, JSON.stringify(b))
+    localStorage.setItem(claveCarrito(), JSON.stringify(b))
   } catch {
     /* modo privado o cuota: sigue en memoria */
   }
 }
 
 /** La última lista de pedidos web (W1), para mostrarla al cargar mientras llega la nueva. */
-const CLAVE_PEDIDOS = 'caja:pedidos-web:zattia'
+const clavePedidos = () => `caja:pedidos-web:${storeCaja()}`
 /** «Con sonido / Sin sonido» de esta computadora (Bruno, 4-oct): el pitido y la voz de cada escaneo. */
 const CLAVE_SONIDO = 'caja:sonido'
 
@@ -164,7 +166,7 @@ function POS() {
   const { perfil } = useSesion()
   const promos = useAgenda((st) => st.promos)
   const { datos } = useDatosMonitor()
-  const tnIdx = useTnPromo('zattia')
+  const tnIdx = useTnPromo(storeCaja())
 
   const [config, setConfig] = useState<Config | null>(null)
   const [errCarga, setErrCarga] = useState<string | null>(null)
@@ -314,7 +316,7 @@ function POS() {
     // 30 min (el cartel dice de qué hora es). Adentro de un async: `localStorage` ⛔ existe en el servidor.
     void Promise.resolve().then(() => {
       try {
-        const d = JSON.parse(localStorage.getItem(CLAVE_PEDIDOS) || 'null') as PedidosWeb | null
+        const d = JSON.parse(localStorage.getItem(clavePedidos()) || 'null') as PedidosWeb | null
         if (d && Date.now() - Date.parse(d.leidoEn) < 30 * 60_000) setPedidosWeb((ya) => ya ?? { ...d, guardada: true })
       } catch {
         /* sin localStorage: se espera la lectura */
@@ -326,7 +328,7 @@ function POS() {
           setPedidosWeb(d)
           setErrPedidos(null)
           try {
-            localStorage.setItem(CLAVE_PEDIDOS, JSON.stringify(d))
+            localStorage.setItem(clavePedidos(), JSON.stringify(d))
           } catch {
             /* sin localStorage: la próxima carga espera la lectura */
           }
@@ -350,7 +352,7 @@ function POS() {
   // pregunta a la cajera si hay: sólo si la tarjeta es de ese banco.
   const promoCredito = useMemo(
     // La MISMA pregunta que hace el servidor antes de aceptar la cuenta del −10 % (A6).
-    () => promosDeCreditoEnMostrador(promos, hoyIso(), 'zattia'),
+    () => promosDeCreditoEnMostrador(promos, hoyIso(), storeCaja()),
     [promos],
   )
   const bancosPromo = promoCredito.map((p) => p.banco).join(' o ')
@@ -384,7 +386,7 @@ function POS() {
   const [colorSku, setColorSku] = useState<Record<string, string>>({})
   useEffect(() => {
     let vivo = true
-    traerAudit<ProductoFchk>('zattia', { variantes: true })
+    traerAudit<ProductoFchk>(storeCaja(), { variantes: true })
       .then((ps) => {
         const m: Record<string, string> = {}
         const cs: Record<string, string> = {}
@@ -630,7 +632,7 @@ function POS() {
   )
   useEffect(() => {
     try {
-      localStorage.setItem(CLAVE_VISTA, vistaCliente)
+      localStorage.setItem(claveVista(), vistaCliente)
     } catch {
       /* sin localStorage: la pantalla de la clienta ⛔ se entera */
     }
@@ -638,7 +640,7 @@ function POS() {
   // Y el mail que escribe la clienta llega al campo «Mail para el ticket».
   useEffect(() => {
     const oir = (e: StorageEvent) => {
-      if (e.key !== CLAVE_MAIL) return
+      if (e.key !== claveMail()) return
       const m = leerMail(e.newValue)
       if (m) setBor((b) => ({ ...b, email: m.no ? '' : m.email.trim() }))
     }
@@ -998,7 +1000,7 @@ function POS() {
           {pendientes
             .filter((v) => v.estado === 'esperando_pago' && v.id !== validando?.id)
             .map((v) => (
-              <EsperaTransferencia key={v.id} venta={v} onLlego={llegoTransferencia} onCambio={refrescarPendientes} onCambiarPago={volverAlCarrito} />
+              <EsperaTransferencia key={v.id} venta={v} reglas={reglas} onLlego={llegoTransferencia} onCambio={refrescarPendientes} onCambiarPago={volverAlCarrito} />
             ))}
           {sinLlegar > 0 && (
             <Notice tone="danger">
@@ -1027,6 +1029,7 @@ function POS() {
             <Modal abierto onCerrar={() => setValidando(null)} titulo="Confirmar transferencia" ancho="xl" cerrarConFondo={false}>
               <EsperaTransferencia
                 venta={validando}
+                reglas={reglas}
                 onLlego={(v) => {
                   setValidando(null)
                   llegoTransferencia(v)
@@ -1393,15 +1396,18 @@ function POS() {
 }
 
 /**
- * El POS es de Zattia: el precio sale de los datos de la marca del monitor, y sin el shell nadie la
- * elige. ⛔ Se monta antes de que la marca sea Zattia: cargaría los datos de la otra (el payload de
- * BDI pesa ~15 MB) y los precios saldrían de ahí.
+ * El POS de la marca de la Caja (V4, 12-oct): la de `?marca=` (la pone «Abrir POS» de la pestaña) o la del
+ * shell; ⛔ fuerza Zattia. El precio sale de los datos de la marca del monitor ⇒ ⛔ se monta antes de que
+ * la sesión esté en ESA marca: cargaría los datos de la otra (el payload de BDI pesa ~15 MB) y los precios
+ * saldrían de ahí. `key` = la marca: cambiarla arma un POS nuevo, con SU borrador.
  */
 export function CajaPOS() {
   const { marca, setMarca } = useSesion()
+  const quiere = marcaParaPOS(useMarcaDeLaUrl(), marca)
   useEffect(() => {
-    if (marca !== 'zattia') setMarca('zattia')
-  }, [marca, setMarca])
-  if (marca !== 'zattia') return <div style={{ minHeight: '100vh', background: color.bg, padding: space[4], color: color.mut }}>Abriendo la caja…</div>
-  return <POS />
+    if (marca !== quiere) setMarca(quiere as Marca)
+  }, [marca, quiere, setMarca])
+  if (marca !== quiere) return <div style={{ minHeight: '100vh', background: color.bg, padding: space[4], color: color.mut }}>Abriendo la caja…</div>
+  usarMarcaCaja(quiere)
+  return <POS key={quiere} />
 }

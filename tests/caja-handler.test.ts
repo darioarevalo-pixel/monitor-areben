@@ -35,6 +35,7 @@ const gn = {
   posts: [] as Fila[],
   gets: [] as string[],
   authInventario: [] as string[],
+  authPosts: [] as string[],
   respuestaPost: { status: 201, body: { data: { id: 1600001, number: 30100 } } as unknown },
   delDia: { data: [] as Fila[] },
   // Las que GN CREÓ (POST 2xx): aparecen en `ventas/obtener` como en el real (A12 las busca ahí).
@@ -188,6 +189,7 @@ function conSesion(perfil: unknown) {
       if (opts?.method === 'POST') {
         const cuerpo = JSON.parse(String(opts.body))
         gn.posts.push(cuerpo)
+        gn.authPosts.push(String(opts?.headers?.Authorization))
         const d = (gn.respuestaPost.body as { data?: Fila } | null)?.data
         if (gn.respuestaPost.status < 300 && d) gn.creadas.push({ ...d, integration_id: cuerpo.integration_id })
         return respuesta(gn.respuestaPost.status, gn.respuestaPost.body)
@@ -245,7 +247,7 @@ beforeEach(async () => {
   // Hay un turno abierto: las ventas de los tests de antes de W3 se cobran adentro de él.
   base.turnos = [{ id: TURNO_ID, store: 'zattia', fondo: 50000, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null, abierto_por: 'cajera', abierto_por_usuario: 'cajera' }]; base.movs = []
   mailer.posts = []; delete process.env.MAILER_URL; delete process.env.MAILER_TICKET_KEY
-  gn.posts = []; gn.gets = []; gn.authInventario = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }; gn.creadas = []; base.agenda = [];
+  gn.posts = []; gn.gets = []; gn.authInventario = []; gn.authPosts = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }; gn.creadas = []; base.agenda = [];
   base.giftLotes = []; base.giftCards = []; base.giftChoques = 0; base.ventaMp = []
   // Bruno, 11-oct: la cuenta de MP del test asienta en Transferencia (13015, Areben Comercial).
   base.config = { store: 'zattia', reglas: { ...REGLAS_INICIALES, transferenciaPorMp: { [CUENTA_MP]: 13015 } }, politica_cambio: null }; base.alCerrar = null; base.antesDeInsertar = null
@@ -267,9 +269,10 @@ describe('caja · permiso', () => {
     expect(gn.posts).toHaveLength(0)
     expect(base.ventas.size).toBe(0)
   })
-  it('otra marca ⇒ 400', async () => {
+  it('una marca sin Caja ⇒ 400; BDI sin el permiso de BDI ⇒ 403 (V4)', async () => {
     conSesion(CAJERA)
-    expect((await correr(req('GET', { action: 'config', store: 'bdi' }))).code).toBe(400)
+    expect((await correr(req('GET', { action: 'config', store: 'mayorista' }))).code).toBe(400)
+    expect((await correr(req('GET', { action: 'config', store: 'bdi' }))).code).toBe(403)
   })
   // Rediseño fase 5: la marca es configuración (`lib/caja/marcas.core.js`). Zattia tiene que quedar IDÉNTICA.
   it('la venta sale al modo Local de Zattia: local 11780, Consumidor Final 137131, canal 3', async () => {
@@ -1603,5 +1606,72 @@ describe('caja · cobros sumados, otra cuenta y cambio de forma de pago (12-oct)
     const r = await correr(req('POST', {}, { action: 'cancelar', id: ID, motivo: 'cambio_pago' }))
     expect(r.code).toBe(200)
     expect(base.ventas.get(ID)).toMatchObject({ estado: 'cancelada', cancelada_motivo: 'cambio_pago' })
+  })
+})
+
+/**
+ * V4 (Bruno, 12-oct): BDI en la Caja. Es OTRA empresa en GN ⇒ su modo Local, su token y sus cuentas; y
+ * ⛔ verifica la transferencia en Mercado Pago ⇒ la venta va directo a GN. Oráculo: el cuerpo que viajó a
+ * GN y con qué token, contra los ids leídos de su `GET /ventas/referencias` el 12-oct.
+ */
+describe('caja · BDI (V4)', () => {
+  const CAJERA_BDI = { name: 'cajera', admin: false, cuenta: null, acceso: { bdi: { caja: true } }, funcion: [] }
+  const ID_BDI = '7a1c2b9e-6a4d-4c1e-9b7a-2d5e8f0a1b3d'
+  beforeEach(() => {
+    process.env.SUPABASE_SERVICE_KEY = 'k-bdi'
+    process.env.GN_TOKEN_VENTAS_BDI = 'tok-ventas-bdi'
+    process.env.GN_TOKEN = 'tok-bdi'
+    base.config = null
+    base.turnos = [{ id: TURNO_ID, store: 'bdi', fondo: 0, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null, abierto_por: 'cajera', abierto_por_usuario: 'cajera' }]
+  })
+  afterEach(() => { delete process.env.GN_TOKEN_VENTAS_BDI; delete process.env.GN_TOKEN; delete process.env.SUPABASE_SERVICE_KEY })
+
+  it('la config nace con las formas de pago de BDI: SUS cuentas, sin verificar la transferencia', async () => {
+    conSesion(CAJERA_BDI)
+    const r = await correr(req('GET', { action: 'config', store: 'bdi' }))
+    expect(r.code).toBe(200)
+    const reglas = r.body!.reglas as { medios: { efectivo: { normal: number } }; transferenciaA: number; verificarTransferencia: boolean }
+    expect(reglas.medios.efectivo.normal).toBe(14685)
+    expect(reglas.verificarTransferencia).toBe(false)
+    expect(reglas.transferenciaA).toBe(20597)
+    expect(r.body!.marca).toEqual({ store: 'bdi', nombre: 'BDI', tienda: 'bdiaccesorios.com.ar' })
+  })
+
+  it('🔑 efectivo: la venta sale al modo Local de BDI (18393, Consumidor Final 158744) con el token de BDI', async () => {
+    conSesion(CAJERA_BDI)
+    const r = await correr(req('POST', { store: 'bdi' }, { ...VENTA, id: ID_BDI, pagos: [{ cuenta: 14685 }] }))
+    expect(r.code).toBe(200)
+    expect(gn.posts[0]).toMatchObject({ store_id: 18393, client_id: 158744, channel_id: 3, sale_state_id: 6 })
+    expect((gn.posts[0].payments as Fila[])[0]).toMatchObject({ account_id: 14685, amount: 21700 })
+    expect(gn.authPosts[0]).toBe('Bearer tok-ventas-bdi')
+    expect(base.ventas.get(ID_BDI)).toMatchObject({ store: 'bdi', estado: 'en_gn' })
+  })
+
+  it('🔑 transferencia SIN verificar: a la CG (20597), directo a GN y ⛔ se mira Mercado Pago', async () => {
+    conSesion(CAJERA_BDI)
+    // $25.490 − 10 % = $22.941 ⇒ $22.900.
+    const r = await correr(req('POST', { store: 'bdi' }, { ...VENTA, id: ID_BDI, pagos: [{ cuenta: 20597 }], total: 22900, pagaCon: null }))
+    expect(r.code).toBe(200)
+    expect(base.ventas.get(ID_BDI)).toMatchObject({ estado: 'en_gn', espera_monto: null })
+    expect((gn.posts[0].payments as Fila[])[0]).toMatchObject({ account_id: 20597 })
+    expect(mp.busquedas).toBe(0)
+  })
+
+  it('una cuenta de Zattia en la Caja de BDI ⇒ 400 y ⛔ sale nada', async () => {
+    conSesion(CAJERA_BDI)
+    const r = await correr(req('POST', { store: 'bdi' }, { ...VENTA, id: ID_BDI, pagos: [{ cuenta: 12921 }] }))
+    expect(r.code).toBe(400)
+    expect(gn.posts).toHaveLength(0)
+  })
+
+  it('el stock vivo se lee con el token de LECTURA de BDI y de SUS depósitos', async () => {
+    conSesion(CAJERA_BDI)
+    base.inventario = [
+      { product_id: 7, size_id: 8, product_name: 'FUNDA', size_name: 'U', sku: 'F-1', barcode: '779', available_quantity: 2, store_name: 'Local' },
+      { product_id: 7, size_id: 8, product_name: 'FUNDA', size_name: 'U', sku: 'F-1', barcode: '779', available_quantity: 900, store_name: 'Deposito Mayorista' },
+    ]
+    const r = await correr(req('GET', { action: 'producto', codigo: '779', store: 'bdi' }))
+    expect(r.code).toBe(200)
+    expect(gn.authInventario[0]).toBe('Bearer tok-bdi')
   })
 })

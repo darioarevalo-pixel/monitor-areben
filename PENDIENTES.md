@@ -112,6 +112,15 @@ a meta-blusas y −20% a sweaters). ▶️ Hasta que el parte sepa del SALE, Zat
 🔴 **Píxel de Zattia**: el 5 y el 7-oct Meta vio checkouts normales pero la compra cayó a 20%/50% (la
 pauta explicó 33% y 45% de los pedidos, normal 73%). ▶️ Mirar Purchase en el Administrador de eventos.
 
+## ▶️ EL MONITOR COMO ERP: APAGAR GESTIÓN NUBE ENTERO — 12-oct-2026 (decidido por Bruno)
+
+Plan v1: `~/Documents/reunion-gerencia/2026-10-12-ERP-monitor-plan-v1.md`. Cada fase saca una función
+ENTERA de GN o corre en sombra (⛔ doble carga). Lo que arranca ya: **paso 0** (costo de GN, quién usa
+la pantalla, sistemas del hermano, volumen de facturas ARCA, tokens TN por tienda, export de GN) ·
+**libro de stock en sombra** con diff diario contra GN · terminar la Caja (abajo) · un solo bajador de GN.
+Abiertas para Bruno: primera marca a cortar (propuesta Zattia+Stunned), ARCA propio desde el día 1 o
+portal hasta F5, cuánto queda GN en sólo-lectura.
+
 ## ▶️ CAJA + POS: REEMPLAZAR AL POS DE GN — 11-oct-2026 (decidido por Bruno)
 
 Auditoría: `~/Documents/reunion-gerencia/2026-10-11-POS-auditoria-y-gift-card.md`. Fase 2 (A5–A12, B2–B4,
@@ -122,6 +131,19 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
 - **La feria es POR PRODUCTO** (11-oct, 2ª vuelta): la prenda de feria a precio final, sin el %; la común con
   su descuento. ⛔ Hay modo feria general: un solo «Efectivo» y la Caja reparte sola. 🔑 Los productos de
   feria salen de LIQUIDACIÓN (las campañas tildadas como feria, con el precio aplicado).
+- 🏁 **V4 — BDI en la Caja + formas de pago por tienda (12-oct)**: hecho (ficha `docs/secciones/caja.md` § V4).
+  BDI con sus ids de GN (modo Local 18393, consumidor final 158744, depósito 13307), sus cuentas y SIN
+  verificar la transferencia (va a la CG 20597); la oferta lleva el % de la forma de pago. «Formas de pago»
+  (admin) cambia cuenta, %, cuotas, oferta y verificación por tienda. Logo: «Usar el de Tienda Nube».
+  Las 10 `sql/migrate-caja*.sql` CORRIDAS en BDI (esquema leído: igual al de Zattia) y
+  `sql/migrate-caja-v4-marcas.sql` en Zattia.
+  ▶️ **Manos de Bruno**: (1) crear en el mailer la automation «Ticket del local» de **BDI** (sin ella el mail
+  del ticket de BDI ⛔ sale; la venta sí) · (2) confirmar si la cuenta de MP de BDI es la misma ⇒ si sí,
+  prender «verificar» en Formas de pago · (3) ⚠️ **débito de BDI**: dictado 10 % como Zattia, pero en su POS
+  de GN las 2 ventas de débito de sep-oct salieron SIN descuento · (4) cargar el logo (un clic) y caminar una
+  venta real en BDI · (5) el permiso «Caja» de BDI para quien cobre allá.
+- ⛔ **Vendedor en cada venta (W2): RETIRADO** (Bruno, 12-oct: «no tenemos esa dinámica de trabajo»).
+  Alcanza con la cuenta que cobró (`caja_venta.usuario`).
 - **La cuenta de GN de la transferencia sale de la cuenta de MP en uso**: Darío ⇒ Transferencia CG,
   Areben Comercial ⇒ Transferencia.
 - Elegido sin preguntar (cambiable): la transferencia que llega más de **15 min** después ⛔ se confirma

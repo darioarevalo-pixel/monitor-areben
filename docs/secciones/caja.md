@@ -1,6 +1,6 @@
 # Caja — ficha de sección
 
-Sección `caja`, área `local`, sólo Zattia. El POS propio del local: se escanea, se cobra por cuenta
+Sección `caja`, área `local`, **Zattia y BDI** (V4, 12-oct-2026). El POS propio del local: se escanea, se cobra por cuenta
 con su descuento, sale el vuelto y el ticket, y la venta queda en Gestión Nube con su número, en la
 cuenta de cobro y bajando el stock. Reemplaza al POS de GN (`/ventas/pos`), que ⛔ muestra el stock
 en el pedido, ⛔ tiene vuelto y ⛔ guarda el mail sin dar de alta al cliente (decidido el 3-oct-2026).
@@ -12,8 +12,8 @@ El plan completo, por fases, vive afuera del repo: `~/Documents/reunion-gerencia
 `components/caja/CajaPOS.tsx` (el POS, `/pos`) · `components/caja/Caja.tsx` (la pestaña: el
 informativo del turno) · `components/caja/partes.tsx` (lo que comparten) · `lib/caja/` (`core.core.js` el cobro, `gn.core.js` la respuesta de
 GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cliente.ts`) ·
-`api/_caja.js` por `?recurso=caja` · tablas `caja_venta` y `caja_config` en la base de **Zattia**
-(`sql/migrate-caja.sql`) · respaldo de la cola `scripts/caja-reintentar.mjs` +
+`api/_caja.js` por `?recurso=caja` · tablas `caja_*` en la base de CADA marca (Zattia: la suya; BDI: la
+del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo de la cola `scripts/caja-reintentar.mjs` +
 `.github/workflows/caja-reintentar.yml` · tests `tests/caja-*.test.ts`.
 
 ## ⛔ Lo que comparte con otras secciones
@@ -272,12 +272,10 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   de `cobro()` con `pagosDeMedio('efectivo')` (`lib/caja/totem.ts`): el % de la cuenta, el redondeo y
   la traba de feria —una prenda de feria muestra su precio FINAL—. ⛔ «precio × 0,85» a mano. La prenda
   se resuelve con `buscarProducto`, como el POS (UNA lectura de GN por escaneo). Sólo lectura.
-- 🔑 **La marca es CONFIGURACIÓN (rediseño fase 5 = V4)**: nombre, Local (11780), Depósito (18210) y el
-  modo Local de GN viven en `lib/caja/marcas.core.js` (JS plano: lo lee el handler). El handler resuelve
-  `marcaDeCaja(store)` y contesta 400 si ⛔ está habilitada; el chip del POS, la pantalla de la clienta,
-  el tótem y el nombre del ticket sin logo salen de ahí (`lib/caja/marca.ts` le suma el color). 🔴
-  **Habilitada: sólo Zattia.** Para BDI faltan sus ids de GN, sus cuentas y las tablas de la Caja en su
-  base. ⚠️ Siguen fijos a Zattia: los tokens de GN, `ticket-mail.core.js` y `cliente.ts`.
+- 🔑 **La marca es CONFIGURACIÓN (rediseño fase 5 + V4)**: nombre, Local, Depósito, modo Local de GN,
+  tokens de GN, los `store_name` del espejo, la Tienda Nube y la SIEMBRA de las formas de pago viven en
+  `lib/caja/marcas.core.js` (JS plano: lo lee el handler). El handler resuelve `marcaDeCaja(store)` y
+  contesta 400 si ⛔ está habilitada. Ver «V4 — BDI» abajo.
 - 🔑 **Las PROMOS (v2, W5, Bruno 4 y 5-oct)** (`lib/caja/promos.core.js`, `components/caja/PromosCaja.tsx`):
   NxM · 2ª unidad al X % · X % sobre un alcance (todo, **categorías de Tienda Nube** —la de GN está
   vacía en el 85 %— o productos) · $ fijos por compra desde X. Las carga un ADMIN en la pestaña
@@ -334,6 +332,47 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   escaneada antes de que cargaran los datos se completa al llegar · el selector %/$ del descuento se elige
   antes de escribir · el tótem distingue «no está» de «no se pudo consultar» y muestra la promo.
 
+## V4 — BDI y la configuración por marca (12-oct-2026)
+
+- 🔑 **BDI es OTRA empresa en Gestión Nube**: otro token (`GN_TOKEN_VENTAS_BDI` / `GN_TOKEN`), otros ids.
+  Leídos de SU `GET /ventas/referencias` el 12-oct con `scripts/caja-referencias.mjs bdi` (sólo lectura):
+  modo «Local» id 614 ⇒ depósito **18393**, canal 3, tipo 1, estado 6; consumidor final **158744** (78 de 81
+  ventas del local, 1 al 11-oct); depósito para reponer **13307** «Deposito Minorista». 🔴 En el espejo,
+  «Deposito Mayorista» ⛔ es el depósito (`ladoDelEspejo`, nombres EXACTOS; antes `startsWith('deposito')`).
+- 🔑 **Las formas de pago son DATO DE CADA TIENDA** (`caja_config.reglas` de su marca), ⛔ código: cuenta de
+  GN y % de cada una, crédito con promo, 6 cuotas, las cuentas de la oferta (`efectivo.feria`,
+  `transferencia.feria`, **`medios.tarjetaOferta`** —era la constante 25869—) y los **`titulares`** de
+  «Transfirió a otra cuenta» (eran `TITULARES` fijos). Las que la tienda ⛔ tiene van en `null` y esa opción
+  ⛔ existe (`cuentaDeOferta` tira con el porqué; «Cómo se cobra la oferta» ⛔ las ofrece). Las cambia un admin
+  en **«Formas de pago»** (`components/caja/FormasDePago.tsx`, acción `formas-pago`): la lógica es
+  `lib/caja/formas-pago.core.js`, la MISMA en la pantalla y en el servidor, que valida contra las cuentas de
+  GN de la marca (que existan, ⛔ repetidas, % de 0 a 100) y, si una cuenta de oferta desaparece, pasa esa
+  oferta a «con el %» (si no, la Caja ⛔ cobraría). Verificado: la config REAL de Zattia ida y vuelta, igual.
+- 🔑 **BDI nace con las de Zattia y SUS cuentas** (`REGLAS_INICIALES_BDI`): Efectivo 14685 (15 %) ·
+  Transferencia AREBEN 14701 / CG 20597 (10 %) · Débito 21667 (10 %) · Crédito 25189 (0) · Crédito 10 % OFF
+  25176. ⛔ Feria, ⛔ Feria TC, ⛔ 6 cuotas: **la oferta lleva el % de la forma de pago** (Bruno). ⚠️ En el POS
+  de GN de BDI las 2 ventas de débito de sep-oct salieron SIN descuento: Bruno dictó «idénticas» ⇒ 10 %.
+- 🔑 **Verificación de transferencia POR TIENDA** (`reglas.verificarTransferencia`; sólo un `false` explícito
+  la apaga): sin ella, `montoAEsperar` da 0 ⇒ la venta va directo a GN como el efectivo, y la cuenta es
+  `transferenciaFija`. **BDI arranca SIN** (su cuenta de MP «creo que igual», Bruno: ⛔ confirmada) ⇒ CG 20597,
+  la que usa su local (53 de 53). Se prende en «Formas de pago».
+- 🔑 **La marca de la PANTALLA**: `lib/caja/marca.ts` guarda la marca ACTIVA de la pestaña
+  (`usarMarcaCaja`); de ella salen el `store` de cada pedido (`cliente.ts`), las claves del `localStorage`
+  (`caja:borrador:<marca>`, `caja:conteo:<marca>:…`, `caja:cliente:<marca>`) y `MARCA_CAJA` (getters). La
+  pestaña usa la marca del shell; `/pos`, `/pos/totem` usan `?marca=` (lo pone «Abrir POS») o la del shell y
+  ⛔ fuerzan Zattia; `/pos/cliente` sólo `?marca=`. El POS lleva `key` = marca.
+- 🔑 **Logo desde Tienda Nube**: «Usar el de Tienda Nube» (acción `logo-tn`) lee el `"logo"` del HTML de la
+  tienda pública (`logoDeTienda`, sólo la CDN de TN) y la pantalla lo achica como uno subido (la CDN tiene CORS
+  abierto). Reemplazable con «Cargar otro (para la térmica)». Stunned (sin tienda) sigue a mano y su logo
+  sólo en la Caja de Zattia.
+- El mail del ticket va con `marca: venta.store` (la automation `TICKET` de ESA marca en el mailer; sin
+  ella el mailer contesta «sin automation» y la venta sigue). `COLUMNAS_VENTA` lleva `store`.
+- El respaldo de la cola (`scripts/caja-reintentar.mjs`) recorre las marcas; la que ⛔ tiene credenciales
+  en el workflow se saltea y lo dice.
+- `scripts/caja-esquema.mjs BDI|ZATTIA` (sólo lectura): el oráculo de una migración de la Caja.
+- 🔴 `sql/migrate-caja-v4-marcas.sql` (Zattia: `tarjetaOferta`, `titulares`, `verificarTransferencia`) va
+  ANTES del deploy. CORRIDA el 12-oct y verificada leyendo la fila.
+
 ## Gift card (W6) — parte 1: los lotes (11-oct-2026)
 
 - 🏁 **Es una TARJETA FÍSICA de PVC con código de barras** (Bruno, 11-oct). Los códigos los genera el
@@ -366,7 +405,8 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   vuelta). ⛔ Decidido: tablet SUELTA (pide el pedido en el servidor) o segundo monitor.
 - Rediseño fase 4 (`/pos/totem`): ⛔ visto en prod con el lector real. ⛔ Decidido (paso 0 de V2): si
   es la misma tablet que la de la clienta, y si escanea con la cámara.
-- Rediseño fase 5: ⛔ BDI habilitada (faltan sus ids de GN, sus cuentas y su base) ni el color de cada marca.
+- V4: ⛔ caminada en prod (la pestaña en BDI, «Formas de pago», el logo de TN, una venta real de BDI). ⛔ El
+  color de cada marca. ⛔ La automation `TICKET` de BDI en el mailer. ⛔ Confirmado si BDI verifica en MP.
 - F5: ⛔ probado con una transferencia real (la verificación del plan).
 - ⚠️ La carrera de dos pantallas cruzando la MISMA venta la cubre el `.eq('estado','esperando_pago')`
   del update, y ⛔ tiene test (el mock de la base es secuencial).

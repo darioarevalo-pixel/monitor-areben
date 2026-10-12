@@ -8,6 +8,7 @@ import { REGLAS_INICIALES } from '../lib/caja/core.core.js'
 
 const V30049 = {
   id: '0b6f1c8e-2d3a-4f5b-9c7d-1e2f3a4b5c6d',
+  store: 'zattia',
   estado: 'en_gn',
   email: 'clienta@ejemplo.com',
   gn_number: 30049,
@@ -32,6 +33,11 @@ describe('ticketParaMail', () => {
     })
     expect(b.ticket.renglones).toEqual([{ nombre: 'ACCESORIO NRO 1', talle: 'LILA', cantidad: 1, precio: 4990, importe: 4990, foto: null }])
     expect(b.ticket.pagos).toEqual([{ cuenta: 'Efectivo', rebaja: 0, porcentaje: 15, descuento: 748.5, redondeo: -41.5, monto: 4200 }])
+  })
+
+  it('V4: la marca es la de la venta (la automation TICKET de BDI); sin marca ⇒ tira', () => {
+    expect(ticketParaMail({ ...V30049, store: 'bdi' }, CFG).marca).toBe('bdi')
+    expect(() => ticketParaMail({ ...V30049, store: undefined }, CFG)).toThrow(/marca/)
   })
 
   it('sin pago en efectivo ⛔ hay vuelto aunque se haya anotado «paga con»', () => {

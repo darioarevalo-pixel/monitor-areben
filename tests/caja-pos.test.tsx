@@ -120,7 +120,7 @@ describe('POS · promos (W5)', () => {
 describe('pestaña Caja', () => {
   it('«Abrir POS» sólo para la cuenta que abrió; se cobra en el POS, ⛔ acá', async () => {
     let t = await montar(<Caja />)
-    expect(document.querySelector('a[href="/pos"]')?.textContent).toBe('Abrir POS')
+    expect(document.querySelector('a[href="/pos?marca=zattia"]')?.textContent).toBe('Abrir POS')
     expect(t).not.toContain('Escanear')
     expect(t).toContain('Contar billetes')
     act(() => raiz.unmount())
@@ -130,7 +130,7 @@ describe('pestaña Caja', () => {
     document.body.appendChild(caja)
     raiz = createRoot(caja)
     t = await montar(<Caja />)
-    expect(document.querySelector('a[href="/pos"]')).toBeNull()
+    expect(document.querySelector('a[href="/pos?marca=zattia"]')).toBeNull()
     expect(t).toContain('POS sólo para esa cuenta')
     // Cerrar la caja, sí: «desde los dos lados». Contar billetes, ⛔ (el servidor da 403).
     expect(t).toContain('Cerrar caja')
@@ -267,7 +267,7 @@ describe('POS · la transferencia que ⛔ llega justa (Bruno, 12-oct, segunda ta
     vi.mocked(cruzarVenta).mockResolvedValue({ venta: VENTA, cruce: { estado: 'esperando' }, recientes: [reciente('111', 13300, -100, true), reciente('222', 100, -13300)], cuentaMp: 'Areben Comercial' } as never)
     vi.mocked(confirmarVarios).mockResolvedValueOnce({ venta: { ...VENTA, estado: 'en_gn', gn_number: 30100 } } as never)
     const onLlego = vi.fn()
-    await montar(<EsperaTransferencia venta={VENTA as never} onLlego={onLlego} onCambio={() => {}} />)
+    await montar(<EsperaTransferencia venta={VENTA as never} reglas={null} onLlego={onLlego} onCambio={() => {}} />)
     await hastaQue(() => (document.body.textContent || '').includes('de menos'))
     // La tolerancia: el de $13.300 se marca «de menos», ⛔ «monto exacto».
     expect(document.body.textContent).toContain('$100 de menos')
@@ -289,7 +289,8 @@ describe('POS · la transferencia que ⛔ llega justa (Bruno, 12-oct, segunda ta
     vi.mocked(cruzarVenta).mockResolvedValue({ venta: VENTA, cruce: { estado: 'esperando' }, recientes: [], cuentaMp: null } as never)
     vi.mocked(confirmarOtraCuenta).mockResolvedValueOnce({ venta: { ...VENTA, estado: 'en_gn' } } as never)
     const onLlego = vi.fn()
-    await montar(<EsperaTransferencia venta={VENTA as never} onLlego={onLlego} onCambio={() => {}} />)
+    const { REGLAS_INICIALES } = await import('@/lib/caja/core.core.js')
+    await montar(<EsperaTransferencia venta={VENTA as never} reglas={REGLAS_INICIALES as never} onLlego={onLlego} onCambio={() => {}} />)
     await act(async () => boton('Transfirió a otra cuenta').click())
     const confirmar = () => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Confirmar transferencia') as HTMLButtonElement
     expect(confirmar().disabled).toBe(true)
@@ -303,6 +304,14 @@ describe('POS · la transferencia que ⛔ llega justa (Bruno, 12-oct, segunda ta
     await act(async () => confirmar().click())
     expect(vi.mocked(confirmarOtraCuenta)).toHaveBeenCalledWith(VENTA.id, 'dario', 'Galicia')
     expect(onLlego).toHaveBeenCalled()
+  })
+
+  it('V4: una tienda sin titulares cargados ⛔ ofrece «Transfirió a otra cuenta»', async () => {
+    const { cruzarVenta } = await import('@/lib/caja/cliente')
+    vi.mocked(cruzarVenta).mockResolvedValue({ venta: VENTA, cruce: { estado: 'esperando' }, recientes: [], cuentaMp: null } as never)
+    await montar(<EsperaTransferencia venta={VENTA as never} reglas={{ redondeo: 100, cuentas: {} }} onLlego={vi.fn()} onCambio={() => {}} />)
+    await hastaQue(() => !!boton('Completar con otro cobro'))
+    expect(boton('Transfirió a otra cuenta')).toBeFalsy()
   })
 
   it('🔑 «Cambiar forma de pago» en el POS: cancela con motivo y las prendas vuelven al carrito', async () => {

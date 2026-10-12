@@ -30,6 +30,10 @@ jobs:
           ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
           ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
           GN_TOKEN_ZATTIA: ${{ secrets.GN_TOKEN_ZATTIA }}
+          # BDI (V4, 12-oct): su base es la del monitor y su token de GN es otro.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GN_TOKEN: ${{ secrets.GN_TOKEN }}
           # El ticket por mail (F4): sin estos dos, los tickets que fallaron ⛔ se reintentan.
           MAILER_URL: ${{ secrets.MAILER_URL }}
           MAILER_TICKET_KEY: ${{ secrets.MAILER_TICKET_KEY }}

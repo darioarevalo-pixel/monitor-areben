@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renglones } from '@/lib/caja/core.core.js'
-import { CLAVE_MAIL, CLAVE_VISTA, enmascarar, leerMail, leerVista, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
+import { claveMail, claveVista, enmascarar, leerMail, leerVista, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
 
 /**
  * La pantalla de la clienta (rediseño, fase 3). El oráculo: los números que ve la clienta son los del
@@ -89,7 +89,7 @@ describe('CajaCliente', () => {
 
   it('muestra la compra publicada por el POS y le devuelve el mail', async () => {
     const { CajaCliente } = await import('@/components/caja/CajaCliente')
-    disco.set(CLAVE_VISTA, JSON.stringify(vistaParaCliente({ carrito, filas, aPagar: 40000, cobro: null, medio: null, email: '', ultima: null })))
+    disco.set(claveVista(), JSON.stringify(vistaParaCliente({ carrito, filas, aPagar: 40000, cobro: null, medio: null, email: '', ultima: null })))
     await act(async () => raiz.render(<CajaCliente />))
     const t = caja.textContent ?? ''
     expect(t).toContain('Tu compra · 3 prendas')
@@ -113,7 +113,7 @@ describe('CajaCliente', () => {
     await act(async () => novedades.click())
     const enviar = [...caja.querySelectorAll('button')].find((b) => b.textContent === 'Enviar')!
     await act(async () => enviar.click())
-    expect(leerMail(disco.get(CLAVE_MAIL) ?? null)).toMatchObject({ email: 'ana@gmail.com', no: false, novedades: true })
+    expect(leerMail(disco.get(claveMail()) ?? null)).toMatchObject({ email: 'ana@gmail.com', no: false, novedades: true })
   })
 
   it('se entera de cada cambio del POS (evento storage)', async () => {
@@ -121,7 +121,7 @@ describe('CajaCliente', () => {
     await act(async () => raiz.render(<CajaCliente />))
     expect(caja.textContent).toContain('Te damos la bienvenida')
     const nuevo = JSON.stringify(vistaParaCliente({ carrito: [], filas: null, aPagar: null, cobro: null, medio: null, email: '', ultima: { numero: 30051, email: null } }))
-    await act(async () => window.dispatchEvent(new StorageEvent('storage', { key: CLAVE_VISTA, newValue: nuevo })))
+    await act(async () => window.dispatchEvent(new StorageEvent('storage', { key: claveVista(), newValue: nuevo })))
     expect(caja.textContent).toContain('¡Gracias por tu compra!')
     expect(caja.textContent).toContain('Venta #30051')
     expect(caja.textContent).toContain('Seguinos en @zattia_co')

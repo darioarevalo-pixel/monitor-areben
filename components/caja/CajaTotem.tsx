@@ -27,7 +27,8 @@ import { coloresDelProducto, precioTotem, tallesDelLocal, TOTEM_MS, type PrecioT
 import { nombreDeColor } from '@/lib/caja/pantalla-cliente'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
-import { MARCA_CAJA } from '@/lib/caja/marca'
+import { MARCA_CAJA, marcaParaPOS, storeCaja, useMarcaDeLaUrl, usarMarcaCaja } from '@/lib/caja/marca'
+import type { Marca } from '@/lib/nav.datos'
 import { CabeceraMarca, ESTILOS_CLIENTA, FONDO_FOTO, FotoPrenda } from '@/components/caja/CajaCliente'
 import { color, font, radius, space, weight } from '@/components/ui'
 
@@ -51,17 +52,19 @@ type Estado = { que: 'espera' } | { que: 'buscando' } | { que: 'no' } | { que: '
 
 export function CajaTotem() {
   const { marca, setMarca } = useSesion()
-  // El precio sale de los datos de Zattia, igual que en el POS.
+  // El precio sale de los datos de la marca, igual que en el POS (V4: `?marca=` o la del shell).
+  const quiere = marcaParaPOS(useMarcaDeLaUrl(), marca)
   useEffect(() => {
-    if (marca !== 'zattia') setMarca('zattia')
-  }, [marca, setMarca])
-  if (marca !== 'zattia') return <div style={{ minHeight: '100dvh', background: color.surface }} />
-  return <Totem />
+    if (marca !== quiere) setMarca(quiere as Marca)
+  }, [marca, quiere, setMarca])
+  if (marca !== quiere) return <div style={{ minHeight: '100dvh', background: color.surface }} />
+  usarMarcaCaja(quiere)
+  return <Totem key={quiere} />
 }
 
 function Totem() {
   const { datos } = useDatosMonitor()
-  const tnIdx = useTnPromo('zattia')
+  const tnIdx = useTnPromo(storeCaja())
   const [config, setConfig] = useState<Config | null>(null)
   useEffect(() => {
     leerConfig()
@@ -72,7 +75,7 @@ function Totem() {
   const [audit, setAudit] = useState<ProductoFchk[]>([])
   useEffect(() => {
     let vivo = true
-    traerAudit<ProductoFchk>('zattia', { variantes: true })
+    traerAudit<ProductoFchk>(storeCaja(), { variantes: true })
       .then((ps) => vivo && setAudit(ps))
       .catch(() => {
         /* sin el detalle de TN: la foto del producto y sin fila de colores */

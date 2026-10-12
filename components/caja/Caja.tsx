@@ -1,7 +1,8 @@
 'use client'
 
 /**
- * Caja (key `caja`, área Local, sólo Zattia): el INFORMATIVO DEL TURNO (fase C, Bruno 5-oct).
+ * Caja (key `caja`, área Local, Zattia y BDI): el INFORMATIVO DEL TURNO (fase C, Bruno 5-oct).
+ * 🔑 V4 (12-oct): la marca es la del shell; cada una con su caja, su configuración y sus formas de pago.
  *
  * Acá se abre el turno (con la calculadora de billetes), se ve qué cobró por cuenta, los cobros de
  * GN, las salidas y los conteos, y se cierra. También la configuración del cobro y las ventas que
@@ -26,9 +27,19 @@ import { VistaTicket } from '@/components/caja/VistaTicket'
 import { PromosCaja } from '@/components/caja/PromosCaja'
 import { PromosFormaDePago } from '@/components/caja/PromosFormaDePago'
 import { GiftCards } from '@/components/caja/GiftCards'
+import { FormasDePago } from '@/components/caja/FormasDePago'
+import { MARCA_CAJA, marcaParaPOS, usarMarcaCaja } from '@/lib/caja/marca'
 import { ModalVarianteContext } from '@/components/ui/Modal'
 
 export function Caja() {
+  const { marca } = useSesion()
+  // La marca de la Caja ANTES de pedir nada (`cliente.ts` la lee en cada pedido). `key`: otra marca = otra caja.
+  const store = marcaParaPOS(null, marca)
+  usarMarcaCaja(store)
+  return <CajaDeMarca key={store} store={store} />
+}
+
+function CajaDeMarca({ store }: { store: string }) {
   const { perfil } = useSesion()
   const admin = esAdmin(perfil)
 
@@ -80,7 +91,7 @@ export function Caja() {
   const otras = pendientes.filter((v) => v.estado !== 'esperando_pago')
   const esperando = pendientes.length - otras.length
   const abrirPOS = esMio ? (
-    <ButtonLink href="/pos" variant="solid" tone="brand">
+    <ButtonLink href={`/pos?marca=${store}`} variant="solid" tone="brand">
       Abrir POS
     </ButtonLink>
   ) : null
@@ -125,8 +136,10 @@ export function Caja() {
         {config?.reglas.medios && <PromosCaja reglas={config.reglas} admin={admin} version={config.versiones?.promos} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
         {config?.reglas.medios && <PromosFormaDePago reglas={config.reglas} />}
         {admin && config?.reglas.medios && <ProductosFeria reglas={config.reglas} version={config.versiones?.feriaProductos} campanias={config.campaniasLiq ?? []} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
-        {admin && config && <LogoDelTicket marca="zattia" nombre="Zattia" inicial={config.ticket_logo ?? null} onGuardado={(l) => setConfig({ ...config, ...l })} />}
-        {admin && config && <LogoDelTicket marca="stunned" nombre="Stunned" inicial={config.ticket_logo_stunned ?? null} onGuardado={(l) => setConfig({ ...config, ...l })} />}
+        {admin && config?.reglas.medios && <FormasDePago reglas={config.reglas} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
+        {admin && config && <LogoDelTicket marca={store} nombre={MARCA_CAJA.nombre} tienda={config.marca?.tienda ?? null} inicial={config.ticket_logo ?? null} onGuardado={(l) => setConfig({ ...config, ...l })} />}
+        {/* Stunned es una línea de Zattia (SKU `STU…`): su logo sólo en la Caja de Zattia. */}
+        {admin && config && store === 'zattia' && <LogoDelTicket marca="stunned" nombre="Stunned" inicial={config.ticket_logo_stunned ?? null} onGuardado={(l) => setConfig({ ...config, ...l })} />}
         {admin && <GiftCards />}
         {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
         <UltimosTurnos ultimos={ultimosTurnos} onVerVentas={(t) => setVerVentas({ turnoId: t.id, titulo: `Ventas de la caja del ${diaAr(t.abierto_en)}${t.abierto_por ? ` · ${t.abierto_por}` : ''}` })} />

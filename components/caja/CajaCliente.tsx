@@ -10,9 +10,9 @@
 import { useEffect, useState } from 'react'
 import { leerConfig } from '@/lib/caja/cliente'
 import { plata, type LogoTicket } from '@/lib/caja/ticket'
-import { CLAVE_MAIL, CLAVE_VISTA, enmascarar, leerVista, mailValido, nombreDeColor, type MailCliente, type VistaCliente } from '@/lib/caja/pantalla-cliente'
+import { claveMail, claveVista, enmascarar, leerVista, mailValido, nombreDeColor, type MailCliente, type VistaCliente } from '@/lib/caja/pantalla-cliente'
 import { talleVisible } from '@/lib/caja/ticket-mail.core.js'
-import { MARCA_CAJA } from '@/lib/caja/marca'
+import { MARCA_CAJA, marcaParaPOS, useMarcaDeLaUrl, usarMarcaCaja } from '@/lib/caja/marca'
 import { Icono, color, font, radius, space, weight } from '@/components/ui'
 
 const DOMINIOS = ['@gmail.com', '@hotmail.com', '@yahoo.com.ar', '.com']
@@ -58,14 +58,14 @@ export function useVistaCliente(): VistaCliente {
   useEffect(() => {
     const leer = () => {
       try {
-        setVista(leerVista(localStorage.getItem(CLAVE_VISTA)))
+        setVista(leerVista(localStorage.getItem(claveVista())))
       } catch {
         /* sin localStorage: queda la bienvenida */
       }
     }
     leer()
     const oir = (e: StorageEvent) => {
-      if (e.key === CLAVE_VISTA) setVista(leerVista(e.newValue))
+      if (e.key === claveVista()) setVista(leerVista(e.newValue))
     }
     window.addEventListener('storage', oir)
     return () => window.removeEventListener('storage', oir)
@@ -77,7 +77,7 @@ function devolverMail(email: string, no = false, novedades?: boolean) {
   try {
     // `novedades` viaja de más: el POS de hoy lee sólo `email` y `no` (ver `MailCliente`).
     const m: MailCliente = { email, no, ...(novedades === undefined ? {} : { novedades }), en: Date.now() }
-    localStorage.setItem(CLAVE_MAIL, JSON.stringify(m))
+    localStorage.setItem(claveMail(), JSON.stringify(m))
   } catch {
     /* sin localStorage: el mail lo pide la cajera */
   }
@@ -114,7 +114,17 @@ export function useLogo() {
   return logo
 }
 
+/**
+ * V4: la marca es la de `?marca=` (sin ella, la de siempre): de ella salen las claves del `localStorage`
+ * que escucha y el logo. ⛔ Carga los datos del monitor ni toca la sesión (se abre al lado del POS).
+ */
 export function CajaCliente() {
+  const m = marcaParaPOS(useMarcaDeLaUrl(), null)
+  usarMarcaCaja(m)
+  return <PantallaCliente key={m} />
+}
+
+function PantallaCliente() {
   const vista = useVistaCliente()
   const logo = useLogo()
   return (

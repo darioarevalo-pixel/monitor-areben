@@ -7,14 +7,18 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import type { LogoTicket } from '@/lib/caja/ticket'
+import { storeCaja } from '@/lib/caja/marca'
+import type { FormasDePago } from '@/lib/caja/formas-pago.core.js'
 
 export type ReglaCuenta = { nombre: string; descuento: number; efectivo?: boolean; esperaPago?: boolean }
 export type Medio = 'efectivo' | 'transferencia' | 'debito' | 'credito'
+/** V4: las cuentas de oferta y las 6 cuotas pueden ⛔ existir en la tienda (BDI) ⇒ null. */
 export type Medios = {
-  efectivo: { normal: number; feria: number }
-  transferencia: { opciones: number[]; feria: number }
+  efectivo: { normal: number; feria: number | null }
+  transferencia: { opciones: number[]; feria: number | null }
   debito: { normal: number }
-  credito: { normal: number; promo: number; seisCuotas: number; minSeisCuotas: number }
+  credito: { normal: number; promo: number; seisCuotas: number | null; minSeisCuotas: number }
+  tarjetaOferta?: number | null
 }
 /** `medios` ⛔ está hasta que se corre `sql/migrate-caja-medios.sql`. */
 /** `feriaProductos` (Bruno, 5-oct): los productos de feria trabados —sólo efectivo o transferencia, a la cuenta de feria—. */
@@ -26,14 +30,14 @@ export type TipoPromo = 'nxm' | 'segunda_unidad' | 'pct' | 'monto_minimo'
 export type AlcancePromo = { tipo: 'todo' } | { tipo: 'categorias'; categorias: string[] } | { tipo: 'productos'; productos: ProductoFeria[] }
 export type PromoCaja = { id: string; nombre: string; tipo: TipoPromo; lleva?: number; paga?: number; pct?: number; minimo?: number; pesos?: number; alcance: AlcancePromo; desde: string; hasta: string | null; activa: boolean }
 /** `transferenciaA`: la cuenta de GN de la transferencia, YA resuelta por el servidor desde la cuenta de MP en uso (null sin mapeo). */
-export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number | null; transferenciaPorMp?: Record<string, number>; feriaProductos?: ProductoFeria[]; /** Las campañas de Liquidación que son feria (Bruno, 11-oct). */ feriaCampanias?: string[]; /** Los productos con el precio de esas campañas aplicado: los resuelve el servidor. */ feriaIdsCampania?: number[]; promos?: PromoCaja[]; /** Cómo se cobra la oferta por forma de pago (Bruno, 12-oct; `normalizarOferta`). */ oferta?: Partial<Oferta> }
+export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number | null; transferenciaPorMp?: Record<string, number>; feriaProductos?: ProductoFeria[]; /** Las campañas de Liquidación que son feria (Bruno, 11-oct). */ feriaCampanias?: string[]; /** Los productos con el precio de esas campañas aplicado: los resuelve el servidor. */ feriaIdsCampania?: number[]; promos?: PromoCaja[]; /** Cómo se cobra la oferta por forma de pago (Bruno, 12-oct; `normalizarOferta`). */ oferta?: Partial<Oferta>; /** V4: false ⇒ la transferencia se confirma sin mirar Mercado Pago. */ verificarTransferencia?: boolean; transferenciaFija?: number | null; titulares?: Partial<Record<'areben' | 'dario' | 'bruno', number>> }
 /** Un descuento a mano, a una prenda o a toda la venta. */
 export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 /** `ticket_logo`: el logo del ticket (null sin logo, o sin `sql/migrate-caja-logo.sql`). */
 /** `versiones`: las de las listas que se guardan ENTERAS (promos, productos de feria): se mandan al guardar para ⛔ pisar a otro admin. */
 /** `campaniasLiq`: sólo a un admin, para elegir cuáles son de feria. */
 export type CampaniaLiq = { id: string; nombre: string; estado: string }
-export type Config = { reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; /** El de Stunned (Bruno, 12-oct): sale si el ticket lleva prendas de Stunned. */ ticket_logo_stunned?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string }; campaniasLiq?: CampaniaLiq[] }
+export type Config = { reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; /** El de Stunned (Bruno, 12-oct): sale si el ticket lleva prendas de Stunned. */ ticket_logo_stunned?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string }; campaniasLiq?: CampaniaLiq[]; /** V4: la marca de la Caja (`tienda` = su Tienda Nube, de donde sale el logo). */ marca?: { store: string; nombre: string; tienda: string | null } }
 
 /** Una cuenta de cobro de GN. `regla` en null ⇒ la Caja ⛔ la cobra (sin %, o con recargo). */
 export type CuentaGN = { id: number; nombre: string; regla: ReglaCuenta | null }
@@ -106,13 +110,14 @@ async function leer<T>(r: Response, fallo: string): Promise<T> {
   return j as T
 }
 
-const get = <T>(q: string, fallo: string) => apiFetch(`/api/datos?recurso=caja&store=zattia&${q}&nc=${Date.now()}`).then((r) => leer<T>(r, fallo))
+// V4: el `store` es el de la marca activa de la pestaña (`usarMarcaCaja`, lib/caja/marca.ts).
+const get = <T>(q: string, fallo: string) => apiFetch(`/api/datos?recurso=caja&store=${storeCaja()}&${q}&nc=${Date.now()}`).then((r) => leer<T>(r, fallo))
 
 const post = <T>(body: Record<string, unknown>, fallo: string) =>
   apiFetch('/api/datos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recurso: 'caja', store: 'zattia', ...body }),
+    body: JSON.stringify({ recurso: 'caja', store: storeCaja(), ...body }),
   }).then((r) => leer<T>(r, fallo))
 
 export const leerConfig = () => get<Config>('action=config', 'No se pudo leer la configuración de la Caja.')
@@ -252,9 +257,15 @@ export const guardarPolitica = (texto: string) => post<{ politica_cambio: string
 export type CuentaMp = { cuenta_id: number; nombre: string }
 export const leerCuentasMp = () => get<{ enUso: CuentaMp | null; cuentas?: CuentaMp[] }>('action=cuentas-mp', 'No se pudo leer la cuenta de Mercado Pago.')
 export const usarCuentaMp = (cuenta_id: number) => post<{ enUso: CuentaMp }>({ action: 'usar-mp', cuenta_id }, 'No se pudo cambiar la cuenta de Mercado Pago.')
-export type MarcaLogo = 'zattia' | 'stunned'
-export const guardarLogo = (logo: LogoTicket | null, marca: MarcaLogo = 'zattia') =>
+/** El logo propio de la marca de la Caja (`zattia` | `bdi`), o el de Stunned (sólo en la Caja de Zattia). */
+export type MarcaLogo = string
+export const guardarLogo = (logo: LogoTicket | null, marca: MarcaLogo = storeCaja()) =>
   post<{ ticket_logo: LogoTicket | null; ticket_logo_stunned: LogoTicket | null }>({ action: 'logo', logo, marca }, 'No se pudo guardar el logo.')
+/** V4: la URL del logo de la Tienda Nube de la marca (por defecto, el del ticket). Sólo admin. */
+export const leerLogoTN = () => get<{ url: string }>('action=logo-tn', 'No se pudo traer el logo de Tienda Nube.')
+/** V4: las formas de pago de la tienda (cuenta de GN, %, cuotas, oferta, verificación). Sólo admin. */
+export const guardarFormasDePago = (formas: FormasDePago) =>
+  post<{ reglas: Reglas; versiones?: Versiones }>({ action: 'formas-pago', formas }, 'No se pudieron guardar las formas de pago.')
 /** Sólo admin: la lista ENTERA de promos (W5). */
 /** `version`: la de la lista que se editó (`Config.versiones`); si otro admin la cambió, 409. */
 export type Versiones = NonNullable<Config['versiones']>
