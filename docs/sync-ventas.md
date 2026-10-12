@@ -13,6 +13,7 @@ en cada mensaje de cada sesión.
 | mapeo y guardado de ventas | `scripts/lib/ventas-espejo.mjs` |
 | **padrón de clientes** (la ficha, con el WhatsApp) | `scripts/sync-clientes.js` + `scripts/lib/clientes-espejo.mjs` |
 | borrado de las que GN ya no tiene | `scripts/lib/purga-ventas.mjs` |
+| **las ventas del monitor que GN ya no tiene ⇒ anuladas en `gn_venta_monitor`** (después de la purga, con la misma bajada) | `scripts/lib/registro-anuladas.mjs` |
 | histórico anterior a la ventana | `scripts/purga-historica.js` (arranca en simulación) |
 | refresco de las vistas | `scripts/lib/refrescar-vistas.mjs` + `sql/migrate-refresco-vistas.sql` |
 | **foto diaria del stock** (libro de stock; gana la PRIMERA del día, la de las 06:40) | `scripts/lib/stock-foto.mjs` + `sql/migrate-stock-foto.sql` |

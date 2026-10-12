@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
 import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
+import { anotarAnuladasDelRegistro } from './lib/registro-anuladas.mjs';
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
 import { refrescarVistas } from './lib/refrescar-vistas.mjs';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
@@ -222,6 +223,18 @@ async function syncInventario(maps) {
 // de Zattia se quedó atrás (9 columnas contra 19), que es por qué esa marca no tiene
 // CRM ni márgenes.
 
+// Las ventas que creó el monitor y GN ya no devuelve quedan anuladas en su registro (libro de
+// stock). Un error acá ⛔ frena el sync: va a `problemas` como la purga.
+async function anotarAnuladas(idsGN, desde, corte) {
+  try {
+    const r = await anotarAnuladasDelRegistro(supabase, idsGN, desde, corte);
+    if (r.frenado) { console.warn(`[registro] ${r.frenado}`); problemas.push(`registro de ventas: ${r.frenado}`); }
+  } catch (e) {
+    console.warn(`[registro] anulaciones omitidas por error: ${e.message}`);
+    problemas.push(`registro de ventas: ${e.message}`);
+  }
+}
+
 async function syncVentas(fromDate) {
   const today = new Date().toISOString().substring(0, 10);
 
@@ -235,6 +248,8 @@ async function syncVentas(fromDate) {
 
   const basePath = `ventas/obtener?from=${desde}&to=${today}&include_details=1&per_page=50`;
   console.log(`\n[ventas] Descargando desde ${desde} hasta ${today} (repaso de ${DIAS_REPASO} días)...`);
+  // Lo creado después de esto puede no venir en la bajada: el registro ⛔ lo da por anulado.
+  const corte = new Date();
 
   // Lo que GN devolvió, para poder borrar por diferencia una vez terminada la descarga.
   // Solo se guardan ids (livianos): con streaming las filas no quedan todas en memoria.
@@ -271,6 +286,7 @@ async function syncVentas(fromDate) {
     console.warn(`[ventas] purga omitida por error: ${e.message}`);
     problemas.push(`purga de ventas: ${e.message}`);
   }
+  await anotarAnuladas(idsGN, repasoDesde, corte);
 
   return totales;
 }

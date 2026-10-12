@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
 import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
+import { anotarAnuladasDelRegistro } from './lib/registro-anuladas.mjs';
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
 import { refrescarVistas } from './lib/refrescar-vistas.mjs';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
@@ -241,6 +242,18 @@ async function syncInventario(maps) {
   return inventario.length;
 }
 
+// Las ventas que creó el monitor y GN ya no devuelve quedan anuladas en su registro (libro de
+// stock). Un error acá ⛔ frena el sync: va a `problemas` como la purga.
+async function anotarAnuladas(idsGN, desde, corte) {
+  try {
+    const r = await anotarAnuladasDelRegistro(supabase, idsGN, desde, corte);
+    if (r.frenado) { console.warn(`[registro] ${r.frenado}`); problemas.push(`registro de ventas: ${r.frenado}`); }
+  } catch (e) {
+    console.warn(`[registro] anulaciones omitidas por error: ${e.message}`);
+    problemas.push(`registro de ventas: ${e.message}`);
+  }
+}
+
 async function syncVentas(fromDate) {
   const today = new Date().toISOString().substring(0, 10);
 
@@ -251,6 +264,8 @@ async function syncVentas(fromDate) {
 
   const basePath = `ventas/obtener?from=${desde}&to=${today}&include_details=1&per_page=50`;
   console.log(`\n[ventas] Descargando desde ${desde} hasta ${today} (repaso de ${DIAS_REPASO} días)...`);
+  // Lo creado después de esto puede no venir en la bajada: el registro ⛔ lo da por anulado.
+  const corte = new Date();
   const rows = await fetchAllPages(basePath);
 
   // Mapeo y guardado compartidos con BDI (scripts/lib/ventas-espejo.mjs).
@@ -264,8 +279,8 @@ async function syncVentas(fromDate) {
   // Purga DESPUÉS del upsert (ver scripts/lib/purga-ventas.mjs: una venta que cambió de
   // fecha se vería como desaparecida si se mirara antes).
   const resultado = { ventas: guardado.ventas, detalles: guardado.detalles };
+  const idsGN = new Set();
   try {
-    const idsGN = new Set();
     const detallesPorVenta = new Map();
     for (const v of rows) {
       if ((v.date_sale || '') < repasoDesde) continue; // el tramo viejo no se recorrió entero
@@ -280,6 +295,7 @@ async function syncVentas(fromDate) {
     console.warn(`[ventas] purga omitida por error: ${e.message}`);
     problemas.push(`purga de ventas: ${e.message}`);
   }
+  await anotarAnuladas(idsGN, repasoDesde, corte);
 
   console.log(`[ventas] OK`);
   return resultado;
