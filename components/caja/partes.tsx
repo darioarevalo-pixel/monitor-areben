@@ -737,6 +737,8 @@ export function EsperaTransferencia({
   // `otra` = el formulario de «transfirió a otra cuenta».
   const [sumando, setSumando] = useState<string[] | null>(null)
   const [otra, setOtra] = useState<{ titular: string | null; banco: string } | null>(null)
+  // El error de una ACCIÓN de la cajera va aparte: la consulta a MP de cada 5 s limpia el suyo y lo borraba.
+  const [errorAccion, setErrorAccion] = useState<string | null>(null)
   const terminada = useRef(false)
   const verTodos = useRef(false)
 
@@ -784,12 +786,12 @@ export function EsperaTransferencia({
   /** Corre una acción que termina la espera (la venta salió a GN o se canceló). */
   async function terminar(que: string, accion: () => Promise<void>) {
     setTrabajando(que)
-    setError(null)
+    setErrorAccion(null)
     try {
       await accion()
       terminada.current = true
     } catch (e) {
-      setError((e as Error).message)
+      setErrorAccion((e as Error).message)
     } finally {
       setTrabajando(null)
     }
@@ -975,6 +977,7 @@ export function EsperaTransferencia({
         )}
         {(cruce?.estado === 'sin_cuenta' || cruce?.estado === 'invalido') && <span>{cruce.motivo}</span>}
         {error && <span style={{ color: color.danger }}>{error}</span>}
+        {errorAccion && <span style={{ color: color.danger }}>{errorAccion}</span>}
       </div>
     </Notice>
   )

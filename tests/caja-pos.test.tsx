@@ -325,7 +325,8 @@ describe('POS · la transferencia que ⛔ llega justa (Bruno, 12-oct, segunda ta
   it('🔴 con otra venta en el carrito ⛔ cambia: lo dice y la venta sigue esperando', async () => {
     const { cruzarVenta, cancelarVenta, leerPendientes } = await import('@/lib/caja/cliente')
     vi.mocked(cancelarVenta).mockClear()
-    vi.mocked(cruzarVenta).mockResolvedValue({ venta: VENTA, cruce: { estado: 'esperando' }, recientes: [], cuentaMp: null } as never)
+    // La consulta a MP llega DESPUÉS del clic (como en el CI, lento): ⛔ tiene que borrar el error de la acción.
+    vi.mocked(cruzarVenta).mockImplementation(() => new Promise((r) => setTimeout(() => r({ venta: VENTA, cruce: { estado: 'esperando' }, recientes: [], cuentaMp: null } as never), 300)))
     vi.mocked(leerPendientes).mockResolvedValue({ ventas: [VENTA] } as never)
     disco.set('caja:borrador:zattia', JSON.stringify({ id: 'b-otra', renglones: [PRENDA], email: '' }))
     await montar(<CajaPOS />)
@@ -333,6 +334,7 @@ describe('POS · la transferencia que ⛔ llega justa (Bruno, 12-oct, segunda ta
     await hastaQue(() => !!boton('Cambiar forma de pago') && (document.body.textContent || '').includes('PRENDA 1'))
     await act(async () => boton('Cambiar forma de pago').click())
     await hastaQue(() => (document.body.textContent || '').includes('Hay otra venta en el carrito'))
+    await act(async () => new Promise((r) => setTimeout(r, 400)))
     expect(document.body.textContent).toContain('Hay otra venta en el carrito')
     expect(vi.mocked(cancelarVenta)).not.toHaveBeenCalled()
     vi.mocked(leerPendientes).mockResolvedValue({ ventas: [] } as never)
