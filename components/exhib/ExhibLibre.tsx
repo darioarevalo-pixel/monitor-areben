@@ -20,6 +20,7 @@ import { ElegirEspacio, otraAltura } from './ElegirEspacio'
 import { RelevamientoPanel } from './RelevamientoPanel'
 import { FinMapa } from './FinMapa'
 import { ReporteChequeo } from './ReporteChequeo'
+import { ElegirVoz } from './ElegirVoz'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 import { useActividad } from '@/components/mapa-local/useMapaLocalDatos'
@@ -412,6 +413,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               </span>
               <Button size="sm" variant="outline" onClick={escucharAvisos}>Escuchar los avisos</Button>
             </div>
+            <ElegirVoz />
             {/* 🔴 **«Se oye la voz pero no los pitidos» es un síntoma con nombre**, y pasó la primera
                 noche: en iPhone el interruptor de silencio del costado apaga los pitidos y deja
                 pasar la voz. Decirlo acá es la diferencia entre resolverlo en diez segundos y

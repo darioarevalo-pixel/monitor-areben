@@ -71,6 +71,13 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > 🔴 Afirma sobre **todo lo regular del local**: si un día se camina un solo perchero, pide el resto —
 > por eso dice «pasaron por el lector X de Y» arriba del botón de imprimir.
 
+> 🗣️ **La voz se elige (11-oct-2026, Darío: «demasiado eléctrica»)** — `lib/voces.ts` + `ElegirVoz.tsx`
+> al lado de «Escuchar los avisos». Antes sólo se pedía `lang es-AR` y el iPhone usaba la compacta.
+> Ahora gana la mejor en español (premium › mejorada › común; acento AR › latino › España), ⛔ se
+> ofrecen las de fantasía (Eddy, Grandma… eran 16 de 20 en Chrome de la Mac) y la elegida queda en el
+> `localStorage` de ese teléfono (`monitor_voz`). Vale para TODAS las pantallas que usan `decir`.
+> Si ⛔ hay mejorada/premium, la pantalla dice cómo bajarla en Ajustes del iPhone.
+
 **Son DOS recorridos distintos**, no dos vistas del mismo:
 
 | | **Por categoría** (el viejo) | **Libre por lugar** (19-sep-2026) |

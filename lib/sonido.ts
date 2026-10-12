@@ -29,6 +29,8 @@
  * porque el teléfono no pueda pitar**.
  */
 
+import { elegirVoz, ordenarVoces } from './voces'
+
 export type Aviso = 'ok' | 'suma' | 'ojo' | 'no' | 'mira'
 
 /** Frecuencia (Hz), duración (s) y, si son dos, el segundo tono. Lo que distingue un aviso del otro. */
@@ -176,11 +178,56 @@ export function decir(texto: string): void {
     if (!s || !texto) return
     s.cancel()
     const u = new SpeechSynthesisUtterance(texto)
-    u.lang = 'es-AR'
-    u.rate = 1.15
+    // 🔑 La voz se elige a mano (11-oct-2026): sin esto el teléfono usa la de por defecto, que en
+    // iPhone es la compacta, la más eléctrica. Ver `lib/voces.ts`.
+    const v = vozActual()
+    if (v) u.voice = v
+    u.lang = v?.lang ?? 'es-AR'
+    // ⚠️ 1,05 y ⛔ 1,15: apurada, cualquier voz suena más metálica. Sigue siendo corta igual.
+    u.rate = 1.05
     s.speak(u)
   } catch {
     /* sin voz */
+  }
+}
+
+const CLAVE_VOZ = 'monitor_voz'
+
+/** La voz elegida en ESTE teléfono (por id), o `null`. ⚠️ `localStorage` puede fallar: se traga. */
+export function vozGuardada(): string | null {
+  try {
+    return localStorage.getItem(CLAVE_VOZ)
+  } catch {
+    return null
+  }
+}
+
+export function guardarVoz(uri: string): void {
+  try {
+    localStorage.setItem(CLAVE_VOZ, uri)
+  } catch {
+    /* sin almacenamiento: vale para esta vez */
+  }
+}
+
+/**
+ * Las voces en español del teléfono, la mejor primero.
+ * ⚠️ En iPhone la lista puede llegar VACÍA la primera vez y llenarse un instante después
+ * (`voiceschanged`): por eso se pregunta en cada uso y ⛔ se guarda.
+ */
+export function vocesEnEspanol(): SpeechSynthesisVoice[] {
+  try {
+    return ordenarVoces(window.speechSynthesis?.getVoices() ?? [])
+  } catch {
+    return []
+  }
+}
+
+function vozActual(): SpeechSynthesisVoice | null {
+  try {
+    return elegirVoz(window.speechSynthesis?.getVoices() ?? [], vozGuardada())
+  } catch {
+    return null
   }
 }
 
