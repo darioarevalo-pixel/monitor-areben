@@ -22,8 +22,8 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { pathnameDeBlob } from './_blob.js'
 import { armarCorreoChequeo, limpiarReporte } from '../lib/exhib/correo.core.js'
-// El mismo envío por SES que usan los correos de las 10:00 (`scripts/`): ⛔ hay otro.
-import { mandarMail } from '../scripts/lib/mail.mjs'
+// 🔑 El Monitor ⛔ manda mails: los pide a Mailer, como el ticket de la Caja.
+import { pedirAvisoInterno } from '../lib/mailer/aviso.core.js'
 
 const texto = (v) => (v == null || v === '' ? null : String(v))
 /**
@@ -439,8 +439,9 @@ export default async function handler(req, res) {
        * puede importar): acá sólo se acota (`limpiarReporte`). Quién y a qué hora salen de la fila.
        * 🔑 **Una sola vez por recorrido** salvo `reenviar`: el celular lo pide en cada cierre y un
        * reintento ⛔ tiene que llegar dos veces. La constancia vive en `cobertura.correo` (⛔ migración).
-       * ⚠️ Sin las claves de SES en Vercel contesta `configurado: false` y ⛔ un error: el cierre del
-       * recorrido ya pasó y eso es lo que importa en el local.
+       * 🔑 Sale por **Mailer** (`lib/mailer/aviso.core.js`), que sólo acepta casillas @arebensrl.com.
+       * ⚠️ Sin `MAILER_URL`/`MAILER_TICKET_KEY` contesta `configurado: false` y ⛔ un error: el cierre
+       * del recorrido ya pasó y eso es lo que importa en el local.
        */
       if (accion === 'correo') {
         const recorrido = await recorridoDeLaMarca(String(b.id || ''))
@@ -451,13 +452,10 @@ export default async function handler(req, res) {
 
         const c = armarCorreoChequeo({ recorrido, reporte: limpiarReporte(b.reporte) })
         const para = String(process.env.MAIL_EXHIB_A || process.env.MAIL_REPOSICION_A || 'darioarevalo@arebensrl.com').split(',').map((x) => x.trim()).filter(Boolean)
-        const fallas = []
-        for (const a of para) {
-          const r = await mandarMail({ para: a, asunto: c.asunto, texto: c.texto, html: c.html })
-          if (!r.ok && !r.configurado) return res.status(200).json({ ok: false, configurado: false, error: 'Faltan las claves del servicio de correos (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) en Vercel.' })
-          if (!r.ok) fallas.push(`${a}: ${r.motivo}`)
-        }
-        const enviados = para.length - fallas.length
+        const r = await pedirAvisoInterno({ url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch }, { para, asunto: c.asunto, html: c.html, texto: c.texto })
+        if (!r.ok && !r.configurado) return res.status(200).json({ ok: false, configurado: false, error: 'Falta la conexión con Mailer (MAILER_URL / MAILER_TICKET_KEY) en Vercel.' })
+        const fallas = r.ok ? r.fallas : [r.motivo]
+        const enviados = r.ok ? r.enviados.length : 0
         const correo = { ...(enviados ? { enviado_en: new Date().toISOString() } : antes.correo || {}), a: para, asunto: c.asunto, por: perfil.name || null, ...(fallas.length ? { error: fallas.join(' · ').slice(0, 400) } : {}) }
         const { error } = await sb.from('exhib_recorrido').update({ cobertura: { ...antes, correo } }).eq('id', recorrido.id)
         if (error) throw new Error(error.message)

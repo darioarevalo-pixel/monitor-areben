@@ -59,11 +59,11 @@ function consulta(tabla: string) {
 }
 
 // El correo del chequeo: se anota qué se mandó, ⛔ sale nada (ver «el correo del chequeo»).
-const correos = { mandados: [] as { para: string; asunto: string }[], respuesta: { ok: true, id: 'm1' } as Record<string, unknown> }
-vi.mock('../scripts/lib/mail.mjs', () => ({
-  mandarMail: async (m: { para: string; asunto: string }) => {
-    correos.mandados.push({ para: m.para, asunto: m.asunto })
-    return correos.respuesta
+const correos = { mandados: [] as { para: string; asunto: string }[], respuesta: null as Record<string, unknown> | null }
+vi.mock('../lib/mailer/aviso.core.js', () => ({
+  pedirAvisoInterno: async (_m: unknown, a: { para: string[]; asunto: string }) => {
+    for (const p of a.para) correos.mandados.push({ para: p, asunto: a.asunto })
+    return correos.respuesta ?? { ok: true, enviados: a.para, fallas: [] }
   },
 }))
 
@@ -589,7 +589,7 @@ describe('el correo del chequeo', () => {
   const REPORTE = { vistas: 9, total: 10, pendientes: [{ sku: 'RTO-1', nombre: 'TOP X', variante: 'NEGRO', enLocal: 1, nuevo: '2026-10-08' }], duplicadas: [], feria: [], escaneos: 9 }
   beforeEach(() => {
     correos.mandados = []
-    correos.respuesta = { ok: true, id: 'm1' }
+    correos.respuesta = null
     process.env.MAIL_EXHIB_A = 'dario@x.com'
     base.tablas.exhib_recorrido = [{ id: REC, store: 'zattia', modo: 'libre', estado: 'cerrado', persona: 'Camila', creado_en: '2026-10-13T12:00:00Z', cerrado_en: '2026-10-13T12:40:00Z', cobertura: { cats: [], ticket: [{ url: 'u' }], por: null, cuando: 'z' } }]
   })
@@ -618,18 +618,18 @@ describe('el correo del chequeo', () => {
     expect(correos.mandados).toHaveLength(0)
   })
 
-  it('sin las claves de correo lo dice, y ⛔ anota nada', async () => {
+  it('sin la conexión con Mailer lo dice, y ⛔ anota nada', async () => {
     correos.respuesta = { ok: false, configurado: false }
     const res = await correr(postear({ action: 'correo', id: REC, reporte: REPORTE }))
     expect(res.body).toMatchObject({ ok: false, configurado: false })
     expect(base.escrituras).toHaveLength(0)
   })
 
-  it('si SES rechaza, contesta error y guarda el motivo', async () => {
+  it('si Mailer rechaza, contesta error y guarda el motivo', async () => {
     correos.respuesta = { ok: false, configurado: true, motivo: 'MessageRejected' }
     const res = await correr(postear({ action: 'correo', id: REC, reporte: REPORTE }))
     expect(res.code).toBe(502)
-    expect(guardada().correo).toMatchObject({ error: 'dario@x.com: MessageRejected' })
+    expect(guardada().correo).toMatchObject({ error: 'MessageRejected' })
     expect((guardada().correo as Record<string, unknown>).enviado_en).toBeUndefined()
   })
 

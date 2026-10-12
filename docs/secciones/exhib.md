@@ -88,14 +88,15 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > (*«no me sirve que lo hagan a medias»*): **al cerrar el recorrido** (`terminar` de `ExhibLibre`) el
 > celular arma el reporte (`paraElCorreo`, `lib/exhib/correo.ts` = `reporteDelChequeo` + lecturas,
 > no leídas y por lugar) y lo manda con la acción `correo` de `api/_exhib.js`, que arma el mail
-> (`lib/exhib/correo.core.js`) y lo envía por **SES** (`scripts/lib/mail.mjs`, el mismo del correo de
-> las 10:00). 🔴 El reporte viaja CALCULADO porque el handler ⛔ importa TypeScript; el servidor sólo
+> (`lib/exhib/correo.core.js`) y se lo pide a **Mailer** (`lib/mailer/aviso.core.js` →
+> `areben-mailer` `POST /api/externo/aviso`, con la MISMA llave del ticket de la Caja). 🔴 **El
+> Monitor ⛔ manda mails por su cuenta** (Bruno, 12-oct): la primera versión fue por SES directo y
+> en Vercel ⛔ están esas claves — a propósito. Mailer sólo acepta casillas `@arebensrl.com`. 🔴 El reporte viaja CALCULADO porque el handler ⛔ importa TypeScript; el servidor sólo
 > lo acota (`limpiarReporte`) y toma quién/cuándo de la fila. Debajo de `COMPLETO_PCT` (90 %) de lo
 > regular el asunto dice **«incompleto»**. Una vez por recorrido (constancia en `cobertura.correo`,
 > ⛔ migración; `cobertura`/`tachar`/`repetida` la conservan) salvo `reenviar` = el botón «Enviar por
-> correo» del reporte. Destino: `MAIL_EXHIB_A` › `MAIL_REPOSICION_A` › Darío. ⚠️ Necesita
-> `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (+`AWS_REGION`) en **Vercel**; sin ellas contesta
-> `configurado: false` y el cierre ⛔ se entera (va en segundo plano). ⏭️ Cuando haya día fijo:
+> correo» del reporte. Destino: `MAIL_EXHIB_A` › `MAIL_REPOSICION_A` › Darío. Sin `MAILER_URL`/
+> `MAILER_TICKET_KEY` contesta `configurado: false` y el cierre ⛔ se entera (va en segundo plano). ⏭️ Cuando haya día fijo:
 > aviso de «no se hizo». Además: **«Nuevo DD-mes»** (alta del PRODUCTO en GN desde el chequeo
 > anterior = último día con ≥100 escaneos, `nuevosDesde`) y **«1 sola»** en lo pendiente, sólo en
 > pantalla y correo; y **el stock se trae solo** al abrir el reporte si la foto tiene >30 min.
