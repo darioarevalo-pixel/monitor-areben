@@ -364,6 +364,20 @@ describe('caja · formas de pago y descuentos a mano (Bruno, 4-oct)', () => {
     expect((await correr(req('GET', { action: 'config' }))).body).toMatchObject({ ticket_logo: null })
   })
 
+  it('🔑 logo por marca (Bruno, 12-oct): el de Stunned ⛔ pisa el de Zattia, y al revés', async () => {
+    const z = { src: 'data:image/png;base64,WkFUVElB', ancho: 400, alto: 120 }
+    const st = { src: 'data:image/png;base64,U1RVTk5FRA==', ancho: 300, alto: 300 }
+    conSesion(ADMIN_)
+    expect((await correr(req('POST', {}, { action: 'logo', logo: st, marca: 'otra' }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'logo', logo: z }))).code).toBe(200)
+    const r = await correr(req('POST', {}, { action: 'logo', logo: st, marca: 'stunned' }))
+    expect(r.body).toEqual({ ticket_logo: z, ticket_logo_stunned: st })
+    expect((await correr(req('GET', { action: 'config' }))).body).toMatchObject({ ticket_logo: z, ticket_logo_stunned: st })
+    // Eliminar el de Zattia deja el de Stunned.
+    expect((await correr(req('POST', {}, { action: 'logo', logo: null }))).body).toEqual({ ticket_logo: null, ticket_logo_stunned: st })
+    expect((await correr(req('GET', { action: 'config' }))).body).toMatchObject({ ticket_logo: null, ticket_logo_stunned: st })
+  })
+
   it('🔴 productos de feria trabados: un admin los marca y el servidor EXIGE la cuenta de feria', async () => {
     conSesion(CAJERA)
     expect((await correr(req('POST', {}, { action: 'bajadas', feriaProductos: [{ id: 7, nombre: 'CORSET' }] }))).code).toBe(403)

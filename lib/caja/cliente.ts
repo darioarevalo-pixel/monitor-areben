@@ -34,7 +34,7 @@ export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 /** `versiones`: las de las listas que se guardan ENTERAS (promos, productos de feria): se mandan al guardar para ⛔ pisar a otro admin. */
 /** `campaniasLiq`: sólo a un admin, para elegir cuáles son de feria. */
 export type CampaniaLiq = { id: string; nombre: string; estado: string }
-export type Config = { reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string }; campaniasLiq?: CampaniaLiq[] }
+export type Config = { reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; /** El de Stunned (Bruno, 12-oct): sale si el ticket lleva prendas de Stunned. */ ticket_logo_stunned?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string }; campaniasLiq?: CampaniaLiq[] }
 
 /** Una cuenta de cobro de GN. `regla` en null ⇒ la Caja ⛔ la cobra (sin %, o con recargo). */
 export type CuentaGN = { id: number; nombre: string; regla: ReglaCuenta | null }
@@ -54,7 +54,7 @@ export type Resolucion = { tipo: 'a_mano' | 'descartada'; por: string | null; en
 /** B5: lo hecho a mano en la venta, en pesos (a la venta, a las prendas, bajando el precio). */
 export type AMano = { venta: number; prendas: number; precios: number }
 /** Un renglón como quedó guardado: con lo que necesita el ticket. */
-export type RenglonGuardado = { product_id: number; size_id: number; cantidad: number; precio: number; importe?: number; nombre: string | null; talle: string | null; promos?: string[]; /** B5: el de la etiqueta, si la cajera lo cambió. */ precio_lista?: number }
+export type RenglonGuardado = { product_id: number; size_id: number; cantidad: number; precio: number; importe?: number; nombre: string | null; talle: string | null; /** Para el logo de la marca (12-oct); las ventas anteriores ⛔ lo tienen. */ sku?: string | null; promos?: string[]; /** B5: el de la etiqueta, si la cajera lo cambió. */ precio_lista?: number }
 export type PagoGuardado = { cuenta: number; base: number; rebaja?: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
 export type Venta = {
   id: string
@@ -229,7 +229,9 @@ export const guardarPolitica = (texto: string) => post<{ politica_cambio: string
 export type CuentaMp = { cuenta_id: number; nombre: string }
 export const leerCuentasMp = () => get<{ enUso: CuentaMp | null; cuentas?: CuentaMp[] }>('action=cuentas-mp', 'No se pudo leer la cuenta de Mercado Pago.')
 export const usarCuentaMp = (cuenta_id: number) => post<{ enUso: CuentaMp }>({ action: 'usar-mp', cuenta_id }, 'No se pudo cambiar la cuenta de Mercado Pago.')
-export const guardarLogo = (logo: LogoTicket | null) => post<{ ticket_logo: LogoTicket | null }>({ action: 'logo', logo }, 'No se pudo guardar el logo.')
+export type MarcaLogo = 'zattia' | 'stunned'
+export const guardarLogo = (logo: LogoTicket | null, marca: MarcaLogo = 'zattia') =>
+  post<{ ticket_logo: LogoTicket | null; ticket_logo_stunned: LogoTicket | null }>({ action: 'logo', logo, marca }, 'No se pudo guardar el logo.')
 /** Sólo admin: la lista ENTERA de promos (W5). */
 /** `version`: la de la lista que se editó (`Config.versiones`); si otro admin la cambió, 409. */
 export type Versiones = NonNullable<Config['versiones']>

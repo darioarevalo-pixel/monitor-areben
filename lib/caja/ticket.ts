@@ -40,7 +40,8 @@ const NOMBRE_POR_DEFECTO = marcaDeCaja(MARCA_POR_DEFECTO)?.nombre ?? ''
 
 /** `importe` es lo que queda después del descuento a mano de esa prenda (si lo hubo). */
 /** `promos`: las que le tocaron (W5): el descuento del renglón sale con su nombre, ⛔ «Descuento». */
-export type RenglonTicket = { nombre: string; talle?: string | null; cantidad: number; precio: number; importe: number; promos?: string[] | null }
+/** `stunned`: la prenda es de Stunned (SKU `STU…`): el ticket lleva su logo (Bruno, 12-oct). */
+export type RenglonTicket = { nombre: string; talle?: string | null; cantidad: number; precio: number; importe: number; promos?: string[] | null; stunned?: boolean }
 /** `rebaja` = la parte de este pago del descuento a mano a la VENTA (0 o ausente si ⛔ hubo). */
 export type PagoTicket = { cuenta: number; rebaja?: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
 
@@ -61,6 +62,8 @@ export type DatosTicket = {
   politica: string | null
   /** El logo del ticket (Configuración de la Caja): data URL y su tamaño en píxeles. Sin logo, el nombre. */
   logo?: LogoTicket | null
+  /** El logo de Stunned: sale si alguna prenda es de Stunned; con prendas de las dos, salen los DOS. */
+  logoStunned?: LogoTicket | null
   /** El mail del ticket, si se cargó; si no, «Consumidor Final». */
   cliente?: string | null
   /** El nombre de la marca, si ⛔ hay logo (rediseño, fase 5); sin él, la marca por defecto de la Caja. */
@@ -68,6 +71,16 @@ export type DatosTicket = {
 }
 
 export type LogoTicket = { src: string; ancho: number; alto: number }
+
+/** Las marcas del ticket, en orden: Zattia si hay alguna prenda que ⛔ es de Stunned (o ninguna prenda), Stunned si hay alguna. */
+export function marcasDelTicket(t: Pick<DatosTicket, 'renglones' | 'logo' | 'logoStunned' | 'marca'>): Array<{ nombre: string; logo: LogoTicket | null }> {
+  const hayStunned = t.renglones.some((r) => r.stunned)
+  const hayOtra = t.renglones.some((r) => !r.stunned)
+  return [
+    ...(hayOtra || !hayStunned ? [{ nombre: t.marca ?? NOMBRE_POR_DEFECTO, logo: t.logo ?? null }] : []),
+    ...(hayStunned ? [{ nombre: 'Stunned', logo: t.logoStunned ?? null }] : []),
+  ]
+}
 /** El logo, como lo dibuja jsPDF: `x`/`y`/`w`/`h` en mm. */
 export type OpImagen = { k: 'img'; src: string; x: number; y: number; w: number; h: number }
 
@@ -131,14 +144,27 @@ export function armarTicket(
     y += 2.5
   }
 
-  // El logo: 44 mm de ancho como mucho y 22 de alto, centrado.
-  if (t.logo && t.logo.ancho > 0 && t.logo.alto > 0) {
-    const w = Math.min(44, (22 * t.logo.ancho) / t.logo.alto)
-    const h = (w * t.logo.alto) / t.logo.ancho
-    ops.push({ k: 'img', src: t.logo.src, x: (W - w) / 2, y, w, h })
-    y += h + 2
+  // El logo de la MARCA de lo que se vende (Bruno, 12-oct): Zattia, Stunned o los DOS lado a lado. Uno solo:
+  // 44 mm de ancho como mucho y 22 de alto, centrado; dos: 34 × 18 cada uno. Si a alguno le falta el logo,
+  // van los nombres.
+  const marcas = marcasDelTicket(t)
+  const conLogo = marcas.every((m) => m.logo && m.logo.ancho > 0 && m.logo.alto > 0)
+  if (conLogo) {
+    const [maxW, maxH, sep] = marcas.length > 1 ? [34, 18, 4] : [44, 22, 0]
+    const tam = marcas.map(({ logo }) => {
+      const l = logo as LogoTicket
+      const w = Math.min(maxW, (maxH * l.ancho) / l.alto)
+      return { src: l.src, w, h: (w * l.alto) / l.ancho }
+    })
+    let x = (W - tam.reduce((s, m) => s + m.w, 0) - sep * (tam.length - 1)) / 2
+    const alto = Math.max(...tam.map((m) => m.h))
+    for (const m of tam) {
+      ops.push({ k: 'img', src: m.src, x, y: y + (alto - m.h) / 2, w: m.w, h: m.h })
+      x += m.w + sep
+    }
+    y += alto + 2
   } else {
-    escribir((t.marca ?? NOMBRE_POR_DEFECTO).toUpperCase(), 16, true, 'centro')
+    escribir(marcas.map((m) => m.nombre.toUpperCase()).join(' · '), 16, true, 'centro')
     y += 1
   }
   escribir('COMPROBANTE', 12, true, 'centro')

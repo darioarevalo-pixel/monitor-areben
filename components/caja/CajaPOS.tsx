@@ -85,6 +85,7 @@ import {
 } from '@/lib/caja/cliente'
 import { Badge, Button, ButtonLink, Card, Field, Icono, Input, Modal, Notice, SectionCard, color, font, radius, shadow, space, weight } from '@/components/ui'
 import { useConfirmar } from '@/components/ui/Confirm'
+import { esStunned } from '@/lib/lineas.core.js'
 import { ModalVarianteContext } from '@/components/ui/Modal'
 import {
   CampoRebaja,
@@ -658,6 +659,7 @@ function POS() {
         precio: r.precio ?? 0,
         importe: filas?.[i]?.importe ?? Math.round(r.cantidad * (r.precio ?? 0) * 100) / 100,
         promos: (conPromo.items[i] as { promos?: string[] } | undefined)?.promos ?? null,
+        stunned: esStunned(r.variante.sku),
       })),
       subtotal: venta.subtotal,
       pagos: venta.pagos,
@@ -666,6 +668,7 @@ function POS() {
       pagaCon: venta.paga_con,
       politica: config?.politica_cambio ?? null,
       logo: config?.ticket_logo ?? null,
+      logoStunned: config?.ticket_logo_stunned ?? null,
       cliente: venta.email,
     }
   }
@@ -681,6 +684,7 @@ function POS() {
         precio: r.precio,
         importe: r.importe ?? Math.round(r.cantidad * r.precio * 100) / 100,
         promos: r.promos ?? null,
+        stunned: esStunned(r.sku),
       })),
     }
   }
@@ -713,7 +717,7 @@ function POS() {
       const r = await confirmarVenta({
         id: bor.id,
         // El nombre, el talle y la foto van para el ticket por mail; la plata ⛔ los mira.
-        items: bor.renglones.map((r, i) => ({ ...items[i], nombre: r.variante.product_name, talle: r.variante.size_name, foto: r.foto, precioLista: r.precioLista ?? null })),
+        items: bor.renglones.map((r, i) => ({ ...items[i], nombre: r.variante.product_name, talle: r.variante.size_name, sku: r.variante.sku ?? null, foto: r.foto, precioLista: r.precioLista ?? null })),
         pagos: pedidos,
         total: c.total,
         descuentoVenta: descuentoManual,

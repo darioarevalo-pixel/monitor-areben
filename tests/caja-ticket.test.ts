@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { armarTicket, fechaConDia, fechaTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
+import { armarTicket, fechaConDia, fechaTicket, marcasDelTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
 import { REGLAS_INICIALES, cobro, nombreParaTicket, renglones } from '@/lib/caja/core.core.js'
 
 const medir = (txt: string) => txt.match(/.{1,40}/g) || ['']
@@ -137,5 +137,33 @@ describe('caja · ticket contra la pantalla de cobro de GN', () => {
     const img = ops.find((o) => o.k === 'img') as unknown as { x: number; w: number; h: number }
     expect(img).toMatchObject({ w: 44, h: 22 })
     expect(img.x).toBe(18) // (80 − 44) / 2
+  })
+})
+
+describe('el logo de la MARCA de lo que se vende (Bruno, 12-oct)', () => {
+  const Z = { src: 'data:image/png;base64,Wg==', ancho: 400, alto: 100 }
+  const S = { src: 'data:image/png;base64,Uw==', ancho: 100, alto: 100 }
+  const r = (stunned: boolean) => ({ nombre: 'X', cantidad: 1, precio: 1000, importe: 1000, stunned })
+
+  it('sólo Zattia ⇒ su logo; sólo Stunned ⇒ el de Stunned; las dos ⇒ los dos, Zattia primero', () => {
+    expect(marcasDelTicket({ renglones: [r(false)], logo: Z, logoStunned: S }).map((m) => m.logo)).toEqual([Z])
+    expect(marcasDelTicket({ renglones: [r(true)], logo: Z, logoStunned: S }).map((m) => m.logo)).toEqual([S])
+    expect(marcasDelTicket({ renglones: [r(true), r(false)], logo: Z, logoStunned: S }).map((m) => m.logo)).toEqual([Z, S])
+  })
+
+  it('🔑 mixto: dos imágenes lado a lado, centradas, sin pisarse', () => {
+    const { ops } = ticket([{ precio: 1000 }, { precio: 2000 }], [{ cuenta: 12921 }], { logo: Z, logoStunned: S })
+    expect(ops.filter((o) => o.k === 'img')).toHaveLength(1) // sin `stunned` en los renglones: sólo Zattia
+    const datosMixto = ticket([{ precio: 1000 }], [{ cuenta: 12921 }], { logo: Z, logoStunned: S, renglones: [{ ...r(false) }, { ...r(true) }] })
+    const imgs = datosMixto.ops.filter((o) => o.k === 'img') as unknown as { src: string; x: number; w: number }[]
+    expect(imgs.map((i) => i.src)).toEqual([Z.src, S.src])
+    expect(imgs[0].x + imgs[0].w).toBeLessThan(imgs[1].x)
+    expect(imgs[0].x).toBeCloseTo(80 - (imgs[1].x + imgs[1].w), 5)
+  })
+
+  it('a una marca le falta el logo ⇒ van los NOMBRES de las dos, ⛔ un logo solo', () => {
+    const { ops, txt } = ticket([{ precio: 1000 }], [{ cuenta: 12921 }], { logo: Z, logoStunned: null, renglones: [r(false), r(true)] })
+    expect(ops.filter((o) => o.k === 'img')).toHaveLength(0)
+    expect(txt[0]).toBe('ZATTIA · STUNNED')
   })
 })

@@ -124,7 +124,8 @@ export function Caja() {
         <DeteccionTransferencias admin={admin} reglas={config?.reglas ?? null} onGuardadas={(rg, v) => config && setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />
         {config?.reglas.medios && <PromosCaja reglas={config.reglas} admin={admin} version={config.versiones?.promos} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
         {admin && config?.reglas.medios && <ProductosFeria reglas={config.reglas} version={config.versiones?.feriaProductos} campanias={config.campaniasLiq ?? []} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
-        {admin && config && <LogoDelTicket inicial={config.ticket_logo ?? null} onGuardado={(l) => setConfig({ ...config, ticket_logo: l })} />}
+        {admin && config && <LogoDelTicket marca="zattia" nombre="Zattia" inicial={config.ticket_logo ?? null} onGuardado={(l) => setConfig({ ...config, ...l })} />}
+        {admin && config && <LogoDelTicket marca="stunned" nombre="Stunned" inicial={config.ticket_logo_stunned ?? null} onGuardado={(l) => setConfig({ ...config, ...l })} />}
         {admin && <GiftCards />}
         {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
         <UltimosTurnos ultimos={ultimosTurnos} onVerVentas={(t) => setVerVentas({ turnoId: t.id, titulo: `Ventas de la caja del ${diaAr(t.abierto_en)}${t.abierto_por ? ` · ${t.abierto_por}` : ''}` })} />

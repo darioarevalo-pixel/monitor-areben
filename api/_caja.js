@@ -406,7 +406,7 @@ export default async function handler(req, res) {
         const conf = { ...leida, reglas: await reglasDeHoy(leida.reglas), ...(esAdmin(perfil) ? { campaniasLiq: await campaniasLiq() } : {}) }
         // `versiones`: las de las listas que la pantalla manda ENTERAS, para ⛔ pisar la de otro admin.
         const versiones = { promos: versionDe(conf.reglas, 'promos'), feriaProductos: versionDe(conf.reglas, 'feriaProductos') }
-        return res.status(200).json({ ...conf, versiones, ticket_logo: logo.error ? null : (logo.data && logo.data.ticket_logo) || null })
+        return res.status(200).json({ ...conf, versiones, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo) })
       }
 
       if (accion === 'referencias') {
@@ -553,6 +553,10 @@ export default async function handler(req, res) {
       }
       if (accion === 'logo') {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia el logo del ticket.' })
+        // Bruno, 12-oct: el ticket lleva el logo de la MARCA de lo que se vende ⇒ uno por marca. El de Stunned
+        // va adentro de la misma columna (`ticket_logo.stunned`): ⛔ una migración para un campo.
+        const marcaLogo = b.marca == null ? 'zattia' : String(b.marca)
+        if (!['zattia', 'stunned'].includes(marcaLogo)) return res.status(400).json({ error: 'Marca de logo inválida.' })
         let logo = null
         if (b.logo != null) {
           const src = String(b.logo.src || '')
@@ -564,10 +568,17 @@ export default async function handler(req, res) {
           logo = { src, ancho, alto }
         }
         await leerConfig() // la fila tiene que existir: la siembra si ⛔ hay
-        const { error } = await sb.from('caja_config').update({ ticket_logo: logo, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
+        const previa = await sb.from('caja_config').select('ticket_logo').eq('store', store).maybeSingle()
+        if (previa.error && /ticket_logo/.test(previa.error.message || '')) return res.status(409).json({ error: 'Falta correr sql/migrate-caja-logo.sql en la base de Zattia.' })
+        if (previa.error) throw new Error(previa.error.message)
+        const actual = logosDeFila(previa.data && previa.data.ticket_logo)
+        const zattia = marcaLogo === 'zattia' ? logo : actual.ticket_logo
+        const stunned = marcaLogo === 'stunned' ? logo : actual.ticket_logo_stunned
+        const fila = zattia || stunned ? { ...(zattia || {}), ...(stunned ? { stunned } : {}) } : null
+        const { error } = await sb.from('caja_config').update({ ticket_logo: fila, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
         if (error && /ticket_logo/.test(error.message || '')) return res.status(409).json({ error: 'Falta correr sql/migrate-caja-logo.sql en la base de Zattia.' })
         if (error) throw new Error(error.message)
-        return res.status(200).json({ ticket_logo: logo })
+        return res.status(200).json(logosDeFila(fila))
       }
       if (accion === 'gift-lote') {
         // 🏁 W6 (Bruno, 11-oct): la tarjeta es FÍSICA ⇒ los códigos nacen acá, INACTIVOS, y van a la imprenta.
@@ -861,7 +872,7 @@ export default async function handler(req, res) {
           // B5: el precio de la etiqueta cuando la cajera lo cambió (lo manda la pantalla: es para mostrar).
           const lista = Number(it.precioLista)
           const cambiado = Number.isFinite(lista) && lista > 0 && Math.round(lista * 100) !== Math.round(f.precio * 100)
-          return { ...f, nombre: aTexto(it.nombre, 120), talle: aTexto(it.talle, 60), foto: /^https:\/\//.test(String(it.foto || '')) ? aTexto(it.foto, 500) : null, ...(promos ? { promos } : {}), ...(cambiado ? { precio_lista: lista } : {}) }
+          return { ...f, nombre: aTexto(it.nombre, 120), talle: aTexto(it.talle, 60), sku: aTexto(it.sku, 80), foto: /^https:\/\//.test(String(it.foto || '')) ? aTexto(it.foto, 500) : null, ...(promos ? { promos } : {}), ...(cambiado ? { precio_lista: lista } : {}) }
         })
         // 🔑 B5 (Bruno, 11-oct): el descuento a mano y el cambio de precio son LIBRES, pero A LA VISTA: la
         // fila guarda cuánto se rebajó a mano (a la venta, a las prendas, bajando el precio) y el turno lo suma.
@@ -1070,6 +1081,16 @@ const MAX_MOVIMIENTO = 50_000_000
 const centavosJs = (n) => Math.round(n * 100) / 100
 /** El error del trigger de `sql/migrate-caja-auditoria.sql` (A7): el insert llegó con el turno ya cerrado. */
 const turnoCerrado = (e) => /caja_turno_cerrado/.test(String((e && e.message) || ''))
+
+/**
+ * Los logos del ticket guardados en `caja_config.ticket_logo`: el de Zattia es la fila misma ({ src, ancho,
+ * alto }) y el de Stunned va en `.stunned` (Bruno, 12-oct). Al navegador van separados: el de Zattia
+ * sigue siendo `ticket_logo` para la pantalla de la clienta y el tótem.
+ */
+function logosDeFila(fila) {
+  const uno = (x) => (x && typeof x.src === 'string' && x.src ? { src: x.src, ancho: Number(x.ancho), alto: Number(x.alto) } : null)
+  return { ticket_logo: uno(fila), ticket_logo_stunned: uno(fila && fila.stunned) }
+}
 
 /** Hasta cuánto atrás otra venta esperando el mismo monto obliga a elegir el pago a mano. */
 const COMPETIDORAS_MS = 12 * 3600 * 1000

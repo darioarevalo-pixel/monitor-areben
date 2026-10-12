@@ -136,6 +136,12 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   registro. ⛔ Las formas de pago abajo. Los descuentos siguen en su renglón (sin ellos el total ⛔ cierra).
   **Logo**: `caja_config.ticket_logo` (`sql/migrate-caja-logo.sql`), lo sube un admin; la pantalla lo
   achica a 400 px y lo pasa a PNG con fondo blanco. Sin la columna, el ticket sale con el nombre.
+  🔑 **Un logo por MARCA (Bruno, 12-oct)**: sale el de la marca de lo que se vende —Stunned = SKU `STU…`
+  (`esStunned`)—, y si el ticket mezcla, **los dos lado a lado** (`marcasDelTicket`, `ticket.ts`); si a una
+  le falta el logo, van los nombres. El de Stunned vive ADENTRO de la misma columna (`ticket_logo.stunned`,
+  ⛔ migración) y al navegador va aparte (`ticket_logo_stunned`). Para el ticket reimpreso, el renglón
+  guardado lleva `sku` desde el 12-oct (las ventas anteriores salen con el de Zattia). ▶️ El logo cargado una
+  sola vez para todo el monitor es otra tanda (`PENDIENTES.md`).
 - 🔑 **El turno en TÉRMINOS** (Bruno, 5-oct): `Esperado · Contado · Diferencia`, ⛔ «tenía que haber… se
   contaron…». Abrir, contar, cargar salida y cerrar son MODALES (`ModalesTurno`), los mismos en la
   pestaña y en el POS, que ⛔ repite la tarjeta del turno.

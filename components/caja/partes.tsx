@@ -42,6 +42,7 @@ import {
   type PedidosWeb,
   type ProductoLista,
   type ProductoFeria,
+  type MarcaLogo,
   type Oferta,
   type ModoOferta,
   type CampaniaLiq,
@@ -2173,8 +2174,11 @@ async function logoDesdeArchivo(archivo: File): Promise<LogoTicket> {
   }
 }
 
-/** Sólo admin: el logo que va arriba del ticket (Bruno, 5-oct). Sin logo, el ticket lleva el nombre. */
-export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | null; onGuardado: (l: LogoTicket | null) => void }) {
+/**
+ * Sólo admin: el logo que va arriba del ticket (Bruno, 5-oct). Sin logo, el ticket lleva el nombre. Uno por
+ * marca (Bruno, 12-oct): sale el de la marca de lo que se vende, y los dos si el ticket mezcla.
+ */
+export function LogoDelTicket({ marca, nombre, inicial, onGuardado }: { marca: MarcaLogo; nombre: string; inicial: LogoTicket | null; onGuardado: (r: { ticket_logo: LogoTicket | null; ticket_logo_stunned: LogoTicket | null }) => void }) {
   const [abierto, setAbierto] = useState(false)
   const archivo = useRef<HTMLInputElement>(null)
   const [guardando, setGuardando] = useState(false)
@@ -2183,8 +2187,8 @@ export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | n
     setGuardando(true)
     setMsg(null)
     try {
-      const r = await guardarLogo(l)
-      onGuardado(r.ticket_logo)
+      const r = await guardarLogo(l, marca)
+      onGuardado(r)
       setMsg(l ? 'Logo guardado: sale en el próximo ticket.' : 'Logo eliminado: el ticket lleva el nombre.')
     } catch (e) {
       setMsg((e as Error).message)
@@ -2193,11 +2197,11 @@ export function LogoDelTicket({ inicial, onGuardado }: { inicial: LogoTicket | n
     }
   }
   return (
-    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Logo del ticket" ayuda="PNG o JPG; se achica a 400 px de ancho. Sólo lo cambia un admin.">
+    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo={`Logo del ticket · ${nombre}`} ayuda={`Sale cuando el ticket lleva prendas de ${nombre}. PNG o JPG; se achica a 400 px de ancho. Sólo lo cambia un admin.`}>
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
         {inicial ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={inicial.src} alt="Logo del ticket" style={{ maxWidth: 160, maxHeight: 48, objectFit: 'contain', justifySelf: 'start', border: `1px solid ${color.line}`, borderRadius: radius.sm, padding: space[1], background: '#fff' }} />
+          <img src={inicial.src} alt={`Logo de ${nombre}`} style={{ maxWidth: 160, maxHeight: 48, objectFit: 'contain', justifySelf: 'start', border: `1px solid ${color.line}`, borderRadius: radius.sm, padding: space[1], background: '#fff' }} />
         ) : (
           <span style={{ color: color.mut, fontSize: font.sm }}>Logo: ninguno (el ticket lleva el nombre).</span>
         )}
