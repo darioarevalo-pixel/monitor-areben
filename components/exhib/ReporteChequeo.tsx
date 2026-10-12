@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Notice, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, useToast, weight } from '@/components/ui'
 import { CUENTAS } from '@/lib/cuentas'
 import { leerRecorrido } from '@/lib/exhib/cliente'
@@ -31,6 +31,8 @@ const EN_AR = { timeZone: 'America/Argentina/Buenos_Aires' } as const
 export const diaDe = (iso: string) => new Date(iso).toLocaleDateString('en-CA', EN_AR)
 const fechaLarga = (dia: string) => new Date(`${dia}T12:00:00-03:00`).toLocaleDateString('es-AR', { ...EN_AR, weekday: 'long', day: '2-digit', month: '2-digit' })
 const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { ...EN_AR, hour: '2-digit', minute: '2-digit' })
+/** Con una foto del stock más nueva que esto, abrir el reporte ⛔ la vuelve a traer. */
+const FRESCO_MIN = 30
 const variante = (v: string) => (v && v !== 'Variante Única' ? v : '—')
 /** `2026-10-08` → `8-oct`. */
 const diaCorto = (dia: string) => new Date(`${dia}T12:00:00-03:00`).toLocaleDateString('es-AR', { ...EN_AR, day: 'numeric', month: 'short' }).replace(/\s+de\s+|\s+/, '-').replace('.', '')
@@ -91,8 +93,23 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
 
   const listo = elegidos.length > 0 && elegidos.every((r) => escaneos[r.id]) && nuevosAlDia !== null
   const reporte = useMemo(() => (listo && nuevosAlDia ? reporteDelChequeo(elegidos.flatMap((r) => escaneos[r.id]), items, mapa, nuevosAlDia) : null), [listo, elegidos, escaneos, items, mapa, nuevosAlDia])
-  const { stockViejo, texto: textoStock } = useEdadStock(marca, items)
+  const { stockDe, stockViejo, texto: textoStock } = useEdadStock(marca, items)
   const [imprimiendo, setImprimiendo] = useState(false)
+
+  /**
+   * 🔑 **El stock se trae SOLO al abrir el reporte** (Darío, 12-oct-2026): el espejo es una foto de la
+   * mañana, y una venta o una reposición posterior hacen que la lista pida lo que ya se vendió o
+   * se olvide de lo que llegó. El botón quedaba librado a la memoria de quien imprime.
+   * Es el MISMO sync del botón (2-4 min); ⛔ se dispara si la foto tiene menos de `FRESCO_MIN`, y
+   * una sola vez por apertura (si falla, queda el botón y el aviso de la hora).
+   */
+  const disparado = useRef(false)
+  useEffect(() => {
+    if (disparado.current || stockDe === undefined || trayendo || !dias.length) return
+    if (stockDe && stockDe.horas * 60 < FRESCO_MIN) return
+    disparado.current = true
+    void onTraerStock()
+  }, [stockDe, trayendo, dias.length, onTraerStock])
 
   async function imprimir() {
     if (!reporte) return
@@ -172,10 +189,16 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
             <Button size="sm" variant="outline" onClick={() => void onTraerStock()} loading={trayendo}>
               Actualizar stock
             </Button>
-            <Button size="sm" variant="solid" tone="brand" onClick={() => void imprimir()} loading={imprimiendo}>
+            {/* ⛔ Se imprime mientras se trae el stock: el papel saldría con la foto vieja. */}
+            <Button size="sm" variant="solid" tone="brand" onClick={() => void imprimir()} loading={imprimiendo} disabled={trayendo}>
               Imprimir ticket
             </Button>
           </div>
+          {trayendo && (
+            <Notice tone="brand" icon="↻" style={{ marginBottom: space[3] }}>
+              Actualizando el stock con Gestión Nube (2 a 4 minutos). Cuando termine, la lista se vuelve a armar sola y se puede imprimir.
+            </Notice>
+          )}
 
           <ListaPendientes lista={reporte.pendientes} porUnaVariante={reporte.porUnaVariante} desde={desde} />
           <ListaDuplicadas lista={reporte.duplicadas} />
