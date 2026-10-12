@@ -14,7 +14,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  CBTE, COND_IVA, DOC, cuitValido, desglosarIVA, detalleXml, fechaArca, leerCAE, leerConsulta,
+  ambienteDeEntorno, CBTE, COND_IVA, DOC, cuitValido, desglosarIVA, detalleXml, fechaArca, leerCAE, leerConsulta,
   leerTA, leerUltimo, loteXml, numeroVisible, problemasDe, reconciliar, tags, taVigente, traXml, urlQR,
 } from '../lib/arca/arca.core.js'
 import { firmarTRA } from '../api/_arca.js'
@@ -181,4 +181,16 @@ describe('firmarTRA', () => {
       '-CAfile', join(dir, 'c.pem')], { stdio: ['ignore', 'pipe', 'ignore'] }).toString()
     expect(salida).toBe(tra)
   })
+})
+
+describe('🔴 el freno de producción', () => {
+  it('sin nada, homologación', () => expect(ambienteDeEntorno({})).toBe('homologacion'))
+  it('pedir producción sin la segunda llave tira error, ⛔ cae callado a homologación', () => {
+    expect(() => ambienteDeEntorno({ ARCA_AMBIENTE: 'produccion' })).toThrow(/APAGADA/)
+    expect(() => ambienteDeEntorno({ ARCA_AMBIENTE: 'produccion', ARCA_PRODUCCION_HABILITADA: 'true' })).toThrow(/APAGADA/)
+  })
+  it('producción, sólo con las dos', () => {
+    expect(ambienteDeEntorno({ ARCA_AMBIENTE: 'produccion', ARCA_PRODUCCION_HABILITADA: 'si' })).toBe('produccion')
+  })
+  it('un valor raro es error', () => expect(() => ambienteDeEntorno({ ARCA_AMBIENTE: 'prod' })).toThrow(/inválido/))
 })
