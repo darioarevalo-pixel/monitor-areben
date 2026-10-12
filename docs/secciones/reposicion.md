@@ -114,10 +114,14 @@ completos**, con «ya faltó N veces en 14 días».
 
 - `lib/reposicion/correo.core.js` (puro, `tests/reposicion-correo.test.ts`) ·
   `scripts/reposicion-correo.mjs` (sólo lee `repo_armado`) · `.github/workflows/reposicion-correo.yml`.
-- 🔑 **El asunto avisa por la REPOSICIÓN** (sin iniciar / sin finalizar). La devolución puede
-  hacerse más tarde: su estado va adentro. Una transferencia **sin confirmar** avisa siempre.
+- ⛔ **Sin la devolución** («por ahora no», Darío 12-oct): el correo es sólo depósito → local.
+  El asunto avisa sin iniciar / sin finalizar / transferencia **sin confirmar**.
+- ⏱️ **La duración** = de «Iniciar armado» a «Finalizar» (`creado_en` → `cerrado_en`): si se abre la
+  lista y se empieza a juntar más tarde, la duración sale inflada.
+- 📅 **Lunes a sábado** (Zattia; BDI repone de lunes a viernes, pero no usa el armado con lector).
+  Los feriados no se saltean: ese día llega «sin iniciar».
 - Stunned aparece sólo si tuvo un armado ese día: no tiene rutina propia todavía.
-- 🔴 **El reloj es de Maketa** (`/api/cron/reposicion-monitor`, 13:00 UTC), igual que el parte de la
+- 🔴 **El reloj es de Maketa** (`/api/cron/reposicion-monitor`, 13:00 UTC de lunes a sábado), igual que el parte de la
   mañana: los crons de GitHub de este repo llegan horas tarde.
 - Para mirarlo sin mandarlo: `gh workflow run reposicion-correo.yml -f simulacro=true` (deja el HTML
   como artefacto `correo-html`). Desde la Mac ⛔ se puede: el `.env` tiene sólo la clave anon de Zattia.

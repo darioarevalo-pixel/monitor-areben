@@ -41,15 +41,15 @@ describe('correo de la reposición', () => {
   })
 
   it('🔴 transferencia sin confirmar gana al resto', () => {
-    const c = armarCorreo({ hoy: HOY, armados: [arm({ estado: 'revisar', error: 'Se cortó la conexión' }), arm({ id: 'a2', sentido: 'devolver', estado: 'en_curso' })], anteriores: [] })
+    const c = armarCorreo({ hoy: HOY, armados: [arm({ estado: 'revisar', error: 'Se cortó la conexión' })], anteriores: [] })
     expect(c.asunto).toBe('⚠️ Reposición 13-oct: transferencia a verificar')
     expect(c.html).toContain('Se cortó la conexión')
   })
 
-  it('la devolución sin finalizar NO cambia el asunto (no tiene que estar a las 10)', () => {
-    const c = armarCorreo({ hoy: HOY, armados: [arm({}), arm({ id: 'd', sentido: 'devolver', estado: 'en_curso' })], anteriores: [] })
+  it('⛔ la devolución no va en el correo (Darío, 12-oct)', () => {
+    const c = armarCorreo({ hoy: HOY, armados: [arm({}), arm({ id: 'd', sentido: 'devolver', estado: 'revisar' })], anteriores: [] })
     expect(c.asunto).toBe('Reposición 13-oct: finalizada · 1 no encontrada')
-    expect(c.texto).toContain('DEVOLUCIÓN (LOCAL → DEPÓSITO)\n  Sin finalizar')
+    expect(c.texto).not.toContain('DEVOLUCIÓN')
   })
 
   it('un armado finalizado de otro día no entra; los descartados tampoco', () => {
@@ -65,9 +65,8 @@ describe('correo de la reposición', () => {
     expect(c.texto).toContain('(ya faltó 1 vez en 14 días)')
   })
 
-  it('devolución con tandas: lista todas las transferencias y dice «Devueltas»', () => {
-    const c = armarCorreo({ hoy: HOY, armados: [arm({}), arm({ id: 'd', sentido: 'devolver', persona: 'Camila', pedido: [L('5_1', 3)], escaneos: { '5_1': 3 }, faltantes: {}, transfer: { tandas: [{ transfer_id: 7751 }, { transfer_id: 7752 }] } })], anteriores: [] })
-    expect(c.texto).toContain('Pedidas 3 · Devueltas 3')
+  it('varias tandas: lista todas las transferencias', () => {
+    const c = armarCorreo({ hoy: HOY, armados: [arm({ transfer: { tandas: [{ transfer_id: 7751 }, { transfer_id: 7752 }] } })], anteriores: [] })
     expect(c.texto).toContain('Transferencia en GN: 7751, 7752')
   })
 
