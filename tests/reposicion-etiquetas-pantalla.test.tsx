@@ -136,11 +136,13 @@ describe('impresión rápida', () => {
   it('busca por nombre y talle e imprime la etiqueta de código de barras (sin precio)', async () => {
     await montar()
     await clic(boton('Impresión rápida'))
-    const buscar = host.querySelector('input[aria-label="Buscar prenda para imprimir"]') as HTMLInputElement
+    // Se abre en una ventana aparte (Darío, 12-oct): vive fuera de la hoja, en el `body`.
+    const buscar = document.body.querySelector('input[aria-label="Buscar prenda para imprimir"]') as HTMLInputElement
     await escribir(buscar, 'mini blush m')
-    expect(host.textContent).toContain('RMI-0009-M')
-    expect(host.textContent).not.toContain('RMI-0009-S')
-    await clic(boton('Imprimir'))
+    const ventana = document.body.querySelector('[role="dialog"]') as HTMLElement
+    expect(ventana.textContent).toContain('RMI-0009-M')
+    expect(ventana.textContent).not.toContain('RMI-0009-S')
+    await clic([...ventana.querySelectorAll('button')].find((b) => b.textContent === 'Imprimir'))
     const [labels, modo] = pdf.buildEtiquetasPdf.mock.calls[0] as [unknown[], string]
     expect(modo).toBe('dep')
     expect(labels).toMatchObject([{ sku: 'RMI-0009-M', barcode: '779010' }])
