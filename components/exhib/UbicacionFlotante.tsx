@@ -2,15 +2,16 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Input, color, font, space, weight } from '@/components/ui'
-import { claveLugar, lugarDeParada, percherosHechos, percherosPendientes, percheroDe, siguienteLugar, type Perchero, type PosParada } from '@/lib/exhib/paradas'
+import { claveLugar, conFrontal, esFrontal, lugarDeParada, percherosHechos, percherosPendientes, percheroDe, siguienteLugar, sinFrontal, type Perchero, type PosParada } from '@/lib/exhib/paradas'
 
 /**
  * **La ubicación flotante del chequeo con mapa** (Darío, 12-oct-2026): fija arriba, dice dónde está
  * parada la empleada. Tocándola se abre la lista de percheros en el orden del recorrido (I → ISLA →
- * D), cada uno con Arriba / Abajo / Frontal; un toque elige y la lista se cierra. La flecha salta al
- * lugar que sigue. La lógica vive en `lib/exhib/paradas.ts`.
+ * D), cada uno con Arriba / Abajo; un toque elige y la lista se cierra. La flecha salta al lugar que
+ * sigue. El botón **Frontal** marca la barra de adelante como exhibición frontal (lo repetido ahí ⛔
+ * es duplicado) y se apaga solo al cambiar de barra. La lógica vive en `lib/exhib/paradas.ts`.
  *
- * 🔑 **Cada perchero ofrece SIEMPRE las tres** (y «Única» si el mapa lo tiene de una barra): el mapa
+ * 🔑 **Cada perchero ofrece SIEMPRE Arriba y Abajo** (y «Única» si el mapa lo tiene de una barra): el mapa
  * guardado puede estar viejo (el 10-oct se movió todo y ⛔ se actualizó), así que elige quien está
  * delante, ⛔ el mapa.
  * 🔑 **Un perchero ya escaneado ⛔ se ofrece** al pasar a otro: queda tras «Ver los ya escaneados».
@@ -48,7 +49,8 @@ export function UbicacionFlotante({ percheros, lugar, escaneos, onElegir }: { pe
   }
 
   const posiciones = (p: Perchero): [PosParada, string][] =>
-    p.isla ? [['simple', 'ISLA'], ['frontal', 'Frontal']] : [...(p.doble ? [] : ([['simple', 'Única']] as [PosParada, string][])), ['alta', 'Arriba'], ['baja', 'Abajo'], ['frontal', 'Frontal']]
+    p.isla ? [['simple', 'ISLA']] : [...(p.doble ? [] : ([['simple', 'Única']] as [PosParada, string][])), ['alta', 'Arriba'], ['baja', 'Abajo']]
+  const frontal = esFrontal(lugar)
 
   return (
     <div style={{ position: 'sticky', top: 8, zIndex: 20, marginBottom: space[3] }}>
@@ -76,11 +78,26 @@ export function UbicacionFlotante({ percheros, lugar, escaneos, onElegir }: { pe
             boxShadow: 'var(--mo-sh-md)',
           }}
         >
-          <span>📍 {lugar.trim() || 'Elegí dónde estás'}</span>
+          <span>
+            📍 {sinFrontal(lugar) || 'Elegí dónde estás'}
+            {frontal && <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, background: color.brandBg, color: color.brand, border: `1px solid ${color.brandBorder}`, fontSize: font.sm, verticalAlign: 'middle' }}>FRONTAL</span>}
+          </span>
           <span style={{ fontSize: font.sm, fontWeight: weight.normal, color: color.mut, whiteSpace: 'nowrap' }}>
             {faltan ? `faltan ${faltan}` : 'todos hechos'} {abierta ? '▴' : '▾'}
           </span>
         </button>
+        {/* 🔑 Frontal es de la BARRA de adelante (Darío: «D03 arriba es frontal y abajo normal»):
+            se prende acá y se apaga sola al pasar a otra barra. */}
+        <Button
+          variant={frontal ? 'solid' : 'outline'}
+          tone={frontal ? 'brand' : undefined}
+          aria-pressed={frontal}
+          disabled={!lugar.trim()}
+          onClick={() => onElegir(conFrontal(lugar, !frontal))}
+          style={{ height: 'auto', minHeight: 52, fontSize: font.md, background: frontal ? undefined : color.surface, boxShadow: 'var(--mo-sh-md)' }}
+        >
+          Frontal
+        </Button>
         {sigue && (
           <Button
             variant="solid"

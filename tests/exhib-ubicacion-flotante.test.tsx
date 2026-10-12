@@ -39,15 +39,25 @@ describe('UbicacionFlotante', () => {
     expect(elegidos).toEqual(['ISLA'])
   })
 
-  it('cada perchero ofrece Frontal; lo ya escaneado ⛔ se ofrece; elegir cierra la lista', async () => {
+  it('cada perchero ofrece Arriba y Abajo; lo ya escaneado ⛔ se ofrece; elegir cierra la lista', async () => {
     const { elegidos, botones, host, abrir } = await dibujar('ISLA', ['I01 arriba', 'ISLA'])
     await abrir()
     expect(host.textContent).not.toContain('I01')
     expect(host.textContent).toContain('Ver los ya escaneados (1)')
     const filaD01 = [...host.querySelectorAll('div')].find((d) => d.firstElementChild?.textContent === 'D01')!
-    expect([...filaD01.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Arriba', 'Abajo', 'Frontal'])
-    await act(async () => [...filaD01.querySelectorAll('button')].find((b) => b.textContent === 'Frontal')!.click())
-    expect(elegidos.at(-1)).toBe('D01 frontal')
+    expect([...filaD01.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Arriba', 'Abajo'])
+    await act(async () => [...filaD01.querySelectorAll('button')].find((b) => b.textContent === 'Abajo')!.click())
+    expect(elegidos.at(-1)).toBe('D01 abajo')
     expect(botones().find((b) => b.hasAttribute('aria-expanded'))!.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('🔑 Frontal se prende en la barra de adelante y se ve en la ubicación', async () => {
+    const a = await dibujar('D01 arriba', [])
+    await act(async () => a.botones().find((b) => b.textContent === 'Frontal')!.click())
+    expect(a.elegidos.at(-1)).toBe('D01 arriba frontal')
+    const b = await dibujar('D01 arriba frontal', [])
+    expect(b.host.textContent).toContain('FRONTAL')
+    await act(async () => b.botones().find((x) => x.textContent === 'Frontal')!.click())
+    expect(b.elegidos.at(-1)).toBe('D01 arriba')
   })
 })

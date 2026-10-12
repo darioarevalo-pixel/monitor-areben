@@ -5,12 +5,14 @@
  *
  * 🔴 **Del mapa guardado se toman SÓLO los nombres de los percheros**, ⛔ cómo están armados: el
  * sábado 10-oct se cambiaron cosas de lugar y el mapa ⛔ se actualizó (*«si mañana quiero hacer un
- * chequeo me liquida no poder hacerlo»*). Por eso cada perchero ofrece SIEMPRE Arriba / Abajo /
- * Frontal, y elige quien está parada delante.
+ * chequeo me liquida no poder hacerlo»*). Por eso cada perchero ofrece SIEMPRE Arriba y Abajo, y
+ * elige quien está parada delante.
  * 🔑 **El orden es el del recorrido, fijo** (Darío): I01 → I02 → … → ISLA → D01 → … → D12. ⛔ Es el
  * `orden` del mapa, que es el de la clienta caminando y sirve para otra cosa.
- * 🔑 **Frontal** = la exhibición que repite a propósito para que se vea lleno. Lo escaneado ahí se
- * guarda como `D03 frontal` y lo repetido ⛔ sale como duplicado (`esFrontal` en `reporte.ts`).
+ * 🔑 **Frontal** = la exhibición que repite a propósito para que se vea lleno. Es un ATRIBUTO de la
+ * barra, ⛔ una barra más: D03 arriba puede ser frontal y D03 abajo normal (Darío). Se prende con un
+ * botón y se guarda como `D03 arriba frontal`; lo repetido ahí ⛔ sale como duplicado (`esFrontal`
+ * en `reporte.ts`). Se apaga solo al pasar a otra barra.
  * 🔑 **Un perchero ya escaneado se deja de ofrecer** al pasar a otro (*«normalmente no se vuelve a un
  * lugar donde ya chequeaste»*).
  */
@@ -29,7 +31,7 @@ export type Perchero = {
 }
 
 /** Las posiciones que se eligen en cada perchero. */
-export type PosParada = PosEspacio | 'frontal'
+export type PosParada = PosEspacio
 
 const ORDEN_PARED = { izq: 0, isla: 1, der: 2 } as const
 
@@ -55,9 +57,8 @@ export function percherosDelChequeo(mapa: Pick<MapaLocal, 'modulos'> | null): Pe
   return out.map(({ codigo, nombre, isla, doble }) => ({ codigo, nombre, isla, doble }))
 }
 
-/** El texto del lugar que se guarda en cada escaneo: `D01 arriba`, `D07-08 abajo`, `D03 frontal`, `ISLA`. */
+/** El texto del lugar que se guarda en cada escaneo: `D01 arriba`, `D07-08 abajo`, `ISLA`. */
 export function lugarDeParada(p: Perchero, pos: PosParada): string {
-  if (pos === 'frontal') return `${p.nombre} frontal`
   if (p.isla || pos === 'simple') return p.nombre
   return `${p.nombre} ${pos === 'alta' ? 'arriba' : 'abajo'}`
 }
@@ -67,24 +68,32 @@ export function esFrontal(lugar: string | null | undefined): boolean {
   return /\bfrontal\b/i.test(String(lugar || ''))
 }
 
+/** El lugar sin la marca de frontal: `D03 arriba frontal` → `D03 arriba`. */
+export function sinFrontal(lugar: string): string {
+  return String(lugar || '').replace(/\s*\bfrontal\b/gi, '').trim()
+}
+
+/** Prende o apaga la marca de frontal de la barra donde está parada. */
+export function conFrontal(lugar: string, frontal: boolean): string {
+  const base = sinFrontal(lugar)
+  return frontal && base ? `${base} frontal` : base
+}
+
 /** El perchero (`D01`, `ISLA`) que nombra un lugar, frontal incluido. `null` si ⛔ es del mapa. */
 export function percheroDe(lugar: string): string | null {
-  const sin = String(lugar || '').replace(/\bfrontal\b/i, '').trim()
-  return leerEspacio(sin)?.codigo ?? null
+  return leerEspacio(sinFrontal(lugar))?.codigo ?? null
 }
 
 /**
- * La clave de un lugar para comparar dos textos: `D7 abajo`, `D07 baja` y `D07-08 abajo` son la
- * misma barra. Lo que ⛔ es del mapa, en minúscula y sin espacios de más.
+ * La clave de la BARRA de un lugar para comparar dos textos: `D7 abajo`, `D07 baja`, `D07-08 abajo`
+ * y `D07-08 abajo frontal` son la misma barra (frontal es un atributo, ⛔ otra barra). Lo que ⛔ es
+ * del mapa, en minúscula y sin espacios de más.
  */
 export function claveLugar(lugar: string): string {
-  if (esFrontal(lugar)) {
-    const p = percheroDe(lugar)
-    if (p) return `${p}|frontal`
-  }
-  const e = leerEspacio(lugar)
+  const base = sinFrontal(lugar)
+  const e = leerEspacio(base)
   if (e) return `${e.codigo}|${e.pos}`
-  return String(lugar || '').trim().toLowerCase().replace(/\s+/g, ' ')
+  return base.toLowerCase().replace(/\s+/g, ' ')
 }
 
 /** Los percheros (`D01`, `ISLA`) que ya tienen al menos un escaneo en el recorrido. */
@@ -118,7 +127,7 @@ export function siguienteLugar(percheros: Perchero[], actual: string, escaneos: 
   const cod = percheroDe(actual)
   const i = cod ? percheros.findIndex((p) => p.codigo === cod) : -1
   const aqui = i >= 0 ? percheros[i] : null
-  const e = leerEspacio(actual)
+  const e = leerEspacio(sinFrontal(actual))
   if (aqui && aqui.doble && e?.pos === 'alta') {
     const abajo = lugarDeParada(aqui, 'baja')
     if (!lugares.has(claveLugar(abajo))) return abajo

@@ -110,9 +110,11 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > la lista de PERCHEROS en el **orden del recorrido, fijo: I01 → I02 → ISLA → D01 → … → D12**
 > (`percherosDelChequeo`; ⛔ el `orden` del mapa, que es el de la clienta). 🔴 **Del mapa se toman sólo
 > los NOMBRES**: el 10-oct se movió todo y el mapa ⛔ se actualizó, así que cada perchero ofrece
-> SIEMPRE Arriba / Abajo / **Frontal** (+ «Única» si el mapa lo tiene de una barra) y elige quien está
-> delante. 🔑 **Frontal** = repetición a propósito: se guarda `D03 frontal` y lo repetido ahí ⛔ va a
-> «Variantes duplicadas» (`esFrontal` en `reporte.ts`), pero cuenta como exhibido. Un perchero ya
+> SIEMPRE Arriba / Abajo (+ «Única» si el mapa lo tiene de una barra) y elige quien está delante.
+> 🔑 **Frontal es un botón al lado de la ubicación** que marca la BARRA de adelante (Darío: «D03
+> arriba es frontal y abajo normal»): se guarda `D03 arriba frontal`, lo repetido ahí ⛔ va a
+> «Variantes duplicadas» (`esFrontal` en `reporte.ts`) pero cuenta como exhibido, y se APAGA solo
+> al pasar a otra barra (`claveLugar` ignora el frontal: es la misma barra). Un perchero ya
 > escaneado ⛔ se ofrece al pasar a otro (tras «Ver los ya escaneados»). La flecha: arriba → abajo del
 > mismo si el mapa lo tiene doble, después el próximo sin escanear, al final el salteado
 > (`siguienteLugar`). Arranca sola en el primero, y el foco vuelve al escaneo al elegir. «Otro

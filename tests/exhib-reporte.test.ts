@@ -92,7 +92,7 @@ describe('reporteDelChequeo', () => {
   })
 
   it('🔑 lo repetido en una exhibición FRONTAL ⛔ es duplicado, pero cuenta como exhibido (Darío, 12-oct)', () => {
-    const esc = [sumarUna(escanear(negro, 'D03 frontal', 0), T0 + 60_000), escanear(blanco, 'D03 frontal', 2), escanear(blanco, 'D03 arriba', 3)]
+    const esc = [sumarUna(escanear(negro, 'D03 arriba frontal', 0), T0 + 60_000), escanear(blanco, 'D03 arriba frontal', 2), escanear(blanco, 'D03 arriba', 3)]
     const r = reporteDelChequeo(esc, items, mapa)
     expect(r.duplicadas).toEqual([])
     expect(r.pendientes.map((p) => p.sku)).toEqual(['RMI-0002-38'])
