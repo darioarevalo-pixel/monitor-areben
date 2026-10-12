@@ -148,7 +148,10 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - 🔑 **TODA transferencia ESPERA el pago (F5; Bruno, 5-oct)**: la regla es la FORMA de pago
   (`montoAEsperar` ⇒ `medioDeCuenta === 'transferencia'`), ⛔ el `esperaPago` de cada cuenta —sólo lo
   tenía la 13015 y en modo feria una venta de $200 fue directo a GN—. Deja la venta en `esperando_pago` —⛔ GN, ⛔ ticket, ⛔ mail— hasta que aparece en
-  MP un pago aprobado del **monto exacto** (`espera_monto`: la SUMA de las partes por transferencia).
+  MP un pago aprobado del monto (`espera_monto`: la SUMA de las partes por transferencia) **con ±$100 de
+  tolerancia** (`TOLERANCIA_TRANSFERENCIA`, Bruno 12-oct: el redondeo de la clienta; antes era al centavo). GN
+  recibe el TOTAL; lo que llegó de más o de menos queda en `mp_diferencia`. Si llegó uno EXACTO, el que sólo
+  cae en la tolerancia ⛔ es duda: confirma el exacto. Compite toda venta que espera un monto a menos de $100.
   🔑 **Dónde se detecta** es la cuenta de MP en uso de **Pagos recibidos** (`mp_cuenta_uso`, la MISMA):
   la Caja la muestra («Las transferencias se detectan en») y un admin la cambia (`usar-mp`, que llama
   a `ponerEnUso` de `api/_pagos-recibidos.js`). Cargar una cuenta nueva sigue en Pagos recibidos.
@@ -162,12 +165,29 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   van redondeados a $100 y MP ⛔ dice quién transfiere ⇒ una transferencia AJENA del mismo monto horas
   después confirmaba sola. Más tarde, la elige la cajera viendo la hora y los últimos 4 del número de
   operación. 🔑 La competidora (otra venta esperando el mismo monto) cuenta sólo si es de las últimas 12 h.
-- 🔑 **Paso «Validar transferencia» (Bruno, 12-oct)**: con transferencia el botón dice «Validar
+- 🔑 **Paso «Confirmar transferencia» (Bruno, 12-oct)**: con transferencia el botón dice «Confirmar
   transferencia $X» (⛔ «Finalizar»: la venta no está cobrada). Guardada en `esperando_pago`, el cobro pasa
   a un modal con `EsperaTransferencia` y los **últimos pagos** de la cuenta de MP (`pagosRecientes`: desde
   30 min antes de la venta, 5, los del monto exacto siempre), **sólo para mirar**: confirma `cruzarTransferencia`.
   «Seguir vendiendo mientras llega» la deja en el cartel ámbar de arriba. ⚠️ La cajera ve montos de otros
   pagos de esa media hora (⛔ el total del día, que sigue siendo de admin).
+- 🔑 **Cuando ⛔ llega justa, tres salidas (Bruno, 12-oct, segunda tanda)** en el mismo modal (y en el cartel ámbar):
+  - **«Completar con otro cobro»** (13.300 + 100): la lista pasa a 20 pagos (`todos`) y la cajera **suma**; con la
+    suma dentro de ±$100, `confirmar-varios` (`sumarCobros`). 🔴 El candado es **`caja_venta_mp`** (PK
+    `mp_pago_id`): un pago sumado ⛔ cruza otra venta; el cruce de un pago lee como tomados los de las dos
+    tablas (`pagosParaCruzar`). `mp_cruce = 'varios'`, `mp_pago_id` = el primero, la lista en `confirmacion.cobros`.
+    ⚠️ El cruce de UN pago sigue con el índice de `mp_pago_id`: entre un cruce solo y una suma simultáneos
+    sobre el mismo pago hay una carrera (una sola compu en el local: como A5/A7).
+  - **«Transfirió a otra cuenta»** (nuestra, ⛔ la que mira el cruce): titular (Areben Comercial / Darío / Bruno,
+    `lib/caja/otra-cuenta.core.js`) + banco ⇒ `confirmar-otra-cuenta` la confirma YA (la cajera de la caja o un
+    admin). 🔑 **La cuenta de GN sale del TITULAR**: Darío o Bruno ⇒ 20595 «Transferencia CG», Areben ⇒ 13015;
+    la de oferta (25868) ⛔ cambia. El `payload` se REARMA (`aOtraCuenta`; si las dos cuentas tuvieran
+    descuentos distintos, tira: el monto cambiaría). Sale un **mail a Darío y Bruno** por Mailer
+    (`MAIL_CAJA_A`, si no los dos de @arebensrl.com) para verificar que entró; si ⛔ sale, la venta igual queda
+    y `confirmacion.mail.error` lo dice («el mail no salió» en Ventas).
+  - **«Cambiar forma de pago»** (no le anda internet, paga en efectivo): cancela con `cancelada_motivo =
+    'cambio_pago'` y las prendas VUELVEN AL CARRITO con el stock leído de nuevo (el precio cambiado a mano se
+    conserva; los descuentos a mano ⛔). Con otra venta en el carrito ⛔ (mezclaría dos clientas).
 - 🔑 **Confirmar a mano (B3, sólo admin, en la pestaña)**: la que el cruce ⛔ ve nunca (Caja Gerencia es la
   cuenta de un particular) se confirma con el comprobante (`confirmar-transferencia`): `mp_cruce = 'admin'`
   y `confirmacion` = { por, en, comprobante }. Sale a GN como con el cruce; el POS imprime al verla.
@@ -181,8 +201,9 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   de 3 días (corta en 200 por pedido) y lo que ⛔ llegó se dice. Caché de 60 s por instancia.
 - 🔴 **El stock del Local YA descontó el pedido web**: cada orden de TN entra a GN como venta del Local
   (4 de 4 pagados y 7 de 7 sin pagar, medido), y el Depósito ⛔ lo toca. Tres avisos (Bruno, 4-oct):
-  alcanza el Local ⇒ «el pedido #N lleva esta prenda»; ⛔ alcanza el Local pero sí el Depósito ⇒ ámbar
-  «hay que traer N del depósito»; ⛔ alcanza ni con el Depósito ⇒ rojo «el pedido queda sin stock».
+  alcanza el Local ⇒ «Pedido web #N sin armar»; ⛔ alcanza el Local pero sí el Depósito ⇒ ámbar
+  «traer N del depósito»; ⛔ alcanza ni con el Depósito ⇒ rojo «si la vendés, queda sin stock». Textos cortos
+  y el cartel corta línea (Bruno, 12-oct: el `Badge` es `nowrap` y estiraba el carrito a lo ancho).
   El cruce es por SKU de variante (TN y GN usan el mismo). La Caja ⛔ frena: gana el local.
 - 🔑 **«Con sonido / Sin sonido»** (botón en Escanear, Bruno 4-oct): apaga el pitido y la voz de la Caja en
   ESA computadora (`localStorage` `caja:sonido`). Todos los avisos siguen en pantalla.
@@ -297,9 +318,11 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   ⛔ Reenvía el mail todavía.
   🔑 **También en la PESTAÑA** (Bruno, 11-oct): «Ventas del turno» en el header con turno abierto, y
   «Ventas» en cada fila de «Últimos turnos» (`action=ventas&turno=<id>`). Lo ve cualquiera con permiso
-  de Caja, como el resto de la pestaña. Tocar la cantidad de prendas abre la venta renglón por renglón
-  (talle, promo, el precio de la etiqueta si se cambió). En la pestaña ⛔ hay «Reimprimir»: el ticket
-  se imprime desde el POS.
+  de Caja, como el resto de la pestaña. En la pestaña ⛔ hay «Reimprimir»: el ticket se imprime desde el POS.
+  🔑 **12-oct (Bruno, segunda tanda)**: «Reimprimir» es el **ícono de impresora**; las **provisorias** (sin
+  número de GN: esperando la transferencia, sin llegar a GN o canceladas) van en su sección **abajo**; el
+  **ojo** abre el **resumen** (prendas, formas de pago, total, quién cobró, mail, marcas) en el MISMO modal
+  —dos modales apilados se cierran juntos con Escape—. Reemplazó al desplegable de prendas.
 - ⚠️ Varias partes por transferencia en una venta se esperan como UNA transferencia por la suma.
 - 🔑 **«Varios pagos» se escribe en lo que PAGA la clienta** con cada forma de pago (ya con su %), ⛔ en la
   parte del subtotal a lista: `baseParaMonto` hace la vuelta. Un monto múltiplo de $100 da exacto.

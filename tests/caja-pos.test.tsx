@@ -38,6 +38,11 @@ vi.mock('@/lib/caja/cliente', async (orig) => ({
   reintentarPendientes: vi.fn(async () => ({ intentadas: 0, llegaron: 0 })),
   cerrarTurno: vi.fn(async () => ({ turno: { ...TURNO, cerrado_en: '2026-10-05T20:00:00.000Z' } })),
   cruzarVenta: vi.fn(async () => ({ venta: null, cruce: { estado: 'esperando' }, recientes: [{ id: '998812', monto: 12300, cuando: new Date().toISOString(), origen: 'banco', coincide: false }], cuentaMp: 'Areben Comercial' })),
+  confirmarVarios: vi.fn(),
+  confirmarOtraCuenta: vi.fn(),
+  cancelarVenta: vi.fn(),
+  elegirVariante: vi.fn(),
+  leerVentasTurno: vi.fn(),
   confirmarVenta: vi.fn(async () => {
     throw Object.assign(new Error('Recargá la Caja: cambió una forma de pago (las transferencias van a otra cuenta).'), { status: 400, datos: {} })
   }),
@@ -45,7 +50,7 @@ vi.mock('@/lib/caja/cliente', async (orig) => ({
 
 const { CajaPOS } = await import('@/components/caja/CajaPOS')
 const { Caja } = await import('@/components/caja/Caja')
-const { CerrarTurnoModal } = await import('@/components/caja/partes')
+const { CerrarTurnoModal, EsperaTransferencia, VentasDelTurno } = await import('@/components/caja/partes')
 
 let raiz: Root
 beforeEach(() => {
@@ -218,7 +223,7 @@ describe('POS · A6: la pantalla se pone al día sola (Bruno, 12-oct)', () => {
   })
 })
 
-describe('POS · paso «Validar transferencia» (Bruno, 12-oct)', () => {
+describe('POS · paso «Confirmar transferencia» (Bruno, 12-oct)', () => {
   it('🔑 con transferencia el botón dice «Confirmar transferencia» y, guardada, el cobro pasa a validar con los últimos pagos', async () => {
     const { leerConfig, confirmarVenta } = await import('@/lib/caja/cliente')
     const { REGLAS_INICIALES } = await import('@/lib/caja/core.core.js')
@@ -244,5 +249,119 @@ describe('POS · paso «Validar transferencia» (Bruno, 12-oct)', () => {
     await act(async () => boton('Seguir vendiendo mientras llega').click())
     // La venta sigue esperando en el cartel de arriba, ya ⛔ en el modal.
     expect(document.body.textContent).not.toContain('Seguir vendiendo mientras llega')
+  })
+})
+
+/** Espera a que la pantalla llegue (con la suite entera la máquina va lenta y 10 ms ⛔ alcanzan). */
+async function hastaQue(cond: () => boolean, ms = 3000) {
+  const fin = Date.now() + ms
+  while (!cond() && Date.now() < fin) await act(async () => new Promise((r) => setTimeout(r, 20)))
+}
+
+describe('POS · la transferencia que ⛔ llega justa (Bruno, 12-oct, segunda tanda)', () => {
+  const VENTA = { id: '0d6c1c2e-1111-4222-8333-944445555666', estado: 'esperando_pago', espera_monto: 13400, total: 13400, subtotal: 14900, creada_en: new Date(Date.now() - 60_000).toISOString(), renglones: [{ product_id: 1, size_id: 1, cantidad: 1, precio: 14900, nombre: 'PRENDA 1', talle: 'M' }], pagos: [{ cuenta: 13015, monto: 13400 }], email: null, usuario: 'Sofi' }
+  const reciente = (id: string, monto: number, diferencia: number, coincide = false) => ({ id, monto, cuando: new Date().toISOString(), origen: 'mp', coincide, diferencia })
+
+  it('🔑 «Completar con otro cobro»: suma pagos, dice cuánto falta y confirma con los dos', async () => {
+    const { cruzarVenta, confirmarVarios } = await import('@/lib/caja/cliente')
+    vi.mocked(cruzarVenta).mockResolvedValue({ venta: VENTA, cruce: { estado: 'esperando' }, recientes: [reciente('111', 13300, -100, true), reciente('222', 100, -13300)], cuentaMp: 'Areben Comercial' } as never)
+    vi.mocked(confirmarVarios).mockResolvedValueOnce({ venta: { ...VENTA, estado: 'en_gn', gn_number: 30100 } } as never)
+    const onLlego = vi.fn()
+    await montar(<EsperaTransferencia venta={VENTA as never} onLlego={onLlego} onCambio={() => {}} />)
+    await hastaQue(() => (document.body.textContent || '').includes('de menos'))
+    // La tolerancia: el de $13.300 se marca «de menos», ⛔ «monto exacto».
+    expect(document.body.textContent).toContain('$100 de menos')
+    await act(async () => boton('Completar con otro cobro').click())
+    const sumar = () => [...document.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Sumar')
+    await hastaQue(() => sumar().length === 2)
+    expect(vi.mocked(cruzarVenta)).toHaveBeenLastCalledWith(VENTA.id, undefined, true)
+    await act(async () => sumar()[0].click())
+    expect(document.body.textContent).toContain('Elegidos $13.300 · falta $100')
+    await act(async () => sumar()[0].click())
+    expect(document.body.textContent).toContain('Elegidos $13.400 · completo')
+    await act(async () => boton('Confirmar con estos 2 cobros').click())
+    expect(vi.mocked(confirmarVarios)).toHaveBeenCalledWith(VENTA.id, ['111', '222'])
+    expect(onLlego).toHaveBeenCalledWith(expect.objectContaining({ gn_number: 30100 }))
+  })
+
+  it('🔑 «Transfirió a otra cuenta»: titular y banco, recién ahí confirma', async () => {
+    const { cruzarVenta, confirmarOtraCuenta } = await import('@/lib/caja/cliente')
+    vi.mocked(cruzarVenta).mockResolvedValue({ venta: VENTA, cruce: { estado: 'esperando' }, recientes: [], cuentaMp: null } as never)
+    vi.mocked(confirmarOtraCuenta).mockResolvedValueOnce({ venta: { ...VENTA, estado: 'en_gn' } } as never)
+    const onLlego = vi.fn()
+    await montar(<EsperaTransferencia venta={VENTA as never} onLlego={onLlego} onCambio={() => {}} />)
+    await act(async () => boton('Transfirió a otra cuenta').click())
+    const confirmar = () => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Confirmar transferencia') as HTMLButtonElement
+    expect(confirmar().disabled).toBe(true)
+    await act(async () => boton('Darío Arévalo').click())
+    const banco = document.querySelector('input[placeholder^="Galicia"]') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(banco, 'Galicia')
+      banco.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(confirmar().disabled).toBe(false)
+    await act(async () => confirmar().click())
+    expect(vi.mocked(confirmarOtraCuenta)).toHaveBeenCalledWith(VENTA.id, 'dario', 'Galicia')
+    expect(onLlego).toHaveBeenCalled()
+  })
+
+  it('🔑 «Cambiar forma de pago» en el POS: cancela con motivo y las prendas vuelven al carrito', async () => {
+    const { cruzarVenta, cancelarVenta, elegirVariante, leerPendientes } = await import('@/lib/caja/cliente')
+    vi.mocked(cruzarVenta).mockResolvedValue({ venta: VENTA, cruce: { estado: 'esperando' }, recientes: [], cuentaMp: null } as never)
+    vi.mocked(leerPendientes).mockResolvedValue({ ventas: [VENTA] } as never)
+    vi.mocked(elegirVariante).mockResolvedValue({ variante: PRENDA.variante, stock: PRENDA.stock } as never)
+    vi.mocked(cancelarVenta).mockResolvedValue({ venta: { ...VENTA, estado: 'cancelada' } } as never)
+    await montar(<CajaPOS />)
+    await hastaQue(() => !!boton('Cambiar forma de pago'))
+    await act(async () => boton('Cambiar forma de pago').click())
+    await act(async () => new Promise((r) => setTimeout(r, 10)))
+    await hastaQue(() => vi.mocked(cancelarVenta).mock.calls.length > 0)
+    expect(vi.mocked(cancelarVenta)).toHaveBeenCalledWith(VENTA.id, 'cambio_pago')
+    expect(borrador().renglones).toHaveLength(1)
+    expect(document.body.textContent).toContain('sus prendas volvieron al carrito')
+    vi.mocked(leerPendientes).mockResolvedValue({ ventas: [] } as never)
+  })
+
+  it('🔴 con otra venta en el carrito ⛔ cambia: lo dice y la venta sigue esperando', async () => {
+    const { cruzarVenta, cancelarVenta, leerPendientes } = await import('@/lib/caja/cliente')
+    vi.mocked(cancelarVenta).mockClear()
+    vi.mocked(cruzarVenta).mockResolvedValue({ venta: VENTA, cruce: { estado: 'esperando' }, recientes: [], cuentaMp: null } as never)
+    vi.mocked(leerPendientes).mockResolvedValue({ ventas: [VENTA] } as never)
+    disco.set('caja:borrador:zattia', JSON.stringify({ id: 'b-otra', renglones: [PRENDA], email: '' }))
+    await montar(<CajaPOS />)
+    // El carrito guardado se lee aparte: hasta que llega, el carrito está vacío.
+    await hastaQue(() => !!boton('Cambiar forma de pago') && (document.body.textContent || '').includes('PRENDA 1'))
+    await act(async () => boton('Cambiar forma de pago').click())
+    await hastaQue(() => (document.body.textContent || '').includes('Hay otra venta en el carrito'))
+    expect(document.body.textContent).toContain('Hay otra venta en el carrito')
+    expect(vi.mocked(cancelarVenta)).not.toHaveBeenCalled()
+    vi.mocked(leerPendientes).mockResolvedValue({ ventas: [] } as never)
+  })
+})
+
+describe('Ventas de la caja (Bruno, 12-oct)', () => {
+  const v = (id: string, extra: Record<string, unknown>) => ({ id, estado: 'en_gn', total: 10000, subtotal: 10000, pagos: [{ cuenta: 12921, monto: 10000 }], renglones: [{ product_id: 1, size_id: 1, cantidad: 2, precio: 5000, nombre: 'TOP AIXA', talle: 'S' }], creada_en: new Date().toISOString(), gn_number: null, usuario: 'Sofi', email: null, paga_con: null, ...extra })
+  it('🔑 impresora, las provisorias en su sección de abajo, y el ojo abre el resumen', async () => {
+    const { leerVentasTurno } = await import('@/lib/caja/cliente')
+    vi.mocked(leerVentasTurno).mockResolvedValueOnce({ ventas: [
+      v('a0000000-0000-4000-8000-000000000001', { estado: 'esperando_pago' }),
+      v('a0000000-0000-4000-8000-000000000002', { gn_number: 30100, mp_cruce: 'otra_cuenta', confirmacion: { por: 'Sofi', en: '', titular: 'Darío Arévalo', banco: 'Galicia' } }),
+    ] } as never)
+    const reimprimir = vi.fn()
+    await montar(<VentasDelTurno nombreCuenta={() => 'Efectivo'} onReimprimir={reimprimir} onCerrar={() => {}} />)
+    await hastaQue(() => (document.body.textContent || '').includes('#30100'))
+    const t = document.body.textContent || ''
+    expect(t.indexOf('#30100')).toBeLessThan(t.indexOf('Provisorias (1)'))
+    expect(t).toContain('transferencia a Darío Arévalo (Galicia)')
+    // La impresora sólo en la que tiene ticket (la que espera ⛔).
+    const imp = document.querySelectorAll('button[aria-label="Reimprimir ticket"]')
+    expect(imp).toHaveLength(1)
+    await act(async () => (imp[0] as HTMLButtonElement).click())
+    expect(reimprimir).toHaveBeenCalledWith(expect.objectContaining({ gn_number: 30100 }))
+    await act(async () => (document.querySelectorAll('button[aria-label="Ver la venta"]')[0] as HTMLButtonElement).click())
+    const r = document.body.textContent || ''
+    expect(r).toContain('2 × TOP AIXA')
+    expect(r).toContain('Cobró: Sofi')
+    expect(r).not.toContain('Provisorias (1)')
   })
 })

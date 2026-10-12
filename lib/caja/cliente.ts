@@ -75,11 +75,24 @@ export type Venta = {
   /** Lo que tiene que llegar por transferencia; null si la venta ⛔ espera. */
   espera_monto?: number | null
   mp_pago_id?: string | null
-  mp_cruce?: 'solo' | 'cajera' | 'admin' | null
+  /** `varios`: completada sumando cobros; `otra_cuenta`: transfirió a otra cuenta nuestra (Bruno, 12-oct). */
+  mp_cruce?: 'solo' | 'cajera' | 'admin' | 'varios' | 'otra_cuenta' | null
+  /** Lo que llegó menos lo esperado (la tolerancia de $100; negativo = de menos). */
+  mp_diferencia?: number | null
+  /** `cambio_pago`: se canceló para cobrarla de otra forma (⛔ «no llegó»). */
+  cancelada_motivo?: string | null
   a_mano?: AMano | null
   resolucion?: Resolucion | null
-  /** B3: la transferencia la confirmó un admin con el comprobante. */
-  confirmacion?: { por: string | null; en: string; comprobante: string } | null
+  /** Quién confirmó la transferencia y cómo: B3 (admin, con `comprobante`), los cobros sumados (`cobros`) o la otra cuenta (`titular`, `banco`, y si salió el `mail`). */
+  confirmacion?: {
+    por: string | null
+    en: string
+    comprobante?: string
+    cobros?: Array<{ id: string; monto: number; cuando: string }>
+    titular?: string
+    banco?: string
+    mail?: { enviado_en?: string; a?: string[]; error?: string }
+  } | null
 }
 
 async function leer<T>(r: Response, fallo: string): Promise<T> {
@@ -201,17 +214,28 @@ export type PagoMP = { id: string; monto: number; cuando: string; origen: 'mp' |
 export type Cruce =
   | { estado: 'esperando' }
   | { estado: 'llego'; por: 'solo' | 'cajera'; pago: PagoMP }
-  | { estado: 'elegir'; candidatos: PagoMP[]; motivo: string }
+  | { estado: 'elegir'; candidatos: Array<PagoMP & { diferencia: number }>; motivo: string }
   | { estado: 'invalido' | 'sin_cuenta'; motivo: string }
   | { estado: 'ya' | 'cancelada' }
 
 /** ¿Llegó la transferencia? Con `pago`, la cajera eligió cuál es. Si llegó, la venta ya salió a GN. */
-/** Un pago reciente de la cuenta de MP, sólo para mirar (paso «Validar transferencia», Bruno 12-oct). */
-export type PagoReciente = PagoMP & { coincide: boolean }
-export const cruzarVenta = (id: string, pago?: string) =>
-  post<Resultado & { cruce: Cruce; recientes?: PagoReciente[]; cuentaMp?: string | null }>({ action: 'cruzar', id, ...(pago ? { pago } : {}) }, 'No se pudo mirar Mercado Pago.')
+/**
+ * Un pago reciente de la cuenta de MP (paso «Confirmar transferencia», Bruno 12-oct). `coincide`: cae en la
+ * tolerancia del monto; `diferencia`: el pago menos lo esperado.
+ */
+export type PagoReciente = PagoMP & { coincide: boolean; diferencia: number }
+/** `todos`: la cajera está sumando cobros y necesita ver más que los últimos 5. */
+export const cruzarVenta = (id: string, pago?: string, todos?: boolean) =>
+  post<Resultado & { cruce: Cruce; recientes?: PagoReciente[]; cuentaMp?: string | null }>({ action: 'cruzar', id, ...(pago ? { pago } : {}), ...(todos ? { todos: true } : {}) }, 'No se pudo mirar Mercado Pago.')
+/** Transfirió de menos y mandó el resto: los pagos de MP que juntos completan la venta (Bruno, 12-oct). */
+export const confirmarVarios = (id: string, pagos: string[]) =>
+  post<Resultado>({ action: 'confirmar-varios', id, pagos }, 'No se pudieron confirmar los cobros.')
+/** Transfirió a OTRA cuenta nuestra (Bruno, 12-oct): se confirma ya y sale un mail a Darío y Bruno. */
+export const confirmarOtraCuenta = (id: string, titular: string, banco: string) =>
+  post<Resultado & { mail?: { error?: string } }>({ action: 'confirmar-otra-cuenta', id, titular, banco }, 'No se pudo confirmar la transferencia.')
 
-export const cancelarVenta = (id: string) => post<{ venta: Venta }>({ action: 'cancelar', id }, 'No se pudo cancelar la venta.')
+/** `cambio_pago`: la clienta paga de otra forma y el carrito vuelve al POS (Bruno, 12-oct). */
+export const cancelarVenta = (id: string, motivo?: 'cambio_pago') => post<{ venta: Venta }>({ action: 'cancelar', id, ...(motivo ? { motivo } : {}) }, 'No se pudo cancelar la venta.')
 
 export const reintentarVenta = (id: string) => post<Resultado>({ action: 'reintentar', id }, 'No se pudo reintentar la venta.')
 /** B2: la venta que GN RECHAZÓ: cargada a mano en GN (con su número) o descartada (sólo admin). */

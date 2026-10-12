@@ -269,7 +269,7 @@ describe('caja · el aviso del renglón', () => {
   it('el Local ⛔ alcanza pero el Depósito sí: se arma TRAYENDO del depósito (el AIXA Rojo del 4-oct: Local 0, 2 para reponer)', () => {
     const a = avisoDeRenglon({ sku: 'RVE-0022-RO', local: 0, deposito: 2, enCarrito: 1, porSku })
     expect(a?.tipo).toBe('reponer')
-    expect(a?.texto).toBe('Comprada online (pedido #7153): para armarlo hay que traer 1 del depósito.')
+    expect(a?.texto).toBe('Comprada online, pedido #7153: traer 1 del depósito.')
     expect(avisoDeRenglon({ sku: 'RVE-0022-RO', local: 0, deposito: 2, enCarrito: 2, porSku })?.texto).toMatch(/traer 2 del depósito/)
     expect(avisoDeRenglon({ sku: 'RVE-0022-RO', local: 0, deposito: 2, enCarrito: 3, porSku })?.tipo).toBe('sin_stock')
   })
@@ -297,9 +297,9 @@ describe('caja · el aviso del renglón', () => {
       { numero: 7153, sinPagar: false, prendas: [{ sku: 'C-1', cantidad: 1 }] },
       { numero: 7161, sinPagar: true, prendas: [{ sku: 'C-1', cantidad: 1 }] },
     ] as never)
-    expect(avisoDeRenglon({ sku: 'B-1', local: 0, deposito: 0, enCarrito: 1, porSku: por })?.texto).toBe('Reservada online (pedido #7160 (sin pagar), sin armar): si la vendés, el pedido queda sin stock.')
-    expect(avisoDeRenglon({ sku: 'C-1', local: 0, deposito: 0, enCarrito: 1, porSku: por })?.texto).toMatch(/^Comprada online \(pedido #7153, #7161 \(sin pagar\)/)
-    expect(avisoDeRenglon({ sku: 'B-1', local: 2, deposito: 0, enCarrito: 1, porSku: por })?.texto).toMatch(/#7160 \(sin pagar\) lleva esta prenda/)
+    expect(avisoDeRenglon({ sku: 'B-1', local: 0, deposito: 0, enCarrito: 1, porSku: por })?.texto).toBe('Reservada online, pedido #7160 (sin pagar): si la vendés, queda sin stock.')
+    expect(avisoDeRenglon({ sku: 'C-1', local: 0, deposito: 0, enCarrito: 1, porSku: por })?.texto).toMatch(/^Comprada online, pedido #7153, #7161 \(sin pagar\):/)
+    expect(avisoDeRenglon({ sku: 'B-1', local: 2, deposito: 0, enCarrito: 1, porSku: por })?.texto).toMatch(/Pedido web #7160 \(sin pagar\) sin armar/)
   })
 
   it('una prenda en ningún pedido, o sin SKU ⇒ sin aviso', () => {

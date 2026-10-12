@@ -8,10 +8,14 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { MODOS_OFERTA, NOMBRE_MEDIO, medioDeCuenta, msjOferta, ofertaDe } from '@/lib/caja/core.core.js'
 import { numeroProvisorio, plata, type LogoTicket } from '@/lib/caja/ticket'
+import { TITULARES } from '@/lib/caja/otra-cuenta.core.js'
+import { TOLERANCIA_TRANSFERENCIA } from '@/lib/pagos-recibidos/core.core.js'
 import { CalculadoraBilletes, olvidarConteo } from '@/components/caja/CalculadoraBilletes'
 import { aNumero as aNumeroTxt, textoDiferencia } from '@/lib/caja/textos'
 import {
   cancelarVenta,
+  confirmarOtraCuenta,
+  confirmarVarios,
   cruzarVenta,
   guardarBajadas,
   guardarPolitica,
@@ -498,7 +502,8 @@ export function FilaRenglon({
         <div style={{ gridColumn: '2 / 5', display: 'flex', gap: space[1.5], flexWrap: 'wrap', alignItems: 'center', fontSize: font.xs }}>
           {r.precioLista != null && r.precio != null && Math.abs(r.precioLista - r.precio) > 0.004 && <span style={{ color: color.warningInk }}>Precio cambiado: la etiqueta dice {plata(r.precioLista)}.</span>}
           {mirandoWeb && <span style={{ color: color.mut }}>Pedidos web: leyendo…</span>}
-          {avisoWeb && <Badge tone={avisoWeb.tipo === 'sin_stock' ? 'danger' : 'warning'}>{avisoWeb.texto}</Badge>}
+          {/* El Badge ⛔ corta línea (nowrap): con el aviso largo estiraba el carrito a lo ancho (Bruno, 12-oct). */}
+          {avisoWeb && <Badge tone={avisoWeb.tipo === 'sin_stock' ? 'danger' : 'warning'} style={{ whiteSpace: 'normal', minWidth: 0, maxWidth: '100%', borderRadius: 8 }}>{avisoWeb.texto}</Badge>}
         </div>
       )}
       {/* Los controles van a lo ancho del renglón: con el precio editable ⛔ entran debajo del nombre. */}
@@ -709,19 +714,37 @@ const TEXTO_ORIGEN: Record<string, string> = { mp: 'desde Mercado Pago', banco: 
  * Una venta que espera la transferencia (F5). Pregunta cada 5 s si llegó; el servidor decide con
  * `cruzarTransferencia` y, si llegó, ya la mandó a GN ⇒ acá sólo se imprime (`onLlego`).
  */
-export function EsperaTransferencia({ venta, onLlego, onCambio, onSeguir }: { venta: Venta; onLlego: (v: Venta) => void; onCambio: () => void; onSeguir?: () => void }) {
+export function EsperaTransferencia({
+  venta,
+  onLlego,
+  onCambio,
+  onSeguir,
+  onCambiarPago,
+}: {
+  venta: Venta
+  onLlego: (v: Venta) => void
+  onCambio: () => void
+  onSeguir?: () => void
+  /** «Cambiar forma de pago» (Bruno, 12-oct): la pantalla cancela la venta y vuelve a cargar el carrito. */
+  onCambiarPago?: (v: Venta) => Promise<void>
+}) {
   const [cruce, setCruce] = useState<Cruce | null>(null)
   const [recientes, setRecientes] = useState<{ lista: PagoReciente[]; cuenta: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState<string | null>(null)
   const [seguro, setSeguro] = useState(false)
+  // Bruno, 12-oct: la salida cuando ⛔ llega justa. `sumando` = los pagos elegidos para completar la venta;
+  // `otra` = el formulario de «transfirió a otra cuenta».
+  const [sumando, setSumando] = useState<string[] | null>(null)
+  const [otra, setOtra] = useState<{ titular: string | null; banco: string } | null>(null)
   const terminada = useRef(false)
+  const verTodos = useRef(false)
 
   const mirar = useCallback(
     async (pago?: string) => {
       if (terminada.current) return
       try {
-        const r = await cruzarVenta(venta.id, pago)
+        const r = await cruzarVenta(venta.id, pago, verTodos.current)
         setError(null)
         if (r.cruce.estado === 'llego') {
           terminada.current = true
@@ -758,6 +781,20 @@ export function EsperaTransferencia({ venta, onLlego, onCambio, onSeguir }: { ve
     setTrabajando(null)
   }
 
+  /** Corre una acción que termina la espera (la venta salió a GN o se canceló). */
+  async function terminar(que: string, accion: () => Promise<void>) {
+    setTrabajando(que)
+    setError(null)
+    try {
+      await accion()
+      terminada.current = true
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setTrabajando(null)
+    }
+  }
+
   async function cancelar() {
     setTrabajando('cancelar')
     try {
@@ -772,13 +809,24 @@ export function EsperaTransferencia({ venta, onLlego, onCambio, onSeguir }: { ve
     }
   }
 
+  function empezarASumar() {
+    verTodos.current = true
+    setOtra(null)
+    setSumando([])
+    void mirar()
+  }
+
   const monto = venta.espera_monto ?? venta.total
-  // Los del monto exacto que el cruce ofrece para elegir (con duda); el resto de la lista es para mirar.
+  // Los que el cruce ofrece para elegir (con duda); el resto de la lista es para mirar o para sumar.
   const elegibles = new Set(cruce?.estado === 'elegir' ? cruce.candidatos.map((p) => p.id) : [])
   const lista: PagoReciente[] = [
     ...(recientes?.lista ?? []),
     ...(cruce?.estado === 'elegir' ? cruce.candidatos.filter((p) => !recientes?.lista.some((x) => x.id === p.id)).map((p) => ({ ...p, coincide: true })) : []),
   ]
+  const suma = (sumando ?? []).reduce((s, id) => s + (lista.find((p) => p.id === id)?.monto ?? 0), 0)
+  const falta = Math.round((monto - suma) * 100) / 100
+  const completa = !!sumando && sumando.length > 0 && Math.abs(falta) <= TOLERANCIA_TRANSFERENCIA
+  const otraLista = !!otra && !!otra.titular && otra.banco.trim().length >= 2
   return (
     <Notice tone="warning">
       <div style={{ display: 'grid', gap: space[2] }}>
@@ -814,29 +862,115 @@ export function EsperaTransferencia({ venta, onLlego, onCambio, onSeguir }: { ve
           La venta se finaliza y sale el ticket cuando la transferencia aparece en Mercado Pago. No alcanza con el comprobante del teléfono.
           {venta.total !== monto && ` El resto (${plata(venta.total - monto)}) se cobra aparte.`}
         </span>
-        {cruce?.estado === 'elegir' && <span>{cruce.motivo}</span>}
+        {/* Bruno, 12-oct: las tres salidas cuando la transferencia ⛔ llega justa. */}
+        <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+          {!sumando && (
+            <Button size="sm" variant="outline" disabled={!!trabajando} onClick={empezarASumar}>
+              Completar con otro cobro
+            </Button>
+          )}
+          {!otra && (
+            <Button size="sm" variant="outline" disabled={!!trabajando} onClick={() => { setSumando(null); setOtra({ titular: null, banco: '' }) }}>
+              Transfirió a otra cuenta
+            </Button>
+          )}
+          {onCambiarPago && (
+            <Button size="sm" variant="outline" loading={trabajando === 'cambiar'} disabled={!!trabajando} onClick={() => terminar('cambiar', () => onCambiarPago(venta))}>
+              Cambiar forma de pago
+            </Button>
+          )}
+        </div>
+        {otra && (
+          <div style={{ display: 'grid', gap: space[2], padding: space[2], border: `1px solid ${color.line2}`, borderRadius: radius.md, background: color.surface }}>
+            <span style={{ fontSize: font.sm, fontWeight: weight.semibold }}>¿A nombre de quién está la cuenta a la que transfirió?</span>
+            <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+              {TITULARES.map((t) => (
+                <Button key={t.id} size="sm" variant={otra.titular === t.id ? 'solid' : 'outline'} onClick={() => setOtra({ ...otra, titular: t.id })}>
+                  {t.nombre}
+                </Button>
+              ))}
+            </div>
+            <Field label="Banco">
+              <Input value={otra.banco} placeholder="Galicia, Santander, Brubank…" onChange={(e) => setOtra({ ...otra, banco: e.target.value })} />
+            </Field>
+            <span style={{ fontSize: font.xs, color: color.mut }}>La venta se confirma ya y les llega un mail a Darío y Bruno para que verifiquen que entró.</span>
+            <div style={{ display: 'flex', gap: space[2] }}>
+              <Button
+                size="sm"
+                tone="success"
+                disabled={!otraLista || !!trabajando}
+                loading={trabajando === 'otra'}
+                onClick={() =>
+                  terminar('otra', async () => {
+                    const r = await confirmarOtraCuenta(venta.id, otra.titular!, otra.banco.trim())
+                    onLlego(r.venta)
+                  })
+                }
+              >
+                Confirmar transferencia
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setOtra(null)}>
+                Volver
+              </Button>
+            </div>
+          </div>
+        )}
+        {sumando && (
+          <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm }}>
+            <b style={{ fontVariantNumeric: 'tabular-nums' }}>
+              Elegidos {plata(suma)} · {falta > 0 ? `falta ${plata(falta)}` : falta < 0 ? `sobra ${plata(-falta)}` : 'completo'}
+            </b>
+            <Button
+              size="sm"
+              tone="success"
+              disabled={!completa || !!trabajando}
+              loading={trabajando === 'varios'}
+              onClick={() =>
+                terminar('varios', async () => {
+                  const r = await confirmarVarios(venta.id, sumando)
+                  onLlego(r.venta)
+                })
+              }
+            >
+              Confirmar con {sumando.length === 1 ? 'este cobro' : `estos ${sumando.length} cobros`}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => { verTodos.current = false; setSumando(null) }}>
+              Volver
+            </Button>
+          </div>
+        )}
+        {cruce?.estado === 'elegir' && !sumando && <span>{cruce.motivo}</span>}
         {recientes && (
           <div style={{ display: 'grid', gap: space[1] }}>
             <span style={{ fontSize: font.sm, fontWeight: weight.semibold }}>
               Últimos pagos en Mercado Pago{recientes.cuenta ? ` (${recientes.cuenta})` : ''}
             </span>
             {lista.length === 0 && <span style={{ fontSize: font.sm, color: color.mut }}>Todavía no entró ningún pago.</span>}
-            {lista.map((p) => (
-              <div key={p.id} style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm, color: p.coincide ? color.ink : color.mut }}>
-                <span style={{ fontWeight: p.coincide ? weight.heavy : weight.semibold, fontVariantNumeric: 'tabular-nums' }}>{plata(p.monto)}</span>
-                <span>a las {hora(p.cuando)}</span>
-                <span>{TEXTO_ORIGEN[p.origen] ?? p.origen}</span>
-                {/* A5: para compararlo con el comprobante de la clienta (MP ⛔ dice quién transfirió). */}
-                <span style={{ fontVariantNumeric: 'tabular-nums' }}>operación ····{String(p.id).slice(-4)}</span>
-                {p.coincide && !elegibles.has(p.id) && Date.parse(p.cuando) < Date.parse(venta.creada_en) && <Badge tone="neutral">de antes de la venta</Badge>}
-                {p.coincide && elegibles.has(p.id) && (
-                  <Button size="sm" tone="success" loading={trabajando === p.id} disabled={!!trabajando} onClick={() => elegir(p.id)}>
-                    Elegir
-                  </Button>
-                )}
-                {p.coincide && !elegibles.has(p.id) && Date.parse(p.cuando) >= Date.parse(venta.creada_en) && <Badge tone="success">monto exacto</Badge>}
-              </div>
-            ))}
+            {lista.map((p) => {
+              const despues = Date.parse(p.cuando) >= Date.parse(venta.creada_en)
+              const elegido = !!sumando && sumando.includes(p.id)
+              return (
+                <div key={p.id} style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm, color: p.coincide || elegido ? color.ink : color.mut }}>
+                  <span style={{ fontWeight: p.coincide || elegido ? weight.heavy : weight.semibold, fontVariantNumeric: 'tabular-nums' }}>{plata(p.monto)}</span>
+                  <span>a las {hora(p.cuando)}</span>
+                  <span>{TEXTO_ORIGEN[p.origen] ?? p.origen}</span>
+                  {/* A5: para compararlo con el comprobante de la clienta (MP ⛔ dice quién transfirió). */}
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>operación ····{String(p.id).slice(-4)}</span>
+                  {p.coincide && !despues && !sumando && !elegibles.has(p.id) && <Badge tone="neutral">de antes de la venta</Badge>}
+                  {p.coincide && !sumando && <Badge tone={p.diferencia ? 'warning' : 'success'}>{textoDiferenciaPago(p.diferencia)}</Badge>}
+                  {p.coincide && !sumando && elegibles.has(p.id) && (
+                    <Button size="sm" tone="success" loading={trabajando === p.id} disabled={!!trabajando} onClick={() => elegir(p.id)}>
+                      Elegir
+                    </Button>
+                  )}
+                  {sumando && (
+                    <Button size="sm" variant={elegido ? 'solid' : 'outline'} disabled={!!trabajando} onClick={() => setSumando(elegido ? sumando.filter((x) => x !== p.id) : [...sumando, p.id])}>
+                      {elegido ? 'Sacar' : 'Sumar'}
+                    </Button>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
         {(cruce?.estado === 'sin_cuenta' || cruce?.estado === 'invalido') && <span>{cruce.motivo}</span>}
@@ -845,6 +979,9 @@ export function EsperaTransferencia({ venta, onLlego, onCambio, onSeguir }: { ve
     </Notice>
   )
 }
+
+/** Lo que dice el pago al lado del monto: «monto exacto», o cuánto de más o de menos (la tolerancia, Bruno 12-oct). */
+export const textoDiferenciaPago = (d: number) => (!d ? 'monto exacto' : d < 0 ? `${plata(-d)} de menos` : `${plata(d)} de más`)
 
 /** Las ventas cobradas que todavía ⛔ están en GN. Rojo: hasta que lleguen, el stock y la caja de GN ⛔ cierran. */
 /**
@@ -908,15 +1045,108 @@ const ESTADO_VENTA: Record<string, { texto: string; tono: 'success' | 'danger' |
   descartada: { texto: 'Descartada', tono: 'neutral' },
 }
 
+/** Lo hecho a mano y cómo se cobró, en palabras: la línea chica debajo del estado y el resumen. */
+function marcasDe(v: Venta): string[] {
+  const am = v.a_mano
+  const c = v.confirmacion
+  return [
+    // B5: lo hecho a mano, a la vista. B2/B3: cómo se resolvió.
+    am && am.precios > 0 && `precio bajado ${plata(am.precios)}`,
+    am && (am.venta > 0 || am.prendas > 0) && `descuento a mano ${plata(am.venta + am.prendas)}`,
+    v.resolucion?.tipo === 'a_mano' && `cargada a mano en GN (${v.resolucion.por ?? ''})`,
+    v.resolucion?.tipo === 'descartada' && `descartada: «${v.resolucion.nota}»`,
+    v.mp_cruce === 'admin' && `transferencia confirmada a mano (${c?.por ?? 'admin'})`,
+    // Bruno, 12-oct: la transferencia que ⛔ llegó justa.
+    v.mp_cruce === 'varios' && `${c?.cobros?.length ?? 'varios'} cobros de Mercado Pago`,
+    v.mp_cruce === 'otra_cuenta' && `transferencia a ${c?.titular ?? 'otra cuenta'}${c?.banco ? ` (${c.banco})` : ''}${c?.mail?.error ? ' · el mail no salió' : ''}`,
+    v.mp_diferencia ? `transferencia: ${textoDiferenciaPago(v.mp_diferencia)}` : false,
+    v.cancelada_motivo === 'cambio_pago' && 'cambió la forma de pago',
+  ].filter(Boolean) as string[]
+}
+
+const numeroDeVenta = (v: Venta) => (v.gn_number ? `#${v.gn_number}` : `Provisoria ${numeroProvisorio(v.id)}`)
+
+/** El resumen de una venta (Bruno, 12-oct): qué se llevó, cómo pagó y quién la cobró, para identificarla rápido. */
+function ResumenVenta({ venta: v, nombreCuenta, onVolver, onReimprimir }: { venta: Venta; nombreCuenta: (id: number) => string; onVolver: () => void; onReimprimir?: () => void }) {
+  const e = ESTADO_VENTA[v.estado] ?? { texto: v.estado, tono: 'neutral' as const }
+  const marcas = marcasDe(v)
+  const fila: React.CSSProperties = { display: 'flex', gap: space[3], justifyContent: 'space-between', fontSize: font.base }
+  const der: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }
+  return (
+    <div style={{ display: 'grid', gap: space[3] }}>
+      <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button size="sm" variant="outline" onClick={onVolver}>
+          <Icono nombre="atras" size={14} /> Ventas
+        </Button>
+        <b style={{ flex: 1, fontSize: font.lg, fontVariantNumeric: 'tabular-nums' }}>
+          {numeroDeVenta(v)} · {hora(v.creada_en)}
+        </b>
+        <Badge tone={e.tono}>{e.texto}</Badge>
+        {onReimprimir && (
+          <Button size="sm" variant="outline" onClick={onReimprimir} title="Reimprimir ticket">
+            <Icono nombre="impresora" size={16} /> Reimprimir
+          </Button>
+        )}
+      </div>
+      <div style={{ display: 'grid', gap: space[1] }}>
+        {(v.renglones ?? []).map((r, i) => (
+          <div key={i} style={fila}>
+            <span>
+              {r.cantidad} × <b>{r.nombre ?? `Producto ${r.product_id}`}</b>
+              {r.talle ? <span style={{ color: color.mut }}> · {r.talle}</span> : null}
+              {r.promos?.length ? <span style={{ color: color.successInk }}> · {r.promos.join(' · ')}</span> : null}
+              {r.precio_lista != null && r.precio_lista !== r.precio && <span style={{ color: color.warningInk }}> · etiqueta {plata(r.precio_lista)}</span>}
+            </span>
+            <span style={der}>{plata(r.importe ?? r.cantidad * r.precio)}</span>
+          </div>
+        ))}
+        {!v.renglones?.length && <span style={{ color: color.mut }}>La venta no tiene las prendas guardadas.</span>}
+      </div>
+      <div style={{ display: 'grid', gap: space[1], borderTop: `1px solid ${color.line}`, paddingTop: space[2] }}>
+        {v.subtotal !== v.total && (
+          <div style={{ ...fila, color: color.mut }}>
+            <span>Subtotal</span>
+            <span style={der}>{plata(v.subtotal)}</span>
+          </div>
+        )}
+        {v.pagos.map((p, i) => (
+          <div key={i} style={fila}>
+            <span>{nombreCuenta(p.cuenta)}</span>
+            <span style={der}>{plata(p.monto)}</span>
+          </div>
+        ))}
+        <div style={{ ...fila, fontWeight: weight.heavy }}>
+          <span>Total</span>
+          <span style={der}>{plata(v.total)}</span>
+        </div>
+        {v.paga_con != null && v.paga_con > 0 && (
+          <div style={{ ...fila, color: color.mut }}>
+            <span>Pagó con</span>
+            <span style={der}>{plata(v.paga_con)}</span>
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'grid', gap: 2, fontSize: font.sm, color: color.ink2 }}>
+        <span>Cobró: {v.usuario ?? '—'}</span>
+        {v.email && <span>Mail de la clienta: {v.email}</span>}
+        {marcas.length > 0 && <span style={{ color: color.warningInk }}>{marcas.join(' · ')}</span>}
+      </div>
+    </div>
+  )
+}
+
 /**
  * B1 (auditoría, 11-oct): las ventas del turno, de la más nueva a la más vieja, con «Reimprimir».
  * Antes sólo quedaba la última, en memoria. La que espera la transferencia o se canceló ⛔ tiene ticket.
  * 🔑 También en la PESTAÑA (Bruno, 11-oct): el turno abierto y cada uno de «Últimos turnos» (`turnoId`),
  * sin «Reimprimir» —el ticket se arma en el POS, con la impresora del local—.
+ * Bruno, 12-oct: «Reimprimir» es la impresora, las PROVISORIAS (sin número de GN) van en su sección abajo, y
+ * el ojo abre el resumen de la venta (en el mismo modal: dos modales apilados cerrarían juntos con Escape).
  */
 export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar, turnoId, titulo = 'Ventas' }: { nombreCuenta: (id: number) => string; /** Sin él, ⛔ hay «Reimprimir». */ onReimprimir?: (v: Venta) => void; onCerrar: () => void; /** Sin él, el turno abierto. */ turnoId?: string; titulo?: string }) {
   const [ventas, setVentas] = useState<Venta[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [viendo, setViendo] = useState<Venta | null>(null)
   useEffect(() => {
     let vivo = true
     leerVentasTurno(turnoId)
@@ -930,101 +1160,84 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar, turnoId, 
   const td: React.CSSProperties = { padding: `${space[2]}px`, borderBottom: `1px solid ${color.line}`, fontSize: font.base, verticalAlign: 'middle' }
   const der: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
   const cobradas = (ventas ?? []).filter((v) => v.estado !== 'cancelada' && v.estado !== 'esperando_pago' && v.estado !== 'descartada')
-  // Venta por venta (Bruno, 11-oct): las prendas de cada una se abren tocando la cantidad.
-  const [abierta, setAbierta] = useState<string | null>(null)
-  const columnas = onReimprimir ? 7 : 6
+  const conTicket = (v: Venta) => v.estado !== 'cancelada' && v.estado !== 'esperando_pago' && v.estado !== 'descartada'
+  const firmes = (ventas ?? []).filter((v) => v.gn_number != null)
+  const provisorias = (ventas ?? []).filter((v) => v.gn_number == null)
+
+  const tabla = (lista: Venta[]) => (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={th}>Hora</th>
+            <th style={th}>Venta</th>
+            <th style={{ ...th, ...der }}>Prendas</th>
+            <th style={th}>Forma de pago</th>
+            <th style={{ ...th, ...der }}>Total</th>
+            <th style={th}>Estado</th>
+            <th style={th} />
+          </tr>
+        </thead>
+        <tbody>
+          {lista.map((v) => {
+            const e = ESTADO_VENTA[v.estado] ?? { texto: v.estado, tono: 'neutral' as const }
+            const prendas = (v.renglones ?? []).reduce((t, r) => t + r.cantidad, 0)
+            const marcas = marcasDe(v)
+            return (
+              <tr key={v.id}>
+                <td style={td}>{hora(v.creada_en)}</td>
+                <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>{numeroDeVenta(v)}</td>
+                <td style={{ ...td, ...der }}>{prendas || '—'}</td>
+                <td style={td}>{[...new Set(v.pagos.map((p) => nombreCuenta(p.cuenta)))].join(' + ')}</td>
+                <td style={{ ...td, ...der, fontWeight: weight.semibold }}>{plata(v.total)}</td>
+                <td style={td}>
+                  <Badge tone={e.tono}>{e.texto}</Badge>
+                  {marcas.length > 0 && <div style={{ fontSize: font.xs, color: color.warningInk, marginTop: 2 }}>{marcas.join(' · ')}</div>}
+                </td>
+                <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <Button size="sm" variant="ghost" aria-label="Ver la venta" title="Ver la venta" onClick={() => setViendo(v)}>
+                    <Icono nombre="tn-visibilidad" size={16} />
+                  </Button>
+                  {onReimprimir && conTicket(v) && (
+                    <Button size="sm" variant="ghost" aria-label="Reimprimir ticket" title="Reimprimir ticket" onClick={() => onReimprimir(v)}>
+                      <Icono nombre="impresora" size={16} />
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+
   return (
     <Modal abierto onCerrar={onCerrar} titulo={titulo} ancho="xl">
       {error && <Notice tone="danger">{error}</Notice>}
       {!ventas && !error && <span style={{ color: color.mut }}>Leyendo las ventas…</span>}
       {ventas && !ventas.length && <span style={{ color: color.mut }}>Sin ventas en esta caja.</span>}
-      {ventas && ventas.length > 0 && (
+      {viendo && (
+        <ResumenVenta
+          venta={viendo}
+          nombreCuenta={nombreCuenta}
+          onVolver={() => setViendo(null)}
+          onReimprimir={onReimprimir && conTicket(viendo) ? () => onReimprimir(viendo) : undefined}
+        />
+      )}
+      {!viendo && ventas && ventas.length > 0 && (
         <div style={{ display: 'grid', gap: space[2] }}>
           <span style={{ fontSize: font.sm, color: color.ink2 }}>
             {cobradas.length === 1 ? '1 venta cobrada' : `${cobradas.length} ventas cobradas`} · {plata(cobradas.reduce((t, v) => t + v.total, 0))}
           </span>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={th}>Hora</th>
-                  <th style={th}>Venta</th>
-                  <th style={{ ...th, ...der }}>Prendas</th>
-                  <th style={th}>Forma de pago</th>
-                  <th style={{ ...th, ...der }}>Total</th>
-                  <th style={th}>Estado</th>
-                  {onReimprimir && <th style={th} />}
-                </tr>
-              </thead>
-              <tbody>
-                {ventas.map((v) => {
-                  const e = ESTADO_VENTA[v.estado] ?? { texto: v.estado, tono: 'neutral' as const }
-                  const prendas = (v.renglones ?? []).reduce((t, r) => t + r.cantidad, 0)
-                  const conTicket = v.estado !== 'cancelada' && v.estado !== 'esperando_pago' && v.estado !== 'descartada'
-                  // B5: lo hecho a mano, a la vista. B2/B3: cómo se resolvió.
-                  const am = v.a_mano
-                  const marcas = [
-                    am && am.precios > 0 && `precio bajado ${plata(am.precios)}`,
-                    am && (am.venta > 0 || am.prendas > 0) && `descuento a mano ${plata(am.venta + am.prendas)}`,
-                    v.resolucion?.tipo === 'a_mano' && `cargada a mano en GN (${v.resolucion.por ?? ''})`,
-                    v.resolucion?.tipo === 'descartada' && `descartada: «${v.resolucion.nota}»`,
-                    v.mp_cruce === 'admin' && `transferencia confirmada a mano (${v.confirmacion?.por ?? 'admin'})`,
-                  ].filter(Boolean) as string[]
-                  const verPrendas = abierta === v.id
-                  return (
-                    <Fragment key={v.id}>
-                    <tr>
-                      <td style={td}>{hora(v.creada_en)}</td>
-                      <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>{v.gn_number ? `#${v.gn_number}` : `Provisoria ${numeroProvisorio(v.id)}`}</td>
-                      <td style={{ ...td, ...der }}>
-                        {prendas ? (
-                          <Button size="sm" variant="ghost" aria-expanded={verPrendas} onClick={() => setAbierta(verPrendas ? null : v.id)}>
-                            {prendas} {verPrendas ? '▾' : '▸'}
-                          </Button>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td style={td}>{[...new Set(v.pagos.map((p) => nombreCuenta(p.cuenta)))].join(' + ')}</td>
-                      <td style={{ ...td, ...der, fontWeight: weight.semibold }}>{plata(v.total)}</td>
-                      <td style={td}>
-                        <Badge tone={e.tono}>{e.texto}</Badge>
-                        {marcas.length > 0 && <div style={{ fontSize: font.xs, color: color.warningInk, marginTop: 2 }}>{marcas.join(' · ')}</div>}
-                      </td>
-                      {onReimprimir && <td style={{ ...td, textAlign: 'right' }}>
-                        {conTicket && (
-                          <Button size="sm" variant="outline" onClick={() => onReimprimir(v)}>
-                            Reimprimir
-                          </Button>
-                        )}
-                      </td>}
-                    </tr>
-                    {verPrendas && (
-                      <tr>
-                        <td colSpan={columnas} style={{ ...td, background: color.bg2 }}>
-                          <div style={{ display: 'grid', gap: 2, fontSize: font.sm }}>
-                            {(v.renglones ?? []).map((r, i) => (
-                              <div key={i} style={{ display: 'flex', gap: space[3], justifyContent: 'space-between' }}>
-                                <span>
-                                  {r.cantidad > 1 ? `${r.cantidad} × ` : ''}
-                                  {r.nombre ?? `Producto ${r.product_id}`}
-                                  {r.talle ? <span style={{ color: color.mut }}> · {r.talle}</span> : null}
-                                  {r.promos?.length ? <span style={{ color: color.successInk }}> · {r.promos.join(' · ')}</span> : null}
-                                  {r.precio_lista != null && r.precio_lista !== r.precio && <span style={{ color: color.warningInk }}> · etiqueta {plata(r.precio_lista)}</span>}
-                                </span>
-                                <span style={der}>{plata(r.importe ?? r.cantidad * r.precio)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          {firmes.length > 0 ? tabla(firmes) : <span style={{ color: color.mut, fontSize: font.sm }}>Ninguna venta con número de Gestión Nube todavía.</span>}
+          {provisorias.length > 0 && (
+            <div style={{ display: 'grid', gap: space[1], marginTop: space[3] }}>
+              <b style={{ fontSize: font.sm, color: color.ink2 }}>Provisorias ({provisorias.length})</b>
+              <span style={{ fontSize: font.xs, color: color.mut }}>Sin número de Gestión Nube: esperan la transferencia, no llegaron a GN, o se cancelaron.</span>
+              {tabla(provisorias)}
+            </div>
+          )}
         </div>
       )}
     </Modal>

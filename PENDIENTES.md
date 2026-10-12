@@ -153,6 +153,18 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
     ▶️ Falta reproducirlo: captura o pasos de Bruno.
   - Carrito: que entren **3 productos a la vista**; la cruz de sacar, **en rojo**.
   - **Botón abajo a la derecha «Ayuda / problemas»**: dejar registradas mejoras que faltan y problemas.
+- 🏁 **Segunda tanda dictada por Bruno (12-oct, noche)** — HECHA; `sql/migrate-caja-cobros.sql` CORRIDA en Zattia
+  (tabla `caja_venta_mp` + `mp_diferencia` + `cancelada_motivo`, leídas). ▶️ Falta caminarla en el local (lista en la
+  ficha `docs/secciones/caja.md`). Plan `~/.claude/plans/segunda-tanda-de-cambios-goofy-cocke.md`:
+  - El aviso «El pedido web #… (sin pagar) lleva esta prenda…» es largo y **estira la vista a lo ancho**.
+  - Transferencia: monto justo ⇒ como hoy. Diferencia **≤ $100** (redondeo) ⇒ se acepta. Diferencia mayor ⇒
+    **sumar otro cobro de MP a la misma venta** (13.300 + 100).
+  - Excepción **«transfirió a otra cuenta nuestra»**: titular Areben Comercial / Darío Arévalo / Bruno
+    Arévalo + banco ⇒ **se confirma ya** y sale un **mail a Darío y Bruno** para verificar. Cuenta de GN:
+    Darío o Bruno ⇒ Transferencia CG (20595); Areben ⇒ Transferencia (13015).
+  - **Cambiar forma de pago** (no le anda internet, paga en efectivo): vuelve al carrito.
+  - Ventas: «Reimprimir» como **botón de impresora**; las **provisorias, en una sección abajo**; un botón que
+    abre el **resumen de la venta** (qué se llevó).
 - ▶️ **Diseñar aparte (Bruno, 12-oct)**:
   - **LISTAS DE PRECIOS en vez de precios de feria/liquidación.** Una liquidación genera una lista **online**
     (escribe en TN y TN pasa a GN) o **local** (va al POS y escribe en GN; puede ser más barata o más cara

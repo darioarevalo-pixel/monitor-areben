@@ -78,7 +78,9 @@ import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
 import { REGLAS_INICIALES, armarVentaGN, cobro, exigirCuentas, exigirFeria, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, normalizarOferta, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { promosDeCreditoEnMostrador } from '../lib/agenda/promos.core.js'
-import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
+import { TOLERANCIA_TRANSFERENCIA, cruzarTransferencia, pagosRecientes, sumarCobros } from '../lib/pagos-recibidos/core.core.js'
+import { aOtraCuenta, mailOtraCuenta, titularDe } from '../lib/caja/otra-cuenta.core.js'
+import { pedirAvisoInterno } from '../lib/mailer/aviso.core.js'
 import { cuentasDe, pagosDelDia, ponerEnUso, usosDe } from './_pagos-recibidos.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
@@ -395,6 +397,31 @@ export default async function handler(req, res) {
   // El ticket por mail (F4): sin `MAILER_URL` o `MAILER_TICKET_KEY` la venta sale igual, sin mail.
   const mailer = { url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch }
   const enviar = (fila) => enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token, mailer })
+
+  /**
+   * Los pagos de MP que puede tomar una venta que espera la transferencia, y los que ya tomó otra. Se
+   * leen los días desde el de la venta hasta hoy (A4: un pago después de medianoche ⛔ cruzaba nunca).
+   * Tomados = el `mp_pago_id` de cada venta + los de `caja_venta_mp` (las que se completaron sumando
+   * cobros, 12-oct). `null` = Pagos recibidos ⛔ tiene una cuenta de MP conectada.
+   */
+  async function pagosParaCruzar(venta) {
+    const usos = await usosDe(sb, store)
+    if (!usos.length) return null
+    const desde = new Date(Date.parse(venta.creada_en) - 2 * 86400000).toISOString()
+    const dias = diasDelCruce(Date.parse(venta.creada_en), Date.now())
+    const [porDia, unoSolo, sumados] = await Promise.all([
+      Promise.all(dias.map((dia) => pagosDelDia(sb, usos, dia))),
+      sb.from('caja_venta').select('mp_pago_id').eq('store', store).not('mp_pago_id', 'is', null).gte('creada_en', desde),
+      sb.from('caja_venta_mp').select('mp_pago_id').eq('store', store).gte('creado_en', desde),
+    ])
+    if (unoSolo.error) throw new Error(unoSolo.error.message)
+    // Sin `sql/migrate-caja-cobros.sql` la tabla ⛔ está: el cruce de un pago sigue andando.
+    if (sumados.error && sumados.error.code !== '42P01') throw new Error(sumados.error.message)
+    const vistos = new Set()
+    const pagos = porDia.flatMap((x) => x.pagos).filter((p) => !vistos.has(p.id) && vistos.add(p.id))
+    const reclamados = [...(unoSolo.data || []), ...((sumados.data) || [])].map((r) => r.mp_pago_id)
+    return { pagos, reclamados }
+  }
 
   try {
     if (req.method === 'GET') {
@@ -925,33 +952,27 @@ export default async function handler(req, res) {
         if (!v.data) return res.status(404).json({ error: 'La venta no existe.' })
         if (v.data.estado !== 'esperando_pago') return res.status(200).json({ venta: sinPayload(v.data), cruce: { estado: v.data.estado === 'cancelada' ? 'cancelada' : 'ya' } })
 
-        const usos = await usosDe(sb, store)
-        if (!usos.length) return res.status(200).json({ venta: sinPayload(v.data), cruce: { estado: 'sin_cuenta', motivo: 'Pagos recibidos no tiene una cuenta de Mercado Pago conectada: la transferencia no se puede ver. Cancelá y cobrá por otra cuenta.' } })
-        // 🔴 Auditoría A4 (11-oct): ⛔ sólo el día de la venta. Un pago después de medianoche ⛔ cruzaba
-        // nunca: se leen los días desde el de la venta hasta hoy (tope DIAS_CRUCE, MP se lee cada 5 s).
-        const dias = diasDelCruce(Date.parse(v.data.creada_en), Date.now())
-        const [porDia, reclamados, competidoras] = await Promise.all([
-          Promise.all(dias.map((dia) => pagosDelDia(sb, usos, dia))),
-          sb.from('caja_venta').select('mp_pago_id').eq('store', store).not('mp_pago_id', 'is', null)
-            .gte('creada_en', new Date(Date.parse(v.data.creada_en) - 2 * 86400000).toISOString()),
-          // Robustez (11-oct): sólo las de las últimas horas. Una venta vieja olvidada esperando el mismo
-          // monto trababa el cruce automático de TODAS las de ese monto, para siempre.
-          sb.from('caja_venta').select('id').eq('store', store).eq('estado', 'esperando_pago').eq('espera_monto', v.data.espera_monto).neq('id', id)
-            .gte('creada_en', new Date(Date.now() - COMPETIDORAS_MS).toISOString()),
-        ])
-        if (reclamados.error) throw new Error(reclamados.error.message)
+        const mp = await pagosParaCruzar(v.data)
+        if (!mp) return res.status(200).json({ venta: sinPayload(v.data), cruce: { estado: 'sin_cuenta', motivo: 'Pagos recibidos no tiene una cuenta de Mercado Pago conectada: la transferencia no se puede ver. Cancelá y cobrá por otra cuenta.' } })
+        const { pagos, reclamados } = mp
+        // Robustez (11-oct): sólo las de las últimas horas. Una venta vieja olvidada esperando el mismo
+        // monto trababa el cruce automático de TODAS las de ese monto, para siempre. Con la tolerancia
+        // (12-oct) compite toda venta que espera un monto a menos de $100 de éste.
+        const espera = Number(v.data.espera_monto)
+        const competidoras = await sb.from('caja_venta').select('id').eq('store', store).eq('estado', 'esperando_pago')
+          .gte('espera_monto', espera - TOLERANCIA_TRANSFERENCIA).lte('espera_monto', espera + TOLERANCIA_TRANSFERENCIA).neq('id', id)
+          .gte('creada_en', new Date(Date.now() - COMPETIDORAS_MS).toISOString())
         if (competidoras.error) throw new Error(competidoras.error.message)
-        const vistos = new Set()
-        const pagos = porDia.flatMap((x) => x.pagos).filter((p) => !vistos.has(p.id) && vistos.add(p.id))
         const d = cruzarTransferencia({
-          monto: Number(v.data.espera_monto), desde: v.data.creada_en, pagos, antesManual: ANTES_MANUAL_MS,
-          reclamados: (reclamados.data || []).map(r => r.mp_pago_id), competidoras: (competidoras.data || []).length,
+          monto: espera, desde: v.data.creada_en, pagos, antesManual: ANTES_MANUAL_MS,
+          reclamados, competidoras: (competidoras.data || []).length,
           elegido: b.pago == null ? null : String(b.pago),
         })
         if (d.estado !== 'llego') {
-          // Paso «Validar transferencia» (Bruno, 12-oct): los últimos pagos de la cuenta, SÓLO para mirar —
-          // confirma `cruzarTransferencia`—, y en qué cuenta de MP se están mirando.
-          const recientes = pagosRecientes({ monto: Number(v.data.espera_monto), desde: v.data.creada_en, pagos, reclamados: (reclamados.data || []).map(r => r.mp_pago_id), cuantos: RECIENTES_CAJA })
+          // Paso «Confirmar transferencia» (Bruno, 12-oct): los últimos pagos de la cuenta —de ahí la cajera
+          // suma cobros si transfirió de menos (`confirmar-varios`)— y en qué cuenta de MP se están mirando.
+          // `todos`: la cajera está sumando y necesita ver más que los últimos 5.
+          const recientes = pagosRecientes({ monto: espera, desde: v.data.creada_en, pagos, reclamados, cuantos: b.todos ? RECIENTES_SUMAR : RECIENTES_CAJA })
           let cuentaMp = null
           try { cuentaMp = (await cuentasDe(sb, store)).enUso?.nombre ?? null } catch { /* el nombre es una ayuda */ }
           return res.status(200).json({ venta: sinPayload(v.data), cruce: d, recientes, cuentaMp })
@@ -961,7 +982,7 @@ export default async function handler(req, res) {
         // El índice único de `mp_pago_id` frena que el MISMO pago confirme otra venta (23505).
         const ahora = new Date().toISOString()
         const tom = await sb.from('caja_venta')
-          .update({ estado: 'borrador', mp_pago_id: d.pago.id, mp_pago_en: d.pago.cuando, mp_cruce: d.por, actualizada_en: ahora })
+          .update({ estado: 'borrador', mp_pago_id: d.pago.id, mp_pago_en: d.pago.cuando, mp_cruce: d.por, mp_diferencia: d.pago.diferencia || 0, actualizada_en: ahora })
           .eq('id', id).eq('estado', 'esperando_pago').select(COLUMNAS_ENVIO).maybeSingle()
         if (tom.error && tom.error.code === '23505') return res.status(409).json({ error: 'Ese pago lo acaba de tomar otra venta. Esperá la transferencia de ésta.' })
         if (tom.error) throw new Error(tom.error.message)
@@ -972,6 +993,77 @@ export default async function handler(req, res) {
           return res.status(200).json({ venta: ya.data, cruce: { estado: 'ya' } })
         }
         return res.status(200).json({ ...(await enviar(tom.data)), cruce: { estado: 'llego', por: d.por, pago: d.pago } })
+      }
+
+      if (accion === 'confirmar-varios') {
+        // Bruno, 12-oct («13.300 + 100»): transfirió de menos y mandó lo que faltaba. La cajera SUMA pagos de
+        // MP hasta el total (con la tolerancia); `caja_venta_mp` es el candado: un pago, UNA venta (la PK).
+        const id = String(b.id || '')
+        if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido.' })
+        const elegidos = Array.isArray(b.pagos) ? b.pagos.slice(0, 10).map(String) : []
+        const v = await sb.from('caja_venta').select(COLUMNAS_ENVIO).eq('id', id).eq('store', store).maybeSingle()
+        if (v.error) throw new Error(v.error.message)
+        if (!v.data) return res.status(404).json({ error: 'La venta no existe.' })
+        if (v.data.estado !== 'esperando_pago') return res.status(409).json({ error: v.data.estado === 'cancelada' ? 'La venta está cancelada.' : 'La venta ya no espera la transferencia.', venta: sinPayload(v.data) })
+        const mp = await pagosParaCruzar(v.data)
+        if (!mp) return res.status(409).json({ error: 'Pagos recibidos no tiene una cuenta de Mercado Pago conectada.' })
+        const s2 = sumarCobros({ monto: Number(v.data.espera_monto), desde: v.data.creada_en, pagos: mp.pagos, reclamados: mp.reclamados, elegidos, antesManual: ANTES_MANUAL_MS })
+        if (s2.estado !== 'llego') return res.status(409).json({ error: s2.motivo })
+        const ahora = new Date().toISOString()
+        const candado = await sb.from('caja_venta_mp').insert(s2.pagos.map((p) => ({ mp_pago_id: String(p.id), venta_id: id, store, monto: Number(p.monto), pago_en: p.cuando })))
+        if (candado.error && candado.error.code === '23505') return res.status(409).json({ error: 'Uno de esos pagos lo acaba de tomar otra venta. Elegí de nuevo.' })
+        if (candado.error) throw new Error(candado.error.message)
+        const confirmacion = { por: perfil.name || null, en: ahora, cobros: s2.pagos.map((p) => ({ id: String(p.id), monto: Number(p.monto), cuando: p.cuando })) }
+        const tom = await sb.from('caja_venta')
+          .update({ estado: 'borrador', mp_pago_id: String(s2.pagos[0].id), mp_pago_en: s2.pagos[0].cuando, mp_cruce: 'varios', mp_diferencia: s2.diferencia, confirmacion, actualizada_en: ahora })
+          .eq('id', id).eq('estado', 'esperando_pago').select(COLUMNAS_ENVIO).maybeSingle()
+        if (tom.error || !tom.data) {
+          // ⛔ Quedó tomada: se sueltan los pagos (la venta cambió o el primero ya lo tenía otra venta).
+          await sb.from('caja_venta_mp').delete().eq('venta_id', id)
+          if (tom.error && tom.error.code === '23505') return res.status(409).json({ error: 'Uno de esos pagos lo acaba de tomar otra venta. Elegí de nuevo.' })
+          if (tom.error) throw new Error(tom.error.message)
+          return res.status(409).json({ error: 'La venta ya no espera la transferencia.' })
+        }
+        return res.status(200).json({ ...(await enviar(tom.data)), cruce: { estado: 'llego', por: 'varios' } })
+      }
+
+      if (accion === 'confirmar-otra-cuenta') {
+        // Bruno, 12-oct: transfirió a OTRA cuenta nuestra (Areben Comercial, Darío o Bruno): el cruce ⛔ la
+        // ve nunca. Se confirma YA (la cajera, con titular y banco), la cuenta de GN sale del titular, y
+        // Darío y Bruno reciben un mail para verificar. El mail que ⛔ sale ⛔ frena la venta: queda anotado.
+        const id = String(b.id || '')
+        if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido.' })
+        const titular = titularDe(b.titular)
+        if (!titular) return res.status(400).json({ error: 'Falta a nombre de quién está la cuenta.' })
+        const banco = String(b.banco ?? '').trim().slice(0, 80)
+        if (banco.length < 2) return res.status(400).json({ error: 'Falta el banco.' })
+        const t = await turnoAbierto()
+        if (!esAdmin(perfil) && !puedeUsarPOS(t, perfil)) return res.status(403).json({ error: 'Lo hace la cuenta que tiene la caja abierta, o un admin.' })
+        const v = await sb.from('caja_venta').select(COLUMNAS_ENVIO).eq('id', id).eq('store', store).maybeSingle()
+        if (v.error) throw new Error(v.error.message)
+        if (!v.data) return res.status(404).json({ error: 'La venta no existe.' })
+        if (v.data.estado !== 'esperando_pago') return res.status(409).json({ error: v.data.estado === 'cancelada' ? 'La venta está cancelada.' : 'La venta ya no espera la transferencia.', venta: sinPayload(v.data) })
+        let cambio
+        try {
+          cambio = aOtraCuenta({ pagos: v.data.pagos || [], payload: v.data.payload, titular, reglas: (await leerConfig()).reglas })
+        } catch (e) {
+          return res.status(409).json({ error: e.message })
+        }
+        const ahora = new Date().toISOString()
+        const confirmacion = { por: perfil.name || null, en: ahora, titular: titular.nombre, banco }
+        const tom = await sb.from('caja_venta')
+          .update({ estado: 'borrador', mp_cruce: 'otra_cuenta', pagos: cambio.pagos, payload: cambio.payload, confirmacion, actualizada_en: ahora })
+          .eq('id', id).eq('store', store).eq('estado', 'esperando_pago').select(COLUMNAS_ENVIO).maybeSingle()
+        if (tom.error) throw new Error(tom.error.message)
+        if (!tom.data) return res.status(409).json({ error: 'La venta ya no espera la transferencia.' })
+        const out = await enviar(tom.data)
+        const venta = out.venta || tom.data
+        const m = mailOtraCuenta({ venta: { ...tom.data, ...venta }, titular, banco, por: perfil.name || null })
+        const para = String(process.env.MAIL_CAJA_A || 'brunoarevalo@arebensrl.com,darioarevalo@arebensrl.com').split(',').map((x) => x.trim()).filter(Boolean)
+        const r = await pedirAvisoInterno(mailer, { para, ...m })
+        const mail = r.ok ? { enviado_en: new Date().toISOString(), a: r.enviados } : { error: r.configurado ? r.motivo : 'Falta la conexión con Mailer' }
+        const conMail = await sb.from('caja_venta').update({ confirmacion: { ...confirmacion, mail } }).eq('id', id).select(COLUMNAS).maybeSingle()
+        return res.status(200).json({ ...out, venta: conMail.data || venta, mail })
       }
 
       if (accion === 'resolver') {
@@ -1038,7 +1130,8 @@ export default async function handler(req, res) {
         if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido.' })
         const ahora = new Date().toISOString()
         const can = await sb.from('caja_venta')
-          .update({ estado: 'cancelada', cancelada_por: perfil.name || null, actualizada_en: ahora })
+          // `cambio_pago` (Bruno, 12-oct): ⛔ «no llegó», la clienta paga de otra forma y el carrito vuelve al POS.
+          .update({ estado: 'cancelada', cancelada_por: perfil.name || null, cancelada_motivo: b.motivo === 'cambio_pago' ? 'cambio_pago' : null, actualizada_en: ahora })
           .eq('id', id).eq('store', store).eq('estado', 'esperando_pago').select(COLUMNAS).maybeSingle()
         if (can.error) throw new Error(can.error.message)
         if (can.data) return res.status(200).json({ venta: can.data })
@@ -1049,7 +1142,7 @@ export default async function handler(req, res) {
         if (ya.data.estado === 'cancelada') return res.status(200).json({ venta: ya.data })
         return res.status(409).json({ error: 'La transferencia ya llegó: la venta está cobrada y no se cancela desde acá.', venta: ya.data })
       }
-      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, reintentar-pendientes, cruzar, cancelar, resolver, confirmar-transferencia, usar-mp, politica, logo, gift-lote, bajadas, abrir-turno, salida, anular-mov, contar, cerrar-turno)' })
+      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, reintentar-pendientes, cruzar, confirmar-varios, confirmar-otra-cuenta, cancelar, resolver, confirmar-transferencia, usar-mp, politica, logo, gift-lote, bajadas, abrir-turno, salida, anular-mov, contar, cerrar-turno)' })
     }
     return res.status(405).json({ error: 'Método no permitido' })
   } catch (e) {
@@ -1087,8 +1180,10 @@ function logosDeFila(fila) {
 
 /** Hasta cuánto atrás otra venta esperando el mismo monto obliga a elegir el pago a mano. */
 const COMPETIDORAS_MS = 12 * 3600 * 1000
-/** Cuántos pagos recientes se muestran al validar una transferencia (los del monto exacto, siempre). */
+/** Cuántos pagos recientes se muestran al confirmar una transferencia (los del monto, siempre). */
 const RECIENTES_CAJA = 5
+/** Y cuántos cuando la cajera está sumando cobros (Bruno, 12-oct: «13.300 + 100»). */
+const RECIENTES_SUMAR = 20
 /** Cuántos días de Mercado Pago lee el cruce, desde el de la venta (A4). */
 const DIAS_CRUCE = 3
 /**

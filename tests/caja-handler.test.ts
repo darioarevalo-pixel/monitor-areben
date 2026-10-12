@@ -25,6 +25,8 @@ const base = {
   // W6: las gift cards (`null` = falta la migración).
   giftLotes: [] as Fila[] | null,
   giftCards: [] as Fila[],
+  // `caja_venta_mp` (sql/migrate-caja-cobros.sql): los pagos de una venta completada sumando cobros.
+  ventaMp: [] as Fila[],
   giftChoques: 0,
   alCerrar: null as null | (() => void),
   antesDeInsertar: null as null | (() => void),
@@ -53,7 +55,7 @@ function consulta(tabla: string) {
       : tabla === 'mp_cuenta_uso' ? base.usos : tabla === 'mp_cuentas' ? base.llaves
       : tabla === 'caja_turno' ? base.turnos : tabla === 'caja_turno_mov' ? base.movs
       : tabla === 'agenda_promos' ? base.agenda : tabla === 'liquidacion_items' ? base.liqItems
-      : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_gift_card' ? base.giftCards : base.inventario
+      : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_venta_mp' ? base.ventaMp : tabla === 'caja_gift_card' ? base.giftCards : base.inventario
     return todas.filter((f) => filtros.every((p) => p(f)))
   }
   const ejecutar = () => {
@@ -61,12 +63,20 @@ function consulta(tabla: string) {
     if (accion.tipo === 'delete') {
       const fuera = new Set(filas())
       if (tabla === 'caja_gift_lote') base.giftLotes = (base.giftLotes ?? []).filter((f) => !fuera.has(f))
+      if (tabla === 'caja_venta_mp') base.ventaMp = base.ventaMp.filter((f) => !fuera.has(f))
       return { data: [...fuera], error: null }
     }
     if (accion.tipo === 'insert' && tabla === 'caja_gift_lote') {
       const l = { id: (base.giftLotes ?? []).length + 1, creado_en: new Date().toISOString(), ...accion.fila }
       base.giftLotes!.push(l)
       return { data: [l], error: null }
+    }
+    if (accion.tipo === 'insert' && tabla === 'caja_venta_mp') {
+      // La PK de `mp_pago_id`: un pago repetido tira el insert ENTERO.
+      const nuevas = accion.fila as unknown as Fila[]
+      if (nuevas.some((n) => base.ventaMp.some((c) => c.mp_pago_id === n.mp_pago_id))) return { data: null, error: { code: '23505', message: 'duplicate key' } }
+      for (const n of nuevas) base.ventaMp.push({ creado_en: new Date().toISOString(), ...n })
+      return { data: nuevas, error: null }
     }
     if (accion.tipo === 'insert' && tabla === 'caja_gift_card') {
       // La clave primaria: un código repetido tira el insert ENTERO (todo o nada, como Postgres).
@@ -131,7 +141,10 @@ function consulta(tabla: string) {
   q.is = (c: string, v: unknown) => { filtros.push((f) => (v === null ? f[c] == null : f[c] === v)); return q }
   q.in = (c: string, v: unknown[]) => { filtros.push((f) => v.map(String).includes(String(f[c]))); return q }
   q.not = (c: string, op: string, v: unknown) => { filtros.push((f) => (op === 'is' && v === null ? f[c] != null : true)); return q }
-  q.gte = (c: string, v: string) => { filtros.push((f) => String(f[c]) >= v); return q }
+  // Números como números (`espera_monto`), fechas como texto ISO.
+  const comparar = (a: unknown, b: unknown) => (typeof b === 'number' ? Number(a) - b : String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0)
+  q.gte = (c: string, v: string | number) => { filtros.push((f) => f[c] != null && comparar(f[c], v) >= 0); return q }
+  q.lte = (c: string, v: string | number) => { filtros.push((f) => f[c] != null && comparar(f[c], v) <= 0); return q }
   q.lt = (c: string, v: string) => { filtros.push((f) => String(f[c]) < v); return q }
   q.order = () => q
   q.limit = () => q
@@ -198,6 +211,8 @@ function conSesion(perfil: unknown) {
     }
     if (String(url).startsWith('https://mailer.test')) {
       mailer.posts.push({ url: String(url), body: JSON.parse(String(opts?.body)), key: opts?.headers?.['x-ticket-key'] })
+      // El aviso interno (lib/mailer/aviso.core.js) contesta a quién salió.
+      if (String(url).endsWith('/api/externo/aviso')) return respuesta(200, { ok: true, enviados: (JSON.parse(String(opts?.body)).para as string[]).map((para) => ({ para })) })
       return respuesta(200, { encolado: true, runId: 'r1' })
     }
     return { ok: true, json: async () => ({ ok: true, perfil }) }
@@ -231,7 +246,7 @@ beforeEach(async () => {
   base.turnos = [{ id: TURNO_ID, store: 'zattia', fondo: 50000, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null, abierto_por: 'cajera', abierto_por_usuario: 'cajera' }]; base.movs = []
   mailer.posts = []; delete process.env.MAILER_URL; delete process.env.MAILER_TICKET_KEY
   gn.posts = []; gn.gets = []; gn.authInventario = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }; gn.creadas = []; base.agenda = [];
-  base.giftLotes = []; base.giftCards = []; base.giftChoques = 0
+  base.giftLotes = []; base.giftCards = []; base.giftChoques = 0; base.ventaMp = []
   // Bruno, 11-oct: la cuenta de MP del test asienta en Transferencia (13015, Areben Comercial).
   base.config = { store: 'zattia', reglas: { ...REGLAS_INICIALES, transferenciaPorMp: { [CUENTA_MP]: 13015 } }, politica_cambio: null }; base.alCerrar = null; base.antesDeInsertar = null
   gn.lista = { status: 200, body: { data: [], meta: { has_more_pages: false } } }
@@ -692,12 +707,12 @@ describe('caja · F5 transferencia', () => {
   it('sin la transferencia en MP ⇒ sigue esperando y ⛔ sale a GN', async () => {
     conSesion(CAJERA)
     await correr(req('POST', {}, TRANSF))
-    base.mpPagos = [pagoMP(1, 22800), pagoMP(2, 22900, 60_000, { status: 'pending' })]
+    base.mpPagos = [pagoMP(1, 22700), pagoMP(2, 22900, 60_000, { status: 'pending' })]
     const r = await correr(req('POST', {}, { action: 'cruzar', id: ID }))
     expect(r.code).toBe(200)
     expect(r.body?.cruce).toEqual({ estado: 'esperando' })
-    // Paso «Validar transferencia» (Bruno, 12-oct): los últimos pagos, sólo para mirar; el pendiente ⛔.
-    expect(r.body?.recientes).toEqual([expect.objectContaining({ id: '1', monto: 22800, coincide: false })])
+    // Paso «Confirmar transferencia» (Bruno, 12-oct): los últimos pagos, sólo para mirar; el pendiente ⛔.
+    expect(r.body?.recientes).toEqual([expect.objectContaining({ id: '1', monto: 22700, coincide: false })])
     expect(mp.busquedas).toBe(1)
     expect(gn.posts).toHaveLength(0)
   })
@@ -1499,5 +1514,94 @@ describe('caja · gift card, el lote (W6, Bruno 11-oct: tarjeta física)', () =>
     const r = await correr(req('POST', {}, { action: 'gift-lote', cantidad: 5 }))
     expect(r.code).toBe(409)
     expect(r.body?.error).toMatch(/migrate-caja-gift-card\.sql/)
+  })
+})
+
+// ─── La transferencia que ⛔ llega justa (Bruno, 12-oct, segunda tanda del POS) ─────────────────────
+describe('caja · cobros sumados, otra cuenta y cambio de forma de pago (12-oct)', () => {
+  it('🔑 la tolerancia: llegan $22.850 por una de $22.900 ⇒ sale sola a GN por el TOTAL, con la diferencia', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, TRANSF))
+    base.mpPagos = [pagoMP(5, 22850)]
+    const r = await correr(req('POST', {}, { action: 'cruzar', id: ID }))
+    expect(r.body?.cruce).toMatchObject({ estado: 'llego', por: 'solo' })
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'en_gn', mp_pago_id: '5', mp_diferencia: -50 })
+    expect((gn.posts[0] as { payments: Fila[] }).payments).toEqual([expect.objectContaining({ amount: 22900, account_id: 13015 })])
+  })
+
+  it('🔑 «13.300 + 100»: dos pagos que suman el total confirman la venta y quedan TOMADOS', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, TRANSF))
+    base.mpPagos = [pagoMP(1, 22000), pagoMP(2, 900, 120_000)]
+    const r = await correr(req('POST', {}, { action: 'cruzar', id: ID, todos: true }))
+    expect(r.body?.cruce).toEqual({ estado: 'esperando' })
+    expect((r.body?.recientes as Fila[]).map((p) => p.id)).toEqual(['2', '1'])
+    const ok = await correr(req('POST', {}, { action: 'confirmar-varios', id: ID, pagos: ['1', '2'] }))
+    expect(ok.code).toBe(200)
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'en_gn', mp_cruce: 'varios', mp_pago_id: '1', mp_diferencia: 0 })
+    expect((base.ventas.get(ID)!.confirmacion as { cobros: Fila[] }).cobros.map((c) => c.id)).toEqual(['1', '2'])
+    expect(base.ventaMp.map((f) => f.mp_pago_id)).toEqual(['1', '2'])
+    expect((gn.posts[0] as { payments: Fila[] }).payments).toEqual([expect.objectContaining({ amount: 22900, account_id: 13015 })])
+  })
+
+  it('🔴 la suma corta ⇒ 409 diciendo cuánto falta, y ⛔ toma nada', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, TRANSF))
+    base.mpPagos = [pagoMP(1, 22000), pagoMP(2, 500, 120_000)]
+    const r = await correr(req('POST', {}, { action: 'confirmar-varios', id: ID, pagos: ['1', '2'] }))
+    expect(r.code).toBe(409)
+    expect(r.body?.error).toMatch(/Faltan \$400/)
+    expect(base.ventaMp).toHaveLength(0)
+    expect(base.ventas.get(ID)!.estado).toBe('esperando_pago')
+    expect(gn.posts).toHaveLength(0)
+  })
+
+  it('🔴 un pago sumado a una venta ⛔ cruza otra venta', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, TRANSF))
+    base.mpPagos = [pagoMP(1, 22000), pagoMP(2, 900, 120_000)]
+    await correr(req('POST', {}, { action: 'confirmar-varios', id: ID, pagos: ['1', '2'] }))
+    await correr(req('POST', {}, { ...TRANSF, id: ID2, items: [{ ...VENTA.items[0] }] }))
+    base.mpPagos = [pagoMP(2, 900, 120_000)]
+    base.ventas.get(ID2)!.espera_monto = 900
+    const r = await correr(req('POST', {}, { action: 'cruzar', id: ID2 }))
+    expect(r.body?.cruce).toEqual({ estado: 'esperando' })
+    expect((await correr(req('POST', {}, { action: 'confirmar-varios', id: ID2, pagos: ['2'] }))).code).toBe(409)
+  })
+
+  it('🔑 otra cuenta nuestra: Darío ⇒ Transferencia CG (20595), sale a GN y el mail a Darío y Bruno', async () => {
+    conSesion(CAJERA)
+    process.env.MAILER_URL = 'https://mailer.test'
+    process.env.MAILER_TICKET_KEY = 'llave'
+    await correr(req('POST', {}, TRANSF))
+    expect((await correr(req('POST', {}, { action: 'confirmar-otra-cuenta', id: ID, titular: 'dario', banco: '' }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'confirmar-otra-cuenta', id: ID, titular: 'otro', banco: 'Galicia' }))).code).toBe(400)
+    const r = await correr(req('POST', {}, { action: 'confirmar-otra-cuenta', id: ID, titular: 'dario', banco: 'Galicia' }))
+    expect(r.code).toBe(200)
+    expect((gn.posts[0] as { payments: Fila[] }).payments).toEqual([expect.objectContaining({ amount: 22900, account_id: 20595 })])
+    const v = base.ventas.get(ID)!
+    expect(v).toMatchObject({ estado: 'en_gn', mp_cruce: 'otra_cuenta' })
+    expect((v.pagos as Fila[])[0].cuenta).toBe(20595)
+    expect(v.confirmacion).toMatchObject({ titular: 'Darío Arévalo', banco: 'Galicia', por: 'cajera', mail: { a: ['brunoarevalo@arebensrl.com', 'darioarevalo@arebensrl.com'] } })
+    const aviso = mailer.posts.find((p) => p.url.endsWith('/api/externo/aviso'))!
+    expect(aviso.body).toMatchObject({ para: ['brunoarevalo@arebensrl.com', 'darioarevalo@arebensrl.com'], asunto: expect.stringMatching(/Darío Arévalo/) })
+    expect(String(aviso.body.texto)).toMatch(/Banco: Galicia/)
+  })
+
+  it('otra cuenta: Areben Comercial ⇒ Transferencia (13015); sin Mailer la venta sale igual y queda anotado', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, TRANSF))
+    const r = await correr(req('POST', {}, { action: 'confirmar-otra-cuenta', id: ID, titular: 'areben', banco: 'Santander' }))
+    expect(r.code).toBe(200)
+    expect((gn.posts[0] as { payments: Fila[] }).payments).toEqual([expect.objectContaining({ account_id: 13015 })])
+    expect(base.ventas.get(ID)!.confirmacion).toMatchObject({ titular: 'Areben Comercial', mail: { error: expect.any(String) } })
+  })
+
+  it('cambiar forma de pago: cancela con motivo «cambio_pago»', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, TRANSF))
+    const r = await correr(req('POST', {}, { action: 'cancelar', id: ID, motivo: 'cambio_pago' }))
+    expect(r.code).toBe(200)
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'cancelada', cancelada_motivo: 'cambio_pago' })
   })
 })

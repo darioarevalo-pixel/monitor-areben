@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { VENTANA_ANTES_MS, VENTANA_SOLA_MS, cruzarTransferencia, limpiarPagos, pagosRecientes } from '@/lib/pagos-recibidos/core.core.js'
+import { TOLERANCIA_TRANSFERENCIA, VENTANA_ANTES_MS, VENTANA_SOLA_MS, cruzarTransferencia, limpiarPagos, pagosRecientes, sumarCobros } from '@/lib/pagos-recibidos/core.core.js'
 
 /**
  * Caja F5: la transferencia que se confirma sola. Los pagos pasan por `limpiarPagos` con la forma
@@ -25,9 +25,23 @@ describe('cruzarTransferencia', () => {
     expect(r).toMatchObject({ estado: 'llego', por: 'solo', pago: { id: '1', monto: 21700 } })
   })
 
-  it('el monto es EXACTO: $21.699 o $21.800 ⛔ son el de $21.700', () => {
-    const pagos = limpios(mp(1, 21699, '2026-10-04T15:01:00.000-04:00'), mp(2, 21800, '2026-10-04T15:02:00.000-04:00'), mp(3, 21700.01, '2026-10-04T15:03:00.000-04:00'))
-    expect(cruzarTransferencia({ monto: 21700, desde: DESDE, pagos, reclamados: [], competidoras: 0, antesManual: VENTANA_ANTES_MS })).toEqual({ estado: 'esperando' })
+  it('🔑 tolerancia de $100 (Bruno, 12-oct: el redondeo): $21.600 y $21.800 entran, $21.599 ⛔', () => {
+    const t = (monto: number) => cruzarTransferencia({ monto: 21700, desde: DESDE, pagos: limpios(mp(1, monto, '2026-10-04T15:01:00.000-04:00')), reclamados: [], competidoras: 0, antesManual: VENTANA_ANTES_MS })
+    expect(t(21600)).toMatchObject({ estado: 'llego', por: 'solo', pago: { id: '1', diferencia: -100 } })
+    expect(t(21800)).toMatchObject({ estado: 'llego', pago: { diferencia: 100 } })
+    expect(t(21599)).toEqual({ estado: 'esperando' })
+    expect(t(21800.01)).toEqual({ estado: 'esperando' })
+    expect(TOLERANCIA_TRANSFERENCIA).toBe(100)
+  })
+
+  it('🔴 si llegó uno EXACTO, el que sólo cae en la tolerancia ⛔ es duda: el exacto confirma solo', () => {
+    const pagos = limpios(mp(1, 21650, '2026-10-04T15:01:00.000-04:00'), mp(2, 21700, '2026-10-04T15:02:00.000-04:00'))
+    expect(cruzarTransferencia({ monto: 21700, desde: DESDE, pagos, reclamados: [], competidoras: 0, antesManual: VENTANA_ANTES_MS })).toMatchObject({ estado: 'llego', por: 'solo', pago: { id: '2', diferencia: 0 } })
+  })
+
+  it('dos dentro de la tolerancia y ninguno exacto ⇒ elige la cajera', () => {
+    const pagos = limpios(mp(1, 21650, '2026-10-04T15:01:00.000-04:00'), mp(2, 21750, '2026-10-04T15:02:00.000-04:00'))
+    expect(cruzarTransferencia({ monto: 21700, desde: DESDE, pagos, reclamados: [], competidoras: 0, antesManual: VENTANA_ANTES_MS })).toMatchObject({ estado: 'elegir' })
   })
 
   it('🔴 sólo lo que ENTRÓ y está APROBADO: un pendiente o uno que sale ⛔ confirma', () => {
@@ -111,11 +125,15 @@ describe('cruzarTransferencia', () => {
   })
 })
 
-describe('pagosRecientes (paso «Validar transferencia», Bruno 12-oct)', () => {
+describe('pagosRecientes (paso «Confirmar transferencia», Bruno 12-oct)', () => {
   const p = (id: string, monto: number, min: number) => ({ id, monto, cuando: new Date(Date.parse(DESDE) + min * 60000).toISOString(), origen: 'mp' })
   it('🔑 el más nuevo primero, marca el del monto exacto y saca lo de antes de 30 min y lo ya tomado', () => {
     const r = pagosRecientes({ monto: 4500, desde: DESDE, cuantos: 5, reclamados: ['tomado'], pagos: [p('viejo', 4500, -31), p('a', 12300, -5), p('b', 4500, 2), p('tomado', 4500, 3)] })
     expect(r.map((x) => [x.id, x.coincide])).toEqual([['b', true], ['a', false]])
+  })
+  it('«coincide» es dentro de la tolerancia, y cada pago dice su diferencia', () => {
+    const r = pagosRecientes({ monto: 4500, desde: DESDE, cuantos: 5, reclamados: [], pagos: [p('c', 4400, 1), p('d', 4399, 2)] })
+    expect(r.map((x) => [x.id, x.coincide, x.diferencia])).toEqual([['d', false, -101], ['c', true, -100]])
   })
   it('🔴 el tope corta a los OTROS: un pago del monto exacto entra siempre', () => {
     const r = pagosRecientes({ monto: 4500, desde: DESDE, cuantos: 2, reclamados: [], pagos: [p('x', 4500, -20), p('o1', 100, 1), p('o2', 200, 2), p('o3', 300, 3)] })
@@ -123,5 +141,32 @@ describe('pagosRecientes (paso «Validar transferencia», Bruno 12-oct)', () => 
   })
   it('sin cuántos mostrar ⇒ error (⛔ un default callado)', () => {
     expect(() => pagosRecientes({ monto: 4500, desde: DESDE, cuantos: 0, reclamados: [], pagos: [] })).toThrow(/cuántos/)
+  })
+})
+
+describe('sumarCobros (Bruno, 12-oct: «13.300 + 100»)', () => {
+  const p = (id: string, monto: number, min: number) => ({ id, monto, cuando: new Date(Date.parse(DESDE) + min * 60000).toISOString(), origen: 'mp' })
+  const base = { monto: 13400, desde: DESDE, antesManual: VENTANA_ANTES_MS, reclamados: [] as string[] }
+  it('🔑 dos pagos que suman el total ⇒ llegó, en orden de hora', () => {
+    const r = sumarCobros({ ...base, pagos: [p('a', 13300, 1), p('b', 100, 4)], elegidos: ['b', 'a'] })
+    expect(r).toMatchObject({ estado: 'llego', suma: 13400, diferencia: 0 })
+    expect(r.estado === 'llego' && r.pagos.map((x) => x.id)).toEqual(['a', 'b'])
+  })
+  it('la suma también va con la tolerancia: 13.300 + 50 entra (−$50)', () => {
+    expect(sumarCobros({ ...base, pagos: [p('a', 13300, 1), p('b', 50, 4)], elegidos: ['a', 'b'] })).toMatchObject({ estado: 'llego', diferencia: -50 })
+  })
+  it('🔴 corta o pasada ⇒ inválido, diciendo cuánto falta o sobra', () => {
+    expect(sumarCobros({ ...base, pagos: [p('a', 13200, 1)], elegidos: ['a'] })).toEqual({ estado: 'invalido', motivo: expect.stringMatching(/Faltan \$200/) })
+    expect(sumarCobros({ ...base, pagos: [p('a', 13300, 1), p('b', 300, 2)], elegidos: ['a', 'b'] })).toEqual({ estado: 'invalido', motivo: expect.stringMatching(/pasan el total por \$200/) })
+  })
+  it('🔴 un pago que ya tomó otra venta, uno de antes de la venta o uno que no existe ⇒ inválido', () => {
+    const pagos = [p('a', 13300, 1), p('b', 100, 2), p('viejo', 100, -11)]
+    expect(sumarCobros({ ...base, pagos, reclamados: ['b'], elegidos: ['a', 'b'] }).estado).toBe('invalido')
+    expect(sumarCobros({ ...base, pagos, elegidos: ['a', 'viejo'] }).estado).toBe('invalido')
+    expect(sumarCobros({ ...base, pagos, elegidos: ['a', 'zzz'] }).estado).toBe('invalido')
+    expect(sumarCobros({ ...base, pagos, elegidos: [] }).estado).toBe('invalido')
+  })
+  it('el mismo id dos veces cuenta UNA', () => {
+    expect(sumarCobros({ ...base, pagos: [p('a', 6700, 1)], elegidos: ['a', 'a'] }).estado).toBe('invalido')
   })
 })

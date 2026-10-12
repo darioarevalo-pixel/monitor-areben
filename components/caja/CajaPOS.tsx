@@ -57,12 +57,13 @@ import { avisoDeRenglon } from '@/lib/caja/pedidos-web.core.js'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
-import { imprimirTicket, plata, type DatosTicket } from '@/lib/caja/ticket'
+import { imprimirTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
 import { CLAVE_MAIL, CLAVE_VISTA, leerMail, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
 import { MARCA_CAJA } from '@/lib/caja/marca'
 import {
   buscarNombre,
   buscarProducto,
+  cancelarVenta,
   confirmarVenta,
   elegirVariante,
   leerConfig,
@@ -219,7 +220,7 @@ function POS() {
   // código siguiente enseguida, y con el campo bloqueado ese escaneo se PERDÍA (visto en prod, 4-oct).
   const [buscando, setBuscando] = useState(0)
   const [aviso, setAviso] = useState<{ tono: 'danger' | 'warning'; texto: string } | null>(null)
-  // Paso «Validar transferencia» (Bruno, 12-oct): la venta guardada que espera el pago, en su modal.
+  // Paso «Confirmar transferencia» (Bruno, 12-oct): la venta guardada que espera el pago, en su modal.
   const [validando, setValidando] = useState<Venta | null>(null)
   const [candidatos, setCandidatos] = useState<{ lista: Candidato[]; mas: number } | null>(null)
   // La lista que aparece MIENTRAS se escribe (Bruno, 4-oct). `vuelta` numera cada búsqueda: sólo se
@@ -644,7 +645,7 @@ function POS() {
     window.addEventListener('storage', oir)
     return () => window.removeEventListener('storage', oir)
   }, [])
-  // Con transferencia la venta ⛔ se finaliza al apretar: espera el pago (paso «Validar transferencia»).
+  // Con transferencia la venta ⛔ se finaliza al apretar: espera el pago (paso «Confirmar transferencia»).
   const porTransferencia = pagos.some((p) => p.medio === 'transferencia')
   const puedeConfirmar = !!turno && !!c && !enviando && emailOk && !faltaContestar && (vuelto == null || vuelto >= 0)
 
@@ -695,6 +696,43 @@ function POS() {
     setUltima({ venta, ticket })
     avisar(venta.estado === 'en_gn' ? 'ok' : 'ojo')
     imprimirTicket(ticket, esEfectivo, ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
+    refrescarPendientes()
+    refrescarTurno()
+  }
+
+  /**
+   * «Cambiar forma de pago» (Bruno, 12-oct: no le anda internet y paga en efectivo): la venta que espera
+   * la transferencia se cancela (`cambio_pago`) y sus prendas vuelven al carrito, con el stock leído de
+   * nuevo; el precio que la cajera había cambiado a mano se conserva. Con otra venta en el carrito ⛔:
+   * mezclaría dos clientas. Tira el error para que lo muestre la transferencia pendiente.
+   */
+  async function volverAlCarrito(venta: Venta) {
+    if (bor.renglones.length) throw new Error('Hay otra venta en el carrito: cobrala o sacá sus prendas antes de cambiar la forma de pago.')
+    const guardados = venta.renglones ?? []
+    if (!guardados.length) throw new Error('La venta no tiene las prendas guardadas: cancelala y escaneá de nuevo.')
+    // Primero las prendas, después cancelar: si una ⛔ se puede traer, la venta sigue esperando.
+    const leidas = await Promise.all(
+      guardados.map(async (g) => {
+        const r = await elegirVariante({ product_id: g.product_id, size_id: g.size_id, product_name: g.nombre ?? '', size_name: g.talle ?? '', sku: g.sku ?? null, barcode: null })
+        if (!('variante' in r)) throw new Error(`No se pudo traer ${g.nombre ?? 'una prenda'}: cancelá la venta y escaneala de nuevo.`)
+        return { g, ...r }
+      }),
+    )
+    await cancelarVenta(venta.id, 'cambio_pago')
+    const renglones = leidas.map(({ g, variante, stock }) => {
+      const pf = precioYFoto(variante.product_id)
+      const aMano = g.precio_lista != null
+      return { variante, stock, cantidad: g.cantidad, rebaja: null, ...pf, precio: aMano ? g.precio : pf.precio, precioLista: aMano ? g.precio_lista : pf.precio, foto: fotoDe(variante) }
+    })
+    setBor({ id: nuevoId(), renglones, email: venta.email ?? '', descuentoVenta: null })
+    limpiarCobro()
+    setValidando(null)
+    setEnCobro(true)
+    const aparte = venta.total - (venta.espera_monto ?? venta.total)
+    setAviso({
+      tono: 'warning',
+      texto: `La venta ${numeroProvisorio(venta.id)} se canceló y sus prendas volvieron al carrito: elegí la forma de pago nueva.${aparte > 0 ? ` Ya se cobraron ${plata(aparte)} aparte: tenelo en cuenta al cobrar.` : ''}${venta.a_mano?.venta || venta.a_mano?.prendas ? ' Los descuentos a mano hay que cargarlos de nuevo.' : ''}`,
+    })
     refrescarPendientes()
     refrescarTurno()
   }
@@ -960,7 +998,7 @@ function POS() {
           {pendientes
             .filter((v) => v.estado === 'esperando_pago' && v.id !== validando?.id)
             .map((v) => (
-              <EsperaTransferencia key={v.id} venta={v} onLlego={llegoTransferencia} onCambio={refrescarPendientes} />
+              <EsperaTransferencia key={v.id} venta={v} onLlego={llegoTransferencia} onCambio={refrescarPendientes} onCambiarPago={volverAlCarrito} />
             ))}
           {sinLlegar > 0 && (
             <Notice tone="danger">
@@ -998,6 +1036,7 @@ function POS() {
                   refrescarPendientes()
                 }}
                 onSeguir={() => setValidando(null)}
+                onCambiarPago={volverAlCarrito}
               />
             </Modal>
           )}
