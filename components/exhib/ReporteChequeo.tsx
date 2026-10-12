@@ -205,21 +205,20 @@ function ListaDuplicadas({ lista }: { lista: Duplicada[] }) {
               <Th>Producto</Th>
               <Th>Variante</Th>
               <Th align="center" width={70}>Veces</Th>
-              <Th>Dónde</Th>
             </Tr>
           </THead>
           <TBody>
             {lista.map((d) => (
               <Tr key={d.clave}>
                 <Td style={{ fontWeight: 600 }}>{d.sku || '—'}</Td>
-                <Td wrap>{d.nombre}</Td>
+                <Td wrap>
+                  {d.nombre}
+                  {/* El lugar sólo cuando está en DOS: por el nombre ya se sabe el sector (Darío, 11-oct-2026),
+                      pero con una en el perchero y otra en la vidriera hay que saber cuál se retira. */}
+                  {d.lugares.length > 1 && <span style={{ fontSize: font.sm, color: color.mut }}> · en {d.lugares.slice(0, -1).join(', ')} y {d.lugares.at(-1)}</span>}
+                </Td>
                 <Td wrap>{variante(d.variante)}</Td>
                 <Td align="center">{d.veces}</Td>
-                <Td wrap style={{ fontSize: font.sm, color: color.mut }}>
-                  {d.lugares.join(', ')}
-                  {/* Leídas una detrás de la otra: pueden ser dos iguales colgadas juntas o la misma pasada dos veces. */}
-                  {d.otrasEnMedio === 0 && <span style={{ color: color.warning }}> · leídas seguidas, confirmar en el perchero</span>}
-                </Td>
               </Tr>
             ))}
           </TBody>

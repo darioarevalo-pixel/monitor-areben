@@ -59,8 +59,11 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 >   outlet/accesorios (⛔ están en TN) y Stunned; además, los tipos que el mapa marca `cuelga: false`.
 >   Respeta «una sola variante» igual que el relevamiento.
 > - **Variantes duplicadas** = `colgadasDeMas` sobre los recorridos juntos, sólo regulares. ⛔ La app
->   no sabe cuáles son frontales: lo marca la empleada en el ticket. «leídas seguidas» = 0 prendas en
->   el medio (puede ser la misma pasada dos veces).
+>   no sabe cuáles son frontales: lo marca la empleada en el ticket. ⛔ **Sin aviso de «leídas
+>   seguidas»** (sacado el 11-oct, Darío): dos iguales colgadas juntas también se leen seguidas, así
+>   que ⛔ separaba nada. ⛔ Y sin casilla «había una»: sería la salida para no buscar. El control
+>   es el chequeo de la semana siguiente (⏭️ marcar lo que sigue duplicado o pendiente).
+>   El lugar sale **sólo si está en dos** («en Tops y Vidriera»): por el nombre ya se sabe el sector.
 > - 🖨️ **Ticket de 80 mm** (`lib/exhib/ticket.ts`): casillas «Exhibido / No encontrado» y «Retirado /
 >   Exhibición frontal» y el aviso de los frontales en negrita. ⛔ Sin stock ni ventas en el papel.
 > 📊 **Oráculo**: los dos recorridos del 10-oct contra el stock del 11-oct dan **76 pendientes de 64
