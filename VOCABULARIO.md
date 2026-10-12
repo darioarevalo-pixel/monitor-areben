@@ -1,6 +1,6 @@
 # VOCABULARIO — el glosario compartido de MAKETA y el monitor
 
-Versión: 2026-10-12
+Versión: 2026-10-12b
 
 🔑 **Este archivo es el MISMO en los dos repos** (`areben-marketing` y `monitor-areben`), byte a
 byte. Si cambia acá, se copia allá en el mismo día y sube la `Versión:` de arriba. Cada repo tiene
@@ -210,19 +210,24 @@ decidida en la §1**.
 | regla | ✅ | ⛔ |
 |---|---|---|
 | **Botón = verbo en infinitivo** | `Eliminar` · `Guardar` · `Publicar` | `Eliminá` · `Sacalo` · `Dale` |
-| **Título de sección = sustantivo, ⛔ no frase** (monitor) | `Pendientes` · `Retornos` · `Novedades` | `Qué falta ahora` · `Lo que tiene que volver` · `Lo que se viene` · `Lo que se escribe a mano` |
-| **Título de sección = verbo en infinitivo** (MAKETA, 🆕 6-oct-2026, Bruno) | `Asignar el trabajo` · `Ver el historial` · `Elegir la campaña` | `Lo que se habló y lo que pasó` · `Título, enlaces y texto` · `De qué campaña es` |
+| **Título de sección = sustantivo, ⛔ no frase** (🔑 Bruno, 12-oct-2026: *«más alineado a sustantivos»*) | `Pendientes` · `Promociones` · `Logo del ticket` · `Política de cambio` · `Billetes de la calculadora` | `Qué falta ahora` · `Lo que se viene` · `Elegir los productos en oferta` · `Cargar el logo de Zattia` |
+| **Infinitivo SÓLO si es la acción propiamente dicha** (Bruno, 12-oct) | `Cobrar` · `Eliminar` · `Cerrar caja` | un título que describe lo que hay adentro puesto como verbo: `Ver el historial` · `Escribir la política de cambio` |
 | **Mayúscula sólo en la primera palabra** | `Nuevo pendiente` | `Nuevo Pendiente` |
 | **Sin jerga interna en pantalla** | la palabra del negocio | `sembrar` · `corrida` · `padrón` · `bitácora` · `copy` · `moodboard` |
 | **La palabra formal del oficio, ⛔ no la coloquial** | `Exhibido` · `Retirado` · `Pendiente de exhibición` · `Variantes duplicadas` | `Colgado` · `Lo saqué` · `Falta colgar` · `Sobra (repetido)` |
+
+🔴 **12-oct-2026, Bruno: ⛔ es una cosa o la otra, es un equilibrio — y queda «más alineado a sustantivos».**
+Se probó en la Caja con el criterio «¿la sección es para mirar o para hacer?» y ⛔ era el suyo: «Logo del
+ticket», «Política de cambio», «Billetes de la calculadora» y «Promociones» se quedaron en sustantivo aunque
+se configuran. El infinitivo va cuando el texto ES la acción: *«eliminar es eliminar, como acción; cobrar
+lo mismo»*. ▶️ Lo de abajo (MAKETA, 6-oct) queda hasta que Bruno diga si MAKETA vuelve al sustantivo.
 
 🆕 **6-oct-2026 (MAKETA): el título de sección pasó de sustantivo a INFINITIVO** (Bruno: *«sumemos a todo esto
 las terminaciones en infinitivo… lo que se habló no me convence como sección, y así un montón de
 cosas»*). Lo cuida `tests/titulos-infinitivo.test.ts` de MAKETA sobre cada `<Seccion titulo>`. ⛔ **Siguen en
 sustantivo**: el título de cada PANTALLA (es el nombre del menú: `Tablero`, `Calendario`), las
 agrupaciones de una lista (`Próximas`, `Se pasaron`), los títulos de un gráfico y los carteles de error.
-▶️ **En el monitor sigue el sustantivo**: la regla vivía sólo en la copia de MAKETA (ver arriba, la
-versión). Si vale también acá, lo dice Bruno.
+▶️ **En el monitor ⛔ se adopta** (12-oct, ver arriba).
 
 🔴 **Darío, 11-oct: *«usamos pocas palabras formales y muchas palabras informales»*.** Salió del
 ticket del chequeo de exhibición. ⚠️ **⛔ No choca con «sin jerga»**: la palabra formal es la que
