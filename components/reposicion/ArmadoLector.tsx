@@ -158,7 +158,7 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
     }
     setExtra(0)
     if (l.tipo === 'sobra') {
-      setCartel({ titulo: 'Artículo excedente', texto: `${l.linea.name}${talle(l.linea.size) ? ` ${talle(l.linea.size)}` : ''}: ya están las ${l.linea.cant}.` })
+      setCartel({ titulo: 'Artículo excedente', texto: `Este producto ya está completo: se ${l.linea.cant === 1 ? 'pidió 1' : `pidieron ${l.linea.cant}`}.`, nombre: `${l.linea.name}${talle(l.linea.size) ? ` ${talle(l.linea.size)}` : ''}` })
       avisar('no', 'Excedente')
     } else if (l.tipo === 'no-pedida') {
       setCartel({ titulo: 'Artículo NO solicitado', texto: `Este producto no se encuentra en la ${devolucion ? 'devolución' : 'reposición'} de hoy.`, nombre: l.nombre })
