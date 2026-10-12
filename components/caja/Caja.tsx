@@ -24,6 +24,7 @@ import { Button, ButtonLink, Notice, color, font, space, weight } from '@/compon
 import { Bajadas, DeteccionTransferencias, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TransferenciasEnEspera, TurnoCaja, UltimosTurnos, VentasDelTurno, diaAr } from '@/components/caja/partes'
 import { VistaTicket } from '@/components/caja/VistaTicket'
 import { PromosCaja } from '@/components/caja/PromosCaja'
+import { PromosFormaDePago } from '@/components/caja/PromosFormaDePago'
 import { GiftCards } from '@/components/caja/GiftCards'
 import { ModalVarianteContext } from '@/components/ui/Modal'
 
@@ -123,6 +124,7 @@ export function Caja() {
         {admin && config?.reglas.medios && <Bajadas reglas={config.reglas} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
         <DeteccionTransferencias admin={admin} reglas={config?.reglas ?? null} onGuardadas={(rg, v) => config && setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />
         {config?.reglas.medios && <PromosCaja reglas={config.reglas} admin={admin} version={config.versiones?.promos} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
+        {config?.reglas.medios && <PromosFormaDePago reglas={config.reglas} />}
         {admin && config?.reglas.medios && <ProductosFeria reglas={config.reglas} version={config.versiones?.feriaProductos} campanias={config.campaniasLiq ?? []} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
         {admin && config && <LogoDelTicket marca="zattia" nombre="Zattia" inicial={config.ticket_logo ?? null} onGuardado={(l) => setConfig({ ...config, ...l })} />}
         {admin && config && <LogoDelTicket marca="stunned" nombre="Stunned" inicial={config.ticket_logo_stunned ?? null} onGuardado={(l) => setConfig({ ...config, ...l })} />}
