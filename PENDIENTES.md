@@ -139,6 +139,28 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
   N códigos al azar con verificador, INACTIVOS, y el CSV para la imprenta. 🏁 `sql/migrate-caja-gift-card.sql` CORRIDA en Zattia
   (11-oct, verificada leyendo el esquema). ▶️ Bruno: generar el lote y mandarlo a imprimir. ▶️ Parte 2: activar
   y canjear en el POS (paso 0 en GN primero: producto y cuenta «Gift card»).
+- ▶️ **Dictado por Bruno el 12-oct (la caminata del POS).** Se hace ahora, sólo en la Caja:
+  - Textos: «Ventas del turno» ⇒ «Ventas» · «Cargar salida o aporte» ⇒ «+ Salida, gasto o aporte» ·
+    «Promos» ⇒ «Promociones vigentes · productos» · **feria ⇒ «Oferta»** (sólo pantalla) · «No va con
+    prendas de feria» ⇒ «No aplica a productos en oferta», dinámico según la configuración · turno ⇒ caja ·
+    «Bajadas» ⇒ «Descuentos por forma de pago» · «Esperando/Validando transferencia» ⇒ «Transferencia
+    pendiente» / «Confirmar transferencia» · sacar «Precio del espejo: producto sin cruce con Tienda Nube».
+  - Sección nueva debajo de las promos: **promociones bancarias y por forma de pago**.
+  - **Oferta con crédito/débito: +10% sobre el precio de oferta, sólo en esos productos.** En «Productos en
+    oferta» se configura por forma de pago: se acepta o no, se suma o no el descuento adicional, % de recargo.
+  - **Logo del ticket según la marca**: Zattia, Stunned, o **los dos** si el ticket mezcla.
+  - 🐛 **Abrir una vista desplegada de la Caja (le pasó con «Últimos turnos») rompe la vista del ticket.**
+    ▶️ Falta reproducirlo: captura o pasos de Bruno.
+  - Carrito: que entren **3 productos a la vista**; la cruz de sacar, **en rojo**.
+  - **Botón abajo a la derecha «Ayuda / problemas»**: dejar registradas mejoras que faltan y problemas.
+- ▶️ **Diseñar aparte (Bruno, 12-oct)**:
+  - **LISTAS DE PRECIOS en vez de precios de feria/liquidación.** Una liquidación genera una lista **online**
+    (escribe en TN y TN pasa a GN) o **local** (va al POS y escribe en GN; puede ser más barata o más cara
+    que la online y tiene **sus condiciones de cobro**). La condición por forma de pago de la oferta se muda
+    ahí. Hoy el POS cobra el precio de TN (`lib/etiquetas/core.ts:90`). 🔴 Una oferta sólo del local
+    esconde el producto en TN ⇒ el POS cobraría el de lista. GN ignora `price_list_id` (#30046).
+  - **Logos cargados UNA vez en la configuración del monitor**, y que los usen el ticket, reposición, el
+    parte y los documentos. Hoy: `caja_config.ticket_logo` y metidos a mano en `lib/parte/fotos.core.js:52`.
 
 ## ▶️ CAJA + POS: IGUALARLO AL PROTOTIPO — 6-oct-2026 (dictado por Bruno)
 

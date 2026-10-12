@@ -72,7 +72,7 @@ describe('POS (/pos)', () => {
     const t = await montar(<CajaPOS />)
     expect(t).toContain('Escanear o buscar')
     expect(t).toContain('Pedido · 0 prendas')
-    expect(t).toContain('Cerrar turno')
+    expect(t).toContain('Cerrar caja')
     // Sólo una flecha (Bruno, 5-oct), ⛔ «Volver al monitor».
     expect(t).not.toContain('Volver al monitor')
     expect(document.querySelector('a[aria-label="Volver"]')?.getAttribute('href')).toBe('/caja')
@@ -81,7 +81,7 @@ describe('POS (/pos)', () => {
   it('🔴 otra cuenta ⇒ «la abrió Sofi», sin escanear ni cobrar', async () => {
     sesion.perfil = { ...sesion.perfil, name: 'Ana', email: 'ana@zattia.com' }
     const t = await montar(<CajaPOS />)
-    expect(t).toContain('Turno de Sofi: POS sólo para esa cuenta.')
+    expect(t).toContain('Caja de Sofi: POS sólo para esa cuenta.')
     expect(t).not.toContain('Escanear o buscar')
   })
 
@@ -94,7 +94,7 @@ describe('POS (/pos)', () => {
   it('sin turno abierto ⇒ lo dice y manda a la Caja', async () => {
     turno = null
     const t = await montar(<CajaPOS />)
-    expect(t).toContain('Sin turno abierto')
+    expect(t).toContain('Sin caja abierta')
     expect(document.querySelector('a[href="/caja"]')).toBeTruthy()
   })
 })
@@ -128,7 +128,7 @@ describe('pestaña Caja', () => {
     expect(document.querySelector('a[href="/pos"]')).toBeNull()
     expect(t).toContain('POS sólo para esa cuenta')
     // Cerrar la caja, sí: «desde los dos lados». Contar billetes, ⛔ (el servidor da 403).
-    expect(t).toContain('Cerrar turno')
+    expect(t).toContain('Cerrar caja')
     expect(t).not.toContain('Contar billetes')
   })
 })
@@ -158,7 +158,7 @@ describe('POS · auditoría 11-oct', () => {
 
   it('B1: «Ventas del turno» está en la cabecera del POS', async () => {
     const t = await montar(<CajaPOS />)
-    expect(t).toContain('Ventas del turno')
+    expect(t).toContain('Ventas')
   })
 })
 
@@ -169,19 +169,19 @@ describe('Cerrar turno · auditoría A10', () => {
     const pregunta = vi.fn(() => false)
     vi.stubGlobal('confirm', pregunta)
     await montar(<CerrarTurnoModal turno={{ ...TURNO, resumen: RESUMEN } as never} billetes={[1000]} onCerrar={() => {}} onCerrado={() => {}} />)
-    expect(boton('Cerrar turno').disabled).toBe(true)
+    expect(boton('Cerrar caja').disabled).toBe(true)
     const aMano = document.querySelector('input[aria-label="Total a mano"]') as HTMLInputElement
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(aMano, '0')
       aMano.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    expect(boton('Cerrar turno').disabled).toBe(false)
-    await act(async () => boton('Cerrar turno').click())
+    expect(boton('Cerrar caja').disabled).toBe(false)
+    await act(async () => boton('Cerrar caja').click())
     expect(pregunta).toHaveBeenCalledTimes(1)
-    expect(String((pregunta.mock.calls[0] as unknown[])[0])).toContain('Cerrar turno')
+    expect(String((pregunta.mock.calls[0] as unknown[])[0])).toContain('Cerrar caja')
     expect(cerrarTurno).not.toHaveBeenCalled()
     pregunta.mockReturnValue(true)
-    await act(async () => boton('Cerrar turno').click())
+    await act(async () => boton('Cerrar caja').click())
     expect(cerrarTurno).toHaveBeenCalledWith('t1', 0, '', null, false)
   })
 })
@@ -219,7 +219,7 @@ describe('POS · A6: la pantalla se pone al día sola (Bruno, 12-oct)', () => {
 })
 
 describe('POS · paso «Validar transferencia» (Bruno, 12-oct)', () => {
-  it('🔑 con transferencia el botón dice «Validar transferencia» y, guardada, el cobro pasa a validar con los últimos pagos', async () => {
+  it('🔑 con transferencia el botón dice «Confirmar transferencia» y, guardada, el cobro pasa a validar con los últimos pagos', async () => {
     const { leerConfig, confirmarVenta } = await import('@/lib/caja/cliente')
     const { REGLAS_INICIALES } = await import('@/lib/caja/core.core.js')
     const conf = { reglas: { ...REGLAS_INICIALES, transferenciaA: REGLAS_INICIALES.medios.transferencia.opciones[0] }, politica_cambio: null }
@@ -231,16 +231,18 @@ describe('POS · paso «Validar transferencia» (Bruno, 12-oct)', () => {
     await act(async () => boton('Continuar al cobro Alt+C').click())
     const transf = [...document.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Transferencia')) as HTMLButtonElement
     await act(async () => transf.click())
-    const fin = [...document.querySelectorAll('button')].find((b) => /^(Finalizar venta|Validar transferencia)/.test(b.textContent ?? '')) as HTMLButtonElement
-    expect(fin.textContent).toMatch(/^Validar transferencia/)
+    const fin = [...document.querySelectorAll('button')].find((b) => /^(Finalizar venta|Confirmar transferencia)/.test(b.textContent ?? '')) as HTMLButtonElement
+    expect(fin.textContent).toMatch(/^Confirmar transferencia/)
     await act(async () => fin.click())
     await act(async () => new Promise((r) => setTimeout(r, 10)))
     const t = document.body.textContent || ''
-    expect(t).toContain('Validando la transferencia')
+    expect(t).toContain('Transferencia pendiente de')
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Seguir vendiendo mientras llega')
     expect(t).toContain('Últimos pagos en Mercado Pago (Areben Comercial)')
     expect(t).toContain('operación ····8812')
     // «Seguir vendiendo» cierra el paso: la venta queda esperando en el cartel de arriba.
     await act(async () => boton('Seguir vendiendo mientras llega').click())
-    expect(document.body.textContent).not.toContain('Validando la transferencia')
+    // La venta sigue esperando en el cartel de arriba, ya ⛔ en el modal.
+    expect(document.body.textContent).not.toContain('Seguir vendiendo mientras llega')
   })
 })

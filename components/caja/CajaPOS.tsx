@@ -816,12 +816,12 @@ function POS() {
 
   const marco = (hijos: React.ReactNode) => <div style={{ minHeight: '100vh', background: color.bg, padding: space[4], display: 'grid', placeItems: 'start center' }}>{hijos}</div>
   if (errCarga) return marco(<Notice tone="danger">{errCarga}</Notice>)
-  if (turno === undefined) return marco(errTurno ? <Notice tone="danger">No se pudo leer el turno: {errTurno}</Notice> : <span style={{ color: color.mut }}>Abriendo la caja…</span>)
+  if (turno === undefined) return marco(errTurno ? <Notice tone="danger">No se pudo leer la caja: {errTurno}</Notice> : <span style={{ color: color.mut }}>Abriendo la caja…</span>)
   if (!turno) {
     return marco(
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
         {cerradoAca && <AvisoCierre t={cerradoAca} />}
-        <Notice tone="warning">Sin turno abierto: el POS no cobra. Abrir turno desde la pestaña Caja.</Notice>
+        <Notice tone="warning">Sin caja abierta: el POS no cobra. Abrir caja desde la pestaña Caja.</Notice>
         <div>
           <ButtonLink href="/caja" variant="solid" tone="brand">
             Ir a la Caja
@@ -833,7 +833,7 @@ function POS() {
   if (!puedeUsarPOS(turno, perfil)) {
     return marco(
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
-        <Notice tone="warning">Turno de {turno.abierto_por ?? 'otra cuenta'}: POS sólo para esa cuenta.</Notice>
+        <Notice tone="warning">Caja de {turno.abierto_por ?? 'otra cuenta'}: POS sólo para esa cuenta.</Notice>
         <div>
           <ButtonLink href="/caja" iconLeft={<Icono nombre="atras" />}>
             Caja
@@ -910,16 +910,16 @@ function POS() {
             <Icono nombre={conSonido ? 'sonido' : 'silencio'} size={18} />
           </button>
           <button type="button" className="pos-tbtn" onClick={() => setVerVentas(true)} style={{ height: 36 }}>
-            Ventas del turno
+            Ventas
           </button>
           <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('contar')} style={{ height: 36 }}>
             Contar billetes
           </button>
           <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('salida')} style={{ height: 36 }}>
-            Cargar salida o aporte
+            + Salida, gasto o aporte
           </button>
           <button type="button" className="pos-tbtn peligro" onClick={() => setPanelTurno('cerrar')} style={{ height: 36 }}>
-            Cerrar turno
+            Cerrar caja
           </button>
         </div>
       </header>
@@ -979,7 +979,7 @@ function POS() {
           )}
 
           {validando && (
-            <Modal abierto onCerrar={() => setValidando(null)} titulo="Validar transferencia" ancho="xl" cerrarConFondo={false}>
+            <Modal abierto onCerrar={() => setValidando(null)} titulo="Confirmar transferencia" ancho="xl" cerrarConFondo={false}>
               <EsperaTransferencia
                 venta={validando}
                 onLlego={(v) => {
@@ -1008,7 +1008,7 @@ function POS() {
                     Volver
                   </Button>
                   <Button size="lg" tone="success" variant="solid" disabled={!puedeConfirmar} loading={enviando} onClick={confirmar} iconLeft={<Icono nombre="check" />}>
-                    {porTransferencia ? 'Validar transferencia' : 'Finalizar venta'} {c ? plata(c.total) : ''}
+                    {porTransferencia ? 'Confirmar transferencia' : 'Finalizar venta'} {c ? plata(c.total) : ''}
                   </Button>
                 </>
               }
@@ -1028,7 +1028,7 @@ function POS() {
                       <div key={claveDe(r.variante)} style={{ display: 'flex', justifyContent: 'space-between', gap: space[2] }}>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontWeight: weight.semibold, color: color.ink, textTransform: 'uppercase' }}>
-                            {r.variante.product_name} {feriaIds.has(Number(r.variante.product_id)) && <Badge tone="warning">Feria</Badge>}
+                            {r.variante.product_name} {feriaIds.has(Number(r.variante.product_id)) && <Badge tone="warning">Oferta</Badge>}
                           </div>
                           <div style={{ color: color.mut }}>
                             {r.variante.size_name} · ×{r.cantidad}
@@ -1121,7 +1121,7 @@ function POS() {
                               {trabada ? (
                                 <span style={{ fontSize: font.xs, color: color.warningInk, fontWeight: weight.bold }}>No va con prendas de feria</span>
                               ) : (
-                                regla && regla.descuento > 0 && <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{regla.descuento}% de descuento{hayFeria ? ' (sin la feria)' : ''}</span>
+                                regla && regla.descuento > 0 && <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{regla.descuento}% de descuento{hayFeria ? ' (sin la oferta)' : ''}</span>
                               )}
                             </span>
                             <span style={{ fontSize: font.lg, fontWeight: weight.bold, color: color.ink, fontVariantNumeric: 'tabular-nums' }}>

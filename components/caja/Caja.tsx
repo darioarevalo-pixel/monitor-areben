@@ -86,8 +86,8 @@ export function Caja() {
   const antes = turno ? (
     <>
       {abrirPOS}
-      <Button variant="outline" onClick={() => setVerVentas({ titulo: 'Ventas del turno abierto' })}>
-        Ventas del turno
+      <Button variant="outline" onClick={() => setVerVentas({ titulo: 'Ventas de la caja abierta' })}>
+        Ventas
       </Button>
     </>
   ) : abrirPOS
@@ -99,8 +99,8 @@ export function Caja() {
       {/* Una columna debajo de 1100 px; arriba, la vista previa del ticket a la derecha (sólo admin). */}
       <style>{`@media (min-width: 1100px) { .caja-grilla.con-ticket { grid-template-columns: minmax(0, 1fr) 320px; } .caja-ticket { position: sticky; top: 0; } }`}</style>
       <div style={{ display: 'grid', gap: space[3], minWidth: 0 }}>
-        {errTurno && <Notice tone="danger">No se pudo leer el turno: {errTurno}</Notice>}
-        {turno && !esMio && <Notice tone="neutral">Turno de {turno.abierto_por ?? 'otra cuenta'}: POS sólo para esa cuenta.</Notice>}
+        {errTurno && <Notice tone="danger">No se pudo leer la caja: {errTurno}</Notice>}
+        {turno && !esMio && <Notice tone="neutral">Caja de {turno.abierto_por ?? 'otra cuenta'}: POS sólo para esa cuenta.</Notice>}
         {otras.length > 0 && <Pendientes ventas={otras} admin={admin} esMio={esMio} onCambio={() => { refrescarPendientes(); refrescarTurno() }} />}
         {/* B3: el admin confirma a mano la que el cruce ⛔ ve; el resto, sólo el aviso. */}
         {admin ? (
@@ -127,7 +127,7 @@ export function Caja() {
         {admin && config && <LogoDelTicket inicial={config.ticket_logo ?? null} onGuardado={(l) => setConfig({ ...config, ticket_logo: l })} />}
         {admin && <GiftCards />}
         {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
-        <UltimosTurnos ultimos={ultimosTurnos} onVerVentas={(t) => setVerVentas({ turnoId: t.id, titulo: `Ventas del turno del ${diaAr(t.abierto_en)}${t.abierto_por ? ` · ${t.abierto_por}` : ''}` })} />
+        <UltimosTurnos ultimos={ultimosTurnos} onVerVentas={(t) => setVerVentas({ turnoId: t.id, titulo: `Ventas de la caja del ${diaAr(t.abierto_en)}${t.abierto_por ? ` · ${t.abierto_por}` : ''}` })} />
         {verVentas && <VentasDelTurno turnoId={verVentas.turnoId} titulo={verVentas.titulo} nombreCuenta={(id) => nombreParaTicket(id, config?.reglas ?? null)} onCerrar={() => setVerVentas(null)} />}
       </div>
       {admin && config && (

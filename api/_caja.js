@@ -666,7 +666,7 @@ export default async function handler(req, res) {
         if (c) fila.conteos = { apertura: c }
         const ins = await sb.from('caja_turno').insert(fila).select(COLS_TURNO).single()
         // El índice único: ya hay un turno abierto (otra pantalla lo abrió recién).
-        if (ins.error && ins.error.code === '23505') return res.status(409).json({ error: 'Ya hay un turno abierto. Recargá la Caja.' })
+        if (ins.error && ins.error.code === '23505') return res.status(409).json({ error: 'Ya hay una caja abierta. Recargá la Caja.' })
         if (ins.error) throw new Error(ins.error.message)
         return res.status(200).json({ turno: await conResumen(ins.data) })
       }
@@ -679,11 +679,11 @@ export default async function handler(req, res) {
         if (!Number.isFinite(monto) || monto <= 0 || monto > MAX_MOVIMIENTO) return res.status(400).json({ error: `${nombre} tiene que ser un monto mayor a cero.` })
         if (!motivo) return res.status(400).json({ error: `Falta el motivo ${tipo === 'aporte' ? 'del aporte' : 'de la salida'}.` })
         const turno = await turnoAbierto()
-        if (!turno) return res.status(409).json({ error: 'No hay un turno abierto.' })
+        if (!turno) return res.status(409).json({ error: 'No hay una caja abierta.' })
         // 🔑 A8 (Bruno, 11-oct): la cuenta que abrió el turno y los admins; ⛔ otra cuenta con permiso de Caja.
         if (!puedeMoverEfectivo(turno, perfil, esAdmin(perfil))) return res.status(403).json({ error: `La caja la abrió ${turno.abierto_por || 'otra cuenta'}: sólo esa cuenta o un admin cargan efectivo que sale o entra.` })
         const ins = await sb.from('caja_turno_mov').insert({ turno_id: turno.id, tipo, monto, motivo, usuario: perfil.name || null, usuario_cuenta: usuarioDe(perfil) })
-        if (ins.error && turnoCerrado(ins.error)) return res.status(409).json({ error: 'El turno se cerró recién. Recargá la Caja.' })
+        if (ins.error && turnoCerrado(ins.error)) return res.status(409).json({ error: 'La caja se cerró recién. Recargá la Caja.' })
         if (ins.error) throw new Error(ins.error.message)
         return res.status(200).json({ turno: await conResumen(turno) })
       }
@@ -695,10 +695,10 @@ export default async function handler(req, res) {
         if (!id) return res.status(400).json({ error: 'Falta el movimiento.' })
         if (!motivo) return res.status(400).json({ error: 'Falta por qué se anula.' })
         const turno = await turnoAbierto()
-        if (!turno) return res.status(409).json({ error: 'No hay un turno abierto: el cerrado ya tiene su foto.' })
+        if (!turno) return res.status(409).json({ error: 'No hay una caja abierta: la cerrada ya tiene su foto.' })
         const mov = await sb.from('caja_turno_mov').select('id, turno_id, tipo, usuario, usuario_cuenta, anulado_en').eq('id', id).eq('turno_id', turno.id).maybeSingle()
         if (mov.error) throw new Error(mov.error.message)
-        if (!mov.data) return res.status(404).json({ error: 'Ese movimiento no es del turno abierto.' })
+        if (!mov.data) return res.status(404).json({ error: 'Ese movimiento no es de la caja abierta.' })
         if (!puedeAnularMov(mov.data, turno, perfil, esAdmin(perfil))) return res.status(403).json({ error: 'Lo anula quien lo cargó (si abrió la caja) o un admin.' })
         if (!mov.data.anulado_en) {
           const up = await sb.from('caja_turno_mov').update({ anulado_en: new Date().toISOString(), anulado_por: perfil.name || null, anulado_motivo: motivo })
@@ -716,8 +716,8 @@ export default async function handler(req, res) {
         const c = await conteoContra(b.conteo, null, '')
         if (c.error) return res.status(400).json({ error: c.error })
         const turno = await turnoAbierto()
-        if (!turno || turno.id !== id) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
-        if (!puedeUsarPOS(turno, perfil)) return res.status(403).json({ error: `La caja la abrió ${turno.abierto_por || 'otra cuenta'}: sólo esa cuenta puede contar los billetes del turno.` })
+        if (!turno || turno.id !== id) return res.status(409).json({ error: 'Esa caja ya está cerrada. Recargá la Caja.' })
+        if (!puedeUsarPOS(turno, perfil)) return res.status(403).json({ error: `La caja la abrió ${turno.abierto_por || 'otra cuenta'}: sólo esa cuenta puede contar los billetes de la caja.` })
         // Fresco, como el cierre: el conteo se compara con lo que tiene que haber AHORA.
         const con = await conResumen(turno, true)
         const esperado = con.resumen.efectivo.esperado
@@ -725,7 +725,7 @@ export default async function handler(req, res) {
         const conteos = { ...(turno.conteos || {}), intermedios: [...previos, { ...c, esperado, diferencia: diferencia(c.total, esperado) }].slice(-MAX_INTERMEDIOS) }
         const up = await sb.from('caja_turno').update({ conteos }).eq('id', id).is('cerrado_en', null).select(COLS_TURNO).maybeSingle()
         if (up.error) throw new Error(up.error.message)
-        if (!up.data) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
+        if (!up.data) return res.status(409).json({ error: 'Esa caja ya está cerrada. Recargá la Caja.' })
         return res.status(200).json({ turno: { ...con, conteos } })
       }
       if (accion === 'cerrar-turno') {
@@ -737,7 +737,7 @@ export default async function handler(req, res) {
         if (c && c.error) return res.status(400).json({ error: c.error })
         const nota = String(b.nota ?? '').trim().slice(0, 500) || null
         const turno = await turnoAbierto()
-        if (!turno || turno.id !== id) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
+        if (!turno || turno.id !== id) return res.status(409).json({ error: 'Esa caja ya está cerrada. Recargá la Caja.' })
         // Fresco: un cobro cargado en GN hace un minuto tiene que entrar en la foto del cierre.
         const con = await conResumen(turno, true)
         // 🔴 Auditoría A3 (11-oct): sin los cobros de GN el esperado queda CORTO y el cierre dice que
@@ -759,7 +759,7 @@ export default async function handler(req, res) {
           .update({ cerrado_en: new Date().toISOString(), cerrado_por: perfil.name || null, contado, nota, ...foto(con) })
           .eq('id', id).is('cerrado_en', null).select(COLS_TURNO).maybeSingle()
         if (up.error) throw new Error(up.error.message)
-        if (!up.data) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
+        if (!up.data) return res.status(409).json({ error: 'Esa caja ya está cerrada. Recargá la Caja.' })
         // 🔴 A7 (11-oct): una venta (o una salida) que se guardó mientras se cerraba quedaba en el turno y
         // ⛔ en su foto. Ya cerrado, ⛔ entra nada más (el trigger de sql/migrate-caja-auditoria.sql): se
         // relee y, si cambió, la foto se rehace con lo que de verdad quedó adentro.
@@ -798,7 +798,7 @@ export default async function handler(req, res) {
         }
 
         const turno = await turnoAbierto()
-        if (!turno) return res.status(409).json({ error: 'No hay un turno abierto: abrí el turno para cobrar.', sinTurno: true })
+        if (!turno) return res.status(409).json({ error: 'No hay una caja abierta: abrí la caja para cobrar.', sinTurno: true })
         // 🔑 Fase C (Bruno, 5-oct): cobra sólo la cuenta que abrió la caja. Cerrarla queda abierto a todos.
         if (!puedeUsarPOS(turno, perfil)) return res.status(403).json({ error: `La caja la abrió ${turno.abierto_por || 'otra cuenta'}: sólo esa cuenta puede cobrar.`, otraCuenta: true })
         const reglas = await reglasDeHoy((await leerConfig()).reglas)
@@ -873,7 +873,7 @@ export default async function handler(req, res) {
           return res.status(409).json({ error: 'La venta ya se está mandando. Mirá Pendientes en unos segundos.' })
         }
         // A7: el turno se cerró entre que se leyó y se guardó la venta (el trigger lo frena): ⛔ quedó guardada.
-        if (ins.error && turnoCerrado(ins.error)) return res.status(409).json({ error: 'El turno se cerró mientras se cobraba: la venta NO se guardó. Abrí el turno y cobrala de nuevo.', sinTurno: true })
+        if (ins.error && turnoCerrado(ins.error)) return res.status(409).json({ error: 'La caja se cerró mientras se cobraba: la venta NO se guardó. Abrí la caja y cobrala de nuevo.', sinTurno: true })
         if (ins.error) throw new Error(ins.error.message)
         // La transferencia todavía ⛔ llegó: la venta espera, y la pantalla pide `cruzar`.
         if (ins.data.estado === 'esperando_pago') return res.status(200).json({ venta: sinPayload(ins.data) })

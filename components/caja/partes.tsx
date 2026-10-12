@@ -199,7 +199,7 @@ export function TarjetaProducto({ nombre, precio, foto, cta, apagada, feria = fa
         )}
         {feria && (
           <span style={{ position: 'absolute', top: space[2], left: space[2] }}>
-            <Badge tone="warning">Feria</Badge>
+            <Badge tone="warning">Oferta</Badge>
           </span>
         )}
       </span>
@@ -377,7 +377,7 @@ export function ElegirVariante({
           <Foto src={fotoDe(elegida)} ancho={96} />
           <div style={{ minWidth: 0 }}>
             <h4 style={{ margin: 0, fontSize: font.xl, color: color.ink }}>
-              {producto.product_name} {feria && <Badge tone="warning">Feria</Badge>}
+              {producto.product_name} {feria && <Badge tone="warning">Oferta</Badge>}
             </h4>
             <p style={{ margin: '2px 0 0', fontSize: font.base, color: color.mut }}>
               {(elegida.sku ?? elegida.barcode) && <>{elegida.sku ?? elegida.barcode} · </>}
@@ -446,55 +446,49 @@ export function FilaRenglon({
     </button>
   )
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '48px minmax(0, 1fr) auto', columnGap: space[3], rowGap: space[1.5], padding: `${space[3]}px 0`, borderBottom: `1px solid ${color.bg2}` }}>
+    // Compacto (Bruno, 12-oct): tres prendas tienen que entrar a la vista sin scroll ⇒ foto de 36 px y talle,
+    // código, stock y ubicación en UNA línea; los avisos, sólo si hay alguno.
+    <div style={{ display: 'grid', gridTemplateColumns: '36px minmax(0, 1fr) auto', columnGap: space[2], rowGap: space[1], padding: `${space[1.5]}px 0`, borderBottom: `1px solid ${color.bg2}` }}>
       <div style={{ gridRow: 'span 2' }}>
-        <Foto src={r.foto} ancho={48} proporcion="1 / 1" />
+        <Foto src={r.foto} ancho={36} proporcion="1 / 1" />
       </div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontWeight: weight.semibold, color: color.ink, fontSize: font.base, lineHeight: 1.25 }}>
-          {r.variante.product_name} {feria && <Badge tone="warning">Feria</Badge>}{' '}
-          {!!promos?.length && <Badge tone="success">{promos.join(' + ')}</Badge>}
-        </div>
-        <div style={{ color: color.mut, fontSize: font.sm }}>
-          {r.variante.size_name}
-          {(r.variante.sku ?? r.variante.barcode) && <span style={{ color: color.mut2 }}> · {r.variante.sku ?? r.variante.barcode}</span>}
-        </div>
+      <div style={{ minWidth: 0, fontWeight: weight.semibold, color: color.ink, fontSize: font.base, lineHeight: 1.25 }}>
+        {r.variante.product_name} {feria && <Badge tone="warning">Oferta</Badge>}{' '}
+        {!!promos?.length && <Badge tone="success">{promos.join(' + ')}</Badge>}
       </div>
-      <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ gridRow: 'span 2', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
         {conRebaja && <s style={{ display: 'block', color: color.mut2, fontSize: font.xs }}>{plata(lista as number)}</s>}
         <b style={{ fontSize: font.md, color: conRebaja ? color.successInk : color.ink }}>{importe != null ? plata(importe) : lista != null ? plata(lista) : '—'}</b>
       </div>
-      <div style={{ gridColumn: '2 / 4', display: 'grid', gap: space[1.5], justifyItems: 'start' }}>
+      <div style={{ display: 'flex', gap: space[1.5], alignItems: 'center', flexWrap: 'wrap', fontSize: font.xs, color: color.mut, minWidth: 0 }}>
+        <span style={{ fontSize: font.sm }}>{r.variante.size_name}</span>
+        {(r.variante.sku ?? r.variante.barcode) && <span style={{ color: color.mut2 }}>· {r.variante.sku ?? r.variante.barcode}</span>}
+        <span>·</span>
+        {quedan < 0 ? <Badge tone="danger">Local: sin stock en Gestión Nube</Badge> : quedan === 0 ? <Badge tone="warning">ÚLTIMA</Badge> : <span>Local: quedan {quedan}</span>}
+        {/* En el local «depósito» es el de atrás de la percha, que ya está en `local`. El Depósito de GN
+            (18210) ⛔ vende desde la caja: sólo repone. */}
+        <span>· Para reponer: {r.stock.deposito}</span>
         {/* 🔑 Ubicaciones depósito: dónde buscarla atrás. Va EN EL RENGLÓN porque la mayoría se escanea y
             ⛔ pasa por la búsqueda (Bruno, 5-oct). Sin estante ⛔ se dice nada: está todo en percha. */}
         {!!r.stock.atras?.length && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: font.sm, fontWeight: weight.semibold, color: color.brand, background: color.brandBg, border: `1px solid ${color.brandBorder}`, padding: '2px 8px', borderRadius: radius.pill }}>
-            <Icono nombre="ubicaciones" size={13} />
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: weight.semibold, color: color.brand, background: color.brandBg, border: `1px solid ${color.brandBorder}`, padding: '0 6px', borderRadius: radius.pill }}>
+            <Icono nombre="ubicaciones" size={12} />
             Ubicación: {r.stock.atras.join(' · ')}
           </span>
         )}
-        <div style={{ display: 'flex', gap: space[1.5], alignItems: 'center', flexWrap: 'wrap', fontSize: font.xs, color: color.mut }}>
-          {quedan < 0 ? (
-            <Badge tone="danger">Local: sin stock en Gestión Nube</Badge>
-          ) : quedan === 0 ? (
-            <Badge tone="warning">ÚLTIMA</Badge>
-          ) : (
-            <span>Local: quedan {quedan}</span>
-          )}
-          {/* En el local «depósito» es el de atrás de la percha, que ya está en `local`. El Depósito de GN
-              (18210) ⛔ vende desde la caja: sólo repone. */}
-          <span>· Para reponer: {r.stock.deposito}</span>
-          {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· Stock de anoche (Gestión Nube sin respuesta)</span>}
-        </div>
-        {r.fueraDeTn && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio del espejo: producto sin cruce con Tienda Nube.</div>}
-        {/* B5 (Bruno, 11-oct): cambiar el precio es libre, pero se ve (y queda en la venta). */}
-        {r.precioLista != null && r.precio != null && Math.abs(r.precioLista - r.precio) > 0.004 && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio cambiado: la etiqueta dice {plata(r.precioLista)}.</div>}
-        {mirandoWeb && <div style={{ fontSize: font.xs, color: color.mut }}>Pedidos web: leyendo…</div>}
-        {avisoWeb && <Badge tone={avisoWeb.tipo === 'sin_stock' ? 'danger' : 'warning'}>{avisoWeb.texto}</Badge>}
+        {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· Stock de anoche (Gestión Nube sin respuesta)</span>}
       </div>
+      {/* B5 (Bruno, 11-oct): cambiar el precio es libre, pero se ve (y queda en la venta). */}
+      {((r.precioLista != null && r.precio != null && Math.abs(r.precioLista - r.precio) > 0.004) || mirandoWeb || avisoWeb) && (
+        <div style={{ gridColumn: '2 / 4', display: 'flex', gap: space[1.5], flexWrap: 'wrap', alignItems: 'center', fontSize: font.xs }}>
+          {r.precioLista != null && r.precio != null && Math.abs(r.precioLista - r.precio) > 0.004 && <span style={{ color: color.warningInk }}>Precio cambiado: la etiqueta dice {plata(r.precioLista)}.</span>}
+          {mirandoWeb && <span style={{ color: color.mut }}>Pedidos web: leyendo…</span>}
+          {avisoWeb && <Badge tone={avisoWeb.tipo === 'sin_stock' ? 'danger' : 'warning'}>{avisoWeb.texto}</Badge>}
+        </div>
+      )}
       {/* Los controles van a lo ancho del renglón: con el precio editable ⛔ entran debajo del nombre. */}
       <div style={{ gridColumn: '1 / -1', display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', height: 30, border: `1px solid ${color.line2}`, borderRadius: radius.md, background: color.surface, flexShrink: 0 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', height: 28, border: `1px solid ${color.line2}`, borderRadius: radius.md, background: color.surface, flexShrink: 0 }}>
           {paso(-1, 'Una menos', '−')}
           <span style={{ minWidth: 28, textAlign: 'center', fontWeight: weight.semibold, fontSize: font.base, fontVariantNumeric: 'tabular-nums' }}>{r.cantidad}</span>
           {paso(1, 'Una más', '+')}
@@ -510,7 +504,7 @@ export function FilaRenglon({
             if (texto != null) onPrecio(aNumero(texto))
             setTexto(null)
           }}
-          style={{ width: 84, height: 30, textAlign: 'right', color: color.brand, fontWeight: weight.semibold, fontSize: font.base }}
+          style={{ width: 84, height: 28, textAlign: 'right', color: color.brand, fontWeight: weight.semibold, fontSize: font.base }}
           aria-label="Precio"
         />
         <CampoRebaja valor={r.rebaja ?? null} onCambio={onRebaja} chico />
@@ -520,7 +514,8 @@ export function FilaRenglon({
           className="caja-sacar"
           aria-label={`Sacar ${r.variante.product_name} · ${r.variante.size_name} del pedido`}
           title="Sacar del pedido"
-          style={{ marginLeft: 'auto', height: 30, width: 30, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', borderRadius: radius.md, color: color.mut2, cursor: 'pointer', flexShrink: 0 }}
+          // La cruz en ROJO siempre (Bruno, 12-oct), ⛔ sólo al pasar el mouse.
+          style={{ marginLeft: 'auto', height: 28, width: 28, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', borderRadius: radius.md, color: color.danger, cursor: 'pointer', flexShrink: 0 }}
         >
           <Icono nombre="cruz" size={16} />
         </button>
@@ -785,7 +780,7 @@ export function EsperaTransferencia({ venta, onLlego, onCambio, onSeguir }: { ve
       <div style={{ display: 'grid', gap: space[2] }}>
         <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
           <b style={{ flex: 1, minWidth: 220 }}>
-            {onSeguir ? 'Validando' : 'Esperando'} la transferencia de {plata(monto)} · venta {numeroProvisorio(venta.id)} de las {hora(venta.creada_en)}
+            Transferencia pendiente de {plata(monto)} · venta {numeroProvisorio(venta.id)} de las {hora(venta.creada_en)}
           </b>
           {onSeguir && !seguro && (
             <Button size="sm" variant="outline" onClick={onSeguir}>
@@ -915,7 +910,7 @@ const ESTADO_VENTA: Record<string, { texto: string; tono: 'success' | 'danger' |
  * 🔑 También en la PESTAÑA (Bruno, 11-oct): el turno abierto y cada uno de «Últimos turnos» (`turnoId`),
  * sin «Reimprimir» —el ticket se arma en el POS, con la impresora del local—.
  */
-export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar, turnoId, titulo = 'Ventas del turno' }: { nombreCuenta: (id: number) => string; /** Sin él, ⛔ hay «Reimprimir». */ onReimprimir?: (v: Venta) => void; onCerrar: () => void; /** Sin él, el turno abierto. */ turnoId?: string; titulo?: string }) {
+export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar, turnoId, titulo = 'Ventas' }: { nombreCuenta: (id: number) => string; /** Sin él, ⛔ hay «Reimprimir». */ onReimprimir?: (v: Venta) => void; onCerrar: () => void; /** Sin él, el turno abierto. */ turnoId?: string; titulo?: string }) {
   const [ventas, setVentas] = useState<Venta[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
@@ -938,7 +933,7 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onCerrar, turnoId, 
     <Modal abierto onCerrar={onCerrar} titulo={titulo} ancho="xl">
       {error && <Notice tone="danger">{error}</Notice>}
       {!ventas && !error && <span style={{ color: color.mut }}>Leyendo las ventas…</span>}
-      {ventas && !ventas.length && <span style={{ color: color.mut }}>Sin ventas en el turno.</span>}
+      {ventas && !ventas.length && <span style={{ color: color.mut }}>Sin ventas en esta caja.</span>}
       {ventas && ventas.length > 0 && (
         <div style={{ display: 'grid', gap: space[2] }}>
           <span style={{ fontSize: font.sm, color: color.ink2 }}>
@@ -1234,7 +1229,7 @@ export function CampoRebaja({ valor, onCambio, chico = false }: { valor: Rebaja 
           if (texto != null) fijar(texto, tipo)
           setTexto(null)
         }}
-        style={chico ? { width: 90, height: 30, textAlign: 'right', fontSize: font.base } : { width: 100, textAlign: 'right' }}
+        style={chico ? { width: 90, height: 28, textAlign: 'right', fontSize: font.base } : { width: 100, textAlign: 'right' }}
         aria-label="Descuento"
       />
       <Select
@@ -1308,7 +1303,7 @@ export function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: 
     }
   }
   return (
-    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Billetes de la calculadora" ayuda="Con qué billetes cuenta la calculadora del turno. Sólo lo cambia un admin.">
+    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Billetes de la calculadora" ayuda="Con qué billetes cuenta la calculadora de la caja. Sólo lo cambia un admin.">
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
         <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <Field label={`Billetes de la calculadora (sin la lista: ${BILLETES_INICIALES.join(', ')})`}>
@@ -1356,7 +1351,7 @@ const der: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabu
 export function AvisoCierre({ t }: { t: Turno }) {
   const d = t.resumen?.diferencia ?? Number(t.contado) - Number(t.esperado)
   return (
-    <SectionCard title={`Turno cerrado ${t.cerrado_en ? horaAr(t.cerrado_en) : ''}`}>
+    <SectionCard title={`Caja cerrada ${t.cerrado_en ? horaAr(t.cerrado_en) : ''}`}>
       <div style={grillaDatos}>
         <Dato rotulo="Esperado" valor={plata(Number(t.esperado))} />
         <Dato rotulo="Contado" valor={plata(Number(t.contado))} />
@@ -1374,8 +1369,8 @@ export function AbrirTurnoModal({ billetes, onCerrar, onAbierto }: { billetes: n
     <CalculadoraBilletes
       momento="apertura"
       billetes={billetes}
-      titulo="Abrir turno · fondo inicial"
-      accion="Abrir turno"
+      titulo="Abrir caja · fondo inicial"
+      accion="Abrir caja"
       aMano
       trabajando={trabajando}
       error={error}
@@ -1460,8 +1455,8 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
     <CalculadoraBilletes
       momento={momento}
       billetes={billetes}
-      titulo="Cerrar turno · efectivo con el fondo"
-      accion="Cerrar turno"
+      titulo="Cerrar caja · efectivo con el fondo"
+      accion="Cerrar caja"
       tono="danger"
       aMano
       vacioApagado
@@ -1490,7 +1485,7 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
         const esperado = r?.efectivo.esperado ?? null
         const dif = esperado == null ? null : Math.round((total - esperado) * 100) / 100
         const ok = await confirmar({
-          titulo: 'Cerrar turno',
+          titulo: 'Cerrar caja',
           mensaje: (
             <div style={{ display: 'grid', gap: space[2] }}>
               {esperado != null && <ConfirmDetalle label="Esperado" valor={plata(esperado)} />}
@@ -1500,7 +1495,7 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
               <span>El cierre queda guardado y no se reabre.</span>
             </div>
           ),
-          ok: 'Cerrar turno',
+          ok: 'Cerrar caja',
           tono: 'danger',
         })
         if (ok) await cerrar(total, conteo, false)
@@ -1537,7 +1532,7 @@ export function SalidaModal({ onCerrar, onListo }: { onCerrar: () => void; onLis
     <Modal
       abierto
       onCerrar={onCerrar}
-      titulo="Cargar salida o aporte"
+      titulo="Salida, gasto o aporte"
       cerrarConFondo={false}
       pie={
         <>
@@ -1560,7 +1555,7 @@ export function SalidaModal({ onCerrar, onListo }: { onCerrar: () => void; onLis
               onClick={() => setTipo(t)}
               style={{ height: 32, padding: `0 ${space[3]}px`, border: 0, borderRadius: radius.sm, background: tipo === t ? color.brandSolid : 'transparent', color: tipo === t ? '#fff' : color.ink2, fontWeight: weight.semibold, fontSize: font.base, cursor: 'pointer' }}
             >
-              {t === 'salida' ? 'Sale efectivo' : 'Entra efectivo (aporte)'}
+              {t === 'salida' ? 'Sale efectivo (salida, gasto, pago)' : 'Entra efectivo (aporte)'}
             </button>
           ))}
         </div>
@@ -1810,16 +1805,16 @@ export function TurnoCaja({
         <HeaderAcciones>
           {antes}
           <Button variant="outline" onClick={() => setAbierto('abrir')}>
-            Abrir turno
+            Abrir caja
           </Button>
         </HeaderAcciones>
         {cerrado && <AvisoCierre t={cerrado} />}
         <Card padding={4} style={tarjetaTurno}>
           <div style={{ display: 'grid', justifyItems: 'start', gap: space[2], padding: space[1] }}>
-            <b style={{ fontSize: font.lg + 1, color: color.ink }}>Sin turno abierto</b>
-            <span style={{ color: color.mut, fontSize: font.base }}>El POS cobra con un turno abierto.</span>
+            <b style={{ fontSize: font.lg + 1, color: color.ink }}>Sin caja abierta</b>
+            <span style={{ color: color.mut, fontSize: font.base }}>El POS cobra con una caja abierta.</span>
             <Button tone="brand" variant="solid" onClick={() => setAbierto('abrir')}>
-              Abrir turno
+              Abrir caja
             </Button>
           </div>
         </Card>
@@ -1849,17 +1844,17 @@ export function TurnoCaja({
         )}
         {(esMio || admin) && (
           <Button variant="outline" onClick={() => setAbierto('salida')}>
-            Cargar salida o aporte
+            + Salida, gasto o aporte
           </Button>
         )}
         {/* Borde neutro y texto rojo (prototipo): avisa sin competir con la acción sólida. */}
         <Button variant="outline" onClick={() => setAbierto('cerrar')} style={{ '--_fg': color.danger } as React.CSSProperties}>
-          Cerrar turno
+          Cerrar caja
         </Button>
       </HeaderAcciones>
       <Card padding={4} style={tarjetaTurno}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2] + 2, flexWrap: 'wrap' }}>
-          <b style={{ fontSize: font.lg, color: color.ink }}>Turno abierto</b>
+          <b style={{ fontSize: font.lg, color: color.ink }}>Caja abierta</b>
           <span style={{ color: color.mut, fontSize: font.base }}>desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}</span>
         </div>
         <ResumenTurnoDatos turno={turno} conTabla reglas={reglas} puedeAnular={esMio || admin} onCambio={onCambio} />
@@ -1891,7 +1886,7 @@ export function UltimosTurnos({ ultimos, onVerVentas }: { ultimos: Turno[]; /** 
   const [abierto, setAbierto] = useState(false)
   if (ultimos.length === 0) return null
   return (
-    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Últimos turnos" ayuda="Los turnos cerrados: esperado, contado y diferencia del efectivo.">
+    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Cajas anteriores" ayuda="Las cajas cerradas: esperado, contado y diferencia del efectivo.">
       <div style={{ overflowX: 'auto', fontSize: font.base }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -2016,13 +2011,13 @@ export function ProductosFeria({ reglas, version, campanias = [], onGuardadas }:
       variante="tarjeta"
       abierto={abierto}
       onToggle={() => setAbierto(!abierto)}
-      titulo={`Productos de feria (${new Set([...lista.map((p) => p.id), ...(reglas.feriaIdsCampania ?? [])]).size})`}
+      titulo={`Productos en oferta (${new Set([...lista.map((p) => p.id), ...(reglas.feriaIdsCampania ?? [])]).size})`}
       ayuda="Precio final: sólo efectivo o transferencia, a la cuenta de feria, sin descuento por forma de pago. Sólo lo cambia un admin."
     >
       <div style={{ display: 'grid', gap: space[3], maxWidth: 640 }}>
         {/* 🔑 Bruno, 11-oct: la feria es la de Liquidación. Es feria todo producto con el precio de una campaña
             tildada APLICADO; al sacar la campaña, deja de serlo solo. */}
-        <Field label="Campañas de Liquidación que son feria">
+        <Field label="Campañas de Liquidación que son oferta">
           <div style={{ display: 'grid', gap: space[1] }}>
             {campanias.length === 0 && <span style={{ color: color.mut, fontSize: font.sm }}>Sin campañas en Liquidación.</span>}
             {campanias.map((c) => {
@@ -2050,7 +2045,7 @@ export function ProductosFeria({ reglas, version, campanias = [], onGuardadas }:
           <div style={{ display: 'grid', gap: space[1.5] }}>
             {lista.map((p) => (
               <div key={p.id} style={{ display: 'flex', gap: space[2], alignItems: 'center', border: `1px solid ${color.line}`, borderRadius: radius.md, padding: `${space[1.5]}px ${space[2] + 2}px` }}>
-                <Badge tone="warning">Feria</Badge>
+                <Badge tone="warning">Oferta</Badge>
                 <span style={{ flex: 1 }}>{p.nombre || `Producto ${p.id}`}</span>
                 <Button size="sm" variant="ghost" disabled={guardando} onClick={() => guardar(lista.filter((x) => x.id !== p.id))}>
                   Sacar
@@ -2069,7 +2064,7 @@ export function ProductosFeria({ reglas, version, campanias = [], onGuardadas }:
               <div key={p.product_id} style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
                 <span style={{ flex: 1 }}>{p.product_name}</span>
                 {ids.has(p.product_id) ? (
-                  <Badge tone="warning">Feria</Badge>
+                  <Badge tone="warning">Oferta</Badge>
                 ) : (
                   <Button size="sm" variant="outline" disabled={guardando} onClick={() => guardar([...lista, { id: p.product_id, nombre: p.product_name }])}>
                     Agregar

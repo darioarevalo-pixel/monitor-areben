@@ -245,7 +245,7 @@ function Prenda({ r }: { r: Resultado }) {
         ) : !precio ? (
           <div style={{ background: color.bg2, color: color.ink2, borderRadius: radius.xl, padding: space[4], fontSize: font.xl }}>Precio: consultá en caja.</div>
         ) : precio.feria ? (
-          <Precio rotulo="Feria · precio final" monto={precio.final} pie="Sólo efectivo o transferencia" />
+          <Precio rotulo="Oferta · precio final" monto={precio.final} pie="Sólo efectivo o transferencia" />
         ) : (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: font.xl, color: color.ink2 }}>

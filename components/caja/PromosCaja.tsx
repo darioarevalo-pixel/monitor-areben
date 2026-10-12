@@ -83,12 +83,12 @@ export function PromosCaja({ reglas, admin, version, onGuardadas }: { reglas: Re
       variante="tarjeta"
       abierto={abierto}
       onToggle={() => setAbierto(!abierto)}
-      titulo={`Promos (${vigentes} vigente${vigentes === 1 ? '' : 's'})`}
-      ayuda="Se aplican solas en el POS: una por prenda, la que más ahorra, y además el descuento de la forma de pago. Las prendas de feria y las que tienen descuento a mano quedan afuera. Sólo las carga un admin."
+      titulo={`Promociones vigentes · productos (${vigentes})`}
+      ayuda="Se aplican solas en el POS: una por prenda, la que más ahorra, y además el descuento de la forma de pago. Los productos en oferta y las prendas que tienen descuento a mano quedan afuera. Sólo las carga un admin."
     >
       <div style={{ display: 'grid', gap: space[3], maxWidth: 720 }}>
         {lista.length === 0 ? (
-          <span style={{ color: color.mut, fontSize: font.sm }}>Promos: ninguna.</span>
+          <span style={{ color: color.mut, fontSize: font.sm }}>Ninguna promoción cargada.</span>
         ) : (
           <div style={{ display: 'grid', gap: space[1.5] }}>
             {lista.map((p) => {
