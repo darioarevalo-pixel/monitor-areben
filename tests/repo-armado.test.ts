@@ -38,8 +38,11 @@ describe('lo puro', () => {
     const pedido = [L({ exhibir: true })]
     const a = leerCodigo(pedido, {}, '779001', [])
     expect(a).toMatchObject({ tipo: 'suma', n: 1, faltan: 1, exhibir: true })
-    expect(frase(a as Extract<typeof a, { tipo: 'suma' }>)).toBe('Para exhibir. TOP ZOE, S. Faltan 1')
-    expect(leerCodigo(pedido, { '1_1': 1 }, '779001', [])).toMatchObject({ tipo: 'suma', n: 2, faltan: 0, exhibir: false })
+    expect(frase(a as Extract<typeof a, { tipo: 'suma' }>)).toBe('Para exhibir')
+    const b = leerCodigo(pedido, { '1_1': 1 }, '779001', [])
+    expect(b).toMatchObject({ tipo: 'suma', n: 2, faltan: 0, exhibir: false })
+    // La segunda ya no habla: sólo el pitido (Darío, 12-oct-2026).
+    expect(frase(b as Extract<typeof b, { tipo: 'suma' }>)).toBeUndefined()
     expect(leerCodigo(pedido, { '1_1': 2 }, '779001', []).tipo).toBe('sobra')
   })
 

@@ -105,12 +105,13 @@ export function talle(size: string): string {
   return /^variante\s+[uú]nica$/i.test(size.trim()) ? '' : size.trim()
 }
 
-/** La frase corta que dice la voz. Corta a propósito: la cancela el escaneo siguiente. */
-export function frase(l: Extract<Lectura, { tipo: 'suma' }>): string {
-  const t = talle(l.linea.size)
-  const tx = t ? `, ${t}` : ''
-  const resto = l.faltan > 0 ? `Faltan ${l.faltan}` : 'Completo'
-  return `${l.exhibir ? 'Para exhibir. ' : ''}${l.linea.name}${tx}. ${resto}`
+/**
+ * Lo que dice la voz con una prenda bien escaneada: NADA, salvo «Para exhibir» (Darío, 12-oct-2026:
+ * repetir cada producto «lo hace extenso» — la prenda ya está en la mano). El caso normal va sólo
+ * con el pitido: uno si faltan más de esa prenda, dos cuando queda completa.
+ */
+export function frase(l: Extract<Lectura, { tipo: 'suma' }>): string | undefined {
+  return l.exhibir ? 'Para exhibir' : undefined
 }
 
 // ─── El servidor ────────────────────────────────────────────────────────────────────────────────

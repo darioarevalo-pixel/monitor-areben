@@ -83,6 +83,9 @@ Lorena escanea en la **COMPU** del depósito, con lector, contra la lista de «L
   mientras el stock sea anterior a la transferencia (si no, se pide dos veces lo mismo).
 - Lo que sobra o no estaba pedido **frena la pantalla** (cartel rojo, ⛔ no el `Modal`: el Enter del
   lector lo cerraba), igual que Conteo. La primera de una «para exhibir» se canta y se marca.
+- 🔈 **La voz calla en el caso normal** (Darío, 12-oct-2026: repetir cada producto «lo hace extenso»):
+  prenda bien escaneada = sólo pitido (uno si faltan, dos al completarse). Habla sólo «Para exhibir» y
+  los errores («Excedente», «No solicitada», «Código desconocido»).
 - **Historial** (pestaña, `HistorialArmados.tsx`, `?action=historial`): un renglón por armado (sin
   los descartados) con horario, duración, pedidas/escaneadas/no encontradas y el detalle; arriba,
   **«Más veces no encontradas»** = la señal de stock mal cargado. Sólo cuenta armados transferidos.
