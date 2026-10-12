@@ -201,6 +201,18 @@ describe('api/_repo-armado.js', () => {
     respuestaGN = () => ({ status: 201, body: { executed: true, transfer_id: 1 } })
   })
 
+  it('la tanda que alguien confirma a mano después de «revisar» también guarda sus prendas', async () => {
+    await abrir()
+    respuestaGN = () => ({ status: 500, body: { message: 'boom' } })
+    await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 2 } })
+    expect(tabla[0].estado).toBe('revisar')
+    const r = await correr({ action: 'resolver', id: 'ra1', hecha: true, transfer_id: '7745' })
+    expect(r.code).toBe(200)
+    expect(tabla[0].estado).toBe('transferido')
+    expect((tabla[0].transfer as { tandas: unknown[] }).tandas).toMatchObject([{ transfer_id: '7745', prendas: { '10_3': 2 }, desde: 18210, hacia: 11780 }])
+    respuestaGN = () => ({ status: 201, body: { executed: true, transfer_id: 1 } })
+  })
+
   it('sin nada escaneado no llama a GN', async () => {
     await abrir()
     const r = await correr({ action: 'transferir', id: 'ra1', escaneos: {} })
@@ -239,6 +251,11 @@ describe('api/_repo-armado.js', () => {
     ])
     expect(tabla[0]).toMatchObject({ estado: 'transferido', transfer: { unidades: 3, transfer_id: 8002 } })
     expect((tabla[0].transfer as { tandas: unknown[] }).tandas).toHaveLength(2)
+    // 🔑 Cada tanda dice qué prendas movió y de dónde a dónde: el acumulado ya no alcanza para saberlo.
+    expect((tabla[0].transfer as { tandas: unknown[] }).tandas).toMatchObject([
+      { transfer_id: 8001, prendas: { '10_3': 1 }, desde: 18210, hacia: 11780 },
+      { transfer_id: 8002, prendas: { '10_3': 1, '11_4': 1 }, desde: 18210, hacia: 11780 },
+    ])
   })
 
   it('cerrar después de transferir todo en tandas no vuelve a llamar a GN', async () => {
@@ -255,6 +272,7 @@ describe('api/_repo-armado.js', () => {
     await correr({ action: 'transferir', id: 'rd1', escaneos: { '10_3': 1 } })
     expect(llamadasGN[0].body).toMatchObject({ from_store_id: 11780, to_store_id: 18210 })
     expect(String(llamadasGN[0].body.description)).toMatch(/^Devolución/)
+    expect((tabla[0].transfer as { tandas: unknown[] }).tandas).toMatchObject([{ prendas: { '10_3': 1 }, desde: 11780, hacia: 18210 }])
   })
 
   it('no se puede descartar un armado con tandas ya transferidas', async () => {

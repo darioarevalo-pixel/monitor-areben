@@ -28,6 +28,7 @@ import {
   sanearFaltantes,
   sanearPedido,
   conTransferido,
+  depositosDelArmado,
   pendienteDeTransferir,
   sumar,
   transferidoDe,
@@ -156,7 +157,9 @@ export default async function handler(req, res) {
       const hecha = b.hecha === true
       const t = armado.transfer || {}
       const enCurso = t.enCurso || {}
-      const tandaRevisada = { transfer_id: String(b.transfer_id || '').trim() || null, unidades: Object.values(enCurso).reduce((x, n) => x + n, 0), hora: new Date().toISOString(), revisadaPor: perfil.name || null }
+      // 🔑 La tanda guarda QUÉ prendas movió y de dónde a dónde: el libro de stock la lee prenda por prenda.
+      const [desdeR, haciaR] = DEPOSITOS_GN[armado.store] ? depositosDelArmado(armado.sentido, DEPOSITOS_GN[armado.store]) : [null, null]
+      const tandaRevisada = { transfer_id: String(b.transfer_id || '').trim() || null, unidades: Object.values(enCurso).reduce((x, n) => x + n, 0), hora: new Date().toISOString(), revisadaPor: perfil.name || null, prendas: enCurso, desde: desdeR, hacia: haciaR }
       const transferHecha = { ...t, enCurso: null, seguir: null, transferido: sumar(transferidoDe(t), enCurso), tandas: [...(t.tandas || []), tandaRevisada] }
       transferHecha.unidades = Object.values(transferHecha.transferido).reduce((x, n) => x + n, 0)
       const cambios = hecha
@@ -220,7 +223,7 @@ async function transferir(sb, res, armado, b, perfil) {
   if (!tomado.data || !tomado.data.length) return res.status(409).json({ error: 'Este armado ya se está transfiriendo.' })
 
   const devolucion = armado.sentido === 'devolver'
-  const [desde, hacia] = devolucion ? [dep.local, dep.deposito] : [dep.deposito, dep.local]
+  const [desde, hacia] = depositosDelArmado(armado.sentido, dep)
   const body = {
     from_store_id: desde,
     to_store_id: hacia,
@@ -252,7 +255,9 @@ async function transferir(sb, res, armado, b, perfil) {
   }
 
   if (resp.ok && datos && (datos.executed === true || datos.transfer_id)) {
-    const tanda = { transfer_id: datos.transfer_id ?? null, movement_id: datos.movement_id ?? null, unidades, hora: new Date().toISOString() }
+    // 🔑 `prendas`, `desde` y `hacia`: el libro de stock lee cada tanda prenda por prenda (con varias
+    // tandas, `transferido` sólo da el acumulado y ya no se sabe qué viajó en cuál).
+    const tanda = { transfer_id: datos.transfer_id ?? null, movement_id: datos.movement_id ?? null, unidades, hora: new Date().toISOString(), prendas: pendiente, desde, hacia }
     const nuevoTransferido = sumar(transferido, pendiente)
     const transfer = {
       tandas: [...(previo.tandas || []), tanda],
