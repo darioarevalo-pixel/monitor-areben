@@ -92,8 +92,12 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > `areben-mailer` `POST /api/externo/aviso`, con la MISMA llave del ticket de la Caja). 🔴 **El
 > Monitor ⛔ manda mails por su cuenta** (Bruno, 12-oct): la primera versión fue por SES directo y
 > en Vercel ⛔ están esas claves — a propósito. Mailer sólo acepta casillas `@arebensrl.com`. 🔴 El reporte viaja CALCULADO porque el handler ⛔ importa TypeScript; el servidor sólo
-> lo acota (`limpiarReporte`) y toma quién/cuándo de la fila. Debajo de `COMPLETO_PCT` (90 %) de lo
-> regular el asunto dice **«incompleto»**. Una vez por recorrido (constancia en `cobertura.correo`,
+> lo acota (`limpiarReporte`) y toma quién/cuándo de la fila. 🔴 ⛔ Se juzga por porcentaje (12-oct, corregido
+> el mismo día): lo que ⛔ se escaneó es también lo que ⛔ está colgado, y un corte del 90 % decía
+> «incompleto» del 10-oct, recorrido entero (88 % = las 76 por colgar). Lo que avisa que se salteó
+> un sector es **un tipo de prenda entero sin escanear** (`tiposSinEscanear`, desde
+> `MIN_TIPO_SIN_ESCANEAR` = 5 variantes; el 10-oct: BODY 0 de 7) → «⚠️ … sin escanear BODY».
+> Se muestra «Exhibido el N % · faltan colgar M», sin la palabra «regular». Una vez por recorrido (constancia en `cobertura.correo`,
 > ⛔ migración; `cobertura`/`tachar`/`repetida` la conservan) salvo `reenviar` = el botón «Enviar por
 > correo» del reporte. Destino: `MAIL_EXHIB_A` › `MAIL_REPOSICION_A` › Darío. Sin `MAILER_URL`/
 > `MAILER_TICKET_KEY` contesta `configurado: false` y el cierre ⛔ se entera (va en segundo plano). ⏭️ Cuando haya día fijo:
@@ -101,6 +105,10 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > anterior = último día con ≥100 escaneos, `nuevosDesde`) y **«1 sola»** en lo pendiente, sólo en
 > pantalla y correo; y **el stock se trae solo** al abrir el reporte si la foto tiene >30 min.
 
+> 🗺️ **Desde el 12-oct-2026 el chequeo de siempre es CON MAPA** (Darío: «para que agarre costumbre
+> de usarlo siempre»): la empleada ⛔ elige, el botón es «Iniciar chequeo» y abre el «+ mapa». El
+> sin mapa queda como link chico para quien edita el mapa. ⚠️ El del 5-oct con mapa tardó ~66 min
+> de escaneo y hay 60 antes de abrir: medirlo en el próximo (el correo dice la duración).
 > 🧹 **Pantalla de inicio sin texto (12-oct-2026, Darío: «hay mucho texto»)** — dos personas, dos
 > cosas: la EMPLEADA ve «Último chequeo: fecha · completo/⚠️ incompleto (N %)» (sale del asunto de
 > `cobertura.correo`), UN botón grande «Iniciar chequeo» (los números de inventario/en cero/Stunned

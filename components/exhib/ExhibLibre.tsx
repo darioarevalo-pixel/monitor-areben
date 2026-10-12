@@ -101,7 +101,11 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
    * finalizar el relevamiento en vez de «Para colgar». Se elige antes de iniciar; el recorrido en
    * curso lo recuerda solo (`lib.conMapa`, va en el borrador del teléfono).
    */
-  const [conMapa, setConMapa] = useState(false)
+  /**
+   * 🔑 **El chequeo de siempre es CON MAPA** (Darío, 12-oct-2026: «para que agarre costumbre de
+   * usarlo siempre»): la empleada ⛔ elige; el sin mapa queda para quien edita el mapa.
+   */
+  const [conMapa, setConMapa] = useState(marca === 'zattia')
   /** Los escaneos del recorrido «+ mapa» recién cerrado, congelados para el relevamiento. */
   const [cierreRelev, setCierreRelev] = useState<EscaneoLibre[] | null>(null)
   /**
@@ -411,8 +415,9 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               Último chequeo: {fechaDe(ultimoChequeo[0].creado_en)}
               {(() => {
                 const asunto = ultimoChequeo.map((r) => r.cobertura?.correo?.asunto).find(Boolean) ?? ''
-                const m = asunto.match(/incompleto \((\d+) %\)/)
-                return m ? <b style={{ color: color.warning }}> · ⚠️ incompleto ({m[1]} %)</b> : asunto ? <b style={{ color: color.success }}> · completo</b> : null
+                const sin = asunto.match(/sin escanear ([^·]+)/)
+                const pct = asunto.match(/exhibido (\d+) %/)
+                return sin ? <b style={{ color: color.warning }}> · ⚠️ quedó sin escanear {sin[1].trim()}</b> : pct ? <> · exhibido el {pct[1]} %</> : null
               })()}
             </div>
           )}
@@ -439,7 +444,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
                 disabled={cargando || !items.length}
                 title={`${items.length} variantes con stock en el Local${enCero ? ` · ${enCero} en cero (también se pueden escanear)` : ''}${deStunned ? ` · ${deStunned} de Stunned (se registran pero no cuentan)` : ''}`}
               >
-                {conMapa ? 'Iniciar chequeo + mapa' : 'Iniciar chequeo'}
+                Iniciar chequeo
               </Button>
             </div>
           )}
@@ -454,14 +459,13 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
             <ReporteChequeo marca={marca} previos={previos} items={items} mapa={mapaLocal} onTraerStock={onTraerStock} trayendo={trayendo} onCobertura={ponerCobertura} />
           )}
 
-          {/* 🔑 «Chequeo + mapa» es para ARMAR el Mapa del local, ⛔ el chequeo semanal: sólo para
-              quien lo edita, y chico (Darío, 12-oct-2026). */}
+          {/* 🔑 El chequeo sin mapa queda como alternativa sólo para quien edita el mapa, chico. */}
           {marca === 'zattia' && !lib.recorridoId && mapaGuardado?.puede.editar && (
             <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[4] }}>
               <button type="button" onClick={() => setConMapa(!conMapa)} style={{ height: 'auto', background: 'none', border: 'none', padding: 0, color: color.brand, cursor: 'pointer', fontSize: font.sm, textDecoration: 'underline' }}>
-                {conMapa ? 'Volver al chequeo de siempre' : 'Chequeo + mapa (para armar el mapa del local)'}
+                {conMapa ? 'Hacer el chequeo sin mapa (escribiendo el lugar)' : 'Volver al chequeo con mapa'}
               </button>
-              {conMapa && <> · Elegís el espacio con botones (lado, número, simple o doble, arriba o abajo) y escaneás.</>}
+              {!conMapa && <> · El próximo chequeo se hace escribiendo el lugar en vez de elegirlo con botones.</>}
             </div>
           )}
 

@@ -1,10 +1,10 @@
 /**
  * **El correo del chequeo** (`lib/exhib/correo.core.js` + `lib/exhib/correo.ts`, Darío 12-oct-2026):
  * apenas se cierra el recorrido, a los dueños les llega cuánto se escaneó contra lo que había, lo
- * pendiente, las duplicadas y la feria. Debajo de `COMPLETO_PCT` el asunto dice «incompleto».
+ * pendiente, las duplicadas y la feria. Si un tipo de prenda entero ⛔ se escaneó, el asunto lo dice.
  */
 import { describe, expect, it } from 'vitest'
-import { armarCorreoChequeo, COMPLETO_PCT, limpiarReporte } from '../lib/exhib/correo.core.js'
+import { armarCorreoChequeo, limpiarReporte } from '../lib/exhib/correo.core.js'
 import { paraElCorreo } from '../lib/exhib/correo'
 import { aEscaneo, sumarUna } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
@@ -28,11 +28,11 @@ const reporte = (over: Record<string, unknown> = {}) =>
   })
 
 describe('armarCorreoChequeo', () => {
-  it('completo: el asunto cuenta pendientes y duplicadas; el texto trae todo', () => {
+  it('sin tipos salteados: el asunto da el porcentaje exhibido; el texto trae todo', () => {
     const c = armarCorreoChequeo({ recorrido: REC, reporte: reporte() })
-    expect(c.asunto).toBe('Chequeo de exhibición 13-oct: 2 pendientes · 1 duplicadas')
+    expect(c.asunto).toBe('Chequeo de exhibición 13-oct: exhibido 94 % · 2 pendientes · 1 duplicadas')
     expect(c.texto).toContain('Camila · 09:00 a 09:42 · 42 min')
-    expect(c.texto).toContain('Escaneadas 580 de 616 variantes regulares (94 %)')
+    expect(c.texto).toContain('Exhibido el 94 % (580 de 616 variantes) · faltan colgar 2')
     expect(c.texto).toContain('2 no leídas')
     expect(c.texto).toContain('1 nuevos desde el chequeo del 5-oct · 1 con 1 sola unidad')
     expect(c.texto).toContain('RTO-0412-NG TOP NUEVO Negro - M · en el local 3 · Nuevo 8-oct')
@@ -40,13 +40,15 @@ describe('armarCorreoChequeo', () => {
     expect(c.texto).toContain('en Tops y Vidriera · puede ser la misma pasada dos veces')
     // «Variante Única» ⛔ se escribe.
     expect(c.texto).toContain('RTO-0099 BABY TEE · Tops')
-    expect(c.html).toContain('Completo: se escaneó el 94 %')
+    expect(c.html).toContain('Exhibido el 94 % · faltan colgar 2')
+    expect(c.texto).not.toMatch(/regular|incompleto/i)
   })
 
-  it(`debajo del ${COMPLETO_PCT} %, el asunto avisa que quedó incompleto`, () => {
-    const c = armarCorreoChequeo({ recorrido: REC, reporte: reporte({ vistas: 300 }) })
-    expect(c.asunto).toBe('⚠️ Chequeo de exhibición 13-oct: incompleto (49 %) · 2 pendientes')
-    expect(c.html).toContain('Incompleto: se escaneó el 49 %')
+  it('🔴 un porcentaje bajo ⛔ es «incompleto»: lo que avisa es un TIPO entero sin escanear', () => {
+    expect(armarCorreoChequeo({ recorrido: REC, reporte: reporte({ vistas: 300 }) }).asunto).toBe('Chequeo de exhibición 13-oct: exhibido 49 % · 2 pendientes · 1 duplicadas')
+    const c = armarCorreoChequeo({ recorrido: REC, reporte: reporte({ tiposSinEscanear: [{ tipo: 'BODY', variantes: 7 }] }) })
+    expect(c.asunto).toBe('⚠️ Chequeo de exhibición 13-oct: sin escanear BODY · 2 pendientes')
+    expect(c.texto).toContain('⚠️ No se escaneó ningún BODY (7 variantes): ¿se saltearon o no están colgados?')
   })
 
   it('el HTML escapa lo que viene del teléfono', () => {

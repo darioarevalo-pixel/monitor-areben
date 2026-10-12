@@ -84,8 +84,18 @@ export type FeriaEnRegulares = {
   lugares: string[]
 }
 
+/**
+ * Un tipo de prenda del que ⛔ pasó NINGUNA variante por el lector (Darío, 12-oct-2026). Es la señal
+ * de que se salteó un sector: el porcentaje solo ⛔ lo dice, porque lo que ⛔ se escaneó también es
+ * lo que ⛔ está colgado (el 10-oct dio 88 % con el local recorrido entero; BODY 0 de 7).
+ */
+export type TipoSinEscanear = { tipo: string; variantes: number }
+/** Desde cuántas variantes con stock un tipo entero sin escanear se avisa: con menos, es ruido. */
+export const MIN_TIPO_SIN_ESCANEAR = 5
+
 export type ReporteChequeo = {
   pendientes: Pendiente[]
+  tiposSinEscanear: TipoSinEscanear[]
   duplicadas: Duplicada[]
   feria: FeriaEnRegulares[]
   /** Variantes regulares con stock que pasaron por el lector, contra el total. */
@@ -155,13 +165,19 @@ export function reporteDelChequeo(
   const noCuelga = new Set((mapa?.tipos ?? []).filter((t) => t.cuelga === false).map((t) => t.tipo))
 
   const pendientes = new Map<string, Pendiente>()
+  /** Por tipo de prenda: cuántas variantes hay y cuántas pasaron por el lector. */
+  const porTipo = new Map<string, { n: number; vistas: number }>()
   let total = 0
   let vistasRegulares = 0
   let porUnaVariante = 0
   for (const it of items) {
     if (!(it.qty > 0) || !esRegular(it) || noCuelga.has(tipoDePrenda(it.name))) continue
     total++
+    const tipo = porTipo.get(tipoDePrenda(it.name)) ?? { n: 0, vistas: 0 }
+    tipo.n++
+    porTipo.set(tipoDePrenda(it.name), tipo)
     if (vistas.has(exhibId(it))) {
+      tipo.vistas++
       vistasRegulares++
       continue
     }
@@ -204,8 +220,14 @@ export function reporteDelChequeo(
     feria.push({ clave: id, sku: e.sku || '', nombre: e.product_name || '—', variante: e.size || '', veces: vistas.get(id) || 1, lugares })
   }
 
+  const tiposSinEscanear = [...porTipo]
+    .filter(([, t]) => t.vistas === 0 && t.n >= MIN_TIPO_SIN_ESCANEAR)
+    .map(([tipo, t]) => ({ tipo, variantes: t.n }))
+    .sort((a, b) => b.variantes - a.variantes)
+
   return {
     pendientes: [...pendientes.values()].sort(porSku),
+    tiposSinEscanear,
     duplicadas: duplicadas.sort(porSku),
     feria: feria.sort(porSku),
     vistas: vistasRegulares,

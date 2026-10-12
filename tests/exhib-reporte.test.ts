@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { aEscaneo, sumarUna, type EscaneoLibre } from '../lib/exhib/libre'
-import { esRegular, nuevosDesde, porSku, reporteDelChequeo } from '../lib/exhib/reporte'
+import { esRegular, MIN_TIPO_SIN_ESCANEAR, nuevosDesde, porSku, reporteDelChequeo } from '../lib/exhib/reporte'
 import { armarTicket, AVISO_FRONTAL } from '../lib/exhib/ticket'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
@@ -81,6 +81,14 @@ describe('reporteDelChequeo', () => {
     expect(r.pendientes.find((p) => p.sku === 'RTO-0010-NG')?.nuevo).toBeNull()
     // Sin el mapa (el default), ninguno.
     expect(reporteDelChequeo([], items, mapa).pendientes.every((p) => p.nuevo === null)).toBe(true)
+  })
+
+  it('avisa el tipo de prenda del que ⛔ pasó ninguna variante, si tiene al menos el mínimo', () => {
+    const bodies = Array.from({ length: MIN_TIPO_SIN_ESCANEAR }, (_, i) => variante({ barcode: `b${i}`, sku: `RBO-00${i}`, productId: `body${i}`, name: 'BODY Z' }))
+    const r = reporteDelChequeo([escanear(negro, 'Tops', 0)], [...items, ...bodies], mapa)
+    expect(r.tiposSinEscanear).toEqual([{ tipo: 'BODY', variantes: MIN_TIPO_SIN_ESCANEAR }])
+    // TOP tuvo una escaneada y MINI tiene una sola variante (menos del mínimo): ninguno avisa.
+    expect(reporteDelChequeo([escanear(negro, 'Tops', 0)], items, mapa).tiposSinEscanear).toEqual([])
   })
 
   it('duplicadas: la misma variante dos veces en un lugar o en dos recorridos; ⛔ la feria', () => {

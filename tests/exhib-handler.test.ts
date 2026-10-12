@@ -597,7 +597,7 @@ describe('el correo del chequeo', () => {
   it('manda el correo y deja la constancia, sin pisar la foto del ticket', async () => {
     const res = await correr(postear({ action: 'correo', id: REC, reporte: REPORTE }))
     expect(res.code).toBe(200)
-    expect(correos.mandados).toEqual([{ para: 'dario@x.com', asunto: 'Chequeo de exhibición 13-oct: 1 pendientes · 0 duplicadas' }])
+    expect(correos.mandados).toEqual([{ para: 'dario@x.com', asunto: 'Chequeo de exhibición 13-oct: exhibido 90 % · 1 pendientes · 0 duplicadas' }])
     expect(guardada().correo).toMatchObject({ a: ['dario@x.com'], por: 'camilaquintana' })
     expect(guardada().ticket).toHaveLength(1)
   })

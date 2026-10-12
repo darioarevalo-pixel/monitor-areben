@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, KpiCard, Notice, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, useToast, weight } from '@/components/ui'
-import { COMPLETO_PCT } from '@/lib/exhib/correo.core.js'
 import { leerRecorrido, mandarCorreo } from '@/lib/exhib/cliente'
 import { altasDesde, paraElCorreo } from '@/lib/exhib/correo'
 import type { Cobertura, EscaneoLibre, RecorridoLibre } from '@/lib/exhib/libre'
@@ -141,7 +140,6 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
 
   if (!dias.length) return null
   const pct = reporte && reporte.total ? Math.round((reporte.vistas / reporte.total) * 100) : 0
-  const completo = pct >= COMPLETO_PCT
   const inicio = delDia[0]?.creado_en
   const fin = delDia.at(-1)?.cerrado_en ?? null
   const minutos = inicio && fin ? Math.round((Date.parse(fin) - Date.parse(inicio)) / 60000) : null
@@ -178,16 +176,23 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
 
       {reporte && (
         <>
-          <Notice tone={completo ? 'success' : 'warning'} icon={completo ? '✓' : '⚠'} style={{ marginBottom: space[3] }}>
-            <span title="Variantes regulares con stock en el Local (sin feria, outlet, accesorios ni Stunned) que pasaron por el lector">
-              <b>{completo ? 'Completo' : 'Incompleto'}</b>: se escaneó el {pct} % de lo regular ({reporte.vistas} de {reporte.total})
+          {/* 🔑 Un dato, ⛔ un juicio (Darío, 12-oct-2026): el porcentaje mezcla lo que ⛔ se escaneó con
+              lo que ⛔ está colgado. Lo que avisa que se salteó algo es un TIPO entero sin escanear. */}
+          <Notice tone={reporte.tiposSinEscanear.length ? 'warning' : 'success'} icon={reporte.tiposSinEscanear.length ? '⚠' : '✓'} style={{ marginBottom: space[3] }}>
+            <span title="Variantes con stock en el Local (sin feria, outlet, accesorios ni Stunned) que pasaron por el lector">
+              <b>Exhibido el {pct} %</b> ({reporte.vistas} de {reporte.total}) · faltan colgar {reporte.pendientes.length}
             </span>
+            {reporte.tiposSinEscanear.map((t) => (
+              <div key={t.tipo} style={{ marginTop: 4 }}>
+                No se escaneó ningún <b>{t.tipo}</b> ({t.variantes} variantes): ¿se saltearon o no están colgados?
+              </div>
+            ))}
           </Notice>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: space[3], marginBottom: space[3] }}>
             <KpiCard label="Pendientes" value={reporte.pendientes.length} tone={reporte.pendientes.length ? 'warning' : 'success'} />
             <KpiCard label="Duplicadas" value={reporte.duplicadas.length} tone={reporte.duplicadas.length ? 'warning' : 'success'} />
-            <KpiCard label="Feria en regulares" value={reporte.feria.length} />
+            <KpiCard label="Feria fuera de su sector" value={reporte.feria.length} />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[3], fontSize: font.sm, color: color.mut }}>
@@ -342,7 +347,7 @@ function ListaDuplicadas({ lista }: { lista: Duplicada[] }) {
 function ListaFeria({ lista }: { lista: FeriaEnRegulares[] }) {
   return (
     <Plegable titulo={<>
-        Feria en el sector regular ({lista.length})
+        Feria fuera de su sector ({lista.length})
         <span style={{ fontWeight: 400, fontSize: font.sm, color: color.mut }}> · para decidir después, no va en el ticket</span>
       </>}>
       {lista.length ? (
