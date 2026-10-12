@@ -32,10 +32,10 @@ describe('mapVentaRow', () => {
 
     const completo = mapVentaRow(v)
     expect(fila(completo).client_id).toBe(7)
-    expect(Object.keys(completo)).toHaveLength(22)
+    expect(Object.keys(completo)).toHaveLength(27)
 
     const reducido = mapVentaRow(v, { completo: false })
-    expect(Object.keys(reducido)).toHaveLength(13)
+    expect(Object.keys(reducido)).toHaveLength(18)
     expect('client_id' in reducido).toBe(false)
     expect(fila(reducido).client_name).toBe('Ana') // el nombre sí, que la columna existe
   })
@@ -60,6 +60,22 @@ describe('mapVentaRow', () => {
     // Ídem un descuento o un envío en 0: `||` los volvía null y "sin dato" no es "cero".
     expect(fila(mapVentaRow(venta({ discount: 0, shipping_cost: 0 }))).discount).toBe(0)
     expect(fila(mapVentaRow(venta({ discount: 0, shipping_cost: 0 }))).shipping_cost).toBe(0)
+  })
+})
+
+describe('las columnas del libro de stock', () => {
+  /** 🔑 Van en las DOS marcas: el libro de Zattia necesita la hora tanto como el de BDI. */
+  it('la hora, el pedido de TN, el id del monitor y el depósito viajan en las dos marcas', () => {
+    const v = venta({ created_at: '2026-10-12T03:08:20.000000Z', tn_order: 7274, integration_id: 'falla-12-deposito', integration_source: null, store_id: 11780 })
+    for (const completo of [true, false]) {
+      expect(fila(mapVentaRow(v, { completo }))).toMatchObject({
+        gn_created_at: '2026-10-12T03:08:20.000000Z', tn_order: '7274', integration_id: 'falla-12-deposito', integration_source: null, store_id: 11780,
+      })
+    }
+  })
+
+  it('sin esos datos quedan en null, ⛔ inventados', () => {
+    expect(fila(mapVentaRow(venta()))).toMatchObject({ gn_created_at: null, tn_order: null, integration_id: null, store_id: null })
   })
 })
 
@@ -116,6 +132,31 @@ describe('guardarVentasBatch', () => {
 
     expect(r.clientes).toBe(0)
     expect(sb.escrito.clientes).toHaveLength(0)
+  })
+
+  it('🔴 si la base todavía no tiene las columnas del libro, guarda la venta igual y lo avisa', async () => {
+    const escrito: unknown[] = []
+    const sb = {
+      from: (tabla: string) => ({
+        async upsert(filas: Array<Record<string, unknown>>) {
+          if (tabla === 'ventas' && filas.some((f) => 'gn_created_at' in f)) {
+            return { error: { message: "Could not find the 'gn_created_at' column of 'ventas' in the schema cache" } }
+          }
+          if (tabla === 'ventas') escrito.push(...filas)
+          return { error: null }
+        },
+      }),
+    }
+    const r = await guardarVentasBatch(sb, [venta({ id: 1, created_at: '2026-10-12T03:08:20Z' }), venta({ id: 2 })])
+    expect(r.ventas).toBe(2)
+    expect(r.sinHora).toBe(true)
+    expect(escrito).toHaveLength(2)
+    expect(escrito.every((f) => !('gn_created_at' in (f as object)))).toBe(true)
+  })
+
+  it('con la base al día ⛔ avisa nada', async () => {
+    const r = await guardarVentasBatch(mock(), [venta()])
+    expect('sinHora' in r).toBe(false)
   })
 
   it('la misma venta repetida en el lote se guarda una sola vez', async () => {

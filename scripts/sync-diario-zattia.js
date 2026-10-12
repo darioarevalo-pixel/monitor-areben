@@ -8,6 +8,7 @@ import { refrescarVistas } from './lib/refrescar-vistas.mjs';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
 import { revisarCostos, sinCostoSiNoSeVe } from './lib/costos-espejo.mjs';
 import { registrarCambiosDeStock } from './lib/stock-cambios.mjs';
+import { guardarFotoDelDia } from './lib/stock-foto.mjs';
 
 /** Ver el comentario gemelo en sync-diario.js: lo que falló sin frenar el sync. */
 const problemas = [];
@@ -183,6 +184,11 @@ async function syncInventario(maps) {
   if (historia.error) problemas.push(`historia de stock: ${historia.error}`);
   else console.log(`[inventario] historia: ${historia.cambios} variante(s) cambiaron desde la foto anterior.`);
 
+  // Foto del día para el libro de stock (scripts/lib/stock-foto.mjs): gana la primera corrida del día.
+  const foto = await guardarFotoDelDia(supabase, inventario);
+  if (foto.error) problemas.push(`foto del día: ${foto.error}`);
+  else console.log(`[inventario] foto del día: ${foto.filas} fila(s) con stock (si ya había foto de hoy, queda la primera).`);
+
   let { error } = await supabase.from('inventario').upsert(inventario, { onConflict: 'product_id,size_id,store_name' });
   if (error && /sku|barcode|column/i.test(error.message)) {
     console.warn(`  ⚠️  columnas sku/barcode no existen aún, guardando sin ellas (${error.message})`);
@@ -252,6 +258,7 @@ async function syncVentas(fromDate) {
   // cliente, costo, ganancia y unidades, y por eso esta marca no tiene CRM ni márgenes.
   // Cuando se agreguen las columnas, esto pasa a `true` y hereda todo.
   const guardado = await guardarVentasBatch(supabase, rows, { completo: false });
+  if (guardado.sinHora) problemas.push('ventas sin hora: falta correr sql/migrate-ventas-gn-hora.sql en esta base');
   console.log(`[ventas] ${guardado.ventas} ventas (de ${rows.length} raw), ${guardado.detalles} detalles guardados.`);
 
   // Purga DESPUÉS del upsert (ver scripts/lib/purga-ventas.mjs: una venta que cambió de

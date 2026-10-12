@@ -7,6 +7,7 @@ import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
 import { refrescarVistas } from './lib/refrescar-vistas.mjs';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
 import { revisarCostos, sinCostoSiNoSeVe } from './lib/costos-espejo.mjs';
+import { guardarFotoDelDia } from './lib/stock-foto.mjs';
 
 /**
  * Lo que salió mal SIN frenar el sync (una purga, el refresco de vistas, el
@@ -158,6 +159,12 @@ async function syncInventario(maps) {
   const inventario = Array.from(seen.values());
   console.log(`[inventario] ${inventario.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inventario.length) return 0;
+
+  // Foto del día para el libro de stock (scripts/lib/stock-foto.mjs): gana la primera corrida del día.
+  const foto = await guardarFotoDelDia(supabase, inventario);
+  if (foto.error) problemas.push(`foto del día: ${foto.error}`);
+  else console.log(`[inventario] foto del día: ${foto.filas} fila(s) con stock (si ya había foto de hoy, queda la primera).`);
+
   let { error } = await supabase.from('inventario').upsert(inventario, { onConflict: 'product_id,size_id,store_name' });
   if (error && /sku|barcode|observation|column/i.test(error.message)) {
     console.warn(`  ⚠️  columnas opcionales no existen aún, guardando sin ellas (${error.message})`);
@@ -246,6 +253,7 @@ async function syncVentas(fromDate) {
       detallesPorVenta.set(v.id, set);
     }
     const r = await guardarVentasBatch(supabase, rows);
+    if (r.sinHora && !problemas.some((p) => p.startsWith('ventas sin hora'))) problemas.push('ventas sin hora: falta correr sql/migrate-ventas-gn-hora.sql en esta base');
     console.log(`    ✓ ventas: ${r.ventas}, clientes: ${r.clientes}, detalles: ${r.detalles}`);
     totales.ventas   += r.ventas;
     totales.detalles += r.detalles;

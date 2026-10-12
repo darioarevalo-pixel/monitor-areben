@@ -21,6 +21,22 @@ export function dedupById(arr) {
   return [...map.values()]
 }
 
+const COLUMNAS_LIBRO = (v) => ({
+  gn_created_at:      v.created_at || null,
+  tn_order:           v.tn_order ? String(v.tn_order) : null,
+  integration_id:     v.integration_id ? String(v.integration_id) : null,
+  integration_source: v.integration_source || null,
+  store_id:           v.store_id ?? null,
+})
+const NOMBRES_LIBRO = Object.keys(COLUMNAS_LIBRO({}))
+
+/** La venta sin las columnas del libro: para una base donde la migración todavía no corrió. */
+export function sinColumnasDelLibro(fila) {
+  const out = { ...fila }
+  for (const k of NOMBRES_LIBRO) delete out[k]
+  return out
+}
+
 export function mapVentaRow(v, { completo = true } = {}) {
   const base = {
     id:             v.id,
@@ -40,6 +56,10 @@ export function mapVentaRow(v, { completo = true } = {}) {
     discount:        v.discount ?? null,
     shipping_cost:   v.shipping_cost ?? null,
     total_cost:      v.total_cost ?? null,
+    // 🔑 Lo que necesita el libro de stock (sql/migrate-ventas-gn-hora.sql): `date_sale` es un día sin
+    // hora, y sin hora no se sabe si la venta fue antes o después de un conteo o de la foto del día.
+    // `tn_order` cruza con el pedido de TN y `integration_id` con lo que creó el monitor.
+    ...COLUMNAS_LIBRO(v),
   }
   // 🔑 `completo` quedó significando **CRM y PII**, no "todo lo demás": son los datos del cliente y
   // los ids que alimentan el padrón. Zattia sigue afuera de eso a propósito, y eso ya no le cuesta
@@ -121,8 +141,17 @@ export async function guardarVentasBatch(supabase, rawRows, { completo = true } 
   const clientes = completo ? dedupById(extraerClientesDeVentas(raw)) : []
   const detalles = dedupById(raw.flatMap(v => (v.detalles || []).map(d => mapDetalleRow(d, v.id))))
 
+  // 🔴 Si la base todavía no tiene las columnas del libro, la venta se guarda igual sin ellas y se
+  // avisa (`sinHora`): perder la hora es malo, frenar el espejo de ventas es peor.
+  let sinHora = false
   for (let i = 0; i < ventas.length; i += 1000) {
-    const { error } = await supabase.from('ventas').upsert(ventas.slice(i, i + 1000), { onConflict: 'id' })
+    let lote = ventas.slice(i, i + 1000)
+    if (sinHora) lote = lote.map(sinColumnasDelLibro)
+    let { error } = await supabase.from('ventas').upsert(lote, { onConflict: 'id' })
+    if (error && !sinHora && NOMBRES_LIBRO.some((c) => error.message.includes(c))) {
+      sinHora = true
+      ;({ error } = await supabase.from('ventas').upsert(lote.map(sinColumnasDelLibro), { onConflict: 'id' }))
+    }
     if (error) throw new Error(`Error guardando ventas: ${error.message}`)
   }
   for (let i = 0; i < clientes.length; i += 500) {
@@ -138,5 +167,5 @@ export async function guardarVentasBatch(supabase, rawRows, { completo = true } 
     if (error) throw new Error(`Error guardando detalles: ${error.message}`)
   }
 
-  return { ventas: ventas.length, detalles: detalles.length, clientes: clientes.length }
+  return { ventas: ventas.length, detalles: detalles.length, clientes: clientes.length, ...(sinHora ? { sinHora } : {}) }
 }

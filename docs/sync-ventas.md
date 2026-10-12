@@ -15,6 +15,8 @@ en cada mensaje de cada sesión.
 | borrado de las que GN ya no tiene | `scripts/lib/purga-ventas.mjs` |
 | histórico anterior a la ventana | `scripts/purga-historica.js` (arranca en simulación) |
 | refresco de las vistas | `scripts/lib/refrescar-vistas.mjs` + `sql/migrate-refresco-vistas.sql` |
+| **foto diaria del stock** (libro de stock; gana la PRIMERA del día, la de las 06:40) | `scripts/lib/stock-foto.mjs` + `sql/migrate-stock-foto.sql` |
+| hora, pedido de TN e `integration_id` de cada venta | `scripts/lib/ventas-espejo.mjs` + `sql/migrate-ventas-gn-hora.sql` (⛔ antes del código; sin ella guarda sin hora y avisa) |
 | payload de la app | `lib/etl/`, cacheado en IndexedDB (`lib/cache.ts`) |
 
 ## Reglas que el código no dice
