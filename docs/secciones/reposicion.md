@@ -101,7 +101,7 @@ Lorena escanea en la **COMPU** del depósito, con lector, contra la lista de «L
   sin confirmar → «⛔ no la hagas a mano» y vuelve a la lista. Reintentar «Transferir» es seguro: el
   candado no deja que salga dos veces.
 - 🔑 **Qué buscar en GN**: la descripción lleva el código del armado (`… · Monitor #K3X9AB (12 u)`,
-  `codigoArmado`) y el cartel rojo lo muestra con la hora y las prendas. «No figura» pide confirmación.
+  `codigoArmado`) y el cartel rojo lo muestra con la hora y las prendas. «No está: transferir de nuevo» pide confirmación (botones renombrados por Darío, 12-oct: «figura» no se entendía).
 - Lo escaneado vive en `localStorage` (`monitor_repo_armado_<id>`) y se sube cada 1,5 s.
 - GN es atómico: un 422 no movió nada; la pantalla muestra los renglones rechazados y ofrece
   sacarlos (quedan `rechazada`: diferencia de stock para la tanda 3).

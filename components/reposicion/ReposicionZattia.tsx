@@ -160,12 +160,12 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   }
 
   const onResolver = async (a: Armado, hecha: boolean) => {
-    // 🔴 «No figura» habilita a transferir de nuevo: si en realidad figuraba, las prendas viajan dos veces.
+    // 🔴 «No está» habilita a transferir de nuevo: si en realidad estaba, las prendas viajan dos veces.
     if (!hecha) {
       const ok = await confirmar({
-        titulo: '¿Seguro que no figura?',
+        titulo: '¿Seguro que no está en Gestión Nube?',
         tono: 'danger',
-        ok: 'No figura',
+        ok: 'No está: transferir de nuevo',
         mensaje: `Buscá en Gestión Nube una transferencia con «#${codigoArmado(a.id)}» en la descripción. Si figura y la volvés a hacer, las prendas se transfieren dos veces.`,
       })
       if (!ok) return
@@ -656,10 +656,10 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
           {armado.transfer?.descripcion && <div style={{ fontSize: font.sm, marginTop: space[1], opacity: 0.85 }}>Descripción: «{armado.transfer.descripcion}»</div>}
           <div style={{ display: 'flex', gap: space[2], marginTop: space[2], flexWrap: 'wrap' }}>
             <Button size="sm" variant="solid" tone="brand" onClick={() => onResolver(armado, true)}>
-              Figura en Gestión Nube
+              Sí, está en Gestión Nube
             </Button>
             <Button size="sm" variant="outline" onClick={() => onResolver(armado, false)}>
-              No figura: reintentar
+              No está: transferir de nuevo
             </Button>
           </div>
         </Notice>
