@@ -52,6 +52,12 @@ export type Pendiente = {
   enLocal: number
   /** El modelo se exhibe con una sola variante y ⛔ hay ninguna: va UNA cualquiera. */
   unaCualquiera: boolean
+  /**
+   * El día de alta en GN (`YYYY-MM-DD`) si el producto es **nuevo desde el chequeo anterior**; si ⛔, `null`.
+   * ⚠️ Es el alta del PRODUCTO: la reposición de algo que ya existía ⛔ se marca (el TOP MALTA del
+   * 8-oct figura del 19-sep).
+   */
+  nuevo: string | null
 }
 
 /** Un renglón de «Variantes duplicadas». */
@@ -103,16 +109,45 @@ export function porSku(a: { sku: string; nombre: string; variante: string }, b: 
 }
 
 /**
+ * **Desde cuándo un producto es «nuevo»** (Darío, 12-oct-2026): desde el chequeo ANTERIOR al que se
+ * mira —lo que entró después ⛔ pudo estar colgado en ese chequeo—. Sin chequeo anterior, la semana
+ * de antes (el chequeo es semanal).
+ *
+ * 🔑 **Por DÍA y ⛔ por hora**: `productos.created_at` de GN viene sin zona horaria. El alta del mismo
+ * día del chequeo anterior cuenta como nueva: el chequeo es antes de abrir y las compras se cargan
+ * a la tarde (la del 8-oct, 17:10).
+ *
+ * 🔑 **Una prueba ⛔ es un chequeo**: el 7-oct hubo 4 recorridos de 7 a 15 escaneos y, tomados como
+ * «el anterior» del 10-oct, habrían corrido el corte. Cuenta el día con `MIN_ESCANEOS_CHEQUEO` o más
+ * (los reales: 415, 638 y 560).
+ *
+ * @param recorridos los cerrados, con su día (`YYYY-MM-DD`) y cuántos escaneos tienen.
+ */
+export const MIN_ESCANEOS_CHEQUEO = 100
+
+export function nuevosDesde(dia: string, recorridos: { dia: string; escaneos: number }[]): { desde: string; hayAnterior: boolean } {
+  const porDia = new Map<string, number>()
+  for (const r of recorridos) porDia.set(r.dia, (porDia.get(r.dia) ?? 0) + r.escaneos)
+  const anterior = [...porDia].filter(([d, n]) => d < dia && n >= MIN_ESCANEOS_CHEQUEO).map(([d]) => d).sort().at(-1)
+  if (anterior) return { desde: anterior, hayAnterior: true }
+  const d = new Date(`${dia}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 7)
+  return { desde: d.toISOString().slice(0, 10), hayAnterior: false }
+}
+
+/**
  * El reporte de un chequeo.
  *
  * @param escaneos los de TODOS los recorridos del chequeo, juntos.
  * @param items el inventario del Local (con o sin stock: acá se filtra).
  * @param mapa el Mapa del local guardado, por `unaVariante` y los tipos que ⛔ se cuelgan. Sin mapa, ninguno.
+ * @param nuevos `productId` → día de alta, sólo de los dados de alta desde el chequeo anterior (`nuevosDesde`).
  */
 export function reporteDelChequeo(
   escaneos: EscaneoLibre[],
   items: ExhibItem[],
   mapa: Pick<Partial<MapaLocal>, 'unaVariante' | 'tipos'> | null,
+  nuevos: Map<string, string> = new Map(),
 ): ReporteChequeo {
   const vistas = unidadesVistas(escaneos)
   const modelosVistos = new Set(escaneos.filter((e) => pasoPorElLector(e) && e.encontrado && e.product_id).map((e) => String(e.product_id)))
@@ -141,11 +176,11 @@ export function reporteDelChequeo(
         ya.enLocal += it.qty
         // El SKU más bajo del modelo: es por donde se empieza a buscar en el depósito.
         if (it.sku && (!ya.sku || porSku({ sku: it.sku, nombre: '', variante: '' }, { sku: ya.sku, nombre: '', variante: '' }) < 0)) ya.sku = it.sku
-      } else pendientes.set(k, { clave: k, sku: it.sku, productId: it.productId, nombre: it.name, variante: '', enLocal: it.qty, unaCualquiera: true })
+      } else pendientes.set(k, { clave: k, sku: it.sku, productId: it.productId, nombre: it.name, variante: '', enLocal: it.qty, unaCualquiera: true, nuevo: nuevos.get(it.productId) ?? null })
       continue
     }
     const k = exhibId(it)
-    pendientes.set(k, { clave: k, sku: it.sku, productId: it.productId, nombre: it.name, variante: it.size, enLocal: it.qty, unaCualquiera: false })
+    pendientes.set(k, { clave: k, sku: it.sku, productId: it.productId, nombre: it.name, variante: it.size, enLocal: it.qty, unaCualquiera: false, nuevo: nuevos.get(it.productId) ?? null })
   }
 
   // Las duplicadas salen de la MISMA cuenta que el balance (`colgadasDeMas`), sobre todos los

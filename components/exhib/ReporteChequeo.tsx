@@ -2,13 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Notice, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, useToast, weight } from '@/components/ui'
+import { CUENTAS } from '@/lib/cuentas'
 import { leerRecorrido } from '@/lib/exhib/cliente'
 import type { Cobertura, EscaneoLibre, RecorridoLibre } from '@/lib/exhib/libre'
-import { reporteDelChequeo, type Duplicada, type FeriaEnRegulares, type Pendiente } from '@/lib/exhib/reporte'
+import { nuevosDesde, reporteDelChequeo, type Duplicada, type FeriaEnRegulares, type Pendiente } from '@/lib/exhib/reporte'
 import { imprimirTicket } from '@/lib/exhib/ticket'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import type { MapaLocal } from '@/lib/mapa-local/tipos'
 import type { Marca } from '@/lib/nav'
+import { fetchAll } from '@/lib/supabase/rest'
 import { FotoTicket } from './FotoTicket'
 import { useEdadStock } from './useEdadStock'
 
@@ -30,6 +32,8 @@ export const diaDe = (iso: string) => new Date(iso).toLocaleDateString('en-CA', 
 const fechaLarga = (dia: string) => new Date(`${dia}T12:00:00-03:00`).toLocaleDateString('es-AR', { ...EN_AR, weekday: 'long', day: '2-digit', month: '2-digit' })
 const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { ...EN_AR, hour: '2-digit', minute: '2-digit' })
 const variante = (v: string) => (v && v !== 'Variante Única' ? v : '—')
+/** `2026-10-08` → `8-oct`. */
+const diaCorto = (dia: string) => new Date(`${dia}T12:00:00-03:00`).toLocaleDateString('es-AR', { ...EN_AR, day: 'numeric', month: 'short' }).replace(/\s+de\s+|\s+/, '-').replace('.', '')
 
 export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, trayendo, onCobertura }: { marca: Marca; previos: RecorridoLibre[]; items: ExhibItem[]; mapa: MapaLocal | null; onTraerStock: () => Promise<void>; trayendo: boolean; onCobertura: (id: string, c: Cobertura) => void }) {
   const toast = useToast()
@@ -61,8 +65,32 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
     }
   }, [elegidos, escaneos, marca])
 
-  const listo = elegidos.length > 0 && elegidos.every((r) => escaneos[r.id])
-  const reporte = useMemo(() => (listo ? reporteDelChequeo(elegidos.flatMap((r) => escaneos[r.id]), items, mapa) : null), [listo, elegidos, escaneos, items, mapa])
+  /**
+   * Los productos dados de alta en GN desde el chequeo anterior (Darío, 12-oct-2026): en la lista
+   * separan «entró y todavía no se colgó» de «se dejó de exhibir». Si ⛔ se pudieron leer, el reporte
+   * sale igual, sin la marca.
+   */
+  const desde = useMemo(() => (diaVisto ? nuevosDesde(diaVisto, cerrados.map((r) => ({ dia: diaDe(r.creado_en), escaneos: r.escaneos ?? 0 }))) : null), [diaVisto, cerrados])
+  const [nuevos, setNuevos] = useState<{ desde: string; porProducto: Map<string, string> } | null>(null)
+  useEffect(() => {
+    if (!desde) return
+    let vivo = true
+    fetchAll<{ id: number | string; created_at: string | null }>(CUENTAS[marca], 'productos', `select=id,created_at&created_at=gte.${desde.desde}`)
+      .then((filas) => {
+        if (!vivo) return
+        const porProducto = new Map<string, string>()
+        for (const f of filas) if (f.created_at) porProducto.set(String(f.id), f.created_at.slice(0, 10))
+        setNuevos({ desde: desde.desde, porProducto })
+      })
+      .catch(() => vivo && setNuevos({ desde: desde.desde, porProducto: new Map() }))
+    return () => {
+      vivo = false
+    }
+  }, [desde, marca])
+  const nuevosAlDia = nuevos && desde && nuevos.desde === desde.desde ? nuevos.porProducto : null
+
+  const listo = elegidos.length > 0 && elegidos.every((r) => escaneos[r.id]) && nuevosAlDia !== null
+  const reporte = useMemo(() => (listo && nuevosAlDia ? reporteDelChequeo(elegidos.flatMap((r) => escaneos[r.id]), items, mapa, nuevosAlDia) : null), [listo, elegidos, escaneos, items, mapa, nuevosAlDia])
   const { stockViejo, texto: textoStock } = useEdadStock(marca, items)
   const [imprimiendo, setImprimiendo] = useState(false)
 
@@ -149,7 +177,7 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
             </Button>
           </div>
 
-          <ListaPendientes lista={reporte.pendientes} porUnaVariante={reporte.porUnaVariante} />
+          <ListaPendientes lista={reporte.pendientes} porUnaVariante={reporte.porUnaVariante} desde={desde} />
           <ListaDuplicadas lista={reporte.duplicadas} />
           <ListaFeria lista={reporte.feria} />
         </>
@@ -162,12 +190,23 @@ function Titulo({ children }: { children: React.ReactNode }) {
   return <div style={{ fontWeight: weight.bold, fontSize: font.base, color: color.ink, margin: `${space[3]}px 0 ${space[2]}px` }}>{children}</div>
 }
 
-function ListaPendientes({ lista, porUnaVariante }: { lista: Pendiente[]; porUnaVariante: number }) {
+function ListaPendientes({ lista, porUnaVariante, desde }: { lista: Pendiente[]; porUnaVariante: number; desde: { desde: string; hayAnterior: boolean } | null }) {
+  const cuantosNuevos = lista.filter((p) => p.nuevo).length
+  const unaSola = lista.filter((p) => p.enLocal === 1).length
   return (
     <>
       <Titulo>
         Pendiente de exhibición ({lista.length})
-        {porUnaVariante > 0 && <span style={{ fontWeight: 400, fontSize: font.sm, color: color.mut }}> · {porUnaVariante} sin pedir por «una sola variante»</span>}
+        <span style={{ fontWeight: 400, fontSize: font.sm, color: color.mut }}>
+          {cuantosNuevos > 0 && desde && (
+            <span title="Productos dados de alta en Gestión Nube desde el chequeo anterior. La reposición de un producto que ya existía no se marca.">
+              {' '}
+              · {cuantosNuevos} nuevos {desde.hayAnterior ? `desde el chequeo del ${diaCorto(desde.desde)}` : `desde el ${diaCorto(desde.desde)}`}
+            </span>
+          )}
+          {unaSola > 0 && <span title="El sistema dice que hay una sola unidad: si no aparece, revisar el stock"> · {unaSola} con 1 sola unidad</span>}
+          {porUnaVariante > 0 && <> · {porUnaVariante} sin pedir por «una sola variante»</>}
+        </span>
       </Titulo>
       {lista.length ? (
         <TableWrap maxHeight={420}>
@@ -183,7 +222,11 @@ function ListaPendientes({ lista, porUnaVariante }: { lista: Pendiente[]; porUna
             {lista.map((p) => (
               <Tr key={p.clave}>
                 <Td style={{ fontWeight: 600 }}>{p.sku || '—'}</Td>
-                <Td wrap>{p.nombre}</Td>
+                <Td wrap>
+                  {p.nombre}
+                  {p.nuevo && <Etiqueta tono="nuevo" titulo="Dado de alta en Gestión Nube desde el chequeo anterior">Nuevo {diaCorto(p.nuevo)}</Etiqueta>}
+                  {p.enLocal === 1 && <Etiqueta tono="una" titulo="Una sola unidad: si no aparece, revisar el stock">1 sola</Etiqueta>}
+                </Td>
                 <Td wrap>{p.unaCualquiera ? 'una cualquiera' : variante(p.variante)}</Td>
                 <Td align="center" style={{ color: p.enLocal === 1 ? color.danger : color.ink2 }} title={p.enLocal === 1 ? 'Una sola unidad: si no aparece, revisar el stock' : undefined}>
                   {p.enLocal}
@@ -196,6 +239,16 @@ function ListaPendientes({ lista, porUnaVariante }: { lista: Pendiente[]; porUna
         <div style={{ color: color.mut, fontSize: font.sm }}>No hay variantes pendientes.</div>
       )}
     </>
+  )
+}
+
+/** La marquita al lado del producto: «Nuevo 8-oct» o «1 sola». Sólo en pantalla, ⛔ va al ticket. */
+function Etiqueta({ tono, titulo, children }: { tono: 'nuevo' | 'una'; titulo: string; children: React.ReactNode }) {
+  const c = tono === 'nuevo' ? color.brand : color.danger
+  return (
+    <span title={titulo} style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 4, border: `1px solid ${c}`, color: c, fontSize: font.xs, fontWeight: 600, whiteSpace: 'nowrap' }}>
+      {children}
+    </span>
   )
 }
 

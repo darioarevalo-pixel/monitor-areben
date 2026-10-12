@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { aEscaneo, sumarUna, type EscaneoLibre } from '../lib/exhib/libre'
-import { esRegular, porSku, reporteDelChequeo } from '../lib/exhib/reporte'
+import { esRegular, nuevosDesde, porSku, reporteDelChequeo } from '../lib/exhib/reporte'
 import { armarTicket, AVISO_FRONTAL } from '../lib/exhib/ticket'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
@@ -75,6 +75,14 @@ describe('reporteDelChequeo', () => {
     expect(sinNinguna.pendientes[0]).toMatchObject({ sku: 'RTO-0010-BL', unaCualquiera: true, enLocal: 4 })
   })
 
+  it('marca «nuevo» con el día de alta los productos que vienen en el mapa de nuevos (Darío, 12-oct)', () => {
+    const r = reporteDelChequeo([], items, mapa, new Map([['mini', '2026-10-08']]))
+    expect(r.pendientes.find((p) => p.sku === 'RMI-0002-38')?.nuevo).toBe('2026-10-08')
+    expect(r.pendientes.find((p) => p.sku === 'RTO-0010-NG')?.nuevo).toBeNull()
+    // Sin el mapa (el default), ninguno.
+    expect(reporteDelChequeo([], items, mapa).pendientes.every((p) => p.nuevo === null)).toBe(true)
+  })
+
   it('duplicadas: la misma variante dos veces en un lugar o en dos recorridos; ⛔ la feria', () => {
     const esc = [
       sumarUna(escanear(negro, 'Tops', 0), T0 + 5 * 60_000),
@@ -111,7 +119,7 @@ describe('reporteDelChequeo', () => {
 describe('el ticket de 80 mm', () => {
   // Un medidor de mentira: un renglón por texto, salvo los largos.
   const partir = (txt: string) => (txt.length > 40 ? [txt.slice(0, 40), txt.slice(40)] : [txt])
-  const pend = [{ clave: '1', sku: 'RTO-0010-BL', productId: 'top', nombre: 'TOP X', variante: 'BLANCO', enLocal: 2, unaCualquiera: false }]
+  const pend = [{ clave: '1', sku: 'RTO-0010-BL', productId: 'top', nombre: 'TOP X', variante: 'BLANCO', enLocal: 2, unaCualquiera: false, nuevo: '2026-10-08' }]
   const dup = [{ clave: '2', sku: 'RMI-0002-38', nombre: 'MINI Y', variante: '38', veces: 2, lugares: ['Tops'], otrasEnMedio: 3 }]
 
   it('las dos listas con sus casillas y el aviso de los frontales al final, en negrita', () => {
@@ -132,5 +140,19 @@ describe('el ticket de 80 mm', () => {
     const textos = armarTicket([], [], T0, partir).ops.flatMap((o) => (o.k === 'txt' ? [o.txt] : []))
     expect(textos).toContain('No hay variantes pendientes.')
     expect(textos).toContain('No hay variantes duplicadas.')
+  })
+})
+
+describe('nuevosDesde', () => {
+  const r = (dia: string, escaneos: number) => ({ dia, escaneos })
+  it('desde el chequeo ANTERIOR al que se mira, ⛔ el último de todos', () => {
+    expect(nuevosDesde('2026-10-10', [r('2026-10-17', 500), r('2026-10-05', 638), r('2026-10-10', 560), r('2026-09-21', 415)])).toEqual({ desde: '2026-10-05', hayAnterior: true })
+  })
+  it('las pruebas chicas ⛔ son chequeo (el 7-oct: 4 recorridos, 46 escaneos); suma los recorridos del día', () => {
+    const reales = [r('2026-10-07', 9), r('2026-10-07', 15), r('2026-10-07', 15), r('2026-10-07', 7), r('2026-10-05', 52), r('2026-10-05', 366)]
+    expect(nuevosDesde('2026-10-10', reales)).toEqual({ desde: '2026-10-05', hayAnterior: true })
+  })
+  it('sin chequeo anterior: la semana de antes', () => {
+    expect(nuevosDesde('2026-09-21', [r('2026-09-21', 415), r('2026-10-05', 638)])).toEqual({ desde: '2026-09-14', hayAnterior: false })
   })
 })
