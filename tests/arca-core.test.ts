@@ -162,6 +162,9 @@ describe('QR y número', () => {
     expect(datos).toEqual({ ver: 1, fecha: '2026-10-12', cuit: 30718508181, ptoVta: 12, tipoCmp: 6, nroCmp: 41, importe: 27000, moneda: 'PES', ctz: 1, tipoDocRec: 99, nroDocRec: 0, tipoCodAut: 'E', codAut: 76123456789012 })
   })
   it('el número como lo muestra GN', () => expect(numeroVisible(6, 2, 12132)).toBe('B 00002-00012132'))
+  it('la nota de crédito no se confunde con la factura del mismo número', () => {
+    expect(numeroVisible(CBTE.NC_B, 1, 1)).toBe('NC B 00001-00000001')
+  })
 })
 
 describe('firmarTRA', () => {
