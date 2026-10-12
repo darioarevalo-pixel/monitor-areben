@@ -90,6 +90,14 @@ Lorena escanea en la **COMPU** del depósito, con lector, contra la lista de «L
 - GN es atómico: un 422 no movió nada; la pantalla muestra los renglones rechazados y ofrece
   sacarlos (quedan `rechazada`: diferencia de stock para la tanda 3).
 
+## La foto guardada (12-oct-2026)
+
+Al abrir, la pantalla pide la config y la **huella** (`huellaDatos`: la hora de cada sync de
+`sync_state` + el día). Si coincide con la foto guardada en la compu (`reposicion_foto_<marca>`, en
+el almacén del Monitor), muestra eso **sin bajar el stock ni las ventas** (1,3 MB, 16 pedidos →
+2 pedidos chicos). Si cambió —sync de la mañana, «Actualizar stock», transferencia de un armado, o
+cambió el día—, baja todo como antes, en paralelo. «Recargar» y «Reintentar» fuerzan la bajada.
+
 ## Lo que ya se rompió acá
 
 - 4-sep-2026: «Actualizado» con el stock de ayer → la hora es la del **sync**, no la de la lectura

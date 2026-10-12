@@ -88,7 +88,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
       // Ver el porqué de mirar el `done` en `Reposicion.tsx` (el 4-sep el local bajó con stock de ayer).
       const done = await dispararSyncStock(marca, setSyncLabel)
       setSyncLabel('↻ Recargando…')
-      await Promise.all([rep.traer(), recargar()])
+      await Promise.all([rep.traer({ forzar: true }), recargar()])
       setManual({})
       if (done) toast.ok('Stock actualizado')
       else toast.aviso('La actualización está tardando más de lo normal. Lo que ves es lo último guardado: esperá un minuto y tocá «Recargar».')
@@ -188,7 +188,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     return (
       <Notice tone="danger" icon="⚠">
         No pude cargar la reposición: {rep.error}{' '}
-        <Button size="sm" variant="outline" tone="danger" onClick={() => void rep.traer()}>
+        <Button size="sm" variant="outline" tone="danger" onClick={() => void rep.traer({ forzar: true })}>
           Reintentar
         </Button>
       </Notice>
@@ -230,7 +230,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         <Button variant="ghost" onClick={() => setConfigOpen(true)}>
           Configurar
         </Button>
-        <Button variant="ghost" onClick={() => void Promise.all([rep.traer(), recargar()])} loading={recargando} title="Vuelve a leer los datos ya sincronizados, sin ir a Gestión Nube">
+        <Button variant="ghost" onClick={() => void Promise.all([rep.traer({ forzar: true }), recargar()])} loading={recargando} title="Vuelve a leer los datos ya sincronizados, sin ir a Gestión Nube">
           Recargar
         </Button>
         <Button variant="outline" onClick={() => void onActualizar()} loading={syncing} title="Carga el stock de Gestión Nube (unos 2 minutos)">

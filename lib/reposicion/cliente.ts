@@ -92,6 +92,23 @@ export async function ultimaSincronizacion(marca: Marca): Promise<Date | null> {
   }
 }
 
+/**
+ * La «huella» de los datos de Reposición: la hora de CADA sync que escribe en el espejo (stock y
+ * ventas) más el día. Si no cambió desde la última vez, el inventario y las ventas son los mismos y
+ * la pantalla puede mostrar lo guardado en la compu sin volver a bajar 1,3 MB (Darío, 12-oct-2026:
+ * «¿por qué vuelve a cargar si la foto ya fue hecha?»). El día entra porque la ventana de ventas
+ * corre sola a la medianoche. `null` si no se pudo leer: entonces se baja todo, como siempre.
+ */
+export async function huellaDatos(marca: Marca, hoy: string): Promise<string | null> {
+  try {
+    const filas = await fetchAll<{ clave: string; updated_at: string | null }>(CUENTAS[marca], 'sync_state', 'select=clave,updated_at&order=clave')
+    if (!filas.length) return null
+    return hoy + '|' + filas.map((f) => `${f.clave}:${f.updated_at ?? ''}`).join('|')
+  } catch {
+    return null
+  }
+}
+
 /** Guarda la config compartida (mins/topes/apagados/…). Port de repoCfgSave @11314. */
 export async function guardarRepoConfig(marca: Marca, config: RepoCfg): Promise<{ ok: boolean; error?: string }> {
   try {

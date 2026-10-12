@@ -101,7 +101,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
       // `rep.traer()` refresca SOLO inventario + ventas 7d + config. El catálogo (`allProductos`,
       // que es contra lo que se cruza el inventario) vive en el caché de IndexedDB y sin este
       // `recargar()` quedaba viejo: se sincronizaba y el producto nuevo seguía sin aparecer.
-      await Promise.all([rep.traer(), recargar()])
+      await Promise.all([rep.traer({ forzar: true }), recargar()])
       setManual({})
       if (done) toast.ok('Stock actualizado')
       else
@@ -175,7 +175,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
         </Button>
         <Button
           variant="ghost"
-          onClick={() => void Promise.all([rep.traer(), recargar()])}
+          onClick={() => void Promise.all([rep.traer({ forzar: true }), recargar()])}
           loading={recargando}
           title="Vuelve a leer los datos guardados (unos segundos)"
         >
@@ -195,7 +195,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
         <Notice tone="danger" icon="⚠">
           <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
             <span>No se pudo cargar la reposición: {rep.error}</span>
-            <Button size="sm" variant="outline" tone="danger" onClick={() => void rep.traer()}>
+            <Button size="sm" variant="outline" tone="danger" onClick={() => void rep.traer({ forzar: true })}>
               Reintentar
             </Button>
           </div>
