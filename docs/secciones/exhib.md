@@ -105,6 +105,16 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > anterior = último día con ≥100 escaneos, `nuevosDesde`) y **«1 sola»** en lo pendiente, sólo en
 > pantalla y correo; y **el stock se trae solo** al abrir el reporte si la foto tiene >30 min.
 
+> 📍 **Ubicación FLOTANTE en el chequeo con mapa (12-oct-2026, Darío)** — `UbicacionFlotante.tsx` +
+> `lib/exhib/paradas.ts`: fija arriba («📍 D03 arriba ▾ · faltan N» + flecha «→»). Tocándola se abre
+> la lista de barras en el `orden` del mapa guardado, agrupadas por perchero («D01 [Arriba] [Abajo]»);
+> un toque elige y cierra, y el foco vuelve al escaneo. La flecha salta a la próxima SIN escanear
+> (`siguienteParada`; al final vuelve a la salteada). 🔑 **Lo ya escaneado ⛔ se ofrece** (*«no se
+> vuelve a un lugar donde ya chequeaste»*), queda tras «Ver los ya escaneados». Arranca solo en la
+> primera barra. Doble barra y doble largo salen del MAPA (`paradasDelMapa`, misma regla que
+> `ElegirEspacio`); lo que ⛔ es del mapa va por «Otro lugar…». `claveLugar` iguala `D7 abajo` /
+> `D07-08 abajo`. Sin mapa guardado vuelven las cinco filas de `ElegirEspacio` y el campo de texto.
+
 > 🗺️ **Desde el 12-oct-2026 el chequeo de siempre es CON MAPA** (Darío: «para que agarre costumbre
 > de usarlo siempre»): la empleada ⛔ elige, el botón es «Iniciar chequeo» y abre el «+ mapa». El
 > sin mapa queda como link chico para quien edita el mapa. ⚠️ El del 5-oct con mapa tardó ~66 min

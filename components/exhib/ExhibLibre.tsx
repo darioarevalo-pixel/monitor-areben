@@ -24,6 +24,8 @@ import { FinMapa } from './FinMapa'
 import { FotoTicket } from './FotoTicket'
 import { diaDe, ReporteChequeo } from './ReporteChequeo'
 import { ElegirVoz } from './ElegirVoz'
+import { UbicacionFlotante } from './UbicacionFlotante'
+import { lugaresHechos, paradasDelMapa } from '@/lib/exhib/paradas'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 import { useActividad } from '@/components/mapa-local/useMapaLocalDatos'
@@ -376,6 +378,19 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     return [...lib.sugerencias, ...cods.filter((c) => !lib.sugerencias.includes(c))]
   }, [mapaLocal, lib.sugerencias])
 
+  /** Las barras del mapa guardado en el orden del local, y las que ya tienen escaneos. */
+  const paradas = useMemo(() => paradasDelMapa(mapaLocal), [mapaLocal])
+  const hechos = useMemo(() => lugaresHechos(lib.escaneos), [lib.escaneos])
+  const usarFlotante = lib.conMapa && paradas.length > 0
+  const setLugar = lib.setLugar
+  const elegirLugar = useCallback(
+    (l: string) => {
+      setLugar(l)
+      foco(scanRef)
+    },
+    [setLugar],
+  )
+
   return (
     <>
       <HeaderAcciones>
@@ -533,7 +548,12 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
       {/* ── Recorrer ── */}
       {fase === 'scan' && (
         <Card>
-          {lib.conMapa && (
+          {/* 🔑 Con el mapa guardado, la ubicación FLOTANTE (Darío, 12-oct-2026): un toque por barra
+              en vez de cinco filas de botones. Sin mapa, los botones de siempre. */}
+          {usarFlotante && (
+            <UbicacionFlotante paradas={paradas} lugar={lib.lugar} hechos={hechos} onElegir={elegirLugar} />
+          )}
+          {lib.conMapa && !usarFlotante && (
             <>
               <ElegirEspacio
                 mapa={mapaLocal}
@@ -546,6 +566,8 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               {lib.lugar.trim() && <LugarActual lugar={lib.lugar} onCambiar={(l) => { lib.setLugar(l); foco(scanRef) }} />}
             </>
           )}
+          {!usarFlotante && (
+            <>
           <Field
             label={lib.conMapa ? 'O escribí el lugar' : '¿En qué lugar estás?'}
             hint={lib.conMapa ? 'Para la vidriera, una mesa o lo que no sea un perchero del mapa.' : 'Por ejemplo: perchero tops. Cuando termines de escribirlo, tocá Enter y ya podés escanear.'}
@@ -599,6 +621,8 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               <option key={l} value={l} />
             ))}
           </datalist>
+            </>
+          )}
 
           <div style={{ display: 'flex', gap: space[2], alignItems: 'center', margin: `${space[3]}px 0`, flexWrap: 'wrap' }}>
             <input
