@@ -38,6 +38,10 @@ import {
 } from '@/lib/reposicion/armado'
 import { avisar, prepararSonido } from '@/lib/sonido'
 import type { RepoItem } from '@/lib/reposicion/tipos'
+import { aVarianteEti } from '@/lib/reposicion/etiquetasExhibir'
+import type { VarianteEti } from '@/lib/etiquetas/tipos'
+import type { Producto } from '@/lib/etl/tipos'
+import { BotonEtiquetasExhibir, ImpresionRapida, useEtiquetasArmado, type EtiquetasArmado } from './EtiquetasArmado'
 import { Badge, Button, Modal, Notice, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 type Guardado = 'ok' | 'guardando' | 'error'
@@ -54,10 +58,14 @@ function leerLocal(id: string): { escaneos: Record<string, number>; faltantes: R
   }
 }
 
-export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
+export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSalir, onTerminado }: {
   armado: Armado
   /** Todo el inventario de la línea: para nombrar una prenda que no está en la lista. */
   inv: RepoItem[]
+  /** Los productos del ETL: el precio de respaldo de las etiquetas (como en Etiquetas). */
+  allProductos: Producto[]
+  /** La campaña cuyas prendas salen con su etiqueta propia (Configurar), o `null`. */
+  campaniaEtiqueta: string | null
   /** Volver a la lista sin cerrar el armado (sigue abierto). */
   onSalir: () => void
   /** Se transfirió o se descartó: la pantalla de arriba vuelve a leer el armado y el stock. */
@@ -81,6 +89,11 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
   const [transferido, setTransferido] = useState<Record<string, number>>(() => transferidoDe(armado.transfer))
   const devolucion = armado.sentido === 'devolver'
   const inputRef = useRef<HTMLInputElement>(null)
+  // La Zebra está en la compu del depósito (tanda 4, Darío 12-oct-2026): etiquetas para exhibir e
+  // impresión rápida, sólo en la reposición.
+  const et = useEtiquetasArmado(allProductos, campaniaEtiqueta)
+  const [rapida, setRapida] = useState(false)
+  const varsInv = useMemo(() => inv.map(aVarianteEti), [inv])
 
   // ── Guardar: en el aparato al instante, en la base cada 1,5 s ──────────────────────────────
   const pendiente = useRef(false)
@@ -221,6 +234,11 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
             Transferir y continuar
           </Button>
         )}
+        {!devolucion && (
+          <Button variant="outline" onClick={() => setRapida((x) => !x)}>
+            Impresión rápida
+          </Button>
+        )}
         <Button variant="solid" tone="brand" onClick={() => setTerminar('cerrar')} disabled={r.escaneadas === 0 && !Object.keys(faltantes).length}>
           Finalizar
         </Button>
@@ -286,18 +304,29 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
         </button>
       )}
 
-      <UltimaLectura l={ultima} />
+      {rapida && !devolucion && (
+        <ImpresionRapida
+          vars={varsInv}
+          et={et}
+          onCerrar={() => {
+            setRapida(false)
+            setTimeout(() => inputRef.current?.focus(), 0)
+          }}
+        />
+      )}
+
+      <UltimaLectura l={ultima} et={devolucion ? null : et} />
 
       {abiertas.length > 0 && (
         <>
           <h3 style={{ fontSize: font.md, margin: `${space[4]}px 0 ${space[2]}px`, color: color.ink }}>Pendientes ({abiertas.length})</h3>
-          <TablaRenglones lineas={abiertas} escaneos={escaneos} faltantes={faltantes} transferido={transferido} onSacar={sacarUna} />
+          <TablaRenglones lineas={abiertas} escaneos={escaneos} faltantes={faltantes} transferido={transferido} onSacar={sacarUna} et={devolucion ? null : et} />
         </>
       )}
       {completas.length > 0 && (
         <>
           <h3 style={{ fontSize: font.md, margin: `${space[4]}px 0 ${space[2]}px`, color: color.success }}>Completas ({completas.length})</h3>
-          <TablaRenglones lineas={completas} escaneos={escaneos} faltantes={faltantes} transferido={transferido} onSacar={sacarUna} />
+          <TablaRenglones lineas={completas} escaneos={escaneos} faltantes={faltantes} transferido={transferido} onSacar={sacarUna} et={devolucion ? null : et} />
         </>
       )}
 
@@ -353,7 +382,10 @@ export function ArmadoLector({ armado, inv, onSalir, onTerminado }: {
   )
 }
 
-function UltimaLectura({ l }: { l: Extract<Lectura, { tipo: 'suma' }> | null }) {
+/** La prenda del pedido con la forma que piden las etiquetas. */
+const varDeLinea = (l: LineaPedido): VarianteEti => ({ id: l.vid, pid: l.pid, name: l.name, size: l.size, sku: l.sku, barcode: l.barcode, stock: 0 })
+
+function UltimaLectura({ l, et }: { l: Extract<Lectura, { tipo: 'suma' }> | null; et: EtiquetasArmado | null }) {
   if (!l)
     return (
       <div style={{ marginTop: space[3], padding: space[4], border: `1px solid ${color.line}`, borderRadius: 'var(--mo-r-xl)', textAlign: 'center', color: color.mut, fontSize: font.md }}>
@@ -374,6 +406,11 @@ function UltimaLectura({ l }: { l: Extract<Lectura, { tipo: 'suma' }> | null }) 
       }}
     >
       {l.exhibir && <div style={{ fontSize: font.lg, fontWeight: 800, color: color.warningInk, marginBottom: space[2] }}>Para exhibir: alarma y etiquetas</div>}
+      {l.exhibir && et && (
+        <div style={{ marginBottom: space[2] }}>
+          <BotonEtiquetasExhibir v={varDeLinea(l.linea)} et={et} />
+        </div>
+      )}
       <div style={{ fontSize: 22, fontWeight: 700, color: color.ink }}>
         {l.linea.name} {talle(l.linea.size) && <span style={{ fontWeight: 400 }}>· {talle(l.linea.size)}</span>}
       </div>
@@ -384,7 +421,7 @@ function UltimaLectura({ l }: { l: Extract<Lectura, { tipo: 'suma' }> | null }) 
   )
 }
 
-function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar }: { lineas: LineaPedido[]; escaneos: Record<string, number>; faltantes: Record<string, MotivoFaltante>; transferido: Record<string, number>; onSacar: (l: LineaPedido) => void }) {
+function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, et }: { lineas: LineaPedido[]; escaneos: Record<string, number>; faltantes: Record<string, MotivoFaltante>; transferido: Record<string, number>; onSacar: (l: LineaPedido) => void; et: EtiquetasArmado | null }) {
   return (
     <TableWrap>
       <THead>
@@ -408,6 +445,11 @@ function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar }: {
                 {l.exhibir && (
                   <span style={{ marginLeft: 6 }}>
                     <Badge tone="warning">para exhibir</Badge>
+                  </span>
+                )}
+                {l.exhibir && et && (
+                  <span style={{ marginLeft: 6 }}>
+                    <BotonEtiquetasExhibir v={varDeLinea(l)} et={et} size="sm" />
                   </span>
                 )}
                 {faltantes[l.vid] === 'no-estaba' && (

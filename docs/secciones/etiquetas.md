@@ -26,6 +26,11 @@ es sólo de la pestaña de Precio: va detrás de cualquiera de las dos que dicen
 
 ## ⛔ Lo que comparte con otras secciones
 
+- **El armado de Reposición imprime con estos dibujos** (12-oct-2026, `components/reposicion/EtiquetasArmado.tsx`):
+  precio + formas de pago, precio rebajado, información de producto y la de campaña. Por eso
+  `FP_DEFAULT` / `claveFormasDePago` viven en `lib/etiquetas/tipos.ts` y `dibujoDeCampania` en
+  `useEtiquetasCampania.ts`: una sola definición para las dos pantallas.
+
 - 🔴 **El handler es el de Liquidación.** `?etiquetas=1` es una de sus cuatro llaves y la única que
   además **escribe** (`action:'etiquetado'`). Tocar el gate de arriba de `api/_liquidacion.js` le
   cambia el acceso a gente que no tiene esta sección → leer `docs/secciones/liquidacion.md`.

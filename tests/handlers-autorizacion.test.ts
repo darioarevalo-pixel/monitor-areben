@@ -361,6 +361,33 @@ describe('_precios · la puerta de Marketing, y la que sigue cerrada', () => {
   })
 })
 
+describe('_liquidacion · Reposición LEE la llave de Etiquetas y no escribe (Darío, 12-oct-2026)', () => {
+  // El armado con el lector imprime la etiqueta de la campaña: quien arma puede no tener Etiquetas.
+  const SOLO_REPOSICION = { name: 'Lorena', admin: false, cuenta: null, acceso: { zattia: { reposicion: true } }, funcion: [] }
+
+  it('la lista de campañas y sus precios SÍ entran con Reposición', async () => {
+    sesionDe(SOLO_REPOSICION)
+    try {
+      const res = await llamar('_liquidacion', conSesion({ query: { store: 'zattia', etiquetas: '1' } }))
+      expect(res.code).not.toBe(403)
+    } catch (e) {
+      expect(String(e)).toContain('LLEGÓ A LA BASE')
+    }
+  })
+
+  it('🔴 `etiquetado` NO entra con Reposición: escribir sigue siendo de Etiquetas', async () => {
+    sesionDe(SOLO_REPOSICION)
+    const res = await llamar('_liquidacion', conSesion({ method: 'POST', query: { store: 'zattia', etiquetas: '1' }, body: { store: 'zattia', action: 'etiquetado', pids: ['1'] } }))
+    expect(res.code).toBe(403)
+  })
+
+  it('🔴 y Liquidación tampoco: sin ?etiquetas=1 es otra puerta', async () => {
+    sesionDe(SOLO_REPOSICION)
+    const res = await llamar('_liquidacion', conSesion({ query: { store: 'zattia' } }))
+    expect(res.code).toBe(403)
+  })
+})
+
 describe('_liquidacion · la llave de Etiquetas escribe una sola cosa', () => {
   const SOLO_ETIQUETAS = { name: 'Local', admin: false, cuenta: null, acceso: { bdi: { etiquetas: true } }, funcion: [] }
   const postDe = (body: Record<string, unknown>) =>

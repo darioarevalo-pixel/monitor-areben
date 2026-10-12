@@ -249,3 +249,6 @@ npx vitest run tests/liquidacion-resultado.test.ts --reporter=dot   # y los otro
   incluidos.
 - ⚠️ **Escribir precios de verdad no se ensaya**: `aplicar` le pega a Gestión Nube en producción y no
   hay sandbox. Se prueba con un producto y se mira en la tienda.
+
+- 12-oct-2026: la **lectura** de `?etiquetas=1` la abre también la sección **Reposición** (el armado
+  imprime la etiqueta de la campaña en la Zebra). La escritura `etiquetado` sigue siendo sólo de Etiquetas.

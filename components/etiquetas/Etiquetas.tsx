@@ -7,7 +7,7 @@ import { BotonActualizarInventario } from '@/components/productos/BotonActualiza
 import { BotonRecargar } from '@/components/productos/BotonRecargar'
 import { useEtiquetasTn } from './useEtiquetasTn'
 import { pidsDe, useColaReetiquetado, type EstadoCola, type PrecioImpreso } from './useColaReetiquetado'
-import { useEtiquetasCampania, type PrecioCampania } from './useEtiquetasCampania'
+import { dibujoDeCampania, useEtiquetasCampania, type PrecioCampania } from './useEtiquetasCampania'
 import { etiquetasDesactualizadas, preciosDesalineados, type PrecioDesalineado } from '@/lib/etiquetas/cola'
 import {
   agruparCantidades,
@@ -33,6 +33,8 @@ import {
   admiteFormasDePago,
   CONFIG_SKU_DEFAULT,
   ETIQUETA,
+  claveFormasDePago,
+  FP_DEFAULT,
   MODO_DE,
   PESTANIAS,
   rotuloPestania,
@@ -52,17 +54,11 @@ import { Badge, Button, Card, Lightbox, Notice, Select, Tabs, color, space, useC
 const CAP = 500
 
 
-const FP_DEFAULT: LineaEtiqueta[] = [
-  { texto: 'FORMAS DE PAGO', tam: 'titulo', bold: true },
-  { texto: '3 cuotas sin interés', tam: 'normal', bold: false },
-  { texto: '10% OFF Transferencia', tam: 'normal', bold: false },
-  { texto: '15% OFF Efectivo', tam: 'normal', bold: false },
-]
 
 // ── localStorage (mismas claves que el legacy → el flip preserva lo guardado) ──
 const keyCant = (slot: string, marca: Marca) => `monitor_etiquetas_${slot}_${marca}`
 const keyAutoClear = (marca: Marca) => `monitor_eti_autoclear_${marca}`
-const keyFP = (marca: Marca) => `monitor_eti_fp_v3_${marca}`
+const keyFP = (marca: Marca) => claveFormasDePago(marca)
 const keyCfgSku = (marca: Marca) => `monitor_eti_sku_cfg_${marca}`
 const keyCampaniaLiq = (marca: Marca) => `monitor_eti_campania_liq_${marca}`
 const keyCampaniaTirada = (marca: Marca) => `monitor_eti_campania_tirada_${marca}`
@@ -1127,20 +1123,7 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
    * con él le entra un renglón arriba. `buildLibrePdf` descarta las líneas vacías, así que el
    * dibujo es el mismo objeto en los dos casos.
    */
-  const dibujo = useCallback(
-    (precio: number, copias: number, barcode: string) => ({
-      grande: false,
-      copias,
-      barcode,
-      precio,
-      lineas: [{ texto: camp.rotulo?.nombreComercial || '', tam: camp.rotulo?.etiqueta?.tamTitulo || ('titulo' as const), bold: true }],
-      // Las condiciones del evento, debajo del precio. Salen del diseño de la CAMPAÑA: acá ⛔ no se
-      // editan, justamente para que sean las mismas en todas las máquinas.
-      lineasAbajo: camp.rotulo?.etiqueta?.abajo || [],
-      tamPrecio: camp.rotulo?.etiqueta?.tamPrecio,
-    }),
-    [camp.rotulo],
-  )
+  const dibujo = useCallback((precio: number, copias: number, barcode: string) => dibujoDeCampania(camp.rotulo, precio, copias, barcode), [camp.rotulo])
 
   /** Una tirada entera de una mesa: N etiquetas del mismo precio, sin escanear ninguna prenda. */
   const imprimirMesa = async (precio: number, n: number) => {

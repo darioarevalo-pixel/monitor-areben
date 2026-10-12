@@ -151,6 +151,15 @@ describe('la config de ventas sobrevive al ida y vuelta', () => {
       globalThis.fetch = orig
     }
   })
+  it('leerRepoConfig conserva la campaña con etiqueta propia (si no, el próximo guardado la borra)', async () => {
+    const orig = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify({ ok: true, config: { mins: {}, apagados: [], campaniaEtiqueta: 'l1788656536418_tdukfi' } }))) as typeof fetch
+    try {
+      expect((await leerRepoConfig('zattia')).campaniaEtiqueta).toBe('l1788656536418_tdukfi')
+    } finally {
+      globalThis.fetch = orig
+    }
+  })
 })
 
 describe('Zattia y Stunned no comparten condiciones', () => {

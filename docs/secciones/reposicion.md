@@ -121,6 +121,29 @@ fijo: **«Retirar solo de la reserva, nunca la exhibida.»** Lo que sobra está 
   ni descartar un armado con tandas (esas prendas ya cambiaron de depósito). Un `revisar` a mitad de una
   tanda guarda lo que iba en `transfer.enCurso` y `resolver` lo suma.
 
+## La Zebra en el armado (tanda 4, 12-oct-2026)
+
+La Zebra está en la **misma compu** donde Lorena escanea (Darío). Sólo en la Reposición, no en la Devolución.
+`components/reposicion/EtiquetasArmado.tsx` + `lib/reposicion/etiquetasExhibir.ts` (puro, `tests/reposicion-etiquetas*.test.ts*`).
+
+- 🔑 **Qué etiqueta sale lo decide el estado de la VARIANTE** (Darío): en la **campaña elegida en
+  Configurar** (`campaniaEtiqueta`, el 12-oct «Feria Septiembre 2026») → SÓLO la etiqueta de la
+  campaña, con su precio (el dibujo de Etiquetas → Precio de campaña, `dibujoDeCampania`); precio
+  regular → precio + formas de pago; en oferta en TN fuera de la campaña → precio rebajado + formas de pago.
+  ⛔ Precio de campaña sin confirmar o sin precio: no imprime.
+- 🔴 **Con una campaña elegida, si sus precios no se leen ⛔ no se imprime nada**: la prenda saldría
+  con el precio regular. Una campaña que terminó también bloquea → cambiarla en Configurar.
+- **Impresión rápida**: buscar por nombre / talle / SKU y reimprimir la etiqueta de información de
+  producto (código de barras, sin precio), para una prenda mal etiquetada. Una o dos letras sueltas
+  son el talle (palabra entera).
+- Precios y formas de pago son los de Etiquetas: TN con caché de 30 min, y las formas de pago **de
+  esa compu** (se editan en Etiquetas → Precio).
+- 🔑 **La lectura de campañas la abre también Reposición** (`api/_liquidacion.js`, `?etiquetas=1`
+  GET): quien arma puede no tener Etiquetas. ⛔ La escritura sigue siendo sólo de Etiquetas.
+- `campaniaEtiqueta` viaja en `leerRepoConfig` (si no, el próximo guardado la borra).
+- ⛔ «feria» en pantalla no: se dice «campaña» (VOCABULARIO §5); en el papel sale el título de la campaña.
+- ⏭️ Imprimir de verdad no se ensaya desde una sesión de IA: se prueba en la compu del depósito.
+
 ## El correo de las 10:00 (tanda 3, 12-oct-2026)
 
 A las 10:00 abre el local y la reposición tiene que estar ahí (Darío). Un correo a Darío
@@ -161,8 +184,8 @@ cambió el día—, baja todo como antes, en paralelo. «Recargar» y «Reintent
 
 - ▶️ **Parte 2:** la lista de Lorena por correo a administración a las 7:00 (falta la dirección) (el de las 10:00 ya está: ver arriba).
 - ▶️ **Parte 3, en tandas** (Darío, 12-oct): ✅ T1 Lorena escanea + transferencia · ✅ T2 Camila
-  (devolver) + la limpieza grande · ✅ T3 correo de las 10:00 (⛔ «no estaba» → Conteo: descartado por Darío, 12-oct) · ▶️ T4
-  etiquetas mal puestas + imprimir en la Zebra las de «para exhibir».
+  (devolver) + la limpieza grande · ✅ T3 correo de las 10:00 (⛔ «no estaba» → Conteo: descartado por Darío, 12-oct) · ✅ T4
+  (Zebra: etiquetas para exhibir + impresión rápida, ver arriba).
 - ▶️ Condiciones de Stunned. ▶️ Ubicaciones del depósito de Zattia (la sección Ubicaciones es sólo BDI).
 
 ## Cómo se prueba

@@ -400,7 +400,11 @@ export default async function handler(req, res) {
   const escribeEtiquetado = req.method === 'POST' && String(req.query.etiquetas || '') === '1' && b.action === 'etiquetado';
   const vistaVendido = req.method === 'GET' && String(req.query.vendido || '') === '1';
   const conLlaveEtiquetas = vistaEtiquetas || escribeEtiquetado;
-  const secciones = conLlaveEtiquetas ? ['etiquetas'] : vistaVendido ? SECCIONES_ANALISIS_VENTAS : ['liquidacion'];
+  // 🔑 La LECTURA de Etiquetas la abre también Reposición (Darío, 12-oct-2026): el armado con el
+  // lector imprime en la Zebra la etiqueta de la campaña de las prendas «para exhibir», y quien arma
+  // (Lorena, en el depósito) puede no tener Etiquetas. Viaja la misma lista blanca (sin costo ni
+  // margen). ⛔ La ESCRITURA (`etiquetado`) sigue siendo sólo de Etiquetas.
+  const secciones = vistaEtiquetas ? ['etiquetas', 'reposicion'] : escribeEtiquetado ? ['etiquetas'] : vistaVendido ? SECCIONES_ANALISIS_VENTAS : ['liquidacion'];
   if (!puedeVerAlguna(perfil, store, secciones)) {
     const que = conLlaveEtiquetas ? 'Etiquetas' : vistaVendido ? 'Análisis' : 'Liquidación';
     return res.status(403).json({ error: `No tenés acceso a ${que} en esta marca.` });

@@ -30,6 +30,12 @@ export type RepoCfg = {
    * condiciones (Darío, 11-oct-2026: «lo que precisa Stunned es diferente»). Ver `docs/lineas.md`.
    */
   ventasStunned?: Partial<CfgVentas>
+  /**
+   * La campaña cuyas prendas «para exhibir» salen con la ETIQUETA DE FERIA (el precio de la campaña)
+   * en vez de la de precio + formas de pago (Darío, 12-oct-2026). Es el id de una liquidación viva;
+   * se elige en Configurar. ⚠️ Tiene que viajar en `leerRepoConfig`, igual que `ventas`.
+   */
+  campaniaEtiqueta?: string | null
 }
 
 export function repoCfgDefault(): RepoCfg {

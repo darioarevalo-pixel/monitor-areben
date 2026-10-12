@@ -33,6 +33,7 @@ import { reposicionPDFFilas } from '@/lib/reposicion/pdf'
 import { imprimirDevolucion } from '@/lib/reposicion/rollo'
 import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
+import { useEtiquetasCampania } from '@/components/etiquetas/useEtiquetasCampania'
 import { ArmadoLector } from './ArmadoLector'
 import { HistorialArmados } from './HistorialArmados'
 import { abrirArmado, codigoArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type Sentido } from '@/lib/reposicion/armado'
@@ -234,6 +235,8 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
       <ArmadoLector
         armado={enArmado}
         inv={inv}
+        allProductos={allProductos}
+        campaniaEtiqueta={cfg.campaniaEtiqueta ?? null}
         onSalir={() => {
           setArmando(null)
           void traerArmados()
@@ -391,6 +394,8 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         puede={puedeMarcar}
         shareStatus={rep.shareStatus}
         guardar={(v) => rep.guardarCfg({ ...cfg, [CAMPO_LINEA[linea]]: v })}
+        campaniaEtiqueta={cfg.campaniaEtiqueta ?? null}
+        guardarCampania={(id) => rep.guardarCfg({ ...cfg, campaniaEtiqueta: id })}
       />
     </>
   )
@@ -492,7 +497,7 @@ const MODOS: { v: Modo; label: string }[] = [
 ]
 
 /** Parámetros y marcas (por categoría y por producto). Editan sólo Darío y Bruno; el resto lo ve. */
-function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, shareStatus, guardar }: {
+function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, shareStatus, guardar, campaniaEtiqueta, guardarCampania }: {
   abierto: boolean
   onClose: () => void
   titulo: string
@@ -501,8 +506,12 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
   puede: boolean
   shareStatus: { txt: string; color: string }
   guardar: (v: CfgVentas) => void
+  campaniaEtiqueta: string | null
+  guardarCampania: (id: string | null) => void
 }) {
   const [buscar, setBuscar] = useState('')
+  // Las campañas vivas, las mismas que lista Etiquetas → Precio de campaña. Sólo con la ventana abierta.
+  const { campanias } = useEtiquetasCampania('zattia', '', abierto)
   const productos = useMemo(() => {
     const m = new Map<string, string>()
     filas.forEach((f) => m.set(f.it.pid, f.it.name))
@@ -582,6 +591,27 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
         {param('topeDevolucion', 'Devolución diaria máxima')}
         {param('diasNuevo', 'Días como producto nuevo')}
       </div>
+
+      {/* La campaña cuyas prendas «para exhibir» salen con su etiqueta propia (Darío, 12-oct-2026). */}
+      <div style={{ fontSize: 13, fontWeight: 700, margin: '6px 0' }}>Etiqueta de campaña</div>
+      <div style={{ fontSize: 11.5, color: color.mut2, marginBottom: 8 }}>
+        Las prendas para exhibir que estén en esta campaña salen con su etiqueta, con el precio de la campaña. El resto, con precio y formas de pago.
+      </div>
+      <Select
+        value={campaniaEtiqueta ?? ''}
+        disabled={!puede}
+        onChange={(e) => guardarCampania(e.target.value || null)}
+        aria-label="Campaña con etiqueta propia"
+        style={{ marginBottom: 14, maxWidth: 360 }}
+      >
+        <option value="">Ninguna</option>
+        {campaniaEtiqueta && !campanias.some((c) => c.id === campaniaEtiqueta) && <option value={campaniaEtiqueta}>Campaña terminada</option>}
+        {campanias.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.nombre}
+          </option>
+        ))}
+      </Select>
 
       {/* «Por categoría» se sacó el 11-oct-2026 (Darío): nada la usaba —las excepciones van por
           producto— y las categorías de Tienda Nube mezclan «BEST SELLERS» y «(sin categoría)». El

@@ -141,3 +141,24 @@ export function useEtiquetasCampania(marca: Marca, liq: string, activo = true): 
 
   return { campanias, rotulo, porPid, porPrecio, cargando, error, liqEfectivo }
 }
+
+/**
+ * El dibujo de la etiqueta de una campaña (el que consume `buildLibrePdf`). Lo usan la pestaña
+ * «Precio de campaña» —su previa y sus dos formas de imprimir— y el armado de Reposición para las
+ * prendas «para exhibir» que están en la feria (Darío, 12-oct-2026): una sola definición, para que
+ * la feria salga igual imprima quien imprima.
+ *
+ * 🔑 **Sin nombre comercial la etiqueta es SÓLO EL PRECIO**; las condiciones del evento van debajo
+ * y salen del diseño de la CAMPAÑA (se editan en Liquidación, no en cada máquina).
+ */
+export function dibujoDeCampania(rotulo: RotuloCampania | null, precio: number, copias: number, barcode: string) {
+  return {
+    grande: false,
+    copias,
+    barcode,
+    precio,
+    lineas: [{ texto: rotulo?.nombreComercial || '', tam: rotulo?.etiqueta?.tamTitulo || ('titulo' as const), bold: true }],
+    lineasAbajo: rotulo?.etiqueta?.abajo || [],
+    tamPrecio: rotulo?.etiqueta?.tamPrecio,
+  }
+}

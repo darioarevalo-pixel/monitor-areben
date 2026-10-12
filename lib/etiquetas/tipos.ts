@@ -161,3 +161,18 @@ export type ConfigSku = { grupo: boolean; grande: boolean; elegir: boolean }
 
 /** Lo que ve quien nunca tocó nada: exactamente el comportamiento de siempre. */
 export const CONFIG_SKU_DEFAULT: ConfigSku = { grupo: false, grande: false, elegir: false }
+
+/**
+ * Las líneas de la etiqueta de formas de pago que trae una compu que nunca las editó. Se editan en
+ * Etiquetas → Precio y se guardan EN ESA COMPU (`claveFormasDePago`). Las lee también el armado de
+ * Reposición, para la etiqueta de las prendas «para exhibir» (Darío, 12-oct-2026).
+ */
+export const FP_DEFAULT: LineaEtiqueta[] = [
+  { texto: 'FORMAS DE PAGO', tam: 'titulo', bold: true },
+  { texto: '3 cuotas sin interés', tam: 'normal', bold: false },
+  { texto: '10% OFF Transferencia', tam: 'normal', bold: false },
+  { texto: '15% OFF Efectivo', tam: 'normal', bold: false },
+]
+
+/** Dónde guarda cada compu sus líneas de formas de pago (misma clave que el legacy). */
+export const claveFormasDePago = (marca: string) => `monitor_eti_fp_v3_${marca}`
