@@ -33,6 +33,7 @@ import { reposicionPDFFilas } from '@/lib/reposicion/pdf'
 import { imprimirDevolucion } from '@/lib/reposicion/rollo'
 import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
+import { ultimaSincronizacion } from '@/lib/reposicion/cliente'
 import { useEtiquetasCampania } from '@/components/etiquetas/useEtiquetasCampania'
 import { ArmadoLector } from './ArmadoLector'
 import { HistorialArmados } from './HistorialArmados'
@@ -83,6 +84,28 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   const paraExhibir = llevar.filter((f) => f.d.exhibir && cantLlevar(f) > 0).length
   const totalDevolverHoy = devolver.filas.reduce((s, f) => s + f.devolverHoy, 0)
 
+  // Desde cuándo se espera un «Actualizar stock» que tardó más de lo normal (`null` = no se espera).
+  const [esperandoSync, setEsperandoSync] = useState<number | null>(null)
+  useEffect(() => {
+    if (esperandoSync == null) return
+    const desde = rep.lastUpdate?.getTime() ?? 0
+    const t = setInterval(() => {
+      void (async () => {
+        const s = await ultimaSincronizacion(marca)
+        if (s && s.getTime() > desde) {
+          setEsperandoSync(null)
+          await Promise.all([rep.traer({ forzar: true }), recargar()])
+          toast.ok('Stock actualizado')
+        } else if (Date.now() - esperandoSync > 10 * 60_000) {
+          setEsperandoSync(null)
+          toast.aviso('Gestión Nube no terminó de actualizar el stock. Probá «Actualizar stock» de nuevo en unos minutos.')
+        }
+      })()
+    }, 30_000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esperandoSync, marca])
+
   const onActualizar = async () => {
     if (syncing) return
     setSyncing(true)
@@ -93,7 +116,12 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
       await Promise.all([rep.traer({ forzar: true }), recargar()])
       setManual({})
       if (done) toast.ok('Stock actualizado')
-      else toast.aviso('La actualización está tardando más de lo normal. Lo que ves es lo último guardado: esperá un minuto y tocá «Recargar».')
+      else {
+        // 🔑 Sin «tocá Recargar» (Darío, 12-oct-2026: Recargar quedó sólo para él y Bruno): la
+        // pantalla mira sola cada 30 s hasta que Gestión Nube termina.
+        toast.aviso('Gestión Nube está tardando. La pantalla se actualiza sola cuando termine.')
+        setEsperandoSync(Date.now())
+      }
     } catch (e) {
       toast.error('No se pudo actualizar: ' + (e as Error).message)
     } finally {
@@ -265,14 +293,20 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
           <br />
           Ventas del local y de Tienda Nube: últimos {cv.ventanaDias} días y última semana.
         </InfoPopover>
-        <Button variant="ghost" onClick={() => setConfigOpen(true)}>
-          Configurar
-        </Button>
-        <Button variant="ghost" onClick={() => void Promise.all([rep.traer({ forzar: true }), recargar()])} loading={recargando} title="Vuelve a leer los datos ya sincronizados, sin ir a Gestión Nube">
-          Recargar
-        </Button>
-        <Button variant="outline" onClick={() => void onActualizar()} loading={syncing} title="Carga el stock de Gestión Nube (unos 2 minutos)">
-          {syncing ? syncLabel || 'Actualizando…' : 'Actualizar stock'}
+        {/* Configurar y Recargar, sólo Darío y Bruno (Darío, 12-oct-2026): para quien arma, una
+            pantalla más simple. Recargar no hace falta: la espera de «Actualizar stock» se resuelve sola. */}
+        {puedeMarcar && (
+          <Button variant="ghost" onClick={() => setConfigOpen(true)}>
+            Configurar
+          </Button>
+        )}
+        {puedeMarcar && (
+          <Button variant="ghost" onClick={() => void Promise.all([rep.traer({ forzar: true }), recargar()])} loading={recargando} title="Vuelve a leer los datos ya sincronizados, sin ir a Gestión Nube">
+            Recargar
+          </Button>
+        )}
+        <Button variant="outline" onClick={() => void onActualizar()} loading={syncing || esperandoSync != null} title="Carga el stock de Gestión Nube (unos 2 minutos)">
+          {syncing ? syncLabel || 'Actualizando…' : esperandoSync != null ? 'Esperando a Gestión Nube…' : 'Actualizar stock'}
         </Button>
       </HeaderAcciones>
 

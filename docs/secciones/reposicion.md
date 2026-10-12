@@ -64,8 +64,11 @@ columna.
   SELLERS» y «(sin categoría)»); el cálculo la entiende igual (`modosCat`).
 - ⚠️ **Stunned tiene su config propia** (`ventasStunned`) pero hoy con los mismos valores: sus
   condiciones quedaron para más adelante.
-- ⚠️ **Configurar lo editan Darío y Bruno sólo en la PANTALLA** (`puedeEliminarTn`, la regla de
-  Caducados). El POST a bdi-catalogo lo acepta cualquiera del equipo.
+- ⚠️ **Configurar y Recargar los VEN sólo Darío y Bruno** (`puedeEliminarTn`, la regla de Caducados;
+  Darío 12-oct-2026: pantalla más simple para quien arma). El POST a bdi-catalogo lo acepta
+  cualquiera del equipo: el freno es la pantalla.
+- Si «Actualizar stock» tarda, ⛔ no se pide tocar Recargar: la pantalla mira `sync_state` cada 30 s
+  (hasta 10 min) y se pone al día sola.
 - ⚠️ Un día sin stock en el local cuenta como día sin venta: el sistema no guarda el stock día por día.
 
 ## Armar con el lector (tanda 1 del escaneo, 12-oct-2026)
