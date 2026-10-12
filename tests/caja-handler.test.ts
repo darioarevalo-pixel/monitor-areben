@@ -1057,18 +1057,12 @@ describe('caja · calculadora de billetes (fase B)', () => {
     expect(conteos.intermedios).toEqual([{ total: 1 }])
   })
 
-  it('bajadas: un admin cambia los billetes (ordenados); uno de $0 ⇒ 400; el conteo usa la lista nueva', async () => {
-    conSesion({ ...CAJERA, admin: true })
-    base.config = { store: 'zattia', reglas: { cuentas: {}, medios: { transferencia: { opciones: [13015] } } } }
-    expect((await correr(req('POST', {}, { action: 'bajadas', billetes: [0, 100] }))).code).toBe(400)
-    const r = await correr(req('POST', {}, { action: 'bajadas', billetes: [1000, 20000] }))
-    expect(r.code).toBe(200)
-    expect((base.config.reglas as Fila).billetes).toEqual([20000, 1000])
-    base.turnos = []
-    // $500 ya ⛔ es billete: 3 × 20.000 + 4 × 1.000 = $64.000.
-    expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: 64000, conteo: CONTEO }))).code).toBe(200)
+  it('🔑 los billetes ⛔ se configuran: una lista vieja en la config ⛔ cuenta, el conteo usa los de Argentina (Bruno, 12-oct)', async () => {
     conSesion(CAJERA)
-    expect((await correr(req('POST', {}, { action: 'bajadas', billetes: [1000] }))).code).toBe(403)
+    base.config = { store: 'zattia', reglas: { cuentas: {}, medios: { transferencia: { opciones: [13015] } }, billetes: [1000, 20000] } }
+    base.turnos = []
+    // 3 × 20.000 + 4 × 1.000 + 1 × 500 = $64.500: el $500 vale aunque la lista vieja ⛔ lo tenga.
+    expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: 64500, conteo: CONTEO }))).code).toBe(200)
   })
 })
 

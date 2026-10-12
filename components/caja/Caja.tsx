@@ -21,7 +21,7 @@ import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { nombreParaTicket } from '@/lib/caja/core.core.js'
 import { leerConfig, leerPendientes, leerTurno, type Config, type Turno, type Venta } from '@/lib/caja/cliente'
 import { Button, ButtonLink, Notice, color, font, space, weight } from '@/components/ui'
-import { Bajadas, DeteccionTransferencias, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TransferenciasEnEspera, TurnoCaja, UltimosTurnos, VentasDelTurno, diaAr } from '@/components/caja/partes'
+import { DeteccionTransferencias, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TransferenciasEnEspera, TurnoCaja, UltimosTurnos, VentasDelTurno, diaAr } from '@/components/caja/partes'
 import { VistaTicket } from '@/components/caja/VistaTicket'
 import { PromosCaja } from '@/components/caja/PromosCaja'
 import { PromosFormaDePago } from '@/components/caja/PromosFormaDePago'
@@ -121,7 +121,6 @@ export function Caja() {
             onCerrado={refrescarTurno}
           />
         )}
-        {admin && config?.reglas.medios && <Bajadas reglas={config.reglas} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
         <DeteccionTransferencias admin={admin} reglas={config?.reglas ?? null} onGuardadas={(rg, v) => config && setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />
         {config?.reglas.medios && <PromosCaja reglas={config.reglas} admin={admin} version={config.versiones?.promos} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
         {config?.reglas.medios && <PromosFormaDePago reglas={config.reglas} />}

@@ -8,7 +8,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { MODOS_OFERTA, NOMBRE_MEDIO, medioDeCuenta, msjOferta, ofertaDe } from '@/lib/caja/core.core.js'
 import { numeroProvisorio, plata, type LogoTicket } from '@/lib/caja/ticket'
-import { BILLETES_INICIALES, billetesDe } from '@/lib/caja/conteo.core.js'
 import { CalculadoraBilletes, olvidarConteo } from '@/components/caja/CalculadoraBilletes'
 import { aNumero as aNumeroTxt, textoDiferencia } from '@/lib/caja/textos'
 import {
@@ -1281,52 +1280,6 @@ export function SiNo({ pregunta, valor, onCambio }: { pregunta: string; valor: b
   )
 }
 
-/**
- * Sólo admin: las bajadas de línea del cobro. 🔑 **A qué cuenta van las transferencias ⛔ lo decide
- * la cajera** (Bruno, 4-oct): «si dicen transfieran a cuenta Darío, va Caja Gerencia». Y el modo
- * feria: efectivo y transferencia van a las cuentas de feria (precio final, sin descuento extra).
- */
-export function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reglas, v?: Versiones) => void }) {
-  const [abierto, setAbierto] = useState(true)
-  const [guardando, setGuardando] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
-  // La cuenta de GN de la transferencia ya ⛔ se elige acá: sale de la cuenta de Mercado Pago en uso
-  // (Bruno, 11-oct; «Las transferencias se detectan en»). ⛔ Hay modo feria: la feria es por producto.
-  const [billetesTxt, setBilletesTxt] = useState(() => billetesDe(reglas).join(', '))
-  async function guardar(b: { billetes?: number[] }) {
-    setGuardando(true)
-    setMsg(null)
-    try {
-      const r = await guardarBajadas(b)
-      onGuardadas(r.reglas, r.versiones)
-      if (r.reglas.billetes) setBilletesTxt(r.reglas.billetes.join(', '))
-      setMsg('Guardado: la calculadora cuenta con estos billetes.')
-    } catch (e) {
-      setMsg((e as Error).message)
-    } finally {
-      setGuardando(false)
-    }
-  }
-  return (
-    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Billetes de la calculadora" ayuda="Con qué billetes cuenta la calculadora de la caja. Sólo lo cambia un admin.">
-      <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
-        <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <Field label={`Billetes de la calculadora (sin la lista: ${BILLETES_INICIALES.join(', ')})`}>
-            <Input value={billetesTxt} onChange={(e) => setBilletesTxt(e.target.value)} style={{ minWidth: 320 }} />
-          </Field>
-          <Button
-            size="sm"
-            loading={guardando}
-            onClick={() => guardar({ billetes: billetesTxt.split(/[\s,;]+/).filter(Boolean).map((t) => Number(t.replace(/\./g, ''))) })}
-          >
-            Guardar billetes
-          </Button>
-        </div>
-        {msg && <span style={{ fontSize: font.sm, color: color.mut }}>{msg}</span>}
-      </div>
-    </Plegable>
-  )
-}
 
 export const horaAr = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
 export const diaAr = (iso: string) => new Date(iso).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })

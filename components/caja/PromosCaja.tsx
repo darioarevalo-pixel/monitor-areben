@@ -62,7 +62,6 @@ export function PromosCaja({ reglas, admin, version, onGuardadas }: { reglas: Re
   const [msg, setMsg] = useState<string | null>(null)
   const lista = reglas.promos ?? []
   const hoy = hoyIso()
-  const vigentes = lista.filter((p) => estado(p, hoy).texto === 'Vigente').length
 
   async function guardar(nueva: PromoCaja[], despues?: () => void) {
     setGuardando(true)
@@ -83,7 +82,7 @@ export function PromosCaja({ reglas, admin, version, onGuardadas }: { reglas: Re
       variante="tarjeta"
       abierto={abierto}
       onToggle={() => setAbierto(!abierto)}
-      titulo={`Promociones vigentes · productos (${vigentes})`}
+      titulo="Promociones"
       ayuda="Se aplican solas en el POS: una por prenda, la que más ahorra, y además el descuento de la forma de pago. Los productos en oferta y las prendas que tienen descuento a mano quedan afuera. Sólo las carga un admin."
     >
       <div style={{ display: 'grid', gap: space[3], maxWidth: 720 }}>

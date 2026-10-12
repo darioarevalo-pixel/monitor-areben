@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BILLETES_INICIALES, billetesDe, conteoVacio, limpiarConteo, normalizarBilletes, totalDeConteo } from '@/lib/caja/conteo.core.js'
+import { BILLETES_INICIALES, billetesDe, conteoVacio, limpiarConteo, totalDeConteo } from '@/lib/caja/conteo.core.js'
 
 /**
  * Caja · fase B: la calculadora de billetes (Bruno, 5-oct-2026). El oráculo se hizo a mano, antes:
@@ -46,21 +46,10 @@ describe('limpiarConteo', () => {
   })
 })
 
-describe('normalizarBilletes / billetesDe', () => {
-  it('ordena de mayor a menor', () => {
-    expect(normalizarBilletes([100, 20000, '500'])).toEqual([20000, 500, 100])
-  })
-  it('🔴 un billete de $0, negativo, con coma o repetido ⇒ lanza', () => {
-    expect(() => normalizarBilletes([0])).toThrow()
-    expect(() => normalizarBilletes([-100])).toThrow()
-    expect(() => normalizarBilletes([100.5])).toThrow()
-    expect(() => normalizarBilletes([100, 100])).toThrow(/repetido/)
-    expect(() => normalizarBilletes([])).toThrow()
-  })
-  it('sin lista en las reglas, o rota ⇒ los iniciales, sin monedas', () => {
+describe('billetesDe', () => {
+  it('🔑 los billetes que circulan en Argentina, siempre: una lista vieja guardada ⛔ cuenta (Bruno, 12-oct)', () => {
     expect(billetesDe({})).toEqual([20000, 10000, 2000, 1000, 500, 200, 100])
     expect(billetesDe(null)).toEqual(B)
-    expect(billetesDe({ billetes: [0, 100] })).toEqual(B)
-    expect(billetesDe({ billetes: [1000, 2000] })).toEqual([2000, 1000])
+    expect(billetesDe({ billetes: [1000, 2000] })).toEqual(B)
   })
 })

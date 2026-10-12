@@ -88,7 +88,7 @@ import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
 import { anuladasEnGN, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
-import { billetesDe, limpiarConteo, normalizarBilletes, totalDeConteo } from '../lib/caja/conteo.core.js'
+import { billetesDe, limpiarConteo, totalDeConteo } from '../lib/caja/conteo.core.js'
 import { aplicarPromos, normalizarPromos } from '../lib/caja/promos.core.js'
 import { MAX_LOTE, csvDeLote, generarCodigos } from '../lib/caja/gift.core.js'
 
@@ -619,7 +619,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ reglas: await reglasDeHoy(g.reglas), versiones: { promos: versionDe(g.reglas, 'promos'), feriaProductos: versionDe(g.reglas, 'feriaProductos') } })
       }
       if (accion === 'bajadas') {
-        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia a dónde van las transferencias, los productos en oferta o los billetes.' })
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia a dónde van las transferencias o los productos en oferta.' })
         const { reglas } = await leerConfig()
         if (!reglas.medios) return res.status(409).json({ error: 'La Caja todavía no tiene las formas de pago: falta correr sql/migrate-caja-medios.sql.' })
         // Lo que cambia, validado UNA vez; se aplica sobre la fila que esté al guardar (`guardarReglas`).
@@ -656,13 +656,6 @@ export default async function handler(req, res) {
         if (b.oferta != null) {
           try {
             nuevas.oferta = normalizarOferta(b.oferta)
-          } catch (e) {
-            return res.status(400).json({ error: e.message })
-          }
-        }
-        if (b.billetes != null) {
-          try {
-            nuevas.billetes = normalizarBilletes(b.billetes)
           } catch (e) {
             return res.status(400).json({ error: e.message })
           }

@@ -17,7 +17,6 @@ export type Medios = {
   credito: { normal: number; promo: number; seisCuotas: number; minSeisCuotas: number }
 }
 /** `medios` ⛔ está hasta que se corre `sql/migrate-caja-medios.sql`. */
-/** `billetes`: los de la calculadora (fase B); sin la lista, `BILLETES_INICIALES` de `conteo.core.js`. */
 /** `feriaProductos` (Bruno, 5-oct): los productos de feria trabados —sólo efectivo o transferencia, a la cuenta de feria—. */
 export type ProductoFeria = { id: number; nombre: string }
 export type ModoOferta = 'final' | 'descuento' | 'recargo' | 'no'
@@ -27,7 +26,7 @@ export type TipoPromo = 'nxm' | 'segunda_unidad' | 'pct' | 'monto_minimo'
 export type AlcancePromo = { tipo: 'todo' } | { tipo: 'categorias'; categorias: string[] } | { tipo: 'productos'; productos: ProductoFeria[] }
 export type PromoCaja = { id: string; nombre: string; tipo: TipoPromo; lleva?: number; paga?: number; pct?: number; minimo?: number; pesos?: number; alcance: AlcancePromo; desde: string; hasta: string | null; activa: boolean }
 /** `transferenciaA`: la cuenta de GN de la transferencia, YA resuelta por el servidor desde la cuenta de MP en uso (null sin mapeo). */
-export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number | null; transferenciaPorMp?: Record<string, number>; billetes?: number[]; feriaProductos?: ProductoFeria[]; /** Las campañas de Liquidación que son feria (Bruno, 11-oct). */ feriaCampanias?: string[]; /** Los productos con el precio de esas campañas aplicado: los resuelve el servidor. */ feriaIdsCampania?: number[]; promos?: PromoCaja[]; /** Cómo se cobra la oferta por forma de pago (Bruno, 12-oct; `normalizarOferta`). */ oferta?: Partial<Oferta> }
+export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number | null; transferenciaPorMp?: Record<string, number>; feriaProductos?: ProductoFeria[]; /** Las campañas de Liquidación que son feria (Bruno, 11-oct). */ feriaCampanias?: string[]; /** Los productos con el precio de esas campañas aplicado: los resuelve el servidor. */ feriaIdsCampania?: number[]; promos?: PromoCaja[]; /** Cómo se cobra la oferta por forma de pago (Bruno, 12-oct; `normalizarOferta`). */ oferta?: Partial<Oferta> }
 /** Un descuento a mano, a una prenda o a toda la venta. */
 export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 /** `ticket_logo`: el logo del ticket (null sin logo, o sin `sql/migrate-caja-logo.sql`). */
@@ -237,7 +236,7 @@ export const guardarLogo = (logo: LogoTicket | null, marca: MarcaLogo = 'zattia'
 export type Versiones = NonNullable<Config['versiones']>
 export const guardarPromos = (promos: PromoCaja[], version?: string) =>
   post<{ reglas: Reglas; versiones?: Versiones }>({ action: 'promos', promos, ...(version ? { version } : {}) }, 'No se pudieron guardar las promos.')
-export const guardarBajadas = (b: { transferenciaPorMp?: { mp: number; gn: number }; billetes?: number[]; feriaProductos?: ProductoFeria[]; feriaCampanias?: string[]; oferta?: Oferta; version?: string }) =>
+export const guardarBajadas = (b: { transferenciaPorMp?: { mp: number; gn: number }; feriaProductos?: ProductoFeria[]; feriaCampanias?: string[]; oferta?: Oferta; version?: string }) =>
   post<{ reglas: Reglas; versiones?: Versiones }>({ action: 'bajadas', ...b }, 'No se pudo guardar.')
 
 /** W6: un lote de gift cards (tarjetas físicas, nacen INACTIVAS). Sólo admin. */
