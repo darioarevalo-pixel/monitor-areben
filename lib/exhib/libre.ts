@@ -287,9 +287,20 @@ export type Cobertura = {
    * salón, así que se guardan juntas y se conservan juntas.
    */
   repetidas?: Array<{ variante_id: string; decision: string; por: string | null; cuando: string }>
+  /**
+   * **Las fotos del ticket tildado** (Darío, 11-oct-2026): la prueba de que la empleada terminó el
+   * chequeo. Un chequeo son los recorridos del día; la foto se guarda en el primero del día.
+   * ⚠️ Puede venir SOLA (sin `cats`/`tipos`): por eso «balance hecho» es `balanceHecho`, ⛔ `!!cobertura`.
+   */
+  ticket?: FotoTicket[]
   por: string | null
   cuando: string
 }
+
+export type FotoTicket = { url: string; por: string | null; cuando: string }
+
+/** ¿Alguien hizo el balance de este recorrido? Una cobertura con sólo la foto del ticket ⛔ lo es. */
+export const balanceHecho = (c: Cobertura | null | undefined): boolean => !!c && (Array.isArray(c.cats) || Array.isArray(c.tipos))
 
 /** La cabecera de un recorrido. Espeja `exhib_recorrido`. */
 export type RecorridoLibre = {

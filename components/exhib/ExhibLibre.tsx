@@ -7,7 +7,7 @@ import { Button, Card, Field, Input, Notice, color, font, formatMoney, space, us
 import { descargarXlsx } from '@/lib/excel'
 import { candidatosPorCodigo, coincidencias, precioDeGondola } from '@/lib/exhib/core'
 import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
-import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, compararConHistorial, filasExport, hallazgoDe, RAFAGA_MS, resumenRecorrido, separarEscaneoDelLugar, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
+import { agruparPorLugar, ANCHOS_EXPORT, balanceHecho, catsVisibles, compararConHistorial, filasExport, hallazgoDe, RAFAGA_MS, resumenRecorrido, separarEscaneoDelLugar, type Cobertura, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
 import { ParaColgar } from './ParaColgar'
 import { ControlModulo, ControlRecorridoPanel } from './ControlModulo'
@@ -19,7 +19,8 @@ import { BalanceSector } from './BalanceSector'
 import { ElegirEspacio, otraAltura } from './ElegirEspacio'
 import { RelevamientoPanel } from './RelevamientoPanel'
 import { FinMapa } from './FinMapa'
-import { ReporteChequeo } from './ReporteChequeo'
+import { FotoTicket } from './FotoTicket'
+import { diaDe, ReporteChequeo } from './ReporteChequeo'
 import { ElegirVoz } from './ElegirVoz'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
@@ -130,6 +131,17 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
   }, [marca])
 
   useEffect(cargarPrevios, [cargarPrevios])
+
+  /** Lo que contestó el servidor al guardar algo de la cobertura (la foto del ticket), sin releer la lista. */
+  const ponerCobertura = useCallback((id: string, c: Cobertura) => {
+    setPrevios((prev) => prev && prev.map((r) => (r.id === id ? { ...r, cobertura: c } : r)))
+  }, [])
+  /** Los recorridos cerrados del último día con chequeo, del primero al último: ahí va la foto del ticket. */
+  const ultimoChequeo = useMemo(() => {
+    const cerrados = (previos ?? []).filter((r) => r.estado === 'cerrado' && (r.escaneos ?? 0) > 0)
+    const ultimo = cerrados.map((r) => diaDe(r.creado_en)).sort().at(-1)
+    return cerrados.filter((r) => diaDe(r.creado_en) === ultimo).sort((a, b) => a.creado_en.localeCompare(b.creado_en))
+  }, [previos])
 
   /**
    * El Mapa del local **guardado** (F4). 🔑 Sólo el guardado: el armado inicial es un borrador y ⛔ no
@@ -463,7 +475,11 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               del día, con el ticket de 80 mm. Es de quien edita el Mapa del local, como el
               relevamiento: el celular es para escanear. */}
           {marca === 'zattia' && mapaGuardado?.puede.editar && previos && (
-            <ReporteChequeo marca={marca} previos={previos} items={items} mapa={mapaLocal} onTraerStock={onTraerStock} trayendo={trayendo} />
+            <ReporteChequeo marca={marca} previos={previos} items={items} mapa={mapaLocal} onTraerStock={onTraerStock} trayendo={trayendo} onCobertura={ponerCobertura} />
+          )}
+          {/* 🔑 Quien ⛔ ve el reporte (la empleada) igual sube la foto del ticket tildado del último chequeo. */}
+          {marca === 'zattia' && !mapaGuardado?.puede.editar && ultimoChequeo.length > 0 && (
+            <FotoTicket marca={marca} recorridos={ultimoChequeo} onCobertura={ponerCobertura} titulo={`Ticket tildado del chequeo del ${fechaDe(ultimoChequeo[0].creado_en)}`} />
           )}
 
           <Subtitulo>Recorridos anteriores</Subtitulo>
@@ -485,7 +501,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
                     {r.modo === 'mapa' && <> · <b>+ mapa</b></>}
                     {/* 🔑 El balance es de otra persona y de otro momento, así que la lista tiene
                         que decir cuáles esperan que alguien los mire. */}
-                    {r.estado === 'cerrado' && r.modo !== 'mapa' && (r.cobertura ? <> · <b>balance hecho</b></> : <> · sin balance</>)}
+                    {r.estado === 'cerrado' && r.modo !== 'mapa' && (balanceHecho(r.cobertura) ? <> · <b>balance hecho</b></> : <> · sin balance</>)}
                   </div>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => abrirPrevio(r.id)}>Ver</Button>

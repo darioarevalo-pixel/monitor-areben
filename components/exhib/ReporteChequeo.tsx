@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Notice, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, useToast, weight } from '@/components/ui'
 import { leerRecorrido } from '@/lib/exhib/cliente'
-import type { EscaneoLibre, RecorridoLibre } from '@/lib/exhib/libre'
+import type { Cobertura, EscaneoLibre, RecorridoLibre } from '@/lib/exhib/libre'
 import { reporteDelChequeo, type Duplicada, type FeriaEnRegulares, type Pendiente } from '@/lib/exhib/reporte'
 import { imprimirTicket } from '@/lib/exhib/ticket'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import type { MapaLocal } from '@/lib/mapa-local/tipos'
 import type { Marca } from '@/lib/nav'
+import { FotoTicket } from './FotoTicket'
 import { useEdadStock } from './useEdadStock'
 
 /**
@@ -24,13 +25,13 @@ import { useEdadStock } from './useEdadStock'
  */
 
 const EN_AR = { timeZone: 'America/Argentina/Buenos_Aires' } as const
-/** El día del local (`YYYY-MM-DD` en hora de Buenos Aires). */
-const diaDe = (iso: string) => new Date(iso).toLocaleDateString('en-CA', EN_AR)
+/** El día del local (`YYYY-MM-DD` en hora de Buenos Aires). Lo usa también la foto del ticket de `ExhibLibre`. */
+export const diaDe = (iso: string) => new Date(iso).toLocaleDateString('en-CA', EN_AR)
 const fechaLarga = (dia: string) => new Date(`${dia}T12:00:00-03:00`).toLocaleDateString('es-AR', { ...EN_AR, weekday: 'long', day: '2-digit', month: '2-digit' })
 const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { ...EN_AR, hour: '2-digit', minute: '2-digit' })
 const variante = (v: string) => (v && v !== 'Variante Única' ? v : '—')
 
-export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, trayendo }: { marca: Marca; previos: RecorridoLibre[]; items: ExhibItem[]; mapa: MapaLocal | null; onTraerStock: () => Promise<void>; trayendo: boolean }) {
+export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, trayendo, onCobertura }: { marca: Marca; previos: RecorridoLibre[]; items: ExhibItem[]; mapa: MapaLocal | null; onTraerStock: () => Promise<void>; trayendo: boolean; onCobertura: (id: string, c: Cobertura) => void }) {
   const toast = useToast()
   const cerrados = useMemo(() => previos.filter((r) => r.estado === 'cerrado' && (r.escaneos ?? 0) > 0), [previos])
   const dias = useMemo(() => [...new Set(cerrados.map((r) => diaDe(r.creado_en)))].sort().reverse(), [cerrados])
@@ -121,6 +122,9 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
           </label>
         ))}
       </div>
+
+      {/* 🔑 La foto del ticket tildado va ARRIBA: lo primero que se quiere saber de un día viejo es si se terminó. */}
+      <FotoTicket marca={marca} recorridos={delDia} onCobertura={onCobertura} />
 
       {error && <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>No se pudieron leer los recorridos: {error}</Notice>}
       {!elegidos.length && <div style={{ color: color.mut, fontSize: font.sm }}>Tildá al menos un recorrido.</div>}

@@ -70,6 +70,13 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 >   (de Zattia, ⛔ Stunned) que pasó por el lector, con el precio **congelado al escanear**. Como el
 >   chequeo recorre sólo lo regular, si se leyó estaba colgada ahí. Sale en pantalla con dónde y
 >   cuántas veces; ⛔ va al ticket (se decide después, ⛔ es tarea de la empleada).
+> - 📷 **Foto del ticket tildado** (`FotoTicket.tsx`, 11-oct, Darío): la prueba de que el chequeo se
+>   terminó. La sube la empleada desde su celular (ve sólo el último día con chequeo) y los dueños la
+>   ven arriba del reporte («terminado» / «foto pendiente»). Varias por día (un ticket largo ⛔ entra
+>   en una). Se guarda en `cobertura.ticket` del **primer** recorrido del día (acción `foto-ticket`,
+>   ⛔ sin migración) y se lee de todos. 🔴 Por eso «balance hecho» es `balanceHecho` (hay
+>   `cats`/`tipos`) y ⛔ `!!cobertura`, y `cobertura`/`tachar`/`repetida` **conservan** `ticket`.
+>   El servidor sólo acepta URLs de nuestro Blob en la carpeta `exhib/`.
 > 📊 **Oráculo**: los dos recorridos del 10-oct contra el stock del 11-oct dan **76 pendientes de 64
 > productos (533 de 609 regulares vistas) y 23 duplicadas**; la lista hecha a mano el 10-oct dio 75/63.
 > Feria en regulares: **11** (8 en Tops, 3 en Partes de abajo), las mismas que se contaron a mano.

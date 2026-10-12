@@ -435,6 +435,70 @@ describe('decidir sobre una prenda colgada de más', () => {
 })
 
 /**
+ * **La foto del ticket tildado** (Darío, 11-oct-2026): la empleada sube la foto y los dueños ven que
+ * el chequeo se terminó. Vive en `cobertura.ticket`, así que convive con el balance sin pisarlo.
+ */
+describe('la foto del ticket tildado', () => {
+  const FOTO = 'https://abc123.public.blob.vercel-storage.com/exhib/foto-XYZ.jpg'
+  const conCobertura = (cobertura: unknown) => {
+    base.tablas.exhib_recorrido = [{ id: REC, store: 'zattia', modo: 'libre', estado: 'cerrado', cobertura }]
+  }
+  const guardada = () => base.escrituras.filter((e) => e.tabla === 'exhib_recorrido').at(-1)?.filas?.[0]?.cobertura as Record<string, unknown>
+
+  it('guarda la foto con quién y cuándo, sin inventar un balance', async () => {
+    conCobertura(null)
+    const res = await correr(postear({ action: 'foto-ticket', id: REC, url: FOTO }))
+    expect(res.code).toBe(200)
+    expect((guardada().ticket as Record<string, unknown>[])[0]).toMatchObject({ url: FOTO, por: 'camilaquintana' })
+    // 🔑 Sin `cats`/`tipos`: la lista sigue diciendo «sin balance» (`balanceHecho`).
+    expect(guardada().cats).toBeUndefined()
+    expect(guardada().tipos).toBeUndefined()
+  })
+
+  it('🔴 sólo fotos de nuestro Blob y de la carpeta del chequeo', async () => {
+    conCobertura(null)
+    for (const url of ['https://evil.com/exhib/x.jpg', 'https://abc123.public.blob.vercel-storage.com/fundas/x.jpg', '']) {
+      const res = await correr(postear({ action: 'foto-ticket', id: REC, url }))
+      expect(res.code).toBe(400)
+    }
+    expect(base.escrituras).toHaveLength(0)
+  })
+
+  it('suma varias, ⛔ duplica la misma, y se puede sacar una', async () => {
+    conCobertura(null)
+    await correr(postear({ action: 'foto-ticket', id: REC, url: FOTO }))
+    conCobertura(guardada())
+    await correr(postear({ action: 'foto-ticket', id: REC, url: FOTO }))
+    conCobertura(guardada())
+    await correr(postear({ action: 'foto-ticket', id: REC, url: FOTO.replace('XYZ', 'ABC') }))
+    expect(guardada().ticket).toHaveLength(2)
+    conCobertura(guardada())
+    await correr(postear({ action: 'foto-ticket', id: REC, url: FOTO, quitar: true }))
+    expect((guardada().ticket as Record<string, unknown>[]).map((f) => f.url)).toEqual([FOTO.replace('XYZ', 'ABC')])
+  })
+
+  it('🔴 la foto ⛔ borra el balance, y el balance ⛔ borra la foto', async () => {
+    conCobertura({ cats: [], tipos: ['TOP'], tachadas: [{ variante_id: 'b2', motivo: 'despues', por: 'x', cuando: 'y' }], por: 'Darío', cuando: 'z' })
+    await correr(postear({ action: 'foto-ticket', id: REC, url: FOTO }))
+    expect(guardada()).toMatchObject({ tipos: ['TOP'], por: 'Darío' })
+    expect(guardada().tachadas).toHaveLength(1)
+
+    conCobertura(guardada())
+    await correr(postear({ action: 'cobertura', id: REC, tipos: ['TOP', 'BLUSA'] }))
+    expect(guardada().ticket).toHaveLength(1)
+    conCobertura(guardada())
+    await correr(postear({ action: 'tachar', id: REC, variante_id: 'b3', motivo: 'otro-lugar' }))
+    expect(guardada().ticket).toHaveLength(1)
+  })
+
+  it('🔴 un recorrido de OTRA marca ⛔ recibe la foto', async () => {
+    base.tablas.exhib_recorrido = [{ id: REC, store: 'bdi', modo: 'libre', estado: 'cerrado' }]
+    const res = await correr(postear({ action: 'foto-ticket', id: REC, url: FOTO }))
+    expect(res.code).toBe(404)
+  })
+})
+
+/**
  * **La hora de cada lectura** (`sql/migrate-exhib-horas.sql`). Lo que se ejerce acá es lo único que
  * puede romper el salón: que una columna que todavía ⛔ no existe **⛔ no se lleve puesta la tanda**.
  */

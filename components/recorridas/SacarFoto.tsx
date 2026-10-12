@@ -16,16 +16,19 @@
  */
 import { useRef, useState } from 'react'
 import { Button } from '@/components/ui'
-import { achicarADataUrl, subirBlob } from '@/lib/imagenes'
+import { achicarADataUrl, subirBlob, type PrefijoBlob } from '@/lib/imagenes'
 
 export function SacarFoto({
   onFoto,
   onError,
   etiqueta = 'Sacar foto',
+  carpeta = 'prm',
 }: {
   onFoto: (url: string) => void
   onError: (msg: string) => void
   etiqueta?: string
+  /** La carpeta del Blob. El chequeo de exhibición sube a `exhib` (la foto del ticket tildado). */
+  carpeta?: PrefijoBlob
 }) {
   const camara = useRef<HTMLInputElement>(null)
   const galeria = useRef<HTMLInputElement>(null)
@@ -39,7 +42,7 @@ export function SacarFoto({
     setSubiendo(true)
     try {
       const dataUrl = await achicarADataUrl(archivo)
-      onFoto(await subirBlob(dataUrl, 'prm'))
+      onFoto(await subirBlob(dataUrl, carpeta))
     } catch (e) {
       onError(e instanceof Error ? `No se pudo subir la foto: ${e.message}` : 'No se pudo subir la foto.')
     } finally {

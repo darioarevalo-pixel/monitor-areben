@@ -3,7 +3,7 @@
 //   GET  ?recurso=exhib&store=…&action=recorridos       → los recorridos, con cuántos escaneos tiene cada uno
 //   GET  ?recurso=exhib&store=…&action=recorrido&id=…   → UNO entero: cabecera + TODOS sus escaneos
 //   GET  ?recurso=exhib&store=…&action=lugares          → los lugares ya usados, para sugerir
-//   POST ?recurso=exhib&store=…  { action: 'abrir'|'escanear'|'cerrar'|'cobertura'|'tachar'|'repetida'|'sacar-escaneo'|'eliminar', … }
+//   POST ?recurso=exhib&store=…  { action: 'abrir'|'escanear'|'cerrar'|'cobertura'|'tachar'|'repetida'|'foto-ticket'|'sacar-escaneo'|'eliminar', … }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=exhib`. El plan Hobby de
 // Vercel admite 12 funciones y hay 7 usadas; una ruta nueva sería la octava por un solo recurso.
@@ -20,6 +20,7 @@ import { exigirUsuario } from './_auth.js'
 import { puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
+import { pathnameDeBlob } from './_blob.js'
 
 const texto = (v) => (v == null || v === '' ? null : String(v))
 /**
@@ -342,6 +343,8 @@ export default async function handler(req, res) {
           tipos: limpiar(b.tipos),
           tachadas: Array.isArray(antes.tachadas) ? antes.tachadas : [],
           repetidas: Array.isArray(antes.repetidas) ? antes.repetidas : [],
+          // 🔴 La foto del ticket tildado también se conserva: es de la empleada, ⛔ del balance.
+          ...(Array.isArray(antes.ticket) ? { ticket: antes.ticket } : {}),
           por: perfil.name || null,
           cuando: new Date().toISOString(),
         }
@@ -384,12 +387,39 @@ export default async function handler(req, res) {
           tipos: Array.isArray(antes.tipos) ? antes.tipos : [],
           tachadas: Array.isArray(antes.tachadas) ? antes.tachadas : [],
           repetidas: Array.isArray(antes.repetidas) ? antes.repetidas : [],
+          ...(Array.isArray(antes.ticket) ? { ticket: antes.ticket } : {}),
           // ⚠️ `por`/`cuando` son de la DECLARACIÓN del sector, ⛔ no de esta marca: cada una trae
           // los suyos. Pisarlos haría que «lo declaró Fulano» cambie por marcar una prenda.
           por: antes.por || null,
           cuando: antes.cuando || new Date().toISOString(),
           [lista]: marcas,
         }
+        const { error } = await sb.from('exhib_recorrido').update({ cobertura }).eq('id', recorrido.id)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ ok: true, cobertura })
+      }
+
+      /**
+       * **La foto del ticket tildado** (Darío, 11-oct-2026): la empleada imprime el reporte, tilda
+       * «Exhibido»/«No encontrado»/«Retirado» en el papel y sube la foto. Es la prueba de que el
+       * chequeo se terminó. Con `quitar: true` se saca (una foto equivocada o movida).
+       *
+       * 🔑 **Va adentro de `cobertura.ticket` y ⛔ en una columna nueva**: así ⛔ hace falta migración.
+       * ⚠️ Por eso «balance hecho» se pregunta por `cats`/`tipos` y ⛔ por que exista la cobertura
+       * (`balanceHecho` en `lib/exhib/libre.ts`): una foto sola ⛔ es un balance.
+       * 🔴 **Sólo URLs de NUESTRO Blob, carpeta `exhib/`.** La URL la manda el teléfono y se muestra
+       * como imagen a los dueños: sin esto, cualquier sesión podría colgar ahí un link cualquiera.
+       */
+      if (accion === 'foto-ticket') {
+        const recorrido = await recorridoDeLaMarca(String(b.id || ''))
+        if (!recorrido) return res.status(404).json({ error: 'Ese recorrido no está.' })
+        const url = String(b.url || '').trim()
+        const camino = pathnameDeBlob(url)
+        if (!camino || !camino.startsWith('exhib/')) return res.status(400).json({ error: 'Esa foto no es válida.' })
+        const antes = recorrido.cobertura || {}
+        const fotos = (Array.isArray(antes.ticket) ? antes.ticket : []).filter((f) => f && f.url !== url)
+        if (!b.quitar) fotos.push({ url, por: perfil.name || null, cuando: new Date().toISOString() })
+        const cobertura = { ...antes, ticket: fotos }
         const { error } = await sb.from('exhib_recorrido').update({ cobertura }).eq('id', recorrido.id)
         if (error) throw new Error(error.message)
         return res.status(200).json({ ok: true, cobertura })
@@ -426,7 +456,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true })
       }
 
-      return res.status(400).json({ error: `action inválida (usá abrir, escanear, cerrar, sacar-escaneo o eliminar)` })
+      return res.status(400).json({ error: `action inválida (usá abrir, escanear, cerrar, cobertura, tachar, repetida, foto-ticket, sacar-escaneo o eliminar)` })
     }
 
     return res.status(405).json({ error: 'método no permitido' })

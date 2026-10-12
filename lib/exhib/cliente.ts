@@ -122,6 +122,15 @@ export async function decidirRepetida(marca: string, id: string, varianteId: str
 }
 
 /**
+ * Suma (o con `quitar`, saca) la foto del ticket tildado en un recorrido. El quién y el cuándo los
+ * firma el servidor. Contesta la cobertura entera, como las otras marcas.
+ */
+export async function fotoDelTicket(marca: string, id: string, url: string, quitar = false): Promise<Cobertura> {
+  const d = await escribir<{ ok: true; cobertura: Cobertura }>(marca, 'foto-ticket', { id, url, quitar })
+  return d.cobertura
+}
+
+/**
  * Descarta un recorrido **sin cerrar**, con sus escaneos.
  *
  * 🔴 El servidor rechaza el que ya está cerrado: ése es el dato con el que alguien va a comparar el

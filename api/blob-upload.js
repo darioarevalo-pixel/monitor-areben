@@ -59,7 +59,7 @@ import { esAdmin, puedeSub } from '../lib/permisos.core.js';
 // ⚠️ Lo que NO está acá no se rechaza: cae al default (`fundas`). Por eso agregar una carpeta es
 // una línea acá y una en el `PrefijoBlob` de `lib/imagenes.ts`, o los archivos de una sección nueva
 // terminan mezclados con las miniaturas de Fundas y sin forma de distinguirlos después.
-const PREFIJOS = new Set(['fundas', 'ingresos', 'disenos', 'manuales', 'prm']);
+const PREFIJOS = new Set(['fundas', 'ingresos', 'disenos', 'manuales', 'prm', 'exhib']);
 
 /**
  * ⭐ **Las carpetas que admiten el camino de cliente, con su tope y sus formatos.**
@@ -130,7 +130,7 @@ const CARPETAS_BORRABLES = ['ingresos'];
  * carpetas, borrarlo tiene que costar agregar un renglón acá y pensarlo, ⛔ no salir gratis por un
  * comodín que nadie volvió a leer.
  */
-const CARPETAS_ADMIN = ['canjes', 'piezas', 'ingresos', 'disenos', 'reclamos', 'fundas', 'manuales', 'prm'];
+const CARPETAS_ADMIN = ['canjes', 'piezas', 'ingresos', 'disenos', 'reclamos', 'fundas', 'manuales', 'prm', 'exhib'];
 
 /** Cuántos archivos borra un lote. Más que esto no entra en el tiempo de una función de Vercel. */
 const TOPE_LOTE = 200;
