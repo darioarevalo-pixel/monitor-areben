@@ -136,8 +136,8 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
   paralelo. Verificar: las 7 ventas de prueba (4 al 6-oct) eliminadas en GN y la automation TICKET de
   Zattia activa en el mailer. Gift card: falta cantidad, diseño e imprenta para generar el lote.
 - 🏁 **Gift card, parte 1: «Generar lote»** (11-oct, rama `caja`): pestaña Caja ⇒ «Gift cards» (sólo admin):
-  N códigos al azar con verificador, INACTIVOS, y el CSV para la imprenta. ▶️ **Bruno: correr
-  `sql/migrate-caja-gift-card.sql` en Zattia**, generar el lote y mandarlo a imprimir. ▶️ Parte 2: activar
+  N códigos al azar con verificador, INACTIVOS, y el CSV para la imprenta. 🏁 `sql/migrate-caja-gift-card.sql` CORRIDA en Zattia
+  (11-oct, verificada leyendo el esquema). ▶️ Bruno: generar el lote y mandarlo a imprimir. ▶️ Parte 2: activar
   y canjear en el POS (paso 0 en GN primero: producto y cuenta «Gift card»).
 
 ## ▶️ CAJA + POS: IGUALARLO AL PROTOTIPO — 6-oct-2026 (dictado por Bruno)
