@@ -97,12 +97,20 @@ export function crearClienteArca({ ambiente, cuit, cert, key, almacenTA, ahora =
     },
 
     /**
-     * Pide el CAE de un lote. Los comprobantes ya tienen que venir validados con `problemasDe`.
-     *
-     * Si la respuesta no llega (corte, timeout), ⛔ no se reintenta: se consulta cada número que
-     * se había reservado y `reconciliar` dice cuáles quedaron autorizados. Devuelve siempre
-     * `{ autorizados, rechazados, faltan, ajenos }`, con el número y el CAE de cada uno.
+     * Pide el CAE de un lote ya numerado (`desde` = último autorizado + 1). Devuelve `leerCAE`.
+     * Si se corta antes de la respuesta, el error lleva `corte: true`: ⛔ se reintenta, se consulta
+     * (eso lo hace `lib/arca/lote.core.js`, que además reservó los números en la base).
      */
+    async solicitar({ ptoVta, tipo, desde, comprobantes }) {
+      try {
+        return leerCAE(await wsfe('FECAESolicitar', loteXml({ ptoVta, tipo, desde, comprobantes })))
+      } catch (e) {
+        if (esCorte(e)) throw Object.assign(new Error(`Se cortó la conexión con ARCA: ${e.message}`), { corte: true })
+        throw e
+      }
+    },
+
+    /** Versión sin base, para el script de prueba: numera, pide y, si se corta, reconcilia. */
     async facturarLote({ ptoVta, tipo, comprobantes }) {
       const desde = (await cliente.ultimo(ptoVta, tipo)) + 1
       const reservados = comprobantes.map((c, i) => ({
@@ -110,9 +118,9 @@ export function crearClienteArca({ ambiente, cuit, cert, key, almacenTA, ahora =
       }))
       let resp
       try {
-        resp = leerCAE(await wsfe('FECAESolicitar', loteXml({ ptoVta, tipo, desde, comprobantes })))
+        resp = await cliente.solicitar({ ptoVta, tipo, desde, comprobantes })
       } catch (e) {
-        if (!esCorte(e)) throw e
+        if (!e.corte) throw e
         const consultados = new Map()
         for (const r of reservados) consultados.set(r.numero, await cliente.consultar(ptoVta, tipo, r.numero))
         return { ...reconciliar(reservados, consultados), rechazados: [], cortado: true }
