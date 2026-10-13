@@ -39,6 +39,30 @@ export function sinColumnasDelLibro(fila) {
   return out
 }
 
+/**
+ * El pack de Mercado Libre de una venta que GN importó de ML (BDI): GN lo deja en el comentario,
+ * «Importado de MercadoLibre - Pack: 2000015462700307». Es lo que cruza la venta con su pedido de ML en la
+ * sombra del ERP (`areben-libro-stock`, `bin/ml.mjs cruce`). Texto: un pack tiene 16 dígitos.
+ */
+export function mlPackDe(comments) {
+  const m = /MercadoLibre\s*-\s*Pack:\s*(\d+)/i.exec(String(comments || ''))
+  return m ? m[1] : null
+}
+// 🔑 Grupo aparte del libro (sql/migrate-ventas-ml-pack.sql): si en una base falta SÓLO esta columna, se pierde
+// sólo el pack, ⛔ la hora y el pedido de TN.
+const COLUMNAS_ML = (v) => ({ ml_pack: mlPackDe(v.comments) })
+const NOMBRES_ML = Object.keys(COLUMNAS_ML({}))
+const sinColumnas = (nombres) => (fila) => {
+  const out = { ...fila }
+  for (const k of nombres) delete out[k]
+  return out
+}
+/** Las columnas que una base puede no tener todavía, cada grupo con su aviso. */
+const OPCIONALES = [
+  { nombres: NOMBRES_LIBRO, aviso: 'sinHora' },
+  { nombres: NOMBRES_ML, aviso: 'sinMlPack' },
+]
+
 export function mapVentaRow(v, { completo = true } = {}) {
   const base = {
     id:             v.id,
@@ -62,6 +86,7 @@ export function mapVentaRow(v, { completo = true } = {}) {
     // hora, y sin hora no se sabe si la venta fue antes o después de un conteo o de la foto del día.
     // `tn_order` cruza con el pedido de TN y `integration_id` con lo que creó el monitor.
     ...COLUMNAS_LIBRO(v),
+    ...COLUMNAS_ML(v),
   }
   // 🔑 `completo` quedó significando **CRM y PII**, no "todo lo demás": son los datos del cliente y
   // los ids que alimentan el padrón. Zattia sigue afuera de eso a propósito, y eso ya no le cuesta
@@ -143,19 +168,23 @@ export async function guardarVentasBatch(supabase, rawRows, { completo = true } 
   const clientes = completo ? dedupById(extraerClientesDeVentas(raw)) : []
   const detalles = dedupById(raw.flatMap(v => (v.detalles || []).map(d => mapDetalleRow(d, v.id))))
 
-  // 🔴 Si la base todavía no tiene las columnas del libro, la venta se guarda igual sin ellas y se
-  // avisa (`sinHora`): perder la hora es malo, frenar el espejo de ventas es peor.
-  let sinHora = false
+  // 🔴 Si la base todavía no tiene las columnas del libro (o el pack de ML), la venta se guarda igual sin
+  // ellas y se avisa (`sinHora`, `sinMlPack`): perder un dato es malo, frenar el espejo de ventas es peor.
+  // Cada grupo se saca sólo si el error lo nombra.
+  const faltan = new Set()
+  const quitar = (lote) => [...faltan].reduce((l, g) => l.map(sinColumnas(g.nombres)), lote)
   for (let i = 0; i < ventas.length; i += 1000) {
-    let lote = ventas.slice(i, i + 1000)
-    if (sinHora) lote = lote.map(sinColumnasDelLibro)
-    let { error } = await supabase.from('ventas').upsert(lote, { onConflict: 'id' })
-    if (error && !sinHora && NOMBRES_LIBRO.some((c) => error.message.includes(c))) {
-      sinHora = true
-      ;({ error } = await supabase.from('ventas').upsert(lote.map(sinColumnasDelLibro), { onConflict: 'id' }))
+    const lote = ventas.slice(i, i + 1000)
+    let { error } = await supabase.from('ventas').upsert(quitar(lote), { onConflict: 'id' })
+    while (error) {
+      const g = OPCIONALES.find((o) => !faltan.has(o) && o.nombres.some((c) => error.message.includes(c)))
+      if (!g) break
+      faltan.add(g)
+      ;({ error } = await supabase.from('ventas').upsert(quitar(lote), { onConflict: 'id' }))
     }
     if (error) throw new Error(`Error guardando ventas: ${error.message}`)
   }
+  const avisos = Object.fromEntries([...faltan].map((g) => [g.aviso, true]))
   for (let i = 0; i < clientes.length; i += 500) {
     // `ignoreDuplicates`: inserta al que no existe y NO toca al que ya está. Ver el comentario de
     // `extraerClientesDeVentas` — la ficha manda, la venta sólo descubre.
@@ -174,7 +203,7 @@ export async function guardarVentasBatch(supabase, rawRows, { completo = true } 
 
   return {
     ventas: ventas.length, detalles: detalles.length, clientes: clientes.length, cobros: c.filas, facturasGN: f.filas,
-    ...(sinHora ? { sinHora } : {}), ...(c.sinTabla ? { sinCobros: true } : {}), ...(f.sinTabla ? { sinFacturasGN: true } : {}),
+    ...avisos, ...(c.sinTabla ? { sinCobros: true } : {}), ...(f.sinTabla ? { sinFacturasGN: true } : {}),
   }
 }
 

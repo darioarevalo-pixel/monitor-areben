@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mapVentaRow, extraerClientesDeVentas, dedupById, guardarVentasBatch } from '../scripts/lib/ventas-espejo.mjs'
+import { mapVentaRow, extraerClientesDeVentas, dedupById, guardarVentasBatch, mlPackDe } from '../scripts/lib/ventas-espejo.mjs'
 
 /**
  * El mapeo del espejo de ventas, ahora compartido por BDI, Zattia y la purga histórica.
@@ -32,10 +32,10 @@ describe('mapVentaRow', () => {
 
     const completo = mapVentaRow(v)
     expect(fila(completo).client_id).toBe(7)
-    expect(Object.keys(completo)).toHaveLength(27)
+    expect(Object.keys(completo)).toHaveLength(28) // + ml_pack (sombra de ML del ERP)
 
     const reducido = mapVentaRow(v, { completo: false })
-    expect(Object.keys(reducido)).toHaveLength(18)
+    expect(Object.keys(reducido)).toHaveLength(19)
     expect('client_id' in reducido).toBe(false)
     expect(fila(reducido).client_name).toBe('Ana') // el nombre sí, que la columna existe
   })
@@ -75,7 +75,13 @@ describe('las columnas del libro de stock', () => {
   })
 
   it('sin esos datos quedan en null, ⛔ inventados', () => {
-    expect(fila(mapVentaRow(venta()))).toMatchObject({ gn_created_at: null, tn_order: null, integration_id: null, store_id: null })
+    expect(fila(mapVentaRow(venta()))).toMatchObject({ gn_created_at: null, tn_order: null, integration_id: null, store_id: null, ml_pack: null })
+  })
+
+  it('el pack de Mercado Libre sale del comentario que deja GN, como texto (16 dígitos)', () => {
+    expect(fila(mapVentaRow(venta({ comments: 'Importado de MercadoLibre - Pack: 2000015462700307' }))).ml_pack).toBe('2000015462700307')
+    expect(mlPackDe('De Tienda Nube. #Orden: 7114')).toBe(null)
+    expect(mlPackDe('Pack: 123')).toBe(null) // sólo el de la importación de ML
   })
 })
 
@@ -154,9 +160,30 @@ describe('guardarVentasBatch', () => {
     expect(escrito.every((f) => !('gn_created_at' in (f as object)))).toBe(true)
   })
 
+  it('🔴 si falta SÓLO la columna del pack de ML, se pierde sólo el pack (⛔ la hora)', async () => {
+    const escrito: Array<Record<string, unknown>> = []
+    const sb = {
+      from: (tabla: string) => ({
+        async upsert(filas: Array<Record<string, unknown>>) {
+          if (tabla === 'ventas' && filas.some((f) => 'ml_pack' in f)) {
+            return { error: { message: "Could not find the 'ml_pack' column of 'ventas' in the schema cache" } }
+          }
+          if (tabla === 'ventas') escrito.push(...filas)
+          return { error: null }
+        },
+      }),
+    }
+    const r = await guardarVentasBatch(sb, [venta({ id: 1, created_at: '2026-10-12T03:08:20Z', comments: 'Importado de MercadoLibre - Pack: 1' })])
+    expect(r.sinMlPack).toBe(true)
+    expect('sinHora' in r).toBe(false)
+    expect(escrito[0]).toMatchObject({ gn_created_at: '2026-10-12T03:08:20Z' })
+    expect('ml_pack' in escrito[0]).toBe(false)
+  })
+
   it('con la base al día ⛔ avisa nada', async () => {
     const r = await guardarVentasBatch(mock(), [venta()])
     expect('sinHora' in r).toBe(false)
+    expect('sinMlPack' in r).toBe(false)
   })
 
   it('la misma venta repetida en el lote se guarda una sola vez', async () => {

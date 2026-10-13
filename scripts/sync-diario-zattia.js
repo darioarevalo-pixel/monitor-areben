@@ -285,6 +285,7 @@ async function syncVentas(fromDate) {
   // Cuando se agreguen las columnas, esto pasa a `true` y hereda todo.
   const guardado = await guardarVentasBatch(supabase, rows, { completo: false });
   if (guardado.sinHora) problemas.push('ventas sin hora: falta correr sql/migrate-ventas-gn-hora.sql en esta base');
+  if (guardado.sinMlPack) problemas.push('ventas sin pack de ML: falta correr sql/migrate-ventas-ml-pack.sql en esta base');
   if (guardado.sinCobros) problemas.push('ventas sin cobros: falta correr sql/migrate-ventas-cobros.sql en esta base');
   if (guardado.sinFacturasGN) problemas.push('ventas sin factura de GN: falta correr sql/migrate-ventas-factura-gn.sql en esta base');
   console.log(`[ventas] ${guardado.ventas} ventas (de ${rows.length} raw), ${guardado.detalles} detalles guardados.`);
