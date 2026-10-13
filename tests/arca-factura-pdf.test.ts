@@ -16,8 +16,8 @@ const F: FacturaEmitida = {
 }
 const EMISOR_COMPLETO: Emisor = {
   ...EMISOR,
-  razonSocial: 'RAZON SOCIAL DE PRUEBA', ingresosBrutos: '000-000000-0', inicioActividades: '01/01/2020',
-  marcas: { bdi: { nombre: 'BDI', domicilio: 'Calle 1' }, zattia: { nombre: 'Zattia', domicilio: 'Calle 2' } },
+  razonSocial: 'RAZON SOCIAL DE PRUEBA', ingresosBrutos: '000-000000-0',
+  marcas: { bdi: { nombre: 'BDI', domicilio: 'Calle 1', inicioActividades: '01/01/2020' }, zattia: { nombre: 'Zattia', domicilio: 'Calle 2', inicioActividades: '01/01/2020' } },
 }
 /** El PDF real sale comprimido; el de la prueba no, para poder buscar el texto adentro. */
 class SinComprimir extends jsPDF { constructor(o: { unit: 'mm'; format: 'a4'; compress: boolean }) { super({ ...o, compress: false }) } }
@@ -46,12 +46,13 @@ describe('QR de ARCA', () => {
 })
 
 describe('datos del emisor', () => {
-  it('hoy falta sólo el domicilio de Zattia (sale de una factura de GN de Zattia, ⛔ se inventa)', () => {
-    expect(faltanDelEmisor(EMISOR, 'zattia')).toEqual(['domicilio de Zattia'])
+  it('hoy falta sólo el domicilio de Zattia (su factura de GN ⛔ lo imprime, ⛔ se inventa)', () => {
+    expect(faltanDelEmisor(EMISOR, 'zattia')).toEqual(['domicilio de Zattia - Stunned'])
     expect(faltanDelEmisor(EMISOR, 'bdi')).toEqual([])
   })
   it('un dato fiscal en null frena', () => {
     expect(faltanDelEmisor({ ...EMISOR, ingresosBrutos: null }, 'bdi')).toEqual(['Ingresos Brutos'])
+    expect(faltanDelEmisor({ ...EMISOR, marcas: { ...EMISOR.marcas, bdi: { ...EMISOR.marcas.bdi, inicioActividades: null } } }, 'bdi')).toEqual(['inicio de actividades de BDI Accesorios'])
   })
   it('completos, no falta nada', () => {
     expect(faltanDelEmisor(EMISOR_COMPLETO, 'bdi')).toEqual([])
@@ -76,7 +77,7 @@ describe('el PDF', () => {
     expect(await armar(F)).toContain('SIN VALIDEZ FISCAL')
   })
   it('⛔ sale sin los datos del emisor', async () => {
-    await expect(armar(F, EMISOR)).rejects.toThrow(/domicilio de Zattia/)
+    await expect(armar(F, EMISOR)).rejects.toThrow(/domicilio de Zattia - Stunned/)
   })
   it('nombra el archivo por letra, número y marca', () => {
     expect(numeroComprobante(F)).toBe('00002-00000012')

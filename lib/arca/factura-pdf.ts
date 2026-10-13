@@ -116,7 +116,7 @@ export function armarFacturaPdf({ f, emisor, qrDataUrl, JsPDF }: { f: FacturaEmi
     ['Fecha de emisión', fechaAR(f.fecha)],
     ['CUIT', cuitTxt(emisor.cuit)],
     ['Ingresos Brutos', String(emisor.ingresosBrutos)],
-    ['Inicio de actividades', String(emisor.inicioActividades)],
+    ['Inicio de actividades', String(marca.inicioActividades)],
   ]) {
     pdf.setFont('helvetica', 'bold'); pdf.text(`${k}:`, MID + 6, y)
     const w = pdf.getTextWidth(`${k}: `)
@@ -165,7 +165,7 @@ export function armarFacturaPdf({ f, emisor, qrDataUrl, JsPDF }: { f: FacturaEmi
     y += 8
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8)
     pdf.text('Régimen de Transparencia Fiscal al Consumidor (Ley 27.743)', M + 2, y)
-    pdf.text(`IVA contenido: ${pesos(f.iva)}`, R - 2, y, { align: 'right' })
+    pdf.text(`IVA contenido: ${pesos(f.iva)} · Otros Imp. Nac. Indirectos: ${pesos(0)}`, R - 2, y, { align: 'right' })
   } else {
     y += 8
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9)
