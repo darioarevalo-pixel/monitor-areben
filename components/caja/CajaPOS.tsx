@@ -701,7 +701,7 @@ function POS() {
     const ticket = ticketGuardado(venta)
     setUltima({ venta, ticket })
     avisar(venta.estado === 'en_gn' ? 'ok' : 'ojo')
-    imprimirTicket(ticket, esEfectivo, ahora(), regalos.current.delete(venta.id) ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
+    imprimirTicket(ticket, ahora(), regalos.current.delete(venta.id) ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
     refrescarPendientes()
     refrescarTurno()
   }
@@ -789,7 +789,7 @@ function POS() {
       setGnSenal(r.venta.estado === 'en_gn' ? { ok: true, que: 'la última venta llegó' } : { ok: false, que: `la última venta quedó pendiente${r.venta.ultimo_error ? ` (${r.venta.ultimo_error})` : ''}` })
       setUltima({ venta: r.venta, ticket })
       avisar(r.venta.estado === 'en_gn' ? 'ok' : 'ojo')
-      imprimirTicket(ticket, esEfectivo, ahora(), conRegalo ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
+      imprimirTicket(ticket, ahora(), conRegalo ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
       refrescarPendientes()
       refrescarTurno()
     } catch (e) {
@@ -982,8 +982,8 @@ function POS() {
         <VentasDelTurno
           nombreCuenta={nombreCuenta}
           onCerrar={() => setVerVentas(false)}
-          onReimprimir={(v) => imprimirTicket(ticketGuardado(v), esEfectivo, ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))}
-          onTicketCambio={(v) => imprimirTicket(ticketGuardado(v), esEfectivo, ahora(), 'cambio').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket de cambio: ${(e as Error).message}` }))}
+          onReimprimir={(v) => imprimirTicket(ticketGuardado(v), ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))}
+          onTicketCambio={(v) => imprimirTicket(ticketGuardado(v), ahora(), 'cambio').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket de cambio: ${(e as Error).message}` }))}
         />
       )}
 
@@ -1025,8 +1025,8 @@ function POS() {
               venta={ultima.venta}
               nombreCuenta={nombreCuenta}
               esEfectivo={esEfectivo}
-              onReimprimir={() => imprimirTicket(ultima.ticket, esEfectivo, ahora())}
-              onTicketCambio={() => imprimirTicket(ultima.ticket, esEfectivo, ahora(), 'cambio').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket de cambio: ${(e as Error).message}` }))}
+              onReimprimir={() => imprimirTicket(ultima.ticket, ahora())}
+              onTicketCambio={() => imprimirTicket(ultima.ticket, ahora(), 'cambio').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket de cambio: ${(e as Error).message}` }))}
               onOtra={() => {
                 setUltima(null)
                 enfocar()

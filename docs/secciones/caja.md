@@ -418,6 +418,20 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   uno** —el fajo que arman tiene que coincidir con el papel—, salidas e ingresos (sólo al cerrar: la lista
   de cajas anteriores ⛔ trae el detalle) y firma. ⛔ Calcula: escribe la foto del cierre.
 
+- 🧾 **4ta vuelta (13-oct)**: el ticket de venta dice **siempre «Consumidor Final»** (el mail sólo sirve
+  para mandarlo) y **termina en el TOTAL** (⛔ RECIBIMOS, SALDO ni VUELTO). El de cambio cierra con
+  «¡Que lo disfrutes!» (puede ser regalo). La política de cambio es el campo «Política de cambio» de la
+  pestaña: Bruno pega la de GN, por marca.
+- 🔑 **Los nombres de cuenta de adentro del local** (`nombreEnCaja`, `core.core.js`): forma de pago + lo
+  que la distingue («Efectivo · oferta», «Tarjeta de crédito · promo», «Transferencia · CG»). ⛔ El
+  nombre de GN («Feria - Efectivo»): lo guarda `resumenTurno` y lo usan la tabla de la pestaña y el
+  ticket del cierre.
+- 🔑 **El sobre** (`armarSobre`, `conteo.core.js`): después de cerrar, la pantalla (`AvisoCierre`) y el
+  ticket dicen qué billetes van al SOBRE y cuáles QUEDAN DE FONDO. Fondo = el de la apertura de esa caja
+  (Bruno); se arma con la MAYOR cantidad de billetes que sume exacto (= los chicos, para tener cambio).
+  ⛔ Exacto ⇒ lo más cerca por debajo y avisa «Faltan $X de fondo». Sin billetes contados: sobre =
+  contado − fondo.
+
 ## Pendiente
 
 - 🏁 `sql/migrate-caja-anulada-en-gn.sql` CORRIDA en las dos bases (12-oct), verificada leyendo la columna, el check y las 7 de prueba (`por: sync`).

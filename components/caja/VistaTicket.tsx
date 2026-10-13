@@ -55,7 +55,7 @@ export function VistaTicket({ logo, politica, medidor }: { logo: LogoTicket | nu
     }
   }, [medidor])
 
-  const pagina = useMemo(() => (medir ? armarTicket(ticketDeMuestra(logo, politica), () => true, ahora, medir) : null), [medir, logo, politica, ahora])
+  const pagina = useMemo(() => (medir ? armarTicket(ticketDeMuestra(logo, politica), ahora, medir) : null), [medir, logo, politica, ahora])
 
   if (error) return <span style={{ color: color.dangerInk, fontSize: font.sm }}>No se pudo armar la vista previa: {error}</span>
   if (!pagina) return <span style={{ color: color.mut, fontSize: font.sm }}>Armando la vista previa…</span>

@@ -31,11 +31,11 @@ describe('VistaTicket', () => {
   it('dibuja cada texto del papel, la política y el logo', () => {
     act(() => raiz.render(<VistaTicket logo={LOGO} politica="Cambios dentro de los 30 días." medidor={medir} />))
     const textos = [...caja.querySelectorAll('text')].map((t) => t.textContent)
-    const papel = armarTicket(ticketDeMuestra(LOGO, 'Cambios dentro de los 30 días.'), () => true, Date.now(), medir)
+    const papel = armarTicket(ticketDeMuestra(LOGO, 'Cambios dentro de los 30 días.'), Date.now(), medir)
     const delPapel = papel.ops.filter((o) => o.k === 'txt').map((o) => (o as { txt: string }).txt)
     // La fecha cambia de un milisegundo a otro: se compara la cantidad, y los textos fijos uno por uno.
     expect(textos).toHaveLength(delPapel.length)
-    for (const t of ['COMPROBANTE', 'TOTAL', 'VUELTO', 'Cambios dentro de los 30 días.', 'Gracias por tu compra!']) expect(textos).toContain(t)
+    for (const t of ['COMPROBANTE', 'TOTAL', 'Cambios dentro de los 30 días.', 'Gracias por tu compra!']) expect(textos).toContain(t)
     expect(caja.querySelector('image')?.getAttribute('href')).toBe(LOGO.src)
     // Con logo, ⛔ el nombre de la marca en letras.
     expect(textos).not.toContain('ZATTIA')

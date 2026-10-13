@@ -13,7 +13,6 @@ const AHORA = Date.parse('2026-10-04T22:04:00Z') // 19:04 en Argentina
 const ID = '3f1c2b9e-6a4d-4c1e-9b7a-2d5e8f0a1b3c'
 const reglas = REGLAS_INICIALES as unknown as { redondeo: number; cuentas: Record<number, { nombre: string; descuento: number; efectivo?: boolean }> }
 const nombreCuenta = (c: number) => nombreParaTicket(c, REGLAS_INICIALES)
-const efectivo = (c: number) => !!reglas.cuentas[c]?.efectivo
 
 type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 function ticket(items: { precio: number; cantidad?: number; rebaja?: Rebaja }[], pagos: { cuenta: number; base?: number }[], extra: Partial<DatosTicket> = {}, descuentoVenta: Rebaja | null = null) {
@@ -31,7 +30,7 @@ function ticket(items: { precio: number; cantidad?: number; rebaja?: Rebaja }[],
     politica: null,
     ...extra,
   }
-  const r = armarTicket(datos, efectivo, AHORA, medir)
+  const r = armarTicket(datos, AHORA, medir)
   const txt = r.ops.filter((o) => o.k === 'txt').map((o) => (o as { txt: string }).txt)
   return { ...r, txt, c }
 }
@@ -60,8 +59,6 @@ describe('caja · ticket contra la pantalla de cobro de GN', () => {
     expect(montoDe(ops, 'Descuento 15%')).toBe('-$748,50')
     expect(montoDe(ops, 'Redondeo')).toBe('-$41,50')
     expect(montoDe(ops, 'TOTAL')).toBe('$4.200')
-    expect(montoDe(ops, 'RECIBIMOS')).toBe('$4.200')
-    expect(montoDe(ops, 'SALDO')).toBe('$0')
     expect(txt).toContain('COMPROBANTE')
     expect(txt).toContain('DOCUMENTO NO VÁLIDO COMO FACTURA')
     expect(txt).toContain('Comprobante: #30048')
@@ -79,14 +76,19 @@ describe('caja · ticket contra la pantalla de cobro de GN', () => {
     expect(montoDe(ops, 'Descuento en la venta')).toBe('-$800')
     expect(montoDe(ops, 'Descuento 10%')).toBe('-$720')
     expect(montoDe(ops, 'TOTAL')).toBe('$6.500')
-    expect(montoDe(ops, 'RECIBIMOS')).toBe('$6.500')
     expect(txt.join('|')).not.toMatch(/CG|Transferencia CG/)
   })
 
-  it('con «paga con»: RECIBIMOS lo entregado y el VUELTO', () => {
-    const { ops } = ticket([{ precio: 4990 }], [{ cuenta: 12921 }], { pagaCon: 5000 })
-    expect(montoDe(ops, 'RECIBIMOS')).toBe('$5.000')
-    expect(montoDe(ops, 'VUELTO')).toBe('$800')
+  it('🔑 termina en el TOTAL (Bruno, 13-oct): ⛔ RECIBIMOS, SALDO ni VUELTO, aunque haya «paga con»', () => {
+    const { ops, txt } = ticket([{ precio: 4990 }], [{ cuenta: 12921 }], { pagaCon: 5000 })
+    expect(montoDe(ops, 'TOTAL')).toBe('$4.200')
+    expect(txt.some((t) => /RECIBIMOS|SALDO|VUELTO/.test(t))).toBe(false)
+  })
+
+  it('🔑 el cliente es SIEMPRE «Consumidor Final», aunque haya mail (Bruno, 13-oct)', () => {
+    const { txt } = ticket([{ precio: 4990 }], [{ cuenta: 12921 }], { cliente: 'clienta@gmail.com' })
+    expect(txt).toContain('Cliente: Consumidor Final')
+    expect(txt.join(' ')).not.toContain('clienta@gmail.com')
   })
 
   it('🔴 el redondeo PARA ARRIBA se llama «Redondeo», ⛔ «Recargo» (Bruno, 13-oct)', () => {
@@ -98,14 +100,11 @@ describe('caja · ticket contra la pantalla de cobro de GN', () => {
     expect(txt.some((t) => t.startsWith('Descuento'))).toBe(false)
   })
 
-  it('varios pagos: un descuento por cuenta y el vuelto sólo sobre lo que fue en efectivo', () => {
+  it('varios pagos: un descuento por cuenta', () => {
     const { ops, c } = ticket([{ precio: 20000 }], [{ cuenta: 12921, base: 10000 }, { cuenta: 20196 }], { pagaCon: 10000 })
     expect(montoDe(ops, 'Descuento 15%')).toBe('-$1.500')
     expect(montoDe(ops, 'Descuento 10%')).toBe('-$1.000')
     expect(montoDe(ops, 'TOTAL')).toBe(plata(c.total))
-    // RECIBIMOS = los $9.000 del débito + los $10.000 que entregó en efectivo.
-    expect(montoDe(ops, 'RECIBIMOS')).toBe('$19.000')
-    expect(montoDe(ops, 'VUELTO')).toBe('$1.500') // 10.000 − 8.500 de efectivo, ⛔ − el total
   })
 
   it('🔴 sin número de GN sale igual, con el provisorio y diciendo que está pendiente', () => {
@@ -131,9 +130,8 @@ describe('caja · ticket contra la pantalla de cobro de GN', () => {
     expect(fechaConDia(Date.parse('2026-10-05T02:30:00Z'))).toBe('domingo 04/10/2026') // 23:30 del domingo en AR
   })
 
-  it('el mail como cliente, y el logo arriba centrado en vez del nombre', () => {
+  it('el logo arriba centrado en vez del nombre', () => {
     const { ops, txt } = ticket([{ precio: 4990 }], [{ cuenta: 12921 }], { cliente: 'ana@mail.com', logo: { src: 'data:image/png;base64,AAA', ancho: 400, alto: 200 } })
-    expect(txt).toContain('Cliente: ana@mail.com')
     expect(txt).not.toContain('ZATTIA')
     const img = ops.find((o) => o.k === 'img') as unknown as { x: number; w: number; h: number }
     expect(img).toMatchObject({ w: 44, h: 22 })
@@ -183,6 +181,8 @@ describe('ticket de cambio (regalo, Bruno 13-oct)', () => {
     expect(txt).toContain('Comprobante: #30048')
     expect(txt).toContain('2 x TOP MONTANA - M')
     expect(txt.join(' ')).toContain('Cambios dentro de los 30 días')
+    expect(txt).toContain('¡Que lo disfrutes!')
+    expect(txt.join(' ')).not.toContain('Gracias por tu compra')
     expect(txt.some((t) => t.includes('$'))).toBe(false)
     expect(txt.some((t) => /TOTAL|Descuento|RECIBIMOS|VUELTO/.test(t))).toBe(false)
   })
@@ -217,5 +217,25 @@ describe('ticket del cierre (Bruno, 13-oct)', () => {
     expect(montoDe(ops, 'Limpieza')).toBe('-$2.000')
     expect(txt).not.toContain('anulada')
     expect(txt).toContain('Nota: faltan 200')
+  })
+
+  it('🔑 el SOBRE y lo que QUEDA DE FONDO (Bruno, 13-oct): fondo de la apertura con los chicos, el resto al sobre', () => {
+    const { ops } = armarTicketCierre({ ...cierre, conteos: { cierre: { billetes: { 20000: 3, 10000: 2, 2000: 10, 1000: 8, 500: 4 }, total: 110000 } } }, AHORA, medir)
+    const txt = ops.filter((o) => o.k === 'txt').map((o) => (o as { txt: string }).txt)
+    const i = txt.indexOf('SOBRE'), j = txt.indexOf('QUEDA DE FONDO')
+    expect(i).toBeGreaterThan(txt.indexOf('BILLETES CONTADOS'))
+    expect(j).toBeGreaterThan(i)
+    // Fondo $50.000 con la mayor cantidad de billetes: 4×500 + 8×1000 + 10×2000 + 2×10000 = 50.000.
+    const t2 = ops as { k: string; txt?: string }[]
+    const totales = t2.flatMap((o, k) => (o.txt === 'Total' ? [t2[k + 1].txt] : []))
+    expect(totales).toEqual(['$110.000', '$60.000', '$50.000'])
+    expect(txt).toContain('3 x $20.000')
+    expect(txt.some((t) => t.startsWith('Faltan'))).toBe(false)
+  })
+
+  it('sin billetes contados: el sobre es lo contado menos el fondo', () => {
+    const { ops } = armarTicketCierre({ ...cierre, conteos: null }, AHORA, medir)
+    expect(montoDe(ops, 'SOBRE')).toBe('$32.300')
+    expect(montoDe(ops, 'Queda de fondo')).toBe('$50.000')
   })
 })

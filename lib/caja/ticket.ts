@@ -5,8 +5,9 @@
  *
  * Logo (o el nombre), «COMPROBANTE», «DOCUMENTO NO VÁLIDO COMO FACTURA», `Comprobante: #N` (el
  * número de la venta, se mantiene), `Fecha:` con el día, `Cliente:`, el encabezado `Cant. x Precio /
- * Descripción / Total`, los renglones, TOTAL, RECIBIMOS, SALDO (y el vuelto si hubo), la política
- * de cambio, «Gracias por tu compra!» y la fecha y hora de registro. ⛔ Las formas de pago abajo
+ * Descripción / Total`, los renglones y TOTAL —⛔ RECIBIMOS, SALDO ni vuelto: el ticket termina en el
+ * total (Bruno, 13-oct)—, la política de cambio, «Gracias por tu compra!» y la fecha y hora de registro.
+ * 🔑 El cliente es SIEMPRE «Consumidor Final» (Bruno, 13-oct): el mail sirve para mandarlo, ⛔ se imprime. ⛔ Las formas de pago abajo
  * (Bruno: «es raro»). ⛔ Es factura: la Caja ⛔ factura en AFIP (la API de GN tampoco).
  *
  * # 🔑 Los números salen del MISMO cobro que vio la cajera
@@ -40,6 +41,7 @@ import { imprimirPdf } from '../etiquetas/pdf'
 import { OFFSET_AR_MS } from '../envios/portal.core.js'
 import { talleVisible } from './ticket-mail.core.js'
 import { MARCA_CAJA } from './marca'
+import { armarSobre, billetesDe } from './conteo.core.js'
 
 /** `importe` es lo que queda después del descuento a mano de esa prenda (si lo hubo). */
 /** `promos`: las que le tocaron (W5): el descuento del renglón sale con su nombre, ⛔ «Descuento». */
@@ -67,7 +69,7 @@ export type DatosTicket = {
   logo?: LogoTicket | null
   /** El logo de Stunned: sale si alguna prenda es de Stunned; con prendas de las dos, salen los DOS. */
   logoStunned?: LogoTicket | null
-  /** El mail del ticket, si se cargó; si no, «Consumidor Final». */
+  /** El mail del ticket, si se cargó. ⛔ Se imprime (siempre «Consumidor Final»): lo usa el ticket por mail. */
   cliente?: string | null
   /** El nombre de la marca, si ⛔ hay logo (rediseño, fase 5); sin él, la marca activa de la Caja (V4). */
   marca?: string
@@ -108,12 +110,6 @@ const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', '
 export function fechaConDia(ahoraMs: number): string {
   const ar = new Date(ahoraMs + OFFSET_AR_MS)
   return `${DIAS[ar.getUTCDay()]} ${fechaTicket(ahoraMs).slice(0, 10)}`
-}
-
-/** El vuelto de lo que se pagó en efectivo. Sin `pagaCon`, o si ⛔ hay pago en efectivo, `null`. */
-export function vueltoDelTicket(pagaCon: number | null, montoEfectivo: number): number | null {
-  if (pagaCon == null || !(montoEfectivo > 0)) return null
-  return Math.max(0, Math.round((pagaCon - montoEfectivo) * 100) / 100)
 }
 
 /** El papel que se va llenando de arriba abajo: lo comparten el ticket y el de cambio. */
@@ -183,13 +179,9 @@ function numeroYFecha(l: ReturnType<typeof lienzo>, t: DatosTicket, ahoraMs: num
   l.escribir(`Fecha: ${fechaConDia(ahoraMs)}`, 10, false)
 }
 
-/**
- * Dónde va cada cosa y cuánto mide el papel, sin tocar jsPDF. `efectivo` dice qué cuentas son de
- * efectivo (para el vuelto): sale de las reglas de la Caja.
- */
+/** Dónde va cada cosa y cuánto mide el papel, sin tocar jsPDF. */
 export function armarTicket(
   t: DatosTicket,
-  efectivo: (cuenta: number) => boolean,
   ahoraMs: number,
   partir: Medidor,
 ): { ops: (OpBase | OpImagen)[]; alto: number } {
@@ -201,7 +193,7 @@ export function armarTicket(
   escribir('DOCUMENTO NO VÁLIDO COMO FACTURA', 8, false, 'centro', 60)
   regla()
   numeroYFecha(l, t, ahoraMs)
-  escribir(`Cliente: ${t.cliente?.trim() || 'Consumidor Final'}`, 10, false)
+  escribir('Cliente: Consumidor Final', 10, false)
   regla()
 
   escribir('Cant. x Precio', 9, true)
@@ -228,13 +220,6 @@ export function armarTicket(
   }
   l.y += 1
   par('TOTAL', plata(t.total), 12, true)
-  // RECIBIMOS: lo que entregó (con el efectivo, «paga con» + el resto); SALDO: lo que queda debiendo.
-  const enEfectivo = t.pagos.filter((p) => efectivo(p.cuenta)).reduce((s, p) => s + p.monto, 0)
-  const v = vueltoDelTicket(t.pagaCon, enEfectivo)
-  const recibimos = v != null && t.pagaCon != null ? Math.round((t.total - enEfectivo + t.pagaCon) * 100) / 100 : t.total
-  par('RECIBIMOS', plata(recibimos), 12, true)
-  par('SALDO', plata(0), 12, true)
-  if (v != null && v > 0) par('VUELTO', plata(v), 12, true)
   regla()
 
   if (t.politica) {
@@ -273,7 +258,8 @@ export function armarTicketCambio(t: DatosTicket, ahoraMs: number, partir: Medid
     l.escribir(t.politica, 9, false)
     l.y += 2
   }
-  l.escribir('Gracias por tu compra!', 10, false, 'centro')
+  // Puede ser un regalo: ⛔ «Gracias por tu compra» (Bruno, 13-oct).
+  l.escribir('¡Que lo disfrutes!', 10, false, 'centro')
   return l.pagina()
 }
 
@@ -281,10 +267,10 @@ export function armarTicketCambio(t: DatosTicket, ahoraMs: number, partir: Medid
  * Arma el PDF y lo manda a la térmica (con `--kiosk-printing`, sin diálogo). `que`: el ticket solo, el
  * ticket + el de cambio (regalo, dos páginas en el mismo PDF) o sólo el de cambio.
  */
-export async function imprimirTicket(t: DatosTicket, efectivo: (cuenta: number) => boolean, ahoraMs: number, que: 'ticket' | 'regalo' | 'cambio' = 'ticket') {
+export async function imprimirTicket(t: DatosTicket, ahoraMs: number, que: 'ticket' | 'regalo' | 'cambio' = 'ticket') {
   const rollo = await abrirRollo()
   const paginas = [
-    ...(que !== 'cambio' ? [armarTicket(t, efectivo, ahoraMs, rollo.medir)] : []),
+    ...(que !== 'cambio' ? [armarTicket(t, ahoraMs, rollo.medir)] : []),
     ...(que !== 'ticket' ? [armarTicketCambio(t, ahoraMs, rollo.medir)] : []),
   ]
   imprimirPdf(
@@ -362,13 +348,27 @@ export function armarTicketCierre(t: DatosCierre, ahoraMs: number, partir: Medid
   if (dif != null) par(Math.abs(dif) < 0.005 ? 'DIFERENCIA' : dif > 0 ? 'SOBRA' : 'FALTA', Math.abs(dif) < 0.005 ? plata(0) : plata(Math.abs(dif)), 11, true)
 
   const billetes = t.conteos?.cierre?.billetes
-  const conBilletes = billetes ? Object.entries(billetes).map(([v, n]) => [Number(v), Number(n)] as const).filter(([, n]) => n > 0).sort((a, b) => b[0] - a[0]) : []
-  if (conBilletes.length) {
+  const lista = (c: Record<string, number>) =>
+    Object.entries(c).map(([v, n]) => [Number(v), Number(n)] as const).filter(([, n]) => n > 0).sort((a, b) => b[0] - a[0])
+  const bloque = (titulo: string, c: Record<string, number>) => {
     regla()
-    escribir('BILLETES CONTADOS', 10, true)
+    escribir(titulo, 10, true)
     l.y += 0.6
-    for (const [v, n] of conBilletes) par(`${n} x ${plata(v)}`, plata(n * v), 9)
-    par('Total', plata(conBilletes.reduce((s, [v, n]) => s + v * n, 0)), 10, true)
+    const filas = lista(c)
+    for (const [v, n] of filas) par(`${n} x ${plata(v)}`, plata(n * v), 9)
+    par('Total', plata(filas.reduce((s, [v, n]) => s + v * n, 0)), 10, true)
+  }
+  if (billetes && lista(billetes).length) {
+    bloque('BILLETES CONTADOS', billetes)
+    // 🔑 El sobre (Bruno, 13-oct): el fondo de la apertura queda con los billetes chicos, el resto al sobre.
+    const sb = armarSobre(billetes, Number(t.fondo), billetesDe())
+    bloque('SOBRE', sb.sobre)
+    bloque('QUEDA DE FONDO', sb.fondo)
+    if (!sb.exacto) escribir(`Faltan ${plata(Number(t.fondo) - sb.totalFondo)} de fondo: completalo con cambio.`, 9, true)
+  } else if (t.contado != null) {
+    regla()
+    par('SOBRE', plata(Math.max(0, Number(t.contado) - Number(t.fondo))), 11, true)
+    par('Queda de fondo', plata(Math.min(Number(t.contado), Number(t.fondo))), 9)
   }
 
   const movs = (t.movimientos ?? []).filter((m) => !m.anulado_en)

@@ -6,7 +6,8 @@
  */
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { MODOS_OFERTA, NOMBRE_MEDIO, medioDeCuenta, msjOferta, ofertaDe } from '@/lib/caja/core.core.js'
+import { MODOS_OFERTA, NOMBRE_MEDIO, medioDeCuenta, msjOferta, nombreEnCaja, ofertaDe } from '@/lib/caja/core.core.js'
+import { armarSobre, billetesDe } from '@/lib/caja/conteo.core.js'
 import { MARCA_CAJA } from '@/lib/caja/marca'
 import { imprimirCierre, numeroProvisorio, plata, type DatosCierre, type LogoTicket } from '@/lib/caja/ticket'
 import { titularesDe } from '@/lib/caja/otra-cuenta.core.js'
@@ -1614,7 +1615,48 @@ export function AvisoCierre({ t }: { t: Turno }) {
         <Dato rotulo="Contado" valor={plata(Number(t.contado))} />
         <Dato rotulo="Diferencia" valor={textoDiferencia(d)} tono={tonoDiferencia(d)} />
       </div>
+      <SobreDelCierre t={t} />
     </SectionCard>
+  )
+}
+
+/**
+ * 🔑 El sobre (Bruno, 13-oct): qué billetes van al sobre y cuáles quedan de fondo (el de la apertura, con
+ * los chicos para tener cambio: `armarSobre`). Lo mismo que imprime el ticket del cierre.
+ */
+function SobreDelCierre({ t }: { t: Turno }) {
+  const billetes = t.conteos?.cierre?.billetes
+  if (!billetes || t.contado == null) return null
+  const sb = armarSobre(billetes, Number(t.fondo), billetesDe())
+  const columna = (titulo: string, c: Record<string, number>, total: number) => (
+    <div style={{ display: 'grid', gap: space[0.5], alignContent: 'start', minWidth: 0 }}>
+      <b style={{ fontSize: font.base, color: color.ink }}>{titulo}</b>
+      {Object.entries(c)
+        .map(([v, n]) => [Number(v), n] as const)
+        .filter(([, n]) => n > 0)
+        .sort((a, b) => b[0] - a[0])
+        .map(([v, n]) => (
+          <span key={v} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], fontVariantNumeric: 'tabular-nums' }}>
+            <span>
+              {n} × {plata(v)}
+            </span>
+            <span style={{ color: color.mut }}>{plata(n * v)}</span>
+          </span>
+        ))}
+      <span style={{ display: 'flex', justifyContent: 'space-between', fontWeight: weight.bold, borderTop: `1px solid ${color.line}`, paddingTop: space[0.5], fontVariantNumeric: 'tabular-nums' }}>
+        <span>Total</span>
+        <span>{plata(total)}</span>
+      </span>
+    </div>
+  )
+  return (
+    <div style={{ display: 'grid', gap: space[2], marginTop: space[3] }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: space[4] }}>
+        {columna('Armá el sobre', sb.sobre, sb.totalSobre)}
+        {columna('Queda en la caja (fondo)', sb.fondo, sb.totalFondo)}
+      </div>
+      {!sb.exacto && <Notice tone="warning">Faltan {plata(Number(t.fondo) - sb.totalFondo)} de fondo: completalo con cambio.</Notice>}
+    </div>
   )
 }
 
@@ -1969,15 +2011,14 @@ export function ResumenTurnoDatos({
             </thead>
             <tbody>
               {r.porCuenta.map((c) => {
-                // Una fila por CUENTA (los números son los del resumen): la forma de pago adelante y la
-                // cuenta atrás, porque dos cuentas pueden ser la misma forma (crédito con promo y de lista).
+                // Una fila por CUENTA, con el nombre de adentro del local (`nombreEnCaja`): forma de pago y lo
+                // que la distingue («Efectivo · oferta», «Tarjeta de crédito · promo»). Un resumen guardado
+                // antes del 13-oct trae el nombre de GN: la forma de pago adelante, como antes.
                 const medio = medioDeCuenta(c.cuenta, reglas)
+                const nombre = medio && reglas ? nombreEnCaja(c.cuenta, reglas) : c.nombre
                 return (
                   <tr key={c.cuenta}>
-                    <td style={td}>
-                      {medio ? NOMBRE_MEDIO[medio] : c.nombre}
-                      {medio && <span style={{ color: color.mut }}> · {c.nombre}</span>}
-                    </td>
+                    <td style={td}>{nombre}</td>
                     <td style={{ ...td, ...der }}>{c.cobros}</td>
                     <td style={{ ...td, ...der }}>{plata(c.monto)}</td>
                   </tr>
