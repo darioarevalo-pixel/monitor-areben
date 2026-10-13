@@ -339,13 +339,15 @@ export async function buildLibrePdf(cfg: { grande: boolean; copias: number; barc
  * Manda el PDF a imprimir sin abrir pestaña: lo carga en un iframe oculto y dispara
  * el diálogo de impresión (autoPrint). Port de _etiPrint.
  */
-export function imprimirPdf(pdf: Pdf) {
+export function imprimirPdf(pdf: Pdf, marco = 'eti-print-frame') {
   pdf.autoPrint()
   const url = pdf.output('bloburl')
-  let f = document.getElementById('eti-print-frame') as HTMLIFrameElement | null
+  // `marco`: un iframe por orden de impresión. Dos PDF seguidos en el MISMO iframe ⇒ el segundo pisa al
+  // primero y sale uno solo (el regalo de la Caja manda dos, 13-oct).
+  let f = document.getElementById(marco) as HTMLIFrameElement | null
   if (!f) {
     f = document.createElement('iframe')
-    f.id = 'eti-print-frame'
+    f.id = marco
     Object.assign(f.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' })
     document.body.appendChild(f)
   }

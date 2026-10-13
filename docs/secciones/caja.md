@@ -405,8 +405,9 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
 
 ## Regalo y textos (13-oct-2026, Bruno)
 
-- 🎁 **«Regalo»** en el pie del cobro: imprime el ticket + el **ticket de cambio** en el mismo PDF
-  (`armarTicketCambio`, `lib/caja/ticket.ts`): logo, número, fecha, prendas con talle y la política;
+- 🎁 **«Regalo»** en el pie del cobro: imprime el ticket + el **ticket de cambio** en **DOS órdenes de
+  impresión** (Bruno, 13-oct: en un mismo PDF salían en un solo papel), cada una en su iframe y la de cambio
+  1,5 s después (`imprimirTicket`, `armarTicketCambio`, `lib/caja/ticket.ts`): logo, número, fecha, prendas con talle y la política;
   ⛔ un solo precio. Con transferencia sale al llegar el pago (`regalos`, en memoria del POS: recargar la
   página en la espera lo pierde ⇒ queda «Ticket de cambio» en Última venta y en Ventas).
 - El redondeo se llama **«Redondeo»** suba o baje (⛔ «Recargo por redondeo») en el ticket, el cobro y la
@@ -431,6 +432,12 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   del efectivo (esperado, contado, sobra/falta), salidas e ingresos, y de billetes **SÓLO EL SOBRE** (cada
   billete y el total) + nota y firma. ⛔ Billetes contados ni lo que queda de fondo (Bruno: «los 3 conteos
   no servían»): quedan guardados en la caja.
+
+- 🔴 **GN corta a 2 consultas por SEGUNDO, compartidas con la casa** (13-oct): el turno leía los cobros y
+  las anuladas en paralelo y con un solo intento ⇒ un 429 era «GN no contestó» y el cierre frenaba en las
+  dos cajas con GN andando. Ahora van de a una y `gnLeerTurno` espera el `retry-after` (hasta 4 intentos).
+- ✉️ **El mail** (`CampoMail`, `lib/caja/mail.ts`): botones `@gmail.com` / `@hotmail.com`; un mail a medio
+  escribir apaga el cobro ⇒ el cobro lo muestra para corregirlo ahí o «Sin mail» (13-oct).
 
 ## Pendiente
 

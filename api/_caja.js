@@ -74,7 +74,7 @@ import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
-import { GN_BASE, gnFetch } from './_gn.js'
+import { GN_BASE, dormir, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
 import { armarVentaGN, cobro, exigirCuentas, exigirFeria, cuentaDeOferta, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, normalizarOferta, reglaDeCuenta, renglones, verificaTransferencias } from '../lib/caja/core.core.js'
 import { promosDeCreditoEnMostrador } from '../lib/agenda/promos.core.js'
@@ -158,6 +158,20 @@ let cacheCobrosGN = null
 /** Lo mismo para las anuladas en GN (A12): una lectura de `ventas/obtener` por día del turno. */
 let cacheAnuladas = null
 export const olvidarCobrosGN = () => { cacheCobrosGN = null; cacheAnuladas = null }
+
+/**
+ * Una lectura de GN para el turno. 🔴 GN corta a **2 consultas por segundo, COMPARTIDAS con la casa** (el
+ * POS, los syncs): un 429 con `retry-after: 1` (medido el 13-oct) ⛔ es «GN no contestó». Con un solo
+ * intento, el cierre frenaba en las dos cajas con GN contestando bien. Se espera lo que dice (1 a 5 s) y
+ * se reintenta, hasta 4 veces: ⛔ más, que el techo de la función es 30 s.
+ */
+async function gnLeerTurno(url, tok) {
+  for (let intento = 1; ; intento++) {
+    const r = await gnFetch(url, { headers: cabeceras(tok) }, 1)
+    if (r.status !== 429 || intento >= 4) return r
+    await dormir(Math.min(Math.max(Number(r.headers?.get?.('retry-after')) || 1, 1), 5) * 1000)
+  }
+}
 
 async function leerJson(r) {
   const t = await r.text()
@@ -343,7 +357,7 @@ export default async function handler(req, res) {
             account_id: String(cuenta), include_payments: '1', per_page: '200', page: String(pag),
             dateFrom: diaArgentino(Date.parse(turno.abierto_en) - DIAS_COBROS_GN * DIA_MS), dateTo: diaArgentino(ahora),
           })
-          const r = await gnFetch(`${GN_BASE}/ventas?${qs}`, { headers: cabeceras(tok) }, 1)
+          const r = await gnLeerTurno(`${GN_BASE}/ventas?${qs}`, tok)
           if (!r.ok) throw new Error(`GN ${r.status}`)
           const d = await leerJson(r)
           ventas.push(...(d && Array.isArray(d.data) ? d.data : []))
@@ -400,7 +414,7 @@ export default async function handler(req, res) {
       for (const dia of dias) {
         for (let pag = 1; ; pag++) {
           if (pag > 5) throw new Error('más de 5 páginas de ventas en un día')
-          const r = await gnFetch(`${GN_BASE}/ventas/obtener?from=${dia}&to=${dia}&per_page=200&page=${pag}`, { headers: cabeceras(tok) }, 1)
+          const r = await gnLeerTurno(`${GN_BASE}/ventas/obtener?from=${dia}&to=${dia}&per_page=200&page=${pag}`, tok)
           if (!r.ok) throw new Error(`GN ${r.status}`)
           const d = await leerJson(r)
           if (!d || !Array.isArray(d.data)) throw new Error('GN contestó otra cosa')
@@ -429,10 +443,9 @@ export default async function handler(req, res) {
     try {
       for (const c of await cuentasGN()) if (c.nombre) nombres[c.id] = c.nombre
     } catch { /* caen los nombres de las reglas */ }
-    const [cobrosGN, anuladasGN] = await Promise.all([
-      cobrosGNDelTurno(turno, reglas, fresco),
-      anuladasDelTurno(turno, ventas.data || [], fresco),
-    ])
+    // De a una, ⛔ en paralelo: las dos juntas ya pasaban las 2 consultas por segundo de GN.
+    const cobrosGN = await cobrosGNDelTurno(turno, reglas, fresco)
+    const anuladasGN = await anuladasDelTurno(turno, ventas.data || [], fresco)
     const resumen = resumenTurno({ turno, ventas: ventas.data || [], movs: movs.data || [], reglas, nombres, cobrosGN, anuladasGN })
     // `salidas` sigue siendo el nombre de la lista (la pantalla la lee así): son TODOS los movimientos.
     return { ...turno, resumen, salidas: movs.data || [] }

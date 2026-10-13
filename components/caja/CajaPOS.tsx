@@ -60,6 +60,7 @@ import { aplicarPromos } from '@/lib/caja/promos.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { imprimirTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
 import { claveMail, claveVista, leerMail, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
+import { mailOk } from '@/lib/caja/mail'
 import { MARCA_CAJA, marcaParaPOS, storeCaja, useMarcaDeLaUrl, usarMarcaCaja } from '@/lib/caja/marca'
 import {
   buscarNombre,
@@ -90,6 +91,7 @@ import { useConfirmar } from '@/components/ui/Confirm'
 import { esStunned } from '@/lib/lineas.core.js'
 import { ModalVarianteContext } from '@/components/ui/Modal'
 import {
+  CampoMail,
   CampoRebaja,
   EsperaTransferencia,
   FilaRenglon,
@@ -621,7 +623,7 @@ function POS() {
   const enEfectivo = c ? c.pagos.filter((p) => esEfectivo(p.cuenta)).reduce((s, p) => s + p.monto, 0) : 0
   const pagaConN = aNumero(pagaCon)
   const vuelto = pagaConN != null && enEfectivo > 0 ? Math.round((pagaConN - enEfectivo) * 100) / 100 : null
-  const emailOk = !bor.email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bor.email.trim())
+  const emailOk = mailOk(bor.email)
 
   // 🔑 La pantalla de la clienta (rediseño, fase 3): se le publican los números del POS, ⛔ los recalcula.
   const vistaCliente = JSON.stringify(
@@ -1092,6 +1094,11 @@ function POS() {
                   <div style={{ background: color.bg, borderRadius: radius.md, padding: `${space[2]}px ${space[3]}px`, color: color.ink2, fontSize: font.sm, overflowWrap: 'anywhere' }}>
                     Cliente: {bor.email.trim() || 'Consumidor final'}
                   </div>
+                  {!emailOk && (
+                    <Field label="El mail está incompleto: corregilo o cobrá sin mail">
+                      <CampoMail valor={bor.email} onCambio={(m) => setBor((b) => ({ ...b, email: m }))} sinMail />
+                    </Field>
+                  )}
                   <div style={{ display: 'grid', gap: space[2], fontSize: font.sm }}>
                     {bor.renglones.map((r, i) => (
                       <div key={claveDe(r.variante)} style={{ display: 'flex', justifyContent: 'space-between', gap: space[2] }}>
@@ -1242,7 +1249,6 @@ function POS() {
                       )}
                     </div>
                   )}
-                  {!emailOk && <Notice tone="warning">Mail del pedido inválido.</Notice>}
                 </div>
               </div>
             </Modal>
@@ -1377,7 +1383,7 @@ function POS() {
             {/* El pie SIEMPRE a la vista (prototipo del 6-oct): con el pedido vacío, TOTAL $0 y el cobro apagado. */}
             <div style={{ flexShrink: 0, display: 'grid', gap: space[2], padding: `${space[3]}px ${space[4]}px ${space[4]}px`, borderTop: `1px solid ${color.line}`, background: color.bg }}>
                 <Field label="Mail para el ticket (opcional)">
-                  <Input type="email" autoComplete="off" spellCheck={false} value={bor.email} invalid={!emailOk} onChange={(e) => setBor((b) => ({ ...b, email: e.target.value }))} placeholder="nombre@mail.com" />
+                  <CampoMail valor={bor.email} onCambio={(m) => setBor((b) => ({ ...b, email: m }))} />
                 </Field>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.md, color: color.ink2 }}>
                   <span>Subtotal</span>

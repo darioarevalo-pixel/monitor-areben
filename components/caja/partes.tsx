@@ -10,6 +10,7 @@ import { MODOS_OFERTA, NOMBRE_MEDIO, msjOferta, ofertaDe } from '@/lib/caja/core
 import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { porFormaDePago } from '@/lib/caja/cierre.core.js'
 import { MARCA_CAJA } from '@/lib/caja/marca'
+import { DOMINIOS_MAIL, completarMail, mailOk } from '@/lib/caja/mail'
 import { imprimirCierre, numeroProvisorio, plata, type DatosCierre, type LogoTicket } from '@/lib/caja/ticket'
 import { titularesDe } from '@/lib/caja/otra-cuenta.core.js'
 import { TOLERANCIA_TRANSFERENCIA } from '@/lib/pagos-recibidos/core.core.js'
@@ -1501,6 +1502,32 @@ export function TransferenciasEnEspera({ ventas, onCambio }: { ventas: Venta[]; 
  * Un descuento a mano: % o $ (Bruno, 4-oct). Vacío = sin descuento. El tope (⛔ más que el importe)
  * lo pone el núcleo, y la pantalla muestra su error.
  */
+/**
+ * El mail del ticket con los botones de dominio (Bruno, 13-oct: «para simplificar la carga»). Lo usan el
+ * pie del pedido y el cobro: un mail a medio escribir apaga «Finalizar venta» / «Validar transferencia», y
+ * en el cobro se corrige ahí mismo o se cobra «Sin mail» (⛔ hay que volver al pedido).
+ */
+export function CampoMail({ valor, onCambio, sinMail = false }: { valor: string; onCambio: (m: string) => void; /** El botón «Sin mail» (el cobro). */ sinMail?: boolean }) {
+  const ok = mailOk(valor)
+  return (
+    <div style={{ display: 'grid', gap: space[1] }}>
+      <Input type="email" autoComplete="off" spellCheck={false} value={valor} invalid={!ok} onChange={(e) => onCambio(e.target.value)} placeholder="nombre@mail.com" />
+      <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap' }}>
+        {DOMINIOS_MAIL.map((d) => (
+          <Button key={d} variant="outline" size="sm" onClick={() => onCambio(completarMail(valor, d))}>
+            @{d}
+          </Button>
+        ))}
+        {sinMail && valor.trim() && (
+          <Button variant="ghost" size="sm" onClick={() => onCambio('')}>
+            Sin mail
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function CampoRebaja({ valor, onCambio, chico = false }: { valor: Rebaja | null; onCambio: (rb: Rebaja | null) => void; /** El del renglón del pedido: más angosto. */ chico?: boolean }) {
   const [texto, setTexto] = useState<string | null>(null)
   // Robustez (11-oct): el %/$ se elige ANTES de escribir. Arrancaba apagado y 5000 se tomaba como 5000 %.

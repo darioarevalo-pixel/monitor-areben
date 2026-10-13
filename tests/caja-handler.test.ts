@@ -42,6 +42,8 @@ const gn = {
   creadas: [] as Fila[],
   // W3b: `GET /ventas?account_id=…&include_payments=1` (los cobros de GN del turno).
   lista: { status: 200, body: { data: [] as Fila[], meta: { has_more_pages: false } } as unknown },
+  // Cuántas `/ventas?` rebotan con 429 antes de contestar (el corte de 2 por segundo, 13-oct).
+  rebotes: 0,
 }
 const mp = { busquedas: 0 }
 // W1: el audit de TN (bdi-catalogo). `tramos` = la respuesta de cada pedido, en orden; anota la URL y el sobre.
@@ -196,6 +198,7 @@ function conSesion(perfil: unknown) {
       }
       gn.gets.push(String(url))
       if (String(url).includes('/ventas/obtener')) return respuesta(200, { ...gn.delDia, data: [...gn.delDia.data, ...gn.creadas] })
+      if (String(url).includes('/ventas?') && gn.rebotes > 0) { gn.rebotes--; return respuesta(429, { message: 'Too Many Attempts.' }) }
       if (String(url).includes('/ventas?')) return respuesta(gn.lista.status, gn.lista.body)
       if (String(url).includes('/ventas/referencias')) return respuesta(200, { cuentas: [{ id: 12921, name: 'Efectivo', balance: 114084283.83 }, { id: 99, name: 'Mercado Pago', balance: 5 }] })
       if (String(url).includes('/inventario/')) gn.authInventario.push(String(opts?.headers?.Authorization))
@@ -252,6 +255,7 @@ beforeEach(async () => {
   // Bruno, 11-oct: la cuenta de MP del test asienta en Transferencia (13015, Areben Comercial).
   base.config = { store: 'zattia', reglas: { ...REGLAS_INICIALES, transferenciaPorMp: { [CUENTA_MP]: 13015 } }, politica_cambio: null }; base.alCerrar = null; base.antesDeInsertar = null
   gn.lista = { status: 200, body: { data: [], meta: { has_more_pages: false } } }
+  gn.rebotes = 0
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
   process.env.ZATTIA_SUPABASE_SERVICE_KEY = 'k'
   process.env.GN_TOKEN_VENTAS = 'tok-ventas'
@@ -978,6 +982,18 @@ describe('caja · turno propio (v2, W3)', () => {
     expect(c.code).toBe(200)
     expect(base.turnos[0]).toMatchObject({ esperado: 126482, contado: 126482 })
     expect((base.turnos[0].resumen as Fila).diferencia).toBe(0)
+  })
+
+  it('🔴 un 429 de GN (2 consultas por segundo) se espera y se reintenta: ⛔ es «GN no contestó» (13-oct)', async () => {
+    conSesion(CAJERA)
+    gn.lista = { status: 200, body: { data: [
+      { number: 29981, channel_id: 16, payments: [{ id: 1, amount: 1000, account_id: 12921, created_at: '2026-10-04 10:15:00' }] },
+    ], meta: { has_more_pages: false } } }
+    gn.rebotes = 1
+    const t = await correr(req('GET', { action: 'turno' }))
+    const r = (t.body?.turno as { resumen: { efectivo: Fila; cobrosGN: Fila[] | null } }).resumen
+    expect(r.cobrosGN?.map((c) => c.venta)).toEqual([29981])
+    expect(r.efectivo.cobradoGN).toBe(1000)
   })
 
   it('W3b: GN ⛔ contesta ⇒ el turno se ve igual, sin los cobros de GN, y lo dice', async () => {

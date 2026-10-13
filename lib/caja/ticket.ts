@@ -265,23 +265,32 @@ export function armarTicketCambio(t: DatosTicket, ahoraMs: number, partir: Medid
 
 /**
  * Arma el PDF y lo manda a la térmica (con `--kiosk-printing`, sin diálogo). `que`: el ticket solo, el
- * ticket + el de cambio (regalo, dos páginas en el mismo PDF) o sólo el de cambio.
+ * ticket + el de cambio (regalo) o sólo el de cambio.
+ * 🔴 **El regalo son DOS órdenes de impresión** (Bruno, 13-oct): como dos páginas de un PDF salían en el
+ * MISMO papel, y el de cambio va en la bolsa. Cada uno en su iframe, el de cambio un poco después para
+ * que salgan en orden.
  */
 export async function imprimirTicket(t: DatosTicket, ahoraMs: number, que: 'ticket' | 'regalo' | 'cambio' = 'ticket') {
   const rollo = await abrirRollo()
-  const paginas = [
-    ...(que !== 'cambio' ? [armarTicket(t, ahoraMs, rollo.medir)] : []),
-    ...(que !== 'ticket' ? [armarTicketCambio(t, ahoraMs, rollo.medir)] : []),
-  ]
-  imprimirPdf(
-    rollo.documento<OpImagen>(paginas, (pdf, op) => {
+  const mandar = (pagina: { ops: (OpBase | OpImagen)[]; alto: number }, marco?: string) => imprimirPdf(
+    rollo.documento<OpImagen>([pagina], (pdf, op) => {
       if (op.k !== 'img') return false
       const tipo = /^data:image\/jpe?g/i.test(op.src) ? 'JPEG' : 'PNG'
       pdf.addImage(op.src, tipo, op.x, op.y, op.w, op.h)
       return true
     }),
+    marco,
   )
+  if (que !== 'cambio') mandar(armarTicket(t, ahoraMs, rollo.medir))
+  if (que === 'cambio') mandar(armarTicketCambio(t, ahoraMs, rollo.medir))
+  if (que === 'regalo') {
+    const cambio = armarTicketCambio(t, ahoraMs, rollo.medir)
+    setTimeout(() => mandar(cambio, 'caja-print-cambio'), PAUSA_ENTRE_TICKETS)
+  }
 }
+
+/** Entre el ticket y el de cambio del regalo: que la térmica tome el primero antes de recibir el segundo. */
+const PAUSA_ENTRE_TICKETS = 1500
 
 /**
  * El TICKET DEL CIERRE (Bruno, 13-oct): lo cobrado POR FORMA DE PAGO (crédito es crédito, como el cierre de

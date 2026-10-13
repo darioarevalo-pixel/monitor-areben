@@ -121,6 +121,17 @@ la pantalla, sistemas del hermano, volumen de facturas ARCA, tokens TN por tiend
 Abiertas para Bruno: primera marca a cortar (propuesta Zattia+Stunned), ARCA propio desde el día 1 o
 portal hasta F5, cuánto queda GN en sólo-lectura.
 
+## 🏁 CAJA: LO DEL 13-OCT A LA MAÑANA (dictado por Bruno, con la caja abierta) — hecho el 13-oct; ▶️ verlo en el local
+
+- 🔴 **El cierre frenaba con «Gestión Nube no contestó» y GN contestaba bien** (200 en <0,5 s): `cobrosGN`
+  volvía `null` en las dos cajas (Zattia y BDI). El `catch` se traga el error ⇒ ⛔ se sabe cuál. Se cerró
+  la de Zattia por API con nota; la de BDI (abierta 12-oct 22:25) sigue abierta. 🏁 Causa medida: el 429 de
+  GN (2 por segundo, compartido) con un solo intento. Arreglado: de a una y con reintento.
+- **Botón Regalo: el ticket de cambio sale PEGADO al de la venta.** Tienen que ser DOS tickets, en DOS
+  órdenes de impresión distintas.
+- **El mail traba «Validar transferencia».**
+- **Botones `@gmail.com` y `@hotmail.com`** para cargar el mail más rápido.
+
 ## ▶️ CAJA + POS: REEMPLAZAR AL POS DE GN — 11-oct-2026 (decidido por Bruno)
 
 Auditoría: `~/Documents/reunion-gerencia/2026-10-11-POS-auditoria-y-gift-card.md`. Fase 2 (A5–A12, B2–B4,
