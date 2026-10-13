@@ -338,6 +338,10 @@ strings y el texto de JSX con forma de frase, con el parser de TypeScript; ⛔ l
 las carpetas de la fila, y falla con el archivo y la frase. Una fila nueva = el CI encuentra solo
 todas las pantallas viejas que lo dicen mal.
 
+🔑 **`outlet` ≠ `oferta`** (Bruno, 13-oct): **outlet son los productos de 2da** (con falla o de segunda
+selección); **oferta**, los que están en una liquidación. ⛔ Usar una por la otra: en la política de
+cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una para lo suyo.)
+
 | se dice | ⛔ no se dice | app | dónde | por qué / desde |
 |---|---|---|---|---|
 | `caja` (abrir, cerrar, cajas anteriores) | `turno` · `turnos` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct-2026: la cajera abre y cierra **la caja** |
