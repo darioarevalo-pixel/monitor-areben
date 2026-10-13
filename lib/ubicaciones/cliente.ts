@@ -16,9 +16,15 @@ import type { Marca } from '@/lib/nav'
 import { computarUbicaciones } from './core'
 import type { FilaInvUbi, UbiProducto } from './tipos'
 
-const DEPOSITO = 'Deposito Minorista'
+/**
+ * El depósito de cada marca, con el nombre EXACTO que tiene en GN (y en el espejo). ⚠️ El de Zattia
+ * lleva un espacio al final: `'Deposito '`. Es el depósito de Lorena, ⛔ el de atrás del local (ese
+ * es otra sección: `ubicaciones-local`, de Bruno). Zattia se sumó el 13-oct-2026 (Darío) para que la
+ * lista de reposición salga en el orden en que se camina el depósito.
+ */
+export const DEPOSITO: Record<Marca, string> = { bdi: 'Deposito Minorista', zattia: 'Deposito ' }
 
-/** Lee inventario del Depósito Minorista + productos activos y arma la lista por producto. */
+/** Lee inventario del depósito de la marca + productos activos y arma la lista por producto. */
 export async function cargarUbicaciones(marca: Marca): Promise<UbiProducto[]> {
   const cuenta: Cuenta = CUENTAS[marca]
   const [rows, prods] = await Promise.all([
@@ -30,7 +36,7 @@ export async function cargarUbicaciones(marca: Marca): Promise<UbiProducto[]> {
     // aparece en "A reparar". `product_id,size_id` es único dentro de un depósito (verificado
     // contra la base: 2.703 renglones, 2.703 combinaciones). El orden por nombre que se ve en
     // pantalla lo pone `computarUbicaciones` al final, así que no se pierde nada.
-    fetchAll<FilaInvUbi>(cuenta, 'inventario', `select=product_id,product_name,sku,store_name,observation&store_name=eq.${encodeURIComponent(DEPOSITO)}&order=product_id,size_id`),
+    fetchAll<FilaInvUbi>(cuenta, 'inventario', `select=product_id,product_name,sku,store_name,observation&store_name=eq.${encodeURIComponent(DEPOSITO[marca])}&order=product_id,size_id`),
     fetchAll<{ id: number | string }>(cuenta, 'productos', 'select=id&active=eq.1&order=id'),
   ])
   const activos = new Set(prods.map((p) => p.id))
@@ -50,12 +56,12 @@ type ObsResp = { ok?: boolean; error?: string; total?: number; pendientes?: numb
  * saltea las que ya quedaron escritas, cada intento avanza. En cambio "no tiene variantes
  * en el depósito" no mejora por insistir, así que se corta ahí.
  */
-export async function guardarObservacion(productId: number | string, observation: string): Promise<{ ok: boolean; error?: string; reintentable?: boolean }> {
+export async function guardarObservacion(marca: Marca, productId: number | string, observation: string): Promise<{ ok: boolean; error?: string; reintentable?: boolean }> {
   try {
     const r = await apiFetch('/api/deposito?recurso=observaciones', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId, observation }),
+      body: JSON.stringify({ marca, productId, observation }),
     })
     const d: ObsResp = await r.json()
     // Un ok sobre 0 variantes no es un guardado. El endpoint ya lo contesta como error, pero

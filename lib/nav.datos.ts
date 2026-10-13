@@ -795,7 +795,8 @@ export const PERM_CAT: PermCat[] = [
     "label": "Ubicaciones",
     "info": "Cargá la ubicación física (observación de GN) por producto, masivo. Para que el orden de armado de pedidos coincida con el recorrido del depósito.",
     "brands": [
-      "bdi"
+      "bdi",
+      "zattia"
     ]
   },
   {

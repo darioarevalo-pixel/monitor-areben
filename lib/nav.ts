@@ -500,7 +500,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   recorridas: 'Los locales de proveedores que hay que visitar y el viaje a verlos. Cargá la lista de una —pegando una nota o subiendo los lugares guardados de Google Maps—, armá la recorrida del día ordenada por cercanía, y en la calle anotá desde el celular qué te pareció, qué producto te interesa, si compraste y qué quedó prometido. La ficha de cada proveedor está en PRM.',
   prm: 'La relación con cada proveedor: quién es, dónde queda, qué anotaste en cada visita, qué producto suyo te interesa y a qué precio, y qué quedó prometido de un lado y del otro. Al lado, lo que el sistema ya mide: si entrega lo que le pedimos y cómo vendió su mercadería. Lo de la calle se carga en Recorridas.',
   recepciones: 'Lo que entró de cada orden de compra: lo pedido contra lo contado, renglón por renglón, con lo que faltó y lo que sobró por separado, el cumplimiento de cada proveedor y los artículos que llegaron sin ficha en Gestión Nube. Llega sola cuando el sistema de Ingresos confirma una OC; acá no se carga nada a mano.',
-  ubicaciones: 'Ubicación física (NN-N) de cada producto en el Depósito Minorista.',
+  ubicaciones: 'Ubicación física (NN-N) de cada producto en el depósito.',
   reposicion: 'Reposición diaria del local.',
   cobranzas: 'Compras online con pago manual: cuáles faltan cobrar, registrar el cobro y dejarlo listo para marcar pagado en Tienda Nube.',
   insumos: 'Lo que se consume y no se vende: bolsas, rollos, papel. Qué hay en cada lugar, cuánto sale y cuánto dura.',

@@ -1,15 +1,22 @@
 // Escribe la OBSERVACIÓN (ubicación física) del inventario en Gestión Nube,
-// para TODAS las variantes de un producto en un depósito (default "Deposito Minorista").
-// POST { productId, observation, store? }
+// para TODAS las variantes de un producto en el depósito de la marca.
+// POST { marca?, productId, observation }
+//   - marca: 'bdi' (default, como era antes) | 'zattia' (sumada el 13-oct-2026, Darío).
 //   - observation: string (se recorta a 20 chars) o vacío/null para limpiar.
-// Seguridad: exige un usuario válido del Monitor (login server-side contra el KV).
-// Usa GN_TOKEN (token con inventory:read + inventory:write) desde el entorno del servidor.
+// Seguridad: exige un usuario válido del Monitor con la sección Ubicaciones en ESA marca.
+// Usa el token de GN de la marca (inventory:read + inventory:write) desde el entorno del servidor.
+// 🔑 El depósito lo decide el servidor por la marca, ⛔ el pedido: así nadie escribe en otro depósito.
 // GN: GET /inventario/{product_id} (trae las filas con inventory_id) +
 //     PATCH /inventario/{inventory_id}/observacion { observation }.
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+import { GN_TOKENS } from './_gn.js';
+import { puedeVerAlguna } from '../lib/permisos.core.js';
 
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
-const TOKEN = process.env.GN_TOKEN; // token GN con inventory:read+write (env del Monitor)
+// El depósito de cada marca, con el nombre de GN. ⚠️ El de Zattia es 'Deposito ' (con espacio al
+// final); se compara sin espacios de los costados. Es el de Lorena, ⛔ el de atrás del local.
+const DEPOSITO = { bdi: 'Deposito Minorista', zattia: 'Deposito' };
+const enDeposito = (f, dep) => String(f.store_name || '').trim().toLowerCase() === dep.toLowerCase();
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -31,15 +38,22 @@ async function gnFetch(url, opts, tries = 4) {
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'POST, OPTIONS')) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
-  if (!TOKEN) return res.status(500).json({ error: 'Falta GN_TOKEN en el entorno del servidor' });
 
   // Escribe en el GN de producción con un token de inventory:write: sin usuario
   // válido no se sigue. Va antes de leer el body a propósito.
-  if (!(await exigirUsuario(req, res))) return;
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
 
   const body = req.body || {};
+  const marca = String(body.marca || 'bdi').toLowerCase();
+  const dep = DEPOSITO[marca];
+  if (!dep) return res.status(400).json({ error: 'marca inválida (bdi o zattia)' });
+  if (!puedeVerAlguna(perfil, marca, ['ubicaciones'])) {
+    return res.status(403).json({ error: 'Cargar ubicaciones pide la sección Ubicaciones en esta marca.' });
+  }
+  const TOKEN = GN_TOKENS[marca];
+  if (!TOKEN) return res.status(500).json({ error: `Falta el token de GN de ${marca} en el entorno del servidor` });
   const productId = body.productId;
-  const store = (body.store || 'Deposito Minorista').toLowerCase();
   const obs = (body.observation == null ? '' : String(body.observation)).trim().slice(0, 20) || null;
   if (!productId) return res.status(400).json({ error: 'Falta productId' });
 
@@ -59,9 +73,9 @@ export default async function handler(req, res) {
         stores: [...new Set(filas.map(f => f && f.store_name))],
       });
     }
-    // 2) Filtrar al depósito pedido (por nombre, tolerante)
-    const target = filas.filter(f => String(f.store_name || '').toLowerCase().includes(store));
-    const nombreDep = body.store || 'Deposito Minorista';
+    // 2) Filtrar al depósito de la marca (por nombre, sin los espacios de los costados)
+    const target = filas.filter(f => enDeposito(f, dep));
+    const nombreDep = dep;
     // Sin renglones en ese depósito no hay nada que escribir, y eso NO es un éxito: es el
     // producto que ya no está en GN, o el espejo desactualizado. Contestarlo `ok: true`
     // hacía que la pantalla dijera "guardado", limpiara el pendiente y pintara el valor
@@ -96,14 +110,14 @@ export default async function handler(req, res) {
         } catch (e) { errInv.push(f.inventory_id); lastErr = e.message; }
         await sleep(300);
       }
-      // Re-leer el producto y quedarnos solo con las variantes de Minorista que NO tienen el valor todavía.
+      // Re-leer el producto y quedarnos solo con las variantes del depósito que NO tienen el valor todavía.
       await sleep(600);
       try {
         const rV = await gnFetch(`${GN_BASE}/inventario/${productId}`, { headers });
         const dV = await rV.json();
         if (rV.ok) {
           const filasV = (dV.variantes || []).flatMap(v => (v.stock_por_tienda || []).map(s => ({ ...s, size_name: v.size_name })));
-          pend = filasV.filter(f => String(f.store_name || '').toLowerCase().includes(store) && !sameObs(f.observation));
+          pend = filasV.filter(f => enDeposito(f, dep) && !sameObs(f.observation));
         } else {
           // si no podemos verificar, reintentar solo las que dieron error en el PATCH
           pend = pend.filter(f => errInv.includes(f.inventory_id));

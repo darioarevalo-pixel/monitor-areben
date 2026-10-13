@@ -41,7 +41,7 @@ const RONDAS = 3
 type Filtro = 'todos' | 'sin' | 'reparar'
 
 /**
- * Ubicaciones (Depósito Minorista, BDI). Carga la ubicación física (NN-N) de cada
+ * Ubicaciones (el depósito de cada marca: Depósito Minorista en BDI, Depósito en Zattia). Carga la ubicación física (NN-N) de cada
  * producto; se guarda en la observación de GN de TODAS sus variantes. Lo tipeado se
  * persiste en localStorage (no se pierde si se refresca antes de Guardar). "Reparar"
  * empareja los productos con variantes desparejas pero con un NN-N dominante.
@@ -175,7 +175,7 @@ export function Ubicaciones() {
       mensaje: (
         <>
           <p>
-            Se escribe la ubicación en la observación de <b>todas las variantes</b> de cada producto, en Depósito Minorista.
+            Se escribe la ubicación en la observación de <b>todas las variantes</b> de cada producto, en el depósito{marca === 'bdi' ? ' Minorista' : ''}.
           </p>
           <div style={{ marginTop: space[3] }}>
             <ConfirmDetalle label="Productos a escribir" valor={validos.length} />
@@ -204,7 +204,7 @@ export function Ubicaciones() {
         const p = porHacer[i]
         setProgreso({ hechos: i, total: porHacer.length })
         const valor = (cambios[String(p.product_id)] || '').trim()
-        const r = await guardarObservacion(p.product_id, cambios[String(p.product_id)])
+        const r = await guardarObservacion(marca, p.product_id, cambios[String(p.product_id)])
         if (r.ok) {
           exitosos.push({ pid: String(p.product_id), valor: valor.slice(0, 20) })
         } else {
@@ -294,7 +294,7 @@ export function Ubicaciones() {
     for (let i = 0; i < aReparar.length; i++) {
       const p = aReparar[i]
       setProgreso({ hechos: i, total: aReparar.length })
-      const r = await guardarObservacion(p.product_id, p.actual)
+      const r = await guardarObservacion(marca, p.product_id, p.actual)
       if (r.ok) hechos++
       else {
         err++
