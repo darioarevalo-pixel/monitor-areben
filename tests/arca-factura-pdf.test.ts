@@ -46,8 +46,12 @@ describe('QR de ARCA', () => {
 })
 
 describe('datos del emisor', () => {
-  it('hoy faltan los que no se inventan (se completan con una factura de GN o la constancia de ARCA)', () => {
-    expect(faltanDelEmisor(EMISOR, 'zattia')).toEqual(['razón social', 'Ingresos Brutos', 'inicio de actividades', 'domicilio de Zattia'])
+  it('hoy falta sólo el domicilio de Zattia (sale de una factura de GN de Zattia, ⛔ se inventa)', () => {
+    expect(faltanDelEmisor(EMISOR, 'zattia')).toEqual(['domicilio de Zattia'])
+    expect(faltanDelEmisor(EMISOR, 'bdi')).toEqual([])
+  })
+  it('un dato fiscal en null frena', () => {
+    expect(faltanDelEmisor({ ...EMISOR, ingresosBrutos: null }, 'bdi')).toEqual(['Ingresos Brutos'])
   })
   it('completos, no falta nada', () => {
     expect(faltanDelEmisor(EMISOR_COMPLETO, 'bdi')).toEqual([])
@@ -72,7 +76,7 @@ describe('el PDF', () => {
     expect(await armar(F)).toContain('SIN VALIDEZ FISCAL')
   })
   it('⛔ sale sin los datos del emisor', async () => {
-    await expect(armar(F, EMISOR)).rejects.toThrow(/razón social/)
+    await expect(armar(F, EMISOR)).rejects.toThrow(/domicilio de Zattia/)
   })
   it('nombra el archivo por letra, número y marca', () => {
     expect(numeroComprobante(F)).toBe('00002-00000012')
