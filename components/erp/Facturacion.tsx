@@ -13,8 +13,10 @@ import {
   Badge, Button, ConfirmDetalle, EmptyState, Input, KpiCard, Notice, SectionCard, TableWrap, TBody, Td, Th, THead, Tr, Tabs,
   formatMoney, space, useConfirmar,
 } from '@/components/ui'
-import { cerrarMes, facturar, leerMes, type MarcaErp, type MesFacturacion, type ResultadoLote, type VentaParaFacturar } from '@/lib/erp/cliente'
+import { cerrarMes, facturar, leerFacturas, leerMes, type MarcaErp, type MesFacturacion, type ResultadoLote, type VentaParaFacturar } from '@/lib/erp/cliente'
 import { proponerLote } from '@/lib/arca/mes.core.js'
+import { descargarFactura, numeroComprobante, type FacturaEmitida } from '@/lib/arca/factura-pdf'
+import { EMISOR, faltanDelEmisor } from '@/lib/arca/emisor.core.js'
 
 const MARCAS: Array<{ key: MarcaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'bdi', label: 'BDI' }]
 const mesActual = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 7)
@@ -30,11 +32,14 @@ export function Facturacion() {
   const [elegidas, setElegidas] = useState<Set<string>>(new Set())
   const [trabajando, setTrabajando] = useState(false)
   const [resultado, setResultado] = useState<ResultadoLote | null>(null)
+  const [facturas, setFacturas] = useState<FacturaEmitida[] | null>(null)
+  const [bajando, setBajando] = useState<string | null>(null)
 
   const leer = useCallback(async () => {
     try {
-      const d = await leerMes(mes)
+      const [d, f] = await Promise.all([leerMes(mes), leerFacturas(mes).catch(() => null)])
       setDatos(d)
+      setFacturas(f ? f.facturas : null)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo leer la facturación del mes.')
@@ -51,6 +56,7 @@ export function Facturacion() {
   function cambiarMes(m: string) {
     setMes(m)
     setDatos(null)
+    setFacturas(null)
     setElegidas(new Set())
     setResultado(null)
   }
@@ -106,6 +112,17 @@ export function Facturacion() {
       setError(e instanceof Error ? e.message : 'No se pudo facturar.')
     } finally {
       setTrabajando(false)
+    }
+  }
+
+  async function bajar(f: FacturaEmitida) {
+    setBajando(f.id)
+    try {
+      await descargarFactura(f)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo armar el PDF.')
+    } finally {
+      setBajando(null)
     }
   }
 
@@ -222,6 +239,39 @@ export function Facturacion() {
           </TableWrap>
         )}
       </SectionCard>
+
+      {facturas && facturas.length > 0 && (
+        <SectionCard title="Facturas del monitor" subtitle="Las que salieron de acá este mes, con su CAE. El PDF lleva el QR de ARCA.">
+          {(() => {
+            const faltan = [...new Set(facturas.flatMap((f) => faltanDelEmisor(EMISOR, f.marca) as string[]))]
+            return faltan.length > 0 && (
+              <Notice tone="warning" style={{ marginBottom: space[3] }}>Para imprimir faltan datos del emisor: {faltan.join(', ')}.</Notice>
+            )
+          })()}
+          <TableWrap>
+            <THead>
+              <Tr><Th>Comprobante</Th><Th>Fecha</Th><Th>Marca</Th><Th>Venta</Th><Th>CAE</Th><Th style={{ textAlign: 'right' }}>Total</Th><Th /></Tr>
+            </THead>
+            <TBody>
+              {facturas.map((f) => (
+                <Tr key={f.id}>
+                  <Td>{numeroComprobante(f)}</Td>
+                  <Td>{dia(f.fecha)}</Td>
+                  <Td>{MARCAS.find((m) => m.key === f.marca)?.label}</Td>
+                  <Td>{f.venta_numero || f.venta_id}</Td>
+                  <Td>{f.cae}</Td>
+                  <Td style={{ textAlign: 'right' }}>{pesos(f.total)}</Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    <Button variant="outline" size="sm" onClick={() => bajar(f)} disabled={bajando === f.id || faltanDelEmisor(EMISOR, f.marca).length > 0}>
+                      {bajando === f.id ? 'Armando…' : 'Descargar PDF'}
+                    </Button>
+                  </Td>
+                </Tr>
+              ))}
+            </TBody>
+          </TableWrap>
+        </SectionCard>
+      )}
     </div>
   )
 }

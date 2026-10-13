@@ -41,7 +41,13 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   mes, ⛔ el total); del navegador sólo viajan ids. Hoy sólo Factura B a consumidor final; la A
   (mayoristas, CUIT del cliente) falta.
 
+- 🔑 **El PDF** (`lib/arca/factura-pdf.ts`, botón en «Facturas del monitor») se arma en el navegador con la
+  fila de `facturas` tal como se le mandó a ARCA, ⛔ con la venta; el QR es el de la RG 4892
+  (`lib/arca/qr.core.js`). 🔴 ⛔ Sale sin los datos fiscales del emisor (`lib/arca/emisor.core.js`: razón
+  social, IIBB, inicio de actividades, domicilio de cada punto de venta): se copian de una factura de GN o
+  de la constancia de ARCA, ⛔ se inventan. Una de homologación sale sellada «SIN VALIDEZ FISCAL».
+
 ## Pendiente
 
-Factura A · nota de crédito desde la pantalla · PDF con QR · facturar desde la Caja · reabrir un mes ·
+Factura A · nota de crédito desde la pantalla · los datos del emisor para el PDF · facturar desde la Caja · reabrir un mes ·
 en producción: certificado, PV nuevos (contador) y las dos variables.

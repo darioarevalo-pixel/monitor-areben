@@ -4,6 +4,7 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
+import type { FacturaEmitida } from '@/lib/arca/factura-pdf'
 
 export type MarcaErp = 'bdi' | 'zattia'
 
@@ -50,6 +51,9 @@ const post = (body: Record<string, unknown>) => ({
 
 export const leerMes = (mes: string) =>
   pedir<MesFacturacion>(null, `&vista=facturacion&mes=${mes}&nc=${Date.now()}`, 'No se pudo leer la facturación del mes.')
+
+export const leerFacturas = (mes: string) =>
+  pedir<{ ambiente: string; facturas: FacturaEmitida[] }>(null, `&vista=facturas&mes=${mes}&nc=${Date.now()}`, 'No se pudieron leer las facturas del mes.')
 
 export const facturar = (mes: string, marca: MarcaErp, ventaIds: string[]) =>
   pedir<ResultadoLote>(post({ accion: 'facturar', mes, marca, ventaIds }), '', 'No se pudo facturar.')

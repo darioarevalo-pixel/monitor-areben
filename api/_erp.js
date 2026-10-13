@@ -7,6 +7,7 @@
  * construye). ⛔ alcanza con esconderlo del menú: acá se pide un CAE.
  *
  *   GET  ?recurso=erp&vista=facturacion&mes=YYYY-MM   el mes: techo, facturado, pendiente, ventas
+ *   GET  ?recurso=erp&vista=facturas&mes=YYYY-MM      las facturas del monitor del mes (para el PDF)
  *   POST {recurso:'erp', accion:'facturar', mes, marca, ventaIds}   factura esas ventas (un lote)
  *   POST {recurso:'erp', accion:'cerrar', mes}                      congela el techo del mes
  *
@@ -135,6 +136,38 @@ export async function facturarVentas({ mes, marca, ventaIds, usuario }) {
   }
 }
 
+/**
+ * Las facturas que el monitor emitió en el mes (autorizadas, del ambiente de hoy), con lo que el PDF
+ * necesita: la fila tal como se le mandó a ARCA y el número de la venta en GN para el renglón.
+ */
+export async function facturasDelMes(mes) {
+  const { ambiente, error } = ambienteSeguro()
+  if (!ambiente) return { status: 409, error }
+  const sb = baseFacturacion()
+  const facturas = await leerTodo(sb, 'facturas', (q) => q
+    .select('id, ambiente, marca, venta_id, tipo, pto_vta, numero, fecha, total, neto, iva, doc_tipo, doc_nro, cond_iva, estado, cae, cae_vence')
+    .eq('ambiente', ambiente).eq('mes', mes).eq('estado', 'autorizada').order('creado_en'))
+  const numeros = new Map()
+  for (const marca of MARCAS) {
+    const ids = [...new Set(facturas.filter((f) => f.marca === marca).map((f) => f.venta_id))]
+    if (!ids.length) continue
+    const { url, key } = cfgDeMarca(marca)
+    const b = createClient(url, key)
+    for (let i = 0; i < ids.length; i += 300) {
+      const { data, error: e } = await b.from('ventas').select('id, number').in('id', ids.slice(i, i + 300))
+      if (e) throw new Error(`ventas (${marca}): ${e.message}`)
+      for (const v of data) numeros.set(claveVenta(marca, v.id), v.number != null ? String(v.number) : null)
+    }
+  }
+  return {
+    ambiente,
+    facturas: facturas.map((f) => ({
+      ...f, total: Number(f.total), neto: Number(f.neto), iva: Number(f.iva), numero: Number(f.numero), doc_nro: Number(f.doc_nro),
+      venta_numero: numeros.get(claveVenta(f.marca, f.venta_id)) ?? null,
+    })),
+  }
+}
+
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res)
   if (!perfil) return
@@ -146,6 +179,11 @@ export default async function handler(req, res) {
   if (!/^\d{4}-\d{2}$/.test(mes)) return res.status(400).json({ error: 'Mes inválido' })
 
   try {
+    if (req.method === 'GET' && req.query.vista === 'facturas') {
+      const r = await facturasDelMes(mes)
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
     if (req.method === 'GET') {
       const m = await leerMes(mes)
       return res.status(200).json({
