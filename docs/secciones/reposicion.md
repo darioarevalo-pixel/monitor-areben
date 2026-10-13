@@ -1,9 +1,9 @@
 # Reposición — ficha de sección
 
-Sección `reposicion`, área `administracion`. Qué llevar del depósito al local y qué devolver. **Dos
-mundos en la misma pantalla:** BDI sigue con el mínimo fijo por categoría/modelo (`core.ts`, fundas);
-**Zattia repone según ventas** desde el 11-oct-2026 (`ReposicionZattia.tsx` + `porVentas.ts`), con
-selector **Zattia / Stunned**. Las reglas de Zattia las decidieron Darío y su socio ese día, medidas
+Sección `reposicion`, área `administracion`. Qué llevar del depósito al local y qué devolver. **Las
+dos marcas reponen según ventas** con la misma pantalla (`ReposicionZattia.tsx` + `porVentas.ts`):
+Zattia desde el 11-oct-2026 (con selector **Zattia / Stunned**) y **BDI desde el 12-oct** (ver «BDI»
+abajo). El mínimo fijo por categoría/modelo de `core.ts` quedó sin pantalla. Las reglas de Zattia las decidieron Darío y su socio ese día, medidas
 contra las ventas reales; la conversación entera está en la nota viva de Darío (Claude Docs).
 
 ## Dónde vive
@@ -70,6 +70,55 @@ columna.
 - Si «Actualizar stock» tarda, ⛔ no se pide tocar Recargar: la pantalla mira `sync_state` cada 30 s
   (hasta 10 min) y se pone al día sola.
 - ⚠️ Un día sin stock en el local cuenta como día sin venta: el sistema no guarda el stock día por día.
+
+## BDI (Darío, 12-oct-2026)
+
+«Hoy no se devuelven fundas y eso es lo que más me preocupa, porque se podrían vender»: la funda
+guardada en el local no se vende online (el online sale del Depósito Minorista). Todo se edita en
+Configurar; los defaults son `CFG_VENTAS_BDI`.
+
+- 🔑 Cuentan **sólo las ventas del local**. **Mínimo 1**; **2 en los modelos que venden ≥ 10 fundas
+  por semana** sumando diseños (hoy la línea 17) — umbral alto a propósito: se repone a diario.
+- ⛔ **Ese 2 exige que el DISEÑO venda** (`ventaDisenoMin`: 4 en 60 días, sumando todos sus modelos):
+  «FLUX CASE no vende nada de nada y pide 2». Un **diseño nuevo** (< `diasNuevo`) de un modelo de
+  venta alta arranca con 2 sin ventas; después se lo mide como a todos.
+- 🔑 La reserva **redondea** en BDI (`ceil` le daba 2 a ~500 variantes con una venta en 60 días).
+- 🔑 **Siempre queda `reservaDeposito` (1) en el depósito** para la venta online.
+- ⏸️ **Devolución EN PAUSA** (Darío, 12-oct-2026: «pendiente de analizar»): la pestaña no se muestra
+  en BDI. El cálculo está hecho (100 por día; la limpieza inicial medida ese día: ~1.400 fundas).
+- 🔑 **Vidrios que venden **≥ 2 por semana** (`umbralCaja`): POR CAJA de 10 — debajo, de a 1 («uno que vende 1 por mes no puede recibir una caja»)** (`cajaTemplado`). Se pide una caja
+  cuando en el local queda **una semana de venta** o menos (`diasPedidoTemplado` 7; Darío: «sino me pierdo ventas», sin excepciones por producto), y no se devuelve hasta
+  pasar de lo que deja una caja. Darío: salían «de a 1 o 2, una locura» y el del 17 Pro igual se
+  quedaba sin stock. Sin caja entera en el depósito, se lleva lo que hay. El que casi no vende, de a 1.
+  🔑 **La caja cerrada NO tiene etiqueta** (9D Premium y Antiespía Premium vienen de a 10 y se
+  etiquetan al abrirlas): en el armado ese renglón trae el botón **«Caja cerrada (+10)»** y no se
+  escanea (`LineaPedido.caja`, sólo en «llevar»). Las sueltas ya etiquetadas se escanean de a una.
+- Por caja van SÓLO el **9D Premium y el 9D Antiespía Premium** (`VIENE_EN_CAJA`). El **9D común** se está por discontinuar (de a 1). El **HIDROGEL** se compra directo al local y no pasa por el depósito: fuera de las listas (`REGLAS_NOMBRE_BDI`).
+- **Accesorios**: mínimo 1; los que venden **≥ 2 por semana** tienen en el local **lo de una semana** (`umbralAccesorio`/`diasAccesorio`; hoy el enchufe y el cable Lightning BDI ≈ 4). Darío: «vamos a ir agregando más accesorios y gadgets, es esencial que de todo haya la cantidad justa» → todo sale de las ventas, sin cargar nada por producto.
+- **Accesorio con variantes**: si el PRODUCTO (sumando variantes) vende ≥ 2 por semana, **2 de cada variante** (funda para cargador: 4,2/sem entre 5 diseños).
+- **Vidrios: mínimo 2 en el local** (`minimoTemplado`; Darío: «son muy baratos, lo peor sería no tener»; que no haya en el depósito es error de COMPRA, no de reposición).
+- `tipoBdi`: funda / templado / accesorio por prefijo de SKU (`F-`, `ATE-`, `AC-`/`SW-`) y, sin SKU,
+  por el nombre; el nombre «templado/hidrogel/vidrio» le gana al SKU (hay un vidrio cargado `AC-0057`). **Sólo las fundas suman al modelo** (los templados también dicen «iPhone 17 Pro»).
+- **Karen arma las DOS listas** con el lector en la compu del local (depósito 13307 → local 18393).
+  Sin «para exhibir», sin reglas por nombre y sin etiquetas: son de la ropa.
+- Los «topes por producto» viejos ⛔ no se aplican; los **no reponer** sí, y junto con las categorías
+  a ignorar (las lee Conteo) se editan en `OpcionesBdi.tsx`.
+
+## El correo de los lunes (BDI, 12-oct-2026)
+
+Lo que la reposición descubre y no puede resolver, porque son decisiones de Darío: «la reposición se
+ajusta sola; lo que hay que mirar es lo que ella no puede arreglar». `lib/reposicion/semanal.core.js`
+(puro, `tests/reposicion-semanal.test.ts`) · `scripts/reposicion-semanal.mjs` (sólo lee BDI) ·
+`.github/workflows/reposicion-semanal.yml` (cron de GitHub los lunes: que llegue tarde da igual).
+
+1. **Para comprar: se vende y no queda en el depósito**: ≥ 4 ventas minoristas en 60 días y depósito
+   ≤ 1 (la reserva online). ⛔ **Sin fundas** (casi todas se importan: no es compra de acá) ni el
+   HIDROGEL (va directo al local) ni el 9D común (`DISCONTINUADO`: se está por discontinuar). `tipoBdi` vive en `lib/reposicion/tipo-bdi.core.js` por los scripts.
+2. **No encontradas al armar**, últimos 7 días (si la tabla todavía no está, va sin esa lista).
+3. **Sin ninguna venta en 60 días** (ningún canal, alta de más de 60 días), **sólo el primer lunes del
+   mes**: de una semana a otra casi no cambia.
+
+Medido el 12-oct: 41 sin depósito (encabeza STELLAR 17 Pro, 4,3 por semana) y 39 productos sin ventas.
 
 ## Armar con el lector (tanda 1 del escaneo, 12-oct-2026)
 
@@ -169,7 +218,9 @@ completos**, con «ya faltó N veces en 14 días».
   Finalizar los números dicen **Escaneadas** (no se movió nada); después, **Transferidas**.
 - ⏱️ **La duración** = de «Iniciar armado» a «Finalizar» (`creado_en` → `cerrado_en`): si se abre la
   lista y se empieza a juntar más tarde, la duración sale inflada.
-- 📅 **Lunes a sábado** (Zattia; BDI repone de lunes a viernes, pero no usa el armado con lector).
+- 📅 **Un correo por marca**: Zattia de lunes a sábado y **BDI de lunes a viernes** (asunto «Reposición
+  BDI …»). Una marca sin ningún armado en 14 días no manda correo: así BDI no avisa «sin iniciar»
+  antes de estrenarlo. Si una marca falla, la otra sale igual.
   Los feriados no se saltean: ese día llega «sin iniciar».
 - Stunned aparece sólo si tuvo un armado ese día: no tiene rutina propia todavía.
 - 🔴 **El reloj es de Maketa** (`/api/cron/reposicion-monitor`, 13:00 UTC de lunes a sábado), igual que el parte de la

@@ -1,6 +1,7 @@
 name: Correo de la reposición (10:00)
 
-# Cómo quedó la reposición de Zattia cuando abre el local (Darío, 11/12-oct-2026). Sólo lee
+# Cómo quedó la reposición cuando abre el local (Darío, 11/12-oct-2026): un correo de Zattia (lunes a
+# sábado) y otro de BDI (lunes a viernes, desde el 12-oct). Sólo lee
 # `repo_armado` y manda el correo: no necesita syncs. Ficha: `docs/secciones/reposicion.md`.
 #
 # 🔴 ⛔ Tiene `schedule`, a propósito: los crons de GitHub de este repo llegan HORAS tarde (medido el
@@ -40,6 +41,8 @@ jobs:
         env:
           ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
           ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -53,6 +56,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: correo-html
-          path: correo.html
+          path: correo*.html
           if-no-files-found: ignore
           retention-days: 7

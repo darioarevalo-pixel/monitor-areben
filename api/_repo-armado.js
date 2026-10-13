@@ -5,7 +5,7 @@
 //   POST ?recurso=repo-armado  { action: 'abrir'|'guardar'|'cancelar'|'transferir'|'resolver', store, … }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` (12 funciones en Hobby).
-// ⛔ Sólo Zattia: BDI sigue con la transferencia a mano.
+// Zattia (con su línea Stunned) desde el 11-oct-2026 y BDI desde el 12-oct: cada uno en su base.
 //
 // 🔑 La ficha es `docs/secciones/reposicion.md`. Lo que no se adivina:
 // - **La transferencia sale al final y sólo con lo escaneado** (`armado.core.js`). Lo que no se
@@ -41,9 +41,14 @@ import {
  * 11-oct-2026 con la transferencia de prueba (7741/7742). ⚠️ En Zattia el depósito se llama
  * `Deposito ` con un espacio al final: por eso va por id y no por nombre.
  */
-const DEPOSITOS_GN = { zattia: { deposito: 18210, local: 11780 } }
+const DEPOSITOS_GN = {
+  zattia: { deposito: 18210, local: 11780 },
+  // BDI: «Deposito Minorista» → «Local». El «Deposito Mayorista» no entra en la reposición.
+  bdi: { deposito: 13307, local: 18393 },
+}
 
-const LINEAS = ['zattia', 'stunned']
+/** Las líneas de cada base: Stunned vive en la de Zattia (`docs/lineas.md`). */
+const LINEAS_DE = { zattia: ['zattia', 'stunned'], bdi: ['bdi'] }
 
 /**
  * 🔴 Lo máximo que se le espera a Gestión Nube, con reintentos de 429 incluidos. El servidor entero
@@ -64,7 +69,8 @@ export default async function handler(req, res) {
   const b = req.body || {}
   const store = String(req.query.store || b.store || '').toLowerCase()
   const accion = String(req.query.action || b.action || '')
-  if (store !== 'zattia') return res.status(400).json({ error: 'El armado con el lector es sólo de Zattia.' })
+  if (!LINEAS_DE[store]) return res.status(400).json({ error: 'store inválida (bdi o zattia)' })
+  const LINEAS = LINEAS_DE[store]
   // 🔴 `puedeVerAlguna` y ⛔ nunca `puedeVer` pelado: la `store` la elige el request.
   if (!puedeVerAlguna(perfil, store, ['reposicion'])) return res.status(403).json({ error: 'No tenés acceso a Reposición.' })
 
@@ -83,7 +89,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       if (accion === 'historial') {
         // El historial (Darío, 12-oct-2026): un renglón por armado, sin los descartados.
-        const linea = LINEAS.includes(req.query.linea) ? req.query.linea : 'zattia'
+        const linea = LINEAS.includes(req.query.linea) ? req.query.linea : LINEAS[0]
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 60, 1), 200)
         const { data, error } = await sb
           .from('repo_armado')
@@ -97,7 +103,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, armados: data || [] })
       }
       if (accion !== 'hoy') return res.status(400).json({ error: 'action inválida (usá hoy o historial)' })
-      const linea = LINEAS.includes(req.query.linea) ? req.query.linea : 'zattia'
+      const linea = LINEAS.includes(req.query.linea) ? req.query.linea : LINEAS[0]
       const sentido = SENTIDOS.includes(req.query.sentido) ? req.query.sentido : 'llevar'
       // Primero uno abierto (de cualquier día: uno que quedó de ayer sin cerrar tiene que verse), y
       // si no hay, el último de hoy que no se canceló.
@@ -118,7 +124,7 @@ export default async function handler(req, res) {
       const sentido = SENTIDOS.includes(b.sentido) ? b.sentido : null
       if (!id || !linea || !sentido) return res.status(400).json({ error: 'faltan id, línea o sentido' })
       const pedido = sanearPedido(b.pedido)
-      if (!pedido.length) return res.status(400).json({ error: 'No hay prendas para reponer.' })
+      if (!pedido.length) return res.status(400).json({ error: 'La lista está vacía.' })
       const row = { id, store, linea, sentido, fecha: fechaAR(), persona: perfil.name || null, estado: 'en_curso', pedido }
       const { error } = await sb.from('repo_armado').insert(row)
       if (error) {
@@ -200,7 +206,7 @@ async function transferir(sb, res, armado, b, perfil) {
   if (armado.estado !== 'en_curso') return res.status(409).json({ error: 'Este armado ya se cerró.', armado })
   const token = GN_TOKENS[armado.store]
   const dep = DEPOSITOS_GN[armado.store]
-  if (!token || !dep) return res.status(500).json({ error: 'Falta la clave de Gestión Nube de Zattia en el servidor.' })
+  if (!token || !dep) return res.status(500).json({ error: `Falta la clave de Gestión Nube de ${armado.store === 'bdi' ? 'BDI' : 'Zattia'} en el servidor.` })
 
   const seguir = b.seguir === true
   const previo = armado.transfer || {}
@@ -221,7 +227,7 @@ async function transferir(sb, res, armado, b, perfil) {
       if (error) throw new Error(error.message)
       return res.status(200).json({ ok: true, transfer: previo, tanda: null })
     }
-    return res.status(400).json({ error: 'No hay prendas escaneadas para transferir.' })
+    return res.status(400).json({ error: 'No hay nada escaneado para transferir.' })
   }
   const unidades = Object.values(pendiente).reduce((x, n) => x + n, 0)
 

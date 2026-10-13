@@ -1,6 +1,6 @@
 -- Reposición: el ARMADO con el lector — lo que se pidió, lo que se escaneó y la transferencia en GN.
--- Correr en el proyecto Supabase de ZATTIA (`node scripts/apply-repo-armado.mjs`). BDI no lo usa:
--- sus fundas siguen con la transferencia a mano.
+-- Correr en el proyecto Supabase de ZATTIA y en el de BDI (BDI desde el 12-oct-2026: Karen arma la
+-- reposición y la devolución de fundas con el lector). Se pega entero en el SQL Editor de cada uno.
 --
 -- 🔑 POR QUÉ EXISTE (Darío, 11/12-oct-2026). Hasta acá Lorena juntaba con el papel y después
 -- escaneaba en la app de Gestión Nube para hacer la transferencia. GN no sabe qué se pidió: si se
@@ -21,8 +21,8 @@
 
 create table if not exists repo_armado (
   id            text primary key,                   -- lo genera la compu (`ra<epoch>_<azar>`)
-  store         text not null,                      -- 'zattia'
-  linea         text not null default 'zattia',     -- 'zattia' | 'stunned'
+  store         text not null,                      -- 'zattia' | 'bdi'
+  linea         text not null default 'zattia',     -- 'zattia' | 'stunned' | 'bdi'
   sentido       text not null default 'llevar',     -- 'llevar' (depósito → local) | 'devolver' (tanda 2)
   fecha         date not null,                      -- el día del armado, hora de Argentina
   persona       text,                               -- 🔑 sale de perfil.name, NUNCA del body

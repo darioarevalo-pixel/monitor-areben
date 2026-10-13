@@ -349,3 +349,14 @@ describe('sin etiqueta de precio: cada unidad con alarma (Darío, 12-oct)', () =
     }
   })
 })
+
+describe('la caja cerrada de vidrios (BDI, 12-oct-2026)', () => {
+  it('el servidor conserva el tamaño de la caja y descarta uno inválido', () => {
+    const [a, b] = sanearPedido([
+      { pid: '1', sid: '1', name: 'TEMPLADO 9D PREMIUM', cant: 10, caja: 10 },
+      { pid: '2', sid: '1', name: 'FUNDA', cant: 1, caja: 'x' },
+    ])
+    expect(a.caja).toBe(10)
+    expect('caja' in b).toBe(false)
+  })
+})

@@ -1,7 +1,19 @@
 /**
- * Reposición de Zattia **según ventas**: cuánto tiene que haber de cada variante en el local, qué
- * llevar desde el depósito y qué devolver. Puro, sin DOM ni red. BDI no pasa por acá: sus fundas
- * siguen con el mínimo por modelo de `core.ts`.
+ * Reposición **según ventas** (Zattia desde el 11-oct-2026, BDI desde el 12-oct): cuánto tiene que
+ * haber de cada variante en el local, qué llevar desde el depósito y qué devolver. Puro, sin DOM ni
+ * red. El mínimo fijo por modelo de `core.ts` quedó sin pantalla.
+ *
+ * # BDI (Darío, 12-oct-2026)
+ *
+ * - **Mínimo 1 por variante** y **2 para los modelos de iPhone que más venden** (`umbralModelo`
+ *   fundas por semana en el local, sumando todos los diseños del modelo; empezó en 10 = la línea 17),
+ *   ⛔ **siempre que el diseño venda** (`ventaDisenoMin` en 60 días, sumando sus modelos): un diseño
+ *   que no vende no lleva 2 aunque su modelo sea el que más vende.
+ *   «Hoy no se devuelven fundas y eso es lo que más me preocupa, porque se podrían vender»: la funda
+ *   guardada en el local no se vende online, la del depósito sí.
+ * - **Siempre queda `reservaDeposito` (1) en el depósito**: la venta online sale de ahí.
+ * - Cuentan **sólo las ventas del local** (`ventasLocal`): el online no descuenta del local.
+ * - Ni «para exhibir» ni «todo exhibido» por nombre: son de la ropa.
  *
  * # Las reglas (Darío, 11-oct-2026 — la nota viva está en la memoria del proyecto)
  *
@@ -24,6 +36,7 @@
  */
 
 import { ubicCmp } from './core'
+import { tipoBdi as tipoBdiJs } from './tipo-bdi.core.js'
 import type { RepoCfg, RepoItem } from './tipos'
 
 export type Modo = 'ventas' | 'exhibido' | 'fija'
@@ -48,6 +61,41 @@ export type CfgVentas = {
   topeDevolucion: number
   /** Antes de esta edad (días) un producto no se devuelve. */
   diasNuevo: number
+  /**
+   * Piso para las fundas de los modelos de iPhone que más venden (BDI). 0 = no hay piso por modelo
+   * (Zattia). Un modelo «vende» con `umbralModelo` fundas o más por semana, sumando sus diseños.
+   */
+  minimoModelo: number
+  umbralModelo: number
+  /**
+   * Y el DISEÑO tiene que vender: el piso del modelo vale sólo si el producto (sumando todos sus
+   * modelos) vendió esto o más en la ventana. Darío, 12-oct-2026: «FLUX CASE no vende nada de nada y
+   * pide 2» — el modelo vendía, el diseño no.
+   */
+  ventaDisenoMin: number
+  /** Unidades que siempre quedan en el depósito (BDI: la venta online sale de ahí). */
+  reservaDeposito: number
+  /**
+   * BDI, vidrios templados que venden: se llevan **por caja** (10), no de a 1 o 2 (Darío, 12-oct-2026:
+   * «una locura»). Se pide cuando en el local quedan `diasPedidoTemplado` días de venta o menos. 0 o 1
+   * = sin caja (la regla común).
+   */
+  cajaTemplado: number
+  diasPedidoTemplado: number
+  /**
+   * Desde cuántos vidrios por semana se lleva por caja. Debajo, de a 1 como las fundas: uno que vende
+   * 1 por mes no puede recibir una caja de 10 (Darío, 12-oct-2026). Con 2, la caja dura 5 semanas o menos.
+   */
+  umbralCaja: number
+  /** Piso de los vidrios (BDI): son baratos y «lo peor sería no tener» (Darío, 12-oct-2026). 0 = sin piso propio. */
+  minimoTemplado: number
+  /**
+   * BDI, accesorios que venden `umbralAccesorio` o más por semana: en el local, lo que se vende en
+   * `diasAccesorio` días (Darío, 12-oct-2026: «vamos a ir agregando más accesorios y gadgets, es
+   * esencial que de todo haya la cantidad justa»). Sale solo de las ventas: un gadget nuevo entra solo.
+   */
+  umbralAccesorio: number
+  diasAccesorio: number
   modosCat: Record<string, MarcaModo>
   modosProd: Record<string, MarcaModo>
   /**
@@ -73,19 +121,86 @@ export const CFG_VENTAS_DEFAULT: CfgVentas = {
   loteMin: 1,
   topeDevolucion: 30,
   diasNuevo: 21,
+  minimoModelo: 0,
+  umbralModelo: 0,
+  ventaDisenoMin: 0,
+  cajaTemplado: 0,
+  diasPedidoTemplado: 3,
+  umbralCaja: 2,
+  minimoTemplado: 0,
+  umbralAccesorio: 0,
+  diasAccesorio: 7,
+  reservaDeposito: 0,
   modosCat: {},
   modosProd: {},
   sinPrecio: {},
 }
 
-/** Las dos líneas de Zattia: cada una con su config (`ventas` / `ventasStunned`). */
-export type LineaZ = 'zattia' | 'stunned'
-export const CAMPO_LINEA: Record<LineaZ, 'ventas' | 'ventasStunned'> = { zattia: 'ventas', stunned: 'ventasStunned' }
+/**
+ * BDI (Darío, 12-oct-2026), medido con 60 días de ventas del local: de 1.834 variantes con stock,
+ * 1.330 no vendieron ninguna en el local. Con mínimo 1 y 2 para la línea 17, el primer día hay unas
+ * 1.100 fundas para devolver y ~150 para llevar. Devolución de a 100 por día; se repone de lunes a
+ * viernes, todos los días.
+ */
+export const CFG_VENTAS_BDI: CfgVentas = {
+  ...CFG_VENTAS_DEFAULT,
+  minimo: 2,
+  minimoBajo: 1,
+  topeDevolucion: 100,
+  minimoModelo: 2,
+  umbralModelo: 10,
+  ventaDisenoMin: 4,
+  reservaDeposito: 1,
+  cajaTemplado: 10,
+  // Una semana (Darío, 12-oct-2026: «sino me pierdo ventas»): una regla que se entiende sola y cubre
+  // el fin de semana sin reposición con margen.
+  diasPedidoTemplado: 7,
+  umbralCaja: 2,
+  minimoTemplado: 2,
+  umbralAccesorio: 2,
+  diasAccesorio: 7,
+}
+
+/** Las líneas que reponen: las dos de Zattia (`ventas` / `ventasStunned`) y BDI (`ventas` de su propia config). */
+export type LineaZ = 'zattia' | 'stunned' | 'bdi'
+export const CAMPO_LINEA: Record<LineaZ, 'ventas' | 'ventasStunned'> = { zattia: 'ventas', stunned: 'ventasStunned', bdi: 'ventas' }
 
 /** La config de ventas de una línea con los defaults rellenos (lo guardado puede ser de una versión anterior). */
 export function cfgVentas(cfg: RepoCfg, linea: LineaZ = 'zattia'): CfgVentas {
   const v = cfg[CAMPO_LINEA[linea]] || {}
-  return { ...CFG_VENTAS_DEFAULT, ...v, modosCat: { ...(v.modosCat || {}) }, modosProd: { ...(v.modosProd || {}) }, sinPrecio: { ...(v.sinPrecio || {}) } }
+  const base = linea === 'bdi' ? CFG_VENTAS_BDI : CFG_VENTAS_DEFAULT
+  return { ...base, ...v, modosCat: { ...(v.modosCat || {}) }, modosProd: { ...(v.modosProd || {}) }, sinPrecio: { ...(v.sinPrecio || {}) } }
+}
+
+export type TipoBdi = 'funda' | 'templado' | 'accesorio'
+
+/** Funda, vidrio o accesorio: la regla vive en `tipo-bdi.core.js` (la usan también los scripts). */
+export const tipoBdi = tipoBdiJs as (it: Pick<RepoItem, 'name' | 'sku'>) => TipoBdi
+
+/**
+ * Las fundas con modelo de iPhone en el talle. Los templados también dicen «iPhone 17 Pro»: si
+ * sumaran al modelo, el 15 pasaba el umbral por los vidrios.
+ */
+export function esFundaDeModelo(it: Pick<RepoItem, 'name' | 'modelo' | 'sku'>): boolean {
+  return !!it.modelo && tipoBdi(it) === 'funda'
+}
+
+/** Unidades vendidas de cada producto en la ventana, sumando todos sus modelos. */
+export function ventaPorDiseno(inv: RepoItem[]): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const it of inv) out[String(it.pid)] = (out[String(it.pid)] || 0) + (it.vv || 0)
+  return out
+}
+
+/** Fundas vendidas por semana de cada modelo de iPhone, sumando todos sus diseños. */
+export function ventaPorModelo(inv: RepoItem[], ventanaDias: number): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const it of inv) {
+    if (!esFundaDeModelo(it)) continue
+    out[it.modelo!] = (out[it.modelo!] || 0) + (it.vv || 0)
+  }
+  for (const k of Object.keys(out)) out[k] = r1((out[k] / Math.max(1, ventanaDias)) * 7)
+  return out
 }
 
 /**
@@ -97,15 +212,27 @@ export const REGLAS_NOMBRE: { re: RegExp; motivo: string }[] = [
   { re: /^\s*ACCESORIO/i, motivo: 'Accesorio' },
 ]
 
+/**
+ * BDI: el HIDROGEL se vende sólo en el local y cuando se compra va DIRECTO al local (Darío,
+ * 12-oct-2026): no pasa por el depósito, así que no se repone ni se devuelve.
+ */
+export const REGLAS_NOMBRE_BDI: { re: RegExp; motivo: string }[] = [{ re: /HIDROGEL/i, motivo: 'Hidrogel: va directo al local' }]
+
+/**
+ * Los vidrios que vienen en CAJA CERRADA de 10: el 9D Premium y el 9D Antiespía Premium (Darío,
+ * 12-oct-2026). El 9D común se está por discontinuar y los automáticos / con colocador no vienen así.
+ */
+export const VIENE_EN_CAJA = /9D.*PREMIUM/i
+
 const vigente = (m: MarcaModo | undefined, hoy: string): m is MarcaModo => !!m && (!m.hasta || m.hasta >= hoy)
 
 export type ModoResuelto = { modo: Modo; n?: number; origen: 'producto' | 'nombre' | 'categoría' | 'normal'; motivo: string }
 
-/** Qué regla manda para esta variante: producto > nombre > categoría > según ventas. */
-export function modoDe(it: Pick<RepoItem, 'pid' | 'name' | 'cat'>, cv: CfgVentas, hoy: string): ModoResuelto {
+/** Qué regla manda para esta variante: producto > nombre > categoría > según ventas. Las reglas por nombre son de Zattia. */
+export function modoDe(it: Pick<RepoItem, 'pid' | 'name' | 'cat'>, cv: CfgVentas, hoy: string, porNombre = true): ModoResuelto {
   const p = cv.modosProd[String(it.pid)]
   if (vigente(p, hoy)) return { modo: p.modo, n: p.n, origen: 'producto', motivo: p.motivo || 'marcado a mano' }
-  const regla = REGLAS_NOMBRE.find((r) => r.re.test(it.name || ''))
+  const regla = (porNombre ? REGLAS_NOMBRE : REGLAS_NOMBRE_BDI).find((r) => r.re.test(it.name || ''))
   if (regla) return { modo: 'exhibido', origen: 'nombre', motivo: regla.motivo }
   const c = cv.modosCat[it.cat]
   if (vigente(c, hoy)) return { modo: c.modo, n: c.n, origen: 'categoría', motivo: c.motivo || it.cat }
@@ -126,6 +253,8 @@ export type Decision = {
   exhibir: boolean
   /** Sin etiqueta de precio: cada unidad que va al local sale con alarma, ninguna con etiquetas. */
   soloAlarma: boolean
+  /** BDI, vidrios: se lleva por caja de este tamaño (las cajas cerradas no tienen etiqueta). */
+  caja?: number
   nuevo: boolean
   /** Cuánto tiene que haber en el local. `null` = todo exhibido (no aplica). */
   objetivo: number | null
@@ -143,8 +272,18 @@ const r1 = (n: number) => Math.round(n * 10) / 10
  * `vendidas` = ventas de la variante en `cv.ventanaDias` (local + Tienda Nube). `diasVivo` del
  * producto, si se sabe, achica el denominador de lo nuevo.
  */
-export function decidir(it: RepoItem, cfg: RepoCfg, cv: CfgVentas, hoy: string): Decision {
-  const modo = modoDe(it, cv, hoy)
+export type Contexto = {
+  /** BDI: sin reglas por nombre ni «para exhibir», y la reserva redondea (ver abajo). */
+  bdi?: boolean
+  /** Fundas por semana de cada modelo (`ventaPorModelo`), para el piso por modelo. */
+  ventaModelo?: Record<string, number>
+  /** Unidades vendidas de cada producto (todos sus modelos) en la ventana (`ventaPorDiseno`). */
+  ventaDiseno?: Record<string, number>
+}
+
+export function decidir(it: RepoItem, cfg: RepoCfg, cv: CfgVentas, hoy: string, ctx: Contexto = {}): Decision {
+  const bdi = !!ctx.bdi
+  const modo = modoDe(it, cv, hoy, !bdi)
   const vendidas = it.vv || 0
   const vivo = it.diasVivo ?? null
   const dias = Math.max(1, vivo != null ? Math.min(cv.ventanaDias, vivo) : cv.ventanaDias)
@@ -173,15 +312,56 @@ export function decidir(it: RepoItem, cfg: RepoCfg, cv: CfgVentas, hoy: string):
     // Si «vende» o «vende poco» se decide con la ventana larga: una sola venta en la semana no
     // puede cambiarle el piso a una variante. La última semana sólo sube la reserva de lo que se
     // disparó (y ahí sí es `pico`).
-    const piso = porDiaLargo * 7 >= cv.umbralSemana ? cv.minimo : cv.minimoBajo
-    const resLargo = Math.ceil(porDiaLargo * cv.coberturaDias)
-    const resCorto = Math.ceil(porDiaCorto * cv.coberturaDias)
+    let piso = porDiaLargo * 7 >= cv.umbralSemana ? cv.minimo : cv.minimoBajo
+    // El piso del modelo (BDI): las fundas de los modelos que más venden llevan `minimoModelo`.
+    const ventaMod = esFundaDeModelo(it) ? ctx.ventaModelo?.[it.modelo!] : undefined
+    // Un diseño NUEVO no tiene ventas todavía: en un modelo de venta alta arranca con el piso del modelo
+    // (Darío, 12-oct-2026: un lanzamiento del 17 Pro no puede entrar al local con 1 sola). Pasados
+    // `diasNuevo` días se lo mide como a todos.
+    const nuevoDiseno = it.diasVivo != null && it.diasVivo < cv.diasNuevo
+    const disenoVende = nuevoDiseno || (ctx.ventaDiseno?.[String(it.pid)] ?? 0) >= cv.ventaDisenoMin
+    const modeloAlto = cv.minimoModelo > 0 && ventaMod != null && ventaMod >= cv.umbralModelo && disenoVende && cv.minimoModelo > piso
+    if (modeloAlto) piso = cv.minimoModelo
+    if (bdi && cv.minimoTemplado > piso && tipoBdi(it) === 'templado') piso = cv.minimoTemplado
+    // Accesorio con variantes (BDI): si el PRODUCTO, sumando sus variantes, vende `umbralAccesorio` o
+    // más por semana, cada variante lleva `minimo` (2). Darío, 12-oct-2026, con la funda para cargador:
+    // 4,2 por semana entre 5 diseños, ninguno llegaba solo a 1 por semana.
+    const prodSemana = ((ctx.ventaDiseno?.[String(it.pid)] ?? 0) / Math.max(1, cv.ventanaDias)) * 7
+    const productoVende = bdi && cv.umbralAccesorio > 0 && prodSemana >= cv.umbralAccesorio && cv.minimo > piso && tipoBdi(it) === 'accesorio'
+    if (productoVende) piso = cv.minimo
+    // 🔑 En BDI la reserva REDONDEA y no sube al entero siguiente: con mínimo 1, `ceil` le daba 2 a
+    // cualquier funda que vendió una sola vez en 60 días (~500 variantes), y se repone todos los
+    // días. En Zattia el piso ya es 2 o 3, y `ceil` es lo que se midió el 11-oct: no se toca.
+    const redondear = bdi ? Math.round : Math.ceil
+    const resLargo = redondear(porDiaLargo * cv.coberturaDias)
+    const resCorto = redondear(porDiaCorto * cv.coberturaDias)
     const reserva = Math.max(piso - 1, resLargo, resCorto)
     objetivo = 1 + reserva
     pico = resCorto > Math.max(piso - 1, resLargo)
+    // Accesorio que vende (BDI): que alcance una semana en el local.
+    let semanaAccesorio = false
+    if (bdi && cv.umbralAccesorio > 0 && porDia * 7 >= cv.umbralAccesorio && tipoBdi(it) === 'accesorio') {
+      const semana = Math.ceil(porDia * cv.diasAccesorio)
+      if (semana > objetivo) {
+        objetivo = semana
+        semanaAccesorio = true
+      }
+    }
     // El motivo dice sólo lo que las columnas no dicen (Darío, 12-oct: «muy repetitivo»): la venta
     // semanal y el stock ideal ya están al lado. El caso normal (el mínimo) va vacío.
-    porque = vendidas === 0 ? `Sin ventas en ${dias} días` : pico ? `Pico de venta: ${it.s7} esta semana` : objetivo > piso ? 'Reserva por ventas' : ''
+    porque = semanaAccesorio
+      ? `Lo que se vende en ${cv.diasAccesorio} días`
+      : pico
+      ? `Pico de venta: ${it.s7} esta semana`
+      : objetivo > piso
+        ? 'Reserva por ventas'
+        : productoVende
+          ? `El producto vende ${r1(prodSemana).toLocaleString('es-AR')} por semana`
+        : modeloAlto
+          ? `Modelo de venta alta (${it.modelo}: ${ventaMod!.toLocaleString('es-AR')} por semana)`
+          : vendidas === 0
+            ? `Sin ventas en ${dias} días`
+            : ''
   }
   // ⛔ Los «topes por producto» de la pantalla vieja NO se aplican acá (Darío, 11-oct-2026: «con
   // estos cambios queda completamente anticuado»): se pusieron para el mínimo fijo por categoría y
@@ -189,17 +369,37 @@ export function decidir(it: RepoItem, cfg: RepoCfg, cv: CfgVentas, hoy: string):
   // BDI los usa. Para un número a mano en Zattia está «cantidad fija». Los apagados sí se respetan.
 
   const apagado = cfg.apagados.map(String).includes(String(it.pid))
+  // Lo que se puede sacar del depósito sin tocar la reserva para la venta online (BDI).
+  const disponible = Math.max(0, it.deposito - cv.reservaDeposito)
+
+  // 🔑 BDI, vidrios que venden: POR CAJA. «Cuándo pedir» (quedan `diasPedidoTemplado` días de venta)
+  // separado de «cuánto traer» (cajas enteras). Con la regla común salían de a 1 o 2 por día y el del
+  // 17 Pro igual se quedaba sin stock. No se devuelve mientras no pase de lo que deja una caja.
+  if (bdi && cv.cajaTemplado > 1 && modo.modo === 'ventas' && tipoBdi(it) === 'templado' && VIENE_EN_CAJA.test(it.name || '') && porDia * 7 >= cv.umbralCaja) {
+    const punto = Math.max(objetivo, Math.ceil(porDia * cv.diasPedidoTemplado))
+    const tope = punto + cv.cajaTemplado
+    let llevarT = 0
+    if (!apagado && it.local <= punto && disponible > 0) {
+      const cajas = Math.ceil((punto + 1 - it.local) / cv.cajaTemplado)
+      // Si en el depósito no hay una caja entera, se lleva lo que hay.
+      llevarT = Math.min(cajas * cv.cajaTemplado, disponible)
+    }
+    const devolverT = !nuevo && it.local > tope ? it.local - tope : 0
+    const porqueT = `Caja de ${cv.cajaTemplado}: se pide con ${punto} o menos en el local`
+    return { ...base, porSemana: r1(porDia * 7), pico, objetivo: tope, llevar: llevarT, devolver: devolverT, porque: porqueT, exhibir: false, caja: cv.cajaTemplado }
+  }
+
   const falta = objetivo - it.local
   let llevar = 0
-  if (!apagado && falta > 0 && it.deposito > 0) {
+  if (!apagado && falta > 0 && disponible > 0) {
     // Con `loteMin` > 1 no se camina el depósito por una sola, salvo que quede sólo la exhibida.
-    if (falta >= cv.loteMin || it.local <= 1) llevar = Math.min(falta, it.deposito)
+    if (falta >= cv.loteMin || it.local <= 1) llevar = Math.min(falta, disponible)
   }
   const devolver = !nuevo && it.local > objetivo ? it.local - objetivo : 0
   if (nuevo && it.local > objetivo) porque = [porque, 'Producto nuevo: no se devuelve'].filter(Boolean).join(' · ')
   // La columna «Vende x sem.» muestra el ritmo que decidió: el de la semana si se disparó, si no el largo.
   const ritmoSemana = r1((pico ? porDiaCorto : porDiaLargo) * 7)
-  return { ...base, porSemana: ritmoSemana, pico, objetivo, llevar, devolver, porque, exhibir: !soloAlarma && llevar > 0 && it.local <= 0, soloAlarma: soloAlarma && llevar > 0 }
+  return { ...base, porSemana: ritmoSemana, pico, objetivo, llevar, devolver, porque, exhibir: !bdi && !soloAlarma && llevar > 0 && it.local <= 0, soloAlarma: soloAlarma && llevar > 0 }
 }
 
 export type FilaVentas = { it: RepoItem; d: Decision }
@@ -207,7 +407,9 @@ export type FilaVentas = { it: RepoItem; d: Decision }
 /** Todas las decisiones, una por variante con stock, con la config de la línea. */
 export function decidirTodo(inv: RepoItem[], cfg: RepoCfg, hoy: string, linea: LineaZ = 'zattia'): FilaVentas[] {
   const cv = cfgVentas(cfg, linea)
-  return inv.filter((it) => it.local > 0 || it.deposito > 0).map((it) => ({ it, d: decidir(it, cfg, cv, hoy) }))
+  const bdi = linea === 'bdi'
+  const ctx: Contexto = cv.minimoModelo > 0 ? { bdi, ventaModelo: ventaPorModelo(inv, cv.ventanaDias), ventaDiseno: ventaPorDiseno(inv) } : { bdi }
+  return inv.filter((it) => it.local > 0 || it.deposito > 0).map((it) => ({ it, d: decidir(it, cfg, cv, hoy, ctx) }))
 }
 
 /**

@@ -81,3 +81,18 @@ describe('correo de la reposición', () => {
     expect(c.html).toContain('&lt;b&gt;X&lt;/b&gt;')
   })
 })
+
+describe('el correo de BDI (12-oct-2026)', () => {
+  it('lleva la marca en el asunto, sólo la línea BDI y el enlace a BDI', () => {
+    const c = armarCorreo({ hoy: '2026-10-13', armados: [], anteriores: [], marca: 'bdi' })
+    expect(c.asunto).toBe('⚠️ Reposición BDI 13-oct: sin iniciar')
+    expect(c.secciones.map((s) => s.linea)).toEqual(['bdi'])
+    expect(c.texto).toContain('/reposicion?m=bdi')
+    expect(c.html).toContain('BDI · ')
+  })
+  it('el de Zattia no cambia', () => {
+    const c = armarCorreo({ hoy: '2026-10-13', armados: [], anteriores: [] })
+    expect(c.asunto).toBe('⚠️ Reposición 13-oct: sin iniciar')
+    expect(c.texto).toContain('/reposicion?m=zattia')
+  })
+})

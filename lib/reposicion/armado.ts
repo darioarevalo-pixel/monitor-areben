@@ -13,7 +13,23 @@ import type { RepoItem } from './tipos'
 
 export { codigoArmado, fechaAR, motivoRechazo, resumenArmado, trabado, transferidoDe } from './armado.core.js'
 
-export type LineaPedido = { vid: string; pid: string; sid: string; sku: string; barcode: string; name: string; size: string; cant: number; exhibir: boolean; soloAlarma?: boolean }
+export type LineaPedido = {
+  vid: string
+  pid: string
+  sid: string
+  sku: string
+  barcode: string
+  name: string
+  size: string
+  cant: number
+  exhibir: boolean
+  soloAlarma?: boolean
+  /**
+   * Vidrios de BDI que van por caja: la caja cerrada NO tiene etiqueta (se etiqueta al abrirla, Darío
+   * 12-oct-2026), así que no se puede escanear: se suma con el botón «Caja cerrada».
+   */
+  caja?: number
+}
 export type MotivoFaltante = 'no-estaba' | 'despues' | 'rechazada'
 export type EstadoArmado = 'en_curso' | 'transfiriendo' | 'transferido' | 'revisar' | 'cancelado'
 export type Sentido = 'llevar' | 'devolver'
@@ -49,7 +65,7 @@ export type Armado = {
 }
 
 /** Lo que se congela al empezar: la lista de «Llevar» tal como está en pantalla (con lo corregido a mano). */
-export function pedidoDesde(filas: FilaVentas[], cantidad: (f: FilaVentas) => number): LineaPedido[] {
+export function pedidoDesde(filas: FilaVentas[], cantidad: (f: FilaVentas) => number, conCaja = false): LineaPedido[] {
   return filas
     .map((f) => ({
       vid: f.it.vid,
@@ -62,6 +78,7 @@ export function pedidoDesde(filas: FilaVentas[], cantidad: (f: FilaVentas) => nu
       cant: cantidad(f),
       exhibir: f.d.exhibir,
       soloAlarma: f.d.soloAlarma,
+      ...(conCaja && f.d.caja ? { caja: f.d.caja } : {}),
     }))
     .filter((l) => l.cant > 0)
 }
@@ -122,7 +139,13 @@ export function frase(l: Extract<Lectura, { tipo: 'suma' }>): string | undefined
 
 // ─── El servidor ────────────────────────────────────────────────────────────────────────────────
 
-const API = '/api/datos?recurso=repo-armado&store=zattia'
+/** La base de cada línea: Stunned vive en la de Zattia (`docs/lineas.md`), BDI en la suya. */
+export const storeDeLinea = (linea: LineaZ): 'bdi' | 'zattia' => (linea === 'bdi' ? 'bdi' : 'zattia')
+/** Cómo se llama lo que se arma: unidades en BDI (fundas, vidrios y accesorios), prendas en Zattia. */
+export function articuloDe(linea: LineaZ): { singular: string; plural: string; ninguna: string } {
+  return linea === 'bdi' ? { singular: 'unidad', plural: 'unidades', ninguna: 'ningún producto' } : { singular: 'prenda', plural: 'prendas', ninguna: 'ninguna prenda' }
+}
+const API = (linea: LineaZ) => `/api/datos?recurso=repo-armado&store=${storeDeLinea(linea)}`
 
 export class ErrorArmado extends Error {
   status: number
@@ -148,18 +171,18 @@ async function pedir<T>(url: string, init?: RequestInit): Promise<T> {
   return d as T
 }
 
-const escribir = <T = { ok: true }>(action: string, datos: Record<string, unknown>) =>
-  pedir<T>(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, store: 'zattia', ...datos }) })
+const escribir = <T = { ok: true }>(linea: LineaZ, action: string, datos: Record<string, unknown>) =>
+  pedir<T>(API(linea), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, store: storeDeLinea(linea), ...datos }) })
 
 /** El armado abierto (de cualquier día) o, si no hay, el último de hoy. `null` si no hay ninguno. */
 export async function leerArmadoHoy(linea: LineaZ, sentido: Sentido): Promise<Armado | null> {
-  const d = await pedir<{ armado: Armado | null }>(`${API}&action=hoy&linea=${linea}&sentido=${sentido}&nc=${Date.now()}`)
+  const d = await pedir<{ armado: Armado | null }>(`${API(linea)}&action=hoy&linea=${linea}&sentido=${sentido}&nc=${Date.now()}`)
   return d.armado
 }
 
 /** Los últimos armados de la línea (sin los descartados), del más nuevo al más viejo. */
 export async function leerHistorial(linea: LineaZ, limit = 60): Promise<Armado[]> {
-  const d = await pedir<{ armados: Armado[] }>(`${API}&action=historial&linea=${linea}&limit=${limit}&nc=${Date.now()}`)
+  const d = await pedir<{ armados: Armado[] }>(`${API(linea)}&action=historial&linea=${linea}&limit=${limit}&nc=${Date.now()}`)
   return d.armados || []
 }
 
@@ -203,18 +226,18 @@ export function masNoEncontradas(armados: Armado[], tope = 10): { vid: string; n
 
 export async function abrirArmado(linea: LineaZ, sentido: Sentido, pedido: LineaPedido[]): Promise<{ armado: Armado; yaHabia?: boolean }> {
   const id = `ra${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-  return escribir('abrir', { id, linea, sentido, pedido })
+  return escribir(linea, 'abrir', { id, linea, sentido, pedido })
 }
 
-export const guardarArmado = (id: string, escaneos: Record<string, number>, faltantes: Record<string, MotivoFaltante>) => escribir('guardar', { id, escaneos, faltantes })
-export const cancelarArmado = (id: string) => escribir('cancelar', { id })
-export const resolverArmado = (id: string, hecha: boolean, transfer_id?: string) => escribir('resolver', { id, hecha, transfer_id })
+export const guardarArmado = (linea: LineaZ, id: string, escaneos: Record<string, number>, faltantes: Record<string, MotivoFaltante>) => escribir(linea, 'guardar', { id, escaneos, faltantes })
+export const cancelarArmado = (linea: LineaZ, id: string) => escribir(linea, 'cancelar', { id })
+export const resolverArmado = (linea: LineaZ, id: string, hecha: boolean, transfer_id?: string) => escribir(linea, 'resolver', { id, hecha, transfer_id })
 
 export type Rechazado = { vid: string; reason: string | null }
 
 /** Hace la transferencia en Gestión Nube con lo escaneado. 422 = GN rechazó renglones y no movió nada. */
-export async function transferirArmado(id: string, escaneos: Record<string, number>, faltantes: Record<string, MotivoFaltante>, seguir = false) {
-  return escribir<{ ok: true; transfer: NonNullable<Armado['transfer']>; tanda: { transfer_id: string | number | null; unidades: number } | null }>('transferir', { id, escaneos, faltantes, seguir })
+export async function transferirArmado(linea: LineaZ, id: string, escaneos: Record<string, number>, faltantes: Record<string, MotivoFaltante>, seguir = false) {
+  return escribir<{ ok: true; transfer: NonNullable<Armado['transfer']>; tanda: { transfer_id: string | number | null; unidades: number } | null }>(linea, 'transferir', { id, escaneos, faltantes, seguir })
 }
 
 /** «depósito» o «local»: adónde va lo que se arma. */

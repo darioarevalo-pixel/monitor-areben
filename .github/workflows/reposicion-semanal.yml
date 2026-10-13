@@ -1,0 +1,65 @@
+name: Correo de los lunes de la reposición (BDI)
+
+# Lo que la reposición de BDI descubre y no puede resolver (Darío, 12-oct-2026): lo que se vende sin
+# stock en el depósito, lo que no se encontró al armar y, el primer lunes del mes, lo que no vendió
+# nada en 60 días. Sólo lee la base de BDI. Ficha: `docs/secciones/reposicion.md`.
+#
+# Con el cron de GitHub, a propósito: llega horas tarde (ver `parte-manana.yml`), pero es un resumen
+# de la semana y da lo mismo que llegue a las 8 o a las 11.
+concurrency:
+  group: reposicion-semanal
+  cancel-in-progress: false
+
+on:
+  schedule:
+    - cron: '0 11 * * 1' # lunes 08:00 de Argentina
+  workflow_dispatch:
+    inputs:
+      simulacro:
+        description: 'true = arma el correo y lo imprime, pero ⛔ NO lo manda'
+        required: false
+        default: 'false'
+      mensual:
+        description: 'true = incluye «sin ventas en 60 días» aunque no sea el primer lunes'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+
+jobs:
+  correo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Armar y mandar el correo
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          MAIL_REPOSICION_A: ${{ vars.MAIL_REPOSICION_A }}
+          ENTRADA_SIMULACRO: ${{ inputs.simulacro }}
+          ENTRADA_MENSUAL: ${{ inputs.mensual }}
+          CORREO_HTML: semanal.html
+        run: node scripts/reposicion-semanal.mjs
+
+      - name: Guardar el HTML del correo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semanal-html
+          path: semanal.html
+          if-no-files-found: ignore
+          retention-days: 7

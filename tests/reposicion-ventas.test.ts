@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CFG_VENTAS_DEFAULT, cfgVentas, decidir, decidirTodo, listaDevolver, listaLlevar, modoDe, type CfgVentas } from '@/lib/reposicion/porVentas'
+import { CFG_VENTAS_DEFAULT, tipoBdi, cfgVentas, decidir, decidirTodo, listaDevolver, listaLlevar, modoDe, type CfgVentas } from '@/lib/reposicion/porVentas'
 import { leerRepoConfig } from '@/lib/reposicion/cfg'
 import { repoCfgDefault, type RepoCfg, type RepoItem } from '@/lib/reposicion/tipos'
 
@@ -210,5 +210,196 @@ describe('sin etiqueta de precio (bikinis en la caja «todo a $5.000», Darío 1
   })
   it('si no se lleva nada, no se marca', () => {
     expect(d(item({ local: 5, deposito: 0 }), c).soloAlarma).toBe(false)
+  })
+})
+
+describe('BDI: mínimo 1, 2 en los modelos que más venden, 1 siempre en el depósito (12-oct)', () => {
+  const funda = (over: Partial<RepoItem> = {}) => item({ name: 'FUNDA SILICONE Negro', size: 'iPhone 17 Pro', modelo: 'iPhone 17 Pro', ...over })
+  const todo = (inv: RepoItem[], c: RepoCfg = cfg()) => decidirTodo(inv, c, HOY, 'bdi')
+
+  it('los defaults de BDI: mínimo 1, modelo 2 desde 10 por semana, devolución 100, reserva 1', () => {
+    const cv = cfgVentas(cfg(), 'bdi')
+    expect([cv.minimoBajo, cv.minimoModelo, cv.umbralModelo, cv.topeDevolucion, cv.reservaDeposito]).toEqual([1, 2, 10, 100, 1])
+    // Zattia no cambia.
+    expect(cfgVentas(cfg(), 'zattia').reservaDeposito).toBe(0)
+    expect(cfgVentas(cfg(), 'zattia').minimoModelo).toBe(0)
+  })
+
+  it('una funda sin ventas de un modelo que vende poco: 1 en el local, el resto se devuelve', () => {
+    const [f] = todo([funda({ size: 'iPhone 12', modelo: 'iPhone 12', local: 3, deposito: 5 })])
+    expect(f.d.objetivo).toBe(1)
+    expect(f.d.devolver).toBe(2)
+    expect(f.d.porque).toBe('Sin ventas en 60 días')
+  })
+
+  it('el modelo que vende 10 o más fundas por semana (sumando diseños) lleva 2', () => {
+    // 90 en 60 días = 10,5 por semana entre los dos diseños.
+    // El diseño 3 vendió 5 en otro modelo (el 13) y 0 en el 17 Pro: el diseño vende, lleva 2.
+    const inv = [
+      funda({ vid: '1_1', vv: 45, local: 0 }),
+      funda({ vid: '2_1', pid: '2', vv: 45, local: 1 }),
+      funda({ vid: '3_1', pid: '3', vv: 0, local: 0 }),
+      funda({ vid: '3_2', pid: '3', size: 'iPhone 13', modelo: 'iPhone 13', vv: 5, local: 1 }),
+    ]
+    const filas = todo(inv)
+    const sinVentas = filas.find((f) => f.it.vid === '3_1')!
+    expect(sinVentas.d.objetivo).toBe(2)
+    expect(sinVentas.d.llevar).toBe(2)
+    expect(sinVentas.d.porque).toBe('Modelo de venta alta (iPhone 17 Pro: 10,5 por semana)')
+  })
+
+  it('un diseño que no vende no lleva 2 aunque su modelo sea el que más vende (FLUX CASE, 12-oct)', () => {
+    const inv = [funda({ vid: '1_1', vv: 90, local: 0 }), funda({ vid: '9_1', pid: '9', name: 'FLUX CASE BLUE', vv: 0, local: 2 })]
+    const flux = todo(inv).find((f) => f.it.vid === '9_1')!
+    expect(flux.d.objetivo).toBe(1)
+    expect(flux.d.devolver).toBe(1)
+    // Con 3 en 60 días (debajo de 4) tampoco.
+    const inv2 = [funda({ vid: '1_1', vv: 90, local: 0 }), funda({ vid: '9_1', pid: '9', vv: 3, local: 1 })]
+    expect(todo(inv2).find((f) => f.it.vid === '9_1')!.d.objetivo).toBe(1)
+  })
+
+  it('un diseño NUEVO de un modelo de venta alta arranca con 2 aunque no tenga ventas (12-oct)', () => {
+    const inv = [funda({ vid: '1_1', vv: 90, local: 0 }), funda({ vid: '8_1', pid: '8', vv: 0, local: 0, deposito: 10, diasVivo: 3 })]
+    const nuevo = todo(inv).find((f) => f.it.vid === '8_1')!
+    expect(nuevo.d.objetivo).toBe(2)
+    expect(nuevo.d.llevar).toBe(2)
+    // Pasados los 21 días, sin ventas, baja a 1.
+    const viejo = todo([inv[0], { ...inv[1], diasVivo: 30 }]).find((f) => f.it.vid === '8_1')!
+    expect(viejo.d.objetivo).toBe(1)
+  })
+
+  it('los vidrios no suman al modelo (dicen iPhone en el talle pero no son fundas)', () => {
+    const inv = [item({ name: 'TEMPLADO 9D PREMIUM', size: 'iPhone 17 Pro', modelo: 'iPhone 17 Pro', vv: 200 }), funda({ vid: '2_1', pid: '2', vv: 0 })]
+    const f = todo(inv).find((x) => x.it.vid === '2_1')!
+    expect(f.d.objetivo).toBe(1)
+  })
+
+  it('siempre queda 1 en el depósito para la venta online', () => {
+    const [f] = todo([funda({ size: 'iPhone 12', modelo: 'iPhone 12', local: 0, deposito: 1 })])
+    expect(f.d.llevar).toBe(0)
+    const [g] = todo([funda({ size: 'iPhone 12', modelo: 'iPhone 12', local: 0, deposito: 2 })])
+    expect(g.d.llevar).toBe(1)
+  })
+
+  it('una venta suelta en 60 días no le da reserva (redondea, no sube)', () => {
+    const [f] = todo([funda({ size: 'iPhone 12', modelo: 'iPhone 12', vv: 1 })])
+    expect(f.d.objetivo).toBe(1)
+  })
+
+  it('sin «para exhibir» ni reglas por nombre de la ropa', () => {
+    const [f] = todo([funda({ name: 'ACCESORIO SIN CAMBIO', size: 'iPhone 12', modelo: 'iPhone 12', local: 0, deposito: 5 })])
+    expect(f.d.modo.modo).toBe('ventas')
+    expect(f.d.exhibir).toBe(false)
+    expect(f.d.llevar).toBe(1)
+  })
+
+  it('la devolución de BDI corta en 100 por día', () => {
+    const inv = Array.from({ length: 60 }, (_, i) => funda({ vid: `${i}_1`, pid: String(i), size: 'iPhone 12', modelo: 'iPhone 12', local: 3 }))
+    const r = listaDevolver(todo(inv), cfgVentas(cfg(), 'bdi').topeDevolucion)
+    expect(r.total).toBe(120)
+    expect(r.filas.reduce((s, f) => s + f.devolverHoy, 0)).toBe(100)
+    expect(r.pendiente).toBe(20)
+  })
+})
+
+describe('BDI: funda, templado o accesorio (12-oct)', () => {
+  it('por el prefijo del SKU', () => {
+    expect(tipoBdi({ sku: 'F-0160-17P', name: 'SPACE GRAY CASE' })).toBe('funda')
+    expect(tipoBdi({ sku: 'ATE-025-17P-9DP', name: 'TEMPLADO 9D PREMIUM' })).toBe('templado')
+    expect(tipoBdi({ sku: 'AC-0073-BL', name: 'CORREA LOOP LARGA' })).toBe('accesorio')
+    expect(tipoBdi({ sku: 'SW-01', name: 'SMARTWATCH ACTIVE' })).toBe('accesorio')
+    // El nombre le gana al SKU en los vidrios (cargado como AC-0057).
+    expect(tipoBdi({ sku: 'AC-0057-17P', name: 'VIDRIO TEMPLADO PREMIUM AUTOMATICO' })).toBe('templado')
+  })
+  it('sin SKU, por el nombre', () => {
+    expect(tipoBdi({ sku: '', name: 'BUBBLE CASE' })).toBe('funda')
+    expect(tipoBdi({ sku: '', name: 'TEMPLADO 9D' })).toBe('templado')
+    expect(tipoBdi({ sku: '', name: 'HIDROGEL' })).toBe('templado')
+    expect(tipoBdi({ sku: '', name: 'PROTECTOR DE CAMARA - LISO' })).toBe('accesorio')
+    expect(tipoBdi({ sku: '', name: 'CABLE TIPO C a tipo C - 1M' })).toBe('accesorio')
+  })
+})
+
+describe('BDI: vidrios por caja de 10 (12-oct)', () => {
+  const vidrio = (over: Partial<RepoItem> = {}) => item({ name: 'TEMPLADO 9D PREMIUM', sku: 'ATE-025-17P-9DP', size: 'iPhone 17 Pro', modelo: 'iPhone 17 Pro', vv: 50, deposito: 90, ...over })
+  const uno = (it: RepoItem) => decidirTodo([it], cfg(), HOY, 'bdi')[0].d
+
+  it('el del 17 Pro (50 en 60 días): con una semana de venta o menos en el local se lleva una caja', () => {
+    // 0,83 por día × 7 días = 5,8 → se pide con 6 o menos.
+    expect(uno(vidrio({ local: 6 })).llevar).toBe(10)
+    expect(uno(vidrio({ local: 0 })).llevar).toBe(10)
+    expect(uno(vidrio({ local: 7 })).llevar).toBe(0)
+  })
+  it('no se devuelve mientras no pase de lo que deja una caja', () => {
+    expect(uno(vidrio({ local: 16 })).devolver).toBe(0)
+    expect(uno(vidrio({ local: 18 })).devolver).toBe(2)
+  })
+  it('sin una caja entera en el depósito, se lleva lo que hay (dejando la reserva online)', () => {
+    expect(uno(vidrio({ local: 0, deposito: 6 })).llevar).toBe(5)
+  })
+  it('el vidrio que casi no vende sigue con la regla común, con mínimo 2', () => {
+    const d = uno(vidrio({ size: 'iPhone 12 Pro Max', modelo: 'iPhone 12 Pro Max', vv: 1, local: 0, deposito: 10 }))
+    expect(d.llevar).toBe(2)
+    expect(uno(vidrio({ size: 'iPhone 12 Pro Max', modelo: 'iPhone 12 Pro Max', vv: 1, local: 1, deposito: 10 })).llevar).toBe(1)
+  })
+})
+
+describe('BDI: la caja sólo para los vidrios que venden (12-oct)', () => {
+  const vidrio = (over: Partial<RepoItem> = {}) => item({ name: 'TEMPLADO 9D PREMIUM', sku: 'ATE-1', size: 'iPhone 11', modelo: 'iPhone 11', deposito: 40, local: 0, ...over })
+  const uno = (it: RepoItem) => decidirTodo([it], cfg(), HOY, 'bdi')[0].d
+  it('uno que vende 1 por mes va de a 1, no por caja, con mínimo 2 en el local', () => {
+    const d = uno(vidrio({ vv: 2 }))
+    expect(d.caja).toBeUndefined()
+    expect(d.objetivo).toBe(2)
+    expect(d.llevar).toBe(2)
+  })
+  it('uno que vende 1,6 por semana (debajo de 2) también va de a 1', () => {
+    expect(uno(vidrio({ vv: 14 })).caja).toBeUndefined()
+  })
+  it('uno que vende 2,3 por semana va por caja', () => {
+    expect(uno(vidrio({ vv: 20 })).caja).toBe(10)
+  })
+  it('si la venta sube mucho, lleva más de una caja', () => {
+    // 20 por semana = 171 en 60 días; con 5 en el local se piden 2 cajas.
+    expect(uno(vidrio({ vv: 171, local: 5 })).llevar).toBe(20)
+  })
+})
+
+describe('BDI: qué vidrio va por caja y el hidrogel (12-oct)', () => {
+  const uno = (it: RepoItem) => decidirTodo([it], cfg(), HOY, 'bdi')[0].d
+  it('el 9D Antiespía Premium va por caja; el 9D común no', () => {
+    expect(uno(item({ name: 'TEMPLADO 9D ANTIESPIA PREMIUM', sku: 'ATE-2', vv: 30, deposito: 40 })).caja).toBe(10)
+    expect(uno(item({ name: 'TEMPLADO 9D', sku: '', vv: 30, deposito: 40 })).caja).toBeUndefined()
+  })
+  it('el hidrogel queda fuera de las listas: va directo al local', () => {
+    const d = uno(item({ name: 'HIDROGEL', sku: '', vv: 44, local: 29, deposito: 5 }))
+    expect(d.modo.modo).toBe('exhibido')
+    expect(d.llevar).toBe(0)
+    expect(d.devolver).toBe(0)
+  })
+})
+
+describe('BDI: accesorios (12-oct)', () => {
+  const uno = (it: RepoItem) => decidirTodo([it], cfg(), HOY, 'bdi')[0].d
+  const acc = (over: Partial<RepoItem> = {}) => item({ name: 'ENCHUFE BDI USB-C | CARGA RAPIDA 20W', sku: 'AC-0001', size: 'Variante Única', deposito: 300, ...over })
+  it('el que vende 2 o más por semana tiene en el local lo de una semana', () => {
+    // 32 en 60 días = 3,7 por semana → 4 en el local.
+    const d = uno(acc({ vv: 32, local: 1 }))
+    expect(d.objetivo).toBe(4)
+    expect(d.llevar).toBe(3)
+    expect(d.porque).toBe('Lo que se vende en 7 días')
+  })
+  it('el que casi no vende, mínimo 1', () => {
+    expect(uno(acc({ name: 'SOPAPA ADHESIVA', vv: 0, local: 0 })).objetivo).toBe(1)
+  })
+})
+
+describe('BDI: accesorio con variantes que vende como producto (12-oct)', () => {
+  it('funda para cargador: 4,2 por semana entre 5 diseños → 2 de cada diseño', () => {
+    const vv = [10, 7, 4, 12, 3]
+    const inv = vv.map((n, i) => item({ vid: `50_${i}`, pid: '50', sid: String(i), name: 'FUNDA PARA CARGADOR DISEÑO', sku: '', size: `D${i}`, vv: n, local: 1, deposito: 20 }))
+    const filas = decidirTodo(inv, cfg(), HOY, 'bdi')
+    expect(filas.map((f) => f.d.objetivo)).toEqual([2, 2, 2, 2, 2])
+    expect(filas[4].d.porque).toBe('El producto vende 4,2 por semana')
   })
 })

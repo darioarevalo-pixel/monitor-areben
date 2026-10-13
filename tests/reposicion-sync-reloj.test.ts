@@ -32,7 +32,8 @@ const leer = (p: string) => readFileSync(join(raiz, p), 'utf8')
  * siempre; Reposición era la única que no, y fue la única que mintió.
  */
 const LLAMADORES = [
-  'components/reposicion/Reposicion.tsx',
+  // Desde el 12-oct-2026 las dos marcas usan la pantalla según ventas: el botón vive ahí.
+  'components/reposicion/ReposicionZattia.tsx',
   'components/exhib/Exhib.tsx',
   'components/ubicaciones/Ubicaciones.tsx',
   'components/caducados/Caducados.tsx',

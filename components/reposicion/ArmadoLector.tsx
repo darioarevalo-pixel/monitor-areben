@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  articuloDe,
   cancelarArmado,
   destino,
   transferidoDe,
@@ -91,7 +92,11 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
   const inputRef = useRef<HTMLInputElement>(null)
   // La Zebra está en la compu del depósito (tanda 4, Darío 12-oct-2026): etiquetas para exhibir e
   // impresión rápida, sólo en la reposición.
-  const et = useEtiquetasArmado(allProductos, campaniaEtiqueta)
+  // ⛔ Las etiquetas son de la ropa de Zattia (precio + formas de pago en la Zebra): BDI no las usa.
+  const bdi = armado.linea === 'bdi'
+  const etZ = useEtiquetasArmado(allProductos, campaniaEtiqueta)
+  const et = bdi ? null : etZ
+  const art = articuloDe(armado.linea)
   const [rapida, setRapida] = useState(false)
   const varsInv = useMemo(() => inv.map(aVarianteEti), [inv])
 
@@ -108,13 +113,13 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
     pendiente.current = false
     setGuardado('guardando')
     try {
-      await guardarArmado(armado.id, estadoRef.current.escaneos, estadoRef.current.faltantes)
+      await guardarArmado(armado.linea, armado.id, estadoRef.current.escaneos, estadoRef.current.faltantes)
       setGuardado(pendiente.current ? 'guardando' : 'ok')
     } catch {
       pendiente.current = true
       setGuardado('error')
     }
-  }, [armado.id])
+  }, [armado.id, armado.linea])
 
   const primera = useRef(true)
   useEffect(() => {
@@ -178,9 +183,19 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
       setCartel({ titulo: 'Artículo NO solicitado', texto: `Este producto no se encuentra en la ${devolucion ? 'devolución' : 'reposición'} de hoy.`, nombre: l.nombre })
       avisar('no', 'No solicitado')
     } else {
-      setCartel({ titulo: 'Código desconocido', texto: `«${codigo.trim()}» no corresponde a ninguna prenda.` })
+      setCartel({ titulo: 'Código desconocido', texto: `«${codigo.trim()}» no corresponde a ${art.ninguna}.` })
       avisar('no', 'Código desconocido')
     }
+  }
+
+  // Caja cerrada de vidrios (BDI): no tiene etiqueta, se suma entera sin escanear (hasta lo pedido).
+  const sumarCaja = (l: LineaPedido) => {
+    if (!l.caja) return
+    const n = Math.min(l.cant, (escaneos[l.vid] || 0) + l.caja)
+    setEscaneos((e) => ({ ...e, [l.vid]: n }))
+    if (faltantes[l.vid]) setFaltantes(({ [l.vid]: _, ...resto }) => resto)
+    avisar(n >= l.cant ? 'suma' : 'ok')
+    setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   const sacarUna = (l: LineaPedido) => setEscaneos((e) => {
@@ -204,7 +219,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
     })
     if (!ok) return
     try {
-      await cancelarArmado(armado.id)
+      await cancelarArmado(armado.linea, armado.id)
       try {
         localStorage.removeItem(claveLocal(armado.id))
       } catch {
@@ -223,7 +238,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
           ← Volver
         </Button>
         <span style={{ fontSize: font.lg, color: color.ink }}>
-          <b>{r.escaneadas}</b> / {r.pedidas} prendas
+          <b>{r.escaneadas}</b> / {r.pedidas} {art.plural}
         </span>
         {yaTransferidas > 0 && <span style={{ fontSize: font.sm, color: color.mut }}>{yaTransferidas} ya transferidas</span>}
         <span style={{ marginLeft: 'auto', fontSize: font.sm, color: guardado === 'error' ? color.danger : color.mut2 }}>
@@ -234,7 +249,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
             Transferir y continuar
           </Button>
         )}
-        {!devolucion && (
+        {!devolucion && et && (
           <Button variant="outline" onClick={() => setRapida((x) => !x)}>
             Impresión rápida
           </Button>
@@ -272,7 +287,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
         data-lpignore="true"
         data-bwignore="true"
         data-form-type="other"
-        placeholder="Escanear prenda…"
+        placeholder={`Escanear ${art.singular}…`}
         aria-label="Código de barras a escanear"
         onFocus={() => setEscuchando(true)}
         onBlur={() => setEscuchando(false)}
@@ -304,7 +319,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
         </button>
       )}
 
-      {rapida && !devolucion && (
+      {rapida && !devolucion && et && (
         <ImpresionRapida
           vars={varsInv}
           et={et}
@@ -315,18 +330,18 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
         />
       )}
 
-      <UltimaLectura l={ultima} et={devolucion ? null : et} />
+      <UltimaLectura l={ultima} et={devolucion ? null : et} art={art} />
 
       {abiertas.length > 0 && (
         <>
           <h3 style={{ fontSize: font.md, margin: `${space[4]}px 0 ${space[2]}px`, color: color.ink }}>Pendientes ({abiertas.length})</h3>
-          <TablaRenglones lineas={abiertas} escaneos={escaneos} faltantes={faltantes} transferido={transferido} onSacar={sacarUna} et={devolucion ? null : et} />
+          <TablaRenglones lineas={abiertas} escaneos={escaneos} faltantes={faltantes} transferido={transferido} onSacar={sacarUna} onCaja={sumarCaja} et={devolucion ? null : et} />
         </>
       )}
       {completas.length > 0 && (
         <>
           <h3 style={{ fontSize: font.md, margin: `${space[4]}px 0 ${space[2]}px`, color: color.success }}>Completas ({completas.length})</h3>
-          <TablaRenglones lineas={completas} escaneos={escaneos} faltantes={faltantes} transferido={transferido} onSacar={sacarUna} et={devolucion ? null : et} />
+          <TablaRenglones lineas={completas} escaneos={escaneos} faltantes={faltantes} transferido={transferido} onSacar={sacarUna} onCaja={sumarCaja} et={devolucion ? null : et} />
         </>
       )}
 
@@ -364,7 +379,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
         onTanda={(t, nueva) => {
           setTransferido(transferidoDe(t))
           setTerminar(false)
-          if (nueva) toast.ok(`${t.tandas?.at(-1)?.unidades ?? ''} prendas transferidas al ${destino(armado.sentido)}${t.transfer_id ? ` · Transferencia ${t.transfer_id}` : ''}`)
+          if (nueva) toast.ok(`${t.tandas?.at(-1)?.unidades ?? ''} ${art.plural} transferidas al ${destino(armado.sentido)}${t.transfer_id ? ` · Transferencia ${t.transfer_id}` : ''}`)
           else toast.ok(`Ya estaba transferido${t.transfer_id ? ` · Transferencia ${t.transfer_id}` : ''}`)
           setTimeout(() => inputRef.current?.focus(), 0)
         }}
@@ -385,11 +400,11 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
 /** La prenda del pedido con la forma que piden las etiquetas. */
 const varDeLinea = (l: LineaPedido): VarianteEti => ({ id: l.vid, pid: l.pid, name: l.name, size: l.size, sku: l.sku, barcode: l.barcode, stock: 0 })
 
-function UltimaLectura({ l, et }: { l: Extract<Lectura, { tipo: 'suma' }> | null; et: EtiquetasArmado | null }) {
+function UltimaLectura({ l, et, art }: { l: Extract<Lectura, { tipo: 'suma' }> | null; et: EtiquetasArmado | null; art: { singular: string } }) {
   if (!l)
     return (
       <div style={{ marginTop: space[3], padding: space[4], border: `1px solid ${color.line}`, borderRadius: 'var(--mo-r-xl)', textAlign: 'center', color: color.mut, fontSize: font.md }}>
-        Escaneá la primera prenda.
+        Escaneá la primera {art.singular}.
       </div>
     )
   const ok = l.faltan === 0
@@ -425,7 +440,7 @@ function UltimaLectura({ l, et }: { l: Extract<Lectura, { tipo: 'suma' }> | null
   )
 }
 
-function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, et }: { lineas: LineaPedido[]; escaneos: Record<string, number>; faltantes: Record<string, MotivoFaltante>; transferido: Record<string, number>; onSacar: (l: LineaPedido) => void; et: EtiquetasArmado | null }) {
+function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, onCaja, et }: { lineas: LineaPedido[]; escaneos: Record<string, number>; faltantes: Record<string, MotivoFaltante>; transferido: Record<string, number>; onSacar: (l: LineaPedido) => void; onCaja: (l: LineaPedido) => void; et: EtiquetasArmado | null }) {
   return (
     <TableWrap>
       <THead>
@@ -435,7 +450,7 @@ function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, et 
           <Th width={110}>Variante</Th>
           <Th align="center" width={80}>Pedido</Th>
           <Th align="center" width={90}>Escaneado</Th>
-          <Th width={60} />
+          <Th />
         </Tr>
       </THead>
       <TBody>
@@ -472,7 +487,12 @@ function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, et 
               <Td align="center" style={{ fontWeight: 700, color: n >= l.cant ? color.success : n > 0 ? color.ink : color.mut2 }}>
                 {n}
               </Td>
-              <Td align="right">
+              <Td align="right" style={{ whiteSpace: 'nowrap' }}>
+                {l.caja && n < l.cant && (
+                  <Button size="sm" variant="outline" onMouseDown={(e) => e.preventDefault()} onClick={() => onCaja(l)} title="La caja cerrada no tiene etiqueta: suma la caja entera" aria-label={`Sumar una caja cerrada de «${l.name}»`}>
+                    Caja cerrada (+{Math.min(l.caja, l.cant - n)})
+                  </Button>
+                )}
                 {n > (transferido[l.vid] || 0) && (
                   <Button size="sm" variant="ghost" onMouseDown={(e) => e.preventDefault()} onClick={() => onSacar(l)} title="Restar una (escaneo por error)" aria-label={`Restar una de «${l.name}»`}>
                     −1
@@ -539,6 +559,7 @@ function Terminar({ abierto, seguir, transferido, armado, escaneos, faltantes, s
   onSinConfirmar: () => void
 }) {
   const lugar = destino(armado.sentido)
+  const art = articuloDe(armado.linea)
   const [enviando, setEnviando] = useState(false)
   const [rechazados, setRechazados] = useState<Rechazado[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -556,7 +577,7 @@ function Terminar({ abierto, seguir, transferido, armado, escaneos, faltantes, s
     setError(null)
     setRechazados([])
     try {
-      const d = await transferirArmado(armado.id, esc, fal, seguir)
+      const d = await transferirArmado(armado.linea, armado.id, esc, fal, seguir)
       if (seguir) onTanda(d.transfer, !!d.tanda)
       else setHecho(d.transfer)
     } catch (e) {
@@ -622,7 +643,7 @@ function Terminar({ abierto, seguir, transferido, armado, escaneos, faltantes, s
     return (
       <Modal abierto={abierto} onCerrar={onTransferido} titulo="Transferencia realizada" cerrarConFondo={false} pie={<Button variant="solid" tone="brand" onClick={onTransferido}>Volver</Button>}>
         <p style={{ fontSize: font.md, margin: 0 }}>
-          {hecho.unidades ?? r.escaneadas} {(hecho.unidades ?? r.escaneadas) === 1 ? 'prenda transferida' : 'prendas transferidas'} al {lugar}
+          {hecho.unidades ?? r.escaneadas} {(hecho.unidades ?? r.escaneadas) === 1 ? `${art.singular} transferida` : `${art.plural} transferidas`} al {lugar}
           {hecho.transfer_id ? ` · Transferencia ${hecho.transfer_id}` : ''}.
         </p>
       </Modal>
@@ -646,7 +667,7 @@ function Terminar({ abierto, seguir, transferido, armado, escaneos, faltantes, s
             </Button>
           ) : (
             <Button variant="solid" tone="brand" onClick={() => void transferir()} loading={enviando} disabled={sinContestar.length > 0 || (porTransferir <= 0 && (seguir || r.escaneadas === 0))}>
-              {porTransferir > 0 ? `Transferir ${porTransferir} ${porTransferir === 1 ? 'prenda' : 'prendas'}` : 'Cerrar armado'}
+              {porTransferir > 0 ? `Transferir ${porTransferir} ${porTransferir === 1 ? art.singular : art.plural}` : 'Cerrar armado'}
             </Button>
           )}
         </>
@@ -659,7 +680,7 @@ function Terminar({ abierto, seguir, transferido, armado, escaneos, faltantes, s
           </>
         ) : (
           <>
-            <b>{r.escaneadas}</b> / {r.pedidas} prendas escaneadas. Se transfieren al {lugar} solo las escaneadas
+            <b>{r.escaneadas}</b> / {r.pedidas} {art.plural} escaneadas. Se transfieren al {lugar} solo las escaneadas
             {r.escaneadas > porTransferir ? ` (${r.escaneadas - porTransferir} ya transferidas)` : ''}.
           </>
         )}

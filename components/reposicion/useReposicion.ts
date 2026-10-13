@@ -63,7 +63,7 @@ export function useReposicion(marca: Marca): EstadoReposicion {
         // 1) Lo chico, siempre: la config (la pueden cambiar otros) y la huella de los datos.
         const [config, huella] = await Promise.all([leerRepoConfig(marca), huellaDatos(marca, hoyAR())])
         setCfg(config)
-        const ventanas = marca === 'zattia' ? [...new Set([cfgVentas(config, 'zattia').ventanaDias, cfgVentas(config, 'stunned').ventanaDias])] : []
+        const ventanas = marca === 'zattia' ? [...new Set([cfgVentas(config, 'zattia').ventanaDias, cfgVentas(config, 'stunned').ventanaDias])] : [cfgVentas(config, 'bdi').ventanaDias]
 
         // 2) 🔑 Si la foto guardada tiene la misma huella, el stock y las ventas no cambiaron: se
         // muestra al instante, sin volver a bajar 1,3 MB. La huella cambia con CADA sync (el de la

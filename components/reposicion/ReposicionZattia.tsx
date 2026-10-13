@@ -1,7 +1,8 @@
 'use client'
 
 /**
- * Reposición de Zattia **según ventas**: dos listas, una por persona.
+ * Reposición **según ventas** de Zattia y de BDI (BDI desde el 12-oct-2026: las dos listas las arma
+ * Karen, desde la compu del local). Dos listas, una por persona en Zattia:
  *
  * - **Llevar al local** — la arma Lorena en el depósito (hoja A4).
  * - **Devolver al depósito** — la arma Camila en el local y la lleva en el carro (rollo de 80 mm).
@@ -9,7 +10,8 @@
  * Arriba, el selector **Zattia / Stunned**: cada línea tiene sus propias condiciones (`ventas` y
  * `ventasStunned` en la config) y sus propios papeles, porque Stunned tiene su sector en el depósito.
  *
- * El cálculo vive en `lib/reposicion/porVentas.ts` (reglas y porqué, ahí). BDI no pasa por acá.
+ * El cálculo vive en `lib/reposicion/porVentas.ts` (reglas y porqué, ahí). En BDI no hay selector de
+ * línea, ni «para exhibir», ni etiquetas: son de la ropa.
  * **Armar con el lector** (12-oct-2026): Lorena escanea en la compu contra la lista y el Monitor hace
  * la transferencia depósito → local en Gestión Nube (`ArmadoLector.tsx`, `api/_repo-armado.js`).
  * Devolución (12-oct-2026): Camila escanea en la compu del local y el Monitor transfiere local →
@@ -36,8 +38,9 @@ import { useReposicion } from './useReposicion'
 import { ultimaSincronizacion } from '@/lib/reposicion/cliente'
 import { useEtiquetasCampania } from '@/components/etiquetas/useEtiquetasCampania'
 import { ArmadoLector } from './ArmadoLector'
+import { OpcionesBdi } from './OpcionesBdi'
 import { HistorialArmados } from './HistorialArmados'
-import { abrirArmado, codigoArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type Sentido } from '@/lib/reposicion/armado'
+import { abrirArmado, articuloDe, codigoArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type Sentido } from '@/lib/reposicion/armado'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 type Pestana = 'llevar' | 'devolver' | 'historial'
@@ -52,7 +55,10 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   // La misma regla que Caducados: marcar modos lo pueden Darío y Bruno.
   const puedeMarcar = puedeEliminarTn(perfil)
 
-  const [linea, setLinea] = useState<LineaZ>('zattia')
+  const bdi = marca === 'bdi'
+  const [linea, setLinea] = useState<LineaZ>(bdi ? 'bdi' : 'zattia')
+  const art = articuloDe(linea)
+  const [opcionesOpen, setOpcionesOpen] = useState(false)
   // Las categorías salen de la Tienda Nube DE LA LÍNEA: Stunned tiene la suya (`docs/lineas.md`).
   const tnIdx = useTnPromo(linea)
   const prodById = useMemo(() => Object.fromEntries(allProductos.map((p) => [String(p.id), p])) as Record<string, Producto>, [allProductos])
@@ -162,8 +168,8 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
 
   const onArmar = async (sentido: Sentido) => {
     if (abierto(sentido)) return setArmando(sentido)
-    const pedido = sentido === 'llevar' ? pedidoDesde(llevar, cantLlevar) : pedidoDesde(devolver.filas, (f) => (f as FilaVentas & { devolverHoy: number }).devolverHoy)
-    if (!pedido.length) return toast.aviso(sentido === 'llevar' ? 'No hay prendas para reponer.' : 'No hay prendas para devolver.')
+    const pedido = sentido === 'llevar' ? pedidoDesde(llevar, cantLlevar, true) : pedidoDesde(devolver.filas, (f) => (f as FilaVentas & { devolverHoy: number }).devolverHoy)
+    if (!pedido.length) return toast.aviso(sentido === 'llevar' ? `No hay ${art.plural} para reponer.` : `No hay ${art.plural} para devolver.`)
     // Una lista armada con stock viejo pide lo que ya se movió ayer.
     if (edadMin != null && edadMin >= 360) {
       const ok = await confirmar({
@@ -196,12 +202,12 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         titulo: '¿Seguro que no está en Gestión Nube?',
         tono: 'danger',
         ok: 'No está: transferir de nuevo',
-        mensaje: `Buscá en Gestión Nube una transferencia con «#${codigoArmado(a.id)}» en la descripción. Si figura y la volvés a hacer, las prendas se transfieren dos veces.`,
+        mensaje: `Buscá en Gestión Nube una transferencia con «#${codigoArmado(a.id)}» en la descripción. Si figura y la volvés a hacer, las ${art.plural} se transfieren dos veces.`,
       })
       if (!ok) return
     }
     try {
-      await resolverArmado(a.id, hecha)
+      await resolverArmado(a.linea, a.id, hecha)
       await traerArmados()
     } catch (e) {
       toast.error((e as Error).message)
@@ -240,7 +246,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
       linea,
       rep.lastUpdate,
     )
-    if (!ok) toast.aviso('No hay prendas para llevar: están todas en 0.')
+    if (!ok) toast.aviso(`No hay ${art.plural} para llevar: están todas en 0.`)
   }
   const onImprimirDevolver = async () => {
     if (!devolver.filas.length) return
@@ -282,18 +288,36 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   return (
     <>
       <HeaderAcciones>
-        <InfoPopover titulo="Reposición">
-          <b>Stock ideal</b>: {cv.minimoBajo} por variante (1 exhibida + reserva); {cv.minimo} si vende {cv.umbralSemana} o más por semana. Lo que vende mucho
-          suma reserva para {cv.coberturaDias} días.
-          <br />
-          <br />
-          <b>Reposición</b>: lo que falta para llegar al stock ideal. Si el local está en 0, la primera va <b>para exhibir</b> (alarma y etiquetas).
-          <br />
-          <b>Devolución</b>: lo que supera el stock ideal, hasta {cv.topeDevolucion} prendas por día, primero lo que no se vende.
-          <br />
-          <br />
-          Ventas del local y de Tienda Nube: últimos {cv.ventanaDias} días y última semana.
-        </InfoPopover>
+        {bdi ? (
+          <InfoPopover titulo="Reposición">
+            <b>Stock ideal</b>: {cv.minimoBajo} por variante; {cv.minimoModelo} en los modelos que venden {cv.umbralModelo} o más fundas por semana, si el diseño
+            vendió {cv.ventaDisenoMin} o más en {cv.ventanaDias} días; {cv.minimo} si
+            el diseño vende {cv.umbralSemana} o más por semana. Lo que vende mucho suma reserva para {cv.coberturaDias} días.
+            <br />
+            <br />
+            <b>Reposición</b>: lo que falta para llegar al stock ideal. Siempre quedan {cv.reservaDeposito} en el depósito para la venta online. Los vidrios, mínimo {cv.minimoTemplado}; los que
+            venden {cv.umbralCaja} o más por semana van por caja de {cv.cajaTemplado}, cuando en el local quedan {cv.diasPedidoTemplado} días de venta o menos.
+            Los accesorios que venden {cv.umbralAccesorio} o más por semana tienen en el local lo que se vende en {cv.diasAccesorio} días.
+            <br />
+            <b>Devolución</b>: lo que supera el stock ideal, hasta {cv.topeDevolucion} {art.plural} por día, primero lo que no se vende.
+            <br />
+            <br />
+            Ventas del local: últimos {cv.ventanaDias} días y última semana.
+          </InfoPopover>
+        ) : (
+          <InfoPopover titulo="Reposición">
+            <b>Stock ideal</b>: {cv.minimoBajo} por variante (1 exhibida + reserva); {cv.minimo} si vende {cv.umbralSemana} o más por semana. Lo que vende mucho
+            suma reserva para {cv.coberturaDias} días.
+            <br />
+            <br />
+            <b>Reposición</b>: lo que falta para llegar al stock ideal. Si el local está en 0, la primera va <b>para exhibir</b> (alarma y etiquetas).
+            <br />
+            <b>Devolución</b>: lo que supera el stock ideal, hasta {cv.topeDevolucion} {art.plural} por día, primero lo que no se vende.
+            <br />
+            <br />
+            Ventas del local y de Tienda Nube: últimos {cv.ventanaDias} días y última semana.
+          </InfoPopover>
+        )}
         {/* Configurar y Recargar, sólo Darío y Bruno (Darío, 12-oct-2026): para quien arma, una
             pantalla más simple. Recargar no hace falta: la espera de «Actualizar stock» se resuelve sola. */}
         {puedeMarcar && (
@@ -311,21 +335,25 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         </Button>
       </HeaderAcciones>
 
-      <SelectorLinea
-        linea={linea}
-        lineas={['zattia', 'stunned']}
-        onChange={(l) => {
-          setLinea(l as LineaZ)
-          setManual({})
-        }}
-      />
+      {!bdi && (
+        <SelectorLinea
+          linea={linea}
+          lineas={['zattia', 'stunned']}
+          onChange={(l) => {
+            setLinea(l as LineaZ)
+            setManual({})
+          }}
+        />
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', margin: `${space[3]}px 0` }}>
         <Tabs
           value={tab}
           onChange={(k) => setTab(k as Pestana)}
           items={[
             { key: 'llevar', label: 'Reposición', badge: totalLlevar || undefined },
-            { key: 'devolver', label: 'Devolución', badge: devolver.total || undefined },
+            // ⏸️ BDI: la devolución queda EN PAUSA (Darío, 12-oct-2026: «pendiente de analizar»). El
+            // cálculo está hecho (100 por día); se vuelve a mostrar sacando esta condición.
+            ...(bdi ? [] : [{ key: 'devolver', label: 'Devolución', badge: devolver.total || undefined }]),
             { key: 'historial', label: 'Historial' },
           ]}
         />
@@ -342,7 +370,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
             <span style={{ fontSize: font.md, color: color.ink2 }}>
-              <b>{totalLlevar}</b> prendas · {llevar.length} variantes
+              <b>{totalLlevar}</b> {art.plural} · {llevar.length} variantes
             </span>
             {paraExhibir > 0 && (
               <span title="La primera va con alarma, etiqueta de precio y etiqueta de formas de pago">
@@ -366,7 +394,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
           </div>
           <EstadoArmado armado={armados.llevar} onResolver={(a, h) => void onResolver(a, h)} />
           {!llevar.length ? (
-            <EmptyState icon="🎉" title="No hay prendas para reponer" hint="El local tiene su stock ideal, o lo que falta no está en el depósito." dashed />
+            <EmptyState icon="🎉" title={`No hay ${art.plural} para reponer`} hint="El local tiene su stock ideal, o lo que falta no está en el depósito." dashed />
           ) : (
             <TablaVentas
               filas={llevar}
@@ -389,11 +417,11 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             <span style={{ fontSize: font.md, color: color.ink2 }}>
               {verTodo ? (
                 <>
-                  <b>{devolver.total}</b> prendas en total
+                  <b>{devolver.total}</b> {art.plural} en total
                 </>
               ) : (
                 <>
-                  <b>{totalDevolverHoy}</b> prendas hoy
+                  <b>{totalDevolverHoy}</b> {art.plural} hoy
                   {devolver.pendiente > 0 && <> · {devolver.pendiente} pendientes</>}
                 </>
               )}
@@ -412,7 +440,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
           </div>
           <EstadoArmado armado={armados.devolver} onResolver={(a, h) => void onResolver(a, h)} />
           {!devolver.filas.length ? (
-            <EmptyState icon="🎉" title="No hay prendas para devolver" hint="Ninguna variante supera su stock ideal." dashed />
+            <EmptyState icon="🎉" title={`No hay ${art.plural} para devolver`} hint="Ninguna variante supera su stock ideal." dashed />
           ) : (
             <TablaVentas filas={devolver.filas} cantidad={(f) => (f as FilaVentas & { devolverHoy: number }).devolverHoy} titulo="Devolver" />
           )}
@@ -436,7 +464,25 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         guardar={(v) => rep.guardarCfg({ ...cfg, [CAMPO_LINEA[linea]]: v })}
         campaniaEtiqueta={cfg.campaniaEtiqueta ?? null}
         guardarCampania={(id) => rep.guardarCfg({ ...cfg, campaniaEtiqueta: id })}
+        bdi={bdi}
+        onOpciones={() => {
+          setConfigOpen(false)
+          setOpcionesOpen(true)
+        }}
       />
+      {/* BDI: los productos que no se reponen y las categorías a ignorar al agrupar (las lee Conteo)
+          salen de la ventana de antes; los mínimos y los topes ya no se aplican. */}
+      {bdi && (
+        <OpcionesBdi
+          abierto={opcionesOpen}
+          inv={inv}
+          cfg={cfg}
+          puede={puedeMarcar}
+          shareStatus={rep.shareStatus}
+          guardarCfg={rep.guardarCfg}
+          onClose={() => setOpcionesOpen(false)}
+        />
+      )}
     </>
   )
 }
@@ -542,7 +588,7 @@ const MODOS: { v: Modo; label: string }[] = [
 ]
 
 /** Parámetros y marcas (por categoría y por producto). Editan sólo Darío y Bruno; el resto lo ve. */
-function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, shareStatus, guardar, campaniaEtiqueta, guardarCampania }: {
+function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, shareStatus, guardar, campaniaEtiqueta, guardarCampania, bdi, onOpciones }: {
   abierto: boolean
   onClose: () => void
   titulo: string
@@ -553,6 +599,8 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
   guardar: (v: CfgVentas) => void
   campaniaEtiqueta: string | null
   guardarCampania: (id: string | null) => void
+  bdi: boolean
+  onOpciones: () => void
 }) {
   const [buscar, setBuscar] = useState('')
   const [buscarSp, setBuscarSp] = useState('')
@@ -572,7 +620,7 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
   }
   const encontrados = buscar.trim().length >= 2 ? productos.filter(([, n]) => n.toLowerCase().includes(buscar.toLowerCase())).slice(0, 20) : []
 
-  const setParam = (k: keyof Pick<CfgVentas, 'minimo' | 'minimoBajo' | 'umbralSemana' | 'coberturaDias' | 'ventanaDias' | 'loteMin' | 'topeDevolucion' | 'diasNuevo'>, v: string) => {
+  const setParam = (k: keyof Pick<CfgVentas, 'minimo' | 'minimoBajo' | 'umbralSemana' | 'coberturaDias' | 'ventanaDias' | 'loteMin' | 'topeDevolucion' | 'diasNuevo' | 'minimoModelo' | 'umbralModelo' | 'ventaDisenoMin' | 'reservaDeposito' | 'cajaTemplado' | 'diasPedidoTemplado' | 'umbralCaja' | 'minimoTemplado' | 'umbralAccesorio' | 'diasAccesorio'>, v: string) => {
     const n = parseInt(v, 10)
     if (!Number.isFinite(n) || n < 0) return
     guardar({ ...cv, [k]: n })
@@ -638,6 +686,16 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
         {param('minimoBajo', 'Mínimo, baja venta')}
         {param('minimo', 'Mínimo, con venta')}
         {param('umbralSemana', 'Con venta desde (por semana)')}
+        {bdi && param('minimoModelo', 'Mínimo, modelos de venta alta')}
+        {bdi && param('umbralModelo', 'Modelo de venta alta desde (fundas por semana)')}
+        {bdi && param('ventaDisenoMin', 'Y el diseño vendió al menos (en los días analizados)')}
+        {bdi && param('reservaDeposito', 'Reserva en el depósito (venta online)')}
+        {bdi && param('minimoTemplado', 'Vidrios: mínimo en el local')}
+        {bdi && param('cajaTemplado', 'Vidrios: unidades por caja')}
+        {bdi && param('diasPedidoTemplado', 'Vidrios: pedir caja cuando quedan (días de venta)')}
+        {bdi && param('umbralCaja', 'Vidrios: por caja desde (por semana)')}
+        {bdi && param('umbralAccesorio', 'Accesorios: cubrir días de venta desde (por semana)')}
+        {bdi && param('diasAccesorio', 'Accesorios: días de venta en el local')}
         {param('coberturaDias', 'Días de reserva')}
         {param('ventanaDias', 'Días de ventas analizados')}
         {param('loteMin', 'Reposición mínima')}
@@ -645,7 +703,17 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
         {param('diasNuevo', 'Días como producto nuevo')}
       </div>
 
+      {bdi && (
+        <div style={{ marginBottom: 14 }}>
+          <Button size="sm" variant="outline" onClick={onOpciones}>
+            Productos que no se reponen y categorías
+          </Button>
+        </div>
+      )}
+
       {/* La campaña cuyas prendas «para exhibir» salen con su etiqueta propia (Darío, 12-oct-2026). */}
+      {!bdi && (
+        <>
       <div style={{ fontSize: 13, fontWeight: 700, margin: '6px 0' }}>Etiqueta de campaña</div>
       <div style={{ fontSize: 11.5, color: color.mut2, marginBottom: 8 }}>
         Las prendas para exhibir que estén en esta campaña salen con su etiqueta, con el precio de la campaña. El resto, con precio y formas de pago.
@@ -665,12 +733,14 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
           </option>
         ))}
       </Select>
+        </>
+      )}
 
       {/* «Por categoría» se sacó el 11-oct-2026 (Darío): nada la usaba —las excepciones van por
           producto— y las categorías de Tienda Nube mezclan «BEST SELLERS» y «(sin categoría)». El
           cálculo todavía la entiende (`modosCat`), por si vuelve. */}
       <div style={{ fontSize: 13, fontWeight: 700, margin: '6px 0' }}>Excepciones por producto</div>
-      <div style={{ fontSize: 11.5, color: color.mut2, marginBottom: 8 }}>OUTLET y ACCESORIO ya van como «Todo exhibido».</div>
+      {!bdi && <div style={{ fontSize: 11.5, color: color.mut2, marginBottom: 8 }}>OUTLET y ACCESORIO ya van como «Todo exhibido».</div>}
       {Object.keys(cv.modosProd).map((pid) => filaModo('modosProd', pid, productos.find(([p]) => p === pid)?.[1] ?? `Producto ${pid}`))}
       {puede && (
         <>
@@ -688,6 +758,9 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
         </>
       )}
 
+      {/* Sin etiqueta de precio es de la ropa: BDI no lo usa. */}
+      {!bdi && (
+        <>
       {/* Darío, 12-oct-2026: las bikinis van a una caja «todo a $5.000» → sin etiqueta de precio, y
           como todo está exhibido, cada unidad va con alarma. No cambia cuánto se lleva. */}
       <div style={{ fontSize: 13, fontWeight: 700, margin: '16px 0 6px' }}>Sin etiqueta de precio</div>
@@ -736,6 +809,8 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
           ))}
         </>
       )}
+        </>
+      )}
     </Modal>
   )
 }
@@ -747,6 +822,7 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
   if (!armado) return null
   const r = resumenArmado(armado.pedido, armado.escaneos || {})
   const quien = armado.persona ? ` · ${armado.persona}` : ''
+  const art = articuloDe(armado.linea)
   const devolucion = armado.sentido === 'devolver'
   const ya = armado.transfer?.unidades ?? 0
   const box = { marginBottom: space[3] }
@@ -754,7 +830,7 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
     return (
       <div style={box}>
         <Notice tone="brand" icon="📦">
-          Armado en curso{quien} · {r.escaneadas} de {r.pedidas} prendas escaneadas{ya > 0 ? ` · ${ya} ya transferidas` : ''}
+          Armado en curso{quien} · {r.escaneadas} de {r.pedidas} {art.plural} escaneadas{ya > 0 ? ` · ${ya} ya transferidas` : ''}
         </Notice>
       </div>
     )
@@ -762,7 +838,7 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
     return (
       <div style={box}>
         <Notice tone="success" icon="✓">
-          {devolucion ? 'Devolución transferida' : 'Reposición transferida'} a las {hhmm(armado.cerrado_en)}{quien} · {ya || r.escaneadas} prendas
+          {devolucion ? 'Devolución transferida' : 'Reposición transferida'} a las {hhmm(armado.cerrado_en)}{quien} · {ya || r.escaneadas} {art.plural}
           {armado.transfer?.transfer_id ? ` · Transferencia ${(armado.transfer.tandas?.length ?? 0) > 1 ? armado.transfer.tandas!.map((t) => t.transfer_id).join(', ') : armado.transfer.transfer_id}` : ''}. Actualizá el stock para ver la lista nueva.
         </Notice>
       </div>
@@ -783,7 +859,7 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
           <div>
             <b>Transferencia sin confirmar{quien}.</b> Puede haberse hecho: ⛔ no la hagas a mano. Buscá en Gestión Nube una transferencia{' '}
             {devolucion ? 'del local al depósito' : 'del depósito al local'} de las {hhmm(armado.actualizado_en)}
-            {u ? ` de ${u} ${u === 1 ? 'prenda' : 'prendas'}` : ''} con <b>#{codigoArmado(armado.id)}</b> en la descripción.
+            {u ? ` de ${u} ${u === 1 ? art.singular : art.plural}` : ''} con <b>#{codigoArmado(armado.id)}</b> en la descripción.
           </div>
           {armado.transfer?.descripcion && <div style={{ fontSize: font.sm, marginTop: space[1], opacity: 0.85 }}>Descripción: «{armado.transfer.descripcion}»</div>}
           <div style={{ display: 'flex', gap: space[2], marginTop: space[2], flexWrap: 'wrap' }}>
