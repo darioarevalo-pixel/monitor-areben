@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { armarTicket, armarTicketCambio, fechaConDia, fechaTicket, marcasDelTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
+import { armarTicket, armarTicketCambio, armarTicketCierre, fechaConDia, fechaTicket, marcasDelTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
 import { REGLAS_INICIALES, cobro, nombreParaTicket, renglones } from '@/lib/caja/core.core.js'
 
 const medir = (txt: string) => txt.match(/.{1,40}/g) || ['']
@@ -185,5 +185,37 @@ describe('ticket de cambio (regalo, Bruno 13-oct)', () => {
     expect(txt.join(' ')).toContain('Cambios dentro de los 30 días')
     expect(txt.some((t) => t.includes('$'))).toBe(false)
     expect(txt.some((t) => /TOTAL|Descuento|RECIBIMOS|VUELTO/.test(t))).toBe(false)
+  })
+})
+
+describe('ticket del cierre (Bruno, 13-oct)', () => {
+  const cierre = {
+    marca: 'Zattia', abierto_en: '2026-10-13T12:00:00Z', abierto_por: 'cajera', cerrado_en: '2026-10-13T23:00:00Z', cerrado_por: 'cajera',
+    fondo: 50000, contado: 82300, esperado: 82500, nota: 'faltan 200',
+    resumen: {
+      porCuenta: [{ nombre: 'Efectivo', monto: 30000, cobros: 2, efectivo: true }, { nombre: 'Debito', monto: 15000, cobros: 1 }],
+      total: 45000, ventas: 3,
+      efectivo: { fondo: 50000, cobrado: 30000, cobradoGN: 4500, salidas: 2000, esperado: 82500 },
+      diferencia: -200,
+    },
+    conteos: { cierre: { billetes: { 20000: 4, 2000: 1, 200: 1, 100: 1, 500: 0 }, total: 82300 } },
+    movimientos: [{ tipo: 'salida' as const, monto: 2000, motivo: 'Limpieza' }, { tipo: 'salida' as const, monto: 99, motivo: 'anulada', anulado_en: '2026-10-13T15:00:00Z' }],
+  }
+  it('🔑 cada cuenta, la cuenta del efectivo y los billetes contados uno por uno', () => {
+    const { ops } = armarTicketCierre(cierre, AHORA, medir)
+    const txt = ops.filter((o) => o.k === 'txt').map((o) => (o as { txt: string }).txt)
+    expect(montoDe(ops, 'Efectivo (2)')).toBe('$30.000')
+    expect(montoDe(ops, 'Debito (1)')).toBe('$15.000')
+    expect(montoDe(ops, 'Total vendido')).toBe('$45.000')
+    expect(montoDe(ops, '+ Cobrado en Gestión Nube')).toBe('$4.500')
+    expect(montoDe(ops, 'ESPERADO')).toBe('$82.500')
+    expect(montoDe(ops, 'CONTADO')).toBe('$82.300')
+    expect(montoDe(ops, 'FALTA')).toBe('$200')
+    expect(montoDe(ops, '4 x $20.000')).toBe('$80.000')
+    expect(montoDe(ops, 'Total')).toBe('$82.300')
+    expect(txt.some((t) => t.startsWith('0 x'))).toBe(false)
+    expect(montoDe(ops, 'Limpieza')).toBe('-$2.000')
+    expect(txt).not.toContain('anulada')
+    expect(txt).toContain('Nota: faltan 200')
   })
 })

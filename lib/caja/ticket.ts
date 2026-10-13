@@ -296,3 +296,105 @@ export async function imprimirTicket(t: DatosTicket, efectivo: (cuenta: number) 
     }),
   )
 }
+
+/**
+ * El TICKET DEL CIERRE (Bruno, 13-oct): el papel que queda con la plata de la caja. Lo cobrado POR CUENTA,
+ * la cuenta del efectivo (fondo + ventas + Gestión Nube + aportes − salidas = esperado, contado y
+ * diferencia) y **los billetes contados uno por uno**, para que el fajo que arman coincida con el papel.
+ * ⛔ Calcula: escribe la foto que guardó el cierre (`resumen`, `conteos.cierre`).
+ */
+export type DatosCierre = {
+  marca: string
+  abierto_en: string
+  abierto_por: string | null
+  cerrado_en: string | null
+  cerrado_por: string | null
+  fondo: number
+  contado: number | null
+  esperado: number | null
+  nota: string | null
+  resumen?: {
+    porCuenta: { nombre: string; monto: number; cobros: number; efectivo?: boolean }[]
+    total: number
+    ventas: number
+    efectivo: { fondo: number; cobrado: number; deEspera?: number; cobradoGN: number; aportes?: number; salidas: number; esperado: number }
+    diferencia?: number
+  } | null
+  conteos?: { cierre?: { billetes: Record<string, number>; total: number } | null } | null
+  /** Las salidas e ingresos con su motivo (sólo al cerrar: la lista de cajas anteriores ⛔ los trae). */
+  movimientos?: { tipo?: 'salida' | 'aporte'; monto: number; motivo: string; anulado_en?: string | null }[] | null
+}
+
+export function armarTicketCierre(t: DatosCierre, ahoraMs: number, partir: Medidor): { ops: (OpBase | OpImagen)[]; alto: number } {
+  const l = lienzo(partir)
+  const { escribir, par, regla } = l
+  const cuando = (iso: string | null) => (iso ? fechaTicket(Date.parse(iso)) : '—')
+  escribir(t.marca.toUpperCase(), 16, true, 'centro')
+  l.y += 1
+  escribir('CIERRE DE CAJA', 12, true, 'centro')
+  regla()
+  escribir(`Abrió: ${t.abierto_por ?? '—'} · ${cuando(t.abierto_en)}`, 9, false)
+  escribir(`Cerró: ${t.cerrado_por ?? '—'} · ${cuando(t.cerrado_en)}`, 9, false)
+  regla()
+
+  const r = t.resumen
+  if (r) {
+    escribir(`VENTAS (${r.ventas})`, 10, true)
+    l.y += 0.6
+    for (const c of r.porCuenta) par(`${c.nombre} (${c.cobros})`, plata(c.monto), 9)
+    par('Total vendido', plata(r.total), 10, true)
+    regla()
+
+    const e = r.efectivo
+    escribir('EFECTIVO', 10, true)
+    l.y += 0.6
+    par('Fondo inicial', plata(e.fondo), 9)
+    par('+ Ventas en efectivo', plata(e.cobrado), 9)
+    if (e.deEspera) par('+ Transferencias en espera (efectivo)', plata(e.deEspera), 9)
+    if (e.cobradoGN) par('+ Cobrado en Gestión Nube', plata(e.cobradoGN), 9)
+    if (e.aportes) par('+ Ingresos', plata(e.aportes), 9)
+    if (e.salidas) par('- Salidas', `-${plata(e.salidas)}`, 9)
+    l.y += 0.6
+    par('ESPERADO', plata(Number(t.esperado ?? e.esperado)), 11, true)
+  }
+  if (t.contado != null) par('CONTADO', plata(Number(t.contado)), 11, true)
+  const dif = r?.diferencia ?? (t.contado != null && t.esperado != null ? Number(t.contado) - Number(t.esperado) : null)
+  if (dif != null) par(Math.abs(dif) < 0.005 ? 'DIFERENCIA' : dif > 0 ? 'SOBRA' : 'FALTA', Math.abs(dif) < 0.005 ? plata(0) : plata(Math.abs(dif)), 11, true)
+
+  const billetes = t.conteos?.cierre?.billetes
+  const conBilletes = billetes ? Object.entries(billetes).map(([v, n]) => [Number(v), Number(n)] as const).filter(([, n]) => n > 0).sort((a, b) => b[0] - a[0]) : []
+  if (conBilletes.length) {
+    regla()
+    escribir('BILLETES CONTADOS', 10, true)
+    l.y += 0.6
+    for (const [v, n] of conBilletes) par(`${n} x ${plata(v)}`, plata(n * v), 9)
+    par('Total', plata(conBilletes.reduce((s, [v, n]) => s + v * n, 0)), 10, true)
+  }
+
+  const movs = (t.movimientos ?? []).filter((m) => !m.anulado_en)
+  if (movs.length) {
+    regla()
+    escribir('SALIDAS E INGRESOS', 10, true)
+    l.y += 0.6
+    for (const m of movs) par(m.motivo, `${(m.tipo ?? 'salida') === 'salida' ? '-' : '+'}${plata(m.monto)}`, 9)
+  }
+  if (t.nota?.trim()) {
+    regla()
+    escribir(`Nota: ${t.nota.trim()}`, 9, false)
+  }
+  regla()
+  l.y += 6
+  escribir('Firma: ______________________', 9, false)
+  l.y += 4
+  escribir('Recibe: _____________________', 9, false)
+  l.y += 2
+  regla()
+  escribir(`Impreso: ${fechaTicket(ahoraMs)}`, 8, false, 'centro', 60)
+  return l.pagina()
+}
+
+/** El ticket del cierre a la térmica. */
+export async function imprimirCierre(t: DatosCierre, ahoraMs: number) {
+  const rollo = await abrirRollo()
+  imprimirPdf(rollo.documento<OpImagen>([armarTicketCierre(t, ahoraMs, rollo.medir)], () => false))
+}

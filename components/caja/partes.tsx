@@ -7,7 +7,8 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { MODOS_OFERTA, NOMBRE_MEDIO, medioDeCuenta, msjOferta, ofertaDe } from '@/lib/caja/core.core.js'
-import { numeroProvisorio, plata, type LogoTicket } from '@/lib/caja/ticket'
+import { MARCA_CAJA } from '@/lib/caja/marca'
+import { imprimirCierre, numeroProvisorio, plata, type DatosCierre, type LogoTicket } from '@/lib/caja/ticket'
 import { titularesDe } from '@/lib/caja/otra-cuenta.core.js'
 import { TOLERANCIA_TRANSFERENCIA } from '@/lib/pagos-recibidos/core.core.js'
 import { CalculadoraBilletes, olvidarConteo } from '@/components/caja/CalculadoraBilletes'
@@ -1591,11 +1592,23 @@ const th: React.CSSProperties = { textAlign: 'left', fontSize: font.xs, textTran
 const td: React.CSSProperties = { padding: `${space[2]}px ${space[2]}px ${space[2]}px 0`, borderBottom: `1px solid ${color.bg2}`, whiteSpace: 'nowrap' }
 const der: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
 
-/** El turno que se acaba de cerrar: Esperado · Contado · Diferencia, ⛔ una frase. */
+/** El turno cerrado, como lo escribe el ticket del cierre (Bruno, 13-oct). */
+export const datosCierre = (t: Turno): DatosCierre => ({ ...t, marca: MARCA_CAJA.nombre, movimientos: t.salidas ?? null })
+/** Imprime el ticket del cierre; el error vuelve como texto para el aviso de la pantalla. */
+export const imprimirCierreDe = (t: Turno) => imprimirCierre(datosCierre(t), Date.now())
+
+/** El turno que se acaba de cerrar: Esperado · Contado · Diferencia, ⛔ una frase. «Imprimir cierre» saca el ticket del turno. */
 export function AvisoCierre({ t }: { t: Turno }) {
   const d = t.resumen?.diferencia ?? Number(t.contado) - Number(t.esperado)
   return (
-    <SectionCard title={`Caja cerrada ${t.cerrado_en ? horaAr(t.cerrado_en) : ''}`}>
+    <SectionCard
+      title={`Caja cerrada ${t.cerrado_en ? horaAr(t.cerrado_en) : ''}`}
+      actions={
+        <Button size="sm" variant="outline" onClick={() => void imprimirCierreDe(t)}>
+          <Icono nombre="impresora" size={16} /> Imprimir cierre
+        </Button>
+      }
+    >
       <div style={grillaDatos}>
         <Dato rotulo="Esperado" valor={plata(Number(t.esperado))} />
         <Dato rotulo="Contado" valor={plata(Number(t.contado))} />
@@ -1687,6 +1700,8 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
       const x = await cerrarTurno(turno.id, total, nota.trim(), conteo, sinCobrosGN)
       olvidarConteo(momento)
       onCerrado(x.turno)
+      // El ticket del cierre sale solo (Bruno, 13-oct); si la impresora falla, queda «Imprimir cierre» en el aviso.
+      imprimirCierreDe(x.turno).catch((e) => console.error('No se pudo imprimir el cierre:', e))
     } catch (e) {
       if ((e as { datos?: { sinCobrosGN?: boolean } }).datos?.sinCobrosGN) setSinGN({ total, conteo })
       setError((e as Error).message)
@@ -2142,7 +2157,7 @@ export function UltimosTurnos({ ultimos, onVerVentas }: { ultimos: Turno[]; /** 
               <th style={{ ...th, ...der }}>Esperado</th>
               <th style={{ ...th, ...der }}>Contado</th>
               <th style={{ ...th, ...der }}>Diferencia</th>
-              {onVerVentas && <th style={th} />}
+              <th style={th} />
             </tr>
           </thead>
           <tbody>
@@ -2158,13 +2173,18 @@ export function UltimosTurnos({ ultimos, onVerVentas }: { ultimos: Turno[]; /** 
                   <td style={{ ...td, ...der }}>{plata(Number(t.esperado))}</td>
                   <td style={{ ...td, ...der }}>{plata(Number(t.contado))}</td>
                   <td style={{ ...td, ...der, fontWeight: weight.bold, color: tintaDiferencia(d) }}>{textoDiferencia(d)}</td>
-                  {onVerVentas && (
-                    <td style={{ ...td, textAlign: 'right' }}>
-                      <Button size="sm" variant="outline" onClick={() => onVerVentas(t)}>
-                        Ventas
+                  <td style={{ ...td, textAlign: 'right' }}>
+                    <span style={{ display: 'inline-flex', gap: space[1] }}>
+                      <Button size="sm" variant="ghost" aria-label="Imprimir cierre" title="Imprimir el ticket del cierre" onClick={() => void imprimirCierreDe(t)}>
+                        <Icono nombre="impresora" size={16} />
                       </Button>
-                    </td>
-                  )}
+                      {onVerVentas && (
+                        <Button size="sm" variant="outline" onClick={() => onVerVentas(t)}>
+                          Ventas
+                        </Button>
+                      )}
+                    </span>
+                  </td>
                 </tr>
               )
             })}

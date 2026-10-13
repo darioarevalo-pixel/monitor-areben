@@ -412,6 +412,12 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
 - El redondeo se llama **«Redondeo»** suba o baje (⛔ «Recargo por redondeo») en el ticket, el cobro y la
   pantalla de la clienta. El paso de la transferencia vuelve a ser **«Validar transferencia»**.
 
+- 🧾 **Ticket del cierre** (`armarTicketCierre`): sale solo al cerrar la caja (`CerrarTurnoModal`) y se
+  reimprime con «Imprimir cierre» en el aviso y con la impresora en «Cajas anteriores». Lleva lo cobrado
+  por cuenta, la cuenta del efectivo, contado y diferencia (SOBRA/FALTA), **los billetes contados uno por
+  uno** —el fajo que arman tiene que coincidir con el papel—, salidas e ingresos (sólo al cerrar: la lista
+  de cajas anteriores ⛔ trae el detalle) y firma. ⛔ Calcula: escribe la foto del cierre.
+
 ## Pendiente
 
 - 🏁 `sql/migrate-caja-anulada-en-gn.sql` CORRIDA en las dos bases (12-oct), verificada leyendo la columna, el check y las 7 de prueba (`por: sync`).
