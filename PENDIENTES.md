@@ -166,10 +166,9 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
   con «Consumidor Final» y hasta el TOTAL, «Redondeo», «Validar transferencia», el cierre suma las ventas en
   efectivo del POS de GN (las dos cajas en paralelo), formas de pago agrupadas (crédito es crédito), el sobre
   en vivo al contar y el ticket del cierre (ventas, efectivo, salidas y SOBRE). Ficha: `docs/secciones/caja.md`.
-  ▶️ **Manos de Bruno**: pegar la política de cambio de GN en «Política de cambio» (Zattia y BDI) · armar con
-  el diseñador el mail «Ticket del local» de BDI (molde: `.mirar/ticket-zattia/propuesta-contenido.json` del
-  mailer; BDI tiene `local` y `plazoCambio` cargados, faltan reseña de Google, IG y WhatsApp; el plazo dice
-  «desde que lo recibís») · en el local: caminar Regalo, el sobre en la ventana de cerrar y una transferencia
+  ▶️ **Manos de Bruno**: ~~política de cambio~~ (✅ 13-oct, cargada por API en las dos: Zattia «…sin uso y con su
+  etiqueta. No aplica a accesorios o productos de outlet.», BDI «…sin uso y en su empaque original.») ·
+  ~~mail «Ticket del local» de BDI~~ (✅ ACTIVO, «Tu ticket de BDI», verificado en la base del mailer) · en el local: caminar Regalo, el sobre en la ventana de cerrar y una transferencia
   real · ¿el fajo es lo contado menos el fondo? (así lo arma `armarSobre`). 🔴 Débito en oferta cae en
   «Tarjeta de crédito» (la cuenta «Feria TC» es la misma): si pasa seguido, no cierra con el posnet.
 - ⛔ **Vendedor en cada venta (W2): RETIRADO** (Bruno, 12-oct: «no tenemos esa dinámica de trabajo»).
