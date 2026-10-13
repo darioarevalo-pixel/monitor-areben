@@ -140,6 +140,16 @@ export async function facturarVentas({ mes, marca, ventaIds, usuario }) {
  * Las facturas que el monitor emitió en el mes (autorizadas, del ambiente de hoy), con lo que el PDF
  * necesita: la fila tal como se le mandó a ARCA y el número de la venta en GN para el renglón.
  */
+/** El descuento (o el redondeo hacia arriba, que GN guarda como descuento negativo) y el envío de una venta. */
+export function ajustesDeVenta(v) {
+  const r = []
+  const d = Number(v.discount) || 0, s = Number(v.shipping_cost) || 0
+  if (d > 0) r.push({ descripcion: 'Descuento', cantidad: 1, unitario: -d, importe: -d })
+  if (d < 0) r.push({ descripcion: 'Redondeo', cantidad: 1, unitario: -d, importe: -d })
+  if (s > 0) r.push({ descripcion: 'Envío', cantidad: 1, unitario: s, importe: s })
+  return r
+}
+
 export async function facturasDelMes(mes) {
   const { ambiente, error } = ambienteSeguro()
   if (!ambiente) return { status: 409, error }
@@ -147,16 +157,30 @@ export async function facturasDelMes(mes) {
   const facturas = await leerTodo(sb, 'facturas', (q) => q
     .select('id, ambiente, marca, venta_id, tipo, pto_vta, numero, fecha, total, neto, iva, doc_tipo, doc_nro, cond_iva, estado, cae, cae_vence')
     .eq('ambiente', ambiente).eq('mes', mes).eq('estado', 'autorizada').order('creado_en'))
-  const numeros = new Map()
+  const numeros = new Map(), detalles = new Map()
   for (const marca of MARCAS) {
     const ids = [...new Set(facturas.filter((f) => f.marca === marca).map((f) => f.venta_id))]
     if (!ids.length) continue
     const { url, key } = cfgDeMarca(marca)
     const b = createClient(url, key)
     for (let i = 0; i < ids.length; i += 300) {
-      const { data, error: e } = await b.from('ventas').select('id, number').in('id', ids.slice(i, i + 300))
+      const tanda = ids.slice(i, i + 300)
+      const { data, error: e } = await b.from('ventas').select('id, number, discount, shipping_cost').in('id', tanda)
       if (e) throw new Error(`ventas (${marca}): ${e.message}`)
       for (const v of data) numeros.set(claveVenta(marca, v.id), v.number != null ? String(v.number) : null)
+      const d = await leerTodo(b, 'venta_detalles', (q) => q.select('sale_id, product_name, size, quantity, unit_price, total').in('sale_id', tanda).order('id'))
+      for (const r of d) {
+        const k = claveVenta(marca, r.sale_id)
+        if (!detalles.has(k)) detalles.set(k, [])
+        detalles.get(k).push({ descripcion: [r.product_name, r.size].filter(Boolean).join(' - '), cantidad: Number(r.quantity), unitario: Number(r.unit_price), importe: Number(r.total) })
+      }
+      // GN guarda las prendas SIN el descuento ni el envío de la venta: total = prendas − descuento + envío
+      // (medido sep-2026: explica el 98% de las ventas). Van como renglones, igual que en la factura de GN.
+      for (const v of data) {
+        const k = claveVenta(marca, v.id)
+        if (!detalles.has(k)) continue
+        for (const extra of ajustesDeVenta(v)) detalles.get(k).push(extra)
+      }
     }
   }
   return {
@@ -164,6 +188,7 @@ export async function facturasDelMes(mes) {
     facturas: facturas.map((f) => ({
       ...f, total: Number(f.total), neto: Number(f.neto), iva: Number(f.iva), numero: Number(f.numero), doc_nro: Number(f.doc_nro),
       venta_numero: numeros.get(claveVenta(f.marca, f.venta_id)) ?? null,
+      renglones: detalles.get(claveVenta(f.marca, f.venta_id)) || [],
     })),
   }
 }

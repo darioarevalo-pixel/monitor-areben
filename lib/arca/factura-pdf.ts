@@ -22,6 +22,8 @@ export type FacturaEmitida = {
   venta_id: string
   /** El número de la venta en GN, para el renglón (null si no se encontró). */
   venta_numero: string | null
+  /** Las prendas de la venta en GN (`venta_detalles`). Se imprimen sólo si suman lo facturado. */
+  renglones: Renglon[]
   tipo: number
   pto_vta: number
   numero: number
@@ -38,6 +40,18 @@ export type FacturaEmitida = {
 }
 
 type Emisor = import('./emisor.core.js').Emisor
+export type Renglon = { descripcion: string; cantidad: number; unitario: number; importe: number }
+
+/**
+ * Qué renglones lleva la factura. Las prendas de la venta, como GN, cuando suman lo facturado (el 98% en
+ * sep-2026: lo cobrado en cuentas Areben = el total de la venta). Si no suman —parte se cobró en una cuenta
+ * propia, o la venta tiene un ajuste—, un renglón solo por lo facturado: el detalle ⛔ puede sumar más que la factura.
+ */
+export function renglonesDe(f: Pick<FacturaEmitida, 'renglones' | 'total' | 'venta_numero' | 'venta_id'>): Renglon[] {
+  const suma = Math.round((f.renglones || []).reduce((a, r) => a + r.importe * 100, 0))
+  if (f.renglones?.length && Math.abs(suma - Math.round(f.total * 100)) <= 1) return f.renglones
+  return [{ descripcion: `Prendas de vestir y accesorios — venta ${f.venta_numero || f.venta_id}`, cantidad: 1, unitario: f.total, importe: f.total }]
+}
 
 const LETRA: Record<number, { letra: string; nombre: string }> = {
   [CBTE.FACTURA_A]: { letra: 'A', nombre: 'FACTURA' },
@@ -147,11 +161,18 @@ export function armarFacturaPdf({ f, emisor, qrDataUrl, JsPDF }: { f: FacturaEmi
   pdf.text('Precio unit.', X.unit, y + 5, { align: 'right' })
   pdf.text('Subtotal', X.sub, y + 5, { align: 'right' })
   pdf.setFont('helvetica', 'normal')
-  y += 13
-  pdf.text(`Prendas de vestir y accesorios — venta ${f.venta_numero || f.venta_id}`, X.desc, y)
-  pdf.text('1', X.cant, y, { align: 'right' })
-  pdf.text(pesos(f.total), X.unit, y, { align: 'right' })
-  pdf.text(pesos(f.total), X.sub, y, { align: 'right' })
+  y += 7
+  for (const r of renglonesDe(f)) {
+    // Una venta mayorista puede traer muchas prendas: lo que no entra arriba de los totales pasa de hoja.
+    if (y > 190) { pdf.addPage(); y = 16 }
+    const desc = pdf.splitTextToSize(r.descripcion, X.cant - X.desc - 14)
+    y += 6
+    pdf.text(desc, X.desc, y)
+    pdf.text(String(r.cantidad), X.cant, y, { align: 'right' })
+    pdf.text(pesos(r.unitario), X.unit, y, { align: 'right' })
+    pdf.text(pesos(r.importe), X.sub, y, { align: 'right' })
+    y += 5 * (desc.length - 1)
+  }
 
   // ── Totales ──
   y = 200

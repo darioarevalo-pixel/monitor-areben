@@ -7,10 +7,10 @@ import { jsPDF } from 'jspdf'
 import QR from 'qrcode'
 import { URL_QR, datosQR, urlQR } from '../lib/arca/qr.core.js'
 import { EMISOR, faltanDelEmisor, type Emisor } from '../lib/arca/emisor.core.js'
-import { armarFacturaPdf, nombreArchivo, numeroComprobante, type FacturaEmitida } from '../lib/arca/factura-pdf'
+import { armarFacturaPdf, nombreArchivo, numeroComprobante, renglonesDe, type FacturaEmitida } from '../lib/arca/factura-pdf'
 
 const F: FacturaEmitida = {
-  id: 'f1', ambiente: 'homologacion', marca: 'zattia', venta_id: '1519771', venta_numero: '30437',
+  id: 'f1', ambiente: 'homologacion', marca: 'zattia', venta_id: '1519771', venta_numero: '30437', renglones: [],
   tipo: 6, pto_vta: 2, numero: 12, fecha: '2026-10-13', total: 12000, neto: 9917.36, iva: 2082.64,
   doc_tipo: 99, doc_nro: 0, cond_iva: 5, estado: 'autorizada', cae: '86417453677227', cae_vence: '2026-10-23',
 }
@@ -82,5 +82,48 @@ describe('el PDF', () => {
   it('nombra el archivo por letra, número y marca', () => {
     expect(numeroComprobante(F)).toBe('00002-00000012')
     expect(nombreArchivo(F)).toBe('factura-B-00002-00000012-zattia.pdf')
+  })
+})
+
+describe('los renglones', () => {
+  const r = (importe: number, d = 'TOP ZARA - CHOCOLATE') => ({ descripcion: d, cantidad: 1, unitario: importe, importe })
+  it('las prendas de la venta, como GN, cuando suman lo facturado', () => {
+    const f = { ...F, total: 91300, renglones: [r(14866.5), r(42066.5, 'BERMUDA ZAHA - 36'), r(34367)] }
+    expect(renglonesDe(f)).toEqual(f.renglones)
+  })
+  it('si no suman (parte cobrada en otra cuenta), un renglón solo por lo facturado', () => {
+    expect(renglonesDe({ ...F, total: 5000, renglones: [r(12000)] })).toEqual([
+      { descripcion: 'Prendas de vestir y accesorios — venta 30437', cantidad: 1, unitario: 5000, importe: 5000 },
+    ])
+  })
+  it('sin detalle en el espejo, también un renglón solo', () => {
+    expect(renglonesDe(F)).toHaveLength(1)
+  })
+  it('muchas prendas pasan de hoja', async () => {
+    const renglones = Array.from({ length: 40 }, () => r(100))
+    const qrDataUrl = await QR.toDataURL(urlQR(datosQR(F)), { margin: 0 })
+    const pdf = armarFacturaPdf({ f: { ...F, total: 4000, renglones }, emisor: EMISOR_COMPLETO, qrDataUrl, JsPDF: SinComprimir })
+    expect(pdf.getNumberOfPages()).toBe(2)
+  })
+})
+
+describe('descuento y envío de la venta (GN los guarda aparte de las prendas)', () => {
+  it('la Factura B 00005-00006043 de GN (venta 30290): tres prendas con 15% y «Descuento 49,50» suman $91.300', async () => {
+    const { ajustesDeVenta } = await import('../api/_erp.js')
+    const prendas = [
+      { descripcion: 'TOP ZARA - CHOCOLATE', cantidad: 1, unitario: 14866.5, importe: 14866.5 },
+      { descripcion: 'BERMUDA ZAHA - 36', cantidad: 1, unitario: 42066.5, importe: 42066.5 },
+      { descripcion: 'SHORT MINT - 36', cantidad: 1, unitario: 34416.5, importe: 34416.5 },
+    ]
+    const renglones = [...prendas, ...ajustesDeVenta({ discount: '49.5', shipping_cost: '0' })]
+    expect(renglones.at(-1)).toEqual({ descripcion: 'Descuento', cantidad: 1, unitario: -49.5, importe: -49.5 })
+    expect(renglonesDe({ ...F, total: 91300, renglones })).toEqual(renglones)
+  })
+  it('el redondeo hacia arriba (descuento negativo) y el envío suman', async () => {
+    const { ajustesDeVenta } = await import('../api/_erp.js')
+    expect(ajustesDeVenta({ discount: '-20', shipping_cost: '6900' })).toEqual([
+      { descripcion: 'Redondeo', cantidad: 1, unitario: 20, importe: 20 },
+      { descripcion: 'Envío', cantidad: 1, unitario: 6900, importe: 6900 },
+    ])
   })
 })
