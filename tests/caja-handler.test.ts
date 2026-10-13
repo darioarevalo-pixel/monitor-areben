@@ -1313,6 +1313,18 @@ describe('caja · auditoría 11-oct, fase 2 (A5–A12, B2–B5, robustez)', () =
     expect((t.body?.turno as { resumen: { aMano: Fila } }).resumen.aMano).toEqual({ ventas: 1, venta: 2000, prendas: 0, precios: 5490 })
   })
 
+  it('🔑 `liviano=1` (13-oct): la fila del turno SOLA, sin resumen y ⛔ sin una sola consulta a GN', async () => {
+    conSesion(CAJERA)
+    const t = await correr(req('GET', { action: 'turno', liviano: '1' }))
+    expect(t.code).toBe(200)
+    expect((t.body?.turno as Fila).id).toBe(TURNO_ID)
+    expect((t.body?.turno as Fila).resumen).toBeUndefined()
+    expect(gn.gets).toHaveLength(0)
+    // La entera sigue trayendo el resumen.
+    const u = await correr(req('GET', { action: 'turno' }))
+    expect((u.body?.turno as Fila).resumen).toBeDefined()
+  })
+
   it('🔴 A7: el turno se cerró entre la lectura y el insert ⇒ 409 y la venta ⛔ queda guardada', async () => {
     conSesion(CAJERA)
     // Otra pantalla cierra el turno justo antes de que la venta se inserte: el trigger lo frena.

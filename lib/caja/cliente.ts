@@ -179,7 +179,9 @@ export type Turno = {
   resumen?: ResumenTurno & { diferencia?: number }
   salidas?: SalidaTurno[]
 }
-export const leerTurno = () => get<{ turno: Turno | null; ultimos: Turno[] }>('action=turno', 'No se pudo leer la caja.')
+/** `liviano`: la fila sola, sin `resumen` ni `ultimos` (⛔ consulta GN): para dibujar el POS sin esperar. */
+export const leerTurno = (liviano = false) =>
+  get<{ turno: Turno | null; ultimos: Turno[] }>(liviano ? 'action=turno&liviano=1' : 'action=turno', 'No se pudo leer la caja.')
 export const abrirTurno = (fondo: number, conteo?: Conteo | null) =>
   post<{ turno: Turno }>({ action: 'abrir-turno', fondo, ...(conteo ? { conteo } : {}) }, 'No se pudo abrir la caja.')
 export const sacarEfectivo = (monto: number, motivo: string, tipo: 'salida' | 'aporte' = 'salida') =>

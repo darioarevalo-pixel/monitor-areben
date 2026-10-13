@@ -449,6 +449,19 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
 - ✉️ **El mail** (`CampoMail`, `lib/caja/mail.ts`): botones `@gmail.com` / `@hotmail.com`; un mail a medio
   escribir apaga el cobro ⇒ el cobro lo muestra para corregirlo ahí o «Sin mail» (13-oct).
 
+## Entrar y salir del POS demoraba (13-oct-2026, reporte del local)
+
+Dos causas, medidas en prod:
+
+1. **«Abrir POS» y «Volver» eran un `<a>` pelado** ⇒ cada ida y vuelta RECARGABA el monitor entero:
+   sesión («Entrando…»), shell, datos de la marca. Ahora es `IrA` (`partes.tsx`): navega con el router
+   de Next; con Ctrl/⌘ sigue abriendo otra pestaña.
+2. **El POS esperaba `action=turno` entero para dibujarse**, y el resumen lee GN de a una consulta
+   (cobros en efectivo + anuladas, 2/s): **3,9 s** con el caché de 60 s vencido y **10,5 s** en frío,
+   contra 0,6–0,8 s con caché. Ahora el POS pide primero `action=turno&liviano=1` (la fila sola, ⛔ GN) y
+   la entera por detrás; la liviana ⛔ pisa a la entera si llega tarde. La pestaña Caja sigue leyendo la
+   entera (muestra el resumen).
+
 ## Pendiente
 
 - 🏁 `sql/migrate-caja-anulada-en-gn.sql` CORRIDA en las dos bases (12-oct), verificada leyendo la columna, el check y las 7 de prueba (`por: sync`).

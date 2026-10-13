@@ -22,6 +22,8 @@ const TURNO = { id: 't1', abierto_en: '2026-10-05T12:00:00.000Z', abierto_por: '
 let turno: typeof TURNO | null = TURNO
 
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => sesion }))
+const push = vi.fn()
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }))
 vi.mock('@/components/fundas/useDatosMonitor', () => ({ useDatosMonitor: () => ({ datos: null }) }))
 vi.mock('@/components/productos/useTnImages', () => ({ useTnPromo: () => null }))
 vi.mock('@/store/useAgenda', () => {
@@ -101,6 +103,47 @@ describe('POS (/pos)', () => {
     const t = await montar(<CajaPOS />)
     expect(t).toContain('Sin caja abierta')
     expect(document.querySelector('a[href="/caja"]')).toBeTruthy()
+  })
+
+  it('🔑 se dibuja con la lectura LIVIANA del turno, sin esperar la entera (que lee GN: 1 a 10 s)', async () => {
+    const { leerTurno } = await import('@/lib/caja/cliente')
+    vi.mocked(leerTurno).mockImplementation((liviano?: boolean) => (liviano ? Promise.resolve({ turno, ultimos: [] }) : new Promise(() => {})) as never)
+    try {
+      const t = await montar(<CajaPOS />)
+      expect(t).not.toContain('Abriendo la caja')
+      expect(t).toContain('Cerrar caja')
+      expect(vi.mocked(leerTurno)).toHaveBeenCalledWith(true)
+    } finally {
+      vi.mocked(leerTurno).mockImplementation(async () => ({ turno, ultimos: [] }) as never)
+    }
+  })
+
+  it('🔴 la liviana que llega TARDE ⛔ pisa a la entera (que trae el resumen)', async () => {
+    const { leerTurno } = await import('@/lib/caja/cliente')
+    let soltar: (v: unknown) => void = () => {}
+    vi.mocked(leerTurno).mockImplementation((liviano?: boolean) => (liviano ? new Promise((r) => (soltar = r)) : Promise.resolve({ turno: null, ultimos: [] })) as never)
+    try {
+      await montar(<CajaPOS />)
+      await act(async () => soltar({ turno: TURNO, ultimos: [] }))
+      expect(document.body.textContent).toContain('Sin caja abierta')
+    } finally {
+      vi.mocked(leerTurno).mockImplementation(async () => ({ turno, ultimos: [] }) as never)
+    }
+  })
+
+  it('🔑 «Volver» navega adentro de la app: ⛔ recarga el monitor entero', async () => {
+    push.mockClear()
+    await montar(<CajaPOS />)
+    const a = document.querySelector('a[href="/caja"]') as HTMLAnchorElement
+    const clic = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+    act(() => void a.dispatchEvent(clic))
+    expect(clic.defaultPrevented).toBe(true)
+    expect(push).toHaveBeenCalledWith('/caja')
+    // Con Ctrl/⌘ sigue siendo un link: otra pestaña, ⛔ el router.
+    push.mockClear()
+    const ctrl = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ctrlKey: true })
+    act(() => void a.dispatchEvent(ctrl))
+    expect(push).not.toHaveBeenCalled()
   })
 })
 

@@ -5,7 +5,8 @@
  * y la pestaña Caja del monitor, que es el informativo del turno (`Caja.tsx`).
  */
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState, type ComponentProps } from 'react'
+import { useRouter } from 'next/navigation'
 import { MODOS_OFERTA, NOMBRE_MEDIO, msjOferta, ofertaDe } from '@/lib/caja/core.core.js'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { porFormaDePago } from '@/lib/caja/cierre.core.js'
@@ -60,7 +61,7 @@ import {
   usarCuentaMp,
   type CuentaMp,
 } from '@/lib/caja/cliente'
-import { Badge, Button, Card, Field, Icono, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
+import { Badge, Button, ButtonLink, Card, Field, Icono, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { ConfirmDetalle, useConfirmar } from '@/components/ui/Confirm'
 
@@ -2753,5 +2754,26 @@ export function PoliticaCambio({ inicial, onGuardada }: { inicial: string | null
         </div>
       </div>
     </Plegable>
+  )
+}
+
+/**
+ * El botón entre la pestaña Caja y el POS (Bruno, 13-oct: «entrar y salir del POS demora»). Era un `<a>`
+ * pelado ⇒ cada ida y vuelta RECARGABA el monitor entero: la sesión otra vez («Entrando…»), el shell y
+ * los datos de la marca. Navega adentro de la app; con Ctrl/⌘ o la rueda sigue abriendo otra pestaña.
+ */
+export function IrA({ href, onClick, ...resto }: ComponentProps<typeof ButtonLink> & { href: string }) {
+  const router = useRouter()
+  return (
+    <ButtonLink
+      href={href}
+      onClick={(e) => {
+        onClick?.(e)
+        if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+        e.preventDefault()
+        router.push(href)
+      }}
+      {...resto}
+    />
   )
 }

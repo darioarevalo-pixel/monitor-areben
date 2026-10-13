@@ -21,8 +21,8 @@ import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { nombreParaTicket } from '@/lib/caja/core.core.js'
 import { leerConfig, leerPendientes, leerTurno, type Config, type Turno, type Venta } from '@/lib/caja/cliente'
-import { Button, ButtonLink, Notice, color, font, space, weight } from '@/components/ui'
-import { DeteccionTransferencias, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TransferenciasEnEspera, TurnoCaja, UltimosTurnos, VentasDelTurno, diaAr } from '@/components/caja/partes'
+import { Button, Notice, color, font, space, weight } from '@/components/ui'
+import { DeteccionTransferencias, IrA, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TransferenciasEnEspera, TurnoCaja, UltimosTurnos, VentasDelTurno, diaAr } from '@/components/caja/partes'
 import { VistaTicket } from '@/components/caja/VistaTicket'
 import { PromosCaja } from '@/components/caja/PromosCaja'
 import { PromosFormaDePago } from '@/components/caja/PromosFormaDePago'
@@ -91,9 +91,9 @@ function CajaDeMarca({ store }: { store: string }) {
   const otras = pendientes.filter((v) => v.estado !== 'esperando_pago')
   const esperando = pendientes.length - otras.length
   const abrirPOS = esMio ? (
-    <ButtonLink href={`/pos?marca=${store}`} variant="solid" tone="brand">
+    <IrA href={`/pos?marca=${store}`} variant="solid" tone="brand">
       Abrir POS
-    </ButtonLink>
+    </IrA>
   ) : null
   const antes = turno ? (
     <>

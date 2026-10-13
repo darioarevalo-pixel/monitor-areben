@@ -86,7 +86,7 @@ import {
   type Variante,
   type Venta,
 } from '@/lib/caja/cliente'
-import { Badge, Button, ButtonLink, Card, Field, Icono, Input, Modal, Notice, SectionCard, color, font, radius, shadow, space, weight } from '@/components/ui'
+import { Badge, Button, Card, Field, Icono, Input, Modal, Notice, SectionCard, color, font, radius, shadow, space, weight } from '@/components/ui'
 import { useConfirmar } from '@/components/ui/Confirm'
 import { esStunned } from '@/lib/lineas.core.js'
 import { ModalVarianteContext } from '@/components/ui/Modal'
@@ -104,6 +104,7 @@ import {
   SiNo,
   AvisoCierre,
   DeteccionTransferencias,
+  IrA,
   ModalesTurno,
   UltimaVenta,
   VariosPagos,
@@ -309,6 +310,11 @@ function POS() {
       .catch((e) => setErrTurno((e as Error).message))
   }, [])
   useEffect(() => {
+    // Primero la fila sola (rápida) para dibujar el POS; la entera trae el resumen, que lee GN y tarda
+    // de 1 a 10 s (medido el 13-oct). La liviana ⛔ pisa a la entera si llega después.
+    leerTurno(true)
+      .then((r) => setTurno((ya) => (ya === undefined ? r.turno : ya)))
+      .catch(() => {})
     refrescarTurno()
   }, [refrescarTurno])
 
@@ -909,9 +915,9 @@ function POS() {
         {cerradoAca && <AvisoCierre t={cerradoAca} />}
         <Notice tone="warning">Sin caja abierta: el POS no cobra. Abrir caja desde la pestaña Caja.</Notice>
         <div>
-          <ButtonLink href="/caja" variant="solid" tone="brand">
+          <IrA href="/caja" variant="solid" tone="brand">
             Ir a la Caja
-          </ButtonLink>
+          </IrA>
         </div>
       </div>,
     )
@@ -921,9 +927,9 @@ function POS() {
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
         <Notice tone="warning">Caja de {turno.abierto_por ?? 'otra cuenta'}: POS sólo para esa cuenta.</Notice>
         <div>
-          <ButtonLink href="/caja" iconLeft={<Icono nombre="atras" />}>
+          <IrA href="/caja" iconLeft={<Icono nombre="atras" />}>
             Caja
-          </ButtonLink>
+          </IrA>
         </div>
       </div>,
     )
@@ -969,9 +975,9 @@ function POS() {
         @media (max-width: 860px) { .pos-grid { grid-template-columns: 1fr; } .pos-der { position: static; max-height: none; } }
       `}</style>
       <header className="pos-top">
-        <ButtonLink href="/caja" className="pos-tbtn icono" aria-label="Volver" title="Volver" style={{ height: 36 }}>
+        <IrA href="/caja" className="pos-tbtn icono" aria-label="Volver" title="Volver" style={{ height: 36 }}>
           <Icono nombre="atras" size={18} />
-        </ButtonLink>
+        </IrA>
         {/* El chip de la marca (prototipo del 5-oct): sale de la configuración (`lib/caja/marca.ts`). */}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 28, padding: '0 11px 0 5px', borderRadius: radius.pill, background: MARCA_CAJA.acentoBg, color: MARCA_CAJA.acento, fontWeight: weight.bold, fontSize: font.base, whiteSpace: 'nowrap' }}>
           <b style={{ width: 19, height: 19, borderRadius: radius.pill, background: MARCA_CAJA.acento, color: MARCA_CAJA.acentoBg, display: 'grid', placeItems: 'center', fontSize: font.xs }}>{MARCA_CAJA.nombre[0]}</b>

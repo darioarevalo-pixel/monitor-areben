@@ -606,6 +606,9 @@ export default async function handler(req, res) {
       }
       if (accion === 'turno') {
         const turno = await turnoAbierto()
+        // `liviano=1` (13-oct, «abrir el POS demora»): sólo la fila, para que el POS se dibuje ya. El resumen
+        // lee GN de a una consulta (1 a 10 s medidos) y el POS lo pide por detrás, con la lectura entera.
+        if (req.query.liviano === '1') return res.status(200).json({ turno: turno || null, ultimos: [] })
         const ultimos = await sb.from('caja_turno').select(COLS_TURNO).eq('store', store).not('cerrado_en', 'is', null)
           .order('abierto_en', { ascending: false }).limit(10)
         if (ultimos.error) throw new Error(ultimos.error.message)
