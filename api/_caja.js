@@ -233,11 +233,11 @@ export default async function handler(req, res) {
    * Zattia ⛔ tiene `transferenciaFija` ⇒ sin mapeo sigue sin cobrar transferencia, como antes.
    */
   async function reglasDeHoy(reglas) {
-    const { feria: _f, feriaIdsCampania: _x, ...sinFeria } = reglas
+    const { feria: _f, feriaIdsCampania: _x, feriaPrecios: _p, ...sinFeria } = reglas
     // 🔑 V4: la tienda que ⛔ verifica en Mercado Pago manda la transferencia a SU cuenta fija.
     if (!verificaTransferencias(reglas)) {
       const fija = Number(reglas.transferenciaFija)
-      return { ...sinFeria, transferenciaA: Number.isInteger(fija) && fija > 0 ? fija : null, feriaIdsCampania: await idsDeCampanias(reglas.feriaCampanias) }
+      return { ...sinFeria, transferenciaA: Number.isInteger(fija) && fija > 0 ? fija : null, ...(await feriaDeCampanias(reglas.feriaCampanias)) }
     }
     let enUso = null
     try {
@@ -247,7 +247,7 @@ export default async function handler(req, res) {
     const gn = enUso != null ? Number(mapa[String(enUso)]) : NaN
     const fija = Number(reglas.transferenciaFija)
     const a = Number.isInteger(gn) && gn > 0 ? gn : Number.isInteger(fija) && fija > 0 ? fija : null
-    return { ...sinFeria, transferenciaA: a, feriaIdsCampania: await idsDeCampanias(reglas.feriaCampanias) }
+    return { ...sinFeria, transferenciaA: a, ...(await feriaDeCampanias(reglas.feriaCampanias)) }
   }
 
   /**
@@ -256,19 +256,34 @@ export default async function handler(req, res) {
    * Qué campañas son de feria lo elige un admin (`reglas.feriaCampanias`); cuando la campaña se saca, sus
    * productos dejan de ser feria solos. 🔴 Si la lectura falla, LANZA: cobrar una prenda de feria con el %
    * de la forma de pago la deja debajo del costo.
+   *
+   * 🔑 Y el PRECIO de la prenda de feria es el de la CAMPAÑA (Bruno, 13-oct: «son dos campañas conectadas»):
+   * Tienda Nube puede tener aplicada otra campaña encima —la «Feria Online» pone feria ÷ 0,9 para que el
+   * 10 % de la transferencia vuelva al de feria— y la Caja, que ⛔ le aplica el % a la feria, cobraba ese
+   * número ~11 % más caro. Con dos campañas de feria sobre el mismo producto, gana la aplicada más tarde.
    */
-  async function idsDeCampanias(ids) {
+  async function feriaDeCampanias(ids) {
     const lista = Array.isArray(ids) ? ids.map(String).filter(Boolean) : []
-    if (!lista.length) return []
+    if (!lista.length) return { feriaIdsCampania: [], feriaPrecios: {} }
     const pids = new Set()
+    const precios = {}
+    const cuando = {}
     for (let desde = 0; desde < 20_000; desde += 1000) {
-      const { data, error } = await sb.from('liquidacion_items').select('pid').eq('store', store).in('liq_id', lista).eq('estado', 'aplicado')
+      const { data, error } = await sb.from('liquidacion_items').select('pid, datos').eq('store', store).in('liq_id', lista).eq('estado', 'aplicado')
         .order('pid').range(desde, desde + 999)
       if (error) throw new Error(`No se pudieron leer los productos en oferta de Liquidación (${error.message}).`)
-      for (const f of data || []) { const n = Number(f.pid); if (Number.isInteger(n) && n > 0) pids.add(n) }
+      for (const f of data || []) {
+        const n = Number(f.pid)
+        if (!Number.isInteger(n) || n <= 0) continue
+        pids.add(n)
+        const d = f.datos || {}
+        const precio = Number((d.aplicacion && d.aplicacion.precioEscrito) ?? (d.decision && d.decision.precioSale))
+        const t = Number((d.aplicacion && d.aplicacion.aplicadoEn) || 0)
+        if (Number.isFinite(precio) && precio > 0 && !(cuando[n] > t)) { precios[n] = precio; cuando[n] = t }
+      }
       if (!data || data.length < 1000) break
     }
-    return [...pids]
+    return { feriaIdsCampania: [...pids], feriaPrecios: precios }
   }
 
   /** Las campañas de Liquidación, para que un admin elija cuáles son de feria. */
@@ -706,7 +721,7 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: e.message })
         }
         const g = await guardarReglas((actual) => {
-          const { feria: _f, transferenciaA: _t, feriaIdsCampania: _x, ...resto } = actual
+          const { feria: _f, transferenciaA: _t, feriaIdsCampania: _x, feriaPrecios: _p, ...resto } = actual
           return aplicarFormasDePago(resto, b.formas, lista)
         }, null)
         if (g.conflicto) return res.status(409).json({ error: 'Otro admin cambió la configuración recién. Recargá la Caja y volvé a cargar el cambio.', conflicto: true })
@@ -760,7 +775,7 @@ export default async function handler(req, res) {
         }
         const deLista = b.feriaProductos != null ? { clave: 'feriaProductos', version: b.version } : null
         const g = await guardarReglas((actual) => {
-          const { feria: _f, transferenciaA: _t, feriaIdsCampania: _x, ...resto } = actual
+          const { feria: _f, transferenciaA: _t, feriaIdsCampania: _x, feriaPrecios: _p, ...resto } = actual
           return { ...resto, ...nuevas, ...(parMp ? { transferenciaPorMp: { ...(actual.transferenciaPorMp || {}), [String(parMp.mp)]: parMp.gn } } : {}) }
         }, deLista)
         if (g.conflicto) return res.status(409).json({ error: 'Otro admin cambió la configuración recién. Recargá la Caja y volvé a cargar el cambio.', conflicto: true })

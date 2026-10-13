@@ -50,7 +50,7 @@ import { imagenDe, matchTn } from '@/lib/tn'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
-import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, idsDeFeria, nombreParaTicket, pagosDeMedio, renglones, subtotalDeFeria } from '@/lib/caja/core.core.js'
+import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, idsDeFeria, nombreParaTicket, precioDeFeria, pagosDeMedio, renglones, subtotalDeFeria } from '@/lib/caja/core.core.js'
 import { hoyIso, promosDeCreditoEnMostrador } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
@@ -368,10 +368,11 @@ function POS() {
       const p = datos?.allProductos.find((x) => String(x.id) === String(productId))
       if (!p || !tnIdx) return { precio: null, fueraDeTn: false, foto: null }
       const { precios, fueraDeTn } = construirPrecios([p], tnIdx)
-      const precio = precios[p.id] || null
+      // 🔑 La prenda de feria va al precio de SU campaña (13-oct): el de TN puede ser el de la «Feria Online».
+      const precio = precioDeFeria(reglas, productId) ?? (precios[p.id] || null)
       return { precio, fueraDeTn: fueraDeTn.has(p.id), foto: imagenDe(p, tnIdx) }
     },
-    [datos, tnIdx],
+    [datos, tnIdx, reglas],
   )
 
   /** Las categorías de Tienda Nube del producto (las promos por categoría, W5). La de GN está vacía en el 85 %. */

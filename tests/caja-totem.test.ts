@@ -19,6 +19,14 @@ describe('precioTotem', () => {
     expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: conPromo, hoy: HOY, categorias: [] })).toMatchObject({ efectivo: 12900, promo: '20% en todo' })
   })
 
+  it('🔑 la prenda de feria va al precio de SU campaña, ⛔ al de Tienda Nube (13-oct)', () => {
+    // TN tiene la «Feria Online» ($5.590 = feria ÷ 0,9); la campaña de feria dice $4.990 ⇒ final $5.000 (redondeo).
+    const feria = { ...R, feriaIdsCampania: [5], feriaPrecios: { 5: 4990 } } as Reglas
+    expect(precioTotem({ product_id: 5, size_id: 1, precio: 5590, reglas: feria, hoy: HOY, categorias: [] })).toEqual({ feria: true, lista: 4990, final: 5000 })
+    // Sin precio de campaña (agregada a mano), el de la etiqueta.
+    expect(precioTotem({ product_id: 6, size_id: 1, precio: 5590, reglas: { ...feria, feriaIdsCampania: [5, 6] } as Reglas, hoy: HOY, categorias: [] })).toMatchObject({ feria: true, lista: 5590 })
+  })
+
   it('el precio en efectivo es el del cobro: 15 % y redondeo a $100', () => {
     // Transferencia es 10 % ($17.000) ⇒ ⛔ vale lo mismo: el rótulo dice sólo «En efectivo».
     expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: R, hoy: HOY, categorias: [] })).toEqual({ feria: false, lista: 18900, efectivo: 16100, ahorro: 2800, conTransferencia: false, promo: null })

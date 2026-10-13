@@ -1450,7 +1450,7 @@ describe('caja · la feria es la de Liquidación (Bruno, 11-oct)', () => {
   const ADMIN = { name: 'bruno', admin: true, cuenta: null, acceso: {}, funcion: [] }
   it('🔑 un producto con el precio de la campaña de feria APLICADO va a precio final; uno descartado ⛔', async () => {
     base.liqItems = [
-      { liq_id: 'feria', store: 'zattia', pid: '7', estado: 'aplicado' },
+      { liq_id: 'feria', store: 'zattia', pid: '7', estado: 'aplicado', datos: { aplicacion: { precioEscrito: 4990, aplicadoEn: 1 } } },
       { liq_id: 'feria', store: 'zattia', pid: '8', estado: 'descartado' },
       { liq_id: 'otra', store: 'zattia', pid: '9', estado: 'aplicado' },
     ]
@@ -1460,8 +1460,11 @@ describe('caja · la feria es la de Liquidación (Bruno, 11-oct)', () => {
     const g = await correr(req('POST', {}, { action: 'bajadas', feriaCampanias: ['feria'] }))
     expect(g.code).toBe(200)
     expect((g.body?.reglas as Fila).feriaIdsCampania).toEqual([7])
+    // 13-oct: el precio de la campaña viaja con la feria (manda sobre el de Tienda Nube).
+    expect((g.body?.reglas as Fila).feriaPrecios).toEqual({ 7: 4990 })
     // Lo derivado ⛔ se guarda: se resuelve cada vez.
     expect((base.config as { reglas: Fila }).reglas.feriaIdsCampania).toBeUndefined()
+    expect((base.config as { reglas: Fila }).reglas.feriaPrecios).toBeUndefined()
     conSesion(CAJERA)
     // $25.490 de feria en efectivo ⇒ a la de feria, sin el 15 %: $25.500 (redondeo). Con la cuenta común, 400.
     expect((await correr(req('POST', {}, VENTA))).code).toBe(400)

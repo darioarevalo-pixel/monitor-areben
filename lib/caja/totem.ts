@@ -10,7 +10,7 @@
  * llega al mostrador con un precio que no es.
  */
 
-import { cobro, idsDeFeria, pagosDeMedio, renglones } from '@/lib/caja/core.core.js'
+import { cobro, idsDeFeria, pagosDeMedio, precioDeFeria, renglones } from '@/lib/caja/core.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
 import type { Reglas } from '@/lib/caja/cliente'
 
@@ -31,9 +31,11 @@ export type PrecioTotem =
  * Nube) son los mismos datos que usa el POS.
  */
 export function precioTotem(a: { product_id: number; size_id: number; precio: number | null; reglas: Reglas | null; hoy: string; categorias: string[] }): PrecioTotem | null {
-  if (a.precio == null || !(a.precio > 0) || !a.reglas?.medios) return null
+  if (!a.reglas?.medios) return null
   const reglas = a.reglas
-  const precio = a.precio
+  // La prenda de feria, al precio de SU campaña, como en el POS (13-oct).
+  const precio = precioDeFeria(reglas, a.product_id) ?? a.precio
+  if (precio == null || !(precio > 0)) return null
   const conPromo = aplicarPromos({ items: [{ product_id: a.product_id, size_id: a.size_id, cantidad: 1, precio, categorias: a.categorias }], promos: reglas.promos, feriaIds: idsDeFeria(reglas), hoy: a.hoy })
   const filas = renglones(conPromo.items)
   const descuentoVenta = conPromo.venta ? { tipo: 'pesos' as const, valor: conPromo.venta.pesos, sinFeria: true } : null
@@ -43,14 +45,14 @@ export function precioTotem(a: { product_id: number; size_id: number; precio: nu
     return cobro({ filas, pagos, reglas, descuentoVenta }).total
   }
   const total = totalCon('efectivo')
-  if (idsDeFeria(reglas).has(a.product_id)) return { feria: true, lista: a.precio, final: total }
+  if (idsDeFeria(reglas).has(a.product_id)) return { feria: true, lista: precio, final: total }
   let transferencia: number | null = null
   try {
     transferencia = totalCon('transferencia')
   } catch {
     /* sin cuenta de transferencia configurada: el rótulo dice sólo «En efectivo» */
   }
-  return { feria: false, lista: a.precio, efectivo: total, ahorro: Math.round((a.precio - total) * 100) / 100, conTransferencia: transferencia === total, promo: nombres.length ? nombres.join(' + ') : null }
+  return { feria: false, lista: precio, efectivo: total, ahorro: Math.round((precio - total) * 100) / 100, conTransferencia: transferencia === total, promo: nombres.length ? nombres.join(' + ') : null }
 }
 
 /** Los talles del producto en el local (stock de anoche): sin repetir, en el orden de la lista. */
