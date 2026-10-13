@@ -94,8 +94,9 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   Se muda a la lista de precios del local cuando exista (`PENDIENTES.md`).
 - 🔑 **LA OFERTA EN VARIOS PAGOS (Bruno, 13-oct)** — «Varios pagos» ⛔ se traba más con oferta. Si alguna
   forma de pago cobra la oferta aparte (`final`/`recargo`, `mediosOfertaAparte`), son DOS repartos en
-  pantalla: **«La oferta»** (sólo esas formas, cada una a su cuenta de oferta) y **«El resto»** (las que ⛔
-  están en `no`); la venta toda en oferta ⛔ tiene resto. Lo arma `pagosDeVarios`; el servidor
+  pantalla: **«La oferta»** (sólo esas formas, cada una a su cuenta de oferta) y **«El resto»** (CUALQUIER
+  forma, también las que están en `no`: débito para la prenda común, Bruno 13-oct — si no, eran dos ventas);
+  la venta toda en oferta ⛔ tiene resto. Lo arma `pagosDeVarios`; el servidor
   (`exigirFeria`) exige que las cuentas de oferta sumen EXACTAMENTE la oferta y que ninguna se repita
   ⇒ débito y crédito ⛔ van juntos en la oferta (comparten la 25869; dos pagos a la misma cuenta en GN ⛔
   se probaron). Sin cuenta de oferta (BDI, todo `descuento`) es el reparto de siempre, con las formas en

@@ -405,6 +405,7 @@ describe('POS · la oferta en varios pagos (Bruno, 13-oct)', () => {
     const t = document.body.textContent || ''
     expect(t).toContain('La oferta')
     expect(t).toContain('El resto')
+    expect(t).toContain('Lo que no está en oferta se paga con cualquier forma de pago')
     // La oferta: sólo las formas de pago que la cobran aparte.
     const selects = [...document.querySelectorAll('select')].filter((s) => /Forma de pago \d/.test(s.getAttribute('aria-label') ?? '')) as HTMLSelectElement[]
     expect(selects).toHaveLength(3)
@@ -412,7 +413,9 @@ describe('POS · la oferta en varios pagos (Bruno, 13-oct)', () => {
     await act(async () => escribir(selects[0], 'efectivo'))
     await act(async () => escribir(document.querySelector('input[aria-label="Lo que paga con el pago 1"]') as HTMLInputElement, '6000'))
     await act(async () => escribir(selects[1], 'transferencia'))
-    await act(async () => escribir(selects[2], 'efectivo'))
+    // El resto: las cuatro, aunque débito y crédito ⛔ acepten oferta (Bruno, 13-oct).
+    expect([...selects[2].options].map((o) => o.value).filter(Boolean)).toEqual(['efectivo', 'transferencia', 'debito', 'credito'])
+    await act(async () => escribir(selects[2], 'debito'))
     const fin = [...document.querySelectorAll('button')].find((b) => /^(Finalizar venta|Validar transferencia)/.test(b.textContent ?? '')) as HTMLButtonElement
     expect(fin.disabled).toBe(false)
     await act(async () => fin.click())
@@ -422,7 +425,7 @@ describe('POS · la oferta en varios pagos (Bruno, 13-oct)', () => {
     expect(pedido.pagos).toEqual([
       { cuenta: m.efectivo.feria, base: 6000 },
       { cuenta: m.transferencia.feria, base: 14000 },
-      { cuenta: m.efectivo.normal },
+      { cuenta: m.debito.normal },
     ])
   })
 })

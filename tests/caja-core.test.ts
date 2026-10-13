@@ -425,7 +425,7 @@ describe('caja · productos de feria trabados', () => {
     // Todo a la cuenta normal con su −15 %: la feria se llevaría el descuento.
     expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: EFECTIVO }], reglas: R })).toThrow(/cuenta de oferta/)
     // La feria por débito.
-    expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: FERIA_EFECTIVO, base: 10000 }, { cuenta: DEBITO }], reglas: R })).toThrow(/productos en oferta se cobran con efectivo, transferencia$/)
+    expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: DEBITO }], reglas: R })).toThrow(/cuenta de oferta/)
     // Una base de feria que ⛔ es la de las prendas de feria (le pasa una normal sin descuento).
     expect(() => exigirFeria({ filas: mixto, pagos: [{ cuenta: FERIA_EFECTIVO, base: 25000 }, { cuenta: EFECTIVO }], reglas: R })).toThrow(/sólo los productos en oferta/)
   })
@@ -527,8 +527,19 @@ describe('caja · productos de feria trabados', () => {
         expect(() => pagosDeVarios(vq(dosOfertas, [{ medio: 'efectivo', base: 6000 }, { medio: 'debito' }], [{ medio: 'efectivo' }]))).toThrow(/se cobran con efectivo, transferencia$/)
         expect(() => pagosDeVarios(vq(dosOfertas, [{ medio: 'debito', base: 6000 }, { medio: 'credito' }], [{ medio: 'efectivo' }], conTarjeta))).toThrow(/una sola vez/)
         expect(() => pagosDeVarios(vq(dosOfertas, [{ medio: 'efectivo', base: 20000 }, { medio: 'transferencia' }], [{ medio: 'efectivo' }]))).toThrow(/pasan lo que suman los productos en oferta/)
-        // El resto con una forma de pago que ⛔ se usa con oferta.
-        expect(() => pagosDeVarios(vq(dosOfertas, [{ medio: 'efectivo' }], [{ medio: 'debito' }]))).toThrow(/se cobran con efectivo, transferencia$/)
+      })
+
+      it('🔑 lo que ⛔ es oferta se paga con débito aunque el débito ⛔ acepte oferta (Bruno, 13-oct) ⇒ $20.000 + $18.000', () => {
+        const pagos = pagosDeVarios(vq(dosOfertas, [{ medio: 'efectivo' }], [{ medio: 'debito' }]))
+        expect(pagos).toEqual([{ cuenta: FERIA_EFECTIVO, base: 20000 }, { cuenta: DEBITO }])
+        expect(cobro({ filas: dosOfertas, pagos, reglas: R, descuentoVenta: null }).pagos.map((p) => p.monto)).toEqual([20000, 18000])
+        expect(() => exigirFeria({ filas: dosOfertas, pagos, reglas: R })).not.toThrow()
+        expect(() => exigirCuentas({ filas: dosOfertas, pagos, reglas: R, descuentoVenta: null, promoCreditoHoy: false })).not.toThrow()
+        // 🔴 ...pero el débito ⛔ se lleva un peso de la oferta: la cuenta de oferta tiene que cubrirla entera.
+        expect(() => exigirFeria({ filas: dosOfertas, pagos: [{ cuenta: FERIA_EFECTIVO, base: 15000 }, { cuenta: DEBITO }], reglas: R })).toThrow(/sólo los productos en oferta/)
+        // Y si la oferta se cobra con el % (⛔ a una cuenta de oferta), débito en `no` ⛔: ⛔ se sabría qué pagó.
+        const sinCuenta = { ...R, oferta: { efectivo: 'descuento', transferencia: 'descuento', debito: 'no', credito: 'no', recargo: 10 } } as R_
+        expect(() => exigirFeria({ filas: dosOfertas, pagos: [{ cuenta: EFECTIVO, base: 20000 }, { cuenta: DEBITO }], reglas: sinCuenta })).toThrow(/cuenta de oferta/)
       })
 
       it('🔴 el servidor: las cuentas de oferta suman EXACTAMENTE la oferta, y ninguna repetida', () => {

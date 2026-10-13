@@ -1186,7 +1186,11 @@ function POS() {
                     // Con «Varios pagos» las cuatro tarjetas siguen a la vista, apagadas (prototipo del 6-oct):
                     // las formas de pago se eligen en cada fila de abajo.
                     <div style={{ display: 'grid', gap: space[2] }}>
-                    {hayFeria && <Notice tone="warning">Hay productos en oferta. {msjOferta(reglas)}.</Notice>}
+                    {hayFeria && (
+                      <Notice tone="warning">
+                        Hay productos en oferta. {msjOferta(reglas)}.{repartoOferta && hayResto ? ' Lo que no está en oferta se paga con cualquier forma de pago, en «Varios pagos».' : ''}
+                      </Notice>
+                    )}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: space[2] }}>
                       {MEDIOS.map((medio) => {
                         const activa = !varios && pagos[0].medio === medio
@@ -1263,7 +1267,7 @@ function POS() {
                               montos={c?.pagos.slice(pagosOferta.length).map((p) => p.monto) ?? null}
                               subtotal={subtotalFilas != null ? Math.round((subtotalFilas - subFeria) * 100) / 100 : null}
                               aBase={aBase}
-                              medios={mediosConOferta}
+                              medios={MEDIOS}
                               minimo={1}
                             />
                           )}
