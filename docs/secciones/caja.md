@@ -427,9 +427,10 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   «Armá el sobre» y «Queda en la caja» (`ArmadoDelSobre`); lo mismo en el aviso de la caja cerrada. Fondo =
   el de la apertura (Bruno); se arma con la MAYOR cantidad de billetes que sume exacto (= los chicos, para
   tener cambio). ⛔ Exacto ⇒ lo más cerca por debajo y «Faltan $X de fondo».
-- 🧾 **El ticket del cierre lleva SÓLO EL SOBRE** (cada billete y el total) + nota y firma. Lo demás
-  (ventas por forma de pago, esperado, contado, billetes contados) queda guardado en la caja y se ve en la
-  pestaña.
+- 🧾 **El ticket del cierre**: VENTAS por forma de pago (`resumen.porForma`, guardado al cerrar), la cuenta
+  del efectivo (esperado, contado, sobra/falta), salidas e ingresos, y de billetes **SÓLO EL SOBRE** (cada
+  billete y el total) + nota y firma. ⛔ Billetes contados ni lo que queda de fondo (Bruno: «los 3 conteos
+  no servían»): quedan guardados en la caja.
 
 ## Pendiente
 

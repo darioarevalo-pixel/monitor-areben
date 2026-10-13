@@ -188,27 +188,41 @@ describe('ticket de cambio (regalo, Bruno 13-oct)', () => {
   })
 })
 
-describe('ticket del cierre (Bruno, 13-oct): sólo el SOBRE', () => {
+describe('ticket del cierre (Bruno, 13-oct)', () => {
   const cierre = {
     marca: 'Zattia', abierto_en: '2026-10-13T12:00:00Z', abierto_por: 'cajera', cerrado_en: '2026-10-13T23:00:00Z', cerrado_por: 'cajera',
-    fondo: 50000, contado: 110000, nota: 'faltan 200',
+    fondo: 50000, contado: 110000, esperado: 110200, nota: 'faltan 200',
+    formas: [{ nombre: 'Efectivo', monto: 62200, cobros: 4 }, { nombre: 'Tarjeta de crédito', monto: 15000, cobros: 1 }],
+    resumen: { total: 77200, ventas: 5, efectivo: { fondo: 50000, cobrado: 62200, cobradoGN: 0, salidas: 2000, esperado: 110200 }, diferencia: -200 },
     conteos: { cierre: { billetes: { 20000: 3, 10000: 2, 2000: 10, 1000: 8, 500: 4 }, total: 110000 } },
+    movimientos: [{ tipo: 'salida' as const, monto: 2000, motivo: 'Limpieza' }, { tipo: 'salida' as const, monto: 99, motivo: 'anulada', anulado_en: '2026-10-13T15:00:00Z' }],
   }
   const textos = (ops: { k: string }[]) => ops.filter((o) => o.k === 'txt').map((o) => (o as unknown as { txt: string }).txt)
-  it('🔑 cada billete del sobre y su total; el fondo de la apertura queda con los chicos', () => {
+  it('🔑 los cobros por forma de pago, la cuenta del efectivo y las salidas', () => {
+    const { ops } = armarTicketCierre(cierre, AHORA, medir)
+    const txt = textos(ops)
+    expect(montoDe(ops, 'Efectivo (4)')).toBe('$62.200')
+    expect(montoDe(ops, 'Tarjeta de crédito (1)')).toBe('$15.000')
+    expect(montoDe(ops, 'Total vendido')).toBe('$77.200')
+    expect(montoDe(ops, 'ESPERADO')).toBe('$110.200')
+    expect(montoDe(ops, 'CONTADO')).toBe('$110.000')
+    expect(montoDe(ops, 'FALTA')).toBe('$200')
+    expect(montoDe(ops, 'Limpieza')).toBe('-$2.000')
+    expect(txt).not.toContain('anulada')
+    expect(txt).toContain('Nota: faltan 200')
+  })
+  it('🔑 de billetes, SÓLO el sobre (⛔ los contados ni lo que queda de fondo): el fondo queda con los chicos', () => {
     const { ops } = armarTicketCierre(cierre, AHORA, medir)
     const txt = textos(ops)
     // Fondo $50.000 con la mayor cantidad de billetes: 4×500 + 8×1000 + 10×2000 + 2×10000 ⇒ el sobre son los 3 de $20.000.
     expect(montoDe(ops, '3 x $20.000')).toBe('$60.000')
-    expect(montoDe(ops, 'TOTAL')).toBe('$60.000')
+    expect(montoDe(ops, 'TOTAL SOBRE')).toBe('$60.000')
     expect(txt.some((t) => /x \$(10\.000|2\.000|1\.000|500)$/.test(t))).toBe(false)
-    expect(txt).toContain('Nota: faltan 200')
-    // ⛔ ventas, esperado, contado ni billetes contados: quedan guardados en la caja.
-    expect(txt.some((t) => /VENTAS|ESPERADO|CONTADO|BILLETES CONTADOS|QUEDA DE FONDO/.test(t))).toBe(false)
+    expect(txt.some((t) => /BILLETES CONTADOS|QUEDA DE FONDO/.test(t))).toBe(false)
   })
   it('sin billetes contados: el sobre es lo contado menos el fondo', () => {
     const { ops } = armarTicketCierre({ ...cierre, conteos: null }, AHORA, medir)
-    expect(montoDe(ops, 'TOTAL')).toBe('$60.000')
+    expect(montoDe(ops, 'TOTAL SOBRE')).toBe('$60.000')
   })
   it('sin cómo llegar exacto al fondo, lo avisa', () => {
     const txt = textos(armarTicketCierre({ ...cierre, conteos: { cierre: { billetes: { 20000: 5 }, total: 100000 } } }, AHORA, medir).ops)

@@ -1595,7 +1595,13 @@ const td: React.CSSProperties = { padding: `${space[2]}px ${space[2]}px ${space[
 const der: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
 
 /** El turno cerrado, como lo escribe el ticket del cierre (Bruno, 13-oct). */
-export const datosCierre = (t: Turno): DatosCierre => ({ ...t, marca: MARCA_CAJA.nombre })
+export const datosCierre = (t: Turno): DatosCierre => ({
+  ...t,
+  marca: MARCA_CAJA.nombre,
+  // Por forma de pago (13-oct); un cierre guardado antes, por cuenta como estaba.
+  formas: t.resumen?.porForma ?? t.resumen?.porCuenta ?? null,
+  movimientos: t.salidas ?? null,
+})
 /** Imprime el ticket del cierre; el error vuelve como texto para el aviso de la pantalla. */
 export const imprimirCierreDe = (t: Turno) => imprimirCierre(datosCierre(t), Date.now())
 
@@ -1984,7 +1990,7 @@ export function ResumenTurnoDatos({
             </thead>
             <tbody>
               {/* Por FORMA DE PAGO (Bruno, 13-oct): crédito es crédito, como el cierre de lote del posnet. */}
-              {porFormaDePago(r.porCuenta, reglas).map((c) => (
+              {(r.porForma ?? porFormaDePago(r.porCuenta, reglas)).map((c) => (
                 <tr key={c.nombre}>
                   <td style={td}>{c.nombre}</td>
                   <td style={{ ...td, ...der }}>{c.cobros}</td>

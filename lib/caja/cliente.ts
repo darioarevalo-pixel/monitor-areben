@@ -142,6 +142,8 @@ export type CobroGN = { id: number; venta: number | null; tn: string | null; cli
 /** v2, W3: el turno propio de la Caja (`lib/caja/cierre.core.js`). */
 export type ResumenTurno = {
   porCuenta: { cuenta: number; nombre: string; efectivo: boolean; monto: number; cobros: number }[]
+  /** Lo mismo sumado por forma de pago (13-oct). Un resumen guardado antes ⛔ lo trae. */
+  porForma?: { nombre: string; efectivo: boolean; monto: number; cobros: number }[]
   total: number
   ventas: number
   /** `deEspera`: la parte en efectivo de las ventas que esperan la transferencia (A2): ya está en el cajón. */
