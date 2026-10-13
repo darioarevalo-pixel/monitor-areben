@@ -92,6 +92,15 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   en GN que la 25869 sirve también para débito (el token de GN de la Mac daba 401 el 12-oct). El texto de
   las tarjetas («No aplica a productos en oferta», «+10% en productos en oferta») sale de la misma config.
   Se muda a la lista de precios del local cuando exista (`PENDIENTES.md`).
+- 🔑 **LA OFERTA EN VARIOS PAGOS (Bruno, 13-oct)** — «Varios pagos» ⛔ se traba más con oferta. Si alguna
+  forma de pago cobra la oferta aparte (`final`/`recargo`, `mediosOfertaAparte`), son DOS repartos en
+  pantalla: **«La oferta»** (sólo esas formas, cada una a su cuenta de oferta) y **«El resto»** (las que ⛔
+  están en `no`); la venta toda en oferta ⛔ tiene resto. Lo arma `pagosDeVarios`; el servidor
+  (`exigirFeria`) exige que las cuentas de oferta sumen EXACTAMENTE la oferta y que ninguna se repita
+  ⇒ débito y crédito ⛔ van juntos en la oferta (comparten la 25869; dos pagos a la misma cuenta en GN ⛔
+  se probaron). Sin cuenta de oferta (BDI, todo `descuento`) es el reparto de siempre, con las formas en
+  `no` fuera de la lista. ▶️ Oráculo pendiente: una venta real partida, y en GN los dos pagos a las
+  cuentas de oferta sumando justo la oferta.
 - 🔑 **La cajera ve CUATRO formas de pago; la cuenta de GN es INTERNA** (Bruno, 4-oct). `cuentaDeMedio`
   (`core.core.js`) la resuelve con `caja_config.reglas.medios` (`sql/migrate-caja-medios.sql`):
   Efectivo 12921 · Débito 20196 · Transferencia ⇒ `transferenciaA` · Crédito ⇒ 25172 (−10 %) sólo si la

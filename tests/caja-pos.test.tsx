@@ -381,3 +381,48 @@ describe('Ventas de la caja (Bruno, 12-oct)', () => {
     expect(r).not.toContain('Provisorias (1)')
   })
 })
+
+describe('POS · la oferta en varios pagos (Bruno, 13-oct)', () => {
+  const escribir = (el: HTMLInputElement | HTMLSelectElement, v: string) => {
+    const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+    Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(el, v)
+    el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }))
+  }
+
+  it('🔑 «Varios pagos» ⛔ se traba: la oferta se parte entre efectivo y transferencia, y el resto aparte', async () => {
+    const { leerConfig, confirmarVenta } = await import('@/lib/caja/cliente')
+    const { REGLAS_INICIALES } = await import('@/lib/caja/core.core.js')
+    const conf = { reglas: { ...REGLAS_INICIALES, transferenciaA: REGLAS_INICIALES.medios.transferencia.opciones[0], feriaProductos: [{ id: 1, nombre: 'PRENDA 1' }] }, politica_cambio: null }
+    vi.mocked(leerConfig).mockResolvedValue(conf as never)
+    vi.mocked(confirmarVenta).mockClear()
+    const comun = { ...PRENDA, variante: { ...PRENDA.variante, product_id: 2, product_name: 'PRENDA 2' }, precio: 20000 }
+    disco.set('caja:borrador:zattia', JSON.stringify({ id: 'b-oferta', renglones: [{ ...PRENDA, cantidad: 2 }, comun], email: '' }))
+    await montar(<CajaPOS />)
+    await act(async () => boton('Continuar al cobro Alt+C').click())
+    const varios = boton('Varios pagos')
+    expect(varios.disabled).toBe(false)
+    await act(async () => varios.click())
+    const t = document.body.textContent || ''
+    expect(t).toContain('La oferta')
+    expect(t).toContain('El resto')
+    // La oferta: sólo las formas de pago que la cobran aparte.
+    const selects = [...document.querySelectorAll('select')].filter((s) => /Forma de pago \d/.test(s.getAttribute('aria-label') ?? '')) as HTMLSelectElement[]
+    expect(selects).toHaveLength(3)
+    expect([...selects[0].options].map((o) => o.value).filter(Boolean)).toEqual(['efectivo', 'transferencia'])
+    await act(async () => escribir(selects[0], 'efectivo'))
+    await act(async () => escribir(document.querySelector('input[aria-label="Lo que paga con el pago 1"]') as HTMLInputElement, '6000'))
+    await act(async () => escribir(selects[1], 'transferencia'))
+    await act(async () => escribir(selects[2], 'efectivo'))
+    const fin = [...document.querySelectorAll('button')].find((b) => /^(Finalizar venta|Validar transferencia)/.test(b.textContent ?? '')) as HTMLButtonElement
+    expect(fin.disabled).toBe(false)
+    await act(async () => fin.click())
+    await act(async () => {})
+    const pedido = vi.mocked(confirmarVenta).mock.calls[0][0] as unknown as { pagos: { cuenta: number; base?: number }[] }
+    const m = REGLAS_INICIALES.medios
+    expect(pedido.pagos).toEqual([
+      { cuenta: m.efectivo.feria, base: 6000 },
+      { cuenta: m.transferencia.feria, base: 14000 },
+      { cuenta: m.efectivo.normal },
+    ])
+  })
+})

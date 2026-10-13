@@ -50,7 +50,7 @@ import { imagenDe, matchTn } from '@/lib/tn'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
-import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, idsDeFeria, nombreParaTicket, precioDeFeria, pagosDeMedio, renglones, subtotalDeFeria } from '@/lib/caja/core.core.js'
+import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, cuentaDeOferta, idsDeFeria, mediosOfertaAparte, nombreParaTicket, precioDeFeria, pagosDeMedio, pagosDeVarios, renglones, subtotal, subtotalDeFeria } from '@/lib/caja/core.core.js'
 import { hoyIso, promosDeCreditoEnMostrador } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
@@ -570,8 +570,27 @@ function POS() {
   // 🔑 Productos de feria trabados (Bruno, 5-oct): la MISMA regla que exige el servidor (`exigirFeria`).
   const feriaIds = useMemo(() => idsDeFeria(reglas), [reglas])
   const hayFeria = !!filas && subtotalDeFeria(filas, reglas) > 0
-  // La feria es por PRODUCTO (Bruno, 11-oct): ⛔ hay modo feria general.
-  const trabaFeria = hayFeria
+  // 🔑 «Varios pagos» con oferta (Bruno, 13-oct): ⛔ se traba. Si alguna forma de pago cobra la oferta APARTE
+  // (a su cuenta de oferta), son DOS repartos —la oferta y el resto— y la oferta se puede partir entre esas
+  // formas de pago (`pagosDeVarios`; el servidor lo vuelve a exigir con `exigirFeria`).
+  const mediosAparte = hayFeria && reglas ? mediosOfertaAparte(reglas) : []
+  const repartoOferta = mediosAparte.length > 0
+  const subFeria = filas ? subtotalDeFeria(filas, reglas) : 0
+  const hayResto = !!filas && subFeria < subtotal(filas)
+  const mediosConOferta = hayFeria ? MEDIOS.filter((md) => ofertaDe(reglas)[md] !== 'no') : MEDIOS
+  const pagosOferta = pagos.filter((p) => p.oferta)
+  const pagosResto = pagos.filter((p) => !p.oferta)
+  const variosIniciales = (medio: Medio | null): PagoUI[] =>
+    repartoOferta
+      ? [{ medio: medio && mediosAparte.includes(medio) ? medio : null, base: '', oferta: true }, { medio: null, base: '', oferta: true }, ...(hayResto ? [{ medio: null, base: '' }] : [])]
+      : [{ medio, base: '' }, { medio: null, base: '' }]
+  // Si el pedido cambia de forma (entra o sale la oferta, o queda todo en oferta), el reparto se rearma.
+  const formaVarios = `${repartoOferta}-${hayResto}`
+  const [formaVista, setFormaVista] = useState(formaVarios)
+  if (formaVista !== formaVarios) {
+    setFormaVista(formaVarios)
+    if (varios) setPagos(variosIniciales(null))
+  }
   /** Los pagos de UNA forma de pago: con prendas de feria, la parte de feria va a su cuenta. */
   const pagosDe = (medio: Medio, rg: Reglas) => (filas ? pagosDeMedio(medio, { filas, reglas: rg, total: aPagar ?? 0, ...respuestas }) : [{ cuenta: cuentaDe(medio, rg) }])
 
@@ -589,6 +608,16 @@ function POS() {
     return m
   })()
 
+  /** En el reparto de la oferta: lo que paga con una forma de pago ⇒ la parte de la oferta, a su cuenta de oferta. */
+  const aBaseOferta = (medio: Medio, monto: number): number | null => {
+    if (!filas || !reglas?.medios) return null
+    try {
+      return baseParaMonto({ filas, reglas, descuentoVenta, cuenta: cuentaDeOferta(medio, reglas), monto })
+    } catch {
+      return null
+    }
+  }
+
   /** «Varios pagos»: lo que paga con una forma de pago ⇒ la parte del subtotal que reparte `cobro()`. */
   const aBase = (medio: Medio, monto: number): number | null => {
     if (!filas || !reglas?.medios) return null
@@ -605,9 +634,12 @@ function POS() {
     try {
       const rg = reglas
       // Un solo pago: el armado de la forma de pago (con la traba de feria). Varios: lo que repartió la cajera.
+      const conBase = (lista: PagoUI[], a: (medio: Medio, monto: number) => number | null) => lista.map((p) => ({ medio: p.medio as Medio, base: a(p.medio as Medio, aNumero(p.base) ?? 0) ?? 0 }))
       const pedidos = !varios
         ? pagosDe(pagos[0].medio as Medio, rg)
-        : pagos.map((p, i) => {
+        : repartoOferta
+          ? pagosDeVarios({ filas, reglas: rg, total: aPagar ?? 0, ...respuestas, oferta: conBase(pagosOferta, aBaseOferta), resto: conBase(pagosResto, aBase) })
+          : pagos.map((p, i) => {
             const cuenta = cuentaDe(p.medio as Medio, rg)
             return i === pagos.length - 1 ? { cuenta } : { cuenta, base: aBase(p.medio as Medio, aNumero(p.base) ?? 0) ?? 0 }
           })
@@ -1139,11 +1171,9 @@ function POS() {
                         tone={varios ? 'brand' : 'neutral'}
                         size="sm"
                         aria-pressed={varios}
-                        disabled={trabaFeria && !varios}
-                        title={trabaFeria ? 'Con productos en oferta, un solo pago' : undefined}
                         onClick={() => {
                           setVarios(!varios)
-                          setPagos(varios ? [{ medio: null, base: '' }] : [{ medio: pagos[0].medio, base: '' }, { medio: null, base: '' }])
+                          setPagos(varios ? [{ medio: null, base: '' }] : variosIniciales(pagos[0].medio))
                         }}
                       >
                         Varios pagos
@@ -1212,7 +1242,35 @@ function POS() {
                         )
                       })}
                     </div>
-                    {varios && <VariosPagos pagos={pagos} setPagos={setPagos} montos={c?.pagos.map((p) => p.monto) ?? null} subtotal={subtotalFilas} aBase={aBase} />}
+                    {varios &&
+                      (repartoOferta ? (
+                        <>
+                          <VariosPagos
+                            titulo="La oferta"
+                            pagos={pagosOferta}
+                            setPagos={(p) => setPagos([...p, ...pagosResto])}
+                            montos={c?.pagos.slice(0, pagosOferta.length).map((p) => p.monto) ?? null}
+                            subtotal={subFeria}
+                            aBase={aBaseOferta}
+                            medios={mediosAparte}
+                            minimo={1}
+                          />
+                          {hayResto && (
+                            <VariosPagos
+                              titulo="El resto"
+                              pagos={pagosResto}
+                              setPagos={(p) => setPagos([...pagosOferta, ...p])}
+                              montos={c?.pagos.slice(pagosOferta.length).map((p) => p.monto) ?? null}
+                              subtotal={subtotalFilas != null ? Math.round((subtotalFilas - subFeria) * 100) / 100 : null}
+                              aBase={aBase}
+                              medios={mediosConOferta}
+                              minimo={1}
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <VariosPagos pagos={pagos} setPagos={setPagos} montos={c?.pagos.map((p) => p.monto) ?? null} subtotal={subtotalFilas} aBase={aBase} medios={mediosConOferta} />
+                      ))}
                     </div>
                   )}
 

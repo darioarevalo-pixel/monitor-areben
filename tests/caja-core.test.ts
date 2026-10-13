@@ -10,6 +10,8 @@ import {
   baseParaMonto,
   exigirCuentas,
   exigirFeria,
+  mediosOfertaAparte,
+  pagosDeVarios,
   montoAEsperar,
   pagosDeMedio,
   subtotalDeFeria,
@@ -485,6 +487,63 @@ describe('caja · productos de feria trabados', () => {
       // Y sin productos en oferta, la cuenta de oferta con tarjeta ⛔.
       const normal = renglones([{ product_id: 2, size_id: 1, cantidad: 1, precio: 20000 }])
       expect(() => exigirCuentas({ filas: normal, pagos: [{ cuenta: FERIA_TC }], reglas: conTarjeta, descuentoVenta: null, promoCreditoHoy: false })).toThrow(/sólo para los productos en oferta/)
+    })
+
+    describe('🔑 la oferta partida entre dos formas de pago (Bruno, 13-oct)', () => {
+      const vq = (filas: ReturnType<typeof renglones>, oferta: { medio: 'efectivo' | 'transferencia' | 'debito' | 'credito'; base?: number }[], resto: { medio: 'efectivo' | 'transferencia' | 'debito' | 'credito'; base?: number }[], reglas: R_ = R) => ({ ...q(filas, reglas), oferta, resto })
+      const dosOfertas = renglones([
+        { product_id: 1, size_id: 1, cantidad: 2, precio: 10000 },
+        { product_id: 2, size_id: 1, cantidad: 1, precio: 20000 },
+      ])
+
+      it('$20.000 en oferta: $6.000 efectivo + $14.000 transferencia, y el resto por transferencia ⇒ $6.000 + $14.000 + $18.000', () => {
+        const pagos = pagosDeVarios(vq(dosOfertas, [{ medio: 'efectivo', base: 6000 }, { medio: 'transferencia' }], [{ medio: 'transferencia' }]))
+        expect(pagos).toEqual([{ cuenta: FERIA_EFECTIVO, base: 6000 }, { cuenta: FERIA_TRANSFERENCIA, base: 14000 }, { cuenta: TRANSFERENCIA }])
+        expect(cobro({ filas: dosOfertas, pagos, reglas: R, descuentoVenta: null }).pagos.map((p) => p.monto)).toEqual([6000, 14000, 18000])
+        expect(() => exigirFeria({ filas: dosOfertas, pagos, reglas: R })).not.toThrow()
+        expect(() => exigirCuentas({ filas: dosOfertas, pagos, reglas: R, descuentoVenta: null, promoCreditoHoy: false })).not.toThrow()
+      })
+
+      it('todo en oferta: el último de la oferta va sin base y se lleva el resto', () => {
+        const solo = renglones([{ product_id: 1, size_id: 1, cantidad: 2, precio: 10000 }])
+        const pagos = pagosDeVarios(vq(solo, [{ medio: 'transferencia', base: 5000 }, { medio: 'efectivo' }], []))
+        expect(pagos).toEqual([{ cuenta: FERIA_TRANSFERENCIA, base: 5000 }, { cuenta: FERIA_EFECTIVO }])
+        expect(cobro({ filas: solo, pagos, reglas: R, descuentoVenta: null }).total).toBe(20000)
+        expect(() => exigirFeria({ filas: solo, pagos, reglas: R })).not.toThrow()
+      })
+
+      it('oferta con efectivo + crédito +10 %: el recargo sólo sobre lo de tarjeta ⇒ $5.000 + $16.500', () => {
+        const conTarjeta = { ...R, oferta: { efectivo: 'final', transferencia: 'final', debito: 'recargo', credito: 'recargo', recargo: 10 } } as R_
+        const solo = renglones([{ product_id: 1, size_id: 1, cantidad: 2, precio: 10000 }])
+        const pagos = pagosDeVarios(vq(solo, [{ medio: 'efectivo', base: 5000 }, { medio: 'credito' }], [], conTarjeta))
+        expect(pagos).toEqual([{ cuenta: FERIA_EFECTIVO, base: 5000 }, { cuenta: FERIA_TC }])
+        expect(cobro({ filas: solo, pagos, reglas: conTarjeta, descuentoVenta: null }).pagos.map((p) => p.monto)).toEqual([5000, 16500])
+        expect(() => exigirFeria({ filas: solo, pagos, reglas: conTarjeta })).not.toThrow()
+      })
+
+      it('🔴 en la oferta sólo las formas que la cobran aparte, y cada una una vez (débito y crédito comparten la cuenta)', () => {
+        const conTarjeta = { ...R, oferta: { efectivo: 'final', transferencia: 'final', debito: 'recargo', credito: 'recargo', recargo: 10 } } as R_
+        expect(mediosOfertaAparte(R)).toEqual(['efectivo', 'transferencia'])
+        expect(() => pagosDeVarios(vq(dosOfertas, [{ medio: 'efectivo', base: 6000 }, { medio: 'debito' }], [{ medio: 'efectivo' }]))).toThrow(/se cobran con efectivo, transferencia$/)
+        expect(() => pagosDeVarios(vq(dosOfertas, [{ medio: 'debito', base: 6000 }, { medio: 'credito' }], [{ medio: 'efectivo' }], conTarjeta))).toThrow(/una sola vez/)
+        expect(() => pagosDeVarios(vq(dosOfertas, [{ medio: 'efectivo', base: 20000 }, { medio: 'transferencia' }], [{ medio: 'efectivo' }]))).toThrow(/pasan lo que suman los productos en oferta/)
+        // El resto con una forma de pago que ⛔ se usa con oferta.
+        expect(() => pagosDeVarios(vq(dosOfertas, [{ medio: 'efectivo' }], [{ medio: 'debito' }]))).toThrow(/se cobran con efectivo, transferencia$/)
+      })
+
+      it('🔴 el servidor: las cuentas de oferta suman EXACTAMENTE la oferta, y ninguna repetida', () => {
+        // Suman menos: $4.000 de oferta se irían con el −15 % del efectivo.
+        expect(() => exigirFeria({ filas: dosOfertas, pagos: [{ cuenta: FERIA_EFECTIVO, base: 6000 }, { cuenta: FERIA_TRANSFERENCIA, base: 10000 }, { cuenta: EFECTIVO }], reglas: R })).toThrow(/sólo los productos en oferta/)
+        // Suman más: una prenda común a precio final.
+        expect(() => exigirFeria({ filas: dosOfertas, pagos: [{ cuenta: FERIA_EFECTIVO, base: 6000 }, { cuenta: FERIA_TRANSFERENCIA, base: 20000 }, { cuenta: EFECTIVO }], reglas: R })).toThrow(/sólo los productos en oferta/)
+        // La misma cuenta de oferta dos veces.
+        expect(() => exigirFeria({ filas: dosOfertas, pagos: [{ cuenta: FERIA_EFECTIVO, base: 6000 }, { cuenta: FERIA_EFECTIVO, base: 14000 }, { cuenta: EFECTIVO }], reglas: R })).toThrow(/una sola vez/)
+      })
+
+      it('A9: con la promo de compra, la base de la cuenta de oferta ⛔ descuenta la promo', () => {
+        const promo = { tipo: 'pct' as const, valor: 10, sinFeria: true }
+        expect(baseParaMonto({ filas: dosOfertas, reglas: R, descuentoVenta: promo, cuenta: FERIA_EFECTIVO, monto: 6000 })).toBe(6000)
+      })
     })
 
     it('el aviso dice lo que está configurado', () => {

@@ -68,7 +68,8 @@ import { ConfirmDetalle, useConfirmar } from '@/components/ui/Confirm'
 /** Un renglón del pedido. `precioLista`: el de la etiqueta al escanear (B5: si la cajera lo cambia, queda a la vista). */
 export type Renglon = { variante: Variante; stock: Stock; cantidad: number; precio: number | null; fueraDeTn: boolean; foto: string | null; rebaja?: Rebaja | null; precioLista?: number | null }
 /** La cajera elige la FORMA de pago; la cuenta de GN la resuelve `cuentaDeMedio` (Bruno, 4-oct). `base`: con «Varios pagos», lo que PAGA con ella (texto). */
-export type PagoUI = { medio: Medio | null; base: string }
+/** `oferta`: el pago es del reparto de la OFERTA (varios pagos con productos en oferta, 13-oct); van primero. */
+export type PagoUI = { medio: Medio | null; base: string; oferta?: boolean }
 
 /** Las cuatro formas de pago que ve la cajera, en el orden del mostrador. */
 export const MEDIOS: Medio[] = ['efectivo', 'transferencia', 'debito', 'credito']
@@ -545,7 +546,31 @@ export function FilaRenglon({
  * descuento), ⛔ la parte del subtotal a precio de lista, que es lo que nadie tiene en la cabeza. `aBase`
  * lo pasa a la parte del subtotal, que es lo que reparte `cobro()`.
  */
-export function VariosPagos({ pagos, setPagos, montos, subtotal = null, aBase }: { pagos: PagoUI[]; setPagos: (p: PagoUI[]) => void; montos: number[] | null; /** El subtotal a precio de lista: contra eso se reparte. */ subtotal?: number | null; /** Lo que paga con una forma de pago ⇒ la parte del subtotal (null si ⛔ se puede). */ aBase: (medio: Medio, monto: number) => number | null }) {
+export function VariosPagos({
+  pagos,
+  setPagos,
+  montos,
+  subtotal = null,
+  aBase,
+  medios = MEDIOS,
+  minimo = 2,
+  titulo,
+}: {
+  pagos: PagoUI[]
+  setPagos: (p: PagoUI[]) => void
+  montos: number[] | null
+  /** El subtotal a precio de lista: contra eso se reparte. */
+  subtotal?: number | null
+  /** Lo que paga con una forma de pago ⇒ la parte del subtotal (null si ⛔ se puede). */
+  aBase: (medio: Medio, monto: number) => number | null
+  /** Las formas de pago que se ofrecen en este reparto (con oferta, 13-oct: ⛔ todas valen). */
+  medios?: Medio[]
+  /** Con menos pagos que esto ⛔ se ofrece eliminar: el reparto de la oferta o del resto puede ser de uno. */
+  minimo?: number
+  /** Con oferta son dos repartos: «La oferta» y «El resto». */
+  titulo?: string
+}) {
+  const nuevo = (): PagoUI => ({ medio: null, base: '', oferta: pagos[0]?.oferta })
   const cambiar = (i: number, cambio: Partial<PagoUI>) => setPagos(pagos.map((p, j) => (j === i ? { ...p, ...cambio } : p)))
   // Lo que se lleva el último: el subtotal menos lo que cubren los demás. ⛔ Es plata nueva: el cobro lo
   // calcula `cobro()`; esto sólo dice si el reparto cierra.
@@ -565,9 +590,16 @@ export function VariosPagos({ pagos, setPagos, montos, subtotal = null, aBase }:
           : { ok: true, texto: 'Repartido completo' }
   return (
     <div style={{ display: 'grid', gap: space[2] }}>
-      <span style={{ fontSize: font.sm, color: color.mut }}>
-        En cada pago va lo que la clienta paga con esa forma de pago (ya con su descuento); el último se lleva el resto. Cada uno se redondea por separado.
-      </span>
+      {titulo ? (
+        <span style={{ fontSize: font.md, fontWeight: weight.semibold, color: color.ink }}>
+          {titulo}
+          {subtotal != null && <span style={{ color: color.mut, fontWeight: weight.normal }}> · {plata(subtotal)} a precio de lista</span>}
+        </span>
+      ) : (
+        <span style={{ fontSize: font.sm, color: color.mut }}>
+          En cada pago va lo que la clienta paga con esa forma de pago (ya con su descuento); el último se lleva el resto. Cada uno se redondea por separado.
+        </span>
+      )}
       {pagos.map((p, i) => {
         const ultimo = i === pagos.length - 1
         return (
@@ -575,7 +607,7 @@ export function VariosPagos({ pagos, setPagos, montos, subtotal = null, aBase }:
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 150px 30px', gap: space[2], alignItems: 'center' }}>
               <Select value={p.medio ?? ''} onChange={(e) => cambiar(i, { medio: (e.target.value || null) as Medio | null })} aria-label={`Forma de pago ${i + 1}`}>
                 <option value="">Forma de pago…</option>
-                {MEDIOS.map((m) => (
+                {medios.map((m) => (
                   <option key={m} value={m}>
                     {NOMBRE_MEDIO[m]}
                   </option>
@@ -586,7 +618,7 @@ export function VariosPagos({ pagos, setPagos, montos, subtotal = null, aBase }:
               ) : (
                 <Input inputMode="decimal" autoComplete="off" value={p.base} onChange={(e) => cambiar(i, { base: e.target.value })} placeholder="$ que paga" aria-label={`Lo que paga con el pago ${i + 1}`} style={{ textAlign: 'right' }} />
               )}
-              {pagos.length > 2 ? (
+              {pagos.length > minimo ? (
                 <button
                   type="button"
                   className="caja-sacar"
@@ -606,7 +638,7 @@ export function VariosPagos({ pagos, setPagos, montos, subtotal = null, aBase }:
         )
       })}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
-        <Button size="sm" variant="outline" onClick={() => setPagos([...pagos.slice(0, -1), { medio: null, base: '' }, pagos[pagos.length - 1]])}>
+        <Button size="sm" variant="outline" onClick={() => setPagos([...pagos.slice(0, -1), nuevo(), pagos[pagos.length - 1]])}>
           Agregar pago
         </Button>
         {estado && <span style={{ fontSize: font.base, fontWeight: weight.semibold, fontVariantNumeric: 'tabular-nums', color: estado.ok ? color.successInk : color.warningInk }}>{estado.texto}</span>}
