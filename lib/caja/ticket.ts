@@ -284,10 +284,10 @@ export async function imprimirTicket(t: DatosTicket, ahoraMs: number, que: 'tick
 }
 
 /**
- * El TICKET DEL CIERRE (Bruno, 13-oct): el papel que queda con la plata de la caja. Lo cobrado POR CUENTA,
- * la cuenta del efectivo (fondo + ventas + Gestión Nube + aportes − salidas = esperado, contado y
- * diferencia) y **los billetes contados uno por uno**, para que el fajo que arman coincida con el papel.
- * ⛔ Calcula: escribe la foto que guardó el cierre (`resumen`, `conteos.cierre`).
+ * El TICKET DEL CIERRE (Bruno, 13-oct, 2ª vuelta): **sólo lo que va en el SOBRE** —cada billete con su
+ * cantidad y el total—, para que el sobre que arman coincida con el papel. Lo demás (ventas por forma de
+ * pago, esperado, contado, billetes contados) queda guardado en la caja (`resumen`, `conteos`) y se ve en
+ * la pestaña. El sobre sale de `armarSobre`: el fondo de la apertura queda con los billetes chicos.
  */
 export type DatosCierre = {
   marca: string
@@ -297,18 +297,8 @@ export type DatosCierre = {
   cerrado_por: string | null
   fondo: number
   contado: number | null
-  esperado: number | null
   nota: string | null
-  resumen?: {
-    porCuenta: { nombre: string; monto: number; cobros: number; efectivo?: boolean }[]
-    total: number
-    ventas: number
-    efectivo: { fondo: number; cobrado: number; deEspera?: number; cobradoGN: number; aportes?: number; salidas: number; esperado: number }
-    diferencia?: number
-  } | null
   conteos?: { cierre?: { billetes: Record<string, number>; total: number } | null } | null
-  /** Las salidas e ingresos con su motivo (sólo al cerrar: la lista de cajas anteriores ⛔ los trae). */
-  movimientos?: { tipo?: 'salida' | 'aporte'; monto: number; motivo: string; anulado_en?: string | null }[] | null
 }
 
 export function armarTicketCierre(t: DatosCierre, ahoraMs: number, partir: Medidor): { ops: (OpBase | OpImagen)[]; alto: number } {
@@ -323,60 +313,21 @@ export function armarTicketCierre(t: DatosCierre, ahoraMs: number, partir: Medid
   escribir(`Cerró: ${t.cerrado_por ?? '—'} · ${cuando(t.cerrado_en)}`, 9, false)
   regla()
 
-  const r = t.resumen
-  if (r) {
-    escribir(`VENTAS (${r.ventas})`, 10, true)
-    l.y += 0.6
-    for (const c of r.porCuenta) par(`${c.nombre} (${c.cobros})`, plata(c.monto), 9)
-    par('Total vendido', plata(r.total), 10, true)
-    regla()
-
-    const e = r.efectivo
-    escribir('EFECTIVO', 10, true)
-    l.y += 0.6
-    par('Fondo inicial', plata(e.fondo), 9)
-    par('+ Ventas en efectivo', plata(e.cobrado), 9)
-    if (e.deEspera) par('+ Transferencias en espera (efectivo)', plata(e.deEspera), 9)
-    if (e.cobradoGN) par('+ Cobrado en Gestión Nube', plata(e.cobradoGN), 9)
-    if (e.aportes) par('+ Ingresos', plata(e.aportes), 9)
-    if (e.salidas) par('- Salidas', `-${plata(e.salidas)}`, 9)
-    l.y += 0.6
-    par('ESPERADO', plata(Number(t.esperado ?? e.esperado)), 11, true)
-  }
-  if (t.contado != null) par('CONTADO', plata(Number(t.contado)), 11, true)
-  const dif = r?.diferencia ?? (t.contado != null && t.esperado != null ? Number(t.contado) - Number(t.esperado) : null)
-  if (dif != null) par(Math.abs(dif) < 0.005 ? 'DIFERENCIA' : dif > 0 ? 'SOBRA' : 'FALTA', Math.abs(dif) < 0.005 ? plata(0) : plata(Math.abs(dif)), 11, true)
-
   const billetes = t.conteos?.cierre?.billetes
-  const lista = (c: Record<string, number>) =>
-    Object.entries(c).map(([v, n]) => [Number(v), Number(n)] as const).filter(([, n]) => n > 0).sort((a, b) => b[0] - a[0])
-  const bloque = (titulo: string, c: Record<string, number>) => {
-    regla()
-    escribir(titulo, 10, true)
+  const sb = billetes && Object.values(billetes).some((n) => Number(n) > 0) ? armarSobre(billetes, Number(t.fondo), billetesDe()) : null
+  escribir('SOBRE', 12, true)
+  l.y += 0.6
+  if (sb) {
+    const filas = Object.entries(sb.sobre).map(([v, n]) => [Number(v), Number(n)] as const).filter(([, n]) => n > 0).sort((a, b) => b[0] - a[0])
+    for (const [v, n] of filas) par(`${n} x ${plata(v)}`, plata(n * v), 10)
     l.y += 0.6
-    const filas = lista(c)
-    for (const [v, n] of filas) par(`${n} x ${plata(v)}`, plata(n * v), 9)
-    par('Total', plata(filas.reduce((s, [v, n]) => s + v * n, 0)), 10, true)
-  }
-  if (billetes && lista(billetes).length) {
-    bloque('BILLETES CONTADOS', billetes)
-    // 🔑 El sobre (Bruno, 13-oct): el fondo de la apertura queda con los billetes chicos, el resto al sobre.
-    const sb = armarSobre(billetes, Number(t.fondo), billetesDe())
-    bloque('SOBRE', sb.sobre)
-    bloque('QUEDA DE FONDO', sb.fondo)
-    if (!sb.exacto) escribir(`Faltan ${plata(Number(t.fondo) - sb.totalFondo)} de fondo: completalo con cambio.`, 9, true)
-  } else if (t.contado != null) {
-    regla()
-    par('SOBRE', plata(Math.max(0, Number(t.contado) - Number(t.fondo))), 11, true)
-    par('Queda de fondo', plata(Math.min(Number(t.contado), Number(t.fondo))), 9)
-  }
-
-  const movs = (t.movimientos ?? []).filter((m) => !m.anulado_en)
-  if (movs.length) {
-    regla()
-    escribir('SALIDAS E INGRESOS', 10, true)
-    l.y += 0.6
-    for (const m of movs) par(m.motivo, `${(m.tipo ?? 'salida') === 'salida' ? '-' : '+'}${plata(m.monto)}`, 9)
+    par('TOTAL', plata(sb.totalSobre), 12, true)
+    if (!sb.exacto) {
+      l.y += 1
+      escribir(`Faltan ${plata(Number(t.fondo) - sb.totalFondo)} de fondo: completalo con cambio.`, 9, true)
+    }
+  } else {
+    par('TOTAL', plata(Math.max(0, Number(t.contado ?? 0) - Number(t.fondo))), 12, true)
   }
   if (t.nota?.trim()) {
     regla()

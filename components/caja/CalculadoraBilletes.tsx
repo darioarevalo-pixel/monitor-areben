@@ -18,7 +18,7 @@
 
 import { useState } from 'react'
 import { Button, Input, Modal, Notice, color, font, radius, space, weight } from '@/components/ui'
-import { totalDeConteo } from '@/lib/caja/conteo.core.js'
+import { armarSobre, totalDeConteo } from '@/lib/caja/conteo.core.js'
 import { plata } from '@/lib/caja/ticket'
 import { aNumero } from '@/lib/caja/textos'
 import type { Conteo } from '@/lib/caja/cliente'
@@ -76,6 +76,7 @@ export function CalculadoraBilletes({
   trabajando = false,
   error,
   esperado,
+  fondo,
   extra,
   aMano = false,
   vacioApagado = false,
@@ -92,6 +93,8 @@ export function CalculadoraBilletes({
   tono?: 'brand' | 'danger'
   /** Al cerrar: el efectivo esperado ⇒ se ven Esperado / Contado / Diferencia mientras se cuenta. */
   esperado?: number | null
+  /** Al cerrar: el fondo de la apertura ⇒ mientras se cuenta se ve qué va al sobre y qué queda (Bruno, 13-oct). */
+  fondo?: number | null
   /** Lo que va abajo del total (la nota del cierre). */
   extra?: React.ReactNode
   /** Deja escribir el total sin contar billetes (abrir y cerrar): entonces viaja sin conteo. */
@@ -204,6 +207,7 @@ export function CalculadoraBilletes({
             <Mosaico rotulo="Diferencia" valor={diferencia == null ? '—' : textoDiferencia(diferencia)} tinta={diferencia == null ? undefined : diferenciaColor(diferencia)} />
           </div>
         )}
+        {fondo != null && !manualN && deBilletes != null && deBilletes > 0 && <ArmadoDelSobre conteo={conteo} fondo={fondo} billetes={billetes} />}
         {extra}
         {error && <Notice tone="danger">{error}</Notice>}
       </div>
@@ -236,3 +240,42 @@ const contador: React.CSSProperties = { display: 'inline-flex', alignItems: 'cen
 // `height` explícita: la regla legacy `.shell-content button` le fija a todo botón la altura de un control.
 const botonContador: React.CSSProperties = { width: 28, height: 28, padding: 0, border: 'none', background: 'transparent', display: 'grid', placeItems: 'center', color: color.ink2, fontSize: 16, cursor: 'pointer' }
 const inputContador: React.CSSProperties = { width: 48, height: 28, textAlign: 'center', fontWeight: weight.semibold, fontSize: font.base, border: 0, background: 'transparent', padding: 0, outline: 'none', fontVariantNumeric: 'tabular-nums' }
+
+/**
+ * 🔑 El sobre (Bruno, 13-oct): con lo contado, qué billetes van al SOBRE y cuáles QUEDAN en la caja —el
+ * fondo de la apertura, con los chicos para tener cambio (`armarSobre`)—. Se ve mientras se cuenta al
+ * cerrar y en el aviso de la caja cerrada; el ticket del cierre imprime el sobre.
+ */
+export function ArmadoDelSobre({ conteo, fondo, billetes }: { conteo: Conteo; fondo: number; billetes: number[] }) {
+  const sb = armarSobre(conteo, fondo, billetes)
+  const columna = (titulo: string, c: Record<string, number>, total: number) => (
+    <div style={{ display: 'grid', gap: space[0.5], alignContent: 'start', minWidth: 0 }}>
+      <b style={{ fontSize: font.base, color: color.ink }}>{titulo}</b>
+      {Object.entries(c)
+        .map(([v, n]) => [Number(v), n] as const)
+        .filter(([, n]) => n > 0)
+        .sort((a, b) => b[0] - a[0])
+        .map(([v, n]) => (
+          <span key={v} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], fontVariantNumeric: 'tabular-nums' }}>
+            <span>
+              {n} × {plata(v)}
+            </span>
+            <span style={{ color: color.mut }}>{plata(n * v)}</span>
+          </span>
+        ))}
+      <span style={{ display: 'flex', justifyContent: 'space-between', fontWeight: weight.bold, borderTop: `1px solid ${color.line}`, paddingTop: space[0.5], fontVariantNumeric: 'tabular-nums' }}>
+        <span>Total</span>
+        <span>{plata(total)}</span>
+      </span>
+    </div>
+  )
+  return (
+    <div style={{ display: 'grid', gap: space[2] }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: space[4] }}>
+        {columna('Armá el sobre', sb.sobre, sb.totalSobre)}
+        {columna('Queda en la caja (fondo)', sb.fondo, sb.totalFondo)}
+      </div>
+      {!sb.exacto && <Notice tone="warning">Faltan {plata(fondo - sb.totalFondo)} de fondo: completalo con cambio.</Notice>}
+    </div>
+  )
+}

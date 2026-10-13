@@ -6,13 +6,14 @@
  */
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { MODOS_OFERTA, NOMBRE_MEDIO, medioDeCuenta, msjOferta, nombreEnCaja, ofertaDe } from '@/lib/caja/core.core.js'
-import { armarSobre, billetesDe } from '@/lib/caja/conteo.core.js'
+import { MODOS_OFERTA, NOMBRE_MEDIO, msjOferta, ofertaDe } from '@/lib/caja/core.core.js'
+import { billetesDe } from '@/lib/caja/conteo.core.js'
+import { porFormaDePago } from '@/lib/caja/cierre.core.js'
 import { MARCA_CAJA } from '@/lib/caja/marca'
 import { imprimirCierre, numeroProvisorio, plata, type DatosCierre, type LogoTicket } from '@/lib/caja/ticket'
 import { titularesDe } from '@/lib/caja/otra-cuenta.core.js'
 import { TOLERANCIA_TRANSFERENCIA } from '@/lib/pagos-recibidos/core.core.js'
-import { CalculadoraBilletes, olvidarConteo } from '@/components/caja/CalculadoraBilletes'
+import { ArmadoDelSobre, CalculadoraBilletes, olvidarConteo } from '@/components/caja/CalculadoraBilletes'
 import { aNumero as aNumeroTxt, textoDiferencia } from '@/lib/caja/textos'
 import {
   cancelarVenta,
@@ -1594,7 +1595,7 @@ const td: React.CSSProperties = { padding: `${space[2]}px ${space[2]}px ${space[
 const der: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
 
 /** El turno cerrado, como lo escribe el ticket del cierre (Bruno, 13-oct). */
-export const datosCierre = (t: Turno): DatosCierre => ({ ...t, marca: MARCA_CAJA.nombre, movimientos: t.salidas ?? null })
+export const datosCierre = (t: Turno): DatosCierre => ({ ...t, marca: MARCA_CAJA.nombre })
 /** Imprime el ticket del cierre; el error vuelve como texto para el aviso de la pantalla. */
 export const imprimirCierreDe = (t: Turno) => imprimirCierre(datosCierre(t), Date.now())
 
@@ -1620,42 +1621,13 @@ export function AvisoCierre({ t }: { t: Turno }) {
   )
 }
 
-/**
- * 🔑 El sobre (Bruno, 13-oct): qué billetes van al sobre y cuáles quedan de fondo (el de la apertura, con
- * los chicos para tener cambio: `armarSobre`). Lo mismo que imprime el ticket del cierre.
- */
+/** El sobre de la caja que se acaba de cerrar: el mismo armado que se vio al contar (`ArmadoDelSobre`). */
 function SobreDelCierre({ t }: { t: Turno }) {
   const billetes = t.conteos?.cierre?.billetes
-  if (!billetes || t.contado == null) return null
-  const sb = armarSobre(billetes, Number(t.fondo), billetesDe())
-  const columna = (titulo: string, c: Record<string, number>, total: number) => (
-    <div style={{ display: 'grid', gap: space[0.5], alignContent: 'start', minWidth: 0 }}>
-      <b style={{ fontSize: font.base, color: color.ink }}>{titulo}</b>
-      {Object.entries(c)
-        .map(([v, n]) => [Number(v), n] as const)
-        .filter(([, n]) => n > 0)
-        .sort((a, b) => b[0] - a[0])
-        .map(([v, n]) => (
-          <span key={v} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], fontVariantNumeric: 'tabular-nums' }}>
-            <span>
-              {n} × {plata(v)}
-            </span>
-            <span style={{ color: color.mut }}>{plata(n * v)}</span>
-          </span>
-        ))}
-      <span style={{ display: 'flex', justifyContent: 'space-between', fontWeight: weight.bold, borderTop: `1px solid ${color.line}`, paddingTop: space[0.5], fontVariantNumeric: 'tabular-nums' }}>
-        <span>Total</span>
-        <span>{plata(total)}</span>
-      </span>
-    </div>
-  )
+  if (!billetes || t.contado == null || !Object.values(billetes).some((n) => Number(n) > 0)) return null
   return (
-    <div style={{ display: 'grid', gap: space[2], marginTop: space[3] }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: space[4] }}>
-        {columna('Armá el sobre', sb.sobre, sb.totalSobre)}
-        {columna('Queda en la caja (fondo)', sb.fondo, sb.totalFondo)}
-      </div>
-      {!sb.exacto && <Notice tone="warning">Faltan {plata(Number(t.fondo) - sb.totalFondo)} de fondo: completalo con cambio.</Notice>}
+    <div style={{ marginTop: space[3] }}>
+      <ArmadoDelSobre conteo={billetes} fondo={Number(t.fondo)} billetes={billetesDe()} />
     </div>
   )
 }
@@ -1762,6 +1734,7 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
       aMano
       vacioApagado
       esperado={r?.efectivo.esperado ?? null}
+      fondo={Number(turno.fondo)}
       trabajando={trabajando}
       error={error}
       onCerrar={onCerrar}
@@ -2010,20 +1983,14 @@ export function ResumenTurnoDatos({
               </tr>
             </thead>
             <tbody>
-              {r.porCuenta.map((c) => {
-                // Una fila por CUENTA, con el nombre de adentro del local (`nombreEnCaja`): forma de pago y lo
-                // que la distingue («Efectivo · oferta», «Tarjeta de crédito · promo»). Un resumen guardado
-                // antes del 13-oct trae el nombre de GN: la forma de pago adelante, como antes.
-                const medio = medioDeCuenta(c.cuenta, reglas)
-                const nombre = medio && reglas ? nombreEnCaja(c.cuenta, reglas) : c.nombre
-                return (
-                  <tr key={c.cuenta}>
-                    <td style={td}>{nombre}</td>
-                    <td style={{ ...td, ...der }}>{c.cobros}</td>
-                    <td style={{ ...td, ...der }}>{plata(c.monto)}</td>
-                  </tr>
-                )
-              })}
+              {/* Por FORMA DE PAGO (Bruno, 13-oct): crédito es crédito, como el cierre de lote del posnet. */}
+              {porFormaDePago(r.porCuenta, reglas).map((c) => (
+                <tr key={c.nombre}>
+                  <td style={td}>{c.nombre}</td>
+                  <td style={{ ...td, ...der }}>{c.cobros}</td>
+                  <td style={{ ...td, ...der }}>{plata(c.monto)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

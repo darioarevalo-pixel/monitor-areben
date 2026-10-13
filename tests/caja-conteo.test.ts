@@ -81,16 +81,26 @@ describe('armarSobre (Bruno, 13-oct): qué queda de fondo y qué va al sobre', (
   })
 })
 
-describe('nombreEnCaja (Bruno, 13-oct): ⛔ «Feria - Efectivo» en el monitor', () => {
-  it('la forma de pago con lo que la distingue', async () => {
+describe('nombreEnCaja y porFormaDePago (Bruno, 13-oct): crédito es crédito, ⛔ «Feria - Efectivo»', () => {
+  it('sólo la forma de pago, y las cuentas de la misma forma se suman en una fila', async () => {
     const { REGLAS_INICIALES, nombreEnCaja } = await import('@/lib/caja/core.core.js')
+    const { porFormaDePago } = await import('@/lib/caja/cierre.core.js')
     const r = REGLAS_INICIALES
-    expect(nombreEnCaja(r.medios.efectivo.normal, r)).toBe('Efectivo')
-    expect(nombreEnCaja(r.medios.efectivo.feria, r)).toBe('Efectivo · oferta')
-    expect(nombreEnCaja(r.medios.credito.promo, r)).toBe('Tarjeta de crédito · promo')
-    expect(nombreEnCaja(r.titulares.areben, r)).toBe('Transferencia · Areben')
-    expect(nombreEnCaja(r.titulares.dario, r)).toBe('Transferencia · CG')
-    expect(nombreEnCaja(r.medios.debito.normal, r)).toBe('Tarjeta de débito')
-    for (const c of Object.keys(r.cuentas)) expect(nombreEnCaja(Number(c), r)).not.toMatch(/feria/i)
+    expect(nombreEnCaja(r.medios.efectivo.feria, r)).toBe('Efectivo')
+    expect(nombreEnCaja(r.medios.credito.promo, r)).toBe('Tarjeta de crédito')
+    expect(nombreEnCaja(r.titulares.dario, r)).toBe('Transferencia')
+    for (const c of Object.keys(r.cuentas)) expect(nombreEnCaja(Number(c), r)).not.toMatch(/feria|oferta|CG|promo/i)
+    const filas = porFormaDePago([
+      { cuenta: r.medios.efectivo.normal, nombre: 'Efectivo', efectivo: true, monto: 1000, cobros: 2 },
+      { cuenta: r.medios.efectivo.feria, nombre: 'Feria - Efectivo', efectivo: true, monto: 500, cobros: 1 },
+      { cuenta: r.medios.credito.promo, nombre: 'Credito 10% OFF', monto: 3000, cobros: 1 },
+      { cuenta: r.medios.credito.normal, nombre: 'Credito', monto: 2000, cobros: 1 },
+      { cuenta: 999999, nombre: 'Vieja', monto: 10, cobros: 1 },
+    ], r)
+    expect(filas).toEqual([
+      { nombre: 'Efectivo', efectivo: true, monto: 1500, cobros: 3 },
+      { nombre: 'Tarjeta de crédito', efectivo: false, monto: 5000, cobros: 2 },
+      { nombre: 'Vieja', efectivo: false, monto: 10, cobros: 1 },
+    ])
   })
 })

@@ -413,24 +413,23 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   pantalla de la clienta. El paso de la transferencia vuelve a ser **«Validar transferencia»**.
 
 - 🧾 **Ticket del cierre** (`armarTicketCierre`): sale solo al cerrar la caja (`CerrarTurnoModal`) y se
-  reimprime con «Imprimir cierre» en el aviso y con la impresora en «Cajas anteriores». Lleva lo cobrado
-  por cuenta, la cuenta del efectivo, contado y diferencia (SOBRA/FALTA), **los billetes contados uno por
-  uno** —el fajo que arman tiene que coincidir con el papel—, salidas e ingresos (sólo al cerrar: la lista
-  de cajas anteriores ⛔ trae el detalle) y firma. ⛔ Calcula: escribe la foto del cierre.
+  reimprime con «Imprimir cierre» en el aviso y con la impresora en «Cajas anteriores».
 
 - 🧾 **4ta vuelta (13-oct)**: el ticket de venta dice **siempre «Consumidor Final»** (el mail sólo sirve
   para mandarlo) y **termina en el TOTAL** (⛔ RECIBIMOS, SALDO ni VUELTO). El de cambio cierra con
   «¡Que lo disfrutes!» (puede ser regalo). La política de cambio es el campo «Política de cambio» de la
   pestaña: Bruno pega la de GN, por marca.
-- 🔑 **Los nombres de cuenta de adentro del local** (`nombreEnCaja`, `core.core.js`): forma de pago + lo
-  que la distingue («Efectivo · oferta», «Tarjeta de crédito · promo», «Transferencia · CG»). ⛔ El
-  nombre de GN («Feria - Efectivo»): lo guarda `resumenTurno` y lo usan la tabla de la pestaña y el
-  ticket del cierre.
-- 🔑 **El sobre** (`armarSobre`, `conteo.core.js`): después de cerrar, la pantalla (`AvisoCierre`) y el
-  ticket dicen qué billetes van al SOBRE y cuáles QUEDAN DE FONDO. Fondo = el de la apertura de esa caja
-  (Bruno); se arma con la MAYOR cantidad de billetes que sume exacto (= los chicos, para tener cambio).
-  ⛔ Exacto ⇒ lo más cerca por debajo y avisa «Faltan $X de fondo». Sin billetes contados: sobre =
-  contado − fondo.
+- 🔑 **Por FORMA DE PAGO, ⛔ por cuenta de GN** (Bruno, 13-oct: «crédito siempre es crédito», como el cierre
+  de lote del posnet): `nombreEnCaja` (`core.core.js`) da sólo la forma de pago y `porFormaDePago`
+  (`cierre.core.js`) suma las cuentas de la misma forma en una fila (la tabla de la pestaña). ⛔ «Feria -
+  Efectivo». 🔴 La cuenta «Feria TC» la comparten débito y crédito en oferta ⇒ cae en «Tarjeta de crédito».
+- 🔑 **El sobre** (`armarSobre`, `conteo.core.js`): al CERRAR, mientras cuentan, la calculadora muestra
+  «Armá el sobre» y «Queda en la caja» (`ArmadoDelSobre`); lo mismo en el aviso de la caja cerrada. Fondo =
+  el de la apertura (Bruno); se arma con la MAYOR cantidad de billetes que sume exacto (= los chicos, para
+  tener cambio). ⛔ Exacto ⇒ lo más cerca por debajo y «Faltan $X de fondo».
+- 🧾 **El ticket del cierre lleva SÓLO EL SOBRE** (cada billete y el total) + nota y firma. Lo demás
+  (ventas por forma de pago, esperado, contado, billetes contados) queda guardado en la caja y se ve en la
+  pestaña.
 
 ## Pendiente
 
