@@ -162,6 +162,16 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
   | `migrate-caja-anulada-en-gn.sql` | ✅ 12-oct (las 7 de prueba anotadas) | ✅ 12-oct |
   ⚠️ «fecha del archivo» = cuándo entró al repo; el día exacto en que corrió en Zattia ⛔ quedó anotado, pero el
   esquema de hoy confirma que las 10 están.
+- 🏁 **13-oct (Bruno, 4ta vuelta), EN PROD:** Regalo + ticket de cambio («¡Que lo disfrutes!»), ticket de venta
+  con «Consumidor Final» y hasta el TOTAL, «Redondeo», «Validar transferencia», el cierre suma las ventas en
+  efectivo del POS de GN (las dos cajas en paralelo), formas de pago agrupadas (crédito es crédito), el sobre
+  en vivo al contar y el ticket del cierre (ventas, efectivo, salidas y SOBRE). Ficha: `docs/secciones/caja.md`.
+  ▶️ **Manos de Bruno**: pegar la política de cambio de GN en «Política de cambio» (Zattia y BDI) · armar con
+  el diseñador el mail «Ticket del local» de BDI (molde: `.mirar/ticket-zattia/propuesta-contenido.json` del
+  mailer; BDI tiene `local` y `plazoCambio` cargados, faltan reseña de Google, IG y WhatsApp; el plazo dice
+  «desde que lo recibís») · en el local: caminar Regalo, el sobre en la ventana de cerrar y una transferencia
+  real · ¿el fajo es lo contado menos el fondo? (así lo arma `armarSobre`). 🔴 Débito en oferta cae en
+  «Tarjeta de crédito» (la cuenta «Feria TC» es la misma): si pasa seguido, no cierra con el posnet.
 - ⛔ **Vendedor en cada venta (W2): RETIRADO** (Bruno, 12-oct: «no tenemos esa dinámica de trabajo»).
   Alcanza con la cuenta que cobró (`caja_venta.usuario`).
 - **La cuenta de GN de la transferencia sale de la cuenta de MP en uso**: Darío ⇒ Transferencia CG,
