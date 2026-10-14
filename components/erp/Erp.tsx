@@ -12,8 +12,9 @@ import { SectionCard, Tabs, space } from '@/components/ui'
 import { Facturacion } from './Facturacion'
 import { StockPrenda, type PrendaPedida } from './StockPrenda'
 import { DiferenciasDia } from './DiferenciasDia'
+import { PedidosSinPagar } from './PedidosSinPagar'
 
-const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }, { key: 'diferencias', label: 'Diferencias del día' }]
+const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }, { key: 'diferencias', label: 'Diferencias del día' }, { key: 'pedidos-tn', label: 'Pedidos sin pagar' }]
 
 export function Erp() {
   const [pestania, setPestania] = useState('facturacion')
@@ -25,6 +26,7 @@ export function Erp() {
       </SectionCard>
       {pestania === 'facturacion' && <Facturacion />}
       {pestania === 'stock' && <StockPrenda key={prenda ? `${prenda.marca}/${prenda.producto}/${prenda.talle}` : 'buscar'} pedida={prenda} />}
+      {pestania === 'pedidos-tn' && <PedidosSinPagar />}
       {pestania === 'diferencias' && <DiferenciasDia abrirPrenda={(p) => { setPrenda(p); setPestania('stock') }} />}
     </div>
   )

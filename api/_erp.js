@@ -10,6 +10,7 @@
  *   GET  ?recurso=erp&vista=facturas&mes=YYYY-MM      las facturas del monitor del mes (para el PDF)
  *   POST {recurso:'erp', accion:'facturar', mes, marca, ventaIds}   factura esas ventas (un lote)
  *   POST {recurso:'erp', accion:'cerrar', mes}                      congela el techo del mes
+ *   GET  ?recurso=erp&vista=pedidos-tn&marca=…                      los pedidos de TN abiertos y sin pagar (retienen stock)
  *   GET  ?recurso=erp&vista=diferencias&marca=…&fecha=YYYY-MM-DD    lo que el libro ⛔ explicó ese día + la sobreventa
  *   GET  ?recurso=erp&vista=stock&marca=bdi|zattia&q=texto            busca prendas (SKU, código, nombre)
  *   GET  ?recurso=erp&vista=stock&marca=…&producto=ID&talle=ID       el libro y GN de esa prenda, con historial
@@ -30,6 +31,7 @@ import { POR_PEDIDO, facturarLote } from '../motor/arca/lote.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
+import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -293,6 +295,22 @@ export async function diferenciasDelDia({ marca, fecha: pedida }) {
   }
 }
 
+/** Los pedidos de TN abiertos y sin pagar de la base de la marca (Zattia trae también los de Stunned). */
+export async function pedidosSinPagar({ marca }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const { url, key } = cfgDeMarca(marca)
+  const b = createClient(url, key)
+  const ordenes = await leerTodo(b, 'tn_orden', (x) => x.select('tienda, tn_id, numero, creada_en, status, payment_status, medio, gateway, total')
+    .eq('status', 'open').in('payment_status', SIN_PAGAR).order('creada_en'))
+  const ids = ordenes.map((o) => o.tn_id)
+  const lineas = []
+  for (let i = 0; i < ids.length; i += 200) {
+    lineas.push(...await leerTodo(b, 'tn_orden_linea', (x) => x.select('tienda, tn_id, nombre, sku, cantidad').in('tn_id', ids.slice(i, i + 200)).order('tn_id').order('linea_id')))
+  }
+  const [lectura] = (await b.from('tn_lectura').select('tienda, leida_en').order('leida_en', { ascending: false }).limit(1)).data || []
+  return { ...armarPedidosSinPagar({ ordenes, lineas, ahora: Date.now() }), leidaEn: lectura?.leida_en ?? null }
+}
+
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res)
   if (!perfil) return
@@ -304,6 +322,11 @@ export default async function handler(req, res) {
   if (!/^\d{4}-\d{2}$/.test(mes)) return res.status(400).json({ error: 'Mes inválido' })
 
   try {
+    if (req.method === 'GET' && req.query.vista === 'pedidos-tn') {
+      const r = await pedidosSinPagar({ marca: String(req.query.marca || '') })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
     if (req.method === 'GET' && req.query.vista === 'diferencias') {
       const r = await diferenciasDelDia({ marca: String(req.query.marca || ''), fecha: req.query.fecha })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)

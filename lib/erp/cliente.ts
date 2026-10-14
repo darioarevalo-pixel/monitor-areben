@@ -96,3 +96,11 @@ export type DiferenciasDelDia = {
 
 export const leerDiferencias = (marca: MarcaErp, fecha: string | null) =>
   pedir<DiferenciasDelDia>(null, `&vista=diferencias&marca=${marca}${fecha ? `&fecha=${fecha}` : ''}&nc=${Date.now()}`, 'No se pudieron leer las diferencias del día.')
+
+export type PedidoSinPagar = {
+  tienda: string; tnId: string; numero: number; creadaEn: string; dias: number; pago: string; medio: string | null; gateway: string | null
+  total: number; unidades: number; prendas: Array<{ nombre: string | null; sku: string | null; cantidad: number }>; link: string | null
+}
+export const leerPedidosSinPagar = (marca: MarcaErp) =>
+  pedir<{ pedidos: PedidoSinPagar[]; porTienda: Record<string, { pedidos: number; unidades: number; total: number }>; leidaEn: string | null }>(
+    null, `&vista=pedidos-tn&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los pedidos sin pagar.')
