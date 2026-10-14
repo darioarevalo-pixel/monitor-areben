@@ -55,8 +55,9 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   `registrarCambio` del motor por `cambiarVentaPropia` (`api/_erp.js`). 🔴 Usa el MISMO código de la Caja
   (`buscarProducto`, `construirPrecios`+`precioDeFeria`, `renglones`, `exigirDevolucion`), ⛔ una copia: al cortar
   GN se muda al POS. 🔴 De PRUEBA hasta el corte (⛔ libro, ⛔ GN). Que ⛔ se devuelva de más y que el pago cierre lo
-  hace cumplir el MOTOR (409); la pantalla usa `diferenciaDeCambio`, la MISMA cuenta. ⚠️ La diferencia se cobra
-  sin el descuento de la forma de pago y la transferencia ⛔ se espera: los decide Bruno.
+  hace cumplir el MOTOR (409); la pantalla usa `diferenciaDeCambio`, la MISMA cuenta. ✅ (Bruno, 14-oct) La diferencia
+  se cobra CON el descuento de la forma de pago (`cobroDelCambio` = el `cobro()` de la Caja), la transferencia se
+  ESPERA como en la Caja (`cruzarTransferencia`) y lo devuelto que vale más queda como SALDO A FAVOR (DNI + nombre).
 - 🔑 **`erp › Caja › Factura` = la factura A PEDIDO** (`FacturaCaja.tsx`, 14-oct): busca la venta propia y saca UNA
   factura B (sin identificar, DNI o CUIT) o A (CUIT + inscripta/monotributista) por el MISMO `facturarLote` de la
   masiva (`facturarVentaPropia` en `api/_erp.js`, núcleo en `lib/erp/factura.core.js`). 🔴 **`facturas.venta_id` =
