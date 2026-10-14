@@ -9,7 +9,7 @@
  * GN es el espejo de `inventario`, de la última sincronización.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Badge, Button, EmptyState, Input, Notice, SectionCard, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space,
 } from '@/components/ui'
@@ -24,14 +24,17 @@ const cuando = (iso: string) => {
 }
 const conSigno = (n: number) => (n > 0 ? `+${n}` : String(n))
 
-export function StockPrenda() {
-  const [marca, setMarca] = useState<MarcaErp>('zattia')
+/** La prenda que pide abrir otra pestaña (Diferencias): cada pedido nuevo es un objeto nuevo. */
+export type PrendaPedida = { marca: MarcaErp; producto: string; talle: string }
+
+export function StockPrenda({ pedida = null }: { pedida?: PrendaPedida | null } = {}) {
+  const [marca, setMarca] = useState<MarcaErp>(pedida?.marca ?? 'zattia')
   const [texto, setTexto] = useState('')
   const [encontradas, setEncontradas] = useState<PrendaEncontrada[] | null>(null)
   const [cortado, setCortado] = useState(false)
   const [ficha, setFicha] = useState<StockDePrenda | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [trabajando, setTrabajando] = useState(false)
+  const [trabajando, setTrabajando] = useState(!!pedida)
 
   async function buscar() {
     setTrabajando(true)
@@ -59,6 +62,17 @@ export function StockPrenda() {
       setTrabajando(false)
     }
   }
+
+  // La prenda pedida desde otra pestaña: `Erp` monta esta pestaña de nuevo (key) ⇒ arranca con su marca y cargando.
+  useEffect(() => {
+    if (!pedida) return
+    let vivo = true
+    leerStockDePrenda(pedida.marca, pedida.producto, pedida.talle)
+      .then((f) => { if (vivo) { setFicha(f); setError(null) } })
+      .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudo leer el stock de la prenda.'))
+      .finally(() => vivo && setTrabajando(false))
+    return () => { vivo = false }
+  }, [pedida])
 
   // Otra marca: lo de antes se limpia en el MISMO cambio.
   function cambiarMarca(k: string) {

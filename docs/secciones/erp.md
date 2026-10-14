@@ -11,6 +11,14 @@ lado de GN (`inventario`), y cada movimiento con el saldo después. GN ⛔ tiene
 reemplaza. Núcleo puro en `lib/erp/stock.core.js` (`tests/erp-stock.test.ts`). 🔴 El libro es
 inmutable: el nivel es la SUMA de los movimientos; la pantalla ⛔ escribe nada.
 
+**Diferencias del día** (14-oct, sólo lectura): lo que el libro ⛔ pudo explicar al comparar su día con
+el de GN (`stock_diff`), agrupado por clase con qué mirar, y la **sobreventa**: las prendas que el libro
+deja en NEGATIVO hoy. Cada fila abre la ficha de Stock. Núcleo en `lib/erp/diferencias.core.js`
+(`tests/erp-diferencias.test.ts`). 🔴 La sobreventa ⛔ es una clase del diff: si GN también quedó en
+negativo, el día cierra (medido: las 13 de BDI del 14-oct están en −1/−4 en los dos) ⇒ se suma aparte, por
+pg con `DATABASE_URL_<MARCA>` (supabase-js ⛔ agrupa); sin esa variable la pantalla lo dice. 🔴 Los nombres
+salen del espejo PAGINADOS: una fila por talle y depósito pasa las 1000 de Supabase y cortaba callado.
+
 Y **Facturación** (F5 del plan): el tope del mes, lo ya facturado y las ventas sin
 factura, que se facturan con ARCA (ex AFIP) por web service. Reemplaza la facturación masiva de GN
 y el «Pendiente de facturar» del dashboard de Darío.

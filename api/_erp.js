@@ -10,6 +10,7 @@
  *   GET  ?recurso=erp&vista=facturas&mes=YYYY-MM      las facturas del monitor del mes (para el PDF)
  *   POST {recurso:'erp', accion:'facturar', mes, marca, ventaIds}   factura esas ventas (un lote)
  *   POST {recurso:'erp', accion:'cerrar', mes}                      congela el techo del mes
+ *   GET  ?recurso=erp&vista=diferencias&marca=…&fecha=YYYY-MM-DD    lo que el libro ⛔ explicó ese día + la sobreventa
  *   GET  ?recurso=erp&vista=stock&marca=bdi|zattia&q=texto            busca prendas (SKU, código, nombre)
  *   GET  ?recurso=erp&vista=stock&marca=…&producto=ID&talle=ID       el libro y GN de esa prenda, con historial
  *
@@ -28,6 +29,7 @@ import { claveVenta, resumenDelMes, ventasParaFacturar } from '../motor/arca/mes
 import { POR_PEDIDO, facturarLote } from '../motor/arca/lote.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
+import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -237,6 +239,60 @@ export async function stockDePrenda({ marca, q, producto, talle }) {
   }
 }
 
+const PG_DE_MARCA = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
+
+/**
+ * La SOBREVENTA: las variantes × depósito con el libro en NEGATIVO hoy. Se suma en la base (por pg, con la
+ * conexión del motor: supabase-js ⛔ agrupa). Sin la conexión ⇒ null (la pantalla dice que falta).
+ */
+async function negativosDelLibro(marca) {
+  const conexion = process.env[PG_DE_MARCA[marca]]
+  if (!conexion) return null
+  const { default: pg } = await import('pg')
+  const db = new pg.Client({ connectionString: conexion, connectionTimeoutMillis: 5000, statement_timeout: 15000 })
+  await db.connect()
+  try {
+    return (await db.query(`select linea, product_id, size_id, deposito, sum(cantidad)::int as nivel from stock_movimiento
+      group by 1, 2, 3, 4 having sum(cantidad) < 0 order by 5 limit 300`)).rows
+  } finally {
+    await db.end().catch(() => {})
+  }
+}
+
+/**
+ * Las diferencias de un día del libro (pestaña `erp › Diferencias`, sólo lectura): `stock_diff` del día
+ * (el último calculado si ⛔ se pide), su resumen, los días que hay para elegir y la sobreventa de hoy.
+ */
+export async function diferenciasDelDia({ marca, fecha: pedida }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const f = leerFecha(pedida)
+  if (f.error) return { status: 400, error: f.error }
+  const { url, key } = cfgDeMarca(marca)
+  const b = createClient(url, key)
+  const dias = await b.from('stock_libro_dia').select('fecha, resumen, foto_desde, foto_hasta').order('fecha', { ascending: false }).limit(30)
+  if (dias.error) throw new Error(`stock_libro_dia: ${dias.error.message}`)
+  const fecha = f.fecha ?? dias.data[0]?.fecha ?? null
+  const dia = dias.data.find((d) => d.fecha === fecha) ?? null
+  const [filas, negativos] = await Promise.all([
+    fecha ? leerTodo(b, 'stock_diff', (x) => x.select('product_id, size_id, deposito, linea, delta_gn, delta_libro, nivel_gn, nivel_libro, clase, explicacion').eq('fecha', fecha).order('product_id')) : [],
+    negativosDelLibro(marca).catch((e) => ({ error: e.message })),
+  ])
+  const negs = Array.isArray(negativos) ? negativos : []
+  const ids = [...new Set([...filas, ...negs].map((r) => Number(r.product_id)))]
+  const nombres = new Map()
+  // 🔴 Paginado: el espejo tiene una fila por talle Y depósito ⇒ 300 productos pasan las 1000 filas que
+  // devuelve Supabase de una, y cortaba CALLADO (87 de 92 sin nombre en BDI, medido 14-oct).
+  for (let i = 0; i < ids.length; i += 200) {
+    const data = await leerTodo(b, 'inventario', (x) => x.select('product_id, size_id, product_name, size_name').in('product_id', ids.slice(i, i + 200)).order('product_id').order('size_id'))
+    for (const r of data) nombres.set(`${r.product_id}/${r.size_id}`, { nombre: r.product_name, talle: r.size_name })
+  }
+  return {
+    fecha, dias: dias.data.map((d) => d.fecha), fotoDesde: dia?.foto_desde ?? null, fotoHasta: dia?.foto_hasta ?? null,
+    ...armarDiferencias({ filas, nombres, resumen: dia?.resumen, negativos: negs }),
+    sobreventaSinConexion: negativos === null, sobreventaError: negativos && !Array.isArray(negativos) ? negativos.error : null,
+  }
+}
+
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res)
   if (!perfil) return
@@ -248,6 +304,11 @@ export default async function handler(req, res) {
   if (!/^\d{4}-\d{2}$/.test(mes)) return res.status(400).json({ error: 'Mes inválido' })
 
   try {
+    if (req.method === 'GET' && req.query.vista === 'diferencias') {
+      const r = await diferenciasDelDia({ marca: String(req.query.marca || ''), fecha: req.query.fecha })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
     if (req.method === 'GET' && req.query.vista === 'stock') {
       const r = await stockDePrenda({ marca: String(req.query.marca || ''), q: req.query.q, producto: req.query.producto, talle: req.query.talle })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)

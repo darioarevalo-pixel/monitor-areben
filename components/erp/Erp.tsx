@@ -10,19 +10,22 @@
 import { useState } from 'react'
 import { SectionCard, Tabs, space } from '@/components/ui'
 import { Facturacion } from './Facturacion'
-import { StockPrenda } from './StockPrenda'
+import { StockPrenda, type PrendaPedida } from './StockPrenda'
+import { DiferenciasDia } from './DiferenciasDia'
 
-const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }]
+const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }, { key: 'diferencias', label: 'Diferencias del día' }]
 
 export function Erp() {
   const [pestania, setPestania] = useState('facturacion')
+  const [prenda, setPrenda] = useState<PrendaPedida | null>(null)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard title="ERP" subtitle="En construcción: lo que va a reemplazar a Gestión Nube. Lo ven sólo los administradores.">
-        <Tabs items={PESTANIAS} value={pestania} onChange={setPestania} />
+        <Tabs items={PESTANIAS} value={pestania} onChange={(k) => { setPrenda(null); setPestania(k) }} />
       </SectionCard>
       {pestania === 'facturacion' && <Facturacion />}
-      {pestania === 'stock' && <StockPrenda />}
+      {pestania === 'stock' && <StockPrenda key={prenda ? `${prenda.marca}/${prenda.producto}/${prenda.talle}` : 'buscar'} pedida={prenda} />}
+      {pestania === 'diferencias' && <DiferenciasDia abrirPrenda={(p) => { setPrenda(p); setPestania('stock') }} />}
     </div>
   )
 }

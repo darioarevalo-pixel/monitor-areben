@@ -80,3 +80,19 @@ export const buscarPrendas = (marca: MarcaErp, q: string) =>
 
 export const leerStockDePrenda = (marca: MarcaErp, producto: string, talle: string) =>
   pedir<StockDePrenda>(null, `&vista=stock&marca=${marca}&producto=${producto}&talle=${talle}&nc=${Date.now()}`, 'No se pudo leer el stock de la prenda.')
+
+export type FilaDiferencia = {
+  producto: string; talle: string; nombre: string | null; talleNombre: string | null; linea: string; deposito: string
+  clase: string; explicacion: string | null; deltaGN: number; deltaLibro: number; nivelGN: number; nivelLibro: number; diferencia: number
+}
+export type DiferenciasDelDia = {
+  fecha: string | null; dias: string[]; fotoDesde: string | null; fotoHasta: string | null
+  grupos: Array<{ clase: string; nombre: string; mirar: string; filas: FilaDiferencia[]; unidades: number }>
+  explicadas: Array<{ clase: string; nombre: string; variantes: number }>
+  desconocidas: number; inexplicadas: number
+  sobreventa: Array<{ producto: string; talle: string; nombre: string | null; talleNombre: string | null; linea: string; deposito: string; nivelLibro: number }>
+  sobreventaSinConexion: boolean; sobreventaError: string | null
+}
+
+export const leerDiferencias = (marca: MarcaErp, fecha: string | null) =>
+  pedir<DiferenciasDelDia>(null, `&vista=diferencias&marca=${marca}${fecha ? `&fecha=${fecha}` : ''}&nc=${Date.now()}`, 'No se pudieron leer las diferencias del día.')
