@@ -38,6 +38,12 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   veían «0 en el pedido» y entraban las dos. **Cambio** (lo arma la sesión B en `erp › Caja`): con ticket,
   `exigirDevolucion` **BLOQUEA** devolver más de lo que esa venta vendió, contando cambios anteriores
   (⛔ se confirma: esa prenda ⛔ viene de esa venta); sin ticket, pregunta con **PIN de encargada**.
+- 🔑 **La venta va TAMBIÉN al motor del ERP** (opción (a), Bruno 14-oct: después del ERP GN desaparece).
+  La que llega a GN (`en_gn`) se anota con `registrarVenta` en `prueba: true` (⛔ mueve el libro, que todavía
+  cuenta la Caja desde `caja_venta`) desde la fila guardada (`lib/caja/motor.core.js`, `api/_caja-motor.js`).
+  🔴 **⛔ frena a la cajera**: si el motor falla, log `[caja→motor]` y la sube el repaso de `reintentar-pendientes`
+  (cada 3 min, últimos 3 días). Sin `DATABASE_URL_BDI`/`_ZATTIA` en Vercel ⛔ está prendido: cargarla (URL del
+  rol `motor`, puerto 6543) ES prenderlo. Techo 4 s por venta.
 - 🔴 **El dinero se calcula DOS veces con el MISMO núcleo**: la pantalla para mostrarlo, el servidor
   para mandarlo. Si el total que vio la cajera ⛔ coincide ⇒ 409 y ⛔ sale nada a GN.
 - 🔴 **En el `POST /ventas`, `items[].discount` son PESOS; en las ventas del POS de GN, %.** Medido

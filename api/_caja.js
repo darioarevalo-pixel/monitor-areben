@@ -89,6 +89,7 @@ import { filtrarPorNombre, ordenParaLaBase, palabrasDeBusqueda, productosPorStoc
 import { COLUMNAS_VENTA as COLUMNAS, SIN_LLEGAR, enviarVenta, pendientesParaReintentar } from '../lib/caja/enviar.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, ladoDelEspejo, marcaDeCaja, tokenDe } from '../lib/caja/marcas.core.js'
+import { anotarEnMotor, avisoDelMotor, repasarMotor } from './_caja-motor.js'
 import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
 import { anuladasEnGN, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
@@ -454,7 +455,13 @@ export default async function handler(req, res) {
 
   // El ticket por mail (F4): sin `MAILER_URL` o `MAILER_TICKET_KEY` la venta sale igual, sin mail.
   const mailer = { url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch }
-  const enviar = (fila) => enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token, mailer })
+  // 🔑 Opción (a) (Bruno, 14-oct): la que llega a GN se anota TAMBIÉN en el motor (`prueba`). ⛔ Frena: falla ⇒ log y el repaso.
+  const enviar = async (fila) => {
+    const out = await enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token, mailer })
+    const aviso = avisoDelMotor(await anotarEnMotor(store, out.venta).catch((e) => ({ error: e.message })), 'al mandar')
+    if (aviso) console.warn(aviso)
+    return out
+  }
 
   /**
    * Los pagos de MP que puede tomar una venta que espera la transferencia, y los que ya tomó otra. Se
@@ -1055,7 +1062,11 @@ export default async function handler(req, res) {
           const { venta } = await enviar(v)
           if (venta && venta.estado === 'en_gn') llegaron++
         }
-        return res.status(200).json({ intentadas: pendientes.length, llegaron })
+        // El repaso del motor va en la misma vuelta (cada 3 min con el POS abierto): sube las que quedaron afuera.
+        const motor = await repasarMotor(sb, store).catch((e) => ({ error: e.message }))
+        const aviso = avisoDelMotor(motor, 'repaso')
+        if (aviso) console.warn(aviso)
+        return res.status(200).json({ intentadas: pendientes.length, llegaron, ...(motor && motor.anotadas ? { motor: motor.anotadas } : {}) })
       }
 
       if (accion === 'cruzar') {
