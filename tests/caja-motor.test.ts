@@ -5,7 +5,7 @@
  * $1.444.100 = la suma de la Caja, 80 líneas, 0 movimientos del libro, y repetidas = 51 `ya_existia`.
  */
 import { describe, it, expect } from 'vitest'
-import { entradaDelMotor, faltanEnMotor } from '../lib/caja/motor.core.js'
+import { anularEnMotor, entradaDelMotor, faltanEnMotor } from '../lib/caja/motor.core.js'
 import { avisoDelMotor } from '../api/_caja-motor.js'
 import { armarVenta } from '../motor/venta/armar.mjs'
 
@@ -41,6 +41,28 @@ describe('faltanEnMotor', () => {
   it('sólo las en GN que el motor ⛔ tiene', () => {
     const ventas = [{ id: 'a', estado: 'en_gn' }, { id: 'b', estado: 'en_gn' }, { id: 'c', estado: 'error' }]
     expect(faltanEnMotor(ventas, ['a']).map((v) => v.id)).toEqual(['b'])
+  })
+})
+
+describe('anularEnMotor (la anulada en GN)', () => {
+  it('anula la confirmada en el motor, con el motivo de quién la vio; ⛔ la que ya está anulada ni la que el motor ⛔ tiene', () => {
+    const anuladas = [
+      { id: 'c1', anulada_en_gn: { por: 'cierre', en: '2026-10-14T20:00:00Z' } },
+      { id: 'c2', anulada_en_gn: { por: 'sync', en: '2026-10-14T06:00:00Z' } },
+      { id: 'c3', anulada_en_gn: { por: 'sync', en: '2026-10-14T06:00:00Z' } },
+      { id: 'c4', anulada_en_gn: null },
+    ]
+    const enMotor = [
+      { id: 'v1', origen_ref: 'c1', estado: 'confirmada' },
+      { id: 'v2', origen_ref: 'c2', estado: 'confirmada' },
+      { id: 'v3', origen_ref: 'c3', estado: 'anulada' },
+      { id: 'v4', origen_ref: 'c4', estado: 'confirmada' },
+    ]
+    expect(anularEnMotor(anuladas, enMotor)).toEqual([
+      { venta_id: 'v1', motivo: 'Anulada en GN (la vio el cierre de caja)', usuario: 'gn' },
+      { venta_id: 'v2', motivo: 'Anulada en GN (la vio el sync diario)', usuario: 'gn' },
+    ])
+    expect(anularEnMotor(anuladas, [])).toEqual([])
   })
 })
 
