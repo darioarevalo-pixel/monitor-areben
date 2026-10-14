@@ -67,6 +67,8 @@ export function CambioCaja() {
   const [id, setId] = useState(nuevoId)
   const [hecho, setHecho] = useState<Hecho | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Cada sondeo fallido suma una vuelta: el MISMO error ⛔ cambia el estado y el efecto ⛔ se volvería a armar.
+  const [, setVuelta] = useState(0)
   const [trabajando, setTrabajando] = useState(false)
 
   useEffect(() => {
@@ -240,7 +242,8 @@ export function CambioCaja() {
   const esperando = !!espera && espera.cruce.estado === 'esperando'
   useEffect(() => {
     if (!esperando) return
-    const t = setTimeout(() => { void mandar().catch(() => {}) }, CADA_MS)
+    // Un error se MUESTRA y el sondeo sigue (el cambio de estado vuelve a armar el efecto): callado se cortaba.
+    const t = setTimeout(() => { void mandar().catch((e) => { setError(e instanceof Error ? e.message : 'No se pudo mirar Mercado Pago.'); setVuelta((n) => n + 1) }) }, CADA_MS)
     return () => clearTimeout(t)
   })
 
@@ -407,7 +410,7 @@ export function CambioCaja() {
                           <Tr key={p.id}>
                             <Td>{cuando(p.cuando)}{p.coincide && <> <Badge tone="success">Coincide</Badge></>}</Td>
                             <Td style={{ textAlign: 'right' }}><MoneyText value={p.monto} /></Td>
-                            <Td>{p.coincide && <Button variant="outline" disabled={trabajando} onClick={() => void confirmar({ pago: p.id })}>Es éste</Button>}</Td>
+                            <Td>{p.coincide && <Button variant="outline" disabled={trabajando} onClick={() => void confirmar({ pago: p.id })}>Elegir este pago</Button>}</Td>
                           </Tr>
                         ))}
                       </TBody>
@@ -417,7 +420,7 @@ export function CambioCaja() {
                 {espera.cruce.estado === 'sin_cuenta' && (
                   <form onSubmit={(e) => { e.preventDefault(); void confirmar({ comprobante }) }} style={{ display: 'flex', gap: space[2], alignItems: 'flex-end' }}>
                     <Field label="Número de operación del comprobante"><Input value={comprobante} onChange={(e) => setComprobante(e.target.value)} /></Field>
-                    <Button type="submit" disabled={trabajando || comprobante.trim().length < 4}>Transferencia confirmada</Button>
+                    <Button type="submit" disabled={trabajando || comprobante.trim().length < 4}>Validar transferencia</Button>
                   </form>
                 )}
                 <div><Button variant="outline" onClick={() => setEspera(null)}>Cambiar la forma de pago</Button></div>

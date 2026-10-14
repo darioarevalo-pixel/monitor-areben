@@ -4,7 +4,7 @@
  * prueba facturada en producción, o un PDF cuyos renglones ⛔ suman lo facturado.
  */
 import { describe, it, expect } from 'vitest'
-import { claveDeFactura, leerFacturar, mesDeVenta, puedeFacturar, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
+import { claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, puedeFacturar, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { CBTE, COND_IVA, DOC } from '../motor/arca/arca.core.js'
 
 const ID = '0b5e7a52-6d1c-4b8e-9a51-2f6c7d8e9f01'
@@ -87,5 +87,19 @@ describe('puedeHacerNC', () => {
     expect(puedeHacerNC({ estado: 'confirmada', facturas: [{ tipo: 'factura' }] })).toMatch(/anula/)
     expect(puedeHacerNC({ estado: 'anulada', facturas: [] })).toMatch(/no tiene factura/)
     expect(puedeHacerNC({ estado: 'anulada', facturas: [{ tipo: 'factura' }, { tipo: 'nc' }] })).toMatch(/ya tiene/)
+  })
+})
+
+describe('clavesDeFactura y distintaDeLaPedida', () => {
+  it('busca por la de GN del detalle, la de la columna y el uuid, sin repetir', () => {
+    expect(clavesDeFactura({ id: ID, gn_sale_id: 5, detalle: { gn_sale_id: 7 } })).toEqual(['7', '5', ID])
+    expect(clavesDeFactura({ id: ID, gn_sale_id: 7, detalle: { gn_sale_id: 7 } })).toEqual(['7', ID])
+    expect(clavesDeFactura({ id: ID })).toEqual([ID])
+  })
+  it('la misma clase y receptor ⇒ la misma; otra ⇒ dice cuál tiene y que va con NC', () => {
+    const ya = { tipo: 6, doc_tipo: 99, doc_nro: 0, pto_vta: 1, numero: 16 }
+    expect(distintaDeLaPedida(ya, leerFacturar({ ventaId: ID }) as never)).toBeNull()
+    expect(distintaDeLaPedida(ya, leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri' }) as never)).toMatch(/factura B 1-16 \(sin identificar\).*nota de crédito/)
+    expect(distintaDeLaPedida(ya, leerFacturar({ ventaId: ID, doc: '30123456' }) as never)).toBeTruthy()
   })
 })

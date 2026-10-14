@@ -11,6 +11,8 @@ describe('leerBusqueda', () => {
   it('un número (con o sin #) es el número de venta; texto es cliente', () => {
     expect(leerBusqueda({ q: '#123' })).toMatchObject({ numero: 123, cliente: null })
     expect(leerBusqueda({ q: ' 7 ' })).toMatchObject({ numero: 7 })
+    expect(leerBusqueda({ q: '30123456' })).toMatchObject({ numero: null, cliente: '30123456' })
+    expect(leerBusqueda({ q: '#30123456' })).toMatchObject({ numero: 30123456 })
     expect(leerBusqueda({ q: 'Pérez, Ana' })).toMatchObject({ numero: null, cliente: 'Pérez  Ana' })
     expect(leerBusqueda({ q: '' })).toMatchObject({ numero: null, cliente: null })
   })

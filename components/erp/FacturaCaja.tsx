@@ -90,6 +90,14 @@ export function FacturaCaja() {
     }, 'No se pudo facturar.')
   }
 
+  /** La factura que ya tiene la venta, para el PDF: el servidor devuelve la MISMA, ⛔ pide otra a ARCA. */
+  const reimprimir = () => correr(async () => {
+    if (!ficha) return
+    const r = await facturarVenta(store, { ventaId: ficha.venta.id, clase: 'B', reimprimir: true })
+    setHecha({ factura: r.factura, yaEstaba: true })
+    await descargarFactura(r.factura)
+  }, 'No se pudo armar el PDF.')
+
   const bajar = (f: FacturaEmitida) => correr(() => descargarFactura(f), 'No se pudo armar el PDF.')
 
   return (
@@ -157,7 +165,10 @@ export function FacturaCaja() {
           </TableWrap>
 
           {ficha.facturada ? (
-            <Notice tone="neutral">Esta venta ya tiene factura. Para volver a bajar el PDF, tocá «Facturar» de nuevo: sale la MISMA, ⛔ una nueva.</Notice>
+            <Notice tone="neutral">
+              Esta venta ya tiene factura.{' '}
+              <Button variant="outline" disabled={trabajando} onClick={() => void reimprimir()}>Descargar PDF</Button>
+            </Notice>
           ) : null}
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <Field label="Factura">

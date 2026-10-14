@@ -24,7 +24,7 @@
  *   POST {recurso:'erp', accion:'cambiar', marca, id, ventaId, devueltas, items, pagos, total, desde?, pago?, comprobante?, cliente?}
  *        el cambio en el local: cobra la diferencia con el descuento de la forma de pago y, con transferencia,
  *        contesta `esperando` hasta que llega el pago (la pantalla repite el MISMO pedido)
- *   POST {recurso:'erp', accion:'facturar-venta', marca, ventaId, clase:'A'|'B', doc?, condicion?}
+ *   POST {recurso:'erp', accion:'facturar-venta', marca, ventaId, clase:'A'|'B', doc?, condicion?, reimprimir?}
  *        la factura A PEDIDO de una venta propia (la Caja): una, con su CAE, y atada a la venta en el motor
  *   POST {recurso:'erp', accion:'nota-credito-venta', marca, ventaId}  la NC de una venta propia ANULADA con factura
  *
@@ -48,7 +48,7 @@ import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { MENSAJE_ERROR_MOTOR, armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
-import { claveDeFactura, leerFacturar, mesDeVenta, puedeFacturar, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
+import { claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, puedeFacturar, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
@@ -519,7 +519,13 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
   return correr(async (db) => {
     const [f] = (await db.query('select * from venta_ficha where id = $1', [p.ventaId])).rows
     const clave = f ? claveDeFactura(f) : null
-    const ya = f ? await buscar(clave) : null
+    let ya = null
+    for (const k of f ? clavesDeFactura(f) : []) if ((ya = await buscar(k))) break
+    if (body?.reimprimir && !ya) return { status: 404, error: 'No se encontró la factura de esta venta en este ambiente.' }
+    if (ya && !body?.reimprimir) {
+      const otra = distintaDeLaPedida(ya, p)
+      if (otra) return { status: 409, error: otra }
+    }
     const frena = puedeFacturar(f, { ambiente, facturada: (f?.facturas || []).some((x) => x.tipo === 'factura') })
     if (frena && !(ya && frena === 'La venta ya tiene factura.')) return { status: f ? 409 : 404, error: frena }
     if (!ya && clave !== String(f.id)) {
