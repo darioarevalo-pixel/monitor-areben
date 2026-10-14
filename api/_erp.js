@@ -26,6 +26,7 @@
  *        contesta `esperando` hasta que llega el pago (la pantalla repite el MISMO pedido)
  *   POST {recurso:'erp', accion:'facturar-venta', marca, ventaId, clase:'A'|'B', doc?, condicion?}
  *        la factura A PEDIDO de una venta propia (la Caja): una, con su CAE, y atada a la venta en el motor
+ *   POST {recurso:'erp', accion:'nota-credito-venta', marca, ventaId}  la NC de una venta propia ANULADA con factura
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
  * Contra qué ARCA se factura lo decide `ambienteDeEntorno` (homologación por defecto).
@@ -47,7 +48,7 @@ import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { MENSAJE_ERROR_MOTOR, armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
-import { claveDeFactura, leerFacturar, mesDeVenta, puedeFacturar, renglonesDeVenta } from '../lib/erp/factura.core.js'
+import { claveDeFactura, leerFacturar, mesDeVenta, puedeFacturar, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
@@ -169,22 +170,25 @@ export async function facturarVentas({ mes, marca, ventaIds, usuario }) {
  * candado, número reservado antes del CAE, una sola por venta). 🔴 Con CAE ⛔ se borra.
  * El mes del techo es el de HOY (la NC resta en el período en que se emite) — ❓ a confirmar con el contador.
  */
-export async function notaDeCredito({ facturaId, usuario }) {
+export async function notaDeCredito({ facturaId, usuario }, deps = {}) {
   if (!/^[0-9a-f-]{36}$/i.test(String(facturaId || ''))) return { status: 400, error: 'Factura inválida' }
   const { ambiente, error } = ambienteSeguro()
   if (!ambiente) return { status: 409, error }
-  const sb = baseFacturacion()
-  const { data: f, error: e } = await sb.from('facturas')
-    .select('id, ambiente, marca, venta_id, tipo, pto_vta, numero, fecha, total, doc_tipo, doc_nro, cond_iva, estado').eq('id', facturaId).maybeSingle()
-  if (e) throw new Error(`facturas: ${e.message}`)
+  const sb = deps.sb || (deps.repo ? null : baseFacturacion())
+  const f = deps.leerFactura ? await deps.leerFactura(facturaId) : await (async () => {
+    const { data, error: e } = await sb.from('facturas')
+      .select('id, ambiente, marca, venta_id, tipo, pto_vta, numero, fecha, total, doc_tipo, doc_nro, cond_iva, estado').eq('id', facturaId).maybeSingle()
+    if (e) throw new Error(`facturas: ${e.message}`)
+    return data
+  })()
   if (!f || f.ambiente !== ambiente) return { status: 404, error: 'La factura no existe en este ambiente.' }
   if (f.estado !== 'autorizada') return { status: 409, error: 'Sólo una factura autorizada (con CAE) lleva nota de crédito.' }
   const tipo = { [CBTE.FACTURA_A]: CBTE.NC_A, [CBTE.FACTURA_B]: CBTE.NC_B }[f.tipo]
   if (!tipo) return { status: 409, error: 'Eso ya es una nota de crédito.' }
   const hoy = diaArgentino(Date.now())
-  const { arca } = clienteArcaDelEntorno(sb)
+  const arca = deps.arca || clienteArcaDelEntorno(sb).arca
   const r = await facturarLote({
-    arca, repo: repoFacturas(sb), ambiente, marca: f.marca, ptoVta: Number(f.pto_vta), tipo,
+    arca, repo: deps.repo || repoFacturas(sb), ambiente, marca: f.marca, ptoVta: Number(f.pto_vta), tipo,
     comprobantes: [{
       ventaId: f.venta_id, mes: hoy.slice(0, 7), tipo, fecha: hoy, total: Number(f.total), asociadoId: f.id,
       receptor: { docTipo: Number(f.doc_tipo), docNro: Number(f.doc_nro), condicionIva: Number(f.cond_iva) },
@@ -194,7 +198,7 @@ export async function notaDeCredito({ facturaId, usuario }) {
     lote: globalThis.crypto.randomUUID(), usuario,
   })
   const [hecha] = r.autorizadas
-  if (hecha) return { ambiente, autorizada: { numero: hecha.numero, cae: hecha.cae, total: hecha.total } }
+  if (hecha) return { ambiente, autorizada: { id: hecha.id, numero: hecha.numero, cae: hecha.cae, total: hecha.total } }
   const motivos = [...r.rechazadas, ...r.noSalen].flatMap((x) => x.motivos || [])
   return { status: 409, error: motivos.join(' · ') || 'ARCA no autorizó la nota de crédito.' }
 }
@@ -554,6 +558,30 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
   })
 }
 
+/**
+ * La NOTA DE CRÉDITO de una venta propia ANULADA que tenía factura (el «falta la nota de crédito» del anular):
+ * la de la factura entera, por `notaDeCredito`, y atada a la venta en el motor (`venta_factura` tipo `nc`).
+ * Sólo anulada: a una venta que sigue en pie, una NC le deja la factura anulada y el lote ⛔ la deja refacturar.
+ * Repetirla ⇒ el lote contesta «ya tiene nota de crédito» (⛔ sale otra).
+ */
+export async function notaDeCreditoDeVenta({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const ventaId = String(body?.ventaId ?? '')
+  if (!/^[0-9a-f-]{36}$/i.test(ventaId)) return { status: 400, error: 'Venta inválida' }
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'La nota de crédito', fn)
+  return correr(async (db) => {
+    const [f] = (await db.query('select id, estado, facturas from venta_ficha where id = $1', [ventaId])).rows
+    if (!f) return { status: 404, error: 'La venta no existe.' }
+    const frena = puedeHacerNC(f)
+    if (frena) return { status: 409, error: frena }
+    const factura = (f.facturas || []).find((x) => x.tipo === 'factura')
+    const r = await notaDeCredito({ facturaId: factura.factura_id, usuario }, deps)
+    if (r.status) return r
+    await db.query(`insert into venta_factura (venta_id, factura_id, tipo) values ($1, $2, 'nc') on conflict do nothing`, [f.id, String(r.autorizada.id)])
+    return { ok: true, ambiente: r.ambiente, autorizada: r.autorizada }
+  })
+}
+
 /** La factura (⛔ rechazada) que ya tiene esa clave en `facturas`, o null. */
 async function facturaDeClave(sb, { ambiente, marca, clave }) {
   const { data, error } = await sb.from('facturas').select('*').eq('ambiente', ambiente).eq('marca', marca).eq('venta_id', clave)
@@ -849,6 +877,11 @@ export default async function handler(req, res) {
 
     if (body.accion === 'cambiar') {
       const r = await cambiarVentaPropia({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (body.accion === 'nota-credito-venta') {
+      const r = await notaDeCreditoDeVenta({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

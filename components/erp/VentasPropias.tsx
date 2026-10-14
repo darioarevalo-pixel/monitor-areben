@@ -11,9 +11,9 @@
 
 import { useState } from 'react'
 import {
-  Badge, Button, EmptyState, Field, Input, Modal, MoneyText, Notice, SectionCard, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space,
+  Badge, Button, EmptyState, Field, Input, Modal, MoneyText, Notice, SectionCard, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space, useConfirmar,
 } from '@/components/ui'
-import { anularVenta, buscarVentas, leerFichaDeVenta, type FichaDeVenta, type MarcaErp, type VentaPropia } from '@/lib/erp/cliente'
+import { anularVenta, buscarVentas, leerFichaDeVenta, notaDeCreditoDeVenta, type FichaDeVenta, type MarcaErp, type VentaPropia } from '@/lib/erp/cliente'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import { MOTIVO_MINIMO, NOMBRE_CANAL, NOMBRE_MARCA, NOMBRE_ORIGEN_VENTA } from '@/lib/erp/venta.core.js'
 
@@ -68,6 +68,7 @@ export function VentasPropias() {
   const [trabajando, setTrabajando] = useState(false)
   const [anulando, setAnulando] = useState(false)
   const [motivo, setMotivo] = useState('')
+  const { confirmar } = useConfirmar()
 
   async function correr(fn: () => Promise<void>, fallo: string) {
     setTrabajando(true)
@@ -98,6 +99,23 @@ export function VentasPropias() {
     setAviso(`Venta #${ficha.venta.numero} anulada.${r.ncPendiente ? ' Tenía factura: falta la nota de crédito.' : ''}`)
     setFicha(await leerFichaDeVenta(marca, ficha.venta.id))
   }, 'No se pudo anular.')
+
+  /** La NC de la factura de una venta anulada: con CAE ⛔ se elimina, por eso se confirma. */
+  async function hacerNC() {
+    if (!ficha) return
+    const ok = await confirmar({
+      titulo: `Nota de crédito de la venta #${ficha.venta.numero}`,
+      mensaje: 'Anula entera la factura de esta venta ante ARCA. Una nota de crédito con CAE ⛔ se elimina.',
+      ok: 'Hacer nota de crédito',
+      tono: 'danger',
+    })
+    if (!ok) return
+    await correr(async () => {
+      const r = await notaDeCreditoDeVenta(marca, ficha.venta.id)
+      setAviso(`Nota de crédito ${r.autorizada.numero} autorizada (CAE ${r.autorizada.cae})${r.ambiente !== 'produccion' ? ', de prueba' : ''}.`)
+      setFicha(await leerFichaDeVenta(marca, ficha.venta.id))
+    }, 'No se pudo hacer la nota de crédito.')
+  }
 
   // Otra marca: lo de antes se limpia en el MISMO cambio.
   function cambiarMarca(k: string) {
@@ -142,7 +160,10 @@ export function VentasPropias() {
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', marginBottom: space[3] }}>
               <Button variant="outline" onClick={() => setFicha(null)}>Volver a la búsqueda</Button>
               <Estado v={v} />
-              {ficha.facturada ? <Badge tone="action">Facturada</Badge> : <Badge tone="neutral">Sin factura</Badge>}
+              {ficha.conNotaDeCredito ? <Badge tone="neutral">Factura anulada con nota de crédito</Badge> : ficha.facturada ? <Badge tone="action">Facturada</Badge> : <Badge tone="neutral">Sin factura</Badge>}
+              {ficha.facturada && !ficha.conNotaDeCredito && v.estado === 'anulada' && (
+                <Button tone="danger" variant="outline" disabled={trabajando} onClick={() => void hacerNC()}>Hacer nota de crédito</Button>
+              )}
               <span style={{ flex: 1 }} />
               <Button tone="danger" disabled={!!ficha.puedeAnular || trabajando} title={ficha.puedeAnular ?? undefined} onClick={() => setAnulando(true)}>Anular venta</Button>
             </div>

@@ -65,6 +65,9 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   nuevo devuelve la MISMA (para el PDF). Frena: GN ya la facturó (`ventas_factura_gn`), anulada, cambio, y 🔴 una
   venta de PRUEBA en producción (hasta el corte la factura real sale de GN). «Facturas del monitor» lee los
   renglones de una venta propia de `venta_ficha` (la clave ⛔ es numérica).
+- 🔑 **La NC de una venta propia**: botón «Hacer nota de crédito» en la ficha de Ventas, SÓLO con la venta ANULADA
+  y facturada (a una en pie la NC le anula la factura y el lote ⛔ la deja refacturar). Va por el MISMO
+  `notaDeCredito` de Facturación (entera, asociada) y se ata como `nc` en `venta_factura`.
 - 🔴 **Homologación por defecto.** Facturas reales sólo con `ARCA_AMBIENTE=produccion` **y**
   `ARCA_PRODUCCION_HABILITADA=si` (las pone Bruno), y con `ARCA_PTOVTA_BDI`/`_ZATTIA` cargados: en
   producción ⛔ hay punto de venta por defecto, y los de GN (00002 BDI, 00005 Zattia) se rechazan —dos
@@ -93,5 +96,5 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
 
 ## Pendiente
 
-Factura A en la masiva (en la Caja ya está) · nota de crédito desde la pantalla · los datos del emisor para el PDF · facturar un CAMBIO (NC + factura nueva) · reabrir un mes ·
+Factura A en la masiva (en la Caja ya está) · NC PARCIAL (la del cambio) · los datos del emisor para el PDF · facturar un CAMBIO (NC + factura nueva) · reabrir un mes ·
 en producción: certificado, PV nuevos (contador) y las dos variables.

@@ -4,7 +4,7 @@
  * prueba facturada en producción, o un PDF cuyos renglones ⛔ suman lo facturado.
  */
 import { describe, it, expect } from 'vitest'
-import { claveDeFactura, leerFacturar, mesDeVenta, puedeFacturar, renglonesDeVenta } from '../lib/erp/factura.core.js'
+import { claveDeFactura, leerFacturar, mesDeVenta, puedeFacturar, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { CBTE, COND_IVA, DOC } from '../motor/arca/arca.core.js'
 
 const ID = '0b5e7a52-6d1c-4b8e-9a51-2f6c7d8e9f01'
@@ -78,5 +78,14 @@ describe('renglonesDeVenta', () => {
   })
   it('sin nombre usa el SKU; sin diferencia, sin renglón extra', () => {
     expect(renglonesDeVenta({ total: 100, lineas: [{ product_id: 2, size_id: 1, cantidad: 1, importe: 100, sku: 'ABC' }] })).toEqual([{ descripcion: 'ABC', cantidad: 1, unitario: 100, importe: 100 }])
+  })
+})
+
+describe('puedeHacerNC', () => {
+  it('sólo una venta ANULADA con factura y sin NC', () => {
+    expect(puedeHacerNC({ estado: 'anulada', facturas: [{ tipo: 'factura' }] })).toBeNull()
+    expect(puedeHacerNC({ estado: 'confirmada', facturas: [{ tipo: 'factura' }] })).toMatch(/anula/)
+    expect(puedeHacerNC({ estado: 'anulada', facturas: [] })).toMatch(/no tiene factura/)
+    expect(puedeHacerNC({ estado: 'anulada', facturas: [{ tipo: 'factura' }, { tipo: 'nc' }] })).toMatch(/ya tiene/)
   })
 })

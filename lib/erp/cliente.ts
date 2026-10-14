@@ -145,6 +145,8 @@ export type FichaDeVenta = {
   anulacion: { motivo: string; usuario: string; anuladaEn: string; devolucion: unknown } | null
   facturas: Array<{ facturaId: string; tipo: 'factura' | 'nc' | 'nd' }>
   facturada: boolean
+  /** La factura ya se anuló con nota de crédito. */
+  conNotaDeCredito: boolean
   cambios: VentaPropia[]
   original: VentaPropia | null
   /** null = se puede anular; si no, por qué no. */
@@ -188,3 +190,7 @@ export const cambiarVenta = (marca: MarcaErp, c: {
 export type PedidoFactura = { ventaId: string; clase: 'A' | 'B'; doc?: string; condicion?: 'ri' | 'monotributo' }
 export const facturarVenta = (marca: MarcaErp, p: PedidoFactura) =>
   pedir<{ ok: true; yaEstaba: boolean; factura: FacturaEmitida }>(post({ accion: 'facturar-venta', marca, ...p }), '', 'No se pudo facturar.')
+
+/** La nota de crédito de una venta propia ANULADA que tenía factura (desde su ficha). */
+export const notaDeCreditoDeVenta = (marca: MarcaErp, ventaId: string) =>
+  pedir<{ ok: true; ambiente: string; autorizada: { id: string; numero: number; cae: string; total: number } }>(post({ accion: 'nota-credito-venta', marca, ventaId }), '', 'No se pudo hacer la nota de crédito.')
