@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|erp|caja|repo-armado|reportes&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|erp|caja|repo-armado|reportes|tn-erp&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -59,6 +59,7 @@ import pagosRecibidos from './_pagos-recibidos.js';
 import erp from './_erp.js';
 import caja from './_caja.js';
 import repoArmado from './_repo-armado.js';
+import tnErp from './_tn-erp.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -164,6 +165,9 @@ const RECURSOS = {
   // ⚠️ La URL que tiene cargada el emisor es exactamente `/api/datos?recurso=oc-webhook`.
   // Cambiarle el nombre al recurso apaga el envío sin que falle nada acá.
   'oc-webhook': ocWebhook,
+  // Las URLs de privacidad de la app de TN «Areben ERP» (sin sesión: las llama Tienda Nube). En el Partner
+  // Portal van como `/api/datos?recurso=tn-erp&accion=store-redact` (y `customers-redact`, `customers-data-request`).
+  'tn-erp': tnErp,
   // PRM y Recorridas: la relación con el proveedor y el viaje a comprarle. Es UN recurso para DOS
   // secciones (`prm` lee la ficha, `recorridas` escribe lo de la calle) porque es el mismo dato;
   // el permiso se separa adentro, acción por acción.
