@@ -121,6 +121,15 @@ la pantalla, sistemas del hermano, volumen de facturas ARCA, tokens TN por tiend
 Abiertas para Bruno: primera marca a cortar (propuesta Zattia+Stunned), ARCA propio desde el día 1 o
 portal hasta F5, cuánto queda GN en sólo-lectura.
 
+## ▶️ CAJA: LA NOTA EN GN PARA UBICAR UNA VENTA — 14-oct-2026 (Bruno)
+- Pasó: un 429 de GN dejó la venta 5C65E1EF con ticket «Provisorio»; entró sola a los 2 min como **#30489**
+  (mail del ticket salió con #30489), pero desde el ticket ⛔ había cómo encontrarla en GN (Consumidor Final, sin mail).
+- 🏁 `86288041` + `92a9f146` EN PROD: toda venta va a GN con `comments` = «Caja XXXXXXXX · mail · Cajera: X»
+  (`notaGN` en `lib/caja/core.core.js`). ⛔ `tn_order`: lo lee el sync de TN.
+- ▶️ **Oráculo pendiente**: con la 1ª venta real después de las 15:32, ver la nota en GN y si el BUSCADOR de GN
+  la encuentra por código o mail. Si ⛔ busca en notas ⇒ armar un buscador de ventas en la Caja (código/mail/#GN).
+- La #30489 ⛔ tiene nota (es de antes y GN ⛔ edita por API): Bruno le escribió el código a mano.
+
 ## 🏁 CAJA: LO DEL 13-OCT A LA MAÑANA (dictado por Bruno, con la caja abierta) — hecho el 13-oct; ▶️ verlo en el local
 
 - 🔴 **El cierre frenaba con «Gestión Nube no contestó» y GN contestaba bien** (200 en <0,5 s): `cobrosGN`
