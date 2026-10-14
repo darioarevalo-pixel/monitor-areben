@@ -20,6 +20,10 @@
  *   GET  ?recurso=erp&vista=ventas&marca=…&q=nº|cliente&desde&hasta    busca ventas propias (las del motor)
  *   GET  ?recurso=erp&vista=venta&marca=…&id=UUID                      la ficha: prendas, pagos, factura, estado
  *   POST {recurso:'erp', accion:'anular', marca, ventaId, motivo}      anula una venta propia (por el motor)
+ *   GET  ?recurso=erp&vista=saldo&marca=…&doc=DNI                      el saldo a favor de la clienta (el de prueba)
+ *   POST {recurso:'erp', accion:'cambiar', marca, id, ventaId, devueltas, items, pagos, total, desde?, pago?, comprobante?, cliente?}
+ *        el cambio en el local: cobra la diferencia con el descuento de la forma de pago y, con transferencia,
+ *        contesta `esperando` hasta que llega el pago (la pantalla repite el MISMO pedido)
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
  * Contra qué ARCA se factura lo decide `ambienteDeEntorno` (homologación por defecto).
@@ -39,7 +43,12 @@ import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
-import { MENSAJE_ERROR_MOTOR, armarFicha, cambiadasDe, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias } from '../lib/erp/venta.core.js'
+import { MENSAJE_ERROR_MOTOR, armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias } from '../lib/erp/venta.core.js'
+import { marcaDeCaja } from '../lib/caja/marcas.core.js'
+import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
+import { reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
+import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
+import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from './_caja.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -396,18 +405,111 @@ export async function anularVentaPropia({ marca, body, usuario }) {
  * Que ⛔ se devuelva más de lo vendido lo hace cumplir el motor (`DEVUELVE_DE_MAS`), y la diferencia la
  * vuelve a sumar él: si ⛔ coincide con el pago, 409.
  */
+/**
+ * El saldo a favor de una clienta, por documento (el de PRUEBA mientras el cambio es de prueba): para
+ * ofrecerlo como forma de pago en el cambio. Lee la vista `saldo_favor` del motor (contrato §6).
+ */
+export async function saldoDeClienta({ marca, doc }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const d = String(doc ?? '').replace(/\D/g, '')
+  if (!/^\d{7,11}$/.test(d)) return { status: 400, error: 'Documento inválido' }
+  const { url, key } = cfgDeMarca(marca)
+  const sb = createClient(url, key)
+  const cl = await sb.from('cliente').select('id, nombre').eq('doc', d).maybeSingle()
+  if (cl.error) throw new Error(`cliente: ${cl.error.message}`)
+  if (!cl.data) return { cliente: null, saldo: 0 }
+  const s = await sb.from('saldo_favor').select('saldo').eq('cliente_id', cl.data.id).eq('marca', marca).eq('prueba', true).maybeSingle()
+  if (s.error) throw new Error(`saldo_favor: ${s.error.message}`)
+  return { cliente: { nombre: cl.data.nombre }, saldo: Number(s.data?.saldo || 0) }
+}
+
 export async function cambiarVentaPropia({ marca, body, usuario }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const c = leerCambiar(body)
   if (c.error) return { status: 400, error: c.error }
+  const cajaDe = marcaDeCaja(marca)
+  if (!cajaDe) return { status: 400, error: 'El cambio en la Caja es de Zattia y BDI.' }
+  const { url, key } = cfgDeMarca(marca)
+  const sb = createClient(url, key)
   return conMotor(marca, 'El cambio', async (db, { registrarCambio }) => {
+    // La diferencia con la MISMA cuenta que el motor (lo devuelto al precio que se pagó), y su cobro con
+    // las reglas de HOY de la Caja: el descuento de la forma de pago lo pone el servidor.
+    const lineas = (await db.query('select id, cantidad, importe from venta_linea where venta_id = $1', [c.ventaId])).rows
+      .map((l) => ({ id: l.id, cantidad: Number(l.cantidad), importe: Number(l.importe) }))
+    const diferencia = diferenciaDeCambio({ lineas, devueltas: c.devueltas.map((d) => ({ lineaId: d.linea_id, cantidad: d.cantidad })), nuevas: c.nuevas })
+    /** @type {{ pagos: any[], total: number, espera: number }} */
+    let cobrado
+    try {
+      const reglas = await reglasDeHoy(sb, marca, await reglasGuardadas(sb, marca, cajaDe))
+      cobrado = cobroDelCambio({ diferencia, pagos: c.pagos, reglas, nuevas: c.nuevas, saldo: c.saldo })
+    } catch (e) {
+      return { status: 400, error: e.message }
+    }
+    if (c.total != null && Math.round(c.total * 100) !== Math.round(cobrado.total * 100)) {
+      return { status: 409, error: `La pantalla dice $${c.total} y el servidor $${cobrado.total}: recargá la venta y volvé a cobrar.`, total: cobrado.total }
+    }
+    // 🔑 Con transferencia se ESPERA el pago, como en la Caja (Bruno, 14-oct): recién con el pago encontrado
+    // en Mercado Pago (o confirmado a mano con el comprobante, sin cuenta conectada) se registra el cambio.
+    let mp = null
+    if (cobrado.espera > 0) {
+      const t = await esperarTransferencia({ sb, db, marca, c, espera: cobrado.espera, usuario })
+      if (!t.llego) return { ok: true, esperando: true, espera: cobrado.espera, total: cobrado.total, ...t.para }
+      mp = t.mp
+    }
+    // El saldo a favor paga con la cuenta «Saldo a favor» del motor (va por uuid: ⛔ tiene cuenta en GN).
+    if (cobrado.pagos.some((p) => p.cuenta === 'saldo')) {
+      const [cs] = (await db.query(`select id from cuenta_cobro where marca = $1 and medio = 'saldo'`, [marca])).rows
+      if (!cs) return { status: 409, error: 'Falta la cuenta «Saldo a favor» en el ERP (sql/007 del motor).' }
+      cobrado = { ...cobrado, pagos: cobrado.pagos.map((p) => (p.cuenta === 'saldo' ? { ...p, cuenta: cs.id } : p)) }
+    }
     const r = await registrarCambio(db, {
       origen: 'caja', origen_ref: c.id, marca, usuario: usuario || 'erp', prueba: true, deposito: 'local',
-      venta_original_id: c.ventaId, devueltas: c.devueltas, nuevas: c.nuevas, pagos: c.pagos,
+      venta_original_id: c.ventaId, devueltas: c.devueltas, nuevas: c.nuevas, pagos: cobrado.pagos,
+      ...(c.cliente ? { cliente: c.cliente } : {}),
+      ...(mp ? { detalle: { mp } } : {}),
     })
     if (!r.ok) return errorDelMotor(r)
-    return { ok: true, venta: r.venta, aFavor: r.a_favor, ncPendiente: r.nc_pendiente, yaExistia: !!r.ya_existia }
+    return { ok: true, venta: r.venta, total: cobrado.total, aFavor: r.a_favor, saldo: r.saldo ?? null, ncPendiente: r.nc_pendiente, yaExistia: !!r.ya_existia }
   })
+}
+
+/** Cuánto atrás puede empezar la espera de un cambio (la pantalla manda cuándo empezó). */
+const ESPERA_MAXIMA_MS = 6 * 3600_000
+
+/**
+ * ¿Llegó la transferencia del cambio? Con la MISMA lectura de Mercado Pago y el MISMO cruce que la Caja
+ * (`cruzarTransferencia`). Los pagos ya tomados: los de la Caja (`caja_venta`, `caja_venta_mp`) y los de los
+ * cambios del motor (`venta.detalle.mp`). Sin cuenta de MP conectada: lo confirma el admin con el comprobante.
+ * 🔴 La Caja ⛔ ve los pagos que toma un cambio (es de prueba y la Caja vende a GN): al corte, un candado común.
+ */
+async function esperarTransferencia({ sb, db, marca, c, espera, usuario }) {
+  const ahora = Date.now()
+  const desde = new Date(c.desde && c.desde <= ahora && c.desde > ahora - ESPERA_MAXIMA_MS ? c.desde : ahora).toISOString()
+  // BDI ⛔ tiene la tabla de las cuentas de MP (14-oct): es lo mismo que «sin cuenta conectada».
+  const usos = await usosDe(sb, marca).catch((e) => {
+    if (e && (e.code === 'PGRST205' || e.code === '42P01')) return []
+    throw e
+  })
+  if (!usos.length) {
+    if (c.comprobante && c.comprobante.length >= 4) return { llego: true, mp: { cruce: 'admin', comprobante: c.comprobante, por: usuario || null, en: new Date(ahora).toISOString() } }
+    return { llego: false, para: { desde, cruce: { estado: 'sin_cuenta', motivo: 'Esta tienda todavía no tiene la cuenta de Mercado Pago conectada: mirá el comprobante en el teléfono de la clienta y confirmá con el número de operación.' } } }
+  }
+  const hace2d = new Date(Date.parse(desde) - 2 * 86400000).toISOString()
+  const [porDia, unoSolo, sumados, deCambios] = await Promise.all([
+    Promise.all(diasDelCruce(Date.parse(desde), ahora).map((dia) => pagosDelDia(sb, usos, dia))),
+    sb.from('caja_venta').select('mp_pago_id').eq('store', marca).not('mp_pago_id', 'is', null).gte('creada_en', hace2d),
+    sb.from('caja_venta_mp').select('mp_pago_id').eq('store', marca).gte('creado_en', hace2d),
+    db.query(`select detalle->'mp'->>'pago_id' as id from venta where marca = $1 and estado = 'confirmada' and detalle->'mp'->>'pago_id' is not null and registrada_en >= $2`, [marca, hace2d]),
+  ])
+  if (unoSolo.error) throw new Error(unoSolo.error.message)
+  if (sumados.error && sumados.error.code !== '42P01') throw new Error(sumados.error.message)
+  const vistos = new Set()
+  const pagos = porDia.flatMap((x) => x.pagos).filter((p) => !vistos.has(p.id) && vistos.add(p.id))
+  const reclamados = [...(unoSolo.data || []), ...(sumados.data || [])].map((r) => r.mp_pago_id).concat(deCambios.rows.map((r) => r.id))
+  const d = cruzarTransferencia({ monto: espera, desde, pagos, reclamados, competidoras: 0, elegido: c.pago, antesManual: ANTES_MANUAL_MS })
+  if (d.estado === 'llego') return { llego: true, mp: { pago_id: String(d.pago.id), cruce: d.por, pago_en: d.pago.cuando, diferencia: d.pago.diferencia || 0, por: usuario || null } }
+  const recientes = pagosRecientes({ monto: espera, desde, pagos, reclamados, cuantos: RECIENTES_CAJA })
+  return { llego: false, para: { desde, cruce: d, recientes } }
 }
 
 /**
@@ -593,6 +695,11 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET' && req.query.vista === 'venta') {
       const r = await fichaDeVenta({ marca: String(req.query.marca || ''), id: req.query.id })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'saldo') {
+      const r = await saldoDeClienta({ marca: String(req.query.marca || ''), doc: req.query.doc })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

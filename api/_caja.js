@@ -77,7 +77,7 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, dormir, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
 import { limpiarRepetida } from '../lib/caja/repetida.core.js'
-import { armarVentaGN, cobro, exigirCuentas, exigirFeria, cuentaDeOferta, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, normalizarOferta, reglaDeCuenta, renglones, verificaTransferencias } from '../lib/caja/core.core.js'
+import { armarVentaGN, cobro, exigirCuentas, exigirFeria, cuentaDeOferta, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, normalizarOferta, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { promosDeCreditoEnMostrador } from '../lib/agenda/promos.core.js'
 import { TOLERANCIA_TRANSFERENCIA, cruzarTransferencia, pagosRecientes, sumarCobros } from '../lib/pagos-recibidos/core.core.js'
 import { aOtraCuenta, mailOtraCuenta, titularDe } from '../lib/caja/otra-cuenta.core.js'
@@ -90,6 +90,7 @@ import { COLUMNAS_VENTA as COLUMNAS, SIN_LLEGAR, enviarVenta, pendientesParaRein
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, ladoDelEspejo, marcaDeCaja, tokenDe } from '../lib/caja/marcas.core.js'
 import { anotarEnMotor, avisoDelMotor, repasarMotor } from './_caja-motor.js'
+import { reglasDeHoy as reglasDeHoyDe } from './_caja-reglas.js'
 import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
 import { anuladasEnGN, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
@@ -235,72 +236,8 @@ export default async function handler(req, res) {
     return { conflicto: true }
   }
 
-  /**
-   * Las reglas con las que se cobra HOY. 🔑 Bruno, 11-oct: la cuenta de GN de la transferencia SALE de la
-   * cuenta de Mercado Pago donde se detecta (la de Pagos recibidos en uso): la de Darío ⇒ Transferencia
-   * CG (20595), Areben Comercial ⇒ Transferencia (13015). El mapeo lo carga un admin en
-   * `reglas.transferenciaPorMp` ({ [cuenta de MP]: cuenta de GN }); sin mapeo para la cuenta en uso, la
-   * transferencia ⛔ se cobra (`transferenciaA: null` ⇒ `cuentaDeMedio` lo dice). ⛔ Hay modo feria
-   * general: la feria es por producto (`feriaProductos`).
-   * 🔑 V4 (Bruno, 12-oct): una tienda SIN verificación (`verificarTransferencia: false`) ⛔ mira MP: la cuenta
-   * de GN es `transferenciaFija`. Y la que verifica pero TODAVÍA ⛔ tiene cuenta de MP conectada (BDI, 12-oct),
-   * o cuya cuenta en uso ⛔ tiene mapeo, también va a `transferenciaFija`: la venta espera igual y la cajera
-   * la confirma a mano («Transferencia confirmada»); cuando se conecte la cuenta, el cruce es automático.
-   * Zattia ⛔ tiene `transferenciaFija` ⇒ sin mapeo sigue sin cobrar transferencia, como antes.
-   */
-  async function reglasDeHoy(reglas) {
-    const { feria: _f, feriaIdsCampania: _x, feriaPrecios: _p, ...sinFeria } = reglas
-    // 🔑 V4: la tienda que ⛔ verifica en Mercado Pago manda la transferencia a SU cuenta fija.
-    if (!verificaTransferencias(reglas)) {
-      const fija = Number(reglas.transferenciaFija)
-      return { ...sinFeria, transferenciaA: Number.isInteger(fija) && fija > 0 ? fija : null, ...(await feriaDeCampanias(reglas.feriaCampanias)) }
-    }
-    let enUso = null
-    try {
-      ;({ enUso } = await cuentasDe(sb, store))
-    } catch { /* sin cuenta de MP: la transferencia ⛔ se cobra */ }
-    const mapa = reglas.transferenciaPorMp || {}
-    const gn = enUso != null ? Number(mapa[String(enUso)]) : NaN
-    const fija = Number(reglas.transferenciaFija)
-    const a = Number.isInteger(gn) && gn > 0 ? gn : Number.isInteger(fija) && fija > 0 ? fija : null
-    return { ...sinFeria, transferenciaA: a, ...(await feriaDeCampanias(reglas.feriaCampanias)) }
-  }
-
-  /**
-   * 🔑 La FERIA es la de LIQUIDACIÓN (Bruno, 11-oct: «tenés la lista, está todo en el monitor»): los
-   * productos con el precio de una campaña de feria APLICADO (`liquidacion_items.estado = 'aplicado'`).
-   * Qué campañas son de feria lo elige un admin (`reglas.feriaCampanias`); cuando la campaña se saca, sus
-   * productos dejan de ser feria solos. 🔴 Si la lectura falla, LANZA: cobrar una prenda de feria con el %
-   * de la forma de pago la deja debajo del costo.
-   *
-   * 🔑 Y el PRECIO de la prenda de feria es el de la CAMPAÑA (Bruno, 13-oct: «son dos campañas conectadas»):
-   * Tienda Nube puede tener aplicada otra campaña encima —la «Feria Online» pone feria ÷ 0,9 para que el
-   * 10 % de la transferencia vuelva al de feria— y la Caja, que ⛔ le aplica el % a la feria, cobraba ese
-   * número ~11 % más caro. Con dos campañas de feria sobre el mismo producto, gana la aplicada más tarde.
-   */
-  async function feriaDeCampanias(ids) {
-    const lista = Array.isArray(ids) ? ids.map(String).filter(Boolean) : []
-    if (!lista.length) return { feriaIdsCampania: [], feriaPrecios: {} }
-    const pids = new Set()
-    const precios = {}
-    const cuando = {}
-    for (let desde = 0; desde < 20_000; desde += 1000) {
-      const { data, error } = await sb.from('liquidacion_items').select('pid, datos').eq('store', store).in('liq_id', lista).eq('estado', 'aplicado')
-        .order('pid').range(desde, desde + 999)
-      if (error) throw new Error(`No se pudieron leer los productos en oferta de Liquidación (${error.message}).`)
-      for (const f of data || []) {
-        const n = Number(f.pid)
-        if (!Number.isInteger(n) || n <= 0) continue
-        pids.add(n)
-        const d = f.datos || {}
-        const precio = Number((d.aplicacion && d.aplicacion.precioEscrito) ?? (d.decision && d.decision.precioSale))
-        const t = Number((d.aplicacion && d.aplicacion.aplicadoEn) || 0)
-        if (Number.isFinite(precio) && precio > 0 && !(cuando[n] > t)) { precios[n] = precio; cuando[n] = t }
-      }
-      if (!data || data.length < 1000) break
-    }
-    return { feriaIdsCampania: [...pids], feriaPrecios: precios }
-  }
+  /** Las reglas con las que se cobra HOY: viven en `api/_caja-reglas.js` (las usa también el cambio de `erp › Caja`). */
+  const reglasDeHoy = (reglas) => reglasDeHoyDe(sb, store, reglas)
 
   /** Las campañas de Liquidación, para que un admin elija cuáles son de feria. */
   async function campaniasLiq() {
@@ -1322,7 +1259,7 @@ function logosDeFila(fila) {
 /** Hasta cuánto atrás otra venta esperando el mismo monto obliga a elegir el pago a mano. */
 const COMPETIDORAS_MS = 12 * 3600 * 1000
 /** Cuántos pagos recientes se muestran al confirmar una transferencia (los del monto, siempre). */
-const RECIENTES_CAJA = 5
+export const RECIENTES_CAJA = 5
 /** Y cuántos cuando la cajera está sumando cobros (Bruno, 12-oct: «13.300 + 100»). */
 const RECIENTES_SUMAR = 20
 /** Cuántos días de Mercado Pago lee el cruce, desde el de la venta (A4). */
@@ -1332,7 +1269,7 @@ const DIAS_CRUCE = 3
  * a escanear nace después del pago. Como se lee desde el día de la venta, en la práctica es desde su
  * medianoche. ⛔ Entra solo nunca: lo elige la cajera.
  */
-const ANTES_MANUAL_MS = 24 * 3600 * 1000
+export const ANTES_MANUAL_MS = 24 * 3600 * 1000
 /**
  * Los días argentinos desde el de la venta hasta hoy. Con más de `DIAS_CRUCE`: el de la venta y los
  * últimos (el pago que llega tarde llega HOY).

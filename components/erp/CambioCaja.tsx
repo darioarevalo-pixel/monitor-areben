@@ -19,15 +19,20 @@ import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { construirPrecios } from '@/lib/etiquetas/core'
-import { precioDeFeria, renglones } from '@/lib/caja/core.core.js'
+import { NOMBRE_MEDIO, cuentaDeMedio, precioDeFeria, renglones } from '@/lib/caja/core.core.js'
 import { exigirDevolucion } from '@/lib/caja/repetida.core.js'
 import { buscarProducto, elegirVariante, leerConfig, type Candidato, type Config, type Variante } from '@/lib/caja/cliente'
 import { marcaParaPOS, usarMarcaCaja } from '@/lib/caja/marca'
-import { buscarVentas, cambiarVenta, leerFichaDeVenta, type FichaDeVenta, type MarcaErp, type VentaPropia } from '@/lib/erp/cliente'
-import { NOMBRE_MARCA, diferenciaDeCambio } from '@/lib/erp/venta.core.js'
+import { buscarVentas, cambiarVenta, leerFichaDeVenta, leerSaldo, type CruceCambio, type FichaDeVenta, type MarcaErp, type PagoMp, type VentaPropia } from '@/lib/erp/cliente'
+import { NOMBRE_MARCA, cobroDelCambio, diferenciaDeCambio } from '@/lib/erp/venta.core.js'
 
 type Nueva = { variante: Variante; cantidad: number; precio: number | '' }
-type Hecho = { numero: number; diferencia: number; aFavor: number; ncPendiente: boolean }
+type Hecho = { numero: number; cobrado: number; aFavor: number; saldo: number | null; ncPendiente: boolean }
+type Medio = 'efectivo' | 'transferencia' | 'debito' | 'credito'
+/** La transferencia que se espera (como la Caja): el pedido se repite igual hasta que llega el pago. */
+type Espera = { desde: string; monto: number; cruce: CruceCambio; recientes: PagoMp[] }
+const MEDIOS: Medio[] = ['efectivo', 'transferencia', 'debito', 'credito']
+const CADA_MS = 5000
 
 const cuando = (iso: string) => {
   const d = new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString()
@@ -52,7 +57,13 @@ export function CambioCaja() {
   const [codigoDev, setCodigoDev] = useState('')
   const [codigoNueva, setCodigoNueva] = useState('')
   const [candidatos, setCandidatos] = useState<Candidato[] | null>(null)
-  const [cuenta, setCuenta] = useState('')
+  const [medio, setMedio] = useState<Medio | ''>('')
+  const [clienta, setClienta] = useState({ doc: '', nombre: '', whatsapp: '' })
+  const [espera, setEspera] = useState<Espera | null>(null)
+  const [comprobante, setComprobante] = useState('')
+  /** El saldo a favor de la clienta (por DNI) y si se usa para pagar la diferencia. */
+  const [saldo, setSaldo] = useState<{ doc: string; monto: number } | null>(null)
+  const [usaSaldo, setUsaSaldo] = useState(false)
   const [id, setId] = useState(nuevoId)
   const [hecho, setHecho] = useState<Hecho | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -80,7 +91,12 @@ export function CambioCaja() {
     setFicha(null)
     setDevuelve({})
     setNuevas([])
-    setCuenta('')
+    setMedio('')
+    setClienta({ doc: '', nombre: '', whatsapp: '' })
+    setEspera(null)
+    setComprobante('')
+    setSaldo(null)
+    setUsaSaldo(false)
     setCandidatos(null)
     setId(nuevoId())
   }
@@ -165,20 +181,68 @@ export function CambioCaja() {
   }
   const devueltas = Object.entries(devuelve).filter(([, n]) => n > 0).map(([lineaId, cantidad]) => ({ lineaId, cantidad }))
   const diferencia = ficha ? diferenciaDeCambio({ lineas: ficha.lineas, devueltas, nuevas: filas }) : 0
-  const cuentas = Object.entries(config?.reglas.cuentas ?? {})
-  const listo = !!ficha && devueltas.length > 0 && !sinPrecio && (diferencia <= 0 || !!cuenta)
+  const reglas = config?.reglas ?? null
+  // La forma de pago de la Caja ⇒ su cuenta (crédito: la normal; la promo del banco y las 6 cuotas, todavía no).
+  const docLimpio = clienta.doc.replace(/\D/g, '')
+  // El saldo sólo vale para el DNI con que se buscó (si se cambia el DNI, se vuelve a buscar).
+  const saldoUsado = usaSaldo && saldo && saldo.doc === docLimpio && diferencia > 0 ? Math.min(saldo.monto, diferencia) : 0
+  const resto = Math.round((diferencia - saldoUsado) * 100) / 100
+  let cuenta: number | null = null
+  let errorCobro: string | null = null
+  try {
+    cuenta = medio && reglas && resto > 0 ? cuentaDeMedio(medio, { reglas, total: diferencia, promoCreditoHoy: false, esDelBanco: false, seisCuotas: false }) : null
+  } catch (e) {
+    errorCobro = e instanceof Error ? e.message : 'Esa forma de pago no se puede usar.'
+  }
+  // 🔑 El descuento de la forma de pago, con el MISMO cálculo que el servidor (`cobroDelCambio` = `cobro()` de la Caja).
+  let cobrado: { pagos: Array<{ cuenta: number; monto: number }>; total: number; espera: number } = { pagos: [], total: 0, espera: 0 }
+  try {
+    if (reglas && diferencia > 0 && (cuenta || !(resto > 0))) cobrado = cobroDelCambio({ diferencia, pagos: cuenta ? [{ cuenta }] : [], reglas, nuevas: items, saldo: saldoUsado })
+  } catch (e) {
+    errorCobro = e instanceof Error ? e.message : 'No se pudo calcular el cobro.'
+  }
+  const aFavor = diferencia < 0 ? -diferencia : 0
+  // Saldo a favor (Bruno, 14-oct): se guarda a nombre de la clienta ⇒ DNI y nombre obligatorios.
+  const pideClienta = aFavor > 0 || saldoUsado > 0
+  const faltaClienta = pideClienta && !(docLimpio.length >= 7 && clienta.nombre.trim().length >= 3)
 
-  const confirmar = () => correr(async () => {
+  const buscarSaldo = () => correr(async () => {
+    const r = await leerSaldo(store, docLimpio)
+    setSaldo({ doc: docLimpio, monto: r.saldo })
+    if (r.cliente && !clienta.nombre.trim()) setClienta((x) => ({ ...x, nombre: r.cliente?.nombre ?? '' }))
+    setUsaSaldo(r.saldo > 0)
+  }, 'No se pudo leer el saldo.')
+  const listo = !!ficha && devueltas.length > 0 && !sinPrecio && !errorCobro && (diferencia <= 0 || cobrado.total > 0) && !faltaClienta
+
+  /** El pedido del cambio: el mismo cada vez (mismo `id`), así repetirlo ⛔ duplica. */
+  async function mandar(extra: { pago?: string | null; comprobante?: string | null } = {}) {
     if (!ficha) return
     const r = await cambiarVenta(store, {
       id, ventaId: ficha.venta.id, devueltas, items,
-      pagos: diferencia > 0 ? [{ cuenta: Number(cuenta), monto: diferencia }] : [],
+      pagos: resto > 0 && cuenta ? [{ cuenta }] : [], total: cobrado.total, desde: espera?.desde ?? null,
+      saldo: saldoUsado,
+      cliente: pideClienta ? { doc: clienta.doc, nombre: clienta.nombre, whatsapp: clienta.whatsapp || null } : null,
+      ...extra,
     })
-    setHecho({ numero: r.venta.numero, diferencia, aFavor: r.aFavor, ncPendiente: r.ncPendiente })
+    if (r.esperando) {
+      setEspera({ desde: r.desde, monto: r.espera, cruce: r.cruce, recientes: r.recientes ?? [] })
+      return
+    }
+    setHecho({ numero: r.venta.numero, cobrado: r.total, aFavor: r.aFavor, saldo: r.saldo, ncPendiente: r.ncPendiente })
     setVentas(null)
     setQ('')
     empezarDeNuevo()
-  }, 'No se pudo registrar el cambio.')
+  }
+
+  const confirmar = (extra?: { pago?: string | null; comprobante?: string | null }) => correr(() => mandar(extra), 'No se pudo registrar el cambio.')
+
+  // Mientras se espera la transferencia, se vuelve a mirar Mercado Pago cada 5 s (como la Caja).
+  const esperando = !!espera && espera.cruce.estado === 'esperando'
+  useEffect(() => {
+    if (!esperando) return
+    const t = setTimeout(() => { void mandar().catch(() => {}) }, CADA_MS)
+    return () => clearTimeout(t)
+  })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -196,7 +260,7 @@ export function CambioCaja() {
       {hecho && (
         <Notice tone="success" onClose={() => setHecho(null)}>
           Cambio #{hecho.numero} registrado.{' '}
-          {hecho.diferencia > 0 ? <>Se cobraron <MoneyText value={hecho.diferencia} />.</> : hecho.aFavor > 0 ? <>Quedan <MoneyText value={hecho.aFavor} /> a favor de la clienta.</> : 'Sin diferencia.'}
+          {hecho.cobrado > 0 ? <>Se cobraron <MoneyText value={hecho.cobrado} />.</> : hecho.aFavor > 0 ? <>Quedan <MoneyText value={hecho.aFavor} /> a favor de la clienta{hecho.saldo != null && <> (saldo: <MoneyText value={hecho.saldo} />)</>}.</> : 'Sin diferencia.'}
           {hecho.ncPendiente && ' La venta tenía factura: falta la nota de crédito.'}
         </Notice>
       )}
@@ -288,21 +352,77 @@ export function CambioCaja() {
           <SectionCard title="Diferencia">
             <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div style={{ fontSize: 18 }}>
-                {diferencia > 0 ? <>A pagar: <MoneyText value={diferencia} strong /></> : diferencia < 0 ? <>A favor de la clienta: <MoneyText value={-diferencia} strong /></> : 'Sin diferencia'}
+                {diferencia > 0
+                  ? <>
+                    {saldoUsado > 0 && <>Con saldo a favor: <MoneyText value={saldoUsado} strong /> · </>}
+                    {resto > 0 && (cobrado.total > 0 && cobrado.total - saldoUsado !== resto
+                      ? <>A pagar: <MoneyText value={cobrado.total - saldoUsado} strong /> <span style={{ fontSize: 14 }}>(<MoneyText value={resto} /> con el descuento de la forma de pago)</span></>
+                      : <>A pagar: <MoneyText value={resto} strong /></>)}
+                  </>
+                  : diferencia < 0 ? <>A favor de la clienta: <MoneyText value={aFavor} strong /></> : 'Sin diferencia'}
               </div>
-              {diferencia > 0 && (
-                <Field label="Forma de pago">
-                  <Select value={cuenta} onChange={(e) => setCuenta(e.target.value)}>
+              {resto > 0 && (
+                <Field label={saldoUsado > 0 ? 'Forma de pago del resto' : 'Forma de pago'}>
+                  <Select value={medio} onChange={(e) => setMedio(e.target.value as Medio | '')} disabled={!!espera}>
                     <option value="">Elegir…</option>
-                    {cuentas.map(([k, c]) => <option key={k} value={k}>{c.nombre}</option>)}
+                    {MEDIOS.filter((m) => reglas?.medios?.[m]).map((m) => <option key={m} value={m}>{NOMBRE_MEDIO[m]}</option>)}
                   </Select>
                 </Field>
               )}
               <span style={{ flex: 1 }} />
-              <Button disabled={!listo || trabajando} onClick={() => void confirmar()}>Confirmar cambio</Button>
+              {!espera && <Button disabled={!listo || trabajando || (resto > 0 && !cuenta)} onClick={() => void confirmar()}>{cobrado.espera > 0 ? 'Esperar la transferencia' : 'Confirmar cambio'}</Button>}
             </div>
+            {(aFavor > 0 || diferencia > 0) && (
+              <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[3], alignItems: 'flex-end' }}>
+                <Field label={aFavor > 0 ? 'DNI o CUIT de la clienta' : '¿Tiene saldo a favor? DNI o CUIT'}><Input value={clienta.doc} onChange={(e) => setClienta({ ...clienta, doc: e.target.value })} inputMode="numeric" /></Field>
+                {diferencia > 0 && <Button variant="outline" disabled={trabajando || docLimpio.length < 7 || !!espera} onClick={() => void buscarSaldo()}>Ver saldo</Button>}
+                {diferencia > 0 && saldo && saldo.doc === docLimpio && (
+                  saldo.monto > 0
+                    ? <label style={{ display: 'flex', gap: space[1], alignItems: 'center' }}><input type="checkbox" checked={usaSaldo} disabled={!!espera} onChange={(e) => setUsaSaldo(e.target.checked)} /> Usar <MoneyText value={Math.min(saldo.monto, diferencia)} /> de su saldo (<MoneyText value={saldo.monto} />)</label>
+                    : <span>Sin saldo a favor.</span>
+                )}
+              </div>
+            )}
+            {pideClienta && (
+              <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
+                <Field label="Nombre"><Input value={clienta.nombre} onChange={(e) => setClienta({ ...clienta, nombre: e.target.value })} /></Field>
+                <Field label="WhatsApp (opcional)"><Input value={clienta.whatsapp} onChange={(e) => setClienta({ ...clienta, whatsapp: e.target.value })} inputMode="tel" /></Field>
+              </div>
+            )}
+            {faltaClienta && <Notice tone="action">El saldo a favor va a nombre de la clienta: cargá su DNI y su nombre.</Notice>}
             {sinPrecio && <Notice tone="warning">Falta el precio de una prenda nueva.</Notice>}
-            {diferencia > 0 && <Notice tone="action">La diferencia se cobra sin el descuento de la forma de pago (falta decidirlo).</Notice>}
+            {errorCobro && <Notice tone="warning">{errorCobro}</Notice>}
+            {espera && (
+              <div style={{ marginTop: space[3], display: 'flex', flexDirection: 'column', gap: space[2] }}>
+                <Notice tone="action">
+                  Esperando la transferencia de <MoneyText value={espera.monto} strong />.{' '}
+                  {espera.cruce.motivo ?? 'Se mira Mercado Pago cada 5 segundos: el cambio se registra solo cuando llega.'}
+                </Notice>
+                {espera.recientes.length > 0 && (
+                  <TableWrap>
+                    <table>
+                      <THead><Tr><Th>Llegó</Th><Th style={{ textAlign: 'right' }}>Monto</Th><Th /></Tr></THead>
+                      <TBody>
+                        {espera.recientes.map((p) => (
+                          <Tr key={p.id}>
+                            <Td>{cuando(p.cuando)}{p.coincide && <> <Badge tone="success">Coincide</Badge></>}</Td>
+                            <Td style={{ textAlign: 'right' }}><MoneyText value={p.monto} /></Td>
+                            <Td>{p.coincide && <Button variant="outline" disabled={trabajando} onClick={() => void confirmar({ pago: p.id })}>Es éste</Button>}</Td>
+                          </Tr>
+                        ))}
+                      </TBody>
+                    </table>
+                  </TableWrap>
+                )}
+                {espera.cruce.estado === 'sin_cuenta' && (
+                  <form onSubmit={(e) => { e.preventDefault(); void confirmar({ comprobante }) }} style={{ display: 'flex', gap: space[2], alignItems: 'flex-end' }}>
+                    <Field label="Número de operación del comprobante"><Input value={comprobante} onChange={(e) => setComprobante(e.target.value)} /></Field>
+                    <Button type="submit" disabled={trabajando || comprobante.trim().length < 4}>Transferencia confirmada</Button>
+                  </form>
+                )}
+                <div><Button variant="outline" onClick={() => setEspera(null)}>Cambiar la forma de pago</Button></div>
+              </div>
+            )}
           </SectionCard>
         </>
       )}

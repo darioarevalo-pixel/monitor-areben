@@ -163,8 +163,23 @@ export const anularVenta = (marca: MarcaErp, ventaId: string, motivo: string) =>
 /** Lo que se lleva en un cambio: la forma de `ItemCaja` de la Caja (el servidor lo arma con `renglones`). */
 export type PrendaNueva = { product_id: number; size_id: number; cantidad: number; precio: number; sku?: string | null }
 
+/** El saldo a favor de una clienta (el de prueba, mientras el cambio es de prueba). */
+export const leerSaldo = (marca: MarcaErp, doc: string) =>
+  pedir<{ cliente: { nombre: string } | null; saldo: number }>(null, `&vista=saldo&marca=${marca}&doc=${encodeURIComponent(doc)}&nc=${Date.now()}`, 'No se pudo leer el saldo.')
+
+export type ClienteCambio = { doc: string; nombre: string; whatsapp?: string | null; email?: string | null }
+export type CruceCambio = { estado: string; motivo?: string }
+export type PagoMp = { id: string; monto: number; cuando: string; origen?: string; coincide: boolean; diferencia: number }
+export type RespuestaCambio =
+  | { ok: true; esperando?: false; venta: { id: string; numero: number; diferencia?: number }; total: number; aFavor: number; saldo: number | null; ncPendiente: boolean; yaExistia: boolean }
+  | { ok: true; esperando: true; espera: number; total: number; desde: string; cruce: CruceCambio; recientes?: PagoMp[] }
+
+/**
+ * El cambio. Con transferencia contesta `esperando` hasta que llega el pago: la pantalla repite el MISMO
+ * pedido (mismo `id` y `desde`), y con `pago` (el que eligió) o `comprobante` (sin cuenta de MP).
+ */
 export const cambiarVenta = (marca: MarcaErp, c: {
-  id: string; ventaId: string; devueltas: Array<{ lineaId: string; cantidad: number }>; items: PrendaNueva[]; pagos: Array<{ cuenta: number; monto: number }>
+  id: string; ventaId: string; devueltas: Array<{ lineaId: string; cantidad: number }>; items: PrendaNueva[]
+  pagos: Array<{ cuenta: number; base?: number }>; total: number; desde?: string | null; pago?: string | null; comprobante?: string | null; cliente?: ClienteCambio | null; saldo?: number
 }) =>
-  pedir<{ ok: true; venta: { id: string; numero: number; diferencia?: number }; aFavor: number; ncPendiente: boolean; yaExistia: boolean }>(
-    post({ accion: 'cambiar', marca, ...c }), '', 'No se pudo registrar el cambio.')
+  pedir<RespuestaCambio>(post({ accion: 'cambiar', marca, ...c }), '', 'No se pudo registrar el cambio.')

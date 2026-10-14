@@ -4,7 +4,8 @@
  * vendida, o un anular sin motivo que llega al motor.
  */
 import { describe, it, expect } from 'vitest'
-import { armarFicha, cambiadasDe, diferenciaDeCambio, leerAnular, leerBusqueda, leerCambiar, puedeAnular, rangoDeDias } from '../lib/erp/venta.core.js'
+import { armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, leerAnular, leerBusqueda, leerCambiar, leerClienteCambio, puedeAnular, rangoDeDias } from '../lib/erp/venta.core.js'
+import { REGLAS_INICIALES } from '../lib/caja/core.core.js'
 
 describe('leerBusqueda', () => {
   it('un número (con o sin #) es el número de venta; texto es cliente', () => {
@@ -94,8 +95,44 @@ describe('el cambio (erp › Caja)', () => {
     expect(leerCambiar({ id, ventaId: venta, devueltas: [] }).error).toMatch(/devuelve/)
     expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 0 }] }).error).toBeTruthy()
     expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], items: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 0 }] }).error).toMatch(/precio/)
-    expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], pagos: [{ cuenta: 'x', monto: 1 }] }).error).toBe('Pago inválido')
-    const ok = leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], items: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 20000, sku: 'Z-1' }], pagos: [{ cuenta: 12921, monto: 5000 }] })
-    expect(ok).toEqual({ id, ventaId: venta, devueltas: [{ linea_id: L1, cantidad: 1 }], nuevas: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 20000, descuento: 0, rebaja: 0, importe: 20000, sku: 'Z-1' }], pagos: [{ cuenta: 12921, monto: 5000 }] })
+    expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], pagos: [{ cuenta: 'x' }] }).error).toBe('Pago inválido')
+    const ok = leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], items: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 20000, sku: 'Z-1' }], pagos: [{ cuenta: 12921, monto: 5000 }], total: 4300 })
+    expect(ok).toEqual({
+      id, ventaId: venta, devueltas: [{ linea_id: L1, cantidad: 1 }], nuevas: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 20000, descuento: 0, rebaja: 0, importe: 20000, sku: 'Z-1' }],
+      pagos: [{ cuenta: 12921 }], total: 4300, desde: null, pago: null, comprobante: null, cliente: null, saldo: 0,
+    })
+    // Varios pagos: la base viaja en todos menos el último (como la Caja); el monto de la pantalla ⛔ viaja.
+    expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], pagos: [{ cuenta: 12921, base: 2000 }, { cuenta: 25188, base: 1 }] }).pagos).toEqual([{ cuenta: 12921, base: 2000 }, { cuenta: 25188 }])
+  })
+
+  it('la diferencia se cobra con el descuento de la forma de pago, como la Caja (Bruno, 14-oct)', () => {
+    const R = REGLAS_INICIALES
+    // Efectivo 15 %: 5000 − 750 = 4250, redondeado a 100 ⇒ 4300 (lo mismo que `cobro()` de la Caja).
+    expect(cobroDelCambio({ diferencia: 5000, pagos: [{ cuenta: 12921 }], reglas: R, nuevas: [] }))
+      .toEqual({ pagos: [{ cuenta: 12921, base: 5000, porcentaje: 15, descuento: 750, redondeo: 50, monto: 4300 }], total: 4300, espera: 0 })
+    // Transferencia: el 10 % y se ESPERA el monto con descuento.
+    expect(cobroDelCambio({ diferencia: 5000, pagos: [{ cuenta: 13015 }], reglas: R, nuevas: [] })).toMatchObject({ total: 4500, espera: 4500 })
+    // Lo que queda a favor ⛔ se cobra.
+    expect(cobroDelCambio({ diferencia: -10, pagos: [], reglas: R, nuevas: [] })).toEqual({ pagos: [], total: 0, espera: 0 })
+    expect(() => cobroDelCambio({ diferencia: 5000, pagos: [], reglas: R, nuevas: [] })).toThrow(/forma de pago/)
+    expect(() => cobroDelCambio({ diferencia: 5000, pagos: [{ cuenta: 999 }], reglas: R, nuevas: [] })).toThrow(/no es una forma de pago/)
+    // Con saldo a favor: va primero, sin descuento; el resto con la forma de pago (Bruno, 14-oct).
+    expect(cobroDelCambio({ diferencia: 5000, pagos: [{ cuenta: 12921 }], reglas: R, nuevas: [], saldo: 3000 }))
+      .toEqual({ pagos: [{ cuenta: 'saldo', base: 3000, porcentaje: 0, descuento: 0, redondeo: 0, monto: 3000 }, { cuenta: 12921, base: 2000, porcentaje: 15, descuento: 300, redondeo: 0, monto: 1700 }], total: 4700, espera: 0 })
+    // El saldo alcanza: ⛔ hace falta otra forma de pago, y ⛔ se usa más que la diferencia.
+    expect(cobroDelCambio({ diferencia: 5000, pagos: [], reglas: R, nuevas: [], saldo: 9000 }))
+      .toEqual({ pagos: [{ cuenta: 'saldo', base: 5000, porcentaje: 0, descuento: 0, redondeo: 0, monto: 5000 }], total: 5000, espera: 0 })
+    // Una prenda de feria entre lo nuevo: ⛔ se cobra acá (precio final, cuenta propia; falta decidirlo).
+    expect(() => cobroDelCambio({ diferencia: 5000, pagos: [{ cuenta: 12921 }], reglas: { ...R, feriaProductos: [{ id: 7, nombre: 'x' }] }, nuevas: [{ product_id: 7 }] })).toThrow(/oferta/)
+  })
+
+  it('la clienta del saldo a favor: DNI y nombre, o nada', () => {
+    expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], saldo: 100 }).error).toMatch(/DNI/)
+    expect(leerClienteCambio(null)).toBeNull()
+    expect(leerClienteCambio({ doc: '', nombre: '' })).toBeNull()
+    expect(leerClienteCambio({ doc: '30.123.456', nombre: 'Ana Pérez', whatsapp: '+54 9 11 5555-0000' })).toEqual({ doc: '30123456', nombre: 'Ana Pérez', whatsapp: '+5491155550000', email: null })
+    expect(leerClienteCambio({ doc: '123', nombre: 'Ana' })?.error).toMatch(/DNI/)
+    expect(leerClienteCambio({ doc: '30123456', nombre: '' })?.error).toMatch(/nombre/)
+    expect(leerClienteCambio({ doc: '30123456', nombre: 'Ana', email: 'x' })?.error).toMatch(/mail/)
   })
 })
