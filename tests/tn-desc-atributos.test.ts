@@ -59,6 +59,10 @@ describe('🔴 la familia sale de la categoría, y las categorías vienen sucias
     expect(familiaDe(['SHORTS, MINIS Y FALDAS'])).toBe('faldas')
   })
 
+  it('MINIS Y FALDAS, el nombre desde el 23-sep, también es falda', () => {
+    expect(familiaDe(['NEW IN', 'MINIS Y FALDAS'])).toBe('faldas')
+  })
+
   it('BLAZER y BLAZERS son la misma', () => {
     expect(familiaDe(['BLAZER'])).toBe('abrigo')
     expect(familiaDe(['BLAZERS'])).toBe('abrigo')
