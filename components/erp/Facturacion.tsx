@@ -36,7 +36,6 @@ export function Facturacion() {
   const [facturas, setFacturas] = useState<FacturaEmitida[] | null>(null)
   const [bajando, setBajando] = useState<string | null>(null)
   /** La factura que se está por anular con nota de crédito (pide confirmar: con CAE ⛔ se borra). */
-  const [anulando, setAnulando] = useState<string | null>(null)
   const [hechaNC, setHechaNC] = useState<string | null>(null)
 
   const leer = useCallback(async () => {
@@ -122,12 +121,30 @@ export function Facturacion() {
   // Las ventas que ya tienen nota de crédito este mes: su factura ⛔ ofrece otra (una por venta, como GN).
   const conNC = useMemo(() => new Set((facturas || []).filter((f) => f.tipo === CBTE.NC_A || f.tipo === CBTE.NC_B).map((f) => `${f.marca}:${f.venta_id}`)), [facturas])
 
+  /** Con el MISMO aviso que facturar: en producción la NC es REAL y con CAE ⛔ se elimina. */
   async function anularConNC(f: FacturaEmitida) {
+    const prueba = f.ambiente !== 'produccion'
+    const ok = await confirmar({
+      titulo: prueba ? 'Nota de crédito en el ambiente de prueba' : 'Nota de crédito con ARCA',
+      mensaje: (
+        <div>
+          <ConfirmDetalle label="Anula la factura" valor={numeroComprobante(f)} />
+          <ConfirmDetalle label="Total" valor={pesos(f.total)} />
+          <p style={{ marginTop: space[3] }}>
+            {prueba
+              ? 'Es de PRUEBA (homologación de ARCA): no tiene validez fiscal.'
+              : 'Es REAL: una vez autorizada no se puede eliminar.'}
+          </p>
+        </div>
+      ),
+      ok: 'Hacer nota de crédito',
+      tono: prueba ? 'warning' : 'danger',
+    })
+    if (!ok) return
     setTrabajando(true)
     try {
       const r = await notaDeCredito(f.id)
       setHechaNC(`Nota de crédito ${r.autorizada.numero} autorizada (CAE ${r.autorizada.cae}) por ${pesos(r.autorizada.total)}.`)
-      setAnulando(null)
       await leer()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo hacer la nota de crédito.')
@@ -285,12 +302,7 @@ export function Facturacion() {
                   <Td style={{ textAlign: 'right' }}>{pesos(f.total)}</Td>
                   <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {(f.tipo === CBTE.FACTURA_A || f.tipo === CBTE.FACTURA_B) && !conNC.has(`${f.marca}:${f.venta_id}`) && (
-                      anulando === f.id
-                        ? <>
-                          <Button size="sm" tone="danger" disabled={trabajando} onClick={() => void anularConNC(f)}>Confirmar nota de crédito por {pesos(f.total)}</Button>{' '}
-                          <Button size="sm" variant="outline" disabled={trabajando} onClick={() => setAnulando(null)}>No</Button>{' '}
-                        </>
-                        : <><Button size="sm" variant="outline" onClick={() => setAnulando(f.id)}>Nota de crédito</Button>{' '}</>
+                      <><Button size="sm" variant="outline" disabled={trabajando} onClick={() => void anularConNC(f)}>Hacer nota de crédito</Button>{' '}</>
                     )}
                     <Button variant="outline" size="sm" onClick={() => bajar(f)} disabled={bajando === f.id || faltanDelEmisor(EMISOR, f.marca).length > 0}>
                       {bajando === f.id ? 'Armando…' : 'Descargar PDF'}
