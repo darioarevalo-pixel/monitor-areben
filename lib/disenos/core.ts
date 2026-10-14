@@ -57,6 +57,7 @@ function saneaEnviados(bruto: unknown): EnvioAIngreso[] {
       columnaId: typeof x.columnaId === 'string' ? x.columnaId : '',
       fecha: typeof x.fecha === 'string' ? x.fecha : '',
       por: typeof x.por === 'string' ? x.por : '',
+      ...(x.vinculo === true ? { vinculo: true } : {}),
     }]
   })
 }
@@ -165,6 +166,24 @@ export function podarSeleccion(sel: Set<string>, visibles: Diseno[]): Set<string
  */
 export function pesadas(disenos: Diseno[]): Diseno[] {
   return disenos.filter((d) => d.url.startsWith('data:'))
+}
+
+/**
+ * «Ya viene en…»: anota que estos diseños **ya están** en una importación y los confirma.
+ *
+ * Confirmar es lo que los saca de «Por revisar», que es de donde la votación nueva toma su lista
+ * (`VotacionPanel`). ⛔ No toca Ingresos: la funda ya está ahí, cargada a mano. Si ya tenía un
+ * vínculo a esa misma importación no lo repite, pero la confirma igual.
+ */
+export function vincularAImportacion(disenos: Diseno[], ids: ReadonlySet<string>, envio: EnvioAIngreso): Diseno[] {
+  if (!ids.size) return disenos
+  const vinculo: EnvioAIngreso = { ...envio, vinculo: true }
+  return disenos.map((d) => {
+    if (!ids.has(d.id)) return d
+    const previos = d.enviados || []
+    const yaEsta = previos.some((e) => e.ingresoId === envio.ingresoId)
+    return { ...d, estado: 'confirmado', enviados: yaEsta ? previos : [...previos, vinculo] }
+  })
 }
 
 /** Anota en los diseños a qué importación se mandaron. Inmutable, y no duplica el mismo envío. */

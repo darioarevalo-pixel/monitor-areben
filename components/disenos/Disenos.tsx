@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { imgAThumbYSubir } from '@/lib/imagenes'
-import { aplicarEstadoALote, conteos, marcarEnviados, pesadas } from '@/lib/disenos/core'
+import { aplicarEstadoALote, conteos, marcarEnviados, pesadas, vincularAImportacion } from '@/lib/disenos/core'
 import { estaAbierta } from '@/lib/disenos/votacion'
 import { VotacionPanel } from '@/components/disenos/VotacionPanel'
 import { Tablero } from '@/components/disenos/Tablero'
@@ -22,6 +22,8 @@ import { RevisionRapida } from '@/components/disenos/RevisionRapida'
 import { ReportePDF } from '@/components/disenos/ReportePDF'
 import { useResumenRonda } from '@/components/disenos/useResumenRonda'
 import { PasarAImportacion } from '@/components/ingresos/PasarAImportacion'
+import { YaVieneEn } from '@/components/disenos/YaVieneEn'
+import { esDeMarca } from '@/lib/nav'
 import type { Diseno, EstadoDiseno } from '@/lib/disenos/tipos'
 import {
   avisoLocalOculto,
@@ -50,6 +52,7 @@ export function Disenos() {
   const [tab, setTab] = useFiltroUrl<Pestana>('t', 'tablero')
 
   const [preview, setPreview] = useState<string | null>(null)
+  const [yaVieneIds, setYaVieneIds] = useState<Set<string>>(new Set())
   const [pdfOpen, setPdfOpen] = useState(false)
   const [quickOn, setQuickOn] = useState(false)
   const [quickIndex, setQuickIndex] = useState(0)
@@ -303,6 +306,7 @@ export function Disenos() {
             onEstado={setEstado}
             onVer={setPreview}
             onCargar={cargar}
+            onYaViene={esDeMarca('ingresos', marca) ? setYaVieneIds : undefined}
             acciones={botonesTablero}
           />
         </>
@@ -341,6 +345,18 @@ export function Disenos() {
           }
         />
       )}
+
+      <YaVieneEn
+        marca={marca}
+        disenos={disenos.filter((d) => yaVieneIds.has(d.id))}
+        por={perfil?.name || perfil?.cuenta || ''}
+        onCerrar={() => setYaVieneIds(new Set())}
+        onVincular={(ids, envio) => {
+          setDisenos((ds) => vincularAImportacion(ds, ids, envio))
+          setYaVieneIds(new Set())
+          toast.ok(`${ids.size} ${ids.size === 1 ? 'funda marcada' : 'fundas marcadas'} como «ya viene en ${envio.ingresoDesc}». No van a entrar en la próxima votación.`)
+        }}
+      />
 
       <Lightbox src={preview} onCerrar={() => setPreview(null)} />
 

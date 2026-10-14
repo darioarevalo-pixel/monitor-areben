@@ -10,6 +10,7 @@ import {
   pesadas,
   podarSeleccion,
   quitarLote,
+  vincularAImportacion,
 } from '../lib/disenos/core'
 import { ranking, resumen } from '../lib/disenos/votacion.core.js'
 import type { Diseno } from '../lib/disenos/tipos'
@@ -205,5 +206,36 @@ describe('pesadas y marcarEnviados', () => {
     expect(marcarEnviados(arr, [{ id: 'a', envio }])[0].enviados).toHaveLength(1)
     const otro = { ...envio, ingresoId: 'g2', columnaId: 'c9' }
     expect(marcarEnviados(arr, [{ id: 'a', envio: otro }])[0].enviados).toHaveLength(2)
+  })
+})
+
+describe('vincularAImportacion («Ya viene en…»)', () => {
+  const envio = { ingresoId: 'g5', ingresoDesc: 'IMPORTACION 5', bloqueId: '', columnaId: '', fecha: '2026-10-14', por: 'Bruno' }
+
+  // 🔑 Lo que pidió Bruno: que una funda que ya se compró no vuelva a votarse. La votación nueva
+  // toma «los por revisar», así que el vínculo tiene que sacarla de ahí.
+  it('confirma los elegidos y les deja el vínculo marcado como tal', () => {
+    const arr = [D({ id: 'a' }), D({ id: 'b', estado: 'duda' }), D({ id: 'c' })]
+    const out = vincularAImportacion(arr, new Set(['a', 'b']), envio)
+    expect(out.map((d) => d.estado)).toEqual(['confirmado', 'confirmado', 'revisar'])
+    expect(out[0].enviados).toEqual([{ ...envio, vinculo: true }])
+    expect(out[2]).toBe(arr[2])
+    expect(arr[0].estado).toBe('revisar')
+  })
+
+  it('no repite el vínculo a la misma importación, y sí suma otra', () => {
+    const arr = [D({ id: 'a', estado: 'rechazado', enviados: [{ ...envio, vinculo: true }] })]
+    const otra = vincularAImportacion(arr, new Set(['a']), envio)[0]
+    expect(otra.enviados).toHaveLength(1)
+    expect(otra.estado).toBe('confirmado')
+    expect(vincularAImportacion(arr, new Set(['a']), { ...envio, ingresoId: 'g4' })[0].enviados).toHaveLength(2)
+  })
+
+  // Si la lectura lo tirara, la chapita pasaría a decir «se mandó» sobre algo que nunca escribió en Ingresos.
+  it('el vínculo sobrevive a la lectura de la base, y un envío común no gana la clave', () => {
+    const leido = normalizarDiseno({ id: 'a', url: 'data:,', enviados: [{ ...envio, vinculo: true }] }, nid)!
+    expect(leido.enviados![0].vinculo).toBe(true)
+    const comun = normalizarDiseno({ id: 'a', url: 'data:,', enviados: [{ ...envio, vinculo: 'sí' }] }, nid)!
+    expect(Object.keys(comun.enviados![0])).not.toContain('vinculo')
   })
 })

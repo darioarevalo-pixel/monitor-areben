@@ -28,7 +28,20 @@ const MOVER: { k: EstadoDiseno; verbo: (n: number) => string; ico: string }[] = 
   { k: 'rechazado', ico: '❌', verbo: () => 'Rechazar' },
 ]
 
-export function BarraLote({ n, onEstado, onQuitar, onLimpiar }: { n: number; onEstado: (e: EstadoDiseno) => void; onQuitar: () => void; onLimpiar: () => void }) {
+export function BarraLote({
+  n,
+  onEstado,
+  onYaViene,
+  onQuitar,
+  onLimpiar,
+}: {
+  n: number
+  onEstado: (e: EstadoDiseno) => void
+  /** Sólo donde hay Ingresos (BDI). Sin él, el botón no se dibuja. */
+  onYaViene?: () => void
+  onQuitar: () => void
+  onLimpiar: () => void
+}) {
   if (!n) return null
   return (
     <div
@@ -55,6 +68,11 @@ export function BarraLote({ n, onEstado, onQuitar, onLimpiar }: { n: number; onE
           {m.ico} {m.verbo(n)}
         </Button>
       ))}
+      {onYaViene && (
+        <Button size="sm" variant="outline" onClick={onYaViene}>
+          📦 Ya viene en…
+        </Button>
+      )}
       <Button size="sm" variant="ghost" tone="danger" onClick={onQuitar}>
         {/* ⚠️ Decía «Quitar», y el diálogo que abre ya decía «Sacar» en el título, en el botón y
             en el mensaje: el disparador y la confirmación nombraban el mismo gesto distinto.

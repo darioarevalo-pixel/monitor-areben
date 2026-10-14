@@ -56,6 +56,7 @@ export function Tablero({
   onEstado,
   onVer,
   onCargar,
+  onYaViene,
   acciones,
 }: {
   disenos: Diseno[]
@@ -69,6 +70,8 @@ export function Tablero({
   onEstado: (id: string, e: EstadoDiseno) => void
   onVer: (url: string) => void
   onCargar: (files: FileList | null) => void
+  /** Abre «Ya viene en…» con los elegidos. Sólo donde hay Ingresos. */
+  onYaViene?: (ids: Set<string>) => void
   /** La fila de botones de la sección (PDF, revisión rápida, vaciar…). */
   acciones: React.ReactNode
 }) {
@@ -216,7 +219,19 @@ export function Tablero({
         </>
       )}
 
-      <BarraLote n={sel.size} onEstado={enLote} onQuitar={() => void quitarElegidos()} onLimpiar={() => setSel(new Set())} />
+      <BarraLote
+        n={sel.size}
+        onEstado={enLote}
+        onYaViene={
+          onYaViene &&
+          (() => {
+            onYaViene(sel)
+            setSel(new Set())
+          })
+        }
+        onQuitar={() => void quitarElegidos()}
+        onLimpiar={() => setSel(new Set())}
+      />
 
       <div
         onDragOver={(e) => {

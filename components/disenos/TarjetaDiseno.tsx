@@ -78,10 +78,10 @@ export function TarjetaDiseno({
         </div>
         {enviado && (
           <div
-            title={`Se mandó a «${enviado.ingresoDesc || 'una importación'}»${enviado.fecha ? ' el ' + new Date(enviado.fecha).toLocaleDateString('es-AR') : ''}${enviado.por ? ' · ' + enviado.por : ''}`}
+            title={`${enviado.vinculo ? 'Ya viene en' : 'Se mandó a'} «${enviado.ingresoDesc || 'una importación'}»${enviado.fecha ? ' el ' + new Date(enviado.fecha).toLocaleDateString('es-AR') : ''}${enviado.por ? ' · ' + enviado.por : ''}`}
             style={{ position: 'absolute', right: 5, bottom: 5, background: color.scrim, color: '#fff', fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 20, maxWidth: '60%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
           >
-            → {enviado.ingresoDesc || 'importación'}
+            {enviado.vinculo ? '📦' : '→'} {enviado.ingresoDesc || 'importación'}
           </div>
         )}
       </div>

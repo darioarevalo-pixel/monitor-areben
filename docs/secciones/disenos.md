@@ -16,6 +16,11 @@ ninguna tarjeta**), `Tablero.tsx`, `TarjetaDiseno.tsx`, `BarraLote.tsx`, `Revisi
 `pdf.ts`, `votacion.core.js` (**`.js`**: lo comparten los handlers) y `votacion.ts`.
 El puente a Ingresos vive **del otro lado**: `components/ingresos/PasarAImportacion.tsx` y
 `lib/ingresos/puente.ts` (ver `docs/secciones/ingresos.md`).
+**«Ya viene en…»** (`components/disenos/YaVieneEn.tsx` + `vincularAImportacion` en `core.ts`) es
+lo contrario del puente: la funda **ya está** en una importación cargada a mano en Ingresos, así
+que sólo se LEE el KV y se escribe el diseño —confirmado y con `enviados[].vinculo: true`—. Existe
+para que lo comprado no vuelva a votarse: la ronda nueva toma «los por revisar». ⛔ Nunca escribe
+el KV. Nació el 14-oct-2026 con 19 fundas del tablero que eran la IMPORTACION 5, foto por foto.
 Handlers, todos por `api/datos.js`: `_disenos.js` (`?recurso=disenos`), `_disenos-rondas.js`
 (`?recurso=disenos-rondas`, con sesión) y `_disenos-votacion.js` (`?recurso=votacion`, **abierto**).
 Tablas: `disenos` (`sql/migrate-disenos.sql`) · `disenos_rondas` + `disenos_votos`

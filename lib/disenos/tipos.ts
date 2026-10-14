@@ -55,6 +55,14 @@ export type EnvioAIngreso = {
   /** ISO. */
   fecha: string
   por: string
+  /**
+   * `true` = la funda **ya estaba** en esa importación (se cargó directo en Ingresos) y acá sólo
+   * se anotó que es la misma: no se agregó ninguna columna al KV. Existe para que una funda que ya
+   * se compró no vuelva a una votación — el 14-oct-2026 había 19 en «Por revisar» que eran la
+   * importación del 10-dic, foto por foto. Sin esta marca la chapita diría «se mandó», que es otro
+   * hecho (ese sí escribió en Ingresos).
+   */
+  vinculo?: boolean
 }
 
 /**

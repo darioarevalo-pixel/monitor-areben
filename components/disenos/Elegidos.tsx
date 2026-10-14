@@ -84,7 +84,7 @@ export function Elegidos({
                   {d.name || <span style={{ color: color.danger, fontWeight: 500 }}>sin nombre</span>}
                 </div>
                 <div style={{ fontSize: font.xs, color: enviado ? color.success : color.mut2, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {enviado ? `→ ${enviado.ingresoDesc || 'una importación'}` : 'sin mandar a ninguna importación'}
+                  {enviado ? `${enviado.vinculo ? '📦 ya viene en' : '→'} ${enviado.ingresoDesc || 'una importación'}` : 'sin mandar a ninguna importación'}
                 </div>
               </div>
             </div>
