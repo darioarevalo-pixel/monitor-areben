@@ -57,6 +57,14 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   GN se muda al POS. 🔴 De PRUEBA hasta el corte (⛔ libro, ⛔ GN). Que ⛔ se devuelva de más y que el pago cierre lo
   hace cumplir el MOTOR (409); la pantalla usa `diferenciaDeCambio`, la MISMA cuenta. ⚠️ La diferencia se cobra
   sin el descuento de la forma de pago y la transferencia ⛔ se espera: los decide Bruno.
+- 🔑 **`erp › Caja › Factura` = la factura A PEDIDO** (`FacturaCaja.tsx`, 14-oct): busca la venta propia y saca UNA
+  factura B (sin identificar, DNI o CUIT) o A (CUIT + inscripta/monotributista) por el MISMO `facturarLote` de la
+  masiva (`facturarVentaPropia` en `api/_erp.js`, núcleo en `lib/erp/factura.core.js`). 🔴 **`facturas.venta_id` =
+  la venta de GN si la refleja una** (`detalle.gn_sale_id`), si no el uuid del motor: con la misma clave, ni la
+  Caja ni la masiva facturan dos veces la misma venta. Con CAE se ata en el motor (`venta_factura`); pedirla de
+  nuevo devuelve la MISMA (para el PDF). Frena: GN ya la facturó (`ventas_factura_gn`), anulada, cambio, y 🔴 una
+  venta de PRUEBA en producción (hasta el corte la factura real sale de GN). «Facturas del monitor» lee los
+  renglones de una venta propia de `venta_ficha` (la clave ⛔ es numérica).
 - 🔴 **Homologación por defecto.** Facturas reales sólo con `ARCA_AMBIENTE=produccion` **y**
   `ARCA_PRODUCCION_HABILITADA=si` (las pone Bruno), y con `ARCA_PTOVTA_BDI`/`_ZATTIA` cargados: en
   producción ⛔ hay punto de venta por defecto, y los de GN (00002 BDI, 00005 Zattia) se rechazan —dos
@@ -85,5 +93,5 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
 
 ## Pendiente
 
-Factura A · nota de crédito desde la pantalla · los datos del emisor para el PDF · facturar desde la Caja · reabrir un mes ·
+Factura A en la masiva (en la Caja ya está) · nota de crédito desde la pantalla · los datos del emisor para el PDF · facturar un CAMBIO (NC + factura nueva) · reabrir un mes ·
 en producción: certificado, PV nuevos (contador) y las dos variables.

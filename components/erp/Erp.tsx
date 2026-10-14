@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { SectionCard, Tabs, space } from '@/components/ui'
 import { CambioCaja } from './CambioCaja'
+import { FacturaCaja } from './FacturaCaja'
 import { Facturacion } from './Facturacion'
 import { StockPrenda, type PrendaPedida } from './StockPrenda'
 import { DiferenciasDia } from './DiferenciasDia'
@@ -22,6 +23,7 @@ const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock'
 export function Erp() {
   const [pestania, setPestania] = useState('facturacion')
   const [prenda, setPrenda] = useState<PrendaPedida | null>(null)
+  const [enCaja, setEnCaja] = useState('cambio')
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard title="ERP" subtitle="En construcción: lo que va a reemplazar a Gestión Nube. Lo ven sólo los administradores.">
@@ -33,7 +35,12 @@ export function Erp() {
       {pestania === 'precios' && <PreciosProducto />}
       {pestania === 'diferencias' && <DiferenciasDia abrirPrenda={(p) => { setPrenda(p); setPestania('stock') }} />}
       {pestania === 'ventas' && <VentasPropias />}
-      {pestania === 'caja' && <CambioCaja />}
+      {pestania === 'caja' && (
+        <>
+          <Tabs items={EN_CAJA} value={enCaja} onChange={setEnCaja} />
+          {enCaja === 'cambio' ? <CambioCaja /> : <FacturaCaja />}
+        </>
+      )}
     </div>
   )
 }

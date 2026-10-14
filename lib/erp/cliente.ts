@@ -183,3 +183,8 @@ export const cambiarVenta = (marca: MarcaErp, c: {
   pagos: Array<{ cuenta: number; base?: number }>; total: number; desde?: string | null; pago?: string | null; comprobante?: string | null; cliente?: ClienteCambio | null; saldo?: number
 }) =>
   pedir<RespuestaCambio>(post({ accion: 'cambiar', marca, ...c }), '', 'No se pudo registrar el cambio.')
+
+/** La factura a pedido de una venta propia (`erp › Caja`). B sin documento = consumidor final sin identificar. */
+export type PedidoFactura = { ventaId: string; clase: 'A' | 'B'; doc?: string; condicion?: 'ri' | 'monotributo' }
+export const facturarVenta = (marca: MarcaErp, p: PedidoFactura) =>
+  pedir<{ ok: true; yaEstaba: boolean; factura: FacturaEmitida }>(post({ accion: 'facturar-venta', marca, ...p }), '', 'No se pudo facturar.')

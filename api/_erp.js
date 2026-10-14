@@ -24,6 +24,8 @@
  *   POST {recurso:'erp', accion:'cambiar', marca, id, ventaId, devueltas, items, pagos, total, desde?, pago?, comprobante?, cliente?}
  *        el cambio en el local: cobra la diferencia con el descuento de la forma de pago y, con transferencia,
  *        contesta `esperando` hasta que llega el pago (la pantalla repite el MISMO pedido)
+ *   POST {recurso:'erp', accion:'facturar-venta', marca, ventaId, clase:'A'|'B', doc?, condicion?}
+ *        la factura A PEDIDO de una venta propia (la Caja): una, con su CAE, y atada a la venta en el motor
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
  * Contra qué ARCA se factura lo decide `ambienteDeEntorno` (homologación por defecto).
@@ -45,6 +47,7 @@ import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { MENSAJE_ERROR_MOTOR, armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
+import { claveDeFactura, leerFacturar, mesDeVenta, puedeFacturar, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
@@ -210,6 +213,18 @@ export function ajustesDeVenta(v) {
   return r
 }
 
+/** Número y renglones de las ventas PROPIAS facturadas (por su uuid), de `venta_ficha`. */
+async function renglonesPropios(b, marca, ids, { numeros, detalles }) {
+  const fichas = await leerTodo(b, 'venta_ficha', (q) => q.select('id, numero, total, lineas, detalle').in('id', ids))
+  const productos = [...new Set(fichas.flatMap((f) => (f.lineas || []).map((l) => l.product_id)))]
+  const inv = productos.length ? await leerTodo(b, 'inventario', (q) => q.select('product_id, size_id, product_name, size_name').in('product_id', productos)) : []
+  const nombres = new Map(inv.map((x) => [`${x.product_id}/${x.size_id}`, { nombre: x.product_name, talle: x.size_name }]))
+  for (const f of fichas) {
+    numeros.set(claveVenta(marca, f.id), String(f.detalle?.gn_number ?? f.numero))
+    detalles.set(claveVenta(marca, f.id), renglonesDeVenta(f, nombres))
+  }
+}
+
 export async function facturasDelMes(mes) {
   const { ambiente, error } = ambienteSeguro()
   if (!ambiente) return { status: 409, error }
@@ -219,10 +234,14 @@ export async function facturasDelMes(mes) {
     .eq('ambiente', ambiente).eq('mes', mes).eq('estado', 'autorizada').order('creado_en'))
   const numeros = new Map(), detalles = new Map()
   for (const marca of MARCAS) {
-    const ids = [...new Set(facturas.filter((f) => f.marca === marca).map((f) => f.venta_id))]
-    if (!ids.length) continue
+    const todas = [...new Set(facturas.filter((f) => f.marca === marca).map((f) => f.venta_id))]
+    if (!todas.length) continue
     const { url, key } = cfgDeMarca(marca)
     const b = createClient(url, key)
+    // Las de una venta propia sin venta de GN (la factura a pedido de la Caja) van por el uuid del motor.
+    const ids = todas.filter((id) => /^\d+$/.test(id))
+    const propias = todas.filter((id) => !/^\d+$/.test(id))
+    if (propias.length) await renglonesPropios(b, marca, propias, { numeros, detalles })
     for (let i = 0; i < ids.length; i += 300) {
       const tanda = ids.slice(i, i + 300)
       const { data, error: e } = await b.from('ventas').select('id, number, discount, shipping_cost').in('id', tanda)
@@ -471,6 +490,86 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
     if (!r.ok) return errorDelMotor(r)
     return { ok: true, venta: r.venta, total: cobrado.total, aFavor: r.a_favor, saldo: r.saldo ?? null, ncPendiente: r.nc_pendiente, yaExistia: !!r.ya_existia }
   })
+}
+
+/**
+ * La factura A PEDIDO de una venta propia (`erp › Caja`): una sola, con su CAE, por el MISMO `facturarLote` que
+ * la masiva (candado, reserva del número, corte resuelto consultando a ARCA). La clave en `facturas` es la venta
+ * de GN si la refleja una (`claveDeFactura`): así ninguna de las dos puertas factura dos veces la misma venta.
+ * Con CAE, el motor la ata a la venta (`venta_factura`). Si esa fila ⛔ se pudo escribir, la próxima vez que se
+ * pide la MISMA factura se ata y se devuelve (⛔ sale otra: el lote la ve facturada).
+ * 🔴 Una venta de prueba ⛔ se factura en producción (`puedeFacturar`).
+ */
+export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const p = leerFacturar(body)
+  if (p.error) return { status: 400, error: p.error }
+  const { ambiente, error: errorAmbiente } = ambienteSeguro()
+  if (!ambiente) return { status: 409, error: errorAmbiente }
+  const b = deps.b || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
+  const sb = deps.sb || (deps.repo ? null : baseFacturacion())
+  const repo = deps.repo || repoFacturas(sb)
+  const buscar = deps.buscarFactura || ((clave) => facturaDeClave(sb, { ambiente, marca, clave }))
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'La factura desde la Caja', fn)
+
+  return correr(async (db) => {
+    const [f] = (await db.query('select * from venta_ficha where id = $1', [p.ventaId])).rows
+    const clave = f ? claveDeFactura(f) : null
+    const ya = f ? await buscar(clave) : null
+    const frena = puedeFacturar(f, { ambiente, facturada: (f?.facturas || []).some((x) => x.tipo === 'factura') })
+    if (frena && !(ya && frena === 'La venta ya tiene factura.')) return { status: f ? 409 : 404, error: frena }
+    if (!ya && clave !== String(f.id)) {
+      // La factura que GN ya le hizo (la cajera la facturó en el POS de GN) también cuenta.
+      const gn = await b.from('ventas_factura_gn').select('venta_id').eq('venta_id', clave).limit(1)
+      if (gn.error) throw new Error(`ventas_factura_gn: ${gn.error.message}`)
+      if (gn.data.length) return { status: 409, error: 'Esa venta ya está facturada en GN.' }
+    }
+
+    let factura = ya
+    if (!factura) {
+      const ptoVta = ptoVtaDe(ambiente, marca, process.env)
+      const hoy = diaArgentino(Date.now())
+      const arca = deps.arca || clienteArcaDelEntorno(sb).arca
+      const r = await facturarLote({
+        arca, repo, ambiente, marca, ptoVta, tipo: p.tipo,
+        comprobantes: [{ ventaId: clave, mes: mesDeVenta(f.ocurrida_en), tipo: p.tipo, fecha: hoy, total: Number(f.total), receptor: p.receptor }],
+        reglas: { umbralIdentificar: UMBRAL_IDENTIFICAR, hoy },
+        lote: globalThis.crypto.randomUUID(), usuario,
+      })
+      if (r.rechazadas.length) return { status: 409, error: `ARCA la rechazó: ${r.rechazadas[0].motivos.join(' · ')}` }
+      if (r.noSalen.length) {
+        // Facturada entre la lectura y el candado (la masiva u otra caja): se ata la que ya está.
+        factura = await buscar(clave)
+        if (!factura) return { status: 409, error: r.noSalen[0].motivos.join(' · ') }
+      } else factura = r.autorizadas[0]
+    }
+    if (factura.estado !== 'autorizada') return { status: 409, error: 'Esa venta tiene una factura a medio pedir: probá de nuevo en un minuto.' }
+    await db.query(`insert into venta_factura (venta_id, factura_id, tipo) values ($1, $2, 'factura') on conflict do nothing`, [f.id, String(factura.id)])
+    const inv = (f.lineas || []).length
+      ? await b.from('inventario').select('product_id, size_id, product_name, size_name').in('product_id', [...new Set(f.lineas.map((l) => l.product_id))])
+      : { data: [] }
+    if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
+    const nombres = new Map((inv.data || []).map((x) => [`${x.product_id}/${x.size_id}`, { nombre: x.product_name, talle: x.size_name }]))
+    return { ok: true, yaEstaba: !!ya, factura: filaParaPdf(factura, { numero: f.detalle?.gn_number ?? f.numero, renglones: renglonesDeVenta(f, nombres) }) }
+  })
+}
+
+/** La factura (⛔ rechazada) que ya tiene esa clave en `facturas`, o null. */
+async function facturaDeClave(sb, { ambiente, marca, clave }) {
+  const { data, error } = await sb.from('facturas').select('*').eq('ambiente', ambiente).eq('marca', marca).eq('venta_id', clave)
+    .in('tipo', [CBTE.FACTURA_A, CBTE.FACTURA_B]).neq('estado', 'rechazada').order('creado_en').limit(1)
+  if (error) throw new Error(`facturas: ${error.message}`)
+  return data[0] || null
+}
+
+/** Una fila de `facturas` con la forma de `FacturaEmitida` (el PDF). */
+function filaParaPdf(f, { numero, renglones }) {
+  return {
+    id: f.id, ambiente: f.ambiente, marca: f.marca, venta_id: f.venta_id, tipo: Number(f.tipo), pto_vta: Number(f.pto_vta),
+    numero: Number(f.numero), fecha: f.fecha, total: Number(f.total), neto: Number(f.neto), iva: Number(f.iva),
+    doc_tipo: Number(f.doc_tipo), doc_nro: Number(f.doc_nro), cond_iva: Number(f.cond_iva), estado: f.estado, cae: f.cae, cae_vence: f.cae_vence,
+    venta_numero: numero != null ? String(numero) : null, renglones,
+  }
 }
 
 /** Cuánto atrás puede empezar la espera de un cambio (la pantalla manda cuándo empezó). */
@@ -753,7 +852,12 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
-        if (body.accion === 'facturar') {
+    if (body.accion === 'facturar-venta') {
+      const r = await facturarVentaPropia({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (body.accion === 'facturar') {
       const r = await facturarVentas({ mes, marca: String(body.marca || ''), ventaIds: body.ventaIds, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
