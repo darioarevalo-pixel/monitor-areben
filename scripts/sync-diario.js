@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { leerEstado, guardarEstado } from './lib/sync-state.mjs';
-import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './lib/purga-ventas.mjs';
+import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles, respaldoEnTabla } from './lib/purga-ventas.mjs';
 import { anotarAnuladasDelRegistro } from './lib/registro-anuladas.mjs';
 import { anotarAnuladasDeCaja } from '../lib/caja/anuladas.js';
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
@@ -293,8 +293,11 @@ async function syncVentas(fromDate) {
   // Purga DESPUÉS del upsert, nunca antes: si una venta cambió de fecha en GN, mirarla
   // antes la mostraría con la fecha vieja y la borraríamos por "desaparecida".
   try {
-    totales.ventasBorradas   = await purgarVentas(supabase, idsGN, repasoDesde, today);
-    totales.detallesBorrados = await purgarDetalles(supabase, detallesPorVenta);
+    // Lo que se borra queda en `ventas_purgadas`: el libro de stock anula con eso las ventas de antes de su apertura.
+    const respaldo = respaldoEnTabla(supabase);
+    totales.ventasBorradas   = await purgarVentas(supabase, idsGN, repasoDesde, today, { respaldo });
+    totales.detallesBorrados = await purgarDetalles(supabase, detallesPorVenta, { respaldo });
+    if (respaldo.sinTabla) problemas.push('purga sin respaldo: falta correr sql/migrate-ventas-purgadas.sql en esta base');
   } catch (e) {
     console.warn(`[ventas] purga omitida por error: ${e.message}`);
     problemas.push(`purga de ventas: ${e.message}`);

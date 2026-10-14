@@ -204,3 +204,46 @@ export async function purgarDetalles(supabase, detallesPorVenta, { topePorc = 0.
   console.log(`[ventas] purga de renglones: ${borrados} producto(s) sacados de ventas → borrados del espejo.`)
   return borrados
 }
+
+/**
+ * El respaldo del sync diario: lo que la purga borra queda en `ventas_purgadas` (14-oct-2026,
+ * `sql/migrate-ventas-purgadas.sql`). Una venta va con sus renglones (la FK los borra en cascada, así
+ * que se leen ANTES); un renglón suelto, con su `sale_id`. Es lo que el libro de stock (`areben-motor`,
+ * fuente `gn_borrada`) usa para anular una venta de GN ANTERIOR a su apertura, que nunca tuvo.
+ *
+ * Sin la tabla (la migración no corrió en esta base) la purga sigue como antes y `sinTabla` queda en
+ * true, para que el sync lo avise. Cualquier otro error tira ⇒ la purga ⛔ borra (lo dice `respaldar`).
+ */
+export function respaldoEnTabla(supabase) {
+  const fn = async (tabla, filas) => {
+    if (fn.sinTabla || !filas.length) return
+    let aGuardar
+    if (tabla === 'ventas') {
+      const ids = filas.map((v) => v.id)
+      const detalles = []
+      for (let i = 0; i < ids.length; i += 200) {
+        const lote = ids.slice(i, i + 200)
+        detalles.push(...await leerPaginado((a, b) =>
+          supabase.from('venta_detalles').select('*').in('sale_id', lote).order('id').range(a, b)
+        ))
+      }
+      const porVenta = new Map()
+      for (const d of detalles) {
+        if (!porVenta.has(d.sale_id)) porVenta.set(d.sale_id, [])
+        porVenta.get(d.sale_id).push(d)
+      }
+      aGuardar = filas.map((v) => ({ tabla, venta_id: v.id, fila: v, detalles: porVenta.get(v.id) ?? [] }))
+    } else {
+      aGuardar = filas.map((d) => ({ tabla, venta_id: d.sale_id, fila: d, detalles: null }))
+    }
+    for (let i = 0; i < aGuardar.length; i += 500) {
+      const { error } = await supabase.from('ventas_purgadas').insert(aGuardar.slice(i, i + 500))
+      if (error && (error.code === '42P01' || error.code === 'PGRST205')) { fn.sinTabla = true; return }
+      if (error) throw new Error(`no se pudo guardar en ventas_purgadas: ${error.message}`)
+    }
+    fn.guardadas = (fn.guardadas || 0) + aGuardar.length
+  }
+  fn.sinTabla = false
+  fn.guardadas = 0
+  return fn
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { purgarVentas, purgarDetalles, fechaDesdeRepaso } from '../scripts/lib/purga-ventas.mjs'
+import { purgarVentas, purgarDetalles, fechaDesdeRepaso, respaldoEnTabla } from '../scripts/lib/purga-ventas.mjs'
 
 /**
  * La purga del espejo de ventas. Lo que se prueba es lo que el bug rompía —una venta
@@ -16,10 +16,12 @@ type FilaDetalle = { id: number; sale_id: number }
  * sin tipos, así que `any` acá es fiel: no hay contrato de TS que romper.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mock(ventas: FilaVenta[], detalles: FilaDetalle[] = []): any {
-  const tablas: Record<string, { id: number; date_sale?: string; sale_id?: number }[]> = {
+function mock(ventas: FilaVenta[], detalles: FilaDetalle[] = [], { conPurgadas = false } = {}): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tablas: Record<string, any[]> = {
     ventas: [...ventas],
     venta_detalles: [...detalles],
+    ...(conPurgadas ? { ventas_purgadas: [] } : {}),
   }
   return {
     tablas,
@@ -28,6 +30,12 @@ function mock(ventas: FilaVenta[], detalles: FilaDetalle[] = []): any {
       let borrando = false
       const api = {
         select() { return api },
+        // Sin la tabla, lo que contesta PostgREST cuando la migración no corrió.
+        insert(nuevas: unknown[]) {
+          if (!tablas[tabla]) return Promise.resolve({ error: { code: 'PGRST205', message: `no existe ${tabla}` } })
+          tablas[tabla].push(...nuevas)
+          return Promise.resolve({ error: null })
+        },
         delete() { borrando = true; return api },
         gte(col: string, val: string) { filas = filas.filter(f => String(f[col as 'date_sale']) >= val); return api },
         lte(col: string, val: string) { filas = filas.filter(f => String(f[col as 'date_sale']) <= val); return api },
@@ -246,5 +254,46 @@ describe('fechaDesdeRepaso', () => {
   it('cuenta los días hacia atrás en formato YYYY-MM-DD', () => {
     expect(fechaDesdeRepaso(90, new Date('2026-07-29T03:00:00Z'))).toBe('2026-04-30')
     expect(fechaDesdeRepaso(1, new Date('2026-01-01T03:00:00Z'))).toBe('2025-12-31')
+  })
+})
+
+describe('respaldoEnTabla (ventas_purgadas, para el libro de stock)', () => {
+  it('la venta purgada queda guardada CON sus renglones, leídos antes de que la cascada los borre', async () => {
+    const sb = mock(
+      [{ id: 1, date_sale: '2026-07-01' }, { id: 2, date_sale: '2026-07-02' }],
+      [{ id: 10, sale_id: 1 }, { id: 20, sale_id: 2 }, { id: 21, sale_id: 2 }],
+      { conPurgadas: true },
+    )
+    const respaldo = respaldoEnTabla(sb)
+    expect(await purgarVentas(sb, new Set([1]), '2026-06-01', '2026-07-31', { respaldo })).toBe(1)
+
+    expect(sb.tablas.ventas_purgadas).toHaveLength(1)
+    const [g] = sb.tablas.ventas_purgadas
+    expect(g).toMatchObject({ tabla: 'ventas', venta_id: 2, fila: { id: 2, date_sale: '2026-07-02' } })
+    expect(g.detalles.map((d: FilaDetalle) => d.id)).toEqual([20, 21])
+    expect(sb.tablas.venta_detalles.map((d: FilaDetalle) => d.id)).toEqual([10])
+    expect(respaldo.sinTabla).toBe(false)
+  })
+
+  it('el renglón sacado de una venta viva queda guardado con su venta', async () => {
+    const sb = mock([{ id: 1, date_sale: '2026-07-01' }], [{ id: 10, sale_id: 1 }, { id: 11, sale_id: 1 }], { conPurgadas: true })
+    const respaldo = respaldoEnTabla(sb)
+    await purgarDetalles(sb, new Map([[1, new Set([10])]]), { respaldo })
+
+    expect(sb.tablas.ventas_purgadas).toEqual([{ tabla: 'venta_detalles', venta_id: 1, fila: { id: 11, sale_id: 1 }, detalles: null }])
+  })
+
+  it('sin la tabla (migración sin correr) la purga sigue como antes y lo avisa', async () => {
+    const sb = mock([{ id: 1, date_sale: '2026-07-01' }, { id: 2, date_sale: '2026-07-02' }])
+    const respaldo = respaldoEnTabla(sb)
+    expect(await purgarVentas(sb, new Set([1]), '2026-06-01', '2026-07-31', { respaldo })).toBe(1)
+    expect(respaldo.sinTabla).toBe(true)
+  })
+
+  it('si guardar falla por otra cosa, la purga ⛔ borra: lo borrado ya no existe en GN', async () => {
+    const sb = mock([{ id: 1, date_sale: '2026-07-01' }, { id: 2, date_sale: '2026-07-02' }], [], { conPurgadas: true })
+    const roto = Object.assign(async () => { throw new Error('se cayó la base') }, { sinTabla: false })
+    await expect(purgarVentas(sb, new Set([1]), '2026-06-01', '2026-07-31', { respaldo: roto })).rejects.toThrow('se cayó')
+    expect(sb.tablas.ventas).toHaveLength(2)
   })
 })
