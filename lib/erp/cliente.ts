@@ -60,3 +60,23 @@ export const facturar = (mes: string, marca: MarcaErp, ventaIds: string[]) =>
 
 export const cerrarMes = (mes: string) =>
   pedir<{ ok: true; techo: number }>(post({ accion: 'cerrar', mes }), '', 'No se pudo cerrar el mes.')
+
+export type PrendaEncontrada = { producto: string; talle: string; nombre: string | null; talleNombre: string | null; sku: string | null; barcode: string | null; gn: number }
+
+export type MovimientoLibro = {
+  id: string; deposito: string; cantidad: number; saldo: number; tipo: string; origen: string
+  origen_ref: string; ocurrido_en: string; linea: string; detalle: Record<string, unknown> | null
+}
+
+export type StockDePrenda = {
+  prenda: Omit<PrendaEncontrada, 'gn'>
+  depositos: Array<{ deposito: string; libro: number; gn: number | null; diferencia: number | null }>
+  historial: MovimientoLibro[]
+  sinDeposito: string[]
+}
+
+export const buscarPrendas = (marca: MarcaErp, q: string) =>
+  pedir<{ variantes: PrendaEncontrada[]; cortado: boolean }>(null, `&vista=stock&marca=${marca}&q=${encodeURIComponent(q)}`, 'No se pudo buscar.')
+
+export const leerStockDePrenda = (marca: MarcaErp, producto: string, talle: string) =>
+  pedir<StockDePrenda>(null, `&vista=stock&marca=${marca}&producto=${producto}&talle=${talle}&nc=${Date.now()}`, 'No se pudo leer el stock de la prenda.')

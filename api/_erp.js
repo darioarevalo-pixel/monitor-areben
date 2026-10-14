@@ -10,6 +10,8 @@
  *   GET  ?recurso=erp&vista=facturas&mes=YYYY-MM      las facturas del monitor del mes (para el PDF)
  *   POST {recurso:'erp', accion:'facturar', mes, marca, ventaIds}   factura esas ventas (un lote)
  *   POST {recurso:'erp', accion:'cerrar', mes}                      congela el techo del mes
+ *   GET  ?recurso=erp&vista=stock&marca=bdi|zattia&q=texto            busca prendas (SKU, código, nombre)
+ *   GET  ?recurso=erp&vista=stock&marca=…&producto=ID&talle=ID       el libro y GN de esa prenda, con historial
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
  * Contra qué ARCA se factura lo decide `ambienteDeEntorno` (homologación por defecto).
@@ -25,6 +27,7 @@ import { techoDelMes } from '../lib/arca/techo.core.js'
 import { claveVenta, resumenDelMes, ventasParaFacturar } from '../lib/arca/mes.core.js'
 import { POR_PEDIDO, facturarLote } from '../lib/arca/lote.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
+import { stockDeVariante } from '../lib/erp/stock.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -193,6 +196,47 @@ export async function facturasDelMes(mes) {
   }
 }
 
+/**
+ * Stock e historial de una prenda (sólo lectura). Sin `producto`: busca en el espejo de GN
+ * (`inventario`) por SKU, código de barras o nombre. Con `producto` y `talle`: lo que dice el libro
+ * (`stock_movimiento`, cada fila) y lo que dice GN ahora, por depósito.
+ */
+export async function stockDePrenda({ marca, q, producto, talle }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const { url, key } = cfgDeMarca(marca)
+  const b = createClient(url, key)
+  if (!producto) {
+    const t = String(q || '').trim()
+    if (t.length < 3) return { status: 400, error: 'Escribí al menos 3 letras o números.' }
+    const like = `%${t.replace(/[%_,()]/g, ' ')}%`
+    const { data, error } = await b.from('inventario')
+      .select('product_id, product_name, size_id, size_name, sku, barcode, store_name, available_quantity')
+      .or(`sku.ilike.${like},barcode.eq.${t.replace(/[,()]/g, '')},product_name.ilike.${like}`)
+      .order('product_name').order('size_name').limit(400)
+    if (error) throw new Error(`inventario: ${error.message}`)
+    const porVariante = new Map()
+    for (const r of data) {
+      const k = `${r.product_id}/${r.size_id}`
+      const v = porVariante.get(k) || { producto: String(r.product_id), talle: String(r.size_id), nombre: r.product_name, talleNombre: r.size_name, sku: r.sku, barcode: r.barcode, gn: 0 }
+      v.gn += Number(r.available_quantity || 0)
+      porVariante.set(k, v)
+    }
+    return { variantes: [...porVariante.values()].slice(0, 60), cortado: porVariante.size > 60 }
+  }
+  if (!/^\d+$/.test(String(producto)) || !/^\d+$/.test(String(talle))) return { status: 400, error: 'Prenda inválida' }
+  const [movs, gn] = await Promise.all([
+    leerTodo(b, 'stock_movimiento', (x) => x.select('id, deposito, cantidad, tipo, origen, origen_ref, ocurrido_en, linea, detalle')
+      .eq('product_id', producto).eq('size_id', talle).order('id')),
+    b.from('inventario').select('product_name, size_name, sku, barcode, store_name, available_quantity').eq('product_id', producto).eq('size_id', talle),
+  ])
+  if (gn.error) throw new Error(`inventario: ${gn.error.message}`)
+  const f = gn.data[0] || {}
+  return {
+    prenda: { producto: String(producto), talle: String(talle), nombre: f.product_name ?? null, talleNombre: f.size_name ?? null, sku: f.sku ?? null, barcode: f.barcode ?? null },
+    ...stockDeVariante({ marca, movimientos: movs, gn: gn.data }),
+  }
+}
+
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res)
   if (!perfil) return
@@ -204,6 +248,11 @@ export default async function handler(req, res) {
   if (!/^\d{4}-\d{2}$/.test(mes)) return res.status(400).json({ error: 'Mes inválido' })
 
   try {
+    if (req.method === 'GET' && req.query.vista === 'stock') {
+      const r = await stockDePrenda({ marca: String(req.query.marca || ''), q: req.query.q, producto: req.query.producto, talle: req.query.talle })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
     if (req.method === 'GET' && req.query.vista === 'facturas') {
       const r = await facturasDelMes(mes)
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)

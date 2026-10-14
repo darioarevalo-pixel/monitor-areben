@@ -10,8 +10,9 @@
 import { useState } from 'react'
 import { SectionCard, Tabs, space } from '@/components/ui'
 import { Facturacion } from './Facturacion'
+import { StockPrenda } from './StockPrenda'
 
-const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }]
+const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }]
 
 export function Erp() {
   const [pestania, setPestania] = useState('facturacion')
@@ -21,6 +22,7 @@ export function Erp() {
         <Tabs items={PESTANIAS} value={pestania} onChange={setPestania} />
       </SectionCard>
       {pestania === 'facturacion' && <Facturacion />}
+      {pestania === 'stock' && <StockPrenda />}
     </div>
   )
 }

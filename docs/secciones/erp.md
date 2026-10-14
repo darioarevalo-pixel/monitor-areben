@@ -5,7 +5,13 @@ menú y `esAdmin` en el handler. Bruno, 12-oct-2026: todo lo que el monitor cons
 acá, en pestañas, mientras dura el desarrollo —lo ven él y Darío, prueban y opinan—; cuando reemplace
 a GN se reparte en las secciones de siempre. Plan y mediciones del ERP: `~/Documents/erp-monitor/`.
 
-Hoy, una pestaña: **Facturación** (F5 del plan): el tope del mes, lo ya facturado y las ventas sin
+**Stock** (14-oct, sólo lectura): busca una prenda por SKU, código o nombre y muestra lo que dice el
+**libro de stock** (`stock_movimiento`, lo escribe `areben-libro-stock` una vez por día) por depósito al
+lado de GN (`inventario`), y cada movimiento con el saldo después. GN ⛔ tiene historial: ésta lo
+reemplaza. Núcleo puro en `lib/erp/stock.core.js` (`tests/erp-stock.test.ts`). 🔴 El libro es
+inmutable: el nivel es la SUMA de los movimientos; la pantalla ⛔ escribe nada.
+
+Y **Facturación** (F5 del plan): el tope del mes, lo ya facturado y las ventas sin
 factura, que se facturan con ARCA (ex AFIP) por web service. Reemplaza la facturación masiva de GN
 y el «Pendiente de facturar» del dashboard de Darío.
 
