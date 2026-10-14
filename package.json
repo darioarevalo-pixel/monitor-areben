@@ -13,7 +13,8 @@
     "lint": "eslint --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "fixture-etl": "node scripts/fixture-etl.mjs"
+    "fixture-etl": "node scripts/fixture-etl.mjs",
+    "traer-motor": "node scripts/traer-motor.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",

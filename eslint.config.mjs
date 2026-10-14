@@ -50,6 +50,9 @@ const config = [
       // `--max-warnings 0` se pone rojo apenas alguien pide cobertura una vez.
       'coverage/**',
       'next-env.d.ts',
+      // Copia de `areben-motor` (`scripts/traer-motor.mjs`): ⛔ se edita acá, la lintea y testea su repo.
+      // Lintearla acá obligaría a editarla, y `tests/motor-copia.test.ts` falla si se edita.
+      'motor/**',
     ],
   },
   ...(Array.isArray(next) ? next : [next]),
