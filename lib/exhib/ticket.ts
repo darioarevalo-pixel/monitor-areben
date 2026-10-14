@@ -11,7 +11,7 @@
  * ⛔ Sin stock ni ventas: al papel va sólo lo que se hace (misma regla que la Reposición).
  */
 
-import { abrirRollo, COLA, M, MIN, W, type Medidor, type OpBase } from '../rollo80'
+import { abrirRollo, COLA, M, MIN, W, type Medidor, type OpBase, type Pagina } from '../rollo80'
 import { imprimirPdf } from '../etiquetas/pdf'
 import { selloDeImpresion } from '../envios/recibo'
 import type { Duplicada, Pendiente } from './reporte'
@@ -39,15 +39,31 @@ const C2 = X_CAS2 + CASILLA / 2
 
 export const AVISO_FRONTAL = 'Antes de reponer, verificar los productos en exhibición frontal. Si figuran en esta lista, marcar Exhibición frontal'
 
+/**
+ * 🔴 **El largo máximo de cada papel.** El 14-oct-2026 se chequeó el local entero y la Epson imprimió
+ * sólo el principio (hasta «Remera Bell»): el PDF era UNA hoja de más de un metro y la impresora
+ * tiene un largo máximo de hoja (el de fábrica es 297 mm); lo que pasa de ahí lo tira sin avisar.
+ * Por eso el ticket sale en partes de hasta este largo, cortadas siempre entre renglones, y cada
+ * parte dice «parte N de T».
+ */
+export const ALTO_MAX = 250
+/** Lo más alto que puede ocupar un renglón (SKU + nombre en dos renglones + variante): no se parte. */
+const RENGLON_MAX = 20
+
 /** La variante tal como se lee en el papel: «Variante Única» ⛔ dice nada. */
 function varianteDe(v: string): string {
   return v && v !== 'Variante Única' ? v : ''
 }
 
 /** Dónde va cada cosa y cuánto mide el papel, sin jsPDF (testeable). */
-export function armarTicket(pendientes: Pendiente[], duplicadas: Duplicada[], ahoraMs: number, partir: Medidor): { ops: Op[]; alto: number } {
-  const ops: Op[] = []
+export function armarTicket(pendientes: Pendiente[], duplicadas: Duplicada[], ahoraMs: number, partir: Medidor): Pagina<OpCasilla | OpColumna | OpProducto>[] {
+  const paginas: { ops: Op[]; alto: number }[] = []
+  let ops: Op[] = []
   let y = M
+  /** El título de la lista en curso, para repetirlo arriba de la parte siguiente. */
+  let seccion: Parameters<typeof titulos>[0] | null = null
+  /** El renglón «Parte N de T» de cada parte: el total se sabe al final. */
+  const partes: { txt: string }[] = []
 
   const escribir = (txt: string, tam: number, bold: boolean, gris?: number) => {
     for (const l of partir(txt, tam, bold)) {
@@ -61,8 +77,10 @@ export function armarTicket(pendientes: Pendiente[], duplicadas: Duplicada[], ah
     y += 2.5
   }
   /** El título de la lista en su renglón y abajo los de las columnas: el de cada casilla, en dos renglones. */
-  const titulos = (titulo: string, cas1: [string, string], cas2: [string, string]) => {
-    escribir(titulo, 11, true)
+  function titulos(t: { titulo: string; cas1: [string, string]; cas2: [string, string] }, sigue = false) {
+    const { cas1, cas2 } = t
+    seccion = t
+    escribir(sigue ? `${t.titulo.replace(/ \(\d+\)$/, '')} (sigue)` : t.titulo, 11, true)
     y += 0.8
     ops.push({ k: 'txt', txt: 'SKU · Producto', y: y + 2.4, tam: 7, bold: true, align: 'izq', gris: 90 })
     for (const [x, [a, b]] of [[C1, cas1], [C2, cas2]] as const) {
@@ -72,9 +90,34 @@ export function armarTicket(pendientes: Pendiente[], duplicadas: Duplicada[], ah
     }
     y += 6.2
   }
+  /** Cierra la parte y abre la siguiente, con su encabezado y el título de la lista en curso. */
+  const nuevaParte = () => {
+    y += 1.5
+    escribir('Sigue en el próximo papel.', 9, true, 90)
+    paginas.push({ ops, alto: Math.max(MIN, y + COLA) })
+    ops = []
+    y = M
+    encabezadoParte()
+    regla()
+    if (seccion) titulos(seccion, true)
+  }
+  const encabezadoParte = () => {
+    const op = { k: 'txt' as const, txt: '', y, tam: 9, bold: true, align: 'izq' as const }
+    ops.push(op)
+    partes.push(op)
+    y += 9 * 0.38
+  }
+  /** Si lo que viene (`mm`) ⛔ entra en lo que queda de esta parte, abre la siguiente. */
+  const lugar = (mm: number) => {
+    // 5 mm de reserva para el «Sigue en el próximo papel.»
+    if (y + mm > ALTO_MAX - COLA - 5) nuevaParte()
+  }
   /** Un renglón: arriba el SKU (y lo que haga falta al lado) con las dos casillas; abajo el producto. */
   const renglon = (i: number, sku: string, extra: string, nombre: string, variante: string) => {
-    if (i > 0) {
+    const antes = paginas.length
+    lugar(RENGLON_MAX)
+    // El primero de una parte nueva ⛔ lleva regla arriba: ya tiene el título encima.
+    if (i > 0 && paginas.length === antes) {
       y += 0.8
       ops.push({ k: 'regla', y })
       y += 2.4
@@ -95,25 +138,36 @@ export function armarTicket(pendientes: Pendiente[], duplicadas: Duplicada[], ah
 
   escribir('CHEQUEO DE EXHIBICIÓN', 13, true)
   escribir(selloDeImpresion(ahoraMs), 9, false, 90)
+  encabezadoParte()
   y += 0.5
   escribir(`${pendientes.length} pendientes · ${duplicadas.length} duplicadas`, 10, true)
   regla()
 
-  titulos(`Pendiente de exhibición (${pendientes.length})`, ['Exhibido', ''], ['No', 'encontrado'])
+  // El título de una lista ⛔ queda solo al pie de una parte: va con su primer renglón.
+  lugar(15 + RENGLON_MAX)
+  titulos({ titulo: `Pendiente de exhibición (${pendientes.length})`, cas1: ['Exhibido', ''], cas2: ['No', 'encontrado'] })
   if (!pendientes.length) escribir('No hay variantes pendientes.', 9, false, 90)
   pendientes.forEach((p, i) => renglon(i, p.sku, '', p.nombre, p.unaCualquiera ? 'una cualquiera' : varianteDe(p.variante)))
   regla()
 
-  titulos(`Variantes duplicadas (${duplicadas.length})`, ['Retirado', ''], ['Exhibición', 'frontal'])
+  seccion = null
+  lugar(15 + RENGLON_MAX)
+  titulos({ titulo: `Variantes duplicadas (${duplicadas.length})`, cas1: ['Retirado', ''], cas2: ['Exhibición', 'frontal'] })
   if (!duplicadas.length) escribir('No hay variantes duplicadas.', 9, false, 90)
   duplicadas.forEach((d, i) => renglon(i, d.sku, `× ${d.veces}`, d.nombre, varianteDe(d.variante)))
   regla()
 
+  seccion = null
+  lugar(30)
   escribir(AVISO_FRONTAL, 10, true)
   y += 4
   escribir('Hizo: ______________________', 10, false)
 
-  return { ops, alto: Math.max(MIN, y + COLA) }
+  paginas.push({ ops, alto: Math.max(MIN, y + COLA) })
+  // Con una sola parte el renglón queda vacío (⛔ se dibuja nada); con más, dice cuál es.
+  if (paginas.length > 1) partes.forEach((p, i) => (p.txt = `Parte ${i + 1} de ${paginas.length}`))
+  for (const pag of paginas) pag.ops = pag.ops.filter((o) => !(o.k === 'txt' && !o.txt))
+  return paginas
 }
 
 export function pintarTicket(pdf: Pdf, op: OpCasilla | OpColumna | OpProducto): boolean {
@@ -148,7 +202,7 @@ export function pintarTicket(pdf: Pdf, op: OpCasilla | OpColumna | OpProducto): 
 /** Arma el PDF del ticket (para mirarlo o imprimirlo). */
 export async function pdfTicket(pendientes: Pendiente[], duplicadas: Duplicada[], ahoraMs = Date.now()): Promise<Pdf> {
   const rollo = await abrirRollo()
-  return rollo.documento<OpCasilla | OpColumna | OpProducto>([armarTicket(pendientes, duplicadas, ahoraMs, rollo.medir)], pintarTicket)
+  return rollo.documento<OpCasilla | OpColumna | OpProducto>(armarTicket(pendientes, duplicadas, ahoraMs, rollo.medir), pintarTicket)
 }
 
 export async function imprimirTicket(pendientes: Pendiente[], duplicadas: Duplicada[], ahoraMs = Date.now()): Promise<void> {

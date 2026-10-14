@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest'
 import { aEscaneo, sumarUna, type EscaneoLibre } from '../lib/exhib/libre'
 import { esRegular, MIN_TIPO_SIN_ESCANEAR, nuevosDesde, porSku, reporteDelChequeo } from '../lib/exhib/reporte'
-import { armarTicket, AVISO_FRONTAL } from '../lib/exhib/ticket'
+import { ALTO_MAX, armarTicket, AVISO_FRONTAL } from '../lib/exhib/ticket'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
 const variante = (over: Partial<ExhibItem>): ExhibItem => ({
@@ -138,7 +138,8 @@ describe('el ticket de 80 mm', () => {
   const dup = [{ clave: '2', sku: 'RMI-0002-38', nombre: 'MINI Y', variante: '38', veces: 2, lugares: ['Tops'], otrasEnMedio: 3 }]
 
   it('las dos listas con sus casillas y el aviso de los frontales al final, en negrita', () => {
-    const { ops, alto } = armarTicket(pend, dup, T0, partir)
+    const [{ ops, alto }, ...resto] = armarTicket(pend, dup, T0, partir)
+    expect(resto).toHaveLength(0)
     const textos = ops.filter((o) => o.k === 'txt' || o.k === 'col').map((o) => ('txt' in o ? o.txt : ''))
     for (const t of ['Pendiente de exhibición (1)', 'Variantes duplicadas (1)', 'Exhibido', 'No', 'encontrado', 'Retirado', 'Exhibición', 'frontal', 'RMI-0002-38  × 2']) expect(textos).toContain(t)
     // Dos casillas por renglón.
@@ -152,9 +153,41 @@ describe('el ticket de 80 mm', () => {
   })
 
   it('sin nada que hacer lo dice, en vez de dejar la lista vacía', () => {
-    const textos = armarTicket([], [], T0, partir).ops.flatMap((o) => (o.k === 'txt' ? [o.txt] : []))
+    const textos = armarTicket([], [], T0, partir)[0].ops.flatMap((o) => (o.k === 'txt' ? [o.txt] : []))
     expect(textos).toContain('No hay variantes pendientes.')
     expect(textos).toContain('No hay variantes duplicadas.')
+  })
+})
+
+describe('el ticket del local entero (14-oct: la Epson cortó en «Remera Bell»)', () => {
+  const partir = (txt: string) => [txt]
+  const pend = Array.from({ length: 120 }, (_, i) => ({ clave: `p${i}`, sku: `RTO-${String(i).padStart(4, '0')}-BL`, productId: `p${i}`, nombre: `TOP ${i}`, variante: 'BLANCO', enLocal: 1, unaCualquiera: false, nuevo: null }))
+  const dup = Array.from({ length: 40 }, (_, i) => ({ clave: `d${i}`, sku: `RMI-${String(i).padStart(4, '0')}-38`, nombre: `MINI ${i}`, variante: '38', veces: 2, lugares: ['Tops'], otrasEnMedio: 0 }))
+  const paginas = armarTicket(pend, dup, T0, partir)
+  const textos = (o: (typeof paginas)[number]) => o.ops.flatMap((x) => (x.k === 'txt' ? [x.txt] : []))
+
+  it('sale en partes que entran en la impresora, y cada una dice cuál es', () => {
+    expect(paginas.length).toBeGreaterThan(1)
+    for (const p of paginas) expect(p.alto).toBeLessThanOrEqual(ALTO_MAX)
+    paginas.forEach((p, i) => expect(textos(p)).toContain(`Parte ${i + 1} de ${paginas.length}`))
+    for (const p of paginas.slice(0, -1)) expect(textos(p)).toContain('Sigue en el próximo papel.')
+  })
+
+  it('⛔ se pierde ningún renglón, ningún renglón se repite, y cada uno con sus 2 casillas', () => {
+    const skus = paginas.flatMap((p) => textos(p).filter((t) => /^R(TO|MI)-/.test(t)))
+    expect(skus).toEqual([...pend.map((p) => p.sku), ...dup.map((d) => `${d.sku}  × 2`)])
+    expect(paginas.flatMap((p) => p.ops).filter((o) => o.k === 'casilla')).toHaveLength(2 * (pend.length + dup.length))
+  })
+
+  it('la parte que sigue en medio de una lista repite su título; el aviso de los frontales va al final', () => {
+    expect(textos(paginas[1])).toContain('Pendiente de exhibición (sigue)')
+    expect(textos(paginas[paginas.length - 1]).some((t) => AVISO_FRONTAL.startsWith(t.slice(0, 20)))).toBe(true)
+  })
+
+  it('un ticket corto sale en un solo papel y ⛔ dice «Parte 1 de 1»', () => {
+    const corto = armarTicket(pend.slice(0, 3), [], T0, partir)
+    expect(corto).toHaveLength(1)
+    expect(textos(corto[0]).join(' ')).not.toMatch(/Parte|Sigue/)
   })
 })
 
