@@ -42,6 +42,7 @@ import { OFFSET_AR_MS } from '../envios/portal.core.js'
 import { talleVisible } from './ticket-mail.core.js'
 import { MARCA_CAJA } from './marca'
 import { armarSobre, billetesDe } from './conteo.core.js'
+import { codigoCaja } from './core.core.js'
 
 /** `importe` es lo que queda después del descuento a mano de esa prenda (si lo hubo). */
 /** `promos`: las que le tocaron (W5): el descuento del renglón sale con su nombre, ⛔ «Descuento». */
@@ -96,8 +97,8 @@ export function plata(n: number): string {
   return '$' + Math.abs(r).toLocaleString('es-AR', { minimumFractionDigits: conCentavos ? 2 : 0, maximumFractionDigits: 2 })
 }
 
-/** El número provisorio: las primeras 8 letras del id, para buscarla en Pendientes. */
-export const numeroProvisorio = (id: string) => id.replace(/-/g, '').slice(0, 8).toUpperCase()
+/** El número provisorio: el código de la venta en la Caja, el mismo que va en el comentario de GN. */
+export const numeroProvisorio = (id: string): string => codigoCaja(id)
 
 /** Fecha y hora de Argentina, como función pura del instante (mismo offset que el recibo del cadete). */
 export function fechaTicket(ahoraMs: number): string {

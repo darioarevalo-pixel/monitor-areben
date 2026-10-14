@@ -167,6 +167,14 @@ describe('caja · redondeo PARA ARRIBA sin descuento (⛔ alcanzan los billetes 
     expect(totalSegunGN(p)).toBeCloseTo(5000, 6)
   })
 
+  it('el comentario de GN lleva el código de la Caja, el mismo «Provisorio» del ticket (Bruno, 14-oct)', () => {
+    const f = renglones([prenda(4990)])
+    const c = cobro({ filas: f, pagos: [{ cuenta: FERIA_EFECTIVO }], reglas: REGLAS_INICIALES, descuentoVenta: null })
+    const p = armarVentaGN({ filas: f, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: '5c65e1ef-534f-4210-bd89-2d796d72c8dc', fecha: '2026-10-14' })
+    expect(p.comments).toBe('Caja 5C65E1EF')
+    expect(p).not.toHaveProperty('tn_order')
+  })
+
   it('con dos unidades, los pesos de más se reparten y cierran justo', () => {
     // 2 × $4.990 + $2.990 = $12.970 ⇒ $13.000: $30 de más entre tres renglones.
     const f = renglones([prenda(4990, 2), prenda(2990)])
