@@ -76,6 +76,7 @@ import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, dormir, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
+import { limpiarRepetida } from '../lib/caja/repetida.core.js'
 import { armarVentaGN, cobro, exigirCuentas, exigirFeria, cuentaDeOferta, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, normalizarOferta, reglaDeCuenta, renglones, verificaTransferencias } from '../lib/caja/core.core.js'
 import { promosDeCreditoEnMostrador } from '../lib/agenda/promos.core.js'
 import { TOLERANCIA_TRANSFERENCIA, cruzarTransferencia, pagosRecientes, sumarCobros } from '../lib/pagos-recibidos/core.core.js'
@@ -1002,8 +1003,10 @@ export default async function handler(req, res) {
           const promos = conPromo.items[i].promos
           // B5: el precio de la etiqueta cuando la cajera lo cambió (lo manda la pantalla: es para mostrar).
           const lista = Number(it.precioLista)
+          // La prenda repetida (14-oct): qué contestó la cajera al escanearla de nuevo. Queda para revisar después.
+          const repetida = limpiarRepetida(it.repetida)
           const cambiado = Number.isFinite(lista) && lista > 0 && Math.round(lista * 100) !== Math.round(f.precio * 100)
-          return { ...f, nombre: aTexto(it.nombre, 120), talle: aTexto(it.talle, 60), sku: aTexto(it.sku, 80), foto: /^https:\/\//.test(String(it.foto || '')) ? aTexto(it.foto, 500) : null, ...(promos ? { promos } : {}), ...(cambiado ? { precio_lista: lista } : {}) }
+          return { ...f, nombre: aTexto(it.nombre, 120), talle: aTexto(it.talle, 60), sku: aTexto(it.sku, 80), foto: /^https:\/\//.test(String(it.foto || '')) ? aTexto(it.foto, 500) : null, ...(promos ? { promos } : {}), ...(cambiado ? { precio_lista: lista } : {}), ...(repetida ? { repetida } : {}) }
         })
         // 🔑 B5 (Bruno, 11-oct): el descuento a mano y el cambio de precio son LIBRES, pero A LA VISTA: la
         // fila guarda cuánto se rebajó a mano (a la venta, a las prendas, bajando el precio) y el turno lo suma.

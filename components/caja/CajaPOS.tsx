@@ -57,6 +57,7 @@ import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
 import { avisoDeRenglon } from '@/lib/caja/pedidos-web.core.js'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
+import { registrarRespuesta, repetida } from '@/lib/caja/repetida.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { imprimirTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
 import { claveMail, claveVista, leerMail, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
@@ -199,6 +200,14 @@ function POS() {
   }
 
   const [bor, setBor] = useState<Borrador>(() => ({ id: '', renglones: [], email: '' }))
+  // 🔴 La PRENDA REPETIDA (Bruno, 14-oct): cuántas hay de cada prenda, AL INSTANTE. El lector que dispara dos
+  // veces resuelve las dos búsquedas antes de que React pinte: contando sobre `bor` las dos veían «0 en el
+  // pedido» y entraban las dos, calladas. `agregar` suma acá en el momento; cada pintada lo rearma de `bor`.
+  const cantidades = useRef(new Map<string, number>())
+  useEffect(() => {
+    cantidades.current = new Map(bor.renglones.map((r) => [claveDe(r.variante), r.cantidad]))
+  }, [bor.renglones])
+  const [pregunta, setPregunta] = useState<{ variante: Variante; stock: Stock; enPedido: number; quedaria: number; superaStock: boolean } | null>(null)
   // Se lee del aparato al montar, adentro de un async: `localStorage` ⛔ existe en el render del servidor.
   useEffect(() => {
     let vivo = true
@@ -471,6 +480,9 @@ function POS() {
   }, [refrescarPendientes])
 
   function agregar(variante: Variante, stock: Stock) {
+    const k = claveDe(variante)
+    const enCarrito = (cantidades.current.get(k) ?? 0) + 1
+    cantidades.current.set(k, enCarrito)
     setGnSenal(stock.fuente === 'vivo' ? { ok: true, que: 'el stock de la última prenda se leyó en vivo' } : { ok: false, que: `el stock de la última prenda es el de anoche${stock.motivo ? ` (${stock.motivo})` : ''}` })
     setBor((b) => {
       const i = b.renglones.findIndex((r) => claveDe(r.variante) === claveDe(variante))
@@ -482,7 +494,6 @@ function POS() {
       const pf = precioYFoto(variante.product_id)
       return { ...b, renglones: [...b.renglones, { variante, stock, cantidad: 1, rebaja: null, ...pf, precioLista: pf.precio, foto: fotoDe(variante) }] }
     })
-    const enCarrito = (bor.renglones.find((r) => claveDe(r.variante) === claveDe(variante))?.cantidad ?? 0) + 1
     const web = avisoWeb(variante, stock, enCarrito)
     // La Caja ⛔ frena (gana el local, Bruno 4-oct): avisa, y el pedido se resuelve después.
     if (web && web.tipo !== 'separada') {
@@ -490,6 +501,28 @@ function POS() {
       setAviso({ tono: web.tipo === 'sin_stock' ? 'danger' : 'warning', texto: web.texto })
     } else if (stock.local - enCarrito <= 0) avisar('ojo', 'Última')
     else avisar('ok')
+  }
+
+  /**
+   * Una prenda escaneada (o elegida de la lista). Si ya está en el pedido ⛔ se suma: se PREGUNTA (Bruno,
+   * 14-oct, `lib/caja/repetida.core.js`). El «+» del renglón ⛔ pasa por acá: ése es a propósito.
+   */
+  function llego(variante: Variante, stock: Stock) {
+    const rep = repetida({ enPedido: cantidades.current.get(claveDe(variante)) ?? 0, local: stock.local })
+    if (!rep) return agregar(variante, stock)
+    avisar('ojo', 'Ya está en el pedido')
+    // Con una pregunta abierta, la segunda repetida ⛔ abre otra: es la misma duda.
+    setPregunta((p) => p ?? { variante, stock, ...rep })
+  }
+
+  /** Lo que contestó la cajera queda en el renglón (`repetida`) y viaja con la venta. */
+  function responder(si: boolean) {
+    const p = pregunta
+    if (!p) return
+    setPregunta(null)
+    if (si) agregar(p.variante, p.stock)
+    const k = claveDe(p.variante)
+    setBor((b) => ({ ...b, renglones: b.renglones.map((r) => (claveDe(r.variante) === k ? { ...r, repetida: registrarRespuesta(r.repetida, si ? 'si' : 'no') } : r)) }))
   }
 
   async function escanear(texto: string, elegida?: Variante) {
@@ -506,7 +539,7 @@ function POS() {
       if ('candidatos' in r) {
         setCandidatos({ lista: r.candidatos, mas: r.mas ?? 0 })
         avisar('mira')
-      } else agregar(r.variante, r.stock)
+      } else llego(r.variante, r.stock)
     } catch (e) {
       avisar('no')
       setAviso({ tono: 'danger', texto: (e as Error).message })
@@ -800,7 +833,7 @@ function POS() {
       const r = await confirmarVenta({
         id: bor.id,
         // El nombre, el talle y la foto van para el ticket por mail; la plata ⛔ los mira.
-        items: bor.renglones.map((r, i) => ({ ...items[i], nombre: r.variante.product_name, talle: r.variante.size_name, sku: r.variante.sku ?? null, foto: r.foto, precioLista: r.precioLista ?? null })),
+        items: bor.renglones.map((r, i) => ({ ...items[i], nombre: r.variante.product_name, talle: r.variante.size_name, sku: r.variante.sku ?? null, foto: r.foto, precioLista: r.precioLista ?? null, repetida: r.repetida ?? null })),
         pagos: pedidos,
         total: c.total,
         descuentoVenta: descuentoManual,
@@ -1069,6 +1102,36 @@ function POS() {
                 enfocar()
               }}
             />
+          )}
+
+          {/* 🔴 La prenda repetida (Bruno, 14-oct): el foco y el Enter van a «No» — el lector que disparó dos
+              veces manda su Enter acá —, y cerrar con Escape o el fondo también es «No». */}
+          {pregunta && (
+            <Modal
+              abierto
+              onCerrar={() => responder(false)}
+              titulo="Esta prenda ya está en el pedido"
+              pie={
+                <>
+                  <Button variant="outline" onClick={() => responder(true)}>
+                    Sí, se lleva otra
+                  </Button>
+                  <Button variant="solid" tone="brand" onClick={() => responder(false)} data-foco>
+                    No, era la misma
+                  </Button>
+                </>
+              }
+            >
+              <div style={{ display: 'grid', gap: space[3] }}>
+                <div style={{ fontSize: font.lg, fontWeight: weight.semibold }}>
+                  {pregunta.variante.product_name} · {pregunta.variante.size_name}
+                </div>
+                <div>
+                  Ya hay {pregunta.enPedido} en el pedido. ¿La clienta se lleva {pregunta.quedaria} iguales, o se escaneó dos veces la misma?
+                </div>
+                {pregunta.superaStock && <Notice tone="danger">En el local quedan {pregunta.stock.local}: casi seguro es la misma prenda.</Notice>}
+              </div>
+            </Modal>
           )}
 
           {validando && (

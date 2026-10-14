@@ -28,6 +28,16 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
 
 ## Reglas que el código no dice
 
+- 🔴 **LA PRENDA REPETIDA (Bruno, 14-oct)** — en GN se escaneó dos veces la prenda devuelta en un cambio:
+  descontó de más y el stock quedó con +1 que ⛔ existe. Las reglas viven en `lib/caja/repetida.core.js`.
+  **Venta**: escanear (o elegir de la lista) una prenda que ya está ⇒ ⛔ se suma: pregunta «¿se lleva otra?»,
+  con el foco y el Enter en **«No, era la misma»** (el Enter del lector que disparó dos veces cae ahí) y
+  Escape = No. Confirma la cajera con un toque. ⛔ Preguntan el «+» del renglón ni lo que vuelve solo al
+  pedido. Lo contestado queda en `caja_venta.renglones[].repetida` `{ si, no, en }` (⛔ migración).
+  🔴 La cuenta va en un `useRef` que `agregar` suma AL INSTANTE: con `bor`, las dos lecturas del lector
+  veían «0 en el pedido» y entraban las dos. **Cambio** (lo arma la sesión B en `erp › Caja`): con ticket,
+  `exigirDevolucion` **BLOQUEA** devolver más de lo que esa venta vendió, contando cambios anteriores
+  (⛔ se confirma: esa prenda ⛔ viene de esa venta); sin ticket, pregunta con **PIN de encargada**.
 - 🔴 **El dinero se calcula DOS veces con el MISMO núcleo**: la pantalla para mostrarlo, el servidor
   para mandarlo. Si el total que vio la cajera ⛔ coincide ⇒ 409 y ⛔ sale nada a GN.
 - 🔴 **En el `POST /ventas`, `items[].discount` son PESOS; en las ventas del POS de GN, %.** Medido

@@ -57,7 +57,7 @@ export type Resolucion = { tipo: 'a_mano' | 'descartada'; por: string | null; en
 /** B5: lo hecho a mano en la venta, en pesos (a la venta, a las prendas, bajando el precio). */
 export type AMano = { venta: number; prendas: number; precios: number }
 /** Un renglón como quedó guardado: con lo que necesita el ticket. */
-export type RenglonGuardado = { product_id: number; size_id: number; cantidad: number; precio: number; importe?: number; nombre: string | null; talle: string | null; /** Para el logo de la marca (12-oct); las ventas anteriores ⛔ lo tienen. */ sku?: string | null; promos?: string[]; /** B5: el de la etiqueta, si la cajera lo cambió. */ precio_lista?: number }
+export type RenglonGuardado = { product_id: number; size_id: number; cantidad: number; precio: number; importe?: number; nombre: string | null; talle: string | null; /** Para el logo de la marca (12-oct); las ventas anteriores ⛔ lo tienen. */ sku?: string | null; promos?: string[]; /** B5: el de la etiqueta, si la cajera lo cambió. */ precio_lista?: number; /** 14-oct: qué contestó la cajera al escanearla de nuevo. */ repetida?: { si: number; no: number; en: string[] } }
 export type PagoGuardado = { cuenta: number; base: number; rebaja?: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
 export type Venta = {
   id: string
