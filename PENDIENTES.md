@@ -1852,8 +1852,7 @@ nuevo a precio de lista** — que es como está cargado hoy, y conviene que siga
    ⚠️ ⛔ No hizo falta tocar ningún test: `tests/meta-ads-rentabilidad.test.ts` clava la fila de
    **BDI** y los fixtures de «Sin techo» de `memo` y `meta-rendimiento` ⛔ no leen la fila real.
 4. **Decidir la promo del ingreso nuevo**: a lista 3,38× de equilibrio, con −30 % 9,05×.
-5. Sigue abierto de la sección de abajo: el SKU de CAMPERA WEAR (`CAM-0001-*`, ⇒ **para el Monitor es
-   Zattia**), las 10 unidades fantasma y ESSENTIAL $36.990 vs $45.990.
+5. Sigue abierto de la sección de abajo: las 10 unidades fantasma y ESSENTIAL $36.990 vs $45.990.
 
 ---
 
@@ -1890,7 +1889,9 @@ Su SKU es `CAM-0001-{S,M,L,XL}` (así en el `inventario` de GN y así en TN). `e
 (`lib/lineas.core.js`) es `/^stu/i` y **es la única señal que hay**: no existe columna de marca ni
 depósito propio. ⇒ sus **11 unidades** y todo lo que venda se cuentan en la línea Zattia, en las 8
 pantallas que parten por línea y en el conteo `conteo-estandar-stunned`.
-▶️ Se arregla renombrando el SKU en GN a `STU-CAM-0001-*` (y en TN, que es donde lo lee el audit).
+🏁 **14-oct: renombrado a `STU-CAM-0001-*` en GN y en TN.** El mapeo se revalidó con el SKU nuevo (los 4
+`CAM-0001-*` quedaron sin validar), el stock se escribió en TN (S 2 · M 3 · L 4 · XL 1, releído) y
+se sacó `CAM-*` de `FILTRO_OR_STUNNED`.
 
 ### Lo demás que quedó torcido, medido
 

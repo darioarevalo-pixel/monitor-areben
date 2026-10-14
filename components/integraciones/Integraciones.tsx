@@ -35,7 +35,7 @@ import type { MotivoCola, PlanSync, PlanVenta } from '@/lib/sync-tn/tipos'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Badge as BadgeKit, Button, ConfirmDetalle, EmptyState, Esqueleto, Notice, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space, useConfirmar } from '@/components/ui'
 
-// El filtro de qué variantes son de Stunned (`FILTRO_SKU_STUNNED`) y por qué lleva `CAM-` viven en
+// El filtro de qué variantes son de Stunned (`FILTRO_SKU_STUNNED`) vive en
 // `lib/sync-tn/stock-plan.core.js`: lo comparte el cron diario de stock.
 
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
