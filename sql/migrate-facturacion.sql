@@ -65,6 +65,11 @@ create table if not exists facturas (
   check (estado <> 'reservada' or numero is not null)
 );
 
+-- El MES del techo por el que se factura (≠ el de `fecha`: el tope de septiembre se factura a principios de octubre).
+-- Lo usan el lote y el resumen del mes desde b6379d2c, pero ⛔ estaba en este archivo (lo tenía sólo la base de BDI;
+-- hallado el 14-oct al levantar un Postgres local para el oráculo de la factura a pedido). Idempotente en prod.
+alter table facturas add column if not exists mes text;
+
 -- Un número es de UN comprobante (las rechazadas quedan con numero null y no cuentan).
 create unique index if not exists facturas_numero_uq on facturas (ambiente, pto_vta, tipo, numero);
 -- Una venta, una factura; y una nota de crédito. Las rechazadas no cuentan.
