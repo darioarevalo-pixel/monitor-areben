@@ -14,7 +14,7 @@
  * agreguen, pasa a `true` y hereda todo.
  */
 
-import { cobrosDeVentaGN } from '../../lib/arca/techo.core.js'
+import { cobrosDeVentaGN } from '../../motor/arca/techo.core.js'
 
 /** Si llega el mismo id dos veces en un lote, gana la última versión. */
 export function dedupById(arr) {
@@ -180,7 +180,7 @@ export async function guardarVentasBatch(supabase, rawRows, { completo = true } 
 
 /**
  * Los cobros de cada venta (`ventas_cobros`, sql/migrate-ventas-cobros.sql): de ellos sale el techo de
- * facturación del mes (`lib/arca/techo.core.js`).
+ * facturación del mes (`motor/arca/techo.core.js`).
  *
  * ⚠️ Sólo las ventas que trajeron `payments` (el pedido llevó `include_payments=1`). Una que no los
  * trae ⛔ se toca: si no, un pedido sin cobros (la purga histórica) le borraría los que tiene.

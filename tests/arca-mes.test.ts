@@ -3,8 +3,8 @@
  * pueden facturar. Lo que no se ve si falla: facturar dos veces una venta que GN ya facturó.
  */
 import { describe, it, expect } from 'vitest'
-import { claveVenta, proponerLote, resumenDelMes, ventasParaFacturar } from '../lib/arca/mes.core.js'
-import { CBTE } from '../lib/arca/arca.core.js'
+import { claveVenta, proponerLote, resumenDelMes, ventasParaFacturar } from '../motor/arca/mes.core.js'
+import { CBTE } from '../motor/arca/arca.core.js'
 
 const TIPOS = new Map([['Mercado Pago', 'areben'], ['Pago Nube', 'areben'], ['Transferencia', 'propia']])
 const c = (venta_id: number, fecha: string, cuenta: string, monto: number, marca = 'zattia') => ({ marca, venta_id, fecha, cuenta, monto })

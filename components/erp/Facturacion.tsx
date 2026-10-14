@@ -14,9 +14,9 @@ import {
   formatMoney, space, useConfirmar,
 } from '@/components/ui'
 import { cerrarMes, facturar, leerFacturas, leerMes, type MarcaErp, type MesFacturacion, type ResultadoLote, type VentaParaFacturar } from '@/lib/erp/cliente'
-import { proponerLote } from '@/lib/arca/mes.core.js'
+import { proponerLote } from '@/motor/arca/mes.core.js'
 import { descargarFactura, numeroComprobante, type FacturaEmitida } from '@/lib/arca/factura-pdf'
-import { EMISOR, faltanDelEmisor } from '@/lib/arca/emisor.core.js'
+import { EMISOR, faltanDelEmisor } from '@/motor/arca/emisor.core.js'
 
 const MARCAS: Array<{ key: MarcaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'bdi', label: 'BDI' }]
 const mesActual = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 7)

@@ -4,8 +4,8 @@
  * El ARCA falso numera como el de verdad: «el último + 1», sin huecos, y rechaza lo que no sigue.
  */
 import { describe, it, expect } from 'vitest'
-import { facturarLote, resolverPendientes, POR_PEDIDO } from '../lib/arca/lote.core.js'
-import { CBTE, COND_IVA, DOC } from '../lib/arca/arca.core.js'
+import { facturarLote, resolverPendientes, POR_PEDIDO } from '../motor/arca/lote.core.js'
+import { CBTE, COND_IVA, DOC } from '../motor/arca/arca.core.js'
 
 const HOY = '2026-10-12'
 const REGLAS = { umbralIdentificar: 10_000_000, hoy: HOY }

@@ -14,8 +14,8 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { crearClienteArca } from '../api/_arca.js'
-import { CBTE, COND_IVA, CUIT_AREBEN, DOC, numeroVisible, problemasDe, urlQR } from '../lib/arca/arca.core.js'
+import { crearClienteArca } from '../motor/arca/cliente.js'
+import { CBTE, COND_IVA, CUIT_AREBEN, DOC, numeroVisible, problemasDe, urlQR } from '../motor/arca/arca.core.js'
 
 const args = process.argv.slice(2)
 const valor = (f) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : null }

@@ -5,8 +5,8 @@
 import { describe, it, expect } from 'vitest'
 import { jsPDF } from 'jspdf'
 import QR from 'qrcode'
-import { URL_QR, datosQR, urlQR } from '../lib/arca/qr.core.js'
-import { EMISOR, faltanDelEmisor, type Emisor } from '../lib/arca/emisor.core.js'
+import { URL_QR, datosQR, urlQR } from '../motor/arca/qr.core.js'
+import { EMISOR, faltanDelEmisor, type Emisor } from '../motor/arca/emisor.core.js'
 import { armarFacturaPdf, nombreArchivo, numeroComprobante, renglonesDe, type FacturaEmitida } from '../lib/arca/factura-pdf'
 
 const F: FacturaEmitida = {

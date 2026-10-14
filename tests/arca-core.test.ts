@@ -16,8 +16,8 @@ import { join } from 'node:path'
 import {
   ambienteDeEntorno, ptoVtaDe, CBTE, COND_IVA, DOC, cuitValido, desglosarIVA, detalleXml, fechaArca, leerCAE, leerConsulta,
   leerTA, leerUltimo, loteXml, numeroVisible, problemasDe, reconciliar, tags, taVigente, traXml, urlQR,
-} from '../lib/arca/arca.core.js'
-import { firmarTRA } from '../api/_arca.js'
+} from '../motor/arca/arca.core.js'
+import { firmarTRA } from '../motor/arca/cliente.js'
 
 const CF = { docTipo: DOC.SIN_IDENTIFICAR, docNro: 0, condicionIva: COND_IVA.CONSUMIDOR_FINAL }
 const REGLAS = { umbralIdentificar: 10_000_000, hoy: '2026-10-12' }

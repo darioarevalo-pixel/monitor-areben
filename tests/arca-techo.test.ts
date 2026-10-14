@@ -3,7 +3,7 @@
  * contra GN real dio sep-2026 = $29.903.066,32, igual al centavo que el cierre del dashboard (12-oct).
  */
 import { describe, it, expect } from 'vitest'
-import { cobrosDeVentaGN, techoDelMes, ventaCuenta } from '../lib/arca/techo.core.js'
+import { cobrosDeVentaGN, techoDelMes, ventaCuenta } from '../motor/arca/techo.core.js'
 
 const TIPOS = new Map([['Mercado Pago', 'areben'], ['Transferencia', 'propia'], ['Efectivo', 'efectivo']])
 const c = (fecha: string, cuenta: string, monto: number, marca = 'zattia') => ({ marca, fecha, cuenta, monto })

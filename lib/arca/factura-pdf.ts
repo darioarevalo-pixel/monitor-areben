@@ -5,13 +5,13 @@
  * `armarFacturaPdf` es el dibujo, sin imports dinámicos (lo prueba `tests/arca-factura-pdf.test.ts`
  * con el jsPDF real); `descargarFactura` le pone jsPDF, el QR y el compartir/descargar.
  *
- * 🔴 ⛔ Sale sin los datos del emisor (`lib/arca/emisor.core.js`): un dato fiscal mal impreso es peor
+ * 🔴 ⛔ Sale sin los datos del emisor (`motor/arca/emisor.core.js`): un dato fiscal mal impreso es peor
  * que ninguna factura. 🔴 Una de homologación sale con el sello «SIN VALIDEZ FISCAL».
  */
 
-import { CBTE, COND_IVA, DOC } from './arca.core.js'
-import { datosQR, urlQR } from './qr.core.js'
-import { EMISOR, faltanDelEmisor } from './emisor.core.js'
+import { CBTE, COND_IVA, DOC } from '@/motor/arca/arca.core.js'
+import { datosQR, urlQR } from '@/motor/arca/qr.core.js'
+import { EMISOR, faltanDelEmisor } from '@/motor/arca/emisor.core.js'
 import { compartirODescargarPDF } from '@/lib/pdf'
 
 /** Una fila de `facturas` autorizada, como la devuelve `?recurso=erp&vista=facturas`. */
@@ -39,7 +39,7 @@ export type FacturaEmitida = {
   cae_vence: string
 }
 
-type Emisor = import('./emisor.core.js').Emisor
+type Emisor = import('@/motor/arca/emisor.core.js').Emisor
 export type Renglon = { descripcion: string; cantidad: number; unitario: number; importe: number }
 
 /**

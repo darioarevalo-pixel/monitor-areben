@@ -19,7 +19,7 @@ y el «Pendiente de facturar» del dashboard de Darío.
 
 `components/erp/` · `lib/erp/cliente.ts` · `lib/arca/` (todo el dominio, puro y testeado:
 `arca.core.js` arma y lee ARCA · `lote.core.js` el lote · `techo.core.js` el tope · `mes.core.js`
-lo pendiente) · `api/_erp.js` por `?recurso=erp` · `api/_arca.js` (WSAA/WSFE) · `api/_facturacion.js`
+lo pendiente) · `api/_erp.js` por `?recurso=erp` · `motor/arca/cliente.js` (WSAA/WSFE) · `api/_facturacion.js`
 (el repo). Tablas: `facturas`, `arca_ta`, `arca_candado`, `cuentas_cobro`, `facturacion_mes` **sólo en
 BDI**; `ventas_cobros` y `ventas_factura_gn` en las dos bases, las llena el sync de ventas.
 Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (cert en
@@ -33,7 +33,7 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   sistemas en el mismo PV se pisan la numeración—. Los PV nuevos esperan el OK del contador.
 - 🔴 **Una factura con CAE ⛔ se borra ni se edita**: se anula con nota de crédito. Por eso el número
   se reserva en la base ANTES de pedirlo y un corte se resuelve CONSULTANDO a ARCA, ⛔ reintentando
-  (reintentar duplica). Medido contra homologación y Postgres local el 12-oct (`lib/arca/lote.core.js`).
+  (reintentar duplica). Medido contra homologación y Postgres local el 12-oct (`motor/arca/lote.core.js`).
 - 🔑 **El tope va cobro por cobro**, por la fecha y la cuenta de cada pago (regla del contador: se
   factura lo que entra a la cuenta). Validado: sep-2026 desde producción = $29.936.566,32 = cierre del
   dashboard + $33.500 de Feria TC.
@@ -49,7 +49,7 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
 
 - 🔑 **El PDF** (`lib/arca/factura-pdf.ts`, botón en «Facturas del monitor») se arma en el navegador con la
   fila de `facturas` tal como se le mandó a ARCA, ⛔ con la venta; el QR es el de la RG 4892
-  (`lib/arca/qr.core.js`). 🔴 ⛔ Sale sin los datos fiscales del emisor (`lib/arca/emisor.core.js`: razón
+  (`motor/arca/qr.core.js`). 🔴 ⛔ Sale sin los datos fiscales del emisor (`motor/arca/emisor.core.js`: razón
   social, IIBB, inicio de actividades, domicilio de cada punto de venta): se copian de una factura de GN o
   de la constancia de ARCA, ⛔ se inventan. Una de homologación sale sellada «SIN VALIDEZ FISCAL».
 

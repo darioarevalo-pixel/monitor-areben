@@ -189,7 +189,7 @@ ya tienen ficha:
   `lib/pagos-recibidos/` o `api/_pagos-recibidos.js`. 🔴 **El total es sólo para admin y lo corta
   el SERVIDOR**, y ⛔ cuenta sólo lo que ENTRÓ aprobado: lo que sale viene en la misma búsqueda.
 - ERP (sólo admin; hoy Facturación con ARCA) → **leer `docs/secciones/erp.md`** antes de tocar
-  `components/erp/`, `lib/erp/`, `lib/arca/`, `api/_erp.js`, `api/_arca.js` o `api/_facturacion.js`.
+  `components/erp/`, `lib/erp/`, `lib/arca/`, `api/_erp.js`, `motor/arca/cliente.js` o `api/_facturacion.js`.
   🔴 **Pide CAE reales a ARCA si se habilita producción**, y una factura con CAE ⛔ se borra.
 - Clientes (CRM) y el panel de WhatsApp → **leer `docs/secciones/crm.md`** antes de tocar
   `components/crm/`, `components/panel/`, `lib/crm/` o la acción `panel` de `api/_crm.js`. ⛔ **La

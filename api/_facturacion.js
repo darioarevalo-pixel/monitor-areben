@@ -2,7 +2,7 @@
  * Facturación: lo que toca la base. Las tablas (`facturas`, `arca_ta`, `arca_candado`) viven SÓLO en
  * la base del monitor (`sql/migrate-facturacion.sql`): un CUIT y un permiso de ARCA para las dos marcas.
  *
- * El orquestador del lote es `lib/arca/lote.core.js`; acá está su `repo` y el cliente armado con las
+ * El orquestador del lote es `motor/arca/lote.core.js`; acá está su `repo` y el cliente armado con las
  * variables de entorno. ⚠️ No es una función de Vercel (prefijo `_`).
  *
  * Variables: `ARCA_CERT` y `ARCA_KEY` (PEM). El ambiente lo decide `ambienteDeEntorno`: homologación
@@ -10,8 +10,8 @@
  */
 import { createClient } from '@supabase/supabase-js'
 import { cfgDelMonitor } from './_recepciones-base.js'
-import { crearClienteArca } from './_arca.js'
-import { CUIT_AREBEN, ambienteDeEntorno } from '../lib/arca/arca.core.js'
+import { crearClienteArca } from '../motor/arca/cliente.js'
+import { CUIT_AREBEN, ambienteDeEntorno } from '../motor/arca/arca.core.js'
 
 /** Un candado más viejo que esto es de una corrida que murió: el lote entero entra en 30 s. */
 const CANDADO_VENCIDO_MS = 2 * 60_000
@@ -50,7 +50,7 @@ export function clienteArcaDelEntorno(sb) {
   }
 }
 
-/** Las filas de `facturas`, con la forma que espera `lib/arca/lote.core.js`. */
+/** Las filas de `facturas`, con la forma que espera `motor/arca/lote.core.js`. */
 export function repoFacturas(sb) {
   const fallo = (donde, error) => { if (error) throw new Error(`${donde}: ${error.message}`) }
   return {
