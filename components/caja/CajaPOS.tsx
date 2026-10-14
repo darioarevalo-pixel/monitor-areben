@@ -216,7 +216,6 @@ function POS() {
 
   const [pagos, setPagos] = useState<PagoUI[]>([{ medio: null, base: '' }])
   // Las dos preguntas del crédito (null = ⛔ contestada todavía).
-  const [esDelBanco, setEsDelBanco] = useState<boolean | null>(null)
   const [seisCuotas, setSeisCuotas] = useState<boolean | null>(null)
   const [varios, setVarios] = useState(false)
   const [pagaCon, setPagaCon] = useState('')
@@ -360,14 +359,13 @@ function POS() {
   const reglas = config?.reglas ?? null
   // Lo que lee la gente de una cuenta: la forma de pago, ⛔ el nombre de la cuenta de GN.
   const nombreCuenta = useCallback((id: number) => nombreParaTicket(id, reglas), [reglas])
-  // 🔑 La promo bancaria de crédito de HOY sale de la Agenda (la misma de la banda de promos), ⛔ se le
-  // pregunta a la cajera si hay: sólo si la tarjeta es de ese banco.
+  // 🔑 La promo bancaria de crédito de HOY sale de la Agenda (la misma de la banda de promos). Con promo, el
+  // crédito va con el descuento sin preguntar de qué tarjeta es: la cajera sabe cuáles entran (Bruno, 14-oct).
   const promoCredito = useMemo(
     // La MISMA pregunta que hace el servidor antes de aceptar la cuenta del −10 % (A6).
     () => promosDeCreditoEnMostrador(promos, hoyIso(), storeCaja()),
     [promos],
   )
-  const bancosPromo = promoCredito.map((p) => p.banco).join(' o ')
   const esEfectivo = useCallback((id: number) => !!reglas?.cuentas[id]?.efectivo, [reglas])
 
   /** El precio de la etiqueta y la foto de un producto, con la regla de Etiquetas. */
@@ -569,9 +567,8 @@ function POS() {
   })()
   const sinMedios = !!reglas && !reglas.medios
   const hayCredito = pagos.some((p) => p.medio === 'credito')
-  const preguntaBanco = hayCredito && promoCredito.length > 0
   const preguntaCuotas = hayCredito && !!reglas?.medios && aPagar != null && aPagar > reglas.medios.credito.minSeisCuotas
-  const respuestas = { promoCreditoHoy: promoCredito.length > 0, esDelBanco: esDelBanco === true, seisCuotas: seisCuotas === true }
+  const respuestas = { promoCreditoHoy: promoCredito.length > 0, esDelBanco: true, seisCuotas: seisCuotas === true }
   const cuentaDe = (medio: Medio, rg: Reglas) => cuentaDeMedio(medio, { reglas: rg, total: aPagar ?? 0, ...respuestas })
   // 🔑 Productos de feria trabados (Bruno, 5-oct): la MISMA regla que exige el servidor (`exigirFeria`).
   const feriaIds = useMemo(() => idsDeFeria(reglas), [reglas])
@@ -656,7 +653,7 @@ function POS() {
   })()
   const c = elCobro.c
   const pedidos = elCobro.pedidos
-  const faltaContestar = (preguntaBanco && esDelBanco == null) || (preguntaCuotas && seisCuotas == null)
+  const faltaContestar = preguntaCuotas && seisCuotas == null
 
   const enEfectivo = c ? c.pagos.filter((p) => esEfectivo(p.cuenta)).reduce((s, p) => s + p.monto, 0) : 0
   const pagaConN = aNumero(pagaCon)
@@ -787,7 +784,6 @@ function POS() {
   /** El cobro de la clienta anterior ⛔ queda (auditoría A11): forma de pago, «paga con», las preguntas del crédito. */
   function limpiarCobro() {
     setPagos([{ medio: null, base: '' }])
-    setEsDelBanco(null)
     setSeisCuotas(null)
     setVarios(false)
     setPagaCon('')
@@ -1284,9 +1280,8 @@ function POS() {
                     </div>
                   )}
 
-                  {!sinMedios && (preguntaBanco || preguntaCuotas) && (
+                  {!sinMedios && preguntaCuotas && (
                     <div style={{ display: 'grid', gap: space[2] }}>
-                      {preguntaBanco && <SiNo pregunta={`¿Es tarjeta de ${bancosPromo}?`} valor={esDelBanco} onCambio={setEsDelBanco} />}
                       {preguntaCuotas && <SiNo pregunta="¿En 6 cuotas?" valor={seisCuotas} onCambio={setSeisCuotas} />}
                     </div>
                   )}
