@@ -19,6 +19,14 @@ negativo, el día cierra (medido: las 13 de BDI del 14-oct están en −1/−4 e
 pg con `DATABASE_URL_<MARCA>` (supabase-js ⛔ agrupa); sin esa variable la pantalla lo dice. 🔴 Los nombres
 salen del espejo PAGINADOS: una fila por talle y depósito pasa las 1000 de Supabase y cortaba callado.
 
+**Ventas** (14-oct): buscador y ficha de una venta PROPIA (la que escribe el motor, `motor/venta/`, ⛔ la de
+GN) por número, cliente o fecha: prendas, pagos, factura, estado y sus cambios. Lee `venta` y la vista
+`venta_ficha` (contrato: `~/Documents/erp-monitor/contrato-venta.md`). **Anular** desde la ficha, con motivo
+(≥5 letras) y sólo admin: lo hace `anularVenta` del motor por **pg** (⛔ supabase-js: sin transacciones), con
+`DATABASE_URL_BDI` / `DATABASE_URL_ZATTIA`; 🔴 sin esa variable en Vercel contesta 409 «⛔ está conectado» —
+cargarla ES prender el anular—. La plata vuelve a los mismos pagos; si tenía factura, avisa que falta la NC.
+Núcleo puro en `lib/erp/venta.core.js` (`tests/erp-venta.test.ts`). 🔑 «Prueba» = entró antes del corte de GN y ⛔ movió el libro.
+
 Y **Facturación** (F5 del plan): el tope del mes, lo ya facturado y las ventas sin
 factura, que se facturan con ARCA (ex AFIP) por web service. Reemplaza la facturación masiva de GN
 y el «Pendiente de facturar» del dashboard de Darío.

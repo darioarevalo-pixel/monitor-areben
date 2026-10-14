@@ -17,6 +17,9 @@
  *   GET  ?recurso=erp&vista=precio&marca=…&producto=ID                precio por lista y costo del producto, con GN y TN al lado
  *   POST {recurso:'erp', accion:'cargar-precio'|'cargar-costo', marca, producto, monto, lista?, desde?, motivo?, proveedor?}
  *   GET  ?recurso=erp&vista=stock&marca=…&producto=ID&talle=ID       el libro y GN de esa prenda, con historial
+ *   GET  ?recurso=erp&vista=ventas&marca=…&q=nº|cliente&desde&hasta    busca ventas propias (las del motor)
+ *   GET  ?recurso=erp&vista=venta&marca=…&id=UUID                      la ficha: prendas, pagos, factura, estado
+ *   POST {recurso:'erp', accion:'anular', marca, ventaId, motivo}      anula una venta propia (por el motor)
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
  * Contra qué ARCA se factura lo decide `ambienteDeEntorno` (homologación por defecto).
@@ -36,6 +39,7 @@ import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
+import { MENSAJE_ERROR_MOTOR, armarFicha, filaDeVenta, leerAnular, leerBusqueda, rangoDeDias } from '../lib/erp/venta.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -281,6 +285,10 @@ export async function stockDePrenda({ marca, q, producto, talle }) {
   }
 }
 
+/**
+ * La conexión pg de la base de la marca (la del rol `motor`): para que ESCRIBA el motor (⛔ supabase-js: no tiene
+ * transacciones) y para sumar el libro. Sin la variable ⛔ está conectado todavía: se dice, ⛔ se adivina.
+ */
 const PG_DE_MARCA = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
 
 /**
@@ -296,6 +304,74 @@ async function negativosDelLibro(marca) {
   try {
     return (await db.query(`select linea, product_id, size_id, deposito, sum(cantidad)::int as nivel from stock_movimiento
       group by 1, 2, 3, 4 having sum(cantidad) < 0 order by 5 limit 300`)).rows
+  } finally {
+    await db.end().catch(() => {})
+  }
+}
+
+/**
+ * Ventas propias (las que escribe el motor, `motor/venta/`): busca por número, cliente o fecha. Lee
+ * directo de la base (contrato de la venta, §2); ⛔ escribe. Stunned vive en la base de Zattia.
+ */
+export async function buscarVentas({ marca, q, desde, hasta }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const b = leerBusqueda({ q, desde, hasta })
+  if (b.error) return { status: 400, error: b.error }
+  const { url, key } = cfgDeMarca(marca)
+  const sb = createClient(url, key)
+  let consulta = sb.from('venta').select('id, numero, marca, tipo, estado, origen, canal, deposito, total, prueba, ocurrida_en, cliente:cliente_id (nombre, doc)')
+  if (b.numero != null) consulta = consulta.eq('numero', b.numero)
+  if (b.cliente) {
+    const like = `%${b.cliente}%`
+    const { data, error } = await sb.from('cliente').select('id').or(`nombre.ilike.${like},doc.ilike.${like},email.ilike.${like},whatsapp.ilike.${like}`).limit(200)
+    if (error) throw new Error(`cliente: ${error.message}`)
+    if (!data.length) return { ventas: [], cortado: false }
+    consulta = consulta.in('cliente_id', data.map((c) => c.id))
+  }
+  const r = rangoDeDias(b.desde, b.hasta)
+  if (r.desde) consulta = consulta.gte('ocurrida_en', r.desde)
+  if (r.hasta) consulta = consulta.lt('ocurrida_en', r.hasta)
+  const { data, error } = await consulta.order('ocurrida_en', { ascending: false }).limit(101)
+  if (error) throw new Error(`venta: ${error.message}`)
+  return { ventas: data.slice(0, 100).map(filaDeVenta), cortado: data.length > 100 }
+}
+
+/** La ficha de una venta propia (`venta_ficha`), con el nombre de cada prenda y sus cambios. */
+export async function fichaDeVenta({ marca, id }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!/^[0-9a-f-]{36}$/i.test(String(id || ''))) return { status: 400, error: 'Venta inválida' }
+  const { url, key } = cfgDeMarca(marca)
+  const sb = createClient(url, key)
+  const { data: f, error } = await sb.from('venta_ficha').select('*').eq('id', id).maybeSingle()
+  if (error) throw new Error(`venta_ficha: ${error.message}`)
+  if (!f) return { status: 404, error: 'La venta no existe.' }
+  const columnas = 'id, numero, marca, tipo, estado, origen, canal, deposito, total, prueba, ocurrida_en'
+  const [cambios, original, inv] = await Promise.all([
+    sb.from('venta').select(columnas).eq('venta_original_id', id).order('ocurrida_en'),
+    f.venta_original_id ? sb.from('venta').select(columnas).eq('id', f.venta_original_id).maybeSingle() : Promise.resolve({ data: null }),
+    (f.lineas || []).length
+      ? sb.from('inventario').select('product_id, size_id, product_name, size_name').in('product_id', [...new Set(f.lineas.map((l) => l.product_id))])
+      : Promise.resolve({ data: [] }),
+  ])
+  for (const [t, r] of [['venta', cambios], ['venta', original], ['inventario', inv]]) if (r.error) throw new Error(`${t}: ${r.error.message}`)
+  const nombres = new Map((inv.data || []).map((r) => [`${r.product_id}/${r.size_id}`, { nombre: r.product_name, talle: r.size_name }]))
+  return armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data })
+}
+
+/** Anula una venta propia con motivo (sólo admin: lo chequea el handler). La plata vuelve a los mismos pagos. */
+export async function anularVentaPropia({ marca, body, usuario }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const a = leerAnular(body)
+  if (a.error) return { status: 400, error: a.error }
+  const conexion = process.env[PG_DE_MARCA[marca]]
+  if (!conexion) return { status: 409, error: 'Anular todavía ⛔ está conectado: falta la conexión del motor en Vercel.' }
+  const [{ default: pg }, { anularVenta }] = await Promise.all([import('pg'), import('../motor/venta/registrar.mjs')])
+  const db = new pg.Client({ connectionString: conexion })
+  await db.connect()
+  try {
+    const r = await anularVenta(db, { venta_id: a.ventaId, motivo: a.motivo, usuario })
+    if (!r.ok) return { status: r.error.codigo === 'NO_ENCONTRADA' ? 404 : 409, error: MENSAJE_ERROR_MOTOR[r.error.codigo] || r.error.mensaje }
+    return { ok: true, movimientos: r.movimientos, ncPendiente: r.nc_pendiente }
   } finally {
     await db.end().catch(() => {})
   }
@@ -477,6 +553,16 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
+    if (req.method === 'GET' && req.query.vista === 'ventas') {
+      const r = await buscarVentas({ marca: String(req.query.marca || ''), q: req.query.q, desde: req.query.desde, hasta: req.query.hasta })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'venta') {
+      const r = await fichaDeVenta({ marca: String(req.query.marca || ''), id: req.query.id })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
     if (req.method === 'GET' && req.query.vista === 'facturas') {
       const r = await facturasDelMes(mes)
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
@@ -514,6 +600,11 @@ export default async function handler(req, res) {
 
     if (body.accion === 'nota-credito') {
       const r = await notaDeCredito({ facturaId: body.facturaId, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (body.accion === 'anular') {
+      const r = await anularVentaPropia({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

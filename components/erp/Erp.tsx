@@ -14,8 +14,9 @@ import { StockPrenda, type PrendaPedida } from './StockPrenda'
 import { DiferenciasDia } from './DiferenciasDia'
 import { PedidosSinPagar } from './PedidosSinPagar'
 import { PreciosProducto } from './PreciosProducto'
+import { VentasPropias } from './VentasPropias'
 
-const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }, { key: 'diferencias', label: 'Diferencias del día' }, { key: 'pedidos-tn', label: 'Pedidos sin pagar' }, { key: 'precios', label: 'Precios' }]
+const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }, { key: 'diferencias', label: 'Diferencias del día' }, { key: 'pedidos-tn', label: 'Pedidos sin pagar' }, { key: 'precios', label: 'Precios' }, { key: 'ventas', label: 'Ventas' }]
 
 export function Erp() {
   const [pestania, setPestania] = useState('facturacion')
@@ -30,6 +31,7 @@ export function Erp() {
       {pestania === 'pedidos-tn' && <PedidosSinPagar />}
       {pestania === 'precios' && <PreciosProducto />}
       {pestania === 'diferencias' && <DiferenciasDia abrirPrenda={(p) => { setPrenda(p); setPestania('stock') }} />}
+      {pestania === 'ventas' && <VentasPropias />}
     </div>
   )
 }

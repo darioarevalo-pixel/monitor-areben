@@ -126,3 +126,34 @@ export type PedidoSinPagar = {
 export const leerPedidosSinPagar = (marca: MarcaErp) =>
   pedir<{ pedidos: PedidoSinPagar[]; porTienda: Record<string, { pedidos: number; unidades: number; total: number }>; leidaEn: string | null }>(
     null, `&vista=pedidos-tn&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los pedidos sin pagar.')
+
+export type VentaPropia = {
+  id: string; numero: number; marca: 'bdi' | 'zattia' | 'stunned'; tipo: 'venta' | 'cambio'; estado: 'confirmada' | 'anulada'
+  origen: string; canal: string; deposito: string; total: number; prueba: boolean; ocurridaEn: string; cliente: string | null
+}
+
+export type FichaDeVenta = {
+  venta: VentaPropia & { subtotal: number; usuario: string; registradaEn: string; origenRef: string; gnSaleId: string | null; ventaOriginalId: string | null }
+  cliente: { nombre: string | null; doc: string | null; email: string | null; whatsapp: string | null } | null
+  lineas: Array<{
+    id: string; n: number; producto: string; talle: string; nombre: string | null; talleNombre: string | null; sku: string | null
+    cantidad: number; precio: number; descuento: number; rebaja: number; importe: number; devuelta: boolean; lineaOrigenId: string | null
+  }>
+  pagos: Array<{ cuenta: string | null; medio: string | null; monto: number; base: number | null; porcentaje: number | null }>
+  anulacion: { motivo: string; usuario: string; anuladaEn: string; devolucion: unknown } | null
+  facturas: Array<{ facturaId: string; tipo: 'factura' | 'nc' | 'nd' }>
+  facturada: boolean
+  cambios: VentaPropia[]
+  original: VentaPropia | null
+  /** null = se puede anular; si no, por qué no. */
+  puedeAnular: string | null
+}
+
+export const buscarVentas = (marca: MarcaErp, f: { q: string; desde: string; hasta: string }) =>
+  pedir<{ ventas: VentaPropia[]; cortado: boolean }>(null, `&vista=ventas&marca=${marca}&q=${encodeURIComponent(f.q)}&desde=${f.desde}&hasta=${f.hasta}&nc=${Date.now()}`, 'No se pudo buscar.')
+
+export const leerFichaDeVenta = (marca: MarcaErp, id: string) =>
+  pedir<FichaDeVenta>(null, `&vista=venta&marca=${marca}&id=${id}&nc=${Date.now()}`, 'No se pudo leer la venta.')
+
+export const anularVenta = (marca: MarcaErp, ventaId: string, motivo: string) =>
+  pedir<{ ok: true; movimientos: number; ncPendiente: boolean }>(post({ accion: 'anular', marca, ventaId, motivo }), '', 'No se pudo anular.')
