@@ -9,6 +9,7 @@
  *   GET  ?recurso=erp&vista=facturacion&mes=YYYY-MM   el mes: techo, facturado, pendiente, ventas
  *   GET  ?recurso=erp&vista=facturas&mes=YYYY-MM      las facturas del monitor del mes (para el PDF)
  *   POST {recurso:'erp', accion:'facturar', mes, marca, ventaIds}   factura esas ventas (un lote)
+ *   POST {recurso:'erp', accion:'nota-credito', facturaId}            anula ENTERA una factura del monitor con NC (ARCA)
  *   POST {recurso:'erp', accion:'cerrar', mes}                      congela el techo del mes
  *   GET  ?recurso=erp&vista=pedidos-tn&marca=…                      los pedidos de TN abiertos y sin pagar (retienen stock)
  *   GET  ?recurso=erp&vista=diferencias&marca=…&fecha=YYYY-MM-DD    lo que el libro ⛔ explicó ese día + la sobreventa
@@ -141,6 +142,42 @@ export async function facturarVentas({ mes, marca, ventaIds, usuario }) {
     rechazadas: r.rechazadas.map((f) => ({ ventaId: f.venta_id, motivos: f.motivos })),
     noSalen: [...r.noSalen.map((c) => ({ ventaId: c.ventaId, motivos: c.motivos })), ...noDisponibles.map((id) => ({ ventaId: id, motivos: ['Ya no está entre las ventas para facturar'] }))],
   }
+}
+
+/**
+ * La NOTA DE CRÉDITO de una factura del monitor: la anula ENTERA (una por venta, como GN hoy), con la
+ * factura asociada para ARCA y el mismo receptor. Sale por el MISMO camino que las facturas (`facturarLote`:
+ * candado, número reservado antes del CAE, una sola por venta). 🔴 Con CAE ⛔ se borra.
+ * El mes del techo es el de HOY (la NC resta en el período en que se emite) — ❓ a confirmar con el contador.
+ */
+export async function notaDeCredito({ facturaId, usuario }) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(facturaId || ''))) return { status: 400, error: 'Factura inválida' }
+  const { ambiente, error } = ambienteSeguro()
+  if (!ambiente) return { status: 409, error }
+  const sb = baseFacturacion()
+  const { data: f, error: e } = await sb.from('facturas')
+    .select('id, ambiente, marca, venta_id, tipo, pto_vta, numero, fecha, total, doc_tipo, doc_nro, cond_iva, estado').eq('id', facturaId).maybeSingle()
+  if (e) throw new Error(`facturas: ${e.message}`)
+  if (!f || f.ambiente !== ambiente) return { status: 404, error: 'La factura no existe en este ambiente.' }
+  if (f.estado !== 'autorizada') return { status: 409, error: 'Sólo una factura autorizada (con CAE) lleva nota de crédito.' }
+  const tipo = { [CBTE.FACTURA_A]: CBTE.NC_A, [CBTE.FACTURA_B]: CBTE.NC_B }[f.tipo]
+  if (!tipo) return { status: 409, error: 'Eso ya es una nota de crédito.' }
+  const hoy = diaArgentino(Date.now())
+  const { arca } = clienteArcaDelEntorno(sb)
+  const r = await facturarLote({
+    arca, repo: repoFacturas(sb), ambiente, marca: f.marca, ptoVta: Number(f.pto_vta), tipo,
+    comprobantes: [{
+      ventaId: f.venta_id, mes: hoy.slice(0, 7), tipo, fecha: hoy, total: Number(f.total), asociadoId: f.id,
+      receptor: { docTipo: Number(f.doc_tipo), docNro: Number(f.doc_nro), condicionIva: Number(f.cond_iva) },
+      asociado: { tipo: Number(f.tipo), ptoVta: Number(f.pto_vta), numero: Number(f.numero), fecha: f.fecha },
+    }],
+    reglas: { umbralIdentificar: UMBRAL_IDENTIFICAR, hoy },
+    lote: globalThis.crypto.randomUUID(), usuario,
+  })
+  const [hecha] = r.autorizadas
+  if (hecha) return { ambiente, autorizada: { numero: hecha.numero, cae: hecha.cae, total: hecha.total } }
+  const motivos = [...r.rechazadas, ...r.noSalen].flatMap((x) => x.motivos || [])
+  return { status: 409, error: motivos.join(' · ') || 'ARCA no autorizó la nota de crédito.' }
 }
 
 /**
@@ -365,6 +402,11 @@ export default async function handler(req, res) {
       })
       if (error) throw new Error(`facturacion_mes: ${error.message}`)
       return res.status(200).json({ ok: true, techo: m.calculado.total })
+    }
+
+    if (body.accion === 'nota-credito') {
+      const r = await notaDeCredito({ facturaId: body.facturaId, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
     if (body.accion === 'facturar') {

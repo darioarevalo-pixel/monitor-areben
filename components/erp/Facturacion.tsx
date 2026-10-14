@@ -13,10 +13,11 @@ import {
   Badge, Button, ConfirmDetalle, EmptyState, Input, KpiCard, Notice, SectionCard, TableWrap, TBody, Td, Th, THead, Tr, Tabs,
   formatMoney, space, useConfirmar,
 } from '@/components/ui'
-import { cerrarMes, facturar, leerFacturas, leerMes, type MarcaErp, type MesFacturacion, type ResultadoLote, type VentaParaFacturar } from '@/lib/erp/cliente'
+import { cerrarMes, facturar, leerFacturas, leerMes, notaDeCredito, type MarcaErp, type MesFacturacion, type ResultadoLote, type VentaParaFacturar } from '@/lib/erp/cliente'
 import { proponerLote } from '@/motor/arca/mes.core.js'
 import { descargarFactura, numeroComprobante, type FacturaEmitida } from '@/lib/arca/factura-pdf'
 import { EMISOR, faltanDelEmisor } from '@/motor/arca/emisor.core.js'
+import { CBTE } from '@/motor/arca/arca.core.js'
 
 const MARCAS: Array<{ key: MarcaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'bdi', label: 'BDI' }]
 const mesActual = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 7)
@@ -34,6 +35,9 @@ export function Facturacion() {
   const [resultado, setResultado] = useState<ResultadoLote | null>(null)
   const [facturas, setFacturas] = useState<FacturaEmitida[] | null>(null)
   const [bajando, setBajando] = useState<string | null>(null)
+  /** La factura que se está por anular con nota de crédito (pide confirmar: con CAE ⛔ se borra). */
+  const [anulando, setAnulando] = useState<string | null>(null)
+  const [hechaNC, setHechaNC] = useState<string | null>(null)
 
   const leer = useCallback(async () => {
     try {
@@ -110,6 +114,23 @@ export function Facturacion() {
       await leer()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo facturar.')
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
+  // Las ventas que ya tienen nota de crédito este mes: su factura ⛔ ofrece otra (una por venta, como GN).
+  const conNC = useMemo(() => new Set((facturas || []).filter((f) => f.tipo === CBTE.NC_A || f.tipo === CBTE.NC_B).map((f) => `${f.marca}:${f.venta_id}`)), [facturas])
+
+  async function anularConNC(f: FacturaEmitida) {
+    setTrabajando(true)
+    try {
+      const r = await notaDeCredito(f.id)
+      setHechaNC(`Nota de crédito ${r.autorizada.numero} autorizada (CAE ${r.autorizada.cae}) por ${pesos(r.autorizada.total)}.`)
+      setAnulando(null)
+      await leer()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo hacer la nota de crédito.')
     } finally {
       setTrabajando(false)
     }
@@ -240,6 +261,7 @@ export function Facturacion() {
         )}
       </SectionCard>
 
+      {hechaNC && <Notice tone="success" onClose={() => setHechaNC(null)}>{hechaNC}</Notice>}
       {facturas && facturas.length > 0 && (
         <SectionCard title="Facturas del monitor" subtitle="Las que salieron de acá este mes, con su CAE. El PDF lleva el QR de ARCA.">
           {(() => {
@@ -261,7 +283,15 @@ export function Facturacion() {
                   <Td>{f.venta_numero || f.venta_id}</Td>
                   <Td>{f.cae}</Td>
                   <Td style={{ textAlign: 'right' }}>{pesos(f.total)}</Td>
-                  <Td style={{ textAlign: 'right' }}>
+                  <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {(f.tipo === CBTE.FACTURA_A || f.tipo === CBTE.FACTURA_B) && !conNC.has(`${f.marca}:${f.venta_id}`) && (
+                      anulando === f.id
+                        ? <>
+                          <Button size="sm" tone="danger" disabled={trabajando} onClick={() => void anularConNC(f)}>Confirmar nota de crédito por {pesos(f.total)}</Button>{' '}
+                          <Button size="sm" variant="outline" disabled={trabajando} onClick={() => setAnulando(null)}>No</Button>{' '}
+                        </>
+                        : <><Button size="sm" variant="outline" onClick={() => setAnulando(f.id)}>Nota de crédito</Button>{' '}</>
+                    )}
                     <Button variant="outline" size="sm" onClick={() => bajar(f)} disabled={bajando === f.id || faltanDelEmisor(EMISOR, f.marca).length > 0}>
                       {bajando === f.id ? 'Armando…' : 'Descargar PDF'}
                     </Button>

@@ -58,6 +58,9 @@ export const leerFacturas = (mes: string) =>
 export const facturar = (mes: string, marca: MarcaErp, ventaIds: string[]) =>
   pedir<ResultadoLote>(post({ accion: 'facturar', mes, marca, ventaIds }), '', 'No se pudo facturar.')
 
+export const notaDeCredito = (facturaId: string) =>
+  pedir<{ ambiente: string; autorizada: { numero: number; cae: string; total: number } }>(post({ accion: 'nota-credito', facturaId }), '', 'No se pudo hacer la nota de crédito.')
+
 export const cerrarMes = (mes: string) =>
   pedir<{ ok: true; techo: number }>(post({ accion: 'cerrar', mes }), '', 'No se pudo cerrar el mes.')
 
