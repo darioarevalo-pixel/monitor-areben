@@ -9,6 +9,7 @@
 
 import { useState } from 'react'
 import { SectionCard, Tabs, space } from '@/components/ui'
+import { CambioCaja } from './CambioCaja'
 import { Facturacion } from './Facturacion'
 import { StockPrenda, type PrendaPedida } from './StockPrenda'
 import { DiferenciasDia } from './DiferenciasDia'
@@ -16,7 +17,7 @@ import { PedidosSinPagar } from './PedidosSinPagar'
 import { PreciosProducto } from './PreciosProducto'
 import { VentasPropias } from './VentasPropias'
 
-const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }, { key: 'diferencias', label: 'Diferencias del día' }, { key: 'pedidos-tn', label: 'Pedidos sin pagar' }, { key: 'precios', label: 'Precios' }, { key: 'ventas', label: 'Ventas' }]
+const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }, { key: 'diferencias', label: 'Diferencias del día' }, { key: 'pedidos-tn', label: 'Pedidos sin pagar' }, { key: 'ventas', label: 'Ventas' }, { key: 'caja', label: 'Caja' }, { key: 'precios', label: 'Precios' }]
 
 export function Erp() {
   const [pestania, setPestania] = useState('facturacion')
@@ -32,6 +33,7 @@ export function Erp() {
       {pestania === 'precios' && <PreciosProducto />}
       {pestania === 'diferencias' && <DiferenciasDia abrirPrenda={(p) => { setPrenda(p); setPestania('stock') }} />}
       {pestania === 'ventas' && <VentasPropias />}
+      {pestania === 'caja' && <CambioCaja />}
     </div>
   )
 }

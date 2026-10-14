@@ -39,7 +39,7 @@ import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
-import { MENSAJE_ERROR_MOTOR, armarFicha, filaDeVenta, leerAnular, leerBusqueda, rangoDeDias } from '../lib/erp/venta.core.js'
+import { MENSAJE_ERROR_MOTOR, armarFicha, cambiadasDe, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias } from '../lib/erp/venta.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -354,27 +354,60 @@ export async function fichaDeVenta({ marca, id }) {
       : Promise.resolve({ data: [] }),
   ])
   for (const [t, r] of [['venta', cambios], ['venta', original], ['inventario', inv]]) if (r.error) throw new Error(`${t}: ${r.error.message}`)
+  // Lo que ya volvió en cambios confirmados: cuánto se puede devolver todavía de cada línea.
+  const vivos = (cambios.data || []).filter((c) => c.estado === 'confirmada').map((c) => c.id)
+  const devueltas = vivos.length ? await sb.from('venta_linea').select('linea_origen_id, cantidad').in('venta_id', vivos).lt('cantidad', 0) : { data: [] }
+  if (devueltas.error) throw new Error(`venta_linea: ${devueltas.error.message}`)
   const nombres = new Map((inv.data || []).map((r) => [`${r.product_id}/${r.size_id}`, { nombre: r.product_name, talle: r.size_name }]))
-  return armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data })
+  return armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data, cambiadas: cambiadasDe(devueltas.data) })
 }
+
+/** Abre la conexión del motor de la marca, corre `fn(db, motor)` y la cierra. Sin la variable: 409, dicho. */
+async function conMotor(marca, que, fn) {
+  const conexion = process.env[PG_DE_MARCA[marca]]
+  if (!conexion) return { status: 409, error: `${que} todavía ⛔ está conectado: falta la conexión del motor en Vercel.` }
+  const [{ default: pg }, motor] = await Promise.all([import('pg'), import('../motor/venta/registrar.mjs')])
+  const db = new pg.Client({ connectionString: conexion })
+  await db.connect()
+  try {
+    return await fn(db, motor)
+  } finally {
+    await db.end().catch(() => {})
+  }
+}
+
+const errorDelMotor = (r) => ({ status: r.error.codigo === 'NO_ENCONTRADA' ? 404 : 409, error: MENSAJE_ERROR_MOTOR[r.error.codigo] || r.error.mensaje })
 
 /** Anula una venta propia con motivo (sólo admin: lo chequea el handler). La plata vuelve a los mismos pagos. */
 export async function anularVentaPropia({ marca, body, usuario }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const a = leerAnular(body)
   if (a.error) return { status: 400, error: a.error }
-  const conexion = process.env[PG_DE_MARCA[marca]]
-  if (!conexion) return { status: 409, error: 'Anular todavía ⛔ está conectado: falta la conexión del motor en Vercel.' }
-  const [{ default: pg }, { anularVenta }] = await Promise.all([import('pg'), import('../motor/venta/registrar.mjs')])
-  const db = new pg.Client({ connectionString: conexion })
-  await db.connect()
-  try {
+  return conMotor(marca, 'Anular', async (db, { anularVenta }) => {
     const r = await anularVenta(db, { venta_id: a.ventaId, motivo: a.motivo, usuario })
-    if (!r.ok) return { status: r.error.codigo === 'NO_ENCONTRADA' ? 404 : 409, error: MENSAJE_ERROR_MOTOR[r.error.codigo] || r.error.mensaje }
+    if (!r.ok) return errorDelMotor(r)
     return { ok: true, movimientos: r.movimientos, ncPendiente: r.nc_pendiente }
-  } finally {
-    await db.end().catch(() => {})
-  }
+  })
+}
+
+/**
+ * El cambio en el local (`erp › Caja`): entra lo devuelto, sale lo nuevo, y la diferencia se cobra o
+ * queda a favor. 🔑 Hasta el corte de GN es de PRUEBA (⛔ mueve el libro): el local sigue cambiando en GN.
+ * Que ⛔ se devuelva más de lo vendido lo hace cumplir el motor (`DEVUELVE_DE_MAS`), y la diferencia la
+ * vuelve a sumar él: si ⛔ coincide con el pago, 409.
+ */
+export async function cambiarVentaPropia({ marca, body, usuario }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const c = leerCambiar(body)
+  if (c.error) return { status: 400, error: c.error }
+  return conMotor(marca, 'El cambio', async (db, { registrarCambio }) => {
+    const r = await registrarCambio(db, {
+      origen: 'caja', origen_ref: c.id, marca, usuario: usuario || 'erp', prueba: true, deposito: 'local',
+      venta_original_id: c.ventaId, devueltas: c.devueltas, nuevas: c.nuevas, pagos: c.pagos,
+    })
+    if (!r.ok) return errorDelMotor(r)
+    return { ok: true, venta: r.venta, aFavor: r.a_favor, ncPendiente: r.nc_pendiente, yaExistia: !!r.ya_existia }
+  })
 }
 
 /**
@@ -608,7 +641,12 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
-    if (body.accion === 'facturar') {
+    if (body.accion === 'cambiar') {
+      const r = await cambiarVentaPropia({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+        if (body.accion === 'facturar') {
       const r = await facturarVentas({ mes, marca: String(body.marca || ''), ventaIds: body.ventaIds, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }

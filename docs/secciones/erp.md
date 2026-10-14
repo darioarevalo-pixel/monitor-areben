@@ -50,6 +50,13 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
 
 ## Reglas que el código no dice
 
+- 🔑 **`erp › Caja` = el CAMBIO en el local** (`CambioCaja.tsx`, Bruno 14-oct): busca la venta propia, marca lo
+  devuelto (al precio que se PAGÓ), escanea lo nuevo y cobra o deja a favor la diferencia; lo registra
+  `registrarCambio` del motor por `cambiarVentaPropia` (`api/_erp.js`). 🔴 Usa el MISMO código de la Caja
+  (`buscarProducto`, `construirPrecios`+`precioDeFeria`, `renglones`, `exigirDevolucion`), ⛔ una copia: al cortar
+  GN se muda al POS. 🔴 De PRUEBA hasta el corte (⛔ libro, ⛔ GN). Que ⛔ se devuelva de más y que el pago cierre lo
+  hace cumplir el MOTOR (409); la pantalla usa `diferenciaDeCambio`, la MISMA cuenta. ⚠️ La diferencia se cobra
+  sin el descuento de la forma de pago y la transferencia ⛔ se espera: los decide Bruno.
 - 🔴 **Homologación por defecto.** Facturas reales sólo con `ARCA_AMBIENTE=produccion` **y**
   `ARCA_PRODUCCION_HABILITADA=si` (las pone Bruno), y con `ARCA_PTOVTA_BDI`/`_ZATTIA` cargados: en
   producción ⛔ hay punto de venta por defecto, y los de GN (00002 BDI, 00005 Zattia) se rechazan —dos

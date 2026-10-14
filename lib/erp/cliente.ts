@@ -138,6 +138,8 @@ export type FichaDeVenta = {
   lineas: Array<{
     id: string; n: number; producto: string; talle: string; nombre: string | null; talleNombre: string | null; sku: string | null
     cantidad: number; precio: number; descuento: number; rebaja: number; importe: number; devuelta: boolean; lineaOrigenId: string | null
+    /** Unidades de esta línea que ya volvieron en cambios confirmados. */
+    cambiado: number
   }>
   pagos: Array<{ cuenta: string | null; medio: string | null; monto: number; base: number | null; porcentaje: number | null }>
   anulacion: { motivo: string; usuario: string; anuladaEn: string; devolucion: unknown } | null
@@ -157,3 +159,12 @@ export const leerFichaDeVenta = (marca: MarcaErp, id: string) =>
 
 export const anularVenta = (marca: MarcaErp, ventaId: string, motivo: string) =>
   pedir<{ ok: true; movimientos: number; ncPendiente: boolean }>(post({ accion: 'anular', marca, ventaId, motivo }), '', 'No se pudo anular.')
+
+/** Lo que se lleva en un cambio: la forma de `ItemCaja` de la Caja (el servidor lo arma con `renglones`). */
+export type PrendaNueva = { product_id: number; size_id: number; cantidad: number; precio: number; sku?: string | null }
+
+export const cambiarVenta = (marca: MarcaErp, c: {
+  id: string; ventaId: string; devueltas: Array<{ lineaId: string; cantidad: number }>; items: PrendaNueva[]; pagos: Array<{ cuenta: number; monto: number }>
+}) =>
+  pedir<{ ok: true; venta: { id: string; numero: number; diferencia?: number }; aFavor: number; ncPendiente: boolean; yaExistia: boolean }>(
+    post({ accion: 'cambiar', marca, ...c }), '', 'No se pudo registrar el cambio.')

@@ -4,7 +4,7 @@
  * vendida, o un anular sin motivo que llega al motor.
  */
 import { describe, it, expect } from 'vitest'
-import { armarFicha, leerAnular, leerBusqueda, puedeAnular, rangoDeDias } from '../lib/erp/venta.core.js'
+import { armarFicha, cambiadasDe, diferenciaDeCambio, leerAnular, leerBusqueda, leerCambiar, puedeAnular, rangoDeDias } from '../lib/erp/venta.core.js'
 
 describe('leerBusqueda', () => {
   it('un número (con o sin #) es el número de venta; texto es cliente', () => {
@@ -67,5 +67,35 @@ describe('anular', () => {
     expect(leerAnular({ ventaId: id, motivo: '  x ' }).error).toBeTruthy()
     expect(leerAnular({ ventaId: 'v1', motivo: 'se equivocó de talle' }).error).toBeTruthy()
     expect(leerAnular({ ventaId: id, motivo: ' se equivocó de talle ' })).toEqual({ ventaId: id, motivo: 'se equivocó de talle' })
+  })
+})
+
+describe('el cambio (erp › Caja)', () => {
+  const L1 = '11111111-1111-4111-8111-111111111111'
+  const L2 = '22222222-2222-4222-8222-222222222222'
+  const id = '33333333-3333-4333-8333-333333333333'
+  const venta = '44444444-4444-4444-8444-444444444444'
+  const lineas = [{ id: L1, cantidad: 2, importe: 30000 }, { id: L2, cantidad: 1, importe: 9000 }]
+
+  it('la diferencia: lo devuelto al precio que se PAGÓ (por unidad), lo nuevo con su importe', () => {
+    expect(diferenciaDeCambio({ lineas, devueltas: [{ lineaId: L1, cantidad: 1 }], nuevas: [{ importe: 20000 }] })).toBe(5000)
+    expect(diferenciaDeCambio({ lineas, devueltas: [{ lineaId: L1, cantidad: 2 }], nuevas: [{ importe: 20000 }] })).toBe(-10000)
+    expect(diferenciaDeCambio({ lineas, devueltas: [{ lineaId: L2, cantidad: 1 }], nuevas: [{ importe: 9000 }] })).toBe(0)
+  })
+
+  it('lo ya cambiado sale de las líneas negativas de los cambios', () => {
+    const m = cambiadasDe([{ linea_origen_id: L1, cantidad: -1 }, { linea_origen_id: L1, cantidad: -1 }, { linea_origen_id: null, cantidad: 1 }])
+    expect(m.get(L1)).toBe(2)
+    expect(armarFicha({ id: venta, numero: 1, lineas: [{ id: L1, product_id: 1, size_id: 2, cantidad: 2, precio: 15000, importe: 30000 }], pagos: [] }, { cambiadas: m }).lineas[0].cambiado).toBe(2)
+  })
+
+  it('valida lo que manda la pantalla y arma lo nuevo con `renglones` de la Caja', () => {
+    expect(leerCambiar({ ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }] }).error).toMatch(/número del cambio/)
+    expect(leerCambiar({ id, ventaId: venta, devueltas: [] }).error).toMatch(/devuelve/)
+    expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 0 }] }).error).toBeTruthy()
+    expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], items: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 0 }] }).error).toMatch(/precio/)
+    expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], pagos: [{ cuenta: 'x', monto: 1 }] }).error).toBe('Pago inválido')
+    const ok = leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], items: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 20000, sku: 'Z-1' }], pagos: [{ cuenta: 12921, monto: 5000 }] })
+    expect(ok).toEqual({ id, ventaId: venta, devueltas: [{ linea_id: L1, cantidad: 1 }], nuevas: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 20000, descuento: 0, rebaja: 0, importe: 20000, sku: 'Z-1' }], pagos: [{ cuenta: 12921, monto: 5000 }] })
   })
 })
