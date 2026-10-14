@@ -74,7 +74,7 @@ describe('renglonesDeVenta', () => {
       { descripcion: 'Remera - M', cantidad: 2, unitario: 15000, importe: 30000 },
       { descripcion: 'Descuento', cantidad: 1, unitario: -4500, importe: -4500 },
     ])
-    expect(r.reduce((a, x) => a + x.importe, 0)).toBe(25500)
+    expect(r.reduce((a: number, x: { importe: number }) => a + x.importe, 0)).toBe(25500)
   })
   it('sin nombre usa el SKU; sin diferencia, sin renglón extra', () => {
     expect(renglonesDeVenta({ total: 100, lineas: [{ product_id: 2, size_id: 1, cantidad: 1, importe: 100, sku: 'ABC' }] })).toEqual([{ descripcion: 'ABC', cantidad: 1, unitario: 100, importe: 100 }])
