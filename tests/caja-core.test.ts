@@ -173,6 +173,8 @@ describe('caja · redondeo PARA ARRIBA sin descuento (⛔ alcanzan los billetes 
     const p = armarVentaGN({ filas: f, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: '5c65e1ef-534f-4210-bd89-2d796d72c8dc', fecha: '2026-10-14' })
     expect(p.comments).toBe('Caja 5C65E1EF')
     expect(p).not.toHaveProperty('tn_order')
+    const conMail = armarVentaGN({ filas: f, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: '5c65e1ef-534f-4210-bd89-2d796d72c8dc', fecha: '2026-10-14', email: 'danielaorellana161@gmail.com', cajera: 'Lorena' })
+    expect(conMail.comments).toBe('Caja 5C65E1EF · danielaorellana161@gmail.com · Cajera: Lorena')
   })
 
   it('con dos unidades, los pesos de más se reparten y cierran justo', () => {

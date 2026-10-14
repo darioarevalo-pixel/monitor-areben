@@ -984,7 +984,7 @@ export default async function handler(req, res) {
           }
           c = cobro({ filas, pagos: b.pagos, reglas, descuentoVenta })
           espera = montoAEsperar(c.pagos, reglas)
-          payload = armarVentaGN({ filas, pagos: c.pagos, modoLocal: marca.modoLocal, integrationId: id, fecha: fechaLocal(new Date()) })
+          payload = armarVentaGN({ filas, pagos: c.pagos, modoLocal: marca.modoLocal, integrationId: id, fecha: fechaLocal(new Date()), email, cajera: perfil.name || null })
         } catch (e) {
           return res.status(400).json({ error: e.message })
         }
