@@ -18,8 +18,8 @@
  * De paso evita devolver el tablero entero —con las fotos— a la base en cada refresco.
  */
 
-import { useCallback, useEffect, useState } from 'react'
-import { promedio as calcPromedio, quienesVotaron, ranking, resumen, sacadosDeRonda, sinNingunVoto, MAX_PUNTAJE } from '@/lib/disenos/votacion.core.js'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { marcarSacado, promedio as calcPromedio, quienesVotaron, ranking, resumen, sacadosDeRonda, sinNingunVoto, MAX_PUNTAJE } from '@/lib/disenos/votacion.core.js'
 import {
   borrarRonda,
   cerrarRonda,
@@ -125,15 +125,37 @@ export function VotacionPanel({
   }
 
   // Sacar no pide confirmación: se deshace con «Volver a la ronda» y no pierde votos.
-  const sacar = async (r: RondaConDisenos, disenoId: string, sacado: boolean) => {
-    try {
-      await sacarDeRonda(marca, r.id, disenoId, sacado)
-      await verResultados(r)
-      await recargar()
-      onCambio()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
+  //
+  // 🔴 Dos cosas que la primera versión hacía mal (15-oct-2026, la reportó Bruno):
+  //   1. **La pantalla cambia YA**, sin esperar al servidor. Antes esperaba el POST y después
+  //      re-bajaba `vista=resultados` —el snapshot con las fotos— para recién ahí moverse.
+  //   2. **Los pedidos van EN FILA.** El servidor lee el snapshot, lo cambia y lo escribe: dos clics
+  //      seguidos leían la misma lista y el segundo devolvía a la ronda el que el primero sacó.
+  // Si algo falla se re-baja la ronda entera, que es la verdad, en vez de adivinar qué deshacer.
+  const fila = useRef<Promise<void>>(Promise.resolve())
+  const pendientes = useRef(0)
+  const sacar = (r: RondaConDisenos, disenoId: string, sacado: boolean) => {
+    const nueva = marcarSacado(r.disenos, disenoId, sacado)
+    if (!nueva) {
+      toast.error('Tiene que quedar al menos un diseño en la ronda. Para terminarla, cerrá la votación.')
+      return
     }
+    setVista((v) => (v.modo === 'resultados' && v.ronda.id === r.id ? { ...v, ronda: { ...v.ronda, disenos: marcarSacado(v.ronda.disenos, disenoId, sacado) ?? v.ronda.disenos } } : v))
+    pendientes.current++
+    fila.current = fila.current.then(async () => {
+      try {
+        await sacarDeRonda(marca, r.id, disenoId, sacado)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e))
+        await verResultados(r)
+      } finally {
+        // El listado y el ★ del tablero se refrescan una vez, cuando se vacía la fila.
+        if (--pendientes.current === 0) {
+          await recargar()
+          onCambio()
+        }
+      }
+    })
   }
 
   const cerrar = async (r: Ronda) => {
@@ -197,7 +219,7 @@ export function VotacionPanel({
           onVolver={() => setVista({ modo: 'lista' })}
           onRefrescar={() => void verResultados(vista.ronda)}
           onConfirmar={onConfirmar}
-          onSacar={(disenoId, sacado) => void sacar(vista.ronda, disenoId, sacado)}
+          onSacar={(disenoId, sacado) => sacar(vista.ronda, disenoId, sacado)}
         />
       )}
 
