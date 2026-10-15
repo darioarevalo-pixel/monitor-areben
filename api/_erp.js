@@ -38,7 +38,7 @@ import { exigirUsuario } from './_auth.js'
 import { esAdmin } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
-import { baseFacturacion, clienteArcaDelEntorno, repoFacturas } from './_facturacion.js'
+import { SIN_ARCA, arcaConectado, baseFacturacion, clienteArcaDelEntorno, repoFacturas } from './_facturacion.js'
 import { CBTE, COND_IVA, DOC, ambienteDeEntorno, ptoVtaDe } from '../motor/arca/arca.core.js'
 import { techoDelMes } from '../motor/arca/techo.core.js'
 import { claveVenta, resumenDelMes, ventasParaFacturar } from '../motor/arca/mes.core.js'
@@ -147,6 +147,7 @@ export async function facturarVentas({ mes, marca, ventaIds, usuario }) {
     return { status: 409, error: `El grupo suma $${suma} y lo pendiente del mes es $${m.resumen.pendiente}` }
   }
 
+  if (!arcaConectado()) return { status: 409, error: SIN_ARCA }
   const hoy = diaArgentino(Date.now())
   const { arca } = clienteArcaDelEntorno(m.sb)
   const r = await facturarLote({
@@ -193,6 +194,7 @@ export async function notaDeCredito({ facturaId, usuario }, deps = {}) {
   if (previas.some((x) => String(x.venta_id) === String(f.venta_id))) return { status: 409, error: 'La venta ya tiene nota de crédito' }
   const queda = Math.round(Number(f.total) * 100 - previas.reduce((a, x) => a + Math.round(Number(x.total) * 100), 0)) / 100
   if (!(queda > 0)) return { status: 409, error: 'La factura ya está acreditada entera (por las notas de crédito de sus cambios).' }
+  if (!deps.arca && !arcaConectado()) return { status: 409, error: SIN_ARCA }
   const hoy = diaArgentino(Date.now())
   const arca = deps.arca || clienteArcaDelEntorno(sb).arca
   const r = await facturarLote({
@@ -575,6 +577,7 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
 
     let factura = ya
     if (!factura) {
+      if (!deps.arca && !arcaConectado()) return { status: 409, error: SIN_ARCA }
       const ptoVta = ptoVtaDe(ambiente, marca, process.env)
       const hoy = diaArgentino(Date.now())
       const arca = deps.arca || clienteArcaDelEntorno(sb).arca
@@ -738,6 +741,7 @@ export async function facturarCambio({ marca, body, usuario }, deps = {}) {
         return { ok: true, simulado: true, clase: tipos.factura === CBTE.FACTURA_A ? 'A' : 'B', nc: plan.nc?.total ?? 0, factura: plan.factura?.total ?? 0, ncYa: !!ncYa, facturaYa: !!facturaYa }
       }
 
+      if (!deps.arca && !arcaConectado() && !(ncYa && facturaYa)) return { status: 409, error: SIN_ARCA }
       const hoy = diaArgentino(Date.now())
       const receptor = { docTipo: Number(facturaOriginal.doc_tipo), docNro: Number(facturaOriginal.doc_nro), condicionIva: Number(facturaOriginal.cond_iva) }
       const ptoVta = ptoVtaDe(ambiente, marca, process.env)

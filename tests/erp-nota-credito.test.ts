@@ -12,6 +12,8 @@ const FACTURA = {
 const estado = { filas: [] as Array<Record<string, unknown>>, pedidos: [] as Array<Record<string, unknown>>, factura: { ...FACTURA } as Record<string, unknown> }
 
 vi.mock('../api/_facturacion.js', () => ({
+  // El certificado está (el cliente de ARCA lo pone el mock de abajo): sin él, la puerta contesta 409 antes.
+  arcaConectado: () => true, SIN_ARCA: 'sin certificado',
   baseFacturacion: () => ({
     // `maybeSingle` = la factura; como lista (`.in().neq()`) = las NC ya asociadas a ella (lo que lleva acreditado).
     from: () => {
