@@ -2,7 +2,7 @@
  * ERP › Precios: la ficha de precio y costo de un producto (`armarPrecioDeProducto`), pura.
  */
 import { describe, it, expect } from 'vitest'
-import { armarPrecioDeProducto, NOMBRE_FUENTE } from '../lib/erp/precio.core.js'
+import { armarPrecioDeProducto, leerCarga, NOMBRE_FUENTE } from '../lib/erp/precio.core.js'
 
 const LISTAS = [{ id: 'mayorista', nombre: 'Mayorista' }, { id: 'local', nombre: 'Local' }, { id: 'online', nombre: 'Online' }]
 const vig = (lista: string, precio: number, fuente = 'gn') => ({ lista, precio: String(precio), fuente, vigente_desde: '2026-10-14T23:00:00Z', usuario: 'copia-gn', motivo: null })
@@ -42,5 +42,27 @@ describe('armarPrecioDeProducto', () => {
   it('lo de GN al lado (el espejo) y los nombres de las fuentes', () => {
     expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [], costo: null, gn: { retailer_price: '25500', wholesaler_price: '0', unit_cost: '12000' } }).gn).toEqual({ precio: 25500, mayorista: 0, costo: 12000 })
     expect(Object.keys(NOMBRE_FUENTE).sort()).toEqual(['carga', 'gn', 'oc', 'tn'])
+  })
+})
+
+describe('leerCarga', () => {
+  it('precio con lista; monto en pesos con coma o con puntos de miles', () => {
+    expect(leerCarga({ que: 'precio', producto: '237777', lista: 'local', monto: '10.990,50' })).toMatchObject({ que: 'precio', producto: '237777', lista: 'local', monto: 10990.5, desde: null })
+    expect(leerCarga({ que: 'precio', producto: '1', lista: 'local', monto: 0 })).toMatchObject({ monto: 0 })
+    // 🔴 el punto decimal que escribe `String(n)` ⛔ se lee como miles (el bug de los compromisos: cien veces el monto).
+    expect(leerCarga({ que: 'precio', producto: '1', lista: 'local', monto: String(1500.5) })).toMatchObject({ monto: 1500.5 })
+    expect(leerCarga({ que: 'precio', producto: '1', lista: 'local', monto: '$ 1.500' })).toMatchObject({ monto: 1500 })
+  })
+  it('costo sin lista, con proveedor; desde = 00:00 de Argentina', () => {
+    expect(leerCarga({ que: 'costo', producto: '1', monto: 1500, lista: 'local', proveedor: ' Textil Sur ', desde: '2026-10-20' }))
+      .toMatchObject({ que: 'costo', lista: null, proveedor: 'Textil Sur', desde: '2026-10-20T00:00:00-03:00' })
+  })
+  it('frena lo que el motor rechazaría con un error menos claro', () => {
+    expect(leerCarga({ producto: '1', monto: 1 }).error).toBeTruthy()
+    expect(leerCarga({ que: 'precio', producto: 'x', lista: 'local', monto: 1 }).error).toBeTruthy()
+    expect(leerCarga({ que: 'precio', producto: '1', monto: 1 }).error).toMatch(/lista/)
+    expect(leerCarga({ que: 'costo', producto: '1', monto: '' }).error).toBeTruthy()
+    expect(leerCarga({ que: 'costo', producto: '1', monto: -5 }).error).toBeTruthy()
+    expect(leerCarga({ que: 'costo', producto: '1', monto: 5, desde: '20/10' }).error).toMatch(/AAAA/)
   })
 })

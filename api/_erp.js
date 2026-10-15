@@ -15,6 +15,7 @@
  *   GET  ?recurso=erp&vista=diferencias&marca=…&fecha=YYYY-MM-DD    lo que el libro ⛔ explicó ese día + la sobreventa
  *   GET  ?recurso=erp&vista=stock&marca=bdi|zattia&q=texto            busca prendas (SKU, código, nombre)
  *   GET  ?recurso=erp&vista=precio&marca=…&producto=ID                precio por lista y costo del producto, con GN y TN al lado
+ *   POST {recurso:'erp', accion:'cargar-precio'|'cargar-costo', marca, producto, monto, lista?, desde?, motivo?, proveedor?}
  *   GET  ?recurso=erp&vista=stock&marca=…&producto=ID&talle=ID       el libro y GN de esa prenda, con historial
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
@@ -34,7 +35,8 @@ import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
-import { armarPrecioDeProducto } from '../lib/erp/precio.core.js'
+import { armarPrecioDeProducto, leerCarga } from '../lib/erp/precio.core.js'
+import { lineaDe } from '../lib/lineas.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -368,6 +370,47 @@ export async function precioDeProducto({ marca, producto }) {
   }
 }
 
+/** Abre la conexión del motor de la marca, corre `fn(db)` y la cierra. Sin la variable: 409, dicho. */
+async function conMotor(marca, que, fn) {
+  const conexion = process.env[PG_DE_MARCA[marca]]
+  if (!conexion) return { status: 409, error: `${que} todavía ⛔ está conectado: falta la conexión del motor en Vercel.` }
+  const { default: pg } = await import('pg')
+  const db = new pg.Client({ connectionString: conexion })
+  await db.connect()
+  try {
+    return await fn(db)
+  } finally {
+    await db.end().catch(() => {})
+  }
+}
+
+/**
+ * CARGAR un precio (de una lista) o el costo de un producto en el ERP (`cargarPrecio` / `cargarCosto` del motor, contrato
+ * §13): una fila nueva `fuente = 'carga'` que manda sobre las copias de GN y TN. 🔴 Mientras GN vive, ⛔ cambia lo que
+ * cobra la Caja ni lo que muestra TN: queda en el ERP. La marca del motor es la LÍNEA del producto (Stunned adentro de la
+ * base de Zattia, por el SKU).
+ */
+export async function cargarPrecioCosto({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const c = leerCarga(body)
+  if (c.error) return { status: 400, error: c.error }
+  const b = deps.b || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
+  const inv = await b.from('inventario').select('sku').eq('product_id', c.producto).limit(1)
+  if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
+  if (!inv.data.length) return { status: 404, error: 'El producto no está en el espejo de GN.' }
+  const linea = lineaDe(marca, inv.data[0].sku)
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'Cargar precios', fn)
+  return correr(async (db) => {
+    const { cargarPrecio, cargarCosto } = await import('../motor/venta/precio.mjs')
+    const comun = { marca: linea, product_id: Number(c.producto), vigente_desde: c.desde, usuario: usuario || 'admin', motivo: c.motivo }
+    const r = c.que === 'precio'
+      ? await cargarPrecio(db, { ...comun, lista: c.lista, precio: c.monto })
+      : await cargarCosto(db, { ...comun, costo: c.monto, proveedor: c.proveedor })
+    if (!r.ok) return { status: 409, error: r.error.mensaje }
+    return { ok: true, vigente: r.vigente ?? null }
+  })
+}
+
 /** Los pedidos de TN abiertos y sin pagar de la base de la marca (Zattia trae también los de Stunned). */
 export async function pedidosSinPagar({ marca }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
@@ -443,6 +486,11 @@ export default async function handler(req, res) {
       })
       if (error) throw new Error(`facturacion_mes: ${error.message}`)
       return res.status(200).json({ ok: true, techo: m.calculado.total })
+    }
+
+    if (body.accion === 'cargar-precio' || body.accion === 'cargar-costo') {
+      const r = await cargarPrecioCosto({ marca: String(body.marca || ''), body: { ...body, que: body.accion === 'cargar-precio' ? 'precio' : 'costo' }, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
     if (body.accion === 'nota-credito') {

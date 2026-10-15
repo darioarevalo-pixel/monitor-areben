@@ -3,7 +3,8 @@
 /**
  * ERP › Precios. El precio de un producto en cada lista (local, online, mayorista) y su costo, como los tiene el ERP,
  * con de dónde salió cada uno (la copia de GN, cargado en el ERP, Tienda Nube) y su historial; al lado, lo que dicen
- * GN y Tienda Nube. Sólo lectura: cargar un precio o un costo espera a las funciones del motor (contrato §13).
+ * GN y Tienda Nube. «Cargar en el ERP» agrega un precio o un costo (`cargarPrecio`/`cargarCosto` del motor, contrato §13):
+ * manda sobre las copias, pero mientras GN vive ⛔ cambia lo que cobra la Caja ni lo que muestra Tienda Nube.
  *
  * 🔑 Mientras GN vive el ERP COPIA precio y costo de GN cada 2 h: la ficha avisa donde Tienda Nube dice otra cosa,
  * que es lo que hay que resolver antes de cortar (Bruno, 14-oct: el precio del local sale de TN o de una lista propia;
@@ -12,9 +13,10 @@
 
 import { useState } from 'react'
 import {
-  Button, EmptyState, Input, MoneyText, Notice, SectionCard, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space,
+  Button, ConfirmDetalle, EmptyState, Field, Input, MoneyText, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space, useConfirmar,
 } from '@/components/ui'
-import { buscarPrendas, leerPrecioDeProducto, type MarcaErp, type PrecioDeProducto } from '@/lib/erp/cliente'
+import { buscarPrendas, cargarPrecioCosto, leerPrecioDeProducto, type MarcaErp, type PrecioDeProducto } from '@/lib/erp/cliente'
+import { parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { NOMBRE_FUENTE } from '@/lib/erp/precio.core.js'
 
 const MARCAS: Array<{ key: MarcaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'bdi', label: 'BDI' }]
@@ -36,6 +38,13 @@ export function PreciosProducto() {
   const [encontrados, setEncontrados] = useState<Encontrado[] | null>(null)
   const [ficha, setFicha] = useState<PrecioDeProducto | null>(null)
   const [tnVieja, setTnVieja] = useState(false)
+  const [que, setQue] = useState('costo')
+  const [monto, setMonto] = useState('')
+  const [desde, setDesde] = useState('')
+  const [motivo, setMotivo] = useState('')
+  const [proveedor, setProveedor] = useState('')
+  const [hecho, setHecho] = useState<string | null>(null)
+  const { confirmar } = useConfirmar()
   const [error, setError] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState(false)
 
@@ -70,6 +79,35 @@ export function PreciosProducto() {
     setTnVieja(f.tnLeidaEn ? Date.now() - Date.parse(f.tnLeidaEn) > VIEJA_MS : false)
   }, 'No se pudo leer el precio.')
 
+  /** «Cargar en el ERP»: `que` es `costo` o `precio:<lista>`. */
+  async function cargar() {
+    if (!ficha) return
+    const esCosto = que === 'costo'
+    const lista = esCosto ? undefined : que.slice('precio:'.length)
+    const n = parsearMonto(monto)
+    if (!Number.isFinite(n) || n < 0) { setError('El monto es en pesos.'); return }
+    const nombre = esCosto ? 'Costo' : `Precio ${ficha.listas.find((l) => l.lista === lista)?.nombre ?? lista}`
+    const ok = await confirmar({
+      titulo: `Cargar ${nombre.toLowerCase()} de ${ficha.nombre ?? `producto ${ficha.producto}`}`,
+      mensaje: (
+        <div>
+          <ConfirmDetalle label={nombre} valor={<MoneyText value={n} />} />
+          <ConfirmDetalle label="Desde" valor={desde || 'Ahora'} />
+          <p style={{ marginTop: space[3] }}>Queda en el ERP y manda sobre la copia de GN. Mientras GN funcione, ⛔ cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</p>
+        </div>
+      ),
+      ok: 'Cargar',
+      tono: 'warning',
+    })
+    if (!ok) return
+    await correr(async () => {
+      await cargarPrecioCosto(marca, { que: esCosto ? 'costo' : 'precio', producto: ficha.producto, monto: String(n), lista, desde, motivo, ...(esCosto ? { proveedor } : {}) })
+      setHecho(`${nombre} cargado.`)
+      setMonto(''); setDesde(''); setMotivo(''); setProveedor('')
+      setFicha(await leerPrecioDeProducto(marca, ficha.producto))
+    }, 'No se pudo cargar.')
+  }
+
   function cambiarMarca(k: string) {
     setMarca(k as MarcaErp)
     setEncontrados(null)
@@ -87,6 +125,7 @@ export function PreciosProducto() {
       </SectionCard>
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
 
       {encontrados && !ficha && (
         <SectionCard title="Productos">
@@ -141,8 +180,33 @@ export function PreciosProducto() {
             </TableWrap>
             <p style={{ marginTop: space[2], fontSize: 13, opacity: 0.75 }}>
               Tienda Nube: lo que se leyó el {cuando(ficha.tnLeidaEn)}{tnVieja && ' (hace más de un día: puede haber cambiado)'}.
-              Cargar un precio o un costo en el ERP todavía no se puede desde acá.
             </p>
+          </SectionCard>
+
+          <SectionCard title="Cargar en el ERP" subtitle="Una fila nueva: lo anterior queda en el historial. Mientras GN funcione, ⛔ cambia la Caja ni Tienda Nube.">
+            <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <Field label="Qué">
+                <Select value={que} onChange={(e) => setQue(e.target.value)}>
+                  <option value="costo">Costo</option>
+                  {ficha.listas.map((l) => <option key={l.lista} value={`precio:${l.lista}`}>Precio {l.nombre}</option>)}
+                </Select>
+              </Field>
+              <Field label="Monto" style={{ flex: '1 1 140px' }}>
+                <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="$ 0" />
+              </Field>
+              <Field label="Desde (opcional)">
+                <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+              </Field>
+              {que === 'costo' && (
+                <Field label="Proveedor (opcional)" style={{ flex: '1 1 180px' }}>
+                  <Input value={proveedor} onChange={(e) => setProveedor(e.target.value)} />
+                </Field>
+              )}
+              <Field label="Motivo (opcional)" style={{ flex: '2 1 220px' }}>
+                <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Aumento del proveedor, liquidación…" />
+              </Field>
+              <Button disabled={trabajando || !monto.trim()} onClick={() => void cargar()}>Cargar</Button>
+            </div>
           </SectionCard>
 
           <SectionCard title="Historial" subtitle="El más nuevo arriba. Un precio o un costo nuevo es otra fila: lo anterior ⛔ se edita.">

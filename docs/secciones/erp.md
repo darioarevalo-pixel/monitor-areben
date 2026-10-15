@@ -23,6 +23,13 @@ Y **Facturación** (F5 del plan): el tope del mes, lo ya facturado y las ventas 
 factura, que se facturan con ARCA (ex AFIP) por web service. Reemplaza la facturación masiva de GN
 y el «Pendiente de facturar» del dashboard de Darío.
 
+- 🔑 **`erp › Precios`** (`PreciosProducto.tsx`, 15-oct): precio por LISTA y costo de un producto como los tiene el motor
+  (`precio_vigente`/`costo_vigente`), de dónde salió cada uno y su historial, con GN (`productos.retailer_price`…) y TN
+  (`tn_variante` por los SKU, con cuándo se leyó: puede estar vieja) al lado; avisa local ≠ TN, sin costo y costo de TN ≠ ERP.
+  «Cargar en el ERP» = `cargarPrecio`/`cargarCosto` del motor (contrato §13): fila `carga` que manda sobre las copias, pero
+  🔴 mientras GN vive ⛔ cambia la Caja ni TN. La `marca` del motor es la LÍNEA (`lineaDe`: un SKU `STU…` es `stunned`).
+  El monto pasa por `parsearMonto` (el de compromisos: el punto decimal de `String(n)` ⛔ se lee como miles).
+
 ## Dónde vive
 
 `components/erp/` · `lib/erp/cliente.ts` · `lib/arca/` (todo el dominio, puro y testeado:
