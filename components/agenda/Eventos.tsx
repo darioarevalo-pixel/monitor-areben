@@ -76,7 +76,7 @@ export function Eventos() {
       <Notice tone="neutral">
         Un <b>evento</b> es un hecho que deja trabajo: llega mercadería, se arma una sesión de fotos,
         se lanza un producto, cambia una condición comercial. Sus <b>actividades</b> se cargan una
-        sola vez acá y ⛔ no corren ningún día por su cuenta: cuando el evento pasa, se copian con su
+        sola vez acá y no corren ningún día por su cuenta: cuando el evento pasa, se copian con su
         fecha y con la dueña que tenga cada una.
       </Notice>
 
@@ -158,7 +158,7 @@ function TarjetaEvento({
         {actividades.length === 0 ? (
           <EmptyState
             title="Este evento todavía no tiene ninguna actividad cargada."
-            hint="Mientras no haya ninguna, el evento pasa y ⛔ no deja trabajo: no se inventa ningún renglón."
+            hint="Mientras no haya ninguna, el evento pasa y no deja trabajo: no se inventa ningún renglón."
             dashed
           />
         ) : (

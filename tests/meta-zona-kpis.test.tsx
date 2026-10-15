@@ -86,7 +86,7 @@ describe('la fila de KPIs sigue a la ventana elegida', () => {
   it('🔑 los pedidos de la tienda ⛔ NO desaparecen: bajan a un renglón que dice que no son la vara', () => {
     expect(foto).toContain('Pedidos de la tienda: 100')
     expect(foto).toContain('todos los canales')
-    expect(foto).toContain('⛔ no son la vara de la pauta')
+    expect(foto).toContain('no son la vara de la pauta')
     // Sin tono: un renglón gris ⛔ no se lee como un semáforo. La tarjeta sí, y es la de Meta.
     expect(foto).toContain('7.000')
   })

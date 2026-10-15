@@ -161,7 +161,7 @@ function NotaPyl({ pyl }: { pyl: Pyl }) {
         </div>
       )}
       <div>
-        ⛔ <strong>Es «por arriba»: termina en la contribución.</strong> No descuenta los gastos fijos —la estructura de
+        ⚠️ <strong>Es «por arriba»: termina en la contribución.</strong> No descuenta los gastos fijos —la estructura de
         las tres marcas—, que viven en el dashboard y no tienen API. Tampoco IIBB ni impuesto al cheque.
         {!c.comisionesCargadas && ' ⚠️ Las comisiones de cobro están en 0% en el dashboard, así que no están descontadas.'}
       </div>

@@ -74,7 +74,7 @@ export function Campanias() {
         <Notice tone="danger">
           No se pudieron traer las campañas: {m.estado.motivo}
           <div style={{ fontSize: font.sm, marginTop: space[1] }}>
-            ⚠️ Desde el 30-ago un token vencido ya ⛔ no llega acá: cae a la foto diaria y lo dice
+            ⚠️ Desde el 30-ago un token vencido ya no llega acá: cae a la foto diaria y lo dice
             arriba. Si igual estás viendo esto, tampoco se pudo leer la foto.
           </div>
         </Notice>

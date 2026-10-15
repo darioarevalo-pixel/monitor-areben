@@ -166,7 +166,7 @@ describe('los textos de la pantalla', () => {
   it('🔴 la ayuda de «abierta» dice explícitamente que ⛔ NO es gente nueva', () => {
     // Es la confusión que vuelve mentira a la pantalla entera, y por eso la corrección va en la
     // fila y ⛔ no en un popover: un dato que hay que ir a buscar ⛔ no corrige a nadie.
-    expect(AYUDA_PUBLICO.abierta).toContain('⛔ No es «gente nueva»')
+    expect(AYUDA_PUBLICO.abierta).toContain('No es «gente nueva»')
   })
 
   it('⛔ ningún rótulo dice «fría» ni «remarketing» a secas: el nombre manda en criollo', () => {

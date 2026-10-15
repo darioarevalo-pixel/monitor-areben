@@ -61,7 +61,7 @@ export function QueSeLeDijo({ marca, id }: { marca: Marca; id: number }) {
       {!error && lista === null && <div style={{ fontSize: font.xs, color: color.mut2 }}>Leyendo…</div>}
       {!error && lista?.length === 0 && (
         <div style={{ fontSize: font.xs, color: color.mut2 }}>
-          Nada registrado. ⚠️ Eso ⛔ no quiere decir que no se le dijo nada: los mensajes se
+          Nada registrado. ⚠️ Eso no quiere decir que no se le dijo nada: los mensajes se
           registran desde el {DESDE_CUANDO_SE_REGISTRA}, y los anteriores no están.
         </div>
       )}

@@ -836,7 +836,7 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
       <div style={box}>
         <Notice tone="danger" icon="⚠">
           <div>
-            <b>Transferencia sin confirmar{quien}.</b> Puede haberse hecho: ⛔ no la hagas a mano. Buscá en Gestión Nube una transferencia{' '}
+            <b>Transferencia sin confirmar{quien}.</b> Puede haberse hecho: no la hagas a mano. Buscá en Gestión Nube una transferencia{' '}
             {devolucion ? 'del local al depósito' : 'del depósito al local'} de las {hhmm(armado.actualizado_en)}
             {u ? ` de ${u} ${u === 1 ? art.singular : art.plural}` : ''} con <b>#{codigoArmado(armado.id)}</b> en la descripción.
           </div>

@@ -298,8 +298,8 @@ export function AireDeHoy({ vigente, medido, aire, fichaPropia }: {
         Pagás {cuanto} por pedido
         <br />
         <span style={{ color: color.mut2 }}>
-          {vigente.fuente === 'foto' ? `medido sobre ${ventana}` : 'según la ficha'} · ⛔ sin aire:
-          {' '}esta línea todavía ⛔ no cargó su economía y el techo de arriba es prestado
+          {vigente.fuente === 'foto' ? `medido sobre ${ventana}` : 'según la ficha'} · sin aire:
+          {' '}esta línea todavía no cargó su economía y el techo de arriba es prestado
         </span>
       </>
     )
@@ -310,7 +310,7 @@ export function AireDeHoy({ vigente, medido, aire, fichaPropia }: {
       <>
         Según la ficha pagás {cuanto} · <b>{decimal(aire)}× de aire</b>
         <br />
-        <span style={{ color: color.mut2 }}>⛔ Sin medir: {vigente.motivo}.</span>
+        <span style={{ color: color.mut2 }}>Sin medir: {vigente.motivo}.</span>
       </>
     )
   }

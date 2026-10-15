@@ -53,7 +53,7 @@ import type { Acciones, ObjetoMeta } from '@/components/meta-ads/acciones/tipos'
 const vueltaDe = (clave: keyof typeof ACCIONES) => {
   const v = ACCIONES[clave]?.vuelta
   if (!v) return ''
-  const marca = v.como === 'si' ? '↩︎ Se deshace' : v.como === 'parcial' ? '⚠️ Se deshace a medias' : '🔴 ⛔ No se deshace'
+  const marca = v.como === 'si' ? '↩︎ Se deshace' : v.como === 'parcial' ? '⚠️ Se deshace a medias' : '🔴 No se deshace'
   return ` · ${marca}: ${v.texto}`
 }
 

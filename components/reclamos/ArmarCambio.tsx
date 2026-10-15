@@ -874,7 +874,7 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
                               los cinco mensajes de Reclamos. Ver `BotonMensaje`. */}
                           <BotonMensaje
                             marca={marca} id={c.id} tipo="detalle_cambio"
-                            onSinRegistrar={(e) => toast.error(`El detalle se copió, pero ⛔ no quedó registrado: ${e.message}`)}
+                            onSinRegistrar={(e) => toast.error(`El detalle se copió, pero no quedó registrado: ${e.message}`)}
                             getText={() => detalleCambioTexto({ ...c, items: c.items, items_nuevos: c.items_nuevos })}
                             label="Copiar el detalle" tone="neutral" variant="ghost"
                           />

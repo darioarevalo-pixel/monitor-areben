@@ -102,7 +102,7 @@ describe('el orden vertical de la zona de rendimiento', () => {
   })
 
   it('🔑 y los pedidos de la tienda se declaran como lo que son, ⛔ no como una vara', () => {
-    expect(markup).toContain('⛔ no son la vara de la pauta')
+    expect(markup).toContain('no son la vara de la pauta')
     expect(donde('Pedidos de la tienda')).toBeLessThan(donde('Las pautas'))
   })
 })

@@ -281,7 +281,7 @@ export function BancoSesion({
           corta y nadie sabría por qué. */}
       {ausentes.length ? (
         <div style={{ fontSize: 11, color: color.dangerInk, background: color.dangerBg, borderRadius: 6, padding: '4px 7px', marginTop: 6 }}>
-          {ausentes.length === 1 ? 'Una prenda no entró al pedido' : `${ausentes.length} prendas no entraron al pedido`} porque ya ⛔ no tienen stock:{' '}
+          {ausentes.length === 1 ? 'Una prenda no entró al pedido' : `${ausentes.length} prendas no entraron al pedido`} porque ya no tienen stock:{' '}
           {ausentes.map((v) => banco.find((i) => i.vid === v)?.nombre || v).join(' · ')}. Siguen en el banco.
         </div>
       ) : null}

@@ -165,7 +165,7 @@ export function FichaModelo<T extends { modelo?: ModeloSesion }>({
         </div>
       ) : borrador.id ? null : (
         <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>
-          Tipeada a mano: no queda enganchada con su ficha, así que esta sesión ⛔ no le va a contar
+          Tipeada a mano: no queda enganchada con su ficha, así que esta sesión no le va a contar
           para «cuántas hizo».
         </div>
       )}

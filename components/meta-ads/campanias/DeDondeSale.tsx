@@ -32,13 +32,13 @@ export function DeDondeSale({ d }: { d: RespuestaEtapas }) {
   if (d.fuente !== 'foto') return null
   return (
     <Notice tone="warning" icon="📌">
-      <b>Esto sale de la foto diaria, ⛔ no de Meta.</b> {d.motivo}
+      <b>Esto sale de la foto diaria, no de Meta.</b> {d.motivo}
       <div style={{ fontSize: font.sm, marginTop: space[1] }}>
         Ventana {d.desde} → {d.hasta}, sólo días cerrados.{' '}
         <b>Le faltan las campañas que nunca entregaron</b>: la foto guarda sólo las que gastaron, así
         que «activas sin entrega» está incompleto.
         {d.sinObjetivo
-          ? ` Y ${d.sinObjetivo === 1 ? 'una campaña quedó afuera' : `${d.sinObjetivo} campañas quedaron afuera`} porque la foto todavía ⛔ no guardaba su objetivo.`
+          ? ` Y ${d.sinObjetivo === 1 ? 'una campaña quedó afuera' : `${d.sinObjetivo} campañas quedaron afuera`} porque la foto todavía no guardaba su objetivo.`
           : ''}
       </div>
     </Notice>

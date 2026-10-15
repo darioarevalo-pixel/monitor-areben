@@ -298,7 +298,7 @@ export function FichaProveedor({
           </Notice>
         ) : !ficha.recepciones.length ? (
           <Notice tone="neutral">
-            Está enganchado, y todavía no llegó ninguna orden de compra suya. ⛔ No es que entregue mal:
+            Está enganchado, y todavía no llegó ninguna orden de compra suya. No es que entregue mal:
             es que no hay nada medido.
           </Notice>
         ) : entrega ? (

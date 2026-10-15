@@ -118,12 +118,12 @@ function Contenido({ d, marca }: { d: RespuestaPublicos; marca: string }) {
   if (!d.clasificado || !d.partes) {
     return (
       <Notice tone="warning" icon="📌">
-        <b>⛔ No se pudo leer a quién le habla cada conjunto.</b> {d.motivo}
+        <b>No se pudo leer a quién le habla cada conjunto.</b> {d.motivo}
         {typeof d.total === 'number' && (
           <div style={{ fontSize: font.sm, marginTop: space[1] }}>
             Lo que sí se sabe de la foto: en la ventana se gastaron <b>{plata(d.total)}</b>. Lo que
             falta es el corte por público, que vive en Meta —el <code>targeting</code> de cada
-            conjunto— y la foto ⛔ no lo guarda.
+            conjunto— y la foto no lo guarda.
           </div>
         )}
       </Notice>
@@ -172,7 +172,7 @@ function Contenido({ d, marca }: { d: RespuestaPublicos; marca: string }) {
           <b>El costo de acá abajo sale de la atribución de Meta, y le regala la compra al
           remarketing.</b> Le muestra el aviso a alguien que ya venía decidido y Meta le imputa esa
           venta: por eso sale <b>{d.sesgo.veces.toFixed(1)}× más barato</b> ({plata(d.sesgo.costoRemarketing)}{' '}
-          contra {plata(d.sesgo.costoResto)}). ⛔ <b>No es un ranking y la plata ⛔ no se mueve por
+          contra {plata(d.sesgo.costoResto)}). ⚠️ <b>No es un ranking y la plata no se mueve por
           él.</b> Lo que esta pantalla mide bien es el <b>reparto del gasto</b>, que es un hecho.
         </Notice>
       )}
@@ -205,9 +205,9 @@ function Contenido({ d, marca }: { d: RespuestaPublicos; marca: string }) {
         <div style={{ fontSize: font.sm, color: color.mut2 }}>
           Se leyó el público de <b>{entero(cob.conjuntosEnMeta)}</b> conjuntos de Meta.{' '}
           {cob.sinPublicoLeido > 0
-            ? `${entero(cob.sinPublicoLeido)} de los que gastaron en la ventana ya ⛔ no están en Meta —pausados y archivados, o borrados—, así que su plata queda en «sin clasificar» y ⛔ no se reparte entre los otros.`
+            ? `${entero(cob.sinPublicoLeido)} de los que gastaron en la ventana ya no están en Meta —pausados y archivados, o borrados—, así que su plata queda en «sin clasificar» y no se reparte entre los otros.`
             : 'Todos los que gastaron en la ventana siguen en Meta, así que el reparto está completo.'}
-          {cob.sinTargeting > 0 && ` Y a ${entero(cob.sinTargeting)} ⛔ no se les pudo leer el público: quedaron afuera del reparto en vez de entrar como «abierto».`}
+          {cob.sinTargeting > 0 && ` Y a ${entero(cob.sinTargeting)} no se les pudo leer el público: quedaron afuera del reparto en vez de entrar como «abierto».`}
         </div>
       )}
     </>

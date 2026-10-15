@@ -84,7 +84,7 @@ export function Medidor({ marca }: { marca: Marca }) {
           </TableWrap>
 
           <Notice tone="warning" icon="⚠️" style={{ marginTop: space[3] }}>
-            <b>Esto ⛔ no es la tasa de reclamos: es lo que se registró.</b> El reclamo que se
+            <b>Esto no es la tasa de reclamos: es lo que se registró.</b> El reclamo que se
             resuelve en un chat no deja fila acá, así que el número sube tanto cuando reclama más
             gente como cuando se anota mejor. El mes en curso además está incompleto, y las ventas
             de hoy pueden todavía no haber sincronizado desde Gestión Nube.

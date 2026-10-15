@@ -1251,7 +1251,7 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
       {!camp.cargando && camp.campanias.length === 0 ? (
         <Notice tone="warning" icon="🎪">
           <b>No hay ninguna campaña para etiquetar en {marca === 'bdi' ? 'BDI' : 'Zattia'}.</b> Acá aparecen sólo las que están{' '}
-          <b>en curso</b> o <b>aplicadas</b>: una campaña en <b>borrador</b> ⛔ no entra, aunque ya tenga los precios decididos.
+          <b>en curso</b> o <b>aplicadas</b>: una campaña en <b>borrador</b> no entra, aunque ya tenga los precios decididos.
           Se cambia desde <b>Liquidación</b>. {marca === 'bdi' ? 'Ojo con el selector de marca de arriba: la feria es de Zattia.' : ''}
         </Notice>
       ) : !camp.liqEfectivo ? (
@@ -1296,7 +1296,7 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
               ) : null}
               {/* 🔑 **El diseño ⛔ no se edita acá, y el cartel lo dice.** Va en miles de etiquetas:
                   se decide una vez, en la campaña, y ⛔ no una vez por computadora. */}
-              <> Se diseña en <b>Liquidación → Editar campaña</b>, ⛔ no acá: es el mismo para todos los que etiqueten.</>
+              <> Se diseña en <b>Liquidación → Editar campaña</b>, no acá: es el mismo para todos los que etiqueten.</>
               {precioPrevia != null && <> La previa muestra <b>${Math.round(precioPrevia).toLocaleString('es-AR')}</b>, que es {ultimoPrecio == null ? 'la mesa más barata' : 'lo último que salió'}.</>}
             </div>
           </div>

@@ -104,7 +104,7 @@ export const GUIA_SESION_FOTOS: readonly PasoGuia[] = [
   {
     ancla: 'sf.historial',
     anclaFina: 'sf.nuevaSolicitud',
-    texto: 'Este botón pide productos sin sesión de por medio. Sirve igual, pero lo que se pide así ⛔ no queda enganchado a ninguna producción.',
+    texto: 'Este botón pide productos sin sesión de por medio. Sirve igual, pero lo que se pide así no queda enganchado a ninguna producción.',
     siNoEsta: 'El botón está arriba del historial, y lo ve quien puede pedir: el depósito y el local preparan, no piden.',
   },
   {

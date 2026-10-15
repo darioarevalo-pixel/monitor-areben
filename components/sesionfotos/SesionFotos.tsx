@@ -1573,7 +1573,7 @@ function Detalle({
               {aClasificar.length === 1 ? 'Falta decir de qué zona es' : `Faltan clasificar ${aClasificar.length} prendas`}
               : {aClasificar.slice(0, 4).map((i) => i.nombre).join(' · ')}
               {aClasificar.length > 4 ? ` y ${aClasificar.length - 4} más` : ''}
-              . Hasta que estén, el aviso de outfit incompleto ⛔ no las cuenta.
+              . Hasta que estén, el aviso de outfit incompleto no las cuenta.
             </div>
           ) : null}
         </div>
@@ -2136,7 +2136,7 @@ function Draft({
           <span style={{ fontSize: 12, color: draft.disparador ? color.mut : color.warningInk, maxWidth: 340 }}>
             {draft.disparador
               ? 'Al crear la sesión, sus pasos caen en la Agenda de cada una.'
-              : 'Sin esto la sesión se guarda igual, pero sus pasos ⛔ no caen en la Agenda: de quién es cada uno lo decide el origen.'}
+              : 'Sin esto la sesión se guarda igual, pero sus pasos no caen en la Agenda: de quién es cada uno lo decide el origen.'}
           </span>
         ) : null}
         <span style={{ fontSize: 13, color: color.ink2 }}>Destino:</span>

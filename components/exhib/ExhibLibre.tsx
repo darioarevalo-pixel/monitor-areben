@@ -495,7 +495,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
                 Mientras escaneás <b>no hace falta mirar el teléfono</b>. Son tres avisos:<br />
                 • <b>Un pitido y el nombre de la prenda</b> = la detectó. Si dice otra prenda, la etiqueta está cambiada.<br />
                 • <b>Dos pitidos y «otra vez»</b> = esa variante ya se escaneó. Seguí: queda en el reporte.<br />
-                • <b>Un pitido grave y «de nuevo»</b> = ⛔ no la detectó: pasá la prenda de nuevo.
+                • <b>Un pitido grave y «de nuevo»</b> = no la detectó: pasá la prenda de nuevo.
               </span>
               <Button size="sm" variant="outline" onClick={escucharAvisos}>Escuchar los avisos</Button>
             </div>
@@ -507,8 +507,8 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
             {audio && (
               <div style={{ fontSize: font.sm, marginTop: space[2], color: audio === 'listo' ? color.mut : color.ink }}>
                 {audio === 'listo' && <>Si escuchás la voz pero <b>no los pitidos</b>, es el <b>interruptor de silencio</b> del costado del teléfono: la voz lo ignora y los pitidos no.</>}
-                {audio === 'bloqueado' && <>El teléfono todavía ⛔ no deja sonar. Subí el volumen, sacalo de silencio y tocá de nuevo.</>}
-                {audio === 'sin-audio' && <>Este navegador ⛔ no puede hacer sonidos. La voz puede andar igual.</>}
+                {audio === 'bloqueado' && <>El teléfono todavía no deja sonar. Subí el volumen, sacalo de silencio y tocá de nuevo.</>}
+                {audio === 'sin-audio' && <>Este navegador no puede hacer sonidos. La voz puede andar igual.</>}
               </div>
             )}
           </Notice>

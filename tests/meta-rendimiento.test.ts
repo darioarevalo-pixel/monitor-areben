@@ -958,7 +958,7 @@ describe('el piso de evidencia — el exceso tiene que ser más grande que el ru
     expect(v.clase).toBe('sin-prueba')
     // ⛔ `accion: null` es la decisión: un pill en cada fila gris sería un muro que no señala nada.
     expect(v.accion).toBeNull()
-    expect(v.porque[0]).toContain('⛔ no se distingue de 100%')
+    expect(v.porque[0]).toContain('no se distingue de 100%')
   })
 
   it('el gris ⛔ NO es mudo: dice el excedente y cuántas compras harían falta', () => {

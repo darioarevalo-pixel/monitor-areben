@@ -637,7 +637,7 @@ function Terminar({ abierto, seguir, transferido, armado, escaneos, faltantes, s
     return (
       <Modal abierto={abierto} onCerrar={onSinConfirmar} titulo="Transferencia sin confirmar" cerrarConFondo={false} pie={<Button variant="solid" tone="brand" onClick={onSinConfirmar}>Volver a la lista</Button>}>
         <p style={{ fontSize: font.md, margin: 0 }}>
-          Gestión Nube no confirmó la transferencia: <b>puede haberse hecho</b>. ⛔ No la hagas a mano en la app de Gestión Nube. En la lista figura qué buscar para verificarla.
+          Gestión Nube no confirmó la transferencia: <b>puede haberse hecho</b>. No la hagas a mano en la app de Gestión Nube. En la lista figura qué buscar para verificarla.
         </p>
       </Modal>
     )

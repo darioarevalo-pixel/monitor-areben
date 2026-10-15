@@ -135,7 +135,7 @@ describe('traer una orden al banco', () => {
     await apretar('Agregar al banco')
 
     expect(cont.textContent).toContain('1 prenda al banco')
-    expect(cont.textContent).toContain('2 renglones ⛔ no entraron')
+    expect(cont.textContent).toContain('2 renglones no entraron')
     expect(cont.textContent).toContain('1 su producto todavía no está cargado en Gestión Nube')
     expect(cont.textContent).toContain('1 no queda ninguna unidad para fotografiar')
   })
@@ -163,7 +163,7 @@ describe('traer una orden al banco', () => {
     expect(cont.textContent).toContain('Lo que entró')
     // ⛔ Y no dice «sin órdenes», que mandaría a buscar una OC que sí existe.
     expect(cont.textContent).not.toContain('Sin órdenes')
-    expect(cont.textContent).toContain('⛔ No se pudieron leer las órdenes')
+    expect(cont.textContent).toContain('No se pudieron leer las órdenes')
   })
 
   it('sin órdenes en la ventana lo dice, y el botón de traer queda apagado', async () => {

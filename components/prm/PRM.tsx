@@ -287,14 +287,14 @@ export function PRM() {
             <p style={{ fontSize: 12, color: color.mut, margin: 0 }}>
               Se ven los proveedores a los que le compra <strong>{marca.toUpperCase()}</strong>.
               Los otros {deLaOtra} le venden a la otra marca y están en su sección. La marca sale de
-              sus órdenes de compra, ⛔ no de un tilde; el que todavía no tiene ninguna orden aparece
+              sus órdenes de compra, no de un tilde; el que todavía no tiene ninguna orden aparece
               en las dos.
             </p>
           )}
 
           <p style={{ fontSize: 12, color: color.mut, margin: 0 }}>
             <strong>Vendido</strong> son las unidades de <strong>los productos que él trajo</strong>,
-            en los últimos {DIAS} días. ⛔ No es «cuánto de lo suyo se vendió»: el mismo producto pudo
+            en los últimos {DIAS} días. No es «cuánto de lo suyo se vendió»: el mismo producto pudo
             entrar por otra orden o ya estar en el depósito.
             {compartidos > 0 && (
               <>
@@ -325,8 +325,8 @@ export function PRM() {
 
           {falloMedido && (
             <Notice tone="warning">
-              ⛔ No se pudieron leer las columnas medidas —Comprado, Vendido, Por día y Última
-              orden—, así que dicen <strong>?</strong>. ⛔ No es que estos proveedores no hayan
+              No se pudieron leer las columnas medidas —Comprado, Vendido, Por día y Última
+              orden—, así que dicen <strong>?</strong>. No es que estos proveedores no hayan
               vendido: es que el pedido que cruza las órdenes contra las ventas no volvió. El resto
               de la lista es de otro pedido y está entero.
             </Notice>
@@ -335,7 +335,7 @@ export function PRM() {
           {mudas.length > 0 && (
             <Notice tone="warning">
               No se pudo preguntar por las ventas de {mudas.join(' y ')}. Esas filas muestran
-              <strong> ?</strong> en «Vendido» y «Por día»: ⛔ no es que no hayan vendido, es que no
+              <strong> ?</strong> en «Vendido» y «Por día»: no es que no hayan vendido, es que no
               se pudo preguntar.
             </Notice>
           )}

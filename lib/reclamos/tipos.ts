@@ -898,7 +898,7 @@ export function faltantesDeLaDecision(o: {
   if (o.retencionMonto !== '' && !o.retencionRespuesta && !o.ofertaMandada) {
     faltas.push({
       paso: 'producto',
-      que: 'decir si la oferta ya se la mandaste o qué contestó (si no, el monto ⛔ no se guarda)',
+      que: 'decir si la oferta ya se la mandaste o qué contestó (si no, el monto no se guarda)',
       bloquea: true,
     })
   }

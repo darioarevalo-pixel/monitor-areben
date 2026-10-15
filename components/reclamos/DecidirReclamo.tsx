@@ -824,7 +824,7 @@ export function DecidirReclamo({
           Este reclamo <b>ya está decidido</b>: {COMPENSACION_LABEL[reclamo.compensacion].toLowerCase()}.
           {' '}Hasta que no aprietes <b>«Volver a decidir»</b> en la pestaña <b>«{PASO_LABEL.cliente}»</b>,
           ésa sigue siendo la decisión que vale. Lo que confirmes en los dos primeros pasos queda
-          guardado, pero <b>⛔ no reemplaza la resolución</b>.
+          guardado, pero <b>no reemplaza la resolución</b>.
         </Notice>
       )}
 

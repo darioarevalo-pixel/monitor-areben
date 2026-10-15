@@ -53,7 +53,7 @@ export const PROPIAS: Record<string, Propia> = {
     texto:
     'La casa: qué pasa hoy según la función de cada uno. Muestra los MISMOS avisos que cuenta el ' +
     'badge del sidebar, los pendientes de la Agenda de hoy, las novedades sin leer y lo que viene. ' +
-    '⛔ No escribe nada del negocio: lo único que guarda es hasta dónde leíste los avisos, para no ' +
+    'No escribe nada del negocio: lo único que guarda es hasta dónde leíste los avisos, para no ' +
     'volver a marcarlos como nuevos.',
     porque: 'sin-info',
   },
@@ -72,39 +72,39 @@ export const PROPIAS: Record<string, Propia> = {
     'de una categoría), Visibilidad (publica u oculta el producto en la tienda) y las dos de texto, ' +
     'Tabla de talles y Descripción. 🔴 Lo que se toca acá se ve en la tienda pública, y Tienda Nube ' +
     'guarda la LISTA COMPLETA de categorías de cada producto: si otra persona está editando el mismo ' +
-    'producto, la última en guardar pisa lo de la otra. Eliminar una categoría ⛔ no se puede desde acá: ' +
+    'producto, la última en guardar pisa lo de la otra. Eliminar una categoría no se puede desde acá: ' +
     'eso es a mano en el admin de Tienda Nube.',
     porque: 'no-dice-si-escribe',
   },
   resumen: {
     texto:
     'El tablero de la marca: los KPIs y el resumen del negocio, con el estado del último sync de ' +
-    'Gestión Nube y el botón para volver a traer los datos. ⛔ No escribe nada del negocio: todo sale ' +
+    'Gestión Nube y el botón para volver a traer los datos. No escribe nada del negocio: todo sale ' +
     'del ETL y acá sólo se mira — lo único que hace el botón es volver a pedir la foto.',
     porque: 'no-dice-si-escribe',
   },
   'ventas-mensuales': {
     texto:
     'La venta mes a mes (con el corte por categoría y por canal) y, en la otra pestaña, día a día en ' +
-    'plata y en unidades contra la semana anterior. ⛔ No escribe nada: es lectura del store del ETL.',
+    'plata y en unidades contra la semana anterior. No escribe nada: es lectura del store del ETL.',
     porque: 'no-dice-si-escribe',
   },
   variantes: {
     texto:
     'Ventas y stock de cada variante —talle, modelo o color— con la vida útil de los últimos 30 días, ' +
-    'buscador y orden por columna. ⛔ No escribe nada: es lectura del store del ETL.',
+    'buscador y orden por columna. No escribe nada: es lectura del store del ETL.',
     porque: 'no-dice-si-escribe',
   },
   talles: {
     texto:
     'Qué talles se venden en cada categoría, en gráfico y en tabla, con el rango de meses que elijas. ' +
-    'Es de Zattia. ⛔ No escribe nada: es lectura del store del ETL.',
+    'Es de Zattia. No escribe nada: es lectura del store del ETL.',
     porque: 'no-dice-si-escribe',
   },
   colores: {
     texto:
     'Qué colores se venden (gráfico y tabla) y el análisis de agotamiento, que congela el ratio de ' +
-    'cada color al primer sellout. Es de Zattia. ⛔ No escribe nada: es lectura del store del ETL.',
+    'cada color al primer sellout. Es de Zattia. No escribe nada: es lectura del store del ETL.',
     porque: 'no-dice-si-escribe',
   },
   exhib: {

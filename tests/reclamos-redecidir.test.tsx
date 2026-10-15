@@ -437,7 +437,7 @@ describe('la oferta de retención: lo que sale de la pantalla', () => {
       await conOferta('13491')
       await act(async () => { boton('Confirmar paso')!.click() })
       expect(llamadas.filter((l) => l.que === 'editar'), '⛔ no puede guardar tirando el monto').toHaveLength(0)
-      expect(texto()).toContain('el monto ⛔ no se guarda')
+      expect(texto()).toContain('el monto no se guarda')
     })
 
     /** Y el freno se levanta con un click: es una traba de un paso, ⛔ no un formulario nuevo. */

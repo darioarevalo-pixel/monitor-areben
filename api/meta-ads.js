@@ -499,7 +499,7 @@ async function etapasDeLaFoto(res, dias, visibles, asignadas, motivo) {
 
   const cierre = ultimoDiaCerrado(relectura.filas) || '';
   if (!cierre) {
-    return res.status(502).json({ error: motivo, detalle: 'Y la foto todavía ⛔ no tiene ningún día cerrado con el que armarlo.' });
+    return res.status(502).json({ error: motivo, detalle: 'Y la foto todavía no tiene ningún día cerrado con el que armarlo.' });
   }
   const desde = desdeDe(cierre, dias);
   const deLaVentana = snap.filas.filter((f) => {

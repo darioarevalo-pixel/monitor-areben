@@ -103,7 +103,7 @@ export function AgregarDesdeOC({
   const vacio = cargando && !ocs
     ? 'Cargando órdenes…'
     : error
-      ? '⛔ No se pudieron leer las órdenes'
+      ? 'No se pudieron leer las órdenes'
       : ocs?.length
         ? 'Elegí una orden…'
         : 'Sin órdenes en los últimos 90 días'
@@ -123,9 +123,9 @@ export function AgregarDesdeOC({
           Agregar desde una orden recibida{' '}
           <InfoPopover titulo="Lo que entró, sobre la mesa">
             Trae al banco los renglones de una orden de compra ya recibida, cruzándolos con Gestión
-            Nube por SKU y, si no, por código de barras. Agregarlos ⛔ no los pide ni los separa del
+            Nube por SKU y, si no, por código de barras. Agregarlos no los pide ni los separa del
             stock: quedan como candidatos, para armar los outfits y recién después pedir lo que falte
-            al local. Lo que ⛔ no cruza o ya ⛔ no tiene stock se lista con su motivo.
+            al local. Lo que no cruza o ya no tiene stock se lista con su motivo.
           </InfoPopover>
         </span>
         <Select value={elegida} onChange={(e) => setElegida(e.target.value)} disabled={cargando || !ocs?.length} style={{ fontSize: 12, maxWidth: 280 }}>
@@ -164,7 +164,7 @@ export function AgregarDesdeOC({
               y el que la trajo leería el número de arriba como si fuera la orden entera. */}
           {parte.excluidos.length ? (
             <div style={{ color: color.warningInk, marginTop: 2 }}>
-              {parte.excluidos.length === 1 ? '1 renglón ⛔ no entró' : `${parte.excluidos.length} renglones ⛔ no entraron`}:{' '}
+              {parte.excluidos.length === 1 ? '1 renglón no entró' : `${parte.excluidos.length} renglones no entraron`}:{' '}
               {porMotivo(parte.excluidos)
                 .map((m) => `${m.n} ${MOTIVO_EXCLUIDO_LABEL[m.motivo]}`)
                 .join(' · ')}

@@ -366,7 +366,7 @@ export function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas
           <Notice tone="neutral">
             Los números son del {anclado || 'período'}, pero el <b>veredicto</b>, el desgaste y el
             marginal se miden sobre <b>{z.ventanaJuicio} días</b>. Un día suelto tiene una o dos
-            compras: alcanza para mirarlo, ⛔ no para juzgarlo.
+            compras: alcanza para mirarlo, no para juzgarlo.
           </Notice>
         )}
         {celdas.length === 0 ? (
@@ -500,7 +500,7 @@ function Cabecera({ d }: { d: RespuestaZona }) {
           </>
         ) : (
           <span style={{ color: color.warningInk }}>
-            ⛔ Esta línea no tiene fila de rentabilidad: sin techo no se puede juzgar ninguna celda, y
+            ⚠️ Esta línea no tiene fila de rentabilidad: sin techo no se puede juzgar ninguna celda, y
             no se inventa un default.{' '}
             <Link href="/meta-ads/rentabilidad" style={{ color: color.brandSolid, fontWeight: weight.semibold }}>Cargarla →</Link>
           </span>
@@ -541,7 +541,7 @@ function Oraculo({ d, dias }: { d: RespuestaZona; dias: number }) {
           )}
           <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>
             {m.a!.desde}→{m.a!.hasta} ({m.a!.pedidosDia.toFixed(1)}/día) contra {m.b!.desde}→{m.b!.hasta} ({m.b!.pedidosDia.toFixed(1)}/día).
-            ⛔ No multiplicar los pedidos que faltan por este número: el marginal sube en cada escalón.
+            No multiplicar los pedidos que faltan por este número: el marginal sube en cada escalón.
           </div>
         </div>
       ) : (
@@ -651,7 +651,7 @@ export function FilaDeKpis({ z, tv, techo, ventana }: {
         <KpiCard
           label="Compras · Meta"
           value={entero(tv ? tv.compras : t.compras)}
-          sub="atribuidas por Meta, ⛔ no la caja de la tienda"
+          sub="atribuidas por Meta, no la caja de la tienda"
         />
         <KpiCard
           label="Costo por compra · Meta"
@@ -690,7 +690,7 @@ export function FilaDeKpis({ z, tv, techo, ventana }: {
       <div style={{ fontSize: font.sm, color: color.mut2 }}>
         {tv ? (
           <>
-            Los <b>pedidos reales de la tienda</b> ⛔ no están para hoy: la caja cierra el día. El
+            Los <b>pedidos reales de la tienda</b> no están para hoy: la caja cierra el día. El
             último cerrado es el <b>{z.hasta}</b> — mirá «7 días» o tocá un día en la tira.
           </>
         ) : (
@@ -698,7 +698,7 @@ export function FilaDeKpis({ z, tv, techo, ventana }: {
             <b>Pedidos de la tienda: {entero(t.pedidos)}</b> ({t.pedidosDia.toFixed(1)}/día
             {z.objetivoPedidos ? ` · meta ${z.objetivoPedidos}` : ''}
             {t.pedidos ? ` · ${plata(t.costoPedidoReal)} cada uno` : ''}). Son <b>todos los canales</b>,
-            así que ⛔ no son la vara de la pauta: sirven para dimensionar el negocio. La vara de cada
+            así que no son la vara de la pauta: sirven para dimensionar el negocio. La vara de cada
             fila es la compra que <b>Meta</b> se atribuye.
           </>
         )}

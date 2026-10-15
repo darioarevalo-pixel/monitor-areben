@@ -156,7 +156,7 @@ export function Eventos({
             <div style={{ fontSize: 11, color: color.mut2, marginBottom: 3 }}>
               <Badge tone="brand" subtle>Ejemplo</Badge>{' '}
               Esta sesión no existe: se dibuja sólo mientras mirás el tour, para que se vea dónde está cada
-              cosa. ⛔ No se guarda, y nadie más la ve.
+              cosa. No se guarda, y nadie más la ve.
             </div>
             <FilaEvento
               e={muestra}
@@ -287,7 +287,7 @@ function FormNueva({ usuario, onCrear, onCancelar }: { usuario: string; onCrear:
         </div>
       </div>
       <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>
-        La modelo se elige después, adentro de la sesión. Lo que no se sabe todavía se deja vacío: ⛔ no
+        La modelo se elige después, adentro de la sesión. Lo que no se sabe todavía se deja vacío: no
         se guarda una hora inventada.
       </div>
     </div>
@@ -436,7 +436,7 @@ function FilaEvento({
 
           {hijas.length ? (
             <div style={{ fontSize: 11, color: color.mut, marginTop: 2 }}>
-              ⚠️ Cambiar el día acá ⛔ no le cambia la fecha a los {hijas.length === 1 ? 'pedido ya hecho' : `${hijas.length} pedidos ya hechos`}: esa se
+              ⚠️ Cambiar el día acá no le cambia la fecha a los {hijas.length === 1 ? 'pedido ya hecho' : `${hijas.length} pedidos ya hechos`}: esa se
               corrige en cada uno.
             </div>
           ) : null}

@@ -326,7 +326,7 @@ export function Exhib() {
               <b>{ex.items.length}</b> variantes con stock en Local
               {/* Las en cero ⛔ no entran a la lista —no son faltantes de nadie— pero el lector sí
                   las engancha, y decirlo es la diferencia con «ese código no existe». */}
-              {ex.enCero > 0 && <> (hay <b>{ex.enCero}</b> más en cero: ⛔ no se chequean, pero si escaneás una te lo digo)</>}
+              {ex.enCero > 0 && <> (hay <b>{ex.enCero}</b> más en cero: no se chequean, pero si escaneás una te lo digo)</>}
               {ex.deStunned > 0 && <>. Las <b>{ex.deStunned}</b> de <b>Stunned</b> quedan afuera: las revisa su propia pantalla</>}. Los datos son de la última sincronización diaria y pueden tener unas horas: conviene chequear en momentos de baja venta.
             </Notice>
           )}
@@ -449,7 +449,7 @@ export function Exhib() {
                 <div style={{ margin: '2px 0' }}>
                   <PrecioEtiqueta it={fb.it} />
                 </div>
-                <div>Está colgada y el stock está mal. Acá ⛔ no se chequea: para dejarlo anotado, hacelo en «Libre por lugar».</div>
+                <div>Está colgada y el stock está mal. Acá no se chequea: para dejarlo anotado, hacelo en «Libre por lugar».</div>
               </Notice>
             )}
             {fb?.tipo === 'ok' && (

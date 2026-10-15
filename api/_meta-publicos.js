@@ -70,8 +70,8 @@ export default async function publicosGet(res, perfil, q) {
     return res.status(200).json({
       ok: true, linea, dias, partes: null, clasificado: false,
       motivo: filas.length
-        ? 'La foto todavía ⛔ no tiene ningún día cerrado de esta línea: el corte de la mañana es el que cierra el anterior.'
-        : 'La foto ⛔ no tiene ni una fila de conjunto de esta línea. ¿Corrió el snapshot?',
+        ? 'La foto todavía no tiene ningún día cerrado de esta línea: el corte de la mañana es el que cierra el anterior.'
+        : 'La foto no tiene ni una fila de conjunto de esta línea. ¿Corrió el snapshot?',
     });
   }
   const desde = desdeDe(cierre, dias);
@@ -126,11 +126,11 @@ export default async function publicosGet(res, perfil, q) {
  * archivados», que es otra cosa y manda a mirar a otro lado.
  */
 async function publicosDeMeta() {
-  if (!tokenMeta()) return { error: 'Meta Ads ⛔ no está configurado (falta o venció el token), así que ⛔ no se pudo leer el público de los conjuntos.' };
+  if (!tokenMeta()) return { error: 'Meta Ads no está configurado (falta o venció el token), así que no se pudo leer el público de los conjuntos.' };
   const cuentasRes = await graph('me/adaccounts?fields=account_id&limit=100');
-  if (!cuentasRes.ok) return { error: `⛔ No se pudieron listar las cuentas de Meta: ${mensajeError(cuentasRes)}` };
+  if (!cuentasRes.ok) return { error: `No se pudieron listar las cuentas de Meta: ${mensajeError(cuentasRes)}` };
   const cuentas = ((cuentasRes.data && cuentasRes.data.data) || []).map((c) => String(c.account_id));
-  if (!cuentas.length) return { error: 'El token ⛔ no ve ninguna cuenta publicitaria.' };
+  if (!cuentas.length) return { error: 'El token no ve ninguna cuenta publicitaria.' };
 
   const mapa = new Map();
   let sinTargeting = 0;
@@ -138,7 +138,7 @@ async function publicosDeMeta() {
     const r = await insightsTodas(
       `act_${id}/adsets?fields=id,targeting{custom_audiences,excluded_custom_audiences}&limit=500`,
     );
-    if (!r.ok) return { error: `⛔ No se pudieron leer los públicos de la cuenta ${id}: ${r.error}` };
+    if (!r.ok) return { error: `No se pudieron leer los públicos de la cuenta ${id}: ${r.error}` };
     for (const a of r.rows) {
       const p = publicoDe(a.targeting);
       // ⛔ Un conjunto sin `targeting` legible NO entra al mapa: entraría como `abierta` y eso es

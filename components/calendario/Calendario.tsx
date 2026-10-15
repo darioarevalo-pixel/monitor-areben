@@ -1035,7 +1035,7 @@ function ModalHito({ hito, marca, marcas, onMarca, onCerrar, onGuardar, onBorrar
           <div style={{ fontSize: font.xs, color: f.firme ? color.mut : color.warningInk, lineHeight: 1.5 }}>
             {f.firme
               ? 'Al guardarlo firme, los renglones del lanzamiento caen en la Agenda de cada una, con su fecha.'
-              : 'Mientras esté proyectada ⛔ no se reparte nada: los renglones del lanzamiento caen recién cuando la fecha queda firme.'}
+              : 'Mientras esté proyectada no se reparte nada: los renglones del lanzamiento caen recién cuando la fecha queda firme.'}
           </div>
         )}
         <Field label="Nota" hint="Opcional. Lo que el resto necesita saber para producir a tiempo.">

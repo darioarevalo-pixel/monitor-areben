@@ -288,7 +288,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
    * tiene el texto en el portapapeles y lo va a pegar igual.
    */
   const sinRegistrar = (e: Error) =>
-    toast.error(`El mensaje se copió, pero ⛔ no quedó registrado en el reclamo: ${e.message}`)
+    toast.error(`El mensaje se copió, pero no quedó registrado en el reclamo: ${e.message}`)
 
   /**
    * El mensaje de apertura, con el link del cliente resuelto.
@@ -383,7 +383,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     const esCupon = d.retencion_forma === 'cupon'
     const noAcepto = d.compensacion
       ? `${numeroReclamo(d.id)}: sigue lo que ya estaba decidido (${COMPENSACION_LABEL[d.compensacion] || d.compensacion}). Queda registrado que la oferta no funcionó.`
-      : `${numeroReclamo(d.id)}: este reclamo ⛔ no tiene ninguna decisión guardada, así que vuelve a quedar pendiente de decidir. Queda registrado que la oferta no funcionó.`
+      : `${numeroReclamo(d.id)}: este reclamo no tiene ninguna decisión guardada, así que vuelve a quedar pendiente de decidir. Queda registrado que la oferta no funcionó.`
     const si = await confirmar({
       titulo: respuesta === 'acepto' ? 'El cliente aceptó quedárselo' : 'El cliente no aceptó',
       ok: respuesta === 'acepto' ? 'Sí, aceptó' : 'Sí, no aceptó',
@@ -463,7 +463,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
         placeholder: 'Queda en el historial, con tu nombre',
       })
       if (razon === null) return
-      if (!razon.trim()) { toast.aviso('Sin el motivo la plata ⛔ no sale antes que el producto.'); return }
+      if (!razon.trim()) { toast.aviso('Sin el motivo la plata no sale antes que el producto.'); return }
       await accion(() => marcarReintegro(marca, d.id, null, razon.trim()), 'Anotado: la plata salió antes que el producto.')
       return
     }
@@ -610,7 +610,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
       tono: 'warning',
       ok: 'Descontar en GN',
       mensaje: `Se crea la venta técnica en Gestión Nube que saca del depósito ${faltan.map((u) => `${u.item.cantidad} × ${u.item.producto}`).join(', ')}. `
-        + 'Va al cliente «Reclamo», neto $0 y valuada a precio de lista. ⛔ No entra a Fallas: el producto está sano.',
+        + 'Va al cliente «Reclamo», neto $0 y valuada a precio de lista. No entra a Fallas: el producto está sano.',
     })
     if (!si) return
     const cred = await obtenerCred()
@@ -733,7 +733,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
       titulo: `Anular ${numeroReclamo(d.id)}`,
       tono: 'danger',
       ok: 'Anular',
-      mensaje: 'El reclamo queda registrado pero deja de contar: se usa cuando no debió existir (se abrió por error, o está duplicado). ⛔ No anula nada de lo que ya se haya hecho en Gestión Nube. Para eso está «Volver a decidir».',
+      mensaje: 'El reclamo queda registrado pero deja de contar: se usa cuando no debió existir (se abrió por error, o está duplicado). No anula nada de lo que ya se haya hecho en Gestión Nube. Para eso está «Volver a decidir».',
     })
     if (si) await accion(() => cambiarEstado(marca, d.id, 'anulado', 'el reclamo no debió existir'), 'Reclamo anulado.')
   }
@@ -1360,7 +1360,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                         <Button
                           size="sm" variant="ghost"
                           onClick={async () => {
-                            const si = await confirmar({ titulo: 'Eliminar el reclamo', tono: 'danger', ok: 'Eliminar', mensaje: 'Se elimina el registro y ⛔ no queda rastro. Si el reclamo no debió existir, lo que corresponde es «Anular»: la fila queda con su número y su historial. ⛔ No anula nada de lo que ya se haya hecho en Gestión Nube.' })
+                            const si = await confirmar({ titulo: 'Eliminar el reclamo', tono: 'danger', ok: 'Eliminar', mensaje: 'Se elimina el registro y no queda rastro. Si el reclamo no debió existir, lo que corresponde es «Anular»: la fila queda con su número y su historial. No anula nada de lo que ya se haya hecho en Gestión Nube.' })
                             if (si) await accion(() => eliminarReclamo(marca, d.id), 'Reclamo eliminado.')
                           }}
                         >Eliminar</Button>

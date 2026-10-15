@@ -141,7 +141,7 @@ export function BandaDeHoy({ b, fecha, leidoA, actualizar, error }: {
               {/* ⛔ No se cae a comparar contra el día entero de ayer: ése es exactamente el número
                   que esta banda vino a sacar del medio. Se dice que falta y se sigue. */}
               Sin comparación contra ayer: {b.motivoSinHora} El día entero de ayer cerró en{' '}
-              {plata(b.ayerEntero.gasto)} y {entero(b.ayerEntero.compras)} compras — ⚠️ ⛔ no lo
+              {plata(b.ayerEntero.gasto)} y {entero(b.ayerEntero.compras)} compras — ⚠️ no lo
               compares contra lo de arriba, que es medio día.
             </>
           )}

@@ -1,7 +1,8 @@
 // El «⛔» de las notas quiere decir «no»; en una pantalla se lee como un emoji y la frase dice lo contrario
-// («⛔ mueve el stock ni sale a GN», 15-oct). Ningún texto del ERP lo lleva fuera de un comentario, y lo que viene
-// del motor sin traducción pasa por `textoDelMotor`.
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+// («⛔ mueve el stock ni sale a GN», 15-oct). Bruno, 15-oct («dale»): NINGÚN texto del monitor lo lleva fuera de un
+// comentario —las pantallas, sus núcleos y sus handlers—, y lo que viene del motor sin traducción pasa por `textoDelMotor`.
+// La única excepción es un ícono a propósito (la caja «Nunca» de `components/ui/Markdown.tsx`).
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { MENSAJE_ERROR_MOTOR, textoDelMotor } from '../lib/erp/venta.core.js'
@@ -31,23 +32,24 @@ const archivos = (dir: string): string[] =>
     return statSync(p).isDirectory() ? archivos(p) : /\.(tsx?|m?js)$/.test(p) ? [p] : []
   })
 
-/** Todo lo del ERP: sus pantallas, sus núcleos y sus handlers (`api/_erp*.js` y la facturación). */
-const ARCHIVOS = [
-  ...archivos('components/erp'),
-  ...archivos('lib/erp'),
-  ...readdirSync('api').filter((f) => /^_erp.*\.js$/.test(f) || f === '_facturacion.js').map((f) => `api/${f}`),
-]
+/** Todo el monitor que llega a una pantalla. `motor/` es la copia del motor (se cuida en su repo: `test/textos.test.mjs`). */
+const ARCHIVOS = ['components', 'app', 'lib', 'api'].filter((d) => existsSync(d)).flatMap(archivos)
 
-describe('textos del ERP sin «⛔»', () => {
+/** Los íconos a propósito: el archivo y la línea exacta (⛔ «el archivo entero»: lo demás de ese archivo también se mira). */
+const ICONOS = [{ archivo: join('components', 'ui', 'Markdown.tsx'), linea: "icono: '⛔'" }]
+
+describe('textos del monitor sin «⛔»', () => {
   it('encuentra los archivos', () => {
     expect(ARCHIVOS).toContain('components/erp/CambioCaja.tsx')
     expect(ARCHIVOS).toContain('api/_erp.js')
+    expect(ARCHIVOS).toContain('components/prm/MovimientoProveedor.tsx')
+    expect(ARCHIVOS.some((f) => f.startsWith('motor'))).toBe(false)
   })
 
   it.each(ARCHIVOS)('%s', (archivo) => {
     const malas = sinComentarios(readFileSync(archivo, 'utf8'))
       .split('\n')
-      .filter((l) => l.includes('⛔'))
+      .filter((l) => l.includes('⛔') && !ICONOS.some((x) => x.archivo === archivo && l.includes(x.linea)))
       .map((l) => l.trim().slice(0, 100))
     expect(malas).toEqual([])
   })

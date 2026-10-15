@@ -183,7 +183,7 @@ export function Modelos() {
           <p style={{ fontSize: 12, color: color.mut, margin: 0 }}>
             El <strong>talle</strong> y la <strong>altura</strong> de cada ficha son los que salen a la
             descripción del producto cuando la modelo se elige en una sesión de fotos. Lo que está
-            vacío es <strong>no anotado</strong>: ⛔ no se inventa.
+            vacío es <strong>no anotado</strong>: no se inventa.
           </p>
         </>
       )}

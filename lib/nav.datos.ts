@@ -175,7 +175,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "recorridas",
     "area": "compras",
     "label": "Recorridas",
-    "info": "Los locales de proveedores que hay que visitar y el viaje a verlos. Se cargan de a uno o en tanda —pegando una nota o subiendo los lugares guardados de Google Maps—, se arma la recorrida del día ordenada por cercanía, y en la calle se anota desde el celular qué pareció el local, qué producto interesa, si se compró y qué quedó comprometido. ⛔ La compra no se carga acá: se le manda al sistema de Ingresos y vuelve contada por la orden de compra. La ficha completa de cada proveedor está en PRM.",
+    "info": "Los locales de proveedores que hay que visitar y el viaje a verlos. Se cargan de a uno o en tanda —pegando una nota o subiendo los lugares guardados de Google Maps—, se arma la recorrida del día ordenada por cercanía, y en la calle se anota desde el celular qué pareció el local, qué producto interesa, si se compró y qué quedó comprometido. ⚠️ La compra no se carga acá: se le manda al sistema de Ingresos y vuelve contada por la orden de compra. La ficha completa de cada proveedor está en PRM.",
     "brands": [
       "bdi",
       "zattia"
@@ -232,7 +232,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "precios",
     "area": "marketing",
     "label": "Precios de campaña",
-    "info": "La lista de precios de una liquidación o feria, para poder comunicarla antes de que los precios estén publicados en la tienda: foto, precio de lista, precio de campaña, % off y stock. Muestra sólo las campañas que se compartieron desde Liquidación, y marca cuáles precios ya están confirmados y cuáles todavía se pueden mover. ⛔ No lleva costo ni margen, y desde acá no se cambia ningún precio.",
+    "info": "La lista de precios de una liquidación o feria, para poder comunicarla antes de que los precios estén publicados en la tienda: foto, precio de lista, precio de campaña, % off y stock. Muestra sólo las campañas que se compartieron desde Liquidación, y marca cuáles precios ya están confirmados y cuáles todavía se pueden mover. No lleva costo ni margen, y desde acá no se cambia ningún precio.",
     "brands": [
       "bdi",
       "zattia"
@@ -937,7 +937,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "retornos",
     "area": "deposito",
     "label": "Retornos",
-    "info": "Todo lo que estamos esperando que vuelva, en un solo lugar y ordenado por hace cuánto: lo que el cliente despachó de vuelta, lo que va a traer al local, y lo que ya llegó y todavía no se guardó. Desde acá se marca que llegó y que se reingresó en Gestión Nube. La ven Depósito y Local. ⛔ No es Envíos del día, que es lo que SALE (reparto y cadetería).",
+    "info": "Todo lo que estamos esperando que vuelva, en un solo lugar y ordenado por hace cuánto: lo que el cliente despachó de vuelta, lo que va a traer al local, y lo que ya llegó y todavía no se guardó. Desde acá se marca que llegó y que se reingresó en Gestión Nube. La ven Depósito y Local. No es Envíos del día, que es lo que SALE (reparto y cadetería).",
     "brands": [
       "bdi",
       "zattia"

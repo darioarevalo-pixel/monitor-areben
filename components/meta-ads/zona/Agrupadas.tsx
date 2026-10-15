@@ -85,7 +85,7 @@ export function Analizar() {
       hojas={[
         { key: 'campanias', label: 'Campañas', hint: 'El árbol completo: campaña, conjunto y aviso, con la marca y la etapa.', Vista: Campanias },
         { key: 'embudo', label: 'Embudo', hint: 'A quién le habla la plata y qué etapa está vacía.', Vista: Embudo },
-        { key: 'publicos', label: 'Fría vs remarketing', hint: 'Cuánta de la plata le compra a gente que ya nos conocía, y qué parte ⛔ no se puede saber.', Vista: Publicos },
+        { key: 'publicos', label: 'Fría vs remarketing', hint: 'Cuánta de la plata le compra a gente que ya nos conocía, y qué parte no se puede saber.', Vista: Publicos },
         { key: 'cuenta', label: 'Totales por cuenta', hint: 'Los anuncios por campaña, quién compra, desde dónde y en qué ubicación.', Vista: Rendimiento },
         { key: 'registro', label: 'Registro', hint: 'Qué se accionó, quién y cómo terminó.', Vista: Auditoria },
         { key: 'informes', label: 'Informes', hint: 'El análisis en prosa de cada fecha. Lo escribe una persona.', Vista: Informes },

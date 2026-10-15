@@ -183,7 +183,7 @@ export function PanelesDeSupuestos({ s, cambiar, soloLectura = false }: {
         </Campo>
         <p style={{ fontSize: font.xs, color: color.mut2, margin: 0, lineHeight: 1.5 }}>
           Prendelo sólo si hay saldo a favor que no se consume. Cuando está prendido aparece un
-          segundo techo, el de <b>caja</b>. ⛔ El recupero <b>no es ganancia</b>: es plata propia que
+          segundo techo, el de <b>caja</b>. ⚠️ El recupero <b>no es ganancia</b>: es plata propia que
           se descongela, de un stock finito, y la libera cualquier venta facturada — también una del
           local con tarjeta. <b>La regla permanente es el techo de ganancia.</b>
         </p>

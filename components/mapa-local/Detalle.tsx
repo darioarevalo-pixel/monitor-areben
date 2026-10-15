@@ -94,7 +94,7 @@ export function Detalle({ mapa, modo, modulo, u, alertas, opcionesTipo, editar, 
               </div>
               {n.modelos?.length ? (
                 <Notice tone="brand" style={{ marginBottom: space[2] }}>
-                  <b>{n.modelos.length} modelos elegidos a mano.</b> Esta barra lleva sólo esos, con todos sus colores, y ⛔ no reparte por tipo ni línea.
+                  <b>{n.modelos.length} modelos elegidos a mano.</b> Esta barra lleva sólo esos, con todos sus colores, y no reparte por tipo ni línea.
                   {editar && (
                     <>
                       {' '}

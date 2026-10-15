@@ -166,7 +166,7 @@ export function MovimientoProveedor({ marca, id, hoy }: { marca: string; id: str
   if (!calculado || !mov.ocs.length) {
     return (
       <Notice tone="neutral">
-        Está enganchado y todavía no llegó ninguna orden de compra suya. ⛔ No es que no venda: es
+        Está enganchado y todavía no llegó ninguna orden de compra suya. No es que no venda: es
         que no hay nada comprado que medir.
       </Notice>
     )
@@ -197,7 +197,7 @@ export function MovimientoProveedor({ marca, id, hoy }: { marca: string; id: str
     <div style={{ display: 'grid', gap: space[3] }}>
       <p style={{ fontSize: font.sm, color: color.mut, margin: 0 }}>
         Se cuentan las ventas de <strong>los productos que este proveedor trajo</strong> en sus
-        órdenes. ⛔ No es «cuánto de lo suyo se vendió»: el mismo producto puede haber entrado por
+        órdenes. No es «cuánto de lo suyo se vendió»: el mismo producto puede haber entrado por
         otra orden, de otro proveedor, o ya estar en el depósito. Por eso vendido puede dar más que
         comprado, y no es un error.
       </p>
@@ -225,13 +225,13 @@ export function MovimientoProveedor({ marca, id, hoy }: { marca: string; id: str
       {mov.marcasMudas.length > 0 && (
         <Notice tone="warning">
           No se pudo preguntar por las ventas de {mov.marcasMudas.join(' y ')}. Lo que ves abajo está
-          incompleto, ⛔ y los ceros no son ceros.
+          incompleto, y los ceros no son ceros.
         </Notice>
       )}
       {mov.sinCruce.lineas > 0 && (
         <Notice tone="neutral">
           {mov.sinCruce.lineas} renglón(es) de sus órdenes —{entero(mov.sinCruce.unidades)} unidades—
-          ⛔ no cruzaron con el catálogo de Gestión Nube, así que de esos no se sabe qué se vendió.
+          no cruzaron con el catálogo de Gestión Nube, así que de esos no se sabe qué se vendió.
           Están sumados en «Comprado» y afuera de todo lo demás.
         </Notice>
       )}
@@ -245,7 +245,7 @@ export function MovimientoProveedor({ marca, id, hoy }: { marca: string; id: str
       {c.antes > 0 && (
         <Notice tone="neutral">
           {entero(c.antes)} unidades de estos productos se vendieron <strong>antes</strong> de que
-          llegara su primera orden. Es la prueba de que ⛔ no son productos exclusivos suyos.
+          llegara su primera orden. Es la prueba de que no son productos exclusivos suyos.
         </Notice>
       )}
 
@@ -294,7 +294,7 @@ export function MovimientoProveedor({ marca, id, hoy }: { marca: string; id: str
         </div>
         <div style={{ fontSize: font.xs, color: color.mut, marginBottom: space[2] }}>
           Unidades promedio por producto, semana a semana desde su primera llegada. Cada producto
-          entra una vez y sólo cuenta en las semanas que ya cumplió, así que la cola ⛔ no se hunde
+          entra una vez y sólo cuenta en las semanas que ya cumplió, así que la cola no se hunde
           por los que recién llegaron.
           {c.sinFecha > 0 && ` ${c.sinFecha} producto(s) quedaron afuera: ninguna orden suya traía fecha.`}
         </div>
@@ -441,17 +441,17 @@ export function BloqueEstrellas({
             </TBody>
           </TableWrap>
           <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[2] }}>
-            <strong>Se termina</strong> es cuándo ⛔ no queda nada <strong>de lo que él trajo</strong>,
+            <strong>Se termina</strong> es cuándo no queda nada <strong>de lo que él trajo</strong>,
             al ritmo de estos días. <strong>Stock hoy</strong> es otra cosa: el stock del producto
-            entero en Gestión Nube, depósito y local. Los dos ⛔ no se restan entre sí: medido el
-            8-sep-2026 sobre 109 productos, «comprado − vendido» daba el stock en 97 y ⛔ no en 12
-            —TOP TERRA compró 5, vendió 5 y tiene 5— porque la reposición ⛔ no siempre entra por
+            entero en Gestión Nube, depósito y local. Los dos no se restan entre sí: medido el
+            8-sep-2026 sobre 109 productos, «comprado − vendido» daba el stock en 97 y no en 12
+            —TOP TERRA compró 5, vendió 5 y tiene 5— porque la reposición no siempre entra por
             una orden.
             {' '}⭐ es lo que se avisa por mail.
             {stockAl && ` El espejo de stock se sincronizó por última vez el ${stockAl}, y lo aprieta una persona desde Reposición: no se actualiza solo.`}
-            {e.repuestos > 0 && ` ${e.repuestos} producto(s) suyos volvieron a entrar en la ventana y ⛔ no están acá: de un repuesto ⛔ no se puede decir «colocó el X% de lo que trajo», porque lo vendido sale de un montón donde también está el stock viejo.`}
+            {e.repuestos > 0 && ` ${e.repuestos} producto(s) suyos volvieron a entrar en la ventana y no están acá: de un repuesto no se puede decir «colocó el X% de lo que trajo», porque lo vendido sale de un montón donde también está el stock viejo.`}
             {e.sinFecha > 0 && ` ${e.sinFecha} producto(s) quedaron afuera: ninguna orden suya traía fecha.`}
-            {stockMudo.length > 0 && ` El stock de ${stockMudo.join(' y ')} ⛔ no se pudo leer, así que esa columna va en «—» y ⛔ no en 0.`}
+            {stockMudo.length > 0 && ` El stock de ${stockMudo.join(' y ')} no se pudo leer, así que esa columna va en «—» y no en 0.`}
           </div>
         </>
       )}
