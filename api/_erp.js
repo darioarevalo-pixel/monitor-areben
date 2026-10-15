@@ -419,9 +419,9 @@ async function conMotor(marca, que, fn) {
   const conexion = process.env[PG_DE_MARCA[marca]]
   if (!conexion) return { status: 409, error: `${que} todavía ⛔ está conectado: falta la conexión del motor en Vercel.` }
   const [{ default: pg }, motor] = await Promise.all([import('pg'), import('../motor/venta/registrar.mjs')])
-  const db = new pg.Client({ connectionString: conexion })
-  await db.connect()
+  const db = new pg.Client({ connectionString: conexion, connectionTimeoutMillis: 5000, statement_timeout: 15000 })
   try {
+    await db.connect()
     return await fn(db, motor)
   } finally {
     await db.end().catch(() => {})
@@ -910,20 +910,6 @@ export async function precioDeProducto({ marca, producto }) {
       listas: listas.data, vigentes: vigentes.data, efectivos: efectivos.error ? null : efectivos.data, costo: costo.data[0] ?? null,
       historialPrecio: hPrecio.data, historialCosto: hCosto.data, gn: gn.data, tn,
     }),
-  }
-}
-
-/** Abre la conexión del motor de la marca, corre `fn(db)` y la cierra. Sin la variable: 409, dicho. */
-async function conMotor(marca, que, fn) {
-  const conexion = process.env[PG_DE_MARCA[marca]]
-  if (!conexion) return { status: 409, error: `${que} todavía ⛔ está conectado: falta la conexión del motor en Vercel.` }
-  const { default: pg } = await import('pg')
-  const db = new pg.Client({ connectionString: conexion, connectionTimeoutMillis: 5000, statement_timeout: 15000 })
-  try {
-    await db.connect()
-    return await fn(db)
-  } finally {
-    await db.end().catch(() => {})
   }
 }
 
