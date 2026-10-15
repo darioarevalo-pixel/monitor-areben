@@ -37,7 +37,11 @@ describe('caja · respuesta de POST /ventas', () => {
     const tok = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiYWJj'
     const r = leerRespuestaVenta(500, { message: `fallo con Bearer ${tok}` })
     expect('error' in r && r.error).not.toContain(tok)
-    expect(sinSecretos(`https://x/api?token=abc123&q=1`)).toBe('https://x/api?token=***&q=1')
+    expect(sinSecretos(`https://x/api?token=abc123&q=1`)).toBe('https://x/api?token=«oculto»&q=1')
+    // lo que la regla vieja de la Caja ⛔ tapaba: la cadena de conexión y un token de Mercado Pago
+    expect(sinSecretos('connect ETIMEDOUT postgres://motor.abc:S3cr3t-Clave@pooler:6543/postgres')).not.toContain('S3cr3t-Clave')
+    expect(sinSecretos('MP: APP_USR-1234567890123456-101412-0123456789abcdef-191103')).not.toContain('APP_USR-1234567890123456')
+    expect(sinSecretos('x'.repeat(500)).length).toBeLessThanOrEqual(300)
     expect(sinSecretos(`id ${tok}`)).not.toContain(tok)
     // un uuid de la Caja ⛔ es un secreto: se tiene que poder leer en el error
     expect(sinSecretos('venta 3f1c2b9e-6a4d-4c1e-9b7a-2d5e8f0a1b3c')).toContain('3f1c2b9e-6a4d-4c1e-9b7a-2d5e8f0a1b3c')

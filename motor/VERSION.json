@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "99105f0c4088dda240d8eac02eacbd03ec554067",
-  "traido_en": "2026-10-15T12:09:09.147Z",
+  "commit": "c2ccc22d0d7bf05b6dfd9920b1c2ddac4c300f94",
+  "traido_en": "2026-10-15T13:07:55.347Z",
   "archivos": {
     "venta/armar.mjs": "e8baa81040f363b116d57d8bfb852915bc5813c7eae7d380f5d9e5ee6b9b5744",
     "venta/cliente.mjs": "b0020770f493c272fe4eeaf2ca15026a0b255f8f90a96087a9bfab6baf489392",
@@ -17,7 +17,7 @@
     "arca/lote.core.js": "a3d1c3c7bf7ceb10de3e4f40ae56e48144fe7dd09364564b617dcd7444dbe5dc",
     "arca/mes.core.js": "932c2e5c114e2746bd7831471d4fc5a93d6d34fd5c9a7aacd4ac23a47c0edd25",
     "arca/qr.core.js": "f0985c1b77fe664e51bcff5b86e22d4143773b22a66555cbbb0711b31275e2c4",
-    "arca/sin-secretos.core.js": "74252da83b6d74f82af7421f317ce28a81d4b0e4c20494be7ff0e12274f8f687",
+    "arca/sin-secretos.core.js": "1807f79d7ab1d1b8d97d8401d84ef1b575964e9bf02c644c51c4b007eded5fb6",
     "arca/techo.core.js": "7938bfdd0fbd52bf80dc57730f70a36ccbc5717843c89939e427f048c3d77454"
   }
 }

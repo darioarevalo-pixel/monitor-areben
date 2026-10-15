@@ -23,8 +23,11 @@ const REGLAS = [
   [/\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, `$1 ${OCULTO}`],
   // Parámetros y campos con nombre de secreto: access_token=…, "refresh_token":"…", client_secret: …
   [/\b((?:access|refresh)_token|client_secret|api[_-]?key|password|contrase(?:ñ|n)a|secret|token|sign|authorization)(["']?\s*[:=]\s*["']?)([^"'\s&,;}]{6,})/gi, `$1$2${OCULTO}`],
-  // JWT suelto.
-  [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, OCULTO],
+  // Parámetro corto de query `key=` (las claves de Google, `AIza…`, tienen 39: ⛔ las agarra la de 40+). Sólo como
+  // parámetro de URL: «duplicate key value» o «Key (id)=(…)» de Postgres ⛔ se tocan.
+  [/([?&]key=)[^&\s"']{6,}/gi, `$1${OCULTO}`],
+  // JWT suelto — también CORTADO (el `.slice` de un mensaje deja header.payload sin firma; el token de GN es un JWT).
+  [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]*)?/g, OCULTO],
   // Token de Mercado Libre / Mercado Pago (APP_USR-…, TEST-…, TG-…).
   [/\b(APP_USR|TEST|TG)-[A-Za-z0-9-]{16,}/g, OCULTO],
   // Cualquier tira larga de base64/hex sin espacios (un token sin nombre): 40+ caracteres.
