@@ -52,6 +52,6 @@ local** → Credenciales de producción. 🔴 En Zattia, al nacer, era la cuenta
 
 ## Pendiente
 
-- BDI: correr `sql/migrate-mp-cuentas.sql` en su base, sumar `bdi` a `brands` en `lib/nav.datos.ts` y
+- BDI (15-oct): `bdi` sumado a `brands`; falta correr `sql/migrate-mp-cuentas.sql` en su base (SQL Editor) y
   cargar la cuenta desde la pantalla.
 - Cruzar cada pago con la venta de Gestión Nube (otro proyecto, no pedido todavía).
