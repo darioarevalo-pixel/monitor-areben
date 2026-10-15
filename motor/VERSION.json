@@ -1,18 +1,23 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "cc85f3a8ed556bba5424e303be10426dad295229",
-  "traido_en": "2026-10-14T18:52:19.720Z",
+  "commit": "99105f0c4088dda240d8eac02eacbd03ec554067",
+  "traido_en": "2026-10-15T12:09:09.147Z",
   "archivos": {
-    "venta/armar.mjs": "41919c0f4ee9bb88725a7e98fadfd3f60f4da0f3faaac7b93c4bb37bdeea6027",
-    "venta/registrar.mjs": "875fda21a5141fcc19ca2861ae1d43845119118b94357a6f5ff67726c43d821d",
-    "arca/arca.core.js": "f3954eb78a58e0e7ada4c4cc0d34e520825fca76c504672555ee5a2df8634dd1",
+    "venta/armar.mjs": "e8baa81040f363b116d57d8bfb852915bc5813c7eae7d380f5d9e5ee6b9b5744",
+    "venta/cliente.mjs": "b0020770f493c272fe4eeaf2ca15026a0b255f8f90a96087a9bfab6baf489392",
+    "venta/costo.mjs": "a69abcd98a827783f88dc9c3a22705710f7b349e050a9a5c11045e5d452d6fbb",
+    "venta/facturar.mjs": "072a0af4c487250cab33b10e3efdffc6278d5fb254e948bd1caaa766d2d580a7",
+    "venta/precio.mjs": "5af5eaf4248531bdc9d2d35bf06053e54d6cf06e47155514f98fa99cc9ffdf6a",
+    "venta/registrar.mjs": "619b4616a66ce9369f3524d92c7646e8b3d2b4e89bb568351bfad8cb54bd3d26",
+    "arca/arca.core.js": "c3b4c12db4f1892ad8964348ed41824fd4eedf44c6346524d33aabc06ccbacd7",
     "arca/cliente.js": "4dff26c177d05a73919a1f215bd55e3beb2ade5117b8a2537418dae29d33a3f4",
     "arca/emisor-db.js": "278768915858aa5114f455a6c5c9c9864782b2d2fc5eb25a46eb106d23fef2fd",
     "arca/emisor.core.js": "7db7752db29a23cac652d89d952fe88585d6fa2474446282be7eb854a5e628c3",
-    "arca/lote.core.js": "307090300595b50ba918581f0e0ae0b39b68e14c8b7f6379786425047f5b4910",
+    "arca/lote.core.js": "a3d1c3c7bf7ceb10de3e4f40ae56e48144fe7dd09364564b617dcd7444dbe5dc",
     "arca/mes.core.js": "932c2e5c114e2746bd7831471d4fc5a93d6d34fd5c9a7aacd4ac23a47c0edd25",
     "arca/qr.core.js": "f0985c1b77fe664e51bcff5b86e22d4143773b22a66555cbbb0711b31275e2c4",
+    "arca/sin-secretos.core.js": "74252da83b6d74f82af7421f317ce28a81d4b0e4c20494be7ff0e12274f8f687",
     "arca/techo.core.js": "7938bfdd0fbd52bf80dc57730f70a36ccbc5717843c89939e427f048c3d77454"
   }
 }

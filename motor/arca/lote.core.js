@@ -12,7 +12,8 @@
  * 🔴 **Un lote por punto de venta y tipo a la vez** (`repo.tomarCandado`): la numeración es «el último
  * + 1» y dos lotes en paralelo piden el mismo número.
  */
-import { CBTE, desglosarIVA, problemasDe, reconciliar } from './arca.core.js'
+import { sinSecretos, sinSecretosTexto } from './sin-secretos.core.js'
+import { CBTE, desglosarIVA, esNotaDeDebito, problemasDe, reconciliar } from './arca.core.js'
 
 const esNC = (tipo) => tipo === CBTE.NC_A || tipo === CBTE.NC_B
 
@@ -46,7 +47,8 @@ export async function facturarLote({ arca, repo, ambiente, marca, ptoVta, tipo, 
     if (resueltasDeAntes.ajenas.length) throw new Error(ajenasMsg(resueltasDeAntes.ajenas))
     // Una venta que ya tiene factura (de antes, o de una pendiente recién resuelta) ⛔ se vuelve a facturar.
     // (Una nota de crédito por venta: cubre la devolución entera, que es lo que hace GN hoy.)
-    const yaFacturadas = await repo.ventasFacturadas({ ambiente, marca, nc: esNC(tipo), ventaIds: salen.map((c) => c.ventaId) })
+    // La nota de DÉBITO es al revés: la venta YA tiene factura (la asocia) y puede llevar varias ⇒ ⛔ se pregunta.
+    const yaFacturadas = esNotaDeDebito(tipo) ? new Set() : await repo.ventasFacturadas({ ambiente, marca, nc: esNC(tipo), ventaIds: salen.map((c) => c.ventaId) })
     // Y la misma venta repetida ADENTRO del lote sale una sola vez (probado contra homologación el
     // 12-oct: sin esto salieron dos facturas con CAE para la misma venta).
     const nuevas = [], enEsteLote = new Set()
@@ -81,13 +83,14 @@ export async function facturarLote({ arca, repo, ambiente, marca, ptoVta, tipo, 
       for (const f of filas) {
         const d = porNumero.get(f.numero)
         if (d?.resultado === 'A' && d.cae) {
-          const hecha = { ...f, estado: 'autorizada', cae: d.cae, cae_vence: d.caeVence, observaciones: d.observaciones }
-          await repo.resolver(f.id, { estado: 'autorizada', cae: d.cae, cae_vence: d.caeVence, observaciones: d.observaciones })
+          const hecha = { ...f, estado: 'autorizada', cae: d.cae, cae_vence: d.caeVence, observaciones: sinSecretos(d.observaciones) }
+          await repo.resolver(f.id, { estado: 'autorizada', cae: d.cae, cae_vence: d.caeVence, observaciones: sinSecretos(d.observaciones) })
           autorizadas.push(hecha)
         } else {
           // Rechazada ⛔ consume número: se le saca, así el próximo lo puede usar.
-          const motivos = [...(d?.observaciones || []), ...(resp.errores || [])].map((o) => `${o.codigo} ${o.mensaje}`)
-          await repo.resolver(f.id, { estado: 'rechazada', numero: null, observaciones: d?.observaciones || resp.errores })
+          // Los motivos vuelven al llamador y salen a PANTALLA (factura a pedido, NC): también tapados (code-review de B, 14-oct).
+          const motivos = [...(d?.observaciones || []), ...(resp.errores || [])].map((o) => sinSecretosTexto(`${o.codigo} ${o.mensaje}`))
+          await repo.resolver(f.id, { estado: 'rechazada', numero: null, observaciones: sinSecretos(d?.observaciones || resp.errores) })
           rechazadas.push({ ...f, estado: 'rechazada', numero: null, motivos })
         }
       }

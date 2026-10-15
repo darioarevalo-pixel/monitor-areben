@@ -59,9 +59,13 @@ export function ptoVtaDe(ambiente, marca, env) {
 }
 
 /** Tipos de comprobante (`FEParamGetTiposCbte`). */
-export const CBTE = { FACTURA_A: 1, NC_A: 3, FACTURA_B: 6, NC_B: 8 }
-const CLASE = { 1: 'A', 3: 'A', 6: 'B', 8: 'B' }
+export const CBTE = { FACTURA_A: 1, ND_A: 2, NC_A: 3, FACTURA_B: 6, ND_B: 7, NC_B: 8 }
+const CLASE = { 1: 'A', 2: 'A', 3: 'A', 6: 'B', 7: 'B', 8: 'B' }
 const ES_NC = { 3: true, 8: true }
+// La nota de DÉBITO suma a una factura (un recargo, una diferencia de precio): asocia la factura, como la NC,
+// pero en el mes SUMA y una venta puede tener varias.
+const ES_ND = { 2: true, 7: true }
+export const esNotaDeDebito = (tipo) => !!ES_ND[tipo]
 
 /** Tipos de documento del receptor (`FEParamGetTiposDoc`). */
 export const DOC = { CUIT: 80, DNI: 96, SIN_IDENTIFICAR: 99 }
@@ -150,6 +154,11 @@ export function problemasDe(c, { umbralIdentificar, hoy }) {
     const a = c.asociado
     if (!a) p.push('La nota de crédito tiene que decir qué factura anula')
     else if (CLASE[a.tipo] !== clase || ES_NC[a.tipo]) p.push('La nota de crédito anula una factura de su misma clase')
+  }
+  if (ES_ND[c.tipo]) {
+    const a = c.asociado
+    if (!a) p.push('La nota de débito tiene que decir a qué factura se suma')
+    else if (CLASE[a.tipo] !== clase || ES_NC[a.tipo] || ES_ND[a.tipo]) p.push('La nota de débito se suma a una factura de su misma clase')
   }
   return p
 }
@@ -373,7 +382,7 @@ export function urlQR({ fecha, cuit, ptoVta, tipo, numero, total, docTipo, docNr
   return `https://www.afip.gob.ar/fe/qr/?p=${Buffer.from(JSON.stringify(datos)).toString('base64')}`
 }
 
-/** «B 00012-00000045», como lo muestra GN; la nota de crédito, «NC B …» (numera aparte de la factura). */
+/** «B 00012-00000045», como lo muestra GN; las notas, «NC B …» y «ND B …» (cada tipo numera aparte). */
 export function numeroVisible(tipo, ptoVta, numero) {
-  return `${ES_NC[tipo] ? 'NC ' : ''}${CLASE[tipo] || '?'} ${String(ptoVta).padStart(5, '0')}-${String(numero).padStart(8, '0')}`
+  return `${ES_NC[tipo] ? 'NC ' : ES_ND[tipo] ? 'ND ' : ''}${CLASE[tipo] || '?'} ${String(ptoVta).padStart(5, '0')}-${String(numero).padStart(8, '0')}`
 }

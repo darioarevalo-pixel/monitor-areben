@@ -9,7 +9,9 @@
  *
  * Devuelven `{ ok: true, … }` o `{ ok: false, error }`. Sólo lanzan si la BASE falla.
  */
+import { randomUUID } from 'node:crypto'
 import { armarAnulacion, armarCambio, armarVenta } from './armar.mjs'
+import { costosDe } from './costo.mjs'
 
 const q = async (db, sql, params = []) => (await db.query(sql, params)).rows
 
@@ -30,8 +32,9 @@ async function enTransaccion(db, fn) {
 async function leerConf(db, marca) {
   const marcas = await q(db, `select m.id, m.empresa_id, coalesce(array_agg(d.id) filter (where d.vende), '{}') as depositos
     from marca m left join deposito d on d.marca = m.id where m.id = $1 group by m.id, m.empresa_id`, [marca])
-  const cuentas = await q(db, 'select id, marca, gn_cuenta_id, activa from cuenta_cobro where marca = $1', [marca])
-  return { marcas: Object.fromEntries(marcas.map((m) => [m.id, { empresa_id: m.empresa_id, depositos: m.depositos }])), cuentas }
+  const cuentas = await q(db, 'select id, marca, gn_cuenta_id, activa, medio from cuenta_cobro where marca = $1', [marca])
+  const canales = (await q(db, 'select id from canal')).map((c) => c.id)
+  return { marcas: Object.fromEntries(marcas.map((m) => [m.id, { empresa_id: m.empresa_id, depositos: m.depositos }])), cuentas, canales }
 }
 
 /** La venta que ya entró con esa clave, para devolverla igual (idempotencia). */
@@ -49,16 +52,15 @@ async function mismaVenta(db, v, marca, total, unidades) {
 const respuestaYaExistia = (v) => ({ ok: true, venta: { id: v.id, numero: Number(v.numero), estado: v.estado, tipo: v.tipo, total: Number(v.total), prueba: v.prueba }, ya_existia: true, movimientos: 0, avisos: [] })
 const conflicto = (e) => ({ ok: false, error: { codigo: 'CONFLICTO_IDEMPOTENCIA', mensaje: `Ya entró otra venta con ${e.origen} ${e.origen_ref} y es distinta: no se pisa`, campo: 'origen_ref' } })
 
-/** El costo vigente de cada prenda. Hasta la tabla de costo (paso 5), el espejo de GN, que es POR PRODUCTO. */
+/** El costo vigente de cada prenda (`costosDe`: lo cargado en el ERP, si no el espejo de GN), que es POR PRODUCTO. */
 async function ponerCosto(db, lineas, avisos) {
   const ids = [...new Set(lineas.filter((l) => l.costo_fuente == null).map((l) => l.product_id))]
   if (!ids.length) return
-  const hay = (await q(db, `select to_regclass('public.productos') is not null as hay`))[0].hay
-  const costos = hay ? new Map((await q(db, 'select id, unit_cost from productos where id = any($1::bigint[])', [ids])).map((r) => [Number(r.id), Number(r.unit_cost)])) : new Map()
+  const costos = await costosDe(db, ids)
   for (const l of lineas) {
     if (l.costo_fuente != null) continue
     const c = costos.get(l.product_id)
-    if (c > 0) Object.assign(l, { costo_unitario: c, costo_fuente: 'gn_espejo' })
+    if (c) Object.assign(l, { costo_unitario: c.costo, costo_fuente: c.fuente })
     else avisos.push({ codigo: 'SIN_COSTO', product_id: l.product_id, size_id: l.size_id })
   }
 }
@@ -74,6 +76,52 @@ async function avisarStock(db, venta, lineas, avisos) {
   for (const l of salen) {
     if ((nivel.get(`${l.product_id}:${l.size_id}`) ?? 0) < l.cantidad) avisos.push({ codigo: 'SIN_STOCK_EN_LIBRO', product_id: l.product_id, size_id: l.size_id })
   }
+}
+
+const falla = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo, mensaje, campo } : { codigo, mensaje } })
+/** Medio peso de tolerancia al comparar saldos (todo se guarda con 2 decimales). */
+const casi = (a, b) => a >= b - 0.005
+
+/**
+ * La clienta de la venta (§6.2): por `cliente_id`, o por `cliente: { doc, nombre, whatsapp?, email? }` (la busca
+ * por documento o la crea; el `unique` parcial de 007 hace que dos a la vez den la misma). `{ id: null }` si no vino.
+ */
+async function resolverCliente(db, empresaId, e) {
+  if (e.cliente_id) {
+    const [c] = await q(db, 'select id from cliente where id = $1 and empresa_id = $2', [e.cliente_id, empresaId])
+    return c ? { id: c.id } : { error: falla('FALTA_CLIENTE', 'Esa clienta no está', 'cliente_id') }
+  }
+  const c = e.cliente
+  if (!c) return { id: null }
+  const doc = typeof c.doc === 'string' || typeof c.doc === 'number' ? String(c.doc).replace(/\D/g, '') : ''
+  if (!doc) return { error: falla('FALTA_CLIENTE', 'Falta el documento de la clienta', 'cliente.doc') }
+  if (!(typeof c.nombre === 'string' && c.nombre.trim())) return { error: falla('FALTA_CLIENTE', 'Falta el nombre de la clienta', 'cliente.nombre') }
+  const [r] = await q(db, `insert into cliente (empresa_id, doc, nombre, whatsapp, email) values ($1, $2, $3, $4, $5)
+    on conflict (empresa_id, doc) where doc is not null do update set doc = excluded.doc returning id`,
+  [empresaId, doc, c.nombre.trim(), c.whatsapp || null, c.email || null])
+  return { id: r.id }
+}
+
+/** El saldo a favor de la clienta en la marca, con su fila BLOQUEADA hasta el commit (dos usos a la vez ⛔ lo pasan). */
+async function saldoDe(db, clienteId, marca, prueba) {
+  await q(db, 'select id from cliente where id = $1 for update', [clienteId])
+  const [r] = await q(db, 'select coalesce(sum(monto), 0) as s from saldo_favor_movimiento where cliente_id = $1 and marca = $2 and prueba = $3', [clienteId, marca, prueba])
+  return Number(r.s)
+}
+
+const movSaldo = (venta, monto, tipo, usuario) => ({
+  id: randomUUID(), empresa_id: venta.empresa_id, marca: venta.marca, cliente_id: venta.cliente_id, venta_id: venta.id,
+  monto, tipo, prueba: venta.prueba, usuario, creado_en: new Date().toISOString(),
+})
+
+/** Pagar con saldo: hace falta la clienta y que le alcance. `null` si está bien. */
+async function chequearUsoDeSaldo(db, armada) {
+  if (!(armada.usa_saldo > 0)) return null
+  const v = armada.venta
+  if (!v.cliente_id) return falla('FALTA_CLIENTE', 'Para pagar con saldo a favor hace falta la clienta', 'cliente')
+  const saldo = await saldoDe(db, v.cliente_id, v.marca, v.prueba)
+  if (!casi(saldo, armada.usa_saldo)) return falla('SALDO_INSUFICIENTE', `La clienta tiene ${saldo} a favor y se quieren usar ${armada.usa_saldo}`, 'pagos')
+  return null
 }
 
 async function insertar(db, tabla, filas) {
@@ -118,18 +166,32 @@ async function conReintentoIdempotente(db, e, unidades, fn) {
 
 /** §1 registrarVenta. @param {import('pg').ClientBase} db @param {any} e */
 export async function registrarVenta(db, e) {
-  const unidades = Array.isArray(e?.lineas) ? e.lineas.reduce((s, l) => s + Number(l?.cantidad || 0), 0) : 0
-  return conReintentoIdempotente(db, e, unidades, async () => {
-    const ya = e && e.origen && e.origen_ref ? await yaRegistrada(db, e.origen, String(e.origen_ref).trim()) : null
-    if (ya) return (await mismaVenta(db, ya, e.marca, e.total, unidades)) ? respuestaYaExistia(ya) : conflicto(e)
-    const armada = armarVenta(e, await leerConf(db, e?.marca))
-    if (!armada.ok) return armada
-    const avisos = []
-    await ponerCosto(db, armada.lineas, avisos)
-    await avisarStock(db, armada.venta, armada.lineas, avisos)
-    const venta = await escribir(db, armada)
-    return { ok: true, venta: { id: venta.id, numero: venta.numero, estado: venta.estado, tipo: venta.tipo, total: venta.total, prueba: venta.prueba }, ya_existia: false, movimientos: armada.movimientos.length, avisos }
-  })
+  const unidades = unidadesDe(e)
+  return conReintentoIdempotente(db, e, unidades, () => registrarDentro(db, e, unidades))
+}
+
+const unidadesDe = (e) => (Array.isArray(e?.lineas) ? e.lineas.reduce((s, l) => s + Number(l?.cantidad || 0), 0) : 0)
+
+/** El cuerpo de `registrarVenta`, dentro de una transacción que abrió otro (registrar o reemplazar). */
+async function registrarDentro(db, e, unidades) {
+  const ya = e && e.origen && e.origen_ref ? await yaRegistrada(db, e.origen, String(e.origen_ref).trim()) : null
+  if (ya) return (await mismaVenta(db, ya, e.marca, e.total, unidades)) ? respuestaYaExistia(ya) : conflicto(e)
+  const armada = armarVenta(e, await leerConf(db, e?.marca))
+  if (!armada.ok) return armada
+  const cli = await resolverCliente(db, armada.venta.empresa_id, e)
+  if (cli.error) return cli.error
+  armada.venta.cliente_id = cli.id
+  const sinSaldo = await chequearUsoDeSaldo(db, armada)
+  if (sinSaldo) return sinSaldo
+  const avisos = []
+  await ponerCosto(db, armada.lineas, avisos)
+  await avisarStock(db, armada.venta, armada.lineas, avisos)
+  const venta = await escribir(db, armada)
+  if (armada.usa_saldo > 0) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, -armada.usa_saldo, 'uso', venta.usuario)])
+  return {
+    ok: true, venta: { id: venta.id, numero: venta.numero, estado: venta.estado, tipo: venta.tipo, total: venta.total, prueba: venta.prueba }, ya_existia: false, movimientos: armada.movimientos.length, avisos,
+    ...(armada.usa_saldo > 0 ? { saldo: await saldoDe(db, venta.cliente_id, venta.marca, venta.prueba) } : {}),
+  }
 }
 
 /** La venta con sus líneas (y cuánto de cada una ya se devolvió en cambios), bloqueada para la transacción. */
@@ -161,13 +223,24 @@ export async function registrarCambio(db, e) {
     if (original && e.marca && e.marca !== original.venta.marca) return { ok: false, error: { codigo: 'OTRA_MARCA', mensaje: 'Un cambio entre marcas ⛔ se puede todavía', campo: 'marca' } }
     const armada = armarCambio(e, original ? await leerConf(db, original.venta.marca) : { marcas: {}, cuentas: [] }, original)
     if (!armada.ok) return armada
+    // §6.2: la clienta que vino en el cambio, o la de la venta original. Hace falta si queda saldo o si lo usa.
+    const cli = await resolverCliente(db, armada.venta.empresa_id, e)
+    if (cli.error) return cli.error
+    armada.venta.cliente_id = cli.id ?? armada.venta.cliente_id
+    if (armada.a_favor > 0 && !armada.venta.cliente_id) return falla('FALTA_CLIENTE', `Quedan ${armada.a_favor} a favor: hace falta la clienta para guardarlos`, 'cliente')
+    const sinSaldo = await chequearUsoDeSaldo(db, armada)
+    if (sinSaldo) return sinSaldo
     const avisos = []
     await ponerCosto(db, armada.lineas, avisos)
     await avisarStock(db, armada.venta, armada.lineas, avisos)
     const venta = await escribir(db, armada)
+    const usuario = venta.usuario
+    if (armada.a_favor > 0) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, armada.a_favor, 'cambio', usuario)])
+    if (armada.usa_saldo > 0) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, -armada.usa_saldo, 'uso', usuario)])
     return {
-      ok: true, venta: { id: venta.id, numero: venta.numero, tipo: 'cambio', diferencia: armada.diferencia },
+      ok: true, venta: { id: venta.id, numero: venta.numero, tipo: 'cambio', diferencia: armada.diferencia, total: venta.total },
       movimientos: armada.movimientos.length, a_favor: armada.a_favor, avisos,
+      saldo: venta.cliente_id ? await saldoDe(db, venta.cliente_id, venta.marca, venta.prueba) : null,
       nc_pendiente: await tieneFactura(db, original.venta.id),
     }
   })
@@ -175,13 +248,92 @@ export async function registrarCambio(db, e) {
 
 /** §1 anularVenta. @param {import('pg').ClientBase} db @param {{ venta_id: string, motivo: string, usuario: string, devolucion?: any[] }} e */
 export async function anularVenta(db, e) {
-  return enTransaccion(db, async () => {
-    const actual = await leerParaCambiar(db, e?.venta_id)
-    const armada = armarAnulacion(actual, e ?? {})
-    if (!armada.ok) return armada
-    await insertar(db, 'venta_anulacion', [armada.anulacion])
-    await db.query(`update venta set estado = 'anulada' where id = $1`, [actual.venta.id])
-    await insertarMovimientos(db, armada.movimientos)
-    return { ok: true, venta: { id: actual.venta.id, numero: actual.venta.numero, estado: 'anulada' }, movimientos: armada.movimientos.length, nc_pendiente: await tieneFactura(db, actual.venta.id) }
+  return enTransaccion(db, () => anularDentro(db, e))
+}
+
+/** El cuerpo de `anularVenta`, dentro de una transacción que abrió otro. */
+async function anularDentro(db, e) {
+  const actual = await leerParaCambiar(db, e?.venta_id)
+  const armada = armarAnulacion(actual, e ?? {})
+  if (!armada.ok) return armada
+  // §6.2: lo que la venta movió del saldo se da vuelta. Si generó saldo y ya se usó, primero se anula la que lo usó.
+  const netos = await q(db, `select cliente_id, sum(monto) as neto from saldo_favor_movimiento where venta_id = $1 group by 1`, [actual.venta.id])
+  const vueltas = []
+  for (const n of netos) {
+    const neto = Number(n.neto)
+    if (!neto) continue
+    const v = { ...actual.venta, cliente_id: n.cliente_id }
+    if (neto > 0 && !casi(await saldoDe(db, n.cliente_id, v.marca, v.prueba), neto)) {
+      return falla('SALDO_USADO', `La venta ${actual.venta.numero} dejó ${neto} a favor y ya se usó: primero se anula la venta que lo usó`)
+    }
+    vueltas.push(movSaldo(v, -neto, 'anulacion', armada.anulacion.usuario))
+  }
+  await insertar(db, 'venta_anulacion', [armada.anulacion])
+  await insertar(db, 'saldo_favor_movimiento', vueltas)
+  await db.query(`update venta set estado = 'anulada' where id = $1`, [actual.venta.id])
+  await insertarMovimientos(db, armada.movimientos)
+  return { ok: true, venta: { id: actual.venta.id, numero: actual.venta.numero, estado: 'anulada' }, movimientos: armada.movimientos.length, nc_pendiente: await tieneFactura(db, actual.venta.id) }
+}
+
+
+/**
+ * Reemplazar una venta por otra (el pedido mayorista que el equipo rehace, pedido de B 14-oct): anula la vieja
+ * y registra la nueva en UNA transacción ⇒ ⛔ queda una sin la otra. La nueva lleva `detalle.reemplaza` = la vieja
+ * y su propio `origen_ref` (reintentar con el mismo devuelve la misma, como `registrarVenta`).
+ * Mismo origen, marca y `prueba` que la vieja. Los errores de anular (TIENE_CAMBIO, YA_ANULADA, SALDO_USADO, …)
+ * y de registrar salen tal cual, y entonces ⛔ se anuló nada.
+ * @param {import('pg').ClientBase} db @param {{ venta_id: string, motivo: string, usuario: string, nueva: any }} e
+ */
+export async function reemplazarVenta(db, e) {
+  const nueva = e?.nueva
+  const unidades = unidadesDe(nueva)
+  return conReintentoIdempotente(db, nueva ?? {}, unidades, async () => {
+    if (!nueva || typeof nueva !== 'object') return falla('ENTRADA_INVALIDA', 'Falta la venta nueva', 'nueva')
+    const ya = nueva.origen && nueva.origen_ref ? await yaRegistrada(db, nueva.origen, String(nueva.origen_ref).trim()) : null
+    if (ya) return (await mismaVenta(db, ya, nueva.marca, nueva.total, unidades)) ? respuestaYaExistia(ya) : conflicto(nueva)
+    const [vieja] = await q(db, 'select id, origen, marca, prueba from venta where id = $1', [e.venta_id])
+    if (!vieja) return falla('NO_ENCONTRADA', 'No está la venta que se reemplaza', 'venta_id')
+    if (nueva.origen !== vieja.origen || nueva.marca !== vieja.marca) return falla('ENTRADA_INVALIDA', 'El reemplazo es del mismo origen y la misma marca', 'nueva')
+    if (nueva.prueba !== vieja.prueba) return falla('ENTRADA_INVALIDA', 'Una venta de prueba se reemplaza con otra de prueba (y al revés)', 'nueva.prueba')
+    const anulada = await anularDentro(db, { venta_id: vieja.id, motivo: e.motivo, usuario: e.usuario })
+    if (!anulada.ok) return anulada
+    const r = await registrarDentro(db, { ...nueva, detalle: { ...(nueva.detalle ?? {}), reemplaza: vieja.id } }, unidades)
+    if (!r.ok) return r
+    return { ...r, anulada: anulada.venta, movimientos: r.movimientos + anulada.movimientos }
   })
 }
+
+const TIPOS_FACTURA = ['factura', 'nc', 'nd']
+
+/**
+ * Atar una factura de ARCA a la venta (paso 6, pedido de B 14-oct): `venta_factura`, N:M — una venta en varias
+ * facturas (NC parciales) y una factura de varias ventas. El monitor emite (ARCA, `facturas`) y LUEGO llama esto
+ * con el id de su fila de `facturas`; el motor ⛔ habla con ARCA ni sabe del ambiente ⇒ 🔴 que una venta de PRUEBA
+ * ⛔ se facture en producción lo frena el que emite (`puedeFacturar` del monitor).
+ * - `factura`: la venta tiene que estar confirmada (`YA_ANULADA`).
+ * - `nc` / `nd`: la venta tiene que tener una factura antes (`SIN_FACTURA`); la venta puede estar anulada (es la NC del anular).
+ * - Repetir lo mismo devuelve lo mismo (`ya_existia`); la misma factura con OTRO tipo ⇒ `CONFLICTO_TIPO`.
+ * @param {import('pg').ClientBase} db @param {{ venta_id: string, factura_id: string|number, tipo: 'factura'|'nc'|'nd' }} e
+ */
+export async function vincularFactura(db, e) {
+  const facturaId = e?.factura_id == null ? '' : String(e.factura_id).trim()
+  if (!facturaId) return falla('ENTRADA_INVALIDA', 'Falta la factura', 'factura_id')
+  if (!TIPOS_FACTURA.includes(e?.tipo)) return falla('ENTRADA_INVALIDA', `El tipo es ${TIPOS_FACTURA.join(', ')}`, 'tipo')
+  if (!/^[0-9a-f-]{36}$/i.test(String(e?.venta_id ?? ''))) return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id')
+  return enTransaccion(db, async () => {
+    const [venta] = await q(db, 'select id, numero, estado from venta where id = $1 for update', [e.venta_id])
+    if (!venta) return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id')
+    const otra = await q(db, 'select venta_id, tipo from venta_factura where factura_id = $1 and tipo <> $2 limit 1', [facturaId, e.tipo])
+    if (otra.length) return falla('CONFLICTO_TIPO', `La factura ${facturaId} ya está atada como ${otra[0].tipo}`, 'tipo')
+    const atadas = await q(db, 'select factura_id, tipo, creada_en from venta_factura where venta_id = $1 order by creada_en', [venta.id])
+    const respuesta = (ya, facturas) => ({ ok: true, venta: { id: venta.id, numero: Number(venta.numero), estado: venta.estado }, vinculo: { venta_id: venta.id, factura_id: facturaId, tipo: e.tipo }, ya_existia: ya, facturas })
+    if (atadas.some((f) => f.factura_id === facturaId)) return respuesta(true, atadas)
+    if (e.tipo === 'factura' && venta.estado !== 'confirmada') return falla('YA_ANULADA', `La venta ${venta.numero} está anulada: ⛔ se factura`, 'venta_id')
+    if (e.tipo !== 'factura' && !atadas.some((f) => f.tipo === 'factura')) return falla('SIN_FACTURA', `La venta ${venta.numero} ⛔ tiene factura: una ${e.tipo} va contra una factura`, 'tipo')
+    const [nueva] = await q(db, 'insert into venta_factura (venta_id, factura_id, tipo) values ($1, $2, $3) returning factura_id, tipo, creada_en', [venta.id, facturaId, e.tipo])
+    return respuesta(false, [...atadas, nueva])
+  })
+}
+
+// La ficha de la clienta (§11) viaja por la misma puerta: `import { guardarCliente } from 'areben-motor/venta'`.
+export { buscarClientes, guardarCliente } from './cliente.mjs'

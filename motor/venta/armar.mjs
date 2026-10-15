@@ -12,6 +12,7 @@
 import { randomUUID } from 'node:crypto'
 
 export const ORIGENES = ['caja', 'tn', 'mayorista', 'postventa', 'ml']
+/** Los canales de la semilla (005). Manda la tabla `canal` (`conf.canales`); esto es para cuando no viene (tests). */
 export const CANALES = ['local', 'online', 'mayorista', 'ml']
 /** Diferencia que se tolera al sumar pesos (el redondeo de la Caja es en pesos enteros, pero GN guarda 2 decimales). */
 const TOLERANCIA = 0.01
@@ -24,7 +25,7 @@ const cierra = (a, b) => Math.abs(a - b) <= TOLERANCIA
 /**
  * La configuración que lee `registrar.mjs` de las tablas de §3 (marca, deposito, cuenta_cobro).
  * @typedef {{ marcas: Record<string, { empresa_id: string, depositos: string[] }>,
- *   cuentas: Array<{ id: string, marca: string, gn_cuenta_id: number | null, activa?: boolean }> }} Conf
+ *   cuentas: Array<{ id: string, marca: string, gn_cuenta_id: number | null, activa?: boolean, medio?: string }>, canales?: string[] }} Conf
  */
 
 /** La cuenta de cobro de un pago: por su uuid o, mientras la Caja guarda ésos, por el id de GN. */
@@ -49,18 +50,34 @@ function validarLineas(lineas, campo) {
   return null
 }
 
-function validarPagos(pagos, conf, marca, total) {
+/**
+ * Los pagos. En la venta, `Σ monto = total`. En el cambio (`base`, §6.1) la forma de pago lleva su descuento,
+ * como `cobro()` de la Caja: `Σ base = diferencia` y por pago `monto = base − descuento + redondeo`; el total
+ * es lo que se cobró (`Σ monto`). `usa_saldo`: lo que se paga con la cuenta «Saldo a favor» (§6.2).
+ */
+function validarPagos(pagos, conf, marca, total, { base = null } = {}) {
   if (!Array.isArray(pagos)) return { error: fallo('ENTRADA_INVALIDA', 'Faltan los pagos', 'pagos') }
   const filas = []
+  let usa_saldo = 0
   for (const [i, p] of pagos.entries()) {
     const cuenta = p && cuentaDe(conf, marca, p.cuenta)
     if (!cuenta) return { error: fallo('CUENTA_DESCONOCIDA', `La cuenta de cobro ${p && p.cuenta} no es de ${marca}`, `pagos[${i}].cuenta`) }
     if (!Number.isFinite(num(p.monto))) return { error: fallo('ENTRADA_INVALIDA', 'Falta el monto', `pagos[${i}].monto`) }
-    filas.push({ cuenta_cobro_id: cuenta.id, base: pesos(p.base ?? p.monto), porcentaje: num(p.porcentaje) || 0, descuento: pesos(p.descuento || 0), redondeo: pesos(p.redondeo || 0), monto: pesos(p.monto) })
+    const f = { cuenta_cobro_id: cuenta.id, base: pesos(p.base ?? p.monto), porcentaje: num(p.porcentaje) || 0, descuento: pesos(p.descuento || 0), redondeo: pesos(p.redondeo || 0), monto: pesos(p.monto) }
+    if (base != null && !cierra(f.base - f.descuento + f.redondeo, f.monto)) {
+      return { error: fallo('PAGOS_NO_CIERRAN', `El pago ${i + 1}: ${f.base} − ${f.descuento} + ${f.redondeo} no da ${f.monto}`, `pagos[${i}].monto`) }
+    }
+    if (cuenta.medio === 'saldo') usa_saldo += f.monto
+    filas.push(f)
   }
   const suma = filas.reduce((s, p) => s + p.monto, 0)
+  if (base != null) {
+    const sumaBase = filas.reduce((s, p) => s + p.base, 0)
+    if (!cierra(sumaBase, base)) return { error: fallo('PAGOS_NO_CIERRAN', `Los pagos cubren ${pesos(sumaBase)} y la diferencia es ${base}`, 'pagos') }
+    return { filas, total: pesos(suma), usa_saldo: pesos(usa_saldo) }
+  }
   if (!cierra(suma, total)) return { error: fallo('PAGOS_NO_CIERRAN', `Los pagos suman ${pesos(suma)} y la venta es de ${total}`, 'pagos') }
-  return { filas }
+  return { filas, total, usa_saldo: pesos(usa_saldo) }
 }
 
 /** Lo común a la venta y al cambio: origen, marca, depósito, usuario. */
@@ -108,7 +125,7 @@ export function movimientoDe(venta, linea, tipo) {
 export function armarVenta(e, conf, { ahora = new Date() } = {}) {
   const mal = validarCabecera(e) || validarLugar(e, conf)
   if (mal) return mal
-  if (!CANALES.includes(e.canal)) return fallo('ENTRADA_INVALIDA', `Canal desconocido: ${e.canal}`, 'canal')
+  if (!(conf.canales ?? CANALES).includes(e.canal)) return fallo('CANAL_DESCONOCIDO', `Canal desconocido: ${e.canal}`, 'canal')
   const malas = validarLineas(e.lineas, 'lineas')
   if (malas) return malas
   const subtotal = pesos(e.subtotal), total = pesos(e.total)
@@ -127,7 +144,7 @@ export function armarVenta(e, conf, { ahora = new Date() } = {}) {
   const lineas = e.lineas.map((l, i) => filaDeLinea(venta.id, l, i + 1, 1))
   const pagos = p.filas.map((f) => ({ id: randomUUID(), venta_id: venta.id, ...f }))
   const movimientos = venta.prueba ? [] : lineas.map((l) => movimientoDe(venta, l, 'venta'))
-  return { ok: true, venta, lineas, pagos, movimientos }
+  return { ok: true, venta, lineas, pagos, movimientos, usa_saldo: p.usa_saldo }
 }
 
 /**
@@ -176,12 +193,13 @@ export function armarCambio(e, conf, original, { ahora = new Date() } = {}) {
   for (const l of e.nuevas || []) lineas.push(filaDeLinea(venta.id, l, lineas.length + 1, 1))
   const diferencia = pesos(lineas.reduce((s, l) => s + l.importe, 0))
   venta.subtotal = diferencia
-  venta.total = Math.max(diferencia, 0)
-  const p = validarPagos(e.pagos || [], conf, o.marca, venta.total)
+  // §6.1: lo que se cobra de más lleva el descuento de la forma de pago ⇒ el total es lo cobrado.
+  const p = diferencia > 0 ? validarPagos(e.pagos || [], conf, o.marca, null, { base: diferencia }) : validarPagos(e.pagos || [], conf, o.marca, 0)
   if (p.error) return p.error
+  venta.total = p.total
   const pagos = p.filas.map((f) => ({ id: randomUUID(), venta_id: venta.id, ...f }))
   const movimientos = venta.prueba ? [] : lineas.map((l) => movimientoDe(venta, l, l.cantidad < 0 ? 'cambio_entra' : 'cambio_sale'))
-  return { ok: true, venta, lineas, pagos, movimientos, diferencia, a_favor: diferencia < 0 ? -diferencia : 0 }
+  return { ok: true, venta, lineas, pagos, movimientos, diferencia, a_favor: diferencia < 0 ? -diferencia : 0, usa_saldo: p.usa_saldo }
 }
 
 /**
