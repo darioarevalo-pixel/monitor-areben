@@ -73,6 +73,12 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   (`vista=clientas`) y un CUIT completo con ficha se completa solo. Lo que viene con dato PISA la ficha; lo vacío ⛔
   borra. El PDF de la A imprime razón social y domicilio del receptor DE LA FICHA (`receptor_nombre`/`_domicilio`,
   también al reimprimir y en «Facturas del monitor»); sin ficha, sólo el CUIT (⛔ se inventa).
+- 🔑 **El CAMBIO se factura desde `Caja › Factura`** (Bruno, 14-oct: NC por lo devuelto + factura por lo nuevo;
+  `facturarCambio`, núcleo `armarFacturaDelCambio`): misma clase y receptor que la factura de la venta ORIGINAL (sin
+  ella ⛔ se factura: dice por qué). Lo devuelto se acredita al valor FACTURADO (`× total/subtotal` de la original) y la
+  factura nueva = el crédito usado + lo cobrado hoy ⇒ lo facturado neto = la plata que entró. Las dos con la clave del
+  CAMBIO (una de cada una; repetir trae las mismas). La NC va asociada a la factura original y atada a la venta original;
+  🔴 nunca acredita más de lo que a esa factura le queda, y la NC ENTERA de Facturación se frena si ya hay una parcial.
 - 🔑 **La NC de una venta propia**: botón «Hacer nota de crédito» en la ficha de Ventas, SÓLO con la venta ANULADA
   y facturada (a una en pie la NC le anula la factura y el lote ⛔ la deja refacturar). Va por el MISMO
   `notaDeCredito` de Facturación (entera, asociada) y se ata como `nc` en `venta_factura`.
@@ -104,5 +110,5 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
 
 ## Pendiente
 
-Factura A en la masiva (en la Caja ya está) · NC PARCIAL (la del cambio) · los datos del emisor para el PDF · facturar un CAMBIO (NC + factura nueva) · reabrir un mes ·
+Factura A en la masiva (en la Caja ya está) · NC PARCIAL (la del cambio) · los datos del emisor para el PDF · reabrir un mes ·
 en producción: certificado, PV nuevos (contador) y las dos variables.

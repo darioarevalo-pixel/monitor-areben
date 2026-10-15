@@ -198,6 +198,13 @@ export type PedidoFactura = {
 export const facturarVenta = (marca: MarcaErp, p: PedidoFactura) =>
   pedir<{ ok: true; yaEstaba: boolean; sinAtar: string | null; sinFicha?: string | null; factura: FacturaEmitida }>(post({ accion: 'facturar-venta', marca, ...p }), '', 'No se pudo facturar.')
 
+/** Facturar un CAMBIO: NC por lo devuelto + factura por lo nuevo, con el receptor de la factura original. */
+export type CambioFacturado =
+  | { ok: true; simulado: true; clase: 'A' | 'B'; nc: number; factura: number; ncYa: boolean; facturaYa: boolean }
+  | { ok: true; simulado?: false; yaEstaban: boolean; nc: FacturaEmitida | null; factura: FacturaEmitida | null; avisos: string[] }
+export const facturarCambio = (marca: MarcaErp, ventaId: string, simular = false) =>
+  pedir<CambioFacturado>(post({ accion: 'facturar-cambio', marca, ventaId, simular }), '', 'No se pudo facturar el cambio.')
+
 /** La nota de crédito de una venta propia ANULADA que tenía factura (desde su ficha). */
 export const notaDeCreditoDeVenta = (marca: MarcaErp, ventaId: string) =>
   pedir<{ ok: true; ambiente: string; sinAtar: string | null; autorizada: { id: string; numero: number; cae: string; total: number } }>(post({ accion: 'nota-credito-venta', marca, ventaId }), '', 'No se pudo hacer la nota de crédito.')

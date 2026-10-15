@@ -264,7 +264,7 @@ export function CambioCaja() {
         <Notice tone="success" onClose={() => setHecho(null)}>
           Cambio #{hecho.numero} registrado.{' '}
           {hecho.cobrado > 0 ? <>Se cobraron <MoneyText value={hecho.cobrado} />.</> : hecho.aFavor > 0 ? <>Quedan <MoneyText value={hecho.aFavor} /> a favor de la clienta{hecho.saldo != null && <> (saldo: <MoneyText value={hecho.saldo} />)</>}.</> : 'Sin diferencia.'}
-          {hecho.ncPendiente && ' La venta tenía factura: falta la nota de crédito.'}
+          {hecho.ncPendiente && ' La venta tenía factura: facturá el cambio en Caja › Factura (nota de crédito por lo devuelto y factura por lo nuevo).'}
         </Notice>
       )}
 

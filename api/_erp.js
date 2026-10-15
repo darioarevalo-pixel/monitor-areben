@@ -25,7 +25,8 @@
  *   POST {recurso:'erp', accion:'cambiar', marca, id, ventaId, devueltas, items, pagos, total, desde?, pago?, comprobante?, cliente?}
  *        el cambio en el local: cobra la diferencia con el descuento de la forma de pago y, con transferencia,
  *        contesta `esperando` hasta que llega el pago (la pantalla repite el MISMO pedido)
- *   POST {recurso:'erp', accion:'facturar-venta', marca, ventaId, clase:'A'|'B', doc?, condicion?, reimprimir?}
+ *   POST {recurso:'erp', accion:'facturar-venta', marca, ventaId, clase:'A'|'B', doc?, condicion?, razonSocial?, domicilio?, reimprimir?}
+ *   POST {recurso:'erp', accion:'facturar-cambio', marca, ventaId, simular?}   NC por lo devuelto + factura por lo nuevo
  *        la factura A PEDIDO de una venta propia (la Caja): una, con su CAE, y atada a la venta en el motor
  *   POST {recurso:'erp', accion:'nota-credito-venta', marca, ventaId}  la NC de una venta propia ANULADA con factura
  *
@@ -49,7 +50,7 @@ import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { MENSAJE_ERROR_MOTOR, armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
-import { claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
+import { armarFacturaDelCambio, claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
@@ -186,6 +187,10 @@ export async function notaDeCredito({ facturaId, usuario }, deps = {}) {
   if (f.estado !== 'autorizada') return { status: 409, error: 'Sólo una factura autorizada (con CAE) lleva nota de crédito.' }
   const tipo = { [CBTE.FACTURA_A]: CBTE.NC_A, [CBTE.FACTURA_B]: CBTE.NC_B }[f.tipo]
   if (!tipo) return { status: 409, error: 'Eso ya es una nota de crédito.' }
+  // 🔴 Una NC PARCIAL (la de un cambio) ya acreditó parte: la entera acreditaría dos veces lo devuelto.
+  const previas = deps.ncsDeFactura ? await deps.ncsDeFactura(f.id) : await ncsDeFactura(sb, f.id)
+  if (previas.some((x) => String(x.venta_id) === String(f.venta_id))) return { status: 409, error: 'La venta ya tiene nota de crédito' }
+  if (previas.length) return { status: 409, error: `Esa factura ya tiene nota de crédito por $${previas.reduce((a, x) => a + Number(x.total), 0)} (de un cambio): la entera acreditaría dos veces.` }
   const hoy = diaArgentino(Date.now())
   const arca = deps.arca || clienteArcaDelEntorno(sb).arca
   const r = await facturarLote({
@@ -652,6 +657,104 @@ async function atarFactura(db, { venta, facturaId, tipo }) {
   return `Salió con CAE, pero ⛔ quedó atada a la venta en el ERP: ${MENSAJE_ERROR_MOTOR[r.error.codigo] || r.error.mensaje}`
 }
 
+/** Las NC (⛔ rechazadas) asociadas a una factura: lo que ya se le acreditó. */
+async function ncsDeFactura(sb, facturaId) {
+  const { data, error } = await sb.from('facturas').select('id, venta_id, total').eq('asociado_id', facturaId).in('tipo', [CBTE.NC_A, CBTE.NC_B]).neq('estado', 'rechazada')
+  if (error) throw new Error(`facturas: ${error.message}`)
+  return data
+}
+
+/** El comprobante (⛔ rechazado) de esa clave y esos tipos, o null. */
+async function comprobanteDeClave(sb, { ambiente, marca, clave, tipos }) {
+  const { data, error } = await sb.from('facturas').select('*').eq('ambiente', ambiente).eq('marca', marca).eq('venta_id', clave)
+    .in('tipo', tipos).neq('estado', 'rechazada').order('creado_en').limit(1)
+  if (error) throw new Error(`facturas: ${error.message}`)
+  return data[0] || null
+}
+
+/**
+ * Facturar un CAMBIO desde la Caja (Bruno, 14-oct): **NC por lo devuelto + factura por lo nuevo**, con la clase y el
+ * receptor de la factura de la venta ORIGINAL (`armarFacturaDelCambio` dice cuánto). Las dos van por el MISMO lote
+ * (candado, número reservado, una por clave) con la clave del CAMBIO ⇒ repetir devuelve las mismas y una que faltó
+ * (se cortó a la mitad) sale sola. La NC queda asociada a la factura original y atada a la venta ORIGINAL (`nc`); la
+ * factura nueva, al cambio. `simular` dice cuánto saldría, ⛔ pide nada.
+ */
+export async function facturarCambio({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const ventaId = String(body?.ventaId ?? '')
+  if (!/^[0-9a-f-]{36}$/i.test(ventaId)) return { status: 400, error: 'Cambio inválido' }
+  const { ambiente, error: errorAmbiente } = ambienteSeguro()
+  if (!ambiente) return { status: 409, error: errorAmbiente }
+  const b = deps.b || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
+  const sb = deps.sb || (deps.repo ? null : baseFacturacion())
+  const repo = deps.repo || repoFacturas(sb)
+  const buscar = deps.buscarComprobante || ((clave, tipos) => comprobanteDeClave(sb, { ambiente, marca, clave, tipos }))
+  const leerFactura = deps.leerFactura || (async (id) => { const r = await sb.from('facturas').select('*').eq('id', id).maybeSingle(); if (r.error) throw new Error(`facturas: ${r.error.message}`); return r.data })
+  const ncsDe = deps.ncsDeFactura || ((id) => ncsDeFactura(sb, id))
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'Facturar el cambio', fn)
+
+  return correr(async (db) => {
+    const [cambio] = (await db.query('select * from venta_ficha where id = $1', [ventaId])).rows
+    const [original] = cambio?.venta_original_id ? (await db.query('select * from venta_ficha where id = $1', [cambio.venta_original_id])).rows : []
+    const atada = (original?.facturas || []).find((x) => x.tipo === 'factura')
+    const facturaOriginal = atada ? await leerFactura(atada.factura_id) : null
+    const frena = puedeFacturarCambio(cambio, original, { ambiente, facturaOriginal })
+    if (frena) return { status: cambio ? 409 : 404, error: frena }
+
+    const tipos = Number(facturaOriginal.tipo) === CBTE.FACTURA_A ? { nc: CBTE.NC_A, factura: CBTE.FACTURA_A } : { nc: CBTE.NC_B, factura: CBTE.FACTURA_B }
+    const [ncYa, facturaYa] = await Promise.all([buscar(cambio.id, [tipos.nc]), buscar(cambio.id, [tipos.factura])])
+    const otras = (await ncsDe(facturaOriginal.id)).filter((x) => String(x.venta_id) !== String(cambio.id))
+    const productos = [...new Set((cambio.lineas || []).map((l) => l.product_id))]
+    const inv = productos.length ? await b.from('inventario').select('product_id, size_id, product_name, size_name').in('product_id', productos) : { data: [] }
+    if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
+    const nombres = new Map((inv.data || []).map((x) => [`${x.product_id}/${x.size_id}`, { nombre: x.product_name, talle: x.size_name }]))
+    const plan = armarFacturaDelCambio({ cambio, original, facturaOriginal, acreditado: otras.reduce((a, x) => a + Number(x.total), 0), nombres })
+    if ('error' in plan) return { status: 409, error: plan.error }
+    const numero = cambio.detalle?.gn_number ?? cambio.numero
+    if (body?.simular) {
+      return { ok: true, simulado: true, clase: tipos.factura === CBTE.FACTURA_A ? 'A' : 'B', nc: plan.nc?.total ?? 0, factura: plan.factura?.total ?? 0, ncYa: !!ncYa, facturaYa: !!facturaYa }
+    }
+
+    const hoy = diaArgentino(Date.now())
+    const receptor = { docTipo: Number(facturaOriginal.doc_tipo), docNro: Number(facturaOriginal.doc_nro), condicionIva: Number(facturaOriginal.cond_iva) }
+    const ptoVta = ptoVtaDe(ambiente, marca, process.env)
+    const arca = deps.arca || clienteArcaDelEntorno(sb).arca
+    const reglas = { umbralIdentificar: UMBRAL_IDENTIFICAR, hoy }
+    /** Uno de los dos comprobantes: el que ya está, o sale por el lote (con la clave del cambio). */
+    const emitir = async (ya, tipo, comprobante) => {
+      if (ya) return { fila: ya }
+      const r = await facturarLote({ arca, repo, ambiente, marca, ptoVta, tipo, comprobantes: [{ ventaId: cambio.id, tipo, fecha: hoy, receptor, ...comprobante }], reglas, lote: globalThis.crypto.randomUUID(), usuario })
+      if (r.autorizadas[0]) return { fila: r.autorizadas[0], nueva: true }
+      if (r.noSalen.length) { const otra = await buscar(cambio.id, [tipo]); if (otra) return { fila: otra } }
+      return { error: [...r.rechazadas, ...r.noSalen].flatMap((x) => x.motivos || []).join(' · ') || 'ARCA no la autorizó.' }
+    }
+    const avisos = []
+    let nc = null, factura = null
+    if (plan.nc) {
+      const e = await emitir(ncYa, tipos.nc, {
+        mes: hoy.slice(0, 7), total: plan.nc.total, asociadoId: facturaOriginal.id,
+        asociado: { tipo: Number(facturaOriginal.tipo), ptoVta: Number(facturaOriginal.pto_vta), numero: Number(facturaOriginal.numero), fecha: facturaOriginal.fecha },
+      })
+      if (e.error) return { status: 409, error: `La nota de crédito ⛔ salió: ${e.error}` }
+      if (e.fila.estado !== 'autorizada') return { status: 409, error: 'La nota de crédito del cambio está a medio pedir: probá de nuevo en un minuto.' }
+      nc = filaParaPdf(e.fila, { numero, renglones: plan.nc.renglones })
+      const sin = await atarFactura(db, { venta: original, facturaId: e.fila.id, tipo: 'nc' })
+      if (sin) avisos.push(sin)
+    }
+    if (plan.factura) {
+      const e = await emitir(facturaYa, tipos.factura, { mes: mesDeVenta(cambio.ocurrida_en), total: plan.factura.total })
+      if (e.error) return { status: 409, error: `${nc ? 'Salió la nota de crédito, pero la factura de lo nuevo ⛔: ' : 'La factura de lo nuevo ⛔ salió: '}${e.error}` }
+      if (e.fila.estado !== 'autorizada') return { status: 409, error: 'La factura del cambio está a medio pedir: probá de nuevo en un minuto.' }
+      factura = filaParaPdf(e.fila, { numero, renglones: plan.factura.renglones })
+      const sin = await atarFactura(db, { venta: cambio, facturaId: e.fila.id, tipo: 'factura' })
+      if (sin) avisos.push(sin)
+    }
+    const receptorPdf = await receptorDeFicha(db, { empresaId: cambio.empresa_id, factura: facturaOriginal })
+    for (const x of [nc, factura]) if (x && receptorPdf) Object.assign(x, { receptor_nombre: receptorPdf.nombre, receptor_domicilio: receptorPdf.domicilio })
+    return { ok: true, yaEstaban: !!(ncYa || !plan.nc) && !!(facturaYa || !plan.factura), nc, factura, avisos }
+  })
+}
+
 /** La factura (⛔ rechazada) que ya tiene esa clave en `facturas`, o null. */
 async function facturaDeClave(sb, { ambiente, marca, clave }) {
   const { data, error } = await sb.from('facturas').select('*').eq('ambiente', ambiente).eq('marca', marca).eq('venta_id', clave)
@@ -958,6 +1061,11 @@ export default async function handler(req, res) {
 
     if (body.accion === 'nota-credito-venta') {
       const r = await notaDeCreditoDeVenta({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (body.accion === 'facturar-cambio') {
+      const r = await facturarCambio({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

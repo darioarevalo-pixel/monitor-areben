@@ -4,7 +4,7 @@
  * prueba facturada en producción, o un PDF cuyos renglones ⛔ suman lo facturado.
  */
 import { describe, it, expect } from 'vitest'
-import { claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
+import { armarFacturaDelCambio, claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { CBTE, COND_IVA, DOC } from '../motor/arca/arca.core.js'
 
 const ID = '0b5e7a52-6d1c-4b8e-9a51-2f6c7d8e9f01'
@@ -118,5 +118,62 @@ describe('clavesDeFactura y distintaDeLaPedida', () => {
     expect(distintaDeLaPedida(ya, leerFacturar({ ventaId: ID }) as never)).toBeNull()
     expect(distintaDeLaPedida(ya, leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri' }) as never)).toMatch(/factura B 1-16 \(sin identificar\).*nota de crédito/)
     expect(distintaDeLaPedida(ya, leerFacturar({ ventaId: ID, doc: '30123456' }) as never)).toBeTruthy()
+  })
+})
+
+describe('el CAMBIO facturado: NC por lo devuelto + factura por lo nuevo', () => {
+  // La original: 2 prendas por $25.500, cobradas en efectivo con 15 % ⇒ $21.675 facturados (k = 0,85).
+  const original = { subtotal: 25500, total: 21675 }
+  const facturaOriginal = { total: 21675, estado: 'autorizada', ambiente: 'homologacion' }
+  const dev = (importe: number, n = 1) => ({ product_id: 1, size_id: 1, cantidad: -n, importe: -importe })
+  const nueva = (importe: number, n = 1) => ({ product_id: 2, size_id: 1, cantidad: n, importe })
+  const suma = (r: Array<{ importe: number }>) => Math.round(r.reduce((a, x) => a + x.importe * 100, 0)) / 100
+
+  it('a pagar: lo devuelto al valor FACTURADO, lo nuevo = el crédito usado + lo cobrado hoy', () => {
+    // Devuelve $10.000, se lleva $12.000: diferencia $2.000, en efectivo con 15 % ⇒ cobró $1.700.
+    const r = armarFacturaDelCambio({ cambio: { total: 1700, lineas: [dev(10000), nueva(12000)] }, original, facturaOriginal })
+    if ('error' in r) throw new Error(r.error)
+    expect(r.nc?.total).toBe(8500)
+    expect(r.factura?.total).toBe(10200)
+    // Lo facturado neto = lo que entró de plata: 21.675 − 8.500 + 10.200 = 21.675 + 1.700.
+    expect(21675 - (r.nc?.total ?? 0) + (r.factura?.total ?? 0)).toBe(21675 + 1700)
+    expect(suma(r.nc!.renglones)).toBe(8500)
+    expect(suma(r.factura!.renglones)).toBe(10200)
+    expect(r.nc!.renglones[0]).toMatchObject({ cantidad: 1, importe: 10000 })
+    expect(r.nc!.renglones.at(-1)).toMatchObject({ descripcion: 'Descuento', importe: -1500 })
+  })
+  it('a favor: lo nuevo hasta lo devuelto; lo que sobra ⛔ entra en la factura (queda como saldo)', () => {
+    const r = armarFacturaDelCambio({ cambio: { total: 0, lineas: [dev(15500), nueva(10000)] }, original, facturaOriginal })
+    if ('error' in r) throw new Error(r.error)
+    expect([r.nc?.total, r.factura?.total]).toEqual([13175, 8500])
+  })
+  it('sólo devuelve (sin nada nuevo): NC y ninguna factura', () => {
+    const r = armarFacturaDelCambio({ cambio: { total: 0, lineas: [dev(10000)] }, original, facturaOriginal })
+    if ('error' in r) throw new Error(r.error)
+    expect(r.nc?.total).toBe(8500)
+    expect(r.factura).toBeNull()
+  })
+  it('sin descuento en la original, k = 1', () => {
+    const r = armarFacturaDelCambio({ cambio: { total: 2000, lineas: [dev(10000), nueva(12000)] }, original: { subtotal: 25500, total: 25500 }, facturaOriginal: { total: 25500 } })
+    if ('error' in r) throw new Error(r.error)
+    expect([r.nc?.total, r.factura?.total]).toEqual([10000, 12000])
+  })
+  it('🔴 nunca acredita más de lo que a la factura original le queda (otro cambio ya devolvió)', () => {
+    // Devolver $15.500 acredita $13.175: con $8.500 ya acreditados queda JUSTO eso (pasa); un centavo más, ⛔.
+    const devolver = (acreditado: number) => armarFacturaDelCambio({ cambio: { total: 0, lineas: [dev(15500)] }, original, facturaOriginal, acreditado })
+    expect(devolver(8500)).toMatchObject({ nc: { total: 13175 } })
+    const r = devolver(8500.01)
+    expect('error' in r ? r.error : '').toMatch(/le queda sin acreditar \(\$13174\.99\)/)
+  })
+  it('puedeFacturarCambio: sólo un cambio confirmado, con factura en la original, y ⛔ de prueba en producción', () => {
+    const c = { tipo: 'cambio', estado: 'confirmada', prueba: true }
+    const ok = { ambiente: 'homologacion', facturaOriginal }
+    expect(puedeFacturarCambio(c, original, ok)).toBeNull()
+    expect(puedeFacturarCambio({ ...c, tipo: 'venta' }, original, ok)).toMatch(/no es un cambio/)
+    expect(puedeFacturarCambio({ ...c, estado: 'anulada' }, original, ok)).toMatch(/anulado/)
+    expect(puedeFacturarCambio(c, original, { ambiente: 'homologacion', facturaOriginal: null })).toMatch(/original no tiene factura/)
+    expect(puedeFacturarCambio(c, original, { ambiente: 'produccion', facturaOriginal: { ...facturaOriginal, ambiente: 'produccion' } })).toMatch(/PRUEBA/)
+    expect(puedeFacturarCambio(c, original, { ambiente: 'produccion', facturaOriginal })).toMatch(/PRUEBA/)
+    expect(puedeFacturarCambio({ ...c, prueba: false }, original, { ambiente: 'produccion', facturaOriginal })).toMatch(/no está autorizada en este ambiente/)
   })
 })

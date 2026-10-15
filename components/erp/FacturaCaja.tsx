@@ -19,7 +19,7 @@ import {
 import { useSesion } from '@/components/SesionProvider'
 import { marcaParaPOS, usarMarcaCaja } from '@/lib/caja/marca'
 import { descargarFactura, numeroComprobante, type FacturaEmitida } from '@/lib/arca/factura-pdf'
-import { buscarClientas, buscarVentas, facturarVenta, leerFichaDeVenta, type Clienta, type FichaDeVenta, type MarcaErp, type PedidoFactura, type VentaPropia } from '@/lib/erp/cliente'
+import { buscarClientas, buscarVentas, facturarCambio, facturarVenta, leerFichaDeVenta, type CambioFacturado, type Clienta, type FichaDeVenta, type MarcaErp, type PedidoFactura, type VentaPropia } from '@/lib/erp/cliente'
 import { NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 
 const cuando = (iso: string) => {
@@ -45,6 +45,8 @@ export function FacturaCaja() {
   const [clientas, setClientas] = useState<Clienta[]>([])
   const [deFicha, setDeFicha] = useState<string | null>(null)
   const [hecha, setHecha] = useState<{ factura: FacturaEmitida; yaEstaba: boolean } | null>(null)
+  const [planCambio, setPlanCambio] = useState<Extract<CambioFacturado, { simulado: true }> | null>(null)
+  const [cambioHecho, setCambioHecho] = useState<{ nc: FacturaEmitida | null; factura: FacturaEmitida | null; yaEstaban: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState(false)
 
@@ -61,7 +63,7 @@ export function FacturaCaja() {
   }
 
   const limpiarA = () => { setCondicion(''); setRazonSocial(''); setDomicilio(''); setBuscaClienta(''); setClientas([]); setDeFicha(null) }
-  const limpiar = () => { setFicha(null); setClase('B'); setDoc(''); limpiarA(); setHecha(null) }
+  const limpiar = () => { setFicha(null); setClase('B'); setDoc(''); limpiarA(); setHecha(null); setPlanCambio(null); setCambioHecho(null) }
 
   /** Completa la A con la ficha elegida (lo que la ficha ⛔ tiene queda como estaba). */
   const usarFicha = (c: Clienta) => {
@@ -102,13 +104,45 @@ export function FacturaCaja() {
 
   const buscar = () => correr(async () => {
     limpiar()
-    setVentas((await buscarVentas(store, { q, desde: '', hasta: '' })).ventas.filter((v) => v.tipo === 'venta' && v.estado === 'confirmada'))
+    setVentas((await buscarVentas(store, { q, desde: '', hasta: '' })).ventas.filter((v) => v.estado === 'confirmada'))
   }, 'No se pudo buscar.')
 
   const abrir = (id: string) => correr(async () => {
     limpiar()
-    setFicha(await leerFichaDeVenta(store, id))
+    const f = await leerFichaDeVenta(store, id)
+    setFicha(f)
+    // Un cambio: cuánto saldría de nota de crédito y de factura (⛔ pide nada a ARCA). Si ⛔ se puede, dice por qué.
+    if (f.venta.tipo === 'cambio') {
+      const r = await facturarCambio(store, id, true)
+      if (r.simulado) setPlanCambio(r)
+    }
   }, 'No se pudo leer la venta.')
+
+  async function facturarElCambio() {
+    if (!ficha || !planCambio) return
+    // Si las dos ya están, sólo se traen de nuevo (para el PDF): ⛔ hace falta confirmar nada.
+    const yaEstan = (planCambio.ncYa || !planCambio.nc) && (planCambio.facturaYa || !planCambio.factura)
+    const ok = yaEstan || await confirmar({
+      titulo: `Facturar el cambio #${ficha.venta.numero}`,
+      mensaje: (
+        <div>
+          {planCambio.nc > 0 && <ConfirmDetalle label={`Nota de crédito ${planCambio.clase} (lo devuelto)`} valor={<MoneyText value={planCambio.nc} />} />}
+          {planCambio.factura > 0 && <ConfirmDetalle label={`Factura ${planCambio.clase} (lo nuevo)`} valor={<MoneyText value={planCambio.factura} />} />}
+          <p style={{ marginTop: space[3] }}>A nombre de la factura de la venta #{ficha.original?.numero}. Con CAE ⛔ se eliminan.</p>
+        </div>
+      ),
+      ok: 'Facturar el cambio',
+      tono: 'warning',
+    })
+    if (!ok) return
+    await correr(async () => {
+      const r = await facturarCambio(store, ficha.venta.id)
+      if (r.simulado) return
+      setCambioHecho({ nc: r.nc, factura: r.factura, yaEstaban: r.yaEstaban })
+      if (r.avisos.length) setError(r.avisos.join(' · '))
+      setFicha(await leerFichaDeVenta(store, ficha.venta.id))
+    }, 'No se pudo facturar el cambio.')
+  }
 
   const docLimpio = doc.replace(/\D/g, '')
   const faltaDato = clase === 'A' ? docLimpio.length !== 11 || !condicion || razonSocial.trim().length < 2 : !!docLimpio && ![7, 8, 11].includes(docLimpio.length)
@@ -173,6 +207,16 @@ export function FacturaCaja() {
         </Notice>
       )}
 
+      {cambioHecho && (
+        <Notice tone="success" onClose={() => setCambioHecho(null)}>
+          {cambioHecho.yaEstaban ? 'El cambio ya estaba facturado' : 'Cambio facturado'}:{' '}
+          {[cambioHecho.nc && `NC ${numeroComprobante(cambioHecho.nc)}`, cambioHecho.factura && `factura ${numeroComprobante(cambioHecho.factura)}`].filter(Boolean).join(' y ')}
+          {(cambioHecho.nc ?? cambioHecho.factura)?.ambiente !== 'produccion' && ' (de prueba, sin validez fiscal)'}.{' '}
+          {cambioHecho.nc && <Button variant="outline" disabled={trabajando} onClick={() => void bajar(cambioHecho.nc!)}>Descargar NC</Button>}{' '}
+          {cambioHecho.factura && <Button variant="outline" disabled={trabajando} onClick={() => void bajar(cambioHecho.factura!)}>Descargar factura</Button>}
+        </Notice>
+      )}
+
       {ventas && !ficha && (
         <SectionCard title="Ventas">
           {!ventas.length ? <EmptyState title="No hay ventas para facturar con esa búsqueda." /> : (
@@ -182,7 +226,7 @@ export function FacturaCaja() {
                 <TBody>
                   {ventas.map((v) => (
                     <Tr key={v.id} onClick={() => void abrir(v.id)} style={{ cursor: 'pointer' }}>
-                      <Td>#{v.numero}{v.prueba && <> <Badge tone="warning">Prueba</Badge></>}</Td>
+                      <Td>#{v.numero}{v.tipo === 'cambio' && <> <Badge tone="neutral">Cambio</Badge></>}{v.prueba && <> <Badge tone="warning">Prueba</Badge></>}</Td>
                       <Td>{cuando(v.ocurridaEn)}</Td>
                       <Td>{v.cliente ?? 'Consumidor final'}</Td>
                       <Td style={{ textAlign: 'right' }}><MoneyText value={v.total} /></Td>
@@ -216,12 +260,29 @@ export function FacturaCaja() {
             </table>
           </TableWrap>
 
-          {ficha.facturada ? (
+          {ficha.venta.tipo === 'cambio' ? (
+            <div style={{ marginTop: space[3] }}>
+              <p>
+                Cambio de la venta #{ficha.original?.numero}: sale una nota de crédito por lo devuelto y una factura por lo nuevo,
+                con la misma clase y a nombre de la factura de la venta original.
+              </p>
+              {planCambio && (
+                <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', marginTop: space[2] }}>
+                  {planCambio.nc > 0 && <span>NC {planCambio.clase}: <MoneyText value={planCambio.nc} />{planCambio.ncYa && ' (ya está)'}</span>}
+                  {planCambio.factura > 0 && <span>Factura {planCambio.clase}: <MoneyText value={planCambio.factura} />{planCambio.facturaYa && ' (ya está)'}</span>}
+                  <Button disabled={trabajando} onClick={() => void facturarElCambio()}>
+                    {(planCambio.ncYa || !planCambio.nc) && (planCambio.facturaYa || !planCambio.factura) ? 'Traer los comprobantes' : 'Facturar el cambio'}
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : ficha.facturada ? (
             <Notice tone="neutral">
               Esta venta ya tiene factura.{' '}
               <Button variant="outline" disabled={trabajando} onClick={() => void reimprimir()}>Descargar PDF</Button>
             </Notice>
           ) : null}
+          {ficha.venta.tipo !== 'cambio' && (<>
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <Field label="Factura">
               <Select value={clase} onChange={(e) => { setClase(e.target.value as 'A' | 'B'); limpiarA() }}>
@@ -266,6 +327,7 @@ export function FacturaCaja() {
             <Button disabled={trabajando || faltaDato} onClick={() => void facturar()}>Facturar</Button>
           </div>
           {clase === 'A' && deFicha && deFicha === docLimpio && <p style={{ marginTop: space[2] }}>Datos de la ficha guardada de este CUIT. Si cambió algo, corregilo: la ficha se actualiza al facturar.</p>}
+          </>)}
         </SectionCard>
       )}
     </div>

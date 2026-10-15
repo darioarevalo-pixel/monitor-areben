@@ -13,7 +13,14 @@ const estado = { filas: [] as Array<Record<string, unknown>>, pedidos: [] as Arr
 
 vi.mock('../api/_facturacion.js', () => ({
   baseFacturacion: () => ({
-    from: () => { const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: estado.factura, error: null }) }; return q },
+    // `maybeSingle` = la factura; como lista (`.in().neq()`) = las NC ya asociadas a ella (lo que lleva acreditado).
+    from: () => {
+      const q = {
+        select: () => q, eq: () => q, in: () => q, neq: () => q, maybeSingle: async () => ({ data: estado.factura, error: null }),
+        then: (r: (x: unknown) => unknown) => r({ data: estado.filas.filter((f) => f.asociado_id === FACTURA.id && f.estado !== 'rechazada'), error: null }),
+      }
+      return q
+    },
   }),
   clienteArcaDelEntorno: () => ({
     arca: {
@@ -45,6 +52,15 @@ describe('notaDeCredito', () => {
     const otra = await notaDeCredito({ facturaId: FACTURA.id, usuario: 'Bruno' })
     expect(otra).toMatchObject({ status: 409, error: 'La venta ya tiene nota de crédito' })
     expect(estado.pedidos).toHaveLength(1)
+  })
+
+  it('🔴 con una NC PARCIAL previa (la de un cambio) la entera ⛔ sale: acreditaría dos veces lo devuelto', async () => {
+    const { notaDeCredito } = await import('../api/_erp.js')
+    estado.filas = [{ id: 'nc-cambio', venta_id: 'uuid-del-cambio', tipo: CBTE.NC_B, total: '8500.00', asociado_id: FACTURA.id, estado: 'autorizada' }]
+    const r = await notaDeCredito({ facturaId: FACTURA.id, usuario: 'x' })
+    expect(r).toMatchObject({ status: 409 })
+    expect(r.error).toMatch(/\$8500 \(de un cambio\)/)
+    expect(estado.pedidos).toHaveLength(0)
   })
 
   it('⛔ sobre una NC, una factura sin CAE ni otro ambiente', async () => {
