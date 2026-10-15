@@ -235,7 +235,7 @@ export function VentasPropias() {
             </>}
           >
             <p style={{ marginTop: 0 }}>
-              {v.prueba ? 'Es de prueba: no mueve el stock' : `Las prendas vuelven al stock de ${nombreDe(NOMBRE_DEPOSITO, v.deposito)}`} y la plata, a los mismos pagos
+              {v.prueba ? 'Es de prueba: el stock no se mueve. La plata vuelve' : `Las prendas vuelven al stock de ${nombreDe(NOMBRE_DEPOSITO, v.deposito)} y la plata,`} a los mismos pagos
               ({ficha.pagos.map((p) => p.cuenta).filter(Boolean).join(', ') || 'sin pagos'}). Una venta anulada no se puede volver a confirmar.
               {ficha.facturada && ' Tiene factura: después hay que hacer la nota de crédito.'}
             </p>

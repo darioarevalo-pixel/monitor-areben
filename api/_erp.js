@@ -48,7 +48,7 @@ import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
-import { MENSAJE_ERROR_MOTOR, armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias } from '../lib/erp/venta.core.js'
+import { armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { armarFacturaDelCambio, claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
@@ -466,7 +466,7 @@ async function conMotor(marca, que, fn) {
   }
 }
 
-const errorDelMotor = (r) => ({ status: r.error.codigo === 'NO_ENCONTRADA' ? 404 : 409, error: MENSAJE_ERROR_MOTOR[r.error.codigo] || r.error.mensaje })
+const errorDelMotor = (r) => ({ status: r.error.codigo === 'NO_ENCONTRADA' ? 404 : 409, error: textoDelMotor(r.error) })
 
 /** Anula una venta propia con motivo (sólo admin: lo chequea el handler). La plata vuelve a los mismos pagos. */
 export async function anularVentaPropia({ marca, body, usuario }) {
@@ -699,7 +699,7 @@ async function atarFactura(db, { venta, facturaId, tipo }) {
   const r = await vincularFactura(db, { venta_id: venta.id, factura_id: String(facturaId), tipo })
   if (r.ok) return null
   console.error(`[erp] ${tipo} ${facturaId} sin atar a la venta ${venta.id}: ${r.error.codigo} ${r.error.mensaje}`)
-  return `Salió con CAE, pero no quedó atada a la venta en el ERP: ${MENSAJE_ERROR_MOTOR[r.error.codigo] || r.error.mensaje}`
+  return `Salió con CAE, pero no quedó atada a la venta en el ERP: ${textoDelMotor(r.error)}`
 }
 
 /** Las NC (⛔ rechazadas) asociadas a una factura: lo que ya se le acreditó. */
