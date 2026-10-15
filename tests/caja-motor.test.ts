@@ -72,5 +72,11 @@ describe('avisoDelMotor', () => {
     expect(avisoDelMotor({ anotadas: 1, yaEstaban: 0, fallidas: [] }, 'x')).toBeNull()
     expect(avisoDelMotor({ error: 'timeout' }, 'al mandar')).toBe('[caja→motor] al mandar: timeout')
     expect(avisoDelMotor({ anotadas: 0, yaEstaban: 0, fallidas: [{ id: 'abcdef123', codigo: 'CUENTA_DESCONOCIDA' }] }, 'repaso')).toContain('1 sin anotar — abcdef12 CUENTA_DESCONOCIDA')
+    // La anulación que falla ⛔ se cuenta como «sin anotar», la NC pendiente se dice, y una base sin la columna se avisa.
+    const a = avisoDelMotor({ anotadas: 0, yaEstaban: 0, fallidas: [{ id: '11112222x', codigo: 'TIENE_CAMBIO', anular: true }], ncPendientes: ['33334444y'], errorAnuladas: 'column anulada_en_gn does not exist' }, 'repaso')
+    expect(a).not.toContain('sin anotar')
+    expect(a).toContain('1 sin anular en el motor — 11112222 TIENE_CAMBIO')
+    expect(a).toContain('falta la nota de crédito — 33334444')
+    expect(a).toContain('anuladas en GN sin leer')
   })
 })
