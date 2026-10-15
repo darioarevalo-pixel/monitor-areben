@@ -55,6 +55,23 @@ describe('lib/pagos-recibidos/core', () => {
     expect(totalDe(pagos)).toBe(400)
   })
 
+  it('🔴 sólo transferencias: la venta online, el envío y lo de Facebook no son cobros del local', () => {
+    const { pagos, devueltos } = limpiarPagos(
+      [
+        entra(1, 100, { operation_type: 'regular_payment', payment_method_id: 'visa', payment_type_id: 'credit_card' }),
+        entra(2, 200, { operation_type: 'regular_payment' }),
+        entra(3, 300, { operation_type: 'regular_payment', status: 'refunded' }),
+        entra(4, 400, { operation_type: 'recurring_payment' }),
+        entra(5, 500, { operation_type: 'account_fund', payment_method_id: 'cvu', payment_type_id: 'bank_transfer' }),
+        entra(6, 600, { payment_method_id: 'visa', payment_type_id: 'credit_card' }),
+        entra(7, 700),
+      ],
+      CUENTA,
+    )
+    expect(pagos.map((p) => p.id).sort()).toEqual(['5', '6', '7'])
+    expect(devueltos).toEqual([])
+  })
+
   it('⛔ no viaja ningún dato de quien pagó', () => {
     const { pagos } = limpiarPagos([entra(1, 100)], CUENTA)
     expect(Object.keys(pagos[0]).sort()).toEqual(['cuando', 'id', 'monto', 'origen'])
