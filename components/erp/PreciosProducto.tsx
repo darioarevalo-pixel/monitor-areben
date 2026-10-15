@@ -14,7 +14,7 @@
  * o se da de alta. Sin la tabla en la base, se escribe como texto (como antes).
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   Button, ConfirmDetalle, EmptyState, Field, Input, MoneyText, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space, useConfirmar,
 } from '@/components/ui'
@@ -86,15 +86,24 @@ export function PreciosProducto() {
     setCortado(r.cortado)
   }, 'No se pudo buscar.')
 
+  // La marca de AHORA: una respuesta que llega después de cambiar de marca es de la otra base y se descarta.
+  const marcaActual = useRef(marca)
+
   // La lista se lee una vez por marca, al abrir la primera ficha; si la base todavía ⛔ tiene la tabla, queda el texto.
-  async function cargarProveedores() {
+  // Devuelve si quedó leída (para elegir la recién creada sólo si está en la lista).
+  async function cargarProveedores(): Promise<boolean> {
+    const de = marca
     try {
-      const r = await leerProveedores(marca)
+      const r = await leerProveedores(de)
+      if (marcaActual.current !== de) return false
       setProveedores(r.proveedores)
       setSinListaProveedores(null)
+      return true
     } catch (e) {
+      if (marcaActual.current !== de) return false
       setProveedores([])
       setSinListaProveedores(e instanceof Error ? e.message : 'No se pudieron leer los proveedores.')
+      return false
     }
   }
 
@@ -145,13 +154,15 @@ export function PreciosProducto() {
   const altaProveedor = () => correr(async () => {
     if (!nuevoProveedor) return
     const r = await guardarProveedor(marca, { nombre: nuevoProveedor.nombre, cuit: nuevoProveedor.cuit || undefined })
-    await cargarProveedores()
-    setProveedorId(r.proveedor.id)
     setNuevoProveedor(null)
+    // 🔴 Se elige sólo si la lista se volvió a leer: si no, el formulario mostraría «Sin proveedor» y mandaría el id.
+    if (!(await cargarProveedores())) { setHecho(`Proveedor «${r.proveedor.nombre}» ${r.yaExistia ? 'ya estaba' : 'creado'}, pero la lista no se pudo volver a leer: elegilo de nuevo.`); return }
+    setProveedorId(r.proveedor.id)
     setHecho(r.yaExistia ? `Ya había un proveedor «${r.proveedor.nombre}»: quedó elegido.` : `Proveedor «${r.proveedor.nombre}» creado.`)
   }, 'No se pudo guardar el proveedor.')
 
   function cambiarMarca(k: string) {
+    marcaActual.current = k as MarcaErp
     setMarca(k as MarcaErp)
     setProveedores(null)
     setProveedorId('')

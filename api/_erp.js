@@ -903,6 +903,9 @@ export async function diferenciasDelDia({ marca, fecha: pedida }) {
  * el motor (sql/009), su historial, y al lado GN (el espejo `productos`) y Tienda Nube (`tn_variante` por los SKU del
  * producto, con cuándo se leyó: puede estar vieja). Se busca con la misma búsqueda de Stock.
  */
+/** ¿El error de PostgREST es «esa vista/tabla ⛔ existe» (antes de su migración)? Otro error con el nombre ⛔ cuenta. */
+const VISTA_FALTA = (e, nombre) => new RegExp(nombre).test(e.message || '') && (e.code === '42P01' || e.code === 'PGRST205' || /does not exist|schema cache|Could not find/i.test(e.message || ''))
+
 export async function precioDeProducto({ marca, producto }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   if (!/^\d+$/.test(String(producto ?? ''))) return { status: 400, error: 'Producto inválido' }
@@ -913,7 +916,7 @@ export async function precioDeProducto({ marca, producto }) {
   const skus = [...new Set((inv.data || []).map((x) => x.sku).filter(Boolean))]
   const linea = lineaDelProducto(marca, skus)
   // Todo por (LÍNEA, producto): las vistas del motor son por marca, y en la base de Zattia conviven zattia y stunned.
-  const [listas, vigentes, efectivos, costo, hPrecio, hCosto, gn, lecturas] = await Promise.all([
+  const [listas, vigentes, efectivos, costo, hPrecio, hCosto, gn, lecturas, cpv] = await Promise.all([
     b.from('lista_precio').select('id, nombre'),
     b.from('precio_vigente').select('lista, precio, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto),
     b.from('precio_lista').select('lista, precio, fuente, de_lista').eq('marca', linea).eq('product_id', producto),
@@ -922,15 +925,16 @@ export async function precioDeProducto({ marca, producto }) {
     b.from('producto_costo').select('costo, proveedor, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto).order('vigente_desde', { ascending: false }).limit(40),
     b.from('productos').select('retailer_price, wholesaler_price, unit_cost').eq('id', producto).maybeSingle(),
     b.from('tn_catalogo_lectura').select('tienda, leida_en'),
+    // El proveedor del costo como FICHA (sql/013): el de la carga, o el que tiene ese texto de GN.
+    b.from('costo_proveedor_vigente').select('proveedor_id').eq('marca', linea).eq('product_id', producto).limit(1),
   ])
   for (const [t, r] of [['lista_precio', listas], ['precio_vigente', vigentes], ['costo_vigente', costo], ['producto_precio', hPrecio], ['producto_costo', hCosto], ['productos', gn], ['tn_catalogo_lectura', lecturas]]) {
     if (r.error) throw new Error(`${t}: ${r.error.message}`)
   }
   // `precio_lista` llega con sql/011: sin ella, lo vigente de cada lista tal cual (⛔ es un error).
   if (efectivos.error && !/precio_lista/.test(efectivos.error.message)) throw new Error(`precio_lista: ${efectivos.error.message}`)
-  // El proveedor del costo como FICHA (sql/013): el de la carga, o el que tiene ese texto de GN. Sin 013, sólo el texto.
-  const cpv = await b.from('costo_proveedor_vigente').select('proveedor_id').eq('marca', linea).eq('product_id', producto).limit(1)
-  if (cpv.error && !/costo_proveedor_vigente/.test(cpv.error.message)) throw new Error(`costo_proveedor_vigente: ${cpv.error.message}`)
+  // Sin 013 la vista ⛔ existe ⇒ sólo el texto. 🔴 Cualquier OTRO error (permiso, tiempo) se dice: ⛔ se cae callado al texto.
+  if (cpv.error && !VISTA_FALTA(cpv.error, 'costo_proveedor_vigente')) throw new Error(`costo_proveedor_vigente: ${cpv.error.message}`)
   const proveedorId = cpv.error ? null : cpv.data[0]?.proveedor_id ?? null
   let proveedorFicha = null
   if (proveedorId != null) {
@@ -990,7 +994,8 @@ export async function cargarPrecioCosto({ marca, body, usuario }, deps = {}) {
 }
 
 const SIN_PROVEEDORES = 'La lista de proveedores todavía no está en esta base: el proveedor se escribe a mano.'
-const tieneProveedores = async (db) => (await db.query(`select to_regclass('public.proveedor') is not null as hay`)).rows[0].hay
+// La regla es del motor (tabla Y permiso del rol): sin el GRANT, 409 y texto (⛔ 500).
+const tieneProveedores = async (db) => (await import('../motor/venta/proveedor.mjs')).hayProveedores(db)
 
 /**
  * Los PROVEEDORES del ERP (`sql/013`, Bruno 15-oct: tabla propia cruzada con PRM) de la empresa de la marca, para elegir
