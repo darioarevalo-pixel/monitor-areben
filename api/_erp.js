@@ -755,15 +755,16 @@ export async function facturarCambio({ marca, body, usuario }, deps = {}) {
       return { status: 409, error: 'Otro cambio de esta venta se está facturando: probá de nuevo en un minuto.' }
     }
     try {
-      const tipos = Number(facturaOriginal.tipo) === CBTE.FACTURA_A ? { nc: CBTE.NC_A, factura: CBTE.FACTURA_A } : { nc: CBTE.NC_B, factura: CBTE.FACTURA_B }
+      // Sin factura en la original: factura B a consumidor final por lo cobrado hoy (Bruno, 15-oct), ⛔ NC.
+      const tipos = Number(facturaOriginal?.tipo) === CBTE.FACTURA_A ? { nc: CBTE.NC_A, factura: CBTE.FACTURA_A } : { nc: CBTE.NC_B, factura: CBTE.FACTURA_B }
       const [ncYa, facturaYa] = await Promise.all([buscar(cambio.id, [tipos.nc]), buscar(cambio.id, [tipos.factura])])
-      const otras = (await ncsDe(facturaOriginal.id)).filter((x) => String(x.venta_id) !== String(cambio.id))
+      const otras = facturaOriginal ? (await ncsDe(facturaOriginal.id)).filter((x) => String(x.venta_id) !== String(cambio.id)) : []
       const nombres = await nombresDeVariantes(b, (cambio.lineas || []).map((l) => l.product_id))
       const plan = armarFacturaDelCambio({ cambio, original, facturaOriginal, acreditado: otras.reduce((a, x) => a + Number(x.total), 0), nombres })
       if ('error' in plan) return { status: 409, error: plan.error }
       const numero = cambio.detalle?.gn_number ?? cambio.numero
       if (body?.simular) {
-        return { ok: true, simulado: true, clase: tipos.factura === CBTE.FACTURA_A ? 'A' : 'B', nc: plan.nc?.total ?? 0, factura: plan.factura?.total ?? 0, ncYa: !!ncYa, facturaYa: !!facturaYa }
+        return { ok: true, simulado: true, clase: tipos.factura === CBTE.FACTURA_A ? 'A' : 'B', nc: plan.nc?.total ?? 0, factura: plan.factura?.total ?? 0, ncYa: !!ncYa, facturaYa: !!facturaYa, sinFacturaOriginal: !facturaOriginal }
       }
 
       // El cliente de ARCA sólo si falta pedir algo: reimprimir lo que ya salió anda sin certificado.
@@ -771,7 +772,9 @@ export async function facturarCambio({ marca, body, usuario }, deps = {}) {
       const arca = falta ? arcaDe(deps, sb) : null
       if (falta && !arca) return { status: 409, error: SIN_ARCA }
       const hoy = diaArgentino(Date.now())
-      const receptor = { docTipo: Number(facturaOriginal.doc_tipo), docNro: Number(facturaOriginal.doc_nro), condicionIva: Number(facturaOriginal.cond_iva) }
+      const receptor = facturaOriginal
+        ? { docTipo: Number(facturaOriginal.doc_tipo), docNro: Number(facturaOriginal.doc_nro), condicionIva: Number(facturaOriginal.cond_iva) }
+        : { docTipo: DOC.SIN_IDENTIFICAR, docNro: 0, condicionIva: COND_IVA.CONSUMIDOR_FINAL }
       const ptoVta = ptoVtaDe(ambiente, marca, process.env)
       const reglas = { umbralIdentificar: UMBRAL_IDENTIFICAR, hoy }
       /** Uno de los dos comprobantes: el que ya está, o sale por el lote (con la clave del cambio). */
@@ -803,7 +806,7 @@ export async function facturarCambio({ marca, body, usuario }, deps = {}) {
         const sin = await atarFactura(db, { venta: cambio, facturaId: e.fila.id, tipo: 'factura' })
         if (sin) avisos.push(sin)
       }
-      const receptorPdf = await receptorDeFicha(db, { empresaId: cambio.empresa_id, factura: facturaOriginal })
+      const receptorPdf = facturaOriginal ? await receptorDeFicha(db, { empresaId: cambio.empresa_id, factura: facturaOriginal }) : null
       for (const x of [nc, factura]) if (x && receptorPdf) Object.assign(x, { receptor_nombre: receptorPdf.nombre, receptor_domicilio: receptorPdf.domicilio })
       return { ok: true, yaEstaban: !!(ncYa || !plan.nc) && !!(facturaYa || !plan.factura), nc, factura, avisos }
     } finally {

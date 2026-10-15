@@ -127,8 +127,10 @@ export function FacturaCaja() {
       mensaje: (
         <div>
           {planCambio.nc > 0 && <ConfirmDetalle label={`Nota de crédito ${planCambio.clase} (lo devuelto)`} valor={<MoneyText value={planCambio.nc} />} />}
-          {planCambio.factura > 0 && <ConfirmDetalle label={`Factura ${planCambio.clase} (lo nuevo)`} valor={<MoneyText value={planCambio.factura} />} />}
-          <p style={{ marginTop: space[3] }}>A nombre de la factura de la venta #{ficha.original?.numero}. Con CAE no se eliminan.</p>
+          {planCambio.factura > 0 && <ConfirmDetalle label={`Factura ${planCambio.clase} (${planCambio.sinFacturaOriginal ? 'lo cobrado hoy' : 'lo nuevo'})`} valor={<MoneyText value={planCambio.factura} />} />}
+          <p style={{ marginTop: space[3] }}>
+            {planCambio.sinFacturaOriginal ? `La venta #${ficha.original?.numero} no tiene factura: sale sólo la de lo cobrado hoy, a consumidor final.` : `A nombre de la factura de la venta #${ficha.original?.numero}.`} Con CAE no se eliminan.
+          </p>
         </div>
       ),
       ok: 'Facturar el cambio',
@@ -145,7 +147,7 @@ export function FacturaCaja() {
   }
 
   const docLimpio = doc.replace(/\D/g, '')
-  const faltaDato = clase === 'A' ? docLimpio.length !== 11 || !condicion || razonSocial.trim().length < 2 : !!docLimpio && ![7, 8, 11].includes(docLimpio.length)
+  const faltaDato = clase === 'A' ? docLimpio.length !== 11 || !condicion || razonSocial.trim().length < 2 || domicilio.trim().length < 3 : !!docLimpio && ![7, 8, 11].includes(docLimpio.length)
 
   async function facturar() {
     if (!ficha) return
@@ -159,7 +161,7 @@ export function FacturaCaja() {
         <div>
           <ConfirmDetalle label="Total" valor={<MoneyText value={ficha.venta.total} />} />
           <ConfirmDetalle label="Para" valor={clase === 'A' ? `${razonSocial.trim()} · CUIT ${docLimpio} · ${condicion === 'ri' ? 'Responsable inscripta' : 'Monotributista'}` : docLimpio ? `Consumidor final · ${docLimpio}` : 'Consumidor final'} />
-          {clase === 'A' && domicilio.trim() && <ConfirmDetalle label="Domicilio" valor={domicilio.trim()} />}
+          {clase === 'A' && <ConfirmDetalle label="Domicilio" valor={domicilio.trim()} />}
           <p style={{ marginTop: space[3] }}>Una factura con CAE no se elimina: si sale mal, se anula con nota de crédito.</p>
         </div>
       ),
@@ -263,8 +265,10 @@ export function FacturaCaja() {
           {ficha.venta.tipo === 'cambio' ? (
             <div style={{ marginTop: space[3] }}>
               <p>
-                Cambio de la venta #{ficha.original?.numero}: sale una nota de crédito por lo devuelto y una factura por lo nuevo,
-                con la misma clase y a nombre de la factura de la venta original.
+                {planCambio?.sinFacturaOriginal
+                  ? <>Cambio de la venta #{ficha.original?.numero}, que no tiene factura: se factura sólo lo cobrado hoy (factura B a consumidor final).</>
+                  : <>Cambio de la venta #{ficha.original?.numero}: sale una nota de crédito por lo devuelto y una factura por lo nuevo,
+                    con la misma clase y a nombre de la factura de la venta original.</>}
               </p>
               {planCambio && (
                 <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', marginTop: space[2] }}>
@@ -311,7 +315,7 @@ export function FacturaCaja() {
               </Field>
             )}
             {clase === 'A' && (
-              <Field label="Domicilio (opcional)" style={{ flex: '2 1 220px' }}>
+              <Field label="Domicilio" style={{ flex: '2 1 220px' }}>
                 <Input value={domicilio} onChange={(e) => setDomicilio(e.target.value)} />
               </Field>
             )}

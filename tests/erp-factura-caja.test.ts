@@ -19,7 +19,7 @@ describe('leerFacturar', () => {
     expect(leerFacturar({ ventaId: ID, doc: '30-71850818-1' }).receptor).toMatchObject({ docTipo: DOC.CUIT, docNro: 30718508181 })
   })
   it('A pide CUIT válido, condición y razón social', () => {
-    const rs = { razonSocial: 'Moda Sur SRL' }
+    const rs = { razonSocial: 'Moda Sur SRL', domicilio: 'Av. Rivadavia 1234' }
     expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri', ...rs })).toMatchObject({ tipo: CBTE.FACTURA_A, receptor: { docTipo: DOC.CUIT, condicionIva: COND_IVA.RESPONSABLE_INSCRIPTO } })
     expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'monotributo', ...rs }).receptor?.condicionIva).toBe(COND_IVA.MONOTRIBUTO)
     expect(leerFacturar({ ventaId: ID, clase: 'A', doc: '30123456', condicion: 'ri', ...rs }).error).toBeTruthy()
@@ -27,13 +27,15 @@ describe('leerFacturar', () => {
     expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, ...rs }).error).toBeTruthy()
   })
   it('A sin razón social ⛔ sale: es el nombre de la ficha y va impreso', () => {
-    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri' }).error).toMatch(/razón social/)
+    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri', domicilio: 'Av. 1' }).error).toMatch(/razón social/)
     expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri', razonSocial: '   ' }).error).toMatch(/razón social/)
   })
-  it('A devuelve la ficha a guardar, con espacios limpios y el domicilio opcional', () => {
+  it('A devuelve la ficha a guardar, con espacios limpios; sin domicilio ⛔ sale', () => {
     expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri', razonSocial: '  Moda   Sur SRL ', domicilio: ' Av. Rivadavia  1234 ' }).cliente)
       .toEqual({ razonSocial: 'Moda Sur SRL', domicilio: 'Av. Rivadavia 1234' })
-    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri', razonSocial: 'Moda Sur SRL' }).cliente).toEqual({ razonSocial: 'Moda Sur SRL', domicilio: '' })
+    // Bruno, 15-oct: el domicilio en la A es OBLIGATORIO.
+    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri', razonSocial: 'Moda Sur SRL' }).error).toMatch(/domicilio/)
+    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri', razonSocial: 'Moda Sur SRL', domicilio: '  ' }).error).toMatch(/domicilio/)
     expect(leerFacturar({ ventaId: ID, doc: '30123456' }).cliente).toBeUndefined()
   })
   it('la condición de la ficha vuelve a la opción de la pantalla', () => {
@@ -165,13 +167,26 @@ describe('el CAMBIO facturado: NC por lo devuelto + factura por lo nuevo', () =>
     const r = devolver(8500.01)
     expect('error' in r ? r.error : '').toMatch(/le queda sin acreditar \(\$13174\.99\)/)
   })
+  it('original SIN factura (Bruno, 15-oct): ⛔ NC; la factura es lo cobrado hoy, y sus renglones suman eso', () => {
+    const r = armarFacturaDelCambio({ cambio: { total: 1700, lineas: [dev(10000), nueva(12000)] }, original, facturaOriginal: null })
+    if ('error' in r) throw new Error(r.error)
+    expect(r.nc).toBeNull()
+    expect(r.factura?.total).toBe(1700)
+    expect(suma(r.factura!.renglones)).toBe(1700)
+    expect(r.factura!.renglones.map((x) => x.importe)).toEqual([-10000, 12000, -300])
+    // A favor o sin diferencia: ⛔ hay factura.
+    const f = armarFacturaDelCambio({ cambio: { total: 0, lineas: [dev(15500), nueva(10000)] }, original, facturaOriginal: null })
+    expect('error' in f ? f : f.factura).toBeNull()
+  })
   it('puedeFacturarCambio: sólo un cambio confirmado, con factura en la original, y ⛔ de prueba en producción', () => {
     const c = { tipo: 'cambio', estado: 'confirmada', prueba: true }
     const ok = { ambiente: 'homologacion', facturaOriginal }
     expect(puedeFacturarCambio(c, original, ok)).toBeNull()
     expect(puedeFacturarCambio({ ...c, tipo: 'venta' }, original, ok)).toMatch(/no es un cambio/)
     expect(puedeFacturarCambio({ ...c, estado: 'anulada' }, original, ok)).toMatch(/anulado/)
-    expect(puedeFacturarCambio(c, original, { ambiente: 'homologacion', facturaOriginal: null })).toMatch(/original no tiene factura/)
+    // Bruno, 15-oct: original SIN factura ⇒ se factura lo cobrado hoy; sin nada cobrado, ⛔ hay qué facturar.
+    expect(puedeFacturarCambio({ ...c, total: 1700 }, original, { ambiente: 'homologacion', facturaOriginal: null })).toBeNull()
+    expect(puedeFacturarCambio({ ...c, total: 0 }, original, { ambiente: 'homologacion', facturaOriginal: null })).toMatch(/no se cobró nada/)
     expect(puedeFacturarCambio(c, original, { ambiente: 'produccion', facturaOriginal: { ...facturaOriginal, ambiente: 'produccion' } })).toMatch(/PRUEBA/)
     expect(puedeFacturarCambio(c, original, { ambiente: 'produccion', facturaOriginal })).toMatch(/PRUEBA/)
     expect(puedeFacturarCambio({ ...c, prueba: false }, original, { ambiente: 'produccion', facturaOriginal })).toMatch(/no está autorizada en este ambiente/)

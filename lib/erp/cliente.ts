@@ -207,7 +207,7 @@ export const facturarVenta = (marca: MarcaErp, p: PedidoFactura) =>
 
 /** Facturar un CAMBIO: NC por lo devuelto + factura por lo nuevo, con el receptor de la factura original. */
 export type CambioFacturado =
-  | { ok: true; simulado: true; clase: 'A' | 'B'; nc: number; factura: number; ncYa: boolean; facturaYa: boolean }
+  | { ok: true; simulado: true; clase: 'A' | 'B'; nc: number; factura: number; ncYa: boolean; facturaYa: boolean; sinFacturaOriginal?: boolean }
   | { ok: true; simulado?: false; yaEstaban: boolean; nc: FacturaEmitida | null; factura: FacturaEmitida | null; avisos: string[] }
 export const facturarCambio = (marca: MarcaErp, ventaId: string, simular = false) =>
   pedir<CambioFacturado>(post({ accion: 'facturar-cambio', marca, ventaId, simular }), '', 'No se pudo facturar el cambio.')
