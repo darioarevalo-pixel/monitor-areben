@@ -16,7 +16,7 @@ export type CopyButtonProps = {
   getText: () => string | Promise<string>
   label?: string
   copiedLabel?: string
-  /** Si true y existe navigator.share (mobile) → hoja de compartir; si no, cae a clipboard. */
+  /** Si true, en un celular (puntero táctil y navigator.share) → hoja de compartir; si no, copia al portapapeles. */
   share?: boolean
   /** Qué hacer si `getText` falla. Sin esto el error se traga y el botón no copia nada, en silencio. */
   onError?: (e: Error) => void
@@ -59,7 +59,11 @@ export function CopyButton({ getText, label = 'Copiar', copiedLabel = '✓ Copia
       setOcupado(false)
     }
     // Mobile: hoja de compartir (WhatsApp/mail). Cancelar (AbortError) no es error.
-    if (share && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    // 🔴 Tener `navigator.share` NO alcanza para ser celular: Safari de Mac también lo tiene, y ahí
+    // «Copiar el link» abría la hoja de Mail/Mensajes/Notas y no copiaba nada (15-oct-2026, Bruno).
+    // Se pide además puntero táctil.
+    const esTactil = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+    if (share && esTactil && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try { await navigator.share({ text }); onCopiado?.(text); return } catch (e) { if ((e as Error)?.name === 'AbortError') return }
     }
     // El «✓ Copiado» sólo se prende si el navegador aceptó de verdad. Si no, `copiarAlPortapapeles`
