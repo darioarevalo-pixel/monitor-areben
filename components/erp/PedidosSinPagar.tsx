@@ -70,7 +70,7 @@ export function PedidosSinPagar() {
                     <Tr key={`${p.tienda}/${p.tnId}`}>
                       <Td>#{p.numero}{p.tienda !== marca && <> <Badge tone="neutral">{NOMBRE_TIENDA[p.tienda] ?? p.tienda}</Badge></>}</Td>
                       <Td>{cuando(p.creadaEn)}{p.dias >= VIEJO_DIAS && <> <Badge tone="warning">hace {p.dias} días</Badge></>}</Td>
-                      <Td>{(p.medio && NOMBRE_MEDIO_TN[p.medio as keyof typeof NOMBRE_MEDIO_TN]) || p.gateway || '—'}{p.pago === 'authorized' && <> <Badge tone="neutral">autorizado</Badge></>}</Td>
+                      <Td>{(p.medio && NOMBRE_MEDIO_TN[p.medio as keyof typeof NOMBRE_MEDIO_TN]) || p.gateway || '—'}</Td>
                       <Td>{p.prendas.map((x) => `${x.cantidad > 1 ? `${x.cantidad} × ` : ''}${x.nombre ?? x.sku ?? '¿?'}`).join(' · ')}</Td>
                       <Td style={{ textAlign: 'right' }}><MoneyText value={p.total} /></Td>
                       <Td>{p.link && <a href={p.link} target="_blank" rel="noreferrer">Abrir en Tienda Nube</a>}</Td>

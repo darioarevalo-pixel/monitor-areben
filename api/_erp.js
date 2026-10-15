@@ -46,7 +46,7 @@ import { POR_PEDIDO, facturarLote } from '../motor/arca/lote.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
-import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
+import { NO_SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
@@ -983,7 +983,7 @@ export async function pedidosSinPagar({ marca }) {
   const { url, key } = cfgDeMarca(marca)
   const b = createClient(url, key)
   const ordenes = await leerTodo(b, 'tn_orden', (x) => x.select('tienda, tn_id, numero, creada_en, status, payment_status, medio, gateway, total')
-    .eq('status', 'open').in('payment_status', SIN_PAGAR).order('creada_en'))
+    .eq('status', 'open').not('payment_status', 'in', `(${NO_SIN_PAGAR.join(',')})`).order('creada_en'))
   const ids = ordenes.map((o) => o.tn_id)
   const lineas = []
   for (let i = 0; i < ids.length; i += 200) {

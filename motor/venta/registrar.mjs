@@ -229,7 +229,7 @@ export async function registrarCambio(db, e) {
     const ya = e && e.origen && e.origen_ref ? await yaRegistrada(db, e.origen, String(e.origen_ref).trim()) : null
     if (ya) return (await mismaVenta(db, ya, ya.marca, ya.total, nuevas - devueltas)) ? respuestaYaExistia(ya) : conflicto(e)
     const original = await leerParaCambiar(db, e?.venta_original_id)
-    if (original && e.marca && e.marca !== original.venta.marca) return { ok: false, error: { codigo: 'OTRA_MARCA', mensaje: 'Un cambio entre marcas ⛔ se puede todavía', campo: 'marca' } }
+    if (original && e.marca && e.marca !== original.venta.marca) return { ok: false, error: { codigo: 'OTRA_MARCA', mensaje: 'Todavía no se puede hacer un cambio entre marcas', campo: 'marca' } }
     const armada = armarCambio(e, original ? await leerConf(db, original.venta.marca) : { marcas: {}, cuentas: [] }, original)
     if (!armada.ok) return armada
     // §6.2: la clienta que vino en el cambio, o la de la venta original. Hace falta si queda saldo o si lo usa.
@@ -337,8 +337,8 @@ export async function vincularFactura(db, e) {
     const atadas = await q(db, 'select factura_id, tipo, creada_en from venta_factura where venta_id = $1 order by creada_en', [venta.id])
     const respuesta = (ya, facturas) => ({ ok: true, venta: { id: venta.id, numero: Number(venta.numero), estado: venta.estado }, vinculo: { venta_id: venta.id, factura_id: facturaId, tipo: e.tipo }, ya_existia: ya, facturas })
     if (atadas.some((f) => f.factura_id === facturaId)) return respuesta(true, atadas)
-    if (e.tipo === 'factura' && venta.estado !== 'confirmada') return falla('YA_ANULADA', `La venta ${venta.numero} está anulada: ⛔ se factura`, 'venta_id')
-    if (e.tipo !== 'factura' && !atadas.some((f) => f.tipo === 'factura')) return falla('SIN_FACTURA', `La venta ${venta.numero} ⛔ tiene factura: una ${e.tipo} va contra una factura`, 'tipo')
+    if (e.tipo === 'factura' && venta.estado !== 'confirmada') return falla('YA_ANULADA', `La venta ${venta.numero} está anulada: no se factura`, 'venta_id')
+    if (e.tipo !== 'factura' && !atadas.some((f) => f.tipo === 'factura')) return falla('SIN_FACTURA', `La venta ${venta.numero} no tiene factura: una ${e.tipo} va contra una factura`, 'tipo')
     const [nueva] = await q(db, 'insert into venta_factura (venta_id, factura_id, tipo) values ($1, $2, $3) returning factura_id, tipo, creada_en', [venta.id, facturaId, e.tipo])
     return respuesta(false, [...atadas, nueva])
   })
