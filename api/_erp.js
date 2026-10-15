@@ -54,7 +54,7 @@ import { armarFacturaDelCambio, claveDeFactura, clavesDeFactura, distintaDeLaPed
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
-import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from './_caja.js'
+import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -225,12 +225,27 @@ export function ajustesDeVenta(v) {
   return r
 }
 
+/**
+ * Nombre y talle de cada variante (`producto/talle`) del espejo, para los renglones de una venta, su ficha, su
+ * factura y las Diferencias. 🔴 Paginado: el espejo tiene una fila por talle Y depósito ⇒ 300 productos pasan
+ * las 1000 filas que devuelve Supabase de una, y cortaba CALLADO (87 de 92 sin nombre en BDI, medido 14-oct).
+ * @param {any} b supabase de la marca @param {Iterable<any>} productos ids de producto (se repiten: se sacan)
+ */
+async function nombresDeVariantes(b, productos) {
+  const ids = [...new Set(productos)]
+  /** @type {Map<string, { nombre: string, talle: string }>} */
+  const nombres = new Map()
+  for (let i = 0; i < ids.length; i += 200) {
+    const data = await leerTodo(b, 'inventario', (x) => x.select('product_id, size_id, product_name, size_name').in('product_id', ids.slice(i, i + 200)).order('product_id').order('size_id'))
+    for (const r of data) nombres.set(`${r.product_id}/${r.size_id}`, { nombre: r.product_name, talle: r.size_name })
+  }
+  return nombres
+}
+
 /** Número y renglones de las ventas PROPIAS facturadas (por su uuid), de `venta_ficha`. */
 async function renglonesPropios(b, marca, ids, { numeros, detalles }) {
   const fichas = await leerTodo(b, 'venta_ficha', (q) => q.select('id, numero, tipo, total, lineas, detalle').in('id', ids))
-  const productos = [...new Set(fichas.flatMap((f) => (f.lineas || []).map((l) => l.product_id)))]
-  const inv = productos.length ? await leerTodo(b, 'inventario', (q) => q.select('product_id, size_id, product_name, size_name').in('product_id', productos)) : []
-  const nombres = new Map(inv.map((x) => [`${x.product_id}/${x.size_id}`, { nombre: x.product_name, talle: x.size_name }]))
+  const nombres = await nombresDeVariantes(b, fichas.flatMap((f) => (f.lineas || []).map((l) => l.product_id)))
   for (const f of fichas) {
     numeros.set(claveVenta(marca, f.id), String(f.detalle?.gn_number ?? f.numero))
     // Un CAMBIO tiene DOS comprobantes con su clave (la NC de lo devuelto y la factura de lo nuevo): sus líneas ⛔ suman
@@ -398,19 +413,16 @@ export async function fichaDeVenta({ marca, id }) {
   if (error) throw new Error(`venta_ficha: ${error.message}`)
   if (!f) return { status: 404, error: 'La venta no existe.' }
   const columnas = 'id, numero, marca, tipo, estado, origen, canal, deposito, total, prueba, ocurrida_en'
-  const [cambios, original, inv] = await Promise.all([
+  const [cambios, original, nombres] = await Promise.all([
     sb.from('venta').select(columnas).eq('venta_original_id', id).order('ocurrida_en'),
     f.venta_original_id ? sb.from('venta').select(columnas).eq('id', f.venta_original_id).maybeSingle() : Promise.resolve({ data: null }),
-    (f.lineas || []).length
-      ? sb.from('inventario').select('product_id, size_id, product_name, size_name').in('product_id', [...new Set(f.lineas.map((l) => l.product_id))])
-      : Promise.resolve({ data: [] }),
+    nombresDeVariantes(sb, (f.lineas || []).map((l) => l.product_id)),
   ])
-  for (const [t, r] of [['venta', cambios], ['venta', original], ['inventario', inv]]) if (r.error) throw new Error(`${t}: ${r.error.message}`)
+  for (const [t, r] of [['venta', cambios], ['venta', original]]) if (r.error) throw new Error(`${t}: ${r.error.message}`)
   // Lo que ya volvió en cambios confirmados: cuánto se puede devolver todavía de cada línea.
   const vivos = (cambios.data || []).filter((c) => c.estado === 'confirmada').map((c) => c.id)
   const devueltas = vivos.length ? await sb.from('venta_linea').select('linea_origen_id, cantidad').in('venta_id', vivos).lt('cantidad', 0) : { data: [] }
   if (devueltas.error) throw new Error(`venta_linea: ${devueltas.error.message}`)
-  const nombres = new Map((inv.data || []).map((r) => [`${r.product_id}/${r.size_id}`, { nombre: r.product_name, talle: r.size_name }]))
   return armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data, cambiadas: cambiadasDe(devueltas.data) })
 }
 
@@ -458,7 +470,12 @@ export async function saldoDeClienta({ marca, doc }) {
   if (!/^\d{7,11}$/.test(d)) return { status: 400, error: 'Documento inválido' }
   const { url, key } = cfgDeMarca(marca)
   const sb = createClient(url, key)
-  const cl = await sb.from('cliente').select('id, nombre').eq('doc', d).maybeSingle()
+  // La ficha es UNA por empresa y documento (§11): sin la empresa, dos empresas en la misma base harían
+  // que `maybeSingle` falle con dos filas, o que el saldo saliera de la ficha de la otra.
+  const m = await sb.from('marca').select('empresa_id').eq('id', marca).maybeSingle()
+  if (m.error) throw new Error(`marca: ${m.error.message}`)
+  if (!m.data) return { status: 409, error: `La marca ${marca} no está en el motor de esta base.` }
+  const cl = await sb.from('cliente').select('id, nombre').eq('empresa_id', m.data.empresa_id).eq('doc', d).maybeSingle()
   if (cl.error) throw new Error(`cliente: ${cl.error.message}`)
   if (!cl.data) return { cliente: null, saldo: 0 }
   const s = await sb.from('saldo_favor').select('saldo').eq('cliente_id', cl.data.id).eq('marca', marca).eq('prueba', true).maybeSingle()
@@ -579,11 +596,7 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
     const { receptor, sinFicha } = p.cliente
       ? await guardarFichaA(db, { venta: f, doc: p.receptor.docNro, condicionIva: p.receptor.condicionIva, ...p.cliente })
       : { receptor: await receptorDeFicha(db, { empresaId: f.empresa_id, factura }), sinFicha: null }
-    const inv = (f.lineas || []).length
-      ? await b.from('inventario').select('product_id, size_id, product_name, size_name').in('product_id', [...new Set(f.lineas.map((l) => l.product_id))])
-      : { data: [] }
-    if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
-    const nombres = new Map((inv.data || []).map((x) => [`${x.product_id}/${x.size_id}`, { nombre: x.product_name, talle: x.size_name }]))
+    const nombres = await nombresDeVariantes(b, (f.lineas || []).map((l) => l.product_id))
     return { ok: true, yaEstaba: !!ya, sinAtar, sinFicha, factura: filaParaPdf(factura, { numero: f.detalle?.gn_number ?? f.numero, renglones: renglonesDeVenta(f, nombres), receptor }) }
   })
 }
@@ -717,10 +730,7 @@ export async function facturarCambio({ marca, body, usuario }, deps = {}) {
       const tipos = Number(facturaOriginal.tipo) === CBTE.FACTURA_A ? { nc: CBTE.NC_A, factura: CBTE.FACTURA_A } : { nc: CBTE.NC_B, factura: CBTE.FACTURA_B }
       const [ncYa, facturaYa] = await Promise.all([buscar(cambio.id, [tipos.nc]), buscar(cambio.id, [tipos.factura])])
       const otras = (await ncsDe(facturaOriginal.id)).filter((x) => String(x.venta_id) !== String(cambio.id))
-      const productos = [...new Set((cambio.lineas || []).map((l) => l.product_id))]
-      const inv = productos.length ? await b.from('inventario').select('product_id, size_id, product_name, size_name').in('product_id', productos) : { data: [] }
-      if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
-      const nombres = new Map((inv.data || []).map((x) => [`${x.product_id}/${x.size_id}`, { nombre: x.product_name, talle: x.size_name }]))
+      const nombres = await nombresDeVariantes(b, (cambio.lineas || []).map((l) => l.product_id))
       const plan = armarFacturaDelCambio({ cambio, original, facturaOriginal, acreditado: otras.reduce((a, x) => a + Number(x.total), 0), nombres })
       if ('error' in plan) return { status: 409, error: plan.error }
       const numero = cambio.detalle?.gn_number ?? cambio.numero
@@ -849,13 +859,7 @@ export async function diferenciasDelDia({ marca, fecha: pedida }) {
   ])
   const negs = Array.isArray(negativos) ? negativos : []
   const ids = [...new Set([...filas, ...negs].map((r) => Number(r.product_id)))]
-  const nombres = new Map()
-  // 🔴 Paginado: el espejo tiene una fila por talle Y depósito ⇒ 300 productos pasan las 1000 filas que
-  // devuelve Supabase de una, y cortaba CALLADO (87 de 92 sin nombre en BDI, medido 14-oct).
-  for (let i = 0; i < ids.length; i += 200) {
-    const data = await leerTodo(b, 'inventario', (x) => x.select('product_id, size_id, product_name, size_name').in('product_id', ids.slice(i, i + 200)).order('product_id').order('size_id'))
-    for (const r of data) nombres.set(`${r.product_id}/${r.size_id}`, { nombre: r.product_name, talle: r.size_name })
-  }
+  const nombres = await nombresDeVariantes(b, ids)
   return {
     fecha, dias: dias.data.map((d) => d.fecha), fotoDesde: dia?.foto_desde ?? null, fotoHasta: dia?.foto_hasta ?? null,
     ...armarDiferencias({ filas, nombres, resumen: dia?.resumen, negativos: negs }),

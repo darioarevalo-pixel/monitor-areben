@@ -90,6 +90,7 @@ import { COLUMNAS_VENTA as COLUMNAS, SIN_LLEGAR, enviarVenta, pendientesParaRein
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, ladoDelEspejo, marcaDeCaja, tokenDe } from '../lib/caja/marcas.core.js'
 import { anotarEnMotor, avisoDelMotor, repasarMotor } from './_caja-motor.js'
+import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { reglasDeHoy as reglasDeHoyDe } from './_caja-reglas.js'
 import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
@@ -1256,34 +1257,6 @@ function logosDeFila(fila) {
   return { ticket_logo: uno(fila), ticket_logo_stunned: uno(fila && fila.stunned) }
 }
 
-/** Hasta cuánto atrás otra venta esperando el mismo monto obliga a elegir el pago a mano. */
-const COMPETIDORAS_MS = 12 * 3600 * 1000
-/** Cuántos pagos recientes se muestran al confirmar una transferencia (los del monto, siempre). */
-export const RECIENTES_CAJA = 5
-/** Y cuántos cuando la cajera está sumando cobros (Bruno, 12-oct: «13.300 + 100»). */
-const RECIENTES_SUMAR = 20
-/** Cuántos días de Mercado Pago lee el cruce, desde el de la venta (A4). */
-const DIAS_CRUCE = 3
-/**
- * Hasta cuánto ANTES de la venta un pago se OFRECE para elegir (A4): la venta que se canceló y se volvió
- * a escanear nace después del pago. Como se lee desde el día de la venta, en la práctica es desde su
- * medianoche. ⛔ Entra solo nunca: lo elige la cajera.
- */
-export const ANTES_MANUAL_MS = 24 * 3600 * 1000
-/**
- * Los días argentinos desde el de la venta hasta hoy. Con más de `DIAS_CRUCE`: el de la venta y los
- * últimos (el pago que llega tarde llega HOY).
- */
-export function diasDelCruce(creada, ahora) {
-  const hoy = diaArgentino(ahora)
-  const dias = []
-  for (let t = creada; t <= ahora + DIA_MS; t += DIA_MS) {
-    const d = diaArgentino(t)
-    if (!dias.includes(d)) dias.push(d)
-    if (d === hoy) break
-  }
-  return dias.length <= DIAS_CRUCE ? dias : [dias[0], ...dias.slice(-(DIAS_CRUCE - 1))]
-}
 
 /**
  * Las variantes del espejo (`inventario`) que corresponden al código del lector: barcode exacto,
