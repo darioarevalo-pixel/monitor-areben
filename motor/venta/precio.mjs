@@ -50,15 +50,25 @@ export async function cargarPrecio(db, e) {
 
 /**
  * @param {import('pg').ClientBase} db
- * @param {{ marca: string, product_id: number, costo: number, proveedor?: string, vigente_desde?: string, usuario: string, motivo?: string }} e
+ * @param {{ marca: string, product_id: number, costo: number, proveedor?: string, proveedor_id?: number, vigente_desde?: string, usuario: string, motivo?: string }} e
  */
 export async function cargarCosto(db, e) {
   const v = await validar(db, e, 'costo')
   if (v.falla) return v.falla
+  // Con 013 el proveedor es una FICHA (`proveedor_id`, de la misma empresa); su nombre queda también en el texto.
+  let proveedor = texto(e.proveedor), proveedorId = null
+  if (e.proveedor_id != null && e.proveedor_id !== '') {
+    const id = Number(e.proveedor_id)
+    const [p] = Number.isSafeInteger(id) && id > 0 ? await q(db, 'select id, nombre from proveedor where empresa_id = $1 and id = $2', [v.empresa, id]) : []
+    if (!p) return falla('PROVEEDOR_DESCONOCIDO', 'Ese proveedor no está en la lista', 'proveedor_id')
+    proveedor = p.nombre
+    proveedorId = Number(p.id)
+  }
+  const conId = proveedorId != null
   const [fila] = await q(db,
-    `insert into producto_costo (empresa_id, marca, product_id, costo, proveedor, vigente_desde, usuario, motivo, fuente)
-     values ($1, $2, $3, $4, $5, coalesce($6::timestamptz, now()), $7, $8, 'carga') returning *`,
-    [v.empresa, e.marca, v.pid, v.monto, texto(e.proveedor), v.desde, v.usuario, v.motivo])
+    `insert into producto_costo (empresa_id, marca, product_id, costo, proveedor, vigente_desde, usuario, motivo, fuente${conId ? ', proveedor_id' : ''})
+     values ($1, $2, $3, $4, $5, coalesce($6::timestamptz, now()), $7, $8, 'carga'${conId ? ', $9' : ''}) returning *`,
+    [v.empresa, e.marca, v.pid, v.monto, proveedor, v.desde, v.usuario, v.motivo, ...(conId ? [proveedorId] : [])])
   const [vigente] = await q(db, 'select * from costo_vigente where marca = $1 and product_id = $2', [e.marca, v.pid])
   return { ok: true, costo: fila, vigente: vigente ?? null }
 }
