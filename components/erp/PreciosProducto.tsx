@@ -148,7 +148,7 @@ export function PreciosProducto() {
     await cargarProveedores()
     setProveedorId(r.proveedor.id)
     setNuevoProveedor(null)
-    setHecho(r.yaExistia ? `Ya había un proveedor «${r.proveedor.nombre}»: quedó elegido.` : `Proveedor «${r.proveedor.nombre}» dado de alta.`)
+    setHecho(r.yaExistia ? `Ya había un proveedor «${r.proveedor.nombre}»: quedó elegido.` : `Proveedor «${r.proveedor.nombre}» creado.`)
   }, 'No se pudo guardar el proveedor.')
 
   function cambiarMarca(k: string) {
@@ -279,7 +279,7 @@ export function PreciosProducto() {
                 <Field label="CUIT (opcional)" style={{ flex: '1 1 160px' }}>
                   <Input value={nuevoProveedor.cuit} onChange={(e) => setNuevoProveedor({ ...nuevoProveedor, cuit: e.target.value })} inputMode="numeric" placeholder="11 números" />
                 </Field>
-                <Button disabled={trabajando || !nuevoProveedor.nombre.trim()} onClick={() => void altaProveedor()}>Dar de alta</Button>
+                <Button disabled={trabajando || !nuevoProveedor.nombre.trim()} onClick={() => void altaProveedor()}>Crear proveedor</Button>
                 <Button variant="outline" onClick={() => setNuevoProveedor(null)}>Cancelar</Button>
               </div>
             )}
