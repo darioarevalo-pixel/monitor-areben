@@ -97,7 +97,7 @@ export function PreciosProducto() {
         <div>
           <ConfirmDetalle label={nombre} valor={<MoneyText value={n} />} />
           <ConfirmDetalle label="Desde" valor={desde || 'Ahora'} />
-          <p style={{ marginTop: space[3] }}>Queda en el ERP y manda sobre la copia de GN. Mientras GN funcione, ⛔ cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</p>
+          <p style={{ marginTop: space[3] }}>Queda en el ERP y manda sobre la copia de GN. Mientras GN funcione, no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</p>
         </div>
       ),
       ok: 'Cargar',
@@ -191,7 +191,7 @@ export function PreciosProducto() {
             </p>
           </SectionCard>
 
-          <SectionCard title="Cargar en el ERP" subtitle="Una fila nueva: lo anterior queda en el historial. Mientras GN funcione, ⛔ cambia la Caja ni Tienda Nube.">
+          <SectionCard title="Cargar en el ERP" subtitle="Una fila nueva: lo anterior queda en el historial. Mientras GN funcione, no cambia la Caja ni Tienda Nube.">
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <Field label="Qué">
                 <Select value={que} onChange={(e) => setQue(e.target.value)}>
@@ -217,7 +217,7 @@ export function PreciosProducto() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Historial" subtitle="El más nuevo arriba. Un precio o un costo nuevo es otra fila: lo anterior ⛔ se edita.">
+          <SectionCard title="Historial" subtitle="El más nuevo arriba. Un precio o un costo nuevo es otra fila: lo anterior no se edita.">
             {!ficha.historial.length ? <EmptyState title="Todavía no hay precios ni costos de este producto en el ERP." /> : (
               <TableWrap>
                 <table>

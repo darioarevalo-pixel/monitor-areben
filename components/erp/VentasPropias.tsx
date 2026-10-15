@@ -105,7 +105,7 @@ export function VentasPropias() {
     if (!ficha) return
     const ok = await confirmar({
       titulo: `Nota de crédito de la venta #${ficha.venta.numero}`,
-      mensaje: 'Anula entera la factura de esta venta ante ARCA. Una nota de crédito con CAE ⛔ se elimina.',
+      mensaje: 'Anula entera la factura de esta venta ante ARCA. Una nota de crédito con CAE no se elimina.',
       ok: 'Hacer nota de crédito',
       tono: 'danger',
     })
@@ -127,7 +127,7 @@ export function VentasPropias() {
   const v = ficha?.venta
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <SectionCard title="Ventas" subtitle="Las ventas propias del monitor (⛔ las de GN). Buscá por número, cliente o fecha; sin nada, las últimas.">
+      <SectionCard title="Ventas" subtitle="Las ventas propias del monitor (no las de GN). Buscá por número, cliente o fecha; sin nada, las últimas.">
         <Tabs items={MARCAS} value={marca} onChange={cambiarMarca} />
         <form
           onSubmit={(e) => { e.preventDefault(); void buscar() }}
@@ -167,7 +167,7 @@ export function VentasPropias() {
               <span style={{ flex: 1 }} />
               <Button tone="danger" disabled={!!ficha.puedeAnular || trabajando} title={ficha.puedeAnular ?? undefined} onClick={() => setAnulando(true)}>Anular venta</Button>
             </div>
-            {v.prueba && <Notice tone="warning">Venta de prueba: entró antes del corte de GN, ⛔ movió el stock del libro ni se factura.</Notice>}
+            {v.prueba && <Notice tone="warning">Venta de prueba: entró antes del corte de GN, no movió el stock del libro ni se factura.</Notice>}
             {ficha.anulacion && (
               <Notice tone="danger">Anulada el {cuando(ficha.anulacion.anuladaEn)} por {ficha.anulacion.usuario}: «{ficha.anulacion.motivo}».</Notice>
             )}
@@ -235,8 +235,8 @@ export function VentasPropias() {
             </>}
           >
             <p style={{ marginTop: 0 }}>
-              Las prendas vuelven al stock de {nombreDe(NOMBRE_DEPOSITO, v.deposito)} y la plata, a los mismos pagos
-              ({ficha.pagos.map((p) => p.cuenta).filter(Boolean).join(', ') || 'sin pagos'}). Una venta anulada ⛔ se puede volver a confirmar.
+              {v.prueba ? 'Es de prueba: no mueve el stock' : `Las prendas vuelven al stock de ${nombreDe(NOMBRE_DEPOSITO, v.deposito)}`} y la plata, a los mismos pagos
+              ({ficha.pagos.map((p) => p.cuenta).filter(Boolean).join(', ') || 'sin pagos'}). Una venta anulada no se puede volver a confirmar.
               {ficha.facturada && ' Tiene factura: después hay que hacer la nota de crédito.'}
             </p>
             <Field label="Motivo" required hint="Queda guardado con tu nombre.">

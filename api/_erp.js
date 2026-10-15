@@ -455,7 +455,7 @@ export async function fichaDeVenta({ marca, id }) {
 /** Abre la conexión del motor de la marca, corre `fn(db, motor)` y la cierra. Sin la variable: 409, dicho. */
 async function conMotor(marca, que, fn) {
   const conexion = process.env[PG_DE_MARCA[marca]]
-  if (!conexion) return { status: 409, error: `${que} todavía ⛔ está conectado: falta la conexión del motor en Vercel.` }
+  if (!conexion) return { status: 409, error: `${que} todavía no está conectado: falta la conexión del motor en Vercel.` }
   const [{ default: pg }, motor] = await Promise.all([import('pg'), import('../motor/venta/registrar.mjs')])
   const db = new pg.Client({ connectionString: conexion, connectionTimeoutMillis: 5000, statement_timeout: 15000 })
   try {
@@ -662,7 +662,7 @@ async function guardarFichaA(db, { venta, doc, condicionIva, razonSocial, domici
   const r = await guardarCliente(db, { empresa_id: venta.empresa_id, doc: String(doc), nombre: razonSocial, razon_social: razonSocial, condicion_iva: condicionIva, domicilio })
   if (r.ok) return { receptor: { nombre: r.cliente.razon_social || r.cliente.nombre, domicilio: r.cliente.domicilio }, sinFicha: null }
   console.error(`[erp] ficha de ${doc} sin guardar: ${r.error.codigo} ${r.error.mensaje}`)
-  return { receptor, sinFicha: `La factura salió, pero la ficha de la clienta ⛔ se guardó: ${r.error.mensaje}` }
+  return { receptor, sinFicha: `La factura salió, pero la ficha de la clienta no se guardó: ${r.error.mensaje}` }
 }
 
 /** El receptor de una factura A ya hecha (reimprimir), de la ficha por su CUIT. null si ⛔ es A o ⛔ hay ficha. */
@@ -677,7 +677,7 @@ export async function clientasDeLaCaja({ marca, q }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   return conMotor(marca, 'Buscar clientas', async (db, { buscarClientes }) => {
     const [m] = (await db.query('select empresa_id from marca where id = $1', [marca])).rows
-    if (!m) return { status: 409, error: 'La marca ⛔ está en la base del motor.' }
+    if (!m) return { status: 409, error: 'La marca no está en la base del motor.' }
     const r = await buscarClientes(db, { empresa_id: m.empresa_id, texto: String(q ?? ''), limite: 8 })
     if (!r.ok) return errorDelMotor(r)
     return {
@@ -699,7 +699,7 @@ async function atarFactura(db, { venta, facturaId, tipo }) {
   const r = await vincularFactura(db, { venta_id: venta.id, factura_id: String(facturaId), tipo })
   if (r.ok) return null
   console.error(`[erp] ${tipo} ${facturaId} sin atar a la venta ${venta.id}: ${r.error.codigo} ${r.error.mensaje}`)
-  return `Salió con CAE, pero ⛔ quedó atada a la venta en el ERP: ${MENSAJE_ERROR_MOTOR[r.error.codigo] || r.error.mensaje}`
+  return `Salió con CAE, pero no quedó atada a la venta en el ERP: ${MENSAJE_ERROR_MOTOR[r.error.codigo] || r.error.mensaje}`
 }
 
 /** Las NC (⛔ rechazadas) asociadas a una factura: lo que ya se le acreditó. */
@@ -787,7 +787,7 @@ export async function facturarCambio({ marca, body, usuario }, deps = {}) {
           mes: hoy.slice(0, 7), total: plan.nc.total, asociadoId: facturaOriginal.id,
           asociado: { tipo: Number(facturaOriginal.tipo), ptoVta: Number(facturaOriginal.pto_vta), numero: Number(facturaOriginal.numero), fecha: facturaOriginal.fecha },
         })
-        if (e.error) return { status: 409, error: `La nota de crédito ⛔ salió: ${e.error}` }
+        if (e.error) return { status: 409, error: `La nota de crédito no salió: ${e.error}` }
         if (e.fila.estado !== 'autorizada') return { status: 409, error: 'La nota de crédito del cambio está a medio pedir: probá de nuevo en un minuto.' }
         nc = filaParaPdf(e.fila, { numero, renglones: plan.nc.renglones })
         const sin = await atarFactura(db, { venta: original, facturaId: e.fila.id, tipo: 'nc' })
@@ -795,7 +795,7 @@ export async function facturarCambio({ marca, body, usuario }, deps = {}) {
       }
       if (plan.factura) {
         const e = await emitir(facturaYa, tipos.factura, { mes: mesDeVenta(cambio.ocurrida_en), total: plan.factura.total })
-        if (e.error) return { status: 409, error: `${nc ? 'Salió la nota de crédito, pero la factura de lo nuevo ⛔: ' : 'La factura de lo nuevo ⛔ salió: '}${e.error}` }
+        if (e.error) return { status: 409, error: `${nc ? 'Salió la nota de crédito, pero la factura de lo nuevo no: ' : 'La factura de lo nuevo no salió: '}${e.error}` }
         if (e.fila.estado !== 'autorizada') return { status: 409, error: 'La factura del cambio está a medio pedir: probá de nuevo en un minuto.' }
         factura = filaParaPdf(e.fila, { numero, renglones: plan.factura.renglones })
         const sin = await atarFactura(db, { venta: cambio, facturaId: e.fila.id, tipo: 'factura' })

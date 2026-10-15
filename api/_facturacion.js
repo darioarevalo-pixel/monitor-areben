@@ -38,7 +38,7 @@ export function almacenTA(sb, ambiente) {
 }
 
 /** Sin certificado en el servidor, ARCA ⛔ se puede llamar: las puertas que piden CAE lo dicen ANTES (409), ⛔ con un 500. */
-export const SIN_ARCA = 'Este servidor todavía ⛔ tiene el certificado de ARCA cargado: no se puede facturar desde acá.'
+export const SIN_ARCA = 'Este servidor todavía no tiene el certificado de ARCA cargado: no se puede facturar desde acá.'
 export const arcaConectado = (env = process.env) => !!(env.ARCA_CERT && env.ARCA_KEY)
 
 export function clienteArcaDelEntorno(sb) {

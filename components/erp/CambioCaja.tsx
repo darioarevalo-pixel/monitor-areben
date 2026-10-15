@@ -250,7 +250,7 @@ export function CambioCaja() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard title={`Cambio · ${NOMBRE_MARCA[store] ?? store}`} subtitle="Buscá la venta por número o cliente, marcá lo que devuelve y escaneá lo que se lleva.">
-        <Notice tone="warning">De prueba hasta que se apague GN: ⛔ mueve el stock ni sale a GN. El cambio de verdad se sigue haciendo en GN.</Notice>
+        <Notice tone="warning">De prueba hasta que se apague GN: no mueve el stock ni sale a GN. El cambio de verdad se sigue haciendo en GN.</Notice>
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="#123, nombre, DNI o mail" />
@@ -292,7 +292,7 @@ export function CambioCaja() {
 
       {ficha && (
         <>
-          <SectionCard title={`Devuelve · venta #${ficha.venta.numero}`} subtitle="Al precio que se pagó, ⛔ al de hoy.">
+          <SectionCard title={`Devuelve · venta #${ficha.venta.numero}`} subtitle="Al precio que se pagó, no al de hoy.">
             <div style={{ display: 'flex', gap: space[2], marginBottom: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <Button variant="outline" onClick={() => { setFicha(null); empezarDeNuevo() }}>Volver a las ventas</Button>
               <form onSubmit={(e) => { e.preventDefault(); if (codigoDev.trim()) void escanearDevuelta() }} style={{ display: 'flex', gap: space[2], alignItems: 'flex-end' }}>

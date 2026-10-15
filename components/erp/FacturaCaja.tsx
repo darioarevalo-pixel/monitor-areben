@@ -128,7 +128,7 @@ export function FacturaCaja() {
         <div>
           {planCambio.nc > 0 && <ConfirmDetalle label={`Nota de crédito ${planCambio.clase} (lo devuelto)`} valor={<MoneyText value={planCambio.nc} />} />}
           {planCambio.factura > 0 && <ConfirmDetalle label={`Factura ${planCambio.clase} (lo nuevo)`} valor={<MoneyText value={planCambio.factura} />} />}
-          <p style={{ marginTop: space[3] }}>A nombre de la factura de la venta #{ficha.original?.numero}. Con CAE ⛔ se eliminan.</p>
+          <p style={{ marginTop: space[3] }}>A nombre de la factura de la venta #{ficha.original?.numero}. Con CAE no se eliminan.</p>
         </div>
       ),
       ok: 'Facturar el cambio',
@@ -160,7 +160,7 @@ export function FacturaCaja() {
           <ConfirmDetalle label="Total" valor={<MoneyText value={ficha.venta.total} />} />
           <ConfirmDetalle label="Para" valor={clase === 'A' ? `${razonSocial.trim()} · CUIT ${docLimpio} · ${condicion === 'ri' ? 'Responsable inscripta' : 'Monotributista'}` : docLimpio ? `Consumidor final · ${docLimpio}` : 'Consumidor final'} />
           {clase === 'A' && domicilio.trim() && <ConfirmDetalle label="Domicilio" valor={domicilio.trim()} />}
-          <p style={{ marginTop: space[3] }}>Una factura con CAE ⛔ se elimina: si sale mal, se anula con nota de crédito.</p>
+          <p style={{ marginTop: space[3] }}>Una factura con CAE no se elimina: si sale mal, se anula con nota de crédito.</p>
         </div>
       ),
       ok: 'Facturar',

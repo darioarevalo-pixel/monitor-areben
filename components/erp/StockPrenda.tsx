@@ -125,7 +125,7 @@ export function StockPrenda({ pedida = null }: { pedida?: PrendaPedida | null } 
               <Button variant="outline" onClick={() => setFicha(null)}>Volver a la búsqueda</Button>
             </div>
             {ficha.sinDeposito.length > 0 && (
-              <Notice tone="warning">GN tiene stock en depósitos que el libro ⛔ conoce: {ficha.sinDeposito.join(', ')}.</Notice>
+              <Notice tone="warning">GN tiene stock en depósitos que el libro no conoce: {ficha.sinDeposito.join(', ')}.</Notice>
             )}
             <TableWrap>
               <table>
@@ -146,7 +146,7 @@ export function StockPrenda({ pedida = null }: { pedida?: PrendaPedida | null } 
             </TableWrap>
           </SectionCard>
 
-          <SectionCard title="Movimientos" subtitle="El más nuevo arriba. Una anulación o una corrección es otro movimiento: el libro ⛔ se edita.">
+          <SectionCard title="Movimientos" subtitle="El más nuevo arriba. Una anulación o una corrección es otro movimiento: el libro no se edita.">
             {!ficha.historial.length ? <EmptyState title="El libro todavía no tiene movimientos de esta prenda." /> : (
               <TableWrap>
                 <table>
