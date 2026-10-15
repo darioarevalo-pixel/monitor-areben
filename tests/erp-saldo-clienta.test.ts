@@ -45,8 +45,9 @@ describe('saldoDeClienta', () => {
   })
 
   it('una marca que el motor ⛔ conoce: 409, ⛔ busca sin empresa', async () => {
+    // (BDI: la empresa de Zattia ya quedó en la memoria del primer test, y ⛔ cambia.)
     filas.marca = []
-    const r = await saldoDeClienta({ marca: 'zattia', doc: '30111222' })
+    const r = await saldoDeClienta({ marca: 'bdi', doc: '30111222' })
     expect(r).toMatchObject({ status: 409 })
     expect(filtros.some(([t]) => t === 'cliente')).toBe(false)
   })

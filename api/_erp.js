@@ -134,6 +134,7 @@ export async function facturarVentas({ mes, marca, ventaIds, usuario }) {
   const pedidos = [...new Set((Array.isArray(ventaIds) ? ventaIds : []).map(String))]
   if (!pedidos.length) return { status: 400, error: 'No hay ventas elegidas' }
   if (pedidos.length > POR_PEDIDO) return { status: 400, error: `Hasta ${POR_PEDIDO} ventas por vez` }
+  if (!arcaConectado()) return { status: 409, error: SIN_ARCA }
 
   const m = await leerMes(mes)
   if (!m.ambiente) return { status: 409, error: m.errorAmbiente }
@@ -147,7 +148,6 @@ export async function facturarVentas({ mes, marca, ventaIds, usuario }) {
     return { status: 409, error: `El grupo suma $${suma} y lo pendiente del mes es $${m.resumen.pendiente}` }
   }
 
-  if (!arcaConectado()) return { status: 409, error: SIN_ARCA }
   const hoy = diaArgentino(Date.now())
   const { arca } = clienteArcaDelEntorno(m.sb)
   const r = await facturarLote({
@@ -194,9 +194,9 @@ export async function notaDeCredito({ facturaId, usuario }, deps = {}) {
   if (previas.some((x) => String(x.venta_id) === String(f.venta_id))) return { status: 409, error: 'La venta ya tiene nota de crédito' }
   const queda = Math.round(Number(f.total) * 100 - previas.reduce((a, x) => a + Math.round(Number(x.total) * 100), 0)) / 100
   if (!(queda > 0)) return { status: 409, error: 'La factura ya está acreditada entera (por las notas de crédito de sus cambios).' }
-  if (!deps.arca && !arcaConectado()) return { status: 409, error: SIN_ARCA }
+  const arca = arcaDe(deps, sb)
+  if (!arca) return { status: 409, error: SIN_ARCA }
   const hoy = diaArgentino(Date.now())
-  const arca = deps.arca || clienteArcaDelEntorno(sb).arca
   const r = await facturarLote({
     arca, repo: deps.repo || repoFacturas(sb), ambiente, marca: f.marca, ptoVta: Number(f.pto_vta), tipo,
     comprobantes: [{
@@ -228,6 +228,27 @@ export function ajustesDeVenta(v) {
 }
 
 /**
+ * El cliente de ARCA de este servidor, o null si ⛔ tiene el certificado (prod hoy): la puerta que pide un CAE contesta
+ * 409 `SIN_ARCA` ANTES de reservar nada, ⛔ un 500 de adentro del cliente. Un oráculo o un test lo inyecta en `deps.arca`.
+ */
+function arcaDe(deps, sb) {
+  if (deps.arca) return deps.arca
+  return arcaConectado() ? clienteArcaDelEntorno(sb).arca : null
+}
+
+/** La empresa de cada marca (tabla `marca` del motor): ⛔ cambia ⇒ una lectura por marca y por instancia. */
+const empresas = new Map()
+async function empresaDeMarca(sb, marca) {
+  if (!empresas.has(marca)) {
+    const m = await sb.from('marca').select('empresa_id').eq('id', marca).maybeSingle()
+    if (m.error) throw new Error(`marca: ${m.error.message}`)
+    if (!m.data) return null
+    empresas.set(marca, m.data.empresa_id)
+  }
+  return empresas.get(marca)
+}
+
+/**
  * Nombre y talle de cada variante (`producto/talle`) del espejo, para los renglones de una venta, su ficha, su
  * factura y las Diferencias. 🔴 Paginado: el espejo tiene una fila por talle Y depósito ⇒ 300 productos pasan
  * las 1000 filas que devuelve Supabase de una, y cortaba CALLADO (87 de 92 sin nombre en BDI, medido 14-oct).
@@ -237,10 +258,10 @@ async function nombresDeVariantes(b, productos) {
   const ids = [...new Set(productos)]
   /** @type {Map<string, { nombre: string, talle: string }>} */
   const nombres = new Map()
-  for (let i = 0; i < ids.length; i += 200) {
-    const data = await leerTodo(b, 'inventario', (x) => x.select('product_id, size_id, product_name, size_name').in('product_id', ids.slice(i, i + 200)).order('product_id').order('size_id'))
-    for (const r of data) nombres.set(`${r.product_id}/${r.size_id}`, { nombre: r.product_name, talle: r.size_name })
-  }
+  const tandas = []
+  for (let i = 0; i < ids.length; i += 200) tandas.push(ids.slice(i, i + 200))
+  const leidas = await Promise.all(tandas.map((t) => leerTodo(b, 'inventario', (x) => x.select('product_id, size_id, product_name, size_name').in('product_id', t).order('product_id').order('size_id'))))
+  for (const r of leidas.flat()) nombres.set(`${r.product_id}/${r.size_id}`, { nombre: r.product_name, talle: r.size_name })
   return nombres
 }
 
@@ -273,7 +294,10 @@ export async function facturasDelMes(mes) {
     // El receptor de las A (y sus NC): la razón social y el domicilio de la ficha de la clienta, por su CUIT.
     const cuits = [...new Set(facturas.filter((f) => f.marca === marca && Number(f.doc_tipo) === DOC.CUIT).map((f) => String(f.doc_nro)))]
     for (let i = 0; i < cuits.length; i += 200) {
-      const { data, error: e } = await b.from('cliente').select('doc, nombre, razon_social, domicilio').in('doc', cuits.slice(i, i + 200))
+      // La ficha es una por EMPRESA y documento (§11): sin la empresa, el PDF podría salir con la de otra.
+      const empresa = await empresaDeMarca(b, marca)
+      if (!empresa) break
+      const { data, error: e } = await b.from('cliente').select('doc, nombre, razon_social, domicilio').eq('empresa_id', empresa).in('doc', cuits.slice(i, i + 200))
       if (e) throw new Error(`cliente (${marca}): ${e.message}`)
       for (const c of data) receptores.set(`${marca}/${c.doc}`, { nombre: c.razon_social || c.nombre, domicilio: c.domicilio })
     }
@@ -474,10 +498,9 @@ export async function saldoDeClienta({ marca, doc }) {
   const sb = createClient(url, key)
   // La ficha es UNA por empresa y documento (§11): sin la empresa, dos empresas en la misma base harían
   // que `maybeSingle` falle con dos filas, o que el saldo saliera de la ficha de la otra.
-  const m = await sb.from('marca').select('empresa_id').eq('id', marca).maybeSingle()
-  if (m.error) throw new Error(`marca: ${m.error.message}`)
-  if (!m.data) return { status: 409, error: `La marca ${marca} no está en el motor de esta base.` }
-  const cl = await sb.from('cliente').select('id, nombre').eq('empresa_id', m.data.empresa_id).eq('doc', d).maybeSingle()
+  const empresa = await empresaDeMarca(sb, marca)
+  if (!empresa) return { status: 409, error: `La marca ${marca} no está en el motor de esta base.` }
+  const cl = await sb.from('cliente').select('id, nombre').eq('empresa_id', empresa).eq('doc', d).maybeSingle()
   if (cl.error) throw new Error(`cliente: ${cl.error.message}`)
   if (!cl.data) return { cliente: null, saldo: 0 }
   const s = await sb.from('saldo_favor').select('saldo').eq('cliente_id', cl.data.id).eq('marca', marca).eq('prueba', true).maybeSingle()
@@ -577,10 +600,10 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
 
     let factura = ya
     if (!factura) {
-      if (!deps.arca && !arcaConectado()) return { status: 409, error: SIN_ARCA }
+      const arca = arcaDe(deps, sb)
+      if (!arca) return { status: 409, error: SIN_ARCA }
       const ptoVta = ptoVtaDe(ambiente, marca, process.env)
       const hoy = diaArgentino(Date.now())
-      const arca = deps.arca || clienteArcaDelEntorno(sb).arca
       const r = await facturarLote({
         arca, repo, ambiente, marca, ptoVta, tipo: p.tipo,
         comprobantes: [{ ventaId: clave, mes: mesDeVenta(f.ocurrida_en), tipo: p.tipo, fecha: hoy, total: Number(f.total), receptor: p.receptor }],
@@ -741,11 +764,13 @@ export async function facturarCambio({ marca, body, usuario }, deps = {}) {
         return { ok: true, simulado: true, clase: tipos.factura === CBTE.FACTURA_A ? 'A' : 'B', nc: plan.nc?.total ?? 0, factura: plan.factura?.total ?? 0, ncYa: !!ncYa, facturaYa: !!facturaYa }
       }
 
-      if (!deps.arca && !arcaConectado() && !(ncYa && facturaYa)) return { status: 409, error: SIN_ARCA }
+      // El cliente de ARCA sólo si falta pedir algo: reimprimir lo que ya salió anda sin certificado.
+      const falta = (plan.nc && !ncYa) || (plan.factura && !facturaYa)
+      const arca = falta ? arcaDe(deps, sb) : null
+      if (falta && !arca) return { status: 409, error: SIN_ARCA }
       const hoy = diaArgentino(Date.now())
       const receptor = { docTipo: Number(facturaOriginal.doc_tipo), docNro: Number(facturaOriginal.doc_nro), condicionIva: Number(facturaOriginal.cond_iva) }
       const ptoVta = ptoVtaDe(ambiente, marca, process.env)
-      const arca = deps.arca || clienteArcaDelEntorno(sb).arca
       const reglas = { umbralIdentificar: UMBRAL_IDENTIFICAR, hoy }
       /** Uno de los dos comprobantes: el que ya está, o sale por el lote (con la clave del cambio). */
       const emitir = async (ya, tipo, comprobante) => {
