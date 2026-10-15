@@ -15,7 +15,9 @@
  *   GET  ?recurso=erp&vista=diferencias&marca=…&fecha=YYYY-MM-DD    lo que el libro ⛔ explicó ese día + la sobreventa
  *   GET  ?recurso=erp&vista=stock&marca=bdi|zattia&q=texto            busca prendas (SKU, código, nombre)
  *   GET  ?recurso=erp&vista=precio&marca=…&producto=ID                precio por lista y costo del producto, con GN y TN al lado
- *   POST {recurso:'erp', accion:'cargar-precio'|'cargar-costo', marca, producto, monto, lista?, desde?, motivo?, proveedor?}
+ *   POST {recurso:'erp', accion:'cargar-precio'|'cargar-costo', marca, producto, monto, lista?, desde?, motivo?, proveedor?, proveedorId?}
+ *   GET  ?recurso=erp&vista=proveedores&marca=…&q=…                  los proveedores del ERP (sql/013) para elegir en el costo
+ *   POST {recurso:'erp', accion:'guardar-proveedor', marca, nombre, cuit?}   alta a mano de un proveedor
  *   GET  ?recurso=erp&vista=stock&marca=…&producto=ID&talle=ID       el libro y GN de esa prenda, con historial
  *   GET  ?recurso=erp&vista=ventas&marca=…&q=nº|cliente&desde&hasta    busca ventas propias (las del motor)
  *   GET  ?recurso=erp&vista=venta&marca=…&id=UUID                      la ficha: prendas, pagos, factura, estado
@@ -926,6 +928,16 @@ export async function precioDeProducto({ marca, producto }) {
   }
   // `precio_lista` llega con sql/011: sin ella, lo vigente de cada lista tal cual (⛔ es un error).
   if (efectivos.error && !/precio_lista/.test(efectivos.error.message)) throw new Error(`precio_lista: ${efectivos.error.message}`)
+  // El proveedor del costo como FICHA (sql/013): el de la carga, o el que tiene ese texto de GN. Sin 013, sólo el texto.
+  const cpv = await b.from('costo_proveedor_vigente').select('proveedor_id').eq('marca', linea).eq('product_id', producto).limit(1)
+  if (cpv.error && !/costo_proveedor_vigente/.test(cpv.error.message)) throw new Error(`costo_proveedor_vigente: ${cpv.error.message}`)
+  const proveedorId = cpv.error ? null : cpv.data[0]?.proveedor_id ?? null
+  let proveedorFicha = null
+  if (proveedorId != null) {
+    const pf = await b.from('proveedor').select('id, nombre').eq('id', proveedorId).maybeSingle()
+    if (pf.error) throw new Error(`proveedor: ${pf.error.message}`)
+    proveedorFicha = pf.data ? { id: String(pf.data.id), nombre: pf.data.nombre } : null
+  }
   // TN por SKU (como lo guardó TN y en mayúsculas, sin espacios) y por código de barras: como cruza la copia del motor.
   const claves = [...new Set(skus.flatMap((s) => [s, s.trim().toUpperCase()]))]
   const barras = [...new Set((inv.data || []).map((x) => x.barcode).filter(Boolean))]
@@ -941,7 +953,7 @@ export async function precioDeProducto({ marca, producto }) {
     tnLeidaEn: (lecturas.data || []).find((x) => x.tienda === tienda)?.leida_en ?? null,
     ...armarPrecioDeProducto({
       listas: listas.data, vigentes: vigentes.data, efectivos: efectivos.error ? null : efectivos.data, costo: costo.data[0] ?? null,
-      historialPrecio: hPrecio.data, historialCosto: hCosto.data, gn: gn.data, tn,
+      historialPrecio: hPrecio.data, historialCosto: hCosto.data, gn: gn.data, tn, proveedorFicha,
     }),
   }
 }
@@ -967,13 +979,50 @@ export async function cargarPrecioCosto({ marca, body, usuario }, deps = {}) {
     const comun = { marca: linea, product_id: Number(c.producto), vigente_desde: c.desde, usuario: usuario || 'admin', motivo: c.motivo }
     const r = c.que === 'precio'
       ? await cargarPrecio(db, { ...comun, lista: c.lista, precio: c.monto })
-      : await cargarCosto(db, { ...comun, costo: c.monto, proveedor: c.proveedor })
+      : await cargarCosto(db, { ...comun, costo: c.monto, proveedor: c.proveedor, proveedor_id: c.proveedorId })
     if (!r.ok) return { status: 409, error: r.error.mensaje }
     // Sin «desde» tiene que valer YA: si lo vigente ⛔ es lo recién cargado, se dice (⛔ «cargado» callado).
     const fila = r.precio ?? r.costo, v = r.vigente
     const esLaMisma = v && v.fuente === 'carga' && Number(v[c.que]) === Number(fila[c.que]) && Date.parse(v.vigente_desde) === Date.parse(fila.vigente_desde)
     const aviso = !c.desde && !esLaMisma ? 'Quedó guardado, pero lo vigente sigue siendo otra fila: revisá el historial.' : null
     return { ok: true, futuro: !!c.desde, aviso }
+  })
+}
+
+const SIN_PROVEEDORES = 'La lista de proveedores todavía no está en esta base: el proveedor se escribe a mano.'
+const tieneProveedores = async (db) => (await db.query(`select to_regclass('public.proveedor') is not null as hay`)).rows[0].hay
+
+/**
+ * Los PROVEEDORES del ERP (`sql/013`, Bruno 15-oct: tabla propia cruzada con PRM) de la empresa de la marca, para elegir
+ * en «Cargar costo». Sin 013 ⇒ 409 con aviso: la pantalla deja escribir el proveedor como texto, como antes.
+ * @param {{ marca: string, q?: string }} x @param {{ db?: any }} [deps]
+ */
+export async function proveedoresDeMarca({ marca, q }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'Los proveedores', fn)
+  return correr(async (db) => {
+    if (!(await tieneProveedores(db))) return { status: 409, error: SIN_PROVEEDORES }
+    const { buscarProveedores } = await import('../motor/venta/proveedor.mjs')
+    const r = await buscarProveedores(db, { marca, q: typeof q === 'string' ? q.slice(0, 80) : null, limite: 200 })
+    if (!r.ok) return { status: 409, error: textoDelMotor(r.error) }
+    return { proveedores: r.proveedores.map((p) => ({ id: String(p.id), nombre: p.nombre, cuit: p.cuit ?? null, nombreGn: p.nombre_gn ?? null, productos: p.productos, activo: p.activo })) }
+  })
+}
+
+/**
+ * Alta a mano de un proveedor. Uno que ya existe (mismo nombre) ⛔ se repite: se devuelve ése, para elegirlo.
+ * @param {{ marca: string, body: any, usuario?: string | null }} x @param {{ db?: any }} [deps]
+ */
+export async function altaDeProveedor({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'Los proveedores', fn)
+  return correr(async (db) => {
+    if (!(await tieneProveedores(db))) return { status: 409, error: SIN_PROVEEDORES }
+    const { guardarProveedor } = await import('../motor/venta/proveedor.mjs')
+    const r = await guardarProveedor(db, { marca, nombre: body?.nombre, cuit: body?.cuit, usuario: usuario || 'admin' })
+    const p = r.proveedor
+    if (!r.ok && r.error.codigo !== 'YA_EXISTE') return { status: r.error.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: textoDelMotor(r.error) }
+    return { ok: true, yaExistia: !r.ok, proveedor: { id: String(p.id), nombre: p.nombre, cuit: p.cuit ?? null } }
   })
 }
 
@@ -1014,6 +1063,10 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
+    if (req.method === 'GET' && req.query.vista === 'proveedores') {
+      const r = await proveedoresDeMarca({ marca: String(req.query.marca || ''), q: req.query.q })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
     if (req.method === 'GET' && req.query.vista === 'precio') {
       const r = await precioDeProducto({ marca: String(req.query.marca || ''), producto: req.query.producto })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
@@ -1076,6 +1129,11 @@ export default async function handler(req, res) {
 
     if (body.accion === 'cargar-precio' || body.accion === 'cargar-costo') {
       const r = await cargarPrecioCosto({ marca: String(body.marca || ''), body: { ...body, que: body.accion === 'cargar-precio' ? 'precio' : 'costo' }, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (body.accion === 'guardar-proveedor') {
+      const r = await altaDeProveedor({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

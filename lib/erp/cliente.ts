@@ -83,7 +83,7 @@ export type FilaPrecio = { lista: string; nombre: string; precio: number | null;
 export type PrecioDeProducto = {
   producto: string; nombre: string | null; skus: number; tnLeidaEn: string | null
   listas: FilaPrecio[]
-  costo: { costo: number | null; proveedor: string | null; fuente: string; desde: string; usuario: string; motivo: string | null } | null
+  costo: { costo: number | null; proveedor: string | null; proveedorId: string | null; fuente: string; desde: string; usuario: string; motivo: string | null } | null
   gn: { precio: number | null; mayorista: number | null; costo: number | null } | null
   tn: { tienda: string; variantes: number; precio: number | null; promocional: number | null; costo: number | null; distintos: boolean } | null
   avisos: string[]
@@ -93,9 +93,16 @@ export const leerPrecioDeProducto = (marca: MarcaErp, producto: string) =>
   pedir<PrecioDeProducto>(null, `&vista=precio&marca=${marca}&producto=${producto}&nc=${Date.now()}`, 'No se pudo leer el precio.')
 
 /** Cargar un precio (de una lista) o el costo en el ERP: una fila nueva, ⛔ toca GN ni TN. */
-export type CargaPrecio = { que: 'precio' | 'costo'; producto: string; monto: number; lista?: string; desde?: string; motivo?: string; proveedor?: string }
+export type CargaPrecio = { que: 'precio' | 'costo'; producto: string; monto: number; lista?: string; desde?: string; motivo?: string; proveedor?: string; proveedorId?: string }
 export const cargarPrecioCosto = (marca: MarcaErp, c: CargaPrecio) =>
   pedir<{ ok: true; futuro: boolean; aviso: string | null }>(post({ accion: c.que === 'precio' ? 'cargar-precio' : 'cargar-costo', marca, ...c }), '', 'No se pudo cargar.')
+
+/** Los proveedores del ERP (sql/013) para elegir en el costo. Sin la tabla, el API contesta 409 y se escribe el texto. */
+export type ProveedorErp = { id: string; nombre: string; cuit: string | null; nombreGn: string | null; productos: number; activo: boolean }
+export const leerProveedores = (marca: MarcaErp) =>
+  pedir<{ proveedores: ProveedorErp[] }>(null, `&vista=proveedores&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los proveedores.')
+export const guardarProveedor = (marca: MarcaErp, p: { nombre: string; cuit?: string }) =>
+  pedir<{ ok: true; yaExistia: boolean; proveedor: { id: string; nombre: string; cuit: string | null } }>(post({ accion: 'guardar-proveedor', marca, ...p }), '', 'No se pudo guardar el proveedor.')
 
 export const buscarPrendas = (marca: MarcaErp, q: string) =>
   pedir<{ variantes: PrendaEncontrada[]; cortado: boolean }>(null, `&vista=stock&marca=${marca}&q=${encodeURIComponent(q)}`, 'No se pudo buscar.')
