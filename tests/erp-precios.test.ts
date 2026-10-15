@@ -2,7 +2,7 @@
  * ERP › Precios: la ficha de precio y costo de un producto (`armarPrecioDeProducto`), pura.
  */
 import { describe, it, expect } from 'vitest'
-import { armarPrecioDeProducto, leerCarga, NOMBRE_FUENTE } from '../lib/erp/precio.core.js'
+import { armarPrecioDeProducto, leerCarga, lineaDelProducto, NOMBRE_FUENTE } from '../lib/erp/precio.core.js'
 
 const LISTAS = [{ id: 'mayorista', nombre: 'Mayorista' }, { id: 'local', nombre: 'Local' }, { id: 'online', nombre: 'Online' }]
 const vig = (lista: string, precio: number, fuente = 'gn') => ({ lista, precio: String(precio), fuente, vigente_desde: '2026-10-14T23:00:00Z', usuario: 'copia-gn', motivo: null })
@@ -54,8 +54,12 @@ describe('leerCarga', () => {
     expect(leerCarga({ que: 'precio', producto: '1', lista: 'local', monto: '$ 1.500' })).toMatchObject({ monto: 1500 })
   })
   it('costo sin lista, con proveedor; desde = 00:00 de Argentina', () => {
-    expect(leerCarga({ que: 'costo', producto: '1', monto: 1500, lista: 'local', proveedor: ' Textil Sur ', desde: '2026-10-20' }))
+    expect(leerCarga({ que: 'costo', producto: '1', monto: 1500, lista: 'local', proveedor: ' Textil Sur ', desde: '2026-10-20' }, { hoy: '2026-10-15' }))
       .toMatchObject({ que: 'costo', lista: null, proveedor: 'Textil Sur', desde: '2026-10-20T00:00:00-03:00' })
+  })
+  it('🔴 «desde» HOY = ahora (a las 00:00 perdería contra la copia de GN de la mañana); hacia atrás ⛔', () => {
+    expect(leerCarga({ que: 'costo', producto: '1', monto: 1500, desde: '2026-10-15' }, { hoy: '2026-10-15' })).toMatchObject({ desde: null })
+    expect(leerCarga({ que: 'costo', producto: '1', monto: 1500, desde: '2026-10-14' }, { hoy: '2026-10-15' }).error).toMatch(/desde hoy/)
   })
   it('frena lo que el motor rechazaría con un error menos claro', () => {
     expect(leerCarga({ producto: '1', monto: 1 }).error).toBeTruthy()
@@ -64,5 +68,26 @@ describe('leerCarga', () => {
     expect(leerCarga({ que: 'costo', producto: '1', monto: '' }).error).toBeTruthy()
     expect(leerCarga({ que: 'costo', producto: '1', monto: -5 }).error).toBeTruthy()
     expect(leerCarga({ que: 'costo', producto: '1', monto: 5, desde: '20/10' }).error).toMatch(/AAAA/)
+  })
+})
+
+describe('lo que encontró la review (15-oct)', () => {
+  it('la línea del producto mira TODAS las variantes, como la copia de GN', () => {
+    expect(lineaDelProducto('zattia', [null as unknown as string, 'ZA-1', 'STU-9'])).toBe('stunned')
+    expect(lineaDelProducto('zattia', ['ZA-1'])).toBe('zattia')
+    expect(lineaDelProducto('bdi', ['STU-1'])).toBe('bdi')
+  })
+  it('con precio_lista (011), el local que SIGUE al online muestra el de online y de qué lista salió', () => {
+    const r = armarPrecioDeProducto({
+      listas: LISTAS, vigentes: [vig('online', 27000, 'tn'), vig('mayorista', 15000)], costo: COSTO, tn: [tnV(27000)],
+      efectivos: [{ lista: 'local', precio: '27000', fuente: 'tn', de_lista: 'online' }, { lista: 'online', precio: '27000', fuente: 'tn', de_lista: 'online' }, { lista: 'mayorista', precio: '15000', fuente: 'gn', de_lista: 'mayorista' }],
+    })
+    expect(r.listas.map((l) => [l.lista, l.precio, l.deLista])).toEqual([['local', 27000, 'online'], ['online', 27000, null], ['mayorista', 15000, null]])
+    expect(r.avisos).toEqual([])
+  })
+  it('un 0 en TN es que falta: ⛔ cuenta ni dispara avisos', () => {
+    const r = armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: COSTO, tn: [tnV(0, 0), tnV(0, 0), tnV(25500)] })
+    expect(r.tn).toMatchObject({ precio: 25500, costo: 12000, distintos: false })
+    expect(r.avisos).toEqual([])
   })
 })

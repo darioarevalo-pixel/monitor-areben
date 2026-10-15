@@ -36,6 +36,7 @@ export function PreciosProducto() {
   const [marca, setMarca] = useState<MarcaErp>('zattia')
   const [texto, setTexto] = useState('')
   const [encontrados, setEncontrados] = useState<Encontrado[] | null>(null)
+  const [cortado, setCortado] = useState(false)
   const [ficha, setFicha] = useState<PrecioDeProducto | null>(null)
   const [tnVieja, setTnVieja] = useState(false)
   const [que, setQue] = useState('costo')
@@ -63,6 +64,7 @@ export function PreciosProducto() {
   // La búsqueda de Stock trae variantes: acá se agrupan por producto (precio y costo son del producto).
   const buscar = () => correr(async () => {
     setFicha(null)
+    setHecho(null)
     const r = await buscarPrendas(marca, texto)
     const porProducto = new Map<string, Encontrado>()
     for (const v of r.variantes) {
@@ -71,9 +73,11 @@ export function PreciosProducto() {
       porProducto.set(v.producto, p)
     }
     setEncontrados([...porProducto.values()])
+    setCortado(r.cortado)
   }, 'No se pudo buscar.')
 
   const abrir = (producto: string) => correr(async () => {
+    setHecho(null)
     const f = await leerPrecioDeProducto(marca, producto)
     setFicha(f)
     setTnVieja(f.tnLeidaEn ? Date.now() - Date.parse(f.tnLeidaEn) > VIEJA_MS : false)
@@ -101,10 +105,13 @@ export function PreciosProducto() {
     })
     if (!ok) return
     await correr(async () => {
-      await cargarPrecioCosto(marca, { que: esCosto ? 'costo' : 'precio', producto: ficha.producto, monto: String(n), lista, desde, motivo, ...(esCosto ? { proveedor } : {}) })
-      setHecho(`${nombre} cargado.`)
+      const r = await cargarPrecioCosto(marca, { que: esCosto ? 'costo' : 'precio', producto: ficha.producto, monto: n, lista, desde, motivo, ...(esCosto ? { proveedor } : {}) })
+      setHecho(r.futuro ? `${nombre} cargado: empieza a valer el ${desde}.` : `${nombre} cargado.`)
+      if (r.aviso) setError(r.aviso)
       setMonto(''); setDesde(''); setMotivo(''); setProveedor('')
-      setFicha(await leerPrecioDeProducto(marca, ficha.producto))
+      const f = await leerPrecioDeProducto(marca, ficha.producto)
+      setFicha(f)
+      setTnVieja(f.tnLeidaEn ? Date.now() - Date.parse(f.tnLeidaEn) > VIEJA_MS : false)
     }, 'No se pudo cargar.')
   }
 
@@ -112,6 +119,7 @@ export function PreciosProducto() {
     setMarca(k as MarcaErp)
     setEncontrados(null)
     setFicha(null)
+    setHecho(null)
   }
 
   return (
@@ -128,7 +136,7 @@ export function PreciosProducto() {
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
 
       {encontrados && !ficha && (
-        <SectionCard title="Productos">
+        <SectionCard title="Productos" subtitle={cortado ? 'La búsqueda trajo demasiadas prendas y se cortó: afiná la búsqueda si no aparece el producto.' : undefined}>
           {!encontrados.length ? <EmptyState title="No hay productos con ese SKU, código o nombre." /> : (
             <TableWrap>
               <table>
@@ -150,7 +158,7 @@ export function PreciosProducto() {
         <>
           <SectionCard title={ficha.nombre ?? `Producto ${ficha.producto}`} subtitle={`Producto ${ficha.producto} · ${ficha.skus} SKU`}>
             <div style={{ marginBottom: space[3] }}>
-              <Button variant="outline" onClick={() => setFicha(null)}>Volver a la búsqueda</Button>
+              <Button variant="outline" onClick={() => { setFicha(null); setHecho(null) }}>Volver a la búsqueda</Button>
             </div>
             {ficha.avisos.map((a) => <Notice key={a} tone="warning">{a}</Notice>)}
             <TableWrap>
@@ -161,7 +169,7 @@ export function PreciosProducto() {
                     <Tr key={l.lista}>
                       <Td>{l.nombre}</Td>
                       <Td style={{ textAlign: 'right' }}>{plata(l.precio)}</Td>
-                      <Td>{l.fuente ? FUENTE[l.fuente] ?? l.fuente : 'Sin precio'}</Td>
+                      <Td>{l.fuente ? FUENTE[l.fuente] ?? l.fuente : 'Sin precio'}{l.deLista && ` · sigue a ${ficha.listas.find((x) => x.lista === l.deLista)?.nombre ?? l.deLista}`}</Td>
                       <Td>{cuando(l.desde)}</Td>
                       <Td style={{ textAlign: 'right' }}>{plata(l.lista === 'local' ? ficha.gn?.precio : l.lista === 'mayorista' ? ficha.gn?.mayorista : null)}</Td>
                       <Td style={{ textAlign: 'right' }}>{l.lista === 'online' || l.lista === 'local' ? plata(ficha.tn?.precio) : '—'}{l.lista === 'online' && ficha.tn?.promocional != null && <> (oferta {plata(ficha.tn.promocional)})</>}</Td>

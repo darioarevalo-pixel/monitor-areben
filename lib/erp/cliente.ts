@@ -79,7 +79,7 @@ export type StockDePrenda = {
 }
 
 /** Precio por lista y costo de un producto (`erp › Precios`). */
-export type FilaPrecio = { lista: string; nombre: string; precio: number | null; fuente: string | null; desde: string | null; usuario: string | null; motivo: string | null }
+export type FilaPrecio = { lista: string; nombre: string; precio: number | null; fuente: string | null; desde: string | null; usuario: string | null; motivo: string | null; deLista: string | null }
 export type PrecioDeProducto = {
   producto: string; nombre: string | null; skus: number; tnLeidaEn: string | null
   listas: FilaPrecio[]
@@ -93,9 +93,9 @@ export const leerPrecioDeProducto = (marca: MarcaErp, producto: string) =>
   pedir<PrecioDeProducto>(null, `&vista=precio&marca=${marca}&producto=${producto}&nc=${Date.now()}`, 'No se pudo leer el precio.')
 
 /** Cargar un precio (de una lista) o el costo en el ERP: una fila nueva, ⛔ toca GN ni TN. */
-export type CargaPrecio = { que: 'precio' | 'costo'; producto: string; monto: string; lista?: string; desde?: string; motivo?: string; proveedor?: string }
+export type CargaPrecio = { que: 'precio' | 'costo'; producto: string; monto: number; lista?: string; desde?: string; motivo?: string; proveedor?: string }
 export const cargarPrecioCosto = (marca: MarcaErp, c: CargaPrecio) =>
-  pedir<{ ok: true; vigente: unknown }>(post({ accion: c.que === 'precio' ? 'cargar-precio' : 'cargar-costo', marca, ...c }), '', 'No se pudo cargar.')
+  pedir<{ ok: true; futuro: boolean; aviso: string | null }>(post({ accion: c.que === 'precio' ? 'cargar-precio' : 'cargar-costo', marca, ...c }), '', 'No se pudo cargar.')
 
 export const buscarPrendas = (marca: MarcaErp, q: string) =>
   pedir<{ variantes: PrendaEncontrada[]; cortado: boolean }>(null, `&vista=stock&marca=${marca}&q=${encodeURIComponent(q)}`, 'No se pudo buscar.')

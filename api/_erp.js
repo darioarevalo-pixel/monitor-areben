@@ -35,8 +35,7 @@ import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
-import { armarPrecioDeProducto, leerCarga } from '../lib/erp/precio.core.js'
-import { lineaDe } from '../lib/lineas.core.js'
+import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -346,27 +345,43 @@ export async function precioDeProducto({ marca, producto }) {
   if (!/^\d+$/.test(String(producto ?? ''))) return { status: 400, error: 'Producto inválido' }
   const { url, key } = cfgDeMarca(marca)
   const b = createClient(url, key)
-  const [inv, listas, vigentes, costo, hPrecio, hCosto, gn, lecturas] = await Promise.all([
-    b.from('inventario').select('product_name, sku').eq('product_id', producto),
+  const inv = await b.from('inventario').select('product_name, sku, barcode').eq('product_id', producto)
+  if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
+  const skus = [...new Set((inv.data || []).map((x) => x.sku).filter(Boolean))]
+  const linea = lineaDelProducto(marca, skus)
+  // Todo por (LÍNEA, producto): las vistas del motor son por marca, y en la base de Zattia conviven zattia y stunned.
+  const [listas, vigentes, efectivos, costo, hPrecio, hCosto, gn, lecturas] = await Promise.all([
     b.from('lista_precio').select('id, nombre'),
-    b.from('precio_vigente').select('lista, precio, fuente, vigente_desde, usuario, motivo').eq('product_id', producto),
-    b.from('costo_vigente').select('costo, proveedor, fuente, vigente_desde, usuario, motivo').eq('product_id', producto).maybeSingle(),
-    b.from('producto_precio').select('lista, precio, fuente, vigente_desde, usuario, motivo').eq('product_id', producto).order('vigente_desde', { ascending: false }).limit(40),
-    b.from('producto_costo').select('costo, proveedor, fuente, vigente_desde, usuario, motivo').eq('product_id', producto).order('vigente_desde', { ascending: false }).limit(40),
+    b.from('precio_vigente').select('lista, precio, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto),
+    b.from('precio_lista').select('lista, precio, fuente, de_lista').eq('marca', linea).eq('product_id', producto),
+    b.from('costo_vigente').select('costo, proveedor, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto).limit(1),
+    b.from('producto_precio').select('lista, precio, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto).order('vigente_desde', { ascending: false }).limit(40),
+    b.from('producto_costo').select('costo, proveedor, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto).order('vigente_desde', { ascending: false }).limit(40),
     b.from('productos').select('retailer_price, wholesaler_price, unit_cost').eq('id', producto).maybeSingle(),
     b.from('tn_catalogo_lectura').select('tienda, leida_en'),
   ])
-  for (const [t, r] of [['inventario', inv], ['lista_precio', listas], ['precio_vigente', vigentes], ['costo_vigente', costo], ['producto_precio', hPrecio], ['producto_costo', hCosto], ['productos', gn], ['tn_catalogo_lectura', lecturas]]) {
+  for (const [t, r] of [['lista_precio', listas], ['precio_vigente', vigentes], ['costo_vigente', costo], ['producto_precio', hPrecio], ['producto_costo', hCosto], ['productos', gn], ['tn_catalogo_lectura', lecturas]]) {
     if (r.error) throw new Error(`${t}: ${r.error.message}`)
   }
-  const skus = [...new Set((inv.data || []).map((x) => x.sku).filter(Boolean))]
-  const tn = skus.length ? await b.from('tn_variante').select('tienda, sku, precio, precio_promocional, costo').in('sku', skus) : { data: [] }
-  if (tn.error) throw new Error(`tn_variante: ${tn.error.message}`)
-  const tienda = tn.data[0]?.tienda
+  // `precio_lista` llega con sql/011: sin ella, lo vigente de cada lista tal cual (⛔ es un error).
+  if (efectivos.error && !/precio_lista/.test(efectivos.error.message)) throw new Error(`precio_lista: ${efectivos.error.message}`)
+  // TN por SKU (como lo guardó TN y en mayúsculas, sin espacios) y por código de barras: como cruza la copia del motor.
+  const claves = [...new Set(skus.flatMap((s) => [s, s.trim().toUpperCase()]))]
+  const barras = [...new Set((inv.data || []).map((x) => x.barcode).filter(Boolean))]
+  const [porSku, porBarra] = await Promise.all([
+    claves.length ? b.from('tn_variante').select('tienda, variant_id, sku, precio, precio_promocional, costo').in('sku', claves) : { data: [] },
+    barras.length ? b.from('tn_variante').select('tienda, variant_id, sku, precio, precio_promocional, costo').in('barcode', barras) : { data: [] },
+  ])
+  for (const r of [porSku, porBarra]) if (r.error) throw new Error(`tn_variante: ${r.error.message}`)
+  const tn = [...new Map([...porSku.data, ...porBarra.data].map((v) => [`${v.tienda}/${v.variant_id}`, v])).values()]
+  const tienda = tn[0]?.tienda
   return {
-    producto: String(producto), nombre: inv.data[0]?.product_name ?? null, skus: skus.length,
+    producto: String(producto), nombre: inv.data[0]?.product_name ?? null, skus: skus.length, linea,
     tnLeidaEn: (lecturas.data || []).find((x) => x.tienda === tienda)?.leida_en ?? null,
-    ...armarPrecioDeProducto({ listas: listas.data, vigentes: vigentes.data, costo: costo.data, historialPrecio: hPrecio.data, historialCosto: hCosto.data, gn: gn.data, tn: tn.data }),
+    ...armarPrecioDeProducto({
+      listas: listas.data, vigentes: vigentes.data, efectivos: efectivos.error ? null : efectivos.data, costo: costo.data[0] ?? null,
+      historialPrecio: hPrecio.data, historialCosto: hCosto.data, gn: gn.data, tn,
+    }),
   }
 }
 
@@ -375,9 +390,9 @@ async function conMotor(marca, que, fn) {
   const conexion = process.env[PG_DE_MARCA[marca]]
   if (!conexion) return { status: 409, error: `${que} todavía ⛔ está conectado: falta la conexión del motor en Vercel.` }
   const { default: pg } = await import('pg')
-  const db = new pg.Client({ connectionString: conexion })
-  await db.connect()
+  const db = new pg.Client({ connectionString: conexion, connectionTimeoutMillis: 5000, statement_timeout: 15000 })
   try {
+    await db.connect()
     return await fn(db)
   } finally {
     await db.end().catch(() => {})
@@ -392,13 +407,13 @@ async function conMotor(marca, que, fn) {
  */
 export async function cargarPrecioCosto({ marca, body, usuario }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  const c = leerCarga(body)
+  const c = leerCarga(body, { hoy: diaArgentino(Date.now()) })
   if (c.error) return { status: 400, error: c.error }
   const b = deps.b || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
-  const inv = await b.from('inventario').select('sku').eq('product_id', c.producto).limit(1)
+  const inv = await b.from('inventario').select('sku').eq('product_id', c.producto)
   if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
   if (!inv.data.length) return { status: 404, error: 'El producto no está en el espejo de GN.' }
-  const linea = lineaDe(marca, inv.data[0].sku)
+  const linea = lineaDelProducto(marca, inv.data.map((x) => x.sku))
   const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'Cargar precios', fn)
   return correr(async (db) => {
     const { cargarPrecio, cargarCosto } = await import('../motor/venta/precio.mjs')
@@ -407,7 +422,11 @@ export async function cargarPrecioCosto({ marca, body, usuario }, deps = {}) {
       ? await cargarPrecio(db, { ...comun, lista: c.lista, precio: c.monto })
       : await cargarCosto(db, { ...comun, costo: c.monto, proveedor: c.proveedor })
     if (!r.ok) return { status: 409, error: r.error.mensaje }
-    return { ok: true, vigente: r.vigente ?? null }
+    // Sin «desde» tiene que valer YA: si lo vigente ⛔ es lo recién cargado, se dice (⛔ «cargado» callado).
+    const fila = r.precio ?? r.costo, v = r.vigente
+    const esLaMisma = v && v.fuente === 'carga' && Number(v[c.que]) === Number(fila[c.que]) && Date.parse(v.vigente_desde) === Date.parse(fila.vigente_desde)
+    const aviso = !c.desde && !esLaMisma ? 'Quedó guardado, pero lo vigente sigue siendo otra fila: revisá el historial.' : null
+    return { ok: true, futuro: !!c.desde, aviso }
   })
 }
 
