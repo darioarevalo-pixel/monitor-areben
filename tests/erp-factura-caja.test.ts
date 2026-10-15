@@ -99,11 +99,11 @@ describe('renglonesDeVenta', () => {
 })
 
 describe('puedeHacerNC', () => {
-  it('sólo una venta ANULADA con factura y sin NC', () => {
+  it('sólo una venta ANULADA con factura (una NC atada puede ser la parcial de un cambio: lo decide notaDeCredito)', () => {
     expect(puedeHacerNC({ estado: 'anulada', facturas: [{ tipo: 'factura' }] })).toBeNull()
     expect(puedeHacerNC({ estado: 'confirmada', facturas: [{ tipo: 'factura' }] })).toMatch(/anula/)
     expect(puedeHacerNC({ estado: 'anulada', facturas: [] })).toMatch(/no tiene factura/)
-    expect(puedeHacerNC({ estado: 'anulada', facturas: [{ tipo: 'factura' }, { tipo: 'nc' }] })).toMatch(/ya tiene/)
+    expect(puedeHacerNC({ estado: 'anulada', facturas: [{ tipo: 'factura' }, { tipo: 'nc' }] })).toBeNull()
   })
 })
 

@@ -160,8 +160,8 @@ export function VentasPropias() {
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', marginBottom: space[3] }}>
               <Button variant="outline" onClick={() => setFicha(null)}>Volver a la búsqueda</Button>
               <Estado v={v} />
-              {ficha.conNotaDeCredito ? <Badge tone="neutral">Factura anulada con nota de crédito</Badge> : ficha.facturada ? <Badge tone="action">Facturada</Badge> : <Badge tone="neutral">Sin factura</Badge>}
-              {ficha.facturada && !ficha.conNotaDeCredito && v.estado === 'anulada' && (
+              {ficha.conNotaDeCredito ? <Badge tone="neutral">Con nota de crédito</Badge> : ficha.facturada ? <Badge tone="action">Facturada</Badge> : <Badge tone="neutral">Sin factura</Badge>}
+              {ficha.facturada && v.estado === 'anulada' && (
                 <Button tone="danger" variant="outline" disabled={trabajando} onClick={() => void hacerNC()}>Hacer nota de crédito</Button>
               )}
               <span style={{ flex: 1 }} />
