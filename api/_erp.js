@@ -554,13 +554,13 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
       } else factura = r.autorizadas[0]
     }
     if (factura.estado !== 'autorizada') return { status: 409, error: 'Esa venta tiene una factura a medio pedir: probá de nuevo en un minuto.' }
-    await db.query(`insert into venta_factura (venta_id, factura_id, tipo) values ($1, $2, 'factura') on conflict do nothing`, [f.id, String(factura.id)])
+    const sinAtar = await atarFactura(db, { venta: f, facturaId: factura.id, tipo: 'factura' })
     const inv = (f.lineas || []).length
       ? await b.from('inventario').select('product_id, size_id, product_name, size_name').in('product_id', [...new Set(f.lineas.map((l) => l.product_id))])
       : { data: [] }
     if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
     const nombres = new Map((inv.data || []).map((x) => [`${x.product_id}/${x.size_id}`, { nombre: x.product_name, talle: x.size_name }]))
-    return { ok: true, yaEstaba: !!ya, factura: filaParaPdf(factura, { numero: f.detalle?.gn_number ?? f.numero, renglones: renglonesDeVenta(f, nombres) }) }
+    return { ok: true, yaEstaba: !!ya, sinAtar, factura: filaParaPdf(factura, { numero: f.detalle?.gn_number ?? f.numero, renglones: renglonesDeVenta(f, nombres) }) }
   })
 }
 
@@ -583,9 +583,23 @@ export async function notaDeCreditoDeVenta({ marca, body, usuario }, deps = {}) 
     const factura = (f.facturas || []).find((x) => x.tipo === 'factura')
     const r = await notaDeCredito({ facturaId: factura.factura_id, usuario }, deps)
     if (r.status) return r
-    await db.query(`insert into venta_factura (venta_id, factura_id, tipo) values ($1, $2, 'nc') on conflict do nothing`, [f.id, String(r.autorizada.id)])
-    return { ok: true, ambiente: r.ambiente, autorizada: r.autorizada }
+    const sinAtar = await atarFactura(db, { venta: f, facturaId: r.autorizada.id, tipo: 'nc' })
+    return { ok: true, ambiente: r.ambiente, autorizada: r.autorizada, sinAtar }
   })
+}
+
+/**
+ * Ata la factura (o la NC) a la venta en el motor: `vincularFactura` (`venta_factura` es INMUTABLE desde 009 ⇒ ⛔ insert
+ * directo). Repetirla devuelve la misma fila. Si el motor ⛔ la ata (la venta se anuló entre medio, otro tipo…), el
+ * comprobante YA tiene CAE: ⛔ se tira; se dice a pantalla y al log, y queda para atar a mano.
+ * @returns {Promise<string|null>} null si quedó atada; si no, el aviso
+ */
+async function atarFactura(db, { venta, facturaId, tipo }) {
+  const { vincularFactura } = await import('../motor/venta/registrar.mjs')
+  const r = await vincularFactura(db, { venta_id: venta.id, factura_id: String(facturaId), tipo })
+  if (r.ok) return null
+  console.error(`[erp] ${tipo} ${facturaId} sin atar a la venta ${venta.id}: ${r.error.codigo} ${r.error.mensaje}`)
+  return `Salió con CAE, pero ⛔ quedó atada a la venta en el ERP: ${MENSAJE_ERROR_MOTOR[r.error.codigo] || r.error.mensaje}`
 }
 
 /** La factura (⛔ rechazada) que ya tiene esa clave en `facturas`, o null. */

@@ -112,7 +112,7 @@ export function VentasPropias() {
     if (!ok) return
     await correr(async () => {
       const r = await notaDeCreditoDeVenta(marca, ficha.venta.id)
-      setAviso(`Nota de crédito ${r.autorizada.numero} autorizada (CAE ${r.autorizada.cae})${r.ambiente !== 'produccion' ? ', de prueba' : ''}.`)
+      setAviso(`Nota de crédito ${r.autorizada.numero} autorizada (CAE ${r.autorizada.cae})${r.ambiente !== 'produccion' ? ', de prueba' : ''}.${r.sinAtar ? ` ${r.sinAtar}` : ''}`)
       setFicha(await leerFichaDeVenta(marca, ficha.venta.id))
     }, 'No se pudo hacer la nota de crédito.')
   }

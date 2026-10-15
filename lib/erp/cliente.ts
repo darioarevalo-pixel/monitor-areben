@@ -189,8 +189,8 @@ export const cambiarVenta = (marca: MarcaErp, c: {
 /** La factura a pedido de una venta propia (`erp › Caja`). B sin documento = consumidor final sin identificar. */
 export type PedidoFactura = { ventaId: string; clase: 'A' | 'B'; doc?: string; condicion?: 'ri' | 'monotributo'; reimprimir?: boolean }
 export const facturarVenta = (marca: MarcaErp, p: PedidoFactura) =>
-  pedir<{ ok: true; yaEstaba: boolean; factura: FacturaEmitida }>(post({ accion: 'facturar-venta', marca, ...p }), '', 'No se pudo facturar.')
+  pedir<{ ok: true; yaEstaba: boolean; sinAtar: string | null; factura: FacturaEmitida }>(post({ accion: 'facturar-venta', marca, ...p }), '', 'No se pudo facturar.')
 
 /** La nota de crédito de una venta propia ANULADA que tenía factura (desde su ficha). */
 export const notaDeCreditoDeVenta = (marca: MarcaErp, ventaId: string) =>
-  pedir<{ ok: true; ambiente: string; autorizada: { id: string; numero: number; cae: string; total: number } }>(post({ accion: 'nota-credito-venta', marca, ventaId }), '', 'No se pudo hacer la nota de crédito.')
+  pedir<{ ok: true; ambiente: string; sinAtar: string | null; autorizada: { id: string; numero: number; cae: string; total: number } }>(post({ accion: 'nota-credito-venta', marca, ventaId }), '', 'No se pudo hacer la nota de crédito.')

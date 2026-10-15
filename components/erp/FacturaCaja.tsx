@@ -86,6 +86,7 @@ export function FacturaCaja() {
     await correr(async () => {
       const r = await facturarVenta(store, pedido)
       setHecha({ factura: r.factura, yaEstaba: r.yaEstaba })
+      if (r.sinAtar) setError(r.sinAtar)
       setFicha(await leerFichaDeVenta(store, ficha.venta.id))
     }, 'No se pudo facturar.')
   }
