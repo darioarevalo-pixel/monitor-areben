@@ -78,6 +78,20 @@ export type StockDePrenda = {
   sinDeposito: string[]
 }
 
+/** Precio por lista y costo de un producto (`erp › Precios`). */
+export type FilaPrecio = { lista: string; nombre: string; precio: number | null; fuente: string | null; desde: string | null; usuario: string | null; motivo: string | null }
+export type PrecioDeProducto = {
+  producto: string; nombre: string | null; skus: number; tnLeidaEn: string | null
+  listas: FilaPrecio[]
+  costo: { costo: number | null; proveedor: string | null; fuente: string; desde: string; usuario: string; motivo: string | null } | null
+  gn: { precio: number | null; mayorista: number | null; costo: number | null } | null
+  tn: { tienda: string; variantes: number; precio: number | null; promocional: number | null; costo: number | null; distintos: boolean } | null
+  avisos: string[]
+  historial: Array<{ que: 'precio' | 'costo'; lista: string | null; valor: number | null; fuente: string; desde: string; usuario: string; motivo: string | null; proveedor?: string | null }>
+}
+export const leerPrecioDeProducto = (marca: MarcaErp, producto: string) =>
+  pedir<PrecioDeProducto>(null, `&vista=precio&marca=${marca}&producto=${producto}&nc=${Date.now()}`, 'No se pudo leer el precio.')
+
 export const buscarPrendas = (marca: MarcaErp, q: string) =>
   pedir<{ variantes: PrendaEncontrada[]; cortado: boolean }>(null, `&vista=stock&marca=${marca}&q=${encodeURIComponent(q)}`, 'No se pudo buscar.')
 

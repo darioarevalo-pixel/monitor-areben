@@ -14,6 +14,7 @@
  *   GET  ?recurso=erp&vista=pedidos-tn&marca=…                      los pedidos de TN abiertos y sin pagar (retienen stock)
  *   GET  ?recurso=erp&vista=diferencias&marca=…&fecha=YYYY-MM-DD    lo que el libro ⛔ explicó ese día + la sobreventa
  *   GET  ?recurso=erp&vista=stock&marca=bdi|zattia&q=texto            busca prendas (SKU, código, nombre)
+ *   GET  ?recurso=erp&vista=precio&marca=…&producto=ID                precio por lista y costo del producto, con GN y TN al lado
  *   GET  ?recurso=erp&vista=stock&marca=…&producto=ID&talle=ID       el libro y GN de esa prenda, con historial
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
@@ -33,6 +34,7 @@ import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
+import { armarPrecioDeProducto } from '../lib/erp/precio.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -332,6 +334,40 @@ export async function diferenciasDelDia({ marca, fecha: pedida }) {
   }
 }
 
+/**
+ * Precio y costo de un PRODUCTO (pestaña `erp › Precios`, sólo lectura): lo vigente por lista y el costo como los tiene
+ * el motor (sql/009), su historial, y al lado GN (el espejo `productos`) y Tienda Nube (`tn_variante` por los SKU del
+ * producto, con cuándo se leyó: puede estar vieja). Se busca con la misma búsqueda de Stock.
+ */
+export async function precioDeProducto({ marca, producto }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!/^\d+$/.test(String(producto ?? ''))) return { status: 400, error: 'Producto inválido' }
+  const { url, key } = cfgDeMarca(marca)
+  const b = createClient(url, key)
+  const [inv, listas, vigentes, costo, hPrecio, hCosto, gn, lecturas] = await Promise.all([
+    b.from('inventario').select('product_name, sku').eq('product_id', producto),
+    b.from('lista_precio').select('id, nombre'),
+    b.from('precio_vigente').select('lista, precio, fuente, vigente_desde, usuario, motivo').eq('product_id', producto),
+    b.from('costo_vigente').select('costo, proveedor, fuente, vigente_desde, usuario, motivo').eq('product_id', producto).maybeSingle(),
+    b.from('producto_precio').select('lista, precio, fuente, vigente_desde, usuario, motivo').eq('product_id', producto).order('vigente_desde', { ascending: false }).limit(40),
+    b.from('producto_costo').select('costo, proveedor, fuente, vigente_desde, usuario, motivo').eq('product_id', producto).order('vigente_desde', { ascending: false }).limit(40),
+    b.from('productos').select('retailer_price, wholesaler_price, unit_cost').eq('id', producto).maybeSingle(),
+    b.from('tn_catalogo_lectura').select('tienda, leida_en'),
+  ])
+  for (const [t, r] of [['inventario', inv], ['lista_precio', listas], ['precio_vigente', vigentes], ['costo_vigente', costo], ['producto_precio', hPrecio], ['producto_costo', hCosto], ['productos', gn], ['tn_catalogo_lectura', lecturas]]) {
+    if (r.error) throw new Error(`${t}: ${r.error.message}`)
+  }
+  const skus = [...new Set((inv.data || []).map((x) => x.sku).filter(Boolean))]
+  const tn = skus.length ? await b.from('tn_variante').select('tienda, sku, precio, precio_promocional, costo').in('sku', skus) : { data: [] }
+  if (tn.error) throw new Error(`tn_variante: ${tn.error.message}`)
+  const tienda = tn.data[0]?.tienda
+  return {
+    producto: String(producto), nombre: inv.data[0]?.product_name ?? null, skus: skus.length,
+    tnLeidaEn: (lecturas.data || []).find((x) => x.tienda === tienda)?.leida_en ?? null,
+    ...armarPrecioDeProducto({ listas: listas.data, vigentes: vigentes.data, costo: costo.data, historialPrecio: hPrecio.data, historialCosto: hCosto.data, gn: gn.data, tn: tn.data }),
+  }
+}
+
 /** Los pedidos de TN abiertos y sin pagar de la base de la marca (Zattia trae también los de Stunned). */
 export async function pedidosSinPagar({ marca }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
@@ -366,6 +402,11 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET' && req.query.vista === 'diferencias') {
       const r = await diferenciasDelDia({ marca: String(req.query.marca || ''), fecha: req.query.fecha })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'precio') {
+      const r = await precioDeProducto({ marca: String(req.query.marca || ''), producto: req.query.producto })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
