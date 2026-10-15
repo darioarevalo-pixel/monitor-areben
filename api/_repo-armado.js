@@ -2,7 +2,8 @@
 //
 //   GET  ?recurso=repo-armado&store=zattia&action=hoy&linea=zattia&sentido=llevar → el armado de hoy (o null)
 //   GET  ?recurso=repo-armado&store=zattia&action=historial&linea=zattia&limit=60   → los últimos armados, del más nuevo
-//   POST ?recurso=repo-armado  { action: 'abrir'|'guardar'|'cancelar'|'transferir'|'resolver', store, … }
+//   GET  ?recurso=repo-armado&store=zattia&action=confirmados&linea=zattia                → la solicitud de devolución sin enviar (o null)
+//   POST ?recurso=repo-armado  { action: 'abrir'|'guardar'|'cancelar'|'transferir'|'resolver'|'confirmados'|'enviar', store, … }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` (12 funciones en Hobby).
 // Zattia (con su línea Stunned) desde el 11-oct-2026 y BDI desde el 12-oct: cada uno en su base.
@@ -10,6 +11,9 @@
 // 🔑 La ficha es `docs/secciones/reposicion.md`. Lo que no se adivina:
 // - **La transferencia sale al final y sólo con lo escaneado** (`armado.core.js`). Lo que no se
 //   encontró no se mueve, y GN es atómico: si un renglón falla, no mueve ninguno (422).
+// - 🔑 **La devolución es una SOLICITUD** (Darío, 15-oct-2026): Darío o Bruno confirman qué vuelve
+//   (`borrador`) y la envían (`enviar`); recién ahí el local la ve y la arma. El borrador vive en esta
+//   misma tabla con estado `borrador`: ⛔ no cuenta como armado en ningún lado.
 // - 🔴 **Nunca dos transferencias del mismo armado.** Antes de llamar a GN la fila pasa de
 //   `en_curso` a `transfiriendo` con un update condicionado: el segundo clic (o la segunda compu)
 //   no encuentra la fila en `en_curso` y no llama. Y ⛔ **el POST a GN no se reintenta** salvo en
@@ -21,7 +25,9 @@ import { puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, dormir } from './_gn.js'
 import {
+  SIN_ENVIAR,
   SENTIDOS,
+  esAprobador,
   codigoArmado,
   trabado,
   fechaAR,
@@ -96,13 +102,19 @@ export default async function handler(req, res) {
           .select(COLUMNAS)
           .eq('store', store)
           .eq('linea', linea)
-          .neq('estado', 'cancelado')
+          .not('estado', 'in', `(cancelado,${SIN_ENVIAR})`)
           .order('creado_en', { ascending: false })
           .limit(limit)
         if (error) throw new Error(error.message)
         return res.status(200).json({ ok: true, armados: data || [] })
       }
-      if (accion !== 'hoy') return res.status(400).json({ error: 'action inválida (usá hoy o historial)' })
+      if (accion === 'confirmados') {
+        const linea = LINEAS.includes(req.query.linea) ? req.query.linea : LINEAS[0]
+        const { data, error } = await sb.from('repo_armado').select(COLUMNAS).eq('store', store).eq('linea', linea).eq('sentido', 'devolver').eq('estado', SIN_ENVIAR).order('creado_en', { ascending: false }).limit(1)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ ok: true, borrador: (data && data[0]) || null })
+      }
+      if (accion !== 'hoy') return res.status(400).json({ error: 'action inválida (usá hoy, historial o borrador)' })
       const linea = LINEAS.includes(req.query.linea) ? req.query.linea : LINEAS[0]
       const sentido = SENTIDOS.includes(req.query.sentido) ? req.query.sentido : 'llevar'
       // Primero uno abierto (de cualquier día: uno que quedó de ayer sin cerrar tiene que verse), y
@@ -111,7 +123,7 @@ export default async function handler(req, res) {
       const abierto = await base().in('estado', ABIERTOS).order('creado_en', { ascending: false }).limit(1)
       if (abierto.error) throw new Error(abierto.error.message)
       if (abierto.data && abierto.data[0]) return res.status(200).json({ ok: true, armado: abierto.data[0] })
-      const hoy = await base().eq('fecha', fechaAR()).neq('estado', 'cancelado').order('creado_en', { ascending: false }).limit(1)
+      const hoy = await base().eq('fecha', fechaAR()).not('estado', 'in', `(cancelado,${SIN_ENVIAR})`).order('creado_en', { ascending: false }).limit(1)
       if (hoy.error) throw new Error(hoy.error.message)
       return res.status(200).json({ ok: true, armado: (hoy.data && hoy.data[0]) || null })
     }
@@ -123,6 +135,8 @@ export default async function handler(req, res) {
       const linea = LINEAS.includes(b.linea) ? b.linea : null
       const sentido = SENTIDOS.includes(b.sentido) ? b.sentido : null
       if (!id || !linea || !sentido) return res.status(400).json({ error: 'faltan id, línea o sentido' })
+      // La devolución se arma sólo desde una solicitud enviada (`enviar`), nunca de una lista suelta.
+      if (sentido === 'devolver') return res.status(400).json({ error: 'La devolución se arma desde una solicitud.' })
       const pedido = sanearPedido(b.pedido)
       if (!pedido.length) return res.status(400).json({ error: 'La lista está vacía.' })
       const row = { id, store, linea, sentido, fecha: fechaAR(), persona: perfil.name || null, estado: 'en_curso', pedido }
@@ -138,8 +152,57 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, armado: await leer(id) })
     }
 
+    if (accion === 'confirmados') {
+      // Guardar lo confirmado (entero: el último guardado gana). Vacío = se descarta.
+      if (!esAprobador(perfil)) return res.status(403).json({ error: 'La devolución la deciden Darío o Bruno.' })
+      const linea = LINEAS.includes(b.linea) ? b.linea : null
+      if (!linea) return res.status(400).json({ error: 'falta la línea' })
+      const pedido = sanearPedido(b.pedido)
+      const prev = await sb.from('repo_armado').select('id').eq('store', store).eq('linea', linea).eq('sentido', 'devolver').eq('estado', SIN_ENVIAR).limit(1)
+      if (prev.error) throw new Error(prev.error.message)
+      const ahora = new Date().toISOString()
+      const previo = prev.data && prev.data[0]
+      if (!pedido.length) {
+        if (previo) {
+          const { error } = await sb.from('repo_armado').update({ estado: 'cancelado', cerrado_en: ahora, actualizado_en: ahora }).eq('id', previo.id).eq('estado', SIN_ENVIAR)
+          if (error) throw new Error(error.message)
+        }
+        return res.status(200).json({ ok: true, borrador: null })
+      }
+      if (previo) {
+        const { error } = await sb.from('repo_armado').update({ pedido, actualizado_en: ahora }).eq('id', previo.id).eq('estado', SIN_ENVIAR)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ ok: true, borrador: await leer(previo.id) })
+      }
+      const id = String(b.id || '').trim()
+      if (!id) return res.status(400).json({ error: 'falta el id' })
+      const { error } = await sb.from('repo_armado').insert({ id, store, linea, sentido: 'devolver', fecha: fechaAR(), persona: null, estado: SIN_ENVIAR, pedido })
+      if (error) throw new Error(error.message)
+      return res.status(200).json({ ok: true, borrador: await leer(id) })
+    }
+
     const armado = await leer(String(b.id || ''))
     if (!armado) return res.status(404).json({ error: 'Ese armado no está.' })
+
+    if (accion === 'enviar') {
+      // La solicitud pasa al local: desde acá es un armado de devolución como cualquiera.
+      if (!esAprobador(perfil)) return res.status(403).json({ error: 'La devolución la deciden Darío o Bruno.' })
+      if (armado.estado !== SIN_ENVIAR) return res.status(409).json({ error: 'Esta solicitud ya se envió.' })
+      const ahora = new Date().toISOString()
+      const { data, error } = await sb
+        .from('repo_armado')
+        .update({ estado: 'en_curso', fecha: fechaAR(), creado_en: ahora, actualizado_en: ahora, persona: null, transfer: { solicitud: { por: perfil.name || null, hora: ahora } } })
+        .eq('id', armado.id)
+        .eq('estado', SIN_ENVIAR)
+        .select('id')
+      if (error) {
+        // 🔴 Uno abierto por lista: el local todavía no terminó la solicitud anterior.
+        if (error.code === '23505') return res.status(409).json({ error: 'El local todavía no terminó la solicitud anterior. Esta queda guardada para enviarla después.' })
+        throw new Error(error.message)
+      }
+      if (!data || !data.length) return res.status(409).json({ error: 'Esta solicitud ya se envió.' })
+      return res.status(200).json({ ok: true, armado: await leer(armado.id) })
+    }
 
     if (accion === 'guardar') {
       if (armado.estado !== 'en_curso') return res.status(409).json({ error: 'Este armado ya se cerró.', armado })
@@ -148,6 +211,8 @@ export default async function handler(req, res) {
         escaneos: conTransferido(sanearEscaneos(b.escaneos, armado.pedido), transferidoDe(armado.transfer)),
         faltantes: sanearFaltantes(b.faltantes, armado.pedido),
         actualizado_en: new Date().toISOString(),
+        // Una solicitud enviada nace sin persona: es quien la arma en el local.
+        ...(armado.persona ? {} : { persona: perfil.name || null }),
       }
       const { error } = await sb.from('repo_armado').update(cambios).eq('id', armado.id).eq('estado', 'en_curso')
       if (error) throw new Error(error.message)

@@ -29,9 +29,11 @@ export type LineaPedido = {
    * 12-oct-2026), así que no se puede escanear: se suma con el botón «Caja cerrada».
    */
   caja?: number
+  /** Devolución: el producto vuelve en su bolsa con la etiqueta de 10 × 15 (Darío, 15-oct-2026). */
+  bolsa?: boolean
 }
 export type MotivoFaltante = 'no-estaba' | 'despues' | 'rechazada'
-export type EstadoArmado = 'en_curso' | 'transfiriendo' | 'transferido' | 'revisar' | 'cancelado'
+export type EstadoArmado = 'sin_enviar' | 'en_curso' | 'transfiriendo' | 'transferido' | 'revisar' | 'cancelado'
 export type Sentido = 'llevar' | 'devolver'
 
 export type Armado = {
@@ -57,6 +59,8 @@ export type Armado = {
     enCurso?: Record<string, number> | null
     descripcion?: string | null
     unidadesEnCurso?: number | null
+    /** Devolución: quién envió la solicitud al local y cuándo. */
+    solicitud?: { por: string | null; hora: string } | null
   } | null
   error: string | null
   creado_en: string
@@ -227,6 +231,27 @@ export function masNoEncontradas(armados: Armado[], tope = 10): { vid: string; n
 export async function abrirArmado(linea: LineaZ, sentido: Sentido, pedido: LineaPedido[]): Promise<{ armado: Armado; yaHabia?: boolean }> {
   const id = `ra${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   return escribir(linea, 'abrir', { id, linea, sentido, pedido })
+}
+
+// ─── La solicitud de devolución (Darío, 15-oct-2026) ───────────────────────────────────────────
+
+/** Lo confirmado por Darío o Bruno y todavía sin enviar al local. `null` si no hay nada. */
+export async function leerConfirmados(linea: LineaZ): Promise<Armado | null> {
+  const d = await pedir<{ borrador: Armado | null }>(`${API(linea)}&action=confirmados&linea=${linea}&nc=${Date.now()}`)
+  return d.borrador
+}
+
+/** Guarda lo confirmado ENTERO (el último guardado gana). Una lista vacía lo descarta. */
+export async function guardarConfirmados(linea: LineaZ, pedido: LineaPedido[]): Promise<Armado | null> {
+  const id = `ra${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  const d = await escribir<{ ok: true; borrador: Armado | null }>(linea, 'confirmados', { id, linea, pedido })
+  return d.borrador
+}
+
+/** Manda la solicitud al local: desde ahí es un armado de devolución. */
+export async function enviarSolicitud(linea: LineaZ, id: string): Promise<Armado> {
+  const d = await escribir<{ ok: true; armado: Armado }>(linea, 'enviar', { id })
+  return d.armado
 }
 
 export const guardarArmado = (linea: LineaZ, id: string, escaneos: Record<string, number>, faltantes: Record<string, MotivoFaltante>) => escribir(linea, 'guardar', { id, escaneos, faltantes })

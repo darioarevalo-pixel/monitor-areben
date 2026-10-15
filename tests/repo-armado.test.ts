@@ -102,6 +102,8 @@ function consulta() {
   q.eq = (c: string, v: unknown) => (filtros.push((f) => f[c] === v), q)
   q.neq = (c: string, v: unknown) => (filtros.push((f) => f[c] !== v), q)
   q.in = (c: string, vs: unknown[]) => (filtros.push((f) => vs.includes(f[c])), q)
+  // Sólo la forma que usa el handler: `.not('estado', 'in', '(a,b)')`.
+  q.not = (c: string, _op: string, v: string) => (filtros.push((f) => !String(v).replace(/[()]/g, '').split(',').includes(String(f[c]))), q)
   q.maybeSingle = async () => ({ data: filas()[0] ?? null, error: null })
   q.update = (c: Fila) => ((cambios = c), q)
   q.insert = async (f: Fila) => (tabla.push({ ...f }), { error: null })
@@ -111,6 +113,8 @@ function consulta() {
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: () => consulta() }) }))
 
 const LORENA = { name: 'lorena', admin: false, cuenta: null, acceso: { zattia: { reposicion: true } }, funcion: [] }
+const DARIO = { name: 'Darío Arevalo', admin: true, cuenta: null, acceso: { zattia: { reposicion: true } }, funcion: [] }
+let perfil: Record<string, unknown> = LORENA
 const sobre = (d: unknown) => Buffer.from(JSON.stringify(d), 'utf8').toString('base64')
 
 let llamadasGN: { url: string; body: Record<string, unknown> }[] = []
@@ -118,6 +122,7 @@ let respuestaGN: () => { status: number; body: unknown } = () => ({ status: 201,
 
 beforeEach(() => {
   tabla.length = 0
+  perfil = LORENA
   llamadasGN = []
   respuestaGN = () => ({ status: 201, body: { executed: true, transfer_id: 7800, movement_id: 1 } })
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
@@ -132,7 +137,7 @@ beforeEach(() => {
         const r = respuestaGN()
         return { ok: r.status < 300, status: r.status, headers: { get: () => null }, json: async () => r.body }
       }
-      return { ok: true, json: async () => ({ ok: true, perfil: LORENA }) }
+      return { ok: true, json: async () => ({ ok: true, perfil }) }
     }),
   )
 })
@@ -268,11 +273,59 @@ describe('api/_repo-armado.js', () => {
   })
 
   it('la devolución va del local al depósito', async () => {
-    await correr({ action: 'abrir', id: 'rd1', linea: 'zattia', sentido: 'devolver', pedido: PEDIDO })
+    perfil = DARIO
+    await correr({ action: 'confirmados', id: 'rd1', linea: 'zattia', pedido: PEDIDO })
+    await correr({ action: 'enviar', id: 'rd1' })
+    perfil = LORENA
     await correr({ action: 'transferir', id: 'rd1', escaneos: { '10_3': 1 } })
     expect(llamadasGN[0].body).toMatchObject({ from_store_id: 11780, to_store_id: 18210 })
     expect(String(llamadasGN[0].body.description)).toMatch(/^Devolución/)
     expect((tabla[0].transfer as { tandas: unknown[] }).tandas).toMatchObject([{ prendas: { '10_3': 1 }, desde: 11780, hacia: 18210 }])
+  })
+
+  // ── La devolución como solicitud (Darío, 15-oct-2026) ─────────────────────────────────────────
+
+  it('la devolución no se abre suelta, y la solicitud la deciden sólo Darío o Bruno', async () => {
+    expect((await correr({ action: 'abrir', id: 'rd1', linea: 'zattia', sentido: 'devolver', pedido: PEDIDO })).code).toBe(400)
+    expect((await correr({ action: 'confirmados', id: 'rd1', linea: 'zattia', pedido: PEDIDO })).code).toBe(403)
+    perfil = { ...DARIO, admin: false }
+    expect((await correr({ action: 'confirmados', id: 'rd1', linea: 'zattia', pedido: PEDIDO })).code).toBe(403)
+    expect(tabla).toHaveLength(0)
+  })
+
+  it('lo confirmado se guarda en UN borrador, que no es un armado hasta enviarlo', async () => {
+    perfil = DARIO
+    await correr({ action: 'confirmados', id: 'rd1', linea: 'zattia', pedido: [{ ...PEDIDO[0], bolsa: true }] })
+    await correr({ action: 'confirmados', id: 'rd2', linea: 'zattia', pedido: [{ ...PEDIDO[0], bolsa: true }, PEDIDO[1]] })
+    expect(tabla).toHaveLength(1)
+    expect(tabla[0]).toMatchObject({ id: 'rd1', estado: 'sin_enviar', sentido: 'devolver' })
+    expect((tabla[0].pedido as LineaPedido[]).map((l) => [l.vid, !!l.bolsa])).toEqual([
+      ['10_3', true],
+      ['11_4', false],
+    ])
+    expect((await correrGet({ action: 'confirmados', linea: 'zattia' })).body?.borrador).toMatchObject({ id: 'rd1' })
+    // ⛔ No aparece como el armado de hoy ni en el historial.
+    expect((await correrGet({ action: 'hoy', linea: 'zattia', sentido: 'devolver' })).body?.armado).toBeNull()
+    expect((await correrGet({ action: 'historial', linea: 'zattia' })).body?.armados).toEqual([])
+  })
+
+  it('al enviarla pasa al local: la firma quien la arma, y queda dicho quién la envió', async () => {
+    perfil = DARIO
+    await correr({ action: 'confirmados', id: 'rd1', linea: 'zattia', pedido: PEDIDO })
+    const r = await correr({ action: 'enviar', id: 'rd1' })
+    expect(r.code).toBe(200)
+    expect(tabla[0]).toMatchObject({ estado: 'en_curso', persona: null, transfer: { solicitud: { por: 'Darío Arevalo' } } })
+    expect((await correr({ action: 'enviar', id: 'rd1' })).code).toBe(409)
+    perfil = LORENA
+    await correr({ action: 'guardar', id: 'rd1', escaneos: { '10_3': 1 } })
+    expect(tabla[0].persona).toBe('lorena')
+  })
+
+  it('una solicitud vacía se descarta', async () => {
+    perfil = DARIO
+    await correr({ action: 'confirmados', id: 'rd1', linea: 'zattia', pedido: PEDIDO })
+    await correr({ action: 'confirmados', id: 'rd9', linea: 'zattia', pedido: [] })
+    expect(tabla[0].estado).toBe('cancelado')
   })
 
   it('no se puede descartar un armado con tandas ya transferidas', async () => {

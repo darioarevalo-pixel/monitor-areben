@@ -15,7 +15,9 @@
  * **Armar con el lector** (12-oct-2026): Lorena escanea en la compu contra la lista y el Monitor hace
  * la transferencia depósito → local en Gestión Nube (`ArmadoLector.tsx`, `api/_repo-armado.js`).
  * Devolución (12-oct-2026): Camila escanea en la compu del local y el Monitor transfiere local →
- * depósito; la limpieza grande es la misma pantalla con «Ver todo» y «Transferir y continuar».
+ * depósito, en varias tandas del carro con «Transferir y continuar».
+ * Desde el 15-oct-2026 la devolución es una SOLICITUD (`SolicitudDevolucion.tsx`): Darío o Bruno
+ * eligen qué vuelve, por prioridad y sin tope diario, y la envían al local.
  */
 
 import { Fragment, useEffect, useMemo, useState } from 'react'
@@ -29,10 +31,9 @@ import { dispararSyncStock } from '@/lib/sync-gn'
 import { indexarTn } from '@/lib/tn'
 import { construirInv } from '@/lib/reposicion/inventario'
 import { aplicarCats } from '@/lib/reposicion/core'
-import { CAMPO_LINEA, cfgVentas, decidirTodo, hoyAR, listaDevolver, listaLlevar, type CfgVentas, type FilaVentas, type LineaZ, type MarcaModo, type Modo } from '@/lib/reposicion/porVentas'
+import { CAMPO_LINEA, cfgVentas, decidirTodo, hoyAR, listaLlevar, type CfgVentas, type FilaVentas, type LineaZ, type MarcaModo, type Modo } from '@/lib/reposicion/porVentas'
 import { esStunned, ETIQUETA_LINEA } from '@/lib/lineas'
 import { reposicionPDFFilas } from '@/lib/reposicion/pdf'
-import { imprimirDevolucion } from '@/lib/reposicion/rollo'
 import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
 import { ultimaSincronizacion } from '@/lib/reposicion/cliente'
@@ -40,6 +41,7 @@ import { useEtiquetasCampania } from '@/components/etiquetas/useEtiquetasCampani
 import { ArmadoLector } from './ArmadoLector'
 import { OpcionesBdi } from './OpcionesBdi'
 import { HistorialArmados } from './HistorialArmados'
+import { SolicitudDevolucion } from './SolicitudDevolucion'
 import { abrirArmado, articuloDe, codigoArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type Sentido } from '@/lib/reposicion/armado'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
@@ -75,8 +77,6 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   )
   const filas = useMemo(() => decidirTodo(inv, cfg, hoy, linea), [inv, cfg, hoy, linea])
   const llevar = useMemo(() => listaLlevar(filas), [filas])
-  const [verTodo, setVerTodo] = useState(false)
-  const devolver = useMemo(() => listaDevolver(filas, verTodo ? null : cv.topeDevolucion), [filas, verTodo, cv.topeDevolucion])
   const exhibidos = useMemo(() => filas.filter((f) => f.d.modo.modo === 'exhibido'), [filas])
 
   const [tab, setTab] = useState<Pestana>('llevar')
@@ -89,7 +89,6 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   const totalLlevar = llevar.reduce((s, f) => s + cantLlevar(f), 0)
   const paraExhibir = llevar.filter((f) => f.d.exhibir && cantLlevar(f) > 0).length
   const conAlarma = llevar.filter((f) => f.d.soloAlarma).reduce((s, f) => s + cantLlevar(f), 0)
-  const totalDevolverHoy = devolver.filas.reduce((s, f) => s + f.devolverHoy, 0)
 
   // Desde cuándo se espera un «Actualizar stock» que tardó más de lo normal (`null` = no se espera).
   const [esperandoSync, setEsperandoSync] = useState<number | null>(null)
@@ -168,8 +167,10 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
 
   const onArmar = async (sentido: Sentido) => {
     if (abierto(sentido)) return setArmando(sentido)
-    const pedido = sentido === 'llevar' ? pedidoDesde(llevar, cantLlevar, true) : pedidoDesde(devolver.filas, (f) => (f as FilaVentas & { devolverHoy: number }).devolverHoy)
-    if (!pedido.length) return toast.aviso(sentido === 'llevar' ? `No hay ${art.plural} para reponer.` : `No hay ${art.plural} para devolver.`)
+    // La devolución se arma sólo desde una solicitud enviada (ya está abierta): acá no se inicia.
+    if (sentido === 'devolver') return
+    const pedido = pedidoDesde(llevar, cantLlevar, true)
+    if (!pedido.length) return toast.aviso(`No hay ${art.plural} para reponer.`)
     // Una lista armada con stock viejo pide lo que ya se movió ayer.
     if (edadMin != null && edadMin >= 360) {
       const ok = await confirmar({
@@ -225,7 +226,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         disabled={!abierto(sentido) && (!hayLista || esperandoStock)}
         title={esperandoStock && !abierto(sentido) ? 'Actualizá el stock: la lista todavía no descuenta lo transferido' : undefined}
       >
-        {abierto(sentido) ? 'Continuar armado' : 'Iniciar armado'}
+        {abierto(sentido) && Object.keys(abierto(sentido)!.escaneos || {}).length ? 'Continuar armado' : 'Iniciar armado'}
       </Button>
     )
 
@@ -247,10 +248,6 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
       rep.lastUpdate,
     )
     if (!ok) toast.aviso(`No hay ${art.plural} para llevar: están todas en 0.`)
-  }
-  const onImprimirDevolver = async () => {
-    if (!devolver.filas.length) return
-    await imprimirDevolucion(devolver.filas, ETIQUETA_LINEA[linea])
   }
 
   if (rep.cargando && !rep.rawInv.length) return <Esqueleto forma="tabla" filas={8} />
@@ -299,7 +296,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             venden {cv.umbralCaja} o más por semana van por caja de {cv.cajaTemplado}, cuando en el local quedan {cv.diasPedidoTemplado} días de venta o menos.
             Los accesorios que venden {cv.umbralAccesorio} o más por semana tienen en el local lo que se vende en {cv.diasAccesorio} días.
             <br />
-            <b>Devolución</b>: lo que supera el stock ideal, hasta {cv.topeDevolucion} {art.plural} por día, primero lo que no se vende.
+            <b>Devolución</b>: una solicitud que eligen Darío o Bruno entre lo que supera el stock ideal; primero lo que no se vende.
             <br />
             <br />
             Ventas del local: últimos {cv.ventanaDias} días y última semana.
@@ -312,7 +309,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             <br />
             <b>Reposición</b>: lo que falta para llegar al stock ideal. Si el local está en 0, la primera va <b>para exhibir</b> (alarma y etiquetas).
             <br />
-            <b>Devolución</b>: lo que supera el stock ideal, hasta {cv.topeDevolucion} {art.plural} por día, primero lo que no se vende.
+            <b>Devolución</b>: una solicitud que eligen Darío o Bruno entre lo que supera el stock ideal; primero lo que no se vende.
             <br />
             <br />
             Ventas del local y de Tienda Nube: últimos {cv.ventanaDias} días y última semana.
@@ -353,7 +350,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             { key: 'llevar', label: 'Reposición', badge: totalLlevar || undefined },
             // ⏸️ BDI: la devolución queda EN PAUSA (Darío, 12-oct-2026: «pendiente de analizar»). El
             // cálculo está hecho (100 por día); se vuelve a mostrar sacando esta condición.
-            ...(bdi ? [] : [{ key: 'devolver', label: 'Devolución', badge: devolver.total || undefined }]),
+            ...(bdi ? [] : [{ key: 'devolver', label: 'Devolución', badge: (abierto('devolver') ? resumenArmado(abierto('devolver')!.pedido, {}).pedidas : 0) || undefined }]),
             { key: 'historial', label: 'Historial' },
           ]}
         />
@@ -413,37 +410,20 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         </>
       ) : (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
-            <span style={{ fontSize: font.md, color: color.ink2 }}>
-              {verTodo ? (
-                <>
-                  <b>{devolver.total}</b> {art.plural} en total
-                </>
-              ) : (
-                <>
-                  <b>{totalDevolverHoy}</b> {art.plural} hoy
-                  {devolver.pendiente > 0 && <> · {devolver.pendiente} pendientes</>}
-                </>
-              )}
-            </span>
-            <label
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut, cursor: 'pointer' }}
-              title="La limpieza grande: la lista entera, sin el tope diario. Se puede armar en varias tandas del carro"
-            >
-              <input type="checkbox" checked={verTodo} onChange={(e) => setVerTodo(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} />
-              Ver todo
-            </label>
-            <Button variant="outline" style={{ marginLeft: 'auto' }} onClick={() => void onImprimirDevolver()} disabled={!devolver.filas.length}>
-              Imprimir ticket
-            </Button>
-            {botonArmado('devolver', devolver.filas.length > 0)}
-          </div>
-          <EstadoArmado armado={armados.devolver} onResolver={(a, h) => void onResolver(a, h)} />
-          {!devolver.filas.length ? (
-            <EmptyState icon="🎉" title={`No hay ${art.plural} para devolver`} hint="Ninguna variante supera su stock ideal." dashed />
-          ) : (
-            <TablaVentas filas={devolver.filas} cantidad={(f) => (f as FilaVentas & { devolverHoy: number }).devolverHoy} titulo="Devolver" />
-          )}
+          {/* Recién enviada (sin nada escaneado) ya la muestra la solicitud: el cartel de «en curso» sobra. */}
+          <EstadoArmado armado={armados.devolver?.estado === 'en_curso' && !Object.keys(armados.devolver.escaneos || {}).length ? null : armados.devolver} onResolver={(a, h) => void onResolver(a, h)} />
+          <SolicitudDevolucion
+            linea={linea}
+            rotulo={ETIQUETA_LINEA[linea]}
+            filas={filas}
+            armado={armados.devolver}
+            stockViejo={transferidoDespues(armados.devolver)}
+            puedeAprobar={puedeMarcar}
+            bolsaProd={cv.bolsaProd}
+            guardarBolsaProd={(v) => rep.guardarCfg({ ...cfg, [CAMPO_LINEA[linea]]: { ...cv, bolsaProd: v } })}
+            boton={botonArmado('devolver', true)}
+            onEnviada={() => void traerArmados()}
+          />
         </>
       )}
 
@@ -699,7 +679,6 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
         {param('coberturaDias', 'Días de reserva')}
         {param('ventanaDias', 'Días de ventas analizados')}
         {param('loteMin', 'Reposición mínima')}
-        {param('topeDevolucion', 'Devolución diaria máxima')}
         {param('diasNuevo', 'Días como producto nuevo')}
       </div>
 

@@ -104,6 +104,12 @@ export type CfgVentas = {
    * a Lorena al escanear. `hasta` vencido = no existe.
    */
   sinPrecio: Record<string, { hasta?: string }>
+  /**
+   * Devolución: si el producto vuelve en su bolsa con la etiqueta de 10 × 15 (`true`) o suelto en el
+   * carro (`false`). Lo elige Darío o Bruno al confirmar y queda recordado; sin elegir, decide el
+   * nombre (`bolsaPorDefecto`: jeans, shorts y bermudas van sueltos — Darío, 15-oct-2026).
+   */
+  bolsaProd: Record<string, boolean>
 }
 
 /**
@@ -134,6 +140,7 @@ export const CFG_VENTAS_DEFAULT: CfgVentas = {
   modosCat: {},
   modosProd: {},
   sinPrecio: {},
+  bolsaProd: {},
 }
 
 /**
@@ -169,7 +176,7 @@ export const CAMPO_LINEA: Record<LineaZ, 'ventas' | 'ventasStunned'> = { zattia:
 export function cfgVentas(cfg: RepoCfg, linea: LineaZ = 'zattia'): CfgVentas {
   const v = cfg[CAMPO_LINEA[linea]] || {}
   const base = linea === 'bdi' ? CFG_VENTAS_BDI : CFG_VENTAS_DEFAULT
-  return { ...base, ...v, modosCat: { ...(v.modosCat || {}) }, modosProd: { ...(v.modosProd || {}) }, sinPrecio: { ...(v.sinPrecio || {}) } }
+  return { ...base, ...v, modosCat: { ...(v.modosCat || {}) }, modosProd: { ...(v.modosProd || {}) }, sinPrecio: { ...(v.sinPrecio || {}) }, bolsaProd: { ...(v.bolsaProd || {}) } }
 }
 
 export type TipoBdi = 'funda' | 'templado' | 'accesorio'

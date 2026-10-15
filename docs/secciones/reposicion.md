@@ -52,8 +52,8 @@ columna.
   pusieron para el mínimo fijo y pisaban a las ventas. Siguen guardados porque BDI los usa. Los
   **apagados sí** se respetan.
 - 🔑 **Devolver al depósito es la mitad que faltaba**: el local se llenó porque sólo existía el
-  camino de ida. Tope diario (30) porque armar el carro es lo lento; la **limpieza grande** (todo de
-  una, ~600 u el 11-oct) se hace con el escaneo de la parte 3, por eso existe «Ver la lista entera».
+  camino de ida. Desde el 15-oct es una **solicitud** sin tope (ver abajo); `topeDevolucion` quedó
+  guardado pero sin uso.
 - 🔑 **Los papeles llevan sólo lo que se hace** (Darío): ⛔ ni stock ni ventas ni «para exhibir». El
   A4 de Lorena: producto · talle · cuánto · una casilla (tilde / cruz / número, **en palabras**:
   Helvetica no tiene ✓ ni ✗). El rollo de Camila: SKU · «PRODUCTO - variante» · Cant. · Listo.
@@ -172,6 +172,34 @@ fijo: **«Retirar solo de la reserva, nunca la exhibida.»** Lo que sobra está 
   tanda en `transfer.tandas`. El servidor no deja que lo escaneado baje de lo transferido (`conTransferido`),
   ni descartar un armado con tandas (esas prendas ya cambiaron de depósito). Un `revisar` a mitad de una
   tanda guarda lo que iba en `transfer.enCurso` y `resolver` lo suma.
+
+## La devolución es una SOLICITUD (Darío, 15-oct-2026)
+
+«Parece que todas las devoluciones valen lo mismo y hay que traer cerca de 700 productos»: la lista
+diaria con tope (30) se reemplazó por una solicitud que deciden **Darío o Bruno** (`esAprobador` en
+`armado.core.js`, la misma regla que `puedeEliminarTn`). `components/reposicion/SolicitudDevolucion.tsx`
++ `lib/reposicion/solicitud.ts` (puro, `tests/reposicion-solicitud.test.ts`).
+
+- **Propuesta**: lo que sobra, **por producto**. 🔑 Orden: primero **sin ventas en 60 días** (sumando
+  TODAS las variantes del producto), después **lo que más sobra**. ⛔ Sin tope diario («30 tops es re
+  poco; 30 jeans se complica»): lo pone quien elige. No propone lo que ya está confirmado o en el local.
+- **Confirmados**: se confirma en varias veces; vive en `repo_armado` con estado **`sin_enviar`**
+  (acción `confirmados`, GET y POST). ⛔ No es un armado: fuera del historial, del «hoy» y del índice
+  de «uno abierto». Vacío = `cancelado`. ⚠️ No se llama «borrador»: el test del VOCABULARIO lo frena.
+- **Cerrar solicitud** → resumen (productos, prendas, etiquetas de bolsa, sueltas) → **Enviar al
+  local** (`enviar`): pasa a `en_curso` con `persona` vacía (la firma quien la arma, al primer
+  guardado) y `transfer.solicitud = { por, hora }`. Si el local no terminó la anterior, el índice
+  único frena el envío (409) y la solicitud queda guardada.
+- ⛔ `abrir` con `sentido: 'devolver'` da 400: la devolución sale SÓLO de una solicitud.
+- 🔑 **Bolsa por producto** (`LineaPedido.bolsa`): las etiquetas de 10 × 15 se imprimen en el local
+  **antes de juntar** (`buildSkuGrandePdf`, con clave en Zattia). Por defecto van sueltos los códigos
+  **RJE/RSH/RBE** y los nombres JEAN/SHORT/BERMUDA; ⛔ la categoría no cuenta («FALDAS Y SHORTS» es una
+  mini, «FADE #002» es bermuda). Lo que se cambia a mano queda en `ventas.bolsaProd`.
+- Al escanear, la pantalla dice **«Bolsa nueva RTO-0065»** (la primera del producto), **«A la bolsa…»**
+  o **«Suelta al carro»**. La voz sigue callada.
+- Medido el 15-oct: 633 prendas sobran en 225 productos; 45 sin ventas (129 prendas).
+- ⏸️ BDI sigue con la pestaña oculta. Su prioridad pedida: primero los diseños que venden online y
+  no tienen depósito (hoy BDI sólo mira ventas del local: falta traer las online).
 
 ## La Zebra en el armado (tanda 4, 12-oct-2026)
 

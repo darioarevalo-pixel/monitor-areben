@@ -27,6 +27,8 @@ const ESTADO: Record<Armado['estado'], { txt: string; tone: 'success' | 'brand' 
   transfiriendo: { txt: 'Sin confirmar', tone: 'danger' },
   revisar: { txt: 'Sin confirmar', tone: 'danger' },
   cancelado: { txt: 'Descartada', tone: 'neutral' },
+  // No llega nunca: el servidor no manda borradores al historial.
+  sin_enviar: { txt: 'Sin enviar', tone: 'neutral' },
 }
 
 const RESULTADO: Record<EstadoRenglon, { txt: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {

@@ -1,0 +1,90 @@
+// La devolución como solicitud (Darío, 15-oct-2026): el orden de prioridad, la bolsa y el resumen.
+import { describe, it, expect } from 'vitest'
+import { bolsaDeLectura, bolsaPorDefecto, conBolsa, fusionar, lineasDe, porProducto, propuesta, resumenSolicitud } from '@/lib/reposicion/solicitud'
+import type { FilaVentas } from '@/lib/reposicion/porVentas'
+import type { LineaPedido } from '@/lib/reposicion/armado'
+
+const F = (pid: string, sid: string, sku: string, name: string, devolver: number, vendidas: number): FilaVentas =>
+  ({ it: { vid: `${pid}_${sid}`, pid, sid, sku, barcode: '', name, size: sid, cat: '', local: devolver + 2, deposito: 0 }, d: { devolver, vendidas } }) as unknown as FilaVentas
+
+const filas = [
+  F('1', 'S', 'RTO-0001-S', 'TOP ZOE', 2, 3),
+  F('1', 'M', 'RTO-0001-M', 'TOP ZOE', 0, 1), // no sobra, pero sus ventas cuentan para el producto
+  F('2', '38', 'RBE-0002-38', 'JEAN MOM', 5, 1),
+  F('3', 'U', 'RBO-0003-U', 'BODY LIA', 1, 0),
+  F('4', 'S', 'RTO-0004-S', 'TOP ANA', 4, 0),
+]
+
+describe('la propuesta', () => {
+  it('🔑 primero lo que no vendió nada en 60 días, después lo que más sobra', () => {
+    expect(propuesta(filas).map((g) => [g.name, g.prioridad, g.sobra])).toEqual([
+      ['TOP ANA', 'sin-ventas', 4],
+      ['BODY LIA', 'sin-ventas', 1],
+      ['JEAN MOM', 'con-ventas', 5],
+      ['TOP ZOE', 'con-ventas', 2],
+    ])
+  })
+
+  it('las ventas son del PRODUCTO entero: una variante sin ventas de un producto que vende no es «sin ventas»', () => {
+    expect(propuesta(filas).find((g) => g.pid === '1')).toMatchObject({ prioridad: 'con-ventas', vendidas: 4, clave: 'RTO-0001' })
+  })
+
+  it('lo que ya está en una solicitud no se propone dos veces', () => {
+    const g = propuesta(filas, { '2_38': 3, '4_S': 4 })
+    expect(g.find((x) => x.pid === '2')?.sobra).toBe(2)
+    expect(g.find((x) => x.pid === '4')).toBeUndefined()
+  })
+})
+
+describe('la bolsa', () => {
+  it('jeans, shorts y bermudas van sueltos; el resto en bolsa', () => {
+    expect(bolsaPorDefecto({ name: 'JEAN MOM' })).toBe(false)
+    expect(bolsaPorDefecto({ name: 'SHORT DENIM' })).toBe(false)
+    // Por el código: «FADE #002» es bermuda sin decirlo (lista real del 15-oct).
+    expect(bolsaPorDefecto({ name: 'FADE #002', sku: 'RBE-0007-38' })).toBe(false)
+    // ⛔ La categoría no cuenta: «FALDAS Y SHORTS» es de una mini.
+    expect(bolsaPorDefecto({ name: 'MINI KYLIE', sku: 'RMI-0039-S' })).toBe(true)
+    expect(bolsaPorDefecto({ name: 'TOP ZOE' })).toBe(true)
+  })
+
+  it('lo elegido a mano queda recordado y le gana al nombre', () => {
+    expect(conBolsa({ pid: '2', name: 'JEAN MOM' }, { '2': true })).toBe(true)
+    expect(conBolsa({ pid: '1', name: 'TOP ZOE' }, { '1': false })).toBe(false)
+  })
+
+  it('al escanear: la primera del producto abre su bolsa, las siguientes van a la misma', () => {
+    const p: LineaPedido[] = lineasDe(propuesta(filas).find((g) => g.pid === '1')!, (v) => v.sobra, true)
+    expect(bolsaDeLectura(p, { '1_S': 1 }, p[0])).toEqual({ bolsa: 'RTO-0001', nueva: true })
+    expect(bolsaDeLectura(p, { '1_S': 2 }, p[0])).toEqual({ bolsa: 'RTO-0001', nueva: false })
+    expect(bolsaDeLectura(p, {}, { ...p[0], bolsa: undefined })).toBeNull()
+  })
+})
+
+describe('confirmar y resumir', () => {
+  const g = propuesta(filas)
+  const jean = g.find((x) => x.pid === '2')!
+  const top = g.find((x) => x.pid === '4')!
+
+  it('la cantidad elegida no pasa de lo que sobra', () => {
+    expect(lineasDe(jean, () => 99, false).map((l) => l.cant)).toEqual([5])
+    expect(lineasDe(jean, () => 0, false)).toEqual([])
+  })
+
+  it('confirmar en varias veces suma, ordenado por SKU, y la bolsa la decide lo último', () => {
+    const a = fusionar([], lineasDe(top, () => 2, true))
+    const b = fusionar(a, [...lineasDe(top, () => 1, false), ...lineasDe(jean, (v) => v.sobra, false)])
+    expect(b.map((l) => [l.sku, l.cant, !!l.bolsa])).toEqual([
+      ['RBE-0002-38', 5, false],
+      ['RTO-0004-S', 3, false],
+    ])
+  })
+
+  it('el resumen: productos, prendas, etiquetas de bolsa y lo suelto', () => {
+    const p = fusionar([], [...lineasDe(top, (v) => v.sobra, true), ...lineasDe(jean, (v) => v.sobra, false)])
+    expect(resumenSolicitud(p)).toEqual({ productos: 2, prendas: 9, bolsas: 1, sueltas: 5 })
+    expect(porProducto(p).map((x) => [x.clave, x.bolsa])).toEqual([
+      ['RBE-0002', false],
+      ['RTO-0004', true],
+    ])
+  })
+})

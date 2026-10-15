@@ -38,6 +38,7 @@ import {
   type Rechazado,
 } from '@/lib/reposicion/armado'
 import { avisar, prepararSonido } from '@/lib/sonido'
+import { bolsaDeLectura } from '@/lib/reposicion/solicitud'
 import type { RepoItem } from '@/lib/reposicion/tipos'
 import { aVarianteEti } from '@/lib/reposicion/etiquetasExhibir'
 import type { VarianteEti } from '@/lib/etiquetas/tipos'
@@ -81,6 +82,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
   const [guardado, setGuardado] = useState<Guardado>('ok')
   // La última que SUMÓ: un cartel rojo no la borra, así se sigue viendo dónde iba.
   const [ultima, setUltima] = useState<Extract<Lectura, { tipo: 'suma' }> | null>(null)
+  const [bolsa, setBolsa] = useState<{ va: ReturnType<typeof bolsaDeLectura> } | null>(null)
   const [cartel, setCartel] = useState<Cartel | null>(null)
   const [extra, setExtra] = useState(0)
   const [escuchando, setEscuchando] = useState(false)
@@ -169,6 +171,8 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
     const l = leerCodigo(pedido, escaneos, codigo, inv)
     if (l.tipo === 'suma') {
       setUltima(l)
+      // Devolución: a qué bolsa va (la primera de un producto abre su bolsa) o suelta al carro.
+      setBolsa(devolucion ? { va: bolsaDeLectura(pedido, { ...escaneos, [l.linea.vid]: l.n }, l.linea) } : null)
       setEscaneos((e) => ({ ...e, [l.linea.vid]: l.n }))
       // Si estaba anotada como «no estaba», apareció: se saca la marca.
       if (faltantes[l.linea.vid]) setFaltantes(({ [l.linea.vid]: _, ...resto }) => resto)
@@ -330,7 +334,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
         />
       )}
 
-      <UltimaLectura l={ultima} et={devolucion ? null : et} art={art} />
+      <UltimaLectura l={ultima} et={devolucion ? null : et} art={art} bolsa={bolsa} />
 
       {abiertas.length > 0 && (
         <>
@@ -400,7 +404,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
 /** La prenda del pedido con la forma que piden las etiquetas. */
 const varDeLinea = (l: LineaPedido): VarianteEti => ({ id: l.vid, pid: l.pid, name: l.name, size: l.size, sku: l.sku, barcode: l.barcode, stock: 0 })
 
-function UltimaLectura({ l, et, art }: { l: Extract<Lectura, { tipo: 'suma' }> | null; et: EtiquetasArmado | null; art: { singular: string } }) {
+function UltimaLectura({ l, et, art, bolsa }: { l: Extract<Lectura, { tipo: 'suma' }> | null; et: EtiquetasArmado | null; art: { singular: string }; bolsa: { va: ReturnType<typeof bolsaDeLectura> } | null }) {
   if (!l)
     return (
       <div style={{ marginTop: space[3], padding: space[4], border: `1px solid ${color.line}`, borderRadius: 'var(--mo-r-xl)', textAlign: 'center', color: color.mut, fontSize: font.md }}>
@@ -423,6 +427,12 @@ function UltimaLectura({ l, et, art }: { l: Extract<Lectura, { tipo: 'suma' }> |
         background: fondo,
       }}
     >
+      {bolsa && (
+        // Devolución (Darío, 15-oct-2026): lo que va en bolsa, a la bolsa de SU producto; el resto suelto.
+        <div style={{ fontSize: 30, fontWeight: 800, color: bolsa.va ? color.brand : color.ink2, marginBottom: space[2] }}>
+          {bolsa.va ? `${bolsa.va.nueva ? 'Bolsa nueva' : 'A la bolsa'} ${bolsa.va.bolsa}` : 'Suelta al carro'}
+        </div>
+      )}
       {l.soloAlarma && <div style={{ fontSize: font.lg, fontWeight: 800, color: color.brand, marginBottom: space[2] }}>Con alarma · sin etiqueta de precio</div>}
       {l.exhibir && <div style={{ fontSize: font.lg, fontWeight: 800, color: color.warningInk, marginBottom: space[2] }}>Para exhibir: alarma y etiquetas</div>}
       {l.exhibir && et && (
@@ -474,6 +484,11 @@ function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, onC
                 {l.exhibir && et && (
                   <span style={{ marginLeft: 6 }}>
                     <BotonEtiquetasExhibir v={varDeLinea(l)} et={et} size="sm" />
+                  </span>
+                )}
+                {l.bolsa && (
+                  <span style={{ marginLeft: 6 }} title="Va en la bolsa de su producto">
+                    <Badge tone="brand">en bolsa</Badge>
                   </span>
                 )}
                 {faltantes[l.vid] === 'no-estaba' && (
