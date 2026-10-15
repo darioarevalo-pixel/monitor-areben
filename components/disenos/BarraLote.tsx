@@ -32,6 +32,8 @@ export function BarraLote({
   n,
   onEstado,
   onYaViene,
+  nEnRonda = 0,
+  onSacarDeRonda,
   onQuitar,
   onLimpiar,
 }: {
@@ -39,6 +41,10 @@ export function BarraLote({
   onEstado: (e: EstadoDiseno) => void
   /** Sólo donde hay Ingresos (BDI). Sin él, el botón no se dibuja. */
   onYaViene?: () => void
+  /** Cuántos de los elegidos están en la última ronda. Sin ninguno, el botón no se dibuja. */
+  nEnRonda?: number
+  /** Saca de la última ronda los elegidos que están en ella. El link no cambia. */
+  onSacarDeRonda?: () => void
   onQuitar: () => void
   onLimpiar: () => void
 }) {
@@ -71,6 +77,12 @@ export function BarraLote({
       {onYaViene && (
         <Button size="sm" variant="outline" onClick={onYaViene}>
           📦 Ya viene en…
+        </Button>
+      )}
+      {/* ⚠️ Dice «de la ronda» con todas las letras: el «Sacar» de al lado saca del TABLERO. */}
+      {onSacarDeRonda && nEnRonda > 0 && (
+        <Button size="sm" variant="outline" onClick={onSacarDeRonda}>
+          🗳 Sacar de la ronda{nEnRonda < n ? ` (${nEnRonda} de ${n} están)` : ''}
         </Button>
       )}
       <Button size="sm" variant="ghost" tone="danger" onClick={onQuitar}>

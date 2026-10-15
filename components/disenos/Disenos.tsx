@@ -35,6 +35,7 @@ import {
   olvidarLocales,
 } from '@/lib/disenos/persistencia'
 import { useSesion } from '@/components/SesionProvider'
+import { sacarDeRonda } from '@/lib/disenos/votacion'
 import { Button, Card as Superficie, Lightbox, Notice, Tabs, color, font, space, useConfirmar, useFiltroUrl, useToast } from '@/components/ui'
 
 let seq = 0
@@ -67,6 +68,20 @@ export function Disenos() {
 
   // El ★ de cada tarjeta. Vive acá afuera del `Diseno` a propósito: ver el docblock del hook.
   const { resumen: ronda, recargar: recargarRonda } = useResumenRonda(marca)
+
+  // Saca de la última ronda —la del ★— los elegidos del tablero, en UNA escritura. El link no
+  // cambia y los votos quedan: se devuelven desde Votaciones → Resultados.
+  const sacarDeLaRonda = async (ids: string[]) => {
+    const r = ronda.ronda
+    if (!r || !ids.length) return
+    try {
+      await sacarDeRonda(marca, r.id, ids, true)
+      await recargarRonda()
+      toast.ok(`${ids.length === 1 ? 'Se sacó 1 diseño' : `Se sacaron ${ids.length} diseños`} de «${r.titulo || 'la ronda'}». El link ya no ${ids.length === 1 ? 'lo' : 'los'} muestra; se ${ids.length === 1 ? 'devuelve' : 'devuelven'} desde Votaciones → Resultados.`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   useEffect(() => {
     let vivo = true
@@ -307,6 +322,7 @@ export function Disenos() {
             onVer={setPreview}
             onCargar={cargar}
             onYaViene={esDeMarca('ingresos', marca) ? setYaVieneIds : undefined}
+            onSacarDeRonda={ronda.ronda ? (ids) => void sacarDeLaRonda(ids) : undefined}
             acciones={botonesTablero}
           />
         </>

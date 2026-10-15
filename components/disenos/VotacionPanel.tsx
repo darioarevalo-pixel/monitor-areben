@@ -144,7 +144,7 @@ export function VotacionPanel({
     pendientes.current++
     fila.current = fila.current.then(async () => {
       try {
-        await sacarDeRonda(marca, r.id, disenoId, sacado)
+        await sacarDeRonda(marca, r.id, [disenoId], sacado)
       } catch (e) {
         toast.error(e instanceof Error ? e.message : String(e))
         await verResultados(r)

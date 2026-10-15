@@ -151,8 +151,8 @@ export async function cerrarRonda(store: Marca, id: string): Promise<void> {
  * Saca un diseño de la ronda (`sacado: true`) o lo devuelve (`false`). El link no cambia y los
  * votos que tenía quedan guardados: volverlo a la ronda los trae.
  */
-export async function sacarDeRonda(store: Marca, id: string, disenoId: string, sacado: boolean): Promise<void> {
-  await pedir(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store, action: 'sacar', id, disenoId, sacado }) })
+export async function sacarDeRonda(store: Marca, id: string, disenoIds: string[], sacado: boolean): Promise<void> {
+  await pedir(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store, action: 'sacar', id, disenoIds, sacado }) })
 }
 
 /** Borra la ronda **y sus votos** (`on delete cascade`). Es el único verbo que pierde votos. */

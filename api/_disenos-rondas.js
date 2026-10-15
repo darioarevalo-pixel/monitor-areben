@@ -6,7 +6,7 @@
 //   GET  ?recurso=disenos-rondas&store=&id=&vista=resultados       → { ok, ronda, boletas }
 //   POST { recurso:'disenos-rondas', store, action:'crear', titulo, disenos, ids }
 //   POST { recurso:'disenos-rondas', store, action:'cerrar', id }
-//   POST { recurso:'disenos-rondas', store, action:'sacar', id, disenoId, sacado }
+//   POST { recurso:'disenos-rondas', store, action:'sacar', id, disenoIds, sacado }
 //
 // ⚠️ **Este archivo es el lado CON SESIÓN. El lado abierto a internet es `_disenos-votacion.js`**,
 // y están separados a propósito: mismo criterio que `reclamos`/`reclamo` y `canjes`/`canje` en
@@ -22,7 +22,7 @@ import { randomUUID } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
-import { marcarSacado, paraElVotante, resumenLiviano, snapshotDeRonda } from '../lib/disenos/votacion.core.js';
+import { marcarSacados, paraElVotante, resumenLiviano, snapshotDeRonda } from '../lib/disenos/votacion.core.js';
 
 /** Días que vive el link. Cerrar la ronda lo revoca antes. Reclamos usa 15 y canjes 45; una ronda
  *  de diseños se decide en una semana, y 30 deja aire sin que un link quede dando vueltas un año. */
@@ -226,12 +226,14 @@ export default async function handler(req, res) {
       // Saca un diseño de la ronda —o lo devuelve— sin cambiar el link y sin perder sus votos.
       // Ver `marcarSacado` en `lib/disenos/votacion.core.js`.
       const id = String(b.id || '');
-      const disenoId = String(b.disenoId || '');
-      if (!id || !disenoId) return res.status(400).json({ error: 'falta id o disenoId' });
+      // `disenoId` suelto es el nombre del primer deploy: una pestaña abierta manda el del bundle
+      // que bajó.
+      const disenoIds = (Array.isArray(b.disenoIds) ? b.disenoIds : b.disenoId ? [b.disenoId] : []).map(String).slice(0, 500);
+      if (!id || !disenoIds.length) return res.status(400).json({ error: 'falta id o disenoIds' });
       const { data: ronda, error: e1 } = await supabase.from('disenos_rondas').select('disenos').eq('store', store).eq('id', id).maybeSingle();
       if (e1) throw new Error(e1.message);
       if (!ronda) return res.status(404).json({ error: 'ronda no encontrada' });
-      const disenos = marcarSacado(ronda.disenos, disenoId, b.sacado !== false);
+      const disenos = marcarSacados(ronda.disenos, disenoIds, b.sacado !== false);
       if (!disenos) return res.status(400).json({ error: 'Tiene que quedar al menos un diseño en la ronda. Para terminarla, cerrá la votación.' });
       const { error } = await supabase.from('disenos_rondas').update({ disenos }).eq('store', store).eq('id', id);
       if (error) throw new Error(error.message);

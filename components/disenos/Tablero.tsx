@@ -57,6 +57,7 @@ export function Tablero({
   onVer,
   onCargar,
   onYaViene,
+  onSacarDeRonda,
   acciones,
 }: {
   disenos: Diseno[]
@@ -72,6 +73,8 @@ export function Tablero({
   onCargar: (files: FileList | null) => void
   /** Abre «Ya viene en…» con los elegidos. Sólo donde hay Ingresos. */
   onYaViene?: (ids: Set<string>) => void
+  /** Saca de la última ronda los ids que se le pasan (ya filtrados a los que están en ella). */
+  onSacarDeRonda?: (ids: string[]) => void
   /** La fila de botones de la sección (PDF, revisión rápida, vaciar…). */
   acciones: React.ReactNode
 }) {
@@ -142,6 +145,10 @@ export function Tablero({
     onCambiar((ds) => quitarLote(ds, sel))
     setSel(new Set())
   }
+
+  // Los elegidos que están en la última ronda: `puntajes` trae una clave por cada diseño que el link
+  // muestra (los ya sacados no vienen), haya votos o no.
+  const enRonda = [...sel].filter((id) => id in puntajes)
 
   const todoElegido = enPantalla.length > 0 && enPantalla.every((d) => sel.has(d.id))
 
@@ -226,6 +233,14 @@ export function Tablero({
           onYaViene &&
           (() => {
             onYaViene(sel)
+            setSel(new Set())
+          })
+        }
+        nEnRonda={enRonda.length}
+        onSacarDeRonda={
+          onSacarDeRonda &&
+          (() => {
+            onSacarDeRonda(enRonda)
             setSel(new Set())
           })
         }

@@ -12,6 +12,7 @@ import {
   sinNingunVoto,
   snapshotDeRonda,
   marcarSacado,
+  marcarSacados,
   puntajesDeSacados,
   sacadosDeRonda,
 } from '../lib/disenos/votacion.core.js'
@@ -262,5 +263,21 @@ describe('sacar un diseño de la ronda', () => {
     expect(puntajesDeSacados({ a: 5, b: 2 }, sacada)).toEqual({ b: 2 })
     expect(puntajesDeSacados(null, sacada)).toEqual({})
     expect(puntajesDeSacados({ b: 9 }, sacada)).toEqual({})
+  })
+})
+
+describe('sacar varios de la ronda (lote del Tablero)', () => {
+  const disenos = [
+    { id: 'a', name: 'A', url: '' },
+    { id: 'b', name: 'B', url: '' },
+    { id: 'c', name: 'C', url: '' },
+  ]
+  it('saca todos en una sola pasada e ignora los que no están', () => {
+    const nueva = marcarSacados(disenos, ['a', 'c', 'zzz'], true)!
+    expect(paraElVotante({ disenos: nueva }).disenos.map((d) => d.id)).toEqual(['b'])
+  })
+  it('no deja la ronda vacía', () => {
+    expect(marcarSacados(disenos, ['a', 'b', 'c'], true)).toBeNull()
+    expect(marcarSacados(disenos, ['zzz'], true)).toBeNull()
   })
 })
