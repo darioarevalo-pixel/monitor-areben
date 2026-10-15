@@ -27,7 +27,7 @@
 //
 // Archivo `_`: no es una ruta (entra por api/datos.js). El plan Hobby admite 12 funciones.
 import { createClient } from '@supabase/supabase-js';
-import { paraElVotante, sanearPuntajes, TOPE_NOMBRE, TOPE_VOTANTES } from '../lib/disenos/votacion.core.js';
+import { paraElVotante, puntajesDeSacados, sanearPuntajes, TOPE_NOMBRE, TOPE_VOTANTES } from '../lib/disenos/votacion.core.js';
 
 const STORES = ['bdi', 'zattia'];
 
@@ -110,7 +110,20 @@ export default async function handler(req, res) {
     // Filtrado contra los ids de ESTA ronda y contra la escala. Un control que sólo vive en la
     // pantalla del votante no es un control.
     const ids = paraElVotante(fila).disenos.map((d) => d.id);
-    const puntajes = sanearPuntajes(b.puntajes, ids);
+    const nuevos = sanearPuntajes(b.puntajes, ids);
+    // La boleta se pisa entera, y el votante ya no ve los diseños sacados: lo que les había puesto
+    // se rescata de la boleta guardada. Si no, corregir un voto borraría esos sin avisar.
+    let puntajes = nuevos;
+    if (Array.isArray(fila.disenos) && fila.disenos.some((d) => d && d.sacado)) {
+      const { data: previa, error: eP } = await supabase
+        .from('disenos_votos')
+        .select('puntajes')
+        .eq('ronda_id', fila.id)
+        .eq('votante_id', votanteId)
+        .maybeSingle();
+      if (eP) throw new Error(eP.message);
+      puntajes = { ...puntajesDeSacados(previa && previa.puntajes, fila), ...nuevos };
+    }
     const nombre = String(b.nombre || '').trim().slice(0, TOPE_NOMBRE);
 
     // El tope de votantes se mira antes de insertar, y sólo si es alguien nuevo: quien ya votó
@@ -137,7 +150,7 @@ export default async function handler(req, res) {
       { onConflict: 'ronda_id,votante_id' },
     );
     if (error) throw new Error(error.message);
-    return res.status(200).json({ ok: true, guardados: Object.keys(puntajes).length });
+    return res.status(200).json({ ok: true, guardados: Object.keys(nuevos).length });
   } catch (e) {
     return res.status(500).json({ error: String((e && e.message) || e).slice(0, 200) });
   }

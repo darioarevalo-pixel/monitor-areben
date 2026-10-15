@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { promedio as calcPromedio, quienesVotaron, ranking, resumen, sinNingunVoto, MAX_PUNTAJE } from '@/lib/disenos/votacion.core.js'
+import { promedio as calcPromedio, quienesVotaron, ranking, resumen, sacadosDeRonda, sinNingunVoto, MAX_PUNTAJE } from '@/lib/disenos/votacion.core.js'
 import {
   borrarRonda,
   cerrarRonda,
@@ -29,6 +29,7 @@ import {
   leerRondas,
   leerToken,
   linkDeVotacion,
+  sacarDeRonda,
   type Boleta,
   type Ronda,
   type RondaConDisenos,
@@ -123,6 +124,18 @@ export function VotacionPanel({
     }
   }
 
+  // Sacar no pide confirmación: se deshace con «Volver a la ronda» y no pierde votos.
+  const sacar = async (r: RondaConDisenos, disenoId: string, sacado: boolean) => {
+    try {
+      await sacarDeRonda(marca, r.id, disenoId, sacado)
+      await verResultados(r)
+      await recargar()
+      onCambio()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   const cerrar = async (r: Ronda) => {
     const ok = await confirmar({
       titulo: 'Cerrar la votación',
@@ -184,6 +197,7 @@ export function VotacionPanel({
           onVolver={() => setVista({ modo: 'lista' })}
           onRefrescar={() => void verResultados(vista.ronda)}
           onConfirmar={onConfirmar}
+          onSacar={(disenoId, sacado) => void sacar(vista.ronda, disenoId, sacado)}
         />
       )}
 
@@ -351,11 +365,12 @@ function Nueva({ titulo, setTitulo, disenos, elegidos, setElegidos, creando, lin
   )
 }
 
-function Resultados({ ronda, boletas, onVolver, onRefrescar, onConfirmar }: { ronda: RondaConDisenos; boletas: Boleta[]; onVolver: () => void; onRefrescar: () => void; onConfirmar: (ids: string[]) => void }) {
+function Resultados({ ronda, boletas, onVolver, onRefrescar, onConfirmar, onSacar }: { ronda: RondaConDisenos; boletas: Boleta[]; onVolver: () => void; onRefrescar: () => void; onConfirmar: (ids: string[]) => void; onSacar: (disenoId: string, sacado: boolean) => void }) {
   const { confirmar } = useConfirmar()
   const [abierto, setAbierto] = useState<string | null>(null)
   const [cuantos, setCuantos] = useState(10)
   const res = ranking(resumen(ronda, boletas))
+  const sacados = sacadosDeRonda(ronda)
   const sinVotos = sinNingunVoto(res)
   const nombres = quienesVotaron(boletas)
   // El promedio de la ronda entera: sirve para saber si el lote gustó o no, más allá del orden.
@@ -377,6 +392,7 @@ function Resultados({ ronda, boletas, onVolver, onRefrescar, onConfirmar }: { ro
               : `Votaron ${boletas.length} ${boletas.length === 1 ? 'persona' : 'personas'}${nombres.length ? `: ${nombres.join(', ')}` : ''}.`}
             {' '}
             {res.length} {res.length === 1 ? 'diseño' : 'diseños'} en la ronda
+            {sacados.length ? ` · ${sacados.length} ${sacados.length === 1 ? 'sacado' : 'sacados'}` : ''}
             {sinVotos ? ` · ${sinVotos} sin ningún voto` : ''}
             {general != null ? ` · promedio general ${textoPromedio(general)}` : ''}
           </div>
@@ -445,7 +461,7 @@ function Resultados({ ronda, boletas, onVolver, onRefrescar, onConfirmar }: { ro
                 <Th align="right" width={90}>Promedio</Th>
                 <Th align="right" width={70}>Votos</Th>
                 <Th width={130}>Cómo se repartió</Th>
-                <Th width={70} />
+                <Th width={140} />
               </Tr>
             </THead>
             <TBody>
@@ -465,11 +481,18 @@ function Resultados({ ronda, boletas, onVolver, onRefrescar, onConfirmar }: { ro
                   <Td align="right">{d.n}</Td>
                   <Td><Reparto dist={d.distribucion} n={d.n} /></Td>
                   <Td>
-                    {d.n > 0 && (
-                      <Button size="sm" variant="ghost" onClick={() => setAbierto(abierto === d.id ? null : d.id)}>
-                        {abierto === d.id ? 'Ocultar' : 'Quién'}
-                      </Button>
-                    )}
+                    <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                      {d.n > 0 && (
+                        <Button size="sm" variant="ghost" onClick={() => setAbierto(abierto === d.id ? null : d.id)}>
+                          {abierto === d.id ? 'Ocultar' : 'Quién'}
+                        </Button>
+                      )}
+                      {res.length > 1 && (
+                        <Button size="sm" variant="ghost" tone="danger" onClick={() => onSacar(d.id, true)} title="Deja de verse en el link. Sus votos quedan guardados.">
+                          Sacar
+                        </Button>
+                      )}
+                    </div>
                   </Td>
                 </Tr>,
                 // El desglose va en un renglón PROPIO y a todo el ancho, no adentro de la última
@@ -491,6 +514,28 @@ function Resultados({ ronda, boletas, onVolver, onRefrescar, onConfirmar }: { ro
             </TBody>
           </table>
         </TableWrap>
+      )}
+
+      {/* Los sacados quedan a la vista para poder devolverlos: con sus votos, que nunca se borraron. */}
+      {sacados.length > 0 && (
+        <div style={{ marginTop: space[4] }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+            Sacados de la ronda{' '}
+            <span style={{ fontWeight: 400, color: color.mut }}>· ya no se ven en el link; sus votos quedan guardados</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {sacados.map((d) => (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={d.url} alt="" style={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 5, background: color.bg2, flex: 'none', opacity: 0.6 }} />
+                <span style={{ color: color.ink2 }}>{d.name || '—'}</span>
+                <Button size="sm" variant="outline" onClick={() => onSacar(d.id, false)} style={{ marginLeft: 'auto' }}>
+                  Volver a la ronda
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )

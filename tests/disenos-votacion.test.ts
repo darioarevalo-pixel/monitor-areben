@@ -11,6 +11,9 @@ import {
   sanearPuntajes,
   sinNingunVoto,
   snapshotDeRonda,
+  marcarSacado,
+  puntajesDeSacados,
+  sacadosDeRonda,
 } from '../lib/disenos/votacion.core.js'
 
 /**
@@ -217,5 +220,47 @@ describe('resumenLiviano — lo que cuesta el ★ de cada tarjeta', () => {
   it('una ronda sin diseños devuelve un objeto vacío y no se cae', () => {
     expect(resumenLiviano({}, [])).toEqual({})
     expect(resumenLiviano({ disenos: [] }, boletas)).toEqual({})
+  })
+})
+
+/**
+ * Sacar un diseño de una ronda andando: el link no cambia, el diseño deja de verse y de contar, y
+ * sus votos quedan guardados para cuando vuelva.
+ */
+describe('sacar un diseño de la ronda', () => {
+  const ronda = {
+    titulo: 'Fundas',
+    disenos: [
+      { id: 'a', name: 'Palmera', url: 'u1' },
+      { id: 'b', name: 'Ola', url: 'u2' },
+    ],
+  }
+  const boletas = [{ nombre: 'Ana', puntajes: { a: 5, b: 2 } }]
+
+  it('el sacado no sale al link ni entra al resultado, y vuelve con sus votos', () => {
+    const sacada = { ...ronda, disenos: marcarSacado(ronda.disenos, 'b', true)! }
+    expect(paraElVotante(sacada).disenos.map((d) => d.id)).toEqual(['a'])
+    expect(resumen(sacada, boletas).map((d) => d.id)).toEqual(['a'])
+    expect(Object.keys(resumenLiviano(sacada, boletas))).toEqual(['a'])
+    expect(sacadosDeRonda(sacada)).toEqual([{ id: 'b', name: 'Ola', url: 'u2' }])
+    // La marca no viaja al portal.
+    expect(JSON.stringify(paraElVotante(sacada))).not.toContain('sacado')
+
+    const devuelta = { ...ronda, disenos: marcarSacado(sacada.disenos, 'b', false)! }
+    expect(devuelta.disenos).toEqual(ronda.disenos)
+    expect(resumen(devuelta, boletas).find((d) => d.id === 'b')).toMatchObject({ n: 1, promedio: 2 })
+  })
+
+  it('no deja la ronda vacía ni acepta un id que no está', () => {
+    const una = marcarSacado(ronda.disenos, 'a', true)!
+    expect(marcarSacado(una, 'b', true)).toBeNull()
+    expect(marcarSacado(ronda.disenos, 'zzz', true)).toBeNull()
+  })
+
+  it('corregir el voto no borra lo que se había puesto a los sacados', () => {
+    const sacada = { ...ronda, disenos: marcarSacado(ronda.disenos, 'b', true)! }
+    expect(puntajesDeSacados({ a: 5, b: 2 }, sacada)).toEqual({ b: 2 })
+    expect(puntajesDeSacados(null, sacada)).toEqual({})
+    expect(puntajesDeSacados({ b: 9 }, sacada)).toEqual({})
   })
 })

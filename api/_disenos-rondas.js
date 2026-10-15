@@ -6,6 +6,7 @@
 //   GET  ?recurso=disenos-rondas&store=&id=&vista=resultados       → { ok, ronda, boletas }
 //   POST { recurso:'disenos-rondas', store, action:'crear', titulo, disenos, ids }
 //   POST { recurso:'disenos-rondas', store, action:'cerrar', id }
+//   POST { recurso:'disenos-rondas', store, action:'sacar', id, disenoId, sacado }
 //
 // ⚠️ **Este archivo es el lado CON SESIÓN. El lado abierto a internet es `_disenos-votacion.js`**,
 // y están separados a propósito: mismo criterio que `reclamos`/`reclamo` y `canjes`/`canje` en
@@ -21,7 +22,7 @@ import { randomUUID } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
-import { resumenLiviano, snapshotDeRonda } from '../lib/disenos/votacion.core.js';
+import { marcarSacado, paraElVotante, resumenLiviano, snapshotDeRonda } from '../lib/disenos/votacion.core.js';
 
 /** Días que vive el link. Cerrar la ronda lo revoca antes. Reclamos usa 15 y canjes 45; una ronda
  *  de diseños se decide en una semana, y 30 deja aire sin que un link quede dando vueltas un año. */
@@ -102,7 +103,7 @@ export default async function handler(req, res) {
         const { data: ronda, error: e1 } = await supabase.from('disenos_rondas').select(COLS_CON_DISENOS).eq('store', store).eq('id', id).maybeSingle();
         if (e1) throw new Error(e1.message);
         if (!ronda) return res.status(404).json({ error: 'ronda no encontrada' });
-        ronda.nDisenos = Array.isArray(ronda.disenos) ? ronda.disenos.length : 0;
+        ronda.nDisenos = paraElVotante(ronda).disenos.length;
         const { data: votos, error: e2 } = await supabase
           .from('disenos_votos')
           .select('votante_id, nombre, puntajes, updated_at')
@@ -148,7 +149,7 @@ export default async function handler(req, res) {
             token_vence: ronda.token_vence,
             cerrada_at: ronda.cerrada_at,
             created_at: ronda.created_at,
-            nDisenos: Array.isArray(ronda.disenos) ? ronda.disenos.length : 0,
+            nDisenos: paraElVotante(ronda).disenos.length,
           },
           votantes: boletas.length,
           // El promedio de la ronda entera. `null` y nunca 0: sin votos no es la peor nota.
@@ -173,7 +174,8 @@ export default async function handler(req, res) {
         ok: true,
         rondas: rondas.map(({ disenos, ...r }) => ({
           ...r,
-          nDisenos: Array.isArray(disenos) ? disenos.length : 0,
+          // Sin los sacados: es lo que ve quien abre el link.
+          nDisenos: paraElVotante({ disenos }).disenos.length,
           votantes: porRonda[r.id] || 0,
         })),
       });
@@ -218,6 +220,22 @@ export default async function handler(req, res) {
         .eq('id', id);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'sacar') {
+      // Saca un diseño de la ronda —o lo devuelve— sin cambiar el link y sin perder sus votos.
+      // Ver `marcarSacado` en `lib/disenos/votacion.core.js`.
+      const id = String(b.id || '');
+      const disenoId = String(b.disenoId || '');
+      if (!id || !disenoId) return res.status(400).json({ error: 'falta id o disenoId' });
+      const { data: ronda, error: e1 } = await supabase.from('disenos_rondas').select('disenos').eq('store', store).eq('id', id).maybeSingle();
+      if (e1) throw new Error(e1.message);
+      if (!ronda) return res.status(404).json({ error: 'ronda no encontrada' });
+      const disenos = marcarSacado(ronda.disenos, disenoId, b.sacado !== false);
+      if (!disenos) return res.status(400).json({ error: 'Tiene que quedar al menos un diseño en la ronda. Para terminarla, cerrá la votación.' });
+      const { error } = await supabase.from('disenos_rondas').update({ disenos }).eq('store', store).eq('id', id);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, nDisenos: paraElVotante({ disenos }).disenos.length });
     }
 
     // ⚠️ El verbo acepta además el nombre viejo (`borrar`). **No es indecisión: es que una pestaña

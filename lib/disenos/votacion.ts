@@ -17,7 +17,7 @@ const API = '/api/datos?recurso=disenos-rondas'
 const API_PUB = '/api/datos?recurso=votacion'
 
 /** Un diseño tal como viaja a la ronda: tres campos y ninguno más (ver `votacion.core.js`). */
-export type DisenoDeRonda = { id: string; name: string; url: string }
+export type DisenoDeRonda = { id: string; name: string; url: string; sacado?: boolean }
 
 export type Ronda = {
   id: string
@@ -145,6 +145,14 @@ export async function crearRonda(
 /** Cierra la ronda: el link deja de abrir. Los votos quedan y el resultado se sigue viendo. */
 export async function cerrarRonda(store: Marca, id: string): Promise<void> {
   await pedir(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store, action: 'cerrar', id }) })
+}
+
+/**
+ * Saca un diseño de la ronda (`sacado: true`) o lo devuelve (`false`). El link no cambia y los
+ * votos que tenía quedan guardados: volverlo a la ronda los trae.
+ */
+export async function sacarDeRonda(store: Marca, id: string, disenoId: string, sacado: boolean): Promise<void> {
+  await pedir(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store, action: 'sacar', id, disenoId, sacado }) })
 }
 
 /** Borra la ronda **y sus votos** (`on delete cascade`). Es el único verbo que pierde votos. */
