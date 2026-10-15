@@ -15,7 +15,8 @@
 export function motivoFuera(v) {
   if (v.prueba) return 'prueba'
   if (v.estado !== 'confirmada') return 'anulada'
-  if (v.gn_sale_id != null) return 'en_gn'
+  // La columna, o el id que trajo la Caja en `detalle` (las anotadas antes de que `registrarVenta` lo copiara).
+  if (v.gn_sale_id != null || (v.detalle && v.detalle.gn_sale_id != null)) return 'en_gn'
   return null
 }
 
@@ -27,7 +28,7 @@ export function motivoFuera(v) {
 export async function cobrosPropios(db, mes) {
   if (!/^\d{4}-\d{2}$/.test(mes || '')) throw new Error(`Mes inválido: ${mes}`)
   const { rows } = await db.query(
-    `select v.id as venta_id, v.marca, v.estado, v.prueba, v.gn_sale_id,
+    `select v.id as venta_id, v.marca, v.estado, v.prueba, v.gn_sale_id, jsonb_build_object('gn_sale_id', v.detalle->'gn_sale_id') as detalle,
             to_char(v.ocurrida_en at time zone 'America/Argentina/Buenos_Aires', 'YYYY-MM-DD') as fecha,
             c.nombre as cuenta, p.monto
        from venta v

@@ -29,7 +29,7 @@ async function enTransaccion(db, fn) {
 }
 
 /** La configuración de la marca (§3 del contrato), con la forma que pide `armar.mjs`. */
-async function leerConf(db, marca) {
+export async function leerConf(db, marca) {
   const marcas = await q(db, `select m.id, m.empresa_id, coalesce(array_agg(d.id) filter (where d.vende), '{}') as depositos
     from marca m left join deposito d on d.marca = m.id where m.id = $1 group by m.id, m.empresa_id`, [marca])
   const cuentas = await q(db, 'select id, marca, gn_cuenta_id, activa, medio from cuenta_cobro where marca = $1', [marca])
@@ -124,6 +124,15 @@ async function chequearUsoDeSaldo(db, armada) {
   return null
 }
 
+/**
+ * El id de GN de una venta que YA está en GN (la Caja la manda a los dos hasta el corte: `detalle.gn_sale_id`) va a
+ * la COLUMNA: es la que mira `motivoFuera` para ⛔ contar dos veces en el techo. Lo halló B (15-oct): iba siempre null.
+ */
+export function idDeGN(detalle) {
+  const n = Number(detalle && detalle.gn_sale_id)
+  return Number.isSafeInteger(n) && n > 0 ? n : null
+}
+
 async function insertar(db, tabla, filas) {
   if (!filas.length) return
   await db.query(`insert into ${tabla} select * from jsonb_populate_recordset(null::${tabla}, $1::jsonb)`, [JSON.stringify(filas)])
@@ -133,7 +142,7 @@ async function insertar(db, tabla, filas) {
 async function escribir(db, armada) {
   const [n] = await q(db, `insert into venta_numero (marca, ultimo) values ($1, 1)
     on conflict (marca) do update set ultimo = venta_numero.ultimo + 1 returning ultimo`, [armada.venta.marca])
-  const venta = { ...armada.venta, numero: Number(n.ultimo), registrada_en: new Date().toISOString(), gn_sale_id: null }
+  const venta = { ...armada.venta, numero: Number(n.ultimo), registrada_en: new Date().toISOString(), gn_sale_id: idDeGN(armada.venta.detalle) }
   await insertar(db, 'venta', [venta])
   await insertar(db, 'venta_linea', armada.lineas)
   await insertar(db, 'venta_pago', armada.pagos)

@@ -107,6 +107,21 @@ const filaDeLinea = (venta_id, l, n, signo, extra = {}) => ({
   linea_origen_id: null, ...extra,
 })
 
+/**
+ * ¿La venta mueve el stock del libro DESDE EL MOTOR? ⛔ si es de prueba, y ⛔ si GN también la tiene (`gn_sale_id` en la
+ * columna o en `detalle`): mientras GN viva, el libro la cuenta por GN (fuentes `caja`/`gn`) ⇒ si el motor también
+ * la moviera, se contaría DOS veces (contrato-venta.md, «Al cortar GN»). Al cortar, la venta ⛔ trae id de GN y la
+ * mueve el motor: el corte es dejar de mandar a GN, ⛔ un interruptor aparte.
+ * 🔴 El id de GN tiene que estar al REGISTRAR (la Caja anota en el motor DESPUÉS de que GN la aceptó): una venta
+ * que se registra sin él y después se manda a GN quedaría contada por los dos.
+ */
+export function mueveStock(v) {
+  if (!v || v.prueba) return false
+  if (v.gn_sale_id != null) return false
+  const g = v.detalle && v.detalle.gn_sale_id
+  return !(g != null && g !== '')
+}
+
 /** El movimiento del libro de una línea (`stock_movimiento` de sql/001-libro.sql). ⛔ hay si es de prueba. */
 export function movimientoDe(venta, linea, tipo) {
   return {
@@ -143,7 +158,7 @@ export function armarVenta(e, conf, { ahora = new Date() } = {}) {
   }
   const lineas = e.lineas.map((l, i) => filaDeLinea(venta.id, l, i + 1, 1))
   const pagos = p.filas.map((f) => ({ id: randomUUID(), venta_id: venta.id, ...f }))
-  const movimientos = venta.prueba ? [] : lineas.map((l) => movimientoDe(venta, l, 'venta'))
+  const movimientos = mueveStock(venta) ? lineas.map((l) => movimientoDe(venta, l, 'venta')) : []
   return { ok: true, venta, lineas, pagos, movimientos, usa_saldo: p.usa_saldo }
 }
 
@@ -198,7 +213,7 @@ export function armarCambio(e, conf, original, { ahora = new Date() } = {}) {
   if (p.error) return p.error
   venta.total = p.total
   const pagos = p.filas.map((f) => ({ id: randomUUID(), venta_id: venta.id, ...f }))
-  const movimientos = venta.prueba ? [] : lineas.map((l) => movimientoDe(venta, l, l.cantidad < 0 ? 'cambio_entra' : 'cambio_sale'))
+  const movimientos = mueveStock(venta) ? lineas.map((l) => movimientoDe(venta, l, l.cantidad < 0 ? 'cambio_entra' : 'cambio_sale')) : []
   return { ok: true, venta, lineas, pagos, movimientos, diferencia, a_favor: diferencia < 0 ? -diferencia : 0, usa_saldo: p.usa_saldo }
 }
 
@@ -217,7 +232,8 @@ export function armarAnulacion(actual, e, { ahora = new Date() } = {}) {
   const en = ahora.toISOString()
   const anulacion = { venta_id: v.id, motivo: e.motivo.trim(), usuario: e.usuario.trim(), anulada_en: en, devolucion: e.devolucion ?? null }
   const contra = { ...v, ocurrida_en: en }
-  const movimientos = v.prueba ? [] : actual.lineas.map((l) => ({
+  // Se da vuelta sólo lo que el motor movió: la misma regla que al registrarla.
+  const movimientos = !mueveStock(v) ? [] : actual.lineas.map((l) => ({
     ...movimientoDe(contra, l, 'anulacion'),
     cantidad: l.cantidad, // lo contrario de la venta: lo que salió, vuelve
     clave: `${v.id}:${l.id}`, origen_ref: `${v.id}:${l.id}:anulacion`,
