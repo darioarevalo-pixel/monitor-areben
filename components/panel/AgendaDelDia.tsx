@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { color, font, radius, space } from '@/components/ui/tokens'
+import { Icono } from '@/components/ui'
 import { TEMP_UI } from '@/components/crm/temperatura'
 import { buscarClientesPorNombre, traerAgenda, traerPorFiltro, type FilaAgenda } from '@/lib/crm/panel'
 import { contarCola, contarPorTipo, vistaDe, type FiltroPanel, type VistaTemp } from '@/lib/crm/lista-dia'
-import { diasHasta, urgenciaFecha } from '@/lib/crm/core'
+import { diasHasta } from '@/lib/crm/core'
 import { hoyISO } from '@/lib/crm/seguimiento'
 import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
@@ -170,71 +171,109 @@ function estadoDeFila(d: number | null): { txt: string; tono: 'neutro' | 'nuestr
 /** La temperatura, chica y al lado del nombre. "Sin marcar" no dibuja nada: era ruido en 341 filas. */
 const EMOJI_TEMP: Record<VistaTemp, string> = { caliente: '🔥', templado: '🟡', frio: '🧊', sin_marcar: '' }
 
-function Fila({ it, onAbrir, hecho }: { it: Item; onAbrir: (id: number, tel: string) => void; hecho?: { dias: number | null } }) {
+/**
+ * Un renglón: **el nombre abre la ficha y el botón verde abre el chat** (Darío, 15-oct-2026).
+ *
+ * 🔑 Antes el renglón entero abría el chat, y para corregirle algo a una persona había que pasar por
+ * su conversación —con WhatsApp recargando— aunque no se le fuera a escribir. Ahora son dos gestos:
+ * mirar/cambiar la ficha, o ir a hablarle.
+ *
+ * ⚠️ Son dos `<button>` hermanos y no uno adentro del otro: un botón dentro de un botón no es HTML
+ * válido y el clic del de adentro dispara también el de afuera.
+ */
+function Fila({ it, onAbrir, onFicha, hecho }: { it: Item; onAbrir: (id: number, tel: string) => void; onFicha: (id: number, tel: string) => void; hecho?: { dias: number | null } }) {
   const sinTel = !it.telefono
+  // Un prospecto se encuentra por teléfono (`id: 0`): sin teléfono no hay ficha que abrir.
+  const sinFicha = it.prospecto && sinTel
   const est = estadoDeFila(it.dias)
   const emoji = it.vista ? EMOJI_TEMP[it.vista] : ''
   return (
-    <button
-      type="button"
-      disabled={sinTel}
-      onClick={() => onAbrir(it.id, it.telefono)}
-      title={sinTel ? 'No tiene teléfono cargado, así que no puedo abrir el chat' : 'Abrir el chat'}
-      style={{
-        display: 'block',
-        width: '100%',
-        height: 'auto',
-        textAlign: 'left',
-        background: color.surface,
-        border: 0,
-        borderTop: `1px solid ${color.line2}`,
-        padding: `${space[2]}px ${MARGEN}px`,
-        cursor: sinTel ? 'default' : 'pointer',
-        opacity: sinTel || hecho ? 0.6 : 1,
-        font: 'inherit',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {emoji && (
-          <span title={it.vista ? TEMP_UI[it.vista].txt : undefined} style={{ fontSize: 11, lineHeight: 1 }}>
-            {emoji}
+    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, background: color.surface, opacity: hecho ? 0.6 : 1 }}>
+      <button
+        type="button"
+        disabled={sinFicha}
+        onClick={() => onFicha(it.id, it.telefono)}
+        title="Ver la ficha"
+        style={{
+          display: 'block',
+          flex: 1,
+          minWidth: 0,
+          height: 'auto',
+          textAlign: 'left',
+          background: 'none',
+          border: 0,
+          padding: `${space[2]}px 0 ${space[2]}px ${MARGEN}px`,
+          cursor: sinFicha ? 'default' : 'pointer',
+          font: 'inherit',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {emoji && (
+            <span title={it.vista ? TEMP_UI[it.vista].txt : undefined} style={{ fontSize: 11, lineHeight: 1 }}>
+              {emoji}
+            </span>
+          )}
+          <span style={{ fontSize: font.md, fontWeight: 700, color: color.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {it.nombre}
           </span>
+          {it.prospecto && <Chapa>Prospecto</Chapa>}
+          <span style={{ flex: 1 }} />
+          {hecho ? (
+            <Chapa tono="hecho">✓ {hecho.dias !== null && hecho.dias > 0 ? `Vuelve en ${hecho.dias} d` : 'Hecho'}</Chapa>
+          ) : (
+            <Chapa tono={est.tono}>{est.txt}</Chapa>
+          )}
+        </div>
+        {it.principal && (
+          <div
+            style={{
+              fontSize: font.sm,
+              color: color.ink,
+              marginTop: 3,
+              lineHeight: 1.35,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}
+          >
+            {it.esPendiente && '⏳ '}
+            {it.principal}
+          </div>
         )}
-        <span style={{ fontSize: font.md, fontWeight: 700, color: color.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {it.nombre}
-        </span>
-        {it.prospecto && <Chapa>Prospecto</Chapa>}
-        <span style={{ flex: 1 }} />
-        {hecho ? (
-          <Chapa tono="hecho">✓ {hecho.dias !== null && hecho.dias > 0 ? `Vuelve en ${hecho.dias} d` : 'Hecho'}</Chapa>
-        ) : (
-          <Chapa tono={est.tono}>{est.txt}</Chapa>
+        {(it.meta || sinTel) && (
+          <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+            {it.meta}
+            {sinTel && (it.meta ? ' · ' : '') + 'sin teléfono'}
+          </div>
         )}
-      </div>
-      {it.principal && (
-        <div
+      </button>
+      <div style={{ display: 'flex', alignItems: 'center', padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
+        <button
+          type="button"
+          disabled={sinTel}
+          onClick={() => onAbrir(it.id, it.telefono)}
+          title={sinTel ? 'No tiene teléfono cargado, así que no puedo abrir el chat' : 'Abrir el chat'}
+          aria-label={`Abrir el chat de ${it.nombre}`}
           style={{
-            fontSize: font.sm,
-            color: color.ink,
-            marginTop: 3,
-            lineHeight: 1.35,
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
+            width: 32,
+            minWidth: 32,
+            height: 32,
+            padding: 0,
+            display: 'grid',
+            placeItems: 'center',
+            borderRadius: radius.sm,
+            border: `1px solid ${sinTel ? color.line2 : color.successBorder}`,
+            background: sinTel ? 'none' : color.successBg,
+            color: sinTel ? color.mut2 : color.successInk,
+            cursor: sinTel ? 'default' : 'pointer',
+            opacity: sinTel ? 0.5 : 1,
           }}
         >
-          {it.esPendiente && '⏳ '}
-          {it.principal}
-        </div>
-      )}
-      {(it.meta || sinTel) && (
-        <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-          {it.meta}
-          {sinTel && (it.meta ? ' · ' : '') + 'sin teléfono'}
-        </div>
-      )}
-    </button>
+          <Icono nombre="whatsapp" size={16} />
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -490,24 +529,83 @@ function Buscador({ onAbrir }: { onAbrir: (id: number, tel: string) => void }) {
   )
 }
 
+type EstadoAgenda =
+  | { t: 'cargando' }
+  | { t: 'error'; motivo: string }
+  | { t: 'trabajo'; lista: FilaAgenda[]; frios: FilaAgenda[]; hechos: FilaAgenda[] }
+  | { t: 'filtro'; filas: FilaAgenda[] }
+
+/**
+ * Lo que la lista recuerda mientras el panel esté abierto, **afuera del componente**.
+ *
+ * 🔑 **Por qué afuera** (Darío, 15-oct-2026: *"tiene que ser estático salvo movimiento"*). Tocar a
+ * alguien lleva a la solapa Cliente, y eso desmonta esta pantalla: al volver se rearmaba de cero —
+ * "Cargando la lista…", los grupos plegados de nuevo, arriba de todo y con el orden recalculado.
+ * Acá queda lo último que se vio, se dibuja al instante y la consulta corre por detrás.
+ *
+ * 🔑 **`posiciones` es lo que la deja quieta.** La primera vez que aparece alguien se le da un
+ * lugar y lo conserva: registrarle algo a uno lo saca de su grupo y los demás no se corren. El que
+ * entra después va al final. Se rearma sólo al recargar el panel.
+ */
+const memoria: {
+  filtro: FiltroPanel
+  estado: EstadoAgenda
+  abiertos: Record<string, boolean>
+  mostrar: number
+  mostrarAtrasados: number
+  scroll: number
+  posiciones: Map<string, number>
+} = {
+  filtro: 'trabajo',
+  estado: { t: 'cargando' },
+  abiertos: { hoy: true, atrasados: true, sinFecha: false, frios: false, hechos: false },
+  mostrar: PAGINA,
+  mostrarAtrasados: PAGINA,
+  scroll: 0,
+  posiciones: new Map(),
+}
+
+/**
+ * Ordena con el orden que trae `base` la primera vez y lo congela (ver `memoria.posiciones`).
+ * Es idempotente: dibujar dos veces la misma lista no mueve a nadie.
+ */
+export function estable<T>(items: T[], clave: (x: T) => string, base: (a: T, b: T) => number): T[] {
+  const pos = memoria.posiciones
+  for (const it of [...items].sort(base)) {
+    const k = clave(it)
+    if (!pos.has(k)) pos.set(k, pos.size)
+  }
+  return [...items].sort((a, b) => (pos.get(clave(a)) ?? 0) - (pos.get(clave(b)) ?? 0))
+}
+
+/**
+ * El orden de la lista: **el más atrasado arriba**, y a igual atraso 🔥 primero (Darío, 15-oct-2026).
+ *
+ * ⚠️ No reabre el problema del 27-ago (`urgenciaFecha`): aquel era QUIÉNES entran en el tope de 25,
+ * y eso lo sigue decidiendo `listaDelDia` en el servidor con la misma regla. Esto sólo ordena a los
+ * que ya entraron, y los de hoy tienen su propio grupo.
+ */
+const porAtraso = (a: Item, b: Item) => (a.dias ?? 0) - (b.dias ?? 0) || a.orden - b.orden || a.nombre.localeCompare(b.nombre, 'es')
+
 export function AgendaDelDia({
   crmSeg,
   crmLeads,
   today,
   onAbrirChat,
+  onVerFicha,
   puedeAbrirChat,
 }: {
   crmSeg: MapaSeguimiento
   crmLeads: MapaLeads
   today: Date
   onAbrirChat: (id: number, tel: string) => void
+  /** Abre la ficha en la solapa Cliente SIN abrir el chat. `id: 0` = prospecto, se busca por teléfono. */
+  onVerFicha: (id: number, tel: string) => void
   puedeAbrirChat: boolean
 }) {
-  const [filtro, setFiltro] = useState<FiltroPanel>('trabajo')
-  const [mostrar, setMostrar] = useState(PAGINA)
-  const [estado, setEstado] = useState<
-    { t: 'cargando' } | { t: 'error'; motivo: string } | { t: 'trabajo'; lista: FilaAgenda[]; frios: FilaAgenda[]; hechos: FilaAgenda[] } | { t: 'filtro'; filas: FilaAgenda[] }
-  >({ t: 'cargando' })
+  const [filtro, setFiltro] = useState<FiltroPanel>(memoria.filtro)
+  const [mostrar, setMostrar] = useState(memoria.mostrar)
+  const [estado, setEstado] = useState<EstadoAgenda>(memoria.estado)
 
   const conteos = useMemo(() => contarPorTipo(crmSeg, today), [crmSeg, today])
   const cola = useMemo(() => contarCola(crmSeg, today), [crmSeg, today])
@@ -516,9 +614,29 @@ export function AgendaDelDia({
    * etapa del día, y lo hecho es para mirar de reojo. Se recuerda mientras el panel esté abierto,
    * nada más — no es un dato.
    */
-  const [abiertos, setAbiertos] = useState<Record<string, boolean>>({ hoy: true, atrasados: true, sinFecha: false, frios: false, hechos: false })
+  const [abiertos, setAbiertos] = useState<Record<string, boolean>>(memoria.abiertos)
   const alternar = (k: string) => setAbiertos((a) => ({ ...a, [k]: !a[k] }))
-  const [mostrarAtrasados, setMostrarAtrasados] = useState(PAGINA)
+  const [mostrarAtrasados, setMostrarAtrasados] = useState(memoria.mostrarAtrasados)
+
+  // Lo que se ve queda guardado para la próxima vez que se monte (ver `memoria`).
+  useEffect(() => {
+    memoria.filtro = filtro
+    memoria.estado = estado
+    memoria.abiertos = abiertos
+    memoria.mostrar = mostrar
+    memoria.mostrarAtrasados = mostrarAtrasados
+  }, [filtro, estado, abiertos, mostrar, mostrarAtrasados])
+
+  // Volver a la solapa deja la lista donde estaba, no arriba de todo. El panel corre en su propio
+  // iframe, así que la barra es la de la ventana.
+  useEffect(() => {
+    if (memoria.scroll) requestAnimationFrame(() => window.scrollTo(0, memoria.scroll))
+    const alMover = () => {
+      memoria.scroll = window.scrollY
+    }
+    window.addEventListener('scroll', alMover, { passive: true })
+    return () => window.removeEventListener('scroll', alMover)
+  }, [])
 
   const pedir = useCallback(async () => {
     if (filtro === 'trabajo') {
@@ -577,7 +695,7 @@ export function AgendaDelDia({
 
   const avisoExtension = !puedeAbrirChat && (
     <div style={{ margin: space[3], fontSize: font.xs, color: color.mut, background: color.bg2, border: `1px solid ${color.line2}`, borderRadius: radius.sm, padding: '6px 8px' }}>
-      Estás viendo esta lista fuera de WhatsApp, así que tocar un nombre no abre nada. Adentro del
+      Estás viendo esta lista fuera de WhatsApp, así que el botón verde no abre el chat. Adentro del
       panel de la extensión sí.
     </div>
   )
@@ -626,8 +744,8 @@ export function AgendaDelDia({
                 {filtro === 'frio' ? 'Atrasados primero, y adentro el que más compró.' : 'Atrasados primero. Los que no vencen también están.'}
               </div>
             </div>
-            {filas.slice(0, mostrar).map((f) => (
-              <Fila key={f.id} it={itemDeCliente(f, today)} onAbrir={onAbrirChat} />
+            {estable(filas, (f) => `${filtro}:${f.id}`, () => 0).slice(0, mostrar).map((f) => (
+              <Fila key={f.id} it={itemDeCliente(f, today)} onAbrir={onAbrirChat} onFicha={onVerFicha} />
             ))}
             {filas.length > mostrar && <VerMas faltan={filas.length - mostrar} onClick={() => setMostrar((n) => n + PAGINA)} />}
           </>
@@ -654,18 +772,20 @@ export function AgendaDelDia({
    * son sin que se coman la lista.
    */
   const deClientes = lista.map((f) => itemDeCliente(f, today))
-  const paraHoy = [...deClientes.filter((i) => i.dias === 0), ...leads.filter((i) => i.dias === 0)].sort((a, b) => a.orden - b.orden)
+  const paraHoy = estable([...deClientes.filter((i) => i.dias === 0), ...leads.filter((i) => i.dias === 0)], (i) => `hoy:${i.key}`, (a, b) => a.orden - b.orden)
   const sinFecha = leads.filter((i) => i.dias === null)
   /**
-   * Atrasados: el mismo orden que `listaDelDia` — 🔥 primero, y adentro el más reciente primero
-   * (`urgenciaFecha`, el del 27-ago). Los prospectos entran como templados, mezclados por fecha.
-   * ⚠️ Ordenar sólo por fecha mandaba a un 🔥 de hace 27 días debajo de veinte tibios de ayer.
+   * Atrasados: clientes y prospectos juntos, **el más atrasado arriba** (`porAtraso`) y quietos
+   * (`estable`).
+   *
+   * 🔑 **El número es lo que se ve** (Darío, 15-oct-2026). Antes el título decía la pila entera —383
+   * con 25 a la vista— y asustaba sin ayudar. Lo que queda afuera lo dice un renglón al final.
    */
-  const porOrden = (a: Item, b: Item) => a.orden - b.orden || urgenciaFecha(a.dias) - urgenciaFecha(b.dias)
-  const atrasados = [...deClientes.filter((i) => i.dias !== 0), ...leads.filter((i) => i.dias !== null && i.dias < 0)].sort(porOrden)
+  const atrasados = estable([...deClientes.filter((i) => i.dias !== 0), ...leads.filter((i) => i.dias !== null && i.dias < 0)], (i) => `atr:${i.key}`, porAtraso)
   const leadsAtrasados = leads.filter((i) => i.dias !== null && i.dias < 0).length
-  const totalAtrasados = cola.atrasados + leadsAtrasados
-  const totalHoy = cola.hoy + leads.filter((i) => i.dias === 0).length
+  const totalAtrasados = atrasados.length
+  const esperando = cola.atrasados + leadsAtrasados - atrasados.length
+  const totalHoy = paraHoy.length
   const hechosItems = [
     ...hechos.map((f) => ({ it: itemDeCliente(f, today), dias: f.dias })),
     ...leadsHechos,
@@ -690,7 +810,7 @@ export function AgendaDelDia({
 
       <Grupo titulo="Para hoy" cuantas={totalHoy} abierto={abiertos.hoy} onToggle={() => alternar('hoy')}>
         {paraHoy.map((it) => (
-          <Fila key={it.key} it={it} onAbrir={onAbrirChat} />
+          <Fila key={it.key} it={it} onAbrir={onAbrirChat} onFicha={onVerFicha} />
         ))}
         {!paraHoy.length && <Aclaracion>No hay nadie agendado para hoy.</Aclaracion>}
       </Grupo>
@@ -698,19 +818,19 @@ export function AgendaDelDia({
       {atrasados.length > 0 && (
         <Grupo titulo="Atrasados" cuantas={totalAtrasados} abierto={abiertos.atrasados} onToggle={() => alternar('atrasados')}>
           {atrasados.slice(0, mostrarAtrasados).map((it) => (
-            <Fila key={it.key} it={it} onAbrir={onAbrirChat} />
+            <Fila key={it.key} it={it} onAbrir={onAbrirChat} onFicha={onVerFicha} />
           ))}
           {atrasados.length > mostrarAtrasados && (
             <VerMas faltan={atrasados.length - mostrarAtrasados} onClick={() => setMostrarAtrasados((n) => n + PAGINA)} />
           )}
           {/*
             ⚠️ La cola de clientes viene cortada en `TOPE_LISTA` desde `lista-dia.ts`: el título dice
-            la pila entera y esto dice que no se ve toda. Un corte que no se ve es el defecto que
+            lo que se ve (15-oct) y esto dice cuántos quedan afuera. Un corte que no se ve es el defecto que
             esta lista ya pagó dos veces.
           */}
-          {totalAtrasados > atrasados.length && (
+          {esperando > 0 && (
             <Aclaracion>
-              Se ven los {atrasados.length} más recientes. A medida que los agendás, suben los siguientes.
+              Hay {esperando} más esperando. Van entrando a medida que atendés a estos.
             </Aclaracion>
           )}
         </Grupo>
@@ -719,7 +839,7 @@ export function AgendaDelDia({
       {sinFecha.length > 0 && (
         <Grupo titulo="Prospectos sin fecha" cuantas={sinFecha.length} abierto={abiertos.sinFecha} onToggle={() => alternar('sinFecha')}>
           {sinFecha.map((it) => (
-            <Fila key={it.key} it={it} onAbrir={onAbrirChat} />
+            <Fila key={it.key} it={it} onAbrir={onAbrirChat} onFicha={onVerFicha} />
           ))}
           <Aclaracion>No están en ninguna lista hasta que les pongas fecha. Abrí el chat y agendalos.</Aclaracion>
         </Grupo>
@@ -728,7 +848,7 @@ export function AgendaDelDia({
       {frios.length > 0 && (
         <Grupo titulo="🧊 Recuperar" cuantas={frios.length} abierto={abiertos.frios} onToggle={() => alternar('frios')}>
           {frios.map((f) => (
-            <Fila key={f.id} it={itemDeCliente(f, today)} onAbrir={onAbrirChat} />
+            <Fila key={f.id} it={itemDeCliente(f, today)} onAbrir={onAbrirChat} onFicha={onVerFicha} />
           ))}
           <Aclaracion>La tanda de hoy, primero el que más compró. Para verlos a todos, tocá 🧊 arriba.</Aclaracion>
         </Grupo>
@@ -737,7 +857,7 @@ export function AgendaDelDia({
       {hechosItems.length > 0 && (
         <Grupo titulo="Hechos hoy" cuantas={hechosItems.length} abierto={abiertos.hechos} onToggle={() => alternar('hechos')}>
           {hechosItems.map(({ it, dias: d }) => (
-            <Fila key={it.key} it={it} onAbrir={onAbrirChat} hecho={{ dias: d }} />
+            <Fila key={it.key} it={it} onAbrir={onAbrirChat} onFicha={onVerFicha} hecho={{ dias: d }} />
           ))}
         </Grupo>
       )}

@@ -153,11 +153,14 @@ window.addEventListener('message', (e) => {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const tab = tabs && tabs[0]
     if (!tab || !tab.id) return
-    // ⚠️ Esto RECARGA WhatsApp Web (~5 s por cliente) y no hay forma de evitarlo desde acá:
-    // pedirle a la aplicación cargada que cambie de conversación está probado y no se puede
-    // — el porqué está escrito en `pagina.js`, para que nadie lo vuelva a intentar a ciegas.
-    // A cambio, la ficha del panel NO espera a esto: sale por su lado, apenas se toca el nombre.
-    chrome.tabs.update(tab.id, { url: 'https://web.whatsapp.com/send?phone=' + numero })
+    // 🔑 Primero se le pide a WhatsApp que cambie de conversación sin recargar (`abrirAca` en
+    // `pagina.js`, 15-oct-2026). Si no puede —chat que nunca existió, WhatsApp cambió por dentro,
+    // pestaña sin el script nuevo— va lo de siempre: `send?phone=`, que RECARGA WhatsApp (~5 s).
+    // La ficha del panel no espera a ninguno de los dos: sale por su lado.
+    const recargar = () => chrome.tabs.update(tab.id, { url: 'https://web.whatsapp.com/send?phone=' + numero })
+    chrome.tabs.sendMessage(tab.id, { tipo: 'abrir-chat-aca', tel: numero }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.ok) recargar()
+    })
   })
 })
 

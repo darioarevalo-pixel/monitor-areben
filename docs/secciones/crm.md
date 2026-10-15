@@ -127,6 +127,12 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   tiene el chat ya abierto; ahí encalla y ahí habría que retomar. ⚠️ Ojo `getLatestChatForWid`:
   devuelve un REGISTRO de la base, truthy y sin `id`, así que hay que validar antes de aceptarlo —
   aceptarlo fue lo que enmascaró el problema media hora.
+  ▶️ **15-oct-2026: segundo intento, con red** (`abrirAca` en `pagina.js`). Busca la conversación
+  que YA existe comparando el teléfono del contacto (las conversaciones viven con LID, no con
+  `@c.us`) y prueba `openChatBottom({ chat })` además de `openChatBottom(chat)`; verifica con
+  `getActive()`. Si no queda abierta, o `pagina.js` no contesta en 2 s, `sidepanel.js` recarga con
+  `send?phone=` como siempre. ⏭️ Falta verlo en el WhatsApp real: la consola dice
+  `[BDI] abrir chat sin recargar: sí/no`.
 - 🔑 **Lo que sí compensa la demora**: la ficha no espera al chat. Se pide por `clienteId` en el
   mismo instante del clic, así que mientras WhatsApp recarga, el panel ya tiene al cliente.
 - 🔑 **El panel NO baja el CRM.** La sección baja 27.990 ventas y 12.485 clientes (~6 s, 5 MB)
@@ -1056,3 +1062,20 @@ Con una sola palabra no sugiere.
 altas del mismo día, sin ventas, mismo mail) y el panel preguntaba entre cuatro "martina". Ahora
 `panelPorTelefono` se queda con el **único que tiene alguna venta** (`clientesConCompras`, sin las
 técnicas); con dos o más compradores sigue preguntando.
+
+---
+
+# ✅ 15-oct-2026 — la solapa "Hoy" quieta, y ficha ≠ chat
+
+Darío, sobre una captura: *"siento que tiene que ser estático salvo movimiento"* y *"a veces quiero
+hacer cambios en la persona y siempre me abre el chat"*.
+
+- **El renglón tiene dos botones**: el nombre abre la ficha (solapa Cliente, por `pedido`, sin tocar
+  WhatsApp) y el botón verde abre el chat. El buscador sigue abriendo el chat.
+- **Quieta**: `memoria` (afuera del componente) guarda estado, filtro, grupos abiertos y scroll, así
+  que volver de la ficha no muestra "Cargando la lista…". `estable()` le da a cada uno su lugar la
+  primera vez que aparece: el que se atiende sale y los demás no se corren; el nuevo va al final.
+- **Orden**: el más atrasado arriba, a igual atraso 🔥 primero (`porAtraso`). ⚠️ Sólo ordena a los
+  25 que ya entraron: quiénes entran sigue siendo `listaDelDia` con `urgenciaFecha` (el 27-ago).
+- **El número de Atrasados es lo que se ve** (antes 383 con 25 a la vista); lo que queda afuera lo
+  dice el renglón "Hay N más esperando". Para hoy, igual.

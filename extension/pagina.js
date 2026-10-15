@@ -54,6 +54,14 @@
 //
 // Si algún día se retoma, el punto exacto donde encalla es ése: qué le falta al modelo para que
 // `Cmd` lo pueda mostrar. Todo lo anterior está resuelto.
+//
+// ── 15-oct-2026: segundo intento (`abrirAca`, al final) ──
+// Dos sospechas sobre lo de agosto: (1) las versiones nuevas de WhatsApp esperan
+// `openChatBottom({ chat })` y no el chat suelto — pasarlo suelto da justo *undefined*; (2) el chat
+// se buscaba por `@c.us`, y las conversaciones ya viven con LID. Ahora se busca entre las
+// conversaciones que YA existen comparando el teléfono del contacto, y se prueban las dos formas.
+// **Se verifica que haya quedado abierta** (`getActive()`); si no, el panel recarga como antes, así
+// que lo peor que puede pasar es lo de siempre.
 
 (() => {
   const FUENTE = 'bdi-crm-panel'
@@ -212,6 +220,55 @@
   // La primera a los 5 s: antes WhatsApp todavía está armando la lista de chats.
   setTimeout(avisarComunidad, 5000)
   setInterval(avisarComunidad, CADA_COMUNIDAD)
+
+  // ═════════════════════════════════════════════════════════════════════════════════════════
+  // ABRIR UN CHAT SIN RECARGAR (ver el bloque ⛔ de arriba)
+  // ═════════════════════════════════════════════════════════════════════════════════════════
+  // Compara por los últimos 10 dígitos: el CRM guarda "3834 270554" y WhatsApp "5493834270554".
+  const cola10 = (x) => soloDigitos(x).slice(-10)
+
+  function chatDe(numero) {
+    const buscado = cola10(numero)
+    if (buscado.length < 10) return null
+    const chats = window.require('WAWebChatCollection').ChatCollection.getModelsArray()
+    return (
+      chats.find((ch) => {
+        const id = serial(ch.id)
+        if (id.endsWith('@g.us')) return false
+        const c = ch.contact
+        const tel = c && c.phoneNumber ? serial(c.phoneNumber) : id.endsWith('@c.us') ? id : ''
+        return cola10(tel) === buscado
+      }) || null
+    )
+  }
+
+  async function abrirAca(numero) {
+    try {
+      const chat = chatDe(numero)
+      // Sin conversación previa no se intenta: `send?phone=` es el que sabe crearla.
+      if (!chat) return false
+      const ColeccionChats = window.require('WAWebChatCollection').ChatCollection
+      const quedoAbierto = () => ColeccionChats.getActive() === chat
+      const { Cmd } = window.require('WAWebCmd')
+      for (const forma of [() => Cmd.openChatBottom({ chat }), () => Cmd.openChatBottom(chat)]) {
+        try {
+          await forma()
+        } catch {}
+        await new Promise((r) => setTimeout(r, 300))
+        if (quedoAbierto()) return true
+      }
+      return false
+    } catch {
+      return false
+    }
+  }
+
+  window.addEventListener('message', async (e) => {
+    if (e.source !== window || !e.data || e.data.fuente !== FUENTE || e.data.tipo !== 'abrir-chat-aca') return
+    const ok = await abrirAca(String(e.data.tel || ''))
+    console.log('[BDI] abrir chat sin recargar: ' + (ok ? 'sí' : 'no, recargo'))
+    window.postMessage({ fuente: FUENTE, tipo: 'abrir-chat-resultado', pedido: e.data.pedido, ok }, '*')
+  })
 
   let ultimo = 'arranque'
   setInterval(() => {

@@ -8,11 +8,24 @@ const FUENTE = 'bdi-crm-panel'
 
 let ultimo = { tel: null, motivo: 'sin-chat' }
 let comunidad = null
+/** Pedidos de "abrí este chat" que esperan la respuesta de `pagina.js`, por número de pedido. */
+const esperando = new Map()
+let nPedido = 0
 
 window.addEventListener('message', (e) => {
   // Sólo lo que mandó nuestro propio script desde esta misma pestaña. Sin este filtro, cualquier
   // cosa embebida en la página podría decirle al panel que abra la ficha de otra persona.
   if (e.source !== window || !e.data || e.data.fuente !== FUENTE) return
+  // La respuesta de `pagina.js` a "abrí este chat sin recargar" (ver `abrirAca` más abajo).
+  if (e.data.tipo === 'abrir-chat-resultado') {
+    const responder = esperando.get(e.data.pedido)
+    if (responder) {
+      esperando.delete(e.data.pedido)
+      responder({ ok: !!e.data.ok })
+    }
+    return
+  }
+  if (e.data.tipo === 'abrir-chat-aca') return
   // La lista de la comunidad: se guarda la última para cuando el panel se abra después.
   if (e.data.tipo === 'comunidad') {
     comunidad = e.data
@@ -30,4 +43,15 @@ window.addEventListener('message', (e) => {
 chrome.runtime.onMessage.addListener((msg, _remitente, responder) => {
   if (msg && msg.tipo === 'que-chat') responder(ultimo)
   if (msg && msg.tipo === 'que-comunidad') responder(comunidad)
+  // El panel pide abrir un chat. Se le pasa a `pagina.js` —el único que ve a WhatsApp por dentro— y
+  // se contesta con lo que pudo. 🔑 Si en 2 s no contestó, se da por no: el panel recarga como antes.
+  if (msg && msg.tipo === 'abrir-chat-aca') {
+    const pedido = ++nPedido
+    esperando.set(pedido, responder)
+    setTimeout(() => {
+      if (esperando.delete(pedido)) responder({ ok: false })
+    }, 2000)
+    window.postMessage({ fuente: FUENTE, tipo: 'abrir-chat-aca', tel: msg.tel, pedido }, '*')
+    return true
+  }
 })

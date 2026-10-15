@@ -719,6 +719,17 @@ function PanelInterno({
   }
 
   /**
+   * Ver la ficha de alguien de la lista SIN abrir su chat (Darío, 15-oct-2026): para corregirle un
+   * dato no hace falta pasar por la conversación. Es lo mismo que `abrirChat` menos el aviso a la
+   * extensión; registrar desde ahí le escribe a ESA persona, no a la del chat abierto.
+   */
+  const verFicha = (id: number, telefono: string) => {
+    if (!id && !telefono) return
+    setPedido({ id, tel: telefono })
+    setSolapa('cliente')
+  }
+
+  /**
    * Saltar de una fila de "Pagos" a esa persona.
    *
    * Con teléfono se abre el chat, que es lo que se quiere para reclamar; sin teléfono —las
@@ -775,7 +786,7 @@ function PanelInterno({
       <Envoltorio aviso={aviso}>
         {solapas}
         {kvListo ? (
-          <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} puedeAbrirChat={enExtension} />
+          <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} puedeAbrirChat={enExtension} />
         ) : (
           <Cargando />
         )}
