@@ -73,6 +73,14 @@ describe('el PDF', () => {
     expect(out).toContain('/Subtype /Image')
     expect(out).not.toContain('SIN VALIDEZ FISCAL')
   })
+  it('la A lleva la razón social y el domicilio del receptor (de la ficha); sin ficha, ⛔ inventa', async () => {
+    const A = { ...F, tipo: 1, doc_tipo: 80, doc_nro: 30718508181, cond_iva: 1 }
+    const con = await armar({ ...A, receptor_nombre: 'MODA SUR SRL', receptor_domicilio: 'AV RIVADAVIA 1234' })
+    expect(con).toContain('MODA SUR SRL')
+    expect(con).toContain('AV RIVADAVIA 1234')
+    const sin = await armar(A)
+    expect(sin).not.toContain('Domicilio:')
+  })
   it('una de homologación sale sellada SIN VALIDEZ FISCAL', async () => {
     expect(await armar(F)).toContain('SIN VALIDEZ FISCAL')
   })

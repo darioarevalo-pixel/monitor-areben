@@ -4,7 +4,7 @@
  * prueba facturada en producción, o un PDF cuyos renglones ⛔ suman lo facturado.
  */
 import { describe, it, expect } from 'vitest'
-import { claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, puedeFacturar, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
+import { claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { CBTE, COND_IVA, DOC } from '../motor/arca/arca.core.js'
 
 const ID = '0b5e7a52-6d1c-4b8e-9a51-2f6c7d8e9f01'
@@ -18,12 +18,29 @@ describe('leerFacturar', () => {
     expect(leerFacturar({ ventaId: ID, clase: 'b', doc: '30.123.456' }).receptor).toEqual({ docTipo: DOC.DNI, docNro: 30123456, condicionIva: COND_IVA.CONSUMIDOR_FINAL })
     expect(leerFacturar({ ventaId: ID, doc: '30-71850818-1' }).receptor).toMatchObject({ docTipo: DOC.CUIT, docNro: 30718508181 })
   })
-  it('A pide CUIT válido y condición', () => {
-    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri' })).toMatchObject({ tipo: CBTE.FACTURA_A, receptor: { docTipo: DOC.CUIT, condicionIva: COND_IVA.RESPONSABLE_INSCRIPTO } })
-    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'monotributo' }).receptor?.condicionIva).toBe(COND_IVA.MONOTRIBUTO)
-    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: '30123456', condicion: 'ri' }).error).toBeTruthy()
-    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: '30718508182', condicion: 'ri' }).error).toBeTruthy()
-    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT }).error).toBeTruthy()
+  it('A pide CUIT válido, condición y razón social', () => {
+    const rs = { razonSocial: 'Moda Sur SRL' }
+    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri', ...rs })).toMatchObject({ tipo: CBTE.FACTURA_A, receptor: { docTipo: DOC.CUIT, condicionIva: COND_IVA.RESPONSABLE_INSCRIPTO } })
+    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'monotributo', ...rs }).receptor?.condicionIva).toBe(COND_IVA.MONOTRIBUTO)
+    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: '30123456', condicion: 'ri', ...rs }).error).toBeTruthy()
+    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: '30718508182', condicion: 'ri', ...rs }).error).toBeTruthy()
+    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, ...rs }).error).toBeTruthy()
+  })
+  it('A sin razón social ⛔ sale: es el nombre de la ficha y va impreso', () => {
+    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri' }).error).toMatch(/razón social/)
+    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri', razonSocial: '   ' }).error).toMatch(/razón social/)
+  })
+  it('A devuelve la ficha a guardar, con espacios limpios y el domicilio opcional', () => {
+    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri', razonSocial: '  Moda   Sur SRL ', domicilio: ' Av. Rivadavia  1234 ' }).cliente)
+      .toEqual({ razonSocial: 'Moda Sur SRL', domicilio: 'Av. Rivadavia 1234' })
+    expect(leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri', razonSocial: 'Moda Sur SRL' }).cliente).toEqual({ razonSocial: 'Moda Sur SRL', domicilio: '' })
+    expect(leerFacturar({ ventaId: ID, doc: '30123456' }).cliente).toBeUndefined()
+  })
+  it('la condición de la ficha vuelve a la opción de la pantalla', () => {
+    expect(opcionDeCondicion(COND_IVA.RESPONSABLE_INSCRIPTO)).toBe('ri')
+    expect(opcionDeCondicion(COND_IVA.MONOTRIBUTO)).toBe('monotributo')
+    expect(opcionDeCondicion(COND_IVA.CONSUMIDOR_FINAL)).toBeNull()
+    expect(opcionDeCondicion(null)).toBeNull()
   })
   it('frena la venta inválida, la clase C y un documento de largo raro', () => {
     expect(leerFacturar({ ventaId: '123' }).error).toBeTruthy()

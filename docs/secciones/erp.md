@@ -66,6 +66,13 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   nuevo devuelve la MISMA (para el PDF). Frena: GN ya la facturó (`ventas_factura_gn`), anulada, cambio, y 🔴 una
   venta de PRUEBA en producción (hasta el corte la factura real sale de GN). «Facturas del monitor» lee los
   renglones de una venta propia de `venta_ficha` (la clave ⛔ es numérica).
+  🔴 **`venta_factura` es INMUTABLE (motor 009)**: se escribe SÓLO con `vincularFactura` del motor (`atarFactura`). Si ⛔
+  la ata (la venta se anuló mientras ARCA autorizaba), el comprobante ya tiene CAE ⇒ vuelve con `sinAtar`, a pantalla.
+- 🔑 **La A deja la FICHA de la clienta** (contrato §11, `guardarCliente`, una por EMPRESA y documento): CUIT, razón
+  social (obligatoria en la A), condición y domicilio (opcional). La Caja la busca por CUIT o nombre
+  (`vista=clientas`) y un CUIT completo con ficha se completa solo. Lo que viene con dato PISA la ficha; lo vacío ⛔
+  borra. El PDF de la A imprime razón social y domicilio del receptor DE LA FICHA (`receptor_nombre`/`_domicilio`,
+  también al reimprimir y en «Facturas del monitor»); sin ficha, sólo el CUIT (⛔ se inventa).
 - 🔑 **La NC de una venta propia**: botón «Hacer nota de crédito» en la ficha de Ventas, SÓLO con la venta ANULADA
   y facturada (a una en pie la NC le anula la factura y el lote ⛔ la deja refacturar). Va por el MISMO
   `notaDeCredito` de Facturación (entera, asociada) y se ata como `nc` en `venta_factura`.

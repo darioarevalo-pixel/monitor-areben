@@ -165,6 +165,11 @@ export const anularVenta = (marca: MarcaErp, ventaId: string, motivo: string) =>
 /** Lo que se lleva en un cambio: la forma de `ItemCaja` de la Caja (el servidor lo arma con `renglones`). */
 export type PrendaNueva = { product_id: number; size_id: number; cantidad: number; precio: number; sku?: string | null }
 
+/** Una ficha de clienta (contrato §11) para la factura A: lo que la Caja completa sola. */
+export type Clienta = { doc: string; nombre: string; razonSocial: string | null; domicilio: string | null; condicion: 'ri' | 'monotributo' | null }
+export const buscarClientas = (marca: MarcaErp, q: string) =>
+  pedir<{ clientas: Clienta[] }>(null, `&vista=clientas&marca=${marca}&q=${encodeURIComponent(q)}`, 'No se pudo buscar la clienta.')
+
 /** El saldo a favor de una clienta (el de prueba, mientras el cambio es de prueba). */
 export const leerSaldo = (marca: MarcaErp, doc: string) =>
   pedir<{ cliente: { nombre: string } | null; saldo: number }>(null, `&vista=saldo&marca=${marca}&doc=${encodeURIComponent(doc)}&nc=${Date.now()}`, 'No se pudo leer el saldo.')
@@ -187,9 +192,11 @@ export const cambiarVenta = (marca: MarcaErp, c: {
   pedir<RespuestaCambio>(post({ accion: 'cambiar', marca, ...c }), '', 'No se pudo registrar el cambio.')
 
 /** La factura a pedido de una venta propia (`erp › Caja`). B sin documento = consumidor final sin identificar. */
-export type PedidoFactura = { ventaId: string; clase: 'A' | 'B'; doc?: string; condicion?: 'ri' | 'monotributo'; reimprimir?: boolean }
+export type PedidoFactura = {
+  ventaId: string; clase: 'A' | 'B'; doc?: string; condicion?: 'ri' | 'monotributo'; razonSocial?: string; domicilio?: string; reimprimir?: boolean
+}
 export const facturarVenta = (marca: MarcaErp, p: PedidoFactura) =>
-  pedir<{ ok: true; yaEstaba: boolean; sinAtar: string | null; factura: FacturaEmitida }>(post({ accion: 'facturar-venta', marca, ...p }), '', 'No se pudo facturar.')
+  pedir<{ ok: true; yaEstaba: boolean; sinAtar: string | null; sinFicha?: string | null; factura: FacturaEmitida }>(post({ accion: 'facturar-venta', marca, ...p }), '', 'No se pudo facturar.')
 
 /** La nota de crédito de una venta propia ANULADA que tenía factura (desde su ficha). */
 export const notaDeCreditoDeVenta = (marca: MarcaErp, ventaId: string) =>

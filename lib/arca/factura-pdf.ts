@@ -37,6 +37,9 @@ export type FacturaEmitida = {
   estado: 'autorizada'
   cae: string
   cae_vence: string
+  /** La razón social y el domicilio del receptor, de la ficha de la clienta (factura A). null si ⛔ hay ficha. */
+  receptor_nombre?: string | null
+  receptor_domicilio?: string | null
 }
 
 type Emisor = import('@/motor/arca/emisor.core.js').Emisor
@@ -140,7 +143,9 @@ export function armarFacturaPdf({ f, emisor, qrDataUrl, JsPDF }: { f: FacturaEmi
 
   // ── Receptor ──
   y = top + alto + 4
-  pdf.rect(M, y, R - M, 14)
+  // La factura A lleva el nombre (razón social) y el domicilio del receptor: salen de la ficha de la clienta.
+  const extras = ([['Razón social', f.receptor_nombre], ['Domicilio', f.receptor_domicilio]] as const).filter(([, v]) => v)
+  pdf.rect(M, y, R - M, 14 + 5 * extras.length)
   const doc = DOC_TXT[f.doc_tipo]
   pdf.setFont('helvetica', 'bold'); pdf.text('Condición frente al IVA:', M + 4, y + 6)
   pdf.setFont('helvetica', 'normal'); pdf.text(COND_IVA_TXT[f.cond_iva] || String(f.cond_iva), M + 46, y + 6)
@@ -150,6 +155,12 @@ export function armarFacturaPdf({ f, emisor, qrDataUrl, JsPDF }: { f: FacturaEmi
   pdf.text(doc ? (f.doc_tipo === DOC.CUIT ? cuitTxt(f.doc_nro) : String(f.doc_nro)) : 'Consumidor final sin identificar', MID + 6 + wDoc, y + 6)
   pdf.setFont('helvetica', 'bold'); pdf.text('Condición de venta:', M + 4, y + 11)
   pdf.setFont('helvetica', 'normal'); pdf.text('Contado', M + 38, y + 11)
+  extras.forEach(([k, v], i) => {
+    pdf.setFont('helvetica', 'bold'); pdf.text(`${k}:`, M + 4, y + 16 + 5 * i)
+    const w = pdf.getTextWidth(`${k}: `)
+    pdf.setFont('helvetica', 'normal'); pdf.text(pdf.splitTextToSize(String(v), R - M - 8 - w)[0], M + 4 + w, y + 16 + 5 * i)
+  })
+  y += 5 * extras.length
 
   // ── El renglón: el monto facturado es lo cobrado en cuentas Areben, ⛔ el total de la venta ──
   y += 20

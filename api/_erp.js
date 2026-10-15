@@ -21,6 +21,7 @@
  *   GET  ?recurso=erp&vista=venta&marca=…&id=UUID                      la ficha: prendas, pagos, factura, estado
  *   POST {recurso:'erp', accion:'anular', marca, ventaId, motivo}      anula una venta propia (por el motor)
  *   GET  ?recurso=erp&vista=saldo&marca=…&doc=DNI                      el saldo a favor de la clienta (el de prueba)
+ *   GET  ?recurso=erp&vista=clientas&marca=…&q=CUIT|nombre             las fichas de clientas (factura A en la Caja)
  *   POST {recurso:'erp', accion:'cambiar', marca, id, ventaId, devueltas, items, pagos, total, desde?, pago?, comprobante?, cliente?}
  *        el cambio en el local: cobra la diferencia con el descuento de la forma de pago y, con transferencia,
  *        contesta `esperando` hasta que llega el pago (la pantalla repite el MISMO pedido)
@@ -48,7 +49,7 @@ import { SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { MENSAJE_ERROR_MOTOR, armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
-import { claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, puedeFacturar, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
+import { claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
@@ -236,12 +237,19 @@ export async function facturasDelMes(mes) {
   const facturas = await leerTodo(sb, 'facturas', (q) => q
     .select('id, ambiente, marca, venta_id, tipo, pto_vta, numero, fecha, total, neto, iva, doc_tipo, doc_nro, cond_iva, estado, cae, cae_vence')
     .eq('ambiente', ambiente).eq('mes', mes).eq('estado', 'autorizada').order('creado_en'))
-  const numeros = new Map(), detalles = new Map()
+  const numeros = new Map(), detalles = new Map(), receptores = new Map()
   for (const marca of MARCAS) {
     const todas = [...new Set(facturas.filter((f) => f.marca === marca).map((f) => f.venta_id))]
     if (!todas.length) continue
     const { url, key } = cfgDeMarca(marca)
     const b = createClient(url, key)
+    // El receptor de las A (y sus NC): la razón social y el domicilio de la ficha de la clienta, por su CUIT.
+    const cuits = [...new Set(facturas.filter((f) => f.marca === marca && Number(f.doc_tipo) === DOC.CUIT).map((f) => String(f.doc_nro)))]
+    for (let i = 0; i < cuits.length; i += 200) {
+      const { data, error: e } = await b.from('cliente').select('doc, nombre, razon_social, domicilio').in('doc', cuits.slice(i, i + 200))
+      if (e) throw new Error(`cliente (${marca}): ${e.message}`)
+      for (const c of data) receptores.set(`${marca}/${c.doc}`, { nombre: c.razon_social || c.nombre, domicilio: c.domicilio })
+    }
     // Las de una venta propia sin venta de GN (la factura a pedido de la Caja) van por el uuid del motor.
     const ids = todas.filter((id) => /^\d+$/.test(id))
     const propias = todas.filter((id) => !/^\d+$/.test(id))
@@ -272,6 +280,8 @@ export async function facturasDelMes(mes) {
       ...f, total: Number(f.total), neto: Number(f.neto), iva: Number(f.iva), numero: Number(f.numero), doc_nro: Number(f.doc_nro),
       venta_numero: numeros.get(claveVenta(f.marca, f.venta_id)) ?? null,
       renglones: detalles.get(claveVenta(f.marca, f.venta_id)) || [],
+      receptor_nombre: receptores.get(`${f.marca}/${f.doc_nro}`)?.nombre ?? null,
+      receptor_domicilio: receptores.get(`${f.marca}/${f.doc_nro}`)?.domicilio ?? null,
     })),
   }
 }
@@ -555,12 +565,15 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
     }
     if (factura.estado !== 'autorizada') return { status: 409, error: 'Esa venta tiene una factura a medio pedir: probá de nuevo en un minuto.' }
     const sinAtar = await atarFactura(db, { venta: f, facturaId: factura.id, tipo: 'factura' })
+    const { receptor, sinFicha } = p.cliente
+      ? await guardarFichaA(db, { venta: f, doc: p.receptor.docNro, condicionIva: p.receptor.condicionIva, ...p.cliente })
+      : { receptor: await receptorDeFicha(db, { empresaId: f.empresa_id, factura }), sinFicha: null }
     const inv = (f.lineas || []).length
       ? await b.from('inventario').select('product_id, size_id, product_name, size_name').in('product_id', [...new Set(f.lineas.map((l) => l.product_id))])
       : { data: [] }
     if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
     const nombres = new Map((inv.data || []).map((x) => [`${x.product_id}/${x.size_id}`, { nombre: x.product_name, talle: x.size_name }]))
-    return { ok: true, yaEstaba: !!ya, sinAtar, factura: filaParaPdf(factura, { numero: f.detalle?.gn_number ?? f.numero, renglones: renglonesDeVenta(f, nombres) }) }
+    return { ok: true, yaEstaba: !!ya, sinAtar, sinFicha, factura: filaParaPdf(factura, { numero: f.detalle?.gn_number ?? f.numero, renglones: renglonesDeVenta(f, nombres), receptor }) }
   })
 }
 
@@ -589,6 +602,43 @@ export async function notaDeCreditoDeVenta({ marca, body, usuario }, deps = {}) 
 }
 
 /**
+ * La FICHA de la clienta de una factura A (contrato §11): CUIT, razón social, condición y domicilio quedan guardados
+ * (`guardarCliente`, una por empresa y documento) ⇒ la próxima vez la Caja la encuentra por CUIT o nombre y ⛔ se tipea.
+ * La factura ya tiene CAE: si la ficha ⛔ se guarda, se avisa y ⛔ se frena. Devuelve el receptor para el PDF.
+ */
+async function guardarFichaA(db, { venta, doc, condicionIva, razonSocial, domicilio }) {
+  const receptor = { nombre: razonSocial, domicilio: domicilio || null }
+  const { guardarCliente } = await import('../motor/venta/registrar.mjs')
+  const r = await guardarCliente(db, { empresa_id: venta.empresa_id, doc: String(doc), nombre: razonSocial, razon_social: razonSocial, condicion_iva: condicionIva, domicilio })
+  if (r.ok) return { receptor: { nombre: r.cliente.razon_social || r.cliente.nombre, domicilio: r.cliente.domicilio }, sinFicha: null }
+  console.error(`[erp] ficha de ${doc} sin guardar: ${r.error.codigo} ${r.error.mensaje}`)
+  return { receptor, sinFicha: `La factura salió, pero la ficha de la clienta ⛔ se guardó: ${r.error.mensaje}` }
+}
+
+/** El receptor de una factura A ya hecha (reimprimir), de la ficha por su CUIT. null si ⛔ es A o ⛔ hay ficha. */
+async function receptorDeFicha(db, { empresaId, factura }) {
+  if (Number(factura.doc_tipo) !== DOC.CUIT || !empresaId) return null
+  const [c] = (await db.query('select nombre, razon_social, domicilio from cliente where empresa_id = $1 and doc = $2', [empresaId, String(factura.doc_nro)])).rows
+  return c ? { nombre: c.razon_social || c.nombre, domicilio: c.domicilio } : null
+}
+
+/** Las fichas de clientas para la factura A (`erp › Caja`): por CUIT/DNI (prefijo) o por nombre. */
+export async function clientasDeLaCaja({ marca, q }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  return conMotor(marca, 'Buscar clientas', async (db, { buscarClientes }) => {
+    const [m] = (await db.query('select empresa_id from marca where id = $1', [marca])).rows
+    if (!m) return { status: 409, error: 'La marca ⛔ está en la base del motor.' }
+    const r = await buscarClientes(db, { empresa_id: m.empresa_id, texto: String(q ?? ''), limite: 8 })
+    if (!r.ok) return errorDelMotor(r)
+    return {
+      clientas: r.clientes.map((c) => ({
+        doc: c.doc, nombre: c.nombre, razonSocial: c.razon_social, domicilio: c.domicilio, condicion: opcionDeCondicion(c.condicion_iva),
+      })),
+    }
+  })
+}
+
+/**
  * Ata la factura (o la NC) a la venta en el motor: `vincularFactura` (`venta_factura` es INMUTABLE desde 009 ⇒ ⛔ insert
  * directo). Repetirla devuelve la misma fila. Si el motor ⛔ la ata (la venta se anuló entre medio, otro tipo…), el
  * comprobante YA tiene CAE: ⛔ se tira; se dice a pantalla y al log, y queda para atar a mano.
@@ -611,12 +661,13 @@ async function facturaDeClave(sb, { ambiente, marca, clave }) {
 }
 
 /** Una fila de `facturas` con la forma de `FacturaEmitida` (el PDF). */
-function filaParaPdf(f, { numero, renglones }) {
+function filaParaPdf(f, { numero, renglones, receptor = null }) {
   return {
     id: f.id, ambiente: f.ambiente, marca: f.marca, venta_id: f.venta_id, tipo: Number(f.tipo), pto_vta: Number(f.pto_vta),
     numero: Number(f.numero), fecha: f.fecha, total: Number(f.total), neto: Number(f.neto), iva: Number(f.iva),
     doc_tipo: Number(f.doc_tipo), doc_nro: Number(f.doc_nro), cond_iva: Number(f.cond_iva), estado: f.estado, cae: f.cae, cae_vence: f.cae_vence,
     venta_numero: numero != null ? String(numero) : null, renglones,
+    receptor_nombre: receptor?.nombre ?? null, receptor_domicilio: receptor?.domicilio ?? null,
   }
 }
 
@@ -842,6 +893,11 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET' && req.query.vista === 'venta') {
       const r = await fichaDeVenta({ marca: String(req.query.marca || ''), id: req.query.id })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'clientas') {
+      const r = await clientasDeLaCaja({ marca: String(req.query.marca || ''), q: req.query.q })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
