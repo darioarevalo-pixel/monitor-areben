@@ -1204,6 +1204,83 @@ function PanelInterno({
  * ⚠️ Guarda al salir del cuadro, como todo lo demás del panel: cada guardado reescribe el mapa
  * entero del KV. Vaciarlo lo borra.
  */
+/**
+ * Un texto que se toca para corregirlo: el nombre o la ciudad de un prospecto. Guarda al salir del
+ * cuadro o con Enter, como el Instagram; Escape deja lo que estaba.
+ */
+function TextoEditable({
+  valor,
+  vacio,
+  ayuda,
+  guardando,
+  estilo,
+  onGuardar,
+}: {
+  valor: string
+  vacio: string
+  ayuda: string
+  guardando: boolean
+  estilo: React.CSSProperties
+  onGuardar: (v: string) => void
+}) {
+  const [editando, setEditando] = useState(false)
+
+  if (editando)
+    return (
+      <input
+        autoFocus
+        className="mo-input"
+        defaultValue={valor}
+        placeholder={ayuda}
+        disabled={guardando}
+        onBlur={(e) => {
+          const txt = e.target.value.trim()
+          setEditando(false)
+          if (txt !== valor.trim()) onGuardar(txt)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            e.currentTarget.blur()
+          }
+          if (e.key === 'Escape') {
+            e.currentTarget.value = valor
+            e.currentTarget.blur()
+          }
+        }}
+        style={{ ...estilo, width: '100%', margin: '1px 0' }}
+      />
+    )
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditando(true)}
+      disabled={guardando}
+      title="Tocá para cambiarlo"
+      style={{
+        ...estilo,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        maxWidth: '100%',
+        height: 'auto',
+        padding: 0,
+        background: 'none',
+        border: 0,
+        textAlign: 'left',
+        cursor: 'pointer',
+        font: 'inherit',
+        fontSize: estilo.fontSize,
+        fontWeight: estilo.fontWeight,
+      }}
+    >
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{valor || vacio}</span>
+      <Icono nombre="lapiz" size={12} />
+    </button>
+  )
+}
+
 function Instagram({
   valor,
   guardando,
@@ -1606,10 +1683,24 @@ function FichaLead({
       <Bloque>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: font.lg, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}>
-              {lead.nombre || 'Sin nombre'}
-            </div>
-            <div style={{ fontSize: font.xs, color: color.mut2 }}>{lead.ciudad || 'sin ciudad'}</div>
+            {/* El nombre y la ciudad se corrigen acá (Darío, 16-oct-2026): muchas veces el prospecto
+                se carga sin saber cómo se llama, y se entera después en la conversación. */}
+            <TextoEditable
+              valor={lead.nombre || ''}
+              vacio="Sin nombre"
+              ayuda="Su nombre"
+              guardando={guardando}
+              estilo={{ fontSize: font.lg, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}
+              onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'nombre', v), 'Nombre guardado')}
+            />
+            <TextoEditable
+              valor={lead.ciudad || ''}
+              vacio="sin ciudad"
+              ayuda="Su ciudad"
+              guardando={guardando}
+              estilo={{ fontSize: font.xs, color: color.mut2 }}
+              onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'ciudad', v), 'Ciudad guardada')}
+            />
             <div>{marcaComunidad}</div>
             {botonChat}
             {/* Editable también acá: en un prospecto el Instagram es la mitad de lo que se sabe
