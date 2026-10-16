@@ -18,8 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
-import { construirPrecios } from '@/lib/etiquetas/core'
-import { imagenDe, matchTn } from '@/lib/tn'
+import { precioDeCaja } from '@/lib/caja/precio'
 import { hoyIso } from '@/lib/agenda'
 import { buscarNombre, buscarProducto, leerConfig, type Config, type Variante } from '@/lib/caja/cliente'
 import { plata } from '@/lib/caja/ticket'
@@ -65,6 +64,7 @@ export function CajaTotem() {
 function Totem() {
   const { datos } = useDatosMonitor()
   const tnIdx = useTnPromo(storeCaja())
+  const tnIdxStunned = useTnPromo(storeCaja() === 'zattia' ? 'stunned' : storeCaja())
   const [config, setConfig] = useState<Config | null>(null)
   useEffect(() => {
     leerConfig()
@@ -102,9 +102,11 @@ function Totem() {
       const p = datos?.allProductos.find((x) => String(x.id) === String(productId))
       if (!p || !tnIdx) return { precio: null, foto: null, categorias: [] as string[] }
       // Las categorías de Tienda Nube: las promos por categoría (las mismas que manda el POS).
-      return { precio: construirPrecios([p], tnIdx).precios[p.id] || null, foto: imagenDe(p, tnIdx), categorias: matchTn(p, tnIdx)?.categories ?? [] }
+      // Stunned, sólo su Tienda Nube (`lib/caja/precio.ts`). `reglas: null`: la oferta la pone `precioTotem`.
+      const { precio, foto, categorias } = precioDeCaja(p, { store: storeCaja(), idx: tnIdx, idxStunned: tnIdxStunned, reglas: null })
+      return { precio, foto, categorias }
     },
-    [datos, tnIdx],
+    [datos, tnIdx, tnIdxStunned],
   )
 
   async function buscar(q: string) {

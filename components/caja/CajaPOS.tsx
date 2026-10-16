@@ -45,12 +45,11 @@ import { useSesion } from '@/components/SesionProvider'
 import type { Marca } from '@/lib/nav.datos'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
-import { construirPrecios } from '@/lib/etiquetas/core'
-import { imagenDe, matchTn } from '@/lib/tn'
+import { precioDeCaja } from '@/lib/caja/precio'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
-import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, cuentaDeOferta, idsDeFeria, mediosOfertaAparte, nombreParaTicket, precioDeFeria, pagosDeMedio, pagosDeVarios, renglones, subtotal, subtotalDeFeria } from '@/lib/caja/core.core.js'
+import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, cuentaDeOferta, idsDeFeria, mediosOfertaAparte, nombreParaTicket, pagosDeMedio, pagosDeVarios, renglones, subtotal, subtotalDeFeria } from '@/lib/caja/core.core.js'
 import { hoyIso, promosDeCreditoEnMostrador } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
@@ -171,6 +170,8 @@ function POS() {
   const promos = useAgenda((st) => st.promos)
   const { datos } = useDatosMonitor()
   const tnIdx = useTnPromo(storeCaja())
+  // 🔑 Stunned tiene SU Tienda Nube (16-oct): su precio sale de ahí, ⛔ de la de Zattia. En BDI es el mismo índice.
+  const tnIdxStunned = useTnPromo(storeCaja() === 'zattia' ? 'stunned' : storeCaja())
 
   const [config, setConfig] = useState<Config | null>(null)
   const [errCarga, setErrCarga] = useState<string | null>(null)
@@ -377,27 +378,27 @@ function POS() {
   )
   const esEfectivo = useCallback((id: number) => !!reglas?.cuentas[id]?.efectivo, [reglas])
 
-  /** El precio de la etiqueta y la foto de un producto, con la regla de Etiquetas. */
+  /** El precio, la foto y las categorías de TN de un producto: la regla de su línea (`lib/caja/precio.ts`). */
+  const precioDeProducto = useCallback(
+    (productId: number) => {
+      const p = datos?.allProductos.find((x) => String(x.id) === String(productId))
+      if (!p || !tnIdx) return null
+      return precioDeCaja(p, { store: storeCaja(), idx: tnIdx, idxStunned: tnIdxStunned, reglas })
+    },
+    [datos, tnIdx, tnIdxStunned, reglas],
+  )
+
+  /** El precio de la etiqueta y la foto de un producto. */
   const precioYFoto = useCallback(
     (productId: number): { precio: number | null; fueraDeTn: boolean; foto: string | null } => {
-      const p = datos?.allProductos.find((x) => String(x.id) === String(productId))
-      if (!p || !tnIdx) return { precio: null, fueraDeTn: false, foto: null }
-      const { precios, fueraDeTn } = construirPrecios([p], tnIdx)
-      // 🔑 La prenda de feria va al precio de SU campaña (13-oct): el de TN puede ser el de la «Feria Online».
-      const precio = precioDeFeria(reglas, productId) ?? (precios[p.id] || null)
-      return { precio, fueraDeTn: fueraDeTn.has(p.id), foto: imagenDe(p, tnIdx) }
+      const r = precioDeProducto(productId)
+      return r ? { precio: r.precio, fueraDeTn: r.fueraDeTn, foto: r.foto } : { precio: null, fueraDeTn: false, foto: null }
     },
-    [datos, tnIdx, reglas],
+    [precioDeProducto],
   )
 
   /** Las categorías de Tienda Nube del producto (las promos por categoría, W5). La de GN está vacía en el 85 %. */
-  const categoriasDe = useCallback(
-    (productId: number): string[] => {
-      const p = datos?.allProductos.find((x) => String(x.id) === String(productId))
-      return (p && tnIdx && matchTn(p, tnIdx)?.categories) || []
-    },
-    [datos, tnIdx],
-  )
+  const categoriasDe = useCallback((productId: number): string[] => precioDeProducto(productId)?.categorias ?? [], [precioDeProducto])
 
   // 🔑 La foto del COLOR (Bruno, 5-oct): Tienda Nube trae la foto de cada variante con su SKU, que es el
   // mismo de GN. Sin foto propia, la del producto.
@@ -1493,7 +1494,7 @@ function POS() {
                     key={claveDe(r.variante)}
                     r={r}
                     feria={feriaIds.has(Number(r.variante.product_id))}
-                    cargandoPrecios={!datos || !tnIdx}
+                    cargandoPrecios={!datos || !tnIdx || !tnIdxStunned}
                     onCantidad={(n) => (n <= 0 ? sacarRenglon(i) : cambiarRenglon(i, { cantidad: n }))}
                     onPrecio={(p) => cambiarRenglon(i, { precio: p })}
                     onRebaja={(rb) => cambiarRenglon(i, { rebaja: rb })}

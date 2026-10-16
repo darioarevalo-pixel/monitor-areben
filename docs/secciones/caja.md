@@ -20,6 +20,10 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
 
 - **El precio es el de Etiquetas** (`construirPrecios`, `lib/etiquetas/core.ts`): la Caja cobra lo
   que dice la etiqueta colgada, y la cajera lo puede cambiar. Tocar esa regla cambia lo que se cobra.
+  🔴 **Stunned (SKU `STU…`) cobra SÓLO lo de SU Tienda Nube** (store 7516263, con la oferta; ⛔ la lista
+  de GN, ⛔ la feria; sin la prenda en su tienda, sin precio) — Bruno, 16-oct. La regla por línea vive en
+  `lib/caja/precio.ts` (POS y tótem). Antes le pasaba el índice de Zattia y cobraba la lista: la REMERA
+  S-MAIL GREY salía $31.490 con la etiqueta en $22.090 (25 de 40 productos de Stunned en oferta).
 - `lib/gn/inventario-vivo.core.js` es también de `api/_inventario-vivo.js` (los Conteos).
 - `lib/rollo80.ts` es también del ticket y el recibo de Envíos.
 - **La transferencia se cruza con la MISMA lectura de Pagos recibidos** (`pagosDelDia` de
