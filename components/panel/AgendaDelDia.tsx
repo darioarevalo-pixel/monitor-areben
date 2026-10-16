@@ -639,6 +639,7 @@ function Agenda({
   onVerFicha: (id: number, tel: string) => void
   puedeAbrirChat: boolean
 }) {
+  const escritos = useContext(EscritosCtx)
   const [filtro, setFiltro] = useState<FiltroPanel>(memoria.filtro)
   const [mostrar, setMostrar] = useState(memoria.mostrar)
   const [estado, setEstado] = useState<EstadoAgenda>(memoria.estado)
@@ -808,8 +809,21 @@ function Agenda({
    * son sin que se coman la lista.
    */
   const deClientes = lista.map((f) => itemDeCliente(f, today))
-  const paraHoy = estable([...deClientes.filter((i) => i.dias === 0), ...leads.filter((i) => i.dias === 0)], (i) => `hoy:${i.key}`, (a, b) => a.orden - b.orden)
-  const sinFecha = leads.filter((i) => i.dias === null)
+  const friosItems = frios.map((f) => itemDeCliente(f, today))
+  /**
+   * 🔴 **Falta la fecha**: a quien le escribiste hoy (según WhatsApp Web) y sigue sin fecha para
+   * adelante. Va arriba de todo y SALE de su grupo (Darío, 16-oct-2026: le escribió a un prospecto,
+   * salió del chat sin agendarlo y no lo encontraba). Se va solo al ponerle fecha.
+   */
+  const faltaFecha = estable(
+    [...deClientes, ...leads, ...friosItems].filter((i) => (i.dias === null || i.dias <= 0) && leEscribisteHoy(escritos, [i.telefono])),
+    (i) => `falta:${i.key}`,
+    porAtraso,
+  )
+  const sinMarcar = new Set(faltaFecha.map((i) => i.key))
+  const fuera = (i: Item) => !sinMarcar.has(i.key)
+  const paraHoy = estable([...deClientes.filter((i) => i.dias === 0), ...leads.filter((i) => i.dias === 0)].filter(fuera), (i) => `hoy:${i.key}`, (a, b) => a.orden - b.orden)
+  const sinFecha = leads.filter((i) => i.dias === null).filter(fuera)
   /**
    * Atrasados: clientes y prospectos juntos, **el más atrasado arriba** (`porAtraso`) y quietos
    * (`estable`).
@@ -817,17 +831,18 @@ function Agenda({
    * 🔑 **El número es lo que se ve** (Darío, 15-oct-2026). Antes el título decía la pila entera —383
    * con 25 a la vista— y asustaba sin ayudar. Lo que queda afuera lo dice un renglón al final.
    */
-  const atrasados = estable([...deClientes.filter((i) => i.dias !== 0), ...leads.filter((i) => i.dias !== null && i.dias < 0)], (i) => `atr:${i.key}`, porAtraso)
+  const todosAtrasados = [...deClientes.filter((i) => i.dias !== 0), ...leads.filter((i) => i.dias !== null && i.dias < 0)]
+  const atrasados = estable(todosAtrasados.filter(fuera), (i) => `atr:${i.key}`, porAtraso)
   const leadsAtrasados = leads.filter((i) => i.dias !== null && i.dias < 0).length
   const totalAtrasados = atrasados.length
-  const esperando = cola.atrasados + leadsAtrasados - atrasados.length
+  const esperando = cola.atrasados + leadsAtrasados - todosAtrasados.length
   const totalHoy = paraHoy.length
   const hechosItems = [
     ...hechos.map((f) => ({ it: itemDeCliente(f, today), dias: f.dias })),
     ...leadsHechos,
   ]
 
-  if (!paraHoy.length && !atrasados.length && !sinFecha.length && !frios.length && !hechosItems.length)
+  if (!faltaFecha.length && !paraHoy.length && !atrasados.length && !sinFecha.length && !frios.length && !hechosItems.length)
     return (
       <div>
         {cabecera}
@@ -843,6 +858,15 @@ function Agenda({
       {cabecera}
       {avisoExtension}
       <Resumen hoy={totalHoy} atrasados={totalAtrasados} hechos={hechosItems.length} />
+
+      {faltaFecha.length > 0 && (
+        <Grupo titulo="🔴 Falta la fecha" cuantas={faltaFecha.length} abierto={abiertos.falta !== false} onToggle={() => setAbiertos((a) => ({ ...a, falta: a.falta === false }))}>
+          {faltaFecha.map((it) => (
+            <Fila key={it.key} it={it} onAbrir={onAbrirChat} onFicha={onVerFicha} />
+          ))}
+          <Aclaracion>Les escribiste hoy y no tienen cuándo volver a hablarles. Tocá el nombre y elegí los días.</Aclaracion>
+        </Grupo>
+      )}
 
       <Grupo titulo="Para hoy" cuantas={totalHoy} abierto={abiertos.hoy} onToggle={() => alternar('hoy')}>
         {paraHoy.map((it) => (
@@ -881,10 +905,10 @@ function Agenda({
         </Grupo>
       )}
 
-      {frios.length > 0 && (
-        <Grupo titulo="🧊 Recuperar" cuantas={frios.length} abierto={abiertos.frios} onToggle={() => alternar('frios')}>
-          {frios.map((f) => (
-            <Fila key={f.id} it={itemDeCliente(f, today)} onAbrir={onAbrirChat} onFicha={onVerFicha} />
+      {friosItems.filter(fuera).length > 0 && (
+        <Grupo titulo="🧊 Recuperar" cuantas={friosItems.filter(fuera).length} abierto={abiertos.frios} onToggle={() => alternar('frios')}>
+          {friosItems.filter(fuera).map((it) => (
+            <Fila key={it.key} it={it} onAbrir={onAbrirChat} onFicha={onVerFicha} />
           ))}
           <Aclaracion>La tanda de hoy, primero el que más compró. Para verlos a todos, tocá 🧊 arriba.</Aclaracion>
         </Grupo>
