@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { esDeStunned, precioDeCaja } from '@/lib/caja/precio'
 import { indexarTn } from '@/lib/tn-match.core.js'
+import type { Reglas } from '@/lib/caja/core.core.js'
 
 // La remera del 16-oct: en GN el producto se llama igual y su SKU es «STUNNED» (los 28 iguales, ver
 // docs/lineas.md); su lista en GN es la de TN, $31.490, y la tienda de Stunned la tiene a $22.090.
@@ -8,7 +9,8 @@ const sMail = { id: '913512', sku: 'STUNNED', name: 'REMERA S-MAIL GREY', retail
 const idxStunned = indexarTn([{ name: 'REMERA S-MAIL GREY', sku: 'STU-REM-0007-S', price: 31490, promo_price: 22090, categories: ['REMERAS'], images: ['https://x/s-mail.jpg'] }])
 const vestido = { id: '700', sku: 'ZAT-VES-0001', name: 'VESTIDO MALBA', retailer_price: 50000 }
 const idxZattia = indexarTn([{ name: 'VESTIDO MALBA', sku: 'ZAT-VES-0001', price: 50000, promo_price: 40000, categories: ['VESTIDOS'], images: [] }])
-const feria = { feriaPrecios: { '700': 30000 } }
+const conFeria = (feriaPrecios: Record<string, number>) => ({ redondeo: 0, cuentas: {}, feriaPrecios }) as unknown as Reglas
+const feria = conFeria({ '700': 30000 })
 
 describe('Caja · el precio según la línea (16-oct)', () => {
   it('Stunned cobra el precio de SU Tienda Nube, con la oferta, ⛔ la lista de GN', () => {
@@ -22,7 +24,7 @@ describe('Caja · el precio según la línea (16-oct)', () => {
   })
 
   it('Stunned ⛔ toma el precio de feria: sólo su Tienda Nube', () => {
-    const r = precioDeCaja(sMail, { store: 'zattia', idx: idxZattia, idxStunned, reglas: { feriaPrecios: { '913512': 1000 } } })
+    const r = precioDeCaja(sMail, { store: 'zattia', idx: idxZattia, idxStunned, reglas: conFeria({ '913512': 1000 }) })
     expect(r.precio).toBe(22090)
   })
 
