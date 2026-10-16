@@ -9,7 +9,8 @@
  * El domicilio va por marca: cada punto de venta está dado de alta en ARCA con un domicilio.
  *
  * Copiados de la Factura A 00002-00000201 de BDI emitida por GN (07-oct-2026, captura de Bruno del 13-oct).
- * Zattia, de la Factura B 00005-00006043 (09-oct-2026): ⛔ imprime domicilio ⇒ falta.
+ * Zattia, de la Factura B 00005-00006043 (09-oct-2026), que ⛔ imprime domicilio ⇒ el domicilio salió de ARCA:
+ * «Administración de puntos de venta y domicilios», PV 5 = SANTA FE 1435 - ROSARIO SUD - SANTA FE (captura de Bruno, 16-oct).
  *
  * 🔴 GN imprime DOS inicios de actividades para el MISMO CUIT (BDI 22/07/2024, Zattia 01/04/2024). Un CUIT
  * tiene uno solo en ARCA ⇒ uno de los dos está mal en GN. Mientras no se confirme, cada marca imprime el
@@ -32,7 +33,7 @@ export const EMISOR = {
   /** Por marca: el nombre que se ve arriba y el domicilio de su punto de venta. */
   marcas: {
     bdi: { nombre: 'BDI Accesorios', domicilio: 'Corrientes 763, Rosario, Santa Fe', inicioActividades: '22/07/2024' },
-    zattia: { nombre: 'Zattia - Stunned', domicilio: null, inicioActividades: '01/04/2024' },
+    zattia: { nombre: 'Zattia - Stunned', domicilio: 'Santa Fe 1435, Rosario, Santa Fe', inicioActividades: '01/04/2024' },
   },
 }
 
