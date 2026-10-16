@@ -592,7 +592,8 @@
   position: fixed;
   z-index: 300;
   right: 18px;
-  bottom: 18px;
+  /* Arriba de «Reportar un problema» (fijo abajo a la derecha, z 900): a 18px quedaba tapado. */
+  bottom: 64px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -632,7 +633,7 @@
   .mo-toasts {
     right: 12px;
     left: 12px;
-    bottom: 12px;
+    bottom: 60px;
   }
   .mo-toast {
     max-width: none;
