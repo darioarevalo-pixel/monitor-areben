@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button } from '@/components/ui'
+import { Button, Icono } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
 import { CalculadoraEnvio } from './CalculadoraEnvio'
@@ -54,6 +54,25 @@ import { antiguedadFoto, estaEnComunidad } from '@/lib/crm/comunidad'
 import { coincideNombre, palabraParaBuscar, palabrasDelNombre } from '@/lib/crm/nombre.core.js'
 import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
+import { cola } from '@/lib/crm/telefono.core.js'
+
+/**
+ * «Abrir su chat», en la ficha (Darío, 16-oct-2026). Desde que el nombre de la lista abre la ficha
+ * sin pasar por WhatsApp, a la ficha le faltaba la vuelta: ver a alguien y después querer
+ * escribirle. Sólo aparece si la ficha NO es la del chat abierto; ahí no tiene nada que abrir.
+ *
+ * ⚠️ Es del panel de WhatsApp. En la tabla de Clientes del monitor el botón se sacó a pedido y no
+ * vuelve (ver la ficha de la sección).
+ */
+function BotonAbrirChat({ tel, chatAbierto, onAbrir }: { tel: string; chatAbierto: string; onAbrir: () => void }) {
+  if (!cola(tel) || cola(tel) === cola(chatAbierto)) return null
+  return (
+    <Button size="sm" variant="soft" tone="success" onClick={onAbrir} style={{ marginTop: 6, gap: 6 }}>
+      <Icono nombre="whatsapp" size={14} />
+      Abrir su chat
+    </Button>
+  )
+}
 
 function useEscritosHoy(): EscritosHoy {
   const [escritos, setEscritos] = useState<EscritosHoy>(() => new Set())
@@ -960,6 +979,7 @@ function PanelInterno({
           guardando={guardando}
           onMutar={(fn, exito) => mutarLead(estado.lead.id, fn, exito)}
           leEscribiste={leEscribisteHoy(escritos, [telNorm, estado.lead.telefono])}
+          botonChat={<BotonAbrirChat tel={estado.lead.telefono || ''} chatAbierto={telNorm} onAbrir={() => abrirChat(0, estado.lead.telefono || '')} />}
           marcaComunidad={<MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={[telNorm, estado.lead.telefono || '']} />}
         />
       </Envoltorio>
@@ -1028,6 +1048,7 @@ function PanelInterno({
               <div>
                 <MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={via === 'id' ? [c.phone] : [telNorm, c.phone]} />
               </div>
+              <BotonAbrirChat tel={pedido?.tel || c.phone || ''} chatAbierto={telNorm} onAbrir={() => abrirChat(c.id, pedido?.tel || c.phone || '')} />
               {/*
                 El Instagram, que hasta ahora sólo se podía ver y escribir desde la sección. Y es
                 acá donde uno se entera de cuál es: lo tenés en la conversación, no en el CRM.
@@ -1564,6 +1585,7 @@ function FichaLead({
   onMutar,
   marcaComunidad,
   leEscribiste,
+  botonChat,
 }: {
   lead: Lead
   today: Date
@@ -1571,6 +1593,7 @@ function FichaLead({
   onMutar: (fn: (m: MapaLeads) => MapaLeads, exito: string) => Promise<boolean>
   marcaComunidad: React.ReactNode
   leEscribiste: boolean
+  botonChat: React.ReactNode
 }) {
   const seg = leadEstadoSeg(lead, today)
   const hoy = hoyISO(today)
@@ -1588,6 +1611,7 @@ function FichaLead({
             </div>
             <div style={{ fontSize: font.xs, color: color.mut2 }}>{lead.ciudad || 'sin ciudad'}</div>
             <div>{marcaComunidad}</div>
+            {botonChat}
             {/* Editable también acá: en un prospecto el Instagram es la mitad de lo que se sabe
                 de él, y muchas veces llega después de haberlo cargado. */}
             <Instagram
