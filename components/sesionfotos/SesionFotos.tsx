@@ -80,6 +80,8 @@ import {
   esperadoEn,
   faltantes,
   filaHistorial,
+  hayDevolucion,
+  reiniciarDevolucion,
   historialVisible,
   itemDeVariante,
   origenesConItems,
@@ -441,6 +443,7 @@ function Contenido({
           sols={solsCombi}
           prioridad={prioridad}
           admin={admin}
+          usuario={perfil?.name ?? ''}
           persistir={persistir}
           mapaBc={mapaBc}
           catalogoListo={catalogoListo}
@@ -1325,6 +1328,14 @@ function Detalle({
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         <BotonFase activo={fase === 'retiro'} onClick={() => { setFase('retiro'); setFb(null) }} label="Preparado" />
         {!esConsumo && <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="Devolución (al volver)" />}
+        {fase === 'devolucion' && s.estado !== 'cerrada' && hayDevolucion(s) ? (
+          <BotonReiniciarDevolucion
+            onConfirmar={() => {
+              setWork((w) => reiniciarDevolucion(w, { por: usuario, ts: Date.now() }))
+              setFb(null)
+            }}
+          />
+        ) : null}
       </div>
 
       {origenVisible('deposito') && grupo('Retirar de Depósito', dep, 'deposito')}
@@ -1587,6 +1598,7 @@ function Combinada({
   sols: sols0,
   prioridad,
   admin,
+  usuario,
   persistir,
   mapaBc,
   catalogoListo,
@@ -1595,6 +1607,7 @@ function Combinada({
   sols: Solicitud[]
   prioridad: Origen
   admin: boolean
+  usuario: string
   persistir: Persistir
   mapaBc: Record<string, string>
   catalogoListo: boolean
@@ -1716,6 +1729,14 @@ function Combinada({
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         <BotonFase activo={fase === 'retiro'} onClick={() => { setFase('retiro'); setFb(null) }} label="Preparado" />
         <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="Devolución (al volver)" />
+        {fase === 'devolucion' && works.some((w) => w.estado !== 'cerrada' && hayDevolucion(w)) ? (
+          <BotonReiniciarDevolucion
+            onConfirmar={() => {
+              setWorks((ws) => ws.map((w) => reiniciarDevolucion(w, { por: usuario, ts: Date.now() })))
+              setFb(null)
+            }}
+          />
+        ) : null}
       </div>
       {grupo('Depósito (todas)', 'deposito')}
       {grupo('Local (todas)', 'local')}
@@ -2337,6 +2358,21 @@ function BotonMini({ label, acento, onClick }: { label: string; acento?: boolean
       }}
     >
       {label}
+    </button>
+  )
+}
+
+/** Borra lo escaneado en la devolución, previa confirmación, para hacerla de nuevo. */
+function BotonReiniciarDevolucion({ onConfirmar }: { onConfirmar: () => void }) {
+  const pedir = () => {
+    if (window.confirm('¿Empezar la devolución de nuevo? Se borra todo lo escaneado en la devolución. Lo preparado no se toca.')) onConfirmar()
+  }
+  return (
+    <button
+      onClick={pedir}
+      style={{ marginLeft: 'auto', border: `1px solid ${color.dangerBorder}`, background: '#fff', color: color.dangerInk, borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+    >
+      Empezar la devolución de nuevo
     </button>
   )
 }

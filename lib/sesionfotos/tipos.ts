@@ -85,7 +85,7 @@ export const MOTIVOS_CAMBIO = ['Sin stock', 'Error de selección', 'Cambio de Ma
 export type Cambio = {
   ts: number
   por: string
-  accion: 'agregó' | 'sacó' | 'cambió cantidad' | 'editó'
+  accion: 'agregó' | 'sacó' | 'cambió cantidad' | 'editó' | 'reinició la devolución'
   detalle: string
   motivo?: string
 }

@@ -278,6 +278,25 @@ export function registrarCambio(s: Solicitud, c: Cambio): Solicitud {
   return { ...s, cambios: [...(s.cambios || []), c] }
 }
 
+/** ¿Hay algo escaneado en la devolución? Habilita el botón de empezarla de nuevo. */
+export function hayDevolucion(s: Solicitud): boolean {
+  return Object.values(s.devuelto || {}).some((n) => n > 0)
+}
+
+/**
+ * Borra lo escaneado en la devolución para hacerla de nuevo desde cero (16-oct-2026: a Lorena se le
+ * cortó la sesión a mitad de una devolución de una hora y no había forma de volver a empezar).
+ *
+ * Toca **sólo `devuelto`** —lo preparado, las ventas y los ítems quedan— y si la solicitud ya había
+ * pasado a `devuelta` vuelve a donde estaba antes: `cargada` si tiene venta, `preparada` si no.
+ * ⛔ Una `cerrada` no se toca: su venta ya se anuló en GN. Queda anotado en el historial de cambios.
+ */
+export function reiniciarDevolucion(s: Solicitud, datos: { por: string; ts: number }): Solicitud {
+  if (s.estado === 'cerrada' || !hayDevolucion(s)) return s
+  const estado = s.estado === 'devuelta' ? (s.ventas ? 'cargada' : 'preparada') : s.estado
+  return registrarCambio({ ...s, devuelto: {}, estado }, { ts: datos.ts, por: datos.por, accion: 'reinició la devolución', detalle: 'Se borró lo escaneado para hacerla de nuevo' })
+}
+
 /** Variante elegida al agregar (misma forma que devuelve `buscarProductos`). */
 export type VarElegida = { vid: string; sid: string | null; size: string; sku: string; local: number; deposito: number }
 
