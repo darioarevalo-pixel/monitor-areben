@@ -161,7 +161,7 @@ export function VentasPropias() {
               <Button variant="outline" onClick={() => setFicha(null)}>Volver a la búsqueda</Button>
               <Estado v={v} />
               {ficha.conNotaDeCredito ? <Badge tone="neutral">Con nota de crédito</Badge> : ficha.facturada ? <Badge tone="action">Facturada</Badge> : <Badge tone="neutral">Sin factura</Badge>}
-              {ficha.facturada && v.estado === 'anulada' && (
+              {ficha.facturada && v.estado === 'anulada' && !ficha.acreditadaEntera && (
                 <Button tone="danger" variant="outline" disabled={trabajando} onClick={() => void hacerNC()}>Hacer nota de crédito</Button>
               )}
               <span style={{ flex: 1 }} />

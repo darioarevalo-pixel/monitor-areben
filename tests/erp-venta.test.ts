@@ -4,7 +4,7 @@
  * vendida, o un anular sin motivo que llega al motor.
  */
 import { describe, it, expect } from 'vitest'
-import { armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, leerAnular, leerBusqueda, leerCambiar, leerClienteCambio, puedeAnular, rangoDeDias } from '../lib/erp/venta.core.js'
+import { armarFicha, cambiadasDe, estaAcreditadaEntera, cobroDelCambio, diferenciaDeCambio, leerAnular, leerBusqueda, leerCambiar, leerClienteCambio, puedeAnular, rangoDeDias } from '../lib/erp/venta.core.js'
 import { REGLAS_INICIALES } from '../lib/caja/core.core.js'
 
 describe('leerBusqueda', () => {
@@ -136,5 +136,21 @@ describe('el cambio (erp › Caja)', () => {
     expect(leerClienteCambio({ doc: '123', nombre: 'Ana' })?.error).toMatch(/DNI/)
     expect(leerClienteCambio({ doc: '30123456', nombre: '' })?.error).toMatch(/nombre/)
     expect(leerClienteCambio({ doc: '30123456', nombre: 'Ana', email: 'x' })?.error).toMatch(/mail/)
+  })
+})
+
+describe('estaAcreditadaEntera (caminado 16-oct, #235: con la NC de la anulación hecha, la ficha seguía ofreciendo otra)', () => {
+  const F = { facturaId: 'f', tipo: 'factura' }, N1 = { facturaId: 'n1', tipo: 'nc' }, N2 = { facturaId: 'n2', tipo: 'nc' }
+  it('la NC entera de la anulación ⇒ acreditada', () => {
+    expect(estaAcreditadaEntera([F, N1], new Map([['f', 49300], ['n1', 49300]]))).toBe(true)
+  })
+  it('🔴 sólo la PARCIAL de un cambio ⇒ queda saldo: se sigue ofreciendo la NC', () => {
+    expect(estaAcreditadaEntera([F, N1], new Map([['f', 49300], ['n1', 15490]]))).toBe(false)
+    expect(estaAcreditadaEntera([F, N1, N2], new Map([['f', 49300], ['n1', 15490], ['n2', 33810]]))).toBe(true)
+  })
+  it('sin NC, sin factura o sin montos ⇒ false (el servidor decide)', () => {
+    expect(estaAcreditadaEntera([F], new Map([['f', 100]]))).toBe(false)
+    expect(estaAcreditadaEntera([N1], new Map([['n1', 100]]))).toBe(false)
+    expect(estaAcreditadaEntera([F, N1], new Map())).toBe(false)
   })
 })

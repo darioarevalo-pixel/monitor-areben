@@ -455,7 +455,15 @@ export async function fichaDeVenta({ marca, id }) {
   const vivos = (cambios.data || []).filter((c) => c.estado === 'confirmada').map((c) => c.id)
   const devueltas = vivos.length ? await sb.from('venta_linea').select('linea_origen_id, cantidad').in('venta_id', vivos).lt('cantidad', 0) : { data: [] }
   if (devueltas.error) throw new Error(`venta_linea: ${devueltas.error.message}`)
-  return armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data, cambiadas: cambiadasDe(devueltas.data) })
+  // Los TOTALES de sus comprobantes (base de facturación): si las NC ya acreditan la factura entera, ⛔ se ofrece otra.
+  const ids = (f.facturas || []).map((x) => x.factura_id).filter(Boolean)
+  const montos = new Map()
+  if (ids.length) {
+    const { data, error: e } = await baseFacturacion().from('facturas').select('id, total').in('id', ids).neq('estado', 'rechazada')
+    if (e) throw new Error(`facturas: ${e.message}`)
+    for (const x of data) montos.set(x.id, Number(x.total))
+  }
+  return armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data, cambiadas: cambiadasDe(devueltas.data), montos })
 }
 
 /** Abre la conexión del motor de la marca, corre `fn(db, motor)` y la cierra. Sin la variable: 409, dicho. */

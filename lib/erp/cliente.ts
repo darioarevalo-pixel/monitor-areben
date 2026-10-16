@@ -154,6 +154,8 @@ export type FichaDeVenta = {
   facturada: boolean
   /** La factura ya se anuló con nota de crédito. */
   conNotaDeCredito: boolean
+  /** Las NC atadas ya acreditan la factura entera (⇒ ⛔ se ofrece otra). */
+  acreditadaEntera: boolean
   cambios: VentaPropia[]
   original: VentaPropia | null
   /** null = se puede anular; si no, por qué no. */
