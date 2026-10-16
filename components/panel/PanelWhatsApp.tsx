@@ -816,7 +816,9 @@ function PanelInterno({
       </Envoltorio>
     )
 
-  if (!telNorm)
+  // ⚠️ `pedido` también cuenta: desde la lista se puede ver la ficha de alguien sin ningún chat
+  // abierto (el nombre abre la ficha, 15-oct-2026). Mirando sólo `telNorm` quedaba este cartel.
+  if (!telNorm && !pedido)
     return (
       <Envoltorio>
         {solapas}
