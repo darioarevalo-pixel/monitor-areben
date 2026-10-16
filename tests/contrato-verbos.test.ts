@@ -67,7 +67,7 @@ function verbosQueManda(): { verbo: string; donde: string; handlers: string[]; c
       // `components/gen-talles/useGenTalles.ts` pegan contra `bdi-catalogo.vercel.app`, que es el
       // repo de Darío: sus verbos viven allá y buscarlos en `api/` daría un rojo permanente, que
       // es la forma más rápida de que nadie mire este test.
-      if (/=\s*'https:\/\//.test(src)) continue
+      if (/=\s*'https:\/\//.test(src) && !handlersDe(src).length) continue
       const handlers = handlersDe(src)
       for (const m of src.matchAll(ENVIOS)) {
         const cuerpo = objeto(src, m.index + m[0].length - 1)

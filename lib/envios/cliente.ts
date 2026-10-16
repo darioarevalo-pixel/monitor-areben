@@ -104,7 +104,7 @@ export async function cambiarEstado(id: string, estado: string, cadete?: string 
 }
 
 export async function borrarEnvio(id: string): Promise<void> {
-  await postear({ action: 'eliminar', id }, 'No se pudo eliminar el envío.')
+  await postear({ action: 'borrar', id }, 'No se pudo eliminar el envío.')
 }
 
 
