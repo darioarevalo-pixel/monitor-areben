@@ -185,6 +185,24 @@ export async function tokenActual(): Promise<string | null> {
   }
 }
 
+/**
+ * Pide un token nuevo **ya**, con el refresh_token, sin esperar a que `getSession()` decida.
+ *
+ * Lo usa `apiFetch` cuando el servidor contestó 403 a una sesión de Google: el token se renueva
+ * solo cada hora, y si justo en ese momento falló la conexión la pantalla se quedaba sin token y
+ * cada guardado decía «Necesitás estar logueado» (16-oct-2026, Lorena en una devolución de una
+ * hora). Devuelve null si no se pudo: ahí sí la sesión está vencida o no hay conexión.
+ */
+export async function tokenRenovado(): Promise<string | null> {
+  try {
+    const { data, error } = await clienteIdentidad().auth.refreshSession()
+    if (error) return null
+    return data.session?.access_token ?? null
+  } catch {
+    return null
+  }
+}
+
 /** Cierra la sesión del proveedor. Se llama junto con `borrarSesion()` del monitor. */
 export async function salirDeGoogle(): Promise<void> {
   try {

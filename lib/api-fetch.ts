@@ -27,6 +27,7 @@
  */
 
 import { credencialActual, guardarAdminPass, leerAdminPass, leerSesion } from './sesion'
+import { tokenRenovado } from './identidad'
 
 let pidiendoPass: Promise<void> | null = null
 
@@ -76,10 +77,29 @@ async function authHeader(): Promise<string | null> {
   }
 }
 
-export async function apiFetch(url: string, opts: RequestInit = {}): Promise<Response> {
-  await asegurarPass()
+async function fetchConAuth(url: string, opts: RequestInit): Promise<Response> {
   const auth = await authHeader()
   const headers = new Headers(opts.headers || {})
   if (auth) headers.set('x-monitor-auth', auth)
   return fetch(url, { ...opts, headers })
+}
+
+/** Sólo se reintenta lo que se puede mandar dos veces igual: sin cuerpo o con cuerpo de texto. */
+const reenviable = (opts: RequestInit) => opts.body == null || typeof opts.body === 'string'
+
+/**
+ * **Un 403 a una sesión de Google se reintenta UNA vez con un token recién pedido** (16-oct-2026).
+ *
+ * El token de Google dura una hora y se renueva solo; si la renovación cae justo en un corte de
+ * conexión, la pantalla queda sin token y el servidor contesta «Necesitás estar logueado» con la
+ * sesión de 30 días viva. Pedir uno nuevo y reintentar lo resuelve sin que la persona se entere.
+ * Si tampoco se puede, vuelve el 403 original y la pantalla avisa como siempre.
+ * ⛔ No aplica a las sesiones de contraseña: ahí no hay nada que renovar.
+ */
+export async function apiFetch(url: string, opts: RequestInit = {}): Promise<Response> {
+  await asegurarPass()
+  const r = await fetchConAuth(url, opts)
+  if (r.status !== 403 || !reenviable(opts) || leerSesion()?.via !== 'google') return r
+  if (!(await tokenRenovado())) return r
+  return fetchConAuth(url, opts)
 }

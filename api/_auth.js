@@ -82,17 +82,24 @@ export async function usuarioValido(user, pass, token) {
       ? { action: 'login', user, pass }
       : null;
   if (!cuerpo) return null;
-  try {
-    const r = await fetch(USU_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cuerpo),
-    });
-    const d = await r.json();
-    return d && d.ok && d.perfil ? d.perfil : null;
-  } catch {
-    return null;
+  // 🔑 Un tropiezo de bdi-catalogo (no contesta, 5xx, respuesta rota) se reintenta UNA vez antes de
+  // contestar 403: sin esto, un segundo de corte allá le decía «Necesitás estar logueado» a alguien
+  // logueado (16-oct-2026). Una respuesta clara de «no» (ok:false) ⛔ se reintenta: es la respuesta.
+  for (let intento = 0; intento < 2; intento++) {
+    try {
+      const r = await fetch(USU_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo),
+      });
+      if (r.status >= 500) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      return d && d.ok && d.perfil ? d.perfil : null;
+    } catch {
+      if (intento === 0) await new Promise((ok) => setTimeout(ok, 400));
+    }
   }
+  return null;
 }
 
 /**
