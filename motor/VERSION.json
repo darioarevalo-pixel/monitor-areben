@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "c967f6c106d8a11e85d88916ff9bb515feaa253c",
-  "traido_en": "2026-10-16T22:58:58.544Z",
+  "commit": "32e7f7b619db82969a0d9853d0998b3f4cba86a3",
+  "traido_en": "2026-10-16T23:33:04.268Z",
   "archivos": {
     "venta/armar.mjs": "e49727872c0eaca04407698af0701943fbaac3f39642845c2af59de8c5fa9cd2",
     "venta/cliente.mjs": "b0020770f493c272fe4eeaf2ca15026a0b255f8f90a96087a9bfab6baf489392",
@@ -12,6 +12,8 @@
     "venta/precio.mjs": "dc17b057849b68bd925292f4a4723e990bd5614a867b0da32170eb4ebe6914e5",
     "venta/proveedor.mjs": "8e69ef57bfffad6ae6d9be235d5ae94761d4b5c99aba5a4aacbe26c7e50549e4",
     "venta/registrar.mjs": "0ce607ad7bf655d693709dec50e426998feb7e1f1f842617dc244a931a79fe4f",
+    "venta/reglas-db.mjs": "b8d0bf468b3bd5f8bcb966367139025f7c17f0383201a2fc8e4519af9aa6ef50",
+    "venta/reglas.mjs": "f9a6c2f6d40310346e29dcd1a43896655f225c4d710334edcd0c2c99e699abd1",
     "arca/arca.core.js": "c3b4c12db4f1892ad8964348ed41824fd4eedf44c6346524d33aabc06ccbacd7",
     "arca/cliente.js": "4dff26c177d05a73919a1f215bd55e3beb2ade5117b8a2537418dae29d33a3f4",
     "arca/emisor-db.js": "278768915858aa5114f455a6c5c9c9864782b2d2fc5eb25a46eb106d23fef2fd",

@@ -38,6 +38,15 @@ y el «Pendiente de facturar» del dashboard de Darío.
   🔴 mientras GN vive ⛔ cambia la Caja ni TN. La `marca` del motor es la LÍNEA (`lineaDe`: un SKU `STU…` es `stunned`).
   El monto pasa por `parsearMonto` (el de compromisos: el punto decimal de `String(n)` ⛔ se lee como miles).
 
+- 🔑 **`erp › Reglas`** (`ReglasComerciales.tsx`, 16-oct; ❓ 15 de `~/Documents/erp-monitor/reglas-comerciales.md`): las reglas por
+  forma de pago como FILAS (`regla_comercial`, motor sql/016), cargar / editar / apagar, y un SIMULADOR que cobra una venta con
+  las 4 formas de pago y dice qué regla ganó (una regla a medio cargar se prueba sin guardar). La cuenta es del motor
+  (`motor/venta/reglas.mjs`: campaña reemplaza a temporada en sus prendas, gana la mejor, el % sobre el precio de campaña,
+  canal obligatorio); el servidor es `api/_erp-reglas.js`. La promo bancaria se LEE de la Agenda (no se copia). 🔴 La Caja
+  todavía cobra con `caja_config` (parte 3 ⇒ con la sesión de la Caja): la pantalla compara y dice dónde se separan. 🔑 Las
+  categorías son las de TN por nombre, y las pone la PANTALLA (`matchTn`), como la Caja: la de GN la tienen 135 de 890.
+  Oráculo: `~/Documents/erp-monitor/oraculos/oraculo-reglas-134.mjs` (re-cobrar las ventas de la Caja con las reglas).
+
 ## Dónde vive
 
 `components/erp/` · `lib/erp/cliente.ts` · `lib/arca/` (todo el dominio, puro y testeado:

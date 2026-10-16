@@ -16,11 +16,12 @@ import { StockPrenda, type PrendaPedida } from './StockPrenda'
 import { DiferenciasDia } from './DiferenciasDia'
 import { PedidosSinPagar } from './PedidosSinPagar'
 import { PreciosProducto } from './PreciosProducto'
+import { ReglasComerciales } from './ReglasComerciales'
 import { VentasPropias } from './VentasPropias'
 
 /** La Caja del ERP: lo que el local todavía hace en GN (el cambio y la factura a pedido). */
 const EN_CAJA = [{ key: 'cambio', label: 'Cambio' }, { key: 'factura', label: 'Factura' }]
-const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }, { key: 'diferencias', label: 'Diferencias del día' }, { key: 'pedidos-tn', label: 'Pedidos sin pagar' }, { key: 'ventas', label: 'Ventas' }, { key: 'caja', label: 'Caja' }, { key: 'precios', label: 'Precios' }]
+const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }, { key: 'diferencias', label: 'Diferencias del día' }, { key: 'pedidos-tn', label: 'Pedidos sin pagar' }, { key: 'ventas', label: 'Ventas' }, { key: 'caja', label: 'Caja' }, { key: 'precios', label: 'Precios' }, { key: 'reglas', label: 'Reglas' }]
 
 export function Erp() {
   const [pestania, setPestania] = useState('facturacion')
@@ -35,6 +36,7 @@ export function Erp() {
       {pestania === 'stock' && <StockPrenda key={prenda ? `${prenda.marca}/${prenda.producto}/${prenda.talle}` : 'buscar'} pedida={prenda} />}
       {pestania === 'pedidos-tn' && <PedidosSinPagar />}
       {pestania === 'precios' && <PreciosProducto />}
+      {pestania === 'reglas' && <ReglasComerciales />}
       {pestania === 'diferencias' && <DiferenciasDia abrirPrenda={(p) => { setPrenda(p); setPestania('stock') }} />}
       {pestania === 'ventas' && <VentasPropias />}
       {pestania === 'caja' && (

@@ -217,3 +217,39 @@ export const facturarCambio = (marca: MarcaErp, ventaId: string, simular = false
 /** La nota de crédito de una venta propia ANULADA que tenía factura (desde su ficha). */
 export const notaDeCreditoDeVenta = (marca: MarcaErp, ventaId: string) =>
   pedir<{ ok: true; ambiente: string; sinAtar: string | null; autorizada: { id: string; numero: number; cae: string; total: number } }>(post({ accion: 'nota-credito-venta', marca, ventaId }), '', 'No se pudo hacer la nota de crédito.')
+
+/** Las REGLAS COMERCIALES por forma de pago (motor sql/016, `api/_erp-reglas.js`). La cuenta la hace el núcleo del motor. */
+export type MedioRegla = 'efectivo' | 'transferencia' | 'debito' | 'credito'
+export type ReglaComercial = {
+  id?: string; nombre: string; fin: string | null; marca?: string; canal: 'local' | 'online'; campania: string | null
+  alcance: 'todo' | 'categorias' | 'productos' | 'variantes'; alcance_ids: string[]; medios: MedioRegla[]
+  banco: string | null; cuotas: number | null; monto_minimo: number | null
+  efecto: 'descuento' | 'recargo' | 'final' | 'no'; pct: number | null
+  desde: string | null; hasta: string | null; dias: number[] | null; activa: boolean; origen?: 'carga' | 'caja' | 'agenda'
+  usuario?: string; actualizada_por?: string | null; actualizada_en?: string | null
+}
+export type ReglasDeMarca = {
+  reglas: ReglaComercial[]; agenda: ReglaComercial[]
+  caja: { reglas: ReglaComercial[]; avisos: string[]; feriaCampanias: string[]; diferencias: { sinTraer: boolean; faltan: string[]; sobran: string[] } }
+  campanias: Array<{ id: string; nombre: string; estado: string; feria: boolean }>
+}
+export type PagoSimulado = {
+  medio: MedioRegla; renglones: number[]; base: number; rebaja: number; pct: number; descuento: number; redondeo: number; monto: number
+  regla: { id: string | null; nombre: string } | null; juego: string; perdieron: Array<{ id: string | null; nombre: string; efecto: string }>
+}
+export type FormaSimulada = { medio: MedioRegla; ok: true; subtotal: number; aVenta: number; total: number; pagos: PagoSimulado[] } | { medio: MedioRegla; ok: false; error: string }
+export type Simulacion = {
+  renglones: Array<{ product_id: number; nombre: string; cantidad: number; precio: number; precioCargado: number; precioDeCampania: number | null; campanias: string[]; categorias: string[] }>
+  formas: FormaSimulada[]; fecha: string; canal: string; redondeo: number
+}
+export type PrendaASimular = { producto: string | null; nombre: string; precio: string; cantidad: number; campanias?: string[]; categorias?: string[] }
+export type PedidoSimulacion = { renglones: PrendaASimular[]; fecha?: string; canal: 'local' | 'online'; banco?: string; cuotas?: number; rebaja?: { tipo: 'pct' | 'pesos'; valor: string } | null; borrador?: ReglaComercial | null }
+
+export const leerReglas = (marca: MarcaErp) =>
+  pedir<ReglasDeMarca>(null, `&vista=reglas&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer las reglas.')
+export const guardarRegla = (marca: MarcaErp, regla: ReglaComercial) =>
+  pedir<{ ok: true; regla: ReglaComercial; nueva: boolean }>(post({ accion: 'guardar-regla', marca, regla }), '', 'No se pudo guardar la regla.')
+export const traerReglasDeCaja = (marca: MarcaErp, escribir: boolean) =>
+  pedir<{ ok: true; sembradas: number; yaEstaban: number; seco: boolean; reglas: ReglaComercial[]; avisos: string[] }>(post({ accion: 'sembrar-reglas', marca, escribir }), '', 'No se pudieron traer las reglas de la Caja.')
+export const simularReglas = (marca: MarcaErp, p: PedidoSimulacion) =>
+  pedir<Simulacion>(post({ accion: 'simular-reglas', marca, ...p }), '', 'No se pudo simular.')
