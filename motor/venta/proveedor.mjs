@@ -29,7 +29,9 @@ async function empresaDe(db, marca) {
  * Da de alta un proveedor a mano (`fuente = 'carga'`). Un nombre que ya existe (sin mayúsculas ni espacios) ⛔ se repite:
  * devuelve `YA_EXISTE` con el que está, para elegirlo.
  * @param {import('pg').ClientBase} db
- * @param {{ marca: string, nombre: string, cuit?: string, usuario: string }} e
+ * Con `nombre_gn` (cómo figura en GN) la copia del catálogo le ata los productos con ese texto; uno que ya usa OTRO proveedor
+ * frena (`NOMBRE_GN_USADO`). Un repetido sin `nombre_gn` lo toma (⛔ pisa uno que ya tiene).
+ * @param {{ marca: string, nombre: string, cuit?: string, nombre_gn?: string, usuario: string }} e
  */
 export async function guardarProveedor(db, e) {
   const nombre = texto(e?.nombre)
@@ -41,11 +43,16 @@ export async function guardarProveedor(db, e) {
   if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién carga', 'usuario')
   const empresa = await empresaDe(db, e.marca)
   if (!empresa) return falla('MARCA_DESCONOCIDA', `Marca desconocida: ${e.marca}`, 'marca')
+  const nombreGn = texto(e.nombre_gn)
+  if (nombreGn) {
+    const [otro] = await q(db, `select nombre from proveedor where empresa_id = $1 and lower(trim(nombre_gn)) = lower($2) and lower(trim(nombre)) <> lower($3)`, [empresa, nombreGn, nombre])
+    if (otro) return falla('NOMBRE_GN_USADO', `«${nombreGn}» de GN ya es de «${otro.nombre}»`, 'nombre_gn')
+  }
   // UNA sentencia: el repetido devuelve la fila que está (el `do update` ⛔ cambia nada; `xmax <> 0` dice que ya existía).
   const [fila] = await q(db,
-    `insert into proveedor (empresa_id, nombre, cuit, fuente, usuario) values ($1, $2, $3, 'carga', $4)
-     on conflict (empresa_id, (lower(trim(nombre)))) do update set nombre = proveedor.nombre
-     returning *, (xmax <> 0) as ya_existia`, [empresa, nombre, cuit, usuario])
+    `insert into proveedor (empresa_id, nombre, cuit, nombre_gn, fuente, usuario) values ($1, $2, $3, $5, 'carga', $4)
+     on conflict (empresa_id, (lower(trim(nombre)))) do update set nombre_gn = coalesce(proveedor.nombre_gn, excluded.nombre_gn)
+     returning *, (xmax <> 0) as ya_existia`, [empresa, nombre, cuit, usuario, nombreGn])
   const { ya_existia: ya, ...proveedor } = fila
   if (!ya) return { ok: true, proveedor }
   return { ...falla('YA_EXISTE', `Ya hay un proveedor «${proveedor.nombre}»`, 'nombre'), proveedor }
@@ -141,4 +148,34 @@ export async function atarProveedores(db, { escribir = false } = {}) {
       where r.empresa_id = x.empresa_id and r.id = x.id and r.nuevo is distinct from x.proveedor_id`)
   }
   return { hay_tabla: true, ...c, sin_ficha: sinFicha }
+}
+
+/**
+ * Bruno, 16-oct («sí»): un proveedor por cada TEXTO de GN que todavía ⛔ tiene ficha, de una vez. El nombre de la ficha en
+ * MAYÚSCULAS (como las de PRM) y `nombre_gn` = el texto tal cual. 🔴 Una ficha de PRM con ese nombre y SIN `nombre_gn` (FEI,
+ * NOX… el 16-oct: 6 de 13) se ADOPTA — `guardarProveedor` le completa el `nombre_gn` —, ⛔ se duplica. Una que ya tiene OTRO
+ * `nombre_gn`, o un texto que es de otra ficha, se cuenta en `quedan` y ⛔ se toca. Después hay que `atarProveedores`.
+ * @param {import('pg').ClientBase} db
+ * @param {{ marca: string, usuario: string, escribir?: boolean }} e
+ */
+export async function fichasDeGn(db, { marca, usuario, escribir = false }) {
+  const empresa = await empresaDe(db, marca)
+  if (!empresa) return falla('MARCA_DESCONOCIDA', `Marca desconocida: ${marca}`, 'marca')
+  const textos = await q(db, `select min(trim(x.proveedor)) as texto, count(*)::int as productos,
+      (select p.nombre_gn from proveedor p where p.empresa_id = $1 and lower(trim(p.nombre)) = lower(trim(min(x.proveedor)))) as gn_de_la_ficha,
+      exists (select 1 from proveedor p where p.empresa_id = $1 and lower(trim(p.nombre)) = lower(trim(min(x.proveedor)))) as hay_ficha
+    from producto x where x.empresa_id = $1 and x.fuente = 'gn' and nullif(trim(x.proveedor), '') is not null
+      and not exists (select 1 from proveedor p where p.empresa_id = x.empresa_id and lower(trim(p.nombre_gn)) = lower(trim(x.proveedor)))
+    group by lower(trim(x.proveedor)) order by 2 desc, 1`, [empresa])
+  const r = { ok: true, nuevos: [], adoptados: [], quedan: [] }
+  for (const t of textos) {
+    const fila = { texto: t.texto, productos: t.productos }
+    if (t.hay_ficha && t.gn_de_la_ficha) { r.quedan.push({ ...fila, motivo: `la ficha ya es de «${t.gn_de_la_ficha}» en GN` }); continue }
+    if (!escribir) { (t.hay_ficha ? r.adoptados : r.nuevos).push(fila); continue }
+    const g = await guardarProveedor(db, { marca, nombre: t.texto.toUpperCase(), nombre_gn: t.texto, usuario })
+    if (g.ok) r.nuevos.push({ ...fila, id: g.proveedor.id })
+    else if (g.error.codigo === 'YA_EXISTE' && g.proveedor.nombre_gn?.toLowerCase() === t.texto.toLowerCase()) r.adoptados.push({ ...fila, id: g.proveedor.id })
+    else r.quedan.push({ ...fila, motivo: g.error.mensaje })
+  }
+  return r
 }
