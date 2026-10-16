@@ -50,6 +50,9 @@ describe('datos del emisor', () => {
     expect(faltanDelEmisor(EMISOR, 'zattia')).toEqual([])
     expect(faltanDelEmisor(EMISOR, 'bdi')).toEqual([])
   })
+  it('un solo inicio de actividades por CUIT: 01/04/2024 (constancia de ARCA, 16-oct; GN imprimía 22/07/2024 en BDI)', () => {
+    expect([EMISOR.marcas.bdi.inicioActividades, EMISOR.marcas.zattia.inicioActividades]).toEqual(['01/04/2024', '01/04/2024'])
+  })
   it('sin domicilio de la marca frena (⛔ se inventa)', () => {
     expect(faltanDelEmisor({ ...EMISOR, marcas: { ...EMISOR.marcas, zattia: { ...EMISOR.marcas.zattia, domicilio: null } } }, 'zattia')).toEqual(['domicilio de Zattia - Stunned'])
   })
