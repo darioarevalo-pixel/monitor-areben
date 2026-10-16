@@ -62,6 +62,7 @@ import {
   type ResultadoDraftScan,
 } from '@/lib/sesionfotos/draft'
 import { pareceCodigo } from '@/lib/sesionfotos/codigo'
+import { eliminarRespaldo, eliminarRespaldoSiIgual, guardarRespaldo, clasificarRespaldos, type Respaldo } from '@/lib/sesionfotos/respaldo'
 import { mapaDeCodigos, vincularSolicitudes } from '@/lib/sesionfotos/vincular'
 import type { Producto, Variante } from '@/lib/etl/tipos'
 import {
@@ -119,7 +120,7 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 import { Badge, Button, Icono, color, useConfirmar, useToast } from '@/components/ui'
 
 /** Una mutación pura de la lista de solicitudes; se aplica optimista y con merge. */
-type Persistir = (mutar: (l: Solicitud[]) => Solicitud[]) => Promise<boolean>
+type Persistir = (mutar: (l: Solicitud[]) => Solicitud[], opts?: { silencioso?: boolean }) => Promise<boolean>
 type CrearVentasDe = (s: Solicitud, cred: Credencial) => Promise<ResultadoCrearGen>
 
 const DISABLED_TITLE = 'Disponible al completar la migración de Sesión de fotos'
@@ -534,33 +535,168 @@ function Contenido({
   )
 }
 
+/** Cada cuánto se reintenta solo un guardado que falló. */
+const REINTENTO_MS = 20_000
+const unaSola = (w: Solicitud): Solicitud[] => [w]
+const lasTodas = (ws: Solicitud[]): Solicitud[] => ws
+
 /**
  * Autoguardado con debounce (500 ms, como el legacy) + flush al desmontar para no
  * perder el último escaneo si se toca "Volver" antes de que dispare. `persistUno`
  * tiene que ser estable (useCallback) o el debounce se reinicia en cada render.
+ *
+ * 🔴 **16-oct-2026: un guardado que falla ya no se pierde callado.** Antes se daba por guardado
+ * apenas se mandaba: si la base contestaba que no (a Lorena se le cortó la sesión a mitad de una
+ * devolución de una hora), lo escaneado quedaba sólo en la pestaña y ella seguía escaneando sin
+ * saberlo. Ahora:
+ *  - `guardado` es lo último que la base **confirmó**, no lo último que se mandó;
+ *  - cada cambio sin confirmar queda copiado en la compu (`lib/sesionfotos/respaldo.ts`) hasta que
+ *    la base lo confirma;
+ *  - si falla, `sinGuardar` frena el escaneo en pantalla y se reintenta solo cada 20 s, al volver a
+ *    la pestaña y al volver la conexión — así, volver a entrar en otra pestaña alcanza.
  */
-function useAutosave<T>(work: T, inicial: T, persistUno: (w: T) => void) {
-  const guardado = useRef(inicial)
+function useAutosave<T>(
+  work: T,
+  inicial: T,
+  persistUno: (w: T, opts?: { silencioso?: boolean }) => Promise<boolean>,
+  aLista: (w: T) => Solicitud[],
+  /** Hay en la compu una copia igual a lo abierto: se vuelve a mandar al abrir (ver `clasificarRespaldos`). */
+  confirmarAlAbrir = false,
+): { sinGuardar: boolean; guardando: boolean; reintentar: () => void } {
+  const guardado = useRef<T | null>(confirmarAlAbrir ? null : inicial)
   const actual = useRef(inicial)
+  const enVuelo = useRef(false)
+  const [sinGuardar, setSinGuardar] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+
+  const intentar = useCallback(
+    async (silencioso: boolean): Promise<void> => {
+      if (enVuelo.current) return
+      enVuelo.current = true
+      try {
+        // En vuelta: lo escaneado mientras volvía la respuesta todavía no se guardó.
+        let callado = silencioso
+        while (actual.current !== guardado.current) {
+          const w = actual.current
+          let ok = false
+          try {
+            ok = await persistUno(w, { silencioso: callado })
+          } catch {
+            ok = false
+          }
+          if (!ok) {
+            setSinGuardar(true)
+            return
+          }
+          guardado.current = w
+          for (const s of aLista(w)) eliminarRespaldoSiIgual(s)
+          callado = false
+        }
+        setSinGuardar(false)
+      } finally {
+        enVuelo.current = false
+      }
+    },
+    [persistUno, aLista],
+  )
+
   useEffect(() => {
     actual.current = work
-  }, [work])
-  useEffect(() => {
     if (work === guardado.current) return
-    const t = setTimeout(() => {
-      guardado.current = work
-      persistUno(work)
-    }, 500)
+    for (const s of aLista(work)) guardarRespaldo(s)
+    const t = setTimeout(() => void intentar(false), 500)
     return () => clearTimeout(t)
-  }, [work, persistUno])
+  }, [work, intentar, aLista])
+
+  useEffect(() => {
+    if (!sinGuardar) return
+    const otraVez = () => void intentar(true)
+    const t = setInterval(otraVez, REINTENTO_MS)
+    window.addEventListener('focus', otraVez)
+    window.addEventListener('online', otraVez)
+    return () => {
+      clearInterval(t)
+      window.removeEventListener('focus', otraVez)
+      window.removeEventListener('online', otraVez)
+    }
+  }, [sinGuardar, intentar])
+
   useEffect(() => {
     return () => {
-      if (actual.current !== guardado.current) {
-        guardado.current = actual.current
-        persistUno(actual.current)
+      const w = actual.current
+      if (w !== guardado.current) {
+        void persistUno(w).then((ok) => {
+          if (!ok) return
+          guardado.current = w
+          for (const s of aLista(w)) eliminarRespaldoSiIgual(s)
+        })
       }
     }
-  }, [persistUno])
+  }, [persistUno, aLista])
+
+  const reintentar = useCallback(() => {
+    setGuardando(true)
+    void intentar(false).finally(() => setGuardando(false))
+  }, [intentar])
+
+  return { sinGuardar, guardando, reintentar }
+}
+
+/**
+ * Los dos avisos del guardado, arriba de los escaneos: que lo escaneado **no se está guardando**
+ * (frena el escaneo), y que quedaron escaneos de una vez anterior **sin guardar** en esta compu.
+ */
+function AvisoGuardado({
+  sinGuardar,
+  guardando,
+  onReintentar,
+  pendientes,
+  onRecuperar,
+  onEliminar,
+}: {
+  sinGuardar: boolean
+  guardando: boolean
+  onReintentar: () => void
+  pendientes: Respaldo[]
+  onRecuperar: () => void
+  onEliminar: () => void
+}) {
+  const caja = { borderRadius: 9, padding: '10px 12px', marginBottom: 10, fontSize: 13, position: 'sticky' as const, top: 0, zIndex: 5 }
+  const boton = { height: 'auto', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }
+  if (sinGuardar) {
+    return (
+      <div role="alert" style={{ ...caja, background: color.dangerBg, border: `2px solid ${color.dangerBorder}`, color: color.dangerInk }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>⚠ Lo que escaneás no se está guardando</div>
+        <div style={{ marginBottom: 8 }}>
+          Pará de escanear. Abrí el Monitor en otra pestaña y volvé a entrar con tu usuario, sin cerrar esta. Lo escaneado está a salvo
+          en esta compu y se guarda solo apenas se pueda.
+        </div>
+        <button onClick={onReintentar} disabled={guardando} style={{ ...boton, border: 'none', background: color.dangerInk, color: '#fff' }}>
+          {guardando ? 'Guardando…' : 'Guardar ahora'}
+        </button>
+      </div>
+    )
+  }
+  if (!pendientes.length) return null
+  const ts = Math.max(...pendientes.map((r) => r.ts))
+  const hora = new Date(ts).toLocaleString('es-AR', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return (
+    <div role="alert" style={{ ...caja, background: color.warningBg, border: `2px solid ${color.warningBorder}`, color: color.warningInk }}>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>Quedaron escaneos sin guardar ({hora})</div>
+      <div style={{ marginBottom: 8 }}>Se guardaron en esta compu cuando se cortó. Recuperalos antes de seguir escaneando.</div>
+      <button onClick={onRecuperar} style={{ ...boton, border: 'none', background: color.brandSolid, color: '#fff', marginRight: 8 }}>
+        Recuperar
+      </button>
+      <button
+        onClick={() => {
+          if (window.confirm(`¿Eliminar los escaneos sin guardar (${hora})? No se pueden recuperar después.`)) onEliminar()
+        }}
+        style={{ ...boton, border: `1px solid ${color.warningBorder}`, background: '#fff', color: color.warningInk }}
+      >
+        Eliminar
+      </button>
+    </div>
+  )
 }
 
 // ── Banner de prioridad de retiro (admin: select DESHABILITADO) ─────────────────
@@ -862,10 +998,31 @@ function Detalle({
   const [fb, setFb] = useState<{ key: string; r: ResultadoEscaneo } | null>(null)
 
   const persistUno = useCallback(
-    (w: Solicitud) => persistir((l) => l.map((x) => (x.id === w.id ? w : x))),
+    (w: Solicitud, opts?: { silencioso?: boolean }) => persistir((l) => l.map((x) => (x.id === w.id ? w : x)), opts),
     [persistir],
   )
-  useAutosave(work, s0, persistUno)
+  // Escaneos de una vez anterior que no llegaron a la base (se cortó la sesión, se cerró la pestaña).
+  const [alAbrir] = useState(() => clasificarRespaldos([s0]))
+  const auto = useAutosave(work, s0, persistUno, unaSola, alAbrir.iguales)
+  const [pendientes, setPendientes] = useState<Respaldo[]>(alAbrir.distintos)
+  const bloqueado = auto.sinGuardar || pendientes.length > 0
+  const aviso = (
+    <AvisoGuardado
+      sinGuardar={auto.sinGuardar}
+      guardando={auto.guardando}
+      onReintentar={auto.reintentar}
+      pendientes={pendientes}
+      onRecuperar={() => {
+        const r = pendientes[0]
+        setPendientes([])
+        if (r) setWork(r.sol)
+      }}
+      onEliminar={() => {
+        pendientes.forEach((r) => eliminarRespaldo(r.sol.id))
+        setPendientes([])
+      }}
+    />
+  )
 
   const s = work
   const conteo = s[fase === 'devolucion' ? 'devuelto' : 'verif'] || {}
@@ -890,7 +1047,7 @@ function Detalle({
   const hayVentables = s.items.some((i) => !i.nuevo)
 
   const onScan = (origen: Origen, code: string) => {
-    if (!code.trim()) return
+    if (!code.trim() || bloqueado) return
     const { sol: ns, resultado } = escanearSol(work, origen, fase, code.trim(), mapaBc)
     setWork(ns)
     setFb({ key: `${origen}-${fase}`, r: resultado })
@@ -1055,8 +1212,8 @@ function Detalle({
         ) : null}
         <div style={{ margin: '8px 0' }}>
           <ScanInput
-            disabled={!catalogoListo}
-            placeholder={catalogoListo ? `Escaneá para confirmar ${accionV} (o tipeá el SKU + Enter)…` : 'Cargando catálogo…'}
+            disabled={!catalogoListo || bloqueado}
+            placeholder={bloqueado ? '⚠ Mirá el aviso de arriba antes de seguir' : catalogoListo ? `Escaneá para confirmar ${accionV} (o tipeá el SKU + Enter)…` : 'Cargando catálogo…'}
             onScan={(v) => onScan(origen, v)}
           />
         </div>
@@ -1325,6 +1482,7 @@ function Detalle({
         </div>
       ) : null}
 
+      {aviso}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         <BotonFase activo={fase === 'retiro'} onClick={() => { setFase('retiro'); setFb(null) }} label="Preparado" />
         {!esConsumo && <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="Devolución (al volver)" />}
@@ -1618,10 +1776,30 @@ function Combinada({
   const [fb, setFb] = useState<{ key: string; r: ResultadoCombi } | null>(null)
 
   const persistTodas = useCallback(
-    (ws: Solicitud[]) => persistir((l) => l.map((x) => ws.find((w) => w.id === x.id) ?? x)),
+    (ws: Solicitud[], opts?: { silencioso?: boolean }) => persistir((l) => l.map((x) => ws.find((w) => w.id === x.id) ?? x), opts),
     [persistir],
   )
-  useAutosave(works, sols0, persistTodas)
+  const [alAbrir] = useState(() => clasificarRespaldos(sols0))
+  const auto = useAutosave(works, sols0, persistTodas, lasTodas, alAbrir.iguales)
+  const [pendientes, setPendientes] = useState<Respaldo[]>(alAbrir.distintos)
+  const bloqueado = auto.sinGuardar || pendientes.length > 0
+  const aviso = (
+    <AvisoGuardado
+      sinGuardar={auto.sinGuardar}
+      guardando={auto.guardando}
+      onReintentar={auto.reintentar}
+      pendientes={pendientes}
+      onRecuperar={() => {
+        const porId = new Map(pendientes.map((r) => [r.sol.id, r.sol]))
+        setPendientes([])
+        setWorks((ws) => ws.map((w) => porId.get(w.id) ?? w))
+      }}
+      onEliminar={() => {
+        pendientes.forEach((r) => eliminarRespaldo(r.sol.id))
+        setPendientes([])
+      }}
+    />
+  )
 
   const completa = faseCompletaCombi(works, fase)
 
@@ -1631,7 +1809,7 @@ function Combinada({
       : ''
 
   const onScan = (origen: Origen, code: string) => {
-    if (!code.trim()) return
+    if (!code.trim() || bloqueado) return
     const { sols: ns, resultado } = escanearCombi(works, origen, fase, code.trim(), mapaBc)
     setWorks(ns)
     setFb({ key: `combi-${origen}-${fase}`, r: resultado })
@@ -1654,8 +1832,8 @@ function Combinada({
         </div>
         <div style={{ margin: '8px 0' }}>
           <ScanInput
-            disabled={!catalogoListo}
-            placeholder={catalogoListo ? `Escaneá para confirmar ${accionV} de las ${works.length} (o tipeá el SKU + Enter)…` : 'Cargando catálogo…'}
+            disabled={!catalogoListo || bloqueado}
+            placeholder={bloqueado ? '⚠ Mirá el aviso de arriba antes de seguir' : catalogoListo ? `Escaneá para confirmar ${accionV} de las ${works.length} (o tipeá el SKU + Enter)…` : 'Cargando catálogo…'}
             onScan={(v) => onScan(origen, v)}
           />
         </div>
@@ -1726,6 +1904,7 @@ function Combinada({
           )}
         </div>
       ) : null}
+      {aviso}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         <BotonFase activo={fase === 'retiro'} onClick={() => { setFase('retiro'); setFb(null) }} label="Preparado" />
         <BotonFase activo={fase === 'devolucion'} onClick={() => { setFase('devolucion'); setFb(null) }} label="Devolución (al volver)" />
@@ -2365,12 +2544,12 @@ function BotonMini({ label, acento, onClick }: { label: string; acento?: boolean
 /** Borra lo escaneado en la devolución, previa confirmación, para hacerla de nuevo. */
 function BotonReiniciarDevolucion({ onConfirmar }: { onConfirmar: () => void }) {
   const pedir = () => {
-    if (window.confirm('¿Empezar la devolución de nuevo? Se borra todo lo escaneado en la devolución. Lo preparado no se toca.')) onConfirmar()
+    if (window.confirm('¿Empezar la devolución de nuevo?\n\nSe elimina todo lo escaneado en la devolución. Lo preparado queda como está.')) onConfirmar()
   }
   return (
     <button
       onClick={pedir}
-      style={{ marginLeft: 'auto', border: `1px solid ${color.dangerBorder}`, background: '#fff', color: color.dangerInk, borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+      style={{ marginLeft: 'auto', height: 'auto', border: `1px solid ${color.dangerBorder}`, background: '#fff', color: color.dangerInk, borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
     >
       Empezar la devolución de nuevo
     </button>

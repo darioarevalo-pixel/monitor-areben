@@ -70,7 +70,11 @@ variante de internas pasada por parámetro.
 - Las dos disciplinas del guardado (`cargado`, re-leer fresco) →
   `components/solicitudes/useHistorialSolicitudes.ts:12`; el diff por solicitud →
   `lib/solicitudes/cajon.ts:108`.
-- El autoguardado con debounce + flush al desmontar → `components/sesionfotos/SesionFotos.tsx:291`.
+- El autoguardado con debounce + flush al desmontar → `useAutosave` en `components/sesionfotos/SesionFotos.tsx`.
+  🔴 Desde el 16-oct-2026 un guardado que falla **frena el escaneo**, se reintenta solo y lo no
+  guardado queda copiado en la compu (`lib/sesionfotos/respaldo.ts`): a Lorena se le cortó la sesión
+  en una devolución de una hora y se perdió todo. Una copia igual a lo abierto ⛔ no prueba que esté
+  guardado (la lista en memoria ya tiene el cambio): se vuelve a mandar al abrir.
 
 ## Reglas que el código no dice
 

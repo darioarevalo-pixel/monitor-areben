@@ -74,7 +74,8 @@ export type HistorialSolicitudes<T> = {
   prioridad: Origen
   cargado: boolean
   recargar: () => void
-  persistir: (mutar: (l: T[]) => T[]) => Promise<boolean>
+  /** `silencioso`: sin cartel si falla — lo usa el reintento automático, que ya muestra su propio aviso. */
+  persistir: (mutar: (l: T[]) => T[], opts?: { silencioso?: boolean }) => Promise<boolean>
   crearVentasDe: (s: T, cred: Credencial) => Promise<ResultadoCrearGen>
   cerrarAnuladas: () => Promise<number>
 }
@@ -136,16 +137,19 @@ export function useHistorialSolicitudes<T extends SolBase>(linea: Linea, opts: O
   }, [linea, tick, kind])
 
   const persistir = useCallback(
-    async (mutar: (l: T[]) => T[]): Promise<boolean> => {
+    async (mutar: (l: T[]) => T[], opts?: { silencioso?: boolean }): Promise<boolean> => {
+      const avisar = (m: string) => {
+        if (!opts?.silencioso) toast.error(m)
+      }
       if (!cargado) {
-        toast.error(noLeido)
+        avisar(noLeido)
         return false
       }
       const lineaAlGuardar = lineaRef.current
       setData((prev) => (prev ? mutar(prev) : prev)) // optimista
       const fresca = await leerCajon<T>(kind, destinosDe(lineaAlGuardar).cajon)
       if (!fresca.ok) {
-        toast.error('No se pudo re-leer el historial para guardar sin pisar cambios de otros: ' + fresca.motivo)
+        avisar('No se pudo re-leer el historial para guardar sin pisar cambios de otros: ' + fresca.motivo)
         return false
       }
       const merged = mutar(fresca.dato)
@@ -153,7 +157,7 @@ export function useHistorialSolicitudes<T extends SolBase>(linea: Linea, opts: O
       // se tocan, así dos personas trabajando a la vez no se pisan.
       const r = await aplicarDiff(kind, destinosDe(lineaAlGuardar).cajon, diffSolicitudes(fresca.dato, merged))
       if (!r.ok) {
-        toast.error('No se pudo guardar: ' + r.motivo)
+        avisar('No se pudo guardar: ' + r.motivo)
         return false
       }
       if (lineaRef.current === lineaAlGuardar) setData(merged)
