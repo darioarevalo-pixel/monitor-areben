@@ -1079,3 +1079,15 @@ hacer cambios en la persona y siempre me abre el chat"*.
   25 que ya entraron: quiénes entran sigue siendo `listaDelDia` con `urgenciaFecha` (el 27-ago).
 - **El número de Atrasados es lo que se ve** (antes 383 con 25 a la vista); lo que queda afuera lo
   dice el renglón "Hay N más esperando". Para hoy, igual.
+
+# 🧪 16-oct-2026 — «Le escribiste hoy» (a prueba)
+
+Darío: que el panel avise en rojo cuando le escribiste a alguien y no le marcaste fecha.
+- `pagina.js` (`escritosHoy`, cada 20 s): de cada chat que se movió hoy mira **sólo** `id.fromMe` y
+  `t` de los mensajes cargados; manda la lista de teléfonos. Ningún texto sale de WhatsApp.
+- Viaja como la comunidad: `content.js` → `sidepanel.js` → iframe (`que-escritos` al armarse).
+- Panel: `lib/crm/escritos.ts` cruza por los últimos 8 dígitos. Rojo en la ficha («Le escribiste
+  hoy. Falta marcar cuándo volver a hablarle») y chapa roja en la lista. Se apaga al tocar un
+  botón de días (`ultimo_contacto` = hoy) o con una fecha para adelante.
+- ⚠️ Sólo ve mensajes cargados en WhatsApp Web: si te contestaron después y el chat nunca se abrió
+  en la compu, puede no verlo. ⏭️ Medir con el uso real cuántos se escapan.

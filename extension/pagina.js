@@ -83,7 +83,11 @@
       return { tel: null, motivo: 'sin-api' }
     }
     if (!chat) return { tel: null, motivo: 'sin-chat' }
+    return telefonoDe(chat)
+  }
 
+  /** El teléfono de una conversación cualquiera (la abierta, o una de la lista). */
+  function telefonoDe(chat) {
     const jid = String((chat.id && (chat.id._serialized || chat.id)) || '')
     // Los grupos no tienen ficha: adentro hay muchas personas y ninguna es "el cliente".
     if (jid.endsWith('@g.us')) return { tel: null, motivo: 'grupo' }
@@ -269,6 +273,56 @@
     console.log('[BDI] abrir chat sin recargar: ' + (ok ? 'sí' : 'no, recargo'))
     window.postMessage({ fuente: FUENTE, tipo: 'abrir-chat-resultado', pedido: e.data.pedido, ok }, '*')
   })
+
+  // ═════════════════════════════════════════════════════════════════════════════════════════
+  // A QUIÉN LE ESCRIBISTE HOY (16-oct-2026, a prueba)
+  // ═════════════════════════════════════════════════════════════════════════════════════════
+  // El panel marca en rojo a quien le escribiste hoy y no le pusiste fecha de recontacto.
+  //
+  // 🔑 **No se lee ningún texto.** De cada mensaje se miran dos cosas: si lo mandaste vos
+  // (`id.fromMe`) y cuándo (`t`, en segundos). Sale sólo la lista de teléfonos.
+  //
+  // ⚠️ Sólo ve los mensajes que WhatsApp Web tiene cargados: el último de cada chat siempre (es el
+  // que muestra la lista de la izquierda); los anteriores, sólo de los chats que se abrieron. O sea
+  // que si te contestaron después y nunca abriste el chat en la compu, puede no verlo.
+  const CADA_ESCRITOS = 20000
+
+  function escritosHoy() {
+    let chats
+    try {
+      chats = window.require('WAWebChatCollection').ChatCollection.getModelsArray()
+    } catch {
+      return null
+    }
+    const desde = new Date().setHours(0, 0, 0, 0) / 1000
+    const tels = []
+    for (const ch of chats) {
+      if (serial(ch.id).endsWith('@g.us')) continue
+      // `t` es el último movimiento del chat: si es de antes de hoy, no hay nada de hoy adentro.
+      if (!ch.t || ch.t < desde) continue
+      let msgs = []
+      try {
+        msgs = ch.msgs && typeof ch.msgs.getModelsArray === 'function' ? ch.msgs.getModelsArray() : []
+      } catch {}
+      if (!msgs.some((m) => m && m.id && m.id.fromMe && m.t >= desde)) continue
+      const r = telefonoDe(ch)
+      if (r.tel) tels.push(r.tel)
+    }
+    return tels
+  }
+
+  let firmaEscritos = ''
+  function avisarEscritos() {
+    const tels = escritosHoy()
+    if (!tels) return
+    const firma = tels.slice().sort().join(',')
+    if (firma === firmaEscritos) return
+    firmaEscritos = firma
+    console.log('[BDI] le escribiste hoy a ' + tels.length + ' chats')
+    window.postMessage({ fuente: FUENTE, tipo: 'escritos-hoy', tels }, '*')
+  }
+  setTimeout(avisarEscritos, 4000)
+  setInterval(avisarEscritos, CADA_ESCRITOS)
 
   let ultimo = 'arranque'
   setInterval(() => {

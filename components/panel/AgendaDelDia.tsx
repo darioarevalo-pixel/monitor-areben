@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import { Icono } from '@/components/ui'
 import { TEMP_UI } from '@/components/crm/temperatura'
@@ -9,6 +9,7 @@ import { contarCola, contarPorTipo, vistaDe, type FiltroPanel, type VistaTemp } 
 import { diasHasta } from '@/lib/crm/core'
 import { hoyISO } from '@/lib/crm/seguimiento'
 import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
+import { leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
 
 /**
@@ -168,6 +169,9 @@ function estadoDeFila(d: number | null): { txt: string; tono: 'neutro' | 'nuestr
   return { txt: `En ${d} d`, tono: 'neutro' }
 }
 
+/** A quién le escribiste hoy. Va por contexto para no pasarlo por las siete listas de `Fila`. */
+const EscritosCtx = createContext<EscritosHoy>(new Set())
+
 /** La temperatura, chica y al lado del nombre. "Sin marcar" no dibuja nada: era ruido en 341 filas. */
 const EMOJI_TEMP: Record<VistaTemp, string> = { caliente: '🔥', templado: '🟡', frio: '🧊', sin_marcar: '' }
 
@@ -182,6 +186,9 @@ const EMOJI_TEMP: Record<VistaTemp, string> = { caliente: '🔥', templado: '�
  * válido y el clic del de adentro dispara también el de afuera.
  */
 function Fila({ it, onAbrir, onFicha, hecho }: { it: Item; onAbrir: (id: number, tel: string) => void; onFicha: (id: number, tel: string) => void; hecho?: { dias: number | null } }) {
+  // 🔴 Le escribiste hoy (según WhatsApp Web) y sigue sin fecha para adelante: hay que marcarla.
+  const escritos = useContext(EscritosCtx)
+  const faltaFecha = !hecho && (it.dias === null || it.dias <= 0) && leEscribisteHoy(escritos, [it.telefono])
   const sinTel = !it.telefono
   // Un prospecto se encuentra por teléfono (`id: 0`): sin teléfono no hay ficha que abrir.
   const sinFicha = it.prospecto && sinTel
@@ -218,7 +225,9 @@ function Fila({ it, onAbrir, onFicha, hecho }: { it: Item; onAbrir: (id: number,
           </span>
           {it.prospecto && <Chapa>Prospecto</Chapa>}
           <span style={{ flex: 1 }} />
-          {hecho ? (
+          {faltaFecha ? (
+            <Chapa tono="tarde">Le escribiste · falta fecha</Chapa>
+          ) : hecho ? (
             <Chapa tono="hecho">✓ {hecho.dias !== null && hecho.dias > 0 ? `Vuelve en ${hecho.dias} d` : 'Hecho'}</Chapa>
           ) : (
             <Chapa tono={est.tono}>{est.txt}</Chapa>
@@ -594,12 +603,39 @@ export function AgendaDelDia({
   onAbrirChat,
   onVerFicha,
   puedeAbrirChat,
+  escritos,
 }: {
   crmSeg: MapaSeguimiento
   crmLeads: MapaLeads
   today: Date
   onAbrirChat: (id: number, tel: string) => void
   /** Abre la ficha en la solapa Cliente SIN abrir el chat. `id: 0` = prospecto, se busca por teléfono. */
+  onVerFicha: (id: number, tel: string) => void
+  puedeAbrirChat: boolean
+  /** A quién le escribiste hoy según WhatsApp Web. Sin extensión llega vacío. */
+  escritos?: EscritosHoy
+}) {
+  return (
+    <EscritosCtx.Provider value={escritos || SIN_ESCRITOS}>
+      <Agenda crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={onAbrirChat} onVerFicha={onVerFicha} puedeAbrirChat={puedeAbrirChat} />
+    </EscritosCtx.Provider>
+  )
+}
+
+const SIN_ESCRITOS: EscritosHoy = new Set()
+
+function Agenda({
+  crmSeg,
+  crmLeads,
+  today,
+  onAbrirChat,
+  onVerFicha,
+  puedeAbrirChat,
+}: {
+  crmSeg: MapaSeguimiento
+  crmLeads: MapaLeads
+  today: Date
+  onAbrirChat: (id: number, tel: string) => void
   onVerFicha: (id: number, tel: string) => void
   puedeAbrirChat: boolean
 }) {

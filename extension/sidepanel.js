@@ -110,6 +110,27 @@ function pedirComunidad() {
   })
 }
 
+/**
+ * A quién le escribiste hoy (sólo teléfonos). Mismo camino que la comunidad: se guarda la última
+ * para el panel que se arma después, y el panel la pide al armarse.
+ */
+let escritos = null
+function pasarEscritos(tels) {
+  escritos = tels
+  if (!iframe.contentWindow) return
+  iframe.contentWindow.postMessage({ fuente: 'bdi-crm-panel', tipo: 'escritos-hoy', tels }, ORIGEN)
+}
+function pedirEscritos() {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs && tabs[0]
+    if (!tab || !tab.id) return
+    chrome.tabs.sendMessage(tab.id, { tipo: 'que-escritos' }, (r) => {
+      if (chrome.runtime.lastError) return
+      if (r) pasarEscritos(r)
+    })
+  })
+}
+
 /** Le pasa el número al panel. Se usa al cambiar de chat y cuando el panel lo pide al armarse. */
 function avisarAlPanel(numero) {
   if (!iframe.contentWindow) return
@@ -147,6 +168,12 @@ window.addEventListener('message', (e) => {
     return
   }
 
+  if (d.tipo === 'que-escritos') {
+    if (escritos) pasarEscritos(escritos)
+    else pedirEscritos()
+    return
+  }
+
   if (d.tipo !== 'abrir-chat') return
   const numero = String(d.tel || '').replace(/\D/g, '')
   if (!numero) return
@@ -170,6 +197,7 @@ mostrar('', 'sin-chat')
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg && msg.tipo === 'chat') mostrar(msg.tel, msg.motivo, msg.nombre)
   if (msg && msg.tipo === 'comunidad' && msg.datos) pasarComunidad(msg.datos)
+  if (msg && msg.tipo === 'escritos-hoy' && Array.isArray(msg.tels)) pasarEscritos(msg.tels)
 })
 
 // Al abrirse, preguntar en qué chat está. El panel se abre con un clic en el ícono, y ese clic no

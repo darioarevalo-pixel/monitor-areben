@@ -53,6 +53,48 @@ import { useComunidad, type AvisoComunidad, type Comunidad } from './useComunida
 import { antiguedadFoto, estaEnComunidad } from '@/lib/crm/comunidad'
 import { coincideNombre, palabraParaBuscar, palabrasDelNombre } from '@/lib/crm/nombre.core.js'
 import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
+import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
+
+function useEscritosHoy(): EscritosHoy {
+  const [escritos, setEscritos] = useState<EscritosHoy>(() => new Set())
+  useEffect(() => {
+    const alMensaje = (e: MessageEvent) => {
+      if (e.source !== window.parent) return
+      const d = e.data
+      if (!d || d.fuente !== 'bdi-crm-panel' || d.tipo !== 'escritos-hoy' || !Array.isArray(d.tels)) return
+      setEscritos(indexarEscritos(d.tels))
+    }
+    window.addEventListener('message', alMensaje)
+    try {
+      window.parent.postMessage({ fuente: 'bdi-crm-panel', tipo: 'que-escritos' }, '*')
+    } catch {}
+    return () => window.removeEventListener('message', alMensaje)
+  }, [])
+  return escritos
+}
+
+/**
+ * 🔴 «Le escribiste hoy y no tiene fecha». Darío, 16-oct-2026: el panel cuenta como hecho sólo lo
+ * que se marca con un botón de días, y escribirle a alguien sin marcarlo lo deja colgado.
+ */
+function AvisoFaltaFecha() {
+  return (
+    <div
+      style={{
+        marginBottom: 8,
+        padding: '6px 8px',
+        fontSize: font.xs,
+        fontWeight: 700,
+        color: color.dangerInk,
+        background: color.dangerBg,
+        border: `1px solid ${color.dangerBorder}`,
+        borderRadius: radius.sm,
+      }}
+    >
+      Le escribiste hoy. Falta marcar cuándo volver a hablarle.
+    </div>
+  )
+}
 
 /**
  * El teléfono del chat, **también si no es argentino** (16-oct-2026).
@@ -441,10 +483,11 @@ export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
   // La comunidad se escucha acá arriba y no en la ficha: llega de la extensión una sola vez al
   // abrir (y después cada tanto), y no tiene que perderse porque en ese momento no había ficha.
   const { comunidad, aviso: avisoComunidad } = useComunidad()
+  const escritos = useEscritosHoy()
 
   return (
     <>
-      <PanelInterno tel={telChat} nombreChat={nombreChat} pedido={pedido} setPedido={setPedido} comunidad={comunidad} avisoComunidad={avisoComunidad} />
+      <PanelInterno tel={telChat} nombreChat={nombreChat} pedido={pedido} setPedido={setPedido} comunidad={comunidad} avisoComunidad={avisoComunidad} escritos={escritos} />
       {/* `key` = el chat: al pasar a otro cliente la cuenta arranca vacía. */}
       <Aislado nombre="Calculadora">
         <CalculadoraEnvio key={telChat || ''} />
@@ -460,6 +503,7 @@ function PanelInterno({
   setPedido,
   comunidad,
   avisoComunidad,
+  escritos,
 }: {
   tel: string | null
   nombreChat: string
@@ -467,6 +511,7 @@ function PanelInterno({
   setPedido: (p: { id: number; tel: string } | null) => void
   comunidad: Comunidad | null
   avisoComunidad: AvisoComunidad
+  escritos: EscritosHoy
 }) {
   const [estado, setEstado] = useState<Estado>({ t: 'cargando' })
   const [crmSeg, setCrmSeg] = useState<MapaSeguimiento>({})
@@ -803,7 +848,7 @@ function PanelInterno({
       <Envoltorio aviso={aviso}>
         {solapas}
         {kvListo ? (
-          <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} puedeAbrirChat={enExtension} />
+          <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} puedeAbrirChat={enExtension} escritos={escritos} />
         ) : (
           <Cargando />
         )}
@@ -914,6 +959,7 @@ function PanelInterno({
           today={today}
           guardando={guardando}
           onMutar={(fn, exito) => mutarLead(estado.lead.id, fn, exito)}
+          leEscribiste={leEscribisteHoy(escritos, [telNorm, estado.lead.telefono])}
           marcaComunidad={<MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={[telNorm, estado.lead.telefono || '']} />}
         />
       </Envoltorio>
@@ -959,6 +1005,11 @@ function PanelInterno({
   const notas = c.notas || []
   // Las ventas ya están en la ficha: la sugerencia no le pide nada más al servidor.
   const ritmo = ritmoDeCompra(c.ventas || [], today)
+  const hoyFicha = hoyISO(today)
+  const faltaFecha =
+    leEscribisteHoy(escritos, [telNorm, c.phone]) &&
+    crmSeg[String(c.id)]?.ultimo_contacto !== hoyFicha &&
+    !((c.proximo_contacto || '') > hoyFicha)
 
   return (
     <Envoltorio aviso={aviso}>
@@ -1053,6 +1104,7 @@ function PanelInterno({
 
         {/* Volver a hablarle */}
         <Bloque titulo="Volver a hablarle">
+          {faltaFecha && <AvisoFaltaFecha />}
           {/*
             🔑 **La sugerencia sale de lo que el cliente ya hace, no de un campo.** Reemplaza a la
             cadencia, que había que cargar a mano y que en 0 de los 771 clientes decidía la fecha.
@@ -1511,14 +1563,19 @@ function FichaLead({
   guardando,
   onMutar,
   marcaComunidad,
+  leEscribiste,
 }: {
   lead: Lead
   today: Date
   guardando: boolean
   onMutar: (fn: (m: MapaLeads) => MapaLeads, exito: string) => Promise<boolean>
   marcaComunidad: React.ReactNode
+  leEscribiste: boolean
 }) {
   const seg = leadEstadoSeg(lead, today)
+  const hoy = hoyISO(today)
+  // Marcado = tocó un botón de días hoy, o ya tiene una fecha para más adelante.
+  const faltaFecha = leEscribiste && lead.ultimo_contacto !== hoy && !((lead.proximo_manual || '') > hoy)
   const notas = Array.isArray(lead.notas) ? lead.notas : []
 
   return (
@@ -1552,6 +1609,7 @@ function FichaLead({
       </Bloque>
 
       <Bloque titulo="Volver a hablarle">
+        {faltaFecha && <AvisoFaltaFecha />}
         <Plazos guardando={guardando} onElegir={(d) => onMutar((m) => escribiHoyLead(m, lead.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)} />
         <input
           className="mo-input"

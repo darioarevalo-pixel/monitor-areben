@@ -2,12 +2,14 @@
 // de WhatsApp (por eso existe `pagina.js`), pero sí puede hablar con el panel.
 //
 // 🔑 **No lee mensajes, no los guarda y no tiene credenciales.** Lo único que cruza por acá es el
-// teléfono de la conversación abierta y la lista de teléfonos de la comunidad mayorista.
+// teléfono de la conversación abierta, la lista de teléfonos de la comunidad mayorista y la de los
+// chats a los que les escribiste hoy (sólo el teléfono: ni el texto ni la hora).
 
 const FUENTE = 'bdi-crm-panel'
 
 let ultimo = { tel: null, motivo: 'sin-chat' }
 let comunidad = null
+let escritos = null
 /** Pedidos de "abrí este chat" que esperan la respuesta de `pagina.js`, por número de pedido. */
 const esperando = new Map()
 let nPedido = 0
@@ -26,6 +28,11 @@ window.addEventListener('message', (e) => {
     return
   }
   if (e.data.tipo === 'abrir-chat-aca') return
+  if (e.data.tipo === 'escritos-hoy') {
+    escritos = e.data.tels || []
+    chrome.runtime.sendMessage({ tipo: 'escritos-hoy', tels: escritos }).catch(() => {})
+    return
+  }
   // La lista de la comunidad: se guarda la última para cuando el panel se abra después.
   if (e.data.tipo === 'comunidad') {
     comunidad = e.data
@@ -43,6 +50,7 @@ window.addEventListener('message', (e) => {
 chrome.runtime.onMessage.addListener((msg, _remitente, responder) => {
   if (msg && msg.tipo === 'que-chat') responder(ultimo)
   if (msg && msg.tipo === 'que-comunidad') responder(comunidad)
+  if (msg && msg.tipo === 'que-escritos') responder(escritos)
   // El panel pide abrir un chat. Se le pasa a `pagina.js` —el único que ve a WhatsApp por dentro— y
   // se contesta con lo que pudo. 🔑 Si en 2 s no contestó, se da por no: el panel recarga como antes.
   if (msg && msg.tipo === 'abrir-chat-aca') {
