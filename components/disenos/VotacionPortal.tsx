@@ -181,7 +181,7 @@ export function VotacionPortal({ token }: { token: string | null }) {
                   src={d.url}
                   alt={d.name}
                   onClick={() => setZoom(d.url)}
-                  style={{ width: '100%', height: 150, objectFit: 'cover', background: '#F3F4F6', display: 'block', cursor: 'zoom-in' }}
+                  style={{ width: '100%', height: 'auto', background: '#F3F4F6', display: 'block', cursor: 'zoom-in' }}
                 />
                 <div style={{ fontSize: 12, fontWeight: 600, padding: '7px 8px 4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={d.name}>
                   {d.name || '—'}
