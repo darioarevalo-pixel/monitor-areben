@@ -6,7 +6,7 @@
  * cobra o queda a favor. Lo registra el motor (`registrarCambio`), atado a la venta original.
  *
  * 🔑 Usa el MISMO código de la Caja, ⛔ una copia (`pantallas.md`): buscar la prenda (`buscarProducto`),
- * su precio de etiqueta (`construirPrecios` + `precioDeFeria`), el importe (`renglones`) y la regla de
+ * su precio (`precioDeCaja`: etiqueta o feria; Stunned, su Tienda Nube), el importe (`renglones`) y la regla de
  * la prenda repetida (`exigirDevolucion`). El día del corte de GN esto se muda al POS.
  * 🔑 Hasta el corte es de PRUEBA: ⛔ mueve el stock ni sale a GN (el local sigue cambiando en GN).
  */
@@ -18,8 +18,8 @@ import {
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
-import { construirPrecios } from '@/lib/etiquetas/core'
-import { NOMBRE_MEDIO, cuentaDeMedio, precioDeFeria, renglones } from '@/lib/caja/core.core.js'
+import { precioDeCaja } from '@/lib/caja/precio'
+import { NOMBRE_MEDIO, cuentaDeMedio, renglones } from '@/lib/caja/core.core.js'
 import { exigirDevolucion } from '@/lib/caja/repetida.core.js'
 import { buscarProducto, elegirVariante, leerConfig, type Candidato, type Config, type Variante } from '@/lib/caja/cliente'
 import { marcaParaPOS, usarMarcaCaja } from '@/lib/caja/marca'
@@ -47,6 +47,8 @@ export function CambioCaja() {
   usarMarcaCaja(store)
   const { datos } = useDatosMonitor()
   const tnIdx = useTnPromo(store)
+  // Stunned cobra SU Tienda Nube (Bruno, 16-oct): su índice, como la Caja (`lib/caja/precio.ts`).
+  const tnIdxStunned = useTnPromo(store === 'zattia' ? 'stunned' : store)
   const [config, setConfig] = useState<Config | null>(null)
 
   const [q, setQ] = useState('')
@@ -114,11 +116,11 @@ export function CambioCaja() {
     setFicha(await leerFichaDeVenta(store, ventaId))
   }, 'No se pudo leer la venta.')
 
-  /** El precio de la etiqueta, con la regla de la Caja (la de Etiquetas, y la de su campaña si es de feria). */
-  const precioDe = (productId: number): number | null => {
-    const p = datos?.allProductos.find((x) => String(x.id) === String(productId))
+  /** El precio de la prenda con la MISMA regla de la Caja (`precioDeCaja`): Zattia etiqueta o feria; Stunned, su Tienda Nube. */
+  const precioDe = (v: Variante): number | null => {
+    const p = datos?.allProductos.find((x) => String(x.id) === String(v.product_id))
     if (!p || !tnIdx) return null
-    return precioDeFeria(config?.reglas ?? null, productId) ?? (construirPrecios([p], tnIdx).precios[p.id] || null)
+    return precioDeCaja(p, { store, skuVariante: v.sku, idx: tnIdx, idxStunned: tnIdxStunned, reglas: config?.reglas ?? null }).precio
   }
 
   const vendidas = useMemo(() => (ficha?.lineas ?? []).filter((l) => l.cantidad > 0), [ficha])
@@ -155,7 +157,7 @@ export function CambioCaja() {
     setNuevas((xs) => {
       const i = xs.findIndex((x) => x.variante.product_id === v.product_id && x.variante.size_id === v.size_id)
       if (i >= 0) return xs.map((x, j) => (j === i ? { ...x, cantidad: x.cantidad + 1 } : x))
-      return [...xs, { variante: v, cantidad: 1, precio: precioDe(v.product_id) ?? '' }]
+      return [...xs, { variante: v, cantidad: 1, precio: precioDe(v) ?? '' }]
     })
   }
 
