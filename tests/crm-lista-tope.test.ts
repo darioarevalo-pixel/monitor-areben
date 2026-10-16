@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { LOTE_IDS, traerPorFiltro } from '@/lib/crm/panel'
+import { LOTE_IDS, olvidarDatos, traerPorFiltro } from '@/lib/crm/panel'
 import { TOPE_IDS_LISTA } from '../api/_crm.js'
 import type { MapaSeguimiento, Seguimiento } from '@/lib/crm/tipos'
 
@@ -31,7 +31,10 @@ describe('el lote del cliente contra el techo del servidor', () => {
 })
 
 describe('traerPorFiltro · pide de a tandas', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    olvidarDatos()
+  })
 
   /** 400 fríos vencidos: más que el techo del servidor, y menos de lo que hay en producción. */
   const mapa: MapaSeguimiento = {}
@@ -94,5 +97,26 @@ describe('traerPorFiltro · pide de a tandas', () => {
     vi.stubGlobal('fetch', () => Promise.resolve({ ok: false, status: 500, json: async () => ({ error: 'se cayó' }) }))
     const r = await traerPorFiltro(mapa, HOY, 'frio')
     expect(r.ok).toBe(false)
+  })
+})
+
+describe('recordados · registrar no vuelve a pedir lo que ya está', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    olvidarDatos()
+  })
+
+  it('la segunda vuelta sólo pide al que entró nuevo', async () => {
+    const pedidos: number[][] = []
+    vi.stubGlobal('fetch', (_u: string, init?: RequestInit) => {
+      const ids: number[] = JSON.parse(String(init?.body)).ids
+      pedidos.push(ids)
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, clientes: ids.map((id) => ({ id, name: 'C' + id, phone: '', total_amount: id })) }) })
+    })
+    const m: MapaSeguimiento = { 1: seg({ proximo_manual: '2026-08-20', temperatura: 'frio' }), 2: seg({ proximo_manual: '2026-08-20', temperatura: 'frio' }) }
+    await traerPorFiltro(m, HOY, 'frio')
+    const r = await traerPorFiltro({ ...m, 3: seg({ proximo_manual: '2026-08-20', temperatura: 'frio' }) }, HOY, 'frio')
+    expect(pedidos).toEqual([[1, 2], [3]])
+    expect(r.ok && r.filas).toHaveLength(3)
   })
 })

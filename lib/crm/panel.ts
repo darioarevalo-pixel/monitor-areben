@@ -221,29 +221,71 @@ export const LOTE_IDS = 250
 type Datos = Map<number, ClienteLista>
 
 /**
+ * Tandas a la vez. Eran **de a una**, y la lista del día son dos (unos 400 ids, casi todos fríos):
+ * ~1,5 s + ~0,8 s una detrás de la otra, medido en producción el 16-oct-2026. Dos juntas no es
+ * "abrir cuatro consultas grandes de un saque", que es lo que se quería evitar.
+ */
+const EN_VUELO = 2
+
+/**
+ * Nombre, teléfono y total ya traídos, mientras el panel esté abierto.
+ *
+ * 🔑 **Es lo que hace que registrar sea instantáneo** (Darío, 16-oct-2026: *"a veces demora
+ * mucho"*). Cada contacto registrado cambia el seguimiento y la lista se vuelve a armar: antes
+ * eso repetía los ~400 pedidos enteros para mover a UNA persona. El total y la última compra no
+ * cambian en minutos, y a los 10 se vuelven a pedir.
+ */
+const recordados = new Map<number, { c: ClienteLista; totales: boolean; ts: number }>()
+const VIGENCIA_MS = 10 * 60 * 1000
+/** Vacía `recordados`. Para los tests, que corren en el mismo módulo uno detrás del otro. */
+export const olvidarDatos = () => recordados.clear()
+
+/**
  * Nombre, teléfono y total de un montón de ids, **de a tandas**.
  *
- * Las tandas van **de a una y no en paralelo**: son consultas pesadas del lado de Supabase (el
- * total se suma recorriendo las ventas de cada cliente) y este panel corre adentro de WhatsApp,
- * donde lo último que conviene es abrir cuatro consultas grandes de un saque.
+ * Van **de a `EN_VUELO`**: son consultas pesadas del lado de Supabase (el total se suma
+ * recorriendo las ventas de cada cliente) y este panel corre adentro de WhatsApp, donde lo último
+ * que conviene es abrir cuatro consultas grandes de un saque. Y sólo se piden las que no están en
+ * `recordados`.
  */
 async function pedirDatos(ids: number[], totales = true): Promise<{ ok: true; datos: Datos } | { ok: false; motivo: string }> {
   const datos: Datos = new Map()
-  for (let i = 0; i < ids.length; i += LOTE_IDS) {
-    const lote = ids.slice(i, i + LOTE_IDS)
-    let d: RespuestaLista
+  const ahora = Date.now()
+  // Lo que ya se trajo hace poco no se vuelve a pedir (ver `recordados`).
+  const faltan: number[] = []
+  for (const id of ids) {
+    const r = recordados.get(id)
+    if (r && ahora - r.ts < VIGENCIA_MS && (r.totales || !totales)) datos.set(id, r.c)
+    else faltan.push(id)
+  }
+
+  const lotes: number[][] = []
+  for (let i = 0; i < faltan.length; i += LOTE_IDS) lotes.push(faltan.slice(i, i + LOTE_IDS))
+
+  const pedirLote = async (lote: number[]): Promise<ClienteLista[] | string> => {
     try {
       const r = await apiFetch('/api/datos?recurso=crm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'lista', ids: lote, totales }),
       })
-      d = (await r.json().catch(() => ({}))) as RespuestaLista
-      if (!r.ok || !d.ok) return { ok: false, motivo: d.error || `Error ${r.status} trayendo la lista.` }
+      const d = (await r.json().catch(() => ({}))) as RespuestaLista
+      if (!r.ok || !d.ok) return d.error || `Error ${r.status} trayendo la lista.`
+      return d.clientes || []
     } catch (e) {
-      return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
+      return e instanceof Error ? e.message : String(e)
     }
-    for (const c of d.clientes || []) datos.set(c.id, c)
+  }
+
+  for (let i = 0; i < lotes.length; i += EN_VUELO) {
+    const tanda = await Promise.all(lotes.slice(i, i + EN_VUELO).map(pedirLote))
+    for (const t of tanda) {
+      if (typeof t === 'string') return { ok: false, motivo: t }
+      for (const c of t) {
+        datos.set(c.id, c)
+        recordados.set(c.id, { c, totales, ts: ahora })
+      }
+    }
   }
   return { ok: true, datos }
 }
