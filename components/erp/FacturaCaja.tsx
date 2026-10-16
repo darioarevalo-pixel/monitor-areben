@@ -286,7 +286,8 @@ export function FacturaCaja() {
               <Button variant="outline" disabled={trabajando} onClick={() => void reimprimir()}>Descargar PDF</Button>
             </Notice>
           ) : null}
-          {ficha.venta.tipo !== 'cambio' && (<>
+          {/* Ya facturada: sólo el PDF (arriba). El formulario ofrecía «Facturar» otra vez (caminado 16-oct, #235). */}
+          {ficha.venta.tipo !== 'cambio' && !ficha.facturada && (<>
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <Field label="Factura">
               <Select value={clase} onChange={(e) => { setClase(e.target.value as 'A' | 'B'); limpiarA() }}>

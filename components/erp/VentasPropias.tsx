@@ -167,7 +167,7 @@ export function VentasPropias() {
               <span style={{ flex: 1 }} />
               <Button tone="danger" disabled={!!ficha.puedeAnular || trabajando} title={ficha.puedeAnular ?? undefined} onClick={() => setAnulando(true)}>Anular venta</Button>
             </div>
-            {v.prueba && <Notice tone="warning">Venta de prueba: entró antes del corte de GN, no movió el stock del libro ni se factura.</Notice>}
+            {v.prueba && <Notice tone="warning">Venta de prueba: entró antes del corte de GN y no movió el stock del libro. Su factura real sale de GN; acá sólo se factura en el ambiente de prueba de ARCA.</Notice>}
             {ficha.anulacion && (
               <Notice tone="danger">Anulada el {cuando(ficha.anulacion.anuladaEn)} por {ficha.anulacion.usuario}: «{ficha.anulacion.motivo}».</Notice>
             )}
