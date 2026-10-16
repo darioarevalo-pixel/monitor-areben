@@ -53,6 +53,23 @@ import { useComunidad, type AvisoComunidad, type Comunidad } from './useComunida
 import { antiguedadFoto, estaEnComunidad } from '@/lib/crm/comunidad'
 import { coincideNombre, palabraParaBuscar, palabrasDelNombre } from '@/lib/crm/nombre.core.js'
 import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
+
+/**
+ * El teléfono del chat, **también si no es argentino** (16-oct-2026).
+ *
+ * 🔴 `normalizeArgPhone` devuelve '' para un número de otro país (+51 970 616 406, Perú): el panel
+ * lo leía como "no hay chat abierto" y mostraba «Abrí el chat de una persona» con la conversación
+ * delante, sin forma de cargarla como prospecto. Si no es argentino quedan los dígitos tal cual:
+ * el servidor y los leads cruzan igual (por los últimos 8 dígitos).
+ *
+ * ⛔ No se arregla en `normalizeArgPhone`: es también de Envíos, Canjes y el portal del cadete.
+ */
+export function telDelChat(t: string | null | undefined): string {
+  const arg = normalizeArgPhone(t || '')
+  if (arg) return arg
+  const d = String(t || '').replace(/\D/g, '')
+  return d.length >= 10 && d.length <= 15 ? d : ''
+}
 import { leerMapa } from '@/lib/kv/cliente'
 import type { FilaCliente, FilaDetalle, MapaSeguimiento, MapaTelefonos, Nota } from '@/lib/crm/tipos'
 
@@ -334,7 +351,7 @@ export function quienPaga(estado: Estado, telNorm: string): QuienPaga | null {
   // Un prospecto ya cargado que compra es exactamente el mismo caso: se sabe el nombre y el
   // número, no existe en Gestión Nube todavía.
   if (estado.t === 'lead') {
-    return { tipo: 'sin-cargar', nombre: estado.lead.nombre, telefono: normalizeArgPhone(estado.lead.telefono) || telNorm }
+    return { tipo: 'sin-cargar', nombre: estado.lead.nombre, telefono: telDelChat(estado.lead.telefono) || telNorm }
   }
   if (estado.t === 'desconocido' && telNorm) {
     return { tipo: 'sin-cargar', nombre: '', telefono: telNorm }
@@ -400,7 +417,7 @@ export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
       setTelChat(nuevo)
       setNombreChat(String(d.nombre || ''))
       // El chat lo abrió WhatsApp; si es el que se pidió desde la lista, la ficha ya está puesta.
-      setPedido((p) => (p && normalizeArgPhone(p.tel) === normalizeArgPhone(nuevo || '') ? p : null))
+      setPedido((p) => (p && telDelChat(p.tel) === telDelChat(nuevo) ? p : null))
     }
     window.addEventListener('message', alMensaje)
     /**
@@ -488,7 +505,7 @@ function PanelInterno({
 
   // El teléfono normalizado es la identidad del chat: lo que llega de la URL puede venir con
   // cualquier forma y no se compara crudo con nada.
-  const telNorm = useMemo(() => normalizeArgPhone(tel), [tel])
+  const telNorm = useMemo(() => telDelChat(tel), [tel])
 
 
   // Al cambiar de chat se vuelve a la ficha: el chat cambió porque se eligió a alguien (desde la
@@ -578,7 +595,7 @@ function PanelInterno({
        * ⚠️ Y el teléfono a cruzar es el del PEDIDO, no `telNorm`: cuando se toca un nombre de la
        * lista, WhatsApp todavía no navegó y `telNorm` sigue siendo el del chat anterior.
        */
-      const telBuscar = pedido && !pedido.id ? normalizeArgPhone(pedido.tel) : telNorm
+      const telBuscar = pedido && !pedido.id ? telDelChat(pedido.tel) : telNorm
       const r = await buscarFicha(pedido?.id ? { clienteId: pedido.id } : { tel: telBuscar }, mapaSeg, today)
       if (!activo) return
 
