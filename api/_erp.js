@@ -52,7 +52,7 @@ import { NO_SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.j
 import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
-import { armarFacturaDelCambio, claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
+import { NC_DESDE_LA_VENTA, armarFacturaDelCambio, claveDeFactura, esDeVentaPropia, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
@@ -174,8 +174,11 @@ export async function facturarVentas({ mes, marca, ventaIds, usuario }) {
  * factura asociada para ARCA y el mismo receptor. Sale por el MISMO camino que las facturas (`facturarLote`:
  * candado, número reservado antes del CAE, una sola por venta). 🔴 Con CAE ⛔ se borra.
  * El mes del techo es el de HOY (la NC resta en el período en que se emite) — ❓ a confirmar con el contador.
+ * 🔴 La factura de una VENTA PROPIA (`venta_id` = uuid del motor) ⛔ sale de acá: su NC va por la venta
+ * (`notaDeCreditoDeVenta`, `desdeVenta`), que exige la venta ANULADA y ata la NC a la ficha. Caminado 16-oct: desde
+ * Facturación la venta #236 quedó en pie con la factura anulada y la ficha ⛔ mostraba la NC.
  */
-export async function notaDeCredito({ facturaId, usuario }, deps = {}) {
+export async function notaDeCredito({ facturaId, usuario, desdeVenta = false }, deps = {}) {
   if (!/^[0-9a-f-]{36}$/i.test(String(facturaId || ''))) return { status: 400, error: 'Factura inválida' }
   const { ambiente, error } = ambienteSeguro()
   if (!ambiente) return { status: 409, error }
@@ -188,6 +191,7 @@ export async function notaDeCredito({ facturaId, usuario }, deps = {}) {
   })()
   if (!f || f.ambiente !== ambiente) return { status: 404, error: 'La factura no existe en este ambiente.' }
   if (f.estado !== 'autorizada') return { status: 409, error: 'Sólo una factura autorizada (con CAE) lleva nota de crédito.' }
+  if (!desdeVenta && esDeVentaPropia(f.venta_id)) return { status: 409, error: NC_DESDE_LA_VENTA }
   const tipo = { [CBTE.FACTURA_A]: CBTE.NC_A, [CBTE.FACTURA_B]: CBTE.NC_B }[f.tipo]
   if (!tipo) return { status: 409, error: 'Eso ya es una nota de crédito.' }
   // 🔴 Una NC PARCIAL (la de un cambio) ya acreditó parte: ésta sale por lo que le QUEDA a la factura (la entera
@@ -646,7 +650,7 @@ export async function notaDeCreditoDeVenta({ marca, body, usuario }, deps = {}) 
     const frena = puedeHacerNC(f)
     if (frena) return { status: 409, error: frena }
     const factura = (f.facturas || []).find((x) => x.tipo === 'factura')
-    const r = await notaDeCredito({ facturaId: factura.factura_id, usuario }, deps)
+    const r = await notaDeCredito({ facturaId: factura.factura_id, usuario, desdeVenta: true }, deps)
     if (r.status) return r
     const sinAtar = await atarFactura(db, { venta: f, facturaId: r.autorizada.id, tipo: 'nc' })
     return { ok: true, ambiente: r.ambiente, autorizada: r.autorizada, sinAtar }

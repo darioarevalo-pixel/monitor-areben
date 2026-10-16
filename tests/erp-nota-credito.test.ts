@@ -56,6 +56,17 @@ describe('notaDeCredito', () => {
     expect(estado.pedidos).toHaveLength(1)
   })
 
+  it('🔴 la factura de una VENTA PROPIA (uuid del motor) ⛔ sale desde Facturación: va por la venta (caminado 16-oct, #236)', async () => {
+    const { notaDeCredito } = await import('../api/_erp.js')
+    const { NC_DESDE_LA_VENTA } = await import('../lib/erp/factura.core.js')
+    estado.factura = { ...FACTURA, venta_id: '907d03ec-1a95-4185-b880-289529893d6c' }
+    expect(await notaDeCredito({ facturaId: FACTURA.id, usuario: 'Bruno' })).toEqual({ status: 409, error: NC_DESDE_LA_VENTA })
+    expect(estado.pedidos).toHaveLength(0)
+    // Por la venta (`notaDeCreditoDeVenta` ⇒ `desdeVenta`), sí.
+    expect(await notaDeCredito({ facturaId: FACTURA.id, usuario: 'Bruno', desdeVenta: true })).toMatchObject({ autorizada: { total: 12100 } })
+    expect(estado.pedidos).toHaveLength(1)
+  })
+
   it('🔴 con una NC PARCIAL previa (la de un cambio) sale por lo que QUEDA; acreditada entera, ⛔ sale', async () => {
     const { notaDeCredito } = await import('../api/_erp.js')
     estado.filas = [{ id: 'nc-cambio', venta_id: 'uuid-del-cambio', tipo: CBTE.NC_B, total: '8500.00', asociado_id: FACTURA.id, estado: 'autorizada' }]

@@ -18,6 +18,11 @@ import { proponerLote } from '@/motor/arca/mes.core.js'
 import { descargarFactura, numeroComprobante, type FacturaEmitida } from '@/lib/arca/factura-pdf'
 import { EMISOR, faltanDelEmisor } from '@/motor/arca/emisor.core.js'
 import { CBTE } from '@/motor/arca/arca.core.js'
+import { esDeVentaPropia } from '@/lib/erp/factura.core.js'
+
+/** Qué comprobante es cada fila: la NC resta (sin esto, factura y NC se veían iguales; caminado 16-oct). */
+const NOMBRE_CBTE: Record<number, string> = { [CBTE.FACTURA_A]: 'Factura A', [CBTE.FACTURA_B]: 'Factura B', [CBTE.NC_A]: 'NC A', [CBTE.NC_B]: 'NC B' }
+const esNC = (tipo: number) => tipo === CBTE.NC_A || tipo === CBTE.NC_B
 
 const MARCAS: Array<{ key: MarcaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'bdi', label: 'BDI' }]
 const mesActual = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 7)
@@ -119,7 +124,7 @@ export function Facturacion() {
   }
 
   // Las ventas que ya tienen nota de crédito este mes: su factura ⛔ ofrece otra (una por venta, como GN).
-  const conNC = useMemo(() => new Set((facturas || []).filter((f) => f.tipo === CBTE.NC_A || f.tipo === CBTE.NC_B).map((f) => `${f.marca}:${f.venta_id}`)), [facturas])
+  const conNC = useMemo(() => new Set((facturas || []).filter((f) => esNC(f.tipo)).map((f) => `${f.marca}:${f.venta_id}`)), [facturas])
 
   /** Con el MISMO aviso que facturar: en producción la NC es REAL y con CAE ⛔ se elimina. */
   async function anularConNC(f: FacturaEmitida) {
@@ -294,14 +299,17 @@ export function Facturacion() {
             <TBody>
               {facturas.map((f) => (
                 <Tr key={f.id}>
-                  <Td>{numeroComprobante(f)}</Td>
+                  <Td>{NOMBRE_CBTE[f.tipo] ?? 'Comprobante'} {numeroComprobante(f)}</Td>
                   <Td>{dia(f.fecha)}</Td>
                   <Td>{MARCAS.find((m) => m.key === f.marca)?.label}</Td>
                   <Td>{f.venta_numero || f.venta_id}</Td>
                   <Td>{f.cae}</Td>
-                  <Td style={{ textAlign: 'right' }}>{pesos(f.total)}</Td>
+                  <Td style={{ textAlign: 'right' }}>{esNC(f.tipo) ? `− ${pesos(f.total)}` : pesos(f.total)}</Td>
                   <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {(f.tipo === CBTE.FACTURA_A || f.tipo === CBTE.FACTURA_B) && !conNC.has(`${f.marca}:${f.venta_id}`) && (
+                    {(f.tipo === CBTE.FACTURA_A || f.tipo === CBTE.FACTURA_B) && !conNC.has(`${f.marca}:${f.venta_id}`) && esDeVentaPropia(f.venta_id) && (
+                      <><Badge tone="neutral">NC desde ERP › Ventas</Badge>{' '}</>
+                    )}
+                    {(f.tipo === CBTE.FACTURA_A || f.tipo === CBTE.FACTURA_B) && !conNC.has(`${f.marca}:${f.venta_id}`) && !esDeVentaPropia(f.venta_id) && (
                       <><Button size="sm" variant="outline" disabled={trabajando} onClick={() => void anularConNC(f)}>Hacer nota de crédito</Button>{' '}</>
                     )}
                     <Button variant="outline" size="sm" onClick={() => bajar(f)} disabled={bajando === f.id || faltanDelEmisor(EMISOR, f.marca).length > 0}>
