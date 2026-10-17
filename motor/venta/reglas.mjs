@@ -413,6 +413,13 @@ export function reglasDeCaja(config, { marca }) {
  * Sólo las del mostrador, con descuento, de esa marca. @param {any[]} filas @param {{ marca: string }} o
  */
 export function reglasDeAgenda(filas, { marca }) {
+  // 🔴 `desde`/`hasta` de la Agenda son columnas DATE: supabase-js las trae como 'aaaa-mm-dd' y `new Date` las lee como
+  // medianoche UTC = el DÍA ANTERIOR en Argentina (la promo hasta el 31 terminaba el 30). Un día pelado es ese día argentino.
+  const dia = (v) => {
+    if (!v) return null
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) return `${v}T03:00:00.000Z`
+    return new Date(v).toISOString()
+  }
   return (filas || [])
     .filter((a) => a.activa && (a.canales || []).includes('mostrador') && (a.marcas || []).includes(marca))
     .filter((a) => a.beneficio && a.beneficio.tipo === 'descuento' && Number(a.beneficio.pct) > 0 && MEDIOS.includes(a.medio))
@@ -420,7 +427,7 @@ export function reglasDeAgenda(filas, { marca }) {
       id: `agenda:${a.id}`, nombre: `${a.banco ? `${a.banco} ` : ''}${NOMBRE_MEDIO[a.medio].toLowerCase()} −${a.beneficio.pct} %`,
       fin: 'promo bancaria', marca, canal: 'local', campania: null, alcance: 'todo', alcance_ids: [], medios: [a.medio],
       banco: a.banco || null, cuotas: null, monto_minimo: null, efecto: 'descuento', pct: Number(a.beneficio.pct),
-      desde: a.desde ? new Date(a.desde).toISOString() : null, hasta: a.hasta ? new Date(a.hasta).toISOString() : null,
+      desde: dia(a.desde), hasta: dia(a.hasta),
       dias: a.regla && a.regla.tipo === 'semanal' && Array.isArray(a.regla.dias) ? a.regla.dias.map(Number) : null,
       activa: true, origen: 'agenda',
     }))
