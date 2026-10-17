@@ -4,6 +4,7 @@
 //   GET  ?recurso=pagos-recibidos&store=zattia[&dia=YYYY-MM-DD]
 //   POST { recurso, store, action: 'verificar', token }   → de quién es la llave (no guarda)
 //   POST { recurso, store, action: 'cargar', token }      → la guarda y la pone en uso
+//   POST { recurso, store, action: 'cargar', token, usar: false } → sólo la guarda (⛔ toca la Caja)
 //   POST { recurso, store, action: 'usar', cuenta_id }    → vuelve a una cuenta ya cargada
 //
 // La pantalla pide el GET cada ~15 s. Los pagos se leen de MP en el momento —no se guardan—
@@ -191,8 +192,11 @@ export default async function handler(req, res) {
           { onConflict: 'cuenta_id' },
         );
         if (e1) throw e1;
+        // 🔴 `usar: false` guarda la cuenta SIN ponerla en uso (Bruno, 17-oct: leer el MP de Areben para
+        // medir). Ponerla en uso cambia dónde la Caja busca las transferencias y a qué cuenta de GN las
+        // asienta (`reglasDeHoy` → `transferenciaPorMp`): sin mapeo, deja de cobrar transferencias.
         const { enUso } = await cuentasDe(sb, store);
-        if (enUso !== q.cuenta_id) await ponerEnUso(sb, store, q.cuenta_id, perfil);
+        if (b.usar !== false && enUso !== q.cuenta_id) await ponerEnUso(sb, store, q.cuenta_id, perfil);
         return res.status(200).json({ ok: true, cuentas: (await cuentasDe(sb, store)).cuentas });
       }
 

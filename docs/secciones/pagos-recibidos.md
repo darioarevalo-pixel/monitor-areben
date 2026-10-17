@@ -28,6 +28,11 @@ local** → Credenciales de producción. 🔴 En Zattia, al nacer, era la cuenta
 - 🔑 **Cada día se busca en la cuenta que estaba en uso ese día** (`cuentasDelDia`), y el día del
   cambio en las dos. Antes de la primera carga, en la primera: así el cierre de caja de los días
   previos se puede comparar igual. `mp_cuenta_uso` ⛔ se edita: es el historial que lo decide.
+- 🔴 **Cargar una cuenta ⛔ es lo mismo que usarla** (17-oct). La cuenta EN USO es también la que mira
+  la Caja para confirmar transferencias y la que decide a qué cuenta de GN se asientan
+  (`transferenciaPorMp`): cambiarla sin mapeo deja a la Caja sin cobrar transferencias. Para tener
+  una cuenta cargada sólo para LEERLA (el MP de Areben; el plan es tener todas, para cobranzas y
+  seguimiento) está «Sólo guardar» (`cargar` con `usar: false`).
 - 🔴 **La llave ⛔ sale del servidor.** Las consultas que responden piden columnas por nombre; lo
   amarra `tests/pagos-recibidos.test.ts`. Cargar es verificar contra MP (`/users/me`) y recién
   después guardar: el id de la cuenta sale de MP, ⛔ del body.

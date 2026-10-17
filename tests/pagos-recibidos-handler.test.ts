@@ -153,6 +153,23 @@ describe('api/_pagos-recibidos.js con cuentas', () => {
     expect(tablas.mp_cuenta_uso).toHaveLength(3)
   })
 
+  it('🔴 cargar con usar: false guarda la cuenta y ⛔ cambia la que está en uso', async () => {
+    perfil = ADMIN
+    await llamar('POST', {}, { action: 'cargar', token: 'APP_USR-aaa-111' })
+    let r = await llamar('POST', {}, { action: 'cargar', token: 'APP_USR-bbb-222', usar: false })
+    expect(r.status).toBe(200)
+    expect(JSON.stringify(r.json)).not.toContain('APP_USR')
+    const cuentas = r.json.cuentas as { enUso: boolean; cuenta_id: number; ultimaVez: string | null }[]
+    expect(cuentas.find((c) => c.enUso)?.cuenta_id).toBe(111)
+    expect(cuentas.find((c) => c.cuenta_id === 222)?.ultimaVez).toBeNull()
+    expect(tablas.mp_cuentas).toHaveLength(2)
+    expect(tablas.mp_cuenta_uso).toHaveLength(1)
+
+    // Hoy se busca sólo en la que está en uso: lo de la guardada ⛔ suma.
+    r = await llamar('GET', {})
+    expect(r.json.total).toBe(111)
+  })
+
   it('🔴 la empleada ve los pagos, ⛔ el total ni las cuentas, y ⛔ puede cambiar nada', async () => {
     perfil = ADMIN
     await llamar('POST', {}, { action: 'cargar', token: 'APP_USR-aaa-111' })

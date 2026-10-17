@@ -7,6 +7,9 @@
  * 🔑 Cargar una llave es en dos pasos —verificar y después guardar— para que se vea **de quién es
  * la cuenta** antes de ponerla en uso. Pegar la llave de otra cuenta por error dejaría al local
  * mirando pagos que no son suyos, y la pantalla no lo notaría.
+ *
+ * 🔴 «Sólo guardar» carga una cuenta SIN usarla (para leerla, p. ej. el MP de Areben): la cuenta en
+ * uso es también la que mira la Caja para confirmar transferencias, así que cambiarla no es inocuo.
  */
 
 import { useState } from 'react'
@@ -54,12 +57,18 @@ export function CuentaDeCobro({ marca, cuentas, onCambio }: { marca: Marca; cuen
     }
   }
 
-  async function guardar() {
+  async function guardar(usar: boolean) {
     setOcupado(true)
     setError(null)
     try {
-      await cargarLlave(marca, llave)
-      toast.ok(`Desde ahora se cobra en ${verificada?.nombre}.`)
+      await cargarLlave(marca, llave, usar)
+      toast.ok(
+        usar || !enUso
+          ? usar
+            ? `Desde ahora se cobra en ${verificada?.nombre}.`
+            : `Se guardó ${verificada?.nombre}. Todavía no se cobra en ninguna cuenta.`
+          : `Se guardó ${verificada?.nombre}. Se sigue cobrando en ${enUso.nombre}.`,
+      )
       cerrar()
       onCambio()
     } catch (e) {
@@ -115,9 +124,16 @@ export function CuentaDeCobro({ marca, cuentas, onCambio }: { marca: Marca; cuen
               Cancelar
             </Button>
             {verificada ? (
-              <Button onClick={guardar} loading={ocupado}>
-                Guardar y usar desde ahora
-              </Button>
+              <>
+                {enUso?.cuenta_id !== verificada.cuenta_id && (
+                  <Button variant="outline" onClick={() => guardar(false)} loading={ocupado}>
+                    Sólo guardar
+                  </Button>
+                )}
+                <Button onClick={() => guardar(true)} loading={ocupado}>
+                  Guardar y usar desde ahora
+                </Button>
+              </>
             ) : (
               <Button onClick={verificar} loading={ocupado} disabled={!llave.trim()}>
                 Verificar
@@ -134,7 +150,9 @@ export function CuentaDeCobro({ marca, cuentas, onCambio }: { marca: Marca; cuen
                 <div key={c.cuenta_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[2] }}>
                   <span>
                     {c.nombre}
-                    {c.ultimaVez && <span style={{ color: color.mut }}> · usada por última vez el {fecha(c.ultimaVez)}</span>}
+                    <span style={{ color: color.mut }}>
+                      {c.ultimaVez ? ` · usada por última vez el ${fecha(c.ultimaVez)}` : ' · guardada, nunca usada'}
+                    </span>
                   </span>
                   <Button size="sm" variant="outline" onClick={() => usar(c)}>
                     Usar esta
@@ -164,6 +182,9 @@ export function CuentaDeCobro({ marca, cuentas, onCambio }: { marca: Marca; cuen
             {verificada && (
               <Notice tone="success">
                 Esta llave es de la cuenta <strong>{verificada.nombre}</strong>. Si es la correcta, guardala.
+                {enUso && enUso.cuenta_id !== verificada.cuenta_id && (
+                  <> «Sólo guardar» la deja cargada y se sigue cobrando en {enUso.nombre}: la Caja ⛔ cambia.</>
+                )}
                 {enUso && enUso.cuenta_id === verificada.cuenta_id && (
                   <>
                     {' '}

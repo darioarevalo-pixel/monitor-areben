@@ -60,9 +60,9 @@ export function verificarLlave(store: Marca, token: string) {
   return post<{ cuenta_id: number; nombre: string }>({ store, action: 'verificar', token }, 'No se pudo verificar la llave.')
 }
 
-/** Guarda la llave y pone esa cuenta en uso desde ahora. */
-export function cargarLlave(store: Marca, token: string) {
-  return post<{ cuentas: Cuenta[] }>({ store, action: 'cargar', token }, 'No se pudo guardar la cuenta.')
+/** Guarda la llave y pone esa cuenta en uso desde ahora; con `usar: false`, sólo la guarda. */
+export function cargarLlave(store: Marca, token: string, usar = true) {
+  return post<{ cuentas: Cuenta[] }>({ store, action: 'cargar', token, usar }, 'No se pudo guardar la cuenta.')
 }
 
 /** Vuelve a una cuenta ya cargada, desde ahora. */
