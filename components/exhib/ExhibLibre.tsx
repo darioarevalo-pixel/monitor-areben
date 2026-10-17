@@ -494,8 +494,8 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               <span>
                 Mientras escaneás <b>no hace falta mirar el teléfono</b>. Son tres avisos:<br />
                 • <b>Un pitido y el nombre de la prenda</b> = la detectó. Si dice otra prenda, la etiqueta está cambiada.<br />
-                • <b>Dos pitidos y «otra vez»</b> = esa variante ya se escaneó. Seguí: queda en el reporte.<br />
-                • <b>Un pitido grave y «de nuevo»</b> = no la detectó: pasá la prenda de nuevo.
+                • <b>Dos pitidos y «duplicado»</b> = esa variante ya se escaneó. Seguí: queda en el reporte.<br />
+                • <b>Un pitido grave y «no leído»</b> = no la detectó: pasá la prenda de nuevo.
               </span>
               <Button size="sm" variant="outline" onClick={escucharAvisos}>Escuchar los avisos</Button>
             </div>

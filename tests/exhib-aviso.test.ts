@@ -66,9 +66,9 @@ describe('avisoDe — son DOS avisos, y eso es todo lo que se oye', () => {
    * 🔴 **Una sola causa audible: «⛔ no la detecté».** Código cortado, SKU que comparten dos prendas
    * o prenda que ⛔ no figura son causas distintas con **la misma acción**: pasarla de nuevo.
    */
-  it('⛔ no la detectó ⇒ «de nuevo», siempre lo mismo', () => {
-    expect(avisoDe({ tipo: 'no-cruzo' })).toEqual({ aviso: 'no', voz: 'de nuevo' })
-    expect(avisoDe({ tipo: 'no-cruzo', parecidos: 2 })).toEqual({ aviso: 'no', voz: 'de nuevo' })
+  it('⛔ no la detectó ⇒ «no leído», siempre lo mismo', () => {
+    expect(avisoDe({ tipo: 'no-cruzo' })).toEqual({ aviso: 'no', voz: 'no leído' })
+    expect(avisoDe({ tipo: 'no-cruzo', parecidos: 2 })).toEqual({ aviso: 'no', voz: 'no leído' })
     // El mismo hecho por las dos pantallas: ⛔ no puede sonar distinto según por dónde se entró.
     expect(avisoDe({ tipo: 'no-encontrado' })).toEqual(avisoDe({ tipo: 'no-cruzo' }))
   })
@@ -88,7 +88,7 @@ describe('avisoDe — son DOS avisos, y eso es todo lo que se oye', () => {
 
 /**
  * 🗣️ **El nombre en vez del número** (Darío, 11-oct-2026): en el chequeo libre se dice la prenda; la
- * variante que ya se leyó en el recorrido suena distinto y dice «otra vez».
+ * variante que ya se leyó en el recorrido suena distinto y dice «duplicado».
  */
 describe('avisoDe con el nombre de la prenda', () => {
   it('la detectó ⇒ dice la prenda, ⛔ el número', () => {
@@ -96,17 +96,17 @@ describe('avisoDe con el nombre de la prenda', () => {
     expect(avisoDe({ tipo: 'stock-cero', avance: 12, nombre: 'top x' }).voz).toBe('top x')
   })
 
-  it('ya leída ⇒ dos pitidos y «otra vez», en el mismo lugar o en otro', () => {
-    expect(avisoDe({ tipo: 'sumado', veces: 2, avance: 13, nombre: 'top x' })).toEqual({ aviso: 'suma', voz: 'otra vez' })
-    expect(avisoDe({ tipo: 'ok', avance: 13, nombre: 'top x', repetida: true })).toEqual({ aviso: 'suma', voz: 'otra vez' })
+  it('ya leída ⇒ dos pitidos y «duplicado», en el mismo lugar o en otro', () => {
+    expect(avisoDe({ tipo: 'sumado', veces: 2, avance: 13, nombre: 'top x' })).toEqual({ aviso: 'suma', voz: 'duplicado' })
+    expect(avisoDe({ tipo: 'ok', avance: 13, nombre: 'top x', repetida: true })).toEqual({ aviso: 'suma', voz: 'duplicado' })
   })
 
   it('el rebote del lector ⛔ habla: cortaría el nombre de la misma prenda', () => {
     expect(avisoDe({ tipo: 'doble-lectura', veces: 1, avance: 13, nombre: 'top x' })).toEqual({ aviso: 'ok', voz: '' })
   })
 
-  it('⛔ la detectó ⇒ sigue «de nuevo»; sin nombre (por categoría) sigue el número', () => {
-    expect(avisoDe({ tipo: 'no-cruzo', nombre: '' })).toEqual({ aviso: 'no', voz: 'de nuevo' })
+  it('⛔ la detectó ⇒ sigue «no leído»; sin nombre (por categoría) sigue el número', () => {
+    expect(avisoDe({ tipo: 'no-cruzo', nombre: '' })).toEqual({ aviso: 'no', voz: 'no leído' })
     expect(avisoDe({ tipo: 'ok', avance: 12 }).voz).toBe('doce')
   })
 })

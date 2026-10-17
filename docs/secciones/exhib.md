@@ -148,7 +148,7 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > 🗣️ **En el libre, la voz dice la PRENDA y ⛔ el número (11-oct-2026, Darío)** — «blusa milano,
 > negro, talle s» (`nombreParaDecir` en `aviso.ts`: minúscula, color antes que talle, «talle» delante).
 > Así se confirma que leyó Y se nota una etiqueta cambiada. 🔑 **La variante ya leída en el recorrido
-> (en cualquier lugar) suena con dos pitidos y dice «otra vez»**, sin frenar: queda como duplicada en
+> (en cualquier lugar) suena con dos pitidos y dice «duplicado»** (era «otra vez»; desde el 17-oct, y «de nuevo» pasó a «no leído»: Camila las confundía y volvía a escanear), sin frenar: queda como duplicada en
 > el reporte. El rebote del lector (<600 ms) ⛔ habla, para no cortar el nombre. ⚠️ Esto **reemplaza**
 > la regla del 20-sep «el número que sube es la confirmación» SÓLO en el libre; el modo por
 > categoría (sin `nombre`) sigue cantando el número. Lo de abajo sobre el número es historia.

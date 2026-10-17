@@ -11,7 +11,7 @@
  * diga que vuelva a escanear porque no lo detectó; lo repetido y demás entra en el balance»*):
  *
  * - **la detectó** → el pitido corto y **el número**, que crece. Si sube, entró.
- * - **⛔ no la detectó** → el pitido grave y **«de nuevo»**, que es la única acción posible con la
+ * - **⛔ no la detectó** → el pitido grave y **«no leído»** (era «de nuevo»), que es la única acción posible con la
  *   prenda todavía en la mano.
  *
  * 🔑 **Todo lo demás se sacó del oído a propósito.** La prenda repetida, la que el sistema tiene en
@@ -57,7 +57,7 @@ export type FinDeEscaneo = {
    * sigue el número.
    */
   nombre?: string
-  /** Esa variante YA se había leído en este recorrido (en este lugar o en otro): suena distinto y dice «otra vez». */
+  /** Esa variante YA se había leído en este recorrido (en este lugar o en otro): suena distinto y dice «duplicado». */
   repetida?: boolean
 }
 
@@ -129,9 +129,12 @@ export function avisoDe(fin: FinDeEscaneo): AvisoEscaneo {
       if (fin.nombre !== undefined) {
         // ⚠️ El rebote ⛔ habla: si hablara, cortaría el nombre que se está diciendo de la misma prenda.
         if (fin.tipo === 'doble-lectura') return { aviso: 'ok', voz: '' }
-        // 🔑 La repetida suena DISTINTO (dos pitidos) y dice «otra vez» (Darío, 11-oct-2026): sin
+        // 🔑 La repetida suena DISTINTO (dos pitidos) y dice «duplicado» (Darío, 11-oct-2026; era «otra vez» hasta el 17-oct): sin
         // preguntas ni botones, la empleada ⛔ se frena y queda en el reporte como duplicada.
-        if (fin.repetida || fin.tipo === 'sumado') return { aviso: 'suma', voz: 'otra vez' }
+        // 🔴 «Otra vez» y «de nuevo» se oían igual: Camila entendía «pasala otra vez» y la volvía a
+        // escanear (14-oct: 7 de 20 repetidas, la misma prenda seguida a 3-10 s). Ahora cada una
+        // dice lo que pasó, con la palabra del ticket.
+        if (fin.repetida || fin.tipo === 'sumado') return { aviso: 'suma', voz: 'duplicado' }
         return { aviso: 'ok', voz: fin.nombre }
       }
       return { aviso: 'ok', voz: fin.avance ? enPalabras(fin.avance) : '' }
@@ -141,7 +144,7 @@ export function avisoDe(fin: FinDeEscaneo): AvisoEscaneo {
     // ⛔ no figura—: son causas distintas con la misma acción, y el escaneo queda guardado igual.
     case 'no-cruzo':
     case 'no-encontrado':
-      return { aviso: 'no', voz: 'de nuevo' }
+      return { aviso: 'no', voz: 'no leído' }
 
     // ── Sólo el modo POR CATEGORÍA, que ⛔ no es el que se camina por sector. ──────────────────
     case 'cruce':
