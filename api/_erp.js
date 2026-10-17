@@ -16,6 +16,7 @@
  *   GET  ?recurso=erp&vista=stock&marca=bdi|zattia&q=texto            busca prendas (SKU, código, nombre)
  *   GET  ?recurso=erp&vista=precio&marca=…&producto=ID                precio por lista y costo del producto, con GN y TN al lado
  *   POST {recurso:'erp', accion:'cargar-precio'|'cargar-costo', marca, producto, monto, lista?, desde?, motivo?, proveedor?, proveedorId?}
+ *   POST {recurso:'erp', accion:'soltar-precio', marca, producto, lista, motivo?}   el precio cargado de una lista vuelve a seguir (018)
  *   GET  ?recurso=erp&vista=proveedores&marca=…&q=…                  los proveedores del ERP (sql/013) para elegir en el costo
  *   POST {recurso:'erp', accion:'guardar-proveedor', marca, nombre, cuit?}   alta a mano de un proveedor
  *   GET  ?recurso=erp&vista=stock&marca=…&producto=ID&talle=ID       el libro y GN de esa prenda, con historial
@@ -51,7 +52,7 @@ import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { NO_SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
-import { armarPrecioDeProducto, leerCarga, lineaDelProducto } from '../lib/erp/precio.core.js'
+import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { NC_DESDE_LA_VENTA, armarFacturaDelCambio, claveDeFactura, esDeVentaPropia, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
@@ -935,7 +936,7 @@ export async function precioDeProducto({ marca, producto }) {
   const linea = lineaDelProducto(marca, skus)
   // Todo por (LÍNEA, producto): las vistas del motor son por marca, y en la base de Zattia conviven zattia y stunned.
   const [listas, vigentes, efectivos, costo, hPrecio, hCosto, gn, lecturas, cpv] = await Promise.all([
-    b.from('lista_precio').select('id, nombre'),
+    b.from('lista_precio').select('id, nombre, sigue'),
     b.from('precio_vigente').select('lista, precio, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto),
     b.from('precio_lista').select('lista, precio, fuente, de_lista').eq('marca', linea).eq('product_id', producto),
     b.from('costo_vigente').select('costo, proveedor, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto).limit(1),
@@ -1008,6 +1009,28 @@ export async function cargarPrecioCosto({ marca, body, usuario }, deps = {}) {
     const esLaMisma = v && v.fuente === 'carga' && Number(v[c.que]) === Number(fila[c.que]) && Date.parse(v.vigente_desde) === Date.parse(fila.vigente_desde)
     const aviso = !c.desde && !esLaMisma ? 'Quedó guardado, pero lo vigente sigue siendo otra fila: revisá el historial.' : null
     return { ok: true, futuro: !!c.desde, aviso }
+  })
+}
+
+/**
+ * SOLTAR el precio cargado de una lista (`soltarPrecio` del motor, sql/018): la lista vuelve a SEGUIR a la suya (el local →
+ * lo que cobra Tienda Nube con la oferta). Una fila nueva `suelta`; la carga queda en el historial. Sin 018 en la base ⇒ 409.
+ */
+export async function soltarPrecioDeLista({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const c = leerSoltar(body)
+  if (c.error) return { status: 400, error: c.error }
+  const b = deps.b || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
+  const inv = await b.from('inventario').select('sku').eq('product_id', c.producto)
+  if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
+  if (!inv.data.length) return { status: 404, error: 'El producto no está en el espejo de GN.' }
+  const linea = lineaDelProducto(marca, inv.data.map((x) => x.sku))
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'Cargar precios', fn)
+  return correr(async (db) => {
+    const { soltarPrecio } = await import('../motor/venta/precio.mjs')
+    const r = await soltarPrecio(db, { marca: linea, product_id: Number(c.producto), lista: c.lista, usuario: usuario || 'admin', motivo: c.motivo })
+    if (!r.ok) return { status: 409, error: r.error.mensaje }
+    return { ok: true, precio: r.vigente?.precio == null ? null : Number(r.vigente.precio), deLista: r.vigente?.de_lista ?? null }
   })
 }
 
@@ -1161,6 +1184,10 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, techo: m.calculado.total })
     }
 
+    if (body.accion === 'soltar-precio') {
+      const r = await soltarPrecioDeLista({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
     if (body.accion === 'cargar-precio' || body.accion === 'cargar-costo') {
       const r = await cargarPrecioCosto({ marca: String(body.marca || ''), body: { ...body, que: body.accion === 'cargar-precio' ? 'precio' : 'costo' }, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)

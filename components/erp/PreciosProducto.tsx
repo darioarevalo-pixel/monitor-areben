@@ -10,6 +10,9 @@
  * que es lo que hay que resolver antes de cortar (Bruno, 14-oct: el precio del local sale de TN o de una lista propia;
  * el costo, de la importación de TN).
  *
+ * 🔑 El local SIGUE a lo que cobra Tienda Nube con la oferta (motor sql/018). Un precio cargado en una lista que sigue a otra
+ * se puede SOLTAR («Volver a seguir»): una fila nueva, la carga queda en el historial.
+ *
  * 🔑 El proveedor del costo es una FICHA del ERP (sql/013; Bruno, 15-oct: tabla propia cruzada con PRM): se elige de la lista
  * o se da de alta. Sin la tabla en la base, se escribe como texto (como antes).
  */
@@ -18,7 +21,7 @@ import { useRef, useState } from 'react'
 import {
   Button, ConfirmDetalle, EmptyState, Field, Input, MoneyText, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space, useConfirmar,
 } from '@/components/ui'
-import { buscarPrendas, cargarPrecioCosto, guardarProveedor, leerPrecioDeProducto, leerProveedores, type MarcaErp, type PrecioDeProducto, type ProveedorErp } from '@/lib/erp/cliente'
+import { buscarPrendas, cargarPrecioCosto, guardarProveedor, leerPrecioDeProducto, leerProveedores, soltarPrecio, type FilaPrecio, type MarcaErp, type PrecioDeProducto, type ProveedorErp } from '@/lib/erp/cliente'
 import { parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { NOMBRE_FUENTE } from '@/lib/erp/precio.core.js'
 
@@ -150,6 +153,32 @@ export function PreciosProducto() {
     }, 'No se pudo cargar.')
   }
 
+  /** «Volver a seguir»: el precio cargado de la lista se suelta y vuelve a valer el de la lista que sigue. */
+  async function soltar(l: FilaPrecio) {
+    if (!ficha || !l.sigue) return
+    const aQuien = ficha.listas.find((x) => x.lista === l.sigue)
+    const ok = await confirmar({
+      titulo: `${l.nombre}: volver a seguir a ${aQuien?.nombre ?? l.sigue}`,
+      mensaje: (
+        <div>
+          <ConfirmDetalle label="Cargado hoy" valor={<MoneyText value={l.precio ?? 0} />} />
+          <ConfirmDetalle label={`Pasa a valer (${aQuien?.nombre ?? l.sigue})`} valor={aQuien?.precio != null ? <MoneyText value={aQuien.precio} /> : 'Sin precio'} />
+          <p style={{ marginTop: space[3] }}>El precio cargado queda en el historial. Mientras GN funcione, no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</p>
+        </div>
+      ),
+      ok: 'Volver a seguir',
+      tono: 'warning',
+    })
+    if (!ok) return
+    await correr(async () => {
+      const r = await soltarPrecio(marca, { producto: ficha.producto, lista: l.lista, motivo: motivo || undefined })
+      setHecho(`${l.nombre}: vuelve a seguir a ${aQuien?.nombre ?? l.sigue}${r.precio != null ? ` ($${r.precio.toLocaleString('es-AR')})` : ''}.`)
+      const f = await leerPrecioDeProducto(marca, ficha.producto)
+      setFicha(f)
+      setTnVieja(f.tnLeidaEn ? Date.now() - Date.parse(f.tnLeidaEn) > VIEJA_MS : false)
+    }, 'No se pudo volver a seguir.')
+  }
+
   /** Alta de un proveedor desde el formulario del costo: queda elegido. Si ya existía, se elige ése. */
   const altaProveedor = () => correr(async () => {
     if (!nuevoProveedor) return
@@ -219,10 +248,13 @@ export function PreciosProducto() {
                     <Tr key={l.lista}>
                       <Td>{l.nombre}</Td>
                       <Td style={{ textAlign: 'right' }}>{plata(l.precio)}</Td>
-                      <Td>{l.fuente ? FUENTE[l.fuente] ?? l.fuente : 'Sin precio'}{l.deLista && ` · sigue a ${ficha.listas.find((x) => x.lista === l.deLista)?.nombre ?? l.deLista}`}</Td>
+                      <Td>
+                        {l.fuente ? FUENTE[l.fuente] ?? l.fuente : 'Sin precio'}{l.deLista && ` · sigue a ${ficha.listas.find((x) => x.lista === l.deLista)?.nombre ?? l.deLista}`}
+                        {l.puedeSoltar && <> <Button variant="outline" disabled={trabajando} onClick={() => void soltar(l)}>Volver a seguir</Button></>}
+                      </Td>
                       <Td>{cuando(l.desde)}</Td>
                       <Td style={{ textAlign: 'right' }}>{plata(l.lista === 'local' ? ficha.gn?.precio : l.lista === 'mayorista' ? ficha.gn?.mayorista : null)}</Td>
-                      <Td style={{ textAlign: 'right' }}>{l.lista === 'online' || l.lista === 'local' ? plata(ficha.tn?.precio) : '—'}{l.lista === 'online' && ficha.tn?.promocional != null && <> (oferta {plata(ficha.tn.promocional)})</>}</Td>
+                      <Td style={{ textAlign: 'right' }}>{l.lista === 'online' ? plata(ficha.tn?.precio) : l.lista === 'local' || l.lista === 'oferta' ? plata(ficha.tn?.cobra) : '—'}{l.lista === 'online' && ficha.tn?.promocional != null && <> (oferta {plata(ficha.tn.promocional)})</>}</Td>
                     </Tr>
                   ))}
                   <Tr>
