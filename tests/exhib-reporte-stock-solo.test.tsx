@@ -20,14 +20,14 @@ const { ToastProvider } = await import('@/components/ui/Toast')
 
 const recorrido = { id: 'r1', estado: 'cerrado', escaneos: 300, creado_en: '2026-10-10T12:04:00Z', persona: 'Camila' } as never
 
-async function abrir(trayendo = false) {
+async function abrir(trayendo = false, soloImprimir = false) {
   const traer = vi.fn(async () => {})
   const host = document.createElement('div')
   document.body.appendChild(host)
   await act(async () => {
     createRoot(host).render(
       <ToastProvider>
-        <ReporteChequeo marca="zattia" previos={[recorrido]} items={[]} mapa={null} onTraerStock={traer} trayendo={trayendo} onCobertura={() => {}} />
+        <ReporteChequeo marca="zattia" previos={[recorrido]} items={[]} mapa={null} onTraerStock={traer} trayendo={trayendo} onCobertura={() => {}} soloImprimir={soloImprimir} />
       </ToastProvider>,
     )
   })
@@ -52,5 +52,14 @@ describe('el reporte trae el stock solo', () => {
     expect(texto).toContain('Actualizando el stock')
     const boton = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('Imprimir ticket'))
     expect(boton?.disabled).toBe(true)
+  })
+
+  it('🔑 la empleada (sólo imprimir) ⛔ dispara el stock al abrir: ve el botón y la hora vieja', async () => {
+    horasDelStock = 3
+    const { traer, texto } = await abrir(false, true)
+    expect(traer).not.toHaveBeenCalled()
+    expect(texto).toContain('Imprimir ticket del')
+    expect(texto).toContain('Actualizar stock')
+    expect(texto).not.toContain('Duplicadas')
   })
 })

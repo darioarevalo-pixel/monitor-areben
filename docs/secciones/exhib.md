@@ -83,6 +83,25 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > 🔴 Afirma sobre **todo lo regular del local**: si un día se camina un solo perchero, pide el resto —
 > por eso dice «pasaron por el lector X de Y» arriba del botón de imprimir.
 
+> ✅ **Exhibir y retirar con el lector (17-oct-2026, Darío)** — *«un proceso es la búsqueda y otra cosa
+> es el escaneo confirmatorio de exhibición, y debería pasar lo mismo con los productos que retira»*.
+> **Reemplaza a la foto del ticket tildado** (el 14-oct ⛔ se subió ninguna, y una tilde ⛔ prueba qué
+> prenda se tuvo en la mano). Al **imprimir** (dueños o empleada) se guarda la lista del papel en
+> `cobertura.confirmacion` del PRIMER recorrido del día (acción `confirmacion` de `api/_exhib.js`,
+> ⛔ migración; `cobertura`/`tachar`/`repetida` la conservan). La empleada ve en su pantalla
+> **«Imprimir ticket del N-mes»** (`ReporteChequeo soloImprimir`: sin números ni listas, y ⛔ trae el
+> stock sola — si está viejo lo dice con su botón) y **`ConfirmarTicket`**: escanea cada prenda al
+> exhibirla y cada duplicada al retirarla. Voz: el nombre propio = anotada · «ya está» · «no está en el
+> ticket» · «no leído». El teléfono manda su estado ENTERO de a un envío (se junta con la base, nunca
+> se borra una marca) y lo guarda en su `localStorage` por falta de señal. **Terminar** = constancia +
+> correo a los dueños (`armarCorreoConfirmacion`: exhibidos X de N · retirados Y de M + lo que faltó).
+> Reimprimir conserva lo hecho que siga en la lista nueva. La cuenta: `lib/exhib/confirmacion.ts`
+> (copia JS en `correo.core.js`, `resumenDeConfirmacion`). Los dueños ven el estado arriba del
+> reporte; la foto sólo aparece en los días que la tienen. ⏭️ Probar en el local con Camila.
+> 🗣️ Mismo día: la voz del chequeo dice sólo el **nombre propio** («ivory», `nombrePropio`: saca el
+> tipo con `tipoDePrenda`), sin color ni talle (Darío: *«es una comprobación rápida de que se hizo la
+> lectura y el nombre coincide con el producto escaneado»*).
+
 > 📬 **El correo del chequeo (12-oct-2026, Darío)** — *«no ir a buscar yo como dueño la información sino
 > que a través del correo me empiecen a reportar»*. Y el chequeo es **UN recorrido, en un momento**
 > (*«no me sirve que lo hagan a medias»*): **al cerrar el recorrido** (`terminar` de `ExhibLibre`) el
@@ -145,8 +164,8 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > `localStorage` de ese teléfono (`monitor_voz`). Vale para TODAS las pantallas que usan `decir`.
 > Si ⛔ hay mejorada/premium, la pantalla dice cómo bajarla en Ajustes del iPhone.
 
-> 🗣️ **En el libre, la voz dice la PRENDA y ⛔ el número (11-oct-2026, Darío)** — «blusa milano,
-> negro, talle s» (`nombreParaDecir` en `aviso.ts`: minúscula, color antes que talle, «talle» delante).
+> 🗣️ **En el libre, la voz dice la PRENDA y ⛔ el número (11-oct-2026, Darío)** — desde el 17-oct sólo «milano» (antes «blusa milano,
+> negro, talle s») (`nombreParaDecir` en `aviso.ts`: minúscula, color antes que talle, «talle» delante).
 > Así se confirma que leyó Y se nota una etiqueta cambiada. 🔑 **La variante ya leída en el recorrido
 > (en cualquier lugar) suena con dos pitidos y dice «duplicado»** (era «otra vez»; desde el 17-oct, y «de nuevo» pasó a «no leído»: Camila las confundía y volvía a escanear), sin frenar: queda como duplicada en
 > el reporte. El rebote del lector (<600 ms) ⛔ habla, para no cortar el nombre. ⚠️ Esto **reemplaza**

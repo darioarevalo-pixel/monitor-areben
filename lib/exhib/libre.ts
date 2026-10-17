@@ -17,6 +17,7 @@
 import type { Filas } from '../excel'
 import { normCode, exhibId, precioDeGondola } from './core'
 import type { ExhibEstado, ExhibItem } from './tipos'
+import type { Confirmacion } from './confirmacion'
 
 /** Un escaneo del recorrido libre: la prenda, y **dónde** apareció. Espeja `exhib_escaneo`. */
 export type EscaneoLibre = {
@@ -298,6 +299,8 @@ export type Cobertura = {
    * Lo escribe sólo el servidor (acción `correo`); se conserva al guardar el balance.
    */
   correo?: { enviado_en?: string; a?: string[]; asunto?: string; por?: string | null; error?: string }
+  /** La confirmación del ticket con el lector (Darío, 17-oct-2026): ver `lib/exhib/confirmacion.ts`. */
+  confirmacion?: Confirmacion
   por: string | null
   cuando: string
 }

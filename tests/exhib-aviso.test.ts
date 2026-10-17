@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { avisoDe, enPalabras, nombreParaDecir } from '../lib/exhib/aviso'
+import { avisoDe, enPalabras, nombrePropio } from '../lib/exhib/aviso'
 
 describe('enPalabras — el número se canta, ⛔ no se lee', () => {
   it('los chicos', () => {
@@ -111,11 +111,16 @@ describe('avisoDe con el nombre de la prenda', () => {
   })
 })
 
-describe('nombreParaDecir', () => {
-  it('en minúscula, con el talle dicho y sin «Variante Única»', () => {
-    expect(nombreParaDecir('BLUSA MARLA', 'S - BLANCO')).toBe('blusa marla, blanco, talle s')
-    expect(nombreParaDecir('BERMUDA FOUR', '38')).toBe('bermuda four, talle 38')
-    expect(nombreParaDecir('BABY TEE EXPENSIVE', 'Variante Única')).toBe('baby tee expensive')
-    expect(nombreParaDecir('TOP ORSA', 'Chocolate')).toBe('top orsa, chocolate')
+describe('nombrePropio', () => {
+  it('dice sólo el nombre propio: sin el tipo, sin color ni talle (Darío, 17-oct)', () => {
+    expect(nombrePropio('TOP IVORY')).toBe('ivory')
+    expect(nombrePropio('BLUSA MARLA')).toBe('marla')
+    expect(nombrePropio('BABY TEE EXPENSIVE')).toBe('expensive')
+    expect(nombrePropio('BERMUDA DARK CAMO')).toBe('dark camo')
+    expect(nombrePropio('MINI  SAINT')).toBe('saint')
+  })
+  it('si el nombre es sólo el tipo, lo dice entero', () => {
+    expect(nombrePropio('BODY')).toBe('body')
+    expect(nombrePropio('')).toBe('')
   })
 })

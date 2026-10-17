@@ -21,7 +21,7 @@ import { BalanceSector } from './BalanceSector'
 import { ElegirEspacio, otraAltura } from './ElegirEspacio'
 import { RelevamientoPanel } from './RelevamientoPanel'
 import { FinMapa } from './FinMapa'
-import { FotoTicket } from './FotoTicket'
+import { ConfirmarTicket } from './ConfirmarTicket'
 import { diaDe, ReporteChequeo } from './ReporteChequeo'
 import { ElegirVoz } from './ElegirVoz'
 import { UbicacionFlotante } from './UbicacionFlotante'
@@ -29,7 +29,7 @@ import { percherosDelChequeo } from '@/lib/exhib/paradas'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 import { useActividad } from '@/components/mapa-local/useMapaLocalDatos'
-import { avisoDe, nombreParaDecir } from '@/lib/exhib/aviso'
+import { avisoDe, nombrePropio } from '@/lib/exhib/aviso'
 import { avisar, estadoSonido, prepararSonido, type EstadoSonido } from '@/lib/sonido'
 
 /**
@@ -213,8 +213,8 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     window.setTimeout(() => setAudio(estadoSonido()), 400)
     // ⚠️ Son los tres que hay que reconocer de oído: el nombre, la repetida y la que ⛔ leyó.
     const demo: Array<{ tipo: string; nombre?: string; repetida?: boolean }> = [
-      { tipo: 'ok', nombre: nombreParaDecir('BLUSA MILANO', 'NEGRO - S') },
-      { tipo: 'ok', nombre: nombreParaDecir('BLUSA MILANO', 'NEGRO - S'), repetida: true },
+      { tipo: 'ok', nombre: nombrePropio('BLUSA MILANO') },
+      { tipo: 'ok', nombre: nombrePropio('BLUSA MILANO'), repetida: true },
       { tipo: 'no-cruzo' },
     ]
     demo.forEach((d, i) => {
@@ -230,10 +230,10 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     // ⚠️ `avance` y `parecidos` viajan adentro del resultado y ⛔ no se calculan acá: el primero sale
     // de la ref de la cola —la única que ya tiene el escaneo recién hecho— y el segundo decide entre
     // «no figura» y «pasala de nuevo».
-    // 🗣️ Dice la prenda en vez del número (Darío, 11-oct-2026). `it` puede faltar en un repetido
-    // que ⛔ cruzó: ahí el nombre sale del escaneo guardado.
+    // 🗣️ Dice la prenda en vez del número (Darío, 11-oct-2026), y desde el 17-oct sólo su nombre
+    // propio («ivory»). `it` puede faltar en un repetido que ⛔ cruzó: ahí sale del escaneo guardado.
     const it = 'it' in r ? r.it : null
-    const nombre = it ? nombreParaDecir(it.name, it.size) : 'e' in r && r.e.product_name ? nombreParaDecir(r.e.product_name, r.e.size) : ''
+    const nombre = it ? nombrePropio(it.name) : 'e' in r && r.e.product_name ? nombrePropio(r.e.product_name) : ''
     const a = avisoDe({ ...r, nombre })
     avisar(a.aviso, a.voz)
     return r
@@ -464,9 +464,13 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
             </div>
           )}
 
-          {/* 🔑 Quien ⛔ ve el reporte (la empleada) sube la foto del ticket tildado del último chequeo. */}
-          {marca === 'zattia' && !mapaGuardado?.puede.editar && ultimoChequeo.length > 0 && (
-            <FotoTicket marca={marca} recorridos={ultimoChequeo} onCobertura={ponerCobertura} titulo={`Ticket tildado del chequeo del ${fechaDe(ultimoChequeo[0].creado_en)}`} />
+          {/* 🔑 La empleada imprime el ticket del último chequeo y, con él en la mano, escanea lo que
+              exhibe y lo que retira (Darío, 17-oct-2026). Reemplaza a la foto del ticket tildado. */}
+          {marca === 'zattia' && !mapaGuardado?.puede.editar && ultimoChequeo.length > 0 && previos && (
+            <>
+              <ReporteChequeo soloImprimir marca={marca} previos={previos} items={items} mapa={mapaLocal} onTraerStock={onTraerStock} trayendo={trayendo} onCobertura={ponerCobertura} />
+              <ConfirmarTicket marca={marca} recorrido={ultimoChequeo[0]} buscables={buscables} onCobertura={ponerCobertura} />
+            </>
           )}
 
           {/* 🔑 El reporte del chequeo: de quien edita el Mapa del local (el celular es para escanear). */}
@@ -493,7 +497,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
                   caminar el salón, ⛔ no estudiando la pantalla. */}
               <span>
                 Mientras escaneás <b>no hace falta mirar el teléfono</b>. Son tres avisos:<br />
-                • <b>Un pitido y el nombre de la prenda</b> = la detectó. Si dice otra prenda, la etiqueta está cambiada.<br />
+                • <b>Un pitido y el nombre de la prenda</b> («ivory») = la detectó. Si dice otra prenda, la etiqueta está cambiada.<br />
                 • <b>Dos pitidos y «duplicado»</b> = esa variante ya se escaneó. Seguí: queda en el reporte.<br />
                 • <b>Un pitido grave y «no leído»</b> = no la detectó: pasá la prenda de nuevo.
               </span>

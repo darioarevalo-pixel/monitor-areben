@@ -9,6 +9,7 @@
  */
 import { apiFetch } from '@/lib/api-fetch'
 import type { Cobertura, EscaneoLibre, RecorridoLibre } from './libre'
+import type { Confirmacion } from './confirmacion'
 
 const API = '/api/datos?recurso=exhib'
 
@@ -144,6 +145,16 @@ export async function fotoDelTicket(marca: string, id: string, url: string, quit
  * 🔴 El servidor rechaza el que ya está cerrado: ése es el dato con el que alguien va a comparar el
  * salón y ⛔ no hay verbo de vuelta.
  */
+/** La confirmación del ticket: la lista al imprimir, las marcas del teléfono, o `terminar`. Ver `api/_exhib.js`. */
+export async function guardarConfirmacion(
+  marca: string,
+  id: string,
+  datos: { lista: Confirmacion['lista'] } | { exhibidos: Record<string, string>; retirados: Record<string, string>; terminar?: boolean },
+): Promise<Cobertura> {
+  const d = await escribir<{ ok: true; cobertura: Cobertura }>(marca, 'confirmacion', { id, ...datos })
+  return d.cobertura
+}
+
 export async function eliminarRecorrido(marca: string, id: string): Promise<void> {
   await escribir(marca, 'eliminar', { id })
 }

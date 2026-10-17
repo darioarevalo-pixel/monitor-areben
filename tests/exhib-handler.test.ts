@@ -642,3 +642,72 @@ describe('el correo del chequeo', () => {
     expect(guardada().correo).toEqual({ enviado_en: 'x' })
   })
 })
+
+/**
+ * **La confirmación del ticket con el lector** (Darío, 17-oct-2026): al imprimir se guarda la lista;
+ * la empleada escanea lo que exhibe y retira; al terminar sale el correo. Vive en
+ * `cobertura.confirmacion`, al lado del balance y de la foto, sin pisarlos.
+ */
+describe('la confirmación del ticket', () => {
+  const conCobertura = (cobertura: unknown) => {
+    base.tablas.exhib_recorrido = [{ id: REC, store: 'zattia', modo: 'mapa', estado: 'cerrado', creado_en: '2026-10-14T12:34:41Z', persona: 'camilaquintana', cobertura }]
+  }
+  type Guardada = Record<string, unknown> & {
+    confirmacion: { lista: { pendientes: unknown[] }; exhibidos: Record<string, string>; retirados: Record<string, string>; terminado_en?: string; correo: { enviado_en?: string } }
+  }
+  const guardada = () => base.escrituras.filter((e) => e.tabla === 'exhib_recorrido').at(-1)?.filas?.[0]?.cobertura as Guardada
+  const LISTA = {
+    pendientes: [{ clave: 'P1', sku: 'RTO-1', nombre: 'TOP IVORY', variante: 'BLANCO' }, { clave: '99|*', sku: 'RTO-2', nombre: 'TOP JADE', variante: '' }],
+    duplicadas: [{ clave: 'D1', sku: 'RTO-3', nombre: 'TOP WREN', variante: 'GRIS' }],
+  }
+  const H = '2026-10-14T14:00:00.000Z'
+
+  it('imprimir guarda la lista y conserva el balance y el correo del chequeo', async () => {
+    conCobertura({ cats: [], tipos: ['TOP'], correo: { enviado_en: 'x' }, por: 'Darío', cuando: 'z' })
+    const res = await correr(postear({ action: 'confirmacion', id: REC, lista: LISTA }))
+    expect(res.code).toBe(200)
+    expect(guardada()).toMatchObject({ tipos: ['TOP'], correo: { enviado_en: 'x' } })
+    expect(guardada().confirmacion.lista.pendientes).toHaveLength(2)
+    expect(guardada().confirmacion).toMatchObject({ exhibidos: {}, retirados: {} })
+  })
+
+  it('🔴 sin ticket impreso ⛔ se anota nada', async () => {
+    conCobertura(null)
+    const res = await correr(postear({ action: 'confirmacion', id: REC, exhibidos: { P1: H }, retirados: {} }))
+    expect(res.code).toBe(400)
+    expect(base.escrituras).toHaveLength(0)
+  })
+
+  it('junta las marcas con las de la base y ⛔ guarda claves que ⛔ están en el ticket', async () => {
+    conCobertura({ confirmacion: { lista: LISTA, impreso_en: 'i', exhibidos: { P1: H }, retirados: {} } })
+    await correr(postear({ action: 'confirmacion', id: REC, exhibidos: { '99|*': H, OTRA: H }, retirados: { D1: H, P1: H } }))
+    expect(guardada().confirmacion.exhibidos).toEqual({ P1: H, '99|*': H })
+    expect(guardada().confirmacion.retirados).toEqual({ D1: H })
+  })
+
+  it('reimprimir conserva lo hecho que sigue en la lista nueva', async () => {
+    conCobertura({ confirmacion: { lista: LISTA, impreso_en: 'i', exhibidos: { P1: H, '99|*': H }, retirados: { D1: H } } })
+    await correr(postear({ action: 'confirmacion', id: REC, lista: { pendientes: [LISTA.pendientes[0]], duplicadas: [] } }))
+    expect(guardada().confirmacion.exhibidos).toEqual({ P1: H })
+    expect(guardada().confirmacion.retirados).toEqual({})
+  })
+
+  it('terminar deja quién y cuándo y manda el correo con lo que faltó', async () => {
+    conCobertura({ confirmacion: { lista: LISTA, impreso_en: 'i', exhibidos: { P1: H }, retirados: {} } })
+    correos.mandados.length = 0
+    const res = await correr(postear({ action: 'confirmacion', id: REC, exhibidos: {}, retirados: { D1: H }, terminar: true }))
+    expect(res.code).toBe(200)
+    expect(guardada().confirmacion.terminado_en).toBeTruthy()
+    expect(guardada().confirmacion.correo.enviado_en).toBeTruthy()
+    expect(correos.mandados[0].asunto).toContain('exhibidos 1 de 2 · retirados 1 de 1')
+  })
+
+  it('🔴 el balance ⛔ borra la confirmación', async () => {
+    conCobertura({ cats: [], tipos: [], confirmacion: { lista: LISTA, impreso_en: 'i', exhibidos: { P1: H }, retirados: {} }, por: null, cuando: 'z' })
+    await correr(postear({ action: 'cobertura', id: REC, tipos: ['TOP'] }))
+    expect(guardada().confirmacion.exhibidos).toEqual({ P1: H })
+    conCobertura(guardada())
+    await correr(postear({ action: 'tachar', id: REC, variante_id: 'b3', motivo: 'otro-lugar' }))
+    expect(guardada().confirmacion.exhibidos).toEqual({ P1: H })
+  })
+})

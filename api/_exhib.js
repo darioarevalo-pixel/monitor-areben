@@ -3,7 +3,7 @@
 //   GET  ?recurso=exhib&store=…&action=recorridos       → los recorridos, con cuántos escaneos tiene cada uno
 //   GET  ?recurso=exhib&store=…&action=recorrido&id=…   → UNO entero: cabecera + TODOS sus escaneos
 //   GET  ?recurso=exhib&store=…&action=lugares          → los lugares ya usados, para sugerir
-//   POST ?recurso=exhib&store=…  { action: 'abrir'|'escanear'|'cerrar'|'cobertura'|'tachar'|'repetida'|'foto-ticket'|'correo'|'sacar-escaneo'|'eliminar', … }
+//   POST ?recurso=exhib&store=…  { action: 'abrir'|'escanear'|'cerrar'|'cobertura'|'tachar'|'repetida'|'foto-ticket'|'correo'|'confirmacion'|'sacar-escaneo'|'eliminar', … }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=exhib`. El plan Hobby de
 // Vercel admite 12 funciones y hay 7 usadas; una ruta nueva sería la octava por un solo recurso.
@@ -21,7 +21,7 @@ import { puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { pathnameDeBlob } from './_blob.js'
-import { armarCorreoChequeo, limpiarReporte } from '../lib/exhib/correo.core.js'
+import { armarCorreoChequeo, armarCorreoConfirmacion, limpiarListaTicket, limpiarMarcas, limpiarReporte } from '../lib/exhib/correo.core.js'
 // 🔑 El Monitor ⛔ manda mails: los pide a Mailer, como el ticket de la Caja.
 import { pedirAvisoInterno } from '../lib/mailer/aviso.core.js'
 
@@ -350,6 +350,8 @@ export default async function handler(req, res) {
           ...(Array.isArray(antes.ticket) ? { ticket: antes.ticket } : {}),
           // Y la constancia del correo a los dueños: si se pierde, el próximo cierre lo manda de nuevo.
           ...(antes.correo ? { correo: antes.correo } : {}),
+          // Y la confirmación del ticket: es de la empleada, ⛔ del balance.
+          ...(antes.confirmacion ? { confirmacion: antes.confirmacion } : {}),
           por: perfil.name || null,
           cuando: new Date().toISOString(),
         }
@@ -394,6 +396,7 @@ export default async function handler(req, res) {
           repetidas: Array.isArray(antes.repetidas) ? antes.repetidas : [],
           ...(Array.isArray(antes.ticket) ? { ticket: antes.ticket } : {}),
           ...(antes.correo ? { correo: antes.correo } : {}),
+          ...(antes.confirmacion ? { confirmacion: antes.confirmacion } : {}),
           // ⚠️ `por`/`cuando` son de la DECLARACIÓN del sector, ⛔ no de esta marca: cada una trae
           // los suyos. Pisarlos haría que «lo declaró Fulano» cambie por marcar una prenda.
           por: antes.por || null,
@@ -463,6 +466,67 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, correo })
       }
 
+      /**
+       * **La confirmación del ticket** (Darío, 17-oct-2026): la empleada pasa por el lector cada
+       * prenda al exhibirla y cada duplicada al retirarla. Va en `cobertura.confirmacion` del PRIMER
+       * recorrido del día, como la foto del ticket (⛔ migración). Tres usos:
+       * - `lista` → la del ticket que se acaba de imprimir. Se reemplaza en cada impresión y se
+       *   conservan las marcas que siguen en la lista nueva (un ticket reimpreso ⛔ borra lo hecho).
+       * - `exhibidos`/`retirados` → TODAS las marcas que tiene el teléfono, ⛔ de a una: el celular
+       *   es uno solo y manda su estado entero, así dos envíos encimados ⛔ se pisan con algo viejo
+       *   (se juntan con las de la base, nunca se borra una).
+       * - `terminar` → la constancia de quién y cuándo, y el correo a los dueños (Mailer).
+       */
+      if (accion === 'confirmacion') {
+        const recorrido = await recorridoDeLaMarca(String(b.id || ''))
+        if (!recorrido) return res.status(404).json({ error: 'Ese recorrido no está.' })
+        const antes = recorrido.cobertura || {}
+        const previa = antes.confirmacion || null
+        const ahora = new Date().toISOString()
+        let conf
+        if (b.lista) {
+          const lista = limpiarListaTicket(b.lista)
+          conf = {
+            lista,
+            impreso_en: ahora,
+            impreso_por: perfil.name || null,
+            exhibidos: limpiarMarcas(previa?.exhibidos, lista.pendientes),
+            retirados: limpiarMarcas(previa?.retirados, lista.duplicadas),
+          }
+        } else {
+          if (!previa || !previa.lista) return res.status(400).json({ error: 'Primero hay que imprimir el ticket.' })
+          const juntar = (base, nuevas) => {
+            const out = { ...(base || {}) }
+            for (const [k, v] of Object.entries(nuevas)) if (!out[k] || v < out[k]) out[k] = v
+            return out
+          }
+          conf = {
+            ...previa,
+            exhibidos: juntar(previa.exhibidos, limpiarMarcas(b.exhibidos, previa.lista.pendientes)),
+            retirados: juntar(previa.retirados, limpiarMarcas(b.retirados, previa.lista.duplicadas)),
+          }
+          if (b.terminar) {
+            conf.terminado_en = ahora
+            conf.terminado_por = perfil.name || null
+          }
+        }
+        let error
+        ;({ error } = await sb.from('exhib_recorrido').update({ cobertura: { ...antes, confirmacion: conf } }).eq('id', recorrido.id))
+        if (error) throw new Error(error.message)
+
+        if (b.terminar) {
+          const marcas = [...Object.values(conf.exhibidos), ...Object.values(conf.retirados)].sort()
+          const c = armarCorreoConfirmacion({ confirmacion: conf, persona: perfil.name || null, dia: String(recorrido.creado_en || ahora).slice(0, 10), desde: marcas[0] || null, hasta: ahora })
+          const para = String(process.env.MAIL_EXHIB_A || process.env.MAIL_REPOSICION_A || 'darioarevalo@arebensrl.com').split(',').map((x) => x.trim()).filter(Boolean)
+          const r = await pedirAvisoInterno({ url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch }, { para, asunto: c.asunto, html: c.html, texto: c.texto })
+          const fallas = r.ok ? r.fallas : [r.configurado === false ? 'Falta la conexión con Mailer en Vercel.' : r.motivo]
+          conf.correo = { ...(r.ok && r.enviados.length ? { enviado_en: new Date().toISOString() } : {}), a: para, ...(fallas.length ? { error: fallas.join(' · ').slice(0, 400) } : {}) }
+          ;({ error } = await sb.from('exhib_recorrido').update({ cobertura: { ...antes, confirmacion: conf } }).eq('id', recorrido.id))
+          if (error) throw new Error(error.message)
+        }
+        return res.status(200).json({ ok: true, cobertura: { ...antes, confirmacion: conf } })
+      }
+
       if (accion === 'sacar-escaneo') {
         const recorrido = await recorridoDeLaMarca(String(b.recorrido_id || ''))
         if (!recorrido) return res.status(404).json({ error: 'Ese recorrido no está.' })
@@ -494,7 +558,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true })
       }
 
-      return res.status(400).json({ error: `action inválida (usá abrir, escanear, cerrar, cobertura, tachar, repetida, foto-ticket, correo, sacar-escaneo o eliminar)` })
+      return res.status(400).json({ error: `action inválida (usá abrir, escanear, cerrar, cobertura, tachar, repetida, foto-ticket, correo, confirmacion, sacar-escaneo o eliminar)` })
     }
 
     return res.status(405).json({ error: 'método no permitido' })

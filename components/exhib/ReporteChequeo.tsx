@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, KpiCard, Notice, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, useToast, weight } from '@/components/ui'
-import { leerRecorrido, mandarCorreo } from '@/lib/exhib/cliente'
+import { guardarConfirmacion, leerRecorrido, mandarCorreo } from '@/lib/exhib/cliente'
+import { listaDelTicket, resumenConfirmacion } from '@/lib/exhib/confirmacion'
 import { altasDesde, paraElCorreo } from '@/lib/exhib/correo'
 import type { Cobertura, EscaneoLibre, RecorridoLibre } from '@/lib/exhib/libre'
 import { nuevosDesde, reporteDelChequeo, type Duplicada, type FeriaEnRegulares, type Pendiente } from '@/lib/exhib/reporte'
@@ -37,7 +38,12 @@ const variante = (v: string) => (v && v !== 'Variante Única' ? v : '—')
 /** `2026-10-08` → `8-oct`. */
 const diaCorto = (dia: string) => new Date(`${dia}T12:00:00-03:00`).toLocaleDateString('es-AR', { ...EN_AR, day: 'numeric', month: 'short' }).replace(/\s+de\s+|\s+/, '-').replace('.', '')
 
-export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, trayendo, onCobertura }: { marca: Marca; previos: RecorridoLibre[]; items: ExhibItem[]; mapa: MapaLocal | null; onTraerStock: () => Promise<void>; trayendo: boolean; onCobertura: (id: string, c: Cobertura) => void }) {
+/**
+ * `soloImprimir` (Darío, 17-oct-2026: «tiene que poder Camila imprimir el ticket»): la empleada ve
+ * sólo el botón de imprimir del último chequeo, sin los números ni las listas. ⛔ Trae el stock sola
+ * al abrirse —la pantalla de la empleada se abre para escanear—: si está viejo, lo dice con su botón.
+ */
+export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, trayendo, onCobertura, soloImprimir = false }: { marca: Marca; previos: RecorridoLibre[]; items: ExhibItem[]; mapa: MapaLocal | null; onTraerStock: () => Promise<void>; trayendo: boolean; onCobertura: (id: string, c: Cobertura) => void; soloImprimir?: boolean }) {
   const toast = useToast()
   const cerrados = useMemo(() => previos.filter((r) => r.estado === 'cerrado' && (r.escaneos ?? 0) > 0), [previos])
   const dias = useMemo(() => [...new Set(cerrados.map((r) => diaDe(r.creado_en)))].sort().reverse(), [cerrados])
@@ -99,11 +105,11 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
    */
   const disparado = useRef(false)
   useEffect(() => {
-    if (disparado.current || stockDe === undefined || trayendo || !dias.length) return
+    if (soloImprimir || disparado.current || stockDe === undefined || trayendo || !dias.length) return
     if (stockDe && stockDe.horas * 60 < FRESCO_MIN) return
     disparado.current = true
     void onTraerStock()
-  }, [stockDe, trayendo, dias.length, onTraerStock])
+  }, [soloImprimir, stockDe, trayendo, dias.length, onTraerStock])
 
   /**
    * 📬 El correo del chequeo (Darío, 12-oct-2026). Sale solo al cerrar el recorrido; esto es para
@@ -133,6 +139,16 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
       await imprimirTicket(reporte.pendientes, reporte.duplicadas)
     } catch (e) {
       toast.error('No se pudo armar el ticket: ' + (e as Error).message)
+      setImprimiendo(false)
+      return
+    }
+    // 🔑 La lista del papel queda guardada: es contra la que se escanea lo exhibido y retirado
+    // (`ConfirmarTicket`). Va en el PRIMER recorrido del día, como la foto del ticket.
+    const primero = delDia[0]
+    try {
+      if (primero) onCobertura(primero.id, await guardarConfirmacion(marca, primero.id, { lista: listaDelTicket(reporte.pendientes, reporte.duplicadas) }))
+    } catch (e) {
+      toast.error('El ticket salió, pero no se guardó su lista para escanear: ' + (e as Error).message)
     } finally {
       setImprimiendo(false)
     }
@@ -144,6 +160,31 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
   const fin = delDia.at(-1)?.cerrado_en ?? null
   const minutos = inicio && fin ? Math.round((Date.parse(fin) - Date.parse(inicio)) / 60000) : null
   const personas = [...new Set(delDia.map((r) => r.persona || 'sin nombre'))].join(', ')
+  const conf = delDia[0]?.cobertura?.confirmacion ?? null
+
+  if (soloImprimir) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', marginBottom: space[3], fontSize: font.sm, color: color.mut }}>
+        {/* ⛔ Se imprime mientras se trae el stock: el papel saldría con la foto vieja. */}
+        <Button variant="outline" onClick={() => void imprimir()} loading={imprimiendo || (!reporte && !error)} disabled={trayendo || !reporte}>
+          Imprimir ticket del {diaVisto ? diaCorto(diaVisto) : ''}
+        </Button>
+        {error && <span style={{ color: color.danger }}>No se pudo armar: {error}</span>}
+        {trayendo ? (
+          <span>Actualizando el stock (2 a 4 minutos)…</span>
+        ) : (
+          stockViejo && (
+            <>
+              <span>{textoStock}</span>
+              <Button size="sm" variant="ghost" onClick={() => void onTraerStock()}>
+                Actualizar stock
+              </Button>
+            </>
+          )
+        )}
+      </div>
+    )
+  }
 
   return (
     <div style={{ marginBottom: space[5] }}>
@@ -224,8 +265,10 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
             )
           )}
 
-          {/* La foto del ticket tildado: la prueba de que se terminó de colgar y retirar. */}
-          <FotoTicket marca={marca} recorridos={delDia} onCobertura={onCobertura} />
+          {/* 🔑 La prueba de que se exhibió y retiró lo del ticket: lo que pasó por el lector (17-oct-2026). */}
+          <EstadoConfirmacion conf={conf} />
+          {/* Las fotos del ticket tildado quedan para los chequeos de antes del lector. */}
+          {delDia.some((r) => r.cobertura?.ticket?.length) && <FotoTicket marca={marca} recorridos={delDia} onCobertura={onCobertura} />}
 
           <ListaPendientes lista={reporte.pendientes} porUnaVariante={reporte.porUnaVariante} desde={desde} />
           <ListaDuplicadas lista={reporte.duplicadas} />
@@ -233,6 +276,27 @@ export function ReporteChequeo({ marca, previos, items, mapa, onTraerStock, tray
         </>
       )}
     </div>
+  )
+}
+
+/** Cómo va la confirmación con el lector (`ConfirmarTicket`): lo hecho y lo que quedó, para los dueños. */
+function EstadoConfirmacion({ conf }: { conf: NonNullable<Cobertura['confirmacion']> | null }) {
+  if (!conf) return <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>Exhibir y retirar con el lector: falta imprimir el ticket.</div>
+  const r = resumenConfirmacion(conf)
+  const empezado = r.exhibidos + r.retirados > 0
+  const completo = !r.sinExhibir.length && !r.sinRetirar.length
+  return (
+    <Notice tone={conf.terminado_en ? (completo ? 'success' : 'warning') : 'neutral'} icon={conf.terminado_en ? (completo ? '✓' : '⚠') : '…'} style={{ marginBottom: space[3] }}>
+      <b>
+        Exhibidos {r.exhibidos} de {r.pendientes} · Retirados {r.retirados} de {r.duplicadas}
+      </b>
+      <span style={{ color: color.mut }}>
+        {' '}
+        · {conf.terminado_en ? `terminado ${fechaYHora(conf.terminado_en)}${conf.terminado_por ? ` por ${conf.terminado_por}` : ''}` : empezado ? 'en curso' : `ticket impreso ${fechaYHora(conf.impreso_en)}, sin empezar`}
+      </span>
+      {conf.terminado_en && r.sinExhibir.length > 0 && <div style={{ marginTop: 4 }}>No se exhibieron: {r.sinExhibir.map((x) => `${x.sku || x.nombre}`).join(', ')}</div>}
+      {conf.terminado_en && r.sinRetirar.length > 0 && <div style={{ marginTop: 4 }}>Siguen duplicadas: {r.sinRetirar.map((x) => `${x.sku || x.nombre}`).join(', ')}</div>}
+    </Notice>
   )
 }
 

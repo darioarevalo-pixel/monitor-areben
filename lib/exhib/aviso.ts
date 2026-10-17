@@ -22,6 +22,7 @@
  */
 
 import type { Aviso } from '../sonido'
+import { tipoDePrenda } from './core'
 
 /**
  * Lo poco que mira la regla: el final del escaneo y **cuántas prendas van en el recorrido**.
@@ -62,19 +63,17 @@ export type FinDeEscaneo = {
 }
 
 /**
- * La prenda como se dice: «blusa milano, negro, talle s». En minúscula porque algunas voces deletrean
- * las palabras cortas en mayúscula («T-O-P»); «Variante Única» ⛔ se dice.
+ * 🗣️ **El nombre propio de la prenda, para decirlo** (Darío, 17-oct-2026): «top ivory» → «ivory».
+ * *«Es una comprobación rápida de que se hizo la lectura y el nombre coincide con el producto
+ * escaneado»*: el tipo y el color alargaban la frase y el lector ya estaba en la prenda siguiente.
+ * Se saca el tipo con la MISMA regla que separa los tipos del local (`tipoDePrenda`: «baby tee»
+ * entero). Si el nombre es sólo el tipo, se dice entero.
  */
-export function nombreParaDecir(nombre: string, variante: string | null | undefined): string {
-  const partes = String(variante || '')
-    .split(/\s+-\s+/)
-    .map((t) => t.trim())
-    .filter((t) => t && !/^variante [úu]nica$/i.test(t))
-  // El talle suelto («S», «38») va al FINAL y con su palabra: «S» sola se pierde, y GN a veces lo
-  // pone primero («S - BLANCO»). Se dice como se pide: el color y después el talle.
-  const esTalle = (t: string) => /^(x{0,3}s|m|x{0,3}l|\d{2})$/i.test(t)
-  const orden = [...partes.filter((t) => !esTalle(t)), ...partes.filter(esTalle).map((t) => `talle ${t}`)]
-  return [String(nombre || '').trim(), ...orden].filter(Boolean).join(', ').toLowerCase()
+export function nombrePropio(nombre: string): string {
+  const n = String(nombre || '').trim().replace(/\s+/g, ' ')
+  const tipo = tipoDePrenda(n)
+  const resto = n.toUpperCase().startsWith(tipo + ' ') ? n.slice(tipo.length + 1) : ''
+  return (resto || n).toLowerCase()
 }
 
 export type AvisoEscaneo = { aviso: Aviso; voz: string }
