@@ -42,10 +42,14 @@ y el «Pendiente de facturar» del dashboard de Darío.
   forma de pago como FILAS (`regla_comercial`, motor sql/016), cargar / editar / apagar, y un SIMULADOR que cobra una venta con
   las 4 formas de pago y dice qué regla ganó (una regla a medio cargar se prueba sin guardar). La cuenta es del motor
   (`motor/venta/reglas.mjs`: campaña reemplaza a temporada en sus prendas, gana la mejor, el % sobre el precio de campaña,
-  canal obligatorio); el servidor es `api/_erp-reglas.js`. La promo bancaria se LEE de la Agenda (no se copia). 🔴 La Caja
-  todavía cobra con `caja_config` (parte 3 ⇒ con la sesión de la Caja): la pantalla compara y dice dónde se separan. 🔑 Las
+  canal obligatorio); el servidor es `api/_erp-reglas.js`. La promo bancaria se LEE de la Agenda (no se copia). 🔑 **Parte 3
+  (17-oct): «Que la Caja cobre con estas reglas» se prende POR MARCA** (`prenderCajaErp`): copia las activas a
+  `caja_config.reglas.reglasComerciales` y cada guardado la rehace; la pantalla dice con qué copia cobra, si está vieja y qué
+  reglas la Caja no puede cobrar (`queNoCobraLaCaja`: banco que no es el de la Agenda, cuotas ≠ 6). Apagada, compara con
+  `caja_config` y dice dónde se separan. Detalle en `docs/secciones/caja.md`. 🔑 Las
   categorías son las de TN por nombre, y las pone la PANTALLA (`matchTn`), como la Caja: la de GN la tienen 135 de 890.
-  Oráculo: `~/Documents/erp-monitor/oraculos/oraculo-reglas-134.mjs` (re-cobrar las ventas de la Caja con las reglas).
+  Oráculos: `oraculo-reglas-134.mjs` (el núcleo) y `oraculo-caja-con-reglas.mjs` + `caminar-caja-reglas.mjs` (la Caja
+  prendida), en `~/Documents/erp-monitor/oraculos/`.
 
 ## Dónde vive
 

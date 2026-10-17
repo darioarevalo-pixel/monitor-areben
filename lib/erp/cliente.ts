@@ -232,7 +232,11 @@ export type ReglasDeMarca = {
   reglas: ReglaComercial[]; agenda: ReglaComercial[]
   caja: { reglas: ReglaComercial[]; avisos: string[]; feriaCampanias: string[]; diferencias: { sinTraer: boolean; faltan: string[]; sobran: string[] } }
   campanias: Array<{ id: string; nombre: string; estado: string; feria: boolean }>
+  /** Parte 3: si la Caja cobra con las reglas (con qué copia, si está al día, y lo que la Caja no puede cobrar). */
+  cobraConReglas: { prendida: boolean; copiadasEn: string | null; por: string | null; alDia: boolean; noCobra: Array<{ id: string; nombre: string; porque: string }> }
 }
+/** Lo que pasó con la copia de la Caja al guardar una regla (null: la Caja no cobra con las reglas). */
+export type CopiaEnCaja = { copiadas: number } | { error: string } | null
 export type PagoSimulado = {
   medio: MedioRegla; renglones: number[]; base: number; rebaja: number; pct: number; descuento: number; redondeo: number; monto: number
   regla: { id: string | null; nombre: string } | null; juego: string; perdieron: Array<{ id: string | null; nombre: string; efecto: string }>
@@ -248,8 +252,10 @@ export type PedidoSimulacion = { renglones: PrendaASimular[]; fecha?: string; ca
 export const leerReglas = (marca: MarcaErp) =>
   pedir<ReglasDeMarca>(null, `&vista=reglas&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer las reglas.')
 export const guardarRegla = (marca: MarcaErp, regla: ReglaComercial) =>
-  pedir<{ ok: true; regla: ReglaComercial; nueva: boolean }>(post({ accion: 'guardar-regla', marca, regla }), '', 'No se pudo guardar la regla.')
+  pedir<{ ok: true; regla: ReglaComercial; nueva: boolean; caja: CopiaEnCaja }>(post({ accion: 'guardar-regla', marca, regla }), '', 'No se pudo guardar la regla.')
 export const traerReglasDeCaja = (marca: MarcaErp, escribir: boolean) =>
-  pedir<{ ok: true; sembradas: number; yaEstaban: number; seco: boolean; reglas: ReglaComercial[]; avisos: string[] }>(post({ accion: 'sembrar-reglas', marca, escribir }), '', 'No se pudieron traer las reglas de la Caja.')
+  pedir<{ ok: true; sembradas: number; yaEstaban: number; seco: boolean; reglas: ReglaComercial[]; avisos: string[]; caja: CopiaEnCaja }>(post({ accion: 'sembrar-reglas', marca, escribir }), '', 'No se pudieron traer las reglas de la Caja.')
+export const prenderCajaReglas = (marca: MarcaErp, prender: boolean) =>
+  pedir<{ ok: true; prendida: boolean; copiadas?: number }>(post({ accion: 'prender-caja-reglas', marca, prender }), '', 'No se pudo cambiar con qué cobra la Caja.')
 export const simularReglas = (marca: MarcaErp, p: PedidoSimulacion) =>
   pedir<Simulacion>(post({ accion: 'simular-reglas', marca, ...p }), '', 'No se pudo simular.')

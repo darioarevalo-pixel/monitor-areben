@@ -10,15 +10,16 @@
  * para la clienta (no se suman); el % de la forma de pago va sobre el precio de campaña; online no hereda las del local.
  * La cuenta la hace el motor (`motor/venta/reglas.mjs`): la pantalla no calcula ningún %.
  *
- * 🔴 Hasta que la Caja cobre con las reglas (parte 3) la Caja sigue con su configuración: la pantalla compara las dos
- * y dice dónde no coinciden.
+ * 🔑 Parte 3 (17-oct): «la Caja cobra con estas reglas» se prende POR MARCA acá. Apagada, la Caja sigue con su
+ * configuración y la pantalla compara las dos y dice dónde no coinciden; prendida, la Caja saca el % de las reglas (de
+ * una copia que se rehace en cada cambio) y la pantalla dice con qué copia cobra y qué reglas la Caja no puede cobrar.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import { Badge, Button, EmptyState, Field, Input, MoneyText, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, space, useConfirmar } from '@/components/ui'
 import {
-  buscarPrendas, guardarRegla, leerReglas, simularReglas, traerReglasDeCaja,
-  type FormaSimulada, type MarcaErp, type MedioRegla, type PrendaASimular, type ReglaComercial, type ReglasDeMarca, type Simulacion,
+  buscarPrendas, guardarRegla, leerReglas, prenderCajaReglas, simularReglas, traerReglasDeCaja,
+  type CopiaEnCaja, type FormaSimulada, type MarcaErp, type MedioRegla, type PrendaASimular, type ReglaComercial, type ReglasDeMarca, type Simulacion,
 } from '@/lib/erp/cliente'
 import { resumenDeRegla } from '@/lib/erp/reglas.core.js'
 import { traerAudit } from '@/lib/tn-audit'
@@ -138,8 +139,35 @@ export function ReglasComerciales() {
       if (!ok) return
       const r = await traerReglasDeCaja(marca, true)
       setHecho(r.sembradas ? `Se trajeron ${r.sembradas} reglas de la Caja.` : `Ya estaban (${r.yaEstaban}).`)
+      dijoLaCaja(r.caja)
       await recargar(marca)
     }, 'No se pudieron traer las reglas de la Caja.')
+  }
+
+  /** Lo que pasó con la copia de la Caja después de guardar: si ⛔ se pudo copiar, la Caja sigue con la anterior. */
+  const dijoLaCaja = (c: CopiaEnCaja) => { if (c && 'error' in c) setError(c.error) }
+
+  async function cajaConReglas(prender: boolean) {
+    const nombre = MARCAS.find((m) => m.key === marca)?.label
+    const faltan = datos?.caja.diferencias.faltan ?? []
+    const ok = await confirmar({
+      titulo: prender ? `Que la Caja de ${nombre} cobre con estas reglas` : `Que la Caja de ${nombre} vuelva a su configuración`,
+      mensaje: prender ? (
+        <div>
+          <p>Desde ahora, el descuento de cada forma de pago en la Caja sale de las reglas prendidas de esta pantalla (y de la promo bancaria de la Agenda). La cuenta de Gestión Nube de cada pago no cambia.</p>
+          {faltan.length > 0 && <p style={{ color: 'var(--warning-text, #92400e)' }}>Ojo: la Caja hoy cobra esto y ninguna regla prendida lo dice: {faltan.join(' · ')}. Con las reglas, eso deja de aplicarse.</p>}
+          <p>Cada vez que se guarda una regla, la Caja la toma (las pantallas abiertas, al recargar).</p>
+        </div>
+      ) : <p>La Caja vuelve a cobrar con Formas de pago y Productos en oferta. Las reglas quedan guardadas.</p>,
+      ok: prender ? 'Prender' : 'Volver',
+      tono: 'warning',
+    })
+    if (!ok) return
+    await correr(async () => {
+      const r = await prenderCajaReglas(marca, prender)
+      setHecho(r.prendida ? `La Caja de ${nombre} cobra con las reglas (${r.copiadas ?? 0}).` : `La Caja de ${nombre} volvió a su configuración.`)
+      await recargar(marca)
+    }, 'No se pudo cambiar con qué cobra la Caja.')
   }
 
   async function prenderApagar(r: ReglaComercial) {
@@ -151,15 +179,18 @@ export function ReglasComerciales() {
     })
     if (!ok) return
     await correr(async () => {
-      await guardarRegla(marca, { ...r, activa: !r.activa })
+      const g = await guardarRegla(marca, { ...r, activa: !r.activa })
       setHecho(`«${r.nombre}» ${r.activa ? 'apagada' : 'prendida'}.`)
+      dijoLaCaja(g.caja)
       await recargar(marca)
     }, 'No se pudo guardar la regla.')
   }
 
   const guardadas = datos?.reglas ?? []
   const grupos = [...new Set(guardadas.map((r) => r.campania ?? TEMPORADA))].sort((a, b) => (a === TEMPORADA ? -1 : b === TEMPORADA ? 1 : a.localeCompare(b)))
-  const dif = datos?.caja.diferencias
+  const cc = datos?.cobraConReglas
+  // Prendida, comparar con la configuración vieja de la Caja ya no dice nada: la Caja cobra con las reglas.
+  const dif = cc?.prendida ? null : datos?.caja.diferencias
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -172,7 +203,25 @@ export function ReglasComerciales() {
           </div>
         )}
       >
-        <Notice tone="warning">La Caja todavía cobra con su configuración (Formas de pago y Productos en oferta). Estas reglas se cargan y se prueban acá; la Caja las va a usar en el próximo paso.</Notice>
+        {cc && !cc.prendida && (
+          <Notice tone="warning">
+            La Caja todavía cobra con su configuración (Formas de pago y Productos en oferta). Estas reglas se cargan y se prueban acá.{' '}
+            <Button size="sm" onClick={() => cajaConReglas(true)} disabled={trabajando || !!datos?.caja.diferencias.sinTraer}>Que la Caja cobre con estas reglas</Button>
+          </Notice>
+        )}
+        {cc?.prendida && (
+          <Notice tone={cc.alDia ? 'success' : 'danger'}>
+            {cc.alDia
+              ? <>La Caja cobra con estas reglas{cc.copiadasEn ? ` (tomadas el ${new Date(cc.copiadasEn).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}${cc.por ? ` por ${cc.por}` : ''})` : ''}.{' '}</>
+              : <>La Caja cobra con una copia VIEJA de las reglas: lo que se cambió después no lo cobra.{' '}<Button size="sm" onClick={() => cajaConReglas(true)} disabled={trabajando}>Pasarle las de ahora</Button>{' '}</>}
+            <Button size="sm" variant="outline" onClick={() => cajaConReglas(false)} disabled={trabajando}>Volver a la configuración de la Caja</Button>
+          </Notice>
+        )}
+        {cc && cc.noCobra.length > 0 && (
+          <Notice tone="warning" style={{ marginTop: space[3] }}>
+            Estas reglas están prendidas pero la Caja no las puede cobrar: {cc.noCobra.map((r) => `«${r.nombre}» (${r.porque})`).join(' · ')}
+          </Notice>
+        )}
         {error && <Notice tone="danger" onClose={() => setError(null)} style={{ marginTop: space[3] }}>{error}</Notice>}
         {hecho && <Notice tone="success" onClose={() => setHecho(null)} style={{ marginTop: space[3] }}>{hecho}</Notice>}
         {dif?.sinTraer && (
@@ -217,6 +266,7 @@ export function ReglasComerciales() {
           onGuardar={(r) => correr(async () => {
             const g = await guardarRegla(marca, r)
             setHecho(g.nueva ? `Regla «${g.regla.nombre}» agregada.` : `Regla «${g.regla.nombre}» guardada.`)
+            dijoLaCaja(g.caja)
             setEditando(null)
             await recargar(marca)
           }, 'No se pudo guardar la regla.')}

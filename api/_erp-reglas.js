@@ -5,7 +5,9 @@
  * Caja (para comparar y sembrar) y las campañas de Liquidación. Las categorías son las de Tienda Nube y las pone la
  * pantalla con el catálogo (`matchTn`), como en la Caja: la de GN la tienen 135 de 890 productos activos de Zattia.
  *
- * 🔴 Hasta la parte 3 la Caja ⛔ cobra con esto: cobra con `caja_config` como siempre. La pantalla lo dice, y compara
+ * 🔑 Parte 3 (17-oct): «la Caja cobra con las reglas» se PRENDE por marca (`prenderCajaErp`): se copian las reglas activas
+ * a `caja_config.reglas.reglasComerciales` y la Caja saca el % de ahí (`lib/caja/core.core.js`, `pctDePago`). Prendida,
+ * cada cambio de una regla vuelve a copiar. Apagada, la Caja cobra con `caja_config` como siempre, y la pantalla compara
  * las reglas guardadas con lo que hoy cobra la Caja para que ⛔ se separen callados.
  *
  * Entra por `api/_erp.js` (sólo admin). `deps.conMotor` es el de `_erp.js` (la conexión del motor de la marca);
@@ -15,7 +17,7 @@ import { createClient } from '@supabase/supabase-js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { reglasGuardadas } from './_caja-reglas.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
-import { compararConCaja, leerReglaDePantalla, leerSimulacion } from '../lib/erp/reglas.core.js'
+import { compararConCaja, copiaParaCaja, leerReglaDePantalla, leerSimulacion, queNoCobraLaCaja } from '../lib/erp/reglas.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 const SIN_TABLA = 'Las reglas todavía no están en esta base (falta la migración 016 del motor).'
@@ -60,9 +62,17 @@ export async function reglasDeMarca({ marca }, deps) {
   return deps.conMotor(marca, 'Las reglas', async (pg) => {
     if (!(await db.hayReglas(pg))) return { status: 409, error: SIN_TABLA }
     const guardadas = await db.leerReglas(pg, { marcas: [marca] })
+    const rc = config.reglasComerciales
+    const prendida = !!(rc && rc.prendida === true)
     return {
       reglas: guardadas, agenda,
       caja: { reglas: caja.reglas, avisos: caja.avisos, feriaCampanias: config.feriaCampanias || [], diferencias: compararConCaja(guardadas, caja.reglas) },
+      // Parte 3: si la Caja ya cobra con las reglas, con qué copia (y si está al día con las guardadas).
+      cobraConReglas: {
+        prendida, copiadasEn: (rc && rc.copiadasEn) || null, por: (rc && rc.por) || null,
+        alDia: !prendida || JSON.stringify(copiaParaCaja(guardadas, marca)) === JSON.stringify(rc.lista),
+        noCobra: queNoCobraLaCaja(guardadas, marca),
+      },
       campanias: (campanias.data || []).map((c) => ({ id: c.id, nombre: c.nombre, estado: c.estado, feria: (config.feriaCampanias || []).includes(c.id) })),
     }
   })
@@ -78,7 +88,7 @@ export async function guardarReglaErp({ marca, body, usuario }, deps) {
     if (!(await db.hayReglas(pg))) return { status: 409, error: SIN_TABLA }
     const r = await db.guardarRegla(pg, { regla: l.regla, usuario: usuario || 'admin' })
     if (!r.ok) return { status: r.error.codigo === 'NO_EXISTE' ? 404 : 400, error: r.error.mensaje, campo: r.error.campo ?? null }
-    return { ok: true, regla: r.regla, nueva: r.nueva }
+    return { ok: true, regla: r.regla, nueva: r.nueva, caja: await recopiarSiPrendida(pg, db, marca, usuario, deps) }
   })
 }
 
@@ -91,7 +101,8 @@ export async function sembrarReglasErp({ marca, body, usuario }, deps) {
     if (!(await db.hayReglas(pg))) return { status: 409, error: SIN_TABLA }
     const r = await db.sembrarDeCaja(pg, { marca, config, usuario: usuario || 'admin', escribir: body && body.escribir === true })
     if (!r.ok) return { status: 400, error: r.error.mensaje }
-    return { ok: true, sembradas: r.sembradas, yaEstaban: r.yaEstaban, seco: !!r.seco, reglas: r.reglas, avisos: r.avisos }
+    const caja = r.seco ? null : await recopiarSiPrendida(pg, db, marca, usuario, deps)
+    return { ok: true, sembradas: r.sembradas, yaEstaban: r.yaEstaban, seco: !!r.seco, reglas: r.reglas, avisos: r.avisos, caja }
   })
 }
 
@@ -148,5 +159,60 @@ export async function simularReglasErp({ marca, body }, deps) {
     const redondeo = Number(config.redondeo) || 100
     const formas = nucleo.simular({ renglones, reglas, extra, marca, canal: s.canal, fecha: s.fecha, redondeo, rebajaVenta: s.rebaja, credito: s.credito })
     return { renglones, formas, fecha: s.fecha, canal: s.canal, redondeo }
+  })
+}
+
+/**
+ * Escribe la copia de las reglas en `caja_config.reglas.reglasComerciales` (o la apaga), sin pisar otro cambio de la
+ * configuración de la Caja hecho al mismo tiempo (mismo candado que `guardarReglas` de `api/_caja.js`: `actualizado_en`).
+ * @returns {Promise<{ ok: true, copiadas: number } | { ok: false, error: string }>}
+ */
+async function escribirEnCaja(sb, marca, { prendida, lista, usuario }) {
+  for (let i = 0; i < 4; i++) {
+    const { data: fila, error } = await sb.from('caja_config').select('reglas, actualizado_en').eq('store', marca).maybeSingle()
+    if (error) return { ok: false, error: `No se pudo leer la configuración de la Caja (${error.message}).` }
+    if (!fila) return { ok: false, error: 'La Caja de esta marca todavía no se abrió nunca: no tiene configuración.' }
+    const ahora = new Date().toISOString()
+    const reglasComerciales = prendida ? { prendida: true, lista, copiadasEn: ahora, por: usuario || 'admin' } : { ...(fila.reglas.reglasComerciales || {}), prendida: false, apagadaEn: ahora, apagadaPor: usuario || 'admin' }
+    let q = sb.from('caja_config').update({ reglas: { ...fila.reglas, reglasComerciales }, actualizado_por: usuario || null, actualizado_en: ahora }).eq('store', marca)
+    q = fila.actualizado_en == null ? q.is('actualizado_en', null) : q.eq('actualizado_en', fila.actualizado_en)
+    const up = await q.select('store').maybeSingle()
+    if (up.error) return { ok: false, error: `No se pudo guardar en la Caja (${up.error.message}).` }
+    if (up.data) return { ok: true, copiadas: prendida ? lista.length : 0 }
+  }
+  return { ok: false, error: 'La configuración de la Caja cambió mientras se guardaba: probá de nuevo.' }
+}
+
+/** Prendida ⇒ vuelve a copiar las reglas activas a la Caja. Devuelve qué pasó (para que la pantalla lo diga). */
+async function recopiarSiPrendida(pg, db, marca, usuario, deps) {
+  const sb = clienteDe(marca, deps)
+  const config = await configDeCaja(sb, marca)
+  if (!(config.reglasComerciales && config.reglasComerciales.prendida === true)) return null
+  const lista = copiaParaCaja(await db.leerReglas(pg, { marcas: [marca] }), marca)
+  const w = await escribirEnCaja(sb, marca, { prendida: true, lista, usuario })
+  // 🔴 Si la copia ⛔ se pudo escribir, la Caja sigue cobrando con la ANTERIOR: se dice, ⛔ se calla.
+  return w.ok ? { copiadas: w.copiadas } : { error: `La regla se guardó, pero la Caja sigue con las reglas de antes: ${w.error}` }
+}
+
+/**
+ * Prender o apagar «la Caja cobra con las reglas» en una marca (sólo admin). Prender copia las reglas activas; antes,
+ * exige que estén traídas las de la Caja (si no, prenderla con la tabla vacía cobraría TODO a precio de lista).
+ */
+export async function prenderCajaErp({ marca, body, usuario }, deps) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!body || typeof body.prender !== 'boolean') return { status: 400, error: 'Falta si se prende o se apaga' }
+  const [, db] = await motor()
+  const sb = clienteDe(marca, deps)
+  return deps.conMotor(marca, 'La Caja cobra con las reglas', async (pg) => {
+    if (!(await db.hayReglas(pg))) return { status: 409, error: SIN_TABLA }
+    if (!body.prender) {
+      const w = await escribirEnCaja(sb, marca, { prendida: false, lista: [], usuario })
+      return w.ok ? { ok: true, prendida: false } : { status: 409, error: w.error }
+    }
+    const guardadas = await db.leerReglas(pg, { marcas: [marca] })
+    if (!guardadas.some((r) => r.origen === 'caja')) return { status: 409, error: 'Primero traé las reglas de la Caja: sin ellas, la Caja cobraría todo a precio de lista.' }
+    const lista = copiaParaCaja(guardadas, marca)
+    const w = await escribirEnCaja(sb, marca, { prendida: true, lista, usuario })
+    return w.ok ? { ok: true, prendida: true, copiadas: w.copiadas } : { status: 409, error: w.error }
   })
 }

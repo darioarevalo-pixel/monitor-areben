@@ -16,8 +16,10 @@
  *
  * El cobro es el de la Caja (`lib/caja/core.core.js` del monitor, `cobro()`), con el % saliendo de las reglas en vez de
  * la cuenta de GN: prenda ⇒ VENTA (la rebaja a toda la venta se reparte entre los pagos por su base) ⇒ forma de pago ⇒
- * redondeo de CADA pago. Un pago cobra un GRUPO de renglones con UN solo %: si la forma de pago tiene % distintos en la
- * venta (oferta + resto), son pagos distintos (`pagosDeMedio` los arma), como las dos cuentas de GN de hoy.
+ * redondeo de CADA pago. Un pago cobra un GRUPO de renglones: la campaña con reglas propias va en su grupo (la cuenta de
+ * oferta de GN, `pagosDeMedio`) y el resto en otro. 🔑 Parte 3 (17-oct): dentro de un grupo cada prenda lleva SU % (la
+ * regla que gana en ella) y el pago lleva el % PESADO por el importe de cada prenda (`efectoDeGrupo`): «jeans efectivo
+ * −20 %» con la general −15 % es UN pago a la cuenta de efectivo, ⛔ dos pagos a la misma cuenta de GN (⛔ probados).
  */
 
 export const MEDIOS = Object.freeze(['efectivo', 'transferencia', 'debito', 'credito'])
@@ -162,6 +164,32 @@ export function efectoEnPrenda(reglas, renglon, pago, { fecha, aPagar }) {
   return { pct: pctDe(orden[0]), acepta: true, regla: orden[0], juego: nombreJuego, perdieron: orden.slice(1) }
 }
 
+/**
+ * Qué le pasa a un GRUPO de prendas (las que paga un pago) con una forma de pago. Cada prenda con SU regla
+ * (`efectoEnPrenda`); el % del pago es el PESADO por el importe de cada una (`pctExacto`, y `pct` a 2 decimales para
+ * mostrar): con el mismo % en todas es ese %. Una prenda que ⛔ acepta la forma de pago frena el pago, con el porqué.
+ * `filas` con `importe` (`importes`). Si las prendas ganaron con reglas distintas, `regla` las nombra juntas y
+ * `porPrenda` dice cuál ganó en cada una.
+ */
+export function efectoDeGrupo(reglas, filas, idx, pago, { fecha, aPagar }) {
+  const es = idx.map((i) => efectoEnPrenda(reglas, filas[i], pago, { fecha, aPagar }))
+  const no = es.findIndex((e) => !e.acepta)
+  if (no >= 0) throw new Error(`${filas[idx[no]].nombre || 'Una prenda'}: ${es[no].regla.nombre} — ${NOMBRE_MEDIO[pago.medio].toLowerCase()} no se acepta`)
+  const peso = suma(idx.map((i) => filas[i].importe))
+  const uno = es.every((e) => e.pct === es[0].pct && e.regla === es[0].regla)
+  const mismoPct = es.every((e) => e.pct === es[0].pct)
+  const pctExacto = mismoPct || !(peso > 0) ? es[0].pct : idx.reduce((s, i, j) => s + filas[i].importe * es[j].pct, 0) / peso
+  const ganaron = [...new Set(es.map((e) => e.regla).filter(Boolean))]
+  const vistas = new Set(ganaron)
+  const perdieron = es.flatMap((e) => e.perdieron).filter((r) => !vistas.has(r) && vistas.add(r))
+  return {
+    pct: Math.round(pctExacto * 100) / 100, pctExacto,
+    regla: uno ? es[0].regla : ganaron.length ? { id: null, nombre: ganaron.map((r) => r.nombre).join(' + ') } : null,
+    juego: [...new Set(es.map((e) => e.juego))].join(' + '), perdieron,
+    porPrenda: uno ? null : idx.map((i, j) => ({ renglon: i, pct: es[j].pct, regla: es[j].regla ? { id: es[j].regla.id ?? null, nombre: es[j].regla.nombre } : null })),
+  }
+}
+
 /** Las reglas de esa marca y ese canal. 🔑 El canal es obligatorio: online ⛔ hereda las del local. */
 export function delCanal(reglas, { marca, canal }) {
   exigir(CANALES.includes(canal), 'Falta el canal')
@@ -268,15 +296,11 @@ export function cobrar(q) {
   const aVenta = pesosDeRebaja(q.rebajaVenta, centavos(sub - deCampania))
   const aPagar = centavos(sub - aVenta)
 
-  // El % de cada pago: el de sus prendas con su forma de pago. Un grupo con % distintos es un error (`pagosDeMedio`).
+  // El % de cada pago: el de sus prendas con su forma de pago, pesado por importe (`efectoDeGrupo`).
   const efectos = q.pagos.map((p, k) => {
     exigir(MEDIOS.includes(p.medio), `Pago ${k + 1}: forma de pago desconocida`)
     const g = grupos.get(claveDe(p))
-    const es = g.idx.map((i) => efectoEnPrenda(reglas, filas[i], p, { fecha: q.fecha, aPagar }))
-    const no = es.findIndex((e) => !e.acepta)
-    if (no >= 0) throw new Error(`${filas[g.idx[no]].nombre || 'Una prenda'}: ${es[no].regla.nombre} — ${NOMBRE_MEDIO[p.medio].toLowerCase()} no se acepta`)
-    exigir(es.every((e) => e.pct === es[0].pct), `Con ${NOMBRE_MEDIO[p.medio].toLowerCase()} las prendas tienen descuentos distintos: va en pagos separados`)
-    return { ...es[0], soloCampania: g.idx.every(esDeCampania) }
+    return { ...efectoDeGrupo(reglas, filas, g.idx, p, { fecha: q.fecha, aPagar }), soloCampania: g.idx.every(esDeCampania) }
   })
 
   // La rebaja a la venta se reparte entre los pagos por su base (Σ exacta); con `sinCampania` el pago que es SÓLO de
@@ -292,7 +316,7 @@ export function cobrar(q) {
     exigir(rebaja <= bases[k], 'El descuento a la venta pasa lo que se paga con una forma de pago')
     const neto = centavos(bases[k] - rebaja)
     const pct = efectos[k].pct
-    const descuento = centavos(neto * pct / 100)
+    const descuento = centavos(neto * efectos[k].pctExacto / 100)
     const crudo = centavos(neto - descuento)
     const monto = Math.round(crudo / q.redondeo) * q.redondeo
     exigir(monto > 0, `Pago ${k + 1}: queda en $0`)
@@ -302,6 +326,7 @@ export function cobrar(q) {
       renglones: grupos.get(claveDe(p)).idx, base: bases[k], rebaja, pct, descuento, redondeo: centavos(monto - crudo), monto,
       regla: e.regla ? { id: e.regla.id ?? null, nombre: e.regla.nombre } : null, juego: e.juego,
       perdieron: e.perdieron.map((r) => ({ id: r.id ?? null, nombre: r.nombre, efecto: efectoEnTexto(r) })),
+      ...(e.porPrenda ? { porPrenda: e.porPrenda } : {}),
     }
   })
   const total = centavos(pagos.reduce((s, p) => s + p.monto, 0))
@@ -318,15 +343,19 @@ export function pagosDeMedio(medio, q) {
   const reglas = delCanal(q.reglas, q)
   const aPagar = q.aPagar ?? suma(filas.map((f) => f.importe))
   const pago = { medio, ...(q.banco ? { banco: q.banco } : {}), ...(q.cuotas ? { cuotas: q.cuotas } : {}) }
-  const porPct = new Map()
+  // 🔑 Parte 3 (17-oct): un grupo por JUEGO (cada campaña con reglas propias y «temporada»), como la cuenta de oferta y la
+  // normal de la Caja. Si todas las prendas llevan el mismo %, un solo pago (BDI: la oferta suma el % de temporada).
+  const porJuego = new Map()
+  const pcts = new Set()
   filas.forEach((f, i) => {
     const e = efectoEnPrenda(reglas, f, pago, { fecha: q.fecha, aPagar })
     if (!e.acepta) throw new Error(`${f.nombre || 'Una prenda'}: ${e.regla.nombre} — ${NOMBRE_MEDIO[medio].toLowerCase()} no se acepta`)
-    if (!porPct.has(e.pct)) porPct.set(e.pct, [])
-    porPct.get(e.pct).push(i)
+    pcts.add(e.pct)
+    if (!porJuego.has(e.juego)) porJuego.set(e.juego, [])
+    porJuego.get(e.juego).push(i)
   })
-  const grupos = [...porPct.values()]
-  if (grupos.length === 1) return [pago]
+  const grupos = [...porJuego.values()]
+  if (grupos.length === 1 || pcts.size === 1) return [pago]
   return grupos.map((idx) => ({ ...pago, renglones: idx }))
 }
 

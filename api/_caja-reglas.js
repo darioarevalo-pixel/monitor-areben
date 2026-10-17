@@ -3,7 +3,9 @@
  * `erp › Caja` (`api/_erp.js`): el descuento de la forma de pago y la cuenta de la transferencia salen de
  * ACÁ, ⛔ de una copia. Movidas tal cual de `api/_caja.js` (14-oct, sesión B del ERP).
  */
+import { createClient } from '@supabase/supabase-js'
 import { verificaTransferencias } from '../lib/caja/core.core.js'
+import { reglasDeAgenda } from '../motor/venta/reglas.mjs'
 import { cuentasDe } from './_pagos-recibidos.js'
 
 /** La fila de `caja_config` de la marca (sin sembrarla: eso lo hace la Caja al abrir). @returns {Promise<any>} */
@@ -27,7 +29,8 @@ export async function reglasGuardadas(sb, store, marca) {
  * Zattia ⛔ tiene `transferenciaFija` ⇒ sin mapeo sigue sin cobrar transferencia, como antes.
  */
 export async function reglasDeHoy(sb, store, reglas) {
-  const { feria: _f, feriaIdsCampania: _x, feriaPrecios: _p, ...sinFeria } = reglas
+  const { feria: _f, feriaIdsCampania: _x, feriaPrecios: _p, reglasComerciales: _rc, comerciales: _c, ...guardadas } = reglas
+  const sinFeria = { ...guardadas, comerciales: await comercialesDeHoy(sb, store, reglas) }
   // 🔑 V4: la tienda que ⛔ verifica en Mercado Pago manda la transferencia a SU cuenta fija.
   if (!verificaTransferencias(reglas)) {
     const fija = Number(reglas.transferenciaFija)
@@ -78,4 +81,48 @@ export async function feriaDeCampanias(sb, store, ids) {
     if (!data || data.length < 1000) break
   }
   return { feriaIdsCampania: [...pids], feriaPrecios: precios }
+}
+
+/**
+ * 🔑 **LA CAJA COBRA CON LAS REGLAS COMERCIALES** (parte 3 de `reglas-comerciales.md`, 17-oct). Si la marca la prendió en
+ * `erp › Reglas`, `caja_config.reglas.reglasComerciales` guarda `{ prendida, lista, copiadasEn, por }`: la COPIA de las
+ * reglas activas de `regla_comercial` (motor) que se hace al prender y en cada cambio de una regla. La Caja cobra con esa
+ * copia para ⛔ depender del motor en el mostrador (la cajera está esperando). Acá se le suma lo que ⛔ se copia:
+ * - la promo bancaria de la AGENDA, LEÍDA (`reglasDeAgenda`: se edita en la Agenda, como siempre);
+ * - de qué campañas de Liquidación es cada producto (`campaniasDe`), para las reglas de campaña.
+ * Apagada (o sin la clave) ⇒ `null`: el % sale de la cuenta de GN, como siempre. 🔴 Si algo de esto ⛔ se puede leer,
+ * LANZA: cobrar sin la promo o sin la regla de la campaña cobra MAL (lo mismo que la feria).
+ * @returns {Promise<import('../lib/caja/core.core.js').Comerciales | null>}
+ */
+export async function comercialesDeHoy(sb, store, reglas) {
+  const rc = reglas && reglas.reglasComerciales
+  if (!rc || rc.prendida !== true || !Array.isArray(rc.lista)) return null
+  const lista = rc.lista.filter((r) => r && r.activa && r.canal === 'local' && r.marca === store)
+  const url = process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co'
+  const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY
+  const { data, error } = await createClient(url, key).from('agenda_promos')
+    .select('id, banco, medio, beneficio, regla, desde, hasta, canales, marcas, activa').eq('activa', true)
+  if (error) throw new Error('No se pudo leer la Agenda (las promos bancarias de las reglas). Reintentar.')
+  const ids = [...new Set([...lista.map((r) => r.campania).filter(Boolean), ...(reglas.feriaCampanias || [])].map(String))]
+  return { marca: store, lista: [...lista, ...reglasDeAgenda(data || [], { marca: store })], campaniasDe: await campaniasDe(sb, store, ids) }
+}
+
+/** De qué campañas (con el precio APLICADO) es cada producto: `{ [pid]: [liq_id] }`. Lanza si ⛔ se puede leer. */
+async function campaniasDe(sb, store, ids) {
+  /** @type {Record<string, string[]>} */
+  const de = {}
+  if (!ids.length) return de
+  for (let desde = 0; desde < 40_000; desde += 1000) {
+    const { data, error } = await sb.from('liquidacion_items').select('pid, liq_id').eq('store', store).in('liq_id', ids).eq('estado', 'aplicado')
+      .order('pid').order('liq_id').range(desde, desde + 999)
+    if (error) throw new Error(`No se pudieron leer las campañas de Liquidación (${error.message}).`)
+    for (const f of data || []) {
+      const k = String(Number(f.pid))
+      if (k === 'NaN' || k === '0') continue
+      if (!de[k]) de[k] = []
+      if (!de[k].includes(String(f.liq_id))) de[k].push(String(f.liq_id))
+    }
+    if (!data || data.length < 1000) break
+  }
+  return de
 }

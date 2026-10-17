@@ -49,7 +49,7 @@ import { precioDeCaja } from '@/lib/caja/precio'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
-import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, cuentaDeOferta, idsDeFeria, mediosOfertaAparte, nombreParaTicket, pagosDeMedio, pagosDeVarios, renglones, subtotal, subtotalDeFeria } from '@/lib/caja/core.core.js'
+import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, cuentaDeOferta, idsDeFeria, mediosOfertaAparte, nombreParaTicket, pagosDeMedio, pagosDeVarios, pctDeMedio, renglones, subtotal, subtotalDeFeria } from '@/lib/caja/core.core.js'
 import { hoyIso, promosDeCreditoEnMostrador } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
@@ -1265,7 +1265,8 @@ function POS() {
                         const trabada = modoOferta === 'no'
                         const apagada = trabada || varios
                         const cuenta = reglas?.medios ? (() => { try { return cuentaDe(medio, reglas) } catch { return 0 } })() : 0
-                        const regla = cuenta ? reglas?.cuentas[cuenta] : undefined
+                        // El % que se dice: el de las reglas comerciales si la Caja cobra con ellas (`pctDeMedio`), si no el de la cuenta.
+                        const regla = cuenta && reglas?.cuentas[cuenta] ? { ...reglas.cuentas[cuenta], descuento: pctDeMedio(medio, reglas, cuenta) ?? 0 } : undefined
                         const estilo = ESTILO_MEDIO[medio]
                         return (
                           <button

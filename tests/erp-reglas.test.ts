@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compararConCaja, leerReglaDePantalla, leerSimulacion, resumenDeRegla } from '@/lib/erp/reglas.core.js'
+import { compararConCaja, copiaParaCaja, leerReglaDePantalla, leerSimulacion, queNoCobraLaCaja, resumenDeRegla } from '@/lib/erp/reglas.core.js'
 import { reglasDeCaja } from '@/motor/venta/reglas.mjs'
 
 const AHORA = Date.parse('2026-10-16T21:00:00Z')
@@ -55,5 +55,20 @@ describe('compararConCaja', () => {
   })
   it('resumenDeRegla dice la condición', () => {
     expect(resumenDeRegla({ medios: ['credito'], cuotas: 6, monto_minimo: 250000, efecto: 'final', banco: null })).toBe('crédito (6 cuotas, más de $250.000): precio final')
+  })
+})
+
+describe('copiaParaCaja / queNoCobraLaCaja (parte 3)', () => {
+  const fila = { id: '7', nombre: 'Efectivo', marca: 'zattia', canal: 'local', campania: null, alcance: 'todo', alcance_ids: [], medios: ['efectivo'], banco: null, cuotas: null, monto_minimo: null, efecto: 'descuento', pct: '15.00', desde: new Date('2026-10-01T03:00:00Z'), hasta: null, dias: null, activa: true }
+  it('copia sólo las activas del local de la marca, con números y fechas iguales vengan de Postgres o de la copia guardada', () => {
+    const otras = [{ ...fila, id: '8', activa: false }, { ...fila, id: '9', canal: 'online' }, { ...fila, id: '10', marca: 'bdi' }]
+    const c = copiaParaCaja([fila, ...otras], 'zattia')
+    expect(c.map((r) => [r.id, r.pct, r.desde])).toEqual([['7', 15, '2026-10-01T03:00:00.000Z']])
+    // la copia guardada (JSON) vuelve a dar lo mismo: así se sabe si la Caja está al día
+    expect(copiaParaCaja(JSON.parse(JSON.stringify(c)), 'zattia')).toEqual(c)
+  })
+  it('dice qué reglas la Caja no puede cobrar (pide algo que la Caja no pregunta)', () => {
+    const no = queNoCobraLaCaja([fila, { ...fila, id: '2', medios: ['credito'], banco: 'Galicia' }, { ...fila, id: '3', medios: ['credito'], cuotas: 12 }, { ...fila, id: '4', medios: ['credito'], cuotas: 6 }], 'zattia')
+    expect(no.map((r) => r.id)).toEqual(['2', '3'])
   })
 })

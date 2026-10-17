@@ -32,7 +32,7 @@
  *        la factura A PEDIDO de una venta propia (la Caja): una, con su CAE, y atada a la venta en el motor
  *   POST {recurso:'erp', accion:'nota-credito-venta', marca, ventaId}  la NC de una venta propia ANULADA con factura
  *   GET  ?recurso=erp&vista=reglas&marca=…                             las reglas comerciales (motor sql/016) + Agenda + Caja
- *   POST {recurso:'erp', accion:'guardar-regla'|'sembrar-reglas'|'simular-reglas', marca, …}   `api/_erp-reglas.js`
+ *   POST {recurso:'erp', accion:'guardar-regla'|'sembrar-reglas'|'simular-reglas'|'prender-caja-reglas', marca, …}   `api/_erp-reglas.js`
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
  * Contra qué ARCA se factura lo decide `ambienteDeEntorno` (homologación por defecto).
@@ -59,7 +59,7 @@ import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core
 import { reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce.core.js'
-import { guardarReglaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
+import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -1091,8 +1091,8 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
-    if (body.accion === 'guardar-regla' || body.accion === 'sembrar-reglas' || body.accion === 'simular-reglas') {
-      const f = { 'guardar-regla': guardarReglaErp, 'sembrar-reglas': sembrarReglasErp, 'simular-reglas': simularReglasErp }[body.accion]
+    if (body.accion === 'guardar-regla' || body.accion === 'sembrar-reglas' || body.accion === 'simular-reglas' || body.accion === 'prender-caja-reglas') {
+      const f = { 'guardar-regla': guardarReglaErp, 'sembrar-reglas': sembrarReglasErp, 'simular-reglas': simularReglasErp, 'prender-caja-reglas': prenderCajaErp }[body.accion]
       const r = await f({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error, campo: r.campo ?? null } : r)
     }

@@ -24,6 +24,17 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   de GN, ⛔ la feria; sin la prenda en su tienda, sin precio) — Bruno, 16-oct. La regla por línea vive en
   `lib/caja/precio.ts` (POS y tótem). Antes le pasaba el índice de Zattia y cobraba la lista: la REMERA
   S-MAIL GREY salía $31.490 con la etiqueta en $22.090 (25 de 40 productos de Stunned en oferta).
+- 🔴 **EL % DE LA FORMA DE PAGO PUEDE SALIR DE `erp › Reglas`** (parte 3 de las reglas comerciales, 17-oct). Si la marca
+  prendió «la Caja cobra con las reglas», `reglasDeHoy` (`api/_caja-reglas.js`) pone `reglas.comerciales` (la COPIA de
+  `regla_comercial` guardada en `caja_config.reglas.reglasComerciales` + la Agenda leída + de qué campaña es cada producto)
+  y `cobro()` / `baseParaMonto()` sacan el % de ahí (`pctDePago`), ⛔ de `reglas.cuentas`. **La cuenta de GN y el reparto
+  NO cambian** (`pagosDeMedio`, `exigirFeria`, `exigirCuentas`): la cuenta es A DÓNDE va la plata; la regla, CUÁNTO.
+  Cada prenda lleva la regla que gana en ella y el pago el % PESADO por importe («jeans −20 %» + resto −15 % ⇒ UN pago a
+  la cuenta de efectivo, ⛔ dos pagos a la misma cuenta). La cuenta de la promo de crédito = «tarjeta del banco de la
+  Agenda»; la de 6 cuotas = 6 cuotas. Una regla «no se acepta» en una prenda que ⛔ es oferta FRENA el cobro con el
+  porqué (la pantalla ⛔ la separa sola). Lo que se DICE en la tarjeta de cada forma de pago y en la banda de promos sale
+  de `pctDeMedio`. 🔴 Si la Agenda o Liquidación ⛔ se pueden leer con la llave prendida, la Caja ⛔ cobra (como la feria).
+  Apagada (o sin la clave) es exactamente lo de antes. Oráculo: re-cobrar las ventas de las cajeras ⇒ 127/127 iguales.
 - `lib/gn/inventario-vivo.core.js` es también de `api/_inventario-vivo.js` (los Conteos).
 - `lib/rollo80.ts` es también del ticket y el recibo de Envíos.
 - **La transferencia se cruza con la MISMA lectura de Pagos recibidos** (`pagosDelDia` de

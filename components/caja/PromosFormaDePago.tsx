@@ -10,18 +10,18 @@ import { useEffect, useState } from 'react'
 
 import { Badge, Plegable, color, font, space, weight } from '@/components/ui'
 import { hoyIso, promosDe, rotuloBeneficio, rotuloRegla } from '@/lib/agenda'
-import { NOMBRE_MEDIO, cuentaDeMedio, msjOferta } from '@/lib/caja/core.core.js'
+import { NOMBRE_MEDIO, cuentaDeMedio, msjOferta, pctDeMedio } from '@/lib/caja/core.core.js'
 import type { Medio, Reglas } from '@/lib/caja/cliente'
 import { useAgenda } from '@/store/useAgenda'
 import { storeCaja } from '@/lib/caja/marca'
 
 const MEDIO_PROMO: Record<string, string> = { credito: 'Crédito', debito: 'Débito', app: 'App', qr: 'QR', transferencia: 'Transferencia' }
 
-/** El % de la cuenta de una forma de pago, o null si ⛔ se puede armar (falta configuración). */
+/** El % de una forma de pago (el de las reglas comerciales si la Caja cobra con ellas), o null si ⛔ se puede armar. */
 function pctDe(medio: Medio, reglas: Reglas): number | null {
   try {
     const cuenta = cuentaDeMedio(medio, { reglas, total: 0, promoCreditoHoy: false, esDelBanco: false, seisCuotas: false })
-    return reglas.cuentas[cuenta]?.descuento ?? null
+    return pctDeMedio(medio, reglas, cuenta)
   } catch {
     return null
   }
