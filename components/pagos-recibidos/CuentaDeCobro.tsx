@@ -183,7 +183,7 @@ export function CuentaDeCobro({ marca, cuentas, onCambio }: { marca: Marca; cuen
               <Notice tone="success">
                 Esta llave es de la cuenta <strong>{verificada.nombre}</strong>. Si es la correcta, guardala.
                 {enUso && enUso.cuenta_id !== verificada.cuenta_id && (
-                  <> «Sólo guardar» la deja cargada y se sigue cobrando en {enUso.nombre}: la Caja ⛔ cambia.</>
+                  <> «Sólo guardar» la deja cargada y se sigue cobrando en {enUso.nombre}: la Caja no cambia.</>
                 )}
                 {enUso && enUso.cuenta_id === verificada.cuenta_id && (
                   <>
