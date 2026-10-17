@@ -35,6 +35,17 @@ describe('leerReglaDePantalla', () => {
     expect([r.regla?.marca, r.regla?.origen]).toEqual(['zattia', 'carga'])
     expect(leerReglaDePantalla({ nombre: 'X', medios: ['efectivo'], efecto: 'descuento', pct: 20 }, { marca: 'zattia' })).toEqual({ error: 'Elegí si es para el local o para online', campo: 'canal' })
   })
+  it('🔑 Stunned (17-oct): en la pantalla de Zattia una regla puede ser de Stunned; en la de BDI ⛔', () => {
+    const x = { nombre: 'X', marca: 'stunned', canal: 'local', medios: ['efectivo'], efecto: 'descuento', pct: 5 }
+    expect(leerReglaDePantalla(x, { marca: 'zattia' }).regla?.marca).toBe('stunned')
+    expect(leerReglaDePantalla(x, { marca: 'bdi' }).regla?.marca).toBe('bdi')
+  })
+  it('el simulador lleva la línea de la prenda (sólo una línea de la marca)', () => {
+    const s = leerSimulacion({ renglones: [{ nombre: 'A', precio: '1000', linea: 'stunned' }, { nombre: 'B', precio: '1000', linea: 'zattia' }] }, { marca: 'zattia', ahora: 0 })
+    expect('error' in s ? null : s.renglones.map((r) => r.linea ?? null)).toEqual(['stunned', null])
+    const b = leerSimulacion({ renglones: [{ nombre: 'A', precio: '1000', linea: 'stunned' }] }, { marca: 'bdi', ahora: 0 })
+    expect('error' in b ? null : b.renglones[0].linea ?? null).toBeNull()
+  })
 })
 
 describe('compararConCaja', () => {
@@ -66,6 +77,11 @@ describe('copiaParaCaja / queNoCobraLaCaja (parte 3)', () => {
     expect(c.map((r) => [r.id, r.pct, r.desde])).toEqual([['7', 15, '2026-10-01T03:00:00.000Z']])
     // la copia guardada (JSON) vuelve a dar lo mismo: así se sabe si la Caja está al día
     expect(copiaParaCaja(JSON.parse(JSON.stringify(c)), 'zattia')).toEqual(c)
+  })
+  it('🔑 la copia de Zattia lleva también las de Stunned (la Caja de Zattia cobra las dos); la de BDI ⛔', () => {
+    const stu = { ...fila, id: '11', marca: 'stunned' }
+    expect(copiaParaCaja([fila, stu], 'zattia').map((r) => [r.id, r.marca])).toEqual([['7', 'zattia'], ['11', 'stunned']])
+    expect(copiaParaCaja([{ ...fila, marca: 'bdi' }, stu], 'bdi').map((r) => r.marca)).toEqual(['bdi'])
   })
   it('dice qué reglas la Caja no puede cobrar (pide algo que la Caja no pregunta)', () => {
     const no = queNoCobraLaCaja([fila, { ...fila, id: '2', medios: ['credito'], banco: 'Galicia' }, { ...fila, id: '3', medios: ['credito'], cuotas: 12 }, { ...fila, id: '4', medios: ['credito'], cuotas: 6 }], 'zattia')

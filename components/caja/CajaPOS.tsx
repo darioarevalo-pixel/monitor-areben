@@ -45,7 +45,7 @@ import { useSesion } from '@/components/SesionProvider'
 import type { Marca } from '@/lib/nav.datos'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
-import { precioDeCaja } from '@/lib/caja/precio'
+import { esDeStunned, precioDeCaja } from '@/lib/caja/precio'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
@@ -397,6 +397,12 @@ function POS() {
     [precioDeProducto],
   )
 
+  /** ¿La prenda es de Stunned? La MISMA pregunta que el precio (`esDeStunned`: el SKU del producto o el de la variante). */
+  const esStunnedVariante = useCallback(
+    (v: Variante): boolean => esDeStunned(storeCaja(), { sku: datos?.allProductos.find((x) => String(x.id) === String(v.product_id))?.sku ?? null }, v.sku),
+    [datos],
+  )
+
   /** Las categorías de Tienda Nube del producto (las promos por categoría, W5). La de GN está vacía en el 85 %. */
   const categoriasDe = useCallback((productId: number): string[] => precioDeProducto(productId)?.categorias ?? [], [precioDeProducto])
 
@@ -568,7 +574,8 @@ function POS() {
   // ── El cobro: el mismo núcleo que el servidor ──
   const sinPrecio = bor.renglones.some((r) => !(r.precio && r.precio > 0))
   // Lo que viaja al servidor: el descuento A MANO y las categorías de Tienda Nube; la promo la aplica él.
-  const items = bor.renglones.map((r) => ({ product_id: r.variante.product_id, size_id: r.variante.size_id, cantidad: r.cantidad, precio: r.precio ?? 0, rebaja: r.rebaja ?? null, categorias: categoriasDe(r.variante.product_id) }))
+  // y la LÍNEA (Stunned, por el SKU, como el precio): con reglas comerciales, cobra con las de su línea.
+  const items = bor.renglones.map((r) => ({ product_id: r.variante.product_id, size_id: r.variante.size_id, cantidad: r.cantidad, precio: r.precio ?? 0, rebaja: r.rebaja ?? null, categorias: categoriasDe(r.variante.product_id), ...(esStunnedVariante(r.variante) ? { linea: 'stunned' } : {}) }))
   // 🔑 W5: las promos, con el MISMO núcleo que el servidor (`aplicarPromos`). La de compra la
   // reemplaza el descuento a mano a la venta (Bruno, 5-oct).
   const conPromo = (() => {

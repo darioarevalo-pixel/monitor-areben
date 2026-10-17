@@ -86,4 +86,18 @@ describe('Caja · cobra con las reglas comerciales (parte 3)', () => {
     expect(pctDeMedio('debito', reglas, 20196)).toBe(0)
     expect(pctDeMedio('efectivo', zattia, 12921)).toBe(15)
   })
+
+  it('🔑 STUNNED (Bruno 17-oct): sin reglas propias cobra con las de Zattia (= hoy); con las suyas, sólo con ésas', () => {
+    const items = [{ product_id: 1, size_id: 1, cantidad: 1, precio: 20000, linea: 'stunned' }, { product_id: 2, size_id: 1, cantidad: 1, precio: 10000 }]
+    // Sin reglas de Stunned: las dos −15 % (lo mismo que la Caja apagada).
+    expect(cobrar(conReglas(TEMPORADA), items, 'efectivo').total).toBe(cobrar(zattia, items, 'efectivo').total)
+    // Stunned efectivo −25 %: 20000 × 0,75 + 10000 × 0,85 = 23500, UN pago a la cuenta de efectivo.
+    const STU = regla('stu-efectivo', { marca: 'stunned', medios: ['efectivo'], efecto: 'descuento', pct: 25 })
+    const c = cobrar(conReglas([...TEMPORADA, STU]), items, 'efectivo')
+    expect([c.pagos.length, c.total]).toEqual([1, 23500])
+    // Lo que se DICE para toda la tienda es lo de Zattia, ⛔ el −25 % de Stunned.
+    expect(pctDeMedio('efectivo', conReglas([...TEMPORADA, STU]), 12921)).toBe(15)
+    // La línea viaja en el renglón (la manda la pantalla); otra cosa ⛔.
+    expect(renglones([{ product_id: 1, size_id: 1, cantidad: 1, precio: 1, linea: 'Stunned!' } as never])[0]).not.toHaveProperty('linea')
+  })
 })

@@ -26,6 +26,7 @@ import { traerAudit } from '@/lib/tn-audit'
 import { indexarTn, matchTn, type IndiceTn, type TnProducto } from '@/lib/tn'
 import { ofertaVigente } from '@/lib/tienda.core.js'
 import { validarRegla } from '@/motor/venta/reglas.mjs'
+import { esStunned } from '@/lib/lineas'
 
 const MARCAS: Array<{ key: MarcaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'bdi', label: 'BDI' }]
 const MEDIOS: Array<{ key: MedioRegla; label: string }> = [
@@ -42,6 +43,12 @@ const diaAR = (iso: string | null) => (iso ? new Date(Date.parse(iso) - 3 * 3600
 const aIso = (dia: string) => (dia ? `${dia}T03:00:00.000Z` : null)
 const corto = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}`
 const hoyAR = () => diaAR(new Date().toISOString())
+
+/**
+ * Las LÍNEAS con reglas propias dentro de una marca (Bruno, 17-oct: «cada negocio dentro del ERP puede configurar sus
+ * propias reglas»): Stunned se cobra en la Caja de Zattia, con las suyas; sin ninguna, con las de Zattia.
+ */
+const LINEAS: Partial<Record<MarcaErp, Array<{ key: string; label: string }>>> = { zattia: [{ key: 'zattia', label: 'Zattia' }, { key: 'stunned', label: 'Stunned' }] }
 
 const VACIA: ReglaComercial = {
   nombre: '', fin: null, canal: 'local', campania: null, alcance: 'todo', alcance_ids: [], medios: [], banco: null, cuotas: null,
@@ -68,6 +75,8 @@ export function ReglasComerciales() {
   const [hecho, setHecho] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState(false)
   const [editando, setEditando] = useState<ReglaComercial | null>(null)
+  // La línea que se mira (Stunned adentro de Zattia); en una marca sin líneas, la marca.
+  const [linea, setLinea] = useState<string>('zattia')
   const { confirmar } = useConfirmar()
   const marcaActual = useRef(marca)
   // 🔑 Las categorías son las de TIENDA NUBE (las mismas que mira la Caja: `matchTn` sobre el catálogo), por nombre.
@@ -111,6 +120,7 @@ export function ReglasComerciales() {
     if (m === marca) return
     marcaActual.current = m
     setMarca(m)
+    setLinea(m)
     setDatos(null)
     setEditando(null)
     setHecho(null)
@@ -186,11 +196,18 @@ export function ReglasComerciales() {
     }, 'No se pudo guardar la regla.')
   }
 
-  const guardadas = datos?.reglas ?? []
+  const lineas = LINEAS[marca] ?? null
+  const deLinea = lineas ? linea : marca
+  const nombreLinea = lineas?.find((l) => l.key === deLinea)?.label ?? deLinea
+  const esLinea = deLinea !== marca
+  const guardadas = (datos?.reglas ?? []).filter((r) => (r.marca ?? marca) === deLinea)
+  // ¿La línea tiene reglas propias? Las que cuentan son las prendidas del local (como en la Caja, `deLaLinea` del motor).
+  const lineaSinReglas = esLinea && !guardadas.some((r) => r.activa && r.canal === 'local')
   const grupos = [...new Set(guardadas.map((r) => r.campania ?? TEMPORADA))].sort((a, b) => (a === TEMPORADA ? -1 : b === TEMPORADA ? 1 : a.localeCompare(b)))
   const cc = datos?.cobraConReglas
   // Prendida, comparar con la configuración vieja de la Caja ya no dice nada: la Caja cobra con las reglas.
-  const dif = cc?.prendida ? null : datos?.caja.diferencias
+  // La comparación con la Caja es de las reglas de la MARCA (la Caja de hoy ⛔ distingue Stunned).
+  const dif = cc?.prendida || esLinea ? null : datos?.caja.diferencias
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -240,18 +257,28 @@ export function ReglasComerciales() {
       </SectionCard>
 
       <SectionCard
-        title="Reglas"
-        actions={<Button size="sm" onClick={() => setEditando({ ...VACIA })} disabled={!datos || trabajando}>Agregar regla</Button>}
+        title={lineas ? `Reglas de ${nombreLinea}` : 'Reglas'}
+        actions={(
+          <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+            {lineas?.map((l) => <Button key={l.key} size="sm" variant={l.key === deLinea ? 'solid' : 'outline'} onClick={() => { setLinea(l.key); setEditando(null) }}>{l.label}</Button>)}
+            <Button size="sm" onClick={() => setEditando({ ...VACIA, marca: deLinea })} disabled={!datos || trabajando}>Agregar regla</Button>
+          </div>
+        )}
       >
+        {datos && lineaSinReglas && (
+          <Notice tone="neutral" style={{ marginBottom: space[3] }}>
+            {nombreLinea} no tiene reglas propias: sus prendas se cobran con las de {MARCAS.find((m) => m.key === marca)?.label}. Con la primera regla prendida de {nombreLinea}, sus prendas se cobran sólo con las de {nombreLinea}.
+          </Notice>
+        )}
         {!datos && !error && <p>Leyendo…</p>}
-        {datos && !guardadas.length && !datos.agenda.length && <EmptyState title="Sin reglas" hint="Traé las de la Caja o agregá una." />}
+        {datos && !guardadas.length && (esLinea || !datos.agenda.length) && !lineaSinReglas && <EmptyState title="Sin reglas" hint="Traé las de la Caja o agregá una." />}
         {datos && grupos.map((g) => (
           <div key={g || 'temporada'} style={{ marginBottom: space[5] }}>
             <h4 style={{ margin: `0 0 ${space[2]}` }}>{g === TEMPORADA ? 'Temporada (siempre)' : `Campaña: ${nombreCampania(g)}`}</h4>
             <TablaReglas reglas={guardadas.filter((r) => (r.campania ?? TEMPORADA) === g)} onEditar={setEditando} onPrenderApagar={prenderApagar} trabajando={trabajando} />
           </div>
         ))}
-        {datos && datos.agenda.length > 0 && (
+        {datos && !esLinea && datos.agenda.length > 0 && (
           <div>
             <h4 style={{ margin: `0 0 ${space[2]}` }}>Promos bancarias (se cargan en la Agenda)</h4>
             <TablaReglas reglas={datos.agenda} trabajando={trabajando} />
@@ -261,7 +288,7 @@ export function ReglasComerciales() {
 
       {editando && datos && (
         <FormRegla
-          key={editando.id ?? 'nueva'} inicial={editando} datos={datos} categorias={catalogo?.categorias ?? []} marca={marca} trabajando={trabajando}
+          key={editando.id ?? 'nueva'} inicial={editando} datos={datos} categorias={catalogo?.categorias ?? []} marca={editando.marca ?? marca} trabajando={trabajando}
           onCancelar={() => setEditando(null)}
           onGuardar={(r) => correr(async () => {
             const g = await guardarRegla(marca, r)
@@ -310,7 +337,7 @@ function TablaReglas({ reglas, onEditar, onPrenderApagar, trabajando }: { reglas
 
 /** El formulario de una regla. Valida con el MISMO núcleo que el servidor (`validarRegla`): mismo texto. */
 function FormRegla({ inicial, datos, categorias, marca, trabajando, onCancelar, onGuardar }: {
-  inicial: ReglaComercial; datos: ReglasDeMarca; categorias: string[]; marca: MarcaErp; trabajando: boolean; onCancelar: () => void; onGuardar: (r: ReglaComercial) => void
+  inicial: ReglaComercial; datos: ReglasDeMarca; categorias: string[]; marca: string; trabajando: boolean; onCancelar: () => void; onGuardar: (r: ReglaComercial) => void
 }) {
   const [r, setR] = useState<ReglaComercial>(inicial)
   const [pct, setPct] = useState(inicial.pct == null ? '' : String(inicial.pct).replace('.', ','))
@@ -433,6 +460,7 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
   const [error, setError] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState(false)
   const [enVivo, setEnVivo] = useState<ReglaComercial | null>(null)
+  const conLineas = !!LINEAS[marca]
 
   useEffect(() => {
     const oir = (e: Event) => setEnVivo((e as CustomEvent<ReglaComercial>).detail)
@@ -455,7 +483,8 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
   const deTn = (e: { producto: string; nombre: string | null; sku: string | null }): Partial<Prenda> => {
     const t = idx ? matchTn({ sku: e.sku, name: e.nombre }, idx) : null
     const precio = t ? ofertaVigente(t.price, t.promo_price).aCobrar : null
-    return { producto: e.producto, nombre: e.nombre ?? `Producto ${e.producto}`, precio: precio ? String(precio) : '', categorias: t?.categories ?? [] }
+    // La línea por el SKU, como la Caja: la prenda de Stunned se simula con las reglas de Stunned.
+    return { producto: e.producto, nombre: e.nombre ?? `Producto ${e.producto}`, precio: precio ? String(precio) : '', categorias: t?.categories ?? [], ...(conLineas && esStunned(e.sku) ? { linea: 'stunned' as const } : {}) }
   }
   const agregar = (p: Partial<Prenda>) => setPrendas((xs) => [...xs, { producto: null, nombre: '', precio: '', cantidad: 1, ...p, clave: `${Date.now()}-${xs.length}` }])
   const cambiar = (clave: string, x: Partial<Prenda>) => setPrendas((xs) => xs.map((p) => (p.clave === clave ? { ...p, ...x } : p)))
@@ -488,11 +517,21 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
       {prendas.length > 0 && (
         <TableWrap style={{ marginTop: space[3] }}>
           <table>
-            <THead><Tr><Th>Prenda</Th><Th>Precio</Th><Th>Cantidad</Th><Th>Categorías</Th><Th>Campaña (prenda suelta)</Th><Th /></Tr></THead>
+            <THead><Tr><Th>Prenda</Th>{conLineas && <Th>Línea</Th>}<Th>Precio</Th><Th>Cantidad</Th><Th>Categorías</Th><Th>Campaña (prenda suelta)</Th><Th /></Tr></THead>
             <TBody>
               {prendas.map((p) => (
                 <Tr key={p.clave}>
                   <Td>{p.producto ? p.nombre : <Input value={p.nombre} onChange={(e) => cambiar(p.clave, { nombre: e.target.value })} />}</Td>
+                  {conLineas && (
+                    <Td>
+                      {p.producto ? (p.linea ? 'Stunned' : 'Zattia') : (
+                        <Select value={p.linea ?? ''} onChange={(e) => cambiar(p.clave, { linea: e.target.value === 'stunned' ? 'stunned' : undefined })}>
+                          <option value="">Zattia</option>
+                          <option value="stunned">Stunned</option>
+                        </Select>
+                      )}
+                    </Td>
+                  )}
                   <Td><Input inputMode="decimal" value={p.precio} onChange={(e) => cambiar(p.clave, { precio: e.target.value })} style={{ width: 120 }} /></Td>
                   <Td><Input inputMode="numeric" value={String(p.cantidad)} onChange={(e) => cambiar(p.clave, { cantidad: Number(e.target.value) || 1 })} style={{ width: 64 }} /></Td>
                   <Td>{p.producto ? (p.categorias?.length ? p.categorias.join(', ') : <span style={{ opacity: 0.7 }}>Sin categoría en TN</span>) : (

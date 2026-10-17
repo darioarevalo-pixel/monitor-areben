@@ -5,7 +5,7 @@
  */
 import { createClient } from '@supabase/supabase-js'
 import { verificaTransferencias } from '../lib/caja/core.core.js'
-import { reglasDeAgenda } from '../motor/venta/reglas.mjs'
+import { LINEAS_DE, reglasDeAgenda } from '../motor/venta/reglas.mjs'
 import { cuentasDe } from './_pagos-recibidos.js'
 
 /** La fila de `caja_config` de la marca (sin sembrarla: eso lo hace la Caja al abrir). @returns {Promise<any>} */
@@ -97,7 +97,9 @@ export async function feriaDeCampanias(sb, store, ids) {
 export async function comercialesDeHoy(sb, store, reglas) {
   const rc = reglas && reglas.reglasComerciales
   if (!rc || rc.prendida !== true || !Array.isArray(rc.lista)) return null
-  const lista = rc.lista.filter((r) => r && r.activa && r.canal === 'local' && r.marca === store)
+  // Las de la marca y las de sus líneas (Stunned en Zattia): cada prenda usa las suyas (`deLaLinea`; Bruno, 17-oct).
+  const marcas = [store, ...(LINEAS_DE[store] || [])]
+  const lista = rc.lista.filter((r) => r && r.activa && r.canal === 'local' && marcas.includes(r.marca))
   const url = process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co'
   const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY
   const { data, error } = await createClient(url, key).from('agenda_promos')

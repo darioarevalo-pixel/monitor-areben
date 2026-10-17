@@ -10,6 +10,9 @@
  * cada cambio de una regla vuelve a copiar. Apagada, la Caja cobra con `caja_config` como siempre, y la pantalla compara
  * las reglas guardadas con lo que hoy cobra la Caja para que ⛔ se separen callados.
  *
+ * 🔑 Stunned (Bruno, 17-oct): sus reglas viven en la pantalla de Zattia (`marca = 'stunned'`, misma base y misma Caja) y se
+ * leen, copian y simulan con las de Zattia (`marcasDe`); cada prenda usa las de su línea (`deLaLinea` del motor).
+ *
  * Entra por `api/_erp.js` (sólo admin). `deps.conMotor` es el de `_erp.js` (la conexión del motor de la marca);
  * `deps.sb(base)`, opcional, el cliente de Supabase de esa base (para caminarlo sin deploy).
  */
@@ -17,7 +20,7 @@ import { createClient } from '@supabase/supabase-js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { reglasGuardadas } from './_caja-reglas.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
-import { compararConCaja, copiaParaCaja, leerReglaDePantalla, leerSimulacion, queNoCobraLaCaja } from '../lib/erp/reglas.core.js'
+import { compararConCaja, copiaParaCaja, leerReglaDePantalla, leerSimulacion, marcasDe, queNoCobraLaCaja } from '../lib/erp/reglas.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 const SIN_TABLA = 'Las reglas todavía no están en esta base (falta la migración 016 del motor).'
@@ -61,12 +64,12 @@ export async function reglasDeMarca({ marca }, deps) {
   const caja = nucleo.reglasDeCaja(config, { marca })
   return deps.conMotor(marca, 'Las reglas', async (pg) => {
     if (!(await db.hayReglas(pg))) return { status: 409, error: SIN_TABLA }
-    const guardadas = await db.leerReglas(pg, { marcas: [marca] })
+    const guardadas = await db.leerReglas(pg, { marcas: marcasDe(marca) })
     const rc = config.reglasComerciales
     const prendida = !!(rc && rc.prendida === true)
     return {
       reglas: guardadas, agenda,
-      caja: { reglas: caja.reglas, avisos: caja.avisos, feriaCampanias: config.feriaCampanias || [], diferencias: compararConCaja(guardadas, caja.reglas) },
+      caja: { reglas: caja.reglas, avisos: caja.avisos, feriaCampanias: config.feriaCampanias || [], diferencias: compararConCaja(guardadas.filter((r) => r.marca === marca), caja.reglas) },
       // Parte 3: si la Caja ya cobra con las reglas, con qué copia (y si está al día con las guardadas).
       cobraConReglas: {
         prendida, copiadasEn: (rc && rc.copiadasEn) || null, por: (rc && rc.por) || null,
@@ -119,7 +122,7 @@ export async function simularReglasErp({ marca, body }, deps) {
   const [nucleo, db] = await motor()
   let extra = []
   if (s.borrador) {
-    const v = nucleo.validarRegla({ ...s.borrador, marca })
+    const v = nucleo.validarRegla({ ...s.borrador, marca: marcasDe(marca).includes(s.borrador.marca) ? s.borrador.marca : marca })
     if (!v.ok) return { status: 400, error: `La regla nueva: ${v.error.mensaje}`, campo: v.error.campo ?? null }
     extra = [{ ...v.regla, id: v.regla.id ?? 'borrador', nombre: `${v.regla.nombre} (sin guardar)` }]
   }
@@ -127,7 +130,7 @@ export async function simularReglasErp({ marca, body }, deps) {
   const [config, agenda] = await Promise.all([configDeCaja(sb, marca), deAgenda(marca, nucleo.reglasDeAgenda, deps)])
   return deps.conMotor(marca, 'El simulador', async (pg) => {
     if (!(await db.hayReglas(pg))) return { status: 409, error: SIN_TABLA }
-    let reglas = [...(await db.leerReglas(pg, { marcas: [marca] })), ...agenda]
+    let reglas = [...(await db.leerReglas(pg, { marcas: marcasDe(marca) })), ...agenda]
     // Corregir una regla en el borrador reemplaza a la guardada en la prueba.
     if (extra.length && s.borrador.id) reglas = reglas.filter((r) => r.id !== String(s.borrador.id))
     // Las campañas que importan: las de las reglas (y la del borrador) y las de oferta de la Caja.
@@ -153,7 +156,7 @@ export async function simularReglasErp({ marca, body }, deps) {
       return {
         product_id: n || 0, nombre: r.nombre || 'Prenda', cantidad: r.cantidad,
         precio: deCampania ?? r.precio, precioCargado: r.precio, precioDeCampania: deCampania,
-        campanias: n ? enCampania.get(n) || [] : r.campanias, categorias: r.categorias,
+        campanias: n ? enCampania.get(n) || [] : r.campanias, categorias: r.categorias, ...(r.linea ? { linea: r.linea } : {}),
       }
     })
     const redondeo = Number(config.redondeo) || 100
@@ -188,7 +191,7 @@ async function recopiarSiPrendida(pg, db, marca, usuario, deps) {
   const sb = clienteDe(marca, deps)
   const config = await configDeCaja(sb, marca)
   if (!(config.reglasComerciales && config.reglasComerciales.prendida === true)) return null
-  const lista = copiaParaCaja(await db.leerReglas(pg, { marcas: [marca] }), marca)
+  const lista = copiaParaCaja(await db.leerReglas(pg, { marcas: marcasDe(marca) }), marca)
   const w = await escribirEnCaja(sb, marca, { prendida: true, lista, usuario })
   // 🔴 Si la copia ⛔ se pudo escribir, la Caja sigue cobrando con la ANTERIOR: se dice, ⛔ se calla.
   return w.ok ? { copiadas: w.copiadas } : { error: `La regla se guardó, pero la Caja sigue con las reglas de antes: ${w.error}` }
@@ -209,7 +212,7 @@ export async function prenderCajaErp({ marca, body, usuario }, deps) {
       const w = await escribirEnCaja(sb, marca, { prendida: false, lista: [], usuario })
       return w.ok ? { ok: true, prendida: false } : { status: 409, error: w.error }
     }
-    const guardadas = await db.leerReglas(pg, { marcas: [marca] })
+    const guardadas = await db.leerReglas(pg, { marcas: marcasDe(marca) })
     if (!guardadas.some((r) => r.origen === 'caja')) return { status: 409, error: 'Primero traé las reglas de la Caja: sin ellas, la Caja cobraría todo a precio de lista.' }
     const lista = copiaParaCaja(guardadas, marca)
     const w = await escribirEnCaja(sb, marca, { prendida: true, lista, usuario })
