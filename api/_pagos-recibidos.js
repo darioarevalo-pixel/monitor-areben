@@ -91,6 +91,40 @@ async function quienEs(token) {
   return { token: t, cuenta_id: Number(yo.id), nombre: nombreDeCuenta(yo) };
 }
 
+/** 🔴 La ÚNICA consulta que lee `token`: lo usa quien habla con MP, ⛔ va a ninguna respuesta. */
+async function llavesDe(sb, ids) {
+  const { data, error } = await sb.from('mp_cuentas').select('cuenta_id, token').in('cuenta_id', ids);
+  if (error) throw error;
+  return data || [];
+}
+
+/**
+ * Pone al día el nombre de las cuentas cargadas antes del 17-oct (eran «apodo (titular)»; ahora
+ * titular + CUIT, `nombreDeCuenta`). Una vez por cuenta y por instancia: ⛔ se le pregunta a MP cada
+ * 15 s. Si falla, queda el nombre viejo: un nombre ⛔ vale romper la pantalla.
+ */
+const nombresAlDia = new Set();
+async function refrescarNombres(sb, cuentas) {
+  const ids = cuentas.map((c) => c.cuenta_id).filter((id) => !nombresAlDia.has(id));
+  if (!ids.length) return false;
+  let cambio = false;
+  try {
+    for (const ll of await llavesDe(sb, ids)) {
+      const r = await fetch('https://api.mercadopago.com/users/me', { headers: { Authorization: `Bearer ${ll.token}` } });
+      const yo = r.ok ? await r.json().catch(() => null) : null;
+      if (!yo || !yo.id) continue;
+      nombresAlDia.add(Number(ll.cuenta_id));
+      const nombre = nombreDeCuenta(yo);
+      if (cuentas.find((c) => c.cuenta_id === Number(ll.cuenta_id))?.nombre === nombre) continue;
+      const { error: e } = await sb.from('mp_cuentas').update({ nombre }).eq('cuenta_id', ll.cuenta_id);
+      if (!e) cambio = true;
+    }
+  } catch {
+    /* queda el nombre viejo */
+  }
+  return cambio;
+}
+
 /** Las cuentas de la marca, con su período de uso. ⛔ Sin la llave. */
 /**
  * Las cuentas cargadas (sin la llave) y cuál está en uso. La Caja la usa también (`api/_caja.js`):
@@ -130,8 +164,7 @@ export async function ponerEnUso(sb, store, cuentaId, perfil) {
  */
 export async function pagosDelDia(sb, usos, dia) {
   const ids = cuentasDelDia(usos, dia);
-  const { data: llaves, error: eLl } = await sb.from('mp_cuentas').select('cuenta_id, token').in('cuenta_id', ids);
-  if (eLl) throw eLl;
+  const llaves = await llavesDe(sb, ids);
   const pagos = [];
   const devueltos = [];
   for (const ll of llaves || []) {
@@ -216,7 +249,8 @@ export default async function handler(req, res) {
     if (!esDiaValido(dia)) return res.status(400).json({ error: 'dia inválido (usá AAAA-MM-DD)' });
     if (dia !== hoy && !admin) return res.status(403).json({ error: 'Sólo se puede ver el día de hoy.' });
 
-    const { cuentas, usos } = await cuentasDe(sb, store);
+    let { cuentas, usos } = await cuentasDe(sb, store);
+    if (admin && (await refrescarNombres(sb, cuentas))) ({ cuentas } = await cuentasDe(sb, store));
     // Sin cuenta no es un error: todavía no se cargó ninguna, y la pantalla lo dice.
     if (!usos.length) return res.status(200).json({ ok: true, conectada: false, dia, hoy, admin, ...(admin ? { cuentas } : {}) });
 

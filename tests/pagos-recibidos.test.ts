@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { cuentasDelDia, esDiaValido, limpiarPagos, origenDe, rangoDelDia, totalDe } from '@/lib/pagos-recibidos/core.core.js'
+import { cuentasDelDia, esDiaValido, limpiarPagos, nombreDeCuenta, origenDe, rangoDelDia, totalDe } from '@/lib/pagos-recibidos/core.core.js'
 
 /**
  * Pagos recibidos. Los casos salen de la cuenta real de Zattia (2-oct-2026): transferencia desde
@@ -99,6 +99,24 @@ describe('lib/pagos-recibidos/core', () => {
     })
     expect(esDiaValido('2026-10-02')).toBe(true)
     expect(esDiaValido('02/10/2026')).toBe(false)
+  })
+})
+
+describe('nombreDeCuenta: titular + CUIT, ⛔ el apodo', () => {
+  // Lo que devolvió MP el 17-oct: los apodos difieren en UN guion bajo.
+  it('la de Areben: razón social y CUIT de empresa', () => {
+    expect(
+      nombreDeCuenta({ id: 1911036737, nickname: 'BDI_ACCESORIOS', first_name: 'AREBEN COMERCIAL S. R. L.', last_name: 'AREBEN COMERCIAL S. R. L.', identification: { type: 'CUIT', number: '30718508181' }, company: { corporate_name: 'AREBEN COMERCIAL S. R. L.' } }),
+    ).toBe('AREBEN COMERCIAL S. R. L. · CUIT 30-71850818-1')
+  })
+  it('🔴 la de Darío dice «personal», aunque MP le ponga la marca de Areben', () => {
+    expect(
+      nombreDeCuenta({ id: 136578181, nickname: 'BDIACCESORIOS', first_name: 'Dario Alberto', last_name: 'Arevalo Benites', identification: { type: 'CUIT', number: '20430076974' }, company: { corporate_name: 'Dario Alberto Arevalo Benites', brand_name: 'Areben Comercial SRL' } }),
+    ).toBe('Dario Alberto Arevalo Benites (personal) · CUIT 20-43007697-4')
+  })
+  it('sin CUIT, como antes: apodo (titular)', () => {
+    expect(nombreDeCuenta({ id: 5, nickname: 'X', first_name: 'Ana', last_name: 'B' })).toBe('X (Ana B)')
+    expect(nombreDeCuenta({ id: 5 })).toBe('Cuenta 5')
   })
 })
 

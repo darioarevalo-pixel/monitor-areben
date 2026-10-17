@@ -33,6 +33,10 @@ local** → Credenciales de producción. 🔴 En Zattia, al nacer, era la cuenta
   (`transferenciaPorMp`): cambiarla sin mapeo deja a la Caja sin cobrar transferencias. Para tener
   una cuenta cargada sólo para LEERLA (el MP de Areben; el plan es tener todas, para cobranzas y
   seguimiento) está «Sólo guardar» (`cargar` con `usar: false`).
+- 🔑 **El nombre de la cuenta es titular + CUIT, ⛔ el apodo** (Bruno, 17-oct). Areben es
+  `BDI_ACCESORIOS` (CUIT 30-71850818-1, en BDI) y la personal de Darío `BDIACCESORIOS` (CUIT
+  20-43007697-4, en Zattia): un guion bajo de diferencia. Las cargadas antes se ponen al día solas la
+  primera vez que las mira un admin (`refrescarNombres`).
 - 🔴 **La llave ⛔ sale del servidor.** Las consultas que responden piden columnas por nombre; lo
   amarra `tests/pagos-recibidos.test.ts`. Cargar es verificar contra MP (`/users/me`) y recién
   después guardar: el id de la cuenta sale de MP, ⛔ del body.

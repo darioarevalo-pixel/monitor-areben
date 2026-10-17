@@ -40,6 +40,12 @@ function consulta(nombre: string) {
       ;(tablas[nombre] ||= []).push({ desde: new Date(Date.now() + (tablas[nombre]?.length || 0)).toISOString(), ...f })
       return { error: null }
     },
+    update: (f: Fila) => ({
+      eq: async (k: string, v: unknown) => {
+        for (const x of tablas[nombre] || []) if (x[k] === v) Object.assign(x, f)
+        return { error: null }
+      },
+    }),
     upsert: async (f: Fila) => {
       const t = (tablas[nombre] ||= [])
       const i = t.findIndex((x) => x.cuenta_id === f.cuenta_id)
@@ -55,9 +61,10 @@ let perfil: Record<string, unknown> = {}
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: consulta }) }))
 vi.mock('../api/_auth.js', () => ({ exigirUsuario: async () => perfil }))
 
-const CUENTAS: Record<string, { id: number; nickname: string; first_name: string; last_name: string }> = {
+const CUENTAS: Record<string, { id: number; nickname: string; first_name: string; last_name: string; identification?: { number: string } }> = {
   'APP_USR-aaa-111': { id: 111, nickname: 'ZATTIA', first_name: 'Dario', last_name: 'Arevalo' },
   'APP_USR-bbb-222': { id: 222, nickname: 'OTRA', first_name: 'Bruno', last_name: 'Arevalo' },
+  'APP_USR-ccc-333': { id: 333, nickname: 'BDIACCESORIOS', first_name: 'Dario', last_name: 'Arevalo', identification: { number: '20430076974' } },
 }
 const pago = (id: number, cuenta: number, monto: number) => ({
   id,
@@ -168,6 +175,19 @@ describe('api/_pagos-recibidos.js con cuentas', () => {
     // Hoy se busca sólo en la que está en uso: lo de la guardada ⛔ suma.
     r = await llamar('GET', {})
     expect(r.json.total).toBe(111)
+  })
+
+  it('una cuenta cargada con el nombre viejo se pone al día cuando la mira un admin, ⛔ cuando la mira la empleada', async () => {
+    tablas.mp_cuentas = [{ cuenta_id: 333, store: 'zattia', nombre: 'BDIACCESORIOS (Dario Arevalo)', token: 'APP_USR-ccc-333' }]
+    tablas.mp_cuenta_uso = [{ store: 'zattia', cuenta_id: 333, desde: '2026-10-02T00:00:00.000Z' }]
+    perfil = LOCAL
+    await llamar('GET', {})
+    expect(tablas.mp_cuentas[0].nombre).toBe('BDIACCESORIOS (Dario Arevalo)')
+    perfil = ADMIN
+    const r = await llamar('GET', {})
+    expect(tablas.mp_cuentas[0].nombre).toBe('Dario Arevalo (personal) · CUIT 20-43007697-4')
+    expect((r.json.cuentas as { nombre: string }[])[0].nombre).toBe('Dario Arevalo (personal) · CUIT 20-43007697-4')
+    expect(JSON.stringify(r.json)).not.toContain('APP_USR')
   })
 
   it('🔴 la empleada ve los pagos, ⛔ el total ni las cuentas, y ⛔ puede cambiar nada', async () => {
