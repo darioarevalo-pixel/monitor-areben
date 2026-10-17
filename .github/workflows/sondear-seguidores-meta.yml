@@ -1,0 +1,38 @@
+name: Sondear seguidores en Meta
+
+# Sondeo de SÓLO LECTURA: ¿en qué campo de insights guarda Meta los seguidores de un conjunto?
+# Ver la cabecera de `scripts/sondear-seguidores-meta.mjs`. Corre acá por el token, igual que
+# `meta-snapshot.yml`. ⛔ No escribe en Meta ni en la base.
+
+on:
+  workflow_dispatch:
+    inputs:
+      cuenta:
+        description: 'Cuenta publicitaria (por defecto la de Stunned)'
+        required: false
+        default: '4366752500136303'
+      desde:
+        description: 'Desde (AAAA-MM-DD)'
+        required: true
+      hasta:
+        description: 'Hasta (AAAA-MM-DD)'
+        required: true
+
+jobs:
+  sondear:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Sondear
+        env:
+          META_ADS_TOKEN: ${{ secrets.META_ADS_TOKEN }}
+          ENTRADA_CUENTA: ${{ inputs.cuenta }}
+          ENTRADA_DESDE: ${{ inputs.desde }}
+          ENTRADA_HASTA: ${{ inputs.hasta }}
+        run: node scripts/sondear-seguidores-meta.mjs --cuenta "$ENTRADA_CUENTA" --desde "$ENTRADA_DESDE" --hasta "$ENTRADA_HASTA"
