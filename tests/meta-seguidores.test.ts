@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { metricasDe, RE_SEGUIDOR, RE_PERFIL } from '@/lib/meta-ads/metricas'
+import { metricasDe, RE_SEGUIDOR, RE_PERFIL, CAMPOS_INSIGHTS } from '@/lib/meta-ads/metricas'
 
 /**
  * 🔴 El caso que motivó todo, medido el 18-sep-2026 sobre `TRAFICO - STUNNED - PERFIL IG - 12/9`.
@@ -48,5 +48,17 @@ describe('qué cuenta el monitor como un seguidor', () => {
     // El cero es el estado honesto justamente porque ninguna acción de perfil viene en el array.
     expect(ACCIONES_REALES.some((a) => RE_PERFIL.test(a.action_type))).toBe(false)
     expect(ACCIONES_REALES.some((a) => RE_SEGUIDOR.test(a.action_type))).toBe(false)
+  })
+})
+
+describe('los campos propios de insights (medido el 16-oct-2026)', () => {
+  it('✅ `instagram_profile_follow` e `instagram_profile_visits` mandan sobre `actions`', () => {
+    const m = metricasDe({ spend: '10362', actions: ACCIONES_REALES, instagram_profile_follow: '38', instagram_profile_visits: '254' })
+    expect(m.seguidores).toBe(38)
+    expect(m.perfil).toBe(254)
+  })
+
+  it('🔑 se piden: sin el campo en CAMPOS_INSIGHTS la foto lo deja en 0 callado', () => {
+    expect(CAMPOS_INSIGHTS.split(',')).toEqual(expect.arrayContaining(['instagram_profile_follow', 'instagram_profile_visits']))
   })
 })
