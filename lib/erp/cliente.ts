@@ -252,7 +252,7 @@ export type Simulacion = {
   renglones: Array<{ product_id: number; nombre: string; cantidad: number; precio: number; precioCargado: number; precioDeCampania: number | null; campanias: string[]; categorias: string[] }>
   formas: FormaSimulada[]; fecha: string; canal: string; redondeo: number
 }
-export type PrendaASimular = { producto: string | null; nombre: string; precio: string; cantidad: number; campanias?: string[]; categorias?: string[] }
+export type PrendaASimular = { producto: string | null; nombre: string; precio: string; cantidad: number; campanias?: string[]; categorias?: string[]; linea?: 'stunned' }
 export type PedidoSimulacion = { renglones: PrendaASimular[]; fecha?: string; canal: 'local' | 'online'; banco?: string; cuotas?: number; rebaja?: { tipo: 'pct' | 'pesos'; valor: string } | null; borrador?: ReglaComercial | null }
 
 export const leerReglas = (marca: MarcaErp) =>

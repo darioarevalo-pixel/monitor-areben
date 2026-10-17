@@ -144,12 +144,13 @@ function condicion(r, pago, aPagar) {
 }
 
 /**
- * Qué le pasa a UNA prenda con UNA forma de pago. `reglas` ya filtradas por marca y canal (`delCanal`).
+ * Qué le pasa a UNA prenda con UNA forma de pago. `reglas` ya filtradas por marca y canal (`delCanal`); la prenda usa las
+ * de SU línea (`deLaLinea`: `renglon.linea = 'stunned'`).
  * Devuelve `{ pct, acepta, regla, juego, perdieron }`: `regla` la que ganó (null = sin regla: va sin descuento), `juego`
  * 'temporada' o el id de la campaña, `perdieron` las que aplicaban y no ganaron (para el «por qué» del simulador).
  */
 export function efectoEnPrenda(reglas, renglon, pago, { fecha, aPagar }) {
-  const hoy = reglas.filter((r) => vigente(r, fecha))
+  const hoy = deLaLinea(reglas, renglon).filter((r) => vigente(r, fecha))
   // 🔑 Dos juegos: las campañas del renglón que TIENEN reglas hoy reemplazan a las de temporada en esta prenda.
   const campanias = (renglon.campanias || []).map(String)
   const deCampania = hoy.filter((r) => r.campania && campanias.includes(r.campania))
@@ -190,11 +191,36 @@ export function efectoDeGrupo(reglas, filas, idx, pago, { fecha, aPagar }) {
   }
 }
 
-/** Las reglas de esa marca y ese canal. 🔑 El canal es obligatorio: online ⛔ hereda las del local. */
+/**
+ * Las LÍNEAS que se venden dentro de una marca: Stunned va en el local de Zattia (la Caja de Zattia, la base de Zattia) y
+ * tiene sus propias reglas (`marca = 'stunned'`).
+ */
+export const LINEAS_DE = Object.freeze({ zattia: Object.freeze(['stunned']) })
+const SUBLINEAS = new Set(Object.values(LINEAS_DE).flat())
+
+/**
+ * Las reglas de esa marca y ese canal, con las de sus líneas (Zattia trae también las de Stunned: cada prenda elige las
+ * suyas con `deLaLinea`). 🔑 El canal es obligatorio: online ⛔ hereda las del local.
+ */
 export function delCanal(reglas, { marca, canal }) {
   exigir(CANALES.includes(canal), 'Falta el canal')
   exigir(marca, 'Falta la marca')
-  return reglas.filter((r) => r.marca === marca && r.canal === canal)
+  exigir(!SUBLINEAS.has(marca), `${marca} se cobra dentro de su marca (sus reglas van con las de ella)`)
+  const marcas = [marca, ...(LINEAS_DE[marca] || [])]
+  return reglas.filter((r) => marcas.includes(r.marca) && r.canal === canal)
+}
+
+/**
+ * Las reglas de la LÍNEA de la prenda (`renglon.linea`). 🔑 Bruno, 17-oct: «cada negocio dentro del ERP puede configurar
+ * sus propias reglas» ⇒ la prenda de Stunned cobra con las reglas de Stunned; si Stunned ⛔ tiene NINGUNA (activa, de ese
+ * canal), con las de Zattia (= antes: ⛔ cambia un peso). «Tener reglas» es tener alguna, ⛔ alguna que valga hoy: con una
+ * sola de los martes, los otros días Stunned va sin descuento, ⛔ con las de Zattia. Sin línea (o de la marca), las de la
+ * marca. `{}` ⇒ las de la marca (para lo que se dice «para toda la tienda»).
+ */
+export function deLaLinea(reglas, renglon) {
+  const l = renglon && renglon.linea
+  if (l && SUBLINEAS.has(l) && reglas.some((r) => r.marca === l)) return reglas.filter((r) => r.marca === l)
+  return reglas.filter((r) => !SUBLINEAS.has(r.marca))
 }
 
 /**
@@ -230,7 +256,7 @@ function pesosDeRebaja(rebaja, monto) {
  * EL COBRO. Igual al `cobro()` de la Caja, con el % de cada pago saliendo de las reglas.
  *
  * @param {{
- *   renglones: Array<{ product_id: number, variant_id?: number, categorias?: Array<number|string>, campanias?: string[], cantidad: number, precio: number, descuento?: number, rebaja?: number }>,
+ *   renglones: Array<{ product_id: number, variant_id?: number, linea?: string, categorias?: Array<number|string>, campanias?: string[], cantidad: number, precio: number, descuento?: number, rebaja?: number }>,
  *   pagos: Array<{ medio: string, banco?: string, cuotas?: number, base?: number, renglones?: number[] }>,
  *   reglas: any[], marca: string, canal: string, fecha: string | Date, redondeo: number,
  *   rebajaVenta: { tipo: 'pct' | 'pesos', valor: number, sinCampania?: boolean } | null,
