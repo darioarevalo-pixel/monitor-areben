@@ -2,7 +2,7 @@
  * ERP › Precios: la ficha de precio y costo de un producto (`armarPrecioDeProducto`), pura.
  */
 import { describe, it, expect } from 'vitest'
-import { armarPrecioDeProducto, leerCarga, lineaDelProducto, NOMBRE_FUENTE } from '../lib/erp/precio.core.js'
+import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto, NOMBRE_FUENTE } from '../lib/erp/precio.core.js'
 
 const LISTAS = [{ id: 'mayorista', nombre: 'Mayorista' }, { id: 'local', nombre: 'Local' }, { id: 'online', nombre: 'Online' }]
 const vig = (lista: string, precio: number, fuente = 'gn') => ({ lista, precio: String(precio), fuente, vigente_desde: '2026-10-14T23:00:00Z', usuario: 'copia-gn', motivo: null })
@@ -18,7 +18,7 @@ describe('armarPrecioDeProducto', () => {
   })
   it('avisa lo que hay que mirar al cortar GN: local ≠ TN, sin costo, costo de TN ≠ el del ERP', () => {
     expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: COSTO, tn: [tnV(27000)] }).avisos)
-      .toEqual(['El precio del local ($25500) no es el de Tienda Nube ($27000).'])
+      .toEqual(['El precio del local ($25500) no es el que cobra Tienda Nube ($27000).'])
     expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: null, tn: [tnV(25500, null)] }).avisos).toEqual(['Sin costo en el ERP.'])
     expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: COSTO, tn: [tnV(25500, 13000)] }).avisos)
       .toEqual(['El costo de Tienda Nube ($13000) no es el del ERP ($12000).'])
@@ -41,7 +41,40 @@ describe('armarPrecioDeProducto', () => {
   })
   it('lo de GN al lado (el espejo) y los nombres de las fuentes', () => {
     expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [], costo: null, gn: { retailer_price: '25500', wholesaler_price: '0', unit_cost: '12000' } }).gn).toEqual({ precio: 25500, mayorista: 0, costo: 12000 })
-    expect(Object.keys(NOMBRE_FUENTE).sort()).toEqual(['carga', 'gn', 'oc', 'tn'])
+    expect(Object.keys(NOMBRE_FUENTE).sort()).toEqual(['carga', 'gn', 'oc', 'suelta', 'tn'])
+  })
+})
+
+describe('precio que sigue a lo que cobra Tienda Nube (motor sql/018)', () => {
+  const L18 = [{ id: 'local', nombre: 'Local', sigue: 'oferta' }, { id: 'online', nombre: 'Online', sigue: null }, { id: 'oferta', nombre: 'Tienda Nube con oferta', sigue: null }, { id: 'mayorista', nombre: 'Mayorista', sigue: null }]
+  const ef = (lista: string, precio: number, fuente: string, de_lista: string) => ({ lista, precio: String(precio), fuente, de_lista })
+  it('🔑 REMERA ESSENTIAL: TN $45.990 con oferta $31.490 ⇒ el local se compara con lo que COBRA ($31.490), y lo cargado se puede soltar', () => {
+    const r = armarPrecioDeProducto({
+      listas: L18, vigentes: [vig('local', 36990, 'carga'), vig('online', 45990, 'tn'), vig('oferta', 31490, 'tn')],
+      efectivos: [ef('local', 36990, 'carga', 'local'), ef('online', 45990, 'tn', 'online'), ef('oferta', 31490, 'tn', 'oferta')],
+      costo: COSTO, tn: [tnV(45990, 12000, 31490)],
+    })
+    expect(r.listas.map((l) => [l.lista, l.precio, l.puedeSoltar])).toEqual([['local', 36990, true], ['online', 45990, false], ['oferta', 31490, false], ['mayorista', null, false]])
+    expect(r.tn).toMatchObject({ precio: 45990, promocional: 31490, cobra: 31490 })
+    expect(r.avisos).toEqual(['El precio del local ($36990) no es el que cobra Tienda Nube ($31490).'])
+  })
+  it('suelto: el local sigue a la oferta, sin aviso ni botón; una promo MAYOR que la de lista ⛔ es oferta', () => {
+    const r = armarPrecioDeProducto({
+      listas: L18, vigentes: [{ ...vig('local', 0, 'suelta'), precio: null }, vig('oferta', 31490, 'tn')],
+      efectivos: [ef('local', 31490, 'tn', 'oferta'), ef('oferta', 31490, 'tn', 'oferta')], costo: COSTO, tn: [tnV(45990, 12000, 31490)],
+    })
+    expect(r.listas[0]).toMatchObject({ lista: 'local', precio: 31490, deLista: 'oferta', puedeSoltar: false })
+    expect(r.avisos).toEqual([])
+    expect(armarPrecioDeProducto({ listas: L18, vigentes: [], costo: COSTO, tn: [tnV(25000, 12000, 26000)] }).tn?.cobra).toBe(25000)
+  })
+  it('una lista cargada que ⛔ sigue a nadie ⛔ se suelta desde la pantalla', () => {
+    const r = armarPrecioDeProducto({ listas: L18, vigentes: [vig('online', 40000, 'carga')], efectivos: [ef('online', 40000, 'carga', 'online')], costo: COSTO, tn: [] })
+    expect(r.listas.find((l) => l.lista === 'online')?.puedeSoltar).toBe(false)
+  })
+  it('leerSoltar: producto y lista; el motivo se recorta', () => {
+    expect(leerSoltar({ producto: '237777', lista: 'local', motivo: '  vuelve a TN ' })).toEqual({ producto: '237777', lista: 'local', motivo: 'vuelve a TN' })
+    expect(leerSoltar({ producto: 'x', lista: 'local' })).toEqual({ error: 'Producto inválido' })
+    expect(leerSoltar({ producto: '1', lista: '' })).toEqual({ error: 'Elegí la lista.' })
   })
 })
 

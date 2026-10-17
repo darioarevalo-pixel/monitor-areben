@@ -79,13 +79,13 @@ export type StockDePrenda = {
 }
 
 /** Precio por lista y costo de un producto (`erp › Precios`). */
-export type FilaPrecio = { lista: string; nombre: string; precio: number | null; fuente: string | null; desde: string | null; usuario: string | null; motivo: string | null; deLista: string | null }
+export type FilaPrecio = { lista: string; nombre: string; precio: number | null; fuente: string | null; desde: string | null; usuario: string | null; motivo: string | null; deLista: string | null; sigue: string | null; puedeSoltar: boolean }
 export type PrecioDeProducto = {
   producto: string; nombre: string | null; skus: number; tnLeidaEn: string | null
   listas: FilaPrecio[]
   costo: { costo: number | null; proveedor: string | null; proveedorId: string | null; fuente: string; desde: string; usuario: string; motivo: string | null } | null
   gn: { precio: number | null; mayorista: number | null; costo: number | null } | null
-  tn: { tienda: string; variantes: number; precio: number | null; promocional: number | null; costo: number | null; distintos: boolean } | null
+  tn: { tienda: string; variantes: number; precio: number | null; promocional: number | null; cobra: number | null; costo: number | null; distintos: boolean } | null
   avisos: string[]
   historial: Array<{ que: 'precio' | 'costo'; lista: string | null; valor: number | null; fuente: string; desde: string; usuario: string; motivo: string | null; proveedor?: string | null }>
 }
@@ -96,6 +96,10 @@ export const leerPrecioDeProducto = (marca: MarcaErp, producto: string) =>
 export type CargaPrecio = { que: 'precio' | 'costo'; producto: string; monto: number; lista?: string; desde?: string; motivo?: string; proveedor?: string; proveedorId?: string }
 export const cargarPrecioCosto = (marca: MarcaErp, c: CargaPrecio) =>
   pedir<{ ok: true; futuro: boolean; aviso: string | null }>(post({ accion: c.que === 'precio' ? 'cargar-precio' : 'cargar-costo', marca, ...c }), '', 'No se pudo cargar.')
+
+/** El precio cargado de una lista vuelve a seguir a la suya (motor sql/018): una fila nueva, la carga queda en el historial. */
+export const soltarPrecio = (marca: MarcaErp, s: { producto: string; lista: string; motivo?: string }) =>
+  pedir<{ ok: true; precio: number | null; deLista: string | null }>(post({ accion: 'soltar-precio', marca, ...s }), '', 'No se pudo volver a seguir.')
 
 /** Los proveedores del ERP (sql/013) para elegir en el costo. Sin la tabla, el API contesta 409 y se escribe el texto. */
 export type ProveedorErp = { id: string; nombre: string; cuit: string | null; nombreGn: string | null; productos: number; activo: boolean }
