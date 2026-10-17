@@ -34,7 +34,8 @@ console.log(`\n══ ${activos.length} conjuntos activos en act_${CUENTA} (${DE
 
 // Un campo por llamada: si Meta no conoce uno, el error dice cuál.
 const CAMPOS = ['actions', 'unique_actions', 'conversions', 'results', 'cost_per_result', 'cost_per_action_type',
-  'outbound_clicks', 'instagram_profile_visits', 'instagram_follows', 'follows']
+  'outbound_clicks', 'instagram_profile_visits', 'instagram_profile_follow', 'instagram_profile_follows',
+  'instagram_follows', 'instagram_follow', 'follows']
 const DESGLOSES = ['action_type', 'action_destination', 'action_target_id']
 
 let primero = true
