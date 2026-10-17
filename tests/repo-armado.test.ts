@@ -4,7 +4,7 @@
 // 🔴 Lo que más importa acá es que **la transferencia no salga dos veces** y que **sólo lleve lo
 // escaneado, nunca más de lo pedido**: mueve stock real en GN.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { itemsTransferencia, sanearEscaneos, sanearPedido } from '@/lib/reposicion/armado.core.js'
+import { cambiarCantidades, itemsTransferencia, sanearEscaneos, sanearPedido } from '@/lib/reposicion/armado.core.js'
 import { estadoRenglon, frase, leerCodigo, masNoEncontradas, noEncontradas, type Armado, type LineaPedido } from '@/lib/reposicion/armado'
 
 const L = (x: Partial<LineaPedido>): LineaPedido => ({ vid: '1_1', pid: '1', sid: '1', sku: 'RTO-1-NG', barcode: '779001', name: 'TOP ZOE', size: 'S', cant: 2, exhibir: false, ...x })
@@ -411,5 +411,72 @@ describe('la caja cerrada de vidrios (BDI, 12-oct-2026)', () => {
     ])
     expect(a.caja).toBe(10)
     expect('caja' in b).toBe(false)
+  })
+})
+
+describe('cambiar cantidades con el armado empezado (17-oct-2026)', () => {
+  const P = [L({ vid: '1_1', pid: '1', sid: '1', cant: 3 }), L({ vid: '2_1', pid: '2', sid: '1', cant: 1 })]
+
+  it('cambia, saca la que queda en 0 y suma la que no estaba', () => {
+    const { pedido, topes } = cambiarCantidades(P, [{ ...P[0], cant: 5 }, { ...P[1], cant: 0 }, L({ vid: '3_1', pid: '3', sid: '1', cant: 2, name: 'TOP NUEVO' })], {}, {})
+    expect(pedido.map((l: LineaPedido) => [l.vid, l.cant])).toEqual([
+      ['1_1', 5],
+      ['3_1', 2],
+    ])
+    expect(topes).toEqual({})
+  })
+
+  it('🔴 nunca por debajo de lo escaneado o transferido', () => {
+    const { pedido, topes } = cambiarCantidades(P, [{ ...P[0], cant: 1 }, { ...P[1], cant: 0 }], { '1_1': 2 }, { '2_1': 1 })
+    expect(pedido.map((l: LineaPedido) => [l.vid, l.cant])).toEqual([
+      ['1_1', 2],
+      ['2_1', 1],
+    ])
+    expect(topes).toEqual({ '1_1': 2, '2_1': 1 })
+  })
+
+  it('no toca el pedido que recibe', () => {
+    cambiarCantidades(P, [{ ...P[0], cant: 9 }], {}, {})
+    expect(P[0].cant).toBe(3)
+  })
+})
+
+describe('api/_repo-armado.js · cantidades (17-oct-2026)', () => {
+  it('lo cambiado queda en el armado: otra compu lo lee igual', async () => {
+    await abrir()
+    const r = await correr({ action: 'cantidades', id: 'ra1', cambios: [{ pid: '10', sid: '3', name: 'TOP ZOE', size: 'S', cant: 5 }] })
+    expect(r.code).toBe(200)
+    expect((tabla[0].pedido as LineaPedido[]).map((l: LineaPedido) => [l.vid, l.cant])).toEqual([
+      ['10_3', 5],
+      ['11_4', 1],
+    ])
+    const otra = await correrGet({ action: 'hoy', linea: 'zattia', sentido: 'llevar' })
+    expect((otra.body?.armado as Armado).pedido[0].cant).toBe(5)
+  })
+
+  it('🔴 no baja de lo escaneado, y la transferencia respeta la cantidad nueva', async () => {
+    await abrir()
+    await correr({ action: 'guardar', id: 'ra1', escaneos: { '10_3': 2 }, faltantes: {} })
+    const r = await correr({ action: 'cantidades', id: 'ra1', cambios: [{ pid: '10', sid: '3', cant: 0 }, { pid: '11', sid: '4', cant: 3 }] })
+    expect(r.body?.topes).toEqual({ '10_3': 2 })
+    await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 2, '11_4': 3 } })
+    expect(llamadasGN[0].body.items).toEqual([
+      { product_id: 10, size_id: 3, quantity: 2 },
+      { product_id: 11, size_id: 4, quantity: 3 },
+    ])
+  })
+
+  it('con el armado cerrado, no cambia nada', async () => {
+    await abrir()
+    await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 1 } })
+    const r = await correr({ action: 'cantidades', id: 'ra1', cambios: [{ pid: '10', sid: '3', cant: 9 }] })
+    expect(r.code).toBe(409)
+    expect((tabla[0].pedido as LineaPedido[])[0].cant).toBe(2)
+  })
+
+  it('la lista no puede quedar vacía', async () => {
+    await abrir()
+    const r = await correr({ action: 'cantidades', id: 'ra1', cambios: [{ pid: '10', sid: '3', cant: 0 }, { pid: '11', sid: '4', cant: 0 }] })
+    expect(r.code).toBe(400)
   })
 })

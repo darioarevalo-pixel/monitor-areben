@@ -155,6 +155,14 @@ Lorena escanea en la **COMPU** del depósito, con lector, contra la lista de «L
 - 🔑 **Qué buscar en GN**: la descripción lleva el código del armado (`… · Monitor #K3X9AB (12 u)`,
   `codigoArmado`) y el cartel rojo lo muestra con la hora y las prendas. «No está: transferir de nuevo» pide confirmación (botones renombrados por Darío, 12-oct: «figura» no se entendía).
 - Lo escaneado vive en `localStorage` (`monitor_repo_armado_<id>`) y se sube cada 1,5 s.
+- 🔑 **Con el armado empezado, las cantidades son las del ARMADO** (Darío, 17-oct-2026). Antes, lo
+  cambiado a mano en la lista vivía sólo en esa pantalla (`manual`, estado de React): en otra compu,
+  con el mismo usuario, volvía el cálculo. Ahora, con un armado `en_curso`, la tabla muestra
+  `armado.pedido` y cada cambio va a `action: 'cantidades'` (`cambiarCantidades` en
+  `armado.core.js`): 🔴 nunca por debajo de lo escaneado o transferido, 0 sin escanear = sale de la
+  lista, la lista no queda vacía. La lista se vuelve a mirar cada 20 s y el lector cada 15 s, así lo
+  cambiado en una compu aparece en la otra. Antes de «Iniciar», lo cambiado sigue siendo de la
+  pantalla y entra al armado al iniciar.
 - GN es atómico: un 422 no movió nada; la pantalla muestra los renglones rechazados y ofrece
   sacarlos (quedan `rechazada`: diferencia de stock para la tanda 3).
 

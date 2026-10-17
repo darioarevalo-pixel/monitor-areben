@@ -256,6 +256,12 @@ export async function enviarSolicitud(linea: LineaZ, id: string): Promise<Armado
 
 export const guardarArmado = (linea: LineaZ, id: string, escaneos: Record<string, number>, faltantes: Record<string, MotivoFaltante>) => escribir(linea, 'guardar', { id, escaneos, faltantes })
 export const cancelarArmado = (linea: LineaZ, id: string) => escribir(linea, 'cancelar', { id })
+/**
+ * Cambia cantidades con el armado empezado (Darío, 17-oct-2026): queda en el armado, así lo ve
+ * cualquier compu. `topes`: los renglones que no se pudieron bajar de lo ya escaneado.
+ */
+export const cambiarCantidadesArmado = (linea: LineaZ, id: string, cambios: LineaPedido[]) =>
+  escribir<{ ok: true; armado: Armado; topes: Record<string, number> }>(linea, 'cantidades', { id, cambios })
 export const resolverArmado = (linea: LineaZ, id: string, hecha: boolean, transfer_id?: string) => escribir(linea, 'resolver', { id, hecha, transfer_id })
 
 export type Rechazado = { vid: string; reason: string | null }

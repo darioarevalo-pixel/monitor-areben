@@ -35,6 +35,7 @@ import {
   sanearEscaneos,
   sanearFaltantes,
   sanearPedido,
+  cambiarCantidades,
   conTransferido,
   depositosDelArmado,
   pendienteDeTransferir,
@@ -219,6 +220,20 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true })
     }
 
+    if (accion === 'cantidades') {
+      // Cambiar cantidades con el armado empezado (Darío, 17-oct-2026): se guarda en el armado para
+      // que lo vea cualquier compu, no sólo la pantalla donde se cambió.
+      if (armado.estado !== 'en_curso') return res.status(409).json({ error: 'Este armado ya se cerró.', armado })
+      if (armado.sentido !== 'llevar') return res.status(400).json({ error: 'Las cantidades de una devolución se cambian en la solicitud.' })
+      const { pedido, topes } = cambiarCantidades(armado.pedido, b.cambios, armado.escaneos, transferidoDe(armado.transfer))
+      if (!pedido.length) return res.status(400).json({ error: 'La lista no puede quedar vacía: si no va nada, descartá el armado.' })
+      // 🔴 Sólo si nadie lo cerró en el medio (el lector puede estar transfiriendo en la otra compu).
+      const { data, error } = await sb.from('repo_armado').update({ pedido, actualizado_en: new Date().toISOString() }).eq('id', armado.id).eq('estado', 'en_curso').select('id')
+      if (error) throw new Error(error.message)
+      if (!data || !data.length) return res.status(409).json({ error: 'Este armado ya se cerró.', armado: await leer(armado.id) })
+      return res.status(200).json({ ok: true, armado: await leer(armado.id), topes })
+    }
+
     if (accion === 'cancelar') {
       if (armado.estado !== 'en_curso') return res.status(409).json({ error: 'Sólo se puede descartar un armado en curso.', armado })
       // Con tandas ya transferidas, esas prendas cambiaron de depósito: descartarlo las escondería del historial.
@@ -255,7 +270,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true })
     }
 
-    return res.status(400).json({ error: 'action inválida (usá abrir, guardar, cancelar, transferir o resolver)' })
+    return res.status(400).json({ error: 'action inválida (usá abrir, guardar, cantidades, cancelar, transferir o resolver)' })
   } catch (e) {
     return res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
   }

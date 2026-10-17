@@ -20,7 +20,7 @@
  * eligen qué vuelve, por prioridad y sin tope diario, y la envían al local.
  */
 
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { useRecargarDatos } from '@/components/productos/BotonRecargar'
@@ -42,7 +42,8 @@ import { ArmadoLector } from './ArmadoLector'
 import { OpcionesBdi } from './OpcionesBdi'
 import { HistorialArmados } from './HistorialArmados'
 import { SolicitudDevolucion } from './SolicitudDevolucion'
-import { abrirArmado, articuloDe, codigoArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type Sentido } from '@/lib/reposicion/armado'
+import { abrirArmado, articuloDe, cambiarCantidadesArmado, codigoArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type LineaPedido, type Sentido } from '@/lib/reposicion/armado'
+import { cambiarCantidades, transferidoDe } from '@/lib/reposicion/armado.core.js'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 type Pestana = 'llevar' | 'devolver' | 'historial'
@@ -85,7 +86,12 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   const [syncing, setSyncing] = useState(false)
   const [syncLabel, setSyncLabel] = useState('')
 
-  const cantLlevar = (f: FilaVentas) => manual[f.it.vid] ?? f.d.llevar
+  const [armados, setArmados] = useState<Record<Sentido, Armado | null>>({ llevar: null, devolver: null })
+  // 🔑 Con un armado empezado, las cantidades son las del ARMADO (Darío, 17-oct-2026): lo cambiado en
+  // una compu quedaba sólo en esa pantalla y en otra, con el mismo usuario, no aparecía.
+  const enCurso = armados.llevar?.estado === 'en_curso' ? armados.llevar : null
+  const cantArmado = useMemo(() => (enCurso ? Object.fromEntries(enCurso.pedido.map((l) => [l.vid, l.cant])) : null), [enCurso])
+  const cantLlevar = (f: FilaVentas) => (cantArmado ? (cantArmado[f.it.vid] ?? 0) : (manual[f.it.vid] ?? f.d.llevar))
   const totalLlevar = llevar.reduce((s, f) => s + cantLlevar(f), 0)
   const paraExhibir = llevar.filter((f) => f.d.exhibir && cantLlevar(f) > 0).length
   const conAlarma = llevar.filter((f) => f.d.soloAlarma).reduce((s, f) => s + cantLlevar(f), 0)
@@ -137,7 +143,6 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   }
 
   // ── El armado con el lector: Reposición (Lorena) y Devolución (Camila) ───────────────────────
-  const [armados, setArmados] = useState<Record<Sentido, Armado | null>>({ llevar: null, devolver: null })
   const [armando, setArmando] = useState<Sentido | null>(null)
   const [abriendo, setAbriendo] = useState(false)
   const traerArmados = async (l: LineaZ = linea) => {
@@ -151,6 +156,61 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linea])
   const abierto = (s: Sentido) => (armados[s]?.estado === 'en_curso' ? armados[s] : null)
+
+  // ── Cambiar cantidades con el armado empezado: se guardan en el armado (Darío, 17-oct-2026) ──
+  const cambiosCant = useRef<Record<string, LineaPedido>>({})
+  const timerCant = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const subirCantidades = async (id: string) => {
+    const cambios = Object.values(cambiosCant.current)
+    cambiosCant.current = {}
+    if (!cambios.length) return
+    try {
+      const d = await cambiarCantidadesArmado(linea, id, cambios)
+      setArmados((x) => ({ ...x, llevar: d.armado }))
+      if (Object.keys(d.topes || {}).length) toast.aviso('No se puede pedir menos de lo que ya se escaneó.')
+    } catch (e) {
+      toast.error('No se pudo guardar la cantidad: ' + (e as Error).message)
+      await traerArmados()
+    }
+  }
+  const editarLlevar = (f: FilaVentas, v: string) => {
+    if (!enCurso) {
+      setManual((m) => {
+        const n = { ...m }
+        if (v === '') delete n[f.it.vid]
+        else n[f.it.vid] = Math.max(0, Math.min(f.it.deposito, parseInt(v, 10) || 0))
+        return n
+      })
+      return
+    }
+    // Vacío = 0 mientras se escribe (si no, borrar para corregir no dejaba): el guardado espera 0,8 s.
+    const cant = Math.max(0, Math.min(f.it.deposito, parseInt(v, 10) || 0))
+    const [base] = pedidoDesde([f], () => 1, true)
+    const cambio = { ...base, cant }
+    // Se ve al instante; el servidor confirma (y no deja bajar de lo ya escaneado).
+    const { pedido } = cambiarCantidades(enCurso.pedido, [cambio], enCurso.escaneos, transferidoDe(enCurso.transfer))
+    setArmados((x) => ({ ...x, llevar: x.llevar ? { ...x.llevar, pedido } : x.llevar }))
+    cambiosCant.current[cambio.vid] = cambio
+    if (timerCant.current) clearTimeout(timerCant.current)
+    const id = enCurso.id
+    timerCant.current = setTimeout(() => void subirCantidades(id), 800)
+  }
+  // Con un armado empezado y la lista a la vista, se vuelve a mirar cada 20 s: lo cambiado en otra
+  // compu aparece solo (salvo mientras hay un cambio propio sin guardar).
+  const idEnCurso = enCurso?.id
+  useEffect(() => {
+    if (!idEnCurso || armando) return
+    const r = setInterval(() => {
+      if (Object.keys(cambiosCant.current).length) return
+      void leerArmadoHoy(linea, 'llevar')
+        .then((a) => {
+          if (Object.keys(cambiosCant.current).length) return
+          setArmados((x) => ({ ...x, llevar: a }))
+        })
+        .catch(() => {})
+    }, 20_000)
+    return () => clearInterval(r)
+  }, [idEnCurso, armando, linea])
   // Mientras uno está «transfiriendo», se vuelve a mirar cada 30 s: o termina, o a los 90 s queda
   // TRABADO y aparecen los botones para resolverlo (revisión del 12-oct-2026).
   const hayTransfiriendo = armados.llevar?.estado === 'transfiriendo' || armados.devolver?.estado === 'transfiriendo'
@@ -185,6 +245,8 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     try {
       const d = await abrirArmado(linea, sentido, pedido)
       setArmados((x) => ({ ...x, [sentido]: d.armado }))
+      // Lo cambiado a mano ya quedó en el armado: desde acá manda el armado.
+      setManual({})
       // El que ya había puede estar sin confirmar en GN: ése no se abre, se resuelve con el cartel.
       if (d.yaHabia && d.armado.estado !== 'en_curso') return toast.aviso('Hay una transferencia sin confirmar: verificala antes de iniciar otro armado.')
       if (d.yaHabia) toast.aviso('Ya había un armado en curso: se continúa ese.')
@@ -379,7 +441,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
                 <Badge tone="brand">{conAlarma} con alarma, sin precio</Badge>
               </span>
             )}
-            {Object.keys(manual).length > 0 && (
+            {!enCurso && Object.keys(manual).length > 0 && (
               <Button size="sm" variant="ghost" onClick={() => setManual({})}>
                 ↺ Restablecer cantidades
               </Button>
@@ -397,14 +459,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
               filas={llevar}
               cantidad={cantLlevar}
               titulo="Reponer"
-              editar={(f, v) =>
-                setManual((m) => {
-                  const n = { ...m }
-                  if (v === '') delete n[f.it.vid]
-                  else n[f.it.vid] = Math.max(0, Math.min(f.it.deposito, parseInt(v, 10) || 0))
-                  return n
-                })
-              }
+              editar={editarLlevar}
             />
           )}
         </>

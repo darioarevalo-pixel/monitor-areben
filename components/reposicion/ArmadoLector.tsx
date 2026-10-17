@@ -75,7 +75,24 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
 }) {
   const toast = useToast()
   const { confirmar } = useConfirmar()
-  const pedido = armado.pedido
+  // La lista puede cambiar desde otra compu (cantidades, Darío 17-oct-2026): se vuelve a mirar cada 15 s.
+  const [pedido, setPedido] = useState(armado.pedido)
+  const pedidoRef = useRef(JSON.stringify(armado.pedido))
+  useEffect(() => {
+    if (armado.sentido !== 'llevar') return
+    const r = setInterval(() => {
+      void leerArmadoHoy(armado.linea, armado.sentido)
+        .then((a) => {
+          if (!a || a.id !== armado.id || a.estado !== 'en_curso') return
+          const j = JSON.stringify(a.pedido)
+          if (j === pedidoRef.current) return
+          pedidoRef.current = j
+          setPedido(a.pedido)
+        })
+        .catch(() => {})
+    }, 15_000)
+    return () => clearInterval(r)
+  }, [armado.id, armado.linea, armado.sentido])
   const inicial = useMemo(() => leerLocal(armado.id), [armado.id])
   const [escaneos, setEscaneos] = useState<Record<string, number>>(() => inicial?.escaneos ?? armado.escaneos ?? {})
   const [faltantes, setFaltantes] = useState<Record<string, MotivoFaltante>>(() => inicial?.faltantes ?? armado.faltantes ?? {})
@@ -371,7 +388,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
         abierto={!!terminar}
         seguir={terminar === 'seguir'}
         transferido={transferido}
-        armado={armado}
+        armado={{ ...armado, pedido }}
         escaneos={escaneos}
         faltantes={faltantes}
         setEscaneos={setEscaneos}
