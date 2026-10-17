@@ -13,6 +13,7 @@
  * 🔴 **Un solo lote por punto de venta a la vez.** La numeración es «el último + 1»: dos lotes en
  * paralelo piden el mismo número y el segundo rebota. El candado lo pone quien llama.
  */
+import https from 'node:https'
 import forge from 'node-forge'
 import {
   AMBIENTES, authXml, leerCAE, leerConsulta, leerTA, leerUltimo, loteXml, reconciliar,
@@ -41,16 +42,35 @@ export function firmarTRA(tra, certPem, keyPem) {
   return forge.util.encode64(forge.asn1.toDer(p7.toAsn1()).getBytes())
 }
 
+/**
+ * 🔴 ARCA de PRODUCCIÓN (`servicios1.afip.gov.ar`, la factura) negocia TLS con una clave Diffie-Hellman CHICA que
+ * OpenSSL 3 rechaza por defecto: `fetch` falla con «fetch failed» (`ERR_SSL_DH_KEY_TOO_SMALL`), medido 17-oct en la
+ * primera factura real. Homologación ⛔ tiene el problema. Este agente baja el nivel a SECLEVEL=1 (⛔ 0) y es SÓLO para
+ * hablar con ARCA: el resto del motor sigue con el default.
+ */
+export const AGENTE_ARCA = new https.Agent({ keepAlive: true, ciphers: 'DEFAULT@SECLEVEL=1' })
+
+/** Un error de red con la forma que `esCorte` reconoce (antes era el `TypeError` de `fetch`). */
+const deRed = (e) => new TypeError(`No se pudo hablar con ARCA (${e.code || e.message})`)
+
 async function soap(url, accion, cuerpo) {
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: accion },
-    body: cuerpo,
-    signal: AbortSignal.timeout(ESPERA_MS),
+  const { status, texto } = await new Promise((ok, mal) => {
+    const req = https.request(url, {
+      method: 'POST', agent: AGENTE_ARCA,
+      headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: accion, 'Content-Length': Buffer.byteLength(cuerpo) },
+    }, (r) => {
+      let t = ''
+      r.setEncoding('utf8')
+      r.on('data', (c) => { t += c })
+      r.on('end', () => { clearTimeout(reloj); ok({ status: r.statusCode, texto: t }) })
+      r.on('error', (e) => { clearTimeout(reloj); mal(deRed(e)) })
+    })
+    const reloj = setTimeout(() => req.destroy(Object.assign(new Error(`ARCA no contestó en ${ESPERA_MS / 1000} s`), { name: 'TimeoutError' })), ESPERA_MS)
+    req.on('error', (e) => { clearTimeout(reloj); mal(e.name === 'TimeoutError' ? e : deRed(e)) })
+    req.end(cuerpo)
   })
   // Un SOAP Fault viene con 500 y el detalle en el cuerpo: se lee igual.
-  const texto = await r.text()
-  if (!r.ok && !tag(texto, 'Fault')) throw new Error(`ARCA respondió ${r.status}`)
+  if (!(status >= 200 && status < 300) && !tag(texto, 'Fault')) throw new Error(`ARCA respondió ${status}`)
   return texto
 }
 
