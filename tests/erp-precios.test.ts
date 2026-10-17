@@ -78,6 +78,19 @@ describe('precio que sigue a lo que cobra Tienda Nube (motor sql/018)', () => {
   })
 })
 
+describe('prenda en oferta de Liquidación: el local la cobra al precio de su campaña', () => {
+  const L18 = [{ id: 'local', nombre: 'Local', sigue: 'oferta' }, { id: 'oferta', nombre: 'Tienda Nube con oferta', sigue: null }]
+  const ef = (lista: string, precio: number) => ({ lista, precio: String(precio), fuente: 'tn', de_lista: 'oferta' })
+  it('🔑 TN tiene la «Feria Online» (campaña ÷ 0,9) y el local la sigue: la ficha dice además el precio de la campaña', () => {
+    const base = { listas: L18, vigentes: [vig('oferta', 20000, 'tn')], efectivos: [ef('local', 20000), ef('oferta', 20000)], costo: COSTO }
+    const r = armarPrecioDeProducto({ ...base, tn: [tnV(30000, 12000, 20000)], feria: 18000 })
+    expect(r.feria).toBe(18000)
+    expect(r.listas[0]).toMatchObject({ lista: 'local', precio: 20000 })
+    expect(r.avisos).toEqual([])
+    expect(armarPrecioDeProducto({ ...base, tn: [tnV(30000, 12000, 20000)] }).feria).toBeNull()
+  })
+})
+
 describe('leerCarga', () => {
   it('precio con lista; monto en pesos con coma o con puntos de miles', () => {
     expect(leerCarga({ que: 'precio', producto: '237777', lista: 'local', monto: '10.990,50' })).toMatchObject({ que: 'precio', producto: '237777', lista: 'local', monto: 10990.5, desde: null })

@@ -239,6 +239,9 @@ export function PreciosProducto() {
             <div style={{ marginBottom: space[3] }}>
               <Button variant="outline" onClick={() => { setFicha(null); setHecho(null) }}>Volver a la búsqueda</Button>
             </div>
+            {ficha.feria != null && (
+              <Notice tone="neutral">Está en oferta (Liquidación): en el local se cobra {plata(ficha.feria)}, el precio de su campaña, sin el descuento de la forma de pago. Tienda Nube muestra otro precio para la venta online.</Notice>
+            )}
             {ficha.avisos.map((a) => <Notice key={a} tone="warning">{a}</Notice>)}
             <TableWrap>
               <table>

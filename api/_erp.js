@@ -57,7 +57,7 @@ import { armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVent
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { NC_DESDE_LA_VENTA, armarFacturaDelCambio, claveDeFactura, esDeVentaPropia, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
-import { reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
+import { feriaDeCampanias, reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
@@ -971,13 +971,27 @@ export async function precioDeProducto({ marca, producto }) {
   for (const r of [porSku, porBarra]) if (r.error) throw new Error(`tn_variante: ${r.error.message}`)
   const tn = [...new Map([...porSku.data, ...porBarra.data].map((v) => [`${v.tienda}/${v.variant_id}`, v])).values()]
   const tienda = tn[0]?.tienda
+  // La feria de Liquidación: la MISMA lectura que la Caja (`feriaDeCampanias`). Stunned ⛔ tiene feria (`lib/caja/precio.ts`).
+  // 🔴 Si falla se dice en la ficha: ⛔ se muestra el precio de TN como si fuera el que cobra el local.
+  let feria = null
+  let sinFeria = null
+  if (linea !== 'stunned') {
+    try {
+      const reglas = await reglasGuardadas(b, marca, marcaDeCaja(marca))
+      feria = (await feriaDeCampanias(b, marca, reglas?.feriaCampanias)).feriaPrecios[Number(producto)] ?? null
+    } catch (e) {
+      sinFeria = `No se pudieron leer los productos en oferta de Liquidación (${e instanceof Error ? e.message : e}): si éste está en oferta, el local lo cobra al precio de su campaña.`
+    }
+  }
+  const armado = armarPrecioDeProducto({
+    listas: listas.data, vigentes: vigentes.data, efectivos: efectivos.error ? null : efectivos.data, costo: costo.data[0] ?? null,
+    historialPrecio: hPrecio.data, historialCosto: hCosto.data, gn: gn.data, tn, proveedorFicha, feria,
+  })
+  if (sinFeria) armado.avisos.push(sinFeria)
   return {
     producto: String(producto), nombre: inv.data[0]?.product_name ?? null, skus: skus.length, linea,
     tnLeidaEn: (lecturas.data || []).find((x) => x.tienda === tienda)?.leida_en ?? null,
-    ...armarPrecioDeProducto({
-      listas: listas.data, vigentes: vigentes.data, efectivos: efectivos.error ? null : efectivos.data, costo: costo.data[0] ?? null,
-      historialPrecio: hPrecio.data, historialCosto: hCosto.data, gn: gn.data, tn, proveedorFicha,
-    }),
+    ...armado,
   }
 }
 

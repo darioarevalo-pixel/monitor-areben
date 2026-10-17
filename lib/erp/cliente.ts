@@ -83,6 +83,8 @@ export type FilaPrecio = { lista: string; nombre: string; precio: number | null;
 export type PrecioDeProducto = {
   producto: string; nombre: string | null; skus: number; tnLeidaEn: string | null
   listas: FilaPrecio[]
+  /** El precio de su campaña de Liquidación si la prenda es de feria: lo que cobra el local (⛔ el de la lista). */
+  feria: number | null
   costo: { costo: number | null; proveedor: string | null; proveedorId: string | null; fuente: string; desde: string; usuario: string; motivo: string | null } | null
   gn: { precio: number | null; mayorista: number | null; costo: number | null } | null
   tn: { tienda: string; variantes: number; precio: number | null; promocional: number | null; cobra: number | null; costo: number | null; distintos: boolean } | null
