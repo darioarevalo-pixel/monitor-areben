@@ -42,16 +42,22 @@ export function ambienteDeEntorno(env) {
   return 'produccion'
 }
 
+/** Los puntos de venta de GN de cada marca (Stunned factura con el de Zattia: mismo CUIT, ❓ 3). */
+export const PV_DE_GN = Object.freeze({ bdi: 2, zattia: 5 })
+
 /**
- * El punto de venta de cada marca. Homologación tiene uno de prueba por marca (cualquier número sirve);
- * producción ⛔ tiene default: son los PV NUEVOS que se crean en ARCA con el OK del contador, y usar
- * uno de GN (00002 BDI, 00005 Zattia) haría que los dos sistemas se pisen la numeración.
+ * El punto de venta de cada marca. Homologación tiene uno de prueba por marca (cualquier número sirve); producción ⛔
+ * tiene default (`ARCA_PTOVTA_<MARCA>`).
+ * 🔑 Bruno, 17-oct (50): **se quedan los de GN** (BDI 00002, Zattia y Stunned 00005), ⛔ PV nuevos. Los dos sistemas
+ * numeran en el mismo PV sin pisarse porque el número sale de ARCA en cada pedido (`ultimo` + 1, `lote.core.js`) y un
+ * número que ARCA ya tiene con OTRO contenido frena el lote (`ajenas`). Lo que ⛔ se acepta es el PV de GN de OTRA marca.
  */
 export function ptoVtaDe(ambiente, marca, env) {
   const clave = `ARCA_PTOVTA_${String(marca).toUpperCase()}`
   const n = Number(env[clave])
   if (Number.isInteger(n) && n > 0) {
-    if (ambiente === 'produccion' && (n === 2 || n === 5)) throw new Error(`${clave}=${n} es un punto de venta de GN: el monitor usa uno propio`)
+    const otra = Object.entries(PV_DE_GN).find(([m, pv]) => pv === n && m !== marca)
+    if (ambiente === 'produccion' && otra) throw new Error(`${clave}=${n} es el punto de venta de GN de ${otra[0]}, no el de ${marca}`)
     return n
   }
   if (ambiente === 'homologacion') return marca === 'bdi' ? 1 : 2
