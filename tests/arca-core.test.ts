@@ -201,8 +201,12 @@ describe('ptoVtaDe', () => {
     expect(ptoVtaDe('homologacion', 'zattia', {})).toBe(2)
   })
   it('🔴 producción ⛔ tiene default', () => expect(() => ptoVtaDe('produccion', 'bdi', {})).toThrow(/ARCA_PTOVTA_BDI/))
-  it('🔴 producción ⛔ acepta los PV de GN', () => {
-    expect(() => ptoVtaDe('produccion', 'zattia', { ARCA_PTOVTA_ZATTIA: '5' })).toThrow(/de GN/)
+  // Bruno, 17-oct (50): se quedan los PV de GN, cada marca el SUYO; el de la OTRA marca frena.
+  it('🔴 producción acepta el PV de GN de su marca y ⛔ el de la otra', () => {
+    expect(ptoVtaDe('produccion', 'zattia', { ARCA_PTOVTA_ZATTIA: '5' })).toBe(5)
+    expect(ptoVtaDe('produccion', 'bdi', { ARCA_PTOVTA_BDI: '2' })).toBe(2)
+    expect(() => ptoVtaDe('produccion', 'zattia', { ARCA_PTOVTA_ZATTIA: '2' })).toThrow(/de GN de bdi/)
+    expect(() => ptoVtaDe('produccion', 'bdi', { ARCA_PTOVTA_BDI: '5' })).toThrow(/de GN de zattia/)
     expect(ptoVtaDe('produccion', 'zattia', { ARCA_PTOVTA_ZATTIA: '12' })).toBe(12)
   })
 })
