@@ -54,6 +54,15 @@ y el «Pendiente de facturar» del dashboard de Darío.
   Oráculos: `oraculo-reglas-134.mjs` (el núcleo) y `oraculo-caja-con-reglas.mjs` + `caminar-caja-reglas.mjs` (la Caja
   prendida), en `~/Documents/erp-monitor/oraculos/`.
 
+**Cuentas de cobro** (18-oct): las RUTAS de gerencia —qué cuenta REAL (las del dashboard, copiadas a `cuenta_real`)
+recibe cada medio, por línea × canal, desde un momento— (`components/erp/RutasCobro.tsx`, `api/_erp-rutas.js`, núcleo
+`lib/erp/rutas.core.js`). Leer y poner van por el contrato del motor (`motor/cuentas/rutas.mjs`, sql/019-020): una ruta
+⛔ se edita, se pone otra, y ⛔ para atrás (lo frena el motor). 🔑 Bruno: la cajera ve sólo el MEDIO; el descuento va
+en el medio (Reglas), ⛔ en la cuenta. Cambiar a una cuenta que FACTURA (`esFacturable`: Areben y ⛔ efectivo) un medio
+con descuento AVISA antes y después de guardar (`avisoDeRuta`, Stunned con sus reglas o las de Zattia como la Caja):
+⛔ cambia la regla. 🔴 EN SOMBRA: la ruta anota la cuenta real de cada cobro del motor (TN, Caja→motor); la Caja sigue
+con su cuenta de MP hasta activar el ERP. Saldo a favor ⛔ lleva ruta (⛔ entra plata).
+
 ## Dónde vive
 
 `components/erp/` · `lib/erp/cliente.ts` · `lib/arca/` (todo el dominio, puro y testeado:

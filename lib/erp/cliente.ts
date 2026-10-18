@@ -267,3 +267,29 @@ export const prenderCajaReglas = (marca: MarcaErp, prender: boolean) =>
   pedir<{ ok: true; prendida: boolean; copiadas?: number }>(post({ accion: 'prender-caja-reglas', marca, prender }), '', 'No se pudo cambiar con qué cobra la Caja.')
 export const simularReglas = (marca: MarcaErp, p: PedidoSimulacion) =>
   pedir<Simulacion>(post({ accion: 'simular-reglas', marca, ...p }), '', 'No se pudo simular.')
+
+/** ERP › Cuentas de cobro (motor sql/019-020): qué cuenta REAL recibe cada medio, por línea × canal, desde un momento. */
+export type MedioRuta = 'efectivo' | 'transferencia' | 'debito' | 'credito' | 'mp' | 'pagonube'
+export type CanalRuta = 'local' | 'online' | 'mayorista' | 'ml'
+export type CuentaReal = { id: string; titular: 'areben' | 'bruno' | 'dario' | 'tercero'; nombre: string; banco: string | null; tipo: string }
+export type RutaCobro = {
+  id: string; marca: string; canal: CanalRuta; medio: MedioRuta; cuenta_real_id: string | null; tasa: number | null; dias_acreditacion: number | null
+  desde: string; puesta_por: string; puesta_en: string; cuenta_titular?: CuentaReal['titular'] | null; cuenta_nombre?: string | null; cuenta_banco?: string | null
+}
+export type FilaDeRuta = {
+  canal: CanalRuta; medio: MedioRuta; vigente: RutaCobro | null; proxima: RutaCobro | null
+  cuenta: { id: string; titular: CuentaReal['titular']; nombre: string; banco: string | null } | null
+  /** null: sin ruta, o «se elige en cada cobro». */
+  factura: boolean | null
+  aviso: string | null
+}
+export type RutasDeMarca = {
+  lineas: Array<{ linea: string; filas: FilaDeRuta[] }>
+  cuentas: CuentaReal[]; reglas: ReglaComercial[]; historial: RutaCobro[]; cuentasCopiadasEn: string | null
+}
+export type RutaAPoner = { linea: string; canal: CanalRuta; medio: MedioRuta; cuenta_real_id: string | null; tasa: string; dias_acreditacion: string; desde?: string }
+
+export const leerRutas = (marca: MarcaErp) =>
+  pedir<RutasDeMarca>(null, `&vista=rutas&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer las cuentas de cobro.')
+export const ponerRuta = (marca: MarcaErp, ruta: RutaAPoner) =>
+  pedir<{ ok: true; ruta: { id: string; desde: string }; aviso: string | null }>(post({ accion: 'poner-ruta', marca, ...ruta }), '', 'No se pudo cambiar la ruta.')

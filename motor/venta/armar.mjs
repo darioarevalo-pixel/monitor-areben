@@ -10,6 +10,7 @@
  * de negocio (la pantalla tiene que poder mostrarlo).
  */
 import { randomUUID } from 'node:crypto'
+import { cobroReal } from '../cuentas/cuentas.mjs'
 
 export const ORIGENES = ['caja', 'tn', 'mayorista', 'postventa', 'ml']
 /** Los canales de la semilla (005). Manda la tabla `canal` (`conf.canales`); esto es para cuando no viene (tests). */
@@ -25,7 +26,8 @@ const cierra = (a, b) => Math.abs(a - b) <= TOLERANCIA
 /**
  * La configuración que lee `registrar.mjs` de las tablas de §3 (marca, deposito, cuenta_cobro).
  * @typedef {{ marcas: Record<string, { empresa_id: string, depositos: string[] }>,
- *   cuentas: Array<{ id: string, marca: string, gn_cuenta_id: number | null, activa?: boolean, medio?: string }>, canales?: string[] }} Conf
+ *   cuentas: Array<{ id: string, marca: string, gn_cuenta_id: number | null, activa?: boolean, medio?: string, nombre?: string }>, canales?: string[],
+ *   rutas?: any[], cuentasReales?: Array<{ id: string, activa: boolean }> }} Conf  rutas y cuentasReales: sql/019-020
  */
 
 /** La cuenta de cobro de un pago: por su uuid o, mientras la Caja guarda ésos, por el id de GN. */
@@ -57,7 +59,7 @@ function validarLineas(lineas, campo) {
  */
 function validarPagos(pagos, conf, marca, total, { base = null } = {}) {
   if (!Array.isArray(pagos)) return { error: fallo('ENTRADA_INVALIDA', 'Faltan los pagos', 'pagos') }
-  const filas = []
+  const filas = [], cuentas = []
   let usa_saldo = 0
   for (const [i, p] of pagos.entries()) {
     const cuenta = p && cuentaDe(conf, marca, p.cuenta)
@@ -69,15 +71,31 @@ function validarPagos(pagos, conf, marca, total, { base = null } = {}) {
     }
     if (cuenta.medio === 'saldo') usa_saldo += f.monto
     filas.push(f)
+    cuentas.push({ cuenta, elegida: p.cuenta_real ?? null })
   }
   const suma = filas.reduce((s, p) => s + p.monto, 0)
   if (base != null) {
     const sumaBase = filas.reduce((s, p) => s + p.base, 0)
     if (!cierra(sumaBase, base)) return { error: fallo('PAGOS_NO_CIERRAN', `Los pagos cubren ${pesos(sumaBase)} y la diferencia es ${base}`, 'pagos') }
-    return { filas, total: pesos(suma), usa_saldo: pesos(usa_saldo) }
+    return { filas, cuentas, total: pesos(suma), usa_saldo: pesos(usa_saldo) }
   }
   if (!cierra(suma, total)) return { error: fallo('PAGOS_NO_CIERRAN', `Los pagos suman ${pesos(suma)} y la venta es de ${total}`, 'pagos') }
-  return { filas, total, usa_saldo: pesos(usa_saldo) }
+  return { filas, cuentas, total, usa_saldo: pesos(usa_saldo) }
+}
+
+/**
+ * Los pagos listos para escribir, con su medio, su cuenta REAL y su comisión (sql/020, `cobroReal`). Sin rutas en la
+ * configuración (una base sin la 019) los campos van null y `insertar` los ignora si la tabla ⛔ los tiene.
+ */
+function pagosConCuenta(p, conf, venta) {
+  const pagos = []
+  for (const [i, f] of p.filas.entries()) {
+    const { cuenta, elegida } = p.cuentas[i]
+    const r = cobroReal({ monto: f.monto, elegida }, cuenta, { marca: venta.marca, canal: venta.canal, en: venta.ocurrida_en }, conf)
+    if (!r.ok) return { error: fallo(r.codigo, r.mensaje, `pagos[${i}].cuenta_real`) }
+    pagos.push({ id: randomUUID(), venta_id: venta.id, ...f, ...r.cobro })
+  }
+  return { pagos }
 }
 
 /** Lo común a la venta y al cambio: origen, marca, depósito, usuario. */
@@ -157,7 +175,9 @@ export function armarVenta(e, conf, { ahora = new Date() } = {}) {
     usuario: e.usuario.trim(), ocurrida_en: new Date(e.ocurrida_en ?? ahora).toISOString(), detalle: e.detalle ?? {},
   }
   const lineas = e.lineas.map((l, i) => filaDeLinea(venta.id, l, i + 1, 1))
-  const pagos = p.filas.map((f) => ({ id: randomUUID(), venta_id: venta.id, ...f }))
+  const c = pagosConCuenta(p, conf, venta)
+  if (c.error) return c.error
+  const { pagos } = c
   const movimientos = mueveStock(venta) ? lineas.map((l) => movimientoDe(venta, l, 'venta')) : []
   return { ok: true, venta, lineas, pagos, movimientos, usa_saldo: p.usa_saldo }
 }
@@ -212,7 +232,9 @@ export function armarCambio(e, conf, original, { ahora = new Date() } = {}) {
   const p = diferencia > 0 ? validarPagos(e.pagos || [], conf, o.marca, null, { base: diferencia }) : validarPagos(e.pagos || [], conf, o.marca, 0)
   if (p.error) return p.error
   venta.total = p.total
-  const pagos = p.filas.map((f) => ({ id: randomUUID(), venta_id: venta.id, ...f }))
+  const c = pagosConCuenta(p, conf, venta)
+  if (c.error) return c.error
+  const { pagos } = c
   const movimientos = mueveStock(venta) ? lineas.map((l) => movimientoDe(venta, l, l.cantidad < 0 ? 'cambio_entra' : 'cambio_sale')) : []
   return { ok: true, venta, lineas, pagos, movimientos, diferencia, a_favor: diferencia < 0 ? -diferencia : 0, usa_saldo: p.usa_saldo }
 }

@@ -34,6 +34,8 @@
  *   POST {recurso:'erp', accion:'nota-credito-venta', marca, ventaId}  la NC de una venta propia ANULADA con factura
  *   GET  ?recurso=erp&vista=reglas&marca=…                             las reglas comerciales (motor sql/016) + Agenda + Caja
  *   POST {recurso:'erp', accion:'guardar-regla'|'sembrar-reglas'|'simular-reglas'|'prender-caja-reglas', marca, …}   `api/_erp-reglas.js`
+ *   GET  ?recurso=erp&vista=rutas&marca=…                              las cuentas de cobro: qué cuenta recibe cada medio (motor sql/019-020)
+ *   POST {recurso:'erp', accion:'poner-ruta', marca, linea?, canal, medio, cuenta_real_id, …}   `api/_erp-rutas.js`
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
  * Contra qué ARCA se factura lo decide `ambienteDeEntorno` (homologación por defecto).
@@ -61,6 +63,7 @@ import { feriaDeCampanias, reglasDeHoy, reglasGuardadas } from './_caja-reglas.j
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
+import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -1149,6 +1152,16 @@ export default async function handler(req, res) {
     if (body.accion === 'guardar-regla' || body.accion === 'sembrar-reglas' || body.accion === 'simular-reglas' || body.accion === 'prender-caja-reglas') {
       const f = { 'guardar-regla': guardarReglaErp, 'sembrar-reglas': sembrarReglasErp, 'simular-reglas': simularReglasErp, 'prender-caja-reglas': prenderCajaErp }[body.accion]
       const r = await f({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error, campo: r.campo ?? null } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'rutas') {
+      const r = await rutasDeMarca({ marca: String(req.query.marca || '') }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'POST' && body.accion === 'poner-ruta') {
+      const r = await ponerRutaErp({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error, campo: r.campo ?? null } : r)
     }
 
