@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * ERP › Conciliación (paso 7). El ERP contra Tienda Nube, GN y Mercado Libre, un día: cuánto cierra y la lista de lo que
+ * ERP › Conciliación (paso 7). El ERP contra Tienda Nube, GN y Mercado Libre (sólo BDI), un día: cuánto cierra y la lista de lo que
  * ⛔ cierra, agrupado por qué pasó y qué mirar. Sólo lectura: una prenda abre su stock e historial; un pedido, Tienda Nube.
  *
  * Se calcula una vez por día, a las 13:40 (el cruce del motor, `bin/tn.mjs conciliar`); el stock de Tienda Nube se lee
@@ -71,17 +71,13 @@ export function ConciliacionDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida
                 <div key={t.tipo} style={{ minWidth: 220 }}>
                   <strong>{t.nombre}</strong>
                   {!t.calculado ? <div>No se calculó ese día.</div>
-                    : t.tipo === 'stock_tn' ? <div>Coinciden {t.cierran} de {t.total} {t.unidad} ({pct(t.cierran ?? 0, t.total ?? 0)}){t.aparte ? <> · {t.aparte} de la tienda sin producto en el ERP</> : null}</div>
+                    : t.tipo.startsWith('stock_') ? <div>Coinciden {t.cierran} de {t.total} {t.unidad} ({pct(t.cierran ?? 0, t.total ?? 0)}){t.aparte ? <> · {t.aparte} {t.tipo === 'stock_ml' ? 'publicaciones' : 'de la tienda'} sin producto en el ERP</> : null}</div>
                       : <div>{t.noCierran ? `${t.noCierran} de ${t.total} ${t.unidad} no coinciden` : `Coinciden los ${t.total} ${t.unidad}`} (últimos 7 días)</div>}
                 </div>
               ))}
               <div style={{ minWidth: 220 }}>
                 <strong>Stock por depósito: GN y el ERP</strong>
                 <div>{!datos.gn.calculado ? 'No se calculó ese día.' : datos.gn.sinExplicar ? `${datos.gn.sinExplicar} sin explicar: verlas en Diferencias del día` : 'Todo explicado (Diferencias del día)'}</div>
-              </div>
-              <div style={{ minWidth: 220 }}>
-                <strong>Mercado Libre</strong>
-                <div>Todavía sin conexión: se suma cuando esté la app de Mercado Libre.</div>
               </div>
             </div>
             {datos.enVuelo > 0 && <div style={{ marginTop: space[2] }}><Badge tone="neutral">Recién pagados, todavía en camino: {datos.enVuelo}</Badge></div>}
@@ -91,12 +87,12 @@ export function ConciliacionDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida
           {datos.grupos.map((g) => (
             <SectionCard key={`${g.tipo}/${g.clase}`} title={`${g.nombre} · ${g.filas.length}`} subtitle={`${g.mirar}${g.deAntes ? ` (${g.deAntes} vienen de días anteriores)` : ''}`}>
               <TableWrap>
-                {g.tipo === 'stock_tn' ? (
+                {g.tipo.startsWith('stock_') ? (
                   <table>
                     <THead>
                       <Tr>
                         <Th>Prenda</Th><Th>SKU</Th>
-                        <Th style={{ textAlign: 'right' }}>Tienda Nube</Th><Th style={{ textAlign: 'right' }}>ERP</Th><Th style={{ textAlign: 'right' }}>GN</Th>
+                        <Th style={{ textAlign: 'right' }}>{g.tipo === 'stock_ml' ? 'Mercado Libre' : 'Tienda Nube'}</Th><Th style={{ textAlign: 'right' }}>ERP</Th><Th style={{ textAlign: 'right' }}>GN</Th>
                         <Th style={{ textAlign: 'right' }}>Días</Th>
                       </Tr>
                     </THead>
@@ -116,7 +112,7 @@ export function ConciliacionDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida
                 ) : (
                   <table>
                     <THead>
-                      <Tr><Th>Pedido</Th><Th>Estado en Tienda Nube</Th><Th>Medio</Th><Th style={{ textAlign: 'right' }}>Total</Th><Th style={{ textAlign: 'right' }}>Días</Th></Tr>
+                      <Tr><Th>{g.tipo === 'pedido_ml' ? 'Venta' : 'Pedido'}</Th><Th>{g.tipo === 'pedido_ml' ? 'Estado en Mercado Libre' : 'Estado en Tienda Nube'}</Th><Th>Medio</Th><Th style={{ textAlign: 'right' }}>Total</Th><Th style={{ textAlign: 'right' }}>Días</Th></Tr>
                     </THead>
                     <TBody>
                       {g.filas.map((f) => (

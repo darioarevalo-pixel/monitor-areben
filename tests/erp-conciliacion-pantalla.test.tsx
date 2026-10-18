@@ -48,7 +48,7 @@ describe('ConciliacionDia', () => {
     expect(texto()).toContain('1 de 20 pedidos no coinciden')
     expect(texto()).toContain('Coinciden los 20 pedidos')
     expect(texto()).toContain('3 sin explicar: verlas en Diferencias del día')
-    expect(texto()).toContain('Todavía sin conexión')
+    expect(texto()).not.toContain('Stock: Mercado Libre')   // Zattia ⛔ vende en ML: sin tarjeta
     expect(texto()).toContain('El ERP dice otro stock · 1')
     expect(texto()).toContain('(1 vienen de días anteriores)')
     expect(texto()).toContain('Cancelado con la venta activa en GN · 1')

@@ -58,8 +58,20 @@ describe('armarConciliacion', () => {
       stock_tn: ['libro_aparte', 'tn_atrasado', 'gn_aparte', 'los_tres', 'sin_variante'],
       pedido_erp: ['falta_venta', 'no_entra', 'venta_anulada', 'venta_de_cancelada', 'total_distinto'],
       pedido_gn: ['sin_venta', 'prendas_distintas', 'cancelada_con_venta', 'varias_ventas', 'venta_sin_orden'],
+      stock_ml: ['libro_aparte', 'ml_atrasado', 'gn_aparte', 'los_tres', 'sin_variante', 'sin_sku'],
+      pedido_ml: ['sin_venta', 'prendas_distintas', 'cancelada_con_venta', 'varias_ventas', 'venta_sin_orden'],
     }
     for (const [tipo, clases] of Object.entries(DEL_MOTOR)) for (const c of clases) expect(CLASE[tipo as keyof typeof CLASE][c as never]).toBeTruthy()
     expect(TIENDAS).toEqual(['bdi', 'zattia', 'stunned'])
+  })
+  it('Mercado Libre: sólo BDI tiene sus tarjetas; el estado sin pago va solo', () => {
+    const res = { ...resumen, stock_ml: { comparadas: 50, cierran: 45, clases: { stock_ml: { sin_sku: 2, sin_variante: 1 } } }, pedidos_ml: { packs: 9 } }
+    const ml = [{ tipo: 'pedido_ml', clave: '#2000123', clase: 'sin_venta', numero: '2000123', dias: 1, detalle: { status: 'paid' } }]
+    const bdi = armarConciliacion({ tienda: 'bdi', filas: ml, resumen: res, nombres })
+    expect(bdi.tarjetas.map((t: { tipo: string }) => t.tipo)).toEqual(['stock_tn', 'pedido_erp', 'pedido_gn', 'stock_ml', 'pedido_ml'])
+    expect(bdi.tarjetas[3]).toMatchObject({ cierran: 45, total: 50, aparte: 3 })
+    expect(bdi.tarjetas[4]).toMatchObject({ total: 9, noCierran: 1 })
+    expect(bdi.grupos[0].filas[0]).toMatchObject({ estado: 'paid', link: null })
+    expect(armarConciliacion({ tienda: 'zattia', filas: [], resumen: res, nombres }).tarjetas).toHaveLength(3)
   })
 })
