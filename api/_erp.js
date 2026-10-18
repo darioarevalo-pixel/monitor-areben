@@ -23,7 +23,7 @@
  *   GET  ?recurso=erp&vista=ventas&marca=…&q=nº|cliente&desde&hasta    busca ventas propias (las del motor)
  *   GET  ?recurso=erp&vista=venta&marca=…&id=UUID                      la ficha: prendas, pagos, factura, estado
  *   POST {recurso:'erp', accion:'anular', marca, ventaId, motivo}      anula una venta propia (por el motor)
- *   GET  ?recurso=erp&vista=saldo&marca=…&doc=DNI                      el saldo a favor de la clienta (el de prueba)
+ *   GET  ?recurso=erp&vista=saldo&marca=…&doc=DNI[&prueba=0]           el saldo a favor de la clienta (el de prueba, o el real con prueba=0)
  *   GET  ?recurso=erp&vista=clientas&marca=…&q=CUIT|nombre             las fichas de clientas (factura A en la Caja)
  *   POST {recurso:'erp', accion:'cambiar', marca, id, ventaId, devueltas, items, pagos, total, desde?, pago?, comprobante?, cliente?}
  *        el cambio en el local: cobra la diferencia con el descuento de la forma de pago y, con transferencia,
@@ -503,15 +503,16 @@ export async function anularVentaPropia({ marca, body, usuario }) {
 
 /**
  * El cambio en el local (`erp › Caja`): entra lo devuelto, sale lo nuevo, y la diferencia se cobra o
- * queda a favor. 🔑 Hasta el corte de GN es de PRUEBA (⛔ mueve el libro): el local sigue cambiando en GN.
+ * queda a favor. 🔑 El cambio es real o de prueba como la venta ORIGINAL (la Caja real, Bruno 18-oct). Mientras GN
+ * viva, el real va con `detalle.en_gn`: el local hace el mismo cambio en GN y el libro lo cuenta por ahí (⛔ dos veces).
  * Que ⛔ se devuelva más de lo vendido lo hace cumplir el motor (`DEVUELVE_DE_MAS`), y la diferencia la
  * vuelve a sumar él: si ⛔ coincide con el pago, 409.
  */
 /**
- * El saldo a favor de una clienta, por documento (el de PRUEBA mientras el cambio es de prueba): para
+ * El saldo a favor de una clienta, por documento: el de prueba o el real, como la venta que se cambia (`prueba`). Para
  * ofrecerlo como forma de pago en el cambio. Lee la vista `saldo_favor` del motor (contrato §6).
  */
-export async function saldoDeClienta({ marca, doc }) {
+export async function saldoDeClienta({ marca, doc, prueba = true }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const d = String(doc ?? '').replace(/\D/g, '')
   if (!/^\d{7,11}$/.test(d)) return { status: 400, error: 'Documento inválido' }
@@ -524,7 +525,7 @@ export async function saldoDeClienta({ marca, doc }) {
   const cl = await sb.from('cliente').select('id, nombre').eq('empresa_id', empresa).eq('doc', d).maybeSingle()
   if (cl.error) throw new Error(`cliente: ${cl.error.message}`)
   if (!cl.data) return { cliente: null, saldo: 0 }
-  const s = await sb.from('saldo_favor').select('saldo').eq('cliente_id', cl.data.id).eq('marca', marca).eq('prueba', true).maybeSingle()
+  const s = await sb.from('saldo_favor').select('saldo').eq('cliente_id', cl.data.id).eq('marca', marca).eq('prueba', prueba).maybeSingle()
   if (s.error) throw new Error(`saldo_favor: ${s.error.message}`)
   return { cliente: { nombre: cl.data.nombre }, saldo: Number(s.data?.saldo || 0) }
 }
@@ -540,6 +541,9 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
   return conMotor(marca, 'El cambio', async (db, { registrarCambio }) => {
     // La diferencia con la MISMA cuenta que el motor (lo devuelto al precio que se pagó), y su cobro con
     // las reglas de HOY de la Caja: el descuento de la forma de pago lo pone el servidor.
+    // Real o de prueba como la original (si ⛔ está, de prueba: el motor contesta que falta la venta).
+    const [orig] = (await db.query('select prueba from venta where id = $1', [c.ventaId])).rows
+    const prueba = orig ? orig.prueba !== false : true
     const lineas = (await db.query('select id, cantidad, importe from venta_linea where venta_id = $1', [c.ventaId])).rows
       .map((l) => ({ id: l.id, cantidad: Number(l.cantidad), importe: Number(l.importe) }))
     const diferencia = diferenciaDeCambio({ lineas, devueltas: c.devueltas.map((d) => ({ lineaId: d.linea_id, cantidad: d.cantidad })), nuevas: c.nuevas })
@@ -569,10 +573,11 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
       cobrado = { ...cobrado, pagos: cobrado.pagos.map((p) => (p.cuenta === 'saldo' ? { ...p, cuenta: cs.id } : p)) }
     }
     const r = await registrarCambio(db, {
-      origen: 'caja', origen_ref: c.id, marca, usuario: usuario || 'erp', prueba: true, deposito: 'local',
+      origen: 'caja', origen_ref: c.id, marca, usuario: usuario || 'erp', prueba, deposito: 'local',
       venta_original_id: c.ventaId, devueltas: c.devueltas, nuevas: c.nuevas, pagos: cobrado.pagos,
       ...(c.cliente ? { cliente: c.cliente } : {}),
-      ...(mp ? { detalle: { mp } } : {}),
+      // Hasta el corte, el cambio real también se hace en GN ⇒ `en_gn`: ⛔ mueve el libro ni sale a facturar (motor `enGN`).
+      ...(mp || !prueba ? { detalle: { ...(mp ? { mp } : {}), ...(prueba ? {} : { en_gn: true }) } } : {}),
     })
     if (!r.ok) return errorDelMotor(r)
     return { ok: true, venta: r.venta, total: cobrado.total, aFavor: r.a_favor, saldo: r.saldo ?? null, ncPendiente: r.nc_pendiente, yaExistia: !!r.ya_existia }
@@ -1195,7 +1200,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET' && req.query.vista === 'saldo') {
-      const r = await saldoDeClienta({ marca: String(req.query.marca || ''), doc: req.query.doc })
+      const r = await saldoDeClienta({ marca: String(req.query.marca || ''), doc: req.query.doc, prueba: req.query.prueba !== '0' })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

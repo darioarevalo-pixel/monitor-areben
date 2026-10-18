@@ -187,9 +187,9 @@ export type Clienta = { doc: string; nombre: string; razonSocial: string | null;
 export const buscarClientas = (marca: MarcaErp, q: string) =>
   pedir<{ clientas: Clienta[] }>(null, `&vista=clientas&marca=${marca}&q=${encodeURIComponent(q)}`, 'No se pudo buscar la clienta.')
 
-/** El saldo a favor de una clienta (el de prueba, mientras el cambio es de prueba). */
-export const leerSaldo = (marca: MarcaErp, doc: string) =>
-  pedir<{ cliente: { nombre: string } | null; saldo: number }>(null, `&vista=saldo&marca=${marca}&doc=${encodeURIComponent(doc)}&nc=${Date.now()}`, 'No se pudo leer el saldo.')
+/** El saldo a favor de una clienta: el de prueba o el real, como la venta que se cambia. */
+export const leerSaldo = (marca: MarcaErp, doc: string, prueba = true) =>
+  pedir<{ cliente: { nombre: string } | null; saldo: number }>(null, `&vista=saldo&marca=${marca}&doc=${encodeURIComponent(doc)}${prueba ? '' : '&prueba=0'}&nc=${Date.now()}`, 'No se pudo leer el saldo.')
 
 export type ClienteCambio = { doc: string; nombre: string; whatsapp?: string | null; email?: string | null }
 export type CruceCambio = { estado: string; motivo?: string }

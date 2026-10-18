@@ -211,7 +211,7 @@ export function CambioCaja() {
   const faltaClienta = pideClienta && !(docLimpio.length >= 7 && clienta.nombre.trim().length >= 3)
 
   const buscarSaldo = () => correr(async () => {
-    const r = await leerSaldo(store, docLimpio)
+    const r = await leerSaldo(store, docLimpio, ficha?.venta.prueba ?? true)
     setSaldo({ doc: docLimpio, monto: r.saldo })
     if (r.cliente && !clienta.nombre.trim()) setClienta((x) => ({ ...x, nombre: r.cliente?.nombre ?? '' }))
     setUsaSaldo(r.saldo > 0)
@@ -252,7 +252,9 @@ export function CambioCaja() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard title={`Cambio · ${NOMBRE_MARCA[store] ?? store}`} subtitle="Buscá la venta por número o cliente, marcá lo que devuelve y escaneá lo que se lleva.">
-        <Notice tone="warning">De prueba hasta que se apague GN: no mueve el stock ni sale a GN. El cambio de verdad se sigue haciendo en GN.</Notice>
+        <Notice tone="warning">{ficha && !ficha.venta.prueba
+          ? 'Esta venta es real: el cambio queda anotado, pero hasta que se apague GN el stock lo lleva GN. Hacé el cambio también en GN.'
+          : 'De prueba hasta que se apague GN: no mueve el stock ni sale a GN. El cambio de verdad se sigue haciendo en GN.'}</Notice>
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="#123, nombre, DNI o mail" />
