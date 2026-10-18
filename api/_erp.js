@@ -13,6 +13,7 @@
  *   POST {recurso:'erp', accion:'cerrar', mes}                      congela el techo del mes
  *   GET  ?recurso=erp&vista=pedidos-tn&marca=…                      los pedidos de TN abiertos y sin pagar (retienen stock)
  *   GET  ?recurso=erp&vista=diferencias&marca=…&fecha=YYYY-MM-DD    lo que el libro ⛔ explicó ese día + la sobreventa
+ *   GET  ?recurso=erp&vista=conciliacion&tienda=bdi|zattia|stunned&fecha=…  lo que ⛔ cierra contra TN y GN ese día (motor sql/024)
  *   GET  ?recurso=erp&vista=stock&marca=bdi|zattia&q=texto            busca prendas (SKU, código, nombre)
  *   GET  ?recurso=erp&vista=precio&marca=…&producto=ID                precio por lista y costo del producto, con GN y TN al lado
  *   POST {recurso:'erp', accion:'cargar-precio'|'cargar-costo', marca, producto, monto, lista?, desde?, motivo?, proveedor?, proveedorId?}
@@ -53,6 +54,7 @@ import { POR_PEDIDO, facturarLote } from '../motor/arca/lote.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
+import { armarConciliacion, TIENDAS as TIENDAS_CONCILIACION } from '../lib/erp/conciliacion.core.js'
 import { NO_SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
@@ -921,6 +923,36 @@ export async function diferenciasDelDia({ marca, fecha: pedida }) {
 }
 
 /**
+ * La conciliación de un día (pestaña `erp › Conciliación`, sólo lectura): `conciliacion_fila` y `conciliacion_dia` de la
+ * tienda (motor sql/024; el último día calculado si ⛔ se pide), los días para elegir, y la cuenta del diff de GN de ese
+ * día (`stock_libro_dia`). Sin la 024 contesta `sinTablas` (⛔ es un error: la pantalla lo dice).
+ */
+export async function conciliacionDelDia({ tienda, fecha: pedida }) {
+  if (!TIENDAS_CONCILIACION.includes(tienda)) return { status: 400, error: 'Tienda inválida' }
+  const f = leerFecha(pedida)
+  if (f.error) return { status: 400, error: f.error }
+  const { url, key } = cfgDeMarca(tienda)
+  const b = createClient(url, key)
+  const dias = await b.from('conciliacion_dia').select('fecha, resumen, calculado_en').eq('tienda', tienda).order('fecha', { ascending: false }).limit(30)
+  if (dias.error) {
+    if (VISTA_FALTA(dias.error, 'conciliacion_dia')) return { sinTablas: true, fecha: null, dias: [], calculadoEn: null, ...armarConciliacion({ tienda, filas: [], resumen: null, nombres: new Map() }) }
+    throw new Error(`conciliacion_dia: ${dias.error.message}`)
+  }
+  const fecha = f.fecha ?? dias.data[0]?.fecha ?? null
+  const dia = dias.data.find((d) => d.fecha === fecha) ?? null
+  const [filas, gn] = await Promise.all([
+    fecha ? leerTodo(b, 'conciliacion_fila', (x) => x.select('tipo, clave, clase, product_id, size_id, sku, numero, tn, libro, reservado, gn, dias, detalle').eq('fecha', fecha).eq('tienda', tienda).order('tipo').order('clave')) : [],
+    fecha ? b.from('stock_libro_dia').select('resumen').eq('fecha', fecha).maybeSingle() : { data: null },
+  ])
+  if (gn.error) throw new Error(`stock_libro_dia: ${gn.error.message}`)
+  const nombres = await nombresDeVariantes(b, filas.filter((r) => r.product_id != null).map((r) => Number(r.product_id)))
+  return {
+    sinTablas: false, fecha, dias: dias.data.map((d) => d.fecha), calculadoEn: dia?.calculado_en ?? null,
+    ...armarConciliacion({ tienda, filas, resumen: dia?.resumen ?? null, nombres, diaGN: gn.data }),
+  }
+}
+
+/**
  * Precio y costo de un PRODUCTO (pestaña `erp › Precios`, sólo lectura): lo vigente por lista y el costo como los tiene
  * el motor (sql/009), su historial, y al lado GN (el espejo `productos`) y Tienda Nube (`tn_variante` por los SKU del
  * producto, con cuándo se leyó: puede estar vieja). Se busca con la misma búsqueda de Stock.
@@ -1141,6 +1173,11 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET' && req.query.vista === 'diferencias') {
       const r = await diferenciasDelDia({ marca: String(req.query.marca || ''), fecha: req.query.fecha })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'conciliacion') {
+      const r = await conciliacionDelDia({ tienda: String(req.query.tienda || ''), fecha: req.query.fecha })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

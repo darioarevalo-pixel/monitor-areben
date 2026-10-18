@@ -19,6 +19,14 @@ negativo, el día cierra (medido: las 13 de BDI del 14-oct están en −1/−4 e
 pg con `DATABASE_URL_<MARCA>` (supabase-js ⛔ agrupa); sin esa variable la pantalla lo dice. 🔴 Los nombres
 salen del espejo PAGINADOS: una fila por talle y depósito pasa las 1000 de Supabase y cortaba callado.
 
+**Conciliación** (18-oct, sólo lectura, paso 7): el ERP contra Tienda Nube, GN y Mercado Libre, por tienda (Zattia,
+Stunned, BDI) y por día: cuánto coincide y lo que ⛔, agrupado por clase con qué mirar. Tres tipos: el **stock de TN**
+(leído EN VIVO a las 13:40) contra el libro MENOS lo reservado y contra GN; los **pedidos** de 7 días contra la venta
+del ERP y la de GN. Lo de GN por depósito sigue en Diferencias (acá sólo su cuenta, por `porLinea`); ML dice «sin
+conexión» hasta su app. Lo escribe el MOTOR (`lib/conciliacion.mjs`, `bin/tn.mjs conciliar`, sql/024: sólo lo que ⛔
+cierra, con los días seguidos); núcleo de la pantalla en `lib/erp/conciliacion.core.js` (`tests/erp-conciliacion.test.ts`).
+🔴 Una clase nueva del motor se nombra en `CLASE`; si ⛔, la pantalla la avisa como desconocida (⛔ la esconde).
+
 **Ventas** (14-oct): buscador y ficha de una venta PROPIA (la que escribe el motor, `motor/venta/`, ⛔ la de
 GN) por número, cliente o fecha: prendas, pagos, factura, estado y sus cambios. Lee `venta` y la vista
 `venta_ficha` (contrato: `~/Documents/erp-monitor/contrato-venta.md`). **Anular** desde la ficha, con motivo

@@ -134,6 +134,24 @@ export type DiferenciasDelDia = {
 export const leerDiferencias = (marca: MarcaErp, fecha: string | null) =>
   pedir<DiferenciasDelDia>(null, `&vista=diferencias&marca=${marca}${fecha ? `&fecha=${fecha}` : ''}&nc=${Date.now()}`, 'No se pudieron leer las diferencias del día.')
 
+export type TiendaErp = 'bdi' | 'zattia' | 'stunned'
+export type FilaConciliacion = {
+  tipo: string; clase: string; clave: string; dias: number
+  producto: string | null; talle: string | null; nombre: string | null; talleNombre: string | null; sku: string | null
+  tn: number | null; erp: number | null; gn: number | null; reservado: number
+  numero: string | null; estado: string | null; medio: string | null; total: number | null; totalErp: number | null; motivo: string | null; link: string | null
+}
+export type ConciliacionDelDia = {
+  sinTablas: boolean; fecha: string | null; dias: string[]; calculadoEn: string | null
+  grupos: Array<{ tipo: string; clase: string; nombre: string; mirar: string; filas: FilaConciliacion[]; deAntes: number }>
+  tarjetas: Array<{ tipo: string; nombre: string; unidad: string; calculado: boolean; total: number | null; cierran?: number | null; aparte?: number; noCierran?: number }>
+  gn: { calculado: boolean; sinExplicar: number | null }
+  enVuelo: number; desconocidas: number; noCierran: number
+}
+
+export const leerConciliacion = (tienda: TiendaErp, fecha: string | null) =>
+  pedir<ConciliacionDelDia>(null, `&vista=conciliacion&tienda=${tienda}${fecha ? `&fecha=${fecha}` : ''}&nc=${Date.now()}`, 'No se pudo leer la conciliación del día.')
+
 export type PedidoSinPagar = {
   tienda: string; tnId: string; numero: number; creadaEn: string; dias: number; pago: string; medio: string | null; gateway: string | null
   total: number; unidades: number; prendas: Array<{ nombre: string | null; sku: string | null; cantidad: number }>; link: string | null
