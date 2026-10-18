@@ -127,22 +127,30 @@ export async function sembrarProveedores(db, { empresa, prm, escribir = false, u
 }
 
 /**
- * Ata cada producto copiado de GN a su proveedor por el TEXTO de GN (`nombre_gn`). Sólo filas `gn` (lo cargado ⛔ se toca).
- * Un texto sin proveedor en la tabla deja `proveedor_id` en null y se cuenta (`sin_ficha`, por nombre): ⛔ se crea solo.
+ * Ata cada producto copiado de GN a su proveedor: con 021, el de su ÚLTIMA OC de Ingresos (`producto_proveedor_oc`; Bruno,
+ * 18-oct: el proveedor nace en Ingresos) y, si ⛔ vino por ninguna, el TEXTO de GN (`nombre_gn`). Sólo filas `gn` (lo
+ * cargado ⛔ se toca). Un texto sin proveedor en la tabla deja `proveedor_id` en null y se cuenta (`sin_ficha`, por
+ * nombre; el producto con OC ⛔ cuenta): ⛔ se crea solo.
  * Lo corre la copia del catálogo; sin 013, no hace nada.
  * @param {import('pg').ClientBase} db  dentro de la transacción de la copia, o suelto
  */
 export async function atarProveedores(db, { escribir = false } = {}) {
   if (!(await hayProveedores(db))) return { hay_tabla: false }
-  const resolver = `select x.empresa_id, x.id, (select p.id from proveedor p where p.empresa_id = x.empresa_id and x.proveedor is not null
-      and lower(trim(p.nombre_gn)) = lower(trim(x.proveedor))) as nuevo from producto x where x.fuente = 'gn'`
+  const [h] = await q(db, `select to_regclass('public.producto_proveedor_oc') is not null as hay`)
+  const deOc = `(select o.proveedor_id from producto_proveedor_oc o where o.empresa_id = x.empresa_id and o.product_id = x.id)`
+  const deGn = `(select p.id from proveedor p where p.empresa_id = x.empresa_id and x.proveedor is not null
+      and lower(trim(p.nombre_gn)) = lower(trim(x.proveedor)))`
+  const resolver = `select x.empresa_id, x.id, ${h.hay ? `coalesce(${deOc}, ${deGn})` : deGn} as nuevo,
+      ${h.hay ? `${deOc} is not null` : 'false'} as por_oc from producto x where x.fuente = 'gn'`
   const [c] = await q(db, `with r as (${resolver}) select
       count(*) filter (where r.nuevo is distinct from x.proveedor_id)::int as a_cambiar,
-      count(*) filter (where r.nuevo is not null)::int as con_ficha
+      count(*) filter (where r.nuevo is not null)::int as con_ficha${h.hay ? `,
+      count(*) filter (where r.por_oc)::int as por_ingresos` : ''}
     from r join producto x using (empresa_id, id)`)
   const sinFicha = await q(db, `select min(trim(x.proveedor)) as nombre, count(*)::int as productos from producto x
     where x.fuente = 'gn' and nullif(trim(x.proveedor), '') is not null and not exists (select 1 from proveedor p where p.empresa_id = x.empresa_id
-      and lower(trim(p.nombre_gn)) = lower(trim(x.proveedor))) group by lower(trim(x.proveedor)) order by 2 desc, 1`)
+      and lower(trim(p.nombre_gn)) = lower(trim(x.proveedor)))${h.hay ? ` and not exists ${deOc.replace('select o.proveedor_id', 'select 1')}` : ''}
+    group by lower(trim(x.proveedor)) order by 2 desc, 1`)
   if (escribir && c.a_cambiar) {
     await db.query(`update producto x set proveedor_id = r.nuevo, actualizado_en = now() from (${resolver}) r
       where r.empresa_id = x.empresa_id and r.id = x.id and r.nuevo is distinct from x.proveedor_id`)
@@ -178,4 +186,105 @@ export async function fichasDeGn(db, { marca, usuario, escribir = false }) {
     else r.quedan.push({ ...fila, motivo: g.error.mensaje })
   }
   return r
+}
+
+/**
+ * Bruno, 18-oct: el proveedor NACE EN INGRESOS (`sql/021-proveedor-ingresos.sql`). Cada OC confirmada trae su proveedor
+ * (id y nombre de Ingresos) y sus renglones con SKU; el SKU que es el de una variante del catálogo ata ESE producto al
+ * proveedor de la ÚLTIMA OC que lo trajo (`producto_proveedor_oc`; `fecha` = el DÍA AAAA-MM-DD, el empate lo gana la de id mayor), y `atarProveedores` lo pone antes que el texto de GN.
+ *
+ * - La ficha se busca por `ingresos_id`. Si ⛔ hay: una con el mismo nombre y sin `ingresos_id` se ADOPTA; si no, se crea
+ *   (`fuente = 'ingresos'`). Una con el mismo nombre y OTRO `ingresos_id` choca: ⛔ se toca y sus productos ⛔ se atan.
+ * - Un nombre que cambió en Ingresos: se sigue en las fichas `ingresos`; en las de PRM o cargadas, se cuenta (`nombre_distinto`).
+ * - 🔑 SIN `escribir` corre LO MISMO dentro de una transacción y la deshace: el seco cuenta exactamente lo que escribiría.
+ *
+ * @param {import('pg').ClientBase} db  la base del catálogo (sin transacción abierta)
+ * @param {{ marca: string, ocs: Array<{ oc_id: number, oc_label?: string, fecha: string, proveedor_id: number|string, proveedor_nombre: string, skus: string[] }>, escribir?: boolean, usuario?: string }} o
+ */
+export async function proveedoresDeIngresos(db, { marca, ocs, escribir = false, usuario = 'ingresos' }) {
+  if (!(await hayProveedores(db))) return { ok: true, hay_tabla: false }
+  const [h] = await q(db, `select to_regclass('public.producto_proveedor_oc') is not null as hay`)
+  if (!h.hay) return falla('FALTA_MIGRACION', 'Falta `sql/021-proveedor-ingresos.sql` en esta base')
+  const empresa = await empresaDe(db, marca)
+  if (!empresa) return falla('MARCA_DESCONOCIDA', `Marca desconocida: ${marca}`, 'marca')
+  // La más nueva primero (empate: la de id mayor): el primer proveedor que ve un producto es el que queda.
+  const orden = ocs.filter((o) => o.proveedor_id != null && texto(o.proveedor_nombre))
+    .map((o) => ({ ...o, ing: String(o.proveedor_id), dia: String(o.fecha).slice(0, 10) }))
+    .sort((a, b) => b.dia.localeCompare(a.dia) || b.oc_id - a.oc_id)
+  const r = { ok: true, hay_tabla: true, ocs: orden.length, fichas_nuevas: [], fichas_adoptadas: [], fichas_renombradas: [], nombre_distinto: [],
+    ficha_choca: [], skus: 0, skus_sin_producto: [], productos: 0, productos_cambian: 0, productos_con_dos: 0 }
+  await db.query('begin')
+  try {
+    await db.query(`select pg_advisory_xact_lock(hashtext('proveedores-ingresos'))`)
+    // 1. Una ficha por proveedor de Ingresos (el nombre, el de su OC más nueva).
+    const ficha = new Map()
+    for (const o of orden) {
+      if (ficha.has(o.ing) || r.ficha_choca.some((x) => x.ingresos_id === o.ing)) continue
+      const nombre = texto(o.proveedor_nombre)
+      const [ya] = await q(db, 'select id, nombre, fuente from proveedor where empresa_id = $1 and ingresos_id = $2', [empresa, o.ing])
+      if (ya) {
+        ficha.set(o.ing, ya.id)
+        if (ya.nombre.trim().toLowerCase() === nombre.toLowerCase()) continue
+        const [otro] = await q(db, 'select 1 from proveedor where empresa_id = $1 and lower(trim(nombre)) = lower($2) and id <> $3', [empresa, nombre, ya.id])
+        if (ya.fuente === 'ingresos' && !otro) {
+          await db.query('update proveedor set nombre = $3, actualizado_en = now() where empresa_id = $1 and id = $2', [empresa, ya.id, nombre])
+          r.fichas_renombradas.push({ antes: ya.nombre, ahora: nombre })
+        } else r.nombre_distinto.push({ ficha: ya.nombre, ingresos: nombre })
+        continue
+      }
+      const [mismo] = await q(db, 'select id, nombre, ingresos_id from proveedor where empresa_id = $1 and lower(trim(nombre)) = lower($2)', [empresa, nombre])
+      if (mismo && mismo.ingresos_id == null) {
+        await db.query('update proveedor set ingresos_id = $3, actualizado_en = now() where empresa_id = $1 and id = $2', [empresa, mismo.id, o.ing])
+        ficha.set(o.ing, mismo.id)
+        r.fichas_adoptadas.push(mismo.nombre)
+      } else if (mismo) {
+        r.ficha_choca.push({ ingresos_id: o.ing, nombre, motivo: `«${mismo.nombre}» ya es el ${mismo.ingresos_id} de Ingresos` })
+      } else {
+        const [n] = await q(db, `insert into proveedor (empresa_id, nombre, ingresos_id, fuente, usuario) values ($1, $2, $3, 'ingresos', $4) returning id`,
+          [empresa, nombre, o.ing, usuario])
+        ficha.set(o.ing, n.id)
+        r.fichas_nuevas.push(nombre)
+      }
+    }
+    // 2. SKU del renglón ⇒ producto (por la variante del catálogo, sin mayúsculas ni espacios).
+    const skus = [...new Set(orden.flatMap((o) => (o.skus ?? []).map((s) => texto(s)?.toUpperCase()).filter(Boolean)))]
+    r.skus = skus.length
+    const vars = await q(db, `select distinct on (upper(trim(sku))) upper(trim(sku)) as sku, product_id from variante
+      where empresa_id = $1 and upper(trim(sku)) = any($2::text[]) order by upper(trim(sku)), product_id`, [empresa, skus])
+    const prodDe = new Map(vars.map((v) => [v.sku, String(v.product_id)]))
+    r.skus_sin_producto = skus.filter((s) => !prodDe.has(s)).sort()
+    const queda = new Map()
+    const vistos = new Map()
+    for (const o of orden) {
+      for (const s of new Set((o.skus ?? []).map((x) => texto(x)?.toUpperCase()).filter(Boolean))) {
+        const pid = prodDe.get(s)
+        if (!pid) continue
+        if (!vistos.has(pid)) vistos.set(pid, new Set())
+        vistos.get(pid).add(o.ing)
+        if (!queda.has(pid) && ficha.has(o.ing)) queda.set(pid, { o, sku: s })
+      }
+    }
+    r.productos_con_dos = [...vistos.values()].filter((v) => v.size > 1).length
+    r.productos = queda.size
+    // 3. Lo que cambió (otro proveedor u otra OC) se escribe; lo igual ⛔ se toca.
+    const antes = new Map((await q(db, 'select product_id, proveedor_id, oc_id from producto_proveedor_oc where empresa_id = $1', [empresa]))
+      .map((a) => [String(a.product_id), a]))
+    for (const [pid, { o, sku }] of queda) {
+      const a = antes.get(pid)
+      const prov = ficha.get(o.ing)
+      if (a && String(a.proveedor_id) === String(prov) && Number(a.oc_id) === Number(o.oc_id)) continue
+      r.productos_cambian++
+      await db.query(`insert into producto_proveedor_oc (empresa_id, product_id, proveedor_id, oc_id, oc_label, oc_fecha, sku) values ($1, $2, $3, $4, $5, $6, $7)
+        on conflict (empresa_id, product_id) do update set proveedor_id = excluded.proveedor_id, oc_id = excluded.oc_id, oc_label = excluded.oc_label,
+          oc_fecha = excluded.oc_fecha, sku = excluded.sku, actualizado_en = now()`,
+        [empresa, pid, prov, o.oc_id, texto(o.oc_label), o.dia, sku])
+    }
+    // 4. Atar: lo de Ingresos antes que el texto de GN.
+    r.atar = await atarProveedores(db, { escribir: true })
+    await db.query(escribir ? 'commit' : 'rollback')
+  } catch (e) {
+    await db.query('rollback').catch(() => {})
+    throw e
+  }
+  return { ...r, escribio: escribir }
 }

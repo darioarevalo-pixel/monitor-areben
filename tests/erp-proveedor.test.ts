@@ -25,6 +25,25 @@ describe('armarPrecioDeProducto: proveedor', () => {
   })
 })
 
+describe('armarPrecioDeProducto: el proveedor DEL PRODUCTO (Bruno, 18-oct: nace en Ingresos, motor 021)', () => {
+  const base = { listas: [], vigentes: [], costo: null }
+  it('con OC: de Ingresos, con la OC', () => {
+    expect(armarPrecioDeProducto({ ...base, proveedorProducto: { id: '7', nombre: 'KHAN', oc: { label: 'OC-3034', fecha: '2026-10-07' } } }).proveedor)
+      .toEqual({ id: '7', nombre: 'KHAN', origen: 'ingresos', oc: { label: 'OC-3034', fecha: '2026-10-07' } })
+  })
+  it('sin OC: el de GN', () => {
+    expect(armarPrecioDeProducto({ ...base, proveedorProducto: { id: '7', nombre: 'KHAN', oc: null } }).proveedor).toMatchObject({ origen: 'gn', oc: null })
+  })
+  it('sin proveedor: null (la pantalla dice que todavía ⛔ entró por ninguna OC)', () => {
+    expect(armarPrecioDeProducto(base).proveedor).toBeNull()
+  })
+  it('es OTRO que el del costo: el costo de GN sigue con su texto', () => {
+    const r = armarPrecioDeProducto({ ...base, costo: { costo: '100', proveedor: 'Boucle', fuente: 'gn', vigente_desde: '2026-10-15T00:00:00Z', usuario: 'gn-copia' },
+      proveedorProducto: { id: '25', nombre: 'ZATTIA', oc: { label: 'OC-1', fecha: '2026-10-01' } } })
+    expect([r.costo?.proveedor, r.proveedor?.nombre]).toEqual(['Boucle', 'ZATTIA'])
+  })
+})
+
 describe('proveedores sin la tabla (base sin sql/013)', () => {
   const sinTabla = { query: async () => ({ rows: [{ hay: false }] }) }
   it('lista y alta contestan 409 con el aviso (la pantalla deja el texto)', async () => {

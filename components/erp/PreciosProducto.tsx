@@ -115,6 +115,8 @@ export function PreciosProducto() {
     if (proveedores == null) void cargarProveedores()
     const f = await leerPrecioDeProducto(marca, producto)
     setFicha(f)
+    // El costo que se carga a mano viene, de entrada, con el proveedor del producto (el de Ingresos).
+    setProveedorId(f.proveedor?.id ?? '')
     setTnVieja(f.tnLeidaEn ? Date.now() - Date.parse(f.tnLeidaEn) > VIEJA_MS : false)
   }, 'No se pudo leer el precio.')
 
@@ -271,6 +273,13 @@ export function PreciosProducto() {
                 </TBody>
               </table>
             </TableWrap>
+            <p style={{ marginTop: space[2] }}>
+              {ficha.proveedor
+                ? <>Proveedor: <strong>{ficha.proveedor.nombre}</strong>{ficha.proveedor.oc
+                  ? ` · de Ingresos, ${ficha.proveedor.oc.label ?? 'orden de compra'} del ${ficha.proveedor.oc.fecha.slice(8, 10)}/${ficha.proveedor.oc.fecha.slice(5, 7)}`
+                  : ' · de Gestión Nube (todavía no entró por ninguna orden de compra de Ingresos)'}</>
+                : 'Sin proveedor: todavía no entró por ninguna orden de compra de Ingresos.'}
+            </p>
             <p style={{ marginTop: space[2], fontSize: 13, opacity: 0.75 }}>
               Tienda Nube: lo que se leyó el {cuando(ficha.tnLeidaEn)}{tnVieja && ' (hace más de un día: puede haber cambiado)'}.
             </p>

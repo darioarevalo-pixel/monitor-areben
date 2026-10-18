@@ -86,6 +86,8 @@ export type PrecioDeProducto = {
   /** El precio de su campaña de Liquidación si la prenda es de feria: lo que cobra el local (⛔ el de la lista). */
   feria: number | null
   costo: { costo: number | null; proveedor: string | null; proveedorId: string | null; fuente: string; desde: string; usuario: string; motivo: string | null } | null
+  /** El proveedor del PRODUCTO: el de su última OC de Ingresos o, si ⛔ entró por ninguna, el texto de GN. */
+  proveedor: { id: string; nombre: string; origen: 'ingresos' | 'gn'; oc: { label: string | null; /** AAAA-MM-DD */ fecha: string } | null } | null
   gn: { precio: number | null; mayorista: number | null; costo: number | null } | null
   tn: { tienda: string; variantes: number; precio: number | null; promocional: number | null; cobra: number | null; costo: number | null; distintos: boolean } | null
   avisos: string[]

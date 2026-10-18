@@ -961,6 +961,24 @@ export async function precioDeProducto({ marca, producto }) {
     if (pf.error) throw new Error(`proveedor: ${pf.error.message}`)
     proveedorFicha = pf.data ? { id: String(pf.data.id), nombre: pf.data.nombre } : null
   }
+  // El proveedor DEL PRODUCTO (motor sql/013 + 021; Bruno, 18-oct: nace en Ingresos) y la OC que lo dio. Sin 013/021 la tabla
+  // ⛔ existe ⇒ sin proveedor / sin OC; 🔴 cualquier OTRO error se dice.
+  let proveedorProducto = null
+  if (!cpv.error) {
+    const px = await b.from('producto').select('proveedor_id').eq('id', producto).maybeSingle()
+    if (px.error && !VISTA_FALTA(px.error, 'producto')) throw new Error(`producto: ${px.error.message}`)
+    const pid = px.error ? null : px.data?.proveedor_id ?? null
+    if (pid != null) {
+      const [pf, oc] = await Promise.all([
+        b.from('proveedor').select('id, nombre').eq('id', pid).maybeSingle(),
+        b.from('producto_proveedor_oc').select('oc_label, oc_fecha').eq('product_id', producto).eq('proveedor_id', pid).maybeSingle(),
+      ])
+      if (pf.error) throw new Error(`proveedor: ${pf.error.message}`)
+      if (oc.error && !VISTA_FALTA(oc.error, 'producto_proveedor_oc')) throw new Error(`producto_proveedor_oc: ${oc.error.message}`)
+      const deOc = oc.error ? null : oc.data
+      if (pf.data) proveedorProducto = { id: String(pf.data.id), nombre: pf.data.nombre, oc: deOc ? { label: deOc.oc_label ?? null, fecha: deOc.oc_fecha } : null }
+    }
+  }
   // TN por SKU (como lo guardó TN y en mayúsculas, sin espacios) y por código de barras: como cruza la copia del motor.
   const claves = [...new Set(skus.flatMap((s) => [s, s.trim().toUpperCase()]))]
   const barras = [...new Set((inv.data || []).map((x) => x.barcode).filter(Boolean))]
@@ -985,7 +1003,7 @@ export async function precioDeProducto({ marca, producto }) {
   }
   const armado = armarPrecioDeProducto({
     listas: listas.data, vigentes: vigentes.data, efectivos: efectivos.error ? null : efectivos.data, costo: costo.data[0] ?? null,
-    historialPrecio: hPrecio.data, historialCosto: hCosto.data, gn: gn.data, tn, proveedorFicha, feria,
+    historialPrecio: hPrecio.data, historialCosto: hCosto.data, gn: gn.data, tn, proveedorFicha, proveedorProducto, feria,
   })
   if (sinFeria) armado.avisos.push(sinFeria)
   return {

@@ -37,6 +37,9 @@ y el «Pendiente de facturar» del dashboard de Darío.
   «Cargar en el ERP» = `cargarPrecio`/`cargarCosto` del motor (contrato §13): fila `carga` que manda sobre las copias, pero
   🔴 mientras GN vive ⛔ cambia la Caja ni TN. La `marca` del motor es la LÍNEA (`lineaDe`: un SKU `STU…` es `stunned`).
   El monto pasa por `parsearMonto` (el de compromisos: el punto decimal de `String(n)` ⛔ se lee como miles).
+  🔑 **El proveedor NACE EN INGRESOS** (Bruno, 18-oct; motor sql/021): la ficha muestra el proveedor DEL PRODUCTO
+  (`producto.proveedor_id`, ⛔ el del costo) y la OC que lo dio (`producto_proveedor_oc`); lo ata el motor en `traer`
+  por el SKU del renglón de la OC. «Crear proveedor» queda para la excepción. El costo cargado a mano viene con ese proveedor elegido.
 
 - 🔑 **`erp › Reglas`** (`ReglasComerciales.tsx`, 16-oct; ❓ 15 de `~/Documents/erp-monitor/reglas-comerciales.md`): las reglas por
   forma de pago como FILAS (`regla_comercial`, motor sql/016), cargar / editar / apagar, y un SIMULADOR que cobra una venta con
