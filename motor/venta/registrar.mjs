@@ -32,14 +32,9 @@ async function enTransaccion(db, fn) {
 export async function leerConf(db, marca) {
   const marcas = await q(db, `select m.id, m.empresa_id, coalesce(array_agg(d.id) filter (where d.vende), '{}') as depositos
     from marca m left join deposito d on d.marca = m.id where m.id = $1 group by m.id, m.empresa_id`, [marca])
-  const cuentas = await q(db, 'select id, marca, gn_cuenta_id, activa, medio, nombre from cuenta_cobro where marca = $1', [marca])
+  const cuentas = await q(db, 'select id, marca, gn_cuenta_id, activa, medio from cuenta_cobro where marca = $1', [marca])
   const canales = (await q(db, 'select id from canal')).map((c) => c.id)
-  // Las rutas de gerencia y las cuentas reales (sql/019-020). Una base sin la 020 ⇒ los cobros quedan sin cuenta real.
-  const [{ hay }] = await q(db, `select exists (select 1 from information_schema.columns
-    where table_schema = current_schema() and table_name = 'ruta_cobro' and column_name = 'dias_acreditacion') as hay`)
-  const rutas = hay ? await q(db, 'select marca, canal, medio, cuenta_real_id, tasa, dias_acreditacion, desde from ruta_cobro where marca = $1', [marca]) : []
-  const cuentasReales = hay ? await q(db, 'select id, activa from cuenta_real') : []
-  return { marcas: Object.fromEntries(marcas.map((m) => [m.id, { empresa_id: m.empresa_id, depositos: m.depositos }])), cuentas, canales, rutas, cuentasReales }
+  return { marcas: Object.fromEntries(marcas.map((m) => [m.id, { empresa_id: m.empresa_id, depositos: m.depositos }])), cuentas, canales }
 }
 
 /** La venta que ya entró con esa clave, para devolverla igual (idempotencia). */
