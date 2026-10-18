@@ -934,6 +934,13 @@ Que las reuniones lleven sector es **carga** (cambiarles el destino a «roles» 
 
 ## Pendiente
 
+- ⏸️ **LOS INGRESOS ESTÁN EN PAUSA desde el 18-oct-2026** (Darío). El webhook de OC ya no abre la
+  pregunta de la puerta, y sin ella no se siembra nada (`abrirPreguntaDePuerta`, `api/_oc-webhook.js`).
+  Se vuelve a prender con `AGENDA_PREGUNTA_INGRESO=1` en Vercel. Ese día se cerraron las 265 tareas
+  de ingresos y sesiones abiertas (nota «Cerrado por limpieza» / «ingresos en pausa»): **nadie
+  tildaba los diez renglones por orden**. ⚠️ Antes de prenderlo hay que rediseñarlo, no sólo
+  prenderlo. El alta a mano «Ingresó mercadería» en Eventos sigue andando.
+
 - ▶️ **El `info` de `lib/nav.datos.ts` la describe como si fuera sólo de promociones bancarias** y
   no nombra los pendientes rutinarios, que es la mitad de la sección. Es una descripción, no una
   regla: se corrige el texto.

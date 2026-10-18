@@ -266,6 +266,16 @@ describe('lo que no es para nosotros', () => {
  * seguía contestando 200 con la OC guardada**: verde por todos lados y ni una pregunta abierta.
  */
 describe('la pregunta de la puerta', () => {
+  beforeEach(() => { vi.stubEnv('AGENDA_PREGUNTA_INGRESO', '1') })
+
+  it('⏸️ sin AGENDA_PREGUNTA_INGRESO=1 está en pausa: no abre nada, y lo dice', async () => {
+    vi.stubEnv('AGENDA_PREGUNTA_INGRESO', '')
+    const res = await llamar(conConfirmada(new Date().toISOString()))
+    expect(res.code).toBe(200)
+    expect(enAgenda()).toEqual([])
+    expect(String(res.body?.agenda)).toContain('en pausa')
+  })
+
   const enAgenda = () => escrituras.filter((e) => e.tabla === 'agenda_items')
 
   /** El mismo evento, con la hora de confirmación puesta: es de ahí que cuelga la pregunta. */

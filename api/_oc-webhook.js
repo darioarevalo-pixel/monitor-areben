@@ -89,8 +89,14 @@ async function cruzarConElEspejo(store, lineas) {
  * ⚠️ **Pero lo que pasó se DICE** —viaja en la respuesta del webhook— y ⛔ no se calla: «no se abrió
  * ninguna pregunta» sin motivo se lee como que el disparador está roto, y es lo que mantiene mudo
  * seis días a un módulo que anda.
+ *
+ * ⏸️ **EN PAUSA desde el 18-oct-2026** (Darío: «lo de ingresos, por el momento hay que apagarlo y
+ * verlo nuevamente»). Diez renglones por orden no los tildaba nadie y se habían juntado 265. Sin la
+ * pregunta no se siembra nada, así que apagar la entrada apaga el disparador entero; los moldes
+ * quedan cargados. Se vuelve a prender con `AGENDA_PREGUNTA_INGRESO=1` en Vercel.
  */
 async function abrirPreguntaDePuerta(sb, oc) {
+  if (process.env.AGENDA_PREGUNTA_INGRESO !== '1') return 'sin pregunta: los ingresos de la Agenda están en pausa'
   try {
     // Lo que ya se preguntó y cuántas van hoy, de una sola lectura. ⚠️ El filtro `not.is null` sobre
     // la clave de `datos` lo tiene que resolver LA BASE: un `select *` y un filtro acá traería la
