@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { armarConciliacion } from '@/lib/erp/conciliacion.core.js'
+import type { ConciliacionDelDia } from '@/lib/erp/cliente'
 
 /**
  * **ERP › Conciliación, del lado de la pantalla** (18-oct). El oráculo es lo que se LEE: cuánto coincide sale del resumen
@@ -18,10 +19,10 @@ const filas = [
   { tipo: 'stock_tn', clave: 'tn:77', clase: 'sin_variante', product_id: null, size_id: null, sku: 'XX-1', tn: 4, libro: null, reservado: null, gn: null, dias: 1, detalle: {} },
   { tipo: 'pedido_gn', clave: '#7331', clase: 'cancelada_con_venta', numero: '7331', dias: 1, detalle: { tn_id: 99, status: 'cancelled', payment_status: 'voided', gateway: 'mercadopago', total: 1500 } },
 ]
-const conDatos = (o = {}) => ({ sinTablas: false, fecha: '2026-10-18', dias: ['2026-10-18', '2026-10-17'], calculadoEn: '2026-10-18T16:41:00Z',
+const conDatos = (o = {}): ConciliacionDelDia => ({ sinTablas: false, fecha: '2026-10-18', dias: ['2026-10-18', '2026-10-17'], calculadoEn: '2026-10-18T16:41:00Z',
   ...armarConciliacion({ tienda: 'zattia', filas, resumen, nombres: new Map([['1/10', { nombre: 'Remera Lisa', talle: 'M' }]]), diaGN: { resumen: { porLinea: { zattia: { inexplicadas: 3 } } } } }), ...o })
 
-const leerConciliacion = vi.fn(async (..._a: unknown[]) => conDatos())
+const leerConciliacion = vi.fn(async (..._a: unknown[]): Promise<ConciliacionDelDia> => conDatos())
 vi.mock('@/lib/erp/cliente', () => ({ leerConciliacion: (...a: unknown[]) => leerConciliacion(...a) }))
 
 let root: Root | null = null
