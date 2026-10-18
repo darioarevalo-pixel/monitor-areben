@@ -73,14 +73,13 @@ const ORACULO = [
 const totalSegunGN = (p: ReturnType<typeof armarVentaGN>) =>
   p.items.reduce((s, it) => s + it.quantity * it.unit_price - it.discount, 0) - p.discount_amount
 
-/** Lo que GN acepta: descuentos ≥ 0, a centavos, y ⛔ más que el precio. */
+/** Lo que GN acepta y cómo lo deja su POS: renglones sin descuento, el descuento ≥ 0 a nivel venta, a centavos. */
 const esEscribible = (p: ReturnType<typeof armarVentaGN>) => {
-  expect(p.discount_amount).toBe(0)
+  expect(p.discount_amount).toBeGreaterThanOrEqual(0)
+  expect(Math.round(p.discount_amount * 100) / 100).toBe(p.discount_amount)
   for (const it of p.items) {
     expect(it.quantity).toBe(1)
-    expect(it.discount).toBeGreaterThanOrEqual(0)
-    expect(it.discount).toBeLessThanOrEqual(it.unit_price)
-    expect(Math.round(it.discount * 100) / 100).toBe(it.discount)
+    expect(it.discount).toBe(0)
   }
 }
 
@@ -99,7 +98,7 @@ describe('caja · contra ventas reales del POS de GN', () => {
       // Lo que GN calcula del lado suyo = lo cobrado ⇒ deuda 0. Y el descuento repartido = el de la venta.
       esEscribible(p)
       expect(totalSegunGN(p)).toBeCloseTo(o.total, 6)
-      expect(p.items.reduce((s, it) => s + it.discount, 0)).toBeCloseTo(p.items.reduce((s, it) => s + it.unit_price, 0) - o.total, 6)
+      expect(p.discount_amount).toBeCloseTo(p.items.reduce((s, it) => s + it.unit_price, 0) - o.total, 6)
     })
   }
 })
@@ -207,7 +206,7 @@ describe('caja · varios pagos', () => {
     const p = armarVentaGN({ filas, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-03' })
     expect(p.payments.map(x => [x.account_id, x.amount])).toEqual([[EFECTIVO, 8500], [DEBITO, 18000]])
     esEscribible(p)
-    expect(p.items[0].discount).toBe(3500)
+    expect(p.discount_amount).toBe(3500)
   })
 
   it('las bases tienen que cerrar con el subtotal', () => {
@@ -236,12 +235,12 @@ describe('caja · payload de GN', () => {
     expect(p).toMatchObject({
       client_id: 137131, channel_id: 3, sale_type_id: 1, sale_state_id: 6, currency_id: 1,
       store_id: 11780, date_sale: '2026-10-03', discount_inventory: true,
-      integration_source: 'monitor-caja', integration_id: 'caja-abc', discount_amount: 0,
+      integration_source: 'monitor-caja', integration_id: 'caja-abc', discount_amount: 3790,
     })
     // ⛔ price_list_id: GN lo ignora (#30046) y el precio es el `unit_price` de la caja.
     expect(p).not.toHaveProperty('price_list_id')
-    // $25.490 en efectivo ⇒ $21.700 (#30021): el descuento entero, en PESOS, en el renglón.
-    expect(p.items).toEqual([{ product_id: 1106847, size_id: 229042, quantity: 1, unit_price: 25490, discount: 3790, store_id: 11780 }])
+    // $25.490 en efectivo ⇒ $21.700 (#30021): el renglón a su precio y el descuento entero, en PESOS, en la venta.
+    expect(p.items).toEqual([{ product_id: 1106847, size_id: 229042, quantity: 1, unit_price: 25490, discount: 0, store_id: 11780 }])
   })
 
   it('cantidad 2 ⇒ dos renglones de 1 (cómo toma GN pesos × cantidad ⛔ está medido)', () => {
@@ -253,12 +252,15 @@ describe('caja · payload de GN', () => {
     expect(totalSegunGN(p)).toBeCloseTo(c.total, 6)
   })
 
-  it('la prenda REBAJADA lleva su rebaja: el descuento se reparte por lo que vale cada una después', () => {
+  it('la rebaja por prenda también va a nivel venta: cada renglón a SU precio (Bruno, 17-oct)', () => {
     // $10.000 con 50 % de rebaja + $10.000 sin rebaja, Feria Transferencia (0 %) ⇒ $15.000 justos.
+    // Repartido por renglón, GN lo mostraba como % y con oferta + comunes le ponía descuento a la oferta (#30656).
     const f = renglones([prenda(10000, 1, 50), prenda(10000)])
     const c = cobro({ filas: f, pagos: [{ cuenta: FERIA_TRANSFERENCIA }], reglas: REGLAS_INICIALES, descuentoVenta: null })
     const p = armarVentaGN({ filas: f, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-03' })
-    expect(p.items.map(it => it.discount)).toEqual([5000, 0])
+    expect(p.items.map(it => [it.unit_price, it.discount])).toEqual([[10000, 0], [10000, 0]])
+    expect(p.discount_amount).toBe(5000)
+    expect(totalSegunGN(p)).toBeCloseTo(15000, 6)
   })
 
   it('redondeo que SUBE con renglones mixtos: ninguno queda con descuento negativo', () => {
@@ -363,14 +365,13 @@ describe('caja · descuentos a mano', () => {
     expect(c.pagos.reduce((s, p) => s + p.rebaja, 0)).toBeCloseTo(1000, 6)
   })
 
-  it('a GN va todo en pesos por renglón y la prenda rebajada lleva más descuento; Σ = pagos', () => {
+  it('a GN va todo en pesos a nivel venta, con los renglones a su precio; Σ = pagos', () => {
     const filas = renglones([item(10000, { tipo: 'pct', valor: 50 }), item(10000)])
     const c = cobro({ filas, pagos: [{ cuenta: 25188 }], reglas: R, descuentoVenta: { tipo: 'pct', valor: 10 } })
     expect(c.total).toBe(13500)
     const v = armarVentaGN({ filas, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-04' })
-    const neto = v.items.map((i: { unit_price: number; discount: number }) => i.unit_price - i.discount)
-    expect(neto.reduce((s: number, x: number) => s + x, 0)).toBe(13500)
-    expect(neto[0]).toBeLessThan(neto[1])
+    expect(v.items.map((i: { unit_price: number; discount: number }) => [i.unit_price, i.discount])).toEqual([[10000, 0], [10000, 0]])
+    expect(v.discount_amount).toBe(6500)
   })
 
   it('topes: ⛔ negativo, ⛔ más que el importe, ⛔ dos descuentos en la misma prenda, y null es obligatorio', () => {

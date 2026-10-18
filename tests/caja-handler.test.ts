@@ -314,8 +314,9 @@ describe('caja · formas de pago y descuentos a mano (Bruno, 4-oct)', () => {
     expect(gn.posts).toHaveLength(0)
     const r = await correr(req('POST', {}, { ...VENTA, items, total: 6100, pagaCon: 6100, descuentoVenta: { tipo: 'pct', valor: 10 } }))
     expect(r.code).toBe(200)
-    const p = gn.posts[0] as { items: Fila[]; payments: Fila[] }
-    expect(p.items[0]).toMatchObject({ unit_price: 10000, discount: 3900 })
+    const p = gn.posts[0] as { items: Fila[]; payments: Fila[]; discount_amount: number }
+    expect(p.items[0]).toMatchObject({ unit_price: 10000, discount: 0 })
+    expect(p.discount_amount).toBe(3900)
     expect(base.ventas.get(ID)).toMatchObject({ subtotal: 8000, total: 6100 })
     expect((base.ventas.get(ID)!.pagos as Fila[])[0]).toMatchObject({ rebaja: 800, descuento: 1080 })
   })
@@ -444,9 +445,10 @@ describe('caja · promos (W5)', () => {
     expect(gn.posts).toHaveLength(0)
     const r = await correr(req('POST', {}, { ...VENTA, total: 17300, pagaCon: 17300 }))
     expect(r.code).toBe(200)
-    const p = gn.posts[0] as { items: Fila[]; payments: Fila[] }
+    const p = gn.posts[0] as { items: Fila[]; payments: Fila[]; discount_amount: number }
     expect(p.payments).toEqual([expect.objectContaining({ amount: 17300, account_id: 12921 })])
-    expect(p.items).toEqual([expect.objectContaining({ unit_price: 25490, discount: 8190 })])
+    expect(p.items).toEqual([expect.objectContaining({ unit_price: 25490, discount: 0 })])
+    expect(p.discount_amount).toBe(8190)
     expect((base.ventas.get(ID) as { renglones: Fila[] }).renglones[0]).toMatchObject({ promos: ['20% corset'], rebaja: 5098 })
   })
 
@@ -470,8 +472,8 @@ describe('caja · confirmar', () => {
     expect(gn.posts).toHaveLength(1)
     const p = gn.posts[0] as { items: Fila[]; payments: Fila[]; integration_id: string; discount_amount: number }
     expect(p.integration_id).toBe(ID)
-    expect(p.items[0]).toMatchObject({ unit_price: 25490, discount: 3790, quantity: 1 })
-    expect(p.discount_amount).toBe(0)
+    expect(p.items[0]).toMatchObject({ unit_price: 25490, discount: 0, quantity: 1 })
+    expect(p.discount_amount).toBe(3790)
     expect(p.payments).toEqual([expect.objectContaining({ amount: 21700, account_id: 12921 })])
     const fila = base.ventas.get(ID)!
     expect(fila).toMatchObject({ estado: 'en_gn', gn_sale_id: 1600001, gn_number: 30100, total: 21700, paga_con: 22000, usuario: 'cajera', intentos: 1 })
