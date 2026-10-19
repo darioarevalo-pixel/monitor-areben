@@ -16,11 +16,19 @@ Clientes todavía vacía. El contenido va adentro de `.shell-content` A PROPÓSI
 botones crudos y `select`). Tests: `tests/erp-navegacion*.test.ts*`. El registro (`registro.ts`) conserva `erp` sólo
 porque el test de registro lo exige: el shell ya ⛔ lo monta.
 
-**Stock** (14-oct, sólo lectura): busca una prenda por SKU, código o nombre y muestra lo que dice el
-**libro de stock** (`stock_movimiento`, lo escribe `areben-libro-stock` una vez por día) por depósito al
-lado de GN (`inventario`), y cada movimiento con el saldo después. GN ⛔ tiene historial: ésta lo
-reemplaza. Núcleo puro en `lib/erp/stock.core.js` (`tests/erp-stock.test.ts`). 🔴 El libro es
-inmutable: el nivel es la SUMA de los movimientos; la pantalla ⛔ escribe nada.
+**Stock** (14-oct, sólo lectura; 🎨 **19-oct, Diseño: rehecha con el molde de Ventas**): UNA lista con cada prenda
+(variante) y lo que hay por depósito, vistas con número (Con stock · Sin stock en el Local · Negativos · Con pedidos ·
+Todo), resumen ARRIBA, buscador (nombre, SKU, código entero), columnas por usuario (`erp-stock-<marca>`) y la ficha AL
+COSTADO (por depósito ERP contra GN + historial con lo que quedó). 🔑 Palabras del diseño: **en estantería** = el
+**libro de stock** (`stock_movimiento`, la SUMA: es inmutable) · **en pedidos** = lo que apartan los pedidos de TN SIN
+PAGAR (cruce por SKU con `inventario`; el libro ⛔ los descontó) · **disponible** = estantería − pedidos, el número que
+manda. 🔴 La reserva del motor (`reservasTN`) además VENCE a las 72 h; mientras GN viva eso es seco ⇒ acá cuentan todos
+los sin pagar abiertos. El libro se suma POR PG (`conMotor`; sin la conexión, 409 dicho en pantalla) en `api/_erp-stock.js`
+(`vista=stock-lista`); núcleo `lib/erp/stock-lista.core.js` (`tests/erp-stock-lista.test.ts`, pantalla en
+`tests/erp-stock-pantalla.test.tsx`). Se dibujan de a 300 filas (la lista ⛔ es virtual). «Ajustar» (fila y ficha) lleva
+la prenda a «Nuevo ajuste» de Conteos y ajustes (`AjustesStock` › `pedida`); transferir y etiquetas, al monitor (↗).
+La ficha sigue leyendo `vista=stock&producto=…` (núcleo `lib/erp/stock.core.js`, `tests/erp-stock.test.ts`). La cuenta
+de las columnas elegidas es una sola para todas las listas: `lib/erp/lista-columnas.core.js`.
 
 **Diferencias del día** (14-oct, sólo lectura): lo que el libro ⛔ pudo explicar al comparar su día con
 el de GN (`stock_diff`), agrupado por clase con qué mirar, y la **sobreventa**: las prendas que el libro
@@ -64,7 +72,7 @@ el servidor) · servidor `api/_erp-ventas.js` (`vista=ventas-lista`, `vista=vent
 · pantalla en `tests/erp-ventas-pantalla.test.tsx`. Las piezas nuevas son del kit (`components/ui/ListaTrabajo`,
 `PanelColumnas`, `FichaCostado` con `Historial`, `DatoFicha`, `BarraSeleccion` y `AccionSeleccion`, y `PiezasLista`: `TileResumen`,
 `VistasLista`, `BuscadorLista`, `InterruptorDensidad`, `ChipEstado`, `cuandoCorto`): Stock, Clientes y Productos salen con el
-mismo molde. ⛔ se copian en la pantalla nueva (Ajustes ya las usa).
+mismo molde. ⛔ se copian en la pantalla nueva (Ajustes y Stock ya las usan).
 - 🔑 Lo que el motor ⛔ tiene se LEE de donde está y se dice: el **cliente** (0 de ~950 ventas traen `cliente_id`, medido 18-oct)
   sale del espejo de GN (`ventas.client_name`, por la venta de GN o por `tn_order`) con «de GN»; un pedido online sin nombre
   todavía ⛔ es «consumidor final» (el espejo llega al otro día). El **estado** del pedido, de `tn_orden.estado` (§14.1); el

@@ -25,6 +25,7 @@ import {
 } from '@/lib/erp/cliente'
 import { MOTIVOS, baseDe } from '@/lib/erp/ajuste.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
+import type { PrendaAAjustar } from './stock/StockErp'
 
 const LINEAS: Array<{ key: LineaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'stunned', label: 'Stunned' }, { key: 'bdi', label: 'BDI' }]
 const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
@@ -53,15 +54,19 @@ type Renglon = {
 }
 type Borrador = { deposito: string; motivo: string; detalle: string; renglones: Renglon[] }
 
-export function AjustesStock() {
-  const [linea, setLinea] = useState<LineaErp>('zattia')
+type PrendaDeAjuste = { producto: string; talle: string; sku: string | null; barcode?: string | null; nombre: string | null; talleNombre: string | null }
+const renglonDe = (p: PrendaDeAjuste): Renglon => ({ producto: p.producto, talle: p.talle, sku: p.sku, barcode: p.barcode ?? null, nombre: p.nombre, talleNombre: p.talleNombre, porDeposito: null, valor: '' })
+
+export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null } = {}) {
+  const [linea, setLinea] = useState<LineaErp>((pedida?.linea as LineaErp | undefined) ?? 'zattia')
   const base = baseDe(linea) as MarcaErp
   const [datos, setDatos] = useState<AjustesDeLinea | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hecho, setHecho] = useState<{ texto: string; avisos: AvisoAjuste[] } | null>(null)
   const [vuelta, setVuelta] = useState(0)
   const [trabajando, setTrabajando] = useState(false)
-  const [borrador, setBorrador] = useState<Borrador | null>(null)
+  // Desde la lista de Stock («Ajustar»): arranca con el ajuste abierto y la prenda cargada.
+  const [borrador, setBorrador] = useState<Borrador | null>(() => (pedida ? { deposito: DEPOSITOS[baseDe(pedida.linea) as MarcaErp][0], motivo: MOTIVOS_A_MANO[0].key, detalle: '', renglones: [renglonDe(pedida)] } : null))
   const [texto, setTexto] = useState('')
   const [encontradas, setEncontradas] = useState<PrendaEncontrada[] | null>(null)
   const [descartando, setDescartando] = useState<{ id: string; motivo: string } | null>(null)
@@ -88,10 +93,14 @@ export function AjustesStock() {
 
   const motivo = MOTIVOS_A_MANO.find((m) => m.key === borrador?.motivo) ?? MOTIVOS_A_MANO[0]
 
-  async function agregar(p: { producto: string; talle: string; sku: string | null; barcode?: string | null; nombre: string | null; talleNombre: string | null }) {
+  async function agregar(p: PrendaDeAjuste) {
     if (!borrador || borrador.renglones.some((r) => r.producto === p.producto && r.talle === p.talle)) return
-    const nuevo: Renglon = { producto: p.producto, talle: p.talle, sku: p.sku, barcode: p.barcode ?? null, nombre: p.nombre, talleNombre: p.talleNombre, porDeposito: null, valor: '' }
-    setBorrador({ ...borrador, renglones: [...borrador.renglones, nuevo] })
+    setBorrador({ ...borrador, renglones: [...borrador.renglones, renglonDe(p)] })
+    await leerRenglon(p)
+  }
+
+  /** Lo que dice el ERP (y GN) de la prenda en cada depósito: el «antes» del renglón. */
+  async function leerRenglon(p: { producto: string; talle: string }) {
     try {
       const s = await leerStockDePrenda(base, p.producto, p.talle)
       const porDeposito = Object.fromEntries(s.depositos.map((d) => [d.deposito, { libro: d.libro, gn: d.gn }]))
@@ -100,6 +109,12 @@ export function AjustesStock() {
       setError(e instanceof Error ? e.message : 'No se pudo leer el stock de la prenda.')
     }
   }
+
+  useEffect(() => {
+    if (pedida) void leerRenglon(pedida)
+    // Una sola vez: `Erp` monta la pestaña de nuevo (key) para cada prenda pedida.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function buscar() {
     setTrabajando(true)
