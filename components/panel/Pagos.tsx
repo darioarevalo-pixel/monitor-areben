@@ -58,6 +58,7 @@ import {
   mostrar as plata, paraEditar, parsearMonto, escribirMonto, restanteTrasConfirmar,
   type Compromiso,
 } from '@/lib/compromisos/core'
+import { SOBRE_OSCURO } from './oscuro'
 import { hoyISO } from '@/lib/crm/seguimiento'
 
 /** De a cuántas cerradas se muestran. No es una lista de trabajo: es para mirar atrás un rato. */
@@ -574,6 +575,8 @@ function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado,
   return (
     <article style={{
       background: color.surface, borderTop: `1px solid ${color.line2}`,
+      // El color de la ficha (rediseño del 19-oct-2026): rojo vencido, amarillo para hoy.
+      borderLeft: `3px solid ${fecha.tarde ? color.danger : diasPara(c.fecha_prometida, hoy) === 0 ? color.warning : 'transparent'}`,
     }}>
       {/*
         🔑 **Las acciones van al costado del monto, no en una barra abajo.**
@@ -770,6 +773,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
       : !c.cliente_id && c.cliente_telefono === cliente.telefono))
   }, [cola.cerradas, soloSuyas, cliente])
   const abiertas = cola.pedidos.length
+  const vencidos = cola.pedidos.filter((c) => cuando(c.fecha_prometida, hoy).tarde).length
   const puede = cobros.puede
   // Los compromisos de ESTE número que se anotaron antes de que el cliente existiera en Gestión Nube.
   const porVincular = useMemo(
@@ -1005,9 +1009,20 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
         cuesta un renglón — el formulario sigue siendo lo primero que se puede tocar.
       */}
       {cola.totalAbierto > 0 && (
-        <div style={{ padding: `0 ${MARGEN}px ${space[3]}px` }}>
-          <Monto v={cola.totalAbierto} tam="total" />
-          <div style={{ fontSize: font.xs, color: color.mut2 }}>pedido y sin acreditar</div>
+        // En azul noche, como el encabezado de la ficha y el resumen de «Hoy» (19-oct-2026).
+        <div style={{ ...SOBRE_OSCURO, display: 'flex', gap: space[2], padding: `${space[3]}px ${MARGEN}px`, marginBottom: space[3] }}>
+          {(
+            [
+              [<Monto key="m" v={cola.totalAbierto} tam="chico" />, 'Por acreditar'],
+              [vencidos, 'Vencidos', vencidos ? color.dangerInk : color.mut2],
+              [abiertas, 'Pedidos'],
+            ] as [React.ReactNode, string, string?][]
+          ).map(([v, txt, tono]) => (
+            <div key={txt} style={{ flex: txt === 'Por acreditar' ? 1.6 : 1, minWidth: 0, background: color.bg2, border: `1px solid ${color.line}`, borderRadius: radius.md, padding: '6px 8px' }}>
+              <div style={{ fontSize: font.lg, fontWeight: 700, lineHeight: 1.15, color: tono ?? color.ink, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div>
+              <div style={{ fontSize: font.xs, color: color.mut2 }}>{txt}</div>
+            </div>
+          ))}
         </div>
       )}
 

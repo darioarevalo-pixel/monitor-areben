@@ -1091,3 +1091,32 @@ Darío: que el panel avise en rojo cuando le escribiste a alguien y no le marcas
   botón de días (`ultimo_contacto` = hoy) o con una fecha para adelante.
 - ⚠️ Sólo ve mensajes cargados en WhatsApp Web: si te contestaron después y el chat nunca se abrió
   en la compu, puede no verlo. ⏭️ Medir con el uso real cuántos se escapan.
+
+# ✅ 19-oct-2026 — rediseño del panel: «Encabezado oscuro» (Darío, sobre una maqueta)
+
+Maqueta acordada: https://claude.ai/artifact/PF9FfwbesDs7NexFsp2EHE. Sólo cómo se ve y dónde está
+cada cosa: ni una regla de datos cambió.
+
+- 🔑 **Próximo contacto fijo abajo** (`components/panel/ProximoContacto.tsx`), arriba de la
+  calculadora: fecha grande (el casillero ES la fecha, se sigue pudiendo tipear), estado
+  Atrasado/Hoy/Agendado/Sin fecha y la franja del color del estado. Los siete plazos de siempre,
+  **de menor a mayor**, con el sugerido por el ritmo de compra en azul **en su lugar**
+  (`plazosConSugerido` en `lib/crm/proximo.ts`). ⚠️ Se pega arriba de la calculadora por
+  `--alto-calc`, que publica `CalculadoraEnvio` con un `ResizeObserver`.
+- **Encabezado en azul noche** (`SOBRE_OSCURO` en `components/panel/oscuro.ts`): no repinta cada
+  componente, **redefine los `--mo-*` adentro del bloque**. Lo que se meta en el encabezado ya sale
+  claro sobre oscuro. La temperatura va sin pintar: el rojo es sólo «atrasado».
+- **Botón verde de WhatsApp siempre visible** arriba (lo pidió Darío). Si la ficha es la del chat
+  abierto, no vuelve a pedir el chat: avisa «Ya estás en su chat».
+- **Notas arriba y abiertas**; el despacho adentro. ⛔ «Pendiente» y «Tener en cuenta» ya no se
+  ofrecen vacíos (medido: 1 cliente cada uno de 782); lo cargado se sigue viendo. Nada se borró
+  del KV.
+- **Última compra plegada** en un renglón (fecha · productos · total).
+- **Hoy y Pagos**: el resumen de números en el mismo azul noche, y una raya de color a la
+  izquierda de cada renglón (rojo vencido/atrasado de más de 7 días o «falta la fecha», amarillo
+  hoy, verde hecho). En «Hoy» el atrasado de pocos días sigue sin color, por la regla del 28-sep.
+- Fuera de la ficha: el chip de segmento («Compra seguido»…) y el chip «Volver a hablarle: fecha»,
+  que repetía la fecha de abajo.
+- Cómo se miró sin entrar al panel: render en jsdom con datos inventados (mocks de `leerMapa`,
+  `buscarFicha`, `traerAgenda` y los hooks de Pagos), HTML con `tokens.css` + `kit.css` y foto con
+  Chrome headless a 350 px. Hay que fijar `--alto-calc` a mano: jsdom no mide.

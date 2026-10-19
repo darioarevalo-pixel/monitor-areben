@@ -121,6 +121,22 @@
      pertenecía a ninguna paleta. Ahora es el índigo aclarado — distingue sin salirse. */
   --mo-side-accent: #a5b4fc;
   --mo-side-accent-hover: #e0e7ff;
+  /* El segundo tono de la barra oscura: el degradé del encabezado del panel de WhatsApp. */
+  --mo-side-bg2: #1c2847;
+  /* Los tres estados sobre la barra oscura: los semánticos del kit no se leen sobre azul noche. */
+  --mo-side-ok: #75e0a7;
+  --mo-side-ok-bg: rgba(71, 205, 137, 0.14);
+  --mo-side-ok-border: rgba(71, 205, 137, 0.35);
+  --mo-side-warn: #fec84b;
+  --mo-side-warn-bg: rgba(253, 176, 34, 0.14);
+  --mo-side-warn-border: rgba(253, 176, 34, 0.35);
+  --mo-side-danger: #fda29b;
+  --mo-side-danger-bg: rgba(249, 112, 102, 0.14);
+  --mo-side-danger-border: rgba(249, 112, 102, 0.35);
+
+  /* Verde de WhatsApp: etiqueta de identidad del botón que abre el chat, no un color de estado. */
+  --mo-whatsapp: #1ebe5d;
+  --mo-whatsapp-hover: #19a851;
   --mo-side-w: 248px;
 
   /* ── Radios ────────────────────────────────────────────── */

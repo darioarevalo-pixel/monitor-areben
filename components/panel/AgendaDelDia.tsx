@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import { Icono } from '@/components/ui'
+import { SOBRE_OSCURO } from './oscuro'
 import { TEMP_UI } from '@/components/crm/temperatura'
 import { buscarClientesPorNombre, telsQueSonClientes, traerAgenda, traerPorFiltro, type FilaAgenda } from '@/lib/crm/panel'
 import { contarCola, contarPorTipo, vistaDe, type FiltroPanel, type VistaTemp } from '@/lib/crm/lista-dia'
@@ -163,8 +164,9 @@ function Chapa({ children, tono = 'neutro' }: { children: React.ReactNode; tono?
  * veían iguales.
  */
 function estadoDeFila(d: number | null): { txt: string; tono: 'neutro' | 'nuestro' | 'tarde' | 'espera' } {
-  if (d === null) return { txt: 'Sin fecha', tono: 'espera' }
-  if (d === 0) return { txt: 'Hoy', tono: 'nuestro' }
+  // Rediseño del 19-oct-2026: el mismo color que la ficha — Hoy en amarillo, Sin fecha en gris.
+  if (d === null) return { txt: 'Sin fecha', tono: 'neutro' }
+  if (d === 0) return { txt: 'Hoy', tono: 'espera' }
   if (d < 0) return { txt: `Atrasado ${-d} d`, tono: -d > 7 ? 'tarde' : 'neutro' }
   return { txt: `En ${d} d`, tono: 'neutro' }
 }
@@ -194,8 +196,14 @@ function Fila({ it, onAbrir, onFicha, hecho }: { it: Item; onAbrir: (id: number,
   const sinFicha = it.prospecto && sinTel
   const est = estadoDeFila(it.dias)
   const emoji = it.vista ? EMOJI_TEMP[it.vista] : ''
+  /**
+   * La rayita de la izquierda, con el color de la ficha (rediseño del 19-oct-2026): rojo lo que hay
+   * que resolver, amarillo hoy, verde hecho. El atrasado de pocos días queda sin raya, por la misma
+   * regla de la chapa: un color en todas las filas no marca ninguna.
+   */
+  const raya = faltaFecha || est.tono === 'tarde' ? color.danger : hecho ? color.success : it.dias === 0 ? color.warning : 'transparent'
   return (
-    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, background: color.surface, opacity: hecho ? 0.6 : 1 }}>
+    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, borderLeft: `3px solid ${raya}`, background: color.surface, opacity: hecho ? 0.6 : 1 }}>
       <button
         type="button"
         disabled={sinFicha}
@@ -271,10 +279,10 @@ function Fila({ it, onAbrir, onFicha, hecho }: { it: Item; onAbrir: (id: number,
             padding: 0,
             display: 'grid',
             placeItems: 'center',
-            borderRadius: radius.sm,
-            border: `1px solid ${sinTel ? color.line2 : color.successBorder}`,
-            background: sinTel ? 'none' : color.successBg,
-            color: sinTel ? color.mut2 : color.successInk,
+            borderRadius: radius.md,
+            border: sinTel ? `1px solid ${color.line2}` : 0,
+            background: sinTel ? 'none' : color.whatsapp,
+            color: sinTel ? color.mut2 : color.sideActiveInk,
             cursor: sinTel ? 'default' : 'pointer',
             opacity: sinTel ? 0.5 : 1,
           }}
@@ -353,17 +361,19 @@ function Aclaracion({ children }: { children: React.ReactNode }) {
  * lo veía desaparecer y subir al siguiente, y la pantalla quedaba igual. Ahora "Hechos" sube.
  */
 function Resumen({ hoy, atrasados, hechos }: { hoy: number; atrasados: number; hechos: number }) {
+  // En azul noche, como el encabezado de la ficha (rediseño del 19-oct-2026), y cada número con el
+  // color de su estado: amarillo hoy, rojo atrasado, verde hecho.
   const celda = (n: number, txt: string, tono: string) => (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: font.xl, fontWeight: 700, color: tono, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{n}</div>
+    <div style={{ flex: 1, minWidth: 0, background: color.bg2, border: `1px solid ${color.line}`, borderRadius: radius.md, padding: '6px 8px' }}>
+      <div style={{ fontSize: font.xl, fontWeight: 700, color: n ? tono : color.mut2, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{n}</div>
       <div style={{ fontSize: font.xs, color: color.mut2 }}>{txt}</div>
     </div>
   )
   return (
-    <div style={{ display: 'flex', gap: space[2], padding: `${space[3]}px ${MARGEN}px`, borderTop: `1px solid ${color.line2}`, marginTop: space[2] }}>
-      {celda(hoy, 'Para hoy', color.brand)}
-      {celda(atrasados, 'Atrasados', atrasados ? color.ink : color.mut2)}
-      {celda(hechos, 'Hechos hoy', hechos ? color.successInk : color.mut2)}
+    <div style={{ ...SOBRE_OSCURO, display: 'flex', gap: space[2], padding: `${space[3]}px ${MARGEN}px` }}>
+      {celda(hoy, 'Para hoy', color.warningInk)}
+      {celda(atrasados, 'Atrasados', color.dangerInk)}
+      {celda(hechos, 'Hechos hoy', color.successInk)}
     </div>
   )
 }
@@ -895,9 +905,9 @@ function Agenda({
 
   return (
     <div>
+      <Resumen hoy={totalHoy} atrasados={totalAtrasados} hechos={hechosItems.length} />
       {cabecera}
       {avisoExtension}
-      <Resumen hoy={totalHoy} atrasados={totalAtrasados} hechos={hechosItems.length} />
 
       {faltaFecha.length > 0 && (
         <Grupo titulo="🔴 Falta la fecha" cuantas={faltaFecha.length} abierto={abiertos.falta !== false} onToggle={() => setAbiertos((a) => ({ ...a, falta: a.falta === false }))}>

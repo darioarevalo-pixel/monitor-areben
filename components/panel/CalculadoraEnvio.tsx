@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui'
 import { color, font, space } from '@/components/ui/tokens'
 import { escribirMonto, parsearMonto } from '@/lib/compromisos/core'
@@ -35,6 +35,25 @@ export function CalculadoraEnvio() {
   const [pedido, setPedido] = useState('')
   const [envio, setEnvio] = useState('')
   const [aviso, setAviso] = useState('')
+  const caja = useRef<HTMLDivElement>(null)
+
+  /**
+   * Publica su alto en `--alto-calc` para que la franja de «Próximo contacto» de la ficha, que
+   * también es fija abajo, se pegue arriba de esta y no quede tapada (rediseño del 19-oct-2026).
+   */
+  useEffect(() => {
+    const el = caja.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const raiz = document.documentElement
+    const publicar = () => raiz.style.setProperty('--alto-calc', `${el.offsetHeight}px`)
+    publicar()
+    const ro = new ResizeObserver(publicar)
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      raiz.style.setProperty('--alto-calc', '0px')
+    }
+  }, [])
 
   const p = parsearMonto(pedido)
   const e = parsearMonto(envio)
@@ -66,6 +85,7 @@ export function CalculadoraEnvio() {
 
   return (
     <div
+      ref={caja}
       style={{
         position: 'sticky',
         bottom: 0,

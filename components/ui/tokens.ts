@@ -69,6 +69,19 @@ export const color = {
   sideInk2: 'var(--mo-side-ink2)',
   sideLine: 'var(--mo-side-line)',
   sideAccent: 'var(--mo-side-accent)',
+  sideActiveInk: 'var(--mo-side-active-ink)', // blanco sobre la barra oscura o sobre un relleno fuerte
+  sideBg2: 'var(--mo-side-bg2)',
+  sideOk: 'var(--mo-side-ok)',
+  sideOkBg: 'var(--mo-side-ok-bg)',
+  sideOkBorder: 'var(--mo-side-ok-border)',
+  sideWarn: 'var(--mo-side-warn)',
+  sideWarnBg: 'var(--mo-side-warn-bg)',
+  sideWarnBorder: 'var(--mo-side-warn-border)',
+  sideDanger: 'var(--mo-side-danger)',
+  sideDangerBg: 'var(--mo-side-danger-bg)',
+  sideDangerBorder: 'var(--mo-side-danger-border)',
+  whatsapp: 'var(--mo-whatsapp)',
+  whatsappHover: 'var(--mo-whatsapp-hover)',
 } as const
 
 /**

@@ -5,11 +5,13 @@ import { Button, Icono } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
 import { CalculadoraEnvio } from './CalculadoraEnvio'
+import { ProximoContacto, RayaEstado, estadoDeFicha } from './ProximoContacto'
+import { SOBRE_OSCURO } from './oscuro'
 import type { QuienPaga } from './NuevoCompromiso'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
 import { TEMP_UI, vistaTemp } from '@/components/crm/temperatura'
 import { addDiasISO, diaHabil, PLAZOS_DIAS, siguienteTemperatura } from '@/lib/crm/core'
-import { plazoEnPalabras, ritmoDeCompra } from '@/lib/crm/ritmo'
+import { ritmoDeCompra } from '@/lib/crm/ritmo'
 import {
   buscarClientesPorNombre,
   buscarFicha,
@@ -57,21 +59,52 @@ import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/es
 import { cola } from '@/lib/crm/telefono.core.js'
 
 /**
- * «Abrir su chat», en la ficha (Darío, 16-oct-2026). Desde que el nombre de la lista abre la ficha
- * sin pasar por WhatsApp, a la ficha le faltaba la vuelta: ver a alguien y después querer
- * escribirle. Sólo aparece si la ficha NO es la del chat abierto; ahí no tiene nada que abrir.
+ * El botón verde de WhatsApp, arriba en el encabezado de la ficha (Darío, 19-oct-2026: «no tiene el
+ * botón de WhatsApp» — lo quiere siempre a la vista, con el ícono de WhatsApp).
+ *
+ * Desde la lista, el nombre abre la ficha sin pasar por WhatsApp (16-oct): éste es la vuelta. Si la
+ * ficha ya es la del chat abierto no se vuelve a pedir el chat —la extensión podría recargar
+ * WhatsApp para nada—: avisa que ya estás ahí.
  *
  * ⚠️ Es del panel de WhatsApp. En la tabla de Clientes del monitor el botón se sacó a pedido y no
  * vuelve (ver la ficha de la sección).
  */
-function BotonAbrirChat({ tel, chatAbierto, onAbrir }: { tel: string; chatAbierto: string; onAbrir: () => void }) {
-  if (!cola(tel) || cola(tel) === cola(chatAbierto)) return null
+function BotonAbrirChat({ tel, chatAbierto, onAbrir, onYaEsta }: { tel: string; chatAbierto: string; onAbrir: () => void; onYaEsta?: () => void }) {
+  if (!cola(tel)) return null
+  const yaEsta = cola(tel) === cola(chatAbierto)
   return (
-    <Button size="sm" variant="soft" tone="success" onClick={onAbrir} style={{ marginTop: 6, gap: 6 }}>
+    <button
+      type="button"
+      onClick={yaEsta ? onYaEsta : onAbrir}
+      title={yaEsta ? 'Ya estás en su chat' : 'Abrir su chat en WhatsApp'}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        height: 26,
+        padding: '0 10px',
+        fontSize: font.xs,
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+        borderRadius: radius.md,
+        border: 0,
+        background: color.whatsapp,
+        color: color.sideActiveInk,
+        cursor: 'pointer',
+      }}
+    >
       <Icono nombre="whatsapp" size={14} />
-      Abrir su chat
-    </Button>
+      Abrir chat
+    </button>
   )
+}
+
+/**
+ * El encabezado de la ficha en azul noche (rediseño del 19-oct-2026): quién es, separado de lo que
+ * se hace con él. Ver `SOBRE_OSCURO`.
+ */
+function Encabezado({ children }: { children: React.ReactNode }) {
+  return <section style={{ ...SOBRE_OSCURO, padding: `${space[3]}px ${space[3]}px ${space[3] + 2}px` }}>{children}</section>
 }
 
 function useEscritosHoy(): EscritosHoy {
@@ -90,29 +123,6 @@ function useEscritosHoy(): EscritosHoy {
     return () => window.removeEventListener('message', alMensaje)
   }, [])
   return escritos
-}
-
-/**
- * 🔴 «Le escribiste hoy y no tiene fecha». Darío, 16-oct-2026: el panel cuenta como hecho sólo lo
- * que se marca con un botón de días, y escribirle a alguien sin marcarlo lo deja colgado.
- */
-function AvisoFaltaFecha() {
-  return (
-    <div
-      style={{
-        marginBottom: 8,
-        padding: '6px 8px',
-        fontSize: font.xs,
-        fontWeight: 700,
-        color: color.dangerInk,
-        background: color.dangerBg,
-        border: `1px solid ${color.dangerBorder}`,
-        borderRadius: radius.sm,
-      }}
-    >
-      Le escribiste hoy. Falta marcar cuándo volver a hablarle.
-    </div>
-  )
 }
 
 /**
@@ -202,14 +212,6 @@ function fmtFecha(d: string | null): string {
   return m ? `${m[3]}/${m[2]}` : '—'
 }
 
-const SEG_TXT: Record<string, string> = {
-  nuevos: 'Nuevo',
-  activos: 'Compra seguido',
-  riesgo: 'Se está enfriando',
-  dormidos: 'Dormido',
-  otros: '',
-}
-
 /**
  * 🔴 **"¿Cómo te fue?" salió del panel el 24-ago-2026.** Los cuatro botones (contestó / no
  * contestó / pidió precio / no le interesa) eran el bloque más grande de la pantalla y estaban
@@ -232,53 +234,6 @@ const SEG_TXT: Record<string, string> = {
  */
 
 /**
- * La fila de "en cuántos días", que reemplazó a los tres botones de frase completa.
- *
- * Bruno, después de un día de uso: *"me parece que funciona más el calendario, y necesito más
- * opciones de recontacto — mañana, 1 2 3, 7 15 21 y 30, que sea medio factor común para que no sea
- * grande esa sección"*. Tres botones que decían "En 1 semana" ocupaban tres renglones para dar tres
- * opciones; **siete números debajo de un título ocupan uno solo y dan siete**.
- *
- * ⚠️ **Cada fichita muestra en qué día cae**, y ya corrido al lunes si caía fin de semana. Un "15"
- * pelado obliga a hacer la cuenta de cabeza, que es justo lo que hacía que se usara el calendario.
- */
-function Plazos({ guardando, onElegir }: { guardando: boolean; onElegir: (dias: number) => void }) {
-  const hoy = hoyISO()
-  return (
-    <>
-      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 4 }}>En cuántos días</div>
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
-        {PLAZOS_DIAS.map((d) => {
-          const cae = diaHabil(addDiasISO(hoy, d))
-          return (
-            <button
-              key={d}
-              type="button"
-              disabled={guardando}
-              onClick={() => onElegir(d)}
-              title={`${d === 1 ? 'Mañana' : `En ${d} días`} · ${diaYFecha(cae)}`}
-              style={{
-                minWidth: 34,
-                padding: '4px 8px',
-                fontSize: font.sm,
-                fontWeight: 600,
-                color: color.ink2,
-                background: color.surface,
-                border: `1px solid ${color.line2}`,
-                borderRadius: radius.md,
-                cursor: guardando ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {d}
-            </button>
-          )
-        })}
-      </div>
-    </>
-  )
-}
-
-/**
  * El calendario de "Volver a hablarle".
  *
  * 🔴 **Escribir la fecha con el teclado no la guardaba** (Darío, 19-oct-2026). El campo guardaba
@@ -287,11 +242,17 @@ function Plazos({ guardando, onElegir }: { guardando: boolean; onElegir: (dias: 
  * perdía. Ahora lo escrito vive acá hasta que es una fecha completa y razonable, y el campo nunca
  * se bloquea.
  */
-function CampoFecha({ valor, onGuardar }: { valor: string; onGuardar: (v: string) => Promise<boolean> | void }) {
+function CampoFecha({ valor, onGuardar, grande }: { valor: string; onGuardar: (v: string) => Promise<boolean> | void; grande?: boolean }) {
   const [txt, setTxt] = useState(valor)
   const ultimo = useRef(valor)
-  useEffect(() => {
+  // Si la fecha cambia de afuera (un botón de días, otro cliente), el casillero la toma. Ajuste
+  // durante el render, el patrón de React para seguir una prop sin un render de más.
+  const [valorPrevio, setValorPrevio] = useState(valor)
+  if (valor !== valorPrevio) {
+    setValorPrevio(valor)
     setTxt(valor)
+  }
+  useEffect(() => {
     ultimo.current = valor
   }, [valor])
 
@@ -319,7 +280,12 @@ function CampoFecha({ valor, onGuardar }: { valor: string; onGuardar: (v: string
         guardar(e.target.value)
       }}
       onBlur={() => guardar(txt)}
-      style={{ width: '100%', fontSize: font.sm }}
+      style={
+        grande
+          ? // En la franja de «Próximo contacto» la fecha ES el dato: grande, sin caja que la achique.
+            { width: '100%', maxWidth: 190, height: 34, padding: '0 2px', fontSize: 19, fontWeight: 700, color: color.ink, background: 'transparent', border: 0, boxShadow: 'none' }
+          : { width: '100%', fontSize: font.sm }
+      }
     />
   )
 }
@@ -924,7 +890,7 @@ function PanelInterno({
   }, [telNorm, pedido])
 
   const solapas = (
-    <div style={{ display: 'flex', borderBottom: `1px solid ${color.line2}`, background: color.bg2, position: 'sticky', top: 0, zIndex: 3 }}>
+    <div style={{ display: 'flex', borderBottom: `1px solid ${color.sideBg}`, background: color.sideBg, position: 'sticky', top: 0, zIndex: 3 }}>
       {([
         ['cliente', 'Cliente'],
         ['hoy', 'Hoy'],
@@ -941,9 +907,9 @@ function PanelInterno({
             fontWeight: 700,
             cursor: 'pointer',
             border: 0,
-            borderBottom: `2px solid ${solapa === k ? color.brandSolid : 'transparent'}`,
+            borderBottom: `2px solid ${solapa === k ? color.sideAccent : 'transparent'}`,
             background: 'none',
-            color: solapa === k ? color.brand : color.mut,
+            color: solapa === k ? color.sideActiveInk : color.sideInk2,
           }}
         >
           {txt}
@@ -1061,22 +1027,43 @@ function PanelInterno({
       </Envoltorio>
     )
 
-  if (estado.t === 'lead')
+  if (estado.t === 'lead') {
+    const lead = estado.lead
     return (
-      <Envoltorio aviso={aviso}>
+      <Envoltorio
+        aviso={aviso}
+        pie={
+          <PieLead
+            key={lead.id}
+            lead={lead}
+            today={today}
+            guardando={guardando}
+            onMutar={(fn, exito) => mutarLead(lead.id, fn, exito)}
+            leEscribiste={leEscribisteHoy(escritos, pedido ? [lead.telefono] : [telNorm, lead.telefono])}
+          />
+        }
+      >
         {solapas}
+        <RayaEstado
+          estado={estadoDeFicha(
+            leadEstadoSeg(lead, today).proximo,
+            hoyISO(today),
+            leEscribisteHoy(escritos, pedido ? [lead.telefono] : [telNorm, lead.telefono]) &&
+              lead.ultimo_contacto !== hoyISO(today) &&
+              !((lead.proximo_manual || '') > hoyISO(today)),
+          )}
+        />
         <FichaLead
-          key={estado.lead.id}
-          lead={estado.lead}
-          today={today}
+          key={lead.id}
+          lead={lead}
           guardando={guardando}
-          onMutar={(fn, exito) => mutarLead(estado.lead.id, fn, exito)}
-          leEscribiste={leEscribisteHoy(escritos, pedido ? [estado.lead.telefono] : [telNorm, estado.lead.telefono])}
-          botonChat={<BotonAbrirChat tel={estado.lead.telefono || ''} chatAbierto={telNorm} onAbrir={() => abrirChat(0, estado.lead.telefono || '')} />}
-          marcaComunidad={<MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={[telNorm, estado.lead.telefono || '']} />}
+          onMutar={(fn, exito) => mutarLead(lead.id, fn, exito)}
+          botonChat={<BotonAbrirChat tel={lead.telefono || ''} chatAbierto={telNorm} onAbrir={() => abrirChat(0, lead.telefono || '')} onYaEsta={() => decir('Ya estás en su chat')} />}
+          marcaComunidad={<MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={[telNorm, lead.telefono || '']} />}
         />
       </Envoltorio>
     )
+  }
 
   if (estado.t === 'desconocido')
     return (
@@ -1112,7 +1099,7 @@ function PanelInterno({
     )
 
   // ── La ficha ───────────────────────────────────────────────────────────────
-  const { cliente: c, compras, segmento, via } = estado.ficha
+  const { cliente: c, compras, via } = estado.ficha
   const seg = crmSeg[String(c.id)] || {}
   const t = TEMP_UI[vistaTemp(c)]
   const notas = c.notas || []
@@ -1126,168 +1113,122 @@ function PanelInterno({
     crmSeg[String(c.id)]?.ultimo_contacto !== hoyFicha &&
     !((c.proximo_contacto || '') > hoyFicha)
 
+  const estadoFicha = estadoDeFicha(c.proximo_contacto, hoyFicha, faltaFecha)
+  const telFicha = pedido?.tel || c.phone || ''
+
   return (
-    <Envoltorio aviso={aviso}>
+    <Envoltorio
+      aviso={aviso}
+      pie={
+        <ProximoContacto
+          fecha={c.proximo_contacto}
+          hoy={hoyFicha}
+          faltaFecha={faltaFecha}
+          ritmo={ritmo}
+          guardando={guardando}
+          onPlazo={(d) => mutar((m) => escribiHoy(m, c.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)}
+          calendario={
+            <CampoFecha
+              key={`fecha-${c.id}`}
+              grande
+              valor={c.proximo_contacto || ''}
+              onGuardar={(v) => mutar((m) => setProximoManual(m, c.id, v), avisoFecha(v))}
+            />
+          }
+        />
+      }
+    >
       {solapas}
-      <div style={{ paddingTop: space[2] }}>
-        {/* Encabezado */}
-        <Bloque>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: font.lg, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}>{c.name || `#${c.id}`}</div>
-              <div style={{ fontSize: font.xs, color: color.mut2 }}>
-                {c.city || 'sin ciudad'} · #{c.id}
-                {estado.otros && estado.otros.length > 1 && (
-                  <>
-                    {' · '}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const tel = estado.telOtros || telNorm
-                        guardarEleccion(tel, null)
-                        setEstado({ t: 'varios', candidatos: estado.otros!, tel })
-                      }}
-                      style={{ background: 'none', border: 0, padding: 0, color: color.brand, fontSize: font.xs, cursor: 'pointer', textDecoration: 'underline' }}
-                    >
-                      ¿No es? Cambiar
-                    </button>
-                  </>
-                )}
-              </div>
-              {/* Los dos números: el del chat es el que está en la comunidad, pero si la ficha se abrió
-                  desde la lista, el chat todavía puede ser el anterior. */}
-              <div>
-                <MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={via === 'id' ? [c.phone] : [telNorm, c.phone]} />
-              </div>
-              <BotonAbrirChat tel={pedido?.tel || c.phone || ''} chatAbierto={telNorm} onAbrir={() => abrirChat(c.id, pedido?.tel || c.phone || '')} />
-              {/*
-                El Instagram, que hasta ahora sólo se podía ver y escribir desde la sección. Y es
-                acá donde uno se entera de cuál es: lo tenés en la conversación, no en el CRM.
-                Medido el 23-ago-2026: **91 de 771** lo tienen cargado.
-              */}
-              <Instagram
-                valor={seg.pagina || ''}
-                guardando={guardando}
-                onGuardar={(v) => mutar((m) => setPagina(m, c.id, v), v ? 'Instagram guardado' : 'Instagram eliminado')}
-              />
-            </div>
+      <RayaEstado estado={estadoFicha} />
+      <Encabezado>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
+          <div style={{ minWidth: 0, fontSize: 18, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}>{c.name || `#${c.id}`}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
+            {/*
+              La temperatura sin pintar (rediseño del 19-oct-2026): el rojo quedó sólo para
+              «atrasado», y un 🔥 rojo arriba con un «Atrasado» rojo abajo eran dos cosas con el
+              mismo color.
+            */}
             <button
               onClick={() => mutar((m) => setTemperatura(m, c.id, siguienteTemperatura(c.temperatura)), 'Listo')}
               title={`${t.txt} — ${t.ayuda}`}
               disabled={guardando}
-              style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${t.bd}`, background: t.bg, color: t.fg }}
+              style={{ cursor: 'pointer', height: 26, fontSize: 11, fontWeight: 600, padding: '0 9px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${color.line}`, background: color.bg2, color: color.ink }}
             >
               {t.txt}
             </button>
+            <BotonAbrirChat tel={telFicha} chatAbierto={telNorm} onAbrir={() => abrirChat(c.id, telFicha)} onYaEsta={() => decir('Ya estás en su chat')} />
           </div>
-
-          {via === 'cola' && (
-            <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: radius.sm, padding: '4px 8px' }}>
-              El teléfono no coincide exacto con el de la ficha (difieren en el principio). Fijate que sea esta persona.
-            </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4, fontSize: font.xs, color: color.mut2 }}>
+          <span>{c.city || 'sin ciudad'}</span>
+          {estado.otros && estado.otros.length > 1 && (
+            <button
+              type="button"
+              onClick={() => {
+                const tel = estado.telOtros || telNorm
+                guardarEleccion(tel, null)
+                setEstado({ t: 'varios', candidatos: estado.otros!, tel })
+              }}
+              style={{ background: 'none', border: 0, padding: 0, color: color.brand, fontSize: font.xs, cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              ¿No es? Cambiar
+            </button>
           )}
-
           {/*
-            Los números como números. Antes la etiqueta y el valor tenían casi el mismo tamaño, así
-            que "Pedidos 12" se leía como una frase; lo que se mira de un vistazo es el 12.
+            El Instagram, que hasta ahora sólo se podía ver y escribir desde la sección. Y es
+            acá donde uno se entera de cuál es: lo tenés en la conversación, no en el CRM.
           */}
-          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-            <Dato k="Pedidos" v={String(c.total_sales)} />
-            <Dato k="Total" v={fmtMonto(c.total_amount)} />
-            <Dato k="Último" v={c.dias_ultimo === null ? '—' : c.dias_ultimo === 0 ? 'hoy' : `hace ${c.dias_ultimo}d`} />
-          </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            {SEG_TXT[segmento] && <Chip tone={segmento === 'dormidos' || segmento === 'riesgo' ? 'alerta' : 'neutro'}>{SEG_TXT[segmento]}</Chip>}
-            {c.proximo_contacto && (
-              <Chip tone={c.dias_proximo !== null && c.dias_proximo < 0 ? 'alerta' : 'neutro'}>
-                Volver a hablarle: {fmtFecha(c.proximo_contacto)}
-              </Chip>
-            )}
-          </div>
-        </Bloque>
-
-        {/*
-          Lo que hay que saber de esta persona, arriba de todo: es a lo que se vino. El `key` con el
-          id del cliente es lo que hace que al cambiar de chat no quede abierto el editor del
-          anterior —ni su borrador— sobre la ficha de otro.
-        */}
-        <Contexto
-          key={c.id}
-          seg={seg}
-          guardando={guardando}
-          onGuardar={(campo, valor) => {
-            const setter = campo === 'pendiente' ? setPendiente : campo === 'despacho' ? setDespacho : setTenerEnCuenta
-            mutar((m) => setter(m, c.id, valor), 'Guardado')
-          }}
-          onTachar={() => mutar((m) => cumplirPendiente(m, c.id, hoyISO()), 'Listo, queda en las notas')}
-        />
-
-        {/* Lo último que llevó */}
-        <Bloque titulo="Lo último que llevó">
-          {compras.ultima ? (
-            <>
-              <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 4 }}>{fmtFecha(compras.ultima.fecha)}</div>
-              <ListaCompra items={compras.ultima.items} />
-            </>
-          ) : (
-            <div style={{ fontSize: font.sm, color: color.mut2 }}>Todavía no le vendimos nada.</div>
-          )}
-        </Bloque>
-
-        {/* Volver a hablarle */}
-        <Bloque titulo="Volver a hablarle">
-          {faltaFecha && <AvisoFaltaFecha />}
-          {/*
-            🔑 **La sugerencia sale de lo que el cliente ya hace, no de un campo.** Reemplaza a la
-            cadencia, que había que cargar a mano y que en 0 de los 771 clientes decidía la fecha.
-            Y lo que se muestra no es el promedio —que solo no dice nada— sino **cuánto falta**:
-            "compra cada 22 días, la última fue hace 20" ⇒ le toca en 2.
-
-            ⚠️ Sugiere y no decide: es un botón más, con el número puesto. Elige el que habla.
-          */}
-          {ritmo && (
-            <div style={{ marginBottom: 8 }}>
-              {/*
-                ⚠️ **Cuando ya le toca NO hay botón, hay un dato.** Agendarlo para hoy lo dejaría
-                en la lista de hoy después de haberle escrito, o sea que reaparecería mañana como
-                si nada. Si ya está pasado, lo que hay que elegir es un plazo hacia adelante — y
-                eso lo elige el que está hablando, con el dato a la vista.
-              */}
-              {ritmo.enDias > 0 && (
-                <Button
-                  size="sm"
-                  variant="soft"
-                  tone="brand"
-                  fullWidth
-                  disabled={guardando}
-                  onClick={() => mutar((m) => escribiHoy(m, c.id, ritmo.enDias), 'Listo')}
-                >
-                  {plazoEnPalabras(ritmo.enDias)}
-                </Button>
-              )}
-              <div style={{ fontSize: font.xs, color: color.mut2, marginTop: ritmo.enDias > 0 ? 4 : 0, textAlign: 'center' }}>
-                {ritmo.enDias === 0 && <b style={{ color: color.warningInk }}>Ya le tocaba comprar. </b>}
-                Compra cada {ritmo.cadaDias} {ritmo.cadaDias === 1 ? 'día' : 'días'} · la última fue hace{' '}
-                {ritmo.desdeUltima === 0 ? 'nada' : ritmo.desdeUltima === 1 ? '1 día' : `${ritmo.desdeUltima} días`}
-              </div>
-            </div>
-          )}
-          <Plazos guardando={guardando} onElegir={(d) => mutar((m) => escribiHoy(m, c.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)} />
-          {/* El calendario, ancho: es lo que más se usa. */}
-          <CampoFecha
-            key={`fecha-${c.id}`}
-            valor={c.proximo_contacto || ''}
-            onGuardar={(v) => mutar((m) => setProximoManual(m, c.id, v), avisoFecha(v))}
+          <Instagram
+            valor={seg.pagina || ''}
+            guardando={guardando}
+            onGuardar={(v) => mutar((m) => setPagina(m, c.id, v), v ? 'Instagram guardado' : 'Instagram eliminado')}
           />
-        </Bloque>
+        </div>
+        {/* Los dos números: el del chat es el que está en la comunidad, pero si la ficha se abrió
+            desde la lista, el chat todavía puede ser el anterior. */}
+        <MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={via === 'id' ? [c.phone] : [telNorm, c.phone]} />
 
-        {/* Notas: la bitácora de lo que se hizo. Lo que hay que TENER EN CUENTA ya está arriba. */}
+        {via === 'cola' && (
+          <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: radius.sm, padding: '4px 8px' }}>
+            El teléfono no coincide exacto con el de la ficha (difieren en el principio). Fijate que sea esta persona.
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+          <Dato k="Pedidos" v={String(c.total_sales)} />
+          <Dato k="Total" v={fmtMonto(c.total_amount)} />
+          <Dato k="Último" v={c.dias_ultimo === null ? '—' : c.dias_ultimo === 0 ? 'hoy' : `hace ${c.dias_ultimo}d`} />
+        </div>
+      </Encabezado>
+
+      <div style={{ paddingTop: space[2] }}>
+        {/*
+          Las notas arriba, abiertas: es dónde quedaste con esta persona (Darío, 19-oct-2026). El
+          despacho va adentro; «Pendiente» y «Tener en cuenta» sólo se ven si están cargados
+          (medido ese día: 1 cliente cada uno de 782). El `key` con el id del cliente es lo que hace
+          que al cambiar de chat no quede abierto el editor del anterior —ni su borrador—.
+        */}
         <Notas
           key={`notas-${c.id}`}
           notas={notas}
           guardando={guardando}
           onGuardar={(texto) => mutar((m) => agregarNota(m, c.id, texto, hoyISO()), 'Nota guardada')}
+          extra={
+            <Contexto
+              key={c.id}
+              seg={seg}
+              guardando={guardando}
+              onGuardar={(campo, valor) => {
+                const setter = campo === 'pendiente' ? setPendiente : campo === 'despacho' ? setDespacho : setTenerEnCuenta
+                mutar((m) => setter(m, c.id, valor), 'Guardado')
+              }}
+              onTachar={() => mutar((m) => cumplirPendiente(m, c.id, hoyISO()), 'Listo, queda en las notas')}
+            />
+          }
         />
+
+        <UltimaCompra key={`compra-${c.id}`} ultima={compras.ultima} />
 
         <div style={{ padding: `0 ${space[3]}px ${space[3]}px` }}>
           <a href="/clientes" target="_blank" rel="noreferrer" style={{ fontSize: font.sm, color: color.brand, textDecoration: 'none' }}>
@@ -1296,6 +1237,48 @@ function PanelInterno({
         </div>
       </div>
     </Envoltorio>
+  )
+}
+
+/**
+ * La última compra, plegada en un renglón: fecha, cantidad de productos y total (Darío, 19-oct-2026:
+ * «siento que es algo que no uso»). El detalle se abre al tocar.
+ */
+function UltimaCompra({ ultima }: { ultima: { fecha: string; items: FilaDetalle[] } | null }) {
+  const [abierta, setAbierta] = useState(false)
+  if (!ultima)
+    return (
+      <Bloque>
+        <div style={{ fontSize: font.sm, color: color.mut2 }}>Todavía no le vendimos nada.</div>
+      </Bloque>
+    )
+  const total = ultima.items.reduce((acc, d) => {
+    const t = parseFloat(String(d.total ?? ''))
+    return acc + (Number.isFinite(t) ? t : (Number(d.quantity) || 0) * (parseFloat(String(d.unit_price)) || 0))
+  }, 0)
+  const n = ultima.items.length
+  return (
+    <Bloque>
+      <button
+        type="button"
+        onClick={() => setAbierta((v) => !v)}
+        aria-expanded={abierta}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: 'auto', padding: 0, background: 'none', border: 0, font: 'inherit', textAlign: 'left', cursor: 'pointer', color: color.ink }}
+      >
+        <span style={{ fontSize: font.sm, fontWeight: 700 }}>Última compra</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: font.xs, color: color.mut2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          · {fmtFecha(ultima.fecha)} · {n} {n === 1 ? 'producto' : 'productos'} · {fmtMonto(total)}
+        </span>
+        <svg aria-hidden width="14" height="14" viewBox="0 0 16 16" style={{ flex: 'none', color: color.mut2, transform: abierta ? 'none' : 'rotate(-90deg)', transition: 'transform 0.12s ease' }}>
+          <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {abierta && (
+        <div style={{ marginTop: 6 }}>
+          <ListaCompra items={ultima.items} />
+        </div>
+      )}
+    </Bloque>
   )
 }
 
@@ -1495,10 +1478,12 @@ function Contexto({
   const [abierto, setAbierto] = useState<string | null>(null)
   const valor = (k: (typeof CAMPOS)[number]['k']) => (seg[k] || '').trim()
   const llenos = CAMPOS.filter((x) => valor(x.k) || abierto === x.k)
-  const vacios = CAMPOS.filter((x) => !valor(x.k) && abierto !== x.k)
+  // ⛔ «Pendiente» y «Tener en cuenta» ya no se ofrecen vacíos (Darío, 19-oct-2026: 1 cliente cada
+  // uno de 782). Lo cargado se sigue viendo y editando; sólo el despacho se ofrece para cargar.
+  const vacios = CAMPOS.filter((x) => x.k === 'despacho' && !valor(x.k) && abierto !== x.k)
 
   return (
-    <Bloque>
+    <div style={{ marginTop: space[2], paddingTop: space[2], borderTop: `1px solid ${color.line}` }}>
       {llenos.map((campo) => (
         <div key={campo.k} style={{ marginBottom: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
@@ -1574,7 +1559,7 @@ function Contexto({
           ))}
         </div>
       )}
-    </Bloque>
+    </div>
   )
 }
 
@@ -1623,7 +1608,7 @@ function ListaCompra({ items }: { items: FilaDetalle[] }) {
  * Y se ve más de una: mostrar sólo la última es lo que enterraba las notas viejas. Las de arriba
  * ahora son los tres campos, así que esto es historial y se puede desplegar cuando hace falta.
  */
-function Notas({ notas, guardando, onGuardar }: { notas: Nota[]; guardando: boolean; onGuardar: (texto: string) => Promise<boolean> }) {
+function Notas({ notas, guardando, onGuardar, extra }: { notas: Nota[]; guardando: boolean; onGuardar: (texto: string) => Promise<boolean>; extra?: React.ReactNode }) {
   const [texto, setTexto] = useState('')
   const [todo, setTodo] = useState(false)
   const caja = useRef<HTMLTextAreaElement>(null)
@@ -1703,6 +1688,7 @@ function Notas({ notas, guardando, onGuardar }: { notas: Nota[]; guardando: bool
           </button>
         )}
       </div>
+      {extra}
     </Bloque>
   )
 }
@@ -1720,9 +1706,13 @@ function Dato({ k, v }: { k: string; v: string }) {
 /** Alto de la fila de pestañas: el aviso se pega justo debajo, sin taparlas. */
 const ALTO_SOLAPAS = 31
 
-function Envoltorio({ children, aviso }: { children: React.ReactNode; aviso?: { txt: string; mal?: boolean } | null }) {
+/**
+ * `pie` es la franja de «Próximo contacto»: va al fondo de la pantalla aunque la ficha sea corta
+ * (por eso la columna con `flex: 1`) y se pega abajo al bajar.
+ */
+function Envoltorio({ children, aviso, pie }: { children: React.ReactNode; aviso?: { txt: string; mal?: boolean } | null; pie?: React.ReactNode }) {
   return (
-    <div style={{ background: color.bg, color: color.ink, minHeight: '100vh', fontSize: font.sm, paddingBottom: space[3] }}>
+    <div style={{ background: color.bg, color: color.ink, minHeight: '100vh', fontSize: font.sm, display: 'flex', flexDirection: 'column' }}>
       {aviso && (
         <div
           style={{
@@ -1740,7 +1730,8 @@ function Envoltorio({ children, aviso }: { children: React.ReactNode; aviso?: { 
           {aviso.txt}
         </div>
       )}
-      {children}
+      <div style={{ flex: 1, paddingBottom: space[3] }}>{children}</div>
+      {pie}
     </div>
   )
 }
@@ -1768,30 +1759,22 @@ function Vacio({ texto, mal }: { texto: string; mal?: boolean }) {
  */
 function FichaLead({
   lead,
-  today,
   guardando,
   onMutar,
   marcaComunidad,
-  leEscribiste,
   botonChat,
 }: {
   lead: Lead
-  today: Date
   guardando: boolean
   onMutar: (fn: (m: MapaLeads) => MapaLeads, exito: string) => Promise<boolean>
   marcaComunidad: React.ReactNode
-  leEscribiste: boolean
   botonChat: React.ReactNode
 }) {
-  const seg = leadEstadoSeg(lead, today)
-  const hoy = hoyISO(today)
-  // Marcado = tocó un botón de días hoy, o ya tiene una fecha para más adelante.
-  const faltaFecha = leEscribiste && lead.ultimo_contacto !== hoy && !((lead.proximo_manual || '') > hoy)
   const notas = Array.isArray(lead.notas) ? lead.notas : []
 
   return (
-    <div style={{ paddingTop: space[2] }}>
-      <Bloque>
+    <div>
+      <Encabezado>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
           <div style={{ minWidth: 0 }}>
             {/* El nombre y la ciudad se corrigen acá (Darío, 16-oct-2026): muchas veces el prospecto
@@ -1801,49 +1784,37 @@ function FichaLead({
               vacio="Sin nombre"
               ayuda="Su nombre"
               guardando={guardando}
-              estilo={{ fontSize: font.lg, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}
+              estilo={{ fontSize: 18, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}
               onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'nombre', v), 'Nombre guardado')}
             />
-            <TextoEditable
-              valor={lead.ciudad || ''}
-              vacio="sin ciudad"
-              ayuda="Su ciudad"
-              guardando={guardando}
-              estilo={{ fontSize: font.xs, color: color.mut2 }}
-              onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'ciudad', v), 'Ciudad guardada')}
-            />
-            <div>{marcaComunidad}</div>
-            {botonChat}
-            {/* Editable también acá: en un prospecto el Instagram es la mitad de lo que se sabe
-                de él, y muchas veces llega después de haberlo cargado. */}
-            <Instagram
-              valor={lead.instagram || ''}
-              guardando={guardando}
-              onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'instagram', v), v ? 'Instagram guardado' : 'Instagram eliminado')}
-            />
           </div>
-          <Chip tone={lead.estado === 'activo' ? 'neutro' : 'ok'}>{LEAD_ESTADO_LABEL[lead.estado]}</Chip>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
+            <Chip tone={lead.estado === 'activo' ? 'neutro' : 'ok'}>{LEAD_ESTADO_LABEL[lead.estado]}</Chip>
+            {botonChat}
+          </div>
         </div>
-
-        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+          <TextoEditable
+            valor={lead.ciudad || ''}
+            vacio="sin ciudad"
+            ayuda="Su ciudad"
+            guardando={guardando}
+            estilo={{ fontSize: font.xs, color: color.mut2 }}
+            onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'ciudad', v), 'Ciudad guardada')}
+          />
+          {/* Editable también acá: en un prospecto el Instagram es la mitad de lo que se sabe
+              de él, y muchas veces llega después de haberlo cargado. */}
+          <Instagram
+            valor={lead.instagram || ''}
+            guardando={guardando}
+            onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'instagram', v), v ? 'Instagram guardado' : 'Instagram eliminado')}
+          />
           <Chip>Todavía no compró</Chip>
-          {seg.proximo && (
-            <Chip tone={seg.estado === 'vencido' ? 'alerta' : 'neutro'}>Volver a hablarle: {fmtFecha(seg.proximo)}</Chip>
-          )}
-          {!seg.proximo && <Chip tone="alerta">Sin agendar</Chip>}
         </div>
-      </Bloque>
+        {marcaComunidad}
+      </Encabezado>
 
-      <Bloque titulo="Volver a hablarle">
-        {faltaFecha && <AvisoFaltaFecha />}
-        <Plazos guardando={guardando} onElegir={(d) => onMutar((m) => escribiHoyLead(m, lead.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)} />
-        <CampoFecha
-          key={`fecha-${lead.id}`}
-          valor={lead.proximo_manual || ''}
-          onGuardar={(v) => onMutar((m) => setProximoLead(m, lead.id, v), avisoFecha(v))}
-        />
-      </Bloque>
-
+      <div style={{ paddingTop: space[2] }}>
       <Notas
         notas={notas}
         guardando={guardando}
@@ -1886,7 +1857,49 @@ function FichaLead({
           Verlo en Leads ↗
         </a>
       </div>
+      </div>
     </div>
+  )
+}
+
+/**
+ * «Próximo contacto» del prospecto: la misma franja fija que la del cliente, sin ritmo de compra
+ * (todavía no compró).
+ */
+function PieLead({
+  lead,
+  today,
+  guardando,
+  leEscribiste,
+  onMutar,
+}: {
+  lead: Lead
+  today: Date
+  guardando: boolean
+  leEscribiste: boolean
+  onMutar: (fn: (m: MapaLeads) => MapaLeads, exito: string) => Promise<boolean>
+}) {
+  const seg = leadEstadoSeg(lead, today)
+  const hoy = hoyISO(today)
+  // Marcado = tocó un botón de días hoy, o ya tiene una fecha para más adelante.
+  const faltaFecha = leEscribiste && lead.ultimo_contacto !== hoy && !((lead.proximo_manual || '') > hoy)
+  return (
+    <ProximoContacto
+      fecha={seg.proximo}
+      hoy={hoy}
+      faltaFecha={faltaFecha}
+      ritmo={null}
+      guardando={guardando}
+      onPlazo={(d) => onMutar((m) => escribiHoyLead(m, lead.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)}
+      calendario={
+        <CampoFecha
+          key={`fecha-${lead.id}`}
+          grande
+          valor={lead.proximo_manual || ''}
+          onGuardar={(v) => onMutar((m) => setProximoLead(m, lead.id, v), avisoFecha(v))}
+        />
+      }
+    />
   )
 }
 
