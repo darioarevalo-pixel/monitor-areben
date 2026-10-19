@@ -8,7 +8,13 @@ import type { FacturaEmitida } from '@/lib/arca/factura-pdf'
 
 export type MarcaErp = 'bdi' | 'zattia'
 
-export type VentaParaFacturar = { marca: MarcaErp; ventaId: string; fecha: string; monto: number; cuentas: string[] }
+/** `numero`/`cliente`: los de la venta en GN, sólo para mostrar (null si ⛔ se encontró). */
+export type VentaParaFacturar = { marca: MarcaErp; ventaId: string; fecha: string; monto: number; cuentas: string[]; numero?: string | null; cliente?: string | null }
+/** Una factura de GN del mes (`ventas_factura_gn`: la fecha es el día de la VENTA, GN ⛔ da el de la factura). */
+export type FacturaGN = {
+  marca: MarcaErp; ventaId: string; numero: string; tipo: string | null; cae: string | null; estado: string | null; fecha: string | null; monto: number
+  venta: { numero: string | null; cliente: string | null }
+}
 
 export type MesFacturacion = {
   mes: string
@@ -26,6 +32,7 @@ export type MesFacturacion = {
   pendiente: number
   sinClasificar: Array<{ cuenta: string; monto: number; n: number }>
   ventas: VentaParaFacturar[]
+  facturasGN?: FacturaGN[]
   porPedido: number
   puntosDeVenta: Partial<Record<MarcaErp, number | null>>
 }

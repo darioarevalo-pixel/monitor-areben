@@ -149,6 +149,36 @@ export async function leerMes(mes) {
 }
 
 /**
+ * Lo que la PANTALLA de Facturación muestra además del mes (🎨 Diseño 7): el Nº y la clienta de GN de cada venta sin
+ * factura, y las facturas de GN del mes (`ventas_factura_gn`, por el día de la VENTA). Sólo lectura: ⛔ entra en
+ * `facturarVentas` ni en el tope.
+ */
+async function vistaDeFacturacion(mes, ventas) {
+  const desde = `${mes}-01`, hasta = finDeMes(mes)
+  const porMarca = await Promise.all(MARCAS.map(async (marca) => {
+    const { url, key } = cfgDeMarca(marca)
+    const b = createClient(url, key)
+    const gn = await leerTodo(b, 'ventas_factura_gn', (q) => q.select('venta_id, numero, tipo, cae, estado, fecha, monto').gte('fecha', desde).lte('fecha', hasta).order('venta_id'))
+    const ids = [...new Set([...ventas.filter((v) => v.marca === marca).map((v) => v.ventaId), ...gn.map((f) => String(f.venta_id))])].filter((id) => /^\d+$/.test(id))
+    const datos = new Map()
+    for (let i = 0; i < ids.length; i += 300) {
+      const { data, error } = await b.from('ventas').select('id, number, client_name').in('id', ids.slice(i, i + 300))
+      if (error) throw new Error(`ventas (${marca}): ${error.message}`)
+      for (const v of data) datos.set(String(v.id), { numero: v.number != null ? String(v.number) : null, cliente: v.client_name || null })
+    }
+    return { marca, gn, datos }
+  }))
+  const de = (marca, id) => porMarca.find((p) => p.marca === marca)?.datos.get(String(id)) ?? { numero: null, cliente: null }
+  return {
+    ventas: ventas.map((v) => ({ ...v, ...de(v.marca, v.ventaId) })),
+    facturasGN: porMarca.flatMap((p) => p.gn.map((f) => ({
+      marca: p.marca, ventaId: String(f.venta_id), numero: f.numero, tipo: f.tipo, cae: f.cae, estado: f.estado, fecha: f.fecha,
+      monto: Number(f.monto), venta: de(p.marca, f.venta_id),
+    }))),
+  }
+}
+
+/**
  * Factura esas ventas de una marca (un lote). Devuelve `{ status, error }` si no se puede, o el
  * resultado del lote. Exportada para la prueba de punta a punta contra homologación.
  */
@@ -1335,12 +1365,14 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const m = await leerMes(mes)
+      const vista = await vistaDeFacturacion(mes, m.ventas)
       return res.status(200).json({
         mes, ambiente: m.ambiente, errorAmbiente: m.errorAmbiente || null,
         estado: m.periodo?.estado || 'abierto', cerradoPor: m.periodo?.cerrado_por || null, cerradoEn: m.periodo?.cerrado_en || null,
         techoCalculado: m.calculado.total, sinClasificar: m.calculado.sinClasificar, porCuenta: m.calculado.porCuenta,
         ...m.resumen,
-        ventas: m.ventas,
+        ventas: vista.ventas,
+        facturasGN: vista.facturasGN,
         porPedido: POR_PEDIDO,
         puntosDeVenta: m.ambiente ? Object.fromEntries(MARCAS.map((x) => { try { return [x, ptoVtaDe(m.ambiente, x, process.env)] } catch { return [x, null] } })) : {},
       })

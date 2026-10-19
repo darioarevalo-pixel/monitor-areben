@@ -105,6 +105,13 @@ mismo molde. ⛔ se copian en la pantalla nueva (Ajustes y Stock ya las usan).
 Y **Facturación** (F5 del plan): el tope del mes, lo ya facturado y las ventas sin
 factura, que se facturan con ARCA (ex AFIP) por web service. Reemplaza la facturación masiva de GN
 y el «Pendiente de facturar» del dashboard de Darío.
+🎨 **Con el molde (19-oct, Diseño 7)**: arriba el tope (tarjeta oscura), lo facturado con su % del tope (GN · ERP), lo
+pendiente (las dos marcas) y cuántas sin factura tiene la marca del menú; abajo UNA lista con tres vistas —Sin factura
+(Nº y clienta de GN, último cobro, a qué cuenta entró, «A facturar»; clic o tilde ⇒ barra con «Facturar»; la barra DICE
+por qué ⛔ se puede: pasa lo pendiente, más de `porPedido`, facturación apagada) · Facturas (las de GN del mes, por el día
+de la venta, + las del ERP con CAE; «⋯» = PDF y NC) · Notas de crédito (sólo las del ERP)—, de a 300 («Mostrar N más»).
+Núcleo `lib/erp/facturacion-lista.core.js`; el Nº, la clienta y las facturas de GN los suma el GET del mes
+(`vistaDeFacturacion`, sólo lectura: ⛔ entra en `facturarVentas`). Test `tests/erp-facturacion-pantalla.test.tsx`.
 
 - 🔑 **`erp › Productos y precios › Productos`** (🎨 19-oct, Diseño 7: lista de TRABAJO con el molde, tablero 5 del v8; reemplaza
   al «buscá un producto» de `PreciosProducto.tsx`, 15-oct): un producto por fila —variantes, disponible, costo, precio Local ·
