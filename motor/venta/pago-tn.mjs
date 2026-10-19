@@ -27,3 +27,14 @@ export const puedeVencer = (o) => !PAGADA.has(o.payment_status)
  * y lo que vence). Un pagado sin `pagada_en` retiene pero ⛔ está sin pagar: le falta la fecha, ⛔ la plata.
  */
 export const esSinPagarTN = (o) => esReservaTN(o) && puedeVencer(o)
+
+/**
+ * ¿ENTREGADO SIN COBRAR? Cerrado en TN (`closed`: entregado o archivado) sin estado pagado ni devuelto. 🔑 Bruno, 19-oct:
+ * sigue en «Sin pagar», con el aviso «entregado sin cobrar», hasta que se cobre o se cancele. Medido 19-oct: 6 (BDI
+ * 21745/21865/21870, Zattia 7197/7206/7268), todos «Efectivo» de retiro: cobrados en el local sin marcar pagado en TN.
+ * ⛔ retiene stock (la prenda ya se fue) ni vence: ⛔ es reserva, sólo falta cobrarlo o cancelarlo.
+ */
+export const esEntregadoSinCobrarTN = (o) => o.status === 'closed' && !PAGADA.has(o.payment_status) && !DEVUELTA.has(o.payment_status)
+
+/** Lo que va en «Sin pagar» de la pantalla: lo sin pagar que retiene + lo entregado sin cobrar. */
+export const esPorCobrarTN = (o) => esSinPagarTN(o) || esEntregadoSinCobrarTN(o)

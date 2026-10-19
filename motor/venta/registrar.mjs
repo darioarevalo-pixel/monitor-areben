@@ -10,8 +10,9 @@
  * Devuelven `{ ok: true, … }` o `{ ok: false, error }`. Sólo lanzan si la BASE falla.
  */
 import { randomUUID } from 'node:crypto'
-import { armarAnulacion, armarCambio, armarVenta, mueveStock } from './armar.mjs'
+import { armarAnulacion, armarCambio, armarVenta, movimientosDeAnulacion, mueveStock } from './armar.mjs'
 import { costosDe } from './costo.mjs'
+import { armarDevolucion, autorizacion, leerDevolucion, pagosDePlata, vueltaDe } from './devolucion.core.mjs'
 import { frena } from '../cuenta/cuenta.core.mjs'
 import { anularCompraDe, cuentaBloqueada, filaCompra, insertarFila } from '../cuenta/libro.mjs'
 
@@ -123,6 +124,7 @@ function frenarSinStock(armada, avisos, e) {
 const falla = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo, mensaje, campo } : { codigo, mensaje } })
 /** Medio peso de tolerancia al comparar saldos (todo se guarda con 2 decimales). */
 const casi = (a, b) => a >= b - 0.005
+const pesos = (x) => Math.round(Number(x) * 100) / 100
 
 /**
  * Lo que queda A CUENTA (§15, sql/025): hace falta el cliente, y `frena` (sin crédito, atrasado, pasa el tope) se
@@ -305,13 +307,39 @@ export async function registrarCambio(db, e) {
     if (ya) return (await mismaVenta(db, ya, ya.marca, ya.total, nuevas - devueltas)) ? respuestaYaExistia(ya) : conflicto(e)
     const original = await leerParaCambiar(db, e?.venta_original_id)
     if (original && e.marca && e.marca !== original.venta.marca) return { ok: false, error: { codigo: 'OTRA_MARCA', mensaje: 'Todavía no se puede hacer un cambio entre marcas', campo: 'marca' } }
-    const armada = armarCambio(e, original ? await leerConf(db, original.venta.marca) : { marcas: {}, cuentas: [] }, original)
+    const conf = original ? await leerConf(db, original.venta.marca) : { marcas: {}, cuentas: [] }
+    const armada = armarCambio(e, conf, original)
     if (!armada.ok) return armada
+    const leida = leerDevolucion(e.devolucion)
+    if (leida.ok === false) return leida
     // §6.2: la clienta que vino en el cambio, o la de la venta original. Hace falta si queda saldo o si lo usa.
     const cli = await resolverCliente(db, armada.venta.empresa_id, e)
     if (cli.error) return cli.error
     armada.venta.cliente_id = cli.id ?? armada.venta.cliente_id
-    if (armada.a_favor > 0 && !armada.venta.cliente_id) return falla('FALTA_CLIENTE', `Quedan ${armada.a_favor} a favor: hace falta la clienta para guardarlos`, 'cliente')
+    // §17: lo que queda a favor se devuelve en PLATA si el local lo eligió; si no, es saldo (como siempre). Con la llave, PIN.
+    const enPlata = armada.a_favor > 0 && leida.devolucion?.forma === 'plata'
+    if (armada.a_favor > 0 && !enPlata && !armada.venta.cliente_id) return falla('FALTA_CLIENTE', `Quedan ${armada.a_favor} a favor: hace falta la clienta para guardarlos`, 'cliente')
+    let dev = null, autoriza = null
+    if (armada.a_favor > 0) {
+      const a = autorizacion(armada.venta.marca, e.autoriza)
+      if (a.ok === false) return a
+      autoriza = a.autoriza
+      if (leida.devolucion && !(await hayDevolucion(db))) return falla('ENTRADA_INVALIDA', 'Esta base todavía no registra devoluciones (falta sql/028)', 'devolucion')
+      const o = original.venta
+      // Lo pagado por lo devuelto: lo de lista con el descuento que tuvo la venta (13.500 por 15.000 en efectivo).
+      const plata = Number(o.subtotal) > 0 ? (armada.a_favor * Number(o.total)) / Number(o.subtotal) : 0
+      const pagos = leida.devolucion ? await pagosDe(db, o.id) : []
+      if (enPlata) {
+        const [ya] = await q(db, `select coalesce(sum(d.monto), 0)::float as s from venta_devolucion d join venta c on c.id = d.venta_id
+          where c.venta_original_id = $1 and c.estado = 'confirmada' and d.forma = 'plata'`, [o.id])
+        const queda = pagosDePlata(pagos).reduce((s, p) => s + p.monto, 0) - ya.s
+        if (plata > queda + 0.01) return falla('DEVUELVE_DE_MAS', `De la venta ${o.numero} quedan ${pesos(queda)} pagados en plata y se quieren devolver ${pesos(plata)}`, 'devolucion')
+      }
+      if (leida.devolucion) {
+        dev = armarDevolucion({ devolucion: leida.devolucion, plata, lista: armada.a_favor, pagos, conf, marca: o.marca, cliente_id: armada.venta.cliente_id })
+        if (!dev.ok) return dev
+      }
+    }
     const sinSaldo = await chequearUsoDeSaldo(db, armada)
     if (sinSaldo) return sinSaldo
     const sinCuenta = await chequearCuenta(db, armada, e)
@@ -323,13 +351,14 @@ export async function registrarCambio(db, e) {
     if (sinStock) return sinStock
     const venta = await escribir(db, armada)
     const usuario = venta.usuario
-    if (armada.a_favor > 0) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, armada.a_favor, 'cambio', usuario)])
+    if (armada.a_favor > 0 && !enPlata) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, armada.a_favor, 'cambio', usuario)])
+    if (dev) await insertarDevolucion(db, venta, dev.filas, { usuario, autoriza, en: venta.ocurrida_en })
     if (armada.usa_saldo > 0) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, -armada.usa_saldo, 'uso', usuario)])
     const enCuenta = await anotarCompra(db, venta, armada.usa_cuenta)
     return {
       ...enCuenta,
       ok: true, venta: { id: venta.id, numero: venta.numero, tipo: 'cambio', diferencia: armada.diferencia, total: venta.total },
-      movimientos: armada.movimientos.length, a_favor: armada.a_favor, avisos,
+      movimientos: armada.movimientos.length, a_favor: enPlata ? 0 : armada.a_favor, avisos, devolucion: resumenDevolucion(dev),
       saldo: venta.cliente_id ? await saldoDe(db, venta.cliente_id, venta.marca, venta.prueba) : null,
       nc_pendiente: await tieneFactura(db, original.venta.id),
     }
@@ -341,11 +370,72 @@ export async function anularVenta(db, e) {
   return enTransaccion(db, () => anularDentro(db, e))
 }
 
+/** ¿La base tiene la 028 (devolución, vuelta de la prenda)? Sin ella se anula como antes: todo vuelve al instante. */
+async function hayDevolucion(db) {
+  const [r] = await q(db, `select to_regclass('venta_devolucion') is not null as hay`)
+  return r.hay
+}
+
+/** Los pagos de una venta con el medio de su cuenta de cobro (`cuenta_medio`: saldo y cuenta ⛔ son plata). */
+async function pagosDe(db, ventaId) {
+  const filas = await q(db, `select p.*, c.medio as cuenta_medio from venta_pago p join cuenta_cobro c on c.id = p.cuenta_cobro_id where p.venta_id = $1 order by p.monto desc, p.id`, [ventaId])
+  return filas.map((p) => ({ cuenta_cobro_id: p.cuenta_cobro_id, medio: p.medio ?? null, cuenta_real_id: p.cuenta_real_id ?? null, cuenta_medio: p.cuenta_medio, monto: Number(p.monto) }))
+}
+
+/** 37a: el estado del pedido de TN de la venta (sql/015), o null si no es de TN o la base ⛔ lo tiene. */
+async function estadoDelPedido(db, venta) {
+  if (venta.origen !== 'tn') return null
+  const [{ hay }] = await q(db, `select exists (select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'tn_orden' and column_name = 'estado') as hay`)
+  if (!hay) return null
+  const [tienda, tnId] = String(venta.origen_ref).split(':')
+  if (!/^\d+$/.test(tnId ?? '')) return null
+  const [o] = await q(db, 'select estado from tn_orden where tienda = $1 and tn_id = $2', [tienda, tnId])
+  return o?.estado ?? null
+}
+
+async function insertarDevolucion(db, venta, filas, { usuario, autoriza, en }) {
+  await insertar(db, 'venta_devolucion', filas.map((f) => ({
+    ...f, id: randomUUID(), empresa_id: venta.empresa_id, marca: venta.marca, venta_id: venta.id, autoriza, prueba: venta.prueba, usuario, ocurrida_en: en, creado_en: new Date().toISOString(),
+  })))
+}
+
+const resumenDevolucion = (dev) => (dev ? { forma: dev.forma, monto: dev.monto, pagos: dev.filas.map(({ cuenta_cobro_id, medio, monto }) => ({ cuenta_cobro_id, medio, monto })) } : null)
+
 /** El cuerpo de `anularVenta`, dentro de una transacción que abrió otro. */
 async function anularDentro(db, e) {
   const actual = await leerParaCambiar(db, e?.venta_id)
-  const armada = armarAnulacion(actual, e ?? {})
+  const leida = leerDevolucion(e?.devolucion)
+  if (leida.ok === false) return leida
+  const armada = armarAnulacion(actual, { ...(e ?? {}), devolucion: leida.devolucion })
   if (!armada.ok) return armada
+  const v = actual.venta
+  const con028 = await hayDevolucion(db)
+  if (leida.devolucion && !con028) return falla('ENTRADA_INVALIDA', 'Esta base todavía no registra devoluciones (falta sql/028)', 'devolucion')
+  if (con028) {
+    const [d] = await q(db, `select exists (select 1 from venta_devolucion where venta_id = $1) as hay`, [v.id])
+    if (d.hay) return falla('TIENE_DEVOLUCION', `La venta ${v.numero} ya devolvió plata o saldo: no se anula`)
+  }
+  // §17: lo PAGADO en plata vuelve como eligió el local (plata o saldo a favor, a lista); con la llave, con PIN.
+  const pagos = con028 ? await pagosDe(db, v.id) : []
+  const plata = pagosDePlata(pagos).reduce((s, p) => s + p.monto, 0)
+  let dev = null, autoriza = null, clienteSaldo = v.cliente_id
+  if (leida.devolucion) {
+    const a = autorizacion(v.marca, e.autoriza)
+    if (a.ok === false) return a
+    autoriza = a.autoriza
+    if (leida.devolucion.forma === 'saldo' && !clienteSaldo) {
+      const cli = await resolverCliente(db, v.empresa_id, e)
+      if (cli.error) return cli.error
+      clienteSaldo = cli.id
+    }
+    const lista = Number(v.total) > 0 ? (plata * Number(v.subtotal)) / Number(v.total) : 0
+    dev = armarDevolucion({ devolucion: leida.devolucion, plata, lista, pagos, conf: await leerConf(db, v.marca), marca: v.marca, cliente_id: clienteSaldo })
+    if (!dev.ok) return dev
+  }
+  // 37a: empaquetado ⇒ «a desarmar», ya salió ⇒ «a recibir»: el libro espera a `confirmarVuelta`.
+  const vuelta = con028 ? vueltaDe(await estadoDelPedido(db, v)) : 'ya'
+  if (con028) Object.assign(armada.anulacion, { vuelta, autoriza })
   // §6.2: lo que la venta movió del saldo se da vuelta. Si generó saldo y ya se usó, primero se anula la que lo usó.
   const netos = await q(db, `select cliente_id, sum(monto) as neto from saldo_favor_movimiento where venta_id = $1 group by 1`, [actual.venta.id])
   const vueltas = []
@@ -363,8 +453,40 @@ async function anularDentro(db, e) {
   // §15: lo que dejó a cuenta se da vuelta (si ya lo pagó, le queda a favor en la cuenta).
   await anularCompraDe(db, actual.venta, { usuario: armada.anulacion.usuario, motivo: armada.anulacion.motivo, en: armada.anulacion.anulada_en })
   await db.query(`update venta set estado = 'anulada' where id = $1`, [actual.venta.id])
-  await insertarMovimientos(db, armada.movimientos)
-  return { ok: true, venta: { id: actual.venta.id, numero: actual.venta.numero, estado: 'anulada' }, movimientos: armada.movimientos.length, nc_pendiente: await tieneFactura(db, actual.venta.id) }
+  const movimientos = vuelta === 'ya' ? armada.movimientos : []
+  await insertarMovimientos(db, movimientos)
+  const quien = { usuario: armada.anulacion.usuario, autoriza, en: armada.anulacion.anulada_en }
+  if (dev) await insertarDevolucion(db, v, dev.filas, quien)
+  if (dev?.forma === 'saldo' && dev.monto > 0) await insertar(db, 'saldo_favor_movimiento', [movSaldo({ ...v, cliente_id: clienteSaldo }, dev.monto, 'devolucion', quien.usuario)])
+  return {
+    ok: true, venta: { id: v.id, numero: v.numero, estado: 'anulada' }, movimientos: movimientos.length, nc_pendiente: await tieneFactura(db, v.id),
+    vuelta, a_devolver: pesos(plata), devolucion: resumenDevolucion(dev),
+    ...(dev?.forma === 'saldo' ? { saldo: await saldoDe(db, clienteSaldo, v.marca, v.prueba) } : {}),
+  }
+}
+
+/**
+ * §17 La prenda de una anulación «a desarmar» o «a recibir» (37a) VOLVIÓ: alguien la escaneó o la recibió. Recién
+ * ahí el libro la suma. Una sola vez (`YA_VOLVIO`); la que volvió al anular ⛔ espera nada (`NO_PENDIENTE`).
+ * @param {import('pg').ClientBase} db @param {{ venta_id: string, usuario: string }} e
+ */
+export async function confirmarVuelta(db, e) {
+  if (!(typeof e?.usuario === 'string' && e.usuario.trim())) return falla('ENTRADA_INVALIDA', 'Falta quién la recibió', 'usuario')
+  if (!/^[0-9a-f-]{36}$/i.test(String(e?.venta_id ?? ''))) return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id')
+  return enTransaccion(db, async () => {
+    const actual = await leerParaCambiar(db, e.venta_id)
+    if (!actual) return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id')
+    const [a] = await q(db, `select a.vuelta, w.venta_id is not null as volvio from venta_anulacion a
+      left join venta_vuelta w on w.venta_id = a.venta_id where a.venta_id = $1 for update of a`, [e.venta_id])
+    if (!a || a.vuelta === 'ya') return falla('NO_PENDIENTE', `La venta ${actual.venta.numero} no espera ninguna prenda`, 'venta_id')
+    if (a.volvio) return falla('YA_VOLVIO', `Las prendas de la venta ${actual.venta.numero} ya volvieron`, 'venta_id')
+    const en = new Date().toISOString()
+    await insertar(db, 'venta_vuelta', [{ venta_id: e.venta_id, usuario: e.usuario.trim(), vuelta_en: en }])
+    const movimientos = movimientosDeAnulacion(actual.venta, actual.lineas, en)
+      .map((m) => ({ ...m, detalle: { ...m.detalle, venta_numero: actual.venta.numero, vuelta: a.vuelta } }))
+    await insertarMovimientos(db, movimientos)
+    return { ok: true, venta: { id: actual.venta.id, numero: actual.venta.numero }, vuelta: a.vuelta, movimientos: movimientos.length }
+  })
 }
 
 

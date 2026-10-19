@@ -258,12 +258,19 @@ export function armarAnulacion(actual, e, { ahora = new Date() } = {}) {
   if (!(typeof e.usuario === 'string' && e.usuario.trim())) return fallo('ENTRADA_INVALIDA', 'Falta quién la anula', 'usuario')
   const en = ahora.toISOString()
   const anulacion = { venta_id: v.id, motivo: e.motivo.trim(), usuario: e.usuario.trim(), anulada_en: en, devolucion: e.devolucion ?? null }
+  return { ok: true, anulacion, movimientos: movimientosDeAnulacion(v, actual.lineas, en) }
+}
+
+/**
+ * Lo contrario de la venta en el libro: lo que salió, vuelve. Sólo lo que el motor movió (la misma regla que al
+ * registrarla). `en`: al anular, o al confirmar que la prenda volvió (sql/028, «a desarmar» / «a recibir»).
+ */
+export function movimientosDeAnulacion(v, lineas, en) {
+  if (!mueveStock(v)) return []
   const contra = { ...v, ocurrida_en: en }
-  // Se da vuelta sólo lo que el motor movió: la misma regla que al registrarla.
-  const movimientos = !mueveStock(v) ? [] : actual.lineas.map((l) => ({
+  return lineas.map((l) => ({
     ...movimientoDe(contra, l, 'anulacion'),
-    cantidad: l.cantidad, // lo contrario de la venta: lo que salió, vuelve
+    cantidad: l.cantidad,
     clave: `${v.id}:${l.id}`, origen_ref: `${v.id}:${l.id}:anulacion`,
   }))
-  return { ok: true, anulacion, movimientos }
 }

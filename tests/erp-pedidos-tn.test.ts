@@ -16,6 +16,17 @@ describe('armarPedidosSinPagar', () => {
     expect(r.pedidos[1].link).toBe('https://stunned3.mitiendanube.com/admin/orders/6')
     expect(r.porTienda).toEqual({ zattia: { pedidos: 2, unidades: 3, total: 2001 }, stunned: { pedidos: 1, unidades: 0, total: 1000.5 } })
   })
+  it('entregado sin cobrar (Bruno, 19-oct): el CERRADO sin pago sigue, marcado, y ⛔ suma unidades retenidas', async () => {
+    const { STATUS_POR_COBRAR } = await import('../lib/erp/pedidos-tn.core.js')
+    const r = armarPedidosSinPagar({
+      ordenes: [o(1), o(2, { status: 'closed' }), o(3, { status: 'closed', payment_status: 'paid' }), o(4, { status: 'closed', payment_status: 'refunded' })],
+      lineas: [{ tienda: 'zattia', tn_id: 1, nombre: 'A', sku: 'Z1', cantidad: 1 }, { tienda: 'zattia', tn_id: 2, nombre: 'B', sku: 'Z2', cantidad: 3 }],
+      ahora,
+    })
+    expect(r.pedidos.map((p) => [p.tnId, p.entregadoSinCobrar, p.unidades])).toEqual([['1', false, 1], ['2', true, 3]])
+    expect(r.porTienda).toEqual({ zattia: { pedidos: 2, unidades: 1, total: 2001 } })
+    expect(STATUS_POR_COBRAR).toEqual(['open', 'closed'])
+  })
   it('authorized es PAGADO (Bruno, 15-oct): ⛔ aparece, y el handler lo excluye al leer', async () => {
     const { NO_SIN_PAGAR } = await import('../lib/erp/pedidos-tn.core.js')
     expect(armarPedidosSinPagar({ ordenes: [o(1, { payment_status: 'authorized' })], lineas: [], ahora }).pedidos).toEqual([])
