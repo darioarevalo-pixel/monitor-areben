@@ -579,30 +579,36 @@ async function buscarClientes(supabase, body, res) {
   const q = String(body.q || '').trim();
   if (q.length < 2) return res.status(200).json({ ok: true, clientes: [] });
 
-  // Los comodines de LIKE que venga escribiendo la persona son texto, no comodines; y las vocales
-  // pasan a ser comodines para que los acentos no escondan a nadie.
-  const patron = patronBusqueda(q);
 
   // Los que coinciden por nombre. Se piden de más porque después se filtra por "compró".
-  const { data: candidatos, error } = await supabase
-    .from('clientes')
-    .select('id, name, city, phone')
-    .ilike('name', patron)
-    .order('name')
-    .limit(TOPE_CANDIDATOS);
+  //
+  // 🔴 **Cada palabra por separado, en cualquier orden** (Darío, 19-oct-2026: "franco ortiz" no
+  // encontraba a Franco Ortiz). Con el texto entero como un solo patrón, "Ortiz Franco" o "Franco
+  // D. Ortiz" quedaban afuera.
+  const palabras = q.split(/\s+/).filter((p) => p.length >= 2);
+  let consulta = supabase.from('clientes').select('id, name, city, phone');
+  for (const p of palabras.length ? palabras : [q]) consulta = consulta.ilike('name', patronBusqueda(p));
+  const { data: candidatos, error } = await consulta.order('name').limit(TOPE_CANDIDATOS);
   if (error) throw new Error(error.message);
   if (!(candidatos || []).length) return res.status(200).json({ ok: true, clientes: [] });
 
   // ¿Cuáles de ésos compraron por el canal mayorista? Es lo que los hace clientes del CRM.
   const ids = candidatos.map((c) => c.id);
-  const { data: ventas, error: e2 } = await supabase
-    .from('ventas')
-    .select('client_id')
-    .in('client_id', ids)
-    .eq('channel_id', CANAL_MAYORISTA);
-  if (e2) throw new Error(e2.message);
-
-  const compraron = new Set((ventas || []).map((v) => v.client_id));
+  // 🔴 Paginado: con cientos de candidatos las ventas pasan las 1.000 filas y el corte de
+  // Supabase dejaba afuera, en silencio, a clientes que sí compraron.
+  const compraron = new Set();
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data: ventas, error: e2 } = await supabase
+      .from('ventas')
+      .select('client_id')
+      .in('client_id', ids)
+      .eq('channel_id', CANAL_MAYORISTA)
+      .order('id')
+      .range(desde, desde + PAGINA - 1);
+    if (e2) throw new Error(e2.message);
+    for (const v of ventas || []) compraron.add(v.client_id);
+    if ((ventas || []).length < PAGINA) break;
+  }
   return res.status(200).json({ ok: true, clientes: candidatos.filter((c) => compraron.has(c.id)).slice(0, TOPE_BUSQUEDA) });
 }
 
