@@ -130,6 +130,19 @@ portal hasta F5, cuánto queda GN en sólo-lectura.
   la encuentra por código o mail. Si ⛔ busca en notas ⇒ armar un buscador de ventas en la Caja (código/mail/#GN).
 - La #30489 ⛔ tiene nota (es de antes y GN ⛔ edita por API): Bruno le escribió el código a mano.
 
+## ▶️ CAJA 19-OCT (EN PROD: `8d2d7c72`, `ef70f2b1`, `a0519394`) — verlo el 20-oct en el local
+
+- Sobra de $24.976 del vie 16-oct (tarde) = el pedido web #7170 cobrado en efectivo 11 días después; el cierre
+  leía 10 días ⇒ ahora 45. Con él daba −$116. ▶️ Mirar que los cierres sigan en ±$200.
+- Ventas provisorias = primer 429 de GN (16 de 180); ahora se espera adentro del cobro. ▶️ Mirar que las
+  ventas del día lleguen con `intentos = 1`.
+- Regalo: el de cambio sale al cerrarse el cuadro de impresión del primero (como GN). Botón «Ticket de
+  cambio» también en «Ventas» de la pestaña Caja. ▶️ Prueba en el local: venta con Regalo, Enter en el
+  primer cuadro ⇒ tiene que aparecer el segundo. Recargar el POS antes (F5).
+- Reportes abiertos: «tarda en abrir la caja para cobrar, poner más a mano» (14-oct, medido ~1 s por
+  llamada: preguntar a Josefina qué quiere decir) · «efectivo-cadete» en GN (mano de Bruno; si esa plata ⛔
+  entra al cajón, la cuenta ⛔ va como efectivo en la Caja).
+
 ## 🏁 CAJA: LO DEL 13-OCT A LA MAÑANA (dictado por Bruno, con la caja abierta) — hecho el 13-oct; ▶️ verlo en el local
 
 - 🔴 **El cierre frenaba con «Gestión Nube no contestó» y GN contestaba bien** (200 en <0,5 s): `cobrosGN`
