@@ -10,8 +10,10 @@
  * Devuelven `{ ok: true, … }` o `{ ok: false, error }`. Sólo lanzan si la BASE falla.
  */
 import { randomUUID } from 'node:crypto'
-import { armarAnulacion, armarCambio, armarVenta } from './armar.mjs'
+import { armarAnulacion, armarCambio, armarVenta, mueveStock } from './armar.mjs'
 import { costosDe } from './costo.mjs'
+import { frena } from '../cuenta/cuenta.core.mjs'
+import { anularCompraDe, cuentaBloqueada, filaCompra, insertarFila } from '../cuenta/libro.mjs'
 
 const q = async (db, sql, params = []) => (await db.query(sql, params)).rows
 
@@ -70,22 +72,85 @@ async function ponerCosto(db, lineas, avisos) {
   }
 }
 
-/** Lo que dice el libro de cada prenda que SALE: si ⛔ alcanza, aviso (en sombra el libro todavía ⛔ cierra ⇒ ⛔ frena). */
+/**
+ * Lo que dice el libro de cada prenda que SALE: si ⛔ alcanza, aviso `SIN_STOCK_EN_LIBRO` con el nivel. Se cuenta NETO por
+ * variante: en un cambio por la misma prenda, la que entra suma antes de que reste la que sale (si no, falso aviso).
+ */
 async function avisarStock(db, venta, lineas, avisos) {
-  const salen = lineas.filter((l) => l.cantidad > 0)
+  const neto = new Map()
+  for (const l of lineas) { const k = `${l.product_id}:${l.size_id}`; neto.set(k, (neto.get(k) || 0) + l.cantidad) }
+  const salen = [...neto].filter(([, n]) => n > 0).map(([k, n]) => { const [product_id, size_id] = k.split(':').map(Number); return { product_id, size_id, cantidad: n } })
   if (!salen.length) return
   const filas = await q(db, `select product_id, size_id, coalesce(sum(cantidad), 0)::int as nivel from stock_movimiento
     where deposito = $1 and (product_id, size_id) in (select * from unnest($2::bigint[], $3::bigint[])) group by 1, 2`,
   [venta.deposito, salen.map((l) => l.product_id), salen.map((l) => l.size_id)])
   const nivel = new Map(filas.map((r) => [`${r.product_id}:${r.size_id}`, r.nivel]))
   for (const l of salen) {
-    if ((nivel.get(`${l.product_id}:${l.size_id}`) ?? 0) < l.cantidad) avisos.push({ codigo: 'SIN_STOCK_EN_LIBRO', product_id: l.product_id, size_id: l.size_id })
+    const n = nivel.get(`${l.product_id}:${l.size_id}`) ?? 0
+    if (n < l.cantidad) avisos.push({ codigo: 'SIN_STOCK_EN_LIBRO', product_id: l.product_id, size_id: l.size_id, nivel: n, cantidad: l.cantidad })
   }
+}
+
+/**
+ * 🔑 «El libro MANDA» · sin negativos (Bruno, 18-oct): con la llave de la marca prendida, la venta de la CAJA que deja el
+ * libro < 0 ⛔ entra, salvo con el PIN de la encargada (lo valida el monitor: llega `autoriza: { usuario, motivo:
+ * 'pin_encargada' }`); si entra así, la venta guarda en `detalle.contar` qué variantes hay que CONTAR (la prenda estaba en
+ * la mano ⇒ el que está mal es el libro). TN, mayorista y el resto ⛔ se frenan: ya los cobró otro. La de prueba ⛔ mueve
+ * el libro ⇒ ⛔ se frena.
+ * Llave: `VENTA_SIN_NEGATIVOS=zattia,stunned` (apagada: el libro todavía ⛔ es la verdad; se prende con el corte).
+ */
+export const MARCAS_LLAVE = ['bdi', 'zattia', 'stunned']
+export function sinNegativosEn(marca, env = process.env) {
+  const lista = String(env.VENTA_SIN_NEGATIVOS ?? '').split(',').map((m) => m.trim().toLowerCase()).filter(Boolean)
+  for (const m of lista) if (!MARCAS_LLAVE.includes(m)) throw new Error(`VENTA_SIN_NEGATIVOS: marca desconocida «${m}»`)
+  return lista.includes(marca)
+}
+
+/** El freno de `sinNegativosEn` sobre los avisos ya calculados: la falla, o null (y si lo autorizó la encargada, anota). */
+function frenarSinStock(armada, avisos, e) {
+  const v = armada.venta
+  const faltan = avisos.filter((a) => a.codigo === 'SIN_STOCK_EN_LIBRO')
+  if (!faltan.length || !mueveStock(v) || v.origen !== 'caja' || !sinNegativosEn(v.marca)) return null
+  const a = e?.autoriza
+  if (a?.motivo === 'pin_encargada' && typeof a.usuario === 'string' && a.usuario.trim()) {
+    v.detalle = { ...v.detalle, contar: faltan.map(({ product_id, size_id, nivel }) => ({ product_id, size_id, nivel, autoriza: a.usuario.trim() })) }
+    return null
+  }
+  const n = faltan.length
+  return { ok: false, error: { codigo: 'SIN_STOCK', mensaje: `El libro dice que ${n === 1 ? 'esa prenda no está' : `${n} prendas no están`} en ${v.deposito}: hace falta el PIN de la encargada`, campo: 'lineas', faltan } }
 }
 
 const falla = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo, mensaje, campo } : { codigo, mensaje } })
 /** Medio peso de tolerancia al comparar saldos (todo se guarda con 2 decimales). */
 const casi = (a, b) => a >= b - 0.005
+
+/**
+ * Lo que queda A CUENTA (§15, sql/025): hace falta el cliente, y `frena` (sin crédito, atrasado, pasa el tope) se
+ * salta sólo con el PIN de un admin (`autoriza: { motivo: 'pin_admin', usuario }`, queda en `detalle.cuenta_autoriza`).
+ * Bloquea la cuenta del cliente hasta el commit. `null` si está bien.
+ */
+async function chequearCuenta(db, armada, e) {
+  if (!(armada.usa_cuenta > 0)) return null
+  const v = armada.venta
+  if (!v.cliente_id) return falla('FALTA_CLIENTE', 'Para dejar a cuenta hace falta el cliente', 'cliente')
+  const { credito, estado } = await cuentaBloqueada(db, { cliente_id: v.cliente_id, marca: v.marca, prueba: v.prueba })
+  const f = frena({ cuenta: estado, credito, monto: armada.usa_cuenta })
+  if (!f) return null
+  const a = e?.autoriza
+  if (a?.motivo === 'pin_admin' && typeof a.usuario === 'string' && a.usuario.trim()) {
+    v.detalle = { ...v.detalle, cuenta_autoriza: { usuario: a.usuario.trim(), codigo: f.codigo } }
+    return null
+  }
+  return { ok: false, error: { codigo: f.codigo, mensaje: f.mensaje, campo: 'pagos', cuenta: { debe: estado.debe, vencido: estado.vencido, tope: credito?.tope ?? null } } }
+}
+
+/** Después de escribir la venta: su compra en la cuenta, y el saldo que queda. */
+async function anotarCompra(db, venta, usaCuenta) {
+  if (!(usaCuenta > 0)) return {}
+  await insertarFila(db, filaCompra(venta, usaCuenta, venta.detalle?.cuenta_autoriza ? { autoriza: venta.detalle.cuenta_autoriza } : {}))
+  const [r] = await q(db, 'select coalesce(sum(monto), 0)::float as s from cuenta_movimiento where cliente_id = $1 and marca = $2 and prueba = $3', [venta.cliente_id, venta.marca, venta.prueba])
+  return { cuenta: r.s }
+}
 
 /**
  * La clienta de la venta (§6.2): por `cliente_id`, o por `cliente: { doc, nombre, whatsapp?, email? }` (la busca
@@ -197,14 +262,19 @@ async function registrarDentro(db, e, unidades) {
   armada.venta.cliente_id = cli.id
   const sinSaldo = await chequearUsoDeSaldo(db, armada)
   if (sinSaldo) return sinSaldo
+  const sinCuenta = await chequearCuenta(db, armada, e)
+  if (sinCuenta) return sinCuenta
   const avisos = []
   await ponerCosto(db, armada.lineas, avisos)
   await avisarStock(db, armada.venta, armada.lineas, avisos)
+  const sinStock = frenarSinStock(armada, avisos, e)
+  if (sinStock) return sinStock
   const venta = await escribir(db, armada)
   if (armada.usa_saldo > 0) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, -armada.usa_saldo, 'uso', venta.usuario)])
   return {
     ok: true, venta: { id: venta.id, numero: venta.numero, estado: venta.estado, tipo: venta.tipo, total: venta.total, prueba: venta.prueba }, ya_existia: false, movimientos: armada.movimientos.length, avisos,
     ...(armada.usa_saldo > 0 ? { saldo: await saldoDe(db, venta.cliente_id, venta.marca, venta.prueba) } : {}),
+    ...(await anotarCompra(db, venta, armada.usa_cuenta)),
   }
 }
 
@@ -244,14 +314,20 @@ export async function registrarCambio(db, e) {
     if (armada.a_favor > 0 && !armada.venta.cliente_id) return falla('FALTA_CLIENTE', `Quedan ${armada.a_favor} a favor: hace falta la clienta para guardarlos`, 'cliente')
     const sinSaldo = await chequearUsoDeSaldo(db, armada)
     if (sinSaldo) return sinSaldo
+    const sinCuenta = await chequearCuenta(db, armada, e)
+    if (sinCuenta) return sinCuenta
     const avisos = []
     await ponerCosto(db, armada.lineas, avisos)
     await avisarStock(db, armada.venta, armada.lineas, avisos)
+    const sinStock = frenarSinStock(armada, avisos, e)
+    if (sinStock) return sinStock
     const venta = await escribir(db, armada)
     const usuario = venta.usuario
     if (armada.a_favor > 0) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, armada.a_favor, 'cambio', usuario)])
     if (armada.usa_saldo > 0) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, -armada.usa_saldo, 'uso', usuario)])
+    const enCuenta = await anotarCompra(db, venta, armada.usa_cuenta)
     return {
+      ...enCuenta,
       ok: true, venta: { id: venta.id, numero: venta.numero, tipo: 'cambio', diferencia: armada.diferencia, total: venta.total },
       movimientos: armada.movimientos.length, a_favor: armada.a_favor, avisos,
       saldo: venta.cliente_id ? await saldoDe(db, venta.cliente_id, venta.marca, venta.prueba) : null,
@@ -284,6 +360,8 @@ async function anularDentro(db, e) {
   }
   await insertar(db, 'venta_anulacion', [armada.anulacion])
   await insertar(db, 'saldo_favor_movimiento', vueltas)
+  // §15: lo que dejó a cuenta se da vuelta (si ya lo pagó, le queda a favor en la cuenta).
+  await anularCompraDe(db, actual.venta, { usuario: armada.anulacion.usuario, motivo: armada.anulacion.motivo, en: armada.anulacion.anulada_en })
   await db.query(`update venta set estado = 'anulada' where id = $1`, [actual.venta.id])
   await insertarMovimientos(db, armada.movimientos)
   return { ok: true, venta: { id: actual.venta.id, numero: actual.venta.numero, estado: 'anulada' }, movimientos: armada.movimientos.length, nc_pendiente: await tieneFactura(db, actual.venta.id) }
