@@ -27,6 +27,23 @@ describe('armarPedidosSinPagar', () => {
     expect(r.porTienda).toEqual({ zattia: { pedidos: 2, unidades: 1, total: 2001 } })
     expect(STATUS_POR_COBRAR).toEqual(['open', 'closed'])
   })
+  it('entregado sin cobrar que GN YA cobró (Bruno, 19-oct): sale; sin cobro, o de otro pedido viejo con el mismo número, queda', async () => {
+    const { cobradosEnGN } = await import('../lib/erp/pedidos-tn.core.js')
+    const entregados = [o(1, { status: 'closed', total: '5431.50' }), o(2, { status: 'closed' }), o(3, { status: 'closed' }), o(4, { status: 'closed' })]
+    const ventasGN = [
+      { id: 91, tn_order: '1001', date_sale: '2026-10-11' },   // #1001: cobró $5.400 de $5.431,50 (redondeo del efectivo) ⇒ cobrado
+      { id: 92, tn_order: '1002', date_sale: '2026-10-10' },   // #1002: sin cobro ⇒ queda
+      { id: 93, tn_order: '1003', date_sale: '2025-03-01' },   // #1003: una venta VIEJA con el mismo número (otra tienda) ⇒ ⛔ cuenta
+      { id: 94, tn_order: '1004', date_sale: '2026-10-12' },   // #1004: cobro a medias ⇒ queda
+    ]
+    const cobros = [{ venta_id: 91, monto: '5400.00' }, { venta_id: 93, monto: '1000.50' }, { venta_id: 94, monto: '500' }]
+    const set = cobradosEnGN({ entregados, ventasGN, cobros })
+    expect([...set]).toEqual(['zattia/1'])
+    const r = armarPedidosSinPagar({ ordenes: [...entregados, o(5)], lineas: [], ahora, cobradosGN: set })
+    expect(r.pedidos.map((p) => p.tnId).sort()).toEqual(['2', '3', '4', '5'])
+    // un ABIERTO sin pagar ⛔ sale aunque el set lo nombre: la regla es sólo para el entregado
+    expect(armarPedidosSinPagar({ ordenes: [o(5)], lineas: [], ahora, cobradosGN: new Set(['zattia/5']) }).pedidos).toHaveLength(1)
+  })
   it('authorized es PAGADO (Bruno, 15-oct): ⛔ aparece, y el handler lo excluye al leer', async () => {
     const { NO_SIN_PAGAR } = await import('../lib/erp/pedidos-tn.core.js')
     expect(armarPedidosSinPagar({ ordenes: [o(1, { payment_status: 'authorized' })], lineas: [], ahora }).pedidos).toEqual([])

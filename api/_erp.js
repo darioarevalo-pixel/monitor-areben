@@ -61,7 +61,8 @@ import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { armarConciliacion, TIENDAS as TIENDAS_CONCILIACION } from '../lib/erp/conciliacion.core.js'
-import { NO_SIN_PAGAR, STATUS_POR_COBRAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
+import { NO_SIN_PAGAR, STATUS_POR_COBRAR, armarPedidosSinPagar, cobradosEnGN } from '../lib/erp/pedidos-tn.core.js'
+import { esEntregadoSinCobrarTN } from '../motor/venta/pago-tn.mjs'
 import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
@@ -1161,7 +1162,15 @@ export async function pedidosSinPagar({ marca }) {
     lineas.push(...await leerTodo(b, 'tn_orden_linea', (x) => x.select('tienda, tn_id, nombre, sku, cantidad').in('tn_id', ids.slice(i, i + 200)).order('tn_id').order('linea_id')))
   }
   const [lectura] = (await b.from('tn_lectura').select('tienda, leida_en').order('leida_en', { ascending: false }).limit(1)).data || []
-  const armado = armarPedidosSinPagar({ ordenes, lineas, ahora: Date.now() })
+  // Bruno, 19-oct: el entregado sin cobrar que GN ya tiene cobrado sale de la lista (el espejo `ventas` / `ventas_cobros`).
+  const entregados = ordenes.filter(esEntregadoSinCobrarTN)
+  let cobradosGN = new Set()
+  if (entregados.length) {
+    const ventasGN = await leerTodo(b, 'ventas', (x) => x.select('id, tn_order, date_sale').in('tn_order', entregados.map((o) => String(o.numero))))
+    const cobros = ventasGN.length ? await leerTodo(b, 'ventas_cobros', (x) => x.select('venta_id, monto').in('venta_id', ventasGN.map((v) => v.id))) : []
+    cobradosGN = cobradosEnGN({ entregados, ventasGN, cobros })
+  }
+  const armado = armarPedidosSinPagar({ ordenes, lineas, ahora: Date.now(), cobradosGN })
   const nombres = await compradoresTn(armado.pedidos)
   for (const p of armado.pedidos) p.comprador = nombres.get(`${p.tienda}/${p.tnId}`) ?? null
   return { ...armado, leidaEn: lectura?.leida_en ?? null }
