@@ -171,6 +171,29 @@ import type { FilaCliente, FilaDetalle, MapaSeguimiento, MapaTelefonos, Nota } f
 
 // ── Piezas chicas ────────────────────────────────────────────────────────────
 
+/**
+ * 🔑 **Cuando un teléfono cae en más de un cliente, la elección se recuerda** (19-oct-2026).
+ * Antes el panel volvía a preguntar "¿Cuál es?" cada vez que se entraba al chat. Se guarda en
+ * este navegador nada más: es una comodidad, y si falla el guardado el panel vuelve a preguntar.
+ */
+const CLAVE_ELECCION = 'panel:eleccion:'
+
+function eleccionGuardada(tel: string): number | null {
+  try {
+    const v = Number(localStorage.getItem(CLAVE_ELECCION + tel))
+    return v > 0 ? v : null
+  } catch {
+    return null
+  }
+}
+
+function guardarEleccion(tel: string, id: number | null) {
+  try {
+    if (id) localStorage.setItem(CLAVE_ELECCION + tel, String(id))
+    else localStorage.removeItem(CLAVE_ELECCION + tel)
+  } catch {}
+}
+
 const fmtMonto = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
 function fmtFecha(d: string | null): string {
@@ -425,9 +448,10 @@ export function quienPaga(estado: Estado, telNorm: string): QuienPaga | null {
 export type Estado =
   | { t: 'cargando' }
   | { t: 'error'; motivo: string }
-  | { t: 'ficha'; ficha: FichaPanel; crudo: RespuestaPanel }
+  /** `otros`: los demás clientes con el mismo teléfono, para poder cambiar la elección. */
+  | { t: 'ficha'; ficha: FichaPanel; crudo: RespuestaPanel; otros?: FilaCliente[]; telOtros?: string }
   | { t: 'desconocido' }
-  | { t: 'varios'; candidatos: FilaCliente[] }
+  | { t: 'varios'; candidatos: FilaCliente[]; tel: string }
   /** El chat es de un prospecto ya cargado. Antes esto no existía y se ofrecía cargarlo de nuevo. */
   | { t: 'lead'; lead: Lead }
   | { t: 'varios-leads'; candidatos: Lead[] }
@@ -668,7 +692,16 @@ function PanelInterno({
         return
       }
       if (r.estado === 'varios') {
-        setEstado({ t: 'varios', candidatos: r.candidatos })
+        const elegido = eleccionGuardada(telBuscar)
+        if (elegido && r.candidatos.some((c) => c.id === elegido)) {
+          const r2 = await buscarFicha({ clienteId: elegido }, mapaSeg, today)
+          if (!activo) return
+          if (r2.estado === 'encontrado') {
+            setEstado({ t: 'ficha', ficha: r2.ficha, crudo: r2.crudo, otros: r.candidatos, telOtros: telBuscar })
+            return
+          }
+        }
+        setEstado({ t: 'varios', candidatos: r.candidatos, tel: telBuscar })
         return
       }
       if (r.estado === 'error') {
@@ -743,7 +776,7 @@ function PanelInterno({
       setCrmSeg(r.mapa)
       // Recalcular con el mapa recién guardado, sin volver a pedirle nada al servidor: las ventas
       // y el padrón no cambiaron, lo que cambió es el seguimiento.
-      setEstado({ t: 'ficha', ficha: armarFicha(estado.crudo, r.mapa, today), crudo: estado.crudo })
+      setEstado({ ...estado, ficha: armarFicha(estado.crudo, r.mapa, today) })
       decir(exito)
       return true
     },
@@ -929,11 +962,14 @@ function PanelInterno({
               variant="ghost"
               style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 6 }}
               onClick={async () => {
+                const { candidatos, tel } = estado
                 setEstado({ t: 'cargando' })
                 const r = await buscarFicha({ clienteId: c.id }, crmSeg, today)
                 if (!vivo.current) return
-                if (r.estado === 'encontrado') setEstado({ t: 'ficha', ficha: r.ficha, crudo: r.crudo })
-                else setEstado({ t: 'desconocido' })
+                if (r.estado === 'encontrado') {
+                  guardarEleccion(tel, c.id)
+                  setEstado({ t: 'ficha', ficha: r.ficha, crudo: r.crudo, otros: candidatos, telOtros: tel })
+                } else setEstado({ t: 'desconocido' })
               }}
             >
               {c.name || `#${c.id}`}
@@ -1042,6 +1078,22 @@ function PanelInterno({
               <div style={{ fontSize: font.lg, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}>{c.name || `#${c.id}`}</div>
               <div style={{ fontSize: font.xs, color: color.mut2 }}>
                 {c.city || 'sin ciudad'} · #{c.id}
+                {estado.otros && estado.otros.length > 1 && (
+                  <>
+                    {' · '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tel = estado.telOtros || telNorm
+                        guardarEleccion(tel, null)
+                        setEstado({ t: 'varios', candidatos: estado.otros!, tel })
+                      }}
+                      style={{ background: 'none', border: 0, padding: 0, color: color.brand, fontSize: font.xs, cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      ¿No es? Cambiar
+                    </button>
+                  </>
+                )}
               </div>
               {/* Los dos números: el del chat es el que está en la comunidad, pero si la ficha se abrió
                   desde la lista, el chat todavía puede ser el anterior. */}
