@@ -1281,7 +1281,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.vista === 'ventas-lista') {
       const marca = String(req.query.marca || '')
       const p = MARCAS.includes(marca) ? await pedidosSinPagar({ marca }) : { pedidos: [] }
-      const r = await listaDeVentas({ marca, desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), pedidos: p.pedidos || [] })
+      const r = await listaDeVentas({ marca, desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), pedidos: p.pedidos || [], tnLeidaEn: p.leidaEn ?? null })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'venta-extra') {

@@ -23,7 +23,7 @@ import { BuscadorLista, ChipEstado, InterruptorDensidad, TileResumen, VistasList
 import { leerListaDeVentas, type FilaVentaLista, type MarcaErp, type QueSabeElMotor } from '@/lib/erp/cliente'
 import {
   COBRO, COLUMNAS, ESTADO, ORIGEN, PERIODOS, VISTAS, accionesDeFila, alternarColumna, contarVistas, filtrar, moverColumna,
-  normalizarPrefs, ordenar, plata, rangoDePeriodo, resumen,
+  PEDIDO_VIEJO_DIAS, normalizarPrefs, ordenar, plata, rangoDePeriodo, resumen,
 } from '@/lib/erp/ventas-lista.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
@@ -59,7 +59,7 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const usuario = perfil?.name ?? null
   const [periodo, setPeriodo] = useState('mes')
-  const [datos, setDatos] = useState<{ filas: FilaVentaLista[]; puede: QueSabeElMotor; clave: string } | null>(null)
+  const [datos, setDatos] = useState<{ filas: FilaVentaLista[]; puede: QueSabeElMotor; tnLeidaEn: string | null; clave: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [vista, setVista] = useState('todas')
@@ -86,7 +86,7 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
     leerListaDeVentas(marca, r.desde, r.hasta)
       .then((d) => {
         if (!vivo) return
-        setDatos({ filas: d.filas, puede: d.puede, clave })
+        setDatos({ filas: d.filas, puede: d.puede, tnLeidaEn: d.tnLeidaEn ?? null, clave })
         // Lo tildado ⛔ sobrevive a una lectura nueva: puede haber cambiado (una anulada ya no se exporta igual).
         setSeleccion(new Set())
         setError(null)
@@ -108,6 +108,7 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
   const todasPrueba = !!datos?.filas.length && datos.filas.every((f) => f.kind === 'pedido' || f.prueba)
   const nombrePeriodo = PERIODOS.find(([k]) => k === periodo)?.[1] ?? ''
 
+  const irACobranzas = () => window.open('/cobranzas', '_blank', 'noopener')
   const abrirFicha = (fila: FilaVentaLista, accion?: 'anular') => { setVentana(null); setFicha({ fila, accion }) }
   const abrirVentana = (tipo: 'cobro' | 'editar', fila: FilaVentaLista, desdeFicha: boolean) => setVentana({ tipo, fila, desdeFicha })
   const cerrarVentana = () => setVentana(null)
@@ -138,7 +139,17 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
         </span>
       )
     }
-    if (k === 'e') return <ChipEstado mapa={ESTADO} k={f.estadoKey} />
+    if (k === 'e') {
+      // Un pedido colgado hace días: a cobrar o a cancelar ya (lo que marcaba la pestaña «Pedidos sin pagar»).
+      const viejo = f.kind === 'pedido' && (f.dias ?? 0) >= PEDIDO_VIEJO_DIAS
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <ChipEstado mapa={ESTADO} k={f.estadoKey} />
+          {f.entregadoSinCobrar && <span title="Tienda Nube lo cerró sin que se cobrara: ya no retiene stock" style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>entregado</span>}
+          {viejo && !f.entregadoSinCobrar && <span title={`Entró hace ${f.dias} días y sigue sin pagar`} style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-warning-ink)', whiteSpace: 'nowrap' }}>{f.dias} días</span>}
+        </span>
+      )
+    }
     if (k === 'p') return <ChipEstado mapa={COBRO} k={f.cobroKey} />
     if (k === 'total') return <b>{plata(f.total)}</b>
     if (k === 'fac') return f.factura ? <span style={{ color: color.ink2 }}>{f.factura.numero}{f.factura.de === 'gn' && <span style={{ marginLeft: 4, fontSize: font.xs, color: color.mut2 }}>GN</span>}</span> : <span style={{ color: color.mut2 }}>—</span>
@@ -151,7 +162,11 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
   const acciones = (f: FilaVentaLista) => {
     const a = accionesDeFila(f, puede)
     const menu: AccionMenu[] = f.kind === 'pedido'
-      ? [{ key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir', onClick: () => f.link && window.open(f.link, '_blank', 'noopener'), disabled: !f.link }]
+      ? [
+          { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrirFicha(f) },
+          { key: 'cobrar', label: 'Cobrar en Cobranzas ↗', icono: 'pesos', onClick: irACobranzas, hint: 'Transferencia o efectivo: se registra en Cobranzas del monitor.' },
+          { key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir', onClick: () => f.link && window.open(f.link, '_blank', 'noopener'), disabled: !f.link, hint: 'Para cancelarlo, en Tienda Nube.' },
+        ]
       : [
           { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrirFicha(f) },
           { key: 'cobro', label: 'Registrar cobro', icono: 'pesos', onClick: () => abrirVentana('cobro', f, false), disabled: !(f.saldo > 0), hint: f.saldo > 0 ? undefined : 'No tiene saldo.' },
@@ -162,7 +177,7 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
         ]
     return (
       <>
-        <IconoFila label={a.cobro.label} verde={a.cobro.verde} apagado={!a.cobro.activo} onClick={() => (f.saldo > 0 ? abrirVentana('cobro', f, false) : abrirFicha(f))}><Icono nombre="pesos" size={16} /></IconoFila>
+        <IconoFila label={a.cobro.label} verde={a.cobro.verde} apagado={!a.cobro.activo} onClick={() => (f.kind === 'pedido' ? irACobranzas() : f.saldo > 0 ? abrirVentana('cobro', f, false) : abrirFicha(f))}><Icono nombre="pesos" size={16} /></IconoFila>
         <IconoFila label={a.editar.label} apagado={!a.editar.activo} onClick={() => abrirVentana('editar', f, false)}><Icono nombre="lapiz" size={16} /></IconoFila>
         <IconoFila label={a.factura.label} verde={a.factura.verde} apagado={!a.factura.activo} onClick={() => (f.facturada ? abrirFicha(f) : irACaja('factura'))}><Icono nombre="factura" size={16} /></IconoFila>
         <MenuAcciones acciones={menu} etiqueta={`Más acciones de la venta ${f.ref}`} vertical alinear="izquierda" />
@@ -215,7 +230,7 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo las ventas…' : `${filas.length.toLocaleString('es-AR')} de ${(conteo.todas ?? 0).toLocaleString('es-AR')} · ${nombrePeriodo.toLowerCase()}`}
-          {' · '}los pedidos sin pagar son los abiertos hoy, de cualquier fecha.
+          {' · '}los pedidos sin pagar son los abiertos hoy, de cualquier fecha{datos?.tnLeidaEn ? ` (Tienda Nube leída ${cuandoCorto(datos.tnLeidaEn)})` : ''}.
         </div>
       </div>
 

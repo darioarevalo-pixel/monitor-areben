@@ -138,7 +138,7 @@ const COLUMNAS_LISTA = 'id, numero, cliente_id, marca, tipo, estado, origen, ori
  * Las ventas propias del período (días argentinos, `desde`..`hasta` inclusive) + los pedidos de TN sin pagar (los
  * abiertos HOY, de cualquier fecha: `pedidos` ya leídos por `pedidosSinPagar`), armadas para la lista.
  */
-export async function listaDeVentas({ marca, desde, hasta, pedidos = [] }, deps = {}) {
+export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeidaEn = null }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   if (!DIA.test(String(desde || '')) || !DIA.test(String(hasta || '')) || desde > hasta) return { status: 400, error: 'Período inválido' }
   const sb = deps.sb || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
@@ -157,9 +157,12 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [] }, deps 
   for (const v of ventas) if (v.id in pendientes) v.pendiente = pendientes[v.id]
   const filas = [
     ...ventas.map((v) => armarFila(filaCruda(v, a, numeros))),
-    ...pedidos.map((p) => armarFila({ kind: 'pedido', tienda: p.tienda, tnId: p.tnId, tnNumero: p.numero, creadaEn: p.creadaEn, total: p.total, link: p.link, unidades: p.unidades, entregadoSinCobrar: !!p.entregadoSinCobrar, clienteGn: null, clienteTn: p.comprador ?? null })),
+    ...pedidos.map((p) => armarFila({
+      kind: 'pedido', tienda: p.tienda, tnId: p.tnId, tnNumero: p.numero, creadaEn: p.creadaEn, total: p.total, link: p.link, unidades: p.unidades,
+      dias: p.dias, medio: p.medio, gateway: p.gateway, prendas: p.prendas, entregadoSinCobrar: !!p.entregadoSinCobrar, clienteGn: null, clienteTn: p.comprador ?? null,
+    })),
   ]
-  return { filas, desde, hasta, puede }
+  return { filas, desde, hasta, puede, tnLeidaEn }
 }
 
 /**

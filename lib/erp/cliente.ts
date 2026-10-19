@@ -181,17 +181,6 @@ export const aprobarAjuste = (linea: LineaErp, ajusteId: string) =>
 export const descartarAjuste = (linea: LineaErp, ajusteId: string, motivo: string) =>
   pedir<{ ok: true; numero: number }>(post({ accion: 'descartar-ajuste', linea, ajusteId, motivo }), '', 'No se pudo descartar el ajuste.')
 
-export type PedidoSinPagar = {
-  tienda: string; tnId: string; numero: number; creadaEn: string; dias: number; pago: string; medio: string | null; gateway: string | null
-  total: number; unidades: number; prendas: Array<{ nombre: string | null; sku: string | null; cantidad: number }>; link: string | null
-  /** Cerrado en TN sin pago (Bruno, 19-oct): ⛔ retiene stock; se muestra con el aviso «entregado sin cobrar». */
-  entregadoSinCobrar: boolean
-  /** El nombre del comprador, leído de TN EN VIVO (⛔ se guarda); null si TN ⛔ contestó. */
-  comprador: string | null
-}
-export const leerPedidosSinPagar = (marca: MarcaErp) =>
-  pedir<{ pedidos: PedidoSinPagar[]; porTienda: Record<string, { pedidos: number; unidades: number; total: number }>; leidaEn: string | null }>(
-    null, `&vista=pedidos-tn&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los pedidos sin pagar.')
 
 export type VentaPropia = {
   id: string; numero: number; marca: 'bdi' | 'zattia' | 'stunned'; tipo: 'venta' | 'cambio'; estado: 'confirmada' | 'anulada'
@@ -357,10 +346,14 @@ export type FilaVentaLista = {
   factura: { numero: string; de: 'erp' | 'gn' } | null; facturada: boolean
   nota: { id: string; texto: string; de: string } | null; entrega: { tipo: string; direccion?: string } | null
   prueba: boolean; anulada: boolean; tieneCambio?: boolean; link: string | null; unidades: number | null; busca: string
+  /** Sólo los pedidos sin pagar: hace cuántos días entró, el medio que eligió y las prendas que retiene. */
+  dias?: number | null; medio?: string | null; prendas?: Array<{ nombre: string | null; sku: string | null; cantidad: number }>
+  /** Cerrado en TN sin pago: ⛔ retiene stock, se muestra «entregado sin cobrar». */
+  entregadoSinCobrar?: boolean
 }
 export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean }
 export const leerListaDeVentas = (marca: MarcaErp, desde: string, hasta: string) =>
-  pedir<{ filas: FilaVentaLista[]; desde: string; hasta: string; puede: QueSabeElMotor }>(null, `&vista=ventas-lista&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer las ventas.')
+  pedir<{ filas: FilaVentaLista[]; desde: string; hasta: string; puede: QueSabeElMotor; tnLeidaEn?: string | null }>(null, `&vista=ventas-lista&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer las ventas.')
 
 export type ExtraDeVenta = {
   clienteGn: string | null; gnNumero: string | null; gnEstado: string | null; clienteId: string | null

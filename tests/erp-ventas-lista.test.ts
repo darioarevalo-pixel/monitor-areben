@@ -80,6 +80,22 @@ describe('la fila, las vistas y el resumen', () => {
     expect(filas[4].origenTexto).toBe('Cambio · de la #301')
     expect(filas[5]).toMatchObject({ kind: 'pedido', ref: 'TN 4818', estadoKey: 'pedido', cobroKey: 'sinpagar', saldo: 15490, cliente: 'Sin nombre todavía' })
   })
+  it('un pedido sin pagar trae lo que tenía su pestaña: hace cuánto, el medio y lo que retiene (y se busca por prenda)', () => {
+    const p = armarFila({
+      kind: 'pedido', tienda: 'stunned', tnId: '9', tnNumero: 512, creadaEn: '2026-10-14T12:00:00Z', total: 30000, link: null, unidades: 3,
+      dias: 5, medio: 'transfer', gateway: 'offline', prendas: [{ nombre: 'Remera Boxy Negra', sku: 'STU-1', cantidad: 2 }, { nombre: null, sku: 'STU-2', cantidad: 1 }],
+    })
+    expect(p).toMatchObject({ dias: 5, medio: 'Transferencia', origenTexto: 'Tienda Nube · 512 · sin pagar · Transferencia', prendas: [{ sku: 'STU-1' }, { sku: 'STU-2' }] })
+    expect(filtrar([p], { q: 'boxy' })).toHaveLength(1)
+    expect(filtrar([p], { q: 'stu-2' })).toHaveLength(1)
+    // Sin medio de los de TN, el gateway; sin nada, ⛔ se inventa.
+    expect(armarFila({ kind: 'pedido', tienda: 'bdi', tnId: '1', tnNumero: 1, creadaEn: '2026-10-19T12:00:00Z', total: 1, gateway: 'mercadopago' }).medio).toBe('mercadopago')
+    expect(armarFila({ kind: 'pedido', tienda: 'bdi', tnId: '1', tnNumero: 1, creadaEn: '2026-10-19T12:00:00Z', total: 1 })).toMatchObject({ medio: null, dias: null, prendas: [] })
+    expect(p.entregadoSinCobrar).toBe(false)
+    expect(armarFila({ kind: 'pedido', tienda: 'bdi', tnId: '2', tnNumero: 2, creadaEn: '2026-10-19T12:00:00Z', total: 1, entregadoSinCobrar: true }).entregadoSinCobrar).toBe(true)
+    // Se cobra en Cobranzas (el ícono $ lleva ahí, ⛔ a una ventana del ERP).
+    expect(accionesDeFila(p).cobro).toMatchObject({ activo: true, label: 'Pedido sin pagar: se cobra en Cobranzas ↗' })
+  })
   it('las vistas cuentan lo suyo', () => {
     expect(contarVistas(filas)).toEqual({ todas: 6, preparar: 2, listas: 0, sinpagar: 1, saldo: 1, sinfactura: 2, anuladas: 1 })
   })
@@ -106,7 +122,6 @@ describe('la fila, las vistas y el resumen', () => {
     expect(accionesDeFila(filas[0]).cobro).toMatchObject({ verde: false, label: 'Cobrada · ver cobros' })
     expect(accionesDeFila(filas[3]).editar).toMatchObject({ activo: false })
     expect(accionesDeFila(filas[1]).factura).toMatchObject({ verde: true, label: 'Factura B 00005-00012351 (de GN)' })
-    expect(accionesDeFila(filas[5]).cobro).toMatchObject({ activo: false, label: 'Pedido sin pagar: se cobra en Tienda Nube ↗' })
   })
 })
 

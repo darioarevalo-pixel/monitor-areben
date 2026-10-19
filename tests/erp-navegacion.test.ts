@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { SECCIONES_ERP, hrefErp, resolverRutaErp } from '@/components/erp/Erp'
 
-// `/erp` con su menú (Bruno, 19-oct): las 6 secciones del diseño + la Caja, y las 12 pestañas de antes repartidas adentro.
+// `/erp` con su menú (Bruno, 19-oct): las 6 secciones del diseño + la Caja, y las pestañas de antes repartidas adentro
+// (Pedidos sin pagar, 19-oct: pasó a ser la vista «Sin pagar» de Ventas).
 describe('ERP › menú y direcciones', () => {
-  it('las 12 pestañas de antes siguen, una sola vez cada una', () => {
+  it('las pestañas de antes siguen, una sola vez cada una', () => {
     const todas = SECCIONES_ERP.flatMap((s) => s.pestanias.map((p) => p.key))
     expect(new Set(todas).size).toBe(todas.length)
-    expect(todas.sort()).toEqual(['ajustes', 'cambio', 'conciliacion', 'cuentas', 'diferencias', 'factura', 'facturacion', 'pedidos-tn', 'precios', 'reglas', 'stock', 'ventas'])
+    expect(todas.sort()).toEqual(['ajustes', 'cambio', 'conciliacion', 'cuentas', 'diferencias', 'factura', 'facturacion', 'precios', 'reglas', 'stock', 'ventas'])
   })
 
   it('las secciones del diseño, en su orden', () => {
@@ -23,6 +24,10 @@ describe('ERP › menú y direcciones', () => {
     const r = resolverRutaErp(['stock', 'nada'])
     expect(r).toMatchObject({ pestania: 'stock', valida: false })
     expect(hrefErp(r.seccion.key, r.pestania)).toBe('/erp/stock/stock')
+    // La pestaña «Pedidos sin pagar» ya ⛔ existe: su dirección vieja cae en Ventas.
+    const v = resolverRutaErp(['ventas', 'pedidos-tn'])
+    expect(v).toMatchObject({ pestania: 'ventas', valida: false })
+    expect(hrefErp(v.seccion.key, v.pestania)).toBe('/erp/ventas/ventas')
     const s = resolverRutaErp(['facturacion'])
     expect(s.valida).toBe(false)
     expect(hrefErp(s.seccion.key, s.pestania)).toBe('/erp')

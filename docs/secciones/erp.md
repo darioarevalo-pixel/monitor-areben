@@ -10,7 +10,8 @@ solo sin ir atrás»): sale del shell en `app/[[...seccion]]/page.tsx` (`esERP`,
 marca adentro) con SU menú (`components/erp/Erp.tsx`, `SECCIONES_ERP`): Inicio · Ventas + Caja (POS) · Stock ·
 Productos y precios · Clientes y proveedores · Configuración, y «Volver al monitor». Una dirección por sección y por
 pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una vieja o mal escrita se corrige sola).
-Las 12 pestañas de antes: Ventas = Ventas · Pedidos sin pagar · Facturación · Caja (POS) = Cambio · Factura · Stock =
+Las pestañas: Ventas = Ventas · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
+dirección vieja cae en Ventas) · Caja (POS) = Cambio · Factura · Stock =
 Stock · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Precios · Configuración = Reglas · Cuentas de cobro;
 Clientes todavía vacía. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
 botones crudos y `select`). Tests: `tests/erp-navegacion*.test.ts*`. El registro (`registro.ts`) conserva `erp` sólo
@@ -82,6 +83,11 @@ mismo molde. ⛔ se copian en la pantalla nueva (Ajustes y Stock ya las usan).
   ⛔ un camino inventado. Lo económico (prendas, precios, pagos) ⛔ se edita: lleva a Hacer cambio / Registrar cobro / Anular.
 - 🔑 El cobro va IMPUTADO a esa venta (`registrarPagoACuenta`, `imputar`, nunca más que su saldo); lo que sobra va a la venta
   más vieja que deba (lo hace el motor). Clave por ventana abierta (`erp-cobro:<uuid>`): reintentar ⛔ duplica.
+- 🔑 **Los pedidos sin pagar viven ACÁ** (Bruno, 17-oct: «Ventas abarca todo lo que es venta… se separan con FILTROS»; la
+  pestaña se fue el 19-oct): la fila dice el medio que eligió en el origen y, desde `PEDIDO_VIEJO_DIAS` (3), cuántos días lleva
+  colgado al lado del estado; el $ y el «⋯» llevan a **Cobranzas** del monitor (↗, ahí se cobra transferencia o efectivo) y a
+  Tienda Nube (cancelarlo); la ficha muestra cuándo entró, el medio y las prendas que retiene. El buscador lee también las
+  prendas. Al pie, cuándo se leyó Tienda Nube (`tnLeidaEn`, cada 2 h).
 - Anular (con motivo, sólo admin) y la NC de una anulada facturada siguen como antes, desde la ficha (`anularVenta` del
   motor por pg; 🔴 sin `DATABASE_URL_<MARCA>` en Vercel contesta 409). 🔑 «Prueba» = corre en paralelo con GN y ⛔ movió el libro.
 

@@ -4,7 +4,8 @@
  * La FICHA de una venta, al costado de la lista (diseño §5): número grande (total o saldo), chips, botones (principal +
  * Editar + Hacer cambio + ⋯), datos, nota, prendas y totales, e HISTORIAL. Anular (con motivo) y la nota de crédito de
  * una anulada facturada son las de siempre (`anularVenta`, `notaDeCreditoDeVenta`), mudadas del buscador viejo.
- * Un pedido de TN sin pagar ⛔ es venta todavía: su ficha dice eso y lleva a Tienda Nube.
+ * Un pedido de TN sin pagar ⛔ es venta todavía: su ficha dice eso, hace cuánto entró, el medio, lo que retiene, y lleva
+ * a Cobranzas (cobrarlo) o a Tienda Nube (cancelarlo) — lo que era la pestaña «Pedidos sin pagar» (19-oct).
  */
 
 import { useEffect, useState } from 'react'
@@ -115,14 +116,37 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
 
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         {debe && <Button onClick={() => abrirVentana('cobro')}>Registrar cobro</Button>}
-        {fila.link && <Button variant={esPedido ? 'solid' : 'outline'} onClick={() => window.open(fila.link!, '_blank', 'noopener')}>Ver el pedido en Tienda Nube ↗</Button>}
+        {esPedido && <Button onClick={() => window.open('/cobranzas', '_blank', 'noopener')}>Cobrar en Cobranzas ↗</Button>}
+        {fila.link && <Button variant="outline" onClick={() => window.open(fila.link!, '_blank', 'noopener')}>Ver el pedido en Tienda Nube ↗</Button>}
         {!esPedido && <Button variant="outline" disabled={fila.anulada} onClick={() => abrirVentana('editar')}>Editar</Button>}
         {!esPedido && <Button variant="outline" disabled={fila.anulada} onClick={() => irACaja('cambio')}>Hacer cambio</Button>}
         <MenuAcciones acciones={menu} etiqueta={`Más acciones de la venta ${fila.ref}`} vertical />
       </div>
 
       {esPedido ? (
-        <Notice tone="warning">Pedido de Tienda Nube <b>sin pagar</b>: todavía no es una venta. Pasa a venta solo cuando Tienda Nube avisa que se pagó; hasta el día del corte se cobra en Tienda Nube.{fila.unidades != null && ` Retiene ${fila.unidades} ${fila.unidades === 1 ? 'prenda' : 'prendas'}.`}</Notice>
+        <>
+          {fila.entregadoSinCobrar && <Notice tone="danger"><b>Entregado sin cobrar</b>: Tienda Nube lo cerró sin que se registrara el pago. Ya no retiene stock; queda acá hasta que se cobre o se cancele.</Notice>}
+          <Notice tone="warning">Pedido de Tienda Nube <b>sin pagar</b>: todavía no es una venta{fila.entregadoSinCobrar ? '' : ' y tiene las prendas retenidas'}. Pasa a venta solo cuando Tienda Nube avisa que se pagó. Se cobra en Cobranzas (transferencia o efectivo) o se cancela en Tienda Nube.</Notice>
+          <DatosFicha>
+            <DatoFicha titulo="Entró">{`${cuandoCorto(fila.pedidoEn)}${fila.dias != null ? ` · ${fila.dias === 0 ? 'hoy' : fila.dias === 1 ? 'hace 1 día' : `hace ${fila.dias} días`}` : ''}`}</DatoFicha>
+            <DatoFicha titulo="Eligió pagar con">{fila.medio ?? '—'}</DatoFicha>
+            <DatoFicha titulo="Tienda">{LINEA[fila.linea] ?? fila.linea}</DatoFicha>
+          </DatosFicha>
+          {!!fila.prendas?.length && (
+            <section>
+              <h3 style={h3}>{fila.entregadoSinCobrar ? 'Prendas' : 'Prendas retenidas'}{fila.unidades != null && ` · ${fila.unidades}`}</h3>
+              {fila.prendas.map((x, i) => (
+                <div key={`${x.sku ?? x.nombre}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], padding: '10px 0', borderBottom: `1px solid ${color.bg2}` }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: weight.semibold }}>{x.nombre ?? x.sku ?? 'Sin nombre'}</div>
+                    {x.sku && <div style={{ fontSize: font.sm, color: color.mut }}>{x.sku}</div>}
+                  </div>
+                  <span style={{ whiteSpace: 'nowrap', color: color.ink2 }}>{x.cantidad} u.</span>
+                </div>
+              ))}
+            </section>
+          )}
+        </>
       ) : !ficha ? (
         <span style={{ color: color.mut }}>Leyendo la venta…</span>
       ) : (
