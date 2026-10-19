@@ -522,6 +522,13 @@ const TOPE_CANDIDATOS = 400;
 
 /** El canal Mayorista. Es el mismo `CANAL_MAYORISTA` de `lib/crm/datos.ts`, del otro lado. */
 const CANAL_MAYORISTA = 10;
+/**
+ * Para "¿es un cliente mío?" cuenta también el canal 8, «Whatsapp»: 140 ventas mayoristas
+ * cargadas así entre nov-2024 y jun-2026 (Darío, 19-oct-2026: *"eran mayoristas, lo importante
+ * es el cliente, no el canal"*). Caso real: Franco Ortiz, 3 compras por Whatsapp, no aparecía.
+ * ⚠️ Sólo para encontrar al cliente: el tablero de ventas mayoristas sigue contando el canal 10.
+ */
+const CANALES_CLIENTE = [CANAL_MAYORISTA, 8];
 
 const ESCAPE = String.fromCharCode(92); // la barra invertida, sin pelearse con los escapes
 const RE_COMODINES = new RegExp('[' + ESCAPE + ESCAPE + '%_]', 'g');
@@ -602,7 +609,7 @@ async function buscarClientes(supabase, body, res) {
       .from('ventas')
       .select('client_id')
       .in('client_id', ids)
-      .eq('channel_id', CANAL_MAYORISTA)
+      .in('channel_id', CANALES_CLIENTE)
       .order('id')
       .range(desde, desde + PAGINA - 1);
     if (e2) throw new Error(e2.message);
