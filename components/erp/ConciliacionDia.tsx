@@ -1,26 +1,51 @@
 'use client'
 
 /**
- * ERP › Conciliación (paso 7). El ERP contra Tienda Nube, GN y Mercado Libre (sólo BDI), un día: cuánto cierra y la lista de lo que
- * ⛔ cierra, agrupado por qué pasó y qué mirar. Sólo lectura: una prenda abre su stock e historial; un pedido, Tienda Nube.
+ * ERP › Stock › Conciliación (paso 7), con el molde de REGISTRO (diseño §3–§4; tablero 3 del v8, «Comparación con TN y ML»):
+ * el ERP contra Tienda Nube, GN y Mercado Libre (sólo BDI), un día. Arriba, cuánto coincide; abajo, UNA lista con lo que ⛔
+ * coincide, con una vista por clase (con su número) y qué mirar. Sólo lectura: una prenda abre su ficha AL COSTADO
+ * (`FichaPrenda`, la de Stock); un pedido, Tienda Nube (↗).
  *
  * Se calcula una vez por día, a las 13:40 (el cruce del motor, `bin/tn.mjs conciliar`); el stock de Tienda Nube se lee
- * en ese momento. Hasta el corte GN sirve y el ERP es la prueba: acá se mira, ⛔ se arregla.
+ * en ese momento. Hasta el corte GN sirve y el ERP es la prueba: acá se mira, ⛔ se arregla. ⛔ cambia qué se calcula
+ * (`lib/erp/conciliacion.core.js` y el servidor siguen iguales): la pantalla sólo aplana los grupos en filas.
  */
 
-import { useEffect, useState } from 'react'
-import { Badge, Button, EmptyState, Field, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space } from '@/components/ui'
-import { leerConciliacion, type ConciliacionDelDia, type FilaConciliacion, type TiendaErp } from '@/lib/erp/cliente'
-import type { PrendaPedida } from './stock/StockErp'
+import { useEffect, useMemo, useState } from 'react'
+import { useSesion } from '@/components/SesionProvider'
+import { Button, EmptyState, MenuAcciones, Notice, Select, color, font, space, type AccionMenu } from '@/components/ui'
+import { ListaTrabajo } from '@/components/ui/ListaTrabajo'
+import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { leerConciliacion, type ConciliacionDelDia, type FilaConciliacion, type MarcaErp, type TiendaErp } from '@/lib/erp/cliente'
+import { normal } from '@/lib/erp/stock-lista.core.js'
+import { FichaPrenda, type PrendaAbierta } from './stock/FichaPrenda'
+import type { PrendaAAjustar } from './stock/StockErp'
 
-const TIENDAS: Array<{ key: TiendaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'stunned', label: 'Stunned' }, { key: 'bdi', label: 'BDI' }]
+const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
+/** Contra qué se compara cada fila (el `tipo` del motor). */
+const CONTRA: Record<string, string> = { stock_tn: 'Tienda Nube', stock_ml: 'Mercado Libre', pedido_erp: 'Pedido TN · ERP', pedido_gn: 'Pedido TN · GN', pedido_ml: 'Venta ML · GN' }
 const dia = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
-const hora = (iso: string | null) => (iso ? new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString().slice(11, 16) : '—')
 const pesos = (n: number | null) => (n == null ? '—' : `$ ${n.toLocaleString('es-AR', { maximumFractionDigits: 2 })}`)
 const pct = (a: number, b: number) => (b ? `${((100 * a) / b).toFixed(1)}%` : '—')
 
-export function ConciliacionDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida) => void }) {
-  const [tienda, setTienda] = useState<TiendaErp>('zattia')
+type Fila = FilaConciliacion & { id: string; grupo: string; grupoNombre: string; mirar: string }
+
+const COLUMNAS = [
+  { key: 'que', titulo: 'Prenda o pedido', ancho: 'minmax(220px, 2fr)' },
+  { key: 'contra', titulo: 'Contra', ancho: '128px' },
+  { key: 'ellos', titulo: 'Ellos', ancho: '92px', derecha: true },
+  { key: 'erp', titulo: 'ERP', ancho: '92px', derecha: true },
+  { key: 'gn', titulo: 'GN', ancho: '64px', derecha: true },
+  { key: 'dias', titulo: 'Días', ancho: '56px', derecha: true },
+  { key: 'paso', titulo: 'Qué pasó', ancho: 'minmax(220px, 1.6fr)' },
+]
+
+export function ConciliacionDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => void }) {
+  const { marca: delShell } = useSesion()
+  const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  // En la base de Zattia hay dos tiendas: Zattia y Stunned (su Tienda Nube es propia).
+  const [deZattia, setDeZattia] = useState<TiendaErp>('zattia')
+  const tienda: TiendaErp = marca === 'bdi' ? 'bdi' : deZattia
   const [fecha, setFecha] = useState<string | null>(null)
   const [datos, setDatos] = useState<ConciliacionDelDia | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -28,6 +53,9 @@ export function ConciliacionDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida
   const pedido = `${tienda}|${fecha ?? ''}|${vuelta}`
   const [leido, setLeido] = useState<string | null>(null)
   const cargando = leido !== pedido
+  const [vista, setVista] = useState('todas')
+  const [q, setQ] = useState('')
+  const [ficha, setFicha] = useState<PrendaAbierta | null>(null)
 
   useEffect(() => {
     let vivo = true
@@ -38,25 +66,62 @@ export function ConciliacionDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida
     return () => { vivo = false }
   }, [tienda, fecha, pedido])
 
-  const marca = tienda === 'bdi' ? 'bdi' : 'zattia'
-  const abrir = (f: FilaConciliacion) => f.producto && f.talle && abrirPrenda({ marca, producto: f.producto, talle: f.talle })
+  const todas: Fila[] = useMemo(() => (datos?.grupos ?? []).flatMap((g) => g.filas.map((f) => ({ ...f, id: `${g.tipo}/${f.clave}`, grupo: `${g.tipo}/${g.clase}`, grupoNombre: g.nombre, mirar: g.mirar }))), [datos])
+  const vistas = useMemo(() => [['todas', 'No coinciden'] as const, ...(datos?.grupos ?? []).map((g) => [`${g.tipo}/${g.clase}`, g.nombre] as const)], [datos])
   const prendaDe = (f: FilaConciliacion) => (f.nombre ? `${f.nombre}${f.talleNombre ? ` · ${f.talleNombre}` : ''}` : f.sku ?? f.clave)
+  const buscadas = useMemo(() => {
+    const t = normal(q)
+    return !t ? todas : todas.filter((f) => normal(`${prendaDe(f)} ${f.sku ?? ''} ${f.numero ?? ''}`).includes(t))
+  }, [todas, q])
+  const conteo = useMemo(() => Object.fromEntries(vistas.map(([k]) => [k, k === 'todas' ? buscadas.length : buscadas.filter((f) => f.grupo === k).length])), [vistas, buscadas])
+  // Una vista que ya ⛔ está (otro día, otra tienda) ⇒ todas.
+  const enVista = vistas.some(([k]) => k === vista) ? vista : 'todas'
+  const filas = enVista === 'todas' ? buscadas : buscadas.filter((f) => f.grupo === enVista)
 
+  const esStock = (f: Fila) => f.tipo.startsWith('stock_')
+  const abrir = (f: Fila) => { if (f.producto && f.talle) setFicha({ producto: f.producto, talle: f.talle, fila: null }) }
+
+  const celda = (f: Fila, k: string): React.ReactNode => {
+    if (k === 'que') return esStock(f)
+      ? <span title={f.sku ?? undefined}><b style={{ color: color.ink }}>{prendaDe(f)}</b>{f.sku && f.nombre && <span style={{ color: color.mut }}> · {f.sku}</span>}</span>
+      : <span title={[f.estado, f.medio].filter(Boolean).join(' · ')}><b style={{ color: color.ink }}>#{f.numero}</b><span style={{ color: color.mut }}> · {[f.estado, f.medio].filter(Boolean).join(' · ') || '—'}</span></span>
+    if (k === 'contra') return <span style={{ color: color.ink2 }}>{CONTRA[f.tipo] ?? f.tipo}</span>
+    if (k === 'ellos') return <span style={{ fontWeight: 600 }}>{esStock(f) ? f.tn ?? '—' : pesos(f.total)}</span>
+    if (k === 'erp') return esStock(f)
+      ? <span title={f.reservado ? `${f.reservado} reservado por pedidos sin pagar` : undefined}>{f.erp ?? '—'}{f.reservado ? <span style={{ color: color.mut }}> ({f.reservado} res.)</span> : null}</span>
+      : <span>{pesos(f.totalErp)}</span>
+    if (k === 'gn') return <span style={{ color: color.mut }}>{esStock(f) ? f.gn ?? '—' : '—'}</span>
+    if (k === 'dias') return <span style={{ color: f.dias > 1 ? 'var(--mo-warning-ink)' : color.mut }} title={f.dias > 1 ? 'Viene de días anteriores' : undefined}>{f.dias}</span>
+    if (k === 'paso') return <span title={`${f.grupoNombre}: ${f.mirar}${f.motivo ? ` · ${f.motivo}` : ''}`}><ChipEstado mapa={{ x: ['warning', f.grupoNombre] }} k="x" /></span>
+    return null
+  }
+
+  const acciones = (f: Fila) => {
+    const menu: AccionMenu[] = [
+      ...(f.producto && f.talle ? [{ key: 'ficha', label: 'Abrir la prenda', icono: 'abrir' as const, onClick: () => abrir(f) }] : []),
+      ...(f.link ? [{ key: 'tn', label: 'Ver en Tienda Nube ↗', icono: 'abrir' as const, onClick: () => window.open(f.link!, '_blank', 'noopener') }] : []),
+    ]
+    return menu.length ? <MenuAcciones acciones={menu} etiqueta={`Más acciones de ${esStock(f) ? prendaDe(f) : `#${f.numero}`}`} vertical alinear="izquierda" /> : null
+  }
+
+  const calculado = !!datos?.tarjetas.some((t) => t.calculado)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <SectionCard title="Conciliación" subtitle="El ERP contra Tienda Nube, GN y Mercado Libre: cuánto coincide y lo que no, con qué mirar. Se calcula una vez por día, a las 13:40.">
-        <Tabs items={TIENDAS} value={tienda} onChange={(k) => { setTienda(k as TiendaErp); setFecha(null); setDatos(null) }} />
-        {datos && datos.dias.length > 0 && (
-          <div style={{ display: 'flex', gap: space[3], marginTop: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <Field label="Día">
-              <Select value={datos.fecha ?? ''} onChange={(e) => setFecha(e.target.value)} disabled={cargando}>
-                {datos.dias.map((d) => <option key={d} value={d}>{dia(d)}</option>)}
-              </Select>
-            </Field>
-            <span>Calculado a las {hora(datos.calculadoEn)}.</span>
-          </div>
+      <p style={{ margin: 0, color: color.mut }}>El ERP contra Tienda Nube, GN y Mercado Libre: cuánto coincide y lo que no, con qué mirar. Se calcula una vez por día, a las 13:40.</p>
+      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
+        {marca === 'zattia' && (
+          <Select aria-label="Tienda" style={ANCHO_SELECT} value={deZattia} onChange={(e) => { setDeZattia(e.target.value as TiendaErp); setFecha(null); setFicha(null) }}>
+            <option value="zattia">Zattia</option><option value="stunned">Stunned</option>
+          </Select>
         )}
-      </SectionCard>
+        {datos && datos.dias.length > 0 && (
+          <Select aria-label="Día" style={ANCHO_SELECT} value={datos.fecha ?? ''} onChange={(e) => setFecha(e.target.value)} disabled={cargando}>
+            {datos.dias.map((d) => <option key={d} value={d}>{dia(d)}</option>)}
+          </Select>
+        )}
+        {datos?.calculadoEn && <span style={{ color: color.mut }}>Calculado {cuandoCorto(datos.calculadoEn)}</span>}
+        <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Volver a leer'}</Button>
+      </div>
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {cargando && !datos && <EmptyState title="Leyendo la conciliación…" />}
@@ -65,79 +130,44 @@ export function ConciliacionDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida
 
       {datos && datos.fecha && (
         <>
-          <SectionCard title={!datos.tarjetas.some((t) => t.calculado) ? 'Ese día no se calculó' : datos.noCierran ? `${datos.noCierran} no coinciden` : 'Todo coincide'}>
-            <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-              {datos.tarjetas.map((t) => (
-                <div key={t.tipo} style={{ minWidth: 220 }}>
-                  <strong>{t.nombre}</strong>
-                  {!t.calculado ? <div>No se calculó ese día.</div>
-                    : t.tipo.startsWith('stock_') ? <div>Coinciden {t.cierran} de {t.total} {t.unidad} ({pct(t.cierran ?? 0, t.total ?? 0)}){t.aparte ? <> · {t.aparte} {t.tipo === 'stock_ml' ? 'publicaciones' : 'de la tienda'} sin producto en el ERP</> : null}</div>
-                      : <div>{t.noCierran ? `${t.noCierran} de ${t.total} ${t.unidad} no coinciden` : `Coinciden los ${t.total} ${t.unidad}`} (últimos 7 días)</div>}
-                </div>
-              ))}
-              <div style={{ minWidth: 220 }}>
-                <strong>Stock por depósito: GN y el ERP</strong>
-                <div>{!datos.gn.calculado ? 'No se calculó ese día.' : datos.gn.sinExplicar ? `${datos.gn.sinExplicar} sin explicar: verlas en Diferencias del día` : 'Todo explicado (Diferencias del día)'}</div>
-              </div>
-            </div>
-            {datos.enVuelo > 0 && <div style={{ marginTop: space[2] }}><Badge tone="neutral">Recién pagados, todavía en camino: {datos.enVuelo}</Badge></div>}
-            {datos.desconocidas > 0 && <Notice tone="warning">{datos.desconocidas} con una clase que esta pantalla todavía no conoce.</Notice>}
-          </SectionCard>
+          <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+            <TileResumen oscuro titulo="No coinciden" valor={!calculado ? '—' : datos.noCierran.toLocaleString('es-AR')} nota={!calculado ? 'Ese día no se calculó' : datos.noCierran ? `del ${dia(datos.fecha)}` : 'Todo coincide'} />
+            {datos.tarjetas.map((t) => (
+              <TileResumen
+                key={t.tipo} titulo={t.nombre}
+                valor={!t.calculado ? '—' : t.tipo.startsWith('stock_') ? pct(t.cierran ?? 0, t.total ?? 0) : (t.noCierran ?? 0).toLocaleString('es-AR')}
+                nota={!t.calculado ? 'No se calculó ese día.'
+                  : t.tipo.startsWith('stock_') ? `Coinciden ${t.cierran} de ${t.total} ${t.unidad}${t.aparte ? ` · ${t.aparte} ${t.tipo === 'stock_ml' ? 'publicaciones' : 'de la tienda'} sin producto en el ERP` : ''}`
+                    : t.noCierran ? `${t.noCierran} de ${t.total} ${t.unidad} no coinciden (7 días)` : `Coinciden los ${t.total} ${t.unidad} (7 días)`}
+              />
+            ))}
+            <TileResumen titulo="Stock por depósito: GN y el ERP" valor={!datos.gn.calculado ? '—' : (datos.gn.sinExplicar ?? 0).toLocaleString('es-AR')}
+              nota={!datos.gn.calculado ? 'No se calculó ese día.' : datos.gn.sinExplicar ? 'sin explicar: verlas en Diferencias con GN' : 'Todo explicado (Diferencias con GN)'} />
+          </div>
+          {datos.enVuelo > 0 && <Notice tone="neutral">Recién pagados, todavía en camino: {datos.enVuelo}.</Notice>}
+          {datos.desconocidas > 0 && <Notice tone="warning">{datos.desconocidas} con una clase que esta pantalla todavía no conoce.</Notice>}
 
-          {datos.grupos.map((g) => (
-            <SectionCard key={`${g.tipo}/${g.clase}`} title={`${g.nombre} · ${g.filas.length}`} subtitle={`${g.mirar}${g.deAntes ? ` (${g.deAntes} vienen de días anteriores)` : ''}`}>
-              <TableWrap>
-                {g.tipo.startsWith('stock_') ? (
-                  <>
-                    <THead>
-                      <Tr>
-                        <Th>Prenda</Th><Th>SKU</Th>
-                        <Th style={{ textAlign: 'right' }}>{g.tipo === 'stock_ml' ? 'Mercado Libre' : 'Tienda Nube'}</Th><Th style={{ textAlign: 'right' }}>ERP</Th><Th style={{ textAlign: 'right' }}>GN</Th>
-                        <Th style={{ textAlign: 'right' }}>Días</Th>
-                      </Tr>
-                    </THead>
-                    <TBody>
-                      {g.filas.map((f) => (
-                        <Tr key={f.clave} onClick={f.producto ? () => abrir(f) : undefined} style={f.producto ? { cursor: 'pointer' } : undefined}>
-                          <Td>{prendaDe(f)}</Td>
-                          <Td>{f.sku ?? '—'}</Td>
-                          <Td style={{ textAlign: 'right' }}>{f.tn ?? '—'}</Td>
-                          <Td style={{ textAlign: 'right' }}>{f.erp ?? '—'}{f.reservado ? <div style={{ fontSize: 12 }}>{f.reservado} reservado</div> : null}</Td>
-                          <Td style={{ textAlign: 'right' }}>{f.gn ?? '—'}</Td>
-                          <Td style={{ textAlign: 'right' }}>{f.dias}</Td>
-                        </Tr>
-                      ))}
-                    </TBody>
-                  </>
-                ) : (
-                  <>
-                    <THead>
-                      <Tr><Th>{g.tipo === 'pedido_ml' ? 'Venta' : 'Pedido'}</Th><Th>{g.tipo === 'pedido_ml' ? 'Estado en Mercado Libre' : 'Estado en Tienda Nube'}</Th><Th>Medio</Th><Th style={{ textAlign: 'right' }}>Total</Th><Th style={{ textAlign: 'right' }}>Días</Th></Tr>
-                    </THead>
-                    <TBody>
-                      {g.filas.map((f) => (
-                        <Tr key={f.clave}>
-                          <Td>
-                            {f.link ? <a href={f.link} target="_blank" rel="noreferrer">#{f.numero}</a> : `#${f.numero}`}
-                            {f.motivo && <div style={{ fontSize: 12 }}>{f.motivo}</div>}
-                            {f.totalErp != null && <div style={{ fontSize: 12 }}>En el ERP: {pesos(f.totalErp)}</div>}
-                          </Td>
-                          <Td>{f.estado ?? '—'}</Td>
-                          <Td>{f.medio ?? '—'}</Td>
-                          <Td style={{ textAlign: 'right' }}>{pesos(f.total)}</Td>
-                          <Td style={{ textAlign: 'right' }}>{f.dias}</Td>
-                        </Tr>
-                      ))}
-                    </TBody>
-                  </>
-                )}
-              </TableWrap>
-            </SectionCard>
-          ))}
+          <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
+            <VistasLista vistas={vistas} valor={enVista} conteo={conteo} onCambio={setVista} />
+            <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
+              <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la conciliación" placeholder="Prenda, SKU o número de pedido" />
+            </div>
+            {enVista !== 'todas' && <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Qué mirar: {datos.grupos.find((g) => `${g.tipo}/${g.clase}` === enVista)?.mirar}{(() => { const g = datos.grupos.find((x) => `${x.tipo}/${x.clase}` === enVista); return g?.deAntes ? ` (${g.deAntes} vienen de días anteriores)` : '' })()}</div>}
+            <ListaTrabajo
+              columnas={COLUMNAS} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={40}
+              activa={ficha ? filas.find((f) => f.producto === ficha.producto && f.talle === ficha.talle)?.id ?? null : null}
+              onAbrir={(f) => (f.producto && f.talle ? abrir(f) : f.link ? window.open(f.link, '_blank', 'noopener') : undefined)}
+              etiquetaFila={(f) => (esStock(f) ? `la prenda ${prendaDe(f)}` : `el pedido #${f.numero}`)}
+              vacio={!cargando ? <div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con esa prenda o pedido.' : calculado ? 'Todo coincide.' : 'Ese día no se calculó.'} /></div> : null}
+            />
+            <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
+              {filas.length.toLocaleString('es-AR')} que no coinciden · el arreglo se hace en el monitor o en GN, no en el ERP
+            </div>
+          </div>
         </>
       )}
 
-      {datos && <div><Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>Volver a leer</Button></div>}
+      {ficha && <FichaPrenda key={`${marca}/${ficha.producto}/${ficha.talle}`} marca={marca} prenda={ficha} onCerrar={() => setFicha(null)} ajustar={ajustar} />}
     </div>
   )
 }

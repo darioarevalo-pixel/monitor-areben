@@ -42,7 +42,7 @@ celda dice el SISTEMA en gris (⛔ una persona inventada). Más de `TOPE_MOVS` (
 Servidor `api/_erp-stock.js` (`vista=movimientos`, por pg con `conMotor`), núcleo `lib/erp/movimientos.core.js`
 (`tests/erp-movimientos*.test.ts*`).
 
-**Diferencias del día** (14-oct, sólo lectura): lo que el libro ⛔ pudo explicar al comparar su día con
+**Diferencias con GN** (14-oct, sólo lectura; 🎨 19-oct, Diseño 7: molde de REGISTRO — números arriba (sin explicar · sobreventa · explicadas solas), UNA lista con una vista por clase + «Sobreventa», buscador, y la fila abre `FichaPrenda` AL COSTADO; ⛔ cambió qué se calcula; `tests/erp-diferencias-pantalla.test.tsx`): lo que el libro ⛔ pudo explicar al comparar su día con
 el de GN (`stock_diff`), agrupado por clase con qué mirar, y la **sobreventa**: las prendas que el libro
 deja en NEGATIVO hoy. Cada fila abre la ficha de Stock. Núcleo en `lib/erp/diferencias.core.js`
 (`tests/erp-diferencias.test.ts`). 🔴 La sobreventa ⛔ es una clase del diff: si GN también quedó en
@@ -50,7 +50,7 @@ negativo, el día cierra (medido: las 13 de BDI del 14-oct están en −1/−4 e
 pg con `DATABASE_URL_<MARCA>` (supabase-js ⛔ agrupa); sin esa variable la pantalla lo dice. 🔴 Los nombres
 salen del espejo PAGINADOS: una fila por talle y depósito pasa las 1000 de Supabase y cortaba callado.
 
-**Conciliación** (18-oct, sólo lectura, paso 7): el ERP contra Tienda Nube, GN y Mercado Libre, por tienda (Zattia,
+**Conciliación** (18-oct, sólo lectura, paso 7; 🎨 19-oct, Diseño 7: molde de REGISTRO — cuánto coincide en tarjetas arriba, UNA lista de lo que ⛔ coincide con una vista por clase (con su número y qué mirar), la tienda sale de la marca del ERP (Zattia trae el selector Zattia/Stunned), la prenda abre `FichaPrenda` AL COSTADO y el pedido, Tienda Nube ↗; ⛔ cambió qué se calcula): el ERP contra Tienda Nube, GN y Mercado Libre, por tienda (Zattia,
 Stunned, BDI) y por día: cuánto coincide y lo que ⛔, agrupado por clase con qué mirar. Tres tipos: el **stock de TN**
 (leído EN VIVO a las 13:40) contra el libro MENOS lo reservado y contra GN; los **pedidos** de 7 días contra la venta
 del ERP y la de GN. Lo de GN por depósito sigue en Diferencias (acá sólo su cuenta, por `porLinea`); ML dice «sin

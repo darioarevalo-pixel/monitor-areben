@@ -6,9 +6,10 @@ import { armarConciliacion } from '@/lib/erp/conciliacion.core.js'
 import type { ConciliacionDelDia } from '@/lib/erp/cliente'
 
 /**
- * **ERP › Conciliación, del lado de la pantalla** (18-oct). El oráculo es lo que se LEE: cuánto coincide sale del resumen
- * del motor, cada grupo dice qué mirar, la prenda abre su stock, el pedido abre Tienda Nube, y una base sin la 024 o un día
- * sin calcular lo DICEN (⛔ muestran «todo coincide»). Los datos pasan por el núcleo real (`armarConciliacion`).
+ * **ERP › Conciliación, del lado de la pantalla** (18-oct; 🎨 19-oct con el molde de REGISTRO). El oráculo es lo que se LEE:
+ * cuánto coincide sale del resumen del motor, cada clase es una vista con su número y qué mirar, la prenda abre su ficha AL
+ * COSTADO, el pedido abre Tienda Nube, y una base sin la 024 o un día sin calcular lo DICEN (⛔ muestran «todo coincide»).
+ * Los datos pasan por el núcleo real (`armarConciliacion`).
  */
 const resumen = {
   stock_tn: { variantes: 12, sin_limite: 0, repetidas: 0, comparadas: 10, cierran: 8, clases: { stock_tn: { libro_aparte: 1, sin_variante: 1 } } },
@@ -24,54 +25,65 @@ const conDatos = (o = {}): ConciliacionDelDia => ({ sinTablas: false, fecha: '20
 
 const leerConciliacion = vi.fn(async (..._a: unknown[]): Promise<ConciliacionDelDia> => conDatos())
 vi.mock('@/lib/erp/cliente', () => ({ leerConciliacion: (...a: unknown[]) => leerConciliacion(...a) }))
+vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno' } }) }))
+const fichaDe = vi.fn()
+vi.mock('@/components/erp/stock/FichaPrenda', () => ({ FichaPrenda: (p: { marca: string; prenda: { producto: string; talle: string } }) => { fichaDe(p.marca, p.prenda.producto, p.prenda.talle); return <aside aria-label="Ficha de la prenda">ficha {p.prenda.producto}/{p.prenda.talle}</aside> } }))
 
 let root: Root | null = null
 let host: HTMLDivElement
-const abrirPrenda = vi.fn()
+const ajustar = vi.fn()
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); vi.clearAllMocks() })
 
 async function montar() {
   const { ConciliacionDia } = await import('@/components/erp/ConciliacionDia')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<ConciliacionDia abrirPrenda={abrirPrenda} />) })
+  await act(async () => { root = createRoot(host); root.render(<ConciliacionDia ajustar={ajustar} />) })
   await act(async () => {})
 }
 const texto = () => host.textContent ?? ''
+const boton = (t: RegExp) => [...host.querySelectorAll('button')].find((b) => t.test(b.textContent ?? ''))!
+const filaDe = (t: string) => [...host.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes(t))!
+const clic = async (el: Element) => { await act(async () => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })) }); await act(async () => {}) }
 
 describe('ConciliacionDia', () => {
-  it('dice cuánto coincide, el diff de GN, ML sin conexión, y cada grupo con qué mirar', async () => {
+  it('dice cuánto coincide, el diff de GN, ML sin conexión, y cada clase como vista con su número', async () => {
     await montar()
     expect(leerConciliacion).toHaveBeenCalledWith('zattia', null)
-    expect(texto()).toContain('3 no coinciden')
-    expect(texto()).toContain('Coinciden 8 de 10 variantes (80.0%) · 1 de la tienda sin producto en el ERP')
-    expect(texto()).toContain('1 de 20 pedidos no coinciden')
-    expect(texto()).toContain('Coinciden los 20 pedidos')
-    expect(texto()).toContain('3 sin explicar: verlas en Diferencias del día')
+    expect(texto()).toMatch(/No coinciden3del 18\/10/)
+    expect(texto()).toContain('Coinciden 8 de 10 variantes · 1 de la tienda sin producto en el ERP')
+    expect(texto()).toContain('80.0%')
+    expect(texto()).toContain('1 de 20 pedidos no coinciden (7 días)')
+    expect(texto()).toContain('Coinciden los 20 pedidos (7 días)')
+    expect(texto()).toContain('sin explicar: verlas en Diferencias con GN')
     expect(texto()).not.toContain('Stock: Mercado Libre')   // Zattia ⛔ vende en ML: sin tarjeta
-    expect(texto()).toContain('El ERP dice otro stock · 1')
+    expect(boton(/^El ERP dice otro stock/).textContent).toContain('1')
+    expect(boton(/^Cancelado con la venta activa en GN/).textContent).toContain('1')
+    await clic(boton(/^El ERP dice otro stock/))
     expect(texto()).toContain('(1 vienen de días anteriores)')
-    expect(texto()).toContain('Cancelado con la venta activa en GN · 1')
+    expect(host.querySelectorAll('[role="row"]').length).toBeGreaterThan(0)
+    expect(texto()).not.toContain('#7331')
   })
-  it('la prenda abre su stock (con la marca de la BASE); la de TN sin producto ⛔ abre nada; el pedido va a TN', async () => {
+  it('la prenda abre su ficha al costado (con la marca de la BASE); la de TN sin producto ⛔ abre nada; el pedido va a TN', async () => {
     await montar()
-    const filaDe = (t: string) => [...host.querySelectorAll('tr')].find((tr) => tr.textContent?.includes(t))!
-    await act(async () => { filaDe('Remera Lisa · M').dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    expect(abrirPrenda).toHaveBeenCalledWith({ marca: 'zattia', producto: '1', talle: '10' })
-    await act(async () => { filaDe('XX-1').dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    expect(abrirPrenda).toHaveBeenCalledTimes(1)
-    const a = host.querySelector('a[href*="/orders/99"]') as HTMLAnchorElement
-    expect(a.href).toBe('https://zattiaco.mitiendanube.com/admin/orders/99')
+    await clic(filaDe('Remera Lisa · M'))
+    expect(fichaDe).toHaveBeenCalledWith('zattia', '1', '10')
+    fichaDe.mockClear()
+    await clic(filaDe('XX-1'))
+    expect(fichaDe).not.toHaveBeenCalledWith('zattia', expect.anything(), expect.anything())
+    const abrir = vi.spyOn(window, 'open').mockImplementation(() => null)
+    await clic(filaDe('#7331'))
+    expect(abrir).toHaveBeenCalledWith('https://zattiaco.mitiendanube.com/admin/orders/99', '_blank', 'noopener')
+    abrir.mockRestore()
   })
   it('Stunned se pide como stunned y abre la prenda en la base de Zattia', async () => {
     await montar()
-    const tab = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Stunned')!
-    await act(async () => { tab.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    const sel = host.querySelector('select[aria-label="Tienda"]') as HTMLSelectElement
+    await act(async () => { sel.value = 'stunned'; sel.dispatchEvent(new Event('change', { bubbles: true })) })
     await act(async () => {})
     expect(leerConciliacion).toHaveBeenLastCalledWith('stunned', null)
-    const filaDe = (t: string) => [...host.querySelectorAll('tr')].find((tr) => tr.textContent?.includes(t))!
-    await act(async () => { filaDe('Remera Lisa · M').dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    expect(abrirPrenda).toHaveBeenCalledWith({ marca: 'zattia', producto: '1', talle: '10' })
+    await clic(filaDe('Remera Lisa · M'))
+    expect(fichaDe).toHaveBeenCalledWith('zattia', '1', '10')
   })
   it('sin la 024 lo dice; un día sin calcular ⛔ dice «todo coincide»', async () => {
     leerConciliacion.mockResolvedValueOnce({ ...conDatos(), sinTablas: true, fecha: null, dias: [] })
@@ -81,7 +93,7 @@ describe('ConciliacionDia', () => {
     act(() => root?.unmount()); root = null; host.remove()
     leerConciliacion.mockResolvedValueOnce({ sinTablas: false, fecha: '2026-10-18', dias: ['2026-10-18'], calculadoEn: null, ...armarConciliacion({ tienda: 'zattia', filas: [], resumen: null, nombres: new Map() }) })
     await montar()
-    expect(texto()).toContain('No se calculó ese día.')
+    expect(texto()).toContain('Ese día no se calculó')
     expect(texto()).not.toContain('Todo coincide')
   })
 })
