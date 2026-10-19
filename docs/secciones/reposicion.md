@@ -191,6 +191,11 @@ diaria con tope (30) se reemplazó por una solicitud que deciden **Darío o Brun
 - **Propuesta**: lo que sobra, **por producto**. 🔑 Orden: primero **sin ventas en 60 días** (sumando
   TODAS las variantes del producto), después **lo que más sobra**. ⛔ Sin tope diario («30 tops es re
   poco; 30 jeans se complica»): lo pone quien elige. No propone lo que ya está confirmado o en el local.
+- 🔴 **Las ventas del producto incluyen los talles AGOTADOS** (19-oct-2026): `filas` sólo trae variantes
+  con stock, y sumar desde ahí perdía las ventas del talle que se vendió y se agotó. Medido: 9 de los 39
+  «sin ventas» habían vendido (Short Cliff 3, todas del 40 y 42; Top Laia 7). Ahora sale de las ventas
+  por variante (`vendidasPorProducto(vv)`). ⏭️ Las ventas con canal «Ninguno» (25 en 60 días; Short
+  Nate) siguen sin contar en ningún cálculo: falta que Darío diga qué son.
 - **Confirmados**: se confirma en varias veces; vive en `repo_armado` con estado **`sin_enviar`**
   (acción `confirmados`, GET y POST). ⛔ No es un armado: fuera del historial, del «hoy» y del índice
   de «uno abierto». Vacío = `cancelado`. ⚠️ No se llama «borrador»: el test del VOCABULARIO lo frena.

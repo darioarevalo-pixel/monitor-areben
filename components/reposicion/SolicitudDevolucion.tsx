@@ -27,6 +27,7 @@ import {
   resumenSolicitud,
   ROTULO_PRIORIDAD,
   sumarPedidos,
+  vendidasPorProducto,
   type GrupoPropuesta,
   type Prioridad,
   type VariantePropuesta,
@@ -54,11 +55,13 @@ function imprimirTicket(pedido: LineaPedido[], rotulo: string) {
   return imprimirDevolucion(filas, rotulo)
 }
 
-export function SolicitudDevolucion({ linea, rotulo, filas, armado, stockViejo, puedeAprobar, bolsaProd, guardarBolsaProd, boton, onEnviada }: {
+export function SolicitudDevolucion({ linea, rotulo, filas, vv, armado, stockViejo, puedeAprobar, bolsaProd, guardarBolsaProd, boton, onEnviada }: {
   linea: LineaZ
   /** «Zattia» / «Stunned»: va en el ticket. */
   rotulo: string
   filas: FilaVentas[]
+  /** Ventas por variante en la ventana, también de los talles agotados (no están en `filas`). */
+  vv?: Record<string, number>
   /** El armado de devolución de hoy (o el abierto). */
   armado: Armado | null
   /** El stock es anterior a la última transferencia: lo transferido todavía figura en el local. */
@@ -103,7 +106,8 @@ export function SolicitudDevolucion({ linea, rotulo, filas, armado, stockViejo, 
     () => sumarPedidos(cantidades(borrador?.pedido), enLocal ? cantidades(enLocal.pedido) : armado?.estado === 'transferido' && stockViejo ? transferidoDe(armado.transfer) : {}),
     [borrador, enLocal, armado, stockViejo],
   )
-  const grupos = useMemo(() => propuesta(filas, yaPedido), [filas, yaPedido])
+  const vendidasProd = useMemo(() => (vv ? vendidasPorProducto(vv) : undefined), [vv])
+  const grupos = useMemo(() => propuesta(filas, yaPedido, vendidasProd), [filas, yaPedido, vendidasProd])
   const bolsaDe = (g: { pid: string; name: string; sku?: string }) => conBolsa(g, bolsaProd)
   const cantDe = (v: VariantePropuesta) => Math.min(v.sobra, cant[v.f.it.vid] ?? v.sobra)
   const prendasDe = (g: GrupoPropuesta) => g.variantes.reduce((s, v) => s + cantDe(v), 0)

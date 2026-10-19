@@ -471,6 +471,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             linea={linea}
             rotulo={ETIQUETA_LINEA[linea]}
             filas={filas}
+            vv={vv}
             armado={armados.devolver}
             stockViejo={transferidoDespues(armados.devolver)}
             puedeAprobar={puedeMarcar}

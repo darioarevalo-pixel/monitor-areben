@@ -58,19 +58,36 @@ export type GrupoPropuesta = {
 }
 
 /**
+ * Vendidas de cada producto en la ventana, desde las ventas por variante (`pid_sid`), SIN pasar por el
+ * inventario. 🔴 `filas` sólo trae las variantes con stock: el talle que se vendió y se agotó no
+ * está, y con él se perdían sus ventas. Medido el 19-oct-2026: 10 de los 39 productos «sin ventas»
+ * habían vendido (Short Cliff: 3, todas del 40 y el 42, agotados; Top Laia: 7).
+ */
+export function vendidasPorProducto(vv: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const [vid, n] of Object.entries(vv)) {
+    const pid = vid.slice(0, vid.indexOf('_'))
+    out[pid] = (out[pid] || 0) + n
+  }
+  return out
+}
+
+/**
  * Lo que sobra en el local, por producto y en orden de prioridad. `yaPedido` = lo que ya está en una
  * solicitud (confirmada o enviada) y todavía no se descontó del stock: no se propone dos veces.
+ * `vendidasProd` = `vendidasPorProducto(vv)`; sin él, se suman las de `filas` (sólo talles con stock).
  */
-export function propuesta(filas: FilaVentas[], yaPedido: Record<string, number> = {}): GrupoPropuesta[] {
-  const vendidasProd = new Map<string, number>()
-  for (const f of filas) vendidasProd.set(f.it.pid, (vendidasProd.get(f.it.pid) || 0) + (f.d.vendidas || 0))
+export function propuesta(filas: FilaVentas[], yaPedido: Record<string, number> = {}, vendidasProd?: Record<string, number>): GrupoPropuesta[] {
+  const desdeFilas = new Map<string, number>()
+  for (const f of filas) desdeFilas.set(f.it.pid, (desdeFilas.get(f.it.pid) || 0) + (f.d.vendidas || 0))
+  const vendidasDe = (pid: string) => (vendidasProd ? vendidasProd[pid] || 0 : desdeFilas.get(pid) || 0)
   const grupos = new Map<string, GrupoPropuesta>()
   for (const f of filas) {
     const sobra = f.d.devolver - (yaPedido[f.it.vid] || 0)
     if (sobra <= 0) continue
     let g = grupos.get(f.it.pid)
     if (!g) {
-      const vendidas = vendidasProd.get(f.it.pid) || 0
+      const vendidas = vendidasDe(f.it.pid)
       g = { pid: f.it.pid, name: f.it.name, cat: f.it.cat || '', sku: f.it.sku || '', clave: claveDe(f.it.sku), prioridad: vendidas === 0 ? 'sin-ventas' : 'con-ventas', vendidas, sobra: 0, variantes: [] }
       grupos.set(f.it.pid, g)
     }

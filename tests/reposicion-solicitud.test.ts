@@ -1,6 +1,6 @@
 // La devolución como solicitud (Darío, 15-oct-2026): el orden de prioridad, la bolsa y el resumen.
 import { describe, it, expect } from 'vitest'
-import { bolsaDeLectura, bolsaPorDefecto, conBolsa, fusionar, lineasDe, porProducto, propuesta, resumenSolicitud } from '@/lib/reposicion/solicitud'
+import { bolsaDeLectura, bolsaPorDefecto, conBolsa, fusionar, lineasDe, porProducto, propuesta, resumenSolicitud, vendidasPorProducto } from '@/lib/reposicion/solicitud'
 import type { FilaVentas } from '@/lib/reposicion/porVentas'
 import type { LineaPedido } from '@/lib/reposicion/armado'
 
@@ -27,6 +27,19 @@ describe('la propuesta', () => {
 
   it('las ventas son del PRODUCTO entero: una variante sin ventas de un producto que vende no es «sin ventas»', () => {
     expect(propuesta(filas).find((g) => g.pid === '1')).toMatchObject({ prioridad: 'con-ventas', vendidas: 4, clave: 'RTO-0001' })
+  })
+
+  it('🔴 cuentan las ventas de los talles AGOTADOS (no están en las filas): Short Cliff, 19-oct', () => {
+    // El 36 y el 38 sobran y no vendieron; las 3 ventas fueron del 40 y el 42, hoy en cero (sin fila).
+    const cliff = [F('9', '36', 'RSH-0100-36', 'SHORT CLIFF', 1, 0), F('9', '38', 'RSH-0100-38', 'SHORT CLIFF', 1, 0)]
+    expect(propuesta(cliff)[0]).toMatchObject({ prioridad: 'sin-ventas', vendidas: 0 })
+    const vv = { '9_36': 0, '9_40': 2, '9_42': 1, '4_S': 0 }
+    expect(vendidasPorProducto(vv)).toEqual({ '9': 3, '4': 0 })
+    expect(propuesta(cliff, {}, vendidasPorProducto(vv))[0]).toMatchObject({ prioridad: 'con-ventas', vendidas: 3 })
+  })
+
+  it('un cambio (venta en negativo) descuenta: vendió 1 y lo devolvió = sin ventas', () => {
+    expect(vendidasPorProducto({ '9_36': 1, '9_38': -1 })).toEqual({ '9': 0 })
   })
 
   it('lo que ya está en una solicitud no se propone dos veces', () => {
