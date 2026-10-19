@@ -9,7 +9,7 @@ import { contarCola, contarPorTipo, vistaDe, type FiltroPanel, type VistaTemp } 
 import { diasHasta } from '@/lib/crm/core'
 import { hoyISO } from '@/lib/crm/seguimiento'
 import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
-import { leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
+import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
 
 /**
@@ -815,8 +815,21 @@ function Agenda({
    * adelante. Va arriba de todo y SALE de su grupo (Darío, 16-oct-2026: le escribió a un prospecto,
    * salió del chat sin agendarlo y no lo encontraba). Se va solo al ponerle fecha.
    */
+  const hechosItems = [
+    ...hechos.map((f) => ({ it: itemDeCliente(f, today), dias: f.dias })),
+    ...leadsHechos,
+  ]
+  /**
+   * 🔴 **El mismo teléfono puede estar dos veces** (cliente y prospecto, o dos clientes cargados
+   * por separado). Darío, 19-oct-2026: le puso "en 2 días" a Nuria y seguía en «Falta la fecha»,
+   * porque lo que quedaba era el otro registro con su número. Si a ese teléfono ya se le puso
+   * fecha hoy, no falta nada.
+   */
+  const agendadosHoy = indexarEscritos(hechosItems.map((h) => h.it.telefono))
   const faltaFecha = estable(
-    [...deClientes, ...leads, ...friosItems].filter((i) => (i.dias === null || i.dias <= 0) && leEscribisteHoy(escritos, [i.telefono])),
+    [...deClientes, ...leads, ...friosItems].filter(
+      (i) => (i.dias === null || i.dias <= 0) && leEscribisteHoy(escritos, [i.telefono]) && !leEscribisteHoy(agendadosHoy, [i.telefono]),
+    ),
     (i) => `falta:${i.key}`,
     porAtraso,
   )
@@ -837,10 +850,6 @@ function Agenda({
   const totalAtrasados = atrasados.length
   const esperando = cola.atrasados + leadsAtrasados - todosAtrasados.length
   const totalHoy = paraHoy.length
-  const hechosItems = [
-    ...hechos.map((f) => ({ it: itemDeCliente(f, today), dias: f.dias })),
-    ...leadsHechos,
-  ]
 
   if (!faltaFecha.length && !paraHoy.length && !atrasados.length && !sinFecha.length && !frios.length && !hechosItems.length)
     return (
