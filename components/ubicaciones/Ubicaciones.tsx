@@ -214,7 +214,9 @@ export function Ubicaciones() {
         await espera(250) // pausa entre productos (no saturar GN)
       }
       porHacer = fallaron
-      if (porHacer.length && ronda < RONDAS) await espera(1000) // aire antes de la ronda siguiente
+      // Aire antes de la ronda siguiente. GN cuenta 60 llamadas por MINUTO: con 1 s de pausa la
+      // ronda 2 chocaba contra el mismo freno y quedaban sin guardar (19-oct, «6 no se pudieron»).
+      if (porHacer.length && ronda < RONDAS) await espera(15000 * ronda)
     }
     setReintento(0)
     const hechos = exitosos.length

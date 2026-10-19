@@ -44,7 +44,7 @@ export async function cargarUbicaciones(marca: Marca): Promise<UbiProducto[]> {
 }
 
 /** Respuesta del endpoint de observaciones (por producto). */
-type ObsResp = { ok?: boolean; error?: string; total?: number; pendientes?: number; errores?: { detalle?: string; status?: number | string }[] }
+type ObsResp = { ok?: boolean; error?: string; total?: number; reintentable?: boolean; pendientes?: number; errores?: { detalle?: string; status?: number | string }[] }
 
 /**
  * Escribe la observación (ubicación) de un producto en GN. ESCRIBE (todas las
@@ -63,13 +63,16 @@ export async function guardarObservacion(marca: Marca, productId: number | strin
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ marca, productId, observation }),
     })
-    const d: ObsResp = await r.json()
+    const d: ObsResp = await r.json().catch(() => ({}))
     // Un ok sobre 0 variantes no es un guardado. El endpoint ya lo contesta como error, pero
     // el chequeo queda acá también: dar por guardado algo que no se escribió es el modo de
     // falla más caro de esta pantalla (limpia el pendiente y el trabajo se pierde sin aviso).
     if (d && d.ok && (d.total ?? 0) > 0) return { ok: true }
     const error = d?.error || (d?.errores?.[0] && (d.errores[0].detalle || 'HTTP ' + d.errores[0].status)) || (d?.pendientes ? `${d.pendientes} variante(s) sin escribir` : '') || 'desconocido'
-    return { ok: false, error, reintentable: (d?.total ?? 0) > 0 }
+    // También se reintenta cuando GN frenó por ráfaga (429/5xx), aunque no haya llegado a leer
+    // las variantes: es lo que dejaba "6 no se pudieron guardar" al cargar muchas de una.
+    const frenoGN = !!d?.reintentable || r.status === 429 || r.status >= 500
+    return { ok: false, error, reintentable: frenoGN || (d?.total ?? 0) > 0 }
   } catch (e) {
     // Corte de red o función que se pasó de tiempo: es justo el caso que sí conviene reintentar.
     return { ok: false, error: e instanceof Error ? e.message : String(e), reintentable: true }

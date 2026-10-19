@@ -63,7 +63,10 @@ export default async function handler(req, res) {
     // 1) Traer las filas de inventario del producto
     const rGet = await gnFetch(`${GN_BASE}/inventario/${productId}`, { headers });
     const dGet = await rGet.json();
-    if (!rGet.ok) return res.status(rGet.status).json({ error: 'No se pudo leer el inventario del producto', detalle: JSON.stringify(dGet).slice(0, 200) });
+    // 429/5xx = GN frenó por ráfaga (pasa al guardar muchos seguidos, 19-oct-2026 con Lorena):
+    // se avisa `reintentable` para que la pantalla insista después de una pausa. Sin esto el
+    // producto quedaba como error definitivo y no entraba en las rondas de reintento.
+    if (!rGet.ok) return res.status(rGet.status).json({ error: 'No se pudo leer el inventario del producto', detalle: JSON.stringify(dGet).slice(0, 200), reintentable: rGet.status === 429 || rGet.status >= 500 });
     // GET /inventario/{id} → { variantes: [ { size_name, stock_por_tienda: [ {inventory_id, store_name, observation, ...} ] } ] }
     const filas = (dGet.variantes || []).flatMap(v =>
       (v.stock_por_tienda || []).map(s => ({ ...s, size_name: v.size_name })));
@@ -130,6 +133,6 @@ export default async function handler(req, res) {
     // `updated` = variantes que quedaron con el valor puesto (escritas + las que ya lo tenían).
     return res.status(200).json({ ok: pendientes === 0, productId, updated: total - pendientes, total, yaEstaban, pendientes, error: pendientes ? (lastErr || 'algunas variantes no se pudieron escribir') : undefined });
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: e.message, reintentable: true });
   }
 }
