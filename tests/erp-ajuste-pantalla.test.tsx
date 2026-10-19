@@ -6,27 +6,30 @@ import { armarAContar, filaDeAjuste } from '@/lib/erp/ajuste.core.js'
 import type { AjustesDeLinea } from '@/lib/erp/cliente'
 
 /**
- * **ERP › Ajustes, del lado de la pantalla** (19-oct). El oráculo es lo que se LEE y lo que se MANDA: «Contar» lleva la
- * prenda al ajuste con el depósito de la tienda y lee su stock, la diferencia se ve antes de enviar, el envío lleva lo
- * contado (⛔ la diferencia: la calcula el motor), «Aprobar» manda el id, y «Descartar» ⛔ sale sin porqué.
+ * **ERP › Stock › Conteos y ajustes, del lado de la pantalla** (Diseño, 19-oct). El oráculo es lo que se LEE y lo que se
+ * MANDA: ⛔ «A contar» ni «Conteo» a mano (Bruno: ⛔ se cuenta en el ERP); «Guardar ajuste» manda lo que SALE en positivo
+ * y APLICA en el mismo gesto (aprobación apagada); si aplicar falla, queda «Sin confirmar» y ⛔ se crea dos veces; la lista
+ * abre la ficha con antes → después.
  */
 const conciliacion = { fecha: '2026-10-19', calculadoEn: '2026-10-19T16:40:00Z', grupos: [{ tipo: 'stock_tn', clase: 'libro_aparte', filas: [
   { producto: '828948', talle: '229042', nombre: 'TOP ZARA', talleNombre: 'NEGRO', sku: 'RTO-0152-NG', tn: 12, erp: 0, gn: 12, dias: 2 },
 ] }] }
-const pendiente = { id: '0d6c3f0e-0000-4000-8000-000000000001', numero: 7, linea: 'zattia', deposito: 'local', motivo: 'conteo', estado: 'para_aprobar', fuente: 'conciliacion',
-  creado_por: 'camila', creado_en: '2026-10-19T13:00:00Z', renglones: [{ n: 1, product_id: 370642, size_id: 76584, sku: 'RTO-0013-BL', antes: 7, contado: 0, diferencia: -7, ahora: 6 }] }
-const datos = (): AjustesDeLinea => ({ ...armarAContar({ linea: 'zattia', conciliacion, contar: [], ajustes: [] }), sinConciliacion: false, ajustes: [filaDeAjuste(pendiente)] }) as AjustesDeLinea
-
+const pendiente = { id: '0d6c3f0e-0000-4000-8000-000000000001', numero: 7, linea: 'zattia', deposito: 'local', motivo: 'fallado', estado: 'para_aprobar', fuente: 'mano',
+  creado_por: 'camila', creado_en: '2026-10-19T13:00:00Z', renglones: [{ n: 1, product_id: 370642, size_id: 76584, sku: 'RTO-0013-BL', antes: 7, contado: null, diferencia: -1, ahora: 7 }] }
+const igualado = { id: '0d6c3f0e-0000-4000-8000-000000000002', numero: 5, linea: 'zattia', deposito: 'deposito', motivo: 'otro', detalle: 'Igualado a GN (Bruno, 19-oct) · causa: transferencia', estado: 'aplicado', fuente: 'mano',
+  creado_por: 'bruno', creado_en: '2026-10-19T12:00:00Z', resuelto_por: 'bruno', resuelto_en: '2026-10-19T12:00:01Z', renglones: [{ n: 1, product_id: 828948, size_id: 229042, sku: 'RTO-0152-NG', antes: 0, contado: null, diferencia: 12, ahora: 12 }] }
+const datos = (): AjustesDeLinea => ({ ...armarAContar({ linea: 'zattia', conciliacion, contar: [], ajustes: [] }), sinConciliacion: false, ajustes: [filaDeAjuste(pendiente), filaDeAjuste(igualado)] }) as AjustesDeLinea
+const prenda = { producto: '828948', talle: '229042', nombre: 'TOP ZARA', talleNombre: 'NEGRO', sku: 'RTO-0152-NG', barcode: '7790152' }
 const leerAjustes = vi.fn(async (..._a: unknown[]) => datos())
 const leerStockDePrenda = vi.fn(async (..._a: unknown[]) => ({ prenda: { producto: '828948', talle: '229042', nombre: 'TOP ZARA', talleNombre: 'NEGRO', sku: 'RTO-0152-NG', barcode: '7790152' },
   depositos: [{ deposito: 'local', libro: 0, gn: 12, diferencia: 12 }, { deposito: 'deposito', libro: 3, gn: 3, diferencia: 0 }], historial: [], sinDeposito: [] }))
-const crearAjuste = vi.fn(async (..._a: unknown[]) => ({ ok: true, numero: 8, id: 'y', renglones: 1, avisos: [{ codigo: 'CONTEO_DE_DEPOSITO_RECIENTE', texto: 'Esta prenda tiene un conteo de Depósito (C-31)' }] }))
+const crearAjuste = vi.fn(async (..._a: unknown[]) => ({ ok: true, numero: 8, id: 'nuevo-8', renglones: 1, avisos: [{ codigo: 'CONTEO_DE_DEPOSITO_RECIENTE', texto: 'Esta prenda tiene un conteo de Depósito (C-31)' }] }))
 const aprobarAjuste = vi.fn(async (..._a: unknown[]) => ({ ok: true, numero: 7, movimientos: 1, avisos: [] }))
 const descartarAjuste = vi.fn(async (..._a: unknown[]) => ({ ok: true, numero: 7 }))
 vi.mock('@/lib/erp/cliente', () => ({
   leerAjustes: (...a: unknown[]) => leerAjustes(...a), leerStockDePrenda: (...a: unknown[]) => leerStockDePrenda(...a),
   crearAjuste: (...a: unknown[]) => crearAjuste(...a), aprobarAjuste: (...a: unknown[]) => aprobarAjuste(...a),
-  descartarAjuste: (...a: unknown[]) => descartarAjuste(...a), buscarPrendas: vi.fn(async () => ({ variantes: [], cortado: false })),
+  descartarAjuste: (...a: unknown[]) => descartarAjuste(...a), buscarPrendas: vi.fn(async () => ({ variantes: [prenda], cortado: false })),
 }))
 
 let root: Root | null = null
@@ -48,47 +51,66 @@ function escribir(input: HTMLInputElement, valor: string) {
   act(() => { set.call(input, valor); input.dispatchEvent(new Event('input', { bubbles: true })) })
 }
 
-describe('AjustesStock', () => {
-  it('muestra la lista a contar y lo que espera aprobación, con el aviso de que el ERP se movió', async () => {
+describe('Conteos y ajustes', () => {
+  it('⛔ «A contar» ni «Conteo» a mano; lista los ajustes y lo que quedó sin aplicar', async () => {
     await montar()
     expect(leerAjustes).toHaveBeenCalledWith('zattia')
-    expect(texto()).toContain('A contar · 1')
-    expect(texto()).toContain('TOP ZARA · NEGRO')
-    expect(texto()).toContain('Coincide Tienda Nube con GN')
-    expect(texto()).toContain('Para aprobar · 1')
-    expect(texto()).toContain('el ERP se movió desde que se contó')
-    expect(texto()).toContain('cambia sólo el stock del ERP')
+    expect(texto()).toContain('Conteos y ajustes')
+    expect(texto()).not.toContain('A contar')
+    expect(texto()).toContain('Ajustes · 2')
+    expect(texto()).toContain('Sin confirmar · 1')
+    expect(texto()).toContain('Igualado a GN')
+    await click(boton('Nuevo ajuste'))
+    const motivos = [...host.querySelectorAll('option')].map((o) => o.textContent)
+    expect(motivos).toContain('Fallado')
+    expect(motivos).not.toContain('Conteo')
   })
 
-  it('«Contar» arma el ajuste con el depósito de la tienda, muestra la diferencia y envía lo contado', async () => {
+  it('«Guardar ajuste» manda lo que sale en positivo y lo aplica en el mismo gesto', async () => {
     await montar()
-    await click(boton('Contar'))
+    await click(boton('Nuevo ajuste'))
+    escribir(host.querySelector('input[placeholder="SKU, código de barras o nombre"]') as HTMLInputElement, 'zara')
+    await click(boton('Buscar'))
+    await click(boton(/TOP ZARA · NEGRO/))
     expect(leerStockDePrenda).toHaveBeenCalledWith('zattia', '828948', '229042')
-    expect(texto()).toContain('Nuevo ajuste')
-    expect(boton('Enviar a aprobar').disabled).toBe(true)
-    const contado = host.querySelector('td input') as HTMLInputElement
-    escribir(contado, '11')
+    expect(boton('Guardar ajuste').disabled).toBe(true)
+    escribir(host.querySelector('input[aria-label="Cantidad de TOP ZARA · NEGRO"]') as HTMLInputElement, '-2')
     await act(async () => {})
-    expect([...host.querySelectorAll('td')].map((t) => t.textContent)).toContain('+11')
-    expect(boton('Enviar a aprobar').disabled).toBe(false)
-    await click(boton('Enviar a aprobar'))
-    expect(crearAjuste).toHaveBeenCalledWith({ linea: 'zattia', deposito: 'local', motivo: 'conteo', detalle: '', fuente: 'conciliacion',
-      renglones: [{ producto: '828948', talle: '229042', sku: 'RTO-0152-NG', barcode: '7790152', contado: 11 }] })
-    expect(texto()).toContain('Ajuste A-8 listo para aprobar')
+    expect(boton('Guardar ajuste').disabled).toBe(false)
+    await click(boton('Guardar ajuste'))
+    expect(crearAjuste).toHaveBeenCalledWith({ linea: 'zattia', deposito: 'local', motivo: 'fallado', detalle: '', fuente: 'mano',
+      renglones: [{ producto: '828948', talle: '229042', sku: 'RTO-0152-NG', barcode: '7790152', cantidad: 2 }] })
+    expect(aprobarAjuste).toHaveBeenCalledWith('zattia', 'nuevo-8')
     expect(texto()).toContain('C-31')
-    expect(leerAjustes).toHaveBeenCalledTimes(2)
   })
 
-  it('«Aprobar» manda el id; «Descartar» pide el porqué antes de salir', async () => {
+  it('si aplicar falla, lo dice y ⛔ deja el borrador para crearlo otra vez', async () => {
+    aprobarAjuste.mockRejectedValueOnce(new Error('se cortó'))
     await montar()
-    await click(boton('Aprobar 1 diferencia'))
+    await click(boton('Nuevo ajuste'))
+    escribir(host.querySelector('input[placeholder="SKU, código de barras o nombre"]') as HTMLInputElement, 'zara')
+    await click(boton('Buscar'))
+    await click(boton(/TOP ZARA · NEGRO/))
+    escribir(host.querySelector('input[aria-label="Cantidad de TOP ZARA · NEGRO"]') as HTMLInputElement, '1')
+    await act(async () => {})
+    await click(boton('Guardar ajuste'))
+    expect(texto()).toContain('A-8 quedó guardado pero el stock todavía no cambió')
+    expect(boton('Guardar ajuste')).toBeUndefined()
+  })
+
+  it('«Confirmar» manda el id; «Descartar» pide el porqué; la fila abre la ficha', async () => {
+    await montar()
+    await click(boton('Confirmar'))
     expect(aprobarAjuste).toHaveBeenCalledWith('zattia', pendiente.id)
-    expect(texto()).toContain('A-7 aprobado')
     await click(boton('Descartar'))
     expect(boton('Descartar A-7').disabled).toBe(true)
-    escribir(host.querySelector('input[placeholder="Ej.: se contó otro talle"]') as HTMLInputElement, 'otro talle')
+    escribir(host.querySelector('input[placeholder="Ej.: se cargó otro talle"]') as HTMLInputElement, 'otro talle')
     await act(async () => {})
     await click(boton('Descartar A-7'))
     expect(descartarAjuste).toHaveBeenCalledWith('zattia', pendiente.id, 'otro talle')
+    const fila = [...host.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes('A-5')) as HTMLElement
+    await act(async () => { fila.click() })
+    expect(document.body.textContent).toContain('Ajuste A-5')
+    expect(document.body.textContent).toContain('+12')
   })
 })

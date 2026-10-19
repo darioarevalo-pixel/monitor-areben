@@ -1,30 +1,47 @@
 'use client'
 
 /**
- * ERP › Ajustes (paso 7). El AJUSTE DE STOCK CON MOTIVO: se cuenta la prenda (o se saca una fallada, un canje, un regalo),
- * el ajuste queda para aprobar con lo que decía el ERP en ese momento, y un admin lo aprueba: recién ahí el stock del ERP
- * pasa a lo contado. Nada se borra: un ajuste equivocado se arregla con otro.
+ * ERP › Stock › Conteos y ajustes (diseño §7, Bruno 19-oct). Dos cosas: **cargar un ajuste a mano** (Fallado · Canje ·
+ * Regalo · Otro con el porqué) y **la lista de los ajustes hechos** (registro), con la ficha al costado.
  *
- * 🔑 Hasta el corte GN sirve y el ERP es la prueba: esto mueve SÓLO el stock del ERP (⛔ GN ni Tienda Nube). La lista
- * «A contar» es lo que la Conciliación marca «El ERP dice otro stock» y las prendas que la Caja vendió con el PIN.
+ * 🔑 Bruno, 19-oct: ⛔ se cuenta en el ERP. El ERP se IGUALÓ a GN (los «Igualado a GN» de la lista) y lo que se cuenta en el
+ * módulo de Conteo del monitor entra solo (se ve en el historial de la prenda) ⇒ ⛔ lista «A contar», ⛔ motivo «Conteo» a mano.
+ * La aprobación está APAGADA («somos pocos, burocracia») ⇒ «Guardar» = `crearAjuste` + `aprobarAjuste` en un gesto
+ * (el contrato de B ⛔ cambia). Si el 2º paso falla, el ajuste queda «para aprobar» y se resuelve abajo.
+ * Hasta el corte mueve SÓLO el stock del ERP (⛔ GN ni Tienda Nube). Nada se borra: un ajuste equivocado se arregla con otro.
  */
 
 import { useEffect, useState } from 'react'
 import {
-  Badge, Button, EmptyState, Field, Input, Notice, Plegable, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space,
+  Badge, Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space,
 } from '@/components/ui'
+import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
+import { FichaCostado } from '@/components/ui/FichaCostado'
+import { color, font } from '@/components/ui/tokens'
 import {
   aprobarAjuste, buscarPrendas, crearAjuste, descartarAjuste, leerAjustes, leerStockDePrenda,
-  type AjusteStock, type AjustesDeLinea, type AvisoAjuste, type FilaAContar, type LineaErp, type MarcaErp, type PrendaEncontrada,
+  type AjusteStock, type AjustesDeLinea, type AvisoAjuste, type LineaErp, type MarcaErp, type PrendaEncontrada,
 } from '@/lib/erp/cliente'
 import { MOTIVOS, baseDe } from '@/lib/erp/ajuste.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 
 const LINEAS: Array<{ key: LineaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'stunned', label: 'Stunned' }, { key: 'bdi', label: 'BDI' }]
 const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
+/** Los motivos que se cargan a mano: el conteo entra solo desde el monitor (⛔ va en el menú). */
+export const MOTIVOS_A_MANO = MOTIVOS.filter((m) => m.key !== 'conteo')
 const ESTADO: Record<string, { label: string; tone: 'warning' | 'success' | 'neutral' }> = {
-  para_aprobar: { label: 'Para aprobar', tone: 'warning' }, aplicado: { label: 'Aprobado', tone: 'success' }, rechazado: { label: 'Descartado', tone: 'neutral' },
+  para_aprobar: { label: 'Para aprobar', tone: 'warning' }, aplicado: { label: 'Aplicado', tone: 'success' }, rechazado: { label: 'Descartado', tone: 'neutral' },
 }
+const COLUMNAS: ColumnaLista[] = [
+  { key: 'n', titulo: 'Nº', ancho: '64px' },
+  { key: 'h', titulo: 'Fecha', ancho: '96px' },
+  { key: 'motivo', titulo: 'Motivo', ancho: 'minmax(200px, 1.6fr)' },
+  { key: 'dep', titulo: 'Depósito', ancho: '150px' },
+  { key: 'prendas', titulo: 'Prendas', ancho: '72px', derecha: true },
+  { key: 'neto', titulo: 'Unidades', ancho: '80px', derecha: true },
+  { key: 'estado', titulo: 'Estado', ancho: '120px' },
+  { key: 'quien', titulo: 'Quién', ancho: 'minmax(120px, 1fr)' },
+]
 const deposito = (d: string) => (NOMBRE_DEPOSITO as Record<string, string>)[d] ?? d
 const cuando = (iso: string | null) => {
   if (!iso) return '—'
@@ -40,7 +57,7 @@ type Renglon = {
   producto: string; talle: string; sku: string | null; barcode: string | null; nombre: string | null; talleNombre: string | null
   porDeposito: Record<string, { libro: number; gn: number | null }> | null; valor: string
 }
-type Borrador = { deposito: string; motivo: string; detalle: string; fuente: 'mano' | 'conciliacion' | 'contar'; renglones: Renglon[] }
+type Borrador = { deposito: string; motivo: string; detalle: string; renglones: Renglon[] }
 
 export function AjustesStock() {
   const [linea, setLinea] = useState<LineaErp>('zattia')
@@ -54,12 +71,13 @@ export function AjustesStock() {
   const [texto, setTexto] = useState('')
   const [encontradas, setEncontradas] = useState<PrendaEncontrada[] | null>(null)
   const [descartando, setDescartando] = useState<{ id: string; motivo: string } | null>(null)
-  const [verEnAjuste, setVerEnAjuste] = useState(false)
+  const [ficha, setFicha] = useState<string | null>(null)
 
   useEffect(() => {
     let vivo = true
     leerAjustes(linea)
-      .then((d) => { if (vivo) { setDatos(d); setError(null) } })
+      // ⛔ borra el error: el «quedó sin aplicar» de `guardar` se muestra JUSTO después de releer (lo borra cambiar de línea).
+      .then((d) => { if (vivo) setDatos(d) })
       .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudieron leer los ajustes.'))
     return () => { vivo = false }
   }, [linea, vuelta])
@@ -70,15 +88,16 @@ export function AjustesStock() {
     setBorrador(null)
     setEncontradas(null)
     setHecho(null)
+    setError(null)
+    setFicha(null)
   }
 
-  const motivo = MOTIVOS.find((m) => m.key === borrador?.motivo) ?? MOTIVOS[0]
+  const motivo = MOTIVOS_A_MANO.find((m) => m.key === borrador?.motivo) ?? MOTIVOS_A_MANO[0]
 
-  async function agregar(p: { producto: string; talle: string; sku: string | null; barcode?: string | null; nombre: string | null; talleNombre: string | null }, desde: Partial<Borrador>) {
-    const actual: Borrador = borrador ?? { deposito: desde.deposito ?? DEPOSITOS[base][0], motivo: desde.motivo ?? 'conteo', detalle: '', fuente: desde.fuente ?? 'mano', renglones: [] }
-    if (actual.renglones.some((r) => r.producto === p.producto && r.talle === p.talle)) return
+  async function agregar(p: { producto: string; talle: string; sku: string | null; barcode?: string | null; nombre: string | null; talleNombre: string | null }) {
+    if (!borrador || borrador.renglones.some((r) => r.producto === p.producto && r.talle === p.talle)) return
     const nuevo: Renglon = { producto: p.producto, talle: p.talle, sku: p.sku, barcode: p.barcode ?? null, nombre: p.nombre, talleNombre: p.talleNombre, porDeposito: null, valor: '' }
-    setBorrador({ ...actual, renglones: [...actual.renglones, nuevo] })
+    setBorrador({ ...borrador, renglones: [...borrador.renglones, nuevo] })
     try {
       const s = await leerStockDePrenda(base, p.producto, p.talle)
       const porDeposito = Object.fromEntries(s.depositos.map((d) => [d.deposito, { libro: d.libro, gn: d.gn }]))
@@ -100,32 +119,39 @@ export function AjustesStock() {
     }
   }
 
-  async function mandar() {
+  /** Guardar = crear + aplicar (la aprobación está apagada). */
+  async function guardar() {
     if (!borrador) return
     setTrabajando(true)
+    let creado: { numero: number; id: string; avisos: AvisoAjuste[] } | null = null
     try {
-      const r = await crearAjuste({
-        linea, deposito: borrador.deposito, motivo: borrador.motivo, detalle: borrador.detalle, fuente: borrador.fuente,
-        renglones: borrador.renglones.map((x) => ({ producto: x.producto, talle: x.talle, sku: x.sku, barcode: x.barcode, ...(motivo.pide === 'contado' ? { contado: Number(x.valor) } : { cantidad: Number(x.valor) }) })),
+      creado = await crearAjuste({
+        linea, deposito: borrador.deposito, motivo: borrador.motivo, detalle: borrador.detalle, fuente: 'mano',
+        // Fallado/Canje/Regalo: lo que sale, en positivo (contrato de B); Otro: con signo.
+        renglones: borrador.renglones.map((x) => ({ producto: x.producto, talle: x.talle, sku: x.sku, barcode: x.barcode, cantidad: motivo.pide === 'sale' ? Math.abs(Number(x.valor)) : Number(x.valor) })),
       })
-      setHecho({ texto: `Ajuste A-${r.numero} listo para aprobar (${r.renglones} ${r.renglones === 1 ? 'prenda' : 'prendas'} con diferencia).`, avisos: r.avisos })
+      const r = await aprobarAjuste(linea, creado.id)
+      setHecho({ texto: `Ajuste A-${r.numero} guardado: el stock del ERP cambió en ${r.movimientos} ${r.movimientos === 1 ? 'prenda' : 'prendas'}.`, avisos: [...creado.avisos, ...r.avisos] })
       setBorrador(null)
       setEncontradas(null)
       setError(null)
-      setVuelta((n) => n + 1)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo armar el ajuste.')
+      const m = e instanceof Error ? e.message : 'No se pudo guardar el ajuste.'
+      // Se creó pero ⛔ se aplicó: queda «para aprobar» (abajo) y el borrador se suelta para ⛔ crearlo dos veces.
+      if (creado) { setBorrador(null); setEncontradas(null); setError(`El ajuste A-${creado.numero} quedó guardado pero el stock todavía no cambió (${m}). Confirmalo en «Sin confirmar».`) }
+      else setError(m)
     } finally {
       setTrabajando(false)
+      setVuelta((n) => n + 1)
     }
   }
 
-  async function resolver(a: AjusteStock, aprobar: boolean) {
+  async function resolver(a: AjusteStock, aplicar: boolean) {
     setTrabajando(true)
     try {
-      if (aprobar) {
+      if (aplicar) {
         const r = await aprobarAjuste(linea, a.id)
-        setHecho({ texto: `A-${r.numero} aprobado: el stock del ERP cambió en ${r.movimientos} ${r.movimientos === 1 ? 'prenda' : 'prendas'}.`, avisos: r.avisos })
+        setHecho({ texto: `A-${r.numero} aplicado: el stock del ERP cambió en ${r.movimientos} ${r.movimientos === 1 ? 'prenda' : 'prendas'}.`, avisos: r.avisos })
       } else {
         const r = await descartarAjuste(linea, a.id, descartando?.motivo ?? '')
         setHecho({ texto: `A-${r.numero} descartado: el stock no cambió.`, avisos: [] })
@@ -140,21 +166,35 @@ export function AjustesStock() {
     }
   }
 
-  const pendientes = datos?.ajustes.filter((a) => a.estado === 'para_aprobar') ?? []
-  const resueltos = datos?.ajustes.filter((a) => a.estado !== 'para_aprobar').slice(0, 30) ?? []
-  const diferenciaDe = (r: Renglon) => {
-    const libro = r.porDeposito?.[borrador?.deposito ?? '']?.libro ?? 0
-    if (r.valor.trim() === '' || !Number.isInteger(Number(r.valor))) return null
+  const sinAplicar = datos?.ajustes.filter((a) => a.estado === 'para_aprobar') ?? []
+  const abierta = datos?.ajustes.find((a) => a.id === ficha) ?? null
+  const salen = (r: Renglon) => {
+    if (r.valor.trim() === '' || !Number.isInteger(Number(r.valor)) || Number(r.valor) === 0) return null
     const n = Number(r.valor)
-    return motivo.pide === 'contado' ? n - libro : motivo.pide === 'sale' ? -Math.abs(n) : n
+    return motivo.pide === 'sale' ? -Math.abs(n) : n
   }
-  const listo = !!borrador && borrador.renglones.length > 0 && borrador.renglones.every((r) => diferenciaDe(r) != null) && (borrador.motivo !== 'otro' || borrador.detalle.trim().length >= 3)
+  const listo = !!borrador && borrador.renglones.length > 0 && borrador.renglones.every((r) => salen(r) != null) && (borrador.motivo !== 'otro' || borrador.detalle.trim().length >= 3)
+
+  const celda = (a: AjusteStock, k: string): React.ReactNode => {
+    if (k === 'n') return <b>A-{a.numero}</b>
+    if (k === 'h') return <span style={{ color: color.mut }}>{cuando(a.creadoEn)}</span>
+    if (k === 'motivo') return <span title={a.detalle ? `${a.motivoNombre} · ${a.detalle}` : a.motivoNombre}>{a.motivoNombre}{a.detalle ? <span style={{ color: color.mut, marginLeft: 6 }}>{a.detalle}</span> : null}</span>
+    if (k === 'dep') return deposito(a.deposito)
+    if (k === 'prendas') return a.renglones.length
+    if (k === 'neto') return conSigno(a.neto)
+    if (k === 'estado') return <Badge tone={ESTADO[a.estado]?.tone ?? 'neutral'}>{ESTADO[a.estado]?.label ?? a.estado}</Badge>
+    if (k === 'quien') return a.creadoPor
+    return null
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <SectionCard title="Ajustes de stock" subtitle="Se cuenta la prenda, el ajuste queda para aprobar y, al aprobarlo, el stock del ERP pasa a lo contado. Nada se borra: un ajuste equivocado se arregla con otro.">
-        <Tabs items={LINEAS} value={linea} onChange={cambiarLinea} />
-        <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock del ERP: GN y Tienda Nube siguen como están, y ahí se ajusta como siempre.</Notice>
+      <SectionCard title="Conteos y ajustes" subtitle="Lo que sale del stock fuera de una venta: fallados, canjes, regalos. Nada se borra: un ajuste equivocado se arregla con otro.">
+        <div style={{ display: 'flex', gap: space[3], alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <Tabs items={LINEAS} value={linea} onChange={cambiarLinea} />
+          {datos && !borrador && <Button onClick={() => setBorrador({ deposito: DEPOSITOS[base][0], motivo: MOTIVOS_A_MANO[0].key, detalle: '', renglones: [] })}>Nuevo ajuste</Button>}
+        </div>
+        <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock del ERP: en GN se ajusta como siempre. Los conteos se hacen en el módulo de Conteo del monitor y entran solos (se ven en el historial de cada prenda, en Stock).</Notice>
       </SectionCard>
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
@@ -167,20 +207,20 @@ export function AjustesStock() {
       {!datos && !error && <EmptyState title="Leyendo los ajustes…" />}
 
       {borrador && (
-        <SectionCard title="Nuevo ajuste" subtitle={motivo.pide === 'contado' ? 'Escribí cuántas hay en la estantería de ese depósito (incluye lo de pedidos todavía sin armar).' : 'Escribí cuántas salen de ese depósito.'}>
+        <SectionCard title="Nuevo ajuste" subtitle={motivo.pide === 'sale' ? 'Escribí cuántas salen de ese depósito.' : 'Escribí la cantidad: + entra, − sale.'}>
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <Field label="Motivo">
+              <Select value={borrador.motivo} onChange={(e) => setBorrador({ ...borrador, motivo: e.target.value, renglones: borrador.renglones.map((r) => ({ ...r, valor: '' })) })}>
+                {MOTIVOS_A_MANO.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+              </Select>
+            </Field>
             <Field label="Depósito">
               <Select value={borrador.deposito} onChange={(e) => setBorrador({ ...borrador, deposito: e.target.value })}>
                 {DEPOSITOS[base].map((d) => <option key={d} value={d}>{deposito(d)}</option>)}
               </Select>
             </Field>
-            <Field label="Motivo">
-              <Select value={borrador.motivo} onChange={(e) => setBorrador({ ...borrador, motivo: e.target.value, renglones: borrador.renglones.map((r) => ({ ...r, valor: '' })) })}>
-                {MOTIVOS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-              </Select>
-            </Field>
             <Field label={borrador.motivo === 'otro' ? 'Por qué (obligatorio)' : 'Detalle'}>
-              <Input value={borrador.detalle} onChange={(e) => setBorrador({ ...borrador, detalle: e.target.value })} placeholder={borrador.motivo === 'fallado' ? 'Ej.: costura abierta' : 'Opcional'} />
+              <Input value={borrador.detalle} onChange={(e) => setBorrador({ ...borrador, detalle: e.target.value })} placeholder={borrador.motivo === 'fallado' ? 'Ej.: costura abierta' : borrador.motivo === 'otro' ? 'Qué pasó' : 'Opcional'} />
             </Field>
           </div>
 
@@ -193,167 +233,107 @@ export function AjustesStock() {
           {encontradas && (encontradas.length === 0 ? <div style={{ marginTop: space[2] }}>No se encontró ninguna prenda.</div> : (
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
               {encontradas.slice(0, 20).map((p) => (
-                <Button key={`${p.producto}:${p.talle}`} variant="soft" size="sm" onClick={() => agregar(p, {})}>+ {prendaDe(p)}</Button>
+                <Button key={`${p.producto}:${p.talle}`} variant="soft" size="sm" onClick={() => agregar(p)}>+ {prendaDe(p)}</Button>
               ))}
             </div>
           ))}
 
-          <TableWrap style={{ marginTop: space[3] }}>
-            <THead>
-              <Tr>
-                <Th>Prenda</Th><Th>SKU</Th>
-                <Th style={{ textAlign: 'right' }}>ERP en {deposito(borrador.deposito)}</Th><Th style={{ textAlign: 'right' }}>GN</Th>
-                <Th style={{ textAlign: 'right' }}>{motivo.pide === 'contado' ? 'Contado' : motivo.pide === 'sale' ? 'Salen' : 'Cantidad (+ o −)'}</Th>
-                <Th style={{ textAlign: 'right' }}>Diferencia</Th><Th />
-              </Tr>
-            </THead>
-            <TBody>
-              {borrador.renglones.map((r) => {
-                const enDep = r.porDeposito?.[borrador.deposito]
-                const d = diferenciaDe(r)
-                return (
-                  <Tr key={`${r.producto}:${r.talle}`}>
-                    <Td>{prendaDe(r)}</Td>
-                    <Td>{r.sku ?? '—'}</Td>
-                    <Td style={{ textAlign: 'right' }}>{r.porDeposito ? enDep?.libro ?? 0 : '…'}</Td>
-                    <Td style={{ textAlign: 'right' }}>{r.porDeposito ? enDep?.gn ?? '—' : '…'}</Td>
-                    <Td style={{ textAlign: 'right' }}>
-                      <Input value={r.valor} inputMode="numeric" style={{ width: 80, textAlign: 'right' }}
-                        onChange={(e) => setBorrador({ ...borrador, renglones: borrador.renglones.map((x) => (x === r ? { ...x, valor: e.target.value } : x)) })} />
-                    </Td>
-                    <Td style={{ textAlign: 'right' }}>{d == null ? '—' : d === 0 ? 'coincide' : conSigno(d)}</Td>
-                    <Td><Button variant="ghost" size="sm" onClick={() => setBorrador({ ...borrador, renglones: borrador.renglones.filter((x) => x !== r) })}>Sacar</Button></Td>
-                  </Tr>
-                )
-              })}
-            </TBody>
-          </TableWrap>
-          {borrador.renglones.length === 0 && <div style={{ marginTop: space[2] }}>Agregá prendas con el buscador o con «Contar» en la lista de abajo.</div>}
+          {borrador.renglones.length > 0 ? (
+            <TableWrap style={{ marginTop: space[3] }}>
+              <THead>
+                <Tr>
+                  <Th>Prenda</Th><Th>SKU</Th>
+                  <Th style={{ textAlign: 'right' }}>ERP en {deposito(borrador.deposito)}</Th>
+                  <Th style={{ textAlign: 'right' }}>{motivo.pide === 'sale' ? 'Salen' : 'Cantidad (+ o −)'}</Th>
+                  <Th style={{ textAlign: 'right' }}>Queda</Th><Th />
+                </Tr>
+              </THead>
+              <TBody>
+                {borrador.renglones.map((r) => {
+                  const libro = r.porDeposito?.[borrador.deposito]?.libro
+                  const d = salen(r)
+                  return (
+                    <Tr key={`${r.producto}:${r.talle}`}>
+                      <Td>{prendaDe(r)}</Td>
+                      <Td>{r.sku ?? '—'}</Td>
+                      <Td style={{ textAlign: 'right' }}>{r.porDeposito ? libro ?? 0 : '…'}</Td>
+                      <Td style={{ textAlign: 'right' }}>
+                        <Input value={r.valor} inputMode="numeric" aria-label={`Cantidad de ${prendaDe(r)}`} style={{ width: 80, textAlign: 'right' }}
+                          onChange={(e) => setBorrador({ ...borrador, renglones: borrador.renglones.map((x) => (x === r ? { ...x, valor: e.target.value } : x)) })} />
+                      </Td>
+                      <Td style={{ textAlign: 'right' }}>{d == null || !r.porDeposito ? '—' : (libro ?? 0) + d}</Td>
+                      <Td><Button variant="ghost" size="sm" onClick={() => setBorrador({ ...borrador, renglones: borrador.renglones.filter((x) => x !== r) })}>Sacar</Button></Td>
+                    </Tr>
+                  )
+                })}
+              </TBody>
+            </TableWrap>
+          ) : <div style={{ marginTop: space[2], color: color.mut }}>Agregá las prendas con el buscador.</div>}
 
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3] }}>
-            <Button disabled={trabajando || !listo} onClick={mandar}>Enviar a aprobar</Button>
-            <Button variant="outline" disabled={trabajando} onClick={() => { setBorrador(null); setEncontradas(null) }}>Descartar el borrador</Button>
+            <Button disabled={trabajando || !listo} onClick={guardar}>Guardar ajuste</Button>
+            <Button variant="outline" disabled={trabajando} onClick={() => { setBorrador(null); setEncontradas(null) }}>Cancelar</Button>
           </div>
         </SectionCard>
       )}
 
-      {datos && !borrador && (
-        <div><Button onClick={() => setBorrador({ deposito: DEPOSITOS[base][0], motivo: 'conteo', detalle: '', fuente: 'mano', renglones: [] })}>Nuevo ajuste</Button></div>
-      )}
-
-      {datos && (
-        <SectionCard title={pendientes.length ? `Para aprobar · ${pendientes.length}` : 'Para aprobar'} subtitle="Al aprobar, el stock del ERP cambia en cada diferencia y queda como ajuste con su motivo.">
-          {pendientes.length === 0 ? <EmptyState title="No hay ajustes para aprobar." /> : pendientes.map((a) => (
-            <div key={a.id} style={{ marginBottom: space[4] }}>
-              <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
-                <strong>A-{a.numero}</strong><Badge tone="brand">{a.motivoNombre}</Badge>
-                <span>{deposito(a.deposito)} · {a.creadoPor} · {cuando(a.creadoEn)} · neto {conSigno(a.neto)} u</span>
-                {a.fuente === 'conciliacion' && <Badge tone="neutral">de la Conciliación</Badge>}
-              </div>
-              {a.detalle && <div style={{ marginTop: 4 }}>{a.detalle}</div>}
-              {a.seMovio > 0 && <Notice tone="warning" style={{ marginTop: space[2] }}>En {a.seMovio === 1 ? 'una prenda' : `${a.seMovio} prendas`} el ERP se movió desde que se contó (una venta en el medio). Mirá «ERP ahora» antes de aprobar.</Notice>}
-              <TableWrap style={{ marginTop: space[2] }}>
-                <THead>
-                  <Tr>
-                    <Th>Prenda</Th><Th>SKU</Th><Th style={{ textAlign: 'right' }}>ERP al armarlo</Th>
-                    {a.motivo === 'conteo' && <Th style={{ textAlign: 'right' }}>Contado</Th>}
-                    <Th style={{ textAlign: 'right' }}>Diferencia</Th><Th style={{ textAlign: 'right' }}>ERP ahora</Th>
-                  </Tr>
-                </THead>
-                <TBody>
-                  {a.renglones.map((r) => (
-                    <Tr key={r.n}>
-                      <Td>{prendaDe(r)}</Td><Td>{r.sku ?? '—'}</Td>
-                      <Td style={{ textAlign: 'right' }}>{r.antes}</Td>
-                      {a.motivo === 'conteo' && <Td style={{ textAlign: 'right' }}>{r.contado}</Td>}
-                      <Td style={{ textAlign: 'right' }}>{conSigno(r.diferencia)}</Td>
-                      <Td style={{ textAlign: 'right' }}>{r.ahora ?? '—'}{r.ahora != null && r.ahora !== r.antes ? ' ⚠️' : ''}</Td>
-                    </Tr>
-                  ))}
-                </TBody>
-              </TableWrap>
-              <div style={{ display: 'flex', gap: space[2], marginTop: space[2], alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                <Button disabled={trabajando} onClick={() => resolver(a, true)}>Aprobar {a.renglones.length} {a.renglones.length === 1 ? 'diferencia' : 'diferencias'}</Button>
-                {descartando?.id === a.id ? (
-                  <>
-                    <Field label="Por qué se descarta">
-                      <Input value={descartando.motivo} onChange={(e) => setDescartando({ id: a.id, motivo: e.target.value })} placeholder="Ej.: se contó otro talle" />
-                    </Field>
-                    <Button variant="outline" tone="danger" disabled={trabajando || descartando.motivo.trim().length < 3} onClick={() => resolver(a, false)}>Descartar A-{a.numero}</Button>
-                  </>
-                ) : <Button variant="outline" disabled={trabajando} onClick={() => setDescartando({ id: a.id, motivo: '' })}>Descartar</Button>}
-              </div>
+      {sinAplicar.length > 0 && (
+        <SectionCard title={`Sin confirmar · ${sinAplicar.length}`} subtitle="Se guardaron pero el stock del ERP todavía no cambió. Confirmalos o descartalos.">
+          {sinAplicar.map((a) => (
+            <div key={a.id} style={{ display: 'flex', gap: space[2], alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: space[3] }}>
+              <span style={{ alignSelf: 'center' }}><b>A-{a.numero}</b> · {a.motivoNombre} · {deposito(a.deposito)} · {conSigno(a.neto)} u · {a.creadoPor} {cuando(a.creadoEn)}</span>
+              <Button size="sm" disabled={trabajando} onClick={() => resolver(a, true)}>Confirmar</Button>
+              {descartando?.id === a.id ? (
+                <>
+                  <Field label="Por qué se descarta">
+                    <Input value={descartando.motivo} onChange={(e) => setDescartando({ id: a.id, motivo: e.target.value })} placeholder="Ej.: se cargó otro talle" />
+                  </Field>
+                  <Button size="sm" variant="outline" tone="danger" disabled={trabajando || descartando.motivo.trim().length < 3} onClick={() => resolver(a, false)}>Descartar A-{a.numero}</Button>
+                </>
+              ) : <Button size="sm" variant="outline" disabled={trabajando} onClick={() => setDescartando({ id: a.id, motivo: '' })}>Descartar</Button>}
             </div>
           ))}
         </SectionCard>
       )}
 
       {datos && (
-        <SectionCard
-          title={`A contar · ${datos.pendientes.length}`}
-          subtitle={datos.sinConciliacion ? 'La Conciliación de esta tienda no se pudo leer: quedan sólo las ventas con PIN.' : `Lo que la Conciliación${datos.fecha ? ` del ${datos.fecha.slice(8, 10)}/${datos.fecha.slice(5, 7)}` : ''} marca «El ERP dice otro stock» (Tienda Nube y GN coinciden y el ERP no), y lo que la Caja vendió con el PIN de la encargada. Contá la prenda y armá el ajuste.`}
-        >
-          {datos.pendientes.length === 0 ? <EmptyState title="No hay nada para contar." /> : <TablaAContar filas={datos.pendientes} onContar={(f) => agregar(f, { motivo: 'conteo', fuente: f.fuente, deposito: f.deposito })} />}
-          {datos.enAjuste.length > 0 && (
-            <Plegable abierto={verEnAjuste} onToggle={() => setVerEnAjuste((v) => !v)} titulo={`Ya están en un ajuste · ${datos.enAjuste.length}`} ayuda="Las que ya se contaron: esperan aprobación o ya cambiaron el stock del ERP. Si mañana siguen sin coincidir, vuelven a la lista.">
-              <TablaAContar filas={datos.enAjuste} />
-            </Plegable>
-          )}
+        <SectionCard title={`Ajustes · ${datos.ajustes.length}`}>
+          <ListaTrabajo
+            columnas={COLUMNAS} filas={datos.ajustes} claveDe={(a) => a.id} celda={celda} activa={ficha}
+            onAbrir={(a) => setFicha(a.id)} etiquetaFila={(a) => `el ajuste A-${a.numero}`}
+            vacio={<EmptyState title="Todavía no hay ajustes en esta línea." />}
+          />
         </SectionCard>
       )}
 
-      {datos && resueltos.length > 0 && (
-        <SectionCard title="Últimos ajustes" subtitle="Los aprobados ya cambiaron el stock del ERP; los descartados, no.">
-          <TableWrap>
-            <THead>
-              <Tr><Th>Nº</Th><Th>Motivo</Th><Th>Depósito</Th><Th style={{ textAlign: 'right' }}>Prendas</Th><Th style={{ textAlign: 'right' }}>Neto</Th><Th>Estado</Th><Th>Quién</Th></Tr>
-            </THead>
-            <TBody>
-              {resueltos.map((a) => (
-                <Tr key={a.id}>
-                  <Td>A-{a.numero}</Td>
-                  <Td>{a.motivoNombre}{a.detalle ? <div style={{ fontSize: 12 }}>{a.detalle}</div> : null}</Td>
-                  <Td>{deposito(a.deposito)}</Td>
-                  <Td style={{ textAlign: 'right' }}>{a.renglones.length}</Td>
-                  <Td style={{ textAlign: 'right' }}>{conSigno(a.neto)}</Td>
-                  <Td><Badge tone={ESTADO[a.estado]?.tone ?? 'neutral'}>{ESTADO[a.estado]?.label ?? a.estado}</Badge>{a.rechazo ? <div style={{ fontSize: 12 }}>{a.rechazo}</div> : null}</Td>
-                  <Td>{a.creadoPor}{a.resueltoPor ? ` · ${a.resueltoPor}` : ''}<div style={{ fontSize: 12 }}>{cuando(a.resueltoEn ?? a.creadoEn)}</div></Td>
-                </Tr>
-              ))}
-            </TBody>
-          </TableWrap>
-        </SectionCard>
-      )}
-
-      {datos && <div><Button variant="outline" onClick={() => setVuelta((n) => n + 1)}>Volver a leer</Button></div>}
+      <FichaCostado abierta={!!abierta} onCerrar={() => setFicha(null)} etiqueta={abierta ? `Ficha del ajuste A-${abierta.numero}` : 'Ficha del ajuste'}
+        titulo={abierta ? `Ajuste A-${abierta.numero} · ${cuando(abierta.creadoEn)}` : ''}>
+        {abierta && (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontSize: font.lg, fontWeight: 600 }}>{abierta.motivoNombre}</div>
+              {abierta.detalle && <div>{abierta.detalle}</div>}
+              <div style={{ color: color.mut }}>{deposito(abierta.deposito)} · {conSigno(abierta.neto)} unidades · cargó {abierta.creadoPor}{abierta.resueltoPor && abierta.resueltoPor !== abierta.creadoPor ? ` · aplicó ${abierta.resueltoPor}` : ''}</div>
+              <div><Badge tone={ESTADO[abierta.estado]?.tone ?? 'neutral'}>{ESTADO[abierta.estado]?.label ?? abierta.estado}</Badge>{abierta.rechazo ? <span style={{ marginLeft: 8 }}>{abierta.rechazo}</span> : null}</div>
+            </div>
+            <TableWrap>
+              <THead>
+                <Tr><Th>Prenda</Th><Th style={{ textAlign: 'right' }}>Antes</Th><Th style={{ textAlign: 'right' }}>Cambio</Th><Th style={{ textAlign: 'right' }}>Después</Th></Tr>
+              </THead>
+              <TBody>
+                {abierta.renglones.map((r) => (
+                  <Tr key={r.n}>
+                    <Td>{prendaDe(r)}<div style={{ fontSize: font.xs, color: color.mut }}>{r.sku ?? ''}</div></Td>
+                    <Td style={{ textAlign: 'right' }}>{r.antes}</Td>
+                    <Td style={{ textAlign: 'right' }}>{conSigno(r.diferencia)}</Td>
+                    <Td style={{ textAlign: 'right' }}>{r.despues}</Td>
+                  </Tr>
+                ))}
+              </TBody>
+            </TableWrap>
+          </>
+        )}
+      </FichaCostado>
     </div>
-  )
-}
-
-function TablaAContar({ filas, onContar }: { filas: FilaAContar[]; onContar?: (f: FilaAContar) => void }) {
-  return (
-    <TableWrap>
-      <THead>
-        <Tr>
-          <Th>Prenda</Th><Th>SKU</Th><Th>Por qué</Th>
-          <Th style={{ textAlign: 'right' }}>Tienda</Th><Th style={{ textAlign: 'right' }}>ERP</Th><Th style={{ textAlign: 'right' }}>GN</Th>
-          <Th style={{ textAlign: 'right' }}>Días</Th><Th />
-        </Tr>
-      </THead>
-      <TBody>
-        {filas.map((f) => (
-          <Tr key={f.clave}>
-            <Td>{prendaDe(f)}</Td>
-            <Td>{f.sku ?? '—'}</Td>
-            <Td>{f.venta ? `Venta #${f.venta.numero} con PIN${f.venta.autoriza ? ` (${f.venta.autoriza})` : ''}` : `Coincide ${f.donde.join(' y ')} con GN`}</Td>
-            <Td style={{ textAlign: 'right' }}>{f.tienda ?? '—'}</Td>
-            <Td style={{ textAlign: 'right' }}>{f.erp ?? '—'}</Td>
-            <Td style={{ textAlign: 'right' }}>{f.gn ?? '—'}</Td>
-            <Td style={{ textAlign: 'right' }}>{f.dias ?? '—'}</Td>
-            <Td>{f.ajuste ? `A-${f.ajuste.numero} · ${ESTADO[f.ajuste.estado]?.label ?? f.ajuste.estado}` : onContar ? <Button variant="soft" size="sm" onClick={() => onContar(f)}>Contar</Button> : null}</Td>
-          </Tr>
-        ))}
-      </TBody>
-    </TableWrap>
   )
 }

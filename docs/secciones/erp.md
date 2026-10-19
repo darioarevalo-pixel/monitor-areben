@@ -11,7 +11,7 @@ marca adentro) con SU menú (`components/erp/Erp.tsx`, `SECCIONES_ERP`): Inicio 
 Productos y precios · Clientes y proveedores · Configuración, y «Volver al monitor». Una dirección por sección y por
 pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una vieja o mal escrita se corrige sola).
 Las 12 pestañas de antes: Ventas = Ventas · Pedidos sin pagar · Facturación · Caja (POS) = Cambio · Factura · Stock =
-Stock · Ajustes · Conciliación · Diferencias con GN · Productos = Precios · Configuración = Reglas · Cuentas de cobro;
+Stock · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Precios · Configuración = Reglas · Cuentas de cobro;
 Clientes todavía vacía. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
 botones crudos y `select`). Tests: `tests/erp-navegacion*.test.ts*`. El registro (`registro.ts`) conserva `erp` sólo
 porque el test de registro lo exige: el shell ya ⛔ lo monta.
@@ -48,6 +48,11 @@ movimiento `ajuste` por renglón; descartar ⛔ mueve nada; ⛔ se edita ni se b
 se calculara la conciliación ⛔ cierra la fila: si sigue sin coincidir, vuelve a la lista. 🔴 Un conteo del módulo de
 Depósito (`conteos_deposito`) también entra solo al libro (`ajuste_conteo`) ⇒ el motor AVISA si la prenda tiene uno de
 los últimos 3 días (contarla dos veces la descuenta dos veces).
+🎨 **19-oct (Diseño, Bruno): la pestaña pasa a «Conteos y ajustes» (`/erp/stock/ajustes`, misma dirección).** ⛔ se
+cuenta en el ERP (el libro se igualó a GN el 19-oct y el Conteo del monitor entra solo) ⇒ la pantalla ⛔ muestra «A contar»
+ni ofrece «Conteo» a mano (lo de arriba sigue en el servidor y el núcleo, sin pantalla). Quedan: «Nuevo ajuste» (Fallado ·
+Canje · Regalo · Otro) que GUARDA = `crearAjuste` + `aprobarAjuste` (aprobación apagada; si el 2º falla queda en «Sin
+confirmar») y la lista de ajustes (`ListaTrabajo`) con la ficha al costado (antes → cambio → después por prenda).
 
 **Ventas** (19-oct, el PILOTO del diseño aprobado — `~/Documents/erp-monitor/diseno.md` §3–§5 y §8; lo construye la sesión
 Diseño): UNA lista con todo lo que es venta del motor (Caja, Tienda Nube, mayoristas, cambios) + los pedidos de TN SIN PAGAR
