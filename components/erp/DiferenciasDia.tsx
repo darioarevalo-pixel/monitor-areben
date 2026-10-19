@@ -81,7 +81,7 @@ export function DiferenciasDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida)
           {datos.grupos.map((g) => (
             <SectionCard key={g.clase} title={`${g.nombre} · ${g.filas.length}`} subtitle={`${g.mirar} (${g.unidades} u)`}>
               <TableWrap>
-                <table>
+                <>
                   <THead>
                     <Tr>
                       <Th>Prenda</Th><Th>Depósito</Th>
@@ -101,7 +101,7 @@ export function DiferenciasDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida)
                       </Tr>
                     ))}
                   </TBody>
-                </table>
+                </>
               </TableWrap>
             </SectionCard>
           ))}
@@ -114,7 +114,7 @@ export function DiferenciasDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida)
             : datos.sobreventaError ? <Notice tone="danger">No se pudo sumar el libro: {datos.sobreventaError}</Notice>
               : !datos.sobreventa.length ? <EmptyState title="Ninguna prenda en negativo." /> : (
                 <TableWrap>
-                  <table>
+                  <>
                     <THead><Tr><Th>Prenda</Th><Th>Depósito</Th><Th style={{ textAlign: 'right' }}>Según libro</Th></Tr></THead>
                     <TBody>
                       {datos.sobreventa.map((f) => (
@@ -125,7 +125,7 @@ export function DiferenciasDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida)
                         </Tr>
                       ))}
                     </TBody>
-                  </table>
+                  </>
                 </TableWrap>
               )}
         </SectionCard>

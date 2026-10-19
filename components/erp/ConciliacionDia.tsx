@@ -88,7 +88,7 @@ export function ConciliacionDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida
             <SectionCard key={`${g.tipo}/${g.clase}`} title={`${g.nombre} · ${g.filas.length}`} subtitle={`${g.mirar}${g.deAntes ? ` (${g.deAntes} vienen de días anteriores)` : ''}`}>
               <TableWrap>
                 {g.tipo.startsWith('stock_') ? (
-                  <table>
+                  <>
                     <THead>
                       <Tr>
                         <Th>Prenda</Th><Th>SKU</Th>
@@ -108,9 +108,9 @@ export function ConciliacionDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida
                         </Tr>
                       ))}
                     </TBody>
-                  </table>
+                  </>
                 ) : (
-                  <table>
+                  <>
                     <THead>
                       <Tr><Th>{g.tipo === 'pedido_ml' ? 'Venta' : 'Pedido'}</Th><Th>{g.tipo === 'pedido_ml' ? 'Estado en Mercado Libre' : 'Estado en Tienda Nube'}</Th><Th>Medio</Th><Th style={{ textAlign: 'right' }}>Total</Th><Th style={{ textAlign: 'right' }}>Días</Th></Tr>
                     </THead>
@@ -129,7 +129,7 @@ export function ConciliacionDia({ abrirPrenda }: { abrirPrenda: (p: PrendaPedida
                         </Tr>
                       ))}
                     </TBody>
-                  </table>
+                  </>
                 )}
               </TableWrap>
             </SectionCard>
