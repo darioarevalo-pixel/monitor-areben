@@ -529,3 +529,19 @@ Dos causas, medidas en prod:
 - W5 (promos): ⛔ vistas en prod (cargar una, verla en el POS y en el ticket). ⛔ Tocadas: el tótem
   (muestra lista y contado SIN promo), el mail del ticket (`areben-mailer`: dice «Descuento», ⛔ el
   nombre) y la pantalla de la clienta (ve el importe con la promo, ⛔ el nombre).
+
+## 19-oct: la sobra del viernes, las provisorias y el regalo
+
+- 🔴 **El cierre del vie 16-oct (tarde) dio SOBRA $24.976 y la plata estaba bien.** El pedido web #7170
+  (venta de GN del 5-oct) se cobró en efectivo ese día, 11 días después, y los cobros de GN se leían de
+  ventas de los últimos **10** días ⇒ afuera del esperado. Con él, −$116. Ahora **45 días**
+  (`DIAS_COBROS_GN`; ~4,5 s, 1 + 3 páginas medidas) y las propias de la Caja se buscan **por número de GN**
+  (con 45 días la ventana pasaba las 1.000 filas que PostgREST corta callado). 📌 El turno del viernes
+  quedó cerrado con el esperado viejo: ⛔ se reescribe.
+- 🔴 **«Ventas en rojo» = el primer 429 de GN**: 16 de 180 ventas (13 al 19-oct) llegaron en el 2º o 3er
+  intento, 2 a 9 min después, con el ticket ya impreso con número provisorio. Ninguna quedó colgada.
+  Ahora `enviarVenta` espera el 429 adentro del cobro (1 a 3 s, hasta `REINTENTOS_429`). ⚠️ El error del
+  primer intento ⛔ queda guardado (se pisa al llegar): que fue 429 sale del código, ⛔ de un log.
+- 🔴 **Regalo: «sólo salió el de precios»** (reporte 14-oct). El de cambio lo lanza la página 1,5 s después
+  y, si el navegador lo descarta (con el diálogo de imprimir abierto, sin `--kiosk-printing`), ⛔ avisa.
+  La tarjeta de la última venta deja «Imprimir ticket de cambio» resaltado cuando fue regalo.

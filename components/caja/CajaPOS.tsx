@@ -249,7 +249,7 @@ function POS() {
   const [eligiendo, setEligiendo] = useState<ProductoLista | null>(null)
   const vuelta = useRef(0)
   const [enviando, setEnviando] = useState(false)
-  const [ultima, setUltima] = useState<{ venta: Venta; ticket: DatosTicket } | null>(null)
+  const [ultima, setUltima] = useState<{ venta: Venta; ticket: DatosTicket; regalo?: boolean } | null>(null)
   const [pendientes, setPendientes] = useState<Venta[]>([])
   const scanRef = useRef<HTMLInputElement>(null)
 
@@ -778,9 +778,10 @@ function POS() {
   /** Llegó la transferencia y la venta salió a GN: recién ahora el ticket. */
   function llegoTransferencia(venta: Venta) {
     const ticket = ticketGuardado(venta)
-    setUltima({ venta, ticket })
+    const regalo = regalos.current.delete(venta.id)
+    setUltima({ venta, ticket, regalo })
     avisar(venta.estado === 'en_gn' ? 'ok' : 'ojo')
-    imprimirTicket(ticket, ahora(), regalos.current.delete(venta.id) ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
+    imprimirTicket(ticket, ahora(), regalo ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
     refrescarPendientes()
     refrescarTurno()
   }
@@ -865,7 +866,7 @@ function POS() {
       // El ticket sale de la venta GUARDADA (sus renglones), ⛔ del carrito: A1 los mezclaba.
       const ticket = ticketGuardado(r.venta)
       setGnSenal(r.venta.estado === 'en_gn' ? { ok: true, que: 'la última venta llegó' } : { ok: false, que: `la última venta quedó pendiente${r.venta.ultimo_error ? ` (${r.venta.ultimo_error})` : ''}` })
-      setUltima({ venta: r.venta, ticket })
+      setUltima({ venta: r.venta, ticket, regalo: conRegalo })
       avisar(r.venta.estado === 'en_gn' ? 'ok' : 'ojo')
       imprimirTicket(ticket, ahora(), conRegalo ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
       refrescarPendientes()
@@ -1103,6 +1104,7 @@ function POS() {
               venta={ultima.venta}
               nombreCuenta={nombreCuenta}
               esEfectivo={esEfectivo}
+              regalo={ultima.regalo}
               onReimprimir={() => imprimirTicket(ultima.ticket, ahora())}
               onTicketCambio={() => imprimirTicket(ultima.ticket, ahora(), 'cambio').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket de cambio: ${(e as Error).message}` }))}
               onOtra={() => {

@@ -689,11 +689,19 @@ export function UltimaVenta({
   onOtra,
   nombreCuenta,
   esEfectivo,
+  regalo = false,
 }: {
   venta: Venta
   onReimprimir: () => void
   /** El ticket de cambio solo (regalo, Bruno 13-oct): sin precios. */
   onTicketCambio?: () => void
+  /**
+   * 🔴 La venta se cobró con «Regalo» (19-oct): el ticket de cambio sale solo 1,5 s después del de la venta,
+   * y en el local salió sólo el de precios (reporte del 14-oct). Una impresión que lanza la página ⛔ la
+   * ve nadie si el navegador la descarta (con el diálogo de imprimir abierto, la segunda se pierde) ⇒ el
+   * botón queda resaltado y dice que se toque si no salió.
+   */
+  regalo?: boolean
   onOtra?: () => void
   /** El MEDIO de una cuenta (`nombreParaTicket`): con él, la línea dice cómo pagó. */
   nombreCuenta?: (id: number) => string
@@ -735,13 +743,16 @@ export function UltimaVenta({
               .flatMap((x, i) => (i ? [' · ', x] : [x]))}
           </span>
         )}
+        {regalo && onTicketCambio && (
+          <span style={{ display: 'block', fontSize: font.base, color: color.ink2 }}>Es regalo: si no salió el ticket de cambio, tocá «Imprimir ticket de cambio».</span>
+        )}
       </div>
       <Button variant="outline" onClick={onReimprimir}>
         Reimprimir ticket
       </Button>
       {onTicketCambio && (
-        <Button variant="outline" onClick={onTicketCambio} title="Sin precios, para regalo">
-          Ticket de cambio
+        <Button variant={regalo ? 'solid' : 'outline'} tone={regalo ? 'brand' : undefined} onClick={onTicketCambio} title="Sin precios, para regalo">
+          {regalo ? 'Imprimir ticket de cambio' : 'Ticket de cambio'}
         </Button>
       )}
       {onOtra && (

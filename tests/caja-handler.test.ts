@@ -44,6 +44,8 @@ const gn = {
   lista: { status: 200, body: { data: [] as Fila[], meta: { has_more_pages: false } } as unknown },
   // Cuántas `/ventas?` rebotan con 429 antes de contestar (el corte de 2 por segundo, 13-oct).
   rebotes: 0,
+  // Cuántos POST de venta rebotan con 429 antes de contestar `respuestaPost` (19-oct).
+  rebotesPost: 0,
 }
 const mp = { busquedas: 0 }
 // W1: el audit de TN (bdi-catalogo). `tramos` = la respuesta de cada pedido, en orden; anota la URL y el sobre.
@@ -192,6 +194,7 @@ function conSesion(perfil: unknown) {
         const cuerpo = JSON.parse(String(opts.body))
         gn.posts.push(cuerpo)
         gn.authPosts.push(String(opts?.headers?.Authorization))
+        if (gn.rebotesPost > 0) { gn.rebotesPost--; return respuesta(429, { message: 'Too Many Attempts.' }) }
         const d = (gn.respuestaPost.body as { data?: Fila } | null)?.data
         if (gn.respuestaPost.status < 300 && d) gn.creadas.push({ ...d, integration_id: cuerpo.integration_id })
         return respuesta(gn.respuestaPost.status, gn.respuestaPost.body)
@@ -255,7 +258,7 @@ beforeEach(async () => {
   // Bruno, 11-oct: la cuenta de MP del test asienta en Transferencia (13015, Areben Comercial).
   base.config = { store: 'zattia', reglas: { ...REGLAS_INICIALES, transferenciaPorMp: { [CUENTA_MP]: 13015 } }, politica_cambio: null }; base.alCerrar = null; base.antesDeInsertar = null
   gn.lista = { status: 200, body: { data: [], meta: { has_more_pages: false } } }
-  gn.rebotes = 0
+  gn.rebotes = 0; gn.rebotesPost = 0
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
   process.env.ZATTIA_SUPABASE_SERVICE_KEY = 'k'
   process.env.GN_TOKEN_VENTAS = 'tok-ventas'
@@ -534,6 +537,15 @@ describe('caja · confirmar', () => {
     expect(r.body?.reintentable).toBe(true)
     expect(base.ventas.get(ID)).toMatchObject({ estado: 'error' })
     expect(String(base.ventas.get(ID)!.ultimo_error)).toMatch(/429/)
+  })
+
+  it('🔴 un 429 suelto se espera adentro del cobro: la venta llega con su número, ⛔ provisoria (19-oct)', async () => {
+    conSesion(CAJERA)
+    gn.rebotesPost = 1
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(200)
+    expect(gn.posts).toHaveLength(2)
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'en_gn', gn_number: 30100, intentos: 1, ultimo_error: null })
   })
 
   it('🔴 el error guardado ⛔ lleva el token', async () => {
@@ -976,9 +988,9 @@ describe('caja · turno propio (v2, W3)', () => {
     const turno = t.body?.turno as { resumen: { efectivo: Fila; cobrosGN: Fila[] } }
     expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 0, deEspera: 0, cobradoGN: 76482, aportes: 0, salidas: 0, esperado: 126482 })
     expect(turno.resumen.cobrosGN.map((c) => [c.venta, c.pos])).toEqual([[29981, false], [29990, true]])
-    // Se pide por cada cuenta de efectivo, con los cobros, 10 días de ventas para atrás.
+    // Se pide por cada cuenta de efectivo, con los cobros, 45 días de ventas para atrás (19-oct: con 10 se escapó un pedido de 11).
     const pedidas = gn.gets.filter((u) => u.includes('/ventas?'))
-    expect(pedidas.some((u) => u.includes('account_id=12921') && u.includes('include_payments=1') && u.includes('dateFrom=2026-09-24'))).toBe(true)
+    expect(pedidas.some((u) => u.includes('account_id=12921') && u.includes('include_payments=1') && u.includes('dateFrom=2026-08-20'))).toBe(true)
 
     const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 126482 }))
     expect(c.code).toBe(200)

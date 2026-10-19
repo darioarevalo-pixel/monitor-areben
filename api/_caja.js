@@ -156,7 +156,10 @@ async function leerPedidosWeb(sobre, ahora, store = STORE) {
 // Los cobros de GN del turno (W3b): el filtro de fechas de `GET /ventas` es por el día de la VENTA,
 // ⛔ del cobro, y el pedido web se paga al retirar: 16 de 22 cobros en efectivo de pedidos web se
 // cargaron OTRO día que la venta, hasta 5 después (medido el 4-oct sobre 60 días) ⇒ 10 días atrás.
-const DIAS_COBROS_GN = 10
+// 🔴 19-oct: ⛔ alcanzaba. El pedido web #7170 (venta del 5-oct) se cobró en efectivo el 16-oct, 11 días
+// después: quedó afuera del esperado y el cierre de la tarde dio SOBRA $24.976 (con él, −$116). Hay
+// pedidos de retiro sin pagar desde el 1-oct ⇒ 45 días: 1 página de Efectivo y 3 de Feria, ~4,5 s (medido 19-oct).
+const DIAS_COBROS_GN = 45
 /** 60 s por instancia y por turno: la pantalla del turno ⛔ le gasta el cupo a GN. El cierre lee fresco. */
 let cacheCobrosGN = null
 /** Lo mismo para las anuladas en GN (A12): una lectura de `ventas/obtener` por día del turno. */
@@ -306,14 +309,18 @@ export default async function handler(req, res) {
           if (pag === 5) throw new Error('más de 5 páginas de cobros')
         }
       }
-      // Las de la Caja de los mismos días (cualquier turno): una reintentada lleva la hora del reintento.
-      const propias = await sb.from('caja_venta').select('gn_sale_id').not('gn_sale_id', 'is', null)
-        .gte('creada_en', new Date(Date.parse(turno.abierto_en) - (DIAS_COBROS_GN + 1) * DIA_MS).toISOString()).limit(5000)
-      if (propias.error) throw new Error(propias.error.message)
-      // PostgREST corta en 1.000 callado: leído a medias, una de la Caja sumaría dos veces.
-      if ((propias.data || []).length >= 1000) throw new Error('más de 1.000 ventas de la Caja en la ventana')
+      // Las de la Caja entre las que cobraron en el turno (cualquier turno: una reintentada lleva la hora del
+      // reintento). Por NÚMERO de GN y ⛔ por ventana de fechas: 45 días de la Caja pasan las 1.000 filas
+      // que PostgREST corta callado.
       const hasta = turno.cerrado_en || new Date(ahora).toISOString()
-      const datos = cobrosDeGN({ ventas, desde: turno.abierto_en, hasta, cuentas, deCaja: (propias.data || []).map((v) => Number(v.gn_sale_id)) })
+      const candidatas = [...new Set(cobrosDeGN({ ventas, desde: turno.abierto_en, hasta, cuentas, deCaja: [] }).map((c) => c.venta).filter((n) => n != null))]
+      let deCaja = []
+      if (candidatas.length) {
+        const propias = await sb.from('caja_venta').select('gn_sale_id').in('gn_number', candidatas).not('gn_sale_id', 'is', null)
+        if (propias.error) throw new Error(propias.error.message)
+        deCaja = (propias.data || []).map((v) => Number(v.gn_sale_id))
+      }
+      const datos = cobrosDeGN({ ventas, desde: turno.abierto_en, hasta, cuentas, deCaja })
       cacheCobrosGN = { turno: turno.id, en: ahora, datos }
       return datos
     } catch {
