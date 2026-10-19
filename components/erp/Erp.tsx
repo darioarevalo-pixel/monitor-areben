@@ -26,7 +26,7 @@ import { puedeVer } from '@/lib/permisos'
 import { CambioCaja } from './CambioCaja'
 import { FacturaCaja } from './FacturaCaja'
 import { Facturacion } from './Facturacion'
-import { StockPrenda, type PrendaPedida } from './StockPrenda'
+import { StockErp, type PrendaAAjustar, type PrendaPedida } from './stock/StockErp'
 import { DiferenciasDia } from './DiferenciasDia'
 import { ConciliacionDia } from './ConciliacionDia'
 import { AjustesStock } from './AjustesStock'
@@ -95,6 +95,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const { seccion, pestania, valida } = resolverRutaErp(ruta)
   // De Diferencias o Conciliación a la ficha de la prenda (Stock › Stock): viaja en memoria, la dirección sólo dice la pestaña.
   const [prenda, setPrenda] = useState<PrendaPedida | null>(null)
+  // De Stock a «Nuevo ajuste» con la prenda cargada (Conteos y ajustes): también en memoria.
+  const [aAjustar, setAAjustar] = useState<PrendaAAjustar | null>(null)
   const ir = (s: string, p?: string | null) => router.push(hrefErp(s, p))
   // Una dirección vieja o mal escrita ⇒ la que corresponde (⛔ una pantalla en blanco).
   useEffect(() => {
@@ -103,6 +105,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
 
   const marcas = (Object.keys(CUENTAS) as Marca[]).filter((m) => perfil && puedeVer(perfil, m, 'erp'))
   const abrirPrenda = (p: PrendaPedida) => { setPrenda(p); ir('stock', 'stock') }
+  const ajustarPrenda = (p: PrendaAAjustar) => { setAAjustar(p); ir('stock', 'ajustes') }
 
   return (
     <div className="shell erp-app">
@@ -150,7 +153,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
                 </p>
               </div>
               {seccion.pestanias.length > 1 && (
-                <Tabs variant="underline" items={seccion.pestanias} value={pestania ?? ''} onChange={(k) => { setPrenda(null); ir(seccion.key, k) }} />
+                <Tabs variant="underline" items={seccion.pestanias} value={pestania ?? ''} onChange={(k) => { setPrenda(null); setAAjustar(null); ir(seccion.key, k) }} />
               )}
             </header>
 
@@ -162,8 +165,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {pestania === 'facturacion' && <Facturacion />}
             {pestania === 'cambio' && <CambioCaja />}
             {pestania === 'factura' && <FacturaCaja />}
-            {pestania === 'stock' && <StockPrenda key={prenda ? `${prenda.marca}/${prenda.producto}/${prenda.talle}` : 'buscar'} pedida={prenda} />}
-            {pestania === 'ajustes' && <AjustesStock />}
+            {pestania === 'stock' && <StockErp key={prenda ? `${marca}|${prenda.marca}/${prenda.producto}/${prenda.talle}` : marca} pedida={prenda} ajustar={ajustarPrenda} />}
+            {pestania === 'ajustes' && <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : 'lista'} pedida={aAjustar} />}
             {pestania === 'conciliacion' && <ConciliacionDia abrirPrenda={abrirPrenda} />}
             {pestania === 'diferencias' && <DiferenciasDia abrirPrenda={abrirPrenda} />}
             {pestania === 'precios' && <PreciosProducto />}

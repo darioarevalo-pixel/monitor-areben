@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react'
 import { Badge, Button, EmptyState, Field, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space } from '@/components/ui'
 import { leerDiferencias, type DiferenciasDelDia, type MarcaErp } from '@/lib/erp/cliente'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
-import type { PrendaPedida } from './StockPrenda'
+import type { PrendaPedida } from './stock/StockErp'
 
 const MARCAS: Array<{ key: MarcaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'bdi', label: 'BDI' }]
 const NOMBRE_LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }

@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react'
 import { Badge, Button, EmptyState, Field, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space } from '@/components/ui'
 import { leerConciliacion, type ConciliacionDelDia, type FilaConciliacion, type TiendaErp } from '@/lib/erp/cliente'
-import type { PrendaPedida } from './StockPrenda'
+import type { PrendaPedida } from './stock/StockErp'
 
 const TIENDAS: Array<{ key: TiendaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'stunned', label: 'Stunned' }, { key: 'bdi', label: 'BDI' }]
 const dia = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}`

@@ -384,3 +384,16 @@ export const guardarNotaDeVenta = (marca: MarcaErp, ventaId: string, texto: stri
   pedir<{ ok: true }>(post({ accion: 'nota-venta', marca, ventaId, texto, reemplazaId }), '', 'No se pudo guardar la nota.')
 export const cobrarVentaErp = (marca: MarcaErp, c: { ventaId: string; clienteId: string; linea: string; monto: number; saldo: number; cuenta: string; canal: string | null; fecha: string; ref: string; prueba: boolean }) =>
   pedir<{ ok: true; cuenta: unknown }>(post({ accion: 'cobrar-venta', marca, ...c }), '', 'No se pudo registrar el cobro.')
+
+// ── ERP › Stock › Stock, con el molde (lista + ficha; `api/_erp-stock.js`, núcleo `lib/erp/stock-lista.core.js`) ──
+export type FilaStock = {
+  id: string; producto: string; talle: string; nombre: string; talleNombre: string; sku: string | null; barcode: string | null
+  linea: string
+  /** Lo que dice el libro en cada depósito de la base. */
+  deps: Record<string, number>
+  estanteria: number; enPedidos: number; disponible: number; gn: number | null; negativo: boolean
+  ultimo: { tipo: string; origen: string; ref: string | null; cuando: string } | null
+}
+export type ListaDeStock = { filas: FilaStock[]; libroHasta: string | null; pedidosLeidosEn: string | null; pedidos: number; sinVariante: number }
+export const leerListaDeStock = (marca: MarcaErp) =>
+  pedir<ListaDeStock>(null, `&vista=stock-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el stock.')

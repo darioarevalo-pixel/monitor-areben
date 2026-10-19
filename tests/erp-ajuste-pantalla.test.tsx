@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { PrendaAAjustar } from '@/components/erp/stock/StockErp'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -37,10 +38,10 @@ let host: HTMLDivElement
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); vi.clearAllMocks() })
 
-async function montar() {
+async function montar(pedida: PrendaAAjustar | null = null) {
   const { AjustesStock } = await import('@/components/erp/AjustesStock')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<AjustesStock />) })
+  await act(async () => { root = createRoot(host); root.render(<AjustesStock pedida={pedida} />) })
   await act(async () => {})
 }
 const texto = () => host.textContent ?? ''
@@ -82,6 +83,14 @@ describe('Conteos y ajustes', () => {
       renglones: [{ producto: '828948', talle: '229042', sku: 'RTO-0152-NG', barcode: '7790152', cantidad: 2 }] })
     expect(aprobarAjuste).toHaveBeenCalledWith('zattia', 'nuevo-8')
     expect(texto()).toContain('C-31')
+  })
+
+  it('desde Stock («Ajustar»): abre «Nuevo ajuste» en su línea con la prenda cargada y lo que dice el ERP', async () => {
+    await montar({ linea: 'stunned', producto: '828948', talle: '229042', sku: 'STU-0152-NG', barcode: null, nombre: 'TOP ZARA', talleNombre: 'NEGRO' })
+    expect(leerAjustes).toHaveBeenCalledWith('stunned')
+    expect(leerStockDePrenda).toHaveBeenCalledWith('zattia', '828948', '229042')
+    expect(host.querySelector('input[aria-label="Cantidad de TOP ZARA · NEGRO"]')).toBeTruthy()
+    expect(boton('Nuevo ajuste')).toBeUndefined()
   })
 
   it('si aplicar falla, lo dice y ⛔ deja el borrador para crearlo otra vez', async () => {
