@@ -147,7 +147,8 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Disponible" valor={u(res.disponible)} oscuro nota="lo que se puede vender" />
         <TileResumen titulo="En estantería" valor={u(res.estanteria)} nota={res.enPedidos ? `${res.enPedidos.toLocaleString('es-AR')} apartadas por pedidos sin pagar` : 'ninguna apartada por pedidos'} />
-        <TileResumen titulo="Negativos" valor={res.negativos.toLocaleString('es-AR')} nota={res.negativos ? 'para revisar' : 'ninguna'} />
+        {/* Los negativos se cuentan sobre todo lo buscado (⛔ sólo la vista): si no, el número no es el de la vista «Negativos». */}
+        <TileResumen titulo="Negativos" valor={(conteo.neg ?? 0).toLocaleString('es-AR')} nota={conteo.neg ? 'para revisar' : 'ninguna'} />
         <TileResumen titulo="Prendas" valor={res.prendas.toLocaleString('es-AR')} nota={nombreVista.toLowerCase()} />
       </div>
 

@@ -65,6 +65,7 @@ describe('la lista de stock', () => {
     expect(boton(/^Con stock/).textContent).toContain('2')
     expect(boton(/^Sin stock en el Local/).textContent).toContain('1')
     expect(todo()).toContain('9 u') // disponible: 6 + 3
+    expect(todo()).toMatch(/Negativos0ninguna/)
     expect(todo()).toContain('1 apartadas por pedidos sin pagar')
     expect(filaDe('TOP SAHARA').textContent).toContain('Venta · 19/10 10:25')
     await clic(boton(/^Sin stock en el Local/))
@@ -91,7 +92,8 @@ describe('la lista de stock', () => {
     expect(f.textContent).toContain('Disponible6')
     expect(f.textContent).toContain('GN +1')
     expect(f.textContent).toContain('Venta · -1')
-    expect(f.textContent).toContain('Local · quedan 2 · Caja · venta:296')
+    expect(f.textContent).toContain('Local · quedan 2 · Caja')
+    expect(f.textContent).not.toContain('venta:296')
   })
 
   it('«Ajustar» de la fila lleva la prenda a «Nuevo ajuste»', async () => {

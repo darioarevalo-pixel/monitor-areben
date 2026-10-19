@@ -65,7 +65,8 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
     return {
       cuando: m.ocurrido_en, icono, tono,
       titulo: `${nombreDe(NOMBRE_TIPO, m.tipo)} · ${conSigno(m.cantidad)}`,
-      detalle: `${nombreDe(NOMBRE_DEPOSITO, m.deposito)} · quedan ${m.saldo} · ${nombreDe(NOMBRE_ORIGEN, m.origen)}${m.origen_ref ? ` · ${m.origen_ref}` : ''}`,
+      // La referencia es la clave técnica del libro («uuid:producto:talle:depósito»): ⛔ se muestra.
+      detalle: `${nombreDe(NOMBRE_DEPOSITO, m.deposito)} · quedan ${m.saldo} · ${nombreDe(NOMBRE_ORIGEN, m.origen)}`,
     }
   })
 
