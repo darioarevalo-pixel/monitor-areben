@@ -279,6 +279,52 @@ function Plazos({ guardando, onElegir }: { guardando: boolean; onElegir: (dias: 
 }
 
 /**
+ * El calendario de "Volver a hablarle".
+ *
+ * 🔴 **Escribir la fecha con el teclado no la guardaba** (Darío, 19-oct-2026). El campo guardaba
+ * en cada cambio y se bloqueaba mientras guardaba: al tipear, Chrome ya avisa un cambio con el año
+ * a medio escribir ("0002"), se mandaba eso, el campo quedaba trabado y el resto de lo tipeado se
+ * perdía. Ahora lo escrito vive acá hasta que es una fecha completa y razonable, y el campo nunca
+ * se bloquea.
+ */
+function CampoFecha({ valor, onGuardar }: { valor: string; onGuardar: (v: string) => Promise<boolean> | void }) {
+  const [txt, setTxt] = useState(valor)
+  const ultimo = useRef(valor)
+  useEffect(() => {
+    setTxt(valor)
+    ultimo.current = valor
+  }, [valor])
+
+  const completa = (v: string) => {
+    const m = v.match(/^(\d{4})-\d{2}-\d{2}$/)
+    return !!m && Number(m[1]) >= 2020 && Number(m[1]) <= 2100
+  }
+  const guardar = (v: string) => {
+    if (v === ultimo.current || (v && !completa(v))) return
+    const antes = ultimo.current
+    ultimo.current = v
+    // Si no se guardó (otro guardado en curso, o falló), se puede volver a intentar.
+    Promise.resolve(onGuardar(v)).then((ok) => {
+      if (ok === false && ultimo.current === v) ultimo.current = antes
+    })
+  }
+
+  return (
+    <input
+      className="mo-input"
+      type="date"
+      value={txt}
+      onChange={(e) => {
+        setTxt(e.target.value)
+        guardar(e.target.value)
+      }}
+      onBlur={() => guardar(txt)}
+      style={{ width: '100%', fontSize: font.sm }}
+    />
+  )
+}
+
+/**
  * Qué decir después de elegir una fecha en el calendario.
  *
  * 🔑 **Si la fecha se corrió, hay que decirlo.** El sábado elegido se guarda como lunes (ver
@@ -1226,13 +1272,10 @@ function PanelInterno({
           )}
           <Plazos guardando={guardando} onElegir={(d) => mutar((m) => escribiHoy(m, c.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)} />
           {/* El calendario, ancho: es lo que más se usa. */}
-          <input
-            className="mo-input"
-            type="date"
-            value={c.proximo_contacto || ''}
-            disabled={guardando}
-            onChange={(e) => mutar((m) => setProximoManual(m, c.id, e.target.value), avisoFecha(e.target.value))}
-            style={{ width: '100%', fontSize: font.sm }}
+          <CampoFecha
+            key={`fecha-${c.id}`}
+            valor={c.proximo_contacto || ''}
+            onGuardar={(v) => mutar((m) => setProximoManual(m, c.id, v), avisoFecha(v))}
           />
         </Bloque>
 
@@ -1792,13 +1835,10 @@ function FichaLead({
       <Bloque titulo="Volver a hablarle">
         {faltaFecha && <AvisoFaltaFecha />}
         <Plazos guardando={guardando} onElegir={(d) => onMutar((m) => escribiHoyLead(m, lead.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)} />
-        <input
-          className="mo-input"
-          type="date"
-          value={lead.proximo_manual || ''}
-          disabled={guardando}
-          onChange={(e) => onMutar((m) => setProximoLead(m, lead.id, e.target.value), avisoFecha(e.target.value))}
-          style={{ width: '100%', fontSize: font.sm }}
+        <CampoFecha
+          key={`fecha-${lead.id}`}
+          valor={lead.proximo_manual || ''}
+          onGuardar={(v) => onMutar((m) => setProximoLead(m, lead.id, v), avisoFecha(v))}
         />
       </Bloque>
 
