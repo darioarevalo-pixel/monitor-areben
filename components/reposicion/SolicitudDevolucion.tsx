@@ -380,6 +380,7 @@ function TablaPropuesta({ grupos, tnDe, sel, setSel, abiertos, setAbiertos, cant
           <Th align="center" width={84}>Alta en TN</Th>
           <Th align="center" width={64}>Promo</Th>
           <Th align="center" width={90}>Venta 60 días</Th>
+          <Th align="center" width={80}>En el local</Th>
           <Th align="center" width={90}>Semanas de stock</Th>
           <Th align="center" width={80}>Sobran</Th>
           <Th align="center" width={80}>Devolver</Th>
@@ -392,7 +393,7 @@ function TablaPropuesta({ grupos, tnDe, sel, setSel, abiertos, setAbiertos, cant
           return (
             <Fragment key={p}>
               <Tr>
-                <Td colSpan={10} style={{ background: color.bg2, paddingTop: space[2], paddingBottom: space[2] }}>
+                <Td colSpan={11} style={{ background: color.bg2, paddingTop: space[2], paddingBottom: space[2] }}>
                   <b style={{ color: color.ink }}>{ROTULO_PRIORIDAD[p]}</b>
                   <span style={{ color: color.mut2, fontSize: font.sm }}> · {gs.length} productos · {gs.reduce((s, g) => s + g.sobra, 0)} prendas</span>
                   <Button size="sm" variant="ghost" style={{ marginLeft: space[2] }} onClick={() => setSel((s) => ({ ...s, ...Object.fromEntries(gs.map((g) => [g.pid, !todos])) }))}>
@@ -425,7 +426,8 @@ function TablaPropuesta({ grupos, tnDe, sel, setSel, abiertos, setAbiertos, cant
                       <Td align="center" style={{ fontSize: font.sm, color: color.mut }} title={tn ? undefined : 'No está en Tienda Nube'}>{fechaCorta(tn?.alta ?? null)}</Td>
                       <Td align="center" style={{ fontSize: font.sm, color: tn?.promo ? color.ink : color.mut2, fontWeight: tn?.promo ? 600 : 400 }}>{tn ? (tn.promo ? 'Sí' : 'No') : '—'}</Td>
                       <Td align="center" style={{ color: g.vendidas > 0 ? color.success : color.mut2, fontWeight: 600 }}>{g.vendidas}</Td>
-                      <Td align="center" title={g.semanas != null ? `${g.local} en el local` : undefined}>{g.semanas != null ? g.semanas.toLocaleString('es-AR') : '—'}</Td>
+                      <Td align="center" style={{ fontWeight: 600 }}>{g.local}</Td>
+                      <Td align="center">{g.semanas != null ? g.semanas.toLocaleString('es-AR') : '—'}</Td>
                       <Td align="center">{g.sobra}</Td>
                       <Td align="center" style={{ fontWeight: 700 }}>{prendasDe(g)}</Td>
                       <Td>
@@ -441,6 +443,7 @@ function TablaPropuesta({ grupos, tnDe, sel, setSel, abiertos, setAbiertos, cant
                           <Td />
                           <Td />
                           <Td align="center" style={{ color: color.mut2 }}>{v.f.d.vendidas}</Td>
+                          <Td align="center" style={{ color: color.ink2 }}>{v.f.it.local}</Td>
                           <Td />
                           <Td align="center">{v.sobra}</Td>
                           <Td align="center" tall>
