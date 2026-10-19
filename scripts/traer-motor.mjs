@@ -12,7 +12,7 @@
  * 🔴 `motor/` ⛔ se edita acá: se edita en `areben-motor` y se vuelve a traer. `tests/motor-copia.test.ts`
  * compara cada archivo con la huella que deja este script: si alguien lo tocó a mano, falla.
  *
- * Qué trae: lo que el motor EXPORTA para el monitor (`lib/venta`, `lib/arca`, `lib/cuentas`: la venta la importa desde la 020; `lib/stock`: el ajuste, desde la 026), ⛔ el libro ni sus crons.
+ * Qué trae: lo que el motor EXPORTA para el monitor (`lib/venta`, `lib/arca`, `lib/cuentas`: la venta la importa desde la 020; `lib/stock`: el ajuste, desde la 026; `lib/cuenta`: la cuenta corriente, que la venta importa desde la 025), ⛔ el libro ni sus crons.
  * Sólo trae un motor sin cambios sin commitear y con su commit ya en GitHub (para que la versión anotada
  * se pueda ir a mirar).
  */
@@ -24,7 +24,7 @@ import { join, relative } from 'node:path'
 
 const ORIGEN = process.argv[2] || join(homedir(), 'Projects/areben-libro-stock')
 const DESTINO = join(process.cwd(), 'motor')
-const CARPETAS = ['lib/venta', 'lib/arca', 'lib/cuentas', 'lib/stock']
+const CARPETAS = ['lib/venta', 'lib/arca', 'lib/cuentas', 'lib/stock', 'lib/cuenta']
 const git = (...a) => execFileSync('git', ['-C', ORIGEN, ...a], { encoding: 'utf8' }).trim()
 
 if (!existsSync(join(ORIGEN, 'package.json'))) throw new Error(`No está el motor en ${ORIGEN}`)

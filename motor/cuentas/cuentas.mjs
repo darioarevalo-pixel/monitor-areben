@@ -12,6 +12,8 @@ export const MEDIOS = ['efectivo', 'transferencia', 'debito', 'credito', 'mp', '
  */
 export function medioDeCuenta(c) {
   if (MEDIOS.includes(c.medio)) return c.medio
+  // La «Cuenta corriente» (sql/025): ⛔ es plata que entra ⇒ ⛔ lleva ruta ni cuenta real (⛔ va en MEDIOS de las rutas).
+  if (c.medio === 'cuenta') return 'cuenta'
   if (c.medio !== 'otro') return null
   const nombre = String(c.nombre ?? '')
   if (/pago ?nube/i.test(nombre)) return 'pagonube'

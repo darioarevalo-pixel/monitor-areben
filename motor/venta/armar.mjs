@@ -55,12 +55,13 @@ function validarLineas(lineas, campo) {
 /**
  * Los pagos. En la venta, `Σ monto = total`. En el cambio (`base`, §6.1) la forma de pago lleva su descuento,
  * como `cobro()` de la Caja: `Σ base = diferencia` y por pago `monto = base − descuento + redondeo`; el total
- * es lo que se cobró (`Σ monto`). `usa_saldo`: lo que se paga con la cuenta «Saldo a favor» (§6.2).
+ * es lo que se cobró (`Σ monto`). `usa_saldo`: lo que se paga con la cuenta «Saldo a favor» (§6.2). `usa_cuenta`: lo que
+ * queda DEBIENDO, la cuenta «Cuenta corriente» (§15, sql/025).
  */
 function validarPagos(pagos, conf, marca, total, { base = null } = {}) {
   if (!Array.isArray(pagos)) return { error: fallo('ENTRADA_INVALIDA', 'Faltan los pagos', 'pagos') }
   const filas = [], cuentas = []
-  let usa_saldo = 0
+  let usa_saldo = 0, usa_cuenta = 0
   for (const [i, p] of pagos.entries()) {
     const cuenta = p && cuentaDe(conf, marca, p.cuenta)
     if (!cuenta) return { error: fallo('CUENTA_DESCONOCIDA', `La cuenta de cobro ${p && p.cuenta} no es de ${marca}`, `pagos[${i}].cuenta`) }
@@ -70,6 +71,10 @@ function validarPagos(pagos, conf, marca, total, { base = null } = {}) {
       return { error: fallo('PAGOS_NO_CIERRAN', `El pago ${i + 1}: ${f.base} − ${f.descuento} + ${f.redondeo} no da ${f.monto}`, `pagos[${i}].monto`) }
     }
     if (cuenta.medio === 'saldo') usa_saldo += f.monto
+    if (cuenta.medio === 'cuenta') {
+      if (!(f.monto > 0)) return { error: fallo('ENTRADA_INVALIDA', 'Lo que queda a cuenta es un monto mayor a 0', `pagos[${i}].monto`) }
+      usa_cuenta += f.monto
+    }
     filas.push(f)
     cuentas.push({ cuenta, elegida: p.cuenta_real ?? null })
   }
@@ -77,10 +82,10 @@ function validarPagos(pagos, conf, marca, total, { base = null } = {}) {
   if (base != null) {
     const sumaBase = filas.reduce((s, p) => s + p.base, 0)
     if (!cierra(sumaBase, base)) return { error: fallo('PAGOS_NO_CIERRAN', `Los pagos cubren ${pesos(sumaBase)} y la diferencia es ${base}`, 'pagos') }
-    return { filas, cuentas, total: pesos(suma), usa_saldo: pesos(usa_saldo) }
+    return { filas, cuentas, total: pesos(suma), usa_saldo: pesos(usa_saldo), usa_cuenta: pesos(usa_cuenta) }
   }
   if (!cierra(suma, total)) return { error: fallo('PAGOS_NO_CIERRAN', `Los pagos suman ${pesos(suma)} y la venta es de ${total}`, 'pagos') }
-  return { filas, cuentas, total, usa_saldo: pesos(usa_saldo) }
+  return { filas, cuentas, total, usa_saldo: pesos(usa_saldo), usa_cuenta: pesos(usa_cuenta) }
 }
 
 /**
@@ -179,7 +184,7 @@ export function armarVenta(e, conf, { ahora = new Date() } = {}) {
   if (c.error) return c.error
   const { pagos } = c
   const movimientos = mueveStock(venta) ? lineas.map((l) => movimientoDe(venta, l, 'venta')) : []
-  return { ok: true, venta, lineas, pagos, movimientos, usa_saldo: p.usa_saldo }
+  return { ok: true, venta, lineas, pagos, movimientos, usa_saldo: p.usa_saldo, usa_cuenta: p.usa_cuenta }
 }
 
 /**
@@ -236,7 +241,7 @@ export function armarCambio(e, conf, original, { ahora = new Date() } = {}) {
   if (c.error) return c.error
   const { pagos } = c
   const movimientos = mueveStock(venta) ? lineas.map((l) => movimientoDe(venta, l, l.cantidad < 0 ? 'cambio_entra' : 'cambio_sale')) : []
-  return { ok: true, venta, lineas, pagos, movimientos, diferencia, a_favor: diferencia < 0 ? -diferencia : 0, usa_saldo: p.usa_saldo }
+  return { ok: true, venta, lineas, pagos, movimientos, diferencia, a_favor: diferencia < 0 ? -diferencia : 0, usa_saldo: p.usa_saldo, usa_cuenta: p.usa_cuenta }
 }
 
 /**

@@ -1,17 +1,17 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "3c0572e2878e1b5931c6160ea5a68e5323b704ac",
-  "traido_en": "2026-10-19T00:49:12.731Z",
+  "commit": "a6f0b23c69da2664d14bf51624b2ca81b8cf3710",
+  "traido_en": "2026-10-19T01:15:49.640Z",
   "archivos": {
-    "venta/armar.mjs": "b8b8faee83a299a8421a17fe4dfefb45d3081735cb1a7b998534543bec140453",
+    "venta/armar.mjs": "bdb1f1d08a41f0fd75d3e0eea0afe1e9679343f09302e38a412617146561c4a9",
     "venta/cliente.mjs": "b0020770f493c272fe4eeaf2ca15026a0b255f8f90a96087a9bfab6baf489392",
     "venta/costo.mjs": "a69abcd98a827783f88dc9c3a22705710f7b349e050a9a5c11045e5d452d6fbb",
     "venta/facturar.mjs": "998ac32e7205a79002675518459ed0723ab3aab08ddb40fb2123a69b8dd650fe",
     "venta/pago-tn.mjs": "0d4a8ecbe0a475b2c311fa9fc1d9a1ea5baf7357d15ae92ebad5209d55459e17",
     "venta/precio.mjs": "c5c6d2fef5f8f3481073a53a20b8ac9da66539687da99c9f96c0ef039722f7a9",
     "venta/proveedor.mjs": "bdbfde6aa0749296f5ddc6723dfb3856ce9596ef75a75fac7b2715479dd6f061",
-    "venta/registrar.mjs": "591ac66ff9882ab42b5e2cb87f5803a9e6107366c29f8e8c46b7093d7dd5635b",
+    "venta/registrar.mjs": "a0ab208a5b3c3daa9be27c5d58c2a7268935307ec12a0a7f725c9cbe4dea8968",
     "venta/reglas-db.mjs": "b8d0bf468b3bd5f8bcb966367139025f7c17f0383201a2fc8e4519af9aa6ef50",
     "venta/reglas.mjs": "c356d1743ce274a52b77c11628e4510510e3661360fcb5f18efcca66f5540ad4",
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
@@ -23,8 +23,11 @@
     "arca/qr.core.js": "f0985c1b77fe664e51bcff5b86e22d4143773b22a66555cbbb0711b31275e2c4",
     "arca/sin-secretos.core.js": "1807f79d7ab1d1b8d97d8401d84ef1b575964e9bf02c644c51c4b007eded5fb6",
     "arca/techo.core.js": "7938bfdd0fbd52bf80dc57730f70a36ccbc5717843c89939e427f048c3d77454",
-    "cuentas/cuentas.mjs": "e66f3991bd86b5f5ab0bf995869f99a32ee66374bcead6a1d46fedce50f3e51b",
+    "cuentas/cuentas.mjs": "df4afc50ab4529ac5d7810e6bd379f77def75418a80a01e740b06c54105d60fc",
     "cuentas/rutas.mjs": "02515ffdb62402d10a68ad42b5564f24c5e64eb4a29f74cea74837c890041666",
-    "stock/ajuste.mjs": "3fb5b28ef1d891e9bb9832a1efa004e0e7d5325c119323c78c7329ee6223a11e"
+    "stock/ajuste.mjs": "3fb5b28ef1d891e9bb9832a1efa004e0e7d5325c119323c78c7329ee6223a11e",
+    "cuenta/cuenta.core.mjs": "35640de021c7249a55655d16e709b8251c27807d02832932f4d33be478c385e4",
+    "cuenta/cuenta.mjs": "228ca1d71b65af6f42e4ef4c0834666a4674738945fc0c43eaba8c530a8b47ba",
+    "cuenta/libro.mjs": "9d75dc6dccc4af6c238cbf3353003c38658ab8f4f5760a7207a7768d2123af74"
   }
 }
