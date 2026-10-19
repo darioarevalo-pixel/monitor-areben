@@ -196,6 +196,12 @@ diaria con tope (30) se reemplazó por una solicitud que deciden **Darío o Brun
   «sin ventas» habían vendido (Short Cliff 3, todas del 40 y 42; Top Laia 7). Ahora sale de las ventas
   por variante (`vendidasPorProducto(vv)`). ⏭️ Las ventas con canal «Ninguno» (25 en 60 días; Short
   Nate) siguen sin contar en ningún cálculo: falta que Darío diga qué son.
+- 🔑 **«Con ventas» va por SEMANAS DE STOCK** (Darío, 19-oct-2026: «primero retirar los que más tiempo
+  de venta pueden llegar a tener»): lo del local (todas las variantes) ÷ la venta semanal del producto,
+  con `d.dias` (lo nuevo se mide con sus días de vida). Antes era «lo que más sobra»: Top Zara (28
+  ventas) salía tercero. Columnas nuevas: **Alta en TN** y **Promo** (Sí/No, `promo_price` < `price`,
+  cruzado con `matchTn` como las categorías) y **buscador** (`filtrarPropuesta`: nombre, categoría,
+  código o SKU, sin tildes; lo elegido sigue elegido aunque se esconda).
 - **Confirmados**: se confirma en varias veces; vive en `repo_armado` con estado **`sin_enviar`**
   (acción `confirmados`, GET y POST). ⛔ No es un armado: fuera del historial, del «hoy» y del índice
   de «uno abierto». Vacío = `cancelado`. ⚠️ No se llama «borrador»: el test del VOCABULARIO lo frena.

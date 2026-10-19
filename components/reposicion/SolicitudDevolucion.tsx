@@ -20,6 +20,7 @@ import type { FilaVentas, LineaZ } from '@/lib/reposicion/porVentas'
 import {
   cantidades,
   conBolsa,
+  filtrarPropuesta,
   fusionar,
   lineasDe,
   porProducto,
@@ -55,13 +56,15 @@ function imprimirTicket(pedido: LineaPedido[], rotulo: string) {
   return imprimirDevolucion(filas, rotulo)
 }
 
-export function SolicitudDevolucion({ linea, rotulo, filas, vv, armado, stockViejo, puedeAprobar, bolsaProd, guardarBolsaProd, boton, onEnviada }: {
+export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, stockViejo, puedeAprobar, bolsaProd, guardarBolsaProd, boton, onEnviada }: {
   linea: LineaZ
   /** «Zattia» / «Stunned»: va en el ticket. */
   rotulo: string
   filas: FilaVentas[]
   /** Ventas por variante en la ventana, también de los talles agotados (no están en `filas`). */
   vv?: Record<string, number>
+  /** Alta y precio promocional del producto en Tienda Nube; `null` si no está en la tienda. */
+  tnDe: (g: { pid: string; name: string; sku?: string }) => DatoTn | null
   /** El armado de devolución de hoy (o el abierto). */
   armado: Armado | null
   /** El stock es anterior a la última transferencia: lo transferido todavía figura en el local. */
@@ -85,6 +88,7 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, armado, stockVie
   const [sel, setSel] = useState<Record<string, boolean>>({})
   const [cant, setCant] = useState<Record<string, number>>({})
   const [abiertos, setAbiertos] = useState<Record<string, boolean>>({})
+  const [buscar, setBuscar] = useState('')
   const [cerrar, setCerrar] = useState(false)
 
   useEffect(() => {
@@ -108,6 +112,8 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, armado, stockVie
   )
   const vendidasProd = useMemo(() => (vv ? vendidasPorProducto(vv) : undefined), [vv])
   const grupos = useMemo(() => propuesta(filas, yaPedido, vendidasProd), [filas, yaPedido, vendidasProd])
+  // Lo elegido sigue elegido aunque el buscador lo esconda: el filtro es sólo de la tabla.
+  const visibles = useMemo(() => filtrarPropuesta(grupos, buscar), [grupos, buscar])
   const bolsaDe = (g: { pid: string; name: string; sku?: string }) => conBolsa(g, bolsaProd)
   const cantDe = (v: VariantePropuesta) => Math.min(v.sobra, cant[v.f.it.vid] ?? v.sobra)
   const prendasDe = (g: GrupoPropuesta) => g.variantes.reduce((s, v) => s + cantDe(v), 0)
@@ -188,6 +194,7 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, armado, stockVie
                 <span style={{ fontSize: font.md, color: color.ink2 }}>
                   <b>{totalSobra}</b> {art.plural} sobran en el local · {grupos.length} productos
                 </span>
+                <input className="mo-input" type="search" value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar producto o código…" aria-label="Buscar producto o código" style={{ width: 240 }} />
                 <span style={{ marginLeft: 'auto', fontSize: font.md, color: color.ink2 }}>
                   {elegidos.length > 0 && (
                     <>
@@ -201,9 +208,12 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, armado, stockVie
               </div>
               {!grupos.length ? (
                 <EmptyState icon="🎉" title={`No hay ${art.plural} para devolver`} hint="Ninguna variante supera su stock ideal, o ya está en una solicitud." dashed />
+              ) : !visibles.length ? (
+                <EmptyState icon="🔍" title="Sin resultados" hint={`Ningún producto coincide con «${buscar.trim()}».`} dashed />
               ) : (
                 <TablaPropuesta
-                  grupos={grupos}
+                  grupos={visibles}
+                  tnDe={tnDe}
                   sel={sel}
                   setSel={setSel}
                   abiertos={abiertos}
@@ -341,8 +351,14 @@ function EnElLocal({ armado, linea, rotulo, boton }: { armado: Armado; linea: Li
   )
 }
 
-function TablaPropuesta({ grupos, sel, setSel, abiertos, setAbiertos, cantDe, prendasDe, setCant, bolsaDe, cambiarBolsa }: {
+export type DatoTn = { alta: string | null; promo: boolean }
+
+/** «2026-08-12T…» → «12/08/26». */
+const fechaCorta = (iso: string | null) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}` : '—')
+
+function TablaPropuesta({ grupos, tnDe, sel, setSel, abiertos, setAbiertos, cantDe, prendasDe, setCant, bolsaDe, cambiarBolsa }: {
   grupos: GrupoPropuesta[]
+  tnDe: (g: GrupoPropuesta) => DatoTn | null
   sel: Record<string, boolean>
   setSel: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   abiertos: Record<string, boolean>
@@ -361,7 +377,10 @@ function TablaPropuesta({ grupos, sel, setSel, abiertos, setAbiertos, cantDe, pr
           <Th width={36} />
           <Th>Producto</Th>
           <Th width={110}>Código</Th>
+          <Th align="center" width={84}>Alta en TN</Th>
+          <Th align="center" width={64}>Promo</Th>
           <Th align="center" width={90}>Venta 60 días</Th>
+          <Th align="center" width={90}>Semanas de stock</Th>
           <Th align="center" width={80}>Sobran</Th>
           <Th align="center" width={80}>Devolver</Th>
           <Th width={120}>Va</Th>
@@ -373,7 +392,7 @@ function TablaPropuesta({ grupos, sel, setSel, abiertos, setAbiertos, cantDe, pr
           return (
             <Fragment key={p}>
               <Tr>
-                <Td colSpan={7} style={{ background: color.bg2, paddingTop: space[2], paddingBottom: space[2] }}>
+                <Td colSpan={10} style={{ background: color.bg2, paddingTop: space[2], paddingBottom: space[2] }}>
                   <b style={{ color: color.ink }}>{ROTULO_PRIORIDAD[p]}</b>
                   <span style={{ color: color.mut2, fontSize: font.sm }}> · {gs.length} productos · {gs.reduce((s, g) => s + g.sobra, 0)} prendas</span>
                   <Button size="sm" variant="ghost" style={{ marginLeft: space[2] }} onClick={() => setSel((s) => ({ ...s, ...Object.fromEntries(gs.map((g) => [g.pid, !todos])) }))}>
@@ -384,6 +403,7 @@ function TablaPropuesta({ grupos, sel, setSel, abiertos, setAbiertos, cantDe, pr
               {gs.map((g) => {
                 const abierto = !!abiertos[g.pid]
                 const bolsa = bolsaDe(g)
+                const tn = tnDe(g)
                 return (
                   <Fragment key={g.pid}>
                     <Tr>
@@ -402,7 +422,10 @@ function TablaPropuesta({ grupos, sel, setSel, abiertos, setAbiertos, cantDe, pr
                         {g.cat && <span style={{ color: color.mut2, fontSize: font.sm }}> · {g.cat}</span>}
                       </Td>
                       <Td style={{ fontSize: font.sm, color: color.mut }}>{g.clave || '—'}</Td>
-                      <Td align="center" style={{ color: g.vendidas ? color.success : color.mut2, fontWeight: 600 }}>{g.vendidas}</Td>
+                      <Td align="center" style={{ fontSize: font.sm, color: color.mut }} title={tn ? undefined : 'No está en Tienda Nube'}>{fechaCorta(tn?.alta ?? null)}</Td>
+                      <Td align="center" style={{ fontSize: font.sm, color: tn?.promo ? color.ink : color.mut2, fontWeight: tn?.promo ? 600 : 400 }}>{tn ? (tn.promo ? 'Sí' : 'No') : '—'}</Td>
+                      <Td align="center" style={{ color: g.vendidas > 0 ? color.success : color.mut2, fontWeight: 600 }}>{g.vendidas}</Td>
+                      <Td align="center" title={g.semanas != null ? `${g.local} en el local` : undefined}>{g.semanas != null ? g.semanas.toLocaleString('es-AR') : '—'}</Td>
                       <Td align="center">{g.sobra}</Td>
                       <Td align="center" style={{ fontWeight: 700 }}>{prendasDe(g)}</Td>
                       <Td>
@@ -415,7 +438,10 @@ function TablaPropuesta({ grupos, sel, setSel, abiertos, setAbiertos, cantDe, pr
                           <Td />
                           <Td style={{ paddingLeft: space[5], color: color.ink2 }}>{talle(v.f.it.size) || 'Única'}</Td>
                           <Td style={{ fontSize: font.sm, color: color.mut }}>{v.f.it.sku || '—'}</Td>
+                          <Td />
+                          <Td />
                           <Td align="center" style={{ color: color.mut2 }}>{v.f.d.vendidas}</Td>
+                          <Td />
                           <Td align="center">{v.sobra}</Td>
                           <Td align="center" tall>
                             <input

@@ -1,6 +1,6 @@
 // La devolución como solicitud (Darío, 15-oct-2026): el orden de prioridad, la bolsa y el resumen.
 import { describe, it, expect } from 'vitest'
-import { bolsaDeLectura, bolsaPorDefecto, conBolsa, fusionar, lineasDe, porProducto, propuesta, resumenSolicitud, vendidasPorProducto } from '@/lib/reposicion/solicitud'
+import { bolsaDeLectura, bolsaPorDefecto, conBolsa, filtrarPropuesta, fusionar, lineasDe, porProducto, propuesta, resumenSolicitud, vendidasPorProducto } from '@/lib/reposicion/solicitud'
 import type { FilaVentas } from '@/lib/reposicion/porVentas'
 import type { LineaPedido } from '@/lib/reposicion/armado'
 
@@ -40,6 +40,27 @@ describe('la propuesta', () => {
 
   it('un cambio (venta en negativo) descuenta: vendió 1 y lo devolvió = sin ventas', () => {
     expect(vendidasPorProducto({ '9_36': 1, '9_38': -1 })).toEqual({ '9': 0 })
+  })
+
+  it('🔑 lo que vende va por SEMANAS DE STOCK, no por lo que sobra (Darío, 19-oct-2026)', () => {
+    // 21 en el local y 3 ventas en 60 días ⇒ 60 semanas. Top Zara sobra más pero vende 28 ⇒ 4 semanas.
+    const orsa = [F('20', 'BE', 'RTO-0065-BE', 'TOP ORSA', 7, 0), F('20', 'NG', 'RTO-0065-NG', 'TOP ORSA', 7, 2), F('20', 'CT', 'RTO-0065-CT', 'TOP ORSA', 1, 1)]
+    const zara = [F('21', 'S', 'RTO-0152-S', 'TOP ZARA', 11, 28)]
+    const g = propuesta([...zara, ...orsa])
+    expect(g.map((x) => [x.name, x.local, x.semanas])).toEqual([
+      ['TOP ORSA', 21, 60],
+      ['TOP ZARA', 13, 4],
+    ])
+  })
+
+  it('lo nuevo se mide con sus días de vida, no con los 60', () => {
+    const nuevo = { ...F('22', 'U', 'RTO-0999-U', 'TOP NUEVO', 2, 2), d: { devolver: 2, vendidas: 2, dias: 14 } } as unknown as FilaVentas
+    expect(propuesta([nuevo])[0].semanas).toBe(4) // 4 en el local, 1 por semana
+  })
+
+  it('sin ventas no tiene semanas (y un cambio que deja el neto en 0 es «sin ventas»)', () => {
+    const g = propuesta([F('23', 'U', 'RTO-0998-U', 'TOP X', 1, 0)], {}, { '23': -1 })
+    expect(g[0]).toMatchObject({ prioridad: 'sin-ventas', semanas: null })
   })
 
   it('lo que ya está en una solicitud no se propone dos veces', () => {
@@ -99,5 +120,25 @@ describe('confirmar y resumir', () => {
       ['RBE-0002', false],
       ['RTO-0004', true],
     ])
+  })
+})
+
+describe('el buscador de la Propuesta', () => {
+  const gs = propuesta([
+    F('30', '36', 'RSH-0100-36', 'SHORT CLIFF', 1, 0),
+    F('31', '38', 'RJE-0070-38', 'JEAN ÍNDIGO', 1, 2),
+    F('32', 'S', 'RTO-0065-BE', 'TOP ORSA', 3, 1),
+  ])
+  it('por nombre, sin tildes ni mayúsculas', () => {
+    expect(filtrarPropuesta(gs, 'indigo').map((g) => g.name)).toEqual(['JEAN ÍNDIGO'])
+    expect(filtrarPropuesta(gs, 'Short').map((g) => g.name)).toEqual(['SHORT CLIFF'])
+  })
+  it('por código del producto o SKU de la variante', () => {
+    expect(filtrarPropuesta(gs, 'rje').map((g) => g.name)).toEqual(['JEAN ÍNDIGO'])
+    expect(filtrarPropuesta(gs, 'RTO-0065-BE').map((g) => g.name)).toEqual(['TOP ORSA'])
+  })
+  it('vacío = todo; varias palabras = todas', () => {
+    expect(filtrarPropuesta(gs, '  ')).toHaveLength(3)
+    expect(filtrarPropuesta(gs, 'top short')).toHaveLength(0)
   })
 })

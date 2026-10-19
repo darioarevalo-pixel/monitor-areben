@@ -20,7 +20,7 @@
  * eligen qué vuelve, por prioridad y sin tope diario, y la envían al local.
  */
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { useRecargarDatos } from '@/components/productos/BotonRecargar'
@@ -28,7 +28,7 @@ import { puedeEliminarTn } from '@/components/caducados/eliminarTn'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { dispararSyncStock } from '@/lib/sync-gn'
-import { indexarTn } from '@/lib/tn'
+import { indexarTn, matchTn } from '@/lib/tn'
 import { construirInv } from '@/lib/reposicion/inventario'
 import { aplicarCats } from '@/lib/reposicion/core'
 import { CAMPO_LINEA, cfgVentas, decidirTodo, hoyAR, listaLlevar, type CfgVentas, type FilaVentas, type LineaZ, type MarcaModo, type Modo } from '@/lib/reposicion/porVentas'
@@ -41,7 +41,7 @@ import { useEtiquetasCampania } from '@/components/etiquetas/useEtiquetasCampani
 import { ArmadoLector } from './ArmadoLector'
 import { OpcionesBdi } from './OpcionesBdi'
 import { HistorialArmados } from './HistorialArmados'
-import { SolicitudDevolucion } from './SolicitudDevolucion'
+import { SolicitudDevolucion, type DatoTn } from './SolicitudDevolucion'
 import { abrirArmado, articuloDe, cambiarCantidadesArmado, codigoArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type LineaPedido, type Sentido } from '@/lib/reposicion/armado'
 import { cambiarCantidades, transferidoDe } from '@/lib/reposicion/armado.core.js'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
@@ -77,6 +77,19 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     [rep.rawInv, prodById, tnIdx, rep.s7, vv, cfg.catsOff, linea],
   )
   const filas = useMemo(() => decidirTodo(inv, cfg, hoy, linea), [inv, cfg, hoy, linea])
+  // La Propuesta de devolución muestra el alta en Tienda Nube y si tiene precio promocional (Darío,
+  // 19-oct-2026). Se cruza con el producto de GN (su SKU y nombre), como las categorías.
+  const tnDe = useCallback(
+    (g: { pid: string; name: string; sku?: string }): DatoTn | null => {
+      if (!tnIdx) return null
+      const p = prodById[g.pid]
+      const tn = matchTn({ sku: p?.sku ?? g.sku ?? null, name: p?.name ?? g.name }, tnIdx)
+      if (!tn) return null
+      const promo = !!tn.promo_price && tn.promo_price > 0 && (!tn.price || tn.promo_price < tn.price)
+      return { alta: tn.created_at ?? null, promo }
+    },
+    [tnIdx, prodById],
+  )
   const llevar = useMemo(() => listaLlevar(filas), [filas])
   const exhibidos = useMemo(() => filas.filter((f) => f.d.modo.modo === 'exhibido'), [filas])
 
@@ -472,6 +485,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             rotulo={ETIQUETA_LINEA[linea]}
             filas={filas}
             vv={vv}
+            tnDe={tnDe}
             armado={armados.devolver}
             stockViejo={transferidoDespues(armados.devolver)}
             puedeAprobar={puedeMarcar}
