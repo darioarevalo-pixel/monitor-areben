@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { baseDeLinea, esStunned, lineaDe, lineaVigente, lineasDeMarca, LINEAS } from '@/lib/lineas'
+import { baseDeLinea, esStunned, lineaDe, lineaVigente, lineasDeMarca, skuParaLinea, LINEAS } from '@/lib/lineas'
 import { esStunned as esStunnedMemo, lineaDe as lineaDeMemo } from '@/lib/memo/foto.core.js'
 import { lineaDe as lineaDeConteo } from '@/lib/conteo-estandar/core'
 import { marcaDePermisos, puedeVerAlguna } from '@/lib/permisos'
@@ -40,6 +40,25 @@ describe('lineaDe: el store va primero y no es decorativo', () => {
     expect(lineaDe('bdi', 'STU-1')).toBe('bdi')
     expect(lineaDe('zattia', 'STU-1')).toBe('stunned')
     expect(lineaDe('zattia', 'ZAT-1')).toBe('zattia')
+  })
+})
+
+describe('skuParaLinea: el proveedor cubre al SKU que falta', () => {
+  it('🔴 el drop del 7-sep: sin SKU y proveedor STUNNED ⇒ Stunned (antes contaba como Zattia)', () => {
+    expect(lineaDe('zattia', skuParaLinea({ sku: null, proveedor: 'STUNNED' }))).toBe('stunned')
+    expect(lineaDe('zattia', skuParaLinea({ sku: '', proveedor: ' stunned ' }))).toBe('stunned')
+  })
+  it('el SKU cargado manda: el proveedor ⛔ lo pisa', () => {
+    expect(skuParaLinea({ sku: 'ZAT-1', proveedor: 'STUNNED' })).toBe('ZAT-1')
+    expect(skuParaLinea({ sku: 'STU-1', proveedor: 'ZATTIA' })).toBe('STU-1')
+  })
+  it('sin SKU y otro proveedor (o ninguno) sigue siendo Zattia', () => {
+    expect(lineaDe('zattia', skuParaLinea({ sku: null, proveedor: 'ZATTIA' }))).toBe('zattia')
+    expect(lineaDe('zattia', skuParaLinea({ sku: null }))).toBe('zattia')
+    expect(lineaDe('zattia', skuParaLinea(null))).toBe('zattia')
+  })
+  it('en BDI el proveedor tampoco hace Stunned', () => {
+    expect(lineaDe('bdi', skuParaLinea({ sku: null, proveedor: 'STUNNED' }))).toBe('bdi')
   })
 })
 

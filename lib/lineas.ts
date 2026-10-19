@@ -17,6 +17,7 @@ import {
   lineaDe as lineaDeJs,
   lineasDeMarca as lineasDeMarcaJs,
   lineaVigente as lineaVigenteJs,
+  skuParaLinea as skuParaLineaJs,
 } from './lineas.core.js'
 
 /** Las tres líneas del negocio. ⚠️ NO es `Marca`: Stunned no tiene base ni permisos propios. */
@@ -45,3 +46,4 @@ export const lineasDeMarca = lineasDeMarcaJs as (marca: Marca) => Linea[]
 export const lineaVigente = lineaVigenteJs as (elegida: Linea | null, marca: Marca) => Linea
 export const esStunned = esStunnedJs as (sku: string | null | undefined) => boolean
 export const lineaDe = lineaDeJs as (store: Marca | string, sku: string | null | undefined) => Linea
+export const skuParaLinea = skuParaLineaJs as (producto: { sku?: string | null; proveedor?: string | null } | null | undefined) => string | null | undefined

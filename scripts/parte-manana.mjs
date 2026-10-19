@@ -24,6 +24,7 @@ import { armarUniverso, criticos, curvaRota, paradoEnDeposito, partirPorLinea, r
 import { fotoDe, indiceDeFotos } from '../lib/parte/fotos.core.js'
 import { abiertosPorTitulo, abiertosPorCasilla } from '../lib/parte/pendientes.core.js'
 import { armarParte } from '../lib/parte/mail.core.js'
+import { skuParaLinea } from '../lib/lineas.core.js'
 import { mandarMail } from './lib/mail.mjs'
 
 // En Actions las variables vienen del entorno; en la Mac, del `.env`, que ⛔ pisa lo ya puesto.
@@ -137,7 +138,7 @@ async function leerCapitulos(base) {
   try {
     const d = await leerBase(base)
     const completo = ayerCompleto(d.syncState, HOY)
-    const skuPor = new Map(d.productos.map((p) => [String(p.id), p.sku]))
+    const skuPor = new Map(d.productos.map((p) => [String(p.id), skuParaLinea(p)]))
     const venta = ventaDeAyer({ base, ventas: d.ventas, detalles: d.detalles, skuPor, hoy: HOY, completo })
 
     let proveedorDe = null

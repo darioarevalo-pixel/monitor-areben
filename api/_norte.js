@@ -36,7 +36,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
-import { baseDeLinea, esLinea } from '../lib/lineas.core.js';
+import { baseDeLinea, esLinea, skuParaLinea } from '../lib/lineas.core.js';
 import { contribucionPorCanal, ventanaUltimos } from '../lib/norte/contribucion.core.js';
 import { pylPorLinea } from '../lib/norte/pyl.core.js';
 import { canalDeMeta, esMedidor, medidorDe } from '../lib/norte/medidores.core.js';
@@ -119,8 +119,8 @@ async function skusDe(supabase, store, detalles) {
   const skuPor = new Map();
   for (let i = 0; i < pids.length; i += 200) {
     const grupo = pids.slice(i, i + 200);
-    const prods = await leerTodo(supabase, 'productos', (q) => q.select('id, sku').in('id', grupo).order('id'));
-    for (const p of prods) skuPor.set(String(p.id), p.sku);
+    const prods = await leerTodo(supabase, 'productos', (q) => q.select('id, sku, proveedor').in('id', grupo).order('id'));
+    for (const p of prods) skuPor.set(String(p.id), skuParaLinea(p));
   }
   return skuPor;
 }

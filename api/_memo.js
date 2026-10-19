@@ -45,6 +45,7 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { leerTodo } from '../lib/supabase/paginar.core.js';
 import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
+import { skuParaLinea } from '../lib/lineas.core.js';
 import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
 import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js';
 import { claveValida, cerrada, esFecha, hoyAr, idSemana, puedeEscribirBloque, semanaAnterior, semanaDe } from '../lib/memo/semana.core.js';
@@ -109,8 +110,8 @@ async function traerRango(store, desde, hasta) {
       skuPor = new Map();
       for (let i = 0; i < pids.length; i += 200) {
         const grupo = pids.slice(i, i + 200);
-        const prods = await leerTodo(sb, 'productos', (q) => q.select('id, sku').in('id', grupo).order('id'));
-        for (const p of prods) skuPor.set(String(p.id), p.sku);
+        const prods = await leerTodo(sb, 'productos', (q) => q.select('id, sku, proveedor').in('id', grupo).order('id'));
+        for (const p of prods) skuPor.set(String(p.id), skuParaLinea(p));
       }
     }
 
