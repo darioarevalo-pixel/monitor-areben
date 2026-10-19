@@ -318,17 +318,36 @@ export async function imprimirTicket(t: DatosTicket, ahoraMs: number, que: 'tick
   if (que === 'cambio') mandar(armarTicketCambio(t, ahoraMs, rollo.medir))
   if (que === 'regalo') {
     const cambio = armarTicketCambio(t, ahoraMs, rollo.medir)
-    setTimeout(() => mandar(cambio, 'caja-print-cambio'), PAUSA_ENTRE_TICKETS)
+    void finDeImpresion(() => document.hasFocus()).then(() => mandar(cambio, 'caja-print-cambio'))
   }
 }
 
 /**
- * Entre el ticket y el de cambio del regalo: que la térmica tome el primero antes de recibir el segundo.
- * 🔴 19-oct: con 1,5 s el local reporta que sale sólo el de precios (el navegador descarta una impresión
- * mientras otra está en curso, callado) ⇒ 4 s. ⛔ Probado en la PC del local: si sigue, el de cambio sale
- * con su botón (última venta o «Ventas»), que es una impresión sola.
+ * 🔴 El de cambio del regalo sale cuando TERMINA la impresión del primero (Bruno, 19-oct: «en GN se imprimía
+ * uno, con Enter se generaba la segunda impresión»). La PC del local imprime con el cuadro de diálogo, y una
+ * impresión pedida con el cuadro abierto el navegador la descarta callado: a 1,5 s fijos salía sólo el de
+ * precios (reportes del 14 y 19-oct).
+ * Mientras el cuadro está abierto la página ⛔ tiene el foco ⇒ se espera a que lo pierda y lo recupere (la
+ * cajera apretó Enter o Cancelar). Si en `SIN_DIALOGO_MS` ⛔ lo perdió, no hubo cuadro (`--kiosk-printing`) y
+ * sale igual. Con el cuadro abierto más de `TECHO_MS`, sale igual: ⛔ queda colgado para la venta que sigue.
  */
-const PAUSA_ENTRE_TICKETS = 4000
+export function finDeImpresion(tieneFoco: () => boolean, { cadaMs = 250, sinDialogoMs = SIN_DIALOGO_MS, techoMs = TECHO_MS, despuesMs = 400 } = {}): Promise<void> {
+  return new Promise((listo) => {
+    const desde = Date.now()
+    let perdio = false
+    const t = setInterval(() => {
+      const pasado = Date.now() - desde
+      if (!tieneFoco()) perdio = true
+      const termino = perdio ? tieneFoco() : pasado >= sinDialogoMs
+      if (!termino && pasado < techoMs) return
+      clearInterval(t)
+      // Un respiro para que el cuadro termine de cerrarse antes de abrir el segundo.
+      setTimeout(listo, despuesMs)
+    }, cadaMs)
+  })
+}
+const SIN_DIALOGO_MS = 3000
+const TECHO_MS = 3 * 60_000
 
 /**
  * El TICKET DEL CIERRE (Bruno, 13-oct): lo cobrado POR FORMA DE PAGO (crédito es crédito, como el cierre de

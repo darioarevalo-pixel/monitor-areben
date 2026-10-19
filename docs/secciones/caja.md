@@ -545,3 +545,6 @@ Dos causas, medidas en prod:
 - 🔴 **Regalo: «sólo salió el de precios»** (reporte 14-oct). El de cambio lo lanza la página 1,5 s después
   y, si el navegador lo descarta (con el diálogo de imprimir abierto, sin `--kiosk-printing`), ⛔ avisa.
   La tarjeta de la última venta deja «Imprimir ticket de cambio» resaltado cuando fue regalo.
+  🔑 Bruno: la PC del local imprime CON cuadro, y en GN el Enter del primero daba pie al segundo ⇒ el de
+  cambio sale cuando la página recupera el foco (`finDeImpresion`); sin cuadro, a los 3 s. El botón
+  «Ticket de cambio» está también en «Ventas» de la pestaña Caja.

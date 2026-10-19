@@ -696,10 +696,8 @@ export function UltimaVenta({
   /** El ticket de cambio solo (regalo, Bruno 13-oct): sin precios. */
   onTicketCambio?: () => void
   /**
-   * 🔴 La venta se cobró con «Regalo» (19-oct): el ticket de cambio sale solo 1,5 s después del de la venta,
-   * y en el local salió sólo el de precios (reporte del 14-oct). Una impresión que lanza la página ⛔ la
-   * ve nadie si el navegador la descarta (con el diálogo de imprimir abierto, la segunda se pierde) ⇒ el
-   * botón queda resaltado y dice que se toque si no salió.
+   * 🔴 La venta se cobró con «Regalo» (19-oct): el ticket de cambio sale solo al cerrarse el cuadro del de la
+   * venta (`finDeImpresion`). Si igual ⛔ sale, ⛔ lo ve nadie ⇒ el botón queda resaltado y dice que se toque.
    */
   regalo?: boolean
   onOtra?: () => void
