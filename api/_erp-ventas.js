@@ -271,7 +271,7 @@ export async function cobrarVentaErp({ marca, body, usuario }, deps = {}) {
   return correr(async (db) => {
     const r = await m.registrarPagoACuenta(db, {
       cliente_id: body.clienteId, marca: body.linea || marca, monto, cuenta: String(body.cuenta), origen_ref: `erp-cobro:${body.ref}`,
-      usuario, prueba: body.prueba !== false, imputar: [{ venta_id: body.ventaId, monto: Math.min(monto, Number(body.saldo) || monto) }],
+      usuario, prueba: body.prueba !== false, ...(body.canal ? { canal: String(body.canal) } : {}), imputar: [{ venta_id: body.ventaId, monto: Math.min(monto, Number(body.saldo) || monto) }],
       ...(body.fecha ? { ocurrida_en: `${body.fecha}T15:00:00.000Z` } : {}),
     })
     return r.ok ? { ok: true, pago: r.pago, cuenta: r.cuenta, yaExistia: r.ya_existia } : errorDe(r.error)

@@ -344,7 +344,7 @@ export const ponerRuta = (marca: MarcaErp, ruta: RutaAPoner) =>
 // ── ERP › Ventas, el PILOTO del diseño (lista + ficha; `api/_erp-ventas.js`, núcleo `lib/erp/ventas-lista.core.js`) ──
 
 export type FilaVentaLista = {
-  kind: 'venta' | 'pedido'; id: string; numero: number | null; ref: string; linea: string; origen: string; tipo: 'venta' | 'cambio'
+  kind: 'venta' | 'pedido'; id: string; numero: number | null; ref: string; linea: string; origen: string; canal?: string | null; tipo: 'venta' | 'cambio'
   ocurridaEn: string; cliente: string; clienteDe: 'erp' | 'gn' | 'falta' | null; clienteId: string | null; total: number; saldo: number
   estadoKey: string; cobroKey: string; origenTexto: string; vendio: string
   factura: { numero: string; de: 'erp' | 'gn' } | null; facturada: boolean
@@ -379,5 +379,5 @@ export const editarVentaErp = (marca: MarcaErp, ventaId: string, cambios: Cambio
   pedir<{ ok: true; ediciones: unknown[] }>(post({ accion: 'editar-venta', marca, ventaId, cambios, clienteDoc: clienteDoc ?? null }), '', 'No se pudo guardar.')
 export const guardarNotaDeVenta = (marca: MarcaErp, ventaId: string, texto: string, reemplazaId: string | null) =>
   pedir<{ ok: true }>(post({ accion: 'nota-venta', marca, ventaId, texto, reemplazaId }), '', 'No se pudo guardar la nota.')
-export const cobrarVentaErp = (marca: MarcaErp, c: { ventaId: string; clienteId: string; linea: string; monto: number; saldo: number; cuenta: string; fecha: string; ref: string; prueba: boolean }) =>
+export const cobrarVentaErp = (marca: MarcaErp, c: { ventaId: string; clienteId: string; linea: string; monto: number; saldo: number; cuenta: string; canal: string | null; fecha: string; ref: string; prueba: boolean }) =>
   pedir<{ ok: true; cuenta: unknown }>(post({ accion: 'cobrar-venta', marca, ...c }), '', 'No se pudo registrar el cobro.')

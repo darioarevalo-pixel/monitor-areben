@@ -64,7 +64,7 @@ export function VentanaCobro({ marca, fila, puede, onCerrar, onHecho }: {
     if (!cuenta) return setError('Elegí la cuenta.')
     setTrabajando(true)
     try {
-      await cobrarVentaErp(marca, { ventaId: fila.id, clienteId: fila.clienteId!, linea: fila.linea, monto: n, saldo: fila.saldo, cuenta, fecha, ref, prueba: fila.prueba })
+      await cobrarVentaErp(marca, { ventaId: fila.id, clienteId: fila.clienteId!, linea: fila.linea, monto: n, saldo: fila.saldo, cuenta, canal: fila.canal ?? null, fecha, ref, prueba: fila.prueba })
       onHecho(`Cobro de ${plata(n)} registrado en la venta ${fila.ref}.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo registrar el cobro.')
