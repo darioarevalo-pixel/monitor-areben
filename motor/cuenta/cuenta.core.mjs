@@ -6,7 +6,8 @@
  * antigüedad se CALCULAN, ⛔ se guardan. Lo que el ERP da solo: cuánto debe cada uno, quién está atrasado, FRENAR a
  * quien debe, y el MAYOR de compras y pagos (Darío) para exportar.
  *
- * Un movimiento: `{ tipo: 'compra'|'pago', ref, fecha: 'AAAA-MM-DD', monto > 0, detalle? }` — de las filas del libro
+ * Un movimiento: `{ tipo: 'compra'|'pago', ref, fecha: 'AAAA-MM-DD', monto > 0, detalle?, imputar? }` — `imputar` (sólo el
+ * pago): `[{ ref: 'venta:<id>', monto }]`, lo que se cobró de ventas PUNTUALES; lo que sobra va a la más vieja — de las filas del libro
  * (`cuenta_movimiento`, sql/025) con `movimientosDeLibro`.
  * La fecha es el DÍA de Argentina (la pone quien lee la base): la antigüedad se cuenta en días enteros.
  */
@@ -53,6 +54,15 @@ export function aplicar(movs) {
       continue
     }
     let resto = pesos(m.monto)
+    // Lo IMPUTADO a ventas puntuales («cobrar esta venta»), primero; si esa venta ya ⛔ debe (se anuló), sigue como el resto.
+    for (const imp of m.imputar ?? []) {
+      const c = compras.find((x) => x.ref === imp.ref)
+      if (!c) continue
+      const usa = Math.min(resto, pesos(imp.monto), c.pendiente)
+      c.pendiente = pesos(c.pendiente - usa)
+      resto = pesos(resto - usa)
+    }
+    // El resto, a la compra más vieja que debe.
     for (; i < compras.length && resto > 0; i++) {
       const usa = Math.min(resto, compras[i].pendiente)
       compras[i].pendiente = pesos(compras[i].pendiente - usa)
@@ -77,14 +87,16 @@ export function movimientosDeLibro(filas) {
     const base = f.tipo === 'anulacion' ? String(f.ref).replace(/:anulacion$/, '') : f.ref
     const m = por.get(base) ?? { ref: base, neto: 0, fecha: null, detalle: '' }
     m.neto = pesos(m.neto + Number(f.monto))
-    if (f.tipo !== 'anulacion') { m.fecha = f.fecha; m.detalle = f.detalle ?? '' }
+    if (f.tipo !== 'anulacion') { m.fecha = f.fecha; m.detalle = f.detalle ?? ''; m.imputar = f.imputar ?? null }
     por.set(base, m)
   }
   const movs = []
   for (const m of por.values()) {
     if (casi0(m.neto)) continue
     if (!m.fecha) throw new Error(`anulación sin su movimiento: ${m.ref}`)
-    movs.push({ tipo: m.neto > 0 ? 'compra' : 'pago', ref: m.ref, fecha: m.fecha, monto: Math.abs(m.neto), detalle: m.detalle })
+    const mov = { tipo: m.neto > 0 ? 'compra' : 'pago', ref: m.ref, fecha: m.fecha, monto: Math.abs(m.neto), detalle: m.detalle }
+    if (mov.tipo === 'pago' && m.imputar?.length) mov.imputar = m.imputar.map((x) => ({ ref: `venta:${x.venta_id}`, monto: Number(x.monto) }))
+    movs.push(mov)
   }
   return movs
 }

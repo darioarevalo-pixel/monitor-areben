@@ -89,7 +89,7 @@ export async function ponerCredito(db, e) {
   const dias = e.dias == null || e.dias === '' ? null : Number(e.dias)
   if (tope != null && !(tope > 0)) return fallo('ENTRADA_INVALIDA', 'El tope es un monto mayor a 0, o vacío (sin tope)', 'tope')
   if (dias != null && !(Number.isInteger(dias) && dias >= 1 && dias <= 365)) return fallo('ENTRADA_INVALIDA', 'El plazo es de 1 a 365 días, o vacío (sin plazo)', 'dias')
-  if (!e.credito && (tope != null || dias != null)) return fallo('ENTRADA_INVALIDA', 'Sin crédito ⛔ lleva tope ni plazo', 'credito')
+  if (!e.credito && (tope != null || dias != null)) return fallo('ENTRADA_INVALIDA', 'Sin crédito no lleva tope ni plazo', 'credito')
   const [c] = await q(db, 'select id::text, empresa_id from cliente where id = $1 and empresa_id = $2', [e.cliente_id, e.empresa_id])
   if (!c) return fallo('NO_ENCONTRADO', 'No está ese cliente en esa empresa', 'cliente_id')
   await q(db, 'insert into cliente_credito (empresa_id, cliente_id, credito, tope, dias, usuario) values ($1, $2, $3, $4, $5, $6)', [c.empresa_id, c.id, e.credito, tope, dias, usuario])
@@ -109,11 +109,35 @@ export async function frenoACuenta(db, { cliente_id, marca, prueba = false, mont
 }
 
 /**
+ * Lo que DEBE cada venta en la cuenta corriente (la lista de Ventas, contrato §16): `{ ok, pendientes: { [venta_id]: $ } }`.
+ * Una venta sin parte a cuenta, o ya pagada, da 0.
+ * @param {{ venta_ids: string[], hoy?: string }} e
+ */
+export async function pendienteDeVentas(db, { venta_ids, hoy = null }) {
+  if (!Array.isArray(venta_ids) || venta_ids.some((v) => !UUID.test(String(v)))) return fallo('ENTRADA_INVALIDA', 'venta_ids es una lista de ventas', 'venta_ids')
+  const pendientes = Object.fromEntries(venta_ids.map((v) => [v, 0]))
+  if (!venta_ids.length) return { ok: true, pendientes }
+  const cuentas = await q(db, `select distinct cliente_id::text, marca, prueba from cuenta_movimiento where venta_id = any($1::uuid[])`, [venta_ids])
+  const dia = hoy ?? await hoyAR(db)
+  for (const k of cuentas) {
+    const credito = await creditoDe(db, k.cliente_id)
+    const { pendientes: p } = estado({ movs: movimientosDeLibro(await filasDe(db, k)), credito, hoy: dia })
+    for (const x of p) {
+      const id = x.ref.replace(/^venta:/, '')
+      if (id in pendientes) pendientes[id] = x.pendiente
+    }
+  }
+  return { ok: true, pendientes }
+}
+
+/**
  * Un PAGO A CUENTA: el cliente paga un monto que baja su deuda (se aplica a la compra más vieja). Entra por una cuenta
  * de cobro de la marca (⛔ «Saldo a favor» ni «Cuenta corriente»), con su medio y la cuenta real de la ruta vigente
  * (sql/020), como el cobro de una venta. Repetir con el mismo `origen_ref` devuelve el mismo.
+ * `imputar` («cobrar esta venta», contrato §16): `[{ venta_id, monto }]` — esa parte va a esas ventas (⛔ más que lo que
+ * cada una debe); lo que sobra va a la más VIEJA que debe, y sólo queda a favor si ⛔ debe nada (Bruno y Darío, 18-oct).
  * @param {{ cliente_id: string, marca: string, monto: number, cuenta: string|number, cuenta_real?: string, canal?: string,
- *   origen_ref: string, usuario: string, prueba: boolean, ocurrida_en?: string }} e
+ *   origen_ref: string, usuario: string, prueba: boolean, ocurrida_en?: string, imputar?: Array<{ venta_id: string, monto: number }> }} e
  */
 export async function registrarPagoACuenta(db, e) {
   if (!UUID.test(String(e?.cliente_id ?? ''))) return fallo('ENTRADA_INVALIDA', 'Falta el cliente', 'cliente_id')
@@ -125,11 +149,18 @@ export async function registrarPagoACuenta(db, e) {
   if (!usuario) return fallo('ENTRADA_INVALIDA', 'Falta quién lo registra', 'usuario')
   if (typeof e.prueba !== 'boolean') return fallo('ENTRADA_INVALIDA', 'Falta decir si es de prueba', 'prueba')
   if (e.ocurrida_en != null && Number.isNaN(Date.parse(e.ocurrida_en))) return fallo('ENTRADA_INVALIDA', 'Fecha inválida', 'ocurrida_en')
+  const imputar = e.imputar ?? []
+  if (!Array.isArray(imputar)) return fallo('ENTRADA_INVALIDA', 'imputar es una lista de { venta_id, monto }', 'imputar')
+  for (const [i, x] of imputar.entries()) {
+    if (!UUID.test(String(x?.venta_id ?? '')) || !(pesos(x.monto) > 0)) return fallo('ENTRADA_INVALIDA', 'Cada imputación lleva la venta y un monto mayor a 0', `imputar[${i}]`)
+  }
+  if (new Set(imputar.map((x) => x.venta_id)).size !== imputar.length) return fallo('ENTRADA_INVALIDA', 'Una venta aparece dos veces', 'imputar')
+  if (pesos(imputar.reduce((s, x) => s + pesos(x.monto), 0)) > monto) return fallo('IMPUTA_DE_MAS', 'Lo imputado a las ventas suma más que el pago', 'imputar')
   return enTransaccion(db, async () => {
     const [c] = await q(db, 'select id::text, empresa_id from cliente where id = $1', [e.cliente_id])
     if (!c) return fallo('NO_ENCONTRADO', 'No está ese cliente', 'cliente_id')
     // Primero el candado: dos reintentos del mismo pago a la vez ⇒ el segundo ve el primero (⛔ choca con el unique).
-    await cuentaBloqueada(db, { cliente_id: c.id, marca: e.marca, prueba: e.prueba })
+    const { estado: antes } = await cuentaBloqueada(db, { cliente_id: c.id, marca: e.marca, prueba: e.prueba })
     const [y] = await q(db, 'select cliente_id::text, marca, monto::float, prueba from cuenta_movimiento where empresa_id = $1 and ref = $2', [c.empresa_id, ref])
     if (y) {
       if (y.cliente_id === c.id && y.marca === e.marca && y.monto === -monto && y.prueba === e.prueba) return { ok: true, pago: { ref, monto }, ya_existia: true, cuenta: await saldoDe(db, c.id, e.marca, e.prueba) }
@@ -139,13 +170,20 @@ export async function registrarPagoACuenta(db, e) {
     if (!conf.marcas[e.marca]) return fallo('MARCA_DESCONOCIDA', `Marca desconocida: ${e.marca}`, 'marca')
     const cuenta = cuentaDeCobro(conf, e.marca, e.cuenta)
     if (!cuenta) return fallo('CUENTA_DESCONOCIDA', `La cuenta de cobro ${e.cuenta} no es de ${e.marca}`, 'cuenta')
-    if (cuenta.medio === 'saldo' || cuenta.medio === 'cuenta') return fallo('CUENTA_DESCONOCIDA', `Un pago a cuenta entra con plata, ⛔ con «${cuenta.nombre}»`, 'cuenta')
+    if (cuenta.medio === 'saldo' || cuenta.medio === 'cuenta') return fallo('CUENTA_DESCONOCIDA', `Un pago a cuenta entra con plata, no con «${cuenta.nombre}»`, 'cuenta')
     const en = new Date(e.ocurrida_en ?? Date.now()).toISOString()
     const real = cobroReal({ monto, elegida: e.cuenta_real ?? null }, cuenta, { marca: e.marca, canal: e.canal ?? 'mayorista', en }, conf)
     if (!real.ok) return fallo(real.codigo, real.mensaje, 'cuenta_real')
+    const debe = new Map(antes.pendientes.map((p) => [p.ref, p.pendiente]))
+    for (const [i, x] of imputar.entries()) {
+      const pend = debe.get(`venta:${x.venta_id}`) ?? 0
+      if (!pend) return fallo('VENTA_SIN_SALDO', 'Esa venta no debe nada en la cuenta de este cliente', `imputar[${i}].venta_id`)
+      if (pesos(x.monto) > pend + 0.005) return fallo('IMPUTA_DE_MAS', `Esa venta debe ${pend}`, `imputar[${i}].monto`)
+    }
     await insertarFila(db, {
       empresa_id: c.empresa_id, marca: e.marca, cliente_id: c.id, tipo: 'pago', ref, monto: -monto, cuenta_cobro_id: cuenta.id,
-      medio: real.cobro.medio ?? null, cuenta_real_id: real.cobro.cuenta_real_id ?? null, detalle: {}, prueba: e.prueba, usuario, ocurrida_en: en,
+      medio: real.cobro.medio ?? null, cuenta_real_id: real.cobro.cuenta_real_id ?? null,
+      detalle: imputar.length ? { imputar: imputar.map((x) => ({ venta_id: x.venta_id, monto: pesos(x.monto) })) } : {}, prueba: e.prueba, usuario, ocurrida_en: en,
     })
     return { ok: true, pago: { ref, monto, cuenta: cuenta.nombre, medio: real.cobro.medio ?? null }, ya_existia: false, cuenta: await saldoDe(db, c.id, e.marca, e.prueba) }
   })
