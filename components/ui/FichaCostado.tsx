@@ -5,7 +5,8 @@
  * X, con Escape o tocando el fondo; en el celular ocupa la pantalla entera. Adentro va lo de cada sección.
  *
  * `Historial` — la línea de tiempo de una ficha: cada hecho con ícono, quién y cuándo; una edición, antes → después.
- * `BarraSeleccion` — la barra flotante de las filas tildadas (acciones en lote).
+ * `BarraSeleccion` — la barra flotante de las filas tildadas (acciones en lote); `AccionSeleccion`, cada botón de adentro.
+ * `DatoFicha` — un dato de la ficha (título chico arriba, valor abajo); van en una grilla que se acomoda sola.
  */
 
 import { useEffect } from 'react'
@@ -81,6 +82,20 @@ export function Historial({ hechos, cuandoTexto }: { hechos: HechoHistorial[]; c
   )
 }
 
+export function DatoFicha({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+      <span style={{ fontSize: font.sm, color: color.mut }}>{titulo}</span>
+      <span style={{ color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>{children}</span>
+    </div>
+  )
+}
+
+/** La grilla de los `DatoFicha`: tantas columnas de 150 px como entren. */
+export function DatosFicha({ children }: { children: React.ReactNode }) {
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: space[3] }}>{children}</div>
+}
+
 export function BarraSeleccion({ cuantas, onSoltar, children }: { cuantas: number; onSoltar: () => void; children: React.ReactNode }) {
   if (!cuantas) return null
   return (
@@ -89,5 +104,13 @@ export function BarraSeleccion({ cuantas, onSoltar, children }: { cuantas: numbe
       {children}
       <button type="button" onClick={onSoltar} style={{ height: 34, padding: '0 10px', border: 0, borderRadius: 8, background: 'transparent', color: '#cbd5e1', cursor: 'pointer', fontWeight: weight.semibold }}>Soltar</button>
     </div>
+  )
+}
+
+export function AccionSeleccion({ icono, onClick, children }: { icono: NombreIcono; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 12px', border: 0, borderRadius: 8, background: 'rgba(255,255,255,0.12)', color: '#fff', cursor: 'pointer', fontWeight: weight.semibold }}>
+      <Icono nombre={icono} size={16} />{children}
+    </button>
   )
 }

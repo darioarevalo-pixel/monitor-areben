@@ -14,11 +14,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import {
-  Button, EmptyState, Icono, MenuAcciones, Notice, Select, StatusPill, color, font, space, weight, type AccionMenu, type Tone,
+  Button, EmptyState, Icono, MenuAcciones, Notice, Select, color, font, space, weight, type AccionMenu,
 } from '@/components/ui'
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
-import { BarraSeleccion } from '@/components/ui/FichaCostado'
+import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
+import { BuscadorLista, ChipEstado, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerListaDeVentas, type FilaVentaLista, type MarcaErp, type QueSabeElMotor } from '@/lib/erp/cliente'
 import {
   COBRO, COLUMNAS, ESTADO, ORIGEN, PERIODOS, VISTAS, accionesDeFila, alternarColumna, contarVistas, filtrar, moverColumna,
@@ -31,18 +32,6 @@ import { VentanaCobro, VentanaEditar } from './VentanasVenta'
 
 export type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
 type Ventana = { tipo: 'cobro' | 'editar'; fila: FilaVentaLista; desdeFicha: boolean } | null
-
-/** «18/10 10:40», en hora argentina (UTC−3). */
-export const cuandoCorto = (iso: string) => {
-  const d = new Date(Date.parse(iso) - 3 * 3600_000).toISOString()
-  return `${d.slice(8, 10)}/${d.slice(5, 7)} ${d.slice(11, 16)}`
-}
-
-export const chipDe = (mapa: Record<string, [Tone, string]>, k: string) => {
-  const [tono, texto] = mapa[k] || ['neutral', k]
-  // Con la columna angosta (monitor de 1333 px) el chip largo («Compra pendiente en GN») termina en «…» y lo dice entero al pasar el mouse.
-  return <span title={texto} style={{ display: 'inline-flex', maxWidth: '100%', verticalAlign: 'middle' }}><StatusPill tone={tono as Tone} style={{ maxWidth: '100%', minWidth: 0 }} label={<span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{texto}</span>} /></span>
-}
 
 /** El `Select` del kit es de ancho 100% (formularios): en la barra cada desplegable mide lo suyo, ⛔ una fila entera. */
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
@@ -149,8 +138,8 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
         </span>
       )
     }
-    if (k === 'e') return chipDe(ESTADO, f.estadoKey)
-    if (k === 'p') return chipDe(COBRO, f.cobroKey)
+    if (k === 'e') return <ChipEstado mapa={ESTADO} k={f.estadoKey} />
+    if (k === 'p') return <ChipEstado mapa={COBRO} k={f.cobroKey} />
     if (k === 'total') return <b>{plata(f.total)}</b>
     if (k === 'fac') return f.factura ? <span style={{ color: color.ink2 }}>{f.factura.numero}{f.factura.de === 'gn' && <span style={{ marginLeft: 4, fontSize: font.xs, color: color.mut2 }}>GN</span>}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'ven') return <span style={{ color: color.ink2 }}>{f.vendio}</span>
@@ -181,14 +170,6 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
     )
   }
 
-  const tile = (titulo: string, valor: string, oscuro = false, nota?: string) => (
-    <div style={{ flex: '1 1 180px', minWidth: 0, padding: '14px 16px', borderRadius: 14, background: oscuro ? 'var(--mo-side-bg)' : color.surface, border: oscuro ? 0 : `1px solid ${color.line}`, color: oscuro ? '#fff' : color.ink }}>
-      <div style={{ fontSize: font.sm, color: oscuro ? '#94a3b8' : color.mut }}>{titulo}</div>
-      <div style={{ fontSize: oscuro ? 26 : 20, fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{valor}</div>
-      {nota && <div style={{ fontSize: font.sm, color: oscuro ? '#94a3b8' : color.mut }}>{nota}</div>}
-    </div>
-  )
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título «Ventas» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
@@ -199,43 +180,20 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
       {aviso && <Notice tone="success" onClose={() => setAviso(null)}>{aviso}</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-        {tile(`Vendido · ${nombrePeriodo.toLowerCase()}`, plata(res.vendido), true)}
-        {tile('Ventas', res.ventas.toLocaleString('es-AR'))}
-        {tile('Ticket promedio', plata(res.ticket))}
-        {tile('Por cobrar', plata(res.porCobrar), false, res.sinPagar ? `y ${plata(res.sinPagar)} en pedidos sin pagar` : undefined)}
+        <TileResumen titulo={`Vendido · ${nombrePeriodo.toLowerCase()}`} valor={plata(res.vendido)} oscuro />
+        <TileResumen titulo="Ventas" valor={res.ventas.toLocaleString('es-AR')} />
+        <TileResumen titulo="Ticket promedio" valor={plata(res.ticket)} />
+        <TileResumen titulo="Por cobrar" valor={plata(res.porCobrar)} nota={res.sinPagar ? `y ${plata(res.sinPagar)} en pedidos sin pagar` : undefined} />
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
-        <div role="tablist" aria-label="Vistas" style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', padding: '12px 12px 0' }}>
-          {VISTAS.map(([k, nombre]) => {
-            const on = vista === k
-            return (
-              <button
-                key={k} type="button" role="tab" aria-selected={on} onClick={() => { setVista(k); setSeleccion(new Set()) }}
-                style={{ height: 32, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 12px', borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', fontSize: 13.5, fontWeight: weight.semibold, border: `1px solid ${on ? 'var(--mo-side-bg)' : color.line}`, background: on ? 'var(--mo-side-bg)' : color.surface, color: on ? '#fff' : color.ink2 }}
-              >
-                {nombre}
-                <span style={{ fontSize: 12, fontWeight: weight.bold, padding: '0 6px', borderRadius: 999, background: on ? 'rgba(255,255,255,0.18)' : color.bg2, color: on ? '#fff' : color.mut }}>{(conteo[k] ?? 0).toLocaleString('es-AR')}</span>
-              </button>
-            )
-          })}
-        </div>
+        <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <label style={{ flex: '1 1 240px', display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 10px', border: `1px solid ${color.line2}`, borderRadius: 9 }}>
-            <Icono nombre="lupa" size={16} style={{ color: color.mut2 }} />
-            <input aria-label="Buscar en las ventas" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Número, pedido de TN, cliente o nota" style={{ flex: 1, border: 0, outline: 0, font: 'inherit', background: 'transparent', minWidth: 0 }} />
-          </label>
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las ventas" placeholder="Número, pedido de TN, cliente o nota" />
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => { setFicha(null); setPeriodo(e.target.value) }}>{PERIODOS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
           <Select aria-label="Origen" style={ANCHO_SELECT} value={origen} onChange={(e) => setOrigen(e.target.value)}>{ORIGENES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
           {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
-          <span style={{ flex: '0 0 auto', display: 'inline-flex', padding: 3, borderRadius: 9, background: color.bg2 }} role="radiogroup" aria-label="Alto de las filas">
-            {(['compacta', 'comoda'] as const).map((d) => (
-              <button key={d} type="button" role="radio" aria-checked={prefs.densidad === d} title={d === 'compacta' ? 'Filas compactas' : 'Filas cómodas'} onClick={() => setPrefs({ ...prefs, densidad: d })}
-                style={{ height: 28, padding: '0 10px', border: 0, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: font.sm, fontWeight: weight.semibold, background: prefs.densidad === d ? color.surface : 'transparent', color: prefs.densidad === d ? color.ink : color.mut, boxShadow: prefs.densidad === d ? '0 1px 2px rgba(16,24,40,0.12)' : undefined }}>
-                {d === 'compacta' ? 'Compacta' : 'Cómoda'}
-              </button>
-            ))}
-          </span>
+          <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
@@ -263,9 +221,7 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
 
       <BarraSeleccion cuantas={elegidas.length} onSoltar={() => setSeleccion(new Set())}>
         <span style={{ color: '#cbd5e1', fontVariantNumeric: 'tabular-nums' }}>{plata(elegidas.reduce((a, f) => a + f.total, 0))}</span>
-        <button type="button" onClick={() => bajarCsv(elegidas)} style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 12px', border: 0, borderRadius: 8, background: 'rgba(255,255,255,0.12)', color: '#fff', cursor: 'pointer', fontWeight: weight.semibold }}>
-          <Icono nombre="bajar" size={16} />Exportar las elegidas
-        </button>
+        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas)}>Exportar las elegidas</AccionSeleccion>
       </BarraSeleccion>
 
       {ficha && (

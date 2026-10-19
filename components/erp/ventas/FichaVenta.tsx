@@ -9,7 +9,8 @@
 
 import { useEffect, useState } from 'react'
 import { Button, Field, MenuAcciones, Modal, Notice, color, font, space, useConfirmar, weight, type AccionMenu } from '@/components/ui'
-import { FichaCostado, Historial, type HechoHistorial } from '@/components/ui/FichaCostado'
+import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial } from '@/components/ui/FichaCostado'
+import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
 import {
   anularVenta, leerExtraDeVenta, leerFichaDeVenta, notaDeCreditoDeVenta,
   type ExtraDeVenta, type FichaDeVenta, type FilaVentaLista, type MarcaErp, type QueSabeElMotor,
@@ -17,7 +18,6 @@ import {
 import { COBRO, ESTADO, historialDeVenta, plata } from '@/lib/erp/ventas-lista.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import { MOTIVO_MINIMO, NOMBRE_CANAL } from '@/lib/erp/venta.core.js'
-import { chipDe, cuandoCorto } from './VentasErp'
 
 const ENTREGA: Record<string, string> = { retira: 'Retira', envio: 'Envío', cadete: 'Cadete' }
 const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
@@ -92,12 +92,6 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     { key: 'anular', label: 'Anular…', icono: 'anular', tone: 'danger', disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) },
   ]
   const hechos: HechoHistorial[] = ficha ? (historialDeVenta(ficha, { ...extra, tn: extra?.tn ?? undefined }) as HechoHistorial[]) : []
-  const dato = (t: string, val: React.ReactNode) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-      <span style={{ fontSize: font.sm, color: color.mut }}>{t}</span>
-      <span style={{ color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>{val}</span>
-    </div>
-  )
   const h3: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
   const nota = extra?.nota ?? fila.nota
 
@@ -110,7 +104,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: weight.bold, overflowWrap: 'anywhere' }}>{fila.cliente}</h2>
           {fila.clienteDe === 'gn' && <div style={{ fontSize: font.sm, color: color.mut }}>el nombre sale de GN</div>}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-            {chipDe(ESTADO, fila.estadoKey)}{chipDe(COBRO, fila.cobroKey)}{fila.prueba && chipDe({ p: ['warning', 'Prueba'] }, 'p')}
+            <ChipEstado mapa={ESTADO} k={fila.estadoKey} /><ChipEstado mapa={COBRO} k={fila.cobroKey} />{fila.prueba && <ChipEstado mapa={{ p: ['warning', 'Prueba'] }} k="p" />}
           </div>
         </div>
         <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
@@ -136,16 +130,16 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           {v?.prueba && <Notice tone="warning">De prueba: corre en paralelo con GN y no movió el stock del libro. La factura real sale de GN.</Notice>}
           {ficha.anulacion && <Notice tone="danger">Anulada el {cuandoCorto(ficha.anulacion.anuladaEn)} por {ficha.anulacion.usuario}: «{ficha.anulacion.motivo}».</Notice>}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: space[3] }}>
-            {dato('Origen', fila.origenTexto)}
-            {dato('Factura', fila.factura ? `${fila.factura.numero}${fila.factura.de === 'gn' ? ' (GN)' : ''}` : 'Sin factura')}
-            {dato('Vendió', extra?.vendedor || fila.vendio)}
-            {dato('Sale de', NOMBRE_DEPOSITO[v!.deposito as keyof typeof NOMBRE_DEPOSITO] ?? v!.deposito)}
-            {dato('Canal', NOMBRE_CANAL[v!.canal as keyof typeof NOMBRE_CANAL] ?? v!.canal)}
-            {dato('Línea', LINEA[v!.marca] ?? v!.marca)}
-            {extra?.entrega && dato('Entrega', [ENTREGA[extra.entrega.tipo], extra.entrega.direccion].filter(Boolean).join(' · '))}
-            {extra?.gnNumero && dato('En GN', `venta ${extra.gnNumero}`)}
-          </div>
+          <DatosFicha>
+            <DatoFicha titulo="Origen">{fila.origenTexto}</DatoFicha>
+            <DatoFicha titulo="Factura">{fila.factura ? `${fila.factura.numero}${fila.factura.de === 'gn' ? ' (GN)' : ''}` : 'Sin factura'}</DatoFicha>
+            <DatoFicha titulo="Vendió">{extra?.vendedor || fila.vendio}</DatoFicha>
+            <DatoFicha titulo="Sale de">{NOMBRE_DEPOSITO[v!.deposito as keyof typeof NOMBRE_DEPOSITO] ?? v!.deposito}</DatoFicha>
+            <DatoFicha titulo="Canal">{NOMBRE_CANAL[v!.canal as keyof typeof NOMBRE_CANAL] ?? v!.canal}</DatoFicha>
+            <DatoFicha titulo="Línea">{LINEA[v!.marca] ?? v!.marca}</DatoFicha>
+            {extra?.entrega && <DatoFicha titulo="Entrega">{[ENTREGA[extra.entrega.tipo], extra.entrega.direccion].filter(Boolean).join(' · ')}</DatoFicha>}
+            {extra?.gnNumero && <DatoFicha titulo="En GN">{`venta ${extra.gnNumero}`}</DatoFicha>}
+          </DatosFicha>
 
           {nota ? (
             <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start', padding: '12px 14px', borderRadius: 10, background: 'var(--mo-warning-bg)', border: '1px solid var(--mo-warning-border)' }}>

@@ -62,7 +62,9 @@ factura · Anuladas), el resumen del filtro ARRIBA, buscador (número, pedido de
 Pantalla `components/erp/ventas/` · núcleo puro `lib/erp/ventas-lista.core.js` (`tests/erp-ventas-lista.test.ts`, también
 el servidor) · servidor `api/_erp-ventas.js` (`vista=ventas-lista`, `vista=venta-extra`, `accion=editar-venta|nota-venta|cobrar-venta`)
 · pantalla en `tests/erp-ventas-pantalla.test.tsx`. Las piezas nuevas son del kit (`components/ui/ListaTrabajo`,
-`PanelColumnas`, `FichaCostado` con `Historial` y `BarraSeleccion`): Stock, Clientes y Productos salen con el mismo molde.
+`PanelColumnas`, `FichaCostado` con `Historial`, `DatoFicha`, `BarraSeleccion` y `AccionSeleccion`, y `PiezasLista`: `TileResumen`,
+`VistasLista`, `BuscadorLista`, `InterruptorDensidad`, `ChipEstado`, `cuandoCorto`): Stock, Clientes y Productos salen con el
+mismo molde. ⛔ se copian en la pantalla nueva (Ajustes ya las usa).
 - 🔑 Lo que el motor ⛔ tiene se LEE de donde está y se dice: el **cliente** (0 de ~950 ventas traen `cliente_id`, medido 18-oct)
   sale del espejo de GN (`ventas.client_name`, por la venta de GN o por `tn_order`) con «de GN»; un pedido online sin nombre
   todavía ⛔ es «consumidor final» (el espejo llega al otro día). El **estado** del pedido, de `tn_orden.estado` (§14.1); el

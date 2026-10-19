@@ -20,7 +20,7 @@ import {
 import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { plata } from '@/lib/erp/ventas-lista.core.js'
-import { cuandoCorto } from './VentasErp'
+import { cuandoCorto } from '@/components/ui/PiezasLista'
 
 const ESPERA = 'Todavía no está en el motor del monitor: se prende cuando la sesión A publique la ficha de la venta (contrato §16).'
 

@@ -13,10 +13,11 @@
 
 import { useEffect, useState } from 'react'
 import {
-  Badge, Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space,
+  Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space,
 } from '@/components/ui'
 import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { FichaCostado } from '@/components/ui/FichaCostado'
+import { ChipEstado, cuandoCorto as cuando } from '@/components/ui/PiezasLista'
 import { color, font } from '@/components/ui/tokens'
 import {
   aprobarAjuste, buscarPrendas, crearAjuste, descartarAjuste, leerAjustes, leerStockDePrenda,
@@ -29,9 +30,7 @@ const LINEAS: Array<{ key: LineaErp; label: string }> = [{ key: 'zattia', label:
 const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
 /** Los motivos que se cargan a mano: el conteo entra solo desde el monitor (⛔ va en el menú). */
 export const MOTIVOS_A_MANO = MOTIVOS.filter((m) => m.key !== 'conteo')
-const ESTADO: Record<string, { label: string; tone: 'warning' | 'success' | 'neutral' }> = {
-  para_aprobar: { label: 'Para aprobar', tone: 'warning' }, aplicado: { label: 'Aplicado', tone: 'success' }, rechazado: { label: 'Descartado', tone: 'neutral' },
-}
+const ESTADO = { para_aprobar: ['warning', 'Para aprobar'], aplicado: ['success', 'Aplicado'], rechazado: ['neutral', 'Descartado'] } as const
 const COLUMNAS: ColumnaLista[] = [
   { key: 'n', titulo: 'Nº', ancho: '64px' },
   { key: 'h', titulo: 'Fecha', ancho: '96px' },
@@ -43,11 +42,6 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'quien', titulo: 'Quién', ancho: 'minmax(120px, 1fr)' },
 ]
 const deposito = (d: string) => (NOMBRE_DEPOSITO as Record<string, string>)[d] ?? d
-const cuando = (iso: string | null) => {
-  if (!iso) return '—'
-  const d = new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString()
-  return `${d.slice(8, 10)}/${d.slice(5, 7)} ${d.slice(11, 16)}`
-}
 const conSigno = (n: number) => (n > 0 ? `+${n}` : String(n))
 const prendaDe = (p: { nombre: string | null; talleNombre: string | null; sku: string | null }) =>
   p.nombre ? `${p.nombre}${p.talleNombre ? ` · ${p.talleNombre}` : ''}` : p.sku ?? 'Prenda sin nombre'
@@ -182,7 +176,7 @@ export function AjustesStock() {
     if (k === 'dep') return deposito(a.deposito)
     if (k === 'prendas') return a.renglones.length
     if (k === 'neto') return conSigno(a.neto)
-    if (k === 'estado') return <Badge tone={ESTADO[a.estado]?.tone ?? 'neutral'}>{ESTADO[a.estado]?.label ?? a.estado}</Badge>
+    if (k === 'estado') return <ChipEstado mapa={ESTADO} k={a.estado} />
     if (k === 'quien') return a.creadoPor
     return null
   }
@@ -314,7 +308,7 @@ export function AjustesStock() {
               <div style={{ fontSize: font.lg, fontWeight: 600 }}>{abierta.motivoNombre}</div>
               {abierta.detalle && <div>{abierta.detalle}</div>}
               <div style={{ color: color.mut }}>{deposito(abierta.deposito)} · {conSigno(abierta.neto)} unidades · cargó {abierta.creadoPor}{abierta.resueltoPor && abierta.resueltoPor !== abierta.creadoPor ? ` · aplicó ${abierta.resueltoPor}` : ''}</div>
-              <div><Badge tone={ESTADO[abierta.estado]?.tone ?? 'neutral'}>{ESTADO[abierta.estado]?.label ?? abierta.estado}</Badge>{abierta.rechazo ? <span style={{ marginLeft: 8 }}>{abierta.rechazo}</span> : null}</div>
+              <div><ChipEstado mapa={ESTADO} k={abierta.estado} />{abierta.rechazo ? <span style={{ marginLeft: 8 }}>{abierta.rechazo}</span> : null}</div>
             </div>
             <TableWrap>
               <THead>
