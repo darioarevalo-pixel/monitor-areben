@@ -157,7 +157,7 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [] }, deps 
   for (const v of ventas) if (v.id in pendientes) v.pendiente = pendientes[v.id]
   const filas = [
     ...ventas.map((v) => armarFila(filaCruda(v, a, numeros))),
-    ...pedidos.map((p) => armarFila({ kind: 'pedido', tienda: p.tienda, tnId: p.tnId, tnNumero: p.numero, creadaEn: p.creadaEn, total: p.total, link: p.link, unidades: p.unidades, clienteGn: null })),
+    ...pedidos.map((p) => armarFila({ kind: 'pedido', tienda: p.tienda, tnId: p.tnId, tnNumero: p.numero, creadaEn: p.creadaEn, total: p.total, link: p.link, unidades: p.unidades, entregadoSinCobrar: !!p.entregadoSinCobrar, clienteGn: null })),
   ]
   return { filas, desde, hasta, puede }
 }

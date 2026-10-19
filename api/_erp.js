@@ -60,7 +60,7 @@ import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { armarConciliacion, TIENDAS as TIENDAS_CONCILIACION } from '../lib/erp/conciliacion.core.js'
-import { NO_SIN_PAGAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
+import { NO_SIN_PAGAR, STATUS_POR_COBRAR, armarPedidosSinPagar } from '../lib/erp/pedidos-tn.core.js'
 import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
@@ -1147,13 +1147,13 @@ export async function altaDeProveedor({ marca, body, usuario }, deps = {}) {
   })
 }
 
-/** Los pedidos de TN abiertos y sin pagar de la base de la marca (Zattia trae también los de Stunned). */
+/** Los pedidos de TN sin pagar de la base de la marca —abiertos, y cerrados = entregados sin cobrar— (Zattia trae también los de Stunned). */
 export async function pedidosSinPagar({ marca }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const { url, key } = cfgDeMarca(marca)
   const b = createClient(url, key)
   const ordenes = await leerTodo(b, 'tn_orden', (x) => x.select('tienda, tn_id, numero, creada_en, status, payment_status, medio, gateway, total')
-    .eq('status', 'open').not('payment_status', 'in', `(${NO_SIN_PAGAR.join(',')})`).order('creada_en'))
+    .in('status', STATUS_POR_COBRAR).not('payment_status', 'in', `(${NO_SIN_PAGAR.join(',')})`).order('creada_en'))
   const ids = ordenes.map((o) => o.tn_id)
   const lineas = []
   for (let i = 0; i < ids.length; i += 200) {

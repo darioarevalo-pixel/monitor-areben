@@ -184,6 +184,8 @@ export const descartarAjuste = (linea: LineaErp, ajusteId: string, motivo: strin
 export type PedidoSinPagar = {
   tienda: string; tnId: string; numero: number; creadaEn: string; dias: number; pago: string; medio: string | null; gateway: string | null
   total: number; unidades: number; prendas: Array<{ nombre: string | null; sku: string | null; cantidad: number }>; link: string | null
+  /** Cerrado en TN sin pago (Bruno, 19-oct): ⛔ retiene stock; se muestra con el aviso «entregado sin cobrar». */
+  entregadoSinCobrar: boolean
 }
 export const leerPedidosSinPagar = (marca: MarcaErp) =>
   pedir<{ pedidos: PedidoSinPagar[]; porTienda: Record<string, { pedidos: number; unidades: number; total: number }>; leidaEn: string | null }>(
