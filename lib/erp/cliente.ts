@@ -186,6 +186,8 @@ export type PedidoSinPagar = {
   total: number; unidades: number; prendas: Array<{ nombre: string | null; sku: string | null; cantidad: number }>; link: string | null
   /** Cerrado en TN sin pago (Bruno, 19-oct): ⛔ retiene stock; se muestra con el aviso «entregado sin cobrar». */
   entregadoSinCobrar: boolean
+  /** El nombre del comprador, leído de TN EN VIVO (⛔ se guarda); null si TN ⛔ contestó. */
+  comprador: string | null
 }
 export const leerPedidosSinPagar = (marca: MarcaErp) =>
   pedir<{ pedidos: PedidoSinPagar[]; porTienda: Record<string, { pedidos: number; unidades: number; total: number }>; leidaEn: string | null }>(
@@ -350,7 +352,7 @@ export type FilaVentaLista = {
   ocurridaEn: string
   /** La fecha que se MUESTRA: la del pedido (en TN, cuando entró; si no, la de la venta). Bruno, 19-oct. */
   pedidoEn: string
-  cliente: string; clienteDe: 'erp' | 'gn' | 'falta' | null; clienteId: string | null; total: number; saldo: number
+  cliente: string; clienteDe: 'erp' | 'gn' | 'tn' | 'falta' | null; clienteId: string | null; total: number; saldo: number
   estadoKey: string; cobroKey: string; origenTexto: string; vendio: string
   factura: { numero: string; de: 'erp' | 'gn' } | null; facturada: boolean
   nota: { id: string; texto: string; de: string } | null; entrega: { tipo: string; direccion?: string } | null
