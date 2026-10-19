@@ -395,6 +395,24 @@ export type ListaDeStock = { filas: FilaStock[]; libroHasta: string | null; pedi
 export const leerListaDeStock = (marca: MarcaErp) =>
   pedir<ListaDeStock>(null, `&vista=stock-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el stock.')
 
+// ── ERP › Productos y precios › Productos (lista de TRABAJO; `api/_erp-productos.js`, núcleo `lib/erp/productos-lista.core.js`) ──
+export type VarianteProducto = {
+  talle: string; talleNombre: string; sku: string | null; barcode: string | null
+  deps: Record<string, number>; estanteria: number; enPedidos: number; disponible: number
+}
+export type FilaProducto = {
+  id: string; producto: string; nombre: string; linea: string; categoria: string | null; proveedor: string | null
+  variantes: VarianteProducto[]; disponible: number; enPedidos: number; negativas: number
+  /** El precio vigente de cada lista en el ERP (`precio_lista`): local · online · mayorista · oferta. */
+  precios: Record<string, number | null>
+  costo: number | null
+  tn: 'publicado' | 'oculto' | 'no'
+  sinBarra: boolean
+}
+export type ListaDeProductos = { filas: FilaProducto[]; libroHasta: string | null; pedidosLeidosEn: string | null; tnLeidaEn: string | null }
+export const leerListaDeProductos = (marca: MarcaErp) =>
+  pedir<ListaDeProductos>(null, `&vista=productos-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los productos.')
+
 // ── ERP › Stock › Movimientos (lista de REGISTRO del libro; `api/_erp-stock.js`, núcleo `lib/erp/movimientos.core.js`) ──
 export type FilaMovimiento = {
   id: string; producto: string; talle: string; linea: string; nombre: string; talleNombre: string; sku: string | null; barcode: string | null

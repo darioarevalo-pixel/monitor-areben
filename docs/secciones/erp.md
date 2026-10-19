@@ -12,7 +12,7 @@ Productos y precios · Clientes y proveedores · Configuración, y «Volver al m
 pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una vieja o mal escrita se corrige sola).
 Las pestañas: Ventas = Ventas · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
 dirección vieja cae en Ventas) · Caja (POS) = Cambio · Factura · Stock =
-Stock · Movimientos · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Precios · Configuración = Reglas · Cuentas de cobro;
+Stock · Movimientos · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Productos (la vieja `/erp/productos/precios` cae ahí) · Configuración = Reglas · Cuentas de cobro;
 Clientes todavía vacía. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
 botones crudos y `select`). Tests: `tests/erp-navegacion*.test.ts*`. El registro (`registro.ts`) conserva `erp` sólo
 porque el test de registro lo exige: el shell ya ⛔ lo monta.
@@ -106,10 +106,21 @@ Y **Facturación** (F5 del plan): el tope del mes, lo ya facturado y las ventas 
 factura, que se facturan con ARCA (ex AFIP) por web service. Reemplaza la facturación masiva de GN
 y el «Pendiente de facturar» del dashboard de Darío.
 
-- 🔑 **`erp › Precios`** (`PreciosProducto.tsx`, 15-oct): precio por LISTA y costo de un producto como los tiene el motor
-  (`precio_vigente`/`costo_vigente`), de dónde salió cada uno y su historial, con GN (`productos.retailer_price`…) y TN
-  (`tn_variante` por los SKU, con cuándo se leyó: puede estar vieja) al lado; avisa local ≠ TN, sin costo y costo de TN ≠ ERP.
-  «Cargar en el ERP» = `cargarPrecio`/`cargarCosto` del motor (contrato §13): fila `carga` que manda sobre las copias, pero
+- 🔑 **`erp › Productos y precios › Productos`** (🎨 19-oct, Diseño 7: lista de TRABAJO con el molde, tablero 5 del v8; reemplaza
+  al «buscá un producto» de `PreciosProducto.tsx`, 15-oct): un producto por fila —variantes, disponible, costo, precio Local ·
+  Online · Mayorista, si está en Tienda Nube (publicado / oculto / no está), categoría, proveedor— con vistas de lo que FALTA
+  (Sin costo · Sin precio mayorista · Sin proveedor · Sin código de barras · Ocultos / No están en TN), resumen arriba,
+  buscador (nombre, SKU, código entero, categoría, proveedor), columnas por usuario (`erp-productos`) y Exportar. 🔑 Medido 19-oct:
+  los activos del motor (`producto.activo`) = los del espejo de GN (BDI 313, Zattia 890 con Stunned). Las variantes y su stock
+  son las filas de la lista de Stock (`listaDeStock`) agrupadas; lo del producto, `precio_lista`, `costo_vigente` y el cruce con
+  TN (`tn_variante` por SKU → `tn_producto.publicado`), por pg (`api/_erp-productos.js`, `vista=productos-lista`; núcleo
+  `lib/erp/productos-lista.core.js`, `tests/erp-productos-*.test.ts*`). ⛔ fotos en la base ⇒ ⛔ vista «Sin foto». ⛔ alta (nace en Ingresos).
+  La FICHA al costado (`components/erp/productos/FichaProducto.tsx`) es lo que era Precios: lee `vista=precio&producto=…` —precio
+  por LISTA y costo como los tiene el motor (`precio_vigente`/`costo_vigente`), de dónde salió cada uno y su historial, con GN
+  (`productos.retailer_price`…) y TN (`tn_variante` por los SKU, con cuándo se leyó: puede estar vieja); avisa local ≠ TN, sin costo
+  y costo de TN ≠ ERP— + cada variante con su stock por depósito (en GN cada color es OTRO producto ⇒ la grilla color × talle del
+  tablero es una fila por variante). «Cargar en el ERP» (`CargarPrecio.tsx`; el $ de la fila abre la ficha con el formulario) =
+  `cargarPrecio`/`cargarCosto` del motor (contrato §13): fila `carga` que manda sobre las copias, pero
   🔴 mientras GN vive ⛔ cambia la Caja ni TN. La `marca` del motor es la LÍNEA (`lineaDe`: un SKU `STU…` es `stunned`).
   El monto pasa por `parsearMonto` (el de compromisos: el punto decimal de `String(n)` ⛔ se lee como miles).
   🔑 **El proveedor NACE EN INGRESOS** (Bruno, 18-oct; motor sql/021): la ficha muestra el proveedor DEL PRODUCTO
