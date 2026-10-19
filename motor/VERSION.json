@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "46675f832bd523e32487bcd1894e231a45c9e0d7",
-  "traido_en": "2026-10-19T19:10:40.621Z",
+  "commit": "3b21b846025b24a72f84f481c25d478b97390c16",
+  "traido_en": "2026-10-19T19:20:20.985Z",
   "archivos": {
     "venta/armar.mjs": "996f754abdee3282f1811e534ac094b3f899a589f926fbbca0a93e5f296e35b2",
     "venta/cliente.mjs": "b0020770f493c272fe4eeaf2ca15026a0b255f8f90a96087a9bfab6baf489392",

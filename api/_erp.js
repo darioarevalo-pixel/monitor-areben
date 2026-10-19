@@ -1160,7 +1160,33 @@ export async function pedidosSinPagar({ marca }) {
     lineas.push(...await leerTodo(b, 'tn_orden_linea', (x) => x.select('tienda, tn_id, nombre, sku, cantidad').in('tn_id', ids.slice(i, i + 200)).order('tn_id').order('linea_id')))
   }
   const [lectura] = (await b.from('tn_lectura').select('tienda, leida_en').order('leida_en', { ascending: false }).limit(1)).data || []
-  return { ...armarPedidosSinPagar({ ordenes, lineas, ahora: Date.now() }), leidaEn: lectura?.leida_en ?? null }
+  const armado = armarPedidosSinPagar({ ordenes, lineas, ahora: Date.now() })
+  const nombres = await compradoresTn(armado.pedidos)
+  for (const p of armado.pedidos) p.comprador = nombres.get(`${p.tienda}/${p.tnId}`) ?? null
+  return { ...armado, leidaEn: lectura?.leida_en ?? null }
+}
+
+/**
+ * El nombre del comprador de cada pedido, leído de TN EN VIVO por la puerta del ERP (`erp.arebensrl.com/api/tn-compradores`,
+ * Bruno 19-oct: ⛔ se guarda en ningún lado). Sin `ERP_LLAVE_MONITOR`, o si la puerta ⛔ contesta en 6 s, la lista sale igual,
+ * sin nombres. @returns {Promise<Map<string, string>>} `tienda/tnId` → nombre
+ */
+export async function compradoresTn(pedidos, { env = process.env, pedir = fetch } = {}) {
+  const out = new Map()
+  if (!env.ERP_LLAVE_MONITOR || !pedidos.length) return out
+  const porTienda = {}
+  for (const p of pedidos) (porTienda[p.tienda] ||= []).push(p.tnId)
+  await Promise.all(Object.entries(porTienda).map(async ([tienda, ids]) => {
+    for (let i = 0; i < ids.length; i += 60) {
+      try {
+        const r = await pedir(`https://erp.arebensrl.com/api/tn-compradores?tienda=${tienda}&ids=${ids.slice(i, i + 60).join(',')}`,
+          { headers: { 'x-erp-llave': env.ERP_LLAVE_MONITOR }, signal: AbortSignal.timeout(6000) })
+        if (!r.ok) { console.warn(`[erp] compradores ${tienda}: HTTP ${r.status}`); continue }
+        for (const [id, nombre] of Object.entries((await r.json()).compradores || {})) if (nombre) out.set(`${tienda}/${id}`, nombre)
+      } catch (e) { console.warn(`[erp] compradores ${tienda}: ${e.name}`) }
+    }
+  }))
+  return out
 }
 
 export default async function handler(req, res) {

@@ -58,6 +58,9 @@ describe('el estado de cada venta', () => {
     expect(clienteDe(venta({ clienteGn: 'Mayorista Norte' }))).toEqual({ nombre: 'Mayorista Norte', de: 'gn' })
     expect(clienteDe(venta({ clienteGn: 'Consumidor Final' }))).toEqual({ nombre: 'Consumidor final', de: null })
     expect(clienteDe(venta({ origen: 'tn', clienteGn: null }))).toEqual({ nombre: 'Sin nombre todavía', de: 'falta' })
+    // Bruno, 19-oct: el pedido sin pagar trae el nombre de TN en vivo; GN y el ERP le siguen ganando
+    expect(clienteDe(venta({ origen: 'tn', clienteGn: null, clienteTn: 'Micaela J.' }))).toEqual({ nombre: 'Micaela J.', de: 'tn' })
+    expect(clienteDe(venta({ origen: 'tn', clienteGn: 'De GN', clienteTn: 'Micaela J.' }))).toEqual({ nombre: 'De GN', de: 'gn' })
   })
 })
 
