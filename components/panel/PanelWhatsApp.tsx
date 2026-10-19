@@ -866,8 +866,19 @@ function PanelInterno({
     }
   }
 
+  /**
+   * 🔑 Las pestañas quedan siempre arriba y cada chat nuevo arranca la ficha desde arriba
+   * (19-oct-2026). Antes el panel quedaba a la altura del cliente anterior y había que subir para
+   * ver Cliente / Hoy / Pagos.
+   */
+  useEffect(() => {
+    try {
+      window.scrollTo(0, 0)
+    } catch {}
+  }, [telNorm, pedido])
+
   const solapas = (
-    <div style={{ display: 'flex', borderBottom: `1px solid ${color.line2}`, background: color.bg2 }}>
+    <div style={{ display: 'flex', borderBottom: `1px solid ${color.line2}`, background: color.bg2, position: 'sticky', top: 0, zIndex: 3 }}>
       {([
         ['cliente', 'Cliente'],
         ['hoy', 'Hoy'],
@@ -1661,6 +1672,9 @@ function Dato({ k, v }: { k: string; v: string }) {
   )
 }
 
+/** Alto de la fila de pestañas: el aviso se pega justo debajo, sin taparlas. */
+const ALTO_SOLAPAS = 31
+
 function Envoltorio({ children, aviso }: { children: React.ReactNode; aviso?: { txt: string; mal?: boolean } | null }) {
   return (
     <div style={{ background: color.bg, color: color.ink, minHeight: '100vh', fontSize: font.sm, paddingBottom: space[3] }}>
@@ -1668,7 +1682,7 @@ function Envoltorio({ children, aviso }: { children: React.ReactNode; aviso?: { 
         <div
           style={{
             position: 'sticky',
-            top: 0,
+            top: ALTO_SOLAPAS,
             zIndex: 2,
             padding: '6px 12px',
             fontSize: font.xs,
