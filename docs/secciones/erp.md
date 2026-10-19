@@ -5,6 +5,17 @@ menú y `esAdmin` en el handler. Bruno, 12-oct-2026: todo lo que el monitor cons
 acá, en pestañas, mientras dura el desarrollo —lo ven él y Darío, prueban y opinan—; cuando reemplace
 a GN se reparte en las secciones de siempre. Plan y mediciones del ERP: `~/Documents/erp-monitor/`.
 
+🔑 **`/erp` es una pantalla PROPIA, como el POS** (Bruno, 19-oct: «que abra una sección completa nueva, que se navegue
+solo sin ir atrás»): sale del shell en `app/[[...seccion]]/page.tsx` (`esERP`, antes de `permitida`: el ERP cambia la
+marca adentro) con SU menú (`components/erp/Erp.tsx`, `SECCIONES_ERP`): Inicio · Ventas + Caja (POS) · Stock ·
+Productos y precios · Clientes y proveedores · Configuración, y «Volver al monitor». Una dirección por sección y por
+pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una vieja o mal escrita se corrige sola).
+Las 12 pestañas de antes: Ventas = Ventas · Pedidos sin pagar · Facturación · Caja (POS) = Cambio · Factura · Stock =
+Stock · Ajustes · Conciliación · Diferencias con GN · Productos = Precios · Configuración = Reglas · Cuentas de cobro;
+Clientes todavía vacía. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
+botones crudos y `select`). Tests: `tests/erp-navegacion*.test.ts*`. El registro (`registro.ts`) conserva `erp` sólo
+porque el test de registro lo exige: el shell ya ⛔ lo monta.
+
 **Stock** (14-oct, sólo lectura): busca una prenda por SKU, código o nombre y muestra lo que dice el
 **libro de stock** (`stock_movimiento`, lo escribe `areben-libro-stock` una vez por día) por depósito al
 lado de GN (`inventario`), y cada movimiento con el saldo después. GN ⛔ tiene historial: ésta lo

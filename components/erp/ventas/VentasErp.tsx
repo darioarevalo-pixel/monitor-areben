@@ -40,8 +40,12 @@ export const cuandoCorto = (iso: string) => {
 
 export const chipDe = (mapa: Record<string, [Tone, string]>, k: string) => {
   const [tono, texto] = mapa[k] || ['neutral', k]
-  return <StatusPill tone={tono as Tone} label={texto} />
+  // Con la columna angosta (monitor de 1333 px) el chip largo («Compra pendiente en GN») termina en «…» y lo dice entero al pasar el mouse.
+  return <span title={texto} style={{ display: 'inline-flex', maxWidth: '100%', verticalAlign: 'middle' }}><StatusPill tone={tono as Tone} style={{ maxWidth: '100%', minWidth: 0 }} label={<span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{texto}</span>} /></span>
 }
+
+/** El `Select` del kit es de ancho 100% (formularios): en la barra cada desplegable mide lo suyo, ⛔ una fila entera. */
+const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
 const ORIGENES: Array<[string, string]> = [['', 'Todos los orígenes'], ['caja', 'Caja'], ['tn', 'Tienda Nube'], ['mayorista', 'Mayorista'], ['ml', 'Mercado Libre']]
 
@@ -187,12 +191,8 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: weight.bold }}>Ventas</h1>
-          <p style={{ margin: '2px 0 0', color: color.mut }}>Caja, Tienda Nube, mayoristas y cambios, en una sola lista.</p>
-        </div>
-      </div>
+      {/* El título «Ventas» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
+      <p style={{ margin: 0, color: color.mut }}>Caja, Tienda Nube, mayoristas y cambios, en una sola lista.</p>
 
       {todasPrueba && <Notice tone="warning">Todo lo de esta lista es <b>de prueba</b>: corre en paralelo con Gestión Nube, que es el que sirve hoy (la factura y el stock siguen saliendo de GN).</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
@@ -225,9 +225,9 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
             <Icono nombre="lupa" size={16} style={{ color: color.mut2 }} />
             <input aria-label="Buscar en las ventas" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Número, pedido de TN, cliente o nota" style={{ flex: 1, border: 0, outline: 0, font: 'inherit', background: 'transparent', minWidth: 0 }} />
           </label>
-          <Select aria-label="Período" value={periodo} onChange={(e) => { setFicha(null); setPeriodo(e.target.value) }}>{PERIODOS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
-          <Select aria-label="Origen" value={origen} onChange={(e) => setOrigen(e.target.value)}>{ORIGENES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
-          {marca === 'zattia' && <Select aria-label="Línea" value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
+          <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => { setFicha(null); setPeriodo(e.target.value) }}>{PERIODOS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
+          <Select aria-label="Origen" style={ANCHO_SELECT} value={origen} onChange={(e) => setOrigen(e.target.value)}>{ORIGENES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
+          {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <span style={{ flex: '0 0 auto', display: 'inline-flex', padding: 3, borderRadius: 9, background: color.bg2 }} role="radiogroup" aria-label="Alto de las filas">
             {(['compacta', 'comoda'] as const).map((d) => (
               <button key={d} type="button" role="radio" aria-checked={prefs.densidad === d} title={d === 'compacta' ? 'Filas compactas' : 'Filas cómodas'} onClick={() => setPrefs({ ...prefs, densidad: d })}
@@ -245,7 +245,7 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
           <Button variant="outline" disabled={cargando} onClick={() => cargar()}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
-          columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={132}
+          columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={120}
           seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden} densidad={prefs.densidad}
           activa={ficha?.fila.id ?? null} onAbrir={(f) => abrirFicha(f)} etiquetaFila={(f) => `la venta ${f.ref}`}
           vacio={!cargando && datos ? (

@@ -55,7 +55,7 @@ export function ListaTrabajo<T>({
   const plantilla = [conTilde ? '36px' : null, acciones ? `${anchoAcciones}px` : null, ...columnas.map((c) => c.ancho)].filter(Boolean).join(' ')
   const alto = densidad === 'comoda' ? 52 : 40
   const grilla: React.CSSProperties = {
-    display: 'grid', gridTemplateColumns: plantilla, columnGap: 12, alignItems: 'center',
+    display: 'grid', gridTemplateColumns: plantilla, columnGap: 10, alignItems: 'center',
     // 🔴 la fila mide lo que suman sus columnas (ver arriba).
     width: 'max-content', minWidth: '100%', boxSizing: 'border-box', padding: '0 12px 0 4px', whiteSpace: 'nowrap',
   }

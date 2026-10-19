@@ -1178,3 +1178,50 @@ a.apps-item:hover {
 .lightbox-thumb.active { opacity: 1; border-color: #fff; }
 
 } /* fin de @layer legacy */
+
+/* ══ ERP (`/erp`, Bruno 19-oct): pantalla propia como el POS, con el menú del diseño (`components/erp/Erp.tsx`) ══ */
+.erp-menu {
+  flex: 0 0 216px;
+  width: 216px;
+  background: var(--mo-side-bg);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+.erp-menu-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 16px;
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+}
+.erp-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 14.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  color: #cbd5e1;
+}
+.erp-menu-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.erp-menu-item--debajo { height: 34px; padding-left: 36px; font-size: 13.5px; color: #8391a7; }
+.erp-menu-item--on, .erp-menu-item--on:hover { background: var(--mo-brand-solid); color: #fff; font-weight: 600; }
+.erp-menu-pie { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+
+/* En el celular el menú pasa a una tira arriba que se corre de costado (⛔ cajón: el ERP lo usan admins en la compu). */
+@media (max-width: 900px) {
+  .erp-app.shell { flex-direction: column; }
+  .erp-menu { flex: 0 0 auto; width: auto; flex-direction: row; align-items: center; overflow-x: auto; overflow-y: hidden; padding: 8px; }
+  .erp-menu-logo { display: none; }
+  .erp-menu-item--debajo { padding-left: 10px; }
+  .erp-menu-pie { margin: 0 0 0 auto; padding: 0; flex-direction: row; align-items: center; }
+}

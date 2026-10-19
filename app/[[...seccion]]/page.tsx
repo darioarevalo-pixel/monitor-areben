@@ -37,6 +37,8 @@ const PanelWhatsApp = dynamic(() => import('@/components/panel/PanelWhatsApp').t
 const CajaPOS = dynamic(() => import('@/components/caja/CajaPOS').then((m) => m.CajaPOS), { loading: Cargando })
 const CajaCliente = dynamic(() => import('@/components/caja/CajaCliente').then((m) => m.CajaCliente), { loading: Cargando })
 const CajaTotem = dynamic(() => import('@/components/caja/CajaTotem').then((m) => m.CajaTotem), { loading: Cargando })
+/** El ERP (`/erp`): pantalla propia como el POS, con SU menú (Bruno, 19-oct). Con `dynamic` por lo mismo: arrastra las 12 pestañas. */
+const Erp = dynamic(() => import('@/components/erp/Erp').then((m) => m.Erp), { loading: Cargando })
 
 /**
  * Sección por defecto. **Es Inicio, y es una decisión de producto, no una herencia.**
@@ -89,7 +91,7 @@ export default function Seccion() {
   //
   // Y en el POS de la Caja (`/pos`), por lo mismo: pantalla sin sidebar. Las promos de la Agenda las
   // pide el POS.
-  useAvisosPoll(key !== 'panel' && key !== 'pos')
+  useAvisosPoll(key !== 'panel' && key !== 'pos' && key !== 'erp')
 
   /**
    * Los links públicos (`/reclamo/<token>` para el cliente, `/canje/<token>` para la creadora) NO
@@ -133,6 +135,13 @@ export default function Seccion() {
    */
   const esPOS = key === 'pos'
 
+  /**
+   * `/erp` es el séptimo (Bruno, 19-oct: «que el ERP sea como el POS, que abra una sección completa nueva, que se navegue
+   * solo sin ir atrás»): sale del shell con su propio menú (las 6 secciones del diseño) y una dirección por sección
+   * (`/erp/ventas`, `/erp/stock/ajustes`). El permiso es el mismo de siempre (`erp`, sólo admin) y lo vuelve a pedir el servidor.
+   */
+  const esERP = key === 'erp'
+
   // Si la sección no existe para esta marca o no hay permiso, al default.
   // Mismo criterio que aplicarVisibilidadTabs del legacy.
   //
@@ -162,9 +171,9 @@ export default function Seccion() {
           : puedeVer(perfil, marca, keyPermiso)))
 
   useEffect(() => {
-    if (esPortalCliente || esPanel || esPOS) return
+    if (esPortalCliente || esPanel || esPOS || esERP) return
     if (!cargando && perfil && !permitida && key !== FALLBACK_TAB) router.replace(`/${FALLBACK_TAB}`)
-  }, [cargando, perfil, permitida, key, router, esPortalCliente, esPanel, esPOS])
+  }, [cargando, perfil, permitida, key, router, esPortalCliente, esPanel, esPOS, esERP])
 
   // Va acá adentro y NO como ruta propia de Next porque cada ruta es una función serverless y el
   // proyecto está en el tope del plan Hobby (pasarse frena todos los deploys en silencio). Sale
@@ -234,6 +243,22 @@ export default function Seccion() {
         <ConfirmProvider>
           <CajaPOS />
           <BotonReportes seccion="pos" admin={esAdmin(perfil)} lado="izquierda" />
+        </ConfirmProvider>
+      </ToastProvider>
+    )
+  }
+
+  // El ERP, igual que el POS: después del login y sin el shell. ⛔ `permitida` (pide la marca del shell): el ERP la cambia
+  // adentro, así que alcanza con una marca en la que se vea; cada pestaña lee la marca elegida y el servidor la vuelve a pedir.
+  if (esERP) {
+    if (!['bdi', 'zattia'].some((m) => puedeVer(perfil, m as typeof marca, 'erp'))) {
+      return <div style={{ padding: 16, fontSize: 13 }}>Tu usuario no tiene acceso al ERP.</div>
+    }
+    return (
+      <ToastProvider>
+        <ConfirmProvider>
+          <Erp ruta={Array.isArray(partes) ? partes.slice(1) : []} />
+          <BotonReportes seccion="erp" admin={esAdmin(perfil)} />
         </ConfirmProvider>
       </ToastProvider>
     )
