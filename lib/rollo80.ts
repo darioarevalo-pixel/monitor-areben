@@ -41,6 +41,14 @@ export const ANCHO = W - M * 2
 export const MIN = 82
 /** Papel de más al final, para que el corte no se lleve el último renglón. */
 export const COLA = 10
+/**
+ * 🔴 **El largo máximo de cada papel.** El 14-oct-2026 se chequeó el local entero y la Epson imprimió
+ * sólo el principio (hasta «Remera Bell»): el PDF era UNA hoja de más de un metro y la impresora
+ * tiene un largo máximo de hoja (el de fábrica es 297 mm); lo que pasa de ahí lo tira sin avisar.
+ * Un papel que puede salir largo (el chequeo de exhibición, la devolución) va en partes de hasta este
+ * largo, cortadas siempre entre renglones, y cada parte dice «Parte N de T».
+ */
+export const ALTO_MAX = 250
 
 /** Corta un texto en líneas de `ANCHO` mm. Lo inyecta el PDF; los layouts no saben de fuentes. */
 export type Medidor = (txt: string, tam: number, bold: boolean) => string[]

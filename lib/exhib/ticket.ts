@@ -11,7 +11,7 @@
  * ⛔ Sin stock ni ventas: al papel va sólo lo que se hace (misma regla que la Reposición).
  */
 
-import { abrirRollo, COLA, M, MIN, W, type Medidor, type OpBase, type Pagina } from '../rollo80'
+import { abrirRollo, ALTO_MAX, COLA, M, MIN, W, type Medidor, type OpBase, type Pagina } from '../rollo80'
 import { imprimirPdf } from '../etiquetas/pdf'
 import { selloDeImpresion } from '../envios/recibo'
 import type { Duplicada, Pendiente } from './reporte'
@@ -39,14 +39,8 @@ const C2 = X_CAS2 + CASILLA / 2
 
 export const AVISO_FRONTAL = 'Antes de reponer, verificar los productos en exhibición frontal. Si figuran en esta lista, marcar Exhibición frontal'
 
-/**
- * 🔴 **El largo máximo de cada papel.** El 14-oct-2026 se chequeó el local entero y la Epson imprimió
- * sólo el principio (hasta «Remera Bell»): el PDF era UNA hoja de más de un metro y la impresora
- * tiene un largo máximo de hoja (el de fábrica es 297 mm); lo que pasa de ahí lo tira sin avisar.
- * Por eso el ticket sale en partes de hasta este largo, cortadas siempre entre renglones, y cada
- * parte dice «parte N de T».
- */
-export const ALTO_MAX = 250
+/** El largo máximo de cada parte: ver `ALTO_MAX` en `rollo80`. */
+export { ALTO_MAX }
 /** Lo más alto que puede ocupar un renglón (SKU + nombre en dos renglones + variante): no se parte. */
 const RENGLON_MAX = 20
 
