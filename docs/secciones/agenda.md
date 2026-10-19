@@ -98,6 +98,24 @@ el padrón que necesita entra por `equipoDelPadron` (`api/_auth.js`) del lado de
 sin pasar por el compilador de Next y no puede importar TypeScript); `lib/agenda/index.ts` es el
 re-export tipado. Los dos archivos lo explican en su encabezado y no se repite acá.
 
+## 📬 El correo diario (18-oct-2026, Darío)
+
+*«Me gustaría recibir alguna especie de notificación de si están usando o no la app»*. Sale de lunes
+a sábado entre las 20:00 y las 21:00 (el reloj de Vercel Hobby tiene precisión de una hora:
+`vercel.json`, `0 23 * * 1-6` UTC) a `MAIL_AGENDA_A` (por defecto Darío), por Mailer.
+
+- **Qué dice:** por persona del equipo operativo, cuántas de sus tareas de hoy marcó, a qué hora
+  empezó a marcar y qué le quedó pendiente. 🟢 al día · 🟡 a medias · 🔴 tenía y no marcó nada ·
+  ⚪ no tenía nada cargado. ⚠️ El ⚪ **no es de ella, es de quien carga**: dice que falta una rutina.
+- **Quiénes**: `EQUIPO` en `lib/agenda/correo-diario.core.js`, escrito a mano a propósito (el padrón
+  sólo se lee con sesión y el reloj no tiene). Alguien que entra o sale del equipo **se cambia ahí**.
+- 🔴 **«Empezó a marcar» ⛔ no es «entró»**: el Monitor no guarda las entradas. La huella es el tilde.
+- 🔑 Un pendiente por **rol** (`roles:['local']`) tiene UN tilde para todas: si Camila lo marca, le sale
+  hecho también a Josefina. Es como funciona la Agenda, no un error del correo.
+- **La puerta**: `GET /api/datos?recurso=agenda&tarea=correo-diario`, antes de `exigirUsuario`. ⛔ Sin
+  `CRON_SECRET` en Vercel contesta 503 y no manda nada; Vercel le pone el secreto solo al reloj.
+  `&simulacro=1` devuelve el texto sin mandarlo (con el mismo secreto).
+
 ## ⛔ Lo que comparte con otras secciones
 
 - **`lib/calendario/fechas.core.js`** — de ahí salen `diaDeSemanaDe`, `diasDelMes`, `sumarDias`.

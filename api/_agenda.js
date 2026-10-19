@@ -48,6 +48,8 @@ import { CLAVES_PLANTILLA, clavesDeEje, ejeValeEnMarca, esClavePlantilla, hechoY
 // El techo. Va acá y no en la pantalla por lo mismo que el destino: un pendiente que se
 // filtra sólo al dibujar igual enciende el badge y sigue viajando en el JSON.
 import { esDeArriba, veLoDeArriba } from '../lib/agenda/jerarquia.core.js';
+import { armarCorreoDiario, hoyAR } from '../lib/agenda/correo-diario.core.js';
+import { pedirAvisoInterno } from '../lib/mailer/aviso.core.js';
 import { CAMPO as CAMPO_PREGUNTA, conRespuesta, preguntaDeItem } from '../lib/agenda/pregunta-ingreso.core.js';
 
 /**
@@ -491,6 +493,52 @@ export default async function handler(req, res) {
        diario. Una puerta abierta a internet que pudiera crear cualquier ítem de la Agenda le
        escribe a todo el equipo.
   */
+  /*
+    📬 **EL CORREO DIARIO** (Darío, 18-oct-2026): quién del equipo operativo usó la Agenda hoy. Lo
+    llama el reloj de Vercel (`vercel.json`, lunes a sábado) y por eso va ANTES de `exigirUsuario`:
+    no hay sesión. Se defiende igual que la puerta del ingreso: **sin `CRON_SECRET` está cerrado
+    (503)**, y Vercel manda ese secreto solo, como `Authorization: Bearer …`. Sólo lee y sólo le
+    escribe a las casillas fijas (`MAIL_AGENDA_A`, @arebensrl.com por Mailer). El armado es
+    `lib/agenda/correo-diario.core.js`. `&simulacro=1` lo devuelve sin mandarlo.
+  */
+  if (req.method === 'GET' && String((req.query || {}).tarea || '') === 'correo-diario') {
+    const esperado = process.env.CRON_SECRET || '';
+    if (!esperado) return res.status(503).json({ error: 'El correo diario no está configurado (CRON_SECRET).' });
+    if (String(req.headers.authorization || '') !== `Bearer ${esperado}`) return res.status(401).json({ error: 'no autorizado' });
+
+    const cfgC = cfgMaestra();
+    if (!cfgC.url || !cfgC.key) return res.status(500).json({ error: 'Faltan credenciales de Supabase.' });
+    const sb = createClient(cfgC.url, cfgC.key);
+    const hoy = hoyAR();
+    try {
+      // 🔴 Paginado: Supabase corta en 1.000 filas sin avisar, y la Agenda ya pasó las 500.
+      const todas = async (q) => {
+        const out = [];
+        for (let i = 0; ; i += 1000) {
+          const { data, error } = await q().range(i, i + 999);
+          if (error) throw new Error(error.message);
+          out.push(...(data || []));
+          if (!data || data.length < 1000) return out;
+        }
+      };
+      const items = await todas(() => sb.from('agenda_items').select('id, clase, titulo, regla, destino, marcas, activo, datos, created_at').order('id'));
+      // Los tildes de HOY (la ocurrencia de hoy) y los que se pusieron hoy (lo que venía de antes).
+      // El día de Argentina empieza a las 03:00 UTC.
+      const hechos = await todas(() => sb.from('agenda_hechos').select('item_id, fecha, usuario, hecho_at')
+        .or(`fecha.eq.${hoy},hecho_at.gte.${hoy}T03:00:00Z`).order('hecho_at'));
+      const c = armarCorreoDiario({ hoy, items, hechos });
+      if (String(req.query.simulacro || '') === '1') return res.status(200).json({ ok: true, simulacro: true, asunto: c.asunto, texto: c.texto });
+
+      const para = String(process.env.MAIL_AGENDA_A || 'darioarevalo@arebensrl.com').split(',').map((x) => x.trim()).filter(Boolean);
+      const r = await pedirAvisoInterno({ url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch }, { para, asunto: c.asunto, html: c.html, texto: c.texto });
+      if (!r.ok && !r.configurado) return res.status(503).json({ error: 'Falta la conexión con Mailer (MAILER_URL / MAILER_TICKET_KEY) en Vercel.' });
+      if (!r.ok) return res.status(502).json({ error: r.motivo });
+      return res.status(200).json({ ok: true, asunto: c.asunto, enviados: r.enviados, fallas: r.fallas });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   if (req.method === 'POST' && String((req.body || {}).action || '') === 'ingreso-externo') {
     const esperado = process.env.INGRESO_SECRETO || '';
     const trajo = String(req.headers['x-ingreso-secreto'] || '');
