@@ -43,6 +43,8 @@ import { talleVisible } from './ticket-mail.core.js'
 import { MARCA_CAJA } from './marca'
 import { armarSobre, billetesDe } from './conteo.core.js'
 import { codigoCaja } from './core.core.js'
+import { esStunned } from '../lineas.core.js'
+import type { Config, Venta } from './cliente'
 
 /** `importe` es lo que queda después del descuento a mano de esa prenda (si lo hubo). */
 /** `promos`: las que le tocaron (W5): el descuento del renglón sale con su nombre, ⛔ «Descuento». */
@@ -77,6 +79,36 @@ export type DatosTicket = {
 }
 
 export type LogoTicket = { src: string; ancho: number; alto: number }
+
+/**
+ * El ticket de una venta YA GUARDADA, de sus renglones y ⛔ del carrito. Lo usan el POS (la transferencia que
+ * llega, reimprimir) y la pestaña Caja (el ticket de cambio desde «Ventas», 19-oct): la misma función, para
+ * que el papel sea el mismo de los dos lados.
+ */
+export function ticketDeVenta(venta: Venta, config: Pick<Config, 'politica_cambio' | 'ticket_logo' | 'ticket_logo_stunned'> | null, nombreCuenta: (cuenta: number) => string): DatosTicket {
+  return {
+    numero: venta.gn_number,
+    id: venta.id,
+    renglones: (venta.renglones ?? []).map((r) => ({
+      nombre: r.nombre ?? `Producto ${r.product_id}`,
+      talle: r.talle,
+      cantidad: r.cantidad,
+      precio: r.precio,
+      importe: r.importe ?? Math.round(r.cantidad * r.precio * 100) / 100,
+      promos: r.promos ?? null,
+      stunned: esStunned(r.sku),
+    })),
+    subtotal: venta.subtotal,
+    pagos: venta.pagos,
+    total: venta.total,
+    nombreCuenta,
+    pagaCon: venta.paga_con,
+    politica: config?.politica_cambio ?? null,
+    logo: config?.ticket_logo ?? null,
+    logoStunned: config?.ticket_logo_stunned ?? null,
+    cliente: venta.email,
+  }
+}
 
 /** Las marcas del ticket, en orden: Zattia si hay alguna prenda que ⛔ es de Stunned (o ninguna prenda), Stunned si hay alguna. */
 export function marcasDelTicket(t: Pick<DatosTicket, 'renglones' | 'logo' | 'logoStunned' | 'marca'>): Array<{ nombre: string; logo: LogoTicket | null }> {
@@ -290,8 +322,13 @@ export async function imprimirTicket(t: DatosTicket, ahoraMs: number, que: 'tick
   }
 }
 
-/** Entre el ticket y el de cambio del regalo: que la térmica tome el primero antes de recibir el segundo. */
-const PAUSA_ENTRE_TICKETS = 1500
+/**
+ * Entre el ticket y el de cambio del regalo: que la térmica tome el primero antes de recibir el segundo.
+ * 🔴 19-oct: con 1,5 s el local reporta que sale sólo el de precios (el navegador descarta una impresión
+ * mientras otra está en curso, callado) ⇒ 4 s. ⛔ Probado en la PC del local: si sigue, el de cambio sale
+ * con su botón (última venta o «Ventas»), que es una impresión sola.
+ */
+const PAUSA_ENTRE_TICKETS = 4000
 
 /**
  * El TICKET DEL CIERRE (Bruno, 13-oct): lo cobrado POR FORMA DE PAGO (crédito es crédito, como el cierre de

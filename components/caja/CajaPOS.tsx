@@ -58,7 +58,7 @@ import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
 import { registrarRespuesta, repetida } from '@/lib/caja/repetida.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
-import { imprimirTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
+import { imprimirTicket, numeroProvisorio, plata, ticketDeVenta, type DatosTicket } from '@/lib/caja/ticket'
 import { claveMail, claveVista, leerMail, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
 import { mailOk } from '@/lib/caja/mail'
 import { MARCA_CAJA, marcaParaPOS, storeCaja, useMarcaDeLaUrl, usarMarcaCaja } from '@/lib/caja/marca'
@@ -88,7 +88,6 @@ import {
 } from '@/lib/caja/cliente'
 import { Badge, Button, Card, Field, Icono, Input, Modal, Notice, SectionCard, color, font, radius, shadow, space, weight } from '@/components/ui'
 import { useConfirmar } from '@/components/ui/Confirm'
-import { esStunned } from '@/lib/lineas.core.js'
 import { ModalVarianteContext } from '@/components/ui/Modal'
 import {
   CampoMail,
@@ -734,45 +733,9 @@ function POS() {
   const porTransferencia = pagos.some((p) => p.medio === 'transferencia')
   const puedeConfirmar = !!turno && !!c && !enviando && emailOk && !faltaContestar && (vuelto == null || vuelto >= 0)
 
-  function datosTicket(venta: Venta): DatosTicket {
-    return {
-      numero: venta.gn_number,
-      id: venta.id,
-      renglones: bor.renglones.map((r, i) => ({
-        nombre: r.variante.product_name,
-        talle: r.variante.size_name,
-        cantidad: r.cantidad,
-        precio: r.precio ?? 0,
-        importe: filas?.[i]?.importe ?? Math.round(r.cantidad * (r.precio ?? 0) * 100) / 100,
-        promos: (conPromo.items[i] as { promos?: string[] } | undefined)?.promos ?? null,
-        stunned: esStunned(r.variante.sku),
-      })),
-      subtotal: venta.subtotal,
-      pagos: venta.pagos,
-      total: venta.total,
-      nombreCuenta,
-      pagaCon: venta.paga_con,
-      politica: config?.politica_cambio ?? null,
-      logo: config?.ticket_logo ?? null,
-      logoStunned: config?.ticket_logo_stunned ?? null,
-      cliente: venta.email,
-    }
-  }
-
   /** El ticket de una venta ya guardada (la que esperaba la transferencia): el carrito ya ⛔ está. */
   function ticketGuardado(venta: Venta): DatosTicket {
-    return {
-      ...datosTicket(venta),
-      renglones: (venta.renglones ?? []).map((r) => ({
-        nombre: r.nombre ?? `Producto ${r.product_id}`,
-        talle: r.talle,
-        cantidad: r.cantidad,
-        precio: r.precio,
-        importe: r.importe ?? Math.round(r.cantidad * r.precio * 100) / 100,
-        promos: r.promos ?? null,
-        stunned: esStunned(r.sku),
-      })),
-    }
+    return ticketDeVenta(venta, config, nombreCuenta)
   }
 
   /** Llegó la transferencia y la venta salió a GN: recién ahora el ticket. */

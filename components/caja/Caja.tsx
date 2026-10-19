@@ -24,6 +24,7 @@ import { leerConfig, leerPendientes, leerTurno, type Config, type Turno, type Ve
 import { Button, Notice, color, font, space, weight } from '@/components/ui'
 import { DeteccionTransferencias, IrA, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TransferenciasEnEspera, TurnoCaja, UltimosTurnos, VentasDelTurno, diaAr } from '@/components/caja/partes'
 import { VistaTicket } from '@/components/caja/VistaTicket'
+import { imprimirTicket, ticketDeVenta } from '@/lib/caja/ticket'
 import { PromosCaja } from '@/components/caja/PromosCaja'
 import { PromosFormaDePago } from '@/components/caja/PromosFormaDePago'
 import { GiftCards } from '@/components/caja/GiftCards'
@@ -143,7 +144,16 @@ function CajaDeMarca({ store }: { store: string }) {
         {admin && <GiftCards />}
         {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
         <UltimosTurnos ultimos={ultimosTurnos} onVerVentas={(t) => setVerVentas({ turnoId: t.id, titulo: `Ventas de la caja del ${diaAr(t.abierto_en)}${t.abierto_por ? ` · ${t.abierto_por}` : ''}` })} />
-        {verVentas && <VentasDelTurno turnoId={verVentas.turnoId} titulo={verVentas.titulo} nombreCuenta={(id) => nombreParaTicket(id, config?.reglas ?? null)} onCerrar={() => setVerVentas(null)} />}
+        {verVentas && (
+          <VentasDelTurno
+            turnoId={verVentas.turnoId}
+            titulo={verVentas.titulo}
+            nombreCuenta={(id) => nombreParaTicket(id, config?.reglas ?? null)}
+            // El ticket de cambio también desde la pestaña (Bruno, 19-oct: la cajera buscaba ahí el de un regalo). Reimprimir, ⛔ (11-oct).
+            onTicketCambio={(v) => imprimirTicket(ticketDeVenta(v, config, (id) => nombreParaTicket(id, config?.reglas ?? null)), Date.now(), 'cambio').catch((e) => setErrTurno(`No se pudo imprimir el ticket de cambio: ${(e as Error).message}`))}
+            onCerrar={() => setVerVentas(null)}
+          />
+        )}
       </div>
       {admin && config && (
         <aside className="caja-ticket" style={{ display: 'grid', gap: space[2] + 2 }}>
