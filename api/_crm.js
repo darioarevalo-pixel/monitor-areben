@@ -411,6 +411,29 @@ async function panelPorTelefono(supabase, body, res) {
 }
 
 /**
+ * De una lista de teléfonos (los de los prospectos), cuáles ya son de un cliente que compró.
+ *
+ * 🔴 **Un prospecto que ya compró no es un prospecto** (Darío, 19-oct-2026: Vale Coba figuraba
+ * como prospecto en «Hoy» y al abrir su chat salía su ficha de clienta con compras). La lista de
+ * prospectos vive en el KV y nunca se cruzaba con el padrón. Se usa el mismo índice que abre las
+ * fichas, así que la lista y el chat dicen lo mismo.
+ */
+const TOPE_TELS = 500;
+async function telsDeClientes(supabase, body, res) {
+  const tels = [...new Set((Array.isArray(body.tels) ? body.tels : []).map((t) => String(t || '')).filter(Boolean))].slice(0, TOPE_TELS);
+  if (!tels.length) return res.status(200).json({ ok: true, tels: [] });
+  const indice = await indiceDeTelefonos(supabase, Date.now());
+  const porTel = tels.map((t) => ({ t, ids: buscarPorTelefono(indice, t).ids }));
+  const ids = [...new Set(porTel.flatMap((x) => x.ids))];
+  if (!ids.length) return res.status(200).json({ ok: true, tels: [] });
+  const compraron = new Set();
+  for (let i = 0; i < ids.length; i += 100) {
+    for (const id of await clientesConCompras(supabase, ids.slice(i, i + 100))) compraron.add(id);
+  }
+  return res.status(200).json({ ok: true, tels: porTel.filter((x) => x.ids.some((id) => compraron.has(id))).map((x) => x.t) });
+}
+
+/**
  * Los datos que le faltan a la lista del día del panel: nombre, teléfono y total comprado de un
  * puñado de clientes.
  *
@@ -612,6 +635,15 @@ export default async function handler(req, res) {
   if (accion === 'lista') {
     try {
       return await listaDelPanel(supabase, body, res);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+
+  // ── Qué teléfonos de prospectos ya son de un cliente que compró. ─────────────────────────────
+  if (accion === 'telsClientes') {
+    try {
+      return await telsDeClientes(supabase, body, res);
     } catch (e) {
       return res.status(500).json({ ok: false, error: e.message });
     }

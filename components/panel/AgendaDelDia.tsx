@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { color, font, radius, space } from '@/components/ui/tokens'
 import { Icono } from '@/components/ui'
 import { TEMP_UI } from '@/components/crm/temperatura'
-import { buscarClientesPorNombre, traerAgenda, traerPorFiltro, type FilaAgenda } from '@/lib/crm/panel'
+import { buscarClientesPorNombre, telsQueSonClientes, traerAgenda, traerPorFiltro, type FilaAgenda } from '@/lib/crm/panel'
 import { contarCola, contarPorTipo, vistaDe, type FiltroPanel, type VistaTemp } from '@/lib/crm/lista-dia'
 import { diasHasta } from '@/lib/crm/core'
 import { hoyISO } from '@/lib/crm/seguimiento'
@@ -701,6 +701,32 @@ function Agenda({
     }
   }, [pedir])
 
+  /**
+   * 🔴 Los prospectos cuyo teléfono ya es de un cliente que compró no van en la lista (Darío,
+   * 19-oct-2026, Vale Coba): al abrir el chat sale la ficha de cliente, así que como prospecto
+   * sobra. Se pregunta una vez por cada cambio de la lista de prospectos.
+   */
+  const telsLeads = useMemo(
+    () =>
+      Object.values(crmLeads || {})
+        .filter((l) => l && l.estado === 'activo' && l.telefono)
+        .map((l) => l.telefono)
+        .sort()
+        .join(','),
+    [crmLeads],
+  )
+  const [leadsClientes, setLeadsClientes] = useState<EscritosHoy>(() => new Set())
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      const tels = await telsQueSonClientes(telsLeads ? telsLeads.split(',') : [])
+      if (vivo) setLeadsClientes(indexarEscritos(tels))
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [telsLeads])
+
   const cambiarFiltro = (f: FiltroPanel) => {
     if (f === filtro) return
     setFiltro(f)
@@ -793,7 +819,9 @@ function Agenda({
 
   // ── La cola de trabajo, que es el default ─────────────────────────────────
   const { lista, frios, hechos } = estado
-  const leads = leadsDelPanel(crmLeads, today).map(itemDeLead)
+  const leads = leadsDelPanel(crmLeads, today)
+    .map(itemDeLead)
+    .filter((i) => !leEscribisteHoy(leadsClientes, [i.telefono]))
   const hoyISOs = hoyISO(today)
   const leadsHechos = Object.values(crmLeads || {})
     .filter((l) => l && l.estado === 'activo' && l.ultimo_contacto === hoyISOs)

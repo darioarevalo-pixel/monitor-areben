@@ -430,3 +430,22 @@ export async function vincularTelefono(clienteId: number, tel: string): Promise<
   const r = await guardarMapa({ kind: 'crmtel', store: 'bdi', mapa, cargado: true })
   return r.ok ? { ok: true } : { ok: false, motivo: r.motivo }
 }
+
+/**
+ * De los teléfonos de los prospectos, cuáles ya son de un cliente que compró (ver
+ * `telsDeClientes` en `api/_crm.js`). Si falla, devuelve vacío: la lista se ve como antes.
+ */
+export async function telsQueSonClientes(tels: string[]): Promise<string[]> {
+  if (!tels.length) return []
+  try {
+    const r = await apiFetch('/api/datos?recurso=crm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'telsClientes', tels }),
+    })
+    const d = (await r.json().catch(() => ({}))) as { ok?: boolean; tels?: string[] }
+    return r.ok && d.ok && Array.isArray(d.tels) ? d.tels : []
+  } catch {
+    return []
+  }
+}
