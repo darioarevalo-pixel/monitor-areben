@@ -499,7 +499,7 @@ export default async function handler(req, res) {
     no hay sesión. Se defiende igual que la puerta del ingreso: **sin `CRON_SECRET` está cerrado
     (503)**, y Vercel manda ese secreto solo, como `Authorization: Bearer …`. Sólo lee y sólo le
     escribe a las casillas fijas (`MAIL_AGENDA_A`, @arebensrl.com por Mailer). El armado es
-    `lib/agenda/correo-diario.core.js`. `&simulacro=1` lo devuelve sin mandarlo.
+    `lib/agenda/correo-diario.core.js`. `&simulacro=1` lo devuelve sin mandarlo; `&fecha=` arma el de otro día.
   */
   if (req.method === 'GET' && String((req.query || {}).tarea || '') === 'correo-diario') {
     const esperado = process.env.CRON_SECRET || '';
@@ -509,7 +509,8 @@ export default async function handler(req, res) {
     const cfgC = cfgMaestra();
     if (!cfgC.url || !cfgC.key) return res.status(500).json({ error: 'Faltan credenciales de Supabase.' });
     const sb = createClient(cfgC.url, cfgC.key);
-    const hoy = hoyAR();
+    // `&fecha=` es para probar con un día que ya pasó; el reloj no la manda.
+    const hoy = esFechaIso(String(req.query.fecha || '')) ? String(req.query.fecha) : hoyAR();
     try {
       // 🔴 Paginado: Supabase corta en 1.000 filas sin avisar, y la Agenda ya pasó las 500.
       const todas = async (q) => {

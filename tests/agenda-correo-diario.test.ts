@@ -52,6 +52,11 @@ describe('correo diario de la Agenda', () => {
     expect(resumirDia({ hoy: HOY, items, hechos: [], equipo: EQ })[0].estado).toBe('sin-tareas')
   })
 
+  it('sin nadie con tareas, el asunto lo dice y ⛔ no «0 de 0 al día»', () => {
+    const c = armarCorreoDiario({ hoy: HOY, items: [], hechos: [], equipo: EQ })
+    expect(c.asunto).toBe('Agenda viernes 16-oct: nadie tenía tareas cargadas')
+  })
+
   it('lo que tildó hoy de un día anterior cuenta como uso', () => {
     const items = [it_('v', { regla: { tipo: 'unica', fecha: '2026-10-14' } })]
     const hechos = [{ item_id: 'v', fecha: '2026-10-14', usuario: 'camilaquintana', hecho_at: '2026-10-16T13:00:00Z' }]
