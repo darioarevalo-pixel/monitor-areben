@@ -134,7 +134,7 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
     if (k === 'h') return <span style={{ color: color.mut }}>{cuandoCorto(f.ocurridaEn)}</span>
     if (k === 'c') {
       return (
-        <span title={f.clienteDe === 'gn' ? 'El nombre sale de GN (la venta todavía no tiene cliente del ERP).' : f.clienteDe === 'falta' ? 'El nombre llega con el espejo de GN, al otro día.' : undefined}>
+        <span title={`${f.cliente}${f.clienteDe === 'gn' ? ' · el nombre sale de GN (la venta todavía no tiene cliente del ERP)' : f.clienteDe === 'falta' ? (f.kind === 'pedido' ? ' · un pedido sin pagar todavía no llegó a GN: el nombre aparece cuando se cobra' : ' · el nombre llega con el espejo de GN, al otro día') : ''}`}>
           <span style={{ color: f.clienteDe === 'falta' ? color.mut2 : color.ink, fontStyle: f.clienteDe === 'falta' ? 'italic' : undefined }}>{f.cliente}</span>
           {f.clienteDe === 'gn' && <span style={{ marginLeft: 6, fontSize: font.xs, color: color.mut2 }}>de GN</span>}
         </span>
@@ -145,7 +145,7 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           <span aria-hidden style={{ flex: '0 0 26px', height: 20, borderRadius: 5, display: 'inline-grid', placeItems: 'center', fontSize: 10.5, fontWeight: weight.bold, background: color.bg2, color: color.ink2 }}>{o?.sigla ?? '··'}</span>
-          <span style={{ color: color.ink2 }}>{f.origenTexto}</span>
+          <span style={{ color: color.ink2 }} title={f.origenTexto}>{f.origenTexto}</span>
         </span>
       )
     }

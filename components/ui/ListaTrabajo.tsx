@@ -5,8 +5,10 @@
  * se repite. Nació en el piloto de Ventas; Stock, Clientes y Productos salen con el mismo molde.
  *
  *  - **Encabezado fijo** al bajar (la lista scrollea adentro de su caja).
- *  - 🔴 **La fila mide lo que suman sus columnas** (`width: max-content; min-width: 100%`), ⛔ un `min-width` fijo: con
- *    uno fijo los botones quedaban dibujados AFUERA, sobre blanco (captura de Bruno, 18-oct).
+ *  - 🔴 **Todas las filas miden LO MISMO**: `width: 100%` + `min-width` = la suma de los MÍNIMOS de las columnas
+ *    (`anchoMinimo`). ⛔ `max-content`: cada fila es su propia grilla y una columna `minmax(…, fr)` se estiraba con el
+ *    texto de ESA fila ⇒ una venta con nombre largo corría el resto (la #348 de Zattia, captura de Bruno, 19-oct).
+ *    ⛔ un `min-width` a ojo: con uno fijo los botones quedaban dibujados AFUERA, sobre blanco (captura de Bruno, 18-oct).
  *  - **Textos cortos ⛔ se parten**: cada celda es una línea con «…».
  *  - Clic en el título de una columna que ordena: ↓ ↑. Tilde a la izquierda ⇒ selección (la barra la pone quien usa).
  *  - **Íconos A LA IZQUIERDA** (listas de TRABAJO), en la primera columna después del tilde: `acciones(fila)`.
@@ -26,6 +28,22 @@ export type ColumnaLista = {
 }
 
 export type OrdenLista = { col: string; dir: 'asc' | 'desc' } | null
+
+const HUECO = 10
+const RELLENO = 16
+
+/**
+ * El ancho mínimo de una fila: la suma de lo mínimo de cada columna (`'92px'` ⇒ 92, `'minmax(170px, 1.2fr)'` ⇒ 170) +
+ * los huecos + el relleno. Un ancho que ⛔ se sabe medir (`1fr`, `auto`) es un error: ésa es la columna que se estira.
+ */
+export function anchoMinimo(anchos: string[]): number {
+  const suma = anchos.reduce((a, w) => {
+    const m = /^(?:minmax\(\s*)?(\d+(?:\.\d+)?)px\b/.exec(w.trim())
+    if (!m) throw new Error(`ListaTrabajo: el ancho «${w}» no tiene mínimo en px (usar '92px' o 'minmax(92px, 1fr)').`)
+    return a + Number(m[1])
+  }, 0)
+  return suma + HUECO * Math.max(0, anchos.length - 1) + RELLENO
+}
 
 export function ListaTrabajo<T>({
   columnas, filas, claveDe, celda, acciones, anchoAcciones = 132, seleccion, onSeleccion, orden, onOrden,
@@ -52,12 +70,13 @@ export function ListaTrabajo<T>({
   maxAlto?: number | string
 }) {
   const conTilde = !!onSeleccion
-  const plantilla = [conTilde ? '36px' : null, acciones ? `${anchoAcciones}px` : null, ...columnas.map((c) => c.ancho)].filter(Boolean).join(' ')
+  const anchos = [conTilde ? '36px' : null, acciones ? `${anchoAcciones}px` : null, ...columnas.map((c) => c.ancho)].filter((x): x is string => !!x)
+  const plantilla = anchos.join(' ')
   const alto = densidad === 'comoda' ? 52 : 40
   const grilla: React.CSSProperties = {
-    display: 'grid', gridTemplateColumns: plantilla, columnGap: 10, alignItems: 'center',
-    // 🔴 la fila mide lo que suman sus columnas (ver arriba).
-    width: 'max-content', minWidth: '100%', boxSizing: 'border-box', padding: '0 12px 0 4px', whiteSpace: 'nowrap',
+    display: 'grid', gridTemplateColumns: plantilla, columnGap: HUECO, alignItems: 'center',
+    // 🔴 todas las filas del mismo ancho (ver arriba): ⛔ `max-content`.
+    width: '100%', minWidth: anchoMinimo(anchos), boxSizing: 'border-box', padding: '0 12px 0 4px', whiteSpace: 'nowrap',
   }
   const todas = filas.length > 0 && !!seleccion && filas.every((f) => seleccion.has(claveDe(f)))
   const alternar = (k: string) => {
