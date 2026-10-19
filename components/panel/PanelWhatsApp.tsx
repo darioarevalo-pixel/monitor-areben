@@ -1071,7 +1071,7 @@ function PanelInterno({
           today={today}
           guardando={guardando}
           onMutar={(fn, exito) => mutarLead(estado.lead.id, fn, exito)}
-          leEscribiste={leEscribisteHoy(escritos, [telNorm, estado.lead.telefono])}
+          leEscribiste={leEscribisteHoy(escritos, pedido ? [estado.lead.telefono] : [telNorm, estado.lead.telefono])}
           botonChat={<BotonAbrirChat tel={estado.lead.telefono || ''} chatAbierto={telNorm} onAbrir={() => abrirChat(0, estado.lead.telefono || '')} />}
           marcaComunidad={<MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={[telNorm, estado.lead.telefono || '']} />}
         />
@@ -1120,7 +1120,9 @@ function PanelInterno({
   const ritmo = ritmoDeCompra(c.ventas || [], today)
   const hoyFicha = hoyISO(today)
   const faltaFecha =
-    leEscribisteHoy(escritos, [telNorm, c.phone]) &&
+    // 🔴 Si la ficha se abrió desde la lista, el chat abierto es el de OTRA persona: mirar su número
+    // hacía decir "Le escribiste hoy" a quien no se le escribió (Darío, 19-oct-2026, Valentina Coba).
+    leEscribisteHoy(escritos, via === 'id' ? [c.phone] : [telNorm, c.phone]) &&
     crmSeg[String(c.id)]?.ultimo_contacto !== hoyFicha &&
     !((c.proximo_contacto || '') > hoyFicha)
 
