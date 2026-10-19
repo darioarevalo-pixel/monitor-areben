@@ -3,7 +3,7 @@
  * pestaña, Facturación. Entra por `api/datos.js?recurso=erp` (⛔ un archivo de ruta nuevo: el plan
  * Hobby admite 12 funciones).
  *
- * 🔴 SÓLO ADMIN, en el servidor (Bruno, 12-oct-2026: «que lo vean Bruno y Darío» mientras se
+ * 🔴 PERMISOS POR ROL en el servidor (`puedeErp`; hasta abrir la llave, sólo admin — Bruno, 12-oct: «que lo vean Bruno y Darío» mientras se
  * construye). ⛔ alcanza con esconderlo del menú: acá se pide un CAE.
  *
  *   GET  ?recurso=erp&vista=facturacion&mes=YYYY-MM   el mes: techo, facturado, pendiente, ventas
@@ -39,13 +39,15 @@
  *   POST {recurso:'erp', accion:'poner-ruta', marca, linea?, canal, medio, cuenta_real_id, …}   `api/_erp-rutas.js`
  *   GET  ?recurso=erp&vista=ajustes&linea=bdi|zattia|stunned           los ajustes de stock (motor sql/026) + la lista «A contar»
  *   POST {recurso:'erp', accion:'crear-ajuste'|'aprobar-ajuste'|'descartar-ajuste', linea, …}   `api/_erp-ajustes.js`
+ *   GET  ?recurso=erp&vista=permisos                                   lo que el perfil puede en el ERP, por marca (`permisosErp`)
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
  * Contra qué ARCA se factura lo decide `ambienteDeEntorno` (homologación por defecto).
  */
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
-import { esAdmin } from '../lib/permisos.core.js'
+import { permisoErpDe, permisosErp, puedeErp } from '../lib/permisos.core.js'
+import { baseDeLinea } from '../lib/lineas.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { SIN_ARCA, arcaConectado, baseFacturacion, clienteArcaDelEntorno, repoFacturas } from './_facturacion.js'
@@ -1162,10 +1164,18 @@ export async function pedidosSinPagar({ marca }) {
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res)
   if (!perfil) return
-  if (!esAdmin(perfil)) return res.status(403).json({ error: 'El ERP es sólo para administradores mientras se construye.' })
   if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'método no permitido' })
 
   const body = req.body || {}
+  // Permisos por rol (`puedeErp`, lib/permisos.core.js): cada vista y acción pide su permiso en SU marca;
+  // sin marca (la facturación del mes, que trae las dos) lo pide en las dos. Mientras ninguna función
+  // herede el área `erp` (la llave), sólo pasa el admin, como hasta el 19-oct.
+  const permiso = permisoErpDe({ method: req.method, vista: req.query.vista, accion: body.accion })
+  const base = baseDeLinea(body.marca || body.linea || req.query.marca || req.query.linea || req.query.tienda)
+  if (!(base ? [base] : ['bdi', 'zattia']).every((m) => puedeErp(perfil, m, permiso))) {
+    return res.status(403).json({ error: permiso === 'ver' ? 'No tenés acceso al ERP.' : 'Tu rol no puede hacer esto en el ERP.', permiso })
+  }
+  if (req.method === 'GET' && req.query.vista === 'permisos') return res.status(200).json({ permisos: permisosErp(perfil) })
   const mes = String(req.query.mes || body.mes || diaArgentino(Date.now()).slice(0, 7))
   if (!/^\d{4}-\d{2}$/.test(mes)) return res.status(400).json({ error: 'Mes inválido' })
 

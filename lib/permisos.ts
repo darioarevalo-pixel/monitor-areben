@@ -33,6 +33,7 @@ import {
   SECCION_AREA as SECCION_AREA_JS,
   tieneFuncion as tieneFuncionJs,
 } from './permisos.core.js'
+export { APROBACIONES_ERP, ERP_PERMISOS, ERP_ROLES, permisoErpDe, permisosErp, puedeErp } from './permisos.core.js'
 
 /**
  * Función del usuario dentro del sistema (rol de flujo de trabajo, distinto de los
@@ -41,7 +42,7 @@ import {
  * tener VARIAS. `administracion` es un rol de oficina/coordinación, NO es la gerencia
  * (esa es `direccion`).
  */
-export type Funcion = 'direccion' | 'marketing' | 'local' | 'deposito' | 'administracion'
+export type Funcion = 'direccion' | 'marketing' | 'local' | 'deposito' | 'administracion' | 'mayorista' | 'consulta'
 
 /** Catálogo de funciones con su rótulo y ayuda (fuente única para la UI de usuarios). */
 export const FUNCIONES: { key: Funcion; label: string; info: string }[] = [
@@ -50,6 +51,8 @@ export const FUNCIONES: { key: Funcion; label: string; info: string }[] = [
   { key: 'local', label: 'Local', info: 'Ve solo lo que tiene que RETIRAR en local (ítems de origen local).' },
   { key: 'deposito', label: 'Depósito', info: 'PREPARA los productos de depósito (ítems de origen depósito).' },
   { key: 'administracion', label: 'Administración', info: 'Rol de oficina/coordinación. Distinto de Dirección.' },
+  { key: 'mayorista', label: 'Mayorista', info: 'ERP: ventas mayoristas, sus clientes y su cuenta corriente.' },
+  { key: 'consulta', label: 'Consulta', info: 'ERP: ve todo, no toca nada y no ve costos.' },
 ]
 
 /** Qué ve cada función, por ÁREA del menú. Ver el core para el porqué. */
