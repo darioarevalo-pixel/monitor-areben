@@ -722,6 +722,65 @@ const TRAZOS = {
       <path d="M15.2 15.2l4.6 4.6" />
     </>
   ),
+  /** Registrar cobro — el signo pesos. */
+  pesos: (
+    <>
+      <path d="M12 2.5v19" />
+      <path d="M16.5 6.5H10a3.2 3.2 0 0 0 0 6.4h4a3.2 3.2 0 0 1 0 6.4H7" />
+    </>
+  ),
+  /** Factura — el ticket con el borde dentado. */
+  factura: (
+    <>
+      <path d="M6 2.8v18.4l2-1.3 2 1.3 2-1.3 2 1.3 2-1.3 2 1.3V2.8l-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3z" />
+      <path d="M9 8.5h6M9 12h6M9 15.5h3.5" />
+    </>
+  ),
+  /** Columnas de una lista — elegir cuáles se ven. */
+  columnas: (
+    <>
+      <rect x="3.5" y="4" width="17" height="16" rx="2" />
+      <path d="M9.2 4v16M14.8 4v16" />
+    </>
+  ),
+  /** Abrir afuera — en otra pestaña o en otro sistema (TN, el monitor). */
+  abrir: (
+    <>
+      <path d="M14 4h6v6" />
+      <path d="M20 4l-8.5 8.5" />
+      <path d="M18 13.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5.5" />
+    </>
+  ),
+  /** Nota — la hoja con la esquina doblada. */
+  nota: (
+    <>
+      <path d="M5 3.5h10l4 4V20a.5.5 0 0 1-.5.5h-13A.5.5 0 0 1 5 20z" />
+      <path d="M15 3.5V8h4M8.5 12.5h7M8.5 16h5" />
+    </>
+  ),
+  /** Anular — el círculo tachado. Va en rojo y con motivo. */
+  anular: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M6 6l12 12" />
+    </>
+  ),
+  /** Más acciones, en VERTICAL (el «⋯» de las listas del ERP, diseño §4). */
+  'puntos-v': (
+    <>
+      <circle cx="12" cy="5.5" r="1.1" />
+      <circle cx="12" cy="12" r="1.1" />
+      <circle cx="12" cy="18.5" r="1.1" />
+    </>
+  ),
+  /** Bajar un archivo (exportar a Excel). */
+  bajar: (
+    <>
+      <path d="M12 3.5v11" />
+      <path d="M7.5 10.5 12 15l4.5-4.5" />
+      <path d="M4.5 16.5V19a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2.5" />
+    </>
+  ),
   /** Listo — tilde. */
   check: (
     <>

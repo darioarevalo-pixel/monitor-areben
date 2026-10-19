@@ -38,13 +38,26 @@ se calculara la conciliación ⛔ cierra la fila: si sigue sin coincidir, vuelve
 Depósito (`conteos_deposito`) también entra solo al libro (`ajuste_conteo`) ⇒ el motor AVISA si la prenda tiene uno de
 los últimos 3 días (contarla dos veces la descuenta dos veces).
 
-**Ventas** (14-oct): buscador y ficha de una venta PROPIA (la que escribe el motor, `motor/venta/`, ⛔ la de
-GN) por número, cliente o fecha: prendas, pagos, factura, estado y sus cambios. Lee `venta` y la vista
-`venta_ficha` (contrato: `~/Documents/erp-monitor/contrato-venta.md`). **Anular** desde la ficha, con motivo
-(≥5 letras) y sólo admin: lo hace `anularVenta` del motor por **pg** (⛔ supabase-js: sin transacciones), con
-`DATABASE_URL_BDI` / `DATABASE_URL_ZATTIA`; 🔴 sin esa variable en Vercel contesta 409 «⛔ está conectado» —
-cargarla ES prender el anular—. La plata vuelve a los mismos pagos; si tenía factura, avisa que falta la NC.
-Núcleo puro en `lib/erp/venta.core.js` (`tests/erp-venta.test.ts`). 🔑 «Prueba» = entró antes del corte de GN y ⛔ movió el libro.
+**Ventas** (19-oct, el PILOTO del diseño aprobado — `~/Documents/erp-monitor/diseno.md` §3–§5 y §8; lo construye la sesión
+Diseño): UNA lista con todo lo que es venta del motor (Caja, Tienda Nube, mayoristas, cambios) + los pedidos de TN SIN PAGAR
+(los abiertos hoy, de cualquier fecha), con vistas que dicen cuántas hay (A preparar · Listas · Sin pagar · Con saldo · Sin
+factura · Anuladas), el resumen del filtro ARRIBA, buscador (número, pedido de TN, cliente, nota), columnas a elección
+**guardadas por usuario** (`lib/erp/lista-prefs.ts`, localStorage por usuario) y la ficha AL COSTADO con su historial.
+Pantalla `components/erp/ventas/` · núcleo puro `lib/erp/ventas-lista.core.js` (`tests/erp-ventas-lista.test.ts`, también
+el servidor) · servidor `api/_erp-ventas.js` (`vista=ventas-lista`, `vista=venta-extra`, `accion=editar-venta|nota-venta|cobrar-venta`)
+· pantalla en `tests/erp-ventas-pantalla.test.tsx`. Las piezas nuevas son del kit (`components/ui/ListaTrabajo`,
+`PanelColumnas`, `FichaCostado` con `Historial` y `BarraSeleccion`): Stock, Clientes y Productos salen con el mismo molde.
+- 🔑 Lo que el motor ⛔ tiene se LEE de donde está y se dice: el **cliente** (0 de ~950 ventas traen `cliente_id`, medido 18-oct)
+  sale del espejo de GN (`ventas.client_name`, por la venta de GN o por `tn_order`) con «de GN»; un pedido online sin nombre
+  todavía ⛔ es «consumidor final» (el espejo llega al otro día). El **estado** del pedido, de `tn_orden.estado` (§14.1); el
+  de un mayorista, el `sale_state` de GN. La **factura**, la del ERP (`venta_factura` → `facturas`) o la de GN (`ventas_factura_gn`).
+- 🔑 Editar · notas · cobrar una venta van por el contrato §16 del motor (`motor/venta/ficha.mjs`, `motor/cuenta/cuenta.mjs`)
+  por pg. 🔴 Si la COPIA del motor del monitor ⛔ trae la función, la ventana se dibuja y dice «espera al motor» (`queSabeElMotor`):
+  ⛔ un camino inventado. Lo económico (prendas, precios, pagos) ⛔ se edita: lleva a Hacer cambio / Registrar cobro / Anular.
+- 🔑 El cobro va IMPUTADO a esa venta (`registrarPagoACuenta`, `imputar`, nunca más que su saldo); lo que sobra va a la venta
+  más vieja que deba (lo hace el motor). Clave por ventana abierta (`erp-cobro:<uuid>`): reintentar ⛔ duplica.
+- Anular (con motivo, sólo admin) y la NC de una anulada facturada siguen como antes, desde la ficha (`anularVenta` del
+  motor por pg; 🔴 sin `DATABASE_URL_<MARCA>` en Vercel contesta 409). 🔑 «Prueba» = corre en paralelo con GN y ⛔ movió el libro.
 
 Y **Facturación** (F5 del plan): el tope del mes, lo ya facturado y las ventas sin
 factura, que se facturan con ARCA (ex AFIP) por web service. Reemplaza la facturación masiva de GN

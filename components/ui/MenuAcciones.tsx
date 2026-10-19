@@ -43,11 +43,15 @@ export type AccionMenu = {
   disabled?: boolean
 }
 
-export function MenuAcciones({ acciones, etiqueta, disabled }: {
+export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear = 'derecha' }: {
   acciones: AccionMenu[]
   /** Qué dice el lector de pantalla. Va con el nombre de la cosa adentro, ⛔ no «Más acciones». */
   etiqueta: string
   disabled?: boolean
+  /** «⋯» vertical: el de las listas del ERP (diseño 18-oct §4). Sin la prop, el horizontal de siempre. */
+  vertical?: boolean
+  /** De qué lado se abre el menú. 'izquierda' para el «⋯» que va en la PRIMERA columna (listas del ERP). */
+  alinear?: 'izquierda' | 'derecha'
 }) {
   const [abierto, setAbierto] = useState(false)
   const caja = useRef<HTMLDivElement>(null)
@@ -95,7 +99,7 @@ export function MenuAcciones({ acciones, etiqueta, disabled }: {
           opacity: disabled ? 0.5 : 1,
         }}
       >
-        <Icono nombre="puntos" size={18} />
+        <Icono nombre={vertical ? 'puntos-v' : 'puntos'} size={18} />
       </button>
 
       {abierto && (
@@ -103,7 +107,7 @@ export function MenuAcciones({ acciones, etiqueta, disabled }: {
           id={id}
           role="menu"
           style={{
-            position: 'absolute', zIndex: 40, top: 'calc(100% + 4px)', right: 0, minWidth: 210,
+            position: 'absolute', zIndex: 40, top: 'calc(100% + 4px)', ...(alinear === 'izquierda' ? { left: 0 } : { right: 0 }), minWidth: 210,
             background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg,
             boxShadow: shadow.pop, padding: space[1],
           }}

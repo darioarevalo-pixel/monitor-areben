@@ -20,7 +20,7 @@ import { PedidosSinPagar } from './PedidosSinPagar'
 import { PreciosProducto } from './PreciosProducto'
 import { ReglasComerciales } from './ReglasComerciales'
 import { RutasCobro } from './RutasCobro'
-import { VentasPropias } from './VentasPropias'
+import { VentasErp } from './ventas/VentasErp'
 
 /** La Caja del ERP: lo que el local todavía hace en GN (el cambio y la factura a pedido). */
 const EN_CAJA = [{ key: 'cambio', label: 'Cambio' }, { key: 'factura', label: 'Factura' }]
@@ -44,7 +44,7 @@ export function Erp() {
       {pestania === 'diferencias' && <DiferenciasDia abrirPrenda={(p) => { setPrenda(p); setPestania('stock') }} />}
       {pestania === 'conciliacion' && <ConciliacionDia abrirPrenda={(p) => { setPrenda(p); setPestania('stock') }} />}
       {pestania === 'ajustes' && <AjustesStock />}
-      {pestania === 'ventas' && <VentasPropias />}
+      {pestania === 'ventas' && <VentasErp irACaja={(que) => { setEnCaja(que); setPestania('caja') }} />}
       {pestania === 'caja' && (
         <>
           <Tabs items={EN_CAJA} value={enCaja} onChange={setEnCaja} />

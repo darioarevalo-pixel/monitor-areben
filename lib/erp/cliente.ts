@@ -340,3 +340,44 @@ export const leerRutas = (marca: MarcaErp) =>
   pedir<RutasDeMarca>(null, `&vista=rutas&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer las cuentas de cobro.')
 export const ponerRuta = (marca: MarcaErp, ruta: RutaAPoner) =>
   pedir<{ ok: true; ruta: { id: string; desde: string }; aviso: string | null }>(post({ accion: 'poner-ruta', marca, ...ruta }), '', 'No se pudo cambiar la ruta.')
+
+// ── ERP › Ventas, el PILOTO del diseño (lista + ficha; `api/_erp-ventas.js`, núcleo `lib/erp/ventas-lista.core.js`) ──
+
+export type FilaVentaLista = {
+  kind: 'venta' | 'pedido'; id: string; numero: number | null; ref: string; linea: string; origen: string; tipo: 'venta' | 'cambio'
+  ocurridaEn: string; cliente: string; clienteDe: 'erp' | 'gn' | 'falta' | null; clienteId: string | null; total: number; saldo: number
+  estadoKey: string; cobroKey: string; origenTexto: string; vendio: string
+  factura: { numero: string; de: 'erp' | 'gn' } | null; facturada: boolean
+  nota: { id: string; texto: string; de: string } | null; entrega: { tipo: string; direccion?: string } | null
+  prueba: boolean; anulada: boolean; tieneCambio?: boolean; link: string | null; unidades: number | null; busca: string
+}
+export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean }
+export const leerListaDeVentas = (marca: MarcaErp, desde: string, hasta: string) =>
+  pedir<{ filas: FilaVentaLista[]; desde: string; hasta: string; puede: QueSabeElMotor }>(null, `&vista=ventas-lista&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer las ventas.')
+
+export type ExtraDeVenta = {
+  clienteGn: string | null; gnNumero: string | null; gnEstado: string | null; clienteId: string | null
+  vendedor: string | null; entrega: { tipo: 'retira' | 'envio' | 'cadete'; direccion?: string } | null; facturar: { doc: string; condicion_iva: number } | null
+  tn: { numero: number; estado: string | null; envioTipo: string | null; creadaEn: string; actualizadaEn: string | null; link: string | null } | null
+  facturas: Array<{ numero: string; tipo: 'factura' | 'nc'; de: 'erp' | 'gn'; cuando: string | null }>
+  cuentas: Array<{ id: string; nombre: string; medio: string }>
+  ediciones: Array<{ campo: string; antes: string; despues: string; usuario: string; cuando: string }>
+  notas: Array<{ cuando: string; texto: string; de: string; reemplaza: string | null }>
+  nota: { id: string; texto: string; de: string } | null
+  /** null = el motor contestó; si no, por qué el historial ⛔ trae ediciones ni notas. */
+  motor: string | null
+}
+export const leerExtraDeVenta = (marca: MarcaErp, id: string) =>
+  pedir<ExtraDeVenta>(null, `&vista=venta-extra&marca=${marca}&id=${id}&nc=${Date.now()}`, 'No se pudo leer el historial.')
+
+export type CambiosDeVenta = {
+  cliente_id?: string | null; vendedor?: string | null
+  entrega?: { tipo: 'retira' | 'envio' | 'cadete'; direccion?: string } | null
+  facturar?: { doc: string; condicion_iva: 1 | 4 | 5 | 6 } | null
+}
+export const editarVentaErp = (marca: MarcaErp, ventaId: string, cambios: CambiosDeVenta, clienteDoc?: string | null) =>
+  pedir<{ ok: true; ediciones: unknown[] }>(post({ accion: 'editar-venta', marca, ventaId, cambios, clienteDoc: clienteDoc ?? null }), '', 'No se pudo guardar.')
+export const guardarNotaDeVenta = (marca: MarcaErp, ventaId: string, texto: string, reemplazaId: string | null) =>
+  pedir<{ ok: true }>(post({ accion: 'nota-venta', marca, ventaId, texto, reemplazaId }), '', 'No se pudo guardar la nota.')
+export const cobrarVentaErp = (marca: MarcaErp, c: { ventaId: string; clienteId: string; linea: string; monto: number; saldo: number; cuenta: string; fecha: string; ref: string; prueba: boolean }) =>
+  pedir<{ ok: true; cuenta: unknown }>(post({ accion: 'cobrar-venta', marca, ...c }), '', 'No se pudo registrar el cobro.')

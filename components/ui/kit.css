@@ -677,3 +677,6 @@
 .mo-scroll-x::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ListaTrabajo (ERP): la fila se marca al pasar el mouse; la elegida o abierta ya trae su fondo inline. */
+.mo-lista-fila:hover { background: var(--mo-bg); }

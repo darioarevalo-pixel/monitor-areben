@@ -69,6 +69,7 @@ import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce
 import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
+import { cobrarVentaErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -1235,6 +1236,16 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
+    if (req.method === 'GET' && req.query.vista === 'ventas-lista') {
+      const marca = String(req.query.marca || '')
+      const p = MARCAS.includes(marca) ? await pedidosSinPagar({ marca }) : { pedidos: [] }
+      const r = await listaDeVentas({ marca, desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), pedidos: p.pedidos || [] })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'venta-extra') {
+      const r = await extraDeVenta({ marca: String(req.query.marca || ''), id: String(req.query.id || '') })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
     if (req.method === 'GET' && req.query.vista === 'ventas') {
       const r = await buscarVentas({ marca: String(req.query.marca || ''), q: req.query.q, desde: req.query.desde, hasta: req.query.hasta })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
@@ -1304,6 +1315,11 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
+    if (body.accion === 'editar-venta' || body.accion === 'nota-venta' || body.accion === 'cobrar-venta') {
+      const fn = { 'editar-venta': editarVentaErp, 'nota-venta': notaDeVentaErp, 'cobrar-venta': cobrarVentaErp }[body.accion]
+      const r = await fn({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || 'admin' })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
     if (body.accion === 'anular') {
       const r = await anularVentaPropia({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
