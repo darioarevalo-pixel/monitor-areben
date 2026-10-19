@@ -61,7 +61,8 @@ export async function listaDeStock({ marca }, deps) {
 /**
  * ERP › Stock › Movimientos: cada fila del libro del período (días argentinos, `desde`..`hasta` inclusive), con lo que
  * quedó de la prenda en ese depósito después de ella (`queda`, la suma corrida: mismo orden que la ficha) y el número y
- * quién de la venta del ERP o del ajuste que la escribió. 🔴 Más de `TOPE_MOVS` ⇒ se cortan los más viejos y se dice.
+ * quién de la venta del ERP o del ajuste que la escribió. 🔴 `detalle.caja` es el id de la CAJA, ⛔ el de la venta: se
+ * cruza con `venta.origen_ref` (medido en prod 19-oct: por `venta.id` no pegaba ninguna). 🔴 Más de `TOPE_MOVS` ⇒ se cortan los más viejos y se dice.
  *
  *   GET ?recurso=erp&vista=movimientos&marca=bdi|zattia&desde=YYYY-MM-DD&hasta=YYYY-MM-DD
  */
@@ -76,7 +77,7 @@ async function movimientosDelLibro(pg, r) {
         from stock_movimiento m)
     select q.*, v.numero as venta_numero, v.usuario as venta_usuario, a.numero as ajuste_numero, a.creado_por as ajuste_usuario
       from q
-      left join venta v on q.origen = 'caja' and v.id::text = q.detalle->>'caja'
+      left join venta v on q.origen = 'caja' and v.origen = 'caja' and v.origen_ref = q.detalle->>'caja'
       left join stock_ajuste a on q.origen = 'ajuste' and a.id::text = split_part(q.origen_ref, ':', 1)
      where q.ocurrido_en >= $1 and q.ocurrido_en < $2
      order by q.ocurrido_en desc, q.id desc

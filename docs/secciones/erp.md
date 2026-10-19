@@ -37,7 +37,7 @@ documento · quién — con vistas (Todos · Ventas, con las anulaciones · Tran
 resumen ARRIBA (una transferencia ⛔ entra ni sale), buscador (prenda, SKU, código, documento, quién), columnas por usuario
 (`erp-movimientos`) y «Exportar». Clic ⇒ la ficha de la PRENDA (`FichaPrenda`). 🔑 «Queda» = la suma corrida por prenda ×
 depósito con el MISMO orden que el historial de la ficha (hora, id) ⇒ los dos dicen el mismo número. 🔴 El libro ⛔ guarda
-quién: sale de la venta del ERP (`detalle.caja` → `venta.usuario`) o del ajuste (`stock_ajuste.creado_por`); si ⛔, la
+quién: sale de la venta del ERP (`detalle.caja` = `venta.origen_ref` → `venta.usuario`) o del ajuste (`stock_ajuste.creado_por`); si ⛔, la
 celda dice el SISTEMA en gris (⛔ una persona inventada). Más de `TOPE_MOVS` (20.000) ⇒ los más nuevos y se avisa.
 Servidor `api/_erp-stock.js` (`vista=movimientos`, por pg con `conMotor`), núcleo `lib/erp/movimientos.core.js`
 (`tests/erp-movimientos*.test.ts*`).
