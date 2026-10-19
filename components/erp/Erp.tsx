@@ -15,6 +15,7 @@ import { Facturacion } from './Facturacion'
 import { StockPrenda, type PrendaPedida } from './StockPrenda'
 import { DiferenciasDia } from './DiferenciasDia'
 import { ConciliacionDia } from './ConciliacionDia'
+import { AjustesStock } from './AjustesStock'
 import { PedidosSinPagar } from './PedidosSinPagar'
 import { PreciosProducto } from './PreciosProducto'
 import { ReglasComerciales } from './ReglasComerciales'
@@ -23,7 +24,7 @@ import { VentasPropias } from './VentasPropias'
 
 /** La Caja del ERP: lo que el local todavía hace en GN (el cambio y la factura a pedido). */
 const EN_CAJA = [{ key: 'cambio', label: 'Cambio' }, { key: 'factura', label: 'Factura' }]
-const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }, { key: 'diferencias', label: 'Diferencias del día' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'pedidos-tn', label: 'Pedidos sin pagar' }, { key: 'ventas', label: 'Ventas' }, { key: 'caja', label: 'Caja' }, { key: 'precios', label: 'Precios' }, { key: 'reglas', label: 'Reglas' }, { key: 'cuentas', label: 'Cuentas de cobro' }]
+const PESTANIAS = [{ key: 'facturacion', label: 'Facturación' }, { key: 'stock', label: 'Stock' }, { key: 'diferencias', label: 'Diferencias del día' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'ajustes', label: 'Ajustes' }, { key: 'pedidos-tn', label: 'Pedidos sin pagar' }, { key: 'ventas', label: 'Ventas' }, { key: 'caja', label: 'Caja' }, { key: 'precios', label: 'Precios' }, { key: 'reglas', label: 'Reglas' }, { key: 'cuentas', label: 'Cuentas de cobro' }]
 
 export function Erp() {
   const [pestania, setPestania] = useState('facturacion')
@@ -42,6 +43,7 @@ export function Erp() {
       {pestania === 'cuentas' && <RutasCobro />}
       {pestania === 'diferencias' && <DiferenciasDia abrirPrenda={(p) => { setPrenda(p); setPestania('stock') }} />}
       {pestania === 'conciliacion' && <ConciliacionDia abrirPrenda={(p) => { setPrenda(p); setPestania('stock') }} />}
+      {pestania === 'ajustes' && <AjustesStock />}
       {pestania === 'ventas' && <VentasPropias />}
       {pestania === 'caja' && (
         <>

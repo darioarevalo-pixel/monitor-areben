@@ -10,7 +10,7 @@
  * Devuelven `{ ok: true, … }` o `{ ok: false, error }`. Sólo lanzan si la BASE falla.
  */
 import { randomUUID } from 'node:crypto'
-import { armarAnulacion, armarCambio, armarVenta } from './armar.mjs'
+import { armarAnulacion, armarCambio, armarVenta, mueveStock } from './armar.mjs'
 import { costosDe } from './costo.mjs'
 
 const q = async (db, sql, params = []) => (await db.query(sql, params)).rows
@@ -70,17 +70,52 @@ async function ponerCosto(db, lineas, avisos) {
   }
 }
 
-/** Lo que dice el libro de cada prenda que SALE: si ⛔ alcanza, aviso (en sombra el libro todavía ⛔ cierra ⇒ ⛔ frena). */
+/**
+ * Lo que dice el libro de cada prenda que SALE: si ⛔ alcanza, aviso `SIN_STOCK_EN_LIBRO` con el nivel. Se cuenta NETO por
+ * variante: en un cambio por la misma prenda, la que entra suma antes de que reste la que sale (si no, falso aviso).
+ */
 async function avisarStock(db, venta, lineas, avisos) {
-  const salen = lineas.filter((l) => l.cantidad > 0)
+  const neto = new Map()
+  for (const l of lineas) { const k = `${l.product_id}:${l.size_id}`; neto.set(k, (neto.get(k) || 0) + l.cantidad) }
+  const salen = [...neto].filter(([, n]) => n > 0).map(([k, n]) => { const [product_id, size_id] = k.split(':').map(Number); return { product_id, size_id, cantidad: n } })
   if (!salen.length) return
   const filas = await q(db, `select product_id, size_id, coalesce(sum(cantidad), 0)::int as nivel from stock_movimiento
     where deposito = $1 and (product_id, size_id) in (select * from unnest($2::bigint[], $3::bigint[])) group by 1, 2`,
   [venta.deposito, salen.map((l) => l.product_id), salen.map((l) => l.size_id)])
   const nivel = new Map(filas.map((r) => [`${r.product_id}:${r.size_id}`, r.nivel]))
   for (const l of salen) {
-    if ((nivel.get(`${l.product_id}:${l.size_id}`) ?? 0) < l.cantidad) avisos.push({ codigo: 'SIN_STOCK_EN_LIBRO', product_id: l.product_id, size_id: l.size_id })
+    const n = nivel.get(`${l.product_id}:${l.size_id}`) ?? 0
+    if (n < l.cantidad) avisos.push({ codigo: 'SIN_STOCK_EN_LIBRO', product_id: l.product_id, size_id: l.size_id, nivel: n, cantidad: l.cantidad })
   }
+}
+
+/**
+ * 🔑 «El libro MANDA» · sin negativos (Bruno, 18-oct): con la llave de la marca prendida, la venta de la CAJA que deja el
+ * libro < 0 ⛔ entra, salvo con el PIN de la encargada (lo valida el monitor: llega `autoriza: { usuario, motivo:
+ * 'pin_encargada' }`); si entra así, la venta guarda en `detalle.contar` qué variantes hay que CONTAR (la prenda estaba en
+ * la mano ⇒ el que está mal es el libro). TN, mayorista y el resto ⛔ se frenan: ya los cobró otro. La de prueba ⛔ mueve
+ * el libro ⇒ ⛔ se frena.
+ * Llave: `VENTA_SIN_NEGATIVOS=zattia,stunned` (apagada: el libro todavía ⛔ es la verdad; se prende con el corte).
+ */
+export const MARCAS_LLAVE = ['bdi', 'zattia', 'stunned']
+export function sinNegativosEn(marca, env = process.env) {
+  const lista = String(env.VENTA_SIN_NEGATIVOS ?? '').split(',').map((m) => m.trim().toLowerCase()).filter(Boolean)
+  for (const m of lista) if (!MARCAS_LLAVE.includes(m)) throw new Error(`VENTA_SIN_NEGATIVOS: marca desconocida «${m}»`)
+  return lista.includes(marca)
+}
+
+/** El freno de `sinNegativosEn` sobre los avisos ya calculados: la falla, o null (y si lo autorizó la encargada, anota). */
+function frenarSinStock(armada, avisos, e) {
+  const v = armada.venta
+  const faltan = avisos.filter((a) => a.codigo === 'SIN_STOCK_EN_LIBRO')
+  if (!faltan.length || !mueveStock(v) || v.origen !== 'caja' || !sinNegativosEn(v.marca)) return null
+  const a = e?.autoriza
+  if (a?.motivo === 'pin_encargada' && typeof a.usuario === 'string' && a.usuario.trim()) {
+    v.detalle = { ...v.detalle, contar: faltan.map(({ product_id, size_id, nivel }) => ({ product_id, size_id, nivel, autoriza: a.usuario.trim() })) }
+    return null
+  }
+  const n = faltan.length
+  return { ok: false, error: { codigo: 'SIN_STOCK', mensaje: `El libro dice que ${n === 1 ? 'esa prenda no está' : `${n} prendas no están`} en ${v.deposito}: hace falta el PIN de la encargada`, campo: 'lineas', faltan } }
 }
 
 const falla = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo, mensaje, campo } : { codigo, mensaje } })
@@ -200,6 +235,8 @@ async function registrarDentro(db, e, unidades) {
   const avisos = []
   await ponerCosto(db, armada.lineas, avisos)
   await avisarStock(db, armada.venta, armada.lineas, avisos)
+  const sinStock = frenarSinStock(armada, avisos, e)
+  if (sinStock) return sinStock
   const venta = await escribir(db, armada)
   if (armada.usa_saldo > 0) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, -armada.usa_saldo, 'uso', venta.usuario)])
   return {
@@ -247,6 +284,8 @@ export async function registrarCambio(db, e) {
     const avisos = []
     await ponerCosto(db, armada.lineas, avisos)
     await avisarStock(db, armada.venta, armada.lineas, avisos)
+    const sinStock = frenarSinStock(armada, avisos, e)
+    if (sinStock) return sinStock
     const venta = await escribir(db, armada)
     const usuario = venta.usuario
     if (armada.a_favor > 0) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, armada.a_favor, 'cambio', usuario)])

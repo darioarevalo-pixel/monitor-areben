@@ -27,6 +27,17 @@ conexión» hasta su app. Lo escribe el MOTOR (`lib/conciliacion.mjs`, `bin/tn.m
 cierra, con los días seguidos); núcleo de la pantalla en `lib/erp/conciliacion.core.js` (`tests/erp-conciliacion.test.ts`).
 🔴 Una clase nueva del motor se nombra en `CLASE`; si ⛔, la pantalla la avisa como desconocida (⛔ la esconde).
 
+**Ajustes** (19-oct, paso 7; ESCRIBE en el libro): el ajuste de stock con motivo — Conteo (lo contado) · Fallado ·
+Influencer / canje · Regalo / sorteo / donación (sacan) · Otro (con porqué). Se arma `para_aprobar` con lo que decía el
+libro (`antes`) y al aprobarlo el motor (`motor/stock/ajuste.mjs`, sql/026, por pg en UNA transacción) escribe un
+movimiento `ajuste` por renglón; descartar ⛔ mueve nada; ⛔ se edita ni se borra (otro ajuste). Handler
+`api/_erp-ajustes.js`, núcleo `lib/erp/ajuste.core.js` (`tests/erp-ajuste*.test.ts*`).
+🔴 EN SOMBRA: mueve SÓLO el libro, ⛔ GN ni TN (el diff lo explica como `ajuste_erp`). La lista «A contar» es
+`libro_aparte` de la Conciliación (TN y ML) + `venta.detalle.contar` (Caja con PIN). 🔴 Un ajuste APROBADO antes de que
+se calculara la conciliación ⛔ cierra la fila: si sigue sin coincidir, vuelve a la lista. 🔴 Un conteo del módulo de
+Depósito (`conteos_deposito`) también entra solo al libro (`ajuste_conteo`) ⇒ el motor AVISA si la prenda tiene uno de
+los últimos 3 días (contarla dos veces la descuenta dos veces).
+
 **Ventas** (14-oct): buscador y ficha de una venta PROPIA (la que escribe el motor, `motor/venta/`, ⛔ la de
 GN) por número, cliente o fecha: prendas, pagos, factura, estado y sus cambios. Lee `venta` y la vista
 `venta_ficha` (contrato: `~/Documents/erp-monitor/contrato-venta.md`). **Anular** desde la ficha, con motivo

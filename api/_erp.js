@@ -37,6 +37,8 @@
  *   POST {recurso:'erp', accion:'guardar-regla'|'sembrar-reglas'|'simular-reglas'|'prender-caja-reglas', marca, …}   `api/_erp-reglas.js`
  *   GET  ?recurso=erp&vista=rutas&marca=…                              las cuentas de cobro: qué cuenta recibe cada medio (motor sql/019-020)
  *   POST {recurso:'erp', accion:'poner-ruta', marca, linea?, canal, medio, cuenta_real_id, …}   `api/_erp-rutas.js`
+ *   GET  ?recurso=erp&vista=ajustes&linea=bdi|zattia|stunned           los ajustes de stock (motor sql/026) + la lista «A contar»
+ *   POST {recurso:'erp', accion:'crear-ajuste'|'aprobar-ajuste'|'descartar-ajuste', linea, …}   `api/_erp-ajustes.js`
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
  * Contra qué ARCA se factura lo decide `ambienteDeEntorno` (homologación por defecto).
@@ -66,6 +68,7 @@ import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
+import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -1190,6 +1193,22 @@ export default async function handler(req, res) {
       const f = { 'guardar-regla': guardarReglaErp, 'sembrar-reglas': sembrarReglasErp, 'simular-reglas': simularReglasErp, 'prender-caja-reglas': prenderCajaErp }[body.accion]
       const r = await f({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error, campo: r.campo ?? null } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'ajustes') {
+      const nombres = (base, ids) => { const { url, key } = cfgDeMarca(base); return nombresDeVariantes(createClient(url, key), ids) }
+      const r = await ajustesDeLinea({ linea: String(req.query.linea || '') }, { conMotor, conciliacionDelDia, nombresDeVariantes: nombres })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'POST' && body.accion === 'crear-ajuste') {
+      const r = await crearAjusteErp({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'POST' && (body.accion === 'aprobar-ajuste' || body.accion === 'descartar-ajuste')) {
+      const r = await resolverAjusteErp({ body, usuario: perfil.name || perfil.user || null, aprobar: body.accion === 'aprobar-ajuste' }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
     if (req.method === 'GET' && req.query.vista === 'rutas') {

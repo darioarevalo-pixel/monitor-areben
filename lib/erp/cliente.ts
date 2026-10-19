@@ -152,6 +152,35 @@ export type ConciliacionDelDia = {
 export const leerConciliacion = (tienda: TiendaErp, fecha: string | null) =>
   pedir<ConciliacionDelDia>(null, `&vista=conciliacion&tienda=${tienda}${fecha ? `&fecha=${fecha}` : ''}&nc=${Date.now()}`, 'No se pudo leer la conciliación del día.')
 
+export type LineaErp = TiendaErp
+export type AvisoAjuste = { codigo: string; texto: string }
+export type FilaAContar = {
+  clave: string; producto: string; talle: string; nombre: string | null; talleNombre: string | null; sku: string | null
+  fuente: 'conciliacion' | 'contar'; donde: string[]; tienda: number | null; erp: number | null; gn: number | null; dias: number | null
+  venta: { numero: number; autoriza: string | null; ocurridaEn: string } | null; deposito: string
+  ajuste: { numero: number; estado: string; deposito: string } | null
+}
+export type RenglonAjuste = {
+  n: number; producto: string; talle: string; sku: string | null; nombre: string | null; talleNombre: string | null
+  antes: number; contado: number | null; diferencia: number; despues: number; ahora: number | null
+}
+export type AjusteStock = {
+  id: string; numero: number; linea: string; deposito: string; motivo: string; motivoNombre: string; detalle: string | null
+  fuente: string; estado: 'para_aprobar' | 'aplicado' | 'rechazado'; creadoPor: string; creadoEn: string
+  resueltoPor: string | null; resueltoEn: string | null; rechazo: string | null; neto: number; renglones: RenglonAjuste[]; seMovio: number
+}
+export type AjustesDeLinea = { fecha: string | null; sinConciliacion: boolean; pendientes: FilaAContar[]; enAjuste: FilaAContar[]; ajustes: AjusteStock[] }
+export type RenglonNuevo = { producto: string; talle: string; sku?: string | null; barcode?: string | null; contado?: number; cantidad?: number }
+
+export const leerAjustes = (linea: LineaErp) =>
+  pedir<AjustesDeLinea>(null, `&vista=ajustes&linea=${linea}&nc=${Date.now()}`, 'No se pudieron leer los ajustes.')
+export const crearAjuste = (a: { linea: LineaErp; deposito: string; motivo: string; detalle: string; fuente: string; renglones: RenglonNuevo[] }) =>
+  pedir<{ ok: true; numero: number; id: string; renglones: number; avisos: AvisoAjuste[] }>(post({ accion: 'crear-ajuste', ...a }), '', 'No se pudo armar el ajuste.')
+export const aprobarAjuste = (linea: LineaErp, ajusteId: string) =>
+  pedir<{ ok: true; numero: number; movimientos: number; avisos: AvisoAjuste[] }>(post({ accion: 'aprobar-ajuste', linea, ajusteId }), '', 'No se pudo aprobar el ajuste.')
+export const descartarAjuste = (linea: LineaErp, ajusteId: string, motivo: string) =>
+  pedir<{ ok: true; numero: number }>(post({ accion: 'descartar-ajuste', linea, ajusteId, motivo }), '', 'No se pudo descartar el ajuste.')
+
 export type PedidoSinPagar = {
   tienda: string; tnId: string; numero: number; creadaEn: string; dias: number; pago: string; medio: string | null; gateway: string | null
   total: number; unidades: number; prendas: Array<{ nombre: string | null; sku: string | null; cantidad: number }>; link: string | null
