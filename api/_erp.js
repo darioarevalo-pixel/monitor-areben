@@ -15,6 +15,7 @@
  *   GET  ?recurso=erp&vista=diferencias&marca=…&fecha=YYYY-MM-DD    lo que el libro ⛔ explicó ese día + la sobreventa
  *   GET  ?recurso=erp&vista=conciliacion&tienda=bdi|zattia|stunned&fecha=…  lo que ⛔ cierra contra TN y GN ese día (motor sql/024)
  *   GET  ?recurso=erp&vista=stock-lista&marca=bdi|zattia              la lista de Stock: cada prenda por depósito (`api/_erp-stock.js`)
+ *   GET  ?recurso=erp&vista=movimientos&marca=…&desde=…&hasta=…     Stock › Movimientos: cada fila del libro (`api/_erp-stock.js`)
  *   GET  ?recurso=erp&vista=stock&marca=bdi|zattia&q=texto            busca prendas (SKU, código, nombre)
  *   GET  ?recurso=erp&vista=precio&marca=…&producto=ID                precio por lista y costo del producto, con GN y TN al lado
  *   POST {recurso:'erp', accion:'cargar-precio'|'cargar-costo', marca, producto, monto, lista?, desde?, motivo?, proveedor?, proveedorId?}
@@ -73,7 +74,7 @@ import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simul
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { cobrarVentaErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
-import { listaDeStock } from './_erp-stock.js'
+import { listaDeMovimientos, listaDeStock } from './_erp-stock.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -1274,6 +1275,10 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
+    if (req.method === 'GET' && req.query.vista === 'movimientos') {
+      const r = await listaDeMovimientos({ marca: String(req.query.marca || ''), desde: String(req.query.desde || ''), hasta: String(req.query.hasta || '') }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
     if (req.method === 'GET' && req.query.vista === 'stock-lista') {
       const r = await listaDeStock({ marca: String(req.query.marca || '') }, { conMotor, pedidosSinPagar })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)

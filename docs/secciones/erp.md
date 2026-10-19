@@ -12,7 +12,7 @@ Productos y precios · Clientes y proveedores · Configuración, y «Volver al m
 pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una vieja o mal escrita se corrige sola).
 Las pestañas: Ventas = Ventas · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
 dirección vieja cae en Ventas) · Caja (POS) = Cambio · Factura · Stock =
-Stock · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Precios · Configuración = Reglas · Cuentas de cobro;
+Stock · Movimientos · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Precios · Configuración = Reglas · Cuentas de cobro;
 Clientes todavía vacía. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
 botones crudos y `select`). Tests: `tests/erp-navegacion*.test.ts*`. El registro (`registro.ts`) conserva `erp` sólo
 porque el test de registro lo exige: el shell ya ⛔ lo monta.
@@ -30,6 +30,17 @@ los sin pagar abiertos. El libro se suma POR PG (`conMotor`; sin la conexión, 4
 la prenda a «Nuevo ajuste» de Conteos y ajustes (`AjustesStock` › `pedida`); transferir y etiquetas, al monitor (↗).
 La ficha sigue leyendo `vista=stock&producto=…` (núcleo `lib/erp/stock.core.js`, `tests/erp-stock.test.ts`). La cuenta
 de las columnas elegidas es una sola para todas las listas: `lib/erp/lista-columnas.core.js`.
+
+**Movimientos** (🎨 19-oct, Diseño 7, sólo lectura; lista de REGISTRO, tablero 3 del v8): cada fila del libro
+(`stock_movimiento`) del período (Hoy · Ayer · 7 días · Este mes) — cuándo · tipo · prenda · dónde · cantidad · **queda** ·
+documento · quién — con vistas (Todos · Ventas, con las anulaciones · Transferencias · Ajustes · Ingresos · Del libro),
+resumen ARRIBA (una transferencia ⛔ entra ni sale), buscador (prenda, SKU, código, documento, quién), columnas por usuario
+(`erp-movimientos`) y «Exportar». Clic ⇒ la ficha de la PRENDA (`FichaPrenda`). 🔑 «Queda» = la suma corrida por prenda ×
+depósito con el MISMO orden que el historial de la ficha (hora, id) ⇒ los dos dicen el mismo número. 🔴 El libro ⛔ guarda
+quién: sale de la venta del ERP (`detalle.caja` → `venta.usuario`) o del ajuste (`stock_ajuste.creado_por`); si ⛔, la
+celda dice el SISTEMA en gris (⛔ una persona inventada). Más de `TOPE_MOVS` (20.000) ⇒ los más nuevos y se avisa.
+Servidor `api/_erp-stock.js` (`vista=movimientos`, por pg con `conMotor`), núcleo `lib/erp/movimientos.core.js`
+(`tests/erp-movimientos*.test.ts*`).
 
 **Diferencias del día** (14-oct, sólo lectura): lo que el libro ⛔ pudo explicar al comparar su día con
 el de GN (`stock_diff`), agrupado por clase con qué mirar, y la **sobreventa**: las prendas que el libro

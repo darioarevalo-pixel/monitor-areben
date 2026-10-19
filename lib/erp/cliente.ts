@@ -394,3 +394,16 @@ export type FilaStock = {
 export type ListaDeStock = { filas: FilaStock[]; libroHasta: string | null; pedidosLeidosEn: string | null; pedidos: number; sinVariante: number }
 export const leerListaDeStock = (marca: MarcaErp) =>
   pedir<ListaDeStock>(null, `&vista=stock-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el stock.')
+
+// ── ERP › Stock › Movimientos (lista de REGISTRO del libro; `api/_erp-stock.js`, núcleo `lib/erp/movimientos.core.js`) ──
+export type FilaMovimiento = {
+  id: string; producto: string; talle: string; linea: string; nombre: string; talleNombre: string; sku: string | null; barcode: string | null
+  cuando: string; horaExacta: boolean; tipo: string; tipoTexto: string; origen: string; deposito: string; depositoTexto: string
+  /** Lo que movió (+ entra, − sale) y lo que quedó de la prenda en ese depósito después. */
+  cantidad: number; queda: number; documento: string
+  /** Quién, si el libro lo sabe por la venta o el ajuste; si ⛔ (`sistema`), de dónde vino. */
+  quien: string; quienDe: 'persona' | 'sistema'; busca: string
+}
+export type ListaDeMovimientos = { filas: FilaMovimiento[]; desde: string; hasta: string; cortado: boolean; libroHasta: string | null }
+export const leerMovimientos = (marca: MarcaErp, desde: string, hasta: string) =>
+  pedir<ListaDeMovimientos>(null, `&vista=movimientos&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer los movimientos.')
