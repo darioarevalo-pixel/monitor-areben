@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { armarAContar, filaDeAjuste, leerCrearAjuste, textoDeAviso } from '@/lib/erp/ajuste.core.js'
+import { armarAContar, filaDeAjuste, leerCrearAjuste as leerCrear, textoDeAviso } from '@/lib/erp/ajuste.core.js'
+
+// La respuesta es `{ error }` o la entrada armada: la prueba mira los dos lados.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const leerCrearAjuste = (b: object): any => leerCrear(b)
 
 /**
  * **ERP › Ajustes, el núcleo** (19-oct). El oráculo: la lista «A contar» es la de la Conciliación (TN y ML) + las ventas con
@@ -68,7 +72,7 @@ describe('filaDeAjuste y avisos', () => {
   it('el neto, el después, y cuántas se movieron desde el conteo', () => {
     const a = filaDeAjuste({ id: 'x', numero: 3, linea: 'zattia', deposito: 'local', motivo: 'conteo', estado: 'para_aprobar', creado_por: 'camila', creado_en: 'x',
       renglones: [{ n: 1, product_id: 1, size_id: 10, antes: 40, contado: 0, diferencia: -40, ahora: 39 }, { n: 2, product_id: 2, size_id: 20, antes: 0, contado: 2, diferencia: 2, ahora: 0 }] })
-    expect([a.neto, a.seMovio, a.motivoNombre, a.renglones.map((r) => r.despues)]).toEqual([-38, 1, 'Conteo', [0, 2]])
+    expect([a.neto, a.seMovio, a.motivoNombre, a.renglones.map((r: { despues: number }) => r.despues)]).toEqual([-38, 1, 'Conteo', [0, 2]])
   })
   it('cada aviso del motor se lee en palabras del equipo', () => {
     expect(textoDeAviso({ codigo: 'CONTEO_DE_DEPOSITO_RECIENTE', conteo: 31 })).toMatch(/C-31.*dos veces/)
