@@ -15,8 +15,13 @@
  * una copia que se rehace en cada cambio) y la pantalla dice con qué copia cobra y qué reglas la Caja no puede cobrar.
  */
 
-import { useEffect, useRef, useState } from 'react'
-import { Badge, Button, EmptyState, Field, Input, MoneyText, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, space, useConfirmar } from '@/components/ui'
+import { useEffect, useState } from 'react'
+import { useSesion } from '@/components/SesionProvider'
+import { Button, EmptyState, Field, Input, MenuAcciones, MoneyText, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, useConfirmar, type AccionMenu } from '@/components/ui'
+import { ListaTrabajo } from '@/components/ui/ListaTrabajo'
+import { BuscadorLista, ChipEstado, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { normal } from '@/lib/erp/stock-lista.core.js'
+import { TiraConfiguracion, type PiezaConfiguracion } from './TiraConfiguracion'
 import {
   buscarPrendas, guardarRegla, leerReglas, prenderCajaReglas, simularReglas, traerReglasDeCaja,
   type CopiaEnCaja, type FormaSimulada, type MarcaErp, type MedioRegla, type PrendaASimular, type ReglaComercial, type ReglasDeMarca, type Simulacion,
@@ -48,6 +53,16 @@ const hoyAR = () => diaAR(new Date().toISOString())
  * Las LÍNEAS con reglas propias dentro de una marca (Bruno, 17-oct: «cada negocio dentro del ERP puede configurar sus
  * propias reglas»): Stunned se cobra en la Caja de Zattia, con las suyas; sin ninguna, con las de Zattia.
  */
+const COLUMNAS_REGLAS = [
+  { key: 'regla', titulo: 'Regla', ancho: 'minmax(200px, 1.4fr)' },
+  { key: 'hace', titulo: 'Qué hace', ancho: 'minmax(200px, 1.4fr)' },
+  { key: 'prendas', titulo: 'En qué prendas', ancho: 'minmax(150px, 1fr)' },
+  { key: 'campania', titulo: 'Campaña', ancho: '130px' },
+  { key: 'canal', titulo: 'Canal', ancho: '76px' },
+  { key: 'cuando', titulo: 'Cuándo', ancho: '140px' },
+  { key: 'estado', titulo: 'Estado', ancho: '124px' },
+]
+
 const LINEAS: Partial<Record<MarcaErp, Array<{ key: string; label: string }>>> = { zattia: [{ key: 'zattia', label: 'Zattia' }, { key: 'stunned', label: 'Stunned' }] }
 
 const VACIA: ReglaComercial = {
@@ -68,17 +83,19 @@ function alcanceEnTexto(r: ReglaComercial) {
   return `${r.alcance_ids.length} ${r.alcance === 'productos' ? 'producto' : 'variante'}${r.alcance_ids.length === 1 ? '' : 's'}`
 }
 
-export function ReglasComerciales() {
-  const [marca, setMarca] = useState<MarcaErp>('zattia')
+export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {
+  const { marca: delShell } = useSesion()
+  const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const [datos, setDatos] = useState<ReglasDeMarca | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hecho, setHecho] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState(false)
   const [editando, setEditando] = useState<ReglaComercial | null>(null)
   // La línea que se mira (Stunned adentro de Zattia); en una marca sin líneas, la marca.
-  const [linea, setLinea] = useState<string>('zattia')
+  const [linea, setLinea] = useState<string>(marca)
+  const [vista, setVista] = useState('prendidas')
+  const [q, setQ] = useState('')
   const { confirmar } = useConfirmar()
-  const marcaActual = useRef(marca)
   // 🔑 Las categorías son las de TIENDA NUBE (las mismas que mira la Caja: `matchTn` sobre el catálogo), por nombre.
   const [tn, setTn] = useState<{ marca: MarcaErp; idx: IndiceTn; categorias: string[] } | null>(null)
   useEffect(() => {
@@ -104,28 +121,15 @@ export function ReglasComerciales() {
     }
   }
 
-  const recargar = (de: MarcaErp) => correr(async () => {
-    const r = await leerReglas(de)
-    if (marcaActual.current === de) setDatos(r)
-  }, 'No se pudieron leer las reglas.')
+  const recargar = () => correr(async () => setDatos(await leerReglas(marca)), 'No se pudieron leer las reglas.')
 
-  // La primera lectura (la marca cambia con `elegirMarca`, que limpia y vuelve a leer).
+  // La marca es la del menú (el `key` de Erp vuelve a montar la pantalla al cambiarla).
   useEffect(() => {
     let vivo = true
-    leerReglas('zattia').then((r) => { if (vivo && marcaActual.current === 'zattia') setDatos(r) })
+    leerReglas(marca).then((r) => { if (vivo) setDatos(r) })
       .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudieron leer las reglas.'))
     return () => { vivo = false }
-  }, [])
-  function elegirMarca(m: MarcaErp) {
-    if (m === marca) return
-    marcaActual.current = m
-    setMarca(m)
-    setLinea(m)
-    setDatos(null)
-    setEditando(null)
-    setHecho(null)
-    void recargar(m)
-  }
+  }, [marca])
 
   const nombreCampania = (id: string | null) => (id ? datos?.campanias.find((c) => c.id === id)?.nombre ?? id : 'Temporada')
 
@@ -150,7 +154,7 @@ export function ReglasComerciales() {
       const r = await traerReglasDeCaja(marca, true)
       setHecho(r.sembradas ? `Se trajeron ${r.sembradas} reglas de la Caja.` : `Ya estaban (${r.yaEstaban}).`)
       dijoLaCaja(r.caja)
-      await recargar(marca)
+      await recargar()
     }, 'No se pudieron traer las reglas de la Caja.')
   }
 
@@ -176,7 +180,7 @@ export function ReglasComerciales() {
     await correr(async () => {
       const r = await prenderCajaReglas(marca, prender)
       setHecho(r.prendida ? `La Caja de ${nombre} cobra con las reglas (${r.copiadas ?? 0}).` : `La Caja de ${nombre} volvió a su configuración.`)
-      await recargar(marca)
+      await recargar()
     }, 'No se pudo cambiar con qué cobra la Caja.')
   }
 
@@ -192,7 +196,7 @@ export function ReglasComerciales() {
       const g = await guardarRegla(marca, { ...r, activa: !r.activa })
       setHecho(`«${r.nombre}» ${r.activa ? 'apagada' : 'prendida'}.`)
       dijoLaCaja(g.caja)
-      await recargar(marca)
+      await recargar()
     }, 'No se pudo guardar la regla.')
   }
 
@@ -203,88 +207,116 @@ export function ReglasComerciales() {
   const guardadas = (datos?.reglas ?? []).filter((r) => (r.marca ?? marca) === deLinea)
   // ¿La línea tiene reglas propias? Las que cuentan son las prendidas del local (como en la Caja, `deLaLinea` del motor).
   const lineaSinReglas = esLinea && !guardadas.some((r) => r.activa && r.canal === 'local')
-  const grupos = [...new Set(guardadas.map((r) => r.campania ?? TEMPORADA))].sort((a, b) => (a === TEMPORADA ? -1 : b === TEMPORADA ? 1 : a.localeCompare(b)))
   const cc = datos?.cobraConReglas
   // Prendida, comparar con la configuración vieja de la Caja ya no dice nada: la Caja cobra con las reglas.
   // La comparación con la Caja es de las reglas de la MARCA (la Caja de hoy ⛔ distingue Stunned).
   const dif = cc?.prendida || esLinea ? null : datos?.caja.diferencias
 
+  // Una lista con vistas (diseño §3): Prendidas · Apagadas · Promos bancarias (las lee de la Agenda) · Todas. La campaña
+  // es una columna (antes, una tabla por campaña).
+  const t = normal(q)
+  const agenda = esLinea ? [] : datos?.agenda ?? []
+  const buscar = (rs: ReglaComercial[]) => (t ? rs.filter((r) => normal([r.nombre, r.fin, resumenDeRegla(r), nombreCampania(r.campania ?? null)].filter(Boolean).join(' ')).includes(t)) : rs)
+  const porVista: Record<string, ReglaComercial[]> = {
+    prendidas: buscar(guardadas.filter((r) => r.activa)), apagadas: buscar(guardadas.filter((r) => !r.activa)), agenda: buscar(agenda), todas: buscar(guardadas),
+  }
+  const VISTAS_REGLAS = [['prendidas', 'Prendidas'], ['apagadas', 'Apagadas'], ...(agenda.length ? [['agenda', 'Promos bancarias']] : []), ['todas', 'Todas']] as Array<[string, string]>
+  const enVista = VISTAS_REGLAS.some(([k]) => k === vista) ? vista : 'prendidas'
+  const conteo = Object.fromEntries(VISTAS_REGLAS.map(([k]) => [k, porVista[k].length]))
+  const deAgenda = enVista === 'agenda'
+
+  const celda = (r: ReglaComercial, k: string): React.ReactNode => {
+    if (k === 'regla') return <span title={[r.nombre, r.fin].filter(Boolean).join(' · ')}><b style={{ color: color.ink }}>{r.nombre}</b>{r.fin && <span style={{ color: color.mut }}> · {r.fin}</span>}</span>
+    if (k === 'hace') return <span style={{ color: color.ink2 }} title={resumenDeRegla(r)}>{resumenDeRegla(r)}</span>
+    if (k === 'prendas') return <span style={{ color: color.ink2 }} title={alcanceEnTexto(r)}>{alcanceEnTexto(r)}</span>
+    if (k === 'campania') return <span style={{ color: r.campania ? color.ink : color.mut }}>{nombreCampania(r.campania ?? null)}</span>
+    if (k === 'canal') return <span style={{ color: color.ink2 }}>{r.canal === 'local' ? 'Local' : 'Online'}</span>
+    if (k === 'cuando') return <span style={{ color: color.mut }}>{vigenciaEnTexto(r)}</span>
+    if (k === 'estado') return deAgenda ? <ChipEstado mapa={{ x: ['brand', 'De la Agenda'] }} k="x" /> : <ChipEstado mapa={{ x: r.activa ? ['success', 'Prendida'] : ['neutral', 'Apagada'] }} k="x" />
+    return null
+  }
+  const acciones = (r: ReglaComercial) => {
+    if (deAgenda) return null
+    const menu: AccionMenu[] = [
+      { key: 'editar', label: 'Editar la regla', icono: 'lapiz', onClick: () => setEditando(r), disabled: trabajando },
+      { key: 'prender', label: r.activa ? 'Apagar' : 'Prender', icono: r.activa ? 'pausa' : 'play', tone: r.activa ? 'warning' : undefined, onClick: () => void prenderApagar(r), disabled: trabajando },
+    ]
+    return <MenuAcciones acciones={menu} etiqueta={`Más acciones de «${r.nombre}»`} vertical alinear="izquierda" />
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <SectionCard
-        title="Reglas por forma de pago"
-        subtitle="Cada fin comercial es una regla: cuánto descuenta cada forma de pago, en qué prendas y cuándo. En una campaña, sus reglas reemplazan a las de temporada en sus prendas; entre dos reglas gana la mejor para la clienta."
-        actions={(
-          <div style={{ display: 'flex', gap: space[2] }}>
-            {MARCAS.map((m) => <Button key={m.key} size="sm" variant={m.key === marca ? 'solid' : 'outline'} onClick={() => elegirMarca(m.key)}>{m.label}</Button>)}
-          </div>
-        )}
-      >
-        {cc && !cc.prendida && (
-          <Notice tone="warning">
-            La Caja todavía cobra con su configuración (Formas de pago y Productos en oferta). Estas reglas se cargan y se prueban acá.{' '}
-            <Button size="sm" onClick={() => cajaConReglas(true)} disabled={trabajando || !!datos?.caja.diferencias.sinTraer}>Que la Caja cobre con estas reglas</Button>
-          </Notice>
-        )}
-        {cc?.prendida && (
-          <Notice tone={cc.alDia ? 'success' : 'danger'}>
-            {cc.alDia
-              ? <>La Caja cobra con estas reglas{cc.copiadasEn ? ` (tomadas el ${new Date(cc.copiadasEn).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}${cc.por ? ` por ${cc.por}` : ''})` : ''}.{' '}</>
-              : <>La Caja cobra con una copia VIEJA de las reglas: lo que se cambió después no lo cobra.{' '}<Button size="sm" onClick={() => cajaConReglas(true)} disabled={trabajando}>Pasarle las de ahora</Button>{' '}</>}
-            <Button size="sm" variant="outline" onClick={() => cajaConReglas(false)} disabled={trabajando}>Volver a la configuración de la Caja</Button>
-          </Notice>
-        )}
-        {cc && cc.noCobra.length > 0 && (
-          <Notice tone="warning" style={{ marginTop: space[3] }}>
-            Estas reglas están prendidas pero la Caja no las puede cobrar: {cc.noCobra.map((r) => `«${r.nombre}» (${r.porque})`).join(' · ')}
-          </Notice>
-        )}
-        {error && <Notice tone="danger" onClose={() => setError(null)} style={{ marginTop: space[3] }}>{error}</Notice>}
-        {hecho && <Notice tone="success" onClose={() => setHecho(null)} style={{ marginTop: space[3] }}>{hecho}</Notice>}
-        {dif?.sinTraer && (
-          <Notice tone="action" style={{ marginTop: space[3] }}>
-            Todavía no se trajeron las reglas de hoy de la Caja.{' '}
-            <Button size="sm" onClick={traerDeCaja} disabled={trabajando}>Traer las reglas de la Caja</Button>
-          </Notice>
-        )}
-        {dif && !dif.sinTraer && (dif.faltan.length > 0 || dif.sobran.length > 0) && (
-          <Notice tone="warning" style={{ marginTop: space[3] }}>
-            {dif.faltan.length > 0 && <div>La Caja cobra esto y ninguna regla prendida lo dice: {dif.faltan.join(' · ')}</div>}
-            {dif.sobran.length > 0 && <div>Las reglas dicen esto y la Caja todavía no lo cobra: {dif.sobran.join(' · ')}</div>}
-          </Notice>
-        )}
-        {(datos?.caja.avisos ?? []).map((a) => <Notice key={a} tone="neutral" style={{ marginTop: space[3] }}>{a}</Notice>)}
-      </SectionCard>
+      <TiraConfiguracion activa="reglas" ir={ir} />
+      <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <p style={{ margin: 0, flex: '1 1 320px', color: color.mut }}>
+          Cada fin comercial es una regla: cuánto descuenta cada forma de pago, en qué prendas y cuándo. En una campaña, sus reglas
+          reemplazan a las de temporada en sus prendas; entre dos reglas gana la mejor para la clienta.
+        </p>
+        <Button onClick={() => setEditando({ ...VACIA, marca: deLinea })} disabled={!datos || trabajando}>Agregar regla</Button>
+      </div>
 
-      <SectionCard
-        title={lineas ? `Reglas de ${nombreLinea}` : 'Reglas'}
-        actions={(
-          <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-            {lineas?.map((l) => <Button key={l.key} size="sm" variant={l.key === deLinea ? 'solid' : 'outline'} onClick={() => { setLinea(l.key); setEditando(null) }}>{l.label}</Button>)}
-            <Button size="sm" onClick={() => setEditando({ ...VACIA, marca: deLinea })} disabled={!datos || trabajando}>Agregar regla</Button>
+      {cc && !cc.prendida && (
+        <Notice tone="warning">
+          La Caja todavía cobra con su configuración (Formas de pago y Productos en oferta). Estas reglas se cargan y se prueban acá.{' '}
+          <Button size="sm" onClick={() => cajaConReglas(true)} disabled={trabajando || !!datos?.caja.diferencias.sinTraer}>Que la Caja cobre con estas reglas</Button>
+        </Notice>
+      )}
+      {cc?.prendida && (
+        <Notice tone={cc.alDia ? 'success' : 'danger'}>
+          {cc.alDia
+            ? <>La Caja cobra con estas reglas{cc.copiadasEn ? ` (tomadas el ${cuandoCorto(cc.copiadasEn)}${cc.por ? ` por ${cc.por}` : ''})` : ''}.{' '}</>
+            : <>La Caja cobra con una copia VIEJA de las reglas: lo que se cambió después no lo cobra.{' '}<Button size="sm" onClick={() => cajaConReglas(true)} disabled={trabajando}>Pasarle las de ahora</Button>{' '}</>}
+          <Button size="sm" variant="outline" onClick={() => cajaConReglas(false)} disabled={trabajando}>Volver a la configuración de la Caja</Button>
+        </Notice>
+      )}
+      {cc && cc.noCobra.length > 0 && (
+        <Notice tone="warning">Estas reglas están prendidas pero la Caja no las puede cobrar: {cc.noCobra.map((r) => `«${r.nombre}» (${r.porque})`).join(' · ')}</Notice>
+      )}
+      {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
+      {dif?.sinTraer && (
+        <Notice tone="action">
+          Todavía no se trajeron las reglas de hoy de la Caja.{' '}
+          <Button size="sm" onClick={traerDeCaja} disabled={trabajando}>Traer las reglas de la Caja</Button>
+        </Notice>
+      )}
+      {dif && !dif.sinTraer && (dif.faltan.length > 0 || dif.sobran.length > 0) && (
+        <Notice tone="warning">
+          {dif.faltan.length > 0 && <div>La Caja cobra esto y ninguna regla prendida lo dice: {dif.faltan.join(' · ')}</div>}
+          {dif.sobran.length > 0 && <div>Las reglas dicen esto y la Caja todavía no lo cobra: {dif.sobran.join(' · ')}</div>}
+        </Notice>
+      )}
+      {(datos?.caja.avisos ?? []).map((a) => <Notice key={a} tone="neutral">{a}</Notice>)}
+      {datos && lineaSinReglas && (
+        <Notice tone="neutral">
+          {nombreLinea} no tiene reglas propias: sus prendas se cobran con las de {MARCAS.find((m) => m.key === marca)?.label}. Con la primera regla prendida de {nombreLinea}, sus prendas se cobran sólo con las de {nombreLinea}.
+        </Notice>
+      )}
+
+      {!datos && !error && <EmptyState title="Leyendo las reglas…" />}
+      {datos && (
+        <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
+          <VistasLista vistas={VISTAS_REGLAS} valor={enVista} conteo={conteo} onCambio={setVista} />
+          <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
+            {lineas && (
+              <Select aria-label="Línea" style={{ cursor: 'pointer', width: 'auto', flex: '0 0 auto' }} value={deLinea} onChange={(e) => { setLinea(e.target.value); setEditando(null) }}>
+                {lineas.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+              </Select>
+            )}
+            <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las reglas" placeholder="Regla, medio o campaña" />
           </div>
-        )}
-      >
-        {datos && lineaSinReglas && (
-          <Notice tone="neutral" style={{ marginBottom: space[3] }}>
-            {nombreLinea} no tiene reglas propias: sus prendas se cobran con las de {MARCAS.find((m) => m.key === marca)?.label}. Con la primera regla prendida de {nombreLinea}, sus prendas se cobran sólo con las de {nombreLinea}.
-          </Notice>
-        )}
-        {!datos && !error && <p>Leyendo…</p>}
-        {datos && !guardadas.length && (esLinea || !datos.agenda.length) && !lineaSinReglas && <EmptyState title="Sin reglas" hint="Traé las de la Caja o agregá una." />}
-        {datos && grupos.map((g) => (
-          <div key={g || 'temporada'} style={{ marginBottom: space[5] }}>
-            <h4 style={{ margin: `0 0 ${space[2]}` }}>{g === TEMPORADA ? 'Temporada (siempre)' : `Campaña: ${nombreCampania(g)}`}</h4>
-            <TablaReglas reglas={guardadas.filter((r) => (r.campania ?? TEMPORADA) === g)} onEditar={setEditando} onPrenderApagar={prenderApagar} trabajando={trabajando} />
+          {deAgenda && <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Las promos bancarias se cargan en la Agenda: acá sólo se ven.</div>}
+          <ListaTrabajo
+            columnas={COLUMNAS_REGLAS} filas={porVista[enVista]} claveDe={(r) => r.id ?? r.nombre} celda={celda}
+            acciones={deAgenda ? undefined : acciones} anchoAcciones={40}
+            activa={editando?.id ?? null} onAbrir={deAgenda ? undefined : (r) => setEditando(r)} etiquetaFila={(r) => `la regla «${r.nombre}»`}
+            vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con esa búsqueda.' : guardadas.length ? 'Ninguna en esta vista.' : 'Sin reglas'} hint={!q && !guardadas.length ? 'Traé las de la Caja o agregá una.' : undefined} /></div>}
+          />
+          <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
+            {nombreLinea} · {guardadas.filter((r) => r.activa).length} prendidas de {guardadas.length} · una regla no se elimina: se apaga
           </div>
-        ))}
-        {datos && !esLinea && datos.agenda.length > 0 && (
-          <div>
-            <h4 style={{ margin: `0 0 ${space[2]}` }}>Promos bancarias (se cargan en la Agenda)</h4>
-            <TablaReglas reglas={datos.agenda} trabajando={trabajando} />
-          </div>
-        )}
-      </SectionCard>
+        </div>
+      )}
 
       {editando && datos && (
         <FormRegla
@@ -295,43 +327,13 @@ export function ReglasComerciales() {
             setHecho(g.nueva ? `Regla «${g.regla.nombre}» agregada.` : `Regla «${g.regla.nombre}» guardada.`)
             dijoLaCaja(g.caja)
             setEditando(null)
-            await recargar(marca)
+            await recargar()
           }, 'No se pudo guardar la regla.')}
         />
       )}
 
       {datos && <Simulador key={marca} marca={marca} datos={datos} borrador={editando} idx={catalogo?.idx ?? null} />}
     </div>
-  )
-}
-
-function TablaReglas({ reglas, onEditar, onPrenderApagar, trabajando }: { reglas: ReglaComercial[]; onEditar?: (r: ReglaComercial) => void; onPrenderApagar?: (r: ReglaComercial) => void; trabajando: boolean }) {
-  return (
-    <TableWrap>
-      <table>
-        <THead><Tr><Th>Regla</Th><Th>Qué hace</Th><Th>En qué prendas</Th><Th>Canal</Th><Th>Cuándo</Th><Th>Estado</Th>{onEditar && <Th />}</Tr></THead>
-        <TBody>
-          {reglas.map((r) => (
-            <Tr key={r.id}>
-              <Td>{r.nombre}{r.fin ? <div style={{ opacity: 0.7, fontSize: '0.85em' }}>{r.fin}</div> : null}</Td>
-              <Td>{resumenDeRegla(r)}</Td>
-              <Td>{alcanceEnTexto(r)}</Td>
-              <Td>{r.canal === 'local' ? 'Local' : 'Online'}</Td>
-              <Td>{vigenciaEnTexto(r)}</Td>
-              <Td>{r.activa ? <Badge tone="success" subtle>Prendida</Badge> : <Badge tone="neutral" subtle>Apagada</Badge>}</Td>
-              {onEditar && (
-                <Td>
-                  <div style={{ display: 'flex', gap: space[2] }}>
-                    <Button size="sm" variant="ghost" onClick={() => onEditar(r)} disabled={trabajando}>Editar</Button>
-                    {onPrenderApagar && <Button size="sm" variant="ghost" onClick={() => onPrenderApagar(r)} disabled={trabajando}>{r.activa ? 'Apagar' : 'Prender'}</Button>}
-                  </div>
-                </Td>
-              )}
-            </Tr>
-          ))}
-        </TBody>
-      </table>
-    </TableWrap>
   )
 }
 

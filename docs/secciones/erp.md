@@ -155,6 +155,13 @@ en el medio (Reglas), ⛔ en la cuenta. Cambiar a una cuenta que FACTURA (`esFac
 con descuento AVISA antes y después de guardar (`avisoDeRuta`, Stunned con sus reglas o las de Zattia como la Caja):
 ⛔ cambia la regla. 🔴 EN SOMBRA: la ruta anota la cuenta real de cada cobro del motor (TN, Caja→motor); la Caja sigue
 con su cuenta de MP hasta activar el ERP. Saldo a favor ⛔ lleva ruta (⛔ entra plata).
+🎨 **Reglas y Cuentas de cobro con el molde de REGISTRO (19-oct, Diseño 7)**: las dos llevan arriba la tira cuenta · medio ·
+ruta · regla (`TiraConfiguracion.tsx`; Ruta y Regla llevan a su pestaña) y toman la marca del MENÚ (`key={marca}` en
+`Erp.tsx`; se fue el selector propio). Reglas: UNA lista con vistas Prendidas · Apagadas · Promos bancarias (de la Agenda,
+sólo se ven) · Todas, la campaña como columna, Stunned por el selector de línea; «⋯» = Editar / Apagar-Prender; clic en
+la fila ⇒ el formulario de esa regla (el formulario y el simulador siguen igual, abajo). Cuentas de cobro: una fila por
+canal × medio de la línea, vistas por canal + «Sin ruta» + «Cambios» (el historial); clic o «⋯» ⇒ la ventana «Cambiar la
+ruta» (mismo aviso antes de guardar). ⛔ cambió ningún contrato. Tests `tests/erp-reglas-pantalla.test.tsx`, `erp-rutas-pantalla`.
 
 ## Dónde vive
 

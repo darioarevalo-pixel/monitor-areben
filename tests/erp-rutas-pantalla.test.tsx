@@ -27,6 +27,7 @@ const datos = { lineas: [{ linea: 'zattia', filas: filas('zattia') }, { linea: '
 const leerRutas = vi.fn(async () => datos)
 const ponerRuta = vi.fn(async () => ({ ok: true, ruta: { id: 'r2', desde: 'x' }, aviso: 'AVISO DEL SERVIDOR' }))
 vi.mock('@/lib/erp/cliente', () => ({ leerRutas: (...a: unknown[]) => leerRutas(...(a as [])), ponerRuta: (...a: unknown[]) => ponerRuta(...(a as [])) }))
+vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno' } }) }))
 
 let root: Root | null = null
 let host: HTMLDivElement
@@ -39,12 +40,21 @@ async function montar() {
   await act(async () => { root = createRoot(host); root.render(<RutasCobro />) })
   await act(async () => {})
 }
-const fila = (medio: string) => [...host.querySelectorAll('tr')].find((tr) => tr.querySelector('td')?.textContent === medio)!
-const boton = (texto: string, dentro: ParentNode = host) => [...dentro.querySelectorAll('button')].find((b) => b.textContent === texto)!
+/** La fila de la lista (canal Local, la primera vista): `role="row"` con el medio adentro. */
+const fila = (medio: string) => [...host.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes('Local') && r.textContent?.includes(medio))!
+const pagina = () => document.body.textContent ?? ''
+const abrir = async (medio: string) => { await act(async () => { fila(medio).dispatchEvent(new MouseEvent('click', { bubbles: true })) }) }
 const elegir = async (cuenta: string) => {
-  const sel = host.querySelector('select') as HTMLSelectElement
+  const sel = [...document.body.querySelectorAll('select')].find((x) => x.getAttribute('aria-label') !== 'Línea') as HTMLSelectElement
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, cuenta)
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+}
+const linea = async (l: string) => {
+  const sel = host.querySelector('select[aria-label="Línea"]') as HTMLSelectElement
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, l)
     sel.dispatchEvent(new Event('change', { bubbles: true }))
   })
 }
@@ -56,23 +66,26 @@ describe('RutasCobro', () => {
     expect(fila('Transferencia').textContent).toContain('No')
     expect(fila('Efectivo').textContent).toContain('Sin ruta')
     expect(host.textContent).toContain('la Caja sigue cobrando como hoy')
+    expect(host.textContent).toContain('Ruta')
+    expect(host.textContent).toMatch(/Sin ruta\s*23/)
+    expect(host.textContent).toMatch(/Cambios\s*1/)
   })
 
   it('🔑 el aviso aparece ANTES de guardar: a Galicia (factura) con transferencia −10 %; a Bruno, ⛔', async () => {
     await montar()
-    await act(async () => boton('Cambiar', fila('Transferencia')).click())
+    await abrir('Transferencia')
     await elegir(GAL)
-    expect(host.textContent).toContain('Transferencia de Zattia en local tiene −10 % («Transferencia siempre») y ahora va a Galicia · Cuenta Corriente (Areben), que factura. ¿Revisás la regla?')
+    expect(pagina()).toContain('Transferencia de Zattia en local tiene −10 % («Transferencia siempre») y ahora va a Galicia · Cuenta Corriente (Areben), que factura. ¿Revisás la regla?')
     await elegir(MPB)
-    expect(host.textContent).not.toContain('¿Revisás la regla?')
+    expect(pagina()).not.toContain('¿Revisás la regla?')
   })
 
   it('guardar manda línea, canal, medio y cuenta, y muestra el aviso del servidor', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await montar()
-    await act(async () => boton('Poner', fila('Efectivo')).click())
+    await abrir('Efectivo')
     await elegir(GAL)
-    await act(async () => boton('Cambiar la ruta').click())
+    await act(async () => [...document.body.querySelectorAll('button')].filter((b) => b.textContent === 'Cambiar la ruta').pop()!.click())
     await act(async () => {})
     expect(ponerRuta).toHaveBeenCalledWith('zattia', { linea: 'zattia', canal: 'local', medio: 'efectivo', cuenta_real_id: GAL, tasa: '', dias_acreditacion: '' })
     expect(host.textContent).toContain('Efectivo de Zattia en local va a Galicia · Cuenta Corriente (Areben) desde ahora.')
@@ -83,13 +96,12 @@ describe('RutasCobro', () => {
   it('Stunned: la misma pantalla con su línea', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await montar()
-    await act(async () => boton('Stunned').click())
-    expect(host.textContent).toContain('Rutas de Stunned')
+    await linea('stunned')
     expect(fila('Transferencia').textContent).toContain('Sin ruta')
-    await act(async () => boton('Poner', fila('Transferencia')).click())
+    await abrir('Transferencia')
     await elegir(GAL)
-    expect(host.textContent).toContain('Transferencia de Stunned en local tiene −10 %')
-    await act(async () => boton('Cambiar la ruta').click())
+    expect(pagina()).toContain('Transferencia de Stunned en local tiene −10 %')
+    await act(async () => [...document.body.querySelectorAll('button')].filter((b) => b.textContent === 'Cambiar la ruta').pop()!.click())
     expect(ponerRuta).toHaveBeenCalledWith('zattia', expect.objectContaining({ linea: 'stunned', medio: 'transferencia', cuenta_real_id: GAL }))
   })
 })

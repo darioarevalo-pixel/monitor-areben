@@ -160,7 +160,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {seccion.vacia && <EmptyState title={seccion.vacia} />}
             {/* `key`: al cambiar de marca se cierra la ficha abierta (era de la otra marca) y se vuelve a leer. */}
             {pestania === 'ventas' && <VentasErp key={marca} irACaja={(que) => ir('caja', que)} />}
-            {pestania === 'facturacion' && <Facturacion />}
+            {pestania === 'facturacion' && <Facturacion key={marca} />}
             {pestania === 'cambio' && <CambioCaja />}
             {pestania === 'factura' && <FacturaCaja />}
             {pestania === 'stock' && <StockErp key={marca} ajustar={ajustarPrenda} />}
@@ -169,8 +169,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {pestania === 'conciliacion' && <ConciliacionDia key={marca} ajustar={ajustarPrenda} />}
             {pestania === 'diferencias' && <DiferenciasDia key={marca} ajustar={ajustarPrenda} />}
             {pestania === 'productos' && <ProductosErp />}
-            {pestania === 'reglas' && <ReglasComerciales />}
-            {pestania === 'cuentas' && <RutasCobro />}
+            {pestania === 'reglas' && <ReglasComerciales key={marca} ir={(k) => ir('configuracion', k)} />}
+            {pestania === 'cuentas' && <RutasCobro key={marca} ir={(k) => ir('configuracion', k)} />}
           </div>
         </div>
       </div>
