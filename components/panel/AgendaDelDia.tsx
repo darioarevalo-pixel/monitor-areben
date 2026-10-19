@@ -819,9 +819,12 @@ function Agenda({
 
   // ── La cola de trabajo, que es el default ─────────────────────────────────
   const { lista, frios, hechos } = estado
+  // Además del cruce con el servidor, los clientes que ya están en esta lista: si el número de un
+  // prospecto es el de uno de ellos, ya se sabe que es cliente (Nuria Encina, 19-oct-2026).
+  const telsClientesLista = indexarEscritos([...lista, ...frios, ...hechos].map((f) => f.telefono))
   const leads = leadsDelPanel(crmLeads, today)
     .map(itemDeLead)
-    .filter((i) => !leEscribisteHoy(leadsClientes, [i.telefono]))
+    .filter((i) => !leEscribisteHoy(leadsClientes, [i.telefono]) && !leEscribisteHoy(telsClientesLista, [i.telefono]))
   const hoyISOs = hoyISO(today)
   const leadsHechos = Object.values(crmLeads || {})
     .filter((l) => l && l.estado === 'activo' && l.ultimo_contacto === hoyISOs)

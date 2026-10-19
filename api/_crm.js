@@ -51,7 +51,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
-import { buscarPorTelefono, indexarTelefonos } from '../lib/crm/telefono.core.js';
+import { buscarPorTelefono, cola, indexarTelefonos } from '../lib/crm/telefono.core.js';
 import { esVentaTecnica } from '../lib/etl/tecnica.core.js';
 
 // El select del CRM, palabra por palabra el de `lib/crm/datos.ts` (SEL_CLIENTES). Un campo de menos
@@ -423,7 +423,12 @@ async function telsDeClientes(supabase, body, res) {
   const tels = [...new Set((Array.isArray(body.tels) ? body.tels : []).map((t) => String(t || '')).filter(Boolean))].slice(0, TOPE_TELS);
   if (!tels.length) return res.status(200).json({ ok: true, tels: [] });
   const indice = await indiceDeTelefonos(supabase, Date.now());
-  const porTel = tels.map((t) => ({ t, ids: buscarPorTelefono(indice, t).ids }));
+  // Exacto y por cola, juntos: si el número exacto cae en un alta sin compras, la cola puede
+  // encontrar la que sí compró.
+  const porTel = tels.map((t) => {
+    const c = cola(t);
+    return { t, ids: [...new Set([...buscarPorTelefono(indice, t).ids, ...((c && indice.porCola.get(c)) || [])])] };
+  });
   const ids = [...new Set(porTel.flatMap((x) => x.ids))];
   if (!ids.length) return res.status(200).json({ ok: true, tels: [] });
   const compraron = new Set();
