@@ -345,7 +345,10 @@ export const ponerRuta = (marca: MarcaErp, ruta: RutaAPoner) =>
 
 export type FilaVentaLista = {
   kind: 'venta' | 'pedido'; id: string; numero: number | null; ref: string; linea: string; origen: string; canal?: string | null; tipo: 'venta' | 'cambio'
-  ocurridaEn: string; cliente: string; clienteDe: 'erp' | 'gn' | 'falta' | null; clienteId: string | null; total: number; saldo: number
+  ocurridaEn: string
+  /** La fecha que se MUESTRA: la del pedido (en TN, cuando entró; si no, la de la venta). Bruno, 19-oct. */
+  pedidoEn: string
+  cliente: string; clienteDe: 'erp' | 'gn' | 'falta' | null; clienteId: string | null; total: number; saldo: number
   estadoKey: string; cobroKey: string; origenTexto: string; vendio: string
   factura: { numero: string; de: 'erp' | 'gn' } | null; facturada: boolean
   nota: { id: string; texto: string; de: string } | null; entrega: { tipo: string; direccion?: string } | null

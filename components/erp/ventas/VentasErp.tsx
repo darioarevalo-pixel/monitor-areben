@@ -43,7 +43,7 @@ function bajarCsv(filas: FilaVentaLista[]) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
   const renglones = [['Nº', 'Fecha', 'Cliente', 'Origen', 'Estado', 'Cobro', 'Total', 'Saldo', 'Factura', 'Vendió', 'Nota'].map(c).join(';')]
   for (const f of filas) {
-    renglones.push([f.ref, cuandoCorto(f.ocurridaEn), f.cliente, f.origenTexto, ESTADO[f.estadoKey]?.[1] ?? f.estadoKey, COBRO[f.cobroKey]?.[1] ?? f.cobroKey,
+    renglones.push([f.ref, cuandoCorto(f.pedidoEn), f.cliente, f.origenTexto, ESTADO[f.estadoKey]?.[1] ?? f.estadoKey, COBRO[f.cobroKey]?.[1] ?? f.cobroKey,
       String(f.total).replace('.', ','), String(f.saldo).replace('.', ','), f.factura?.numero ?? '', f.vendio, f.nota?.texto ?? ''].map(c).join(';'))
   }
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
@@ -120,7 +120,7 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
 
   const celda = (f: FilaVentaLista, k: string): React.ReactNode => {
     if (k === 'n') return <b style={{ color: f.kind === 'pedido' ? color.mut : color.ink }}>{f.ref}</b>
-    if (k === 'h') return <span style={{ color: color.mut }}>{cuandoCorto(f.ocurridaEn)}</span>
+    if (k === 'h') return <span style={{ color: color.mut }}>{cuandoCorto(f.pedidoEn)}</span>
     if (k === 'c') {
       return (
         <span title={`${f.cliente}${f.clienteDe === 'gn' ? ' · el nombre sale de GN (la venta todavía no tiene cliente del ERP)' : f.clienteDe === 'falta' ? (f.kind === 'pedido' ? ' · un pedido sin pagar todavía no llegó a GN: el nombre aparece cuando se cobra' : ' · el nombre llega con el espejo de GN, al otro día') : ''}`}>

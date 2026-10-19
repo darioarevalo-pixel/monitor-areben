@@ -17,6 +17,22 @@ const venta = (o: Record<string, unknown> = {}) => ({
   usuario: 'camilaquintana', ocurridaEn: '2026-10-18T13:40:00Z', pagos: [{ medio: 'efectivo', cuenta: 'Efectivo', monto: 18990 }], ...o,
 })
 
+describe('la fecha de la fila es la del PEDIDO (Bruno, 19-oct)', () => {
+  it('una venta de TN muestra cuándo entró el pedido, ⛔ cuándo se pagó; sin pedido, la de la venta', () => {
+    const tn = armarFila(venta({ origen: 'tn', ocurridaEn: '2026-10-19T12:00:00Z', tnCreadaEn: '2026-10-16T22:05:00+00:00' }))
+    expect(tn.pedidoEn).toBe('2026-10-16T22:05:00+00:00')
+    expect(tn.ocurridaEn).toBe('2026-10-19T12:00:00Z')
+    expect(armarFila(venta()).pedidoEn).toBe('2026-10-18T13:40:00Z')
+    // Un pedido «posterior» al pago (reloj corrido) ⛔ adelanta la fecha.
+    expect(armarFila(venta({ origen: 'tn', tnCreadaEn: '2026-10-18T14:00:00Z' })).pedidoEn).toBe('2026-10-18T13:40:00Z')
+  })
+  it('tres pedidos de días distintos pagados juntos se ordenan por el pedido', () => {
+    const f = ['2026-10-14T10:00:00Z', '2026-10-17T10:00:00Z', '2026-10-15T10:00:00Z'].map((t, i) =>
+      armarFila(venta({ id: `v${i}`, numero: 300 + i, origen: 'tn', ocurridaEn: '2026-10-19T12:00:00Z', tnCreadaEn: t })))
+    expect(ordenar(f, null).map((x: { numero: number }) => x.numero)).toEqual([301, 302, 300])
+  })
+})
+
 describe('el estado de cada venta', () => {
   it('cada origen dice lo suyo', () => {
     expect(estadoDeVenta(venta())).toBe('retirado')

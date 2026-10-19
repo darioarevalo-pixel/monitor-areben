@@ -181,7 +181,7 @@ function FormEditar({ marca, fila, puede, vendedores, onCerrar, onHecho, irACaja
         <Button disabled={!hayAlgo || trabajando || faltaDireccion || !!bloqueoEditar || !!bloqueoNota} onClick={() => void guardar()}>Guardar cambios</Button>
       </>}
     >
-      <p style={{ marginTop: 0, color: color.mut }}>{fila.cliente} · {cuandoCorto(fila.ocurridaEn)}</p>
+      <p style={{ marginTop: 0, color: color.mut }}>{fila.cliente} · {cuandoCorto(fila.pedidoEn)}</p>
       {(bloqueoEditar || bloqueoNota) && <Notice tone="warning">{bloqueoEditar || bloqueoNota}</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>

@@ -83,7 +83,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     }, 'No se pudo hacer la nota de crédito.')
   }
 
-  const titulo = `${esPedido ? `Pedido ${fila.ref}` : `Venta ${fila.ref}`} · ${cuandoCorto(fila.ocurridaEn)}`
+  const titulo = `${esPedido ? `Pedido ${fila.ref}` : `Venta ${fila.ref}`} · ${cuandoCorto(fila.pedidoEn)}`
   const debe = fila.saldo > 0 && !esPedido
   const v = ficha?.venta
   const menu: AccionMenu[] = esPedido ? [] : [

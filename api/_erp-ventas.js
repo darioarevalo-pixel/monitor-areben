@@ -118,7 +118,7 @@ function filaCruda(v, a, numeros) {
   const fe = (v.facturas || []).map((f) => a.erp.get(f.factura_id)).filter((f) => f && !f.nc)[0]
   return {
     kind: 'venta', id: v.id, numero: v.numero, linea: v.marca, tipo: v.tipo, estado: v.estado, origen: v.origen,
-    canal: v.canal, deposito: v.deposito, total: v.total, prueba: v.prueba, usuario: v.vendedor || v.usuario, ocurridaEn: v.ocurrida_en,
+    canal: v.canal, deposito: v.deposito, total: v.total, prueba: v.prueba, usuario: v.vendedor || v.usuario, ocurridaEn: v.ocurrida_en, tnCreadaEn: o?.creada_en ?? null,
     nota: notaVigente(v.notas), entrega: v.entrega ?? null, clienteId: v.cliente_id ?? null,
     cliente: v.cliente, clienteGn: g?.client_name ?? null, gnNumero: g?.number ?? null, gnEstado: v.detalle?.sale_state ?? g?.sale_state ?? null,
     tnNumero: v.detalle?.tn?.numero ?? o?.numero ?? null, tnEstado: o?.estado ?? null, envioTipo: o?.envio_tipo ?? null,
