@@ -460,8 +460,18 @@ export type FilaProducto = {
   costo: number | null
   tn: 'publicado' | 'oculto' | 'no'
   sinBarra: boolean
+  /** El último renglón del historial de precios (`copia` = lo trajo la copia de GN o TN, ⛔ una persona). */
+  ultimoCambio: { lista: string; precio: number | null; cuando: string; quien: string | null; copia: boolean } | null
+  /** Cambios de precio de verdad este mes (la copia inicial ⛔ cuenta). */
+  cambiosMes: number
+  /** La liquidación EN CURSO del monitor que lo tiene, con su precio. */
+  liquidacion: { nombre: string; hasta: string | null; precio: number | null } | null
 }
-export type ListaDeProductos = { filas: FilaProducto[]; libroHasta: string | null; pedidosLeidosEn: string | null; tnLeidaEn: string | null }
+export type ListaDeProductos = {
+  filas: FilaProducto[]; libroHasta: string | null; pedidosLeidosEn: string | null; tnLeidaEn: string | null
+  /** El rol del motor ⛔ pudo leer las liquidaciones del monitor: la pantalla lo dice. */
+  liquidacionesError?: string | null
+}
 export const leerListaDeProductos = (marca: MarcaErp) =>
   pedir<ListaDeProductos>(null, `&vista=productos-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los productos.')
 

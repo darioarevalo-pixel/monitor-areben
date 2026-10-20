@@ -35,6 +35,7 @@ import { DiferenciasDia } from './DiferenciasDia'
 import { ConciliacionDia } from './ConciliacionDia'
 import { AjustesStock } from './AjustesStock'
 import { ProductosErp } from './productos/ProductosErp'
+import { PreciosErp } from './productos/PreciosErp'
 import { ReglasComerciales } from './ReglasComerciales'
 import { RutasCobro } from './RutasCobro'
 import { VentasErp } from './ventas/VentasErp'
@@ -69,7 +70,7 @@ export const SECCIONES_ERP: Seccion[] = [
     key: 'stock', titulo: 'Stock', icono: 'M21 8l-9-5-9 5 9 5 9-5z M3 8v8l9 5 9-5V8 M12 13v8',
     pestanias: [{ key: 'stock', label: 'Stock' }, { key: 'movimientos', label: 'Movimientos' }, { key: 'transferencias', label: 'Transferencias' }, { key: 'ajustes', label: 'Conteos y ajustes' }, { key: 'recepciones', label: 'Ingresos' }, { key: 'comparacion', label: 'Comparación con TN y ML' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Diferencias con GN' }],
   },
-  { key: 'productos', titulo: 'Productos y precios', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }] },
+  { key: 'productos', titulo: 'Productos y precios', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }] },
   {
     key: 'clientes', titulo: 'Clientes y proveedores', icono: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
     pestanias: [{ key: 'clientes', label: 'Clientes' }, { key: 'cuenta-corriente', label: 'Cuenta corriente' }, { key: 'proveedores', label: 'Proveedores' }],
@@ -183,6 +184,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {pestania === 'conciliacion' && <ConciliacionDia key={marca} ajustar={ajustarPrenda} />}
             {pestania === 'diferencias' && <DiferenciasDia key={marca} ajustar={ajustarPrenda} />}
             {pestania === 'productos' && <ProductosErp />}
+            {pestania === 'precios' && <PreciosErp key={marca} />}
             {pestania === 'clientes' && <ClientesErp key={marca} />}
             {pestania === 'cuenta-corriente' && <CuentaCorriente key={marca} />}
             {pestania === 'proveedores' && <ProveedoresErp key={marca} />}

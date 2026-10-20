@@ -12,7 +12,7 @@ Productos y precios · Clientes y proveedores · Configuración, y «Volver al m
 pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una vieja o mal escrita se corrige sola).
 Las pestañas: Ventas = Ventas · Por producto · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
 dirección vieja cae en Ventas) · Caja (POS) = Cambio · Factura · Stock =
-Stock · Movimientos · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Productos (la vieja `/erp/productos/precios` cae ahí) · Configuración = Reglas · Cuentas de cobro;
+Stock · Movimientos · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Productos · Precios · Configuración = Reglas · Cuentas de cobro;
 Clientes y proveedores = Clientes · Cuenta corriente · Proveedores. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
 botones crudos y `select`). Tests: `tests/erp-navegacion*.test.ts*`. El registro (`registro.ts`) conserva `erp` sólo
 porque el test de registro lo exige: el shell ya ⛔ lo monta.
@@ -163,6 +163,15 @@ de la venta, + las del ERP con CAE; «⋯» = PDF y NC) · Notas de crédito (s�
 Núcleo `lib/erp/facturacion-lista.core.js`; el Nº, la clienta y las facturas de GN los suma el GET del mes
 (`vistaDeFacturacion`, sólo lectura: ⛔ entra en `facturarVentas`). Test `tests/erp-facturacion-pantalla.test.tsx`.
 
+- 🔑 **`erp › Productos y precios › Precios`** (🎨 20-oct, Diseño 9: pestaña «Precios» del tablero 5 del v8): SÓLO LECTURA, las
+  mismas filas de Productos (`vista=productos-lista`) en una grilla de listas —Local · Online · Mayorista— + «Oferta o liquidación»
+  (la liquidación EN CURSO del monitor, `liquidaciones`/`liquidacion_items` aplicados, manda; si no, el precio «Tienda Nube con
+  oferta» cuando es MÁS BAJO que Online) + «Último cambio» (último renglón de `producto_precio`; `gn-copia`/`tn-copia` dicen
+  «Copia de …»). Vistas Todos · Con liquidación u oferta · Cambiados este mes (un precio DISTINTO del anterior de la misma lista:
+  la copia inicial ⛔ cuenta) · Sin precio mayorista; Exportar; el ícono abre `FichaProducto` con el historial. Núcleo
+  `lib/erp/precios-lista.core.js` (`tests/erp-precios-lista.test.ts`). 🔑 Medido 20-oct: 4 listas en el motor (⛔ «Mayorista
+  especial» ⇒ lo dice el pie); historial desde el 15-oct, 0 cambios de verdad; si el rol del motor ⛔ lee `liquidaciones`, la
+  pantalla lo dice (`liquidacionesError`).
 - 🔑 **`erp › Productos y precios › Productos`** (🎨 19-oct, Diseño 7: lista de TRABAJO con el molde, tablero 5 del v8; reemplaza
   al «buscá un producto» de `PreciosProducto.tsx`, 15-oct): un producto por fila —variantes, disponible, costo, precio Local ·
   Online · Mayorista, si está en Tienda Nube (publicado / oculto / no está), categoría, proveedor— con vistas de lo que FALTA

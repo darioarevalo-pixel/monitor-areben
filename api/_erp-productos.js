@@ -30,7 +30,26 @@ async function delMotor(pg) {
     where i.sku is not null and i.sku <> ''
     group by i.product_id`)).rows
   const [{ leida } = {}] = (await pg.query('select max(leida_en) as leida from tn_catalogo_lectura')).rows
-  return { productos, precios, costos, tn, tnLeidaEn: leida ? new Date(leida).toISOString() : null }
+  // Precios: el último renglón del historial de cada producto y cuántos CAMBIOS de verdad tuvo este mes (un renglón con
+  // otro precio que el anterior de la misma lista; la copia inicial de GN/TN ⛔ es un cambio).
+  const cambios = (await pg.query(`with h as (
+      select marca, product_id, lista, precio, vigente_desde, creada_en, usuario, fuente,
+        lag(precio) over (partition by marca, product_id, lista order by vigente_desde, creada_en) as antes
+      from producto_precio where vigente_desde <= now())
+    select distinct on (marca, product_id) marca, product_id, lista, precio, vigente_desde, usuario, fuente,
+      count(*) filter (where antes is not null and antes <> precio
+        and vigente_desde >= date_trunc('month', now() at time zone 'America/Argentina/Buenos_Aires') at time zone 'America/Argentina/Buenos_Aires')
+        over (partition by marca, product_id) as cambios_mes
+    from h order by marca, product_id, vigente_desde desc, creada_en desc`)).rows
+  // La liquidación EN CURSO del monitor (`liquidaciones`, la escribe Precios del monitor): si el rol ⛔ la lee, se dice.
+  let liquidaciones = [], liquidacionesError = null
+  try {
+    liquidaciones = (await pg.query(`select i.pid::text as product_id, l.store, l.nombre, l.datos->>'hasta' as hasta,
+        i.datos->'decision'->>'precioSale' as precio
+      from liquidaciones l join liquidacion_items i on i.liq_id = l.id
+      where l.estado = 'en_curso' and i.estado = 'aplicado'`)).rows
+  } catch (e) { liquidacionesError = e instanceof Error ? e.message : String(e) }
+  return { productos, precios, costos, tn, cambios, liquidaciones, liquidacionesError, tnLeidaEn: leida ? new Date(leida).toISOString() : null }
 }
 
 /**
@@ -46,7 +65,8 @@ export async function listaDeProductos({ marca }, deps) {
   if (stock.status) return stock
   if (motor.status) return motor
   return {
-    filas: armarFilasProductos({ productos: motor.productos, stock: stock.filas, precios: motor.precios, costos: motor.costos, tn: motor.tn }),
+    filas: armarFilasProductos({ productos: motor.productos, stock: stock.filas, precios: motor.precios, costos: motor.costos, tn: motor.tn, cambios: motor.cambios, liquidaciones: motor.liquidaciones }),
+    liquidacionesError: motor.liquidacionesError,
     libroHasta: stock.libroHasta,
     pedidosLeidosEn: stock.pedidosLeidosEn,
     tnLeidaEn: motor.tnLeidaEn,
