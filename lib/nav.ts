@@ -558,6 +558,17 @@ export function descripcionDe(key: string): string | undefined {
  * documenta que siguen andando sin redirect.
  */
 export const ZONAS: Record<string, Record<string, { titulo: string; desc: string }>> = {
+  // La Agenda (Darío, 20-oct-2026): el encabezado decía «Agenda» y abajo la pantalla repetía el suyo
+  // («Equipo»), dos títulos que en el celular eran media pantalla. Ahora lo dice la zona, con el
+  // «+ Tarea» al lado. ⛔ Sin `''`: «Hoy» no lleva este encabezado, saluda con el suyo (`SaludoHoy`).
+  agenda: {
+    equipo: { titulo: 'Equipo', desc: 'Cómo va cada una hoy.' },
+    semana: { titulo: 'Semana', desc: 'Los próximos siete días.' },
+    mes: { titulo: 'Mes', desc: 'El mes completo.' },
+    eventos: { titulo: 'Eventos', desc: 'Tareas que se generan con un ingreso o una sesión.' },
+    rutinas: { titulo: 'Tareas fijas', desc: 'Lo que se repite, por persona. También avisos y promociones.' },
+    cumplimiento: { titulo: 'Cumplimiento', desc: 'Tareas hechas y pendientes de los últimos días.' },
+  },
   'meta-ads': {
     '': {
       titulo: 'Rendimiento',

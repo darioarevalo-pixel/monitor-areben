@@ -62,20 +62,20 @@ import { TusPantallas } from './TusPantallas'
 type Sub = 'hoy' | 'equipo' | 'semana' | 'mes' | 'eventos' | 'rutinas' | 'cumplimiento'
 
 /**
- * Las seis, con lo que contesta cada una.
+ * Las seis, y quién puede ver cada una.
  *
- * ⚠️ El encabezado lo dibuja esta pantalla y ⛔ no `SeccionHeader`: las seis comparten `key`, así
- * que el del shell diría «Agenda» seis veces y no habría forma de saber en cuál cayó uno desde el
- * sidebar. Es el mismo motivo —y la misma forma— que en `components/tncat/Tncat.tsx`.
+ * ⚠️ El título de cada pantalla lo dibuja `SeccionHeader` con las `ZONAS` de `lib/nav.ts` (Darío,
+ * 20-oct-2026: antes iban los dos, «Agenda» y abajo «Equipo»). «Hoy» no lleva ninguno de los dos:
+ * saluda con `SaludoHoy`.
  */
-const SUBS: { key: Sub; label: string; hint: string; cargar: boolean }[] = [
-  { key: 'hoy', label: 'Hoy', hint: 'Tareas y promoción del día', cargar: false },
-  { key: 'equipo', label: 'Equipo', hint: 'Cómo va cada una hoy', cargar: true },
-  { key: 'semana', label: 'Semana', hint: 'Los próximos siete días', cargar: false },
-  { key: 'mes', label: 'Mes', hint: 'El mes completo', cargar: false },
-  { key: 'eventos', label: 'Eventos', hint: 'Tareas que se generan con un ingreso o una sesión', cargar: true },
-  { key: 'rutinas', label: 'Tareas fijas', hint: 'Lo que se repite, por persona. También avisos y promociones', cargar: true },
-  { key: 'cumplimiento', label: 'Cumplimiento', hint: 'Tareas hechas y pendientes de los últimos días', cargar: true },
+const SUBS: { key: Sub; cargar: boolean }[] = [
+  { key: 'hoy', cargar: false },
+  { key: 'equipo', cargar: true },
+  { key: 'semana', cargar: false },
+  { key: 'mes', cargar: false },
+  { key: 'eventos', cargar: true },
+  { key: 'rutinas', cargar: true },
+  { key: 'cumplimiento', cargar: true },
 ]
 
 export function Agenda() {
@@ -104,20 +104,13 @@ export function Agenda() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      {/* «Hoy» saluda como en la maqueta del celular (Darío, 19-oct-2026); las demás, su título. */}
-      {activa.key === 'hoy' && cargado ? (
+      {/* «Hoy» saluda como en la maqueta del celular (Darío, 19-oct-2026). Sólo el nombre de pila. */}
+      {activa.key === 'hoy' && cargado && (
         <SaludoHoy
-          nombre={delEquipo ? delEquipo.nombre.split(' ')[0] : comoLeLlamamos(perfil)}
+          nombre={(delEquipo ? delEquipo.nombre : comoLeLlamamos(perfil)).split(' ')[0]}
           hechas={deHoy.filter((p) => p.hecho).length}
           total={deHoy.length}
         />
-      ) : (
-      <header style={{ borderBottom: `1px solid ${color.line}`, paddingBottom: space[3] }}>
-        <h2 style={{ fontSize: font.xl, fontWeight: weight.bold, color: color.ink, letterSpacing: -0.2, margin: 0 }}>
-          {activa.label}
-        </h2>
-        <p style={{ fontSize: font.base, color: color.mut, marginTop: 2 }}>{activa.hint}</p>
-      </header>
       )}
 
       {!cargado ? (
