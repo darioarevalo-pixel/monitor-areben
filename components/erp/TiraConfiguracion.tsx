@@ -2,15 +2,15 @@
 
 /**
  * La tira de Configuración (decisión 12, tablero 6 del v8): cómo encajan cuenta · medio · ruta · regla. Va arriba de
- * Reglas y de Cuentas de cobro, con la de la pestaña en oscuro; Ruta y Regla llevan a su pestaña.
+ * Cuentas, Rutas y Reglas, con la de la pestaña en oscuro; cada pieza lleva a su pestaña (el medio ⛔ tiene una).
  */
 
 import { color, font, weight } from '@/components/ui'
 
-export type PiezaConfiguracion = 'cuentas' | 'reglas'
+export type PiezaConfiguracion = 'cuentas-reales' | 'cuentas' | 'reglas'
 
 const PIEZAS: Array<{ k: string; titulo: string; nota: string; va?: PiezaConfiguracion }> = [
-  { k: 'cuenta', titulo: 'Cuenta', nota: 'dónde cae la plata (las del dashboard)' },
+  { k: 'cuenta', titulo: 'Cuenta', nota: 'dónde cae la plata (las del dashboard)', va: 'cuentas-reales' },
   { k: 'medio', titulo: 'Medio', nota: 'con qué paga el cliente' },
   { k: 'ruta', titulo: 'Ruta', nota: 'qué cuenta recibe cada medio', va: 'cuentas' },
   { k: 'regla', titulo: 'Regla de cobro', nota: 'el descuento o recargo del medio', va: 'reglas' },

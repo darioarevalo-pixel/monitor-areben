@@ -38,6 +38,7 @@ import { ProductosErp } from './productos/ProductosErp'
 import { PreciosErp } from './productos/PreciosErp'
 import { ReglasComerciales } from './ReglasComerciales'
 import { RutasCobro } from './RutasCobro'
+import { CuentasErp, EstructuraErp } from './CuentasYEstructura'
 import { VentasErp } from './ventas/VentasErp'
 import { PorProductoErp } from './ventas/PorProductoErp'
 import { CajasErp } from './ventas/CajasErp'
@@ -78,7 +79,7 @@ export const SECCIONES_ERP: Seccion[] = [
   },
   {
     key: 'configuracion', titulo: 'Configuración', icono: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M4 12h2 M18 12h2 M12 4v2 M12 18v2 M6.3 6.3l1.4 1.4 M16.3 16.3l1.4 1.4 M6.3 17.7l1.4-1.4 M16.3 7.7l1.4-1.4',
-    pestanias: [{ key: 'reglas', label: 'Reglas' }, { key: 'cuentas', label: 'Cuentas de cobro' }],
+    pestanias: [{ key: 'cuentas-reales', label: 'Cuentas' }, { key: 'cuentas', label: 'Rutas' }, { key: 'reglas', label: 'Reglas de cobro' }, { key: 'estructura', label: 'Marcas, depósitos y puntos de venta' }],
   },
 ]
 
@@ -192,6 +193,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {pestania === 'proveedores' && <ProveedoresErp key={marca} />}
             {pestania === 'reglas' && <ReglasComerciales key={marca} ir={(k) => ir('configuracion', k)} />}
             {pestania === 'cuentas' && <RutasCobro key={marca} ir={(k) => ir('configuracion', k)} />}
+            {pestania === 'cuentas-reales' && <CuentasErp key={marca} ir={(k) => ir('configuracion', k)} />}
+            {pestania === 'estructura' && <EstructuraErp key={marca} />}
           </div>
         </div>
       </div>

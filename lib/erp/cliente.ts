@@ -366,6 +366,18 @@ export type RutasDeMarca = {
 }
 export type RutaAPoner = { linea: string; canal: CanalRuta; medio: MedioRuta; cuenta_real_id: string | null; tasa: string; dias_acreditacion: string; desde?: string }
 
+// ── ERP › Configuración › Cuentas y Marcas, depósitos y puntos de venta (sólo lectura; `api/_erp-estructura.js`) ──
+export type EstructuraDeMarca = {
+  empresas: Array<{ id: string; razon_social: string | null; cuit: string | null; condicion_iva: string | null; ingresos_brutos: string | null }>
+  marcas: Array<{ id: string; empresa_id: string; nombre: string | null; tienda: string | null; nombre_fiscal: string | null; punto_venta: number | null; domicilio_fiscal: string | null; inicio_actividades: string | null }>
+  depositos: Array<{ marca: string; id: string; nombre: string; vende: boolean; gn_store_id: string | null }>
+  cuentas: Array<{ id: string; titular: string | null; nombre: string; banco: string | null; tipo: string | null; activa: boolean; copiada_en: string | null }>
+  rutas: Array<{ marca: string; canal: string; medio: string; cuenta_real_id: string | null }>
+  cuentasCopiadasEn: string | null
+}
+export const leerEstructura = (marca: MarcaErp) =>
+  pedir<EstructuraDeMarca>(null, `&vista=estructura&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer la configuración.')
+
 export const leerRutas = (marca: MarcaErp) =>
   pedir<RutasDeMarca>(null, `&vista=rutas&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer las cuentas de cobro.')
 export const ponerRuta = (marca: MarcaErp, ruta: RutaAPoner) =>

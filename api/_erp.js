@@ -52,6 +52,7 @@
  *   POST {recurso:'erp', accion:'guardar-regla'|'sembrar-reglas'|'simular-reglas'|'prender-caja-reglas', marca, …}   `api/_erp-reglas.js`
  *   GET  ?recurso=erp&vista=rutas&marca=…                              las cuentas de cobro: qué cuenta recibe cada medio (motor sql/019-020)
  *   POST {recurso:'erp', accion:'poner-ruta', marca, linea?, canal, medio, cuenta_real_id, …}   `api/_erp-rutas.js`
+ *   GET  ?recurso=erp&vista=estructura&marca=…   Configuración › Cuentas y Marcas, depósitos y puntos de venta (`api/_erp-estructura.js`, sólo lee)
  *   GET  ?recurso=erp&vista=ajustes&linea=bdi|zattia|stunned           los ajustes de stock (motor sql/026) + la lista «A contar»
  *   POST {recurso:'erp', accion:'crear-ajuste'|'aprobar-ajuste'|'descartar-ajuste', linea, …}   `api/_erp-ajustes.js`
  *   GET  ?recurso=erp&vista=permisos                                   lo que el perfil puede en el ERP, por marca (`permisosErp`)
@@ -86,6 +87,7 @@ import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
+import { estructuraDeMarca } from './_erp-estructura.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { cobrarVentaErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
@@ -1369,6 +1371,11 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET' && req.query.vista === 'rutas') {
       const r = await rutasDeMarca({ marca: String(req.query.marca || '') }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'estructura') {
+      const r = await estructuraDeMarca({ marca: String(req.query.marca || '') }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

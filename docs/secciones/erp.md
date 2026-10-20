@@ -168,6 +168,13 @@ Núcleo `lib/erp/facturacion-lista.core.js`; el Nº, la clienta y las facturas d
   ⛔ son cobros: filas de clase `entrega` SÓLO en su vista, fuera de «Todos» y del cobrado; tarjeta «Contraentrega» con cuántas y
   desde cuándo; ⛔ dependen del período. El cierre (al marcar entregado en Envíos, ⛔ conectado todavía: lo hace A) sí es un cobro y
   llega por `cobrosDe` el día que se cerró. En «Cargar venta» la cuenta se ve «Contraentrega (lo cobra el cadete)».
+- 🔑 **`erp › Configuración › Cuentas` y `› Marcas, depósitos y puntos de venta`** (🎨 20-oct, Diseño 9: v8 `Configuracion.dc.html`,
+  tabs `cuentas`/`estructura`): SÓLO LECTURA, `vista=estructura` (`api/_erp-estructura.js`, sin permiso propio ⇒ `configurar`).
+  Cuentas = `cuenta_real` (la copia del dashboard: titular, tipo, activa) + «Recibe» = las rutas VIGENTES de la marca que caen
+  en cada una; vistas Activas · Reciben plata · Sin ruta · Dadas de baja; el saldo ⛔ está acá («Abrir en el dashboard» ↗
+  `finanzas/saldos`). Estructura = una fila por línea (depósitos, PV y nombre fiscal, razón social y CUIT de `empresa`).
+  La pestaña de rutas se llama **«Rutas»** (dirección `configuracion/cuentas` de siempre) y la tira lleva Cuenta a la suya.
+  Núcleo `lib/erp/estructura.core.js` (`tests/erp-estructura.test.ts`).
 - 🔑 **`erp › Ventas › Cajas`** (🎨 20-oct, Diseño 9: v8 `VentasMas.dc.html`, pestaña «Cajas»): SÓLO LECTURA, un turno de la
   Caja (POS) por fila —abrió/cerró y quién, estado (Abierta · Cerró justo · Sobró · Faltó), ventas, efectivo esperado, contado,
   diferencia (+ sobró / − faltó, la del cierre)—, vistas Todas · Con diferencia, período (este mes · el pasado · 7 días),
