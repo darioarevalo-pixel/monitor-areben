@@ -53,6 +53,15 @@ nadie escanea al llegar): el 4º paso va RAYADO y la pantalla lo dice. «Faltó�
 transferido antes de que arrancara el libro (13-oct) dice «antes del libro». Servidor `api/_erp-stock.js` (`vista=transferencias`),
 núcleo `lib/erp/transferencias.core.js` (`tests/erp-transferencias*.test.ts*`), barritas en `components/erp/stock/Barritas.tsx`.
 
+**Recepciones** (🎨 20-oct, Diseño 8, sólo lectura; tablero 3 del v8): cada orden de compra que llegó — orden · llegó · de ·
+va a · recibidas (la barrita «a de b») · estado — vistas Con diferencia · Este mes · Todas, buscador (orden, proveedor), columnas
+por usuario (`erp-recepciones`), «Exportar»; clic ⇒ ficha AL COSTADO con los renglones que NO cerraron primero («Ver los N»).
+⛔ alta de producto (nace en Ingresos). 🔑 Lee por la MISMA puerta de Ingresos (`api/_recepciones.js` + `lib/recepciones/cliente.ts`,
+que corta el proveedor en el servidor): las órdenes viven en la base del monitor (BDI, las dos marcas), ⛔ en el motor. 🔴 Ingresos
+avisa sólo al CONFIRMAR ⇒ ⛔ hay «Esperando» (pedida y sin llegar) ni depósito real («va a» = el supuesto del libro); lo dice la
+pantalla. «Con diferencia» = faltantes o sobrantes > 0 (⛔ el neto: medido 20-oct, Zattia 5 por renglón contra 4 por neto). El día
+es el de `diaDeIngreso` (⛔ `recibido_en`). Núcleo `lib/erp/recepciones-lista.core.ts` (`tests/erp-recepciones-pantalla.test.tsx`).
+
 **Diferencias con GN** (14-oct, sólo lectura; 🎨 19-oct, Diseño 7: molde de REGISTRO — números arriba (sin explicar · sobreventa · explicadas solas), UNA lista con una vista por clase + «Sobreventa», buscador, y la fila abre `FichaPrenda` AL COSTADO; ⛔ cambió qué se calcula; `tests/erp-diferencias-pantalla.test.tsx`): lo que el libro ⛔ pudo explicar al comparar su día con
 el de GN (`stock_diff`), agrupado por clase con qué mirar, y la **sobreventa**: las prendas que el libro
 deja en NEGATIVO hoy. Cada fila abre la ficha de Stock. Núcleo en `lib/erp/diferencias.core.js`

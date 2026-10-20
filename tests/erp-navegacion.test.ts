@@ -7,7 +7,7 @@ describe('ERP › menú y direcciones', () => {
   it('las pestañas de antes siguen, una sola vez cada una', () => {
     const todas = SECCIONES_ERP.flatMap((s) => s.pestanias.map((p) => p.key))
     expect(new Set(todas).size).toBe(todas.length)
-    expect(todas.sort()).toEqual(['ajustes', 'cambio', 'clientes', 'conciliacion', 'cuentas', 'diferencias', 'factura', 'facturacion', 'movimientos', 'por-producto', 'productos', 'proveedores', 'reglas', 'stock', 'transferencias', 'ventas'])
+    expect(todas.sort()).toEqual(['ajustes', 'cambio', 'clientes', 'conciliacion', 'cuentas', 'diferencias', 'factura', 'facturacion', 'movimientos', 'por-producto', 'productos', 'proveedores', 'recepciones', 'reglas', 'stock', 'transferencias', 'ventas'])
   })
 
   it('las secciones del diseño, en su orden', () => {
