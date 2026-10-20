@@ -70,7 +70,7 @@ import { Icono } from '@/components/ui/Icono'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { useSesion } from '@/components/SesionProvider'
 import { hoyIso } from '@/lib/calendario'
-import { agendar, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, cotizarDireccion, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarCobrado, marcarPagado, rotarPortal, sugerirPrecios, type PortalDelCadete } from '@/lib/envios/cliente'
+import { agendar, alAvisoDelErp, anularVentaDelEnvio, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, cotizarDireccion, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarCobrado, marcarPagado, rotarPortal, sugerirPrecios, type PortalDelCadete } from '@/lib/envios/cliente'
 import { imprimirRecibo } from '@/lib/envios/recibo'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { Tone } from '@/components/ui'
@@ -78,6 +78,7 @@ import type { Marca } from '@/lib/nav'
 import type { AccionDePago, ClaseMovimiento, CotizacionSuelta, Envio, EstadoEnvio, MovimientoCuenta, SugerenciaDePrecio, Turno } from '@/lib/envios/tipos'
 import { useCuentaCadete, useEnvios } from './useEnvios'
 import { ZonasDeReparto } from './ZonasDeReparto'
+import { puedeAnularVenta } from '@/lib/envios/venta.core.js'
 
 /**
  * El color de cada estado. Mismo criterio que Postventa (`ESTADO_TONE`), y por eso mismo tono:
@@ -114,6 +115,8 @@ export function Envios() {
   const { fecha, setFecha, envios, pendientes, cargando, error, abiertos, errorBuzon, recargar, traerDeTiendaNube } = useEnvios()
   const { confirmar } = useConfirmar()
   const toast = useToast()
+  // El aviso del ERP (un envío con venta propia cuyo cobro el motor ⛔ pudo anotar): el envío anduvo igual.
+  useEffect(() => alAvisoDelErp((t) => toast.aviso(t)), [toast])
   // La marca del header. Es la que siembra el alta a mano: la bandeja filtra por marca, así que una
   // fila creada con otra desaparece de la pantalla en cuanto se recarga.
   const { marca: marcaActiva } = useSesion()
@@ -712,6 +715,7 @@ function Pendientes({
                   <Badge tone="danger">volvió{e.fecha ? ` del ${rotuloDeDia(e.fecha) || e.fecha}` : ''}</Badge>
                 </div>
               ) : null}
+              <AnularVenta envio={e} onHecho={onRecargar} />
               <PastillaMensaje envio={e} abiertos={abiertos} />
             </Td>
             <Td>
@@ -1994,6 +1998,53 @@ function DetalleDelDia({ filas }: { filas: Envio[] }) {
         </div>
       </Td>
     </Tr>
+  )
+}
+
+/**
+ * «No entregado» sin reintento ⇒ **anular su venta del ERP** (contrato §20.4): la prenda vuelve «a recibir» y, si
+ * la venta llegó a cerrarse, la plata ⛔ entró ⇒ ⛔ se devuelve. Sólo en un `no_entregado` con venta; reprogramarlo
+ * (vuelve a `pendiente`) es el otro camino, y ahí la venta sigue. Pide el permiso de anular del ERP: sin él, el
+ * servidor contesta 403 y se dice.
+ */
+function AnularVenta({ envio, onHecho }: { envio: Envio; onHecho: () => void }) {
+  const { confirmar } = useConfirmar()
+  const toast = useToast()
+  const [anulando, setAnulando] = useState(false)
+  if (envio.datos && envio.datos.venta_anulada) {
+    return (
+      <div style={{ marginTop: 2 }}>
+        <Badge>venta anulada</Badge>
+      </div>
+    )
+  }
+  if (!puedeAnularVenta(envio)) return null
+  async function anular() {
+    const ok = await confirmar({
+      titulo: '¿Anular la venta de este envío?',
+      mensaje: `${envio.cliente || 'Sin nombre'}: no se entregó y no se vuelve a mandar. La prenda vuelve al local.`,
+      ok: 'Anular la venta',
+      cancelar: 'Volver',
+      tono: 'danger',
+    })
+    if (!ok) return
+    setAnulando(true)
+    try {
+      await anularVentaDelEnvio(envio.id)
+      toast.ok('Venta anulada.')
+      onHecho()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo anular la venta.')
+    } finally {
+      setAnulando(false)
+    }
+  }
+  return (
+    <div style={{ marginTop: 4 }}>
+      <Button size="sm" variant="outline" tone="danger" disabled={anulando} onClick={() => void anular()}>
+        {anulando ? 'Anulando…' : 'Anular la venta'}
+      </Button>
+    </div>
   )
 }
 

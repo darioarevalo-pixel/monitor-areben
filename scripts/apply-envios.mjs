@@ -65,6 +65,7 @@ const archivos = [
   'sql/migrate-envios-movimientos.sql',
   'sql/migrate-envios-zonas.sql',
   'sql/migrate-envios-hora.sql',
+  'sql/migrate-envios-venta.sql',
 ]
 if (cerrarTandaA) archivos.push('sql/migrate-envios-plata-drop.sql', 'sql/migrate-envios-estados-cierre.sql')
 if (cerrarTandaG) archivos.push('sql/migrate-envios-movimientos-cierre.sql')
@@ -255,6 +256,11 @@ try {
       `exclusión con precio: ${zonasOk.exclusionConPrecio ? 'rechazada ✓' : '✗ SE GUARDÓ — el check no está'}`,
   )
   console.log(`  envios_zonas: ${zonas.rows[0].n} zonas (${zonas.rows[0].exclusiones} de exclusión)`)
+  // La venta del ERP de cada envío (§20): se lee la columna de vuelta, ⛔ se supone.
+  const venta = await client.query(`select (select data_type from information_schema.columns where table_name = 'envios_reparto' and column_name = 'venta_id') as tipo,
+      (select count(*)::int from envios_reparto where venta_id is not null) as con`)
+  console.log(`  venta_id: ${venta.rows[0].tipo === 'uuid' ? `uuid ✓ (${venta.rows[0].con} envíos con venta)` : '✗ NO ESTÁ'}`)
+  if (venta.rows[0].tipo !== 'uuid') process.exitCode = 1
   console.log(
     `  movimientos: ${movs.rows[0].n} filas (${movs.rows[0].anulados} anuladas) · saldo ${movs.rows[0].saldo}`,
   )

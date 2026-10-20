@@ -32,15 +32,19 @@ export async function cobrosPropios(db, mes) {
   if (!/^\d{4}-\d{2}$/.test(mes || '')) throw new Error(`Mes inválido: ${mes}`)
   const AR = `at time zone 'America/Argentina/Buenos_Aires'`
   const [{ hay }] = (await db.query(`select to_regclass('venta_devolucion') is not null as hay`)).rows
+  // sql/032: el cobro de una Contraentrega entra el día que se cerró (`cobrado_en`); sin la 032, el de la venta.
+  const [{ con032 }] = (await db.query(`select exists (select 1 from information_schema.columns where table_schema = current_schema()
+    and table_name = 'venta_pago' and column_name = 'cobrado_en') as con032`)).rows
+  const EN = con032 ? 'coalesce(p.cobrado_en, v.ocurrida_en)' : 'v.ocurrida_en'
   const { rows } = await db.query(
     `select v.id as venta_id, v.marca, v.estado, v.prueba, v.gn_sale_id, jsonb_build_object('gn_sale_id', v.detalle->'gn_sale_id') as detalle,
-            to_char(v.ocurrida_en ${AR}, 'YYYY-MM-DD') as fecha, c.nombre as cuenta, c.medio as cuenta_medio, p.monto,
+            to_char(${EN} ${AR}, 'YYYY-MM-DD') as fecha, c.nombre as cuenta, c.medio as cuenta_medio, p.monto,
             ${hay ? 'exists (select 1 from venta_devolucion d where d.venta_id = v.id)' : 'false'} as con_devolucion
        from venta v
        join venta_pago p on p.venta_id = v.id
        join cuenta_cobro c on c.id = p.cuenta_cobro_id
-      where to_char(v.ocurrida_en ${AR}, 'YYYY-MM') = $1
-      order by v.ocurrida_en, v.id, p.id`,
+      where to_char(${EN} ${AR}, 'YYYY-MM') = $1 and c.medio <> 'entrega'
+      order by ${EN}, v.id, p.id`,
     [mes],
   )
   const cobros = []

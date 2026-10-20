@@ -49,6 +49,7 @@ import {
   rangoDeLectura,
   rotuloCorto,
 } from '../lib/envios/portal.core.js';
+import { seguirVenta } from './_envios-venta.js';
 
 /**
  * Siempre la base de BDI, como todo Envíos: el reparto no es de una marca y el cadete sale con las
@@ -196,6 +197,15 @@ export default async function handler(req, res) {
     const parche = parcheDeAccion(String(body.accion || ''), ahora);
     if (!parche) return res.status(400).json({ error: 'Esa acción no existe.' });
 
+    // Se lee antes por la venta del ERP (contrato §20): «entregado», «cobrado» y «no cobré» llegan sueltos y en
+    // cualquier orden, y lo que hace el motor depende de cómo estaba. Atado al mismo día que la escritura.
+    const { data: antes, error: eLeer } = await supabase
+      .from('envios_reparto')
+      .select('id, store, estado, cobrado, venta_id')
+      .eq('id', id)
+      .eq('fecha', fecha)
+      .maybeSingle();
+    if (eLeer) throw new Error(eLeer.message);
     const { data, error } = await supabase
       .from('envios_reparto')
       .update({
@@ -208,10 +218,13 @@ export default async function handler(req, res) {
       .eq('id', id)
       // 🔑 El día ata la escritura. Un id filtrado de otro día no se toca ni por error.
       .eq('fecha', fecha)
-      .select('id');
+      .select('id, store, estado, cobrado, venta_id');
     if (error) throw new Error(error.message);
     if (!data || !data.length) return res.status(404).json({ error: 'Ese envío no es del día que estás mirando.' });
 
+    // 🔑 El aviso ⛔ le llega al cadete (no puede hacer nada con él): queda en el log y la venta sigue a la vista en
+    // Ventas › Cobros › Contraentrega. Por esta puerta ⛔ sale nada de la venta.
+    await seguirVenta({ antes, despues: data[0], usuario: 'cadete (portal)' });
     return res.status(200).json({ ok: true });
   } catch (e) {
     console.error(`[cadete] ${e.message}`);

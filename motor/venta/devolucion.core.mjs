@@ -14,8 +14,8 @@ import { cuentaDe } from './armar.mjs'
 const fallo = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo, mensaje, campo } : { codigo, mensaje } })
 const pesos = (x) => Math.round(Number(x) * 100) / 100
 const FORMAS = ['plata', 'saldo']
-/** Los medios que ⛔ son plata que entró: los da vuelta su propio libro. */
-const NO_ES_PLATA = ['saldo', 'cuenta']
+/** Los medios que ⛔ son plata que entró: los da vuelta su propio libro (la Contraentrega cerrada ya trae su plata, sql/032). */
+const NO_ES_PLATA = ['saldo', 'cuenta', 'entrega']
 export const MARCAS_PIN = ['bdi', 'zattia', 'stunned']
 
 /**
@@ -65,7 +65,21 @@ export function leerDevolucion(d) {
 }
 
 /** Lo que entró en PLATA de los pagos de una venta (`venta_pago` con el `medio` de su cuenta de cobro en `cuenta_medio`). */
-export const pagosDePlata = (pagos) => pagos.filter((p) => !NO_ES_PLATA.includes(p.cuenta_medio) && Number(p.monto) > 0)
+/**
+ * Lo pagado en plata, NETO por cuenta, medio y cuenta real: la Contraentrega corregida (sql/032, cadete ⇒ local) deja
+ * una fila en negativo en la cuenta vieja y otra en la nueva ⇒ contadas sueltas, la plata saldría dos veces.
+ */
+export function pagosDePlata(pagos) {
+  const netos = new Map()
+  for (const p of pagos) {
+    if (NO_ES_PLATA.includes(p.cuenta_medio)) continue
+    const k = [p.cuenta_cobro_id, p.medio ?? null, p.cuenta_real_id ?? null].join('|')
+    const n = netos.get(k)
+    if (n) n.monto = pesos(n.monto + Number(p.monto))
+    else netos.set(k, { ...p, monto: Number(p.monto) })
+  }
+  return [...netos.values()].filter((p) => p.monto > 0)
+}
 
 /** Repartir `monto` entre los pagos, en proporción a lo que pagó cada uno; el último se lleva el redondeo. */
 function prorratear(pagos, monto) {

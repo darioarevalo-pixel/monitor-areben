@@ -57,7 +57,9 @@ describe('🔴 la rama `desagendar` del handler', () => {
   // Sin la lectura previa, `parcheAlSacarDelDia` recibe `undefined` y devuelve siempre el parche
   // corto: el arreglo queda puesto y apagado, con todos los tests verdes.
   it('🔴 lee el estado de la fila ANTES de escribir', () => {
-    expect(rama).toContain(".select('estado')")
-    expect(rama.indexOf(".select('estado')")).toBeLessThan(rama.indexOf('parcheAlSacarDelDia(actual)'))
+    // Lee `DE_LA_VENTA` (que trae el estado, y la venta del ERP para `seguirVenta`).
+    expect(handler).toMatch(/const DE_LA_VENTA = '[^']*\bestado\b/)
+    expect(rama).toContain('.select(DE_LA_VENTA)')
+    expect(rama.indexOf('.select(DE_LA_VENTA)')).toBeLessThan(rama.indexOf('parcheAlSacarDelDia(actual)'))
   })
 })

@@ -28,6 +28,19 @@ export async function leerDia(fecha: string): Promise<DatosDia> {
  * handler contesta por el primer campo que le falta — o sea, señala a quien llama y no a la cabecera
  * que falta. Es el mismo error que dio "store inválido" en Atención al cliente.
  */
+/**
+ * 🔑 **El AVISO del ERP** (`api/_envios-venta.js`): un envío con venta del ERP le avisa al motor, y si el motor falla
+ * el envío igual quedó escrito y la respuesta trae `{ ok, aviso }`. Se muestra por acá —un solo oyente, el de la
+ * pantalla— en vez de cambiar la firma de cada acción: ⛔ es un error, el envío anduvo.
+ */
+let oyenteDeAviso: ((texto: string) => void) | null = null
+export function alAvisoDelErp(fn: (texto: string) => void): () => void {
+  oyenteDeAviso = fn
+  return () => {
+    if (oyenteDeAviso === fn) oyenteDeAviso = null
+  }
+}
+
 async function postear<T = void>(body: Record<string, unknown>, siFalla: string): Promise<T> {
   const r = await apiFetch(API, {
     method: 'POST',
@@ -36,6 +49,7 @@ async function postear<T = void>(body: Record<string, unknown>, siFalla: string)
   })
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || siFalla)
+  if (d.aviso && oyenteDeAviso) oyenteDeAviso(String(d.aviso))
   return d as T
 }
 
@@ -101,6 +115,11 @@ export async function marcarBonificado(id: string, bonificado: boolean): Promise
 
 export async function cambiarEstado(id: string, estado: string, cadete?: string | null): Promise<void> {
   await postear({ action: 'estado', id, estado, ...(cadete !== undefined ? { cadete } : {}) }, 'No se pudo cambiar el estado.')
+}
+
+/** «No entregado» sin reintento: anula su venta del ERP (§20). Pide el permiso de anular del ERP. */
+export async function anularVentaDelEnvio(id: string): Promise<void> {
+  await postear({ action: 'anular-venta', id }, 'No se pudo anular la venta.')
 }
 
 export async function borrarEnvio(id: string): Promise<void> {
