@@ -60,3 +60,12 @@ export function avanceDelEquipo(
     return { persona, pendientes, hechas, total, atrasadas: pendientes.filter((p) => p.desde && !p.hecho).length, ultima, estado }
   })
 }
+
+/**
+ * La persona del equipo operativo con ese usuario, o `null`. Decide **qué Monitor ve quien entra**
+ * (Darío, 18-oct-2026: «según quién entra, no según el aparato»): al equipo el Monitor le abre en
+ * «Hoy», con su saludo y sus pantallas; Darío, Bruno y el resto siguen entrando por Inicio.
+ */
+export function personaDelEquipo(name: string | null | undefined): PersonaEquipo | null {
+  return EQUIPO_AGENDA.find((p) => p.name === name) ?? null
+}

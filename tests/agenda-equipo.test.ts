@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { avanceDelEquipo, type PersonaEquipo } from '@/lib/agenda/equipo'
+import { avanceDelEquipo, personaDelEquipo, type PersonaEquipo } from '@/lib/agenda/equipo'
 import type { Hecho, ItemAgenda } from '@/lib/agenda'
 
 const LORE: PersonaEquipo = { name: 'Lorena Reyes', nombre: 'Lorena Reyes', lugar: 'Administración', funcion: ['administracion'], cuenta: null }
@@ -43,5 +43,16 @@ describe('avanceDelEquipo', () => {
   it('la marca: lo de BDI no le cae a quien es de Zattia', () => {
     const items = [item({ id: 'a', marcas: ['bdi'], destino: { tipo: 'roles', roles: ['local'] } })]
     expect(avanceDelEquipo(items, [], HOY, [CAMI])[0].estado).toBe('sin-tareas')
+  })
+})
+
+describe('personaDelEquipo — a quién el Monitor le abre en «Hoy»', () => {
+  it('reconoce a las del equipo por su usuario', () => {
+    expect(personaDelEquipo('camilaquintana')?.nombre).toBe('Camila Quintana')
+    expect(personaDelEquipo('Lorena Reyes')?.lugar).toBe('Administración')
+  })
+  it('al resto (y a nadie) lo deja entrar por Inicio', () => {
+    expect(personaDelEquipo('Dario')).toBeNull()
+    expect(personaDelEquipo(undefined)).toBeNull()
   })
 })

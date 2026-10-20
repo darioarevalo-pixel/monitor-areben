@@ -23,6 +23,7 @@ import { componenteDe } from '@/components/secciones/registro'
 import { esDeMarca, esKeyValida, keyDeRuta, KEYS_CROSS_MARCA, tituloDesde } from '@/lib/nav'
 import { esAdmin, marcasConAcceso, puedeVer, puedeVerAlguna } from '@/lib/permisos'
 import { Cargando } from '@/components/secciones/Cargando'
+import { personaDelEquipo } from '@/lib/agenda/equipo'
 
 /**
  * El panel de WhatsApp: la ruta que la extensión de Chrome mete en un iframe al costado del chat.
@@ -79,7 +80,10 @@ export default function Seccion() {
   const [menuAbierto, setMenuAbierto] = useState(false)
 
   const partes = params.seccion
-  const key = Array.isArray(partes) ? partes[0] : (partes ?? DEFAULT_TAB)
+  // Al equipo operativo el Monitor le abre en «Hoy» de la Agenda (Darío, 18-oct-2026): ahí está lo
+  // suyo del día y, abajo, sus pantallas. Sólo cuando entra sin dirección; el menú sigue igual.
+  const inicio = personaDelEquipo(perfil?.name) ? 'agenda' : DEFAULT_TAB
+  const key = Array.isArray(partes) ? partes[0] : (partes ?? inicio)
 
   // El refresco de avisos vive acá y no en una sección: el contador del sidebar tiene que
   // encenderse estés donde estés. Se llama antes de cualquier return temprano (regla de hooks), y

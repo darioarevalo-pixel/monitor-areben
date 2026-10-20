@@ -44,6 +44,8 @@ import {
   avisosDe, contarSinTildar, hoyIso, pendientesDe, promosDe,
   type Promo,
 } from '@/lib/agenda'
+import { personaDelEquipo } from '@/lib/agenda/equipo'
+import { comoLeLlamamos } from '@/lib/inicio/core'
 import { useAgenda } from '@/store/useAgenda'
 import { AvisosHoy } from './AvisosHoy'
 import { Cumplimiento } from './Cumplimiento'
@@ -52,8 +54,10 @@ import { Eventos } from './Eventos'
 import { GrillaAgenda } from './GrillaAgenda'
 import { PendientesHoy } from './PendientesHoy'
 import { Rutinas } from './Rutinas'
+import { SaludoHoy } from './SaludoHoy'
 import { TarjetaPromo } from './TarjetaPromo'
 import { Titulo } from './Titulo'
+import { TusPantallas } from './TusPantallas'
 
 type Sub = 'hoy' | 'equipo' | 'semana' | 'mes' | 'eventos' | 'rutinas' | 'cumplimiento'
 
@@ -75,7 +79,7 @@ const SUBS: { key: Sub; label: string; hint: string; cargar: boolean }[] = [
 ]
 
 export function Agenda() {
-  const { marca } = useSesion()
+  const { marca, perfil } = useSesion()
   const { promos, items, hechos, puede, cargado } = useAgenda()
   const params = useParams()
 
@@ -95,15 +99,26 @@ export function Agenda() {
     : (SUBS.find((s) => s.key === pedida) ?? SUBS[0])
 
   const hoy = hoyIso()
+  const delEquipo = personaDelEquipo(perfil?.name)
+  const deHoy = pendientesDe(items, hechos, hoy, { marca })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
+      {/* «Hoy» saluda como en la maqueta del celular (Darío, 19-oct-2026); las demás, su título. */}
+      {activa.key === 'hoy' && cargado ? (
+        <SaludoHoy
+          nombre={delEquipo ? delEquipo.nombre.split(' ')[0] : comoLeLlamamos(perfil)}
+          hechas={deHoy.filter((p) => p.hecho).length}
+          total={deHoy.length}
+        />
+      ) : (
       <header style={{ borderBottom: `1px solid ${color.line}`, paddingBottom: space[3] }}>
         <h2 style={{ fontSize: font.xl, fontWeight: weight.bold, color: color.ink, letterSpacing: -0.2, margin: 0 }}>
           {activa.label}
         </h2>
         <p style={{ fontSize: font.base, color: color.mut, marginTop: 2 }}>{activa.hint}</p>
       </header>
+      )}
 
       {!cargado ? (
         <Esqueleto />
@@ -114,8 +129,9 @@ export function Agenda() {
               promos={promosDe(promos, hoy, { marca })}
               hoy={hoy}
               sinTildar={contarSinTildar(items, hechos, hoy, { marca })}
-              hayPendientes={pendientesDe(items, hechos, hoy, { marca }).length > 0}
+              hayPendientes={deHoy.length > 0}
               hayAvisos={avisosDe(items, hoy, { marca }).length > 0}
+              pantallas={!!delEquipo}
             />
           )}
           {/* Las dos vistas del calendario son la misma pantalla: lo que cambia es la unidad, y eso
@@ -151,12 +167,15 @@ function Hoy({
   sinTildar,
   hayPendientes,
   hayAvisos,
+  pantallas,
 }: {
   promos: Promo[]
   hoy: string
   sinTildar: number
   hayPendientes: boolean
   hayAvisos: boolean
+  /** Al pie, sus otras pantallas: sólo para el equipo, que en el celular no ve el menú. */
+  pantallas: boolean
 }) {
   return (
     <div style={{ display: 'grid', gap: space[5] }}>
@@ -195,6 +214,8 @@ function Hoy({
           <AvisosHoy fecha={hoy} />
         </section>
       )}
+
+      {pantallas && <TusPantallas />}
 
     </div>
   )
