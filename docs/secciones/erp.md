@@ -10,7 +10,7 @@ solo sin ir atrás»): sale del shell en `app/[[...seccion]]/page.tsx` (`esERP`,
 marca adentro) con SU menú (`components/erp/Erp.tsx`, `SECCIONES_ERP`): Inicio · Ventas + Caja (POS) · Stock ·
 Productos y precios · Clientes y proveedores · Configuración, y «Volver al monitor». Una dirección por sección y por
 pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una vieja o mal escrita se corrige sola).
-Las pestañas: Ventas = Ventas · Por producto · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
+Las pestañas: Ventas = Ventas · Por producto · Cobros · Cajas · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
 dirección vieja cae en Ventas) · Caja (POS) = Cambio · Factura · Stock =
 Stock · Movimientos · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Productos · Precios · Configuración = Reglas · Cuentas de cobro;
 Clientes y proveedores = Clientes · Cuenta corriente · Proveedores. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
@@ -163,6 +163,13 @@ de la venta, + las del ERP con CAE; «⋯» = PDF y NC) · Notas de crédito (s�
 Núcleo `lib/erp/facturacion-lista.core.js`; el Nº, la clienta y las facturas de GN los suma el GET del mes
 (`vistaDeFacturacion`, sólo lectura: ⛔ entra en `facturarVentas`). Test `tests/erp-facturacion-pantalla.test.tsx`.
 
+- 🔑 **`erp › Ventas › Cajas`** (🎨 20-oct, Diseño 9: v8 `VentasMas.dc.html`, pestaña «Cajas»): SÓLO LECTURA, un turno de la
+  Caja (POS) por fila —abrió/cerró y quién, estado (Abierta · Cerró justo · Sobró · Faltó), ventas, efectivo esperado, contado,
+  diferencia (+ sobró / − faltó, la del cierre)—, vistas Todas · Con diferencia, período (este mes · el pasado · 7 días),
+  Exportar, ficha al costado con el efectivo del cierre (`resumen.efectivo`) y por forma de pago. Arriba: la caja abierta y su
+  efectivo esperado EN VIVO (el `action=turno` de siempre: lo calcula la Caja y lee GN, 1–10 s, por separado). Lista: lectura
+  nueva `action=turnos&desde&hasta` de `api/_caja.js` (`caja_turno` por `abierto_en`, tope 500). Núcleo `lib/erp/cajas.core.js`
+  (`tests/erp-cajas.test.ts`). Abrir, contar y cerrar ⛔ acá: en la Caja.
 - 🔑 **`erp › Productos y precios › Precios`** (🎨 20-oct, Diseño 9: pestaña «Precios» del tablero 5 del v8): SÓLO LECTURA, las
   mismas filas de Productos (`vista=productos-lista`) en una grilla de listas —Local · Online · Mayorista— + «Oferta o liquidación»
   (la liquidación EN CURSO del monitor, `liquidaciones`/`liquidacion_items` aplicados, manda; si no, el precio «Tienda Nube con

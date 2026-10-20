@@ -592,3 +592,17 @@ export type VentaACargar = {
 export const cargarVenta = (marca: MarcaErp, venta: VentaACargar) =>
   pedir<{ ok: true; venta: { id: string; numero: number; total: number; prueba: boolean }; yaExistia: boolean; avisos: Array<{ codigo: string }> }>(
     post({ accion: 'cargar-venta', marca, ...venta }), '', 'No se pudo cargar la venta.')
+
+// ── ERP › Ventas › Cajas (sólo lectura; los turnos de la Caja por `?recurso=caja`, núcleo `lib/erp/cajas.core.js`) ──
+const deCaja = async <T>(marca: MarcaErp, query: string, fallo: string): Promise<T> => {
+  const r = await apiFetch(`/api/datos?recurso=caja&store=${marca}&${query}&nc=${Date.now()}`)
+  const j = await r.json().catch(() => null)
+  if (!r.ok) throw new Error((j && j.error) || fallo)
+  return j as T
+}
+/** Los turnos ABIERTOS en esos días argentinos (`caja_turno` tal cual). */
+export const leerTurnosCaja = (marca: MarcaErp, desde: string, hasta: string) =>
+  deCaja<{ turnos: Array<Record<string, unknown>> }>(marca, `action=turnos&desde=${desde}&hasta=${hasta}`, 'No se pudieron leer las cajas.')
+/** El turno abierto con su resumen EN VIVO (el esperado lo calcula la Caja: lee GN, 1 a 10 s). */
+export const leerCajaAbierta = (marca: MarcaErp) =>
+  deCaja<{ turno: (Record<string, unknown> & { resumen?: { ventas?: number; efectivo?: { esperado?: number } } }) | null }>(marca, 'action=turno', 'No se pudo leer la caja abierta.')

@@ -17,6 +17,7 @@
 //        { pedidos, porSku, noLeidas, leidoEn } — ver lib/caja/pedidos-web.core.js
 //   GET  ?recurso=caja&action=gift-lotes          → sólo admin: los lotes de gift cards generados (W6)
 //   GET  ?recurso=caja&action=gift-lote&lote=…    → sólo admin: { nombre, csv } del lote, para la imprenta
+//   GET  ?recurso=caja&action=turnos&desde=&hasta= → los turnos abiertos en esos días (ERP › Ventas › Cajas, sólo lectura)
 //   GET  ?recurso=caja&action=turno               → el turno abierto (o null) con su resumen y salidas, y
 //        los últimos cerrados (v2, W3), con el efectivo cobrado EN GN durante el turno (W3b) — ver lib/caja/cierre.core.js
 //   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, descuentoVenta, email?, pagaCon? }
@@ -566,6 +567,17 @@ export default async function handler(req, res) {
           .order('abierto_en', { ascending: false }).limit(10)
         if (ultimos.error) throw new Error(ultimos.error.message)
         return res.status(200).json({ turno: turno ? await conResumen(turno) : null, ultimos: ultimos.data || [] })
+      }
+      // ERP › Ventas › Cajas (20-oct, sólo lectura): los turnos ABIERTOS en el período, días argentinos `desde`..`hasta`.
+      if (accion === 'turnos') {
+        const dia = /^\d{4}-\d{2}-\d{2}$/
+        const desde = String(req.query.desde || ''), hasta = String(req.query.hasta || '')
+        if (!dia.test(desde) || !dia.test(hasta) || desde > hasta) return res.status(400).json({ error: 'Período inválido' })
+        const { data, error } = await sb.from('caja_turno').select(COLS_TURNO).eq('store', store)
+          .gte('abierto_en', `${desde}T00:00:00-03:00`).lte('abierto_en', `${hasta}T23:59:59.999-03:00`)
+          .order('abierto_en', { ascending: false }).limit(500)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ turnos: data || [] })
       }
       if (accion === 'gift-lotes' || accion === 'gift-lote') {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Los lotes de gift cards los ve un admin.' })
