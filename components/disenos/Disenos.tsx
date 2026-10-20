@@ -365,7 +365,15 @@ export function Disenos() {
                 disenos={porComprar}
                 onEnviados={(marcas) => setDisenos((ds) => marcarEnviados(ds, marcas))}
               />
-              <Button variant="outline" onClick={() => setPdfOpen(true)}>
+              {/* Sólo los de la pestaña: «Confirmados» suma también los que ya vienen en una importación. */}
+              <Button
+                variant="outline"
+                disabled={!porComprar.length}
+                onClick={() => {
+                  setPdfIds(new Set(porComprar.map((d) => d.id)))
+                  setPdfOpen(true)
+                }}
+              >
                 Reporte PDF
               </Button>
             </>
