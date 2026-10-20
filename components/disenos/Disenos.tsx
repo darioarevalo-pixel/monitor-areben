@@ -55,6 +55,8 @@ export function Disenos() {
   const [preview, setPreview] = useState<string | null>(null)
   const [yaVieneIds, setYaVieneIds] = useState<Set<string>>(new Set())
   const [pdfOpen, setPdfOpen] = useState(false)
+  /** Con ids, el PDF sale sólo con esos (los elegidos del Tablero). `null` = el tablero entero. */
+  const [pdfIds, setPdfIds] = useState<Set<string> | null>(null)
   const [quickOn, setQuickOn] = useState(false)
   const [quickIndex, setQuickIndex] = useState(0)
   /** Cuántos quedaron en ESTE navegador del tablero viejo. Un número, ⛔ nunca la lista (ver abajo). */
@@ -324,6 +326,10 @@ export function Disenos() {
             onCargar={cargar}
             onYaViene={esDeMarca('ingresos', marca) ? setYaVieneIds : undefined}
             onSacarDeRonda={ronda.ronda ? (ids) => void sacarDeLaRonda(ids) : undefined}
+            onPdf={(ids) => {
+              setPdfIds(new Set(ids))
+              setPdfOpen(true)
+            }}
             acciones={botonesTablero}
           />
         </>
@@ -383,8 +389,12 @@ export function Disenos() {
 
       <ReportePDF
         abierto={pdfOpen}
-        onCerrar={() => setPdfOpen(false)}
-        disenos={disenos}
+        onCerrar={() => {
+          setPdfOpen(false)
+          setPdfIds(null)
+        }}
+        disenos={pdfIds ? disenos.filter((d) => pdfIds.has(d.id)) : disenos}
+        soloElegidos={!!pdfIds}
         orden={ronda.ronda ? 'puntaje' : 'carga'}
         puntajes={ronda.puntajes}
         tituloRonda={ronda.ronda?.titulo}

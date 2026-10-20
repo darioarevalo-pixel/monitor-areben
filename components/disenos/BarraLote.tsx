@@ -34,6 +34,7 @@ export function BarraLote({
   onYaViene,
   nEnRonda = 0,
   onSacarDeRonda,
+  onPdf,
   onQuitar,
   onLimpiar,
 }: {
@@ -45,6 +46,8 @@ export function BarraLote({
   nEnRonda?: number
   /** Saca de la última ronda los elegidos que están en ella. El link no cambia. */
   onSacarDeRonda?: () => void
+  /** Abre el reporte PDF sólo con los elegidos. */
+  onPdf: () => void
   onQuitar: () => void
   onLimpiar: () => void
 }) {
@@ -85,6 +88,9 @@ export function BarraLote({
           🗳 Sacar de la ronda{nEnRonda < n ? ` (${nEnRonda} de ${n} están)` : ''}
         </Button>
       )}
+      <Button size="sm" variant="outline" onClick={onPdf}>
+        📄 PDF {n === 1 ? 'del elegido' : 'de los ' + n}
+      </Button>
       <Button size="sm" variant="ghost" tone="danger" onClick={onQuitar}>
         {/* ⚠️ Decía «Quitar», y el diálogo que abre ya decía «Sacar» en el título, en el botón y
             en el mensaje: el disparador y la confirmación nombraban el mismo gesto distinto.

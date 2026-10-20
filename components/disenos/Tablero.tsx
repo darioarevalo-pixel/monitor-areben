@@ -58,6 +58,7 @@ export function Tablero({
   onCargar,
   onYaViene,
   onSacarDeRonda,
+  onPdf,
   acciones,
 }: {
   disenos: Diseno[]
@@ -75,6 +76,8 @@ export function Tablero({
   onYaViene?: (ids: Set<string>) => void
   /** Saca de la última ronda los ids que se le pasan (ya filtrados a los que están en ella). */
   onSacarDeRonda?: (ids: string[]) => void
+  /** Abre el reporte PDF sólo con los elegidos. La selección queda: es para mirar, no para decidir. */
+  onPdf: (ids: Set<string>) => void
   /** La fila de botones de la sección (PDF, revisión rápida, vaciar…). */
   acciones: React.ReactNode
 }) {
@@ -244,6 +247,7 @@ export function Tablero({
             setSel(new Set())
           })
         }
+        onPdf={() => onPdf(sel)}
         onQuitar={() => void quitarElegidos()}
         onLimpiar={() => setSel(new Set())}
       />

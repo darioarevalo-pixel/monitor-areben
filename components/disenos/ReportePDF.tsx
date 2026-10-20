@@ -31,6 +31,7 @@ export function ReportePDF({
   orden,
   puntajes,
   tituloRonda,
+  soloElegidos = false,
 }: {
   abierto: boolean
   onCerrar: () => void
@@ -38,6 +39,8 @@ export function ReportePDF({
   orden: OrdenDiseno
   puntajes: PuntajesDeRonda
   tituloRonda?: string
+  /** Vino de la barra de elegidos del Tablero: `disenos` ya trae sólo esos. */
+  soloElegidos?: boolean
 }) {
   const toast = useToast()
   const [tipo, setTipo] = useState<Tipo>('decisiones')
@@ -64,7 +67,7 @@ export function ReportePDF({
   const elegido = TIPOS.find((t) => t.k === tipo)!
 
   return (
-    <Modal abierto={abierto} onCerrar={onCerrar} titulo="Reporte PDF">
+    <Modal abierto={abierto} onCerrar={onCerrar} titulo={soloElegidos ? `Reporte PDF de ${disenos.length === 1 ? 'el elegido' : 'los ' + disenos.length + ' elegidos'}` : 'Reporte PDF'}>
       <Field label="Qué reporte">
         <Select value={tipo} onChange={(e) => setTipo(e.target.value as Tipo)}>
           {TIPOS.map((t) => (
