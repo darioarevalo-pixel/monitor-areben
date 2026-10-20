@@ -7,11 +7,11 @@ un error caro o una búsqueda repetida. **Techo: 160 líneas propias** (el bloqu
 
 ## ⛔ Invariantes — romper una de estas cuesta caro
 
-**Vercel Hobby admite 12 funciones. Hay 7 usadas, quedan 5.**
-Cada archivo de ruta en `api/` **sin** prefijo `_` cuenta como función. Pasarse **frena todos los
-deploys sin error visible**: Vercel sigue sirviendo la versión anterior y no avisa. Ya pasó una vez.
-Para sumar un recurso no se crea un archivo: entra por una puerta existente con `?recurso=`, como
-hace `api/datos.js`. Los `_*.js` no son rutas y no cuentan.
+**Vercel es PRO (team `brunoarevalo-6942s-projects`, verificado 20-oct-2026): el techo de 12
+funciones era de Hobby y ya no aplica.** Igual, cada archivo de ruta en `api/` **sin** prefijo `_`
+es una función: la costumbre sigue siendo sumar recursos por una puerta existente con `?recurso=`,
+como hace `api/datos.js`. Los `_*.js` no son rutas. (En Hobby, pasarse frenaba todos los deploys sin
+error visible: Vercel servía la versión anterior y no avisaba. Ya pasó una vez.)
 Funciones actuales: `blob-upload crear-venta datos deposito meta-ads postventa sku-map`. Eran 9:
 `sync.js` y `proxy.js` se borraron el 13-ago-2026 por abandonados y abiertos (`git show 42c43b8`).
 ⚠️ **Vercel sólo lee el `vercel.json` de la RAÍZ**: el que vivía en `api/` nunca se aplicó.
