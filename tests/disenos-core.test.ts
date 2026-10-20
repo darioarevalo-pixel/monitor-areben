@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   aplicarEstadoALote,
   conteos,
+  elegidosPorComprar,
   etiquetaPuntaje,
   filtrarDisenos,
   marcarEnviados,
@@ -11,6 +12,7 @@ import {
   podarSeleccion,
   quitarLote,
   vincularAImportacion,
+  yaEnImportacion,
 } from '../lib/disenos/core'
 import { ranking, resumen } from '../lib/disenos/votacion.core.js'
 import type { Diseno } from '../lib/disenos/tipos'
@@ -237,5 +239,32 @@ describe('vincularAImportacion («Ya viene en…»)', () => {
     expect(leido.enviados![0].vinculo).toBe(true)
     const comun = normalizarDiseno({ id: 'a', url: 'data:,', enviados: [{ ...envio, vinculo: 'sí' }] }, nid)!
     expect(Object.keys(comun.enviados![0])).not.toContain('vinculo')
+  })
+})
+
+describe('elegidosPorComprar (lo que queda en la pestaña Elegidos)', () => {
+  // 19-oct-2026: «Pasar a una importación» ofrecía 29 y 27 ya venían en la IMPO 5.
+  const envio = { ingresoId: 'g5', ingresoDesc: 'IMPORTACION 5', bloqueId: '', columnaId: '', fecha: '2026-10-19', por: 'B' }
+  const arr = [
+    D({ id: 'libre', estado: 'confirmado' }),
+    D({ id: 'vinculada', estado: 'confirmado', enviados: [{ ...envio, vinculo: true }] }),
+    D({ id: 'mandada', estado: 'confirmado', enviados: [envio] }),
+    D({ id: 'revisar' }),
+    D({ id: 'revisar-con-envio', enviados: [envio] }),
+  ]
+
+  it('deja sólo las confirmadas sin ninguna importación', () => {
+    expect(elegidosPorComprar(arr).map((d) => d.id)).toEqual(['libre'])
+  })
+
+  it('un envío por el puente cuenta igual que un «ya viene en»: las dos ya están compradas', () => {
+    expect(yaEnImportacion(arr[1])).toBe(true)
+    expect(yaEnImportacion(arr[2])).toBe(true)
+    expect(yaEnImportacion(D({ enviados: [] }))).toBe(false)
+  })
+
+  it('sacar una de Elegidos (volver a revisar) la saca de la cuenta', () => {
+    const sacada = aplicarEstadoALote(arr, new Set(['libre']), 'revisar')
+    expect(elegidosPorComprar(sacada)).toEqual([])
   })
 })

@@ -21,6 +21,10 @@ lo contrario del puente: la funda **ya está** en una importación cargada a man
 que sólo se LEE el KV y se escribe el diseño —confirmado y con `enviados[].vinculo: true`—. Existe
 para que lo comprado no vuelva a votarse: la ronda nueva toma «los por revisar». ⛔ Nunca escribe
 el KV. Nació el 14-oct-2026 con 19 fundas del tablero que eran la IMPORTACION 5, foto por foto.
+**Elegidos muestra sólo `elegidosPorComprar`** (`core.ts`): lo que ya tiene un envío —puente o
+«ya viene en»— va plegado abajo y ⛔ no cuenta para el badge ni para «Pasar a una importación»
+(19-oct-2026: ofrecía 29 y 27 ya venían en la IMPO 5). «Sacar de Elegidos» lo devuelve a
+`revisar`, y ⛔ no se ofrece en las ya compradas: volverían a la próxima votación.
 Handlers, todos por `api/datos.js`: `_disenos.js` (`?recurso=disenos`), `_disenos-rondas.js`
 (`?recurso=disenos-rondas`, con sesión) y `_disenos-votacion.js` (`?recurso=votacion`, **abierto**).
 Tablas: `disenos` (`sql/migrate-disenos.sql`) · `disenos_rondas` + `disenos_votos`

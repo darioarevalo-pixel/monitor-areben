@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { imgAThumbYSubir } from '@/lib/imagenes'
-import { aplicarEstadoALote, conteos, marcarEnviados, pesadas, vincularAImportacion } from '@/lib/disenos/core'
+import { aplicarEstadoALote, conteos, elegidosPorComprar, marcarEnviados, pesadas, vincularAImportacion } from '@/lib/disenos/core'
 import { estaAbierta } from '@/lib/disenos/votacion'
 import { VotacionPanel } from '@/components/disenos/VotacionPanel'
 import { Tablero } from '@/components/disenos/Tablero'
@@ -238,7 +238,8 @@ export function Disenos() {
   const n = useMemo(() => conteos(disenos), [disenos])
   const rondasAbiertas = ronda.ronda && estaAbierta(ronda.ronda) ? 1 : 0
   const conBase64 = useMemo(() => pesadas(disenos).length, [disenos])
-  const confirmados = useMemo(() => disenos.filter((d) => d.estado === 'confirmado'), [disenos])
+  // Las que ya vienen en una importación no cuentan: ni para el badge ni para «Pasar a una importación».
+  const porComprar = useMemo(() => elegidosPorComprar(disenos), [disenos])
 
   const botonesTablero = (
     <>
@@ -298,7 +299,7 @@ export function Disenos() {
           { key: 'tablero', label: 'Tablero', badge: n.revisar || undefined, hint: 'Todas las fundas cargadas, para mirarlas y decidir' },
           { key: 'votaciones', label: 'Votaciones', badge: rondasAbiertas || undefined, hint: 'Las rondas por link y sus resultados' },
           // El badge va aunque valga 0: es lo único que dice "todavía no elegiste nada".
-          { key: 'elegidos', label: 'Elegidos', badge: n.confirmado, hint: 'Los confirmados, listos para mandar a una importación' },
+          { key: 'elegidos', label: 'Elegidos', badge: porComprar.length, hint: 'Los confirmados que todavía no vienen en ninguna importación' },
         ]}
       />
 
@@ -346,12 +347,16 @@ export function Disenos() {
           disenos={disenos}
           puntajes={ronda.puntajes}
           onVer={setPreview}
+          onSacar={(id) => {
+            setEstado(id, 'revisar')
+            toast.ok('Volvió a «Por revisar».')
+          }}
           acciones={
             <>
               <PasarAImportacion
                 marca={marca}
                 perfil={perfil}
-                disenos={confirmados}
+                disenos={porComprar}
                 onEnviados={(marcas) => setDisenos((ds) => marcarEnviados(ds, marcas))}
               />
               <Button variant="outline" onClick={() => setPdfOpen(true)}>

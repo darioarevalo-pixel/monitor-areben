@@ -72,6 +72,20 @@ export function conteos(disenos: Diseno[]): Record<EstadoDiseno | 'todos', numbe
   return out
 }
 
+/**
+ * Ya está en una importación: se mandó con el puente o se anotó «ya viene en». Cualquiera de los
+ * dos alcanza — las dos dicen que esa funda ya se compró. Elegidos las esconde y «Pasar a una
+ * importación» no las cuenta: el 19-oct-2026 ofrecía pasar 29 y las 27 ya venían en la IMPO 5.
+ */
+export function yaEnImportacion(d: Diseno): boolean {
+  return !!d.enviados?.length
+}
+
+/** Los elegidos que todavía falta comprar: el trabajo que queda en la pestaña Elegidos. */
+export function elegidosPorComprar(disenos: Diseno[]): Diseno[] {
+  return disenos.filter((d) => d.estado === 'confirmado' && !yaEnImportacion(d))
+}
+
 /** Compat: se usa en el pie del tablero y en el selector del PDF. */
 export function contarPorEstado(disenos: Diseno[], estado: EstadoDiseno): number {
   return disenos.filter((d) => d.estado === estado).length
