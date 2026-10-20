@@ -48,6 +48,7 @@ import { CLAVES_PLANTILLA, clavesDeEje, ejeValeEnMarca, esClavePlantilla, hechoY
 // El techo. Va acá y no en la pantalla por lo mismo que el destino: un pendiente que se
 // filtra sólo al dibujar igual enciende el badge y sigue viajando en el JSON.
 import { esDeArriba, veLoDeArriba } from '../lib/agenda/jerarquia.core.js';
+import { avisar, faltaParaMandar, guardarSuscripcion, suscripcionValida } from './_push.js';
 import { armarCorreoDiario, hoyAR } from '../lib/agenda/correo-diario.core.js';
 import { pedirAvisoInterno } from '../lib/mailer/aviso.core.js';
 import { CAMPO as CAMPO_PREGUNTA, conRespuesta, preguntaDeItem } from '../lib/agenda/pregunta-ingreso.core.js';
@@ -808,6 +809,23 @@ export default async function handler(req, res) {
     const b = req.body || {};
     const action = String(b.action || '');
 
+    // ─── 🔔 Avisos al celular (Darío, 20-oct-2026) ───────────────────────────────────────────────
+    // Cualquiera con sesión anota SU teléfono y se manda un aviso de prueba A SÍ MISMO: ⛔ ninguna de
+    // las dos elige a otra persona, así que no piden el permiso de cargar. Ver `api/_push.js`.
+    if (action === 'push-alta') {
+      if (!suscripcionValida(b.suscripcion)) return res.status(400).json({ error: 'El teléfono no mandó una dirección de avisos válida.' });
+      const falta = faltaParaMandar();
+      if (falta) return res.status(503).json({ error: falta });
+      await guardarSuscripcion(yo, b.suscripcion, req.headers['user-agent']);
+      return res.status(200).json({ ok: true });
+    }
+    if (action === 'push-prueba') {
+      const r = await avisar([yo], { titulo: 'Aviso de prueba', cuerpo: 'Los avisos del Monitor llegan a este teléfono.', url: '/agenda', tag: 'prueba' });
+      if (r.falta) return res.status(503).json({ error: r.falta });
+      if (!r.telefonos) return res.status(400).json({ error: 'Este usuario no tiene ningún teléfono con avisos activados.' });
+      return res.status(200).json({ ok: true, enviados: r.enviados, fallas: r.fallas });
+    }
+
     // ─── La escritura abierta: el tilde ───────────────────────────────────────────────────────
     //
     // Va ANTES del control del sub, y es la única que lo saltea. Cargar un pendiente es de gerencia;
@@ -1251,8 +1269,15 @@ export default async function handler(req, res) {
         autor: yo,
         updated_at: new Date().toISOString(),
       };
+      // ¿Es nueva? Sólo la tarea NUEVA dirigida a personas avisa: editar una ⛔ vuelve a sonar.
+      const { data: previo } = await supabase.from('agenda_items').select('id').eq('id', id).maybeSingle();
       const { error } = await supabase.from('agenda_items').upsert([fila], { onConflict: 'id' });
       if (error) throw new Error(error.message);
+      if (!previo && fila.clase === 'pendiente' && fila.activo && fila.destino.tipo === 'personas') {
+        // 🔔 Se espera (en Vercel lo que queda colgado después de contestar se corta), pero ⛔ falla
+        // nunca la tarea: `avisar` no lanza, y la tarea ya quedó guardada arriba.
+        await avisar(fila.destino.personas || [], { titulo: 'Nueva tarea asignada', cuerpo: titulo, url: '/agenda', tag: id });
+      }
       return res.status(200).json({ ok: true, id });
     }
 

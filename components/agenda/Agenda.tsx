@@ -47,6 +47,7 @@ import {
 import { personaDelEquipo } from '@/lib/agenda/equipo'
 import { comoLeLlamamos } from '@/lib/inicio/core'
 import { useAgenda } from '@/store/useAgenda'
+import { ActivarAvisos } from './ActivarAvisos'
 import { AvisosHoy } from './AvisosHoy'
 import { Cumplimiento } from './Cumplimiento'
 import { Equipo } from './Equipo'
@@ -172,6 +173,8 @@ function Hoy({
 }) {
   return (
     <div style={{ display: 'grid', gap: space[5] }}>
+      {/* 🔔 En prueba (Darío, 20-oct-2026): primero en el teléfono de Darío, después el equipo. */}
+      {!pantallas && <ActivarAvisos />}
       <section style={{ display: 'grid', gap: space[3] }}>
         <Titulo>
           ☑ Tareas

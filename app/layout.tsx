@@ -9,7 +9,10 @@ export const metadata = {
   title: 'Monitor AREBEN SRL',
   // Nombre bajo el ícono al agregarlo a la pantalla de inicio del iPhone
   // (el ícono sale solo de app/apple-icon.png).
-  appleWebApp: { title: 'Monitor' },
+  // 🔔 `capable` + el manifest: agregado a inicio, abre como app a pantalla completa. Es lo que
+  // Apple exige para mandar avisos (Darío, 20-oct-2026); desde Safari común ⛔ se pueden pedir.
+  appleWebApp: { title: 'Monitor', capable: true, statusBarStyle: 'default' },
+  manifest: '/manifest.webmanifest',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

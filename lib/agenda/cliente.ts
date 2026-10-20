@@ -143,3 +143,13 @@ export function marcarHecho(itemId: string, fecha: FechaIso, nota?: string): Pro
 export function desmarcarHecho(itemId: string, fecha: FechaIso): Promise<void> {
   return postear({ action: 'desmarcar', id: itemId, fecha }, 'No se pudo destildar.')
 }
+
+/** 🔔 Anota la dirección de avisos de ESTE teléfono a nombre de quien entró (ver `api/_push.js`). */
+export async function anotarTelefono(suscripcion: PushSubscriptionJSON): Promise<void> {
+  await postear({ action: 'push-alta', suscripcion }, 'No se pudieron activar los avisos.')
+}
+
+/** 🔔 Manda un aviso de prueba a los teléfonos de quien entró. */
+export async function avisoDePrueba(): Promise<void> {
+  await postear({ action: 'push-prueba' }, 'No se pudo mandar el aviso de prueba.')
+}
