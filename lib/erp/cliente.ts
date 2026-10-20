@@ -491,3 +491,15 @@ export type TramoResultado = { desde: string; hasta: string; ventas: number; ven
 export type ResultadoDelMes = { mes: TramoResultado; anterior: TramoResultado; gnHasta: string | null }
 export const leerResultadoDelMes = (marca: MarcaErp) =>
   pedir<ResultadoDelMes>(null, `&vista=inicio-resultado&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el resultado del mes.')
+
+// ── ERP › Ventas › Por producto (`api/_erp-por-producto.js`, núcleo `lib/erp/ventas-producto.core.js`) ──
+
+export type RenglonProducto = {
+  id: string; ventaId: string; numero: string | null; cuando: string; canal: string; cliente: string | null
+  producto: string; nombre: string; talle: string; sku: string | null; cantidad: number; precio: number; total: number; linea: string
+  /** Costo vigente × cantidad; null = sin costo, o el perfil ⛔ ve costos. */
+  costo: number | null
+}
+
+export const leerVentasPorProducto = (marca: MarcaErp, desde: string, hasta: string) =>
+  pedir<{ renglones: RenglonProducto[]; desde: string; hasta: string; costos: boolean; gnHasta: string | null }>(null, `&vista=ventas-producto&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer las ventas por producto.')

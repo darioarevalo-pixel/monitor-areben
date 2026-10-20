@@ -15,6 +15,7 @@
  *   GET  ?recurso=erp&vista=diferencias&marca=…&fecha=YYYY-MM-DD    lo que el libro ⛔ explicó ese día + la sobreventa
  *   GET  ?recurso=erp&vista=conciliacion&tienda=bdi|zattia|stunned&fecha=…  lo que ⛔ cierra contra TN y GN ese día (motor sql/024)
  *   GET  ?recurso=erp&vista=stock-lista&marca=bdi|zattia              la lista de Stock: cada prenda por depósito (`api/_erp-stock.js`)
+ *   GET  ?recurso=erp&vista=ventas-producto&marca=bdi|zattia&desde&hasta  Ventas › Por producto: renglones del espejo de GN (`api/_erp-por-producto.js`)
  *   GET  ?recurso=erp&vista=productos-lista&marca=bdi|zattia          la lista de Productos: uno por fila (`api/_erp-productos.js`)
  *   GET  ?recurso=erp&vista=movimientos&marca=…&desde=…&hasta=…     Stock › Movimientos: cada fila del libro (`api/_erp-stock.js`)
  *   GET  ?recurso=erp&vista=clientes-lista&marca=bdi|zattia           Clientes: uno por fila (`api/_erp-clientes.js`)
@@ -84,6 +85,7 @@ import { listaDeMovimientos, listaDeStock } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
 import { fichaDeCliente, listaDeClientes } from './_erp-clientes.js'
 import { resultadoDelMes } from './_erp-inicio.js'
+import { ventasPorProducto } from './_erp-por-producto.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -1361,6 +1363,11 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET' && req.query.vista === 'movimientos') {
       const r = await listaDeMovimientos({ marca: String(req.query.marca || ''), desde: String(req.query.desde || ''), hasta: String(req.query.hasta || '') }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'ventas-producto') {
+      const marca = String(req.query.marca || '')
+      const r = await ventasPorProducto({ marca, desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), costos: puedeErp(perfil, marca, 'costos') }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'productos-lista') {

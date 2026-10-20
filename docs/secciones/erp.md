@@ -10,7 +10,7 @@ solo sin ir atrás»): sale del shell en `app/[[...seccion]]/page.tsx` (`esERP`,
 marca adentro) con SU menú (`components/erp/Erp.tsx`, `SECCIONES_ERP`): Inicio · Ventas + Caja (POS) · Stock ·
 Productos y precios · Clientes y proveedores · Configuración, y «Volver al monitor». Una dirección por sección y por
 pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una vieja o mal escrita se corrige sola).
-Las pestañas: Ventas = Ventas · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
+Las pestañas: Ventas = Ventas · Por producto · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
 dirección vieja cae en Ventas) · Caja (POS) = Cambio · Factura · Stock =
 Stock · Movimientos · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Productos (la vieja `/erp/productos/precios` cae ahí) · Configuración = Reglas · Cuentas de cobro;
 Clientes y proveedores = Clientes · Proveedores. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
@@ -99,6 +99,14 @@ mismo molde. ⛔ se copian en la pantalla nueva (Ajustes y Stock ya las usan).
   colgado al lado del estado; el $ y el «⋯» llevan a **Cobranzas** del monitor (↗, ahí se cobra transferencia o efectivo) y a
   Tienda Nube (cancelarlo); la ficha muestra cuándo entró, el medio y las prendas que retiene. El buscador lee también las
   prendas. Al pie, cuándo se leyó Tienda Nube (`tnLeidaEn`, cada 2 h).
+- 🎨 **Por producto (Diseño 8, 20-oct; pestaña `/erp/ventas/por-producto`, ⛔ «por prenda»)**: **Agrupado por producto**
+  (unidades NETAS, ventas, vendido, precio promedio y, sólo con permiso `costos`, el margen) y **Cada renglón** (como GN).
+  🔑 Sale del ESPEJO DE GN (`ventas` + `venta_detalles`, por pg con `conMotor`), como Inicio: el motor tiene sólo una parte
+  (20-oct: Zattia local 181 ventas en el motor contra 604 en GN; BDI local 3 contra 317). El margen usa `costo_vigente`
+  (el de HOY; sin costo ⇒ «sin costo», ⛔ 0) y el servidor ⛔ lo manda sin `costos`. GN guarda el DÍA sin hora ⇒ `diaCorto`
+  (⛔ `cuandoCorto`: diría 00:00). Período ≤ 93 días. Clic ⇒ `FichaProducto` (sin la fila de Productos: sin la grilla de
+  stock). Medido 20-oct (1–20): BDI 3.840 renglones, 2,4 s, 1,1 MB · Zattia 1.468, 1,5 s; oráculo `oraculos/por-producto-
+  servidor-lectura.mjs` (Σ y unidades = la base). Núcleo `lib/erp/ventas-producto.core.js`; test `tests/erp-por-producto.test.tsx`.
 - 🎨 **Anular y desarmar (Diseño 8, 20-oct; contrato-venta.md §17, 37a)**: la ventana de anular dice ADÓNDE va la
   prenda (`vueltaSiAnula` = `vueltaDe` del motor con `tn_orden.estado`: al instante · «A desarmar» si estaba empaquetada ·
   «A recibir» si ya salió) y, si entró plata, hace ELEGIR: **devolver la plata** (por el medio con que pagó) o **dejar

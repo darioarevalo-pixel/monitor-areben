@@ -35,6 +35,7 @@ import { ProductosErp } from './productos/ProductosErp'
 import { ReglasComerciales } from './ReglasComerciales'
 import { RutasCobro } from './RutasCobro'
 import { VentasErp } from './ventas/VentasErp'
+import { PorProductoErp } from './ventas/PorProductoErp'
 import { ClientesErp } from './clientes/ClientesErp'
 import { ProveedoresErp } from './clientes/ProveedoresErp'
 import { InicioErp } from './inicio/InicioErp'
@@ -56,7 +57,7 @@ export const SECCIONES_ERP: Seccion[] = [
   { key: 'inicio', titulo: 'Inicio', icono: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z', pestanias: [] },
   {
     key: 'ventas', titulo: 'Ventas', icono: 'M6 2l-2 4v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6l-2-4z M4 6h16 M16 10a4 4 0 0 1-8 0',
-    pestanias: [{ key: 'ventas', label: 'Ventas' }, { key: 'facturacion', label: 'Facturación' }],
+    pestanias: [{ key: 'ventas', label: 'Ventas' }, { key: 'por-producto', label: 'Por producto' }, { key: 'facturacion', label: 'Facturación' }],
   },
   { key: 'caja', titulo: 'Caja (POS)', icono: 'M3 8h18v12H3z M7 8V4h10v4 M7 13h4', debajo: true, pestanias: [{ key: 'cambio', label: 'Cambio' }, { key: 'factura', label: 'Factura' }] },
   {
@@ -163,6 +164,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {seccion.vacia && <EmptyState title={seccion.vacia} />}
             {/* `key`: al cambiar de marca se cierra la ficha abierta (era de la otra marca) y se vuelve a leer. */}
             {pestania === 'ventas' && <VentasErp key={marca} irACaja={(que) => ir('caja', que)} />}
+            {pestania === 'por-producto' && <PorProductoErp key={marca} />}
             {pestania === 'facturacion' && <Facturacion key={marca} />}
             {pestania === 'cambio' && <CambioCaja />}
             {pestania === 'factura' && <FacturaCaja />}
