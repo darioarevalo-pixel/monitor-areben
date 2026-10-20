@@ -19,6 +19,7 @@
  *   GET  ?recurso=erp&vista=movimientos&marca=…&desde=…&hasta=…     Stock › Movimientos: cada fila del libro (`api/_erp-stock.js`)
  *   GET  ?recurso=erp&vista=clientes-lista&marca=bdi|zattia           Clientes: uno por fila (`api/_erp-clientes.js`)
  *   GET  ?recurso=erp&vista=cliente-ficha&marca=…&clave=…             la ficha de un cliente: compras y cuenta corriente
+ *   GET  ?recurso=erp&vista=inicio-resultado&marca=bdi|zattia         Inicio: vendido, costo y margen del mes (`api/_erp-inicio.js`)
  *   GET  ?recurso=erp&vista=stock&marca=bdi|zattia&q=texto            busca prendas (SKU, código, nombre)
  *   GET  ?recurso=erp&vista=precio&marca=…&producto=ID                precio por lista y costo del producto, con GN y TN al lado
  *   POST {recurso:'erp', accion:'cargar-precio'|'cargar-costo', marca, producto, monto, lista?, desde?, motivo?, proveedor?, proveedorId?}
@@ -81,6 +82,7 @@ import { cobrarVentaErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVent
 import { listaDeMovimientos, listaDeStock } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
 import { fichaDeCliente, listaDeClientes } from './_erp-clientes.js'
+import { resultadoDelMes } from './_erp-inicio.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
@@ -1326,6 +1328,10 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.vista === 'productos-lista') {
       const r = await listaDeProductos({ marca: String(req.query.marca || '') }, { conMotor, pedidosSinPagar })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'inicio-resultado') {
+      const r = await resultadoDelMes({ marca: String(req.query.marca || '') }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'clientes-lista') {
       const r = await listaDeClientes({ marca: String(req.query.marca || '') }, { conMotor })

@@ -459,3 +459,9 @@ export type FichaDeCliente = {
 }
 export const leerFichaDeCliente = (marca: MarcaErp, clave: string) =>
   pedir<FichaDeCliente>(null, `&vista=cliente-ficha&marca=${marca}&clave=${encodeURIComponent(clave)}&nc=${Date.now()}`, 'No se pudo leer el cliente.')
+
+// ── ERP › Inicio (`api/_erp-inicio.js`): el resultado comercial del mes, del espejo de GN ──
+export type TramoResultado = { desde: string; hasta: string; ventas: number; vendido: number; costo: number; sinCosto: number; margen: number }
+export type ResultadoDelMes = { mes: TramoResultado; anterior: TramoResultado; gnHasta: string | null }
+export const leerResultadoDelMes = (marca: MarcaErp) =>
+  pedir<ResultadoDelMes>(null, `&vista=inicio-resultado&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el resultado del mes.')

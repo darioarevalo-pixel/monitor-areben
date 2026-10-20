@@ -163,6 +163,15 @@ la fila ⇒ el formulario de esa regla (el formulario y el simulador siguen igua
 canal × medio de la línea, vistas por canal + «Sin ruta» + «Cambios» (el historial); clic o «⋯» ⇒ la ventana «Cambiar la
 ruta» (mismo aviso antes de guardar). ⛔ cambió ningún contrato. Tests `tests/erp-reglas-pantalla.test.tsx`, `erp-rutas-pantalla`.
 
+**Inicio** (🎨 19-oct, Diseño 7, `components/erp/inicio/InicioErp.tsx`): arriba el **resultado comercial del mes**
+(vendido · margen bruto con su % · ventas y ticket · contra el mes pasado), del 1 a hoy contra el MISMO tramo del mes
+anterior, del espejo de GN (`api/_erp-inicio.js`, `vista=inicio-resultado`; GN es el que vende hoy). 🔴 El estado de la
+venta ⛔ se filtra (`lib/crm/metricas.ts` §2: «Compra Pendiente» es normal). Oráculo 19-oct
+(`~/Documents/erp-monitor/oraculos/inicio-resultado-lectura.mjs`): BDI $29.525.439 = «Ventas mensuales › Día a día»
+$29.525.075 (1 venta), Zattia $22.416.415 contra $22.373.468 (0,2%). Abajo, **«Para hacer» por rol** (Local ·
+Administración · Productos) con el número de la vista de cada lista, contado con SU núcleo (`contarVistas` de Ventas del
+mes, Stock y Productos: ⛔ otra cuenta); cada uno lleva a su pestaña y una lista que falla dice «no se pudo».
+
 **Clientes y proveedores** (🎨 19-oct, Diseño 7: molde de TRABAJO, sólo lectura): **Clientes** = UNA lista con cada
 cliente (tipo, compras, comprado, última/primera compra, canales, **saldo de la cuenta**), vistas Todos · Compraron este
 mes · Mayoristas · Con saldo · Sin comprar hace +90 días, resumen arriba, buscador (nombre, DNI/CUIT), columnas por

@@ -37,6 +37,7 @@ import { RutasCobro } from './RutasCobro'
 import { VentasErp } from './ventas/VentasErp'
 import { ClientesErp } from './clientes/ClientesErp'
 import { ProveedoresErp } from './clientes/ProveedoresErp'
+import { InicioErp } from './inicio/InicioErp'
 
 type Seccion = {
   key: string
@@ -158,7 +159,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
               )}
             </header>
 
-            {seccion.key === 'inicio' && <InicioErp />}
+            {seccion.key === 'inicio' && <InicioErp key={marca} href={hrefErp} />}
             {seccion.vacia && <EmptyState title={seccion.vacia} />}
             {/* `key`: al cambiar de marca se cierra la ficha abierta (era de la otra marca) y se vuelve a leer. */}
             {pestania === 'ventas' && <VentasErp key={marca} irACaja={(que) => ir('caja', que)} />}
@@ -178,20 +179,6 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
           </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-/** Inicio, mientras el resumen del día (diseño §7) ⛔ tiene sus números: la puerta a cada sección con lo que hay adentro. */
-function InicioErp() {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: space[3] }}>
-      {SECCIONES_ERP.filter((s) => s.key !== 'inicio').map((s) => (
-        <Link key={s.key} href={hrefErp(s.key)} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '14px 16px', borderRadius: 14, background: color.surface, border: `1px solid ${color.line}`, color: color.ink, textDecoration: 'none' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: weight.semibold }}><Trazo d={s.icono} />{s.titulo}</span>
-          <span style={{ fontSize: 13, color: color.mut }}>{s.pestanias.length ? s.pestanias.map((p) => p.label).join(' · ') : 'Todavía sin pantallas'}</span>
-        </Link>
-      ))}
     </div>
   )
 }
