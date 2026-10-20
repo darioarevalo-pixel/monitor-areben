@@ -24,7 +24,7 @@ import { useMemo, useState } from 'react'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
   BuscarInput, Button, Card, Chips, ContadorFiltro, EmptyState, FilterBar,
-  Notice, Select, StatusPill,
+  Select, StatusPill,
   color, font, space, weight, useConfirmar, useFiltroUrl, useToast, type ChipOpt,
 } from '@/components/ui'
 import {
@@ -140,12 +140,8 @@ export function Rutinas() {
       <div style={{ display: 'grid', gap: space[5] }}>
         <section style={{ display: 'grid', gap: space[3] }}>
           <Titulo>🏦 Promociones bancarias</Titulo>
-          <Notice tone="neutral">
-            Acá están <b>todas</b>, incluidas las apagadas y las vencidas. En «Hoy» sólo se ve lo que
-            corre hoy — es lo que ve el mostrador.
-          </Notice>
           {promos.length === 0 ? (
-            <EmptyState title="Todavía no hay ninguna promoción cargada." dashed />
+            <EmptyState title="Sin promociones cargadas." dashed />
           ) : (
             promos.map((p) => (
               <FilaPromo key={p.id} p={p} hoy={hoy} onEditar={() => setEditandoPromo(p)} onBorrar={onBorrar} />
@@ -154,10 +150,10 @@ export function Rutinas() {
         </section>
 
         <section style={{ display: 'grid', gap: space[3] }}>
-          <Titulo>☑ Rutinas y avisos</Titulo>
+          <Titulo>☑ Tareas y avisos</Titulo>
           {mios.length === 0 ? (
             <EmptyState
-              title="Todavía no hay ninguna rutina ni ningún aviso cargado."
+              title="Sin tareas ni avisos cargados."
               hint="Entra sólo lo que se olvida: la rutina obvia no se carga."
               dashed
             />
@@ -218,28 +214,28 @@ function ListaItems({
 
   const clases: ChipOpt<FiltroClase>[] = [
     { key: 'todos', label: 'Todo', n: porClase.length },
-    { key: 'pendiente', label: 'Rutinas', n: filtrarItems(porClase, { clase: 'pendiente' }).length },
+    { key: 'pendiente', label: 'Tareas', n: filtrarItems(porClase, { clase: 'pendiente' }).length },
     { key: 'aviso', label: 'Avisos', n: filtrarItems(porClase, { clase: 'aviso' }).length },
   ]
   const estados: ChipOpt<FiltroEstado>[] = [
-    { key: 'todos', label: 'Prendidos y apagados', n: porEstado.length },
-    { key: 'activos', label: 'Prendidos', n: filtrarItems(porEstado, { estado: 'activos' }).length },
-    { key: 'apagados', label: 'Apagados', n: filtrarItems(porEstado, { estado: 'apagados' }).length },
+    { key: 'todos', label: 'Todas', n: porEstado.length },
+    { key: 'activos', label: 'Activas', n: filtrarItems(porEstado, { estado: 'activos' }).length },
+    { key: 'apagados', label: 'Pausadas', n: filtrarItems(porEstado, { estado: 'apagados' }).length },
   ]
 
   return (
     <>
       <FilterBar>
-        <BuscarInput value={q} onChange={setQ} placeholder="Buscar por título…" />
+        <BuscarInput value={q} onChange={setQ} placeholder="Buscar" />
         <Select value={quien} onChange={(e) => setQuien(e.target.value)} style={{ maxWidth: 240 }}>
-          <option value="todos">De quien sea</option>
+          <option value="todos">Todas las personas</option>
           {gente.map((o) => (
             <option key={o.clave} value={o.clave}>{o.label} ({o.n})</option>
           ))}
         </Select>
         <Chips opciones={clases} value={clase} onChange={setClase} />
         <Chips opciones={estados} value={estado} onChange={setEstado} />
-        <ContadorFiltro n={filtrados.length} singular="renglón" plural="renglones" />
+        <ContadorFiltro n={filtrados.length} singular="resultado" plural="resultados" />
       </FilterBar>
 
       {filtrados.length === 0 ? (
@@ -323,14 +319,12 @@ function FilaItem({
               tildes en Cumplimiento se explica casi siempre por esto, y buscar el porqué abriendo
               cada uno es la fricción que hace que nadie revise.
             */}
-            {i.clase === 'aviso' && <StatusPill tone="warning" label="sólo avisa" />}
+            {i.clase === 'aviso' && <StatusPill tone="warning" label="aviso" />}
             {!i.activo ? (
-              <StatusPill tone="neutral" label="apagado" />
+              <StatusPill tone="neutral" label="pausada" />
             ) : vaEl(i, hoy) ? (
-              <StatusPill tone="success" label={i.clase === 'aviso' ? 'se avisa hoy' : 'toca hoy'} />
-            ) : (
-              <StatusPill tone="neutral" label="hoy no toca" />
-            )}
+              <StatusPill tone="success" label="hoy" />
+            ) : null}
           </div>
           <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>
             {rotuloRegla(i.regla)} · {rotuloDestino(i.destino)}
@@ -338,8 +332,8 @@ function FilaItem({
                 local aparece un jueves. Acá se lee de una, sin abrir el modal — y el tope va en el
                 mismo renglón: «queda hasta que se tilde» a secas sería falso en las que sí vencen. */}
             {i.arrastra && (i.arrastraDias == null
-              ? ' · queda hasta que se tilde'
-              : ` · queda hasta ${i.arrastraDias} ${i.arrastraDias === 1 ? 'día' : 'días'} después`)}
+              ? ' · si no se hace, queda atrasada'
+              : ` · atrasada hasta ${i.arrastraDias} ${i.arrastraDias === 1 ? 'día' : 'días'}`)}
             {i.marcas.length > 0 && ` · sólo ${i.marcas.join(' y ')}`}
             {i.manualId && ' · con manual'}
           </div>
@@ -361,10 +355,10 @@ function FilaItem({
  * lo normal. Un solo "inactiva" mandaría a revisar la regla cuando el problema es la fecha.
  */
 function EstadoPromo({ promo, hoy }: { promo: Promo; hoy: string }) {
-  if (!promo.activa) return <StatusPill tone="neutral" label="apagada" />
+  if (!promo.activa) return <StatusPill tone="neutral" label="pausada" />
   if (promo.hasta && hoy > promo.hasta) return <StatusPill tone="neutral" label="vencida" />
-  if (hoy < promo.desde) return <StatusPill tone="warning" label="todavía no arrancó" />
+  if (hoy < promo.desde) return <StatusPill tone="warning" label="próxima" />
   return corre(promo, hoy)
-    ? <StatusPill tone="success" label="corre hoy" />
-    : <StatusPill tone="neutral" label="hoy no toca" />
+    ? <StatusPill tone="success" label="hoy" />
+    : null
 }
