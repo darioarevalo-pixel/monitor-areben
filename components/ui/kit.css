@@ -592,7 +592,7 @@
   position: fixed;
   z-index: 300;
   right: 18px;
-  /* Arriba de «Reportar un problema» (fijo abajo a la derecha, z 900): a 18px quedaba tapado. */
+  /* Arriba de «Reportar un problema» (fijo abajo a la derecha, z 150): a 18px quedaba tapado. */
   bottom: 64px;
   display: flex;
   flex-direction: column;

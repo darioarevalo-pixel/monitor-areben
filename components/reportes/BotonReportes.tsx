@@ -71,7 +71,9 @@ export function BotonReportes({ seccion, admin, lado = 'derecha' }: { seccion: s
           position: 'fixed',
           bottom: 16,
           [lado === 'derecha' ? 'right' : 'left']: 16,
-          zIndex: 900,
+          // Debajo de las ventanas (`.mo-backdrop`, z 200): en el celular tapaba el botón de guardar de
+          // «Nueva tarea» (Darío, 20-oct). Con una ventana abierta queda atrás del velo, como el resto.
+          zIndex: 150,
           height: 'auto',
           padding: `${space[2]}px ${space[3]}px`,
           borderRadius: radius.pill,
