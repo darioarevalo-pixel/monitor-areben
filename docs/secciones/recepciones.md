@@ -27,10 +27,14 @@ Siguen siendo **7 de 12**.
 ## La URL y el secreto
 
 ```
-POST https://monitor.arebensrl.com/api/datos?recurso=oc-webhook
+POST https://monitor.arebensrl.com/api/erp/ingreso                 ← la dirección PROPIA DEL ERP
+POST https://monitor.arebensrl.com/api/datos?recurso=oc-webhook    ← la de siempre
 ```
 
-Es exactamente lo que tiene cargado el emisor. ⚠️ **Renombrar el recurso apaga el envío** sin que
+🆕 **20-oct (Bruno): Ingresos se conecta AL ERP, no al monitor.** `/api/erp/ingreso` es la que se
+le pasa al emisor: es una reescritura de `vercel.json` al MISMO recurso, así que las dos andan y
+caen en el mismo handler. El día que el ERP sea un sistema aparte, se muda esa dirección y el
+emisor no cambia nada. Mientras el emisor no la cambie, sigue usando la de siempre. ⚠️ **Renombrar el recurso apaga el envío** sin que
 falle nada de este lado: el emisor empieza a recibir 400 y a los seis reintentos marca fallido.
 
 El secreto compartido va en la variable **`INGRESO_WEBHOOK_SECRET`** de Vercel (base64, con o sin

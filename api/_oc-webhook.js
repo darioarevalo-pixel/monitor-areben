@@ -1,10 +1,11 @@
 // El receptor del webhook `oc.confirmada` del sistema de Ingresos.
 //
-//   POST /api/datos?recurso=oc-webhook     ← ésta es la URL que se le pasa al emisor
+//   POST /api/erp/ingreso                  ← la dirección PROPIA DEL ERP (20-oct): es la que se le pasa
+//                                             al emisor. Es una reescritura de `vercel.json` a la de abajo.
+//   POST /api/datos?recurso=oc-webhook     ← la de siempre: la que el emisor tenía cargada. Sigue andando.
 //
-// ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js`. El plan Hobby de Vercel admite 12
-// funciones y hay 7 usadas; si alguien crea `api/oc-webhook.js` "porque un webhook merece su
-// archivo", **frena todos los deploys sin error visible**. Ya pasó una vez (ver AGENTS.md).
+// Archivo `_`: NO es una ruta, entra por `api/datos.js`. (El tope de 12 funciones era del plan
+// Hobby; desde el 17-ago el proyecto está en Pro.)
 //
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 // ⚠️ ESTE VERBO NO PIDE SESIÓN — y por eso está SOLO en este archivo

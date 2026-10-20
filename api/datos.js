@@ -162,8 +162,10 @@ const RECURSOS = {
   // `disenos-rondas`/`votacion`: dos recursos y no uno, para que el verbo abierto viva en su
   // archivo y nadie le agregue al lado un verbo que se olvidó de pedir la sesión.
   //
-  // ⚠️ La URL que tiene cargada el emisor es exactamente `/api/datos?recurso=oc-webhook`.
-  // Cambiarle el nombre al recurso apaga el envío sin que falle nada acá.
+  // ⚠️ El emisor tiene cargada `/api/datos?recurso=oc-webhook` o la dirección propia del ERP,
+  // `/api/erp/ingreso`, que es una reescritura de `vercel.json` a este mismo recurso. Cambiarle el
+  // nombre al recurso apaga el envío por LAS DOS sin que falle nada acá (lo frena
+  // tests/erp-ingreso-ruta.test.ts).
   'oc-webhook': ocWebhook,
   // Las URLs de privacidad de la app de TN «Areben ERP» (sin sesión: las llama Tienda Nube). En el Partner
   // Portal van como `/api/datos?recurso=tn-erp&accion=store-redact` (y `customers-redact`, `customers-data-request`).
