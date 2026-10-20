@@ -115,6 +115,10 @@ sí se sabe: Semana, Mes y Cumplimiento sólo se miran, Eventos (los ingresos) e
 - **+ Tarea** (`ModalTarea.tsx`): Tarea · Descripción · Fotos · Asignar a (el `EQUIPO`) · Fecha
   (Hoy/Mañana/Otro día). Arma un `pendiente` `unica` a personas, **arrastrando**. Se elimina desde la
   tarjeta de la persona.
+- **Hoy, como la maqueta**: primero lo que falta (lo **nuevo** —asignado a personas hace menos de un
+  día— y lo **atrasado** arriba), lo hecho abajo en una lista compacta «Hechas»; tilde redondo; las
+  tareas antes que la promoción. El nombre del destino ⛔ se dibuja si la tarea es SÓLO de quien mira
+  (compartida, sí). ⚠️ Lo agrupado por evento (las órdenes de un ingreso) ⛔ se separa: sigue en su tarjeta.
 - **Tareas fijas** = la pantalla `rutinas` (misma URL): ⛔ ya no lista la tarea de un solo día (eso
   se sigue en Equipo) y está **agrupada por persona** (`rotuloDestinoCorto`, «Todo el equipo» al
   final). Las promociones siguen ahí hasta que pasen a la Caja (pedido de Darío; la Caja es de Bruno).

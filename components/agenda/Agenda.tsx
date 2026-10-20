@@ -161,6 +161,18 @@ function Hoy({
   return (
     <div style={{ display: 'grid', gap: space[5] }}>
       <section style={{ display: 'grid', gap: space[3] }}>
+        <Titulo>
+          ☑ Tareas
+          {sinTildar > 0 && <span style={{ color: color.mut, fontWeight: weight.medium }}> · {sinTildar} {sinTildar === 1 ? 'pendiente' : 'pendientes'}</span>}
+        </Titulo>
+        {hayPendientes ? (
+          <PendientesHoy fecha={hoy} />
+        ) : (
+          <EmptyState icon="✅" title="Sin tareas para hoy." dashed />
+        )}
+      </section>
+
+      <section style={{ display: 'grid', gap: space[3] }}>
         <Titulo>🏦 Promoción bancaria</Titulo>
         {promos.length === 0 ? (
           // El vacío es información, no una falla: "hoy no hay promo" es exactamente lo que hay que
@@ -184,17 +196,6 @@ function Hoy({
         </section>
       )}
 
-      <section style={{ display: 'grid', gap: space[3] }}>
-        <Titulo>
-          ☑ Tareas
-          {sinTildar > 0 && <span style={{ color: color.mut, fontWeight: weight.medium }}> · {sinTildar} {sinTildar === 1 ? 'pendiente' : 'pendientes'}</span>}
-        </Titulo>
-        {hayPendientes ? (
-          <PendientesHoy fecha={hoy} />
-        ) : (
-          <EmptyState icon="✅" title="Sin tareas para hoy." dashed />
-        )}
-      </section>
     </div>
   )
 }

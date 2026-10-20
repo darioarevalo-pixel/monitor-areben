@@ -55,15 +55,65 @@ export function PendientesHoy({
     armado sobre la lista entera diría «3 de 10» en una pantalla donde los 3 hechos no se muestran.
     El «de cuántas» tiene que contar lo que se está viendo.
   */
-  const filas = filasDeHoy(lista)
+  // Como en la maqueta (Darío, 19-oct-2026): lo que falta arriba —lo nuevo y lo atrasado primero—
+  // y lo hecho abajo, en una lista compacta. Lo agrupado (las órdenes de un ingreso) sigue entero.
+  const peso = (p: PendienteHoy) => (esNueva(p) ? 0 : p.desde ? 1 : 2)
+  const sueltasHechas = lista.filter((p) => p.hecho && !actividadDe(p.item))
+  const resto = lista.filter((p) => !sueltasHechas.includes(p)).sort((a, b) => peso(a) - peso(b))
+  const filas = filasDeHoy(resto)
+  const yo = perfil?.name ?? ''
 
   return (
     <div style={{ display: 'grid', gap: space[2] }}>
       {filas.map((f) => (
         f.tipo === 'grupo'
-          ? <GrupoActividad key={f.clave} g={f} yo={perfil?.name ?? ''} />
-          : <Renglon key={f.clave} p={f.p} yo={perfil?.name ?? ''} />
+          ? <GrupoActividad key={f.clave} g={f} yo={yo} />
+          : <Renglon key={f.clave} p={f.p} yo={yo} />
       ))}
+      {sueltasHechas.length > 0 && <Hechas lista={sueltasHechas} />}
+    </div>
+  )
+}
+
+/** Recién asignada a alguien en particular (menos de un día) y todavía sin hacer. */
+function esNueva(p: PendienteHoy): boolean {
+  if (p.hecho || p.item.destino.tipo !== 'personas' || !p.item.creado) return false
+  return Date.now() - Date.parse(p.item.creado) < 24 * 3600_000
+}
+
+/** Lo ya hecho, compacto: se ve que está, se puede destildar, y no le quita lugar a lo que falta. */
+function Hechas({ lista }: { lista: PendienteHoy[] }) {
+  const desmarcar = useAgenda((s) => s.desmarcar)
+  const [error, setError] = useState<string | null>(null)
+  const hora = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : ''
+  return (
+    <div style={{ display: 'grid', gap: space[1], marginTop: space[2] }}>
+      <div style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.mut, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+        Hechas · {lista.length}
+      </div>
+      <Card padding={2}>
+        {lista.map((p, i) => (
+          <div key={p.item.id + p.fecha} style={{
+            display: 'flex', gap: space[2], alignItems: 'center', padding: `${space[1]}px 0`,
+            borderTop: i ? `1px solid ${color.line}` : undefined, fontSize: font.sm, color: color.mut,
+          }}>
+            <button
+              type="button"
+              title="Destildar"
+              aria-pressed
+              onClick={() => desmarcar(p.item.id, p.fecha).catch((e) => setError(e instanceof Error ? e.message : 'No se pudo destildar.'))}
+              style={{
+                height: 22, width: 22, flex: '0 0 auto', borderRadius: 11, cursor: 'pointer', fontSize: 12, lineHeight: 1,
+                border: `1px solid ${color.success}`, background: color.success, color: '#fff', padding: 0,
+              }}
+            >✓</button>
+            <span style={{ flex: 1, minWidth: 0, textDecoration: 'line-through' }}>{p.item.titulo}</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{hora(p.hecho?.hechoAt ?? null)}</span>
+          </div>
+        ))}
+        {error && <div style={{ fontSize: font.sm, color: color.dangerInk }}>{error}</div>}
+      </Card>
     </div>
   )
 }
@@ -351,7 +401,9 @@ function VerLaOrden({ item }: { item: ItemAgenda }) {
  * 🔑 **`{tipo:'todos'}` no dibuja nada** (`rotuloDestinoCorto` devuelve la cadena vacía): es el caso
  * más común y un rótulo que aparece siempre no distingue nada.
  */
-function DeQuienEs({ item }: { item: ItemAgenda }) {
+function DeQuienEs({ item, yo }: { item: ItemAgenda; yo?: string }) {
+  // Lo que es SÓLO de quien lo está mirando no lleva su nombre: ahí es ruido. Compartido, sí.
+  if (yo && item.destino.tipo === 'personas' && item.destino.personas.length === 1 && item.destino.personas[0] === yo) return null
   const rotulo = rotuloDestinoCorto(item.destino)
   if (!rotulo) return null
   return <StatusPill tone="neutral" label={rotulo} />
@@ -392,7 +444,7 @@ function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
           aria-pressed={!!hecho}
           title={hecho ? 'Destildar' : 'Marcar como hecho'}
           style={{
-            height: 30, width: 30, flex: '0 0 auto', borderRadius: 8, cursor: 'pointer',
+            height: 30, width: 30, flex: '0 0 auto', borderRadius: 15, cursor: 'pointer',
             fontSize: font.base, lineHeight: 1,
             border: `1px solid ${hecho ? color.success : color.line2}`,
             background: hecho ? color.success : 'transparent',
@@ -418,7 +470,8 @@ function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
               El feriado se avisa y no se saltea: saltearlo solo sería deducir que el local está
               cerrado, y hay feriados que se trabaja. Quien mira decide.
             */}
-            <DeQuienEs item={p.item} />
+            {esNueva(p) && <StatusPill tone="brand" label="nueva" />}
+            <DeQuienEs item={p.item} yo={yo} />
             {feriado && <StatusPill tone="warning" label={`feriado · ${feriado}`} />}
             {/*
               De cuándo viene. Un pendiente que aparece un día en que su regla no corre se lee como
