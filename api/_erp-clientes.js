@@ -10,6 +10,8 @@
  *    `client_id` (y el contacto de `clientes`, el CRM); Zattia sólo por NOMBRE: su espejo ⛔ trae el id. La cuenta
  *    corriente del motor (contrato §15, `motor/cuenta/cuenta.mjs`) se suma encima; hoy ⛔ hay movimientos.
  */
+import { createClient } from '@supabase/supabase-js'
+import { cfgDeMarca } from './_recepciones-base.js'
 import { aTupla } from '../lib/erp/clientes-lista.core.js'
 
 const MARCAS = ['bdi', 'zattia']
@@ -64,9 +66,19 @@ export async function listaDeClientes({ marca }, deps) {
 }
 
 /**
+ * El contacto de un cliente de BDI, del CRM (`clientes`). 🔴 Por supabase-js, ⛔ por pg: el rol del motor ⛔ tiene permiso
+ * sobre `clientes` (en prod daba 500 «permission denied», 19-oct). Si falla, la ficha sale sin contacto.
+ */
+async function contactoDeBdi(id) {
+  const { url, key } = cfgDeMarca('bdi')
+  const { data, error } = await createClient(url, key).from('clientes').select('name, email, phone, city, province, address').eq('id', Number(id)).maybeSingle()
+  return error ? null : data ?? null
+}
+
+/**
  * La ficha: el contacto (BDI, del CRM), sus compras en GN (las últimas 200) y, si el motor lo tiene, su cuenta corriente.
  * @param {{ marca: string, clave: string }} p
- * @param {{ conMotor: Function }} deps
+ * @param {{ conMotor: Function, leerContacto?: Function }} deps
  */
 export async function fichaDeCliente({ marca, clave }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
@@ -79,7 +91,7 @@ export async function fichaDeCliente({ marca, clave }, deps) {
     const valor = porId ? k : k.replace(/^n:/, '')
     const compras = erpId ? [] : (await pg.query(`select id::text, number, date_sale::date::text as fecha, channel, total_price::float as total,
         sale_state, payment_method, tn_order::text from ventas where ${donde} order by date_sale desc, id desc limit 200`, [valor])).rows
-    const contacto = porId ? (await pg.query('select name, email, phone, city, province, address from clientes where id = $1::bigint', [k])).rows[0] ?? null : null
+    const contacto = porId ? await (deps.leerContacto ?? contactoDeBdi)(k).catch(() => null) : null
     let cuenta = null
     try {
       const [c] = (await pg.query(`select id::text from cliente where ${erpId ? 'id::text = $1' : porId ? 'gn_client_id = $1::bigint' : 'lower(trim(nombre)) = $1'} limit 1`, [erpId ?? valor])).rows

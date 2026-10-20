@@ -72,11 +72,15 @@ describe('el servidor', () => {
   })
 
   it('la ficha de BDI va por el id de GN y trae el contacto del CRM', async () => {
-    const db = pg({ 'from ventas': [{ id: '1', number: 9, fecha: '2026-10-03', channel: 'Mayorista', total: 1000, sale_state: 'Entregado' }], 'from clientes': [{ name: 'Barbara', email: 'b@x' }], 'from cliente ': [] })
-    const r = await fichaDeCliente({ marca: 'bdi', clave: '10' }, { conMotor: conMotor(db) }) as { compras: unknown[]; contacto: { email: string }; cuenta: null }
+    const db = pg({ 'from ventas': [{ id: '1', number: 9, fecha: '2026-10-03', channel: 'Mayorista', total: 1000, sale_state: 'Entregado' }], 'from cliente ': [] })
+    const r = await fichaDeCliente({ marca: 'bdi', clave: '10' }, { conMotor: conMotor(db), leerContacto: async () => ({ name: 'Barbara', email: 'b@x' }) }) as { compras: unknown[]; contacto: { email: string }; cuenta: null }
     expect(r.compras).toHaveLength(1)
     expect(r.contacto.email).toBe('b@x')
     expect(r.cuenta).toBeNull()
+    // 🔴 El contacto por pg daba «permission denied» en prod: si falla, la ficha sale igual, sin contacto.
+    const sin = await fichaDeCliente({ marca: 'bdi', clave: '10' }, { conMotor: conMotor(db), leerContacto: async () => { throw new Error('permission denied') } }) as { compras: unknown[]; contacto: null }
+    expect(sin.compras).toHaveLength(1)
+    expect(sin.contacto).toBeNull()
     expect(await fichaDeCliente({ marca: 'bdi', clave: '' }, { conMotor: conMotor(db) })).toMatchObject({ status: 400 })
   })
 })
