@@ -41,32 +41,31 @@ async function delMotor(pg) {
         and vigente_desde >= date_trunc('month', now() at time zone 'America/Argentina/Buenos_Aires') at time zone 'America/Argentina/Buenos_Aires')
         over (partition by marca, product_id) as cambios_mes
     from h order by marca, product_id, vigente_desde desc, creada_en desc`)).rows
-  // La liquidación EN CURSO del monitor (`liquidaciones`, la escribe Precios del monitor): si el rol ⛔ la lee, se dice.
-  let liquidaciones = [], liquidacionesError = null
-  try {
-    liquidaciones = (await pg.query(`select i.pid::text as product_id, l.store, l.nombre, l.datos->>'hasta' as hasta,
-        i.datos->'decision'->>'precioSale' as precio
-      from liquidaciones l join liquidacion_items i on i.liq_id = l.id
-      where l.estado = 'en_curso' and i.estado = 'aplicado'`)).rows
-  } catch (e) { liquidacionesError = e instanceof Error ? e.message : String(e) }
-  return { productos, precios, costos, tn, cambios, liquidaciones, liquidacionesError, tnLeidaEn: leida ? new Date(leida).toISOString() : null }
+  return { productos, precios, costos, tn, cambios, tnLeidaEn: leida ? new Date(leida).toISOString() : null }
 }
 
 /**
  * @param {{ marca: string }} p
- * @param {{ conMotor: Function, pedidosSinPagar: Function, leerInventario?: Function }} deps
+ * @param {{ conMotor: Function, pedidosSinPagar: Function, leerInventario?: Function, leerLiquidaciones?: (marca: string) => Promise<Array<Record<string, unknown>>> }} deps
  */
 export async function listaDeProductos({ marca }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  const [stock, motor] = await Promise.all([
+  // La liquidación EN CURSO del monitor (`liquidaciones`, la escribe Liquidación): es tabla del MONITOR ⇒ la lee el cliente
+  // del monitor (`deps.leerLiquidaciones`), ⛔ el rol del motor (en prod: «permission denied for table liquidaciones», 20-oct).
+  // Si falla, la lista sale igual y la pantalla lo dice.
+  const liq = deps.leerLiquidaciones
+    ? deps.leerLiquidaciones(marca).then((filas) => ({ filas, error: null }), (e) => ({ filas: [], error: e instanceof Error ? e.message : String(e) }))
+    : Promise.resolve({ filas: [], error: null })
+  const [stock, motor, liquidaciones] = await Promise.all([
     listaDeStock({ marca }, deps),
     deps.conMotor(marca, 'Los productos del ERP', (pg) => delMotor(pg)),
+    liq,
   ])
   if (stock.status) return stock
   if (motor.status) return motor
   return {
-    filas: armarFilasProductos({ productos: motor.productos, stock: stock.filas, precios: motor.precios, costos: motor.costos, tn: motor.tn, cambios: motor.cambios, liquidaciones: motor.liquidaciones }),
-    liquidacionesError: motor.liquidacionesError,
+    filas: armarFilasProductos({ productos: motor.productos, stock: stock.filas, precios: motor.precios, costos: motor.costos, tn: motor.tn, cambios: motor.cambios, liquidaciones: liquidaciones.filas }),
+    liquidacionesError: liquidaciones.error,
     libroHasta: stock.libroHasta,
     pedidosLeidosEn: stock.pedidosLeidosEn,
     tnLeidaEn: motor.tnLeidaEn,

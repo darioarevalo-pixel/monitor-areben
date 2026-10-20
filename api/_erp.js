@@ -560,6 +560,25 @@ async function devolucionDeVenta(sb, f) {
   })
 }
 
+/**
+ * Las liquidaciones EN CURSO del monitor con sus productos aplicados (ERP › Precios), por el cliente del MONITOR: el rol del
+ * motor ⛔ tiene permiso sobre `liquidaciones` (medido en prod, 20-oct).
+ */
+async function leerLiquidaciones(marca) {
+  const { url, key } = cfgDeMarca(marca)
+  const b = createClient(url, key)
+  const liqs = await b.from('liquidaciones').select('id, store, nombre, datos').eq('estado', 'en_curso')
+  if (liqs.error) throw new Error(`liquidaciones: ${liqs.error.message}`)
+  if (!liqs.data?.length) return []
+  const items = await b.from('liquidacion_items').select('liq_id, pid, datos').eq('estado', 'aplicado').in('liq_id', liqs.data.map((l) => l.id)).limit(5000)
+  if (items.error) throw new Error(`liquidacion_items: ${items.error.message}`)
+  const porId = new Map(liqs.data.map((l) => [l.id, l]))
+  return items.data.map((i) => {
+    const l = porId.get(i.liq_id)
+    return { product_id: String(i.pid), store: l.store, nombre: l.nombre, hasta: l.datos?.hasta ?? null, precio: i.datos?.decision?.precioSale ?? null }
+  })
+}
+
 /** Abre la conexión del motor de la marca, corre `fn(db, motor)` y la cierra. Sin la variable: 409, dicho. */
 async function conMotor(marca, que, fn) {
   const conexion = process.env[PG_DE_MARCA[marca]]
@@ -1398,7 +1417,7 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'productos-lista') {
-      const r = await listaDeProductos({ marca: String(req.query.marca || '') }, { conMotor, pedidosSinPagar })
+      const r = await listaDeProductos({ marca: String(req.query.marca || '') }, { conMotor, pedidosSinPagar, leerLiquidaciones })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'GET' && req.query.vista === 'inicio-resultado') {
