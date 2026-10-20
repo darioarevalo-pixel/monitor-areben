@@ -69,7 +69,7 @@ describe('anular', () => {
     const id = '0b6f1c0e-1111-4222-8333-944455556666'
     expect(leerAnular({ ventaId: id, motivo: '  x ' }).error).toBeTruthy()
     expect(leerAnular({ ventaId: 'v1', motivo: 'se equivocó de talle' }).error).toBeTruthy()
-    expect(leerAnular({ ventaId: id, motivo: ' se equivocó de talle ' })).toEqual({ ventaId: id, motivo: 'se equivocó de talle' })
+    expect(leerAnular({ ventaId: id, motivo: ' se equivocó de talle ', devolucion: { forma: 'plata' } })).toEqual({ ventaId: id, motivo: 'se equivocó de talle', devolucion: { forma: 'plata' }, cliente: null })
   })
 })
 

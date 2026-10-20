@@ -99,6 +99,16 @@ mismo molde. ⛔ se copian en la pantalla nueva (Ajustes y Stock ya las usan).
   colgado al lado del estado; el $ y el «⋯» llevan a **Cobranzas** del monitor (↗, ahí se cobra transferencia o efectivo) y a
   Tienda Nube (cancelarlo); la ficha muestra cuándo entró, el medio y las prendas que retiene. El buscador lee también las
   prendas. Al pie, cuándo se leyó Tienda Nube (`tnLeidaEn`, cada 2 h).
+- 🎨 **Anular y desarmar (Diseño 8, 20-oct; contrato-venta.md §17, 37a)**: la ventana de anular dice ADÓNDE va la
+  prenda (`vueltaSiAnula` = `vueltaDe` del motor con `tn_orden.estado`: al instante · «A desarmar» si estaba empaquetada ·
+  «A recibir» si ya salió) y, si entró plata, hace ELEGIR: **devolver la plata** (por el medio con que pagó) o **dejar
+  saldo a favor** (a precio de LISTA; sin clienta en la venta pide documento y nombre). 🔴 Siempre manda `devolucion`
+  (`leerAnular` la exige). PIN apagado (`DEVOLUCION_CON_PIN`) ⇒ ⛔ manda `autoriza`. Una anulada pendiente tiene estado
+  «A desarmar»/«A recibir», su vista en la lista (entran SIEMPRE, de cualquier mes: `venta_vuelta_pendiente`) y en la
+  ficha el **escaneo**: código de barras (`inventario.barcode`) o SKU, sin guiones; «+1» a mano; con TODAS contadas,
+  «Confirmar que volvieron» ⇒ `confirmarVuelta` (acción `confirmar-vuelta`, permiso `desarmar`: Local y Depósito).
+  Núcleo `lib/erp/desarme.core.js`; tests `tests/erp-ventas-anular.test.tsx`. 🔴 `venta_devolucion` y `venta_vuelta` son
+  INMUTABLES ⇒ ⛔ ejercer en prod sin OK de Bruno y sólo en una venta de PRUEBA.
 - Anular (con motivo, sólo admin) y la NC de una anulada facturada siguen como antes, desde la ficha (`anularVenta` del
   motor por pg; 🔴 sin `DATABASE_URL_<MARCA>` en Vercel contesta 409). 🔑 «Prueba» = corre en paralelo con GN y ⛔ movió el libro.
 

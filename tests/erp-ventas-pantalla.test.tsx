@@ -25,7 +25,7 @@ const leerListaDeVentas = vi.fn(async () => ({ filas: FILAS, desde: '2026-10-01'
 const ficha: FichaDeVenta = {
   venta: { id: 'v2', numero: 293, marca: 'bdi', tipo: 'venta', estado: 'confirmada', origen: 'mayorista', canal: 'mayorista', deposito: 'deposito_minorista', total: 186400, prueba: true, ocurridaEn: '2026-10-16T21:12:00Z', cliente: null, subtotal: 186400, usuario: 'gn-mayorista', registradaEn: '2026-10-16T21:12:00Z', origenRef: 'gn:1', gnSaleId: '1', ventaOriginalId: null },
   cliente: null, lineas: [], pagos: [{ cuenta: 'Cuenta corriente', medio: 'cuenta', monto: 93200, base: null, porcentaje: null }], anulacion: null, facturas: [],
-  facturada: false, conNotaDeCredito: false, acreditadaEntera: false, cambios: [], original: null, puedeAnular: null,
+  facturada: false, conNotaDeCredito: false, acreditadaEntera: false, cambios: [], original: null, puedeAnular: null, devolucion: null,
 }
 const extra: ExtraDeVenta = {
   clienteGn: 'Mayorista Norte', gnNumero: '32365', gnEstado: 'Compra Pendiente', clienteId: 'c1', vendedor: null, entrega: null, facturar: null, tn: null,
@@ -70,7 +70,7 @@ describe('la lista', () => {
     await montar()
     expect(todo()).toContain('Todo lo de esta lista es de prueba')
     const vistas = [...host.querySelectorAll('[role="tab"]')].map((t) => t.textContent)
-    expect(vistas).toEqual(['Todas3', 'A preparar1', 'Listas0', 'Sin pagar0', 'Con saldo1', 'Sin factura2', 'Anuladas1'])
+    expect(vistas).toEqual(['Todas3', 'A preparar1', 'Listas0', 'A desarmar0', 'Sin pagar0', 'Con saldo1', 'Sin factura2', 'Anuladas1'])
     expect(todo()).toContain('$ 205.390') // vendido: 18.990 + 186.400 (la anulada ⛔)
     expect(todo()).toContain('$ 93.200') // por cobrar
     await clic(boton(/^Con saldo/))

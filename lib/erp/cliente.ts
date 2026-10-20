@@ -204,9 +204,13 @@ export type FichaDeVenta = {
     cantidad: number; precio: number; descuento: number; rebaja: number; importe: number; devuelta: boolean; lineaOrigenId: string | null
     /** Unidades de esta línea que ya volvieron en cambios confirmados. */
     cambiado: number
+    /** El código de barras de la prenda (espejo `inventario`): lo que se escanea en el desarme. */
+    codigo: string | null
   }>
   pagos: Array<{ cuenta: string | null; medio: string | null; monto: number; base: number | null; porcentaje: number | null }>
-  anulacion: { motivo: string; usuario: string; anuladaEn: string; devolucion: unknown } | null
+  anulacion: { motivo: string; usuario: string; anuladaEn: string; devolucion: unknown; vuelta: Vuelta } | null
+  /** §17: lo que se devuelve al anular y si la prenda ya volvió (null = el servidor viejo ⛔ lo manda). */
+  devolucion: DevolucionDeVenta | null
   facturas: Array<{ facturaId: string; tipo: 'factura' | 'nc' | 'nd' }>
   facturada: boolean
   /** La factura ya se anuló con nota de crédito. */
@@ -225,8 +229,30 @@ export const buscarVentas = (marca: MarcaErp, f: { q: string; desde: string; has
 export const leerFichaDeVenta = (marca: MarcaErp, id: string) =>
   pedir<FichaDeVenta>(null, `&vista=venta&marca=${marca}&id=${id}&nc=${Date.now()}`, 'No se pudo leer la venta.')
 
-export const anularVenta = (marca: MarcaErp, ventaId: string, motivo: string) =>
-  pedir<{ ok: true; movimientos: number; ncPendiente: boolean }>(post({ accion: 'anular', marca, ventaId, motivo }), '', 'No se pudo anular.')
+/** Adónde va la prenda de una anulación (37a): al instante, «a desarmar» (empaquetado) o «a recibir» (ya salió). */
+export type Vuelta = 'ya' | 'a_desarmar' | 'a_recibir'
+
+export type DevolucionDeVenta = {
+  /** La base tiene la 028 (devoluciones propias). */
+  conDevolucion: boolean
+  /** La llave `DEVOLUCION_CON_PIN` de la marca (apagada). */
+  pin: boolean
+  vueltaSiAnula: Vuelta
+  /** Lo pagado en plata (⛔ saldo ni cuenta corriente): lo que vuelve con «la plata». */
+  pagadoEnPlata: number
+  /** Lo mismo a precio de lista: lo que queda con «saldo a favor». */
+  aLista: number
+  devoluciones: Array<{ forma: 'plata' | 'saldo'; cuenta: string | null; medio: string | null; monto: number; usuario: string; en: string }>
+  volvio: { usuario: string; en: string } | null
+}
+
+export const anularVenta = (marca: MarcaErp, ventaId: string, motivo: string, devolucion: { forma: 'plata' | 'saldo' }, cliente?: { doc: string; nombre: string }) =>
+  pedir<{ ok: true; movimientos: number; ncPendiente: boolean; vuelta: Vuelta; devolucion: { forma: string; monto: number; pagos: Array<{ medio: string | null; monto: number }> } | null; saldo: number | null }>(
+    post({ accion: 'anular', marca, ventaId, motivo, devolucion, ...(cliente ? { cliente } : {}) }), '', 'No se pudo anular.')
+
+/** §17 Las prendas de la anulada volvieron (se escaneó el desarme): el libro las suma. */
+export const confirmarVuelta = (marca: MarcaErp, ventaId: string) =>
+  pedir<{ ok: true; movimientos: number; vuelta: Vuelta }>(post({ accion: 'confirmar-vuelta', marca, ventaId }), '', 'No se pudo confirmar el desarme.')
 
 /** Lo que se lleva en un cambio: la forma de `ItemCaja` de la Caja (el servidor lo arma con `renglones`). */
 export type PrendaNueva = { product_id: number; size_id: number; cantidad: number; precio: number; sku?: string | null }

@@ -97,7 +97,7 @@ describe('la fila, las vistas y el resumen', () => {
     expect(accionesDeFila(p).cobro).toMatchObject({ activo: true, label: 'Pedido sin pagar: se cobra en Cobranzas ↗' })
   })
   it('las vistas cuentan lo suyo', () => {
-    expect(contarVistas(filas)).toEqual({ todas: 6, preparar: 2, listas: 0, sinpagar: 1, saldo: 1, sinfactura: 2, anuladas: 1 })
+    expect(contarVistas(filas)).toEqual({ todas: 6, preparar: 2, listas: 0, desarmar: 0, sinpagar: 1, saldo: 1, sinfactura: 2, anuladas: 1 })
   })
   it('el buscador lee número, pedido de TN, cliente y nota, sin tildes', () => {
     expect(filtrar(filas, { q: '#293' }).map((f: { id: string }) => f.id)).toEqual(['v3'])

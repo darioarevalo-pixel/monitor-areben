@@ -29,7 +29,8 @@
  *   GET  ?recurso=erp&vista=stock&marca=…&producto=ID&talle=ID       el libro y GN de esa prenda, con historial
  *   GET  ?recurso=erp&vista=ventas&marca=…&q=nº|cliente&desde&hasta    busca ventas propias (las del motor)
  *   GET  ?recurso=erp&vista=venta&marca=…&id=UUID                      la ficha: prendas, pagos, factura, estado
- *   POST {recurso:'erp', accion:'anular', marca, ventaId, motivo}      anula una venta propia (por el motor)
+ *   POST {recurso:'erp', accion:'anular', marca, ventaId, motivo, devolucion:{forma}, cliente?}  anula una venta propia (por el motor, §17)
+ *   POST {recurso:'erp', accion:'confirmar-vuelta', marca, ventaId}    la prenda de una anulada a desarmar/recibir volvió (§17)
  *   GET  ?recurso=erp&vista=saldo&marca=…&doc=DNI                      el saldo a favor de la clienta (el de prueba)
  *   GET  ?recurso=erp&vista=clientas&marca=…&q=CUIT|nombre             las fichas de clientas (factura A en la Caja)
  *   POST {recurso:'erp', accion:'cambiar', marca, id, ventaId, devueltas, items, pagos, total, desde?, pago?, comprobante?, cliente?}
@@ -68,7 +69,7 @@ import { armarConciliacion, TIENDAS as TIENDAS_CONCILIACION } from '../lib/erp/c
 import { NO_SIN_PAGAR, STATUS_POR_COBRAR, armarPedidosSinPagar, cobradosEnGN } from '../lib/erp/pedidos-tn.core.js'
 import { esEntregadoSinCobrarTN } from '../motor/venta/pago-tn.mjs'
 import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto } from '../lib/erp/precio.core.js'
-import { armarFicha, cambiadasDe, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
+import { armarFicha, cambiadasDe, devolucionDeFicha, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { NC_DESDE_LA_VENTA, armarFacturaDelCambio, claveDeFactura, esDeVentaPropia, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
@@ -322,8 +323,8 @@ async function nombresDeVariantes(b, productos) {
   const nombres = new Map()
   const tandas = []
   for (let i = 0; i < ids.length; i += 200) tandas.push(ids.slice(i, i + 200))
-  const leidas = await Promise.all(tandas.map((t) => leerTodo(b, 'inventario', (x) => x.select('product_id, size_id, product_name, size_name').in('product_id', t).order('product_id').order('size_id'))))
-  for (const r of leidas.flat()) nombres.set(`${r.product_id}/${r.size_id}`, { nombre: r.product_name, talle: r.size_name })
+  const leidas = await Promise.all(tandas.map((t) => leerTodo(b, 'inventario', (x) => x.select('product_id, size_id, product_name, size_name, barcode').in('product_id', t).order('product_id').order('size_id'))))
+  for (const r of leidas.flat()) nombres.set(`${r.product_id}/${r.size_id}`, { nombre: r.product_name, talle: r.size_name, codigo: r.barcode ?? null })
   return nombres
 }
 
@@ -501,10 +502,11 @@ export async function fichaDeVenta({ marca, id }) {
   if (error) throw new Error(`venta_ficha: ${error.message}`)
   if (!f) return { status: 404, error: 'La venta no existe.' }
   const columnas = 'id, numero, marca, tipo, estado, origen, canal, deposito, total, prueba, ocurrida_en'
-  const [cambios, original, nombres] = await Promise.all([
+  const [cambios, original, nombres, devolucion] = await Promise.all([
     sb.from('venta').select(columnas).eq('venta_original_id', id).order('ocurrida_en'),
     f.venta_original_id ? sb.from('venta').select(columnas).eq('id', f.venta_original_id).maybeSingle() : Promise.resolve({ data: null }),
     nombresDeVariantes(sb, (f.lineas || []).map((l) => l.product_id)),
+    devolucionDeVenta(sb, f),
   ])
   for (const [t, r] of [['venta', cambios], ['venta', original]]) if (r.error) throw new Error(`${t}: ${r.error.message}`)
   // Lo que ya volvió en cambios confirmados: cuánto se puede devolver todavía de cada línea.
@@ -519,7 +521,30 @@ export async function fichaDeVenta({ marca, id }) {
     if (e) throw new Error(`facturas: ${e.message}`)
     for (const x of data) montos.set(x.id, Number(x.total))
   }
-  return armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data, cambiadas: cambiadasDe(devueltas.data), montos })
+  return armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data, cambiadas: cambiadasDe(devueltas.data), montos, devolucion })
+}
+
+/**
+ * §17 Lo que la ficha lee para anular y desarmar: los pagos con el medio de su cuenta (qué fue plata), el estado del
+ * pedido de TN (adónde iría la prenda), lo devuelto (`venta_devolucion`) y si la prenda ya volvió (`venta_vuelta`).
+ * La regla (`vueltaDe`, `pagosDePlata`, `pinEn`) es la del motor. Sin la 028 en la base: `conDevolucion: false`.
+ */
+async function devolucionDeVenta(sb, f) {
+  const { vueltaDe, pagosDePlata, pinEn } = await import('../motor/venta/devolucion.core.mjs')
+  const [tienda, tnId] = f.origen === 'tn' ? String(f.origen_ref || '').split(':') : []
+  const [pagos, orden, devs, volvio] = await Promise.all([
+    sb.from('venta_pago').select('monto, cuenta:cuenta_cobro_id (medio)').eq('venta_id', f.id),
+    tienda && /^\d+$/.test(tnId || '') ? sb.from('tn_orden').select('estado').eq('tienda', tienda).eq('tn_id', tnId).maybeSingle() : Promise.resolve({ data: null }),
+    sb.from('venta_devolucion').select('forma, medio, monto, usuario, ocurrida_en, cuenta:cuenta_cobro_id (nombre)').eq('venta_id', f.id).order('ocurrida_en'),
+    sb.from('venta_vuelta').select('usuario, vuelta_en').eq('venta_id', f.id).maybeSingle(),
+  ])
+  if (pagos.error) throw new Error(`venta_pago: ${pagos.error.message}`)
+  if (orden.error) throw new Error(`tn_orden: ${orden.error.message}`)
+  const plata = pagosDePlata((pagos.data || []).map((p) => ({ monto: Number(p.monto), cuenta_medio: p.cuenta?.medio ?? null }))).reduce((a, p) => a + p.monto, 0)
+  return devolucionDeFicha({
+    plata, subtotal: Number(f.subtotal), total: Number(f.total), vueltaSiAnula: vueltaDe(orden.data?.estado ?? null), pin: pinEn(f.marca),
+    devoluciones: devs.error ? [] : devs.data, volvio: volvio.error ? null : volvio.data, conDevolucion: !devs.error,
+  })
 }
 
 /** Abre la conexión del motor de la marca, corre `fn(db, motor)` y la cierra. Sin la variable: 409, dicho. */
@@ -544,9 +569,22 @@ export async function anularVentaPropia({ marca, body, usuario }) {
   const a = leerAnular(body)
   if (a.error) return { status: 400, error: a.error }
   return conMotor(marca, 'Anular', async (db, { anularVenta }) => {
-    const r = await anularVenta(db, { venta_id: a.ventaId, motivo: a.motivo, usuario })
+    // §17: la devolución SIEMPRE va (plata o saldo); el PIN (`DEVOLUCION_CON_PIN`) está apagado ⇒ ⛔ se manda `autoriza`.
+    const r = await anularVenta(db, { venta_id: a.ventaId, motivo: a.motivo, usuario, devolucion: a.devolucion, ...(a.cliente ? { cliente: a.cliente } : {}) })
     if (!r.ok) return errorDelMotor(r)
-    return { ok: true, movimientos: r.movimientos, ncPendiente: r.nc_pendiente }
+    return { ok: true, movimientos: r.movimientos, ncPendiente: r.nc_pendiente, vuelta: r.vuelta, devolucion: r.devolucion, saldo: r.saldo ?? null }
+  })
+}
+
+/** §17 La prenda de una anulada «a desarmar» / «a recibir» VOLVIÓ (se escaneó el desarme): recién ahí el libro la suma. */
+export async function confirmarVueltaPropia({ marca, body, usuario }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const ventaId = String(body?.ventaId ?? '')
+  if (!/^[0-9a-f-]{36}$/i.test(ventaId)) return { status: 400, error: 'Venta inválida' }
+  return conMotor(marca, 'Confirmar el desarme', async (db, { confirmarVuelta }) => {
+    const r = await confirmarVuelta(db, { venta_id: ventaId, usuario: usuario || 'monitor' })
+    if (!r.ok) return errorDelMotor(r)
+    return { ok: true, movimientos: r.movimientos, vuelta: r.vuelta }
   })
 }
 
@@ -1433,6 +1471,10 @@ export default async function handler(req, res) {
     }
     if (body.accion === 'anular') {
       const r = await anularVentaPropia({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+    if (body.accion === 'confirmar-vuelta') {
+      const r = await confirmarVueltaPropia({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

@@ -19,6 +19,8 @@ import {
 import { COBRO, ESTADO, historialDeVenta, plata } from '@/lib/erp/ventas-lista.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import { MOTIVO_MINIMO, NOMBRE_CANAL } from '@/lib/erp/venta.core.js'
+import { textoDeVuelta } from '@/lib/erp/desarme.core.js'
+import { DesarmeVenta } from './DesarmeVenta'
 
 const ENTREGA: Record<string, string> = { retira: 'Retira', envio: 'Envío', cadete: 'Cadete' }
 const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
@@ -39,6 +41,9 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const [error, setError] = useState<string | null>(null)
   const [anulando, setAnulando] = useState(accionInicial === 'anular')
   const [motivo, setMotivo] = useState('')
+  const [forma, setForma] = useState<'plata' | 'saldo'>('plata')
+  const [cliDoc, setCliDoc] = useState('')
+  const [cliNombre, setCliNombre] = useState('')
   const [trabajando, setTrabajando] = useState(false)
   const { confirmar } = useConfirmar()
   const esPedido = fila.kind === 'pedido'
@@ -64,11 +69,21 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     }
   }
 
+  const dev = ficha?.devolucion ?? null
+  // §17: sin plata pagada ⛔ hay qué elegir (va «plata» con 0). Saldo a favor sin clienta en la venta ⇒ se pide.
+  const hayQueElegir = !!dev && dev.pagadoEnPlata > 0
+  const formaElegida = hayQueElegir ? forma : 'plata'
+  const pideClienta = formaElegida === 'saldo' && !ficha?.cliente
+  const faltaClienta = pideClienta && !(cliDoc.trim() && cliNombre.trim())
   const confirmarAnular = () => correr(async () => {
-    const r = await anularVenta(marca, fila.id, motivo)
+    const r = await anularVenta(marca, fila.id, motivo, { forma: formaElegida }, pideClienta ? { doc: cliDoc.trim(), nombre: cliNombre.trim() } : undefined)
     setAnulando(false)
     setMotivo('')
-    onCambio(`Venta ${fila.ref} anulada.${r.ncPendiente ? ' Tenía factura: falta la nota de crédito.' : ''}`)
+    const plataTexto = r.devolucion?.monto
+      ? r.devolucion.forma === 'saldo' ? ` Quedaron ${plata(r.devolucion.monto)} de saldo a favor.` : ` Devolvé ${plata(r.devolucion.monto)} (${r.devolucion.pagos.map((p) => p.medio ?? 'pago').join(', ')}).`
+      : ''
+    const vueltaTexto = r.vuelta === 'a_desarmar' ? ' Queda «A desarmar».' : r.vuelta === 'a_recibir' ? ' Queda «A recibir».' : ''
+    onCambio(`Venta ${fila.ref} anulada.${plataTexto}${vueltaTexto}${r.ncPendiente ? ' Tenía factura: falta la nota de crédito.' : ''}`)
   }, 'No se pudo anular.')
 
   async function hacerNC() {
@@ -153,6 +168,9 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         <>
           {v?.prueba && <Notice tone="warning">De prueba: corre en paralelo con GN y no movió el stock del libro. La factura real sale de GN.</Notice>}
           {ficha.anulacion && <Notice tone="danger">Anulada el {cuandoCorto(ficha.anulacion.anuladaEn)} por {ficha.anulacion.usuario}: «{ficha.anulacion.motivo}».</Notice>}
+          {ficha.anulacion && ficha.anulacion.vuelta !== 'ya' && dev && !dev.volvio && (
+            <DesarmeVenta marca={marca} ficha={ficha} refVenta={fila.ref} onListo={onCambio} />
+          )}
 
           <DatosFicha>
             <DatoFicha titulo="Origen">{fila.origenTexto}</DatoFicha>
@@ -208,14 +226,37 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         abierto={anulando} onCerrar={() => setAnulando(false)} titulo={`Anular la venta ${fila.ref}`}
         pie={<>
           <Button variant="outline" onClick={() => setAnulando(false)}>Cancelar</Button>
-          <Button tone="danger" disabled={trabajando || motivo.trim().length < MOTIVO_MINIMO || !!ficha?.puedeAnular} onClick={() => void confirmarAnular()}>Anular venta</Button>
+          <Button tone="danger" disabled={trabajando || !ficha || motivo.trim().length < MOTIVO_MINIMO || !!ficha?.puedeAnular || faltaClienta} onClick={() => void confirmarAnular()}>Anular venta</Button>
         </>}
       >
-        {ficha?.puedeAnular ? <Notice tone="warning">{ficha.puedeAnular}</Notice> : (
-          <p style={{ marginTop: 0 }}>
-            {v?.prueba ? 'Es de prueba: el stock no se mueve. La plata vuelve' : `Las prendas vuelven al stock de ${v ? NOMBRE_DEPOSITO[v.deposito as keyof typeof NOMBRE_DEPOSITO] ?? v.deposito : 'su depósito'} y la plata,`} a los mismos pagos.
-            Una venta anulada no se puede volver a confirmar.{ficha?.facturada && ' Tiene factura: después hay que hacer la nota de crédito.'}
-          </p>
+        {ficha?.puedeAnular ? <Notice tone="warning">{ficha.puedeAnular}</Notice> : !dev ? <span style={{ color: color.mut }}>Leyendo la venta…</span> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space[3], marginBottom: space[3] }}>
+            <DatoFicha titulo="Las prendas">{textoDeVuelta(dev.vueltaSiAnula, { deposito: NOMBRE_DEPOSITO[v!.deposito as keyof typeof NOMBRE_DEPOSITO] ?? v!.deposito, prueba: !!v?.prueba })}</DatoFicha>
+            {hayQueElegir ? (
+              <div role="radiogroup" aria-label="Cómo se devuelve lo pagado" style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+                <span style={{ fontSize: font.sm, color: color.mut }}>Lo pagado · elegí cómo vuelve</span>
+                {([
+                  ['plata', `Devolver la plata · ${plata(dev.pagadoEnPlata)}`, `Por el mismo medio con que pagó (${ficha!.pagos.filter((p) => p.medio !== 'cuenta' && p.medio !== 'saldo').map((p) => p.cuenta ?? p.medio).join(', ')}).`],
+                  ['saldo', `Dejar saldo a favor · ${plata(dev.aLista)}`, 'A precio de lista, para usar en otra compra.'],
+                ] as const).map(([k, t, d]) => (
+                  <button
+                    key={k} type="button" role="radio" aria-checked={forma === k} onClick={() => setForma(k)}
+                    style={{ height: 'auto', textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', background: forma === k ? color.brandBg : color.surface, border: `1px solid ${forma === k ? color.brandBorder : color.line}` }}
+                  >
+                    <div style={{ fontWeight: weight.semibold }}>{t}</div>
+                    <div style={{ fontSize: font.sm, color: color.mut }}>{d}</div>
+                  </button>
+                ))}
+              </div>
+            ) : <DatoFicha titulo="Lo pagado">No entró plata: no hay nada que devolver.</DatoFicha>}
+            {pideClienta && (
+              <div style={{ display: 'flex', gap: space[2] }}>
+                <Field label="Documento de la clienta" required><input className="mo-input" value={cliDoc} onChange={(e) => setCliDoc(e.target.value)} /></Field>
+                <Field label="Nombre" required><input className="mo-input" value={cliNombre} onChange={(e) => setCliNombre(e.target.value)} /></Field>
+              </div>
+            )}
+            <span style={{ fontSize: font.sm, color: color.ink2 }}>Una venta anulada no se puede volver a confirmar.{ficha?.facturada && ' Tiene factura: después hay que hacer la nota de crédito.'}</span>
+          </div>
         )}
         <Field label="Motivo" required hint="Queda guardado con tu nombre.">
           <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={motivo} onChange={(e) => setMotivo(e.target.value)} />

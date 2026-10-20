@@ -119,7 +119,7 @@ function filaCruda(v, a, numeros) {
   return {
     kind: 'venta', id: v.id, numero: v.numero, linea: v.marca, tipo: v.tipo, estado: v.estado, origen: v.origen,
     canal: v.canal, deposito: v.deposito, total: v.total, prueba: v.prueba, usuario: v.vendedor || v.usuario, ocurridaEn: v.ocurrida_en, tnCreadaEn: o?.creada_en ?? null,
-    nota: notaVigente(v.notas), entrega: v.entrega ?? null, clienteId: v.cliente_id ?? null,
+    nota: notaVigente(v.notas), entrega: v.entrega ?? null, clienteId: v.cliente_id ?? null, vueltaPendiente: a.vueltas.get(v.id) ?? null,
     cliente: v.cliente, clienteGn: g?.client_name ?? null, gnNumero: g?.number ?? null, gnEstado: v.detalle?.sale_state ?? g?.sale_state ?? null,
     tnNumero: v.detalle?.tn?.numero ?? o?.numero ?? null, tnEstado: o?.estado ?? null, envioTipo: o?.envio_tipo ?? null,
     pagos: (v.pagos || []).map((p) => ({ medio: p.medio, cuenta: p.cuenta, monto: Number(p.monto) })),
@@ -146,10 +146,16 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
   const leer = (cols) => leerTodo(sb, 'venta_ficha', (q) => q.select(cols).gte('ocurrida_en', r.desde).lt('ocurrida_en', r.hasta).order('ocurrida_en', { ascending: false }).order('id'))
   // Con la 027 la vista trae lo editable y las notas vigentes; sin ella (otra base, antes de aplicarla) sigue con lo de antes.
   const ventas = await leer(`${COLUMNAS_LISTA}, ${COLUMNAS_027}`).catch(() => leer(COLUMNAS_LISTA))
+  // §17: las anuladas que esperan el desarme (o volver) entran SIEMPRE, sean del mes que sean: hasta escanearlas, alguien
+  // tiene que hacer algo. Sin la 028 (otra base) la vista ⛔ está y ⛔ hay ninguna.
+  const pendientes028 = deps.sb ? { data: [] } : await sb.from('venta_vuelta_pendiente').select('venta_id, vuelta')
+  const vueltas = new Map((pendientes028.error ? [] : pendientes028.data).map((x) => [x.venta_id, x.vuelta]))
+  const fuera = [...vueltas.keys()].filter((id) => !ventas.some((v) => v.id === id))
+  if (fuera.length) ventas.push(...await enTandas(fuera, (t) => leerTodo(sb, 'venta_ficha', (q) => q.select(COLUMNAS_LISTA).in('id', t).order('id'))))
   const numeros = new Map(ventas.map((v) => [v.id, v.numero]))
   const faltan = ventas.map((v) => v.venta_original_id).filter((id) => id && !numeros.has(id))
   for (const o of await enTandas(faltan, async (t) => (await sb.from('venta').select('id, numero').in('id', t)).data || [])) numeros.set(o.id, o.numero)
-  const a = await deAfuera(sb, ventas)
+  const a = { ...await deAfuera(sb, ventas), vueltas }
   const puede = await queSabeElMotor()
   // El saldo REAL (§16): sólo de las que dejaron algo a cuenta (las demás ⛔ deben nada: Σ pagos = total).
   const aCuenta = ventas.filter((v) => (v.pagos || []).some((p) => p.medio === 'cuenta')).map((v) => v.id)
