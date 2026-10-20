@@ -163,6 +163,11 @@ de la venta, + las del ERP con CAE; «⋯» = PDF y NC) · Notas de crédito (s�
 Núcleo `lib/erp/facturacion-lista.core.js`; el Nº, la clienta y las facturas de GN los suma el GET del mes
 (`vistaDeFacturacion`, sólo lectura: ⛔ entra en `facturarVentas`). Test `tests/erp-facturacion-pantalla.test.tsx`.
 
+- 🔑 **`erp › Ventas › Cobros` · vista «Contraentrega»** (🎨 20-oct, Diseño 9; motor `9bdf6a1`, contrato §20): las ventas que el
+  cadete cobra al entregar y todavía ⛔ se cerraron (`contraentregasAbiertas`, por línea, en el GET de Cobros como `contraentregas`).
+  ⛔ son cobros: filas de clase `entrega` SÓLO en su vista, fuera de «Todos» y del cobrado; tarjeta «Contraentrega» con cuántas y
+  desde cuándo; ⛔ dependen del período. El cierre (al marcar entregado en Envíos, ⛔ conectado todavía: lo hace A) sí es un cobro y
+  llega por `cobrosDe` el día que se cerró. En «Cargar venta» la cuenta se ve «Contraentrega (lo cobra el cadete)».
 - 🔑 **`erp › Ventas › Cajas`** (🎨 20-oct, Diseño 9: v8 `VentasMas.dc.html`, pestaña «Cajas»): SÓLO LECTURA, un turno de la
   Caja (POS) por fila —abrió/cerró y quién, estado (Abierta · Cerró justo · Sobró · Faltó), ventas, efectivo esperado, contado,
   diferencia (+ sobró / − faltó, la del cierre)—, vistas Todas · Con diferencia, período (este mes · el pasado · 7 días),
