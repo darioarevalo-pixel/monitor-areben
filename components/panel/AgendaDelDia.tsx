@@ -12,6 +12,8 @@ import { hoyISO } from '@/lib/crm/seguimiento'
 import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
+import { armarFilasPedidos, traerPedidosCatalogo, type FilaPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
+import { mostrar as plata } from '@/lib/compromisos/core'
 
 /**
  * "Hoy" — la lista del día adentro del panel de WhatsApp.
@@ -349,6 +351,120 @@ function Grupo({
   )
 }
 
+/**
+ * Los pedidos del catálogo de hoy y ayer (Darío, 20-oct-2026). Ver `lib/crm/pedidos-catalogo.ts`.
+ *
+ * 🔑 Se pide al montar y cada 2 minutos mientras el panel está abierto. Lo último que llegó queda
+ * en `memoriaPedidos`, afuera del componente: volver de la ficha no lo deja en blanco.
+ */
+const CADA_PEDIDOS_MS = 2 * 60_000
+const memoriaPedidos: { r: ResultadoCatalogo | null } = { r: null }
+
+function usePedidosCatalogo(): ResultadoCatalogo | null {
+  const [r, setR] = useState<ResultadoCatalogo | null>(memoriaPedidos.r)
+  useEffect(() => {
+    let vivo = true
+    const pedir = async () => {
+      const x = await traerPedidosCatalogo()
+      // Un error pasajero no borra lo que ya se estaba viendo.
+      if (x.t === 'error' && memoriaPedidos.r?.t === 'ok') return
+      memoriaPedidos.r = x
+      if (vivo) setR(x)
+    }
+    pedir()
+    const id = setInterval(pedir, CADA_PEDIDOS_MS)
+    return () => {
+      vivo = false
+      clearInterval(id)
+    }
+  }, [])
+  return r
+}
+
+const horaDe = (iso: string, ayer: boolean) => {
+  const d = new Date(iso)
+  const h = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  return ayer ? `Ayer ${h}` : `Hoy ${h}`
+}
+
+/** Un pedido: el nombre abre la ficha (se busca por teléfono) y el botón verde, el chat. Como `Fila`. */
+function FilaDePedido({ p, onAbrir, onFicha }: { p: FilaPedido; onAbrir: (id: number, tel: string) => void; onFicha: (id: number, tel: string) => void }) {
+  const sinTel = !p.telefono
+  const nombre = p.cliente || 'Sin nombre'
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, borderLeft: `3px solid ${p.hablado ? color.success : color.danger}`, background: color.surface, opacity: p.hablado ? 0.6 : 1 }}>
+      <button
+        type="button"
+        disabled={sinTel}
+        onClick={() => onFicha(0, p.telefono)}
+        title="Ver la ficha"
+        style={{ display: 'block', flex: 1, minWidth: 0, height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: `${space[2]}px 0 ${space[2]}px ${MARGEN}px`, cursor: sinTel ? 'default' : 'pointer', font: 'inherit' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: font.md, fontWeight: 700, color: color.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>
+          <span style={{ flex: 1 }} />
+          {p.hablado ? <Chapa tono="hecho">Ya le escribiste</Chapa> : <Chapa tono="tarde">Sin hablar</Chapa>}
+        </div>
+        <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+          {horaDe(p.fecha, p.ayer)} · {p.unidades} u. · {plata(p.total)}
+        </div>
+      </button>
+      <div style={{ display: 'flex', alignItems: 'center', padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
+        <button
+          type="button"
+          disabled={sinTel}
+          onClick={() => onAbrir(0, p.telefono)}
+          title="Abrir el chat"
+          aria-label={`Abrir el chat de ${nombre}`}
+          style={{ width: 32, minWidth: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', borderRadius: radius.md, border: 0, background: color.whatsapp, color: color.sideActiveInk, cursor: 'pointer' }}
+        >
+          <Icono nombre="whatsapp" size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** El grupo «Pidieron hoy y ayer», arriba de todo en «Hoy». Sin permiso no se dibuja. */
+function GrupoPedidos({
+  r,
+  pedidos,
+  carritos,
+  abierto,
+  onToggle,
+  onAbrir,
+  onFicha,
+}: {
+  r: ResultadoCatalogo | null
+  pedidos: FilaPedido[]
+  carritos: FilaPedido[]
+  abierto: boolean
+  onToggle: () => void
+  onAbrir: (id: number, tel: string) => void
+  onFicha: (id: number, tel: string) => void
+}) {
+  if (!r || r.t === 'sin-permiso') return null
+  return (
+    <Grupo titulo="Pidieron hoy y ayer" cuantas={pedidos.length + carritos.length} abierto={abierto} onToggle={onToggle}>
+      {r.t === 'error' && <Aclaracion>No pude traer los pedidos del catálogo. {r.motivo}</Aclaracion>}
+      {pedidos.map((p) => (
+        <FilaDePedido key={p.key} p={p} onAbrir={onAbrir} onFicha={onFicha} />
+      ))}
+      {r.t === 'ok' && !pedidos.length && <Aclaracion>Todavía no entró ningún pedido.</Aclaracion>}
+      {carritos.length > 0 && (
+        <>
+          <div style={{ padding: `${space[3]}px ${MARGEN}px ${space[1]}px`, fontSize: font.xs, fontWeight: 700, color: color.mut2 }}>
+            Armaron pero no confirmaron <span style={{ fontWeight: 600 }}>{carritos.length}</span>
+          </div>
+          {carritos.map((p) => (
+            <FilaDePedido key={p.key} p={p} onAbrir={onAbrir} onFicha={onFicha} />
+          ))}
+        </>
+      )}
+    </Grupo>
+  )
+}
+
 /** Un renglón gris adentro de un grupo: vacío, o el aviso de que hay más de lo que se ve. */
 function Aclaracion({ children }: { children: React.ReactNode }) {
   return <div style={{ padding: `${space[1]}px ${MARGEN}px ${space[3]}px`, fontSize: font.xs, color: color.mut2 }}>{children}</div>
@@ -360,7 +476,7 @@ function Aclaracion({ children }: { children: React.ReactNode }) {
  * 🔑 **Es lo que la lista no tenía: una forma de ver que avanza.** Antes el que atendía a alguien
  * lo veía desaparecer y subir al siguiente, y la pantalla quedaba igual. Ahora "Hechos" sube.
  */
-function Resumen({ hoy, atrasados, hechos }: { hoy: number; atrasados: number; hechos: number }) {
+function Resumen({ hoy, atrasados, hechos, pedidos }: { hoy: number; atrasados: number; hechos: number; pedidos?: number | null }) {
   // En azul noche, como el encabezado de la ficha (rediseño del 19-oct-2026), y cada número con el
   // color de su estado: amarillo hoy, rojo atrasado, verde hecho.
   const celda = (n: number, txt: string, tono: string) => (
@@ -371,6 +487,8 @@ function Resumen({ hoy, atrasados, hechos }: { hoy: number; atrasados: number; h
   )
   return (
     <div style={{ ...SOBRE_OSCURO, display: 'flex', gap: space[2], padding: `${space[3]}px ${MARGEN}px` }}>
+      {/* Sólo si el catálogo contestó: a quien no es admin no se le muestra un 0 que no es cierto. */}
+      {pedidos != null && celda(pedidos, 'Pedidos sin hablar', color.brand)}
       {celda(hoy, 'Para hoy', color.warningInk)}
       {celda(atrasados, 'Atrasados', color.dangerInk)}
       {celda(hechos, 'Hechos hoy', color.successInk)}
@@ -577,7 +695,7 @@ const memoria: {
 } = {
   filtro: 'trabajo',
   estado: { t: 'cargando' },
-  abiertos: { hoy: true, atrasados: true, sinFecha: false, frios: false, hechos: false },
+  abiertos: { pedidos: true, hoy: true, atrasados: true, sinFecha: false, frios: false, hechos: false },
   mostrar: PAGINA,
   mostrarAtrasados: PAGINA,
   scroll: 0,
@@ -614,6 +732,7 @@ export function AgendaDelDia({
   onVerFicha,
   puedeAbrirChat,
   escritos,
+  ultimos,
 }: {
   crmSeg: MapaSeguimiento
   crmLeads: MapaLeads
@@ -624,10 +743,12 @@ export function AgendaDelDia({
   puedeAbrirChat: boolean
   /** A quién le escribiste hoy según WhatsApp Web. Sin extensión llega vacío. */
   escritos?: EscritosHoy
+  /** La hora de tu último mensaje en cada chat desde ayer. `null` con una extensión anterior a la 0.10.0. */
+  ultimos?: UltimosMios | null
 }) {
   return (
     <EscritosCtx.Provider value={escritos || SIN_ESCRITOS}>
-      <Agenda crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={onAbrirChat} onVerFicha={onVerFicha} puedeAbrirChat={puedeAbrirChat} />
+      <Agenda crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={onAbrirChat} onVerFicha={onVerFicha} puedeAbrirChat={puedeAbrirChat} ultimos={ultimos ?? null} />
     </EscritosCtx.Provider>
   )
 }
@@ -641,6 +762,7 @@ function Agenda({
   onAbrirChat,
   onVerFicha,
   puedeAbrirChat,
+  ultimos,
 }: {
   crmSeg: MapaSeguimiento
   crmLeads: MapaLeads
@@ -648,8 +770,20 @@ function Agenda({
   onAbrirChat: (id: number, tel: string) => void
   onVerFicha: (id: number, tel: string) => void
   puedeAbrirChat: boolean
+  ultimos: UltimosMios | null
 }) {
   const escritos = useContext(EscritosCtx)
+  const catalogo = usePedidosCatalogo()
+  const filasPedidos = useMemo(
+    () => (catalogo?.t === 'ok' ? armarFilasPedidos(catalogo.datos.pedidos, false, today, ultimos, escritos) : []),
+    [catalogo, today, ultimos, escritos],
+  )
+  const filasCarritos = useMemo(
+    () => (catalogo?.t === 'ok' ? armarFilasPedidos(catalogo.datos.carritos, true, today, ultimos, escritos) : []),
+    [catalogo, today, ultimos, escritos],
+  )
+  const pedidosSinHablar = catalogo?.t === 'ok' ? [...filasPedidos, ...filasCarritos].filter((p) => !p.hablado).length : null
+
   const [filtro, setFiltro] = useState<FiltroPanel>(memoria.filtro)
   const [mostrar, setMostrar] = useState(memoria.mostrar)
   const [estado, setEstado] = useState<EstadoAgenda>(memoria.estado)
@@ -663,6 +797,18 @@ function Agenda({
    */
   const [abiertos, setAbiertos] = useState<Record<string, boolean>>(memoria.abiertos)
   const alternar = (k: string) => setAbiertos((a) => ({ ...a, [k]: !a[k] }))
+  // El grupo de los pedidos: nace abierto, y si `memoria` viene de antes de existir, también.
+  const grupoPedidos = (
+    <GrupoPedidos
+      r={catalogo}
+      pedidos={filasPedidos}
+      carritos={filasCarritos}
+      abierto={abiertos.pedidos !== false}
+      onToggle={() => setAbiertos((a) => ({ ...a, pedidos: a.pedidos === false }))}
+      onAbrir={onAbrirChat}
+      onFicha={onVerFicha}
+    />
+  )
   const [mostrarAtrasados, setMostrarAtrasados] = useState(memoria.mostrarAtrasados)
 
   // Lo que se ve queda guardado para la próxima vez que se monte (ver `memoria`).
@@ -895,8 +1041,10 @@ function Agenda({
   if (!faltaFecha.length && !paraHoy.length && !atrasados.length && !sinFecha.length && !frios.length && !hechosItems.length)
     return (
       <div>
+        {pedidosSinHablar != null && <Resumen hoy={0} atrasados={0} hechos={0} pedidos={pedidosSinHablar} />}
         {cabecera}
         {avisoExtension}
+        {grupoPedidos}
         <div style={{ padding: space[3], fontSize: font.sm, color: color.mut }}>
           No hay nadie para contactar hoy. Cuando venza el próximo, aparece acá.
         </div>
@@ -905,9 +1053,10 @@ function Agenda({
 
   return (
     <div>
-      <Resumen hoy={totalHoy} atrasados={totalAtrasados} hechos={hechosItems.length} />
+      <Resumen hoy={totalHoy} atrasados={totalAtrasados} hechos={hechosItems.length} pedidos={pedidosSinHablar} />
       {cabecera}
       {avisoExtension}
+      {grupoPedidos}
 
       {faltaFecha.length > 0 && (
         <Grupo titulo="🔴 Falta la fecha" cuantas={faltaFecha.length} abierto={abiertos.falta !== false} onToggle={() => setAbiertos((a) => ({ ...a, falta: a.falta === false }))}>

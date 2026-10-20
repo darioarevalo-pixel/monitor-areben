@@ -111,14 +111,16 @@ function pedirComunidad() {
 }
 
 /**
- * A quién le escribiste hoy (sólo teléfonos). Mismo camino que la comunidad: se guarda la última
- * para el panel que se arma después, y el panel la pide al armarse.
+ * A quién le escribiste hoy (teléfonos) y la hora de tu último mensaje desde ayer (`ultimos`, desde
+ * la 0.10.0). Mismo camino que la comunidad: se guarda la última para el panel que se arma
+ * después, y el panel la pide al armarse.
  */
 let escritos = null
-function pasarEscritos(tels) {
-  escritos = tels
+function pasarEscritos(r) {
+  // Un `content.js` de antes de la 0.10.0 (pestaña sin recargar) contesta con la lista sola.
+  escritos = Array.isArray(r) ? { tels: r, ultimos: null } : r
   if (!iframe.contentWindow) return
-  iframe.contentWindow.postMessage({ fuente: 'bdi-crm-panel', tipo: 'escritos-hoy', tels }, ORIGEN)
+  iframe.contentWindow.postMessage({ fuente: 'bdi-crm-panel', tipo: 'escritos-hoy', tels: escritos.tels, ultimos: escritos.ultimos }, ORIGEN)
 }
 function pedirEscritos() {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -197,7 +199,7 @@ mostrar('', 'sin-chat')
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg && msg.tipo === 'chat') mostrar(msg.tel, msg.motivo, msg.nombre)
   if (msg && msg.tipo === 'comunidad' && msg.datos) pasarComunidad(msg.datos)
-  if (msg && msg.tipo === 'escritos-hoy' && Array.isArray(msg.tels)) pasarEscritos(msg.tels)
+  if (msg && msg.tipo === 'escritos-hoy' && Array.isArray(msg.tels)) pasarEscritos({ tels: msg.tels, ultimos: msg.ultimos || null })
 })
 
 // Al abrirse, preguntar en qué chat está. El panel se abre con un clic en el ícono, y ese clic no

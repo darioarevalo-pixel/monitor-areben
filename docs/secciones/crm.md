@@ -1120,3 +1120,18 @@ cada cosa: ni una regla de datos cambió.
 - Cómo se miró sin entrar al panel: render en jsdom con datos inventados (mocks de `leerMapa`,
   `buscarFicha`, `traerAgenda` y los hooks de Pagos), HTML con `tokens.css` + `kit.css` y foto con
   Chrome headless a 350 px. Hay que fijar `--alto-calc` a mano: jsdom no mide.
+
+# ✅ 20-oct-2026 — «Pidieron hoy y ayer» arriba de «Hoy» (Darío, sobre una maqueta)
+
+Maqueta: https://claude.ai/artifact/VnYGHZq2A7XCZErzDaru3S. Los pedidos y carritos del catálogo,
+para escribirle al que pidió y no habló.
+- 🔑 **Salen del catálogo, no de GN** (`bdi-catalogo/api/pedido.js?panel=1`): las ventas de GN
+  llegan una vez por día. Hoy y ayer en día de Argentina; carritos sólo con teléfono y sin los que
+  después confirmaron (la regla del correo de las 20:00). ⛔ **Sólo admin**, con `usuarioValido` y
+  no `exigirUsuario` (el modo aviso dejaría pasar sin sesión, y son teléfonos).
+- Panel: `lib/crm/pedidos-catalogo.ts` + `GrupoPedidos` en `AgendaDelDia.tsx`; se pide al montar y
+  cada 2 min. Sin permiso el grupo y la celda «Pedidos sin hablar» no se dibujan.
+- 🔑 **«Ya le escribiste» = un mensaje tuyo DESPUÉS del pedido.** La extensión 0.10.0 manda
+  `ultimos` ([teléfono, segundos] desde ayer 00:00) junto con `tels`; con una anterior cae a «le
+  escribiste hoy». Test: `tests/crm-pedidos-catalogo.test.ts`.
+- El nombre es el que escribió el cliente en el catálogo; tocarlo abre la ficha buscando por teléfono.

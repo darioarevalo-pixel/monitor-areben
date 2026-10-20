@@ -58,6 +58,7 @@ import { coincideNombre, palabraParaBuscar, palabrasDelNombre } from '@/lib/crm/
 import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import { cola } from '@/lib/crm/telefono.core.js'
+import type { UltimosMios } from '@/lib/crm/pedidos-catalogo'
 
 /**
  * El botón verde de WhatsApp, arriba en el encabezado de la ficha (Darío, 19-oct-2026: «no tiene el
@@ -108,14 +109,29 @@ function Encabezado({ children }: { children: React.ReactNode }) {
   return <section style={{ ...SOBRE_OSCURO, padding: `${space[3]}px ${space[3]}px ${space[3] + 2}px` }}>{children}</section>
 }
 
-function useEscritosHoy(): EscritosHoy {
+/**
+ * A quién le escribiste hoy, y desde la extensión 0.10.0 también **a qué hora** fue tu último
+ * mensaje en cada chat desde ayer (`ultimos`): con eso «Pidieron hoy y ayer» sabe si le escribiste
+ * DESPUÉS del pedido. Con una extensión anterior `ultimos` queda en `null`.
+ */
+function useEscritosHoy(): { escritos: EscritosHoy; ultimos: UltimosMios | null } {
   const [escritos, setEscritos] = useState<EscritosHoy>(() => new Set())
+  const [ultimos, setUltimos] = useState<UltimosMios | null>(null)
   useEffect(() => {
     const alMensaje = (e: MessageEvent) => {
       if (e.source !== window.parent) return
       const d = e.data
       if (!d || d.fuente !== 'bdi-crm-panel' || d.tipo !== 'escritos-hoy' || !Array.isArray(d.tels)) return
       setEscritos(indexarEscritos(d.tels))
+      if (Array.isArray(d.ultimos)) {
+        const m: UltimosMios = new Map()
+        for (const x of d.ultimos) {
+          const c = cola(String((x && x[0]) || ''))
+          const t = Number(x && x[1])
+          if (c && t > (m.get(c) || 0)) m.set(c, t)
+        }
+        setUltimos(m)
+      }
     }
     window.addEventListener('message', alMensaje)
     try {
@@ -123,7 +139,7 @@ function useEscritosHoy(): EscritosHoy {
     } catch {}
     return () => window.removeEventListener('message', alMensaje)
   }, [])
-  return escritos
+  return { escritos, ultimos }
 }
 
 /**
@@ -539,11 +555,11 @@ export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
   // La comunidad se escucha acá arriba y no en la ficha: llega de la extensión una sola vez al
   // abrir (y después cada tanto), y no tiene que perderse porque en ese momento no había ficha.
   const { comunidad, aviso: avisoComunidad } = useComunidad()
-  const escritos = useEscritosHoy()
+  const { escritos, ultimos } = useEscritosHoy()
 
   return (
     <>
-      <PanelInterno tel={telChat} nombreChat={nombreChat} pedido={pedido} setPedido={setPedido} comunidad={comunidad} avisoComunidad={avisoComunidad} escritos={escritos} />
+      <PanelInterno tel={telChat} nombreChat={nombreChat} pedido={pedido} setPedido={setPedido} comunidad={comunidad} avisoComunidad={avisoComunidad} escritos={escritos} ultimos={ultimos} />
       {/* `key` = el chat: al pasar a otro cliente la cuenta arranca vacía. */}
       <Aislado nombre="Calculadora">
         <CalculadoraEnvio key={telChat || ''} />
@@ -560,6 +576,7 @@ function PanelInterno({
   comunidad,
   avisoComunidad,
   escritos,
+  ultimos,
 }: {
   tel: string | null
   nombreChat: string
@@ -568,6 +585,7 @@ function PanelInterno({
   comunidad: Comunidad | null
   avisoComunidad: AvisoComunidad
   escritos: EscritosHoy
+  ultimos: UltimosMios | null
 }) {
   const [estado, setEstado] = useState<Estado>({ t: 'cargando' })
   const [crmSeg, setCrmSeg] = useState<MapaSeguimiento>({})
@@ -928,7 +946,7 @@ function PanelInterno({
       <Envoltorio aviso={aviso}>
         {solapas}
         {kvListo ? (
-          <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} puedeAbrirChat={enExtension} escritos={escritos} />
+          <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} puedeAbrirChat={enExtension} escritos={escritos} ultimos={ultimos} />
         ) : (
           <Cargando />
         )}

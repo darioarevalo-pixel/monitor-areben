@@ -287,6 +287,9 @@
   // que si te contestaron después y nunca abriste el chat en la compu, puede no verlo.
   const CADA_ESCRITOS = 20000
 
+  // Desde la 0.10.0 manda además `ultimos`: [teléfono, segundos] de TU último mensaje en cada chat
+  // desde ayer a las 00:00. Lo usa «Pidieron hoy y ayer» del panel para saber si le escribiste
+  // DESPUÉS del pedido. Igual que antes: sólo `fromMe` y la hora, ningún texto.
   function escritosHoy() {
     let chats
     try {
@@ -294,32 +297,38 @@
     } catch {
       return null
     }
-    const desde = new Date().setHours(0, 0, 0, 0) / 1000
+    const hoy = new Date().setHours(0, 0, 0, 0) / 1000
+    const ayer = hoy - 24 * 3600
     const tels = []
+    const ultimos = []
     for (const ch of chats) {
       if (serial(ch.id).endsWith('@g.us')) continue
-      // `t` es el último movimiento del chat: si es de antes de hoy, no hay nada de hoy adentro.
-      if (!ch.t || ch.t < desde) continue
+      // `t` es el último movimiento del chat: si es de antes de ayer, no hay nada nuevo adentro.
+      if (!ch.t || ch.t < ayer) continue
       let msgs = []
       try {
         msgs = ch.msgs && typeof ch.msgs.getModelsArray === 'function' ? ch.msgs.getModelsArray() : []
       } catch {}
-      if (!msgs.some((m) => m && m.id && m.id.fromMe && m.t >= desde)) continue
+      let ultimo = 0
+      for (const m of msgs) if (m && m.id && m.id.fromMe && m.t > ultimo) ultimo = m.t
+      if (ultimo < ayer) continue
       const r = telefonoDe(ch)
-      if (r.tel) tels.push(r.tel)
+      if (!r.tel) continue
+      ultimos.push([r.tel, ultimo])
+      if (ultimo >= hoy) tels.push(r.tel)
     }
-    return tels
+    return { tels, ultimos }
   }
 
   let firmaEscritos = ''
   function avisarEscritos() {
-    const tels = escritosHoy()
-    if (!tels) return
-    const firma = tels.slice().sort().join(',')
+    const r = escritosHoy()
+    if (!r) return
+    const firma = r.ultimos.map((x) => x.join(':')).sort().join(',')
     if (firma === firmaEscritos) return
     firmaEscritos = firma
-    console.log('[BDI] le escribiste hoy a ' + tels.length + ' chats')
-    window.postMessage({ fuente: FUENTE, tipo: 'escritos-hoy', tels }, '*')
+    console.log('[BDI] le escribiste hoy a ' + r.tels.length + ' chats')
+    window.postMessage({ fuente: FUENTE, tipo: 'escritos-hoy', tels: r.tels, ultimos: r.ultimos }, '*')
   }
   setTimeout(avisarEscritos, 4000)
   setInterval(avisarEscritos, CADA_ESCRITOS)

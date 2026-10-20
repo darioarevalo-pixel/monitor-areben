@@ -3,7 +3,8 @@
 //
 // 🔑 **No lee mensajes, no los guarda y no tiene credenciales.** Lo único que cruza por acá es el
 // teléfono de la conversación abierta, la lista de teléfonos de la comunidad mayorista y la de los
-// chats a los que les escribiste hoy (sólo el teléfono: ni el texto ni la hora).
+// chats a los que les escribiste desde ayer (el teléfono y la hora de tu último mensaje, nunca el
+// texto).
 
 const FUENTE = 'bdi-crm-panel'
 
@@ -29,8 +30,8 @@ window.addEventListener('message', (e) => {
   }
   if (e.data.tipo === 'abrir-chat-aca') return
   if (e.data.tipo === 'escritos-hoy') {
-    escritos = e.data.tels || []
-    chrome.runtime.sendMessage({ tipo: 'escritos-hoy', tels: escritos }).catch(() => {})
+    escritos = { tels: e.data.tels || [], ultimos: e.data.ultimos || null }
+    chrome.runtime.sendMessage({ tipo: 'escritos-hoy', ...escritos }).catch(() => {})
     return
   }
   // La lista de la comunidad: se guarda la última para cuando el panel se abra después.
