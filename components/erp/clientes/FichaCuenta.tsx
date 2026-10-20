@@ -71,7 +71,7 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: weight.bold, overflowWrap: 'anywhere' }}>{fila.nombre}</h2>
-          <div style={{ color: color.mut }}>{fila.doc ?? 'sin DNI / CUIT'}</div>
+          <div style={{ color: color.mut }}>{fila.doc ?? 'sin documento'}</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
             <ChipEstado mapa={ESTADO_CUENTA} k={fila.estado} />
             {prueba && <ChipEstado mapa={{ p: ['warning', 'Prueba'] }} k="p" />}

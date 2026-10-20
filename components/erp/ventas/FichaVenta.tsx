@@ -167,6 +167,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
       ) : (
         <>
           {v?.prueba && <Notice tone="warning">De prueba: corre en paralelo con GN y no movió el stock del libro. La factura real sale de GN.</Notice>}
+          {ficha?.sinCreditoGN && <Notice tone="neutral">Gestión Nube la vendió a cuenta a un cliente sin crédito marcado. Desde el ERP, esta venta se habría frenado hasta que un admin la autorizara.</Notice>}
           {ficha.anulacion && <Notice tone="danger">Anulada el {cuandoCorto(ficha.anulacion.anuladaEn)} por {ficha.anulacion.usuario}: «{ficha.anulacion.motivo}».</Notice>}
           {ficha.anulacion && ficha.anulacion.vuelta !== 'ya' && dev && !dev.volvio && (
             <DesarmeVenta marca={marca} ficha={ficha} refVenta={fila.ref} onListo={onCambio} />

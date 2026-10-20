@@ -197,6 +197,8 @@ export type VentaPropia = {
 }
 
 export type FichaDeVenta = {
+  /** La compra a cuenta la cargó GN a un cliente sin crédito (`detalle.cuenta_autoriza.motivo = 'gn'`). */
+  sinCreditoGN?: boolean
   venta: VentaPropia & { subtotal: number; usuario: string; registradaEn: string; origenRef: string; gnSaleId: string | null; ventaOriginalId: string | null }
   cliente: { nombre: string | null; doc: string | null; email: string | null; whatsapp: string | null } | null
   lineas: Array<{

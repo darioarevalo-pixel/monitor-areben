@@ -7,9 +7,9 @@
  * buscador, columnas por usuario y la ficha AL COSTADO con lo que debe venta por venta, el MAYOR y «Exportar» (Darío).
  * Núcleo puro: `lib/erp/cuenta-corriente.core.js`; servidor: `api/_erp-clientes.js` (`cuentasCorrientes`/`cuentaDe` del motor).
  *
- * 🔑 Dos libros que ⛔ se suman: el REAL y el de PRUEBA (las ventas del ERP en paralelo con GN). Medido 20-oct: BDI tiene
- *    232 clientes en el motor y 0 cuentas reales; las 22 compras a cuenta (15 clientes, $ 7,1 M) son de prueba ⇒ la
- *    pantalla abre en el real y dice cuántas hay en el otro.
+ * 🔑 Dos libros que ⛔ se suman: el REAL y el de PRUEBA (las mayoristas de GN en sombra). Medido 20-oct: BDI 233 clientes
+ *    (todos sin documento), 0 cuentas reales; las 22 compras a cuenta (15 clientes, $ 7,1 M) son de prueba ⇒ hasta el
+ *    corte abre en PRUEBA (A, `mensaje-sesion-diseno-cc.md`). Los cobros a cuenta cargados en GN ⛔ llegan: saldos de más.
  * 🔑 «Marcar crédito» es sólo de admin (lo frena la puerta: la acción pide `configurar`).
  * ⛔ todavía (falta en el motor, PENDIENTES «Diseño 8» 7): «Cobros masivos», el último cobro y la cantidad de ventas con
  *    saldo en la fila (`cuentasCorrientes` ⛔ los trae), y el saldo de apertura de GN.
@@ -42,7 +42,8 @@ export function CuentaCorriente() {
   const usuario = perfil?.name ?? null
   const admin = esAdmin(perfil)
   const lista = 'erp-cuenta-corriente'
-  const [prueba, setPrueba] = useState(false)
+  // Hasta el corte con GN, las mayoristas de BDI son de PRUEBA (corren en sombra): se abre en ese libro (A, 20-oct).
+  const [prueba, setPrueba] = useState(true)
   const [datos, setDatos] = useState<(CuentasDeLaMarca & { clave: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [vista, setVista] = useState('saldo')
@@ -76,7 +77,7 @@ export function CuentaCorriente() {
   })
 
   const celda = (f: FilaCuenta, k: string): React.ReactNode => {
-    if (k === 'c') return <span style={{ minWidth: 0 }}><b title={f.nombre} style={{ color: color.ink }}>{f.nombre}</b>{f.doc && <span style={{ color: color.mut }}> · {f.doc}</span>}</span>
+    if (k === 'c') return <span style={{ minWidth: 0 }}><b title={f.nombre} style={{ color: color.ink }}>{f.nombre}</b><span style={{ color: f.doc ? color.mut : color.mut2 }}> · {f.doc ?? 'sin documento'}</span></span>
     if (k === 'linea') return <span style={{ color: color.mut }}>{NOMBRE_LINEA[f.linea as keyof typeof NOMBRE_LINEA] ?? f.linea}</span>
     if (k === 'debe') return f.debe ? <MoneyText value={f.debe} /> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'favor') return f.aFavor ? <span style={{ color: 'var(--mo-success-ink)' }}><MoneyText value={f.aFavor} /></span> : <span style={{ color: color.mut2 }}>—</span>
@@ -109,7 +110,7 @@ export function CuentaCorriente() {
       {datos && datos.clientesErp > 0 && (prueba || datos.otroLibro > 0) && (
         <Notice tone={prueba ? 'warning' : 'neutral'}>
           {prueba
-            ? <>Estás mirando las cuentas <b>de prueba</b> (ventas del ERP en paralelo con Gestión Nube): no es plata que se deba de verdad. {datos.otroLibro ? `Hay ${n(datos.otroLibro)} ${datos.otroLibro === 1 ? 'cliente' : 'clientes'} con movimientos reales.` : 'Todavía no hay ninguna cuenta real.'}</>
+            ? <>Estás mirando las cuentas <b>de prueba</b>: las ventas mayoristas que el ERP copia de Gestión Nube hasta el corte. Los cobros a cuenta que se cargan en Gestión Nube todavía no llegan acá, así que algunos saldos dan de más. {datos.otroLibro ? `Hay ${n(datos.otroLibro)} ${datos.otroLibro === 1 ? 'cliente' : 'clientes'} con movimientos reales.` : 'Todavía no hay ninguna cuenta real.'}</>
             : <>Hay {n(datos.otroLibro)} {datos.otroLibro === 1 ? 'cliente' : 'clientes'} con movimientos <b>de prueba</b>, que no se suman acá. <Button variant="outline" onClick={() => setPrueba(true)}>Ver las de prueba</Button></>}
         </Notice>
       )}

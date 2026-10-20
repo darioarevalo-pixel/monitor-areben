@@ -528,7 +528,9 @@ export async function fichaDeVenta({ marca, id }) {
     if (e) throw new Error(`facturas: ${e.message}`)
     for (const x of data) montos.set(x.id, Number(x.total))
   }
-  return armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data, cambiadas: cambiadasDe(devueltas.data), montos, devolucion })
+  // «GN la vendió sin crédito» (A, 20-oct): la mayorista en sombra que el ERP habría frenado. Aviso, ⛔ error.
+  const sinCreditoGN = f.detalle?.cuenta_autoriza?.motivo === 'gn'
+  return { ...armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data, cambiadas: cambiadasDe(devueltas.data), montos, devolucion }), sinCreditoGN }
 }
 
 /**

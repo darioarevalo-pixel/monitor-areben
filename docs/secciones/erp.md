@@ -241,8 +241,10 @@ columnas opcionales), vistas Con saldo · Atrasadas · Con saldo a favor · Con 
 Σ saldo, vencido, a favor, por antigüedad), y la ficha AL COSTADO (`cuentaDe`): crédito, ventas con saldo nombradas por
 su número (`nombresDeVentas`, del detalle del mayor), el **mayor** entre dos fechas y «Exportar» (el CSV lo arma el motor:
 `mayorCSV`). **«Marcar crédito» sólo admin**: la acción `poner-credito` ⛔ está en `PERMISO_DE_ACCION` ⇒ pide `configurar`.
-🔑 **Dos libros que ⛔ se suman**: real y PRUEBA (ventas del ERP en paralelo con GN); la pantalla abre en el real y dice
-cuántos clientes hay en el otro («Reales / De prueba»). Medido 20-oct: BDI 232 clientes, 0 cuentas reales, 15 de prueba
+🔑 **Dos libros que ⛔ se suman**: real y PRUEBA (las mayoristas de GN en sombra, `sql/030` de A); **hasta el corte abre
+en PRUEBA** («Reales / De prueba») y avisa que los cobros a cuenta cargados en GN ⛔ llegan (saldos de más). Sin documento
+(los 233 de GN) dice «sin documento». La ficha de la VENTA avisa «GN la vendió sin crédito» (`detalle.cuenta_autoriza.motivo
+= 'gn'`, `sinCreditoGN` de `fichaDeVenta`): aviso, ⛔ error. Medido 20-oct: BDI 232 clientes, 0 cuentas reales, 15 de prueba
 ($ 7.149.977,60); Zattia 0 clientes. Servidor `api/_erp-clientes.js` (`vista=cuentas-corrientes`, `vista=cuenta-cliente`),
 núcleo `lib/erp/cuenta-corriente.core.js` (`tests/erp-cuenta-corriente.test.ts`). ⚠️ `cuentasCorrientes` hace 3 consultas
 POR cliente: con 15 tardó 8,5 s desde la Mac.
