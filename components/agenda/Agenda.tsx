@@ -173,8 +173,8 @@ function Hoy({
 }) {
   return (
     <div style={{ display: 'grid', gap: space[5] }}>
-      {/* 🔔 En prueba (Darío, 20-oct-2026): primero en el teléfono de Darío, después el equipo. */}
-      {!pantallas && <ActivarAvisos />}
+      {/* 🔔 Avisos al celular: probados en el de Darío y abiertos a todo el equipo (20-oct-2026). */}
+      <ActivarAvisos />
       <section style={{ display: 'grid', gap: space[3] }}>
         <Titulo>
           ☑ Tareas
