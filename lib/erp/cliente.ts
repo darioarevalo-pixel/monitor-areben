@@ -5,6 +5,8 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import type { FacturaEmitida } from '@/lib/arca/factura-pdf'
+import { armarFilasClientes, deTupla } from '@/lib/erp/clientes-lista.core.js'
+import { diaArgentino } from '@/lib/envios/portal.core.js'
 
 export type MarcaErp = 'bdi' | 'zattia'
 
@@ -432,3 +434,28 @@ export type FilaMovimiento = {
 export type ListaDeMovimientos = { filas: FilaMovimiento[]; desde: string; hasta: string; cortado: boolean; libroHasta: string | null }
 export const leerMovimientos = (marca: MarcaErp, desde: string, hasta: string) =>
   pedir<ListaDeMovimientos>(null, `&vista=movimientos&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer los movimientos.')
+
+// ── ERP › Clientes y proveedores › Clientes (lista de TRABAJO; `api/_erp-clientes.js`, núcleo `lib/erp/clientes-lista.core.js`) ──
+export type FilaCliente = {
+  id: string; nombre: string; doc: string | null; compras: number; total: number; primera: string | null; ultima: string | null
+  mayorista: boolean; canales: string[]; esteMes: boolean; dormido: boolean
+  /** El cliente del motor (si lo tiene) y su cuenta: saldo = lo que debe − lo que tiene a favor. ⛔ cuenta ⇒ `saldo` null. */
+  clienteId: string | null; saldo: number | null; aFavor: number; vencido: boolean; soloErp: boolean
+}
+export type ListaDeClientes = { filas: FilaCliente[]; gnHasta: string | null; clientesErp: number; cuentaLista: boolean; porNombre: boolean }
+/** Los de GN llegan como tuplas (BDI son 13.000) y se arman acá, con el día argentino de hoy. */
+export const leerListaDeClientes = async (marca: MarcaErp): Promise<ListaDeClientes> => {
+  const r = await pedir<{ gn: unknown[][]; erp: never[]; cuentas: never[]; gnHasta: string | null; clientesErp: number; cuentaLista: boolean; porNombre: boolean }>(null, `&vista=clientes-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los clientes.')
+  const filas = armarFilasClientes({ gn: r.gn.map(deTupla), erp: r.erp, cuentas: r.cuentas, hoy: diaArgentino(Date.now()) }) as FilaCliente[]
+  return { filas, gnHasta: r.gnHasta, clientesErp: r.clientesErp, cuentaLista: r.cuentaLista, porNombre: r.porNombre }
+}
+
+export type CompraCliente = { id: string; number: number | null; fecha: string; channel: string | null; total: number; sale_state: string | null; payment_method: string | null; tn_order: string | null }
+export type PendienteCuenta = { ref: string; fecha: string; monto: number; pendiente: number; dias: number }
+export type FichaDeCliente = {
+  compras: CompraCliente[]; cortado: boolean
+  contacto: { name: string | null; email: string | null; phone: string | null; city: string | null; province: string | null; address: string | null } | null
+  cuenta: { cliente: { id: string; nombre: string; doc: string | null }; credito: unknown; estado: { saldo: number; a_favor: number; debe: number; pendientes?: PendienteCuenta[] } } | null
+}
+export const leerFichaDeCliente = (marca: MarcaErp, clave: string) =>
+  pedir<FichaDeCliente>(null, `&vista=cliente-ficha&marca=${marca}&clave=${encodeURIComponent(clave)}&nc=${Date.now()}`, 'No se pudo leer el cliente.')

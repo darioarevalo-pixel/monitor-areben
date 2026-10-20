@@ -13,7 +13,7 @@ pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una
 Las pestañas: Ventas = Ventas · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
 dirección vieja cae en Ventas) · Caja (POS) = Cambio · Factura · Stock =
 Stock · Movimientos · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Productos (la vieja `/erp/productos/precios` cae ahí) · Configuración = Reglas · Cuentas de cobro;
-Clientes todavía vacía. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
+Clientes y proveedores = Clientes · Proveedores. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
 botones crudos y `select`). Tests: `tests/erp-navegacion*.test.ts*`. El registro (`registro.ts`) conserva `erp` sólo
 porque el test de registro lo exige: el shell ya ⛔ lo monta.
 
@@ -162,6 +162,22 @@ sólo se ven) · Todas, la campaña como columna, Stunned por el selector de lí
 la fila ⇒ el formulario de esa regla (el formulario y el simulador siguen igual, abajo). Cuentas de cobro: una fila por
 canal × medio de la línea, vistas por canal + «Sin ruta» + «Cambios» (el historial); clic o «⋯» ⇒ la ventana «Cambiar la
 ruta» (mismo aviso antes de guardar). ⛔ cambió ningún contrato. Tests `tests/erp-reglas-pantalla.test.tsx`, `erp-rutas-pantalla`.
+
+**Clientes y proveedores** (🎨 19-oct, Diseño 7: molde de TRABAJO, sólo lectura): **Clientes** = UNA lista con cada
+cliente (tipo, compras, comprado, última/primera compra, canales, **saldo de la cuenta**), vistas Todos · Compraron este
+mes · Mayoristas · Con saldo · Sin comprar hace +90 días, resumen arriba, buscador (nombre, DNI/CUIT), columnas por
+usuario (`erp-clientes`), Exportar y la ficha AL COSTADO (saldo en grande = debe − a favor, ventas con saldo, contacto,
+sus compras). 🔑 Medido 19-oct: el motor ⛔ tiene clientes (`cliente` vacía, 0 ventas con `cliente_id`, `cuenta_movimiento`
+vacía) ⇒ la lista sale del espejo de GN (`ventas`, sumado por pg en `api/_erp-clientes.js`): BDI por `client_id` (13.453;
+contacto de `clientes`, el CRM), Zattia por NOMBRE (4.028: su espejo ⛔ trae el id; dos homónimos se ven como uno — la
+pantalla lo dice). «Consumidor Final» ⛔ es un cliente. Sin cuenta en el motor el saldo dice «sin cuenta» (⛔ un 0 que
+parece al día); la cuenta del motor (§15, `cuentasCorrientes`/`cuentaDe`) se pega por `gn_client_id` o por nombre. Los de
+GN viajan como TUPLAS (`aTupla`/`deTupla`: con objetos BDI pesaba 3,7 MB, así 1,1) y las arma el navegador. Núcleo
+`lib/erp/clientes-lista.core.js` (`tests/erp-clientes-lista.test.ts`, pantalla `tests/erp-clientes-pantalla.test.tsx`).
+**Proveedores** = los del motor (sql/013, `vista=proveedores`) con cuántos productos tiene cada uno, vistas Con/Sin
+productos · Sin CUIT; sólo ver (nacen en Ingresos) y «⋯» a PRM / Ingresos ↗. ⛔ todavía: «Nuevo cliente», «Registrar
+cobro a cuenta», la pestaña Cuenta corriente (sin movimientos no hay qué mostrar) y la «decisión de cobro» por venta
+(⛔ existe en el motor).
 
 ## Dónde vive
 
