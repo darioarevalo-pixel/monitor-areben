@@ -28,7 +28,16 @@ export async function estadoAvisos(): Promise<EstadoAvisos> {
   if (Notification.permission !== 'granted') return 'apagados'
   const reg = await navigator.serviceWorker.getRegistration('/')
   const sub = reg && (await reg.pushManager.getSubscription())
-  return sub ? 'activados' : 'apagados'
+  if (!sub) return 'apagados'
+  // 🔴 Que el TELÉFONO tenga la dirección ⛔ prueba que el SERVIDOR la tenga: si la primera vez el
+  // anotado falló (le pasó a Darío el 20-oct, faltaba la clave en Vercel), el teléfono decía
+  // «activados» y no había a quién mandarle. Se re-anota cada vez que se abre; es idempotente.
+  try {
+    await anotarTelefono(sub.toJSON())
+    return 'activados'
+  } catch {
+    return 'apagados'
+  }
 }
 
 function claveEnBytes(b64: string): Uint8Array<ArrayBuffer> {
