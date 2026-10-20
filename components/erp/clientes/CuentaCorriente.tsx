@@ -106,10 +106,10 @@ export function CuentaCorriente() {
       {datos && datos.clientesErp === 0 && (
         <Notice tone="neutral">Esta marca todavía no tiene clientes en el ERP: la cuenta corriente empieza cuando se le venda a cuenta a un cliente desde el ERP.</Notice>
       )}
-      {datos && datos.clientesErp > 0 && datos.otroLibro > 0 && (
+      {datos && datos.clientesErp > 0 && (prueba || datos.otroLibro > 0) && (
         <Notice tone={prueba ? 'warning' : 'neutral'}>
           {prueba
-            ? <>Estás mirando las cuentas <b>de prueba</b> (ventas del ERP en paralelo con Gestión Nube): no es plata que se deba de verdad. Hay {n(datos.otroLibro)} {datos.otroLibro === 1 ? 'cliente' : 'clientes'} con movimientos reales.</>
+            ? <>Estás mirando las cuentas <b>de prueba</b> (ventas del ERP en paralelo con Gestión Nube): no es plata que se deba de verdad. {datos.otroLibro ? `Hay ${n(datos.otroLibro)} ${datos.otroLibro === 1 ? 'cliente' : 'clientes'} con movimientos reales.` : 'Todavía no hay ninguna cuenta real.'}</>
             : <>Hay {n(datos.otroLibro)} {datos.otroLibro === 1 ? 'cliente' : 'clientes'} con movimientos <b>de prueba</b>, que no se suman acá. <Button variant="outline" onClick={() => setPrueba(true)}>Ver las de prueba</Button></>}
         </Notice>
       )}
