@@ -460,7 +460,7 @@ function Resultados({ ronda, boletas, onVolver, onRefrescar, onConfirmar, onSaca
                 const ok = await confirmar({
                   titulo: `Confirmar ${tope} ${tope === 1 ? 'diseño' : 'diseños'}`,
                   ok: `Confirmar ${tope === 1 ? 'el mejor' : 'los ' + tope}`,
-                  mensaje: `Pasan a «Confirmados» en el tablero, para todo el equipo: ${elegidos.map((d) => d.name || 'sin nombre').join(', ')}.`,
+                  mensaje: `Pasan a «Elegidos», para todo el equipo: ${elegidos.map((d) => d.name || 'sin nombre').join(', ')}.`,
                 })
                 if (ok) onConfirmar(elegidos.map((d) => d.id))
               })()}
