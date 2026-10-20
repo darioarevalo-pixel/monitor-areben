@@ -14,8 +14,8 @@ import { cuentaDe } from './armar.mjs'
 const fallo = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo, mensaje, campo } : { codigo, mensaje } })
 const pesos = (x) => Math.round(Number(x) * 100) / 100
 const FORMAS = ['plata', 'saldo']
-/** Los medios que ⛔ son plata que entró: los da vuelta su propio libro. */
-const NO_ES_PLATA = ['saldo', 'cuenta']
+/** Los medios que ⛔ son plata que entró: los da vuelta su propio libro (la Contraentrega cerrada ya trae su plata, sql/032). */
+const NO_ES_PLATA = ['saldo', 'cuenta', 'entrega']
 export const MARCAS_PIN = ['bdi', 'zattia', 'stunned']
 
 /**

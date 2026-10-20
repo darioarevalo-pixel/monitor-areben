@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { armarCobro, contarVistas, filtrar, mediosOrdenados, rangoDeCobros, resumen } from '@/lib/erp/cobros.core.js'
+import { armarCobro, armarContraentrega, contarVistas, filtrar, mediosOrdenados, rangoDeCobros, resumen } from '@/lib/erp/cobros.core.js'
 
 const c = (o: Record<string, unknown>) => ({
   id: '1', origen: 'venta', fecha: '2026-10-20', en: '2026-10-20T13:00:00.000Z', clase: 'plata', monto: 1000, medio: 'efectivo',
@@ -25,7 +25,7 @@ describe('ERP › Cobros', () => {
   })
 
   it('cada vista cuenta lo suyo: lo anulado ⛔ entra en «Entró plata»', () => {
-    expect(contarVistas(filas)).toEqual({ todos: 6, entro: 2, salio: 2, a_cuenta: 1, debe: 1, saldo: 0, anulados: 1 })
+    expect(contarVistas(filas)).toEqual({ todos: 6, entro: 2, salio: 2, a_cuenta: 1, debe: 1, saldo: 0, anulados: 1, contraentrega: 0 })
   })
 
   it('busca por cliente, número y medio; filtra por línea y medio', () => {
@@ -44,6 +44,20 @@ describe('ERP › Cobros', () => {
     expect(r).toMatchObject({ cobrado: 1500, entro: 2000, salio: 500, debe: 5000 })
     expect(resumen(totales, filas, 'stunned').cobrado).toBe(0)
     expect(mediosOrdenados(r.porMedio).map((m) => m.nombre)).toEqual(['Transferencia', 'Efectivo'])
+  })
+
+  it('la contraentrega abierta ⛔ es un cobro: sólo en su vista, fuera del cobrado, con lo que está en la calle', () => {
+    const abiertas = [
+      { venta_id: 'v9', numero: 870, canal: 'local', origen: 'manual', en: '2026-10-18T15:00:00.000Z', monto: 25000, cliente: { id: 'k', nombre: 'Ana Paz' }, linea: 'zattia' },
+      { venta_id: 'v8', numero: 865, canal: 'local', origen: 'manual', en: '2026-10-15T15:00:00.000Z', monto: 5000.5, cliente: null, linea: 'stunned' },
+    ].map(armarContraentrega)
+    const todas = [...filas, ...abiertas]
+    expect(abiertas[0]).toMatchObject({ id: 'contraentrega:v9', que: 'Venta 870 · Manual', medioTexto: 'Contraentrega', clase: 'entrega' })
+    expect(contarVistas(todas)).toMatchObject({ todos: 6, entro: 2, contraentrega: 2 })
+    expect(filtrar(todas, { vista: 'contraentrega', q: 'paz' }).map((f) => f.id)).toEqual(['contraentrega:v9'])
+    const totales = { zattia: { plata: 1500, entro: 2000, salio: 500, por_medio: {} } }
+    expect(resumen(totales, todas)).toMatchObject({ cobrado: 1500, cobros: 4, calle: 30000.5, enLaCalle: 2, calleDesde: '2026-10-15T15:00:00.000Z' })
+    expect(resumen(totales, todas, 'zattia')).toMatchObject({ calle: 25000, enLaCalle: 1 })
   })
 
   it('el mes pasado y hoy, en días argentinos', () => {

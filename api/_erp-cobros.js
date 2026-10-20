@@ -4,6 +4,9 @@
  *
  *   GET ?recurso=erp&vista=cobros&marca=bdi|zattia&desde&hasta&prueba=0|1
  *
+ * + `contraentregas`: las ventas «Contraentrega» que todavía ⛔ se cerraron (`contraentregasAbiertas`, contrato §20) — lo
+ *   que está en la calle HOY, ⛔ depende del período. Una base sin la `sql/032` ⛔ tiene la cuenta ⇒ lista vacía.
+ *
  * 🔴 Hasta el corte, todo lo del ERP es de PRUEBA (corre en paralelo con GN) ⇒ la pantalla abre en `prueba=1`. Los dos
  *    libros ⛔ se suman: se cuenta cuántos hay en el otro para que la pantalla lo diga.
  * Los totales salen del MOTOR (por línea): una venta anulada sin devolución propia ⛔ suma, y eso la fila ⛔ lo trae.
@@ -20,9 +23,12 @@ export async function cobrosDelPeriodo({ marca, desde, hasta, prueba = false }, 
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   if (!FECHA.test(desde) || !FECHA.test(hasta)) return { status: 400, error: 'Período inválido' }
   return deps.conMotor(marca, 'Los cobros', async (pg) => {
-    const { cobrosDe } = await import('../motor/venta/cobros.mjs')
+    const [{ cobrosDe }, { contraentregasAbiertas }] = await Promise.all([import('../motor/venta/cobros.mjs'), import('../motor/venta/contraentrega.mjs')])
+    const [{ con032 }] = (await pg.query(`select exists (select 1 from information_schema.columns where table_schema = current_schema()
+      and table_name = 'venta_pago' and column_name = 'cierre_de') as con032`)).rows
     const lineas = (await pg.query('select id, empresa_id::text from marca where id = any($1)', [LINEAS[marca]])).rows
     const cobros = []
+    const contraentregas = []
     /** @type {Record<string, { plata: number, entro: number, salio: number, por_medio: Record<string, number> }>} */
     const totales = {}
     for (const { id: linea, empresa_id } of lineas) {
@@ -30,6 +36,7 @@ export async function cobrosDelPeriodo({ marca, desde, hasta, prueba = false }, 
       if (!r.ok) return { status: r.error?.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: r.error?.mensaje ?? 'El motor no devolvió los cobros.' }
       cobros.push(...r.cobros.map((c) => ({ ...c, linea })))
       totales[linea] = r.totales
+      if (con032) contraentregas.push(...(await contraentregasAbiertas(pg, { empresa_id, marca: linea, prueba })).abiertas.map((a) => ({ ...a, linea })))
     }
     const AR = `at time zone 'America/Argentina/Buenos_Aires'`
     const [{ n: otroLibro }] = (await pg.query(
@@ -38,6 +45,6 @@ export async function cobrosDelPeriodo({ marca, desde, hasta, prueba = false }, 
             + (select count(*) from cuenta_movimiento m
                 where m.tipo = 'pago' and m.marca = any($1) and m.prueba = $2 and (m.ocurrida_en ${AR})::date between $3::date and $4::date) as n`,
       [LINEAS[marca], !prueba, desde, hasta])).rows
-    return { desde, hasta, prueba, cobros, totales, otroLibro: Number(otroLibro) }
+    return { desde, hasta, prueba, cobros, totales, contraentregas, otroLibro: Number(otroLibro) }
   })
 }

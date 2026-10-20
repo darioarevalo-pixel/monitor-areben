@@ -8,6 +8,8 @@
  * Núcleo puro: `lib/erp/cobros.core.js`; servidor: `api/_erp-cobros.js` (`vista=cobros`).
  *
  * 🔴 Hasta el corte todo lo del ERP es DE PRUEBA (corre en paralelo con GN) ⇒ abre en «De prueba», como Cuenta corriente.
+ * La vista «Contraentrega» muestra lo que está EN LA CALLE hoy (ventas que cobra el cadete al entregar, contrato §20): ⛔ es
+ * un cobro ni depende del período; su cierre sí, y entra con los demás.
  * ⛔ Todavía (motor, sesión A): por validar con lo que llegó a MP, cobros masivos, cheques ⇒ la pantalla lo dice.
  */
 
@@ -20,7 +22,7 @@ import { AccionSeleccion, BarraSeleccion, DatoFicha, DatosFicha, FichaCostado } 
 import { BuscadorLista, ChipEstado, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerCobros, type CobrosDelPeriodo, type MarcaErp } from '@/lib/erp/cliente'
 import {
-  COLUMNAS, NOMBRE_LINEA, NOMBRE_MEDIO, PERIODOS_COBROS, VISTAS, alternarColumna, armarCobro, contarVistas, filtrar, mediosOrdenados,
+  COLUMNAS, NOMBRE_LINEA, NOMBRE_MEDIO, PERIODOS_COBROS, VISTAS, alternarColumna, armarCobro, armarContraentrega, contarVistas, filtrar, mediosOrdenados,
   moverColumna, normalizarPrefs, ordenar, rangoDeCobros, resumen,
 } from '@/lib/erp/cobros.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
@@ -86,7 +88,7 @@ export function CobrosErp() {
   }, [marca, prueba, clave])
   const cargando = datos?.clave !== clave
 
-  const todas: FilaCobro[] = useMemo(() => (datos?.cobros ?? []).map(armarCobro), [datos])
+  const todas: FilaCobro[] = useMemo(() => [...(datos?.cobros ?? []).map(armarCobro), ...(datos?.contraentregas ?? []).map(armarContraentrega)], [datos])
   const base = useMemo(() => filtrar(todas, { q, linea, medio }), [todas, q, linea, medio])
   const conteo = useMemo(() => contarVistas(base), [base])
   const filas: FilaCobro[] = useMemo(() => ordenar(filtrar(base, { vista }), orden), [base, vista, orden])
@@ -119,7 +121,7 @@ export function CobrosErp() {
     if (k === 'entra') return f.entraA ? <span style={{ color: color.ink2 }}>{f.entraA}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'monto') {
       const tono = f.anulado || f.clase !== 'plata' ? color.mut : f.monto < 0 ? 'var(--mo-danger-ink)' : color.ink
-      return <b title={f.clase === 'a_cuenta' ? 'Quedó debiendo: no es plata que entró' : f.clase === 'saldo' ? 'Pagó con saldo a favor: no es plata que entró' : undefined} style={{ color: tono, fontVariantNumeric: 'tabular-nums', textDecoration: f.anulado ? 'line-through' : undefined, fontStyle: f.clase !== 'plata' ? 'italic' : undefined }}>{$exacto(f.monto)}</b>
+      return <b title={f.clase === 'a_cuenta' ? 'Quedó debiendo: no es plata que entró' : f.clase === 'saldo' ? 'Pagó con saldo a favor: no es plata que entró' : f.clase === 'entrega' ? 'Contraentrega: lo cobra el cadete al entregar, todavía no entró' : undefined} style={{ color: tono, fontVariantNumeric: 'tabular-nums', textDecoration: f.anulado ? 'line-through' : undefined, fontStyle: f.clase !== 'plata' ? 'italic' : undefined }}>{$exacto(f.monto)}</b>
     }
     if (k === 'quien') return <span style={{ color: f.quien ? color.ink2 : color.mut2 }}>{f.quien ?? '—'}</span>
     if (k === 'comision') return <span style={{ color: color.mut, fontVariantNumeric: 'tabular-nums' }}>{f.comision == null ? '—' : $exacto(f.comision)}</span>
@@ -154,6 +156,7 @@ export function CobrosErp() {
         <TileResumen titulo="Entró" valor={$(res.entro)} nota={`${res.cobros.toLocaleString('es-AR')} cobros con plata`} />
         <TileResumen titulo="Salió" valor={$(res.salio)} nota="vueltos y devoluciones" />
         <TileResumen titulo="Quedó debiendo" valor={$(res.debe)} nota={res.saldo ? `${$(res.saldo)} con saldo a favor` : 'a cuenta: no es plata'} />
+        <TileResumen titulo="Contraentrega" valor={$(res.calle)} nota={res.enLaCalle ? `${res.enLaCalle.toLocaleString('es-AR')} en la calle, desde el ${diaCorto(diaArgentino(Date.parse(res.calleDesde ?? '')))}` : 'nada en la calle'} />
       </div>
       {medios.length > 0 && (
         <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', fontSize: font.sm, color: color.mut }}>
@@ -201,7 +204,7 @@ export function CobrosErp() {
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo los cobros…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {' · '}El cobro de una venta lleva el día de la venta. «Cobrado» no suma lo anulado sin devolución (la plata se devolvió afuera) ni lo que quedó a cuenta.
+          {' · '}{vista === 'contraentrega' ? 'Lo que está en la calle hoy, sea del período que sea: se cierra cuando el envío se marca entregado.' : 'El cobro de una venta lleva el día de la venta.'} «Cobrado» no suma lo anulado sin devolución (la plata se devolvió afuera) ni lo que quedó a cuenta.
         </div>
       </div>
 
@@ -215,9 +218,10 @@ export function CobrosErp() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
             {ficha.anulado && <Notice tone="neutral">{ficha.origen === 'pago_a_cuenta' ? 'Este pago a cuenta se dio vuelta.' : 'La venta está anulada.'}</Notice>}
             {ficha.clase === 'a_cuenta' && <Notice tone="warning">Quedó debiendo: no es plata que entró. Se cobra desde Clientes › Cuenta corriente.</Notice>}
+            {ficha.clase === 'entrega' && <Notice tone="warning">Contraentrega: lo cobra el cadete al entregar y todavía no entró. Se cierra cuando Envíos marca el envío entregado (eso todavía no está conectado: lo está armando el ERP).</Notice>}
             <DatosFicha>
               <DatoFicha titulo="Monto"><b style={{ fontVariantNumeric: 'tabular-nums' }}>{$exacto(ficha.monto)}</b></DatoFicha>
-              <DatoFicha titulo="Cuándo">{cuandoCorto(ficha.cuando)}</DatoFicha>
+              <DatoFicha titulo={ficha.clase === 'entrega' ? 'En la calle desde' : 'Cuándo'}>{cuandoCorto(ficha.cuando)}</DatoFicha>
               <DatoFicha titulo="Cliente">{ficha.cliente ?? '—'}</DatoFicha>
               <DatoFicha titulo="Medio">{ficha.medioTexto}</DatoFicha>
               <DatoFicha titulo="Cuenta">{ficha.cuenta}</DatoFicha>

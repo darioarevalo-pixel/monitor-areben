@@ -66,6 +66,7 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
   const total = pesos(renglones.reduce((a, r) => a + (r.precio === '' ? 0 : r.precio) * r.cantidad, 0))
   const pagado = pesos(pagos.reduce((a, p) => a + (p.monto === '' ? 0 : p.monto), 0))
   const aCuenta = pagos.some((p) => cuentas.find((c) => c.id === p.cuenta)?.medio === 'cuenta' && Number(p.monto) > 0)
+  const contraentrega = pagos.some((p) => cuentas.find((c) => c.id === p.cuenta)?.medio === 'entrega' && Number(p.monto) > 0)
   const conCliente = doc.replace(/\D/g, '').length >= 7 && nombre.trim().length > 1
   const sinPrecio = renglones.some((r) => r.precio === '')
   const falta = !renglones.length ? 'Agregá al menos una prenda.'
@@ -203,7 +204,7 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
             <div key={p.clave} style={{ ...fila, alignItems: 'center' }}>
               <Select aria-label="Cuenta" value={p.cuenta} style={{ flex: '1 1 180px' }} onChange={(e) => setPagos((x) => x.map((y) => (y.clave === p.clave ? { ...y, cuenta: e.target.value } : y)))}>
                 <option value="">Elegí la cuenta</option>
-                {cuentas.map((c) => <option key={c.id} value={c.id}>{c.medio === 'cuenta' ? `${c.nombre} (queda debiendo)` : c.nombre}</option>)}
+                {cuentas.map((c) => <option key={c.id} value={c.id}>{c.medio === 'cuenta' ? `${c.nombre} (queda debiendo)` : c.medio === 'entrega' ? `${c.nombre} (lo cobra el cadete)` : c.nombre}</option>)}
               </Select>
               <Input aria-label="Monto" type="number" min={0} step="0.01" value={p.monto} style={{ width: 120 }}
                 onChange={(e) => setPagos((x) => x.map((y) => (y.clave === p.clave ? { ...y, monto: e.target.value === '' ? '' : Number(e.target.value) } : y)))} />
@@ -213,6 +214,7 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
           ))}
           <div><Button variant="outline" onClick={() => setPagos((x) => [...x, { clave: uuid(), cuenta: '', monto: '' }])}>Agregar otro pago</Button></div>
           {aCuenta && <p style={{ margin: 0, color: color.mut, fontSize: font.sm }}>Si el cliente no tiene crédito, o pasó el tope o el plazo, el ERP no la deja quedar debiendo.</p>}
+          {contraentrega && <p style={{ margin: 0, color: color.mut, fontSize: font.sm }}>Contraentrega: el cadete cobra al entregar. Hasta que el envío se marque entregado, la venta queda en Ventas › Cobros › Contraentrega.</p>}
         </section>
 
         <Field label="Nota (opcional)"><Input value={nota} maxLength={500} onChange={(e) => setNota(e.target.value)} /></Field>
