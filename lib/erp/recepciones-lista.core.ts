@@ -16,7 +16,7 @@ const normal = (s: unknown) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]
 export const DEPOSITO_SUPUESTO: Record<string, string> = { zattia: 'Depósito', bdi: 'Depósito minorista' }
 
 export type FilaRecepcion = {
-  id: string; oc: string; dia: string | null; fecha: string; proveedor: string | null; vaA: string
+  id: string; oc: string; dia: string | null; fecha: string; fechaIngresos: string | null; proveedor: string | null; vaA: string
   pedidas: number; recibidas: number; faltaron: number; sobraron: number; renglonesConDiferencia: number
   estado: 'recibida' | 'diferencia' | 'sin_pedido'; estadoTexto: string; tono: 'ok' | 'aviso' | 'malo' | 'neutro'
   totalesCoinciden: boolean; busca: string
@@ -29,8 +29,12 @@ export function armarFila(r: Recepcion): FilaRecepcion {
   const partes = [faltaron && `faltaron ${faltaron}`, sobraron && `sobraron ${sobraron}`].filter(Boolean).join(' · ')
   const estadoTexto = estado === 'recibida' ? 'Recibida' : estado === 'sin_pedido' ? 'Sin lo pedido' : `Con diferencia: ${partes}`
   const oc = r.oc_label || `OC ${r.oc_id}`
+  // «Llegó» = cuando se CONFIRMÓ (Bruno, 20-oct): la fecha que carga Ingresos a mano puede ser futura (OC-3047: 30/10,
+  // confirmada el 20/10). Esa va aparte, en la ficha. ⛔ se toca `diaDeIngreso`: es la regla de PRM y de la Agenda.
+  const llegada = { fecha_ingreso: null, confirmada_at: r.confirmada_at, recibido_en: r.recibido_en }
   return {
-    id: r.id, oc, dia: diaDeIngreso(r), fecha: fechaDeIngreso(r), proveedor: r.proveedor_nombre ?? null, vaA: DEPOSITO_SUPUESTO[r.store] ?? 'Depósito',
+    id: r.id, oc, dia: diaDeIngreso(llegada), fecha: fechaDeIngreso(llegada),
+    fechaIngresos: r.fecha_ingreso ? fechaDeIngreso({ fecha_ingreso: r.fecha_ingreso, confirmada_at: '', recibido_en: '' }) : null, proveedor: r.proveedor_nombre ?? null, vaA: DEPOSITO_SUPUESTO[r.store] ?? 'Depósito',
     pedidas, recibidas: Number(r.unidades_contadas) || 0, faltaron, sobraron, renglonesConDiferencia: Number(r.lineas_con_diferencia) || 0,
     estado, estadoTexto,
     // Con diferencia ⛔ pinta verde aunque el neto dé 100%.

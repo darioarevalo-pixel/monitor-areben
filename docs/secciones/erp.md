@@ -53,7 +53,8 @@ nadie escanea al llegar): el 4º paso va RAYADO y la pantalla lo dice. «Faltó�
 transferido antes de que arrancara el libro (13-oct) dice «antes del libro». Servidor `api/_erp-stock.js` (`vista=transferencias`),
 núcleo `lib/erp/transferencias.core.js` (`tests/erp-transferencias*.test.ts*`), barritas en `components/erp/stock/Barritas.tsx`.
 
-**Recepciones** (🎨 20-oct, Diseño 8, sólo lectura; tablero 3 del v8): cada orden de compra que llegó — orden · llegó · de ·
+**Recepciones** (🎨 20-oct, Diseño 8, sólo lectura; tablero 3 del v8; 🔑 «Llegó» = cuando se CONFIRMÓ, ⛔ la `fecha_ingreso`
+que carga Ingresos a mano —puede ser futura: OC-3047 30/10 confirmada el 20/10—, que va en la ficha): cada orden de compra que llegó — orden · llegó · de ·
 va a · recibidas (la barrita «a de b») · estado — vistas Con diferencia · Este mes · Todas, buscador (orden, proveedor), columnas
 por usuario (`erp-recepciones`), «Exportar»; clic ⇒ ficha AL COSTADO con los renglones que NO cerraron primero («Ver los N»).
 ⛔ alta de producto (nace en Ingresos). 🔑 Lee por la MISMA puerta de Ingresos (`api/_recepciones.js` + `lib/recepciones/cliente.ts`,

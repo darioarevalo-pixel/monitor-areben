@@ -20,7 +20,8 @@ const OCS = [
   oc({}),
   // El neto da 0 y no cerró: 2 de menos en un talle, 2 de más en otro.
   oc({ id: 'zattia:2', oc_label: 'OC-0002', proveedor_nombre: 'NEOXCELA', unidades_faltantes: 2, unidades_sobrantes: 2, lineas_con_diferencia: 2 }),
-  oc({ id: 'zattia:3', oc_label: 'OC-0003', fecha_ingreso: '2026-09-02', unidades_pedidas: 4, unidades_contadas: 3, diferencia_unidades: -1, unidades_faltantes: 1, cumplimiento: 0.75, recibido_en: '2026-10-20T10:00:00Z' }),
+  // La fecha que carga Ingresos puede ser FUTURA (la OC-3047 real: 30/10, confirmada el 20/10): «Llegó» es la confirmación.
+  oc({ id: 'zattia:3', oc_label: 'OC-0003', fecha_ingreso: '2026-10-30', confirmada_at: '2026-09-02T15:00:00Z', unidades_pedidas: 4, unidades_contadas: 3, diferencia_unidades: -1, unidades_faltantes: 1, cumplimiento: 0.75, recibido_en: '2026-10-20T10:00:00Z' }),
 ]
 const leerRecepciones = vi.fn(async () => ({ recepciones: OCS, eventos: { rotos: [], ultimo: null }, puede: { proveedores: true } }))
 const leerRecepcion = vi.fn(async () => ({
@@ -58,7 +59,7 @@ describe('ERP › Stock › Recepciones', () => {
     const filas = OCS.map(armarFila)
     expect(filas.map((f) => f.estado)).toEqual(['recibida', 'diferencia', 'diferencia'])
     expect(filas[1]).toMatchObject({ estadoTexto: 'Con diferencia: faltaron 2 · sobraron 2', tono: 'aviso', vaA: 'Depósito' })
-    expect(filas[2]).toMatchObject({ dia: '2026-09-02', fecha: '2/9/2026', tono: 'malo' })
+    expect(filas[2]).toMatchObject({ dia: '2026-09-02', fecha: '2/9/2026', fechaIngresos: '30/10/2026', tono: 'malo' })
     expect(contarVistas(filas, '2026-10')).toEqual({ diferencia: 2, mes: 2, todas: 3 })
     expect(resumen(filas, '2026-10')).toEqual({ ordenes: 2, entraron: 48, conDiferencia: 1, faltaron: 2 })
     expect(armarFila(oc({ unidades_pedidas: 0, cumplimiento: null })).estado).toBe('sin_pedido')
