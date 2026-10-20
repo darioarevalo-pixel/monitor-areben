@@ -478,6 +478,18 @@ export type ListaDeMovimientos = { filas: FilaMovimiento[]; desde: string; hasta
 export const leerMovimientos = (marca: MarcaErp, desde: string, hasta: string) =>
   pedir<ListaDeMovimientos>(null, `&vista=movimientos&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer los movimientos.')
 
+// ── ERP › Ventas › Cobros (`api/_erp-cobros.js`, núcleo `lib/erp/cobros.core.js`; `cobrosDe` del motor, contrato §18) ──
+export type CobroDelMotor = {
+  id: string; origen: 'venta' | 'pago_a_cuenta' | 'devolucion'; fecha: string; en: string; clase: 'plata' | 'a_cuenta' | 'saldo'
+  monto: number; medio: string | null; cuenta: { id: string; nombre: string }; cuenta_real: { id: string; nombre: string } | null
+  venta: { id: string; numero: number; canal: string | null; origen: string } | null; cliente: { id: string; nombre: string } | null
+  usuario: string | null; comision: number | null; acredita_el: string | null; anulado: boolean; ref: string | null; linea: string
+}
+export type TotalesCobros = { plata: number; entro: number; salio: number; por_medio: Record<string, number> }
+export type CobrosDelPeriodo = { desde: string; hasta: string; prueba: boolean; cobros: CobroDelMotor[]; totales: Record<string, TotalesCobros>; otroLibro: number }
+export const leerCobros = (marca: MarcaErp, desde: string, hasta: string, prueba: boolean) =>
+  pedir<CobrosDelPeriodo>(null, `&vista=cobros&marca=${marca}&desde=${desde}&hasta=${hasta}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudieron leer los cobros.')
+
 // ── ERP › Stock › Transferencias (sólo lectura; `api/_erp-stock.js`, núcleo `lib/erp/transferencias.core.js`) ──
 export type RenglonTransferencia = { vid: string; nombre: string | null; talle: string | null; sku: string | null; pedida: number; armada: number; enviada: number }
 export type FilaTransferencia = {
