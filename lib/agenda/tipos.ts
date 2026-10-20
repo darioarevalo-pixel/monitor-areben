@@ -141,6 +141,8 @@ export type ItemAgenda = {
    */
   /** Las fotos que deja quien asigna: URLs del Blob, carpeta `agenda/`. Vacío es lo normal. */
   fotos?: string[]
+  /** ⭐ Al tildarla le avisa al celular de Darío y de quien la cargó (20-oct-2026). */
+  importante?: boolean
   arrastraDias?: number | null
   /**
    * Si este ítem no es una rutina sino **el molde de una**: `'ingreso'` o `'sesion-fotos'`.

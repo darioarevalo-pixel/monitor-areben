@@ -50,6 +50,7 @@ import { CLAVES_PLANTILLA, clavesDeEje, ejeValeEnMarca, esClavePlantilla, hechoY
 import { esDeArriba, veLoDeArriba } from '../lib/agenda/jerarquia.core.js';
 import { avisar, faltaParaMandar, guardarSuscripcion, suscripcionValida } from './_push.js';
 import { armarCorreoDiario, hoyAR } from '../lib/agenda/correo-diario.core.js';
+import { avisosAlTildar } from '../lib/agenda/aviso-terminado.core.js';
 import { pedirAvisoInterno } from '../lib/mailer/aviso.core.js';
 import { CAMPO as CAMPO_PREGUNTA, conRespuesta, preguntaDeItem } from '../lib/agenda/pregunta-ingreso.core.js';
 
@@ -489,6 +490,17 @@ export async function sembrarEnMaestra(opts) {
   }
 }
 
+/** Lee una consulta entera: Supabase corta en 1.000 filas sin avisar. */
+async function todasLasFilas(q) {
+  const out = [];
+  for (let i = 0; ; i += 1000) {
+    const { data, error } = await q().range(i, i + 999);
+    if (error) throw new Error(error.message);
+    out.push(...(data || []));
+    if (!data || data.length < 1000) return out;
+  }
+}
+
 export default async function handler(req, res) {
   /*
     🔴 **La puerta del ingreso, y va ANTES de exigir la sesión.** La llama el sistema de Ingresos
@@ -719,6 +731,7 @@ export default async function handler(req, res) {
         // reuniones y los clones del ingreso. Lo resuelve `ocurrenciaAbierta()`; acá viaja el número.
         arrastraDias: i.datos && Number.isFinite(i.datos.arrastraDias) ? i.datos.arrastraDias : null,
         fotos: fotosDe(i.datos && i.datos.fotos),
+        importante: !!(i.datos && i.datos.importante),
         // De qué evento es actividad este ítem. Una actividad no corre ningún día: lo filtra `vaEl`.
         // ⚠️ La clave sigue siendo `datos.plantilla`: lo que cambió el 29-ago-2026 es la palabra de
         // la pantalla, ⛔ no lo que hay escrito en las 44 filas cargadas.
@@ -839,7 +852,7 @@ export default async function handler(req, res) {
 
       const { data: item, error: errItem } = await supabase
         .from('agenda_items')
-        .select('id, regla, destino, activo, clase')
+        .select('id, titulo, regla, destino, activo, clase, marcas, datos, autor')
         .eq('id', id)
         .maybeSingle();
       if (errItem) throw new Error(errItem.message);
@@ -872,13 +885,28 @@ export default async function handler(req, res) {
       const nota = b.nota ? String(b.nota).trim().slice(0, 300) : null;
       // 🔑 `ignoreDuplicates`: el tilde lo pone **el primero que llega**. Sin esto, dos personas del
       // mismo puesto tildando a la vez se pisarían el nombre y "quién lo hizo" cambiaría de a ratos.
-      const { error } = await supabase
+      const { data: nuevo, error } = await supabase
         .from('agenda_hechos')
         .upsert([{ item_id: id, fecha, usuario: yo, nota }], {
           onConflict: 'item_id,fecha',
           ignoreDuplicates: true,
-        });
+        })
+        .select('item_id');
       if (error) throw new Error(error.message);
+
+      // 🔔 ¿Terminó todo lo de hoy, o una importante? Sólo si el tilde es NUEVO (el duplicado no
+      // vuelve a sonar) y ⛔ nunca falla el tilde: si algo de esto se cae, el tilde ya quedó.
+      if (nuevo && nuevo.length) {
+        try {
+          const hoy = hoyAR();
+          const necesitaTodo = fecha === hoy;
+          const items = necesitaTodo ? await todasLasFilas(() => supabase.from('agenda_items').select('id, clase, titulo, regla, destino, marcas, activo, datos').order('id')) : [];
+          const hechos = necesitaTodo ? await todasLasFilas(() => supabase.from('agenda_hechos').select('item_id, fecha, usuario, hecho_at').eq('fecha', hoy).order('item_id')) : [];
+          for (const a of avisosAlTildar({ yo, item, fecha, hoy, items, hechos })) {
+            await avisar(a.para, { titulo: a.titulo, cuerpo: a.cuerpo, url: a.url, tag: a.tag });
+          }
+        } catch { /* el aviso es de yapa */ }
+      }
       return res.status(200).json({ ok: true });
     }
 
@@ -1265,6 +1293,8 @@ export default async function handler(req, res) {
           // Las fotos que deja quien asigna (Darío, 19-oct-2026). Sólo URLs de NUESTRA carpeta
           // `agenda/` del Blob: lo que llega de otro lado no se guarda, se descarta.
           ...(fotosDe(it.fotos).length ? { fotos: fotosDe(it.fotos) } : {}),
+          // ⭐ «Importante» (Darío, 20-oct-2026): al tildarla le avisa a Darío y a quien la cargó.
+          ...(String(it.clase) === 'pendiente' && it.importante ? { importante: true } : {}),
         },
         autor: yo,
         updated_at: new Date().toISOString(),

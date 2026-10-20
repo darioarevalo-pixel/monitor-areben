@@ -33,6 +33,7 @@ export function ModalTarea({
   const [titulo, setTitulo] = useState('')
   const [desc, setDesc] = useState('')
   const [fotos, setFotos] = useState<string[]>([])
+  const [importante, setImportante] = useState(false)
   const [para, setPara] = useState<string[]>(paraInicial)
   const [cuando, setCuando] = useState<Cuando>('hoy')
   const [otra, setOtra] = useState(sumarDias(hoy, 2))
@@ -55,6 +56,7 @@ export function ModalTarea({
         regla: { tipo: 'unica', fecha },
         destino: { tipo: 'personas', personas: para },
         arrastra: true,
+        importante,
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar.')
@@ -118,6 +120,7 @@ export function ModalTarea({
             )}
           </div>
         </Field>
+        <Tilde puesto={importante} label="⭐ Importante: avisarme cuando la termine" onToggle={() => setImportante((x) => !x)} />
       </div>
     </Modal>
   )

@@ -552,6 +552,13 @@ export function ModalItem({
               onToggle={() => set('arrastra', !it.arrastra)}
             />
           )}
+          {it.clase === 'pendiente' && (
+            <Tilde
+              puesto={!!it.importante}
+              label="⭐ Importante: avisarme cuando la terminen"
+              onToggle={() => set('importante', !it.importante)}
+            />
+          )}
         </div>
 
         {/*
