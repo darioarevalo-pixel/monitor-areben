@@ -65,8 +65,16 @@ export async function incidencias(req, res, { yo, action, b, fotosDe }) {
     // 📱 En el celular compartido se reporta desde la solapa de la compañera, a su nombre.
     const autor = b.por && mias.includes(String(b.por)) ? String(b.por) : yo;
     const ahora = new Date();
+    // 🔑 El id lo pone el celular: si el envío se cortó y se reintenta, es la misma y ⛔ se duplica
+    // (ni el archivo ni el aviso). Un id raro o de otra persona no se acepta: se arma uno nuevo.
+    const pedido = ID.test(String(b.id || '')) ? String(b.id) : null;
+    if (pedido) {
+      const ya = await leerUna(pedido);
+      if (ya && ya.autor === autor) return res.status(200).json({ ok: true, incidencia: ya });
+      if (ya) return res.status(409).json({ error: 'Probá de nuevo.' });
+    }
     const inc = {
-      id: `${ahora.getTime()}-${crypto.randomBytes(4).toString('hex')}`,
+      id: pedido || `${ahora.getTime()}-${crypto.randomBytes(4).toString('hex')}`,
       autor, ...v, fotos: fotosDe(b.fotos), estado: 'abierta', creado: ahora.toISOString(), mensajes: [],
     };
     await guardar(inc);
@@ -82,7 +90,10 @@ export async function incidencias(req, res, { yo, action, b, fotosDe }) {
       let texto;
       try { texto = mensajeValido(b.texto); } catch (e) { return res.status(400).json({ error: e.message }); }
       const de = esDario ? yo : (b.por && mias.includes(String(b.por)) ? String(b.por) : yo);
-      inc.mensajes = [...(inc.mensajes || []), { de, texto, at: new Date().toISOString() }];
+      // Mismo criterio que al crear: la respuesta reintentada (mismo `mid`) ⛔ se agrega dos veces.
+      const mid = ID.test(String(b.mid || '')) ? String(b.mid) : null;
+      if (mid && (inc.mensajes || []).some((m) => m.id === mid)) return res.status(200).json({ ok: true, incidencia: inc });
+      inc.mensajes = [...(inc.mensajes || []), { ...(mid ? { id: mid } : {}), de, texto, at: new Date().toISOString() }];
       await guardar(inc);
       const para = esDario ? [inc.autor] : recibe;
       await avisar(para.filter((u) => u !== de), { titulo: `💬 ${nombreDe(de)} respondió`, cuerpo: texto, url: esDario ? '/agenda' : '/agenda/incidencias', tag: `${inc.id}-r` });

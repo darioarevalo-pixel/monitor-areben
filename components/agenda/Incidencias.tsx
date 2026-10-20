@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button, Card, EmptyState, Modal, Notice, StatusPill, color, font, space, weight } from '@/components/ui'
 import { EQUIPO_AGENDA, type PersonaEquipo } from '@/lib/agenda/equipo'
 import {
-  TIPOS_INCIDENCIA, crearIncidencia, estadoIncidencia, leerIncidencias, responderIncidencia, tipoIncidencia,
+  TIPOS_INCIDENCIA, crearIncidencia, estadoIncidencia, leerIncidencias, nuevoIdIncidencia, responderIncidencia, tipoIncidencia,
   type Incidencia, type TipoIncidencia,
 } from '@/lib/agenda/incidencias'
 import { Tilde } from './EditorRegla'
@@ -153,6 +153,8 @@ function ModalIncidencia({ por, onCerrar, onListo }: { por?: string; onCerrar: (
   const [urgente, setUrgente] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Uno por modal: si el primer envío se cortó y se toca «Enviar» otra vez, es la MISMA incidencia.
+  const [id] = useState(nuevoIdIncidencia)
   const listo = !!tipo && !!texto.trim()
 
   const mandar = async () => {
@@ -160,7 +162,7 @@ function ModalIncidencia({ por, onCerrar, onListo }: { por?: string; onCerrar: (
     setGuardando(true)
     setError(null)
     try {
-      onListo(await crearIncidencia({ tipo, texto: texto.trim(), urgente, fotos, por }))
+      onListo(await crearIncidencia({ id, tipo, texto: texto.trim(), urgente, fotos, por }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo mandar.')
       setGuardando(false)
