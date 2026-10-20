@@ -16,16 +16,12 @@ import { useEffect, useState } from 'react'
 import {
   Badge, Button, ConfirmDetalle, EmptyState, Field, Input, MoneyText, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, space, useConfirmar,
 } from '@/components/ui'
+import { cuandoCorto } from '@/components/ui/PiezasLista'
 import { useSesion } from '@/components/SesionProvider'
 import { marcaParaPOS, usarMarcaCaja } from '@/lib/caja/marca'
 import { descargarFactura, numeroComprobante, type FacturaEmitida } from '@/lib/arca/factura-pdf'
 import { buscarClientas, buscarVentas, facturarCambio, facturarVenta, leerFichaDeVenta, type CambioFacturado, type Clienta, type FichaDeVenta, type MarcaErp, type PedidoFactura, type VentaPropia } from '@/lib/erp/cliente'
 import { NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
-
-const cuando = (iso: string) => {
-  const d = new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString()
-  return `${d.slice(8, 10)}/${d.slice(5, 7)} ${d.slice(11, 16)}`
-}
 
 export function FacturaCaja() {
   const { marca: delShell } = useSesion()
@@ -229,7 +225,7 @@ export function FacturaCaja() {
                   {ventas.map((v) => (
                     <Tr key={v.id} onClick={() => void abrir(v.id)} style={{ cursor: 'pointer' }}>
                       <Td>#{v.numero}{v.tipo === 'cambio' && <> <Badge tone="neutral">Cambio</Badge></>}{v.prueba && <> <Badge tone="warning">Prueba</Badge></>}</Td>
-                      <Td>{cuando(v.ocurridaEn)}</Td>
+                      <Td>{cuandoCorto(v.ocurridaEn)}</Td>
                       <Td>{v.cliente ?? 'Consumidor final'}</Td>
                       <Td style={{ textAlign: 'right' }}><MoneyText value={v.total} /></Td>
                     </Tr>
@@ -242,7 +238,7 @@ export function FacturaCaja() {
       )}
 
       {ficha && (
-        <SectionCard title={`Venta #${ficha.venta.numero}`} subtitle={`${cuando(ficha.venta.ocurridaEn)} · ${ficha.cliente?.nombre ?? 'Consumidor final'}`}>
+        <SectionCard title={`Venta #${ficha.venta.numero}`} subtitle={`${cuandoCorto(ficha.venta.ocurridaEn)} · ${ficha.cliente?.nombre ?? 'Consumidor final'}`}>
           <div style={{ marginBottom: space[3] }}>
             <Button variant="outline" onClick={limpiar}>Volver a las ventas</Button>
           </div>

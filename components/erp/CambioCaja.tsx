@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Badge, Button, EmptyState, Field, Input, MoneyText, Notice, NumberField, PasoCantidad, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, space,
 } from '@/components/ui'
+import { cuandoCorto } from '@/components/ui/PiezasLista'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
@@ -34,10 +35,6 @@ type Espera = { desde: string; monto: number; cruce: CruceCambio; recientes: Pag
 const MEDIOS: Medio[] = ['efectivo', 'transferencia', 'debito', 'credito']
 const CADA_MS = 5000
 
-const cuando = (iso: string) => {
-  const d = new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString()
-  return `${d.slice(8, 10)}/${d.slice(5, 7)} ${d.slice(11, 16)}`
-}
 const nuevoId = () => crypto.randomUUID()
 
 export function CambioCaja() {
@@ -280,7 +277,7 @@ export function CambioCaja() {
                   {ventas.map((v) => (
                     <Tr key={v.id} onClick={() => void abrir(v.id)} style={{ cursor: 'pointer' }}>
                       <Td>#{v.numero}{v.prueba && <> <Badge tone="warning">Prueba</Badge></>}</Td>
-                      <Td>{cuando(v.ocurridaEn)}</Td>
+                      <Td>{cuandoCorto(v.ocurridaEn)}</Td>
                       <Td>{v.cliente ?? 'Consumidor final'}</Td>
                       <Td style={{ textAlign: 'right' }}><MoneyText value={v.total} /></Td>
                     </Tr>
@@ -410,7 +407,7 @@ export function CambioCaja() {
                       <TBody>
                         {espera.recientes.map((p) => (
                           <Tr key={p.id}>
-                            <Td>{cuando(p.cuando)}{p.coincide && <> <Badge tone="success">Coincide</Badge></>}</Td>
+                            <Td>{cuandoCorto(p.cuando)}{p.coincide && <> <Badge tone="success">Coincide</Badge></>}</Td>
                             <Td style={{ textAlign: 'right' }}><MoneyText value={p.monto} /></Td>
                             <Td>{p.coincide && <Button variant="outline" disabled={trabajando} onClick={() => void confirmar({ pago: p.id })}>Elegir este pago</Button>}</Td>
                           </Tr>
