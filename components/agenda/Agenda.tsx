@@ -64,12 +64,12 @@ type Sub = 'hoy' | 'semana' | 'mes' | 'eventos' | 'rutinas' | 'cumplimiento'
  * sidebar. Es el mismo motivo —y la misma forma— que en `components/tncat/Tncat.tsx`.
  */
 const SUBS: { key: Sub; label: string; hint: string; cargar: boolean }[] = [
-  { key: 'hoy', label: 'Hoy', hint: 'La promoción que corre hoy y lo que hay que hacer hoy', cargar: false },
-  { key: 'semana', label: 'Semana', hint: 'Los siete días, con todo nombrado', cargar: false },
-  { key: 'mes', label: 'Mes', hint: 'Cuándo cae cada cosa. Es contexto: el tilde se pone en Hoy', cargar: false },
-  { key: 'eventos', label: 'Eventos', hint: 'Los hechos que dejan trabajo, y las actividades de cada uno', cargar: true },
-  { key: 'rutinas', label: 'Rutinas', hint: 'Lo que corre solo: promociones bancarias, rutinas y avisos', cargar: true },
-  { key: 'cumplimiento', label: 'Cumplimiento', hint: 'Qué se tildó y qué no en los últimos días', cargar: true },
+  { key: 'hoy', label: 'Hoy', hint: 'Tareas y promoción del día', cargar: false },
+  { key: 'semana', label: 'Semana', hint: 'Los próximos siete días', cargar: false },
+  { key: 'mes', label: 'Mes', hint: 'El mes completo', cargar: false },
+  { key: 'eventos', label: 'Eventos', hint: 'Tareas que se generan con un ingreso o una sesión', cargar: true },
+  { key: 'rutinas', label: 'Rutinas', hint: 'Tareas fijas, avisos y promociones', cargar: true },
+  { key: 'cumplimiento', label: 'Cumplimiento', hint: 'Tareas hechas y pendientes de los últimos días', cargar: true },
 ]
 
 export function Agenda() {
@@ -158,7 +158,7 @@ function Hoy({
   return (
     <div style={{ display: 'grid', gap: space[5] }}>
       <section style={{ display: 'grid', gap: space[3] }}>
-        <Titulo>🏦 Promociones bancarias de hoy</Titulo>
+        <Titulo>🏦 Promoción bancaria</Titulo>
         {promos.length === 0 ? (
           // El vacío es información, no una falla: "hoy no hay promo" es exactamente lo que hay que
           // poder contestarle al cliente, y hay que leerlo sin dudar de si la pantalla cargó. Por eso
@@ -167,7 +167,7 @@ function Hoy({
           // vista. El día que hay promo, la tarjeta vuelve a ocupar lo que tiene que ocupar.
           <div style={{ display: 'flex', alignItems: 'center', gap: space[2], fontSize: font.sm, color: color.mut }}>
             <span aria-hidden="true">🏦</span>
-            Hoy no corre ninguna promoción bancaria.
+            Sin promoción hoy.
           </div>
         ) : (
           promos.map((p) => <TarjetaPromo key={p.id} promo={p} />)
@@ -176,20 +176,20 @@ function Hoy({
 
       {hayAvisos && (
         <section style={{ display: 'grid', gap: space[3] }}>
-          <Titulo>📣 Para tener en cuenta hoy</Titulo>
+          <Titulo>📣 Avisos</Titulo>
           <AvisosHoy fecha={hoy} />
         </section>
       )}
 
       <section style={{ display: 'grid', gap: space[3] }}>
         <Titulo>
-          ☑ Lo que hay que hacer hoy
-          {sinTildar > 0 && <span style={{ color: color.mut, fontWeight: weight.medium }}> · faltan {sinTildar}</span>}
+          ☑ Tareas
+          {sinTildar > 0 && <span style={{ color: color.mut, fontWeight: weight.medium }}> · {sinTildar} {sinTildar === 1 ? 'pendiente' : 'pendientes'}</span>}
         </Titulo>
         {hayPendientes ? (
           <PendientesHoy fecha={hoy} />
         ) : (
-          <EmptyState icon="✅" title="Hoy no te toca ningún pendiente cargado." dashed />
+          <EmptyState icon="✅" title="Sin tareas para hoy." dashed />
         )}
       </section>
     </div>

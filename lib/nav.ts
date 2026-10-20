@@ -455,7 +455,7 @@ export function tituloDesde(key: string, grupoId?: string | null): string {
  */
 export const DESCRIPCIONES: Record<string, string> = {
   inicio: 'Novedades del día: solicitudes de fotos pendientes de armar.',
-  agenda: 'Qué corre hoy y qué hay que hacer: las promociones bancarias, las rutinas del día y el trabajo que deja cada evento.',
+  agenda: 'Tareas del equipo, avisos y promociones bancarias.',
   novedades: 'Qué cambió en los sistemas, de lo más nuevo a lo más viejo.',
   manuales: 'Cómo se hace cada cosa: los procedimientos de trabajo, escritos.',
   // 🔴 **Faltaba, y el CI lo dijo desde las 15:02 del 30-ago-2026**: `seccion-header` exige que

@@ -132,7 +132,7 @@ export function Rutinas() {
         distintas y acá las dos se defienden.
       */}
       <HeaderAcciones>
-        <Button onClick={() => setEditandoItem(itemVacio('pendiente'))}>+ Rutina</Button>
+        <Button onClick={() => setEditandoItem(itemVacio('pendiente'))}>+ Tarea</Button>
         <Button variant="outline" onClick={() => setEditandoItem(itemVacio('aviso'))}>+ Aviso</Button>
         <Button variant="outline" onClick={() => setEditandoPromo(promoVacia())}>+ Promoción</Button>
       </HeaderAcciones>

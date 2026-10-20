@@ -287,8 +287,8 @@ export function ModalItem({
         esActividad
           ? inicial.creado ? 'Editar la actividad' : `Nueva actividad de ${plant.elHecho}`
           : inicial.creado
-            ? esAviso ? 'Editar el aviso' : 'Editar la rutina'
-            : esAviso ? 'Nuevo aviso fechado' : 'Nueva rutina'
+            ? esAviso ? 'Editar aviso' : 'Editar tarea'
+            : esAviso ? 'Nuevo aviso' : 'Nueva tarea'
       }
       ancho="ancho"
       cerrarConFondo={false}
@@ -306,12 +306,7 @@ export function ModalItem({
           <Notice tone="neutral">
             {plant.ayuda}
           </Notice>
-        ) : (
-          <Notice tone="neutral">
-            Entra <b>lo que se olvida</b>. Lo que se hace siempre igual —abrir la caja, prender las
-            luces— no se carga acá: una lista larga todos los días es una lista que se deja de mirar.
-          </Notice>
-        )}
+        ) : null}
 
         {/*
           La clase va PRIMERO porque cambia lo que significan los campos de abajo, y va como los dos
@@ -323,12 +318,7 @@ export function ModalItem({
         */}
         {!esActividad && (
           <Field
-            label="Qué es"
-            hint={
-              esAviso
-                ? 'Un aviso se lee y listo: no tiene cuadradito, no cuenta para el número del menú y no entra en Cumplimiento.'
-                : 'Una rutina pide que alguien la tilde ese día, y por eso enciende el número del menú hasta que se tilda.'
-            }
+            label="Tipo"
           >
             <Select
               value={it.clase}
@@ -348,16 +338,15 @@ export function ModalItem({
         <Field
           label={esAviso ? 'Aviso' : 'Tarea'}
           required
-          hint={esAviso ? 'Corto y en presente: «Viene el flete a las 10».' : 'Corto y en infinitivo: «Reponer la vidriera».'}
         >
           <Input
             value={it.titulo}
             onChange={(e) => set('titulo', e.target.value)}
-            placeholder={esAviso ? 'Viene el flete a las 10' : 'Reponer la vidriera'}
+            placeholder={esAviso ? 'Ej.: Viene el flete a las 10' : 'Ej.: Reponer la vidriera'}
           />
         </Field>
 
-        <Field label="Descripción" hint="Opcional. El paso a paso largo va en un manual, no acá.">
+        <Field label="Descripción (opcional)">
           <textarea
             value={it.cuerpo ?? ''}
             onChange={(e) => set('cuerpo', e.target.value)}
@@ -371,7 +360,7 @@ export function ModalItem({
         </Field>
 
         {!esAviso && !esActividad && (
-          <Field label="Fotos" hint="Opcional. Se ven en la tarea; al tocarlas se agrandan.">
+          <Field label="Fotos (opcional)">
             <EditorFotos fotos={it.fotos ?? []} onChange={(f) => set('fotos', f)} />
           </Field>
         )}
@@ -409,15 +398,15 @@ export function ModalItem({
                 ...(x.clase === 'pendiente' && r.tipo !== x.regla.tipo ? { arrastra: r.tipo === 'unica' } : {}),
               }))
             }}
-            titulo={esAviso ? 'Qué días se avisa' : 'Qué días toca'}
+            titulo="Fecha"
           />
         )}
 
         <div>
           <div style={{ fontSize: font.xs, color: color.mut, fontWeight: weight.medium, marginBottom: 4 }}>
-            A quién le toca
+            Asignar a
           </div>
-          <Field hint="Si no lo acotás, le aparece a todo el equipo. Quien carga los ve todos igual, pero sólo tilda los suyos.">
+          <Field>
             <Select
               value={d.tipo}
               onChange={(e) => {
@@ -433,11 +422,11 @@ export function ModalItem({
                   : t === 'horas-extras' ? { tipo: 'horas-extras' } : { tipo: 'todos' })
               }}
             >
-              <option value="todos">A todo el equipo</option>
-              <option value="seccion">A quien usa una pantalla</option>
-              <option value="roles">A ciertos roles</option>
-              <option value="personas">A una persona en particular</option>
-              <option value="horas-extras">A quien hace horas extras</option>
+              <option value="todos">Todo el equipo</option>
+              <option value="seccion">Según pantalla</option>
+              <option value="roles">Según rol</option>
+              <option value="personas">Personas</option>
+              <option value="horas-extras">Quien hace horas extras</option>
             </Select>
           </Field>
 
@@ -452,8 +441,7 @@ export function ModalItem({
 
           {d.tipo === 'seccion' && (
             <Field
-              label="¿De qué pantalla es?"
-              hint="Le llega a quien tenga permiso de verla. Si mañana alguien lo gana o lo pierde, la lista se ajusta sola."
+              label="Pantalla"
             >
               <Select value={d.key} onChange={(e) => set('destino', { tipo: 'seccion', key: e.target.value })}>
                 {secciones.map((s) => <option key={s.k} value={s.k}>{s.label}</option>)}
@@ -462,7 +450,7 @@ export function ModalItem({
           )}
 
           {d.tipo === 'roles' && (
-            <Field label="¿Qué roles?" hint="Ojo: a quien no tenga ningún rol asignado no le va a llegar.">
+            <Field label="Roles" hint="A quien no tenga rol no le llega.">
               <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
                 {/* Dirección sólo la ofrece quien está arriba del techo. No se dibuja deshabilitada:
                     una opción que se ve y no se puede usar invita a preguntar por qué, y la
@@ -482,8 +470,7 @@ export function ModalItem({
 
           {d.tipo === 'personas' && (
             <Field
-              label="¿A quién?"
-              hint="Le llega sólo a quien tildes acá, y a nadie más: tampoco a vos, aunque seas administrador. Los puestos compartidos (Local, Depósito) también se pueden elegir — ahí el dueño es el puesto y no una persona."
+              label="Personas"
             >
               {errorGente ? (
                 <Notice tone="warning">
@@ -498,7 +485,7 @@ export function ModalItem({
                     <Tilde
                       key={g.name}
                       puesto={d.personas.includes(g.name)}
-                      label={g.apodo === g.name ? g.name : `${g.apodo} (${g.name})`}
+                      label={g.apodo || g.name}
                       onToggle={() => togglePersona(g.name)}
                     />
                   ))}
@@ -511,7 +498,7 @@ export function ModalItem({
         <div style={{ display: 'flex', gap: space[6], flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div>
             <div style={{ fontSize: font.xs, color: color.mut, fontWeight: weight.medium, marginBottom: 4 }}>
-              Marcas <span style={{ fontWeight: weight.normal }}>(ninguna tildada = las dos)</span>
+              Marca <span style={{ fontWeight: weight.normal }}>(vacío = las dos)</span>
             </div>
             <div style={{ display: 'flex', gap: space[2] }}>
               {MARCAS.map((m) => (
@@ -531,12 +518,12 @@ export function ModalItem({
             tampoco se ofrece en un aviso: "cómo se hace" no aplica a algo que no hay que hacer.
           */}
           {!esAviso && publicados.length > 0 && (
-            <Field label="Cómo se hace" hint="El manual que se abre desde el renglón. Opcional." width={280}>
+            <Field label="Manual (opcional)" width={280}>
               <Select
                 value={it.manualId ?? ''}
                 onChange={(e) => set('manualId', e.target.value || null)}
               >
-                <option value="">— sin manual —</option>
+                <option value="">Sin manual</option>
                 {publicados.map((m) => <option key={m.id} value={m.id}>{m.titulo}</option>)}
               </Select>
             </Field>
@@ -546,7 +533,7 @@ export function ModalItem({
         <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap', alignItems: 'center' }}>
           <Tilde
             puesto={it.activo}
-            label={it.activo ? 'Prendido' : 'Apagado'}
+            label={it.activo ? 'Activa' : 'Pausada'}
             onToggle={() => set('activo', !it.activo)}
           />
           {/*
@@ -561,7 +548,7 @@ export function ModalItem({
           {it.clase === 'pendiente' && !esActividad && (
             <Tilde
               puesto={it.arrastra}
-              label={it.arrastra ? 'Queda hasta que se tilde' : 'Se vence con el día'}
+              label={it.arrastra ? 'Si no se hace, queda atrasada' : 'Si no se hace, vence en el día'}
               onToggle={() => set('arrastra', !it.arrastra)}
             />
           )}
@@ -583,17 +570,15 @@ export function ModalItem({
         {it.clase === 'pendiente' && (it.arrastra || esActividad) && (
           <div style={{ marginTop: space[3], display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <Field
-              label="Hasta cuántos días después"
-              hint={esActividad
-                ? 'Vacío = el renglón copiado queda hasta que lo tilden, que es el caso normal: lo que tarda un ingreso no se puede decir de antemano. Un número lo baja solo pasados esos días.'
-                : 'Vacío = queda hasta que lo tilden, sin fecha de vencimiento. Un número lo baja solo pasados esos días desde el día en que caía.'}
+              label="Días de atraso máximo"
+              hint="Vacío = sin límite."
               width={220}
             >
               <Input
                 type="number"
                 min={0}
                 max={DIAS_ARRASTRE}
-                placeholder="sin tope"
+                placeholder="Sin límite"
                 value={it.arrastraDias == null ? '' : String(it.arrastraDias)}
                 onChange={(e) => set('arrastraDias', e.target.value === '' ? null : Number(e.target.value))}
               />

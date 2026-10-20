@@ -113,6 +113,12 @@ probado primero con Lorena.
   - 🔴 `guardar-item` reescribe `datos` entero: un campo nuevo de `datos` tiene que entrar también ahí.
 - **«Detalle» se llama «Descripción»** y «Qué hay que hacer» se llama **«Tarea»** (Darío pidió palabras
   formales y cortas). La descripción respeta los saltos de línea en Hoy.
+- **Textos cortos (Darío, 19-oct: *«lo mal que están los términos, mucho texto»*)**: el formulario es
+  «Nueva tarea» (Tipo: Tarea / Aviso · Tarea · Descripción · Fotos · Fecha · Asignar a · Marca ·
+  Manual · Activa/Pausada · «Si no se hace, queda atrasada / vence en el día»), sin las ayudas largas
+  ni el cartel de arriba; las personas salen por su apodo. Hoy dice «Promoción bancaria», «Avisos» y
+  «Tareas · N pendientes». ⛔ No volver a llenarlo de explicaciones: lo que hace falta explicar va en
+  esta ficha, no en la pantalla.
 - **«Atrasada»**: la tarea de un solo día (`unica`) nace **arrastrando** —al elegir la regla, el
   interruptor se prende solo; sigue mandando el interruptor—; la rutina se vence con el día. El rótulo
   «viene del …» pasó a **«atrasada · del …»**.

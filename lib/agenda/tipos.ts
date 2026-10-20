@@ -355,8 +355,8 @@ export const DIAS_CUMPLIMIENTO = 30
 export const DIAS_ARRASTRE = 120
 
 export const CLASES: { key: ClaseItem; label: string }[] = [
-  { key: 'pendiente', label: 'Pide que lo tilden' },
-  { key: 'aviso', label: 'Sólo avisa' },
+  { key: 'pendiente', label: 'Tarea' },
+  { key: 'aviso', label: 'Aviso' },
 ]
 
 export const CLAVES_CLASE = CLASES.map((c) => c.key)
