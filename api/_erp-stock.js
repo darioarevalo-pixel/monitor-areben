@@ -5,6 +5,7 @@
  *
  *   GET ?recurso=erp&vista=stock-lista&marca=bdi|zattia     una fila por variante (Zattia trae también Stunned)
  *   GET ?recurso=erp&vista=movimientos&…                  cada fila del libro de un período (abajo, `listaDeMovimientos`)
+ *   GET ?recurso=erp&vista=transferencias&marca=…           cada transferencia con su paso (abajo, `listaDeTransferencias`)
  *
  * 🔑 El libro se SUMA en la base, por pg con la conexión del motor (`conMotor`): supabase-js ⛔ agrupa y el libro tiene
  * una fila por movimiento. Sin la conexión contesta 409 y la pantalla lo dice (⛔ una lista vacía que parece «sin stock»).
@@ -15,6 +16,7 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { armarFilasStock, reservadoPorVariante } from '../lib/erp/stock-lista.core.js'
 import { armarMovimiento } from '../lib/erp/movimientos.core.js'
+import { deArmado, deLibro } from '../lib/erp/transferencias.core.js'
 import { rangoDeDias } from '../lib/erp/venta.core.js'
 
 const MARCAS = ['bdi', 'zattia']
@@ -106,4 +108,52 @@ export async function listaDeMovimientos({ marca, desde, hasta }, deps) {
   }
   const cortado = libro.filas.length > TOPE_MOVS
   return { filas: libro.filas.slice(0, TOPE_MOVS).map((m) => armarMovimiento(m, nombres)), desde, hasta, cortado, libroHasta: libro.hasta }
+}
+
+/**
+ * ERP › Stock › Transferencias (`lib/erp/transferencias.core.js`): los armados de Reposición del monitor (`repo_armado`,
+ * con su estado; por supabase-js con la clave de la marca, como `api/_repo-armado.js`) + las hechas a mano en GN que trajo
+ * el libro (`origen = 'gn_foto'`). De cada armado, cuánto anotó el libro del ERP (la pata que entra), para ver si lo tiene.
+ *
+ *   GET ?recurso=erp&vista=transferencias&marca=bdi|zattia
+ */
+export const TOPE_TRANSFERENCIAS = 500
+
+async function transferenciasDelLibro(pg) {
+  const enLibro = (await pg.query(`select detalle->>'armado' as armado, sum(cantidad)::int as u from stock_movimiento
+     where tipo = 'transferencia' and origen = 'repo' and cantidad > 0 group by 1`)).rows
+  const aMano = (await pg.query(`select id, grupo, product_id, size_id, sku, deposito, cantidad, ocurrido_en, detalle from stock_movimiento
+     where tipo = 'transferencia' and origen = 'gn_foto' order by ocurrido_en desc, id desc limit 5000`)).rows
+  const [{ desde } = {}] = (await pg.query('select min(ocurrido_en) as desde from stock_movimiento')).rows
+  return { enLibro, aMano, desde: desde ? new Date(desde).toISOString() : null }
+}
+
+function leerArmados(marca) {
+  const { url, key } = cfgDeMarca(marca)
+  return createClient(url, key).from('repo_armado')
+    .select('id, store, linea, sentido, fecha, persona, estado, pedido, escaneos, faltantes, transfer, error, creado_en, cerrado_en')
+    .eq('store', marca).order('creado_en', { ascending: false }).limit(TOPE_TRANSFERENCIAS)
+    .then(({ data, error }) => { if (error) throw new Error(error.message); return data || [] })
+}
+
+/**
+ * @param {{ marca: string }} p
+ * @param {{ conMotor: Function, leerArmados?: Function }} deps
+ */
+export async function listaDeTransferencias({ marca }, deps) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const [libro, armados] = await Promise.all([
+    deps.conMotor(marca, 'Las transferencias del ERP', (pg) => transferenciasDelLibro(pg)),
+    (deps.leerArmados ?? leerArmados)(marca),
+  ])
+  if (libro.status) return libro
+  const enLibro = new Map(libro.enLibro.map((r) => [r.armado, r.u]))
+  const grupos = new Map()
+  for (const m of libro.aMano) grupos.set(m.grupo, [...(grupos.get(m.grupo) || []), m])
+  const filas = [
+    ...armados.map((a) => deArmado(a, marca, enLibro.get(a.id) ?? 0)),
+    ...[...grupos].map(([g, movs]) => deLibro(g, movs)),
+  ]
+  // `libroDesde`: lo transferido antes de que arrancara el libro ⛔ está en el ERP, y está bien (medido 20-oct: T-7745 del 12).
+  return { filas, cortado: armados.length >= TOPE_TRANSFERENCIAS, libroDesde: libro.desde }
 }

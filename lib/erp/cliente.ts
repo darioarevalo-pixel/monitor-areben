@@ -461,6 +461,19 @@ export type ListaDeMovimientos = { filas: FilaMovimiento[]; desde: string; hasta
 export const leerMovimientos = (marca: MarcaErp, desde: string, hasta: string) =>
   pedir<ListaDeMovimientos>(null, `&vista=movimientos&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer los movimientos.')
 
+// ── ERP › Stock › Transferencias (sólo lectura; `api/_erp-stock.js`, núcleo `lib/erp/transferencias.core.js`) ──
+export type RenglonTransferencia = { vid: string; nombre: string | null; talle: string | null; sku: string | null; pedida: number; armada: number; enviada: number }
+export type FilaTransferencia = {
+  id: string; numero: string | null; creada: string; cerrada: string | null; desde: string | null; hacia: string | null
+  desdeTexto: string; haciaTexto: string; origen: 'reposicion' | 'devolucion' | 'gn'; origenTexto: string; persona: string | null
+  estado: string; estadoTexto: string; tono: string; paso: number; fin: 'curso' | 'rayado' | 'rojo' | 'gris'
+  pedidas: number; armadas: number; enviadas: number; faltan: number; enLibro: number | null
+  renglones: RenglonTransferencia[]; tandas: Array<{ hora: string; numero: string | null; unidades: number }>; error: string | null; busca: string
+}
+export type ListaDeTransferencias = { filas: FilaTransferencia[]; cortado: boolean; libroDesde: string | null }
+export const leerTransferencias = (marca: MarcaErp) =>
+  pedir<ListaDeTransferencias>(null, `&vista=transferencias&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer las transferencias.')
+
 // ── ERP › Clientes y proveedores › Clientes (lista de TRABAJO; `api/_erp-clientes.js`, núcleo `lib/erp/clientes-lista.core.js`) ──
 export type FilaCliente = {
   id: string; nombre: string; doc: string | null; compras: number; total: number; primera: string | null; ultima: string | null

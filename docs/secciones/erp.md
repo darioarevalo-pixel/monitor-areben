@@ -42,6 +42,17 @@ celda dice el SISTEMA en gris (⛔ una persona inventada). Más de `TOPE_MOVS` (
 Servidor `api/_erp-stock.js` (`vista=movimientos`, por pg con `conMotor`), núcleo `lib/erp/movimientos.core.js`
 (`tests/erp-movimientos*.test.ts*`).
 
+**Transferencias** (🎨 20-oct, Diseño 8, sólo lectura; tablero 3 del v8): cada transferencia con la **barrita de 4 pasos**
+(Borrador · Armada · En tránsito · Recibida) — Nº de GN · creada · de → a · origen · quién · estado · prendas (pedidas → enviadas)
+· «En el ERP» (lo que anotó el libro) — vistas Abiertas · Con faltantes · Transferidas · Canceladas · Todas (se entra a Abiertas
+si hay), período, origen, buscador, columnas por usuario (`erp-transferencias`), «Exportar»; clic ⇒ ficha AL COSTADO con lo
+pedido/armado/enviado de cada prenda. Se arman y se mandan en **Reposición** (↗). 🔑 El motor ⛔ guarda la transferencia como
+documento (sólo los movimientos hechos, `grupo`) ⇒ sale de `repo_armado` de cada base (supabase-js con la clave de la marca, como
+`api/_repo-armado.js`) + las hechas a mano en GN del libro (`origen = 'gn_foto'`). 🔴 «Recibida» ⛔ existe (GN mueve de un golpe,
+nadie escanea al llegar): el 4º paso va RAYADO y la pantalla lo dice. «Faltó» = lo pedido que ⛔ salió, sólo si ya salió. Lo
+transferido antes de que arrancara el libro (13-oct) dice «antes del libro». Servidor `api/_erp-stock.js` (`vista=transferencias`),
+núcleo `lib/erp/transferencias.core.js` (`tests/erp-transferencias*.test.ts*`), barritas en `components/erp/stock/Barritas.tsx`.
+
 **Diferencias con GN** (14-oct, sólo lectura; 🎨 19-oct, Diseño 7: molde de REGISTRO — números arriba (sin explicar · sobreventa · explicadas solas), UNA lista con una vista por clase + «Sobreventa», buscador, y la fila abre `FichaPrenda` AL COSTADO; ⛔ cambió qué se calcula; `tests/erp-diferencias-pantalla.test.tsx`): lo que el libro ⛔ pudo explicar al comparar su día con
 el de GN (`stock_diff`), agrupado por clase con qué mirar, y la **sobreventa**: las prendas que el libro
 deja en NEGATIVO hoy. Cada fila abre la ficha de Stock. Núcleo en `lib/erp/diferencias.core.js`
