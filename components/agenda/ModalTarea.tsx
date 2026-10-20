@@ -70,8 +70,8 @@ export function ModalTarea({
       cerrarConFondo={false}
       pie={
         <>
-          <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
-          <Button onClick={guardar} disabled={!listo || guardando}>{guardando ? 'Guardando…' : 'Asignar'}</Button>
+          <Button variant="soft" tone="neutral" onClick={onCerrar}>Cancelar</Button>
+          <Button variant="solid" tone="brand" onClick={guardar} disabled={!listo || guardando}>{guardando ? 'Guardando…' : 'Asignar'}</Button>
         </>
       }
     >
