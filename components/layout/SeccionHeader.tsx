@@ -58,6 +58,11 @@ export function SeccionHeader({ seccion, grupo }: { seccion: string; grupo?: str
     [registrar],
   )
 
+  // «Hoy» de la Agenda saluda con su propio encabezado («Hola, Lorena» y el avance, Darío 20-oct):
+  // el de la sección encima decía «Agenda» y abajo «Hoy», y en el celular eran media pantalla de
+  // títulos. Se puede porque Hoy ⛔ usa la barra de acciones (sí la usan Equipo y Tareas fijas).
+  if (seccion === 'agenda' && !(Array.isArray(partes) && partes[1])) return null
+
   return (
     <header className="seccion-header">
       <div className="seccion-header-txt">
