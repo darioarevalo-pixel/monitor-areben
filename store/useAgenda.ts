@@ -24,7 +24,7 @@ type AgendaState = {
   items: ItemAgenda[]
   /** Sólo los últimos 30 días: es la ventana que mira Cumplimiento. */
   hechos: Hecho[]
-  puede: { cargar: boolean }
+  puede: { cargar: boolean; incidencias?: boolean }
   cargado: boolean
   cargando: boolean
   cargar: () => Promise<void>

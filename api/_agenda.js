@@ -50,7 +50,8 @@ import { CLAVES_PLANTILLA, clavesDeEje, ejeValeEnMarca, esClavePlantilla, hechoY
 import { esDeArriba, veLoDeArriba } from '../lib/agenda/jerarquia.core.js';
 import { avisar, faltaParaMandar, guardarSuscripcion, suscripcionValida } from './_push.js';
 import { armarCorreoDiario, hoyAR } from '../lib/agenda/correo-diario.core.js';
-import { avisosAlTildar } from '../lib/agenda/aviso-terminado.core.js';
+import { avisosAlTildar, quienesSeEnteran } from '../lib/agenda/aviso-terminado.core.js';
+import { incidencias } from './_incidencias.js';
 import { companerasDe, perfilDe } from '../lib/agenda/celular-compartido.core.js';
 import { EQUIPO } from '../lib/agenda/correo-diario.core.js';
 import { pedirAvisoInterno } from '../lib/mailer/aviso.core.js';
@@ -817,7 +818,7 @@ export default async function handler(req, res) {
           autor: p.autor,
           creado: p.created_at,
         })),
-        puede: { cargar },
+        puede: { cargar, incidencias: quienesSeEnteran().includes(yo) },
       });
     }
 
@@ -844,6 +845,12 @@ export default async function handler(req, res) {
       if (r.falta) return res.status(503).json({ error: r.falta });
       if (!r.telefonos) return res.status(400).json({ error: 'Este usuario no tiene ningún teléfono con avisos activados.' });
       return res.status(200).json({ ok: true, enviados: r.enviados, fallas: r.fallas });
+    }
+
+    // ⚠️ Incidencias del trabajo: las reporta cualquiera con sesión y las contesta Darío. Ver `_incidencias.js`.
+    if (action.startsWith('incidencia')) {
+      const r = await incidencias(req, res, { yo, action, b, fotosDe });
+      if (r !== null) return r;
     }
 
     // ─── La escritura abierta: el tilde ───────────────────────────────────────────────────────

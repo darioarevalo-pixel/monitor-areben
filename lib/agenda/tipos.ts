@@ -321,7 +321,7 @@ export type DatosAgenda = {
    * Los dos vienen mezclados en una lista: quien la lee no tiene que saber de dónde salió cada uno.
    */
   hechos: Hecho[]
-  puede: { cargar: boolean }
+  puede: { cargar: boolean; incidencias?: boolean }
 }
 
 /**

@@ -54,6 +54,7 @@ import { Cumplimiento } from './Cumplimiento'
 import { Equipo } from './Equipo'
 import { Eventos } from './Eventos'
 import { GrillaAgenda } from './GrillaAgenda'
+import { MisIncidencias, PanelIncidencias } from './Incidencias'
 import { PendientesHoy } from './PendientesHoy'
 import { Rutinas } from './Rutinas'
 import { SaludoHoy } from './SaludoHoy'
@@ -61,7 +62,7 @@ import { TarjetaPromo } from './TarjetaPromo'
 import { Titulo } from './Titulo'
 import { TusPantallas } from './TusPantallas'
 
-type Sub = 'hoy' | 'equipo' | 'semana' | 'mes' | 'eventos' | 'rutinas' | 'cumplimiento'
+type Sub = 'hoy' | 'equipo' | 'semana' | 'mes' | 'eventos' | 'rutinas' | 'cumplimiento' | 'incidencias'
 
 /**
  * Las seis, y quién puede ver cada una.
@@ -70,7 +71,7 @@ type Sub = 'hoy' | 'equipo' | 'semana' | 'mes' | 'eventos' | 'rutinas' | 'cumpli
  * 20-oct-2026: antes iban los dos, «Agenda» y abajo «Equipo»). «Hoy» no lleva ninguno de los dos:
  * saluda con `SaludoHoy`.
  */
-const SUBS: { key: Sub; cargar: boolean }[] = [
+const SUBS: { key: Sub; cargar: boolean; incidencias?: boolean }[] = [
   { key: 'hoy', cargar: false },
   { key: 'equipo', cargar: true },
   { key: 'semana', cargar: false },
@@ -78,6 +79,8 @@ const SUBS: { key: Sub; cargar: boolean }[] = [
   { key: 'eventos', cargar: true },
   { key: 'rutinas', cargar: true },
   { key: 'cumplimiento', cargar: true },
+  // ⚠️ Sólo Darío (`puede.incidencias`): el resto ve las suyas en «Hoy».
+  { key: 'incidencias', cargar: false, incidencias: true },
 ]
 
 export function Agenda() {
@@ -85,7 +88,7 @@ export function Agenda() {
   const { promos, items, hechos, puede, cargado } = useAgenda()
   const params = useParams()
 
-  const visibles = SUBS.filter((s) => !s.cargar || puede.cargar)
+  const visibles = SUBS.filter((s) => (!s.cargar || puede.cargar) && (!s.incidencias || puede.incidencias))
   // La subárea sale del 2º tramo de la URL (`/agenda/eventos`). Si no viene —o si es una que esta
   // persona no puede ver, o una inventada— cae en la primera, que es Hoy y la ve todo el mundo.
   const partes = params.seccion
@@ -156,6 +159,7 @@ export function Agenda() {
             <GrillaAgenda key={activa.key} vista={activa.key} />
           )}
           {activa.key === 'equipo' && <Equipo />}
+          {activa.key === 'incidencias' && <PanelIncidencias />}
           {activa.key === 'eventos' && <Eventos />}
           {activa.key === 'rutinas' && <Rutinas />}
           {activa.key === 'cumplimiento' && <Cumplimiento items={items} hechos={hechos} />}
@@ -232,6 +236,8 @@ function Hoy({
           <AvisosHoy fecha={hoy} />
         </section>
       )}
+
+      <MisIncidencias key={para?.name ?? ''} para={para} />
 
       {pantallas && <TusPantallas />}
 

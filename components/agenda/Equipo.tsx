@@ -12,7 +12,7 @@
 
 import { useMemo, useState } from 'react'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { Button, Card, StatusPill, color, font, space, weight, useConfirmar, useToast } from '@/components/ui'
+import { Button, ButtonLink, Card, StatusPill, color, font, space, weight, useConfirmar, useToast } from '@/components/ui'
 import { hoyIso, type ItemAgenda } from '@/lib/agenda'
 import { avanceDelEquipo, type EstadoEquipo, type FilaEquipo } from '@/lib/agenda/equipo'
 import { borrarItem, guardarItem } from '@/lib/agenda/cliente'
@@ -32,7 +32,7 @@ const hora = (iso: string | null) =>
   iso ? new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' }) : null
 
 export function Equipo() {
-  const { items, hechos, cargar } = useAgenda()
+  const { items, hechos, cargar, puede } = useAgenda()
   const toast = useToast()
   const { confirmar } = useConfirmar()
   const hoy = hoyIso()
@@ -65,6 +65,7 @@ export function Equipo() {
   return (
     <>
       <HeaderAcciones>
+        {puede.incidencias && <ButtonLink href="/agenda/incidencias" variant="soft" tone="neutral">⚠️ Incidencias</ButtonLink>}
         <Button variant="solid" tone="brand" onClick={() => setNueva([])}>+ Tarea</Button>
       </HeaderAcciones>
 

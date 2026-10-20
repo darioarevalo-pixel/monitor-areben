@@ -568,6 +568,7 @@ export const ZONAS: Record<string, Record<string, { titulo: string; desc: string
     eventos: { titulo: 'Eventos', desc: 'Tareas que se generan con un ingreso o una sesión.' },
     rutinas: { titulo: 'Tareas fijas', desc: 'Lo que se repite, por persona. También avisos y promociones.' },
     cumplimiento: { titulo: 'Cumplimiento', desc: 'Tareas hechas y pendientes de los últimos días.' },
+    incidencias: { titulo: 'Incidencias', desc: 'Lo que reporta el equipo: algo roto, insumos u otro.' },
   },
   'meta-ads': {
     '': {
