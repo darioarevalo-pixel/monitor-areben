@@ -40,6 +40,7 @@ import { RutasCobro } from './RutasCobro'
 import { VentasErp } from './ventas/VentasErp'
 import { PorProductoErp } from './ventas/PorProductoErp'
 import { ClientesErp } from './clientes/ClientesErp'
+import { CuentaCorriente } from './clientes/CuentaCorriente'
 import { ProveedoresErp } from './clientes/ProveedoresErp'
 import { InicioErp } from './inicio/InicioErp'
 
@@ -70,7 +71,7 @@ export const SECCIONES_ERP: Seccion[] = [
   { key: 'productos', titulo: 'Productos y precios', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }] },
   {
     key: 'clientes', titulo: 'Clientes y proveedores', icono: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
-    pestanias: [{ key: 'clientes', label: 'Clientes' }, { key: 'proveedores', label: 'Proveedores' }],
+    pestanias: [{ key: 'clientes', label: 'Clientes' }, { key: 'cuenta-corriente', label: 'Cuenta corriente' }, { key: 'proveedores', label: 'Proveedores' }],
   },
   {
     key: 'configuracion', titulo: 'Configuración', icono: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M4 12h2 M18 12h2 M12 4v2 M12 18v2 M6.3 6.3l1.4 1.4 M16.3 16.3l1.4 1.4 M6.3 17.7l1.4-1.4 M16.3 7.7l1.4-1.4',
@@ -181,6 +182,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {pestania === 'diferencias' && <DiferenciasDia key={marca} ajustar={ajustarPrenda} />}
             {pestania === 'productos' && <ProductosErp />}
             {pestania === 'clientes' && <ClientesErp key={marca} />}
+            {pestania === 'cuenta-corriente' && <CuentaCorriente key={marca} />}
             {pestania === 'proveedores' && <ProveedoresErp key={marca} />}
             {pestania === 'reglas' && <ReglasComerciales key={marca} ir={(k) => ir('configuracion', k)} />}
             {pestania === 'cuentas' && <RutasCobro key={marca} ir={(k) => ir('configuracion', k)} />}

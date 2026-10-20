@@ -13,7 +13,7 @@ pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una
 Las pestañas: Ventas = Ventas · Por producto · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
 dirección vieja cae en Ventas) · Caja (POS) = Cambio · Factura · Stock =
 Stock · Movimientos · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Productos (la vieja `/erp/productos/precios` cae ahí) · Configuración = Reglas · Cuentas de cobro;
-Clientes y proveedores = Clientes · Proveedores. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
+Clientes y proveedores = Clientes · Cuenta corriente · Proveedores. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
 botones crudos y `select`). Tests: `tests/erp-navegacion*.test.ts*`. El registro (`registro.ts`) conserva `erp` sólo
 porque el test de registro lo exige: el shell ya ⛔ lo monta.
 
@@ -234,8 +234,18 @@ GN viajan como TUPLAS (`aTupla`/`deTupla`: con objetos BDI pesaba 3,7 MB, así 1
 `lib/erp/clientes-lista.core.js` (`tests/erp-clientes-lista.test.ts`, pantalla `tests/erp-clientes-pantalla.test.tsx`).
 **Proveedores** = los del motor (sql/013, `vista=proveedores`) con cuántos productos tiene cada uno, vistas Con/Sin
 productos · Sin CUIT; sólo ver (nacen en Ingresos) y «⋯» a PRM / Ingresos ↗. ⛔ todavía: «Nuevo cliente», «Registrar
-cobro a cuenta», la pestaña Cuenta corriente (sin movimientos no hay qué mostrar) y la «decisión de cobro» por venta
-(⛔ existe en el motor).
+cobro a cuenta» desde Clientes (el cobro vive en la ficha de la venta) y la «decisión de cobro» por venta (⛔ existe en el motor).
+**Cuenta corriente** (🎨 20-oct, Diseño 8 · 7; contrato §15): UNA lista por cliente × línea con lo de `cuentasCorrientes`
+del motor (pendiente · a favor · **saldo** · vencido · la más vieja · crédito · estado · los 4 tramos de antigüedad como
+columnas opcionales), vistas Con saldo · Atrasadas · Con saldo a favor · Con crédito · Todas, resumen arriba (por cobrar =
+Σ saldo, vencido, a favor, por antigüedad), y la ficha AL COSTADO (`cuentaDe`): crédito, ventas con saldo nombradas por
+su número (`nombresDeVentas`, del detalle del mayor), el **mayor** entre dos fechas y «Exportar» (el CSV lo arma el motor:
+`mayorCSV`). **«Marcar crédito» sólo admin**: la acción `poner-credito` ⛔ está en `PERMISO_DE_ACCION` ⇒ pide `configurar`.
+🔑 **Dos libros que ⛔ se suman**: real y PRUEBA (ventas del ERP en paralelo con GN); la pantalla abre en el real y dice
+cuántos clientes hay en el otro («Reales / De prueba»). Medido 20-oct: BDI 232 clientes, 0 cuentas reales, 15 de prueba
+($ 7.149.977,60); Zattia 0 clientes. Servidor `api/_erp-clientes.js` (`vista=cuentas-corrientes`, `vista=cuenta-cliente`),
+núcleo `lib/erp/cuenta-corriente.core.js` (`tests/erp-cuenta-corriente.test.ts`). ⚠️ `cuentasCorrientes` hace 3 consultas
+POR cliente: con 15 tardó 8,5 s desde la Mac.
 
 ## Dónde vive
 

@@ -22,6 +22,9 @@
  *   GET  ?recurso=erp&vista=comparacion&marca=…                       Stock › Comparación: el ERP contra Tienda Nube (`api/_erp-stock.js`)
  *   GET  ?recurso=erp&vista=clientes-lista&marca=bdi|zattia           Clientes: uno por fila (`api/_erp-clientes.js`)
  *   GET  ?recurso=erp&vista=cliente-ficha&marca=…&clave=…             la ficha de un cliente: compras y cuenta corriente
+ *   GET  ?recurso=erp&vista=cuentas-corrientes&marca=…&prueba=0|1     Cuenta corriente: una fila por cliente × línea
+ *   GET  ?recurso=erp&vista=cuenta-cliente&marca=…&cliente=…&linea=…  su estado y el mayor (desde/hasta) con su CSV
+ *   POST { accion: 'poner-credito', marca, clienteId, credito, tope?, dias? }   marcar o sacar el crédito (sólo admin)
  *   GET  ?recurso=erp&vista=inicio-resultado&marca=bdi|zattia         Inicio: vendido, costo y margen del mes (`api/_erp-inicio.js`)
  *   GET  ?recurso=erp&vista=stock&marca=bdi|zattia&q=texto            busca prendas (SKU, código, nombre)
  *   GET  ?recurso=erp&vista=precio&marca=…&producto=ID                precio por lista y costo del producto, con GN y TN al lado
@@ -85,7 +88,7 @@ import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajuste
 import { cobrarVentaErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
-import { fichaDeCliente, listaDeClientes } from './_erp-clientes.js'
+import { cuentaDeCliente, cuentasDeLaMarca, fichaDeCliente, listaDeClientes, ponerCreditoCliente } from './_erp-clientes.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
 
@@ -1395,6 +1398,21 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.vista === 'cliente-ficha') {
       const r = await fichaDeCliente({ marca: String(req.query.marca || ''), clave: String(req.query.clave || '') }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'cuentas-corrientes') {
+      const r = await cuentasDeLaMarca({ marca: String(req.query.marca || ''), prueba: req.query.prueba === '1' }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'cuenta-cliente') {
+      const r = await cuentaDeCliente({
+        marca: String(req.query.marca || ''), clienteId: String(req.query.cliente || ''), linea: String(req.query.linea || ''),
+        prueba: req.query.prueba === '1', desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''),
+      }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'POST' && body.accion === 'poner-credito') {
+      const r = await ponerCreditoCliente({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'GET' && req.query.vista === 'stock-lista') {
       const r = await listaDeStock({ marca: String(req.query.marca || '') }, { conMotor, pedidosSinPagar })

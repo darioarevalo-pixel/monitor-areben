@@ -509,10 +509,32 @@ export type PendienteCuenta = { ref: string; fecha: string; monto: number; pendi
 export type FichaDeCliente = {
   compras: CompraCliente[]; cortado: boolean
   contacto: { name: string | null; email: string | null; phone: string | null; city: string | null; province: string | null; address: string | null } | null
-  cuenta: { cliente: { id: string; nombre: string; doc: string | null }; credito: unknown; estado: { saldo: number; a_favor: number; debe: number; pendientes?: PendienteCuenta[] } } | null
+  cuenta: { cliente: { id: string; nombre: string; doc: string | null }; credito: unknown; estado: { saldo: number; a_favor: number; debe: number; pendientes?: PendienteCuenta[] }; ventas?: Record<string, string> } | null
 }
 export const leerFichaDeCliente = (marca: MarcaErp, clave: string) =>
   pedir<FichaDeCliente>(null, `&vista=cliente-ficha&marca=${marca}&clave=${encodeURIComponent(clave)}&nc=${Date.now()}`, 'No se pudo leer el cliente.')
+
+// ── ERP › Clientes › Cuenta corriente (`api/_erp-clientes.js`, núcleo `lib/erp/cuenta-corriente.core.js`; contrato §15) ──
+export type CreditoCliente = { credito: boolean; tope: number | null; dias: number | null; puesto_por: string | null; puesto_en: string | null } | null
+export type CuentaDelMotor = {
+  cliente_id: string; linea: string; nombre: string; doc: string | null; credito: CreditoCliente
+  saldo: number; debe: number; a_favor: number; vencido: number; dias_mayor: number; atrasado: boolean; sin_credito: boolean; tramos: Record<string, number>
+}
+export type CuentasDeLaMarca = { hoy: string | null; prueba: boolean; cuentas: CuentaDelMotor[]; clientesErp: number; otroLibro: number }
+export const leerCuentasCorrientes = (marca: MarcaErp, prueba: boolean) =>
+  pedir<CuentasDeLaMarca>(null, `&vista=cuentas-corrientes&marca=${marca}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudo leer la cuenta corriente.')
+
+export type RenglonMayor = { fecha: string; tipo: 'compra' | 'pago'; ref: string; detalle: string; debe: number; haber: number; saldo: number }
+export type CuentaDeCliente = {
+  hoy: string; cliente: { id: string; nombre: string; doc: string | null }; credito: CreditoCliente
+  estado: { saldo: number; debe: number; a_favor: number; vencido: number; dias_mayor: number; atrasado: boolean; sin_credito: boolean; tramos: Record<string, number>; pendientes: PendienteCuenta[] }
+  mayor: { anterior: number; renglones: RenglonMayor[]; final: number }
+  csv: string
+}
+export const leerCuentaDeCliente = (marca: MarcaErp, p: { clienteId: string; linea: string; prueba: boolean; desde?: string; hasta?: string }) =>
+  pedir<CuentaDeCliente>(null, `&vista=cuenta-cliente&marca=${marca}&cliente=${p.clienteId}&linea=${p.linea}&prueba=${p.prueba ? 1 : 0}&desde=${p.desde ?? ''}&hasta=${p.hasta ?? ''}&nc=${Date.now()}`, 'No se pudo leer la cuenta del cliente.')
+export const ponerCreditoCliente = (marca: MarcaErp, p: { clienteId: string; credito: boolean; tope: number | null; dias: number | null }) =>
+  pedir<{ ok: true; credito: CreditoCliente }>(post({ accion: 'poner-credito', marca, ...p }), '', 'No se pudo marcar el crédito.')
 
 // ── ERP › Inicio (`api/_erp-inicio.js`): el resultado comercial del mes, del espejo de GN ──
 export type TramoResultado = { desde: string; hasta: string; ventas: number; vendido: number; costo: number; sinCosto: number; margen: number }

@@ -13,6 +13,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { aTupla } from '../lib/erp/clientes-lista.core.js'
+import { nombresDeVentas } from '../lib/erp/cuenta-corriente.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Las líneas de cada base: Stunned vive en la de Zattia. */
@@ -98,9 +99,84 @@ export async function fichaDeCliente({ marca, clave }, deps) {
       if (c) {
         const { cuentaDe } = await import('../motor/cuenta/cuenta.mjs')
         const r = await cuentaDe(pg, { cliente_id: c.id, marca: LINEAS[marca][0] })
-        if (r.ok) cuenta = { cliente: r.cliente, credito: r.credito, estado: r.estado }
+        if (r.ok) cuenta = { cliente: r.cliente, credito: r.credito, estado: r.estado, ventas: Object.fromEntries(nombresDeVentas(r.mayor)) }
       }
     } catch { /* motor sin cuenta corriente: la ficha lo dice */ }
     return { compras, contacto, cuenta, cortado: compras.length === 200 }
+  })
+}
+
+// ── Cuenta corriente (🎨 20-oct, Diseño 8 · 7; contrato §15): la pestaña propia, por cliente × línea ──
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const FECHA = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Las cuentas de la marca (`cuentasCorrientes` del motor, por cada empresa × línea). `prueba`: las del libro de PRUEBA
+ * (las ventas del ERP en paralelo con GN), que es aparte: ⛔ se suman con las reales. Se cuentan las del otro libro para
+ * que la pantalla lo diga.
+ * @param {{ marca: string, prueba?: boolean }} p
+ * @param {{ conMotor: Function }} deps
+ */
+export async function cuentasDeLaMarca({ marca, prueba = false }, deps) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  return deps.conMotor(marca, 'La cuenta corriente', async (pg) => {
+    let empresas, otroLibro
+    try {
+      empresas = (await pg.query('select distinct empresa_id from cliente')).rows.map((r) => r.empresa_id)
+      ;[{ n: otroLibro }] = (await pg.query('select count(distinct cliente_id)::int as n from cuenta_movimiento where prueba = $1 and marca = any($2)', [!prueba, LINEAS[marca]])).rows
+    } catch {
+      return { status: 409, error: 'El motor de esta marca todavía no tiene cuenta corriente (falta la 025).' }
+    }
+    const { cuentasCorrientes } = await import('../motor/cuenta/cuenta.mjs')
+    const cuentas = []
+    let hoy = null
+    for (const empresa_id of empresas) {
+      for (const linea of LINEAS[marca]) {
+        const r = await cuentasCorrientes(pg, { empresa_id, marca: linea, prueba })
+        if (!r.ok) return { status: 409, error: r.error?.mensaje ?? 'El motor no devolvió la cuenta corriente.' }
+        hoy = r.hoy
+        cuentas.push(...r.cuentas.map((c) => ({ ...c, linea })))
+      }
+    }
+    return { hoy, prueba, cuentas, clientesErp: empresas.length ? (await pg.query('select count(*)::int as n from cliente')).rows[0].n : 0, otroLibro }
+  })
+}
+
+/**
+ * La cuenta de UN cliente en UNA línea: estado (con lo que debe compra por compra) y el MAYOR entre `desde` y `hasta`,
+ * con su CSV para Excel (`mayorCSV` del motor: el «Exportar» de Darío).
+ * @param {{ marca: string, clienteId: string, linea: string, prueba?: boolean, desde?: string, hasta?: string }} p
+ * @param {{ conMotor: Function }} deps
+ */
+export async function cuentaDeCliente({ marca, clienteId, linea, prueba = false, desde = '', hasta = '' }, deps) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!LINEAS[marca].includes(linea)) return { status: 400, error: 'Línea inválida' }
+  if (!UUID.test(String(clienteId || ''))) return { status: 400, error: 'Falta el cliente' }
+  for (const f of [desde, hasta]) if (f && !FECHA.test(f)) return { status: 400, error: 'Las fechas van AAAA-MM-DD' }
+  return deps.conMotor(marca, 'La cuenta corriente', async (pg) => {
+    const [{ cuentaDe }, { mayorCSV }] = await Promise.all([import('../motor/cuenta/cuenta.mjs'), import('../motor/cuenta/cuenta.core.mjs')])
+    const r = await cuentaDe(pg, { cliente_id: clienteId, marca: linea, prueba, desde: desde || null, hasta: hasta || null })
+    if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADO' ? 404 : 409, error: r.error?.mensaje ?? 'No se pudo leer la cuenta.' }
+    const csv = mayorCSV(r.mayor, { cliente: r.cliente.nombre, marca: linea, desde: desde || undefined, hasta: hasta || undefined })
+    return { hoy: r.hoy, cliente: r.cliente, credito: r.credito, estado: r.estado, mayor: r.mayor, csv }
+  })
+}
+
+/**
+ * Marcar o sacar el crédito (sólo admin: lo chequea el handler). Cada cambio es una fila nueva del motor con quién fue.
+ * @param {{ marca: string, body: any, usuario: string|null }} p
+ * @param {{ conMotor: Function }} deps
+ */
+export async function ponerCreditoCliente({ marca, body, usuario }, deps) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'Falta el cliente' }
+  if (!usuario) return { status: 400, error: 'Falta quién lo marca' }
+  return deps.conMotor(marca, 'El crédito', async (pg) => {
+    const [c] = (await pg.query('select empresa_id from cliente where id = $1', [body.clienteId])).rows
+    if (!c) return { status: 404, error: 'No está ese cliente.' }
+    const { ponerCredito } = await import('../motor/cuenta/cuenta.mjs')
+    const r = await ponerCredito(pg, { empresa_id: c.empresa_id, cliente_id: body.clienteId, credito: body.credito === true, tope: body.tope ?? null, dias: body.dias ?? null, usuario })
+    return r.ok ? { ok: true, credito: r.credito } : { status: 400, error: r.error?.mensaje ?? 'No se pudo marcar el crédito.' }
   })
 }

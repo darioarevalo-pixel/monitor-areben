@@ -72,7 +72,7 @@ export function FichaCliente({ marca, fila, onCerrar }: { marca: MarcaErp; fila:
               {['Venta', 'Fecha', 'Total', 'Pendiente'].map((t, i) => <span key={t} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i > 1 ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>)}
               {pendientes.map((p) => (
                 <div key={p.ref} role="row" style={{ display: 'contents' }}>
-                  <span role="cell" style={celda} title={p.ref}>{p.ref}</span>
+                  <span role="cell" style={celda} title={p.ref}>{cuenta.ventas?.[p.ref] ?? p.ref}</span>
                   <span role="cell" style={celda}>{fechaCorta(p.fecha)}</span>
                   <span role="cell" style={{ ...celda, textAlign: 'right' }}><MoneyText value={p.monto} /></span>
                   <span role="cell" style={{ ...celda, textAlign: 'right', fontWeight: weight.semibold }}><MoneyText value={p.pendiente} /></span>
