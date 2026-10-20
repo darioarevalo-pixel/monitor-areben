@@ -568,3 +568,17 @@ export type RenglonProducto = {
 
 export const leerVentasPorProducto = (marca: MarcaErp, desde: string, hasta: string) =>
   pedir<{ renglones: RenglonProducto[]; desde: string; hasta: string; costos: boolean; gnHasta: string | null }>(null, `&vista=ventas-producto&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer las ventas por producto.')
+
+// ── ERP › Ventas › Cargar venta (`api/_erp-cargar.js`, `origen: 'manual'` del motor, contrato §19) ──
+export type CuentaParaCargar = { id: string; nombre: string; medio: string; marca: string }
+export type DatosParaCargar = { lineas: string[]; cuentas: CuentaParaCargar[]; canales: string[]; depositos: string[]; manualHabilitado: boolean }
+export const leerParaCargar = (marca: MarcaErp) =>
+  pedir<DatosParaCargar>(null, `&vista=cargar-venta&marca=${marca}&nc=${Date.now()}`, 'No se pudo abrir «Cargar venta».')
+export type VentaACargar = {
+  linea: string; origen_ref: string; ocurrida_en?: string; canal: string; deposito: string; cliente?: { doc: string; nombre: string }
+  lineas: Array<{ producto: string; talle: string; cantidad: number; precio: number; sku?: string | null; barcode?: string | null }>
+  pagos: Array<{ cuenta: string; monto: number }>; nota?: string
+}
+export const cargarVenta = (marca: MarcaErp, venta: VentaACargar) =>
+  pedir<{ ok: true; venta: { id: string; numero: number; total: number; prueba: boolean }; yaExistia: boolean; avisos: Array<{ codigo: string }> }>(
+    post({ accion: 'cargar-venta', marca, ...venta }), '', 'No se pudo cargar la venta.')

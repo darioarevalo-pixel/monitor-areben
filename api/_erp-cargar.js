@@ -1,0 +1,84 @@
+/**
+ * ERP › Ventas › Cargar venta (a mano, «Manual»): `registrarVenta` del motor con `origen: 'manual'` (contrato §19, sql/031).
+ *
+ *   GET  ?recurso=erp&vista=cargar-venta&marca=bdi|zattia          lo que pide el formulario: cuentas de cobro, canales, depósitos
+ *   POST { accion: 'cargar-venta', marca, linea, origen_ref, … }   registra la venta
+ *
+ * 🔴 Hasta el corte va SIEMPRE `prueba: true` (corre en paralelo con GN: ⛔ mueve el libro ni pasa a GN), como la Caja.
+ * 🔑 `origen_ref` lo genera la pantalla al ABRIR el formulario ⇒ reintentar devuelve la misma venta (`ya_existia`).
+ * Sin permiso nombrado en `lib/permisos.core.js` ⇒ `configurar` (sólo admin) hasta que Bruno diga quién carga.
+ */
+import { textoDelMotor } from '../lib/erp/venta.core.js'
+
+const MARCAS = ['bdi', 'zattia']
+const LINEAS = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] }
+const DEPOSITOS = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
+const pesos = (x) => Math.round(Number(x) * 100) / 100
+
+/** @param {{ marca: string }} p @param {{ conMotor: Function }} deps */
+export async function datosParaCargar({ marca }, deps) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  return deps.conMotor(marca, 'Cargar venta', async (pg) => {
+    const cuentas = (await pg.query(
+      `select id::text, nombre, medio, marca from cuenta_cobro where marca = any($1) and activa and medio <> 'saldo' order by marca, nombre`,
+      [LINEAS[marca]])).rows
+    const canales = (await pg.query('select id from canal order by id')).rows.map((r) => r.id)
+    const [{ ok } = { ok: false }] = (await pg.query(`select pg_get_constraintdef(oid) like '%manual%' as ok from pg_constraint where conname = 'venta_origen_check'`)).rows
+    return { lineas: LINEAS[marca], cuentas, canales, depositos: DEPOSITOS[marca], manualHabilitado: Boolean(ok) }
+  })
+}
+
+/**
+ * Lo que manda el formulario ⇒ la entrada del motor. Puro (lo prueba `tests/erp-cargar-venta.test.ts`).
+ * @param {any} b @param {string} marca @param {string | null} usuario
+ * @returns {{ entrada: any } | { error: string }}
+ */
+export function entradaManual(b, marca, usuario) {
+  const linea = String(b?.linea || '')
+  if (!LINEAS[marca]?.includes(linea)) return { error: 'Línea inválida' }
+  if (!/^[0-9a-f-]{36}$/i.test(String(b.origen_ref || ''))) return { error: 'Falta la clave del formulario: volvé a abrirlo.' }
+  if (!DEPOSITOS[marca].includes(String(b.deposito || ''))) return { error: 'Elegí de dónde sale.' }
+  const prendas = Array.isArray(b.lineas) ? b.lineas : []
+  if (!prendas.length) return { error: 'Agregá al menos una prenda.' }
+  const lineas = []
+  for (const l of prendas) {
+    const cantidad = Number(l.cantidad), precio = pesos(l.precio)
+    if (!Number.isInteger(cantidad) || cantidad <= 0) return { error: 'Cada prenda lleva una cantidad entera mayor a 0.' }
+    if (!(precio >= 0)) return { error: 'Cada prenda lleva un precio.' }
+    lineas.push({
+      product_id: Number(l.producto), size_id: Number(l.talle), cantidad, precio, descuento: 0, rebaja: 0, importe: pesos(precio * cantidad),
+      ...(l.sku ? { sku: String(l.sku) } : {}), ...(l.barcode ? { barcode: String(l.barcode) } : {}),
+    })
+  }
+  const subtotal = pesos(lineas.reduce((a, l) => a + l.importe, 0))
+  const pagos = (Array.isArray(b.pagos) ? b.pagos : []).filter((p) => Number(p.monto) > 0)
+    .map((p) => ({ cuenta: String(p.cuenta), base: pesos(p.monto), porcentaje: 0, descuento: 0, redondeo: 0, monto: pesos(p.monto) }))
+  if (!pagos.length) return { error: 'Falta cómo paga.' }
+  if (pesos(pagos.reduce((a, p) => a + p.monto, 0)) !== subtotal) return { error: 'Lo que paga no suma el total.' }
+  const doc = String(b.cliente?.doc ?? '').replace(/\D/g, '')
+  const nombre = String(b.cliente?.nombre ?? '').trim()
+  const cuando = b.ocurrida_en ? new Date(b.ocurrida_en) : null
+  if (cuando && Number.isNaN(cuando.getTime())) return { error: 'La fecha no se entiende.' }
+  if (cuando && cuando.getTime() > Date.now() + 60_000) return { error: 'La fecha no puede ser futura.' }
+  return {
+    entrada: {
+      origen: 'manual', origen_ref: String(b.origen_ref), marca: linea, canal: String(b.canal || ''), deposito: String(b.deposito),
+      ...(doc && nombre ? { cliente: { doc, nombre } } : {}),
+      ...(cuando ? { ocurrida_en: cuando.toISOString() } : {}),
+      usuario: usuario || 'admin', prueba: true, lineas, pagos, subtotal, total: subtotal,
+      ...(String(b.nota || '').trim() ? { detalle: { nota: String(b.nota).trim().slice(0, 500) } } : {}),
+    },
+  }
+}
+
+/** @param {{ marca: string, body: any, usuario: string | null }} p @param {{ conMotor: Function }} deps */
+export async function cargarVentaManual({ marca, body, usuario }, deps) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const e = entradaManual(body, marca, usuario)
+  if ('error' in e) return { status: 400, error: e.error }
+  return deps.conMotor(marca, 'Cargar venta', async (db, { registrarVenta }) => {
+    const r = await registrarVenta(db, e.entrada)
+    if (!r.ok) return { status: r.error?.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: textoDelMotor(r.error) }
+    return { ok: true, venta: r.venta, yaExistia: r.ya_existia, avisos: r.avisos ?? [] }
+  })
+}

@@ -28,6 +28,7 @@ import {
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaVenta } from './FichaVenta'
+import { CargarVenta } from './CargarVenta'
 import { VentanaCobro, VentanaEditar } from './VentanasVenta'
 
 export type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
@@ -56,6 +57,7 @@ function bajarCsv(filas: FilaVentaLista[]) {
 
 export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') => void }) {
   const { marca: delShell, perfil } = useSesion()
+  const [cargarAbierta, setCargarAbierta] = useState(false)
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const usuario = perfil?.name ?? null
   const [periodo, setPeriodo] = useState('mes')
@@ -188,7 +190,11 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título «Ventas» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
-      <p style={{ margin: 0, color: color.mut }}>Caja, Tienda Nube, mayoristas y cambios, en una sola lista.</p>
+      <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
+        <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Caja, Tienda Nube, mayoristas y cambios, en una sola lista.</p>
+        <Button onClick={() => setCargarAbierta(true)}>Cargar venta</Button>
+      </div>
+      {cargarAbierta && <CargarVenta marca={marca} onCerrar={() => setCargarAbierta(false)} onCargada={(t) => { setCargarAbierta(false); setAviso(t); cargar() }} />}
 
       {todasPrueba && <Notice tone="warning">Todo lo de esta lista es <b>de prueba</b>: corre en paralelo con Gestión Nube, que es el que sirve hoy (la factura y el stock siguen saliendo de GN).</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
