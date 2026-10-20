@@ -15,6 +15,7 @@ import { costosDe } from './costo.mjs'
 import { armarDevolucion, autorizacion, leerDevolucion, pagosDePlata, vueltaDe } from './devolucion.core.mjs'
 import { frena } from '../cuenta/cuenta.core.mjs'
 import { anularCompraDe, cuentaBloqueada, filaCompra, insertarFila } from '../cuenta/libro.mjs'
+import { guardarClienteGN } from './cliente.mjs'
 
 const q = async (db, sql, params = []) => (await db.query(sql, params)).rows
 
@@ -129,7 +130,8 @@ const pesos = (x) => Math.round(Number(x) * 100) / 100
 /**
  * Lo que queda A CUENTA (§15, sql/025): hace falta el cliente, y `frena` (sin crédito, atrasado, pasa el tope) se
  * salta sólo con el PIN de un admin (`autoriza: { motivo: 'pin_admin', usuario }`, queda en `detalle.cuenta_autoriza`).
- * Bloquea la cuenta del cliente hasta el commit. `null` si está bien.
+ * La mayorista que llega de GN (`origen 'mayorista'`, en paralelo) ya se vendió allá ⇒ `autoriza: { motivo: 'gn' }` la deja
+ * pasar y el freno queda anotado (lo que el ERP HABRÍA frenado). Bloquea la cuenta del cliente hasta el commit. `null` si está bien.
  */
 async function chequearCuenta(db, armada, e) {
   if (!(armada.usa_cuenta > 0)) return null
@@ -139,8 +141,9 @@ async function chequearCuenta(db, armada, e) {
   const f = frena({ cuenta: estado, credito, monto: armada.usa_cuenta })
   if (!f) return null
   const a = e?.autoriza
-  if (a?.motivo === 'pin_admin' && typeof a.usuario === 'string' && a.usuario.trim()) {
-    v.detalle = { ...v.detalle, cuenta_autoriza: { usuario: a.usuario.trim(), codigo: f.codigo } }
+  const porGN = a?.motivo === 'gn' && e.origen === 'mayorista'
+  if ((a?.motivo === 'pin_admin' || porGN) && typeof a.usuario === 'string' && a.usuario.trim()) {
+    v.detalle = { ...v.detalle, cuenta_autoriza: { usuario: a.usuario.trim(), codigo: f.codigo, ...(porGN ? { motivo: 'gn' } : {}) } }
     return null
   }
   return { ok: false, error: { codigo: f.codigo, mensaje: f.mensaje, campo: 'pagos', cuenta: { debe: estado.debe, vencido: estado.vencido, tope: credito?.tope ?? null } } }
@@ -165,6 +168,11 @@ async function resolverCliente(db, empresaId, e) {
   }
   const c = e.cliente
   if (!c) return { id: null }
+  // El cliente de GN sin documento (la mayorista del espejo, sql/030): por `gn_client_id`.
+  if (c.gn_client_id != null && !c.doc) {
+    const r = await guardarClienteGN(db, { ...c, empresa_id: empresaId })
+    return r.ok ? { id: r.cliente.id } : { error: r }
+  }
   const doc = typeof c.doc === 'string' || typeof c.doc === 'number' ? String(c.doc).replace(/\D/g, '') : ''
   if (!doc) return { error: falla('FALTA_CLIENTE', 'Falta el documento de la clienta', 'cliente.doc') }
   if (!(typeof c.nombre === 'string' && c.nombre.trim())) return { error: falla('FALTA_CLIENTE', 'Falta el nombre de la clienta', 'cliente.nombre') }

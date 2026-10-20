@@ -12,7 +12,7 @@
 import { randomUUID } from 'node:crypto'
 import { cobroReal } from '../cuentas/cuentas.mjs'
 
-export const ORIGENES = ['caja', 'tn', 'mayorista', 'postventa', 'ml']
+export const ORIGENES = ['caja', 'tn', 'mayorista', 'postventa', 'ml', 'manual']
 /** Los canales de la semilla (005). Manda la tabla `canal` (`conf.canales`); esto es para cuando no viene (tests). */
 export const CANALES = ['local', 'online', 'mayorista', 'ml']
 /** Diferencia que se tolera al sumar pesos (el redondeo de la Caja es en pesos enteros, pero GN guarda 2 decimales). */

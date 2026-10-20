@@ -10,7 +10,7 @@
  * abren su transacción (`db` conectado y sin transacción, como `registrarVenta`).
  */
 import { estado, frena, mayor, movimientosDeLibro } from './cuenta.core.mjs'
-import { creditoDe, cuentaBloqueada, filasDe, hoyAR, insertarFila } from './libro.mjs'
+import { creditoDe, creditosDe, cuentaBloqueada, filasDe, filasDeMarca, hoyAR, insertarFila } from './libro.mjs'
 import { cuentaDe as cuentaDeCobro } from '../venta/armar.mjs'
 import { leerConf } from '../venta/registrar.mjs'
 import { cobroReal } from '../cuentas/cuentas.mjs'
@@ -40,20 +40,31 @@ const saldoDe = async (db, clienteId, marca, prueba) =>
 
 /**
  * La lista: cada cliente de la marca que debe, tiene a favor, o tiene crédito marcado. Los atrasados primero, después
- * el que más debe.
+ * el que más debe. Cada cuenta trae además `ventas_con_saldo` (cuántas compras debe) y `ultimo_cobro` (`{ fecha, monto }`
+ * del último pago que sigue en pie, o null). Tres consultas en total, ⛔ por cliente.
  * @param {{ empresa_id: string, marca: string, prueba?: boolean, hoy?: string }} e
  */
 export async function cuentasCorrientes(db, { empresa_id, marca, prueba = false, hoy = null }) {
   const dia = hoy ?? await hoyAR(db)
-  const clientes = await q(db, `select c.id::text, c.nombre, c.doc from cliente c where c.empresa_id = $1 and (
-      exists (select 1 from cuenta_movimiento m where m.cliente_id = c.id and m.marca = $2 and m.prueba = $3)
-      or exists (select 1 from credito_vigente k where k.cliente_id = c.id and k.credito))`, [empresa_id, marca, prueba])
+  const filasPor = new Map()
+  for (const f of await filasDeMarca(db, { empresa_id, marca, prueba })) {
+    if (!filasPor.has(f.cliente_id)) filasPor.set(f.cliente_id, [])
+    filasPor.get(f.cliente_id).push(f)
+  }
+  const creditos = await creditosDe(db, empresa_id)
+  const ids = [...new Set([...filasPor.keys(), ...[...creditos].filter(([, k]) => k.credito).map(([id]) => id)])]
+  const clientes = ids.length ? await q(db, 'select id::text, nombre, doc from cliente where id = any($1::uuid[])', [ids]) : []
   const filas = []
   for (const c of clientes) {
-    const credito = await creditoDe(db, c.id)
-    const e = estado({ movs: movimientosDeLibro(await filasDe(db, { cliente_id: c.id, marca, prueba })), credito, hoy: dia })
+    const credito = creditos.get(c.id) ?? null
+    const movs = movimientosDeLibro(filasPor.get(c.id) ?? [])
+    const e = estado({ movs, credito, hoy: dia })
     if (e.saldo === 0 && !credito?.credito) continue
-    filas.push({ cliente_id: c.id, nombre: c.nombre, doc: c.doc, credito: creditoPublico(credito), ...sinPendientes(e) })
+    const pago = movs.filter((m) => m.tipo === 'pago').at(-1)
+    filas.push({
+      cliente_id: c.id, nombre: c.nombre, doc: c.doc, credito: creditoPublico(credito), ...sinPendientes(e),
+      ventas_con_saldo: e.pendientes.length, ultimo_cobro: pago ? { fecha: pago.fecha, monto: pago.monto } : null,
+    })
   }
   filas.sort((a, b) => b.vencido - a.vencido || b.debe - a.debe || a.nombre.localeCompare(b.nombre))
   return { ok: true, hoy: dia, cuentas: filas }

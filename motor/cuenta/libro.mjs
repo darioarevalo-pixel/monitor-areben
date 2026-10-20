@@ -27,6 +27,24 @@ export async function filasDe(db, { cliente_id, marca, prueba }) {
 }
 
 /**
+ * Las filas del libro de TODOS los clientes de la marca, en una consulta (la lista: ⛔ 3 consultas por cliente). Mismas
+ * columnas que `filasDe` más `cliente_id`, en el mismo orden.
+ */
+export async function filasDeMarca(db, { empresa_id, marca, prueba }) {
+  return q(db, `select m.cliente_id::text, m.tipo, m.ref, m.monto, to_char(m.ocurrida_en ${AR}, 'YYYY-MM-DD') as fecha, m.detalle->'imputar' as imputar,
+      case when m.tipo = 'compra' then 'Venta ' || v.numero when m.tipo = 'pago' then coalesce(c.nombre, '') else '' end as detalle
+    from cuenta_movimiento m left join venta v on v.id = m.venta_id left join cuenta_cobro c on c.id = m.cuenta_cobro_id
+    where m.empresa_id = $1 and m.marca = $2 and m.prueba = $3 order by m.ocurrida_en, m.creado_en`, [empresa_id, marca, prueba])
+}
+
+/** El crédito vigente de cada cliente de la empresa que alguna vez lo tuvo marcado: `Map(cliente_id → crédito)`. */
+export async function creditosDe(db, empresa_id) {
+  const filas = await q(db, `select k.cliente_id::text, k.credito, k.tope::float, k.dias, k.usuario as puesto_por, k.creado_en as puesto_en
+    from credito_vigente k join cliente c on c.id = k.cliente_id where c.empresa_id = $1`, [empresa_id])
+  return new Map(filas.map(({ cliente_id, ...k }) => [cliente_id, k]))
+}
+
+/**
  * La cuenta del cliente para DECIDIR (una venta a cuenta, un pago): bloquea (cliente, marca, prueba) hasta el commit,
  * así dos ventas a la vez ⛔ pasan las dos el tope.
  */

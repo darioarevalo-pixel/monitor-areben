@@ -58,6 +58,29 @@ export async function guardarCliente(db, e) {
 }
 
 /**
+ * La ficha del cliente de GN SIN documento (la mayorista del espejo: ⛔ trae el DNI/CUIT; sql/030), por `gn_client_id`.
+ * Lo que viene con dato pone al día el nombre y el contacto (⛔ borra); `actualizado_en` cambia sólo si algo cambió.
+ * @param {import('pg').ClientBase} db
+ * @param {{ empresa_id: string, gn_client_id: number, nombre: string, whatsapp?: string, email?: string }} e
+ */
+export async function guardarClienteGN(db, e) {
+  const gn = Number(e?.gn_client_id)
+  if (!Number.isInteger(gn) || gn <= 0) return falla('FALTA_CLIENTE', 'El cliente de GN es un número', 'cliente.gn_client_id')
+  const nombre = texto(e.nombre)
+  if (!nombre) return falla('FALTA_CLIENTE', 'Falta el nombre de la clienta', 'cliente.nombre')
+  const [r] = await q(db, `insert into cliente (empresa_id, nombre, whatsapp, email, gn_client_id) values ($1, $2, $3, $4, $5)
+    on conflict (empresa_id, gn_client_id) where gn_client_id is not null do update set
+      nombre = excluded.nombre,
+      whatsapp = coalesce(excluded.whatsapp, cliente.whatsapp),
+      email = coalesce(excluded.email, cliente.email),
+      actualizado_en = case when (cliente.nombre, cliente.whatsapp, cliente.email) is not distinct from
+        (excluded.nombre, coalesce(excluded.whatsapp, cliente.whatsapp), coalesce(excluded.email, cliente.email)) then cliente.actualizado_en else now() end
+    returning ${COLUMNAS}, (xmax = 0) as creado`, [e.empresa_id, nombre, texto(e.whatsapp), texto(e.email), gn])
+  const { creado, ...cliente } = r
+  return { ok: true, cliente, creado }
+}
+
+/**
  * Por documento (si `texto` son sólo números: prefijo) o por nombre (contiene). Hasta `limite` (10).
  * @param {import('pg').ClientBase} db @param {{ empresa_id: string, texto: string, limite?: number }} e
  */
