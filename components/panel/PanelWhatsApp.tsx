@@ -52,6 +52,7 @@ import {
 } from '@/lib/crm/leads'
 import { AgendaDelDia } from './AgendaDelDia'
 import { useComunidad, type AvisoComunidad, type Comunidad } from './useComunidad'
+import { useHoy } from './useHoy'
 import { antiguedadFoto, estaEnComunidad } from '@/lib/crm/comunidad'
 import { coincideNombre, palabraParaBuscar, palabrasDelNombre } from '@/lib/crm/nombre.core.js'
 import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
@@ -581,7 +582,7 @@ function PanelInterno({
   const [crmLeads, setCrmLeads] = useState<MapaLeads>({})
   const [aviso, setAviso] = useState<{ txt: string; mal?: boolean } | null>(null)
   const [guardando, setGuardando] = useState(false)
-  const [today] = useState(() => new Date())
+  const today = useHoy()
   /**
    * Qué se está mirando. Sin chat abierto arranca en la lista: es la pantalla con la que se
    * empieza el día, y un cartel diciendo "abrí un chat" no le sirve a nadie que todavía no sabe a
@@ -657,7 +658,9 @@ function PanelInterno({
         leerMapa<MapaLeads[string]>('crmleads', 'bdi'),
       ])
       if (!activo) return
-      kv.current = { seg: seg.ok ? seg.dato : {}, tel: telKv.ok ? telKv.dato : {}, leads: leadsKv.ok ? leadsKv.dato : {} }
+      // Si falla, queda lo que había: al arrancar es `{}`, y al pasar de día no vacía la lista.
+      const antes = kv.current
+      kv.current = { seg: seg.ok ? seg.dato : antes.seg, tel: telKv.ok ? telKv.dato : antes.tel, leads: leadsKv.ok ? leadsKv.dato : antes.leads }
       setCrmSeg(kv.current.seg)
       setCrmLeads(kv.current.leads)
       setKvListo(true)
@@ -665,7 +668,9 @@ function PanelInterno({
     return () => {
       activo = false
     }
-  }, [])
+    // `today` sólo cambia al pasar de día (`useHoy`): ahí se vuelve a leer, porque lo de ayer
+    // puede haberlo tocado otra pantalla mientras el panel estaba abierto.
+  }, [today])
 
   useEffect(() => {
     // Sin número no hay nada que buscar (pasa en los grupos y en la pantalla de bienvenida). El
