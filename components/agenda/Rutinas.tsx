@@ -28,7 +28,7 @@ import {
   color, font, space, weight, useConfirmar, useFiltroUrl, useToast, type ChipOpt,
 } from '@/components/ui'
 import {
-  corre, filtrarItems, hoyIso, opcionesDeQuien, rotuloBeneficio, rotuloDestino, rotuloRegla,
+  corre, filtrarItems, hoyIso, opcionesDeQuien, rotuloBeneficio, rotuloDestino, rotuloDestinoCorto, rotuloRegla,
   rutinasYAvisos, vaEl,
   type FiltroClase, type FiltroEstado, type ItemAgenda, type Promo,
 } from '@/lib/agenda'
@@ -52,7 +52,12 @@ export function Rutinas() {
   const [editandoItem, setEditandoItem] = useState<ItemAgenda | null>(null)
 
   const hoy = hoyIso()
-  const mios = useMemo(() => rutinasYAvisos(items), [items])
+  // 🔑 «Tareas fijas» es lo que se REPITE (Darío, 19-oct-2026): la tarea de un solo día se manda
+  // y se sigue desde Equipo, y acá sólo engordaría la lista. Los avisos fechados sí se quedan.
+  const mios = useMemo(
+    () => rutinasYAvisos(items).filter((i) => !(i.clase === 'pendiente' && i.regla.tipo === 'unica')),
+    [items],
+  )
 
   /**
    * 🔑 **Guardar una promo prendida SIEMBRA los pasos de comunicarla** (el evento «cambio de
@@ -90,27 +95,27 @@ export function Rutinas() {
   const onGuardarItem = async (i: ItemAgenda) => {
     await guardarItem(i)
     await cargar()
-    toast.ok(i.clase === 'aviso' ? 'Aviso guardado.' : 'Rutina guardada.')
+    toast.ok(i.clase === 'aviso' ? 'Aviso guardado.' : 'Tarea guardada.')
   }
 
   const onBorrarItem = async (i: ItemAgenda) => {
     const esAviso = i.clase === 'aviso'
     const ok = await confirmar({
-      titulo: esAviso ? 'Eliminar el aviso' : 'Eliminar la rutina',
+      titulo: esAviso ? 'Eliminar el aviso' : 'Eliminar la tarea',
       // Que los tildes se van con él va escrito acá y no en un tooltip: es lo que no se puede
       // deshacer, y el interruptor de «apagado» existe justamente para no tener que borrar. Un
       // aviso no tiene tildes que perder, así que no se le advierte de algo que no le pasa.
       mensaje: esAviso
         ? `${i.titulo} — si sólo querés dejar de verlo, apagalo.`
         : `${i.titulo} — se eliminan también los tildes que ya tenga. Si sólo querés dejar de verla, apagala.`,
-      ok: esAviso ? 'Eliminar el aviso' : 'Eliminar la rutina',
+      ok: esAviso ? 'Eliminar el aviso' : 'Eliminar la tarea',
       tono: 'danger',
     })
     if (!ok) return
     try {
       await borrarItem(i.id)
       await cargar()
-      toast.ok(esAviso ? 'Aviso eliminado.' : 'Rutina eliminada.')
+      toast.ok(esAviso ? 'Aviso eliminado.' : 'Tarea eliminada.')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo eliminar.')
     }
@@ -154,7 +159,6 @@ export function Rutinas() {
           {mios.length === 0 ? (
             <EmptyState
               title="Sin tareas ni avisos cargados."
-              hint="Entra sólo lo que se olvida: la rutina obvia no se carga."
               dashed
             />
           ) : (
@@ -240,17 +244,35 @@ function ListaItems({
 
       {filtrados.length === 0 ? (
         <EmptyState
-          title="Ninguno de los cargados entra en ese filtro."
-          hint="El filtro no achica la lista: los otros siguen ahí. Sacá alguno para volver a verlos."
+          title="Sin resultados con esos filtros."
           dashed
         />
       ) : (
-        filtrados.map((i) => (
-          <FilaItem key={i.id} i={i} hoy={hoy} onEditar={onEditar} onBorrar={onBorrar} />
+        // Agrupada por persona (Darío, 19-oct-2026): «¿qué hace Lorena?» se contesta mirando un bloque.
+        porPersona(filtrados).map(([quien, lista]) => (
+          <section key={quien} style={{ display: 'grid', gap: space[2] }}>
+            <div style={{ fontSize: font.sm, fontWeight: weight.semibold, color: color.ink2, marginTop: space[2] }}>
+              {quien} <span style={{ color: color.mut, fontWeight: weight.normal }}>· {lista.length}</span>
+            </div>
+            {lista.map((i) => (
+              <FilaItem key={i.id} i={i} hoy={hoy} onEditar={onEditar} onBorrar={onBorrar} />
+            ))}
+          </section>
         ))
       )}
     </>
   )
+}
+
+/** Los ítems agrupados por a quién le tocan, con «Todo el equipo» al final. */
+function porPersona(items: ItemAgenda[]): [string, ItemAgenda[]][] {
+  const grupos = new Map<string, ItemAgenda[]>()
+  for (const i of items) {
+    const k = rotuloDestinoCorto(i.destino) || 'Todo el equipo'
+    grupos.set(k, [...(grupos.get(k) || []), i])
+  }
+  return [...grupos.entries()].sort(([a], [b]) =>
+    a === 'Todo el equipo' ? 1 : b === 'Todo el equipo' ? -1 : a.localeCompare(b, 'es'))
 }
 
 function FilaPromo({

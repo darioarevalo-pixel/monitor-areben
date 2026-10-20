@@ -1064,11 +1064,8 @@ export const NAV_CATS: NavCat[] = [
     "keys": [],
     "items": [
       { "ruta": "/agenda", "label": "Hoy", "icono": "agenda", "key": "agenda" },
-      { "ruta": "/agenda/semana", "label": "Semana", "icono": "calendario", "key": "agenda" },
-      { "ruta": "/agenda/mes", "label": "Mes", "icono": "calendario", "key": "agenda" },
-      { "ruta": "/agenda/eventos", "label": "Eventos", "icono": "etapas", "key": "agenda", "sub": "cargar" },
-      { "ruta": "/agenda/rutinas", "label": "Rutinas", "icono": "check", "key": "agenda", "sub": "cargar" },
-      { "ruta": "/agenda/cumplimiento", "label": "Cumplimiento", "icono": "historial", "key": "agenda", "sub": "cargar" }
+      { "ruta": "/agenda/equipo", "label": "Equipo", "icono": "usuarios", "key": "agenda", "sub": "cargar" },
+      { "ruta": "/agenda/rutinas", "label": "Tareas fijas", "icono": "check", "key": "agenda", "sub": "cargar" }
     ]
   },
   {

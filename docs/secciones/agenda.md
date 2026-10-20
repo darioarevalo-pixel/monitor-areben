@@ -15,7 +15,7 @@ fechas comerciales. La Agenda es operativa.
 `lib/agenda/` · handler `api/_agenda.js` por `datos.js?recurso=agenda` · tablas `agenda_promos`,
 `agenda_items` y `agenda_hechos`, **siempre en la base de BDI** · test `tests/agenda.test.ts`.
 
-## 🆕 SEIS pantallas, ⛔ ninguna pestaña (29-ago-2026)
+## SEIS pantallas, ⛔ ninguna pestaña (29-ago-2026) — ⚠️ desde el 19-oct el menú muestra tres, ver arriba
 
 La sección dejó de ser una entrada con cuatro pestañas y pasó a ser **una categoría-módulo del
 menú**, como Meta y Tienda Nube: `keys: []` + `items` en `lib/nav.datos.ts`, la subárea sale del **2º
@@ -97,6 +97,27 @@ el padrón que necesita entra por `equipoDelPadron` (`api/_auth.js`) del lado de
 🔑 **El motor está en `lib/agenda/reglas.core.js` y es `.js` a propósito** (el handler corre en Node
 sin pasar por el compilador de Next y no puede importar TypeScript); `lib/agenda/index.ts` es el
 re-export tipado. Los dos archivos lo explican en su encabezado y no se repite acá.
+
+## 🆕 TRES pantallas en el menú: Hoy · Equipo · Tareas fijas (19-oct-2026, Darío)
+
+Darío: *«realmente es un desastre agenda»*. El menú quedó con **Hoy** (todos), **Equipo** y **Tareas
+fijas** (las dos con `agenda.cargar`). ⚠️ **Semana, Mes, Eventos y Cumplimiento ⛔ no se eliminaron**:
+salieron del menú y siguen respondiendo por su URL (`SUBS` de `Agenda.tsx`). Si en unas semanas nadie
+las reclama, se sacan. No hay registro de entradas, así que no se sabe si alguien las usaba; lo que
+sí se sabe: Semana, Mes y Cumplimiento sólo se miran, Eventos (los ingresos) está en pausa.
+
+- **Equipo** (`components/agenda/Equipo.tsx`, cuentas en `lib/agenda/equipo.ts`): una tarjeta por
+  persona del **`EQUIPO` del correo diario** —las mismas personas que el correo de la noche— con
+  estado, «x de y», atrasadas y el último tilde; al tocarla, lo suyo de hoy. 🔑 Lo de cada una sale
+  de **`pendientesDe`** con el `paraMi` recalculado por `esParaMi` para ella (el del servidor es el de
+  quien mira). ⛔ Lo dirigido a una pantalla no le cae a nadie acá (pide permisos), igual que en el
+  correo. El link del correo ahora lleva acá.
+- **+ Tarea** (`ModalTarea.tsx`): Tarea · Descripción · Fotos · Asignar a (el `EQUIPO`) · Fecha
+  (Hoy/Mañana/Otro día). Arma un `pendiente` `unica` a personas, **arrastrando**. Se elimina desde la
+  tarjeta de la persona.
+- **Tareas fijas** = la pantalla `rutinas` (misma URL): ⛔ ya no lista la tarea de un solo día (eso
+  se sigue en Equipo) y está **agrupada por persona** (`rotuloDestinoCorto`, «Todo el equipo» al
+  final). Las promociones siguen ahí hasta que pasen a la Caja (pedido de Darío; la Caja es de Bruno).
 
 ## 📷 Fotos en el pendiente y «Atrasada» (19-oct-2026, Darío)
 

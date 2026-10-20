@@ -47,6 +47,7 @@ import {
 import { useAgenda } from '@/store/useAgenda'
 import { AvisosHoy } from './AvisosHoy'
 import { Cumplimiento } from './Cumplimiento'
+import { Equipo } from './Equipo'
 import { Eventos } from './Eventos'
 import { GrillaAgenda } from './GrillaAgenda'
 import { PendientesHoy } from './PendientesHoy'
@@ -54,7 +55,7 @@ import { Rutinas } from './Rutinas'
 import { TarjetaPromo } from './TarjetaPromo'
 import { Titulo } from './Titulo'
 
-type Sub = 'hoy' | 'semana' | 'mes' | 'eventos' | 'rutinas' | 'cumplimiento'
+type Sub = 'hoy' | 'equipo' | 'semana' | 'mes' | 'eventos' | 'rutinas' | 'cumplimiento'
 
 /**
  * Las seis, con lo que contesta cada una.
@@ -65,10 +66,11 @@ type Sub = 'hoy' | 'semana' | 'mes' | 'eventos' | 'rutinas' | 'cumplimiento'
  */
 const SUBS: { key: Sub; label: string; hint: string; cargar: boolean }[] = [
   { key: 'hoy', label: 'Hoy', hint: 'Tareas y promoción del día', cargar: false },
+  { key: 'equipo', label: 'Equipo', hint: 'Cómo va cada una hoy', cargar: true },
   { key: 'semana', label: 'Semana', hint: 'Los próximos siete días', cargar: false },
   { key: 'mes', label: 'Mes', hint: 'El mes completo', cargar: false },
   { key: 'eventos', label: 'Eventos', hint: 'Tareas que se generan con un ingreso o una sesión', cargar: true },
-  { key: 'rutinas', label: 'Rutinas', hint: 'Tareas fijas, avisos y promociones', cargar: true },
+  { key: 'rutinas', label: 'Tareas fijas', hint: 'Lo que se repite, por persona. También avisos y promociones', cargar: true },
   { key: 'cumplimiento', label: 'Cumplimiento', hint: 'Tareas hechas y pendientes de los últimos días', cargar: true },
 ]
 
@@ -124,6 +126,7 @@ export function Agenda() {
             // adelante» en silencio: React conserva el estado de un componente que no se mueve.
             <GrillaAgenda key={activa.key} vista={activa.key} />
           )}
+          {activa.key === 'equipo' && <Equipo />}
           {activa.key === 'eventos' && <Eventos />}
           {activa.key === 'rutinas' && <Rutinas />}
           {activa.key === 'cumplimiento' && <Cumplimiento items={items} hechos={hechos} />}
