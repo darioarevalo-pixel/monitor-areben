@@ -63,6 +63,8 @@ describe('ERP › Stock › Recepciones', () => {
     expect(contarVistas(filas, '2026-10')).toEqual({ diferencia: 2, mes: 2, todas: 3 })
     expect(resumen(filas, '2026-10')).toEqual({ ordenes: 2, entraron: 48, conDiferencia: 1, faltaron: 2 })
     expect(armarFila(oc({ unidades_pedidas: 0, cumplimiento: null })).estado).toBe('sin_pedido')
+    // Cargada a mano ANTES de confirmar: vale la de Ingresos (sólo la posterior se reemplaza).
+    expect(armarFila(oc({ fecha_ingreso: '2026-09-30', confirmada_at: '2026-10-05T12:00:00Z' }))).toMatchObject({ dia: '2026-09-30', fechaIngresos: null })
   })
 
   it('la lista: barrita «a de b», proveedor, y la ficha con los que no cerraron primero', async () => {

@@ -29,12 +29,16 @@ export function armarFila(r: Recepcion): FilaRecepcion {
   const partes = [faltaron && `faltaron ${faltaron}`, sobraron && `sobraron ${sobraron}`].filter(Boolean).join(' · ')
   const estadoTexto = estado === 'recibida' ? 'Recibida' : estado === 'sin_pedido' ? 'Sin lo pedido' : `Con diferencia: ${partes}`
   const oc = r.oc_label || `OC ${r.oc_id}`
-  // «Llegó» = cuando se CONFIRMÓ (Bruno, 20-oct): la fecha que carga Ingresos a mano puede ser futura (OC-3047: 30/10,
-  // confirmada el 20/10). Esa va aparte, en la ficha. ⛔ se toca `diaDeIngreso`: es la regla de PRM y de la Agenda.
-  const llegada = { fecha_ingreso: null, confirmada_at: r.confirmada_at, recibido_en: r.recibido_en }
+  // «Llegó» = la fecha que carga Ingresos, SALVO que sea posterior a la confirmación (20-oct): nada llega después de
+  // confirmado (OC-3047: 30/10, confirmada el 20/10) ⇒ ahí manda la confirmación, y la de Ingresos va en la ficha.
+  // Sólo por confirmación, BDI octubre pasaba de 6 a 17 órdenes: lo cargado a mano ANTES sí vale.
+  // ⛔ se toca `diaDeIngreso`: es la regla de PRM y de la Agenda.
+  const confirmada = diaDeIngreso({ fecha_ingreso: null, confirmada_at: r.confirmada_at, recibido_en: r.recibido_en })
+  const futura = !!r.fecha_ingreso && !!confirmada && r.fecha_ingreso.slice(0, 10) > confirmada
+  const llegada = futura ? { fecha_ingreso: null, confirmada_at: r.confirmada_at, recibido_en: r.recibido_en } : r
   return {
     id: r.id, oc, dia: diaDeIngreso(llegada), fecha: fechaDeIngreso(llegada),
-    fechaIngresos: r.fecha_ingreso ? fechaDeIngreso({ fecha_ingreso: r.fecha_ingreso, confirmada_at: '', recibido_en: '' }) : null, proveedor: r.proveedor_nombre ?? null, vaA: DEPOSITO_SUPUESTO[r.store] ?? 'Depósito',
+    fechaIngresos: futura ? fechaDeIngreso({ fecha_ingreso: r.fecha_ingreso, confirmada_at: '', recibido_en: '' }) : null, proveedor: r.proveedor_nombre ?? null, vaA: DEPOSITO_SUPUESTO[r.store] ?? 'Depósito',
     pedidas, recibidas: Number(r.unidades_contadas) || 0, faltaron, sobraron, renglonesConDiferencia: Number(r.lineas_con_diferencia) || 0,
     estado, estadoTexto,
     // Con diferencia ⛔ pinta verde aunque el neto dé 100%.

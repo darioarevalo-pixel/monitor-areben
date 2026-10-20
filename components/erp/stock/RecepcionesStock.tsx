@@ -190,7 +190,7 @@ function FichaRecepcion({ f, marca, onCerrar }: { f: FilaRecepcion; marca: strin
       </div>
       {!f.totalesCoinciden && <Notice tone="warning">Los totales que mandó Ingresos no cierran contra sus renglones: se muestra lo de cada renglón.</Notice>}
       <DatosFicha>
-        {f.fechaIngresos && f.fechaIngresos !== f.fecha && <DatoFicha titulo="Fecha que cargó Ingresos">{f.fechaIngresos}</DatoFicha>}
+        {f.fechaIngresos && <DatoFicha titulo="Fecha que cargó Ingresos">{f.fechaIngresos} · posterior a la confirmación</DatoFicha>}
         <DatoFicha titulo="Pedidas">{u(f.pedidas)}</DatoFicha>
         <DatoFicha titulo="Recibidas">{u(f.recibidas)}</DatoFicha>
         <DatoFicha titulo="Faltaron">{f.faltaron ? u(f.faltaron) : '—'}</DatoFicha>
