@@ -56,3 +56,21 @@ describe('personaDelEquipo — a quién el Monitor le abre en «Hoy»', () => {
     expect(personaDelEquipo(undefined)).toBeNull()
   })
 })
+
+describe('celular compartido del depósito', () => {
+  it('Agustina comparte con Lorena; Lorena y el resto, con nadie', async () => {
+    const { companerasDe } = await import('../lib/agenda/equipo')
+    expect(companerasDe('agustinapiriz').map((p) => p.name)).toEqual(['Lorena Reyes'])
+    expect(companerasDe('Lorena Reyes')).toEqual([])
+    expect(companerasDe('camilaquintana')).toEqual([])
+  })
+  it('deLaPersona recalcula para quién es cada tarea', async () => {
+    const { deLaPersona, EQUIPO_AGENDA } = await import('../lib/agenda/equipo')
+    const lorena = EQUIPO_AGENDA.find((p) => p.name === 'Lorena Reyes')!
+    const items = [
+      { id: 'a', destino: { tipo: 'personas', personas: ['Lorena Reyes'] }, paraMi: false },
+      { id: 'b', destino: { tipo: 'personas', personas: ['agustinapiriz'] }, paraMi: true },
+    ] as unknown as Parameters<typeof deLaPersona>[0]
+    expect(deLaPersona(items, lorena).map((i) => i.paraMi)).toEqual([true, false])
+  })
+})

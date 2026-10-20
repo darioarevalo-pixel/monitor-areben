@@ -136,8 +136,9 @@ export function borrarItem(id: string): Promise<void> {
  * anotado en el día siguiente y Cumplimiento mostraría el de hoy sin hacer. El servidor igual
  * valida que la fecha exista, que la regla caiga ese día y que no sea del futuro.
  */
-export function marcarHecho(itemId: string, fecha: FechaIso, nota?: string): Promise<void> {
-  return postear({ action: 'marcar', id: itemId, fecha, nota: nota ?? null }, 'No se pudo tildar.')
+/** `por`: en el celular compartido, a nombre de quién queda el tilde. */
+export function marcarHecho(itemId: string, fecha: FechaIso, nota?: string, por?: string): Promise<void> {
+  return postear({ action: 'marcar', id: itemId, fecha, nota: nota ?? null, ...(por ? { por } : {}) }, 'No se pudo tildar.')
 }
 
 export function desmarcarHecho(itemId: string, fecha: FechaIso): Promise<void> {

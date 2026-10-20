@@ -11,6 +11,7 @@
  * permisos del padrón. Mismo criterio que el correo.
  */
 import { EQUIPO } from './correo-diario.core.js'
+import { companerasDe as companerasCore } from './celular-compartido.core.js'
 import { esParaMi } from '../novedades/destino.core.js'
 import { pendientesDe, type PendienteHoy } from './index'
 import type { FechaIso, Hecho, ItemAgenda } from './tipos'
@@ -46,8 +47,7 @@ export function avanceDelEquipo(
   equipo: PersonaEquipo[] = EQUIPO_AGENDA,
 ): FilaEquipo[] {
   return equipo.map((persona) => {
-    const perfil = { name: persona.name, funcion: persona.funcion, cuenta: persona.cuenta || undefined }
-    const suyos = items.map((i) => ({ ...i, paraMi: esParaMi(i.destino, perfil) as boolean }))
+    const suyos = deLaPersona(items, persona)
     const pendientes = pendientesDe(suyos, hechos, hoy, { marca: persona.cuenta || undefined })
     const hechas = pendientes.filter((p) => p.hecho).length
     const total = pendientes.length
@@ -68,4 +68,15 @@ export function avanceDelEquipo(
  */
 export function personaDelEquipo(name: string | null | undefined): PersonaEquipo | null {
   return EQUIPO_AGENDA.find((p) => p.name === name) ?? null
+}
+
+/** Los ítems con `paraMi` recalculado para otra persona del equipo, como si ella hubiera entrado. */
+export function deLaPersona(items: ItemAgenda[], persona: PersonaEquipo): ItemAgenda[] {
+  const perfil = { name: persona.name, funcion: persona.funcion, cuenta: persona.cuenta || undefined }
+  return items.map((i) => ({ ...i, paraMi: esParaMi(i.destino, perfil) as boolean }))
+}
+
+/** 📱 Con quién comparte el celular quien entró (`celular-compartido.core.js`). `[]` casi siempre. */
+export function companerasDe(name: string | null | undefined): PersonaEquipo[] {
+  return companerasCore(name) as PersonaEquipo[]
 }

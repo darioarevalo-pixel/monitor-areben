@@ -37,14 +37,15 @@
  * `marcas` de la promo, y por eso la pantalla igual filtra por la marca del header.
  */
 
+import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
-import { EmptyState, Esqueleto, color, font, space, weight } from '@/components/ui'
+import { EmptyState, Esqueleto, Tabs, color, font, space, weight } from '@/components/ui'
 import {
   avisosDe, contarSinTildar, hoyIso, pendientesDe, promosDe,
   type Promo,
 } from '@/lib/agenda'
-import { personaDelEquipo } from '@/lib/agenda/equipo'
+import { companerasDe, deLaPersona, personaDelEquipo, type PersonaEquipo } from '@/lib/agenda/equipo'
 import { comoLeLlamamos } from '@/lib/inicio/core'
 import { useAgenda } from '@/store/useAgenda'
 import { ActivarAvisos } from './ActivarAvisos'
@@ -101,16 +102,33 @@ export function Agenda() {
 
   const hoy = hoyIso()
   const delEquipo = personaDelEquipo(perfil?.name)
-  const deHoy = pendientesDe(items, hechos, hoy, { marca })
+  // 📱 Celular compartido (Agustina + Lorena, 20-oct-2026): una solapa por persona en «Hoy».
+  const companeras = companerasDe(perfil?.name)
+  const [solapa, setSolapa] = useState<string>('')
+  const otra = companeras.find((p) => p.name === solapa) ?? null
+  const susItems = otra ? deLaPersona(items, otra) : items
+  const suMarca = otra ? otra.cuenta || marca : marca
+  const deHoy = pendientesDe(susItems, hechos, hoy, { marca: suMarca })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* «Hoy» saluda como en la maqueta del celular (Darío, 19-oct-2026). Sólo el nombre de pila. */}
       {activa.key === 'hoy' && cargado && (
         <SaludoHoy
-          nombre={(delEquipo ? delEquipo.nombre : comoLeLlamamos(perfil)).split(' ')[0]}
+          nombre={(otra ? otra.nombre : delEquipo ? delEquipo.nombre : comoLeLlamamos(perfil)).split(' ')[0]}
           hechas={deHoy.filter((p) => p.hecho).length}
           total={deHoy.length}
+        />
+      )}
+
+      {activa.key === 'hoy' && cargado && companeras.length > 0 && (
+        <Tabs
+          value={otra ? otra.name : ''}
+          onChange={setSolapa}
+          items={[
+            { key: '', label: (delEquipo ? delEquipo.nombre : comoLeLlamamos(perfil)).split(' ')[0] },
+            ...companeras.map((p) => ({ key: p.name, label: p.nombre.split(' ')[0] })),
+          ]}
         />
       )}
 
@@ -122,10 +140,11 @@ export function Agenda() {
             <Hoy
               promos={promosDe(promos, hoy, { marca })}
               hoy={hoy}
-              sinTildar={contarSinTildar(items, hechos, hoy, { marca })}
+              sinTildar={contarSinTildar(susItems, hechos, hoy, { marca: suMarca })}
               hayPendientes={deHoy.length > 0}
               hayAvisos={avisosDe(items, hoy, { marca }).length > 0}
               pantallas={!!delEquipo}
+              para={otra ?? undefined}
             />
           )}
           {/* Las dos vistas del calendario son la misma pantalla: lo que cambia es la unidad, y eso
@@ -162,6 +181,7 @@ function Hoy({
   hayPendientes,
   hayAvisos,
   pantallas,
+  para,
 }: {
   promos: Promo[]
   hoy: string
@@ -170,6 +190,8 @@ function Hoy({
   hayAvisos: boolean
   /** Al pie, sus otras pantallas: sólo para el equipo, que en el celular no ve el menú. */
   pantallas: boolean
+  /** 📱 La solapa de la compañera, en el celular compartido. */
+  para?: PersonaEquipo
 }) {
   return (
     <div style={{ display: 'grid', gap: space[5] }}>
@@ -181,7 +203,7 @@ function Hoy({
           {sinTildar > 0 && <span style={{ color: color.mut, fontWeight: weight.medium }}> · {sinTildar} {sinTildar === 1 ? 'pendiente' : 'pendientes'}</span>}
         </Titulo>
         {hayPendientes ? (
-          <PendientesHoy fecha={hoy} />
+          <PendientesHoy key={para?.name ?? ''} fecha={hoy} para={para} />
         ) : (
           <EmptyState icon="✅" title="Sin tareas para hoy." dashed />
         )}

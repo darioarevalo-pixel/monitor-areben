@@ -51,6 +51,8 @@ import { esDeArriba, veLoDeArriba } from '../lib/agenda/jerarquia.core.js';
 import { avisar, faltaParaMandar, guardarSuscripcion, suscripcionValida } from './_push.js';
 import { armarCorreoDiario, hoyAR } from '../lib/agenda/correo-diario.core.js';
 import { avisosAlTildar } from '../lib/agenda/aviso-terminado.core.js';
+import { companerasDe, perfilDe } from '../lib/agenda/celular-compartido.core.js';
+import { EQUIPO } from '../lib/agenda/correo-diario.core.js';
 import { pedirAvisoInterno } from '../lib/mailer/aviso.core.js';
 import { CAMPO as CAMPO_PREGUNTA, conRespuesta, preguntaDeItem } from '../lib/agenda/pregunta-ingreso.core.js';
 
@@ -779,7 +781,9 @@ export default async function handler(req, res) {
       const delEquipo = cargar && !veArriba
         ? await (async () => { const eq = await equipo(); return items.filter((i) => !esDeArriba(i.destino, eq)); })()
         : items;
-      const visibles = cargar ? delEquipo : items.filter((i) => i.paraMi);
+      // 📱 En el celular compartido viaja además lo de la compañera, para su solapa.
+      const compas = companerasDe(yo).map(perfilDe);
+      const visibles = cargar ? delEquipo : items.filter((i) => i.paraMi || compas.some((c) => esParaMi(i.destino, c)));
       const idsVisibles = new Set(visibles.map((i) => i.id));
 
       return res.status(200).json({
@@ -829,7 +833,10 @@ export default async function handler(req, res) {
       if (!suscripcionValida(b.suscripcion)) return res.status(400).json({ error: 'El teléfono no mandó una dirección de avisos válida.' });
       const falta = faltaParaMandar();
       if (falta) return res.status(503).json({ error: falta });
-      await guardarSuscripcion(yo, b.suscripcion, req.headers['user-agent']);
+      // 📱 En el celular compartido, el teléfono queda anotado también para la compañera.
+      for (const u of [yo, ...companerasDe(yo).map((p) => p.name)]) {
+        await guardarSuscripcion(u, b.suscripcion, req.headers['user-agent']);
+      }
       return res.status(200).json({ ok: true });
     }
     if (action === 'push-prueba') {
@@ -857,7 +864,16 @@ export default async function handler(req, res) {
         .maybeSingle();
       if (errItem) throw new Error(errItem.message);
       if (!item) return res.status(404).json({ error: 'Ese pendiente ya no existe.' });
-      if (!esParaMi(item.destino, perfil)) {
+      // 📱 `por`: en el celular compartido se tilda en la solapa de la compañera, y queda a su nombre.
+      // ⛔ Sólo por alguien que comparte celular con quien entró.
+      const compas = companerasDe(yo);
+      const por = b.por ? String(b.por) : yo;
+      const compa = por === yo ? null : compas.find((p) => p.name === por);
+      if (por !== yo && !compa) return res.status(403).json({ error: 'No podés tildar por otra persona.' });
+      const esDeAlguien = action === 'desmarcar'
+        ? [perfil, ...compas.map(perfilDe)].some((q) => esParaMi(item.destino, q))
+        : esParaMi(item.destino, compa ? perfilDe(compa) : perfil);
+      if (!esDeAlguien) {
         return res.status(403).json({ error: 'Ese pendiente no es tuyo.' });
       }
 
@@ -887,7 +903,7 @@ export default async function handler(req, res) {
       // mismo puesto tildando a la vez se pisarían el nombre y "quién lo hizo" cambiaría de a ratos.
       const { data: nuevo, error } = await supabase
         .from('agenda_hechos')
-        .upsert([{ item_id: id, fecha, usuario: yo, nota }], {
+        .upsert([{ item_id: id, fecha, usuario: por, nota }], {
           onConflict: 'item_id,fecha',
           ignoreDuplicates: true,
         })
@@ -902,7 +918,7 @@ export default async function handler(req, res) {
           const necesitaTodo = fecha === hoy;
           const items = necesitaTodo ? await todasLasFilas(() => supabase.from('agenda_items').select('id, clase, titulo, regla, destino, marcas, activo, datos').order('id')) : [];
           const hechos = necesitaTodo ? await todasLasFilas(() => supabase.from('agenda_hechos').select('item_id, fecha, usuario, hecho_at').eq('fecha', hoy).order('item_id')) : [];
-          for (const a of avisosAlTildar({ yo, item, fecha, hoy, items, hechos })) {
+          for (const a of avisosAlTildar({ yo: por, item, fecha, hoy, items, hechos })) {
             await avisar(a.para, { titulo: a.titulo, cuerpo: a.cuerpo, url: a.url, tag: a.tag });
           }
         } catch { /* el aviso es de yapa */ }
@@ -1306,7 +1322,11 @@ export default async function handler(req, res) {
       if (!previo && fila.clase === 'pendiente' && fila.activo && fila.destino.tipo === 'personas') {
         // 🔔 Se espera (en Vercel lo que queda colgado después de contestar se corta), pero ⛔ falla
         // nunca la tarea: `avisar` no lanza, y la tarea ya quedó guardada arriba.
-        await avisar(fila.destino.personas || [], { titulo: 'Nueva tarea asignada', cuerpo: titulo, url: '/agenda', tag: id });
+        // Con el nombre: en el celular compartido suenan las de las dos.
+        for (const p of fila.destino.personas || []) {
+          const e = EQUIPO.find((x) => x.name === p);
+          await avisar([p], { titulo: e ? `Nueva tarea para ${e.nombre.split(' ')[0]}` : 'Nueva tarea asignada', cuerpo: titulo, url: '/agenda', tag: `${id}-${p}` });
+        }
       }
       return res.status(200).json({ ok: true, id });
     }

@@ -72,7 +72,7 @@ export const useAgenda = create<AgendaState>((set, get) => ({
     const optimista: Hecho = { itemId, fecha, usuario, nota: null, hechoAt: new Date().toISOString() }
     set({ hechos: [...get().hechos, optimista] })
     try {
-      await marcarHecho(itemId, fecha)
+      await marcarHecho(itemId, fecha, undefined, usuario)
     } catch (e) {
       set({ hechos: get().hechos.filter((h) => !(h.itemId === itemId && h.fecha === fecha)) })
       throw e

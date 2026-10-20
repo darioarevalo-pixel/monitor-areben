@@ -25,6 +25,7 @@ import {
   type FilaHoy, type ItemAgenda, type PendienteHoy,
 } from '@/lib/agenda'
 import { contestarPuerta } from '@/lib/agenda/cliente'
+import { deLaPersona, type PersonaEquipo } from '@/lib/agenda/equipo'
 import { MiniaturasFotos } from './FotosTarea'
 import { rotuloFecha } from '@/lib/fechas/semana'
 import { leerManual } from '@/lib/manuales/cliente'
@@ -38,15 +39,20 @@ export function PendientesHoy({
   fecha,
   /** En Inicio sólo va lo que falta: lo ya tildado ahí sería una lista de cosas para no hacer. */
   soloPendientes = false,
+  para,
 }: {
   fecha: string
   soloPendientes?: boolean
+  /** 📱 Celular compartido: la lista de la compañera, y el tilde a su nombre. Ver `deLaPersona`. */
+  para?: PersonaEquipo
 }) {
   const { perfil, marca } = useSesion()
   const items = useAgenda((s) => s.items)
   const hechos = useAgenda((s) => s.hechos)
 
-  const todos = pendientesDe(items, hechos, fecha, { marca })
+  const todos = para
+    ? pendientesDe(deLaPersona(items, para), hechos, fecha, { marca: para.cuenta || marca })
+    : pendientesDe(items, hechos, fecha, { marca })
   const lista = soloPendientes ? todos.filter((p) => !p.hecho) : todos
   if (lista.length === 0) return null
 
@@ -61,7 +67,7 @@ export function PendientesHoy({
   const sueltasHechas = lista.filter((p) => p.hecho && !actividadDe(p.item))
   const resto = lista.filter((p) => !sueltasHechas.includes(p)).sort((a, b) => peso(a) - peso(b))
   const filas = filasDeHoy(resto)
-  const yo = perfil?.name ?? ''
+  const yo = para ? para.name : perfil?.name ?? ''
 
   return (
     <div style={{ display: 'grid', gap: space[2] }}>
