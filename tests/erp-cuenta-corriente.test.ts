@@ -50,3 +50,18 @@ describe('cuenta corriente — núcleo', () => {
     expect(m.has('pago:1')).toBe(false)
   })
 })
+
+describe('Cuenta corriente: las dos columnas del motor (§18)', () => {
+  it('trae ventas con saldo y el último cobro; sin ellos queda null (copia vieja del motor)', async () => {
+    const { armarFilasCuenta, ordenar } = await import('@/lib/erp/cuenta-corriente.core.js')
+    const base = { linea: 'bdi', nombre: 'A', saldo: 10, debe: 10, a_favor: 0, vencido: 0, dias_mayor: 3, tramos: {} }
+    const [a, b, c] = armarFilasCuenta([
+      { ...base, cliente_id: '1', ventas_con_saldo: 2, ultimo_cobro: { fecha: '2026-10-15', monto: 500 } },
+      { ...base, cliente_id: '2', ventas_con_saldo: 5, ultimo_cobro: null },
+      { ...base, cliente_id: '3' },
+    ])
+    expect([a.ventasConSaldo, a.ultimoCobro]).toEqual([2, { fecha: '2026-10-15', monto: 500 }])
+    expect([b.ultimoCobro, c.ventasConSaldo, c.ultimoCobro]).toEqual([null, null, null])
+    expect(ordenar([a, b, c], { col: 'ventas', dir: 'desc' }).map((f: { clienteId: string }) => f.clienteId)).toEqual(['2', '1', '3'])
+  })
+})

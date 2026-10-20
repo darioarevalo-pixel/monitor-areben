@@ -533,6 +533,7 @@ export type CreditoCliente = { credito: boolean; tope: number | null; dias: numb
 export type CuentaDelMotor = {
   cliente_id: string; linea: string; nombre: string; doc: string | null; credito: CreditoCliente
   saldo: number; debe: number; a_favor: number; vencido: number; dias_mayor: number; atrasado: boolean; sin_credito: boolean; tramos: Record<string, number>
+  ventas_con_saldo?: number; ultimo_cobro?: { fecha: string; monto: number } | null
 }
 export type CuentasDeLaMarca = { hoy: string | null; prueba: boolean; cuentas: CuentaDelMotor[]; clientesErp: number; otroLibro: number }
 export const leerCuentasCorrientes = (marca: MarcaErp, prueba: boolean) =>

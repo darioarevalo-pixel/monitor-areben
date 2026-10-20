@@ -84,6 +84,8 @@ export function CuentaCorriente() {
     if (k === 'saldo') return <span style={{ fontWeight: 700, color: f.saldo > 0 ? color.ink : f.saldo < 0 ? 'var(--mo-success-ink)' : color.mut2 }}>{f.saldo < 0 ? `${formatMoney(-f.saldo)} a favor` : formatMoney(f.saldo)}</span>
     if (k === 'vencido') return f.vencido ? <span style={{ color: 'var(--mo-danger-ink)' }}><MoneyText value={f.vencido} /></span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'dias') return f.debe ? <span style={{ color: color.ink2 }}>{n(f.diasMayor)} días</span> : <span style={{ color: color.mut2 }}>—</span>
+    if (k === 'ventas') return f.ventasConSaldo ? <span style={{ color: color.ink2 }}>{n(f.ventasConSaldo)}</span> : <span style={{ color: color.mut2 }}>—</span>
+    if (k === 'cobro') return f.ultimoCobro ? <span style={{ color: color.ink2 }}>{`${String(f.ultimoCobro.fecha).slice(8, 10)}/${String(f.ultimoCobro.fecha).slice(5, 7)} · ${formatMoney(f.ultimoCobro.monto)}`}</span> : <span style={{ color: color.mut2 }}>Ninguno</span>
     if (k === 'credito') return <span title={f.credito?.puesto_por ? `Lo marcó ${f.credito.puesto_por}` : undefined} style={{ color: f.credito?.credito ? color.ink2 : color.mut }}>{textoCredito(f.credito, formatMoney)}</span>
     if (k === 'estado') return <ChipEstado mapa={ESTADO_CUENTA} k={f.estado} />
     if ((TRAMOS as string[]).includes(k)) return f.tramos[k] ? <MoneyText value={f.tramos[k]} /> : <span style={{ color: color.mut2 }}>—</span>

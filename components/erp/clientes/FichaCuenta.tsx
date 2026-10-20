@@ -24,6 +24,7 @@ export type FilaCuenta = {
   id: string; clienteId: string; linea: string; nombre: string; doc: string | null
   saldo: number; debe: number; aFavor: number; vencido: number; diasMayor: number; tramos: Record<string, number>
   credito: CreditoCliente; sinCredito: boolean; estado: string
+  ventasConSaldo?: number | null; ultimoCobro?: { fecha: string; monto: number } | null
 }
 
 function bajar(texto: string, nombre: string) {
