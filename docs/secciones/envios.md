@@ -184,6 +184,16 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   función se llama `pagoAlLocal` y no `cobroPendiente`, y por eso el KPI dice «Pagado al local por
   transferencia» y no «Falta cobrarle a clientas» — **ese rótulo mandaba a reclamarle plata a una
   clienta que ya había pagado**, y en rojo.
+- 🔴 🔑 **Un envío puede apuntar a su VENTA del ERP** (`venta_id`, 20-oct-2026, contrato-venta.md §20
+  «Contraentrega»): la venta la lleva el motor del ERP; la cuenta del cadete, Envíos. Cada escritura que
+  cambia `estado` o `cobrado` —la pantalla (estado, cobrado, sacar del día, guardar, eliminar) **y el
+  portal**— le avisa al motor con `seguirVenta` (`api/_envios-venta.js`), y **lo que hace sale de la fila
+  ANTES y DESPUÉS** (`verboDeVenta`, `lib/envios/venta.core.js`), ⛔ del botón: queda `entregado` ⇒ el
+  cobro por el lado de `cobrado` (null = el cadete); deja de estarlo ⇒ la venta vuelve a la calle. Atarlo
+  al botón era el bug: «Entregado» y después «No cobré» dejaba la plata en el cadete. ⛔ **El ERP nunca
+  frena a Envíos**: el envío se escribe primero y, si el motor falla, la respuesta trae `aviso` (toast; en
+  el portal sólo log). «Anular la venta» sólo en un `no_entregado` con venta, y pide el permiso de anular
+  del **ERP** (`puedeErp`), ⛔ el de Envíos.
 - 🔑 **`cobrado: null` («no dijo nada») NO es `false`** — todas las filas anteriores al portal son
   `null` y la cuenta las lee como el caso normal: la cobró él. Los **tres** valores dicen **por dónde
   entró la plata**, no si entró. La tarifa se le paga igual: llevó el paquete.

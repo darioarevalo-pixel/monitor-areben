@@ -65,7 +65,21 @@ export function leerDevolucion(d) {
 }
 
 /** Lo que entró en PLATA de los pagos de una venta (`venta_pago` con el `medio` de su cuenta de cobro en `cuenta_medio`). */
-export const pagosDePlata = (pagos) => pagos.filter((p) => !NO_ES_PLATA.includes(p.cuenta_medio) && Number(p.monto) > 0)
+/**
+ * Lo pagado en plata, NETO por cuenta, medio y cuenta real: la Contraentrega corregida (sql/032, cadete ⇒ local) deja
+ * una fila en negativo en la cuenta vieja y otra en la nueva ⇒ contadas sueltas, la plata saldría dos veces.
+ */
+export function pagosDePlata(pagos) {
+  const netos = new Map()
+  for (const p of pagos) {
+    if (NO_ES_PLATA.includes(p.cuenta_medio)) continue
+    const k = [p.cuenta_cobro_id, p.medio ?? null, p.cuenta_real_id ?? null].join('|')
+    const n = netos.get(k)
+    if (n) n.monto = pesos(n.monto + Number(p.monto))
+    else netos.set(k, { ...p, monto: Number(p.monto) })
+  }
+  return [...netos.values()].filter((p) => p.monto > 0)
+}
 
 /** Repartir `monto` entre los pagos, en proporción a lo que pagó cada uno; el último se lleva el redondeo. */
 function prorratear(pagos, monto) {

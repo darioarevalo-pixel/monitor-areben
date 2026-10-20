@@ -97,6 +97,11 @@ export type Envio = {
   entregado_en?: string | null
   vendedor: string | null
   cadete: string | null
+  /**
+   * **Su venta del ERP**, si tiene (`sql/migrate-envios-venta.sql`, contrato §20 «Contraentrega»). Al marcar
+   * «entregado» el servidor le avisa al motor por dónde entró la plata. `null`: no tiene.
+   */
+  venta_id?: string | null
   /** La orden de TN congelada al armar el reparto. Ver el encabezado de la migración. */
   datos: Record<string, unknown>
   autor: string | null

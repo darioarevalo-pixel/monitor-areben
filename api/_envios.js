@@ -11,6 +11,9 @@
 //   POST { recurso:'envios', action:'cobrado', id, cobrado }  (true | false | null — corrige el tilde del cadete)
 //   POST { recurso:'envios', action:'estado', id, estado }
 //   POST { recurso:'envios', action:'borrar', id }
+//   POST { recurso:'envios', action:'anular-venta', id }   «no entregado» sin reintento ⇒ anula su venta del ERP (§20)
+//   (`guardar` acepta `envio.venta_id`: el envío apunta a su venta del ERP. Los que cambian `estado` o `cobrado`
+//    le avisan al motor —`_envios-venta.js`— y, si el motor falla, contestan `{ ok, aviso }`: el envío ya quedó.)
 //   POST { recurso:'envios', action:'movimiento', fecha, clase, monto, nota }
 //   POST { recurso:'envios', action:'anular-movimiento', id }
 //   GET  ?recurso=envios&zonas=1                             → { ok, zonas } (el mapa de reparto)
@@ -50,7 +53,9 @@ import { venceElProximoPrimero } from '../lib/envios/portal.core.js';
 import { CAMPOS_ZONA, planDeImportacion, validarZona } from '../lib/envios/zonas.core.js';
 import { consultaDe, motivoDeSugerencia, pedidosDelReintento, sugerenciaDePunto } from '../lib/envios/direccion.core.js';
 import { geocodificarEnEscalera } from './_georef.js';
-import { marcasConAcceso } from '../lib/permisos.core.js';
+import { marcasConAcceso, permisoErpDe, puedeErp } from '../lib/permisos.core.js';
+import { anularVentaDeEnvio, seguirVenta } from './_envios-venta.js';
+import { puedeAnularVenta, ventaIdDe } from '../lib/envios/venta.core.js';
 // `ESTADOS` son sólo los cinco nuevos, a propósito: el handler nuevo no tiene por qué **escribir**
 // un estado legado, aunque la base todavía los acepte para no romper lo que prod ya guardó.
 import {
@@ -113,6 +118,9 @@ function nuevoId() {
  * Los campos que no están en la lista se caen a propósito: el cliente no escribe `created_at`, ni
  * `autor`, ni se inventa columnas. Lo accesorio viaja en `datos`, que es jsonb.
  */
+/** Lo que se lee de un envío para avisarle al motor de su venta (`seguirVenta`). */
+const DE_LA_VENTA = 'id, store, estado, cobrado, venta_id';
+
 function filaDe(e, yo) {
   const mEnvio = monto(e.monto_envio);
   const mSaldo = monto(e.monto_pedido_a_cobrar);
@@ -351,10 +359,18 @@ export default async function handler(req, res) {
       const fila = filaDe(b.envio || {}, yo);
       const mal = validarEnvio(fila);
       if (mal) return res.status(400).json({ error: mal });
+      // 🔑 La venta del ERP sólo se toca si vino en el cuerpo: la ficha que no la conoce ⛔ la suelta al guardar.
+      const ventaId = ventaIdDe((b.envio || {}).venta_id);
+      if (ventaId === false) return res.status(400).json({ error: 'La venta del ERP no es válida.' });
+      if (ventaId !== undefined) fila.venta_id = ventaId;
 
-      const { error } = await supabase.from('envios_reparto').upsert(fila, { onConflict: 'id' });
+      // Se lee antes: `guardar` también puede cambiar el estado, y el motor tiene que enterarse igual.
+      const { data: antes, error: eLeer } = await supabase.from('envios_reparto').select(DE_LA_VENTA).eq('id', fila.id).maybeSingle();
+      if (eLeer) throw new Error(eLeer.message);
+      const { data, error } = await supabase.from('envios_reparto').upsert(fila, { onConflict: 'id' }).select(DE_LA_VENTA);
       if (error) throw new Error(error.message);
-      return res.status(200).json({ ok: true, id: fila.id });
+      const { aviso } = await seguirVenta({ antes, despues: data && data[0], usuario: yo });
+      return res.status(200).json({ ok: true, id: fila.id, ...(aviso ? { aviso } : {}) });
     }
 
     // ── El tilde del día: preparado, despachado, entregado ────────────────────
@@ -374,11 +390,15 @@ export default async function handler(req, res) {
       // Quién lo llevó se anota cuando sale, no antes.
       if (b.cadete !== undefined) parche.cadete = b.cadete || null;
 
-      const { data, error } = await supabase.from('envios_reparto').update(parche).eq('id', id).select('id');
+      // Se lee antes por la venta del ERP: lo que hace el motor depende de cómo estaba (`verboDeVenta`).
+      const { data: antes, error: eLeer } = await supabase.from('envios_reparto').select(DE_LA_VENTA).eq('id', id).maybeSingle();
+      if (eLeer) throw new Error(eLeer.message);
+      const { data, error } = await supabase.from('envios_reparto').update(parche).eq('id', id).select(DE_LA_VENTA);
       if (error) throw new Error(error.message);
       // Sin esto, tildar un envío borrado por otra pantalla contestaría "ok" y no habría pasado nada.
       if (!data || !data.length) return res.status(404).json({ error: 'Ese envío ya no está.' });
-      return res.status(200).json({ ok: true });
+      const { aviso } = await seguirVenta({ antes, despues: data[0], usuario: yo });
+      return res.status(200).json({ ok: true, ...(aviso ? { aviso } : {}) });
     }
 
     // ── Mandar un pendiente a un día, o devolverlo a la bandeja ───────────────
@@ -395,6 +415,8 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: 'Falta el envío.' });
 
       let parche;
+      // Sacar del día a un `entregado` lo reabre (`parcheAlSacarDelDia`) ⇒ su venta del ERP vuelve a la calle.
+      let antesDeSacar = null;
       if (b.action === 'desagendar') {
         // 🔴 **Se lee antes de escribir por lo mismo que `agendar`**: el parche depende del estado
         // en el que está la fila. Un `entregado` que se saca del día cae en la bandeja —el filtro
@@ -403,11 +425,12 @@ export default async function handler(req, res) {
         // no lo decide `parcheAlSacarDelDia`, que es donde se puede afirmar.
         const { data: actual, error: eLeer } = await supabase
           .from('envios_reparto')
-          .select('estado')
+          .select(DE_LA_VENTA)
           .eq('id', id)
           .maybeSingle();
         if (eLeer) throw new Error(eLeer.message);
         parche = parcheAlSacarDelDia(actual);
+        antesDeSacar = actual;
       } else {
         if (!esFechaIso(b.fecha)) return res.status(400).json({ error: 'Falta el día del reparto (YYYY-MM-DD).' });
         if (!TURNOS.includes(b.turno)) return res.status(400).json({ error: `El turno tiene que ser ${TURNOS.join(' o ')}.` });
@@ -433,10 +456,11 @@ export default async function handler(req, res) {
         .from('envios_reparto')
         .update({ ...parche, autor: yo, updated_at: new Date().toISOString() })
         .eq('id', id)
-        .select('id');
+        .select(DE_LA_VENTA);
       if (error) throw new Error(error.message);
       if (!data || !data.length) return res.status(404).json({ error: 'Ese envío ya no está.' });
-      return res.status(200).json({ ok: true });
+      const { aviso } = antesDeSacar ? await seguirVenta({ antes: antesDeSacar, despues: data[0], usuario: yo }) : {};
+      return res.status(200).json({ ok: true, ...(aviso ? { aviso } : {}) });
     }
 
     // ── El tilde de «ya lo pagó» ──────────────────────────────────────────────
@@ -522,14 +546,18 @@ export default async function handler(req, res) {
       if (cobrado === undefined) {
         return res.status(400).json({ error: 'Quién cobró tiene que ser true (el cadete), false (se pagó al local) o null (sin dato).' });
       }
+      // 🔑 Con su venta del ERP ya cerrada, corregir el tilde CORRIGE el cobro de la venta (⛔ choca con `YA_CERRADA`).
+      const { data: antes, error: eLeer } = await supabase.from('envios_reparto').select(DE_LA_VENTA).eq('id', id).maybeSingle();
+      if (eLeer) throw new Error(eLeer.message);
       const { data, error } = await supabase
         .from('envios_reparto')
         .update({ cobrado, autor: yo, updated_at: new Date().toISOString() })
         .eq('id', id)
-        .select('id');
+        .select(DE_LA_VENTA);
       if (error) throw new Error(error.message);
       if (!data || !data.length) return res.status(404).json({ error: 'Ese envío ya no está.' });
-      return res.status(200).json({ ok: true });
+      const { aviso } = await seguirVenta({ antes, despues: data[0], usuario: yo });
+      return res.status(200).json({ ok: true, ...(aviso ? { aviso } : {}) });
     }
 
     // ── El link del cadete ────────────────────────────────────────────────────
@@ -566,8 +594,32 @@ export default async function handler(req, res) {
     if (b.action === 'borrar') {
       const id = String(b.id || '');
       if (!id) return res.status(400).json({ error: 'Falta el envío.' });
-      const { error } = await supabase.from('envios_reparto').delete().eq('id', id);
+      const { data, error } = await supabase.from('envios_reparto').delete().eq('id', id).select(DE_LA_VENTA);
       if (error) throw new Error(error.message);
+      // Eliminar un entregado con venta ⇒ la plata de ese cierre ⛔ tiene envío detrás: la venta vuelve a la calle.
+      const { aviso } = await seguirVenta({ antes: data && data[0], despues: null, usuario: yo });
+      return res.status(200).json({ ok: true, ...(aviso ? { aviso } : {}) });
+    }
+
+    // ── «No entregado» sin reintento: anular su venta del ERP (contrato §20.4) ──────────────────
+    //
+    // 🔑 Lo ofrece la pantalla en un `no_entregado` con venta; si se reprograma, ⛔ (vuelve a `pendiente` y la venta
+    // sigue). Anular es del ERP ⇒ pide el permiso de anular del ERP en la marca del envío (`puedeErp`), ⛔ el de Envíos.
+    if (b.action === 'anular-venta') {
+      const id = String(b.id || '');
+      if (!id) return res.status(400).json({ error: 'Falta el envío.' });
+      const { data: envio, error: eLeer } = await supabase.from('envios_reparto').select(`${DE_LA_VENTA}, orden_numero, datos`).eq('id', id).maybeSingle();
+      if (eLeer) throw new Error(eLeer.message);
+      if (!envio) return res.status(404).json({ error: 'Ese envío ya no está.' });
+      if (!puedeErp(perfil, envio.store, permisoErpDe({ method: 'POST', accion: 'anular' }))) {
+        return res.status(403).json({ error: 'Tu rol no puede anular ventas en el ERP.' });
+      }
+      if (!puedeAnularVenta(envio)) return res.status(409).json({ error: 'Sólo se anula la venta de un envío «no entregado».' });
+      const r = await anularVentaDeEnvio({ envio, usuario: yo || 'envíos' });
+      if (!r.ok) return res.status(r.status).json({ error: r.error });
+      // Queda anotado en el envío para que la pantalla ⛔ vuelva a ofrecerlo (`datos` se APILA: ahí vive la orden de TN).
+      const datos = { ...(envio.datos || {}), venta_anulada: { at: new Date().toISOString(), por: yo } };
+      await supabase.from('envios_reparto').update({ datos, autor: yo, updated_at: new Date().toISOString() }).eq('id', id);
       return res.status(200).json({ ok: true });
     }
 
