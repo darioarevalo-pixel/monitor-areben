@@ -139,6 +139,8 @@ export type ItemAgenda = {
    * Cumplimiento contaría como una sola racha lo que en Hoy ya son dos renglones distintos. Es el
    * mismo par de siempre: los dos lados o ninguno. Ignorado si `arrastra` es `false`.
    */
+  /** Las fotos que deja quien asigna: URLs del Blob, carpeta `agenda/`. Vacío es lo normal. */
+  fotos?: string[]
   arrastraDias?: number | null
   /**
    * Si este ítem no es una rutina sino **el molde de una**: `'ingreso'` o `'sesion-fotos'`.

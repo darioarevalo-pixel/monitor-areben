@@ -149,6 +149,18 @@ function numeroDado(v) {
 }
 
 /**
+ * Las fotos de un pendiente: URLs públicas del Blob, de la carpeta `agenda/`, sin repetir y con
+ * tope. 🔴 Lo que no es nuestro se tira: una URL de afuera dibujada en el «Hoy» del equipo sería
+ * una imagen que nadie del Monitor subió.
+ */
+const MAX_FOTOS = 10;
+const RX_FOTO_AGENDA = /^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\/agenda\/[^\s?#]+$/i;
+function fotosDe(v) {
+  if (!Array.isArray(v)) return [];
+  return [...new Set(v.filter((u) => typeof u === 'string' && RX_FOTO_AGENDA.test(u)))].slice(0, MAX_FOTOS);
+}
+
+/**
  * De qué **hecho** salió un renglón copiado por un evento, o `null` si se cargó a mano.
  *
  * 🔑 El dato para agrupar ya se escribía —`datos.de` y la clave de idempotencia— desde el
@@ -705,6 +717,7 @@ export default async function handler(req, res) {
         // Cuántos días se debe, si arrastra. **`null` = sin tope**, que es lo que tienen las
         // reuniones y los clones del ingreso. Lo resuelve `ocurrenciaAbierta()`; acá viaja el número.
         arrastraDias: i.datos && Number.isFinite(i.datos.arrastraDias) ? i.datos.arrastraDias : null,
+        fotos: fotosDe(i.datos && i.datos.fotos),
         // De qué evento es actividad este ítem. Una actividad no corre ningún día: lo filtra `vaEl`.
         // ⚠️ La clave sigue siendo `datos.plantilla`: lo que cambió el 29-ago-2026 es la palabra de
         // la pantalla, ⛔ no lo que hay escrito en las 44 filas cargadas.
@@ -1231,6 +1244,9 @@ export default async function handler(req, res) {
           // las cuatro puertas, o en los tres orígenes) y escribirla sería guardar un `[]` que dice
           // lo mismo que no estar.
           ...(eje.length ? { [plant.eje.campo]: eje } : {}),
+          // Las fotos que deja quien asigna (Darío, 19-oct-2026). Sólo URLs de NUESTRA carpeta
+          // `agenda/` del Blob: lo que llega de otro lado no se guarda, se descarta.
+          ...(fotosDe(it.fotos).length ? { fotos: fotosDe(it.fotos) } : {}),
         },
         autor: yo,
         updated_at: new Date().toISOString(),

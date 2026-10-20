@@ -98,6 +98,25 @@ el padrón que necesita entra por `equipoDelPadron` (`api/_auth.js`) del lado de
 sin pasar por el compilador de Next y no puede importar TypeScript); `lib/agenda/index.ts` es el
 re-export tipado. Los dos archivos lo explican en su encabezado y no se repite acá.
 
+## 📷 Fotos en el pendiente y «Atrasada» (19-oct-2026, Darío)
+
+Primer paso de la Agenda nueva (la maqueta: https://claude.ai/artifact/QPZPZvo7t7gSRUaS6MLPvQ),
+probado primero con Lorena.
+
+- **Fotos**: quien carga un pendiente adjunta una o varias (`components/agenda/FotosTarea.tsx`, tope 10).
+  Se suben al Blob en la carpeta **`agenda/`** al elegirlas y el ítem guarda sólo las URLs en
+  **`datos.fotos`** (`fotosDe` en `api/_agenda.js`: sólo URLs de nuestro Blob y de esa carpeta; lo
+  demás se descarta callado). En Hoy salen chiquitas debajo de la descripción y se agrandan al tocarlas.
+  - ⚠️ Sacar una foto del formulario ⛔ no la elimina del Blob. `agenda/` ⛔ no está en `FUENTES`
+    (`api/_blob-refs.js`), así que Archivos la marca «no se puede verificar» y ⛔ nunca la ofrece para
+    eliminar: es lo seguro, a costa de que no se limpie.
+  - 🔴 `guardar-item` reescribe `datos` entero: un campo nuevo de `datos` tiene que entrar también ahí.
+- **«Detalle» se llama «Descripción»** y «Qué hay que hacer» se llama **«Tarea»** (Darío pidió palabras
+  formales y cortas). La descripción respeta los saltos de línea en Hoy.
+- **«Atrasada»**: la tarea de un solo día (`unica`) nace **arrastrando** —al elegir la regla, el
+  interruptor se prende solo; sigue mandando el interruptor—; la rutina se vence con el día. El rótulo
+  «viene del …» pasó a **«atrasada · del …»**.
+
 ## 📬 El correo diario (18-oct-2026, Darío)
 
 *«Me gustaría recibir alguna especie de notificación de si están usando o no la app»*. Sale de lunes

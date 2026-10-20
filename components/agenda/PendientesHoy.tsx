@@ -25,6 +25,7 @@ import {
   type FilaHoy, type ItemAgenda, type PendienteHoy,
 } from '@/lib/agenda'
 import { contestarPuerta } from '@/lib/agenda/cliente'
+import { MiniaturasFotos } from './FotosTarea'
 import { rotuloFecha } from '@/lib/fechas/semana'
 import { leerManual } from '@/lib/manuales/cliente'
 import type { Manual } from '@/lib/manuales/tipos'
@@ -257,7 +258,7 @@ function OrdenDeGrupo({
   // sería volver a la lista que esta tarjeta vino a acortar.
   const detalle = listo
     ? `Lo marcó ${p.hecho?.usuario}${hora(p.hecho?.hechoAt ?? null) ? ` a las ${hora(p.hecho?.hechoAt ?? null)}` : ''}`
-    : p.desde ? `Viene del ${rotuloFecha(p.desde)}` : 'Marcar como hecho'
+    : p.desde ? `Atrasada · del ${rotuloFecha(p.desde)}` : 'Marcar como hecho'
 
   return (
     <div style={{
@@ -424,14 +425,15 @@ function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
               un bug si no dice por qué está: acá dice que es la misma reunión que quedó abierta, no
               una nueva. Y es el dato con el que se decide si todavía tiene sentido hacerla.
             */}
-            {p.desde && <StatusPill tone="warning" label={`viene del ${rotuloFecha(p.desde)}`} />}
+            {p.desde && <StatusPill tone="warning" label={`atrasada · del ${rotuloFecha(p.desde)}`} />}
             {/* Que una sola orden del día no pierda el link: un grupo se arma de a dos o más. */}
             <VerLaOrden item={p.item} />
           </div>
 
           {p.item.cuerpo && (
-            <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>{p.item.cuerpo}</div>
+            <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2, whiteSpace: 'pre-line' }}>{p.item.cuerpo}</div>
           )}
+          <MiniaturasFotos fotos={p.item.fotos} />
 
           {/*
             La pregunta de la puerta se contesta ACÁ y no en un modal aparte: es un click y la lista

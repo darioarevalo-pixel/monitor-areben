@@ -75,6 +75,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { useSistema } from '@/store/useSistema'
 import type { Marca } from '@/lib/nav.datos'
 import { EditorRegla, Tilde, toggleEnLista } from './EditorRegla'
+import { EditorFotos } from './FotosTarea'
 
 /** Las dos marcas con su rótulo. Exportada porque el modal de siembra pregunta lo mismo. */
 export const MARCAS: { key: Marca; label: string }[] = [
@@ -119,6 +120,7 @@ export function itemVacio(clase: ClaseItem = 'pendiente'): ItemAgenda {
     // Sin tope: mientras arrastre, queda hasta que lo tilden. El tope es lo excepcional y se carga
     // a mano en las dos o tres rutinas que sí se vencen (la pasada de Tienda Nube, hasta 2 días).
     arrastraDias: null,
+    fotos: [],
     plantilla: null,
     offsetDias: null,
     // Vacío = las cuatro puertas, que es el caso normal: cuatro de los seis pasos no cambian.
@@ -344,7 +346,7 @@ export function ModalItem({
         )}
 
         <Field
-          label={esAviso ? 'Qué hay que saber' : 'Qué hay que hacer'}
+          label={esAviso ? 'Aviso' : 'Tarea'}
           required
           hint={esAviso ? 'Corto y en presente: «Viene el flete a las 10».' : 'Corto y en infinitivo: «Reponer la vidriera».'}
         >
@@ -355,7 +357,7 @@ export function ModalItem({
           />
         </Field>
 
-        <Field label="Detalle" hint="Opcional. El paso a paso largo va en un manual, no acá.">
+        <Field label="Descripción" hint="Opcional. El paso a paso largo va en un manual, no acá.">
           <textarea
             value={it.cuerpo ?? ''}
             onChange={(e) => set('cuerpo', e.target.value)}
@@ -367,6 +369,12 @@ export function ModalItem({
             }}
           />
         </Field>
+
+        {!esAviso && !esActividad && (
+          <Field label="Fotos" hint="Opcional. Se ven en la tarea; al tocarlas se agrandan.">
+            <EditorFotos fotos={it.fotos ?? []} onChange={(f) => set('fotos', f)} />
+          </Field>
+        )}
 
         {esActividad ? (
           /*
@@ -391,7 +399,16 @@ export function ModalItem({
         ) : (
           <EditorRegla
             regla={it.regla}
-            onChange={(r) => set('regla', r)}
+            onChange={(r) => {
+              // Una tarea de un solo día que no se hizo queda como «Atrasada» hasta que se tilde; una
+              // rutina se vence con el día (Darío, 19-oct-2026). Es el default al elegir la regla:
+              // el interruptor de abajo sigue mandando.
+              setIt((x) => ({
+                ...x,
+                regla: r,
+                ...(x.clase === 'pendiente' && r.tipo !== x.regla.tipo ? { arrastra: r.tipo === 'unica' } : {}),
+              }))
+            }}
             titulo={esAviso ? 'Qué días se avisa' : 'Qué días toca'}
           />
         )}
