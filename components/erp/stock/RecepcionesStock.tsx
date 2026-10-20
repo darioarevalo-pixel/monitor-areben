@@ -70,7 +70,7 @@ export function RecepcionesStock() {
     leerRecepciones(marca, DIAS)
       // El día se toma al leer (⛔ en el render): «este mes» es el de cuando se leyó.
       .then((d) => { if (vivo) { setDatos({ filas: d.recepciones.map(armarFila), clave, hoy: diaArgentino(Date.now()) }); setError(null) } })
-      .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer las recepciones.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
+      .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer los ingresos.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
   }, [marca, clave])
   const cargando = datos?.clave !== clave
@@ -130,7 +130,7 @@ export function RecepcionesStock() {
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las recepciones" placeholder="Orden o proveedor" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en los ingresos" placeholder="Orden o proveedor" />
           <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
@@ -156,7 +156,7 @@ export function RecepcionesStock() {
           </div>
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo las recepciones…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
+          {cargando && !datos ? 'Leyendo los ingresos…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
           {' · '}<span style={{ fontWeight: weight.medium }}>Con diferencia</span> = faltó o sobró algún renglón (aunque el total dé igual).
         </div>
       </div>

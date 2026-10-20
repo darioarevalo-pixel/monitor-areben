@@ -41,6 +41,8 @@ function filas(): Fila[] {
  */
 /** `frase` es el COMIENZO de la frase excusada (un mensaje largo con datos adentro se excusa por cómo empieza). */
 const EXCEPCIONES: Array<{ archivo: string; frase: string; motivo: string }> = [
+  // La DIRECCIÓN de la sección Ingresos del monitor (`/recepciones`): es una ruta, ⛔ texto que se lee.
+  { archivo: 'components/erp/stock/RecepcionesStock.tsx', frase: '/recepciones?oc=', motivo: 'ruta de la sección' },
   // La lista de verbos del protocolo (`action=turno`): son NOMBRES de la API, ⛔ texto de la caja.
   { archivo: 'api/_caja.js', frase: 'action inválida (config, referencias,', motivo: 'verbos del protocolo' },
   // Los nombres de las cuentas de feria en Gestión Nube, sembrados como vienen de allá.

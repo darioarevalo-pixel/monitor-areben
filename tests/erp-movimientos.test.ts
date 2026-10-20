@@ -23,7 +23,7 @@ describe('cada movimiento', () => {
     expect(documentoDe(mov({ origen: 'gn', origen_ref: '1533152:694420:76626:local', detalle: { canal: 'Tienda Nube', tn_order: '7324' } }))).toBe('GN 1533152 · TN 7324')
     expect(documentoDe(mov({ origen: 'repo', tipo: 'transferencia', origen_ref: 'repo:ra1:t1:1_1:entra', detalle: { transfer_id: 8101 } }))).toBe('Transferencia 8101')
     expect(documentoDe(mov({ origen: 'apertura', tipo: 'apertura', detalle: { anclaje: 'gn' } }))).toBe('Apertura del libro (foto de GN)')
-    expect(documentoDe(mov({ origen: 'recepcion', tipo: 'ingreso', detalle: {} }))).toBe('Recepción')
+    expect(documentoDe(mov({ origen: 'recepcion', tipo: 'ingreso', detalle: {} }))).toBe('Ingreso')
   })
 
   it('«quién» es una persona sólo si el libro la sabe; si no, de qué sistema vino', () => {
