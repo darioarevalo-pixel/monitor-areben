@@ -65,7 +65,7 @@ export function Equipo() {
   return (
     <>
       <HeaderAcciones>
-        <Button onClick={() => setNueva([])}>+ Tarea</Button>
+        <Button variant="solid" tone="brand" onClick={() => setNueva([])}>+ Tarea</Button>
       </HeaderAcciones>
 
       <div style={{ display: 'grid', gap: space[3] }}>
