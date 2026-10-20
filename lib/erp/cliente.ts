@@ -430,6 +430,21 @@ export type ListaDeStock = { filas: FilaStock[]; libroHasta: string | null; pedi
 export const leerListaDeStock = (marca: MarcaErp) =>
   pedir<ListaDeStock>(null, `&vista=stock-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el stock.')
 
+// ── ERP › Stock › Comparación con TN y ML (`api/_erp-stock.js`, núcleo `lib/erp/comparacion.core.js`) ──
+export type FilaComparacion = {
+  id: string; tienda: 'bdi' | 'zattia' | 'stunned'; producto: string | null; talle: string | null
+  nombre: string; talleNombre: string; sku: string | null; barcode: string | null
+  /** Lo que la tienda tendría que mostrar según el ERP (libro de sus depósitos − pedidos sin pagar); null = sin producto en el ERP. */
+  paraTienda: number | null; enPedidos: number; tn: number | null; gn: number | null; diferencia: number | null
+  clase: string; oculta: boolean; repetidas: number
+}
+export type ComparacionTiendas = {
+  filas: FilaComparacion[]; sinLimite: number; tnLeidas: Record<string, string>; ml: { fecha: string; noCierran: number } | null
+  libroHasta: string | null; pedidosLeidosEn: string | null
+}
+export const leerComparacion = (marca: MarcaErp) =>
+  pedir<ComparacionTiendas>(null, `&vista=comparacion&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer la comparación con Tienda Nube.')
+
 // ── ERP › Productos y precios › Productos (lista de TRABAJO; `api/_erp-productos.js`, núcleo `lib/erp/productos-lista.core.js`) ──
 export type VarianteProducto = {
   talle: string; talleNombre: string; sku: string | null; barcode: string | null

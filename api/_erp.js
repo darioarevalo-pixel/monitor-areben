@@ -19,6 +19,7 @@
  *   GET  ?recurso=erp&vista=productos-lista&marca=bdi|zattia          la lista de Productos: uno por fila (`api/_erp-productos.js`)
  *   GET  ?recurso=erp&vista=movimientos&marca=…&desde=…&hasta=…     Stock › Movimientos: cada fila del libro (`api/_erp-stock.js`)
  *   GET  ?recurso=erp&vista=transferencias&marca=…                    Stock › Transferencias: cada una con su paso (`api/_erp-stock.js`)
+ *   GET  ?recurso=erp&vista=comparacion&marca=…                       Stock › Comparación: el ERP contra Tienda Nube (`api/_erp-stock.js`)
  *   GET  ?recurso=erp&vista=clientes-lista&marca=bdi|zattia           Clientes: uno por fila (`api/_erp-clientes.js`)
  *   GET  ?recurso=erp&vista=cliente-ficha&marca=…&clave=…             la ficha de un cliente: compras y cuenta corriente
  *   GET  ?recurso=erp&vista=inicio-resultado&marca=bdi|zattia         Inicio: vendido, costo y margen del mes (`api/_erp-inicio.js`)
@@ -82,7 +83,7 @@ import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simul
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { cobrarVentaErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
-import { listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
+import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
 import { fichaDeCliente, listaDeClientes } from './_erp-clientes.js'
 import { resultadoDelMes } from './_erp-inicio.js'
@@ -1368,6 +1369,10 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && req.query.vista === 'transferencias') {
       const r = await listaDeTransferencias({ marca: String(req.query.marca || '') }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'comparacion') {
+      const r = await comparacionConTiendas({ marca: String(req.query.marca || '') }, { conMotor, pedidosSinPagar })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'ventas-producto') {

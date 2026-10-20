@@ -6,6 +6,7 @@
  *   GET ?recurso=erp&vista=stock-lista&marca=bdi|zattia     una fila por variante (Zattia trae también Stunned)
  *   GET ?recurso=erp&vista=movimientos&…                  cada fila del libro de un período (abajo, `listaDeMovimientos`)
  *   GET ?recurso=erp&vista=transferencias&marca=…           cada transferencia con su paso (abajo, `listaDeTransferencias`)
+ *   GET ?recurso=erp&vista=comparacion&marca=…              el ERP contra lo publicado en Tienda Nube (abajo, `comparacionConTiendas`)
  *
  * 🔑 El libro se SUMA en la base, por pg con la conexión del motor (`conMotor`): supabase-js ⛔ agrupa y el libro tiene
  * una fila por movimiento. Sin la conexión contesta 409 y la pantalla lo dice (⛔ una lista vacía que parece «sin stock»).
@@ -15,6 +16,7 @@ import { createClient } from '@supabase/supabase-js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { armarFilasStock, reservadoPorVariante } from '../lib/erp/stock-lista.core.js'
+import { armarComparacion } from '../lib/erp/comparacion.core.js'
 import { armarMovimiento } from '../lib/erp/movimientos.core.js'
 import { deArmado, deLibro } from '../lib/erp/transferencias.core.js'
 import { rangoDeDias } from '../lib/erp/venta.core.js'
@@ -156,4 +158,46 @@ export async function listaDeTransferencias({ marca }, deps) {
   ]
   // `libroDesde`: lo transferido antes de que arrancara el libro ⛔ está en el ERP, y está bien (medido 20-oct: T-7745 del 12).
   return { filas, cortado: armados.length >= TOPE_TRANSFERENCIAS, libroDesde: libro.desde }
+}
+
+/**
+ * ERP › Stock › Comparación con TN y ML (`lib/erp/comparacion.core.js`): cada variante con lo que la tienda tendría que
+ * mostrar según el ERP contra `tn_variante` del motor (lo leyó `bin/tn.mjs traer`, cada ~2 h) y GN. Mercado Libre ⛔ (ver el
+ * núcleo): de ML sólo se cuenta cuántas ⛔ cerraron en la última conciliación, para mandar a Conciliación.
+ *
+ *   GET ?recurso=erp&vista=comparacion&marca=bdi|zattia
+ */
+async function tiendaNube(pg) {
+  const tn = (await pg.query(`select v.tienda, v.variant_id, v.sku, v.barcode, v.stock, v.valores, p.nombre, p.publicado
+    from tn_variante v left join tn_producto p on p.tienda = v.tienda and p.tn_id = v.tn_product_id
+    order by v.tienda, v.tn_product_id, v.variant_id`)).rows
+  const lecturas = (await pg.query('select tienda, leida_en from tn_catalogo_lectura')).rows
+  const [ml = {}] = (await pg.query(`select max(fecha) as fecha, count(*) filter (where fecha = (select max(fecha) from conciliacion_fila where tipo = 'stock_ml'))::int as n
+    from conciliacion_fila where tipo = 'stock_ml'`)).rows
+  const nombreTN = (n) => (n && typeof n === 'object' ? n.es ?? Object.values(n)[0] : n) ?? null
+  return {
+    tn: tn.map((v) => ({ ...v, nombre: nombreTN(v.nombre) })),
+    leidas: Object.fromEntries(lecturas.map((l) => [l.tienda, new Date(l.leida_en).toISOString()])),
+    ml: ml.fecha ? { fecha: new Date(ml.fecha).toISOString().slice(0, 10), noCierran: ml.n } : null,
+  }
+}
+
+/**
+ * @param {{ marca: string }} p
+ * @param {{ conMotor: Function, pedidosSinPagar: Function, leerInventario?: Function }} deps
+ */
+export async function comparacionConTiendas({ marca }, deps) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const [libro, tienda, inventario, pedidos] = await Promise.all([
+    deps.conMotor(marca, 'El stock del ERP', (pg) => libroSumado(pg)),
+    deps.conMotor(marca, 'Lo publicado en Tienda Nube', (pg) => tiendaNube(pg)),
+    (deps.leerInventario ?? leerInventario)(marca),
+    deps.pedidosSinPagar({ marca }),
+  ])
+  if (libro.status) return libro
+  if (tienda.status) return tienda
+  const { reservado } = reservadoPorVariante(pedidos.pedidos || [], inventario)
+  const filas = armarFilasStock({ marca, niveles: libro.niveles, ultimos: libro.ultimos, inventario, reservado })
+  const r = armarComparacion({ marca, filas, inventario, tn: tienda.tn })
+  return { filas: r.filas, sinLimite: r.sinLimite, tnLeidas: tienda.leidas, ml: tienda.ml, libroHasta: libro.hasta, pedidosLeidosEn: pedidos.leidaEn ?? null }
 }
