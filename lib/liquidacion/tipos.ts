@@ -268,6 +268,12 @@ export interface LiquidacionItem {
    * Opcional: lo que se arma en el cliente antes de guardarse no lo trae.
    */
   entro?: string | null
+  /**
+   * La parte de la campaña en la que está: una campaña grande se parte para analizarse por
+   * separado (pedido de Bruno, 21-oct-2026: «si hubiese alguna feria preexistente, se analiza
+   * solo esos productos»). Texto libre; `null` o ausente es «sin parte».
+   */
+  parte?: string | null
 }
 
 /** Qué tan grave es un aviso. `alto` es el que frena: no se define un precio sin resolverlo. */

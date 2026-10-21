@@ -247,7 +247,7 @@ export function preciosAEtiquetar(items) {
  * hace imposible saber qué hay adentro dentro de seis meses. Un campo nuevo se agrega acá o **no
  * viaja**, y eso se nota al primer intento en vez de perderse en silencio.
  */
-function itemDelBody(raw) {
+export function itemDelBody(raw) {
   if (!raw || !raw.pid) return null;
   const f = raw.foto || {};
   const d = raw.decision || {};
@@ -257,6 +257,10 @@ function itemDelBody(raw) {
   return {
     pid: String(raw.pid),
     estado,
+    // La parte de la campaña a la que pertenece («Venía de feria», «Temporada nueva»…). Texto
+    // libre y corto; vacío es «sin parte». Pasa por acá para que `aplicar` y `revisar`, que
+    // rearman `datos` con esta lista blanca, ⛔ la borren.
+    parte: txtOrNull(String(raw.parte || '').trim().slice(0, 40)),
     foto: {
       nombre: String(f.nombre || ''),
       sku: txtOrNull(f.sku),

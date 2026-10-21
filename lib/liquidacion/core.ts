@@ -539,12 +539,62 @@ export interface CortesDeGrilla {
   mesa?: string
   /** Tipo de prenda elegido (`''` = todos). */
   prenda?: string
+  /** Parte de la campaña elegida (`''` = todas, `SIN_PARTE` = las que no tienen). */
+  parte?: string
+}
+
+/** El valor del corte para «los que no están en ninguna parte». No puede chocar con un nombre real. */
+export const SIN_PARTE = '∅'
+
+/** La parte de un ítem, o `null` si no tiene. Un nombre en blanco es «sin parte». */
+export function parteDe(i: LiquidacionItem): string | null {
+  const p = String(i.parte || '').trim()
+  return p || null
+}
+
+/**
+ * Las partes presentes, de la más numerosa a la menos, con «sin parte» (`null`) siempre al final:
+ * es lo que falta ordenar, ⛔ una parte más.
+ */
+export function partesDe(items: LiquidacionItem[]): { parte: string | null; n: number }[] {
+  const m = new Map<string | null, number>()
+  for (const i of items || []) {
+    const p = parteDe(i)
+    m.set(p, (m.get(p) || 0) + 1)
+  }
+  return [...m.entries()]
+    .sort((a, b) => (a[0] === null ? 1 : 0) - (b[0] === null ? 1 : 0) || b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
+    .map(([parte, n]) => ({ parte, n }))
+}
+
+/** Los mismos ítems, movidos a otra parte (`null` o en blanco los saca de la que tenían). No muta. */
+export function conParte(items: LiquidacionItem[], parte: string | null): LiquidacionItem[] {
+  const p = String(parte || '').trim().slice(0, 40) || null
+  return (items || []).map((i) => ({ ...i, parte: p }))
+}
+
+/**
+ * La lista partida por tipo de prenda, **respetando el orden que trae** adentro de cada grupo (la
+ * grilla ya ordena por lo que falta decidir y por plata parada). Los grupos van del que más plata
+ * tiene parada al que menos: es el orden en que conviene mirarlos.
+ */
+export function agruparPorPrenda(items: LiquidacionItem[]): { tipo: string; items: LiquidacionItem[]; plata: number }[] {
+  const m = new Map<string, { tipo: string; items: LiquidacionItem[]; plata: number }>()
+  for (const i of items || []) {
+    const tipo = tipoDePrenda(i.foto.nombre)
+    const g = m.get(tipo) || { tipo, items: [], plata: 0 }
+    g.items.push(i)
+    g.plata += (i.foto.costo || 0) * (i.foto.stock || 0)
+    m.set(tipo, g)
+  }
+  return [...m.values()].sort((a, b) => b.plata - a.plata || a.tipo.localeCompare(b.tipo))
 }
 
 /** ¿Este ítem pasa los filtros, salteando el que se indique? `salvo` es el que se está contando. */
-function pasaCortes(i: LiquidacionItem, c: CortesDeGrilla, salvo?: 'mesa' | 'prenda'): boolean {
+function pasaCortes(i: LiquidacionItem, c: CortesDeGrilla, salvo?: 'mesa' | 'prenda' | 'parte'): boolean {
   const q = (c.q || '').trim().toLowerCase()
   if (c.estado && i.estado !== c.estado) return false
+  if (salvo !== 'parte' && c.parte && (c.parte === SIN_PARTE ? parteDe(i) !== null : parteDe(i) !== c.parte)) return false
   if (salvo !== 'mesa' && c.mesa && String(i.decision.precioSale ?? '') !== c.mesa) return false
   if (salvo !== 'prenda' && c.prenda && tipoDePrenda(i.foto.nombre) !== c.prenda) return false
   if (q && !i.foto.nombre.toLowerCase().includes(q) && !(i.foto.sku || '').toLowerCase().includes(q)) return false
@@ -565,11 +615,13 @@ function pasaCortes(i: LiquidacionItem, c: CortesDeGrilla, salvo?: 'mesa' | 'pre
 export function opcionesDeGrilla(items: LiquidacionItem[], c: CortesDeGrilla): {
   mesas: { precio: number; n: number }[]
   prendas: { tipo: string; n: number }[]
+  partes: { parte: string | null; n: number }[]
 } {
   const lista = items || []
   return {
     mesas: mesasDe(lista.filter((i) => pasaCortes(i, c, 'mesa'))),
     prendas: tiposDe(lista.filter((i) => pasaCortes(i, c, 'prenda'))),
+    partes: partesDe(lista.filter((i) => pasaCortes(i, c, 'parte'))),
   }
 }
 

@@ -43,12 +43,13 @@
  */
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { puedeVer } from '@/lib/permisos'
 import {
-  avisos, campaniaEditable, confirmarItem, contar, filtrarGrilla, itemsSinRevisar, leerEscalera,
-  nuevoIdLiquidacion, opcionesDeGrilla,
+  agruparPorPrenda, avisos, campaniaEditable, confirmarItem, conParte, contar, filtrarGrilla, itemsSinRevisar, leerEscalera,
+  SIN_PARTE,
+  nuevoIdLiquidacion, opcionesDeGrilla, partesDe,
   pidsPorAplicar, porEscalera,
   reprecificar, resumenCampania,
   TIPO_CAMPANIA, TIPOS_CAMPANIA, tipoDe, TOPE_APLICAR, TOPE_MASIVO,
@@ -595,6 +596,14 @@ function DetalleCampania({
   const [mesa, setMesa] = useFiltroUrl<string>('mesa', '')
   const [prenda, setPrenda] = useFiltroUrl<string>('prenda', '')
   /**
+   * La parte de la campaña que se está mirando (`''` = todas). Pedido de Bruno, 21-oct-2026: una
+   * campaña grande —el CYBER MONDAY junta lo que venía de feria con la temporada nueva— se analiza
+   * de a una parte, y los números de arriba son los de ESA parte.
+   */
+  const [parte, setParte] = useFiltroUrl<string>('parte', '')
+  /** El modal de «Mover a una parte»: `null` cerrado, si no el nombre que se está tipeando. */
+  const [moviendo, setMoviendo] = useState<string | null>(null)
+  /**
    * Qué producto está abierto en el modal, y en qué orden se recorren.
    *
    * 🔑 **El orden se congela al abrir.** La grilla ordena por estado (primero lo que falta
@@ -658,6 +667,15 @@ function DetalleCampania({
   const tipo = tipoDe(campania)
   const rotulos = TIPO_CAMPANIA[tipo]
   const resumen = useMemo(() => resumenCampania(items || [], tipo), [items, tipo])
+  /**
+   * Los números de la parte elegida. 🔑 `resumen` sigue siendo el de la campaña entera, porque es
+   * el que manda en los botones («Faltan revisar N») y en las pestañas: elegir una parte no puede
+   * esconder lo que falta revisar en otra.
+   */
+  const resumenParte = useMemo(
+    () => (parte ? resumenCampania(filtrarGrilla(items || [], { parte }), tipo) : resumen),
+    [items, parte, tipo, resumen],
+  )
   // Cuántos faltan escribir y cuántos tienen la oferta puesta. Los botones muestran el número: uno
   // que dice «Escribir 260 precios» se entiende antes de apretarlo.
   const porAplicar = useMemo(() => pidsPorAplicar(items || [], 'poner').length, [items])
@@ -671,7 +689,7 @@ function DetalleCampania({
   const visibles = useMemo(() => {
     // 🔑 La MISMA regla que cuenta las opciones de los selectores (`opcionesDeGrilla`): con dos
     // implementaciones, el número del selector y lo que dibuja la tabla pueden dejar de coincidir.
-    return filtrarGrilla(items || [], { estado: filtro, q: busqueda, mesa, prenda })
+    const ordenados = filtrarGrilla(items || [], { estado: filtro, q: busqueda, mesa, prenda, parte })
       // Primero lo que espera una decisión nuestra; dentro de cada grupo, el que tiene más plata
       // parada arriba. Ordenar por nombre pondría a la vista lo que da lo mismo mirar primero.
       .sort((a, b) => {
@@ -681,7 +699,11 @@ function DetalleCampania({
           e === 'pendiente' ? 0 : e === 'definido' || e === 'confirmado' ? 1 : e === 'aplicado' ? 2 : 3
         return peso(a.estado) - peso(b.estado) || b.foto.costo * b.foto.stock - a.foto.costo * a.foto.stock
       })
-  }, [items, busqueda, filtro, mesa, prenda])
+    // 🔑 Agrupada por tipo de prenda, y `visibles` queda en el MISMO orden en que se dibuja: el ←/→
+    // de «Definir» recorre esta lista, y si fuera en otro orden saltaría entre grupos.
+    return agruparPorPrenda(ordenados).flatMap((g) => g.items)
+  }, [items, busqueda, filtro, mesa, prenda, parte])
+  const grupos = useMemo(() => agruparPorPrenda(visibles), [visibles])
 
   /**
    * Las opciones de los dos cortes, **contadas sobre lo que dejan pasar los OTROS filtros**.
@@ -692,12 +714,18 @@ function DetalleCampania({
    * las de los demás.
    */
   const opciones = useMemo(
-    () => opcionesDeGrilla(items || [], { estado: filtro, q: busqueda, mesa, prenda }),
-    [items, busqueda, filtro, mesa, prenda],
+    () => opcionesDeGrilla(items || [], { estado: filtro, q: busqueda, mesa, prenda, parte }),
+    [items, busqueda, filtro, mesa, prenda, parte],
   )
 
   /** Confirmar es de admin, y sólo mientras la campaña se pueda editar — la misma puerta que Revisión. */
   const puedeConfirmar = puede.admin && campaniaEditable(campania.estado)
+  /**
+   * Marcar sirve para dos cosas: confirmar (admin) y mover a una parte (cualquiera que edite la
+   * campaña). Por eso el tilde sale mientras la campaña sea editable, y lo que se puede HACER con
+   * lo marcado lo dice cada botón.
+   */
+  const puedeMarcar = campaniaEditable(campania.estado)
   /**
    * De lo marcado, lo que **realmente** se puede confirmar: la regla es `itemsSinRevisar` del
    * núcleo, la misma que usa la pestaña Revisión. Marcar un confirmado, un pendiente sin precio o
@@ -714,6 +742,29 @@ function DetalleCampania({
   )
   /** Los de la vista de ahora que se podrían confirmar: es lo que marca "Marcar los que se ven". */
   const visiblesConfirmables = useMemo(() => itemsSinRevisar(visibles), [visibles])
+
+  /** Mueve lo marcado (o, sin marcados, lo que se ve) a una parte. Sólo toca nuestra base. */
+  async function moverAParte(nombre: string) {
+    const lista = marcados.size ? (items || []).filter((i) => marcados.has(i.pid)) : visibles
+    if (!lista.length) return
+    const movidos = conParte(lista, nombre)
+    const destino = movidos[0].parte
+    setOcupadoMasivo(true)
+    try {
+      for (let i = 0; i < movidos.length; i += TOPE_MASIVO) {
+        await decidirMasivo(marca, campania.id, movidos.slice(i, i + TOPE_MASIVO))
+      }
+      setMoviendo(null)
+      setMarcados(new Set())
+      await cargar()
+      toast.ok(destino ? `${movidos.length} en «${destino}».` : `${movidos.length} quedaron sin parte.`)
+    } catch (e) {
+      await cargar()
+      toast.error(e instanceof Error ? e.message : 'No se pudieron mover.')
+    } finally {
+      setOcupadoMasivo(false)
+    }
+  }
 
   function marcar(pid: string, on: boolean) {
     setMarcados((s) => {
@@ -1353,12 +1404,12 @@ function DetalleCampania({
       {items !== null && !PESTANIAS_PROPIAS.includes(pestania) && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: space[3], marginBottom: space[4] }}>
-            <KpiCard label="Productos" value={String(resumen.total)} sub={resumen.pendientes ? `${resumen.pendientes} sin definir` : 'todos definidos'} />
-            <KpiCard label="Plata parada" value={formatMoney(resumen.plataInmovilizada)} sub="costo del stock que se quiere mover" />
-            <KpiCard label={rotulos.promedio} value={pct(resumen.descPromedio)} sub="ponderado por stock" />
+            <KpiCard label="Productos" value={String(resumenParte.total)} sub={resumenParte.pendientes ? `${resumenParte.pendientes} sin definir` : 'todos definidos'} />
+            <KpiCard label="Plata parada" value={formatMoney(resumenParte.plataInmovilizada)} sub="costo del stock que se quiere mover" />
+            <KpiCard label={rotulos.promedio} value={pct(resumenParte.descPromedio)} sub="ponderado por stock" />
             <KpiCard
               label="Se resigna"
-              value={formatMoney(resumen.resigna)}
+              value={formatMoney(resumenParte.resigna)}
               sub="contra precio de lista, si se vende todo"
             />
           </div>
@@ -1376,15 +1427,32 @@ function DetalleCampania({
             </Notice>
           )}
 
+          {/*
+            🔑 **Las partes van ARRIBA de los números** porque los cambian: elegir «Venía de feria»
+            deja la plata parada, el descuento y lo que se resigna de esos productos solos. Se
+            dibujan sólo si alguna parte existe: una campaña sin partes se ve como siempre.
+          */}
+          {opciones.partes.some((p) => p.parte !== null) && (
+            <Tabs
+              style={{ marginBottom: space[3] }}
+              value={parte || 'todas'}
+              onChange={(k) => setParte(k === 'todas' ? '' : k)}
+              items={[
+                { key: 'todas', label: 'Todas las partes', badge: opciones.partes.reduce((a, p) => a + p.n, 0) || undefined },
+                ...opciones.partes.map((p) => ({ key: p.parte ?? SIN_PARTE, label: p.parte ?? 'Sin parte', badge: p.n })),
+              ]}
+            />
+          )}
+
           <FilterBar>
             <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar producto o SKU…" />
             <Select value={filtro} onChange={(e) => setFiltro(e.target.value)} style={{ width: 190 }} aria-label="Estado">
-              <option value="">Todos ({resumen.total})</option>
-              <option value="pendiente">Sin definir ({resumen.pendientes})</option>
-              <option value="definido">Definidos ({resumen.definidos})</option>
-              <option value="confirmado">Confirmados ({resumen.confirmados})</option>
-              <option value="descartado">Descartados ({resumen.descartados})</option>
-              <option value="aplicado">Aplicados ({resumen.aplicados})</option>
+              <option value="">Todos ({resumenParte.total})</option>
+              <option value="pendiente">Sin definir ({resumenParte.pendientes})</option>
+              <option value="definido">Definidos ({resumenParte.definidos})</option>
+              <option value="confirmado">Confirmados ({resumenParte.confirmados})</option>
+              <option value="descartado">Descartados ({resumenParte.descartados})</option>
+              <option value="aplicado">Aplicados ({resumenParte.aplicados})</option>
             </Select>
             {/*
               🔑 **Los dos cortes para revisar de a tandas** (Bruno, 11-sep-2026). Van acá y ⛔ no en
@@ -1420,6 +1488,15 @@ function DetalleCampania({
             {puedeConfirmar && visiblesConfirmables.length > 0 && (
               <Button size="sm" variant="soft" tone="brand" onClick={() => setMarcados((m) => new Set([...m, ...visiblesConfirmables.map((i) => i.pid)]))}>
                 Marcar los {visiblesConfirmables.length} que se ven
+              </Button>
+            )}
+            {/*
+              Mueve lo MARCADO, o si no hay nada marcado, lo que se está VIENDO: filtrar «JEAN» y
+              mandarlos a una parte es una sola acción, como «Categoría en TN».
+            */}
+            {puedeMarcar && visibles.length > 0 && (
+              <Button size="sm" variant="ghost" onClick={() => setMoviendo('')}>
+                Mover a una parte ({marcados.size || visibles.length})
               </Button>
             )}
           </FilterBar>
@@ -1482,7 +1559,7 @@ function DetalleCampania({
             <TableWrap>
               <THead>
                 <Tr>
-                  {puedeConfirmar && <Th width={34} />}
+                  {puedeMarcar && <Th width={34} />}
                   <Th width={40} />
                   <Th />
                   <Th>Producto</Th>
@@ -1497,15 +1574,26 @@ function DetalleCampania({
                 </Tr>
               </THead>
               <TBody>
-                {visibles.map((i, n) => (
+                {grupos.map((g) => (
+                  <Fragment key={g.tipo}>
+                    {/* El encabezado de cada tipo de prenda, sólo si hay más de uno: con uno solo repite el filtro. */}
+                    {grupos.length > 1 && (
+                      <Tr>
+                        <Td colSpan={puedeMarcar ? 12 : 11} style={{ background: color.bg2, fontSize: font.sm, color: color.mut }}>
+                          <b style={{ color: color.ink, fontWeight: weight.semibold }}>{g.tipo}</b>
+                          {' '}· {g.items.length} {g.items.length === 1 ? 'producto' : 'productos'} · {formatMoney(g.plata)} parados
+                        </Td>
+                      </Tr>
+                    )}
+                    {g.items.map((i) => (
                   <FilaItem
                     key={i.pid}
                     item={i}
                     tipo={tipo}
                     puedeMover={campaniaEditable(campania.estado)}
-                    onDefinir={() => setDefiniendo({ orden: visibles.map((v) => v.pid), i: n })}
+                    onDefinir={() => setDefiniendo({ orden: visibles.map((v) => v.pid), i: visibles.indexOf(i) })}
                     onFoto={() => setFoto({ src: i.foto.imagen, nombre: i.foto.nombre })}
-                    marcable={puedeConfirmar}
+                    marcable={puedeMarcar}
                     marcado={marcados.has(i.pid)}
                     onMarcar={(on) => marcar(i.pid, on)}
                     estrella={destacados.porProducto.get(i.pid) || null}
@@ -1514,6 +1602,8 @@ function DetalleCampania({
                     onVolver={() => void moverEstado(i, 'pendiente')}
                     onQuitar={() => void quitar(i)}
                   />
+                    ))}
+                  </Fragment>
                 ))}
               </TBody>
             </TableWrap>
@@ -1554,6 +1644,40 @@ function DetalleCampania({
           onCerrar={() => setDefiniendo(null)}
         />
       )}
+
+      <Modal
+        abierto={moviendo !== null}
+        onCerrar={() => setMoviendo(null)}
+        titulo={`Mover ${marcados.size || visibles.length} ${(marcados.size || visibles.length) === 1 ? 'producto' : 'productos'} a una parte`}
+        pie={
+          <>
+            <Button variant="ghost" onClick={() => setMoviendo(null)}>Cancelar</Button>
+            <Button variant="solid" tone="brand" loading={ocupadoMasivo} onClick={() => void moverAParte(moviendo || '')}>
+              {(moviendo || '').trim() ? `Mover a «${(moviendo || '').trim()}»` : 'Sacarlos de su parte'}
+            </Button>
+          </>
+        }
+      >
+        <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
+          {marcados.size
+            ? 'Son los que marcaste en la lista.'
+            : 'Son los que se están viendo con el filtro de ahora.'}{' '}
+          El precio y el estado no cambian: sólo dónde se los mira.
+        </div>
+        <input
+          autoFocus
+          list="partes-campania"
+          value={moviendo || ''}
+          maxLength={40}
+          onChange={(e) => setMoviendo(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void moverAParte(moviendo || '') }}
+          placeholder="Ej.: Venía de feria · Temporada nueva"
+          style={{ width: '100%', padding: '8px 10px', border: `1px solid ${color.line}`, borderRadius: radius.md, fontSize: font.base }}
+        />
+        <datalist id="partes-campania">
+          {partesDe(items || []).filter((p) => p.parte).map((p) => <option key={p.parte as string} value={p.parte as string} />)}
+        </datalist>
+      </Modal>
 
       <Lightbox src={foto?.src || null} alt={foto?.nombre || ''} onCerrar={() => setFoto(null)} />
     </>
