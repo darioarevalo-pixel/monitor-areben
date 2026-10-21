@@ -803,7 +803,8 @@ async function guardarFichaA(db, { venta, doc, condicionIva, razonSocial, domici
   const { guardarCliente } = await import('../motor/venta/registrar.mjs')
   const r = await guardarCliente(db, { empresa_id: venta.empresa_id, doc: String(doc), nombre: razonSocial, razon_social: razonSocial, condicion_iva: condicionIva, domicilio })
   if (r.ok) return { receptor: { nombre: r.cliente.razon_social || r.cliente.nombre, domicilio: r.cliente.domicilio }, sinFicha: null }
-  console.error(`[erp] ficha de ${doc} sin guardar: ${r.error.codigo} ${r.error.mensaje}`)
+  // ⛔ el documento ni el mensaje (puede traerlo) en el log: la venta alcanza para encontrarla (auditoría 20-oct).
+  console.error(`[erp] ficha de la clienta de la venta ${venta.id} sin guardar: ${r.error.codigo}`)
   return { receptor, sinFicha: `La factura salió, pero la ficha de la clienta no se guardó: ${r.error.mensaje}` }
 }
 
