@@ -52,13 +52,13 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 describe('credenciales: de dónde sale la identidad', () => {
   it('lee el sobre base64 del header con user y pass', () => {
     const c = credenciales({ headers: { 'x-monitor-auth': sobre({ user: ' Bruno ', pass: 'secreta' }) } })
-    expect(c).toEqual({ user: 'Bruno', pass: 'secreta', token: '' })
+    expect(c).toEqual({ user: 'Bruno', pass: 'secreta', token: '', sesion: '' })
   })
 
   it('el sobre con token gana y NO arrastra user/pass', () => {
     // Los dos caminos del SSO no se mezclan: si vino token, es sesión de Google.
     const c = credenciales({ headers: { 'x-monitor-auth': sobre({ token: 'jwt-de-google', user: 'x', pass: 'y' }) } })
-    expect(c).toEqual({ user: '', pass: '', token: 'jwt-de-google' })
+    expect(c).toEqual({ user: '', pass: '', token: 'jwt-de-google', sesion: '' })
   })
 
   it('la contraseña con ñ y acentos sobrevive al viaje', () => {
@@ -72,14 +72,14 @@ describe('credenciales: de dónde sale la identidad', () => {
 
   it('un sobre roto no explota: devuelve vacío', () => {
     expect(credenciales({ headers: { 'x-monitor-auth': 'no-es-base64-valido!!' } }))
-      .toEqual({ user: '', pass: '', token: '' })
+      .toEqual({ user: '', pass: '', token: '', sesion: '' })
   })
 
   it('acepta user/pass en el body — el contrato viejo de crear-venta', () => {
     expect(credenciales({ body: { user: 'Local', pass: 'p' } }))
-      .toEqual({ user: 'Local', pass: 'p', token: '' })
+      .toEqual({ user: 'Local', pass: 'p', token: '', sesion: '' })
     expect(credenciales({ body: { adminUser: 'Local', adminPass: 'p' } }))
-      .toEqual({ user: 'Local', pass: 'p', token: '' })
+      .toEqual({ user: 'Local', pass: 'p', token: '', sesion: '' })
   })
 
   it('el header le gana al body', () => {
@@ -91,7 +91,7 @@ describe('credenciales: de dónde sale la identidad', () => {
   })
 
   it('sin nada, no inventa una identidad', () => {
-    expect(credenciales({})).toEqual({ user: '', pass: '', token: '' })
+    expect(credenciales({})).toEqual({ user: '', pass: '', token: '', sesion: '' })
   })
 })
 

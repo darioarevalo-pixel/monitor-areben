@@ -26,7 +26,15 @@
  * que pedir, y preguntarles una sería exactamente el paso que el SSO viene a sacar.
  */
 
-import { credencialActual, guardarAdminPass, leerAdminPass, leerSesion } from './sesion'
+import type { Perfil } from './permisos'
+import {
+  credencialActual,
+  guardarAdminPass,
+  guardarSesionFirmada,
+  leerAdminPass,
+  leerSesion,
+  leerSesionFirmada,
+} from './sesion'
 import { tokenRenovado } from './identidad'
 
 let pidiendoPass: Promise<void> | null = null
@@ -59,16 +67,23 @@ async function asegurarPass(): Promise<void> {
  * `clientPayload`. Del otro lado lo abre `sobreDeCredenciales()` de `api/_auth.js`, que es también
  * el que abre el header — una sola forma de decir quién sos, viaje por donde viaje.
  */
-export async function sobreDeAuth(): Promise<string | null> {
+export async function sobreDeAuth(paraElMonitor = true): Promise<string | null> {
   await asegurarPass()
-  return authHeader()
+  return authHeader(paraElMonitor)
 }
 
-async function authHeader(): Promise<string | null> {
+/**
+ * 🔑 La sesión FIRMADA viaja dentro del mismo sobre, al lado de la credencial (login propio,
+ * 21-oct-2026): si bdi-catalogo no contesta, el Monitor la verifica solo y la pantalla sigue.
+ * ⛔ reemplaza a la credencial: el mismo sobre va también a bdi-catalogo, que no la entiende —
+ * por eso a una URL de afuera la firma ⛔ se manda (`conSesion` false).
+ */
+async function authHeader(conSesion: boolean): Promise<string | null> {
   const cred = await credencialActual()
-  if (!cred) return null
+  const sesion = conSesion ? leerSesionFirmada() : ''
+  if (!cred && !sesion) return null
   try {
-    const bytes = new TextEncoder().encode(JSON.stringify(cred))
+    const bytes = new TextEncoder().encode(JSON.stringify(sesion ? { ...cred, sesion } : cred))
     let bin = ''
     bytes.forEach((b) => (bin += String.fromCharCode(b)))
     return btoa(bin)
@@ -77,11 +92,35 @@ async function authHeader(): Promise<string | null> {
   }
 }
 
+/** Propia = relativa (`/api/...`): las de bdi-catalogo y `crear-venta` van con URL absoluta. */
+const esPropia = (url: string) => url.startsWith('/') && !url.startsWith('//')
+
 async function fetchConAuth(url: string, opts: RequestInit): Promise<Response> {
-  const auth = await authHeader()
+  const propia = esPropia(url)
+  const auth = await authHeader(propia)
   const headers = new Headers(opts.headers || {})
   if (auth) headers.set('x-monitor-auth', auth)
-  return fetch(url, { ...opts, headers })
+  const r = await fetch(url, { ...opts, headers })
+  // El servidor renueva la firma cada vez que bdi-catalogo le confirma quién sos.
+  const firma = propia ? r.headers?.get?.('x-monitor-sesion') : null
+  if (firma) guardarSesionFirmada(firma)
+  return r
+}
+
+/**
+ * Quién soy según el MONITOR (`?recurso=sesion`), para recargar la página cuando bdi-catalogo no
+ * contesta: antes esa caída cerraba la sesión en medio del turno. Null si tampoco alcanza.
+ */
+export async function perfilDelMonitor(): Promise<Perfil | null> {
+  if (!leerSesionFirmada()) return null
+  try {
+    const r = await fetchConAuth('/api/datos?recurso=sesion', {})
+    if (!r.ok) return null
+    const d = await r.json()
+    return d?.ok && d.perfil ? (d.perfil as Perfil) : null
+  } catch {
+    return null
+  }
 }
 
 /** Sólo se reintenta lo que se puede mandar dos veces igual: sin cuerpo o con cuerpo de texto. */

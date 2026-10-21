@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|erp|caja|repo-armado|reportes|tn-erp&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|erp|caja|repo-armado|reportes|tn-erp|sesion&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -58,6 +58,7 @@ import ubicacionesLocal from './_ubicaciones-local.js';
 import cobranzas from './_cobranzas.js';
 import pagosRecibidos from './_pagos-recibidos.js';
 import erp from './_erp.js';
+import sesion from './_sesion.js';
 import caja from './_caja.js';
 import repoArmado from './_repo-armado.js';
 import tnErp from './_tn-erp.js';
@@ -237,6 +238,8 @@ const RECURSOS = {
   'repo-armado': repoArmado,
   // El vigía de erp.arebensrl.com, sin sesión: lo llama el cron de vercel.json con CRON_SECRET.
   'vigia-erp': vigiaErp,
+  // Quién soy según el Monitor: la recarga de la página cuando bdi-catalogo no contesta.
+  sesion,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a

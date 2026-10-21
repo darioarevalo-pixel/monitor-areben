@@ -14,6 +14,12 @@ import { salirDeGoogle, tokenActual } from './identidad'
 export const SESSION_KEY = 'monitor-areben-session'
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 días
 export const ADMINPASS_KEY = 'monitor_adminpass' // sessionStorage, ver index.html:9328
+/**
+ * La sesión FIRMADA por el Monitor (login propio, 21-oct-2026; ver `lib/sesion-firmada.core.js`).
+ * La pone `apiFetch` cuando una respuesta trae `x-monitor-sesion` y viaja dentro del mismo sobre.
+ * Es lo que deja seguir trabajando si bdi-catalogo se cae: la verifica el Monitor solo.
+ */
+export const SESION_FIRMADA_KEY = 'monitor-areben-sesion-firmada'
 
 export type Sesion = {
   user: string
@@ -52,6 +58,7 @@ export function leerSesion(): Sesion | null {
       localStorage.removeItem(SESSION_KEY)
       try { localStorage.removeItem(ADMINPASS_KEY) } catch {}
       try { sessionStorage.removeItem(ADMINPASS_KEY) } catch {}
+      try { localStorage.removeItem(SESION_FIRMADA_KEY) } catch {}
       return null
     }
     return s
@@ -73,6 +80,23 @@ export function borrarSesion(): void {
   try {
     localStorage.removeItem(ADMINPASS_KEY)
   } catch {}
+  try {
+    localStorage.removeItem(SESION_FIRMADA_KEY)
+  } catch {}
+}
+
+export function guardarSesionFirmada(firma: string): void {
+  try {
+    localStorage.setItem(SESION_FIRMADA_KEY, firma)
+  } catch {}
+}
+
+export function leerSesionFirmada(): string {
+  try {
+    return localStorage.getItem(SESION_FIRMADA_KEY) || ''
+  } catch {
+    return ''
+  }
 }
 
 /**
@@ -194,7 +218,7 @@ export function camposAdmin(c: Credencial | null): { adminUser?: string; adminPa
  */
 export type RespuestaLogin =
   | { ok: true; perfil: Perfil; cumples: Cumple[] }
-  | { ok: false; error: string }
+  | { ok: false; error: string; caido?: true }
 
 /** Los cumpleaños de la respuesta, saneados: nunca `undefined`, nunca algo que no sea una lista. */
 function cumplesDeLaRespuesta(d: unknown): Cumple[] {
@@ -220,6 +244,7 @@ export async function loginGoogle(token: string): Promise<RespuestaLogin> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'login-google', token }),
     })
+    if (r.status >= 500) return { ok: false, error: 'No se pudo conectar para validar. Probá de nuevo.', caido: true }
     const d = await r.json()
     if (d?.ok && d.perfil) return { ok: true, perfil: d.perfil as Perfil, cumples: cumplesDeLaRespuesta(d) }
     if (d?.error === 'sin-acceso') {
@@ -230,7 +255,7 @@ export async function loginGoogle(token: string): Promise<RespuestaLogin> {
     }
     return { ok: false, error: 'No se pudo validar tu cuenta de Google. Probá de nuevo.' }
   } catch {
-    return { ok: false, error: 'No se pudo conectar para validar. Probá de nuevo.' }
+    return { ok: false, error: 'No se pudo conectar para validar. Probá de nuevo.', caido: true }
   }
 }
 
@@ -242,11 +267,12 @@ export async function login(user: string, pass: string): Promise<RespuestaLogin>
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'login', user, pass }),
     })
+    if (r.status >= 500) return { ok: false, error: 'No se pudo conectar para validar. Probá de nuevo.', caido: true }
     const d = await r.json()
     if (d?.ok && d.perfil) return { ok: true, perfil: d.perfil as Perfil, cumples: cumplesDeLaRespuesta(d) }
     return { ok: false, error: 'Usuario o contraseña incorrectos.' }
   } catch {
-    return { ok: false, error: 'No se pudo conectar para validar. Probá de nuevo.' }
+    return { ok: false, error: 'No se pudo conectar para validar. Probá de nuevo.', caido: true }
   }
 }
 
@@ -263,12 +289,18 @@ export async function login(user: string, pass: string): Promise<RespuestaLogin>
  * Devuelve null si la contraseña no está cacheada: en ese caso la sesión no se puede
  * probar y hay que volver a entrar. Es raro —la pass persiste en localStorage junto a la
  * sesión— y es el modo de falla correcto.
+ *
+ * `{caido: true}` = bdi-catalogo no contestó (⛔ es un «no»): quien llama prueba con la sesión
+ * firmada del Monitor antes de cerrar nada.
  */
-export async function rehidratarPorPass(user: string): Promise<{ perfil: Perfil; cumples: Cumple[] } | null> {
+export async function rehidratarPorPass(
+  user: string,
+): Promise<{ perfil: Perfil; cumples: Cumple[] } | { caido: true } | null> {
   const pass = leerAdminPass()
   if (!pass) return null
   const r = await login(user, pass)
-  return r.ok ? { perfil: r.perfil, cumples: r.cumples } : null
+  if (r.ok) return { perfil: r.perfil, cumples: r.cumples }
+  return r.caido ? { caido: true } : null
 }
 
 /**

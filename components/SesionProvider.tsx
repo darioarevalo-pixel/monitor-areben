@@ -15,6 +15,7 @@ import {
   tokenActual,
 } from '@/lib/identidad'
 import { borrarSesion, guardarSesion, leerSesion, loginGoogle, rehidratarPorPass, type Via } from '@/lib/sesion'
+import { perfilDelMonitor } from '@/lib/api-fetch'
 
 type Ctx = {
   perfil: Perfil | null
@@ -98,17 +99,25 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
       if (s.via === 'google') {
         const token = await tokenActual()
         const r = token ? await loginGoogle(token) : null
+        // bdi-catalogo no contestó (⛔ dijo «no»): antes de cerrar, la sesión firmada del Monitor.
+        const delMonitor = r && !r.ok && r.caido ? await perfilDelMonitor() : null
         if (!vivo) return
         if (r?.ok) aplicar(r.perfil, r.cumples, s.empresa)
+        else if (delMonitor) aplicar(delMonitor, [], s.empresa)
         else borrarSesion()
         setCargando(false)
         return
       }
 
       const p = await rehidratarPorPass(s.user)
+      // 🔑 Login propio (21-oct-2026): si bdi-catalogo está caído, esto CERRABA la sesión y borraba
+      // la contraseña guardada — la Caja quedaba afuera en medio del turno. Ahora responde el Monitor.
+      const delMonitor = p && 'caido' in p ? await perfilDelMonitor() : null
       if (!vivo) return
-      if (p) {
+      if (p && 'perfil' in p) {
         aplicar(p.perfil, p.cumples, s.empresa)
+      } else if (delMonitor) {
+        aplicar(delMonitor, [], s.empresa)
       } else {
         // El usuario ya no existe, le cambiaron la contraseña, o la pass no está
         // cacheada en este navegador: en los tres casos la sesión no se puede sostener.

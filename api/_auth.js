@@ -28,7 +28,19 @@
 // KV, así que los handlers no se enteran de cuál se usó. Lo que la segunda arregla es que
 // la contraseña deje de viajar en cada request y de vivir cacheada en el navegador.
 
+import { abrirSesion, firmarSesion } from '../lib/sesion-firmada.core.js';
+
 const USU_API = 'https://bdi-catalogo.vercel.app/api/usuarios';
+
+/**
+ * El secreto de la sesión propia. Sin él, todo sigue como antes del 21-oct: cada request le
+ * pregunta a bdi-catalogo. Se lee en cada llamada (y no al cargar el módulo) para que los tests
+ * lo puedan prender y apagar.
+ */
+const secretoSesion = () => process.env.MONITOR_SESION_SECRETO || '';
+
+/** La cabecera en la que la respuesta le devuelve al navegador su sesión firmada (renovada). */
+export const CABECERA_SESION = 'x-monitor-sesion';
 
 /**
  * Lee las credenciales del request.
@@ -40,6 +52,9 @@ const USU_API = 'https://bdi-catalogo.vercel.app/api/usuarios';
  *
  * También acepta user/pass en el body, que es como los manda crear-venta.js desde antes
  * de esto. No se toca ese contrato.
+ *
+ * 🔑 `sesion` (21-oct-2026) viaja AL LADO de lo anterior, ⛔ en su lugar: el mismo sobre va también a
+ * bdi-catalogo (17 pantallas y 4 reenvíos del servidor), que sólo entiende `{user,pass}`/`{token}`.
  */
 export function credenciales(req) {
   const h = req.headers || {};
@@ -50,10 +65,11 @@ export function credenciales(req) {
     try {
       const json = Buffer.from(String(raw), 'base64').toString('utf8');
       const d = JSON.parse(json);
-      if (d.token) return { user: '', pass: '', token: String(d.token) };
-      return { user: String(d.user || '').trim(), pass: String(d.pass || ''), token: '' };
+      const sesion = typeof d.sesion === 'string' ? d.sesion : '';
+      if (d.token) return { user: '', pass: '', token: String(d.token), sesion };
+      return { user: String(d.user || '').trim(), pass: String(d.pass || ''), token: '', sesion };
     } catch {
-      return { user: '', pass: '', token: '' };
+      return { user: '', pass: '', token: '', sesion: '' };
     }
   }
 
@@ -61,6 +77,7 @@ export function credenciales(req) {
     user: String(b.user || b.adminUser || '').trim(),
     pass: String(b.pass || b.adminPass || ''),
     token: String(b.token || b.adminToken || ''),
+    sesion: '',
   };
 }
 
@@ -76,12 +93,22 @@ export function credenciales(req) {
  * proveedor se cae, las sesiones de Google dejan de escribir y las de contraseña no.
  */
 export async function usuarioValido(user, pass, token) {
+  const r = await preguntarAlKv(user, pass, token);
+  return r.perfil || null;
+}
+
+/**
+ * La misma pregunta que `usuarioValido`, pero distingue «no» de «no contesta»: con la sesión
+ * firmada, un «no» CORTA (baja, cambio de clave) y un silencio deja seguir con la firma vigente.
+ * Devuelve `{perfil}`, `{no: true}` o `{caido: true}`.
+ */
+async function preguntarAlKv(user, pass, token) {
   const cuerpo = token
     ? { action: 'login-google', token }
     : user && pass
       ? { action: 'login', user, pass }
       : null;
-  if (!cuerpo) return null;
+  if (!cuerpo) return { no: true };
   // 🔑 Un tropiezo de bdi-catalogo (no contesta, 5xx, respuesta rota) se reintenta UNA vez antes de
   // contestar 403: sin esto, un segundo de corte allá le decía «Necesitás estar logueado» a alguien
   // logueado (16-oct-2026). Una respuesta clara de «no» (ok:false) ⛔ se reintenta: es la respuesta.
@@ -94,12 +121,12 @@ export async function usuarioValido(user, pass, token) {
       });
       if (r.status >= 500) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
-      return d && d.ok && d.perfil ? d.perfil : null;
+      return d && d.ok && d.perfil ? { perfil: d.perfil } : { no: true };
     } catch {
       if (intento === 0) await new Promise((ok) => setTimeout(ok, 400));
     }
   }
-  return null;
+  return { caido: true };
 }
 
 /**
@@ -109,13 +136,45 @@ export async function usuarioValido(user, pass, token) {
  *   if (!perfil) return;
  */
 export async function exigirUsuario(req, res) {
-  const { user, pass, token } = credenciales(req);
-  const perfil = await usuarioValido(user, pass, token);
+  const perfil = await resolverPerfil(req, res);
   if (!perfil) {
     res.status(403).json({ error: 'Necesitás estar logueado en el Monitor para hacer esto.' });
     return null;
   }
   return perfil;
+}
+
+/**
+ * **El login propio** (fase Bases, paso 3, 21-oct-2026): bdi-catalogo deja de ser una pregunta
+ * de CADA request.
+ *
+ *   1. Firma fresca (<10 min) ⇒ el perfil sale de la firma, sin red.
+ *   2. Si no, se le pregunta a bdi-catalogo con la credencial de siempre:
+ *      - dice que sí ⇒ ese perfil, y la respuesta lleva una firma nueva (`x-monitor-sesion`);
+ *      - dice que NO ⇒ nada, aunque la firma siga viva: así se cortan una baja o un cambio de clave;
+ *      - NO CONTESTA ⇒ la firma vieja vale hasta su vencimiento (12 h). Es para lo que existe:
+ *        con bdi-catalogo caído, la Caja con la sesión iniciada sigue cobrando.
+ *
+ * ⚠️ La firma sola, sin credencial al lado, sólo vale fresca: pasados los 10 minutos tiene que haber
+ * con qué preguntar. Si no, alguien que se llevó la firma la usaría las 12 horas.
+ * Sin `MONITOR_SESION_SECRETO` esto es exactamente lo de antes.
+ */
+async function resolverPerfil(req, res) {
+  const { user, pass, token, sesion } = credenciales(req);
+  const secreto = secretoSesion();
+  const firmada = sesion ? abrirSesion(sesion, secreto) : null;
+  // Una firma de OTRA persona que la del sobre ⛔ cuenta: el sobre manda.
+  const deEsteUsuario = firmada && (!user || firmada.perfil.name === user) ? firmada : null;
+  if (deEsteUsuario?.fresca) return deEsteUsuario.perfil;
+
+  const r = await preguntarAlKv(user, pass, token);
+  if (r.perfil) {
+    const nueva = firmarSesion(r.perfil, secreto);
+    if (nueva && res && typeof res.setHeader === 'function') res.setHeader(CABECERA_SESION, nueva);
+    return r.perfil;
+  }
+  if (r.caido && deEsteUsuario) return deEsteUsuario.perfil;
+  return null;
 }
 
 /**
@@ -155,12 +214,9 @@ const EQUIPO_TTL_MS = 60 * 1000;
 
 export async function equipoDelPadron(req, ahora = Date.now()) {
   if (ahora - equipoCache.at < EQUIPO_TTL_MS) return equipoCache.lista;
-  // La credencial se reenvía tal cual: el sobre `x-monitor-auth` es el mismo de los dos lados. Si
-  // vino en el body (el contrato viejo de crear-venta), se rearma.
-  const raw = (req.headers || {})['x-monitor-auth'];
+  // El sobre se REARMA con la credencial sola: la sesión firmada del Monitor ⛔ sale a bdi-catalogo.
   const { user, pass, token } = credenciales(req);
-  const sobre = raw
-    || Buffer.from(JSON.stringify(token ? { token } : { user, pass }), 'utf8').toString('base64');
+  const sobre = Buffer.from(JSON.stringify(token ? { token } : { user, pass }), 'utf8').toString('base64');
   try {
     const r = await fetch(USU_API, { headers: { 'x-monitor-auth': sobre } });
     const d = await r.json();

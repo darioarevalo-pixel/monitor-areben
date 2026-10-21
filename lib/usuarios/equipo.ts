@@ -63,7 +63,7 @@ type UsuarioDelGet = { name?: string; apodo?: string | null; funcion?: Funcion[]
  * pudo preguntar», que es lo que hay que mostrar para que alguien sepa que no es que falte gente.
  */
 export async function traerEquipo(): Promise<Companero[] | null> {
-  const sobre = await sobreDeAuth()
+  const sobre = await sobreDeAuth(false) // va a bdi-catalogo: sin la sesión firmada del Monitor
   if (!sobre) return null
   try {
     const r = await fetch(USU_API, { headers: { 'x-monitor-auth': sobre } })

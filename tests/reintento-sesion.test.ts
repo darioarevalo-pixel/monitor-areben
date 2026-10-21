@@ -16,6 +16,8 @@ describe('apiFetch: un 403 a una sesión de Google se reintenta con un token nue
       leerAdminPass: () => 'x',
       guardarAdminPass: () => {},
       credencialActual: async () => ({ token: 't' }),
+      leerSesionFirmada: () => '',
+      guardarSesionFirmada: () => {},
     }))
     const tokenRenovado = vi.fn(async () => renovado)
     vi.doMock('@/lib/identidad', () => ({ tokenRenovado }))
