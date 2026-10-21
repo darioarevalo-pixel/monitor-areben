@@ -26,6 +26,7 @@ import sistema from './_sistema.js';
 import organizacion from './_organizacion.js';
 import reportes from './_reportes.js';
 import agenda from './_agenda.js';
+import vigiaErp from './_vigia-erp.js';
 import syncTn from './_sync-tn.js';
 import metaRentabilidad from './_meta-rentabilidad.js';
 import envios from './_envios.js';
@@ -234,6 +235,8 @@ const RECURSOS = {
   // Reposición: el armado con el lector y la transferencia depósito → local en Gestión Nube (sólo
   // Zattia, tabla `repo_armado`). Entra por acá como todo el resto (12 funciones de Hobby).
   'repo-armado': repoArmado,
+  // El vigía de erp.arebensrl.com, sin sesión: lo llama el cron de vercel.json con CRON_SECRET.
+  'vigia-erp': vigiaErp,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a
