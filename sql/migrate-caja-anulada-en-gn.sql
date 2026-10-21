@@ -7,7 +7,7 @@
 -- La marcan el cierre del turno (`api/_caja.js`) y el sync diario (`scripts/sync-diario*.js`), con
 -- `lib/caja/anuladas.js`. Lo lee el libro de stock (`areben-libro-stock/lib/fuentes/caja.mjs`).
 --
--- BASES: las DOS. La Caja vive en la base de cada marca (V4): Zattia en la suya, BDI en la del monitor.
+-- Va en las DOS bases. La Caja vive en la base de cada marca (V4): Zattia en la suya, BDI en la del monitor.
 -- Sin la columna, el cierre y el sync siguen andando y ⛔ anotan nada (lo dicen en el log).
 --   node scripts/aplicar-sql.mjs sql/migrate-caja-anulada-en-gn.sql caja_venta
 --   (sólo Zattia: SOLO=ZATTIA node scripts/aplicar-sql.mjs sql/migrate-caja-anulada-en-gn.sql caja_venta)

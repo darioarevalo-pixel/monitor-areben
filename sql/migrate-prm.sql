@@ -1,3 +1,4 @@
+-- bases: bdi
 -- PRM y Recorridas — la relación con el proveedor, y el viaje a comprarle.
 --
 -- # Qué hueco tapa

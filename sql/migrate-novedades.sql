@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Novedades: lo que cambió en los sistemas, y quién lo leyó.
 --
 -- # Por qué NO tiene columna `store`

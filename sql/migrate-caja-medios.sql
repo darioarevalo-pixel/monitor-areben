@@ -1,3 +1,4 @@
+-- bases: zattia
 -- Caja — formas de pago escuetas (Bruno, 4-oct-2026). Base de ZATTIA.
 --
 -- La cajera ve sólo Efectivo · Transferencia · Tarjeta de débito · Tarjeta de crédito; la cuenta de

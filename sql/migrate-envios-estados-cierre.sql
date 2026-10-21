@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Los estados del envío: **segunda mitad**. Renombra lo viejo y estrecha el check a cinco.
 --
 -- ⛔ **NO se corre junto con la primera.** Va con el código nuevo ya sirviéndose en prod:

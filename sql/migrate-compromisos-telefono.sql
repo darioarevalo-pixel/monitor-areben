@@ -1,3 +1,4 @@
+-- bases: bdi
 -- El teléfono del que va a transferir, en el compromiso.
 --
 -- # Qué hueco tapa (planteado por Darío el 3-sep-2026, mirándolo en uso)

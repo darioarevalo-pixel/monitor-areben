@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Insumos: el PEDIDO. La mitad que le faltaba a «gestión de compras».
 --
 -- # Qué hueco tapa

@@ -1,3 +1,4 @@
+-- bases: bdi
 -- La segunda mitad de `migrate-envios-plata.sql`: se lleva `pago_cadete`.
 --
 -- ⛔ **NO se corre junto con la primera.** Va cuando el código nuevo ya se está sirviendo en prod,

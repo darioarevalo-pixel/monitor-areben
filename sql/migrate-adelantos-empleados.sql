@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Adelantos de sueldo: un TERCER destino de compromiso, el empleado (28-sep-2026).
 --
 -- ⛔ Correr a mano en el SQL Editor de la base de **BDI** (`srqzzffmiiescffabtlc`), la del

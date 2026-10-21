@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Manuales: cómo se hace cada cosa. El procedimiento de trabajo, no el paso a paso de la pantalla.
 --
 -- Vive en la misma base que `novedades` y por el mismo motivo (ver ese `.sql`): un manual de "cómo

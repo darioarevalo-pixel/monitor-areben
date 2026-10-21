@@ -1,3 +1,4 @@
+-- bases: bdi
 -- La foto diaria de la pauta de Meta: una fila por objeto por día.
 --
 -- ⚠️ VA A UNA SOLA BASE, la de BDI, y guarda las tres líneas. Mismo razonamiento que

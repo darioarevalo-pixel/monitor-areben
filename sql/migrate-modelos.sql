@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Modelos: la ficha de cada modelo que trabaja con nosotros.
 --
 -- # Qué hueco tapa

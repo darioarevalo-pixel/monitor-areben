@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Los estados del envío pasan de seis a cinco. **Primera mitad: ensanchar.**
 --
 -- # Qué cambia

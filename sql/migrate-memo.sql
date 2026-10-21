@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Friday memo: qué pasó esta semana, con fecha y con firma.
 --
 -- # Por qué NO tiene columna `store`

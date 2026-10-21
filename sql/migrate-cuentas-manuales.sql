@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Cuentas manuales: juntar plata de clientes para algo que el dashboard no conoce.
 --
 -- # Qué hueco tapa

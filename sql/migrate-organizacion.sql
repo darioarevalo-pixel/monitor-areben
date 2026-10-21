@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Organización: de quién es cada cosa, sin fecha.
 --
 -- # Por qué no vive en la Agenda, que es donde primero se pensó

@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Compromisos de pago: "este cliente le va a transferir a este acreedor".
 --
 -- # Qué hueco tapa

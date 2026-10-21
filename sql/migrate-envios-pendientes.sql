@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Envíos pendientes de fecha: la bandeja de los que ya se cotizaron y todavía no tienen día.
 --
 -- # Qué hueco tapa

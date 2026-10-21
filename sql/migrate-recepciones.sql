@@ -1,3 +1,4 @@
+-- bases: bdi
 -- "Lo que entró" — lo que el sistema de Ingresos confirma que llegó de cada orden de compra.
 --
 -- # Qué hueco tapa

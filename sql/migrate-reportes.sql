@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Reportes: «Ayuda / problemas», el botón de abajo a la derecha (Bruno, 12-oct-2026).
 --
 -- Cualquiera del equipo deja registrado algo que falta mejorar o un problema que pasó, desde la

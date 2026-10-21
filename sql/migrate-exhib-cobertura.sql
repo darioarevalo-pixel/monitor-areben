@@ -1,3 +1,4 @@
+-- bases: zattia
 -- Chequeo de exhibición: **el balance del sector**, o qué cubrió de verdad un recorrido.
 -- Correr en el proyecto Supabase de ZATTIA (la sección `exhib` es `brands: ['zattia']`).
 -- Es idempotente.

@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Las piezas marcadas de la Biblioteca de anuncios: una fila por aviso.
 --
 -- ⚠️ VA A UNA SOLA BASE, la de BDI, como `meta_ads_snapshot_dia`, `meta_ads_accion` y

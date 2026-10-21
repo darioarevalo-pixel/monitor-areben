@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Línea de pauta de cada campaña de Meta: de qué marca es la plata.
 --
 -- BDI, Zattia y Stunned se pautean TODAS desde la misma cuenta publicitaria. La versión anterior
