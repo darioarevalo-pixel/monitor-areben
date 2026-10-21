@@ -372,6 +372,18 @@ function AvisoColgadas({
   // devolverles la oferta previa. Duplicarlo acá sería una segunda máquina de escribir precios.
   const deUnaVez = sacables.length > 0 && sacables.length <= TOPE_APLICAR
 
+  // Las «fuera de alcance» no tienen campaña que las tenga: van juntas en su propia línea.
+  const grupos = new Map<string, { clave: string; nombre: string; liqId: string | null; n: number; conStock: number; motivos: MotivoColgada[] }>()
+  for (const c of filas) {
+    const clave = c.seSacaDesdeAca && c.liqId ? c.liqId : '—'
+    const g = grupos.get(clave) || { clave, nombre: clave === '—' ? 'Sin campaña' : c.liqNombre || 'la campaña', liqId: clave === '—' ? null : c.liqId, n: 0, conStock: 0, motivos: [] }
+    g.n++
+    if (c.stock > 0) g.conStock++
+    if (!g.motivos.includes(c.motivo)) g.motivos.push(c.motivo)
+    grupos.set(clave, g)
+  }
+  const porCampania = [...grupos.values()].sort((a, b) => b.n - a.n)
+
   return (
     <Notice tone={conStock > 0 ? 'danger' : 'warning'} style={{ marginBottom: space[4] }}>
       <div style={{ lineHeight: 1.7 }}>
@@ -395,7 +407,31 @@ function AvisoColgadas({
         )}
       </div>
 
+      {/*
+        🔑 Una línea por CAMPAÑA, y el detalle plegado. Con un sale entero vencido eran 8 filas rojas
+        y «y 98 más» que tapaban la pantalla, cuando lo que se hace con ellas es una sola cosa:
+        abrir la campaña y sacarlas (o correrle la fecha).
+      */}
       <div style={{ marginTop: space[3], display: 'grid', gap: space[2] }}>
+        {porCampania.map((g) => (
+          <div key={g.clave} style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', fontSize: font.sm }}>
+            <b style={{ fontWeight: weight.semibold }}>{g.nombre}</b>
+            <span style={{ color: color.mut }}>
+              {g.n} {g.n === 1 ? 'oferta' : 'ofertas'}{g.conStock > 0 && <> · <b>{g.conStock} con stock</b></>}
+            </span>
+            {g.motivos.map((mo) => (
+              <span key={mo} title={MOTIVO_COLGADA[mo].ayuda}><StatusPill tone={MOTIVO_COLGADA[mo].tono} label={MOTIVO_COLGADA[mo].label} /></span>
+            ))}
+            {g.liqId && (
+              <Button variant="ghost" size="sm" onClick={() => onAbrirCampania(g.liqId as string)}>Abrir la campaña</Button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <details style={{ marginTop: space[2] }}>
+        <summary style={{ cursor: 'pointer', fontSize: font.sm, color: color.mut }}>Ver los productos</summary>
+      <div style={{ marginTop: space[2], display: 'grid', gap: space[2] }}>
         {filas.slice(0, TOPE_COLGADAS_A_LA_VISTA).map((c) => {
           const m = MOTIVO_COLGADA[c.motivo]
           return (
@@ -420,6 +456,7 @@ function AvisoColgadas({
           </div>
         )}
       </div>
+      </details>
 
       <div style={{ marginTop: space[3], display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
         {puedeAplicar && deUnaVez && (
@@ -479,9 +516,23 @@ function ListaCampanias({
           const r = ROTULO_CAMPANIA[c.estado] || ROTULO_CAMPANIA.borrador
           return (
             <Tr key={c.id} onClick={() => onAbrir(c)}>
-              <Td>
+              {/*
+                🔑 La nota es texto libre y puede ser larga: con el `nowrap` de la celda ensanchaba la
+                tabla entera. Va en dos líneas como mucho, y entera en el tooltip.
+              */}
+              <Td wrap>
                 <b style={{ fontWeight: weight.semibold }}>{c.nombre}</b> <EtiquetaTipo campania={c} />
-                {c.nota && <div style={{ color: color.mut, fontSize: font.sm }}>{c.nota}</div>}
+                {c.nota && (
+                  <div
+                    title={c.nota}
+                    style={{
+                      color: color.mut, fontSize: font.sm, maxWidth: 560,
+                      display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                    }}
+                  >
+                    {c.nota}
+                  </div>
+                )}
               </Td>
               <Td><StatusPill tone={r.tono} label={r.label} /></Td>
               <Td align="right">{c.conteo.total}</Td>
