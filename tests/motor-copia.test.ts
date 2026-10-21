@@ -5,7 +5,8 @@
 import { describe, it, expect } from 'vitest'
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { dirname, join, normalize, relative } from 'node:path'
+import { importsDe } from '../scripts/motor-cierre.mjs'
 
 const DIR = join(__dirname, '..', 'motor')
 const version = JSON.parse(readFileSync(join(DIR, 'VERSION.json'), 'utf8')) as { version: string, commit: string, archivos: Record<string, string> }
@@ -19,6 +20,11 @@ describe('motor/ es la copia que se trajo de areben-motor', () => {
   })
   it('los mismos archivos, ni uno de más', () => {
     expect(enDisco).toEqual(Object.keys(version.archivos).sort())
+  })
+  it('la copia está CERRADA: cada import relativo resuelve a un archivo de motor/ (⛔ una carpeta que falte)', () => {
+    const faltan = enDisco.flatMap((f) => (importsDe(readFileSync(join(DIR, f), 'utf8')) as string[])
+      .map((s) => normalize(join(dirname(f), s))).filter((d) => !enDisco.includes(d)).map((d) => `${f} → ${d}`))
+    expect(faltan).toEqual([])
   })
   it.each(Object.entries(version.archivos))('%s no se editó a mano (se edita en areben-motor y se vuelve a traer)', (f, h) => {
     expect(createHash('sha256').update(readFileSync(join(DIR, f))).digest('hex')).toBe(h)

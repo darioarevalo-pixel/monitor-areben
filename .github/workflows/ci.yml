@@ -68,6 +68,21 @@ jobs:
       - name: Build
         run: npm run build
 
+  # La copia del motor (`motor/`) tiene que ser de `main` de areben-motor (auditoría 20-oct). Job aparte: pide red y un
+  # token (MOTOR_LECTURA), y `verificar` es sin red a propósito. ⛔ hace npm ci: el script es Node pelado.
+  motor-en-main:
+    name: La copia del motor es de main del motor
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/motor-en-main.mjs
+        env:
+          MOTOR_LECTURA: ${{ secrets.MOTOR_LECTURA }}
+
   paridad:
     name: Paridad del ETL contra el legacy (datos reales)
     runs-on: ubuntu-latest

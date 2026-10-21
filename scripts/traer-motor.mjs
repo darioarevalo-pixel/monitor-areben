@@ -12,45 +12,43 @@
  * 🔴 `motor/` ⛔ se edita acá: se edita en `areben-motor` y se vuelve a traer. `tests/motor-copia.test.ts`
  * compara cada archivo con la huella que deja este script: si alguien lo tocó a mano, falla.
  *
- * Qué trae: lo que el motor EXPORTA para el monitor (`lib/venta`, `lib/arca`, `lib/cuentas`: la venta la importa desde la 020; `lib/stock`: el ajuste, desde la 026; `lib/cuenta`: la cuenta corriente, que la venta importa desde la 025), ⛔ el libro ni sus crons.
- * Sólo trae un motor sin cambios sin commitear y con su commit ya en GitHub (para que la versión anotada
- * se pueda ir a mirar).
+ * Qué trae: el CIERRE de imports (`scripts/motor-cierre.mjs`) de lo que el motor EXPORTA y de lo que el monitor importa de
+ * `motor/` — ⛔ una lista de carpetas a mano, que ya rompió `main` (`1e8ea252`). `lib/X` del motor queda en `motor/X`.
+ * Sólo trae un motor sin cambios sin commitear en esos archivos y con su commit en `main` de GitHub: el CI
+ * (`scripts/motor-en-main.mjs`) vuelve a chequear eso último, porque un commit de una rama ⛔ es el motor de nadie.
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, relative } from 'node:path'
+import { dirname, join, relative } from 'node:path'
+import { cierre, entradasDelMonitor, entradasDeExports } from './motor-cierre.mjs'
 
 const ORIGEN = process.argv[2] || join(homedir(), 'Projects/areben-libro-stock')
 const DESTINO = join(process.cwd(), 'motor')
-const CARPETAS = ['lib/venta', 'lib/arca', 'lib/cuentas', 'lib/stock', 'lib/cuenta']
 const git = (...a) => execFileSync('git', ['-C', ORIGEN, ...a], { encoding: 'utf8' }).trim()
 
 if (!existsSync(join(ORIGEN, 'package.json'))) throw new Error(`No está el motor en ${ORIGEN}`)
 const pkg = JSON.parse(readFileSync(join(ORIGEN, 'package.json'), 'utf8'))
 if (pkg.name !== 'areben-motor') throw new Error(`${ORIGEN} no es areben-motor (es ${pkg.name})`)
-const sucio = git('status', '--porcelain', '--', ...CARPETAS)
+const delMonitor = execFileSync('git', ['ls-files', '*.ts', '*.tsx', '*.js', '*.mjs'], { encoding: 'utf8' }).split('\n').filter((f) => f && !f.startsWith('motor/'))
+const ARCHIVOS = cierre(ORIGEN, [...entradasDeExports(ORIGEN, pkg.exports), ...entradasDelMonitor(process.cwd(), delMonitor)])
+const sucio = git('status', '--porcelain', '--', ...ARCHIVOS)
 if (sucio) throw new Error(`El motor tiene cambios sin commitear en lo que se copia:\n${sucio}`)
 const commit = git('rev-parse', 'HEAD')
 git('fetch', '-q', 'origin')
-if (!git('branch', '-r', '--contains', commit)) throw new Error(`El commit ${commit.slice(0, 8)} del motor no está en GitHub: pushealo primero`)
+try { git('merge-base', '--is-ancestor', commit, 'origin/main') } catch { throw new Error(`El commit ${commit.slice(0, 8)} del motor ⛔ está en main de GitHub: publicalo primero`) }
 
-/** Todos los archivos de una carpeta, recursivo. */
-const archivos = (dir) => readdirSync(dir).flatMap((n) => {
-  const p = join(dir, n)
-  return statSync(p).isDirectory() ? archivos(p) : [p]
-})
 export const huella = (ruta) => createHash('sha256').update(readFileSync(ruta)).digest('hex')
 
 rmSync(DESTINO, { recursive: true, force: true })
 mkdirSync(DESTINO, { recursive: true })
 const lista = {}
-for (const c of CARPETAS) {
-  const desde = join(ORIGEN, c)
-  const hacia = join(DESTINO, c.replace(/^lib\//, ''))
-  cpSync(desde, hacia, { recursive: true })
-  for (const f of archivos(hacia)) lista[relative(DESTINO, f)] = huella(f)
+for (const f of ARCHIVOS) {
+  const hacia = join(DESTINO, relative('lib', f))
+  mkdirSync(dirname(hacia), { recursive: true })
+  cpSync(join(ORIGEN, f), hacia)
+  lista[relative(DESTINO, hacia)] = huella(hacia)
 }
 const version = { motor: pkg.name, version: pkg.version, commit, traido_en: new Date().toISOString(), archivos: lista }
 writeFileSync(join(DESTINO, 'VERSION.json'), JSON.stringify(version, null, 2) + '\n')

@@ -83,6 +83,13 @@ async function avisarStock(db, venta, lineas, avisos) {
   for (const l of lineas) { const k = `${l.product_id}:${l.size_id}`; neto.set(k, (neto.get(k) || 0) + l.cantidad) }
   const salen = [...neto].filter(([, n]) => n > 0).map(([k, n]) => { const [product_id, size_id] = k.split(':').map(Number); return { product_id, size_id, cantidad: n } })
   if (!salen.length) return
+  // La última unidad (auditoría 20-oct): sin candado, dos cajas leen el mismo nivel y pasan las dos. Uno por depósito ×
+  // variante, hasta el commit ⇒ la segunda espera y lee el movimiento de la primera. ⛔ lleva la marca: Zattia y Stunned
+  // comparten el depósito físico y el libro cuenta por depósito. En orden, para que dos ventas cruzadas ⛔ se traben.
+  if (mueveStock(venta)) {
+    const llaves = salen.map((l) => `stock:${venta.deposito}:${l.product_id}:${l.size_id}`).sort()
+    for (const k of llaves) await q(db, 'select pg_advisory_xact_lock(hashtext($1))', [k])
+  }
   const filas = await q(db, `select product_id, size_id, coalesce(sum(cantidad), 0)::int as nivel from stock_movimiento
     where deposito = $1 and (product_id, size_id) in (select * from unnest($2::bigint[], $3::bigint[])) group by 1, 2`,
   [venta.deposito, salen.map((l) => l.product_id), salen.map((l) => l.size_id)])
