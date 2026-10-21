@@ -12,6 +12,7 @@ import { baseFacturacion } from './_facturacion.js'
 import { rangoDeDias } from '../lib/erp/venta.core.js'
 import { armarFila } from '../lib/erp/ventas-lista.core.js'
 import { ADMIN } from '../lib/erp/pedidos-tn.core.js'
+import { configPg } from '../lib/pg.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 const TANDA = 300
@@ -205,7 +206,7 @@ async function conPg(marca, fn) {
   const conexion = process.env[PG_DE_MARCA[marca]]
   if (!conexion) return { status: 409, error: 'Falta la conexión del motor en Vercel.' }
   const { default: pg } = await import('pg')
-  const db = new pg.Client({ connectionString: conexion, connectionTimeoutMillis: 5000, statement_timeout: 15000 })
+  const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: 5000, statement_timeout: 15000 })
   try {
     await db.connect()
     return await fn(db)

@@ -9,6 +9,7 @@
 //
 // ⛔ Archivo `_`: NO es una ruta.
 import { COLUMNAS_MOTOR, DIAS_REPASO, REPASO_POR_VUELTA, anularEnMotor, entradaDelMotor, faltanEnMotor } from '../lib/caja/motor.core.js'
+import { configPg } from '../lib/pg.core.js'
 
 const PG_DE_STORE = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
 /** El motor tiene que contestar rápido: la cajera está esperando el ticket. Lo que no entra, lo sube el repaso. */
@@ -18,7 +19,7 @@ async function conMotor(store, fn) {
   const conexion = process.env[PG_DE_STORE[store]]
   if (!conexion) return { sinConexion: true }
   const [{ default: pg }, motor] = await Promise.all([import('pg'), import('../motor/venta/registrar.mjs')])
-  const db = new pg.Client({ connectionString: conexion, connectionTimeoutMillis: TECHO_MS, statement_timeout: TECHO_MS, query_timeout: TECHO_MS })
+  const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: TECHO_MS, statement_timeout: TECHO_MS, query_timeout: TECHO_MS })
   try {
     await db.connect()
     return await fn(db, motor.registrarVenta, motor)

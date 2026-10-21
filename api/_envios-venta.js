@@ -8,6 +8,7 @@
 // 🔑 **La base del motor es la de la marca del envío** (`store`): Envíos guarda las dos marcas en la base de BDI, pero
 // la venta de Zattia (y la de Stunned, que vive en la de Zattia) está en la otra. ⛔ el motor lee Envíos.
 import { SIN_AVISO, verboDeVenta } from '../lib/envios/venta.core.js'
+import { configPg } from '../lib/pg.core.js'
 
 const PG_DE_STORE = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
 
@@ -20,7 +21,7 @@ async function conMotor(store, fn) {
     import('../motor/venta/contraentrega.mjs'),
     import('../motor/venta/registrar.mjs'),
   ])
-  const db = new pg.Client({ connectionString: conexion, connectionTimeoutMillis: 5000, statement_timeout: 15000 })
+  const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: 5000, statement_timeout: 15000 })
   try {
     await db.connect()
     return await fn(db, { ...contraentrega, ...registrar })
