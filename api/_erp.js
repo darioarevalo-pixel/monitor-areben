@@ -62,7 +62,7 @@
  */
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
-import { permisoErpDe, permisosErp, puedeErp } from '../lib/permisos.core.js'
+import { esAdmin, permisoErpDe, permisosErp, puedeErp } from '../lib/permisos.core.js'
 import { baseDeLinea } from '../lib/lineas.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
@@ -75,6 +75,7 @@ import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { armarConciliacion, TIENDAS as TIENDAS_CONCILIACION } from '../lib/erp/conciliacion.core.js'
+import { entradaInvalida } from '../lib/erp/entrada.core.js'
 import { NO_SIN_PAGAR, STATUS_POR_COBRAR, armarPedidosSinPagar, cobradosEnGN } from '../lib/erp/pedidos-tn.core.js'
 import { esEntregadoSinCobrarTN } from '../motor/venta/pago-tn.mjs'
 import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto } from '../lib/erp/precio.core.js'
@@ -1323,6 +1324,8 @@ export default async function handler(req, res) {
   if (!(base ? [base] : ['bdi', 'zattia']).every((m) => puedeErp(perfil, m, permiso))) {
     return res.status(403).json({ error: permiso === 'ver' ? 'No tenés acceso al ERP.' : 'Tu rol no puede hacer esto en el ERP.', permiso })
   }
+  const invalida = entradaInvalida({ method: req.method, query: req.query, body })
+  if (invalida) return res.status(invalida.status).json({ error: invalida.error, campo: invalida.campo })
   if (req.method === 'GET' && req.query.vista === 'permisos') return res.status(200).json({ permisos: permisosErp(perfil) })
   const mes = String(req.query.mes || body.mes || diaArgentino(Date.now()).slice(0, 7))
   if (!/^\d{4}-\d{2}$/.test(mes)) return res.status(400).json({ error: 'Mes inválido' })
@@ -1585,6 +1588,8 @@ export default async function handler(req, res) {
 
     return res.status(400).json({ error: 'Acción inválida' })
   } catch (e) {
-    return res.status(500).json({ error: e.message })
+    // El texto crudo (de Postgres o de Supabase) puede traer valores de la fila: sólo lo ve el admin.
+    console.error('[erp] 500', req.query.vista || body.accion || 'facturacion', e)
+    return res.status(500).json({ error: esAdmin(perfil) ? e.message : 'Algo falló en el servidor. Probá de nuevo y, si sigue, avisá.' })
   }
 }
