@@ -1,3 +1,4 @@
+-- bases: bdi
 -- El umbral de rentabilidad de cada línea de pauta: hasta cuánto se puede pagar por una compra.
 --
 -- Tanda 2 de `/meta-ads/rentabilidad`. La tanda 1 salió con los supuestos clavados en el código y

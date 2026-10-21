@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Facturación electrónica con ARCA (ERP propio, F5, Bruno 12-oct-2026). Va SÓLO en la base del
 -- monitor (BDI): es un CUIT (Areben) y un permiso de ARCA para las dos marcas; cada factura dice de
 -- qué marca y de qué venta es. La escribe `api/_facturacion.js` con `lib/arca/lote.core.js`.

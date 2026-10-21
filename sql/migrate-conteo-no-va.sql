@@ -1,3 +1,4 @@
+-- bases: zattia
 -- Talles y colores que A PROPÓSITO no se cuelgan en el salón (Conteo del local → «Para colgar»).
 --
 -- El reporte «Para colgar» lista cada talle y color que no está exhibido (la regla es uno por

@@ -1,3 +1,4 @@
+-- bases: zattia
 -- Chequeo de exhibición: que el recorrido CUENTE UNIDADES y el repetido ⛔ no rebote.
 -- Correr en el proyecto Supabase de ZATTIA (la sección `exhib` es `brands: ['zattia']`).
 -- Es idempotente y sirve igual para BDI el día que se le habilite.

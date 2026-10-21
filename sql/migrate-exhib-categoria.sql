@@ -1,3 +1,4 @@
+-- bases: zattia
 -- Chequeo de exhibición: que el recorrido POR CATEGORÍA también guarde en la base.
 -- Correr en el proyecto Supabase de ZATTIA (la sección `exhib` es `brands: ['zattia']`).
 -- Es idempotente y sirve igual para BDI el día que se le habilite.

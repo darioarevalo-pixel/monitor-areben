@@ -1,3 +1,4 @@
+-- bases: zattia
 -- Ledger de idempotencia del sync TN↔GN (Stunned y futuros).
 -- Evita dos cosas: (1) importar dos veces la misma orden de TN a GN, y (2) reescribir en TN un
 -- stock que no cambió desde la última corrida. Sin esto, el cron diario duplicaría ventas o

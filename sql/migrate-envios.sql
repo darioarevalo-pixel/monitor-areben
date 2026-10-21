@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Envíos del día: la hoja del cadete, que hasta hoy era una planilla de Google escrita a mano.
 --
 -- # Qué hueco tapa

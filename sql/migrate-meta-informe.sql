@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Los informes del analista de pauta: el DIAGNÓSTICO en prosa, guardado donde lo pueda leer el resto.
 --
 -- ⚠️ VA A UNA SOLA BASE, la de BDI, igual que las otras seis tablas de Meta y por el mismo motivo:

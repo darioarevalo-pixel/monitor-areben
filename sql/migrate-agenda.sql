@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Agenda operativa: lo que hay que hacer o saber UN DÍA.
 --
 -- # Qué hueco tapa

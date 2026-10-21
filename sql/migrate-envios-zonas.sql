@@ -1,3 +1,4 @@
+-- bases: bdi
 -- El mapa de zonas de reparto: los polígonos de Rosario y cuánto sale llevar un paquete a cada uno.
 --
 -- ⚠️ Aditivo: crea una tabla nueva y no toca ninguna existente. Nace VACÍA — las zonas entran por la

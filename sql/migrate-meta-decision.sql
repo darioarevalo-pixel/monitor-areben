@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Las decisiones tomadas SOBRE la pauta, incluidas las que no pasaron por el monitor.
 --
 -- ⚠️ VA A UNA SOLA BASE, la de BDI, igual que las otras cinco tablas de Meta y por el mismo motivo:

@@ -1,3 +1,4 @@
+-- bases: bdi
 -- La cuenta del cadete pasa a ser **movimientos con signo**, y el cierre del día deja de pedir plata.
 --
 -- ⚠️ Aditivo: crea la tabla y **siembra** desde `envios_dia`. No dropea nada. El `drop` de las dos

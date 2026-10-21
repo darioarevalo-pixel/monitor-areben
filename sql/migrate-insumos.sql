@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Insumos: lo que la empresa consume y no vende.
 --
 -- # Qué hueco tapa

@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Automatizaciones de la pauta de Meta: reglas que MIRAN y PROPONEN, nunca ejecutan.
 --
 -- ⚠️ VA A UNA SOLA BASE, la de BDI, igual que `meta_ads_snapshot_dia`, `meta_ads_plan` y

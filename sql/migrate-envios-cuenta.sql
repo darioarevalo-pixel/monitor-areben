@@ -1,3 +1,4 @@
+-- bases: bdi
 -- La cuenta corriente del cadete: el cierre pasa de ser por TURNO a ser por DÍA, y arrastra saldo.
 --
 -- # Qué hueco tapa

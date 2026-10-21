@@ -1,3 +1,4 @@
+-- bases: bdi
 -- ============================================================================
 -- Migración CRM: agrega datos de cliente a ventas y crea tabla clientes
 -- Idempotente: se puede correr más de una vez sin romper nada.

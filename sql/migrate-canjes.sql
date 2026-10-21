@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Canjes con influencers y creadoras — el módulo entero, seis tablas.
 --
 -- Un canje es producto (o producto + plata) a cambio de contenido publicitario. Cubre el ciclo

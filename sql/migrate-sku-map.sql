@@ -1,3 +1,4 @@
+-- bases: zattia
 -- Mapeo estable de SKU entre Gestión Nube (GN) y Tienda Nube (TN).
 -- Fundacional para el sync bidireccional TN↔GN (Stunned) y para escribir stock/ventas cruzados.
 -- Hoy el cruce GN↔TN es difuso y en memoria (lib/tn.ts matchTn: SKU→nombre→palabras); esta tabla

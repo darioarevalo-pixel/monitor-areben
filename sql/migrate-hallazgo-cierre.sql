@@ -1,3 +1,4 @@
+-- bases: bdi
 -- El motivo por el que un hallazgo dejó de estar pendiente.
 --
 -- 🔴 Por qué (5-sep-2026). Los hallazgos se abrían y **nunca se cerraban solos**: al medir la base

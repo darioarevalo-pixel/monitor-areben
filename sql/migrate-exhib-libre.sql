@@ -1,3 +1,4 @@
+-- bases: zattia
 -- Chequeo de exhibición LIBRE: el recorrido del local por LUGAR, guardado en la base.
 -- Correr este script en el proyecto Supabase de ZATTIA (la sección `exhib` es `brands: ['zattia']`).
 -- Sirve igual para BDI el día que se le habilite: es idempotente y no asume datos previos.

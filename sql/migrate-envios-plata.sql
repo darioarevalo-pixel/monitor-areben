@@ -1,3 +1,4 @@
+-- bases: bdi
 -- El envío bonificado deja de necesitar una segunda columna de plata.
 --
 -- # Qué estaba mal

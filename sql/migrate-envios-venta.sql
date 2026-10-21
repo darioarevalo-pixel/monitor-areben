@@ -1,3 +1,4 @@
+-- bases: bdi
 -- La VENTA del ERP de cada envío (contrato-venta.md §20, «Contraentrega»; Bruno, 20-oct-2026).
 --
 -- # Para qué

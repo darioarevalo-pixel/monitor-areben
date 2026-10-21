@@ -1,3 +1,4 @@
+-- bases: bdi
 -- El portal del cadete: un link público, responsive, con los envíos del día.
 --
 -- # Qué resuelve

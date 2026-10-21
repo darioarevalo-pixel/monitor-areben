@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Auditoría de lo que se acciona sobre la pauta de Meta: quién movió qué plata y cuándo.
 --
 -- ⚠️ VA A UNA SOLA BASE, la de BDI, y la escriben las acciones de las tres líneas. Mismo

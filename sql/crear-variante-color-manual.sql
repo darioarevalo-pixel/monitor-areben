@@ -1,3 +1,4 @@
+-- bases: zattia
 -- Tabla de mapeo manual: producto con Variante Única → color real
 CREATE TABLE IF NOT EXISTS variante_color_manual (
   product_name TEXT PRIMARY KEY,

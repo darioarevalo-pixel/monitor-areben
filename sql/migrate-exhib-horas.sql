@@ -1,3 +1,4 @@
+-- bases: zattia
 -- Chequeo de exhibición: **la hora de CADA lectura** de una prenda, y ⛔ no sólo la primera y la
 -- última. Correr en el proyecto Supabase de ZATTIA (la sección `exhib` es `brands: ['zattia']`).
 -- Es idempotente.

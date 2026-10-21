@@ -1,3 +1,4 @@
+-- bases: bdi
 -- "Mensajes de clientes": lo que la clienta escribió y todavía no se resolvió.
 --
 -- # Qué hueco tapa

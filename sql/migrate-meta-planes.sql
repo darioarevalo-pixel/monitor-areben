@@ -1,3 +1,4 @@
+-- bases: bdi
 -- Planes por pasos sobre la pauta de Meta: el motor que sobrevive a que se corte la llamada.
 --
 -- ⚠️ VA A UNA SOLA BASE, la de BDI, igual que `meta_ads_accion` y `meta_ads_campania_linea` y por el
