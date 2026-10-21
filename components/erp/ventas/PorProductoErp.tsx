@@ -139,7 +139,7 @@ export function PorProductoErp() {
         <TileResumen titulo="Vendido" valor={plata(res.vendido)} oscuro nota={nombrePeriodo.toLowerCase()} />
         <TileResumen titulo="Unidades" valor={u(res.unidades)} nota={`en ${res.ventas.toLocaleString('es-AR')} ventas`} />
         <TileResumen titulo="Productos" valor={res.productos.toLocaleString('es-AR')} nota={res.productos ? `${(res.unidades / res.productos).toLocaleString('es-AR', { maximumFractionDigits: 1 })} u por producto` : 'ninguno'} />
-        {costos && <TileResumen titulo="Margen" valor={plata(res.margen)} nota={res.sinCosto ? `${res.sinCosto} productos sin costo ⛔ entran` : res.vendidoConCosto ? `${Math.round((res.margen / res.vendidoConCosto) * 100)} % de lo vendido` : '—'} />}
+        {costos && <TileResumen titulo="Margen" valor={plata(res.margen)} nota={res.sinCosto ? `${res.sinCosto} productos sin costo no entran` : res.vendidoConCosto ? `${Math.round((res.margen / res.vendidoConCosto) * 100)} % de lo vendido` : '—'} />}
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>

@@ -44,13 +44,13 @@ describe('meta-ads — la puerta despacha todo lo que el cliente pide', () => {
   })
 
   /**
-   * ⛔ La invariante que frena todos los deploys sin error visible si se rompe: Vercel Hobby admite
-   * 12 funciones y cada archivo de `api/` **sin** prefijo `_` cuenta como una. Va acá porque es la
-   * razón por la que existe todo el mecanismo de `?recurso=`.
+   * La costumbre de `?recurso=`: cada archivo de `api/` **sin** prefijo `_` es una función. Nació del
+   * techo de 12 de Vercel Hobby (pasarse frenaba los deploys sin error visible); desde el 20-oct el
+   * monitor está en Pro y el techo ya no aplica, pero la convención sigue y `AGENTS.md` la cuenta.
    */
   it('meta-ads sigue siendo UNA función y no un archivo por recurso', () => {
     const rutas = readFileSync(join(raiz, 'AGENTS.md'), 'utf8')
-    expect(rutas).toContain('Vercel Hobby admite 12 funciones')
+    expect(rutas).toContain('sumar recursos por una puerta existente con `?recurso=`')
   })
 })
 
