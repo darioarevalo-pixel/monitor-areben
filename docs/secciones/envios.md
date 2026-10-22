@@ -379,7 +379,7 @@ coordenada de pantalla.
 - **`tests/guia.test.ts`** afirma texto contra texto que cada ancla existe en el JSX, que no queda
   ninguna **huérfana**, y que las pestañas que los pasos nombran son las que `Tabs` tiene de verdad.
   **5 mutantes, 5 muertos**: usar el ancla fina aunque no esté · callarse el «si no está» · invertir
-  siguiente/anterior · sacar el `data-guia` de «Sugerir precios» · renombrar una pestaña.
+  siguiente/anterior · sacar el `data-guia` de «Sugerir todos» · renombrar una pestaña.
 - 🔑 **Los cuatro estados los pidió Bruno mirando el tour**, y son un paso propio: el camino
   `pendiente → preparado → en_transito → entregado` está en el código, pero **«en tránsito es cuando
   se lo entregás al cadete» no se deduce de ningún lado**. Van también en el manual.
@@ -387,6 +387,13 @@ coordenada de pantalla.
   `<details>` plegado): no puede usar `<Instructivo>` del kit porque **la regla de ese archivo es no
   importar componentes del kit** —se baja con datos del teléfono, arriba de una moto— y tampoco
   puede pedir un manual, porque `?recurso=sistema` exige usuario y él entra con token + PIN.
+- 🔑 **El «Ver cambios» de una novedad corre sólo los pasos de ESE cambio** (22-oct-2026). Cada paso
+  nuevo o reescrito lleva `cambio: 'AAAA-MM-DD'` y la novedad guarda `datos.tour = {seccion, cambio}`;
+  el botón navega a `/envios?tour=2026-10-22` y `components/ui/Guia.tsx` lo arranca cuando la sección
+  registra sus pasos (`pasosDelCambio`, en `lib/guia/core.ts`). Va **por la URL y no por el store**
+  para que un pedido que no se atiende no quede vivo y salte en la próxima pantalla. El primero: los
+  cinco pasos del 22-oct (Ordenar por · «cerrada en TN» · Sugerir todos · `$` · ⋯ › Sacar de la
+  lista). ⚠️ `MenuAcciones` tampoco propaga props sueltas: el ancla del «⋯» va en un `<span>`.
 - ⛔ **El tour no arranca solo la primera vez.** El equipo ya tiene un cartel modal bloqueante (el de
   las novedades importantes); una segunda cosa que se pone adelante sin que la pidan es la que
   enseña a cerrar carteles sin leerlos.

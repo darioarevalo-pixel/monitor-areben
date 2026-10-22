@@ -38,6 +38,11 @@ export type PasoBase = {
   texto: string
   /** La pestaña que hay que abrir antes de mostrarlo. Ausente = la que esté. */
   pestania?: string
+  /**
+   * El día del cambio que trajo este paso (o le cambió el texto), `AAAA-MM-DD`. Es lo que junta una
+   * novedad con sus pasos: «Ver cambios» corre sólo los de ESE día. Ver `pasosDelCambio`.
+   */
+  cambio?: string
 }
 
 /**
@@ -93,6 +98,31 @@ export function siguiente(i: number, total: number): number | null {
 /** El anterior, o `null` en el primero (donde "Atrás" no se dibuja). */
 export function anterior(i: number): number | null {
   return i > 0 ? i - 1 : null
+}
+
+/** El parámetro de la URL con el que una novedad pide el tour acotado: `/envios?tour=2026-10-22`. */
+export const PARAM_TOUR = 'tour'
+
+/** A dónde lleva el «Ver cambios» de una novedad. */
+export function urlDelCambio(seccion: string, cambio: string): string {
+  return `/${seccion}?${PARAM_TOUR}=${encodeURIComponent(cambio)}`
+}
+
+/**
+ * Los pasos de UN cambio, en el orden del tour completo.
+ *
+ * ⚠️ **No es el filtro que este archivo prohíbe.** Aquél saltearía un paso porque su control no está
+ * en pantalla, y en silencio; éste lo pide la persona apretando «Ver cambios», y lo que recorre son
+ * los pasos que la novedad promete. Cada uno sigue resolviéndose con `resolverPaso`: si el control
+ * no está, se para en la pestaña y lo dice, igual que en el tour entero.
+ *
+ * 🔑 **Sin ninguno, devuelve el tour ENTERO**: una novedad que apunta a un cambio que la guía no
+ * conoce (un typo en la fecha, un paso que se reescribió con otra) igual muestra dónde se aprieta
+ * todo. Un botón que no hace nada enseña a no apretarlo.
+ */
+export function pasosDelCambio(pasos: readonly PasoGuia[], cambio: string): readonly PasoGuia[] {
+  const suyos = pasos.filter((p) => p.cambio === cambio)
+  return suyos.length ? suyos : pasos
 }
 
 /**

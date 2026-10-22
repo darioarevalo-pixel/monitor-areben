@@ -35,6 +35,8 @@ export type Destino =
    */
   | { tipo: 'horas-extras'; marca?: Marca }
 
+export type TourDeNovedad = { seccion: string; cambio: string }
+
 export type Novedad = {
   id: string
   estado: EstadoNovedad
@@ -48,6 +50,12 @@ export type Novedad = {
   autor?: string | null
   publicada_at?: string | null
   destino?: Destino
+  /**
+   * El botón «Ver cambios»: lleva a `seccion` y arranca el tour sólo con los pasos de `cambio`
+   * (`AAAA-MM-DD`, el mismo de `PasoGuia.cambio`). `null` = sin botón. Se guarda en `datos.tour`;
+   * ver `tour.core.js`. ⚠️ Ausente al guardar NO lo borra: hay que mandar `null`.
+   */
+  tour?: TourDeNovedad | null
   /**
    * Si además le toca a quien está mirando. **Lo calcula el servidor**, que es el único que sabe.
    * No es lo mismo que "la puede ver": quien publica recibe todas para administrarlas, y esto dice

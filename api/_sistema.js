@@ -30,6 +30,7 @@ import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
 import { diagnosticar } from '../lib/credenciales.core.js';
 import { esEstado } from '../lib/novedades/estados.core.js';
 import { esParaMi, normalizarDestino } from '../lib/novedades/destino.core.js';
+import { datosConTour, normalizarTour } from '../lib/novedades/tour.core.js';
 
 /**
  * Siempre la base de BDI, tenga la sesión la marca que tenga. No es un descuido: acá no hay marca.
@@ -54,7 +55,7 @@ function puedeEditarManuales(perfil) {
   return marcasConAcceso(perfil, 'manuales.editar', ['bdi', 'zattia']).length > 0;
 }
 
-const CAMPOS = 'id, estado, importante, titulo, cuerpo, version, autor, publicada_at, destino, created_at, updated_at';
+const CAMPOS = 'id, estado, importante, titulo, cuerpo, version, autor, publicada_at, destino, datos, created_at, updated_at';
 
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
@@ -156,7 +157,12 @@ export default async function handler(req, res) {
       //  - `paraMi` dice si además le toca a él, que es lo que mira el badge y el cartel.
       // A quien no publica se le sacan directamente las que no son suyas: que no le lleguen ni por
       // la red es más barato de razonar que confiar en que la pantalla las esconda.
-      const conDestino = (nov.data || []).map((n) => ({ ...n, paraMi: esParaMi(n.destino, perfil) }));
+      // `datos` no viaja crudo: de ahí la pantalla sólo necesita el tour del «Ver cambios».
+      const conDestino = (nov.data || []).map(({ datos, ...n }) => ({
+        ...n,
+        tour: normalizarTour(datos?.tour),
+        paraMi: esParaMi(n.destino, perfil),
+      }));
 
       return res.status(200).json({
         ok: true,
@@ -241,7 +247,7 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: 'falta id' });
       if (!titulo) return res.status(400).json({ error: 'falta el título' });
 
-      const { data: ya, error: errLeer } = await supabase.from('novedades').select('id, version, estado').eq('id', id).maybeSingle();
+      const { data: ya, error: errLeer } = await supabase.from('novedades').select('id, version, estado, datos').eq('id', id).maybeSingle();
       if (errLeer) throw new Error(errLeer.message);
 
       // ⚠️ El `estado` del cuerpo se IGNORA a propósito, en las dos ramas. Una novedad nace en
@@ -257,6 +263,10 @@ export default async function handler(req, res) {
         destino: normalizarDestino(n.destino),
         updated_at: new Date().toISOString(),
       };
+      // 🔴 El tour se escribe SÓLO si viene en el cuerpo (`tour: null` lo saca). Un guardado que no
+      // lo nombra —el script sin `--tour`, un llamador viejo— no lo toca: si no, corregir una coma
+      // le borraría a la novedad el «Ver cambios» en silencio, como `publicado` a los manuales.
+      if ('tour' in n) campos.datos = datosConTour(ya?.datos, n.tour);
 
       if (!ya) {
         const { error } = await supabase.from('novedades').insert([{ id, estado: 'borrador', version: 1, ...campos }]);

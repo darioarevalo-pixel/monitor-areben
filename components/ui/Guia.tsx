@@ -29,7 +29,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/Button'
 import { color, font, space } from '@/components/ui/tokens'
-import { resolverPaso, siguiente, anterior, type PasoResuelto } from '@/lib/guia/core'
+import { PARAM_TOUR, resolverPaso, siguiente, anterior, type PasoResuelto } from '@/lib/guia/core'
 import { useGuia } from '@/store/useGuia'
 
 const GLOBO_W = 320
@@ -72,11 +72,26 @@ function mismaCaja(a: Caja | null, b: Caja): boolean {
 }
 
 export function Guia() {
-  const { pasos, paso, irAPestania, ir } = useGuia()
+  const { pasos, recorrido, cambio, paso, irAPestania, ir, arrancarCambio } = useGuia()
   const [caja, setCaja] = useState<Caja | null>(null)
   const [resuelto, setResuelto] = useState<PasoResuelto | null>(null)
 
-  const actual = paso != null ? pasos[paso] : undefined
+  const actual = paso != null ? recorrido[paso] : undefined
+
+  // El «Ver cambios» de una novedad llega como `?tour=AAAA-MM-DD` y se atiende recién cuando la
+  // sección registró sus pasos: antes no hay qué recorrer. 🔑 **Por la URL y no por el store**: un
+  // pedido guardado que no se atiende (la sección no tiene guía, la navegación falló) quedaría
+  // vivo y arrancaría el tour en la próxima pantalla que tenga uno. Se saca de la URL al usarlo,
+  // así recargar no lo vuelve a disparar.
+  useEffect(() => {
+    if (!pasos.length) return
+    const url = new URL(window.location.href)
+    const pedido = url.searchParams.get(PARAM_TOUR)
+    if (!pedido) return
+    url.searchParams.delete(PARAM_TOUR)
+    window.history.replaceState(window.history.state, '', url)
+    arrancarCambio(pedido)
+  }, [pasos, arrancarCambio])
 
   /** Mide el paso actual. Devuelve `false` si el ancla todavía no está en el DOM. */
   const medir = useCallback(() => {
@@ -146,7 +161,7 @@ export function Guia() {
 
   if (paso == null || !actual || !resuelto || typeof document === 'undefined') return null
 
-  const total = pasos.length
+  const total = recorrido.length
   const sigue = siguiente(paso, total)
   const atras = anterior(paso)
   const transicion = sinAnimacion() ? 'none' : 'top .18s ease, left .18s ease, width .18s ease, height .18s ease'
@@ -203,7 +218,7 @@ export function Guia() {
         }}
       >
         <div style={{ fontSize: font.sm, color: color.brand, fontWeight: 600, marginBottom: 4 }}>
-          Paso {paso + 1} de {total}
+          {cambio ? 'Lo nuevo · ' : ''}Paso {paso + 1} de {total}
         </div>
         <div style={{ fontSize: font.base, color: color.ink, lineHeight: 1.5 }}>{resuelto.texto}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: space[2], marginTop: space[3] }}>

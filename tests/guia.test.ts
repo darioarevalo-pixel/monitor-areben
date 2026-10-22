@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { anclasDeLaGuia, anterior, resolverPaso, siguiente, type PasoGuia } from '@/lib/guia/core'
+import { anclasDeLaGuia, anterior, pasosDelCambio, resolverPaso, siguiente, urlDelCambio, type PasoGuia } from '@/lib/guia/core'
+import { datosConTour, normalizarTour } from '@/lib/novedades/tour.core.js'
 import { GUIA_ENVIOS } from '@/lib/envios/guia'
 import { GUIA_SESION_FOTOS, sesionDeMuestra } from '@/lib/sesionfotos/guia'
 import { conEvento, ID_SESION_DE_MUESTRA, type SesionEvento } from '@/lib/sesionfotos/evento'
@@ -229,5 +230,55 @@ describe('la sesión de ejemplo del tour', () => {
   it('y una sesión de verdad sigue entrando igual', () => {
     const real: SesionEvento = { ...m, id: 'real-2' }
     expect(conEvento([], real).map((e) => e.id)).toEqual(['real-2'])
+  })
+})
+
+describe('«Ver cambios»: el tour sólo con lo nuevo', () => {
+  const pasos: PasoGuia[] = [
+    { ancla: 'a', texto: 'viejo' },
+    { ancla: 'b', texto: 'nuevo 1', cambio: '2026-10-22' },
+    { ancla: 'c', texto: 'otro cambio', cambio: '2026-09-01' },
+    { ancla: 'd', texto: 'nuevo 2', cambio: '2026-10-22' },
+  ]
+
+  it('recorre sólo los pasos de ESE cambio, en el orden del tour entero', () => {
+    expect(pasosDelCambio(pasos, '2026-10-22').map((p) => p.texto)).toEqual(['nuevo 1', 'nuevo 2'])
+  })
+
+  it('🔴 un cambio sin pasos devuelve el tour ENTERO, no uno vacío', () => {
+    // Vacío, el botón no haría nada: el globo no se dibuja con `recorrido[0]` undefined.
+    expect(pasosDelCambio(pasos, '2026-01-01')).toBe(pasos)
+  })
+
+  it('la URL lleva a la sección con el cambio en `?tour=`', () => {
+    expect(urlDelCambio('envios', '2026-10-22')).toBe('/envios?tour=2026-10-22')
+  })
+
+  it('Envíos tiene los pasos del 22-oct que cuenta su novedad, y «Sugerir todos» ya no dice «Sugerir precios»', () => {
+    const nuevos = pasosDelCambio(GUIA_ENVIOS, '2026-10-22')
+    expect(nuevos).not.toBe(GUIA_ENVIOS)
+    expect(nuevos.map((p) => p.anclaFina)).toEqual(['envios.orden', 'envios.cerrada', 'envios.sugerir', 'envios.sugerir.fila', 'envios.mas'])
+    expect(GUIA_ENVIOS.some((p) => p.texto.includes('Sugerir precios'))).toBe(false)
+    expect(jsx).toContain('Sugerir todos (')
+  })
+})
+
+describe('el tour de una novedad, como se guarda', () => {
+  it('normaliza lo válido y descarta lo que no se entiende', () => {
+    expect(normalizarTour({ seccion: 'envios', cambio: '2026-10-22' })).toEqual({ seccion: 'envios', cambio: '2026-10-22' })
+    expect(normalizarTour({ seccion: 'https://x.com', cambio: '2026-10-22' })).toBeNull()
+    expect(normalizarTour({ seccion: 'envios', cambio: '22-oct' })).toBeNull()
+    expect(normalizarTour(null)).toBeNull()
+  })
+
+  it('poner o sacar el tour conserva el resto de `datos`', () => {
+    expect(datosConTour({ otro: 1 }, { seccion: 'envios', cambio: '2026-10-22' })).toEqual({ otro: 1, tour: { seccion: 'envios', cambio: '2026-10-22' } })
+    expect(datosConTour({ otro: 1, tour: { seccion: 'envios', cambio: '2026-10-22' } }, null)).toEqual({ otro: 1 })
+  })
+
+  it('🔴 el handler escribe el tour SÓLO si el cuerpo lo nombra', () => {
+    // Sin esta guarda, corregir una coma con el script (que no manda `tour`) le borraba el botón.
+    const handler = readFileSync(join(raiz, 'api/_sistema.js'), 'utf8')
+    expect(handler).toContain("if ('tour' in n) campos.datos = datosConTour(ya?.datos, n.tour)")
   })
 })

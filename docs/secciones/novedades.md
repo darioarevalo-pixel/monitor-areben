@@ -102,16 +102,31 @@ arrepentimiento. El registro de cómo se llegó vive en el repo, no en `/novedad
 - ⚠️ En Config las filas «Novedades» y «Manuales» están en `KEYS_SIN_PERMISO` y **tildarlas no hace
   nada**: están para que los subs `novedades.publicar` y `manuales.editar` tengan dónde tildarse.
 
+## «Ver cambios»: la novedad que lleva a la pantalla y señala lo nuevo
+
+Desde el 22-oct-2026 una novedad puede tener un botón **«Ver cambios»** que abre la sección y arranca
+el tour **sólo con los pasos de ese cambio** (primer caso: Envíos, `n1792697690236_wgruo3`).
+
+- Se guarda en **`datos.tour = {seccion, cambio}`** (la columna jsonb que la tabla tenía libre; sin
+  migración). `cambio` es la fecha `AAAA-MM-DD` que llevan los pasos en `PasoGuia.cambio`.
+- 🔴 **El handler escribe el tour sólo si el cuerpo trae `tour`** (`null` lo saca). Si no, corregir
+  una coma con el script le borraba el botón, como `publicado` a los manuales.
+- Para usarlo en otra sección: marcar sus pasos con `cambio` en su `lib/<seccion>/guia.ts` y cargar
+  la novedad con `--tour=<seccion>@AAAA-MM-DD`. Un cambio sin pasos corre el tour **entero**, no nada.
+- ⚠️ Va sólo en la tarjeta de `/novedades`, **no en el cartel de las importantes**: ahí se lee con
+  «Entendido», y navegar desde el cartel mezclaría leer con ir a otra pantalla.
+
 ## Cómo se carga
 
 ```bash
-node scripts/novedad.mjs "Título" cuerpo.md [--importante] [--destino=…] [--marca=…] [--id=n…] [--dry]
+node scripts/novedad.mjs "Título" cuerpo.md [--importante] [--destino=…] [--marca=…] [--tour=seccion@AAAA-MM-DD] [--id=n…] [--dry]
 node scripts/novedad.mjs --listar
 ```
 
 - ⛔ **El script escribe en PRODUCCIÓN siempre**, aun desde localhost. `--dry` antes.
 - ⛔ **No hay `--publicar`, y es deliberado**: el handler ignora cualquier `estado` que venga en el
   body. Una novedad nace borrador y la publica Bruno de un click.
+- 🔴 **Con `--id`, el destino se manda de nuevo**: sin `--destino`, el script lo guarda como «a todos».
 - El cuerpo va **por ARCHIVO**: markdown con saltos y comillas se escapa mal en `argv`.
 - **Borrar un borrador** es `action:'novedad-borrar'` con `id` y el script **no lo expone**: va por
   script descartable, y **por id enumerado** — «borrar todos los borradores» se lleva puestos los

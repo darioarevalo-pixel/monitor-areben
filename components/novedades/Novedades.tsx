@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { EditorNovedad } from './EditorNovedad'
@@ -27,6 +28,7 @@ import { useSistema } from '@/store/useSistema'
 import { borrarNovedad, cambiarEstado, leerLecturas, nuevoId } from '@/lib/novedades/cliente'
 import { NUEVA, seMarcanAlEntrar, type Destino, type Lectura, type Novedad } from '@/lib/novedades/tipos'
 import { FUNCIONES } from '@/lib/permisos'
+import { urlDelCambio } from '@/lib/guia/core'
 import { tituloLimpio } from '@/lib/nav'
 import { CUENTAS } from '@/lib/cuentas'
 import {
@@ -140,6 +142,7 @@ function QuienLaLeyo({ id }: { id: string }) {
 
 export function Novedades() {
   const { perfil } = useSesion()
+  const router = useRouter()
   const toast = useToast()
   const { confirmar } = useConfirmar()
   const { novedades, leidas, puede, cargado, cargar, marcar } = useSistema()
@@ -243,6 +246,16 @@ export function Novedades() {
         {abierta && (
           <>
             <Markdown texto={n.cuerpo} />
+
+            {/* Lleva a la pantalla y arranca el tour sólo con los pasos de ese cambio: leer «el
+                botón $ al lado del precio» no es lo mismo que verlo señalado. Ver `lib/guia/core.ts`. */}
+            {n.tour && (
+              <div>
+                <Button size="sm" variant="outline" tone="brand" iconLeft="👉" onClick={() => n.tour && router.push(urlDelCambio(n.tour.seccion, n.tour.cambio))}>
+                  Ver cambios
+                </Button>
+              </div>
+            )}
 
             {puede.publicar && n.estado !== 'borrador' && <QuienLaLeyo id={n.id} />}
 

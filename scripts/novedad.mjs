@@ -40,6 +40,12 @@
 // ⚠️ El admin recibe TODO igual, por diseño (ver `esParaMi` en lib/novedades/destino.core.js): es
 // el que se tiene que dar cuenta si algo salió al grupo equivocado.
 //
+// # El botón «Ver cambios» (--tour)
+//
+//   --tour=envios@2026-10-22   → la tarjeta lleva un botón que abre Envíos y arranca el tour sólo
+//                                con los pasos marcados `cambio: '2026-10-22'` en su guía
+//                                (`lib/envios/guia.ts`). Sin `--tour`, el que ya tenía queda como está.
+//
 // # Por qué postea al endpoint y no escribe en la tabla
 //
 // Con `pg` y `DATABASE_URL_BDI` sería más directo, y estaría mal: escribir la fila a mano **esquiva
@@ -97,6 +103,17 @@ function destinoDeArgs() {
   process.exit(1)
 }
 const destino = destinoDeArgs()
+
+/** `--tour=envios@2026-10-22` · ausente = no lo toca (el handler lo conserva). */
+function tourDeArgs() {
+  const arg = args.find((a) => a.startsWith('--tour='))
+  if (!arg) return undefined
+  const [seccion, cambio] = arg.slice('--tour='.length).split('@')
+  if (/^[a-z0-9-]+$/.test(seccion || '') && /^\d{4}-\d{2}-\d{2}$/.test(cambio || '')) return { seccion, cambio }
+  console.error(`✗ --tour inválido: "${arg}". Usá --tour=<seccion>@AAAA-MM-DD.`)
+  process.exit(1)
+}
+const tour = tourDeArgs()
 
 const headers = { 'Content-Type': 'application/json', ...authKv() }
 
@@ -158,6 +175,7 @@ const novedad = {
   cuerpo,
   importante,
   ...(destino ? { destino } : {}),
+  ...(tour ? { tour } : {}),
 }
 
 if (dry) {

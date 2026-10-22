@@ -690,7 +690,7 @@ function Pendientes({
         </>
       }
     >
-      <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[3] }}>
+      <div data-guia="envios.orden" style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[3] }}>
         <span style={{ color: color.mut, fontSize: font.base }}>Ordenar por</span>
         <Chips
           value={orden}
@@ -735,7 +735,7 @@ function Pendientes({
                     <Badge tone="danger">volvió{e.fecha ? ` del ${rotuloDeDia(e.fecha) || e.fecha}` : ''}</Badge>
                   ) : null}
                   {cerradaEnTN(e) ? (
-                    <span {...dice('Tienda Nube tiene la orden cerrada y sin despachar. ¿La retiró, se canceló, se entregó por otro lado? Si ya se resolvió, sacala con «Sacar…».')}>
+                    <span data-guia="envios.cerrada" {...dice('Tienda Nube tiene la orden cerrada y sin despachar. ¿La retiró, se canceló, se entregó por otro lado? Si ya se resolvió, sacala con «Sacar…».')}>
                       <Badge tone="warning">cerrada en TN</Badge>
                     </span>
                   ) : null}
@@ -1430,20 +1430,23 @@ function AccionesDeFila({
       >
         Agendar
       </Button>
-      <MenuAcciones
-        etiqueta={`Acciones del pedido de ${envio.cliente || 'sin nombre'}`}
-        acciones={[
-          { key: 'editar', label: 'Editar', icono: 'lapiz', onClick: () => onEditar(envio) },
-          {
-            key: 'sacar',
-            label: 'Sacar de la lista…',
-            icono: 'check',
-            hint: 'Ya se resolvió por fuera de la moto: lo retiró, se canceló, se mandó por correo…',
-            onClick: () => onSacar(envio),
-          },
-          { key: 'eliminar', label: 'Eliminar', icono: 'papelera', tone: 'danger', hint: 'Lo borra de la base. Si se cargó por error.', onClick: () => void onBorrar(envio) },
-        ]}
-      />
+      {/* El `data-guia` va en un span: `MenuAcciones` es del kit y no propaga props sueltas. */}
+      <span data-guia="envios.mas" style={{ display: 'inline-flex' }}>
+        <MenuAcciones
+          etiqueta={`Acciones del pedido de ${envio.cliente || 'sin nombre'}`}
+          acciones={[
+            { key: 'editar', label: 'Editar', icono: 'lapiz', onClick: () => onEditar(envio) },
+            {
+              key: 'sacar',
+              label: 'Sacar de la lista…',
+              icono: 'check',
+              hint: 'Ya se resolvió por fuera de la moto: lo retiró, se canceló, se mandó por correo…',
+              onClick: () => onSacar(envio),
+            },
+            { key: 'eliminar', label: 'Eliminar', icono: 'papelera', tone: 'danger', hint: 'Lo borra de la base. Si se cargó por error.', onClick: () => void onBorrar(envio) },
+          ]}
+        />
+      </span>
     </div>
   )
 }
@@ -1671,7 +1674,7 @@ function Cotizar({
           onGuardado={onGuardado}
         />
         {!original && !sugerencia ? (
-          <Button size="sm" variant="outline" tone="brand" disabled={pidiendo} iconLeft={<Icono nombre="pesos" />} onClick={() => void sugerir()} {...dice('Sugerir el precio: busca la dirección en el mapa y propone el de la zona. No guarda nada.')} />
+          <Button size="sm" variant="outline" tone="brand" disabled={pidiendo} iconLeft={<Icono nombre="pesos" />} onClick={() => void sugerir()} data-guia="envios.sugerir.fila" {...dice('Sugerir el precio: busca la dirección en el mapa y propone el de la zona. No guarda nada.')} />
         ) : null}
       </div>
       {pidiendo ? <span style={{ fontSize: font.sm, color: color.mut }}>Preguntándole al mapa…</span> : null}

@@ -17,11 +17,18 @@
  * una cosa mientras nombra otra enseña mal, y se ve perfecto en un test.
  *
  * Por eso el ancla estable de cada paso es **la pestaña donde vive** (`envios.tab.*`): es lo único
- * que está siempre —la tabla desaparece con la lista vacía, «Sugerir precios (N)» sólo existe si
+ * que está siempre —la tabla desaparece con la lista vacía, «Sugerir todos (N)» sólo existe si
  * hay algo sin cotizar— y, sobre todo, **es de lo que el paso habla** cuando el control fino no
  * está. Los `data-guia` viven en `components/envios/Envios.tsx` y `tests/guia.test.ts` los afirma
  * uno por uno: si alguien saca un botón, el test se pone rojo en vez de dejar un globo señalando
  * el vacío.
+ *
+ * # `cambio`: los pasos que muestra el «Ver cambios» de una novedad
+ *
+ * Un paso que entra —o cuyo texto cambia— por un cambio de la pantalla lleva la fecha de ese cambio
+ * (`cambio: '2026-10-22'`), y la novedad que lo cuenta apunta a la misma fecha. Así el botón recorre
+ * sólo lo nuevo, en el orden del tour entero. Cuando la pantalla vuelva a cambiar, la fecha se pisa
+ * con la nueva: vale el estado final, como en las novedades.
  */
 
 import type { PasoGuia } from '@/lib/guia/core'
@@ -40,9 +47,34 @@ export const GUIA_ENVIOS: readonly PasoGuia[] = [
   {
     pestania: 'pendientes',
     ancla: 'envios.tab.pendientes',
+    anclaFina: 'envios.orden',
+    cambio: '2026-10-22',
+    texto: '«Ordenar por» cambia el orden de la lista: por fecha de venta (la más vieja arriba), por N° de orden, o los que no tienen precio primero.',
+    siNoEsta: 'Aparece arriba de la lista cuando hay pedidos.',
+  },
+  {
+    pestania: 'pendientes',
+    ancla: 'envios.tab.pendientes',
+    anclaFina: 'envios.cerrada',
+    cambio: '2026-10-22',
+    texto: '«cerrada en TN» marca un pedido que Tienda Nube ya cerró y que la moto no llevó: hay que ver qué pasó. Si ya se resolvió, se saca de a uno o todos juntos con «Sacar las N cerradas en TN», arriba.',
+    siNoEsta: 'La etiqueta aparece debajo del nombre de la clienta; ahora no hay ningún pedido cerrado en TN.',
+  },
+  {
+    pestania: 'pendientes',
+    ancla: 'envios.tab.pendientes',
     anclaFina: 'envios.sugerir',
-    texto: '«Sugerir precios» le pregunta la zona al mapa para todas juntas. No guarda nada: cada una se confirma con «usar».',
-    siNoEsta: 'El botón aparece arriba de la lista, y sólo cuando hay alguna fila sin cotizar.',
+    cambio: '2026-10-22',
+    texto: '«Sugerir todos» le pregunta la zona al mapa por todos los pedidos sin precio. No guarda nada: cada uno se confirma con «usar».',
+    siNoEsta: 'El botón aparece arriba de la lista cuando hay dos o más pedidos sin precio.',
+  },
+  {
+    pestania: 'pendientes',
+    ancla: 'envios.tab.pendientes',
+    anclaFina: 'envios.sugerir.fila',
+    cambio: '2026-10-22',
+    texto: 'El botón $ al lado del precio le pregunta al mapa por ese pedido solo.',
+    siNoEsta: 'Está en cada fila que todavía no tiene precio.',
   },
   {
     pestania: 'pendientes',
@@ -64,6 +96,14 @@ export const GUIA_ENVIOS: readonly PasoGuia[] = [
     anclaFina: 'envios.agendar',
     texto: 'Cuando ella confirma, este botón lo manda a un día. El día y el turno van juntos.',
     siNoEsta: 'Está en cada fila, y se prende recién cuando el envío tiene precio.',
+  },
+  {
+    pestania: 'pendientes',
+    ancla: 'envios.tab.pendientes',
+    anclaFina: 'envios.mas',
+    cambio: '2026-10-22',
+    texto: 'Si un pedido no va a salir en la moto (lo retiró, se canceló, se mandó por correo), en «⋯» está «Sacar de la lista…». Vale también para los cargados a mano.',
+    siNoEsta: 'Está al lado de «Agendar», en cada fila.',
   },
   {
     pestania: 'dia',
