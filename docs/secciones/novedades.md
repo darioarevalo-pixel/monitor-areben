@@ -75,6 +75,13 @@ las lee es **una** cosa nueva, no seis. Y **vale el estado FINAL, no el historia
 que se contradicen (45 días, y después 15) publicados juntos le cuentan al equipo un cambio y su
 arrepentimiento. El registro de cómo se llegó vive en el repo, no en `/novedades`.
 
+### 7. El título dice CUÁNDO y DÓNDE: «Cambios 22/10 · Envíos › Sin fecha»
+
+Bruno, 22-oct-2026: *«el borrador tiene que tener un título más claro, sino es un quilombo»*. Un título
+que cuenta el cambio («Envíos: «Sin fecha» ahora se limpia») no se distingue en la lista de los otros
+borradores ni de las publicadas viejas. La forma es **`Cambios DD/MM · Sección › Pestaña`** (la pestaña
+sólo si el cambio es de una); qué cambió lo cuenta el cuerpo.
+
 ## Reglas que el código no dice
 
 - 🔑 **`paraMi` lo calcula el SERVIDOR.** Filtrar sólo en la pantalla sería peor que no filtrar:
