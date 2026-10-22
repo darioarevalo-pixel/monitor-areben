@@ -167,6 +167,33 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
 - 🏁 **V4 — BDI en la Caja + formas de pago por tienda (12-oct)**: hecho (ficha `docs/secciones/caja.md` § V4).
   BDI con sus ids de GN (modo Local 18393, consumidor final 158744, depósito 13307) y sus cuentas; la oferta
   lleva el % de la forma de pago; débito 10 % (confirmado). La transferencia ESPERA igual y, mientras BDI ⛔
+## ▶️ CAJA: AVISAR A LOS ADMIN CUANDO UNA CAJA SE QUEDA SIN CAMBIO — 22-oct-2026 (dictado por Bruno)
+
+> «las chicas no avisan cuando se están quedando sin cambio … necesitamos definir el umbral de cambio
+> para que debajo de eso vayan a pedir»
+
+- El dato ya está: `caja_turno.conteos` guarda cada conteo **billete por billete** (apertura, intermedios, cierre).
+- ✅ **«Cambio» = billetes de $1.000 o menos** (Bruno: «hay cantidad»). Los de **$2.000 suman con menos peso**
+  (propuesta: un semáforo de dos niveles, ver abajo) — ▶️ Bruno decide.
+- ▶️ **El umbral en pesos se saca de los cierres reales**, ⛔ se inventa. BDI (20–22-oct, 7 turnos, fondo ~$40.000):
+  los cierres quedaron con $0 a $17.600 en billetes de $1.000 o menos; el 21-oct hubo cierres con **$0 y $300**.
+  🔑 Zattia se lee por el API de prod (`?recurso=caja&store=zattia&action=turnos`, `authKv()` de
+  `scripts/lib/kv-auth.mjs`): ⛔ con la clave pública (devuelve 0 filas callado) ni con `vercel env pull` (la de
+  servicio es sensible, baja vacía).
+- **Zattia, 24 turnos (5 al 22-oct, uso real desde el 13), fondo ~$54.000.** Lo PEOR que se comió un turno en
+  billetes de $1.000 o menos: **−$25.300** (14-oct tarde: abrió con $29.600, cerró con **$4.300**) y −$14.300
+  (15-oct mañana). Desde el 17-oct las cajas abren y cierran con $35.000–46.500 de cambio.
+- ▶️ **Propuesta: umbral = lo peor de un turno** ⇒ **Zattia $25.000, BDI $15.000** (BDI: un solo turno con
+  vuelto medido, $14.500 — poco dato). Con el semáforo, en Zattia habría saltado **rojo** el 14-oct tarde y el
+  15-oct mañana, y **ningún turno desde el 17**. Bruno decide.
+- ⚠️ `caja_venta.paga_con` existe pero es opcional: en BDI sólo 6 ventas lo traen.
+- ✅ **DECIDIDO (Bruno, 22-oct): el umbral es LA MITAD DEL FONDO** («es el 50% en cambio … tienen 50mil y 25mil en
+  cambio chico») + el semáforo (los de $2.000 sacan de «falta», ⛔ llegan a «bien») + **aviso al celular a los admins**.
+  Hecho: `cambioDeLaCaja` + aviso en `cerrar-turno` (ver la ficha). ▶️ **Manos de Bruno**: «Activar avisos» en su
+  celular (Agenda) — sin eso el aviso ⛔ le llega. ▶️ Mirar el próximo cierre con poco cambio.
+- ▶️ **Para Bruno**: el sobre arma el fondo EXACTO con la mayor cantidad de billetes, y eso puede llevarse billetes
+  de $1.000 (2 × $20.000 + 25 × $1.000, fondo $50.000 ⇒ deja 10 de $1.000). ¿Que priorice el cambio sobre el exacto?
+
   tenga cuenta de MP, la cajera toca «Transferencia confirmada» (va a la CG 20597); con la cuenta, automática. «Formas de pago»
   (admin) cambia cuenta, %, cuotas, oferta y verificación por tienda. Logo: «Usar el de Tienda Nube».
   SQL: ver «Qué migración de la Caja tiene cada base» abajo.

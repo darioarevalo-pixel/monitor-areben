@@ -164,6 +164,9 @@ function consulta(tabla: string) {
   return q
 }
 
+// 🪙 El aviso de «falta cambio» (Bruno, 22-oct): ⛔ sale a ningún celular, se mira a quién y qué.
+const avisar = vi.fn(async () => ({ enviados: 1, fallas: 0, telefonos: 1 }))
+vi.mock('../api/_push.js', () => ({ avisar }))
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (t: string) => consulta(t) }) }))
 
 function resFalso() {
@@ -1103,6 +1106,27 @@ describe('caja · calculadora de billetes (fase B)', () => {
     expect(conteos.cierre).toMatchObject({ total: 64500, esperado: 50000, diferencia: 14500 })
     expect(conteos.apertura).toEqual({ total: 50000 })
     expect(conteos.intermedios).toEqual([{ total: 1 }])
+  })
+
+  it('🪙 cerrar sin cambio (Bruno, 22-oct): les llega el aviso a los admins; con cambio, ⛔ nada', async () => {
+    conSesion(CAJERA)
+    avisar.mockClear()
+    // Fondo $50.000 ⇒ hacen falta $25.000 en billetes de $1.000 o menos; quedan 4 × $1.000 + $500 = $4.500.
+    expect((await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 64500, conteo: CONTEO }))).code).toBe(200)
+    expect(avisar).toHaveBeenCalledTimes(1)
+    expect(avisar).toHaveBeenCalledWith(['Bruno Arevalo', 'Dario Arevalo'], expect.objectContaining({
+      titulo: '🪙 Zattia: falta cambio en la caja', url: '/caja', tag: `cambio-${TURNO_ID}`,
+      cuerpo: expect.stringContaining('Quedaron $4.500 en billetes de $1.000 o menos; hacen falta $25.000'),
+    }))
+  })
+
+  it('🪙 cerrar con cambio ⇒ ⛔ avisa', async () => {
+    conSesion(CAJERA)
+    avisar.mockClear()
+    // 1 × $20.000 + 25 × $1.000 + 10 × $500 = $50.000 = el fondo: queda todo ⇒ $30.000 de cambio.
+    // (Con 2 × $20.000 + 25 × $1.000 el sobre se lleva 15 de $1.000: suma el fondo justo con 2 × $20.000.)
+    expect((await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 50000, conteo: { 20000: 1, 1000: 25, 500: 10 } }))).code).toBe(200)
+    expect(avisar).not.toHaveBeenCalled()
   })
 
   it('🔑 los billetes ⛔ se configuran: una lista vieja en la config ⛔ cuenta, el conteo usa los de Argentina (Bruno, 12-oct)', async () => {

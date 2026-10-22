@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BILLETES_INICIALES, armarSobre, billetesDe, conteoVacio, limpiarConteo, totalDeConteo } from '@/lib/caja/conteo.core.js'
+import { BILLETES_INICIALES, armarSobre, billetesDe, cambioDeLaCaja, conteoVacio, limpiarConteo, totalDeConteo } from '@/lib/caja/conteo.core.js'
 
 /**
  * Caja · fase B: la calculadora de billetes (Bruno, 5-oct-2026). El oráculo se hizo a mano, antes:
@@ -102,5 +102,24 @@ describe('nombreEnCaja y porFormaDePago (Bruno, 13-oct): crédito es crédito, �
       { nombre: 'Tarjeta de crédito', efectivo: false, monto: 5000, cobros: 2 },
       { nombre: 'Vieja', efectivo: false, monto: 10, cobros: 1 },
     ])
+  })
+})
+
+describe('cambioDeLaCaja (Bruno, 22-oct): la mitad del fondo en billetes de $1.000 o menos', () => {
+  // Oráculo a mano: fondo $50.000 ⇒ umbral $25.000.
+  it('🔑 $25.000 justos en chicos ⇒ bien', () => {
+    expect(cambioDeLaCaja({ 20000: 1, 1000: 20, 500: 10 }, 50000, B)).toEqual({ nivel: 'bien', chicos: 25000, dosMil: 0, umbral: 25000 })
+  })
+  it('$24.900 en chicos y un billete de $2.000 ⇒ ojo (sólo llega con el de $2.000)', () => {
+    expect(cambioDeLaCaja({ 1000: 24, 500: 1, 200: 2, 2000: 1 }, 50000, B).nivel).toBe('ojo')
+  })
+  it('los de $2.000 solos ⛔ hacen «bien»: 13 × $2.000 = $26.000 ⇒ ojo', () => {
+    expect(cambioDeLaCaja({ 2000: 13 }, 50000, B)).toEqual({ nivel: 'ojo', chicos: 0, dosMil: 26000, umbral: 25000 })
+  })
+  it('🔴 el 14-oct de Zattia: $4.300 en chicos con fondo $53.600 ⇒ falta', () => {
+    expect(cambioDeLaCaja({ 20000: 2, 10000: 1, 1000: 1, 500: 3, 100: 18 }, 53600, B)).toEqual({ nivel: 'falta', chicos: 4300, dosMil: 0, umbral: 26800 })
+  })
+  it('los de $10.000 y $20.000 ⛔ cuentan como cambio', () => {
+    expect(cambioDeLaCaja({ 20000: 2, 10000: 1 }, 50000, B).nivel).toBe('falta')
   })
 })

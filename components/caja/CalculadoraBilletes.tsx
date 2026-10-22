@@ -18,7 +18,7 @@
 
 import { useState } from 'react'
 import { Button, Input, Modal, Notice, color, font, radius, space, weight } from '@/components/ui'
-import { armarSobre, totalDeConteo } from '@/lib/caja/conteo.core.js'
+import { armarSobre, cambioDeLaCaja, totalDeConteo } from '@/lib/caja/conteo.core.js'
 import { plata } from '@/lib/caja/ticket'
 import { aNumero } from '@/lib/caja/textos'
 import type { Conteo } from '@/lib/caja/cliente'
@@ -276,6 +276,19 @@ export function ArmadoDelSobre({ conteo, fondo, billetes }: { conteo: Conteo; fo
         {columna('Queda en la caja (fondo)', sb.fondo, sb.totalFondo)}
       </div>
       {!sb.exacto && <Notice tone="warning">Faltan {plata(fondo - sb.totalFondo)} de fondo: completalo con cambio.</Notice>}
+      <CambioDeLaCaja conteo={sb.fondo} fondo={fondo} billetes={billetes} />
     </div>
   )
+}
+
+/**
+ * 🪙 El cambio que queda (Bruno, 22-oct): la mitad del fondo en billetes de $1.000 o menos (`cambioDeLaCaja`).
+ * Con «falta», al cerrar les llega un aviso al celular a los admins (lo manda el servidor).
+ */
+function CambioDeLaCaja({ conteo, fondo, billetes }: { conteo: Conteo; fondo: number; billetes: number[] }) {
+  if (!(fondo > 0)) return null
+  const c = cambioDeLaCaja(conteo, fondo, billetes)
+  if (c.nivel === 'bien') return <Notice tone="success">Cambio: {plata(c.chicos)} en billetes de $1.000 o menos (alcanza: la mitad del fondo es {plata(c.umbral)}).</Notice>
+  if (c.nivel === 'ojo') return <Notice tone="warning">Poco cambio: {plata(c.chicos)} en billetes de $1.000 o menos, y {plata(c.dosMil)} en billetes de $2.000. Hacen falta {plata(c.umbral)}: armá cambio cuando puedas.</Notice>
+  return <Notice tone="danger">Falta cambio: quedan {plata(c.chicos)} en billetes de $1.000 o menos y hacen falta {plata(c.umbral)}. Pedí cambio antes de abrir; al cerrar les llega un aviso a los admins.</Notice>
 }
