@@ -54,6 +54,11 @@ export type PendienteLogistica = PedidoLogistica & {
 
 export type Resultado<T> = { t: 'ok'; datos: T } | { t: 'sin-permiso' } | { t: 'error'; motivo: string }
 
+/** Una carga: además del error, el 409 —alguien cambió ese dato en el medio— trae el pedido como quedó. */
+export type ResultadoCarga = { t: 'ok'; pedido: PedidoLogistica } | { t: 'cambio'; motivo: string; pedido: PedidoLogistica | null } | { t: 'error'; motivo: string }
+
+export type Catalogos = { dispatch_options: CodigoTexto[]; carriers: { slug: string; label: string }[] }
+
 async function pedir<T>(cuerpo: Record<string, unknown>): Promise<Resultado<T>> {
   try {
     const r = await apiFetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) })
@@ -86,6 +91,47 @@ export async function pedidosDelCliente(clienteId: number | null, tel: string | 
 export async function pendientesLogistica(): Promise<Resultado<{ count: number; by_step: Record<string, number>; orders: PendienteLogistica[] }>> {
   const r = await pedir<{ count?: number; by_step?: Record<string, number>; orders?: PendienteLogistica[] }>({ action: 'pendientes' })
   return r.t === 'ok' ? { t: 'ok', datos: { count: r.datos.count || 0, by_step: r.datos.by_step || {}, orders: r.datos.orders || [] } } : r
+}
+
+let catalogosCache: Promise<Resultado<Catalogos>> | null = null
+
+/** Las formas de entrega y los transportes de Logística. Se piden una vez; un error se vuelve a pedir. */
+export function catalogosLogistica(): Promise<Resultado<Catalogos>> {
+  if (!catalogosCache) {
+    catalogosCache = pedir<Partial<Catalogos>>({ action: 'catalogos' }).then((r) =>
+      r.t === 'ok' ? { t: 'ok', datos: { dispatch_options: r.datos.dispatch_options || [], carriers: r.datos.carriers || [] } } : r,
+    )
+    catalogosCache.then((r) => {
+      if (r.t !== 'ok') catalogosCache = null
+    })
+  }
+  return catalogosCache
+}
+
+/** El código de la forma «Transporte»: es la única que pide elegir cuál. */
+export const TRANSPORTE = 3
+
+/**
+ * Guardar la forma de entrega de un pedido. Va con lo que el panel VIO (`expected`): si alguien la
+ * cambió en el medio, Logística no guarda y devuelve el pedido como quedó. ⛔ No se reintenta solo.
+ */
+export async function guardarEntrega(p: PedidoLogistica, codigo: number, carrier: string | null): Promise<ResultadoCarga> {
+  const cuerpo: Record<string, unknown> = {
+    action: 'entrega',
+    id: p.id,
+    dispatch_option: codigo,
+    expected: { dispatch_option: p.dispatch_option?.code ?? null, ...(codigo === TRANSPORTE ? { carrier: p.carrier?.slug ?? null } : {}) },
+  }
+  if (codigo === TRANSPORTE) cuerpo.carrier = carrier
+  try {
+    const r = await apiFetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) })
+    const d = (await r.json().catch(() => ({}))) as Partial<PedidoLogistica> & { error?: string; order?: PedidoLogistica }
+    if (r.status === 409) return { t: 'cambio', motivo: d.error || 'El pedido cambió mientras tanto.', pedido: d.order || null }
+    if (!r.ok) return { t: 'error', motivo: d.error || `Error ${r.status} con Logística.` }
+    return { t: 'ok', pedido: d as PedidoLogistica }
+  } catch (e) {
+    return { t: 'error', motivo: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 const LISTO = 3

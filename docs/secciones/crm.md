@@ -1150,7 +1150,13 @@ Ger (logistica.arebensrl.com) abrió una API para el panel: `https://logistica.a
   encabezado, y en «Número nuevo» por teléfono) + `GrupoLogistica` en `AgendaDelDia.tsx`
   («Pendientes en Logística», debajo de «Pidieron hoy y ayer», cada 2 min). Sin pedidos no se dibuja.
 - 🔑 Un pedido entra a Logística recién cuando Darío lo pasa a «Compra pendiente» en GN.
-- ⏭️ **2ª tanda: cargar** (`PATCH` con `expected`, despachar, etiqueta de transporte). ⛔ No hay
+- ✅ **Forma de entrega desde la ficha** (22-oct, tarde): «Elegir / Cambiar forma de entrega» en
+  cada pedido, nace marcada con lo que tiene o con la `suggestion` de `/pendientes` (la vez
+  anterior). Acción `entrega` → `PATCH` con `dispatch_option` (+ `carrier` si es Transporte) y su
+  `expected`; nada más viaja. 🔴 **Escribir es sólo de admin** (`esAdmin` en el servidor). En el
+  panel se dice «forma de entrega»; Logística dice «modalidad de despacho» (se traduce en «Hoy»).
+  Un timeout en una carga avisa «fijate si quedó guardado»: no contestar no es no guardar.
+- ⏭️ **Lo que sigue de la 2ª tanda: cargar** (`PATCH` con `expected`, despachar, etiqueta de transporte). ⛔ No hay
   entorno de prueba: se prueba sobre un pedido acordado. ⛔ El 409 no se reintenta solo: se muestra
   cómo quedó el pedido y decide la persona.
 - Test: `tests/crm-logistica.test.ts`.

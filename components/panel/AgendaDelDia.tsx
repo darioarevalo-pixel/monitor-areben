@@ -511,7 +511,10 @@ function FilaLogistica({ p, onAbrir, onFicha }: { p: PendienteLogistica; onAbrir
         <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2 }}>
           Pedido {p.gn_number || p.id} · {p.status.label}
         </div>
-        {p.next_step && <div style={{ fontSize: font.xs, color: color.warningInk, marginTop: 2 }}>{p.next_step.label}</div>}
+        {/* Logística dice «modalidad de despacho»; en el panel es «forma de entrega» (Darío, 22-oct-2026). */}
+        {p.next_step && (
+          <div style={{ fontSize: font.xs, color: color.warningInk, marginTop: 2 }}>{p.next_step.code === 'modalidad' ? 'Falta elegir la forma de entrega' : p.next_step.label}</div>
+        )}
         {sugerencia && <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2 }}>{sugerencia}</div>}
       </button>
       <div style={{ display: 'flex', alignItems: 'center', padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>

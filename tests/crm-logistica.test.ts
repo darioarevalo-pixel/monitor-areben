@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { avisosDe, entregaDe, sugerenciaDe, type PedidoLogistica, type PendienteLogistica } from '../lib/crm/logistica'
 
 vi.mock('../api/_auth.js', () => ({ exigirUsuario: vi.fn(async () => ({ name: 'Darío', admin: true })) }))
-vi.mock('../lib/permisos.core.js', () => ({ puedeVerAlguna: vi.fn(() => true) }))
+vi.mock('../lib/permisos.core.js', () => ({ puedeVerAlguna: vi.fn(() => true), esAdmin: vi.fn(() => true) }))
 
 const { default: handler, rutaDe } = await import('../api/_logistica.js')
-const { puedeVerAlguna } = await import('../lib/permisos.core.js')
+const { puedeVerAlguna, esAdmin } = await import('../lib/permisos.core.js')
 
 function pedido(cambios: Partial<PedidoLogistica> = {}): PedidoLogistica {
   return {
@@ -80,6 +80,17 @@ describe('api/_logistica.js', () => {
     expect(rutaDe({ action: 'despachar' }).error).toBeTruthy()
   })
 
+  it('la forma de entrega: sólo esos campos, y siempre con lo que se vio', () => {
+    expect(rutaDe({ action: 'entrega', id: 604, dispatch_option: 3, carrier: 'via_cargo', expected: { dispatch_option: null, carrier: null }, em: 5, shipping: { dni: '1' } })).toEqual({
+      ruta: '/mayorista/pedidos/604',
+      metodo: 'PATCH',
+      cuerpo: { dispatch_option: 3, carrier: 'via_cargo', expected: { dispatch_option: null, carrier: null } },
+    })
+    expect(rutaDe({ action: 'entrega', id: 604, dispatch_option: 1 }).error).toBe('Falta lo que viste del pedido.')
+    expect(rutaDe({ action: 'entrega', id: 604, dispatch_option: null, expected: { dispatch_option: 1 } }).error).toBe('Falta la forma de entrega.')
+    expect(rutaDe({ action: 'entrega', id: '604/despachar', dispatch_option: 1, expected: { dispatch_option: null } }).error).toBeTruthy()
+  })
+
   function llamar(body: unknown) {
     const res = {
       code: 0,
@@ -104,6 +115,29 @@ describe('api/_logistica.js', () => {
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
     vi.mocked(puedeVerAlguna).mockReturnValue(true)
+    vi.mocked(esAdmin).mockReturnValue(true)
+  })
+
+  it('cargar es sólo de admin; mirar no', async () => {
+    vi.mocked(esAdmin).mockReturnValue(false)
+    vi.stubEnv('LOGISTICA_TOKEN', 'lgk_secreto')
+    const f = vi.fn(async () => new Response('{"count":0,"by_step":{},"orders":[]}', { status: 200 }))
+    vi.stubGlobal('fetch', f)
+    const carga = await llamar({ action: 'entrega', id: 604, dispatch_option: 1, expected: { dispatch_option: null } })
+    expect(carga.code).toBe(403)
+    expect(f).not.toHaveBeenCalled()
+    expect((await llamar({ action: 'pendientes' })).code).toBe(200)
+  })
+
+  it('el 409 vuelve tal cual, con el pedido como quedó', async () => {
+    vi.stubEnv('LOGISTICA_TOKEN', 'lgk_secreto')
+    const cuerpo = { detail: 'El pedido cambió.', conflicts: [{ field: 'dispatch_option', expected: null, current: 1 }], order: { id: 604 } }
+    const f = vi.fn(async () => new Response(JSON.stringify(cuerpo), { status: 409 }))
+    vi.stubGlobal('fetch', f)
+    const res = await llamar({ action: 'entrega', id: 604, dispatch_option: 3, carrier: 'via_cargo', expected: { dispatch_option: null, carrier: null } })
+    expect(f).toHaveBeenCalledWith('https://logistica.arebensrl.com/api/ext/v1/mayorista/pedidos/604', expect.objectContaining({ method: 'PATCH' }))
+    expect(res.code).toBe(409)
+    expect(res.cuerpo).toEqual({ ...cuerpo, error: 'El pedido cambió.' })
   })
 
   it('sin permiso de Clientes no consulta', async () => {
