@@ -120,8 +120,9 @@ el tour **sólo con los pasos de ese cambio** (primer caso: Envíos, `n179269769
   una coma con el script le borraba el botón, como `publicado` a los manuales.
 - Para usarlo en otra sección: marcar sus pasos con `cambio` en su `lib/<seccion>/guia.ts` y cargar
   la novedad con `--tour=<seccion>@AAAA-MM-DD`. Un cambio sin pasos corre el tour **entero**, no nada.
-- ⚠️ Va sólo en la tarjeta de `/novedades`, **no en el cartel de las importantes**: ahí se lee con
-  «Entendido», y navegar desde el cartel mezclaría leer con ir a otra pantalla.
+- Va en la tarjeta de `/novedades` **y en el cartel de las importantes**, donde es el botón principal
+  y **también marca leída** (si no, el cartel volvería a tapar el tour en la sección). Lo pidió Bruno
+  el 22-oct al mandar la de Envíos como importante al local de las dos marcas.
 
 ## Cómo se carga
 

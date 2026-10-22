@@ -29,15 +29,18 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useSistema } from '@/store/useSistema'
 import { useSesion } from '@/components/SesionProvider'
 import { marcarLeida } from '@/lib/novedades/cliente'
 import { sinLeer } from '@/lib/novedades/tipos'
+import { urlDelCambio } from '@/lib/guia/core'
 import { faltaParaElPrimero, postergadas, postergar, MINUTOS_POSTERGAR } from '@/lib/novedades/postergar'
 import { Button, Markdown, Modal, Notice, color, font, space } from '@/components/ui'
 
 export function CartelNovedad() {
   const { perfil } = useSesion()
+  const router = useRouter()
   const { novedades, leidas, cargado, cargar } = useSistema()
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -66,17 +69,28 @@ export function CartelNovedad() {
   const n = pendientes[0]
   if (!n) return null
 
-  const entendido = async () => {
+  const entendido = async (): Promise<boolean> => {
     setGuardando(true)
     setError(null)
     try {
       await marcarLeida(n.id, n.version)
       await cargar() // el badge y la próxima del cartel salen de la misma lectura
+      return true
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo registrar que la leíste.')
+      return false
     } finally {
       setGuardando(false)
     }
+  }
+
+  // 🔑 **«Ver cambios» también es «Entendido»** (Bruno, 22-oct-2026: la de Envíos va importante al
+  // local). Ir a ver lo nuevo señalado en la pantalla es leerla, y si no la marcara, el cartel
+  // volvería a tapar el tour en la sección de destino. Si el POST falla, no se navega: mismo
+  // criterio que «Entendido», el error se ve acá adentro.
+  const tour = n.tour
+  const verCambios = async () => {
+    if (tour && (await entendido())) router.push(urlDelCambio(tour.seccion, tour.cambio))
   }
 
   const despues = () => {
@@ -107,9 +121,20 @@ export function CartelNovedad() {
           >
             Después
           </Button>
-          <Button onClick={() => void entendido()} disabled={guardando}>
-            {guardando ? 'Guardando…' : 'Entendido'}
-          </Button>
+          {tour ? (
+            <>
+              <Button variant="outline" onClick={() => void entendido()} disabled={guardando}>
+                Entendido
+              </Button>
+              <Button iconLeft="👉" onClick={() => void verCambios()} disabled={guardando}>
+                {guardando ? 'Guardando…' : 'Ver cambios'}
+              </Button>
+            </>
+          ) : (
+            <Button onClick={() => void entendido()} disabled={guardando}>
+              {guardando ? 'Guardando…' : 'Entendido'}
+            </Button>
+          )}
         </>
       }
     >
