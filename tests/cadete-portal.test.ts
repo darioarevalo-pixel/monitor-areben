@@ -16,6 +16,7 @@ import {
   pinTrabado,
   rangoDeLectura,
   rotuloCorto,
+  totalDeEnvios,
   venceElProximoPrimero,
 } from '@/lib/envios/portal.core.js'
 import { cuentaDelCadete } from '@/lib/envios/reglas.core.js'
@@ -262,6 +263,25 @@ describe('🔴 lo que se ve de la semana que viene', () => {
     const hoyOAyer = enviosDelDia([fila], true) as Record<string, unknown>[]
     expect(hoyOAyer[0].direccion).toBe('3 de Febrero 1234')
     expect(hoyOAyer[0].telefono).toBe('3415551234')
+  })
+
+  it('🔑 cada envío dice cuánto vale y quién lo paga, aunque no se cobre en la puerta', () => {
+    // El pedido de Bruno (22-oct): con «PAGADO» solo, el cadete no sabía cuánto valía el envío.
+    expect(paraElCadeteFuturo(fila)).toMatchObject({ envio: 3000, envioPago: 'puerta' })
+    const pagado = paraElCadete({ ...fila, envio_pagado: true }) as Record<string, unknown>
+    expect(pagado).toMatchObject({ envio: 3000, envioPago: 'clienta', aCobrar: 0 })
+    const regalado = paraElCadete({ ...fila, envio_bonificado: true }) as Record<string, unknown>
+    // 🔴 Bonificado NO es gratis para él: el precio sigue ahí, porque igual se le paga.
+    expect(regalado).toMatchObject({ envio: 3000, envioPago: 'bonificado', aCobrar: 0 })
+  })
+
+  it('el total de envíos del día suma todos, se cobren o no en la puerta', () => {
+    const hoja = enviosDelDia(
+      [fila, { ...fila, id: 'en2', monto_envio: 2500, envio_pagado: true }, { ...fila, id: 'en3', monto_envio: '4000', envio_bonificado: true }],
+      true,
+    )
+    expect(totalDeEnvios(hoja)).toBe(9500)
+    expect(totalDeEnvios([])).toBe(0)
   })
 
   it('🔴 la forma completa se construye ENCIMA de la flaca', () => {

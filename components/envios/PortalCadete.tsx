@@ -28,7 +28,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Icono } from '@/components/ui/Icono'
-import { diasNavegables, diaVecino, linkDeWhatsapp, mensajeParaLaPuerta } from '@/lib/envios/portal.core.js'
+import { diasNavegables, diaVecino, linkDeWhatsapp, mensajeParaLaPuerta, totalDeEnvios } from '@/lib/envios/portal.core.js'
 // Una sola función, y de un archivo sin dependencias. 🔴 El teléfono argentino necesita el `9` que
 // no viene en el dato: sin eso, `wa.me` abre un chat con un número que no existe. Reimplementarlo
 // acá sería la tercera copia de una regla que ya nos mordió una vez.
@@ -44,6 +44,10 @@ type EnvioQueViene = {
   estadoTexto: string
   aCobrar: number
   envioSaldado: boolean
+  /** Lo que vale el envío, se cobre o no en la puerta. */
+  envio: number
+  /** Quién lo paga. Ver `comoSePagoElEnvio`. */
+  envioPago: 'clienta' | 'bonificado' | 'puerta'
 }
 
 /** Un envío del día que se está repartiendo. Lo mismo, más con qué llegar y con qué escribir. */
@@ -374,6 +378,8 @@ export function PortalCadete({ token }: { token: string | null }) {
           <div style={{ fontSize: 13, color: 'var(--mo-mut)' }}>
             {!hoja.envios.length ? 'sin envíos' : hoja.editable ? `${porEntregar} por entregar` : `${hoja.envios.length} ${hoja.envios.length === 1 ? 'envío' : 'envíos'}`}
           </div>
+          {/* El total de los envíos del día, cobrados en la puerta o no: lo que valen sus repartos. */}
+          {hoja.envios.length ? <div style={{ fontSize: 13, color: 'var(--mo-mut)' }}>envíos del día: {plata(totalDeEnvios(hoja.envios))}</div> : null}
         </div>
         <Flecha hacia="siguiente" a={siguiente} onIr={(f) => void traer(pin, f)} />
       </div>
@@ -681,6 +687,27 @@ function Plata({ aCobrar, chico }: { aCobrar: number; chico?: boolean }) {
 }
 
 /**
+ * Cuánto vale el envío y cómo se pagó, en todas las tarjetas.
+ *
+ * 🔑 **Va aunque diga PAGADO**: lo pidió Bruno (22-oct) para que el cadete sepa cuánto vale cada
+ * envío y quién lo pagó. Bonificado no es gratis para él: se le paga igual.
+ */
+const COMO_SE_PAGO: Record<EnvioQueViene['envioPago'], string> = {
+  clienta: 'lo pagó la clienta antes',
+  bonificado: 'bonificado por la marca',
+  puerta: 'lo cobrás vos en la puerta',
+}
+
+function ValorDelEnvio({ envio }: { envio: EnvioQueViene }) {
+  if (!envio.envio) return null
+  return (
+    <div style={{ fontSize: 13, color: 'var(--mo-ink2)', marginTop: 6 }}>
+      Envío {plata(envio.envio)} · {COMO_SE_PAGO[envio.envioPago] || ''}
+    </div>
+  )
+}
+
+/**
  * Un envío que todavía no salió: cuántos son, de qué marca y para qué zona.
  *
  * 🔴 **No tiene con qué llegar a la puerta, y no es un descuido**: el servidor no manda dirección ni
@@ -698,6 +725,7 @@ function TarjetaQueViene({ envio }: { envio: EnvioQueViene }) {
       <div style={{ fontSize: 17, fontWeight: 700, marginTop: 6 }}>{envio.localidad || 'Sin localidad'}</div>
       <div style={{ fontSize: 14, marginTop: 2, color: 'var(--mo-mut)' }}>{envio.cliente || 'Sin nombre'}</div>
       <Plata aCobrar={envio.aCobrar} chico />
+      <ValorDelEnvio envio={envio} />
     </Tarjetón>
   )
 }
@@ -742,6 +770,7 @@ function Tarjeta({
       {envio.anotacion ? <div style={{ fontSize: 14, color: 'var(--mo-ink2)', marginTop: 4 }}>{envio.anotacion}</div> : null}
 
       <Plata aCobrar={envio.aCobrar} />
+      <ValorDelEnvio envio={envio} />
 
       {/* Contacto y mapa: llevan a otra app, así que van en el peso del medio — nunca compiten con
           los dos botones que escriben. */}
