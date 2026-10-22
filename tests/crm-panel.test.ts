@@ -166,6 +166,19 @@ describe('armarFicha', () => {
     expect(f.compras.ultima).toBeNull()
   })
 
+  it('🔴 un cliente sin ventas muestra la fecha y las notas guardadas', () => {
+    // Darío, 22-oct-2026: «le pongo 3 días y no me lo guarda». Se guardaba; la ficha la tiraba.
+    const f = armarFicha(
+      { cliente, ventas: [], detalles: [] },
+      { '500': { proximo_manual: '2026-08-26', ultimo_contacto: '2026-08-23', notas: [{ fecha: '2026-08-23', texto: 'le pasé la tienda' }] } },
+      hoy,
+    )
+    expect(f.cliente.proximo_contacto).toBe('2026-08-26')
+    expect(f.cliente.ultimo_contacto).toBe('2026-08-23')
+    expect(f.cliente.seg_estado).toBe('semana')
+    expect(f.cliente.notas).toHaveLength(1)
+  })
+
   it('🔴 un cliente descartado igual muestra su ficha', () => {
     // Sale de la tabla del CRM a propósito, pero si te está escribiendo EXISTE: mostrarlo como
     // desconocido llevaría a cargarlo de nuevo como lead, o sea a duplicarlo.

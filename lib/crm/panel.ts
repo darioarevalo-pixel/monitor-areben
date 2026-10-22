@@ -20,7 +20,7 @@
 
 import { apiFetch } from '../api-fetch'
 import { guardarMapa, leerMapa } from '../kv/cliente'
-import { TANDA_FRIOS, TEMPERATURA_DEFAULT, calcularAgregado, normalizeArgPhone, resumenCompras, segmentoCliente } from './core'
+import { TANDA_FRIOS, TEMPERATURA_DEFAULT, calcularAgregado, estadoSeguimiento, normalizeArgPhone, resumenCompras, segmentoCliente } from './core'
 import { friosDelDia, grupoUrgencia, hechosHoy, listaDelDia, porTemperatura, type FilaListaDia, type VistaTemp } from './lista-dia'
 import type {
   ClienteCRM,
@@ -139,6 +139,10 @@ export function armarFicha(d: RespuestaPanel, crmSeg: MapaSeguimiento, today: Da
 
   // Un cliente sin ninguna venta no entra al agregado (se arma desde las ventas). Es real: una
   // ficha cargada en Gestión Nube que todavía no compró. Se dibuja igual, en cero.
+  // 🔴 Pero el seguimiento SÍ sale del KV: estaba clavado en null y los plazos guardaban bien pero
+  // la ficha volvía a «dd/mm/aaaa» (Darío, 22-oct-2026, Natalia Nor Cell: «le pongo 3 días y no me
+  // lo guarda»). Lo mismo con las notas.
+  const seg = estadoSeguimiento(cliente.id, crmSeg, today)
   const agregado: ClienteCRM = activos[0] ||
     descartados[0] || {
       id: cliente.id,
@@ -156,11 +160,11 @@ export function armarFicha(d: RespuestaPanel, crmSeg: MapaSeguimiento, today: Da
       avg_ticket: 0,
       ventas: [],
       cadencia: '',
-      ultimo_contacto: null,
-      proximo_contacto: null,
-      seg_estado: 'none',
-      dias_proximo: null,
-      notas: [],
+      ultimo_contacto: seg.ultimo,
+      proximo_contacto: seg.proximo,
+      seg_estado: seg.estado,
+      dias_proximo: seg.dias,
+      notas: seg.notas,
       en_difusion: !!crmSeg[String(cliente.id)]?.en_difusion,
       // ⚠️ Salían clavados en `templado`/`false` aunque el KV dijera otra cosa: este fallback es
       // para el cliente SIN VENTAS, no para el cliente sin seguimiento. Uno marcado 🔥 que todavía
