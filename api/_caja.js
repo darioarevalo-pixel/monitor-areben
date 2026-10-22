@@ -18,7 +18,7 @@
 //   GET  ?recurso=caja&action=gift-lotes          → sólo admin: los lotes de gift cards generados (W6)
 //   GET  ?recurso=caja&action=gift-lote&lote=…    → sólo admin: { nombre, csv } del lote, para la imprenta
 //   GET  ?recurso=caja&action=turnos&desde=&hasta= → los turnos abiertos en esos días (ERP › Ventas › Cajas, sólo lectura)
-//   GET  ?recurso=caja&action=turno               → el turno abierto (o null) con su resumen y salidas, y
+//   GET  ?recurso=caja&action=turno[&fresco=1]   → el turno abierto (o null) con su resumen y salidas, y
 //        los últimos cerrados (v2, W3), con el efectivo cobrado EN GN durante el turno (W3b) — ver lib/caja/cierre.core.js
 //   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, descuentoVenta, email?, pagaCon? }
 //   POST ?recurso=caja  { action: 'reintentar', id }
@@ -566,7 +566,9 @@ export default async function handler(req, res) {
         const ultimos = await sb.from('caja_turno').select(COLS_TURNO).eq('store', store).not('cerrado_en', 'is', null)
           .order('abierto_en', { ascending: false }).limit(10)
         if (ultimos.error) throw new Error(ultimos.error.message)
-        return res.status(200).json({ turno: turno ? await conResumen(turno) : null, ultimos: ultimos.data || [] })
+        // `fresco=1` (22-oct): la ventana de cierre relee GN sin el cache de 60 s —el POS leía el turno al cargar
+        // y el cierre del martes 20 mostró «sobran $13.000» por un cobro web cargado después—.
+        return res.status(200).json({ turno: turno ? await conResumen(turno, req.query.fresco === '1') : null, ultimos: ultimos.data || [] })
       }
       // ERP › Ventas › Cajas (20-oct, sólo lectura): los turnos ABIERTOS en el período, días argentinos `desde`..`hasta`.
       if (accion === 'turnos') {

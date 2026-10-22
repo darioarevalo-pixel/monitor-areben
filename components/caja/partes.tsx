@@ -32,6 +32,7 @@ import {
   type SalidaTurno,
   type Versiones,
   cerrarTurno,
+  leerTurno,
   leerVentasTurno,
   contarBilletes,
   type Turno,
@@ -1779,7 +1780,31 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
   // A3 (auditoría, 11-oct): GN ⛔ contestó los cobros web ⇒ el servidor frena; cerrar igual es explícito y con nota.
   const [sinGN, setSinGN] = useState<{ total: number; conteo: Conteo | null } | null>(null)
   const { confirmar } = useConfirmar()
-  const r = turno.resumen
+  // 🔑 22-oct (el martes 20 dijo «sobran $13.000»): el POS lee el turno al cargar y un cobro web cargado
+  // en GN después ⛔ estaba en el esperado. Al abrir se relee GN entero; mientras, el esperado ⛔ se muestra
+  // (una diferencia vieja se lee como sobra). «Consultar cobros de Gestión Nube» relee a pedido.
+  const [vivo, setVivo] = useState<Turno>(turno)
+  const [consultando, setConsultando] = useState(true)
+  const [errConsulta, setErrConsulta] = useState<string | null>(null)
+  const releer = useCallback(
+    () =>
+      leerTurno(false, true)
+        .then((x) => {
+          if (x.turno && x.turno.id === turno.id) setVivo(x.turno)
+        })
+        .catch((e) => setErrConsulta((e as Error).message))
+        .finally(() => setConsultando(false)),
+    [turno.id],
+  )
+  useEffect(() => {
+    void releer()
+  }, [releer])
+  const consultar = () => {
+    setConsultando(true)
+    setErrConsulta(null)
+    void releer()
+  }
+  const r = vivo.resumen
   const momento = `cierre:${turno.id}`
 
   async function cerrar(total: number, conteo: Conteo | null, sinCobrosGN: boolean) {
@@ -1808,7 +1833,7 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
       tono="danger"
       aMano
       vacioApagado
-      esperado={r?.efectivo.esperado ?? null}
+      esperado={consultando ? null : (r?.efectivo.esperado ?? null)}
       fondo={Number(turno.fondo)}
       trabajando={trabajando}
       error={error}
@@ -1818,7 +1843,23 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
           <Field label={sinGN ? 'Nota (obligatoria para cerrar sin los cobros de Gestión Nube)' : 'Nota (opcional)'}>
             <Input value={nota} onChange={(e) => setNota(e.target.value)} autoComplete="off" />
           </Field>
-          {r?.cobrosGN === null && !sinGN && <span style={{ color: color.warningInk }}>Cobros de Gestión Nube: sin leer. Se releen al cerrar.</span>}
+          {consultando && <span style={{ color: color.mut }}>Consultando los cobros de Gestión Nube…</span>}
+          {!consultando && r && (
+            <span style={{ color: color.mut }}>
+              Esperado = fondo {plata(r.efectivo.fondo)} + efectivo de la Caja {plata(r.efectivo.cobrado)}
+              {!!r.efectivo.deEspera && <> + esperando transferencia {plata(r.efectivo.deEspera)}</>}
+              {r.cobrosGN !== null && <> + cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</>}
+              {!!r.efectivo.aportes && <> + ingresos {plata(r.efectivo.aportes)}</>}
+              {!!r.efectivo.salidas && <> − salidas {plata(r.efectivo.salidas)}</>}
+            </span>
+          )}
+          {!consultando && r && <CobrosGN r={r} />}
+          {errConsulta && <span style={{ color: color.warningInk }}>No se pudo consultar Gestión Nube ({errConsulta}). Se relee al cerrar.</span>}
+          <div>
+            <Button size="sm" variant="outline" loading={consultando} disabled={trabajando} onClick={() => void consultar()}>
+              Consultar cobros de Gestión Nube
+            </Button>
+          </div>
           {!!r?.esperando.length && <span style={{ color: color.warningInk }}>Transferencias en espera: {r.esperando.length}. Si llegan después, no entran en el cierre.</span>}
           {sinGN && (
             <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1831,7 +1872,7 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
       }
       onUsar={async (total, conteo) => {
         // A10 (auditoría, 11-oct): el cierre ⛔ se reabre ⇒ ⛔ en un clic. Se confirma viendo los tres números.
-        const esperado = r?.efectivo.esperado ?? null
+        const esperado = consultando ? null : (r?.efectivo.esperado ?? null)
         const dif = esperado == null ? null : Math.round((total - esperado) * 100) / 100
         const ok = await confirmar({
           titulo: 'Cerrar caja',
