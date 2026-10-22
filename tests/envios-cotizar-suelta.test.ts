@@ -159,7 +159,7 @@ describe('🔴 el panel de la pantalla', () => {
     // 🔴 Y que el botón la LLAME. Afirmar que la función existe no alcanza: dejarla escrita y
     // colgar del botón otra cosa que abra la ficha vacía deja este archivo igual de lleno y la
     // pantalla igual de rota. Sobrevivió el mutante que hacía exactamente eso.
-    expect(panel).toMatch(/onClick=\{cargar\}[\s\S]{0,80}cargar este envío/)
+    expect(panel).toMatch(/onClick=\{cargar\}[\s\S]{0,80}[Cc]argar este envío/)
   })
 
   it('🔴 el precio se siembra SÓLO si el mapa lo propuso, y nunca como cero', () => {
@@ -167,7 +167,7 @@ describe('🔴 el panel de la pantalla', () => {
     // sembrar un envío bonificado que nadie decidió. Se mira el CUERPO de `cargar`, no el panel
     // entero: el comentario que explica esto nombra el cero, y un test que lea comentarios afirma
     // sobre la prosa en vez de sobre el código.
-    const cargar = panel.slice(panel.indexOf('function cargar()'), panel.indexOf('if (!abierto)'))
+    const cargar = panel.slice(panel.indexOf('function cargar()'), panel.indexOf('const listo'))
     expect(cargar).not.toBe('')
     expect(cargar).toMatch(/estado === 'sugerido' && cotizacion\.precio != null/)
     expect(cargar).toMatch(/sugerido \? \{ monto_envio:/)
@@ -190,7 +190,8 @@ describe('🔴 el panel de la pantalla', () => {
 
   it('🔴 después de cargar salta a «Sin fecha», que es donde el envío realmente queda', () => {
     // Nace sin fecha: cargado desde la hoja del día, el guardado sale bien y parece que no pasó nada.
-    const montaje = pantalla.slice(pantalla.indexOf('<CotizarDireccion'), pantalla.indexOf("{pestania === 'zonas' ?"))
+    // Desde el rediseño del 22-oct es un modal que se monta al pie de la pantalla, no una tarjeta arriba.
+    const montaje = pantalla.slice(pantalla.indexOf('<CotizarDireccion'), pantalla.indexOf('{viendoPedido ?'))
     expect(montaje).toContain("setPestania('pendientes')")
   })
 

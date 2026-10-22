@@ -67,7 +67,10 @@ import {
   selloDeEntrega,
   FILTRO_BANDEJA,
   montoDelMovimiento,
+  MOTIVOS_A_MANO,
+  motivoDeTN,
   num,
+  revisableEnTN,
   parcheAlSacarDelDia,
   TURNOS,
   validarEnvio,
@@ -224,6 +227,8 @@ export default async function handler(req, res) {
           .from('envios_reparto')
           .select(CAMPOS)
           .or(FILTRO_BANDEJA)
+          // Lo que ya se resolvió por fuera de la moto (TN o «Sacar…») no vuelve. Ver `MOTIVOS_RESUELTO`.
+          .is('resuelto_motivo', null)
           .order('created_at');
         if (error) throw new Error(error.message);
         return res.status(200).json({ ok: true, envios: data || [] });
@@ -589,6 +594,65 @@ export default async function handler(req, res) {
       );
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true, token, pin, vence });
+    }
+
+    // ── Revisar contra Tienda Nube lo que sigue en la bandeja ─────────────────
+    //
+    // El cliente bajó las órdenes (pasa por `apiFetch`, como `traer-tn`) y manda, por fila, lo que TN
+    // dice HOY. 🔑 **La decisión es de acá**: se relee la fila, se pregunta `revisableEnTN` —una fila de
+    // la hoja ⛔ se toca aunque el cliente la mande— y el motivo sale de `motivoDeTN`. El cliente sólo
+    // trae el dato.
+    //
+    // Se guarda también lo que TN dice ahora en `datos.tn`: la copia era la del día que se importó, y
+    // la pantalla necesita saber que una orden se CERRÓ para mostrar el aviso.
+    if (b.action === 'revisar-tn') {
+      const lista = Array.isArray(b.ordenes) ? b.ordenes.slice(0, 500) : [];
+      const porId = new Map(lista.filter((o) => o && o.id).map((o) => [String(o.id), o]));
+      if (!porId.size) return res.status(200).json({ ok: true, entregadas: 0, canceladas: 0, cerradas: 0 });
+      const { data: filas, error: eSel } = await supabase
+        .from('envios_reparto')
+        .select('id, origen, fecha, estado, datos, resuelto_motivo')
+        .in('id', [...porId.keys()]);
+      if (eSel) throw new Error(eSel.message);
+      const cuenta = { entregadas: 0, canceladas: 0, cerradas: 0 };
+      const ahora = new Date().toISOString();
+      for (const f of filas || []) {
+        if (!revisableEnTN(f)) continue;
+        const o = porId.get(f.id);
+        const tn = { ...((f.datos && f.datos.tn) || {}), estado_orden: o.estado_orden || null, envio_estado: o.envio_estado || null, revisada_en: ahora };
+        const motivo = motivoDeTN(o);
+        const parche = { datos: { ...(f.datos || {}), tn }, updated_at: ahora };
+        if (motivo === 'tn_entregada' || motivo === 'tn_cancelada') {
+          Object.assign(parche, { resuelto_motivo: motivo, resuelto_en: ahora, resuelto_por: 'Tienda Nube' });
+          if (motivo === 'tn_entregada') cuenta.entregadas++;
+          else cuenta.canceladas++;
+        } else if (motivo === 'cerrada') cuenta.cerradas++;
+        const { error } = await supabase.from('envios_reparto').update(parche).eq('id', f.id);
+        if (error) throw new Error(error.message);
+      }
+      return res.status(200).json({ ok: true, ...cuenta });
+    }
+
+    // ── «Sacar…»: resolver a mano, de a una o varias, y deshacerlo ─────────────
+    //
+    // `motivo: null` la devuelve a la bandeja. 🔑 **Parche fijo**: sólo las cuatro columnas de
+    // `resuelto_*`; ni `estado` ni `fecha` ni `cobrado` (ver `MOTIVOS_RESUELTO`).
+    if (b.action === 'resolver') {
+      const ids = Array.isArray(b.ids) ? [...new Set(b.ids.map(String).filter(Boolean))] : [];
+      if (!ids.length) return res.status(400).json({ error: 'Falta el envío.' });
+      if (ids.length > 200) return res.status(400).json({ error: 'De a 200 envíos como máximo.' });
+      const motivo = b.motivo == null ? null : String(b.motivo);
+      if (motivo !== null && !MOTIVOS_A_MANO.includes(motivo)) return res.status(400).json({ error: 'Ese motivo no existe.' });
+      const nota = motivo && b.nota ? String(b.nota).trim().slice(0, 300) || null : null;
+      if (motivo === 'otro' && !nota) return res.status(400).json({ error: 'Con «Otro» hay que escribir qué pasó.' });
+      const ahora = new Date().toISOString();
+      const parche = motivo
+        ? { resuelto_motivo: motivo, resuelto_en: ahora, resuelto_por: yo, resuelto_nota: nota, updated_at: ahora }
+        : { resuelto_motivo: null, resuelto_en: null, resuelto_por: null, resuelto_nota: null, updated_at: ahora };
+      const { data, error } = await supabase.from('envios_reparto').update(parche).in('id', ids).select('id');
+      if (error) throw new Error(error.message);
+      if (!data || !data.length) return res.status(404).json({ error: 'Esos envíos ya no están.' });
+      return res.status(200).json({ ok: true, n: data.length });
     }
 
     if (b.action === 'borrar') {

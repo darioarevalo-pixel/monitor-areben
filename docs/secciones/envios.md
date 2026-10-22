@@ -297,6 +297,35 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   el portal no puede importar TypeScript. Copiarla era la otra salida y es la que este módulo prohíbe.
   `CAMPOS_CIERRE` se mudó por lo mismo — la usaban dos.
 
+### «Sin fecha» se vacía: la revisión contra TN y «Sacar…» (22-oct-2026)
+
+La bandeja no se vaciaba nunca: un pedido salía sólo si alguien lo agendaba o lo borraba. El 22-oct
+tenía 51 filas, y de las 43 de TN **ninguna seguía abierta en TN** (19 entregadas, 9 canceladas, 15
+cerradas sin despachar). Lo que decidió Bruno:
+
+- 🔑 **Se resuelve con una MARCA, ⛔ con un estado**: `resuelto_motivo` / `_en` / `_por` / `_nota`
+  (`sql/migrate-envios-resuelto.sql`). No toca `estado`, `fecha` ni `cobrado` ⇒ la cuenta del cadete
+  y la venta del ERP no se mueven. La bandeja suma `.is('resuelto_motivo', null)` al `FILTRO_BANDEJA`.
+- **Revisión contra TN** al apretar «Cargar los de Tienda Nube», después de importar
+  (`revisarBandeja` en `useEnvios.ts`, acción `revisar-tn`). **Cancelada o `delivered` en TN ⇒ sale
+  sola** (`motivoDeTN`, en `reglas.core.js`). 🔴 **Cerrada sin despachar ⛔ sale**: lleva el aviso
+  «cerrada en TN» y el botón «Sacar las N cerradas». Es la misma medición del 17-ago de abajo (el
+  local cierra al empaquetar), y por eso **la hoja del día sigue sin mirar a TN**: `revisableEnTN`
+  deja afuera toda fila con día que no volvió sin entregar.
+  · 🔴 **Día por día, ⛔ un rango**: el listado de TN corta en 200 órdenes, las más nuevas. Medido: un
+  rango del 18-ago a hoy volvió sólo desde el 6-oct, y 43 de 43 quedaban sin encontrar.
+  · 🔴 **Se cruza por `number`**: `numero` es la altura de la calle en `envio_direccion`. Cruzando por
+  ahí, la primera medición dio «5 entregadas» que eran coincidencias de números de puerta.
+  · Lo que TN no devuelve ⛔ se toca: se cuenta, y el cartel deja de ser verde.
+- **«Sacar…»** (menú «⋯» de cada fila, y en masa sobre las cerradas): motivo de una lista cerrada
+  (`MOTIVOS_A_MANO`: retiró en el local, se entregó por fuera, se canceló, se mandó por correo, otro
+  con nota obligatoria). El aviso trae **Deshacer** (`resolver` con `motivo: null`). Sirve también
+  para las cargadas a mano, que TN no conoce.
+- **Orden de la bandeja** (`ordenarBandeja`): fecha de VENTA (`datos.tn.fecha`, en hora argentina;
+  las manuales por `created_at`) con la más vieja arriba, N° de orden como número, o sin precio primero.
+- **El `$` de cada fila** pide la sugerencia de UNA dirección; «Sugerir todos» va **de a 100 en
+  tandas** (antes mandaba los primeros 100 y se callaba el resto).
+
 ## La ayuda: un manual y un tour, que contestan cosas distintas
 
 🔑 **El manual dice QUÉ hacés y qué pasa si sale mal; el tour dice DÓNDE se aprieta.** Separarlos es

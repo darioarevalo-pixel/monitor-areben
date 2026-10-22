@@ -13,7 +13,7 @@ import { rotuloFecha } from '../fechas/semana'
 import { CUENTAS } from '../cuentas'
 import { LOCALIDAD_DEL_CP } from './direccion.core.js'
 import { OFFSET_AR_MS } from './portal.core.js'
-import { aCobrar, cuentaDelCadete as cuentaDelCadeteJs, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, pagoAlLocal, tarifaCadete, turnosDe } from './reglas.core.js'
+import { aCobrar, cuentaDelCadete as cuentaDelCadeteJs, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, pagoAlLocal, revisableEnTN, tarifaCadete, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
 import type { AccionDePago, CuentaCadete, Envio, MovimientoCuenta, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
 
@@ -114,7 +114,85 @@ export function resumenDeTraida(t: Traida): { tono: 'ok' | 'aviso'; texto: strin
     const q = t.noLeidas === 1 ? 'orden que Tienda Nube no contestó' : 'órdenes que Tienda Nube no contestó'
     partes.push(`⚠️ ${t.noLeidas} ${q}: volvé a apretar Traer`)
   }
-  return { tono: t.noLeidas ? 'aviso' : 'ok', texto: partes.join(' · ') }
+  // La revisión de la bandeja va al final: es lo que SALIÓ, y se dice cuánto y por qué.
+  const rv = t.revision
+  if (rv) {
+    const salieron = rv.entregadas + rv.canceladas
+    if (salieron) {
+      const por = [rv.entregadas && `${rv.entregadas} entregada${rv.entregadas === 1 ? '' : 's'}`, rv.canceladas && `${rv.canceladas} cancelada${rv.canceladas === 1 ? '' : 's'}`].filter(Boolean).join(' y ')
+      partes.push(`salieron de «Sin fecha» ${salieron} (${por} en Tienda Nube)`)
+    }
+    if (rv.cerradas) partes.push(`${rv.cerradas} cerrada${rv.cerradas === 1 ? '' : 's'} en TN para revisar`)
+    if (rv.noRevisadas) partes.push(`⚠️ ${rv.noRevisadas} de «Sin fecha» no se pudieron revisar en TN`)
+  } else if (t.revision === null) partes.push('⚠️ no se pudo revisar «Sin fecha» contra Tienda Nube')
+  const aviso = t.noLeidas || t.revision === null || !!(rv && rv.noRevisadas)
+  return { tono: aviso ? 'aviso' : 'ok', texto: partes.join(' · ') }
+}
+
+// ── La bandeja «Sin fecha»: revisarla contra TN y ordenarla ─────────────────────────────────
+
+/**
+ * **El día en que se VENDIÓ**, ⛔ el día en que se cargó al monitor.
+ *
+ * Sale de la orden de TN congelada (`datos.tn.fecha`, el `created_at` de TN) y, en las cargadas a
+ * mano, de `created_at` de la fila. Va en hora argentina (`OFFSET_AR_MS`): TN la manda en UTC, y una
+ * venta de las 22 h caería al día siguiente.
+ */
+export function fechaDeVenta(e: Envio): string | null {
+  const tn = (e.datos && (e.datos as { tn?: { fecha?: string | null } }).tn) || null
+  const crudo = (tn && tn.fecha) || e.created_at || null
+  const ms = crudo ? Date.parse(crudo) : NaN
+  return Number.isFinite(ms) ? new Date(ms + OFFSET_AR_MS).toISOString().slice(0, 10) : null
+}
+
+/**
+ * **Qué preguntarle a TN para revisar la bandeja**: por marca, los días de venta que tienen filas.
+ *
+ * 🔴 **Día por día, y no un rango**: el listado de TN corta en 200 órdenes, las más nuevas. Medido el
+ * 22-oct: un rango del 18-ago a hoy devolvió sólo desde el 6-oct, y 43 de 43 filas quedaban sin
+ * encontrar. Las filas que no se pueden revisar ⛔ salen: se cuentan.
+ */
+export function pedidosDeRevision(pendientes: Envio[], marcas: Marca[]): { marca: Marca; dia: string; filas: Envio[] }[] {
+  const out = new Map<string, { marca: Marca; dia: string; filas: Envio[] }>()
+  for (const e of pendientes) {
+    if (!marcas.includes(e.store) || !revisableEnTN(e) || !e.orden_numero) continue
+    const dia = fechaDeVenta(e)
+    if (!dia) continue
+    const k = `${e.store}|${dia}`
+    if (!out.has(k)) out.set(k, { marca: e.store, dia, filas: [] })
+    out.get(k)!.filas.push(e)
+  }
+  return [...out.values()]
+}
+
+export type OrdenBandeja = 'venta' | 'orden' | 'sin_precio'
+
+const numeroDeOrden = (e: Envio) => {
+  const n = Number(String(e.orden_numero || '').replace(/\D/g, ''))
+  return e.orden_numero && Number.isFinite(n) ? n : Infinity
+}
+
+/**
+ * **El orden de la bandeja** (lo pidió Bruno el 22-oct). Por defecto, la venta más vieja arriba: es lo
+ * más atrasado. El número de orden se compara como NÚMERO (`#998` antes que `#1002`), y las cargadas
+ * a mano, sin número, van al final. «Sin precio primero» desempata por fecha de venta.
+ */
+export function ordenarBandeja(envios: Envio[], criterio: OrdenBandeja): Envio[] {
+  const porVenta = (a: Envio, b: Envio) => (fechaDeVenta(a) || '9999').localeCompare(fechaDeVenta(b) || '9999') || numeroDeOrden(a) - numeroDeOrden(b)
+  const sinPrecio = (e: Envio) => (Number(e.monto_envio) > 0 ? 1 : 0)
+  const cmp =
+    criterio === 'orden'
+      ? (a: Envio, b: Envio) => numeroDeOrden(a) - numeroDeOrden(b) || porVenta(a, b)
+      : criterio === 'sin_precio'
+        ? (a: Envio, b: Envio) => sinPrecio(a) - sinPrecio(b) || porVenta(a, b)
+        : porVenta
+  return [...envios].sort(cmp)
+}
+
+/** ¿TN la cerró sin despacharla? Es el aviso «Cerrada en TN»: decide una persona. Ver `motivoDeTN`. */
+export function cerradaEnTN(e: Envio): boolean {
+  const tn = (e.datos && (e.datos as { tn?: { estado_orden?: string; envio_estado?: string } }).tn) || null
+  return !!tn && tn.estado_orden === 'closed' && tn.envio_estado !== 'delivered' && !e.resuelto_motivo
 }
 
 // ── La cuenta corriente del cadete ───────────────────────────────────────────────────────────

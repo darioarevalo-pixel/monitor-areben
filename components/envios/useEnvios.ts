@@ -11,13 +11,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { hoyIso, sumarDias } from '@/lib/calendario'
-import { leerCuenta, leerDia, leerOrdenesTN, leerPendientes, leerZonas } from '@/lib/envios/cliente'
+import { leerCuenta, leerDia, leerOrdenesTN, leerPendientes, leerZonas, revisarEnTN } from '@/lib/envios/cliente'
 import { leerMensajes } from '@/lib/buzon/cliente'
 import { indiceDeAbiertos } from '@/lib/buzon/core'
 import type { IndiceAbiertos } from '@/lib/buzon/tipos'
-import { cuentaDelCadete, marcasATraer, ordenAEnvio, vaAlReparto, vaPorCorreo } from '@/lib/envios/core'
+import { cuentaDelCadete, marcasATraer, ordenAEnvio, pedidosDeRevision, vaAlReparto, vaPorCorreo } from '@/lib/envios/core'
 import { apiFetch } from '@/lib/api-fetch'
-import type { CuentaCadete, Envio, Traida, ZonaDeReparto } from '@/lib/envios/tipos'
+import type { CuentaCadete, Envio, Revision, Traida, ZonaDeReparto } from '@/lib/envios/tipos'
 
 /**
  * Cuántos días para atrás se piden al traer de Tienda Nube.
@@ -174,26 +174,29 @@ export function useEnvios(): EstadoEnvios {
 
     // Ninguna candidata NO quiere decir que no había nada: si Tienda Nube cortó, acá es donde el
     // corte se vería como un día tranquilo. Por eso `noLeidas` viaja también por este camino.
-    if (!candidatas.length) {
-      if (fallos.length) throw new Error(fallos.join(' · '))
-      return { agregados: 0, ya_estaban: 0, sinDireccion: 0, porCorreo, noLeidas }
+    let d: { agregados?: number; ya_estaban?: number } = {}
+    if (candidatas.length) {
+      const r = await apiFetch('/api/datos?recurso=envios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recurso: 'envios', action: 'traer-tn', envios: candidatas }),
+      })
+      const j = await r.json().catch(() => null)
+      if (!r.ok || !j?.ok) throw new Error((j && j.error) || 'No se pudieron traer las órdenes.')
+      d = j
     }
 
-    const r = await apiFetch('/api/datos?recurso=envios', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recurso: 'envios', action: 'traer-tn', envios: candidatas }),
-    })
-    const d = await r.json().catch(() => null)
-    if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron traer las órdenes.')
+    // 🔑 **Después de importar, se revisa lo que ya estaba**: la bandeja no se vaciaba nunca (22-oct).
+    // ⚠️ Si la revisión falla, lo importado ya entró: se dice en el cartel y ⛔ se tira el resto.
+    const revision = await revisarBandeja(todosLosPendientes, marcasATraer(marcaActiva))
 
     await recargar()
     if (fallos.length) {
       const faltan = noLeidas ? ` · ${noLeidas} más que Tienda Nube no contestó` : ''
       throw new Error(`Se trajeron las que se pudieron. ${fallos.join(' · ')}${faltan}`)
     }
-    return { agregados: d.agregados || 0, ya_estaban: d.ya_estaban || 0, sinDireccion, porCorreo, noLeidas }
-  }, [recargar, marcaActiva])
+    return { agregados: d.agregados || 0, ya_estaban: d.ya_estaban || 0, sinDireccion, porCorreo, noLeidas, revision }
+  }, [recargar, marcaActiva, todosLosPendientes])
 
   // El filtro por marca se hace acá y no en el servidor: la bandeja es chica y así cambiar de marca
   // en el header no cuesta un viaje. Sin marca (nunca pasa con sesión) se muestran las dos.
@@ -212,6 +215,50 @@ export function useEnvios(): EstadoEnvios {
  * de hoy es la suma de todo lo anterior— y eso no puede pagarse en cada carga de la hoja, que es la
  * pantalla que se abre veinte veces por día para ver qué sale.
  */
+/** Cuántos días de TN se piden a la vez. TN corta por rate limit si se le tiran todos juntos. */
+const EN_PARALELO = 4
+
+/**
+ * **Revisar la bandeja contra lo que TN dice HOY.** Pide a TN los días de venta que tienen filas
+ * (`pedidosDeRevision`), cruza por número de orden y le manda al servidor el estado de cada una; el
+ * servidor decide cuáles salen (`motivoDeTN`).
+ *
+ * 🔴 **Se cruza por `number`**: `numero` es la altura de la calle en `envio_direccion`, y cruzar por
+ * ahí da coincidencias falsas (pasó midiendo, el 22-oct). Las que TN no devuelve ⛔ se tocan: se cuentan.
+ */
+async function revisarBandeja(pendientes: Envio[], marcas: ReturnType<typeof marcasATraer>): Promise<Revision | null> {
+  const pedidos = pedidosDeRevision(pendientes, marcas)
+  if (!pedidos.length) return { entregadas: 0, canceladas: 0, cerradas: 0, noRevisadas: 0 }
+  try {
+    const ordenes: { id: string; estado_orden: string | null; envio_estado: string | null; cancelada?: boolean }[] = []
+    let noRevisadas = 0
+    for (let i = 0; i < pedidos.length; i += EN_PARALELO) {
+      await Promise.all(
+        pedidos.slice(i, i + EN_PARALELO).map(async ({ marca, dia, filas }) => {
+          try {
+            const { ordenes: deTN } = await leerOrdenesTN(marca, dia, sumarDias(dia, 1))
+            const porNumero = new Map(deTN.map((o) => [String(o.number), o]))
+            for (const f of filas) {
+              const o = porNumero.get(String(f.orden_numero))
+              if (!o) {
+                noRevisadas++
+                continue
+              }
+              ordenes.push({ id: f.id, estado_orden: o.estado_orden, envio_estado: o.envio_estado ?? null, cancelada: o.cancelada })
+            }
+          } catch {
+            noRevisadas += filas.length
+          }
+        }),
+      )
+    }
+    const r = ordenes.length ? await revisarEnTN(ordenes) : { entregadas: 0, canceladas: 0, cerradas: 0 }
+    return { entregadas: r.entregadas || 0, canceladas: r.canceladas || 0, cerradas: r.cerradas || 0, noRevisadas }
+  } catch {
+    return null
+  }
+}
+
 export function useCuentaCadete(activa: boolean) {
   const [cuenta, setCuenta] = useState<CuentaCadete>({ dias: [], saldo: 0, sinCobrar: 0 })
   const [cargando, setCargando] = useState(false)

@@ -102,6 +102,14 @@ export type Envio = {
    * «entregado» el servidor le avisa al motor por dónde entró la plata. `null`: no tiene.
    */
   venta_id?: string | null
+  /**
+   * **«Ya se resolvió» por fuera de la moto** (`sql/migrate-envios-resuelto.sql`). Con motivo, la fila
+   * sale de la bandeja; ⛔ cambia `estado` ni la cuenta del cadete. Ver `MOTIVOS_RESUELTO`.
+   */
+  resuelto_motivo?: MotivoResuelto | null
+  resuelto_en?: string | null
+  resuelto_por?: string | null
+  resuelto_nota?: string | null
   /** La orden de TN congelada al armar el reparto. Ver el encabezado de la migración. */
   datos: Record<string, unknown>
   autor: string | null
@@ -233,7 +241,14 @@ export type CuentaCadete = {
  * aprieta no tiene forma de saber cuántas órdenes había del otro lado: si sólo se cuenta lo que
  * entró, media hoja perdida y un día flojo se escriben exactamente igual.
  */
+export type MotivoResuelto = 'tn_entregada' | 'tn_cancelada' | 'retiro_local' | 'entregado_por_fuera' | 'cancelado' | 'por_correo' | 'otro'
+
+/** Lo que dijo la revisión de la bandeja contra Tienda Nube. Ver `motivoDeTN`. */
+export type Revision = { entregadas: number; canceladas: number; cerradas: number; noRevisadas: number }
+
 export type Traida = {
+  /** Lo que salió de la bandeja porque TN ya lo resolvió. `null`: no se pudo revisar. */
+  revision?: Revision | null
   agregados: number
   ya_estaban: number
   /** Entraron igual, pero hay que completarles la dirección a mano. */
@@ -268,6 +283,8 @@ export type OrdenTN = {
   envio_tracking?: string | null
   estado_pago: string | null
   estado_orden: string | null
+  /** `shipping_status`: `unpacked` · `unshipped` · `delivered`… Lo mira la revisión de la bandeja (`motivoDeTN`). */
+  envio_estado?: string | null
   cancelada?: boolean
   envio_direccion: {
     nombre: string | null

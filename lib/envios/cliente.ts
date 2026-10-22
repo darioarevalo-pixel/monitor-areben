@@ -9,7 +9,7 @@
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav'
 import { ordenesQueNoLlegaron } from './core'
-import type { ClaseMovimiento, CotizacionSuelta, Envio, MovimientoCuenta, OrdenTN, PlanDeImportacion, SugerenciaDePrecio, Turno, ZonaDeReparto } from './tipos'
+import type { ClaseMovimiento, CotizacionSuelta, Envio, MotivoResuelto, MovimientoCuenta, OrdenTN, PlanDeImportacion, SugerenciaDePrecio, Turno, ZonaDeReparto } from './tipos'
 
 const API = '/api/datos?recurso=envios'
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
@@ -279,6 +279,18 @@ export async function borrarZona(id: string): Promise<void> {
  * mandarlas desde acá dejaría pedir el precio de una dirección que no es la del envío, y el número
  * que vuelve tiene cara de oficial.
  */
+/** Lo que TN dice hoy de cada fila de la bandeja; el servidor decide qué sale. Ver `revisar-tn`. */
+export async function revisarEnTN(
+  ordenes: { id: string; estado_orden: string | null; envio_estado: string | null; cancelada?: boolean }[],
+): Promise<{ entregadas: number; canceladas: number; cerradas: number }> {
+  return postear({ action: 'revisar-tn', ordenes }, 'No se pudo revisar la bandeja contra Tienda Nube.')
+}
+
+/** «Sacar…» de la bandeja con un motivo, o devolverla (`motivo: null`). */
+export async function resolverEnvios(ids: string[], motivo: MotivoResuelto | null, nota?: string): Promise<void> {
+  await postear({ action: 'resolver', ids, motivo, nota: nota || null }, 'No se pudo sacar de la lista.')
+}
+
 export async function sugerirPrecios(ids: string[]): Promise<SugerenciaDePrecio[]> {
   const d = await postear<{ sugerencias: SugerenciaDePrecio[] }>(
     { action: 'zonas-sugerir', ids },

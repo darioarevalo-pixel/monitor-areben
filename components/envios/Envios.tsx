@@ -5,37 +5,45 @@ import { HeaderAcciones } from '@/components/layout/acciones'
 import {
   Badge,
   Button,
+  ButtonLink,
   Card,
+  Chips,
   EmptyState,
   Field,
   Input,
   KpiCard,
   MarcaChip,
+  MenuAcciones,
   Modal,
   Notice,
+  SectionCard,
   Select,
   StatusPill,
   TBody,
-  TFoot,
   TableWrap,
   Tabs,
   Td,
+  Toolbar,
   THead,
   Th,
   Tr,
   color,
+  font,
   formatMoney,
   space,
   useConfirmar,
+  useFiltroUrl,
   useToast,
 } from '@/components/ui'
 import {
   aCobrar,
+  cerradaEnTN,
   claseDelMovimiento,
   cpFueraDeZona,
   direccionCompleta,
   envioSaldado,
   estaTodoPago,
+  fechaDeVenta,
   ESTADO_LABEL,
   ESTADOS_CERRADOS,
   horaDeEntrega,
@@ -52,6 +60,7 @@ import {
   MOVIMIENTO_LABEL,
   movimientoVivo,
   num,
+  ordenarBandeja,
   ordenarParaPreparar,
   paraImprimir,
   resumenDeTraida,
@@ -60,7 +69,9 @@ import {
   siguienteEstado,
   totalesDelDia,
   turnosDe,
+  type OrdenBandeja,
 } from '@/lib/envios/core'
+import { MOTIVOS_A_MANO, MOTIVOS_RESUELTO } from '@/lib/envios/reglas.core.js'
 import { mensajeParaLaClienta } from '@/lib/envios/mensajes'
 import { abiertosDe, avisoDeDespacho, frenaElDespacho, resumenDe } from '@/lib/buzon/core'
 import type { IndiceAbiertos } from '@/lib/buzon/tipos'
@@ -69,13 +80,13 @@ import { useGuia } from '@/store/useGuia'
 import { Icono } from '@/components/ui/Icono'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { useSesion } from '@/components/SesionProvider'
-import { hoyIso } from '@/lib/calendario'
-import { agendar, alAvisoDelErp, anularVentaDelEnvio, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, cotizarDireccion, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarCobrado, marcarPagado, rotarPortal, sugerirPrecios, type PortalDelCadete } from '@/lib/envios/cliente'
+import { diasEntre, hoyIso } from '@/lib/calendario'
+import { agendar, alAvisoDelErp, anularVentaDelEnvio, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, cotizarDireccion, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarCobrado, marcarPagado, resolverEnvios, rotarPortal, sugerirPrecios, type PortalDelCadete } from '@/lib/envios/cliente'
 import { imprimirRecibo } from '@/lib/envios/recibo'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { Tone } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
-import type { AccionDePago, ClaseMovimiento, CotizacionSuelta, Envio, EstadoEnvio, MovimientoCuenta, SugerenciaDePrecio, Turno } from '@/lib/envios/tipos'
+import type { AccionDePago, ClaseMovimiento, CotizacionSuelta, Envio, EstadoEnvio, MotivoResuelto, MovimientoCuenta, SugerenciaDePrecio, Turno } from '@/lib/envios/tipos'
 import { useCuentaCadete, useEnvios } from './useEnvios'
 import { ZonasDeReparto } from './ZonasDeReparto'
 import { puedeAnularVenta } from '@/lib/envios/venta.core.js'
@@ -126,6 +137,7 @@ export function Envios() {
   const [pestania, setPestania] = useState<'dia' | 'pendientes' | 'cuenta' | 'zonas'>('dia')
   const [agendando, setAgendando] = useState<Envio | null>(null)
   const [viendoPedido, setViendoPedido] = useState<Envio | null>(null)
+  const [cotizando, setCotizando] = useState(false)
 
   // El tour de «Cómo se usa». Los pasos se registran acá y no en un mapa del shell para que viajen
   // en el chunk de esta sección: el registro estático se lo bajaría todo el mundo. `setPestania` va
@@ -284,90 +296,79 @@ export function Envios() {
         </Notice>
       )}
 
-      {/* Las dos primeras no son dos pantallas: el pendiente y el del día son el mismo envío en dos
-          momentos de su vida, y el paso de uno al otro —ponerle precio y mandarlo a un día— es el
-          trabajo. La tercera es la otra mitad de la operación: la plata que queda dando vueltas. */}
-      <Tabs
-        value={pestania}
-        onChange={(k) => setPestania(k as 'dia' | 'pendientes' | 'cuenta' | 'zonas')}
-        items={[
-          { key: 'dia', label: 'El día', guia: 'envios.tab.dia' },
-          { key: 'pendientes', label: 'Sin fecha', badge: pendientes.length || undefined, hint: 'Pedidos cotizados esperando que el cliente confirme el día.', guia: 'envios.tab.pendientes' },
-          { key: 'cuenta', label: 'Cuenta del cadete', hint: 'Lo que se debe de un lado o del otro, arrastrado día a día.', guia: 'envios.tab.cuenta' },
-          // Va última y es de otra frecuencia: las otras tres se abren todos los días, ésta cuando
-          // cambian los precios. Pero es de Envíos —quien cotiza es quien mira el mapa— y una
-          // sección propia en el menú costaría los dos espejos de permisos por una pantalla mensual.
-          { key: 'zonas', label: 'Zonas y precios', hint: 'El mapa de reparto: en qué zona cae cada dirección y cuánto sale.' },
-        ]}
-      />
-
-      {/* 🔑 **Arriba de la lista y en las dos pestañas de la operación**, no adentro de `Pendientes`:
-          ese componente se reemplaza entero por el `EmptyState` cuando no hay nada, y la bandeja
-          vacía es justo cuando más se cotiza —la clienta que pregunta antes de que exista pedido—.
-          En «Cuenta del cadete» y «Zonas y precios» no va: son de otra frecuencia y sería ruido. */}
-      {pestania === 'dia' || pestania === 'pendientes' ? (
-        <CotizarDireccion
-          marca={marcaActiva}
-          onCargar={(e) => {
-            setEditando(e)
-            // 🔴 El envío nace SIN FECHA, así que vive en «Sin fecha». Sin este salto, cargarlo
-            // parado en la hoja del día guarda bien y parece que no pasó nada.
-            setPestania('pendientes')
-          }}
+      {/* 🔑 **Una barra, no tres tarjetas apiladas** (rediseño del 22-oct-2026, lo pidió Bruno: «la
+          vista parece rota»). Las pestañas a la izquierda y, a la derecha, lo que vale en las dos
+          pestañas de la operación: cargar uno a mano y cotizar una dirección suelta. Antes eran dos
+          `Card` con un botón y una frase cada una, y la tabla empezaba a media pantalla. */}
+      <Toolbar justify="between">
+        {/* Las dos primeras no son dos pantallas: el pendiente y el del día son el mismo envío en dos
+            momentos de su vida, y el paso de uno al otro —ponerle precio y mandarlo a un día— es el
+            trabajo. La tercera es la otra mitad de la operación: la plata que queda dando vueltas. */}
+        <Tabs
+          value={pestania}
+          onChange={(k) => setPestania(k as 'dia' | 'pendientes' | 'cuenta' | 'zonas')}
+          items={[
+            { key: 'dia', label: 'El día', guia: 'envios.tab.dia' },
+            { key: 'pendientes', label: 'Sin fecha', badge: pendientes.length || undefined, hint: 'Pedidos cotizados esperando que el cliente confirme el día.', guia: 'envios.tab.pendientes' },
+            { key: 'cuenta', label: 'Cuenta del cadete', hint: 'Lo que se debe de un lado o del otro, arrastrado día a día.', guia: 'envios.tab.cuenta' },
+            // Va última y es de otra frecuencia: las otras tres se abren todos los días, ésta cuando
+            // cambian los precios. Pero es de Envíos —quien cotiza es quien mira el mapa— y una
+            // sección propia en el menú costaría los dos espejos de permisos por una pantalla mensual.
+            { key: 'zonas', label: 'Zonas y precios', hint: 'El mapa de reparto: en qué zona cae cada dirección y cuánto sale.' },
+          ]}
         />
-      ) : null}
+        {pestania === 'dia' || pestania === 'pendientes' ? (
+          <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+            {/* 🔑 Va en las dos pestañas de la operación y no adentro de la bandeja: la bandeja vacía
+                es justo cuando más se cotiza —la clienta que pregunta antes de que exista pedido—. */}
+            <Button variant="outline" iconLeft={<Icono nombre="direccion" />} onClick={() => setCotizando(true)} {...dice('Cotizá una dirección sin cargar nada, para contestarle a una clienta que todavía no compró')}>
+              ¿Cuánto sale un envío?
+            </Button>
+            {/* 🔴 El envío a mano nace SIN FECHA en la bandeja y CON el día a la vista en la hoja: sin
+                la fecha, cargarlo parado en la hoja guarda bien y parece que no pasó nada. */}
+            <Button
+              variant="outline"
+              iconLeft={<Icono nombre="mas" />}
+              onClick={() => setEditando(envioNuevoAMano(pestania === 'dia' ? { marca: marcaActiva, fecha } : { marca: marcaActiva }))}
+              {...dice(pestania === 'dia' ? 'Cargar un envío para este día' : 'Entra sin día: el día se le pone después, cuando la clienta lo confirma')}
+            >
+              Cargar uno a mano
+            </Button>
+          </div>
+        ) : null}
+      </Toolbar>
 
       {pestania === 'zonas' ? (
         <ZonasDeReparto activa={pestania === 'zonas'} />
       ) : pestania === 'cuenta' ? (
         <CuentaDelCadete activa={pestania === 'cuenta'} />
       ) : pestania === 'pendientes' ? (
-        <>
-          {/* 🔑 El botón va ACÁ y no adentro de `Pendientes`: ese componente se reemplaza entero por
-              el `EmptyState` cuando no hay nada, y la bandeja vacía es justo el caso que este botón
-              resuelve —la clienta que escribió antes de que exista un pedido en Tienda Nube—. */}
-          <Card>
-            <Button variant="outline" onClick={() => setEditando(envioNuevoAMano({ marca: marcaActiva }))}>
-              Cargar uno a mano
-            </Button>
-            <span style={{ marginLeft: space[3], opacity: 0.7, fontSize: 13 }}>
-              Entra sin día: el día se le pone después, cuando la clienta lo confirma.
-            </span>
-          </Card>
-          <Pendientes
-            envios={pendientes}
-            cargando={cargando}
-            abiertos={abiertos}
-            onAgendar={pedirDia}
-            onEditar={setEditando}
-            onBorrar={borrar}
-            onRecargar={recargar}
-            onVerPedido={setViendoPedido}
-          />
-        </>
+        <Pendientes
+          envios={pendientes}
+          cargando={cargando}
+          abiertos={abiertos}
+          onAgendar={pedirDia}
+          onEditar={setEditando}
+          onBorrar={borrar}
+          onRecargar={recargar}
+          onVerPedido={setViendoPedido}
+        />
       ) : (
       <>
-      <Card>
-        <div style={{ display: 'flex', gap: space[4], alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          {/* 🔑 Las flechas saltan al día de reparto anterior y al siguiente, no al día calendario:
-              el sábado, el domingo y el resto de los días sin moto son pantallas siempre vacías, y
-              tener que pasar por ellas de a un click es la razón por la que se terminaba abriendo el
-              calendario para todo. El campo de fecha queda para ir a un día lejano. */}
-          <Field label="Día">
-            <SelectorDeDia fecha={fecha} onCambiar={setFecha} />
-          </Field>
-          <Button variant="outline" onClick={() => setEditando(envioNuevoAMano({ marca: marcaActiva, fecha }))}>
-            Cargar uno a mano
-          </Button>
-        </div>
-        <div style={{ marginTop: space[2], opacity: 0.7, fontSize: 13 }}>
+      <div style={{ display: 'flex', gap: space[4], alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* 🔑 Las flechas saltan al día de reparto anterior y al siguiente, no al día calendario:
+            el sábado, el domingo y el resto de los días sin moto son pantallas siempre vacías, y
+            tener que pasar por ellas de a un click es la razón por la que se terminaba abriendo el
+            calendario para todo. El campo de fecha queda para ir a un día lejano. */}
+        <SelectorDeDia fecha={fecha} onCambiar={setFecha} />
+        <span style={{ color: color.mut, fontSize: font.base }}>
           {rotuloDeDia(fecha)
             ? turnosDe(fecha).length === 0
               ? `${rotuloDeDia(fecha)} · no hay reparto`
               : `${rotuloDeDia(fecha)} · sale ${turnosDe(fecha).length === 2 ? 'mañana y tarde' : `sólo por la ${turnosDe(fecha)[0]}`}`
             : ''}
-        </div>
-      </Card>
+        </span>
+      </div>
 
       {error && <Notice tone="danger">{error}</Notice>}
 
@@ -405,23 +406,21 @@ export function Envios() {
           const delTurno = delDia.filter((e) => e.turno === t)
           if (!delTurno.length) return null
           return (
-            <div key={t} style={{ display: 'grid', gap: space[3] }}>
-              {/* El encabezado va SIEMPRE, aunque el día tenga un solo turno: el cadete de la mañana
-                  y el de la tarde salen con hojas distintas, y una tabla sin decir cuál es se lee
-                  como "todo esto sale ahora". La caja, en cambio, es del día: se cierra abajo. */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: space[3], flexWrap: 'wrap' }}>
-                <strong>
-                  <span style={{ textTransform: 'capitalize' }}>{t}</span> · {delTurno.length}{' '}
-                  {delTurno.length === 1 ? 'envío' : 'envíos'}
-                  {turnosDe(fecha).includes(t) ? '' : ' (fuera de grilla)'}
-                </strong>
-              </div>
+            // El encabezado va SIEMPRE, aunque el día tenga un solo turno: el cadete de la mañana y
+            // el de la tarde salen con hojas distintas, y una tabla sin decir cuál es se lee como
+            // "todo esto sale ahora". 🔑 **El total es del TURNO**, arriba a la derecha: el del día
+            // ya está en los KPI, y ponerlo abajo de las dos tablas las haría mentir a las dos.
+            <SectionCard
+              key={t}
+              title={`${t[0].toUpperCase()}${t.slice(1)} · ${delTurno.length} ${delTurno.length === 1 ? 'envío' : 'envíos'}`}
+              subtitle={turnosDe(fecha).includes(t) ? undefined : 'Fuera de la grilla de turnos de este día.'}
+              actions={<TotalDelTurno envios={delTurno} />}
+            >
               <TableWrap>
                 <THead>
                   <Tr>
                     <Th>Cliente</Th>
                     <Th>Dirección</Th>
-                    <Th>Marca</Th>
                     <Th>Pedido</Th>
                     <Th>Cobra</Th>
                     <Th>
@@ -433,114 +432,91 @@ export function Envios() {
                 <TBody>
                   {delTurno.map((e) => (
                     <Tr key={e.id}>
-                      <Td>
-                        <div style={{ fontWeight: 600 }}>{e.cliente || 'Sin nombre'}</div>
-                        {e.orden_numero ? <div style={{ opacity: 0.6, fontSize: 12 }}>#{e.orden_numero}</div> : null}
-                        {e.origen === 'manual' ? <Badge>a mano</Badge> : null}
+                      <Td wrap tall style={{ minWidth: 150 }}>
+                        {/* 🔑 El chip de color va pegado al nombre: la hoja mezcla las dos marcas a
+                            propósito, así que de un golpe de vista tiene que verse de cuál es cada
+                            paquete mientras se arma la mochila. */}
+                        <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+                          <MarcaChip marca={e.store} />
+                          <strong>{e.cliente || 'Sin nombre'}</strong>
+                        </div>
+                        <Apagado>
+                          {e.orden_numero ? `#${e.orden_numero}` : 'cargado a mano'}
+                        </Apagado>
                         <PastillaMensaje envio={e} abiertos={abiertos} />
                       </Td>
-                      <Td>
+                      <Td wrap tall style={{ minWidth: 200, maxWidth: 300 }}>
                         <Direccion envio={e} />
-                        {e.anotacion ? <div style={{ opacity: 0.7, fontSize: 12 }}>{e.anotacion}</div> : null}
+                        {e.anotacion ? <Apagado>{e.anotacion}</Apagado> : null}
                       </Td>
-                      {/* 🔑 El chip de color, y no el nombre en texto: la hoja mezcla las dos marcas a
-                          propósito, así que de un golpe de vista tiene que verse de cuál es cada
-                          paquete mientras se arma la mochila. */}
-                      <Td><MarcaChip marca={e.store} /></Td>
-                      <Td>
+                      <Td tall>
                         <ResumenPedido envio={e} onVer={() => setViendoPedido(e)} />
                       </Td>
-                      <Td>
+                      <Td wrap tall style={{ minWidth: 150 }}>
                         {/* Igual que en el ticket: pagado NO es "$0". Un cero se lee como un precio. */}
                         {estaTodoPago(e) ? <StatusPill tone="success" label="PAGADO" /> : <strong>{formatMoney(aCobrar(e))}</strong>}
                         {/* 🔑 **El costo del envío no se borra cuando no se cobra: se pinta.** Es lo
                             que se le paga al cadete, así que tiene que estar a la vista mientras se
-                            arma la mochila; esconderlo es lo que hacía falta una segunda columna
-                            para no perderlo de vista. Verde = esta puerta no lo cobra. */}
+                            arma la mochila. Verde = esta puerta no lo cobra. */}
                         {envioSaldado(e) && Number(e.monto_envio) > 0 ? (
-                          <div style={{ fontSize: 12, color: color.success }}>
+                          <div style={{ fontSize: font.sm, color: color.success }}>
                             envío {formatMoney(Number(e.monto_envio))} · {e.envio_bonificado ? 'bonificado' : 'ya pago'}
                           </div>
                         ) : null}
                         {/* 🔑 **Por dónde entró la plata, en la única columna donde significa algo.**
-                            Antes esta pantalla era ciega: el portal escribía `cobrado` y del otro
-                            lado no lo pedía nadie. Y después decía «no cobró» **en rojo**, que era
-                            peor que no decir nada: un pedido no se entrega si no está pago, así que
-                            eso no es una deuda de la clienta sino una transferencia al local, y el
-                            rojo mandaba a reclamarle plata a alguien que ya había pagado. */}
+                            Un pedido no se entrega si no está pago, así que «no cobró» no es una deuda
+                            de la clienta sino una transferencia al local — y no va en rojo. */}
                         {e.estado === 'entregado' ? <QuienCobro envio={e} onGuardado={recargar} /> : null}
                         {/* El tilde está en la fila y no sólo en la ficha: es la corrección que se hace
                             con la clienta al teléfono avisando que ya transfirió, y el cadete sin salir. */}
                         <PagoDelEnvio envio={e} onGuardado={recargar} donde="hoja" />
                       </Td>
-                      <Td>
+                      <Td tall>
                         <EstadoDelEnvio envio={e} onCambiar={tildar} />
                       </Td>
-                      <Td>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          {/* Reimprimir una sola fila. No filtra por estado a propósito, al revés
-                              que el botón de arriba: acá alguien pidió ESE ticket, y volver a
-                              imprimir el de un entregado es una decisión de una persona —se manchó,
-                              se despegó— y no un descuido de la pantalla. */}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            iconLeft={<Icono nombre="impresora" />}
-                            onClick={() => void imprimirTicketsCadete([e])}
-                            {...dice('Imprimir el ticket de este envío')}
-                          />
-                          <Button size="sm" variant="ghost" iconLeft={<Icono nombre="lapiz" />} onClick={() => setEditando(e)} {...dice('Editar el envío')} />
-                          {/* ⚠️ **NO el calendario**, aunque la acción sea de días: en la bandeja el
-                              calendario significa «mandalo a un día», y acá significaría lo
-                              contrario. El mismo dibujo para las dos direcciones es peor que no
-                              tener ícono. Éste es la flecha de retorno: vuelve a la bandeja. */}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            iconLeft={<Icono nombre="postventa" />}
-                            onClick={() => void sacarDelDia(e)}
-                            {...dice('Sacarlo del día y devolverlo a «Sin fecha» para recoordinar')}
-                          />
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            tone="danger"
-                            iconLeft={<Icono nombre="papelera" />}
-                            onClick={() => void borrar(e)}
-                            {...dice('Sacar el envío de la hoja')}
-                          />
-                        </div>
+                      <Td tall>
+                        {/* 🔑 **Un «⋯» y no cuatro íconos sueltos.** El verbo de la fila es el estado,
+                            que queda a la vista; esto es lo de vez en cuando. */}
+                        <MenuAcciones
+                          etiqueta={`Acciones del envío de ${e.cliente || 'sin nombre'}`}
+                          acciones={[
+                            // Reimprimir una sola fila. No filtra por estado a propósito: acá alguien
+                            // pidió ESE ticket —se manchó, se despegó—.
+                            { key: 'imprimir', label: 'Imprimir el ticket', icono: 'impresora', onClick: () => void imprimirTicketsCadete([e]) },
+                            { key: 'editar', label: 'Editar', icono: 'lapiz', onClick: () => setEditando(e) },
+                            // ⚠️ **NO el calendario**: en la bandeja el calendario significa «mandalo a
+                            // un día», y acá sería lo contrario. Éste vuelve a la bandeja.
+                            { key: 'volver', label: 'Devolver a «Sin fecha»', icono: 'atras', hint: 'Sacarlo del día para recoordinar con la clienta', onClick: () => void sacarDelDia(e) },
+                            { key: 'eliminar', label: 'Eliminar', icono: 'papelera', tone: 'danger', onClick: () => void borrar(e) },
+                          ]}
+                        />
                       </Td>
                     </Tr>
                   ))}
                 </TBody>
-                {/* 🔑 **El pie es del TURNO, no del día.** La hoja pinta una tabla por turno, así
-                    que poner el total del día entero abajo de las dos las haría mentir a las dos.
-                    El del día ya está arriba, en los KPI. */}
-                <TFoot>
-                  <Tr>
-                    <Td>Total del turno</Td>
-                    <Td />
-                    <Td />
-                    <Td />
-                    <Td>
-                      <TotalDelTurno envios={delTurno} />
-                    </Td>
-                    <Td />
-                    <Td />
-                  </Tr>
-                </TFoot>
               </TableWrap>
-            </div>
+            </SectionCard>
           )
         })
       )}
 
       <LinkDelCadete />
-
-
       </>
       )}
+
+      {cotizando ? (
+        <CotizarDireccion
+          marca={marcaActiva}
+          onCerrar={() => setCotizando(false)}
+          onCargar={(e) => {
+            setCotizando(false)
+            setEditando(e)
+            // 🔴 El envío nace SIN FECHA, así que vive en «Sin fecha». Sin este salto, cargarlo
+            // parado en la hoja del día guarda bien y parece que no pasó nada.
+            setPestania('pendientes')
+          }}
+        />
+      ) : null}
 
       {viendoPedido ? <ModalPedido envio={viendoPedido} onCerrar={() => setViendoPedido(null)} /> : null}
 
@@ -568,6 +544,11 @@ export function Envios() {
 
     </div>
   )
+}
+
+/** Texto secundario de una celda. Antes era `opacity .6` + `fontSize 12` escrito a mano en cada lugar. */
+function Apagado({ children }: { children: React.ReactNode }) {
+  return <div style={{ color: color.mut, fontSize: font.sm }}>{children}</div>
 }
 
 /**
@@ -666,8 +647,21 @@ function Pendientes({
 }) {
   // Las propuestas del mapa viven acá y sólo hasta que se recarga la pantalla: no son un dato de la
   // fila, son la respuesta a una pregunta que alguien hizo hace un minuto sobre la dirección de ese
-  // momento. Guardarlas obligaría a decidir cuándo dejan de valer, y la dirección se corrige seguido.
+  // momento. 🔑 **Un solo Map para el `$` de cada fila y para el botón de todas**: los dos escriben acá.
   const [sugerencias, setSugerencias] = useState<Map<string, SugerenciaDePrecio>>(new Map())
+  const [orden, setOrden] = useFiltroUrl<OrdenBandeja>('orden', 'venta')
+  const [sacando, setSacando] = useState<Envio[] | null>(null)
+  const lista = useMemo(() => ordenarBandeja(envios, orden), [envios, orden])
+  const cerradas = useMemo(() => envios.filter(cerradaEnTN), [envios])
+  const sinPrecio = envios.filter((e) => !(Number(e.monto_envio) > 0)).length
+
+  const sumar = useCallback((nuevas: SugerenciaDePrecio[]) => {
+    setSugerencias((m) => {
+      const otro = new Map(m)
+      for (const x of nuevas) otro.set(x.id, x)
+      return otro
+    })
+  }, [])
 
   if (cargando) return null
   if (!envios.length) {
@@ -680,67 +674,202 @@ function Pendientes({
   }
 
   return (
-    <>
-    <SugerirPrecios envios={envios} sugerencias={sugerencias} onSugerir={setSugerencias} />
-    <TableWrap>
-      <THead>
-        <Tr>
-          <Th>Cliente</Th>
-          {/* Se llamaba «Dónde va», que describía la pregunta en vez de nombrar el dato. */}
-          <Th>Dirección</Th>
-          <Th>Pedido</Th>
-          {/* El `data-guia` va en el span y no en el `<Th>`: `Th` no propaga props sueltas, así que
-              ahí el atributo se perdería en silencio y el tour apuntaría al vacío. */}
-          <Th>
-            <span data-guia="envios.precio">Precio del envío</span>
-          </Th>
-          <Th />
-          {/* El tilde de cobrado va al final: es lo último que se decide, después de cotizar. */}
-          <Th>Pago del envío</Th>
-        </Tr>
-      </THead>
-      <TBody>
-        {envios.map((e) => (
-          <Tr key={e.id}>
-            <Td>
-              <div style={{ fontWeight: 600 }}>{e.cliente || 'Sin nombre'}</div>
-              {e.orden_numero ? <div style={{ opacity: 0.6, fontSize: 12 }}>#{e.orden_numero}</div> : null}
-              {e.origen === 'manual' ? <Badge>a mano</Badge> : null}
-              {/* 🔑 **De dónde viene esta fila.** La bandeja mezcla dos cosas que se trabajan igual
-                  —hablar con la clienta y acordar un día— pero que llegaron por caminos distintos:
-                  el pedido nuevo, y el paquete que salió y volvió. Sin decirlo, el segundo se lee
-                  como un pedido más y nadie sabe que alguien ya esperó en una puerta. */}
-              {e.estado === 'no_entregado' ? (
-                <div style={{ marginTop: 2 }}>
-                  <Badge tone="danger">volvió{e.fecha ? ` del ${rotuloDeDia(e.fecha) || e.fecha}` : ''}</Badge>
-                </div>
-              ) : null}
-              <AnularVenta envio={e} onHecho={onRecargar} />
-              <PastillaMensaje envio={e} abiertos={abiertos} />
-            </Td>
-            <Td>
-              <Direccion envio={e} conMensaje />
-            </Td>
-            <Td>
-              <ResumenPedido envio={e} onVer={() => onVerPedido(e)} />
-            </Td>
-            <Td>
-              <Cotizar envio={e} onGuardado={onRecargar} sugerencia={sugerencias.get(e.id)} />
-            </Td>
-            <Td>
-              <AccionesDeFila envio={e} onAgendar={onAgendar} onEditar={onEditar} onBorrar={onBorrar} />
-            </Td>
-            <Td>
-              {/* 🔴 Esto y el precio son DOS cosas y por eso son dos columnas. Juntas —«sin cotizar»
-                  arriba de «PAGADO»— se leían como si una fuera del envío y la otra del pedido, y
-                  además se contradecían: un envío sin precio no puede estar pagado. */}
-              <PagoDelEnvio envio={e} onGuardado={onRecargar} donde="bandeja" />
-            </Td>
+    <SectionCard
+      title={`${envios.length} ${envios.length === 1 ? 'pedido' : 'pedidos'} sin fecha`}
+      subtitle={sinPrecio ? `${sinPrecio} sin precio del envío todavía` : 'Todos tienen precio: falta acordar el día.'}
+      actions={
+        <>
+          {/* 🔑 Las cerradas en TN se sacan JUNTAS cuando alguien confirma qué pasó (Bruno, 22-oct):
+              ⛔ salen solas, porque el equipo cierra órdenes en TN antes de que salga la moto. */}
+          {cerradas.length ? (
+            <Button variant="outline" tone="warning" onClick={() => setSacando(cerradas)}>
+              Sacar las {cerradas.length} cerradas en TN
+            </Button>
+          ) : null}
+          <SugerirPrecios envios={envios} hay={sugerencias.size > 0} onSugerir={sumar} onOcultar={() => setSugerencias(new Map())} />
+        </>
+      }
+    >
+      <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[3] }}>
+        <span style={{ color: color.mut, fontSize: font.base }}>Ordenar por</span>
+        <Chips
+          value={orden}
+          onChange={setOrden}
+          opciones={[
+            { key: 'venta', label: 'Fecha de venta', title: 'La venta más vieja arriba: lo más atrasado primero.' },
+            { key: 'orden', label: 'N° de orden' },
+            { key: 'sin_precio', label: 'Sin precio primero', n: sinPrecio || undefined },
+          ]}
+        />
+      </div>
+      <TableWrap>
+        <THead>
+          <Tr>
+            <Th>Cliente</Th>
+            {/* Se llamaba «Dónde va», que describía la pregunta en vez de nombrar el dato. */}
+            <Th>Dirección</Th>
+            <Th>Pedido</Th>
+            {/* El `data-guia` va en el span y no en el `<Th>`: `Th` no propaga props sueltas, así que
+                ahí el atributo se perdería en silencio y el tour apuntaría al vacío. */}
+            <Th>
+              <span data-guia="envios.precio">Precio del envío</span>
+            </Th>
+            {/* El tilde de cobrado va después del precio: es lo último que se decide, después de cotizar. */}
+            <Th>Pago del envío</Th>
+            <Th />
           </Tr>
-        ))}
-      </TBody>
-    </TableWrap>
-    </>
+        </THead>
+        <TBody>
+          {lista.map((e) => (
+            <Tr key={e.id}>
+              <Td wrap tall style={{ minWidth: 160 }}>
+                <strong>{e.cliente || 'Sin nombre'}</strong>
+                <Apagado>
+                  {e.orden_numero ? `#${e.orden_numero}` : 'cargado a mano'}
+                  <VendidaHace envio={e} />
+                </Apagado>
+                {/* 🔑 **De dónde viene esta fila.** El paquete que salió y volvió se trabaja igual que
+                    un pedido nuevo, pero alguien ya esperó en una puerta: se dice. */}
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
+                  {e.estado === 'no_entregado' ? (
+                    <Badge tone="danger">volvió{e.fecha ? ` del ${rotuloDeDia(e.fecha) || e.fecha}` : ''}</Badge>
+                  ) : null}
+                  {cerradaEnTN(e) ? (
+                    <span {...dice('Tienda Nube tiene la orden cerrada y sin despachar. ¿La retiró, se canceló, se entregó por otro lado? Si ya se resolvió, sacala con «Sacar…».')}>
+                      <Badge tone="warning">cerrada en TN</Badge>
+                    </span>
+                  ) : null}
+                </div>
+                <AnularVenta envio={e} onHecho={onRecargar} />
+                <PastillaMensaje envio={e} abiertos={abiertos} />
+              </Td>
+              <Td wrap tall style={{ minWidth: 200, maxWidth: 300 }}>
+                <Direccion envio={e} conMensaje />
+              </Td>
+              <Td tall>
+                <ResumenPedido envio={e} onVer={() => onVerPedido(e)} />
+              </Td>
+              <Td wrap tall style={{ minWidth: 170 }}>
+                <Cotizar envio={e} onGuardado={onRecargar} sugerencia={sugerencias.get(e.id)} onSugerida={(x) => sumar([x])} />
+              </Td>
+              <Td wrap tall style={{ minWidth: 140 }}>
+                {/* 🔴 Esto y el precio son DOS cosas y por eso son dos columnas. Juntas —«sin cotizar»
+                    arriba de «PAGADO»— se contradecían: un envío sin precio no puede estar pagado. */}
+                <PagoDelEnvio envio={e} onGuardado={onRecargar} donde="bandeja" />
+              </Td>
+              <Td tall>
+                <AccionesDeFila envio={e} onAgendar={onAgendar} onEditar={onEditar} onBorrar={onBorrar} onSacar={(x) => setSacando([x])} />
+              </Td>
+            </Tr>
+          ))}
+        </TBody>
+      </TableWrap>
+      {sacando ? (
+        <SacarDeLaLista
+          envios={sacando}
+          onCerrar={() => setSacando(null)}
+          onHecho={async () => {
+            setSacando(null)
+            await onRecargar()
+          }}
+        />
+      ) : null}
+    </SectionCard>
+  )
+}
+
+/** «· vendida el 25-ago, hace 58 días». La fecha es la de la VENTA, ⛔ la de cuando se cargó. */
+function VendidaHace({ envio }: { envio: Envio }) {
+  const dia = fechaDeVenta(envio)
+  if (!dia) return null
+  const hace = diasEntre(dia, hoyIso())
+  return (
+    <span>
+      {' · '}
+      {envio.origen === 'manual' ? 'cargado' : 'vendida'} el {rotuloDeDia(dia) || dia}
+      {hace > 0 ? `, hace ${hace} ${hace === 1 ? 'día' : 'días'}` : ''}
+    </span>
+  )
+}
+
+/**
+ * **«Sacar…» de la bandeja, con el motivo** (Bruno, 22-oct-2026: «con motivo»).
+ *
+ * 🔑 **Sacar ⛔ es eliminar**: la fila sigue en la base con su motivo, y ⛔ toca el estado ni la cuenta
+ * del cadete (ver `MOTIVOS_RESUELTO`). Por eso el aviso de abajo ofrece **deshacerlo** ahí mismo.
+ */
+function SacarDeLaLista({ envios, onCerrar, onHecho }: { envios: Envio[]; onCerrar: () => void; onHecho: () => Promise<void> }) {
+  const toast = useToast()
+  const [motivo, setMotivo] = useState<MotivoResuelto | null>(null)
+  const [nota, setNota] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const ids = envios.map((e) => e.id)
+  const uno = envios.length === 1 ? envios[0] : null
+
+  async function deshacer() {
+    try {
+      await resolverEnvios(ids, null)
+      await onHecho()
+      toast.ok(uno ? 'Volvió a «Sin fecha».' : `Volvieron ${ids.length} a «Sin fecha».`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo deshacer.')
+    }
+  }
+
+  async function sacar() {
+    if (!motivo) return
+    setGuardando(true)
+    try {
+      await resolverEnvios(ids, motivo, nota)
+      await onHecho()
+      toast.ok(
+        <span>
+          {uno ? 'Salió de «Sin fecha»' : `Salieron ${ids.length} de «Sin fecha»`}: {MOTIVOS_RESUELTO[motivo].toLowerCase()}.{' '}
+          <Button size="sm" variant="ghost" onClick={() => void deshacer()}>
+            Deshacer
+          </Button>
+        </span>,
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo sacar de la lista.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <Modal abierto onCerrar={onCerrar} titulo={uno ? `Sacar de «Sin fecha» · ${uno.cliente || 'Sin nombre'}` : `Sacar ${envios.length} pedidos de «Sin fecha»`}>
+      <div style={{ display: 'grid', gap: space[4] }}>
+        <div style={{ color: color.mut, fontSize: font.base }}>
+          {uno
+            ? `${uno.orden_numero ? `#${uno.orden_numero} · ` : ''}${direccionCompleta(uno)}`
+            : envios.map((e) => `#${e.orden_numero || '—'} ${e.cliente || ''}`).join(' · ')}
+        </div>
+        <Field label="¿Qué pasó?">
+          <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+            {(MOTIVOS_A_MANO as MotivoResuelto[]).map((m) => (
+              <Button key={m} size="sm" variant={motivo === m ? 'solid' : 'outline'} tone={motivo === m ? 'brand' : 'neutral'} onClick={() => setMotivo(m)}>
+                {MOTIVOS_RESUELTO[m]}
+              </Button>
+            ))}
+          </div>
+        </Field>
+        {motivo ? (
+          <Field label={motivo === 'otro' ? 'Contá qué pasó' : 'Nota (opcional)'}>
+            <Input value={nota} onChange={(ev) => setNota(ev.target.value)} placeholder={motivo === 'otro' ? 'Obligatorio con «Otro»' : ''} />
+          </Field>
+        ) : null}
+        <Notice tone="neutral">No cambia el estado del envío ni la cuenta del cadete: sólo deja de aparecer en esta lista.</Notice>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: space[2] }}>
+          <Button variant="ghost" onClick={onCerrar}>
+            Cancelar
+          </Button>
+          <Button variant="solid" tone="brand" disabled={!motivo || guardando || (motivo === 'otro' && !nota.trim())} onClick={() => void sacar()}>
+            {guardando ? 'Guardando…' : 'Sacar'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -748,21 +877,22 @@ function Pendientes({
  * **El botón que le pregunta al mapa cuánto sale cada envío sin cotizar.**
  *
  * 🔑 **Es un botón y no algo que pase solo al abrir la pestaña.** La bandeja se mira muchas veces por
- * día —para ver quién falta, para agendar, para buscar un pedido— y cotizar es una de esas veces:
- * consultar un servicio ajeno en cada una de las otras es gasto que nadie pidió, y encima llenaría la
- * pantalla de propuestas cuando la pregunta era otra.
+ * día para otra cosa, y consultar un servicio ajeno en cada una es gasto que nadie pidió. Para UNA fila
+ * está el `$` de la fila (Bruno, 22-oct: con la lista larga, sugerir a todos era demasiado).
  *
- * 🔑 **Sólo van las filas sin precio.** Una fila cotizada ya tiene su número decidido por una
- * persona, y ofrecerle una alternativa al lado es invitar a cambiarlo sin motivo.
+ * 🔴 **De a 100 en tandas**: el servidor no acepta más de 100 por pedido, y esto antes mandaba los
+ * primeros 100 y se callaba el resto.
  */
 function SugerirPrecios({
   envios,
-  sugerencias,
+  hay,
   onSugerir,
+  onOcultar,
 }: {
   envios: Envio[]
-  sugerencias: Map<string, SugerenciaDePrecio>
-  onSugerir: (m: Map<string, SugerenciaDePrecio>) => void
+  hay: boolean
+  onSugerir: (l: SugerenciaDePrecio[]) => void
+  onOcultar: () => void
 }) {
   const toast = useToast()
   const [pidiendo, setPidiendo] = useState(false)
@@ -771,14 +901,15 @@ function SugerirPrecios({
   async function pedir() {
     setPidiendo(true)
     try {
-      const lista = await sugerirPrecios(sinPrecio.slice(0, 100).map((e) => e.id))
-      onSugerir(new Map(lista.map((s) => [s.id, s])))
+      const lista: SugerenciaDePrecio[] = []
+      for (let i = 0; i < sinPrecio.length; i += 100) lista.push(...(await sugerirPrecios(sinPrecio.slice(i, i + 100).map((e) => e.id))))
+      onSugerir(lista)
       const conPrecio = lista.filter((s) => s.estado === 'sugerido').length
       const aMano = lista.length - conPrecio
       // Se dicen las dos cuentas: "propuse 7" sin el resto deja creer que las otras cinco no existen.
       toast.ok(
         conPrecio
-          ? `${conPrecio} con precio propuesto${aMano ? ` · ${aMano} se tipea${aMano > 1 ? 'n' : ''} a mano` : ''}.`
+          ? `${conPrecio} con precio propuesto${aMano ? ` · ${aMano} se tipea${aMano > 1 ? 'n' : ''} a mano` : ''}. Cada uno se confirma con «usar».`
           : `Ninguna se pudo ubicar: se tipea${lista.length > 1 ? 'n' : ''} a mano, y al lado de cada una dice por qué.`,
       )
     } catch (e) {
@@ -788,25 +919,25 @@ function SugerirPrecios({
     }
   }
 
-  if (!sinPrecio.length) return null
-
+  if (hay) {
+    return (
+      <Button variant="ghost" onClick={onOcultar}>
+        Ocultar propuestas
+      </Button>
+    )
+  }
+  if (sinPrecio.length < 2) return null
   return (
-    <Card>
-      <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
-        <Button variant="outline" disabled={pidiendo} onClick={() => void pedir()} data-guia="envios.sugerir">
-          {pidiendo ? 'Preguntándole al mapa…' : `Sugerir precios (${sinPrecio.length})`}
-        </Button>
-        <span style={{ opacity: 0.7, fontSize: 13 }}>
-          Busca la dirección en el mapa y propone el precio de la zona. <strong>No lo guarda</strong>: cada uno se
-          confirma con «usar», y el que no se pueda ubicar se tipea a mano como siempre.
-        </span>
-        {sugerencias.size ? (
-          <Button variant="ghost" onClick={() => onSugerir(new Map())}>
-            Ocultar propuestas
-          </Button>
-        ) : null}
-      </div>
-    </Card>
+    <Button
+      variant="outline"
+      iconLeft={<Icono nombre="pesos" />}
+      disabled={pidiendo}
+      onClick={() => void pedir()}
+      data-guia="envios.sugerir"
+      {...dice('Busca cada dirección en el mapa y propone el precio de la zona. No guarda nada: cada uno se confirma con «usar».')}
+    >
+      {pidiendo ? 'Preguntándole al mapa…' : `Sugerir todos (${sinPrecio.length})`}
+    </Button>
   )
 }
 
@@ -832,9 +963,8 @@ function SugerirPrecios({
  * esas veces, no todas. Mismo criterio que «Sugerir precios», que es un botón y no algo que pase
  * solo al abrir la pestaña.
  */
-function CotizarDireccion({ marca, onCargar }: { marca: Marca | null; onCargar: (e: Partial<Envio>) => void }) {
+function CotizarDireccion({ marca, onCargar, onCerrar }: { marca: Marca | null; onCargar: (e: Partial<Envio>) => void; onCerrar: () => void }) {
   const toast = useToast()
-  const [abierto, setAbierto] = useState(false)
   const [direccion, setDireccion] = useState('')
   const [localidad, setLocalidad] = useState('')
   const [cp, setCp] = useState('')
@@ -877,32 +1007,17 @@ function CotizarDireccion({ marca, onCargar }: { marca: Marca | null; onCargar: 
       cp: cp || null,
       ...(sugerido ? { monto_envio: cotizacion?.precio as number } : {}),
     })
-    setAbierto(false)
     limpiar()
-  }
-
-  if (!abierto) {
-    return (
-      <Card>
-        {/* `outline` y no `ghost`: es el gemelo de «Cargar uno a mano» —misma card, mismo lugar,
-            misma jerarquía— y sin borde se leía como un texto suelto, blanco sobre blanco. Lo cazó
-            Bruno mirando la pantalla, igual que «Cargar horas extras» en Inicio. */}
-        <Button variant="outline" iconLeft={<Icono nombre="direccion" />} onClick={() => setAbierto(true)}>
-          ¿Cuánto sale un envío?
-        </Button>
-        <span style={{ marginLeft: space[3], opacity: 0.7, fontSize: 13 }}>
-          Cotizá una dirección sin cargar nada, para contestarle a una clienta que todavía no compró.
-        </span>
-      </Card>
-    )
   }
 
   const listo = direccion.trim() !== '' && localidad.trim() !== ''
   const conPrecio = cotizacion?.estado === 'sugerido' && cotizacion.precio != null
 
+  // 🔑 **Un modal desde la barra, y no una tarjeta fija arriba de la tabla** (rediseño del 22-oct):
+  // era la tercera tarjeta apilada antes de la lista, y se abre sólo cuando una clienta pregunta.
   return (
-    <Card>
-      <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+    <Modal abierto onCerrar={onCerrar} titulo="¿Cuánto sale un envío?">
+      <div style={{ display: 'grid', gap: space[3] }}>
         <Field label="Dirección" hint="Con altura: sin número el mapa no ubica el punto.">
           <Input value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="San Martín 1200" />
         </Field>
@@ -913,15 +1028,17 @@ function CotizarDireccion({ marca, onCargar }: { marca: Marca | null; onCargar: 
         <Field label="Código postal" hint="Opcional. Es la segunda señal: si dice otra localidad que la de al lado, no se propone nada y el motivo nombra a las dos.">
           <Input value={cp} onChange={(e) => setCp(e.target.value)} placeholder="2000" />
         </Field>
-        <Button variant="outline" disabled={pidiendo || !listo} onClick={() => void cotizar()}>
-          {pidiendo ? 'Preguntándole al mapa…' : 'Cotizar'}
-        </Button>
-        <Button variant="ghost" onClick={() => { setAbierto(false); limpiar() }}>
-          Cerrar
-        </Button>
+        <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
+          <Button variant="ghost" onClick={onCerrar}>
+            Cerrar
+          </Button>
+          <Button variant="solid" tone="brand" disabled={pidiendo || !listo} onClick={() => void cotizar()}>
+            {pidiendo ? 'Preguntándole al mapa…' : 'Cotizar'}
+          </Button>
+        </div>
       </div>
 
-      <div style={{ marginTop: space[2], opacity: 0.7, fontSize: 13 }}>
+      <div style={{ marginTop: space[2], color: color.mut, fontSize: font.base }}>
         Busca la dirección en el mapa y dice el precio de la zona. <strong>No guarda nada</strong>: si se
         recarga la pantalla, el número se fue.
       </div>
@@ -936,24 +1053,24 @@ function CotizarDireccion({ marca, onCargar }: { marca: Marca | null; onCargar: 
               {cotizacion.zona?.coordinar ? <Badge tone="warning">coordinar</Badge> : null}
             </>
           ) : (
-            <span style={{ fontSize: 13, opacity: 0.75 }}>
+            <span style={{ fontSize: font.base, color: color.mut }}>
               el mapa no propone: {cotizacion.motivo || 'no se pudo ubicar'}
               {cotizacion.estado === 'ambigua' && cotizacion.zonas?.length ? ` (${cotizacion.zonas.join(' y ')})` : ''}
             </span>
           )}
           {/* Llevarse el texto al formulario ahorra retipearlo aunque el mapa no haya contestado. */}
-          <Button size="sm" variant="ghost" onClick={cargar}>
-            cargar este envío
+          <Button size="sm" variant="outline" onClick={cargar}>
+            Cargar este envío
           </Button>
         </div>
       ) : null}
 
       {cotizacion?.encontrado ? (
-        <div style={{ marginTop: space[2], fontSize: 12, opacity: 0.6 }}>
+        <div style={{ marginTop: space[2], fontSize: font.sm, color: color.mut }}>
           El mapa entendió: {cotizacion.encontrado}
         </div>
       ) : null}
-    </Card>
+    </Modal>
   )
 }
 
@@ -980,7 +1097,7 @@ function PropuestaDelMapa({
 
   if (sugerencia.estado !== 'sugerido' || sugerencia.precio == null) {
     return (
-      <div style={{ fontSize: 12, opacity: 0.65 }} title={sugerencia.encontrado || sugerencia.consulta || undefined}>
+      <div style={{ fontSize: font.sm, color: color.mut }} title={sugerencia.encontrado || sugerencia.consulta || undefined}>
         el mapa no propone: {sugerencia.motivo || 'no se pudo ubicar'}
         {sugerencia.estado === 'ambigua' && sugerencia.zonas?.length ? ` (${sugerencia.zonas.join(' y ')})` : ''}
       </div>
@@ -997,7 +1114,8 @@ function PropuestaDelMapa({
       {sugerencia.zona?.coordinar ? <Badge tone="warning">coordinar</Badge> : null}
       <Button
         size="sm"
-        variant="ghost"
+        variant="outline"
+        tone="brand"
         disabled={usando}
         onClick={async () => {
           setUsando(true)
@@ -1008,7 +1126,7 @@ function PropuestaDelMapa({
           }
         }}
       >
-        {usando ? 'Guardando…' : 'usar'}
+        {usando ? 'Guardando…' : 'Usar'}
       </Button>
     </div>
   )
@@ -1096,7 +1214,7 @@ function LinkDelCadete() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
         <div>
           <strong>El link del cadete</strong>
-          <div style={{ opacity: 0.7, fontSize: 13 }}>
+          <div style={{ color: color.mut, fontSize: font.base }}>
             {!portal
               ? 'Todavía no hay ninguno. Se genera acá y se le manda por WhatsApp.'
               : vencido
@@ -1156,10 +1274,11 @@ function TotalDelTurno({ envios }: { envios: Envio[] }) {
   const total = envios.reduce((s, e) => s + aCobrar(e), 0)
   const saldados = envios.filter((e) => envioSaldado(e)).length
   return (
-    <div style={{ display: 'grid', gap: 2 }}>
-      <span>{formatMoney(total)}</span>
+    <div style={{ display: 'grid', gap: 2, textAlign: 'right' }}>
+      <span style={{ fontSize: font.sm, color: color.mut }}>a cobrar en las puertas</span>
+      <strong style={{ fontSize: font.lg }}>{formatMoney(total)}</strong>
       {saldados ? (
-        <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.7 }}>
+        <span style={{ fontSize: font.sm, color: color.mut }}>
           {saldados} {saldados === 1 ? 'envío ya saldado' : 'envíos ya saldados'}
         </span>
       ) : null}
@@ -1199,7 +1318,7 @@ function Direccion({ envio, conMensaje = false }: { envio: Envio; conMensaje?: b
     <div style={{ display: 'grid', gap: 2 }}>
       <div>{direccionCompleta(envio)}</div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
-        {envio.cp ? <span style={{ opacity: 0.6 }}>CP {envio.cp}</span> : null}
+        {envio.cp ? <span style={{ color: color.mut }}>CP {envio.cp}</span> : null}
         {fuera ? (
           <Badge tone="warning" {...dice('El código postal no es de la zona de reparto. ¿Este pedido es de acá?')}>
             fuera de zona
@@ -1217,7 +1336,13 @@ function Direccion({ envio, conMensaje = false }: { envio: Envio; conMensaje?: b
         {/* El `data-guia` va sólo donde el mensaje se arma: en la hoja del día este botón es el
             chat pelado, y el paso del tour habla del PRIMER mensaje (`lib/envios/guia.ts`). */}
         {wa ? (
-          <a
+          // Un link con forma de botón, ⛔ un `<button>` adentro de un `<a>` (HTML inválido: dos cosas
+          // que se aprietan, una adentro de la otra).
+          <ButtonLink
+            size="sm"
+            variant="ghost"
+            tone={mensaje ? 'success' : 'neutral'}
+            iconLeft={<Icono nombre="whatsapp" />}
             href={wa}
             target="_blank"
             rel="noopener noreferrer"
@@ -1227,20 +1352,14 @@ function Direccion({ envio, conMensaje = false }: { envio: Envio; conMensaje?: b
                 ? `Escribirle por WhatsApp a ${envio.telefono}, con el envío y el día ya escritos`
                 : `Escribirle por WhatsApp a ${envio.telefono}. Cotizá el envío y el mensaje sale escrito`,
             )}
-          >
-            <Button size="sm" variant="ghost" tone={mensaje ? 'success' : undefined} iconLeft={<Icono nombre="whatsapp" />} />
-          </a>
+          />
         ) : null}
-        {tel ? (
-          <a href={`tel:${tel}`} {...dice(`Llamar a ${envio.telefono}`)}>
-            <Button size="sm" variant="ghost" iconLeft={<Icono nombre="telefono" />} />
-          </a>
-        ) : null}
+        {tel ? <ButtonLink size="sm" variant="ghost" iconLeft={<Icono nombre="telefono" />} href={`tel:${tel}`} {...dice(`Llamar a ${envio.telefono}`)} /> : null}
         {/* El motivo se dice sólo donde el mensaje existe. En la hoja del día no hay nada que
             explicar: ahí el botón nunca lleva texto, y avisar de algo que esa pantalla no ofrece
             sería un cartel que confunde en vez de enseñar. */}
         {conMensaje && wa && !mensaje ? (
-          <span style={{ fontSize: 12, opacity: 0.6 }}>el mensaje sale escrito al cotizar</span>
+          <span style={{ fontSize: font.sm, color: color.mut }}>el mensaje sale escrito al cotizar</span>
         ) : null}
       </div>
     </div>
@@ -1264,11 +1383,11 @@ function ResumenPedido({ envio, onVer }: { envio: Envio; onVer: () => void }) {
         <StatusPill tone="warning" label={`Cobrar ${formatMoney(r.aCobrar)}`} />
       )}
       {r.items ? (
-        <Button size="sm" variant="ghost" onClick={onVer} {...dice('Ver el pedido')}>
+        <Button size="sm" variant="outline" onClick={onVer} {...dice('Ver el pedido')}>
           {r.items} {r.items === 1 ? 'artículo' : 'artículos'}
         </Button>
       ) : (
-        <span style={{ fontSize: 12, opacity: 0.5 }}>sin detalle</span>
+        <span style={{ fontSize: font.sm, color: color.mut2 }}>sin detalle</span>
       )}
     </div>
   )
@@ -1287,15 +1406,19 @@ function AccionesDeFila({
   onAgendar,
   onEditar,
   onBorrar,
+  onSacar,
 }: {
   envio: Envio
   onAgendar: (e: Envio) => void
   onEditar: (e: Partial<Envio>) => void
   onBorrar: (e: Envio) => Promise<void>
+  onSacar: (e: Envio) => void
 }) {
   const { ok, motivo } = puedeIrAUnDia(envio)
+  // 🔑 **El verbo de la bandeja queda a la vista; lo de vez en cuando, en el «⋯»** (rediseño 22-oct).
+  // Eran tres íconos sueltos, y «Sacar…» hubiera sido el cuarto.
   return (
-    <div style={{ display: 'flex', gap: 4 }}>
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
       <Button
         size="sm"
         variant="solid"
@@ -1305,15 +1428,22 @@ function AccionesDeFila({
         onClick={() => onAgendar(envio)}
         data-guia="envios.agendar"
         {...dice(ok ? 'Enviar a un día de reparto' : motivo || 'No puede salir todavía')}
-      />
-      <Button size="sm" variant="ghost" iconLeft={<Icono nombre="lapiz" />} onClick={() => onEditar(envio)} {...dice('Editar el envío')} />
-      <Button
-        size="sm"
-        variant="ghost"
-        tone="danger"
-        iconLeft={<Icono nombre="papelera" />}
-        onClick={() => void onBorrar(envio)}
-        {...dice('Sacar el envío de la hoja')}
+      >
+        Agendar
+      </Button>
+      <MenuAcciones
+        etiqueta={`Acciones del pedido de ${envio.cliente || 'sin nombre'}`}
+        acciones={[
+          { key: 'editar', label: 'Editar', icono: 'lapiz', onClick: () => onEditar(envio) },
+          {
+            key: 'sacar',
+            label: 'Sacar de la lista…',
+            icono: 'check',
+            hint: 'Ya se resolvió por fuera de la moto: lo retiró, se canceló, se mandó por correo…',
+            onClick: () => onSacar(envio),
+          },
+          { key: 'eliminar', label: 'Eliminar', icono: 'papelera', tone: 'danger', hint: 'Lo borra de la base. Si se cargó por error.', onClick: () => void onBorrar(envio) },
+        ]}
       />
     </div>
   )
@@ -1504,12 +1634,33 @@ function Cotizar({
   envio,
   onGuardado,
   sugerencia,
+  onSugerida,
 }: {
   envio: Envio
   onGuardado: () => Promise<void>
   sugerencia?: SugerenciaDePrecio
+  onSugerida: (s: SugerenciaDePrecio) => void
 }) {
+  const toast = useToast()
+  const [pidiendo, setPidiendo] = useState(false)
   const original = Number(envio.monto_envio) || 0
+
+  // 🔑 **El `$` de UNA fila** (Bruno, 22-oct: con la lista larga, «Sugerir precios» se lo proponía a
+  // todos). Es la misma pregunta al mapa que el botón de todas, con un solo id, y la respuesta cae en
+  // el mismo `Map`: no hay dos caminos para la misma propuesta.
+  async function sugerir() {
+    setPidiendo(true)
+    try {
+      const [s] = await sugerirPrecios([envio.id])
+      if (s) onSugerida(s)
+      else toast.error('El mapa no contestó por este envío.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo sugerir el precio.')
+    } finally {
+      setPidiendo(false)
+    }
+  }
+
   return (
     <div style={{ display: 'grid', gap: 4 }}>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -1520,8 +1671,11 @@ function Cotizar({
           onGuardar={(n) => guardarCosto(envio.id, n ?? 0)}
           onGuardado={onGuardado}
         />
-        {!original ? <Badge tone="warning">falta</Badge> : null}
+        {!original && !sugerencia ? (
+          <Button size="sm" variant="outline" tone="brand" disabled={pidiendo} iconLeft={<Icono nombre="pesos" />} onClick={() => void sugerir()} {...dice('Sugerir el precio: busca la dirección en el mapa y propone el de la zona. No guarda nada.')} />
+        ) : null}
       </div>
+      {pidiendo ? <span style={{ fontSize: font.sm, color: color.mut }}>Preguntándole al mapa…</span> : null}
       {/* La propuesta se muestra sólo mientras la fila no tenga precio: apenas se guarda, el número
           decidido es el que manda y una alternativa al lado sería una invitación a cambiarlo. */}
       {!original && sugerencia ? (
