@@ -686,7 +686,7 @@ function Pendientes({
               Sacar las {cerradas.length} cerradas en TN
             </Button>
           ) : null}
-          <SugerirPrecios envios={envios} hay={sugerencias.size > 0} onSugerir={sumar} onOcultar={() => setSugerencias(new Map())} />
+          <SugerirPrecios envios={envios} hay={envios.some((e) => sugerencias.has(e.id))} onSugerir={sumar} onOcultar={() => setSugerencias(new Map())} />
         </>
       }
     >
@@ -725,7 +725,7 @@ function Pendientes({
               <Td wrap tall style={{ minWidth: 160 }}>
                 <strong>{e.cliente || 'Sin nombre'}</strong>
                 <Apagado>
-                  {e.orden_numero ? `#${e.orden_numero}` : 'cargado a mano'}
+                  {e.orden_numero ? `#${e.orden_numero} · ` : ''}
                   <VendidaHace envio={e} />
                 </Apagado>
                 {/* 🔑 **De dónde viene esta fila.** El paquete que salió y volvió se trabaja igual que
@@ -778,15 +778,14 @@ function Pendientes({
   )
 }
 
-/** «· vendida el 25-ago, hace 58 días». La fecha es la de la VENTA, ⛔ la de cuando se cargó. */
+/** «vendida el 25-ago, hace 58 días». La fecha es la de la VENTA, ⛔ la de cuando se cargó. */
 function VendidaHace({ envio }: { envio: Envio }) {
   const dia = fechaDeVenta(envio)
   if (!dia) return null
   const hace = diasEntre(dia, hoyIso())
   return (
     <span>
-      {' · '}
-      {envio.origen === 'manual' ? 'cargado' : 'vendida'} el {rotuloDeDia(dia) || dia}
+      {envio.origen === 'manual' ? 'cargado a mano' : 'vendida'} el {rotuloDeDia(dia) || dia}
       {hace > 0 ? `, hace ${hace} ${hace === 1 ? 'día' : 'días'}` : ''}
     </span>
   )
