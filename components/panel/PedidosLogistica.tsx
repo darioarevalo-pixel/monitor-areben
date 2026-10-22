@@ -4,9 +4,15 @@ import { useEffect, useState } from 'react'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import {
   avisosDe,
+  cambiosDeEnvio,
   catalogosLogistica,
   entregaDe,
+  generarEtiqueta,
   guardarEntrega,
+  leerMensaje,
+  vistaPrevia,
+  type CampoEnvio,
+  type Envio,
   pedidosDelCliente,
   pendientesLogistica,
   TRANSPORTE,
@@ -24,7 +30,7 @@ import {
  * Sin pedidos en curso no se dibuja nada: es lo normal y no hace falta anunciarlo. Un error sí se
  * ve, en un renglón, para que «no aparece» no se lea como «no tiene pedidos».
  */
-export function PedidosLogistica({ clienteId, tel }: { clienteId: number | null; tel: string | null }) {
+export function PedidosLogistica({ clienteId, tel, despacho }: { clienteId: number | null; tel: string | null; despacho?: string }) {
   // Lo que llegó va con a quién era: al cambiar de chat no se ve un instante el pedido del anterior.
   const clave = `${clienteId ?? ''}|${tel ?? ''}`
   const [llegado, setLlegado] = useState<{ clave: string; r: Resultado<PedidoLogistica[]> } | null>(null)
@@ -71,7 +77,7 @@ export function PedidosLogistica({ clienteId, tel }: { clienteId: number | null;
         En Logística
       </div>
       {r.datos.map((p, i) => (
-        <Pedido key={p.id} p={p} primero={i === 0} sugerencia={sugerencias.get(p.id) ?? null} onCambio={reemplazar} />
+        <Pedido key={p.id} p={p} primero={i === 0} sugerencia={sugerencias.get(p.id) ?? null} despacho={despacho} onCambio={reemplazar} />
       ))}
     </Caja>
   )
@@ -97,14 +103,20 @@ function Pedido({
   p,
   primero,
   sugerencia,
+  despacho,
   onCambio,
 }: {
   p: PedidoLogistica
   primero: boolean
   sugerencia: PendienteLogistica['suggestion']
+  despacho?: string
   onCambio: (p: PedidoLogistica) => void
 }) {
-  const [eligiendo, setEligiendo] = useState(false)
+  const [modo, setModo] = useState<'entrega' | 'etiqueta' | null>(null)
+  const eligiendo = modo === 'entrega'
+  const setEligiendo = (v: boolean) => setModo(v ? 'entrega' : null)
+  // La etiqueta se arma acá sólo en Etiqueta libre y Transporte: la de EM la da Envío Nube.
+  const llevaEtiqueta = p.dispatch_option?.code === 2 || p.dispatch_option?.code === TRANSPORTE
   const [aviso, setAviso] = useState<{ txt: string; mal?: boolean } | null>(null)
   const avisos = avisosDe(p)
   const entrega = entregaDe(p)
@@ -139,8 +151,26 @@ function Pedido({
             setEligiendo(false)
           }}
         />
+      ) : modo === 'etiqueta' ? (
+        <ArmarEtiqueta
+          p={p}
+          despacho={despacho}
+          onCancelar={() => setModo(null)}
+          onListo={(nuevo, txt, mal) => {
+            if (nuevo) onCambio(nuevo)
+            setAviso({ txt, mal })
+            if (!mal) setModo(null)
+          }}
+        />
       ) : (
-        <BotonChico onClick={() => (setAviso(null), setEligiendo(true))}>{p.dispatch_option ? 'Cambiar forma de entrega' : 'Elegir forma de entrega'}</BotonChico>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <BotonChico onClick={() => (setAviso(null), setEligiendo(true))}>{p.dispatch_option ? 'Cambiar forma de entrega' : 'Elegir forma de entrega'}</BotonChico>
+          {llevaEtiqueta && (
+            <BotonChico fuerte={!p.has_label} onClick={() => (setAviso(null), setModo('etiqueta'))}>
+              {p.has_label ? 'Rehacer etiqueta' : 'Armar etiqueta'}
+            </BotonChico>
+          )}
+        </div>
       )}
       {avisos.map((a) => (
         <div key={a} style={{ marginTop: 4, fontSize: font.xs, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: radius.sm, padding: '3px 8px' }}>
@@ -298,4 +328,195 @@ function ElegirEntrega({
       </div>
     </div>
   )
+}
+
+/** Los datos de quien recibe, en el orden de la etiqueta. `solo` = sólo para esa forma de entrega. */
+const CAMPOS: { k: CampoEnvio; txt: string; ayuda?: string; solo?: number; si?: 'domicilio' | 'sucursal' }[] = [
+  { k: 'first_name', txt: 'Nombre' },
+  { k: 'last_name', txt: 'Apellido' },
+  { k: 'dni', txt: 'DNI o CUIT' },
+  { k: 'phone', txt: 'Teléfono' },
+  { k: 'branch_name', txt: 'Sucursal', si: 'sucursal' },
+  { k: 'address', txt: 'Dirección', ayuda: 'Calle, número, piso y depto', si: 'domicilio' },
+  { k: 'locality', txt: 'Localidad' },
+  { k: 'province', txt: 'Provincia' },
+  { k: 'zipcode', txt: 'Código postal' },
+  { k: 'insurance_amount', txt: 'Seguro', ayuda: 'Vacío = mínimo', solo: TRANSPORTE },
+  { k: 'payment_info', txt: 'Pago', ayuda: 'Vacío = en destino', solo: TRANSPORTE },
+  { k: 'free_text', txt: 'Texto libre', solo: 2 },
+]
+
+const campoStyle: React.CSSProperties = {
+  width: '100%',
+  height: 30,
+  padding: '0 8px',
+  fontSize: font.sm,
+  borderRadius: radius.sm,
+  border: `1px solid ${color.line}`,
+  background: color.surface,
+  color: color.ink,
+  boxSizing: 'border-box',
+}
+
+/**
+ * Armar la etiqueta desde el chat (Darío, 22-oct-2026): pegar el mensaje del cliente → la IA de
+ * Logística separa los datos → se revisan → se ve la etiqueta → «Guardar y generar». La imprime el
+ * depósito; el panel no imprime.
+ *
+ * 🔑 **Guardar pide haber visto la etiqueta con ESOS datos**: tocar un campo después de la vista
+ * previa vuelve a pedirla. Es todo o nada en Logística, pero lo que se guarda es real.
+ */
+function ArmarEtiqueta({
+  p,
+  despacho,
+  onCancelar,
+  onListo,
+}: {
+  p: PedidoLogistica
+  despacho?: string
+  onCancelar: () => void
+  onListo: (nuevo: PedidoLogistica | null, txt: string, mal?: boolean) => void
+}) {
+  const codigo = p.dispatch_option?.code ?? TRANSPORTE
+  const [mensaje, setMensaje] = useState(despacho || '')
+  const [envio, setEnvio] = useState<Envio>(() => ({ ...(p.shipping || {}) }))
+  const [carrier, setCarrier] = useState<string>(p.carrier?.slug ?? '')
+  const [cat, setCat] = useState<Catalogos | null>(null)
+  const [ocupado, setOcupado] = useState<'leer' | 'ver' | 'guardar' | null>(null)
+  const [problema, setProblema] = useState<string | null>(null)
+  const [previa, setPrevia] = useState<{ png: string; de: string } | null>(null)
+  useEffect(() => {
+    if (codigo === TRANSPORTE) catalogosLogistica().then((r) => r.t === 'ok' && setCat(r.datos))
+  }, [codigo])
+
+  const entrega = envio.delivery_type === 'domicilio' ? 'domicilio' : envio.delivery_type === 'sucursal' ? 'sucursal' : null
+  const datos = {
+    dispatch_option: codigo,
+    ...(codigo === TRANSPORTE ? { carrier: carrier || null } : {}),
+    shipping: cambiosDeEnvio(p.shipping, envio),
+  }
+  const huella = JSON.stringify(datos)
+  const vista = previa?.de === huella
+
+  const poner = (k: CampoEnvio, v: string) => setEnvio((e) => ({ ...e, [k]: v }))
+
+  const leer = async () => {
+    setOcupado('leer')
+    setProblema(null)
+    const r = await leerMensaje(mensaje)
+    setOcupado(null)
+    if (r.t !== 'ok') return setProblema(r.motivo)
+    // Lo que la IA no encontró no borra lo que ya estaba.
+    setEnvio((e) => {
+      const n = { ...e }
+      for (const [k, v] of Object.entries(r.shipping) as [CampoEnvio, string | null][]) if (v) n[k] = v
+      return n
+    })
+    if (r.carrier && codigo === TRANSPORTE) {
+      const c = cat?.carriers.find((x) => x.slug === r.carrier || x.label.toLowerCase() === r.carrier!.toLowerCase())
+      setCarrier(c ? c.slug : r.carrier)
+    }
+  }
+
+  const ver = async () => {
+    setOcupado('ver')
+    setProblema(null)
+    const r = await vistaPrevia(p, datos)
+    setOcupado(null)
+    if (r.t !== 'ok') return setProblema(r.motivo)
+    setPrevia({ png: r.png, de: huella })
+  }
+
+  const guardar = async () => {
+    if (!vista) return
+    setOcupado('guardar')
+    setProblema(null)
+    const r = await generarEtiqueta(p, datos)
+    setOcupado(null)
+    if (r.t === 'ok') return onListo(r.pedido, 'Etiqueta generada: la imprime el depósito')
+    if (r.t === 'cambio') return onListo(r.pedido, `${r.motivo} Fijate cómo quedó antes de volver a guardar.`, true)
+    setProblema(r.motivo)
+  }
+
+  return (
+    <div style={{ marginTop: 6, padding: space[2], border: `1px solid ${color.line}`, borderRadius: radius.md, background: color.bg2, display: 'grid', gap: 6 }}>
+      <label style={{ fontSize: font.xs, color: color.mut2 }}>
+        Mensaje del cliente
+        <textarea
+          value={mensaje}
+          onChange={(e) => setMensaje(e.target.value)}
+          rows={3}
+          placeholder="Pegá acá el mensaje con sus datos"
+          style={{ ...campoStyle, height: 'auto', padding: 8, marginTop: 2, resize: 'vertical', fontFamily: 'inherit' }}
+        />
+      </label>
+      <div>
+        <BotonChico onClick={leer} disabled={!mensaje.trim() || !!ocupado}>
+          {ocupado === 'leer' ? 'Leyendo…' : 'Completar con el mensaje'}
+        </BotonChico>
+      </div>
+
+      {codigo === TRANSPORTE && (
+        <label style={{ fontSize: font.xs, color: color.mut2 }}>
+          Transporte
+          <select value={carrier} onChange={(e) => setCarrier(e.target.value)} style={{ ...campoStyle, marginTop: 2 }}>
+            <option value="">Elegí el transporte</option>
+            {(cat?.carriers || []).map((c) => (
+              <option key={c.slug} value={c.slug}>
+                {c.label}
+              </option>
+            ))}
+            {carrier && cat && !cat.carriers.some((c) => c.slug === carrier) && <option value={carrier}>{carrier} (nuevo)</option>}
+          </select>
+        </label>
+      )}
+
+      <label style={{ fontSize: font.xs, color: color.mut2 }}>
+        Entrega
+        <select value={entrega ?? ''} onChange={(e) => poner('delivery_type', e.target.value)} style={{ ...campoStyle, marginTop: 2 }}>
+          <option value="">Elegí</option>
+          <option value="sucursal">En sucursal</option>
+          <option value="domicilio">A domicilio</option>
+        </select>
+      </label>
+
+      {CAMPOS.filter((c) => (!c.solo || c.solo === codigo) && (!c.si || c.si === entrega)).map((c) => (
+        <label key={c.k} style={{ fontSize: font.xs, color: c.k && p.missing.length && esFaltante(p, c.txt) ? color.warningInk : color.mut2 }}>
+          {c.txt}
+          {c.ayuda && <span style={{ color: color.mut2 }}> · {c.ayuda}</span>}
+          {c.k === 'free_text' ? (
+            <textarea value={envio[c.k] ?? ''} onChange={(e) => poner(c.k, e.target.value)} rows={2} style={{ ...campoStyle, height: 'auto', padding: 8, marginTop: 2, fontFamily: 'inherit' }} />
+          ) : (
+            <input value={envio[c.k] ?? ''} onChange={(e) => poner(c.k, e.target.value)} style={{ ...campoStyle, marginTop: 2 }} />
+          )}
+        </label>
+      ))}
+
+      {problema && <div style={{ fontSize: font.xs, color: color.dangerInk }}>{problema}</div>}
+
+      {previa && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={previa.png} alt="Vista previa de la etiqueta" style={{ width: '100%', border: `1px solid ${color.line}`, borderRadius: radius.sm, background: '#fff', opacity: vista ? 1 : 0.4 }} />
+      )}
+      {previa && !vista && <div style={{ fontSize: font.xs, color: color.mut2 }}>Cambiaste algo: volvé a ver la etiqueta antes de guardar.</div>}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <BotonChico onClick={ver} disabled={!!ocupado}>
+          {ocupado === 'ver' ? 'Armando…' : 'Ver etiqueta'}
+        </BotonChico>
+        <BotonChico fuerte onClick={guardar} disabled={!vista || !!ocupado}>
+          {ocupado === 'guardar' ? 'Guardando…' : 'Guardar y generar'}
+        </BotonChico>
+        <BotonChico onClick={onCancelar} disabled={!!ocupado}>
+          Cancelar
+        </BotonChico>
+      </div>
+    </div>
+  )
+}
+
+/** ¿Logística dice que falta este dato? (`missing` viene con los nombres de su pantalla.) */
+function esFaltante(p: PedidoLogistica, txt: string): boolean {
+  const t = txt.toLowerCase()
+  return p.missing.some((m) => m.toLowerCase() === t || m.toLowerCase().startsWith(t.split(' ')[0]))
 }

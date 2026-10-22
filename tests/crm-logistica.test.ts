@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { avisosDe, entregaDe, sugerenciaDe, type PedidoLogistica, type PendienteLogistica } from '../lib/crm/logistica'
+import { avisosDe, cambiosDeEnvio, entregaDe, sugerenciaDe, type PedidoLogistica, type PendienteLogistica } from '../lib/crm/logistica'
 
 vi.mock('../api/_auth.js', () => ({ exigirUsuario: vi.fn(async () => ({ name: 'Darío', admin: true })) }))
 vi.mock('../lib/permisos.core.js', () => ({ puedeVerAlguna: vi.fn(() => true), esAdmin: vi.fn(() => true) }))
 
-const { default: handler, rutaDe } = await import('../api/_logistica.js')
+const { default: handler, rutaDe, datosEtiqueta } = await import('../api/_logistica.js')
 const { puedeVerAlguna, esAdmin } = await import('../lib/permisos.core.js')
 
 function pedido(cambios: Partial<PedidoLogistica> = {}): PedidoLogistica {
@@ -69,6 +69,34 @@ describe('entregaDe y sugerenciaDe', () => {
     const p = { ...pedido(), next_step: null, suggestion: { dispatch_option: { code: 3, label: 'Transporte' }, carrier: { slug: 'via_cargo', label: 'Via Cargo' }, from_gn_number: '31877', from_date: null } } as PendienteLogistica
     expect(sugerenciaDe(p)).toBe('La vez pasada: Transporte · Via Cargo')
     expect(sugerenciaDe({ ...p, suggestion: null })).toBeNull()
+  })
+})
+
+describe('la etiqueta', () => {
+  it('sólo viajan los datos de envío conocidos', () => {
+    expect(datosEtiqueta({ dispatch_option: 3, carrier: 'via_cargo', shipping: { dni: ' 30111222 ', locality: '', otro: 'x' }, em: 4 })).toEqual({
+      cuerpo: { dispatch_option: 3, carrier: 'via_cargo', shipping: { dni: '30111222', locality: null } },
+    })
+    expect(datosEtiqueta({ shipping: { dni: 30111222 } }).error).toBeTruthy()
+  })
+  it('vista previa e interpretar no guardan pero van por POST', () => {
+    expect(rutaDe({ action: 'vista-previa', id: 604, datos: { dispatch_option: 2, shipping: {} } })).toEqual({
+      ruta: '/mayorista/pedidos/604/etiqueta/vista-previa?formato=png',
+      metodo: 'POST',
+      cuerpo: { dispatch_option: 2, shipping: {} },
+      imagen: true,
+    })
+    expect(rutaDe({ action: 'interpretar', text: '  ' }).error).toBe('Pegá el mensaje del cliente.')
+  })
+  it('generar manda lo que se vio', () => {
+    expect(rutaDe({ action: 'etiqueta', id: 604, datos: { dispatch_option: 2, shipping: { dni: '1' } }, expected: { shipping: { dni: null } } }).cuerpo).toEqual({
+      dispatch_option: 2,
+      shipping: { dni: '1' },
+      expected: { shipping: { dni: null } },
+    })
+  })
+  it('cambiosDeEnvio: sólo lo que se tocó', () => {
+    expect(cambiosDeEnvio({ dni: '1', locality: null }, { dni: '1 ', locality: 'Río Segundo', zipcode: '' })).toEqual({ locality: 'Río Segundo' })
   })
 })
 

@@ -1228,7 +1228,7 @@ function PanelInterno({
 
       <div style={{ paddingTop: space[2] }}>
         {/* Los pedidos en curso en Logística (22-oct-2026): sin pedidos no se dibuja. */}
-        <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} />
+        <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} despacho={seg.despacho || ''} />
         {/*
           Las notas arriba, abiertas: es dónde quedaste con esta persona (Darío, 19-oct-2026). El
           despacho va adentro; «Pendiente» y «Tener en cuenta» sólo se ven si están cargados

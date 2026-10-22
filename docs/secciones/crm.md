@@ -1156,6 +1156,13 @@ Ger (logistica.arebensrl.com) abrió una API para el panel: `https://logistica.a
   `expected`; nada más viaja. 🔴 **Escribir es sólo de admin** (`esAdmin` en el servidor). En el
   panel se dice «forma de entrega»; Logística dice «modalidad de despacho» (se traduce en «Hoy»).
   Un timeout en una carga avisa «fijate si quedó guardado»: no contestar no es no guardar.
+- ✅ **Armar la etiqueta desde la ficha** (22-oct, noche; Etiqueta libre y Transporte): el mensaje
+  viene cargado con el «Despacho» de la ficha → «Completar con el mensaje» (`interpretar`, IA de
+  Logística, 20/min, no guarda; lo que no encontró no borra lo cargado) → campos → «Ver etiqueta»
+  (`vista-previa`, PNG que el servidor devuelve en base64) → «Guardar y generar» (`etiqueta`, con
+  `expected` sólo de lo que cambió). 🔑 **Guardar pide haber visto la etiqueta con ESOS datos**: la
+  huella del cuerpo se compara con la de la vista previa. Viajan sólo los campos de
+  `CAMPOS_ENVIO` (`datosEtiqueta`). La imprime el depósito.
 - ⏭️ **Lo que sigue de la 2ª tanda: cargar** (`PATCH` con `expected`, despachar, etiqueta de transporte). ⛔ No hay
   entorno de prueba: se prueba sobre un pedido acordado. ⛔ El 409 no se reintenta solo: se muestra
   cómo quedó el pedido y decide la persona.

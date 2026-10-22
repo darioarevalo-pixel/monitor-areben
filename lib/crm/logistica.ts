@@ -39,7 +39,27 @@ export type PedidoLogistica = {
   dispatched_at: string | null
   url: string
   updated_at: string
+  /** Sólo viene si el token puede cargar (`wholesale:write`). */
+  shipping?: Envio | null
 }
+
+/** Los datos de quien recibe, los mismos de «Datos del cliente» en Logística. Vacío = no cargado. */
+export type Envio = Partial<Record<CampoEnvio, string | null>>
+export type CampoEnvio =
+  | 'first_name'
+  | 'last_name'
+  | 'dni'
+  | 'phone'
+  | 'email'
+  | 'delivery_type'
+  | 'branch_name'
+  | 'address'
+  | 'locality'
+  | 'province'
+  | 'zipcode'
+  | 'insurance_amount'
+  | 'payment_info'
+  | 'free_text'
 
 /** Un pedido de la lista de pendientes: lo mismo + el primer paso que falta y la sugerencia. */
 export type PendienteLogistica = PedidoLogistica & {
@@ -132,6 +152,57 @@ export async function guardarEntrega(p: PedidoLogistica, codigo: number, carrier
   } catch (e) {
     return { t: 'error', motivo: e instanceof Error ? e.message : String(e) }
   }
+}
+
+async function cargar<T>(cuerpo: Record<string, unknown>): Promise<{ ok: true; d: T } | { ok: false; status: number; motivo: string; pedido: PedidoLogistica | null }> {
+  try {
+    const r = await apiFetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) })
+    const d = (await r.json().catch(() => ({}))) as T & { error?: string; order?: PedidoLogistica }
+    if (!r.ok) return { ok: false, status: r.status, motivo: d.error || `Error ${r.status} con Logística.`, pedido: d.order || null }
+    return { ok: true, d }
+  } catch (e) {
+    return { ok: false, status: 0, motivo: e instanceof Error ? e.message : String(e), pedido: null }
+  }
+}
+
+/** Lee el mensaje del cliente con la IA de Logística. No guarda nada. */
+export async function leerMensaje(text: string): Promise<{ t: 'ok'; carrier: string | null; shipping: Envio } | { t: 'error'; motivo: string }> {
+  const r = await cargar<{ carrier?: string | null; shipping?: Envio }>({ action: 'interpretar', text })
+  return r.ok ? { t: 'ok', carrier: r.d.carrier ?? null, shipping: r.d.shipping || {} } : { t: 'error', motivo: r.motivo }
+}
+
+export type DatosEtiqueta = { dispatch_option: number; carrier?: string | null; shipping: Envio }
+
+/** La etiqueta como va a salir, sin guardar nada. Devuelve la imagen lista para un `<img>`. */
+export async function vistaPrevia(p: PedidoLogistica, datos: DatosEtiqueta): Promise<{ t: 'ok'; png: string } | { t: 'error'; motivo: string }> {
+  const r = await cargar<{ png?: string }>({ action: 'vista-previa', id: p.id, datos })
+  return r.ok && r.d.png ? { t: 'ok', png: r.d.png } : { t: 'error', motivo: r.ok ? 'Logística no devolvió la etiqueta.' : r.motivo }
+}
+
+/**
+ * Guardar los datos y generar la etiqueta, que queda en el pedido para que el depósito la imprima.
+ * Va con lo que se VIO de cada dato que cambia: si alguien lo cambió en el medio, no guarda nada.
+ */
+export async function generarEtiqueta(p: PedidoLogistica, datos: DatosEtiqueta): Promise<ResultadoCarga> {
+  const visto = p.shipping || {}
+  const expected: Record<string, unknown> = { shipping: {} }
+  for (const k of Object.keys(datos.shipping) as CampoEnvio[]) (expected.shipping as Envio)[k] = visto[k] ?? null
+  if (datos.dispatch_option !== (p.dispatch_option?.code ?? null)) expected.dispatch_option = p.dispatch_option?.code ?? null
+  if ('carrier' in datos && datos.carrier !== (p.carrier?.slug ?? null)) expected.carrier = p.carrier?.slug ?? null
+  const r = await cargar<{ order?: PedidoLogistica }>({ action: 'etiqueta', id: p.id, datos, expected })
+  if (r.ok) return r.d.order ? { t: 'ok', pedido: r.d.order } : { t: 'error', motivo: 'Logística no devolvió el pedido.' }
+  if (r.status === 409) return { t: 'cambio', motivo: r.motivo, pedido: r.pedido }
+  return { t: 'error', motivo: r.motivo }
+}
+
+/** Sólo cambia lo que se tocó: un campo igual al que ya tiene el pedido no viaja. */
+export function cambiosDeEnvio(antes: Envio | null | undefined, ahora: Envio): Envio {
+  const fuera: Envio = {}
+  for (const [k, v] of Object.entries(ahora) as [CampoEnvio, string | null][]) {
+    const nuevo = (v ?? '').trim() || null
+    if (nuevo !== ((antes?.[k] ?? '').trim() || null)) fuera[k] = nuevo
+  }
+  return fuera
 }
 
 const LISTO = 3
