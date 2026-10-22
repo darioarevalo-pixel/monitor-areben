@@ -13,6 +13,7 @@ import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
 import { armarFilasPedidos, traerPedidosCatalogo, type FilaPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
+import { pendientesLogistica, sugerenciaDe, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
 import { mostrar as plata } from '@/lib/compromisos/core'
 
 /**
@@ -465,6 +466,94 @@ function GrupoPedidos({
   )
 }
 
+/**
+ * Los pedidos de Logística con algún paso pendiente (Darío, 22-oct-2026): forma de entrega, datos,
+ * etiqueta o seguimiento. Como los del catálogo, se piden al montar y cada 2 minutos.
+ */
+type ResultadoLogistica = Resultado<{ count: number; by_step: Record<string, number>; orders: PendienteLogistica[] }>
+const memoriaLogistica: { r: ResultadoLogistica | null } = { r: null }
+
+function usePendientesLogistica(): ResultadoLogistica | null {
+  const [r, setR] = useState<ResultadoLogistica | null>(memoriaLogistica.r)
+  useEffect(() => {
+    let vivo = true
+    const pedir = async () => {
+      const x = await pendientesLogistica()
+      if (x.t === 'error' && memoriaLogistica.r?.t === 'ok') return
+      memoriaLogistica.r = x
+      if (vivo) setR(x)
+    }
+    pedir()
+    const id = setInterval(pedir, CADA_PEDIDOS_MS)
+    return () => {
+      vivo = false
+      clearInterval(id)
+    }
+  }, [])
+  return r
+}
+
+/** Un pedido pendiente: el nombre abre la ficha (por su número de cliente de GN) y el verde, el chat. */
+function FilaLogistica({ p, onAbrir, onFicha }: { p: PendienteLogistica; onAbrir: (id: number, tel: string) => void; onFicha: (id: number, tel: string) => void }) {
+  const id = Number(p.gn_client_id) || 0
+  const tel = p.client_phone || ''
+  const sugerencia = sugerenciaDe(p)
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, borderLeft: `3px solid ${color.warning}`, background: color.surface }}>
+      <button
+        type="button"
+        disabled={!id && !tel}
+        onClick={() => onFicha(id, tel)}
+        title="Ver la ficha"
+        style={{ display: 'block', flex: 1, minWidth: 0, height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: `${space[2]}px 0 ${space[2]}px ${MARGEN}px`, cursor: 'pointer', font: 'inherit' }}
+      >
+        <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.client_name || 'Sin nombre'}</div>
+        <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2 }}>
+          Pedido {p.gn_number || p.id} · {p.status.label}
+        </div>
+        {p.next_step && <div style={{ fontSize: font.xs, color: color.warningInk, marginTop: 2 }}>{p.next_step.label}</div>}
+        {sugerencia && <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2 }}>{sugerencia}</div>}
+      </button>
+      <div style={{ display: 'flex', alignItems: 'center', padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
+        <button
+          type="button"
+          disabled={!tel}
+          onClick={() => onAbrir(id, tel)}
+          title="Abrir el chat"
+          aria-label={`Abrir el chat de ${p.client_name}`}
+          style={{ width: 32, minWidth: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', borderRadius: radius.md, border: 0, background: color.whatsapp, color: color.sideActiveInk, cursor: 'pointer' }}
+        >
+          <Icono nombre="whatsapp" size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** «Pendientes en Logística», debajo de los pedidos del catálogo. Sin pendientes no se dibuja. */
+function GrupoLogistica({
+  r,
+  abierto,
+  onToggle,
+  onAbrir,
+  onFicha,
+}: {
+  r: ResultadoLogistica | null
+  abierto: boolean
+  onToggle: () => void
+  onAbrir: (id: number, tel: string) => void
+  onFicha: (id: number, tel: string) => void
+}) {
+  if (!r || r.t === 'sin-permiso') return null
+  if (r.t === 'ok' && !r.datos.orders.length) return null
+  return (
+    <Grupo titulo="Pendientes en Logística" cuantas={r.t === 'ok' ? r.datos.count : 0} abierto={abierto} onToggle={onToggle}>
+      {r.t === 'error' && <Aclaracion>No pude traer los pedidos de Logística. {r.motivo}</Aclaracion>}
+      {r.t === 'ok' && r.datos.orders.map((p) => <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} />)}
+    </Grupo>
+  )
+}
+
 /** Un renglón gris adentro de un grupo: vacío, o el aviso de que hay más de lo que se ve. */
 function Aclaracion({ children }: { children: React.ReactNode }) {
   return <div style={{ padding: `${space[1]}px ${MARGEN}px ${space[3]}px`, fontSize: font.xs, color: color.mut2 }}>{children}</div>
@@ -809,6 +898,16 @@ function Agenda({
       onFicha={onVerFicha}
     />
   )
+  const logistica = usePendientesLogistica()
+  const grupoLogistica = (
+    <GrupoLogistica
+      r={logistica}
+      abierto={abiertos.logistica !== false}
+      onToggle={() => setAbiertos((a) => ({ ...a, logistica: a.logistica === false }))}
+      onAbrir={onAbrirChat}
+      onFicha={onVerFicha}
+    />
+  )
   const [mostrarAtrasados, setMostrarAtrasados] = useState(memoria.mostrarAtrasados)
 
   // Lo que se ve queda guardado para la próxima vez que se monte (ver `memoria`).
@@ -1045,6 +1144,7 @@ function Agenda({
         {cabecera}
         {avisoExtension}
         {grupoPedidos}
+        {grupoLogistica}
         <div style={{ padding: space[3], fontSize: font.sm, color: color.mut }}>
           No hay nadie para contactar hoy. Cuando venza el próximo, aparece acá.
         </div>
@@ -1057,6 +1157,7 @@ function Agenda({
       {cabecera}
       {avisoExtension}
       {grupoPedidos}
+      {grupoLogistica}
 
       {faltaFecha.length > 0 && (
         <Grupo titulo="🔴 Falta la fecha" cuantas={faltaFecha.length} abierto={abiertos.falta !== false} onToggle={() => setAbiertos((a) => ({ ...a, falta: a.falta === false }))}>

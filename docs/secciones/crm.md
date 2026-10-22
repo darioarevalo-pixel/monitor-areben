@@ -1135,3 +1135,22 @@ para escribirle al que pidió y no habló.
   `ultimos` ([teléfono, segundos] desde ayer 00:00) junto con `tels`; con una anterior cae a «le
   escribiste hoy». Test: `tests/crm-pedidos-catalogo.test.ts`.
 - El nombre es el que escribió el cliente en el catálogo; tocarlo abre la ficha buscando por teléfono.
+
+# ✅ 22-oct-2026 — Logística en el panel (1ª tanda: sólo mirar)
+
+Ger (logistica.arebensrl.com) abrió una API para el panel: `https://logistica.arebensrl.com/api/ext/v1`
+(guía en `docs` de esa misma dirección; Swagger en `/docs`). Hoy sólo **mayorista de BDI**.
+- 🔑 **Token `LOGISTICA_TOKEN` en Vercel**, creado por Darío: todo lo que el panel haga queda en el
+  Historial del pedido como «Darío · desde Panel de WhatsApp». Vence a los 90 días; se renueva
+  editando la fecha en Logística (el token no cambia). 401 = venció o lo revocaron.
+- Servidor: `api/_logistica.js` (puerta `recurso=logistica`), gate de Clientes, **lista cerrada** de
+  acciones (`me`, `cliente`, `telefono`, `pendientes`) y el error de Logística tal cual (`detail`).
+  ⛔ La API no tiene CORS: el navegador nunca le habla directo.
+- Panel: `lib/crm/logistica.ts` + `components/panel/PedidosLogistica.tsx` (en la ficha, debajo del
+  encabezado, y en «Número nuevo» por teléfono) + `GrupoLogistica` en `AgendaDelDia.tsx`
+  («Pendientes en Logística», debajo de «Pidieron hoy y ayer», cada 2 min). Sin pedidos no se dibuja.
+- 🔑 Un pedido entra a Logística recién cuando Darío lo pasa a «Compra pendiente» en GN.
+- ⏭️ **2ª tanda: cargar** (`PATCH` con `expected`, despachar, etiqueta de transporte). ⛔ No hay
+  entorno de prueba: se prueba sobre un pedido acordado. ⛔ El 409 no se reintenta solo: se muestra
+  cómo quedó el pedido y decide la persona.
+- Test: `tests/crm-logistica.test.ts`.

@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|erp|caja|repo-armado|reportes|tn-erp|sesion&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|logistica|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|erp|caja|repo-armado|reportes|tn-erp|sesion&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -31,6 +31,7 @@ import syncTn from './_sync-tn.js';
 import metaRentabilidad from './_meta-rentabilidad.js';
 import envios from './_envios.js';
 import crm from './_crm.js';
+import logistica from './_logistica.js';
 import costos from './_costos.js';
 import espejo from './_espejo.js';
 import memo from './_memo.js';
@@ -125,6 +126,8 @@ const RECURSOS = {
   // El padrón del CRM. Entra por acá porque es el escalón 2 de la Fase S: la tabla `clientes` sale
   // del navegador para que se le pueda revocar el `select` a la anon key.
   crm,
+  // El puente a Logística del panel de WhatsApp (sólo consultas por ahora). Ver `api/_logistica.js`.
+  logistica,
   // El costo de los productos, por lo mismo (pieza B del escalón 3). A diferencia de los otros, es
   // un enriquecimiento opcional: sin permiso contesta 200 con la lista vacía en vez de 403, porque
   // el ETL de las 11 personas que no ven costos tiene que terminar igual.

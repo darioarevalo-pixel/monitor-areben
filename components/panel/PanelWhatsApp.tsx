@@ -51,6 +51,7 @@ import {
   type MapaLeads,
 } from '@/lib/crm/leads'
 import { AgendaDelDia } from './AgendaDelDia'
+import { PedidosLogistica } from './PedidosLogistica'
 import { useComunidad, type AvisoComunidad, type Comunidad } from './useComunidad'
 import { useHoy } from './useHoy'
 import { antiguedadFoto, estaEnComunidad } from '@/lib/crm/comunidad'
@@ -1226,6 +1227,8 @@ function PanelInterno({
       </Encabezado>
 
       <div style={{ paddingTop: space[2] }}>
+        {/* Los pedidos en curso en Logística (22-oct-2026): sin pedidos no se dibuja. */}
+        <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} />
         {/*
           Las notas arriba, abiertas: es dónde quedaste con esta persona (Darío, 19-oct-2026). El
           despacho va adentro; «Pendiente» y «Tener en cuenta» sólo se ven si están cargados
@@ -1985,6 +1988,10 @@ function NumeroNuevo({
     <div style={{ padding: space[3] }}>
       <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>Número nuevo</div>
       <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 12 }}>{tel} · no está en el CRM</div>
+      {/* Un cliente nuevo de hoy ya puede tener el pedido en Logística: el padrón llega una vez por día. */}
+      <div style={{ margin: `0 -${space[2]}px` }}>
+        <PedidosLogistica clienteId={null} tel={tel} />
+      </div>
 
       {/*
         🔑 **La sugerencia por nombre** (Darío, 28-sep-2026). Pasa seguido que el cliente escribe
