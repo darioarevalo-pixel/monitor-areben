@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { pausadoEn } from '@/lib/sync-tn/pausa.core.js'
+import { pausadoEn as pausadoEnCrudo } from '@/lib/sync-tn/pausa.core.js'
+
+const pausadoEn = (t: string, env: Record<string, string>) => pausadoEnCrudo(t, env as NodeJS.ProcessEnv)
 
 describe('pausar el sync GN↔TN', () => {
   it('sin la variable, ninguna tienda está pausada (todo corre como hoy)', () => {
