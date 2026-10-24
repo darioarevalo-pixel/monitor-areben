@@ -55,6 +55,8 @@
  *   GET  ?recurso=erp&vista=estructura&marca=…   Configuración › Cuentas y Marcas, depósitos y puntos de venta (`api/_erp-estructura.js`, sólo lee)
  *   GET  ?recurso=erp&vista=ajustes&linea=bdi|zattia|stunned           los ajustes de stock (motor sql/026) + la lista «A contar»
  *   POST {recurso:'erp', accion:'crear-ajuste'|'aprobar-ajuste'|'descartar-ajuste', linea, …}   `api/_erp-ajustes.js`
+ *   GET  ?recurso=erp&vista=transferencias-doc&marca=…   las transferencias como DOCUMENTO del motor (sql/034) + lo en tránsito
+ *   POST {recurso:'erp', accion:'transferencia-crear'|'-armar'|'-enviar'|'-recibir'|'-cancelar', linea, …}   `api/_erp-transferencia.js`
  *   GET  ?recurso=erp&vista=permisos                                   lo que el perfil puede en el ERP, por marca (`permisosErp`)
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
@@ -91,6 +93,8 @@ import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simul
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { estructuraDeMarca } from './_erp-estructura.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
+import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.js'
+import { ACCIONES as ACCIONES_TRANSFERENCIA } from '../lib/erp/transferencia-doc.core.js'
 import { cobrarVentaErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
@@ -1374,6 +1378,16 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST' && (body.accion === 'aprobar-ajuste' || body.accion === 'descartar-ajuste')) {
       const r = await resolverAjusteErp({ body, usuario: perfil.name || perfil.user || null, aprobar: body.accion === 'aprobar-ajuste' }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'transferencias-doc') {
+      const r = await documentosDeLinea({ linea: String(req.query.marca || ''), estado: req.query.estado ? String(req.query.estado) : null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'POST' && ACCIONES_TRANSFERENCIA.includes(body.accion)) {
+      const r = await accionDeTransferencia({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
