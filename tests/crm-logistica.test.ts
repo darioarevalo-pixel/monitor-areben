@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { avisosDe, cambiosDeEnvio, entregaDe, pasoDe, sugerenciaDe, type PedidoLogistica, type PendienteLogistica } from '../lib/crm/logistica'
+import { avisosDe, cambiosDeEnvio, entregaDe, esDelDeposito, pasoDe, sugerenciaDe, type PedidoLogistica, type PendienteLogistica } from '../lib/crm/logistica'
 
 vi.mock('../api/_auth.js', () => ({ exigirUsuario: vi.fn(async () => ({ name: 'Darío', admin: true })) }))
 vi.mock('../lib/permisos.core.js', () => ({ puedeVerAlguna: vi.fn(() => true), esAdmin: vi.fn(() => true) }))
@@ -71,6 +71,13 @@ describe('entregaDe y sugerenciaDe', () => {
     expect(pasoDe({ ...base, next_step: { code: 'seguimiento', label: 'Falta el número de seguimiento' } })).toBe('Listo para despachar')
     const em = { ...base, dispatch_option: { code: 1, label: 'EM' }, next_step: { code: 'seguimiento', label: 'Falta el número de seguimiento' } }
     expect(pasoDe(em)).toBe('Falta el número de seguimiento')
+  })
+  it('lo del depósito: EM con número y sin PDF', () => {
+    const em = { ...pedido({ dispatch_option: { code: 1, label: 'EM' }, carrier: null, em: 123 }), suggestion: null, next_step: { code: 'etiqueta', label: 'Falta pagar y subir el PDF del EM' } } as PendienteLogistica
+    expect(esDelDeposito(em)).toBe(true)
+    expect(esDelDeposito({ ...em, em: null })).toBe(false)
+    expect(esDelDeposito({ ...em, has_label: true })).toBe(false)
+    expect(esDelDeposito({ ...em, next_step: { code: 'datos', label: 'Faltan datos' } })).toBe(false)
   })
   it('la sugerencia de la vez pasada', () => {
     const p = { ...pedido(), next_step: null, suggestion: { dispatch_option: { code: 3, label: 'Transporte' }, carrier: { slug: 'via_cargo', label: 'Via Cargo' }, from_gn_number: '31877', from_date: null } } as PendienteLogistica

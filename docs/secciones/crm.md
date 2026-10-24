@@ -1171,6 +1171,10 @@ Ger (logistica.arebensrl.com) abrió una API para el panel: `https://logistica.a
   transporte el seguimiento NO hace falta para despachar** (Darío, 24-oct): manda la foto de la guía
   al cliente y lo marca. Por eso en «Hoy» el paso `seguimiento` de un transporte en Listo se lee
   «Listo para despachar» (`pasoDe`). «Cargar seguimiento» quedó descartado por ahora.
+- ✅ **«Hoy» separa lo tuyo de lo del depósito** (24-oct): «Esperando al depósito», apagado, son
+  los EM con número cargado y sin PDF (`esDelDeposito`: `em` y `!has_label`) — los pagan y suben
+  las chicas. El número del grupo cuenta sólo lo tuyo. ⚠️ Supuesto sin verificar contra un pedido
+  real: que `has_label` pase a `true` cuando suben el PDF del EM.
 - ⏭️ **Lo que sigue de la 2ª tanda: cargar** (`PATCH` con `expected`, despachar, etiqueta de transporte). ⛔ No hay
   entorno de prueba: se prueba sobre un pedido acordado. ⛔ El 409 no se reintenta solo: se muestra
   cómo quedó el pedido y decide la persona.

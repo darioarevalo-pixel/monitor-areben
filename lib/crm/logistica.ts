@@ -225,6 +225,16 @@ export function pasoDe(p: PendienteLogistica): string | null {
   return p.next_step.label
 }
 
+/**
+ * ¿Lo que falta lo hacen las chicas del depósito? Un EM con su número cargado y sin el PDF subido
+ * espera que lo paguen y suban (Darío, 24-oct-2026: separar lo suyo de lo de ellas). Todo lo demás
+ * —forma de entrega, datos, número de EM, despachar— es de quien atiende el chat.
+ */
+export function esDelDeposito(p: PendienteLogistica): boolean {
+  if (!p.next_step || p.next_step.code === 'modalidad' || p.next_step.code === 'datos') return false
+  return p.dispatch_option?.code === 1 && !!p.em && !p.has_label
+}
+
 /** Sólo cambia lo que se tocó: un campo igual al que ya tiene el pedido no viaja. */
 export function cambiosDeEnvio(antes: Envio | null | undefined, ahora: Envio): Envio {
   const fuera: Envio = {}

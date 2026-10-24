@@ -13,7 +13,7 @@ import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
 import { armarFilasPedidos, traerPedidosCatalogo, type FilaPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
-import { pasoDe, pendientesLogistica, sugerenciaDe, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
+import { esDelDeposito, pasoDe, pendientesLogistica, sugerenciaDe, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
 import { mostrar as plata } from '@/lib/compromisos/core'
 
 /**
@@ -494,12 +494,22 @@ function usePendientesLogistica(): ResultadoLogistica | null {
 }
 
 /** Un pedido pendiente: el nombre abre la ficha (por su número de cliente de GN) y el verde, el chat. */
-function FilaLogistica({ p, onAbrir, onFicha }: { p: PendienteLogistica; onAbrir: (id: number, tel: string) => void; onFicha: (id: number, tel: string) => void }) {
+function FilaLogistica({
+  p,
+  onAbrir,
+  onFicha,
+  apagada,
+}: {
+  p: PendienteLogistica
+  onAbrir: (id: number, tel: string) => void
+  onFicha: (id: number, tel: string) => void
+  apagada?: boolean
+}) {
   const id = Number(p.gn_client_id) || 0
   const tel = p.client_phone || ''
   const sugerencia = sugerenciaDe(p)
   return (
-    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, borderLeft: `3px solid ${color.warning}`, background: color.surface }}>
+    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, borderLeft: `3px solid ${apagada ? color.line : color.warning}`, background: color.surface, opacity: apagada ? 0.6 : 1 }}>
       <button
         type="button"
         disabled={!id && !tel}
@@ -512,7 +522,7 @@ function FilaLogistica({ p, onAbrir, onFicha }: { p: PendienteLogistica; onAbrir
           Pedido {p.gn_number || p.id} · {p.status.label}
         </div>
         {/* Las palabras del panel, no las de Logística: ver `pasoDe`. */}
-        {p.next_step && <div style={{ fontSize: font.xs, color: color.warningInk, marginTop: 2 }}>{pasoDe(p)}</div>}
+        {p.next_step && <div style={{ fontSize: font.xs, color: apagada ? color.mut2 : color.warningInk, marginTop: 2 }}>{pasoDe(p)}</div>}
         {sugerencia && <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2 }}>{sugerencia}</div>}
       </button>
       <div style={{ display: 'flex', alignItems: 'center', padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
@@ -547,10 +557,27 @@ function GrupoLogistica({
 }) {
   if (!r || r.t === 'sin-permiso') return null
   if (r.t === 'ok' && !r.datos.orders.length) return null
+  const todos = r.t === 'ok' ? r.datos.orders : []
+  const mios = todos.filter((p) => !esDelDeposito(p))
+  const deposito = todos.filter(esDelDeposito)
+  // El número cuenta sólo lo tuyo: 0 = de tu parte está todo hecho.
   return (
-    <Grupo titulo="Pendientes en Logística" cuantas={r.t === 'ok' ? r.datos.count : 0} abierto={abierto} onToggle={onToggle}>
+    <Grupo titulo="Pendientes en Logística" cuantas={mios.length} abierto={abierto} onToggle={onToggle}>
       {r.t === 'error' && <Aclaracion>No pude traer los pedidos de Logística. {r.motivo}</Aclaracion>}
-      {r.t === 'ok' && r.datos.orders.map((p) => <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} />)}
+      {mios.map((p) => (
+        <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} />
+      ))}
+      {r.t === 'ok' && !mios.length && <Aclaracion>De tu parte no hay nada pendiente.</Aclaracion>}
+      {deposito.length > 0 && (
+        <>
+          <div style={{ padding: `${space[3]}px ${MARGEN}px ${space[1]}px`, fontSize: font.xs, fontWeight: 700, color: color.mut2 }}>
+            Esperando al depósito <span style={{ fontWeight: 600 }}>{deposito.length}</span>
+          </div>
+          {deposito.map((p) => (
+            <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} apagada />
+          ))}
+        </>
+      )}
     </Grupo>
   )
 }
