@@ -50,6 +50,8 @@ jobs:
           ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
           STOCK_CRON_KEY: ${{ secrets.STOCK_CRON_KEY }}
           ENTRADA_SIMULACRO: ${{ inputs.simulacro }}
+          # Variable del repo (Settings › Variables). Vacía = el sync corre como siempre. Ver lib/sync-tn/pausa.core.js.
+          SYNC_GN_TN_PAUSADO: ${{ vars.SYNC_GN_TN_PAUSADO }}
         run: |
           args=""
           [ "$ENTRADA_SIMULACRO" = "true" ] && args="--simulacro"

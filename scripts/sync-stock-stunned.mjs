@@ -27,6 +27,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { FILTRO_OR_STUNNED, planDeStock } from '../lib/sync-tn/stock-plan.core.js'
+import { pausadoEn } from '../lib/sync-tn/pausa.core.js'
 
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 const TN_STOCK_API = 'https://bdi-catalogo.vercel.app/api/tn-categorias?store=stunned'
@@ -44,6 +45,13 @@ if (!url || !key) {
 if (!simulacro && !llave) {
   console.error('Falta STOCK_CRON_KEY: sin la llave no se puede escribir en Tienda Nube.')
   process.exit(1)
+}
+
+// 🔑 La llave de «pausar el sync GN↔TN» (`SYNC_GN_TN_PAUSADO`): el día del corte el libro del ERP manda el stock a TN, y
+// este cron (GN→TN) se queda quieto, no en rojo: pausar no es una falla. El simulacro sigue corriendo (no escribe).
+if (!simulacro && pausadoEn('stunned')) {
+  console.log('Sync GN→TN de Stunned PAUSADO (SYNC_GN_TN_PAUSADO): no se escribe nada en la tienda.')
+  process.exit(0)
 }
 
 const supabase = createClient(url, key)
