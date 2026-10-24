@@ -400,7 +400,7 @@ export type FilaVentaLista = {
   /** Cerrado en TN sin pago: ⛔ retiene stock, se muestra «entregado sin cobrar». */
   entregadoSinCobrar?: boolean
 }
-export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean }
+export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean; corregir?: boolean }
 export const leerListaDeVentas = (marca: MarcaErp, desde: string, hasta: string) =>
   pedir<{ filas: FilaVentaLista[]; desde: string; hasta: string; puede: QueSabeElMotor; tnLeidaEn?: string | null }>(null, `&vista=ventas-lista&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer las ventas.')
 
@@ -413,6 +413,12 @@ export type ExtraDeVenta = {
   ediciones: Array<{ campo: string; antes: string; despues: string; usuario: string; cuando: string }>
   notas: Array<{ cuando: string; texto: string; de: string; reemplaza: string | null }>
   nota: { id: string; texto: string; de: string } | null
+  /** Correcciones de precio (motor sql/036): la diferencia contra lo cobrado queda a la vista, ⛔ se mueve plata sola. */
+  correcciones?: {
+    correcciones: Array<{ id: string; motivo: string; usuario: string; creada_en: string; total_antes: number; total_despues: number; cobrado: number; diferencia: number
+      lineas: Array<{ n: number; precio_antes: number; precio_despues: number }> }>
+    total: number | null; cobrado: number | null; diferencia: number
+  }
   /** null = el motor contestó; si no, por qué el historial ⛔ trae ediciones ni notas. */
   motor: string | null
 }
@@ -426,6 +432,9 @@ export type CambiosDeVenta = {
 }
 export const editarVentaErp = (marca: MarcaErp, ventaId: string, cambios: CambiosDeVenta, clienteDoc?: string | null) =>
   pedir<{ ok: true; ediciones: unknown[] }>(post({ accion: 'editar-venta', marca, ventaId, cambios, clienteDoc: clienteDoc ?? null }), '', 'No se pudo guardar.')
+export type CorreccionHecha = { total_antes: number; total_despues: number; cobrado: number; diferencia: number }
+export const corregirPrecioDeVenta = (marca: MarcaErp, ventaId: string, motivo: string, lineas: Array<{ n: number; precio: number }>) =>
+  pedir<{ ok: true; correccion: CorreccionHecha }>(post({ accion: 'corregir-precio', marca, ventaId, motivo, lineas }), '', 'No se pudo corregir el precio.')
 export const guardarNotaDeVenta = (marca: MarcaErp, ventaId: string, texto: string, reemplazaId: string | null) =>
   pedir<{ ok: true }>(post({ accion: 'nota-venta', marca, ventaId, texto, reemplazaId }), '', 'No se pudo guardar la nota.')
 export const cobrarVentaErp = (marca: MarcaErp, c: { ventaId: string; clienteId: string; linea: string; monto: number; saldo: number; cuenta: string; canal: string | null; fecha: string; ref: string; prueba: boolean }) =>

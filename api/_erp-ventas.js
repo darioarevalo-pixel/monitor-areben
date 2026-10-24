@@ -178,6 +178,7 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
  */
 async function moduloDelMotor(cual) {
   try {
+    if (cual === 'correccion') return await import('../motor/venta/correccion.mjs')
     return cual === 'ficha' ? await import('../motor/venta/ficha.mjs') : await import('../motor/cuenta/cuenta.mjs')
   } catch {
     return null
@@ -189,8 +190,9 @@ async function moduloDelMotor(cual) {
  * sin la función, la pantalla dibuja la ventana y dice que espera al motor (⛔ inventa un camino).
  */
 export async function queSabeElMotor() {
-  const [ficha, cuenta] = await Promise.all([moduloDelMotor('ficha'), moduloDelMotor('cuenta')])
+  const [ficha, cuenta, correccion] = await Promise.all([moduloDelMotor('ficha'), moduloDelMotor('cuenta'), moduloDelMotor('correccion')])
   return {
+    corregir: typeof correccion?.corregirPrecio === 'function',
     editar: typeof ficha?.editarVenta === 'function',
     notas: typeof ficha?.agregarNota === 'function',
     cobrar: typeof cuenta?.pendienteDeVentas === 'function' && typeof cuenta?.registrarPagoACuenta === 'function',
@@ -242,6 +244,26 @@ export async function editarVentaErp({ marca, body, usuario }, deps = {}) {
     }
     const r = await m.editarVenta(db, { venta_id: body.ventaId, cambios, usuario })
     return r.ok ? { ok: true, ediciones: r.ediciones } : errorDe(r.error)
+  })
+}
+
+/**
+ * Corregir el precio de una venta hecha, caso 1 (motor sql/036): una corrección inmutable, ⛔ mueve plata. Devuelve el total
+ * nuevo, lo cobrado y la diferencia para resolver a mano. Con factura, anulada o con cambio, el motor la rechaza.
+ */
+export async function corregirPrecioErp({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!UUID.test(String(body?.ventaId || ''))) return { status: 400, error: 'Venta inválida' }
+  const motivo = String(body?.motivo ?? '').trim()
+  if (!motivo) return { status: 400, error: 'Escribí el motivo.' }
+  const lineas = Array.isArray(body?.lineas) ? body.lineas.map((l) => ({ n: Number(l?.n), precio: Number(l?.precio) })) : []
+  if (!lineas.length || lineas.some((l) => !Number.isInteger(l.n) || !Number.isFinite(l.precio) || l.precio < 0)) return { status: 400, error: 'Los precios son números desde 0.' }
+  const m = deps.correccion || await moduloDelMotor('correccion')
+  if (typeof m?.corregirPrecio !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
+  return correr(async (db) => {
+    const r = await m.corregirPrecio(db, { venta_id: body.ventaId, motivo, usuario, lineas })
+    return r.ok ? { ok: true, correccion: r.correccion } : errorDe(r.error)
   })
 }
 
@@ -322,13 +344,15 @@ export async function extraDeVenta({ marca, id }, deps = {}) {
  */
 async function delMotorParaLaFicha(marca, id, deps) {
   const m = deps.ficha !== undefined ? deps.ficha : await moduloDelMotor('ficha')
-  if (typeof m?.historialDe !== 'function') return { ediciones: [], notas: [], nota: null, motor: ESPERA_AL_MOTOR }
+  if (typeof m?.historialDe !== 'function') return { ediciones: [], notas: [], nota: null, correcciones: [], motor: ESPERA_AL_MOTOR }
   const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
   const r = await correr(async (db) => {
     const [h, n] = await Promise.all([m.historialDe(db, { venta_id: id }), m.notasDe(db, { venta_id: id })])
-    return { h, n }
+    // Las correcciones de precio (sql/036): una base sin la 036 ⛔ tiene la tabla ⇒ vacías, ⛔ rompe la ficha.
+    const c = await (deps.correccion !== undefined ? deps.correccion : await moduloDelMotor('correccion'))?.correccionesDe?.(db, { venta_id: id }).catch(() => null)
+    return { h, n, c }
   })
-  if (r.status) return { ediciones: [], notas: [], nota: null, motor: r.error }
+  if (r.status) return { ediciones: [], notas: [], nota: null, correcciones: [], motor: r.error }
   const ediciones = (r.h.ok ? r.h.ediciones : []).map((e) => ({ campo: e.campo, antes: textoDeCampo(e.campo, e.antes), despues: textoDeCampo(e.campo, e.despues), usuario: e.usuario, cuando: e.en }))
   const vigente = (r.n.ok ? r.n.notas : [])[0] || null
   const notas = []
@@ -336,7 +360,8 @@ async function delMotorParaLaFicha(marca, id, deps) {
     const versiones = [...(vigente.historial || []), vigente]
     versiones.forEach((x, i) => notas.push({ cuando: x.creada_en, texto: x.texto, de: deDondeNota(x), reemplaza: i ? versiones[i - 1].texto : null }))
   }
-  return { ediciones, notas, nota: vigente ? { id: vigente.id, texto: vigente.texto, de: deDondeNota(vigente) } : null, motor: null }
+  const correcciones = r.c?.ok ? r.c : { correcciones: [], total: null, cobrado: null, diferencia: 0 }
+  return { ediciones, notas, nota: vigente ? { id: vigente.id, texto: vigente.texto, de: deDondeNota(vigente) } : null, correcciones, motor: null }
 }
 
 /** «camila» · «vino con el pedido de Tienda Nube» · «importada del Excel» (diseño §5). */

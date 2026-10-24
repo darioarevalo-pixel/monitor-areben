@@ -13,7 +13,7 @@ import { Button, Field, MenuAcciones, Modal, Notice, color, font, space, useConf
 import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial } from '@/components/ui/FichaCostado'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
 import {
-  anularVenta, leerExtraDeVenta, leerFichaDeVenta, notaDeCreditoDeVenta,
+  anularVenta, corregirPrecioDeVenta, leerExtraDeVenta, leerFichaDeVenta, notaDeCreditoDeVenta,
   type ExtraDeVenta, type FichaDeVenta, type FilaVentaLista, type MarcaErp, type QueSabeElMotor,
 } from '@/lib/erp/cliente'
 import { COBRO, ESTADO, historialDeVenta, plata } from '@/lib/erp/ventas-lista.core.js'
@@ -40,6 +40,9 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const [extra, setExtra] = useState<ExtraDeVenta | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [anulando, setAnulando] = useState(accionInicial === 'anular')
+  const [corrigiendo, setCorrigiendo] = useState(false)
+  const [precios, setPrecios] = useState<Record<number, string>>({})
+  const [motivoPrecio, setMotivoPrecio] = useState('')
   const [motivo, setMotivo] = useState('')
   const [forma, setForma] = useState<'plata' | 'saldo'>('plata')
   const [cliDoc, setCliDoc] = useState('')
@@ -86,6 +89,30 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     onCambio(`Venta ${fila.ref} anulada.${plataTexto}${vueltaTexto}${r.ncPendiente ? ' Tenía factura: falta la nota de crédito.' : ''}`)
   }, 'No se pudo anular.')
 
+  // Precio vigente de cada línea = el de la última corrección (el motor las guarda aparte: la venta ⛔ se edita).
+  const corr = extra?.correcciones
+  const vigente = (n: number, original: number) => {
+    for (let i = (corr?.correcciones.length ?? 0) - 1; i >= 0; i--) {
+      const l = corr!.correcciones[i].lineas.find((x) => x.n === n)
+      if (l) return l.precio_despues
+    }
+    return original
+  }
+  const abrirCorregir = () => {
+    setPrecios(Object.fromEntries((ficha?.lineas ?? []).filter((l) => !l.devuelta).map((l) => [l.n, String(vigente(l.n, l.precio))])))
+    setMotivoPrecio('')
+    setCorrigiendo(true)
+  }
+  const nuevos = (ficha?.lineas ?? []).filter((l) => !l.devuelta).map((l) => ({ n: l.n, precio: Number(String(precios[l.n] ?? '').replace(',', '.')), antes: vigente(l.n, l.precio) }))
+  const cambian = nuevos.filter((x) => Number.isFinite(x.precio) && x.precio >= 0 && x.precio !== x.antes)
+  const preciosMalos = nuevos.some((x) => !Number.isFinite(x.precio) || x.precio < 0)
+  const confirmarCorregir = () => correr(async () => {
+    const r = await corregirPrecioDeVenta(marca, fila.id, motivoPrecio, cambian.map((x) => ({ n: x.n, precio: x.precio })))
+    setCorrigiendo(false)
+    const d = r.correccion.diferencia
+    onCambio(`Precio de la venta ${fila.ref} corregido: total ${plata(r.correccion.total_despues)}.${d === 0 ? '' : d > 0 ? ` Faltan cobrar ${plata(d)}: registrá el cobro.` : ` Sobran ${plata(-d)}: hay que devolverlos.`} No se movió plata.`)
+  }, 'No se pudo corregir el precio.')
+
   async function hacerNC() {
     const ok = await confirmar({
       titulo: `Nota de crédito de la venta ${fila.ref}`,
@@ -105,6 +132,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const menu: AccionMenu[] = esPedido ? [] : [
     ...(ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
     ...(!fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar (Caja › Factura)', icono: 'factura' as const, onClick: () => irACaja('factura') }] : []),
+    ...(puede.corregir && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
     { key: 'anular', label: 'Anular…', icono: 'anular', tone: 'danger', disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) },
   ]
   const hechos: HechoHistorial[] = ficha ? (historialDeVenta(ficha, { ...extra, tn: extra?.tn ?? undefined }) as HechoHistorial[]) : []
@@ -214,6 +242,14 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             {debe && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', fontWeight: weight.bold, color: 'var(--mo-warning-ink)' }}><span>Saldo</span><span>{plata(fila.saldo)}</span></div>}
           </section>
 
+          {!!corr?.correcciones.length && (
+            <Notice tone={corr.diferencia === 0 ? 'neutral' : 'warning'}>
+              <b>Precio corregido</b>: total {plata(corr.total ?? v!.total)} · cobrado {plata(corr.cobrado ?? 0)}.{' '}
+              {corr.diferencia > 0 ? `Faltan cobrar ${plata(corr.diferencia)}.` : corr.diferencia < 0 ? `Sobran ${plata(-corr.diferencia)}: hay que devolverlos.` : 'Lo cobrado coincide.'}{' '}
+              Las prendas de arriba muestran el precio original; la plata no se movió sola.
+            </Notice>
+          )}
+
           <section style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
             <div><h3 style={h3}>Historial de la venta</h3><span style={{ fontSize: font.sm, color: color.mut }}>todo lo que le pasó, con quién y cuándo</span></div>
             <Historial hechos={hechos} cuandoTexto={cuandoCorto} />
@@ -261,6 +297,25 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         )}
         <Field label="Motivo" required hint="Queda guardado con tu nombre.">
           <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+        </Field>
+      </Modal>
+      <Modal
+        abierto={corrigiendo} onCerrar={() => setCorrigiendo(false)} titulo={`Corregir el precio de la venta ${fila.ref}`}
+        pie={<>
+          <Button variant="outline" onClick={() => setCorrigiendo(false)}>Cancelar</Button>
+          <Button disabled={trabajando || !cambian.length || preciosMalos || motivoPrecio.trim().length < MOTIVO_MINIMO} onClick={() => void confirmarCorregir()}>Corregir precio</Button>
+        </>}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: space[3], marginBottom: space[3] }}>
+          <Notice tone="neutral">No mueve plata: el total nuevo se compara con lo cobrado y la diferencia queda a la vista para resolverla con una devolución o un cobro. Con factura no se puede (va nota de crédito).</Notice>
+          {(ficha?.lineas ?? []).filter((l) => !l.devuelta).map((l) => (
+            <Field key={l.id} label={`${l.nombre ?? `Producto ${l.producto}`} · talle ${l.talleNombre ?? l.talle} · ${l.cantidad} u.`} hint={`Precio por unidad. Ahora: ${plata(vigente(l.n, l.precio))}`}>
+              <input className="mo-input" inputMode="decimal" value={precios[l.n] ?? ''} onChange={(e) => setPrecios({ ...precios, [l.n]: e.target.value })} />
+            </Field>
+          ))}
+        </div>
+        <Field label="Motivo" required hint="Queda guardado con tu nombre.">
+          <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={motivoPrecio} onChange={(e) => setMotivoPrecio(e.target.value)} />
         </Field>
       </Modal>
     </FichaCostado>

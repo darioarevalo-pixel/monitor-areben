@@ -48,6 +48,15 @@ describe('ERP · permisos por rol', () => {
     expect(puedeErp(perfil({ admin: true }), 'bdi', 'anular', apr)).toBe(true)
   })
 
+  it('corregir precio: la oficina lo hace; con el interruptor `precio` de ESA marca prendido, sólo el Admin', () => {
+    expect(puedeErp(abierto(['administracion']), 'bdi', 'corregir-precio')).toBe(true)
+    expect(puedeErp(abierto(['local']), 'bdi', 'corregir-precio')).toBe(false)
+    const apr = { bdi: { anular: false, conteo: false, precio: true }, zattia: { anular: false, conteo: false, precio: false } }
+    expect(puedeErp(abierto(['administracion']), 'bdi', 'corregir-precio', apr)).toBe(false)
+    expect(puedeErp(abierto(['administracion']), 'zattia', 'corregir-precio', apr)).toBe(true)
+    expect(puedeErp(perfil({ admin: true }), 'bdi', 'corregir-precio', apr)).toBe(true)
+  })
+
   it('🔑 los interruptores por marca: prendido en una sola, la otra sigue como antes (y sin dato = apagado)', () => {
     const apr = { bdi: { anular: true, conteo: false, precio: false }, zattia: { anular: false, conteo: false, precio: false } }
     expect(puedeErp(abierto(['local']), 'bdi', 'anular', apr)).toBe(false)

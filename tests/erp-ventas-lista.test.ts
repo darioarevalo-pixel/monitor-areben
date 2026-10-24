@@ -3,7 +3,7 @@ import {
   COLUMNAS_DE_SIEMPRE, accionesDeFila, alternarColumna, armarFila, clienteDe, contarVistas, estadoDeVenta, filtrar,
   historialDeVenta, moverColumna, normalizarPrefs, ordenar, rangoDePeriodo, resumen, saldoDeVenta,
 } from '@/lib/erp/ventas-lista.core.js'
-import { cobrarVentaErp, editarVentaErp, notaDeVentaErp, numeroDeFactura, textoDeCampo } from '../api/_erp-ventas.js'
+import { cobrarVentaErp, corregirPrecioErp, editarVentaErp, notaDeVentaErp, numeroDeFactura, textoDeCampo } from '../api/_erp-ventas.js'
 
 /**
  * **ERP › Ventas, el PILOTO del diseño** (18-oct): la lista que junta Caja, TN, mayoristas, cambios y pedidos sin pagar.
@@ -185,6 +185,19 @@ describe('el servidor: lo que ⛔ está en el motor se frena con el motivo', () 
     const r = await editarVentaErp({ marca: 'zattia', body: { ventaId: V, cambios: { vendedor: 'karen', total: 1 } }, usuario: 'bruno' }, { ficha, db })
     expect(pedido).toEqual({ venta_id: V, cambios: { vendedor: 'karen' }, usuario: 'bruno' })
     expect(r).toEqual({ status: 409, error: 'Ya está facturada (YA_FACTURADA)' })
+  })
+  it('corregir el precio: manda sólo n y precio, devuelve la diferencia, y sin la función o con un motivo vacío ⛔ escribe', async () => {
+    let pedido: unknown = null
+    const correccion = { corregirPrecio: async (_db: unknown, e: unknown) => { pedido = e; return { ok: true, correccion: { total_antes: 22500, total_despues: 19500, cobrado: 22500, diferencia: -3000 } } } }
+    const lineas = [{ n: 1, precio: '12000', total: 5 }]
+    const r = await corregirPrecioErp({ marca: 'zattia', body: { ventaId: V, motivo: ' Precio viejo ', lineas }, usuario: 'dario' }, { correccion, db })
+    expect(pedido).toEqual({ venta_id: V, motivo: 'Precio viejo', usuario: 'dario', lineas: [{ n: 1, precio: 12000 }] })
+    expect(r).toMatchObject({ ok: true, correccion: { diferencia: -3000 } })
+    expect(await corregirPrecioErp({ marca: 'zattia', body: { ventaId: V, motivo: ' ', lineas }, usuario: 'd' }, { correccion, db })).toMatchObject({ status: 400 })
+    expect(await corregirPrecioErp({ marca: 'zattia', body: { ventaId: V, motivo: 'x', lineas: [{ n: 1, precio: -1 }] }, usuario: 'd' }, { correccion, db })).toMatchObject({ status: 400 })
+    expect(await corregirPrecioErp({ marca: 'zattia', body: { ventaId: V, motivo: 'x', lineas }, usuario: 'd' }, { correccion: {}, db })).toMatchObject({ status: 409 })
+    const factura = { corregirPrecio: async () => ({ ok: false, error: { codigo: 'FACTURADA', mensaje: 'Ya tiene factura' } }) }
+    expect(await corregirPrecioErp({ marca: 'zattia', body: { ventaId: V, motivo: 'x', lineas }, usuario: 'd' }, { correccion: factura, db })).toEqual({ status: 409, error: 'Ya tiene factura (FACTURADA)' })
   })
   it('el cliente se elige por documento y se vuelve su id; sin ficha, lo dice', async () => {
     let pedido: { cambios?: unknown } | null = null
