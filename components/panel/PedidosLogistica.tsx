@@ -6,6 +6,7 @@ import {
   avisosDe,
   cambiosDeEnvio,
   catalogosLogistica,
+  despachar,
   entregaDe,
   generarEtiqueta,
   guardarEM,
@@ -16,6 +17,7 @@ import {
   type Envio,
   pedidosDelCliente,
   pendientesLogistica,
+  LISTO,
   TRANSPORTE,
   type Catalogos,
   type PedidoLogistica,
@@ -113,7 +115,21 @@ function Pedido({
   despacho?: string
   onCambio: (p: PedidoLogistica) => void
 }) {
-  const [modo, setModo] = useState<'entrega' | 'etiqueta' | 'em' | null>(null)
+  const [modo, setModo] = useState<'entrega' | 'etiqueta' | 'em' | 'despachar' | null>(null)
+  const [despachando, setDespachando] = useState(false)
+  const confirmarDespacho = async () => {
+    setDespachando(true)
+    const r = await despachar(p)
+    setDespachando(false)
+    setModo(null)
+    if (r.t === 'ok') {
+      onCambio(r.pedido)
+      setAviso({ txt: 'Despachado: sale de la lista' })
+    } else {
+      if (r.t === 'cambio' && r.pedido) onCambio(r.pedido)
+      setAviso({ txt: r.motivo, mal: true })
+    }
+  }
   const eligiendo = modo === 'entrega'
   const setEligiendo = (v: boolean) => setModo(v ? 'entrega' : null)
   // La etiqueta se arma acá sólo en Etiqueta libre y Transporte. En EM se carga sólo su número: la
@@ -154,6 +170,16 @@ function Pedido({
             setEligiendo(false)
           }}
         />
+      ) : modo === 'despachar' ? (
+        <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+          <span style={{ fontSize: font.xs, color: color.ink, marginTop: 6 }}>¿Ya salió el pedido?</span>
+          <BotonChico fuerte onClick={confirmarDespacho} disabled={despachando}>
+            {despachando ? 'Guardando…' : 'Sí, despachado'}
+          </BotonChico>
+          <BotonChico onClick={() => setModo(null)} disabled={despachando}>
+            Cancelar
+          </BotonChico>
+        </div>
       ) : modo === 'em' ? (
         <CargarEM
           p={p}
@@ -175,7 +201,7 @@ function Pedido({
             if (!mal) setModo(null)
           }}
         />
-      ) : (
+      ) : p.status.code > LISTO ? null : (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           <BotonChico onClick={() => (setAviso(null), setEligiendo(true))}>{p.dispatch_option ? 'Cambiar forma de entrega' : 'Elegir forma de entrega'}</BotonChico>
           {llevaEtiqueta && (
@@ -186,6 +212,11 @@ function Pedido({
           {esEM && (
             <BotonChico fuerte={!p.em} onClick={() => (setAviso(null), setModo('em'))}>
               {p.em ? 'Cambiar EM' : 'Cargar EM'}
+            </BotonChico>
+          )}
+          {p.status.code === LISTO && (
+            <BotonChico fuerte onClick={() => (setAviso(null), setModo('despachar'))}>
+              Despachado
             </BotonChico>
           )}
         </div>

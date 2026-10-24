@@ -10,6 +10,7 @@
 //   POST { recurso:'logistica', action:'entrega', id, dispatch_option, carrier?, expected }
 //                                                               → PATCH /mayorista/pedidos/{id}
 //   POST { recurso:'logistica', action:'em', id, em, expected:{em} } → PATCH /mayorista/pedidos/{id}
+//   POST { recurso:'logistica', action:'despachar', id }       → POST /mayorista/pedidos/{id}/despachar
 //   POST { recurso:'logistica', action:'interpretar', text }   → POST /etiquetas/interpretar (IA, no guarda)
 //   POST { recurso:'logistica', action:'vista-previa', id, datos }
 //                                                  → POST /mayorista/pedidos/{id}/etiqueta/vista-previa
@@ -65,6 +66,12 @@ export function rutaDe(body) {
     if (vio !== null && !Number.isInteger(vio)) return { error: 'Falta lo que viste del pedido.' };
     return { ruta: `/mayorista/pedidos/${id}`, metodo: 'PATCH', cuerpo: { em, expected: { em: vio } } };
   }
+  // Sólo desde Listo (si no, 409 con el pedido). Repetirlo no hace nada: vuelve `already: true`.
+  if (accion === 'despachar') {
+    const id = String(body.id ?? '');
+    if (!/^\d{1,12}$/.test(id)) return { error: 'Falta el pedido.' };
+    return { ruta: `/mayorista/pedidos/${id}/despachar`, metodo: 'POST' };
+  }
   if (accion === 'interpretar') {
     const text = typeof body.text === 'string' ? body.text.trim() : '';
     if (!text) return { error: 'Pegá el mensaje del cliente.' };
@@ -83,7 +90,7 @@ export function rutaDe(body) {
     if (vio.error) return { error: vio.error };
     return { ruta: `/mayorista/pedidos/${id}/etiqueta`, metodo: 'POST', cuerpo: { ...datos.cuerpo, expected: vio.cuerpo } };
   }
-  return { error: 'acción inválida (usá me, catalogos, cliente, telefono, pendientes, entrega, em, interpretar, vista-previa o etiqueta)' };
+  return { error: 'acción inválida (usá me, catalogos, cliente, telefono, pendientes, entrega, em, despachar, interpretar, vista-previa o etiqueta)' };
 }
 
 const opcion = (v) => (v === null ? null : Number.isInteger(v) && v >= 1 && v <= 9 ? v : undefined);

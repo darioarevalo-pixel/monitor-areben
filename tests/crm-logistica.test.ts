@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { avisosDe, cambiosDeEnvio, entregaDe, sugerenciaDe, type PedidoLogistica, type PendienteLogistica } from '../lib/crm/logistica'
+import { avisosDe, cambiosDeEnvio, entregaDe, pasoDe, sugerenciaDe, type PedidoLogistica, type PendienteLogistica } from '../lib/crm/logistica'
 
 vi.mock('../api/_auth.js', () => ({ exigirUsuario: vi.fn(async () => ({ name: 'Darío', admin: true })) }))
 vi.mock('../lib/permisos.core.js', () => ({ puedeVerAlguna: vi.fn(() => true), esAdmin: vi.fn(() => true) }))
@@ -65,6 +65,13 @@ describe('entregaDe y sugerenciaDe', () => {
     expect(entregaDe(pedido({ dispatch_option: { code: 1, label: 'Etiqueta manual' }, carrier: null, em: 12345 }))).toBe('Etiqueta manual · EM 12345')
     expect(entregaDe(pedido({ dispatch_option: null }))).toBeNull()
   })
+  it('el paso que falta, en palabras del panel', () => {
+    const base = { ...pedido({ status: { code: 3, label: 'Listo' } }), suggestion: null } as PendienteLogistica
+    expect(pasoDe({ ...base, next_step: { code: 'modalidad', label: 'Falta elegir la modalidad de despacho' } })).toBe('Falta elegir la forma de entrega')
+    expect(pasoDe({ ...base, next_step: { code: 'seguimiento', label: 'Falta el número de seguimiento' } })).toBe('Listo para despachar')
+    const em = { ...base, dispatch_option: { code: 1, label: 'EM' }, next_step: { code: 'seguimiento', label: 'Falta el número de seguimiento' } }
+    expect(pasoDe(em)).toBe('Falta el número de seguimiento')
+  })
   it('la sugerencia de la vez pasada', () => {
     const p = { ...pedido(), next_step: null, suggestion: { dispatch_option: { code: 3, label: 'Transporte' }, carrier: { slug: 'via_cargo', label: 'Via Cargo' }, from_gn_number: '31877', from_date: null } } as PendienteLogistica
     expect(sugerenciaDe(p)).toBe('La vez pasada: Transporte · Via Cargo')
@@ -103,6 +110,9 @@ describe('la etiqueta', () => {
     })
     expect(rutaDe({ action: 'em', id: 681, em: '12a', expected: { em: null } }).error).toBe('El número de EM no es válido.')
     expect(rutaDe({ action: 'em', id: 681, em: 5 }).error).toBe('Falta lo que viste del pedido.')
+  })
+  it('despachar: POST sin cuerpo', () => {
+    expect(rutaDe({ action: 'despachar', id: 677, dispatch_option: 1 })).toEqual({ ruta: '/mayorista/pedidos/677/despachar', metodo: 'POST' })
   })
   it('cambiosDeEnvio: sólo lo que se tocó', () => {
     expect(cambiosDeEnvio({ dni: '1', locality: null }, { dni: '1 ', locality: 'Río Segundo', zipcode: '' })).toEqual({ locality: 'Río Segundo' })

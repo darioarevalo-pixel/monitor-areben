@@ -13,7 +13,7 @@ import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
 import { armarFilasPedidos, traerPedidosCatalogo, type FilaPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
-import { pendientesLogistica, sugerenciaDe, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
+import { pasoDe, pendientesLogistica, sugerenciaDe, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
 import { mostrar as plata } from '@/lib/compromisos/core'
 
 /**
@@ -511,10 +511,8 @@ function FilaLogistica({ p, onAbrir, onFicha }: { p: PendienteLogistica; onAbrir
         <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2 }}>
           Pedido {p.gn_number || p.id} · {p.status.label}
         </div>
-        {/* Logística dice «modalidad de despacho»; en el panel es «forma de entrega» (Darío, 22-oct-2026). */}
-        {p.next_step && (
-          <div style={{ fontSize: font.xs, color: color.warningInk, marginTop: 2 }}>{p.next_step.code === 'modalidad' ? 'Falta elegir la forma de entrega' : p.next_step.label}</div>
-        )}
+        {/* Las palabras del panel, no las de Logística: ver `pasoDe`. */}
+        {p.next_step && <div style={{ fontSize: font.xs, color: color.warningInk, marginTop: 2 }}>{pasoDe(p)}</div>}
         {sugerencia && <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2 }}>{sugerencia}</div>}
       </button>
       <div style={{ display: 'flex', alignItems: 'center', padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>

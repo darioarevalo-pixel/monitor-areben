@@ -1167,6 +1167,10 @@ Ger (logistica.arebensrl.com) abrió una API para el panel: `https://logistica.a
   se carga SÓLO el número** (Darío, 22-oct): los datos y la etiqueta los pone Envío Nube; el
   formulario de datos de quien recibe es sólo para Etiqueta libre y Transporte. Si falta elegir
   domicilio o sucursal, el formulario muestra la dirección y la sucursal (antes escondía las dos).
+- ✅ **«Despachado»** (acción `despachar`) sólo con el pedido en Listo, con confirmación. 🔑 **En
+  transporte el seguimiento NO hace falta para despachar** (Darío, 24-oct): manda la foto de la guía
+  al cliente y lo marca. Por eso en «Hoy» el paso `seguimiento` de un transporte en Listo se lee
+  «Listo para despachar» (`pasoDe`). «Cargar seguimiento» quedó descartado por ahora.
 - ⏭️ **Lo que sigue de la 2ª tanda: cargar** (`PATCH` con `expected`, despachar, etiqueta de transporte). ⛔ No hay
   entorno de prueba: se prueba sobre un pedido acordado. ⛔ El 409 no se reintenta solo: se muestra
   cómo quedó el pedido y decide la persona.

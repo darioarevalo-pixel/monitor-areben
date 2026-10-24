@@ -130,6 +130,8 @@ export function catalogosLogistica(): Promise<Resultado<Catalogos>> {
 
 /** El código de la forma «Transporte»: es la única que pide elegir cuál. */
 export const TRANSPORTE = 3
+/** El estado «Listo»: el pedido está armado y se puede despachar. */
+export const LISTO = 3
 
 /**
  * Guardar la forma de entrega de un pedido. Va con lo que el panel VIO (`expected`): si alguien la
@@ -204,6 +206,25 @@ export async function guardarEM(p: PedidoLogistica, em: number): Promise<Resulta
   return { t: 'error', motivo: r.motivo }
 }
 
+/**
+ * Avisar el despacho: el pedido pasa de Listo a Despachado y sale de la lista. En transporte no hace
+ * falta cargar el seguimiento antes (Darío, 24-oct-2026: le manda la foto de la guía al cliente).
+ */
+export async function despachar(p: PedidoLogistica): Promise<ResultadoCarga> {
+  const r = await cargar<{ already?: boolean; order?: PedidoLogistica }>({ action: 'despachar', id: p.id })
+  if (r.ok) return r.d.order ? { t: 'ok', pedido: r.d.order } : { t: 'error', motivo: 'Logística no devolvió el pedido.' }
+  if (r.status === 409) return { t: 'cambio', motivo: r.motivo, pedido: r.pedido }
+  return { t: 'error', motivo: r.motivo }
+}
+
+/** El paso que falta, en las palabras del panel. En transporte el seguimiento no frena: está listo. */
+export function pasoDe(p: PendienteLogistica): string | null {
+  if (!p.next_step) return null
+  if (p.next_step.code === 'modalidad') return 'Falta elegir la forma de entrega'
+  if (p.next_step.code === 'seguimiento' && p.dispatch_option?.code === TRANSPORTE && p.status.code === LISTO) return 'Listo para despachar'
+  return p.next_step.label
+}
+
 /** Sólo cambia lo que se tocó: un campo igual al que ya tiene el pedido no viaja. */
 export function cambiosDeEnvio(antes: Envio | null | undefined, ahora: Envio): Envio {
   const fuera: Envio = {}
@@ -214,7 +235,6 @@ export function cambiosDeEnvio(antes: Envio | null | undefined, ahora: Envio): E
   return fuera
 }
 
-const LISTO = 3
 
 /**
  * Lo que hay que hacer con un pedido, en el orden del circuito. Es lo que se pinta en amarillo: lo
