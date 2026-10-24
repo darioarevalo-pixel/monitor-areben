@@ -26,6 +26,17 @@ describe('api/_erp.js · la puerta por rol', () => {
     expect(r.code).toBe(403)
   })
 
+  it('los interruptores sólo los lee y los cambia el Admin: un Local con el ERP abierto recibe 403', async () => {
+    const handler = await cargar()
+    perfilActual = perfil({ funcion: ['local'], acceso: { bdi: { erp: true }, zattia: {} } })
+    const lee = res()
+    await handler({ method: 'GET', query: { vista: 'interruptores' }, body: {} }, lee)
+    expect(lee.code).toBe(403)
+    const pone = res()
+    await handler({ method: 'POST', query: {}, body: { accion: 'poner-interruptor', marca: 'bdi', clave: 'anular', valor: true } }, pone)
+    expect(pone.code).toBe(403)
+  })
+
   it('el admin pasa y lee su mapa de permisos', async () => {
     const handler = await cargar()
     perfilActual = perfil({ admin: true })

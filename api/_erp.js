@@ -92,6 +92,7 @@ import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce
 import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { estructuraDeMarca } from './_erp-estructura.js'
+import { interruptoresDeMarcas, ponerInterruptorErp } from './_erp-interruptores.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.js'
 import { ACCIONES as ACCIONES_TRANSFERENCIA } from '../lib/erp/transferencia-doc.core.js'
@@ -1329,12 +1330,18 @@ export default async function handler(req, res) {
   // herede el área `erp` (la llave), sólo pasa el admin, como hasta el 19-oct.
   const permiso = permisoErpDe({ method: req.method, vista: req.query.vista, accion: body.accion })
   const base = baseDeLinea(body.marca || body.linea || req.query.marca || req.query.linea || req.query.tienda)
-  if (!(base ? [base] : ['bdi', 'zattia']).every((m) => puedeErp(perfil, m, permiso))) {
+  // Los interruptores de Aprobaciones (anular / conteo / precio: prendido = sólo Admin) viven en la base de cada marca.
+  // Al Admin ⛔ le cambian nada ⇒ no se lee la base; y los de un pedido que sólo es 'ver' tampoco los usan.
+  const marcasDelPedido = base ? [base] : ['bdi', 'zattia']
+  const aprobaciones = (esAdmin(perfil) || (permiso === 'ver' && req.query.vista !== 'permisos'))
+    ? undefined
+    : await interruptoresDeMarcas(marcasDelPedido, { conMotor })
+  if (!marcasDelPedido.every((m) => puedeErp(perfil, m, permiso, aprobaciones))) {
     return res.status(403).json({ error: permiso === 'ver' ? 'No tenés acceso al ERP.' : 'Tu rol no puede hacer esto en el ERP.', permiso })
   }
   const invalida = entradaInvalida({ method: req.method, query: req.query, body })
   if (invalida) return res.status(invalida.status).json({ error: invalida.error, campo: invalida.campo })
-  if (req.method === 'GET' && req.query.vista === 'permisos') return res.status(200).json({ permisos: permisosErp(perfil) })
+  if (req.method === 'GET' && req.query.vista === 'permisos') return res.status(200).json({ permisos: permisosErp(perfil, aprobaciones) })
   const mes = String(req.query.mes || body.mes || diaArgentino(Date.now()).slice(0, 7))
   if (!/^\d{4}-\d{2}$/.test(mes)) return res.status(400).json({ error: 'Mes inválido' })
 
@@ -1363,6 +1370,15 @@ export default async function handler(req, res) {
       const f = { 'guardar-regla': guardarReglaErp, 'sembrar-reglas': sembrarReglasErp, 'simular-reglas': simularReglasErp, 'prender-caja-reglas': prenderCajaErp }[body.accion]
       const r = await f({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error, campo: r.campo ?? null } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'interruptores') {
+      return res.status(200).json({ interruptores: await interruptoresDeMarcas(['bdi', 'zattia'], { conMotor }) })
+    }
+
+    if (req.method === 'POST' && body.accion === 'poner-interruptor') {
+      const r = await ponerInterruptorErp({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
     if (req.method === 'GET' && req.query.vista === 'ajustes') {

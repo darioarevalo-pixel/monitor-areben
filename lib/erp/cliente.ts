@@ -619,3 +619,13 @@ export const leerTurnosCaja = (marca: MarcaErp, desde: string, hasta: string) =>
 /** El turno abierto con su resumen EN VIVO (el esperado lo calcula la Caja: lee GN, 1 a 10 s). */
 export const leerCajaAbierta = (marca: MarcaErp) =>
   deCaja<{ turno: (Record<string, unknown> & { resumen?: { ventas?: number; efectivo?: { esperado?: number } } }) | null }>(marca, 'action=turno', 'No se pudo leer la caja abierta.')
+
+export type ClaveInterruptor = 'anular' | 'conteo' | 'precio'
+export type Interruptores = Record<ClaveInterruptor, boolean>
+
+/** Los interruptores de Aprobaciones de cada marca (sólo Admin). Prendido = esa acción la hace sólo Admin. */
+export const leerInterruptores = () =>
+  pedir<{ interruptores: Record<MarcaErp, Interruptores> }>(null, `&vista=interruptores&nc=${Date.now()}`, 'No se pudieron leer las aprobaciones.')
+
+export const ponerInterruptor = (marca: MarcaErp, clave: ClaveInterruptor, valor: boolean) =>
+  pedir<{ ok: true; marca: MarcaErp; interruptores: Interruptores }>(post({ accion: 'poner-interruptor', marca, clave, valor }), '', 'No se pudo guardar el cambio.')

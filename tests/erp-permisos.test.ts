@@ -48,6 +48,14 @@ describe('ERP · permisos por rol', () => {
     expect(puedeErp(perfil({ admin: true }), 'bdi', 'anular', apr)).toBe(true)
   })
 
+  it('🔑 los interruptores por marca: prendido en una sola, la otra sigue como antes (y sin dato = apagado)', () => {
+    const apr = { bdi: { anular: true, conteo: false, precio: false }, zattia: { anular: false, conteo: false, precio: false } }
+    expect(puedeErp(abierto(['local']), 'bdi', 'anular', apr)).toBe(false)
+    expect(puedeErp(abierto(['local']), 'zattia', 'anular', apr)).toBe(true)
+    expect(puedeErp(abierto(['local']), 'bdi', 'anular', { zattia: apr.zattia })).toBe(true)
+    expect(puedeErp(perfil({ admin: true }), 'bdi', 'anular', apr)).toBe(true)
+  })
+
   it('la excepción por persona: tildar da, excluir saca (también al admin), y es por marca', () => {
     expect(puedeErp(abierto(['consulta'], { 'erp.cobrar': true }), 'bdi', 'cobrar')).toBe(true)
     expect(puedeErp(abierto(['consulta'], { 'erp.cobrar': true }), 'zattia', 'cobrar')).toBe(false)
