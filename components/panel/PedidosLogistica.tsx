@@ -548,6 +548,8 @@ function ArmarEtiqueta({
         <img src={previa.png} alt="Vista previa de la etiqueta" style={{ width: '100%', border: `1px solid ${color.line}`, borderRadius: radius.sm, background: '#fff', opacity: vista ? 1 : 0.4 }} />
       )}
       {previa && !vista && <div style={{ fontSize: font.xs, color: color.mut2 }}>Cambiaste algo: volvé a ver la etiqueta antes de guardar.</div>}
+      {/* Darío, 24-oct-2026: «no me deja poner guardar y generar». El botón apagado no decía por qué. */}
+      {!previa && <div style={{ fontSize: font.xs, color: color.mut2 }}>Para guardar, primero tocá «Ver etiqueta».</div>}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         <BotonChico onClick={ver} disabled={!!ocupado}>
