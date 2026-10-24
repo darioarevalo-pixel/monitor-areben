@@ -195,6 +195,15 @@ export async function generarEtiqueta(p: PedidoLogistica, datos: DatosEtiqueta):
   return { t: 'error', motivo: r.motivo }
 }
 
+/** Cargar el número de EM (Etiqueta Manual de Envío Nube): en EM es lo único que se carga. */
+export async function guardarEM(p: PedidoLogistica, em: number): Promise<ResultadoCarga> {
+  const visto = p.em == null ? null : Number(p.em)
+  const r = await cargar<PedidoLogistica>({ action: 'em', id: p.id, em, expected: { em: visto } })
+  if (r.ok) return { t: 'ok', pedido: r.d }
+  if (r.status === 409) return { t: 'cambio', motivo: r.motivo, pedido: r.pedido }
+  return { t: 'error', motivo: r.motivo }
+}
+
 /** Sólo cambia lo que se tocó: un campo igual al que ya tiene el pedido no viaja. */
 export function cambiosDeEnvio(antes: Envio | null | undefined, ahora: Envio): Envio {
   const fuera: Envio = {}

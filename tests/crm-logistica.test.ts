@@ -95,6 +95,15 @@ describe('la etiqueta', () => {
       expected: { shipping: { dni: null } },
     })
   })
+  it('el EM: sólo el número, con lo que se vio', () => {
+    expect(rutaDe({ action: 'em', id: 681, em: 123456, expected: { em: null }, shipping: { dni: '1' } })).toEqual({
+      ruta: '/mayorista/pedidos/681',
+      metodo: 'PATCH',
+      cuerpo: { em: 123456, expected: { em: null } },
+    })
+    expect(rutaDe({ action: 'em', id: 681, em: '12a', expected: { em: null } }).error).toBe('El número de EM no es válido.')
+    expect(rutaDe({ action: 'em', id: 681, em: 5 }).error).toBe('Falta lo que viste del pedido.')
+  })
   it('cambiosDeEnvio: sólo lo que se tocó', () => {
     expect(cambiosDeEnvio({ dni: '1', locality: null }, { dni: '1 ', locality: 'Río Segundo', zipcode: '' })).toEqual({ locality: 'Río Segundo' })
   })

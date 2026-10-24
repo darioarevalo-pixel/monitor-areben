@@ -9,6 +9,7 @@
 //   POST { recurso:'logistica', action:'pendientes' }           → GET /mayorista/pendientes
 //   POST { recurso:'logistica', action:'entrega', id, dispatch_option, carrier?, expected }
 //                                                               → PATCH /mayorista/pedidos/{id}
+//   POST { recurso:'logistica', action:'em', id, em, expected:{em} } → PATCH /mayorista/pedidos/{id}
 //   POST { recurso:'logistica', action:'interpretar', text }   → POST /etiquetas/interpretar (IA, no guarda)
 //   POST { recurso:'logistica', action:'vista-previa', id, datos }
 //                                                  → POST /mayorista/pedidos/{id}/etiqueta/vista-previa
@@ -54,6 +55,16 @@ export function rutaDe(body) {
     return { ruta: `/mayorista/pedidos?telefono=${tel}` };
   }
   if (accion === 'entrega') return entrega(body);
+  // En EM lo único que se carga es su número: los datos los pone Envío Nube (Darío, 22-oct-2026).
+  if (accion === 'em') {
+    const id = String(body.id ?? '');
+    if (!/^\d{1,12}$/.test(id)) return { error: 'Falta el pedido.' };
+    const em = body.em;
+    if (!Number.isInteger(em) || em <= 0 || em > 9_999_999_999) return { error: 'El número de EM no es válido.' };
+    const vio = body.expected?.em;
+    if (vio !== null && !Number.isInteger(vio)) return { error: 'Falta lo que viste del pedido.' };
+    return { ruta: `/mayorista/pedidos/${id}`, metodo: 'PATCH', cuerpo: { em, expected: { em: vio } } };
+  }
   if (accion === 'interpretar') {
     const text = typeof body.text === 'string' ? body.text.trim() : '';
     if (!text) return { error: 'Pegá el mensaje del cliente.' };
@@ -72,7 +83,7 @@ export function rutaDe(body) {
     if (vio.error) return { error: vio.error };
     return { ruta: `/mayorista/pedidos/${id}/etiqueta`, metodo: 'POST', cuerpo: { ...datos.cuerpo, expected: vio.cuerpo } };
   }
-  return { error: 'acción inválida (usá me, catalogos, cliente, telefono, pendientes, entrega, interpretar, vista-previa o etiqueta)' };
+  return { error: 'acción inválida (usá me, catalogos, cliente, telefono, pendientes, entrega, em, interpretar, vista-previa o etiqueta)' };
 }
 
 const opcion = (v) => (v === null ? null : Number.isInteger(v) && v >= 1 && v <= 9 ? v : undefined);

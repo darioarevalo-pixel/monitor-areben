@@ -1163,6 +1163,10 @@ Ger (logistica.arebensrl.com) abrió una API para el panel: `https://logistica.a
   `expected` sólo de lo que cambió). 🔑 **Guardar pide haber visto la etiqueta con ESOS datos**: la
   huella del cuerpo se compara con la de la vista previa. Viajan sólo los campos de
   `CAMPOS_ENVIO` (`datosEtiqueta`). La imprime el depósito.
+- ✅ **«Cargar EM»** en los pedidos con EM (acción `em`, `PATCH` con `em` + `expected`). ⛔ **En EM
+  se carga SÓLO el número** (Darío, 22-oct): los datos y la etiqueta los pone Envío Nube; el
+  formulario de datos de quien recibe es sólo para Etiqueta libre y Transporte. Si falta elegir
+  domicilio o sucursal, el formulario muestra la dirección y la sucursal (antes escondía las dos).
 - ⏭️ **Lo que sigue de la 2ª tanda: cargar** (`PATCH` con `expected`, despachar, etiqueta de transporte). ⛔ No hay
   entorno de prueba: se prueba sobre un pedido acordado. ⛔ El 409 no se reintenta solo: se muestra
   cómo quedó el pedido y decide la persona.

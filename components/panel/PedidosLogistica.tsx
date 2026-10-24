@@ -8,6 +8,7 @@ import {
   catalogosLogistica,
   entregaDe,
   generarEtiqueta,
+  guardarEM,
   guardarEntrega,
   leerMensaje,
   vistaPrevia,
@@ -112,11 +113,13 @@ function Pedido({
   despacho?: string
   onCambio: (p: PedidoLogistica) => void
 }) {
-  const [modo, setModo] = useState<'entrega' | 'etiqueta' | null>(null)
+  const [modo, setModo] = useState<'entrega' | 'etiqueta' | 'em' | null>(null)
   const eligiendo = modo === 'entrega'
   const setEligiendo = (v: boolean) => setModo(v ? 'entrega' : null)
-  // La etiqueta se arma acá sólo en Etiqueta libre y Transporte: la de EM la da Envío Nube.
+  // La etiqueta se arma acá sólo en Etiqueta libre y Transporte. En EM se carga sólo su número: la
+  // etiqueta y los datos los pone Envío Nube.
   const llevaEtiqueta = p.dispatch_option?.code === 2 || p.dispatch_option?.code === TRANSPORTE
+  const esEM = p.dispatch_option?.code === 1
   const [aviso, setAviso] = useState<{ txt: string; mal?: boolean } | null>(null)
   const avisos = avisosDe(p)
   const entrega = entregaDe(p)
@@ -151,6 +154,16 @@ function Pedido({
             setEligiendo(false)
           }}
         />
+      ) : modo === 'em' ? (
+        <CargarEM
+          p={p}
+          onCancelar={() => setModo(null)}
+          onListo={(nuevo, txt, mal) => {
+            if (nuevo) onCambio(nuevo)
+            setAviso({ txt, mal })
+            if (!mal) setModo(null)
+          }}
+        />
       ) : modo === 'etiqueta' ? (
         <ArmarEtiqueta
           p={p}
@@ -168,6 +181,11 @@ function Pedido({
           {llevaEtiqueta && (
             <BotonChico fuerte={!p.has_label} onClick={() => (setAviso(null), setModo('etiqueta'))}>
               {p.has_label ? 'Rehacer etiqueta' : 'Armar etiqueta'}
+            </BotonChico>
+          )}
+          {esEM && (
+            <BotonChico fuerte={!p.em} onClick={() => (setAviso(null), setModo('em'))}>
+              {p.em ? 'Cambiar EM' : 'Cargar EM'}
             </BotonChico>
           )}
         </div>
@@ -480,7 +498,7 @@ function ArmarEtiqueta({
         </select>
       </label>
 
-      {CAMPOS.filter((c) => (!c.solo || c.solo === codigo) && (!c.si || c.si === entrega)).map((c) => (
+      {CAMPOS.filter((c) => (!c.solo || c.solo === codigo) && (!c.si || !entrega || c.si === entrega)).map((c) => (
         <label key={c.k} style={{ fontSize: font.xs, color: c.k && p.missing.length && esFaltante(p, c.txt) ? color.warningInk : color.mut2 }}>
           {c.txt}
           {c.ayuda && <span style={{ color: color.mut2 }}> · {c.ayuda}</span>}
@@ -519,4 +537,51 @@ function ArmarEtiqueta({
 function esFaltante(p: PedidoLogistica, txt: string): boolean {
   const t = txt.toLowerCase()
   return p.missing.some((m) => m.toLowerCase() === t || m.toLowerCase().startsWith(t.split(' ')[0]))
+}
+
+/** El número de EM que da Envío Nube. Sólo dígitos. */
+function CargarEM({
+  p,
+  onCancelar,
+  onListo,
+}: {
+  p: PedidoLogistica
+  onCancelar: () => void
+  onListo: (nuevo: PedidoLogistica | null, txt: string, mal?: boolean) => void
+}) {
+  const [valor, setValor] = useState(p.em ? String(p.em) : '')
+  const [guardando, setGuardando] = useState(false)
+  const numero = /^\d{1,10}$/.test(valor) ? Number(valor) : null
+  const guardar = async () => {
+    if (!numero || guardando) return
+    setGuardando(true)
+    const r = await guardarEM(p, numero)
+    setGuardando(false)
+    if (r.t === 'ok') return onListo(r.pedido, 'EM guardado en Logística')
+    if (r.t === 'cambio') return onListo(r.pedido, `${r.motivo} Fijate cómo quedó.`, true)
+    onListo(null, r.motivo, true)
+  }
+  return (
+    <div style={{ marginTop: 6, padding: space[2], border: `1px solid ${color.line}`, borderRadius: radius.md, background: color.bg2 }}>
+      <label style={{ fontSize: font.xs, color: color.mut2 }}>
+        Número de EM
+        <input
+          value={valor}
+          onChange={(e) => setValor(e.target.value.replace(/\D/g, ''))}
+          onKeyDown={(e) => e.key === 'Enter' && guardar()}
+          inputMode="numeric"
+          autoFocus
+          style={{ ...campoStyle, marginTop: 2 }}
+        />
+      </label>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <BotonChico fuerte onClick={guardar} disabled={!numero || numero === Number(p.em) || guardando}>
+          {guardando ? 'Guardando…' : 'Guardar'}
+        </BotonChico>
+        <BotonChico onClick={onCancelar} disabled={guardando}>
+          Cancelar
+        </BotonChico>
+      </div>
+    </div>
+  )
 }
