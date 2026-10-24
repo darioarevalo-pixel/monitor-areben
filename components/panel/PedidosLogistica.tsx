@@ -3,15 +3,17 @@
 import { useEffect, useState } from 'react'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import {
-  avisosDe,
   cambiosDeEnvio,
   catalogosLogistica,
   despachar,
-  entregaDe,
+  estadoDeposito,
+  formaCorta,
   generarEtiqueta,
   guardarEM,
   guardarEntrega,
   leerMensaje,
+  mensajeSeguimiento,
+  pasoPanel,
   vistaPrevia,
   type CampoEnvio,
   type Envio,
@@ -27,8 +29,13 @@ import {
 
 /**
  * Los pedidos del cliente que están en curso en Logística, en la ficha del chat (Darío, 22-oct-2026:
- * no olvidarse de elegir la forma de entrega, cargar el EM y pasar el seguimiento). Desde la 2ª
- * tanda, la forma de entrega se elige acá (sólo admin: el servidor lo corta).
+ * no olvidarse de elegir la forma de entrega, cargar el EM y pasar el seguimiento). La forma de
+ * entrega se elige acá (sólo admin: el servidor lo corta).
+ *
+ * Diseño cerrado el 24-oct-2026 (propuesta «Lo que sigue»): un renglón por pedido y UN botón, el
+ * paso que te toca. Elegir la forma de entrega y completar lo que sigue es un solo paso. Lo que se
+ * usa poco (modificar, abrir en Logística) va en «⋯». Sin estado de Logística con color ni avisos
+ * repetidos: lo que falta ya lo dice el botón.
  *
  * Sin pedidos en curso no se dibuja nada: es lo normal y no hace falta anunciarlo. Un error sí se
  * ve, en un renglón, para que «no aparece» no se lea como «no tiene pedidos».
@@ -64,6 +71,9 @@ export function PedidosLogistica({ clienteId, tel, despacho }: { clienteId: numb
   /** Un pedido que volvió de Logística (guardado, o cómo quedó si cambió en el medio) reemplaza al viejo. */
   const reemplazar = (nuevo: PedidoLogistica) =>
     setLlegado((l) => (l && l.r.t === 'ok' ? { ...l, r: { t: 'ok', datos: l.r.datos.map((p) => (p.id === nuevo.id ? nuevo : p)) } } : l))
+  /** Despachado: sale de la lista al instante, sin cartel. */
+  const quitar = (id: number) =>
+    setLlegado((l) => (l && l.r.t === 'ok' ? { ...l, r: { t: 'ok', datos: l.r.datos.filter((p) => p.id !== id) } } : l))
 
   const r = llegado?.clave === clave ? llegado.r : null
   if (!r || r.t === 'sin-permiso') return null
@@ -77,10 +87,10 @@ export function PedidosLogistica({ clienteId, tel, despacho }: { clienteId: numb
   return (
     <Caja>
       <div style={{ fontSize: font.xs, fontWeight: 700, letterSpacing: 0.4, color: color.mut2, textTransform: 'uppercase', marginBottom: 6 }}>
-        En Logística
+        Logística
       </div>
       {r.datos.map((p, i) => (
-        <Pedido key={p.id} p={p} primero={i === 0} sugerencia={sugerencias.get(p.id) ?? null} despacho={despacho} onCambio={reemplazar} />
+        <Pedido key={p.id} p={p} primero={i === 0} sugerencia={sugerencias.get(p.id) ?? null} despacho={despacho} onCambio={reemplazar} onSale={quitar} />
       ))}
     </Caja>
   )
@@ -102,169 +112,232 @@ function Caja({ children }: { children: React.ReactNode }) {
   )
 }
 
+type Modo = 'forma' | 'etiqueta' | 'em' | 'despachar'
+
 function Pedido({
   p,
   primero,
   sugerencia,
   despacho,
   onCambio,
+  onSale,
 }: {
   p: PedidoLogistica
   primero: boolean
   sugerencia: PendienteLogistica['suggestion']
   despacho?: string
   onCambio: (p: PedidoLogistica) => void
+  onSale: (id: number) => void
 }) {
-  const [modo, setModo] = useState<'entrega' | 'etiqueta' | 'em' | 'despachar' | null>(null)
+  const [modo, setModo] = useState<Modo | null>(null)
+  const [menu, setMenu] = useState(false)
   const [despachando, setDespachando] = useState(false)
-  const confirmarDespacho = async () => {
-    setDespachando(true)
-    const r = await despachar(p)
-    setDespachando(false)
-    setModo(null)
-    if (r.t === 'ok') {
-      onCambio(r.pedido)
-      setAviso({ txt: 'Despachado: sale de la lista' })
-    } else {
-      if (r.t === 'cambio' && r.pedido) onCambio(r.pedido)
-      setAviso({ txt: r.motivo, mal: true })
-    }
-  }
-  const eligiendo = modo === 'entrega'
-  const setEligiendo = (v: boolean) => setModo(v ? 'entrega' : null)
+  const [aviso, setAviso] = useState<{ txt: string; mal?: boolean } | null>(null)
+  const paso = pasoPanel(p)
+  const forma = formaCorta(p)
   // La etiqueta se arma acá sólo en Etiqueta libre y Transporte. En EM se carga sólo su número: la
   // etiqueta y los datos los pone Envío Nube.
   const llevaEtiqueta = p.dispatch_option?.code === 2 || p.dispatch_option?.code === TRANSPORTE
   const esEM = p.dispatch_option?.code === 1
-  const [aviso, setAviso] = useState<{ txt: string; mal?: boolean } | null>(null)
-  const avisos = avisosDe(p)
-  const entrega = entregaDe(p)
+  const abierto = p.status.code <= LISTO
+
+  const abrir = (m: Modo) => {
+    setMenu(false)
+    setAviso(null)
+    setModo(m)
+  }
+  const cerrar = (nuevo: PedidoLogistica | null, txt: string, mal?: boolean) => {
+    if (nuevo) onCambio(nuevo)
+    setAviso({ txt, mal })
+    if (!mal) setModo(null)
+  }
+  const confirmarDespacho = async () => {
+    setDespachando(true)
+    const r = await despachar(p)
+    setDespachando(false)
+    if (r.t === 'ok') return onSale(p.id)
+    if (r.t === 'cambio' && r.pedido) onCambio(r.pedido)
+    setModo(null)
+    setAviso({ txt: r.motivo, mal: true })
+  }
+
+  const botonSiguiente = () => {
+    if (!abierto || modo) return null
+    if (paso === 'deposito') {
+      const pct = p.units.total ? Math.round((p.units.scanned / p.units.total) * 100) : 0
+      return (
+        <>
+          <div style={{ marginTop: 7, fontSize: font.sm, color: color.mut }}>{estadoDeposito(p)}</div>
+          {p.units.scanned > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: font.sm, color: color.mut }}>
+              <span style={{ flex: 1, height: 5, background: color.line2, borderRadius: 99, overflow: 'hidden' }}>
+                <i style={{ display: 'block', height: '100%', width: `${pct}%`, background: color.mut2 }} />
+              </span>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {p.units.scanned} de {p.units.total}
+              </span>
+            </div>
+          )}
+        </>
+      )
+    }
+    const entrega = p.dispatch_option?.code === 2
+    return (
+      <>
+        <BotonGrande onClick={() => abrir(paso === 'despachar' ? 'despachar' : 'forma')}>
+          {paso === 'despachar' ? (entrega ? 'Entregado' : 'Despachado') : 'Elegir forma de entrega'}
+        </BotonGrande>
+        {paso === 'etiqueta' && p.missing.length > 0 && (
+          <div style={{ marginTop: 4, fontSize: font.xs, color: color.warningInk }}>Datos faltantes: {p.missing.join(', ')}</div>
+        )}
+      </>
+    )
+  }
+
   return (
     <div style={{ paddingTop: primero ? 0 : space[2], marginTop: primero ? 0 : space[2], borderTop: primero ? 0 : `1px solid ${color.line2}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: font.sm, fontWeight: 700, color: color.ink }}>Pedido {p.gn_number || p.id}</span>
-        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, border: `1px solid ${color.line}`, background: color.bg2, color: color.mut, whiteSpace: 'nowrap' }}>
-          {p.status.label}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <span style={{ fontSize: font.base, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{p.gn_number || p.id}</span>
+        <span
+          style={{
+            fontSize: font.sm,
+            color: forma ? color.mut : color.warningInk,
+            fontWeight: forma ? 400 : 600,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            minWidth: 0,
+          }}
+        >
+          {forma ?? 'Sin forma de entrega'}
         </span>
         <span style={{ flex: 1 }} />
-        <a href={p.url} target="_blank" rel="noreferrer" style={{ fontSize: font.xs, color: color.brand, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-          Abrir ↗
-        </a>
+        {abierto && (
+          <button
+            type="button"
+            aria-label="Más"
+            aria-expanded={menu}
+            onClick={() => setMenu((m) => !m)}
+            style={{ width: 28, minWidth: 28, height: 26, padding: 0, borderRadius: 7, border: `1px solid ${menu ? color.line : 'transparent'}`, background: menu ? color.bg2 : 'transparent', color: color.mut, fontSize: 16, lineHeight: 1, cursor: 'pointer' }}
+          >
+            ⋯
+          </button>
+        )}
       </div>
-      <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-        {entrega ? `${entrega} · ` : ''}
-        {p.units.scanned} de {p.units.total} escaneadas
-      </div>
-      {p.tracking_number && <Seguimiento numero={p.tracking_number} link={p.tracking_url} />}
-      {aviso && (
-        <div style={{ marginTop: 4, fontSize: font.xs, color: aviso.mal ? color.dangerInk : color.successInk }}>{aviso.txt}</div>
+      {menu && (
+        <div style={{ marginTop: 6, border: `1px solid ${color.line}`, borderRadius: radius.lg, background: color.surface, overflow: 'hidden' }}>
+          {p.dispatch_option && <ItemMenu onClick={() => abrir('forma')}>Cambiar forma de entrega</ItemMenu>}
+          {llevaEtiqueta && p.has_label && <ItemMenu onClick={() => abrir('etiqueta')}>Cambiar etiqueta</ItemMenu>}
+          {esEM && p.em && <ItemMenu onClick={() => abrir('em')}>Cambiar EM</ItemMenu>}
+          <a href={p.url} target="_blank" rel="noreferrer" style={{ ...itemStyle, textDecoration: 'none', display: 'block' }}>
+            Abrir en Logística ↗
+          </a>
+        </div>
       )}
-      {eligiendo ? (
-        <ElegirEntrega
-          p={p}
-          sugerencia={sugerencia}
-          onCancelar={() => setEligiendo(false)}
-          onListo={(nuevo, txt, mal) => {
-            if (nuevo) onCambio(nuevo)
-            setAviso({ txt, mal })
-            setEligiendo(false)
-          }}
-        />
-      ) : modo === 'despachar' ? (
-        <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-          <span style={{ fontSize: font.xs, color: color.ink, marginTop: 6 }}>¿Ya salió el pedido?</span>
+      {botonSiguiente()}
+      {!modo && p.tracking_number && <Seguimiento p={p} informable={esEM} />}
+      {aviso && <div style={{ marginTop: 6, fontSize: font.sm, color: aviso.mal ? color.dangerInk : color.successInk }}>{aviso.txt}</div>}
+      {modo === 'forma' && <ElegirYCompletar p={p} sugerencia={sugerencia} despacho={despacho} onCancelar={() => setModo(null)} onListo={cerrar} />}
+      {modo === 'em' && <CargarEM p={p} onCancelar={() => setModo(null)} onListo={cerrar} />}
+      {modo === 'etiqueta' && <ArmarEtiqueta p={p} despacho={despacho} onCancelar={() => setModo(null)} onListo={cerrar} />}
+      {modo === 'despachar' && (
+        <div style={{ marginTop: 8, padding: space[2], border: `1px solid ${color.line}`, borderRadius: radius.lg, background: color.bg2, display: 'flex', gap: 6, alignItems: 'center' }}>
           <BotonChico fuerte onClick={confirmarDespacho} disabled={despachando}>
-            {despachando ? 'Guardando…' : 'Sí, despachado'}
+            {despachando ? 'Guardando…' : p.dispatch_option?.code === 2 ? 'Confirmar entrega' : 'Confirmar despacho'}
           </BotonChico>
           <BotonChico onClick={() => setModo(null)} disabled={despachando}>
             Cancelar
           </BotonChico>
         </div>
-      ) : modo === 'em' ? (
-        <CargarEM
-          p={p}
-          onCancelar={() => setModo(null)}
-          onListo={(nuevo, txt, mal) => {
-            if (nuevo) onCambio(nuevo)
-            setAviso({ txt, mal })
-            if (!mal) setModo(null)
-          }}
-        />
-      ) : modo === 'etiqueta' ? (
-        <ArmarEtiqueta
-          p={p}
-          despacho={despacho}
-          onCancelar={() => setModo(null)}
-          onListo={(nuevo, txt, mal) => {
-            if (nuevo) onCambio(nuevo)
-            setAviso({ txt, mal })
-            if (!mal) setModo(null)
-          }}
-        />
-      ) : p.status.code > LISTO ? null : (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          <BotonChico onClick={() => (setAviso(null), setEligiendo(true))}>{p.dispatch_option ? 'Cambiar forma de entrega' : 'Elegir forma de entrega'}</BotonChico>
-          {llevaEtiqueta && (
-            <BotonChico fuerte={!p.has_label} onClick={() => (setAviso(null), setModo('etiqueta'))}>
-              {p.has_label ? 'Rehacer etiqueta' : 'Armar etiqueta'}
-            </BotonChico>
-          )}
-          {esEM && (
-            <BotonChico fuerte={!p.em} onClick={() => (setAviso(null), setModo('em'))}>
-              {p.em ? 'Cambiar EM' : 'Cargar EM'}
-            </BotonChico>
-          )}
-          {p.status.code === LISTO && (
-            <BotonChico fuerte onClick={() => (setAviso(null), setModo('despachar'))}>
-              Despachado
-            </BotonChico>
-          )}
-        </div>
       )}
-      {avisos.map((a) => (
-        <div key={a} style={{ marginTop: 4, fontSize: font.xs, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: radius.sm, padding: '3px 8px' }}>
-          {a}
-        </div>
-      ))}
+      {p.tracking_needs_manual && !modo && (
+        <Aviso>No se pudo leer el seguimiento del PDF: cargalo en Logística</Aviso>
+      )}
+      {p.status.code === LISTO && !p.units.complete && !modo && (
+        <Aviso>
+          Preparado con {p.units.scanned} de {p.units.total} unidades
+        </Aviso>
+      )}
     </div>
   )
 }
 
-/** El número de seguimiento, con un botón para copiarlo y pegárselo al cliente. */
-function Seguimiento({ numero, link }: { numero: string; link: string | null }) {
+function Aviso({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ marginTop: 6, fontSize: font.sm, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: radius.sm, padding: '4px 8px' }}>
+      {children}
+    </div>
+  )
+}
+
+const itemStyle: React.CSSProperties = {
+  width: '100%',
+  height: 'auto',
+  textAlign: 'left',
+  background: 'none',
+  border: 0,
+  borderTop: `1px solid ${color.line2}`,
+  padding: '8px 12px',
+  fontSize: font.sm,
+  color: color.ink,
+  cursor: 'pointer',
+}
+function ItemMenu({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} style={itemStyle}>
+      {children}
+    </button>
+  )
+}
+
+/** El número de seguimiento. En EM, «Informar seguimiento» copia el mensaje para el cliente (no lo manda). */
+function Seguimiento({ p, informable }: { p: PedidoLogistica; informable: boolean }) {
   const [copiado, setCopiado] = useState(false)
   const copiar = async () => {
+    const msg = mensajeSeguimiento(p)
+    if (!msg) return
     try {
-      await navigator.clipboard.writeText(link ? `${numero}\n${link}` : numero)
+      await navigator.clipboard.writeText(msg)
       setCopiado(true)
-      setTimeout(() => setCopiado(false), 1500)
     } catch {
       /* sin permiso de portapapeles: el número queda a la vista igual */
     }
   }
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: font.xs }}>
-      <span style={{ color: color.mut2 }}>Seguimiento</span>
-      <span style={{ fontWeight: 700, color: color.ink, fontVariantNumeric: 'tabular-nums' }}>{numero}</span>
-      <button
-        type="button"
-        onClick={copiar}
-        style={{ height: 22, padding: '0 8px', fontSize: 11, fontWeight: 600, borderRadius: 999, border: `1px solid ${color.line}`, background: color.bg2, color: copiado ? color.successInk : color.ink, cursor: 'pointer' }}
-      >
-        {copiado ? 'Copiado' : 'Copiar'}
-      </button>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: font.xs, color: color.mut2 }}>Seguimiento</div>
+        <b style={{ fontSize: font.sm, fontVariantNumeric: 'tabular-nums', wordBreak: 'break-all', color: color.ink }}>{p.tracking_number}</b>
+      </div>
+      {informable && (
+        <BotonChico onClick={copiar} disabled={copiado} sinMargen>
+          {copiado ? 'Copiado ✓' : 'Informar seguimiento'}
+        </BotonChico>
+      )}
     </div>
   )
 }
 
-function BotonChico({ children, onClick, disabled, fuerte }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; fuerte?: boolean }) {
+function BotonGrande({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{ marginTop: 8, width: '100%', height: 32, padding: '0 10px', fontSize: font.base, fontWeight: 600, borderRadius: radius.md, border: `1px solid ${color.brand}`, background: color.brand, color: '#fff', cursor: 'pointer' }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function BotonChico({ children, onClick, disabled, fuerte, sinMargen }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; fuerte?: boolean; sinMargen?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       style={{
-        marginTop: 6,
+        marginTop: sinMargen ? 0 : 6,
         height: 28,
         padding: '0 10px',
         fontSize: font.xs,
@@ -275,6 +348,7 @@ function BotonChico({ children, onClick, disabled, fuerte }: { children: React.R
         color: fuerte ? '#fff' : color.ink,
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.6 : 1,
+        flex: sinMargen ? 'none' : undefined,
       }}
     >
       {children}
@@ -282,59 +356,165 @@ function BotonChico({ children, onClick, disabled, fuerte }: { children: React.R
   )
 }
 
+const FORMA_EM = 1
+const FORMA_LIBRE = 2
+const NOMBRE_FORMA: Record<number, string> = { [FORMA_EM]: 'EM' }
+
 /**
- * Elegir la forma de entrega: las opciones de Logística y, si es Transporte, cuál. Nace marcada con
- * lo que tiene el pedido o, si no tiene, con lo que el cliente usó la vez anterior.
+ * Elegir la forma de entrega y completar lo que sigue en el MISMO lugar (diseño del 24-oct-2026):
+ * · EM → el número, y nada más.
+ * · Etiqueta libre → nombre, apellido y una descripción; «Ver etiqueta» → «Guardar y generar».
+ * · Transporte → el transporte y el mensaje del cliente; «✨ Completar etiqueta con IA» arma la
+ *   etiqueta y la muestra; «Guardar y generar».
+ * Nace marcada con lo que tiene el pedido o, si no tiene, con lo que el cliente usó la vez anterior.
+ *
+ * 🔑 **Guardar la etiqueta pide haberla visto con ESOS datos**: tocar un dato después de verla vuelve
+ * a pedirla. Guardar y generar manda forma, transporte y datos en una sola carga (con `expected`).
  */
-function ElegirEntrega({
+function ElegirYCompletar({
   p,
   sugerencia,
+  despacho,
   onCancelar,
   onListo,
 }: {
   p: PedidoLogistica
   sugerencia: PendienteLogistica['suggestion']
+  despacho?: string
   onCancelar: () => void
   onListo: (nuevo: PedidoLogistica | null, txt: string, mal?: boolean) => void
 }) {
   const [cat, setCat] = useState<Resultado<Catalogos> | null>(null)
   const [codigo, setCodigo] = useState<number | null>(p.dispatch_option?.code ?? sugerencia?.dispatch_option.code ?? null)
   const [carrier, setCarrier] = useState<string>(p.carrier?.slug ?? sugerencia?.carrier?.slug ?? '')
-  const [guardando, setGuardando] = useState(false)
+  const [em, setEm] = useState(p.em ? String(p.em) : '')
+  const [mensaje, setMensaje] = useState(despacho || '')
+  const [leido, setLeido] = useState(false)
+  const [envio, setEnvio] = useState<Envio>(() => ({ ...(p.shipping || {}) }))
+  const partes = (p.client_name || '').trim().split(/\s+/)
+  const [nom, setNom] = useState(p.shipping?.first_name ?? partes[0] ?? '')
+  const [ape, setApe] = useState(p.shipping?.last_name ?? partes.slice(1).join(' '))
+  const [txt, setTxt] = useState(p.shipping?.free_text ?? '')
+  const [ocupado, setOcupado] = useState<'ver' | 'guardar' | null>(null)
+  const [problema, setProblema] = useState<string | null>(null)
+  const [previa, setPrevia] = useState<{ png: string; de: string } | null>(null)
   useEffect(() => {
     catalogosLogistica().then(setCat)
   }, [])
 
-  if (!cat) return <div style={{ marginTop: 6, fontSize: font.xs, color: color.mut2 }}>Cargando…</div>
+  if (!cat) return <Panel>Cargando…</Panel>
   if (cat.t !== 'ok')
     return (
-      <div style={{ marginTop: 6, fontSize: font.xs, color: color.dangerInk }}>
-        {cat.t === 'error' ? cat.motivo : 'Sin acceso.'} <BotonChico onClick={onCancelar}>Cancelar</BotonChico>
-      </div>
+      <Panel>
+        <span style={{ color: color.dangerInk }}>{cat.t === 'error' ? cat.motivo : 'Sin acceso.'}</span> <BotonChico onClick={onCancelar}>Cancelar</BotonChico>
+      </Panel>
     )
 
   const esTransporte = codigo === TRANSPORTE
-  const listo = codigo !== null && (!esTransporte || !!carrier)
-  const igual = codigo === (p.dispatch_option?.code ?? null) && (!esTransporte || carrier === (p.carrier?.slug ?? ''))
+  const esLibre = codigo === FORMA_LIBRE
+  const esEM = codigo === FORMA_EM
 
-  const guardar = async () => {
-    if (!listo || codigo === null || guardando) return
-    setGuardando(true)
-    const r = await guardarEntrega(p, codigo, esTransporte ? carrier : null)
-    setGuardando(false)
-    if (r.t === 'ok') return onListo(r.pedido, 'Guardado en Logística')
-    if (r.t === 'cambio') return onListo(r.pedido, `${r.motivo} Fijate cómo quedó.`, true)
-    onListo(null, r.motivo, true)
+  const datosCon = (e: Envio, c: string) => ({
+    dispatch_option: codigo as number,
+    ...(esTransporte ? { carrier: c || null } : {}),
+    shipping: cambiosDeEnvio(p.shipping, esLibre ? { ...e, first_name: nom, last_name: ape, free_text: txt } : e),
+  })
+  const datos = datosCon(envio, carrier)
+  const huella = JSON.stringify(datos)
+  const vista = previa?.de === huella
+
+  // Cambiar cualquier dato obliga a volver a ver la etiqueta.
+  const tocar = <T,>(set: (v: T) => void) => (v: T) => {
+    set(v)
+    setProblema(null)
+  }
+  const elegir = (c: number) => {
+    setCodigo(c)
+    setProblema(null)
   }
 
+  const numeroEM = /^\d{1,10}$/.test(em) ? Number(em) : null
+
+  /** Transporte: leer el mensaje con la IA y, con lo que salió, mostrar la etiqueta. */
+  const completar = async () => {
+    setOcupado('ver')
+    setProblema(null)
+    const l = await leerMensaje(mensaje)
+    if (l.t !== 'ok') {
+      setOcupado(null)
+      return setProblema(l.motivo)
+    }
+    // Lo que la IA no encontró no borra lo que ya estaba.
+    const e: Envio = { ...envio }
+    for (const [k, v] of Object.entries(l.shipping) as [CampoEnvio, string | null][]) if (v) e[k] = v
+    let c = carrier
+    if (l.carrier && !c) {
+      const hallado = cat.datos.carriers.find((x) => x.slug === l.carrier || x.label.toLowerCase() === l.carrier!.toLowerCase())
+      c = hallado ? hallado.slug : l.carrier
+    }
+    setEnvio(e)
+    setCarrier(c)
+    setLeido(true)
+    await ver(datosCon(e, c))
+  }
+
+  const ver = async (d = datos) => {
+    setOcupado('ver')
+    setProblema(null)
+    const r = await vistaPrevia(p, d)
+    setOcupado(null)
+    if (r.t !== 'ok') return setProblema(r.motivo)
+    setPrevia({ png: r.png, de: JSON.stringify(d) })
+  }
+
+  const guardarEtiqueta = async () => {
+    if (!vista) return
+    setOcupado('guardar')
+    setProblema(null)
+    const r = await generarEtiqueta(p, datos)
+    setOcupado(null)
+    if (r.t === 'ok') return onListo(r.pedido, 'Etiqueta generada')
+    if (r.t === 'cambio') return onListo(r.pedido, `${r.motivo} Fijate cómo quedó antes de volver a guardar.`, true)
+    setProblema(r.motivo)
+  }
+
+  /** EM: la forma (si cambió) y el número, uno atrás del otro. */
+  const guardarNumero = async () => {
+    if (!numeroEM || codigo === null) return
+    setOcupado('guardar')
+    setProblema(null)
+    let actual = p
+    if (p.dispatch_option?.code !== FORMA_EM) {
+      const f = await guardarEntrega(p, FORMA_EM, null)
+      if (f.t !== 'ok') {
+        setOcupado(null)
+        if (f.t === 'cambio') return onListo(f.pedido, `${f.motivo} Fijate cómo quedó.`, true)
+        return setProblema(f.motivo)
+      }
+      actual = f.pedido
+    }
+    if (Number(actual.em) !== numeroEM) {
+      const r = await guardarEM(actual, numeroEM)
+      setOcupado(null)
+      if (r.t === 'ok') return onListo(r.pedido, 'EM guardado')
+      if (r.t === 'cambio') return onListo(r.pedido, `${r.motivo} Fijate cómo quedó.`, true)
+      return setProblema(r.motivo)
+    }
+    setOcupado(null)
+    onListo(actual, 'Guardado')
+  }
+
+  const hayCarrier = !!carrier
+  const faltanCampos = esTransporte && leido ? CAMPOS_BASICOS.some((k) => !(envio[k] ?? '').toString().trim()) : false
+
   return (
-    <div style={{ marginTop: 6, padding: space[2], border: `1px solid ${color.line}`, borderRadius: radius.md, background: color.bg2 }}>
+    <Panel>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {cat.datos.dispatch_options.map((o) => (
           <button
             key={o.code}
             type="button"
-            onClick={() => setCodigo(o.code)}
+            onClick={() => elegir(o.code)}
             aria-pressed={codigo === o.code}
             style={{
               height: 'auto',
@@ -348,33 +528,109 @@ function ElegirEntrega({
               cursor: 'pointer',
             }}
           >
-            {o.label}
+            {NOMBRE_FORMA[o.code] ?? o.label}
           </button>
         ))}
       </div>
-      {esTransporte && (
-        <select
-          value={carrier}
-          onChange={(e) => setCarrier(e.target.value)}
-          style={{ marginTop: 6, width: '100%', height: 30, fontSize: font.sm, borderRadius: radius.sm, border: `1px solid ${color.line}`, background: color.surface, color: color.ink }}
-        >
-          <option value="">Elegí el transporte</option>
-          {cat.datos.carriers.map((c) => (
-            <option key={c.slug} value={c.slug}>
-              {c.label}
-            </option>
-          ))}
-        </select>
+
+      {esEM && (
+        <input
+          value={em}
+          onChange={(e) => tocar(setEm)(e.target.value.replace(/\D/g, ''))}
+          onKeyDown={(e) => e.key === 'Enter' && guardarNumero()}
+          inputMode="numeric"
+          autoFocus
+          placeholder="Número de EM"
+          aria-label="Número de EM"
+          style={campoStyle}
+        />
       )}
-      {!p.dispatch_option && sugerencia && <div style={{ marginTop: 6, fontSize: font.xs, color: color.mut2 }}>Marcado: lo que usó la vez pasada.</div>}
-      <div style={{ display: 'flex', gap: 6 }}>
-        <BotonChico fuerte onClick={guardar} disabled={!listo || igual || guardando}>
-          {guardando ? 'Guardando…' : 'Guardar'}
-        </BotonChico>
-        <BotonChico onClick={onCancelar} disabled={guardando}>
+
+      {esLibre && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <input value={nom} onChange={(e) => tocar(setNom)(e.target.value)} placeholder="Nombre" aria-label="Nombre" style={campoStyle} />
+            <input value={ape} onChange={(e) => tocar(setApe)(e.target.value)} placeholder="Apellido" aria-label="Apellido" style={campoStyle} />
+          </div>
+          <textarea value={txt} onChange={(e) => tocar(setTxt)(e.target.value)} rows={2} placeholder="Descripción" aria-label="Descripción" style={{ ...campoStyle, height: 'auto', padding: 8, fontFamily: 'inherit' }} />
+        </>
+      )}
+
+      {esTransporte && (
+        <>
+          <select value={carrier} onChange={(e) => tocar(setCarrier)(e.target.value)} aria-label="Transporte" style={campoStyle}>
+            <option value="">Elegí el transporte</option>
+            {cat.datos.carriers.map((c) => (
+              <option key={c.slug} value={c.slug}>
+                {c.label}
+              </option>
+            ))}
+            {carrier && !cat.datos.carriers.some((c) => c.slug === carrier) && <option value={carrier}>{carrier} (nuevo)</option>}
+          </select>
+          <textarea
+            value={mensaje}
+            onChange={(e) => {
+              setMensaje(e.target.value)
+              setLeido(false)
+            }}
+            rows={3}
+            placeholder="Pegá el mensaje con los datos del cliente"
+            aria-label="Datos del cliente"
+            style={{ ...campoStyle, height: 'auto', padding: 8, fontFamily: 'inherit' }}
+          />
+          {leido && (
+            <details open={faltanCampos} style={{ fontSize: font.xs, color: color.mut2 }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Revisar datos</summary>
+              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
+                <CamposDeEnvio p={p} codigo={TRANSPORTE} envio={envio} poner={(k, v) => setEnvio((e) => ({ ...e, [k]: v }))} />
+              </div>
+            </details>
+          )}
+        </>
+      )}
+
+      {problema && <div style={{ fontSize: font.xs, color: color.dangerInk }}>{problema}</div>}
+
+      {(esTransporte || esLibre) && previa && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={previa.png} alt="Vista previa de la etiqueta" style={{ width: '100%', border: `1px solid ${color.line}`, borderRadius: radius.sm, background: '#fff', opacity: vista ? 1 : 0.4 }} />
+      )}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {esEM && (
+          <BotonChico fuerte onClick={guardarNumero} disabled={!numeroEM || !!ocupado || (numeroEM === Number(p.em) && p.dispatch_option?.code === FORMA_EM)}>
+            {ocupado === 'guardar' ? 'Guardando…' : 'Guardar'}
+          </BotonChico>
+        )}
+        {(esTransporte || esLibre) &&
+          (vista ? (
+            <BotonChico fuerte onClick={guardarEtiqueta} disabled={!!ocupado}>
+              {ocupado === 'guardar' ? 'Guardando…' : 'Guardar y generar'}
+            </BotonChico>
+          ) : esTransporte && !leido ? (
+            <BotonChico fuerte onClick={completar} disabled={!hayCarrier || !mensaje.trim() || !!ocupado}>
+              {ocupado === 'ver' ? 'Leyendo…' : '✨ Completar etiqueta con IA'}
+            </BotonChico>
+          ) : (
+            <BotonChico fuerte onClick={() => ver()} disabled={!!ocupado || (esTransporte && !hayCarrier) || (esLibre && !nom.trim())}>
+              {ocupado === 'ver' ? 'Armando…' : 'Ver etiqueta'}
+            </BotonChico>
+          ))}
+        <BotonChico onClick={onCancelar} disabled={!!ocupado}>
           Cancelar
         </BotonChico>
       </div>
+    </Panel>
+  )
+}
+
+/** Los datos mínimos de una etiqueta de transporte: si falta alguno, «Revisar datos» se abre solo. */
+const CAMPOS_BASICOS: CampoEnvio[] = ['first_name', 'last_name', 'dni', 'phone', 'locality', 'province', 'zipcode']
+
+function Panel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ marginTop: 8, padding: space[2], border: `1px solid ${color.line}`, borderRadius: radius.lg, background: color.bg2, display: 'grid', gap: 6, fontSize: font.xs, color: color.mut2 }}>
+      {children}
     </div>
   )
 }
@@ -405,6 +661,35 @@ const campoStyle: React.CSSProperties = {
   background: color.surface,
   color: color.ink,
   boxSizing: 'border-box',
+}
+
+/** Los campos de «Datos de quien recibe», sueltos para usarlos en las dos pantallas de la etiqueta. */
+function CamposDeEnvio({ p, codigo, envio, poner }: { p: PedidoLogistica; codigo: number; envio: Envio; poner: (k: CampoEnvio, v: string) => void }) {
+  const entrega = envio.delivery_type === 'domicilio' ? 'domicilio' : envio.delivery_type === 'sucursal' ? 'sucursal' : null
+  return (
+    <>
+      <label style={{ fontSize: font.xs, color: color.mut2 }}>
+        Entrega
+        <select value={entrega ?? ''} onChange={(e) => poner('delivery_type', e.target.value)} style={{ ...campoStyle, marginTop: 2 }}>
+          <option value="">Elegí</option>
+          <option value="sucursal">En sucursal</option>
+          <option value="domicilio">A domicilio</option>
+        </select>
+      </label>
+
+      {CAMPOS.filter((c) => (!c.solo || c.solo === codigo) && (!c.si || !entrega || c.si === entrega)).map((c) => (
+        <label key={c.k} style={{ fontSize: font.xs, color: c.k && p.missing.length && esFaltante(p, c.txt) ? color.warningInk : color.mut2 }}>
+          {c.txt}
+          {c.ayuda && <span style={{ color: color.mut2 }}> · {c.ayuda}</span>}
+          {c.k === 'free_text' ? (
+            <textarea value={envio[c.k] ?? ''} onChange={(e) => poner(c.k, e.target.value)} rows={2} style={{ ...campoStyle, height: 'auto', padding: 8, marginTop: 2, fontFamily: 'inherit' }} />
+          ) : (
+            <input value={envio[c.k] ?? ''} onChange={(e) => poner(c.k, e.target.value)} style={{ ...campoStyle, marginTop: 2 }} />
+          )}
+        </label>
+      ))}
+    </>
+  )
 }
 
 /**
@@ -438,7 +723,6 @@ function ArmarEtiqueta({
     if (codigo === TRANSPORTE) catalogosLogistica().then((r) => r.t === 'ok' && setCat(r.datos))
   }, [codigo])
 
-  const entrega = envio.delivery_type === 'domicilio' ? 'domicilio' : envio.delivery_type === 'sucursal' ? 'sucursal' : null
   const datos = {
     dispatch_option: codigo,
     ...(codigo === TRANSPORTE ? { carrier: carrier || null } : {}),
@@ -520,26 +804,7 @@ function ArmarEtiqueta({
         </label>
       )}
 
-      <label style={{ fontSize: font.xs, color: color.mut2 }}>
-        Entrega
-        <select value={entrega ?? ''} onChange={(e) => poner('delivery_type', e.target.value)} style={{ ...campoStyle, marginTop: 2 }}>
-          <option value="">Elegí</option>
-          <option value="sucursal">En sucursal</option>
-          <option value="domicilio">A domicilio</option>
-        </select>
-      </label>
-
-      {CAMPOS.filter((c) => (!c.solo || c.solo === codigo) && (!c.si || !entrega || c.si === entrega)).map((c) => (
-        <label key={c.k} style={{ fontSize: font.xs, color: c.k && p.missing.length && esFaltante(p, c.txt) ? color.warningInk : color.mut2 }}>
-          {c.txt}
-          {c.ayuda && <span style={{ color: color.mut2 }}> · {c.ayuda}</span>}
-          {c.k === 'free_text' ? (
-            <textarea value={envio[c.k] ?? ''} onChange={(e) => poner(c.k, e.target.value)} rows={2} style={{ ...campoStyle, height: 'auto', padding: 8, marginTop: 2, fontFamily: 'inherit' }} />
-          ) : (
-            <input value={envio[c.k] ?? ''} onChange={(e) => poner(c.k, e.target.value)} style={{ ...campoStyle, marginTop: 2 }} />
-          )}
-        </label>
-      ))}
+      <CamposDeEnvio p={p} codigo={codigo} envio={envio} poner={poner} />
 
       {problema && <div style={{ fontSize: font.xs, color: color.dangerInk }}>{problema}</div>}
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { avisosDe, cambiosDeEnvio, entregaDe, esDelDeposito, pasoDe, sugerenciaDe, type PedidoLogistica, type PendienteLogistica } from '../lib/crm/logistica'
+import { avisosDe, cambiosDeEnvio, enGrupoDeposito, entregaDe, esDelDeposito, estadoDeposito, faltanUnidades, formaCorta, mensajeSeguimiento, pasoDe, pasoPanel, sugerenciaDe, type PedidoLogistica, type PendienteLogistica } from '../lib/crm/logistica'
 
 vi.mock('../api/_auth.js', () => ({ exigirUsuario: vi.fn(async () => ({ name: 'Darío', admin: true })) }))
 vi.mock('../lib/permisos.core.js', () => ({ puedeVerAlguna: vi.fn(() => true), esAdmin: vi.fn(() => true) }))
@@ -91,6 +91,41 @@ describe('entregaDe y sugerenciaDe', () => {
     const p = { ...pedido(), next_step: null, suggestion: { dispatch_option: { code: 3, label: 'Transporte' }, carrier: { slug: 'via_cargo', label: 'Via Cargo' }, from_gn_number: '31877', from_date: null } } as PendienteLogistica
     expect(sugerenciaDe(p)).toBe('La vez pasada: Transporte · Via Cargo')
     expect(sugerenciaDe({ ...p, suggestion: null })).toBeNull()
+  })
+})
+
+describe('el diseño del 24-oct', () => {
+  const em = (c: Partial<PedidoLogistica> = {}) => pedido({ dispatch_option: { code: 1, label: 'Etiqueta manual' }, carrier: null, ...c })
+  it('los pasos', () => {
+    expect(pasoPanel(pedido({ dispatch_option: null }))).toBe('forma')
+    expect(pasoPanel(em())).toBe('em')
+    expect(pasoPanel(em({ em: 4471203 }))).toBe('deposito')
+    expect(pasoPanel(pedido())).toBe('etiqueta')
+    expect(pasoPanel(pedido({ has_label: true }))).toBe('deposito')
+    expect(pasoPanel(pedido({ has_label: true, status: { code: 3, label: 'Listo' } }))).toBe('despachar')
+  })
+  it('el estado del depósito', () => {
+    expect(estadoDeposito(em({ em: 1 }))).toBe('EM pendiente de pago')
+    expect(estadoDeposito(pedido({ has_label: true, units: { scanned: 0, total: 40, complete: false } }))).toBe('Pendiente de preparación')
+    expect(estadoDeposito(pedido({ has_label: true }))).toBe('En preparación')
+  })
+  it('el grupo En depósito no se come lo que pide datos', () => {
+    const base = { ...em({ em: 5 }), suggestion: null } as PendienteLogistica
+    expect(enGrupoDeposito({ ...base, next_step: { code: 'etiqueta', label: '' } })).toBe(true)
+    expect(enGrupoDeposito({ ...base, next_step: { code: 'datos', label: '' } })).toBe(false)
+    expect(enGrupoDeposito({ ...base, dispatch_option: null, next_step: { code: 'modalidad', label: '' } })).toBe(false)
+  })
+  it('faltan unidades, forma corta y mensaje', () => {
+    expect(faltanUnidades(pedido({ status: { code: 3, label: 'Listo' }, units: { scanned: 46, total: 48, complete: false } }))).toBe(2)
+    expect(faltanUnidades(pedido({ units: { scanned: 10, total: 48, complete: false } }))).toBe(0)
+    expect(formaCorta(em({ em: 4471203 }))).toBe('EM 4471203')
+    expect(formaCorta(em())).toBe('EM')
+    expect(formaCorta(pedido())).toBe('Transporte · Via Cargo')
+    expect(formaCorta(pedido({ dispatch_option: null }))).toBeNull()
+    expect(mensajeSeguimiento(pedido())).toBeNull()
+    expect(mensajeSeguimiento(pedido({ client_name: 'Facundo López', tracking_number: '3602034470123', tracking_url: 'https://x.test/s' }))).toBe(
+      '¡Hola Facundo! Te paso el número de seguimiento de tu pedido: 3602034470123\nLo podés seguir acá: https://x.test/s',
+    )
   })
 })
 

@@ -279,6 +279,53 @@ export function entregaDe(p: PedidoLogistica): string | null {
   return partes.join(' · ')
 }
 
+/**
+ * En qué paso está un pedido, con los cuatro del diseño del 24-oct-2026: lo tuyo es elegir la forma
+ * de entrega (en EM, con su número; en transporte y libre, con la etiqueta) y despachar; en el medio
+ * trabaja el depósito.
+ */
+export type PasoPanel = 'forma' | 'em' | 'etiqueta' | 'deposito' | 'despachar'
+export function pasoPanel(p: PedidoLogistica): PasoPanel {
+  if (!p.dispatch_option) return 'forma'
+  const esEM = p.dispatch_option.code === 1
+  if (esEM && !p.em) return 'em'
+  if (!p.has_label) return esEM ? 'deposito' : 'etiqueta'
+  return p.status.code < LISTO ? 'deposito' : 'despachar'
+}
+
+/** Lo que dice el renglón gris mientras el pedido está en el depósito. */
+export function estadoDeposito(p: PedidoLogistica): string {
+  if (p.dispatch_option?.code === 1 && !p.has_label) return 'EM pendiente de pago'
+  return p.units.scanned === 0 ? 'Pendiente de preparación' : 'En preparación'
+}
+
+/** ¿Va al grupo plegado «En depósito» de Hoy? Lo que pide datos sigue siendo tuyo. */
+export function enGrupoDeposito(p: PendienteLogistica): boolean {
+  if (esDelDeposito(p)) return true
+  return pasoPanel(p) === 'deposito' && p.next_step?.code !== 'datos' && p.next_step?.code !== 'modalidad'
+}
+
+/** Cuántas unidades faltan escanear en un pedido que ya cerró (para «· faltan 2»). */
+export function faltanUnidades(p: PedidoLogistica): number {
+  return p.status.code >= LISTO ? Math.max(0, p.units.total - p.units.scanned) : 0
+}
+
+/** La forma de entrega en el renglón de la ficha: «EM 4471203», «Transporte · Via Cargo», o null. */
+export function formaCorta(p: PedidoLogistica): string | null {
+  if (!p.dispatch_option) return null
+  if (p.dispatch_option.code === 1) return p.em ? `EM ${p.em}` : 'EM'
+  return [p.dispatch_option.label, p.carrier?.label].filter(Boolean).join(' · ')
+}
+
+/** Lo que se le escribe al cliente con el seguimiento de un EM (el panel lo copia; no lo manda). */
+export function mensajeSeguimiento(p: PedidoLogistica): string | null {
+  if (!p.tracking_number) return null
+  const nombre = (p.client_name || '').trim().split(/\s+/)[0]
+  const saludo = nombre ? `¡Hola ${nombre}!` : '¡Hola!'
+  const l1 = `${saludo} Te paso el número de seguimiento de tu pedido: ${p.tracking_number}`
+  return p.tracking_url ? `${l1}\nLo podés seguir acá: ${p.tracking_url}` : l1
+}
+
 /** Lo que usó la vez anterior, para la lista de pendientes: «La vez pasada: Transporte · Via Cargo». */
 export function sugerenciaDe(p: PendienteLogistica): string | null {
   if (!p.suggestion) return null

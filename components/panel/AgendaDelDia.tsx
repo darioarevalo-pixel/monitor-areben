@@ -13,7 +13,7 @@ import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
 import { armarFilasPedidos, traerPedidosCatalogo, type FilaPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
-import { esDelDeposito, pasoDe, pendientesLogistica, sugerenciaDe, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
+import { enGrupoDeposito, estadoDeposito, faltanUnidades, pasoPanel, pendientesLogistica, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
 import { mostrar as plata } from '@/lib/compromisos/core'
 
 /**
@@ -493,7 +493,12 @@ function usePendientesLogistica(): ResultadoLogistica | null {
   return r
 }
 
-/** Un pedido pendiente: el nombre abre la ficha (por su número de cliente de GN) y el verde, el chat. */
+/**
+ * Un pedido pendiente, en dos renglones (diseño del 24-oct-2026): el nombre y el estado en una
+ * etiqueta de color. 🟧 «Pendiente» = te toca elegir la forma de entrega (un EM sin número también) ·
+ * 🟩 «Preparado» = despachar (o entregar, en etiqueta libre) · ⬜ depósito. El nombre abre la ficha y
+ * el verde, el chat.
+ */
 function FilaLogistica({
   p,
   onAbrir,
@@ -507,9 +512,26 @@ function FilaLogistica({
 }) {
   const id = Number(p.gn_client_id) || 0
   const tel = p.client_phone || ''
-  const sugerencia = sugerenciaDe(p)
+  const paso = pasoPanel(p)
+  const faltan = faltanUnidades(p)
+  const chip = (tono: 'warning' | 'success' | 'neutral', txt: string) => (
+    <span
+      style={{
+        fontSize: 11,
+        fontWeight: 600,
+        padding: '2px 9px',
+        borderRadius: 999,
+        whiteSpace: 'nowrap',
+        border: `1px solid ${tono === 'warning' ? color.warningBorder : tono === 'success' ? 'transparent' : color.line}`,
+        background: tono === 'warning' ? color.warningBg : tono === 'success' ? color.successBg : color.bg2,
+        color: tono === 'warning' ? color.warningInk : tono === 'success' ? color.successInk : color.mut,
+      }}
+    >
+      {txt}
+    </span>
+  )
   return (
-    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, borderLeft: `3px solid ${apagada ? color.line : color.warning}`, background: color.surface, opacity: apagada ? 0.6 : 1 }}>
+    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, background: color.surface, opacity: apagada ? 0.62 : 1 }}>
       <button
         type="button"
         disabled={!id && !tel}
@@ -518,12 +540,22 @@ function FilaLogistica({
         style={{ display: 'block', flex: 1, minWidth: 0, height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: `${space[2]}px 0 ${space[2]}px ${MARGEN}px`, cursor: 'pointer', font: 'inherit' }}
       >
         <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.client_name || 'Sin nombre'}</div>
-        <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2 }}>
-          Pedido {p.gn_number || p.id} · {p.status.label}
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 4, fontSize: font.xs, color: color.mut }}>
+          {apagada ? (
+            chip('neutral', estadoDeposito(p))
+          ) : paso === 'despachar' ? (
+            <>
+              {chip('success', 'Preparado')}
+              {p.dispatch_option?.code === 2 ? 'Entregar' : 'Despachar'}
+              {faltan > 0 && <span style={{ color: color.warningInk, fontWeight: 600 }}>· faltan {faltan}</span>}
+            </>
+          ) : (
+            <>
+              {chip('warning', 'Pendiente')}
+              Forma de entrega
+            </>
+          )}
         </div>
-        {/* Las palabras del panel, no las de Logística: ver `pasoDe`. */}
-        {p.next_step && <div style={{ fontSize: font.xs, color: apagada ? color.mut2 : color.warningInk, marginTop: 2 }}>{pasoDe(p)}</div>}
-        {sugerencia && <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2 }}>{sugerencia}</div>}
       </button>
       <div style={{ display: 'flex', alignItems: 'center', padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
         <button
@@ -541,7 +573,10 @@ function FilaLogistica({
   )
 }
 
-/** «Pendientes en Logística», debajo de los pedidos del catálogo. Sin pendientes no se dibuja. */
+/**
+ * «Pendientes en Logística», debajo de los pedidos del catálogo. Sin pendientes no se dibuja. Lo
+ * tuyo arriba; lo que espera al depósito, plegado en «En depósito · N».
+ */
 function GrupoLogistica({
   r,
   abierto,
@@ -555,11 +590,12 @@ function GrupoLogistica({
   onAbrir: (id: number, tel: string) => void
   onFicha: (id: number, tel: string) => void
 }) {
+  const [depositoAbierto, setDepositoAbierto] = useState(false)
   if (!r || r.t === 'sin-permiso') return null
   if (r.t === 'ok' && !r.datos.orders.length) return null
   const todos = r.t === 'ok' ? r.datos.orders : []
-  const mios = todos.filter((p) => !esDelDeposito(p))
-  const deposito = todos.filter(esDelDeposito)
+  const mios = todos.filter((p) => !enGrupoDeposito(p))
+  const deposito = todos.filter(enGrupoDeposito)
   // El número cuenta sólo lo tuyo: 0 = de tu parte está todo hecho.
   return (
     <Grupo titulo="Pendientes en Logística" cuantas={mios.length} abierto={abierto} onToggle={onToggle}>
@@ -570,12 +606,15 @@ function GrupoLogistica({
       {r.t === 'ok' && !mios.length && <Aclaracion>De tu parte no hay nada pendiente.</Aclaracion>}
       {deposito.length > 0 && (
         <>
-          <div style={{ padding: `${space[3]}px ${MARGEN}px ${space[1]}px`, fontSize: font.xs, fontWeight: 700, color: color.mut2 }}>
-            Esperando al depósito <span style={{ fontWeight: 600 }}>{deposito.length}</span>
-          </div>
-          {deposito.map((p) => (
-            <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} apagada />
-          ))}
+          <button
+            type="button"
+            aria-expanded={depositoAbierto}
+            onClick={() => setDepositoAbierto((v) => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: 'auto', background: color.surface, border: 0, borderTop: `1px solid ${color.line2}`, padding: `${space[2]}px ${MARGEN}px`, fontSize: font.sm, fontWeight: 600, color: color.mut, textAlign: 'left', cursor: 'pointer' }}
+          >
+            {depositoAbierto ? '▾' : '▸'} En depósito · {deposito.length}
+          </button>
+          {depositoAbierto && deposito.map((p) => <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} apagada />)}
         </>
       )}
     </Grupo>

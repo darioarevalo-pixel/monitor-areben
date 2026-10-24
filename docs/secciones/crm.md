@@ -1180,3 +1180,29 @@ Ger (logistica.arebensrl.com) abrió una API para el panel: `https://logistica.a
   entorno de prueba: se prueba sobre un pedido acordado. ⛔ El 409 no se reintenta solo: se muestra
   cómo quedó el pedido y decide la persona.
 - Test: `tests/crm-logistica.test.ts`.
+
+# ✅ 24-oct-2026 — Logística en el panel: el diseño nuevo («Lo que sigue»)
+
+Cerrado con Darío en la página de prueba (https://claude.ai/artifact/MY9cf71XDcjaKXtpRc4YUr, panel de
+la derecha, «Datos» como vienen). Código: `components/panel/PedidosLogistica.tsx` (ficha) y
+`FilaLogistica`/`GrupoLogistica` en `AgendaDelDia.tsx` (Hoy). Pasos en `pasoPanel` (`lib/crm/logistica.ts`).
+- **Ficha**: título «Logística»; por pedido, el número, la forma (`formaCorta`: «EM 4471203») y «⋯»; UN
+  botón con el paso que toca («Elegir forma de entrega» / «Despachado» / «Entregado» en etiqueta libre).
+  En el depósito no hay botón: el estado en gris (`estadoDeposito`) y la barra de escaneadas.
+  Sin estado de Logística con color, sin avisos repetidos de lo que ya dice el botón.
+- **Elegir forma de entrega y completar en el mismo paso** (`ElegirYCompletar`): EM → el número;
+  Etiqueta libre → nombre, apellido, descripción → «Ver etiqueta» → «Guardar y generar»; Transporte →
+  transporte + mensaje → «✨ Completar etiqueta con IA» (lee el mensaje y muestra la etiqueta) →
+  «Guardar y generar». «Revisar datos» se abre solo si la IA no encontró algún dato básico. Guardar la
+  etiqueta sigue pidiendo haberla visto con ESOS datos. En EM la forma y el número van en dos cargas
+  seguidas (cada una con su `expected`).
+- **«Confirmar despacho» / «Confirmar entrega»**, sin cartel: el pedido sale de la ficha al instante.
+- **Hoy**: dos renglones (nombre + etiqueta de color, sin raya ámbar): 🟧 Pendiente · Forma de entrega,
+  🟩 Preparado · Despachar/Entregar (+ «· faltan N»), y los del depósito plegados en «En depósito · N».
+- ⚠️ Se escribió «Cambiar …» y no «Modificar …» (el glosario `VOCABULARIO.md` §1.5 prohíbe «Modificar»;
+  lo clava `tests/vocabulario.test.ts`).
+- ⚠️ **«Informar seguimiento» COPIA el mensaje, no lo escribe en el cuadro de WhatsApp**: la extensión
+  no tiene todavía un mensaje para escribir en el chat. El link sale de `tracking_url` (sin verificar
+  que Logística traiga el de Correo/Andreani) y no se muestra el nombre del correo.
+- ⏭️ Faltantes por producto («Preparado con 46 de 48» desplegable) y la sugerencia con los datos de
+  etiqueta del último envío esperan a Ger; hoy es una línea ámbar con las unidades.
