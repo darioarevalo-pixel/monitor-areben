@@ -31,7 +31,7 @@ const git = (...a) => execFileSync('git', ['-C', ORIGEN, ...a], { encoding: 'utf
 if (!existsSync(join(ORIGEN, 'package.json'))) throw new Error(`No está el motor en ${ORIGEN}`)
 const pkg = JSON.parse(readFileSync(join(ORIGEN, 'package.json'), 'utf8'))
 if (pkg.name !== 'areben-motor') throw new Error(`${ORIGEN} no es areben-motor (es ${pkg.name})`)
-const delMonitor = execFileSync('git', ['ls-files', '*.ts', '*.tsx', '*.js', '*.mjs'], { encoding: 'utf8' }).split('\n').filter((f) => f && !f.startsWith('motor/'))
+const delMonitor = execFileSync('git', ['ls-files', '*.ts', '*.tsx', '*.js', '*.mjs'], { encoding: 'utf8' }).split('\n').filter((f) => f && !f.startsWith('motor/') && f !== 'tests/motor-cierre.test.ts') // ese test trae imports de MENTIRA como fixture
 const ARCHIVOS = cierre(ORIGEN, [...entradasDeExports(ORIGEN, pkg.exports), ...entradasDelMonitor(process.cwd(), delMonitor)])
 const sucio = git('status', '--porcelain', '--', ...ARCHIVOS)
 if (sucio) throw new Error(`El motor tiene cambios sin commitear en lo que se copia:\n${sucio}`)

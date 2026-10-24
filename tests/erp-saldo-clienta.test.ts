@@ -52,3 +52,14 @@ describe('saldoDeClienta', () => {
     expect(filtros.some(([t]) => t === 'cliente')).toBe(false)
   })
 })
+
+describe('saldoDeClienta · libro de la venta', () => {
+  it('lee el saldo del MISMO libro que la venta que se cambia (prueba o real)', async () => {
+    filas.saldo_favor = [
+      { cliente_id: 'c1', marca: 'zattia', prueba: true, saldo: 4500 },
+      { cliente_id: 'c1', marca: 'zattia', prueba: false, saldo: 900 },
+    ]
+    expect(await saldoDeClienta({ marca: 'zattia', doc: '30111222', prueba: false })).toEqual({ cliente: { nombre: 'Ana' }, saldo: 900 })
+    expect(await saldoDeClienta({ marca: 'zattia', doc: '30111222' })).toEqual({ cliente: { nombre: 'Ana' }, saldo: 4500 })
+  })
+})

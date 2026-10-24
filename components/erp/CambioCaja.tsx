@@ -208,7 +208,7 @@ export function CambioCaja() {
   const faltaClienta = pideClienta && !(docLimpio.length >= 7 && clienta.nombre.trim().length >= 3)
 
   const buscarSaldo = () => correr(async () => {
-    const r = await leerSaldo(store, docLimpio)
+    const r = await leerSaldo(store, docLimpio, ficha?.venta.prueba ?? true)
     setSaldo({ doc: docLimpio, monto: r.saldo })
     if (r.cliente && !clienta.nombre.trim()) setClienta((x) => ({ ...x, nombre: r.cliente?.nombre ?? '' }))
     setUsaSaldo(r.saldo > 0)

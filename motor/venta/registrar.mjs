@@ -16,6 +16,7 @@ import { armarDevolucion, autorizacion, leerDevolucion, pagosDePlata, vueltaDe }
 import { frena } from '../cuenta/cuenta.core.mjs'
 import { anularCompraDe, cuentaBloqueada, filaCompra, insertarFila } from '../cuenta/libro.mjs'
 import { guardarClienteGN } from './cliente.mjs'
+import { mandaEn } from '../tn/stock.mjs'
 
 const q = async (db, sql, params = []) => (await db.query(sql, params)).rows
 
@@ -422,7 +423,8 @@ async function anularDentro(db, e) {
   const actual = await leerParaCambiar(db, e?.venta_id)
   const leida = leerDevolucion(e?.devolucion)
   if (leida.ok === false) return leida
-  const armada = armarAnulacion(actual, { ...(e ?? {}), devolucion: leida.devolucion })
+  // Con el libro mandando en la marca (la llave del corte), GN ya ⛔ devuelve la prenda: la anulación de una venta suya suma acá.
+  const armada = armarAnulacion(actual, { ...(e ?? {}), devolucion: leida.devolucion }, { corte: !!actual && mandaEn(actual.venta.marca) })
   if (!armada.ok) return armada
   const v = actual.venta
   const con028 = await hayDevolucion(db)
@@ -497,7 +499,7 @@ export async function confirmarVuelta(db, e) {
     if (a.volvio) return falla('YA_VOLVIO', `Las prendas de la venta ${actual.venta.numero} ya volvieron`, 'venta_id')
     const en = new Date().toISOString()
     await insertar(db, 'venta_vuelta', [{ venta_id: e.venta_id, usuario: e.usuario.trim(), vuelta_en: en }])
-    const movimientos = movimientosDeAnulacion(actual.venta, actual.lineas, en)
+    const movimientos = movimientosDeAnulacion(actual.venta, actual.lineas, en, { corte: mandaEn(actual.venta.marca) })
       .map((m) => ({ ...m, detalle: { ...m.detalle, venta_numero: actual.venta.numero, vuelta: a.vuelta } }))
     await insertarMovimientos(db, movimientos)
     return { ok: true, venta: { id: actual.venta.id, numero: actual.venta.numero }, vuelta: a.vuelta, movimientos: movimientos.length }
@@ -524,7 +526,7 @@ export async function reemplazarVenta(db, e) {
     if (!vieja) return falla('NO_ENCONTRADA', 'No está la venta que se reemplaza', 'venta_id')
     if (nueva.origen !== vieja.origen || nueva.marca !== vieja.marca) return falla('ENTRADA_INVALIDA', 'El reemplazo es del mismo origen y la misma marca', 'nueva')
     if (nueva.prueba !== vieja.prueba) return falla('ENTRADA_INVALIDA', 'Una venta de prueba se reemplaza con otra de prueba (y al revés)', 'nueva.prueba')
-    const anulada = await anularDentro(db, { venta_id: vieja.id, motivo: e.motivo, usuario: e.usuario })
+    const anulada = await anularDentro(db, { venta_id: vieja.id, motivo: e.motivo, usuario: e.usuario, sigue_gn: e.sigue_gn })
     if (!anulada.ok) return anulada
     const r = await registrarDentro(db, { ...nueva, detalle: { ...(nueva.detalle ?? {}), reemplaza: vieja.id } }, unidades)
     if (!r.ok) return r

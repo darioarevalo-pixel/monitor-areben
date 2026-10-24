@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "1099c39cdc7479daa96912f845c4c3700c69eef2",
-  "traido_en": "2026-10-21T00:11:45.850Z",
+  "commit": "42dc8c1cb3674fa248f85722c8aa7e09d81a6e2e",
+  "traido_en": "2026-10-24T16:24:48.141Z",
   "archivos": {
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
     "arca/cliente.js": "fc1118e7392afdf716057de81175ec6fe2b7a16edd63ed7956241e8389fce168",
@@ -19,7 +19,9 @@
     "cuentas/cuentas.mjs": "cf8a8f2f7737277baf14d2dd824d4b90c8ad3498ead839b6086e75bfd5efa9b7",
     "cuentas/rutas.mjs": "02515ffdb62402d10a68ad42b5564f24c5e64eb4a29f74cea74837c890041666",
     "stock/ajuste.mjs": "3fb5b28ef1d891e9bb9832a1efa004e0e7d5325c119323c78c7329ee6223a11e",
-    "venta/armar.mjs": "6ae89ee6d41a3fafd6296a698ed154f9301d9e7fa780f6db027ec94cc83e61b3",
+    "tn/cruce.mjs": "bfb6eeabe683197f5613f7edcee31a23178bfab582aab69daa8185dd87291b37",
+    "tn/stock.mjs": "d42cb53c3d1282e54d8c0e3fc013e58d4087236e21b5193fb8acf1b54a6f5684",
+    "venta/armar.mjs": "28ee21ee275272ef6e75c7ed96cce0dc2ed47d9b18fc792e40c3fcf59ec181cd",
     "venta/cliente.mjs": "389f224cbcaf546cd7b350523b2a319316a660e025c12ab03e2320ed16ea7aa9",
     "venta/cobros.mjs": "9c2951d85b0db068f2c2fc7958adfa3958adad2fb2a043156e92c53da41a1afa",
     "venta/contraentrega.mjs": "896e2e4f7897d12c42690b5cce8ac7d34325b614a6423264e00830a6b8ab3c20",
@@ -29,7 +31,7 @@
     "venta/pago-tn.mjs": "1de5fe256bcd2e97499c1980b7564c530d727a3d5d1edf966b0ca9a029468931",
     "venta/precio.mjs": "c5c6d2fef5f8f3481073a53a20b8ac9da66539687da99c9f96c0ef039722f7a9",
     "venta/proveedor.mjs": "bdbfde6aa0749296f5ddc6723dfb3856ce9596ef75a75fac7b2715479dd6f061",
-    "venta/registrar.mjs": "c2c40bc0a6b42d46300a3aed1b6aa23cdb3c0c43af9540137d6b8aae4a83ce48",
+    "venta/registrar.mjs": "d524c25dc98a31b8f39049ea1738be7caccd07ffc30118d17a928927442fd53b",
     "venta/reglas-db.mjs": "b8d0bf468b3bd5f8bcb966367139025f7c17f0383201a2fc8e4519af9aa6ef50",
     "venta/reglas.mjs": "c356d1743ce274a52b77c11628e4510510e3661360fcb5f18efcca66f5540ad4"
   }

@@ -631,10 +631,10 @@ export async function confirmarVueltaPropia({ marca, body, usuario }) {
  * vuelve a sumar él: si ⛔ coincide con el pago, 409.
  */
 /**
- * El saldo a favor de una clienta, por documento (el de PRUEBA mientras el cambio es de prueba): para
+ * El saldo a favor de una clienta, por documento (el del MISMO libro que la venta que se cambia: `prueba`, por defecto el de prueba): para
  * ofrecerlo como forma de pago en el cambio. Lee la vista `saldo_favor` del motor (contrato §6).
  */
-export async function saldoDeClienta({ marca, doc }) {
+export async function saldoDeClienta({ marca, doc, prueba = true }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const d = String(doc ?? '').replace(/\D/g, '')
   if (!/^\d{7,11}$/.test(d)) return { status: 400, error: 'Documento inválido' }
@@ -647,7 +647,7 @@ export async function saldoDeClienta({ marca, doc }) {
   const cl = await sb.from('cliente').select('id, nombre').eq('empresa_id', empresa).eq('doc', d).maybeSingle()
   if (cl.error) throw new Error(`cliente: ${cl.error.message}`)
   if (!cl.data) return { cliente: null, saldo: 0 }
-  const s = await sb.from('saldo_favor').select('saldo').eq('cliente_id', cl.data.id).eq('marca', marca).eq('prueba', true).maybeSingle()
+  const s = await sb.from('saldo_favor').select('saldo').eq('cliente_id', cl.data.id).eq('marca', marca).eq('prueba', prueba).maybeSingle()
   if (s.error) throw new Error(`saldo_favor: ${s.error.message}`)
   return { cliente: { nombre: cl.data.nombre }, saldo: Number(s.data?.saldo || 0) }
 }
@@ -691,8 +691,11 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
       if (!cs) return { status: 409, error: 'Falta la cuenta «Saldo a favor» en el ERP (sql/007 del motor).' }
       cobrado = { ...cobrado, pagos: cobrado.pagos.map((p) => (p.cuenta === 'saldo' ? { ...p, cuenta: cs.id } : p)) }
     }
+    // 🔑 `prueba` es la de la venta ORIGINAL: el motor ⛔ cambia una venta de prueba con un cambio real ni al revés
+    // (`armarCambio`). Sin la venta (id ajeno) queda `true` y el motor contesta NO_ENCONTRADA.
+    const [orig] = (await db.query('select prueba from venta where id = $1', [c.ventaId])).rows
     const r = await registrarCambio(db, {
-      origen: 'caja', origen_ref: c.id, marca, usuario: usuario || 'erp', prueba: true, deposito: 'local',
+      origen: 'caja', origen_ref: c.id, marca, usuario: usuario || 'erp', prueba: orig ? orig.prueba === true : true, deposito: 'local',
       venta_original_id: c.ventaId, devueltas: c.devueltas, nuevas: c.nuevas, pagos: cobrado.pagos,
       ...(c.cliente ? { cliente: c.cliente } : {}),
       ...(mp ? { detalle: { mp } } : {}),
@@ -1489,7 +1492,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET' && req.query.vista === 'saldo') {
-      const r = await saldoDeClienta({ marca: String(req.query.marca || ''), doc: req.query.doc })
+      const r = await saldoDeClienta({ marca: String(req.query.marca || ''), doc: req.query.doc, prueba: req.query.prueba !== '0' })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

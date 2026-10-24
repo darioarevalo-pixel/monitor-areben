@@ -150,6 +150,18 @@ export function mueveStock(v) {
   return !(g != null && g !== '')
 }
 
+/**
+ * ¿La ANULACIÓN devuelve la prenda al libro? Lo mismo que al registrar (`mueveStock`) y, además, la venta de GN DESPUÉS del
+ * corte (Bruno, 21-oct): GN descontó todo pedido, entregado o no (⛔ tiene estado de estantería) ⇒ anularla SIEMPRE suma,
+ * sea devolución o pedido que nunca salió. `corte`: GN ya ⛔ alimenta el libro de esa marca (lo decide `registrar.mjs` con
+ * `mandaEn`); antes, la devolución entra por GN (fuentes `gn`/`gn_borrada`) y si el motor también sumara, contaría doble.
+ * `sigueGN`: la anulación que COPIA una de GN (`bin/mayorista`) ⛔ suma nunca: la prenda ya la devolvió GN.
+ */
+export function vuelveAlAnular(v, { corte = false, sigueGN = false } = {}) {
+  if (mueveStock(v)) return true
+  return !!v && !v.prueba && corte && !sigueGN
+}
+
 /** El movimiento del libro de una línea (`stock_movimiento` de sql/001-libro.sql). ⛔ hay si es de prueba. */
 export function movimientoDe(venta, linea, tipo) {
   return {
@@ -254,9 +266,10 @@ export function armarCambio(e, conf, original, { ahora = new Date() } = {}) {
 /**
  * La anulación: la fila y los movimientos contrarios (lo que salió vuelve al depósito de la venta).
  * @param {{ venta: any, lineas: any[], tieneCambio?: boolean }} actual
- * @param {{ motivo: string, usuario: string, devolucion?: Array<{ cuenta: any, monto: number }> }} e
+ * @param {{ motivo: string, usuario: string, devolucion?: Array<{ cuenta: any, monto: number }>, sigue_gn?: boolean }} e
+ * @param {{ ahora?: Date, corte?: boolean }} [op] `corte`: ver `vuelveAlAnular`
  */
-export function armarAnulacion(actual, e, { ahora = new Date() } = {}) {
+export function armarAnulacion(actual, e, { ahora = new Date(), corte = false } = {}) {
   if (!actual || !actual.venta) return fallo('NO_ENCONTRADA', 'No está la venta')
   const v = actual.venta
   if (v.estado === 'anulada') return fallo('YA_ANULADA', `La venta ${v.numero} ya está anulada`)
@@ -265,15 +278,15 @@ export function armarAnulacion(actual, e, { ahora = new Date() } = {}) {
   if (!(typeof e.usuario === 'string' && e.usuario.trim())) return fallo('ENTRADA_INVALIDA', 'Falta quién la anula', 'usuario')
   const en = ahora.toISOString()
   const anulacion = { venta_id: v.id, motivo: e.motivo.trim(), usuario: e.usuario.trim(), anulada_en: en, devolucion: e.devolucion ?? null }
-  return { ok: true, anulacion, movimientos: movimientosDeAnulacion(v, actual.lineas, en) }
+  return { ok: true, anulacion, movimientos: movimientosDeAnulacion(v, actual.lineas, en, { corte, sigueGN: e.sigue_gn === true }) }
 }
 
 /**
- * Lo contrario de la venta en el libro: lo que salió, vuelve. Sólo lo que el motor movió (la misma regla que al
- * registrarla). `en`: al anular, o al confirmar que la prenda volvió (sql/028, «a desarmar» / «a recibir»).
+ * Lo contrario de la venta en el libro: lo que salió, vuelve (`vuelveAlAnular`). `en`: al anular, o al confirmar que la
+ * prenda volvió (sql/028, «a desarmar» / «a recibir»).
  */
-export function movimientosDeAnulacion(v, lineas, en) {
-  if (!mueveStock(v)) return []
+export function movimientosDeAnulacion(v, lineas, en, op = {}) {
+  if (!vuelveAlAnular(v, op)) return []
   const contra = { ...v, ocurrida_en: en }
   return lineas.map((l) => ({
     ...movimientoDe(contra, l, 'anulacion'),
