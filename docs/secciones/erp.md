@@ -348,6 +348,8 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   social, IIBB, inicio de actividades, domicilio de cada punto de venta): se copian de una factura de GN o
   de la constancia de ARCA, ⛔ se inventan. Una de homologación sale sellada «SIN VALIDEZ FISCAL».
 
+- **Editar el producto** (26-oct, puerta sin pantalla todavía; `api/_erp-catalogo.js`, núcleo `lib/erp/catalogo-edicion.core.js`, motor `catalogo-edicion.mjs`, sql/037): `producto-editar` (nombre, categoría, activo), `variante-editar` (talle, SKU, código de barras, activa), `variante-agregar` y la vista `producto-historial`. Sólo Admin (`configurar`). ⛔ Crear producto, proveedor y costo: nacen en Ingresos. 🔴 Editar una fila que vino de GN la pasa a «cargada» y la copia de GN ⛔ la actualiza más; el código de barras ⛔ se repite en la empresa (el motor dice con qué variante choca). Cada campo cambiado queda en `catalogo_edicion`, inmutable.
+
 ## Pendiente
 
 Factura A en la masiva (en la Caja ya está) · NC PARCIAL (la del cambio) · los datos del emisor para el PDF · reabrir un mes ·

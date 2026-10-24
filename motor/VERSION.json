@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "309589e888e249bd2722b3a835225d35d723463c",
-  "traido_en": "2026-10-24T21:20:57.390Z",
+  "commit": "26be693c86e0540a9c2718f9c12f4a7e961066bc",
+  "traido_en": "2026-10-24T21:37:16.574Z",
   "archivos": {
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
     "arca/cliente.js": "fc1118e7392afdf716057de81175ec6fe2b7a16edd63ed7956241e8389fce168",
@@ -13,6 +13,7 @@
     "arca/qr.core.js": "f0985c1b77fe664e51bcff5b86e22d4143773b22a66555cbbb0711b31275e2c4",
     "arca/sin-secretos.core.js": "1807f79d7ab1d1b8d97d8401d84ef1b575964e9bf02c644c51c4b007eded5fb6",
     "arca/techo.core.js": "7938bfdd0fbd52bf80dc57730f70a36ccbc5717843c89939e427f048c3d77454",
+    "catalogo-edicion.mjs": "a68d708d998d64cd887ea36b2409f8c903b108a791a6d3ecb39321f6e7f3932f",
     "cuenta/cuenta.core.mjs": "5907ead92069498add2008832d9887109257b0294b8d329502063dffa34868a0",
     "cuenta/cuenta.mjs": "d86a838dbb4d3ffc9c3e6f39166cca56fcf8c35eafcdfdf1d8918842c78fdbd4",
     "cuenta/libro.mjs": "b97f74ee6f85b125aa240ea296e6986603390d1d3632a23121062f6b55ecc4d0",

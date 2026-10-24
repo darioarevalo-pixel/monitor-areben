@@ -57,6 +57,8 @@
  *   POST {recurso:'erp', accion:'crear-ajuste'|'aprobar-ajuste'|'descartar-ajuste', linea, …}   `api/_erp-ajustes.js`
  *   GET  ?recurso=erp&vista=transferencias-doc&marca=…   las transferencias como DOCUMENTO del motor (sql/034) + lo en tránsito
  *   POST {recurso:'erp', accion:'transferencia-crear'|'-armar'|'-enviar'|'-recibir'|'-cancelar', linea, …}   `api/_erp-transferencia.js`
+ *   GET  ?recurso=erp&vista=producto-historial&marca=…&productId=…   quién cambió qué en un producto (sql/037)
+ *   POST {recurso:'erp', accion:'producto-editar'|'variante-editar'|'variante-agregar', marca, productId, …}   `api/_erp-catalogo.js` (sólo admin)
  *   GET  ?recurso=erp&vista=permisos                                   lo que el perfil puede en el ERP, por marca (`permisosErp`)
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
@@ -96,6 +98,8 @@ import { interruptoresDeMarcas, ponerInterruptorErp } from './_erp-interruptores
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.js'
 import { ACCIONES as ACCIONES_TRANSFERENCIA } from '../lib/erp/transferencia-doc.core.js'
+import { accionDeCatalogo, historialDeProducto } from './_erp-catalogo.js'
+import { ACCIONES as ACCIONES_CATALOGO } from '../lib/erp/catalogo-edicion.core.js'
 import { cobrarVentaErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
@@ -1404,6 +1408,16 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST' && ACCIONES_TRANSFERENCIA.includes(body.accion)) {
       const r = await accionDeTransferencia({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'producto-historial') {
+      const r = await historialDeProducto({ marca: String(req.query.marca || ''), productId: req.query.productId }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'POST' && ACCIONES_CATALOGO.includes(body.accion)) {
+      const r = await accionDeCatalogo({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
