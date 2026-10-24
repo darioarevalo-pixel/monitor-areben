@@ -221,7 +221,7 @@ export async function despachar(p: PedidoLogistica): Promise<ResultadoCarga> {
 export function pasoDe(p: PendienteLogistica): string | null {
   if (!p.next_step) return null
   if (p.next_step.code === 'modalidad') return 'Falta elegir la forma de entrega'
-  if (p.next_step.code === 'seguimiento' && p.dispatch_option?.code === TRANSPORTE && p.status.code === LISTO) return 'Listo para despachar'
+  if (esperaSeguimientoDeTransporte(p)) return p.status.code === LISTO ? 'Listo para despachar' : 'Etiqueta lista: falta armar el pedido'
   return p.next_step.label
 }
 
@@ -232,7 +232,17 @@ export function pasoDe(p: PendienteLogistica): string | null {
  */
 export function esDelDeposito(p: PendienteLogistica): boolean {
   if (!p.next_step || p.next_step.code === 'modalidad' || p.next_step.code === 'datos') return false
+  // Transporte con la etiqueta hecha y sin armar: la imprime y lo arma el depósito (24-oct-2026).
+  if (esperaSeguimientoDeTransporte(p)) return p.status.code !== LISTO
   return p.dispatch_option?.code === 1 && !!p.em && !p.has_label
+}
+
+/**
+ * Logística pide el seguimiento como paso siguiente también en transporte, pero ahí no frena nada:
+ * Darío despacha con la foto de la guía (24-oct-2026).
+ */
+function esperaSeguimientoDeTransporte(p: PendienteLogistica): boolean {
+  return p.next_step?.code === 'seguimiento' && p.dispatch_option?.code === TRANSPORTE
 }
 
 /** Sólo cambia lo que se tocó: un campo igual al que ya tiene el pedido no viaja. */

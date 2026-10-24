@@ -79,6 +79,14 @@ describe('entregaDe y sugerenciaDe', () => {
     expect(esDelDeposito({ ...em, has_label: true })).toBe(false)
     expect(esDelDeposito({ ...em, next_step: { code: 'datos', label: 'Faltan datos' } })).toBe(false)
   })
+  it('transporte con etiqueta: sin armar es del depósito, armado es tuyo', () => {
+    const t = { ...pedido({ status: { code: 2, label: 'En preparación' }, has_label: true }), suggestion: null, next_step: { code: 'seguimiento', label: 'Falta el número de seguimiento' } } as PendienteLogistica
+    expect(pasoDe(t)).toBe('Etiqueta lista: falta armar el pedido')
+    expect(esDelDeposito(t)).toBe(true)
+    const listo = { ...t, status: { code: 3, label: 'Listo' } }
+    expect(pasoDe(listo)).toBe('Listo para despachar')
+    expect(esDelDeposito(listo)).toBe(false)
+  })
   it('la sugerencia de la vez pasada', () => {
     const p = { ...pedido(), next_step: null, suggestion: { dispatch_option: { code: 3, label: 'Transporte' }, carrier: { slug: 'via_cargo', label: 'Via Cargo' }, from_gn_number: '31877', from_date: null } } as PendienteLogistica
     expect(sugerenciaDe(p)).toBe('La vez pasada: Transporte · Via Cargo')

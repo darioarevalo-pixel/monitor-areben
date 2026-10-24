@@ -1173,7 +1173,8 @@ Ger (logistica.arebensrl.com) abrió una API para el panel: `https://logistica.a
   «Listo para despachar» (`pasoDe`). «Cargar seguimiento» quedó descartado por ahora.
 - ✅ **«Hoy» separa lo tuyo de lo del depósito** (24-oct): «Esperando al depósito», apagado, son
   los EM con número cargado y sin PDF (`esDelDeposito`: `em` y `!has_label`) — los pagan y suben
-  las chicas. El número del grupo cuenta sólo lo tuyo. ⚠️ Supuesto sin verificar contra un pedido
+  las chicas; también un transporte con etiqueta que todavía no está en Listo («Etiqueta lista: falta
+  armar el pedido»). El número del grupo cuenta sólo lo tuyo. ⚠️ Supuesto sin verificar contra un pedido
   real: que `has_label` pase a `true` cuando suben el PDF del EM.
 - ⏭️ **Lo que sigue de la 2ª tanda: cargar** (`PATCH` con `expected`, despachar, etiqueta de transporte). ⛔ No hay
   entorno de prueba: se prueba sobre un pedido acordado. ⛔ El 409 no se reintenta solo: se muestra
