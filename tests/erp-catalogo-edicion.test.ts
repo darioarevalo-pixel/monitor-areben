@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { ACCIONES, errorDe, leerAccion, textoDeAviso } from '@/lib/erp/catalogo-edicion.core.js'
 import { accionDeCatalogo, historialDeProducto } from '@/api/_erp-catalogo.js'
 import { permisoErpDe } from '@/lib/permisos.core.js'
+import { entradaInvalida } from '@/lib/erp/entrada.core.js'
+import { ACCIONES as ACCIONES_TRANSFERENCIA } from '@/lib/erp/transferencia-doc.core.js'
 
 // El núcleo es JS sin tipos: la salida se lee como un objeto cualquiera.
 const leer = leerAccion as (b: Record<string, unknown>) => Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -63,5 +65,17 @@ describe('permiso', () => {
   it('editar el producto es sólo de Admin (`configurar`)', () => {
     for (const accion of ACCIONES) expect(permisoErpDe({ method: 'POST', accion })).toBe('configurar')
     expect(permisoErpDe({ method: 'GET', vista: 'producto-historial' })).toBe('configurar')
+  })
+})
+
+describe('el validador de pedidos de la puerta del ERP (`entrada.core.js`)', () => {
+  // Una acción o vista que ⛔ está nombrada ahí contesta 400 en producción, aunque el handler y sus tests estén bien.
+  it('deja pasar las acciones y la vista de editar el producto', () => {
+    for (const accion of ACCIONES) expect(entradaInvalida({ method: 'POST', body: { accion, marca: 'zattia', productId: 1 } })).toBeNull()
+    expect(entradaInvalida({ method: 'GET', query: { vista: 'producto-historial', marca: 'zattia', productId: '1' } })).toBeNull()
+  })
+  it('deja pasar la vista y las 5 acciones de la transferencia como documento', () => {
+    for (const accion of ACCIONES_TRANSFERENCIA) expect(entradaInvalida({ method: 'POST', body: { accion, linea: 'zattia' } })).toBeNull()
+    expect(entradaInvalida({ method: 'GET', query: { vista: 'transferencias-doc', marca: 'zattia', estado: 'en_transito,armada' } })).toBeNull()
   })
 })
