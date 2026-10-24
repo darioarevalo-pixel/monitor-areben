@@ -1202,7 +1202,9 @@ la derecha, «Datos» como vienen). Código: `components/panel/PedidosLogistica.
 - ⚠️ Se escribió «Cambiar …» y no «Modificar …» (el glosario `VOCABULARIO.md` §1.5 prohíbe «Modificar»;
   lo clava `tests/vocabulario.test.ts`).
 - ⚠️ **«Informar seguimiento» COPIA el mensaje, no lo escribe en el cuadro de WhatsApp**: la extensión
-  no tiene todavía un mensaje para escribir en el chat. El link sale de `tracking_url` (sin verificar
-  que Logística traiga el de Correo/Andreani) y no se muestra el nombre del correo.
+  no tiene todavía un mensaje para escribir en el chat. 🔑 **El correo se deduce del número** (`correoDe`,
+  Darío 24-oct): con letras = Correo Argentino, sólo números = Andreani (Logística no manda el correo).
+  El link lleva el número: `correoargentino.com.ar/formularios/e-commerce?id=<n>` y
+  `andreani.com/envio/<n>` (ambos confirmados por Darío con un envío real de cada uno). No se usa `tracking_url`.
 - ⏭️ Faltantes por producto («Preparado con 46 de 48» desplegable) y la sugerencia con los datos de
   etiqueta del último envío esperan a Ger; hoy es una línea ámbar con las unidades.

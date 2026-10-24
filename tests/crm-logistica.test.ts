@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { avisosDe, cambiosDeEnvio, enGrupoDeposito, entregaDe, esDelDeposito, estadoDeposito, faltanUnidades, formaCorta, mensajeSeguimiento, pasoDe, pasoPanel, sugerenciaDe, type PedidoLogistica, type PendienteLogistica } from '../lib/crm/logistica'
+import { avisosDe, cambiosDeEnvio, correoDe, enGrupoDeposito, entregaDe, esDelDeposito, estadoDeposito, faltanUnidades, formaCorta, mensajeSeguimiento, pasoDe, pasoPanel, sugerenciaDe, type PedidoLogistica, type PendienteLogistica } from '../lib/crm/logistica'
 
 vi.mock('../api/_auth.js', () => ({ exigirUsuario: vi.fn(async () => ({ name: 'Darío', admin: true })) }))
 vi.mock('../lib/permisos.core.js', () => ({ puedeVerAlguna: vi.fn(() => true), esAdmin: vi.fn(() => true) }))
@@ -115,6 +115,12 @@ describe('el diseño del 24-oct', () => {
     expect(enGrupoDeposito({ ...base, next_step: { code: 'datos', label: '' } })).toBe(false)
     expect(enGrupoDeposito({ ...base, dispatch_option: null, next_step: { code: 'modalidad', label: '' } })).toBe(false)
   })
+  it('el correo, por cómo es el número', () => {
+    expect(correoDe('VC12345678')).toBe('Correo Argentino')
+    expect(correoDe('360002485519870')).toBe('Andreani')
+    expect(correoDe(' ')).toBeNull()
+    expect(correoDe(null)).toBeNull()
+  })
   it('faltan unidades, forma corta y mensaje', () => {
     expect(faltanUnidades(pedido({ status: { code: 3, label: 'Listo' }, units: { scanned: 46, total: 48, complete: false } }))).toBe(2)
     expect(faltanUnidades(pedido({ units: { scanned: 10, total: 48, complete: false } }))).toBe(0)
@@ -123,8 +129,11 @@ describe('el diseño del 24-oct', () => {
     expect(formaCorta(pedido())).toBe('Transporte · Via Cargo')
     expect(formaCorta(pedido({ dispatch_option: null }))).toBeNull()
     expect(mensajeSeguimiento(pedido())).toBeNull()
-    expect(mensajeSeguimiento(pedido({ client_name: 'Facundo López', tracking_number: '3602034470123', tracking_url: 'https://x.test/s' }))).toBe(
-      '¡Hola Facundo! Te paso el número de seguimiento de tu pedido: 3602034470123\nLo podés seguir acá: https://x.test/s',
+    expect(mensajeSeguimiento(pedido({ client_name: 'Facundo López', tracking_number: 'VC12345678' }))).toBe(
+      '¡Hola Facundo! Te paso el número de seguimiento de tu pedido: VC12345678\nLo podés seguir acá: https://www.correoargentino.com.ar/formularios/e-commerce?id=VC12345678',
+    )
+    expect(mensajeSeguimiento(pedido({ client_name: 'Facundo López', tracking_number: '360002485519870' }))).toBe(
+      '¡Hola Facundo! Te paso el número de seguimiento de tu pedido: 360002485519870\nLo podés seguir acá: https://www.andreani.com/envio/360002485519870',
     )
   })
 })

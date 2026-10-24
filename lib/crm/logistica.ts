@@ -317,13 +317,33 @@ export function formaCorta(p: PedidoLogistica): string | null {
   return [p.dispatch_option.label, p.carrier?.label].filter(Boolean).join(' · ')
 }
 
-/** Lo que se le escribe al cliente con el seguimiento de un EM (el panel lo copia; no lo manda). */
+/**
+ * De qué correo es un seguimiento de EM, por cómo es el número (Darío, 24-oct-2026): el de Correo
+ * Argentino lleva letras y números; el de Andreani, sólo números. Logística no manda el correo.
+ */
+export function correoDe(numero: string | null | undefined): 'Correo Argentino' | 'Andreani' | null {
+  const n = (numero ?? '').trim()
+  if (!n) return null
+  return /[A-Za-z]/.test(n) ? 'Correo Argentino' : 'Andreani'
+}
+
+/** La página donde se sigue el envío, según el correo (los links que Darío mandaba a mano, 24-oct-2026). */
+const LINK_CORREO = {
+  'Correo Argentino': (n: string) => `https://www.correoargentino.com.ar/formularios/e-commerce?id=${encodeURIComponent(n)}`,
+  Andreani: (n: string) => `https://www.andreani.com/envio/${n}`,
+} as const
+
+/**
+ * Lo que se le escribe al cliente con el seguimiento de un EM (el panel lo copia; no lo manda). El
+ * link depende del correo. Los dos llevan el número adentro (lo confirmó Darío con
+ * un envío de cada uno).
+ */
 export function mensajeSeguimiento(p: PedidoLogistica): string | null {
-  if (!p.tracking_number) return null
+  const correo = correoDe(p.tracking_number)
+  if (!correo) return null
   const nombre = (p.client_name || '').trim().split(/\s+/)[0]
   const saludo = nombre ? `¡Hola ${nombre}!` : '¡Hola!'
-  const l1 = `${saludo} Te paso el número de seguimiento de tu pedido: ${p.tracking_number}`
-  return p.tracking_url ? `${l1}\nLo podés seguir acá: ${p.tracking_url}` : l1
+  return `${saludo} Te paso el número de seguimiento de tu pedido: ${p.tracking_number}\nLo podés seguir acá: ${LINK_CORREO[correo](p.tracking_number!.trim())}`
 }
 
 /** Lo que usó la vez anterior, para la lista de pendientes: «La vez pasada: Transporte · Via Cargo». */

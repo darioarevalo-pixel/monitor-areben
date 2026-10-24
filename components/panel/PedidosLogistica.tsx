@@ -5,6 +5,7 @@ import { color, font, radius, space } from '@/components/ui/tokens'
 import {
   cambiosDeEnvio,
   catalogosLogistica,
+  correoDe,
   despachar,
   estadoDeposito,
   formaCorta,
@@ -306,7 +307,7 @@ function Seguimiento({ p, informable }: { p: PedidoLogistica; informable: boolea
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: font.xs, color: color.mut2 }}>Seguimiento</div>
+        <div style={{ fontSize: font.xs, color: color.mut2 }}>{(informable && correoDe(p.tracking_number)) || 'Seguimiento'}</div>
         <b style={{ fontSize: font.sm, fontVariantNumeric: 'tabular-nums', wordBreak: 'break-all', color: color.ink }}>{p.tracking_number}</b>
       </div>
       {informable && (
