@@ -166,7 +166,7 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
     ...ventas.map((v) => armarFila(filaCruda(v, a, numeros))),
     ...pedidos.map((p) => armarFila({
       kind: 'pedido', tienda: p.tienda, tnId: p.tnId, tnNumero: p.numero, creadaEn: p.creadaEn, total: p.total, link: p.link, unidades: p.unidades,
-      dias: p.dias, medio: p.medio, gateway: p.gateway, prendas: p.prendas, entregadoSinCobrar: !!p.entregadoSinCobrar, clienteGn: null, clienteTn: p.comprador ?? null,
+      dias: p.dias, medio: p.medio, gateway: p.gateway, prendas: p.prendas, entregadoSinCobrar: !!p.entregadoSinCobrar, estado: p.estado ?? null, clienteGn: null, clienteTn: p.comprador ?? null,
     })),
   ]
   return { filas, desde, hasta, puede, tnLeidaEn }

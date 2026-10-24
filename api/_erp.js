@@ -94,7 +94,7 @@ import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce
 import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { estructuraDeMarca } from './_erp-estructura.js'
-import { interruptoresDeMarcas, ponerInterruptorErp } from './_erp-interruptores.js'
+import { configuracionDeMarcas, interruptoresDeMarcas, ponerInterruptorErp } from './_erp-interruptores.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.js'
 import { ACCIONES as ACCIONES_TRANSFERENCIA } from '../lib/erp/transferencia-doc.core.js'
@@ -1278,7 +1278,7 @@ export async function pedidosSinPagar({ marca }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const { url, key } = cfgDeMarca(marca)
   const b = createClient(url, key)
-  const ordenes = await leerTodo(b, 'tn_orden', (x) => x.select('tienda, tn_id, numero, creada_en, status, payment_status, medio, gateway, total')
+  const ordenes = await leerTodo(b, 'tn_orden', (x) => x.select('tienda, tn_id, numero, creada_en, status, payment_status, medio, gateway, total, estado')
     .in('status', STATUS_POR_COBRAR).not('payment_status', 'in', `(${NO_SIN_PAGAR.join(',')})`).order('creada_en'))
   const ids = ordenes.map((o) => o.tn_id)
   const lineas = []
@@ -1378,6 +1378,10 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET' && req.query.vista === 'interruptores') {
       return res.status(200).json({ interruptores: await interruptoresDeMarcas(['bdi', 'zattia'], { conMotor }) })
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'configuracion') {
+      return res.status(200).json({ configuracion: await configuracionDeMarcas(['bdi', 'zattia'], { conMotor }) })
     }
 
     if (req.method === 'POST' && body.accion === 'poner-interruptor') {
