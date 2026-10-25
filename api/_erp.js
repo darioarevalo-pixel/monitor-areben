@@ -274,7 +274,8 @@ export async function notaDeCredito({ facturaId, usuario, desdeVenta = false }, 
   if (!f || f.ambiente !== ambiente) return { status: 404, error: 'La factura no existe en este ambiente.' }
   if (f.estado !== 'autorizada') return { status: 409, error: 'Sólo una factura autorizada (con CAE) lleva nota de crédito.' }
   if (!desdeVenta && esDeVentaPropia(f.venta_id)) return { status: 409, error: NC_DESDE_LA_VENTA }
-  const tipo = { [CBTE.FACTURA_A]: CBTE.NC_A, [CBTE.FACTURA_B]: CBTE.NC_B }[f.tipo]
+  // Una NOTA DE DÉBITO también se acredita (un error en la ND se corrige así): la NC la asocia a ELLA y sale por su importe.
+  const tipo = { [CBTE.FACTURA_A]: CBTE.NC_A, [CBTE.FACTURA_B]: CBTE.NC_B, [CBTE.ND_A]: CBTE.NC_A, [CBTE.ND_B]: CBTE.NC_B }[f.tipo]
   if (!tipo) return { status: 409, error: 'Eso ya es una nota de crédito.' }
   // 🔴 Una NC PARCIAL (la de un cambio) ya acreditó parte: ésta sale por lo que le QUEDA a la factura (la entera
   // acreditaría dos veces lo devuelto). Acreditada del todo ⇒ ⛔ sale.

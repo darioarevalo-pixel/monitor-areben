@@ -48,7 +48,10 @@ export async function facturarLote({ arca, repo, ambiente, marca, ptoVta, tipo, 
     // Una venta que ya tiene factura (de antes, o de una pendiente recién resuelta) ⛔ se vuelve a facturar.
     // (Una nota de crédito por venta: cubre la devolución entera, que es lo que hace GN hoy.)
     // La nota de DÉBITO es al revés: la venta YA tiene factura (la asocia) y puede llevar varias ⇒ ⛔ se pregunta.
-    const yaFacturadas = esNotaDeDebito(tipo) ? new Set() : await repo.ventasFacturadas({ ambiente, marca, nc: esNC(tipo), ventaIds: salen.map((c) => c.ventaId) })
+    // Una NC que acredita una NOTA DE DÉBITO (un error en la ND se corrige así) ⛔ cuenta como «la NC de la venta»: la venta puede tener ya
+    // la de su factura. A ésa la frena quien la pide (una NC por ND), no la venta.
+    const deNotaDeDebito = (c) => esNC(tipo) && c.asociado && esNotaDeDebito(c.asociado.tipo)
+    const yaFacturadas = esNotaDeDebito(tipo) ? new Set() : await repo.ventasFacturadas({ ambiente, marca, nc: esNC(tipo), ventaIds: salen.filter((c) => !deNotaDeDebito(c)).map((c) => c.ventaId) })
     // Y la misma venta repetida ADENTRO del lote sale una sola vez (probado contra homologación el
     // 12-oct: sin esto salieron dos facturas con CAE para la misma venta).
     const nuevas = [], enEsteLote = new Set()

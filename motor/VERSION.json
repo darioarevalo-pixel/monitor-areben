@@ -1,14 +1,14 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "a1c1ab2928f3491df9ed37b49c98b21202981d73",
-  "traido_en": "2026-10-25T18:28:07.998Z",
+  "commit": "9ee983135028aced255be77db5f08a8435f29acd",
+  "traido_en": "2026-10-25T22:16:03.531Z",
   "archivos": {
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
     "arca/cliente.js": "fc1118e7392afdf716057de81175ec6fe2b7a16edd63ed7956241e8389fce168",
     "arca/emisor-db.js": "278768915858aa5114f455a6c5c9c9864782b2d2fc5eb25a46eb106d23fef2fd",
     "arca/emisor.core.js": "bf9280d678b4242ae0d525c62d8dbc960175358a49af3a3c087fb065ad842fc0",
-    "arca/lote.core.js": "a3d1c3c7bf7ceb10de3e4f40ae56e48144fe7dd09364564b617dcd7444dbe5dc",
+    "arca/lote.core.js": "4e840c7d02407a23a2ec2be210230ab253bb17d313a424c727c832b876c763c1",
     "arca/mes.core.js": "932c2e5c114e2746bd7831471d4fc5a93d6d34fd5c9a7aacd4ac23a47c0edd25",
     "arca/qr.core.js": "f0985c1b77fe664e51bcff5b86e22d4143773b22a66555cbbb0711b31275e2c4",
     "arca/sin-secretos.core.js": "1807f79d7ab1d1b8d97d8401d84ef1b575964e9bf02c644c51c4b007eded5fb6",

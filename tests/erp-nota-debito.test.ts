@@ -80,3 +80,15 @@ describe('notaDeDebito', () => {
     expect(estado.pedidos).toHaveLength(0)
   })
 })
+
+describe('notaDeCredito de una nota de débito', () => {
+  beforeEach(() => { estado.filas = []; estado.pedidos = []; estado.factura = { ...FACTURA } })
+
+  it('la NC de una ND sale por el importe de la ND, asociada a ELLA, y una sola', async () => {
+    const { notaDeCredito } = await import('../api/_erp.js')
+    estado.factura = { ...FACTURA, id: '22222222-2222-4222-8222-222222222222', tipo: CBTE.ND_B, numero: 41, total: '100.00' }
+    const r = await notaDeCredito({ facturaId: '22222222-2222-4222-8222-222222222222', usuario: 'Bruno' })
+    expect(r).toMatchObject({ autorizada: { total: 100 } })
+    expect(estado.pedidos[0]).toMatchObject({ tipo: CBTE.NC_B, total: 100, asociado: { tipo: CBTE.ND_B, numero: 41 } })
+  })
+})
