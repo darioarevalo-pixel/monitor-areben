@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { ACCESO_POR_FUNCION, ERP_ROLES, type Funcion, marcaExcluir, permisoErpDe, permisosErp, puedeErp, puedeVer, type Perfil } from '@/lib/permisos'
 
 const perfil = (over: Partial<Perfil> = {}): Perfil => ({ name: 'Ana', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, funcion: [], ...over })
@@ -99,5 +100,29 @@ describe('ERP · permisos por rol', () => {
     expect(p.bdi).toMatchObject({ ver: true, cobrar: true, costos: false, configurar: false })
     expect(p.zattia.ver).toBe(true)
     expect(permisosErp(perfil({ funcion: ['local'] })).bdi.ver).toBe(false)
+  })
+
+  it('toda vista y acción que sirve el handler está NOMBRADA en la tabla (si no, cae en «configurar» y la cajera ve un 403)', () => {
+    const fuente = readFileSync('api/_erp.js', 'utf8')
+    const vistas = [...new Set([...fuente.matchAll(/vista === '([a-z-]+)'/g)].map((m) => m[1]))]
+    const acciones = [...new Set([...fuente.matchAll(/accion === '([a-z-]+)'/g)].map((m) => m[1]))]
+    expect(vistas.length).toBeGreaterThan(30)
+    expect(acciones.length).toBeGreaterThan(25)
+    // El permiso por omisión es «configurar»: una vista que lo pide a propósito lo dice con todas las letras.
+    const sinNombrar = (tipo: 'vista' | 'accion', claves: string[]) => claves.filter((k) => {
+      const src = readFileSync('lib/permisos.core.js', 'utf8')
+      const bloque = src.slice(src.indexOf(tipo === 'vista' ? 'const PERMISO_DE_VISTA' : 'const PERMISO_DE_ACCION'), src.indexOf(tipo === 'vista' ? 'const PERMISO_DE_ACCION' : 'export function permisoErpDe'))
+      return !new RegExp(`(^|[\\s,{'"])'?${k}'?:`).test(bloque)
+    })
+    expect(sinNombrar('vista', vistas)).toEqual([])
+    expect(sinNombrar('accion', acciones)).toEqual([])
+  })
+
+  it('el Local lee clientes, productos y cobros; el resultado del Inicio y la Configuración siguen siendo del Admin', () => {
+    for (const vista of ['clientes-lista', 'cliente-ficha', 'productos-lista', 'cobros', 'transferencias', 'cuentas-corrientes']) expect(permisoErpDe({ method: 'GET', vista })).toBe('ver')
+    expect(permisoErpDe({ method: 'GET', vista: 'inicio-resultado' })).toBe('costos')
+    for (const vista of ['configuracion', 'reglas', 'rutas', 'interruptores']) expect(permisoErpDe({ method: 'GET', vista })).toBe('configurar')
+    expect(puedeErp(abierto(['local']), 'bdi', permisoErpDe({ method: 'GET', vista: 'inicio-resultado' }))).toBe(false)
+    expect(puedeErp(abierto(['local']), 'bdi', permisoErpDe({ method: 'GET', vista: 'clientes-lista' }))).toBe(true)
   })
 })
