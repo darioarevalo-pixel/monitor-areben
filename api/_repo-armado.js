@@ -22,6 +22,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
 import { puedeVerAlguna } from '../lib/permisos.core.js'
+import { documentarTanda } from './_repo-documento.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, dormir } from './_gn.js'
 import {
@@ -390,6 +391,9 @@ async function transferir(sb, res, armado, b, perfil) {
       unidadesEnCurso: null,
     }
     await marcar(seguir ? { estado: 'en_curso', transfer, error: null } : { estado: 'transferido', transfer, error: null, cerrado_en: new Date().toISOString() })
+    // El documento del motor, en sombra (api/_repo-documento.js): ⛔ lanza ni frena la respuesta; si falla, la tanda sigue contando por el armado.
+    const doc = await documentarTanda({ store: armado.store, linea: armado.linea, armadoId: armado.id, tanda: transfer.tandas.length, prendas: pendiente, desde, hacia, gnTransferId: tanda.transfer_id, usuario: perfil.name || armado.persona || 'reposicion' })
+    if (doc.error) console.error(`[repo-documento] ${armado.id} t${transfer.tandas.length}: ${doc.error}`)
     return res.status(200).json({ ok: true, transfer, tanda })
   }
 
