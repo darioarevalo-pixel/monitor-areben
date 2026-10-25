@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-// @ts-expect-error módulo JS sin tipos
 import { documentarTanda, renglonesDeTanda } from '../api/_repo-documento.js'
 
 describe('Reposición → documento del motor (en sombra)', () => {
