@@ -57,6 +57,15 @@ describe('ERP · permisos por rol', () => {
     expect(puedeErp(perfil({ admin: true }), 'bdi', 'corregir-precio', apr)).toBe(true)
   })
 
+  it('corregir el medio de un cobro: la oficina lo hace, y ⛔ lo frena el interruptor de precio (no es un precio)', () => {
+    expect(puedeErp(abierto(['administracion']), 'bdi', 'corregir-medio')).toBe(true)
+    expect(puedeErp(abierto(['local']), 'bdi', 'corregir-medio')).toBe(false)
+    expect(puedeErp(abierto(['deposito']), 'zattia', 'corregir-medio')).toBe(false)
+    const apr = { bdi: { anular: true, conteo: true, precio: true }, zattia: { anular: false, conteo: false, precio: false } }
+    expect(puedeErp(abierto(['administracion']), 'bdi', 'corregir-medio', apr)).toBe(true)
+    expect(puedeErp(perfil({ admin: true }), 'bdi', 'corregir-medio', apr)).toBe(true)
+  })
+
   it('🔑 los interruptores por marca: prendido en una sola, la otra sigue como antes (y sin dato = apagado)', () => {
     const apr = { bdi: { anular: true, conteo: false, precio: false }, zattia: { anular: false, conteo: false, precio: false } }
     expect(puedeErp(abierto(['local']), 'bdi', 'anular', apr)).toBe(false)

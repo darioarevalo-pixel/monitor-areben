@@ -17,6 +17,7 @@ import { frena } from '../cuenta/cuenta.core.mjs'
 import { anularCompraDe, cuentaBloqueada, filaCompra, insertarFila } from '../cuenta/libro.mjs'
 import { guardarClienteGN } from './cliente.mjs'
 import { mandaEn } from '../tn/stock.mjs'
+import { fuentePagos } from './pagos-fuente.mjs'
 
 const q = async (db, sql, params = []) => (await db.query(sql, params)).rows
 
@@ -38,7 +39,8 @@ export async function leerConf(db, marca) {
   const marcas = await q(db, `select m.id, m.empresa_id, coalesce(array_agg(d.id) filter (where d.vende), '{}') as depositos
     from marca m left join deposito d on d.marca = m.id where m.id = $1 group by m.id, m.empresa_id`, [marca])
   const cuentas = await q(db, 'select id, marca, gn_cuenta_id, activa, medio, nombre from cuenta_cobro where marca = $1', [marca])
-  const canales = (await q(db, 'select id from canal')).map((c) => c.id)
+  // Los canales `gn_*` son de la historia de Gestión Nube (sql/041): ⛔ se eligen en una venta nueva.
+  const canales = (await q(db, "select id from canal where id not like 'gn\\_%'")).map((c) => c.id)
   // Las rutas de gerencia y las cuentas reales (sql/019-020). Una base sin la 020 ⇒ los cobros quedan sin cuenta real.
   const [{ hay }] = await q(db, `select exists (select 1 from information_schema.columns
     where table_schema = current_schema() and table_name = 'ruta_cobro' and column_name = 'dias_acreditacion') as hay`)
@@ -394,7 +396,8 @@ async function hayDevolucion(db) {
 
 /** Los pagos de una venta con el medio de su cuenta de cobro (`cuenta_medio`: saldo y cuenta ⛔ son plata). */
 async function pagosDe(db, ventaId) {
-  const filas = await q(db, `select p.*, c.medio as cuenta_medio from venta_pago p join cuenta_cobro c on c.id = p.cuenta_cobro_id where p.venta_id = $1 order by p.monto desc, p.id`, [ventaId])
+  const PAGOS = await fuentePagos(db)   // sql/042: la devolución vuelve por la cuenta CORREGIDA
+  const filas = await q(db, `select p.*, c.medio as cuenta_medio from ${PAGOS} p join cuenta_cobro c on c.id = p.cuenta_cobro_id where p.venta_id = $1 order by p.monto desc, p.id`, [ventaId])
   return filas.map((p) => ({ cuenta_cobro_id: p.cuenta_cobro_id, medio: p.medio ?? null, cuenta_real_id: p.cuenta_real_id ?? null, cuenta_medio: p.cuenta_medio, monto: Number(p.monto) }))
 }
 

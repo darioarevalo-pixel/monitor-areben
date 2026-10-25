@@ -16,6 +16,7 @@ describe('ERP › la puerta de entrada (forma del pedido)', () => {
     expect(get({ vista: 'stock', marca: 'bdi', q: 'remera negra' })).toBeNull()
     expect(post({ accion: 'facturar', marca: 'bdi', ventaIds: ['1', '2'], mes: '2026-10' })).toBeNull()
     expect(post({ accion: 'poner-ruta', marca: 'zattia', linea: '' })).toBeNull()
+    expect(post({ accion: 'corregir-medio', marca: 'zattia', ventaId: 'x', medio: 'transferencia', motivo: 'TN lo marcó pagado antes' })).toBeNull()
     expect(post({ accion: 'poner-ruta', marca: 'zattia', linea: null })).toBeNull()
     expect(post({ accion: 'cargar-venta', marca: 'zattia', lineas: [{ sku: 'X', cantidad: 1 }], pagos: [{ medio: 'efectivo', monto: 100 }] })).toBeNull()
   })

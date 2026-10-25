@@ -3,7 +3,7 @@ import {
   COLUMNAS_DE_SIEMPRE, accionesDeFila, alternarColumna, armarFila, clienteDe, contarVistas, estadoDeVenta, filtrar,
   historialDeVenta, moverColumna, normalizarPrefs, ordenar, rangoDePeriodo, resumen, saldoDeVenta,
 } from '@/lib/erp/ventas-lista.core.js'
-import { cobrarVentaErp, corregirPrecioErp, editarVentaErp, notaDeVentaErp, numeroDeFactura, textoDeCampo } from '../api/_erp-ventas.js'
+import { cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, notaDeVentaErp, numeroDeFactura, textoDeCampo } from '../api/_erp-ventas.js'
 
 /**
  * **ERP › Ventas, el PILOTO del diseño** (18-oct): la lista que junta Caja, TN, mayoristas, cambios y pedidos sin pagar.
@@ -198,6 +198,26 @@ describe('el servidor: lo que ⛔ está en el motor se frena con el motivo', () 
     expect(await corregirPrecioErp({ marca: 'zattia', body: { ventaId: V, motivo: 'x', lineas }, usuario: 'd' }, { correccion: {}, db })).toMatchObject({ status: 409 })
     const factura = { corregirPrecio: async () => ({ ok: false, error: { codigo: 'FACTURADA', mensaje: 'Ya tiene factura' } }) }
     expect(await corregirPrecioErp({ marca: 'zattia', body: { ventaId: V, motivo: 'x', lineas }, usuario: 'd' }, { correccion: factura, db })).toEqual({ status: 409, error: 'Ya tiene factura (FACTURADA)' })
+  })
+  it('corregir el medio del cobro: manda sólo lo que el motor entiende, devuelve la corrección, y sin la función o sin motivo ⛔ escribe', async () => {
+    let pedido: unknown = null
+    const correccionMedio = { corregirMedioCobro: async (_db: unknown, e: unknown) => { pedido = e; return { ok: true, correccion: { medio_antes: 'efectivo', medio_despues: 'transferencia', cuenta_despues: 'Transferencia', monto: 13500 }, avisos: ['SIN_CUENTA_REAL'] } } }
+    const r = await corregirMedioErp({ marca: 'zattia', body: { ventaId: V, medio: ' transferencia ', motivo: ' TN lo marcó pagado antes ', extra: 'x' }, usuario: 'dario' }, { correccionMedio, db })
+    expect(pedido).toEqual({ venta_id: V, medio: 'transferencia', motivo: 'TN lo marcó pagado antes', usuario: 'dario' })
+    expect(r).toEqual({ ok: true, correccion: { medio_antes: 'efectivo', medio_despues: 'transferencia', cuenta_despues: 'Transferencia', monto: 13500 }, avisos: ['SIN_CUENTA_REAL'] })
+    await corregirMedioErp({ marca: 'bdi', body: { ventaId: V, medio: 'transferencia', motivo: 'x', pagoId: V, cuenta: 2003, cuentaReal: 'abc' }, usuario: 'd' }, { correccionMedio, db })
+    expect(pedido).toEqual({ venta_id: V, medio: 'transferencia', motivo: 'x', usuario: 'd', pago_id: V, cuenta: 2003, cuenta_real: 'abc' })
+    const malo = (body: object) => corregirMedioErp({ marca: 'zattia', body: { ventaId: V, medio: 'mp', motivo: 'x', ...body }, usuario: 'd' }, { correccionMedio, db })
+    expect(await malo({ motivo: ' ' })).toMatchObject({ status: 400 })
+    expect(await malo({ medio: '' })).toMatchObject({ status: 400 })
+    expect(await malo({ ventaId: 'no' })).toMatchObject({ status: 400 })
+    expect(await malo({ pagoId: 'no' })).toMatchObject({ status: 400 })
+    expect(await corregirMedioErp({ marca: 'otra', body: { ventaId: V, medio: 'mp', motivo: 'x' }, usuario: 'd' }, { correccionMedio, db })).toMatchObject({ status: 400 })
+    expect(await corregirMedioErp({ marca: 'zattia', body: { ventaId: V, medio: 'mp', motivo: 'x' }, usuario: 'd' }, { correccionMedio: {}, db })).toMatchObject({ status: 409 })
+    const factura = { corregirMedioCobro: async () => ({ ok: false, error: { codigo: 'FACTURADA', mensaje: 'Ya tiene factura' } }) }
+    expect(await corregirMedioErp({ marca: 'zattia', body: { ventaId: V, medio: 'mp', motivo: 'x' }, usuario: 'd' }, { correccionMedio: factura, db })).toEqual({ status: 409, error: 'Ya tiene factura (FACTURADA)' })
+    const noEsta = { corregirMedioCobro: async () => ({ ok: false, error: { codigo: 'NO_ENCONTRADA', mensaje: 'No está esa venta' } }) }
+    expect(await corregirMedioErp({ marca: 'zattia', body: { ventaId: V, medio: 'mp', motivo: 'x' }, usuario: 'd' }, { correccionMedio: noEsta, db })).toMatchObject({ status: 404 })
   })
   it('el cliente se elige por documento y se vuelve su id; sin ficha, lo dice', async () => {
     let pedido: { cambios?: unknown } | null = null

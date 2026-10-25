@@ -179,6 +179,7 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
 async function moduloDelMotor(cual) {
   try {
     if (cual === 'correccion') return await import('../motor/venta/correccion.mjs')
+    if (cual === 'correccion-medio') return await import('../motor/venta/correccion-medio.mjs')
     return cual === 'ficha' ? await import('../motor/venta/ficha.mjs') : await import('../motor/cuenta/cuenta.mjs')
   } catch {
     return null
@@ -190,9 +191,10 @@ async function moduloDelMotor(cual) {
  * sin la función, la pantalla dibuja la ventana y dice que espera al motor (⛔ inventa un camino).
  */
 export async function queSabeElMotor() {
-  const [ficha, cuenta, correccion] = await Promise.all([moduloDelMotor('ficha'), moduloDelMotor('cuenta'), moduloDelMotor('correccion')])
+  const [ficha, cuenta, correccion, medio] = await Promise.all([moduloDelMotor('ficha'), moduloDelMotor('cuenta'), moduloDelMotor('correccion'), moduloDelMotor('correccion-medio')])
   return {
     corregir: typeof correccion?.corregirPrecio === 'function',
+    corregirMedio: typeof medio?.corregirMedioCobro === 'function',
     editar: typeof ficha?.editarVenta === 'function',
     notas: typeof ficha?.agregarNota === 'function',
     cobrar: typeof cuenta?.pendienteDeVentas === 'function' && typeof cuenta?.registrarPagoACuenta === 'function',
@@ -264,6 +266,32 @@ export async function corregirPrecioErp({ marca, body, usuario }, deps = {}) {
   return correr(async (db) => {
     const r = await m.corregirPrecio(db, { venta_id: body.ventaId, motivo, usuario, lineas })
     return r.ok ? { ok: true, correccion: r.correccion } : errorDe(r.error)
+  })
+}
+
+/**
+ * Corregir el MEDIO de un cobro ya hecho (motor sql/042): la red para cuando alguien marca «pagado» en Tienda Nube antes de
+ * cargar el cobro en Logística. Una corrección inmutable con el medio anterior y el nuevo; cambia la cuenta, la cuenta real, la
+ * comisión y con eso el IVA. Con factura, anulada o con cambio, el motor la rechaza. `pagoId` sólo si la venta cobró más de una vez.
+ */
+export async function corregirMedioErp({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!UUID.test(String(body?.ventaId || ''))) return { status: 400, error: 'Venta inválida' }
+  const motivo = String(body?.motivo ?? '').trim()
+  if (!motivo) return { status: 400, error: 'Escribí el motivo.' }
+  const medio = String(body?.medio ?? '').trim()
+  if (!medio) return { status: 400, error: 'Elegí el medio de cobro.' }
+  if (body?.pagoId != null && body.pagoId !== '' && !UUID.test(String(body.pagoId))) return { status: 400, error: 'Cobro inválido' }
+  const m = deps.correccionMedio || await moduloDelMotor('correccion-medio')
+  if (typeof m?.corregirMedioCobro !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }
+  const pedido = { venta_id: body.ventaId, medio, motivo, usuario }
+  if (body.pagoId) pedido.pago_id = body.pagoId
+  if (body.cuenta != null && body.cuenta !== '') pedido.cuenta = body.cuenta
+  if (body.cuentaReal) pedido.cuenta_real = String(body.cuentaReal)
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
+  return correr(async (db) => {
+    const r = await m.corregirMedioCobro(db, pedido)
+    return r.ok ? { ok: true, correccion: r.correccion, avisos: r.avisos ?? [] } : errorDe(r.error)
   })
 }
 

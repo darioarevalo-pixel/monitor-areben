@@ -11,6 +11,7 @@
  * Lo anulado ⛔ se borra: queda con `anulado: true` (la venta anulada, el pago a cuenta dado vuelta).
  */
 import { medioDeCuenta } from '../cuentas/cuentas.mjs'
+import { fuentePagos } from './pagos-fuente.mjs'
 
 const fallo = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo, mensaje, campo } : { codigo, mensaje } })
 const q = async (db, sql, p = []) => (await db.query(sql, p)).rows
@@ -42,11 +43,12 @@ export async function cobrosDe(db, { empresa_id, marca, desde, hasta, prueba = f
   const [{ con032 }] = await q(db, `select exists (select 1 from information_schema.columns where table_schema = current_schema()
     and table_name = 'venta_pago' and column_name = 'cobrado_en') as con032`)
   const EN = con032 ? 'coalesce(p.cobrado_en, v.ocurrida_en)' : 'v.ocurrida_en'
+  const PAGOS = await fuentePagos(db)   // sql/042: el medio CORREGIDO
   const ventas = await q(db, `select p.id::text, p.monto::float, p.medio, p.comision::float, p.acredita_el::text,
       p.cuenta_cobro_id::text as cuenta_id, cc.nombre as cuenta, cc.medio as cuenta_medio, p.cuenta_real_id::text, cr.nombre as cuenta_real,
       v.id::text as venta_id, v.numero::int, v.canal, v.origen, ${con032 ? 'coalesce(p.cerrado_por, v.usuario)' : 'v.usuario'} as usuario, ${EN} as en, v.estado = 'anulada' as anulado,
       exists (select 1 from venta_devolucion d where d.venta_id = v.id) as con_devolucion, v.cliente_id::text, cl.nombre as cliente
-    from venta_pago p join venta v on v.id = p.venta_id join cuenta_cobro cc on cc.id = p.cuenta_cobro_id
+    from ${PAGOS} p join venta v on v.id = p.venta_id join cuenta_cobro cc on cc.id = p.cuenta_cobro_id
     left join cuenta_real cr on cr.id = p.cuenta_real_id left join cliente cl on cl.id = v.cliente_id
     where v.empresa_id = $1 and v.marca = $2 and v.prueba = $3 and cc.medio <> 'entrega' and ${enPeriodo(EN)}`, p)
 

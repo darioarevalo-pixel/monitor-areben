@@ -400,7 +400,7 @@ export type FilaVentaLista = {
   /** Cerrado en TN sin pago: ⛔ retiene stock, se muestra «entregado sin cobrar». */
   entregadoSinCobrar?: boolean
 }
-export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean; corregir?: boolean }
+export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean; corregir?: boolean; corregirMedio?: boolean }
 export const leerListaDeVentas = (marca: MarcaErp, desde: string, hasta: string) =>
   pedir<{ filas: FilaVentaLista[]; desde: string; hasta: string; puede: QueSabeElMotor; tnLeidaEn?: string | null }>(null, `&vista=ventas-lista&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer las ventas.')
 
@@ -435,6 +435,9 @@ export const editarVentaErp = (marca: MarcaErp, ventaId: string, cambios: Cambio
 export type CorreccionHecha = { total_antes: number; total_despues: number; cobrado: number; diferencia: number }
 export const corregirPrecioDeVenta = (marca: MarcaErp, ventaId: string, motivo: string, lineas: Array<{ n: number; precio: number }>) =>
   pedir<{ ok: true; correccion: CorreccionHecha }>(post({ accion: 'corregir-precio', marca, ventaId, motivo, lineas }), '', 'No se pudo corregir el precio.')
+export type MedioCorregido = { medio_antes: string; medio_despues: string; cuenta_antes: string; cuenta_despues: string; monto: number; comision_despues: number | null }
+export const corregirMedioDeVenta = (marca: MarcaErp, ventaId: string, c: { medio: string; motivo: string; pagoId?: string; cuenta?: string | number }) =>
+  pedir<{ ok: true; correccion: MedioCorregido; avisos: string[] }>(post({ accion: 'corregir-medio', marca, ventaId, ...c }), '', 'No se pudo corregir el medio de cobro.')
 export const guardarNotaDeVenta = (marca: MarcaErp, ventaId: string, texto: string, reemplazaId: string | null) =>
   pedir<{ ok: true }>(post({ accion: 'nota-venta', marca, ventaId, texto, reemplazaId }), '', 'No se pudo guardar la nota.')
 export const cobrarVentaErp = (marca: MarcaErp, c: { ventaId: string; clienteId: string; linea: string; monto: number; saldo: number; cuenta: string; canal: string | null; fecha: string; ref: string; prueba: boolean }) =>

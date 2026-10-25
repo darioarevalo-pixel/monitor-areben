@@ -100,7 +100,7 @@ import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.j
 import { ACCIONES as ACCIONES_TRANSFERENCIA } from '../lib/erp/transferencia-doc.core.js'
 import { accionDeCatalogo, historialDeProducto } from './_erp-catalogo.js'
 import { ACCIONES as ACCIONES_CATALOGO } from '../lib/erp/catalogo-edicion.core.js'
-import { cobrarVentaErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
+import { cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
 import { cuentaDeCliente, cuentasDeLaMarca, fichaDeCliente, listaDeClientes, ponerCreditoCliente } from './_erp-clientes.js'
@@ -1606,6 +1606,10 @@ export default async function handler(req, res) {
     }
     if (body.accion === 'anular') {
       const r = await anularVentaPropia({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+    if (body.accion === 'corregir-medio') {
+      const r = await corregirMedioErp({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (body.accion === 'corregir-precio') {
