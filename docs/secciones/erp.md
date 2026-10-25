@@ -326,6 +326,12 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   `ARCA_PRODUCCION_HABILITADA=si` (las pone Bruno), y con `ARCA_PTOVTA_BDI`/`_ZATTIA` cargados: en
   producción ⛔ hay punto de venta por defecto, y los de GN (00002 BDI, 00005 Zattia) se rechazan —dos
   sistemas en el mismo PV se pisan la numeración—. Los PV nuevos esperan el OK del contador.
+- 🔑 **La NOTA DE DÉBITO (25-oct)**: «Hacer nota de débito» en el «⋯» de una factura de Facturación pide el importe (IVA incluido) y suma una ND de la
+  clase de la factura (`notaDeDebito`, acción `nota-debito`, permiso `facturacion`); una factura puede llevar varias. ⛔ Todavía no para las facturas de una
+  venta del ERP (habría que atarla a la venta: `venta_factura` tipo `nd`). Un error en una ND se corrige con una NC que la acredita (el mismo
+  `notaDeCredito`, por el importe de la ND, asociada a ELLA): por eso el índice `facturas_venta_nc_uq` es «una NC por comprobante asociado»
+  (`sql/migrate-facturas-nc-por-asociado.sql`), ⛔ «una por venta». Caminada en PRODUCCIÓN el 25-oct: ND B #1 de $100 sobre la B #6044.
+
 - 🔴 **Una factura con CAE ⛔ se borra ni se edita**: se anula con nota de crédito. Por eso el número
   se reserva en la base ANTES de pedirlo y un corte se resuelve CONSULTANDO a ARCA, ⛔ reintentando
   (reintentar duplica). Medido contra homologación y Postgres local el 12-oct (`motor/arca/lote.core.js`).
