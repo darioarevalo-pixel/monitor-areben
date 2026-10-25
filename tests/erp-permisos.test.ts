@@ -119,10 +119,23 @@ describe('ERP · permisos por rol', () => {
   })
 
   it('el Local lee clientes, productos y cobros; el resultado del Inicio y la Configuración siguen siendo del Admin', () => {
-    for (const vista of ['clientes-lista', 'cliente-ficha', 'productos-lista', 'cobros', 'transferencias', 'cuentas-corrientes']) expect(permisoErpDe({ method: 'GET', vista })).toBe('ver')
+    for (const vista of ['clientes-lista', 'cliente-ficha', 'productos-lista', 'cobros', 'transferencias']) expect(permisoErpDe({ method: 'GET', vista })).toBe('ver')
     expect(permisoErpDe({ method: 'GET', vista: 'inicio-resultado' })).toBe('costos')
     for (const vista of ['configuracion', 'reglas', 'rutas', 'interruptores']) expect(permisoErpDe({ method: 'GET', vista })).toBe('configurar')
     expect(puedeErp(abierto(['local']), 'bdi', permisoErpDe({ method: 'GET', vista: 'inicio-resultado' }))).toBe(false)
     expect(puedeErp(abierto(['local']), 'bdi', permisoErpDe({ method: 'GET', vista: 'clientes-lista' }))).toBe(true)
+  })
+
+  it('cuentas corrientes: en BDI Administración (y Mayorista); en Zattia todos; el estado de cobro de la venta lo ve cualquiera', () => {
+    const p = (vista: string) => permisoErpDe({ method: 'GET', vista })
+    expect(p('cuentas-corrientes')).toBe('cuentas')
+    expect(p('cuenta-cliente')).toBe('cuentas')
+    for (const f of ['administracion', 'mayorista'] as Funcion[]) expect(puedeErp(abierto([f]), 'bdi', 'cuentas')).toBe(true)
+    for (const f of ['local', 'deposito', 'consulta'] as Funcion[]) {
+      expect(puedeErp(abierto([f]), 'bdi', 'cuentas')).toBe(false)
+      expect(puedeErp(abierto([f]), 'zattia', 'cuentas')).toBe(true)
+    }
+    expect(puedeErp(perfil({ admin: true }), 'bdi', 'cuentas')).toBe(true)
+    expect(puedeErp(abierto(['local']), 'bdi', p('ventas-lista'))).toBe(true)
   })
 })
