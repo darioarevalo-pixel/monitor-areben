@@ -70,6 +70,9 @@ export const facturar = (mes: string, marca: MarcaErp, ventaIds: string[]) =>
 export const notaDeCredito = (facturaId: string) =>
   pedir<{ ambiente: string; autorizada: { numero: number; cae: string; total: number } }>(post({ accion: 'nota-credito', facturaId }), '', 'No se pudo hacer la nota de crédito.')
 
+export const notaDeDebito = (facturaId: string, monto: number) =>
+  pedir<{ ambiente: string; autorizada: { numero: number; cae: string; total: number } }>(post({ accion: 'nota-debito', facturaId, monto }), '', 'No se pudo hacer la nota de débito.')
+
 export const cerrarMes = (mes: string) =>
   pedir<{ ok: true; techo: number }>(post({ accion: 'cerrar', mes }), '', 'No se pudo cerrar el mes.')
 

@@ -15,7 +15,7 @@ import { Button, ConfirmDetalle, EmptyState, Input, MenuAcciones, Notice, color,
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista } from '@/components/ui/PiezasLista'
-import { cerrarMes, facturar, leerFacturas, leerMes, notaDeCredito, type MarcaErp, type MesFacturacion, type ResultadoLote, type VentaParaFacturar } from '@/lib/erp/cliente'
+import { cerrarMes, facturar, leerFacturas, leerMes, notaDeCredito, notaDeDebito, type MarcaErp, type MesFacturacion, type ResultadoLote, type VentaParaFacturar } from '@/lib/erp/cliente'
 import { filasDeFacturacion, ordenarFilas, ventasConNC } from '@/lib/erp/facturacion-lista.core.js'
 import { normal } from '@/lib/erp/stock-lista.core.js'
 import { proponerLote } from '@/motor/arca/mes.core.js'
@@ -58,7 +58,7 @@ const COLUMNAS_FACT = [
 export function Facturacion() {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
-  const { confirmar } = useConfirmar()
+  const { confirmar, pedirTexto } = useConfirmar()
   const [mes, setMes] = useState(mesActual)
   const [datos, setDatos] = useState<MesFacturacion | null>(null)
   const [facturas, setFacturas] = useState<FacturaEmitida[] | null>(null)
@@ -200,6 +200,40 @@ export function Facturacion() {
     }
   }
 
+  /** La nota de DÉBITO suma un importe a la factura (un recargo, una diferencia): pide el importe y confirma con el mismo aviso que la NC. */
+  async function sumarConND(f: FacturaEmitida) {
+    const texto = await pedirTexto(`Importe a sumar a la factura ${numeroComprobante(f)} (IVA incluido, en pesos)`, '', { titulo: 'Nota de débito', placeholder: 'Ej.: 1500', ok: 'Seguir' })
+    if (texto === null) return
+    const monto = Math.round(Number(texto.replace(/\./g, '').replace(',', '.')) * 100) / 100
+    if (!(monto > 0)) { setError('Poné un importe mayor a 0.'); return }
+    const deVerdad = f.ambiente === 'produccion'
+    const ok = await confirmar({
+      titulo: deVerdad ? 'Nota de débito con ARCA' : 'Nota de débito en el ambiente de prueba',
+      mensaje: (
+        <div>
+          <ConfirmDetalle label="Se suma a la factura" valor={numeroComprobante(f)} />
+          <ConfirmDetalle label="Importe" valor={pesos(monto)} />
+          <p style={{ marginTop: space[3] }}>
+            {deVerdad ? 'Es REAL: una vez autorizada no se puede eliminar; un error se corrige con una nota de crédito.' : 'Es de PRUEBA (homologación de ARCA): no tiene validez fiscal.'}
+          </p>
+        </div>
+      ),
+      ok: 'Hacer nota de débito',
+      tono: deVerdad ? 'danger' : 'warning',
+    })
+    if (!ok) return
+    setTrabajando(true)
+    try {
+      const r = await notaDeDebito(f.id, monto)
+      setAviso(`Nota de débito ${r.autorizada.numero} autorizada (CAE ${r.autorizada.cae}) por ${pesos(r.autorizada.total)}.`)
+      await leer()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo hacer la nota de débito.')
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
   async function bajar(f: FacturaEmitida) {
     try {
       await descargarFactura(f)
@@ -273,6 +307,9 @@ export function Facturacion() {
       menu.push(esDeVentaPropia(e.venta_id)
         ? { key: 'nc', label: 'Nota de crédito desde Ventas', icono: 'anular', onClick: () => undefined, disabled: true, hint: 'Una venta del ERP se anula desde su ficha en Ventas, y la nota de crédito sale sola.' }
         : { key: 'nc', label: 'Hacer nota de crédito', icono: 'anular', tone: 'danger', onClick: () => void anularConNC(e), disabled: trabajando, hint: 'Anula la factura entera con ARCA.' })
+    }
+    if (f.vista === 'facturas' && !esDeVentaPropia(e.venta_id)) {
+      menu.push({ key: 'nd', label: 'Hacer nota de débito', icono: 'lapiz', onClick: () => void sumarConND(e), disabled: trabajando, hint: 'Suma un importe a la factura con ARCA.' })
     }
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones de ${f.comprobante}`} vertical alinear="izquierda" />
   }

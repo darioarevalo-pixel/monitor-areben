@@ -10,6 +10,7 @@
  *   GET  ?recurso=erp&vista=facturas&mes=YYYY-MM      las facturas del monitor del mes (para el PDF)
  *   POST {recurso:'erp', accion:'facturar', mes, marca, ventaIds}   factura esas ventas (un lote)
  *   POST {recurso:'erp', accion:'nota-credito', facturaId}            anula ENTERA una factura del monitor con NC (ARCA)
+ *   POST {recurso:'erp', accion:'nota-debito', facturaId, monto}      SUMA `monto` (IVA incl.) a una factura del monitor con ND (ARCA)
  *   POST {recurso:'erp', accion:'cerrar', mes}                      congela el techo del mes
  *   GET  ?recurso=erp&vista=pedidos-tn&marca=…                      los pedidos de TN abiertos y sin pagar (retienen stock)
  *   GET  ?recurso=erp&vista=diferencias&marca=…&fecha=YYYY-MM-DD    lo que el libro ⛔ explicó ese día + la sobreventa
@@ -298,6 +299,53 @@ export async function notaDeCredito({ facturaId, usuario, desdeVenta = false }, 
   if (hecha) return { ambiente, autorizada: { id: hecha.id, numero: hecha.numero, cae: hecha.cae, total: hecha.total } }
   const motivos = [...r.rechazadas, ...r.noSalen].flatMap((x) => x.motivos || [])
   return { status: 409, error: motivos.join(' · ') || 'ARCA no autorizó la nota de crédito.' }
+}
+
+/**
+ * La NOTA DE DÉBITO de una factura del monitor: SUMA un importe a una factura ya autorizada (un recargo, una diferencia de precio
+ * que se cobra de más). Asocia la factura, de su MISMA clase (ND A a una A, ND B a una B), con el mismo receptor, y sale por el
+ * MISMO camino que las facturas (`facturarLote`: candado, número reservado antes del CAE). A diferencia de la NC, una factura puede
+ * llevar VARIAS (el lote ⛔ pregunta «¿ya tiene?») y sale por el `monto` que se pide (IVA incluido), ⛔ por la factura entera.
+ * Suma en el techo del mes de HOY. Con CAE ⛔ se borra: un error se corrige con una nota de crédito.
+ * 🔴 La factura de una VENTA PROPIA (uuid del motor) todavía ⛔ sale de acá: la ND tendría que atarse a la venta (`venta_factura`
+ * tipo `nd`) y esa mano ⛔ está hecha.
+ * @param {{ facturaId: string, monto: number|string, usuario: string|null }} p
+ */
+export async function notaDeDebito({ facturaId, monto, usuario }, deps = {}) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(facturaId || ''))) return { status: 400, error: 'Factura inválida' }
+  const importe = Math.round(Number(monto) * 100) / 100
+  if (!(importe > 0) || importe > 100_000_000) return { status: 400, error: 'Poné el importe de la nota de débito (IVA incluido, mayor a 0).' }
+  const { ambiente, error } = ambienteSeguro()
+  if (!ambiente) return { status: 409, error }
+  const sb = deps.sb || (deps.repo ? null : baseFacturacion())
+  const f = deps.leerFactura ? await deps.leerFactura(facturaId) : await (async () => {
+    const { data, error: e } = await sb.from('facturas')
+      .select('id, ambiente, marca, venta_id, tipo, pto_vta, numero, fecha, total, doc_tipo, doc_nro, cond_iva, estado').eq('id', facturaId).maybeSingle()
+    if (e) throw new Error(`facturas: ${e.message}`)
+    return data
+  })()
+  if (!f || f.ambiente !== ambiente) return { status: 404, error: 'La factura no existe en este ambiente.' }
+  if (f.estado !== 'autorizada') return { status: 409, error: 'Sólo una factura autorizada (con CAE) lleva nota de débito.' }
+  if (esDeVentaPropia(f.venta_id)) return { status: 409, error: 'La nota de débito de una venta del ERP todavía no se hace desde acá.' }
+  const tipo = { [CBTE.FACTURA_A]: CBTE.ND_A, [CBTE.FACTURA_B]: CBTE.ND_B }[f.tipo]
+  if (!tipo) return { status: 409, error: 'La nota de débito se suma a una factura, no a una nota de crédito ni a otra de débito.' }
+  const arca = arcaDe(deps, sb)
+  if (!arca) return { status: 409, error: SIN_ARCA }
+  const hoy = diaArgentino(Date.now())
+  const r = await facturarLote({
+    arca, repo: deps.repo || repoFacturas(sb), ambiente, marca: f.marca, ptoVta: Number(f.pto_vta), tipo,
+    comprobantes: [{
+      ventaId: f.venta_id, mes: hoy.slice(0, 7), tipo, fecha: hoy, total: importe, asociadoId: f.id,
+      receptor: { docTipo: Number(f.doc_tipo), docNro: Number(f.doc_nro), condicionIva: Number(f.cond_iva) },
+      asociado: { tipo: Number(f.tipo), ptoVta: Number(f.pto_vta), numero: Number(f.numero), fecha: f.fecha },
+    }],
+    reglas: { umbralIdentificar: UMBRAL_IDENTIFICAR, hoy },
+    lote: globalThis.crypto.randomUUID(), usuario,
+  })
+  const [hecha] = r.autorizadas
+  if (hecha) return { ambiente, autorizada: { id: hecha.id, numero: hecha.numero, cae: hecha.cae, total: hecha.total } }
+  const motivos = [...r.rechazadas, ...r.noSalen].flatMap((x) => x.motivos || [])
+  return { status: 409, error: motivos.join(' · ') || 'ARCA no autorizó la nota de débito.' }
 }
 
 /**
@@ -1592,6 +1640,11 @@ export default async function handler(req, res) {
 
     if (body.accion === 'nota-credito') {
       const r = await notaDeCredito({ facturaId: body.facturaId, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (body.accion === 'nota-debito') {
+      const r = await notaDeDebito({ facturaId: body.facturaId, monto: body.monto, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
