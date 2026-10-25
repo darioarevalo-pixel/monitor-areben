@@ -1208,3 +1208,12 @@ la derecha, «Datos» como vienen). Código: `components/panel/PedidosLogistica.
   `andreani.com/envio/<n>` (ambos confirmados por Darío con un envío real de cada uno). No se usa `tracking_url`.
 - ⏭️ Faltantes por producto («Preparado con 46 de 48» desplegable) y la sugerencia con los datos de
   etiqueta del último envío esperan a Ger; hoy es una línea ámbar con las unidades.
+
+### 25-oct-2026 · Hoy: «Pedidos nuevos» y «Falta la fecha» con el diseño de Logística
+
+Diseñado sobre la página de prueba https://claude.ai/artifact/8GWTbjRR9byk1J3fhHGw7U.
+
+- «Pidieron hoy y ayer» pasa a **«Pedidos nuevos»**. Dos renglones: nombre, y abajo 🟧 «Pendiente · Contactar · $total» o 🟩 «Contactado». Sin hora ni unidades, sin raya al costado. El número del título cuenta sólo lo pendiente; los contactados van plegados al final («Contactados · N»). El cuadro de arriba dice «Pedidos sin contactar».
+- ⛔ **Sin carritos**: casi nunca traen nombre ni teléfono. Vuelven cuando los clientes entren al catálogo con usuario.
+- **✓ Contactado a mano**: el panel lo deduce de WhatsApp Web, pero si el cliente escribe desde otro número que el del pedido no lo une. La marca vive en el KV del catálogo, `crm:contactados:bdi` (`/api/ingresos?kind=crmcontactados`), clave = últimos 8 dígitos + fecha del pedido. Se cambia de a una en el servidor (`POST { clave, marcado }`), no reescribiendo el mapa, y se borra sola a los 4 días. Lo que vio WhatsApp tiene el ✓ apagado (no se desmarca).
+- **«Falta la fecha»**: sólo el título en rojo; los renglones, normales. Debajo del nombre: 3 d · 1 sem · 15 d · 📅 Fecha, que guardan lo mismo que el pie de la ficha (`agendarDesdeLista` en `PanelWhatsApp.tsx`) sin abrirla. Sin la aclaración de abajo.

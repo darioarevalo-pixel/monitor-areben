@@ -12,7 +12,7 @@ import { hoyISO } from '@/lib/crm/seguimiento'
 import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
-import { armarFilasPedidos, traerPedidosCatalogo, type FilaPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
+import { armarFilasPedidos, claveContacto, leerContactados, marcarContactado, traerPedidosCatalogo, type FilaPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
 import { enGrupoDeposito, estadoDeposito, faltanUnidades, pasoPanel, pendientesLogistica, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
 import { mostrar as plata } from '@/lib/compromisos/core'
 
@@ -297,6 +297,104 @@ function Fila({ it, onAbrir, onFicha, hecho }: { it: Item; onAbrir: (id: number,
   )
 }
 
+/** Poner la fecha desde la lista. Con `dias` es «le escribí hoy, volver en N»; con `fecha`, el calendario. */
+export type Agendar = (it: { id: number; key: string; prospecto: boolean }, cuando: { dias: number } | { fecha: string }) => Promise<boolean>
+
+/** Los botones de «Falta la fecha»: los tres plazos de siempre y el calendario. */
+const PLAZOS_LISTA: { dias: number; txt: string }[] = [
+  { dias: 3, txt: '3 d' },
+  { dias: 7, txt: '1 sem' },
+  { dias: 15, txt: '15 d' },
+]
+
+/**
+ * Un renglón de «Falta la fecha» (diseño del 25-oct-2026): el nombre, y abajo los días o el
+ * calendario para ponerle fecha AHÍ, sin entrar a la ficha. Al guardar sale solo de la lista.
+ */
+function FilaFaltaFecha({ it, onAbrir, onFicha, onAgendar }: { it: Item; onAbrir: (id: number, tel: string) => void; onFicha: (id: number, tel: string) => void; onAgendar: Agendar }) {
+  const [cal, setCal] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const sinTel = !it.telefono
+  const sinFicha = it.prospecto && sinTel
+  const emoji = it.vista ? EMOJI_TEMP[it.vista] : ''
+  const elegir = async (cuando: { dias: number } | { fecha: string }) => {
+    if (guardando) return
+    setGuardando(true)
+    const ok = await onAgendar(it, cuando)
+    // Si se guardó, el renglón se va solo; si no, se puede volver a intentar.
+    if (!ok) setGuardando(false)
+  }
+  const boton: React.CSSProperties = { height: 26, padding: '0 9px', fontSize: font.xs, fontWeight: 600, borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.bg2, color: color.ink, cursor: guardando ? 'not-allowed' : 'pointer' }
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, background: color.surface, opacity: guardando ? 0.6 : 1 }}>
+      <div style={{ flex: 1, minWidth: 0, padding: `${space[2]}px 0 ${space[2]}px ${MARGEN}px` }}>
+        <button
+          type="button"
+          disabled={sinFicha}
+          onClick={() => onFicha(it.id, it.telefono)}
+          title="Ver la ficha"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '100%', height: 'auto', background: 'none', border: 0, padding: 0, font: 'inherit', textAlign: 'left', cursor: sinFicha ? 'default' : 'pointer' }}
+        >
+          {emoji && (
+            <span title={it.vista ? TEMP_UI[it.vista].txt : undefined} style={{ fontSize: 11, lineHeight: 1 }}>
+              {emoji}
+            </span>
+          )}
+          <span style={{ fontSize: font.md, fontWeight: 700, color: color.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nombre}</span>
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 5, fontSize: font.xs, color: color.mut2 }}>
+          {cal ? (
+            <>
+              <input
+                className="mo-input"
+                type="date"
+                autoFocus
+                min={hoyISO()}
+                disabled={guardando}
+                aria-label={`Fecha para volver a hablarle a ${it.nombre}`}
+                style={{ height: 28, width: 'auto', fontSize: font.sm }}
+                onChange={(e) => {
+                  const v = e.target.value
+                  const m = v.match(/^(\d{4})-\d{2}-\d{2}$/)
+                  // Al tipear, Chrome avisa con el año a medio escribir: se espera a la fecha completa.
+                  if (m && Number(m[1]) >= 2020 && Number(m[1]) <= 2100) elegir({ fecha: v })
+                }}
+              />
+              <button type="button" disabled={guardando} onClick={() => setCal(false)} style={boton}>
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <>
+              {PLAZOS_LISTA.map((p) => (
+                <button key={p.dias} type="button" disabled={guardando} onClick={() => elegir({ dias: p.dias })} style={boton}>
+                  {p.txt}
+                </button>
+              ))}
+              <button type="button" disabled={guardando} onClick={() => setCal(true)} aria-label="Elegir en el calendario" style={boton}>
+                📅 Fecha
+              </button>
+              {it.prospecto && <span>· Prospecto</span>}
+            </>
+          )}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
+        <button
+          type="button"
+          disabled={sinTel}
+          onClick={() => onAbrir(it.id, it.telefono)}
+          title={sinTel ? 'No tiene teléfono cargado, así que no puedo abrir el chat' : 'Abrir el chat'}
+          aria-label={`Abrir el chat de ${it.nombre}`}
+          style={{ width: 32, minWidth: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', borderRadius: radius.md, border: sinTel ? `1px solid ${color.line2}` : 0, background: sinTel ? 'none' : color.whatsapp, color: sinTel ? color.mut2 : color.sideActiveInk, cursor: sinTel ? 'default' : 'pointer', opacity: sinTel ? 0.5 : 1 }}
+        >
+          <Icono nombre="whatsapp" size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /**
  * El título de un grupo, que además lo pliega.
  *
@@ -309,6 +407,7 @@ function Grupo({
   abierto,
   onToggle,
   primero,
+  rojo,
   children,
 }: {
   titulo: string
@@ -316,6 +415,8 @@ function Grupo({
   abierto: boolean
   onToggle: () => void
   primero?: boolean
+  /** Sólo el título pintado de rojo, los renglones no (Darío, 25-oct-2026: «Falta la fecha»). */
+  rojo?: boolean
   children: React.ReactNode
 }) {
   return (
@@ -330,7 +431,7 @@ function Grupo({
           alignItems: 'center',
           width: '100%',
           height: 'auto',
-          background: 'none',
+          background: rojo ? color.dangerBg : 'none',
           border: 0,
           borderTop: primero ? 0 : `1px solid ${color.line2}`,
           padding: `${space[3]}px ${MARGEN}px ${space[2]}px`,
@@ -339,7 +440,7 @@ function Grupo({
           textAlign: 'left',
         }}
       >
-        <span style={{ fontSize: font.sm, fontWeight: 700, color: color.ink }}>{titulo}</span>
+        <span style={{ fontSize: font.sm, fontWeight: 700, color: rojo ? color.dangerInk : color.ink }}>{titulo}</span>
         <span style={{ marginLeft: 6, fontSize: font.sm, fontWeight: 600, color: color.mut2, fontVariantNumeric: 'tabular-nums' }}>{cuantas}</span>
         <span style={{ flex: 1 }} />
         {/* El ▾ de texto salía de 4 px con DM Sans: una flecha dibujada se ve igual en todos lados. */}
@@ -382,18 +483,68 @@ function usePedidosCatalogo(): ResultadoCatalogo | null {
   return r
 }
 
-const horaDe = (iso: string, ayer: boolean) => {
-  const d = new Date(iso)
-  const h = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
-  return ayer ? `Ayer ${h}` : `Hoy ${h}`
+/**
+ * Los pedidos tildados «Contactado» a mano. Se leen con los pedidos (al montar y cada 2 minutos),
+ * así lo que se tildó en otra compu aparece solo. Si una lectura falla, queda lo último que se vio.
+ */
+const memoriaContactados: { s: Set<string> | null } = { s: null }
+
+function useContactados(): [Set<string> | null, (clave: string, marcado: boolean) => Promise<boolean>] {
+  const [s, setS] = useState<Set<string> | null>(memoriaContactados.s)
+  useEffect(() => {
+    let vivo = true
+    const pedir = async () => {
+      const x = await leerContactados()
+      if (!x) return
+      memoriaContactados.s = x
+      if (vivo) setS(x)
+    }
+    pedir()
+    const id = setInterval(pedir, CADA_PEDIDOS_MS)
+    return () => {
+      vivo = false
+      clearInterval(id)
+    }
+  }, [])
+  const tildar = useCallback(async (clave: string, marcado: boolean) => {
+    // Se ve al instante; si el servidor no lo guarda, vuelve a como estaba.
+    const antes = memoriaContactados.s
+    const ya = new Set(antes || [])
+    if (marcado) ya.add(clave)
+    else ya.delete(clave)
+    memoriaContactados.s = ya
+    setS(ya)
+    const r = await marcarContactado(clave, marcado)
+    memoriaContactados.s = r || antes
+    setS(memoriaContactados.s)
+    return !!r
+  }, [])
+  return [s, tildar]
 }
 
-/** Un pedido: el nombre abre la ficha (se busca por teléfono) y el botón verde, el chat. Como `Fila`. */
-function FilaDePedido({ p, onAbrir, onFicha }: { p: FilaPedido; onAbrir: (id: number, tel: string) => void; onFicha: (id: number, tel: string) => void }) {
+/**
+ * Un pedido, en dos renglones como Logística (diseño del 25-oct-2026): el nombre, y abajo
+ * 🟧 «Pendiente · Contactar · $total» o 🟩 «Contactado». Sin hora ni unidades: poco texto.
+ *
+ * El ✓ lo tilda a mano: le escribieron desde otro número que el del pedido y WhatsApp no lo une. Lo
+ * que vio WhatsApp queda con el ✓ apagado, para no desmarcarlo sin querer.
+ */
+function FilaDePedido({
+  p,
+  onAbrir,
+  onFicha,
+  onTildar,
+}: {
+  p: FilaPedido
+  onAbrir: (id: number, tel: string) => void
+  onFicha: (id: number, tel: string) => void
+  onTildar: (p: FilaPedido) => void
+}) {
   const sinTel = !p.telefono
   const nombre = p.cliente || 'Sin nombre'
+  const soloAuto = p.auto && !p.marcado
   return (
-    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, borderLeft: `3px solid ${p.hablado ? color.success : color.danger}`, background: color.surface, opacity: p.hablado ? 0.6 : 1 }}>
+    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, background: color.surface, opacity: p.hablado ? 0.62 : 1 }}>
       <button
         type="button"
         disabled={sinTel}
@@ -401,16 +552,43 @@ function FilaDePedido({ p, onAbrir, onFicha }: { p: FilaPedido; onAbrir: (id: nu
         title="Ver la ficha"
         style={{ display: 'block', flex: 1, minWidth: 0, height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: `${space[2]}px 0 ${space[2]}px ${MARGEN}px`, cursor: sinTel ? 'default' : 'pointer', font: 'inherit' }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: font.md, fontWeight: 700, color: color.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>
-          <span style={{ flex: 1 }} />
-          {p.hablado ? <Chapa tono="hecho">Ya le escribiste</Chapa> : <Chapa tono="tarde">Sin hablar</Chapa>}
-        </div>
-        <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-          {horaDe(p.fecha, p.ayer)} · {p.unidades} u. · {plata(p.total)}
+        <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</div>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 4, fontSize: font.xs, color: color.mut, fontVariantNumeric: 'tabular-nums' }}>
+          {p.hablado ? <Chapa tono="hecho">Contactado</Chapa> : <Chapa tono="espera">Pendiente</Chapa>}
+          {!p.hablado && <span>Contactar</span>}
+          <span style={{ color: color.mut2 }}>
+            {p.hablado ? '' : '· '}
+            {plata(p.total)}
+          </span>
         </div>
       </button>
-      <div style={{ display: 'flex', alignItems: 'center', padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
+        <button
+          type="button"
+          disabled={soloAuto}
+          aria-pressed={p.hablado}
+          onClick={() => onTildar(p)}
+          title={soloAuto ? 'Le escribiste por WhatsApp' : p.marcado ? 'Desmarcar' : 'Marcar como contactado'}
+          aria-label={p.marcado ? `Desmarcar a ${nombre}` : `Marcar a ${nombre} como contactado`}
+          style={{
+            width: 32,
+            minWidth: 32,
+            height: 32,
+            padding: 0,
+            display: 'grid',
+            placeItems: 'center',
+            borderRadius: radius.md,
+            border: `1px solid ${p.hablado ? color.success : color.line}`,
+            background: p.hablado ? color.successBg : color.bg2,
+            color: p.hablado ? color.successInk : color.mut2,
+            fontSize: 15,
+            fontWeight: 700,
+            cursor: soloAuto ? 'default' : 'pointer',
+            opacity: soloAuto ? 0.55 : 1,
+          }}
+        >
+          ✓
+        </button>
         <button
           type="button"
           disabled={sinTel}
@@ -426,40 +604,52 @@ function FilaDePedido({ p, onAbrir, onFicha }: { p: FilaPedido; onAbrir: (id: nu
   )
 }
 
-/** El grupo «Pidieron hoy y ayer», arriba de todo en «Hoy». Sin permiso no se dibuja. */
+/**
+ * «Pedidos nuevos» (antes «Pidieron hoy y ayer»), arriba de todo en «Hoy». Sin permiso no se
+ * dibuja. Los pendientes arriba; los contactados, plegados al final. El número cuenta sólo lo
+ * pendiente. ⛔ Sin carritos (Darío, 25-oct-2026): casi nunca traen nombre ni teléfono; vuelven
+ * cuando los clientes entren al catálogo con su usuario.
+ */
 function GrupoPedidos({
   r,
   pedidos,
-  carritos,
   abierto,
   onToggle,
   onAbrir,
   onFicha,
+  onTildar,
 }: {
   r: ResultadoCatalogo | null
   pedidos: FilaPedido[]
-  carritos: FilaPedido[]
   abierto: boolean
   onToggle: () => void
   onAbrir: (id: number, tel: string) => void
   onFicha: (id: number, tel: string) => void
+  onTildar: (p: FilaPedido) => void
 }) {
+  const [contactadosAbierto, setContactadosAbierto] = useState(false)
   if (!r || r.t === 'sin-permiso') return null
+  const pendientes = pedidos.filter((p) => !p.hablado)
+  const contactados = pedidos.filter((p) => p.hablado)
   return (
-    <Grupo titulo="Pidieron hoy y ayer" cuantas={pedidos.length + carritos.length} abierto={abierto} onToggle={onToggle}>
+    <Grupo titulo="Pedidos nuevos" cuantas={pendientes.length} abierto={abierto} onToggle={onToggle}>
       {r.t === 'error' && <Aclaracion>No pude traer los pedidos del catálogo. {r.motivo}</Aclaracion>}
-      {pedidos.map((p) => (
-        <FilaDePedido key={p.key} p={p} onAbrir={onAbrir} onFicha={onFicha} />
+      {pendientes.map((p) => (
+        <FilaDePedido key={p.key} p={p} onAbrir={onAbrir} onFicha={onFicha} onTildar={onTildar} />
       ))}
       {r.t === 'ok' && !pedidos.length && <Aclaracion>Todavía no entró ningún pedido.</Aclaracion>}
-      {carritos.length > 0 && (
+      {r.t === 'ok' && pedidos.length > 0 && !pendientes.length && <Aclaracion>Contactaste a todos.</Aclaracion>}
+      {contactados.length > 0 && (
         <>
-          <div style={{ padding: `${space[3]}px ${MARGEN}px ${space[1]}px`, fontSize: font.xs, fontWeight: 700, color: color.mut2 }}>
-            Armaron pero no confirmaron <span style={{ fontWeight: 600 }}>{carritos.length}</span>
-          </div>
-          {carritos.map((p) => (
-            <FilaDePedido key={p.key} p={p} onAbrir={onAbrir} onFicha={onFicha} />
-          ))}
+          <button
+            type="button"
+            aria-expanded={contactadosAbierto}
+            onClick={() => setContactadosAbierto((v) => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: 'auto', background: color.surface, border: 0, borderTop: `1px solid ${color.line2}`, padding: `${space[2]}px ${MARGEN}px`, fontSize: font.sm, fontWeight: 600, color: color.mut, textAlign: 'left', cursor: 'pointer' }}
+          >
+            {contactadosAbierto ? '▾' : '▸'} Contactados · {contactados.length}
+          </button>
+          {contactadosAbierto && contactados.map((p) => <FilaDePedido key={p.key} p={p} onAbrir={onAbrir} onFicha={onFicha} onTildar={onTildar} />)}
         </>
       )}
     </Grupo>
@@ -644,7 +834,7 @@ function Resumen({ hoy, atrasados, hechos, pedidos }: { hoy: number; atrasados: 
   return (
     <div style={{ ...SOBRE_OSCURO, display: 'flex', gap: space[2], padding: `${space[3]}px ${MARGEN}px` }}>
       {/* Sólo si el catálogo contestó: a quien no es admin no se le muestra un 0 que no es cierto. */}
-      {pedidos != null && celda(pedidos, 'Pedidos sin hablar', color.brand)}
+      {pedidos != null && celda(pedidos, 'Pedidos sin contactar', color.brand)}
       {celda(hoy, 'Para hoy', color.warningInk)}
       {celda(atrasados, 'Atrasados', color.dangerInk)}
       {celda(hechos, 'Hechos hoy', color.successInk)}
@@ -886,6 +1076,7 @@ export function AgendaDelDia({
   today,
   onAbrirChat,
   onVerFicha,
+  onAgendar,
   puedeAbrirChat,
   escritos,
   ultimos,
@@ -896,6 +1087,8 @@ export function AgendaDelDia({
   onAbrirChat: (id: number, tel: string) => void
   /** Abre la ficha en la solapa Cliente SIN abrir el chat. `id: 0` = prospecto, se busca por teléfono. */
   onVerFicha: (id: number, tel: string) => void
+  /** Pone la fecha desde «Falta la fecha», sin abrir la ficha. `false` = no se guardó. */
+  onAgendar: Agendar
   puedeAbrirChat: boolean
   /** A quién le escribiste hoy según WhatsApp Web. Sin extensión llega vacío. */
   escritos?: EscritosHoy
@@ -904,7 +1097,7 @@ export function AgendaDelDia({
 }) {
   return (
     <EscritosCtx.Provider value={escritos || SIN_ESCRITOS}>
-      <Agenda crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={onAbrirChat} onVerFicha={onVerFicha} puedeAbrirChat={puedeAbrirChat} ultimos={ultimos ?? null} />
+      <Agenda crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={onAbrirChat} onVerFicha={onVerFicha} onAgendar={onAgendar} puedeAbrirChat={puedeAbrirChat} ultimos={ultimos ?? null} />
     </EscritosCtx.Provider>
   )
 }
@@ -917,6 +1110,7 @@ function Agenda({
   today,
   onAbrirChat,
   onVerFicha,
+  onAgendar,
   puedeAbrirChat,
   ultimos,
 }: {
@@ -925,20 +1119,25 @@ function Agenda({
   today: Date
   onAbrirChat: (id: number, tel: string) => void
   onVerFicha: (id: number, tel: string) => void
+  onAgendar: Agendar
   puedeAbrirChat: boolean
   ultimos: UltimosMios | null
 }) {
   const escritos = useContext(EscritosCtx)
   const catalogo = usePedidosCatalogo()
+  const [contactados, tildarContactado] = useContactados()
   const filasPedidos = useMemo(
-    () => (catalogo?.t === 'ok' ? armarFilasPedidos(catalogo.datos.pedidos, false, today, ultimos, escritos) : []),
-    [catalogo, today, ultimos, escritos],
+    () => (catalogo?.t === 'ok' ? armarFilasPedidos(catalogo.datos.pedidos, false, today, ultimos, escritos, contactados) : []),
+    [catalogo, today, ultimos, escritos, contactados],
   )
-  const filasCarritos = useMemo(
-    () => (catalogo?.t === 'ok' ? armarFilasPedidos(catalogo.datos.carritos, true, today, ultimos, escritos) : []),
-    [catalogo, today, ultimos, escritos],
-  )
-  const pedidosSinHablar = catalogo?.t === 'ok' ? [...filasPedidos, ...filasCarritos].filter((p) => !p.hablado).length : null
+  const pedidosSinHablar = catalogo?.t === 'ok' ? filasPedidos.filter((p) => !p.hablado).length : null
+  const [avisoTilde, setAvisoTilde] = useState('')
+  const onTildar = (p: FilaPedido) => {
+    setAvisoTilde('')
+    tildarContactado(claveContacto(p), !p.marcado).then((ok) => {
+      if (!ok) setAvisoTilde('No se pudo guardar el ✓. Probá de nuevo.')
+    })
+  }
 
   const [filtro, setFiltro] = useState<FiltroPanel>(memoria.filtro)
   const [mostrar, setMostrar] = useState(memoria.mostrar)
@@ -955,15 +1154,18 @@ function Agenda({
   const alternar = (k: string) => setAbiertos((a) => ({ ...a, [k]: !a[k] }))
   // El grupo de los pedidos: nace abierto, y si `memoria` viene de antes de existir, también.
   const grupoPedidos = (
+    <>
     <GrupoPedidos
       r={catalogo}
       pedidos={filasPedidos}
-      carritos={filasCarritos}
+      onTildar={onTildar}
       abierto={abiertos.pedidos !== false}
       onToggle={() => setAbiertos((a) => ({ ...a, pedidos: a.pedidos === false }))}
       onAbrir={onAbrirChat}
       onFicha={onVerFicha}
     />
+    {avisoTilde && <Aclaracion>{avisoTilde}</Aclaracion>}
+    </>
   )
   const logistica = usePendientesLogistica()
   const grupoLogistica = (
@@ -1227,11 +1429,10 @@ function Agenda({
       {grupoLogistica}
 
       {faltaFecha.length > 0 && (
-        <Grupo titulo="🔴 Falta la fecha" cuantas={faltaFecha.length} abierto={abiertos.falta !== false} onToggle={() => setAbiertos((a) => ({ ...a, falta: a.falta === false }))}>
+        <Grupo titulo="Falta la fecha" rojo cuantas={faltaFecha.length} abierto={abiertos.falta !== false} onToggle={() => setAbiertos((a) => ({ ...a, falta: a.falta === false }))}>
           {faltaFecha.map((it) => (
-            <Fila key={it.key} it={it} onAbrir={onAbrirChat} onFicha={onVerFicha} />
+            <FilaFaltaFecha key={it.key} it={it} onAbrir={onAbrirChat} onFicha={onVerFicha} onAgendar={onAgendar} />
           ))}
-          <Aclaracion>Les escribiste hoy y no tienen cuándo volver a hablarles. Tocá el nombre y elegí los días.</Aclaracion>
         </Grupo>
       )}
 

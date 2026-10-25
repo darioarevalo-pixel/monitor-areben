@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/api-fetch', () => ({ apiFetch: vi.fn() }))
-const { armarFilasPedidos, yaLeEscribiste } = await import('@/lib/crm/pedidos-catalogo')
+const { armarFilasPedidos, claveContacto, yaLeEscribiste } = await import('@/lib/crm/pedidos-catalogo')
 const { indexarEscritos } = await import('@/lib/crm/escritos')
 
 /**
@@ -38,5 +38,24 @@ describe('armarFilasPedidos', () => {
     expect(f.map((x) => x.telefono)).toEqual(['2222 2222', '1111 1111', '3333 3333'])
     expect(f.map((x) => x.ayer)).toEqual([false, true, false])
     expect(f[2].hablado).toBe(true)
+  })
+})
+
+describe('✓ Contactado a mano (25-oct-2026)', () => {
+  it('lo tildado cuenta como contactado, separado de lo que vio WhatsApp', () => {
+    const today = new Date(2026, 9, 25, 15, 0)
+    const a = pedido(new Date(2026, 9, 25, 9, 0).toISOString(), '1111 1111')
+    const b = pedido(new Date(2026, 9, 25, 10, 0).toISOString(), '2222 2222')
+    const ultimos = new Map([['22222222', Date.parse(new Date(2026, 9, 25, 11, 0).toISOString()) / 1000]])
+    const f = armarFilasPedidos([a, b], false, today, ultimos, new Set(), new Set([claveContacto(a)]))
+    const fa = f.find((x) => x.telefono === '1111 1111')!
+    const fb = f.find((x) => x.telefono === '2222 2222')!
+    expect([fa.hablado, fa.marcado, fa.auto]).toEqual([true, true, false])
+    expect([fb.hablado, fb.marcado, fb.auto]).toEqual([true, false, true])
+  })
+
+  it('la clave usa los últimos 8 dígitos: el mismo pedido con otro formato de número cae igual', () => {
+    const fecha = '2026-10-25T12:00:00Z'
+    expect(claveContacto(pedido(fecha, '+54 9 223 555-1234'))).toBe(claveContacto(pedido(fecha, '2235551234')))
   })
 })

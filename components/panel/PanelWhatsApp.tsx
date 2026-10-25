@@ -848,6 +848,42 @@ function PanelInterno({
   )
 
   /**
+   * «Falta la fecha» desde la lista de Hoy (Darío, 25-oct-2026): los días o el calendario sin
+   * entrar a la ficha. Guarda lo mismo que el pie de la ficha (`escribiHoy` / `setProximoManual`, y
+   * lo de los prospectos) con la misma relectura. Si la ficha de esa persona estaba armada, se
+   * recalcula para que al abrirla no muestre la fecha vieja.
+   */
+  const agendarDesdeLista = useCallback(
+    async (it: { id: number; key: string; prospecto: boolean }, cuando: { dias: number } | { fecha: string }): Promise<boolean> => {
+      const exito = 'dias' in cuando ? `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), cuando.dias)))}` : avisoFecha(cuando.fecha)
+      if (it.prospecto) {
+        const r = await guardarLeadsConRelectura((m) => ('dias' in cuando ? escribiHoyLead(m, it.key, cuando.dias) : setProximoLead(m, it.key, cuando.fecha)))
+        if (!vivo.current) return false
+        if (!r.ok) {
+          decir('No se pudo guardar: ' + r.motivo, true)
+          return false
+        }
+        kv.current = { ...kv.current, leads: r.mapa }
+        setCrmLeads(r.mapa)
+        setEstado((e) => (e.t === 'lead' && r.mapa[e.lead.id] ? { t: 'lead', lead: r.mapa[e.lead.id] } : e))
+      } else {
+        const r = await guardarConRelectura((m) => ('dias' in cuando ? escribiHoy(m, it.id, cuando.dias) : setProximoManual(m, it.id, cuando.fecha)))
+        if (!vivo.current) return false
+        if (!r.ok) {
+          decir('No se pudo guardar: ' + r.motivo, true)
+          return false
+        }
+        kv.current = { ...kv.current, seg: r.mapa }
+        setCrmSeg(r.mapa)
+        setEstado((e) => (e.t === 'ficha' ? { ...e, ficha: armarFicha(e.crudo, r.mapa, today) } : e))
+      }
+      decir(exito)
+      return true
+    },
+    [decir, today],
+  )
+
+  /**
    * Abrir el chat de alguien de la lista.
    *
    * ⚠️ **Esto no navega nada por su cuenta**: acá adentro corre el monitor en un iframe del side
@@ -947,7 +983,7 @@ function PanelInterno({
       <Envoltorio aviso={aviso}>
         {solapas}
         {kvListo ? (
-          <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} puedeAbrirChat={enExtension} escritos={escritos} ultimos={ultimos} />
+          <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} onAgendar={agendarDesdeLista} puedeAbrirChat={enExtension} escritos={escritos} ultimos={ultimos} />
         ) : (
           <Cargando />
         )}
