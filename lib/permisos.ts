@@ -33,7 +33,7 @@ import {
   SECCION_AREA as SECCION_AREA_JS,
   tieneFuncion as tieneFuncionJs,
 } from './permisos.core.js'
-export { APROBACIONES_ERP, ERP_PERMISOS, ERP_ROLES, permisoErpDe, permisosErp, puedeErp } from './permisos.core.js'
+export { APROBACIONES_ERP, ERP_PERMISOS, ERP_ROLES, PERMISOS_EDITABLES, permisoErpDe, permisosErp, puedeErp } from './permisos.core.js'
 
 /**
  * Función del usuario dentro del sistema (rol de flujo de trabajo, distinto de los

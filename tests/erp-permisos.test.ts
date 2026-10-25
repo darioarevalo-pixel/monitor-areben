@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { ACCESO_POR_FUNCION, ERP_ROLES, type Funcion, marcaExcluir, permisoErpDe, permisosErp, puedeErp, puedeVer, type Perfil } from '@/lib/permisos'
+import { ACCESO_POR_FUNCION, ERP_ROLES, type Funcion, marcaExcluir, PERMISOS_EDITABLES, permisoErpDe, permisosErp, puedeErp, puedeVer, type Perfil } from '@/lib/permisos'
 
 const perfil = (over: Partial<Perfil> = {}): Perfil => ({ name: 'Ana', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, funcion: [], ...over })
 // Con la llave abierta para una persona: le tildan `erp` (es lo mismo que sumar el área a su función).
@@ -137,5 +137,20 @@ describe('ERP · permisos por rol', () => {
     }
     expect(puedeErp(perfil({ admin: true }), 'bdi', 'cuentas')).toBe(true)
     expect(puedeErp(abierto(['local']), 'bdi', p('ventas-lista'))).toBe(true)
+  })
+
+  it('roles GUARDADOS (sql/048): pisan la tabla en ESA marca y permiso; sin fila, la tabla; costos/ver/roles inventados no se tocan', () => {
+    const g = { bdi: { cuentas: ['consulta'], cobrar: [], costos: ['local'], ver: [], anular: ['jefe'] } }
+    expect(puedeErp(abierto(['administracion']), 'bdi', 'cuentas', undefined, g)).toBe(false) // la tabla decía que sí
+    expect(puedeErp(abierto(['consulta']), 'bdi', 'cuentas', undefined, g)).toBe(true)
+    expect(puedeErp(abierto(['local']), 'zattia', 'cuentas', undefined, g)).toBe(true) // otra marca: sigue la tabla
+    expect(puedeErp(abierto(['local']), 'bdi', 'cobrar', undefined, g)).toBe(false) // lista vacía = nadie salvo Admin
+    expect(puedeErp(perfil({ admin: true }), 'bdi', 'cobrar', undefined, g)).toBe(true)
+    expect(puedeErp(abierto(['local']), 'bdi', 'costos', undefined, g)).toBe(false) // costos no se reparte
+    expect(puedeErp(abierto(['consulta']), 'bdi', 'ver', undefined, g)).toBe(true)
+    expect(puedeErp(abierto(['local']), 'bdi', 'anular', undefined, g)).toBe(false) // rol inventado se descarta
+    expect(permisosErp(abierto(['consulta']), undefined, g).bdi.cuentas).toBe(true)
+    expect(PERMISOS_EDITABLES).not.toContain('costos')
+    expect(PERMISOS_EDITABLES).not.toContain('ver')
   })
 })
