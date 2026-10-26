@@ -605,7 +605,7 @@ export const leerFichaDeCliente = (marca: MarcaErp, clave: string) =>
 // ── ERP › Clientes › Cuenta corriente (`api/_erp-clientes.js`, núcleo `lib/erp/cuenta-corriente.core.js`; contrato §15) ──
 export type CreditoCliente = { credito: boolean; tope: number | null; dias: number | null; puesto_por: string | null; puesto_en: string | null } | null
 export type CuentaDelMotor = {
-  cliente_id: string; linea: string; nombre: string; doc: string | null; credito: CreditoCliente
+  cliente_id: string; linea: string; nombre: string; doc: string | null; whatsapp?: string | null; credito: CreditoCliente
   saldo: number; debe: number; a_favor: number; vencido: number; dias_mayor: number; atrasado: boolean; sin_credito: boolean; tramos: Record<string, number>
   ventas_con_saldo?: number; ultimo_cobro?: { fecha: string; monto: number } | null
 }

@@ -29,6 +29,8 @@ import {
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { esAdmin } from '@/lib/permisos'
 import { ESTADO_CUENTA, FichaCuenta, type FilaCuenta } from './FichaCuenta'
+import { imprimirResumenDeFila } from './resumen-cuenta'
+import { enlaceWhatsapp } from '@/lib/erp/resumen-cuenta.core.js'
 import { fechaCorta } from './FichaCliente'
 
 type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
@@ -93,10 +95,19 @@ export function CuentaCorriente() {
   }
 
   const acciones = (f: FilaCuenta) => {
-    const menu: AccionMenu[] = [{ key: 'ficha', label: 'Abrir la cuenta', icono: 'abrir', onClick: () => setFicha(f) }]
+    const wa = enlaceWhatsapp(f)
+    const escribir = () => wa.url && window.open(wa.url, '_blank', 'noopener')
+    const imprimir = () => { void imprimirResumenDeFila(marca, f, prueba).then((e) => e && setError(e)) }
+    const menu: AccionMenu[] = [
+      { key: 'ficha', label: 'Abrir la cuenta', icono: 'abrir', onClick: () => setFicha(f) },
+      { key: 'wa', label: 'Escribir por WhatsApp', icono: 'whatsapp', onClick: escribir, disabled: !wa.url, hint: wa.motivo ?? undefined },
+      { key: 'imprimir', label: 'Imprimir resumen de cuenta', icono: 'impresora', onClick: imprimir },
+    ]
     return (
       <>
         <IconoFila label="Abrir la cuenta" onClick={() => setFicha(f)}><Icono nombre="abrir" size={16} /></IconoFila>
+        <IconoFila label={wa.motivo ? `Escribir por WhatsApp · ${wa.motivo}` : 'Escribir por WhatsApp'} apagado={!wa.url} verde={!!wa.url} onClick={escribir}><Icono nombre="whatsapp" size={16} /></IconoFila>
+        <IconoFila label="Imprimir resumen de cuenta" onClick={imprimir}><Icono nombre="impresora" size={16} /></IconoFila>
         <MenuAcciones acciones={menu} etiqueta={`Más acciones de la cuenta de ${f.nombre}`} vertical alinear="izquierda" />
       </>
     )
@@ -143,7 +154,7 @@ export function CuentaCorriente() {
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((x) => x + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
-          columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={72}
+          columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={136}
           orden={orden} onOrden={setOrden} densidad={prefs.densidad}
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `la cuenta de ${f.nombre}`}
           vacio={!cargando && datos ? (

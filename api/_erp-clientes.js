@@ -139,6 +139,12 @@ export async function cuentasDeLaMarca({ marca, prueba = false }, deps) {
         cuentas.push(...r.cuentas.map((c) => ({ ...c, linea })))
       }
     }
+    // El WhatsApp para el botón de la fila: una lectura aparte (el motor ⛔ lo trae en `cuentasCorrientes`). Si falla, la lista sale sin botón.
+    try {
+      const ids = [...new Set(cuentas.map((c) => c.cliente_id))]
+      const wa = new Map((ids.length ? (await pg.query('select id::text, whatsapp from cliente where id = any($1::uuid[])', [ids])).rows : []).map((r) => [r.id, r.whatsapp]))
+      for (const c of cuentas) c.whatsapp = wa.get(c.cliente_id) ?? null
+    } catch { /* sin WhatsApp: el botón queda apagado */ }
     return { hoy, prueba, cuentas, clientesErp: empresas.length ? (await pg.query('select count(*)::int as n from cliente')).rows[0].n : 0, otroLibro }
   })
 }

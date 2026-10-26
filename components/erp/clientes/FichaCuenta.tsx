@@ -17,13 +17,15 @@ import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { fechaCorta } from './FichaCliente'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
+import { enlaceWhatsapp } from '@/lib/erp/resumen-cuenta.core.js'
+import { imprimirResumenCon } from './resumen-cuenta'
 
 export const ESTADO_CUENTA: Record<string, [tono: 'danger' | 'success' | 'action' | 'neutral', texto: string]> = {
   atrasada: ['danger', 'Atrasada'], aldia: ['success', 'Al día'], favor: ['action', 'A favor'], cero: ['neutral', 'Sin saldo'],
 }
 
 export type FilaCuenta = {
-  id: string; clienteId: string; linea: string; nombre: string; doc: string | null
+  id: string; clienteId: string; linea: string; nombre: string; doc: string | null; whatsapp?: string | null
   saldo: number; debe: number; aFavor: number; vencido: number; diasMayor: number; tramos: Record<string, number>
   credito: CreditoCliente; sinCredito: boolean; estado: string
   ventasConSaldo?: number | null; ultimoCobro?: { fecha: string; monto: number } | null
@@ -69,6 +71,12 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
   const celda: React.CSSProperties = { padding: '7px 0', borderBottom: `1px solid ${color.bg2}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
   const cab = (t: string, derecha: boolean) => <span key={t} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: derecha ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>
   const linea = NOMBRE_LINEA[fila.linea as keyof typeof NOMBRE_LINEA] ?? fila.linea
+  const wa = enlaceWhatsapp({ whatsapp: fila.whatsapp, nombre: fila.nombre, linea: fila.linea, saldo, vencido: e?.vencido ?? fila.vencido })
+  const imprimir = () => {
+    const w = window.open('', '_blank')
+    if (!w) return setError('El navegador bloqueó la ventana del resumen: permitila para este sitio.')
+    if (s) imprimirResumenCon(w, fila, prueba, s)
+  }
 
   return (
     <FichaCostado abierta onCerrar={onCerrar} titulo={`Cuenta corriente · ${linea}${prueba ? ' · de prueba' : ''}`} etiqueta={`Cuenta corriente de ${fila.nombre}`}>
@@ -106,6 +114,8 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
       </DatosFicha>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
         {puedeCobrar && <Button disabled={!s} onClick={() => { setHecho(null); setCobrando(true) }}>Cobrar</Button>}
+        <Button variant="outline" disabled={!wa.url} title={wa.motivo ?? undefined} onClick={() => wa.url && window.open(wa.url, '_blank', 'noopener')}>Escribir por WhatsApp</Button>
+        <Button variant="outline" disabled={!s} onClick={imprimir}>Resumen de cuenta</Button>
         {admin && <Button variant="outline" onClick={() => setCredito(true)}>{cred?.credito ? 'Cambiar el crédito' : 'Marcar crédito'}</Button>}
       </div>
 
