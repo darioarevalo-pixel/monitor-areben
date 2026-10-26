@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { Button, EmptyState, Field, Input, MenuAcciones, Modal, Notice, Select, color, font, space, useConfirmar, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo } from '@/components/ui/ListaTrabajo'
 import { BuscadorLista, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
@@ -49,6 +50,7 @@ const COLUMNAS_CAMBIOS = [
 export function Redondeo() {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  const configura = usePuedeErp(marca)('configurar')
   const [linea, setLinea] = useState<string>(marca)
   const [datos, setDatos] = useState<RedondeoDeMarca | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -131,6 +133,7 @@ export function Redondeo() {
     return null
   }
   const acciones = (f: FilaDeRedondeo) => {
+    if (!configura) return null
     const menu: AccionMenu[] = [{ key: 'cambiar', label: f.vigente ? 'Cambiar el redondeo' : 'Poner el redondeo', icono: 'lapiz', onClick: () => empezar(f), disabled: trabajando }]
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones del redondeo en ${nombreCanal(f.canal)}`} vertical alinear="izquierda" />
   }
@@ -164,7 +167,7 @@ export function Redondeo() {
             : <ListaTrabajo
                 columnas={COLUMNAS} filas={buscadas} claveDe={(f) => f.canal} celda={celda} acciones={acciones} anchoAcciones={40}
                 activa={editando ? editando.fila.canal : null}
-                onAbrir={empezar} etiquetaFila={(f) => `el redondeo en ${nombreCanal(f.canal)}`}
+                onAbrir={configura ? empezar : undefined} etiquetaFila={(f) => `el redondeo en ${nombreCanal(f.canal)}`}
                 vacio={<div style={{ padding: space[6] }}><EmptyState title="Nada con esa búsqueda." /></div>}
               />}
           <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>

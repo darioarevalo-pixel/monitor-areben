@@ -15,6 +15,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { Button, EmptyState, Icono, MoneyText, Notice, Select, color, font, space } from '@/components/ui'
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
@@ -66,6 +67,7 @@ function bajarCsv(filas: FilaProducto[], marca: MarcaErp) {
 export function PreciosErp() {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  const puede = usePuedeErp(marca)
   const usuario = perfil?.name ?? null
   const lista = 'erp-precios'
   const [datos, setDatos] = useState<(ListaDeProductos & { clave: string }) | null>(null)
@@ -138,7 +140,7 @@ export function PreciosErp() {
 
   const acciones = (f: FilaProducto) => (
     <>
-      <IconoFila label="Cargar precio o costo" onClick={() => abrir(f, true)}><Icono nombre="pesos" size={16} /></IconoFila>
+      {puede('configurar') && <IconoFila label="Cargar precio o costo" onClick={() => abrir(f, true)}><Icono nombre="pesos" size={16} /></IconoFila>}
       <IconoFila label={`Historial de precios de ${f.nombre}`} onClick={() => abrir(f)}><Icono nombre="historial" size={16} /></IconoFila>
     </>
   )

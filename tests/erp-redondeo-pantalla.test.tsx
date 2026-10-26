@@ -18,14 +18,15 @@ const historial = [{ id: 'r1', marca: 'zattia', canal: 'mayorista', paso: 100, m
 const datos = { lineas: [{ linea: 'zattia', filas: filas('zattia') }, { linea: 'stunned', filas: filas('stunned') }], historial }
 
 const leerRedondeo = vi.fn(async () => datos)
+const leerPermisos = vi.fn(async () => ({ permisos: { bdi: {}, zattia: { configurar: true } } }))
 const ponerRedondeo = vi.fn(async () => ({ ok: true, id: '2' }))
-vi.mock('@/lib/erp/cliente', () => ({ leerRedondeo: (...a: unknown[]) => leerRedondeo(...(a as [])), ponerRedondeo: (...a: unknown[]) => ponerRedondeo(...(a as [])) }))
+vi.mock('@/lib/erp/cliente', () => ({ leerRedondeo: (...a: unknown[]) => leerRedondeo(...(a as [])), ponerRedondeo: (...a: unknown[]) => ponerRedondeo(...(a as [])), leerPermisos: (...a: unknown[]) => leerPermisos(...(a as [])) }))
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno' } }) }))
 
 let root: Root | null = null
 let host: HTMLDivElement
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
-afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); document.body.innerHTML = ''; vi.clearAllMocks() })
+afterEach(async () => { (await import('@/lib/erp/usePuedeErp')).olvidarPermisosErp(); act(() => root?.unmount()); root = null; host?.remove(); document.body.innerHTML = ''; vi.clearAllMocks() })
 
 async function montar() {
   const { Redondeo } = await import('@/components/erp/Redondeo')
@@ -51,5 +52,23 @@ describe('Redondeo (pantalla)', () => {
     await montar()
     await act(async () => { boton('Cambios')?.click() })
     expect(texto()).toContain('Bruno Arevalo')
+  })
+
+  it('con «Configurar», cada renglón tiene su «⋯» para cambiar el redondeo', async () => {
+    await montar()
+    expect(document.querySelector('[aria-label="Más acciones del redondeo en Mayorista"]')).not.toBeNull()
+  })
+
+  it('🔑 si el servidor dice que NO puede configurar ⇒ la lista se lee pero ⛔ hay con qué cambiarla', async () => {
+    leerPermisos.mockResolvedValueOnce({ permisos: { bdi: {}, zattia: { configurar: false } } })
+    await montar()
+    expect(texto()).toContain('Al $100 más cercano')
+    expect(document.querySelector('[aria-label^="Más acciones del redondeo"]')).toBeNull()
+  })
+
+  it('🔑 si los permisos ⛔ llegan, falla ABIERTO: el servidor es quien frena', async () => {
+    leerPermisos.mockRejectedValueOnce(new Error('sin red'))
+    await montar()
+    expect(document.querySelector('[aria-label="Más acciones del redondeo en Mayorista"]')).not.toBeNull()
   })
 })

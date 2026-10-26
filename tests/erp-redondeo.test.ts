@@ -29,7 +29,7 @@ describe('leerRedondeoDePantalla', () => {
       .toMatchObject({ marca: 'stunned', paso: 10, modo: 'abajo' })
   })
   it('lo que no corresponde se dice, con el campo', () => {
-    const err = (b: object, marca = 'zattia', ls = lineas) => leerRedondeoDePantalla(b, { marca, lineas: ls })
+    const err = (b: object | null, marca = 'zattia', ls = lineas) => leerRedondeoDePantalla(b, { marca, lineas: ls })
     expect(err({ linea: 'stunned', canal: 'local', paso: 100, modo: 'cercano' }, 'bdi', ['bdi'])).toMatchObject({ error: 'Línea inválida', campo: 'linea' })
     expect(err({ canal: 'web', paso: 100, modo: 'cercano' })).toMatchObject({ campo: 'canal' })
     expect(err({ canal: 'local', paso: 50, modo: 'cercano' })).toMatchObject({ campo: 'paso' })

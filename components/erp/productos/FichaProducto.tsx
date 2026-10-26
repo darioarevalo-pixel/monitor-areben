@@ -18,6 +18,7 @@ import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial } f
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerHistorialDeEdicion, leerPrecioDeProducto, soltarPrecio, type FilaPrecio, type HechoEdicion, type FilaProducto, type MarcaErp, type PrecioDeProducto } from '@/lib/erp/cliente'
 import { NOMBRE_FUENTE } from '@/lib/erp/precio.core.js'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import { DEPOSITOS } from '@/lib/erp/stock-lista.core.js'
 import { CargarPrecio } from './CargarPrecio'
@@ -43,6 +44,8 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
   /** Se cargó o se soltó un precio: la lista se vuelve a leer. */
   onCargado: () => void
 }) {
+  const puede = usePuedeErp(marca)
+  const configura = puede('configurar')
   const [f, setF] = useState<PrecioDeProducto | null>(null)
   // Se mide al LEER (⛔ en el render: `Date.now` ahí es impuro).
   const [tnVieja, setTnVieja] = useState(false)
@@ -144,15 +147,15 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
       </div>
 
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
-        <Button variant={cargar ? 'outline' : undefined} disabled={!f} onClick={() => setCargar((x) => !x)}>{cargar ? 'Cerrar la carga' : 'Cargar precio o costo'}</Button>
-        <Button variant="outline" disabled={!fila} onClick={() => setEditar((x) => !x)}>{editar ? 'Cerrar la corrección' : 'Corregir datos'}</Button>
+        {configura && <Button variant={cargar ? 'outline' : undefined} disabled={!f} onClick={() => setCargar((x) => !x)}>{cargar ? 'Cerrar la carga' : 'Cargar precio o costo'}</Button>}
+        {configura && <Button variant="outline" disabled={!fila} onClick={() => setEditar((x) => !x)}>{editar ? 'Cerrar la corrección' : 'Corregir datos'}</Button>}
         <MenuAcciones acciones={menu} etiqueta={`Más acciones del producto ${nombre}`} vertical />
       </div>
 
       {f?.feria != null && <Notice tone="neutral">Está en oferta (Liquidación): en el local se cobra {plata(f.feria)}, el precio de su campaña, sin el descuento de la forma de pago. Tienda Nube muestra otro precio para la venta online.</Notice>}
       {f?.avisos.map((a) => <Notice key={a} tone="warning">{a}</Notice>)}
 
-      {editar && fila && (
+      {configura && editar && fila && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2], padding: space[3], border: `1px solid ${color.line}`, borderRadius: 12 }}>
           <div>
             <h3 style={h3}>Corregir datos</h3>
@@ -162,7 +165,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
         </section>
       )}
 
-      {cargar && f && (
+      {configura && cargar && f && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2], padding: space[3], border: `1px solid ${color.line}`, borderRadius: 12 }}>
           <div>
             <h3 style={h3}>Cargar en el ERP</h3>
@@ -187,7 +190,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
                     <div style={{ fontSize: font.sm, color: color.mut }}>
                       {l.fuente ? FUENTE[l.fuente] ?? l.fuente : 'Sin precio'}{l.deLista && ` · sigue a ${nombreLista(l.deLista)}`}{l.desde && ` · ${cuandoCorto(l.desde)}`}
                     </div>
-                    {l.puedeSoltar && <Button variant="outline" disabled={trabajando} onClick={() => void soltar(l)} style={{ marginTop: 4 }}>Volver a seguir</Button>}
+                    {configura && l.puedeSoltar && <Button variant="outline" disabled={trabajando} onClick={() => void soltar(l)} style={{ marginTop: 4 }}>Volver a seguir</Button>}
                   </span>
                   <span role="cell" style={{ ...celda, textAlign: 'right', fontWeight: weight.semibold }}>{plata(l.precio)}</span>
                   <span role="cell" style={{ ...celda, textAlign: 'right', color: color.mut }}>{plata(gn)}</span>

@@ -399,6 +399,11 @@ export const leerRutas = (marca: MarcaErp) =>
 export const ponerRuta = (marca: MarcaErp, ruta: RutaAPoner) =>
   pedir<{ ok: true; ruta: { id: string; desde: string }; aviso: string | null }>(post({ accion: 'poner-ruta', marca, ...ruta }), '', 'No se pudo cambiar la ruta.')
 
+/** Lo que el perfil puede en el ERP, por marca (`permisosErp`): ocultar el botón que el servidor va a rechazar. */
+export type PermisosErp = Record<MarcaErp, Record<string, boolean>>
+export const leerPermisos = () =>
+  pedir<{ permisos: PermisosErp }>(null, `&vista=permisos&nc=${Date.now()}`, 'No se pudieron leer los permisos.')
+
 /** ERP › Configuración › Redondeo (motor sql/029): a cuánto se redondea el precio de cada canal, por línea, desde un momento. */
 export type ModoRedondeo = 'cercano' | 'abajo' | 'arriba'
 export type RedondeoPuesto = { paso: number; modo: ModoRedondeo; desde: string }

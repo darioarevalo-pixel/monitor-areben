@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, Select, color, font, space, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
@@ -53,6 +54,7 @@ function bajarCsv(filas: FilaProducto[], marca: MarcaErp) {
 export function ProductosErp() {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  const puede = usePuedeErp(marca)
   const usuario = perfil?.name ?? null
   const lista = 'erp-productos'
   const [datos, setDatos] = useState<(ListaDeProductos & { clave: string }) | null>(null)
@@ -114,12 +116,12 @@ export function ProductosErp() {
   const acciones = (f: FilaProducto) => {
     const menu: AccionMenu[] = [
       { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrir(f) },
-      { key: 'cargar', label: 'Cargar precio o costo', icono: 'pesos', onClick: () => abrir(f, true) },
+      ...(puede('configurar') ? [{ key: 'cargar', label: 'Cargar precio o costo', icono: 'pesos' as const, onClick: () => abrir(f, true) }] : []),
       { key: 'etiq', label: 'Etiquetas en el monitor ↗', icono: 'abrir', onClick: () => window.open('/etiquetas', '_blank', 'noopener') },
     ]
     return (
       <>
-        <IconoFila label="Cargar precio o costo" onClick={() => abrir(f, true)}><Icono nombre="pesos" size={16} /></IconoFila>
+        {puede('configurar') && <IconoFila label="Cargar precio o costo" onClick={() => abrir(f, true)}><Icono nombre="pesos" size={16} /></IconoFila>}
         <MenuAcciones acciones={menu} etiqueta={`Más acciones del producto ${f.nombre}`} vertical alinear="izquierda" />
       </>
     )
