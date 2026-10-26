@@ -735,6 +735,8 @@ export default async function handler(req, res) {
         arrastraDias: i.datos && Number.isFinite(i.datos.arrastraDias) ? i.datos.arrastraDias : null,
         fotos: fotosDe(i.datos && i.datos.fotos),
         importante: !!(i.datos && i.datos.importante),
+        // 📥 Guardada para después (Darío, 25-oct-2026): sin dueño, apagada, no le llega a nadie.
+        reserva: !!(i.datos && i.datos.reserva),
         // De qué evento es actividad este ítem. Una actividad no corre ningún día: lo filtra `vaEl`.
         // ⚠️ La clave sigue siendo `datos.plantilla`: lo que cambió el 29-ago-2026 es la palabra de
         // la pantalla, ⛔ no lo que hay escrito en las 44 filas cargadas.
@@ -1318,15 +1320,18 @@ export default async function handler(req, res) {
           ...(fotosDe(it.fotos).length ? { fotos: fotosDe(it.fotos) } : {}),
           // ⭐ «Importante» (Darío, 20-oct-2026): al tildarla le avisa a Darío y a quien la cargó.
           ...(String(it.clase) === 'pendiente' && it.importante ? { importante: true } : {}),
+          // 📥 La reserva es una tarea apagada que espera dueño: al asignarla se prende y se va el rótulo.
+          ...(String(it.clase) === 'pendiente' && it.reserva ? { reserva: true } : {}),
         },
         autor: yo,
         updated_at: new Date().toISOString(),
       };
       // ¿Es nueva? Sólo la tarea NUEVA dirigida a personas avisa: editar una ⛔ vuelve a sonar.
-      const { data: previo } = await supabase.from('agenda_items').select('id').eq('id', id).maybeSingle();
+      const { data: previo } = await supabase.from('agenda_items').select('id, datos').eq('id', id).maybeSingle();
+      const eraReserva = !!(previo && previo.datos && previo.datos.reserva);
       const { error } = await supabase.from('agenda_items').upsert([fila], { onConflict: 'id' });
       if (error) throw new Error(error.message);
-      if (!previo && fila.clase === 'pendiente' && fila.activo && fila.destino.tipo === 'personas') {
+      if ((!previo || eraReserva) && fila.clase === 'pendiente' && fila.activo && !fila.datos.reserva && fila.destino.tipo === 'personas') {
         // 🔔 Se espera (en Vercel lo que queda colgado después de contestar se corta), pero ⛔ falla
         // nunca la tarea: `avisar` no lanza, y la tarea ya quedó guardada arriba.
         // Con el nombre: en el celular compartido suenan las de las dos.

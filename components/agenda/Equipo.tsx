@@ -20,6 +20,7 @@ import { rotuloFecha } from '@/lib/fechas/semana'
 import { useAgenda } from '@/store/useAgenda'
 import { MiniaturasFotos } from './FotosTarea'
 import { ModalTarea } from './ModalTarea'
+import { BarraReserva } from './Reserva'
 
 const ESTADO: Record<EstadoEquipo, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
   'al-dia': { label: 'Al día', tone: 'success' },
@@ -45,6 +46,7 @@ export function Equipo() {
     await cargar()
     setNueva(null)
     const quien = i.destino.tipo === 'personas' ? i.destino.personas : []
+    if (i.reserva) return toast.ok('Guardada en la Reserva.')
     toast.ok(`Tarea asignada a ${filas.filter((f) => quien.includes(f.persona.name)).map((f) => f.persona.nombre.split(' ')[0]).join(', ')}.`)
   }
 
@@ -70,6 +72,7 @@ export function Equipo() {
       </HeaderAcciones>
 
       <div style={{ display: 'grid', gap: space[3] }}>
+        <BarraReserva />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
           {(Object.keys(ESTADO) as EstadoEquipo[]).filter((k) => cuenta(k)).map((k) => (
             <StatusPill key={k} tone={ESTADO[k].tone} label={`${cuenta(k)} ${ESTADO[k].label.toLowerCase()}`} />

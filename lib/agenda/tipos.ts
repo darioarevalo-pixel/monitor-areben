@@ -143,6 +143,8 @@ export type ItemAgenda = {
   fotos?: string[]
   /** ⭐ Al tildarla le avisa al celular de Darío y de quien la cargó (20-oct-2026). */
   importante?: boolean
+  /** 📥 Guardada para después: apagada y sin dueño hasta que Darío la asigna (Equipo › Reserva). */
+  reserva?: boolean
   arrastraDias?: number | null
   /**
    * Si este ítem no es una rutina sino **el molde de una**: `'ingreso'` o `'sesion-fotos'`.

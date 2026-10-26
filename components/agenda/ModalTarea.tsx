@@ -37,11 +37,12 @@ export function ModalTarea({
   const [para, setPara] = useState<string[]>(paraInicial)
   const [cuando, setCuando] = useState<Cuando>('hoy')
   const [otra, setOtra] = useState(sumarDias(hoy, 2))
+  const [reserva, setReserva] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const fecha = cuando === 'hoy' ? hoy : cuando === 'manana' ? sumarDias(hoy, 1) : otra
-  const listo = titulo.trim() && para.length && fecha >= hoy
+  const listo = titulo.trim() && (reserva || (para.length && fecha >= hoy))
 
   const guardar = async () => {
     if (!listo) return
@@ -54,9 +55,11 @@ export function ModalTarea({
         cuerpo: desc.trim() || null,
         fotos,
         regla: { tipo: 'unica', fecha },
-        destino: { tipo: 'personas', personas: para },
+        destino: reserva ? { tipo: 'todos' } : { tipo: 'personas', personas: para },
         arrastra: true,
         importante,
+        // 📥 Guardada para después: apagada y sin dueño hasta que se asigne desde Equipo › Reserva.
+        ...(reserva ? { reserva: true, activo: false } : {}),
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar.')
@@ -73,7 +76,7 @@ export function ModalTarea({
       pie={
         <>
           <Button variant="soft" tone="neutral" onClick={onCerrar}>Cancelar</Button>
-          <Button variant="solid" tone="brand" onClick={guardar} disabled={!listo || guardando}>{guardando ? 'Guardando…' : 'Asignar'}</Button>
+          <Button variant="solid" tone="brand" onClick={guardar} disabled={!listo || guardando}>{guardando ? 'Guardando…' : reserva ? 'Guardar' : 'Asignar'}</Button>
         </>
       }
     >
@@ -105,12 +108,13 @@ export function ModalTarea({
                 key={p.name}
                 puesto={para.includes(p.name)}
                 label={p.nombre.split(' ')[0]}
-                onToggle={() => setPara((xs) => (xs.includes(p.name) ? xs.filter((x) => x !== p.name) : [...xs, p.name]))}
+                onToggle={() => { setReserva(false); setPara((xs) => (xs.includes(p.name) ? xs.filter((x) => x !== p.name) : [...xs, p.name])) }}
               />
             ))}
+            <Tilde puesto={reserva} label="📥 Guardar para después" onToggle={() => { setReserva((x) => !x); setPara([]) }} />
           </div>
         </Field>
-        <Field label="Fecha">
+        {!reserva && <Field label="Fecha">
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
             <Tilde puesto={cuando === 'hoy'} label="Hoy" onToggle={() => setCuando('hoy')} />
             <Tilde puesto={cuando === 'manana'} label="Mañana" onToggle={() => setCuando('manana')} />
@@ -119,7 +123,7 @@ export function ModalTarea({
               <Input type="date" value={otra} min={hoy} onChange={(e) => setOtra(e.target.value)} style={{ width: 170 }} />
             )}
           </div>
-        </Field>
+        </Field>}
         <Tilde puesto={importante} label="⭐ Importante: avisarme cuando la termine" onToggle={() => setImportante((x) => !x)} />
       </div>
     </Modal>

@@ -1017,6 +1017,8 @@ export function filtrarItems(items: ItemAgenda[], f: FiltroItems = {}): ItemAgen
   const estado = f.estado && f.estado !== 'todos' ? f.estado : null
 
   return items.filter((i) => {
+    // La reserva vive en Equipo, no en Tareas fijas.
+    if (i.reserva) return false
     if (clase && claseDe(i) !== clase) return false
     if (estado && (estado === 'activos') !== !!i.activo) return false
     if (quien && !clavesDestino(i.destino).includes(quien)) return false
