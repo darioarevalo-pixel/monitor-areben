@@ -103,7 +103,7 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
 
       {fila.variantes.map((v) => (
         <div key={v.talle} style={fila3}>
-          <Field label="Talle" style={{ flex: '0 1 90px' }}><Input value={vars[v.talle]?.talle ?? ''} onChange={(e) => poner(v.talle, 'talle', e.target.value)} /></Field>
+          <Field label="Talle" style={{ flex: '1 1 130px' }}><Input value={vars[v.talle]?.talle ?? ''} onChange={(e) => poner(v.talle, 'talle', e.target.value)} /></Field>
           <Field label="SKU" style={{ flex: '1 1 120px' }}><Input value={vars[v.talle]?.sku ?? ''} onChange={(e) => poner(v.talle, 'sku', e.target.value)} /></Field>
           <Field label="Código de barras" style={{ flex: '1 1 140px' }}><Input value={vars[v.talle]?.barcode ?? ''} onChange={(e) => poner(v.talle, 'barcode', e.target.value)} inputMode="numeric" /></Field>
           <Button variant="outline" disabled={trabajando} onClick={() => void guardarVariante(v.talle, v.talleNombre)}>Guardar</Button>
@@ -112,7 +112,7 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
 
       {nueva ? (
         <div style={fila3}>
-          <Field label="Talle nuevo" style={{ flex: '0 1 90px' }}><Input value={nueva.talle} onChange={(e) => setNueva({ ...nueva, talle: e.target.value })} /></Field>
+          <Field label="Talle nuevo" style={{ flex: '1 1 130px' }}><Input value={nueva.talle} onChange={(e) => setNueva({ ...nueva, talle: e.target.value })} /></Field>
           <Field label="SKU" style={{ flex: '1 1 120px' }}><Input value={nueva.sku} onChange={(e) => setNueva({ ...nueva, sku: e.target.value })} /></Field>
           <Field label="Código de barras" style={{ flex: '1 1 140px' }}><Input value={nueva.barcode} onChange={(e) => setNueva({ ...nueva, barcode: e.target.value })} inputMode="numeric" /></Field>
           <Button disabled={trabajando} onClick={() => void agregar()}>Agregar</Button>
