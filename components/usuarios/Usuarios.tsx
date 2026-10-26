@@ -8,6 +8,7 @@ import type { Marca } from '@/lib/nav'
 import { copiarPermisos, normalizar, sinLinkDeHoras, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
 import { HeaderAcciones } from '@/components/layout/acciones'
+import { leerPines, pinAlAzar, ponerPin, quitarPin } from '@/lib/erp/cliente'
 import { Button, Card, color, font, Notice, useConfirmar } from '@/components/ui'
 import { AltaGuiada } from './AltaGuiada'
 import { Credenciales } from './Credenciales'
@@ -57,6 +58,39 @@ export function Usuarios() {
       vivo = false
     }
   }, [perfil, tick])
+
+  // Los PINs de encargada (ERP, motor sql/051-052): se guardan al instante, ⛔ con «Guardar cambios». `undefined` = sin leer; ausente = no tiene.
+  const [pines, setPines] = useState<Record<string, string> | undefined>(undefined)
+  const [pinOcupado, setPinOcupado] = useState<string | null>(null)
+  const [pinError, setPinError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!admin) return
+    let vivo = true
+    leerPines('bdi').then(
+      (r) => { if (vivo) { setPines(Object.fromEntries(r.pines.filter((p) => p.pin).map((p) => [p.usuario, p.pin as string]))); setPinError(null) } },
+      (e: Error) => { if (vivo) setPinError(e.message) },
+    )
+    return () => { vivo = false }
+  }, [admin, tick])
+  const clavePin = (u: UsuarioConfig) => u.name.trim().toLowerCase()
+  const cambiarPin = async (u: UsuarioConfig, pin: string | null) => {
+    const k = clavePin(u)
+    setPinOcupado(k)
+    try {
+      if (pin) await ponerPin(k, pin)
+      else await quitarPin(k)
+      setPines((p) => { const n = { ...(p || {}) }; if (pin) n[k] = pin; else delete n[k]; return n })
+      setPinError(null)
+    } catch (e) {
+      setPinError((e as Error).message)
+    } finally {
+      setPinOcupado(null)
+    }
+  }
+  const sinPin = (users || []).filter((u) => u.name.trim() && !(pines || {})[clavePin(u)])
+  const ponerATodos = async () => {
+    for (const u of sinPin) await cambiarPin(u, pinAlAzar())
+  }
 
   if (!admin) return <div style={{ padding: 16, color: color.mut2 }}>Solo un administrador puede gestionar usuarios.</div>
 
@@ -128,6 +162,11 @@ export function Usuarios() {
         <Button variant="ghost" onClick={() => setTick((t) => t + 1)} title="Volver a leer la configuración">
           Recargar
         </Button>
+        {pines && sinPin.length > 0 && (
+          <Button variant="outline" onClick={ponerATodos} disabled={!!pinOcupado} title="Les pone un PIN de 4 dígitos al azar a los que todavía no tienen">
+            PIN al azar a los {sinPin.length} sin PIN
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setAlta(true)} disabled={!users}>
           Agregar usuario
         </Button>
@@ -164,6 +203,12 @@ export function Usuarios() {
         </Notice>
       )}
 
+      {pinError && (
+        <Notice tone="warning" icon="⚠️" style={{ marginBottom: 12 }}>
+          PINs de encargada: {pinError}
+        </Notice>
+      )}
+
       {alta && users && <AltaGuiada usuarios={users} onCerrar={() => setAlta(false)} onCrear={crear} />}
 
       {!users ? (
@@ -192,6 +237,9 @@ export function Usuarios() {
               onCopiar={(origen, destino) => onCopiar(i, origen, destino)}
               onFuncion={(f, val) => onFuncion(i, f, val)}
               onEliminar={() => eliminar(i)}
+              {...(pines
+                ? { pin: pines[clavePin(u)] ?? null, pinCargando: pinOcupado === clavePin(u), onPinAlAzar: () => cambiarPin(u, pinAlAzar()), onPinQuitar: () => cambiarPin(u, null) }
+                : {})}
             />
           ))}
         </Card>

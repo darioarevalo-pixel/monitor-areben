@@ -18,6 +18,7 @@ import { InfoPopover } from '@/components/ui/InfoPopover'
 import { Button, color, Field, font, Input, Notice, Plegable, Select, space } from '@/components/ui'
 import { Extras } from './Extras'
 import { MatrizPermisos } from './MatrizPermisos'
+import { PinUsuario } from './PinUsuario'
 import { Resumen } from './Resumen'
 
 export function UsuarioCard({
@@ -35,6 +36,10 @@ export function UsuarioCard({
   onCopiar,
   onFuncion,
   onEliminar,
+  pin,
+  pinCargando,
+  onPinAlAzar,
+  onPinQuitar,
 }: {
   u: UsuarioConfig
   primero: boolean
@@ -51,6 +56,11 @@ export function UsuarioCard({
   onCopiar: (origen: Marca, destino: Marca) => void
   onFuncion: (f: Funcion, val: boolean) => void
   onEliminar: () => void
+  /** El PIN de encargada (sólo Admin; si la lista no lo trae, no se dibuja). */
+  pin?: string | null
+  pinCargando?: boolean
+  onPinAlAzar?: () => void
+  onPinQuitar?: () => void
 }) {
   const [ajuste, setAjuste] = useState(!!ajusteAbierto)
   const r = resumenUsuario(u)
@@ -126,6 +136,9 @@ export function UsuarioCard({
                 onChange={(e) => onCampo('email', e.target.value.trim().toLowerCase())}
               />
             </Field>
+            {onPinAlAzar && onPinQuitar && u.name && (
+              <PinUsuario pin={pin} cargando={!!pinCargando} onAlAzar={onPinAlAzar} onQuitar={onPinQuitar} />
+            )}
             <Field label="Marca">
               <Select value={u.cuenta || ''} onChange={(e) => onCuenta(e.target.value)}>
                 <option value="">BDI + Zattia</option>

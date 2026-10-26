@@ -72,14 +72,14 @@ describe('api/_erp-pin.js', () => {
     expect(db.query).not.toHaveBeenCalled()
     const r = await ponerPinErp({ body: { marca: 'bdi', persona: 'Ana', pin: '1234' }, usuario: 'bruno' }, { conMotor: conMotor(db) })
     expect(r).toEqual({ ok: true, marca: 'bdi', persona: 'ana' })
-    expect((db.query as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual(['ana', expect.any(String), expect.any(String), 'bruno'])
+    expect((db.query as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual(['ana', expect.any(String), expect.any(String), '1234', 'bruno'])
     expect(await quitarPinErp({ body: { marca: 'bdi', persona: 'ana' } }, { conMotor: conMotor(db) })).toEqual({ ok: true, marca: 'bdi', persona: 'ana' })
   })
 
-  it('la lista trae quién tiene PIN y ⛔ el hash', async () => {
-    const db: Db = { query: vi.fn(async () => ({ rows: [{ usuario: 'ana', cambiado_por: 'bruno', cambiado_en: 'ayer', bloqueado: false, bloqueado_hasta: null, hash }] })) }
+  it('la lista trae quién tiene PIN, cuál es (Bruno: visible para Admin) y ⛔ el hash', async () => {
+    const db: Db = { query: vi.fn(async () => ({ rows: [{ usuario: 'ana', pin: '4821', cambiado_por: 'bruno', cambiado_en: 'ayer', bloqueado: false, bloqueado_hasta: null, hash }] })) }
     const r = await pinesErp({ marca: 'bdi' }, { conMotor: conMotor(db) }) as { pines: Record<string, unknown>[] }
-    expect(r.pines[0]).toEqual({ usuario: 'ana', cambiado_por: 'bruno', cambiado_en: 'ayer', bloqueado: false, bloqueado_hasta: null })
+    expect(r.pines[0]).toEqual({ usuario: 'ana', pin: '4821', cambiado_por: 'bruno', cambiado_en: 'ayer', bloqueado: false, bloqueado_hasta: null })
     expect(JSON.stringify(r)).not.toContain(hash)
   })
 

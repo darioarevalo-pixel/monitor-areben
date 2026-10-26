@@ -657,3 +657,26 @@ export const ponerRoles = (marca: MarcaErp, permiso: string, roles: RolErp[]) =>
 
 export const restablecerRoles = (marca: MarcaErp, permiso: string) =>
   pedir<{ ok: true; marca: MarcaErp; guardados: Record<string, RolErp[]> }>(post({ accion: 'restablecer-roles', marca, permiso }), '', 'No se pudo restablecer.')
+
+export type PinPersona = { usuario: string; pin: string | null; cambiado_por: string; cambiado_en: string; bloqueado: boolean; bloqueado_hasta: string | null }
+
+/** Los PINs de encargada de una marca (sólo Admin; el PIN va en claro, decisión de Bruno 26-oct). */
+export const leerPines = (marca: MarcaErp) =>
+  pedir<{ marca: MarcaErp; pines: PinPersona[] }>(null, `&vista=pines&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los PINs.')
+
+/** Fija el PIN de una persona en las DOS marcas (es uno solo por persona). */
+export const ponerPin = async (persona: string, pin: string) => {
+  for (const marca of ['bdi', 'zattia'] as const) await pedir(post({ accion: 'poner-pin', marca, persona, pin }), '', 'No se pudo guardar el PIN.')
+}
+
+export const quitarPin = async (persona: string) => {
+  for (const marca of ['bdi', 'zattia'] as const) await pedir(post({ accion: 'quitar-pin', marca, persona }), '', 'No se pudo quitar el PIN.')
+}
+
+/** Cuatro dígitos al azar, sin sesgo (rechaza lo que cae fuera del múltiplo de 10 000). */
+export function pinAlAzar(): string {
+  const a = new Uint32Array(1)
+  const tope = Math.floor(0x100000000 / 10000) * 10000
+  do crypto.getRandomValues(a); while (a[0] >= tope)
+  return String(a[0] % 10000).padStart(4, '0')
+}

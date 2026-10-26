@@ -1,7 +1,7 @@
 /**
  * EL PIN DE LA ENCARGADA, por persona (paso 7, «el libro MANDA»; Bruno 25/26-oct). Tabla: sql/051.
  * Alimenta `autoriza: { usuario, motivo: 'pin_encargada' }` de la venta (`registrarVenta`, llave VENTA_SIN_NEGATIVOS).
- * 4 dígitos, 5 fallos seguidos ⇒ bloqueo de 15 min, lo fija SÓLO Admin (lo exige el monitor). ⛔ Se devuelve el hash ni el PIN.
+ * 4 dígitos, 5 fallos seguidos ⇒ bloqueo de 15 min, lo fija SÓLO Admin (lo exige el monitor). ⛔ Se devuelve el hash; el PIN, sólo en `pinesDe` (Admin).
  * Esto sólo dice si el PIN es de esa persona; si su ROL puede autorizar en la marca lo decide el monitor (permiso `autorizar-pin`).
  * Los intentos se reservan ANTES de comparar, en un solo UPDATE: diez pedidos en paralelo ⛔ prueban más de 5 claves.
  */
@@ -24,10 +24,10 @@ export async function ponerPin(db, { usuario, pin, por }) {
   if (!FORMA_PIN.test(String(pin ?? ''))) return falla('PIN_INVALIDO', `El PIN son ${LARGO} dígitos`, { campo: 'pin' })
   const sal = randomBytes(16).toString('hex')
   await db.query(
-    `insert into erp_pin (usuario, hash, sal, cambiado_por) values ($1, $2, $3, $4)
-     on conflict (usuario) do update set hash = excluded.hash, sal = excluded.sal, intentos = 0, bloqueado_hasta = null,
+    `insert into erp_pin (usuario, hash, sal, pin, cambiado_por) values ($1, $2, $3, $4, $5)
+     on conflict (usuario) do update set hash = excluded.hash, sal = excluded.sal, pin = excluded.pin, intentos = 0, bloqueado_hasta = null,
        cambiado_por = excluded.cambiado_por, cambiado_en = now()`,
-    [u, hashear(pin, sal), sal, admin],
+    [u, hashear(pin, sal), sal, String(pin), admin],
   )
   return { ok: true }
 }
@@ -69,9 +69,9 @@ export async function verificarPin(db, { usuario, pin }) {
   return falla('PIN_INCORRECTO', 'PIN incorrecto', { quedan: r.intentos === 0 ? 0 : MAX_FALLOS - r.intentos })
 }
 
-/** Quién tiene PIN, desde cuándo y quién lo puso (para la pantalla de Admin). ⛔ Nunca el hash. */
+/** Quién tiene PIN, cuál es (Bruno 26-oct: visible para el Admin, ⛔ cifrado), desde cuándo y quién lo puso. Sólo para la pantalla de Admin. ⛔ Nunca el hash. */
 export async function pinesDe(db) {
   const { rows } = await db.query(
-    `select usuario, cambiado_por, cambiado_en, (bloqueado_hasta > now()) as bloqueado, bloqueado_hasta from erp_pin order by usuario`)
-  return rows.map((f) => ({ usuario: f.usuario, cambiado_por: f.cambiado_por, cambiado_en: f.cambiado_en, bloqueado: !!f.bloqueado, bloqueado_hasta: f.bloqueado ? f.bloqueado_hasta : null }))
+    `select usuario, pin, cambiado_por, cambiado_en, (bloqueado_hasta > now()) as bloqueado, bloqueado_hasta from erp_pin order by usuario`)
+  return rows.map((f) => ({ usuario: f.usuario, pin: f.pin ?? null, cambiado_por: f.cambiado_por, cambiado_en: f.cambiado_en, bloqueado: !!f.bloqueado, bloqueado_hasta: f.bloqueado ? f.bloqueado_hasta : null }))
 }
