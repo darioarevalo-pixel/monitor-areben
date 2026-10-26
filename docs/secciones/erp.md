@@ -393,6 +393,16 @@ impresión; la ventana se abre en el clic y se llena cuando llega la cuenta. (2)
 `lib/erp/inicio-roles.core.js`): cambia las tarjetas de «Para hacer» y el resultado comercial sólo lo ve Admin; cada renglón apunta
 a una vista que existe en su lista (test). Sin tile de cheques. Tests `erp-resumen-cuenta`, `erp-resumen-cuenta-pantalla`, `erp-inicio-ver-como`.
 
+🎨 **Búsqueda global (⌘K) y atajos** (26-oct, Resto; `Piezas.dc.html`). `components/erp/BusquedaGlobal.tsx` + núcleo `lib/erp/busqueda-global.core.js`
+(test `erp-busqueda-global`). ⌘K / Ctrl+K abren siempre; «/» y «?» sólo fuera de un campo (`accionDeTecla`); botón «Buscar» en el pie del menú.
+🔑 ⛔ **Sin lectura nueva**: reparte lo escrito entre `buscarVentas` (número o cliente), `buscarPrendas` (SKU, código, nombre) y
+`buscarClientas` (DNI/CUIT, nombre) — `queBuscar` — y suma saltos a pantallas (`saltosA`). Las ventas se buscan sólo en **este mes y el
+mes pasado** (`desdeBusquedaDeVentas`): son los dos períodos que Ventas puede listar, así toda venta encontrada se abre. Pedido de TN y
+factura (`TN-…`, `B-0005-…`) ⛔ tienen lectura por número ⇒ no se buscan (el cartel lo dice). «Buscar en todas las marcas» corre las
+lecturas en BDI y Zattia. Enter abre: la prenda en `FichaPrenda` encima de lo que hay; la venta/cliente viajan en memoria (`aAbrir`, como
+`aAjustar`) y `VentasErp`/`ClientesErp` la abren al llegar su lista (`abrir`/`alAbrir`). Un escaneo (8+ cifras) + Enter espera la lectura y
+abre si hay UNA sola coincidencia. «?» abre la hoja de atajos (`ATAJOS`; los de la Caja, F2/F4, ⛔ se tocan).
+
 ## Pendiente
 
 Factura A en la masiva (en la Caja ya está) · NC PARCIAL (la del cambio) · los datos del emisor para el PDF · reabrir un mes ·
