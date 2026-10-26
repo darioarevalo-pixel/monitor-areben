@@ -12,8 +12,9 @@ import { hoyISO } from '@/lib/crm/seguimiento'
 import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
-import { armarFilasPedidos, claveContacto, leerContactados, marcarContactado, traerPedidosCatalogo, type FilaPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
+import { armarFilasPedidos, claveContacto, leerContactados, linksDePedidos, marcarContactado, mensajeLink, traerPedidosCatalogo, type FilaPedido, type LinkPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
 import { tomar } from '@/lib/crm/precarga'
+import { copiarAlPortapapeles } from '@/lib/portapapeles'
 import { enGrupoDeposito, estadoDeposito, faltanUnidades, pasoPanel, pendientesLogistica, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
 import { mostrar as plata } from '@/lib/compromisos/core'
 
@@ -549,6 +550,31 @@ function useContactados(): [Set<string> | null, (clave: string, marcado: boolean
 }
 
 /**
+ * Copiar el link del pedido con su total (Darío, 26-oct-2026: «gente que a veces no guarda los
+ * links»). Cuadrado como el ✓ y el de WhatsApp; el ✓ verde dura un momento y sólo sale si copió de
+ * verdad.
+ */
+function BotonLink({ l }: { l: LinkPedido }) {
+  const [copiado, setCopiado] = useState<boolean | null>(null)
+  const copiar = async () => {
+    const ok = await copiarAlPortapapeles(mensajeLink(l, plata))
+    setCopiado(ok)
+    setTimeout(() => setCopiado(null), 1400)
+  }
+  return (
+    <button
+      type="button"
+      onClick={copiar}
+      title={copiado === false ? 'No se pudo copiar' : copiado ? 'Copiado: pegalo en el chat' : `Copiar el link del pedido (total ${plata(l.total)})`}
+      aria-label="Copiar el link del pedido"
+      style={{ width: 32, minWidth: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', borderRadius: radius.md, border: `1px solid ${copiado ? color.success : color.line}`, background: copiado ? color.successBg : color.bg2, color: copiado ? color.successInk : color.ink, fontSize: 14, cursor: 'pointer' }}
+    >
+      {copiado ? '✓' : copiado === false ? '!' : '🔗'}
+    </button>
+  )
+}
+
+/**
  * Un pedido, en dos renglones como Logística (diseño del 25-oct-2026): el nombre, y abajo
  * 🟧 «Pendiente · Contactar · $total» o 🟩 «Contactado». Sin hora ni unidades: poco texto.
  *
@@ -589,6 +615,7 @@ function FilaDePedido({
         </div>
       </button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
+        {p.link && <BotonLink l={{ link: p.link, total: p.total }} />}
         <button
           type="button"
           disabled={soloAuto}
@@ -736,11 +763,13 @@ function FilaLogistica({
   onAbrir,
   onFicha,
   apagada,
+  link,
 }: {
   p: PendienteLogistica
   onAbrir: (id: number, tel: string) => void
   onFicha: (id: number, tel: string) => void
   apagada?: boolean
+  link?: LinkPedido
 }) {
   const id = Number(p.gn_client_id) || 0
   const tel = p.client_phone || ''
@@ -789,7 +818,8 @@ function FilaLogistica({
           )}
         </div>
       </button>
-      <div style={{ display: 'flex', alignItems: 'center', padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
+        {link && <BotonLink l={link} />}
         <button
           type="button"
           disabled={!tel}
@@ -809,6 +839,21 @@ function FilaLogistica({
  * «Pendientes en Logística», debajo de los pedidos del catálogo. Sin pendientes no se dibuja. Lo
  * tuyo arriba; lo que espera al depósito, plegado en «En depósito · N».
  */
+/** Los links del catálogo de los pedidos en Logística. Se piden de nuevo sólo si cambian los números. */
+function useLinksLogistica(orders: PendienteLogistica[]): Record<string, LinkPedido> {
+  const numeros = orders.map((p) => p.gn_number || '').filter(Boolean).sort().join(',')
+  const [links, setLinks] = useState<Record<string, LinkPedido>>({})
+  useEffect(() => {
+    if (!numeros) return
+    let vivo = true
+    linksDePedidos(numeros.split(',')).then((l) => vivo && setLinks(l))
+    return () => {
+      vivo = false
+    }
+  }, [numeros])
+  return links
+}
+
 function GrupoLogistica({
   r,
   onActualizar,
@@ -827,6 +872,7 @@ function GrupoLogistica({
   onFicha: (id: number, tel: string) => void
 }) {
   const [depositoAbierto, setDepositoAbierto] = useState(false)
+  const links = useLinksLogistica(r && r.t === 'ok' ? r.datos.orders : [])
   // 🔑 Vacío también se ve (con 0): si no, el «↻ Actualizar» desaparecía justo cuando se lo busca,
   // esperando que entre un pedido.
   if (!r || r.t === 'sin-permiso') return null
@@ -848,7 +894,7 @@ function GrupoLogistica({
     >
       {r.t === 'error' && <Aclaracion>No pude traer los pedidos de Logística. {r.motivo}</Aclaracion>}
       {mios.map((p) => (
-        <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} />
+        <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} link={p.gn_number ? links[p.gn_number.replace(/\D/g, '')] : undefined} />
       ))}
       {r.t === 'ok' && !mios.length && <Aclaracion>De tu parte no hay nada pendiente.</Aclaracion>}
       {deposito.length > 0 && (
@@ -861,7 +907,7 @@ function GrupoLogistica({
           >
             {depositoAbierto ? '▾' : '▸'} En depósito · {deposito.length}
           </button>
-          {depositoAbierto && deposito.map((p) => <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} apagada />)}
+          {depositoAbierto && deposito.map((p) => <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} apagada link={p.gn_number ? links[p.gn_number.replace(/\D/g, '')] : undefined} />)}
         </>
       )}
     </Grupo>

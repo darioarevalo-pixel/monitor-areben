@@ -15,7 +15,8 @@ import { leEscribisteHoy, type EscritosHoy } from './escritos'
  */
 const API = 'https://bdi-catalogo.vercel.app/api/pedido?panel=1'
 
-export type PedidoCatalogo = { fecha: string; cliente: string; telefono: string; total: number; unidades: number }
+/** `link`: el que recibió el cliente al confirmar (sólo pedidos, no carritos). */
+export type PedidoCatalogo = { fecha: string; cliente: string; telefono: string; total: number; unidades: number; link?: string }
 
 export type DatosCatalogo = { pedidos: PedidoCatalogo[]; carritos: PedidoCatalogo[] }
 
@@ -31,6 +32,32 @@ export async function traerPedidosCatalogo(): Promise<ResultadoCatalogo> {
   } catch (e) {
     return { t: 'error', motivo: e instanceof Error ? e.message : String(e) }
   }
+}
+
+/** Link + total de un pedido del catálogo, por número de GN. */
+export type LinkPedido = { link: string; total: number }
+
+/**
+ * El link y el total de los pedidos de Logística, para volver a pasárselo al que lo perdió (Darío,
+ * 26-oct-2026). Sólo vuelven los que salieron del catálogo; un pedido cargado directo en GN no tiene
+ * link. Un error devuelve vacío: el botón simplemente no aparece.
+ */
+export async function linksDePedidos(numeros: string[]): Promise<Record<string, LinkPedido>> {
+  const ids = [...new Set(numeros.map((n) => n.replace(/\D/g, '')).filter(Boolean))]
+  if (!ids.length) return {}
+  try {
+    const r = await apiFetch(`${API}&ids=${ids.join(',')}`)
+    if (!r.ok) return {}
+    const d = (await r.json().catch(() => ({}))) as { links?: Record<string, LinkPedido> }
+    return d.links || {}
+  } catch {
+    return {}
+  }
+}
+
+/** Lo que se pega en el chat: el total y el link, en dos renglones. */
+export function mensajeLink(l: LinkPedido, plata: (n: number) => string): string {
+  return `Te paso el link de tu pedido (total ${plata(l.total)}):\n${l.link}`
 }
 
 /**
