@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canjeDe, consumoDe, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
+import { canjeDe, consumoDe, motivoDeConsumo, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const item = (o: Record<string, unknown>) => ({ vid: `${o.pid}_${o.sid}`, nombre: 'x', variante: 'M', sku: 'SKU', qty: 3, origen: 'deposito', ...o })
@@ -97,6 +97,11 @@ describe('consumoDe: la baja definitiva como ajustes `consumible`', () => {
   it('deja afuera lo que ⛔ tiene variante o cantidad entera', () => {
     const r = consumoDe('solicitudesinternas', consumo({ items: [item({ pid: null, sid: null }), item({ pid: '1', sid: '10', qty: 0 }), item({ pid: '3', sid: '30', qty: 1 })] }), 'zattia')
     expect(r[0].renglones.map((x: any) => x.product_id)).toEqual([3])
+  })
+  it('Moldería, Prueba y Otro son uso interno; Consumo, Video/contenido y Muestra, consumible', () => {
+    for (const m of ['Moldería', 'Prueba', 'Otro']) expect(consumoDe('solicitudesinternas', consumo({ motivo: m }), 'zattia')[0].motivo).toBe('uso_interno')
+    for (const m of ['Consumo', 'Video/contenido', 'Muestra', '']) expect(consumoDe('solicitudesinternas', consumo({ motivo: m }), 'zattia')[0].motivo).toBe('consumible')
+    expect(motivoDeConsumo(undefined)).toBe('consumible')
   })
   it('la `ref` es estable entre guardados (idempotencia)', () => {
     expect(consumoDe('solicitudesinternas', consumo(), 'zattia')).toEqual(consumoDe('solicitudesinternas', consumo({ estado: 'devuelta' }), 'zattia'))
