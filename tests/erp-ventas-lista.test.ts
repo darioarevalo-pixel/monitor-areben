@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  COLUMNAS_DE_SIEMPRE, accionesDeFila, alternarColumna, armarFila, clienteDe, contarVistas, estadoDeVenta, filtrar,
+  COLUMNAS_DE_SIEMPRE, accionesDeFila, alternarColumna, armarFila, clienteDe, contarVistas, estadoDeVenta, filtrar, ventasDeTnSinNombre,
   historialDeVenta, moverColumna, normalizarPrefs, ordenar, rangoDePeriodo, resumen, saldoDeVenta,
 } from '@/lib/erp/ventas-lista.core.js'
 import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, notaDeVentaErp, numeroDeFactura, textoDeCampo } from '../api/_erp-ventas.js'
@@ -255,5 +255,17 @@ describe('el servidor: lo que ⛔ está en el motor se frena con el motivo', () 
     expect(numeroDeFactura({ tipo: 8, pto_vta: 2, numero: 3, ambiente: 'homologacion' })).toBe('NC B 0002-00000003 (prueba)')
     expect(textoDeCampo('entrega', { tipo: 'envio', direccion: 'Mitre 123' })).toBe('Envío · Mitre 123')
     expect(textoDeCampo('cliente', null)).toBe('—')
+  })
+})
+
+describe('ventasDeTnSinNombre: las ventas de TN que hay que pedir a TN en vivo', () => {
+  const v = (extra: Record<string, unknown> = {}) => ({ origen: 'tn', origen_ref: 'stunned:2043654775', cliente: null, clienteGn: null, ...extra })
+  it('sin nombre del ERP ni de GN ⇒ se pide; con alguno de los dos ⇒ ⛔', () => {
+    const r = ventasDeTnSinNombre([v(), v({ clienteGn: 'Ana P.' }), v({ cliente: { nombre: 'Lía' } }), v({ clienteGn: 'Consumidor final', origen_ref: 'zattia:77' })])
+    expect(r).toEqual([{ i: 0, tienda: 'stunned', tnId: '2043654775' }, { i: 3, tienda: 'zattia', tnId: '77' }])
+  })
+  it('la Caja y lo que ⛔ trae un id de TN válido ⛔ se piden, y hay tope', () => {
+    expect(ventasDeTnSinNombre([v({ origen: 'caja' }), v({ origen_ref: null }), v({ origen_ref: 'stunned:abc' })])).toEqual([])
+    expect(ventasDeTnSinNombre(Array.from({ length: 5 }, (_, k) => v({ origen_ref: `bdi:${k + 1}` })), 2)).toHaveLength(2)
   })
 })

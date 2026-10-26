@@ -10,7 +10,7 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { baseFacturacion } from './_facturacion.js'
 import { rangoDeDias } from '../lib/erp/venta.core.js'
-import { armarFila } from '../lib/erp/ventas-lista.core.js'
+import { armarFila, ventasDeTnSinNombre } from '../lib/erp/ventas-lista.core.js'
 import { ADMIN } from '../lib/erp/pedidos-tn.core.js'
 import { configPg } from '../lib/pg.core.js'
 
@@ -162,8 +162,16 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
   const aCuenta = ventas.filter((v) => (v.pagos || []).some((p) => p.medio === 'cuenta')).map((v) => v.id)
   const pendientes = puede.cobrar && aCuenta.length && !deps.sb ? await leerPendientes(marca, aCuenta) : {}
   for (const v of ventas) if (v.id in pendientes) v.pendiente = pendientes[v.id]
+  // Una venta de TN sin nombre ni del ERP ni de GN (Stunned no tiene GN detrás) ⛔ queda «sin nombre» para siempre: se lee de TN EN VIVO,
+  // como el pedido sin pagar (Bruno, 26-oct; ⛔ se guarda: lo declarado a TN).
+  const crudas = ventas.map((v) => ({ ...filaCruda(v, a, numeros), origen_ref: v.origen_ref }))
+  const sinNombre = deps.compradores ? ventasDeTnSinNombre(crudas) : []
+  if (sinNombre.length) {
+    const nombres = await deps.compradores(sinNombre.map(({ tienda, tnId }) => ({ tienda, tnId })))
+    for (const { i, tienda, tnId } of sinNombre) crudas[i].clienteTn = nombres.get(`${tienda}/${tnId}`) ?? null
+  }
   const filas = [
-    ...ventas.map((v) => armarFila(filaCruda(v, a, numeros))),
+    ...crudas.map((c) => armarFila(c)),
     ...pedidos.map((p) => armarFila({
       kind: 'pedido', tienda: p.tienda, tnId: p.tnId, tnNumero: p.numero, creadaEn: p.creadaEn, total: p.total, link: p.link, unidades: p.unidades,
       dias: p.dias, medio: p.medio, gateway: p.gateway, prendas: p.prendas, entregadoSinCobrar: !!p.entregadoSinCobrar, estado: p.estado ?? null, clienteGn: null, clienteTn: p.comprador ?? null,
