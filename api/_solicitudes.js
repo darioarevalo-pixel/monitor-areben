@@ -25,7 +25,7 @@ import { baseDeLinea } from '../lib/lineas.core.js';
 // El 2º disparador de la Agenda. Armar una sesión de fotos es un hecho que prende trabajo en tres
 // sectores, y sus nueve pasos están escritos con dueña en el manual 05: acá es donde ocurre el hecho.
 import { sembrarEnMaestra } from './_agenda.js';
-import { documentarSalida } from './_salida-documento.js';
+import { documentarConsumo, documentarSalida } from './_salida-documento.js';
 // 🔑 Qué siembra cada fila del cajón —el evento sí, su hija ⛔ no, la solicitud suelta como
 // siempre— vive en el núcleo y ⛔ no en el `for` de abajo: así el test llama a la MISMA función.
 import { KINDS_QUE_SIEMBRAN, siembraDeSesion } from '../lib/sesionfotos/evento.core.js';
@@ -263,7 +263,17 @@ export default async function handler(req, res) {
         }
       }
 
-      return res.status(200).json({ ok: true, guardadas: validas.length, ...(sembrado.length ? { sembrado } : {}), ...(salidas.length ? { salidas } : {}) });
+      // El consumo (baja definitiva) va como ajuste `consumible`, ⛔ como salida: ⛔ vuelve.
+      const consumos = [];
+      if (kind === 'solicitudesinternas' && !Array.isArray(b.solicitudes)) {
+        for (const s of validas) {
+          const r = await documentarConsumo({ store, kind, solicitud: s, usuario: perfil.name || perfil.user || null });
+          if (r.error) console.error('[consumo]', store, s.id, r.error);
+          if (r.error || r.ajustes) consumos.push({ id: String(s.id), ...r });
+        }
+      }
+
+      return res.status(200).json({ ok: true, guardadas: validas.length, ...(sembrado.length ? { sembrado } : {}), ...(salidas.length ? { salidas } : {}), ...(consumos.length ? { consumos } : {}) });
     }
 
     return res.status(405).json({ error: 'método no permitido' });

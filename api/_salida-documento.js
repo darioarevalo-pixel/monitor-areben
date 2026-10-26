@@ -14,7 +14,7 @@
 //
 // ⛔ Archivo `_`: NO es una ruta.
 import { configPg } from '../lib/pg.core.js'
-import { devolverDe, pedidoDeSolicitud, volvioTodo } from '../lib/erp/salida-solicitud.core.js'
+import { consumoDe, devolverDe, pedidoDeSolicitud, volvioTodo } from '../lib/erp/salida-solicitud.core.js'
 
 const PG_DE_STORE = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA', stunned: 'DATABASE_URL_ZATTIA' }
 /** El guardado de la solicitud ya espera a Supabase: el documento no puede sumar mucho más que esto. */
@@ -55,6 +55,39 @@ export async function documentarSalida({ store, kind, solicitud, usuario }) {
       }
       const recien = new Map(aDevolver.map((d) => [d.n, d.cantidad]))
       return { ok: true, ya: c.ya, abierta: doc.renglones.reduce((s, r) => s + (r.cantidad - r.devuelta - (recien.get(r.n) ?? 0) - r.consumida - r.danada - r.perdida), 0) }
+    } finally {
+      await db.end().catch(() => {})
+    }
+  } catch (e) {
+    return { error: String((e && e.message) || e).slice(0, 200) }
+  }
+}
+
+/**
+ * El CONSUMO de una solicitud interna, anotado como ajustes `consumible` del motor (gasto de marketing al costo real; mueve el
+ * libro del ERP al instante, a nombre de quien guardó). Idempotente por `ref` (sql/050). Mismas reglas que `documentarSalida`:
+ * ⛔ frena ni lanza, y sin `DATABASE_URL_<MARCA>` ⛔ toca nada.
+ * @returns {Promise<{ ok?: true, ajustes?: number, ya?: number, sinConexion?: true, salteada?: true, error?: string }>}
+ */
+export async function documentarConsumo({ store, kind, solicitud, usuario }) {
+  try {
+    const conexion = process.env[PG_DE_STORE[store]]
+    if (!conexion) return { sinConexion: true }
+    const pedidos = consumoDe(kind, solicitud, store)
+    if (!pedidos.length) return { salteada: true }
+    const [{ default: pg }, m] = await Promise.all([import('pg'), import('../motor/stock/ajuste.mjs')])
+    const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: TECHO_MS, statement_timeout: TECHO_MS, query_timeout: TECHO_MS })
+    try {
+      await db.connect()
+      let nuevos = 0
+      let ya = 0
+      for (const p of pedidos) {
+        const r = await m.crearAjuste(db, { ...p, usuario: usuario || 'solicitudes' })
+        if (!r.ok) return { error: `${r.error.codigo}: ${r.error.mensaje}` }
+        if (r.ya) ya += 1
+        else nuevos += 1
+      }
+      return { ok: true, ajustes: nuevos, ya }
     } finally {
       await db.end().catch(() => {})
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
+import { consumoDe, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const item = (o: Record<string, unknown>) => ({ vid: `${o.pid}_${o.sid}`, nombre: 'x', variante: 'M', sku: 'SKU', qty: 3, origen: 'deposito', ...o })
@@ -68,5 +68,37 @@ describe('devolver y cerrar', () => {
     expect(volvioTodo(doc([1, 0]), [{ n: 1, cantidad: 2 }, { n: 2, cantidad: 2 }])).toBe(true)
     expect(volvioTodo(doc([1, 0]), [{ n: 1, cantidad: 2 }])).toBe(false)
     expect(volvioTodo([], [])).toBe(false)
+  })
+})
+
+describe('consumoDe: la baja definitiva como ajustes `consumible`', () => {
+  const consumo = (o: Record<string, unknown> = {}): any => sol({ id: 'si-9', tipo: 'consumo', estado: 'retirada', motivo: 'Consumo', verif: undefined, ...o })
+
+  it('uno por depósito, cantidad en negativo, `ref` = solicitud:depósito (todo `qty`, sin escaneo)', () => {
+    const r = consumoDe('solicitudesinternas', consumo(), 'zattia')
+    expect(r.map((a: any) => [a.deposito, a.ref, a.motivo])).toEqual([['deposito', 'si-9:deposito', 'consumible'], ['local', 'si-9:local', 'consumible']])
+    expect(r[0].renglones).toEqual([{ product_id: 1, size_id: 10, sku: 'SKU', cantidad: -3 }])
+    expect(r[1].renglones[0].cantidad).toBe(-2)
+    expect(consumoDe('solicitudesinternas', consumo(), 'bdi')[0].deposito).toBe('deposito_minorista')
+  })
+  it('suma la misma variante repetida en un depósito', () => {
+    const r = consumoDe('solicitudesinternas', consumo({ items: [item({ pid: '1', sid: '10' }), item({ pid: '1', sid: '10', qty: 2 })] }), 'zattia')
+    expect(r).toHaveLength(1)
+    expect(r[0].renglones).toEqual([{ product_id: 1, size_id: 10, sku: 'SKU', cantidad: -5 }])
+  })
+  it('⛔ corresponde si no es consumo, está pendiente / rechazada, la venta ⛔ salió o la marca es desconocida', () => {
+    expect(consumoDe('solicitudesinternas', consumo({ tipo: 'retornable' }), 'zattia')).toEqual([])
+    expect(consumoDe('solicitudesinternas', consumo({ estado: 'pendiente' }), 'zattia')).toEqual([])
+    expect(consumoDe('solicitudesinternas', consumo({ estado: 'rechazada' }), 'zattia')).toEqual([])
+    expect(consumoDe('solicitudesinternas', consumo({ ventas: undefined }), 'zattia')).toEqual([])
+    expect(consumoDe('sesionfotos', consumo(), 'zattia')).toEqual([])
+    expect(consumoDe('solicitudesinternas', consumo(), 'otra')).toEqual([])
+  })
+  it('deja afuera lo que ⛔ tiene variante o cantidad entera', () => {
+    const r = consumoDe('solicitudesinternas', consumo({ items: [item({ pid: null, sid: null }), item({ pid: '1', sid: '10', qty: 0 }), item({ pid: '3', sid: '30', qty: 1 })] }), 'zattia')
+    expect(r[0].renglones.map((x: any) => x.product_id)).toEqual([3])
+  })
+  it('la `ref` es estable entre guardados (idempotencia)', () => {
+    expect(consumoDe('solicitudesinternas', consumo(), 'zattia')).toEqual(consumoDe('solicitudesinternas', consumo({ estado: 'devuelta' }), 'zattia'))
   })
 })
