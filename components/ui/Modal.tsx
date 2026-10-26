@@ -9,7 +9,7 @@
  * scrollear el fondo, devolver el foco a donde estaba, y en el teléfono apoyarse abajo
  * para que llegue el pulgar.
  */
-import { createContext, useCallback, useContext, useEffect, useRef } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 export type ModalProps = {
@@ -43,6 +43,11 @@ export type ModalProps = {
    * que monta adentro, también los que arman otros archivos—.
    */
   variante?: ModalVariante
+  /**
+   * En el celular el teclado tapa el diálogo porque no achica la pantalla: con esto el diálogo se
+   * ajusta a lo que queda a la vista y el campo que se toca se acomoda solo. OPT-IN: el resto no cambia.
+   */
+  alTeclado?: boolean
   children: React.ReactNode
 }
 
@@ -52,7 +57,7 @@ export const ModalVarianteContext = createContext<ModalVariante>('normal')
 
 export function Modal({
   abierto, onCerrar, titulo, pie, ancho = 'normal',
-  cerrarConFondo = true, cerrarConEscape = true, variante, children,
+  cerrarConFondo = true, cerrarConEscape = true, variante, alTeclado = false, children,
 }: ModalProps) {
   const delArbol = useContext(ModalVarianteContext)
   const pos = (variante ?? delArbol) === 'pos'
@@ -60,6 +65,27 @@ export function Modal({
   const foco = useRef<Element | null>(null)
 
   const cerrar = useCallback(() => onCerrar(), [onCerrar])
+  const [vista, setVista] = useState<{ top: number; height: number } | null>(null)
+
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null
+    if (!abierto || !alTeclado || !vv) return
+    const medir = () => setVista({ top: vv.offsetTop, height: vv.height })
+    const alEnfocar = (e: FocusEvent) => {
+      const el = e.target as HTMLElement | null
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300)
+    }
+    medir()
+    vv.addEventListener('resize', medir)
+    vv.addEventListener('scroll', medir)
+    document.addEventListener('focusin', alEnfocar)
+    return () => {
+      vv.removeEventListener('resize', medir)
+      vv.removeEventListener('scroll', medir)
+      document.removeEventListener('focusin', alEnfocar)
+      setVista(null)
+    }
+  }, [abierto, alTeclado])
 
   // 🔴 **Lo que el efecto de abajo necesita, va por ref, y el efecto depende SÓLO de `abierto`.**
   // Casi todos los llamadores pasan `onCerrar={() => …}` inline, así que `cerrar` cambia de
@@ -105,10 +131,14 @@ export function Modal({
   if (!abierto) return null
 
   return createPortal(
-    <div className="mo-backdrop" onMouseDown={(e) => cerrarConFondo && e.target === e.currentTarget && cerrar()}>
+    <div
+      className="mo-backdrop"
+      style={vista ? { inset: 'auto', top: vista.top, left: 0, right: 0, height: vista.height } : undefined}
+      onMouseDown={(e) => cerrarConFondo && e.target === e.currentTarget && cerrar()}>
       <div
         ref={caja}
         className={`mo-modal${ancho === 'ancho' ? ' mo-modal--wide' : ancho === 'xl' ? ' mo-modal--xl' : ''}${pos ? ' mo-modal--pos' : ''}`}
+        style={vista ? { maxHeight: '100%' } : undefined}
         role="dialog"
         aria-modal="true"
         aria-label={typeof titulo === 'string' ? titulo : undefined}

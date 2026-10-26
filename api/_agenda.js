@@ -52,6 +52,8 @@ import { avisar, faltaParaMandar, guardarSuscripcion, suscripcionValida } from '
 import { armarCorreoDiario, hoyAR } from '../lib/agenda/correo-diario.core.js';
 import { avisosAlTildar, quienesSeEnteran } from '../lib/agenda/aviso-terminado.core.js';
 import { incidencias } from './_incidencias.js';
+import { textoDeRespuesta } from './_tn-desc-ia.js';
+import { SISTEMA as SISTEMA_MEJORAR, descripcionLimpia, respuestaLimpia } from '../lib/agenda/mejorar.core.js';
 import { companerasDe, perfilDe } from '../lib/agenda/celular-compartido.core.js';
 import { EQUIPO } from '../lib/agenda/correo-diario.core.js';
 import { pedirAvisoInterno } from '../lib/mailer/aviso.core.js';
@@ -1229,6 +1231,32 @@ export default async function handler(req, res) {
           }
           : {}),
       });
+    }
+
+    // ✨ «Ordenar con IA»: devuelve la propuesta y se para. ⛔ No guarda nada: aplicarla lo decide la persona.
+    if (action === 'mejorar-descripcion') {
+      const texto = descripcionLimpia(b.texto);
+      if (texto.length < 8) return res.status(400).json({ error: 'Escribí un poco más para poder ordenarla.' });
+      const clave = process.env.GEMINI_API_KEY;
+      if (!clave) return res.status(500).json({ error: 'Falta la clave de la IA en el servidor.' });
+      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': clave },
+        body: JSON.stringify({
+          model: 'gemini-3.1-flash-lite',
+          system_instruction: SISTEMA_MEJORAR,
+          input: [{ type: 'text', text: texto }],
+          store: false,
+          generation_config: { max_output_tokens: 1000, thinking_level: 'low' },
+        }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || (j && j.status && j.status !== 'completed')) {
+        return res.status(502).json({ error: 'La IA no pudo ordenarla ahora. Probá de nuevo.' });
+      }
+      const mejorada = respuestaLimpia(textoDeRespuesta(j));
+      if (!mejorada) return res.status(502).json({ error: 'La IA no devolvió nada. Probá de nuevo.' });
+      return res.status(200).json({ ok: true, texto: mejorada });
     }
 
     if (action === 'guardar-item') {

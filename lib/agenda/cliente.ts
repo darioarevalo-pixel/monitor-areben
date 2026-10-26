@@ -124,6 +124,12 @@ export function guardarItem(item: ItemAgenda): Promise<void> {
   return postear({ action: 'guardar-item', item }, 'No se pudo guardar el pendiente.')
 }
 
+/** ✨ La descripción ordenada por la IA. No guarda nada: devuelve la propuesta. */
+export async function mejorarDescripcion(texto: string): Promise<string> {
+  const d = await postearConRespuesta({ action: 'mejorar-descripcion', texto }, 'No se pudo ordenar la descripción.')
+  return String(d.texto || '')
+}
+
 export function borrarItem(id: string): Promise<void> {
   return postear({ action: 'borrar-item', id }, 'No se pudo eliminar el pendiente.')
 }

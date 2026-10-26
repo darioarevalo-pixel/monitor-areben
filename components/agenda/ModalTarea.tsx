@@ -14,6 +14,7 @@ import { Button, Field, Input, Modal, Notice, color, font, space } from '@/compo
 import { hoyIso, type ItemAgenda } from '@/lib/agenda'
 import { sumarDias } from '@/lib/calendario'
 import { EQUIPO_AGENDA } from '@/lib/agenda/equipo'
+import { mejorarDescripcion } from '@/lib/agenda/cliente'
 import { Tilde } from './EditorRegla'
 import { EditorFotos } from './FotosTarea'
 import { itemVacio } from './ModalItem'
@@ -38,11 +39,25 @@ export function ModalTarea({
   const [cuando, setCuando] = useState<Cuando>('hoy')
   const [otra, setOtra] = useState(sumarDias(hoy, 2))
   const [reserva, setReserva] = useState(false)
+  // ✨ La propuesta de la IA: se muestra aparte y ⛔ no pisa lo escrito hasta que se aplica.
+  const [propuesta, setPropuesta] = useState<string | null>(null)
+  const [ordenando, setOrdenando] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const fecha = cuando === 'hoy' ? hoy : cuando === 'manana' ? sumarDias(hoy, 1) : otra
   const listo = titulo.trim() && (reserva || (para.length && fecha >= hoy))
+
+  const ordenar = async () => {
+    setOrdenando(true)
+    setError(null)
+    try {
+      setPropuesta(await mejorarDescripcion(desc))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo ordenar la descripción.')
+    }
+    setOrdenando(false)
+  }
 
   const guardar = async () => {
     if (!listo) return
@@ -73,6 +88,7 @@ export function ModalTarea({
       onCerrar={onCerrar}
       titulo="Nueva tarea"
       cerrarConFondo={false}
+      alTeclado
       pie={
         <>
           <Button variant="soft" tone="neutral" onClick={onCerrar}>Cancelar</Button>
@@ -88,7 +104,7 @@ export function ModalTarea({
         <Field label="Descripción (opcional)">
           <textarea
             value={desc}
-            onChange={(e) => setDesc(e.target.value)}
+            onChange={(e) => { setDesc(e.target.value); setPropuesta(null) }}
             rows={3}
             placeholder="Instrucciones, ubicación, detalles"
             style={{
@@ -97,6 +113,21 @@ export function ModalTarea({
               background: 'transparent', color: color.ink, resize: 'vertical',
             }}
           />
+          {desc.trim().length >= 8 && !propuesta && (
+            <div style={{ marginTop: space[2] }}>
+              <Button variant="soft" tone="brand" onClick={ordenar} disabled={ordenando}>{ordenando ? 'Ordenando…' : '✨ Ordenar con IA'}</Button>
+            </div>
+          )}
+          {propuesta && (
+            <div style={{ marginTop: space[2], border: `1px solid ${color.line2}`, borderRadius: 10, padding: space[3], display: 'grid', gap: space[2] }}>
+              <div style={{ fontSize: font.sm, color: color.ink2 }}>Así quedaría</div>
+              <div style={{ whiteSpace: 'pre-wrap', color: color.ink }}>{propuesta}</div>
+              <div style={{ display: 'flex', gap: space[2] }}>
+                <Button variant="solid" tone="brand" onClick={() => { setDesc(propuesta); setPropuesta(null) }}>Aplicar</Button>
+                <Button variant="soft" tone="neutral" onClick={() => setPropuesta(null)}>Descartar</Button>
+              </div>
+            </div>
+          )}
         </Field>
         <Field label="Fotos (opcional)">
           <EditorFotos fotos={fotos} onChange={setFotos} />
