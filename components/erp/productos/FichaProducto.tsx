@@ -145,7 +145,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
 
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         <Button variant={cargar ? 'outline' : undefined} disabled={!f} onClick={() => setCargar((x) => !x)}>{cargar ? 'Cerrar la carga' : 'Cargar precio o costo'}</Button>
-        <Button variant="outline" disabled={!fila} onClick={() => setEditar((x) => !x)}>{editar ? 'Cerrar la edición' : 'Editar producto'}</Button>
+        <Button variant="outline" disabled={!fila} onClick={() => setEditar((x) => !x)}>{editar ? 'Cerrar la corrección' : 'Corregir datos'}</Button>
         <MenuAcciones acciones={menu} etiqueta={`Más acciones del producto ${nombre}`} vertical />
       </div>
 
@@ -155,8 +155,8 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
       {editar && fila && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2], padding: space[3], border: `1px solid ${color.line}`, borderRadius: 12 }}>
           <div>
-            <h3 style={h3}>Editar el producto</h3>
-            <div style={{ fontSize: font.sm, color: color.mut }}>nombre, categoría, y talle, SKU y código de cada variante · queda quién y el antes y el después</div>
+            <h3 style={h3}>Corregir datos</h3>
+            <div style={{ fontSize: font.sm, color: color.mut }}>nombre, categoría y, de cada variante, talle, SKU y código de barras · el alta del producto es en Ingresos · queda quién y el antes y el después</div>
           </div>
           <EditarProducto key={`${producto}-${vuelta}`} marca={marca} fila={fila} onError={setError} onListo={(h, aviso) => { setHecho(h); if (aviso) setError(aviso); releer() }} />
         </section>

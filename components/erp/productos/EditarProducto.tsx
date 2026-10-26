@@ -2,7 +2,7 @@
 
 /**
  * «Editar el producto» en la ficha de Productos (Bruno, 20-oct: «se tiene que poder hacer»): nombre y categoría del producto;
- * talle, SKU y código de barras de cada variante; agregar una variante; desactivar el producto. Habla con `api/_erp-catalogo.js`
+ * talle, SKU y código de barras de cada variante; agregar una variante. ⛔ Sin «desactivar» ni «archivar»: no hay vuelta desde la pantalla y el v8 no lo dibuja. Habla con `api/_erp-catalogo.js`
  * (motor `catalogo-edicion.mjs`, sql/037). Cada cambio guarda quién, antes y después, y queda en «Cambios de la ficha».
  *
  * 🔴 Editar una fila que vino de GN la pasa a «cargada»: la copia de GN ⛔ la actualiza más. Por eso se avisa ANTES de guardar.
@@ -90,18 +90,6 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
     onListo(`Variante ${nueva.talle.trim()} agregada.`, aviso(r))
   }, 'No se pudo agregar la variante.')
 
-  const desactivar = () => correr(async () => {
-    const ok = await confirmar({
-      titulo: `Desactivar ${fila.nombre}`,
-      mensaje: <p>El producto deja de aparecer en las listas del ERP. No se borra nada: queda en el historial y se puede volver a activar desde la base.</p>,
-      ok: 'Desactivar',
-      tono: 'danger',
-    })
-    if (!ok) return
-    const r = await editarProductoErp(marca, fila.producto, { activo: false })
-    onListo(dicho(r, 'Producto'), aviso(r))
-  }, 'No se pudo desactivar.')
-
   const fila3: React.CSSProperties = { display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }
   const poner = (talle: string, k: 'talle' | 'sku' | 'barcode', t: string) => setVars((m) => ({ ...m, [talle]: { ...m[talle], [k]: t } }))
 
@@ -133,7 +121,6 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
       ) : (
         <div style={fila3}>
           <Button variant="outline" disabled={trabajando} onClick={() => setNueva({ talle: '', sku: '', barcode: '' })}>Agregar una variante</Button>
-          <Button variant="outline" disabled={trabajando} onClick={() => void desactivar()}>Desactivar el producto</Button>
         </div>
       )}
     </div>

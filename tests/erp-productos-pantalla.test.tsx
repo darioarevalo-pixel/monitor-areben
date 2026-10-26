@@ -117,11 +117,11 @@ describe('la lista de productos', () => {
     expect(leerListaDeProductos).toHaveBeenCalledTimes(2)
   })
 
-  it('«Editar producto» cambia el nombre y el código de una variante, y manda sólo lo que cambió', async () => {
+  it('«Corregir datos» cambia el nombre y el código de una variante, y manda sólo lo que cambió', async () => {
     await montar()
     await clic(filaDe('TOP SAHARA'))
     const f = ficha()!
-    await clic(boton('Editar producto', f))
+    await clic(boton('Corregir datos', f))
     const poner = async (input: HTMLInputElement, v: string) => act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, v); input.dispatchEvent(new Event('input', { bubbles: true }))
     })

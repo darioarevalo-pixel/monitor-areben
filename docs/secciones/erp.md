@@ -182,6 +182,11 @@ Núcleo `lib/erp/facturacion-lista.core.js`; el Nº, la clienta y las facturas d
   efectivo esperado EN VIVO (el `action=turno` de siempre: lo calcula la Caja y lee GN, 1–10 s, por separado). Lista: lectura
   nueva `action=turnos&desde&hasta` de `api/_caja.js` (`caja_turno` por `abierto_en`, tope 500). Núcleo `lib/erp/cajas.core.js`
   (`tests/erp-cajas.test.ts`). Abrir, contar y cerrar ⛔ acá: en la Caja.
+- 🔑 **`erp › Productos y precios › Productos` › «Corregir datos»** (🎨 26-oct, Resto; el botón se llama como en el v8, tablero 5): en la ficha, nombre y categoría
+  del producto y, de cada variante, talle · SKU · código de barras, más «Agregar una variante». Cada «Guardar» confirma con el antes → después y avisa que lo
+  que venía de GN pasa a «cargada» (la copia de GN ⛔ lo pisa más); abajo, «Cambios de la ficha» (quién, antes → después). Sólo Admin (permiso `configurar`
+  de la puerta `api/_erp-catalogo.js`; motor `catalogo-edicion.mjs`, sql/037). ⛔ «Desactivar»/«Archivar»: sin vuelta desde la pantalla y el v8 no lo dibuja; ⛔ alta (nace en
+  Ingresos). Pantalla `components/erp/productos/EditarProducto.tsx`, test `tests/erp-productos-pantalla.test.tsx`.
 - 🔑 **`erp › Productos y precios › Precios`** (🎨 20-oct, Diseño 9: pestaña «Precios» del tablero 5 del v8): SÓLO LECTURA, las
   mismas filas de Productos (`vista=productos-lista`) en una grilla de listas —Local · Online · Mayorista— + «Oferta o liquidación»
   (la liquidación EN CURSO del monitor, `liquidaciones`/`liquidacion_items` aplicados, manda; si no, el precio «Tienda Nube con
