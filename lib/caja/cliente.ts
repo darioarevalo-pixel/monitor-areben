@@ -71,6 +71,8 @@ export type Venta = {
   paga_con: number | null
   email: string | null
   gn_number: number | null
+  /** El número que le dio el ERP (ventas de Stunned, `destino = 'erp'`); `gn_number` es el de GN. */
+  erp_numero?: number | null
   /** Cómo quedó el ticket por mail: `encolado`, `ya estaba`, `sin automation`, `error: …`, o null. */
   ticket_mail?: string | null
   usuario: string | null

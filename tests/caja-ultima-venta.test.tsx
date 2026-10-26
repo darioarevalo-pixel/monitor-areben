@@ -43,3 +43,16 @@ describe('UltimaVenta', () => {
     expect(caja.textContent).not.toContain('si no salió')
   })
 })
+
+describe('UltimaVenta · de qué sistema es el número', () => {
+  const pintar = (venta: object) => act(() => raiz.render(<UltimaVenta venta={venta as never} regalo={false} onReimprimir={() => {}} onOtra={() => {}} />))
+  it('una venta de GN dice «#número · en Gestión Nube»', () => {
+    pintar(VENTA)
+    expect(caja.textContent).toContain('Venta #30613'); expect(caja.textContent).toContain('en Gestión Nube')
+  })
+  it('una venta del ERP dice SU número y «en el ERP» (⛔ #null ni Gestión Nube)', () => {
+    pintar({ ...(VENTA as object), estado: 'en_erp', gn_number: null, erp_numero: 19 })
+    expect(caja.textContent).toContain('Venta #19'); expect(caja.textContent).toContain('en el ERP')
+    expect(caja.textContent).not.toContain('null'); expect(caja.textContent).not.toContain('Gestión Nube')
+  })
+})

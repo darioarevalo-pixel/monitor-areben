@@ -707,7 +707,8 @@ export function UltimaVenta({
   /** Las cuentas de efectivo: el vuelto es lo que pagó de más sobre ellas. */
   esEfectivo?: (id: number) => boolean
 }) {
-  const enGn = venta.estado === 'en_gn' || venta.estado === 'en_erp'
+  const enErp = venta.estado === 'en_erp'
+  const enGn = venta.estado === 'en_gn' || enErp
   const tono = enGn ? { fg: color.successInk, bg: color.successBg, borde: color.successBorder } : { fg: color.dangerInk, bg: color.dangerBg, borde: color.dangerBorder }
   const medios = nombreCuenta ? [...new Set(venta.pagos.map((p) => nombreCuenta(p.cuenta)))].join(' + ') : ''
   const enEfectivo = esEfectivo ? venta.pagos.filter((p) => esEfectivo(p.cuenta)).reduce((s, p) => s + p.monto, 0) : 0
@@ -722,10 +723,10 @@ export function UltimaVenta({
       </span>
       <div style={{ flex: '1 1 200px', minWidth: 0 }}>
         <b style={{ display: 'block', fontSize: font.lg, color: color.ink }}>
-          {enGn ? `Venta #${venta.gn_number} · ${plata(venta.total)}` : `Venta provisoria ${numeroProvisorio(venta.id)} · ${plata(venta.total)}`}
+          {enGn ? `Venta #${enErp ? venta.erp_numero ?? '—' : venta.gn_number} · ${plata(venta.total)}` : `Venta provisoria ${numeroProvisorio(venta.id)} · ${plata(venta.total)}`}
         </b>
         <span style={{ display: 'block', fontSize: font.base, color: enGn ? color.ink2 : color.dangerInk }}>
-          {enGn ? 'en Gestión Nube' : `pendiente en Gestión Nube (${venta.ultimo_error ?? 'sin respuesta'}) · reintento automático`}
+          {enGn ? (enErp ? 'en el ERP' : 'en Gestión Nube') : `pendiente en Gestión Nube (${venta.ultimo_error ?? 'sin respuesta'}) · reintento automático`}
         </span>
         {(medios || vuelto > 0 || venta.email) && (
           <span style={{ display: 'block', fontSize: font.base, color: color.ink2 }}>

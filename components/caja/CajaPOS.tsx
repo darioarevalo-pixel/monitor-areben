@@ -716,7 +716,7 @@ function POS() {
       cobro: c,
       medio: !varios && pagos[0]?.medio ? NOMBRE_MEDIO[pagos[0].medio] : null,
       email: bor.email,
-      ultima: ultima ? { numero: ultima.venta.gn_number, email: ultima.venta.email } : null,
+      ultima: ultima ? { numero: ultima.venta.gn_number ?? ultima.venta.erp_numero ?? null, email: ultima.venta.email } : null,
     }),
   )
   useEffect(() => {

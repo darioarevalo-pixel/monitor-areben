@@ -45,13 +45,13 @@ async function anotarCada(db, registrarVenta, ventas) {
  * La venta de STUNNED: el motor ES la venta (⛔ copia de GN). A diferencia de `anotarEnMotor`, sin conexión o con
  * error DEVUELVE el fallo (la cajera lo ve y se reintenta). `prueba`: `CAJA_STUNNED_PRUEBA !== '0'` (el ensayo
  * general corre en prueba; la real se prende con `0`, y esa SÍ mueve el libro). ⛔ Lanza.
- * @param {string} store @param {any} venta la fila de `caja_venta` @returns {Promise<{ ok: true } | { ok: false, error: string, reintentable?: boolean }>}
+ * @param {string} store @param {any} venta la fila de `caja_venta` @returns {Promise<{ ok: true, numero: number | null } | { ok: false, error: string, reintentable?: boolean }>}
  */
 export async function registrarEnErp(store, venta, env = process.env) {
   const prueba = env.CAJA_STUNNED_PRUEBA !== '0';
   const r = await conMotor(store, async (db, registrarVenta) => {
     const out = await registrarVenta(db, entradaDelMotorErp(venta, { prueba }));
-    return out.ok ? { ok: true } : { ok: false, error: `${out.error.codigo}: ${out.error.mensaje}`, reintentable: out.error.codigo !== 'CONFLICTO_IDEMPOTENCIA' };
+    return out.ok ? { ok: true, numero: Number(out.venta?.numero) || null } : { ok: false, error: `${out.error.codigo}: ${out.error.mensaje}`, reintentable: out.error.codigo !== 'CONFLICTO_IDEMPOTENCIA' };
   });
   if (r.sinConexion) return { ok: false, error: 'El ERP no está conectado (falta DATABASE_URL en Vercel).', reintentable: true };
   if (r.error) return { ok: false, error: `No se pudo hablar con el ERP (${r.error}).`, reintentable: true };

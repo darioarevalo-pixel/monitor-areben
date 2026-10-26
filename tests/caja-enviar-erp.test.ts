@@ -35,6 +35,16 @@ describe('enviarVentaErp', () => {
     const r = await enviarVentaErp({ ...venta }, { sb, registrar: async () => { llamadas++; return { ok: true } } })
     expect(llamadas).toBe(1); expect(f.estado).toBe('en_erp'); expect(r.venta.estado).toBe('en_erp'); expect(r.reintentable).toBe(false)
   })
+  it('guarda el número que el ERP le dio a la venta (⛔ en gn_number: es de otro sistema)', async () => {
+    const { sb, f } = baseFalsa(venta)
+    await enviarVentaErp({ ...venta }, { sb, registrar: async () => ({ ok: true, numero: 19 }) })
+    expect(f.erp_numero).toBe(19); expect(f.gn_number).toBeUndefined()
+  })
+  it('si el motor no devolvió número queda null, ⛔ rompe la venta', async () => {
+    const { sb, f } = baseFalsa(venta)
+    await enviarVentaErp({ ...venta }, { sb, registrar: async () => ({ ok: true }) })
+    expect(f.estado).toBe('en_erp'); expect(f.erp_numero).toBeNull()
+  })
   it('si el motor falla queda en error y reintentable (⛔ cae a GN)', async () => {
     const { sb, f } = baseFalsa(venta)
     const r = await enviarVentaErp({ ...venta }, { sb, registrar: async () => ({ ok: false, error: 'SIN_STOCK: no está' }) })
