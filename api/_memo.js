@@ -46,6 +46,8 @@ import { exigirUsuario } from './_auth.js';
 import { leerTodo } from '../lib/supabase/paginar.core.js';
 import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
 import { skuParaLinea } from '../lib/lineas.core.js';
+import { sumarVentasDelErp } from '../lib/stunned/ventas-erp.core.js';
+import { ventasStunnedDelErp } from './_stunned-erp.js';
 import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
 import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js';
 import { claveValida, cerrada, esFecha, hoyAr, idSemana, puedeEscribirBloque, semanaAnterior, semanaDe } from '../lib/memo/semana.core.js';
@@ -92,15 +94,20 @@ async function traerRango(store, desde, hasta) {
     // pestaña «Día a día», que usa `facturadoDeVenta` sobre las mismas ventas.
     const ventas = await leerTodo(sb, 'ventas', (q) =>
       q.select('id, date_sale, channel, discount, shipping_cost').gte('date_sale', desde).lte('date_sale', hasta).order('id'));
-    if (!ventas.length) return { ventas: [], detalles: [], skuPor: null };
+    // Stunned que nace en el ERP (llave `LECTURAS_STUNNED_ERP`): se suma a lo de GN, con su misma forma.
+    const erp = store === 'zattia' ? await ventasStunnedDelErp(desde, hasta) : { activa: false };
+    if (!ventas.length && !erp.ventas?.length) return { ventas: [], detalles: [], skuPor: null, ...(erp.error ? { error: erp.error } : {}) };
 
     // `venta_detalles` no tiene fecha propia: el sale_id es el único puente. El rango de ids
     // arrastra ventas de otras fechas, y por eso el cruce de `ventaPorLinea` filtra por la fecha
     // real y no por el rango.
-    const min = ventas[0].id;
-    const max = ventas[ventas.length - 1].id;
-    const detalles = await leerTodo(sb, 'venta_detalles', (q) =>
-      q.select('sale_id, product_id, quantity, total').gte('sale_id', min).lte('sale_id', max).order('sale_id'));
+    let detalles = [];
+    if (ventas.length) {
+      const min = ventas[0].id;
+      const max = ventas[ventas.length - 1].id;
+      detalles = await leerTodo(sb, 'venta_detalles', (q) =>
+        q.select('sale_id, product_id, quantity, total').gte('sale_id', min).lte('sale_id', max).order('sale_id'));
+    }
 
     // El SKU sólo hace falta en Zattia, que es donde vive Stunned. Pedirlo en BDI sería una consulta
     // entera para una pregunta cuya respuesta ya se sabe.
@@ -115,7 +122,9 @@ async function traerRango(store, desde, hasta) {
       }
     }
 
-    return { ventas, detalles, skuPor };
+    if (erp.activa && !erp.error) return sumarVentasDelErp({ ventas, detalles, skuPor }, erp);
+    // Con la llave prendida y el ERP caído, lo de GN sale igual PERO con el aviso: ⛔ Stunned en cero sin decirlo.
+    return { ventas, detalles, skuPor, ...(erp.error ? { error: erp.error } : {}) };
   } catch (e) {
     return { error: `${store}: ${e.message}`, ventas: [], detalles: [], skuPor: null };
   }

@@ -37,6 +37,8 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
 import { baseDeLinea, esLinea, skuParaLinea } from '../lib/lineas.core.js';
+import { sumarVentasDelErp } from '../lib/stunned/ventas-erp.core.js';
+import { ventasStunnedDelErp } from './_stunned-erp.js';
 import { contribucionPorCanal, ventanaUltimos } from '../lib/norte/contribucion.core.js';
 import { pylPorLinea } from '../lib/norte/pyl.core.js';
 import { canalDeMeta, esMedidor, medidorDe } from '../lib/norte/medidores.core.js';
@@ -155,7 +157,10 @@ async function contribucionDe(supabase, store, reglas) {
   // medidos sobre poblaciones distintas — y multiplicar uno por otro daría un número que no
   // existe. Medido el 18-ago: en BDI son 11 unidades que aportan −$15.608 de contribución, porque
   // salen con descuento del 100% y el costo es real.
-  const ventas = crudas.filter((v) => !esVentaTecnica(v));
+  // Stunned que nace en el ERP (llave `LECTURAS_STUNNED_ERP`, apagada hasta el corte): se suma con la forma de GN.
+  // Con el ERP caído y la llave prendida el P&L sale igual, ⛔ callado: el aviso viaja en `aviso`.
+  const erp = store === 'zattia' ? await ventasStunnedDelErp(hace45, new Date().toISOString().slice(0, 10)) : { activa: false };
+  const ventas = [...crudas.filter((v) => !esVentaTecnica(v)), ...(erp.ventas || [])].sort((x, y) => Number(x.id) - Number(y.id));
 
   const ventana = ventanaUltimos(ventas.map((v) => v.date_sale), 30);
   if (!ventana) return sinPlata('No hay ventas en los últimos 45 días.', null);
@@ -166,10 +171,15 @@ async function contribucionDe(supabase, store, reglas) {
   });
   if (!enVentana.length) return sinPlata('No hay ventas en la ventana.', ventana);
 
-  const min = enVentana[0].id;
-  const max = enVentana[enVentana.length - 1].id;
-  const detalles = await leerTodo(supabase, 'venta_detalles', (q) =>
-    q.select('sale_id, product_id, quantity, total').gte('sale_id', min).lte('sale_id', max).order('sale_id'));
+  // El rango de ids es SÓLO de GN: los del ERP arrancan en 1.000.000.000 y estirarían el `between` a toda la tabla.
+  const idsGn = enVentana.map((v) => Number(v.id)).filter((id) => id < 1_000_000_000);
+  const min = idsGn[0] ?? 0;
+  const max = idsGn[idsGn.length - 1] ?? 0;
+  const detallesGn = idsGn.length
+    ? await leerTodo(supabase, 'venta_detalles', (q) =>
+      q.select('sale_id, product_id, quantity, total').gte('sale_id', min).lte('sale_id', max).order('sale_id'))
+    : [];
+  const detalles = [...detallesGn, ...(erp.detalles || [])];
 
   const comun = {
     ventas: enVentana,
@@ -180,12 +190,13 @@ async function contribucionDe(supabase, store, reglas) {
     hasta: ventana.hasta,
   };
   const { canales, cobertura } = contribucionPorCanal(comun);
-  const skuPor = await skusDe(supabase, store, detalles);
+  const skuGn = await skusDe(supabase, store, detallesGn);
+  const skuPor = erp.activa && !erp.error ? sumarVentasDelErp({ skuPor: skuGn }, erp).skuPor : skuGn;
   const pyl = pylPorLinea({ ...comun, store, skuPor });
 
   return {
-    contribucion: { disponible: true, motivo: null, ventana, canales, cobertura },
-    pyl: { disponible: true, motivo: null, ventana, lineas: pyl.lineas, total: pyl.total, cobertura: pyl.cobertura },
+    contribucion: { disponible: true, motivo: null, ventana, canales, cobertura, ...(erp.error ? { aviso: erp.error } : {}) },
+    pyl: { disponible: true, motivo: null, ventana, lineas: pyl.lineas, total: pyl.total, cobertura: pyl.cobertura, ...(erp.error ? { aviso: erp.error } : {}) },
   };
 }
 
