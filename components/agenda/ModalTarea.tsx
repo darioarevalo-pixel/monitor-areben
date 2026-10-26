@@ -123,7 +123,7 @@ export function ModalTarea({
               <div style={{ fontSize: font.sm, color: color.ink2 }}>Así quedaría</div>
               <div style={{ whiteSpace: 'pre-wrap', color: color.ink }}>{propuesta}</div>
               <div style={{ display: 'flex', gap: space[2] }}>
-                <Button variant="solid" tone="brand" onClick={() => { setDesc(propuesta); setPropuesta(null) }}>Aplicar</Button>
+                <Button variant="solid" tone="brand" onClick={() => { setDesc(propuesta); setPropuesta(null) }}>Confirmar</Button>
                 <Button variant="soft" tone="neutral" onClick={() => setPropuesta(null)}>Descartar</Button>
               </div>
             </div>
