@@ -19,7 +19,7 @@ describe('Stunned: stock del ERP en el espejo de inventario', () => {
     const p = planDeInventario(libro, espejo)
     expect(p.upserts.map((r: { sku: string }) => r.sku)).toEqual(['STU-A', 'STU-B'])
     expect(p.borrar.map((r: { sku?: string | null }) => r.sku)).toEqual(['STU-VIEJA', 'STU-C'])
-    expect(p.frenoBorrado).toBeNull()
+    expect(p.frenoLimpieza).toBeNull()
   })
 
   it('una fila del libro sin SKU no se escribe y se cuenta', () => {
@@ -32,6 +32,6 @@ describe('Stunned: stock del ERP en el espejo de inventario', () => {
     const espejo = [k(1, 1, 'Local', 'STU-1'), k(2, 1, 'Local', 'STU-2'), k(3, 1, 'Local', 'STU-3')]
     const p = planDeInventario([], espejo)
     expect(p.borrar).toEqual([])
-    expect(p.frenoBorrado).toMatch(/3 de 3/)
+    expect(p.frenoLimpieza).toMatch(/3 de 3/)
   })
 })

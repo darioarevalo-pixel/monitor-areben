@@ -40,8 +40,8 @@ const espejoStu = espejo.filter(esFilaStunned)
 
 const plan = planDeInventario(libro, espejoStu)
 console.log(`[stunned-erp] libro: ${libro.length} filas (${plan.sinSku} sin SKU, salteadas) · espejo STU: ${espejoStu.length} · a escribir ${plan.upserts.length} · a sacar ${plan.borrar.length}`)
-if (plan.frenoBorrado) {
-  console.error(`[stunned-erp] ⛔ ${plan.frenoBorrado}: no se borra nada, revisar a mano.`)
+if (plan.frenoLimpieza) {
+  console.error(`[stunned-erp] ⛔ ${plan.frenoLimpieza}: no se borra nada, revisar a mano.`)
   process.exitCode = 1
 }
 for (let i = 0; i < plan.upserts.length; i += 500) {
