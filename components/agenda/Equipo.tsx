@@ -8,12 +8,18 @@
  * función que su «Hoy» y las mismas personas que el correo de la noche.
  *
  * ⚠️ «Última» es el último TILDE, ⛔ no la última vez que entró: el Monitor no guarda las entradas.
+ *
+ * 📅 **Las flechas ‹ › van a los días anteriores** (Darío, 26-oct-2026: «no tengo forma de saber
+ * cuáles hicieron hoy las chicas»). Hasta `DIAS_CUMPLIMIENTO` atrás, que es lo que manda el GET: más
+ * lejos no hay tildes y todo saldría «Sin marcar», que sería mentira. En un día pasado ⛔ no se
+ * asigna ni se elimina: es para mirar.
  */
 
 import { useMemo, useState } from 'react'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Button, ButtonLink, Card, StatusPill, color, font, space, weight, useConfirmar, useToast } from '@/components/ui'
-import { hoyIso, type ItemAgenda } from '@/lib/agenda'
+import { DIAS_CUMPLIMIENTO, hoyIso, type ItemAgenda } from '@/lib/agenda'
+import { sumarDias } from '@/lib/calendario'
 import { avanceDelEquipo, type EstadoEquipo, type FilaEquipo } from '@/lib/agenda/equipo'
 import { borrarItem, guardarItem } from '@/lib/agenda/cliente'
 import { rotuloFecha } from '@/lib/fechas/semana'
@@ -37,7 +43,10 @@ export function Equipo() {
   const toast = useToast()
   const { confirmar } = useConfirmar()
   const hoy = hoyIso()
-  const filas = useMemo(() => avanceDelEquipo(items, hechos, hoy), [items, hechos, hoy])
+  const [dia, setDia] = useState(hoy)
+  const esHoy = dia === hoy
+  const primero = sumarDias(hoy, -(DIAS_CUMPLIMIENTO - 1))
+  const filas = useMemo(() => avanceDelEquipo(items, hechos, dia), [items, hechos, dia])
   const [abierta, setAbierta] = useState<string | null>(null)
   const [nueva, setNueva] = useState<string[] | null>(null)
 
@@ -72,7 +81,13 @@ export function Equipo() {
       </HeaderAcciones>
 
       <div style={{ display: 'grid', gap: space[3] }}>
-        <BarraReserva />
+        {esHoy && <BarraReserva />}
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+          <Button variant="ghost" size="sm" aria-label="Día anterior" disabled={dia <= primero} onClick={() => setDia((d) => sumarDias(d, -1))}>‹</Button>
+          <span style={{ fontWeight: weight.semibold, fontSize: font.base, minWidth: 110, textAlign: 'center' }}>{esHoy ? 'Hoy' : rotuloFecha(dia)}</span>
+          <Button variant="ghost" size="sm" aria-label="Día siguiente" disabled={esHoy} onClick={() => setDia((d) => sumarDias(d, 1))}>›</Button>
+          {!esHoy && <Button variant="soft" tone="neutral" size="sm" onClick={() => setDia(hoy)}>Volver a hoy</Button>}
+        </div>
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
           {(Object.keys(ESTADO) as EstadoEquipo[]).filter((k) => cuenta(k)).map((k) => (
             <StatusPill key={k} tone={ESTADO[k].tone} label={`${cuenta(k)} ${ESTADO[k].label.toLowerCase()}`} />
@@ -83,6 +98,7 @@ export function Equipo() {
           <Persona
             key={f.persona.name}
             f={f}
+            esHoy={esHoy}
             abierta={abierta === f.persona.name}
             onAbrir={() => setAbierta((x) => (x === f.persona.name ? null : f.persona.name))}
             onTarea={() => setNueva([f.persona.name])}
@@ -97,9 +113,10 @@ export function Equipo() {
 }
 
 function Persona({
-  f, abierta, onAbrir, onTarea, onEliminar,
+  f, esHoy, abierta, onAbrir, onTarea, onEliminar,
 }: {
   f: FilaEquipo
+  esHoy: boolean
   abierta: boolean
   onAbrir: () => void
   onTarea: () => void
@@ -143,7 +160,7 @@ function Persona({
 
       {abierta && (
         <div style={{ borderTop: `1px solid ${color.line}`, padding: `${space[2]}px ${space[3]}px ${space[3]}px`, display: 'grid', gap: space[2] }}>
-          {f.pendientes.length === 0 && <div style={{ fontSize: font.sm, color: color.mut }}>Sin tareas para hoy.</div>}
+          {f.pendientes.length === 0 && <div style={{ fontSize: font.sm, color: color.mut }}>{esHoy ? 'Sin tareas para hoy.' : 'Sin tareas ese día.'}</div>}
           {f.pendientes.map((p) => (
             <div key={p.item.id} style={{ display: 'flex', gap: space[2], alignItems: 'flex-start', padding: `${space[1]}px 0` }}>
               <span aria-label={p.hecho ? 'Hecha' : 'Pendiente'} style={{
@@ -156,19 +173,20 @@ function Persona({
                     {p.item.titulo}
                   </span>
                   {p.desde && !p.hecho && <StatusPill tone="warning" label={`atrasada · del ${rotuloFecha(p.desde)}`} />}
+                  {p.desde && p.hecho && <StatusPill tone="neutral" label={`era del ${rotuloFecha(p.desde)}`} />}
                   {p.hecho && hora(p.hecho.hechoAt) && <span style={{ fontSize: font.xs, color: color.mut }}>{hora(p.hecho.hechoAt)}</span>}
                 </div>
                 {p.item.cuerpo && <div style={{ fontSize: font.xs, color: color.mut, whiteSpace: 'pre-line' }}>{p.item.cuerpo}</div>}
                 <MiniaturasFotos fotos={p.item.fotos} />
               </div>
-              {p.item.regla.tipo === 'unica' && (
+              {esHoy && p.item.regla.tipo === 'unica' && (
                 <Button variant="ghost" size="sm" onClick={() => onEliminar(p.item)}>Eliminar</Button>
               )}
             </div>
           ))}
-          <div>
+          {esHoy && <div>
             <Button variant="outline" size="sm" onClick={onTarea}>+ Tarea para {f.persona.nombre.split(' ')[0]}</Button>
-          </div>
+          </div>}
         </div>
       )}
     </Card>

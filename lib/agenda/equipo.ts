@@ -13,7 +13,7 @@
 import { EQUIPO } from './correo-diario.core.js'
 import { companerasDe as companerasCore } from './celular-compartido.core.js'
 import { esParaMi } from '../novedades/destino.core.js'
-import { pendientesDe, type PendienteHoy } from './index'
+import { diaArgentina, pendientesDe, type PendienteHoy } from './index'
 import type { FechaIso, Hecho, ItemAgenda } from './tipos'
 import type { Marca } from '../nav.datos'
 
@@ -35,24 +35,28 @@ export type FilaEquipo = {
   hechas: number
   total: number
   atrasadas: number
-  /** La hora del último tilde de HOY, o `null`. Es la única huella de uso que hay. */
+  /** La hora del último tilde de ESE día (en Argentina), o `null`. Es la única huella de uso que hay. */
   ultima: string | null
   estado: EstadoEquipo
 }
 
 export function avanceDelEquipo(
   items: ItemAgenda[],
-  hechos: Hecho[],
+  todos: Hecho[],
   hoy: FechaIso,
   equipo: PersonaEquipo[] = EQUIPO_AGENDA,
 ): FilaEquipo[] {
+  // 📅 `hoy` puede ser un día pasado (las flechas de Equipo, Darío 26-oct-2026). Se mira **como
+  // quedó ese día al cerrar**: un tilde puesto después no cuenta, así lo que se hizo tarde sale
+  // pendiente en su día y hecho en el día en que se hizo. Hoy esto no saca nada.
+  const hechos = todos.filter((h) => !h.hechoAt || diaArgentina(h.hechoAt) <= hoy)
   return equipo.map((persona) => {
     const suyos = deLaPersona(items, persona)
     const pendientes = pendientesDe(suyos, hechos, hoy, { marca: persona.cuenta || undefined })
     const hechas = pendientes.filter((p) => p.hecho).length
     const total = pendientes.length
     const ultima = hechos
-      .filter((h) => h.usuario === persona.name && h.hechoAt && h.hechoAt.slice(0, 10) >= hoy)
+      .filter((h) => h.usuario === persona.name && !!h.hechoAt && diaArgentina(h.hechoAt) === hoy)
       .map((h) => h.hechoAt as string)
       .sort()
       .pop() ?? null

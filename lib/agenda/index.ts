@@ -536,7 +536,15 @@ export function pendientesDe(
       // Con algo abierto, el tilde va a la última vez que cayó —la que el handler acepta— y cierra
       // todo lo que venía atrás. Sin nada abierto, esto es el pendiente de siempre: el de hoy.
       const dia = abierta ? ultimaOcurrencia(item, fecha) : (vaEl(item, fecha) ? fecha : null)
-      if (!dia) return null
+      if (!dia) {
+        // 🔑 **Lo atrasado que se hizo HOY sigue en el día de hoy, hecho** (Darío, 26-oct-2026: «le
+        // asigné a Lorena una tarea que ella tildó, y no la veo como finalizada»). El tilde queda en
+        // su ocurrencia —el 23, la que cierra—, así que al tildarla dejaba de deberse y desaparecía
+        // de la pantalla en el mismo momento. Se rescata por la HORA del tilde, en Argentina.
+        if (!arrastre || !item.arrastra) return null
+        const tarde = hechos.find((h) => h.itemId === item.id && h.fecha < fecha && !!h.hechoAt && diaArgentina(h.hechoAt) === fecha)
+        return tarde ? { item, hecho: tarde, fecha: tarde.fecha, desde: tarde.fecha } : null
+      }
       return {
         item,
         hecho: hechoDe(hechos, item.id, dia),
@@ -545,6 +553,11 @@ export function pendientesDe(
       }
     })
     .filter((p): p is PendienteHoy => p !== null)
+}
+
+/** El día, en Argentina, de un momento guardado en UTC (el `hecho_at` del tilde). */
+export function diaArgentina(isoUtc: string): FechaIso {
+  return new Date(Date.parse(isoUtc) - 3 * 3600_000).toISOString().slice(0, 10)
 }
 
 /**

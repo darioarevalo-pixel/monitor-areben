@@ -562,7 +562,7 @@ export const ZONAS: Record<string, Record<string, { titulo: string; desc: string
   // («Equipo»), dos títulos que en el celular eran media pantalla. Ahora lo dice la zona, con el
   // «+ Tarea» al lado. ⛔ Sin `''`: «Hoy» no lleva este encabezado, saluda con el suyo (`SaludoHoy`).
   agenda: {
-    equipo: { titulo: 'Equipo', desc: 'Avance de las tareas asignadas hoy.' },
+    equipo: { titulo: 'Equipo', desc: 'Avance de las tareas de cada día.' },
     semana: { titulo: 'Semana', desc: 'Los próximos siete días.' },
     mes: { titulo: 'Mes', desc: 'El mes completo.' },
     eventos: { titulo: 'Eventos', desc: 'Tareas que se generan con un ingreso o una sesión.' },

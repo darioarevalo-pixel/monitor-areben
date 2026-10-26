@@ -531,6 +531,23 @@ describe('pendientesDe(): lo que arrastra queda hasta que se tilda', () => {
     expect(r[0].desde).toBe(null)
   })
 
+  it('lo atrasado que se tildó HOY sigue en hoy, hecho y diciendo de cuándo era (Darío, 26-oct)', () => {
+    const tarea = item({ id: 't1', titulo: 'Bikini Ayla', arrastra: true, regla: { tipo: 'unica', fecha: '2026-10-23' }, creado: '2026-10-23T11:46:00.000Z' })
+    // El tilde va a la ocurrencia (el 23), pero se hizo el 26 a las 9:12 de Argentina.
+    const hechos = [hecho({ itemId: 't1', fecha: '2026-10-23', hechoAt: '2026-10-26T12:12:37.000Z' })]
+    const r = pendientesDe([tarea], hechos, '2026-10-26')
+    expect(r).toHaveLength(1)
+    expect(r[0].hecho?.fecha).toBe('2026-10-23')
+    expect(r[0].fecha).toBe('2026-10-23')
+    expect(r[0].desde).toBe('2026-10-23')
+    expect(contarSinTildar([tarea], hechos, '2026-10-26')).toBe(0)
+    // Al día siguiente ya no está: es de lo hecho HOY, no una fila que queda para siempre.
+    expect(pendientesDe([tarea], hechos, '2026-10-27')).toEqual([])
+    // A las 22 h de Argentina ya es el 27 en UTC, y cuenta igual como del 26.
+    const tarde = [hecho({ itemId: 't1', fecha: '2026-10-23', hechoAt: '2026-10-27T01:00:00.000Z' })]
+    expect(pendientesDe([tarea], tarde, '2026-10-26')).toHaveLength(1)
+  })
+
   it('el badge cuenta la misma fila que muestra la lista', () => {
     expect(contarSinTildar([reunion], [], '2026-08-20')).toBe(1)
     expect(contarSinTildar([reunion], [hecho({ itemId: 'r1', fecha: '2026-08-18' })], '2026-08-20')).toBe(0)

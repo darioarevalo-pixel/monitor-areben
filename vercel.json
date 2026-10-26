@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/datos?recurso=agenda&tarea=correo-diario", "schedule": "0 23 * * 1-6" },
+    { "path": "/api/datos?recurso=agenda&tarea=respaldo", "schedule": "30 6 * * *" },
     { "path": "/api/datos?recurso=vigia-erp&tarea=mirar", "schedule": "*/15 * * * *" }
   ],
   "rewrites": [

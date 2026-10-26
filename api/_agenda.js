@@ -32,6 +32,7 @@
 // sale de un permiso sino del **destino**, que se filtra acá y no en la pantalla: si filtrara sólo
 // la pantalla, un pendiente ajeno igual encendería el badge del menú.
 import { createClient } from '@supabase/supabase-js';
+import { del, list, put } from '@vercel/blob';
 import { equipoDelPadron, exigirUsuario } from './_auth.js';
 import { marcasConAcceso } from '../lib/permisos.core.js';
 import { aplicaEn, esFechaIso, motivoReglaInvalida } from '../lib/agenda/reglas.core.js';
@@ -111,6 +112,10 @@ const CLASES = ['pendiente', 'aviso'];
  * y éste, además, frenaba de rebote a la otra plantilla.
  */
 const TOPE_SEMBRADO_DIARIO = 300;
+
+/** 💾 La copia de cada noche: dónde va y cuántas se guardan (una por día). */
+const CARPETA_COPIAS = 'respaldos/agenda/';
+const COPIAS_AGENDA = 30;
 
 const CAMPOS =
   'id, banco, medio, beneficio, regla, desde, hasta, condiciones, pasos, canales, marcas, activa, autor, created_at';
@@ -566,6 +571,46 @@ export default async function handler(req, res) {
       if (!r.ok && !r.configurado) return res.status(503).json({ error: 'Falta la conexión con Mailer (MAILER_URL / MAILER_TICKET_KEY) en Vercel.' });
       if (!r.ok) return res.status(502).json({ error: r.motivo });
       return res.status(200).json({ ok: true, asunto: c.asunto, enviados: r.enviados, fallas: r.fallas });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  /*
+    💾 **LA COPIA DE CADA NOCHE** (Darío, 26-oct-2026: «no tiene back up las tareas de la agenda»).
+    Eliminar una tarea se lleva sus tildes (`on delete cascade`) y la base no guarda versiones: sin
+    esto, lo borrado por error no vuelve. Las tres tablas enteras, una vez por día, al Blob
+    (`respaldos/agenda/<día>-….json`), y se quedan las últimas `COPIAS_AGENDA`. Su propio reloj (03:30) y el
+    mismo `CRON_SECRET` que el correo. ⚠️ Nombre con sufijo al azar: el Blob es público, y una
+    dirección adivinable sería la agenda entera a la vista. ⛔ `respaldos/` no está en `FUENTES`
+    de Archivos, así que esa pantalla ⛔ nunca la ofrece para eliminar.
+    Para recuperar: listar `respaldos/agenda/` con el token del Blob y bajar el del día anterior.
+  */
+  if (req.method === 'GET' && String((req.query || {}).tarea || '') === 'respaldo') {
+    const esperado = process.env.CRON_SECRET || '';
+    if (!esperado) return res.status(503).json({ error: 'La copia no está configurada (CRON_SECRET).' });
+    if (String(req.headers.authorization || '') !== `Bearer ${esperado}`) return res.status(401).json({ error: 'no autorizado' });
+
+    const cfgR = cfgMaestra();
+    if (!cfgR.url || !cfgR.key) return res.status(500).json({ error: 'Faltan credenciales de Supabase.' });
+    const sb = createClient(cfgR.url, cfgR.key);
+    try {
+      const tablas = {};
+      // Orden por la clave entera: paginando sobre una columna con empates se repiten o se saltean filas.
+      tablas.agenda_items = await todasLasFilas(() => sb.from('agenda_items').select('*').order('id'));
+      tablas.agenda_hechos = await todasLasFilas(() => sb.from('agenda_hechos').select('*').order('item_id').order('fecha'));
+      tablas.agenda_promos = await todasLasFilas(() => sb.from('agenda_promos').select('*').order('id'));
+      const dia = hoyAR();
+      const conToken = process.env.BLOB_READ_WRITE_TOKEN ? { token: process.env.BLOB_READ_WRITE_TOKEN } : {};
+      await put(`${CARPETA_COPIAS}${dia}.json`, JSON.stringify({ dia, hecho: new Date().toISOString(), tablas }), {
+        access: 'public', contentType: 'application/json', addRandomSuffix: true, ...conToken,
+      });
+      // Se quedan las más nuevas: el nombre empieza por el día, así que el orden alfabético es el de las fechas.
+      const { blobs } = await list({ prefix: CARPETA_COPIAS, limit: 1000, ...conToken });
+      const viejas = blobs.map((b) => b.pathname).sort().reverse().slice(COPIAS_AGENDA);
+      if (viejas.length) await del(blobs.filter((b) => viejas.includes(b.pathname)).map((b) => b.url), conToken);
+      const filas = Object.fromEntries(Object.entries(tablas).map(([t, v]) => [t, v.length]));
+      return res.status(200).json({ ok: true, dia, filas, eliminadas: viejas.length });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }

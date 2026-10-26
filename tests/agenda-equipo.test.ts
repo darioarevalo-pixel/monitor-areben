@@ -40,6 +40,18 @@ describe('avanceDelEquipo', () => {
     expect(l.ultima).toBe(`${HOY}T13:00:00.000Z`)
   })
 
+  it('un día pasado se ve como quedó ese día: lo hecho después sale pendiente ahí y hecho el día que se hizo', () => {
+    const items = [item({ id: 'b', titulo: 'Bikini Ayla', arrastra: true, regla: { tipo: 'unica', fecha: '2026-10-23' }, creado: '2026-10-23T11:00:00.000Z', destino: { tipo: 'personas', personas: ['Lorena Reyes'] } })]
+    const tarde: Hecho = { itemId: 'b', fecha: '2026-10-23', usuario: 'Lorena Reyes', nota: null, hechoAt: '2026-10-26T12:12:00.000Z' }
+    const [el23] = avanceDelEquipo(items, [tarde], '2026-10-23', [LORE])
+    expect(el23.hechas).toBe(0)
+    expect(el23.total).toBe(1)
+    const [el26] = avanceDelEquipo(items, [tarde], '2026-10-26', [LORE])
+    expect(el26.hechas).toBe(1)
+    expect(el26.estado).toBe('al-dia')
+    expect(el26.ultima).toBe(tarde.hechoAt)
+  })
+
   it('la marca: lo de BDI no le cae a quien es de Zattia', () => {
     const items = [item({ id: 'a', marcas: ['bdi'], destino: { tipo: 'roles', roles: ['local'] } })]
     expect(avanceDelEquipo(items, [], HOY, [CAMI])[0].estado).toBe('sin-tareas')
