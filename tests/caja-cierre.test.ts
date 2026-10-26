@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { anuladasEnGN, cobrosDeGN, diferencia, horaDeGN, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '@/lib/caja/cierre.core.js'
 
@@ -286,5 +287,20 @@ describe('puedeUsarPOS (fase C: sólo la cuenta que abrió la caja)', () => {
     expect(puedeUsarPOS({ abierto_por: null }, { name: '' })).toBe(false)
     expect(puedeUsarPOS(null, { name: 'Sofi' })).toBe(false)
     expect(puedeUsarPOS(T, null)).toBe(false)
+  })
+})
+
+describe('venta del ERP anulada (ensayo Caja Stunned, 26-oct)', () => {
+  it('una venta en_erp con `anulada` ⛔ suma al efectivo esperado', () => {
+    const r = resumenTurno({
+      turno: { fondo: 0 },
+      ventas: [{ ...v('en_erp', [{ cuenta: 12921, monto: 11700 }]), anulada: { por: 'Bruno', en: '2026-10-26T22:10:17Z', motivo: 'ensayo' } }],
+      movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: [],
+    })
+    expect(r.efectivo.esperado).toBe(0)
+  })
+  it('la consulta del turno pide la columna `anulada` (sin ella la regla de arriba nunca se entera)', () => {
+    const src = readFileSync('api/_caja.js', 'utf-8')
+    expect(src).toMatch(/from\('caja_venta'\)\.select\('[^']*a_mano, anulada'\)\.eq\('turno_id'/)
   })
 })
