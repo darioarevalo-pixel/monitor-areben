@@ -58,7 +58,7 @@ columna.
   «se apague cuando se confirma y de forma definitiva; si luego se quiere volver a vender, hay que
   prenderlo manualmente»). Usa `cfg.apagados` (la lista de siempre, ya respetada por `porVentas`) con
   `lib/reposicion/sinReponer.ts`: frena el «llevar», ⛔ no el «devolver». «Sacar» un producto de
-  Confirmados lo vuelve a prender. Se ve y se prende en Devolución → «Sin reponer» (`Volver a reponer`).
+  Confirmados lo vuelve a prender. Se ve y se prende en Configurar → «Sin reponer» (`Volver a reponer`).
   ⚠️ Es la misma lista que las categorías/productos «no reponer» de BDI. Hoy sólo se dispara desde la
   Devolución de Zattia/Stunned (BDI la tiene oculta). `tests/reposicion-sin-reponer.test.ts`.
 - 🔑 **Los papeles llevan sólo lo que se hace** (Darío): ⛔ ni stock ni ventas ni «para exhibir». El

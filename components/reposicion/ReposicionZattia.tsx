@@ -78,11 +78,6 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     [rep.rawInv, prodById, tnIdx, rep.s7, vv, cfg.catsOff, linea],
   )
   const filas = useMemo(() => decidirTodo(inv, cfg, hoy, linea), [inv, cfg, hoy, linea])
-  // Los apagados de la reposición: se apagan al confirmar una devolución y se prenden a mano (Darío, 26-oct-2026).
-  const sinReponer = useMemo(() => {
-    const nombre = new Map(inv.map((it) => [String(it.pid), it.name]))
-    return cfg.apagados.map((pid) => ({ pid: String(pid), nombre: nombre.get(String(pid)) ?? `Producto ${pid}` }))
-  }, [cfg.apagados, inv])
   // La Propuesta de devolución muestra el alta en Tienda Nube y si tiene precio promocional (Darío,
   // 19-oct-2026). Se cruza con el producto de GN (su SKU y nombre), como las categorías.
   const tnDe = useCallback(
@@ -497,7 +492,6 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             puedeAprobar={puedeMarcar}
             bolsaProd={cv.bolsaProd}
             guardarBolsaProd={(v) => rep.guardarCfg({ ...cfg, [CAMPO_LINEA[linea]]: { ...cv, bolsaProd: v } })}
-            sinReponer={sinReponer}
             apagar={(pids) => rep.guardarCfg(apagarProductos(cfg, pids))}
             prender={(pids) => rep.guardarCfg(prenderProductos(cfg, pids))}
             boton={botonArmado('devolver', true)}
@@ -524,6 +518,8 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         campaniaEtiqueta={cfg.campaniaEtiqueta ?? null}
         guardarCampania={(id) => rep.guardarCfg({ ...cfg, campaniaEtiqueta: id })}
         bdi={bdi}
+        apagados={cfg.apagados.map(String)}
+        prender={(pid) => rep.guardarCfg(prenderProductos(cfg, [pid]))}
         onOpciones={() => {
           setConfigOpen(false)
           setOpcionesOpen(true)
@@ -647,7 +643,7 @@ const MODOS: { v: Modo; label: string }[] = [
 ]
 
 /** Parámetros y marcas (por categoría y por producto). Editan sólo Darío y Bruno; el resto lo ve. */
-function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, shareStatus, guardar, campaniaEtiqueta, guardarCampania, bdi, onOpciones }: {
+function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, shareStatus, guardar, campaniaEtiqueta, guardarCampania, bdi, onOpciones, apagados, prender }: {
   abierto: boolean
   onClose: () => void
   titulo: string
@@ -660,6 +656,9 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
   guardarCampania: (id: string | null) => void
   bdi: boolean
   onOpciones: () => void
+  /** Productos apagados de la reposición (se apagan al confirmar una devolución). */
+  apagados: string[]
+  prender: (pid: string) => void
 }) {
   const [buscar, setBuscar] = useState('')
   const [buscarSp, setBuscarSp] = useState('')
@@ -813,6 +812,28 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
                 </Button>
               </div>
             ))}
+        </>
+      )}
+
+      {/* Darío, 26-oct-2026: confirmar una devolución apaga el producto de la reposición, definitivo;
+          se prende acá, a mano. Es la lista `apagados` de siempre (BDI la edita en OpcionesBdi). */}
+      {!bdi && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 700, margin: '16px 0 6px' }}>Sin reponer</div>
+          <div style={{ fontSize: 11.5, color: color.mut2, marginBottom: 8 }}>
+            Se apagan al confirmar una devolución y no se piden al depósito hasta que los vuelvas a reponer.
+          </div>
+          {!apagados.length && <div style={{ fontSize: 12, color: color.mut2, marginBottom: 6 }}>Ninguno.</div>}
+          {apagados.map((pid) => (
+            <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '5px 8px', border: `1px solid ${color.bg2}`, borderRadius: 6, marginBottom: 4 }}>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{productos.find(([p]) => p === pid)?.[1] ?? `Producto ${pid}`}</span>
+              {puede && (
+                <Button size="sm" variant="ghost" onClick={() => prender(pid)}>
+                  Volver a reponer
+                </Button>
+              )}
+            </div>
+          ))}
         </>
       )}
 
