@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 
@@ -12,7 +12,7 @@ const REM = { producto: '10', talle: '1', sku: 'STU-REM-0019-M', barcode: '77900
 const doc = (x: Record<string, unknown>) => ({ id: 'a'.repeat(8) + '-aaaa-aaaa-aaaa-' + 'a'.repeat(12), numero: 7, linea: 'stunned', desde: 'deposito', hacia: 'local', origen: 'libre', estado: 'en_transito', nota: null, creada_por: 'Bruno', creada_en: '2026-10-26T20:00:00Z', enviada_por: 'Bruno', enviada_en: '2026-10-26T20:01:00Z', recibida_por: null, recibida_en: null, diferencias: [], renglones: [{ n: 1, product_id: 10, size_id: 1, sku: 'STU-REM-0019-M', barcode: '779001', pedida: 0, armada: 3, enviada: 3, recibida: null }], ...x })
 const res = (t: unknown, extra = {}) => ({ ok: true, transferencia: t, ya: false, movimientos: 1, unidades: 2, diferencias: [], avisos: [], ...extra })
 const m = vi.hoisted(() => ({
-  buscarPrendas: vi.fn(), leerTransferenciasDoc: vi.fn(), crearTransferenciaDoc: vi.fn(), armarTransferenciaDoc: vi.fn(), enviarTransferenciaDoc: vi.fn(), recibirTransferenciaDoc: vi.fn(), cancelarTransferenciaDoc: vi.fn(),
+  buscarPrendas: vi.fn(), leerListaDeStock: vi.fn(), leerTransferenciasDoc: vi.fn(), crearTransferenciaDoc: vi.fn(), armarTransferenciaDoc: vi.fn(), enviarTransferenciaDoc: vi.fn(), recibirTransferenciaDoc: vi.fn(), cancelarTransferenciaDoc: vi.fn(),
 }))
 vi.mock('@/lib/erp/cliente', () => m)
 
@@ -20,6 +20,7 @@ let root: Root | null = null
 let host: HTMLDivElement
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); document.body.innerHTML = ''; vi.clearAllMocks() })
+beforeEach(() => { m.leerListaDeStock.mockResolvedValue({ filas: [{ producto: '10', talle: '1', nombre: 'REMERA OVERSIZE', talleNombre: 'M' }] }) })
 
 const esperar = () => act(async () => { await new Promise((r) => setTimeout(r, 0)) })
 async function montar() {
@@ -33,6 +34,9 @@ async function escribir(input: HTMLInputElement, valor: string) {
   await act(async () => { set.call(input, valor); input.dispatchEvent(new Event('input', { bubbles: true })) })
 }
 const boton = (t: string) => [...document.querySelectorAll('button')].find((b) => b.textContent?.includes(t)) as HTMLButtonElement
+async function abrirFicha() {
+  await act(async () => { (document.querySelector('[role="row"].mo-lista-fila') as HTMLElement).click() })
+}
 async function escanear(codigo: string) {
   const caja = document.querySelector('input[placeholder^="Código"]') as HTMLInputElement
   await escribir(caja, codigo)
@@ -76,6 +80,8 @@ describe('Mover y recibir', () => {
     m.buscarPrendas.mockResolvedValue({ variantes: [REM], cortado: false })
     m.recibirTransferenciaDoc.mockResolvedValue(res(doc({ estado: 'recibida' }), { diferencias: [{ sku: 'STU-REM-0019-M', enviada: 3, recibida: 2, diferencia: -1 }] }))
     await montar()
+    await abrirFicha()
+    expect(document.body.textContent).toContain('REMERA OVERSIZE · M')
     await act(async () => { boton('Recibir').click() })
     expect(boton('Recibir con 3 u de menos')).toBeTruthy()
     await escanear('779001'); await escanear('779001')
@@ -90,9 +96,35 @@ describe('Mover y recibir', () => {
     m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [doc({})], enTransito: [] })
     m.buscarPrendas.mockResolvedValue({ variantes: [{ ...REM, producto: '99', talle: '5', sku: 'STU-OTRA-S', barcode: '779999' }], cortado: false })
     await montar()
+    await abrirFicha()
     await act(async () => { boton('Recibir').click() })
     await escanear('779999')
     expect(document.body.textContent).toContain('no salieron en esta transferencia')
     expect((boton('Recibir con') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('la nota viaja como 5º argumento sólo si se escribió', async () => {
+    m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [], enTransito: [] })
+    m.buscarPrendas.mockResolvedValue({ variantes: [REM], cortado: false })
+    const t = doc({ estado: 'borrador' })
+    m.crearTransferenciaDoc.mockResolvedValue(res(t)); m.armarTransferenciaDoc.mockResolvedValue(res(t)); m.enviarTransferenciaDoc.mockResolvedValue(res(doc({})))
+    await montar()
+    await escanear('779001')
+    await escribir(document.querySelector('input[placeholder^="Para qué"]') as HTMLInputElement, 'Para el local de Rosario')
+    await act(async () => { boton('Mover 1 u').click() })
+    await esperar()
+    expect(m.crearTransferenciaDoc).toHaveBeenCalledWith('stunned', 'deposito', 'local', [{ product_id: '10', size_id: '1', sku: 'STU-REM-0019-M', barcode: '779001', cantidad: 1 }], 'Para el local de Rosario')
+  })
+
+  it('la ficha de una recibida con faltantes muestra la diferencia y no ofrece «Recibir»', async () => {
+    const r = doc({ estado: 'recibida', recibida_por: 'Ana', recibida_en: '2026-10-26T21:00:00Z', diferencias: [{ sku: 'STU-REM-0019-M', enviada: 3, recibida: 2, diferencia: -1 }], renglones: [{ n: 1, product_id: 10, size_id: 1, sku: 'STU-REM-0019-M', barcode: '779001', pedida: 0, armada: 3, enviada: 3, recibida: 2 }] })
+    m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [r], enTransito: [] })
+    await montar()
+    await act(async () => { [...document.querySelectorAll('[role="tab"]')].find((b) => b.textContent?.includes('Recibidas'))!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await abrirFicha()
+    expect(document.body.textContent).toContain('Faltaron 1 u al recibir')
+    expect(document.body.textContent).toContain('2 (-1)')
+    expect(boton('Recibir')).toBeUndefined()
+    expect(boton('Imprimir remito')).toBeTruthy()
   })
 })

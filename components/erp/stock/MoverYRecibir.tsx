@@ -1,20 +1,28 @@
 'use client'
 
 /**
- * ERP › Stock › Mover y recibir — pantalla MÍNIMA de la transferencia como DOCUMENTO (requisito del corte de Stunned; la
- * sesión Diseño la rehace completa). Dos cosas: **mover** (transferencia libre: se escanea lo que sale y se manda; el libro
- * anota la SALIDA al instante) y **recibir** (en destino se escanea lo que llegó; lo que ⛔ llega queda como diferencia
- * marcada, nunca se ajusta sola). Mueve SÓLO el libro del ERP: ⛔ GN ni Tienda Nube. Núcleo: `lib/erp/transferencia-escaneo.core.js`.
+ * ERP › Stock › Mover y recibir — la transferencia como DOCUMENTO, con el molde del diseño (§3 y §7): **mover** (transferencia
+ * libre: se escanea lo que sale, con nota, y se manda; el libro anota la SALIDA al instante) y **recibir** (se abre desde la
+ * ficha de una que está en camino; en destino se escanea lo que llegó, y lo que ⛔ llega queda como diferencia marcada, nunca se
+ * ajusta sola). La lista de abajo es de TRABAJO: vistas con su número, buscador, barrita de 4 pasos, ficha al costado con lo
+ * pedido, armado, enviado y recibido, remito para imprimir y «Exportar». Mueve SÓLO el libro del ERP: ⛔ GN ni Tienda Nube.
+ * Núcleos: `lib/erp/transferencia-escaneo.core.js` (el escaneo) y `lib/erp/transferencias-doc.core.js` (la lista y la ficha).
  */
 
-import { useEffect, useRef, useState } from 'react'
-import { Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space } from '@/components/ui'
-import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, color, font, space, weight } from '@/components/ui'
+import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
+import { BuscadorLista, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto, type Densidad } from '@/components/ui/PiezasLista'
 import {
-  armarTransferenciaDoc, buscarPrendas, cancelarTransferenciaDoc, crearTransferenciaDoc, enviarTransferenciaDoc, leerTransferenciasDoc, recibirTransferenciaDoc,
+  armarTransferenciaDoc, buscarPrendas, cancelarTransferenciaDoc, crearTransferenciaDoc, enviarTransferenciaDoc, leerListaDeStock, leerTransferenciasDoc, recibirTransferenciaDoc,
   type AvisoDoc, type PrendaEncontrada, type TiendaErp, type TransferenciaDoc,
 } from '@/lib/erp/cliente'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
+import {
+  VISTAS_DOC, contarVistasDoc, csvDeDocs, faltantesDe, filtrarDocs, nombreDeRenglon, nombresDePrendas, ordenarDocs, pasoDeDoc, remitoHtml, renglonesConDiferencia, unidadesEnviadas, unidadesRecibidas, vistaDeEntradaDoc,
+} from '@/lib/erp/transferencias-doc.core.js'
+import { BarraPasos } from './Barritas'
 import { DEPOSITOS_DE_LINEA, cuentaDeRecepcion, fijarCantidad, listaDeRecepcion, prendaExacta, renglonesParaMotor, sumarEscaneo, unidades } from '@/lib/erp/transferencia-escaneo.core.js'
 
 type Fila = { producto: string; talle: string; sku: string | null; barcode: string | null; nombre: string | null; talleNombre: string | null; cantidad: number; enviada?: number }
@@ -22,7 +30,29 @@ const LINEAS: Array<{ key: TiendaErp; label: string }> = [{ key: 'stunned', labe
 const dep = (d: string) => (NOMBRE_DEPOSITO as Record<string, string>)[d] ?? d
 const baseDe = (l: TiendaErp) => (l === 'bdi' ? 'bdi' : 'zattia')
 const nombreDe = (f: Fila) => (f.nombre ? `${f.nombre}${f.talleNombre ? ` · ${f.talleNombre}` : ''}` : f.sku ?? `Prenda ${f.producto}/${f.talle}`)
-const ESTADO = { borrador: ['neutral', 'Borrador'], armada: ['neutral', 'Armada'], en_transito: ['warning', 'En tránsito'], recibida: ['success', 'Recibida'], cancelada: ['neutral', 'Cancelada'] } as const
+type Nombres = Record<string, { nombre: string | null; talleNombre: string | null }>
+const u = (n: number) => `${n.toLocaleString('es-AR')} u`
+const COLUMNAS = [
+  { key: 'n', titulo: 'Nº', ancho: '70px', ordena: true },
+  { key: 'creada', titulo: 'Creada', ancho: '110px', ordena: true },
+  { key: 'ruta', titulo: 'Ruta', ancho: 'minmax(170px, 1fr)' },
+  { key: 'quien', titulo: 'Quién', ancho: '110px' },
+  { key: 'estado', titulo: 'Paso', ancho: 'minmax(260px, 1.2fr)' },
+  { key: 'unidades', titulo: 'Prendas', ancho: '90px', ordena: true, derecha: true },
+  { key: 'faltan', titulo: 'Faltaron', ancho: '90px', ordena: true, derecha: true },
+]
+
+function bajarCsv(docs: TransferenciaDoc[], linea: TiendaErp) {
+  const url = URL.createObjectURL(new Blob([csvDeDocs(docs, dep)], { type: 'text/csv;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url; a.download = `mover-y-recibir-${linea}.csv`; a.click()
+  URL.revokeObjectURL(url)
+}
+function imprimirRemito(d: TransferenciaDoc, nombres: Nombres) {
+  const url = URL.createObjectURL(new Blob([remitoHtml(d, nombres, dep)], { type: 'text/html;charset=utf-8' }))
+  window.open(url, '_blank', 'noopener')
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
 
 /** Caja de escaneo: el lector escribe y manda Enter. Un código exacto suma 1; un texto con varias coincidencias deja elegir. */
 function Escaneo({ linea, onPrenda }: { linea: TiendaErp; onPrenda: (p: PrendaEncontrada) => void }) {
@@ -93,8 +123,15 @@ export function MoverYRecibir() {
   const [desde, setDesde] = useState('deposito')
   const [hacia, setHacia] = useState('local')
   const [lista, setLista] = useState<Fila[]>([])
+  const [nota, setNota] = useState('')
   const [docs, setDocs] = useState<TransferenciaDoc[] | null>(null)
+  const [nombres, setNombres] = useState<Nombres>({})
   const [vuelta, setVuelta] = useState(0)
+  const [elegida, setVista] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+  const [orden, setOrden] = useState<OrdenLista>(null)
+  const [densidad, setDensidad] = useState<Densidad>('compacta')
+  const [fichaId, setFichaId] = useState<string | null>(null)
   const [recibiendo, setRecibiendo] = useState<{ doc: TransferenciaDoc; lista: Fila[] } | null>(null)
   const [trabajando, setTrabajando] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -108,10 +145,19 @@ export function MoverYRecibir() {
     return () => { vivo = false }
   }, [linea, vuelta])
 
+  // Los nombres de prenda: el renglón del documento sólo trae SKU. Si la lista de stock no llega, se ve el SKU (no se frena nada).
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      try { const l = await leerListaDeStock(baseDe(linea)); if (vivo) setNombres(nombresDePrendas(l?.filas) as Nombres) } catch { /* se ven los SKU */ }
+    })()
+    return () => { vivo = false }
+  }, [linea])
+
   function cambiarLinea(k: string) {
     const l = k as TiendaErp
     const d = DEPOSITOS_DE_LINEA[l] as string[]
-    setLinea(l); setDesde(d[1] ?? d[0]); setHacia(d[0]); setLista([]); setDocs(null); setRecibiendo(null); setError(null); setHecho(null)
+    setLinea(l); setDesde(d[1] ?? d[0]); setHacia(d[0]); setLista([]); setNota(''); setDocs(null); setNombres({} as Nombres); setRecibiendo(null); setFichaId(null); setVista(null); setQ(''); setError(null); setHecho(null)
   }
 
   async function mover() {
@@ -121,12 +167,13 @@ export function MoverYRecibir() {
     let id: string | null = null
     try {
       const renglones = renglonesParaMotor(lista)
-      const c = await crearTransferenciaDoc(linea, desde, hacia, renglones)
+      const texto = nota.trim()
+      const c = texto ? await crearTransferenciaDoc(linea, desde, hacia, renglones, texto) : await crearTransferenciaDoc(linea, desde, hacia, renglones)
       id = c.transferencia.id
       const a = await armarTransferenciaDoc(linea, id, renglones)
       const e = await enviarTransferenciaDoc(linea, id)
       setHecho({ texto: `T-${e.transferencia.numero} en tránsito: salieron ${e.unidades} u de ${dep(desde)}. Falta recibirla en ${dep(hacia)}.`, avisos: [...a.avisos, ...e.avisos] })
-      setLista([])
+      setLista([]); setNota('')
     } catch (err) {
       setError(`${err instanceof Error ? err.message : 'No se pudo mover.'}${id ? ' La transferencia quedó sin enviar: no salió nada del stock. Cancelala abajo o reintentá.' : ''}`)
     } finally {
@@ -151,15 +198,34 @@ export function MoverYRecibir() {
 
   async function cancelar(d: TransferenciaDoc) {
     setTrabajando(true); setError(null)
-    try { await cancelarTransferenciaDoc(linea, d.id, 'Cancelada desde Mover y recibir'); setHecho({ texto: `T-${d.numero} cancelada.`, avisos: [] }) }
+    try { await cancelarTransferenciaDoc(linea, d.id, 'Cancelada desde Mover y recibir'); setHecho({ texto: `T-${d.numero} cancelada.`, avisos: [] }); setFichaId(null) }
     catch (err) { setError(err instanceof Error ? err.message : 'No se pudo cancelar.') }
     finally { setTrabajando(false); setVuelta((v) => v + 1) }
   }
 
-  const enCamino = (docs ?? []).filter((d) => d.estado === 'en_transito')
-  const sinEnviar = (docs ?? []).filter((d) => d.estado === 'borrador' || d.estado === 'armada')
-  const recientes = (docs ?? []).filter((d) => d.estado === 'recibida' || d.estado === 'cancelada').slice(0, 10)
+  function abrirRecepcion(d: TransferenciaDoc) {
+    setRecibiendo({ doc: d, lista: listaDeRecepcion(d.renglones, nombres) as Fila[] }); setFichaId(null); setHecho(null); setError(null)
+  }
+
+  const todos = docs ?? []
+  const conteo = useMemo(() => contarVistasDoc(todos), [docs]) // eslint-disable-line react-hooks/exhaustive-deps
+  const vista = elegida ?? vistaDeEntradaDoc(conteo)
+  const filas = useMemo(() => ordenarDocs(filtrarDocs(todos, { vista, q, nombres }), orden), [docs, vista, q, nombres, orden]) // eslint-disable-line react-hooks/exhaustive-deps
+  const enCaminoU = todos.filter((d) => d.estado === 'en_transito').reduce((s, d) => s + unidadesEnviadas(d), 0)
+  const faltantesU = todos.filter((d) => d.estado === 'recibida').reduce((s, d) => s + faltantesDe(d), 0)
   const cuenta = recibiendo ? cuentaDeRecepcion(recibiendo.lista) : null
+  const ficha = fichaId ? todos.find((d) => d.id === fichaId) ?? null : null
+
+  const celda = (d: TransferenciaDoc, k: string): React.ReactNode => {
+    if (k === 'n') return <b style={{ color: color.ink }}>T-{d.numero}</b>
+    if (k === 'creada') return <span style={{ color: color.mut }}>{cuandoCorto(d.creada_en)}</span>
+    if (k === 'ruta') return <span style={{ fontWeight: weight.semibold, color: color.ink }}>{dep(d.desde)} → {dep(d.hacia)}</span>
+    if (k === 'quien') return <span style={{ color: color.ink2 }}>{d.recibida_por ?? d.enviada_por ?? d.creada_por}</span>
+    if (k === 'estado') { const p = pasoDeDoc(d); return <BarraPasos paso={p.paso} fin={p.fin} texto={p.texto} /> }
+    if (k === 'unidades') return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{unidadesEnviadas(d) || '—'}</span>
+    if (k === 'faltan') return <span style={{ fontVariantNumeric: 'tabular-nums', color: faltantesDe(d) ? 'var(--mo-danger-ink)' : color.mut }}>{faltantesDe(d) || '—'}</span>
+    return null
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -176,6 +242,7 @@ export function MoverYRecibir() {
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <Field label="Sale de"><Select value={desde} onChange={(e) => setDesde(e.target.value)}>{deps.map((d) => <option key={d} value={d}>{dep(d)}</option>)}</Select></Field>
             <Field label="Va a"><Select value={hacia} onChange={(e) => setHacia(e.target.value)}>{deps.map((d) => <option key={d} value={d}>{dep(d)}</option>)}</Select></Field>
+            <div style={{ flex: '1 1 240px' }}><Field label="Nota (opcional)"><Input value={nota} maxLength={200} onChange={(e) => setNota(e.target.value)} placeholder="Para qué se mueve, quién la lleva…" /></Field></div>
           </div>
           <div style={{ marginTop: space[3] }}><Escaneo linea={linea} onPrenda={(p) => setLista((l) => sumarEscaneo(l, p) as Fila[])} /></div>
           <TablaEscaneada filas={lista} onCantidad={(f, n) => setLista((l) => fijarCantidad(l, f.producto, f.talle, n) as Fila[])} />
@@ -197,46 +264,93 @@ export function MoverYRecibir() {
         </SectionCard>
       )}
 
-      <SectionCard title="En camino" subtitle="Salieron y todavía no se recibieron.">
-        {!docs ? <EmptyState title="Leyendo…" /> : !enCamino.length ? <div>No hay nada en camino.</div> : (
-          <TableWrap>
-            <THead><Tr><Th>Nº</Th><Th>Ruta</Th><Th>Salió</Th><Th style={{ textAlign: 'right' }}>Unidades</Th><Th /></Tr></THead>
-            <TBody>
-              {enCamino.map((d) => (
-                <Tr key={d.id}>
-                  <Td><b>T-{d.numero}</b></Td><Td>{dep(d.desde)} → {dep(d.hacia)}</Td><Td>{d.enviada_en ? cuandoCorto(d.enviada_en) : '—'} · {d.enviada_por}</Td>
-                  <Td style={{ textAlign: 'right' }}>{d.renglones.reduce((s, r) => s + r.enviada, 0)}</Td>
-                  <Td><Button size="sm" disabled={trabajando} onClick={() => setRecibiendo({ doc: d, lista: listaDeRecepcion(d.renglones) as Fila[] })}>Recibir</Button></Td>
-                </Tr>
-              ))}
-            </TBody>
-          </TableWrap>
-        )}
-      </SectionCard>
+      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+        <TileResumen titulo="En camino" valor={u(enCaminoU)} oscuro nota={`${conteo.en_camino ?? 0} sin recibir`} />
+        <TileResumen titulo="Sin enviar" valor={(conteo.sin_enviar ?? 0).toLocaleString('es-AR')} nota="quedaron a medias: no salió nada" />
+        <TileResumen titulo="Faltantes recibidos" valor={u(faltantesU)} nota="esperan un ajuste en Conteos y ajustes" />
+      </div>
 
-      {sinEnviar.length > 0 && (
-        <SectionCard title="Sin enviar" subtitle="Quedaron a medias: no salió nada del stock. Se cancelan.">
-          {sinEnviar.map((d) => <div key={d.id} style={{ display: 'flex', gap: space[3], alignItems: 'center' }}><b>T-{d.numero}</b> {dep(d.desde)} → {dep(d.hacia)} <Button size="sm" variant="outline" disabled={trabajando} onClick={() => cancelar(d)}>Cancelar</Button></div>)}
-        </SectionCard>
-      )}
+      <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
+        <VistasLista vistas={VISTAS_DOC} valor={vista} conteo={conteo} onCambio={setVista} />
+        <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las transferencias" placeholder="Nº, prenda o quién la hizo" />
+          <InterruptorDensidad valor={densidad} onCambio={setDensidad} />
+          <Button variant="outline" disabled={!filas.length} onClick={() => bajarCsv(filas, linea)}>Exportar</Button>
+          <Button variant="outline" onClick={() => setVuelta((n) => n + 1)}>Actualizar</Button>
+        </div>
+        <ListaTrabajo
+          columnas={COLUMNAS} filas={filas} claveDe={(d) => d.id} celda={celda} orden={orden} onOrden={setOrden} densidad={densidad}
+          activa={fichaId} onAbrir={(d) => setFichaId(d.id)} etiquetaFila={(d) => `la transferencia T-${d.numero} de ${dep(d.desde)} a ${dep(d.hacia)}`}
+          vacio={docs ? (
+            <div style={{ padding: space[6] }}>
+              <EmptyState title={q ? 'No hay transferencias con ese número, prenda o persona.' : vista === 'en_camino' ? 'No hay nada en camino.' : 'No hay transferencias en esta vista.'} />
+            </div>
+          ) : <div style={{ padding: space[6] }}><EmptyState title="Leyendo…" /></div>}
+        />
+        <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>{filas.length.toLocaleString('es-AR')} de {todos.length.toLocaleString('es-AR')}</div>
+      </div>
 
-      {recientes.length > 0 && (
-        <SectionCard title="Últimas">
-          <TableWrap>
-            <THead><Tr><Th>Nº</Th><Th>Ruta</Th><Th>Estado</Th><Th>Quién</Th><Th style={{ textAlign: 'right' }}>Faltaron</Th></Tr></THead>
-            <TBody>
-              {recientes.map((d) => {
-                return (
-                  <Tr key={d.id}>
-                    <Td><b>T-{d.numero}</b></Td><Td>{dep(d.desde)} → {dep(d.hacia)}</Td><Td><ChipEstado mapa={ESTADO} k={d.estado} /></Td>
-                    <Td>{d.recibida_por ?? d.creada_por}</Td><Td style={{ textAlign: 'right' }}>{-d.diferencias.reduce((s, x) => s + Math.min(0, x.diferencia), 0) || '—'}</Td>
-                  </Tr>
-                )
-              })}
-            </TBody>
-          </TableWrap>
-        </SectionCard>
-      )}
+      {ficha && <FichaDoc d={ficha} nombres={nombres} trabajando={trabajando} onCerrar={() => setFichaId(null)} onRecibir={() => abrirRecepcion(ficha)} onCancelar={() => cancelar(ficha)} />}
     </div>
+  )
+}
+
+function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onCancelar }: { d: TransferenciaDoc; nombres: Nombres; trabajando: boolean; onCerrar: () => void; onRecibir: () => void; onCancelar: () => void }) {
+  const p = pasoDeDoc(d)
+  const renglones = renglonesConDiferencia(d)
+  const recibida = d.estado === 'recibida'
+  const conPedida = renglones.some((r) => r.pedida > 0)
+  const falta = faltantesDe(d)
+  const th: React.CSSProperties = { textAlign: 'right', padding: '6px 8px', fontWeight: weight.medium, color: color.mut, fontSize: font.sm, whiteSpace: 'nowrap' }
+  const td: React.CSSProperties = { textAlign: 'right', padding: '6px 8px', fontVariantNumeric: 'tabular-nums', borderTop: `1px solid ${color.bg2}` }
+  return (
+    <FichaCostado abierta onCerrar={onCerrar} titulo={`Transferencia T-${d.numero} · ${cuandoCorto(d.creada_en)}`} etiqueta={`Ficha de la transferencia T-${d.numero}`}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+        <div style={{ fontSize: 20, fontWeight: weight.bold, color: color.ink }}>{dep(d.desde)} → {dep(d.hacia)}</div>
+        <BarraPasos paso={p.paso} fin={p.fin} texto={p.texto} />
+      </div>
+      {falta > 0 && <Notice tone="warning">Faltaron {u(falta)} al recibir. La diferencia queda marcada y ⛔ se ajusta sola: la cierra un ajuste en Conteos y ajustes.</Notice>}
+      <DatosFicha>
+        <DatoFicha titulo="Creó">{d.creada_por}</DatoFicha>
+        {d.enviada_en && <DatoFicha titulo="Salió">{cuandoCorto(d.enviada_en)} · {d.enviada_por}</DatoFicha>}
+        {d.recibida_en && <DatoFicha titulo="Llegó">{cuandoCorto(d.recibida_en)} · {d.recibida_por}</DatoFicha>}
+        <DatoFicha titulo="Prendas que salieron">{u(unidadesEnviadas(d))}</DatoFicha>
+        {recibida && <DatoFicha titulo="Prendas que llegaron">{u(unidadesRecibidas(d))}</DatoFicha>}
+        {d.nota && <DatoFicha titulo="Nota">{d.nota}</DatoFicha>}
+      </DatosFicha>
+      <div>
+        <div style={{ fontWeight: weight.semibold, color: color.ink, marginBottom: 6 }}>Prendas ({renglones.length})</div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, textAlign: 'left' }}>Prenda</th>
+              {conPedida && <th style={th}>Pedida</th>}
+              {conPedida && <th style={th}>Armada</th>}
+              <th style={th}>Salió</th>
+              {recibida && <th style={th}>Llegó</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {renglones.map((r) => (
+              <tr key={r.n}>
+                <td style={{ ...td, textAlign: 'left' }}>
+                  <b style={{ color: color.ink }}>{nombreDeRenglon(r, nombres)}</b>
+                  {r.sku && <div style={{ fontSize: font.sm, color: color.mut }}>{r.sku}</div>}
+                </td>
+                {conPedida && <td style={td}>{r.pedida || '—'}</td>}
+                {conPedida && <td style={td}>{r.armada || '—'}</td>}
+                <td style={td}>{r.enviada || '—'}</td>
+                {recibida && <td style={{ ...td, color: r.diferencia ? 'var(--mo-danger-ink)' : color.ink, fontWeight: r.diferencia ? weight.semibold : undefined }}>{r.recibida ?? 0}{r.diferencia ? ` (${r.diferencia > 0 ? '+' : ''}${r.diferencia})` : ''}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+        {d.estado === 'en_transito' && <Button disabled={trabajando} onClick={onRecibir}>Recibir</Button>}
+        {(d.estado === 'borrador' || d.estado === 'armada') && <Button variant="outline" disabled={trabajando} onClick={onCancelar}>Cancelar</Button>}
+        <Button variant="outline" onClick={() => imprimirRemito(d, nombres)}>Imprimir remito</Button>
+      </div>
+    </FichaCostado>
   )
 }

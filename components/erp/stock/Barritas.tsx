@@ -1,6 +1,6 @@
 /**
  * Las dos barritas del tablero 3 del v8 (`~/Documents/erp-monitor/diseno/artifact/Stock.dc.html`):
- * `BarraPasos` — los 4 pasos de una transferencia (Borrador · Armada · En tránsito · Recibida) y el estado en texto;
+ * `BarraPasos` (`fin: 'ok'` = recibida y controlada, verde entera) — los 4 pasos de una transferencia (Borrador · Armada · En tránsito · Recibida) y el estado en texto;
  * `BarraRecibidas` — lo recibido de lo pedido de una orden («24 de 24»).
  */
 
@@ -9,12 +9,13 @@ import { PASOS } from '@/lib/erp/transferencias.core.js'
 const AZUL = '#0284c7', VERDE = '#16a34a', ROJO = '#dc2626', PISTA = '#e3e8ef'
 /** El 4º paso sin control al llegar: GN mueve el stock de un golpe y nadie escanea en destino (⛔ verde lleno). */
 const RAYADO = `repeating-linear-gradient(135deg, ${VERDE} 0 3px, ${PISTA} 3px 6px)`
-const TEXTO = { curso: '#075985', rayado: '#15803d', rojo: '#b42318', gris: '#5d6b82' } as const
+const TEXTO = { curso: '#075985', rayado: '#15803d', ok: '#15803d', rojo: '#b42318', gris: '#5d6b82' } as const
 
-export function BarraPasos({ paso, fin, texto }: { paso: number; fin: 'curso' | 'rayado' | 'rojo' | 'gris'; texto: string }) {
+export function BarraPasos({ paso, fin, texto }: { paso: number; fin: 'curso' | 'rayado' | 'ok' | 'rojo' | 'gris'; texto: string }) {
   const fondo = (i: number) => {
     if (i >= paso) return PISTA
     if (fin === 'rayado') return i === 3 ? RAYADO : VERDE
+    if (fin === 'ok') return VERDE
     if (fin === 'rojo' && i === paso - 1) return ROJO
     return AZUL
   }
