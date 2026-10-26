@@ -162,6 +162,7 @@ export function telDelChat(t: string | null | undefined): string {
 }
 import { leerMapa } from '@/lib/kv/cliente'
 import { tomar } from '@/lib/crm/precarga'
+import { adelantarPedidos } from '@/lib/crm/logistica'
 import type { FilaCliente, FilaDetalle, MapaSeguimiento, MapaTelefonos, Nota } from '@/lib/crm/tipos'
 
 /**
@@ -753,6 +754,10 @@ function PanelInterno({
        * lista, WhatsApp todavía no navegó y `telNorm` sigue siendo el del chat anterior.
        */
       const telBuscar = pedido && !pedido.id ? telDelChat(pedido.tel) : telNorm
+      // Desde la lista, los pedidos de Logística salen YA, junto con la ficha: el id y el teléfono son
+      // los mismos que va a usar `PedidosLogistica` al dibujarla. Desde el chat el id recién se sabe
+      // con la ficha, y su teléfono puede no ser el del chat: ahí no se adelanta nada.
+      if (pedido?.id) adelantarPedidos(pedido.id, pedido.tel || null)
       const r = await buscarFicha(pedido?.id ? { clienteId: pedido.id } : { tel: telBuscar }, mapaSeg, today)
       if (!activo) return
 

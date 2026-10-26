@@ -93,19 +93,56 @@ async function pedir<T>(cuerpo: Record<string, unknown>): Promise<Resultado<T>> 
   }
 }
 
+type Busqueda = { action: 'cliente'; clienteId: number } | { action: 'telefono'; tel: string }
+
+const ADELANTADA_MS = 20_000
+const adelantadas = new Map<string, { p: Promise<Resultado<PedidoLogistica[]>>; t: number }>()
+// La clave del teléfono son sus dígitos: es lo único que el servidor le pasa a Logística.
+const claveDe = (b: Busqueda) => (b.action === 'cliente' ? `c:${b.clienteId}` : `t:${b.tel.replace(/\D/g, '')}`)
+
+function buscar(b: Busqueda): Promise<Resultado<PedidoLogistica[]>> {
+  return pedir<{ orders?: PedidoLogistica[] }>(b).then((r) => (r.t === 'ok' ? { t: 'ok', datos: r.datos.orders || [] } : r))
+}
+
+/**
+ * La búsqueda que `adelantarPedidos` ya largó, si es fresca; si no, una nueva. ⚠️ Se usa UNA vez:
+ * después de despachar o cargar la entrega, volver a la ficha tiene que traer el pedido como quedó,
+ * no lo que se adelantó antes.
+ */
+function tomar(b: Busqueda): Promise<Resultado<PedidoLogistica[]>> {
+  const k = claveDe(b)
+  const e = adelantadas.get(k)
+  adelantadas.delete(k)
+  return e && Date.now() - e.t < ADELANTADA_MS ? e.p : buscar(b)
+}
+
+/**
+ * Larga la búsqueda de los pedidos ANTES de que llegue la ficha (Darío, 25-oct-2026: la ficha
+ * tardaba ~0,9 s y sus pedidos ~1 s más, porque recién se pedían al dibujarla). La toma
+ * `pedidosDelCliente` si le llegan el mismo cliente y el mismo teléfono.
+ */
+export function adelantarPedidos(clienteId: number | null, tel: string | null): void {
+  const bs: Busqueda[] = []
+  if (clienteId) bs.push({ action: 'cliente', clienteId })
+  if (tel && tel.replace(/\D/g, '').length >= 8) bs.push({ action: 'telefono', tel })
+  for (const b of bs) adelantadas.set(claveDe(b), { p: buscar(b), t: Date.now() })
+}
+
 /**
  * Los pedidos en curso de un cliente: por su número de GN y, si ahí no hay nada, por teléfono (un
  * pedido de un cliente duplicado en GN cuelga del otro número de cliente).
+ *
+ * Las dos búsquedas salen JUNTAS y no una detrás de la otra: casi siempre la del número viene vacía,
+ * y esperarla para recién ahí preguntar por teléfono costaba ~0,4 s por ficha.
  */
 export async function pedidosDelCliente(clienteId: number | null, tel: string | null): Promise<Resultado<PedidoLogistica[]>> {
+  const porTel = tel ? tomar({ action: 'telefono', tel }) : null
   if (clienteId) {
-    const r = await pedir<{ orders?: PedidoLogistica[] }>({ action: 'cliente', clienteId })
+    const r = await tomar({ action: 'cliente', clienteId })
     if (r.t !== 'ok') return r
-    if (r.datos.orders?.length || !tel) return { t: 'ok', datos: r.datos.orders || [] }
+    if (r.datos.length || !porTel) return r
   }
-  if (!tel) return { t: 'ok', datos: [] }
-  const r = await pedir<{ orders?: PedidoLogistica[] }>({ action: 'telefono', tel })
-  return r.t === 'ok' ? { t: 'ok', datos: r.datos.orders || [] } : r
+  return porTel || { t: 'ok', datos: [] }
 }
 
 export async function pendientesLogistica(): Promise<Resultado<{ count: number; by_step: Record<string, number>; orders: PendienteLogistica[] }>> {
