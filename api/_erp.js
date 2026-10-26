@@ -99,6 +99,7 @@ import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simul
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { estructuraDeMarca } from './_erp-estructura.js'
 import { configuracionDeMarcas, interruptoresDeMarcas, ponerInterruptorErp } from './_erp-interruptores.js'
+import { pinesErp, ponerPinErp, quitarPinErp, verificarPinErp } from './_erp-pin.js'
 import { ponerRolesErp, restablecerRolesErp, rolesGuardadosDeMarcas, vistaRoles } from './_erp-permisos-rol.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.js'
@@ -1452,6 +1453,16 @@ export default async function handler(req, res) {
         ? await ponerRolesErp({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
         : await restablecerRolesErp({ body }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'pines') {
+      const r = await pinesErp({ marca: String(req.query.marca || '') }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+    if (req.method === 'POST' && (body.accion === 'poner-pin' || body.accion === 'quitar-pin' || body.accion === 'verificar-pin')) {
+      const f = { 'poner-pin': ponerPinErp, 'quitar-pin': quitarPinErp, 'verificar-pin': verificarPinErp }[body.accion]
+      const r = await f({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error, codigo: r.codigo, hasta: r.hasta, quedan: r.quedan } : r)
     }
 
     if (req.method === 'POST' && body.accion === 'poner-interruptor') {

@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "b983546f73db9713ad21f04a0dd3b0fe79c246ad",
-  "traido_en": "2026-10-26T00:35:33.412Z",
+  "commit": "3590aa96801ab141c386f91ced15eb7c378913bb",
+  "traido_en": "2026-10-26T00:54:54.256Z",
   "archivos": {
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
     "arca/cliente.js": "fc1118e7392afdf716057de81175ec6fe2b7a16edd63ed7956241e8389fce168",
@@ -22,6 +22,7 @@
     "stock/ajuste.mjs": "5a0cb9193f56b4a5bb31bd17f97d2d9f49045af4162e07987d969922b24d584a",
     "stock/interruptores.mjs": "aa08ed1ff19812949617eddd01af87c08d907434256ea84258368173e715bb58",
     "stock/permisos-rol.mjs": "3acdf41fa5b87a7c89f9752932547672c46d508c40a21940a48f4025ff1f13da",
+    "stock/pin.mjs": "60091dcecd6b700f7e937d9b351ebd79c750477af866332a0f129456c84a342b",
     "stock/salida.mjs": "fe7884f4376ac087ce09dd536a41caafc5c1f5a2e2b2be606521ea2e71e06862",
     "stock/transferencia.mjs": "2006203b6796bec0690cd5e0aba7733648699265d27c576bfad2b7f7dbd1c8f1",
     "tn/cruce.mjs": "bfb6eeabe683197f5613f7edcee31a23178bfab582aab69daa8185dd87291b37",
