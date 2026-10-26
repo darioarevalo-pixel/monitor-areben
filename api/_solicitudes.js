@@ -25,6 +25,7 @@ import { baseDeLinea } from '../lib/lineas.core.js';
 // El 2º disparador de la Agenda. Armar una sesión de fotos es un hecho que prende trabajo en tres
 // sectores, y sus nueve pasos están escritos con dueña en el manual 05: acá es donde ocurre el hecho.
 import { sembrarEnMaestra } from './_agenda.js';
+import { documentarSalida } from './_salida-documento.js';
 // 🔑 Qué siembra cada fila del cajón —el evento sí, su hija ⛔ no, la solicitud suelta como
 // siempre— vive en el núcleo y ⛔ no en el `for` de abajo: así el test llama a la MISMA función.
 import { KINDS_QUE_SIEMBRAN, siembraDeSesion } from '../lib/sesionfotos/evento.core.js';
@@ -51,6 +52,8 @@ function cfgFor(store) {
 // las dos preguntas las contesta `siembraDeSesion`, en el núcleo. Sembrar por hija repetiría los
 // nueve pasos una vez por pedido — un evento con tres solicitudes son 36 renglones.
 const KINDS = ['sesionfotos', 'solicitudesinternas', 'sesion-evento'];
+/** Los que pueden ser una SALIDA CON VUELTA (sql/048): la fotos y la interna retornable. El evento es el padre y ⛔ sale. */
+const KINDS_SALIDA = ['sesionfotos', 'solicitudesinternas'];
 
 
 /**
@@ -247,7 +250,20 @@ export default async function handler(req, res) {
         sembrado.push({ id: String(s.id), ...r });
       }
 
-      return res.status(200).json({ ok: true, guardadas: validas.length, ...(sembrado.length ? { sembrado } : {}) });
+      /*
+        🔴 **La salida con vuelta del motor (sql/048), EN SOMBRA y después de guardar.** Anota que la solicitud salió, lo que
+        volvió y, si volvió todo, la cierra. ⛔ frena ni lanza: sin `DATABASE_URL_<MARCA>` ni toca nada.
+      */
+      const salidas = [];
+      if (KINDS_SALIDA.includes(kind) && !Array.isArray(b.solicitudes)) {
+        for (const s of validas) {
+          const r = await documentarSalida({ store, kind, solicitud: s, usuario: perfil.name || perfil.user || null });
+          if (r.error) console.error('[salida]', store, s.id, r.error);
+          if (r.error || r.cerrada || r.abierta) salidas.push({ id: String(s.id), ...r });
+        }
+      }
+
+      return res.status(200).json({ ok: true, guardadas: validas.length, ...(sembrado.length ? { sembrado } : {}), ...(salidas.length ? { salidas } : {}) });
     }
 
     return res.status(405).json({ error: 'método no permitido' });

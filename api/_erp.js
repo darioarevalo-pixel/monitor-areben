@@ -58,6 +58,8 @@
  *   POST {recurso:'erp', accion:'crear-ajuste'|'aprobar-ajuste'|'descartar-ajuste', linea, …}   `api/_erp-ajustes.js`
  *   GET  ?recurso=erp&vista=transferencias-doc&marca=…   las transferencias como DOCUMENTO del motor (sql/034) + lo en tránsito
  *   POST {recurso:'erp', accion:'transferencia-crear'|'-armar'|'-enviar'|'-recibir'|'-cancelar', linea, …}   `api/_erp-transferencia.js`
+ *   GET  ?recurso=erp&vista=salidas&marca=…   las salidas con vuelta (fotos, producción) del motor (sql/048)
+ *   POST {recurso:'erp', accion:'salida-crear'|'-devolver'|'-cerrar'|'-cancelar', linea, …}   `api/_erp-salida.js`
  *   GET  ?recurso=erp&vista=producto-historial&marca=…&productId=…   quién cambió qué en un producto (sql/037)
  *   POST {recurso:'erp', accion:'producto-editar'|'variante-editar'|'variante-agregar', marca, productId, …}   `api/_erp-catalogo.js` (sólo admin)
  *   GET  ?recurso=erp&vista=roles                                       los roles de cada permiso (defecto + guardados) · POST poner-roles / restablecer-roles (`api/_erp-permisos-rol.js`)
@@ -101,6 +103,8 @@ import { ponerRolesErp, restablecerRolesErp, rolesGuardadosDeMarcas, vistaRoles 
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.js'
 import { ACCIONES as ACCIONES_TRANSFERENCIA } from '../lib/erp/transferencia-doc.core.js'
+import { accionDeSalida, salidasDeLinea } from './_erp-salida.js'
+import { ACCIONES as ACCIONES_SALIDA } from '../lib/erp/salida.core.js'
 import { accionDeCatalogo, historialDeProducto } from './_erp-catalogo.js'
 import { ACCIONES as ACCIONES_CATALOGO } from '../lib/erp/catalogo-edicion.core.js'
 import { cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
@@ -1479,6 +1483,16 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && ACCIONES_TRANSFERENCIA.includes(body.accion)) {
       const r = await accionDeTransferencia({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'salidas') {
+      const r = await salidasDeLinea({ linea: String(req.query.marca || ''), estado: req.query.estado ? String(req.query.estado) : null, ref: req.query.ref ? String(req.query.ref) : null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'POST' && ACCIONES_SALIDA.includes(body.accion)) {
+      const r = await accionDeSalida({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error, ...(r.faltan ? { faltan: r.faltan } : {}) } : r)
     }
 
     if (req.method === 'GET' && req.query.vista === 'producto-historial') {
