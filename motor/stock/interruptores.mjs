@@ -11,10 +11,11 @@ export const APAGADOS = Object.freeze({ anular: false, conteo: false, precio: fa
 /**
  * La CONFIGURACIÓN comparte la tabla (sql/040) pero ⛔ es una aprobación: `interruptoresDe` sigue devolviendo sólo `CLAVES` (la pantalla de
  * Aprobaciones y `puedeErp` esperan esa forma) y la configuración se lee con `configuracionDe`.
+ * `salida_mueve_libro` (sql/048, Bruno 25-oct): prendido = la salida con vuelta (fotos, producción) mueve el libro al escanear y al devolver; apagado = en sombra (lo mueve la venta de GN). Se prende el día del corte.
  * `sin_pagar_a_preparar` (Darío 26-oct: opción A): prendido = el pedido de Tienda Nube SIN PAGAR entra a «A preparar». Por BASE: bdi, y zattia con Stunned.
  */
-export const CONFIGURACION = ['sin_pagar_a_preparar']
-export const CONFIG_APAGADA = Object.freeze({ sin_pagar_a_preparar: false })
+export const CONFIGURACION = ['sin_pagar_a_preparar', 'salida_mueve_libro']
+export const CONFIG_APAGADA = Object.freeze({ sin_pagar_a_preparar: false, salida_mueve_libro: false })
 const SIN_PAGAR_A_PREPARAR = 'sin_pagar_a_preparar'
 
 /** `{ anular, conteo, precio }` de esa línea (booleanos). Sin tabla ⇒ todo apagado. */

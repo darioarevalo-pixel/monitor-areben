@@ -10,10 +10,13 @@
  * un movimiento `ajuste` por renglón con la `diferencia` de ese momento (una venta entre el conteo y la aprobación ⛔ la
  * cambia: el libro ya la descontó, y la estantería también). `rechazarAjuste` lo cierra sin mover nada.
  *
- * Motivos (DECISIONES 8): `conteo` da lo CONTADO (diferencia = contado − libro); los demás dan la cantidad que SALE
- * (fallado, canje, regalo) o la que se mueve, con signo (`otro`, con texto obligatorio). ⛔ ingreso ni cambio.
+ * Motivos (DECISIONES 8 + sesión A 25-oct): `conteo` da lo CONTADO (diferencia = contado − libro); los demás dan la cantidad
+ * que SALE o la que se mueve, con signo (`otro`, con texto obligatorio). ⛔ ingreso ni cambio. Cada motivo tiene su categoría de
+ * gasto (`CATEGORIAS`) y cada renglón guarda el COSTO real de la prenda (tabla de costos; sin costo ⇒ 0 y `sin_costo`).
+ * `canje` y `consumible` nacen `aplicado` (INSTANTANEOS); los demás esperan al admin.
  */
 
+import { costosDe } from '../venta/costo.mjs'
 
 export const MOTIVOS = {
   conteo: 'Conteo',
@@ -21,10 +24,27 @@ export const MOTIVOS = {
   canje: 'Influencer / canje',
   regalo: 'Regalo / sorteo / donación',
   otro: 'Otro',
+  consumible: 'Consumible (se gastó en la sesión de fotos)',
+  muestra_cliente: 'Muestra a cliente',
+  faltante_robo: 'Faltante o robo',
+  uso_interno: 'Uso interno',
+  devolucion_proveedor: 'Devolución a proveedor',
 }
 /** Los que sacan prendas del stock: la cantidad va en negativo. */
-const SOLO_SALEN = new Set(['fallado', 'canje', 'regalo'])
-export const FUENTES = ['mano', 'conciliacion', 'contar']
+const SOLO_SALEN = new Set(['fallado', 'canje', 'regalo', 'consumible', 'muestra_cliente', 'faltante_robo', 'uso_interno', 'devolucion_proveedor'])
+/**
+ * A qué gasto va cada motivo (Bruno 25-oct). `conteo` y `otro` ⇒ pérdida / sin categoría. Se guarda en el ajuste el día
+ * que se arma (sql/047): cambiar esta tabla ⛔ reescribe el pasado.
+ */
+export const CATEGORIAS = {
+  canje: 'marketing', consumible: 'marketing', muestra_cliente: 'marketing', regalo: 'marketing',
+  fallado: 'perdida', faltante_robo: 'perdida', conteo: 'perdida',
+  uso_interno: 'operativo', devolucion_proveedor: 'sin_gasto',
+  otro: null,
+}
+/** Los que ⛔ esperan a un admin: los hace el flujo operativo (canje, cierre de una sesión de fotos). El resto, como siempre. */
+export const INSTANTANEOS = new Set(['canje', 'consumible'])
+export const FUENTES = ['mano', 'conciliacion', 'contar', 'salida']
 export const MAX_RENGLONES = 500
 /** Un conteo del módulo de Depósito (el del Excel para GN) más nuevo que esto sobre la misma prenda ⇒ aviso. */
 const CONTEO_RECIENTE_MS = 3 * 864e5
@@ -36,9 +56,10 @@ const claveDe = (r) => `${r.product_id}:${r.size_id}`
 /**
  * El ajuste listo para escribir: `{ ok, ajuste, renglones }` o `{ ok: false, error }`. Puro.
  * @param {any} e `{ linea, deposito, motivo, detalle?, fuente?, usuario, renglones: [{ product_id, size_id, sku?, barcode?, contado? | cantidad? }] }`
- * @param {{ empresa_id: string, depositos: string[], niveles: Map<string, number> }} ctx el libro de ese depósito, por variante
+ * @param {{ empresa_id: string, depositos: string[], niveles: Map<string, number>, costos?: Map<number, { costo: number, fuente: string }> }} ctx
+ *   el libro de ese depósito, por variante, y el costo por producto (`costosDe`)
  */
-export function armarAjuste(e, { empresa_id, depositos, niveles }) {
+export function armarAjuste(e, { empresa_id, depositos, niveles, costos = new Map() }) {
   if (!e || typeof e !== 'object') return falla('ENTRADA_INVALIDA', 'Falta el ajuste')
   const usuario = String(e.usuario ?? '').trim()
   if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién hace el ajuste', 'usuario')
@@ -70,18 +91,24 @@ export function armarAjuste(e, { empresa_id, depositos, niveles }) {
       if (!entero(r.cantidad) || Number(r.cantidad) === 0) return falla('ENTRADA_INVALIDA', `Falta la cantidad de ${r.sku || k}`, 'renglones')
       diferencia = Number(r.cantidad)
       if (SOLO_SALEN.has(e.motivo) && diferencia > 0) return falla('ENTRADA_INVALIDA', `«${MOTIVOS[e.motivo]}» saca prendas: la cantidad va en negativo (${r.sku || k})`, 'renglones')
-      if (antes + diferencia < 0) return falla('QUEDA_NEGATIVO', `${r.sku || k}: el libro tiene ${antes} en ${e.deposito} y el ajuste saca ${-diferencia}. Si la prenda está, primero hay que contarla`, 'renglones')
+      // Un ajuste de CIERRE de una salida (`sin_movimiento`) ⛔ toca el libro: la prenda ya salió con la salida ⇒ el nivel no importa.
+      if (!e.sin_movimiento && antes + diferencia < 0) return falla('QUEDA_NEGATIVO', `${r.sku || k}: el libro tiene ${antes} en ${e.deposito} y el ajuste saca ${-diferencia}. Si la prenda está, primero hay que contarla`, 'renglones')
     }
     if (diferencia === 0) continue   // el conteo coincide con el libro: ⛔ hay nada que mover
+    const c = costos.get(Number(r.product_id))
     renglones.push({
       n: renglones.length + 1, empresa_id, product_id: Number(r.product_id), size_id: Number(r.size_id),
       sku: r.sku ?? null, barcode: r.barcode ?? null, antes, contado, diferencia,
+      costo_unitario: c ? c.costo : 0, costo_fuente: c ? c.fuente : 'sin_costo',
     })
   }
   if (!renglones.length) return falla('SIN_DIFERENCIAS', 'Lo contado coincide con el libro: no hay nada que ajustar')
   return {
     ok: true,
-    ajuste: { empresa_id, linea: e.linea, deposito: e.deposito, motivo: e.motivo, detalle, fuente, estado: 'para_aprobar', creado_por: usuario },
+    ajuste: {
+      empresa_id, linea: e.linea, deposito: e.deposito, motivo: e.motivo, detalle, fuente, creado_por: usuario, sin_movimiento: e.sin_movimiento === true,
+      categoria_gasto: CATEGORIAS[e.motivo] ?? null, estado: INSTANTANEOS.has(e.motivo) ? 'aplicado' : 'para_aprobar',
+    },
     renglones,
   }
 }
@@ -165,26 +192,38 @@ async function contexto(db, linea) {
  * Arma el ajuste y lo deja `para_aprobar` (⛔ mueve el libro todavía). Devuelve `{ ok, ajuste: { id, numero, … }, renglones, avisos }`.
  * @param {import('pg').ClientBase} db @param {any} e la entrada de `armarAjuste` @param {{ ahora?: Date }} [op]
  */
-export async function crearAjuste(db, e, { ahora = new Date() } = {}) {
-  return enTransaccion(db, async () => {
-    const ctx = await contexto(db, e?.linea)
-    if (!ctx) return falla('ENTRADA_INVALIDA', `Línea desconocida: ${e?.linea}`, 'linea')
-    const variantes = Array.isArray(e.renglones) ? e.renglones.filter((r) => entero(r?.product_id) && entero(r?.size_id)) : []
-    const niveles = await nivelesDe(db, e.deposito, variantes)
-    const armado = armarAjuste(e, { ...ctx, niveles })
-    if (!armado.ok) return armado
-    const [n] = await q(db, `insert into stock_ajuste_numero (linea, ultimo) values ($1, 1)
-      on conflict (linea) do update set ultimo = stock_ajuste_numero.ultimo + 1 returning ultimo`, [e.linea])
-    const [a] = await q(db, `insert into stock_ajuste (empresa_id, linea, numero, deposito, motivo, detalle, fuente, estado, creado_por, creado_en)
-      values ($1, $2, $3, $4, $5, $6, $7, 'para_aprobar', $8, $9) returning *`,
-    [ctx.empresa_id, e.linea, Number(n.ultimo), armado.ajuste.deposito, armado.ajuste.motivo, armado.ajuste.detalle, armado.ajuste.fuente, armado.ajuste.creado_por, ahora.toISOString()])
-    await db.query(`insert into stock_ajuste_renglon (ajuste_id, n, empresa_id, product_id, size_id, sku, barcode, antes, contado, diferencia)
-      select $1, n, empresa_id, product_id, size_id, sku, barcode, antes, contado, diferencia
-      from jsonb_to_recordset($2::jsonb) as x(n int, empresa_id text, product_id bigint, size_id bigint, sku text, barcode text, antes int, contado int, diferencia int)`,
-    [a.id, JSON.stringify(armado.renglones)])
-    const avisos = await conteosRecientes(db, armado.ajuste.deposito, armado.renglones, ahora)
-    return { ok: true, ajuste: a, renglones: armado.renglones, avisos }
-  })
+export async function crearAjuste(db, e, op = {}) {
+  return enTransaccion(db, () => guardarAjuste(db, e, op))
+}
+
+/** `crearAjuste` SIN transacción propia: la abre quien llama (el cierre de una salida arma varios juntos). */
+export async function guardarAjuste(db, e, { ahora = new Date() } = {}) {
+  const ctx = await contexto(db, e?.linea)
+  if (!ctx) return falla('ENTRADA_INVALIDA', `Línea desconocida: ${e?.linea}`, 'linea')
+  const variantes = Array.isArray(e.renglones) ? e.renglones.filter((r) => entero(r?.product_id) && entero(r?.size_id)) : []
+  const niveles = await nivelesDe(db, e.deposito, variantes)
+  const costos = await costosDe(db, [...new Set(variantes.map((v) => Number(v.product_id)))])
+  const armado = armarAjuste(e, { ...ctx, niveles, costos })
+  if (!armado.ok) return armado
+  const [n] = await q(db, `insert into stock_ajuste_numero (linea, ultimo) values ($1, 1)
+    on conflict (linea) do update set ultimo = stock_ajuste_numero.ultimo + 1 returning ultimo`, [e.linea])
+  // `sin_movimiento` es de sql/048: sólo se nombra la columna cuando hace falta ⇒ un ajuste común ⛔ depende de esa migración.
+  const sin = armado.ajuste.sin_movimiento === true
+  const [a] = await q(db, `insert into stock_ajuste (empresa_id, linea, numero, deposito, motivo, detalle, fuente, estado, creado_por, creado_en, categoria_gasto${sin ? ', sin_movimiento' : ''})
+    values ($1, $2, $3, $4, $5, $6, $7, 'para_aprobar', $8, $9, $10${sin ? ', true' : ''}) returning *`,
+  [ctx.empresa_id, e.linea, Number(n.ultimo), armado.ajuste.deposito, armado.ajuste.motivo, armado.ajuste.detalle, armado.ajuste.fuente, armado.ajuste.creado_por, ahora.toISOString(), armado.ajuste.categoria_gasto])
+  await db.query(`insert into stock_ajuste_renglon (ajuste_id, n, empresa_id, product_id, size_id, sku, barcode, antes, contado, diferencia, costo_unitario, costo_fuente)
+    select $1, n, empresa_id, product_id, size_id, sku, barcode, antes, contado, diferencia, costo_unitario, costo_fuente
+    from jsonb_to_recordset($2::jsonb) as x(n int, empresa_id text, product_id bigint, size_id bigint, sku text, barcode text, antes int, contado int, diferencia int, costo_unitario numeric, costo_fuente text)`,
+  [a.id, JSON.stringify(armado.renglones)])
+  const avisos = await conteosRecientes(db, armado.ajuste.deposito, armado.renglones, ahora)
+  for (const r of armado.renglones) if (r.costo_fuente === 'sin_costo' && r.diferencia < 0 && armado.ajuste.categoria_gasto !== 'sin_gasto') avisos.push({ codigo: 'SIN_COSTO', product_id: r.product_id, size_id: r.size_id, sku: r.sku })
+  // Los que hace el flujo operativo (canje, consumible) ⛔ esperan: el libro se mueve en la misma transacción, a nombre de quien lo cargó.
+  if (armado.ajuste.estado === 'aplicado') {
+    const aplicado = await aplicar(db, a, armado.renglones.map((r) => ({ ...r, ajuste_id: a.id })), a.creado_por, ahora)
+    return { ok: true, ajuste: { ...a, estado: 'aplicado', resuelto_por: a.creado_por, resuelto_en: ahora.toISOString() }, renglones: armado.renglones, avisos: [...avisos, ...aplicado.avisos], movimientos: aplicado.movimientos }
+  }
+  return { ok: true, ajuste: a, renglones: armado.renglones, avisos }
 }
 
 async function leerParaResolver(db, id) {
@@ -209,19 +248,28 @@ export async function aprobarAjuste(db, e, { ahora = new Date() } = {}) {
     const a = l.ajuste
     const renglones = (await q(db, 'select * from stock_ajuste_renglon where ajuste_id = $1 order by n', [a.id]))
       .map((r) => ({ ...r, product_id: Number(r.product_id), size_id: Number(r.size_id) }))
-    const ahoraNivel = await nivelesDe(db, a.deposito, renglones)
-    const avisos = []
-    for (const r of renglones) {
-      const hoy = ahoraNivel.get(claveDe(r)) ?? 0
-      if (hoy !== r.antes) avisos.push({ codigo: 'LIBRO_SE_MOVIO', product_id: r.product_id, size_id: r.size_id, sku: r.sku, antes: r.antes, ahora: hoy })
-    }
-    const movimientos = movimientosDe(a, renglones, ahora)
-    await db.query(`insert into stock_movimiento (linea, product_id, size_id, sku, barcode, deposito, cantidad, tipo, origen, clave, origen_ref, ocurrido_en, hora_exacta, grupo, detalle)
-      select linea, product_id, size_id, sku, barcode, deposito, cantidad, tipo, origen, clave, origen_ref, ocurrido_en, hora_exacta, grupo, detalle
-      from jsonb_populate_recordset(null::stock_movimiento, $1::jsonb)`, [JSON.stringify(movimientos)])
-    await db.query(`update stock_ajuste set estado = 'aplicado', resuelto_por = $2, resuelto_en = $3 where id = $1`, [a.id, usuario, ahora.toISOString()])
-    return { ok: true, ajuste: { id: a.id, numero: a.numero, estado: 'aplicado' }, movimientos: movimientos.length, avisos }
+    const r = await aplicar(db, a, renglones, usuario, ahora)
+    return { ok: true, ajuste: { id: a.id, numero: a.numero, estado: 'aplicado' }, movimientos: r.movimientos, avisos: r.avisos }
   })
+}
+
+/**
+ * Escribe en el libro un movimiento por renglón y marca el ajuste `aplicado`. SIN transacción propia: la abre quien llama
+ * (`aprobarAjuste`, o `crearAjuste` para los INSTANTANEOS). `avisos` = renglones cuyo libro se movió desde que se armó.
+ */
+async function aplicar(db, a, renglones, usuario, ahora) {
+  const ahoraNivel = await nivelesDe(db, a.deposito, renglones)
+  const avisos = []
+  for (const r of renglones) {
+    const hoy = ahoraNivel.get(claveDe(r)) ?? 0
+    if (hoy !== r.antes) avisos.push({ codigo: 'LIBRO_SE_MOVIO', product_id: r.product_id, size_id: r.size_id, sku: r.sku, antes: r.antes, ahora: hoy })
+  }
+  const movimientos = a.sin_movimiento ? [] : movimientosDe(a, renglones, ahora)
+  if (movimientos.length) await db.query(`insert into stock_movimiento (linea, product_id, size_id, sku, barcode, deposito, cantidad, tipo, origen, clave, origen_ref, ocurrido_en, hora_exacta, grupo, detalle)
+    select linea, product_id, size_id, sku, barcode, deposito, cantidad, tipo, origen, clave, origen_ref, ocurrido_en, hora_exacta, grupo, detalle
+    from jsonb_populate_recordset(null::stock_movimiento, $1::jsonb)`, [JSON.stringify(movimientos)])
+  await db.query(`update stock_ajuste set estado = 'aplicado', resuelto_por = $2, resuelto_en = $3 where id = $1`, [a.id, usuario, ahora.toISOString()])
+  return { movimientos: movimientos.length, avisos }
 }
 
 /** Rechaza sin mover nada; el motivo es obligatorio (queda a la vista de quien lo armó). */

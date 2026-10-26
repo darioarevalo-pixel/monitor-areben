@@ -4,6 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // los pedidos que pasan la puerta caen en `vista=permisos`, que contesta sin leer nada.
 let perfilActual: unknown = null
 vi.mock('../api/_auth.js', () => ({ exigirUsuario: async () => perfilActual }))
+// Los roles guardados (motor sql/049) ⛔ se leen de una base: acá se eligen. Una marca con `__error` es una base que no respondió.
+let guardadosActual: Record<string, unknown> = {}
+vi.mock('../api/_erp-permisos-rol.js', async (orig) => ({ ...(await orig<object>()), rolesGuardadosDeMarcas: async () => guardadosActual }))
 vi.mock('../api/_facturacion.js', () => ({ arcaConectado: () => false, SIN_ARCA: 'sin certificado', baseFacturacion: () => null, clienteArcaDelEntorno: () => null, repoFacturas: () => null }))
 
 type Resp = { code: number; body: { permiso?: string; permisos?: Record<string, Record<string, boolean>> }; status(c: number): Resp; json(b: unknown): Resp }
@@ -16,7 +19,7 @@ const cargar = async () => (await import('../api/_erp.js')).default as unknown a
 const perfil = (over: Record<string, unknown> = {}) => ({ name: 'Ana', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, funcion: [], ...over })
 
 describe('api/_erp.js · la puerta por rol', () => {
-  beforeEach(() => { perfilActual = null })
+  beforeEach(() => { perfilActual = null; guardadosActual = {} })
 
   it('🔑 con la llave cerrada, un Local recibe 403 aunque tenga la función (como hasta el 19-oct)', async () => {
     const handler = await cargar()
@@ -61,5 +64,34 @@ describe('api/_erp.js · la puerta por rol', () => {
     const otra = res()
     await handler({ method: 'GET', query: { vista: 'permisos', linea: 'stunned' }, body: {} }, otra)
     expect(otra.code).toBe(403)
+  })
+
+  it('roles guardados: pisan la tabla en el mapa de permisos; si la base no respondió, esa marca queda cerrada (sólo Admin)', async () => {
+    const handler = await cargar()
+    perfilActual = perfil({ funcion: ['administracion'], acceso: { bdi: { erp: true }, zattia: { erp: true } } })
+    guardadosActual = { bdi: { cuentas: [] }, zattia: {} }
+    const a = res()
+    await handler({ method: 'GET', query: { vista: 'permisos' }, body: {} }, a)
+    expect(a.body.permisos?.bdi.cuentas).toBe(false) // lo guardado: nadie salvo Admin
+    expect(a.body.permisos?.zattia.cuentas).toBe(true)
+    guardadosActual = { bdi: { __error: true }, zattia: {} }
+    const b = res()
+    await handler({ method: 'GET', query: { vista: 'permisos' }, body: {} }, b)
+    expect(b.body.permisos?.bdi.facturacion).toBe(false) // la base no respondió ⇒ cerrada, no «el valor por defecto»
+    expect(b.body.permisos?.zattia.facturacion).toBe(true)
+  })
+
+  it('repartir roles entre permisos: sólo Admin (poner, restablecer y ver la pantalla)', async () => {
+    const handler = await cargar()
+    perfilActual = perfil({ funcion: ['administracion'], acceso: { bdi: { erp: true }, zattia: { erp: true } } })
+    for (const [method, query, body] of [
+      ['GET', { vista: 'roles' }, {}],
+      ['POST', {}, { accion: 'poner-roles', marca: 'bdi', permiso: 'cuentas', roles: ['local'] }],
+      ['POST', {}, { accion: 'restablecer-roles', marca: 'bdi', permiso: 'cuentas' }],
+    ] as const) {
+      const r = res()
+      await handler({ method, query, body }, r)
+      expect(r.code).toBe(403)
+    }
   })
 })

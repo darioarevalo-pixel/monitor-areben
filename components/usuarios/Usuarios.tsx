@@ -12,6 +12,7 @@ import { Button, Card, color, font, Notice, useConfirmar } from '@/components/ui
 import { AltaGuiada } from './AltaGuiada'
 import { Credenciales } from './Credenciales'
 import { Aprobaciones } from './Aprobaciones'
+import { RolesPermisos } from './RolesPermisos'
 import { UsuarioCard } from './UsuarioCard'
 
 type Estado = { msg: string; color: string } | null
@@ -197,6 +198,7 @@ export function Usuarios() {
       )}
 
       <Aprobaciones />
+      <RolesPermisos />
 
       {/* Va al final y plegado: no es gestión de usuarios, es con qué llave entra el servidor a
           las bases. Está en esta pantalla porque es el único lugar que ya corta a los que no son

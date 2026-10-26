@@ -644,3 +644,16 @@ export const leerInterruptores = () =>
 
 export const ponerInterruptor = (marca: MarcaErp, clave: ClaveInterruptor, valor: boolean) =>
   pedir<{ ok: true; marca: MarcaErp; interruptores: Interruptores }>(post({ accion: 'poner-interruptor', marca, clave, valor }), '', 'No se pudo guardar el cambio.')
+
+export type RolErp = 'local' | 'mayorista' | 'deposito' | 'administracion' | 'consulta'
+export type RolesPorMarca = Record<MarcaErp, Record<string, RolErp[]> & { __error?: boolean }>
+export type VistaRoles = { roles: RolErp[]; editables: string[]; defecto: Record<MarcaErp, Record<string, RolErp[]>>; guardados: RolesPorMarca }
+
+/** Los roles de cada permiso del ERP, por marca (sólo Admin): el valor del código y lo que se guardó para pisarlo. */
+export const leerRoles = () => pedir<VistaRoles>(null, `&vista=roles&nc=${Date.now()}`, 'No se pudieron leer los roles de cada permiso.')
+
+export const ponerRoles = (marca: MarcaErp, permiso: string, roles: RolErp[]) =>
+  pedir<{ ok: true; marca: MarcaErp; guardados: Record<string, RolErp[]> }>(post({ accion: 'poner-roles', marca, permiso, roles }), '', 'No se pudo guardar el cambio.')
+
+export const restablecerRoles = (marca: MarcaErp, permiso: string) =>
+  pedir<{ ok: true; marca: MarcaErp; guardados: Record<string, RolErp[]> }>(post({ accion: 'restablecer-roles', marca, permiso }), '', 'No se pudo restablecer.')

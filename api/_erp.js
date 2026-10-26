@@ -60,6 +60,7 @@
  *   POST {recurso:'erp', accion:'transferencia-crear'|'-armar'|'-enviar'|'-recibir'|'-cancelar', linea, …}   `api/_erp-transferencia.js`
  *   GET  ?recurso=erp&vista=producto-historial&marca=…&productId=…   quién cambió qué en un producto (sql/037)
  *   POST {recurso:'erp', accion:'producto-editar'|'variante-editar'|'variante-agregar', marca, productId, …}   `api/_erp-catalogo.js` (sólo admin)
+ *   GET  ?recurso=erp&vista=roles                                       los roles de cada permiso (defecto + guardados) · POST poner-roles / restablecer-roles (`api/_erp-permisos-rol.js`)
  *   GET  ?recurso=erp&vista=permisos                                   lo que el perfil puede en el ERP, por marca (`permisosErp`)
  *
  * El monto de cada factura lo rearma el SERVIDOR con los cobros: del navegador sólo viajan los ids.
@@ -96,6 +97,7 @@ import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simul
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { estructuraDeMarca } from './_erp-estructura.js'
 import { configuracionDeMarcas, interruptoresDeMarcas, ponerInterruptorErp } from './_erp-interruptores.js'
+import { ponerRolesErp, restablecerRolesErp, rolesGuardadosDeMarcas, vistaRoles } from './_erp-permisos-rol.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.js'
 import { ACCIONES as ACCIONES_TRANSFERENCIA } from '../lib/erp/transferencia-doc.core.js'
@@ -1389,12 +1391,17 @@ export default async function handler(req, res) {
   const aprobaciones = (esAdmin(perfil) || (permiso === 'ver' && req.query.vista !== 'permisos'))
     ? undefined
     : await interruptoresDeMarcas(marcasDelPedido, { conMotor })
-  if (!marcasDelPedido.every((m) => puedeErp(perfil, m, permiso, aprobaciones))) {
+  // Los roles guardados (Usuarios y roles, motor sql/049) pisan la tabla del código; mismo criterio: al Admin ⛔ le cambian nada.
+  // La vista `permisos` arma el mapa de las dos marcas ⇒ lee las dos.
+  const guardados = (esAdmin(perfil) || (permiso === 'ver' && req.query.vista !== 'permisos'))
+    ? undefined
+    : await rolesGuardadosDeMarcas(req.query.vista === 'permisos' ? ['bdi', 'zattia'] : marcasDelPedido, { conMotor })
+  if (!marcasDelPedido.every((m) => puedeErp(perfil, m, permiso, aprobaciones, guardados))) {
     return res.status(403).json({ error: permiso === 'ver' ? 'No tenés acceso al ERP.' : 'Tu rol no puede hacer esto en el ERP.', permiso })
   }
   const invalida = entradaInvalida({ method: req.method, query: req.query, body })
   if (invalida) return res.status(invalida.status).json({ error: invalida.error, campo: invalida.campo })
-  if (req.method === 'GET' && req.query.vista === 'permisos') return res.status(200).json({ permisos: permisosErp(perfil, aprobaciones) })
+  if (req.method === 'GET' && req.query.vista === 'permisos') return res.status(200).json({ permisos: permisosErp(perfil, aprobaciones, guardados) })
   const mes = String(req.query.mes || body.mes || diaArgentino(Date.now()).slice(0, 7))
   if (!/^\d{4}-\d{2}$/.test(mes)) return res.status(400).json({ error: 'Mes inválido' })
 
@@ -1431,6 +1438,16 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET' && req.query.vista === 'configuracion') {
       return res.status(200).json({ configuracion: await configuracionDeMarcas(['bdi', 'zattia'], { conMotor }) })
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'roles') {
+      return res.status(200).json(await vistaRoles({ conMotor }))
+    }
+    if (req.method === 'POST' && (body.accion === 'poner-roles' || body.accion === 'restablecer-roles')) {
+      const r = body.accion === 'poner-roles'
+        ? await ponerRolesErp({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
+        : await restablecerRolesErp({ body }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
     if (req.method === 'POST' && body.accion === 'poner-interruptor') {
