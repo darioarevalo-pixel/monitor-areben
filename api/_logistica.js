@@ -33,11 +33,79 @@
 // 🔴 **Escribir es sólo de admin**: queda a nombre de Darío en Logística, y no hay entorno de prueba —
 // cada escritura cambia un pedido real—. Mirar alcanza con el permiso de Clientes. Leer el mensaje
 // con IA y la vista previa no guardan, pero también son de admin: la IA es paga (20 por minuto).
+//
+// 🔑 **Los pendientes + los preparados sin despachar** (Darío, 26-oct-2026: «no me aparecía para
+// informarle el código de seguimiento a Pilar»). `/mayorista/pendientes` de Logística trae sólo lo
+// que tiene un dato sin cargar: un EM con el seguimiento leído del PDF sale de ahí, y sale de «Hoy»
+// justo cuando falta pasarle el seguimiento y despacharlo. Acá se recuerdan los números de pedido
+// que pasaron por pendientes (Blob `logistica/en-curso.json`, sólo números) y los que ya no están se
+// consultan uno por uno: mientras sigan en curso vuelven a la lista; despachado, cancelado o 404 se
+// olvidan. ⚠️ Un pedido que completó todo sin que nadie abriera el panel en el medio no se recuerda.
+import { list, put } from '@vercel/blob';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
 
 const BASE = 'https://logistica.arebensrl.com/api/ext/v1';
 const ESPERA_MS = 10_000;
+
+const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
+const conToken = BLOB_TOKEN ? { token: BLOB_TOKEN } : {};
+const RECORDADOS = 'logistica/en-curso.json';
+const OLVIDAR_MS = 60 * 24 * 3600 * 1000;
+const TOPE_CONSULTAS = 40;
+/** 1 Pendiente · 2 En preparación · 3 Listo: en curso. 4 Despachado y 5 Cancelado se olvidan. */
+const EN_CURSO = [1, 2, 3];
+
+/**
+ * Junta los pendientes con los recordados que siguen en curso. `consultados` es lo que contestó
+ * Logística por cada recordado: el pedido, `null` si ya no existe (404) o `undefined` si no contestó
+ * (se sigue recordando, sin mostrarlo). Devuelve la lista y lo que queda recordado.
+ */
+export function sumarRecordados(pendientes, recordados, consultados, ahora) {
+  const orders = Array.isArray(pendientes?.orders) ? [...pendientes.orders] : [];
+  const quedan = {};
+  for (const o of orders) if (o && o.id != null) quedan[String(o.id)] = recordados[String(o.id)] || ahora;
+  const limite = new Date(Date.parse(ahora) - OLVIDAR_MS).toISOString();
+  for (const [id, desde] of Object.entries(recordados)) {
+    if (id in quedan || String(desde) < limite) continue;
+    const p = consultados[id];
+    if (p === undefined) quedan[id] = desde;
+    else if (p && EN_CURSO.includes(p.status?.code)) {
+      quedan[id] = desde;
+      orders.push({ ...p, next_step: null, suggestion: null });
+    }
+  }
+  return { datos: { ...pendientes, orders }, recordados: quedan };
+}
+
+async function leerRecordados() {
+  const { blobs } = await list({ prefix: RECORDADOS, limit: 1, ...conToken });
+  if (!blobs.length) return {};
+  const r = await fetch(`${blobs[0].url}?v=${Date.now()}`, { cache: 'no-store' });
+  const d = await r.json();
+  return d && typeof d.ids === 'object' && d.ids ? d.ids : {};
+}
+
+/** Los pendientes de Logística + los preparados que ya salieron de ahí. Si el Blob falla, quedan los pendientes. */
+async function conRecordados(datos, consultar) {
+  if (!BLOB_TOKEN && !process.env.BLOB_STORE_ID) return datos;
+  try {
+    const recordados = await leerRecordados();
+    const enLista = new Set((datos.orders || []).map((o) => String(o.id)));
+    const ids = Object.keys(recordados).filter((id) => /^\d{1,12}$/.test(id) && !enLista.has(id)).slice(0, TOPE_CONSULTAS);
+    const consultados = Object.fromEntries(await Promise.all(ids.map(async (id) => [id, await consultar(id)])));
+    const r = sumarRecordados(datos, recordados, consultados, new Date().toISOString());
+    const antes = Object.keys(recordados).sort().join(',');
+    if (Object.keys(r.recordados).sort().join(',') !== antes) {
+      await put(RECORDADOS, JSON.stringify({ ids: r.recordados }), {
+        access: 'public', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true, cacheControlMaxAge: 60, ...conToken,
+      });
+    }
+    return r.datos;
+  } catch {
+    return datos;
+  }
+}
 
 /** La ruta de Logística para cada acción (con método y cuerpo si escribe), o un error para mostrar. */
 export function rutaDe(body) {
@@ -189,6 +257,21 @@ export default async function handler(req, res) {
     if (!r.ok) {
       const detalle = datos && typeof datos.detail === 'string' ? datos.detail : `Logística contestó ${r.status}.`;
       return res.status(r.status).json({ ...(datos || {}), error: detalle });
+    }
+    if (ruta === '/mayorista/pendientes' && datos) {
+      const consultar = async (id) => {
+        try {
+          const u = await fetch(`${BASE}/mayorista/pedidos/${id}`, {
+            headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+            signal: AbortSignal.timeout(ESPERA_MS),
+          });
+          if (u.status === 404) return null;
+          return u.ok ? await u.json() : undefined;
+        } catch {
+          return undefined;
+        }
+      };
+      return res.status(200).json(await conRecordados(datos, consultar));
     }
     return res.status(200).json(datos ?? {});
   } catch (e) {

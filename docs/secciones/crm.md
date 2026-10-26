@@ -1159,6 +1159,14 @@ Ger (logistica.arebensrl.com) abrió una API para el panel: `https://logistica.a
   encabezado, y en «Número nuevo» por teléfono) + `GrupoLogistica` en `AgendaDelDia.tsx`
   («Pendientes en Logística», debajo de «Pidieron hoy y ayer», cada 2 min). Sin pedidos no se dibuja.
 - 🔑 Un pedido entra a Logística recién cuando Darío lo pasa a «Compra pendiente» en GN.
+- 🔑 **`/pendientes` NO trae los preparados completos** (26-oct, el pedido de Pilar): un EM con el
+  seguimiento leído del PDF no tiene dato sin cargar y Logística lo saca, justo cuando falta
+  informar el seguimiento y despachar. `api/_logistica.js` recuerda los números que pasaron por
+  pendientes (Blob `logistica/en-curso.json`, sólo números) y consulta los que ya no están: en curso
+  (1-3) vuelven con `next_step: null` (Listo → «Preparado · Despachar»; antes, «En depósito»);
+  despachado, cancelado, 404 o 60 días → se olvidan (`sumarRecordados`, con test). ⚠️ Lo que
+  completó todo sin que nadie abriera el panel no se recuerda. Si Ger agrega los listos a
+  `/pendientes`, esto sobra.
 - ✅ **Forma de entrega desde la ficha** (22-oct, tarde): «Elegir / Cambiar forma de entrega» en
   cada pedido, nace marcada con lo que tiene o con la `suggestion` de `/pendientes` (la vez
   anterior). Acción `entrega` → `PATCH` con `dispatch_option` (+ `carrier` si es Transporte) y su

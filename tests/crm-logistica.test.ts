@@ -4,7 +4,7 @@ import { avisosDe, cambiosDeEnvio, correoDe, enGrupoDeposito, entregaDe, esDelDe
 vi.mock('../api/_auth.js', () => ({ exigirUsuario: vi.fn(async () => ({ name: 'Darío', admin: true })) }))
 vi.mock('../lib/permisos.core.js', () => ({ puedeVerAlguna: vi.fn(() => true), esAdmin: vi.fn(() => true) }))
 
-const { default: handler, rutaDe, datosEtiqueta } = await import('../api/_logistica.js')
+const { default: handler, rutaDe, datosEtiqueta, sumarRecordados } = await import('../api/_logistica.js')
 const { puedeVerAlguna, esAdmin } = await import('../lib/permisos.core.js')
 
 function pedido(cambios: Partial<PedidoLogistica> = {}): PedidoLogistica {
@@ -271,5 +271,32 @@ describe('api/_logistica.js', () => {
     expect(res.code).toBe(401)
     expect(res.cuerpo).toEqual({ detail: 'El token venció.', error: 'El token venció.' })
     expect(JSON.stringify(res.cuerpo)).not.toContain('lgk_')
+  })
+})
+
+describe('los preparados que salen de pendientes (Pilar, 26-oct)', () => {
+  const ahora = '2026-10-26T15:00:00.000Z'
+  const listo = { ...pedido({ id: 700, has_label: true, em: 123, tracking_number: 'EM1AR' }), status: { code: 3, label: 'Listo', since: ahora } }
+
+  it('el que salió de pendientes y sigue en curso vuelve a la lista, y se sigue recordando', () => {
+    const r = sumarRecordados({ count: 1, orders: [{ id: 604 }] }, { '700': '2026-10-24T10:00:00.000Z' }, { '700': listo }, ahora)
+    expect(r.datos.orders.map((o: { id: number }) => o.id)).toEqual([604, 700])
+    expect(r.datos.orders[1].next_step).toBeNull()
+    expect(pasoPanel(r.datos.orders[1])).toBe('despachar')
+    expect(r.recordados).toEqual({ '604': ahora, '700': '2026-10-24T10:00:00.000Z' })
+  })
+
+  it('despachado, cancelado o inexistente se olvida; sin respuesta se recuerda sin mostrarse', () => {
+    const despachado = { ...listo, id: 701, status: { code: 4, label: 'Despachado', since: ahora } }
+    const viejos = { '701': '2026-10-20T00:00:00.000Z', '702': '2026-10-20T00:00:00.000Z', '703': '2026-10-20T00:00:00.000Z' }
+    const r = sumarRecordados({ orders: [] }, viejos, { '701': despachado, '702': null, '703': undefined }, ahora)
+    expect(r.datos.orders).toEqual([])
+    expect(r.recordados).toEqual({ '703': '2026-10-20T00:00:00.000Z' })
+  })
+
+  it('a los 60 días se olvida aunque siga en curso', () => {
+    const r = sumarRecordados({ orders: [] }, { '700': '2026-08-01T00:00:00.000Z' }, { '700': listo }, ahora)
+    expect(r.datos.orders).toEqual([])
+    expect(r.recordados).toEqual({})
   })
 })
