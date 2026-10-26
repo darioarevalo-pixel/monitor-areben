@@ -35,6 +35,11 @@ export function PylLinea({ pyl }: { pyl: Pyl }) {
           : 'P&L por arriba, hasta la contribución'
       }
     >
+      {pyl.aviso && (
+        <div style={{ marginBottom: space[2], color: color.mut, fontSize: font.sm }}>
+          🔴 <strong>Stunned puede faltar:</strong> el ERP no contestó ({pyl.aviso}). Lo de Stunned no está sumado.
+        </div>
+      )}
       {!pyl.disponible || columnas.length === 0 ? (
         <EmptyState
           title="Todavía no hay P&L"

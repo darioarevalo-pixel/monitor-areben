@@ -705,12 +705,18 @@ function NotaContribucion({ contribucion }: { contribucion: Contribucion }) {
   }
 
   const c = contribucion.cobertura
-  if (!c) return null
+  const avisoErp = contribucion.aviso && (
+    <div style={{ marginBottom: space[1] }}>
+      🔴 <strong>Stunned puede faltar:</strong> el ERP no contestó ({contribucion.aviso}). Lo de Stunned no está sumado.
+    </div>
+  )
+  if (!c) return avisoErp || null
   const afuera = c.sinCuenta + c.sinCosto
   const pct = c.ventas > 0 ? Math.round((c.usadas / c.ventas) * 100) : 0
 
   return (
     <div style={chico}>
+      {avisoErp}
       {afuera > 0 && (
         <div style={{ marginBottom: space[1] }}>
           🔴 Calculado sobre <strong>{c.usadas} de {c.ventas} ventas ({pct}%)</strong> de la ventana.

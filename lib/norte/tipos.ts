@@ -387,6 +387,8 @@ export type CoberturaContribucion = {
 
 export type Contribucion = {
   disponible: boolean
+  /** ERP de Stunned caído con la llave prendida: el número sale SIN Stunned. Va a la pantalla tal cual. */
+  aviso?: string
   /** Por qué no está, cuando no está. Va a la pantalla tal cual. */
   motivo: string | null
   ventana: { desde: string; hasta: string; dias: number } | null
@@ -452,6 +454,8 @@ export type CoberturaPyl = CoberturaContribucion & {
 
 export type Pyl = {
   disponible: boolean
+  /** ERP de Stunned caído con la llave prendida: el número sale SIN Stunned. Va a la pantalla tal cual. */
+  aviso?: string
   /** Por qué no está, cuando no está. Va a la pantalla tal cual. */
   motivo: string | null
   ventana: { desde: string; hasta: string; dias: number } | null
