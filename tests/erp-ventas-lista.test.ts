@@ -3,7 +3,7 @@ import {
   COLUMNAS_DE_SIEMPRE, accionesDeFila, alternarColumna, armarFila, clienteDe, contarVistas, estadoDeVenta, filtrar,
   historialDeVenta, moverColumna, normalizarPrefs, ordenar, rangoDePeriodo, resumen, saldoDeVenta,
 } from '@/lib/erp/ventas-lista.core.js'
-import { cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, notaDeVentaErp, numeroDeFactura, textoDeCampo } from '../api/_erp-ventas.js'
+import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, notaDeVentaErp, numeroDeFactura, textoDeCampo } from '../api/_erp-ventas.js'
 
 /**
  * **ERP › Ventas, el PILOTO del diseño** (18-oct): la lista que junta Caja, TN, mayoristas, cambios y pedidos sin pagar.
@@ -234,6 +234,21 @@ describe('el servidor: lo que ⛔ está en el motor se frena con el motivo', () 
     await cobrarVentaErp({ marca: 'bdi', body: { ventaId: V, clienteId: V, linea: 'bdi', monto: '150000', saldo: 93200, cuenta: 'c1', ref: V, fecha: '2026-10-18' }, usuario: 'Darío' }, { cuenta, db })
     expect(pedido).toMatchObject({ cliente_id: V, marca: 'bdi', monto: 150000, cuenta: 'c1', origen_ref: `erp-cobro:${V}`, prueba: true, imputar: [{ venta_id: V, monto: 93200 }] })
     expect(await cobrarVentaErp({ marca: 'bdi', body: { ventaId: V, clienteId: null, monto: 1, cuenta: 'c', ref: V }, usuario: 'x' }, { cuenta, db })).toMatchObject({ status: 400 })
+  })
+  it('el cobro a la CUENTA va sin imputar (el motor lo reparte FIFO), con su propia clave, y valida lo suyo', async () => {
+    let pedido: Record<string, unknown> | null = null
+    const cuenta = { registrarPagoACuenta: async (_db: unknown, e: Record<string, unknown>) => { pedido = e; return { ok: true, pago: {}, cuenta: {}, ya_existia: false } } }
+    const r = await cobrarCuentaErp({ marca: 'bdi', body: { clienteId: V, linea: 'bdi', monto: '150000', cuenta: 'c1', ref: V, fecha: '2026-10-18' }, usuario: 'Darío' }, { cuenta, db })
+    expect(r).toMatchObject({ ok: true, yaExistia: false })
+    expect(pedido).toMatchObject({ cliente_id: V, marca: 'bdi', monto: 150000, cuenta: 'c1', origen_ref: `erp-cobro-cuenta:${V}`, prueba: true, ocurrida_en: '2026-10-18T15:00:00.000Z' })
+    expect(pedido).not.toHaveProperty('imputar')
+    for (const body of [{ clienteId: null }, { monto: 0 }, { monto: 'x' }, { cuenta: '' }, { ref: 'x' }]) {
+      expect(await cobrarCuentaErp({ marca: 'bdi', body: { clienteId: V, monto: 10, cuenta: 'c', ref: V, ...body }, usuario: 'x' }, { cuenta, db })).toMatchObject({ status: 400 })
+    }
+    expect(await cobrarCuentaErp({ marca: 'otra', body: { clienteId: V, monto: 10, cuenta: 'c', ref: V }, usuario: 'x' }, { cuenta, db })).toMatchObject({ status: 400 })
+    expect(await cobrarCuentaErp({ marca: 'bdi', body: { clienteId: V, monto: 10, cuenta: 'c', ref: V }, usuario: 'x' }, { cuenta: {}, db })).toMatchObject({ status: 409 })
+    const rechaza = { registrarPagoACuenta: async () => ({ ok: false, error: { codigo: 'CUENTA_DESCONOCIDA', mensaje: 'Un pago a cuenta entra con plata' } }) }
+    expect(await cobrarCuentaErp({ marca: 'bdi', body: { clienteId: V, monto: 10, cuenta: 'c', ref: V }, usuario: 'x' }, { cuenta: rechaza, db })).toMatchObject({ status: 409 })
   })
   it('los textos: el número de factura y lo editado', () => {
     expect(numeroDeFactura({ tipo: 6, pto_vta: 5, numero: 12351, ambiente: 'produccion' })).toBe('B 0005-00012351')
