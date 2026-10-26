@@ -693,3 +693,27 @@ export function pinAlAzar(): string {
   do crypto.getRandomValues(a); while (a[0] >= tope)
   return String(a[0] % 10000).padStart(4, '0')
 }
+
+/** ERP › Stock › Mover y recibir: la transferencia como DOCUMENTO del motor (`api/_erp-transferencia.js`, contrato en `areben-motor/TRANSFERENCIA.md`). */
+export type RenglonDoc = { n: number; product_id: number | string; size_id: number | string; sku: string | null; barcode: string | null; pedida: number; armada: number; enviada: number; recibida: number | null }
+export type TransferenciaDoc = {
+  id: string; numero: number; linea: string; desde: string; hacia: string; origen: string; estado: 'borrador' | 'armada' | 'en_transito' | 'recibida' | 'cancelada'
+  nota: string | null; creada_por: string; creada_en: string; enviada_por: string | null; enviada_en: string | null; recibida_por: string | null; recibida_en: string | null
+  renglones: RenglonDoc[]; diferencias: Array<{ sku: string | null; enviada: number; recibida: number; diferencia: number }>
+}
+export type AvisoDoc = { codigo: string; texto: string }
+export type RenglonAlMotor = { product_id: string; size_id: string; sku: string | null; barcode: string | null; cantidad: number }
+export type ResultadoDoc = { ok: true; transferencia: TransferenciaDoc; ya: boolean; movimientos: number; unidades: number; diferencias: TransferenciaDoc['diferencias']; avisos: AvisoDoc[] }
+
+export const leerTransferenciasDoc = (linea: TiendaErp) =>
+  pedir<{ transferencias: TransferenciaDoc[]; enTransito: Array<{ product_id: number; size_id: number; desde: string; hacia: string; unidades: number }> }>(null, `&vista=transferencias-doc&marca=${linea}&nc=${Date.now()}`, 'No se pudieron leer las transferencias.')
+export const crearTransferenciaDoc = (linea: TiendaErp, desde: string, hacia: string, renglones: RenglonAlMotor[], nota?: string) =>
+  pedir<ResultadoDoc>(post({ accion: 'transferencia-crear', linea, desde, hacia, origen: 'libre', nota, renglones }), '', 'No se pudo crear la transferencia.')
+export const armarTransferenciaDoc = (linea: TiendaErp, transferenciaId: string, renglones: RenglonAlMotor[]) =>
+  pedir<ResultadoDoc>(post({ accion: 'transferencia-armar', linea, transferenciaId, renglones }), '', 'No se pudo armar la transferencia.')
+export const enviarTransferenciaDoc = (linea: TiendaErp, transferenciaId: string) =>
+  pedir<ResultadoDoc>(post({ accion: 'transferencia-enviar', linea, transferenciaId }), '', 'No se pudo enviar la transferencia.')
+export const recibirTransferenciaDoc = (linea: TiendaErp, transferenciaId: string, renglones: RenglonAlMotor[]) =>
+  pedir<ResultadoDoc>(post({ accion: 'transferencia-recibir', linea, transferenciaId, renglones }), '', 'No se pudo recibir la transferencia.')
+export const cancelarTransferenciaDoc = (linea: TiendaErp, transferenciaId: string, motivo: string) =>
+  pedir<ResultadoDoc>(post({ accion: 'transferencia-cancelar', linea, transferenciaId, motivo }), '', 'No se pudo cancelar la transferencia.')
