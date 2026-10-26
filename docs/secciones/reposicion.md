@@ -54,6 +54,13 @@ columna.
 - 🔑 **Devolver al depósito es la mitad que faltaba**: el local se llenó porque sólo existía el
   camino de ida. Desde el 15-oct es una **solicitud** sin tope (ver abajo); `topeDevolucion` quedó
   guardado pero sin uso.
+- 🔑 **Confirmar una devolución apaga el producto de la reposición, para siempre** (Darío, 26-oct-2026:
+  «se apague cuando se confirma y de forma definitiva; si luego se quiere volver a vender, hay que
+  prenderlo manualmente»). Usa `cfg.apagados` (la lista de siempre, ya respetada por `porVentas`) con
+  `lib/reposicion/sinReponer.ts`: frena el «llevar», ⛔ no el «devolver». «Sacar» un producto de
+  Confirmados lo vuelve a prender. Se ve y se prende en Devolución → «Sin reponer» (`Volver a reponer`).
+  ⚠️ Es la misma lista que las categorías/productos «no reponer» de BDI. Hoy sólo se dispara desde la
+  Devolución de Zattia/Stunned (BDI la tiene oculta). `tests/reposicion-sin-reponer.test.ts`.
 - 🔑 **Los papeles llevan sólo lo que se hace** (Darío): ⛔ ni stock ni ventas ni «para exhibir». El
   A4 de Lorena: producto · talle · cuánto · una casilla (tilde / cruz / número, **en palabras**:
   Helvetica no tiene ✓ ni ✗). El rollo de Camila: SKU · «PRODUCTO - variante» · Cant. · Listo.

@@ -56,7 +56,7 @@ function imprimirTicket(pedido: LineaPedido[], rotulo: string) {
   return imprimirDevolucion(filas, rotulo)
 }
 
-export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, stockViejo, puedeAprobar, bolsaProd, guardarBolsaProd, boton, onEnviada }: {
+export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, stockViejo, puedeAprobar, bolsaProd, guardarBolsaProd, sinReponer, apagar, prender, boton, onEnviada }: {
   linea: LineaZ
   /** «Zattia» / «Stunned»: va en el ticket. */
   rotulo: string
@@ -72,6 +72,10 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
   puedeAprobar: boolean
   bolsaProd: Record<string, boolean>
   guardarBolsaProd: (v: Record<string, boolean>) => void
+  /** Los productos apagados de la reposición. Se apagan al confirmar y se prenden a mano. */
+  sinReponer: { pid: string; nombre: string }[]
+  apagar: (pids: string[]) => void
+  prender: (pids: string[]) => void
   /** El botón Iniciar / Continuar armado (lo maneja la pantalla de arriba). */
   boton: ReactNode
   /** Se envió una solicitud: la pantalla de arriba vuelve a leer el armado. */
@@ -142,6 +146,8 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
     if (!nuevas.length) return
     const n = nuevas.reduce((s, l) => s + l.cant, 0)
     if (await guardar(fusionar(confirmados, nuevas), `${n} ${n === 1 ? art.singular : art.plural} confirmadas`)) {
+      // Lo confirmado se apaga de la reposición hasta que alguien lo prenda (Darío, 26-oct-2026).
+      apagar(elegidos.map((g) => g.pid))
       setSel({})
       setCant({})
     }
@@ -242,12 +248,14 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
                 <TablaConfirmados
                   pedido={confirmados}
                   onBolsa={cambiarBolsa}
-                  onSacar={(pid) => void guardar(confirmados.filter((l) => l.pid !== pid))}
+                  onSacar={(pid) => void guardar(confirmados.filter((l) => l.pid !== pid)).then((ok) => ok && prender([pid]))}
                   guardando={guardando}
                 />
               )}
             </>
           )}
+
+          {sinReponer.length > 0 && <SinReponer lista={sinReponer} onPrender={(pid) => prender([pid])} />}
 
           <Modal
             abierto={cerrar}
@@ -538,3 +546,45 @@ function TablaConfirmados({ pedido, onBolsa, onSacar, guardando }: { pedido: Lin
   )
 }
 
+
+/**
+ * Los productos que no se reponen: se apagan solos al confirmar una devolución y quedan así hasta
+ * que alguien los vuelva a reponer (`lib/reposicion/sinReponer.ts`).
+ */
+function SinReponer({ lista, onPrender }: { lista: { pid: string; nombre: string }[]; onPrender: (pid: string) => void }) {
+  const [abierto, setAbierto] = useState(false)
+  return (
+    <div style={{ marginTop: space[4] }}>
+      <Button variant="ghost" size="sm" onClick={() => setAbierto((a) => !a)}>
+        {abierto ? '▾' : '▸'} Sin reponer ({lista.length})
+      </Button>
+      {abierto && (
+        <>
+          <div style={{ fontSize: font.sm, color: color.mut, margin: `${space[1]}px 0 ${space[2]}px` }}>
+            Se apagan al confirmar una devolución y no se piden al depósito hasta que los vuelvas a reponer.
+          </div>
+          <TableWrap>
+            <THead>
+              <Tr>
+                <Th>Producto</Th>
+                <Th />
+              </Tr>
+            </THead>
+            <TBody>
+              {lista.map((p) => (
+                <Tr key={p.pid}>
+                  <Td>{p.nombre}</Td>
+                  <Td>
+                    <Button variant="outline" size="sm" onClick={() => onPrender(p.pid)}>
+                      Volver a reponer
+                    </Button>
+                  </Td>
+                </Tr>
+              ))}
+            </TBody>
+          </TableWrap>
+        </>
+      )}
+    </div>
+  )
+}

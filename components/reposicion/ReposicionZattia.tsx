@@ -33,6 +33,7 @@ import { construirInv } from '@/lib/reposicion/inventario'
 import { aplicarCats } from '@/lib/reposicion/core'
 import { CAMPO_LINEA, cfgVentas, decidirTodo, hoyAR, listaLlevar, type CfgVentas, type FilaVentas, type LineaZ, type MarcaModo, type Modo } from '@/lib/reposicion/porVentas'
 import { esStunned, ETIQUETA_LINEA } from '@/lib/lineas'
+import { apagarProductos, prenderProductos } from '@/lib/reposicion/sinReponer'
 import { reposicionPDFFilas } from '@/lib/reposicion/pdf'
 import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
@@ -77,6 +78,11 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     [rep.rawInv, prodById, tnIdx, rep.s7, vv, cfg.catsOff, linea],
   )
   const filas = useMemo(() => decidirTodo(inv, cfg, hoy, linea), [inv, cfg, hoy, linea])
+  // Los apagados de la reposición: se apagan al confirmar una devolución y se prenden a mano (Darío, 26-oct-2026).
+  const sinReponer = useMemo(() => {
+    const nombre = new Map(inv.map((it) => [String(it.pid), it.name]))
+    return cfg.apagados.map((pid) => ({ pid: String(pid), nombre: nombre.get(String(pid)) ?? `Producto ${pid}` }))
+  }, [cfg.apagados, inv])
   // La Propuesta de devolución muestra el alta en Tienda Nube y si tiene precio promocional (Darío,
   // 19-oct-2026). Se cruza con el producto de GN (su SKU y nombre), como las categorías.
   const tnDe = useCallback(
@@ -491,6 +497,9 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             puedeAprobar={puedeMarcar}
             bolsaProd={cv.bolsaProd}
             guardarBolsaProd={(v) => rep.guardarCfg({ ...cfg, [CAMPO_LINEA[linea]]: { ...cv, bolsaProd: v } })}
+            sinReponer={sinReponer}
+            apagar={(pids) => rep.guardarCfg(apagarProductos(cfg, pids))}
+            prender={(pids) => rep.guardarCfg(prenderProductos(cfg, pids))}
             boton={botonArmado('devolver', true)}
             onEnviada={() => void traerArmados()}
           />
