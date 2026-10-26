@@ -760,9 +760,11 @@ function PanelInterno({
        * lead de nuevo** — el duplicado que ya se pagó el 24-ago.
        *
        * ⚠️ Y el teléfono a cruzar es el del PEDIDO, no `telNorm`: cuando se toca un nombre de la
-       * lista, WhatsApp todavía no navegó y `telNorm` sigue siendo el del chat anterior.
+       * lista, WhatsApp todavía no navegó y `telNorm` sigue siendo el del chat anterior. Vale
+       * también con id (26-oct-2026): si el id no está en el padrón —cliente nuevo de hoy en
+       * Logística— los intentos de abajo cruzaban el teléfono del chat anterior.
        */
-      const telBuscar = pedido && !pedido.id ? telDelChat(pedido.tel) : telNorm
+      const telBuscar = pedido ? telDelChat(pedido.tel) : telNorm
       // Desde la lista, los pedidos de Logística salen YA, junto con la ficha: el id y el teléfono son
       // los mismos que va a usar `PedidosLogistica` al dibujarla. Desde el chat el id recién se sabe
       // con la ficha, y su teléfono puede no ser el del chat: ahí no se adelanta nada.
@@ -800,7 +802,7 @@ function PanelInterno({
       // duplicarlos.
       const mapaTel: MapaTelefonos = kv.current.tel
       const idx = indexarTelefonos(Object.entries(mapaTel).map(([id, phone]) => ({ id, phone })))
-      const { ids } = buscarPorTelefono(idx, telBuscar)
+      const { ids } = telBuscar ? buscarPorTelefono(idx, telBuscar) : { ids: [] as string[] }
       if (ids.length === 1) {
         const r2 = await buscarFicha({ clienteId: ids[0] }, mapaSeg, today)
         if (!activo) return
@@ -819,7 +821,7 @@ function PanelInterno({
        * Va al final a propósito: si la persona ya compró, la ficha de cliente dice más que la de
        * prospecto.
        */
-      const enc = leadsPorTelefono(kv.current.leads, telBuscar)
+      const enc = telBuscar ? leadsPorTelefono(kv.current.leads, telBuscar) : { leads: [] }
       if (enc.leads.length === 1) {
         setEstado({ t: 'lead', lead: enc.leads[0] })
         return
@@ -1152,9 +1154,13 @@ function PanelInterno({
       <Envoltorio aviso={aviso}>
         {solapas}
         <NumeroNuevo
-          key={telNorm}
-          tel={telNorm}
-          nombreAgendado={nombreChat}
+          key={pedido ? `pedido-${pedido.id}-${pedido.tel}` : telNorm}
+          // 🔴 Tocado desde la lista (un pedido de Logística de un cliente que todavía no está en el
+          // padrón), el número es el del PEDIDO, no el del chat abierto (Darío, 26-oct-2026: salía
+          // «Número nuevo» con otro teléfono y no aparecía el pedido para cargarle Logística).
+          tel={pedido ? telDelChat(pedido.tel) || pedido.tel : telNorm}
+          clienteId={pedido?.id || null}
+          nombreAgendado={pedido ? '' : nombreChat}
           onCobranza={() => setSolapa('pagos')}
           onVinculado={async (cliente) => {
             // Se recarga la ficha por id: el número ya quedó guardado, pero el índice del servidor
@@ -1981,6 +1987,7 @@ function PieLead({
  */
 function NumeroNuevo({
   tel,
+  clienteId,
   nombreAgendado,
   onVinculado,
   onGuardado,
@@ -1989,6 +1996,8 @@ function NumeroNuevo({
   onError,
 }: {
   tel: string
+  /** El cliente de Gestión Nube cuando se llegó desde un pedido de Logística: trae sus pedidos aunque no tenga teléfono. */
+  clienteId: number | null
   /** Con qué nombre está agendado este chat. Vacío si no se sabe. */
   nombreAgendado: string
   onVinculado: (cliente: FilaCliente) => void
@@ -2022,10 +2031,10 @@ function NumeroNuevo({
   return (
     <div style={{ padding: space[3] }}>
       <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>Número nuevo</div>
-      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 12 }}>{tel} · no está en el CRM</div>
+      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 12 }}>{tel || 'Sin teléfono'} · no está en el CRM</div>
       {/* Un cliente nuevo de hoy ya puede tener el pedido en Logística: el padrón llega una vez por día. */}
       <div style={{ margin: `0 -${space[2]}px` }}>
-        <PedidosLogistica clienteId={null} tel={tel} />
+        <PedidosLogistica clienteId={clienteId} tel={tel || null} />
       </div>
 
       {/*
