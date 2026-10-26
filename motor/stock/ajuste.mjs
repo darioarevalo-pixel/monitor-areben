@@ -107,6 +107,7 @@ export function armarAjuste(e, { empresa_id, depositos, niveles, costos = new Ma
     ok: true,
     ajuste: {
       empresa_id, linea: e.linea, deposito: e.deposito, motivo: e.motivo, detalle, fuente, creado_por: usuario, sin_movimiento: e.sin_movimiento === true,
+      ref: e.ref == null || e.ref === '' ? null : String(e.ref).slice(0, 120),
       categoria_gasto: CATEGORIAS[e.motivo] ?? null, estado: INSTANTANEOS.has(e.motivo) ? 'aplicado' : 'para_aprobar',
     },
     renglones,
@@ -193,13 +194,27 @@ async function contexto(db, linea) {
  * @param {import('pg').ClientBase} db @param {any} e la entrada de `armarAjuste` @param {{ ahora?: Date }} [op]
  */
 export async function crearAjuste(db, e, op = {}) {
-  return enTransaccion(db, () => guardarAjuste(db, e, op))
+  try {
+    return await enTransaccion(db, () => guardarAjuste(db, e, op))
+  } catch (err) {
+    // Dos pedidos con el mismo `ref` a la vez: el segundo pierde contra el índice único y devuelve el que ganó.
+    if (err?.code !== '23505' || !e?.ref) throw err
+    const [previo] = await q(db, 'select * from stock_ajuste where linea = $1 and ref = $2', [e.linea, String(e.ref).slice(0, 120)])
+    if (!previo) throw err
+    return { ok: true, ya: true, ajuste: previo, renglones: [], avisos: [], movimientos: 0 }
+  }
 }
 
 /** `crearAjuste` SIN transacción propia: la abre quien llama (el cierre de una salida arma varios juntos). */
 export async function guardarAjuste(db, e, { ahora = new Date() } = {}) {
   const ctx = await contexto(db, e?.linea)
   if (!ctx) return falla('ENTRADA_INVALIDA', `Línea desconocida: ${e?.linea}`, 'linea')
+  // Con `ref` el ajuste es idempotente (sql/050): repetir el pedido devuelve el que ya está. ⛔ se nombra la columna sin `ref`.
+  const ref = e.ref == null || e.ref === '' ? null : String(e.ref).slice(0, 120)
+  if (ref) {
+    const [previo] = await q(db, 'select * from stock_ajuste where linea = $1 and ref = $2', [e.linea, ref])
+    if (previo) return { ok: true, ya: true, ajuste: previo, renglones: [], avisos: [], movimientos: 0 }
+  }
   const variantes = Array.isArray(e.renglones) ? e.renglones.filter((r) => entero(r?.product_id) && entero(r?.size_id)) : []
   const niveles = await nivelesDe(db, e.deposito, variantes)
   const costos = await costosDe(db, [...new Set(variantes.map((v) => Number(v.product_id)))])
@@ -209,9 +224,9 @@ export async function guardarAjuste(db, e, { ahora = new Date() } = {}) {
     on conflict (linea) do update set ultimo = stock_ajuste_numero.ultimo + 1 returning ultimo`, [e.linea])
   // `sin_movimiento` es de sql/048: sólo se nombra la columna cuando hace falta ⇒ un ajuste común ⛔ depende de esa migración.
   const sin = armado.ajuste.sin_movimiento === true
-  const [a] = await q(db, `insert into stock_ajuste (empresa_id, linea, numero, deposito, motivo, detalle, fuente, estado, creado_por, creado_en, categoria_gasto${sin ? ', sin_movimiento' : ''})
-    values ($1, $2, $3, $4, $5, $6, $7, 'para_aprobar', $8, $9, $10${sin ? ', true' : ''}) returning *`,
-  [ctx.empresa_id, e.linea, Number(n.ultimo), armado.ajuste.deposito, armado.ajuste.motivo, armado.ajuste.detalle, armado.ajuste.fuente, armado.ajuste.creado_por, ahora.toISOString(), armado.ajuste.categoria_gasto])
+  const [a] = await q(db, `insert into stock_ajuste (empresa_id, linea, numero, deposito, motivo, detalle, fuente, estado, creado_por, creado_en, categoria_gasto${sin ? ', sin_movimiento' : ''}${ref ? ', ref' : ''})
+    values ($1, $2, $3, $4, $5, $6, $7, 'para_aprobar', $8, $9, $10${sin ? ', true' : ''}${ref ? ', $11' : ''}) returning *`,
+  [ctx.empresa_id, e.linea, Number(n.ultimo), armado.ajuste.deposito, armado.ajuste.motivo, armado.ajuste.detalle, armado.ajuste.fuente, armado.ajuste.creado_por, ahora.toISOString(), armado.ajuste.categoria_gasto, ...(ref ? [ref] : [])])
   await db.query(`insert into stock_ajuste_renglon (ajuste_id, n, empresa_id, product_id, size_id, sku, barcode, antes, contado, diferencia, costo_unitario, costo_fuente)
     select $1, n, empresa_id, product_id, size_id, sku, barcode, antes, contado, diferencia, costo_unitario, costo_fuente
     from jsonb_to_recordset($2::jsonb) as x(n int, empresa_id text, product_id bigint, size_id bigint, sku text, barcode text, antes int, contado int, diferencia int, costo_unitario numeric, costo_fuente text)`,
