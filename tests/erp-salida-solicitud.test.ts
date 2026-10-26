@@ -135,3 +135,24 @@ describe('canjeDe: el canje como ajuste `canje`', () => {
     expect(canjeDe(pedido(), 'bdi')).toEqual(canjeDe(pedido(), 'bdi'))
   })
 })
+
+describe('la solicitud interna retornable sale con TODO su qty (no hay escaneo: ⛔ `verif`)', () => {
+  const interna = (o: Record<string, unknown> = {}): any => ({
+    id: 'si-5', motivo: 'Muestra para producción', tipo: 'retornable', estado: 'retirada', ventas: { deposito: { id: 55 } },
+    items: [item({ pid: '1', sid: '10', qty: 3 }), item({ pid: '2', sid: '20', origen: 'local', qty: 2, nuevo: true })], ...o,
+  })
+  it('el pedido sale aunque ⛔ haya verif, con la cantidad pedida', () => {
+    const p = pedidoDeSolicitud('solicitudesinternas', interna(), 'zattia') as any
+    expect(p).not.toBeNull()
+    expect(p.tipo).toBe('produccion')
+    expect(p.renglones.map((r: any) => [r.product_id, r.size_id, r.deposito, r.cantidad])).toEqual([[1, 10, 'deposito', 3], [2, 20, 'local', 2]])
+  })
+  it('lo devuelto se anota contra lo que salió (topeado a qty)', () => {
+    const s = interna({ devuelto: { '1_10': 2, '2_20': 9 } })
+    const doc = [{ n: 1, product_id: 1, size_id: 10, deposito: 'deposito', cantidad: 3, devuelta: 0 }, { n: 2, product_id: 2, size_id: 20, deposito: 'local', cantidad: 2, devuelta: 0 }]
+    expect(devolverDe(s, 'zattia', doc, 'solicitudesinternas')).toEqual([{ n: 1, cantidad: 2 }, { n: 2, cantidad: 2 }])
+  })
+  it('la sesión de fotos sigue saliendo sólo con lo preparado', () => {
+    expect(pedidoDeSolicitud('sesionfotos', sol({ verif: {} }), 'zattia')).toBeNull()
+  })
+})

@@ -43,7 +43,7 @@ export async function documentarSalida({ store, kind, solicitud, usuario }) {
       const { salidas } = await m.salidasDe(db, { linea: store, ref: pedido.ref, limite: 1 })
       const doc = salidas[0]
       if (!doc) return { ok: true, ya: c.ya }
-      const aDevolver = devolverDe(solicitud, store, doc.renglones)
+      const aDevolver = devolverDe(solicitud, store, doc.renglones, kind)
       if (aDevolver.length) {
         const d = await m.devolver(db, { salida_id: doc.id, usuario: quien, renglones: aDevolver })
         if (!d.ok) return { error: mensaje(d) }
