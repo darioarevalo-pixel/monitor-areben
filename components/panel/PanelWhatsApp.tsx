@@ -20,6 +20,7 @@ import {
   type RespuestaPanel,
 } from '@/lib/crm/panel'
 import { guardarConRelectura, guardarLeadsConRelectura } from '@/lib/crm/persistencia'
+import { filaDeGuardado, type Fila } from '@/lib/crm/guardado-al-instante'
 import { armarFicha } from '@/lib/crm/panel'
 import {
   agregarNota,
@@ -160,6 +161,7 @@ export function telDelChat(t: string | null | undefined): string {
   return d.length >= 10 && d.length <= 15 ? d : ''
 }
 import { leerMapa } from '@/lib/kv/cliente'
+import { tomar } from '@/lib/crm/precarga'
 import type { FilaCliente, FilaDetalle, MapaSeguimiento, MapaTelefonos, Nota } from '@/lib/crm/tipos'
 
 /**
@@ -600,7 +602,6 @@ function PanelInterno({
    */
   const [crmLeads, setCrmLeads] = useState<MapaLeads>({})
   const [aviso, setAviso] = useState<{ txt: string; mal?: boolean } | null>(null)
-  const [guardando, setGuardando] = useState(false)
   const today = useHoy()
   /**
    * Qué se está mirando. Sin chat abierto arranca en la lista: es la pantalla con la que se
@@ -665,16 +666,45 @@ function PanelInterno({
   const kv = useRef<{ seg: MapaSeguimiento; tel: MapaTelefonos; leads: MapaLeads }>({ seg: {}, tel: {}, leads: {} })
   const [kvListo, setKvListo] = useState(false)
 
+  /**
+   * Las dos filas de guardado del panel: ver el comentario de `mutar`. Arrancan vacías; la carga de
+   * abajo les pone la base (`fijarBase`) antes de que haya ficha o lista desde donde guardar.
+   */
+  const todayRef = useRef(today)
+  useEffect(() => {
+    todayRef.current = today
+  }, [today])
+  const filaSeg = useRef<Fila<MapaSeguimiento> | null>(null)
+  const filaLeads = useRef<Fila<MapaLeads> | null>(null)
+  useEffect(() => {
+    filaSeg.current = filaDeGuardado<MapaSeguimiento>({}, guardarConRelectura, (vista) => {
+      if (!vivo.current || JSON.stringify(vista) === JSON.stringify(kv.current.seg)) return
+      kv.current = { ...kv.current, seg: vista }
+      setCrmSeg(vista)
+      setEstado((e) => (e.t === 'ficha' ? { ...e, ficha: armarFicha(e.crudo, vista, todayRef.current) } : e))
+    })
+    filaLeads.current = filaDeGuardado<MapaLeads>({}, guardarLeadsConRelectura, (vista) => {
+      if (!vivo.current || JSON.stringify(vista) === JSON.stringify(kv.current.leads)) return
+      kv.current = { ...kv.current, leads: vista }
+      setCrmLeads(vista)
+      setEstado((e) => (e.t === 'lead' && vista[e.lead.id] ? { t: 'lead', lead: vista[e.lead.id] } : e))
+    })
+  }, [])
+
+
   useEffect(() => {
     let activo = true
     ;(async () => {
       // 🔑 Los leads se leen ACÁ, con los otros dos, y no cuando hacen falta: el chat de un
       // prospecto se abre igual de rápido que el de un cliente, y pedir el mapa recién en ese
       // momento agregaría una espera justo en la pantalla que existe para no esperar.
+      //
+      // 🔑 La primera vez toma lo que `precargarPanel` ya largó al abrir `/panel` (ver `lib/crm/precarga.ts`).
+      const ok = (x: { ok: boolean }) => x.ok
       const [seg, telKv, leadsKv] = await Promise.all([
-        leerMapa<MapaSeguimiento[string]>('crmseg', 'bdi'),
-        leerMapa<string>('crmtel', 'bdi'),
-        leerMapa<MapaLeads[string]>('crmleads', 'bdi'),
+        tomar('crmseg', () => leerMapa<MapaSeguimiento[string]>('crmseg', 'bdi'), ok),
+        tomar('crmtel', () => leerMapa<string>('crmtel', 'bdi'), ok),
+        tomar('crmleads', () => leerMapa<MapaLeads[string]>('crmleads', 'bdi'), ok),
       ])
       if (!activo) return
       // Si falla, queda lo que había: al arrancar es `{}`, y al pasar de día no vacía la lista.
@@ -682,6 +712,9 @@ function PanelInterno({
       kv.current = { seg: seg.ok ? seg.dato : antes.seg, tel: telKv.ok ? telKv.dato : antes.tel, leads: leadsKv.ok ? leadsKv.dato : antes.leads }
       setCrmSeg(kv.current.seg)
       setCrmLeads(kv.current.leads)
+      // Lo que se esté guardando en ese momento se vuelve a aplicar encima (pasa al cambiar de día).
+      if (seg.ok) filaSeg.current?.fijarBase(seg.dato)
+      if (leadsKv.ok) filaLeads.current?.fijarBase(leadsKv.dato)
       setKvListo(true)
     })()
     return () => {
@@ -791,32 +824,36 @@ function PanelInterno({
 
   // ── Guardado ───────────────────────────────────────────────────────────────
 
+  /** El aviso sale al instante; si después el servidor no lo guardó, otro en rojo lo dice. */
+  const alGuardar = useCallback(
+    async (p: Promise<{ ok: true } | { ok: false; motivo: string }>, exito: string): Promise<boolean> => {
+      decir(exito)
+      const r = await p
+      if (!r.ok && vivo.current) decir('No se pudo guardar: ' + r.motivo, true)
+      return r.ok
+    },
+    [decir],
+  )
+
   /**
-   * Toda edición pasa por acá: relee el mapa, aplica el cambio, lo persiste y **recalcula la
-   * ficha** con el mapa nuevo. Recalcular no es cosmética: el próximo contacto y el estado del
-   * seguimiento salen del mapa, así que sin esto el panel seguiría mostrando el estado viejo
-   * después de haberlo guardado bien.
+   * Toda edición pasa por acá: aplica el cambio, lo persiste (releyendo el mapa justo antes) y
+   * **recalcula la ficha** con el mapa nuevo. Recalcular no es cosmética: el próximo contacto y el
+   * estado del seguimiento salen del mapa, así que sin esto el panel seguiría mostrando el estado
+   * viejo después de haberlo guardado bien.
+   *
+   * 🔑 **Se ve al instante y se guarda por detrás, en fila** (25-oct-2026, `lib/crm/guardado-al-instante.ts`):
+   * antes cada guardado tenía la pantalla 1,6-1,8 s mostrando lo de antes, con los botones apagados.
+   * ⛔ Todo lo que el panel escribe en `crm:seg` pasa por `filaSeg`, y lo de `crm:leads` por
+   * `filaLeads`: un guardado por fuera de la fila puede leer el mapa mientras otro está en camino y
+   * borrarlo. Lo igual a lo que ya se ve no se vuelve a dibujar: la confirmación del servidor trae
+   * el mismo mapa, y la lista de Hoy se recarga con cada cambio de `crmSeg`.
    */
   const mutar = useCallback(
-    async (fn: (m: MapaSeguimiento) => MapaSeguimiento, exito: string): Promise<boolean> => {
-      if (estado.t !== 'ficha' || guardando) return false
-      setGuardando(true)
-      const r = await guardarConRelectura(fn)
-      if (!vivo.current) return false
-      setGuardando(false)
-      if (!r.ok) {
-        decir('No se pudo guardar: ' + r.motivo, true)
-        return false
-      }
-      kv.current = { ...kv.current, seg: r.mapa }
-      setCrmSeg(r.mapa)
-      // Recalcular con el mapa recién guardado, sin volver a pedirle nada al servidor: las ventas
-      // y el padrón no cambiaron, lo que cambió es el seguimiento.
-      setEstado({ ...estado, ficha: armarFicha(estado.crudo, r.mapa, today) })
-      decir(exito)
-      return true
+    (fn: (m: MapaSeguimiento) => MapaSeguimiento, exito: string): Promise<boolean> => {
+      if (estado.t !== 'ficha' || !filaSeg.current) return Promise.resolve(false)
+      return alGuardar(filaSeg.current.encolar(fn), exito)
     },
-    [estado, guardando, decir, today],
+    [estado.t, alGuardar],
   )
 
   /**
@@ -827,24 +864,15 @@ function PanelInterno({
    * cambiar de chat y volver mostraría el lead como estaba antes del cambio.
    */
   const mutarLead = useCallback(
-    async (id: string, fn: (m: MapaLeads) => MapaLeads, exito: string): Promise<boolean> => {
-      if (guardando) return false
-      setGuardando(true)
-      const r = await guardarLeadsConRelectura(fn)
-      if (!vivo.current) return false
-      setGuardando(false)
-      if (!r.ok) {
-        decir('No se pudo guardar: ' + r.motivo, true)
-        return false
-      }
-      kv.current = { ...kv.current, leads: r.mapa }
-      setCrmLeads(r.mapa)
-      const actualizado = r.mapa[id]
+    (id: string, fn: (m: MapaLeads) => MapaLeads, exito: string): Promise<boolean> => {
+      const fila = filaLeads.current
+      if (!fila) return Promise.resolve(false)
+      const p = fila.encolar(fn)
+      const actualizado = fila.vista()[id]
       if (actualizado) setEstado({ t: 'lead', lead: actualizado })
-      decir(exito)
-      return true
+      return alGuardar(p, exito)
     },
-    [guardando, decir],
+    [alGuardar],
   )
 
   /**
@@ -856,31 +884,13 @@ function PanelInterno({
   const agendarDesdeLista = useCallback(
     async (it: { id: number; key: string; prospecto: boolean }, cuando: { dias: number } | { fecha: string }): Promise<boolean> => {
       const exito = 'dias' in cuando ? `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), cuando.dias)))}` : avisoFecha(cuando.fecha)
-      if (it.prospecto) {
-        const r = await guardarLeadsConRelectura((m) => ('dias' in cuando ? escribiHoyLead(m, it.key, cuando.dias) : setProximoLead(m, it.key, cuando.fecha)))
-        if (!vivo.current) return false
-        if (!r.ok) {
-          decir('No se pudo guardar: ' + r.motivo, true)
-          return false
-        }
-        kv.current = { ...kv.current, leads: r.mapa }
-        setCrmLeads(r.mapa)
-        setEstado((e) => (e.t === 'lead' && r.mapa[e.lead.id] ? { t: 'lead', lead: r.mapa[e.lead.id] } : e))
-      } else {
-        const r = await guardarConRelectura((m) => ('dias' in cuando ? escribiHoy(m, it.id, cuando.dias) : setProximoManual(m, it.id, cuando.fecha)))
-        if (!vivo.current) return false
-        if (!r.ok) {
-          decir('No se pudo guardar: ' + r.motivo, true)
-          return false
-        }
-        kv.current = { ...kv.current, seg: r.mapa }
-        setCrmSeg(r.mapa)
-        setEstado((e) => (e.t === 'ficha' ? { ...e, ficha: armarFicha(e.crudo, r.mapa, today) } : e))
-      }
-      decir(exito)
-      return true
+      // Las mismas dos filas que la ficha: si no, el agendado de la lista podría pisar un guardado en camino.
+      const p = it.prospecto
+        ? filaLeads.current?.encolar((m) => ('dias' in cuando ? escribiHoyLead(m, it.key, cuando.dias) : setProximoLead(m, it.key, cuando.fecha)))
+        : filaSeg.current?.encolar((m) => ('dias' in cuando ? escribiHoy(m, it.id, cuando.dias) : setProximoManual(m, it.id, cuando.fecha)))
+      return p ? alGuardar(p, exito) : false
     },
-    [decir, today],
+    [alGuardar],
   )
 
   /**
@@ -1097,7 +1107,6 @@ function PanelInterno({
             key={lead.id}
             lead={lead}
             today={today}
-            guardando={guardando}
             onMutar={(fn, exito) => mutarLead(lead.id, fn, exito)}
             leEscribiste={leEscribisteHoy(escritos, pedido ? [lead.telefono] : [telNorm, lead.telefono])}
           />
@@ -1116,7 +1125,6 @@ function PanelInterno({
         <FichaLead
           key={lead.id}
           lead={lead}
-          guardando={guardando}
           onMutar={(fn, exito) => mutarLead(lead.id, fn, exito)}
           botonChat={<BotonAbrirChat tel={lead.telefono || ''} chatAbierto={telNorm} onAbrir={() => abrirChat(0, lead.telefono || '')} onYaEsta={() => decir('Ya estás en su chat')} />}
           marcaComunidad={<MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={[telNorm, lead.telefono || '']} />}
@@ -1144,6 +1152,7 @@ function PanelInterno({
             else setEstado({ t: 'desconocido' })
             decir(`Listo: este número ahora abre la ficha de ${cliente.name || 'ese cliente'}`)
           }}
+          guardarLead={(fn) => filaLeads.current?.encolar(fn) ?? Promise.resolve({ ok: false, motivo: 'El panel todavía está cargando.' })}
           onGuardado={(lead) => {
             // 🔑 Se queda en la ficha del prospecto recién creado, no en un cartel de "listo".
             // Cargar el lead y agendarlo son el mismo momento de la conversación; mandarlo a otra
@@ -1185,7 +1194,6 @@ function PanelInterno({
           hoy={hoyFicha}
           faltaFecha={faltaFecha}
           ritmo={ritmo}
-          guardando={guardando}
           onPlazo={(d) => mutar((m) => escribiHoy(m, c.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)}
           calendario={
             <CampoFecha
@@ -1212,7 +1220,6 @@ function PanelInterno({
             <button
               onClick={() => mutar((m) => setTemperatura(m, c.id, siguienteTemperatura(c.temperatura)), 'Listo')}
               title={`${t.txt} — ${t.ayuda}`}
-              disabled={guardando}
               style={{ cursor: 'pointer', height: 26, fontSize: 11, fontWeight: 600, padding: '0 9px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${color.line}`, background: color.bg2, color: color.ink }}
             >
               {t.txt}
@@ -1241,7 +1248,6 @@ function PanelInterno({
           */}
           <Instagram
             valor={seg.pagina || ''}
-            guardando={guardando}
             onGuardar={(v) => mutar((m) => setPagina(m, c.id, v), v ? 'Instagram guardado' : 'Instagram eliminado')}
           />
         </div>
@@ -1274,13 +1280,11 @@ function PanelInterno({
         <Notas
           key={`notas-${c.id}`}
           notas={notas}
-          guardando={guardando}
           onGuardar={(texto) => mutar((m) => agregarNota(m, c.id, texto, hoyISO()), 'Nota guardada')}
           extra={
             <Contexto
               key={c.id}
               seg={seg}
-              guardando={guardando}
               onGuardar={(campo, valor) => {
                 const setter = campo === 'pendiente' ? setPendiente : campo === 'despacho' ? setDespacho : setTenerEnCuenta
                 mutar((m) => setter(m, c.id, valor), 'Guardado')
@@ -1365,14 +1369,12 @@ function TextoEditable({
   valor,
   vacio,
   ayuda,
-  guardando,
   estilo,
   onGuardar,
 }: {
   valor: string
   vacio: string
   ayuda: string
-  guardando: boolean
   estilo: React.CSSProperties
   onGuardar: (v: string) => void
 }) {
@@ -1385,7 +1387,6 @@ function TextoEditable({
         className="mo-input"
         defaultValue={valor}
         placeholder={ayuda}
-        disabled={guardando}
         onBlur={(e) => {
           const txt = e.target.value.trim()
           setEditando(false)
@@ -1409,7 +1410,6 @@ function TextoEditable({
     <button
       type="button"
       onClick={() => setEditando(true)}
-      disabled={guardando}
       title="Tocá para cambiarlo"
       style={{
         ...estilo,
@@ -1436,11 +1436,9 @@ function TextoEditable({
 
 function Instagram({
   valor,
-  guardando,
   onGuardar,
 }: {
   valor: string
-  guardando: boolean
   onGuardar: (v: string) => void
 }) {
   const [editando, setEditando] = useState(false)
@@ -1453,7 +1451,6 @@ function Instagram({
         className="mo-input"
         defaultValue={valor}
         placeholder="@usuario o link de su Instagram"
-        disabled={guardando}
         onBlur={(e) => {
           const txt = e.target.value.trim()
           setEditando(false)
@@ -1474,7 +1471,6 @@ function Instagram({
       <button
         type="button"
         onClick={() => setEditando(true)}
-        disabled={guardando}
         title="Cargar el Instagram de este cliente"
         style={{
           marginTop: 3,
@@ -1504,7 +1500,6 @@ function Instagram({
       <button
         type="button"
         onClick={() => setEditando(true)}
-        disabled={guardando}
         title="Cambiarlo"
         style={{ background: 'none', border: 0, padding: 0, color: color.mut2, fontSize: 11, cursor: 'pointer' }}
       >
@@ -1528,12 +1523,10 @@ function Instagram({
  */
 function Contexto({
   seg,
-  guardando,
   onGuardar,
   onTachar,
 }: {
   seg: MapaSeguimiento[string]
-  guardando: boolean
   onGuardar: (campo: 'pendiente' | 'tener_en_cuenta' | 'despacho', valor: string) => void
   onTachar: () => void
 }) {
@@ -1553,7 +1546,7 @@ function Contexto({
               {campo.icono} {campo.titulo}
             </span>
             {campo.k === 'pendiente' && valor('pendiente') && abierto !== 'pendiente' && (
-              <Button size="sm" variant="ghost" tone="success" disabled={guardando} title="Ya está hecho: lo saca de acá y lo deja anotado en las notas" onClick={onTachar}>
+              <Button size="sm" variant="ghost" tone="success" title="Ya está hecho: lo saca de acá y lo deja anotado en las notas" onClick={onTachar}>
                 ✓ Listo
               </Button>
             )}
@@ -1565,7 +1558,6 @@ function Contexto({
               rows={2}
               defaultValue={valor(campo.k)}
               placeholder={campo.ph}
-              disabled={guardando}
               onBlur={(e) => {
                 const txt = e.target.value.trim()
                 setAbierto(null)
@@ -1603,7 +1595,6 @@ function Contexto({
               key={campo.k}
               type="button"
               onClick={() => setAbierto(campo.k)}
-              disabled={guardando}
               title={campo.ph}
               style={{
                 fontSize: 11,
@@ -1670,7 +1661,7 @@ function ListaCompra({ items }: { items: FilaDetalle[] }) {
  * Y se ve más de una: mostrar sólo la última es lo que enterraba las notas viejas. Las de arriba
  * ahora son los tres campos, así que esto es historial y se puede desplegar cuando hace falta.
  */
-function Notas({ notas, guardando, onGuardar, extra }: { notas: Nota[]; guardando: boolean; onGuardar: (texto: string) => Promise<boolean>; extra?: React.ReactNode }) {
+function Notas({ notas, onGuardar, extra }: { notas: Nota[]; onGuardar: (texto: string) => Promise<boolean>; extra?: React.ReactNode }) {
   const [texto, setTexto] = useState('')
   const [todo, setTodo] = useState(false)
   const caja = useRef<HTMLTextAreaElement>(null)
@@ -1679,11 +1670,13 @@ function Notas({ notas, guardando, onGuardar, extra }: { notas: Nota[]; guardand
 
   const guardar = async () => {
     const txt = texto.trim()
-    if (!txt || guardando) return
-    // ⚠️ El cuadro se vacía SÓLO si se guardó. Si el POST falla —el KV entero, 133 KB, se
-    // reescribe en cada nota— lo escrito se queda ahí para volver a intentar; borrarlo igual
-    // perdía la nota justo cuando el aviso dice que no se guardó.
-    if (await onGuardar(txt)) setTexto('')
+    if (!txt) return
+    // La nota ya se ve en la lista (se guarda por detrás), así que el cuadro se vacía al instante.
+    // ⚠️ Si el guardado falla —el KV entero, 133 KB, se reescribe en cada nota— lo escrito VUELVE al
+    // cuadro para intentar de nuevo: perderlo justo cuando el aviso dice que no se guardó era el
+    // error de antes. Si mientras tanto se empezó a escribir otra cosa, no se pisa.
+    setTexto('')
+    if (!(await onGuardar(txt))) setTexto((t) => t || txt)
   }
 
   return (
@@ -1693,7 +1686,6 @@ function Notas({ notas, guardando, onGuardar, extra }: { notas: Nota[]; guardand
           <button
             key={t}
             type="button"
-            disabled={guardando}
             onClick={() => {
               setTexto((prev) => (prev.trim() ? `${prev.trim()} ${t}` : t))
               caja.current?.focus()
@@ -1716,7 +1708,6 @@ function Notas({ notas, guardando, onGuardar, extra }: { notas: Nota[]; guardand
         ref={caja}
         className="mo-input"
         value={texto}
-        disabled={guardando}
         placeholder="Qué hablaron… (Enter guarda)"
         onChange={(e) => setTexto(e.target.value)}
         onKeyDown={(e) => {
@@ -1728,7 +1719,7 @@ function Notas({ notas, guardando, onGuardar, extra }: { notas: Nota[]; guardand
         rows={2}
         style={{ width: '100%', fontSize: font.sm, resize: 'vertical' }}
       />
-      <Button size="sm" variant="outline" disabled={guardando || !texto.trim()} style={{ marginTop: 6 }} onClick={guardar}>
+      <Button size="sm" variant="outline" disabled={!texto.trim()} style={{ marginTop: 6 }} onClick={guardar}>
         Guardar nota
       </Button>
 
@@ -1821,13 +1812,11 @@ function Vacio({ texto, mal }: { texto: string; mal?: boolean }) {
  */
 function FichaLead({
   lead,
-  guardando,
   onMutar,
   marcaComunidad,
   botonChat,
 }: {
   lead: Lead
-  guardando: boolean
   onMutar: (fn: (m: MapaLeads) => MapaLeads, exito: string) => Promise<boolean>
   marcaComunidad: React.ReactNode
   botonChat: React.ReactNode
@@ -1845,7 +1834,6 @@ function FichaLead({
               valor={lead.nombre || ''}
               vacio="Sin nombre"
               ayuda="Su nombre"
-              guardando={guardando}
               estilo={{ fontSize: 18, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}
               onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'nombre', v), 'Nombre guardado')}
             />
@@ -1860,7 +1848,6 @@ function FichaLead({
             valor={lead.ciudad || ''}
             vacio="sin ciudad"
             ayuda="Su ciudad"
-            guardando={guardando}
             estilo={{ fontSize: font.xs, color: color.mut2 }}
             onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'ciudad', v), 'Ciudad guardada')}
           />
@@ -1868,7 +1855,6 @@ function FichaLead({
               de él, y muchas veces llega después de haberlo cargado. */}
           <Instagram
             valor={lead.instagram || ''}
-            guardando={guardando}
             onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'instagram', v), v ? 'Instagram guardado' : 'Instagram eliminado')}
           />
           <Chip>Todavía no compró</Chip>
@@ -1879,7 +1865,6 @@ function FichaLead({
       <div style={{ paddingTop: space[2] }}>
       <Notas
         notas={notas}
-        guardando={guardando}
         onGuardar={(texto) => onMutar((m) => agregarNotaLead(m, lead.id, texto), 'Nota guardada')}
       />
 
@@ -1894,14 +1879,14 @@ function FichaLead({
               size="sm"
               variant="outline"
               tone={tone}
-              disabled={guardando || lead.estado === est}
+              disabled={lead.estado === est}
               onClick={() => onMutar((m) => setEstadoLead(m, lead.id, est), 'Listo')}
             >
               {txt}
             </Button>
           ))}
           {lead.estado !== 'activo' && (
-            <Button size="sm" variant="ghost" disabled={guardando} onClick={() => onMutar((m) => setEstadoLead(m, lead.id, 'activo'), 'Listo')}>
+            <Button size="sm" variant="ghost" onClick={() => onMutar((m) => setEstadoLead(m, lead.id, 'activo'), 'Listo')}>
               Volver a activo
             </Button>
           )}
@@ -1931,13 +1916,11 @@ function FichaLead({
 function PieLead({
   lead,
   today,
-  guardando,
   leEscribiste,
   onMutar,
 }: {
   lead: Lead
   today: Date
-  guardando: boolean
   leEscribiste: boolean
   onMutar: (fn: (m: MapaLeads) => MapaLeads, exito: string) => Promise<boolean>
 }) {
@@ -1951,7 +1934,6 @@ function PieLead({
       hoy={hoy}
       faltaFecha={faltaFecha}
       ritmo={null}
-      guardando={guardando}
       onPlazo={(d) => onMutar((m) => escribiHoyLead(m, lead.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)}
       calendario={
         <CampoFecha
@@ -1988,6 +1970,7 @@ function NumeroNuevo({
   nombreAgendado,
   onVinculado,
   onGuardado,
+  guardarLead,
   onCobranza,
   onError,
 }: {
@@ -1996,6 +1979,8 @@ function NumeroNuevo({
   nombreAgendado: string
   onVinculado: (cliente: FilaCliente) => void
   onGuardado: (lead: Lead) => void
+  /** La fila de guardado de los leads del panel: el alta va en la misma fila que el resto. */
+  guardarLead: (fn: (m: MapaLeads) => MapaLeads) => Promise<{ ok: true } | { ok: false; motivo: string }>
   /** Ya compró y hay que cobrarle, aunque todavía no esté cargado en Gestión Nube. */
   onCobranza: () => void
   onError: (t: string) => void
@@ -2016,7 +2001,7 @@ function NumeroNuevo({
     onVinculado(c)
   }
 
-  if (camino === 'lead') return <NuevoLead tel={tel} onGuardado={onGuardado} onError={onError} onVolver={() => setCamino('elegir')} />
+  if (camino === 'lead') return <NuevoLead tel={tel} onGuardado={onGuardado} guardarLead={guardarLead} onError={onError} onVolver={() => setCamino('elegir')} />
   if (camino === 'cliente')
     return <VincularCliente tel={tel} onVinculado={onVinculado} onError={onError} onVolver={() => setCamino('elegir')} />
 
@@ -2227,11 +2212,13 @@ function VincularCliente({
 function NuevoLead({
   tel,
   onGuardado,
+  guardarLead,
   onError,
   onVolver,
 }: {
   tel: string
   onGuardado: (lead: Lead) => void
+  guardarLead: (fn: (m: MapaLeads) => MapaLeads) => Promise<{ ok: true } | { ok: false; motivo: string }>
   onError: (t: string) => void
   onVolver: () => void
 }) {
@@ -2267,9 +2254,9 @@ function NuevoLead({
       // `diaHabil` corre el fin de semana al lunes, igual que en toda fecha del CRM.
       proximo_manual: diaHabil(addDiasISO(hoyISO(), dias)),
     }
-    // La relectura la hace `guardarLeadsConRelectura`, igual que el resto de las escrituras del
-    // panel: acá estaba escrita a mano.
-    const r = await guardarLeadsConRelectura((m) => ({ ...m, [id]: lead }))
+    // Por la fila de los leads del panel (relee y reescribe con `guardarLeadsConRelectura`): por
+    // fuera de la fila podría pisar otro guardado de leads que esté en camino.
+    const r = await guardarLead((m) => ({ ...m, [id]: lead }))
     setGuardando(false)
     if (!r.ok) {
       onError('No se pudo guardar el lead: ' + r.motivo)

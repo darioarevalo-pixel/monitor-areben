@@ -13,6 +13,7 @@ import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
 import { armarFilasPedidos, claveContacto, leerContactados, marcarContactado, traerPedidosCatalogo, type FilaPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
+import { tomar } from '@/lib/crm/precarga'
 import { enGrupoDeposito, estadoDeposito, faltanUnidades, pasoPanel, pendientesLogistica, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
 import { mostrar as plata } from '@/lib/compromisos/core'
 
@@ -466,8 +467,11 @@ function usePedidosCatalogo(): ResultadoCatalogo | null {
   const [r, setR] = useState<ResultadoCatalogo | null>(memoriaPedidos.r)
   useEffect(() => {
     let vivo = true
+    let primera = true
     const pedir = async () => {
-      const x = await traerPedidosCatalogo()
+      // La primera, la que `precargarPanel` ya largó al abrir el panel (`lib/crm/precarga.ts`).
+      const x = primera ? await tomar('catalogo', traerPedidosCatalogo, (y) => y.t === 'ok') : await traerPedidosCatalogo()
+      primera = false
       // Un error pasajero no borra lo que ya se estaba viendo.
       if (x.t === 'error' && memoriaPedidos.r?.t === 'ok') return
       memoriaPedidos.r = x
@@ -493,8 +497,10 @@ function useContactados(): [Set<string> | null, (clave: string, marcado: boolean
   const [s, setS] = useState<Set<string> | null>(memoriaContactados.s)
   useEffect(() => {
     let vivo = true
+    let primera = true
     const pedir = async () => {
-      const x = await leerContactados()
+      const x = primera ? await tomar('contactados', leerContactados, (y) => !!y) : await leerContactados()
+      primera = false
       if (!x) return
       memoriaContactados.s = x
       if (vivo) setS(x)
@@ -667,8 +673,10 @@ function usePendientesLogistica(): ResultadoLogistica | null {
   const [r, setR] = useState<ResultadoLogistica | null>(memoriaLogistica.r)
   useEffect(() => {
     let vivo = true
+    let primera = true
     const pedir = async () => {
-      const x = await pendientesLogistica()
+      const x = primera ? await tomar('logistica', pendientesLogistica, (y) => y.t === 'ok') : await pendientesLogistica()
+      primera = false
       if (x.t === 'error' && memoriaLogistica.r?.t === 'ok') return
       memoriaLogistica.r = x
       if (vivo) setR(x)

@@ -50,7 +50,6 @@ export function ProximoContacto({
   hoy,
   faltaFecha,
   ritmo,
-  guardando,
   calendario,
   onPlazo,
 }: {
@@ -58,7 +57,6 @@ export function ProximoContacto({
   hoy: string
   faltaFecha: boolean
   ritmo: { cadaDias: number; desdeUltima: number; enDias: number } | null
-  guardando: boolean
   /** El casillero de la fecha (`CampoFecha`): se escribe con el teclado o se elige en el calendario. */
   calendario: React.ReactNode
   onPlazo: (dias: number) => void
@@ -114,7 +112,6 @@ export function ProximoContacto({
             <button
               key={dias}
               type="button"
-              disabled={guardando}
               onClick={() => onPlazo(dias)}
               title={`${sugerido ? 'Sugerido: ' : ''}${plazoEnPalabras(dias)} · ${dia(cae, false)}`}
               aria-label={`${plazoEnPalabras(dias)}, el ${dia(cae, false)}`}
@@ -127,7 +124,7 @@ export function ProximoContacto({
                 fontWeight: 700,
                 fontVariantNumeric: 'tabular-nums',
                 borderRadius: radius.md,
-                cursor: guardando ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 border: `1px solid ${sugerido ? color.brandSolid : color.line2}`,
                 background: sugerido ? color.brandSolid : color.surface,
                 color: sugerido ? color.sideActiveInk : color.ink2,

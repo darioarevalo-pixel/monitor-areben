@@ -42,6 +42,15 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   (`guardarConRelectura`): se queda abierto horas al costado de WhatsApp mientras la sección, en
   otra pestaña, toca la misma clave. Sin la relectura, un clic en el panel a las 6 de la tarde
   pisaría todo lo que se hizo en el CRM desde la mañana.
+- 🔴 **El panel guarda AL INSTANTE y en FILA** (25-oct-2026, `lib/crm/guardado-al-instante.ts`).
+  Medido: cada guardado tardaba 1,6-1,8 s (releer 0,7-0,8 + reescribir 0,8-1) con la pantalla
+  mostrando lo de antes. Ahora se dibuja enseguida y el servidor va por detrás, de a uno; si falla,
+  vuelve a lo confirmado y avisa en rojo. ⛔ **Todo lo que el panel escribe en `crm:seg`/`crm:leads`
+  pasa por `filaSeg`/`filaLeads`** (ficha, «Falta la fecha» de Hoy, alta de lead): sin el botón
+  apagado, un guardado por fuera de la fila lee el mapa con otro en camino y lo borra.
+- 🔑 **Las lecturas de «Hoy» salen al abrir `/panel`, sin esperar a la sesión** (`lib/crm/precarga.ts`,
+  desde `page.tsx`). Una adelantada que falló ⛔ se usa: se vuelve a pedir — un cuaderno leído
+  como `{}` es «no hay nadie para contactar».
 - 🔴 **El panel lee el KV SIEMPRE, haya chat abierto o no.** Estaba adentro del efecto de la
   ficha, después del `if (!telNorm) return`: con la solapa "Hoy", abrir el panel sin chat dejaba el
   mapa vacío y la lista anunciaba **"No hay nadie para contactar hoy"** con ~300 vencidos adentro.

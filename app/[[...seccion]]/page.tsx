@@ -174,6 +174,14 @@ export default function Seccion() {
           ? marcasConAcceso(perfil, keyPermiso, ['bdi', 'zattia']).length > 0
           : puedeVer(perfil, marca, keyPermiso)))
 
+  // 🔑 El panel no espera a la sesión para empezar a leer: el cuaderno, los pedidos y Logística (y su
+  // propio código) salen junto con la consulta de quién sos. Ver `lib/crm/precarga.ts`.
+  useEffect(() => {
+    if (!esPanel) return
+    void import('@/components/panel/PanelWhatsApp')
+    void import('@/lib/crm/precarga').then((m) => m.precargarPanel())
+  }, [esPanel])
+
   useEffect(() => {
     if (esPortalCliente || esPanel || esPOS || esERP) return
     if (!cargando && perfil && !permitida && key !== FALLBACK_TAB) router.replace(`/${FALLBACK_TAB}`)
