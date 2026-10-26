@@ -10,6 +10,8 @@ import { refrescarVistas } from './lib/refrescar-vistas.mjs';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
 import { revisarCostos, sinCostoSiNoSeVe } from './lib/costos-espejo.mjs';
 import { registrarCambiosDeStock } from './lib/stock-cambios.mjs';
+import { lecturasStunnedErp } from '../lib/stunned/ventas-erp.core.js';
+import { esFilaStunned } from '../lib/stunned/inventario-erp.core.js';
 import { guardarFotoDelDia } from './lib/stock-foto.mjs';
 
 /** Ver el comentario gemelo en sync-diario.js: lo que falló sin frenar el sync. */
@@ -177,7 +179,10 @@ async function syncInventario(maps) {
     }
   });
 
-  const inventario = Object.values(invMap);
+  // Con `LECTURAS_STUNNED_ERP=1` (día del corte) las filas STU las escribe el LIBRO del motor
+  // (`scripts/stunned-erp-inventario.mjs`): GN las trae en 0 y pisaría el stock real. Apagada, no cambia nada.
+  const stunnedDelErp = lecturasStunnedErp();
+  const inventario = Object.values(invMap).filter((r) => !(stunnedDelErp && esFilaStunned(r)));
   console.log(`[inventario] ${inventario.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inventario.length) return 0;
 
@@ -214,13 +219,14 @@ async function syncInventario(maps) {
     for (let desde = 0; ; desde += 1000) { // paginado: la tabla supera el tope de 1000 filas
       const { data, error: e } = await supabase
         .from('inventario')
-        .select('product_id,size_id,store_name')
+        .select('product_id,size_id,store_name,sku')
         .range(desde, desde + 999);
       if (e) throw new Error(e.message);
       espejo.push(...(data || []));
       if (!data || data.length < 1000) break;
     }
-    const aBorrar = espejo.filter(r => !gnKeys.has(`${r.product_id}|${r.size_id}|${r.store_name}`));
+    // Las filas STU del libro (llave prendida) ⛔ se limpian acá: no vienen de GN.
+    const aBorrar = espejo.filter(r => !gnKeys.has(`${r.product_id}|${r.size_id}|${r.store_name}`) && !(stunnedDelErp && esFilaStunned(r)));
     if (aBorrar.length > espejo.length * 0.3) {
       console.warn(`[inventario] limpieza ABORTADA por seguridad: borraría ${aBorrar.length}/${espejo.length} filas (>30%). Revisar a mano.`);
     } else {

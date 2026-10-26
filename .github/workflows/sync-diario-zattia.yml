@@ -40,4 +40,15 @@ jobs:
           ZATTIA_SUPABASE_KEY: ${{ secrets.ZATTIA_SUPABASE_KEY }}
           ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
           GN_TOKEN_ZATTIA: ${{ secrets.GN_TOKEN_ZATTIA }}
+          LECTURAS_STUNNED_ERP: ${{ vars.LECTURAS_STUNNED_ERP }}
         run: node scripts/sync-diario-zattia.js
+
+      # Día del corte de Stunned (variable del repo `LECTURAS_STUNNED_ERP=1`): sus filas STU de `inventario` salen del LIBRO
+      # del motor, no de GN (que las trae en 0). Apagada la variable, el script sale sin tocar nada.
+      - name: Stock de Stunned desde el ERP
+        env:
+          LECTURAS_STUNNED_ERP: ${{ vars.LECTURAS_STUNNED_ERP }}
+          DATABASE_URL_ZATTIA: ${{ secrets.DATABASE_URL_ZATTIA }}
+          ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
+        run: node scripts/stunned-erp-inventario.mjs
