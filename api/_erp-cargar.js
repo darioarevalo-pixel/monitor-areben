@@ -5,6 +5,7 @@
  *   POST { accion: 'cargar-venta', marca, linea, origen_ref, … }   registra la venta
  *
  * 🔴 Hasta el corte va SIEMPRE `prueba: true` (corre en paralelo con GN: ⛔ mueve el libro ni pasa a GN), como la Caja.
+ *    Excepción: la línea Stunned con `ERP_STUNNED_PRUEBA=0` (ya vive en el ERP, ⛔ vuelta a GN).
  * 🔑 `origen_ref` lo genera la pantalla al ABRIR el formulario ⇒ reintentar devuelve la misma venta (`ya_existia`).
  * Sin permiso nombrado en `lib/permisos.core.js` ⇒ `configurar` (sólo admin) hasta que Bruno diga quién carga.
  */
@@ -33,7 +34,7 @@ export async function datosParaCargar({ marca }, deps) {
  * @param {any} b @param {string} marca @param {string | null} usuario
  * @returns {{ entrada: any } | { error: string }}
  */
-export function entradaManual(b, marca, usuario) {
+export function entradaManual(b, marca, usuario, { stunnedReal = false } = {}) {
   const linea = String(b?.linea || '')
   if (!LINEAS[marca]?.includes(linea)) return { error: 'Línea inválida' }
   if (!/^[0-9a-f-]{36}$/i.test(String(b.origen_ref || ''))) return { error: 'Falta la clave del formulario: volvé a abrirlo.' }
@@ -65,7 +66,7 @@ export function entradaManual(b, marca, usuario) {
       origen: 'manual', origen_ref: String(b.origen_ref), marca: linea, canal: String(b.canal || ''), deposito: String(b.deposito),
       ...(doc && nombre ? { cliente: { doc, nombre } } : {}),
       ...(cuando ? { ocurrida_en: cuando.toISOString() } : {}),
-      usuario: usuario || 'admin', prueba: true, lineas, pagos, subtotal, total: subtotal,
+      usuario: usuario || 'admin', prueba: !(linea === 'stunned' && stunnedReal), lineas, pagos, subtotal, total: subtotal,
       ...(String(b.nota || '').trim() ? { detalle: { nota: String(b.nota).trim().slice(0, 500) } } : {}),
     },
   }
@@ -74,7 +75,8 @@ export function entradaManual(b, marca, usuario) {
 /** @param {{ marca: string, body: any, usuario: string | null }} p @param {{ conMotor: Function }} deps */
 export async function cargarVentaManual({ marca, body, usuario }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  const e = entradaManual(body, marca, usuario)
+  // 🔑 Stunned pasa al ERP (Bruno, 26-oct): con `ERP_STUNNED_PRUEBA=0` SUS ventas son reales (mueven el libro y se facturan). BDI y Zattia siguen en prueba hasta su corte.
+  const e = entradaManual(body, marca, usuario, { stunnedReal: process.env.ERP_STUNNED_PRUEBA === '0' })
   if ('error' in e) return { status: 400, error: e.error }
   return deps.conMotor(marca, 'Cargar venta', async (db, { registrarVenta }) => {
     const r = await registrarVenta(db, e.entrada)

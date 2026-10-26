@@ -34,3 +34,19 @@ describe('ERP › Cargar venta: la entrada del motor (§19)', () => {
     expect(r.entrada.cliente).toEqual({ doc: '20123456789', nombre: 'Ana' })
   })
 })
+
+describe('Stunned al ERP: venta real con ERP_STUNNED_PRUEBA=0', () => {
+  const stu = { ...ok, linea: 'stunned' }
+  it('por defecto TODO es de prueba, Stunned incluido', () => {
+    const r = entradaManual(stu, 'zattia', 'Bruno')
+    if ('error' in r) throw new Error(r.error)
+    expect(r.entrada).toMatchObject({ marca: 'stunned', prueba: true })
+  })
+  it('con la llave prendida sólo Stunned sale real; Zattia sigue de prueba', () => {
+    const s = entradaManual(stu, 'zattia', 'Bruno', { stunnedReal: true })
+    const z = entradaManual(ok, 'zattia', 'Bruno', { stunnedReal: true })
+    if ('error' in s || 'error' in z) throw new Error('entrada inválida')
+    expect(s.entrada.prueba).toBe(false)
+    expect(z.entrada.prueba).toBe(true)
+  })
+})

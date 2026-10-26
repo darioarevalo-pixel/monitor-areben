@@ -778,6 +778,12 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
  * pide la MISMA factura se ata y se devuelve (⛔ sale otra: el lote la ve facturada).
  * 🔴 Una venta de prueba ⛔ se factura en producción (`puedeFacturar`).
  */
+/**
+ * 🔑 El punto de venta sale de la marca de la VENTA, ⛔ de la base: Stunned (línea de Zattia) factura con su PV PROPIO
+ * (`ARCA_PTOVTA_STUNNED`, el 9 «STUNNED - FACTURA ERP», Bruno 26-oct). Antes caía en el de Zattia.
+ */
+export const marcaDePuntoDeVenta = (marcaBase, marcaVenta) => (marcaVenta === 'stunned' ? 'stunned' : marcaBase)
+
 export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const p = leerFacturar(body)
@@ -814,7 +820,7 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
     if (!factura) {
       const arca = arcaDe(deps, sb)
       if (!arca) return { status: 409, error: SIN_ARCA }
-      const ptoVta = ptoVtaDe(ambiente, marca, process.env)
+      const ptoVta = ptoVtaDe(ambiente, marcaDePuntoDeVenta(marca, f.marca), process.env)
       const hoy = diaArgentino(Date.now())
       const r = await facturarLote({
         arca, repo, ambiente, marca, ptoVta, tipo: p.tipo,
@@ -986,7 +992,7 @@ export async function facturarCambio({ marca, body, usuario }, deps = {}) {
       const receptor = facturaOriginal
         ? { docTipo: Number(facturaOriginal.doc_tipo), docNro: Number(facturaOriginal.doc_nro), condicionIva: Number(facturaOriginal.cond_iva) }
         : { docTipo: DOC.SIN_IDENTIFICAR, docNro: 0, condicionIva: COND_IVA.CONSUMIDOR_FINAL }
-      const ptoVta = ptoVtaDe(ambiente, marca, process.env)
+      const ptoVta = ptoVtaDe(ambiente, marcaDePuntoDeVenta(marca, cambio.marca), process.env)
       const reglas = { umbralIdentificar: UMBRAL_IDENTIFICAR, hoy }
       /** Uno de los dos comprobantes: el que ya está, o sale por el lote (con la clave del cambio). */
       const emitir = async (ya, tipo, comprobante) => {
