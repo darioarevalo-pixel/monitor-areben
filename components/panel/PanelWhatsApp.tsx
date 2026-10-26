@@ -261,7 +261,7 @@ function fmtFecha(d: string | null): string {
  * en cada cambio y se bloqueaba mientras guardaba: al tipear, Chrome ya avisa un cambio con el año
  * a medio escribir ("0002"), se mandaba eso, el campo quedaba trabado y el resto de lo tipeado se
  * perdía. Ahora lo escrito vive acá hasta que es una fecha completa y razonable, y el campo nunca
- * se bloquea.
+ * se bloquea. Desde el 26-oct se guarda con «Guardar» o Enter (ver abajo).
  */
 function CampoFecha({ valor, onGuardar, grande }: { valor: string; onGuardar: (v: string) => Promise<boolean> | void; grande?: boolean }) {
   const [txt, setTxt] = useState(valor)
@@ -291,23 +291,32 @@ function CampoFecha({ valor, onGuardar, grande }: { valor: string; onGuardar: (v
     })
   }
 
+  // 🔴 Se guarda con «Guardar», no al cambiar (Darío, 26-oct-2026): al pasar de mes en el
+  // calendario, Chrome ya cambia la fecha y la avisaba como elegida, sin dejar elegir el día.
+  const pendiente = txt !== valor && completa(txt)
   return (
-    <input
-      className="mo-input"
-      type="date"
-      value={txt}
-      onChange={(e) => {
-        setTxt(e.target.value)
-        guardar(e.target.value)
-      }}
-      onBlur={() => guardar(txt)}
-      style={
-        grande
-          ? // En la franja de «Próximo contacto» la fecha ES el dato: grande, sin caja que la achique.
-            { width: '100%', maxWidth: 190, height: 34, padding: '0 2px', fontSize: 19, fontWeight: 700, color: color.ink, background: 'transparent', border: 0, boxShadow: 'none' }
-          : { width: '100%', fontSize: font.sm }
-      }
-    />
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, width: '100%' }}>
+      <input
+        className="mo-input"
+        type="date"
+        value={txt}
+        onChange={(e) => setTxt(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') guardar(txt)
+        }}
+        style={
+          grande
+            ? // En la franja de «Próximo contacto» la fecha ES el dato: grande, sin caja que la achique.
+              { width: '100%', maxWidth: 190, height: 34, padding: '0 2px', fontSize: 19, fontWeight: 700, color: color.ink, background: 'transparent', border: 0, boxShadow: 'none' }
+            : { width: '100%', fontSize: font.sm }
+        }
+      />
+      {pendiente && (
+        <button type="button" onClick={() => guardar(txt)} style={{ height: 28, padding: '0 10px', fontSize: font.xs, fontWeight: 700, background: color.ink, color: color.surface, border: 0, borderRadius: 999, cursor: 'pointer', flexShrink: 0 }}>
+          Guardar
+        </button>
+      )}
+    </span>
   )
 }
 

@@ -308,12 +308,19 @@ const PLAZOS_LISTA: { dias: number; txt: string }[] = [
   { dias: 15, txt: '15 d' },
 ]
 
+/** Al tipear, Chrome avisa con el año a medio escribir: sólo vale la fecha completa. */
+function fechaCompleta(v: string): boolean {
+  const m = v.match(/^(\d{4})-\d{2}-\d{2}$/)
+  return !!m && Number(m[1]) >= 2020 && Number(m[1]) <= 2100
+}
+
 /**
  * Un renglón de «Falta la fecha» (diseño del 25-oct-2026): el nombre, y abajo los días o el
  * calendario para ponerle fecha AHÍ, sin entrar a la ficha. Al guardar sale solo de la lista.
  */
 function FilaFaltaFecha({ it, onAbrir, onFicha, onAgendar }: { it: Item; onAbrir: (id: number, tel: string) => void; onFicha: (id: number, tel: string) => void; onAgendar: Agendar }) {
   const [cal, setCal] = useState(false)
+  const [fechaCal, setFechaCal] = useState('')
   const [guardando, setGuardando] = useState(false)
   const sinTel = !it.telefono
   const sinFicha = it.prospecto && sinTel
@@ -352,16 +359,23 @@ function FilaFaltaFecha({ it, onAbrir, onFicha, onAgendar }: { it: Item; onAbrir
                 autoFocus
                 min={hoyISO()}
                 disabled={guardando}
+                value={fechaCal}
                 aria-label={`Fecha para volver a hablarle a ${it.nombre}`}
                 style={{ height: 28, width: 'auto', fontSize: font.sm }}
-                onChange={(e) => {
-                  const v = e.target.value
-                  const m = v.match(/^(\d{4})-\d{2}-\d{2}$/)
-                  // Al tipear, Chrome avisa con el año a medio escribir: se espera a la fecha completa.
-                  if (m && Number(m[1]) >= 2020 && Number(m[1]) <= 2100) elegir({ fecha: v })
-                }}
+                // 🔴 No se guarda al cambiar (Darío, 26-oct-2026): con el casillero vacío, al pasar de
+                // mes en el calendario Chrome ya pone una fecha y la avisaba como elegida. Se guarda
+                // recién con «Guardar».
+                onChange={(e) => setFechaCal(e.target.value)}
               />
-              <button type="button" disabled={guardando} onClick={() => setCal(false)} style={boton}>
+              <button
+                type="button"
+                disabled={guardando || !fechaCompleta(fechaCal)}
+                onClick={() => elegir({ fecha: fechaCal })}
+                style={{ ...boton, ...(fechaCompleta(fechaCal) ? { background: color.ink, color: color.surface, borderColor: color.ink } : { opacity: 0.5 }) }}
+              >
+                Guardar
+              </button>
+              <button type="button" disabled={guardando} onClick={() => { setCal(false); setFechaCal('') }} style={boton}>
                 Cancelar
               </button>
             </>
