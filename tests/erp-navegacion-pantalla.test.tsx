@@ -13,7 +13,7 @@ const replace = vi.fn()
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace }) }))
 const setMarca = vi.fn()
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'bdi', perfil: { name: 'bruno', admin: true }, setMarca }) }))
-vi.mock('@/lib/permisos', () => ({ puedeVer: () => true }))
+vi.mock('@/lib/permisos', () => ({ puedeVer: () => true, esAdmin: () => true }))
 for (const [archivo, nombre] of [['CambioCaja', 'CambioCaja'], ['FacturaCaja', 'FacturaCaja'], ['Facturacion', 'Facturacion'], ['stock/StockErp', 'StockErp'], ['DiferenciasDia', 'DiferenciasDia'], ['ConciliacionDia', 'ConciliacionDia'], ['AjustesStock', 'AjustesStock'], ['PedidosSinPagar', 'PedidosSinPagar'], ['PreciosProducto', 'PreciosProducto'], ['ReglasComerciales', 'ReglasComerciales'], ['RutasCobro', 'RutasCobro'], ['ventas/VentasErp', 'VentasErp']]) {
   vi.doMock(`@/components/erp/${archivo}`, () => ({ [nombre]: () => <div data-pantalla={nombre} /> }))
 }
