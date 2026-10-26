@@ -15,7 +15,7 @@ describe('avisosAlTildar', () => {
     expect(avisosAlTildar({ ...base, item: items[0], items, hechos: [hecho('a')] })).toEqual([])
     const r = avisosAlTildar({ ...base, item: items[1], items, hechos: [hecho('a'), hecho('b')] })
     expect(r).toHaveLength(1)
-    expect(r[0]).toMatchObject({ para: ['Dario Arevalo'], titulo: '✅ Camila terminó sus tareas de hoy', cuerpo: '2 de 2 tareas hechas.' })
+    expect(r[0]).toMatchObject({ para: ['Dario Arevalo'], titulo: '✅ Camila: tareas listas', cuerpo: '2 de 2 hechas.' })
   })
 
   it('la importante avisa al momento, a Darío y a quien la cargó', () => {

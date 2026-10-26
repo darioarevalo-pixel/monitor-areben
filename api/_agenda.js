@@ -52,6 +52,7 @@ import { avisar, faltaParaMandar, guardarSuscripcion, suscripcionValida } from '
 import { armarCorreoDiario, hoyAR } from '../lib/agenda/correo-diario.core.js';
 import { avisosAlTildar, quienesSeEnteran } from '../lib/agenda/aviso-terminado.core.js';
 import { incidencias } from './_incidencias.js';
+import { corto, cuerpoTarea } from '../lib/agenda/aviso-texto.core.js';
 import { textoDeRespuesta } from './_tn-desc-ia.js';
 import { SISTEMA as SISTEMA_MEJORAR, descripcionLimpia, respuestaLimpia } from '../lib/agenda/mejorar.core.js';
 import { companerasDe, perfilDe } from '../lib/agenda/celular-compartido.core.js';
@@ -845,7 +846,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
     if (action === 'push-prueba') {
-      const r = await avisar([yo], { titulo: 'Aviso de prueba', cuerpo: 'Los avisos del Monitor llegan a este teléfono.', url: '/agenda', tag: 'prueba' });
+      const r = await avisar([yo], { titulo: 'Aviso de prueba', cuerpo: 'Los avisos llegan a este teléfono.', url: '/agenda', tag: 'prueba' });
       if (r.falta) return res.status(503).json({ error: r.falta });
       if (!r.telefonos) return res.status(400).json({ error: 'Este usuario no tiene ningún teléfono con avisos activados.' });
       return res.status(200).json({ ok: true, enviados: r.enviados, fallas: r.fallas });
@@ -1365,7 +1366,7 @@ export default async function handler(req, res) {
         // Con el nombre: en el celular compartido suenan las de las dos.
         for (const p of fila.destino.personas || []) {
           const e = EQUIPO.find((x) => x.name === p);
-          await avisar([p], { titulo: e ? `Nueva tarea para ${e.nombre.split(' ')[0]}` : 'Nueva tarea asignada', cuerpo: titulo, url: '/agenda', tag: `${id}-${p}` });
+          await avisar([p], { titulo: e ? `${e.nombre.split(' ')[0]}: nueva tarea` : 'Nueva tarea', cuerpo: cuerpoTarea(titulo, fila.regla && fila.regla.fecha, hoyAR()), url: '/agenda', tag: `${id}-${p}` });
         }
       }
       return res.status(200).json({ ok: true, id });

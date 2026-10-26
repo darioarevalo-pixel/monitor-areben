@@ -13,6 +13,7 @@ import { avisar } from './_push.js';
 import { EQUIPO } from '../lib/agenda/correo-diario.core.js';
 import { quienesSeEnteran } from '../lib/agenda/aviso-terminado.core.js';
 import { companerasDe } from '../lib/agenda/celular-compartido.core.js';
+import { corto } from '../lib/agenda/aviso-texto.core.js';
 import { incidenciaValida, mensajeValido, tituloAviso } from '../lib/agenda/incidencias.core.js';
 
 const TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
@@ -78,7 +79,7 @@ export async function incidencias(req, res, { yo, action, b, fotosDe }) {
       autor, ...v, fotos: fotosDe(b.fotos), estado: 'abierta', creado: ahora.toISOString(), mensajes: [],
     };
     await guardar(inc);
-    await avisar(recibe.filter((u) => u !== autor), { titulo: tituloAviso(inc, nombreDe(autor)), cuerpo: inc.texto, url: '/agenda/incidencias', tag: inc.id });
+    await avisar(recibe.filter((u) => u !== autor), { titulo: tituloAviso(inc, nombreDe(autor)), cuerpo: corto(inc.texto), url: '/agenda/incidencias', tag: inc.id });
     return res.status(200).json({ ok: true, incidencia: inc });
   }
 
@@ -96,7 +97,7 @@ export async function incidencias(req, res, { yo, action, b, fotosDe }) {
       inc.mensajes = [...(inc.mensajes || []), { ...(mid ? { id: mid } : {}), de, texto, at: new Date().toISOString() }];
       await guardar(inc);
       const para = esDario ? [inc.autor] : recibe;
-      await avisar(para.filter((u) => u !== de), { titulo: `💬 ${nombreDe(de)} respondió`, cuerpo: texto, url: esDario ? '/agenda' : '/agenda/incidencias', tag: `${inc.id}-r` });
+      await avisar(para.filter((u) => u !== de), { titulo: `💬 ${nombreDe(de)} respondió`, cuerpo: corto(texto), url: esDario ? '/agenda' : '/agenda/incidencias', tag: `${inc.id}-r` });
       return res.status(200).json({ ok: true, incidencia: inc });
     }
 
@@ -106,7 +107,7 @@ export async function incidencias(req, res, { yo, action, b, fotosDe }) {
     inc.estado = estado;
     inc.resuelta = estado === 'resuelta' ? { por: yo, at: new Date().toISOString() } : null;
     await guardar(inc);
-    if (estado === 'resuelta') await avisar([inc.autor], { titulo: '✅ Incidencia resuelta', cuerpo: inc.texto, url: '/agenda', tag: `${inc.id}-ok` });
+    if (estado === 'resuelta') await avisar([inc.autor], { titulo: '✅ Resuelta', cuerpo: corto(inc.texto), url: '/agenda', tag: `${inc.id}-ok` });
     return res.status(200).json({ ok: true, incidencia: inc });
   }
 
