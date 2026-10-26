@@ -20,7 +20,8 @@ import { precioDeFeria } from './core.core.js'
 
 type ProductoCaja = Parameters<typeof construirPrecios>[0][number]
 
-export type PrecioDeCaja = { precio: number | null; fueraDeTn: boolean; foto: string | null; categorias: string[] }
+/** `oferta`: la prenda de Stunned está en oferta en su tienda ⇒ paga la oferta de su línea (`PCT_OFERTA_DE_LINEA`, 26-oct). */
+export type PrecioDeCaja = { precio: number | null; fueraDeTn: boolean; foto: string | null; categorias: string[]; oferta: boolean }
 
 /**
  * ¿La prenda es de Stunned? Sólo en Zattia (en BDI el prefijo `STU` ⛔ significa nada). Mira el SKU del
@@ -38,13 +39,14 @@ export function precioDeCaja(
   o: { store: string; skuVariante?: string | null; idx: IndiceTn; idxStunned: IndiceTn | null; reglas: Parameters<typeof precioDeFeria>[0] },
 ): PrecioDeCaja {
   if (esDeStunned(o.store, producto, o.skuVariante)) {
-    if (!o.idxStunned) return { precio: null, fueraDeTn: false, foto: null, categorias: [] }
+    if (!o.idxStunned) return { precio: null, fueraDeTn: false, foto: null, categorias: [], oferta: false }
     const tn = matchTn(producto, o.idxStunned)
-    const precio = ofertaVigente(tn?.price, tn?.promo_price).aCobrar
-    return { precio: precio && precio > 0 ? precio : null, fueraDeTn: false, foto: imagenDe(producto, o.idxStunned), categorias: tn?.categories ?? [] }
+    const vigente = ofertaVigente(tn?.price, tn?.promo_price)
+    const precio = vigente.aCobrar
+    return { precio: precio && precio > 0 ? precio : null, fueraDeTn: false, foto: imagenDe(producto, o.idxStunned), categorias: tn?.categories ?? [], oferta: vigente.enOferta }
   }
   const { precios, fueraDeTn } = construirPrecios([producto], o.idx)
   // 🔑 La prenda de feria va al precio de SU campaña (13-oct): el de TN puede ser el de la «Feria Online».
   const precio = precioDeFeria(o.reglas, Number(producto.id)) ?? (precios[producto.id] || null)
-  return { precio, fueraDeTn: fueraDeTn.has(producto.id), foto: imagenDe(producto, o.idx), categorias: matchTn(producto, o.idx)?.categories ?? [] }
+  return { precio, fueraDeTn: fueraDeTn.has(producto.id), foto: imagenDe(producto, o.idx), categorias: matchTn(producto, o.idx)?.categories ?? [], oferta: false }
 }

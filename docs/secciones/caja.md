@@ -24,6 +24,11 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   de GN, ⛔ la feria; sin la prenda en su tienda, sin precio) — Bruno, 16-oct. La regla por línea vive en
   `lib/caja/precio.ts` (POS y tótem). Antes le pasaba el índice de Zattia y cobraba la lista: la REMERA
   S-MAIL GREY salía $31.490 con la etiqueta en $22.090 (25 de 40 productos de Stunned en oferta).
+  🔴 **Y la prenda de Stunned EN OFERTA en su tienda paga 10 % en efectivo Y en transferencia** (Bruno,
+  26-oct: la STND SALE está a ~1,07× el costo y el −15 % del efectivo la dejaba abajo). `PCT_OFERTA_DE_LINEA`
+  en `core.core.js`; la pantalla marca `oferta` en el renglón (de `precioDeCaja`, `enOferta` de su TN) y
+  `pctDeCuenta` pesa el % por prenda en la MISMA cuenta de GN. ⛔ toca las cuentas de feria de Zattia (0 %) ni
+  débito/crédito. ⚠️ Es POR OFERTA, ⛔ por campaña: cualquier promocional de Stunned en su tienda paga 10 %.
 - 🔴 **EL % DE LA FORMA DE PAGO PUEDE SALIR DE `erp › Reglas`** (parte 3 de las reglas comerciales, 17-oct). Si la marca
   prendió «la Caja cobra con las reglas», `reglasDeHoy` (`api/_caja-reglas.js`) pone `reglas.comerciales` (la COPIA de
   `regla_comercial` guardada en `caja_config.reglas.reglasComerciales` + la Agenda leída + de qué campaña es cada producto)

@@ -15,7 +15,7 @@ const feria = conFeria({ '700': 30000 })
 describe('Caja · el precio según la línea (16-oct)', () => {
   it('Stunned cobra el precio de SU Tienda Nube, con la oferta, ⛔ la lista de GN', () => {
     const r = precioDeCaja(sMail, { store: 'zattia', idx: idxZattia, idxStunned, reglas: feria })
-    expect(r).toEqual({ precio: 22090, fueraDeTn: false, foto: 'https://x/s-mail.jpg', categorias: ['REMERAS'] })
+    expect(r).toEqual({ precio: 22090, fueraDeTn: false, foto: 'https://x/s-mail.jpg', categorias: ['REMERAS'], oferta: true })
   })
 
   it('Stunned que ⛔ está en su tienda queda SIN precio: la cajera lo escribe (⛔ cae a la lista de GN)', () => {

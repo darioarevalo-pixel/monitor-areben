@@ -49,7 +49,7 @@ import { esDeStunned, precioDeCaja } from '@/lib/caja/precio'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
-import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, cuentaDeOferta, idsDeFeria, mediosOfertaAparte, nombreParaTicket, pagosDeMedio, pagosDeVarios, pctDeMedio, renglones, subtotal, subtotalDeFeria } from '@/lib/caja/core.core.js'
+import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, cuentaDeOferta, idsDeFeria, mediosOfertaAparte, nombreParaTicket, pagosDeMedio, pagosDeVarios, pctDeMedio, pctOfertaDeLinea, renglones, subtotal, subtotalDeFeria } from '@/lib/caja/core.core.js'
 import { hoyIso, promosDeCreditoEnMostrador } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
@@ -580,7 +580,8 @@ function POS() {
   const sinPrecio = bor.renglones.some((r) => !(r.precio && r.precio > 0))
   // Lo que viaja al servidor: el descuento A MANO y las categorías de Tienda Nube; la promo la aplica él.
   // y la LÍNEA (Stunned, por el SKU, como el precio): con reglas comerciales, cobra con las de su línea.
-  const items = bor.renglones.map((r) => ({ product_id: r.variante.product_id, size_id: r.variante.size_id, cantidad: r.cantidad, precio: r.precio ?? 0, rebaja: r.rebaja ?? null, categorias: categoriasDe(r.variante.product_id), ...(esStunnedVariante(r.variante) ? { linea: 'stunned' } : {}) }))
+  // Con su OFERTA (Stunned en oferta en su tienda, 26-oct): paga el % de la oferta de la línea (`PCT_OFERTA_DE_LINEA`).
+  const items = bor.renglones.map((r) => ({ product_id: r.variante.product_id, size_id: r.variante.size_id, cantidad: r.cantidad, precio: r.precio ?? 0, rebaja: r.rebaja ?? null, categorias: categoriasDe(r.variante.product_id), ...(esStunnedVariante(r.variante) ? { linea: 'stunned', ...(precioDeProducto(r.variante.product_id)?.oferta ? { oferta: true } : {}) } : {}) }))
   // 🔑 W5: las promos, con el MISMO núcleo que el servidor (`aplicarPromos`). La de compra la
   // reemplaza el descuento a mano a la venta (Bruno, 5-oct).
   const conPromo = (() => {
@@ -1280,6 +1281,10 @@ function POS() {
                               ) : (
                                 <>
                                   {regla && regla.descuento > 0 && <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{regla.descuento}% de descuento{modoOferta && modoOferta !== 'descuento' ? ' (sin la oferta)' : ''}</span>}
+                                  {(() => {
+                                    const p = items.some((it) => 'oferta' in it && it.oferta) ? pctOfertaDeLinea('stunned', medio) : null
+                                    return p != null && p !== regla?.descuento ? <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{p}% en Stunned en oferta</span> : null
+                                  })()}
                                   {modoOferta === 'recargo' && <span style={{ fontSize: font.xs, color: color.warningInk, fontWeight: weight.semibold }}>+{ofertaDe(reglas).recargo}% en productos en oferta</span>}
                                 </>
                               )}
