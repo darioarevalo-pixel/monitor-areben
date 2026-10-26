@@ -441,6 +441,8 @@ export type ExtraDeVenta = {
   clienteGn: string | null; gnNumero: string | null; gnEstado: string | null; clienteId: string | null
   vendedor: string | null; entrega: { tipo: 'retira' | 'envio' | 'cadete'; direccion?: string } | null; facturar: { doc: string; condicion_iva: number } | null
   tn: { numero: number; estado: string | null; envioTipo: string | null; creadaEn: string; actualizadaEn: string | null; link: string | null } | null
+  /** Logística cobró al entregar (sql/039): quién, cuándo, con qué medio; la transferencia queda por verificar. */
+  cobroEnEntrega?: { entrego: string | null; fecha: string | null; formaPago: 'efectivo' | 'transferencia' | 'ya_pagado' | null; porVerificar: boolean } | null
   facturas: Array<{ numero: string; tipo: 'factura' | 'nc'; de: 'erp' | 'gn'; cuando: string | null }>
   cuentas: Array<{ id: string; nombre: string; medio: string }>
   ediciones: Array<{ campo: string; antes: string; despues: string; usuario: string; cuando: string }>

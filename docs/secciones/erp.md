@@ -246,6 +246,12 @@ la fila ⇒ el formulario de esa regla (el formulario y el simulador siguen igua
 canal × medio de la línea, vistas por canal + «Sin ruta» + «Cambios» (el historial); clic o «⋯» ⇒ la ventana «Cambiar la
 ruta» (mismo aviso antes de guardar). ⛔ cambió ningún contrato. Tests `tests/erp-reglas-pantalla.test.tsx`, `erp-rutas-pantalla`.
 
+🎨 **Cobrar a la cuenta y «Cobrado al entregar»** (26-oct, Resto): en la ficha de la cuenta corriente, **«Cobrar»** (permiso `cobrar`) abre una ventana
+sin elegir venta (monto, cuenta de cobro, fecha) que avisa a qué se aplica —la compra más vieja primero, lo que sobra a la siguiente, a favor sólo si
+no debe nada— y manda `cobrar-cuenta` con una clave por ventana (⛔ duplica). La vista `cuenta-cliente` trae las cuentas de cobro. En la ficha de una
+venta, si Logística cobró al entregar (motor sql/039, `detalle.entrega`), «Cobrado al entregar» dice medio · quién · cuándo y la transferencia avisa que
+falta verificar (Pagos recibidos del monitor). ▶️ Falta la lista «entregas con el cobro pendiente» (las anotadas sin venta: `entrega_cobro`).
+
 **Redondeo** (🎨 26-oct, Resto; `erp › Configuración › Redondeo`, `components/erp/Redondeo.tsx`, `api/_erp-redondeo.js`, núcleo
 `lib/erp/redondeo.core.js`): a cuánto se redondea el precio de cada canal (Local · Online · Mayorista · Mercado Libre), por línea
 (Stunned por el selector, como Rutas). Una fila por canal con lo que vale hoy, un ejemplo ($12.345,67 ⇒ …) y lo que ya está

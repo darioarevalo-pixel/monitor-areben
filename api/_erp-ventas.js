@@ -394,6 +394,8 @@ export async function extraDeVenta({ marca, id }, deps = {}) {
   return {
     clienteGn: g?.client_name ?? null, gnNumero: g?.number ?? null, gnEstado: v.detalle?.sale_state ?? g?.sale_state ?? null,
     vendedor: v.vendedor ?? null, entrega: v.entrega ?? null, facturar: v.facturar ?? null, clienteId: v.cliente_id ?? null,
+    // 🔑 La ENTREGA QUE COBRA (motor sql/039): si Logística cobró al entregar, la venta lo lleva en `detalle.entrega` (quién, cuándo, con qué; la transferencia queda «por verificar»).
+    cobroEnEntrega: v.detalle?.entrega ? { entrego: v.detalle.entrega.entrego ?? null, fecha: v.detalle.entrega.fecha ?? null, formaPago: v.detalle.entrega.forma_pago ?? null, porVerificar: v.detalle.entrega.por_verificar === true } : null,
     tn: o ? { numero: o.numero, estado: o.estado, envioTipo: o.envio_tipo, creadaEn: o.creada_en, actualizadaEn: o.actualizada_en, link: ADMIN[o.tienda] ? `${ADMIN[o.tienda]}/orders/${o.tn_id}` : null } : null,
     facturas, cuentas, ...(await delMotorParaLaFicha(marca, id, deps)),
   }

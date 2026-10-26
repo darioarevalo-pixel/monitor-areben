@@ -105,6 +105,17 @@ describe('la ficha y las ventanas', () => {
     expect(host.querySelectorAll('[role="row"]').length).toBe(4) // la lista ⛔ se pierde
   })
 
+  it('🔑 lo que Logística cobró al entregar se ve en la ficha; la transferencia avisa que falta verificar', async () => {
+    extra.cobroEnEntrega = { entrego: 'Ger', fecha: '2026-10-26T15:00:00Z', formaPago: 'transferencia', porVerificar: true }
+    try {
+      await montar()
+      await clic(filaDe('#293').querySelectorAll('[role="cell"]')[3])
+      const aside = document.querySelector('aside[aria-label="Ficha de la venta #293"]')!
+      expect(aside.textContent).toContain('Cobrado al entregarTransferencia · Ger')
+      expect(aside.textContent).toContain('falta verificar que entró')
+    } finally { delete extra.cobroEnEntrega }
+  })
+
   it('$ desde la FILA abre sólo el cobro; sin el motor lo dice y ⛔ deja registrar', async () => {
     await montar()
     await clic(boton(/^Registrar cobro \(todavía no conectado al motor\)/, filaDe('#293')))

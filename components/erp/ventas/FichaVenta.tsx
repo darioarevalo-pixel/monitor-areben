@@ -22,6 +22,7 @@ import { MOTIVO_MINIMO, NOMBRE_CANAL } from '@/lib/erp/venta.core.js'
 import { textoDeVuelta } from '@/lib/erp/desarme.core.js'
 import { DesarmeVenta } from './DesarmeVenta'
 
+const COBRO_EN_ENTREGA = { efectivo: 'Efectivo', transferencia: 'Transferencia', ya_pagado: 'Ya estaba pagado' } as const
 const ENTREGA: Record<string, string> = { retira: 'Retira', envio: 'Envío', cadete: 'Cadete' }
 const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
 
@@ -201,6 +202,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             <DesarmeVenta marca={marca} ficha={ficha} refVenta={fila.ref} onListo={onCambio} />
           )}
 
+          {extra?.cobroEnEntrega?.porVerificar && <Notice tone="warning">Lo cobró Logística al entregar con <b>transferencia</b>: falta verificar que entró. Se cruza en el monitor, en Pagos recibidos.</Notice>}
           <DatosFicha>
             <DatoFicha titulo="Origen">{fila.origenTexto}</DatoFicha>
             <DatoFicha titulo="Factura">{fila.factura ? `${fila.factura.numero}${fila.factura.de === 'gn' ? ' (GN)' : ''}` : 'Sin factura'}</DatoFicha>
@@ -209,6 +211,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             <DatoFicha titulo="Canal">{NOMBRE_CANAL[v!.canal as keyof typeof NOMBRE_CANAL] ?? v!.canal}</DatoFicha>
             <DatoFicha titulo="Línea">{LINEA[v!.marca] ?? v!.marca}</DatoFicha>
             {extra?.entrega && <DatoFicha titulo="Entrega">{[ENTREGA[extra.entrega.tipo], extra.entrega.direccion].filter(Boolean).join(' · ')}</DatoFicha>}
+            {extra?.cobroEnEntrega && <DatoFicha titulo="Cobrado al entregar">{[extra.cobroEnEntrega.formaPago ? COBRO_EN_ENTREGA[extra.cobroEnEntrega.formaPago] : null, extra.cobroEnEntrega.entrego, extra.cobroEnEntrega.fecha ? cuandoCorto(extra.cobroEnEntrega.fecha) : null].filter(Boolean).join(' · ')}</DatoFicha>}
             {extra?.gnNumero && <DatoFicha titulo="En GN">{`venta ${extra.gnNumero}`}</DatoFicha>}
           </DatosFicha>
 

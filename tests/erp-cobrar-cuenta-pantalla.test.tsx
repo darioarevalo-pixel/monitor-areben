@@ -11,10 +11,10 @@ import { createRoot, type Root } from 'react-dom/client'
 const CLIENTE = '00000000-0000-0000-0000-0000000000c1'
 const fila = {
   id: 'f1', clienteId: CLIENTE, linea: 'bdi', nombre: 'Mayorista Uno', doc: '20-1', saldo: 1000, debe: 1000, aFavor: 0, vencido: 0, diasMayor: 3, tramos: {},
-  credito: { credito: true, tope: null, dias: 30 }, sinCredito: false, estado: 'aldia',
+  credito: { credito: true, tope: null, dias: 30, puesto_por: null, puesto_en: null }, sinCredito: false, estado: 'aldia',
 }
 const cuenta = {
-  hoy: '2026-10-26', cliente: { id: CLIENTE, nombre: 'Mayorista Uno', doc: '20-1' }, credito: { credito: true, tope: null, dias: 30 },
+  hoy: '2026-10-26', cliente: { id: CLIENTE, nombre: 'Mayorista Uno', doc: '20-1' }, credito: { credito: true, tope: null, dias: 30, puesto_por: null, puesto_en: null },
   estado: { saldo: 1000, debe: 1000, a_favor: 0, vencido: 0, dias_mayor: 3, atrasado: false, sin_credito: false, tramos: {}, pendientes: [] },
   mayor: { anterior: 0, renglones: [], final: 1000 }, csv: '', cuentas: [{ id: 7, nombre: 'Galicia', medio: 'transferencia' }],
 }
