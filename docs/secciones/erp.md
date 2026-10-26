@@ -384,6 +384,15 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
 
 - **Editar el producto** (26-oct, puerta sin pantalla todavía; `api/_erp-catalogo.js`, núcleo `lib/erp/catalogo-edicion.core.js`, motor `catalogo-edicion.mjs`, sql/037): `producto-editar` (nombre, categoría, activo), `variante-editar` (talle, SKU, código de barras, activa), `variante-agregar` y la vista `producto-historial`. Sólo Admin (`configurar`). ⛔ Crear producto, proveedor y costo: nacen en Ingresos. 🔴 Editar una fila que vino de GN la pasa a «cargada» y la copia de GN ⛔ la actualiza más; el código de barras ⛔ se repite en la empresa (el motor dice con qué variante choca). Cada campo cambiado queda en `catalogo_edicion`, inmutable.
 
+🎨 **Cuenta corriente: WhatsApp e imprimir el resumen · Inicio «Ver como»** (26-oct, Resto). (1) En la fila y en la ficha de la
+cuenta: **«Escribir por WhatsApp»** abre `wa.me` con un texto armado del saldo y lo vencido (`lib/erp/resumen-cuenta.core.js`);
+el número sale del campo `whatsapp` del cliente del motor (lectura aparte en `cuentasDeLaMarca`, `cuentasCorrientes` ⛔ lo trae) y
+`numeroWhatsapp` lo lleva a 549 + 10 dígitos o da `null`: ⛔ adivina, el botón queda apagado y dice por qué (sin WhatsApp · número que
+no se entiende · cuenta en cero). **«Imprimir resumen de cuenta»** arma una página (saldo, ventas con saldo, mayor) y abre la
+impresión; la ventana se abre en el clic y se llena cuando llega la cuenta. (2) **Inicio › «Ver como»** (sólo Admin; los 6 roles en
+`lib/erp/inicio-roles.core.js`): cambia las tarjetas de «Para hacer» y el resultado comercial sólo lo ve Admin; cada renglón apunta
+a una vista que existe en su lista (test). Sin tile de cheques. Tests `erp-resumen-cuenta`, `erp-resumen-cuenta-pantalla`, `erp-inicio-ver-como`.
+
 ## Pendiente
 
 Factura A en la masiva (en la Caja ya está) · NC PARCIAL (la del cambio) · los datos del emisor para el PDF · reabrir un mes ·

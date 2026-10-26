@@ -20,29 +20,12 @@ import { contarVistas as vistasDeVentas, rangoDePeriodo } from '@/lib/erp/ventas
 import { contarVistas as vistasDeStock } from '@/lib/erp/stock-lista.core.js'
 import { contarVistas as vistasDeProductos } from '@/lib/erp/productos-lista.core.js'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
+import { ROLES, VISTA, paraHacerDe, subtituloDe, verResultado } from '@/lib/erp/inicio-roles.core.js'
+import { esAdmin } from '@/lib/permisos'
 
 /** Lo que se cuenta de cada lista: `null` = leyendo; un texto = no se pudo (y por qué). */
 type Conteo = Record<string, number> | string | null
 
-/** «Para hacer», por rol: [rol, [[de qué lista, vista, qué es, sección, pestaña]]]. */
-const PARA_HACER: Array<[string, Array<[string, string, string, string, string]>]> = [
-  ['Local', [
-    ['ventas', 'preparar', 'Ventas a preparar', 'ventas', 'ventas'],
-    ['ventas', 'listas', 'Listas para retirar o enviar', 'ventas', 'ventas'],
-    ['stock', 'neg', 'Prendas en negativo', 'stock', 'stock'],
-  ]],
-  ['Administración', [
-    ['ventas', 'sinpagar', 'Pedidos sin pagar', 'ventas', 'ventas'],
-    ['ventas', 'saldo', 'Ventas con saldo', 'ventas', 'ventas'],
-    ['ventas', 'sinfactura', 'Ventas del ERP sin factura', 'ventas', 'facturacion'],
-  ]],
-  ['Productos', [
-    ['productos', 'sincosto', 'Productos sin costo', 'productos', 'productos'],
-    ['productos', 'sinmay', 'Sin precio mayorista', 'productos', 'productos'],
-    ['productos', 'sinprov', 'Sin proveedor', 'productos', 'productos'],
-  ]],
-]
-const VISTA: Record<string, string> = { preparar: 'A preparar', listas: 'Listas', neg: 'Negativos', sinpagar: 'Sin pagar', saldo: 'Con saldo', sinfactura: 'Sin factura', sincosto: 'Sin costo', sinmay: 'Sin precio mayorista', sinprov: 'Sin proveedor' }
 const TITULO: Record<string, string> = { ventas: 'Ventas', stock: 'Stock', productos: 'Productos', facturacion: 'Facturación' }
 
 const fecha = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
@@ -55,7 +38,8 @@ function Variacion({ ahora, antes }: { ahora: number; antes: number }) {
 }
 
 export function InicioErp({ href }: { href: (seccion: string, pestania?: string) => string }) {
-  const { marca: delShell } = useSesion()
+  const { marca: delShell, perfil } = useSesion()
+  const [rol, setRol] = useState('admin')
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const [resultado, setResultado] = useState<{ marca: string; r: ResultadoDelMes | null; error: string | null } | null>(null)
   const [conteos, setConteos] = useState<{ marca: string; ventas: Conteo; stock: Conteo; productos: Conteo }>({ marca: '', ventas: null, stock: null, productos: null })
@@ -79,7 +63,20 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[5] }}>
-      <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+      {esAdmin(perfil) && (
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: font.sm, fontWeight: weight.semibold, color: color.mut }}>Ver como</span>
+          <div role="radiogroup" aria-label="Ver como" style={{ display: 'inline-flex', flexWrap: 'wrap', padding: 3, gap: 2, borderRadius: 10, background: color.bg2, border: `1px solid ${color.line}` }}>
+            {ROLES.map(([k, nombre]) => (
+              <button key={k} type="button" role="radio" aria-checked={rol === k} onClick={() => setRol(k)}
+                style={{ height: 30, padding: '0 12px', border: 0, borderRadius: 8, cursor: 'pointer', fontWeight: weight.semibold, background: rol === k ? color.surface : 'transparent', color: rol === k ? color.ink : color.mut, boxShadow: rol === k ? '0 1px 2px rgba(15,23,41,.12)' : 'none' }}>
+                {nombre}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {verResultado(rol) && <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <div>
           <h2 style={h2}>Resultado comercial del mes</h2>
           <div style={{ fontSize: font.sm, color: color.mut }}>
@@ -94,17 +91,17 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
           <TileResumen titulo="Contra el mes pasado" valor={m && a ? `${(pct(m.vendido, a.vendido) ?? 0) >= 0 ? '+' : ''}${pct(m.vendido, a.vendido) ?? '—'}%` : '…'} nota={m && a ? `en ventas: ${m.ventas} contra ${a.ventas}` : undefined} />
         </div>
         {m && a && <div style={{ fontSize: font.sm, color: color.mut }}>Margen contra el mes pasado: <Variacion ahora={m.margen} antes={a.margen} />{m.sinCosto ? ` · ${m.sinCosto} ventas sin costo en GN (suman su precio sin restar nada)` : ''}{res?.r?.gnHasta ? ` · GN llega hasta el ${fecha(res.r.gnHasta)}` : ''}</div>}
-      </section>
+      </section>}
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <div>
           <h2 style={h2}>Para hacer</h2>
-          <div style={{ fontSize: font.sm, color: color.mut }}>por rol, con el número de cada lista · hoy el ERP lo ven sólo los administradores</div>
+          <div style={{ fontSize: font.sm, color: color.mut }}>{rol === 'admin' ? 'por rol, con el número de cada lista · hoy el ERP lo ven sólo los administradores' : `${ROLES.find(([k]) => k === rol)?.[1]}: ${subtituloDe(rol)}`}</div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: space[3] }}>
-          {PARA_HACER.map(([rol, items]) => (
-            <div key={rol} style={{ display: 'flex', flexDirection: 'column', padding: '12px 16px', borderRadius: 14, background: color.surface, border: `1px solid ${color.line}` }}>
-              <div style={{ fontWeight: weight.semibold, color: color.ink, paddingBottom: 6 }}>{rol}</div>
+          {paraHacerDe(rol).map(([tarjeta, items]) => (
+            <div key={tarjeta} style={{ display: 'flex', flexDirection: 'column', padding: '12px 16px', borderRadius: 14, background: color.surface, border: `1px solid ${color.line}` }}>
+              <div style={{ fontWeight: weight.semibold, color: color.ink, paddingBottom: 6 }}>{tarjeta}</div>
               {items.map(([lista, vista, que, seccion, pestania]) => {
                 const c = de[lista as 'ventas' | 'stock' | 'productos']
                 const nro = typeof c === 'object' && c ? c[vista] ?? 0 : null
