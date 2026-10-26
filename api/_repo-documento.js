@@ -59,3 +59,57 @@ export async function documentarTanda(p) {
     return { error: String((e && e.message) || e).slice(0, 200) }
   }
 }
+
+/**
+ * 🔑 LLAVE (Vercel, `TRANSFERENCIA_STUNNED_ERP=1`; sin definir = APAGADA, todo sigue por GN). Con ella, una tanda de la línea
+ * Stunned ⛔ llama a GN: el documento del motor ES la transferencia (Bruno 26-oct: Stunned sale de GN y no vuelve).
+ */
+export const transferenciaEnErp = (linea) => linea === 'stunned' && /^(1|si|true)$/i.test(String(process.env.TRANSFERENCIA_STUNNED_ERP ?? '').trim())
+
+/** Cuánto se le espera al motor en la vía del ERP: acá no hay GN que esperar, pero el armado está en `transfiriendo`. */
+const TECHO_ERP_MS = 10_000
+
+/**
+ * La tanda como transferencia del motor SIN GN: crear → armar → enviar → recibir de una vez (todavía no hay pantalla de
+ * Recibir: la salida y la entrada las anota el libro al instante, como hacía GN). 🔴 A diferencia de `documentarTanda`, acá el
+ * documento ES la transferencia: cualquier falla se DEVUELVE (`error`) y el que llama vuelve el armado a `en_curso`.
+ * Se retoma sola: si una vez quedó a medias (`ya`), sigue desde el estado en que está (`origen_ref` evita duplicarla).
+ * @returns {Promise<{ ok: true, numero: number, ya: boolean, unidades: number, avisos: any[] } | { error: string, sinConexion?: true }>} ⛔ lanza
+ */
+export async function transferirEnErp(p) {
+  try {
+    const conexion = process.env[PG_DE_STORE[p.store]]
+    if (!conexion) return { sinConexion: true, error: 'El monitor no está conectado a la base del ERP.' }
+    const renglones = renglonesDeTanda(p.prendas)
+    if (!renglones.length) return { error: 'No hay prendas para transferir.' }
+    const [{ default: pg }, m] = await Promise.all([import('pg'), import('../motor/stock/transferencia.mjs')])
+    const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: TECHO_ERP_MS, statement_timeout: TECHO_ERP_MS, query_timeout: TECHO_ERP_MS })
+    try {
+      await db.connect()
+      const base = { usuario: p.usuario || 'reposicion' }
+      const c = await m.crearTransferencia(db, { ...base, linea: p.linea, desde: p.desde, hacia: p.hacia, origen: 'reposicion', origen_ref: `${p.armadoId}:t${p.tanda}`, renglones })
+      if (!c.ok) return { error: `${c.error.codigo}: ${c.error.mensaje}` }
+      const id = c.transferencia.id
+      const avisos = []
+      let estado = c.transferencia.estado
+      const pasos = [
+        ['borrador', () => m.armarTransferencia(db, { ...base, transferencia_id: id, renglones }), 'armada'],
+        ['armada', () => m.enviarTransferencia(db, { ...base, transferencia_id: id }), 'en_transito'],
+        ['en_transito', () => m.recibirTransferencia(db, { ...base, transferencia_id: id, renglones }), 'recibida'],
+      ]
+      if (estado === 'cancelada') return { error: `La transferencia T-${c.transferencia.numero} está cancelada.` }
+      for (const [desdeEstado, paso, haciaEstado] of pasos) {
+        if (estado !== desdeEstado) continue
+        const r = await paso()
+        if (!r.ok) return { error: `${r.error.codigo}: ${r.error.mensaje}` }
+        avisos.push(...(r.avisos || []))
+        estado = haciaEstado
+      }
+      return { ok: true, numero: Number(c.transferencia.numero), ya: c.ya === true, unidades: renglones.reduce((x, r) => x + r.cantidad, 0), avisos }
+    } finally {
+      await db.end().catch(() => {})
+    }
+  } catch (e) {
+    return { error: String((e && e.message) || e).slice(0, 200) }
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { documentarTanda, renglonesDeTanda } from '../api/_repo-documento.js'
+import { documentarTanda, renglonesDeTanda, transferenciaEnErp, transferirEnErp } from '../api/_repo-documento.js'
 
 describe('Reposición → documento del motor (en sombra)', () => {
   it('arma los renglones desde { product_id_size_id: n } y deja afuera lo inválido', () => {
@@ -24,6 +24,39 @@ describe('Reposición → documento del motor (en sombra)', () => {
     try {
       const r = await documentarTanda({ store: 'zattia', linea: 'zattia', armadoId: 'a', tanda: 1, prendas: { '1_2': 1 }, desde: 'deposito', hacia: 'local', usuario: 'x' })
       expect(r.error).toBeTruthy()
+    } finally {
+      if (antes === undefined) delete process.env.DATABASE_URL_ZATTIA
+      else process.env.DATABASE_URL_ZATTIA = antes
+    }
+  })
+})
+
+describe('Stunned sin GN (llave TRANSFERENCIA_STUNNED_ERP)', () => {
+  const con = (v: string | undefined, fn: () => void) => {
+    const antes = process.env.TRANSFERENCIA_STUNNED_ERP
+    if (v === undefined) delete process.env.TRANSFERENCIA_STUNNED_ERP
+    else process.env.TRANSFERENCIA_STUNNED_ERP = v
+    try { fn() } finally { if (antes === undefined) delete process.env.TRANSFERENCIA_STUNNED_ERP; else process.env.TRANSFERENCIA_STUNNED_ERP = antes }
+  }
+  it('apagada por defecto y sólo vale para Stunned', () => {
+    con(undefined, () => expect(transferenciaEnErp('stunned')).toBe(false))
+    con('1', () => {
+      expect(transferenciaEnErp('stunned')).toBe(true)
+      expect(transferenciaEnErp('zattia')).toBe(false)
+      expect(transferenciaEnErp('bdi')).toBe(false)
+    })
+    con('0', () => expect(transferenciaEnErp('stunned')).toBe(false))
+  })
+  it('sin conexión o sin prendas devuelve error, ⛔ lanza (acá el documento ES la transferencia)', async () => {
+    const antes = process.env.DATABASE_URL_ZATTIA
+    delete process.env.DATABASE_URL_ZATTIA
+    try {
+      const r = await transferirEnErp({ store: 'zattia', linea: 'stunned', armadoId: 'a', tanda: 1, prendas: { '1_2': 1 }, desde: 'deposito', hacia: 'local', usuario: 'x' })
+      expect(r).toMatchObject({ sinConexion: true })
+      expect('error' in r && r.error).toBeTruthy()
+      process.env.DATABASE_URL_ZATTIA = 'postgres://x:y@127.0.0.1:1/nada'
+      expect(await transferirEnErp({ store: 'zattia', linea: 'stunned', armadoId: 'a', tanda: 1, prendas: {}, desde: 'deposito', hacia: 'local', usuario: 'x' })).toMatchObject({ error: expect.any(String) })
+      expect(await transferirEnErp({ store: 'zattia', linea: 'stunned', armadoId: 'a', tanda: 1, prendas: { '1_2': 1 }, desde: 'deposito', hacia: 'local', usuario: 'x' })).toMatchObject({ error: expect.any(String) })
     } finally {
       if (antes === undefined) delete process.env.DATABASE_URL_ZATTIA
       else process.env.DATABASE_URL_ZATTIA = antes

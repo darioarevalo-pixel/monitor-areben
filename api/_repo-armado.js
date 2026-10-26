@@ -22,7 +22,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
 import { puedeVerAlguna } from '../lib/permisos.core.js'
-import { documentarTanda } from './_repo-documento.js'
+import { documentarTanda, transferirEnErp, transferenciaEnErp } from './_repo-documento.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, dormir } from './_gn.js'
 import {
@@ -285,9 +285,10 @@ export default async function handler(req, res) {
  */
 async function transferir(sb, res, armado, b, perfil) {
   if (armado.estado !== 'en_curso') return res.status(409).json({ error: 'Este armado ya se cerró.', armado })
+  const enErp = transferenciaEnErp(armado.linea)
   const token = GN_TOKENS[armado.store]
   const dep = DEPOSITOS_GN[armado.store]
-  if (!token || !dep) return res.status(500).json({ error: `Falta la clave de Gestión Nube de ${armado.store === 'bdi' ? 'BDI' : 'Zattia'} en el servidor.` })
+  if (!enErp && (!token || !dep)) return res.status(500).json({ error: `Falta la clave de Gestión Nube de ${armado.store === 'bdi' ? 'BDI' : 'Zattia'} en el servidor.` })
 
   const seguir = b.seguir === true
   const previo = armado.transfer || {}
@@ -314,6 +315,8 @@ async function transferir(sb, res, armado, b, perfil) {
 
   const devolucion = armado.sentido === 'devolver'
   const [desde, hacia] = depositosDelArmado(armado.sentido, dep)
+  // El motor nombra los depósitos `local`/`deposito` (no con el id de GN): lo que va al documento.
+  const [desdeMotor, haciaMotor] = devolucion ? ['local', 'deposito'] : ['deposito', 'local']
   // 🔑 El código del armado (#K3X9AB) va en la descripción: es lo que se busca en GN cuando la
   // transferencia queda sin confirmar, y lo que muestra el cartel de la pantalla.
   const description = `${devolucion ? 'Devolución' : 'Reposición'} ${armado.linea === 'stunned' ? 'Stunned ' : ''}${armado.fecha} · ${perfil.name || armado.persona || ''} · Monitor #${codigoArmado(armado.id)} (${unidades} u)`.slice(0, 250)
@@ -348,6 +351,23 @@ async function transferir(sb, res, armado, b, perfil) {
   }
   const sinTanda = { ...previo, enCurso: null, seguir: null, descripcion: null, unidadesEnCurso: null }
   const limite = Date.now() + PLAZO_GN_MS
+
+  if (enErp) {
+    // 🔑 Stunned sin GN: el documento del motor ES la transferencia (llave `TRANSFERENCIA_STUNNED_ERP`). Si falla, ⛔ quedó nada
+    // movido que GN no sepa: el armado vuelve a `en_curso` y la pantalla lo dice; con `origen_ref` el reintento retoma el documento.
+    const tandaN = (previo.tandas || []).length + 1
+    const doc = await transferirEnErp({ store: armado.store, linea: armado.linea, armadoId: armado.id, tanda: tandaN, prendas: pendiente, desde: desdeMotor, hacia: haciaMotor, usuario: perfil.name || armado.persona || 'reposicion' })
+    if (!doc.ok) {
+      await marcar({ estado: 'en_curso', error: null, transfer: sinTanda })
+      console.error(`[repo-erp] ${armado.id} t${tandaN}: ${doc.error}`)
+      return res.status(502).json({ error: `No se pudo registrar la transferencia en el ERP (no se movió nada): ${doc.error}` })
+    }
+    const tanda = { transfer_id: null, movement_id: null, erp: doc.numero, unidades, hora: new Date().toISOString(), prendas: pendiente, desde: desdeMotor, hacia: haciaMotor }
+    const nuevoTransferido = sumar(transferido, pendiente)
+    const transfer = { tandas: [...(previo.tandas || []), tanda], transferido: nuevoTransferido, transfer_id: null, erp: doc.numero, unidades: Object.values(nuevoTransferido).reduce((x, n) => x + n, 0), enCurso: null, seguir: null, descripcion: null, unidadesEnCurso: null }
+    await marcar(seguir ? { estado: 'en_curso', transfer, error: null } : { estado: 'transferido', transfer, error: null, cerrado_en: new Date().toISOString() })
+    return res.status(200).json({ ok: true, transfer, tanda })
+  }
 
   let resp
   let datos = null
@@ -392,7 +412,7 @@ async function transferir(sb, res, armado, b, perfil) {
     }
     await marcar(seguir ? { estado: 'en_curso', transfer, error: null } : { estado: 'transferido', transfer, error: null, cerrado_en: new Date().toISOString() })
     // El documento del motor, en sombra (api/_repo-documento.js): ⛔ lanza ni frena la respuesta; si falla, la tanda sigue contando por el armado.
-    const doc = await documentarTanda({ store: armado.store, linea: armado.linea, armadoId: armado.id, tanda: transfer.tandas.length, prendas: pendiente, desde, hacia, gnTransferId: tanda.transfer_id, usuario: perfil.name || armado.persona || 'reposicion' })
+    const doc = await documentarTanda({ store: armado.store, linea: armado.linea, armadoId: armado.id, tanda: transfer.tandas.length, prendas: pendiente, desde: desdeMotor, hacia: haciaMotor, gnTransferId: tanda.transfer_id, usuario: perfil.name || armado.persona || 'reposicion' })
     if (doc.error) console.error(`[repo-documento] ${armado.id} t${transfer.tandas.length}: ${doc.error}`)
     return res.status(200).json({ ok: true, transfer, tanda })
   }
