@@ -9,6 +9,9 @@
  *
  * + `entregasPendientes`: las entregas de Logística que quedaron SIN cobro en el ERP (`entregasSinCobro`, ⛔ depende del período).
  *
+ *   POST {recurso:'erp', accion:'reintentar-entregas', marca}   vuelve a intentar el cobro de esas entregas (`reintentarEntregas`
+ *   del motor, sólo admin: lo chequea `api/_erp.js`). 🔴 Cada cobro que ahora sí se puede anotar CREA una venta (fila inmutable).
+ *
  * 🔴 Hasta el corte, todo lo del ERP es de PRUEBA (corre en paralelo con GN) ⇒ la pantalla abre en `prueba=1`. Los dos
  *    libros ⛔ se suman: se cuenta cuántos hay en el otro para que la pantalla lo diga.
  * Los totales salen del MOTOR (por línea): una venta anulada sin devolución propia ⛔ suma, y eso la fila ⛔ lo trae.
@@ -68,5 +71,32 @@ export async function cobrosDelPeriodo({ marca, desde, hasta, prueba = false }, 
       [LINEAS[marca], !prueba, desde, hasta])).rows
     const entregasPendientes = await entregasSinCobro(pg, LINEAS[marca])
     return { desde, hasta, prueba, cobros, totales, contraentregas, entregasPendientes, otroLibro: Number(otroLibro) }
+  })
+}
+
+/**
+ * Vuelve a intentar el cobro de las entregas de Logística que quedaron sin cobrar, línea por línea (el motor reintenta por tienda).
+ * Una entrega que sigue sin poder cobrarse ⛔ ensucia: el motor sólo escribe cuando el cobro sale. Devuelve el resumen sumado.
+ * @param {{ marca: string }} p
+ * @param {{ conMotor: Function }} deps
+ */
+export async function reintentarEntregasErp({ marca }, deps) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const { reintentarEntregas } = await import('../motor/tn/entrega.mjs')
+  return deps.conMotor(marca, 'El reintento de las entregas', async (pg) => {
+    const [{ hay }] = (await pg.query(`select to_regclass('public.entrega_cobro') is not null as hay`)).rows
+    if (!hay) return { status: 409, error: 'Las entregas de Logística todavía no están en la base del motor (migración 039).' }
+    let revisadas = 0
+    let registradas = 0
+    /** @type {{ id: string, linea: string, motivo: string | null }[]} */
+    const siguen = []
+    // Una conexión ⇒ una línea por vez (pg ⛔ las encola en paralelo).
+    for (const linea of LINEAS[marca]) {
+      const r = await reintentarEntregas({ conexion: pg, tienda: linea })
+      revisadas += r.revisadas
+      registradas += r.registradas
+      siguen.push(...r.siguen.map((s) => ({ id: String(s.id), linea, motivo: s.motivo ?? null })))
+    }
+    return { ok: true, revisadas, registradas, siguen }
   })
 }

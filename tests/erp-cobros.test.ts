@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { armarCobro, armarContraentrega, armarEntregaSinCobrar, contarVistas, filtrar, mediosOrdenados, rangoDeCobros, resumen } from '@/lib/erp/cobros.core.js'
+import { armarCobro, armarContraentrega, armarEntregaSinCobrar, contarVistas, filtrar, mediosOrdenados, rangoDeCobros, resumen, textoDelReintento } from '@/lib/erp/cobros.core.js'
 
 const c = (o: Record<string, unknown>) => ({
   id: '1', origen: 'venta', fecha: '2026-10-20', en: '2026-10-20T13:00:00.000Z', clase: 'plata', monto: 1000, medio: 'efectivo',
@@ -75,5 +75,15 @@ describe('ERP › Cobros', () => {
     expect(filtrar(todas, { vista: 'sin_cobrar', q: '4513' }).map((f) => f.id)).toEqual(['sin_cobrar:ent-2'])
     expect(filtrar(todas, { vista: 'sin_cobrar', linea: 'zattia' })).toEqual([])
     expect(resumen({}, todas)).toMatchObject({ cobros: 4, sinCobrar: 2, sinCobrarDesde: '2026-10-24T10:00:00.000Z', enLaCalle: 0 })
+  })
+})
+
+describe('textoDelReintento', () => {
+  it('dice cuántas se cobraron y por qué siguen las otras', () => {
+    expect(textoDelReintento({ revisadas: 0, registradas: 0, siguen: [] })).toBe('No había entregas sin cobrar para reintentar.')
+    expect(textoDelReintento({ revisadas: 2, registradas: 2, siguen: [] })).toBe('Se revisaron 2 entregas. Se anotó el cobro de 2 entregas.')
+    expect(textoDelReintento({ revisadas: 3, registradas: 1, siguen: [{ motivo: 'sin_venta' }, { motivo: null }] }))
+      .toContain('2 siguen sin cobrar: La venta de ese pedido ya existe')
+    expect(textoDelReintento({ revisadas: 1, registradas: 0, siguen: [{ motivo: 'x' }] })).toBe('Se revisaron 1 entrega. No se pudo anotar ningún cobro. 1 sigue sin cobrar: x')
   })
 })

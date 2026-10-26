@@ -54,6 +54,7 @@
  *   GET  ?recurso=erp&vista=rutas&marca=…                              las cuentas de cobro: qué cuenta recibe cada medio (motor sql/019-020)
  *   POST {recurso:'erp', accion:'poner-ruta', marca, linea?, canal, medio, cuenta_real_id, …}   `api/_erp-rutas.js`
  *   GET  ?recurso=erp&vista=redondeo&marca=…                           a cuánto se redondea el precio de cada canal (motor sql/029)
+ *   POST {recurso:'erp', accion:'reintentar-entregas', marca}        vuelve a cobrar las entregas de Logística sin cobrar (`api/_erp-cobros.js`)
  *   POST {recurso:'erp', accion:'poner-redondeo', marca, linea?, canal, paso, modo, desde?}   `api/_erp-redondeo.js`
  *   GET  ?recurso=erp&vista=estructura&marca=…   Configuración › Cuentas y Marcas, depósitos y puntos de venta (`api/_erp-estructura.js`, sólo lee)
  *   GET  ?recurso=erp&vista=ajustes&linea=bdi|zattia|stunned           los ajustes de stock (motor sql/026) + la lista «A contar»
@@ -118,7 +119,7 @@ import { listaDeProductos } from './_erp-productos.js'
 import { cuentaDeCliente, cuentasDeLaMarca, fichaDeCliente, listaDeClientes, ponerCreditoCliente } from './_erp-clientes.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
-import { cobrosDelPeriodo } from './_erp-cobros.js'
+import { cobrosDelPeriodo, reintentarEntregasErp } from './_erp-cobros.js'
 import { cargarVentaManual, datosParaCargar } from './_erp-cargar.js'
 
 const MARCAS = ['bdi', 'zattia']
@@ -1540,6 +1541,11 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET' && req.query.vista === 'rutas') {
       const r = await rutasDeMarca({ marca: String(req.query.marca || '') }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'POST' && body.accion === 'reintentar-entregas') {
+      const r = await reintentarEntregasErp({ marca: String(body.marca || '') }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

@@ -15,15 +15,16 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { Button, EmptyState, Notice, Select, color, font, space, weight } from '@/components/ui'
+import { Button, EmptyState, Notice, Select, color, font, space, useConfirmar, weight } from '@/components/ui'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion, DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { BuscadorLista, ChipEstado, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
-import { leerCobros, type CobrosDelPeriodo, type MarcaErp } from '@/lib/erp/cliente'
+import { leerCobros, reintentarEntregas, type CobrosDelPeriodo, type MarcaErp } from '@/lib/erp/cliente'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import {
   COLUMNAS, NOMBRE_LINEA, NOMBRE_MEDIO, PERIODOS_COBROS, VISTAS, alternarColumna, armarCobro, armarContraentrega, armarEntregaSinCobrar, contarVistas, filtrar, mediosOrdenados,
-  moverColumna, normalizarPrefs, ordenar, rangoDeCobros, resumen,
+  moverColumna, normalizarPrefs, ordenar, rangoDeCobros, resumen, textoDelReintento,
 } from '@/lib/erp/cobros.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
@@ -76,6 +77,10 @@ export function CobrosErp() {
   const setPrefs = (p: Prefs) => { setPrefsState(p); guardarPrefsDeLista(lista, usuario, p) }
 
   const [vuelta, setVuelta] = useState(0)
+  const puede = usePuedeErp(marca)
+  const { confirmar } = useConfirmar()
+  const [reintentando, setReintentando] = useState(false)
+  const [reintento, setReintento] = useState<{ texto: string; ok: boolean } | null>(null)
   const clave = `${marca}|${periodo}|${prueba}|${vuelta}`
   useEffect(() => {
     let vivo = true
@@ -87,6 +92,26 @@ export function CobrosErp() {
     return () => { vivo = false }
   }, [marca, prueba, clave])
   const cargando = datos?.clave !== clave
+  async function reintentar() {
+    const ok = await confirmar({
+      titulo: 'Reintentar el cobro de las entregas',
+      mensaje: <p>El ERP vuelve a intentar anotar el cobro de cada entrega sin cobrar. Las que ahora sí se pueden cobrar <b>crean una venta</b> que después no se borra. Las que siguen sin poder, quedan como están.</p>,
+      ok: 'Reintentar',
+    })
+    if (!ok) return
+    setReintentando(true)
+    setReintento(null)
+    try {
+      const r = await reintentarEntregas(marca)
+      setReintento({ texto: textoDelReintento(r), ok: !r.siguen.length })
+      setFicha(null)
+      setVuelta((v) => v + 1)
+    } catch (e) {
+      setReintento({ texto: e instanceof Error ? e.message : 'No se pudo reintentar el cobro de las entregas.', ok: false })
+    } finally {
+      setReintentando(false)
+    }
+  }
 
   const todas: FilaCobro[] = useMemo(() => [...(datos?.cobros ?? []).map(armarCobro), ...(datos?.contraentregas ?? []).map(armarContraentrega), ...(datos?.entregasPendientes ?? []).map(armarEntregaSinCobrar)], [datos])
   const base = useMemo(() => filtrar(todas, { q, linea, medio }), [todas, q, linea, medio])
@@ -140,6 +165,7 @@ export function CobrosErp() {
           <Button variant={prueba ? 'outline' : 'solid'} aria-pressed={!prueba} onClick={() => { setPrueba(false); setFicha(null) }}>Reales</Button>
           <Button variant={prueba ? 'solid' : 'outline'} aria-pressed={prueba} onClick={() => { setPrueba(true); setFicha(null) }}>De prueba</Button>
         </div>
+        {vista === 'sin_cobrar' && puede('configurar') && <Button disabled={!res.sinCobrar || reintentando} onClick={() => void reintentar()}>{reintentando ? 'Reintentando…' : 'Reintentar el cobro'}</Button>}
         <Button disabled={!filas.length} onClick={() => datos && bajarCsv(filas, marca, datos.desde, datos.hasta)}>Exportar</Button>
       </div>
       {datos && (prueba || datos.otroLibro > 0) && (
@@ -156,6 +182,7 @@ export function CobrosErp() {
         </Notice>
       )}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      {reintento && <Notice tone={reintento.ok ? 'success' : 'warning'} onClose={() => setReintento(null)}>{reintento.texto}</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Cobrado" valor={$(res.cobrado)} oscuro nota={`${nombrePeriodo} · ${libro}`} />
@@ -198,7 +225,7 @@ export function CobrosErp() {
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `el cobro ${f.que}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay cobros con ese número, cliente, medio o persona.' : `No hay cobros ${libro} ${vista === 'todos' ? '' : 'de esta vista '}${nombrePeriodo === 'hoy' || nombrePeriodo === 'ayer' ? nombrePeriodo : `en ${nombrePeriodo}`}.`} />
+              <EmptyState title={q ? 'No hay cobros con ese número, cliente, medio o persona.' : vista === 'sin_cobrar' ? 'No hay entregas sin cobrar.' : `No hay cobros ${libro} ${vista === 'todos' ? '' : 'de esta vista '}${nombrePeriodo === 'hoy' || nombrePeriodo === 'ayer' ? nombrePeriodo : `en ${nombrePeriodo}`}.`} />
               {periodo !== 'mes' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setPeriodo('mes')}>Ver este mes</Button></div>}
             </div>
           ) : null}
