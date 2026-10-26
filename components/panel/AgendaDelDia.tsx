@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { color, font, radius, space } from '@/components/ui/tokens'
-import { Icono } from '@/components/ui'
+import { Button, Icono } from '@/components/ui'
 import { SOBRE_OSCURO } from './oscuro'
 import { TEMP_UI } from '@/components/crm/temperatura'
 import { buscarClientesPorNombre, telsQueSonClientes, traerAgenda, traerPorFiltro, type FilaAgenda } from '@/lib/crm/panel'
@@ -409,6 +409,7 @@ function Grupo({
   onToggle,
   primero,
   rojo,
+  accion,
   children,
 }: {
   titulo: string
@@ -418,37 +419,42 @@ function Grupo({
   primero?: boolean
   /** Sólo el título pintado de rojo, los renglones no (Darío, 25-oct-2026: «Falta la fecha»). */
   rojo?: boolean
+  /** Un botón chico a la derecha del encabezado, afuera del de plegar (un botón no va adentro de otro). */
+  accion?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
     <section>
       {!primero && <div style={{ height: 8, background: color.bg2, borderTop: `1px solid ${color.line2}` }} />}
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={abierto}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          width: '100%',
-          height: 'auto',
-          background: rojo ? color.dangerBg : 'none',
-          border: 0,
-          borderTop: primero ? 0 : `1px solid ${color.line2}`,
-          padding: `${space[3]}px ${MARGEN}px ${space[2]}px`,
-          cursor: 'pointer',
-          font: 'inherit',
-          textAlign: 'left',
-        }}
-      >
-        <span style={{ fontSize: font.sm, fontWeight: 700, color: rojo ? color.dangerInk : color.ink }}>{titulo}</span>
-        <span style={{ marginLeft: 6, fontSize: font.sm, fontWeight: 600, color: color.mut2, fontVariantNumeric: 'tabular-nums' }}>{cuantas}</span>
-        <span style={{ flex: 1 }} />
-        {/* El ▾ de texto salía de 4 px con DM Sans: una flecha dibujada se ve igual en todos lados. */}
-        <svg aria-hidden width="14" height="14" viewBox="0 0 16 16" style={{ color: color.mut2, transform: abierto ? 'none' : 'rotate(-90deg)', transition: 'transform 0.12s ease' }}>
-          <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', background: rojo ? color.dangerBg : 'none', borderTop: primero ? 0 : `1px solid ${color.line2}` }}>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={abierto}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            flex: 1,
+            minWidth: 0,
+            height: 'auto',
+            background: 'none',
+            border: 0,
+            padding: `${space[3]}px ${accion ? space[2] : MARGEN}px ${space[2]}px ${MARGEN}px`,
+            cursor: 'pointer',
+            font: 'inherit',
+            textAlign: 'left',
+          }}
+        >
+          <span style={{ fontSize: font.sm, fontWeight: 700, color: rojo ? color.dangerInk : color.ink }}>{titulo}</span>
+          <span style={{ marginLeft: 6, fontSize: font.sm, fontWeight: 600, color: color.mut2, fontVariantNumeric: 'tabular-nums' }}>{cuantas}</span>
+          <span style={{ flex: 1 }} />
+          {/* El ▾ de texto salía de 4 px con DM Sans: una flecha dibujada se ve igual en todos lados. */}
+          <svg aria-hidden width="14" height="14" viewBox="0 0 16 16" style={{ color: color.mut2, transform: abierto ? 'none' : 'rotate(-90deg)', transition: 'transform 0.12s ease' }}>
+            <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        {accion && <div style={{ paddingRight: MARGEN, paddingTop: space[1] }}>{accion}</div>}
+      </div>
       {abierto && children}
     </section>
   )
@@ -669,8 +675,22 @@ function GrupoPedidos({
 type ResultadoLogistica = Resultado<{ count: number; by_step: Record<string, number>; orders: PendienteLogistica[] }>
 const memoriaLogistica: { r: ResultadoLogistica | null } = { r: null }
 
-function usePendientesLogistica(): ResultadoLogistica | null {
+function usePendientesLogistica(): { r: ResultadoLogistica | null; actualizar: () => void; actualizando: boolean } {
   const [r, setR] = useState<ResultadoLogistica | null>(memoriaLogistica.r)
+  const [actualizando, setActualizando] = useState(false)
+  /**
+   * «↻ Actualizar» (Darío, 25-oct-2026): consultar en el momento, sin esperar los 2 minutos — lo que
+   * puede apurar es un pedido que acaba de entrar a Logística. Igual que el refresco solo, un error
+   * no borra lo que ya se veía.
+   */
+  const actualizar = useCallback(async () => {
+    setActualizando(true)
+    const x = await pendientesLogistica()
+    setActualizando(false)
+    if (x.t === 'error' && memoriaLogistica.r?.t === 'ok') return
+    memoriaLogistica.r = x
+    setR(x)
+  }, [])
   useEffect(() => {
     let vivo = true
     let primera = true
@@ -688,7 +708,7 @@ function usePendientesLogistica(): ResultadoLogistica | null {
       clearInterval(id)
     }
   }, [])
-  return r
+  return { r, actualizar, actualizando }
 }
 
 /**
@@ -777,26 +797,41 @@ function FilaLogistica({
  */
 function GrupoLogistica({
   r,
+  onActualizar,
+  actualizando,
   abierto,
   onToggle,
   onAbrir,
   onFicha,
 }: {
   r: ResultadoLogistica | null
+  onActualizar: () => void
+  actualizando: boolean
   abierto: boolean
   onToggle: () => void
   onAbrir: (id: number, tel: string) => void
   onFicha: (id: number, tel: string) => void
 }) {
   const [depositoAbierto, setDepositoAbierto] = useState(false)
+  // 🔑 Vacío también se ve (con 0): si no, el «↻ Actualizar» desaparecía justo cuando se lo busca,
+  // esperando que entre un pedido.
   if (!r || r.t === 'sin-permiso') return null
-  if (r.t === 'ok' && !r.datos.orders.length) return null
   const todos = r.t === 'ok' ? r.datos.orders : []
   const mios = todos.filter((p) => !enGrupoDeposito(p))
   const deposito = todos.filter(enGrupoDeposito)
   // El número cuenta sólo lo tuyo: 0 = de tu parte está todo hecho.
   return (
-    <Grupo titulo="Pendientes en Logística" cuantas={mios.length} abierto={abierto} onToggle={onToggle}>
+    <Grupo
+      titulo="Pendientes en Logística"
+      cuantas={mios.length}
+      abierto={abierto}
+      onToggle={onToggle}
+      accion={
+        <Button size="sm" variant="ghost" disabled={actualizando} title="Consultar Logística ahora, sin esperar el refresco de cada 2 minutos" onClick={onActualizar}>
+          {actualizando ? 'Actualizando…' : '↻ Actualizar'}
+        </Button>
+      }
+    >
       {r.t === 'error' && <Aclaracion>No pude traer los pedidos de Logística. {r.motivo}</Aclaracion>}
       {mios.map((p) => (
         <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} />
@@ -1175,10 +1210,12 @@ function Agenda({
     {avisoTilde && <Aclaracion>{avisoTilde}</Aclaracion>}
     </>
   )
-  const logistica = usePendientesLogistica()
+  const { r: logistica, actualizar: actualizarLogistica, actualizando: actualizandoLogistica } = usePendientesLogistica()
   const grupoLogistica = (
     <GrupoLogistica
       r={logistica}
+      onActualizar={actualizarLogistica}
+      actualizando={actualizandoLogistica}
       abierto={abiertos.logistica !== false}
       onToggle={() => setAbiertos((a) => ({ ...a, logistica: a.logistica === false }))}
       onAbrir={onAbrirChat}
