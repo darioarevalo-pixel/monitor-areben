@@ -11,7 +11,7 @@
  * 🔑 Todo lo del motor hoy es «Prueba» (en paralelo con GN, que es el que sirve): se dice arriba, siempre.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import {
   Button, EmptyState, Icono, MenuAcciones, Notice, Select, color, font, space, weight, type AccionMenu,
@@ -55,12 +55,19 @@ function bajarCsv(filas: FilaVentaLista[]) {
   URL.revokeObjectURL(url)
 }
 
-export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') => void }) {
+export function VentasErp({ irACaja, abrir, alAbrir }: {
+  irACaja: (que: 'cambio' | 'factura') => void
+  /** Desde la búsqueda global (⌘K): la venta que se abre sola cuando llega la lista (en su período). */
+  abrir?: { id: string; numero: number; periodo: string } | null
+  alAbrir?: () => void
+}) {
   const { marca: delShell, perfil } = useSesion()
   const [cargarAbierta, setCargarAbierta] = useState(false)
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const usuario = perfil?.name ?? null
-  const [periodo, setPeriodo] = useState('mes')
+  const [periodo, setPeriodo] = useState(abrir?.periodo ?? 'mes')
+  const abrirRef = useRef({ abrir, alAbrir })
+  useEffect(() => { abrirRef.current = { abrir, alAbrir } })
   const [datos, setDatos] = useState<{ filas: FilaVentaLista[]; puede: QueSabeElMotor; tnLeidaEn: string | null; clave: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
@@ -92,6 +99,13 @@ export function VentasErp({ irACaja }: { irACaja: (que: 'cambio' | 'factura') =>
         // Lo tildado ⛔ sobrevive a una lectura nueva: puede haber cambiado (una anulada ya no se exporta igual).
         setSeleccion(new Set())
         setError(null)
+        const { abrir: pedida, alAbrir: soltar } = abrirRef.current
+        if (pedida) {
+          const f = d.filas.find((x: FilaVentaLista) => x.id === pedida.id)
+          if (f) setFicha({ fila: f })
+          else setAviso(`No encontré la venta #${pedida.numero} en ${PERIODOS.find(([k]) => k === periodo)?.[1].toLowerCase() ?? 'este período'}.`)
+          soltar?.()
+        }
       })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer las ventas.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }

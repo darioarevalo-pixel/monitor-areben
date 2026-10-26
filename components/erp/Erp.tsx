@@ -49,6 +49,10 @@ import { ClientesErp } from './clientes/ClientesErp'
 import { CuentaCorriente } from './clientes/CuentaCorriente'
 import { ProveedoresErp } from './clientes/ProveedoresErp'
 import { InicioErp } from './inicio/InicioErp'
+import { BusquedaGlobal, HojaDeAtajos, useAtajosErp, type DestinoBusqueda } from './BusquedaGlobal'
+import { FichaPrenda } from './stock/FichaPrenda'
+import { periodoDeVenta } from '@/lib/erp/busqueda-global.core.js'
+import { diaArgentino } from '@/lib/envios/portal.core.js'
 
 type Seccion = {
   key: string
@@ -112,13 +116,30 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   // ficha AL COSTADO, ⛔ saltan a Stock.
   const [aAjustar, setAAjustar] = useState<PrendaAAjustar | null>(null)
   const ir = (s: string, p?: string | null) => router.push(hrefErp(s, p))
+  // Búsqueda global (⌘K) y atajos (?). Lo que se elige viaja en memoria (como `aAjustar`): la lista que lo abre lo recibe y lo suelta.
+  const [panel, setPanel] = useState<'buscar' | 'atajos' | null>(null)
+  const [aAbrir, setAAbrir] = useState<{ tipo: 'venta'; id: string; numero: number; periodo: string } | { tipo: 'cliente'; doc: string } | null>(null)
+  const [prendaGlobal, setPrendaGlobal] = useState<{ marca: Marca; producto: string; talle: string } | null>(null)
+  useAtajosErp(setPanel)
   // Una dirección vieja o mal escrita ⇒ la que corresponde (⛔ una pantalla en blanco).
   useEffect(() => {
     if (!valida) router.replace(hrefErp(seccion.key, pestania))
   }, [valida, seccion.key, pestania, router])
 
   const marcas = (Object.keys(CUENTAS) as Marca[]).filter((m) => perfil && puedeVer(perfil, m, 'erp'))
-  const ajustarPrenda = (p: PrendaAAjustar) => { setAAjustar(p); ir('stock', 'ajustes') }
+  const ajustarPrenda = (p: PrendaAAjustar) => { setAAjustar(p); setPrendaGlobal(null); ir('stock', 'ajustes') }
+  const elegirDeLaBusqueda = (d: DestinoBusqueda) => {
+    setPanel(null)
+    if (d.tipo === 'ir') { ir(d.seccion, d.pestania); return }
+    if (d.marca !== marca) setMarca(d.marca)
+    if (d.tipo === 'prenda') { setPrendaGlobal({ marca: d.marca, producto: d.producto, talle: d.talle }); return }
+    if (d.tipo === 'venta') {
+      setAAbrir({ tipo: 'venta', id: d.id, numero: d.numero, periodo: periodoDeVenta(d.ocurridaEn, diaArgentino(Date.now())) ?? 'mes' })
+      ir('ventas', 'ventas'); return
+    }
+    setAAbrir({ tipo: 'cliente', doc: d.doc })
+    ir('clientes', 'clientes')
+  }
 
   return (
     <div className="shell erp-app">
@@ -149,6 +170,10 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
               ))}
             </div>
           )}
+          <button type="button" onClick={() => setPanel('buscar')} className="erp-menu-item" style={{ height: 'auto', border: 0, background: 'transparent', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
+            <Trazo d="M21 21l-4.3-4.3 M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z" />
+            <span>Buscar</span><kbd style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.7 }}>⌘K</kbd>
+          </button>
           <Link href="/inicio" className="erp-menu-item">
             <Trazo d="M19 12H5 M12 19l-7-7 7-7" />
             <span>Volver al monitor</span>
@@ -173,7 +198,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {seccion.key === 'inicio' && <InicioErp key={marca} href={hrefErp} />}
             {seccion.vacia && <EmptyState title={seccion.vacia} />}
             {/* `key`: al cambiar de marca se cierra la ficha abierta (era de la otra marca) y se vuelve a leer. */}
-            {pestania === 'ventas' && <VentasErp key={marca} irACaja={(que) => ir('caja', que)} />}
+            {pestania === 'ventas' && <VentasErp key={marca} irACaja={(que) => ir('caja', que)} abrir={aAbrir?.tipo === 'venta' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
             {pestania === 'por-producto' && <PorProductoErp key={marca} />}
             {pestania === 'cobros' && <CobrosErp key={marca} />}
             {pestania === 'cajas' && <CajasErp key={marca} />}
@@ -191,7 +216,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {pestania === 'diferencias' && <DiferenciasDia key={marca} ajustar={ajustarPrenda} />}
             {pestania === 'productos' && <ProductosErp />}
             {pestania === 'precios' && <PreciosErp key={marca} />}
-            {pestania === 'clientes' && <ClientesErp key={marca} />}
+            {pestania === 'clientes' && <ClientesErp key={marca} abrir={aAbrir?.tipo === 'cliente' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
             {pestania === 'cuenta-corriente' && <CuentaCorriente key={marca} />}
             {pestania === 'proveedores' && <ProveedoresErp key={marca} />}
             {pestania === 'reglas' && <ReglasComerciales key={marca} ir={(k) => ir('configuracion', k)} />}
@@ -202,6 +227,9 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
           </div>
         </div>
       </div>
+      {panel === 'buscar' && <BusquedaGlobal marca={marca} marcas={marcas} secciones={SECCIONES_ERP} onElegir={elegirDeLaBusqueda} onCerrar={() => setPanel(null)} />}
+      {panel === 'atajos' && <HojaDeAtajos onCerrar={() => setPanel(null)} />}
+      {prendaGlobal && <FichaPrenda key={`${prendaGlobal.marca}/${prendaGlobal.producto}/${prendaGlobal.talle}`} marca={prendaGlobal.marca} prenda={{ producto: prendaGlobal.producto, talle: prendaGlobal.talle, fila: null }} onCerrar={() => setPrendaGlobal(null)} ajustar={ajustarPrenda} />}
     </div>
   )
 }

@@ -64,4 +64,18 @@ describe('ERP › el armazón propio', () => {
     act(() => zattia.click())
     expect(setMarca).toHaveBeenCalledWith('zattia')
   })
+  it('⌘K y el botón «Buscar» abren el buscador global; «?» los atajos; Esc cierra (🎨 26-oct)', async () => {
+    await montar(['ventas', 'ventas'])
+    const dialogo = () => document.querySelector('[role="dialog"]')?.getAttribute('aria-label') ?? null
+    expect(dialogo()).toBeNull()
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })) })
+    expect(dialogo()).toBe('Buscar en el ERP')
+    act(() => { document.querySelector('[aria-label="Buscar venta, prenda o cliente"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    expect(dialogo()).toBeNull()
+    act(() => { [...div.querySelectorAll('nav button')].find((b) => b.textContent?.includes('Buscar'))?.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(dialogo()).toBe('Buscar en el ERP')
+    act(() => { document.querySelector('[aria-label="Buscar venta, prenda o cliente"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })) })
+    expect(dialogo()).toBe('Atajos de teclado')
+  })
 })

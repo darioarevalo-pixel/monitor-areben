@@ -11,7 +11,7 @@
  * 🔑 Botones (§4, lista de TRABAJO): íconos a la izquierda. «Nuevo cliente» y «Registrar cobro a cuenta» esperan al motor.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, color, font, space, type AccionMenu } from '@/components/ui'
 import { formatMoney } from '@/components/ui/MoneyText'
@@ -46,7 +46,11 @@ function bajarCsv(filas: FilaCliente[], marca: MarcaErp) {
   URL.revokeObjectURL(url)
 }
 
-export function ClientesErp() {
+export function ClientesErp({ abrir, alAbrir }: {
+  /** Desde la búsqueda global (⌘K): el cliente (por documento) que se abre solo cuando llega la lista. */
+  abrir?: { doc: string } | null
+  alAbrir?: () => void
+} = {}) {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const usuario = perfil?.name ?? null
@@ -61,13 +65,25 @@ export function ClientesErp() {
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [ficha, setFicha] = useState<FilaCliente | null>(null)
   const setPrefs = (p: Prefs) => { setPrefsState(p); guardarPrefsDeLista(lista, usuario, p) }
+  const abrirRef = useRef({ abrir, alAbrir })
+  useEffect(() => { abrirRef.current = { abrir, alAbrir } })
 
   const [vuelta, setVuelta] = useState(0)
   const clave = `${marca}|${vuelta}`
   useEffect(() => {
     let vivo = true
     leerListaDeClientes(marca)
-      .then((d) => { if (vivo) { setDatos({ ...d, clave }); setSeleccion(new Set()); setError(null) } })
+      .then((d) => {
+        if (!vivo) return
+        setDatos({ ...d, clave }); setSeleccion(new Set()); setError(null)
+        const { abrir: pedido, alAbrir: soltar } = abrirRef.current
+        if (pedido) {
+          const f = d.filas.find((x) => x.doc === pedido.doc)
+          if (f) setFicha(f)
+          else setError(`El documento ${pedido.doc} todavía no está en la lista de clientes.`)
+          soltar?.()
+        }
+      })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer los clientes.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
   }, [marca, clave])
