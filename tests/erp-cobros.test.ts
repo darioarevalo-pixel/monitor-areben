@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { armarCobro, armarContraentrega, contarVistas, filtrar, mediosOrdenados, rangoDeCobros, resumen } from '@/lib/erp/cobros.core.js'
+import { armarCobro, armarContraentrega, armarEntregaSinCobrar, contarVistas, filtrar, mediosOrdenados, rangoDeCobros, resumen } from '@/lib/erp/cobros.core.js'
 
 const c = (o: Record<string, unknown>) => ({
   id: '1', origen: 'venta', fecha: '2026-10-20', en: '2026-10-20T13:00:00.000Z', clase: 'plata', monto: 1000, medio: 'efectivo',
@@ -25,7 +25,7 @@ describe('ERP › Cobros', () => {
   })
 
   it('cada vista cuenta lo suyo: lo anulado ⛔ entra en «Entró plata»', () => {
-    expect(contarVistas(filas)).toEqual({ todos: 6, entro: 2, salio: 2, a_cuenta: 1, debe: 1, saldo: 0, anulados: 1, contraentrega: 0 })
+    expect(contarVistas(filas)).toEqual({ todos: 6, entro: 2, salio: 2, a_cuenta: 1, debe: 1, saldo: 0, anulados: 1, contraentrega: 0, sin_cobrar: 0 })
   })
 
   it('busca por cliente, número y medio; filtra por línea y medio', () => {
@@ -63,5 +63,17 @@ describe('ERP › Cobros', () => {
   it('el mes pasado y hoy, en días argentinos', () => {
     expect(rangoDeCobros('anterior', '2026-10-20')).toEqual({ desde: '2026-09-01', hasta: '2026-09-30' })
     expect(rangoDeCobros('hoy', '2026-10-20')).toEqual({ desde: '2026-10-20', hasta: '2026-10-20' })
+  })
+
+  it('la entrega sin cobrar ⛔ es un cobro: sólo en su vista, fuera de «Todos» y del cobrado, con su motivo', () => {
+    const e = (o: Record<string, unknown>) => ({ id: 'ent-1', linea: 'bdi', numero: '4512', forma_pago: 'transferencia', monto: null, entrego: 'Ger', entregada_en: '2026-10-25T15:00:00.000Z', avisos: [], motivo: 'sin_cuenta', intento_en: '2026-10-26T09:00:00.000Z', intentos: '2', ...o })
+    const sin = [e({}), e({ id: 'ent-2', numero: '4513', forma_pago: 'efectivo', monto: 12500.5, motivo: null, entregada_en: '2026-10-24T10:00:00.000Z' })].map(armarEntregaSinCobrar)
+    expect(sin[0]).toMatchObject({ id: 'sin_cobrar:ent-1', que: 'Pedido 4512 · entregó Ger', medioTexto: 'Transferencia', clase: 'sin_cobrar', montoDicho: false, motivo: 'sin_cuenta', intentos: 2 })
+    expect(sin[1]).toMatchObject({ montoDicho: true, monto: 12500.5, medioTexto: 'Efectivo', motivo: 'El ERP no dejó el motivo.' })
+    const todas = [...filas, ...sin]
+    expect(contarVistas(todas)).toMatchObject({ todos: 6, sin_cobrar: 2 })
+    expect(filtrar(todas, { vista: 'sin_cobrar', q: '4513' }).map((f) => f.id)).toEqual(['sin_cobrar:ent-2'])
+    expect(filtrar(todas, { vista: 'sin_cobrar', linea: 'zattia' })).toEqual([])
+    expect(resumen({}, todas)).toMatchObject({ cobros: 4, sinCobrar: 2, sinCobrarDesde: '2026-10-24T10:00:00.000Z', enLaCalle: 0 })
   })
 })

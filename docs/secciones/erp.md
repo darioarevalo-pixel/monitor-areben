@@ -168,6 +168,12 @@ Núcleo `lib/erp/facturacion-lista.core.js`; el Nº, la clienta y las facturas d
   ⛔ son cobros: filas de clase `entrega` SÓLO en su vista, fuera de «Todos» y del cobrado; tarjeta «Contraentrega» con cuántas y
   desde cuándo; ⛔ dependen del período. El cierre (al marcar entregado en Envíos, ⛔ conectado todavía: lo hace A) sí es un cobro y
   llega por `cobrosDe` el día que se cerró. En «Cargar venta» la cuenta se ve «Contraentrega (lo cobra el cadete)».
+- 🔑 **`erp › Ventas › Cobros` · vista «Entrega sin cobrar»** (🎨 26-oct, Resto): las entregas de Logística cuyo ÚLTIMO intento en `entrega_cobro` quedó `pendiente`
+  (falta la cuenta de ese medio, una variante…). Sale del GET de Cobros como `entregasPendientes` (`entregasSinCobro` en `api/_erp-cobros.js`, SQL sobre
+  `entrega`/`entrega_cobro` del motor sql/039; base sin la tabla ⇒ vacía; ⛔ depende del período). Filas de clase `sin_cobrar` SÓLO en su vista (fuera de «Todos»
+  y del cobrado); aviso arriba cuando hay, con «Verlas»; la columna «Cuenta» pasa a «Por qué quedó sin cobrar» (el `motivo` del motor); la ficha muestra
+  quién entregó, el medio, el monto que dijo Logística (el ERP usa el del pedido) y los intentos. ⛔ Sin botón de reintentar: `reintentarEntregas` es del motor y
+  hoy ⛔ tiene puerta; la lista se vacía cuando se arregla y se reintenta. Test en `erp-cobros`.
 - 🔑 **`erp › Configuración › Cuentas` y `› Marcas, depósitos y puntos de venta`** (🎨 20-oct, Diseño 9: v8 `Configuracion.dc.html`,
   tabs `cuentas`/`estructura`): SÓLO LECTURA, `vista=estructura` (`api/_erp-estructura.js`, sin permiso propio ⇒ `configurar`).
   Cuentas = `cuenta_real` (la copia del dashboard: titular, tipo, activa) + «Recibe» = las rutas VIGENTES de la marca que caen

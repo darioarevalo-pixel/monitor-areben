@@ -556,7 +556,8 @@ export type CobroDelMotor = {
 }
 export type TotalesCobros = { plata: number; entro: number; salio: number; por_medio: Record<string, number> }
 export type ContraentregaAbierta = { venta_id: string; numero: number | null; canal: string | null; origen: string | null; en: string; monto: number; cliente: { id: string; nombre: string | null } | null; linea: string }
-export type CobrosDelPeriodo = { desde: string; hasta: string; prueba: boolean; cobros: CobroDelMotor[]; totales: Record<string, TotalesCobros>; contraentregas?: ContraentregaAbierta[]; otroLibro: number }
+export type EntregaSinCobro = { id: string; linea: string; numero: string; forma_pago: 'efectivo' | 'transferencia'; monto: number | null; entrego: string; entregada_en: string; avisos: string[]; motivo: string | null; intento_en: string; intentos: number | string }
+export type CobrosDelPeriodo = { desde: string; hasta: string; prueba: boolean; cobros: CobroDelMotor[]; totales: Record<string, TotalesCobros>; contraentregas?: ContraentregaAbierta[]; entregasPendientes?: EntregaSinCobro[]; otroLibro: number }
 export const leerCobros = (marca: MarcaErp, desde: string, hasta: string, prueba: boolean) =>
   pedir<CobrosDelPeriodo>(null, `&vista=cobros&marca=${marca}&desde=${desde}&hasta=${hasta}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudieron leer los cobros.')
 

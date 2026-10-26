@@ -7,6 +7,8 @@
  * + `contraentregas`: las ventas «Contraentrega» que todavía ⛔ se cerraron (`contraentregasAbiertas`, contrato §20) — lo
  *   que está en la calle HOY, ⛔ depende del período. Una base sin la `sql/032` ⛔ tiene la cuenta ⇒ lista vacía.
  *
+ * + `entregasPendientes`: las entregas de Logística que quedaron SIN cobro en el ERP (`entregasSinCobro`, ⛔ depende del período).
+ *
  * 🔴 Hasta el corte, todo lo del ERP es de PRUEBA (corre en paralelo con GN) ⇒ la pantalla abre en `prueba=1`. Los dos
  *    libros ⛔ se suman: se cuenta cuántos hay en el otro para que la pantalla lo diga.
  * Los totales salen del MOTOR (por línea): una venta anulada sin devolución propia ⛔ suma, y eso la fila ⛔ lo trae.
@@ -14,6 +16,25 @@
 const MARCAS = ['bdi', 'zattia']
 const LINEAS = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] }
 const FECHA = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Las entregas de Logística cuyo ÚLTIMO intento de cobro quedó `pendiente` (sql/039 del motor; contrato `ENTREGA.md`): ⛔ depende
+ * del período (se queda hasta que se arregle lo que faltaba y `reintentarEntregas` la cobre). Una base sin la tabla ⇒ lista vacía.
+ * @param {any} pg @param {string[]} lineas
+ */
+export async function entregasSinCobro(pg, lineas) {
+  const [{ hay }] = (await pg.query(`select to_regclass('public.entrega_cobro') is not null as hay`)).rows
+  if (!hay) return []
+  return (await pg.query(
+    `select e.id, e.marca as linea, e.numero::text, e.forma_pago, e.monto::float as monto, e.entrego, e.entregada_en, e.avisos,
+            u.motivo, u.creada_en as intento_en,
+            (select count(*) from entrega_cobro c where c.empresa_id = e.empresa_id and c.entrega_id = e.id) as intentos
+       from entrega e
+       join lateral (select resultado, motivo, creada_en from entrega_cobro c
+                      where c.empresa_id = e.empresa_id and c.entrega_id = e.id order by creada_en desc limit 1) u on true
+      where e.marca = any($1) and e.forma_pago <> 'ya_pagado' and u.resultado = 'pendiente'
+      order by e.entregada_en desc limit 500`, [lineas])).rows
+}
 
 /**
  * @param {{ marca: string, desde: string, hasta: string, prueba?: boolean }} p
@@ -45,6 +66,7 @@ export async function cobrosDelPeriodo({ marca, desde, hasta, prueba = false }, 
             + (select count(*) from cuenta_movimiento m
                 where m.tipo = 'pago' and m.marca = any($1) and m.prueba = $2 and (m.ocurrida_en ${AR})::date between $3::date and $4::date) as n`,
       [LINEAS[marca], !prueba, desde, hasta])).rows
-    return { desde, hasta, prueba, cobros, totales, contraentregas, otroLibro: Number(otroLibro) }
+    const entregasPendientes = await entregasSinCobro(pg, LINEAS[marca])
+    return { desde, hasta, prueba, cobros, totales, contraentregas, entregasPendientes, otroLibro: Number(otroLibro) }
   })
 }

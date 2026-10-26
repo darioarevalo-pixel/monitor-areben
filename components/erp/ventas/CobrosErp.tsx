@@ -22,14 +22,14 @@ import { AccionSeleccion, BarraSeleccion, DatoFicha, DatosFicha, FichaCostado } 
 import { BuscadorLista, ChipEstado, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerCobros, type CobrosDelPeriodo, type MarcaErp } from '@/lib/erp/cliente'
 import {
-  COLUMNAS, NOMBRE_LINEA, NOMBRE_MEDIO, PERIODOS_COBROS, VISTAS, alternarColumna, armarCobro, armarContraentrega, contarVistas, filtrar, mediosOrdenados,
+  COLUMNAS, NOMBRE_LINEA, NOMBRE_MEDIO, PERIODOS_COBROS, VISTAS, alternarColumna, armarCobro, armarContraentrega, armarEntregaSinCobrar, contarVistas, filtrar, mediosOrdenados,
   moverColumna, normalizarPrefs, ordenar, rangoDeCobros, resumen,
 } from '@/lib/erp/cobros.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 
 type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
-type FilaCobro = ReturnType<typeof armarCobro>
+type FilaCobro = ReturnType<typeof armarCobro> & Partial<Omit<ReturnType<typeof armarEntregaSinCobrar>, keyof ReturnType<typeof armarCobro>>>
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const LINEA = NOMBRE_LINEA as Record<string, string>
@@ -88,7 +88,7 @@ export function CobrosErp() {
   }, [marca, prueba, clave])
   const cargando = datos?.clave !== clave
 
-  const todas: FilaCobro[] = useMemo(() => [...(datos?.cobros ?? []).map(armarCobro), ...(datos?.contraentregas ?? []).map(armarContraentrega)], [datos])
+  const todas: FilaCobro[] = useMemo(() => [...(datos?.cobros ?? []).map(armarCobro), ...(datos?.contraentregas ?? []).map(armarContraentrega), ...(datos?.entregasPendientes ?? []).map(armarEntregaSinCobrar)], [datos])
   const base = useMemo(() => filtrar(todas, { q, linea, medio }), [todas, q, linea, medio])
   const conteo = useMemo(() => contarVistas(base), [base])
   const filas: FilaCobro[] = useMemo(() => ordenar(filtrar(base, { vista }), orden), [base, vista, orden])
@@ -102,7 +102,7 @@ export function CobrosErp() {
 
   const columnas = prefs.visibles.map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
-    return { key: k, titulo, ancho, ordena, derecha: k === 'monto' || k === 'comision' }
+    return { key: k, titulo: vista === 'sin_cobrar' && k === 'cuenta' ? 'Por qué quedó sin cobrar' : titulo, ancho, ordena, derecha: k === 'monto' || k === 'comision' }
   })
 
   const celda = (f: FilaCobro, k: string): React.ReactNode => {
@@ -119,6 +119,7 @@ export function CobrosErp() {
     if (k === 'medio') return <span style={{ color: f.clase === 'plata' ? color.ink2 : color.mut }}>{f.medioTexto}</span>
     if (k === 'cuenta') return <span style={{ color: color.ink2 }} title={f.cuenta}>{f.cuenta}</span>
     if (k === 'entra') return f.entraA ? <span style={{ color: color.ink2 }}>{f.entraA}</span> : <span style={{ color: color.mut2 }}>—</span>
+    if (k === 'monto' && f.clase === 'sin_cobrar') return <span style={{ color: f.montoDicho ? color.ink2 : color.mut2, fontVariantNumeric: 'tabular-nums' }} title="Lo que dijo Logística; el ERP usa el monto del pedido">{f.montoDicho ? $exacto(f.monto) : '—'}</span>
     if (k === 'monto') {
       const tono = f.anulado || f.clase !== 'plata' ? color.mut : f.monto < 0 ? 'var(--mo-danger-ink)' : color.ink
       return <b title={f.clase === 'a_cuenta' ? 'Quedó debiendo: no es plata que entró' : f.clase === 'saldo' ? 'Pagó con saldo a favor: no es plata que entró' : f.clase === 'entrega' ? 'Contraentrega: lo cobra el cadete al entregar, todavía no entró' : undefined} style={{ color: tono, fontVariantNumeric: 'tabular-nums', textDecoration: f.anulado ? 'line-through' : undefined, fontStyle: f.clase !== 'plata' ? 'italic' : undefined }}>{$exacto(f.monto)}</b>
@@ -149,6 +150,11 @@ export function CobrosErp() {
         </Notice>
       )}
       <Notice tone="neutral">Todavía no están <b>Por validar</b> (lo que llegó a Mercado Pago), <b>Cobros masivos</b> ni <b>Cheques</b>: los está armando el ERP. Un cobro a cuenta se registra desde Clientes › Cuenta corriente o desde la venta.</Notice>
+      {res.sinCobrar > 0 && vista !== 'sin_cobrar' && (
+        <Notice tone="warning">
+          Hay <b>{res.sinCobrar.toLocaleString('es-AR')} {res.sinCobrar === 1 ? 'entrega' : 'entregas'} sin cobrar en el ERP</b>, desde el {diaCorto(diaArgentino(Date.parse(res.sinCobrarDesde ?? '')))}: Logística las entregó y el ERP no pudo anotar el cobro. <Button variant="outline" onClick={() => setVista('sin_cobrar')}>Verlas</Button>
+        </Notice>
+      )}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
@@ -204,7 +210,7 @@ export function CobrosErp() {
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo los cobros…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {' · '}{vista === 'contraentrega' ? 'Lo que está en la calle hoy, sea del período que sea: se cierra cuando el envío se marca entregado.' : 'El cobro de una venta lleva el día de la venta.'} «Cobrado» no suma lo anulado sin devolución (la plata se devolvió afuera) ni lo que quedó a cuenta.
+          {' · '}{vista === 'sin_cobrar' ? 'Las entregas que Logística hizo y el ERP todavía no pudo cobrar, sean del período que sean: se reintentan solas cuando se arregla lo que faltaba (la cuenta de cobro, la ruta, una variante).' : vista === 'contraentrega' ? 'Lo que está en la calle hoy, sea del período que sea: se cierra cuando el envío se marca entregado.' : 'El cobro de una venta lleva el día de la venta.'} «Cobrado» no suma lo anulado sin devolución (la plata se devolvió afuera) ni lo que quedó a cuenta.
         </div>
       </div>
 
@@ -218,7 +224,20 @@ export function CobrosErp() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
             {ficha.anulado && <Notice tone="neutral">{ficha.origen === 'pago_a_cuenta' ? 'Este pago a cuenta se dio vuelta.' : 'La venta está anulada.'}</Notice>}
             {ficha.clase === 'a_cuenta' && <Notice tone="warning">Quedó debiendo: no es plata que entró. Se cobra desde Clientes › Cuenta corriente.</Notice>}
+            {ficha.clase === 'sin_cobrar' && <Notice tone="warning">Logística entregó este pedido y el ERP no pudo anotar el cobro. La entrega no se frena nunca por esto: queda anotada y se reintenta cuando se arregla lo que faltaba. <b>Por qué:</b> {ficha.motivo}</Notice>}
+            {ficha.clase === 'sin_cobrar' && ficha.medio === 'transferencia' && <Notice tone="neutral">Fue una transferencia: cuando el cobro se anote va a quedar «por verificar» hasta cruzarla en Pagos recibidos.</Notice>}
             {ficha.clase === 'entrega' && <Notice tone="warning">Contraentrega: lo cobra el cadete al entregar y todavía no entró. Se cierra cuando Envíos marca el envío entregado (eso todavía no está conectado: lo está armando el ERP).</Notice>}
+            {ficha.clase === 'sin_cobrar' ? (
+              <DatosFicha>
+                <DatoFicha titulo="Entregada">{cuandoCorto(ficha.cuando)}</DatoFicha>
+                <DatoFicha titulo="Entregó">{ficha.quien ?? '—'}</DatoFicha>
+                <DatoFicha titulo="Cobró en mano">{ficha.medioTexto}</DatoFicha>
+                <DatoFicha titulo="Monto que dijo Logística">{ficha.montoDicho ? <b style={{ fontVariantNumeric: 'tabular-nums' }}>{$exacto(ficha.monto)}</b> : '—'}</DatoFicha>
+                <DatoFicha titulo="Último intento">{ficha.intentoEn ? cuandoCorto(ficha.intentoEn) : '—'}{(ficha.intentos ?? 1) > 1 ? ` · ${ficha.intentos} intentos` : ''}</DatoFicha>
+                <DatoFicha titulo="Línea">{LINEA[ficha.linea] ?? ficha.linea}</DatoFicha>
+                <DatoFicha titulo="Id de la entrega">{ficha.ref}</DatoFicha>
+              </DatosFicha>
+            ) : (
             <DatosFicha>
               <DatoFicha titulo="Monto"><b style={{ fontVariantNumeric: 'tabular-nums' }}>{$exacto(ficha.monto)}</b></DatoFicha>
               <DatoFicha titulo={ficha.clase === 'entrega' ? 'En la calle desde' : 'Cuándo'}>{cuandoCorto(ficha.cuando)}</DatoFicha>
@@ -232,6 +251,7 @@ export function CobrosErp() {
               <DatoFicha titulo="Línea">{LINEA[ficha.linea] ?? ficha.linea}</DatoFicha>
               {ficha.ref && <DatoFicha titulo="Referencia">{ficha.ref}</DatoFicha>}
             </DatosFicha>
+            )}
             {ficha.ventaNumero != null && <p style={{ margin: 0, color: color.mut, fontSize: font.sm }}>La venta {ficha.ventaNumero} se abre en Ventas buscando su número.</p>}
           </div>
         )}
