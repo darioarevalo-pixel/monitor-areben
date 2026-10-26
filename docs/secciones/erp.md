@@ -12,7 +12,7 @@ Productos y precios · Clientes y proveedores · Configuración, y «Volver al m
 pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una vieja o mal escrita se corrige sola).
 Las pestañas: Ventas = Ventas · Por producto · Cobros · Cajas · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
 dirección vieja cae en Ventas) · Caja (POS) = Cambio · Factura · Stock =
-Stock · Movimientos · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Productos · Precios · Configuración = Reglas · Cuentas de cobro;
+Stock · Movimientos · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Productos · Precios · Configuración = Reglas · Cuentas de cobro · Redondeo;
 Clientes y proveedores = Clientes · Cuenta corriente · Proveedores. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
 botones crudos y `select`). Tests: `tests/erp-navegacion*.test.ts*`. El registro (`registro.ts`) conserva `erp` sólo
 porque el test de registro lo exige: el shell ya ⛔ lo monta.
@@ -245,6 +245,15 @@ sólo se ven) · Todas, la campaña como columna, Stunned por el selector de lí
 la fila ⇒ el formulario de esa regla (el formulario y el simulador siguen igual, abajo). Cuentas de cobro: una fila por
 canal × medio de la línea, vistas por canal + «Sin ruta» + «Cambios» (el historial); clic o «⋯» ⇒ la ventana «Cambiar la
 ruta» (mismo aviso antes de guardar). ⛔ cambió ningún contrato. Tests `tests/erp-reglas-pantalla.test.tsx`, `erp-rutas-pantalla`.
+
+**Redondeo** (🎨 26-oct, Resto; `erp › Configuración › Redondeo`, `components/erp/Redondeo.tsx`, `api/_erp-redondeo.js`, núcleo
+`lib/erp/redondeo.core.js`): a cuánto se redondea el precio de cada canal (Local · Online · Mayorista · Mercado Libre), por línea
+(Stunned por el selector, como Rutas). Una fila por canal con lo que vale hoy, un ejemplo ($12.345,67 ⇒ …) y lo que ya está
+puesto para más adelante; vista «Cambios» con el historial (quién, cuándo, desde cuándo). «⋯» o clic ⇒ «Cambiar el redondeo»
+(a $1 · $10 · $100 · $1.000; al más cercano / hacia abajo / hacia arriba; desde ahora o un día) con el ejemplo antes de guardar.
+Va por el contrato del motor (`redondeosDe` / `ponerRedondeo`, sql/029): un redondeo ⛔ se edita, se pone otro, y ⛔ para atrás;
+sin redondeo puesto, ⛔ se redondea. Sólo Admin (`configurar`). 🔴 Hoy lo lee el pedido mayorista; la Caja sigue con su
+`redondeo: 100` propio. Tests `erp-redondeo`, `erp-redondeo-puerta`, `erp-redondeo-pantalla`.
 
 **Inicio** (🎨 19-oct, Diseño 7, `components/erp/inicio/InicioErp.tsx`): arriba el **resultado comercial del mes**
 (vendido · margen bruto con su % · ventas y ticket · contra el mes pasado), del 1 a hoy contra el MISMO tramo del mes

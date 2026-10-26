@@ -63,9 +63,10 @@ export function planStockTN({ tienda, productos, indice, libro, gn, reservado = 
 
 /**
  * 🔑 La llave de «el libro MANDA»: `STOCK_TN_MANDA=bdi,zattia,stunned` (Vercel de `areben-erp`). Sin la variable, ninguna:
- * el empuje sigue SECO. 🔴 Bruno (18-oct): el ERP manda TODO JUNTO ⇒ se prenden las tres el día del corte, ⛔ de a una
- * (la lista es por tienda sólo para poder probar), junto con pausar el sync GN↔TN (si GN sigue empujando, los dos se
- * pisan). Una tienda que ⛔ existe hace fallar (un typo ⛔ deja la llave apagada callada).
+ * el empuje sigue SECO. 🔴 Bruno (18-oct): el ERP manda TODO JUNTO, ⛔ por partes. Desde el 26-oct los cortes son por
+ * marca (Stunned → BDI → Zattia) ⇒ cada tienda se prende el día de SU corte, con todo lo suyo a la vez (stock, precio,
+ * libro) y con el sync GN↔TN de esa tienda pausado (si GN sigue empujando, los dos se pisan). Una tienda que ⛔ existe
+ * hace fallar (un typo ⛔ deja la llave apagada callada).
  */
 export function mandaEn(tienda, env = process.env) {
   const lista = String(env.STOCK_TN_MANDA ?? '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean)

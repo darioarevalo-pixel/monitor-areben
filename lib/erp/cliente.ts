@@ -399,6 +399,18 @@ export const leerRutas = (marca: MarcaErp) =>
 export const ponerRuta = (marca: MarcaErp, ruta: RutaAPoner) =>
   pedir<{ ok: true; ruta: { id: string; desde: string }; aviso: string | null }>(post({ accion: 'poner-ruta', marca, ...ruta }), '', 'No se pudo cambiar la ruta.')
 
+/** ERP › Configuración › Redondeo (motor sql/029): a cuánto se redondea el precio de cada canal, por línea, desde un momento. */
+export type ModoRedondeo = 'cercano' | 'abajo' | 'arriba'
+export type RedondeoPuesto = { paso: number; modo: ModoRedondeo; desde: string }
+export type FilaDeRedondeo = { canal: CanalRuta; vigente: RedondeoPuesto | null; proximo: RedondeoPuesto | null }
+export type CambioDeRedondeo = { id: string; marca: string; canal: CanalRuta; paso: number; modo: ModoRedondeo; desde: string; puesto_por: string; puesto_en: string }
+export type RedondeoDeMarca = { lineas: Array<{ linea: string; filas: FilaDeRedondeo[] }>; historial: CambioDeRedondeo[] }
+export type RedondeoAPoner = { linea: string; canal: CanalRuta; paso: number; modo: ModoRedondeo; desde?: string }
+export const leerRedondeo = (marca: MarcaErp) =>
+  pedir<RedondeoDeMarca>(null, `&vista=redondeo&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el redondeo.')
+export const ponerRedondeo = (marca: MarcaErp, redondeo: RedondeoAPoner) =>
+  pedir<{ ok: true; id: string }>(post({ accion: 'poner-redondeo', marca, ...redondeo }), '', 'No se pudo cambiar el redondeo.')
+
 // ── ERP › Ventas, el PILOTO del diseño (lista + ficha; `api/_erp-ventas.js`, núcleo `lib/erp/ventas-lista.core.js`) ──
 
 export type FilaVentaLista = {
