@@ -8,8 +8,9 @@
  * (`FichaProducto`) con el historial de precios. Las filas son las de Productos (`vista=productos-lista`); vistas y
  * columnas en `lib/erp/precios-lista.core.js`.
  *
- * 🔑 ⛔ se editan precios acá (v8): se escriben desde el monitor (cambios y liquidaciones) y desde Ingresos; «Cargar en el
- *    ERP» sigue en la ficha. La «Mayorista especial» del v8 ⛔ existe en el motor ⇒ ⛔ columna (lo dice el pie).
+ * 🔑 Escribir precios (pedido de Bruno, PENDIENTES «Listas de precios (d)»; el v8 los dejaba de sólo lectura): el $ de la fila abre la ficha con
+ *    «Cargar en el ERP» a la vista (`cargarPrecio`/`soltarPrecio`, `CargarPrecio`); «Volver a seguir» está en la ficha. Las reglas
+ *    por forma de pago ya viven en Configuración › Reglas. La «Mayorista especial» del v8 ⛔ existe en el motor ⇒ ⛔ columna (lo dice el pie).
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -76,7 +77,7 @@ export function PreciosErp() {
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
   const [prefs, setPrefsState] = useState<Prefs>(() => normalizarPrefsPrecio(typeof window === 'undefined' ? null : leerPrefsDeLista(lista, usuario)))
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
-  const [ficha, setFicha] = useState<{ marca: MarcaErp; producto: string } | null>(null)
+  const [ficha, setFicha] = useState<{ marca: MarcaErp; producto: string; cargar: boolean } | null>(null)
 
   const setPrefs = (p: Prefs) => { setPrefsState(p); guardarPrefsDeLista(lista, usuario, p) }
 
@@ -99,7 +100,7 @@ export function PreciosErp() {
   const mirada = `${vista}|${q}|${linea}|${orden?.col ?? ''}|${orden?.dir ?? ''}`
   const mostrar = tanda.de === mirada ? tanda.n : DE_A
 
-  const abrir = (f: FilaProducto) => setFicha({ marca, producto: f.producto })
+  const abrir = (f: FilaProducto, cargar = false) => setFicha({ marca, producto: f.producto, cargar })
   const filaDeFicha = ficha && ficha.marca === marca ? datos?.filas.find((x) => x.producto === ficha.producto) ?? null : null
 
   const columnas = prefs.visibles.map((k) => {
@@ -136,14 +137,17 @@ export function PreciosErp() {
   }
 
   const acciones = (f: FilaProducto) => (
-    <IconoFila label={`Historial de precios de ${f.nombre}`} onClick={() => abrir(f)}><Icono nombre="historial" size={16} /></IconoFila>
+    <>
+      <IconoFila label="Cargar precio o costo" onClick={() => abrir(f, true)}><Icono nombre="pesos" size={16} /></IconoFila>
+      <IconoFila label={`Historial de precios de ${f.nombre}`} onClick={() => abrir(f)}><Icono nombre="historial" size={16} /></IconoFila>
+    </>
   )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
-      <p style={{ margin: 0, color: color.mut }}>Todas las listas de cada producto en una grilla, con su oferta o liquidación y el último cambio. Abrí un producto para ver su historial de precios.</p>
-      <Notice tone="neutral">Los precios no se editan acá: se escriben desde el monitor (cambios y liquidaciones) y desde Ingresos. Cada cambio queda con quién y cuándo.</Notice>
+      <p style={{ margin: 0, color: color.mut }}>Todas las listas de cada producto en una grilla, con su oferta o liquidación y el último cambio. El $ de cada fila carga un precio (de cualquier lista) o el costo; abrí un producto para ver su historial.</p>
+      <Notice tone="neutral">Un precio cargado acá queda en el ERP, con quién y cuándo, y manda sobre la copia de GN. Mientras GN funcione, no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {datos?.liquidacionesError && <Notice tone="warning">No se pudieron leer las liquidaciones del monitor: la columna «Oferta o liquidación» muestra sólo las ofertas de Tienda Nube.</Notice>}
 
@@ -170,7 +174,7 @@ export function PreciosErp() {
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
-          columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={44}
+          columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={76}
           seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden} densidad={prefs.densidad}
           activa={filaDeFicha?.id ?? null} onAbrir={(f) => abrir(f)} etiquetaFila={(f) => `el producto ${f.nombre}`}
           vacio={!cargando && datos ? (
@@ -197,7 +201,7 @@ export function PreciosErp() {
 
       {ficha && (
         <FichaProducto
-          key={`${ficha.marca}/${ficha.producto}`} marca={ficha.marca} producto={ficha.producto} fila={filaDeFicha} cargarAbierto={false}
+          key={`${ficha.marca}/${ficha.producto}/${ficha.cargar}`} marca={ficha.marca} producto={ficha.producto} fila={filaDeFicha} cargarAbierto={ficha.cargar}
           onCerrar={() => setFicha(null)} onCargado={() => setVuelta((n) => n + 1)}
         />
       )}

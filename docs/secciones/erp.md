@@ -187,7 +187,7 @@ Núcleo `lib/erp/facturacion-lista.core.js`; el Nº, la clienta y las facturas d
   que venía de GN pasa a «cargada» (la copia de GN ⛔ lo pisa más); abajo, «Cambios de la ficha» (quién, antes → después). Sólo Admin (permiso `configurar`
   de la puerta `api/_erp-catalogo.js`; motor `catalogo-edicion.mjs`, sql/037). ⛔ «Desactivar»/«Archivar»: sin vuelta desde la pantalla y el v8 no lo dibuja; ⛔ alta (nace en
   Ingresos). Pantalla `components/erp/productos/EditarProducto.tsx`, test `tests/erp-productos-pantalla.test.tsx`.
-- 🔑 **`erp › Productos y precios › Precios`** (🎨 20-oct, Diseño 9: pestaña «Precios» del tablero 5 del v8): SÓLO LECTURA, las
+- 🔑 **`erp › Productos y precios › Precios`** (🎨 20-oct, Diseño 9: pestaña «Precios» del tablero 5 del v8): la grilla se LEE, pero (🎨 26-oct, Resto, pedido de Bruno «Listas de precios (d)») el **$ de cada fila abre la ficha con «Cargar en el ERP» a la vista** (precio de cualquier lista, también la «Tienda Nube con oferta», o el costo; el mismo formulario de Productos; «Volver a seguir» en la ficha), ⛔ se edita en la celda. Las reglas por forma de pago están en Configuración › Reglas. Las
   mismas filas de Productos (`vista=productos-lista`) en una grilla de listas —Local · Online · Mayorista— + «Oferta o liquidación»
   (la liquidación EN CURSO del monitor, `liquidaciones`/`liquidacion_items` aplicados, manda; si no, el precio «Tienda Nube con
   oferta» cuando es MÁS BAJO que Online) + «Último cambio» (último renglón de `producto_precio`; `gn-copia`/`tn-copia` dicen

@@ -136,4 +136,13 @@ describe('la lista de productos', () => {
     await clic(boton('Guardar', document.body))
     expect(editarVarianteErp).toHaveBeenCalledWith('zattia', '1', '1', { barcode: '999' })
   })
+
+  it('Precios: el $ de la fila abre la ficha con «Cargar en el ERP» a la vista', async () => {
+    const { PreciosErp } = await import('@/components/erp/productos/PreciosErp')
+    host = document.createElement('div'); document.body.appendChild(host)
+    await act(async () => { root = createRoot(host); root.render(<PreciosErp />) })
+    await act(async () => {})
+    await clic(boton('Cargar precio o costo', filaDe('TOP SAHARA')))
+    expect(ficha()!.textContent).toContain('Cargar en el ERP')
+  })
 })
