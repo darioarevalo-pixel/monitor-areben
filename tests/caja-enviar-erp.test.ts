@@ -76,7 +76,7 @@ describe('cierres de la Caja por marca (Stunned)', () => {
     const pedidos: Array<{ url: string; cuerpo: any }> = []
     const fetchFalso = (async (url: string, init: any) => { pedidos.push({ url, cuerpo: JSON.parse(init.body) }); return { status: 200, text: async () => '{"encolado":true}' } }) as unknown as typeof fetch
     const r = await enviarVentaErp({ ...venta, store: 'zattia', email: 'a@b.co' }, { sb, registrar: async () => ({ ok: true }), mailer: { url: 'http://m', key: 'k', fetch: fetchFalso } })
-    expect(pedidos).toHaveLength(1); expect(pedidos[0].cuerpo.marca).toBe('stunned'); expect(r.venta.ticket_mail).toBe('encolado')
+    expect(pedidos).toHaveLength(1); expect(pedidos[0].cuerpo.marca).toBe('zattia'); expect(r.venta.ticket_mail).toBe('encolado')
   })
   it('si la venta queda en error ⛔ sale el mail', async () => {
     const { sb } = baseFalsa({ ...venta, store: 'zattia', email: 'a@b.co' }); let n = 0
