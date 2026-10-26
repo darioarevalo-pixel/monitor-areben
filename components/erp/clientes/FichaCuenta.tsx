@@ -11,10 +11,12 @@ import { Button, Field, Input, Modal, MoneyText, Notice, Select, color, font, sp
 import { formatMoney } from '@/components/ui/MoneyText'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
-import { leerCuentaDeCliente, ponerCreditoCliente, type CreditoCliente, type CuentaDeCliente, type MarcaErp } from '@/lib/erp/cliente'
+import { cobrarCuentaErp, leerCuentaDeCliente, ponerCreditoCliente, type CreditoCliente, type CuentaDeCliente, type MarcaErp } from '@/lib/erp/cliente'
 import { NOMBRE_LINEA, TRAMOS, nombresDeVentas, textoCredito } from '@/lib/erp/cuenta-corriente.core.js'
 import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { fechaCorta } from './FichaCliente'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
+import { diaArgentino } from '@/lib/envios/portal.core.js'
 
 export const ESTADO_CUENTA: Record<string, [tono: 'danger' | 'success' | 'action' | 'neutral', texto: string]> = {
   atrasada: ['danger', 'Atrasada'], aldia: ['success', 'Al día'], favor: ['action', 'A favor'], cero: ['neutral', 'Sin saldo'],
@@ -46,6 +48,9 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
   const [s, setS] = useState<(CuentaDeCliente & { clave: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [credito, setCredito] = useState(false)
+  const [cobrando, setCobrando] = useState(false)
+  const [hecho, setHecho] = useState<string | null>(null)
+  const puedeCobrar = usePuedeErp(marca)('cobrar')
   const [vuelta, setVuelta] = useState(0)
   const clave = `${desde}|${hasta}|${vuelta}`
   useEffect(() => {
@@ -68,6 +73,7 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
   return (
     <FichaCostado abierta onCerrar={onCerrar} titulo={`Cuenta corriente · ${linea}${prueba ? ' · de prueba' : ''}`} etiqueta={`Cuenta corriente de ${fila.nombre}`}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
@@ -98,7 +104,10 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
         <DatoFicha titulo="La más vieja">{(e?.debe ?? fila.debe) ? `${e?.dias_mayor ?? fila.diasMayor} días` : '—'}</DatoFicha>
         {TRAMOS.map((t) => <DatoFicha key={t} titulo={t === 'más de 90' ? 'Más de 90 días' : `${t} días`}>{formatMoney((e?.tramos ?? fila.tramos)[t] ?? 0)}</DatoFicha>)}
       </DatosFicha>
-      {admin && <div><Button variant="outline" onClick={() => setCredito(true)}>{cred?.credito ? 'Cambiar el crédito' : 'Marcar crédito'}</Button></div>}
+      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+        {puedeCobrar && <Button disabled={!s} onClick={() => { setHecho(null); setCobrando(true) }}>Cobrar</Button>}
+        {admin && <Button variant="outline" onClick={() => setCredito(true)}>{cred?.credito ? 'Cambiar el crédito' : 'Marcar crédito'}</Button>}
+      </div>
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <div>
@@ -157,6 +166,13 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
           </div>
         )}
       </section>
+
+      {cobrando && s && (
+        <VentanaCobrarCuenta
+          marca={marca} fila={fila} prueba={prueba} saldo={saldo} cuentas={s.cuentas ?? []} onCerrar={() => setCobrando(false)}
+          onHecho={(m) => { setCobrando(false); setHecho(m); setVuelta((n) => n + 1); onCambio() }}
+        />
+      )}
 
       {credito && (
         <VentanaCredito
@@ -221,6 +237,70 @@ function VentanaCredito({ marca, fila, credito, onCerrar, onHecho }: {
             ? 'Con crédito, la venta a cuenta se frena sólo si pasa el tope o si debe una compra más vieja que el plazo.'
             : 'Sin crédito, todo lo que debe cuenta como vencido y cada venta a cuenta pide la autorización de un admin.'}
           {' '}Queda guardado quién lo cambió y cuándo; no cambia lo que ya debe.
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * «Cobrar» a la cuenta, SIN elegir venta (el botón de la cuenta corriente): el motor paga primero la compra más VIEJA que debe y lo
+ * que sobra a la siguiente (FIFO); sólo queda a favor si no debe nada (Bruno y Darío, 18-oct). Una clave por ventana abierta:
+ * reintentar el MISMO cobro ⛔ lo duplica (el motor deduplica por `origen_ref`).
+ */
+function VentanaCobrarCuenta({ marca, fila, prueba, saldo, cuentas, onCerrar, onHecho }: {
+  marca: MarcaErp; fila: FilaCuenta; prueba: boolean; saldo: number; cuentas: Array<{ id: string | number; nombre: string }>; onCerrar: () => void; onHecho: (aviso: string) => void
+}) {
+  const [monto, setMonto] = useState(saldo > 0 ? paraEditar(saldo) : '')
+  const [cuenta, setCuenta] = useState('')
+  const [hoyDia] = useState(() => diaArgentino(Date.now()))
+  const [fecha, setFecha] = useState(hoyDia)
+  const [error, setError] = useState<string | null>(null)
+  const [trabajando, setTrabajando] = useState(false)
+  const [ref] = useState(() => crypto.randomUUID())
+  const n = parsearMonto(monto)
+  const debe = Math.max(0, saldo)
+  const quedaAFavor = n != null && n > debe ? Math.round((n - debe) * 100) / 100 : 0
+
+  async function registrar() {
+    if (n == null || n <= 0) return setError('Escribí el monto.')
+    if (!cuenta) return setError('Elegí la cuenta.')
+    setTrabajando(true)
+    try {
+      const r = await cobrarCuentaErp(marca, { clienteId: fila.clienteId, linea: fila.linea, monto: n, cuenta, fecha, ref, prueba })
+      onHecho(r.yaExistia ? 'Ese cobro ya estaba registrado.' : `Cobro de ${formatMoney(n)} registrado en la cuenta de ${fila.nombre}.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo registrar el cobro.')
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
+  return (
+    <Modal
+      abierto onCerrar={onCerrar} titulo="Cobrar a la cuenta"
+      pie={<>
+        <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
+        <Button disabled={trabajando || n == null || n <= 0 || !cuenta} onClick={() => void registrar()}>Cobrar {n != null && n > 0 ? formatMoney(n) : ''}</Button>
+      </>}
+    >
+      <p style={{ marginTop: 0, color: color.mut }}>{fila.nombre} · {saldo > 0 ? `debe ${formatMoney(saldo)}` : saldo < 0 ? `a favor ${formatMoney(-saldo)}` : 'sin saldo'}{prueba ? ' · de prueba' : ''}</p>
+      {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+        <Field label="Monto"><Input inputMode="decimal" value={monto} onChange={(e) => setMonto(e.target.value)} /></Field>
+        <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+          <Field label="Cuenta" hint="Medio y cuenta real salen de la ruta del día." style={{ flex: '1 1 220px' }}>
+            <Select value={cuenta} onChange={(e) => setCuenta(e.target.value)}>
+              <option value="">{cuentas.length ? 'Elegí la cuenta' : 'No hay cuentas para cobrar'}</option>
+              {cuentas.map((c) => <option key={String(c.id)} value={String(c.id)}>{c.nombre}</option>)}
+            </Select>
+          </Field>
+          <Field label="Fecha"><Input type="date" value={fecha} max={hoyDia} onChange={(e) => setFecha(e.target.value)} /></Field>
+        </div>
+        <div style={{ padding: '10px 12px', borderRadius: 9, background: color.bg, border: `1px solid ${color.line}`, display: 'flex', flexDirection: 'column', gap: 4, fontSize: font.base }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Saldo de la cuenta</span><b>{formatMoney(saldo)} → {formatMoney(saldo - (n ?? 0))}</b></div>
+          {quedaAFavor > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Queda a favor</span><b>{formatMoney(quedaAFavor)}</b></div>}
+          <div style={{ color: color.mut }}>No elegís la venta: el cobro paga primero la compra más vieja que debe y lo que sobra, la siguiente. Sólo queda a favor si no debe nada.</div>
         </div>
       </div>
     </Modal>

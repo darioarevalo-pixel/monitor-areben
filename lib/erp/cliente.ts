@@ -613,9 +613,14 @@ export type CuentaDeCliente = {
   estado: { saldo: number; debe: number; a_favor: number; vencido: number; dias_mayor: number; atrasado: boolean; sin_credito: boolean; tramos: Record<string, number>; pendientes: PendienteCuenta[] }
   mayor: { anterior: number; renglones: RenglonMayor[]; final: number }
   csv: string
+  /** Las cuentas con las que se puede cobrar (`cuenta_cobro`). */
+  cuentas?: Array<{ id: string | number; nombre: string; medio: string }>
 }
 export const leerCuentaDeCliente = (marca: MarcaErp, p: { clienteId: string; linea: string; prueba: boolean; desde?: string; hasta?: string }) =>
   pedir<CuentaDeCliente>(null, `&vista=cuenta-cliente&marca=${marca}&cliente=${p.clienteId}&linea=${p.linea}&prueba=${p.prueba ? 1 : 0}&desde=${p.desde ?? ''}&hasta=${p.hasta ?? ''}&nc=${Date.now()}`, 'No se pudo leer la cuenta del cliente.')
+/** El botón «Cobrar» de la cuenta: sin elegir venta, el motor paga la más vieja primero (FIFO). `ref` = una clave por ventana (⛔ duplica). */
+export const cobrarCuentaErp = (marca: MarcaErp, c: { clienteId: string; linea: string; monto: number; cuenta: string; fecha: string; ref: string; prueba: boolean }) =>
+  pedir<{ ok: true; cuenta: unknown; yaExistia?: boolean }>(post({ accion: 'cobrar-cuenta', marca, ...c }), '', 'No se pudo registrar el cobro.')
 export const ponerCreditoCliente = (marca: MarcaErp, p: { clienteId: string; credito: boolean; tope: number | null; dias: number | null }) =>
   pedir<{ ok: true; credito: CreditoCliente }>(post({ accion: 'poner-credito', marca, ...p }), '', 'No se pudo marcar el crédito.')
 

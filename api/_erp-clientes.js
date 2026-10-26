@@ -159,7 +159,10 @@ export async function cuentaDeCliente({ marca, clienteId, linea, prueba = false,
     const r = await cuentaDe(pg, { cliente_id: clienteId, marca: linea, prueba, desde: desde || null, hasta: hasta || null })
     if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADO' ? 404 : 409, error: r.error?.mensaje ?? 'No se pudo leer la cuenta.' }
     const csv = mayorCSV(r.mayor, { cliente: r.cliente.nombre, marca: linea, desde: desde || undefined, hasta: hasta || undefined })
-    return { hoy: r.hoy, cliente: r.cliente, credito: r.credito, estado: r.estado, mayor: r.mayor, csv }
+    // Con qué cuentas se puede COBRAR (las mismas que la venta: ⛔ «Saldo a favor» ni «Cuenta corriente», que no son plata que entra).
+    const cuentas = await pg.query(`select id, nombre, medio from cuenta_cobro where marca = $1 and activa and medio not in ('saldo', 'cuenta') order by nombre`, [linea])
+      .then((x) => x.rows).catch(() => [])
+    return { hoy: r.hoy, cliente: r.cliente, credito: r.credito, estado: r.estado, mayor: r.mayor, csv, cuentas }
   })
 }
 
