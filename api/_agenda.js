@@ -53,7 +53,7 @@ import { avisar, faltaParaMandar, guardarSuscripcion, suscripcionValida } from '
 import { armarCorreoDiario, hoyAR } from '../lib/agenda/correo-diario.core.js';
 import { avisosAlTildar, quienesSeEnteran } from '../lib/agenda/aviso-terminado.core.js';
 import { incidencias } from './_incidencias.js';
-import { corto, cuerpoTarea } from '../lib/agenda/aviso-texto.core.js';
+import { cuerpoTarea } from '../lib/agenda/aviso-texto.core.js';
 import { textoDeRespuesta } from './_tn-desc-ia.js';
 import { SISTEMA as SISTEMA_MEJORAR, descripcionLimpia, respuestaLimpia } from '../lib/agenda/mejorar.core.js';
 import { companerasDe, perfilDe } from '../lib/agenda/celular-compartido.core.js';
