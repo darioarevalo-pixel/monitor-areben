@@ -7,12 +7,12 @@ import { Button, color, Field, font, space } from '@/components/ui'
  * El PIN de encargada de una persona (Bruno 26-oct: «al lado del usuario», oculto pero se puede ver, sin cifrar). Es el que autoriza
  * vender lo que el libro dice 0. Se guarda al instante (⛔ espera el «Guardar cambios» de la lista: es del ERP, no del KV de usuarios).
  */
-export function PinUsuario({ pin, cargando, onAlAzar, onQuitar }: {
+export function PinUsuario({ pin, cargando, onAlAzar, onSacar }: {
   /** `undefined` = todavía no se leyó; `null` = no tiene. */
   pin: string | null | undefined
   cargando: boolean
   onAlAzar: () => void
-  onQuitar: () => void
+  onSacar: () => void
 }) {
   const [visible, setVisible] = useState(false)
   return (
@@ -29,7 +29,7 @@ export function PinUsuario({ pin, cargando, onAlAzar, onQuitar }: {
         <Button size="sm" variant="outline" onClick={onAlAzar} loading={cargando} disabled={pin === undefined}>
           {pin ? 'Cambiar al azar' : 'Poner al azar'}
         </Button>
-        {pin && <Button size="sm" variant="ghost" tone="danger" onClick={onQuitar} disabled={cargando}>Quitar</Button>}
+        {pin && <Button size="sm" variant="ghost" tone="danger" onClick={onSacar} disabled={cargando}>Sacar</Button>}
       </div>
     </Field>
   )

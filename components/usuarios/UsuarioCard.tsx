@@ -39,7 +39,7 @@ export function UsuarioCard({
   pin,
   pinCargando,
   onPinAlAzar,
-  onPinQuitar,
+  onPinSacar,
 }: {
   u: UsuarioConfig
   primero: boolean
@@ -60,7 +60,7 @@ export function UsuarioCard({
   pin?: string | null
   pinCargando?: boolean
   onPinAlAzar?: () => void
-  onPinQuitar?: () => void
+  onPinSacar?: () => void
 }) {
   const [ajuste, setAjuste] = useState(!!ajusteAbierto)
   const r = resumenUsuario(u)
@@ -136,8 +136,8 @@ export function UsuarioCard({
                 onChange={(e) => onCampo('email', e.target.value.trim().toLowerCase())}
               />
             </Field>
-            {onPinAlAzar && onPinQuitar && u.name && (
-              <PinUsuario pin={pin} cargando={!!pinCargando} onAlAzar={onPinAlAzar} onQuitar={onPinQuitar} />
+            {onPinAlAzar && onPinSacar && u.name && (
+              <PinUsuario pin={pin} cargando={!!pinCargando} onAlAzar={onPinAlAzar} onSacar={onPinSacar} />
             )}
             <Field label="Marca">
               <Select value={u.cuenta || ''} onChange={(e) => onCuenta(e.target.value)}>

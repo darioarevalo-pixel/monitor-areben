@@ -8,7 +8,7 @@ import type { Marca } from '@/lib/nav'
 import { copiarPermisos, normalizar, sinLinkDeHoras, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { leerPines, pinAlAzar, ponerPin, quitarPin } from '@/lib/erp/cliente'
+import { leerPines, pinAlAzar, ponerPin, sacarPin } from '@/lib/erp/cliente'
 import { Button, Card, color, font, Notice, useConfirmar } from '@/components/ui'
 import { AltaGuiada } from './AltaGuiada'
 import { Credenciales } from './Credenciales'
@@ -78,7 +78,7 @@ export function Usuarios() {
     setPinOcupado(k)
     try {
       if (pin) await ponerPin(k, pin)
-      else await quitarPin(k)
+      else await sacarPin(k)
       setPines((p) => { const n = { ...(p || {}) }; if (pin) n[k] = pin; else delete n[k]; return n })
       setPinError(null)
     } catch (e) {
@@ -238,7 +238,7 @@ export function Usuarios() {
               onFuncion={(f, val) => onFuncion(i, f, val)}
               onEliminar={() => eliminar(i)}
               {...(pines
-                ? { pin: pines[clavePin(u)] ?? null, pinCargando: pinOcupado === clavePin(u), onPinAlAzar: () => cambiarPin(u, pinAlAzar()), onPinQuitar: () => cambiarPin(u, null) }
+                ? { pin: pines[clavePin(u)] ?? null, pinCargando: pinOcupado === clavePin(u), onPinAlAzar: () => cambiarPin(u, pinAlAzar()), onPinSacar: () => cambiarPin(u, null) }
                 : {})}
             />
           ))}

@@ -669,7 +669,7 @@ export const ponerPin = async (persona: string, pin: string) => {
   for (const marca of ['bdi', 'zattia'] as const) await pedir(post({ accion: 'poner-pin', marca, persona, pin }), '', 'No se pudo guardar el PIN.')
 }
 
-export const quitarPin = async (persona: string) => {
+export const sacarPin = async (persona: string) => {
   for (const marca of ['bdi', 'zattia'] as const) await pedir(post({ accion: 'quitar-pin', marca, persona }), '', 'No se pudo quitar el PIN.')
 }
 
