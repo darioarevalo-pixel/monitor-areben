@@ -117,6 +117,19 @@ export const cargarPrecioCosto = (marca: MarcaErp, c: CargaPrecio) =>
 export const soltarPrecio = (marca: MarcaErp, s: { producto: string; lista: string; motivo?: string }) =>
   pedir<{ ok: true; precio: number | null; deLista: string | null }>(post({ accion: 'soltar-precio', marca, ...s }), '', 'No se pudo volver a seguir.')
 
+/** Editar el producto en el ERP (motor sql/037; `api/_erp-catalogo.js`, sólo Admin). Cada cambio deja antes → después en `catalogo_edicion`. */
+export type CambioCatalogo = { campo: string; antes: string | null; despues: string | null }
+export type ResultadoEdicion = { ok: true; cambios: CambioCatalogo[]; desde_gn: boolean; variante: unknown; avisos: { codigo: string; texto: string }[] }
+export const editarProductoErp = (marca: MarcaErp, productId: string, cambios: { nombre?: string; categoria?: string | null; activo?: boolean }) =>
+  pedir<ResultadoEdicion>(post({ accion: 'producto-editar', marca, productId, cambios }), '', 'No se pudo editar el producto.')
+export const editarVarianteErp = (marca: MarcaErp, productId: string, sizeId: string, cambios: { talle?: string; sku?: string | null; barcode?: string | null }) =>
+  pedir<ResultadoEdicion>(post({ accion: 'variante-editar', marca, productId, sizeId, cambios }), '', 'No se pudo editar la variante.')
+export const agregarVarianteErp = (marca: MarcaErp, productId: string, v: { talle: string; sku?: string; barcode?: string }) =>
+  pedir<ResultadoEdicion>(post({ accion: 'variante-agregar', marca, productId, ...v }), '', 'No se pudo agregar la variante.')
+export type HechoEdicion = { entidad: string; size_id: string | null; campo: string; antes: string | null; despues: string | null; usuario: string; creada_en: string; desde_gn: boolean }
+export const leerHistorialDeEdicion = (marca: MarcaErp, productId: string) =>
+  pedir<{ historial: HechoEdicion[] }>(null, `&vista=producto-historial&marca=${marca}&productId=${productId}&nc=${Date.now()}`, 'No se pudo leer el historial de ediciones.')
+
 /** Los proveedores del ERP (sql/013) para elegir en el costo. Sin la tabla, el API contesta 409 y se escribe el texto. */
 export type ProveedorErp = { id: string; nombre: string; cuit: string | null; nombreGn: string | null; productos: number; activo: boolean }
 export const leerProveedores = (marca: MarcaErp) =>

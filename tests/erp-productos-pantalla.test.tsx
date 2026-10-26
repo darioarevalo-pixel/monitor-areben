@@ -35,6 +35,8 @@ const precio: PrecioDeProducto = {
   historial: [{ que: 'precio', lista: 'local', valor: 22990, fuente: 'gn', desde: '2026-10-01T12:00:00Z', usuario: 'gn', motivo: null }],
 }
 const leerPrecioDeProducto = vi.fn(async () => precio)
+const editarProductoErp = vi.fn(async () => ({ ok: true, cambios: [{ campo: 'nombre', antes: 'TOP SAHARA', despues: 'TOP SAHARA NEGRO' }], desde_gn: true, variante: null, avisos: [] }))
+const editarVarianteErp = vi.fn(async () => ({ ok: true, cambios: [{ campo: 'barcode', antes: '771', despues: '999' }], desde_gn: true, variante: null, avisos: [] }))
 const cargarPrecioCosto = vi.fn(async () => ({ ok: true, futuro: false, aviso: null }))
 vi.mock('@/lib/erp/cliente', () => ({
   leerListaDeProductos: () => leerListaDeProductos(),
@@ -42,6 +44,10 @@ vi.mock('@/lib/erp/cliente', () => ({
   leerProveedores: async () => ({ proveedores: [{ id: '40', nombre: 'AREBEN', cuit: null }] }),
   cargarPrecioCosto: (...a: unknown[]) => (cargarPrecioCosto as (...x: unknown[]) => unknown)(...a),
   soltarPrecio: vi.fn(), guardarProveedor: vi.fn(),
+  leerHistorialDeEdicion: async () => ({ historial: [] }),
+  editarProductoErp: (...a: unknown[]) => (editarProductoErp as (...x: unknown[]) => unknown)(...a),
+  editarVarianteErp: (...a: unknown[]) => (editarVarianteErp as (...x: unknown[]) => unknown)(...a),
+  agregarVarianteErp: vi.fn(),
 }))
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno' } }) }))
 
@@ -109,5 +115,25 @@ describe('la lista de productos', () => {
     expect(cargarPrecioCosto).toHaveBeenCalledWith('zattia', expect.objectContaining({ que: 'costo', producto: '1', monto: 8100, proveedorId: '40' }))
     expect(todo()).toContain('Costo cargado.')
     expect(leerListaDeProductos).toHaveBeenCalledTimes(2)
+  })
+
+  it('«Editar producto» cambia el nombre y el código de una variante, y manda sólo lo que cambió', async () => {
+    await montar()
+    await clic(filaDe('TOP SAHARA'))
+    const f = ficha()!
+    await clic(boton('Editar producto', f))
+    const poner = async (input: HTMLInputElement, v: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, v); input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const ent = (etiqueta: string) => [...f.querySelectorAll('label')].find((l) => l.textContent?.trim() === etiqueta)!.querySelector('input')!
+    await poner(ent('Nombre'), 'TOP SAHARA NEGRO')
+    await clic(boton('Guardar producto', f))
+    await clic(boton('Guardar', document.body))
+    expect(editarProductoErp).toHaveBeenCalledWith('zattia', '1', { nombre: 'TOP SAHARA NEGRO' })
+    expect(todo()).toContain('Producto: nombre guardado.')
+    await poner(ent('Código de barras'), '999')
+    await clic([...f.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Guardar')[0])
+    await clic(boton('Guardar', document.body))
+    expect(editarVarianteErp).toHaveBeenCalledWith('zattia', '1', '1', { barcode: '999' })
   })
 })

@@ -16,11 +16,12 @@ import { useEffect, useState } from 'react'
 import { Button, ConfirmDetalle, MenuAcciones, MoneyText, Notice, color, font, space, useConfirmar, weight, type AccionMenu } from '@/components/ui'
 import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial } from '@/components/ui/FichaCostado'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
-import { leerPrecioDeProducto, soltarPrecio, type FilaPrecio, type FilaProducto, type MarcaErp, type PrecioDeProducto } from '@/lib/erp/cliente'
+import { leerHistorialDeEdicion, leerPrecioDeProducto, soltarPrecio, type FilaPrecio, type HechoEdicion, type FilaProducto, type MarcaErp, type PrecioDeProducto } from '@/lib/erp/cliente'
 import { NOMBRE_FUENTE } from '@/lib/erp/precio.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import { DEPOSITOS } from '@/lib/erp/stock-lista.core.js'
 import { CargarPrecio } from './CargarPrecio'
+import { EditarProducto } from './EditarProducto'
 import type { Tone } from '@/components/ui/tokens'
 
 const FUENTE: Record<string, string> = NOMBRE_FUENTE
@@ -48,6 +49,8 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
   const [error, setError] = useState<string | null>(null)
   const [hecho, setHecho] = useState<string | null>(null)
   const [cargar, setCargar] = useState(cargarAbierto)
+  const [editar, setEditar] = useState(false)
+  const [ediciones, setEdiciones] = useState<HechoEdicion[] | null>(null)
   const [trabajando, setTrabajando] = useState(false)
   const [vuelta, setVuelta] = useState(0)
   const { confirmar } = useConfirmar()
@@ -57,6 +60,13 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
     leerPrecioDeProducto(marca, producto)
       .then((x) => { if (vivo) { setF(x); setTnVieja(x.tnLeidaEn ? Date.now() - Date.parse(x.tnLeidaEn) > VIEJA_MS : false); setError(null) } })
       .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudo leer el precio.'))
+    return () => { vivo = false }
+  }, [marca, producto, vuelta])
+
+  // Las ediciones de la ficha (quién cambió qué). Sin la tabla (409) o sin permiso, la sección ⛔ aparece.
+  useEffect(() => {
+    let vivo = true
+    leerHistorialDeEdicion(marca, producto).then((r) => vivo && setEdiciones(r.historial)).catch(() => vivo && setEdiciones(null))
     return () => { vivo = false }
   }, [marca, producto, vuelta])
 
@@ -135,11 +145,22 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
 
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         <Button variant={cargar ? 'outline' : undefined} disabled={!f} onClick={() => setCargar((x) => !x)}>{cargar ? 'Cerrar la carga' : 'Cargar precio o costo'}</Button>
+        <Button variant="outline" disabled={!fila} onClick={() => setEditar((x) => !x)}>{editar ? 'Cerrar la edición' : 'Editar producto'}</Button>
         <MenuAcciones acciones={menu} etiqueta={`Más acciones del producto ${nombre}`} vertical />
       </div>
 
       {f?.feria != null && <Notice tone="neutral">Está en oferta (Liquidación): en el local se cobra {plata(f.feria)}, el precio de su campaña, sin el descuento de la forma de pago. Tienda Nube muestra otro precio para la venta online.</Notice>}
       {f?.avisos.map((a) => <Notice key={a} tone="warning">{a}</Notice>)}
+
+      {editar && fila && (
+        <section style={{ display: 'flex', flexDirection: 'column', gap: space[2], padding: space[3], border: `1px solid ${color.line}`, borderRadius: 12 }}>
+          <div>
+            <h3 style={h3}>Editar el producto</h3>
+            <div style={{ fontSize: font.sm, color: color.mut }}>nombre, categoría, y talle, SKU y código de cada variante · queda quién y el antes y el después</div>
+          </div>
+          <EditarProducto key={`${producto}-${vuelta}`} marca={marca} fila={fila} onError={setError} onListo={(h, aviso) => { setHecho(h); if (aviso) setError(aviso); releer() }} />
+        </section>
+      )}
 
       {cargar && f && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2], padding: space[3], border: `1px solid ${color.line}`, borderRadius: 12 }}>
@@ -221,6 +242,20 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
           </div>
         )}
       </section>
+
+      {!!ediciones?.length && (
+        <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+          <div>
+            <h3 style={h3}>Cambios de la ficha</h3>
+            <div style={{ fontSize: font.sm, color: color.mut }}>quién editó el producto o sus variantes · el más nuevo arriba</div>
+          </div>
+          <Historial hechos={ediciones.slice(0, 30).map((h): HechoHistorial => ({
+            cuando: h.creada_en, icono: 'lapiz', tono: 'neutral',
+            titulo: `${h.entidad === 'variante' ? 'Variante · ' : ''}${h.campo}: ${h.antes ?? 'vacío'} → ${h.despues ?? 'vacío'}`,
+            detalle: [h.usuario, h.desde_gn ? 'venía de GN' : null].filter(Boolean).join(' · '),
+          }))} cuandoTexto={cuandoCorto} />
+        </section>
+      )}
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <div>
