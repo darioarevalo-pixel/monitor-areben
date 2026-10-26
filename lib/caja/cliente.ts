@@ -37,7 +37,7 @@ export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 /** `versiones`: las de las listas que se guardan ENTERAS (promos, productos de feria): se mandan al guardar para ⛔ pisar a otro admin. */
 /** `campaniasLiq`: sólo a un admin, para elegir cuáles son de feria. */
 export type CampaniaLiq = { id: string; nombre: string; estado: string }
-export type Config = { reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; /** El de Stunned (Bruno, 12-oct): sale si el ticket lleva prendas de Stunned. */ ticket_logo_stunned?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string }; campaniasLiq?: CampaniaLiq[]; /** V4: la marca de la Caja (`tienda` = su Tienda Nube, de donde sale el logo). */ marca?: { store: string; nombre: string; tienda: string | null } }
+export type Config = { /** Stunned ya vende por el ERP (`CAJA_STUNNED_ERP`): un ticket es de UNA marca. */ stunned_erp?: boolean; reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; /** El de Stunned (Bruno, 12-oct): sale si el ticket lleva prendas de Stunned. */ ticket_logo_stunned?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string }; campaniasLiq?: CampaniaLiq[]; /** V4: la marca de la Caja (`tienda` = su Tienda Nube, de donde sale el logo). */ marca?: { store: string; nombre: string; tienda: string | null } }
 
 /** Una cuenta de cobro de GN. `regla` en null ⇒ la Caja ⛔ la cobra (sin %, o con recargo). */
 export type CuentaGN = { id: number; nombre: string; regla: ReglaCuenta | null }
@@ -51,7 +51,10 @@ export type Candidato = Variante & { local?: number }
 export type Producto = { variante: Variante; stock: Stock } | { candidatos: Candidato[]; mas?: number }
 
 /** `esperando_pago`: cobrada por transferencia, el pago todavía ⛔ apareció en MP (F5). `cancelada`: ⛔ llegó y la cajera la canceló. `descartada`: GN la rechazó y se resolvió que ⛔ se cobró (B2). */
-export type EstadoVenta = 'borrador' | 'enviando' | 'en_gn' | 'error' | 'esperando_pago' | 'cancelada' | 'descartada'
+/** ¿La venta ya llegó adonde va (GN, o el ERP si es de Stunned)? */
+export const ventaLlego = (v: { estado: string }): boolean => v.estado === 'en_gn' || v.estado === 'en_erp'
+
+export type EstadoVenta = 'borrador' | 'enviando' | 'en_gn' | 'en_erp' | 'error' | 'esperando_pago' | 'cancelada' | 'descartada'
 /** B2: cómo se resolvió una venta que GN rechazó. */
 export type Resolucion = { tipo: 'a_mano' | 'descartada'; por: string | null; en: string; nota: string; gn_number?: number }
 /** B5: lo hecho a mano en la venta, en pesos (a la venta, a las prendas, bajando el precio). */

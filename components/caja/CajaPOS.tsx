@@ -85,6 +85,7 @@ import {
   type Turno,
   type Variante,
   type Venta,
+  ventaLlego,
 } from '@/lib/caja/cliente'
 import { Badge, Button, Card, Field, Icono, Input, Modal, Notice, SectionCard, color, font, radius, shadow, space, weight } from '@/components/ui'
 import { useConfirmar } from '@/components/ui/Confirm'
@@ -486,6 +487,11 @@ function POS() {
   }, [refrescarPendientes])
 
   function agregar(variante: Variante, stock: Stock) {
+    // 🔑 Un ticket es de UNA marca (Bruno, 26-oct): con Stunned en el ERP, la prenda de la otra marca se cobra aparte.
+    if (config?.stunned_erp && bor.renglones.some((r) => esStunnedVariante(r.variante) !== esStunnedVariante(variante))) {
+      setAviso({ tono: 'warning', texto: `Un ticket es de una sola marca: esta prenda es de ${esStunnedVariante(variante) ? 'Stunned' : 'Zattia'} y la venta de ahora es de ${esStunnedVariante(variante) ? 'Zattia' : 'Stunned'}. Cobrá una y después la otra.` })
+      return
+    }
     const k = claveDe(variante)
     const enCarrito = (cantidades.current.get(k) ?? 0) + 1
     cantidades.current.set(k, enCarrito)
@@ -743,7 +749,7 @@ function POS() {
     const ticket = ticketGuardado(venta)
     const regalo = regalos.current.delete(venta.id)
     setUltima({ venta, ticket, regalo })
-    avisar(venta.estado === 'en_gn' ? 'ok' : 'ojo')
+    avisar(ventaLlego(venta) ? 'ok' : 'ojo')
     imprimirTicket(ticket, ahora(), regalo ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
     refrescarPendientes()
     refrescarTurno()
@@ -805,7 +811,7 @@ function POS() {
       const r = await confirmarVenta({
         id: bor.id,
         // El nombre, el talle y la foto van para el ticket por mail; la plata ⛔ los mira.
-        items: bor.renglones.map((r, i) => ({ ...items[i], nombre: r.variante.product_name, talle: r.variante.size_name, sku: r.variante.sku ?? null, foto: r.foto, precioLista: r.precioLista ?? null, repetida: r.repetida ?? null })),
+        items: bor.renglones.map((r, i) => ({ ...items[i], nombre: r.variante.product_name, talle: r.variante.size_name, sku: r.variante.sku ?? null, linea: esStunnedVariante(r.variante) ? 'stunned' : 'zattia', foto: r.foto, precioLista: r.precioLista ?? null, repetida: r.repetida ?? null })),
         pagos: pedidos,
         total: c.total,
         descuentoVenta: descuentoManual,
@@ -828,9 +834,9 @@ function POS() {
       }
       // El ticket sale de la venta GUARDADA (sus renglones), ⛔ del carrito: A1 los mezclaba.
       const ticket = ticketGuardado(r.venta)
-      setGnSenal(r.venta.estado === 'en_gn' ? { ok: true, que: 'la última venta llegó' } : { ok: false, que: `la última venta quedó pendiente${r.venta.ultimo_error ? ` (${r.venta.ultimo_error})` : ''}` })
+      setGnSenal(ventaLlego(r.venta) ? { ok: true, que: 'la última venta llegó' } : { ok: false, que: `la última venta quedó pendiente${r.venta.ultimo_error ? ` (${r.venta.ultimo_error})` : ''}` })
       setUltima({ venta: r.venta, ticket, regalo: conRegalo })
-      avisar(r.venta.estado === 'en_gn' ? 'ok' : 'ojo')
+      avisar(ventaLlego(r.venta) ? 'ok' : 'ojo')
       imprimirTicket(ticket, ahora(), conRegalo ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
       refrescarPendientes()
       refrescarTurno()

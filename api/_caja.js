@@ -88,9 +88,11 @@ import { diaArgentino } from '../lib/envios/portal.core.js'
 import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
 import { filtrarPorNombre, ordenParaLaBase, palabrasDeBusqueda, productosPorStock } from '../lib/caja/buscar.core.js'
 import { COLUMNAS_VENTA as COLUMNAS, SIN_LLEGAR, enviarVenta, pendientesParaReintentar } from '../lib/caja/enviar.core.js'
+import { enviarVentaErp } from '../lib/caja/enviar-erp.core.js'
+import { destinoDelTicket } from '../lib/caja/marca-ticket.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, ladoDelEspejo, marcaDeCaja, tokenDe } from '../lib/caja/marcas.core.js'
-import { anotarEnMotor, avisoDelMotor, repasarMotor } from './_caja-motor.js'
+import { anotarEnMotor, avisoDelMotor, registrarEnErp, repasarMotor } from './_caja-motor.js'
 import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { reglasDeHoy as reglasDeHoyDe } from './_caja-reglas.js'
 import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
@@ -403,6 +405,8 @@ export default async function handler(req, res) {
   const mailer = { url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch }
   // 🔑 Opción (a) (Bruno, 14-oct): la que llega a GN se anota TAMBIÉN en el motor (`prueba`). ⛔ Frena: falla ⇒ log y el repaso.
   const enviar = async (fila) => {
+    // 🔑 Stunned (26-oct): su ticket va al ERP, ⛔ a GN. `destino` queda en la fila, así un reintento no lo manda a GN.
+    if (fila.destino === 'erp') return enviarVentaErp(fila, { sb, registrar: (v) => registrarEnErp(store, v) })
     const out = await enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token, mailer })
     const aviso = avisoDelMotor(await anotarEnMotor(store, out.venta).catch((e) => ({ error: e.message })), 'al mandar')
     if (aviso) console.warn(aviso)
@@ -444,7 +448,7 @@ export default async function handler(req, res) {
         const conf = { ...leida, reglas: await reglasDeHoy(leida.reglas), ...(esAdmin(perfil) ? { campaniasLiq: await campaniasLiq() } : {}) }
         // `versiones`: las de las listas que la pantalla manda ENTERAS, para ⛔ pisar la de otro admin.
         const versiones = { promos: versionDe(conf.reglas, 'promos'), feriaProductos: versionDe(conf.reglas, 'feriaProductos') }
-        return res.status(200).json({ ...conf, versiones, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), marca: { store, nombre: marca.nombre, tienda: marca.tienda } })
+        return res.status(200).json({ ...conf, versiones, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), stunned_erp: store === 'zattia' && process.env.CAJA_STUNNED_ERP === '1', marca: { store, nombre: marca.nombre, tienda: marca.tienda } })
       }
 
       if (accion === 'logo-tn') {
@@ -997,10 +1001,15 @@ export default async function handler(req, res) {
           prendas: centavosJs(filas.reduce((s, f, i) => s + (conPromo.items[i].promos ? 0 : f.cantidad * f.precio - f.importe), 0)),
           precios: centavosJs(conNombre.reduce((s, f) => s + (f.precio_lista ? Math.max(0, f.precio_lista - f.precio) * f.cantidad : 0), 0)),
         }
+        // 🔑 Un ticket es de UNA marca (Bruno, 26-oct). Con `CAJA_STUNNED_ERP=1`: Stunned ⇒ ERP, Zattia ⇒ GN, mezclado ⇒ 400.
+        const aDonde = destinoDelTicket(store, conNombre.map((f, i) => ({ sku: f.sku, linea: (b.items[i] || {}).linea === 'stunned' ? 'stunned' : (b.items[i] || {}).linea === 'zattia' ? 'zattia' : null })), process.env.CAJA_STUNNED_ERP === '1')
+        if (aDonde.error) return res.status(400).json({ error: aDonde.error, mixto: true })
         const pagosConNombre = c.pagos.map(p => ({ ...p, nombre: nombreParaTicket(p.cuenta, reglas) }))
         const fila = {
           id, store, estado: espera > 0 ? 'esperando_pago' : 'borrador', espera_monto: espera > 0 ? espera : null, renglones: conNombre, pagos: pagosConNombre, subtotal: c.subtotal, total: c.total,
           paga_con: Number.isFinite(pagaCon) ? pagaCon : null, email, payload, usuario: perfil.name || null, turno_id: turno.id, a_mano: aMano,
+          // Sólo se manda la columna si el ticket va al ERP: sin `sql/migrate-caja-erp.sql` las ventas de GN siguen entrando.
+          ...(aDonde.destino === 'erp' ? { destino: 'erp' } : {}),
         }
         const ins = await sb.from('caja_venta').insert(fila).select(COLUMNAS_ENVIO).single()
         if (ins.error && ins.error.code === '23505') {

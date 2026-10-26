@@ -707,7 +707,7 @@ export function UltimaVenta({
   /** Las cuentas de efectivo: el vuelto es lo que pagó de más sobre ellas. */
   esEfectivo?: (id: number) => boolean
 }) {
-  const enGn = venta.estado === 'en_gn'
+  const enGn = venta.estado === 'en_gn' || venta.estado === 'en_erp'
   const tono = enGn ? { fg: color.successInk, bg: color.successBg, borde: color.successBorder } : { fg: color.dangerInk, bg: color.dangerBg, borde: color.dangerBorder }
   const medios = nombreCuenta ? [...new Set(venta.pagos.map((p) => nombreCuenta(p.cuenta)))].join(' + ') : ''
   const enEfectivo = esEfectivo ? venta.pagos.filter((p) => esEfectivo(p.cuenta)).reduce((s, p) => s + p.monto, 0) : 0
@@ -1119,6 +1119,7 @@ export function PedidosWebSinArmar({ datos, error }: { datos: PedidosWeb | null;
 
 const ESTADO_VENTA: Record<string, { texto: string; tono: 'success' | 'danger' | 'warning' | 'neutral' }> = {
   en_gn: { texto: 'En Gestión Nube', tono: 'success' },
+  en_erp: { texto: 'En el ERP', tono: 'success' },
   borrador: { texto: 'Pendiente en GN', tono: 'danger' },
   enviando: { texto: 'Pendiente en GN', tono: 'danger' },
   error: { texto: 'Pendiente en GN', tono: 'danger' },
