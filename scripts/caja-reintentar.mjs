@@ -22,6 +22,8 @@ import { createClient } from '@supabase/supabase-js';
 import { GN_BASE, PAUSA_GN, dormir, gnFetch } from '../api/_gn.js';
 import { cfgDeMarca } from '../api/_recepciones-base.js';
 import { COLUMNAS_VENTA, SIN_LLEGAR, enviarVenta, pendientesParaReintentar } from '../lib/caja/enviar.core.js';
+import { enviarVentaErp } from '../lib/caja/enviar-erp.core.js';
+import { registrarEnErp } from '../api/_caja-motor.js';
 import { MARCAS_CAJA, tokenDe } from '../lib/caja/marcas.core.js';
 import { mandarTicket } from '../lib/caja/ticket-mail.core.js';
 
@@ -58,6 +60,14 @@ async function reintentar(nombre, store, sb, token) {
   let ok = 0;
   for (const v of pendientes) {
     try {
+      // Stunned (`destino = 'erp'`) va al motor, ⛔ a GN. Sin la conexión del motor en el workflow, `registrarEnErp` dice
+      // «no está conectado» y la venta sigue pendiente (la reintenta el POS).
+      if (v.destino === 'erp') {
+        const { venta } = await enviarVentaErp(v, { sb, mailer, registrar: (f) => registrarEnErp(store, f) });
+        if (venta.estado === 'en_erp') { ok++; console.log(`✓ ${nombre} ${v.id.slice(0, 8)} → ERP`); }
+        else console.log(`✗ ${nombre} ${v.id.slice(0, 8)} (ERP): ${venta.ultimo_error}`);
+        continue;
+      }
       const { venta } = await enviarVenta(v, { sb, gnFetch, base: GN_BASE, token, mailer });
       if (venta.estado === 'en_gn') { ok++; console.log(`✓ ${nombre} ${v.id.slice(0, 8)} → GN #${venta.gn_number}`); }
       else console.log(`✗ ${nombre} ${v.id.slice(0, 8)}: ${venta.ultimo_error}`);
@@ -73,7 +83,7 @@ async function reintentar(nombre, store, sb, token) {
   if (mailer.url && mailer.key) {
     const desde = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
     const { data: sinTicket, error: e3 } = await sb.from('caja_venta').select(COLUMNAS_VENTA)
-      .eq('store', store).eq('estado', 'en_gn').not('email', 'is', null).gt('creada_en', desde).lt('actualizada_en', corte)
+      .eq('store', store).in('estado', ['en_gn', 'en_erp']).not('email', 'is', null).gt('creada_en', desde).lt('actualizada_en', corte)
       .or('ticket_mail.is.null,ticket_mail.like.error%').limit(50);
     if (e3) { console.error(`${nombre}: no se pudieron leer los tickets pendientes:`, e3.message); ticketsMal++; }
     for (const v of sinTicket || []) {

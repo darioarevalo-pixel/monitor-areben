@@ -90,6 +90,7 @@ import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto } from '
 import { configPg } from '../lib/pg.core.js'
 import { armarFicha, cambiadasDe, devolucionDeFicha, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
+import { anotarAnuladaDelErp } from '../lib/caja/anulada-erp.core.js'
 import { NC_DESDE_LA_VENTA, armarFacturaDelCambio, claveDeFactura, esDeVentaPropia, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { feriaDeCampanias, reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
@@ -673,7 +674,19 @@ export async function anularVentaPropia({ marca, body, usuario }) {
     // §17: la devolución SIEMPRE va (plata o saldo); el PIN (`DEVOLUCION_CON_PIN`) está apagado ⇒ ⛔ se manda `autoriza`.
     const r = await anularVenta(db, { venta_id: a.ventaId, motivo: a.motivo, usuario, devolucion: a.devolucion, ...(a.cliente ? { cliente: a.cliente } : {}) })
     if (!r.ok) return errorDelMotor(r)
-    return { ok: true, movimientos: r.movimientos, ncPendiente: r.nc_pendiente, vuelta: r.vuelta, devolucion: r.devolucion, saldo: r.saldo ?? null }
+    // Una venta de la CAJA (Stunned: `caja_venta.destino = 'erp'`) queda anulada también en su fila, para el cierre del turno.
+    // ⛔ Frena: la anulación ya está hecha en el motor; si no se pudo anotar, se avisa.
+    let cajaSinAnotar = null
+    try {
+      const o = (await db.query('select origen, origen_ref from venta where id = $1', [a.ventaId])).rows[0]
+      if (o && o.origen === 'caja' && o.origen_ref) {
+        const { url, key } = cfgDeMarca(marca)
+        const n = await anotarAnuladaDelErp(createClient(url, key), String(o.origen_ref), { por: usuario, motivo: a.motivo })
+        if (n.error) cajaSinAnotar = n.error
+      }
+    } catch (e) { cajaSinAnotar = String((e && e.message) || e).slice(0, 200) }
+    if (cajaSinAnotar) console.error(`[erp] anulada ${a.ventaId} sin anotar en caja_venta: ${cajaSinAnotar}`)
+    return { ok: true, movimientos: r.movimientos, ncPendiente: r.nc_pendiente, vuelta: r.vuelta, devolucion: r.devolucion, saldo: r.saldo ?? null, ...(cajaSinAnotar ? { cajaSinAnotar } : {}) }
   })
 }
 

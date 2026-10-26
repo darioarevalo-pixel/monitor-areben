@@ -406,7 +406,7 @@ export default async function handler(req, res) {
   // 🔑 Opción (a) (Bruno, 14-oct): la que llega a GN se anota TAMBIÉN en el motor (`prueba`). ⛔ Frena: falla ⇒ log y el repaso.
   const enviar = async (fila) => {
     // 🔑 Stunned (26-oct): su ticket va al ERP, ⛔ a GN. `destino` queda en la fila, así un reintento no lo manda a GN.
-    if (fila.destino === 'erp') return enviarVentaErp(fila, { sb, registrar: (v) => registrarEnErp(store, v) })
+    if (fila.destino === 'erp') return enviarVentaErp(fila, { sb, mailer, registrar: (v) => registrarEnErp(store, v) })
     const out = await enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token, mailer })
     const aviso = avisoDelMotor(await anotarEnMotor(store, out.venta).catch((e) => ({ error: e.message })), 'al mandar')
     if (aviso) console.warn(aviso)

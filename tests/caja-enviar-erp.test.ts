@@ -69,3 +69,33 @@ describe('resumenTurno con ventas del ERP', () => {
     expect(r.efectivo.cobrado).toBe(100); expect(r.anuladasGN).toHaveLength(1)
   })
 })
+
+describe('cierres de la Caja por marca (Stunned)', () => {
+  it('el ticket por mail sale al quedar en_erp, con la marca stunned', async () => {
+    const { sb } = baseFalsa({ ...venta, store: 'zattia', email: 'a@b.co', renglones: [], pagos: [], subtotal: 1, total: 1 })
+    const pedidos: Array<{ url: string; cuerpo: any }> = []
+    const fetchFalso = (async (url: string, init: any) => { pedidos.push({ url, cuerpo: JSON.parse(init.body) }); return { status: 200, text: async () => '{"encolado":true}' } }) as unknown as typeof fetch
+    const r = await enviarVentaErp({ ...venta, store: 'zattia', email: 'a@b.co' }, { sb, registrar: async () => ({ ok: true }), mailer: { url: 'http://m', key: 'k', fetch: fetchFalso } })
+    expect(pedidos).toHaveLength(1); expect(pedidos[0].cuerpo.marca).toBe('stunned'); expect(r.venta.ticket_mail).toBe('encolado')
+  })
+  it('si la venta queda en error ⛔ sale el mail', async () => {
+    const { sb } = baseFalsa({ ...venta, store: 'zattia', email: 'a@b.co' }); let n = 0
+    const fetchFalso = (async () => { n++; return { status: 200, text: async () => '{}' } }) as unknown as typeof fetch
+    await enviarVentaErp({ ...venta, store: 'zattia', email: 'a@b.co' }, { sb, registrar: async () => ({ ok: false, error: 'x' }), mailer: { url: 'http://m', key: 'k', fetch: fetchFalso } })
+    expect(n).toBe(0)
+  })
+  it('anular en el ERP escribe `anulada` SÓLO en la fila del ERP y sin pisar una ya anotada', async () => {
+    const { anotarAnuladaDelErp } = await import('../lib/caja/anulada-erp.core.js')
+    const visto: Record<string, unknown> = {}; const eq: Array<[string, unknown]> = []; const es: string[] = []
+    const q: any = {
+      update(c: unknown) { visto.cambios = c; return q },
+      eq(k: string, v: unknown) { eq.push([k, v]); return q },
+      is(k: string) { es.push(k); return q },
+      select: async () => ({ data: [{ id: 'v1' }], error: null }),
+    }
+    const r = await anotarAnuladaDelErp({ from: (t: string) => { visto.tabla = t; return q } }, 'v1', { por: 'Bruno', motivo: 'se equivocó', ahora: new Date('2026-10-26T15:00:00Z') })
+    expect(r.anotada).toBe(true); expect(visto.tabla).toBe('caja_venta')
+    expect(visto.cambios).toEqual({ anulada: { por: 'Bruno', en: '2026-10-26T15:00:00.000Z', motivo: 'se equivocó' } })
+    expect(eq).toEqual([['id', 'v1'], ['destino', 'erp']]); expect(es).toEqual(['anulada'])
+  })
+})

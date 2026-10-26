@@ -34,6 +34,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GN_TOKEN: ${{ secrets.GN_TOKEN }}
+          # Stunned (26-oct): su venta va al motor. Sin este secret las del ERP quedan pendientes y las reintenta el POS.
+          DATABASE_URL_ZATTIA: ${{ secrets.DATABASE_URL_ZATTIA }}
           # El ticket por mail (F4): sin estos dos, los tickets que fallaron ⛔ se reintentan.
           MAILER_URL: ${{ secrets.MAILER_URL }}
           MAILER_TICKET_KEY: ${{ secrets.MAILER_TICKET_KEY }}
