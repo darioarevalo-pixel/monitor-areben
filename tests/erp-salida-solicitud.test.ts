@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { consumoDe, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
+import { canjeDe, consumoDe, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const item = (o: Record<string, unknown>) => ({ vid: `${o.pid}_${o.sid}`, nombre: 'x', variante: 'M', sku: 'SKU', qty: 3, origen: 'deposito', ...o })
@@ -100,5 +100,33 @@ describe('consumoDe: la baja definitiva como ajustes `consumible`', () => {
   })
   it('la `ref` es estable entre guardados (idempotencia)', () => {
     expect(consumoDe('solicitudesinternas', consumo(), 'zattia')).toEqual(consumoDe('solicitudesinternas', consumo({ estado: 'devuelta' }), 'zattia'))
+  })
+})
+
+describe('canjeDe: el canje como ajuste `canje`', () => {
+  const pedido = (o: Record<string, unknown> = {}): any => ({
+    proposito: 'canje', solicitudId: 'canje-12', origen: 'local', comments: 'Canje 12 — Ana',
+    items: [{ product_id: 1, size_id: 10, quantity: 2, unit_price: 5000 }, { product_id: '2', size_id: '20', quantity: '1' }], ...o,
+  })
+  it('un ajuste en el depósito del origen, cantidades en negativo y `ref` = canje:depósito', () => {
+    const [a] = canjeDe(pedido(), 'bdi')
+    expect([a.deposito, a.motivo, a.ref, a.linea]).toEqual(['local', 'canje', 'canje-12:local', 'bdi'])
+    expect(a.renglones.map((r: any) => [r.product_id, r.size_id, r.cantidad])).toEqual([[1, 10, -2], [2, 20, -1]])
+    expect(canjeDe(pedido({ origen: 'deposito' }), 'bdi')[0].deposito).toBe('deposito_minorista')
+  })
+  it('suma la variante repetida y deja afuera los renglones sin variante o cantidad', () => {
+    const [a] = canjeDe(pedido({ items: [{ product_id: 1, size_id: 10, quantity: 1 }, { product_id: 1, size_id: 10, quantity: 2 }, { product_id: null, size_id: 3, quantity: 1 }, { product_id: 4, size_id: 40, quantity: 0 }] }), 'bdi')
+    expect(a.renglones).toEqual([{ product_id: 1, size_id: 10, sku: null, cantidad: -3 }])
+  })
+  it('⛔ corresponde si no es canje, falta el id, el origen o la marca ⛔ se conocen, o no queda ningún renglón', () => {
+    expect(canjeDe(pedido({ proposito: 'falla' }), 'bdi')).toEqual([])
+    expect(canjeDe(pedido({ solicitudId: undefined }), 'bdi')).toEqual([])
+    expect(canjeDe(pedido({ origen: 'otro' }), 'bdi')).toEqual([])
+    expect(canjeDe(pedido(), 'otra')).toEqual([])
+    expect(canjeDe(pedido({ items: [] }), 'bdi')).toEqual([])
+    expect(canjeDe(null, 'bdi')).toEqual([])
+  })
+  it('la `ref` es la misma al reintentar (idempotencia)', () => {
+    expect(canjeDe(pedido(), 'bdi')).toEqual(canjeDe(pedido(), 'bdi'))
   })
 })

@@ -10,6 +10,7 @@ import { confirmar as confirmarLedger, liberar as liberarLedger, reservar as res
 import { notaTnImport } from '../lib/sync-tn/nota.core.js';
 // Cada venta que sale de acá se anota en `gn_venta_monitor` (prendas, depósito, hora, de qué flujo):
 // es lo que el libro de stock necesita para que el monitor tenga el dato sin GN. Ver api/_ventas-monitor.js.
+import { documentarCanje } from './_salida-documento.js';
 import { anotar, filaDeVenta, leer as leerRegistro, marcarAnulada } from './_ventas-monitor.js';
 
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
@@ -402,7 +403,14 @@ export default async function handler(req, res) {
     if (!r.ok) return res.status(r.status).json({ error: 'GN rechazó la venta', status: r.status, detalle: d });
     const v = (d && d.data) ? d.data : d;
     const reg = await anotar(store, filaDeVenta({ store, venta: v, payload, b, usuario: perfil.name || perfil.user || null }));
-    return res.status(200).json({ ok: true, store_id, venta: { id: v && v.id, number: v && v.number }, ...reg });
+    // El canje, anotado TAMBIÉN en el motor como ajuste `canje` (EN SOMBRA, sin `DATABASE_URL_<MARCA>` ⛔ toca nada). ⛔ frena ni
+    // lanza: la venta de GN ya salió y es irreversible por API.
+    let canje;
+    if (esCanje) {
+      canje = await documentarCanje({ store, b, usuario: perfil.name || perfil.user || null });
+      if (canje.error) console.error('[canje]', store, b.solicitudId, canje.error);
+    }
+    return res.status(200).json({ ok: true, store_id, venta: { id: v && v.id, number: v && v.number }, ...reg, ...(canje && (canje.error || canje.ajustes) ? { canje } : {}) });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }

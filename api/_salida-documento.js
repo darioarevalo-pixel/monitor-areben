@@ -14,7 +14,7 @@
 //
 // ⛔ Archivo `_`: NO es una ruta.
 import { configPg } from '../lib/pg.core.js'
-import { consumoDe, devolverDe, pedidoDeSolicitud, volvioTodo } from '../lib/erp/salida-solicitud.core.js'
+import { canjeDe, consumoDe, devolverDe, pedidoDeSolicitud, volvioTodo } from '../lib/erp/salida-solicitud.core.js'
 
 const PG_DE_STORE = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA', stunned: 'DATABASE_URL_ZATTIA' }
 /** El guardado de la solicitud ya espera a Supabase: el documento no puede sumar mucho más que esto. */
@@ -64,16 +64,14 @@ export async function documentarSalida({ store, kind, solicitud, usuario }) {
 }
 
 /**
- * El CONSUMO de una solicitud interna, anotado como ajustes `consumible` del motor (gasto de marketing al costo real; mueve el
- * libro del ERP al instante, a nombre de quien guardó). Idempotente por `ref` (sql/050). Mismas reglas que `documentarSalida`:
- * ⛔ frena ni lanza, y sin `DATABASE_URL_<MARCA>` ⛔ toca nada.
+ * Anota ajustes del motor (`crearAjuste`) para un pedido ya armado, idempotentes por `ref` (sql/050). Mismas reglas que
+ * `documentarSalida`: ⛔ frena ni lanza, y sin `DATABASE_URL_<MARCA>` ⛔ toca nada.
  * @returns {Promise<{ ok?: true, ajustes?: number, ya?: number, sinConexion?: true, salteada?: true, error?: string }>}
  */
-export async function documentarConsumo({ store, kind, solicitud, usuario }) {
+async function anotarAjustes({ store, pedidos, usuario }) {
   try {
     const conexion = process.env[PG_DE_STORE[store]]
     if (!conexion) return { sinConexion: true }
-    const pedidos = consumoDe(kind, solicitud, store)
     if (!pedidos.length) return { salteada: true }
     const [{ default: pg }, m] = await Promise.all([import('pg'), import('../motor/stock/ajuste.mjs')])
     const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: TECHO_MS, statement_timeout: TECHO_MS, query_timeout: TECHO_MS })
@@ -83,7 +81,7 @@ export async function documentarConsumo({ store, kind, solicitud, usuario }) {
       let ya = 0
       for (const p of pedidos) {
         const r = await m.crearAjuste(db, { ...p, usuario: usuario || 'solicitudes' })
-        if (!r.ok) return { error: `${r.error.codigo}: ${r.error.mensaje}` }
+        if (!r.ok) return { error: mensaje(r) }
         if (r.ya) ya += 1
         else nuevos += 1
       }
@@ -94,4 +92,21 @@ export async function documentarConsumo({ store, kind, solicitud, usuario }) {
   } catch (e) {
     return { error: String((e && e.message) || e).slice(0, 200) }
   }
+}
+
+/**
+ * El CONSUMO de una solicitud interna, anotado como ajustes `consumible` del motor (gasto de marketing al costo real; mueve el
+ * libro del ERP al instante, a nombre de quien guardó).
+ */
+export function documentarConsumo({ store, kind, solicitud, usuario }) {
+  return anotarAjustes({ store, pedidos: consumoDe(kind, solicitud, store), usuario })
+}
+
+/**
+ * El CANJE (venta de GN ya creada), anotado como ajuste `canje` del motor. EN SOMBRA: la venta de GN descuenta GN; el ajuste
+ * descuenta el libro del ERP (el canje ⛔ pasa por el motor como venta) y deja el gasto de marketing al costo real.
+ * @param {{ store: string, b: any, usuario: string|null }} p `b` = el cuerpo del pedido a crear-venta
+ */
+export function documentarCanje({ store, b, usuario }) {
+  return anotarAjustes({ store, pedidos: canjeDe(b, store), usuario })
 }
