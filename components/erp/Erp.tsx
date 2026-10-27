@@ -73,9 +73,12 @@ export const SECCIONES_ERP: Seccion[] = [
   { key: 'inicio', titulo: 'Inicio', icono: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z', pestanias: [] },
   {
     key: 'ventas', titulo: 'Ventas', icono: 'M6 2l-2 4v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6l-2-4z M4 6h16 M16 10a4 4 0 0 1-8 0',
-    pestanias: [{ key: 'ventas', label: 'Ventas' }, { key: 'por-producto', label: 'Por producto' }, { key: 'cobros', label: 'Cobros' }, { key: 'gastos', label: 'Gastos' }, { key: 'cajas', label: 'Cajas' }, { key: 'facturacion', label: 'Facturación' }],
+    pestanias: [
+      { key: 'ventas', label: 'Ventas' }, { key: 'por-producto', label: 'Por producto' }, { key: 'cobros', label: 'Cobros' }, { key: 'gastos', label: 'Gastos' },
+      { key: 'facturacion', label: 'Facturación', vistas: [{ key: 'facturacion', label: 'Facturas' }, { key: 'factura', label: 'Facturar una venta' }] },
+    ],
   },
-  { key: 'caja', titulo: 'Caja', icono: 'M3 8h18v12H3z M7 8V4h10v4 M7 13h4', debajo: true, pestanias: [{ key: 'cambio', label: 'Cambio' }, { key: 'factura', label: 'Factura' }] },
+  { key: 'caja', titulo: 'Caja', icono: 'M3 8h18v12H3z M7 8V4h10v4 M7 13h4', debajo: true, pestanias: [{ key: 'cambio', label: 'Cambio' }, { key: 'cajas', label: 'Cajas' }] },
   {
     key: 'stock', titulo: 'Stock', icono: 'M21 8l-9-5-9 5 9 5 9-5z M3 8v8l9 5 9-5V8 M12 13v8',
     pestanias: [
@@ -85,28 +88,36 @@ export const SECCIONES_ERP: Seccion[] = [
       { key: 'diferencias', label: 'Diferencias', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }] },
     ],
   },
-  { key: 'productos', titulo: 'Productos y precios', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }] },
+  { key: 'productos', titulo: 'Productos y precios', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }, { key: 'redondeo', label: 'Redondeo' }] },
   {
     key: 'clientes', titulo: 'Clientes y proveedores', icono: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
-    pestanias: [{ key: 'clientes', label: 'Clientes' }, { key: 'cuenta-corriente', label: 'Cuenta corriente' }, { key: 'proveedores', label: 'Proveedores' }],
+    pestanias: [{ key: 'clientes', label: 'Clientes', vistas: [{ key: 'clientes', label: 'Clientes' }, { key: 'cuenta-corriente', label: 'Cuenta corriente' }] }, { key: 'proveedores', label: 'Proveedores' }],
   },
   {
     key: 'configuracion', titulo: 'Configuración', icono: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M4 12h2 M18 12h2 M12 4v2 M12 18v2 M6.3 6.3l1.4 1.4 M16.3 16.3l1.4 1.4 M6.3 17.7l1.4-1.4 M16.3 7.7l1.4-1.4',
-    pestanias: [{ key: 'cuentas-reales', label: 'Cuentas' }, { key: 'cuentas', label: 'Rutas' }, { key: 'reglas', label: 'Reglas de cobro' }, { key: 'redondeo', label: 'Redondeo' }, { key: 'estructura', label: 'Marcas, depósitos y puntos de venta' }],
+    pestanias: [{ key: 'cuentas', label: 'Cuentas y medios de cobro', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: 'Rutas' }] }, { key: 'reglas', label: 'Descuentos por forma de pago' }, { key: 'estructura', label: 'Marcas, depósitos y puntos de venta' }],
   },
 ]
 
-/** Las nueve pestañas de Stock de antes (direcciones guardadas, ⌘K): cada una cae en su pestaña y vista nuevas. */
-const PESTANIAS_VIEJAS_DE_STOCK: Record<string, [string, string]> = {
-  movimientos: ['stock', 'movimientos'], mover: ['transferencias', 'mover'], recepciones: ['ajustes', 'ingresos'], ingresos: ['ajustes', 'ingresos'],
-  comparacion: ['diferencias', 'comparacion'], conciliacion: ['diferencias', 'conciliacion'], diferencias: ['diferencias', 'diferencias'],
+/** Pestañas y vistas de antes (direcciones guardadas, ⌘K que salta a una vista): cada una cae en su sección, pestaña y vista nuevas. */
+const VIEJAS: Record<string, Record<string, [string, string, string | null]>> = {
+  stock: {
+    movimientos: ['stock', 'stock', 'movimientos'], mover: ['stock', 'transferencias', 'mover'], recepciones: ['stock', 'ajustes', 'ingresos'], ingresos: ['stock', 'ajustes', 'ingresos'],
+    comparacion: ['stock', 'diferencias', 'comparacion'], conciliacion: ['stock', 'diferencias', 'conciliacion'], diferencias: ['stock', 'diferencias', 'diferencias'],
+  },
+  ventas: { cajas: ['caja', 'cajas', null], factura: ['ventas', 'facturacion', 'factura'] },
+  caja: { factura: ['ventas', 'facturacion', 'factura'] },
+  clientes: { 'cuenta-corriente': ['clientes', 'clientes', 'cuenta-corriente'] },
+  configuracion: { 'cuentas-reales': ['configuracion', 'cuentas', 'cuentas'], rutas: ['configuracion', 'cuentas', 'rutas'], redondeo: ['productos', 'redondeo', null] },
 }
+const viejaDe = (seccion: string, pestania: string | null | undefined, vista: string | null | undefined) => (pestania && !vista ? VIEJAS[seccion]?.[pestania] : undefined)
 
 /** `['stock', 'ajustes']` → la sección, la pestaña y la vista; lo que no existe cae en Inicio o en la primera pestaña. */
 export function resolverRutaErp(ruta: string[]) {
-  const seccion = SECCIONES_ERP.find((s) => s.key === ruta[0]) ?? SECCIONES_ERP[0]
-  const vieja = seccion.key === 'stock' && ruta[1] && !ruta[2] ? PESTANIAS_VIEJAS_DE_STOCK[ruta[1]] : undefined
-  const [k1, k2] = vieja ?? [ruta[1], ruta[2]]
+  const vieja = viejaDe(ruta[0], ruta[1], ruta[2])
+  const claveSeccion = vieja ? vieja[0] : ruta[0]
+  const seccion = SECCIONES_ERP.find((s) => s.key === claveSeccion) ?? SECCIONES_ERP[0]
+  const [k1, k2] = vieja ? [vieja[1], vieja[2] ?? undefined] : [ruta[1], ruta[2]]
   const item = seccion.pestanias.find((p) => p.key === k1) ?? seccion.pestanias[0]
   const pestania = item?.key ?? null
   const vista = item?.vistas ? (item.vistas.find((v) => v.key === k2) ?? item.vistas[0]).key : null
@@ -116,14 +127,14 @@ export function resolverRutaErp(ruta: string[]) {
 
 export const hrefErp = (seccion: string, pestania?: string | null, vista?: string | null) => {
   if (seccion === 'inicio') return '/erp'
-  const vieja = seccion === 'stock' && pestania && !vista ? PESTANIAS_VIEJAS_DE_STOCK[pestania] : undefined
-  const [p, v] = vieja ?? [pestania, vista]
-  const primera = SECCIONES_ERP.find((s) => s.key === seccion)?.pestanias.find((x) => x.key === p)?.vistas?.[0].key
-  return `/erp/${seccion}${p ? `/${p}` : ''}${p && v && v !== primera ? `/${v}` : ''}`
+  const vieja = viejaDe(seccion, pestania, vista)
+  const [sec, p, v] = vieja ?? [seccion, pestania, vista]
+  const primera = SECCIONES_ERP.find((x) => x.key === sec)?.pestanias.find((x) => x.key === p)?.vistas?.[0].key
+  return `/erp/${sec}${p ? `/${p}` : ''}${p && v && v !== primera ? `/${v}` : ''}`
 }
 
-/** Para ⌘K: Stock con SUS nueve vistas (la búsqueda salta a una vista, no a un grupo). */
-const SECCIONES_BUSCABLES: Seccion[] = SECCIONES_ERP.map((s) => (s.key === 'stock' ? { ...s, pestanias: s.pestanias.flatMap((p) => p.vistas ?? [p]) } : s))
+/** Para ⌘K: cada pestaña con SUS vistas (la búsqueda salta a una vista, no a un grupo). */
+export const SECCIONES_BUSCABLES: Seccion[] = SECCIONES_ERP.map((s) => ({ ...s, pestanias: s.pestanias.flatMap((p) => p.vistas ?? [p]) }))
 
 function Trazo({ d, size = 18 }: { d: string; size?: number }) {
   return (
@@ -136,6 +147,8 @@ function Trazo({ d, size = 18 }: { d: string; size?: number }) {
 type AAbrir = { tipo: 'venta'; id: string; numero: number; periodo: string } | { tipo: 'cliente'; doc: string | null; nombre: string } | null
 let pedidoDeBusqueda: AAbrir = null
 let prendaAAjustarPendiente: PrendaAAjustar | null = null
+/** Color propio de cada marca (§9): sólo señala DÓNDE estás (punto del selector, cartel y título). ⛔ Nunca en tarjetas, chips ni botones: ahí el color es semáforo. */
+export const COLOR_DE_MARCA = { bdi: '#0d9488', zattia: '#db2777', stunned: '#7c3aed' } as const
 type Opcion = { key: 'bdi' | 'zattia' | 'stunned'; titulo: string }
 
 export function Erp({ ruta = [] }: { ruta?: string[] }) {
@@ -177,6 +190,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
     setLinea(k)
     if (marca !== 'zattia') setMarca('zattia')
   }
+  // La tira de Configuración (cuenta · ruta · regla) salta a la pestaña o la vista que corresponde.
+  const irAPieza = (k: 'cuentas' | 'rutas' | 'reglas') => (k === 'reglas' ? ir('configuracion', 'reglas') : ir('configuracion', 'cuentas', k))
   const ajustarPrenda = (p: PrendaAAjustar) => { setAAjustar(p); setPrendaGlobal(null); ir('stock', 'ajustes') }
   const elegirDeLaBusqueda = (d: DestinoBusqueda) => {
     setPanel(null)
@@ -217,6 +232,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
                   key={o.key} type="button" role="radio" aria-checked={opcionActiva === o.key} onClick={() => elegirOpcion(o.key)}
                   style={{ flex: 1, height: 30, border: 0, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: weight.semibold, whiteSpace: 'nowrap', background: opcionActiva === o.key ? 'rgba(255,255,255,0.16)' : 'transparent', color: opcionActiva === o.key ? '#fff' : '#94a3b8' }}
                 >
+                  <span aria-hidden style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, marginRight: 6, background: COLOR_DE_MARCA[o.key] }} />
                   {o.titulo}
                 </button>
               ))}
@@ -237,12 +253,12 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
         <div className="shell-content">
           <div className="seccion-pad" style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
             <header style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-              <p style={{ margin: 0, padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4 }}>
+              <p style={{ margin: 0, padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4, borderLeft: `3px solid ${COLOR_DE_MARCA[opcionActiva]}` }}>
                 {lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy. Lo ven sólo los administradores.
               </p>
               {/* Título + pestañas en UNA línea (diseño §9). */}
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: space[5], flexWrap: 'wrap', borderBottom: `1px solid ${color.line}` }}>
-                <h1 style={{ margin: 0, paddingBottom: 6, fontSize: 20, fontWeight: weight.semibold, color: color.ink, whiteSpace: 'nowrap' }}>{seccion.titulo}</h1>
+                <h1 style={{ margin: 0, paddingBottom: 6, fontSize: 20, fontWeight: weight.semibold, color: color.ink, whiteSpace: 'nowrap', borderLeft: `4px solid ${COLOR_DE_MARCA[opcionActiva]}`, paddingLeft: 10 }}>{seccion.titulo}</h1>
                 {seccion.pestanias.length > 1 && (
                   <Tabs variant="underline" items={seccion.pestanias} value={pestania ?? ''} onChange={(k) => { setAAjustar(null); ir(seccion.key, k) }} style={{ borderBottom: 'none', flex: '1 1 auto' }} />
                 )}
@@ -259,11 +275,12 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {pestania === 'por-producto' && <PorProductoErp key={marca} />}
             {pestania === 'cobros' && <CobrosErp key={marca} />}
             {pestania === 'gastos' && <GastosErp key={marca} />}
-            {pestania === 'cajas' && <CajasErp key={marca} />}
-            {pestania === 'facturacion' && <Facturacion key={marca} />}
+            
+            {vista === 'facturacion' && <Facturacion key={marca} />}
+            {vista === 'factura' && <FacturaCaja />}
             {pestania === 'cambio' && <CambioCaja />}
-            {pestania === 'factura' && <FacturaCaja />}
-            {vista === 'stock' && <StockErp key={marca} ajustar={ajustarPrenda} />}
+            {pestania === 'cajas' && <CajasErp key={marca} />}
+            {vista === 'stock' && <StockErp key={marca} ajustar={ajustarPrenda} irA={(p, v) => ir('stock', p, v)} />}
             {vista === 'movimientos' && <MovimientosStock key={marca} ajustar={ajustarPrenda} />}
             {vista === 'transferencias' && <TransferenciasStock key={marca} />}
             {vista === 'mover' && <MoverYRecibir />}
@@ -274,12 +291,12 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {vista === 'diferencias' && <DiferenciasDia key={marca} ajustar={ajustarPrenda} />}
             {pestania === 'productos' && <ProductosErp />}
             {pestania === 'precios' && <PreciosErp key={marca} />}
-            {pestania === 'clientes' && <ClientesErp key={`${marca}/${pedidoN}`} abrir={aAbrir?.tipo === 'cliente' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
-            {pestania === 'cuenta-corriente' && <CuentaCorriente key={marca} />}
+            {vista === 'clientes' && <ClientesErp key={`${marca}/${pedidoN}`} abrir={aAbrir?.tipo === 'cliente' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
+            {vista === 'cuenta-corriente' && <CuentaCorriente key={marca} />}
             {pestania === 'proveedores' && <ProveedoresErp key={marca} />}
-            {pestania === 'reglas' && <ReglasComerciales key={marca} ir={(k) => ir('configuracion', k)} />}
-            {pestania === 'cuentas' && <RutasCobro key={marca} ir={(k) => ir('configuracion', k)} />}
-            {pestania === 'cuentas-reales' && <CuentasErp key={marca} ir={(k) => ir('configuracion', k)} />}
+            {pestania === 'reglas' && <ReglasComerciales key={marca} ir={irAPieza} />}
+            {vista === 'rutas' && <RutasCobro key={marca} ir={irAPieza} />}
+            {vista === 'cuentas' && <CuentasErp key={marca} ir={irAPieza} />}
             {pestania === 'redondeo' && <Redondeo key={marca} />}
             {pestania === 'estructura' && <EstructuraErp key={marca} />}
           </div>

@@ -54,7 +54,7 @@ function bajarCsv(filas: FilaStock[], marca: MarcaErp, titulos: Record<string, [
   URL.revokeObjectURL(url)
 }
 
-export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | null; ajustar: (p: PrendaAAjustar) => void }) {
+export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedida | null; ajustar: (p: PrendaAAjustar) => void; /** Atajos de arriba (§9): saltan a Ajustes y a Mover y recibir sin pasar por las pestañas. */ irA?: (pestania: string, vista: string) => void }) {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const usuario = perfil?.name ?? null
@@ -162,6 +162,12 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
             onRestablecer={() => setPrefs({ ...normalizarPrefs(marca, null) })}
           />
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
+          {irA && (
+            <span style={{ marginLeft: 'auto', display: 'flex', gap: space[2] }}>
+              <Button variant="soft" tone="brand" onClick={() => irA('ajustes', 'ajustes')}>Nuevo ajuste</Button>
+              <Button variant="soft" tone="info" onClick={() => irA('transferencias', 'mover')}>Mover</Button>
+            </span>
+          )}
         </div>
         <ListaTrabajo
           columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={72}

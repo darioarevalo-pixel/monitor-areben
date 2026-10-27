@@ -74,7 +74,7 @@ export function CuentasErp({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <TiraConfiguracion activa="cuentas-reales" ir={ir} />
+      <TiraConfiguracion activa="cuentas" ir={ir} />
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
         <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Dónde cae la plata. La lista sale del dashboard: el ERP no arma otra. Una cuenta no lleva descuento.</p>
         <a href={DASHBOARD} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}><Button variant="outline">Abrir en el dashboard ↗</Button></a>

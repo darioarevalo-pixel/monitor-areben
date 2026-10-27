@@ -8,7 +8,7 @@ describe('ERP › menú y direcciones', () => {
     // Stock 9 → 4 (diseño §9): las nueve de antes son VISTAS de cuatro pestañas.
     const todas = SECCIONES_ERP.flatMap((s) => s.pestanias.flatMap((p) => p.vistas?.map((v) => v.key) ?? [p.key]))
     expect(new Set(todas).size).toBe(todas.length)
-    expect(todas.sort()).toEqual(['ajustes', 'cajas', 'cambio', 'clientes', 'cobros', 'comparacion', 'conciliacion', 'cuenta-corriente', 'cuentas', 'cuentas-reales', 'diferencias', 'estructura', 'factura', 'facturacion', 'gastos', 'ingresos', 'mover', 'movimientos', 'por-producto', 'precios', 'productos', 'proveedores', 'redondeo', 'reglas', 'stock', 'transferencias', 'ventas'])
+    expect(todas.sort()).toEqual(['ajustes', 'cajas', 'cambio', 'clientes', 'cobros', 'comparacion', 'conciliacion', 'cuenta-corriente', 'cuentas', 'diferencias', 'estructura', 'factura', 'facturacion', 'gastos', 'ingresos', 'mover', 'movimientos', 'por-producto', 'precios', 'productos', 'proveedores', 'redondeo', 'reglas', 'rutas', 'stock', 'transferencias', 'ventas'])
     expect(SECCIONES_ERP.find((s) => s.key === 'stock')!.pestanias.map((p) => p.key)).toEqual(['stock', 'transferencias', 'ajustes', 'diferencias'])
   })
 

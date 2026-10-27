@@ -7,12 +7,12 @@
 
 import { color, font, weight } from '@/components/ui'
 
-export type PiezaConfiguracion = 'cuentas-reales' | 'cuentas' | 'reglas'
+export type PiezaConfiguracion = 'cuentas' | 'rutas' | 'reglas'
 
 const PIEZAS: Array<{ k: string; titulo: string; nota: string; va?: PiezaConfiguracion }> = [
-  { k: 'cuenta', titulo: 'Cuenta', nota: 'dónde cae la plata (las del dashboard)', va: 'cuentas-reales' },
+  { k: 'cuenta', titulo: 'Cuenta', nota: 'dónde cae la plata (las del dashboard)', va: 'cuentas' },
   { k: 'medio', titulo: 'Medio', nota: 'con qué paga el cliente' },
-  { k: 'ruta', titulo: 'Ruta', nota: 'qué cuenta recibe cada medio', va: 'cuentas' },
+  { k: 'ruta', titulo: 'Ruta', nota: 'qué cuenta recibe cada medio', va: 'rutas' },
   { k: 'regla', titulo: 'Regla de cobro', nota: 'el descuento o recargo del medio', va: 'reglas' },
 ]
 

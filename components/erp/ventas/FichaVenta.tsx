@@ -132,7 +132,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const v = ficha?.venta
   const menu: AccionMenu[] = esPedido ? [] : [
     ...(ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
-    ...(!fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar (Caja › Factura)', icono: 'factura' as const, onClick: () => irACaja('factura') }] : []),
+    ...(!fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura') }] : []),
     ...(puede.corregir && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
     { key: 'anular', label: 'Anular…', icono: 'anular', tone: 'danger', disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) },
   ]

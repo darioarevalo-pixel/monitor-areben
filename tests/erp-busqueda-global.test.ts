@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ATAJOS, accionDeTecla, desdeBusquedaDeVentas, esEscaneo, gruposDe, periodoDeVenta, queBuscar, saltosA,
 } from '@/lib/erp/busqueda-global.core.js'
-import { SECCIONES_ERP } from '@/components/erp/Erp'
+import { SECCIONES_BUSCABLES, hrefErp, resolverRutaErp } from '@/components/erp/Erp'
 
 describe('erp › búsqueda global', () => {
   it('reparte lo escrito entre las lecturas que ya existen', () => {
@@ -24,14 +24,27 @@ describe('erp › búsqueda global', () => {
     expect(esEscaneo('296000')).toBe(false) // sólo cifras y cortas: es una venta
     expect(esEscaneo('abc 12345678')).toBe(false) // con espacio: se escribió a mano
   })
-  it('los saltos aceptan tildes y apuntan a una pestaña que existe', () => {
-    const r = saltosA('cuenta cor', SECCIONES_ERP)
+  it('los saltos aceptan tildes y caen en una pantalla que existe', () => {
+    const r = saltosA('cuenta cor', SECCIONES_BUSCABLES)
     expect(r[0]).toMatchObject({ seccion: 'clientes', pestania: 'cuenta-corriente' })
-    for (const s of saltosA('stock', SECCIONES_ERP, 20)) {
-      const sec = SECCIONES_ERP.find((x) => x.key === s.seccion)!
-      expect(sec.pestanias.some((p) => p.key === s.pestania) || s.pestania == null).toBe(true)
+    for (const sec of SECCIONES_BUSCABLES) {
+      for (const p of sec.pestanias) {
+        const { seccion, pestania, vista } = resolverRutaErp(hrefErp(sec.key, p.key).split('/').slice(2))
+        // Lo que ⌘K abre, ya resuelto, es una dirección válida (⛔ un redirect que rebota).
+        expect(resolverRutaErp(hrefErp(seccion.key, pestania, vista).split('/').slice(2)).valida).toBe(true)
+      }
     }
-    expect(saltosA('x', SECCIONES_ERP)).toEqual([])
+    expect(saltosA('x', SECCIONES_BUSCABLES)).toEqual([])
+  })
+  it('las direcciones de antes caen en su pestaña nueva (🎨 27-oct, fusiones de §9)', () => {
+    const a = (r: string[]) => { const x = resolverRutaErp(r); return [x.seccion.key, x.pestania, x.vista, x.valida] }
+    expect(a(['configuracion', 'cuentas-reales'])).toEqual(['configuracion', 'cuentas', 'cuentas', false])
+    expect(a(['configuracion', 'cuentas'])).toEqual(['configuracion', 'cuentas', 'cuentas', true])
+    expect(a(['configuracion', 'redondeo'])).toEqual(['productos', 'redondeo', null, false])
+    expect(a(['ventas', 'cajas'])).toEqual(['caja', 'cajas', null, false])
+    expect(a(['caja', 'factura'])).toEqual(['ventas', 'facturacion', 'factura', false])
+    expect(a(['clientes', 'cuenta-corriente'])).toEqual(['clientes', 'clientes', 'cuenta-corriente', false])
+    expect(hrefErp('caja', 'factura')).toBe('/erp/ventas/facturacion/factura')
   })
   it('arma los grupos en orden y con la marca sólo si se busca en todas', () => {
     const datos = {
