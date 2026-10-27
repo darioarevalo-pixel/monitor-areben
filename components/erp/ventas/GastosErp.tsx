@@ -140,7 +140,7 @@ export function GastosErp() {
           onGuardar={async (g) => {
             const ok = await confirmar({
               titulo: 'Cargar el gasto',
-              mensaje: <p>Vas a anotar <b>{pesos(g.monto)}</b> de «{g.detalle}» como gasto <b>{prueba ? 'de prueba' : 'real'}</b>. Un gasto <b>no se edita ni se borra</b>: si te equivocás, se corrige cargando otro con el monto en negativo.</p>,
+              mensaje: <p>Vas a cargar <b>{pesos(g.monto)}</b> de «{g.detalle}» como gasto <b>{prueba ? 'de prueba' : 'real'}</b>. Un gasto <b>no se edita ni se borra</b>: si te equivocás, se corrige cargando otro con el monto en negativo.</p>,
               ok: 'Cargar',
             })
             if (!ok) return null
