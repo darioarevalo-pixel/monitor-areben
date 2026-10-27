@@ -21,7 +21,7 @@ import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, color, font
 import { formatMoney } from '@/components/ui/MoneyText'
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
-import { BuscadorLista, ChipEstado, TileResumen, VistasLista, estiloNombre } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, TileResumen, VistasLista, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { leerCuentasCorrientes, type CuentasDeLaMarca, type MarcaErp } from '@/lib/erp/cliente'
 import {
   NOMBRE_LINEA, TRAMOS, VISTAS, alternarColumna, armarFilasCuenta, columnasDe, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen, textoCredito,
@@ -131,7 +131,7 @@ export function CuentaCorriente() {
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Por cobrar" valor={formatMoney(res.porCobrar)} oscuro nota={`${n(res.conSaldo)} ${res.conSaldo === 1 ? 'cuenta' : 'cuentas'} con saldo · lo que deben − lo que tienen a favor`} />
-        <TileResumen titulo="Vencido" valor={formatMoney(res.vencido)} nota={`${n(res.atrasadas)} ${res.atrasadas === 1 ? 'atrasada' : 'atrasadas'}`} />
+        <TileResumen tono={tonoDeConteo(res.vencido)} titulo="Vencido" valor={formatMoney(res.vencido)} nota={`${n(res.atrasadas)} ${res.atrasadas === 1 ? 'atrasada' : 'atrasadas'}`} />
         <TileResumen titulo="Saldo a favor" valor={formatMoney(res.aFavor)} nota={`${n(res.conFavor)} ${res.conFavor === 1 ? 'cliente' : 'clientes'}`} />
         <TileResumen titulo="Por antigüedad" valor={formatMoney(res.tramos['más de 90'])} nota={`más de 90 días · 61–90 ${formatMoney(res.tramos['61–90'])} · 31–60 ${formatMoney(res.tramos['31–60'])} · 0–30 ${formatMoney(res.tramos['0–30'])}`} />
       </div>

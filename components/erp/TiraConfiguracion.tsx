@@ -23,7 +23,7 @@ export function TiraConfiguracion({ activa, ir }: { activa: PiezaConfiguracion; 
         const on = p.va === activa
         const caja: React.CSSProperties = {
           flex: '1 1 180px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 14px', borderRadius: 10, textAlign: 'left',
-          fontFamily: 'inherit', background: on ? 'var(--mo-side-bg)' : color.surface, border: `1px solid ${on ? 'var(--mo-side-bg)' : color.line}`,
+          fontFamily: 'inherit', background: on ? 'var(--mo-brand-solid)' : color.surface, border: `1px solid ${on ? 'var(--mo-brand-solid)' : color.line}`,
         }
         const contenido = (
           <>

@@ -17,7 +17,7 @@ import type { Tone } from '@/components/ui/tokens'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto, estiloNombre } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { leerComparacion, type ComparacionTiendas, type FilaComparacion, type MarcaErp } from '@/lib/erp/cliente'
 import {
   COLUMNAS, QUE_PASA, VISTAS, alternarColumna, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
@@ -123,8 +123,8 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="No coinciden" valor={res.noCoinciden.toLocaleString('es-AR')} oscuro nota={`de ${res.comparadas.toLocaleString('es-AR')} variantes publicadas`} />
-        <TileResumen titulo="Muestra de más" valor={res.deMas.toLocaleString('es-AR')} nota={res.uMas ? `${res.uMas.toLocaleString('es-AR')} u que se pueden vender sin tenerlas` : 'ninguna'} />
-        <TileResumen titulo="Muestra de menos" valor={res.deMenos.toLocaleString('es-AR')} nota={res.uMenos ? `${res.uMenos.toLocaleString('es-AR')} u que se dejan de vender` : 'ninguna'} />
+        <TileResumen tono={tonoDeConteo(res.deMas)} titulo="Muestra de más" valor={res.deMas.toLocaleString('es-AR')} nota={res.uMas ? `${res.uMas.toLocaleString('es-AR')} u que se pueden vender sin tenerlas` : 'ninguna'} />
+        <TileResumen tono={tonoDeConteo(res.deMenos)} titulo="Muestra de menos" valor={res.deMenos.toLocaleString('es-AR')} nota={res.uMenos ? `${res.uMenos.toLocaleString('es-AR')} u que se dejan de vender` : 'ninguna'} />
         <TileResumen titulo="Tienda Nube leída" valor={leidas.length ? cuandoCorto(leidas.map(([, l]) => l).sort()[0]) : '—'} nota="se lee cada 2 horas" />
       </div>
 

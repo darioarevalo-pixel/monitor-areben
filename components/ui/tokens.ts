@@ -136,13 +136,14 @@ export const density = {
   ctlH: 'var(--mo-ctl-h)',
 } as const
 
-export type Tone = 'neutral' | 'brand' | 'action' | 'success' | 'warning' | 'danger'
+export type Tone = 'neutral' | 'brand' | 'action' | 'info' | 'success' | 'warning' | 'danger'
 
 /** Un Tone → trío coherente {fg, bg, border}. Lo consumen Badge, StatusPill, Notice, KpiCard, botones soft. */
 export const toneTokens: Record<Tone, { fg: string; bg: string; border: string }> = {
   neutral: { fg: color.ink2, bg: color.bg2, border: color.line },
   brand: { fg: color.brand, bg: color.brandBg, border: color.brandBorder },
   action: { fg: color.action, bg: color.actionBg, border: 'var(--mo-action-border)' },
+  info: { fg: 'var(--mo-info)', bg: 'var(--mo-info-bg)', border: '#b9e6fe' }, // celeste = mover / transferir (diseño ERP §9)
   success: { fg: color.successInk, bg: color.successBg, border: color.successBorder },
   warning: { fg: color.warningInk, bg: color.warningBg, border: color.warningBorder },
   danger: { fg: color.dangerInk, bg: color.dangerBg, border: color.dangerBorder },
@@ -153,6 +154,7 @@ export const toneSolid: Record<Tone, string> = {
   neutral: color.ink,
   brand: color.brandSolid,
   action: 'var(--mo-action-solid)',
+  info: 'var(--mo-info)',
   success: color.success,
   warning: 'var(--mo-warning-solid)',
   danger: color.danger,
@@ -163,6 +165,7 @@ export const toneSolidHover: Record<Tone, string> = {
   neutral: color.ink2,
   brand: 'var(--mo-brand-solid-hover)',
   action: 'var(--mo-brand-solid-hover)',
+  info: '#065986',
   success: color.successInk,
   warning: color.warning,
   danger: color.dangerInk,

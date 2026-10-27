@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, MenuAcciones, Notice, color, font, space, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
-import { BuscadorLista, ChipEstado, TileResumen, VistasLista, estiloNombre } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, TileResumen, VistasLista, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { leerProveedores, type MarcaErp, type ProveedorErp } from '@/lib/erp/cliente'
 import { normal } from '@/lib/erp/stock-lista.core.js'
 
@@ -88,7 +88,7 @@ export function ProveedoresErp() {
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Proveedores" valor={res.total.toLocaleString('es-AR')} oscuro nota="de la empresa" />
         <TileResumen titulo="Con productos" valor={res.conProd.toLocaleString('es-AR')} nota={`${res.productos.toLocaleString('es-AR')} productos atados`} />
-        <TileResumen titulo="Sin CUIT" valor={res.sinCuit.toLocaleString('es-AR')} nota={res.sinCuit ? 'para completar' : 'ninguno'} />
+        <TileResumen tono={tonoDeConteo(res.sinCuit)} titulo="Sin CUIT" valor={res.sinCuit.toLocaleString('es-AR')} nota={res.sinCuit ? 'para completar' : 'ninguno'} />
         <TileResumen titulo="Cuentas por pagar" valor="—" nota="viven en el dashboard" />
       </div>
 

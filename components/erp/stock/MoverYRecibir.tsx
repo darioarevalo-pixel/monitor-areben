@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, color, font, space, weight } from '@/components/ui'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
-import { BuscadorLista, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, tonoDeConteo } from '@/components/ui/PiezasLista'
 import {
   armarTransferenciaDoc, buscarPrendas, cancelarTransferenciaDoc, crearTransferenciaDoc, enviarTransferenciaDoc, leerListaDeStock, leerTransferenciasDoc, recibirTransferenciaDoc,
   type AvisoDoc, type PrendaEncontrada, type TiendaErp, type TransferenciaDoc,
@@ -246,7 +246,7 @@ export function MoverYRecibir() {
           <div style={{ marginTop: space[3] }}><Escaneo linea={linea} onPrenda={(p) => setLista((l) => sumarEscaneo(l, p) as Fila[])} /></div>
           <TablaEscaneada filas={lista} onCantidad={(f, n) => setLista((l) => fijarCantidad(l, f.producto, f.talle, n) as Fila[])} />
           <div style={{ marginTop: space[3] }}>
-            <Button disabled={trabajando || !lista.length} onClick={mover}>{lista.length ? `Mover ${unidades(lista)} u de ${dep(desde)} a ${dep(hacia)}` : 'Mover'}</Button>
+            <Button variant="solid" tone="info" disabled={trabajando || !lista.length} onClick={mover}>{lista.length ? `Mover ${unidades(lista)} u de ${dep(desde)} a ${dep(hacia)}` : 'Mover'}</Button>
           </div>
         </SectionCard>
       )}
@@ -265,8 +265,8 @@ export function MoverYRecibir() {
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="En camino" valor={u(enCaminoU)} oscuro nota={`${conteo.en_camino ?? 0} sin recibir`} />
-        <TileResumen titulo="Sin enviar" valor={(conteo.sin_enviar ?? 0).toLocaleString('es-AR')} nota="quedaron a medias: no salió nada" />
-        <TileResumen titulo="Faltantes recibidos" valor={u(faltantesU)} nota="esperan un ajuste en Ingresos y ajustes" />
+        <TileResumen tono={tonoDeConteo(conteo.sin_enviar)} titulo="Sin enviar" valor={(conteo.sin_enviar ?? 0).toLocaleString('es-AR')} nota="quedaron a medias: no salió nada" />
+        <TileResumen tono={tonoDeConteo(faltantesU)} titulo="Faltantes recibidos" valor={u(faltantesU)} nota="esperan un ajuste en Ingresos y ajustes" />
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>

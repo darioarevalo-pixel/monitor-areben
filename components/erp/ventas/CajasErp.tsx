@@ -14,7 +14,7 @@ import { Button, EmptyState, MoneyText, Notice, Select, color, font, space } fro
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
-import { ChipEstado, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { ChipEstado, TileResumen, VistasLista, cuandoCorto, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { leerCajaAbierta, leerTurnosCaja, type MarcaErp } from '@/lib/erp/cliente'
 import {
   PERIODOS_CAJA, VISTAS_CAJA, alternarColumnaCaja, armarFilasCajas, columnasCaja, contarVistasCaja, filtrarCaja, moverColumna,
@@ -130,7 +130,7 @@ export function CajasErp() {
           nota={!abiertaFila ? 'no hay caja abierta' : enVivo?.error ? 'la Caja no contestó' : enVivo?.ventas != null ? `${enVivo.ventas} ventas en el turno` : 'lo calcula la Caja'} />
         <TileResumen titulo={`Diferencias · ${nombrePeriodo.toLowerCase()}`} valor={res.cierres ? conSigno(res.diferencia) : '—'}
           nota={res.cierres ? `faltó ${pesos(Math.abs(res.falto))} · sobró ${pesos(res.sobro)} · en ${res.cierres} cierres` : 'sin cierres en el período'} />
-        <TileResumen titulo="Cierres con diferencia" valor={res.conDiferencia.toLocaleString('es-AR')} nota={`de ${res.cierres} cierres`} />
+        <TileResumen tono={tonoDeConteo(res.conDiferencia)} titulo="Cierres con diferencia" valor={res.conDiferencia.toLocaleString('es-AR')} nota={`de ${res.cierres} cierres`} />
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>

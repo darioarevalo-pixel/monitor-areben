@@ -22,14 +22,28 @@ export const cuandoCorto = (iso: string | null) => {
   return `${d.slice(8, 10)}/${d.slice(5, 7)} ${d.slice(11, 16)}`
 }
 
-export function TileResumen({ titulo, valor, oscuro, nota }: { titulo: string; valor: string; oscuro?: boolean; nota?: string }) {
+/** El color del tile dice algo (diseño §9): principal = EL número de la pantalla (uno) · neutro = el resto · revisar = hay algo para mirar · bien = en orden. */
+export type TonoTile = 'principal' | 'neutro' | 'revisar' | 'bien'
+
+const TILES: Record<TonoTile, { fondo: string; borde: string; titulo: string; valor: string; nota: string }> = {
+  principal: { fondo: 'var(--mo-brand-solid)', borde: 'var(--mo-brand-solid)', titulo: 'rgba(255,255,255,0.8)', valor: '#fff', nota: 'rgba(255,255,255,0.8)' },
+  neutro: { fondo: 'var(--mo-brand-bg)', borde: 'var(--mo-brand-border)', titulo: 'var(--mo-brand)', valor: color.ink, nota: color.mut },
+  revisar: { fondo: 'var(--mo-danger-bg)', borde: 'var(--mo-danger-border)', titulo: 'var(--mo-danger-ink)', valor: 'var(--mo-danger-ink)', nota: 'var(--mo-danger-ink)' },
+  bien: { fondo: 'var(--mo-success-bg)', borde: 'var(--mo-success-border)', titulo: 'var(--mo-success-ink)', valor: 'var(--mo-success-ink)', nota: 'var(--mo-success-ink)' },
+}
+
+/** `tono` para un conteo de cosas a revisar: rojo si hay, verde si no. */
+export const tonoDeConteo = (n: number | null | undefined): TonoTile => (n ? 'revisar' : 'bien')
+
+export function TileResumen({ titulo, valor, oscuro, tono, nota }: { titulo: string; valor: string; /** = `tono="principal"` */ oscuro?: boolean; tono?: TonoTile; nota?: string }) {
   // Franja de ~54 px (diseño §9): título arriba, el número (18 px) y su nota en la misma línea.
+  const t = TILES[tono ?? (oscuro ? 'principal' : 'neutro')]
   return (
-    <div style={{ flex: '1 1 180px', minWidth: 0, padding: '8px 14px', borderRadius: 12, background: oscuro ? 'var(--mo-side-bg)' : color.surface, border: oscuro ? 0 : `1px solid ${color.line}`, color: oscuro ? '#fff' : color.ink }}>
-      <div style={{ fontSize: font.xs, lineHeight: '14px', color: oscuro ? '#94a3b8' : color.mut }}>{titulo}</div>
+    <div style={{ flex: '1 1 180px', minWidth: 0, padding: '8px 14px', borderRadius: 12, background: t.fondo, border: `1px solid ${t.borde}`, color: t.valor }}>
+      <div style={{ fontSize: font.xs, lineHeight: '14px', color: t.titulo }}>{titulo}</div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
         <span style={{ fontSize: 18, lineHeight: '24px', fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{valor}</span>
-        {nota && <span title={nota} style={{ fontSize: font.xs, color: oscuro ? '#94a3b8' : color.mut, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{nota}</span>}
+        {nota && <span title={nota} style={{ fontSize: font.xs, color: t.nota, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{nota}</span>}
       </div>
     </div>
   )
@@ -49,7 +63,7 @@ export function VistasLista({ vistas, valor, conteo, onCambio }: {
         return (
           <button
             key={k} type="button" role="tab" aria-selected={on} onClick={() => onCambio(k)}
-            style={{ height: 32, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 12px', borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', fontSize: 13.5, fontWeight: weight.semibold, border: `1px solid ${on ? 'var(--mo-side-bg)' : color.line}`, background: on ? 'var(--mo-side-bg)' : color.surface, color: on ? '#fff' : color.ink2 }}
+            style={{ height: 32, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 12px', borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', fontSize: 13.5, fontWeight: weight.semibold, border: `1px solid ${on ? 'var(--mo-brand-solid)' : color.line}`, background: on ? 'var(--mo-brand-solid)' : color.surface, color: on ? '#fff' : color.ink2 }}
           >
             {nombre}
             <span style={{ fontSize: 12, fontWeight: weight.bold, padding: '0 6px', borderRadius: 999, background: on ? 'rgba(255,255,255,0.18)' : color.bg2, color: on ? '#fff' : color.mut }}>{(conteo[k] ?? 0).toLocaleString('es-AR')}</span>

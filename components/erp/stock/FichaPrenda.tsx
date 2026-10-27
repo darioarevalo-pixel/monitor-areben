@@ -99,7 +99,7 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
       </div>
 
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
-        <Button variant="outline" disabled={!linea} onClick={() => linea && ajustar({ linea, producto: prenda.producto, talle: prenda.talle, sku, barcode, nombre, talleNombre: talle })}>Ajustar</Button>
+        <Button variant="soft" tone="brand" disabled={!linea} onClick={() => linea && ajustar({ linea, producto: prenda.producto, talle: prenda.talle, sku, barcode, nombre, talleNombre: talle })}>Ajustar</Button>
         <MenuAcciones acciones={menu} etiqueta={`Más acciones del producto ${nombre} ${talle}`} vertical />
       </div>
 

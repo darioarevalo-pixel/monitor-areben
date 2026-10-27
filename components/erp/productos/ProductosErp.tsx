@@ -18,7 +18,7 @@ import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, Select, col
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto, estiloNombre } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { leerListaDeProductos, type FilaProducto, type ListaDeProductos, type MarcaErp } from '@/lib/erp/cliente'
 import {
   LISTAS, VISTAS, alternarColumna, columnasDe, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
@@ -136,7 +136,7 @@ export function ProductosErp() {
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Productos" valor={res.productos.toLocaleString('es-AR')} oscuro nota={`${res.variantes.toLocaleString('es-AR')} variantes`} />
         <TileResumen titulo="Disponible" valor={u(res.disponible)} nota="lo que se puede vender" />
-        <TileResumen titulo="Sin costo" valor={res.sinCosto.toLocaleString('es-AR')} nota={res.sinCosto ? 'sin costo no hay margen' : 'todos tienen costo'} />
+        <TileResumen tono={tonoDeConteo(res.sinCosto)} titulo="Sin costo" valor={res.sinCosto.toLocaleString('es-AR')} nota={res.sinCosto ? 'sin costo no hay margen' : 'todos tienen costo'} />
         <TileResumen titulo="Fuera de Tienda Nube" valor={res.fueraDeTn.toLocaleString('es-AR')} nota="ocultos o sin publicar" />
       </div>
 

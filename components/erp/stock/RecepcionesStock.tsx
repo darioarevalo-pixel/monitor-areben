@@ -14,7 +14,7 @@ import { Button, EmptyState, MenuAcciones, Notice, color, font, space, weight, t
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
-import { BuscadorLista, TileResumen, VistasLista } from '@/components/ui/PiezasLista'
+import { BuscadorLista, TileResumen, VistasLista, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { leerRecepcion, leerRecepciones, type LineaConCruce } from '@/lib/recepciones/cliente'
 import { renglonesQueNoCerraron } from '@/lib/recepciones/core'
 import {
@@ -123,8 +123,8 @@ export function RecepcionesStock() {
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Recibidas este mes" valor={res.ordenes.toLocaleString('es-AR')} oscuro nota="órdenes de Ingresos" />
         <TileResumen titulo="Productos que entraron" valor={u(res.entraron)} nota="este mes" />
-        <TileResumen titulo="Con diferencia" valor={res.conDiferencia.toLocaleString('es-AR')} nota="este mes" />
-        <TileResumen titulo="Faltaron" valor={u(res.faltaron)} nota="pedidas que no vinieron, este mes" />
+        <TileResumen tono={tonoDeConteo(res.conDiferencia)} titulo="Con diferencia" valor={res.conDiferencia.toLocaleString('es-AR')} nota="este mes" />
+        <TileResumen tono={tonoDeConteo(res.faltaron)} titulo="Faltaron" valor={u(res.faltaron)} nota="pedidas que no vinieron, este mes" />
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>

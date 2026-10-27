@@ -14,7 +14,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { Button, ConfirmDetalle, EmptyState, Input, MenuAcciones, Notice, color, font, space, useConfirmar, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, ChipEstado, TileResumen, VistasLista } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, TileResumen, VistasLista, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { cerrarMes, facturar, leerFacturas, leerMes, notaDeCredito, notaDeDebito, type MarcaErp, type MesFacturacion, type ResultadoLote, type VentaParaFacturar } from '@/lib/erp/cliente'
 import { filasDeFacturacion, ordenarFilas, ventasConNC } from '@/lib/erp/facturacion-lista.core.js'
 import { normal } from '@/lib/erp/stock-lista.core.js'
@@ -344,7 +344,7 @@ export function Facturacion() {
             <TileResumen oscuro titulo="Tope del mes" valor={pesosCortos(datos.techo)} nota={datos.estado === 'cerrado' ? 'fijo desde el cierre' : 'lo que entró a cuentas de Areben; cambia hasta cerrar el mes'} />
             <TileResumen titulo="Facturado" valor={pesosCortos(datos.facturado)} nota={`${pctTope != null ? `${pctTope} % del tope · ` : ''}Gestión Nube ${pesosCortos(datos.facturadoGN)} · ERP ${pesosCortos(datos.facturadoMonitor)}`} />
             <TileResumen titulo="Pendiente de facturar" valor={pesosCortos(datos.pendiente)} nota={datos.pendiente < 0 ? 'se facturó de más' : 'las dos marcas'} />
-            <TileResumen titulo={`Sin factura en ${NOMBRE_MARCA[marca]}`} valor={grupos.sin.length.toLocaleString('es-AR')} nota={`ventas · ${pesosCortos(sumaSin)}`} />
+            <TileResumen tono={tonoDeConteo(grupos.sin.length)} titulo={`Sin factura en ${NOMBRE_MARCA[marca]}`} valor={grupos.sin.length.toLocaleString('es-AR')} nota={`ventas · ${pesosCortos(sumaSin)}`} />
           </div>
           {sinCuenta.length > 0 && (
             <Notice tone="warning">Cuentas de cobro sin clasificar (no suman al tope): {sinCuenta.map((s) => `${s.cuenta} ${pesosCortos(s.monto)}`).join(' · ')}</Notice>

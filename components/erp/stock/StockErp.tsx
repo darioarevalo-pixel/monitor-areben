@@ -17,7 +17,7 @@ import { Button, EmptyState, Icono, MenuAcciones, Notice, Select, color, font, s
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, estiloNombre } from '@/components/ui/PiezasLista'
+import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { leerListaDeStock, type FilaStock, type ListaDeStock, type MarcaErp } from '@/lib/erp/cliente'
 import {
   VISTAS, alternarColumna, columnasDe, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
@@ -146,7 +146,7 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
         <TileResumen titulo="Disponible" valor={u(res.disponible)} oscuro nota="lo que se puede vender" />
         <TileResumen titulo="Físico" valor={u(res.estanteria)} nota={res.enPedidos ? `${res.enPedidos.toLocaleString('es-AR')} apartadas por pedidos sin pagar` : 'ninguna apartada por pedidos'} />
         {/* Los negativos se cuentan sobre todo lo buscado (⛔ sólo la vista): si no, el número no es el de la vista «Negativos». */}
-        <TileResumen titulo="Negativos" valor={(conteo.neg ?? 0).toLocaleString('es-AR')} nota={conteo.neg ? 'para revisar' : 'ninguna'} />
+        <TileResumen tono={tonoDeConteo(conteo.neg)} titulo="Negativos" valor={(conteo.neg ?? 0).toLocaleString('es-AR')} nota={conteo.neg ? 'para revisar' : 'ninguna'} />
         <TileResumen titulo="Productos" valor={res.prendas.toLocaleString('es-AR')} nota={nombreVista.toLowerCase()} />
       </div>
 
