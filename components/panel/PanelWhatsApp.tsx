@@ -7,7 +7,6 @@ import { Pagos } from './Pagos'
 import { CalculadoraEnvio } from './CalculadoraEnvio'
 import { ProximoContacto, RayaEstado, estadoDeFicha } from './ProximoContacto'
 import { QueLeMando } from './QueLeMando'
-import { diasDesdeContacto } from '@/lib/crm/que-le-mando'
 import { SOBRE_OSCURO } from './oscuro'
 import type { QuienPaga } from './NuevoCompromiso'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
@@ -1237,7 +1236,6 @@ function PanelInterno({
                 esCliente: (c.ventas || []).length > 0,
                 enComunidad: enComunidadDe(comunidad, via === 'id' ? [c.phone] : [telNorm, c.phone]),
                 perfil: seg.perfil || null,
-                diasDesdeContacto: diasDesdeContacto(seg.ultimo_contacto, hoyFicha),
               }}
               tels={via === 'id' ? [c.phone || ''] : [telNorm, c.phone || '']}
               onPerfil={(p) => mutar((m) => setPerfil(m, c.id, p), p ? 'Guardado' : 'Listo')}
@@ -1994,7 +1992,7 @@ function PieLead({
       queLeMando={
         <QueLeMando
           key={`qlm-${lead.id}`}
-          sabe={{ esCliente: false, enComunidad, perfil: lead.perfil || null, diasDesdeContacto: diasDesdeContacto(lead.ultimo_contacto, hoy) }}
+          sabe={{ esCliente: false, enComunidad, perfil: lead.perfil || null }}
           tels={tels}
           onPerfil={(p) => onMutar((m) => setPerfilLead(m, lead.id, p), p ? 'Guardado' : 'Listo')}
           onAgendar={(d) => onMutar((m) => escribiHoyLead(m, lead.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)}

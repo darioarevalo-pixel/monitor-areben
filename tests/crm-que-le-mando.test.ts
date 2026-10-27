@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   conNovedad,
   conPregunta,
-  diasDesdeContacto,
   M,
   novedadDelBanco,
   resultado,
@@ -19,7 +18,7 @@ import { setPerfilLead, type Lead } from '@/lib/crm/leads'
  * (https://claude.ai/artifact/FgX8oBCpvQY3u58zqqrTwE): estos casos fijan lo que Darío decidió.
  */
 
-const base: LoQueSabe = { esCliente: false, enComunidad: false, perfil: null, diasDesdeContacto: null, novedad: 'Nos entraron relojes!' }
+const base: LoQueSabe = { esCliente: false, enComunidad: false, perfil: null, novedad: 'Nos entraron relojes!' }
 
 /** Contesta las preguntas en orden hasta que no queden; devuelve los campos que se preguntaron. */
 function recorrer(sabe: LoQueSabe, respuestas: Respuestas) {
@@ -37,20 +36,16 @@ function recorrer(sabe: LoQueSabe, respuestas: Respuestas) {
 }
 
 describe('qué se pregunta', () => {
+  it('⛔ el tiempo se pregunta siempre: una fecha puesta no prueba que le escribió', () => {
+    const { preguntadas } = recorrer({ ...base, esCliente: true }, { tiempo: 'corto', ultimo: 'compra' })
+    expect(preguntadas).toContain('tiempo')
+  })
+
   it('a un cliente no se le pregunta si es cliente ni si dijo que compraba', () => {
     const { preguntadas } = recorrer({ ...base, esCliente: true }, { tiempo: 'corto', ultimo: 'compra' })
     expect(preguntadas).toEqual(['tiempo', 'ultimo'])
   })
 
-  it('si le escribió hace menos de 2 meses, no pregunta el tiempo', () => {
-    const { preguntadas } = recorrer({ ...base, esCliente: true, diasDesdeContacto: 12 }, { ultimo: 'compra' })
-    expect(preguntadas).toEqual(['ultimo'])
-  })
-
-  it('una fecha anotada vieja no alcanza: pregunta igual', () => {
-    const { preguntadas } = recorrer({ ...base, esCliente: true, diasDesdeContacto: 90 }, { tiempo: 'corto', ultimo: 'compra' })
-    expect(preguntadas).toEqual(['tiempo', 'ultimo'])
-  })
 
   it('el perfil guardado no se vuelve a preguntar', () => {
     const sin = recorrer(base, { dijo: 'no', perfil: 'local', tiempo: 'corto', ultimo: 'tienda0' })
@@ -60,7 +55,7 @@ describe('qué se pregunta', () => {
   })
 
   it('⛔ nunca pregunta si contestó ni nombra «1º/2º» en las opciones', () => {
-    const p = siguientePregunta({ ...base, esCliente: true, diasDesdeContacto: 3 }, {})!
+    const p = siguientePregunta({ ...base, esCliente: true, }, {})!
     expect(p.texto).not.toMatch(/contest/i)
     expect(p.opciones.map((o) => o.texto).join(' ')).not.toMatch(/\d\s*º|recontacto/i)
   })
@@ -68,28 +63,28 @@ describe('qué se pregunta', () => {
 
 describe('qué le mando', () => {
   it('C: después de la compra, cómo se vendió; después, la novedad con la pregunta de cliente', () => {
-    const c = { ...base, esCliente: true, diasDesdeContacto: 5 }
-    expect(recorrer(c, { ultimo: 'compra' }).res!.mensajes[0].texto).toBe(M.vendio)
-    expect(recorrer(c, { ultimo: 'r1' }).res!.mensajes[0].texto).toBe('Nos entraron relojes! Pudiste ver algo en particular?')
-    const cierre = recorrer(c, { ultimo: 'r2' }).res!
+    const c = { ...base, esCliente: true }
+    expect(recorrer(c, { tiempo: 'corto', ultimo: 'compra' }).res!.mensajes[0].texto).toBe(M.vendio)
+    expect(recorrer(c, { tiempo: 'corto', ultimo: 'r1' }).res!.mensajes[0].texto).toBe('Nos entraron relojes! Pudiste ver algo en particular?')
+    const cierre = recorrer(c, { tiempo: 'corto', ultimo: 'r2' }).res!
     expect(cierre.mensajes[0].texto).toBe(M.descuento)
     expect(cierre.agendar.map((a) => a.dias)).toEqual([30])
   })
 
   it('A: la novedad pregunta por el local, con videos de repuesto', () => {
-    const { res } = recorrer({ ...base, perfil: 'local', diasDesdeContacto: 4 }, { dijo: 'no', ultimo: 'chusmear' })
+    const { res } = recorrer({ ...base, perfil: 'local' }, { dijo: 'no', tiempo: 'corto', ultimo: 'chusmear' })
     expect(res!.mensajes.map((m) => m.texto)).toEqual(['Nos entraron relojes! Pudiste ver algo en particular para el local?', M.videos])
   })
 
   it('el cierre lo elige la comunidad: si no está, se le ofrece; si está, videos', () => {
-    const a = { ...base, perfil: 'local' as const, diasDesdeContacto: 4 }
-    expect(recorrer({ ...a, enComunidad: false }, { dijo: 'no', ultimo: 'novedad' }).res!.mensajes.map((m) => m.texto)).toEqual([M.cierreComunidad])
-    expect(recorrer({ ...a, enComunidad: true }, { dijo: 'no', ultimo: 'novedad' }).res!.mensajes.map((m) => m.texto)).toEqual([M.cierreVideos])
-    expect(recorrer({ ...a, enComunidad: null }, { dijo: 'no', ultimo: 'novedad' }).res!.mensajes).toHaveLength(2)
+    const a = { ...base, perfil: 'local' as const }
+    expect(recorrer({ ...a, enComunidad: false }, { dijo: 'no', tiempo: 'corto', ultimo: 'novedad' }).res!.mensajes.map((m) => m.texto)).toEqual([M.cierreComunidad])
+    expect(recorrer({ ...a, enComunidad: true }, { dijo: 'no', tiempo: 'corto', ultimo: 'novedad' }).res!.mensajes.map((m) => m.texto)).toEqual([M.cierreVideos])
+    expect(recorrer({ ...a, enComunidad: null }, { dijo: 'no', tiempo: 'corto', ultimo: 'novedad' }).res!.mensajes).toHaveLength(2)
   })
 
   it('la vuelta de un local: 15 días si tiene más de uno, 30 si tiene uno', () => {
-    const { res } = recorrer({ ...base, perfil: 'local', diasDesdeContacto: 4 }, { dijo: 'no', ultimo: 'cierre' })
+    const { res } = recorrer({ ...base, perfil: 'local' }, { dijo: 'no', tiempo: 'corto', ultimo: 'cierre' })
     expect(res!.mensajes).toEqual([])
     expect(res!.agendar.map((a) => a.dias)).toEqual([15, 30])
   })
@@ -102,9 +97,9 @@ describe('qué le mando', () => {
   })
 
   it('B: el 2º según el perfil guardado; sin perfil, los dos', () => {
-    const b = { ...base, diasDesdeContacto: 4 }
-    expect(recorrer({ ...b, perfil: 'emprendedor' }, { dijo: 'si', ultimo: 'r1' }).res!.mensajes.map((m) => m.texto)).toEqual([M.minimo])
-    expect(recorrer(b, { dijo: 'si', ultimo: 'r1' }).res!.mensajes).toHaveLength(2)
+    const b = { ...base }
+    expect(recorrer({ ...b, perfil: 'emprendedor' }, { dijo: 'si', tiempo: 'corto', ultimo: 'r1' }).res!.mensajes.map((m) => m.texto)).toEqual([M.minimo])
+    expect(recorrer(b, { dijo: 'si', tiempo: 'corto', ultimo: 'r1' }).res!.mensajes).toHaveLength(2)
   })
 
   it('emprendedor: un solo recontacto y sin fecha', () => {
@@ -148,13 +143,5 @@ describe('el perfil se guarda en la ficha', () => {
     const m = setPerfilLead({ l1: lead }, 'l1', 'emprendedor')
     expect(m.l1.perfil).toBe('emprendedor')
     expect('perfil' in setPerfilLead(m, 'l1', null).l1).toBe(false)
-  })
-})
-
-describe('días desde el último contacto', () => {
-  it('cuenta días de calendario y no se corre por la hora', () => {
-    expect(diasDesdeContacto('2026-10-20', '2026-10-27')).toBe(7)
-    expect(diasDesdeContacto('2026-10-27T23:00:00', '2026-10-27')).toBe(0)
-    expect(diasDesdeContacto(null, '2026-10-27')).toBeNull()
   })
 })

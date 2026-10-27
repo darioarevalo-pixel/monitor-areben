@@ -11,8 +11,8 @@
  * - ⛔ **No pregunta «¿te contestó?»**: si contestó, esto no se abre (le responde él, a su ritmo).
  * - **Lo que el panel ya sabe no se pregunta**: si es cliente (las ventas), si está en la comunidad
  *   (elige solo el cierre) y si es local o emprendedor (se guarda en la ficha la primera vez).
- *   «Hace cuánto le escribiste» se saltea sólo si el último contacto anotado es de menos de 2
- *   meses: una fecha anotada vieja puede no ser la última vez (la fecha a mano no la mueve).
+ * - ⛔ **«Hace cuánto le escribiste» se pregunta SIEMPRE.** Tocar un botón de días no prueba que
+ *   le escribió: a veces pone la fecha para NO hablarle hasta que entre algo (Darío, 27-oct-2026).
  * - Las opciones de «¿qué fue lo último que le mandaste?» llevan el nombre del MENSAJE y sus
  *   primeras palabras, ⛔ nunca «1º/2º recontacto»: Darío no las reconocía.
  * - Más de 2 meses = **«Recaptar»** (palabra de Darío).
@@ -33,8 +33,6 @@ export type LoQueSabe = {
   /** `null` = no se pudo leer la comunidad todavía: se ofrecen los dos cierres. */
   enComunidad: boolean | null
   perfil: Perfil | null
-  /** Días desde el último contacto anotado (`ultimo_contacto`); `null` si no hay. */
-  diasDesdeContacto: number | null
   /** La novedad de la semana, sin pregunta. Vacía = no hay. */
   novedad: string
 }
@@ -58,15 +56,6 @@ export type Resultado = {
   mensajes: Mensaje[]
   agendar: Agendar[]
   nota: string | null
-}
-
-/** Días entre el último contacto anotado (ISO) y hoy (ISO). `null` si no hay fecha. */
-export function diasDesdeContacto(ultimo: string | null | undefined, hoy: string): number | null {
-  const f = String(ultimo || '').slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return null
-  const a = Date.UTC(+f.slice(0, 4), +f.slice(5, 7) - 1, +f.slice(8, 10))
-  const b = Date.UTC(+hoy.slice(0, 4), +hoy.slice(5, 7) - 1, +hoy.slice(8, 10))
-  return Math.round((b - a) / 86400000)
 }
 
 /** Más de esto sin escribirle es «Recaptar». */
@@ -131,11 +120,6 @@ export function tipoDe(sabe: LoQueSabe, r: Respuestas): Tipo | null {
   return null
 }
 
-/** El tiempo, si el panel ya lo sabe. Sólo «corto»: una fecha anotada vieja no prueba nada. */
-function tiempoSabido(sabe: LoQueSabe): 'corto' | null {
-  return sabe.diasDesdeContacto != null && sabe.diasDesdeContacto >= 0 && sabe.diasDesdeContacto < DIAS_RECAPTAR ? 'corto' : null
-}
-
 const ULTIMO: Record<Tipo, Opcion[]> = {
   A: [
     { valor: 'tienda0', texto: 'La tienda con factura A', detalle: '«Te paso la tienda mayorista… 🧾 IVA incluido y factura A»' },
@@ -175,7 +159,7 @@ export function siguientePregunta(sabe: LoQueSabe, r: Respuestas): Pregunta | nu
       texto: '¿Tiene local o es emprendedor?',
       opciones: [{ valor: 'local', texto: 'Local' }, { valor: 'emprendedor', texto: 'Emprendedor' }],
     }
-  const tiempo = r.tiempo || tiempoSabido(sabe)
+  const tiempo = r.tiempo
   if (t !== 'E' && !tiempo)
     return {
       campo: 'tiempo',
@@ -219,7 +203,7 @@ export function resultado(sabe: LoQueSabe, r: Respuestas): Resultado | null {
     nota,
   })
   const uno = (texto: string): Mensaje[] => [{ etiqueta: null, texto }]
-  const tiempo = r.tiempo || tiempoSabido(sabe)
+  const tiempo = r.tiempo
 
   if (t !== 'E' && tiempo === 'largo') {
     if (t === 'A') return R('Recaptar', uno(M.tepaso), PROXIMO, 'Si contesta que sí, le pasás la tienda.')

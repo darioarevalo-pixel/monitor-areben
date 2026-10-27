@@ -205,10 +205,6 @@ function HojaQueLeMando({ onCerrar, sabe, tels, onPerfil, onAgendar, decir }: Pr
         onPerfil(null)
         setR(({ perfil: _p, ...x }) => x)
       }),
-    !r.tiempo &&
-      sabe.diasDesdeContacto != null &&
-      sabe.diasDesdeContacto < 60 &&
-      chip(`✓ Le escribiste ${sabe.diasDesdeContacto === 0 ? 'hoy' : `hace ${sabe.diasDesdeContacto} ${sabe.diasDesdeContacto === 1 ? 'día' : 'días'}`}`, true),
     r.dijo && chip(r.dijo === 'si' ? 'Dijo que compraba' : 'No dijo que compraba', false),
     r.perfil && chip(r.perfil === 'local' ? 'Local' : 'Emprendedor', false),
     r.tiempo && chip(r.tiempo === 'corto' ? 'Menos de 2 meses' : 'Más de 2 meses', false),

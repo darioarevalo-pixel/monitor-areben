@@ -1273,9 +1273,10 @@ corrige: https://claude.ai/artifact/FgX8oBCpvQY3u58zqqrTwE (si cambia, se cambia
 
 - Reglas puras en `lib/crm/que-le-mando.ts` (tests: `tests/crm-que-le-mando.test.ts`); hoja en
   `components/panel/QueLeMando.tsx`, por portal al `body` (la barra es `sticky` con `zIndex`).
-- Lo que el panel sabe no se pregunta: cliente (ventas), comunidad (elige el cierre), perfil y el
-  tiempo — ⚠️ éste sólo si `ultimo_contacto` es de menos de 60 días: la fecha a mano no lo mueve,
-  así que una anotada vieja no prueba que no le escribió.
+- Lo que el panel sabe no se pregunta: cliente (ventas), comunidad (elige el cierre) y perfil.
+  ⛔ **«Hace cuánto le escribiste» se pregunta SIEMPRE**, aunque haya `ultimo_contacto`: tocar un
+  botón de días no prueba que le escribió — a veces pone la fecha para NO hablarle hasta que entre
+  mercadería (Darío, 27-oct-2026).
 - **Campo nuevo `perfil`** (`'local' | 'emprendedor'`) en `crm:seg` (`setPerfil`) y en `crm:leads`
   (`setPerfilLead`). Aditivo, sin la clave cuando no se sabe, por las filas de siempre.
 - **La novedad de la semana vive en el banco de mensajes** (`mensajes:bdi`), grupo «Novedad de la
