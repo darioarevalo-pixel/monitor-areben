@@ -182,8 +182,6 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const [pedidoN, setPedidoN] = useState(0)
   const [prendaGlobal, setPrendaGlobal] = useState<{ marca: Marca; producto: string; talle: string } | null>(null)
   useAtajosErp(setPanel)
-  // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
-  const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia')
   // Una dirección vieja o mal escrita ⇒ la que corresponde (⛔ una pantalla en blanco).
   useEffect(() => {
     if (!valida) router.replace(hrefErp(seccion.key, pestania, vista))
@@ -194,6 +192,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const [linea, setLineaEstado] = useState<LineaErp>(lineaElegida)
   const setLinea = (l: LineaErp) => { elegirLinea(l); setLineaEstado(l) }
   const lineaVista: LineaErp = marca === 'zattia' ? (linea === 'stunned' ? 'stunned' : 'zattia') : ''
+  // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
+  const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia', lineaVista)
   const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : [{ key: 'zattia', titulo: 'Zattia' }, { key: 'stunned', titulo: 'Stunned' }])
   const opcionActiva = marca === 'bdi' ? 'bdi' : lineaVista === 'stunned' ? 'stunned' : 'zattia'
   const elegirOpcion = (k: 'bdi' | 'zattia' | 'stunned') => {
