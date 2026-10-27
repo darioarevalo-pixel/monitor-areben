@@ -399,9 +399,8 @@ a una vista que existe en su lista (test). Sin tile de cheques. Tests `erp-resum
 `buscarClientas` (DNI/CUIT, nombre) — `queBuscar` — y suma saltos a pantallas (`saltosA`). Las ventas se buscan sólo en **este mes y el
 mes pasado** (`desdeBusquedaDeVentas`): son los dos períodos que Ventas puede listar, así toda venta encontrada se abre. Pedido de TN y
 factura (`TN-…`, `B-0005-…`) ⛔ tienen lectura por número ⇒ no se buscan (el cartel lo dice). «Buscar en todas las marcas» corre las
-lecturas en BDI y Zattia. Enter abre: la prenda en `FichaPrenda` encima de lo que hay; la venta/cliente viajan en memoria (`aAbrir`, como
-`aAjustar`) y `VentasErp`/`ClientesErp` la abren al llegar su lista (`abrir`/`alAbrir`). Un escaneo (8+ cifras) + Enter espera la lectura y
-abre si hay UNA sola coincidencia. «?» abre la hoja de atajos (`ATAJOS`; los de la Caja, F2/F4, ⛔ se tocan).
+lecturas en BDI y Zattia. Enter abre: la prenda en `FichaPrenda` encima de lo que hay; la venta/cliente viajan en memoria (`pedidoDeBusqueda`, a nivel de módulo: `Erp` se REMONTA al cambiar de sección y un `useState` se perdía) y `VentasErp`/`ClientesErp` la abren al llegar su lista (`abrir`/`alAbrir`). Un escaneo (8+ cifras) + Enter espera la lectura y
+abre si hay UNA sola coincidencia. Un cliente sin documento (los de GN) se abre por NOMBRE: ⛔ comparar `doc` nulos. «?» abre la hoja de atajos (`ATAJOS`; los de la Caja, F2/F4, ⛔ se tocan).
 
 ## Pendiente
 
