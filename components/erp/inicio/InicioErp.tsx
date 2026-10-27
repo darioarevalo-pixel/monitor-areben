@@ -16,7 +16,7 @@ import { TileResumen } from '@/components/ui/PiezasLista'
 import {
   leerGastos, leerListaDeProductos, leerListaDeStock, leerListaDeVentas, leerResultadoDelMes, type GastosDelPeriodo, type MarcaErp, type ResultadoDelMes,
 } from '@/lib/erp/cliente'
-import { contarVistas as vistasDeVentas, rangoDePeriodo } from '@/lib/erp/ventas-lista.core.js'
+import { contarVistas as vistasDeVentas, filtrar as filtrarVentas, rangoDePeriodo } from '@/lib/erp/ventas-lista.core.js'
 import { contarVistas as vistasDeStock, filtrar as filtrarStock } from '@/lib/erp/stock-lista.core.js'
 import { contarVistas as vistasDeProductos, filtrar as filtrarProductos } from '@/lib/erp/productos-lista.core.js'
 import { useLineaErp } from '@/lib/erp/linea-erp'
@@ -47,7 +47,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const [resultado, setResultado] = useState<{ marca: string; r: ResultadoDelMes | null; error: string | null } | null>(null)
   // Los gastos comerciales REALES del mismo mes (⛔ los de prueba: son de ventas que Gestión Nube no tiene).
   const [gastos, setGastos] = useState<{ marca: string; g: GastosDelPeriodo | null; error: string | null } | null>(null)
-  const [conteos, setConteos] = useState<{ marca: string; ventas: Conteo; stock: Crudo; productos: Crudo }>({ marca: '', ventas: null, stock: null, productos: null })
+  const [conteos, setConteos] = useState<{ marca: string; ventas: Crudo; stock: Crudo; productos: Crudo }>({ marca: '', ventas: null, stock: null, productos: null })
 
   useEffect(() => {
     let vivo = true
@@ -61,7 +61,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
       })
       .catch((e) => vivo && setResultado({ marca, r: null, error: fallo(e) }))
     const r = rangoDePeriodo('mes', diaArgentino(Date.now()))
-    leerListaDeVentas(marca, r.desde, r.hasta).then((d) => poner('ventas', vistasDeVentas(d.filas))).catch((e) => poner('ventas', fallo(e)))
+    leerListaDeVentas(marca, r.desde, r.hasta).then((d) => poner('ventas', { filas: d.filas })).catch((e) => poner('ventas', fallo(e)))
     leerListaDeStock(marca).then((d) => poner('stock', { filas: d.filas })).catch((e) => poner('stock', fallo(e)))
     leerListaDeProductos(marca).then((d) => poner('productos', { filas: d.filas })).catch((e) => poner('productos', fallo(e)))
     return () => { vivo = false }
@@ -74,7 +74,8 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const linea = useLineaErp()
   const crudos = conteos.marca === marca ? conteos : { ventas: null, stock: null, productos: null }
   const de: { ventas: Conteo; stock: Conteo; productos: Conteo } = {
-    ventas: crudos.ventas as Conteo,
+    // Como la lista de Ventas: el mismo `filtrar` y después la línea elegida (⛔ Zattia + Stunned sumadas).
+    ventas: typeof crudos.ventas === 'object' && crudos.ventas ? vistasDeVentas(filtrarVentas(crudos.ventas.filas as never).filter((f: { linea: string }) => !linea || f.linea === linea)) : crudos.ventas,
     stock: typeof crudos.stock === 'object' && crudos.stock ? vistasDeStock(filtrarStock(crudos.stock.filas as never, { linea })) : crudos.stock,
     productos: typeof crudos.productos === 'object' && crudos.productos ? vistasDeProductos(filtrarProductos(crudos.productos.filas as never, { linea })) : crudos.productos,
   }
