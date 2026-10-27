@@ -107,6 +107,9 @@ function Trazo({ d, size = 18 }: { d: string; size?: number }) {
   )
 }
 
+type AAbrir = { tipo: 'venta'; id: string; numero: number; periodo: string } | { tipo: 'cliente'; doc: string | null; nombre: string } | null
+let pedidoDeBusqueda: AAbrir = null
+
 export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const router = useRouter()
   const { perfil, marca, setMarca } = useSesion()
@@ -118,7 +121,9 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const ir = (s: string, p?: string | null) => router.push(hrefErp(s, p))
   // Búsqueda global (⌘K) y atajos (?). Lo que se elige viaja en memoria (como `aAjustar`): la lista que lo abre lo recibe y lo suelta.
   const [panel, setPanel] = useState<'buscar' | 'atajos' | null>(null)
-  const [aAbrir, setAAbrir] = useState<{ tipo: 'venta'; id: string; numero: number; periodo: string } | { tipo: 'cliente'; doc: string | null; nombre: string } | null>(null)
+  // `Erp` se REMONTA al cambiar de sección (un `useState` se perdía en el camino): el pedido vive en el módulo y la lista lo suelta.
+  const [aAbrir, setAAbrirEstado] = useState<AAbrir>(() => pedidoDeBusqueda)
+  const setAAbrir = (v: AAbrir) => { pedidoDeBusqueda = v; setAAbrirEstado(v) }
   // Cada pedido de la búsqueda remonta la lista que lo recibe (ya montada, no volvería a leer ni a mirar `abrir`).
   const [pedidoN, setPedidoN] = useState(0)
   const [prendaGlobal, setPrendaGlobal] = useState<{ marca: Marca; producto: string; talle: string } | null>(null)
