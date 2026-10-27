@@ -11,13 +11,13 @@ import { Button, Field, Input, Modal, MoneyText, Notice, Select, color, font, sp
 import { formatMoney } from '@/components/ui/MoneyText'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
-import { cobrarCuentaErp, leerCuentaDeCliente, ponerCreditoCliente, type CreditoCliente, type CuentaDeCliente, type MarcaErp } from '@/lib/erp/cliente'
+import { cobrarCuentaErp, leerCuentaDeCliente, ponerContactoCliente, ponerCreditoCliente, type CreditoCliente, type CuentaDeCliente, type MarcaErp } from '@/lib/erp/cliente'
 import { NOMBRE_LINEA, TRAMOS, nombresDeVentas, textoCredito } from '@/lib/erp/cuenta-corriente.core.js'
 import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { fechaCorta } from './FichaCliente'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
-import { enlaceWhatsapp } from '@/lib/erp/resumen-cuenta.core.js'
+import { enlaceWhatsapp, numeroWhatsapp } from '@/lib/erp/resumen-cuenta.core.js'
 import { imprimirResumenCon } from './resumen-cuenta'
 
 export const ESTADO_CUENTA: Record<string, [tono: 'danger' | 'success' | 'action' | 'neutral', texto: string]> = {
@@ -50,6 +50,9 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
   const [s, setS] = useState<(CuentaDeCliente & { clave: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [credito, setCredito] = useState(false)
+  const [contactando, setContactando] = useState(false)
+  // El WhatsApp recién guardado: la lista de arriba se refresca con `onCambio`, pero la ficha ya lo usa.
+  const [whatsappNuevo, setWhatsappNuevo] = useState<string | null>(null)
   const [cobrando, setCobrando] = useState(false)
   const [hecho, setHecho] = useState<string | null>(null)
   const puedeCobrar = usePuedeErp(marca)('cobrar')
@@ -71,7 +74,7 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
   const celda: React.CSSProperties = { padding: '7px 0', borderBottom: `1px solid ${color.bg2}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
   const cab = (t: string, derecha: boolean) => <span key={t} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: derecha ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>
   const linea = NOMBRE_LINEA[fila.linea as keyof typeof NOMBRE_LINEA] ?? fila.linea
-  const wa = enlaceWhatsapp({ whatsapp: fila.whatsapp, nombre: fila.nombre, linea: fila.linea, saldo, vencido: e?.vencido ?? fila.vencido })
+  const wa = enlaceWhatsapp({ whatsapp: whatsappNuevo ?? fila.whatsapp, nombre: fila.nombre, linea: fila.linea, saldo, vencido: e?.vencido ?? fila.vencido })
   const imprimir = () => {
     const w = window.open('', '_blank')
     if (!w) return setError('El navegador bloqueó la ventana del resumen: permitila para este sitio.')
@@ -108,6 +111,7 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
       <DatosFicha>
         <DatoFicha titulo="Crédito">{textoCredito(cred, formatMoney)}</DatoFicha>
         <DatoFicha titulo="Lo marcó">{cred?.puesto_por ? `${cred.puesto_por} · ${cred.puesto_en ? cuandoCorto(cred.puesto_en) : ''}` : '—'}</DatoFicha>
+        <DatoFicha titulo="WhatsApp">{(whatsappNuevo ?? fila.whatsapp)?.trim() ? (whatsappNuevo ?? fila.whatsapp) : 'Sin cargar'}</DatoFicha>
         <DatoFicha titulo="Vencido">{formatMoney(e?.vencido ?? fila.vencido)}</DatoFicha>
         <DatoFicha titulo="La más vieja">{(e?.debe ?? fila.debe) ? `${e?.dias_mayor ?? fila.diasMayor} días` : '—'}</DatoFicha>
         {TRAMOS.map((t) => <DatoFicha key={t} titulo={t === 'más de 90' ? 'Más de 90 días' : `${t} días`}>{formatMoney((e?.tramos ?? fila.tramos)[t] ?? 0)}</DatoFicha>)}
@@ -116,6 +120,7 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
         {puedeCobrar && <Button disabled={!s} onClick={() => { setHecho(null); setCobrando(true) }}>Cobrar</Button>}
         <Button variant="outline" disabled={!wa.url} title={wa.motivo ?? undefined} onClick={() => wa.url && window.open(wa.url, '_blank', 'noopener')}>Escribir por WhatsApp</Button>
         <Button variant="outline" disabled={!s} onClick={imprimir}>Resumen de cuenta</Button>
+        {admin && <Button variant="outline" onClick={() => { setHecho(null); setContactando(true) }}>{(whatsappNuevo ?? fila.whatsapp)?.trim() ? 'Cambiar el WhatsApp' : 'Cargar el WhatsApp'}</Button>}
         {admin && <Button variant="outline" onClick={() => setCredito(true)}>{cred?.credito ? 'Cambiar el crédito' : 'Marcar crédito'}</Button>}
       </div>
 
@@ -184,6 +189,13 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
         />
       )}
 
+      {contactando && (
+        <VentanaContacto
+          marca={marca} fila={fila} actual={whatsappNuevo ?? fila.whatsapp ?? ''} onCerrar={() => setContactando(false)}
+          onHecho={(wa) => { setContactando(false); setWhatsappNuevo(wa); setHecho(`WhatsApp de ${fila.nombre} guardado.`); onCambio() }}
+        />
+      )}
+
       {credito && (
         <VentanaCredito
           marca={marca} fila={fila} credito={cred} onCerrar={() => setCredito(false)}
@@ -191,6 +203,53 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
         />
       )}
     </FichaCostado>
+  )
+}
+
+/**
+ * Cargar o corregir el WhatsApp del cliente (sólo admin). El motor lo lleva a 549 + 10 dígitos o lo rechaza: acá se avisa antes
+ * de guardar con el MISMO criterio (`numeroWhatsapp`), y se muestra a qué número va a escribir, porque un número mal armado le
+ * escribe a otra persona.
+ */
+function VentanaContacto({ marca, fila, actual, onCerrar, onHecho }: {
+  marca: MarcaErp; fila: FilaCuenta; actual: string; onCerrar: () => void; onHecho: (whatsapp: string) => void
+}) {
+  const [texto, setTexto] = useState(actual)
+  const [error, setError] = useState<string | null>(null)
+  const [trabajando, setTrabajando] = useState(false)
+  const n = numeroWhatsapp(texto)
+  const mal = texto.trim() !== '' && !n
+
+  async function guardar() {
+    setTrabajando(true)
+    try {
+      const r = await ponerContactoCliente(marca, { clienteId: fila.clienteId, whatsapp: texto })
+      onHecho(r.contacto.whatsapp ?? texto)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo guardar el WhatsApp.')
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
+  return (
+    <Modal
+      abierto onCerrar={onCerrar} titulo={`WhatsApp de ${fila.nombre}`}
+      pie={<>
+        <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
+        <Button disabled={trabajando || !n} onClick={() => void guardar()}>Guardar el WhatsApp</Button>
+      </>}
+    >
+      {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+        <Field label="WhatsApp" hint="Con código de área, sin el 15. Ej: 11 5555-1234.">
+          <Input inputMode="tel" value={texto} onChange={(ev) => setTexto(ev.target.value)} autoFocus />
+        </Field>
+        <div style={{ color: mal ? 'var(--mo-danger-ink)' : color.mut, fontSize: font.sm }}>
+          {!texto.trim() ? 'Escribí el número.' : mal ? 'No se entiende como número: falta el código de área o sobran dígitos.' : `Le va a escribir a +${n}.`}
+        </div>
+      </div>
+    </Modal>
   )
 }
 

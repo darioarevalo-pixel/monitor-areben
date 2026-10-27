@@ -393,6 +393,12 @@ impresión; la ventana se abre en el clic y se llena cuando llega la cuenta. (2)
 `lib/erp/inicio-roles.core.js`): cambia las tarjetas de «Para hacer» y el resultado comercial sólo lo ve Admin; cada renglón apunta
 a una vista que existe en su lista (test). Sin tile de cheques. Tests `erp-resumen-cuenta`, `erp-resumen-cuenta-pantalla`, `erp-inicio-ver-como`.
 
+📱 **Cargar el WhatsApp de un cliente** (27-oct, Resto). En la ficha de la cuenta, sólo Admin: **«Cargar el WhatsApp»** (o «Cambiar»)
+abre una ventana que, antes de guardar, dice a qué número va a escribir (`+549…`) y ⛔ deja guardar uno que no se entiende. Guarda por
+el id del cliente (acción `poner-contacto`, verbo `ponerContactoCliente` del motor): vale también para las mayoristas de GN sin
+documento, y el botón «Escribir por WhatsApp» se prende al guardar. ⛔ borra un número ya cargado (vacío no se acepta). Test
+`erp-contacto-pantalla`, `erp-poner-contacto`.
+
 🎨 **Búsqueda global (⌘K) y atajos** (26-oct, Resto; `Piezas.dc.html`). `components/erp/BusquedaGlobal.tsx` + núcleo `lib/erp/busqueda-global.core.js`
 (test `erp-busqueda-global`). ⌘K / Ctrl+K abren siempre; «/» y «?» sólo fuera de un campo (`accionDeTecla`); botón «Buscar» en el pie del menú.
 🔑 ⛔ **Sin lectura nueva**: reparte lo escrito entre `buscarVentas` (número o cliente), `buscarPrendas` (SKU, código, nombre) y
