@@ -9,6 +9,7 @@
  * hacen en el monitor ⇒ «↗». Sólo lectura: la ficha ⛔ escribe nada.
  */
 
+import { lineaDe } from '@/lib/lineas'
 import { useEffect, useState } from 'react'
 import { Button, MenuAcciones, Notice, color, font, space, weight, type AccionMenu } from '@/components/ui'
 import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial } from '@/components/ui/FichaCostado'
@@ -56,7 +57,8 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
   const estanteria = s ? s.depositos.reduce((a, d) => a + d.libro, 0) : f?.estanteria ?? null
   const enPedidos = f?.enPedidos ?? 0
   const disponible = estanteria == null ? null : estanteria - enPedidos
-  const linea = f?.linea ?? (marca === 'bdi' ? 'bdi' : null)
+  // Sin fila (abierta desde la búsqueda global) la línea sale del SKU: en Zattia ⛔ alcanza con la marca (Zattia o Stunned) y «Ajustar» quedaba apagado.
+  const linea = f?.linea ?? (s ? lineaDe(marca, sku) : null)
   const local = s?.depositos.find((d) => d.deposito === 'local')?.libro ?? f?.deps.local ?? 0
   const negativo = (disponible ?? 0) < 0 || !!s?.depositos.some((d) => d.libro < 0)
 
