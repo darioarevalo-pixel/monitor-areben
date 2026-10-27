@@ -10,7 +10,7 @@ solo sin ir atrás»): sale del shell en `app/[[...seccion]]/page.tsx` (`esERP`,
 marca adentro) con SU menú (`components/erp/Erp.tsx`, `SECCIONES_ERP`): Inicio · Ventas + Caja (POS) · Stock ·
 Productos y precios · Clientes y proveedores · Configuración, y «Volver al monitor». Una dirección por sección y por
 pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una vieja o mal escrita se corrige sola).
-Las pestañas: Ventas = Ventas · Por producto · Cobros · Cajas · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
+Las pestañas: Ventas = Ventas · Por producto · Cobros · Gastos · Cajas · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
 dirección vieja cae en Ventas) · Caja (POS) = Cambio · Factura · Stock =
 Stock (🎨 27-oct, §9: 9 → 4 pestañas con VISTAS en la dirección `/erp/stock/<pestaña>/<vista>`: Stock = Productos · Movimientos; Transferencias = Transferencias · Mover y recibir; Ingresos y ajustes = Ajustes · Ingresos; Diferencias = Con Tienda Nube y Mercado Libre · Conciliación · Con Gestión Nube; las nueve direcciones viejas caen en su vista, `PESTANIAS_VIEJAS_DE_STOCK`) · Productos = Productos · Precios · Configuración = Reglas · Cuentas de cobro · Redondeo;
 Clientes y proveedores = Clientes · Cuenta corriente · Proveedores. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
@@ -419,3 +419,10 @@ abre si hay UNA sola coincidencia. Un cliente sin documento (los de GN) se abre 
 
 Factura A en la masiva (en la Caja ya está) · NC PARCIAL (la del cambio) · los datos del emisor para el PDF · reabrir un mes ·
 en producción: certificado, PV nuevos (contador) y las dos variables.
+- 🔑 **`erp › Ventas › Gastos`** (🎨 27-oct, Resto; sólo admin; `components/erp/ventas/GastosErp.tsx`, núcleo `lib/erp/gastos.core.js`, tests `erp-gastos-pantalla` y `erp-gastos-ui`): los gastos COMERCIALES del
+  período (comisiones de plataformas, impuestos, otros) sobre `vista=gastos` y `registrar-gasto`. Abre en «De prueba» (como Cobros). Tiles: total, comisiones (cuánto salió solo y cuánto a mano), impuestos, otros.
+  La comisión automática llega SUMADA del motor ⇒ es UNA fila («Comisiones de plataformas de todos los cobros del período»), ⛔ renglón por venta como dibujaba el v8; los cargados a mano, una fila cada uno.
+  Si `cobrosSinComision` > 0 lo dice arriba: esas comisiones NO están en el total (la tasa se carga en Configuración › Rutas). «Nuevo gasto» pide confirmar (es inmutable) y acepta monto con
+  signo menos para corregir uno de más. ⛔ «Cambios y devoluciones» como gasto automático (el v8 lo dibuja): el motor todavía no lo calcula.
+- 🔑 **`erp › Inicio` resta los gastos**: debajo del resultado comercial, «Gastos comerciales» y «Resultado después de gastos comerciales» (= margen bruto − gastos REALES del ERP del mismo mes;
+  ⛔ los de prueba, que son de ventas que Gestión Nube no tiene). Con 0 gastos reales dice que el resultado es antes de gastos.

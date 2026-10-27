@@ -14,7 +14,7 @@ import { Notice, color, font, space, weight } from '@/components/ui'
 import { formatMoney } from '@/components/ui/MoneyText'
 import { TileResumen } from '@/components/ui/PiezasLista'
 import {
-  leerListaDeProductos, leerListaDeStock, leerListaDeVentas, leerResultadoDelMes, type MarcaErp, type ResultadoDelMes,
+  leerGastos, leerListaDeProductos, leerListaDeStock, leerListaDeVentas, leerResultadoDelMes, type GastosDelPeriodo, type MarcaErp, type ResultadoDelMes,
 } from '@/lib/erp/cliente'
 import { contarVistas as vistasDeVentas, rangoDePeriodo } from '@/lib/erp/ventas-lista.core.js'
 import { contarVistas as vistasDeStock } from '@/lib/erp/stock-lista.core.js'
@@ -42,13 +42,21 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const [rol, setRol] = useState('admin')
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const [resultado, setResultado] = useState<{ marca: string; r: ResultadoDelMes | null; error: string | null } | null>(null)
+  // Los gastos comerciales REALES del mismo mes (⛔ los de prueba: son de ventas que Gestión Nube no tiene).
+  const [gastos, setGastos] = useState<{ marca: string; g: GastosDelPeriodo | null; error: string | null } | null>(null)
   const [conteos, setConteos] = useState<{ marca: string; ventas: Conteo; stock: Conteo; productos: Conteo }>({ marca: '', ventas: null, stock: null, productos: null })
 
   useEffect(() => {
     let vivo = true
     const fallo = (e: unknown) => (e instanceof Error ? e.message : 'No se pudo leer.')
     const poner = (k: 'ventas' | 'stock' | 'productos', v: Conteo) => vivo && setConteos((c) => ({ ...(c.marca === marca ? c : { marca, ventas: null, stock: null, productos: null }), [k]: v }))
-    leerResultadoDelMes(marca).then((r) => vivo && setResultado({ marca, r, error: null })).catch((e) => vivo && setResultado({ marca, r: null, error: fallo(e) }))
+    leerResultadoDelMes(marca)
+      .then((r) => {
+        if (!vivo) return
+        setResultado({ marca, r, error: null })
+        leerGastos(marca, r.mes.desde, r.mes.hasta, false).then((g) => vivo && setGastos({ marca, g, error: null })).catch((e) => vivo && setGastos({ marca, g: null, error: fallo(e) }))
+      })
+      .catch((e) => vivo && setResultado({ marca, r: null, error: fallo(e) }))
     const r = rangoDePeriodo('mes', diaArgentino(Date.now()))
     leerListaDeVentas(marca, r.desde, r.hasta).then((d) => poner('ventas', vistasDeVentas(d.filas))).catch((e) => poner('ventas', fallo(e)))
     leerListaDeStock(marca).then((d) => poner('stock', vistasDeStock(d.filas))).catch((e) => poner('stock', fallo(e)))
@@ -58,6 +66,8 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
 
   const res = resultado?.marca === marca ? resultado : null
   const m = res?.r?.mes, a = res?.r?.anterior
+  const gs = gastos?.marca === marca ? gastos : null
+  const gTotal = gs?.g ? gs.g.total : null
   const de = conteos.marca === marca ? conteos : { ventas: null, stock: null, productos: null }
   const h2: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
 
@@ -90,6 +100,13 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
           <TileResumen titulo="Ventas" valor={m ? m.ventas.toLocaleString('es-AR') : '…'} nota={m ? `ticket promedio ${formatMoney(m.ventas ? m.vendido / m.ventas : 0)}` : undefined} />
           <TileResumen titulo="Contra el mes pasado" valor={m && a ? `${(pct(m.vendido, a.vendido) ?? 0) >= 0 ? '+' : ''}${pct(m.vendido, a.vendido) ?? '—'}%` : '…'} nota={m && a ? `en ventas: ${m.ventas} contra ${a.ventas}` : undefined} />
         </div>
+        <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+          <TileResumen titulo="Gastos comerciales" valor={gTotal != null ? formatMoney(gTotal) : gs?.error ? 'No se pudo' : '…'}
+            nota={gs?.error ? gs.error : gTotal != null ? (gTotal ? 'comisiones, impuestos y lo que cuesta vender · reales del ERP' : 'todavía no hay gastos reales en el ERP: el resultado es antes de gastos') : undefined} />
+          <TileResumen titulo="Resultado después de gastos comerciales" valor={m && gTotal != null ? formatMoney(m.margen - gTotal) : '…'} oscuro
+            nota={m && gTotal != null ? `margen bruto ${formatMoney(m.margen)} menos gastos comerciales ${formatMoney(gTotal)}` : undefined} />
+        </div>
+        {gs?.g && gs.g.cobrosSinComision > 0 && <div style={{ fontSize: font.sm, color: 'var(--mo-warning-ink)' }}>Hay {gs.g.cobrosSinComision.toLocaleString('es-AR')} cobros con tarjeta o Mercado Pago sin tasa cargada: esas comisiones no están en los gastos.</div>}
         {m && a && <div style={{ fontSize: font.sm, color: color.mut }}>Margen contra el mes pasado: <Variacion ahora={m.margen} antes={a.margen} />{m.sinCosto ? ` · ${m.sinCosto} ventas sin costo en Gestión Nube (suman su precio sin restar nada)` : ''}{res?.r?.gnHasta ? ` · Gestión Nube llega hasta el ${fecha(res.r.gnHasta)}` : ''}</div>}
       </section>}
 
