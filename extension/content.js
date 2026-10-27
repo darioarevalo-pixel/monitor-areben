@@ -28,7 +28,15 @@ window.addEventListener('message', (e) => {
     }
     return
   }
-  if (e.data.tipo === 'abrir-chat-aca') return
+  if (e.data.tipo === 'escrito-resultado') {
+    const responder = esperando.get(e.data.pedido)
+    if (responder) {
+      esperando.delete(e.data.pedido)
+      responder({ ok: !!e.data.ok, motivo: e.data.ok ? '' : 'sin-cuadro' })
+    }
+    return
+  }
+  if (e.data.tipo === 'abrir-chat-aca' || e.data.tipo === 'escribir-aca') return
   if (e.data.tipo === 'escritos-hoy') {
     escritos = { tels: e.data.tels || [], ultimos: e.data.ultimos || null }
     chrome.runtime.sendMessage({ tipo: 'escritos-hoy', ...escritos }).catch(() => {})
@@ -61,6 +69,24 @@ chrome.runtime.onMessage.addListener((msg, _remitente, responder) => {
       if (esperando.delete(pedido)) responder({ ok: false })
     }, 2000)
     window.postMessage({ fuente: FUENTE, tipo: 'abrir-chat-aca', tel: msg.tel, pedido }, '*')
+    return true
+  }
+  // «Escribir en WhatsApp»: sólo si el chat abierto es el de la ficha (por los últimos 10 dígitos).
+  // Sin esto, una ficha abierta desde la lista le escribiría el mensaje a la persona del chat de
+  // al lado. El texto lo pone `pagina.js` en el cuadro; ⛔ nadie aprieta «enviar».
+  if (msg && msg.tipo === 'escribir-en-chat') {
+    const cola = (x) => String(x || '').replace(/\D/g, '').slice(-10)
+    const abierto = cola(ultimo.tel)
+    if (!abierto || !(msg.tels || []).some((t) => cola(t) === abierto)) {
+      responder({ ok: false, motivo: 'otro-chat' })
+      return
+    }
+    const pedido = ++nPedido
+    esperando.set(pedido, responder)
+    setTimeout(() => {
+      if (esperando.delete(pedido)) responder({ ok: false, motivo: 'sin-cuadro' })
+    }, 2000)
+    window.postMessage({ fuente: FUENTE, tipo: 'escribir-aca', texto: String(msg.texto || ''), pedido }, '*')
     return true
   }
 })

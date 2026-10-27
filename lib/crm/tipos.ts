@@ -126,6 +126,11 @@ export type Seguimiento = {
    */
   pendiente?: string
   /**
+   * 🏪 Si tiene local o es emprendedor. Lo pregunta «Qué le mando» la primera vez y se guarda para
+   * no volver a preguntarlo (Darío, 27-oct-2026). Aditivo, y sin la clave cuando no se sabe.
+   */
+  perfil?: 'local' | 'emprendedor'
+  /**
    * Temperatura de la relación. Campo agregado en ago-2026, POSTERIOR al legacy: las 305
    * entradas que ya viven en el KV no lo tienen y caen a `TEMPERATURA_DEFAULT`. Es aditivo
    * a propósito — no hay que migrar nada.

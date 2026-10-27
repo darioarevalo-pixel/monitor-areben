@@ -6,6 +6,8 @@ import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
 import { CalculadoraEnvio } from './CalculadoraEnvio'
 import { ProximoContacto, RayaEstado, estadoDeFicha } from './ProximoContacto'
+import { QueLeMando } from './QueLeMando'
+import { diasDesdeContacto } from '@/lib/crm/que-le-mando'
 import { SOBRE_OSCURO } from './oscuro'
 import type { QuienPaga } from './NuevoCompromiso'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
@@ -31,6 +33,7 @@ import {
   setDespacho,
   setPagina,
   setPendiente,
+  setPerfil,
   setProximoManual,
   setTemperatura,
   setTenerEnCuenta,
@@ -46,6 +49,7 @@ import {
   setCampo as setCampoLead,
   setEstado as setEstadoLead,
   setProximoManual as setProximoLead,
+  setPerfilLead,
   leadEstadoSeg,
   type EstadoLead,
   type Lead,
@@ -420,6 +424,14 @@ function Chip({ children, tone = 'neutro' }: { children: React.ReactNode; tone?:
  * Sin lista no dice nada, salvo que WhatsApp no la haya cargado todavía: eso tiene arreglo a mano
  * (abrir la comunidad una vez) y por eso se avisa.
  */
+/** Para «Qué le mando»: `null` si la comunidad no se pudo leer o ningún número sirve para buscar. */
+function enComunidadDe(comunidad: Comunidad | null, tels: (string | null | undefined)[]): boolean | null {
+  if (!comunidad) return null
+  const r = tels.map((t) => estaEnComunidad(comunidad.indice, t))
+  if (r.every((x) => x === null)) return null
+  return r.some((x) => x === true)
+}
+
 function MarcaComunidad({ comunidad, aviso, tels }: { comunidad: Comunidad | null; aviso: AvisoComunidad; tels: (string | null | undefined)[] }) {
   if (!comunidad) {
     if (aviso === 'sin-cargar') return <Chip>Para ver si está en la comunidad, abrí la comunidad una vez en WhatsApp</Chip>
@@ -1123,6 +1135,9 @@ function PanelInterno({
             key={lead.id}
             lead={lead}
             today={today}
+            enComunidad={enComunidadDe(comunidad, pedido ? [lead.telefono] : [telNorm, lead.telefono])}
+            tels={pedido ? [lead.telefono || ''] : [telNorm, lead.telefono || '']}
+            decir={decir}
             onMutar={(fn, exito) => mutarLead(lead.id, fn, exito)}
             leEscribiste={leEscribisteHoy(escritos, pedido ? [lead.telefono] : [telNorm, lead.telefono])}
           />
@@ -1215,6 +1230,21 @@ function PanelInterno({
           faltaFecha={faltaFecha}
           ritmo={ritmo}
           onPlazo={(d) => mutar((m) => escribiHoy(m, c.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)}
+          queLeMando={
+            <QueLeMando
+              key={`qlm-${c.id}`}
+              sabe={{
+                esCliente: (c.ventas || []).length > 0,
+                enComunidad: enComunidadDe(comunidad, via === 'id' ? [c.phone] : [telNorm, c.phone]),
+                perfil: seg.perfil || null,
+                diasDesdeContacto: diasDesdeContacto(seg.ultimo_contacto, hoyFicha),
+              }}
+              tels={via === 'id' ? [c.phone || ''] : [telNorm, c.phone || '']}
+              onPerfil={(p) => mutar((m) => setPerfil(m, c.id, p), p ? 'Guardado' : 'Listo')}
+              onAgendar={(d) => mutar((m) => escribiHoy(m, c.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)}
+              decir={decir}
+            />
+          }
           calendario={
             <CampoFecha
               key={`fecha-${c.id}`}
@@ -1937,11 +1967,17 @@ function PieLead({
   lead,
   today,
   leEscribiste,
+  enComunidad,
+  tels,
+  decir,
   onMutar,
 }: {
   lead: Lead
   today: Date
   leEscribiste: boolean
+  enComunidad: boolean | null
+  tels: string[]
+  decir: (txt: string, mal?: boolean) => void
   onMutar: (fn: (m: MapaLeads) => MapaLeads, exito: string) => Promise<boolean>
 }) {
   const seg = leadEstadoSeg(lead, today)
@@ -1955,6 +1991,16 @@ function PieLead({
       faltaFecha={faltaFecha}
       ritmo={null}
       onPlazo={(d) => onMutar((m) => escribiHoyLead(m, lead.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)}
+      queLeMando={
+        <QueLeMando
+          key={`qlm-${lead.id}`}
+          sabe={{ esCliente: false, enComunidad, perfil: lead.perfil || null, diasDesdeContacto: diasDesdeContacto(lead.ultimo_contacto, hoy) }}
+          tels={tels}
+          onPerfil={(p) => onMutar((m) => setPerfilLead(m, lead.id, p), p ? 'Guardado' : 'Listo')}
+          onAgendar={(d) => onMutar((m) => escribiHoyLead(m, lead.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)}
+          decir={decir}
+        />
+      }
       calendario={
         <CampoFecha
           key={`fecha-${lead.id}`}

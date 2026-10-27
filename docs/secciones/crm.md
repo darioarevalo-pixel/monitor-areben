@@ -1263,3 +1263,26 @@ Diseñado sobre la página de prueba https://claude.ai/artifact/8GWTbjRR9byk1J3f
 - ⛔ **Sin carritos**: casi nunca traen nombre ni teléfono. Vuelven cuando los clientes entren al catálogo con usuario.
 - **✓ Contactado a mano**: el panel lo deduce de WhatsApp Web, pero si el cliente escribe desde otro número que el del pedido no lo une. La marca vive en el KV del catálogo, `crm:contactados:bdi` (`/api/ingresos?kind=crmcontactados`), clave = últimos 8 dígitos + fecha del pedido. Se cambia de a una en el servidor (`POST { clave, marcado }`), no reescribiendo el mapa, y se borra sola a los 4 días. Lo que vio WhatsApp tiene el ✓ apagado (no se desmarca).
 - **«Falta la fecha»**: sólo el título en rojo; los renglones, normales. Debajo del nombre: 3 d · 1 sem · 15 d · 📅 Fecha, que guardan lo mismo que el pie de la ficha (`agendarDesdeLista` en `PanelWhatsApp.tsx`) sin abrirla. Sin la aclaración de abajo.
+
+# ✅ 27-oct-2026 — «✉️ Qué le mando» en la ficha (Darío, sobre dos maquetas)
+
+Botón a todo el ancho en la barra «Próximo contacto» (cliente y prospecto) → hoja que sube con unas
+pocas preguntas → el recontacto que sigue + «Agendar». Ubicación: https://claude.ai/artifact/6VkmywsnrCxyYXFaChAyoT ·
+lógica: https://claude.ai/artifact/QoSbPLgUVNQi2sr1hZMuoD · ⛔ los textos salen de la guía que Darío
+corrige: https://claude.ai/artifact/FgX8oBCpvQY3u58zqqrTwE (si cambia, se cambia `M` en `lib/crm/que-le-mando.ts`).
+
+- Reglas puras en `lib/crm/que-le-mando.ts` (tests: `tests/crm-que-le-mando.test.ts`); hoja en
+  `components/panel/QueLeMando.tsx`, por portal al `body` (la barra es `sticky` con `zIndex`).
+- Lo que el panel sabe no se pregunta: cliente (ventas), comunidad (elige el cierre), perfil y el
+  tiempo — ⚠️ éste sólo si `ultimo_contacto` es de menos de 60 días: la fecha a mano no lo mueve,
+  así que una anotada vieja no prueba que no le escribió.
+- **Campo nuevo `perfil`** (`'local' | 'emprendedor'`) en `crm:seg` (`setPerfil`) y en `crm:leads`
+  (`setPerfilLead`). Aditivo, sin la clave cuando no se sabe, por las filas de siempre.
+- **La novedad de la semana vive en el banco de mensajes** (`mensajes:bdi`), grupo «Novedad de la
+  semana»: se cambia desde la hoja (relee antes de escribir) o desde «Mensajes» del CRM. ⚠️ La
+  ventana de Mensajes del CRM no relee al guardar: abierta desde antes, pisa una novedad cargada
+  desde el panel.
+- **«Escribir en WhatsApp» ⛔ nunca manda.** Copia el texto y le pide a la extensión (0.11.0,
+  `escribir-en-chat`) que lo pegue en el cuadro; `content.js` lo rechaza si el chat abierto no es
+  de la ficha (`otro-chat`), y `pagina.js` lo pega como un «pegar» (si no, `insertText`) y verifica
+  que quedó. Con la extensión vieja queda copiado. ⏭️ Probarlo en WhatsApp real (chat propio).

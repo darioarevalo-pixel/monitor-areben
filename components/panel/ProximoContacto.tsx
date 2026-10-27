@@ -51,6 +51,7 @@ export function ProximoContacto({
   faltaFecha,
   ritmo,
   calendario,
+  queLeMando,
   onPlazo,
 }: {
   fecha: string | null | undefined
@@ -59,6 +60,8 @@ export function ProximoContacto({
   ritmo: { cadaDias: number; desdeUltima: number; enDias: number } | null
   /** El casillero de la fecha (`CampoFecha`): se escribe con el teclado o se elige en el calendario. */
   calendario: React.ReactNode
+  /** «✉️ Qué le mando» (27-oct-2026): entre la fecha y los plazos, porque termina en una fecha. */
+  queLeMando?: React.ReactNode
   onPlazo: (dias: number) => void
 }) {
   const est = estadoContacto(fecha, hoy)
@@ -104,6 +107,8 @@ export function ProximoContacto({
           {etiqueta}
         </span>
       </div>
+
+      {queLeMando}
 
       <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
         {plazos.map(({ dias, sugerido }) => {

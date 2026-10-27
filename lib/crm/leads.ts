@@ -37,6 +37,8 @@ export type Lead = {
   proximo_manual: string | null
   notas: Nota[]
   creado: string
+  /** 🏪 Local o emprendedor, lo guarda «Qué le mando» (27-oct-2026). Aditivo. */
+  perfil?: 'local' | 'emprendedor'
 }
 
 export type MapaLeads = Record<string, Lead>
@@ -184,6 +186,14 @@ function conLead(leads: MapaLeads, id: string, f: (l: Lead) => Lead): MapaLeads 
   const actual = leads[id]
   if (!actual) return leads
   return { ...leads, [id]: f({ ...actual, notas: Array.isArray(actual.notas) ? actual.notas : [] }) }
+}
+
+/** 🏪 Local o emprendedor («Qué le mando»). `null` lo saca. */
+export function setPerfilLead(leads: MapaLeads, id: string, perfil: 'local' | 'emprendedor' | null): MapaLeads {
+  return conLead(leads, id, (l) => {
+    const { perfil: _viejo, ...resto } = l
+    return perfil ? { ...resto, perfil } : resto
+  })
 }
 
 /** leadsSetCampo (14177). */

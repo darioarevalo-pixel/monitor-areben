@@ -119,6 +119,15 @@ export const setDespacho = (crmSeg: MapaSeguimiento, id: number | string, value:
 export const setTenerEnCuenta = (crmSeg: MapaSeguimiento, id: number | string, value: string) =>
   conTexto(crmSeg, id, 'tener_en_cuenta', value)
 
+/** 🏪 Local o emprendedor («Qué le mando»). `null` lo saca. */
+export function setPerfil(crmSeg: MapaSeguimiento, id: number | string, perfil: 'local' | 'emprendedor' | null): MapaSeguimiento {
+  const { mapa, k } = conEntrada(crmSeg, id)
+  const entrada: Seguimiento = { ...mapa[k] }
+  if (perfil) entrada.perfil = perfil
+  else delete entrada.perfil
+  return { ...mapa, [k]: entrada }
+}
+
 /** ⏳ Lo que quedó para la próxima. */
 export const setPendiente = (crmSeg: MapaSeguimiento, id: number | string, value: string) =>
   conTexto(crmSeg, id, 'pendiente', value)

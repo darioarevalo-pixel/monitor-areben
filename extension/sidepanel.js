@@ -176,6 +176,22 @@ window.addEventListener('message', (e) => {
     return
   }
 
+  // «Qué le mando» → «Escribir en WhatsApp» (27-oct-2026): el texto va al cuadro del chat, ⛔ nunca
+  // se manda. Lo hace la pestaña (`content.js`, que sabe qué chat está abierto); acá sólo se pasa.
+  if (d.tipo === 'escribir-en-chat') {
+    const contestar = (r) =>
+      iframe.contentWindow.postMessage({ fuente: 'bdi-crm-panel', tipo: 'escribir-en-chat-resultado', pedido: d.pedido, ok: !!(r && r.ok), motivo: (r && r.motivo) || '' }, ORIGEN)
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs && tabs[0]
+      if (!tab || !tab.id) return contestar({ ok: false, motivo: 'sin-pestana' })
+      chrome.tabs.sendMessage(tab.id, { tipo: 'escribir-en-chat', texto: String(d.texto || ''), tels: Array.isArray(d.tels) ? d.tels.map(String) : [] }, (r) => {
+        if (chrome.runtime.lastError) return contestar({ ok: false, motivo: 'sin-pestana' })
+        contestar(r)
+      })
+    })
+    return
+  }
+
   if (d.tipo !== 'abrir-chat') return
   const numero = String(d.tel || '').replace(/\D/g, '')
   if (!numero) return

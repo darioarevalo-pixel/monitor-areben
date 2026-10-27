@@ -275,6 +275,49 @@
   })
 
   // ═════════════════════════════════════════════════════════════════════════════════════════
+  // PONER UN TEXTO EN EL CUADRO DEL CHAT («Qué le mando», 27-oct-2026)
+  // ═════════════════════════════════════════════════════════════════════════════════════════
+  // ⛔ **Nunca manda**: deja el texto en el cuadro y el que aprieta «enviar» es Darío. Si el cuadro
+  // ya tiene algo (el saludo sin mandar), va abajo, en otro renglón.
+  //
+  // Se pega como un «pegar» del portapapeles: el cuadro de WhatsApp es un editor que escucha ese
+  // evento, y no hace falta que la pestaña tenga el foco (el clic fue en el panel de al lado). Si
+  // no lo toma, se prueba `insertText`. Se da por escrito sólo si el texto aparece en el cuadro.
+  async function escribirAca(texto) {
+    try {
+      const caja = document.querySelector('footer [contenteditable="true"]') || document.querySelector('#main [contenteditable="true"][role="textbox"]')
+      if (!caja || !texto) return false
+      const prueba = texto.slice(0, 30)
+      const quedo = () => (caja.innerText || '').includes(prueba)
+      const t = (caja.innerText || '').trim() ? '\n' + texto : texto
+      caja.focus()
+      const sel = window.getSelection()
+      const rango = document.createRange()
+      rango.selectNodeContents(caja)
+      rango.collapse(false)
+      sel.removeAllRanges()
+      sel.addRange(rango)
+      const dt = new DataTransfer()
+      dt.setData('text/plain', t)
+      caja.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+      await new Promise((r) => setTimeout(r, 150))
+      if (quedo()) return true
+      document.execCommand('insertText', false, t)
+      await new Promise((r) => setTimeout(r, 150))
+      return quedo()
+    } catch {
+      return false
+    }
+  }
+
+  window.addEventListener('message', async (e) => {
+    if (e.source !== window || !e.data || e.data.fuente !== FUENTE || e.data.tipo !== 'escribir-aca') return
+    const ok = await escribirAca(String(e.data.texto || ''))
+    console.log('[BDI] escribir en el cuadro: ' + (ok ? 'sí' : 'no'))
+    window.postMessage({ fuente: FUENTE, tipo: 'escrito-resultado', pedido: e.data.pedido, ok }, '*')
+  })
+
+  // ═════════════════════════════════════════════════════════════════════════════════════════
   // A QUIÉN LE ESCRIBISTE HOY (16-oct-2026, a prueba)
   // ═════════════════════════════════════════════════════════════════════════════════════════
   // El panel marca en rojo a quien le escribiste hoy y no le pusiste fecha de recontacto.
