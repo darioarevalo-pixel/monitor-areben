@@ -143,7 +143,7 @@ export function DiferenciasDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => vo
           {datos.sobreventaError && <Notice tone="danger">No se pudo sumar el ERP: {datos.sobreventaError}</Notice>}
 
           <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
-            <VistasLista vistas={vistas} valor={enVista} conteo={conteo} onCambio={setVista} />
+            <VistasLista todasRojas vistas={vistas} valor={enVista} conteo={conteo} onCambio={setVista} />
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
               <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las diferencias" placeholder="Producto o variante" />
             </div>

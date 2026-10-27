@@ -141,7 +141,7 @@ export function PreciosErp() {
   const acciones = (f: FilaProducto) => (
     <>
       {puede('configurar') && <IconoFila label="Cargar precio o costo" onClick={() => abrir(f, true)}><Icono nombre="pesos" size={16} /></IconoFila>}
-      <IconoFila label={`Historial de precios de ${f.nombre}`} onClick={() => abrir(f)}><Icono nombre="historial" size={16} /></IconoFila>
+      <IconoFila indigo label={`Historial de precios de ${f.nombre}`} onClick={() => abrir(f)}><Icono nombre="historial" size={16} /></IconoFila>
     </>
   )
 

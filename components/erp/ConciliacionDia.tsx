@@ -148,7 +148,7 @@ export function ConciliacionDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => v
           {datos.desconocidas > 0 && <Notice tone="warning">{datos.desconocidas} con una clase que esta pantalla todavía no conoce.</Notice>}
 
           <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
-            <VistasLista vistas={vistas} valor={enVista} conteo={conteo} onCambio={setVista} />
+            <VistasLista todasRojas vistas={vistas} valor={enVista} conteo={conteo} onCambio={setVista} />
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
               <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la conciliación" placeholder="Producto, código o número de pedido" />
             </div>

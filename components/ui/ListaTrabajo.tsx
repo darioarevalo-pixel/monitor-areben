@@ -158,11 +158,13 @@ const OCULTO: React.CSSProperties = { position: 'absolute', width: 1, height: 1,
  * El ícono de una fila (28×28, sin borde): el gesto que se repite una vez por fila (VOCABULARIO §3.3), con su nombre
  * al pasar el mouse. `verde` = hay algo para hacer (saldo, facturada); apagado ⇒ dice por qué en el `title`.
  */
-export function IconoFila({ children, label, onClick, verde, apagado }: {
+export function IconoFila({ children, label, onClick, verde, indigo, apagado }: {
   children: React.ReactNode
   label: string
   onClick?: () => void
   verde?: boolean
+  /** Ver historial / detalle (§9 color). */
+  indigo?: boolean
   apagado?: boolean
 }) {
   return (
@@ -172,7 +174,7 @@ export function IconoFila({ children, label, onClick, verde, apagado }: {
         // 🔴 height explícita: `.shell-content button` le fija la altura de un control (tests/boton-crudo-altura).
         height: 28, width: 28, padding: 0, display: 'inline-grid', placeItems: 'center', border: 0, borderRadius: radius.md,
         background: 'transparent', cursor: apagado ? 'default' : 'pointer',
-        color: apagado ? color.line2 : verde ? 'var(--mo-success)' : color.mut2,
+        color: apagado ? color.line2 : verde ? 'var(--mo-success)' : indigo ? 'var(--mo-brand)' : color.mut2,
       }}
     >
       {children}
