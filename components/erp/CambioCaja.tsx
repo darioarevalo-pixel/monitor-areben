@@ -120,6 +120,9 @@ export function CambioCaja() {
     return precioDeCaja(p, { store, skuVariante: v.sku, idx: tnIdx, idxStunned: tnIdxStunned, reglas: config?.reglas ?? null }).precio
   }
 
+  /** Con una venta elegida manda ELLA; sin elegir, avisa si en la lista hay alguna de prueba. */
+  const deEnsayo = ficha ? ficha.venta.prueba : (ventas ?? []).some((v) => v.prueba)
+
   const vendidas = useMemo(() => (ficha?.lineas ?? []).filter((l) => l.cantidad > 0), [ficha])
   const comoPrenda = (l: (typeof vendidas)[number]) => ({ product_id: Number(l.producto), size_id: Number(l.talle), nombre: l.nombre ?? undefined, talle: l.talleNombre ?? undefined })
 
@@ -249,7 +252,10 @@ export function CambioCaja() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard title={`Cambio · ${NOMBRE_MARCA[store] ?? store}`} subtitle="Buscá la venta por número o cliente, marcá lo que devuelve y escaneá lo que se lleva.">
-        <Notice tone="warning">De prueba hasta que se apague Gestión Nube: no mueve el stock ni sale a Gestión Nube. El cambio de verdad se sigue haciendo en Gestión Nube.</Notice>
+        {/* 🔑 El modo lo manda la venta (`prueba`: el motor ⛔ cambia una de prueba con un cambio real ni al revés). El cartel fijo
+            seguía diciendo «el cambio de verdad se hace en GN» DESPUÉS del corte de Stunned: ahora sale sólo con una venta de prueba. */}
+        {deEnsayo && <Notice tone="warning">Venta de prueba: el cambio no mueve el stock ni sale a Gestión Nube. El cambio de verdad de las ventas que siguen en Gestión Nube se hace allá.</Notice>}
+        {ficha && !ficha.venta.prueba && <Notice tone="info">Venta real: el cambio mueve el stock y queda atado a la venta #{ficha.venta.numero}.</Notice>}
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="#123, nombre, DNI o mail" />
