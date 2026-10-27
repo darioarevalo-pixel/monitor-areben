@@ -26,6 +26,7 @@ import { puedeVer } from '@/lib/permisos'
 import { CambioCaja } from './CambioCaja'
 import { FacturaCaja } from './FacturaCaja'
 import { Facturacion } from './Facturacion'
+import { useContadoresErp } from '@/lib/erp/contadores-erp'
 import { ProveedorLineaErp, elegirLinea, lineaElegida, type LineaErp } from '@/lib/erp/linea-erp'
 import { StockErp, type PrendaAAjustar } from './stock/StockErp'
 import { MovimientosStock } from './stock/MovimientosStock'
@@ -136,6 +137,14 @@ export const hrefErp = (seccion: string, pestania?: string | null, vista?: strin
 /** Para ⌘K: cada pestaña con SUS vistas (la búsqueda salta a una vista, no a un grupo). */
 export const SECCIONES_BUSCABLES: Seccion[] = SECCIONES_ERP.map((s) => ({ ...s, pestanias: s.pestanias.flatMap((p) => p.vistas ?? [p]) }))
 
+const TITULO_CONTADOR: Record<string, string> = { stock: 'productos en negativo', productos: 'productos sin costo' }
+
+/** El contador rojo (§9): sólo aparece si hay algo para hacer. */
+function Contador({ n, titulo }: { n: number | undefined; titulo: string }) {
+  if (!n) return null
+  return <span className="erp-contador" title={titulo} aria-label={`${n.toLocaleString('es-AR')} ${titulo}`}>{n.toLocaleString('es-AR')}</span>
+}
+
 function Trazo({ d, size = 18 }: { d: string; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -173,6 +182,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const [pedidoN, setPedidoN] = useState(0)
   const [prendaGlobal, setPrendaGlobal] = useState<{ marca: Marca; producto: string; talle: string } | null>(null)
   useAtajosErp(setPanel)
+  // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
+  const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia')
   // Una dirección vieja o mal escrita ⇒ la que corresponde (⛔ una pantalla en blanco).
   useEffect(() => {
     if (!valida) router.replace(hrefErp(seccion.key, pestania, vista))
@@ -221,6 +232,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             <Link key={s.key} href={hrefErp(s.key)} aria-current={on ? 'page' : undefined} className={`erp-menu-item${s.debajo ? ' erp-menu-item--debajo' : ''}${on ? ' erp-menu-item--on' : ''}`}>
               <Trazo d={s.icono} size={s.debajo ? 16 : 18} />
               <span>{s.titulo}</span>
+              <Contador n={contadores[s.key]} titulo={TITULO_CONTADOR[s.key] ?? 'para hacer'} />
             </Link>
           )
         })}
@@ -260,7 +272,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: space[5], flexWrap: 'wrap', borderBottom: `1px solid ${color.line}` }}>
                 <h1 style={{ margin: 0, paddingBottom: 6, fontSize: 20, fontWeight: weight.semibold, color: color.ink, whiteSpace: 'nowrap', borderLeft: `4px solid ${COLOR_DE_MARCA[opcionActiva]}`, paddingLeft: 10 }}>{seccion.titulo}</h1>
                 {seccion.pestanias.length > 1 && (
-                  <Tabs variant="underline" items={seccion.pestanias} value={pestania ?? ''} onChange={(k) => { setAAjustar(null); ir(seccion.key, k) }} style={{ borderBottom: 'none', flex: '1 1 auto' }} />
+                  <Tabs variant="underline" items={seccion.pestanias.map((p) => ({ ...p, badge: <Contador n={contadores[`${seccion.key}/${p.key}`]} titulo={TITULO_CONTADOR[seccion.key] ?? 'para hacer'} /> }))} value={pestania ?? ''} onChange={(k) => { setAAjustar(null); ir(seccion.key, k) }} style={{ borderBottom: 'none', flex: '1 1 auto' }} />
                 )}
               </div>
             </header>

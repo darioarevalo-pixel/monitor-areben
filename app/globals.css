@@ -1215,6 +1215,7 @@ a.apps-item:hover {
 .erp-menu-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
 .erp-menu-item--debajo { height: 34px; padding-left: 36px; font-size: 13.5px; color: #8391a7; }
 .erp-menu-item--on, .erp-menu-item--on:hover { background: var(--mo-brand-solid); color: #fff; font-weight: 600; }
+.erp-contador { margin-left: auto; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 9px; display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; line-height: 1; color: #fff; background: #dc2626; }
 .erp-menu-pie { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 8px; }
 
 /* En el celular el menú pasa a una tira arriba que se corre de costado (⛔ cajón: el ERP lo usan admins en la compu). */
