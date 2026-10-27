@@ -235,7 +235,9 @@ WhatsApp**: un local vive sólo acá («Sin contactar») hasta que **responde �
 - El id del local es nombre + punto (`idDeLocal`): la búsqueda de dentro de 6 meses se vuelve a
   cargar con el mismo script y suma sólo los nuevos, sin tocar estado ni historial.
 - Mapa de OpenStreetMap (gratis, sin clave). Los colores van por clase CSS: Leaflet escribe el
-  color como atributo SVG y ahí un `var(--mo-*)` no se resuelve.
+  color como atributo SVG y ahí un `var(--mo-*)` no se resuelve. Sin contactar = violeta (brand),
+  contactado = amarillo, respondió = verde, descartado = rojo tenue. 🔑 Sin contactar NO va en gris:
+  es lo que hay que trabajar y tiene que llamar la atención (pedido de Darío, 27-oct).
 - ⏭️ Parte 2 (no está): tandas (elegir N locales), estadística por tanda y por medio, y los
   mayoristas actuales en el mapa.
 

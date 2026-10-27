@@ -90,8 +90,8 @@ export function MapaLeaflet({
     <>
       <style>{`
         .pm-punto { stroke: var(--mo-surface); fill-opacity: .9; cursor: pointer; }
-        .pm-sin_contactar { fill: var(--mo-mut2); }
-        .pm-contactado { fill: var(--mo-brand); }
+        .pm-sin_contactar { fill: var(--mo-brand); }
+        .pm-contactado { fill: var(--mo-warning); }
         .pm-respondio { fill: var(--mo-success); }
         .pm-descartado { fill: var(--mo-danger); fill-opacity: .35; }
         .pm-sel { stroke: var(--mo-ink); }

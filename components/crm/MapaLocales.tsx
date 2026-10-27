@@ -40,8 +40,8 @@ import { BuscarInput, Button, Chips, Modal, Notice, StatusPill, color, space, ty
 const MapaLeaflet = dynamic(() => import('./MapaLeaflet').then((m) => m.MapaLeaflet), { ssr: false })
 
 const TONO: Record<EstadoProspecto, Tone> = {
-  sin_contactar: 'neutral',
-  contactado: 'brand',
+  sin_contactar: 'brand',
+  contactado: 'warning',
   respondio: 'success',
   descartado: 'danger',
 }
