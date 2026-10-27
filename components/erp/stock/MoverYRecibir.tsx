@@ -309,7 +309,7 @@ function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onCancelar }: {
         <div style={{ fontSize: 20, fontWeight: weight.bold, color: color.ink }}>{dep(d.desde)} → {dep(d.hacia)}</div>
         <BarraPasos paso={p.paso} fin={p.fin} texto={p.texto} />
       </div>
-      {falta > 0 && <Notice tone="warning">Faltaron {u(falta)} al recibir. La diferencia queda marcada y ⛔ se ajusta sola: la cierra un ajuste en Conteos y ajustes.</Notice>}
+      {falta > 0 && <Notice tone="warning">Faltaron {u(falta)} al recibir. La diferencia queda marcada y no se ajusta sola: la cierra un ajuste en Conteos y ajustes.</Notice>}
       <DatosFicha>
         <DatoFicha titulo="Creó">{d.creada_por}</DatoFicha>
         {d.enviada_en && <DatoFicha titulo="Salió">{cuandoCorto(d.enviada_en)} · {d.enviada_por}</DatoFicha>}
