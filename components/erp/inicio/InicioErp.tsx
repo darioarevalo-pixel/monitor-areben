@@ -17,14 +17,17 @@ import {
   leerGastos, leerListaDeProductos, leerListaDeStock, leerListaDeVentas, leerResultadoDelMes, type GastosDelPeriodo, type MarcaErp, type ResultadoDelMes,
 } from '@/lib/erp/cliente'
 import { contarVistas as vistasDeVentas, rangoDePeriodo } from '@/lib/erp/ventas-lista.core.js'
-import { contarVistas as vistasDeStock } from '@/lib/erp/stock-lista.core.js'
-import { contarVistas as vistasDeProductos } from '@/lib/erp/productos-lista.core.js'
+import { contarVistas as vistasDeStock, filtrar as filtrarStock } from '@/lib/erp/stock-lista.core.js'
+import { contarVistas as vistasDeProductos, filtrar as filtrarProductos } from '@/lib/erp/productos-lista.core.js'
+import { useLineaErp } from '@/lib/erp/linea-erp'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { ROLES, VISTA, paraHacerDe, subtituloDe, verResultado } from '@/lib/erp/inicio-roles.core.js'
 import { esAdmin } from '@/lib/permisos'
 
 /** Lo que se cuenta de cada lista: `null` = leyendo; un texto = no se pudo (y por qué). */
 type Conteo = Record<string, number> | string | null
+/** Stock y Productos se guardan CRUDOS y se cuentan sobre la línea elegida (como las pantallas a las que llevan). */
+type Crudo = { filas: unknown[] } | string | null
 
 const TITULO: Record<string, string> = { ventas: 'Ventas', stock: 'Stock', productos: 'Productos', facturacion: 'Facturación' }
 
@@ -44,12 +47,12 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const [resultado, setResultado] = useState<{ marca: string; r: ResultadoDelMes | null; error: string | null } | null>(null)
   // Los gastos comerciales REALES del mismo mes (⛔ los de prueba: son de ventas que Gestión Nube no tiene).
   const [gastos, setGastos] = useState<{ marca: string; g: GastosDelPeriodo | null; error: string | null } | null>(null)
-  const [conteos, setConteos] = useState<{ marca: string; ventas: Conteo; stock: Conteo; productos: Conteo }>({ marca: '', ventas: null, stock: null, productos: null })
+  const [conteos, setConteos] = useState<{ marca: string; ventas: Conteo; stock: Crudo; productos: Crudo }>({ marca: '', ventas: null, stock: null, productos: null })
 
   useEffect(() => {
     let vivo = true
     const fallo = (e: unknown) => (e instanceof Error ? e.message : 'No se pudo leer.')
-    const poner = (k: 'ventas' | 'stock' | 'productos', v: Conteo) => vivo && setConteos((c) => ({ ...(c.marca === marca ? c : { marca, ventas: null, stock: null, productos: null }), [k]: v }))
+    const poner = (k: 'ventas' | 'stock' | 'productos', v: Conteo | Crudo) => vivo && setConteos((c) => ({ ...(c.marca === marca ? c : { marca, ventas: null, stock: null, productos: null }), [k]: v }))
     leerResultadoDelMes(marca)
       .then((r) => {
         if (!vivo) return
@@ -59,8 +62,8 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
       .catch((e) => vivo && setResultado({ marca, r: null, error: fallo(e) }))
     const r = rangoDePeriodo('mes', diaArgentino(Date.now()))
     leerListaDeVentas(marca, r.desde, r.hasta).then((d) => poner('ventas', vistasDeVentas(d.filas))).catch((e) => poner('ventas', fallo(e)))
-    leerListaDeStock(marca).then((d) => poner('stock', vistasDeStock(d.filas))).catch((e) => poner('stock', fallo(e)))
-    leerListaDeProductos(marca).then((d) => poner('productos', vistasDeProductos(d.filas))).catch((e) => poner('productos', fallo(e)))
+    leerListaDeStock(marca).then((d) => poner('stock', { filas: d.filas })).catch((e) => poner('stock', fallo(e)))
+    leerListaDeProductos(marca).then((d) => poner('productos', { filas: d.filas })).catch((e) => poner('productos', fallo(e)))
     return () => { vivo = false }
   }, [marca])
 
@@ -68,7 +71,13 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const m = res?.r?.mes, a = res?.r?.anterior
   const gs = gastos?.marca === marca ? gastos : null
   const gTotal = gs?.g ? gs.g.total : null
-  const de = conteos.marca === marca ? conteos : { ventas: null, stock: null, productos: null }
+  const linea = useLineaErp()
+  const crudos = conteos.marca === marca ? conteos : { ventas: null, stock: null, productos: null }
+  const de: { ventas: Conteo; stock: Conteo; productos: Conteo } = {
+    ventas: crudos.ventas as Conteo,
+    stock: typeof crudos.stock === 'object' && crudos.stock ? vistasDeStock(filtrarStock(crudos.stock.filas as never, { linea })) : crudos.stock,
+    productos: typeof crudos.productos === 'object' && crudos.productos ? vistasDeProductos(filtrarProductos(crudos.productos.filas as never, { linea })) : crudos.productos,
+  }
   const h2: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
 
   return (
