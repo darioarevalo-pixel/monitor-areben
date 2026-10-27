@@ -178,7 +178,7 @@ function NuevoGasto({ marca, prueba, onCerrar, onGuardar }: {
     <Modal abierto onCerrar={onCerrar} titulo="Nuevo gasto"
       pie={<><Button variant="outline" onClick={onCerrar}>Cancelar</Button><Button disabled={guardando} onClick={() => void guardar()}>{guardando ? 'Cargando…' : 'Cargar gasto'}</Button></>}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-        <Notice tone={prueba ? 'warning' : 'neutral'}>Se anota como gasto <b>{prueba ? 'de prueba' : 'real'}</b>. Las comisiones de las plataformas salen solas de los cobros: acá van los impuestos y lo que no se calcula solo.</Notice>
+        <Notice tone={prueba ? 'warning' : 'neutral'}>Se anota como gasto <b>{prueba ? 'de prueba' : 'real'}</b>. Las comisiones de las plataformas salen solas de los cobros: acá van los impuestos y lo que no se calcula solo, como el <b>envío de vuelta de una devolución</b> (lo paga el vendedor).</Notice>
         {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
         <Field label="Tipo"><Select value={f.tipo} onChange={(e) => poner('tipo', e.target.value)}>{TIPOS_A_MANO.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select></Field>
         <Field label="Fecha"><Input type="date" value={f.fecha} onChange={(e) => poner('fecha', e.target.value)} /></Field>

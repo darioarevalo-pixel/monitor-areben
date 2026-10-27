@@ -54,6 +54,10 @@ describe('leerMonto y validarGasto', () => {
     expect(validarGasto(ok)).toEqual({ gasto: { linea: 'zattia', fecha: '2026-10-27', tipo: 'otro', monto: 21000, detalle: 'Cadete', cuenta: undefined } })
     expect(validarGasto({ ...ok, monto: '-21.000' }).gasto?.monto).toBe(-21000)
   })
+  it('«Envío de una devolución» sale como gasto «otro» con su rótulo, una sola vez', () => {
+    expect(validarGasto({ ...ok, tipo: 'envio_devolucion', detalle: 'pedido 4790, Correo' }).gasto).toMatchObject({ tipo: 'otro', detalle: 'Envío de devolución · pedido 4790, Correo' })
+    expect(validarGasto({ ...ok, tipo: 'envio_devolucion', detalle: 'Envío de devolución #295' }).gasto?.detalle).toBe('Envío de devolución #295')
+  })
   it('dice qué falta, en palabras', () => {
     expect(validarGasto({ ...ok, monto: '0' }).error).toMatch(/distinto de cero/)
     expect(validarGasto({ ...ok, monto: '' }).error).toMatch(/distinto de cero/)
