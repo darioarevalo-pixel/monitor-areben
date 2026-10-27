@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { Button, EmptyState, Notice, Select, color, font, space } from '@/components/ui'
+import { Button, EmptyState, Notice, color, font, space, Select } from '@/components/ui'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { BuscadorLista, TileResumen, VistasLista, estiloNombre } from '@/components/ui/PiezasLista'
@@ -22,12 +22,13 @@ import { PERIODOS, plata, rangoDePeriodo } from '@/lib/erp/ventas-lista.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaProducto } from '../productos/FichaProducto'
+import { useLineaErp } from '@/lib/erp/linea-erp'
+const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
 type Vista = 'agrupado' | 'renglones'
 type Prefs = { orden: string[]; visibles: string[] }
 type Grupo = ReturnType<typeof agrupar>[number]
 
-const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
 const DE_A = 300
 const u = (n: number) => `${n.toLocaleString('es-AR')} u`
@@ -58,7 +59,7 @@ export function PorProductoErp() {
   const [periodo, setPeriodo] = useState('mes')
   const [vista, setVista] = useState<Vista>('agrupado')
   const [q, setQ] = useState('')
-  const [linea, setLinea] = useState('')
+  const linea = useLineaErp()
   const [canal, setCanal] = useState('')
   const [orden, setOrden] = useState<OrdenLista>(null)
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
@@ -147,7 +148,6 @@ export function PorProductoErp() {
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las ventas por producto" placeholder="Producto, código, venta o cliente" />
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>{PERIODOS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
-          {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <Select aria-label="Origen" style={ANCHO_SELECT} value={canal} onChange={(e) => setCanal(e.target.value)}><option value="">Todos los orígenes</option>{canales.map((c) => <option key={c} value={c}>{c}</option>)}</Select>
           <PanelColumnas
             columnas={prefs.orden.filter((k) => COLUMNAS[k]).map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}

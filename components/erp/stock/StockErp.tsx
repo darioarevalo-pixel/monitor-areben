@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { Button, EmptyState, Icono, MenuAcciones, Notice, Select, color, font, space, type AccionMenu } from '@/components/ui'
+import { Button, EmptyState, Icono, MenuAcciones, Notice, color, font, space, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
@@ -26,6 +26,7 @@ import { NOMBRE_TIPO } from '@/lib/erp/stock.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaPrenda, type PrendaAbierta } from './FichaPrenda'
+import { useLineaErp } from '@/lib/erp/linea-erp'
 
 type Prefs = { orden: string[]; visibles: string[] }
 
@@ -34,7 +35,6 @@ export type PrendaPedida = { marca: MarcaErp; producto: string; talle: string }
 /** La prenda que se lleva a «Nuevo ajuste» (Conteos y ajustes). */
 export type PrendaAAjustar = { linea: string; producto: string; talle: string; sku: string | null; barcode: string | null; nombre: string | null; talleNombre: string | null }
 
-const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
 /** Cuántas filas se dibujan de una (la lista ⛔ es virtual: con miles, el navegador se arrastra). */
 const DE_A = 300
@@ -63,7 +63,7 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
   const [error, setError] = useState<string | null>(null)
   const [vista, setVista] = useState('constock')
   const [q, setQ] = useState('')
-  const [linea, setLinea] = useState('')
+  const linea = useLineaErp()
   const [orden, setOrden] = useState<OrdenLista>(null)
   // Cuántas se dibujan: vuelve a la primera tanda cuando cambia lo que se mira (la tanda es de ESA mirada).
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
@@ -154,7 +154,6 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en el stock" placeholder="Nombre, código o código de barras" />
-          {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(marca, prefs, k))}

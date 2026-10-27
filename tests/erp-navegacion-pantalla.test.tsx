@@ -64,6 +64,15 @@ describe('ERP › el armazón propio', () => {
     act(() => zattia.click())
     expect(setMarca).toHaveBeenCalledWith('zattia')
   })
+  it('el selector ofrece BDI · Zattia · Stunned; Stunned = marca zattia + línea (🎨 27-oct, paso 4)', async () => {
+    await montar([])
+    const radios = () => [...div.querySelectorAll('[aria-label="Marca"] [role="radio"]')] as HTMLButtonElement[]
+    expect(radios().map((b) => b.textContent)).toEqual(['BDI', 'Zattia', 'Stunned'])
+    setMarca.mockClear()
+    act(() => radios().find((b) => b.textContent === 'Stunned')!.click())
+    expect(setMarca).toHaveBeenCalledWith('zattia')
+    expect(radios().find((b) => b.textContent === 'Stunned')!.getAttribute('aria-checked')).toBe('false') // la marca de este test sigue siendo bdi
+  })
   it('⌘K y el botón «Buscar» abren el buscador global; «?» los atajos; Esc cierra (🎨 26-oct)', async () => {
     await montar(['ventas', 'ventas'])
     const dialogo = () => document.querySelector('[role="dialog"]')?.getAttribute('aria-label') ?? null

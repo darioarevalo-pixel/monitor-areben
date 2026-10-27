@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { Button, EmptyState, Notice, Select, color, font, space } from '@/components/ui'
+import { Button, EmptyState, Notice, color, font, space } from '@/components/ui'
 import type { Tone } from '@/components/ui/tokens'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
@@ -26,10 +26,10 @@ import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaPrenda } from './FichaPrenda'
 import type { PrendaAAjustar } from './StockErp'
+import { useLineaErp } from '@/lib/erp/linea-erp'
 
 type Prefs = { orden: string[]; visibles: string[] }
 
-const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const TIENDA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
 const DE_A = 300
 const QUE = QUE_PASA as Record<string, { nombre: string; mirar: string }>
@@ -57,7 +57,7 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
   const [error, setError] = useState<string | null>(null)
   const [vista, setVista] = useState('no')
   const [q, setQ] = useState('')
-  const [tienda, setTienda] = useState('')
+  const tienda = useLineaErp()
   const [orden, setOrden] = useState<OrdenLista>(null)
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
   const [prefs, setPrefsState] = useState<Prefs>(() => normalizarPrefs(typeof window === 'undefined' ? null : leerPrefsDeLista(lista, usuario)))
@@ -132,7 +132,6 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la comparación" placeholder="Producto o código de barras" />
-          {marca === 'zattia' && <Select aria-label="Tienda" style={ANCHO_SELECT} value={tienda} onChange={(e) => setTienda(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k as keyof typeof COLUMNAS][0], visible: prefs.visibles.includes(k), fija: !!COLUMNAS[k as keyof typeof COLUMNAS][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}

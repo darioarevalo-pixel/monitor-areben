@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
-import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, Select, color, font, space, type AccionMenu } from '@/components/ui'
+import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, color, font, space, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
@@ -26,10 +26,10 @@ import {
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { EN_TN, FichaProducto } from './FichaProducto'
+import { useLineaErp } from '@/lib/erp/linea-erp'
 
 type Prefs = { orden: string[]; visibles: string[] }
 
-const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
 /** Cuántas filas se dibujan de una (la lista ⛔ es virtual). */
 const DE_A = 300
@@ -61,7 +61,7 @@ export function ProductosErp() {
   const [error, setError] = useState<string | null>(null)
   const [vista, setVista] = useState('todos')
   const [q, setQ] = useState('')
-  const [linea, setLinea] = useState('')
+  const linea = useLineaErp()
   const [orden, setOrden] = useState<OrdenLista>(null)
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
   const [prefs, setPrefsState] = useState<Prefs>(() => normalizarPrefs(typeof window === 'undefined' ? null : leerPrefsDeLista(lista, usuario)))
@@ -144,7 +144,6 @@ export function ProductosErp() {
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un producto" placeholder="Nombre, código, código de barras, categoría o proveedor" />
-          {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}

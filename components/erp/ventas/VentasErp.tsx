@@ -30,12 +30,13 @@ import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaVenta } from './FichaVenta'
 import { CargarVenta } from './CargarVenta'
 import { VentanaCobro, VentanaEditar } from './VentanasVenta'
+import { useLineaErp } from '@/lib/erp/linea-erp'
+const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
 export type Prefs = { orden: string[]; visibles: string[] }
 type Ventana = { tipo: 'cobro' | 'editar'; fila: FilaVentaLista; desdeFicha: boolean } | null
 
 /** El `Select` del kit es de ancho 100% (formularios): en la barra cada desplegable mide lo suyo, ⛔ una fila entera. */
-const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
 const ORIGENES: Array<[string, string]> = [['', 'Todos los orígenes'], ['caja', 'Caja'], ['tn', 'Tienda Nube'], ['mayorista', 'Mayorista'], ['ml', 'Mercado Libre']]
 
@@ -74,7 +75,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   const [vista, setVista] = useState('todas')
   const [q, setQ] = useState('')
   const [origen, setOrigen] = useState('')
-  const [linea, setLinea] = useState('')
+  const linea = useLineaErp()
   const [orden, setOrden] = useState<OrdenLista>(null)
   // Lo guardado por usuario (la sección es sólo de navegador: `localStorage` existe; si falla, las de siempre).
   const [prefs, setPrefsState] = useState<Prefs>(() => normalizarPrefs(typeof window === 'undefined' ? null : leerPrefsDeLista('erp-ventas', usuario)))
@@ -225,7 +226,6 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las ventas" placeholder="Número, pedido de Tienda Nube, cliente o nota" />
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => { setFicha(null); setPeriodo(e.target.value) }}>{PERIODOS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
           <Select aria-label="Origen" style={ANCHO_SELECT} value={origen} onChange={(e) => setOrigen(e.target.value)}>{ORIGENES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
-          {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}

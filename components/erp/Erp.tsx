@@ -26,6 +26,7 @@ import { puedeVer } from '@/lib/permisos'
 import { CambioCaja } from './CambioCaja'
 import { FacturaCaja } from './FacturaCaja'
 import { Facturacion } from './Facturacion'
+import { ProveedorLineaErp, elegirLinea, lineaElegida, type LineaErp } from '@/lib/erp/linea-erp'
 import { StockErp, type PrendaAAjustar } from './stock/StockErp'
 import { MovimientosStock } from './stock/MovimientosStock'
 import { TransferenciasStock } from './stock/TransferenciasStock'
@@ -135,6 +136,7 @@ function Trazo({ d, size = 18 }: { d: string; size?: number }) {
 type AAbrir = { tipo: 'venta'; id: string; numero: number; periodo: string } | { tipo: 'cliente'; doc: string | null; nombre: string } | null
 let pedidoDeBusqueda: AAbrir = null
 let prendaAAjustarPendiente: PrendaAAjustar | null = null
+type Opcion = { key: 'bdi' | 'zattia' | 'stunned'; titulo: string }
 
 export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const router = useRouter()
@@ -164,11 +166,22 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   }, [valida, seccion.key, pestania, vista, router])
 
   const marcas = (Object.keys(CUENTAS) as Marca[]).filter((m) => perfil && puedeVer(perfil, m, 'erp'))
+  // Selector BDI · Zattia · Stunned (diseño §9). 🔴 Stunned no es una `Marca`: es marca zattia + línea `stunned` (`docs/lineas.md`).
+  const [linea, setLineaEstado] = useState<LineaErp>(lineaElegida)
+  const setLinea = (l: LineaErp) => { elegirLinea(l); setLineaEstado(l) }
+  const lineaVista: LineaErp = marca === 'zattia' ? (linea === 'stunned' ? 'stunned' : 'zattia') : ''
+  const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : [{ key: 'zattia', titulo: 'Zattia' }, { key: 'stunned', titulo: 'Stunned' }])
+  const opcionActiva = marca === 'bdi' ? 'bdi' : lineaVista === 'stunned' ? 'stunned' : 'zattia'
+  const elegirOpcion = (k: 'bdi' | 'zattia' | 'stunned') => {
+    if (k === 'bdi') { setMarca('bdi'); return }
+    setLinea(k)
+    if (marca !== 'zattia') setMarca('zattia')
+  }
   const ajustarPrenda = (p: PrendaAAjustar) => { setAAjustar(p); setPrendaGlobal(null); ir('stock', 'ajustes') }
   const elegirDeLaBusqueda = (d: DestinoBusqueda) => {
     setPanel(null)
     if (d.tipo === 'ir') { ir(d.seccion, d.pestania); return }
-    if (d.marca !== marca) setMarca(d.marca)
+    if (d.marca !== marca) { setMarca(d.marca); if (d.marca === 'zattia') setLinea('zattia') }
     if (d.tipo === 'prenda') { setPrendaGlobal({ marca: d.marca, producto: d.producto, talle: d.talle }); return }
     if (d.tipo === 'venta') {
       setPedidoN((n) => n + 1)
@@ -197,14 +210,14 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
           )
         })}
         <div className="erp-menu-pie">
-          {marcas.length > 1 && (
+          {opciones.length > 1 && (
             <div role="radiogroup" aria-label="Marca" style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 9, background: 'rgba(255,255,255,0.08)' }}>
-              {marcas.map((m) => (
+              {opciones.map((o) => (
                 <button
-                  key={m} type="button" role="radio" aria-checked={marca === m} onClick={() => setMarca(m)}
-                  style={{ flex: 1, height: 30, border: 0, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: weight.semibold, whiteSpace: 'nowrap', background: marca === m ? 'rgba(255,255,255,0.16)' : 'transparent', color: marca === m ? '#fff' : '#94a3b8' }}
+                  key={o.key} type="button" role="radio" aria-checked={opcionActiva === o.key} onClick={() => elegirOpcion(o.key)}
+                  style={{ flex: 1, height: 30, border: 0, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: weight.semibold, whiteSpace: 'nowrap', background: opcionActiva === o.key ? 'rgba(255,255,255,0.16)' : 'transparent', color: opcionActiva === o.key ? '#fff' : '#94a3b8' }}
                 >
-                  {m === 'bdi' ? 'BDI' : 'Zattia'}
+                  {o.titulo}
                 </button>
               ))}
             </div>
@@ -220,11 +233,12 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
         </div>
       </nav>
       <div className="shell-main">
+        <ProveedorLineaErp value={lineaVista}>
         <div className="shell-content">
           <div className="seccion-pad" style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
             <header style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
               <p style={{ margin: 0, padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4 }}>
-                {CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy. Lo ven sólo los administradores.
+                {lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy. Lo ven sólo los administradores.
               </p>
               {/* Título + pestañas en UNA línea (diseño §9). */}
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: space[5], flexWrap: 'wrap', borderBottom: `1px solid ${color.line}` }}>
@@ -270,6 +284,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {pestania === 'estructura' && <EstructuraErp key={marca} />}
           </div>
         </div>
+        </ProveedorLineaErp>
       </div>
       {panel === 'buscar' && <BusquedaGlobal marca={marca} marcas={marcas} secciones={SECCIONES_BUSCABLES} onElegir={elegirDeLaBusqueda} onCerrar={() => setPanel(null)} />}
       {panel === 'atajos' && <HojaDeAtajos onCerrar={() => setPanel(null)} />}

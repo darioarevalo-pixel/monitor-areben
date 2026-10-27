@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { Button, EmptyState, Notice, Select, color, font, space, useConfirmar, weight } from '@/components/ui'
+import { Button, EmptyState, Notice, color, font, space, useConfirmar, weight, Select } from '@/components/ui'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion, DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
@@ -28,11 +28,12 @@ import {
 } from '@/lib/erp/cobros.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
+import { useLineaErp } from '@/lib/erp/linea-erp'
+const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
 type Prefs = { orden: string[]; visibles: string[] }
 type FilaCobro = ReturnType<typeof armarCobro> & Partial<Omit<ReturnType<typeof armarEntregaSinCobrar>, keyof ReturnType<typeof armarCobro>>>
 
-const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const LINEA = NOMBRE_LINEA as Record<string, string>
 const MEDIO = NOMBRE_MEDIO as Record<string, string>
 const DE_A = 300
@@ -67,7 +68,7 @@ export function CobrosErp() {
   const [error, setError] = useState<string | null>(null)
   const [vista, setVista] = useState('todos')
   const [q, setQ] = useState('')
-  const [linea, setLinea] = useState('')
+  const linea = useLineaErp()
   const [medio, setMedio] = useState('')
   const [orden, setOrden] = useState<OrdenLista>(null)
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
@@ -209,7 +210,6 @@ export function CobrosErp() {
             <option value="">Todos los medios</option>
             {mediosDelPeriodo.map((m) => <option key={m} value={m}>{m === 'sin_medio' ? 'Sin medio' : (MEDIO[m] ?? m)}</option>)}
           </Select>
-          {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
