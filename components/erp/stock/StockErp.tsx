@@ -18,6 +18,7 @@ import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaT
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
 import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
+import { BarraNivel } from './Barritas'
 import { leerListaDeStock, type FilaStock, type ListaDeStock, type MarcaErp } from '@/lib/erp/cliente'
 import {
   VISTAS, alternarColumna, columnasDe, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
@@ -110,7 +111,7 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
     if (k === 'p') return <span title={f.nombre} style={estiloNombre}>{f.nombre}</span>
     if (k === 't') return <span title={f.talleNombre} style={{ color: color.ink2 }}>{f.talleNombre}</span>
     if (k === 'sku') return <span style={{ color: color.mut }}>{f.sku ?? '—'}</span>
-    if (k === 'disp') return numero(f.disponible, true)
+    if (k === 'disp') return <BarraNivel n={f.disponible}>{numero(f.disponible, true)}</BarraNivel>
     if (k === 'est') return numero(f.estanteria)
     if (k.startsWith('dep:')) return numero(f.deps[k.slice(4)] ?? 0)
     if (k === 'ped') return f.enPedidos ? <span style={{ color: 'var(--mo-warning-ink)' }} title="Apartadas por pedidos de Tienda Nube sin pagar">{f.enPedidos}</span> : <span style={{ color: color.mut2 }}>—</span>

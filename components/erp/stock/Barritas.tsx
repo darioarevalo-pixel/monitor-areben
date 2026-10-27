@@ -41,3 +41,17 @@ export function BarraRecibidas({ recibidas, pedidas, tono }: { recibidas: number
     </span>
   )
 }
+
+/** Nivel de «Disponible» (§9): ámbar si quedan 6 o menos, verde si hay más; la barra llena a las 12 u. */
+export const NIVEL_BAJO = 6
+export function BarraNivel({ n, children }: { n: number; children: React.ReactNode }) {
+  const pct = n > 0 ? Math.min(Math.round((n / 12) * 100), 100) : 0
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+      <span aria-hidden style={{ display: 'block', width: 36, height: 5, borderRadius: 3, background: PISTA, overflow: 'hidden' }}>
+        <span style={{ display: 'block', height: 5, width: `${pct}%`, background: n <= NIVEL_BAJO ? '#d97706' : VERDE }} />
+      </span>
+      {children}
+    </span>
+  )
+}
