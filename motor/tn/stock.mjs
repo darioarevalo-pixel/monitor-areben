@@ -95,3 +95,22 @@ export const aEscribir = (cambios) => cambios.filter((c) => !c.repetida)
 export function pedidoDeStock(c) {
   return { method: 'PUT', path: `/products/${c.tn_product_id}/variants/${c.variant_id}`, body: { stock: c.libro } }
 }
+
+/**
+ * La PRUEBA de escritura de stock sobre productos puntuales (Bruno, 26-oct: «probemos el stock a TN en el producto oculto»).
+ * `STOCK_TN_MANDA` es de la tienda ENTERA (empujaría las 27 variantes que hoy difieren), así que la prueba va por otro
+ * camino: sólo los productos pedidos Y que están OCULTOS en TN (`published` false), ⛔ la llave. Los ids son los del ERP/GN
+ * (`product_id`, el de «Precios» y «Stock»: 913520), no los de TN. Puro.
+ * @param {{cambios:Array<{product_id:any, tn_product_id:number}>, productos:Array<{id:any, published?:boolean}>, ids:Array<number|string>}} p
+ * @returns {Array} los cambios de esos productos; lanza si el id es inválido o algún producto de TN está publicado.
+ */
+export function cambiosDeProductosOcultos({ cambios, productos, ids }) {
+  const pedidos = [...new Set((ids || []).map(Number))]
+  if (!pedidos.length || pedidos.some((n) => !Number.isInteger(n) || n <= 0)) throw new Error('Pasá el id del producto oculto: --producto 913520 (el del ERP; varios, con coma).')
+  const mios = cambios.filter((c) => pedidos.includes(Number(c.product_id)))
+  for (const id of new Set(mios.map((c) => Number(c.tn_product_id)))) {
+    const p = productos.find((x) => Number(x.id) === id)
+    if (!p || p.published !== false) throw new Error(`El producto de TN ${id} está PUBLICADO (o no se pudo leer): la prueba de stock sólo va sobre productos ocultos.`)
+  }
+  return mios
+}

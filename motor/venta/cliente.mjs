@@ -12,6 +12,16 @@ const q = async (db, sql, params = []) => (await db.query(sql, params)).rows
 const falla = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo, mensaje, campo } : { codigo, mensaje } })
 const CONDICIONES = new Set(Object.values(COND_IVA))
 const COLUMNAS = 'id, empresa_id, doc, nombre, razon_social, condicion_iva, domicilio, whatsapp, email, gn_client_id, creado_en, actualizado_en'
+/** Igual que `numeroWhatsapp` del monitor (`lib/erp/resumen-cuenta.core.js`): 54 9 + 10 dígitos o null. */
+export function numeroWhatsapp(crudo) {
+  let d = String(crudo ?? '').replace(/\D/g, '')
+  if (!d) return null
+  if (d.startsWith('00')) d = d.slice(2)
+  if (d.startsWith('54')) { d = d.slice(2); if (d.startsWith('9')) d = d.slice(1) }
+  if (d.startsWith('0')) d = d.slice(1)
+  if (d.length === 12) for (const area of [2, 3, 4]) if (d.slice(area, area + 2) === '15') { d = d.slice(0, area) + d.slice(area + 2); break }
+  return d.length === 10 ? `549${d}` : null
+}
 const texto = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
 /** DNI (7-8 dígitos) o CUIT (11, con su verificador). '' si ⛔ es ninguno. */
@@ -78,6 +88,30 @@ export async function guardarClienteGN(db, e) {
     returning ${COLUMNAS}, (xmax = 0) as creado`, [e.empresa_id, nombre, texto(e.whatsapp), texto(e.email), gn])
   const { creado, ...cliente } = r
   return { ok: true, cliente, creado }
+}
+
+/**
+ * El WhatsApp / mail de un cliente POR SU `id` (la cuenta corriente trae `clienteId`; las mayoristas de GN ⛔ tienen documento).
+ * 🔑 El único verbo que PONE contacto sin pasar por el documento. Lo que viene con dato pisa, ⛔ borra (un campo ausente no se
+ * toca) y el WhatsApp ⛔ se adivina: se normaliza a 549 + 10 dígitos o se rechaza (un número mal armado le escribe a OTRA persona).
+ * `actualizado_en` cambia sólo si algo cambió.
+ * @param {import('pg').ClientBase} db
+ * @param {{ empresa_id: string, cliente_id: string (uuid), whatsapp?: string, email?: string }} e
+ */
+export async function ponerContactoCliente(db, e) {
+  const id = typeof e?.cliente_id === 'string' ? e.cliente_id.trim().toLowerCase() : ''
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) return falla('FALTA_CLIENTE', 'Falta el cliente', 'cliente_id')
+  const crudoWa = texto(e.whatsapp)
+  const whatsapp = crudoWa == null ? null : numeroWhatsapp(crudoWa)
+  if (crudoWa != null && !whatsapp) return falla('ENTRADA_INVALIDA', 'No se puede asegurar ese WhatsApp: código de área + número, sin el 15', 'whatsapp')
+  const email = texto(e.email)
+  if (email != null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return falla('ENTRADA_INVALIDA', 'Ese mail no parece un mail', 'email')
+  if (whatsapp == null && email == null) return falla('ENTRADA_INVALIDA', 'Falta el WhatsApp o el mail', 'whatsapp')
+  const [r] = await q(db, `update cliente set whatsapp = coalesce($3, whatsapp), email = coalesce($4, email),
+      actualizado_en = case when (whatsapp, email) is not distinct from (coalesce($3, whatsapp), coalesce($4, email)) then actualizado_en else now() end
+    where empresa_id = $1 and id = $2 returning ${COLUMNAS}`, [e.empresa_id, id, whatsapp, email])
+  if (!r) return falla('FALTA_CLIENTE', 'No está ese cliente en esa empresa', 'cliente_id')
+  return { ok: true, cliente: r }
 }
 
 /**

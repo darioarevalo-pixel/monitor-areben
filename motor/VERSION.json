@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "97fe15156ef02f3ea908c5d6377586061c244834",
-  "traido_en": "2026-10-26T21:39:15.375Z",
+  "commit": "91fdd6712f2726922527b13f39c76619f9efd977",
+  "traido_en": "2026-10-27T11:51:32.985Z",
   "archivos": {
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
     "arca/cliente.js": "fc1118e7392afdf716057de81175ec6fe2b7a16edd63ed7956241e8389fce168",
@@ -34,10 +34,10 @@
     "tn/entrega.mjs": "e33f863f5ee634e26aecd03b54511c6f048c635b05e927ab4dbccfa3cb62acbd",
     "tn/guardar.mjs": "355cec93bdc320ba05087d8e4c94209e9db9ad28db815610134493ceba65d9c3",
     "tn/orden.mjs": "29d4a21e64e2372f88e73a98bf9285eba5e094b3e42dc6c14ca00dbe200eadbb",
-    "tn/stock.mjs": "bedbf902bed165572676b7c7280b48bfe1f976c791287fa8e38b483aa17ffc4a",
+    "tn/stock.mjs": "e4dbf31e00ec51406b4967be514043ddb5144dde539bae70e20944aca8412358",
     "tn/venta.mjs": "365b1176c500b5cae01e82185c0a1d059d8e70192d4860c735c0ffcabb2abeed",
     "venta/armar.mjs": "28ee21ee275272ef6e75c7ed96cce0dc2ed47d9b18fc792e40c3fcf59ec181cd",
-    "venta/cliente.mjs": "389f224cbcaf546cd7b350523b2a319316a660e025c12ab03e2320ed16ea7aa9",
+    "venta/cliente.mjs": "64c8032dac6a039bc49216e13edf475013dd90f9b379dd5223b86506c70f935b",
     "venta/cobros.mjs": "420381f86a92784e67cd3b82aa1771edea1a597b67037da14e77ad0bdbb0800b",
     "venta/contraentrega.mjs": "896e2e4f7897d12c42690b5cce8ac7d34325b614a6423264e00830a6b8ab3c20",
     "venta/correccion-medio.mjs": "8581dfb3563816f8f05fd2b03b07564e8f0fff50f20fa46f29cf512b8ca385a8",
@@ -51,7 +51,7 @@
     "venta/proveedor.mjs": "bdbfde6aa0749296f5ddc6723dfb3856ce9596ef75a75fac7b2715479dd6f061",
     "venta/redondeo-db.mjs": "56ef4b54d3159b5f62db3c6743c77c5fabe722a30a7c215f1bbb9b3302582c9e",
     "venta/redondeo.mjs": "5e06ed407a5aa5e5dc32f7bfdaff3d61d48b14f78a79bb0e8a8a448f68a22a13",
-    "venta/registrar.mjs": "71ed556ba71d0fb4c2677dcb192eaafb169f81f8b8bd5a88f72e6677719168e5",
+    "venta/registrar.mjs": "4e967cb0aa9ccc6386bcfd1014d1706014f093eee1d86f9aacfb091d803e08fd",
     "venta/reglas-db.mjs": "b8d0bf468b3bd5f8bcb966367139025f7c17f0383201a2fc8e4519af9aa6ef50",
     "venta/reglas.mjs": "c356d1743ce274a52b77c11628e4510510e3661360fcb5f18efcca66f5540ad4"
   }
