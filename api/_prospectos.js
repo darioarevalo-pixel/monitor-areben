@@ -1,10 +1,11 @@
 // Mapa de locales del CRM — los locales de Google Maps que todavía no compran (ver
 // sql/migrate-prospectos.sql y docs/secciones/crm.md § «Mapa»).
 //
-//   GET  ?recurso=prospectos                                   → { ok, locales, eventos, sinTabla? }
+//   GET  ?recurso=prospectos                                   → { ok, locales, eventos, tandas, sinTabla?, sinTandas? }
 //   POST { recurso:'prospectos', action:'contacto', id, medio }                → { ok, local, evento }
 //   POST { recurso:'prospectos', action:'estado', id, estado, lead_id?, texto? } → { ok, local, evento }
 //   POST { recurso:'prospectos', action:'nota', id, texto }                    → { ok, local, evento }
+//   POST { recurso:'prospectos', action:'tanda', nombre, ids }                 → { ok, tanda, locales }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=prospectos`.
 //
@@ -46,13 +47,17 @@ export default async function handler(req, res) {
       if (error) throw new Error(error.message)
       const { data: eventos, error: e2 } = await sb.from('prospecto_evento').select('*').order('en', { ascending: false }).limit(10000)
       if (e2) throw new Error(e2.message)
-      return res.status(200).json({ ok: true, locales: locales || [], eventos: eventos || [] })
+      // Las tandas son de la parte 2 (sql/migrate-prospectos-tandas.sql): sin su tabla, el mapa anda igual.
+      const { data: tandas, error: e3 } = await sb.from('prospecto_tanda').select('*').order('creada_en', { ascending: false })
+      if (e3 && !faltaLaTabla(e3)) throw new Error(e3.message)
+      return res.status(200).json({ ok: true, locales: locales || [], eventos: eventos || [], tandas: tandas || [], sinTandas: !!e3 })
     }
 
     if (req.method === 'POST') {
       const v = validarAccion(req.body || {})
       if (!v.ok) return res.status(400).json({ error: v.error })
       const a = v.accion
+      if (a.action === 'tanda') return crearTanda(sb, a, perfil, res)
 
       const { data: actual, error: e1 } = await sb.from('prospecto_local').select('id, estado').eq('id', a.id).maybeSingle()
       if (e1 && faltaLaTabla(e1)) return res.status(503).json({ error: SIN_TABLA })
@@ -88,4 +93,24 @@ export default async function handler(req, res) {
   } catch (e) {
     return res.status(500).json({ error: e.message || String(e) })
   }
+}
+
+/**
+ * Arma la tanda y le asigna los locales. 🔑 El filtro va EN EL UPDATE (sin contactar y sin tanda),
+ * no sólo en la pantalla: si dos personas arman tandas a la vez, un local no queda en las dos —
+ * el segundo se lo saltea. Lo que vuelve es lo que de verdad entró.
+ */
+async function crearTanda(sb, a, perfil, res) {
+  const { data: tanda, error: e1 } = await sb.from('prospecto_tanda').insert({ nombre: a.nombre, por: perfil.name || null }).select('*').single()
+  if (e1 && faltaLaTabla(e1)) return res.status(503).json({ error: 'Falta crear la tabla de tandas en la base (sql/migrate-prospectos-tandas.sql).' })
+  if (e1) throw new Error(e1.message)
+  const { data: locales, error: e2 } = await sb
+    .from('prospecto_local')
+    .update({ tanda_id: tanda.id, actualizado_en: new Date().toISOString() })
+    .in('id', a.ids)
+    .eq('estado', 'sin_contactar')
+    .is('tanda_id', null)
+    .select('*')
+  if (e2) throw new Error(e2.message)
+  return res.status(200).json({ ok: true, tanda, locales: locales || [] })
 }

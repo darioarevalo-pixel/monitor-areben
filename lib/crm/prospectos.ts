@@ -7,9 +7,9 @@
  */
 import { apiFetch } from '@/lib/api-fetch'
 import { agregar, agregarNota, leadsPorTelefono, setCampo, type MapaLeads } from './leads'
-import { ESTADO_LABEL, MEDIO_LABEL } from './prospectos.core.js'
+import { ESTADO_LABEL, MEDIO_LABEL, elegirParaTanda as elegirCore, resumenTanda as resumenCore } from './prospectos.core.js'
 
-export { ESTADOS, ESTADO_LABEL, MEDIOS, MEDIO_LABEL } from './prospectos.core.js'
+export { ESTADOS, ESTADO_LABEL, MAX_TANDA, MEDIOS, MEDIO_LABEL } from './prospectos.core.js'
 
 export type EstadoProspecto = 'sin_contactar' | 'contactado' | 'respondio' | 'descartado'
 export type Medio = 'whatsapp' | 'llamada' | 'instagram' | 'correo'
@@ -35,7 +35,10 @@ export type Prospecto = {
   ultimo_contacto: string | null
   ultimo_medio: Medio | null
   lead_id: string | null
+  tanda_id: number | null
 }
+
+export type Tanda = { id: number; nombre: string; creada_en: string; por: string | null }
 
 export type EventoProspecto = {
   id: number
@@ -56,10 +59,28 @@ async function leerJson(r: Response) {
   return j
 }
 
-export async function cargarProspectos(): Promise<{ locales: Prospecto[]; eventos: EventoProspecto[]; sinTabla: boolean }> {
+export async function cargarProspectos(): Promise<{
+  locales: Prospecto[]
+  eventos: EventoProspecto[]
+  tandas: Tanda[]
+  sinTabla: boolean
+  sinTandas: boolean
+}> {
   const j = await leerJson(await apiFetch(API))
-  return { locales: j.locales, eventos: j.eventos, sinTabla: !!j.sinTabla }
+  return { locales: j.locales, eventos: j.eventos, tandas: j.tandas || [], sinTabla: !!j.sinTabla, sinTandas: !!j.sinTandas }
 }
+
+export async function crearTanda(nombre: string, ids: string[]): Promise<{ tanda: Tanda; locales: Prospecto[] }> {
+  const j = await leerJson(
+    await apiFetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recurso: 'prospectos', action: 'tanda', nombre, ids }) }),
+  )
+  return { tanda: j.tanda, locales: j.locales }
+}
+
+export const elegirParaTanda = elegirCore as (locales: Prospecto[], o: { ciudad?: string; cantidad: number }) => Prospecto[]
+
+export type ResumenTanda = { locales: number; contactados: number; respondieron: number; descartados: number }
+export const resumenTanda = resumenCore as (locales: Prospecto[], tandaId: number) => ResumenTanda
 
 export type CuerpoAccion =
   | { action: 'contacto'; id: string; medio: Medio }
@@ -94,7 +115,7 @@ export function enlaceMaps(p: Prospecto): string | null {
   return `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`
 }
 
-export type FiltroProspectos = { ciudad: string; estado: EstadoProspecto | 'todos'; q: string }
+export type FiltroProspectos = { ciudad: string; estado: EstadoProspecto | 'todos'; q: string; tanda?: number | 'todas' }
 
 const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 
@@ -104,6 +125,7 @@ export function filtrarProspectos(lista: Prospecto[], f: FiltroProspectos): Pros
     (p) =>
       (f.ciudad === 'todas' || p.ciudad === f.ciudad) &&
       (f.estado === 'todos' || p.estado === f.estado) &&
+      (f.tanda == null || f.tanda === 'todas' || p.tanda_id === f.tanda) &&
       (!q || sinTildes(`${p.nombre} ${p.direccion || ''} ${p.instagram || ''} ${p.telefono || ''}`).includes(q)),
   )
 }

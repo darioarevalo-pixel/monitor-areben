@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { estadoTrasContacto, filaDesdeMaps, idDeLocal, validarAccion } from '@/lib/crm/prospectos.core.js'
+import { elegirParaTanda, resumenTanda } from '@/lib/crm/prospectos'
 import {
   contarPorEstado,
   enlaces,
@@ -25,11 +26,12 @@ const crudo = {
 }
 
 const p = (o: Partial<Prospecto> = {}): Prospecto => ({
-  ...(filaDesdeMaps(crudo, 'test') as Omit<Prospecto, 'estado' | 'ultimo_contacto' | 'ultimo_medio' | 'lead_id'>),
+  ...(filaDesdeMaps(crudo, 'test') as Omit<Prospecto, 'estado' | 'ultimo_contacto' | 'ultimo_medio' | 'lead_id' | 'tanda_id'>),
   estado: 'sin_contactar',
   ultimo_contacto: null,
   ultimo_medio: null,
   lead_id: null,
+  tanda_id: null,
   ...o,
 })
 
@@ -95,5 +97,38 @@ describe('mapa de locales', () => {
     const leads = { x: { id: 'x', telefono: '2255 40-3132' } } as unknown as MapaLeads
     expect(leadExistente(leads, p())).toBe('x')
     expect(leadExistente({}, p())).toBeNull()
+  })
+
+  it('tanda: sólo sin contactar, sin otra tanda y con algún medio; primero el WhatsApp seguro', () => {
+    const ls = [
+      p({ id: 'a', nombre: 'A', telefono: null, instagram: 'a', resenas: 50 }),
+      p({ id: 'b', nombre: 'B', whatsapp_seguro: true, resenas: 1 }),
+      p({ id: 'c', nombre: 'C', resenas: 10 }),
+      p({ id: 'd', nombre: 'D', estado: 'contactado' }),
+      p({ id: 'e', nombre: 'E', tanda_id: 1 }),
+      p({ id: 'f', nombre: 'F', telefono: null, instagram: null, correo: null }),
+      p({ id: 'g', nombre: 'G', ciudad: 'Pinamar' }),
+    ]
+    expect(elegirParaTanda(ls, { ciudad: 'Villa Gesell', cantidad: 10 }).map((l) => l.id)).toEqual(['b', 'c', 'a'])
+    expect(elegirParaTanda(ls, { cantidad: 2 }).map((l) => l.id)).toEqual(['b', 'c'])
+  })
+
+  it('cuenta de la tanda: respondió también es contactado', () => {
+    const ls = [
+      p({ id: 'a', tanda_id: 1 }),
+      p({ id: 'b', tanda_id: 1, estado: 'contactado' }),
+      p({ id: 'c', tanda_id: 1, estado: 'respondio' }),
+      p({ id: 'd', tanda_id: 1, estado: 'descartado' }),
+      p({ id: 'e', tanda_id: 2, estado: 'respondio' }),
+    ]
+    expect(resumenTanda(ls, 1)).toEqual({ locales: 4, contactados: 3, respondieron: 1, descartados: 1 })
+  })
+
+  it('tanda: pide nombre y locales, sin repetidos, hasta el máximo', () => {
+    expect(validarAccion({ action: 'tanda', nombre: ' ', ids: ['a'] }).ok).toBe(false)
+    expect(validarAccion({ action: 'tanda', nombre: 'Pinamar', ids: [] }).ok).toBe(false)
+    expect(validarAccion({ action: 'tanda', nombre: 'Pinamar', ids: Array.from({ length: 101 }, (_, i) => 'x' + i) }).ok).toBe(false)
+    const v = validarAccion({ action: 'tanda', nombre: 'Pinamar', ids: ['a', 'a', 'b'] })
+    expect(v.ok && v.accion).toEqual({ action: 'tanda', nombre: 'Pinamar', ids: ['a', 'b'] })
   })
 })

@@ -7,24 +7,29 @@ import { guardarLeadsConRelectura } from '@/lib/crm/persistencia'
 import { nuevoIdLead, type Lead } from '@/lib/crm/leads'
 import {
   ESTADO_LABEL,
+  MAX_TANDA,
   MEDIO_LABEL,
   accionProspecto,
   cargarProspectos,
   ciudades,
   contarPorEstado,
+  crearTanda,
+  elegirParaTanda,
   enlaceMaps,
   enlaces,
   filtrarProspectos,
   leadExistente,
   patchLeadDesdeProspecto,
+  resumenTanda,
   textoEvento,
   type CuerpoAccion,
   type EstadoProspecto,
   type EventoProspecto,
   type Medio,
   type Prospecto,
+  type Tanda,
 } from '@/lib/crm/prospectos'
-import { BuscarInput, Button, Chips, Modal, Notice, StatusPill, color, space, type Tone } from '@/components/ui'
+import { BuscarInput, Button, Chips, Field, Input, Modal, Notice, NumberField, Select, StatusPill, color, space, type Tone } from '@/components/ui'
 
 /**
  * Pestaña «Mapa» del CRM: los locales de Google Maps que todavía no compran (26-oct-2026, Darío).
@@ -35,6 +40,9 @@ import { BuscarInput, Button, Chips, Modal, Notice, StatusPill, color, space, ty
  *
  * 🔑 Tocar un medio (WhatsApp, Llamada, Instagram, Correo) abre el canal **y** anota el contacto:
  * es un solo gesto. La ventana se abre ANTES del pedido al servidor, o el navegador la bloquea.
+ *
+ * Tandas (parte 2, 27-oct): se trabaja de a grupos chicos («15 de Pinamar esta semana»). Un local
+ * entra a una sola tanda y queda ahí; la cuenta de cada tanda sale de sus locales.
  */
 
 const MapaLeaflet = dynamic(() => import('./MapaLeaflet').then((m) => m.MapaLeaflet), { ssr: false })
@@ -65,6 +73,10 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
   const [abierto, setAbierto] = useState<string | null>(null)
   const [nota, setNota] = useState('')
   const [ocupado, setOcupado] = useState(false)
+  const [tandas, setTandas] = useState<Tanda[]>([])
+  const [sinTandas, setSinTandas] = useState(false)
+  const [tanda, setTanda] = useState<number | 'todas'>('todas')
+  const [armando, setArmando] = useState(false)
 
   useEffect(() => {
     let vivo = true
@@ -74,6 +86,8 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
         setLocales(r.locales)
         setEventos(r.eventos)
         setSinTabla(r.sinTabla)
+        setTandas(r.tandas)
+        setSinTandas(r.sinTandas)
       })
       .catch((e) => vivo && setError('No se pudo leer el mapa: ' + (e as Error).message))
       .finally(() => vivo && setCargando(false))
@@ -82,8 +96,10 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
     }
   }, [])
 
-  const deCiudad = useMemo(() => filtrarProspectos(locales, { ciudad, estado: 'todos', q: '' }), [locales, ciudad])
-  const lista = useMemo(() => filtrarProspectos(locales, { ciudad, estado, q }), [locales, ciudad, estado, q])
+  const deCiudad = useMemo(() => filtrarProspectos(locales, { ciudad, estado: 'todos', q: '', tanda }), [locales, ciudad, tanda])
+  const lista = useMemo(() => filtrarProspectos(locales, { ciudad, estado, q, tanda }), [locales, ciudad, estado, q, tanda])
+  const resumen = useMemo(() => (tanda === 'todas' ? null : resumenTanda(locales, tanda)), [locales, tanda])
+  const nombreTanda = (id: number | null) => (id == null ? null : tandas.find((t) => t.id === id)?.nombre || null)
   const n = useMemo(() => contarPorEstado(deCiudad), [deCiudad])
   const listaCiudades = useMemo(() => ciudades(locales), [locales])
 
@@ -137,6 +153,24 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
     }
   }
 
+  async function armarTanda(nombre: string, ids: string[]) {
+    setOcupado(true)
+    try {
+      const r = await crearTanda(nombre, ids)
+      const entraron = new Map(r.locales.map((l) => [l.id, l]))
+      setLocales((ls) => ls.map((l) => entraron.get(l.id) || l))
+      setTandas((ts) => [r.tanda, ...ts])
+      setTanda(r.tanda.id)
+      setEstado('todos')
+      setArmando(false)
+      setError(r.locales.length < ids.length ? `Entraron ${r.locales.length} de ${ids.length}: los demás ya estaban en otra tanda o ya se habían contactado.` : null)
+    } catch (e) {
+      setError('No se pudo crear la tanda: ' + (e as Error).message)
+    } finally {
+      setOcupado(false)
+    }
+  }
+
   async function guardarNota() {
     if (!p || !nota.trim()) return
     if (await hacer({ action: 'nota', id: p.id, texto: nota.trim() })) setNota('')
@@ -157,6 +191,10 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
     { key: 'todos' as const, label: 'Todos', n: deCiudad.length },
     ...(['sin_contactar', 'contactado', 'respondio', 'descartado'] as EstadoProspecto[]).map((e) => ({ key: e, label: ESTADO_LABEL[e], n: n[e] })),
   ]
+  const opcionesTanda = [
+    { key: 'todas', label: 'Todas' },
+    ...tandas.map((t) => ({ key: String(t.id), label: t.nombre, n: locales.filter((l) => l.tanda_id === t.id).length })),
+  ]
 
   return (
     <>
@@ -168,12 +206,25 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[2], marginBottom: space[3] }}>
         <Chips opciones={opcionesCiudad} value={ciudad} onChange={setCiudad} />
+        {!sinTandas && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: color.mut2 }}>Tanda</span>
+            {tandas.length > 0 && <Chips opciones={opcionesTanda} value={String(tanda)} onChange={(v) => setTanda(v === 'todas' ? 'todas' : Number(v))} />}
+            <Button size="sm" variant="outline" disabled={ocupado} onClick={() => setArmando(true)}>Crear tanda</Button>
+          </div>
+        )}
         <Chips opciones={opcionesEstado} value={estado} onChange={(v) => setEstado(v as EstadoProspecto | 'todos')} />
+        {resumen && (
+          <div style={{ fontSize: 13, color: color.ink2 }}>
+            {resumen.locales} locales · {resumen.contactados} contactados · {resumen.respondieron} respondieron
+            {resumen.descartados ? ` · ${resumen.descartados} descartados` : ''}
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: space[3] }}>
         <div style={{ height: 560, border: `1px solid ${color.line}`, borderRadius: 10 }}>
-          <MapaLeaflet puntos={lista} elegido={abierto} onElegir={setAbierto} encuadre={ciudad} />
+          <MapaLeaflet puntos={lista} elegido={abierto} onElegir={setAbierto} encuadre={`${ciudad}|${tanda}`} />
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: 560 }}>
@@ -217,18 +268,24 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
       </div>
 
       <Modal abierto={!!p} onCerrar={() => { setAbierto(null); setNota('') }} titulo={p?.nombre}>
-        {p && <Ficha p={p} historial={historial} ocupado={ocupado} nota={nota} setNota={setNota}
+        {p && <Ficha p={p} tanda={nombreTanda(p.tanda_id)} historial={historial} ocupado={ocupado} nota={nota} setNota={setNota}
           onContactar={contactar} onRespondio={respondio} onEstado={(e) => hacer({ action: 'estado', id: p.id, estado: e })}
           onGuardarNota={guardarNota} onVerLead={onVerLead} />}
       </Modal>
+
+      {armando && (
+        <ArmarTanda locales={locales} ciudades={listaCiudades.map((c) => c.ciudad)} ciudadInicial={ciudad}
+          ocupado={ocupado} onCerrar={() => setArmando(false)} onCrear={armarTanda} />
+      )}
     </>
   )
 }
 
 function Ficha({
-  p, historial, ocupado, nota, setNota, onContactar, onRespondio, onEstado, onGuardarNota, onVerLead,
+  p, tanda, historial, ocupado, nota, setNota, onContactar, onRespondio, onEstado, onGuardarNota, onVerLead,
 }: {
   p: Prospecto
+  tanda: string | null
   historial: EventoProspecto[]
   ocupado: boolean
   nota: string
@@ -250,6 +307,7 @@ function Ficha({
         <span style={{ fontSize: 13, color: color.mut }}>
           {[p.rubro, p.ciudad].filter(Boolean).join(' · ')}
           {p.estrellas != null ? ` · ★ ${p.estrellas}${p.resenas ? ` (${p.resenas})` : ''}` : ''}
+          {tanda ? ` · Tanda ${tanda}` : ''}
         </span>
       </div>
 
@@ -334,5 +392,88 @@ function Ficha({
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * Crear una tanda: ciudad + cantidad, y se eligen solos los más fáciles de contactar
+ * (`elegirParaTanda`). Se ve la lista antes de confirmar.
+ */
+function ArmarTanda({
+  locales, ciudades, ciudadInicial, ocupado, onCerrar, onCrear,
+}: {
+  locales: Prospecto[]
+  ciudades: string[]
+  ciudadInicial: string
+  ocupado: boolean
+  onCerrar: () => void
+  onCrear: (nombre: string, ids: string[]) => void
+}) {
+  const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+  const [ciudad, setCiudad] = useState(ciudadInicial)
+  const [cantidad, setCantidad] = useState<number | ''>(15)
+  const [nombre, setNombre] = useState(`${ciudadInicial === 'todas' ? 'Costa' : ciudadInicial} ${hoy}`)
+  const [nombreTocado, setNombreTocado] = useState(false)
+
+  const disponibles = useMemo(() => elegirParaTanda(locales, { ciudad, cantidad: MAX_TANDA * 100 }).length, [locales, ciudad])
+  const elegidos = useMemo(() => elegirParaTanda(locales, { ciudad, cantidad: Number(cantidad) || 0 }), [locales, ciudad, cantidad])
+
+  function cambiarCiudad(c: string) {
+    setCiudad(c)
+    if (!nombreTocado) setNombre(`${c === 'todas' ? 'Costa' : c} ${hoy}`)
+  }
+
+  return (
+    <Modal
+      abierto
+      onCerrar={onCerrar}
+      titulo="Nueva tanda"
+      pie={
+        <>
+          <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
+          <Button variant="solid" disabled={ocupado || !nombre.trim() || elegidos.length === 0}
+            onClick={() => onCrear(nombre.trim(), elegidos.map((l) => l.id))}>
+            Crear tanda
+          </Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+        <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+          <Field label="Ciudad">
+            <Select value={ciudad} onChange={(e) => cambiarCiudad(e.target.value)}>
+              <option value="todas">Todas</option>
+              {ciudades.map((c) => <option key={c} value={c}>{c}</option>)}
+            </Select>
+          </Field>
+          <Field label="Cantidad">
+            <NumberField value={cantidad} onChange={setCantidad} min={1} max={MAX_TANDA} />
+          </Field>
+          <Field label="Nombre" width={220}>
+            <Input value={nombre} maxLength={80} onChange={(e) => { setNombre(e.target.value); setNombreTocado(true) }} />
+          </Field>
+        </div>
+
+        <div style={{ fontSize: 13, color: color.mut }}>
+          {disponibles === 0
+            ? 'No quedan locales sin contactar fuera de otra tanda en esta ciudad.'
+            : `Entran ${elegidos.length} de ${disponibles} disponibles. Primero los que tienen WhatsApp seguro.`}
+        </div>
+
+        {elegidos.length > 0 && (
+          <div style={{ maxHeight: 280, overflowY: 'auto', border: `1px solid ${color.line}`, borderRadius: 10 }}>
+            {elegidos.map((l) => (
+              <div key={l.id} style={{ padding: '6px 12px', borderBottom: `1px solid ${color.line}`, fontSize: 13 }}>
+                <span style={{ color: color.ink }}>{l.nombre}</span>
+                <span style={{ color: color.mut2 }}>
+                  {' · '}
+                  {[l.ciudad, l.whatsapp_seguro ? 'WhatsApp' : l.telefono ? 'Teléfono' : l.instagram ? 'Instagram' : 'Correo'].filter(Boolean).join(' · ')}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }

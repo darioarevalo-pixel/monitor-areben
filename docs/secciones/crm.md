@@ -238,8 +238,13 @@ WhatsApp**: un local vive sólo acá («Sin contactar») hasta que **responde �
   color como atributo SVG y ahí un `var(--mo-*)` no se resuelve. Sin contactar = violeta (brand),
   contactado = amarillo, respondió = verde, descartado = rojo tenue. 🔑 Sin contactar NO va en gris:
   es lo que hay que trabajar y tiene que llamar la atención (pedido de Darío, 27-oct).
-- ⏭️ Parte 2 (no está): tandas (elegir N locales), estadística por tanda y por medio, y los
-  mayoristas actuales en el mapa.
+- **Tandas (parte 2, 27-oct)**: `sql/migrate-prospectos-tandas.sql` (`prospecto_tanda` +
+  `prospecto_local.tanda_id`). «Crear tanda» elige ciudad + cantidad y `elegirParaTanda` toma los
+  más fáciles de contactar (WhatsApp seguro → teléfono → Instagram → correo, después reseñas).
+  🔑 Un local entra a UNA tanda y queda: sólo entran «sin contactar» sin tanda, y ese filtro va
+  también EN EL UPDATE del servidor (dos tandas a la vez no se pisan). La cuenta de la tanda
+  (`resumenTanda`) sale de sus locales. Sin la tabla, el botón no aparece y el mapa anda igual.
+- ⏭️ Falta: estadística por medio y «compraron» por tanda, y los mayoristas actuales en el mapa.
 
 ## Lo que ya se rompió acá
 
