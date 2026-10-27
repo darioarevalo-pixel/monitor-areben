@@ -9,6 +9,13 @@
  *
  *   node scripts/desc-borradores.mjs listar [--marca zattia] [--cuantos 20] [--que mudos|cortas|borradores] [--alta 2026-09-02] [--fresco]
  *   node scripts/desc-borradores.mjs guardar --id 123 --parrafo "…" [--tip "…"] [--chivato escote=redondo>cuello alto]
+ *   node scripts/desc-borradores.mjs cambios [--todos]
+ *
+ * 🆕 **`cambios` muestra qué le cambió Bruno a lo que escribí** (pedido 27-oct-2026: «hay cosas que
+ * no te puedo explicar pero lo podemos solucionar a la práctica»). El borrador de la fila se PISA
+ * cuando él edita antes de publicar, así que mi original se perdía y había que rescatarlo de los
+ * `.jsonl` de sesiones viejas. Ahora `guardar` deja una copia en `ORIGINALES` (local, fuera del
+ * repo) y `cambios` la cruza con lo que salió: **se corre ANTES de escribir una tanda nueva**.
  *
  * 🔑 **`guardar` corre el VALIDADOR REAL** —el mismo `validarParrafo`/`validarTip` que usa la
  * pantalla y que exige el botón de aprobar— y si algo no pasa, **⛔ no guarda y sale 1**. Un
@@ -27,6 +34,9 @@
  * el texto, y vive en la pantalla.
  */
 
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { authKv, leerEnv } from './lib/kv-auth.mjs'
 import { frenan, validarParrafo, validarTip } from '../lib/tn-desc/formato.core.js'
 import { bulletsDe, insumosDe, sinTela } from '../lib/tn-desc/atributos.core.js'
@@ -35,6 +45,9 @@ import { familiaDe } from '../lib/tn-desc/atributos.core.js'
 
 const MONITOR = process.env.MONITOR_URL || 'https://monitorareben.vercel.app'
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
+// Mis originales, uno por `guardar`. Local a propósito: el que escribe borradores es una sesión en
+// esta Mac, y lo que importa es no perder la versión que el editor de la pantalla va a pisar.
+const ORIGINALES = join(homedir(), '.config', 'areben', 'desc-originales.jsonl')
 
 function arg(nombre, def = null) {
   const i = process.argv.indexOf(`--${nombre}`)
@@ -238,13 +251,56 @@ async function guardar() {
     console.error(`⛔ se escribió pero la relectura NO coincide. Miralo en la pantalla.`)
     process.exit(1)
   }
+  mkdirSync(dirname(ORIGINALES), { recursive: true })
+  appendFileSync(ORIGINALES, JSON.stringify({ ts: new Date().toISOString(), store: marca, tn_id: String(id), nombre: p.name, parrafo, tip: String(tip).trim() }) + '\n')
   console.log(`✅ ${p.name}: borrador guardado y releído${chivatos.length ? ` · ${chivatos.length} chivato(s)` : ''}.`)
+}
+
+/**
+ * Lo que escribí contra lo que salió. Sólo cuenta lo que YA está en la tienda: un borrador que
+ * espera revisión todavía no dice nada de lo que le gusta a Bruno.
+ *
+ * 🔑 El final sale del borrador de la fila, que es lo que publicó el botón con sus ediciones
+ * adentro (párrafo y tip por separado). ⚠️ Si alguien después toca el texto directo en TiendaNube,
+ * eso ⛔ no se ve acá.
+ */
+async function cambios() {
+  if (!existsSync(ORIGINALES)) {
+    console.error(`Todavía no hay originales guardados (${ORIGINALES}): se llenan con cada \`guardar\`.`)
+    return
+  }
+  const ultimo = {}
+  for (const l of readFileSync(ORIGINALES, 'utf8').split('\n')) {
+    if (!l.trim()) continue
+    const o = JSON.parse(l)
+    if (o.store === marca) ultimo[o.tn_id] = o // el último `guardar` de cada prenda es el que vio Bruno
+  }
+  const r = await fetch(`${MONITOR}/api/datos?recurso=tn-desc&store=${marca}`, { headers })
+  const d = await r.json()
+  if (!r.ok || !d.ok) throw new Error(`la cola contestó ${r.status}: ${d.error || ''}`)
+  const filas = Object.fromEntries((d.filas || []).map((f) => [String(f.tn_id), f]))
+  const cuenta = { publicadas: 0, tocadas: 0, esperando: 0 }
+  const salida = []
+  for (const o of Object.values(ultimo)) {
+    const fila = filas[o.tn_id]
+    if (!fila || fila.estado !== 'escrito') { cuenta.esperando++; continue }
+    cuenta.publicadas++
+    const fin = { parrafo: (fila.borrador && fila.borrador.parrafo) || '', tip: (fila.borrador && fila.borrador.tip) || '' }
+    const tocado = fin.parrafo.trim() !== o.parrafo.trim() || fin.tip.trim() !== o.tip.trim()
+    if (tocado) cuenta.tocadas++
+    if (tocado || process.argv.includes('--todos')) {
+      salida.push({ nombre: o.nombre, escribi: { parrafo: o.parrafo, tip: o.tip }, salio: fin, tocado })
+    }
+  }
+  console.log(JSON.stringify(salida, null, 1))
+  console.error(`\n${cuenta.publicadas} publicadas de las que escribí · ${cuenta.tocadas} con cambios de Bruno · ${cuenta.esperando} todavía sin publicar.`)
 }
 
 const verbo = process.argv[2]
 if (verbo === 'listar') await listar()
 else if (verbo === 'guardar') await guardar()
+else if (verbo === 'cambios') await cambios()
 else {
-  console.error('Verbos: listar | guardar. Ver el comentario de arriba del archivo.')
+  console.error('Verbos: listar | guardar | cambios. Ver el comentario de arriba del archivo.')
   process.exit(1)
 }
