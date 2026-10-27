@@ -61,7 +61,7 @@ type Seccion = {
   icono: string
   /** Va colgada de la anterior (Caja (POS) debajo de Ventas). */
   debajo?: boolean
-  pestanias: Array<{ key: string; label: string }>
+  pestanias: Array<{ key: string; label: string; /** Vistas de adentro (diseño §9: Stock 9 → 4): la primera es la de siempre. */ vistas?: Array<{ key: string; label: string }> }>
   /** Qué dice la sección mientras no tiene pantallas. */
   vacia?: string
 }
@@ -76,7 +76,12 @@ export const SECCIONES_ERP: Seccion[] = [
   { key: 'caja', titulo: 'Caja', icono: 'M3 8h18v12H3z M7 8V4h10v4 M7 13h4', debajo: true, pestanias: [{ key: 'cambio', label: 'Cambio' }, { key: 'factura', label: 'Factura' }] },
   {
     key: 'stock', titulo: 'Stock', icono: 'M21 8l-9-5-9 5 9 5 9-5z M3 8v8l9 5 9-5V8 M12 13v8',
-    pestanias: [{ key: 'stock', label: 'Stock' }, { key: 'movimientos', label: 'Movimientos' }, { key: 'transferencias', label: 'Transferencias' }, { key: 'mover', label: 'Mover y recibir' }, { key: 'ajustes', label: 'Ingresos y ajustes' }, { key: 'recepciones', label: 'Ingresos' }, { key: 'comparacion', label: 'Comparación con Tienda Nube y Mercado Libre' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Diferencias con Gestión Nube' }],
+    pestanias: [
+      { key: 'stock', label: 'Stock', vistas: [{ key: 'stock', label: 'Productos' }, { key: 'movimientos', label: 'Movimientos' }] },
+      { key: 'transferencias', label: 'Transferencias', vistas: [{ key: 'transferencias', label: 'Transferencias' }, { key: 'mover', label: 'Mover y recibir' }] },
+      { key: 'ajustes', label: 'Ingresos y ajustes', vistas: [{ key: 'ajustes', label: 'Ajustes' }, { key: 'ingresos', label: 'Ingresos' }] },
+      { key: 'diferencias', label: 'Diferencias', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }] },
+    ],
   },
   { key: 'productos', titulo: 'Productos y precios', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }] },
   {
@@ -89,15 +94,34 @@ export const SECCIONES_ERP: Seccion[] = [
   },
 ]
 
-/** `['stock', 'ajustes']` → la sección y la pestaña; lo que no existe cae en Inicio o en la primera pestaña. */
-export function resolverRutaErp(ruta: string[]) {
-  const seccion = SECCIONES_ERP.find((s) => s.key === ruta[0]) ?? SECCIONES_ERP[0]
-  const pestania = seccion.pestanias.find((p) => p.key === ruta[1])?.key ?? seccion.pestanias[0]?.key ?? null
-  const valida = seccion.key === (ruta[0] ?? 'inicio') && (ruta[1] == null || pestania === ruta[1])
-  return { seccion, pestania, valida }
+/** Las nueve pestañas de Stock de antes (direcciones guardadas, ⌘K): cada una cae en su pestaña y vista nuevas. */
+const PESTANIAS_VIEJAS_DE_STOCK: Record<string, [string, string]> = {
+  movimientos: ['stock', 'movimientos'], mover: ['transferencias', 'mover'], recepciones: ['ajustes', 'ingresos'], ingresos: ['ajustes', 'ingresos'],
+  comparacion: ['diferencias', 'comparacion'], conciliacion: ['diferencias', 'conciliacion'], diferencias: ['diferencias', 'diferencias'],
 }
 
-export const hrefErp = (seccion: string, pestania?: string | null) => (seccion === 'inicio' ? '/erp' : `/erp/${seccion}${pestania ? `/${pestania}` : ''}`)
+/** `['stock', 'ajustes']` → la sección, la pestaña y la vista; lo que no existe cae en Inicio o en la primera pestaña. */
+export function resolverRutaErp(ruta: string[]) {
+  const seccion = SECCIONES_ERP.find((s) => s.key === ruta[0]) ?? SECCIONES_ERP[0]
+  const vieja = seccion.key === 'stock' && ruta[1] && !ruta[2] ? PESTANIAS_VIEJAS_DE_STOCK[ruta[1]] : undefined
+  const [k1, k2] = vieja ?? [ruta[1], ruta[2]]
+  const item = seccion.pestanias.find((p) => p.key === k1) ?? seccion.pestanias[0]
+  const pestania = item?.key ?? null
+  const vista = item?.vistas ? (item.vistas.find((v) => v.key === k2) ?? item.vistas[0]).key : null
+  const valida = !vieja && seccion.key === (ruta[0] ?? 'inicio') && (ruta[1] == null || (pestania === ruta[1] && (ruta[2] == null || vista === ruta[2])))
+  return { seccion, pestania, vista, valida }
+}
+
+export const hrefErp = (seccion: string, pestania?: string | null, vista?: string | null) => {
+  if (seccion === 'inicio') return '/erp'
+  const vieja = seccion === 'stock' && pestania && !vista ? PESTANIAS_VIEJAS_DE_STOCK[pestania] : undefined
+  const [p, v] = vieja ?? [pestania, vista]
+  const primera = SECCIONES_ERP.find((s) => s.key === seccion)?.pestanias.find((x) => x.key === p)?.vistas?.[0].key
+  return `/erp/${seccion}${p ? `/${p}` : ''}${p && v && v !== primera ? `/${v}` : ''}`
+}
+
+/** Para ⌘K: Stock con SUS nueve vistas (la búsqueda salta a una vista, no a un grupo). */
+const SECCIONES_BUSCABLES: Seccion[] = SECCIONES_ERP.map((s) => (s.key === 'stock' ? { ...s, pestanias: s.pestanias.flatMap((p) => p.vistas ?? [p]) } : s))
 
 function Trazo({ d, size = 18 }: { d: string; size?: number }) {
   return (
@@ -114,7 +138,7 @@ let prendaAAjustarPendiente: PrendaAAjustar | null = null
 export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const router = useRouter()
   const { perfil, marca, setMarca } = useSesion()
-  const { seccion, pestania, valida } = resolverRutaErp(ruta)
+  const { seccion, pestania, vista, valida } = resolverRutaErp(ruta)
   // De una ficha de prenda (Stock, Movimientos, Conciliación, Diferencias) a «Nuevo ajuste» con la prenda cargada
   // (Conteos y ajustes): viaja en memoria, la dirección sólo dice la pestaña. 🎨 19-oct: Conciliación y Diferencias abren la
   // ficha AL COSTADO, ⛔ saltan a Stock.
@@ -123,7 +147,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const setAAjustar = (p: PrendaAAjustar | null) => { prendaAAjustarPendiente = p; setAAjustarEstado(p) }
   // El estado ya la tomó: el módulo la suelta (si no, reaparecería en el próximo remonte, por ejemplo al volver por el menú).
   useEffect(() => { prendaAAjustarPendiente = null; pedidoDeBusqueda = null }, [])
-  const ir = (s: string, p?: string | null) => router.push(hrefErp(s, p))
+  const ir = (s: string, p?: string | null, v?: string | null) => router.push(hrefErp(s, p, v))
   // Búsqueda global (⌘K) y atajos (?). Lo que se elige viaja en memoria (como `aAjustar`): la lista que lo abre lo recibe y lo suelta.
   const [panel, setPanel] = useState<'buscar' | 'atajos' | null>(null)
   // `Erp` se REMONTA al cambiar de sección (un `useState` se perdía en el camino): el pedido vive en el módulo y la lista lo suelta.
@@ -135,8 +159,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   useAtajosErp(setPanel)
   // Una dirección vieja o mal escrita ⇒ la que corresponde (⛔ una pantalla en blanco).
   useEffect(() => {
-    if (!valida) router.replace(hrefErp(seccion.key, pestania))
-  }, [valida, seccion.key, pestania, router])
+    if (!valida) router.replace(hrefErp(seccion.key, pestania, vista))
+  }, [valida, seccion.key, pestania, vista, router])
 
   const marcas = (Object.keys(CUENTAS) as Marca[]).filter((m) => perfil && puedeVer(perfil, m, 'erp'))
   const ajustarPrenda = (p: PrendaAAjustar) => { setAAjustar(p); setPrendaGlobal(null); ir('stock', 'ajustes') }
@@ -210,6 +234,9 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
               </div>
             </header>
 
+            {vista && (
+              <Tabs items={seccion.pestanias.find((p) => p.key === pestania)?.vistas ?? []} value={vista} onChange={(k) => ir(seccion.key, pestania, k)} />
+            )}
             {seccion.key === 'inicio' && <InicioErp key={marca} href={hrefErp} />}
             {seccion.vacia && <EmptyState title={seccion.vacia} />}
             {/* `key`: al cambiar de marca se cierra la ficha abierta (era de la otra marca) y se vuelve a leer. */}
@@ -220,15 +247,15 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {pestania === 'facturacion' && <Facturacion key={marca} />}
             {pestania === 'cambio' && <CambioCaja />}
             {pestania === 'factura' && <FacturaCaja />}
-            {pestania === 'stock' && <StockErp key={marca} ajustar={ajustarPrenda} />}
-            {pestania === 'movimientos' && <MovimientosStock key={marca} ajustar={ajustarPrenda} />}
-            {pestania === 'transferencias' && <TransferenciasStock key={marca} />}
-            {pestania === 'mover' && <MoverYRecibir />}
-            {pestania === 'ajustes' && <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : 'lista'} pedida={aAjustar} />}
-            {pestania === 'recepciones' && <RecepcionesStock key={marca} />}
-            {pestania === 'comparacion' && <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'conciliacion')} />}
-            {pestania === 'conciliacion' && <ConciliacionDia key={marca} ajustar={ajustarPrenda} />}
-            {pestania === 'diferencias' && <DiferenciasDia key={marca} ajustar={ajustarPrenda} />}
+            {vista === 'stock' && <StockErp key={marca} ajustar={ajustarPrenda} />}
+            {vista === 'movimientos' && <MovimientosStock key={marca} ajustar={ajustarPrenda} />}
+            {vista === 'transferencias' && <TransferenciasStock key={marca} />}
+            {vista === 'mover' && <MoverYRecibir />}
+            {vista === 'ajustes' && <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : 'lista'} pedida={aAjustar} />}
+            {vista === 'ingresos' && <RecepcionesStock key={marca} />}
+            {vista === 'comparacion' && <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'diferencias', 'conciliacion')} />}
+            {vista === 'conciliacion' && <ConciliacionDia key={marca} ajustar={ajustarPrenda} />}
+            {vista === 'diferencias' && <DiferenciasDia key={marca} ajustar={ajustarPrenda} />}
             {pestania === 'productos' && <ProductosErp />}
             {pestania === 'precios' && <PreciosErp key={marca} />}
             {pestania === 'clientes' && <ClientesErp key={`${marca}/${pedidoN}`} abrir={aAbrir?.tipo === 'cliente' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
@@ -242,7 +269,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
           </div>
         </div>
       </div>
-      {panel === 'buscar' && <BusquedaGlobal marca={marca} marcas={marcas} secciones={SECCIONES_ERP} onElegir={elegirDeLaBusqueda} onCerrar={() => setPanel(null)} />}
+      {panel === 'buscar' && <BusquedaGlobal marca={marca} marcas={marcas} secciones={SECCIONES_BUSCABLES} onElegir={elegirDeLaBusqueda} onCerrar={() => setPanel(null)} />}
       {panel === 'atajos' && <HojaDeAtajos onCerrar={() => setPanel(null)} />}
       {prendaGlobal && <FichaPrenda key={`${prendaGlobal.marca}/${prendaGlobal.producto}/${prendaGlobal.talle}`} marca={prendaGlobal.marca} prenda={{ producto: prendaGlobal.producto, talle: prendaGlobal.talle, fila: null }} onCerrar={() => setPrendaGlobal(null)} ajustar={ajustarPrenda} />}
     </div>

@@ -12,7 +12,7 @@ Productos y precios · Clientes y proveedores · Configuración, y «Volver al m
 pestaña: `/erp/ventas`, `/erp/ventas/facturacion`, `/erp/stock/ajustes`… (una vieja o mal escrita se corrige sola).
 Las pestañas: Ventas = Ventas · Por producto · Cobros · Cajas · Facturación (🎨 19-oct: «Pedidos sin pagar» pasó a ser la vista «Sin pagar» de Ventas; su
 dirección vieja cae en Ventas) · Caja (POS) = Cambio · Factura · Stock =
-Stock · Movimientos · Conteos y ajustes · Conciliación · Diferencias con GN · Productos = Productos · Precios · Configuración = Reglas · Cuentas de cobro · Redondeo;
+Stock (🎨 27-oct, §9: 9 → 4 pestañas con VISTAS en la dirección `/erp/stock/<pestaña>/<vista>`: Stock = Productos · Movimientos; Transferencias = Transferencias · Mover y recibir; Ingresos y ajustes = Ajustes · Ingresos; Diferencias = Con Tienda Nube y Mercado Libre · Conciliación · Con Gestión Nube; las nueve direcciones viejas caen en su vista, `PESTANIAS_VIEJAS_DE_STOCK`) · Productos = Productos · Precios · Configuración = Reglas · Cuentas de cobro · Redondeo;
 Clientes y proveedores = Clientes · Cuenta corriente · Proveedores. El contenido va adentro de `.shell-content` A PROPÓSITO (las pantallas heredan de ahí tablas,
 botones crudos y `select`). Tests: `tests/erp-navegacion*.test.ts*`. El registro (`registro.ts`) conserva `erp` sólo
 porque el test de registro lo exige: el shell ya ⛔ lo monta.

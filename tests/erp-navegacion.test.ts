@@ -5,9 +5,24 @@ import { SECCIONES_ERP, hrefErp, resolverRutaErp } from '@/components/erp/Erp'
 // (Pedidos sin pagar, 19-oct: pasó a ser la vista «Sin pagar» de Ventas).
 describe('ERP › menú y direcciones', () => {
   it('las pestañas de antes siguen, una sola vez cada una', () => {
-    const todas = SECCIONES_ERP.flatMap((s) => s.pestanias.map((p) => p.key))
+    // Stock 9 → 4 (diseño §9): las nueve de antes son VISTAS de cuatro pestañas.
+    const todas = SECCIONES_ERP.flatMap((s) => s.pestanias.flatMap((p) => p.vistas?.map((v) => v.key) ?? [p.key]))
     expect(new Set(todas).size).toBe(todas.length)
-    expect(todas.sort()).toEqual(['ajustes', 'cajas', 'cambio', 'clientes', 'cobros', 'comparacion', 'conciliacion', 'cuenta-corriente', 'cuentas', 'cuentas-reales', 'diferencias', 'estructura', 'factura', 'facturacion', 'mover', 'movimientos', 'por-producto', 'precios', 'productos', 'proveedores', 'recepciones', 'redondeo', 'reglas', 'stock', 'transferencias', 'ventas'])
+    expect(todas.sort()).toEqual(['ajustes', 'cajas', 'cambio', 'clientes', 'cobros', 'comparacion', 'conciliacion', 'cuenta-corriente', 'cuentas', 'cuentas-reales', 'diferencias', 'estructura', 'factura', 'facturacion', 'ingresos', 'mover', 'movimientos', 'por-producto', 'precios', 'productos', 'proveedores', 'redondeo', 'reglas', 'stock', 'transferencias', 'ventas'])
+    expect(SECCIONES_ERP.find((s) => s.key === 'stock')!.pestanias.map((p) => p.key)).toEqual(['stock', 'transferencias', 'ajustes', 'diferencias'])
+  })
+
+  it('Stock: la vista va en la dirección y las pestañas viejas caen en su lugar', () => {
+    expect(resolverRutaErp(['stock', 'transferencias', 'mover'])).toMatchObject({ pestania: 'transferencias', vista: 'mover', valida: true })
+    expect(hrefErp('stock', 'diferencias', 'conciliacion')).toBe('/erp/stock/diferencias/conciliacion')
+    expect(hrefErp('stock', 'diferencias', 'comparacion')).toBe('/erp/stock/diferencias')
+    for (const [vieja, nueva] of [['movimientos', '/erp/stock/stock/movimientos'], ['mover', '/erp/stock/transferencias/mover'], ['recepciones', '/erp/stock/ajustes/ingresos'], ['conciliacion', '/erp/stock/diferencias/conciliacion'], ['diferencias', '/erp/stock/diferencias/diferencias']]) {
+      const r = resolverRutaErp(['stock', vieja])
+      expect(r.valida).toBe(false)
+      expect(hrefErp('stock', r.pestania, r.vista)).toBe(nueva)
+      expect(hrefErp('stock', vieja)).toBe(nueva)
+    }
+    expect(resolverRutaErp(['ventas', 'ventas', 'x']).valida).toBe(false)
   })
 
   it('las secciones del diseño, en su orden', () => {
