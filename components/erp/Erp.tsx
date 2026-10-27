@@ -119,6 +119,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   // Búsqueda global (⌘K) y atajos (?). Lo que se elige viaja en memoria (como `aAjustar`): la lista que lo abre lo recibe y lo suelta.
   const [panel, setPanel] = useState<'buscar' | 'atajos' | null>(null)
   const [aAbrir, setAAbrir] = useState<{ tipo: 'venta'; id: string; numero: number; periodo: string } | { tipo: 'cliente'; doc: string } | null>(null)
+  // Cada pedido de la búsqueda remonta la lista que lo recibe (ya montada, no volvería a leer ni a mirar `abrir`).
+  const [pedidoN, setPedidoN] = useState(0)
   const [prendaGlobal, setPrendaGlobal] = useState<{ marca: Marca; producto: string; talle: string } | null>(null)
   useAtajosErp(setPanel)
   // Una dirección vieja o mal escrita ⇒ la que corresponde (⛔ una pantalla en blanco).
@@ -134,9 +136,11 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
     if (d.marca !== marca) setMarca(d.marca)
     if (d.tipo === 'prenda') { setPrendaGlobal({ marca: d.marca, producto: d.producto, talle: d.talle }); return }
     if (d.tipo === 'venta') {
+      setPedidoN((n) => n + 1)
       setAAbrir({ tipo: 'venta', id: d.id, numero: d.numero, periodo: periodoDeVenta(d.ocurridaEn, diaArgentino(Date.now())) ?? 'mes' })
       ir('ventas', 'ventas'); return
     }
+    setPedidoN((n) => n + 1)
     setAAbrir({ tipo: 'cliente', doc: d.doc })
     ir('clientes', 'clientes')
   }
@@ -198,7 +202,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {seccion.key === 'inicio' && <InicioErp key={marca} href={hrefErp} />}
             {seccion.vacia && <EmptyState title={seccion.vacia} />}
             {/* `key`: al cambiar de marca se cierra la ficha abierta (era de la otra marca) y se vuelve a leer. */}
-            {pestania === 'ventas' && <VentasErp key={marca} irACaja={(que) => ir('caja', que)} abrir={aAbrir?.tipo === 'venta' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
+            {pestania === 'ventas' && <VentasErp key={`${marca}/${pedidoN}`} irACaja={(que) => ir('caja', que)} abrir={aAbrir?.tipo === 'venta' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
             {pestania === 'por-producto' && <PorProductoErp key={marca} />}
             {pestania === 'cobros' && <CobrosErp key={marca} />}
             {pestania === 'cajas' && <CajasErp key={marca} />}
@@ -216,7 +220,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {pestania === 'diferencias' && <DiferenciasDia key={marca} ajustar={ajustarPrenda} />}
             {pestania === 'productos' && <ProductosErp />}
             {pestania === 'precios' && <PreciosErp key={marca} />}
-            {pestania === 'clientes' && <ClientesErp key={marca} abrir={aAbrir?.tipo === 'cliente' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
+            {pestania === 'clientes' && <ClientesErp key={`${marca}/${pedidoN}`} abrir={aAbrir?.tipo === 'cliente' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
             {pestania === 'cuenta-corriente' && <CuentaCorriente key={marca} />}
             {pestania === 'proveedores' && <ProveedoresErp key={marca} />}
             {pestania === 'reglas' && <ReglasComerciales key={marca} ir={(k) => ir('configuracion', k)} />}
