@@ -6,6 +6,7 @@ import { TEMP_UI, vistaTemp } from './temperatura'
 import { Leads } from './Leads'
 import { LeadsDelDia } from './LeadsDelDia'
 import { Metricas } from './Metricas'
+import { MapaLocales } from './MapaLocales'
 import { ClienteModal } from './ClienteModal'
 import { GuiaTrabajo, type AccionGuia } from './GuiaTrabajo'
 import { BancoMensajes } from './BancoMensajes'
@@ -216,7 +217,7 @@ export function CRM() {
   // El banco de mensajes se carga al abrirse, no con la sección: es una consulta más al KV que
   // la mayoría de los días no se usa.
   const [mensajes, setMensajes] = useState(false)
-  const [vista, setVista] = useState<'clientes' | 'leads' | 'metricas'>('clientes')
+  const [vista, setVista] = useState<'clientes' | 'leads' | 'mapa' | 'metricas'>('clientes')
   const [modalId, setModalId] = useState<number | null>(null)
   // La ficha de lead que hay que abrir al saltar desde la lista del día.
   const [leadId, setLeadId] = useState<string | null>(null)
@@ -314,7 +315,7 @@ export function CRM() {
       {/* En Métricas estas acciones no aplican: el canal no cambia el tablero (siempre es
           el 10) y las tres de la derecha editan el seguimiento, que ahí no se ve. */}
       <HeaderAcciones>
-        {vista !== 'metricas' && (
+        {vista !== 'metricas' && vista !== 'mapa' && (
           <Select value={modo} onChange={(e) => setModo(e.target.value as ModoCanal)} style={{ width: 170 }} aria-label="Canal">
             <option value="10">Mayorista</option>
             <option value="all">Todos los canales</option>
@@ -334,15 +335,23 @@ export function CRM() {
           items={[
             { key: 'clientes', label: 'Clientes' },
             { key: 'leads', label: 'Leads' },
+            { key: 'mapa', label: 'Mapa' },
             { key: 'metricas', label: 'Métricas' },
           ]}
           value={vista}
-          onChange={(k) => setVista(k as 'clientes' | 'leads' | 'metricas')}
+          onChange={(k) => setVista(k as 'clientes' | 'leads' | 'mapa' | 'metricas')}
           style={{ marginBottom: space[4] }}
         />
 
         {vista === 'leads' ? (
           <Leads abrirId={leadId} />
+        ) : vista === 'mapa' ? (
+          <MapaLocales
+            onVerLead={(id) => {
+              setLeadId(id)
+              setVista('leads')
+            }}
+          />
         ) : vista === 'metricas' ? (
           <Metricas ventas={ventas} cargando={cargando} />
         ) : (

@@ -212,6 +212,33 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   los busca por nombre. Este panel es justamente la dirección contraria: trae el monitor a donde ya
   se trabaja.
 
+## 🗺️ Pestaña «Mapa» — locales nuevos de Google Maps (27-oct-2026, parte 1)
+
+Pedido de Darío el 26-oct: los locales de la costa (Gesell, Pinamar, Madariaga, Mar del Plata) que
+no son clientes ni leads, en un mapa al lado de Clientes/Leads/Métricas. **⛔ No van al panel de
+WhatsApp**: un local vive sólo acá («Sin contactar») hasta que **responde → pasa a Lead**, y ahí sí.
+
+- Dónde vive: `components/crm/MapaLocales.tsx` (filtros, lista, ficha) + `MapaLeaflet.tsx` (el
+  dibujo) · `lib/crm/prospectos.ts` (navegador) + `prospectos.core.js` (reglas que comparten el
+  servidor y la carga) · `api/_prospectos.js` (`?recurso=prospectos`) · `sql/migrate-prospectos.sql`
+  · `scripts/prospectos-cargar.mjs` · `tests/crm-prospectos.test.ts`.
+- 🔑 **En la BASE, ⛔ no en el KV**: `prospecto_local` (el local + su estado) y `prospecto_evento`
+  (cada toque es una fila: contacto por medio, cambio de estado, nota, con quién y cuándo). Nada
+  se reescribe entero y el historial no se pisa. La estadística por tanda/medio (parte 2) sale de
+  contar eventos.
+- 🔑 **Tocar un medio abre el canal Y anota el contacto**, un solo gesto. La ventana se abre antes
+  del pedido al servidor (si no, el navegador la bloquea).
+- 🔴 **El lead lo crea el NAVEGADOR, con `guardarLeadsConRelectura`**, y recién después se ata
+  `lead_id` en la base. El servidor ⛔ escribe el KV: sería una segunda puerta a `crm:leads` sin la
+  relectura. Antes de crear se busca un lead con el mismo teléfono (`leadExistente`) para no
+  duplicar. Si se cae el segundo paso, volver a tocar encuentra el mismo lead.
+- El id del local es nombre + punto (`idDeLocal`): la búsqueda de dentro de 6 meses se vuelve a
+  cargar con el mismo script y suma sólo los nuevos, sin tocar estado ni historial.
+- Mapa de OpenStreetMap (gratis, sin clave). Los colores van por clase CSS: Leaflet escribe el
+  color como atributo SVG y ahí un `var(--mo-*)` no se resuelve.
+- ⏭️ Parte 2 (no está): tandas (elegir N locales), estadística por tanda y por medio, y los
+  mayoristas actuales en el mapa.
+
 ## Lo que ya se rompió acá
 
 - El padrón entero se leía desde el navegador con la anon key: nombre, mail, teléfono y ciudad de
