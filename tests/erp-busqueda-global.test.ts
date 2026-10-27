@@ -17,7 +17,12 @@ describe('erp › búsqueda global', () => {
   it('un escaneo son sólo cifras, 8 o más', () => {
     expect(esEscaneo('7791234567890')).toBe(true)
     expect(esEscaneo('296')).toBe(false)
-    expect(esEscaneo('abc12345678')).toBe(false)
+    expect(esEscaneo('RRE0052BL')).toBe(true) // el código de barras de la casa (SKU sin guiones)
+    expect(esEscaneo('RRE-0052-BL')).toBe(true)
+    expect(esEscaneo('remera')).toBe(false) // sin cifras: es un nombre
+    expect(esEscaneo('remera 1174')).toBe(false) // dos palabras
+    expect(esEscaneo('296000')).toBe(false) // sólo cifras y cortas: es una venta
+    expect(esEscaneo('abc 12345678')).toBe(false) // con espacio: se escribió a mano
   })
   it('los saltos aceptan tildes y apuntan a una pestaña que existe', () => {
     const r = saltosA('cuenta cor', SECCIONES_ERP)
