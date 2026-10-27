@@ -14,14 +14,14 @@ describe('leerAccion', () => {
     expect(r.entrada).toEqual({ linea: 'zattia', tipo: 'foto', ref: 'sol-9', detalle: undefined, gn_sale_ids: { deposito: '987' },
       renglones: [{ product_id: 1, size_id: 2, deposito: 'deposito', cantidad: 3, sku: 'A-1', barcode: null }] })
   })
-  it('línea, tipo, solicitud, id y prendas mal ⇒ error', () => {
+  it('línea, tipo, solicitud, id y productos mal ⇒ error', () => {
     expect(leer({ accion: 'salida-crear', linea: 'xx', tipo: 'foto', ref: 'a', renglones: [] }).error).toBe('Línea inválida')
     expect(leer({ accion: 'salida-crear', linea: 'bdi', tipo: 'regalo', ref: 'a', renglones: [] }).error).toMatch(/tipo/)
     expect(leer({ accion: 'salida-crear', linea: 'bdi', tipo: 'foto', ref: ' ', renglones: [] }).error).toMatch(/solicitud/)
-    expect(leer({ accion: 'salida-crear', linea: 'bdi', tipo: 'foto', ref: 'a', renglones: 'x' }).error).toMatch(/mal armadas/)
+    expect(leer({ accion: 'salida-crear', linea: 'bdi', tipo: 'foto', ref: 'a', renglones: 'x' }).error).toMatch(/mal armados/)
     expect(leer({ accion: 'salida-devolver', linea: 'bdi', salidaId: 'no' }).error).toBe('Falta la salida')
-    expect(leer({ accion: 'salida-devolver', linea: 'bdi', salidaId: ID, renglones: [{ n: 'x' }] }).error).toMatch(/mal armadas/)
-    expect(leer({ accion: 'salida-devolver', linea: 'bdi', salidaId: ID, renglones: [{ n: 1, cantidad: 1.5 }] }).error).toMatch(/mal armadas/)
+    expect(leer({ accion: 'salida-devolver', linea: 'bdi', salidaId: ID, renglones: [{ n: 'x' }] }).error).toMatch(/mal armados/)
+    expect(leer({ accion: 'salida-devolver', linea: 'bdi', salidaId: ID, renglones: [{ n: 1, cantidad: 1.5 }] }).error).toMatch(/mal armados/)
     expect(leer({ accion: 'otra', linea: 'bdi', salidaId: ID }).error).toBe('Acción desconocida')
   })
   it('devolver y cerrar leen sólo sus números; cancelar lleva el motivo', () => {
@@ -41,7 +41,7 @@ describe('errorDe y avisos', () => {
   it('dice el error en palabras de la pantalla y FALTA_CONTAR lleva la lista', () => {
     expect(errorDe({ error: { codigo: 'NO_ENCONTRADA', mensaje: 'x' } })).toEqual({ status: 404, error: 'No está esa salida.' })
     expect(errorDe({ error: { codigo: 'ENTRADA_INVALIDA', mensaje: '⛔ cantidad' } })).toEqual({ status: 400, error: 'no cantidad' })
-    const f = errorDe({ error: { codigo: 'FALTA_CONTAR', mensaje: 'Hay prendas', renglones: [{ n: 2, diferencia: 2 }] } }) as { status: number, faltan?: unknown }
+    const f = errorDe({ error: { codigo: 'FALTA_CONTAR', mensaje: 'Hay productos', renglones: [{ n: 2, diferencia: 2 }] } }) as { status: number, faltan?: unknown }
     expect([f.status, f.faltan]).toEqual([409, [{ n: 2, diferencia: 2 }]])
   })
   it('texto de los avisos', () => {

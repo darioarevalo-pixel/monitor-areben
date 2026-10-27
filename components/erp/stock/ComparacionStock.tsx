@@ -38,7 +38,7 @@ const tono = (f: FilaComparacion): Tone => (f.clase === 'coincide' ? 'success' :
 
 function bajarCsv(filas: FilaComparacion[], marca: MarcaErp) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Prenda', 'Talle', 'SKU', 'Tienda', 'Según el ERP', 'Tienda Nube', 'Diferencia', 'En GN', 'En pedidos', 'Qué pasa'].map(c).join(';')]
+  const renglones = [['Producto', 'Variante', 'código', 'Tienda', 'Según el ERP', 'Tienda Nube', 'Diferencia', 'En Gestión Nube', 'Reservado', 'Qué pasa'].map(c).join(';')]
   for (const f of filas) renglones.push([f.nombre, f.talleNombre, f.sku, TIENDA[f.tienda], f.paraTienda ?? '', f.tn ?? '', f.diferencia ?? '', f.gn ?? '', f.enPedidos, QUE[f.clase]?.nombre ?? f.clase].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -92,7 +92,7 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
   const num = (n: number | null, fuerte = false) => (n == null ? <span style={{ color: color.mut2 }}>—</span> : <span style={{ fontWeight: fuerte ? 700 : 500, color: n === 0 ? color.mut2 : color.ink }}>{n}</span>)
 
   const celda = (f: FilaComparacion, k: string): React.ReactNode => {
-    if (k === 'p') return <b title={f.nombre} style={{ color: color.ink }}>{f.nombre}{f.oculta && <span style={{ color: color.mut, fontWeight: 400 }}> · oculto en TN</span>}</b>
+    if (k === 'p') return <b title={f.nombre} style={{ color: color.ink }}>{f.nombre}{f.oculta && <span style={{ color: color.mut, fontWeight: 400 }}> · oculto en Tienda Nube</span>}</b>
     if (k === 't') return <span style={{ color: color.ink2 }}>{f.talleNombre}</span>
     if (k === 'sku') return <span style={{ color: color.mut }}>{f.sku ?? f.barcode ?? '—'}</span>
     if (k === 'tienda') return <span style={{ color: color.ink2 }}>{TIENDA[f.tienda]}</span>
@@ -104,7 +104,7 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
       if (!f.diferencia) return <span style={{ color: color.mut2 }}>—</span>
       return <span style={{ fontWeight: 700, color: f.diferencia > 0 ? 'var(--mo-danger-ink)' : 'var(--mo-warning-ink)' }} title={f.diferencia > 0 ? 'La tienda muestra de más: se puede vender sin tenerlo' : 'La tienda muestra de menos: se deja de vender'}>{f.diferencia > 0 ? `+${f.diferencia}` : f.diferencia}</span>
     }
-    if (k === 'que') return <span title={QUE[f.clase]?.mirar}><ChipEstado mapa={{ x: [tono(f), QUE[f.clase]?.nombre ?? f.clase] }} k="x" />{f.repetidas > 0 && <span style={{ color: color.mut }}> · repetida en TN</span>}</span>
+    if (k === 'que') return <span title={QUE[f.clase]?.mirar}><ChipEstado mapa={{ x: [tono(f), QUE[f.clase]?.nombre ?? f.clase] }} k="x" />{f.repetidas > 0 && <span style={{ color: color.mut }}> · repetida en Tienda Nube</span>}</span>
     return null
   }
 
@@ -114,7 +114,7 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>Por variante: lo que la tienda tendría que mostrar según el ERP (sus depósitos, menos lo apartado por pedidos sin pagar) contra lo que muestra. Arranca con las que no coinciden.</p>
-      <Notice tone="warning">Hoy el stock de la tienda lo manda <b>Gestión Nube</b>: si GN y la tienda coinciden y el ERP no, lo que hay que mirar es el ERP. Esta pantalla no arregla nada: dice qué no coincide.</Notice>
+      <Notice tone="warning">Hoy el stock de la tienda lo manda <b>Gestión Nube</b>: si Gestión Nube y la tienda coinciden y el ERP no, lo que hay que mirar es el ERP. Esta pantalla no arregla nada: dice qué no coincide.</Notice>
       <Notice tone="neutral">
         <b>Mercado Libre todavía no se compara acá</b>: el ERP no guarda lo publicado en Mercado Libre.
         {datos?.ml ? <> La conciliación del {datos.ml.fecha.split('-').reverse().slice(0, 2).join('/')} encontró {datos.ml.noCierran} publicaciones que no coinciden. <Button variant="outline" onClick={irAConciliacion}>Ver en Conciliación</Button></> : ' Las que no coinciden salen una vez por día en Conciliación.'}
@@ -131,7 +131,7 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la comparación" placeholder="Prenda, SKU o código de barras" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la comparación" placeholder="Producto o código de barras" />
           {marca === 'zattia' && <Select aria-label="Tienda" style={ANCHO_SELECT} value={tienda} onChange={(e) => setTienda(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
@@ -146,10 +146,10 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
         <ListaTrabajo
           columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda}
           seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden} densidad={prefs.densidad}
-          activa={ficha?.id ?? null} onAbrir={abrir} etiquetaFila={(f) => `la prenda ${f.nombre} ${f.talleNombre}`}
+          activa={ficha?.id ?? null} onAbrir={abrir} etiquetaFila={(f) => `el producto ${f.nombre} ${f.talleNombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay prendas con ese nombre, SKU o código.' : vista === 'no' ? 'Todo coincide con la tienda.' : 'No hay prendas en esta vista.'} />
+              <EmptyState title={q ? 'No hay productos con ese nombre o código.' : vista === 'no' ? 'Todo coincide con la tienda.' : 'No hay productos en esta vista.'} />
               {vista !== 'todas' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todas')}>Ver todas</Button></div>}
             </div>
           ) : null}
@@ -162,7 +162,7 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo la comparación…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')} · ${nombreVista.toLowerCase()}`}
           {datos && <> · el ERP llega hasta {cuandoCorto(datos.libroHasta)}{leidas.map(([t, l]) => ` · ${TIENDA[t]} leída ${cuandoCorto(l)}`).join('')}</>}
-          {' '}· el arreglo lo hace GN o el monitor, no el ERP
+          {' '}· el arreglo lo hace Gestión Nube o el monitor, no el ERP
         </div>
       </div>
 

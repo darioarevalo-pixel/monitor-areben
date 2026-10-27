@@ -18,7 +18,7 @@ const LINEAS = [
 ]
 
 describe('el núcleo', () => {
-  it('el escaneo cuenta por código o SKU, sin guiones; lo ajeno y lo de más se dicen', () => {
+  it('el escaneo cuenta por código o código, sin guiones; lo ajeno y lo de más se dicen', () => {
     const p = prendasADesarmar(LINEAS)
     let c: Record<string, number> = {}
     for (const x of ['rbt0151', 'RBT-0151']) c = escanear(p, c, x).contados
@@ -31,7 +31,7 @@ describe('el núcleo', () => {
   it('lo que ya volvió en un cambio ⛔ se escanea', () => {
     expect(prendasADesarmar([{ ...LINEAS[0], cambiado: 2 }, LINEAS[1]]).map((x) => x.id)).toEqual(['l2'])
   })
-  it('qué pasa con la prenda, según el estado', () => {
+  it('qué pasa con el producto, según el estado', () => {
     expect(textoDeVuelta('a_desarmar', { deposito: 'Local', prueba: false })).toContain('A desarmar')
     expect(textoDeVuelta('a_recibir', { deposito: 'Local', prueba: false })).toContain('DEVOLUCIÓN')
     expect(textoDeVuelta('ya', { deposito: 'Local', prueba: false })).toContain('al instante')
@@ -97,7 +97,7 @@ async function escribir(el: HTMLInputElement | HTMLTextAreaElement, v: string) {
 }
 
 describe('anular desde la ficha', () => {
-  it('dice adónde va la prenda y, con plata pagada, elegir saldo pide la clienta', async () => {
+  it('dice adónde va el producto y, con plata pagada, elegir saldo pide la clienta', async () => {
     ficha = fichaDe()
     await montar(fila(), 'anular')
     expect(todo()).toContain('queda «A desarmar»')
@@ -121,21 +121,21 @@ describe('anular desde la ficha', () => {
 })
 
 describe('el desarme', () => {
-  it('se escanea prenda por prenda y recién con todas se confirma', async () => {
-    ficha = fichaDe({ anulacion: { motivo: 'cancelado en TN', usuario: 'tn', anuladaEn: '2026-10-20T10:00:00Z', devolucion: null, vuelta: 'a_desarmar' } })
+  it('se escanea producto por producto y recién con todas se confirma', async () => {
+    ficha = fichaDe({ anulacion: { motivo: 'cancelado en Tienda Nube', usuario: 'tn', anuladaEn: '2026-10-20T10:00:00Z', devolucion: null, vuelta: 'a_desarmar' } })
     await montar(fila({ estado: 'anulada', vueltaPendiente: 'a_desarmar' }))
     expect(todo()).toContain('Desarmar el paquete')
-    const input = document.querySelector<HTMLInputElement>('input[aria-label="Código de la prenda"]')!
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Código del producto"]')!
     const contar = async (c: string) => { await escribir(input, c); await act(async () => { input.form!.requestSubmit() }) }
     await contar('RBT-0151'); await contar('XXX')
-    expect(todo()).toContain('Esa prenda no es de esta venta.')
+    expect(todo()).toContain('Ese producto no es de esta venta.')
     await contar('rbt0151')
     expect(boton('Confirmar que volvieron').disabled).toBe(true)
-    expect(todo()).toContain('Faltan 1 prenda')
+    expect(todo()).toContain('Faltan 1 producto')
     await clic([...document.querySelectorAll('button')].find((b) => b.textContent === '+1' && !b.disabled)!) // la del Short, sin código
     await clic(boton('Confirmar que volvieron'))
     expect(confirmarVuelta).toHaveBeenCalledWith('zattia', ficha.venta.id)
-    expect(onCambio.mock.calls[0][0]).toContain('volvieron 3 prendas al stock')
+    expect(onCambio.mock.calls[0][0]).toContain('volvieron 3 productos al stock')
   })
   it('ya desarmada: ⛔ se escanea de nuevo', async () => {
     ficha = fichaDe({ anulacion: { motivo: 'x', usuario: 'tn', anuladaEn: '2026-10-20T10:00:00Z', devolucion: null, vuelta: 'a_desarmar' }, devolucion: { ...DEV, volvio: { usuario: 'Gise', en: '2026-10-20T11:00:00Z' } } })

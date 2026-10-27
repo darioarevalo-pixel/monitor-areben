@@ -143,10 +143,10 @@ export function ClientesErp({ abrir, alAbrir }: {
         <Notice tone="warning">
           Los clientes salen de <b>Gestión Nube</b>: el ERP todavía no tiene clientes propios (ninguna venta del ERP trae cliente),
           así que todavía no lleva cuentas corrientes. El saldo aparece acá cuando se venda a cuenta desde el ERP.
-          {datos?.porNombre && <> En Zattia, GN no manda el número de cliente: se juntan por <b>nombre</b> (dos con el mismo nombre se ven como uno).</>}
+          {datos?.porNombre && <> En Zattia, Gestión Nube no manda el número de cliente: se juntan por <b>nombre</b> (dos con el mismo nombre se ven como uno).</>}
         </Notice>
       )}
-      {datos && !datos.cuentaLista && <Notice tone="warning">No se pudo leer la cuenta corriente del motor: el saldo no se muestra.</Notice>}
+      {datos && !datos.cuentaLista && <Notice tone="warning">No se pudo leer la cuenta corriente: el saldo no se muestra.</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
@@ -188,7 +188,7 @@ export function ClientesErp({ abrir, alAbrir }: {
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo los clientes…' : `${n(Math.min(mostrar, filas.length))} de ${n(filas.length)}`}
-          {datos && <> · compras de GN hasta {fechaCorta(datos.gnHasta)} · sin «Consumidor Final»</>}
+          {datos && <> · compras de Gestión Nube hasta {fechaCorta(datos.gnHasta)} · sin «Consumidor Final»</>}
         </div>
       </div>
 

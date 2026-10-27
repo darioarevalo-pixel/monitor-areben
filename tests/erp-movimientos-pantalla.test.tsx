@@ -80,9 +80,9 @@ describe('la lista de movimientos', () => {
     expect(desde < hasta).toBe(true)
   })
 
-  it('la fila abre la ficha de la prenda al costado', async () => {
+  it('la fila abre la ficha del producto al costado', async () => {
     await montar()
     await clic(filaDe('TOP SAHARA').querySelector('[role="cell"]:last-child')!)
-    expect(document.querySelector('aside[aria-label^="Ficha de la prenda"]')).toBeTruthy()
+    expect(document.querySelector('aside[aria-label^="Ficha del producto"]')).toBeTruthy()
   })
 })

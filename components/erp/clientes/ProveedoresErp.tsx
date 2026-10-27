@@ -23,7 +23,7 @@ const VISTAS: Array<[string, string, (p: ProveedorErp) => boolean]> = [
 ]
 const COLUMNAS = [
   { key: 'p', titulo: 'Proveedor', ancho: 'minmax(200px, 2fr)', ordena: true },
-  { key: 'gn', titulo: 'En GN como', ancho: 'minmax(160px, 1.4fr)', ordena: false },
+  { key: 'gn', titulo: 'En Gestión Nube como', ancho: 'minmax(160px, 1.4fr)', ordena: false },
   { key: 'cuit', titulo: 'CUIT', ancho: '124px', ordena: false },
   { key: 'prod', titulo: 'Productos', ancho: '96px', ordena: true, derecha: true },
   { key: 'estado', titulo: 'Estado', ancho: '96px', ordena: false },
@@ -95,7 +95,7 @@ export function ProveedoresErp() {
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un proveedor" placeholder="Nombre, nombre en GN o CUIT" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un proveedor" placeholder="Nombre, nombre en Gestión Nube o CUIT" />
         </div>
         <ListaTrabajo
           columnas={COLUMNAS} filas={filas} claveDe={(p) => p.id} celda={celda} acciones={acciones} anchoAcciones={44}

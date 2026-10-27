@@ -38,7 +38,7 @@ const u = (n: number) => `${n.toLocaleString('es-AR')} u`
 
 function bajarCsv(filas: FilaProducto[], marca: MarcaErp) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Producto', 'Variantes', 'SKU', 'Disponible', 'Costo', 'Local', 'Online', 'Mayorista', 'En Tienda Nube', 'Categoría', 'Proveedor', 'Línea'].map(c).join(';')]
+  const renglones = [['Producto', 'Variantes', 'código', 'Disponible', 'Costo', 'Local', 'Online', 'Mayorista', 'En Tienda Nube', 'Categoría', 'Proveedor', 'Línea'].map(c).join(';')]
   for (const f of filas) {
     renglones.push([f.nombre, f.variantes.length, f.variantes.map((v) => v.sku).filter(Boolean).join(' '), f.disponible, f.costo ?? '', ...LISTAS.map((l) => f.precios[l] ?? ''),
       EN_TN[f.tn][1], f.categoria, f.proveedor, LINEA[f.linea] ?? f.linea].map(c).join(';'))
@@ -131,7 +131,6 @@ export function ProductosErp() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
       <p style={{ margin: 0, color: color.mut }}>Cada producto con sus variantes, lo disponible, el costo y el precio de cada lista. Los productos nacen en Ingresos: acá no se dan de alta.</p>
-      <Notice tone="warning">Los precios y costos del ERP corren <b>en paralelo</b> con Gestión Nube: lo que se carga acá no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
@@ -144,7 +143,7 @@ export function ProductosErp() {
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un producto" placeholder="Nombre, SKU, código de barras, categoría o proveedor" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un producto" placeholder="Nombre, código, código de barras, categoría o proveedor" />
           {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
@@ -161,7 +160,7 @@ export function ProductosErp() {
           activa={filaDeFicha?.id ?? null} onAbrir={(f) => abrir(f)} etiquetaFila={(f) => `el producto ${f.nombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay productos con ese nombre, SKU o código.' : 'No hay productos en esta vista.'} />
+              <EmptyState title={q ? 'No hay productos con ese nombre o código.' : 'No hay productos en esta vista.'} />
               {vista !== 'todos' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todos')}>Ver todos</Button></div>}
             </div>
           ) : null}

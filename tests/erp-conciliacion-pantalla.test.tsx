@@ -27,7 +27,7 @@ const leerConciliacion = vi.fn(async (..._a: unknown[]): Promise<ConciliacionDel
 vi.mock('@/lib/erp/cliente', () => ({ leerConciliacion: (...a: unknown[]) => leerConciliacion(...a) }))
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno' } }) }))
 const fichaDe = vi.fn()
-vi.mock('@/components/erp/stock/FichaPrenda', () => ({ FichaPrenda: (p: { marca: string; prenda: { producto: string; talle: string } }) => { fichaDe(p.marca, p.prenda.producto, p.prenda.talle); return <aside aria-label="Ficha de la prenda">ficha {p.prenda.producto}/{p.prenda.talle}</aside> } }))
+vi.mock('@/components/erp/stock/FichaPrenda', () => ({ FichaPrenda: (p: { marca: string; prenda: { producto: string; talle: string } }) => { fichaDe(p.marca, p.prenda.producto, p.prenda.talle); return <aside aria-label="Ficha del producto">ficha {p.prenda.producto}/{p.prenda.talle}</aside> } }))
 
 let root: Root | null = null
 let host: HTMLDivElement
@@ -47,7 +47,7 @@ const filaDe = (t: string) => [...host.querySelectorAll('[role="row"]')].find((r
 const clic = async (el: Element) => { await act(async () => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })) }); await act(async () => {}) }
 
 describe('ConciliacionDia', () => {
-  it('dice cuánto coincide, el diff de GN, ML sin conexión, y cada clase como vista con su número', async () => {
+  it('dice cuánto coincide, el diff de Gestión Nube, Mercado Libre sin conexión, y cada clase como vista con su número', async () => {
     await montar()
     expect(leerConciliacion).toHaveBeenCalledWith('zattia', null)
     expect(texto()).toMatch(/No coinciden3del 18\/10/)
@@ -55,16 +55,16 @@ describe('ConciliacionDia', () => {
     expect(texto()).toContain('80.0%')
     expect(texto()).toContain('1 de 20 pedidos no coinciden (7 días)')
     expect(texto()).toContain('Coinciden los 20 pedidos (7 días)')
-    expect(texto()).toContain('sin explicar: verlas en Diferencias con GN')
+    expect(texto()).toContain('sin explicar: verlas en Diferencias con Gestión Nube')
     expect(texto()).not.toContain('Stock: Mercado Libre')   // Zattia ⛔ vende en ML: sin tarjeta
     expect(boton(/^El ERP dice otro stock/).textContent).toContain('1')
-    expect(boton(/^Cancelado con la venta activa en GN/).textContent).toContain('1')
+    expect(boton(/^Cancelado con la venta activa en Gestión Nube/).textContent).toContain('1')
     await clic(boton(/^El ERP dice otro stock/))
     expect(texto()).toContain('(1 vienen de días anteriores)')
     expect(host.querySelectorAll('[role="row"]').length).toBeGreaterThan(0)
     expect(texto()).not.toContain('#7331')
   })
-  it('la prenda abre su ficha al costado (con la marca de la BASE); la de TN sin producto ⛔ abre nada; el pedido va a TN', async () => {
+  it('el producto abre su ficha al costado (con la marca de la BASE); la de Tienda Nube sin producto ⛔ abre nada; el pedido va a Tienda Nube', async () => {
     await montar()
     await clic(filaDe('Remera Lisa · M'))
     expect(fichaDe).toHaveBeenCalledWith('zattia', '1', '10')
@@ -76,7 +76,7 @@ describe('ConciliacionDia', () => {
     expect(abrir).toHaveBeenCalledWith('https://zattiaco.mitiendanube.com/admin/orders/99', '_blank', 'noopener')
     abrir.mockRestore()
   })
-  it('Stunned se pide como stunned y abre la prenda en la base de Zattia', async () => {
+  it('Stunned se pide como stunned y abre el producto en la base de Zattia', async () => {
     await montar()
     const sel = host.querySelector('select[aria-label="Tienda"]') as HTMLSelectElement
     await act(async () => { sel.value = 'stunned'; sel.dispatchEvent(new Event('change', { bubbles: true })) })

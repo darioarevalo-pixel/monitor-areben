@@ -29,21 +29,21 @@ describe('armarFilasStock', () => {
   })
   const de = (id: string) => filas.find((f) => f.id === id)!
 
-  it('disponible = en estantería − lo que apartan los pedidos sin pagar', () => {
+  it('disponible = físico − lo que apartan los pedidos sin pagar', () => {
     expect(de('1/1')).toMatchObject({ estanteria: 7, enPedidos: 3, disponible: 4, deps: { local: 2, deposito: 5 }, gn: 7, linea: 'zattia' })
     expect(de('1/1').ultimo).toMatchObject({ tipo: 'venta', ref: 'venta:296' })
   })
-  it('la línea sale del libro (y si no, del SKU); un depósito sin fila es 0', () => {
+  it('la línea sale del ERP (y si no, del código); un depósito sin fila es 0', () => {
     expect(de('2/1')).toMatchObject({ linea: 'stunned', deps: { local: 0, deposito: 3 } })
   })
-  it('una prenda que el libro tiene y GN ya no: se ve con su id, ⛔ se pierde', () => {
-    expect(de('9/9')).toMatchObject({ nombre: 'Producto 9', talleNombre: 'Talle 9', estanteria: 4, gn: null })
+  it('un producto que el ERP tiene y Gestión Nube ya no: se ve con su id, ⛔ se pierde', () => {
+    expect(de('9/9')).toMatchObject({ nombre: 'Producto 9', talleNombre: 'Variante 9', estanteria: 4, gn: null })
   })
   it('negativo en un depósito ⇒ negativo; en el resumen ⛔ resta de las demás', () => {
     expect(de('3/1').negativo).toBe(true)
     expect(resumen(filas)).toMatchObject({ disponible: 4 + 3 + 4, estanteria: 7 + 3 + 4, enPedidos: 3, negativos: 1, prendas: 4 })
   })
-  it('vistas con su número, y el buscador por nombre, SKU o código entero', () => {
+  it('vistas con su número, y el buscador por nombre, código o código entero', () => {
     expect(contarVistas(filas)).toEqual({ constock: 3, local0: 1, neg: 1, ped: 1, todo: 4 })
     expect(filtrar(filas, { vista: 'local0' }).map((f) => f.id)).toEqual(['2/1'])
     expect(filtrar(filas, { q: 'sahara' }).map((f) => f.id)).toEqual(['1/1'])
@@ -59,7 +59,7 @@ describe('armarFilasStock', () => {
 })
 
 describe('reservadoPorVariante', () => {
-  it('cruza el SKU del pedido con GN sin importar mayúsculas; lo que ⛔ cruza se cuenta aparte', () => {
+  it('cruza el código del pedido con Gestión Nube sin importar mayúsculas; lo que ⛔ cruza se cuenta aparte', () => {
     const r = reservadoPorVariante([
       { prendas: [{ sku: 'top-1-1', cantidad: 1 }, { sku: 'NO-EXISTE', cantidad: 2 }] },
       { prendas: [{ sku: 'TOP-1-1 ', cantidad: 2 }, { sku: null, cantidad: 1 }] },
@@ -92,7 +92,7 @@ describe('listaDeStock (el servidor)', () => {
     pedidosSinPagar: vi.fn(async () => ({ pedidos: [{ prendas: [{ sku: 'TOP-1-1', cantidad: 1 }] }], leidaEn: '2026-10-19T15:00:00Z' })),
     leerInventario: vi.fn(async () => INVENTARIO),
   }
-  it('suma el libro en la base y descuenta los pedidos', async () => {
+  it('suma el ERP en la base y descuenta los pedidos', async () => {
     const r = await listaDeStock({ marca: 'zattia' }, deps) as { filas: Array<{ id: string; disponible: number }>; libroHasta: string; pedidos: number }
     expect(r.filas.find((f) => f.id === '1/1')!.disponible).toBe(6)
     expect(r).toMatchObject({ libroHasta: '2026-10-19T16:00:00.000Z', pedidos: 1 })

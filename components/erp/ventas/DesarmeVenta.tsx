@@ -12,7 +12,7 @@ import { Button, Notice, color, font, space, weight } from '@/components/ui'
 import { confirmarVuelta, type FichaDeVenta, type MarcaErp } from '@/lib/erp/cliente'
 import { escanear, faltanEscanear, prendasADesarmar } from '@/lib/erp/desarme.core.js'
 
-const AVISO = { no_es: 'Esa prenda no es de esta venta.', de_mas: 'Esa prenda ya está contada entera.' } as const
+const AVISO = { no_es: 'Ese producto no es de esta venta.', de_mas: 'Ese producto ya está contado entero.' } as const
 
 export function DesarmeVenta({ marca, ficha, refVenta, onListo }: {
   marca: MarcaErp
@@ -41,7 +41,7 @@ export function DesarmeVenta({ marca, ficha, refVenta, onListo }: {
     setTrabajando(true)
     try {
       const r = await confirmarVuelta(marca, ficha.venta.id)
-      onListo(`Venta ${refVenta}: ${r.movimientos ? `volvieron ${faltanEscanear(prendas, {})} prendas al stock` : 'quedó confirmado el desarme'}.`)
+      onListo(`Venta ${refVenta}: ${r.movimientos ? `volvieron ${faltanEscanear(prendas, {})} productos al stock` : 'quedó confirmado el desarme'}.`)
     } catch (x) {
       setError(x instanceof Error ? x.message : 'No se pudo confirmar el desarme.')
     } finally {
@@ -52,16 +52,16 @@ export function DesarmeVenta({ marca, ficha, refVenta, onListo }: {
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: space[3], padding: '14px 16px', borderRadius: 12, border: '1px solid var(--mo-warning-border)', background: 'var(--mo-warning-bg)' }}>
       <div>
-        <h3 style={{ margin: 0, fontSize: font.lg, fontWeight: weight.bold }}>{recibir ? 'Recibir las prendas' : 'Desarmar el paquete'}</h3>
+        <h3 style={{ margin: 0, fontSize: font.lg, fontWeight: weight.bold }}>{recibir ? 'Recibir los productos' : 'Desarmar el paquete'}</h3>
         <span style={{ fontSize: font.sm, color: color.ink2 }}>
-          {recibir ? 'El pedido ya había salido. Cuando lleguen, escaneá' : 'Abrí el paquete y escaneá'} cada prenda: vuelven al stock recién al confirmar.
+          {recibir ? 'El pedido ya había salido. Cuando lleguen, escaneá' : 'Abrí el paquete y escaneá'} cada producto: vuelven al stock recién al confirmar.
         </span>
       </div>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       <form onSubmit={leer} style={{ display: 'flex', gap: space[2] }}>
         <input
           className="mo-input" style={{ flex: 1, minWidth: 0 }} autoFocus value={codigo} onChange={(e) => setCodigo(e.target.value)}
-          placeholder="Escaneá o escribí el código" aria-label="Código de la prenda"
+          placeholder="Escaneá o escribí el código" aria-label="Código del producto"
         />
         <Button type="submit" variant="outline" disabled={!codigo.trim()}>Contar</Button>
       </form>
@@ -75,7 +75,7 @@ export function DesarmeVenta({ marca, ficha, refVenta, onListo }: {
             <div key={l.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3], padding: '8px 0', borderBottom: `1px solid var(--mo-warning-border)` }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: weight.semibold }}>{l.nombre ?? `Producto ${l.producto}`}</div>
-                <div style={{ fontSize: font.sm, color: color.mut }}>Talle {l.talleNombre ?? l.talle}{l.sku ? ` · ${l.sku}` : ''}</div>
+                <div style={{ fontSize: font.sm, color: color.mut }}>Variante {l.talleNombre ?? l.talle}{l.sku ? ` · ${l.sku}` : ''}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flex: '0 0 auto' }}>
                 <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: weight.bold, color: listo ? 'var(--mo-success-ink)' : color.ink }}>{n} de {p.cantidad}</span>
@@ -86,7 +86,7 @@ export function DesarmeVenta({ marca, ficha, refVenta, onListo }: {
         })}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
-        <span style={{ fontSize: font.sm, color: color.ink2 }}>{faltan ? `Faltan ${faltan} ${faltan === 1 ? 'prenda' : 'prendas'}` : 'Están todas'}</span>
+        <span style={{ fontSize: font.sm, color: color.ink2 }}>{faltan ? `Faltan ${faltan} ${faltan === 1 ? 'producto' : 'productos'}` : 'Están todas'}</span>
         <Button disabled={trabajando || faltan > 0} onClick={() => void confirmar()}>Confirmar que volvieron</Button>
       </div>
     </section>

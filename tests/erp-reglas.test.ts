@@ -10,7 +10,7 @@ const config = {
 }
 
 describe('leerSimulacion', () => {
-  it('lee prendas, día, canal, banco, cuotas y la rebaja', () => {
+  it('lee productos, día, canal, banco, cuotas y la rebaja', () => {
     const s = leerSimulacion({ renglones: [{ producto: '571449', precio: '17.990', cantidad: 2 }, { nombre: 'Suelta', precio: 1000, campanias: ['liq1'], categorias: ['JEANS'] }], fecha: '2026-10-17', banco: ' Payway ', cuotas: '6', rebaja: { tipo: 'pct', valor: '10' } }, { marca: 'zattia', ahora: AHORA })
     expect(s.error).toBeUndefined()
     expect(s.renglones).toEqual([
@@ -22,8 +22,8 @@ describe('leerSimulacion', () => {
   it('sin día es hoy; lo inválido se dice', () => {
     expect(leerSimulacion({ renglones: [{ precio: 1 }] }, { marca: 'zattia', ahora: AHORA }).fecha).toBe(new Date(AHORA).toISOString())
     const err = (b: object) => leerSimulacion(b, { marca: 'zattia', ahora: AHORA }).error
-    expect(err({ renglones: [] })).toBe('Agregá al menos una prenda')
-    expect(err({ renglones: [{ precio: '' }] })).toBe('Prenda 1: falta el precio')
+    expect(err({ renglones: [] })).toBe('Agregá al menos un producto')
+    expect(err({ renglones: [{ precio: '' }] })).toBe('Producto 1: falta el precio')
     expect(err({ renglones: [{ precio: 1 }], canal: 'web' })).toBe('Canal inválido')
     expect(err({ renglones: [{ precio: 1 }], rebaja: { tipo: 'pct', valor: 120 } })).toBe('Descuento a la venta inválido')
   })
@@ -40,7 +40,7 @@ describe('leerReglaDePantalla', () => {
     expect(leerReglaDePantalla(x, { marca: 'zattia' }).regla?.marca).toBe('stunned')
     expect(leerReglaDePantalla(x, { marca: 'bdi' }).regla?.marca).toBe('bdi')
   })
-  it('el simulador lleva la línea de la prenda (sólo una línea de la marca)', () => {
+  it('el simulador lleva la línea del producto (sólo una línea de la marca)', () => {
     const s = leerSimulacion({ renglones: [{ nombre: 'A', precio: '1000', linea: 'stunned' }, { nombre: 'B', precio: '1000', linea: 'zattia' }] }, { marca: 'zattia', ahora: 0 })
     expect('error' in s ? null : s.renglones.map((r) => r.linea ?? null)).toEqual(['stunned', null])
     const b = leerSimulacion({ renglones: [{ nombre: 'A', precio: '1000', linea: 'stunned' }] }, { marca: 'bdi', ahora: 0 })

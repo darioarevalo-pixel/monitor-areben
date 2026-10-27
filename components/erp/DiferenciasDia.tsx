@@ -36,11 +36,11 @@ type Fila = {
 }
 
 const COLUMNAS = [
-  { key: 'p', titulo: 'Prenda', ancho: 'minmax(220px, 2fr)' },
+  { key: 'p', titulo: 'Producto', ancho: 'minmax(220px, 2fr)' },
   { key: 'dep', titulo: 'Dónde', ancho: '104px' },
   { key: 'libro', titulo: 'Nuestro', ancho: '76px', derecha: true },
-  { key: 'gn', titulo: 'GN', ancho: '64px', derecha: true },
-  { key: 'dgn', titulo: 'GN movió', ancho: '84px', derecha: true },
+  { key: 'gn', titulo: 'Gestión Nube', ancho: '64px', derecha: true },
+  { key: 'dgn', titulo: 'Gestión Nube movió', ancho: '84px', derecha: true },
   { key: 'dlibro', titulo: 'ERP movió', ancho: '84px', derecha: true },
   { key: 'paso', titulo: 'Qué pasó', ancho: 'minmax(220px, 1.6fr)' },
 ]
@@ -106,7 +106,7 @@ export function DiferenciasDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => vo
     return null
   }
   const acciones = (f: Fila) => {
-    const menu: AccionMenu[] = [{ key: 'ficha', label: 'Abrir la prenda', icono: 'abrir', onClick: () => abrir(f) }]
+    const menu: AccionMenu[] = [{ key: 'ficha', label: 'Abrir el producto', icono: 'abrir', onClick: () => abrir(f) }]
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones de ${prendaDe(f)}`} vertical alinear="izquierda" />
   }
 
@@ -114,38 +114,38 @@ export function DiferenciasDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => vo
   const grupo = datos?.grupos.find((g) => g.clase === enVista)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Sólo mientras convivimos con Gestión Nube: lo que nuestro stock no pudo explicar al compararse con GN, y las prendas que quedaron en negativo. Se va el día del corte.</p>
+      <p style={{ margin: 0, color: color.mut }}>Sólo mientras convivimos con Gestión Nube: lo que nuestro stock no pudo explicar al compararse con Gestión Nube, y los productos que quedaron en negativo. Se va el día del corte.</p>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         {datos && datos.dias.length > 0 && (
           <Select aria-label="Día" style={ANCHO_SELECT} value={datos.fecha ?? ''} onChange={(e) => setFecha(e.target.value)} disabled={cargando}>
             {datos.dias.map((d) => <option key={d} value={d}>{dia(d)}</option>)}
           </Select>
         )}
-        {datos?.fotoHasta && <span style={{ color: color.mut }}>Fotos de GN de {cuandoCorto(datos.fotoDesde)} a {cuandoCorto(datos.fotoHasta)}</span>}
+        {datos?.fotoHasta && <span style={{ color: color.mut }}>Fotos de Gestión Nube de {cuandoCorto(datos.fotoDesde)} a {cuandoCorto(datos.fotoHasta)}</span>}
         <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Volver a leer'}</Button>
       </div>
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-      {cargando && !datos && <EmptyState title="Leyendo el libro…" />}
-      {datos && !datos.fecha && <EmptyState title="El libro todavía no calculó ningún día." />}
+      {cargando && !datos && <EmptyState title="Leyendo el ERP…" />}
+      {datos && !datos.fecha && <EmptyState title="El ERP todavía no calculó ningún día." />}
 
       {datos && (
         <>
           {datos.fecha && (
             <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-              <TileResumen oscuro titulo="Sin explicar" valor={datos.inexplicadas.toLocaleString('es-AR')} nota={datos.inexplicadas ? `stock nuestro ≠ GN, el ${dia(datos.fecha)}` : `todo explicado el ${dia(datos.fecha)}`} />
-              <TileResumen titulo="Sobreventa" valor={datos.sobreventaSinConexion || datos.sobreventaError ? '—' : datos.sobreventa.length.toLocaleString('es-AR')} nota={datos.sobreventaSinConexion ? 'falta la conexión al libro' : datos.sobreventaError ? 'no se pudo sumar el libro' : 'quedaron en negativo (hoy)'} />
+              <TileResumen oscuro titulo="Sin explicar" valor={datos.inexplicadas.toLocaleString('es-AR')} nota={datos.inexplicadas ? `stock nuestro ≠ Gestión Nube, el ${dia(datos.fecha)}` : `todo explicado el ${dia(datos.fecha)}`} />
+              <TileResumen titulo="Sobreventa" valor={datos.sobreventaSinConexion || datos.sobreventaError ? '—' : datos.sobreventa.length.toLocaleString('es-AR')} nota={datos.sobreventaSinConexion ? 'falta la conexión al ERP' : datos.sobreventaError ? 'no se pudo sumar el ERP' : 'quedaron en negativo (hoy)'} />
               <TileResumen titulo="Explicadas solas" valor={explicadas.toLocaleString('es-AR')} nota={datos.explicadas.length ? datos.explicadas.map((e) => `${e.nombre} ${e.variantes}`).join(' · ') : 'ninguna'} />
             </div>
           )}
           {datos.desconocidas > 0 && <Notice tone="warning">{datos.desconocidas} con una clase que esta pantalla todavía no conoce.</Notice>}
-          {datos.sobreventaSinConexion && <Notice tone="warning">Falta la conexión al libro en este servidor: la sobreventa se ve en producción.</Notice>}
-          {datos.sobreventaError && <Notice tone="danger">No se pudo sumar el libro: {datos.sobreventaError}</Notice>}
+          {datos.sobreventaSinConexion && <Notice tone="warning">Falta la conexión al ERP en este servidor: la sobreventa se ve en producción.</Notice>}
+          {datos.sobreventaError && <Notice tone="danger">No se pudo sumar el ERP: {datos.sobreventaError}</Notice>}
 
           <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
             <VistasLista vistas={vistas} valor={enVista} conteo={conteo} onCambio={setVista} />
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-              <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las diferencias" placeholder="Prenda o talle" />
+              <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las diferencias" placeholder="Producto o variante" />
             </div>
             {(grupo || enVista === SOBRE) && (
               <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>
@@ -155,8 +155,8 @@ export function DiferenciasDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => vo
             <ListaTrabajo
               columnas={COLUMNAS} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={40}
               activa={ficha ? filas.find((f) => f.producto === ficha.producto && f.talle === ficha.talle)?.id ?? null : null}
-              onAbrir={abrir} etiquetaFila={(f) => `la prenda ${prendaDe(f)}`}
-              vacio={!cargando ? <div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con esa prenda.' : enVista === SOBRE ? 'Ninguna prenda en negativo.' : 'Todo explicado.'} /></div> : null}
+              onAbrir={abrir} etiquetaFila={(f) => `el producto ${prendaDe(f)}`}
+              vacio={!cargando ? <div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con ese producto.' : enVista === SOBRE ? 'Ningún producto en negativo.' : 'Todo explicado.'} /></div> : null}
             />
             <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
               {sinExplicar.toLocaleString('es-AR')} sin explicar · {(datos.sobreventa ?? []).length.toLocaleString('es-AR')} en negativo · pestaña de transición: se va cuando se apague Gestión Nube

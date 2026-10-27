@@ -122,7 +122,7 @@ export function RecepcionesStock() {
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Recibidas este mes" valor={res.ordenes.toLocaleString('es-AR')} oscuro nota="órdenes de Ingresos" />
-        <TileResumen titulo="Prendas que entraron" valor={u(res.entraron)} nota="este mes" />
+        <TileResumen titulo="Productos que entraron" valor={u(res.entraron)} nota="este mes" />
         <TileResumen titulo="Con diferencia" valor={res.conDiferencia.toLocaleString('es-AR')} nota="este mes" />
         <TileResumen titulo="Faltaron" valor={u(res.faltaron)} nota="pedidas que no vinieron, este mes" />
       </div>
@@ -207,7 +207,7 @@ function FichaRecepcion({ f, marca, onCerrar }: { f: FilaRecepcion; marca: strin
         </div>
         {lineas && (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base }}>
-            <thead><tr><th style={{ ...th, textAlign: 'left' }}>Prenda</th><th style={th}>Pedida</th><th style={th}>Recibida</th><th style={th}>Diferencia</th></tr></thead>
+            <thead><tr><th style={{ ...th, textAlign: 'left' }}>Producto</th><th style={th}>Pedida</th><th style={th}>Recibida</th><th style={th}>Diferencia</th></tr></thead>
             <tbody>
               {ver.map((l) => {
                 const dif = (Number(l.cantidad_contada) || 0) - (Number(l.cantidad_pedida) || 0)
@@ -215,7 +215,7 @@ function FichaRecepcion({ f, marca, onCerrar }: { f: FilaRecepcion; marca: strin
                   <tr key={l.id}>
                     <td style={{ ...td, textAlign: 'left' }}>
                       <b style={{ color: color.ink }}>{l.nombre ?? l.sku ?? '—'}</b> <span style={{ color: color.mut }}>{[l.talle, l.color].filter(Boolean).join(' · ')}</span>
-                      <div style={{ fontSize: font.sm, color: color.mut }}>{l.sku ?? ''}{l.es_nuevo ? ' · nuevo' : ''}{l.en_gn_hoy === false ? ' · falta darlo de alta en GN' : ''}</div>
+                      <div style={{ fontSize: font.sm, color: color.mut }}>{l.sku ?? ''}{l.es_nuevo ? ' · nuevo' : ''}{l.en_gn_hoy === false ? ' · falta darlo de alta en Gestión Nube' : ''}</div>
                     </td>
                     <td style={td}>{l.cantidad_pedida}</td>
                     <td style={td}>{l.cantidad_contada}</td>

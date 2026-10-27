@@ -22,7 +22,7 @@ const conciliacion = {
 const ajuste = (numero: number, estado: string, pid: number, o = {}) => ({ numero, estado, deposito: 'local', creado_en: '2026-10-19T10:00:00Z', resuelto_en: null, renglones: [{ product_id: pid, size_id: pid * 10 }], ...o })
 
 describe('armarAContar', () => {
-  it('junta TN y ML sin repetir, deja afuera lo que ⛔ es de contar, y propone el depósito de la tienda', () => {
+  it('junta Tienda Nube y Mercado Libre sin repetir, deja afuera lo que ⛔ es de contar, y propone el depósito de la tienda', () => {
     const r = armarAContar({ linea: 'zattia', conciliacion, contar: [], ajustes: [] })
     expect(r.pendientes.map((f) => [f.clave, f.donde.join('+')])).toEqual([['1:10', 'Tienda Nube+Mercado Libre'], ['2:20', 'Tienda Nube'], ['3:30', 'Tienda Nube'], ['4:40', 'Tienda Nube'], ['5:50', 'Mercado Libre']])
     expect(r.pendientes[0].deposito).toBe('local')
@@ -41,7 +41,7 @@ describe('armarAContar', () => {
     expect(r.pendientes.map((f) => f.clave)).toEqual(['3:30', '4:40', '5:50'])
   })
 
-  it('suma las prendas de las ventas con PIN (con nombre), y el ajuste de ANTES de la venta ⛔ las cierra', () => {
+  it('suma los productos de las ventas con PIN (con nombre), y el ajuste de ANTES de la venta ⛔ las cierra', () => {
     const contar = [{ id: 'v', numero: 296, deposito: 'local', ocurrida_en: '2026-10-19T12:00:00Z', contar: [{ product_id: 7, size_id: 70, nivel: 0, autoriza: 'karen' }, { product_id: 1, size_id: 10, nivel: 0 }] }]
     const nombres = new Map([['7/70', { nombre: 'Top Sahara', talle: 'S' }]])
     const r = armarAContar({ linea: 'zattia', conciliacion: null, contar, ajustes: [ajuste(5, 'aplicado', 7, { creado_en: '2026-10-19T11:00:00Z', resuelto_en: '2026-10-19T11:30:00Z' })], nombres })
@@ -62,7 +62,7 @@ describe('leerCrearAjuste', () => {
   it('lo que ⛔ tiene forma se corta acá', () => {
     expect(leerCrearAjuste({ ...base, linea: 'otra', motivo: 'conteo', renglones: [{ producto: '1', talle: '10', contado: 1 }] }).error).toBe('Línea inválida')
     expect(leerCrearAjuste({ ...base, motivo: 'merma', renglones: [{ producto: '1', talle: '10', contado: 1 }] }).error).toBe('Elegí el motivo')
-    expect(leerCrearAjuste({ ...base, motivo: 'conteo', renglones: [] }).error).toBe('Agregá al menos una prenda')
+    expect(leerCrearAjuste({ ...base, motivo: 'conteo', renglones: [] }).error).toBe('Agregá al menos un producto')
     expect(leerCrearAjuste({ ...base, motivo: 'conteo', renglones: [{ producto: '1', talle: '10', contado: '' }] }).error).toMatch(/lo contado/)
     expect(leerCrearAjuste({ ...base, motivo: 'conteo', fuente: 'excel', renglones: [{ producto: '1', talle: '10', contado: 1 }] }).fuente).toBe('mano')
   })

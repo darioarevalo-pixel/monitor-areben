@@ -37,7 +37,7 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'h', titulo: 'Fecha', ancho: '96px' },
   { key: 'motivo', titulo: 'Motivo', ancho: 'minmax(200px, 1.6fr)' },
   { key: 'dep', titulo: 'Depósito', ancho: '150px' },
-  { key: 'prendas', titulo: 'Prendas', ancho: '72px', derecha: true },
+  { key: 'prendas', titulo: 'Productos', ancho: '72px', derecha: true },
   { key: 'neto', titulo: 'Unidades', ancho: '80px', derecha: true },
   { key: 'estado', titulo: 'Estado', ancho: '120px' },
   { key: 'quien', titulo: 'Quién', ancho: 'minmax(120px, 1fr)' },
@@ -45,7 +45,7 @@ const COLUMNAS: ColumnaLista[] = [
 const deposito = (d: string) => (NOMBRE_DEPOSITO as Record<string, string>)[d] ?? d
 const conSigno = (n: number) => (n > 0 ? `+${n}` : String(n))
 const prendaDe = (p: { nombre: string | null; talleNombre: string | null; sku: string | null }) =>
-  p.nombre ? `${p.nombre}${p.talleNombre ? ` · ${p.talleNombre}` : ''}` : p.sku ?? 'Prenda sin nombre'
+  p.nombre ? `${p.nombre}${p.talleNombre ? ` · ${p.talleNombre}` : ''}` : p.sku ?? 'Producto sin nombre'
 
 /** Un renglón del ajuste que se está armando: el stock por depósito se lee al agregar la prenda. */
 type Renglon = {
@@ -106,7 +106,7 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
       const porDeposito = Object.fromEntries(s.depositos.map((d) => [d.deposito, { libro: d.libro, gn: d.gn }]))
       setBorrador((b) => b && { ...b, renglones: b.renglones.map((r) => (r.producto === p.producto && r.talle === p.talle ? { ...r, porDeposito, barcode: r.barcode ?? s.prenda.barcode ?? null } : r)) })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo leer el stock de la prenda.')
+      setError(e instanceof Error ? e.message : 'No se pudo leer el stock del producto.')
     }
   }
 
@@ -140,7 +140,7 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
         renglones: borrador.renglones.map((x) => ({ producto: x.producto, talle: x.talle, sku: x.sku, barcode: x.barcode, cantidad: motivo.pide === 'sale' ? Math.abs(Number(x.valor)) : Number(x.valor) })),
       })
       const r = await aprobarAjuste(linea, creado.id)
-      setHecho({ texto: `Ajuste A-${r.numero} guardado: el stock del ERP cambió en ${r.movimientos} ${r.movimientos === 1 ? 'prenda' : 'prendas'}.`, avisos: [...creado.avisos, ...r.avisos] })
+      setHecho({ texto: `Ajuste A-${r.numero} guardado: el stock del ERP cambió en ${r.movimientos} ${r.movimientos === 1 ? 'producto' : 'productos'}.`, avisos: [...creado.avisos, ...r.avisos] })
       setBorrador(null)
       setEncontradas(null)
       setError(null)
@@ -160,7 +160,7 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
     try {
       if (aplicar) {
         const r = await aprobarAjuste(linea, a.id)
-        setHecho({ texto: `A-${r.numero} aplicado: el stock del ERP cambió en ${r.movimientos} ${r.movimientos === 1 ? 'prenda' : 'prendas'}.`, avisos: r.avisos })
+        setHecho({ texto: `A-${r.numero} aplicado: el stock del ERP cambió en ${r.movimientos} ${r.movimientos === 1 ? 'producto' : 'productos'}.`, avisos: r.avisos })
       } else {
         const r = await descartarAjuste(linea, a.id, descartando?.motivo ?? '')
         setHecho({ texto: `A-${r.numero} descartado: el stock no cambió.`, avisos: [] })
@@ -198,12 +198,12 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <SectionCard title="Conteos y ajustes" subtitle="Lo que sale del stock fuera de una venta: fallados, canjes, regalos. Nada se borra: un ajuste equivocado se arregla con otro.">
+      <SectionCard title="Ingresos y ajustes" subtitle="Lo que sale del stock fuera de una venta: fallados, canjes, regalos. Nada se borra: un ajuste equivocado se arregla con otro.">
         <div style={{ display: 'flex', gap: space[3], alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <Tabs items={LINEAS} value={linea} onChange={cambiarLinea} />
           {datos && !borrador && <Button onClick={() => setBorrador({ deposito: DEPOSITOS[base][0], motivo: MOTIVOS_A_MANO[0].key, detalle: '', renglones: [] })}>Nuevo ajuste</Button>}
         </div>
-        <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock del ERP: en GN se ajusta como siempre. Los conteos se hacen en el módulo de Conteo del monitor y entran solos (se ven en el historial de cada prenda, en Stock).</Notice>
+        <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock del ERP: en Gestión Nube se ajusta como siempre. Los conteos se hacen en el módulo de Conteo del monitor y entran solos (se ven en el historial de cada producto, en Stock).</Notice>
       </SectionCard>
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
@@ -234,12 +234,12 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
           </div>
 
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3], alignItems: 'flex-end' }}>
-            <Field label="Agregar una prenda">
-              <Input value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && texto.trim()) buscar() }} placeholder="SKU, código de barras o nombre" />
+            <Field label="Agregar un producto">
+              <Input value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && texto.trim()) buscar() }} placeholder="código, código de barras o nombre" />
             </Field>
             <Button variant="outline" disabled={trabajando || !texto.trim()} onClick={buscar}>Buscar</Button>
           </div>
-          {encontradas && (encontradas.length === 0 ? <div style={{ marginTop: space[2] }}>No se encontró ninguna prenda.</div> : (
+          {encontradas && (encontradas.length === 0 ? <div style={{ marginTop: space[2] }}>No se encontró ningún producto.</div> : (
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
               {encontradas.slice(0, 20).map((p) => (
                 <Button key={`${p.producto}:${p.talle}`} variant="soft" size="sm" onClick={() => agregar(p)}>+ {prendaDe(p)}</Button>
@@ -251,7 +251,7 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
             <TableWrap style={{ marginTop: space[3] }}>
               <THead>
                 <Tr>
-                  <Th>Prenda</Th><Th>SKU</Th>
+                  <Th>Producto</Th><Th>código</Th>
                   <Th style={{ textAlign: 'right' }}>ERP en {deposito(borrador.deposito)}</Th>
                   <Th style={{ textAlign: 'right' }}>{motivo.pide === 'sale' ? 'Salen' : 'Cantidad (+ o −)'}</Th>
                   <Th style={{ textAlign: 'right' }}>Queda</Th><Th />
@@ -277,7 +277,7 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
                 })}
               </TBody>
             </TableWrap>
-          ) : <div style={{ marginTop: space[2], color: color.mut }}>Agregá las prendas con el buscador.</div>}
+          ) : <div style={{ marginTop: space[2], color: color.mut }}>Agregá los productos con el buscador.</div>}
 
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3] }}>
             <Button disabled={trabajando || !listo} onClick={guardar}>Guardar ajuste</Button>
@@ -295,7 +295,7 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
               {descartando?.id === a.id ? (
                 <>
                   <Field label="Por qué se descarta">
-                    <Input value={descartando.motivo} onChange={(e) => setDescartando({ id: a.id, motivo: e.target.value })} placeholder="Ej.: se cargó otro talle" />
+                    <Input value={descartando.motivo} onChange={(e) => setDescartando({ id: a.id, motivo: e.target.value })} placeholder="Ej.: se cargó otro variante" />
                   </Field>
                   <Button size="sm" variant="outline" tone="danger" disabled={trabajando || descartando.motivo.trim().length < 3} onClick={() => resolver(a, false)}>Descartar A-{a.numero}</Button>
                 </>
@@ -327,7 +327,7 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
             </div>
             <TableWrap>
               <THead>
-                <Tr><Th>Prenda</Th><Th style={{ textAlign: 'right' }}>Antes</Th><Th style={{ textAlign: 'right' }}>Cambio</Th><Th style={{ textAlign: 'right' }}>Después</Th></Tr>
+                <Tr><Th>Producto</Th><Th style={{ textAlign: 'right' }}>Antes</Th><Th style={{ textAlign: 'right' }}>Cambio</Th><Th style={{ textAlign: 'right' }}>Después</Th></Tr>
               </THead>
               <TBody>
                 {abierta.renglones.map((r) => (

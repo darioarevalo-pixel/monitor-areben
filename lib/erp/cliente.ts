@@ -141,7 +141,7 @@ export const buscarPrendas = (marca: MarcaErp, q: string) =>
   pedir<{ variantes: PrendaEncontrada[]; cortado: boolean }>(null, `&vista=stock&marca=${marca}&q=${encodeURIComponent(q)}`, 'No se pudo buscar.')
 
 export const leerStockDePrenda = (marca: MarcaErp, producto: string, talle: string) =>
-  pedir<StockDePrenda>(null, `&vista=stock&marca=${marca}&producto=${producto}&talle=${talle}&nc=${Date.now()}`, 'No se pudo leer el stock de la prenda.')
+  pedir<StockDePrenda>(null, `&vista=stock&marca=${marca}&producto=${producto}&talle=${talle}&nc=${Date.now()}`, 'No se pudo leer el stock del producto.')
 
 export type FilaDiferencia = {
   producto: string; talle: string; nombre: string | null; talleNombre: string | null; linea: string; deposito: string

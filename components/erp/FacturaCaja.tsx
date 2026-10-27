@@ -187,7 +187,7 @@ export function FacturaCaja() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard title={`Factura · ${NOMBRE_MARCA[store] ?? store}`} subtitle="La factura que pide la clienta en el mostrador: buscá la venta y elegí A o B.">
-        <Notice tone="warning">Hasta que se apague GN la factura real del local sale de GN: acá sólo sale en el ambiente de prueba de ARCA.</Notice>
+        <Notice tone="warning">Hasta que se apague Gestión Nube la factura real del local sale de Gestión Nube: acá sólo sale en el ambiente de prueba de ARCA.</Notice>
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="#123, nombre, DNI o mail" />
@@ -244,11 +244,11 @@ export function FacturaCaja() {
           </div>
           <TableWrap>
             <table>
-              <THead><Tr><Th>Prenda</Th><Th style={{ textAlign: 'right' }}>Cant.</Th><Th style={{ textAlign: 'right' }}>Importe</Th></Tr></THead>
+              <THead><Tr><Th>Producto</Th><Th style={{ textAlign: 'right' }}>Cant.</Th><Th style={{ textAlign: 'right' }}>Importe</Th></Tr></THead>
               <TBody>
                 {ficha.lineas.map((l) => (
                   <Tr key={l.id}>
-                    <Td>{l.nombre ?? l.sku ?? `Prenda ${l.producto}`}{l.talleNombre && ` · ${l.talleNombre}`}</Td>
+                    <Td>{l.nombre ?? l.sku ?? `Producto ${l.producto}`}{l.talleNombre && ` · ${l.talleNombre}`}</Td>
                     <Td style={{ textAlign: 'right' }}>{l.cantidad}</Td>
                     <Td style={{ textAlign: 'right' }}><MoneyText value={l.importe} /></Td>
                   </Tr>

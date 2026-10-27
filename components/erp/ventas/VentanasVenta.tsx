@@ -22,7 +22,7 @@ import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { plata } from '@/lib/erp/ventas-lista.core.js'
 import { cuandoCorto } from '@/components/ui/PiezasLista'
 
-const ESPERA = 'Todavía no está en el motor del monitor: se prende cuando la sesión A publique la ficha de la venta (contrato §16).'
+const ESPERA = 'Todavía no está disponible: se prende cuando esté lista la ficha de la venta.'
 
 /** Lee lo de afuera de la venta (cuentas, lo editable, la nota vigente) para la ventana. */
 function useExtra(marca: MarcaErp, id: string, activo: boolean) {
@@ -186,7 +186,7 @@ function FormEditar({ marca, fila, puede, vendedores, onCerrar, onHecho, irACaja
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
         <div style={fila2}>
-          <Field label="Cliente" hint={`Hoy: ${fila.cliente}${fila.clienteDe === 'gn' ? ' (de GN)' : ''}. Para cambiarlo, el DNI o CUIT de su ficha.`}>
+          <Field label="Cliente" hint={`Hoy: ${fila.cliente}${fila.clienteDe === 'gn' ? ' (de Gestión Nube)' : ''}. Para cambiarlo, el DNI o CUIT de su ficha.`}>
             <Input inputMode="numeric" value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="DNI o CUIT" />
           </Field>
           <Field label="Vendió">
@@ -216,7 +216,7 @@ function FormEditar({ marca, fila, puede, vendedores, onCerrar, onHecho, irACaja
           <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={nota} onChange={(e) => setNota(e.target.value)} />
         </Field>
         <div style={{ padding: '12px 14px', borderRadius: 10, background: color.bg, border: `1px dashed ${color.line2}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ fontWeight: weight.semibold }}>Prendas, precios y cobros</span>
+          <span style={{ fontWeight: weight.semibold }}>Productos, precios y cobros</span>
           <span style={{ fontSize: font.base, color: color.mut }}>No se editan acá: mueven stock, plata o la factura. Para cambiarlos:</span>
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
             <Button size="sm" variant="outline" onClick={() => irACaja('cambio')}>Hacer cambio</Button>

@@ -73,10 +73,10 @@ export const SECCIONES_ERP: Seccion[] = [
     key: 'ventas', titulo: 'Ventas', icono: 'M6 2l-2 4v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6l-2-4z M4 6h16 M16 10a4 4 0 0 1-8 0',
     pestanias: [{ key: 'ventas', label: 'Ventas' }, { key: 'por-producto', label: 'Por producto' }, { key: 'cobros', label: 'Cobros' }, { key: 'cajas', label: 'Cajas' }, { key: 'facturacion', label: 'Facturación' }],
   },
-  { key: 'caja', titulo: 'Caja (POS)', icono: 'M3 8h18v12H3z M7 8V4h10v4 M7 13h4', debajo: true, pestanias: [{ key: 'cambio', label: 'Cambio' }, { key: 'factura', label: 'Factura' }] },
+  { key: 'caja', titulo: 'Caja', icono: 'M3 8h18v12H3z M7 8V4h10v4 M7 13h4', debajo: true, pestanias: [{ key: 'cambio', label: 'Cambio' }, { key: 'factura', label: 'Factura' }] },
   {
     key: 'stock', titulo: 'Stock', icono: 'M21 8l-9-5-9 5 9 5 9-5z M3 8v8l9 5 9-5V8 M12 13v8',
-    pestanias: [{ key: 'stock', label: 'Stock' }, { key: 'movimientos', label: 'Movimientos' }, { key: 'transferencias', label: 'Transferencias' }, { key: 'mover', label: 'Mover y recibir' }, { key: 'ajustes', label: 'Conteos y ajustes' }, { key: 'recepciones', label: 'Ingresos' }, { key: 'comparacion', label: 'Comparación con TN y ML' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Diferencias con GN' }],
+    pestanias: [{ key: 'stock', label: 'Stock' }, { key: 'movimientos', label: 'Movimientos' }, { key: 'transferencias', label: 'Transferencias' }, { key: 'mover', label: 'Mover y recibir' }, { key: 'ajustes', label: 'Ingresos y ajustes' }, { key: 'recepciones', label: 'Ingresos' }, { key: 'comparacion', label: 'Comparación con Tienda Nube y Mercado Libre' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Diferencias con Gestión Nube' }],
   },
   { key: 'productos', titulo: 'Productos y precios', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }] },
   {
@@ -200,8 +200,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             <header style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
               <div>
                 <h1 style={{ margin: 0, fontSize: 24, fontWeight: weight.bold, color: color.ink }}>{seccion.titulo}</h1>
-                <p style={{ margin: '2px 0 0', color: color.mut }}>
-                  {CUENTAS[marca].nombre} · en construcción, en paralelo con Gestión Nube (el que sirve hoy). Lo ven sólo los administradores.
+                <p style={{ margin: '4px 0 0', padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4 }}>
+                  {CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy. Lo ven sólo los administradores.
                 </p>
               </div>
               {seccion.pestanias.length > 1 && (

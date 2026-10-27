@@ -27,7 +27,7 @@ import type { Tone } from '@/components/ui/tokens'
 
 const FUENTE: Record<string, string> = NOMBRE_FUENTE
 /** El estado en Tienda Nube, como chip (diseño §1: verde cumplido · ámbar alguien tiene que hacer algo · gris neutro). */
-export const EN_TN: Record<string, readonly [Tone, string]> = { publicado: ['success', 'Publicado'], oculto: ['warning', 'Oculto'], no: ['neutral', 'No está en TN'] }
+export const EN_TN: Record<string, readonly [Tone, string]> = { publicado: ['success', 'Publicado'], oculto: ['warning', 'Oculto'], no: ['neutral', 'No está en Tienda Nube'] }
 const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
 /** Una lectura de TN de más de un día ya puede no ser lo que dice la tienda. */
 const VIEJA_MS = 24 * 3600_000
@@ -85,7 +85,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
         <div>
           <ConfirmDetalle label="Cargado hoy" valor={<MoneyText value={l.precio ?? 0} />} />
           <ConfirmDetalle label={`Pasa a valer (${aQuien?.nombre ?? l.sigue})`} valor={aQuien?.precio != null ? <MoneyText value={aQuien.precio} /> : 'Sin precio'} />
-          <p style={{ marginTop: space[3] }}>El precio cargado queda en el historial. Mientras GN funcione, no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</p>
+          <p style={{ marginTop: space[3] }}>El precio cargado queda en el historial. Mientras Gestión Nube funcione, no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</p>
         </div>
       ),
       ok: 'Volver a seguir',
@@ -159,7 +159,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2], padding: space[3], border: `1px solid ${color.line}`, borderRadius: 12 }}>
           <div>
             <h3 style={h3}>Corregir datos</h3>
-            <div style={{ fontSize: font.sm, color: color.mut }}>nombre, categoría y, de cada variante, talle, SKU y código de barras · el alta del producto es en Ingresos · queda quién y el antes y el después</div>
+            <div style={{ fontSize: font.sm, color: color.mut }}>nombre, categoría y, de cada variante, variante, código y código de barras · el alta del producto es en Ingresos · queda quién y el antes y el después</div>
           </div>
           <EditarProducto key={`${producto}-${vuelta}`} marca={marca} fila={fila} onError={setError} onListo={(h, aviso) => { setHecho(h); if (aviso) setError(aviso); releer() }} />
         </section>
@@ -169,7 +169,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2], padding: space[3], border: `1px solid ${color.line}`, borderRadius: 12 }}>
           <div>
             <h3 style={h3}>Cargar en el ERP</h3>
-            <div style={{ fontSize: font.sm, color: color.mut }}>una fila nueva: lo anterior queda en el historial · mientras GN funcione, no cambia la Caja ni Tienda Nube</div>
+            <div style={{ fontSize: font.sm, color: color.mut }}>una fila nueva: lo anterior queda en el historial · mientras Gestión Nube funcione, no cambia la Caja ni Tienda Nube</div>
           </div>
           <CargarPrecio marca={marca} ficha={f} onError={setError} onListo={(h, aviso) => { setHecho(h); if (aviso) setError(aviso); setCargar(false); releer() }} />
         </section>
@@ -179,7 +179,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
         <h3 style={h3}>Listas</h3>
         {!f ? <span style={{ color: color.mut }}>Leyendo…</span> : (
           <div role="table" aria-label="Precio por lista" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) 92px 84px 92px', columnGap: 10, fontVariantNumeric: 'tabular-nums', alignItems: 'baseline' }}>
-            {['Lista', 'ERP', 'GN', 'Tienda Nube'].map(encabezado)}
+            {['Lista', 'ERP', 'Gestión Nube', 'Tienda Nube'].map(encabezado)}
             {f.listas.map((l) => {
               const gn = l.lista === 'local' ? f.gn?.precio : l.lista === 'mayorista' ? f.gn?.mayorista : null
               const tn = l.lista === 'online' ? f.tn?.precio : l.lista === 'local' || l.lista === 'oferta' ? f.tn?.cobra : null
@@ -228,7 +228,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <div>
           <h3 style={h3}>Variantes</h3>
-          <div style={{ fontSize: font.sm, color: color.mut }}>lo que dice el ERP en cada lugar · disponible = en estantería − pedidos de Tienda Nube sin pagar</div>
+          <div style={{ fontSize: font.sm, color: color.mut }}>lo que dice el ERP en cada lugar · disponible = físico − pedidos de Tienda Nube sin pagar</div>
         </div>
         {!fila ? <span style={{ color: color.mut }}>Leyendo…</span> : !fila.variantes.length ? <span style={{ color: color.mut }}>Este producto no tiene variantes en el stock.</span> : (
           <div style={{ overflowX: 'auto' }}>
@@ -236,7 +236,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
               {['Variante', ...deps.map((d) => (d === 'local' ? 'Local' : NOMBRE_DEPOSITO[d as keyof typeof NOMBRE_DEPOSITO] ?? d)), 'Disponible'].map(encabezado)}
               {fila.variantes.map((v) => (
                 <div key={v.talle} role="row" style={{ display: 'contents' }}>
-                  <span role="cell" style={celda} title={v.sku ?? undefined}>{v.talleNombre}<div style={{ fontSize: font.sm, color: color.mut }}>{v.sku ?? 'sin SKU'}{!v.barcode && ' · sin código'}</div></span>
+                  <span role="cell" style={celda} title={v.sku ?? undefined}>{v.talleNombre}<div style={{ fontSize: font.sm, color: color.mut }}>{v.sku ?? 'sin código'}{!v.barcode && ' · sin código'}</div></span>
                   {deps.map((d) => <span key={d} role="cell" style={{ ...celda, textAlign: 'right', color: (v.deps[d] ?? 0) < 0 ? 'var(--mo-danger-ink)' : (v.deps[d] ?? 0) === 0 ? color.mut2 : color.ink }}>{v.deps[d] ?? 0}</span>)}
                   <span role="cell" style={{ ...celda, textAlign: 'right', fontWeight: weight.bold, color: v.disponible < 0 ? 'var(--mo-danger-ink)' : v.disponible === 0 ? 'var(--mo-warning-ink)' : color.ink }} title={v.enPedidos ? `${v.enPedidos} apartadas por pedidos sin pagar` : undefined}>{v.disponible}</span>
                 </div>
@@ -255,7 +255,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
           <Historial hechos={ediciones.slice(0, 30).map((h): HechoHistorial => ({
             cuando: h.creada_en, icono: 'lapiz', tono: 'neutral',
             titulo: `${h.entidad === 'variante' ? 'Variante · ' : ''}${h.campo}: ${h.antes ?? 'vacío'} → ${h.despues ?? 'vacío'}`,
-            detalle: [h.usuario, h.desde_gn ? 'venía de GN' : null].filter(Boolean).join(' · '),
+            detalle: [h.usuario, h.desde_gn ? 'venía de Gestión Nube' : null].filter(Boolean).join(' · '),
           }))} cuandoTexto={cuandoCorto} />
         </section>
       )}

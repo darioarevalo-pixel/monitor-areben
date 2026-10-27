@@ -35,8 +35,8 @@ const u = (n: number) => `${n.toLocaleString('es-AR')} u`
 function bajarCsv(vista: Vista, filas: Array<Grupo | RenglonProducto>, marca: MarcaErp, costos: boolean) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
   const cab = vista === 'agrupado'
-    ? ['Producto', 'Unidades', 'Ventas', 'Vendido', 'Precio promedio', ...(costos ? ['Margen'] : []), 'Talles', 'Canales', 'Última venta', 'Línea']
-    : ['Fecha', 'Venta (GN)', 'Producto', 'Talle', 'SKU', 'Cant.', 'Precio', 'Quedó en', ...(costos ? ['Margen'] : []), 'Origen', 'Cliente', 'Línea']
+    ? ['Producto', 'Unidades', 'Ventas', 'Vendido', 'Precio promedio', ...(costos ? ['Margen'] : []), 'Variantes', 'Canales', 'Última venta', 'Línea']
+    : ['Fecha', 'Venta (Gestión Nube)', 'Producto', 'Variante', 'código', 'Cant.', 'Precio', 'Quedó en', ...(costos ? ['Margen'] : []), 'Origen', 'Cliente', 'Línea']
   const filasCsv = filas.map((f) => (vista === 'agrupado'
     ? (({ nombre, unidades, ventas, vendido, promedio, margen, talles, canales, ultimo, linea }: Grupo) => [nombre, unidades, ventas, vendido, promedio ?? '', ...(costos ? [margen ?? 'sin costo'] : []), talles, canales, ultimo.slice(0, 10), LINEA[linea] ?? linea])(f as Grupo)
     : (({ cuando, numero, nombre, talle, sku, cantidad, precio, total, costo, canal, cliente, linea }: RenglonProducto) => [cuando.slice(0, 10), numero ?? '', nombre, talle, sku ?? '', cantidad, precio, total, ...(costos ? [costo == null ? 'sin costo' : total - costo] : []), canal, cliente ?? '', LINEA[linea] ?? linea])(f as RenglonProducto)))
@@ -145,7 +145,7 @@ export function PorProductoErp() {
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k as Vista); setOrden(null) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las ventas por producto" placeholder="Producto, SKU, venta o cliente" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las ventas por producto" placeholder="Producto, código, venta o cliente" />
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>{PERIODOS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
           {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <Select aria-label="Origen" style={ANCHO_SELECT} value={canal} onChange={(e) => setCanal(e.target.value)}><option value="">Todos los orígenes</option>{canales.map((c) => <option key={c} value={c}>{c}</option>)}</Select>

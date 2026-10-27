@@ -147,7 +147,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: weight.bold, overflowWrap: 'anywhere' }}>{fila.cliente}</h2>
-          {fila.clienteDe === 'gn' && <div style={{ fontSize: font.sm, color: color.mut }}>el nombre sale de GN</div>}
+          {fila.clienteDe === 'gn' && <div style={{ fontSize: font.sm, color: color.mut }}>el nombre sale de Gestión Nube</div>}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
             <ChipEstado mapa={ESTADO} k={fila.estadoKey} /><ChipEstado mapa={COBRO} k={fila.cobroKey} />{fila.prueba && <ChipEstado mapa={{ p: ['warning', 'Prueba'] }} k="p" />}
           </div>
@@ -170,7 +170,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
       {esPedido ? (
         <>
           {fila.entregadoSinCobrar && <Notice tone="danger"><b>Entregado sin cobrar</b>: Tienda Nube lo cerró sin que se registrara el pago. Ya no retiene stock; queda acá hasta que se cobre o se cancele.</Notice>}
-          <Notice tone="warning">Pedido de Tienda Nube <b>sin pagar</b>: todavía no es una venta{fila.entregadoSinCobrar ? '' : ' y tiene las prendas retenidas'}. Pasa a venta solo cuando Tienda Nube avisa que se pagó. Se cobra en Cobranzas (transferencia o efectivo) o se cancela en Tienda Nube.</Notice>
+          <Notice tone="warning">Pedido de Tienda Nube <b>sin pagar</b>: todavía no es una venta{fila.entregadoSinCobrar ? '' : ' y tiene los productos retenidos'}. Pasa a venta solo cuando Tienda Nube avisa que se pagó. Se cobra en Cobranzas (transferencia o efectivo) o se cancela en Tienda Nube.</Notice>
           <DatosFicha>
             <DatoFicha titulo="Entró">{`${cuandoCorto(fila.pedidoEn)}${fila.dias != null ? ` · ${fila.dias === 0 ? 'hoy' : fila.dias === 1 ? 'hace 1 día' : `hace ${fila.dias} días`}` : ''}`}</DatoFicha>
             <DatoFicha titulo="Eligió pagar con">{fila.medio ?? '—'}</DatoFicha>
@@ -178,7 +178,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           </DatosFicha>
           {!!fila.prendas?.length && (
             <section>
-              <h3 style={h3}>{fila.entregadoSinCobrar ? 'Prendas' : 'Prendas retenidas'}{fila.unidades != null && ` · ${fila.unidades}`}</h3>
+              <h3 style={h3}>{fila.entregadoSinCobrar ? 'Productos' : 'Productos retenidos'}{fila.unidades != null && ` · ${fila.unidades}`}</h3>
               {fila.prendas.map((x, i) => (
                 <div key={`${x.sku ?? x.nombre}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], padding: '10px 0', borderBottom: `1px solid ${color.bg2}` }}>
                   <div style={{ minWidth: 0 }}>
@@ -195,7 +195,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         <span style={{ color: color.mut }}>Leyendo la venta…</span>
       ) : (
         <>
-          {v?.prueba && <Notice tone="warning">De prueba: corre en paralelo con GN y no movió el stock del libro. La factura real sale de GN.</Notice>}
+          {v?.prueba && <Notice tone="warning">De prueba: corre en paralelo con Gestión Nube y no movió el stock del ERP. La factura real sale de Gestión Nube.</Notice>}
           {ficha?.sinCreditoGN && <Notice tone="neutral">Gestión Nube la vendió a cuenta a un cliente sin crédito marcado. Desde el ERP, esta venta se habría frenado hasta que un admin la autorizara.</Notice>}
           {ficha.anulacion && <Notice tone="danger">Anulada el {cuandoCorto(ficha.anulacion.anuladaEn)} por {ficha.anulacion.usuario}: «{ficha.anulacion.motivo}».</Notice>}
           {ficha.anulacion && ficha.anulacion.vuelta !== 'ya' && dev && !dev.volvio && (
@@ -212,7 +212,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             <DatoFicha titulo="Línea">{LINEA[v!.marca] ?? v!.marca}</DatoFicha>
             {extra?.entrega && <DatoFicha titulo="Entrega">{[ENTREGA[extra.entrega.tipo], extra.entrega.direccion].filter(Boolean).join(' · ')}</DatoFicha>}
             {extra?.cobroEnEntrega && <DatoFicha titulo="Cobrado al entregar">{[extra.cobroEnEntrega.formaPago ? COBRO_EN_ENTREGA[extra.cobroEnEntrega.formaPago] : null, extra.cobroEnEntrega.entrego, extra.cobroEnEntrega.fecha ? cuandoCorto(extra.cobroEnEntrega.fecha) : null].filter(Boolean).join(' · ')}</DatoFicha>}
-            {extra?.gnNumero && <DatoFicha titulo="En GN">{`venta ${extra.gnNumero}`}</DatoFicha>}
+            {extra?.gnNumero && <DatoFicha titulo="En Gestión Nube">{`venta ${extra.gnNumero}`}</DatoFicha>}
           </DatosFicha>
 
           {nota ? (
@@ -226,12 +226,12 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           ) : !fila.anulada && <div><Button size="sm" variant="outline" onClick={() => abrirVentana('editar')}>Agregar nota</Button></div>}
 
           <section>
-            <h3 style={h3}>Prendas</h3>
+            <h3 style={h3}>Productos</h3>
             {ficha.lineas.map((l) => (
               <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], padding: '10px 0', borderBottom: `1px solid ${color.bg2}` }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: weight.semibold }}>{l.nombre ?? `Producto ${l.producto}`}{l.devuelta && <span style={{ marginLeft: 6, color: 'var(--mo-warning-ink)', fontSize: font.sm }}>devuelta</span>}</div>
-                  <div style={{ fontSize: font.sm, color: color.mut }}>Talle {l.talleNombre ?? l.talle} · {l.cantidad} u.{l.sku ? ` · ${l.sku}` : ''}{l.descuento || l.rebaja ? ` · desc. ${plata(l.descuento + l.rebaja)}` : ''}</div>
+                  <div style={{ fontSize: font.sm, color: color.mut }}>Variante {l.talleNombre ?? l.talle} · {l.cantidad} u.{l.sku ? ` · ${l.sku}` : ''}{l.descuento || l.rebaja ? ` · desc. ${plata(l.descuento + l.rebaja)}` : ''}</div>
                 </div>
                 <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{plata(l.importe)}</span>
               </div>
@@ -249,7 +249,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             <Notice tone={corr.diferencia === 0 ? 'neutral' : 'warning'}>
               <b>Precio corregido</b>: total {plata(corr.total ?? v!.total)} · cobrado {plata(corr.cobrado ?? 0)}.{' '}
               {corr.diferencia > 0 ? `Faltan cobrar ${plata(corr.diferencia)}.` : corr.diferencia < 0 ? `Sobran ${plata(-corr.diferencia)}: hay que devolverlos.` : 'Lo cobrado coincide.'}{' '}
-              Las prendas de arriba muestran el precio original; la plata no se movió sola.
+              Los productos de arriba muestran el precio original; la plata no se movió sola.
             </Notice>
           )}
 
@@ -257,7 +257,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             <div><h3 style={h3}>Historial de la venta</h3><span style={{ fontSize: font.sm, color: color.mut }}>todo lo que le pasó, con quién y cuándo</span></div>
             <Historial hechos={hechos} cuandoTexto={cuandoCorto} />
             {extra?.motor && <span style={{ fontSize: font.sm, color: color.mut2 }}>Las ediciones y las notas todavía no se leen: {extra.motor}</span>}
-            {!puede.editar && !extra?.motor && <span style={{ fontSize: font.sm, color: color.mut2 }}>Editar espera al motor.</span>}
+            {!puede.editar && !extra?.motor && <span style={{ fontSize: font.sm, color: color.mut2 }}>Editar todavía no está disponible.</span>}
           </section>
         </>
       )}
@@ -271,7 +271,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
       >
         {ficha?.puedeAnular ? <Notice tone="warning">{ficha.puedeAnular}</Notice> : !dev ? <span style={{ color: color.mut }}>Leyendo la venta…</span> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[3], marginBottom: space[3] }}>
-            <DatoFicha titulo="Las prendas">{textoDeVuelta(dev.vueltaSiAnula, { deposito: NOMBRE_DEPOSITO[v!.deposito as keyof typeof NOMBRE_DEPOSITO] ?? v!.deposito, prueba: !!v?.prueba })}</DatoFicha>
+            <DatoFicha titulo="Los productos">{textoDeVuelta(dev.vueltaSiAnula, { deposito: NOMBRE_DEPOSITO[v!.deposito as keyof typeof NOMBRE_DEPOSITO] ?? v!.deposito, prueba: !!v?.prueba })}</DatoFicha>
             {hayQueElegir ? (
               <div role="radiogroup" aria-label="Cómo se devuelve lo pagado" style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
                 <span style={{ fontSize: font.sm, color: color.mut }}>Lo pagado · elegí cómo vuelve</span>
@@ -312,7 +312,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[3], marginBottom: space[3] }}>
           <Notice tone="neutral">No mueve plata: el total nuevo se compara con lo cobrado y la diferencia queda a la vista para resolverla con una devolución o un cobro. Con factura no se puede (va nota de crédito).</Notice>
           {(ficha?.lineas ?? []).filter((l) => !l.devuelta).map((l) => (
-            <Field key={l.id} label={`${l.nombre ?? `Producto ${l.producto}`} · talle ${l.talleNombre ?? l.talle} · ${l.cantidad} u.`} hint={`Precio por unidad. Ahora: ${plata(vigente(l.n, l.precio))}`}>
+            <Field key={l.id} label={`${l.nombre ?? `Producto ${l.producto}`} · variante ${l.talleNombre ?? l.talle} · ${l.cantidad} u.`} hint={`Precio por unidad. Ahora: ${plata(vigente(l.n, l.precio))}`}>
               <input className="mo-input" inputMode="decimal" value={precios[l.n] ?? ''} onChange={(e) => setPrecios({ ...precios, [l.n]: e.target.value })} />
             </Field>
           ))}

@@ -7,10 +7,10 @@ const d = (o = {}) => ({ id: 'x', numero: 1, linea: 'stunned', desde: 'deposito'
 const nombres = nombresDePrendas([{ producto: '10', talle: '1', nombre: 'REMERA', talleNombre: 'M' }])
 
 describe('transferencias-doc', () => {
-  it('el nombre sale de product_id + size_id; sin nombre, el SKU; nunca «null»', () => {
+  it('el nombre sale de product_id + size_id; sin nombre, el código; nunca «null»', () => {
     expect(nombreDeRenglon(r(), nombres)).toBe('REMERA · M')
     expect(nombreDeRenglon(r(), {})).toBe('STU-REM-M')
-    expect(nombreDeRenglon(r({ sku: null }), {})).toBe('Prenda 10/1')
+    expect(nombreDeRenglon(r({ sku: null }), {})).toBe('Producto 10/1')
   })
   it('el paso de cada estado: recibida completa verde, con faltantes roja', () => {
     expect(pasoDeDoc(d({ estado: 'borrador' })).paso).toBe(1)
@@ -30,7 +30,7 @@ describe('transferencias-doc', () => {
     expect(vistaDeEntradaDoc(c)).toBe('en_camino')
     expect(vistaDeEntradaDoc({ en_camino: 0 })).toBe('todas')
   })
-  it('el buscador entiende «T-7», el nombre sin tildes y el SKU', () => {
+  it('el buscador entiende «T-7», el nombre sin tildes y el código', () => {
     const docs = [d({ numero: 7 }), d({ numero: 8, renglones: [r({ product_id: 11, sku: 'STU-BUZO-L' })] })]
     expect(filtrarDocs(docs, { q: 'T-7', nombres }).map((x: { numero: number }) => x.numero)).toEqual([7])
     expect(filtrarDocs(docs, { q: 'remera', nombres }).map((x: { numero: number }) => x.numero)).toEqual([7])

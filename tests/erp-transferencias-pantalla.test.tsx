@@ -48,7 +48,7 @@ const clic = async (el: Element) => { await act(async () => { (el as HTMLElement
 const filaDe = (t: string) => [...host.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes(t))!
 
 describe('la lista de transferencias', () => {
-  it('sin abiertas entra a Todas; barrita, prendas pedidas → enviadas y el número de GN', async () => {
+  it('sin abiertas entra a Todas; barrita, productos pedidas → enviadas y el número de Gestión Nube', async () => {
     await montar()
     expect(leerTransferencias).toHaveBeenCalledTimes(1)
     expect(boton(/^Todas/).getAttribute('aria-pressed') ?? boton(/^Todas/).getAttribute('aria-selected')).toBe('true')
@@ -61,10 +61,10 @@ describe('la lista de transferencias', () => {
     expect(todo()).toMatch(/«Recibida» todavía no se controla/)
   })
 
-  it('la fila abre la ficha al costado con cada prenda; la de antes del libro lo dice', async () => {
+  it('la fila abre la ficha al costado con cada producto; la de antes del ERP lo dice', async () => {
     await montar()
     await clic(filaDe('T-7745').querySelector('[role="cell"]:last-child')!)
-    expect(document.querySelector('aside[aria-label^="Ficha de la transferencia"]')!.textContent).toContain('antes del libro')
+    expect(document.querySelector('aside[aria-label^="Ficha de la transferencia"]')!.textContent).toContain('antes del ERP')
     await clic(filaDe('T-8101').querySelector('[role="cell"]:last-child')!)
     const ficha = document.querySelector('aside[aria-label^="Ficha de la transferencia"]')!
     expect(ficha).toBeTruthy()

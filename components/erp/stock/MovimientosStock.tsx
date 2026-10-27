@@ -40,7 +40,7 @@ const conSigno = (n: number) => (n > 0 ? `+${n}` : String(n))
 
 function bajarCsv(filas: FilaMovimiento[], marca: MarcaErp, desde: string, hasta: string) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Cuándo', 'Tipo', 'Prenda', 'Talle', 'SKU', 'Dónde', 'Cantidad', 'Queda', 'Documento', 'Quién', 'Línea'].map(c).join(';')]
+  const renglones = [['Cuándo', 'Tipo', 'Producto', 'Variante', 'código', 'Dónde', 'Cantidad', 'Queda', 'Documento', 'Quién', 'Línea'].map(c).join(';')]
   for (const f of filas) renglones.push([cuandoCorto(f.cuando), f.tipoTexto, f.nombre, f.talleNombre, f.sku, f.depositoTexto, f.cantidad, f.queda, f.documento, f.quien, LINEA[f.linea] ?? f.linea].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -107,15 +107,15 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
     if (k === 'cant') return <b style={{ color: f.cantidad > 0 ? 'var(--mo-success-ink)' : 'var(--mo-danger-ink)', fontVariantNumeric: 'tabular-nums' }}>{conSigno(f.cantidad)}</b>
     if (k === 'queda') return <span style={{ fontVariantNumeric: 'tabular-nums', color: f.queda < 0 ? 'var(--mo-danger-ink)' : color.ink }}>{f.queda}</span>
     if (k === 'doc') return <span style={{ color: color.ink2 }} title={f.documento}>{f.documento}</span>
-    if (k === 'quien') return <span title={f.quienDe === 'sistema' ? 'El libro no guarda quién: es el sistema de donde vino' : undefined} style={{ color: f.quienDe === 'sistema' ? color.mut2 : color.ink2, fontStyle: f.quienDe === 'sistema' ? 'italic' : undefined }}>{f.quien}</span>
+    if (k === 'quien') return <span title={f.quienDe === 'sistema' ? 'El ERP no guarda quién: es el sistema de donde vino' : undefined} style={{ color: f.quienDe === 'sistema' ? color.mut2 : color.ink2, fontStyle: f.quienDe === 'sistema' ? 'italic' : undefined }}>{f.quien}</span>
     if (k === 'linea') return <span style={{ color: color.ink2 }}>{LINEA[f.linea] ?? f.linea}</span>
     return null
   }
 
   const acciones = (f: FilaMovimiento) => {
     const menu: AccionMenu[] = [
-      { key: 'ficha', label: 'Abrir la ficha de la prenda', icono: 'abrir', onClick: () => setFicha(f) },
-      { key: 'ajustar', label: 'Ajustar la prenda', icono: 'conteo', onClick: () => ajustar(aAjustar(f)), hint: 'Abre «Nuevo ajuste» con esta prenda.' },
+      { key: 'ficha', label: 'Abrir la ficha del producto', icono: 'abrir', onClick: () => setFicha(f) },
+      { key: 'ajustar', label: 'Ajustar el producto', icono: 'conteo', onClick: () => ajustar(aAjustar(f)), hint: 'Abre «Nuevo ajuste» con este producto.' },
     ]
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones del movimiento de ${f.nombre} ${f.talleNombre}`} vertical alinear="izquierda" />
   }
@@ -126,7 +126,6 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
         <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Todo lo que movió stock, con lo que quedó después y el documento que lo explica. Nada se borra.</p>
         <Button disabled={!filas.length} onClick={() => datos && bajarCsv(filas, marca, datos.desde, datos.hasta)}>Exportar</Button>
       </div>
-      <Notice tone="warning">El stock del ERP corre <b>en paralelo</b> con Gestión Nube, que es el que sirve hoy.</Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {datos?.cortado && <Notice tone="warning">Son más de {datos.filas.length.toLocaleString('es-AR')} movimientos: se ven los más nuevos. Elegí un período más corto.</Notice>}
 
@@ -140,7 +139,7 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en los movimientos" placeholder="Prenda, SKU, código, documento o quién" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en los movimientos" placeholder="Producto, código, documento o quién" />
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
             {PERIODOS_MOV.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
           </Select>
@@ -164,7 +163,7 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `el movimiento de ${f.nombre} ${f.talleNombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay movimientos con esa prenda, documento o persona.' : `No hay movimientos ${vista === 'todos' ? '' : 'de esta vista '}${nombrePeriodo === 'hoy' || nombrePeriodo === 'ayer' ? nombrePeriodo : `en ${nombrePeriodo}`}.`} />
+              <EmptyState title={q ? 'No hay movimientos con ese producto, documento o persona.' : `No hay movimientos ${vista === 'todos' ? '' : 'de esta vista '}${nombrePeriodo === 'hoy' || nombrePeriodo === 'ayer' ? nombrePeriodo : `en ${nombrePeriodo}`}.`} />
               {periodo !== '7d' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setPeriodo('7d')}>Ver los últimos 7 días</Button></div>}
             </div>
           ) : null}
@@ -177,7 +176,7 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo los movimientos…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
           {datos?.libroHasta && <> · el ERP llega hasta {cuandoCorto(datos.libroHasta)}</>}
-          {' · '}<span style={{ fontWeight: weight.medium }}>Queda</span> = lo que quedó de la prenda en ese lugar después del movimiento.
+          {' · '}<span style={{ fontWeight: weight.medium }}>Queda</span> = lo que quedó del producto en ese lugar después del movimiento.
         </div>
       </div>
 

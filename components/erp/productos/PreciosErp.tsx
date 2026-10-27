@@ -149,13 +149,13 @@ export function PreciosErp() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
       <p style={{ margin: 0, color: color.mut }}>Todas las listas de cada producto en una grilla, con su oferta o liquidación y el último cambio. El $ de cada fila carga un precio (de cualquier lista) o el costo; abrí un producto para ver su historial.</p>
-      <Notice tone="neutral">Un precio cargado acá queda en el ERP, con quién y cuándo, y manda sobre la copia de GN. Mientras GN funcione, no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</Notice>
+      <Notice tone="neutral">Un precio cargado acá queda en el ERP, con quién y cuándo, y manda sobre la copia de Gestión Nube. Mientras Gestión Nube funcione, no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {datos?.liquidacionesError && <Notice tone="warning">No se pudieron leer las liquidaciones del monitor: la columna «Oferta o liquidación» muestra sólo las ofertas de Tienda Nube.</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Con liquidación u oferta" valor={(res.liquidacion + res.oferta).toLocaleString('es-AR')} oscuro nota={`${res.liquidacion.toLocaleString('es-AR')} en liquidación · ${res.oferta.toLocaleString('es-AR')} con oferta en Tienda Nube`} />
-        <TileResumen titulo="Cambiados este mes" valor={res.cambiados.toLocaleString('es-AR')} nota={res.cambiados ? 'con un precio distinto del anterior' : 'el historial arranca con la copia de GN y TN'} />
+        <TileResumen titulo="Cambiados este mes" valor={res.cambiados.toLocaleString('es-AR')} nota={res.cambiados ? 'con un precio distinto del anterior' : 'el historial arranca con la copia de Gestión Nube y Tienda Nube'} />
         <TileResumen titulo="Sin precio mayorista" valor={res.sinMayorista.toLocaleString('es-AR')} nota="no se venden por catálogo" />
         <TileResumen titulo="Listas" valor="4" nota="Local · Online · Mayorista · Tienda Nube con oferta" />
       </div>
@@ -163,7 +163,7 @@ export function PreciosErp() {
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS_PRECIO} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un producto" placeholder="Producto, SKU o código" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un producto" placeholder="Producto o código" />
           {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
@@ -181,7 +181,7 @@ export function PreciosErp() {
           activa={filaDeFicha?.id ?? null} onAbrir={(f) => abrir(f)} etiquetaFila={(f) => `el producto ${f.nombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay productos con ese nombre, SKU o código.' : 'No hay productos en esta vista.'} />
+              <EmptyState title={q ? 'No hay productos con ese nombre o código.' : 'No hay productos en esta vista.'} />
               {vista !== 'todos' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todos')}>Ver todos</Button></div>}
             </div>
           ) : null}

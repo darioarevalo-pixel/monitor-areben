@@ -35,7 +35,7 @@ describe('ERP › el armazón propio', () => {
     await montar(['stock', 'ajustes'])
     const links = [...div.querySelectorAll('nav a')].map((a) => [a.textContent, a.getAttribute('href')])
     expect(links).toEqual([
-      ['Inicio', '/erp'], ['Ventas', '/erp/ventas'], ['Caja (POS)', '/erp/caja'], ['Stock', '/erp/stock'],
+      ['Inicio', '/erp'], ['Ventas', '/erp/ventas'], ['Caja', '/erp/caja'], ['Stock', '/erp/stock'],
       ['Productos y precios', '/erp/productos'], ['Clientes y proveedores', '/erp/clientes'], ['Configuración', '/erp/configuracion'],
       ['Volver al monitor', '/inicio'],
     ])
@@ -70,11 +70,11 @@ describe('ERP › el armazón propio', () => {
     expect(dialogo()).toBeNull()
     act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })) })
     expect(dialogo()).toBe('Buscar en el ERP')
-    act(() => { document.querySelector('[aria-label="Buscar venta, prenda o cliente"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    act(() => { document.querySelector('[aria-label="Buscar venta, producto o cliente"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
     expect(dialogo()).toBeNull()
     act(() => { [...div.querySelectorAll('nav button')].find((b) => b.textContent?.includes('Buscar'))?.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     expect(dialogo()).toBe('Buscar en el ERP')
-    act(() => { document.querySelector('[aria-label="Buscar venta, prenda o cliente"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    act(() => { document.querySelector('[aria-label="Buscar venta, producto o cliente"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
     act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })) })
     expect(dialogo()).toBe('Atajos de teclado')
   })

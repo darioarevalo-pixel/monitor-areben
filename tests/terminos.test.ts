@@ -50,6 +50,12 @@ const EXCEPCIONES: Array<{ archivo: string; frase: string; motivo: string }> = [
   { archivo: 'lib/caja/core.core.js', frase: 'Feria - Transferencia', motivo: 'nombre de la cuenta en Gestión Nube' },
   // El nombre de la cuenta de GN, que la pantalla nombra para que un admin la encuentre allá.
   { archivo: 'components/caja/partes.tsx', frase: 'El recargo va sólo sobre los productos en oferta, a la cuenta «Feria TC» de Gestión Nube; el resto del pedido sigue con su regla.', motivo: 'nombre de la cuenta en Gestión Nube' },
+  // Identificadores que arman una clave (`tn:<id>`, `gn/<venta>`): ⛔ se leen en pantalla.
+  { archivo: 'lib/erp/busqueda-global.core.js', frase: 'prenda/', motivo: 'id interno de un resultado' },
+  { archivo: 'lib/erp/facturacion-lista.core.js', frase: 'gn/', motivo: 'id interno de una fila' },
+  { archivo: 'lib/erp/transferencias.core.js', frase: 'libro:', motivo: 'id interno de una fila' },
+  { archivo: 'lib/erp/comparacion.core.js', frase: 'tn:', motivo: 'id interno de una fila' },
+  { archivo: 'lib/erp/ventas-lista.core.js', frase: 'tn:', motivo: 'id interno de una fila' },
 ]
 
 function* archivos(p: string): Generator<string> {

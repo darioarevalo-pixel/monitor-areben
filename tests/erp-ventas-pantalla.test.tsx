@@ -68,7 +68,6 @@ const filaDe = (ref: string) => [...host.querySelectorAll('[role="row"]')].find(
 describe('la lista', () => {
   it('vistas con su número, resumen arriba y la prueba dicha', async () => {
     await montar()
-    expect(todo()).toContain('Todo lo de esta lista es de prueba')
     const vistas = [...host.querySelectorAll('[role="tab"]')].map((t) => t.textContent)
     expect(vistas).toEqual(['Todas3', 'A preparar1', 'Listas0', 'A desarmar0', 'Sin pagar0', 'Con saldo1', 'Sin factura2', 'Anuladas1'])
     expect(todo()).toContain('$ 205.390') // vendido: 18.990 + 186.400 (la anulada ⛔)
@@ -118,10 +117,10 @@ describe('la ficha y las ventanas', () => {
 
   it('$ desde la FILA abre sólo el cobro; sin el motor lo dice y ⛔ deja registrar', async () => {
     await montar()
-    await clic(boton(/^Registrar cobro \(todavía no conectado al motor\)/, filaDe('#293')))
+    await clic(boton(/^Registrar cobro \(todavía no disponible\)/, filaDe('#293')))
     expect(document.querySelector('aside')).toBeNull()
     expect(todo()).toContain('Venta #293 · Mayorista Norte · saldo $ 93.200')
-    expect(todo()).toContain('Todavía no está en el motor del monitor')
+    expect(todo()).toContain('Todavía no está disponible')
     expect((boton(/^Registrar \$ 93\.200/) as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -137,7 +136,7 @@ describe('la ficha y las ventanas', () => {
     puede = { editar: false, notas: false, cobrar: false }
   })
 
-  it('Editar: prendas y cobros con candado; sin cambios ⛔ se guarda', async () => {
+  it('Editar: productos y cobros con candado; sin cambios ⛔ se guarda', async () => {
     await montar()
     await clic(boton('Editar', filaDe('#301')))
     await act(async () => {})

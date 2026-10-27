@@ -350,6 +350,16 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `Validar transferencia` · `Transferencia pendiente` | `Confirmar transferencia` · `Validando` | monitor | `components/caja` · `lib/caja` | Bruno, 12-oct; 13-oct: «validar» se entiende como el paso intermedio |
 | `Ingresos` (la mercadería que entró por una orden de compra) | `Recepciones` · `Recepción` | monitor | `components/erp` · `lib/erp` | Bruno, 20-oct: «en vez de recepciones, pondría ingresos así se entiende» (la pestaña de Stock del ERP; la dirección sigue `/erp/stock/recepciones`) |
 | `Contraentrega` (la forma de pago: el cadete cobra al entregar) | `a cobrar en la entrega` · `Cobrar en la entrega` | monitor | `components/erp` · `lib/erp` | Bruno, 20-oct: «¿contraentrega te parece?» (contrato §20 del motor) |
+| `producto` · `productos` | `prenda` · `prendas` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: el ERP vende productos, no sólo ropa (diseno.md §9) |
+| `variante` · `variantes` | `talle` · `talles` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: la variante puede ser talle, color o medida |
+| `Físico` (lo que hay en el local y el depósito) | `En estantería` · `estantería` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
+| `Reservado` (lo que ya tiene dueño) | `En pedidos` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
+| `movimientos de stock` · `el ERP` | `libro` · `el libro` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: «libro» es jerga de quien lo construyó |
+| `código` | `SKU` · `SKUs` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
+| `Tienda Nube` · `Gestión Nube` · `Mercado Libre` | `TN` · `GN` · `ML` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: sin siglas en pantalla |
+| `Caja` | `Caja (POS)` · `POS` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
+| `Ingresos y ajustes` | `Conteos y ajustes` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
+| (nada: el estado se dice en palabras: «todavía no disponible», «modo de prueba de ARCA») | `motor` · `sesión A` · `espejo` · `homologación` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: jerga de la construcción, ⛔ en pantalla |
 
 ⚠️ **Las excepciones van en el test, con su motivo, y se vacían solas**: un nombre que viene de otro
 sistema y se muestra tal cual (la cuenta «Feria TC» de Gestión Nube) ⛔ es una palabra de la Caja. Si

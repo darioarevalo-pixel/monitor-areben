@@ -172,7 +172,7 @@ export function BusquedaGlobal({ marca, marcas, secciones, onElegir, onCerrar }:
         <Icono nombre="lupa" size={18} />
         <input
           ref={entradaRef} value={escrito} onChange={(e) => { enterPendiente.current = false; setEscrito(e.target.value); setMarcado(0) }} onKeyDown={alTeclear}
-          placeholder="Buscar venta, prenda o cliente" aria-label="Buscar venta, prenda o cliente" autoComplete="off" spellCheck={false}
+          placeholder="Buscar venta, producto o cliente" aria-label="Buscar venta, producto o cliente" autoComplete="off" spellCheck={false}
           style={{ flex: 1, height: 40, border: 0, outline: 'none', background: 'transparent', fontSize: font.lg, color: color.ink, fontFamily: 'inherit' }}
         />
         <Tecla>Esc</Tecla>
@@ -186,7 +186,7 @@ export function BusquedaGlobal({ marca, marcas, secciones, onElegir, onCerrar }:
       <div style={{ overflowY: 'auto', padding: '4px 0 8px' }}>
         {!escrito.trim() && (
           <div style={{ padding: '14px 18px', fontSize: font.md, color: color.mut, lineHeight: 1.6 }}>
-            «296» → la venta · un SKU, el código de barras o parte del nombre → la prenda · DNI/CUIT o el nombre → el cliente.<br />
+            «296» → la venta · un código, el código de barras o parte del nombre → el producto · DNI/CUIT o el nombre → el cliente.<br />
             Las ventas se buscan en este mes y el mes pasado. Un pedido de Tienda Nube o una factura todavía no se buscan por su número.
           </div>
         )}

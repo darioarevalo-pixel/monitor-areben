@@ -29,7 +29,7 @@ type Fila = { producto: string; talle: string; sku: string | null; barcode: stri
 const LINEAS: Array<{ key: TiendaErp; label: string }> = [{ key: 'stunned', label: 'Stunned' }, { key: 'zattia', label: 'Zattia' }, { key: 'bdi', label: 'BDI' }]
 const dep = (d: string) => (NOMBRE_DEPOSITO as Record<string, string>)[d] ?? d
 const baseDe = (l: TiendaErp) => (l === 'bdi' ? 'bdi' : 'zattia')
-const nombreDe = (f: Fila) => (f.nombre ? `${f.nombre}${f.talleNombre ? ` · ${f.talleNombre}` : ''}` : f.sku ?? `Prenda ${f.producto}/${f.talle}`)
+const nombreDe = (f: Fila) => (f.nombre ? `${f.nombre}${f.talleNombre ? ` · ${f.talleNombre}` : ''}` : f.sku ?? `Producto ${f.producto}/${f.talle}`)
 type Nombres = Record<string, { nombre: string | null; talleNombre: string | null }>
 const u = (n: number) => `${n.toLocaleString('es-AR')} u`
 const COLUMNAS = [
@@ -38,7 +38,7 @@ const COLUMNAS = [
   { key: 'ruta', titulo: 'Ruta', ancho: 'minmax(170px, 1fr)' },
   { key: 'quien', titulo: 'Quién', ancho: '110px' },
   { key: 'estado', titulo: 'Paso', ancho: 'minmax(260px, 1.2fr)' },
-  { key: 'unidades', titulo: 'Prendas', ancho: '90px', ordena: true, derecha: true },
+  { key: 'unidades', titulo: 'Productos', ancho: '90px', ordena: true, derecha: true },
   { key: 'faltan', titulo: 'Faltaron', ancho: '90px', ordena: true, derecha: true },
 ]
 
@@ -80,8 +80,8 @@ function Escaneo({ linea, onPrenda }: { linea: TiendaErp; onPrenda: (p: PrendaEn
   }
   return (
     <div>
-      <Field label="Escanear una prenda">
-        <Input ref={caja} autoFocus value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void buscar() }} placeholder="Código de barras, SKU o nombre" />
+      <Field label="Escanear un producto">
+        <Input ref={caja} autoFocus value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void buscar() }} placeholder="Código de barras, código o nombre" />
       </Field>
       {error && <Notice tone="warning" style={{ marginTop: space[2] }}>{error}</Notice>}
       {opciones && (
@@ -97,7 +97,7 @@ function TablaEscaneada({ filas, onCantidad, conEnviada }: { filas: Fila[]; onCa
   if (!filas.length) return <div style={{ marginTop: space[3] }}>Todavía no se escaneó nada.</div>
   return (
     <TableWrap style={{ marginTop: space[3] }}>
-      <THead><Tr><Th>Prenda</Th><Th>SKU</Th>{conEnviada && <Th style={{ textAlign: 'right' }}>Salió</Th>}<Th style={{ textAlign: 'right' }}>{conEnviada ? 'Llegó' : 'Cantidad'}</Th></Tr></THead>
+      <THead><Tr><Th>Producto</Th><Th>código</Th>{conEnviada && <Th style={{ textAlign: 'right' }}>Salió</Th>}<Th style={{ textAlign: 'right' }}>{conEnviada ? 'Llegó' : 'Cantidad'}</Th></Tr></THead>
       <TBody>
         {filas.map((f) => {
           const dif = conEnviada ? f.cantidad - (f.enviada ?? 0) : 0
@@ -231,7 +231,7 @@ export function MoverYRecibir() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard title="Mover y recibir" subtitle="Una transferencia entre el depósito y el local: se escanea lo que sale y, al llegar, lo que llegó. Lo que no llega queda marcado como diferencia.">
         <Tabs items={LINEAS} value={linea} onChange={cambiarLinea} />
-        <Notice tone="neutral" style={{ marginTop: space[3] }}>Mueve sólo el stock del ERP: no toca Gestión Nube ni Tienda Nube. Mientras Zattia siga en GN, sus transferencias se hacen como siempre.</Notice>
+        <Notice tone="neutral" style={{ marginTop: space[3] }}>Mueve sólo el stock del ERP: no toca Gestión Nube ni Tienda Nube. Mientras Zattia siga en Gestión Nube, sus transferencias se hacen como siempre.</Notice>
       </SectionCard>
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
@@ -253,10 +253,10 @@ export function MoverYRecibir() {
       )}
 
       {recibiendo && cuenta && (
-        <SectionCard title={`Recibir T-${recibiendo.doc.numero}`} subtitle={`${dep(recibiendo.doc.desde)} → ${dep(recibiendo.doc.hacia)}. Escaneá cada prenda que llegó: lo que no escanees queda como faltante.`}>
+        <SectionCard title={`Recibir T-${recibiendo.doc.numero}`} subtitle={`${dep(recibiendo.doc.desde)} → ${dep(recibiendo.doc.hacia)}. Escaneá cada producto que llegó: lo que no escanees queda como faltante.`}>
           <Escaneo linea={linea} onPrenda={(p) => setRecibiendo((r) => r && { ...r, lista: sumarEscaneo(r.lista, p) as Fila[] })} />
           <TablaEscaneada conEnviada filas={cuenta.filas as Fila[]} onCantidad={(f, n) => setRecibiendo((r) => r && { ...r, lista: r.lista.map((x) => (x.producto === f.producto && x.talle === f.talle ? { ...x, cantidad: Math.max(0, Math.trunc(n) || 0) } : x)) })} />
-          {cuenta.sobran > 0 && <Notice tone="warning" style={{ marginTop: space[2] }}>Hay prendas que no salieron en esta transferencia: el motor las rechaza. Si llegaron de más, se anotan como ajuste.</Notice>}
+          {cuenta.sobran > 0 && <Notice tone="warning" style={{ marginTop: space[2] }}>Hay productos que no salieron en esta transferencia: el ERP las rechaza. Si llegaron de más, se anotan como ajuste.</Notice>}
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3] }}>
             <Button disabled={trabajando || cuenta.sobran > 0} onClick={recibir}>{cuenta.completa ? 'Recibir completa' : `Recibir con ${-cuenta.faltan} u de menos`}</Button>
             <Button variant="outline" onClick={() => setRecibiendo(null)}>Volver</Button>
@@ -267,13 +267,13 @@ export function MoverYRecibir() {
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="En camino" valor={u(enCaminoU)} oscuro nota={`${conteo.en_camino ?? 0} sin recibir`} />
         <TileResumen titulo="Sin enviar" valor={(conteo.sin_enviar ?? 0).toLocaleString('es-AR')} nota="quedaron a medias: no salió nada" />
-        <TileResumen titulo="Faltantes recibidos" valor={u(faltantesU)} nota="esperan un ajuste en Conteos y ajustes" />
+        <TileResumen titulo="Faltantes recibidos" valor={u(faltantesU)} nota="esperan un ajuste en Ingresos y ajustes" />
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS_DOC} valor={vista} conteo={conteo} onCambio={setVista} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las transferencias" placeholder="Nº, prenda o quién la hizo" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las transferencias" placeholder="Nº, producto o quién la hizo" />
           <InterruptorDensidad valor={densidad} onCambio={setDensidad} />
           <Button variant="outline" disabled={!filas.length} onClick={() => bajarCsv(filas, linea)}>Exportar</Button>
           <Button variant="outline" onClick={() => setVuelta((n) => n + 1)}>Actualizar</Button>
@@ -283,7 +283,7 @@ export function MoverYRecibir() {
           activa={fichaId} onAbrir={(d) => setFichaId(d.id)} etiquetaFila={(d) => `la transferencia T-${d.numero} de ${dep(d.desde)} a ${dep(d.hacia)}`}
           vacio={docs ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay transferencias con ese número, prenda o persona.' : vista === 'en_camino' ? 'No hay nada en camino.' : 'No hay transferencias en esta vista.'} />
+              <EmptyState title={q ? 'No hay transferencias con ese número, producto o persona.' : vista === 'en_camino' ? 'No hay nada en camino.' : 'No hay transferencias en esta vista.'} />
             </div>
           ) : <div style={{ padding: space[6] }}><EmptyState title="Leyendo…" /></div>}
         />
@@ -309,21 +309,21 @@ function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onCancelar }: {
         <div style={{ fontSize: 20, fontWeight: weight.bold, color: color.ink }}>{dep(d.desde)} → {dep(d.hacia)}</div>
         <BarraPasos paso={p.paso} fin={p.fin} texto={p.texto} />
       </div>
-      {falta > 0 && <Notice tone="warning">Faltaron {u(falta)} al recibir. La diferencia queda marcada y no se ajusta sola: la cierra un ajuste en Conteos y ajustes.</Notice>}
+      {falta > 0 && <Notice tone="warning">Faltaron {u(falta)} al recibir. La diferencia queda marcada y no se ajusta sola: la cierra un ajuste en Ingresos y ajustes.</Notice>}
       <DatosFicha>
         <DatoFicha titulo="Creó">{d.creada_por}</DatoFicha>
         {d.enviada_en && <DatoFicha titulo="Salió">{cuandoCorto(d.enviada_en)} · {d.enviada_por}</DatoFicha>}
         {d.recibida_en && <DatoFicha titulo="Llegó">{cuandoCorto(d.recibida_en)} · {d.recibida_por}</DatoFicha>}
-        <DatoFicha titulo="Prendas que salieron">{u(unidadesEnviadas(d))}</DatoFicha>
-        {recibida && <DatoFicha titulo="Prendas que llegaron">{u(unidadesRecibidas(d))}</DatoFicha>}
+        <DatoFicha titulo="Productos que salieron">{u(unidadesEnviadas(d))}</DatoFicha>
+        {recibida && <DatoFicha titulo="Productos que llegaron">{u(unidadesRecibidas(d))}</DatoFicha>}
         {d.nota && <DatoFicha titulo="Nota">{d.nota}</DatoFicha>}
       </DatosFicha>
       <div>
-        <div style={{ fontWeight: weight.semibold, color: color.ink, marginBottom: 6 }}>Prendas ({renglones.length})</div>
+        <div style={{ fontWeight: weight.semibold, color: color.ink, marginBottom: 6 }}>Productos ({renglones.length})</div>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base }}>
           <thead>
             <tr>
-              <th style={{ ...th, textAlign: 'left' }}>Prenda</th>
+              <th style={{ ...th, textAlign: 'left' }}>Producto</th>
               {conPedida && <th style={th}>Pedida</th>}
               {conPedida && <th style={th}>Armada</th>}
               <th style={th}>Salió</th>

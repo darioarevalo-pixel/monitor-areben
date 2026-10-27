@@ -79,16 +79,16 @@ describe('la lista de productos', () => {
     await montar()
     expect(boton(/^Con stock/).textContent).toContain('1')
     expect(boton(/^Sin costo/).textContent).toContain('1')
-    expect(boton(/^No están en TN/).textContent).toContain('1')
+    expect(boton(/^No están en Tienda Nube/).textContent).toContain('1')
     expect(todo()).toMatch(/Productos22 variantes/)
     expect(todo()).toContain('4 u')
     expect(filaDe('TOP SAHARA').textContent).toContain('Publicado')
-    expect(filaDe('CINTO CALYPSO').textContent).toContain('No está en TN')
+    expect(filaDe('CINTO CALYPSO').textContent).toContain('No está en Tienda Nube')
     await clic(boton(/^Sin código de barras/))
     expect(host.querySelector('[role="table"]')!.textContent).not.toContain('TOP SAHARA')
   })
 
-  it('la fila abre la ficha al costado: listas con GN y TN, variantes con su stock y el historial', async () => {
+  it('la fila abre la ficha al costado: listas con Gestión Nube y Tienda Nube, variantes con su stock y el historial', async () => {
     await montar()
     await clic(filaDe('TOP SAHARA'))
     const f = ficha()!

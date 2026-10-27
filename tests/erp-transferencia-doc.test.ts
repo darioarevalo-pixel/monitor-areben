@@ -18,15 +18,15 @@ describe('leerAccion', () => {
     expect(r.entrada.origen).toBe('reposicion')
     expect(r.entrada.origen_ref).toBe('a1:t1')
   })
-  it('línea, depósitos, id y prendas mal ⇒ error', () => {
+  it('línea, depósitos, id y productos mal ⇒ error', () => {
     expect((leer({ accion: 'transferencia-crear', linea: 'xx', desde: 'a', hacia: 'b' })).error).toBe('Línea inválida')
     expect((leer({ accion: 'transferencia-crear', linea: 'bdi', desde: 'a' })).error).toMatch(/de dónde sale/)
     expect((leer({ accion: 'transferencia-enviar', linea: 'bdi', transferenciaId: 'no' })).error).toBe('Falta la transferencia')
-    expect((leer({ accion: 'transferencia-armar', linea: 'bdi', transferenciaId: ID, renglones: 'x' })).error).toMatch(/mal armadas/)
-    expect((leer({ accion: 'transferencia-armar', linea: 'bdi', transferenciaId: ID, renglones: [null] })).error).toMatch(/mal armadas/)
+    expect((leer({ accion: 'transferencia-armar', linea: 'bdi', transferenciaId: ID, renglones: 'x' })).error).toMatch(/mal armados/)
+    expect((leer({ accion: 'transferencia-armar', linea: 'bdi', transferenciaId: ID, renglones: [null] })).error).toMatch(/mal armados/)
     expect((leer({ accion: 'otra', linea: 'bdi', transferenciaId: ID })).error).toBe('Acción desconocida')
   })
-  it('enviar acepta el id de GN; cancelar lleva el motivo', () => {
+  it('enviar acepta el id de Gestión Nube; cancelar lleva el motivo', () => {
     expect((leer({ accion: 'transferencia-enviar', linea: 'bdi', transferenciaId: ID, gn_transfer_id: 8139 })).entrada).toEqual({ gn_transfer_id: '8139' })
     expect((leer({ accion: 'transferencia-cancelar', linea: 'bdi', transferenciaId: ID, motivo: 'no hace falta' })).entrada).toEqual({ motivo: 'no hace falta' })
   })

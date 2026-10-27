@@ -57,7 +57,7 @@ const todo = () => document.body.textContent ?? ''
 const boton = (t: string | RegExp, en: ParentNode = document.body) => [...en.querySelectorAll('button')].find((b) => (typeof t === 'string' ? (b.textContent?.trim() === t || b.getAttribute('aria-label') === t) : t.test(b.textContent ?? '') || t.test(b.getAttribute('aria-label') ?? '')))!
 const clic = async (el: Element) => { await act(async () => { (el as HTMLElement).click() }); await act(async () => {}) }
 const filaDe = (t: string) => [...host.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes(t))!
-const fichaAbierta = () => document.querySelector('aside[aria-label^="Ficha de la prenda"]')
+const fichaAbierta = () => document.querySelector('aside[aria-label^="Ficha del producto"]')
 
 describe('la lista de stock', () => {
   it('vistas con su número, el disponible arriba y lo apartado por pedidos', async () => {
@@ -73,7 +73,7 @@ describe('la lista de stock', () => {
     expect(host.querySelector('[role="table"]')!.textContent).toContain('BUZO ROMA')
   })
 
-  it('el buscador encuentra por SKU', async () => {
+  it('el buscador encuentra por código', async () => {
     await montar()
     const input = host.querySelector('input[aria-label="Buscar en el stock"]') as HTMLInputElement
     await act(async () => {
@@ -84,26 +84,26 @@ describe('la lista de stock', () => {
     expect(host.querySelector('[role="table"]')!.textContent).toContain('BUZO ROMA')
   })
 
-  it('la fila abre la ficha al costado: disponible, por depósito contra GN e historial con lo que quedó', async () => {
+  it('la fila abre la ficha al costado: disponible, por depósito contra Gestión Nube e historial con lo que quedó', async () => {
     await montar()
     await clic(filaDe('TOP SAHARA').querySelector('[role="cell"]:last-child')!)
     const f = fichaAbierta()!
     expect(f).toBeTruthy()
     expect(f.textContent).toContain('Disponible6')
-    expect(f.textContent).toContain('GN +1')
+    expect(f.textContent).toContain('Gestión Nube +1')
     expect(f.textContent).toContain('Venta · -1')
     expect(f.textContent).toContain('Local · quedan 2 · Caja')
     expect(f.textContent).not.toContain('venta:296')
   })
 
-  it('«Ajustar» de la fila lleva la prenda a «Nuevo ajuste»', async () => {
+  it('«Ajustar» de la fila lleva el producto a «Nuevo ajuste»', async () => {
     await montar()
     await clic(boton('Ajustar', filaDe('BUZO ROMA')))
     expect(ajustar).toHaveBeenCalledWith(expect.objectContaining({ linea: 'zattia', producto: '2', talle: '1', sku: 'BUZ-0042-GR-L' }))
     expect(fichaAbierta()).toBeNull()
   })
 
-  it('la prenda pedida desde Diferencias abre su ficha sola, con lo apartado de su fila', async () => {
+  it('el producto pedida desde Diferencias abre su ficha sola, con lo apartado de su fila', async () => {
     await montar({ marca: 'zattia', producto: '1', talle: '1' })
     expect(fichaAbierta()!.textContent).toContain('1 sin pagar')
   })
@@ -112,10 +112,10 @@ describe('la lista de stock', () => {
     await montar()
     await clic(boton(/^Columnas · 8 de 11/))
     await clic(document.getElementById('col-est')!)
-    expect(host.querySelector('[role="row"]')!.textContent).not.toContain('En estantería')
+    expect(host.querySelector('[role="row"]')!.textContent).not.toContain('Físico')
     act(() => root?.unmount()); root = null; host.remove()
     await montar()
-    expect(host.querySelector('[role="row"]')!.textContent).not.toContain('En estantería')
+    expect(host.querySelector('[role="row"]')!.textContent).not.toContain('Físico')
     expect(boton(/^Columnas · 7 de 11/)).toBeTruthy()
   })
 })

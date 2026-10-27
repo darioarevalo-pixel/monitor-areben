@@ -120,8 +120,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   const filas: FilaVentaLista[] = useMemo(() => ordenar(filtrar(base, { vista }), orden), [base, vista, orden])
   const res = useMemo(() => resumen(filtrar(base, { vista })), [base, vista])
   const elegidas = filas.filter((f) => seleccion.has(f.id))
-  const vendedores = useMemo(() => [...new Set((datos?.filas ?? []).map((f) => f.vendio).filter((x) => x && x !== '—' && x !== 'Tienda Nube' && x !== 'Desde GN'))].sort(), [datos])
-  const todasPrueba = !!datos?.filas.length && datos.filas.every((f) => f.kind === 'pedido' || f.prueba)
+  const vendedores = useMemo(() => [...new Set((datos?.filas ?? []).map((f) => f.vendio).filter((x) => x && x !== '—' && x !== 'Tienda Nube' && x !== 'Desde Gestión Nube'))].sort(), [datos])
   const nombrePeriodo = PERIODOS.find(([k]) => k === periodo)?.[1] ?? ''
 
   const irACobranzas = () => window.open('/cobranzas', '_blank', 'noopener')
@@ -140,9 +139,9 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     if (k === 'h') return <span style={{ color: color.mut }}>{cuandoCorto(f.pedidoEn)}</span>
     if (k === 'c') {
       return (
-        <span title={`${f.cliente}${f.clienteDe === 'gn' ? ' · el nombre sale de GN (la venta todavía no tiene cliente del ERP)' : f.clienteDe === 'falta' ? (f.kind === 'pedido' ? ' · un pedido sin pagar todavía no llegó a GN: el nombre aparece cuando se cobra' : ' · el nombre llega con el espejo de GN, al otro día') : ''}`}>
+        <span title={`${f.cliente}${f.clienteDe === 'gn' ? ' · el nombre sale de Gestión Nube (la venta todavía no tiene cliente del ERP)' : f.clienteDe === 'falta' ? (f.kind === 'pedido' ? ' · un pedido sin pagar todavía no llegó a Gestión Nube: el nombre aparece cuando se cobra' : ' · el nombre llega de Gestión Nube, al otro día') : ''}`}>
           <span style={{ color: f.clienteDe === 'falta' ? color.mut2 : color.ink, fontStyle: f.clienteDe === 'falta' ? 'italic' : undefined }}>{f.cliente}</span>
-          {f.clienteDe === 'gn' && <span style={{ marginLeft: 6, fontSize: font.xs, color: color.mut2 }}>de GN</span>}
+          {f.clienteDe === 'gn' && <span style={{ marginLeft: 6, fontSize: font.xs, color: color.mut2 }}>de Gestión Nube</span>}
         </span>
       )
     }
@@ -168,7 +167,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     }
     if (k === 'p') return <ChipEstado mapa={COBRO} k={f.cobroKey} />
     if (k === 'total') return <b>{plata(f.total)}</b>
-    if (k === 'fac') return f.factura ? <span style={{ color: color.ink2 }}>{f.factura.numero}{f.factura.de === 'gn' && <span style={{ marginLeft: 4, fontSize: font.xs, color: color.mut2 }}>GN</span>}</span> : <span style={{ color: color.mut2 }}>—</span>
+    if (k === 'fac') return f.factura ? <span style={{ color: color.ink2 }}>{f.factura.numero}{f.factura.de === 'gn' && <span style={{ marginLeft: 4, fontSize: font.xs, color: color.mut2 }}>Gestión Nube</span>}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'ven') return <span style={{ color: color.ink2 }}>{f.vendio}</span>
     if (k === 'nota') return f.nota ? <span style={{ color: 'var(--mo-warning-ink)' }} title={`Nota · ${f.nota.de}`}>{f.nota.texto}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'linea') return <span style={{ color: color.ink2 }}>{{ bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }[f.linea] ?? f.linea}</span>
@@ -210,7 +209,6 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
       </div>
       {cargarAbierta && <CargarVenta marca={marca} onCerrar={() => setCargarAbierta(false)} onCargada={(t) => { setCargarAbierta(false); setAviso(t); cargar() }} />}
 
-      {todasPrueba && <Notice tone="warning">Todo lo de esta lista es <b>de prueba</b>: corre en paralelo con Gestión Nube, que es el que sirve hoy (la factura y el stock siguen saliendo de GN).</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {aviso && <Notice tone="success" onClose={() => setAviso(null)}>{aviso}</Notice>}
 
@@ -218,13 +216,13 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
         <TileResumen titulo={`Vendido · ${nombrePeriodo.toLowerCase()}`} valor={plata(res.vendido)} oscuro />
         <TileResumen titulo="Ventas" valor={res.ventas.toLocaleString('es-AR')} />
         <TileResumen titulo="Ticket promedio" valor={plata(res.ticket)} />
-        <TileResumen titulo="Por cobrar" valor={plata(res.porCobrar)} nota={res.sinPagar ? `y ${plata(res.sinPagar)} en pedidos sin pagar` : undefined} />
+        <TileResumen titulo="Por cobrar" valor={plata(res.porCobrar)} nota={res.sinPagar ? `y ${plata(res.sinPagar)} reservado sin pagar` : undefined} />
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las ventas" placeholder="Número, pedido de TN, cliente o nota" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las ventas" placeholder="Número, pedido de Tienda Nube, cliente o nota" />
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => { setFicha(null); setPeriodo(e.target.value) }}>{PERIODOS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
           <Select aria-label="Origen" style={ANCHO_SELECT} value={origen} onChange={(e) => setOrigen(e.target.value)}>{ORIGENES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
           {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}

@@ -56,7 +56,7 @@ const hoyAR = () => diaAR(new Date().toISOString())
 const COLUMNAS_REGLAS = [
   { key: 'regla', titulo: 'Regla', ancho: 'minmax(200px, 1.4fr)' },
   { key: 'hace', titulo: 'Qué hace', ancho: 'minmax(200px, 1.4fr)' },
-  { key: 'prendas', titulo: 'En qué prendas', ancho: 'minmax(150px, 1fr)' },
+  { key: 'prendas', titulo: 'En qué productos', ancho: 'minmax(150px, 1fr)' },
   { key: 'campania', titulo: 'Campaña', ancho: '130px' },
   { key: 'canal', titulo: 'Canal', ancho: '76px' },
   { key: 'cuando', titulo: 'Cuándo', ancho: '140px' },
@@ -78,7 +78,7 @@ function vigenciaEnTexto(r: ReglaComercial) {
 }
 
 function alcanceEnTexto(r: ReglaComercial) {
-  if (r.alcance === 'todo') return r.campania ? 'Las prendas de la campaña' : 'Toda la tienda'
+  if (r.alcance === 'todo') return r.campania ? 'Los productos de la campaña' : 'Toda la tienda'
   if (r.alcance === 'categorias') return r.alcance_ids.join(', ')
   return `${r.alcance_ids.length} ${r.alcance === 'productos' ? 'producto' : 'variante'}${r.alcance_ids.length === 1 ? '' : 's'}`
 }
@@ -249,8 +249,8 @@ export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void
       <TiraConfiguracion activa="reglas" ir={ir} />
       <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <p style={{ margin: 0, flex: '1 1 320px', color: color.mut }}>
-          Cada fin comercial es una regla: cuánto descuenta cada forma de pago, en qué prendas y cuándo. En una campaña, sus reglas
-          reemplazan a las de temporada en sus prendas; entre dos reglas gana la mejor para la clienta.
+          Cada fin comercial es una regla: cuánto descuenta cada forma de pago, en qué productos y cuándo. En una campaña, sus reglas
+          reemplazan a las de temporada en sus productos; entre dos reglas gana la mejor para la clienta.
         </p>
         <Button onClick={() => setEditando({ ...VACIA, marca: deLinea })} disabled={!datos || trabajando}>Agregar regla</Button>
       </div>
@@ -289,7 +289,7 @@ export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void
       {(datos?.caja.avisos ?? []).map((a) => <Notice key={a} tone="neutral">{a}</Notice>)}
       {datos && lineaSinReglas && (
         <Notice tone="neutral">
-          {nombreLinea} no tiene reglas propias: sus prendas se cobran con las de {MARCAS.find((m) => m.key === marca)?.label}. Con la primera regla prendida de {nombreLinea}, sus prendas se cobran sólo con las de {nombreLinea}.
+          {nombreLinea} no tiene reglas propias: sus productos se cobran con las de {MARCAS.find((m) => m.key === marca)?.label}. Con la primera regla prendida de {nombreLinea}, sus productos se cobran sólo con las de {nombreLinea}.
         </Notice>
       )}
 
@@ -380,7 +380,7 @@ function FormRegla({ inicial, datos, categorias, marca, trabajando, onCancelar, 
             <option value="local">Local</option><option value="online">Online</option>
           </Select>
         </Field>
-        <Field label="Juego" hint="En una campaña, la regla vale sólo en sus prendas y mientras tenga reglas">
+        <Field label="Juego" hint="En una campaña, la regla vale sólo en sus productos y mientras tenga reglas">
           <Select value={r.campania ?? TEMPORADA} onChange={(e) => cambiar({ campania: e.target.value || null })}>
             <option value={TEMPORADA}>Temporada (siempre)</option>
             {datos.campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}{c.feria ? ' (en oferta en la Caja)' : ''}</option>)}
@@ -392,7 +392,7 @@ function FormRegla({ inicial, datos, categorias, marca, trabajando, onCancelar, 
           </Select>
         </Field>
         {conPct && <Field label="Porcentaje" required><Input inputMode="decimal" value={pct} onChange={(e) => setPct(e.target.value)} placeholder="15" /></Field>}
-        <Field label="En qué prendas">
+        <Field label="En qué productos">
           <Select value={r.alcance} onChange={(e) => cambiar({ alcance: e.target.value as ReglaComercial['alcance'], alcance_ids: [] })}>
             <option value="todo">{r.campania ? 'Todas las de la campaña' : 'Toda la tienda'}</option>
             <option value="categorias">Algunas categorías</option>
@@ -406,7 +406,7 @@ function FormRegla({ inicial, datos, categorias, marca, trabajando, onCancelar, 
             </select>
           </Field>
         )}
-        {r.alcance === 'productos' && <Field label="Productos" hint="Los números de producto de GN, separados por coma"><Input value={productos} onChange={(e) => setProductos(e.target.value)} placeholder="571449, 1131616" /></Field>}
+        {r.alcance === 'productos' && <Field label="Productos" hint="Los números de producto de Gestión Nube, separados por coma"><Input value={productos} onChange={(e) => setProductos(e.target.value)} placeholder="571449, 1131616" /></Field>}
         <Field label="Desde"><Input type="date" value={diaAR(r.desde)} onChange={(e) => cambiar({ desde: aIso(e.target.value) })} /></Field>
         <Field label="Hasta" hint="El día entero"><Input type="date" value={diaAR(r.hasta)} onChange={(e) => cambiar({ hasta: aIso(e.target.value) })} /></Field>
         {tarjeta && <Field label="Banco" hint="Sólo con tarjeta de ese banco"><Input value={r.banco ?? ''} onChange={(e) => cambiar({ banco: e.target.value || null })} placeholder="Payway" /></Field>}
@@ -506,9 +506,9 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
   return (
     <SectionCard title="Simulador" subtitle="Armá una venta y mirá cuánto se cobra con cada forma de pago y qué regla lo decide. El precio de campaña lo pone el servidor.">
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <Field label="Buscar prenda" hint="SKU, código o nombre"><Input value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && texto.trim()) void buscar() }} /></Field>
+        <Field label="Buscar producto" hint="código o nombre"><Input value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && texto.trim()) void buscar() }} /></Field>
         <Button onClick={buscar} disabled={!texto.trim() || trabajando}>Buscar</Button>
-        <Button variant="outline" onClick={() => agregar({ nombre: 'Prenda suelta' })}>Agregar prenda suelta</Button>
+        <Button variant="outline" onClick={() => agregar({ nombre: 'Producto suelto' })}>Agregar producto suelto</Button>
       </div>
       {encontradas && (
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
@@ -519,7 +519,7 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
       {prendas.length > 0 && (
         <TableWrap style={{ marginTop: space[3] }}>
           <table>
-            <THead><Tr><Th>Prenda</Th>{conLineas && <Th>Línea</Th>}<Th>Precio</Th><Th>Cantidad</Th><Th>Categorías</Th><Th>Campaña (prenda suelta)</Th><Th /></Tr></THead>
+            <THead><Tr><Th>Producto</Th>{conLineas && <Th>Línea</Th>}<Th>Precio</Th><Th>Cantidad</Th><Th>Categorías</Th><Th>Campaña (producto suelto)</Th><Th /></Tr></THead>
             <TBody>
               {prendas.map((p) => (
                 <Tr key={p.clave}>
@@ -536,7 +536,7 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
                   )}
                   <Td><Input inputMode="decimal" value={p.precio} onChange={(e) => cambiar(p.clave, { precio: e.target.value })} style={{ width: 120 }} /></Td>
                   <Td><Input inputMode="numeric" value={String(p.cantidad)} onChange={(e) => cambiar(p.clave, { cantidad: Number(e.target.value) || 1 })} style={{ width: 64 }} /></Td>
-                  <Td>{p.producto ? (p.categorias?.length ? p.categorias.join(', ') : <span style={{ opacity: 0.7 }}>Sin categoría en TN</span>) : (
+                  <Td>{p.producto ? (p.categorias?.length ? p.categorias.join(', ') : <span style={{ opacity: 0.7 }}>Sin categoría en Tienda Nube</span>) : (
                     <Input value={(p.categorias ?? []).join(', ')} onChange={(e) => cambiar(p.clave, { categorias: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} placeholder="JEANS" />
                   )}</Td>
                   <Td>

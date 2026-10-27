@@ -135,7 +135,7 @@ export function CambioCaja() {
       setDevuelve(otra)
       setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se puede devolver esa prenda.')
+      setError(e instanceof Error ? e.message : 'No se puede devolver ese producto.')
     }
   }
 
@@ -143,11 +143,11 @@ export function CambioCaja() {
   const escanearDevuelta = () => correr(async () => {
     const r = await buscarProducto(codigoDev.trim())
     setCodigoDev('')
-    if (!('variante' in r)) throw new Error('Ese código es de varias prendas: marcá la devuelta en la lista.')
+    if (!('variante' in r)) throw new Error('Ese código es de varias productos: marcá la devuelta en la lista.')
     const l = vendidas.find((x) => Number(x.producto) === r.variante.product_id && Number(x.talle) === r.variante.size_id)
-    if (!l) throw new Error(`${r.variante.product_name} talle ${r.variante.size_name} no está en esa venta: no se puede devolver con este ticket.`)
+    if (!l) throw new Error(`${r.variante.product_name} (${r.variante.size_name}) no está en esa venta: no se puede devolver con este ticket.`)
     sumarDevuelta(l.id, (devuelve[l.id] || 0) + 1)
-  }, 'No se pudo buscar la prenda.')
+  }, 'No se pudo buscar el producto.')
 
   function sumarNueva(v: Variante) {
     setCandidatos(null)
@@ -163,13 +163,13 @@ export function CambioCaja() {
     setCodigoNueva('')
     if ('variante' in r) sumarNueva(r.variante)
     else if (r.candidatos.length) setCandidatos(r.candidatos)
-    else throw new Error('No se encontró la prenda.')
-  }, 'No se pudo buscar la prenda.')
+    else throw new Error('No se encontró el producto.')
+  }, 'No se pudo buscar el producto.')
 
   const elegir = (c: Candidato) => correr(async () => {
     const r = await elegirVariante(c)
     if ('variante' in r) sumarNueva(r.variante)
-  }, 'No se pudo traer la prenda.')
+  }, 'No se pudo traer el producto.')
 
   // Lo que se lleva, con el importe de la Caja (`renglones`); sin precio todavía ⛔ se puede cobrar.
   const sinPrecio = nuevas.some((n) => !(Number(n.precio) > 0))
@@ -249,7 +249,7 @@ export function CambioCaja() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard title={`Cambio · ${NOMBRE_MARCA[store] ?? store}`} subtitle="Buscá la venta por número o cliente, marcá lo que devuelve y escaneá lo que se lleva.">
-        <Notice tone="warning">De prueba hasta que se apague GN: no mueve el stock ni sale a GN. El cambio de verdad se sigue haciendo en GN.</Notice>
+        <Notice tone="warning">De prueba hasta que se apague Gestión Nube: no mueve el stock ni sale a Gestión Nube. El cambio de verdad se sigue haciendo en Gestión Nube.</Notice>
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="#123, nombre, DNI o mail" />
@@ -295,12 +295,12 @@ export function CambioCaja() {
             <div style={{ display: 'flex', gap: space[2], marginBottom: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <Button variant="outline" onClick={() => { setFicha(null); empezarDeNuevo() }}>Volver a las ventas</Button>
               <form onSubmit={(e) => { e.preventDefault(); if (codigoDev.trim()) void escanearDevuelta() }} style={{ display: 'flex', gap: space[2], alignItems: 'flex-end' }}>
-                <Field label="Escanear lo que devuelve"><Input value={codigoDev} onChange={(e) => setCodigoDev(e.target.value)} placeholder="Código o SKU" /></Field>
+                <Field label="Escanear lo que devuelve"><Input value={codigoDev} onChange={(e) => setCodigoDev(e.target.value)} placeholder="Código" /></Field>
               </form>
             </div>
             <TableWrap>
               <table>
-                <THead><Tr><Th>Prenda</Th><Th>Talle</Th><Th style={{ textAlign: 'right' }}>Vendidas</Th><Th style={{ textAlign: 'right' }}>Pagó c/u</Th><Th>Devuelve</Th></Tr></THead>
+                <THead><Tr><Th>Producto</Th><Th>Variante</Th><Th style={{ textAlign: 'right' }}>Vendidas</Th><Th style={{ textAlign: 'right' }}>Pagó c/u</Th><Th>Devuelve</Th></Tr></THead>
                 <TBody>
                   {vendidas.map((l) => {
                     const queda = l.cantidad - l.cambiado
@@ -310,7 +310,7 @@ export function CambioCaja() {
                         <Td>{l.talleNombre ?? l.talle}</Td>
                         <Td style={{ textAlign: 'right' }}>{l.cantidad}</Td>
                         <Td style={{ textAlign: 'right' }}><MoneyText value={Math.round((l.importe / l.cantidad) * 100) / 100} /></Td>
-                        <Td>{queda > 0 ? <PasoCantidad valor={devuelve[l.id] || 0} onCambio={(n) => sumarDevuelta(l.id, n)} etiqueta="prenda devuelta" etiquetaPlural="prendas devueltas" /> : '—'}</Td>
+                        <Td>{queda > 0 ? <PasoCantidad valor={devuelve[l.id] || 0} onCambio={(n) => sumarDevuelta(l.id, n)} etiqueta="producto devuelto" etiquetaPlural="productos devueltos" /> : '—'}</Td>
                       </Tr>
                     )
                   })}
@@ -321,7 +321,7 @@ export function CambioCaja() {
 
           <SectionCard title="Se lleva" subtitle="Con el precio de la etiqueta; se puede cambiar, como en la Caja.">
             <form onSubmit={(e) => { e.preventDefault(); if (codigoNueva.trim()) void escanearNueva() }} style={{ display: 'flex', gap: space[2], marginBottom: space[3], alignItems: 'flex-end' }}>
-              <Field label="Escanear lo que se lleva"><Input value={codigoNueva} onChange={(e) => setCodigoNueva(e.target.value)} placeholder="Código, SKU o nombre" /></Field>
+              <Field label="Escanear lo que se lleva"><Input value={codigoNueva} onChange={(e) => setCodigoNueva(e.target.value)} placeholder="Código o nombre" /></Field>
             </form>
             {candidatos && (
               <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginBottom: space[3] }}>
@@ -330,10 +330,10 @@ export function CambioCaja() {
                 ))}
               </div>
             )}
-            {!nuevas.length ? <EmptyState title="Sin prendas nuevas: si no se lleva nada, la diferencia queda a favor." /> : (
+            {!nuevas.length ? <EmptyState title="Sin productos nuevos: si no se lleva nada, la diferencia queda a favor." /> : (
               <TableWrap>
                 <table>
-                  <THead><Tr><Th>Prenda</Th><Th>Talle</Th><Th>Cantidad</Th><Th>Precio</Th></Tr></THead>
+                  <THead><Tr><Th>Producto</Th><Th>Variante</Th><Th>Cantidad</Th><Th>Precio</Th></Tr></THead>
                   <TBody>
                     {nuevas.map((n, i) => (
                       <Tr key={`${n.variante.product_id}/${n.variante.size_id}`}>
@@ -392,7 +392,7 @@ export function CambioCaja() {
               </div>
             )}
             {faltaClienta && <Notice tone="action">El saldo a favor va a nombre de la clienta: cargá su DNI y su nombre.</Notice>}
-            {sinPrecio && <Notice tone="warning">Falta el precio de una prenda nueva.</Notice>}
+            {sinPrecio && <Notice tone="warning">Falta el precio de un producto nuevo.</Notice>}
             {errorCobro && <Notice tone="warning">{errorCobro}</Notice>}
             {espera && (
               <div style={{ marginTop: space[3], display: 'flex', flexDirection: 'column', gap: space[2] }}>

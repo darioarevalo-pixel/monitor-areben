@@ -54,6 +54,6 @@ describe('la pantalla', () => {
     expect(fila('Ventas a preparar').getAttribute('href')).toBe('/erp/ventas/ventas')
     expect(fila('Pedidos sin pagar').textContent).toMatch(/1$/)
     expect(fila('Productos sin costo').textContent).toMatch(/1$/)
-    expect(fila('Prendas en negativo').textContent).toContain('no se pudo')
+    expect(fila('Productos en negativo').textContent).toContain('no se pudo')
   })
 })

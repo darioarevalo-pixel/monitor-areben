@@ -42,7 +42,7 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
     mensaje: (
       <div>
         {filas.map(([k, v]) => <ConfirmDetalle key={k} label={k} valor={v} />)}
-        <p style={{ marginTop: space[3] }}>Queda anotado quién lo cambió, con el antes y el después. Si el producto venía de Gestión Nube, desde ahora vale lo que cargues acá: la copia de GN no lo vuelve a pisar.</p>
+        <p style={{ marginTop: space[3] }}>Queda anotado quién lo cambió, con el antes y el después. Si el producto venía de Gestión Nube, desde ahora vale lo que cargues acá: la copia de Gestión Nube no lo vuelve a pisar.</p>
       </div>
     ),
     ok: 'Guardar',
@@ -54,7 +54,7 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
     if (nombre.trim() !== fila.nombre) cambios.nombre = nombre.trim()
     if ((vacioANull(categoria) ?? null) !== (fila.categoria ?? null)) cambios.categoria = vacioANull(categoria)
     if (!Object.keys(cambios).length) { onError('No cambiaste nada del producto.'); return }
-    if (cambios.nombre === '') { onError('El nombre no puede quedar vacío.'); return }
+    if (cambios.nombre === '') { onError('El nombre no puede quedar vacía.'); return }
     const filas: [string, string][] = []
     if ('nombre' in cambios) filas.push(['Nombre', `${fila.nombre} → ${cambios.nombre}`])
     if ('categoria' in cambios) filas.push(['Categoría', `${fila.categoria ?? 'Sin categoría'} → ${cambios.categoria ?? 'Sin categoría'}`])
@@ -72,10 +72,10 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
     if (vacioANull(e.sku) !== (v.sku ?? null)) cambios.sku = vacioANull(e.sku)
     if (vacioANull(e.barcode) !== (v.barcode ?? null)) cambios.barcode = vacioANull(e.barcode)
     if (!Object.keys(cambios).length) { onError('No cambiaste nada de esa variante.'); return }
-    if (cambios.talle === '') { onError('El talle no puede quedar vacío.'); return }
+    if (cambios.talle === '') { onError('La variante no puede quedar vacía.'); return }
     const filas: [string, string][] = []
-    if ('talle' in cambios) filas.push(['Talle', `${nombreActual} → ${cambios.talle}`])
-    if ('sku' in cambios) filas.push(['SKU', `${v.sku ?? 'sin SKU'} → ${cambios.sku ?? 'sin SKU'}`])
+    if ('talle' in cambios) filas.push(['Variante', `${nombreActual} → ${cambios.talle}`])
+    if ('sku' in cambios) filas.push(['código', `${v.sku ?? 'sin código'} → ${cambios.sku ?? 'sin código'}`])
     if ('barcode' in cambios) filas.push(['Código de barras', `${v.barcode ?? 'sin código'} → ${cambios.barcode ?? 'sin código'}`])
     if (!(await confirmarCambio(`Editar la variante ${nombreActual}`, filas))) return
     const r = await editarVarianteErp(marca, fila.producto, talle, cambios)
@@ -83,8 +83,8 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
   }, 'No se pudo editar la variante.')
 
   const agregar = () => correr(async () => {
-    if (!nueva || !nueva.talle.trim()) { onError('Falta el talle de la variante nueva.'); return }
-    if (!(await confirmarCambio(`Agregar una variante a ${fila.nombre}`, [['Talle', nueva.talle.trim()], ['SKU', nueva.sku.trim() || 'sin SKU'], ['Código de barras', nueva.barcode.trim() || 'sin código']]))) return
+    if (!nueva || !nueva.talle.trim()) { onError('Falta la variante de la variante nueva.'); return }
+    if (!(await confirmarCambio(`Agregar una variante a ${fila.nombre}`, [['Variante', nueva.talle.trim()], ['código', nueva.sku.trim() || 'sin código'], ['Código de barras', nueva.barcode.trim() || 'sin código']]))) return
     const r = await agregarVarianteErp(marca, fila.producto, { talle: nueva.talle.trim(), sku: nueva.sku.trim() || undefined, barcode: nueva.barcode.trim() || undefined })
     setNueva(null)
     onListo(`Variante ${nueva.talle.trim()} agregada.`, aviso(r))
@@ -103,8 +103,8 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
 
       {fila.variantes.map((v) => (
         <div key={v.talle} style={fila3}>
-          <Field label="Talle" style={{ flex: '1 1 130px' }}><Input value={vars[v.talle]?.talle ?? ''} onChange={(e) => poner(v.talle, 'talle', e.target.value)} /></Field>
-          <Field label="SKU" style={{ flex: '1 1 120px' }}><Input value={vars[v.talle]?.sku ?? ''} onChange={(e) => poner(v.talle, 'sku', e.target.value)} /></Field>
+          <Field label="Variante" style={{ flex: '1 1 130px' }}><Input value={vars[v.talle]?.talle ?? ''} onChange={(e) => poner(v.talle, 'talle', e.target.value)} /></Field>
+          <Field label="código" style={{ flex: '1 1 120px' }}><Input value={vars[v.talle]?.sku ?? ''} onChange={(e) => poner(v.talle, 'sku', e.target.value)} /></Field>
           <Field label="Código de barras" style={{ flex: '1 1 140px' }}><Input value={vars[v.talle]?.barcode ?? ''} onChange={(e) => poner(v.talle, 'barcode', e.target.value)} inputMode="numeric" /></Field>
           <Button variant="outline" disabled={trabajando} onClick={() => void guardarVariante(v.talle, v.talleNombre)}>Guardar</Button>
         </div>
@@ -112,8 +112,8 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
 
       {nueva ? (
         <div style={fila3}>
-          <Field label="Talle nuevo" style={{ flex: '1 1 130px' }}><Input value={nueva.talle} onChange={(e) => setNueva({ ...nueva, talle: e.target.value })} /></Field>
-          <Field label="SKU" style={{ flex: '1 1 120px' }}><Input value={nueva.sku} onChange={(e) => setNueva({ ...nueva, sku: e.target.value })} /></Field>
+          <Field label="Variante nueva" style={{ flex: '1 1 130px' }}><Input value={nueva.talle} onChange={(e) => setNueva({ ...nueva, talle: e.target.value })} /></Field>
+          <Field label="código" style={{ flex: '1 1 120px' }}><Input value={nueva.sku} onChange={(e) => setNueva({ ...nueva, sku: e.target.value })} /></Field>
           <Field label="Código de barras" style={{ flex: '1 1 140px' }}><Input value={nueva.barcode} onChange={(e) => setNueva({ ...nueva, barcode: e.target.value })} inputMode="numeric" /></Field>
           <Button disabled={trabajando} onClick={() => void agregar()}>Agregar</Button>
           <Button variant="outline" disabled={trabajando} onClick={() => setNueva(null)}>Cancelar</Button>

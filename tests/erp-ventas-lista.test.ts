@@ -18,7 +18,7 @@ const venta = (o: Record<string, unknown> = {}) => ({
 })
 
 describe('la fecha de la fila es la del PEDIDO (Bruno, 19-oct)', () => {
-  it('una venta de TN muestra cuándo entró el pedido, ⛔ cuándo se pagó; sin pedido, la de la venta', () => {
+  it('una venta de Tienda Nube muestra cuándo entró el pedido, ⛔ cuándo se pagó; sin pedido, la de la venta', () => {
     const tn = armarFila(venta({ origen: 'tn', ocurridaEn: '2026-10-19T12:00:00Z', tnCreadaEn: '2026-10-16T22:05:00+00:00' }))
     expect(tn.pedidoEn).toBe('2026-10-16T22:05:00+00:00')
     expect(tn.ocurridaEn).toBe('2026-10-19T12:00:00Z')
@@ -53,14 +53,14 @@ describe('el estado de cada venta', () => {
     expect(saldoDeVenta({ ...aCuenta, pendiente: 0 })).toBe(0)
     expect(saldoDeVenta({ ...aCuenta, estado: 'anulada' })).toBe(0)
   })
-  it('el cliente: el del ERP manda, después GN; online sin nombre ⛔ es consumidor final', () => {
+  it('el cliente: el del ERP manda, después Gestión Nube; online sin nombre ⛔ es consumidor final', () => {
     expect(clienteDe(venta({ cliente: { nombre: 'Lucía G.' }, clienteGn: 'Otra' }))).toEqual({ nombre: 'Lucía G.', de: 'erp' })
     expect(clienteDe(venta({ clienteGn: 'Mayorista Norte' }))).toEqual({ nombre: 'Mayorista Norte', de: 'gn' })
     expect(clienteDe(venta({ clienteGn: 'Consumidor Final' }))).toEqual({ nombre: 'Consumidor final', de: null })
     expect(clienteDe(venta({ origen: 'tn', clienteGn: null }))).toEqual({ nombre: 'Sin nombre todavía', de: 'falta' })
     // Bruno, 19-oct: el pedido sin pagar trae el nombre de TN en vivo; GN y el ERP le siguen ganando
     expect(clienteDe(venta({ origen: 'tn', clienteGn: null, clienteTn: 'Micaela J.' }))).toEqual({ nombre: 'Micaela J.', de: 'tn' })
-    expect(clienteDe(venta({ origen: 'tn', clienteGn: 'De GN', clienteTn: 'Micaela J.' }))).toEqual({ nombre: 'De GN', de: 'gn' })
+    expect(clienteDe(venta({ origen: 'tn', clienteGn: 'De Gestión Nube', clienteTn: 'Micaela J.' }))).toEqual({ nombre: 'De Gestión Nube', de: 'gn' })
   })
 })
 
@@ -78,9 +78,9 @@ describe('la fila, las vistas y el resumen', () => {
     expect(filas[2]).toMatchObject({ cobroKey: 'saldo', saldo: 93200, estadoKey: 'pendiente_gn' })
     expect(filas[3]).toMatchObject({ cobroKey: 'devuelta', anulada: true })
     expect(filas[4].origenTexto).toBe('Cambio · de la #301')
-    expect(filas[5]).toMatchObject({ kind: 'pedido', ref: 'TN 4818', estadoKey: 'pedido', cobroKey: 'sinpagar', saldo: 15490, cliente: 'Sin nombre todavía' })
+    expect(filas[5]).toMatchObject({ kind: 'pedido', ref: 'Tienda Nube 4818', estadoKey: 'pedido', cobroKey: 'sinpagar', saldo: 15490, cliente: 'Sin nombre todavía' })
   })
-  it('un pedido sin pagar trae lo que tenía su pestaña: hace cuánto, el medio y lo que retiene (y se busca por prenda)', () => {
+  it('un pedido sin pagar trae lo que tenía su pestaña: hace cuánto, el medio y lo que retiene (y se busca por producto)', () => {
     const p = armarFila({
       kind: 'pedido', tienda: 'stunned', tnId: '9', tnNumero: 512, creadaEn: '2026-10-14T12:00:00Z', total: 30000, link: null, unidades: 3,
       dias: 5, medio: 'transfer', gateway: 'offline', prendas: [{ nombre: 'Remera Boxy Negra', sku: 'STU-1', cantidad: 2 }, { nombre: null, sku: 'STU-2', cantidad: 1 }],
@@ -99,7 +99,7 @@ describe('la fila, las vistas y el resumen', () => {
   it('las vistas cuentan lo suyo', () => {
     expect(contarVistas(filas)).toEqual({ todas: 6, preparar: 2, listas: 0, desarmar: 0, sinpagar: 1, saldo: 1, sinfactura: 2, anuladas: 1 })
   })
-  it('el buscador lee número, pedido de TN, cliente y nota, sin tildes', () => {
+  it('el buscador lee número, pedido de Tienda Nube, cliente y nota, sin tildes', () => {
     expect(filtrar(filas, { q: '#293' }).map((f: { id: string }) => f.id)).toEqual(['v3'])
     expect(filtrar(filas, { q: 'lucia' }).map((f: { id: string }) => f.id)).toEqual(['v2'])
     expect(filtrar(filas, { q: '21938' }).map((f: { id: string }) => f.id)).toEqual(['v2'])
@@ -117,11 +117,11 @@ describe('la fila, las vistas y el resumen', () => {
     expect(ordenar(filas, { col: 'n', dir: 'asc' })[0].kind).toBe('pedido')
   })
   it('los íconos de la fila: verde si hay algo para hacer, apagado dice por qué', () => {
-    expect(accionesDeFila(filas[2], { cobrar: false }).cobro).toMatchObject({ activo: true, verde: true, label: 'Registrar cobro (todavía no conectado al motor)' })
+    expect(accionesDeFila(filas[2], { cobrar: false }).cobro).toMatchObject({ activo: true, verde: true, label: 'Registrar cobro (todavía no disponible)' })
     expect(accionesDeFila(filas[2], { cobrar: true }).cobro.label).toBe('Registrar cobro · saldo $ 93.200')
     expect(accionesDeFila(filas[0]).cobro).toMatchObject({ verde: false, label: 'Cobrada · ver cobros' })
     expect(accionesDeFila(filas[3]).editar).toMatchObject({ activo: false })
-    expect(accionesDeFila(filas[1]).factura).toMatchObject({ verde: true, label: 'Factura B 00005-00012351 (de GN)' })
+    expect(accionesDeFila(filas[1]).factura).toMatchObject({ verde: true, label: 'Factura B 00005-00012351 (de Gestión Nube)' })
   })
 })
 
@@ -202,8 +202,8 @@ describe('el servidor: lo que ⛔ está en el motor se frena con el motivo', () 
   it('corregir el medio del cobro: manda sólo lo que el motor entiende, devuelve la corrección, y sin la función o sin motivo ⛔ escribe', async () => {
     let pedido: unknown = null
     const correccionMedio = { corregirMedioCobro: async (_db: unknown, e: unknown) => { pedido = e; return { ok: true, correccion: { medio_antes: 'efectivo', medio_despues: 'transferencia', cuenta_despues: 'Transferencia', monto: 13500 }, avisos: ['SIN_CUENTA_REAL'] } } }
-    const r = await corregirMedioErp({ marca: 'zattia', body: { ventaId: V, medio: ' transferencia ', motivo: ' TN lo marcó pagado antes ', extra: 'x' }, usuario: 'dario' }, { correccionMedio, db })
-    expect(pedido).toEqual({ venta_id: V, medio: 'transferencia', motivo: 'TN lo marcó pagado antes', usuario: 'dario' })
+    const r = await corregirMedioErp({ marca: 'zattia', body: { ventaId: V, medio: ' transferencia ', motivo: ' Tienda Nube lo marcó pagado antes ', extra: 'x' }, usuario: 'dario' }, { correccionMedio, db })
+    expect(pedido).toEqual({ venta_id: V, medio: 'transferencia', motivo: 'Tienda Nube lo marcó pagado antes', usuario: 'dario' })
     expect(r).toEqual({ ok: true, correccion: { medio_antes: 'efectivo', medio_despues: 'transferencia', cuenta_despues: 'Transferencia', monto: 13500 }, avisos: ['SIN_CUENTA_REAL'] })
     await corregirMedioErp({ marca: 'bdi', body: { ventaId: V, medio: 'transferencia', motivo: 'x', pagoId: V, cuenta: 2003, cuentaReal: 'abc' }, usuario: 'd' }, { correccionMedio, db })
     expect(pedido).toEqual({ venta_id: V, medio: 'transferencia', motivo: 'x', usuario: 'd', pago_id: V, cuenta: 2003, cuenta_real: 'abc' })
@@ -258,13 +258,13 @@ describe('el servidor: lo que ⛔ está en el motor se frena con el motivo', () 
   })
 })
 
-describe('ventasDeTnSinNombre: las ventas de TN que hay que pedir a TN en vivo', () => {
+describe('ventasDeTnSinNombre: las ventas de Tienda Nube que hay que pedir a Tienda Nube en vivo', () => {
   const v = (extra: Record<string, unknown> = {}) => ({ origen: 'tn', origen_ref: 'stunned:2043654775', cliente: null, clienteGn: null, ...extra })
-  it('sin nombre del ERP ni de GN ⇒ se pide; con alguno de los dos ⇒ ⛔', () => {
+  it('sin nombre del ERP ni de Gestión Nube ⇒ se pide; con alguno de los dos ⇒ ⛔', () => {
     const r = ventasDeTnSinNombre([v(), v({ clienteGn: 'Ana P.' }), v({ cliente: { nombre: 'Lía' } }), v({ clienteGn: 'Consumidor final', origen_ref: 'zattia:77' })])
     expect(r).toEqual([{ i: 0, tienda: 'stunned', tnId: '2043654775' }, { i: 3, tienda: 'zattia', tnId: '77' }])
   })
-  it('la Caja y lo que ⛔ trae un id de TN válido ⛔ se piden, y hay tope', () => {
+  it('la Caja y lo que ⛔ trae un id de Tienda Nube válido ⛔ se piden, y hay tope', () => {
     expect(ventasDeTnSinNombre([v({ origen: 'caja' }), v({ origen_ref: null }), v({ origen_ref: 'stunned:abc' })])).toEqual([])
     expect(ventasDeTnSinNombre(Array.from({ length: 5 }, (_, k) => v({ origen_ref: `bdi:${k + 1}` })), 2)).toHaveLength(2)
   })

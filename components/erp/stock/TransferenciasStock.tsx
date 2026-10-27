@@ -39,8 +39,8 @@ const atras = (hoy: string, n: number) => new Date(Date.parse(`${hoy}T12:00:00Z`
 /** Lo que dice «En el ERP»: lo que anotó el libro, o por qué ⛔ (anterior al libro, cancelada). */
 function enElErp(f: FilaTransferencia, libroDesde: string | null) {
   if (f.estado === 'cancelado' || !f.enviadas) return { texto: '—', ok: true, ayuda: undefined }
-  if (!f.enLibro && libroDesde && f.creada < libroDesde) return { texto: 'antes del libro', ok: true, ayuda: `El libro del ERP arranca el ${cuandoCorto(libroDesde)}` }
-  return { texto: u(f.enLibro ?? 0), ok: f.enLibro === f.enviadas, ayuda: f.enLibro === f.enviadas ? 'El libro del ERP la tiene entera' : `El libro anotó ${f.enLibro ?? 0} de ${f.enviadas}` }
+  if (!f.enLibro && libroDesde && f.creada < libroDesde) return { texto: 'antes del ERP', ok: true, ayuda: `El ERP del ERP arranca el ${cuandoCorto(libroDesde)}` }
+  return { texto: u(f.enLibro ?? 0), ok: f.enLibro === f.enviadas, ayuda: f.enLibro === f.enviadas ? 'El ERP del ERP la tiene entera' : `El ERP anotó ${f.enLibro ?? 0} de ${f.enviadas}` }
 }
 
 function bajarCsv(filas: FilaTransferencia[], marca: MarcaErp) {
@@ -103,7 +103,7 @@ export function TransferenciasStock() {
   })
 
   const celda = (f: FilaTransferencia, k: string): React.ReactNode => {
-    if (k === 'n') return f.numero ? <b style={{ color: color.ink }} title="El número de la transferencia en GN">{f.numero}</b> : <span style={{ color: color.mut2 }}>sin número</span>
+    if (k === 'n') return f.numero ? <b style={{ color: color.ink }} title="El número de la transferencia en Gestión Nube">{f.numero}</b> : <span style={{ color: color.mut2 }}>sin número</span>
     if (k === 'creada') return <span style={{ color: color.mut }}>{cuandoCorto(f.creada)}</span>
     if (k === 'ruta') return (
       <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: weight.semibold, whiteSpace: 'nowrap', color: color.ink }}>
@@ -113,7 +113,7 @@ export function TransferenciasStock() {
       </span>
     )
     if (k === 'origen') return <span style={{ color: color.mut }}>{f.origenTexto}</span>
-    if (k === 'quien') return f.persona ? <span style={{ color: color.ink2 }}>{f.persona}</span> : <span style={{ color: color.mut2, fontStyle: 'italic' }}>{f.origen === 'gn' ? 'GN' : '—'}</span>
+    if (k === 'quien') return f.persona ? <span style={{ color: color.ink2 }}>{f.persona}</span> : <span style={{ color: color.mut2, fontStyle: 'italic' }}>{f.origen === 'gn' ? 'Gestión Nube' : '—'}</span>
     if (k === 'estado') return <BarraPasos paso={f.paso} fin={f.fin} texto={f.faltan > 0 && f.estado === 'transferido' ? 'Transferida con faltantes' : f.estadoTexto} />
     if (k === 'prendas') return <span style={{ fontVariantNumeric: 'tabular-nums', color: f.faltan > 0 && f.estado !== 'cancelado' ? 'var(--mo-danger-ink)' : color.ink }}>{prendasTexto(f)}</span>
     if (k === 'libro') {
@@ -140,7 +140,7 @@ export function TransferenciasStock() {
       </div>
       <Notice tone="warning">
         <b>«Recibida» todavía no se controla</b>: Gestión Nube mueve el stock de un golpe y nadie la escanea al llegar al local (el último paso va rayado).
-        Tampoco hay transferencias armadas a mano fuera de Reposición: las que se hacen en la pantalla de GN aparecen como «A mano en GN».
+        Tampoco hay transferencias armadas a mano fuera de Reposición: las que se hacen en la pantalla de Gestión Nube aparecen como «A mano en Gestión Nube».
       </Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {datos?.cortado && <Notice tone="warning">Se ven las {datos.filas.length.toLocaleString('es-AR')} más nuevas.</Notice>}
@@ -149,13 +149,13 @@ export function TransferenciasStock() {
         <TileResumen titulo="Abiertas" valor={res.abiertas.toLocaleString('es-AR')} oscuro nota="en borrador, armándose o yendo" />
         <TileResumen titulo="En camino" valor={u(res.enCamino)} nota="armadas o enviándose" />
         <TileResumen titulo="Transferidas este mes" valor={res.hechasMes.toLocaleString('es-AR')} nota={res.conFaltantes ? `${res.conFaltantes} con faltantes` : 'sin faltantes'} />
-        <TileResumen titulo="Prendas movidas" valor={u(res.movidas)} nota="este mes" />
+        <TileResumen titulo="Productos movidos" valor={u(res.movidas)} nota="este mes" />
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las transferencias" placeholder="Nº, prenda o quién la hizo" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las transferencias" placeholder="Nº, producto o quién la hizo" />
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
             <option value="todo">Desde el principio</option><option value="mes">Este mes</option><option value="30d">Últimos 30 días</option>
           </Select>
@@ -178,7 +178,7 @@ export function TransferenciasStock() {
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `la transferencia ${f.numero ?? ''} de ${f.desdeTexto} a ${f.haciaTexto}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay transferencias con ese número, prenda o persona.' : vista === 'abiertas' ? 'No hay transferencias abiertas.' : 'No hay transferencias en esta vista.'} />
+              <EmptyState title={q ? 'No hay transferencias con ese número, producto o persona.' : vista === 'abiertas' ? 'No hay transferencias abiertas.' : 'No hay transferencias en esta vista.'} />
             </div>
           ) : null}
         />
@@ -189,7 +189,7 @@ export function TransferenciasStock() {
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo las transferencias…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {libroDesde && <> · el libro del ERP arranca el {cuandoCorto(libroDesde)}</>}
+          {libroDesde && <> · el ERP del ERP arranca el {cuandoCorto(libroDesde)}</>}
         </div>
       </div>
 
@@ -227,11 +227,11 @@ function FichaTransferencia({ f, libroDesde, onCerrar }: { f: FilaTransferencia;
         </div>
       )}
       <div>
-        <div style={{ fontWeight: weight.semibold, color: color.ink, marginBottom: 6 }}>Prendas ({renglones.length})</div>
+        <div style={{ fontWeight: weight.semibold, color: color.ink, marginBottom: 6 }}>Productos ({renglones.length})</div>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base }}>
           <thead>
             <tr>
-              <th style={{ ...th, textAlign: 'left' }}>Prenda</th>
+              <th style={{ ...th, textAlign: 'left' }}>Producto</th>
               {f.origen !== 'gn' && <th style={th}>Pedida</th>}
               {f.origen !== 'gn' && <th style={th}>Armada</th>}
               <th style={th}>Enviada</th>

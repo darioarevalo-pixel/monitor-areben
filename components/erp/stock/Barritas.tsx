@@ -22,7 +22,7 @@ export function BarraPasos({ paso, fin, texto }: { paso: number; fin: 'curso' | 
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }} aria-label={`${texto} (paso ${Math.max(paso, 0)} de 4)`}>
       {PASOS.map((t: string, i: number) => (
-        <span key={t} title={i === 3 && fin === 'rayado' ? 'Recibida: GN la mueve de un golpe, todavía nadie la escanea al llegar' : t} style={{ display: 'block', flex: '0 0 22px', height: 6, borderRadius: 3, background: fondo(i) }} />
+        <span key={t} title={i === 3 && fin === 'rayado' ? 'Recibida: Gestión Nube la mueve de un golpe, todavía nadie la escanea al llegar' : t} style={{ display: 'block', flex: '0 0 22px', height: 6, borderRadius: 3, background: fondo(i) }} />
       ))}
       <span style={{ marginLeft: 6, fontWeight: 600, fontSize: 13, color: TEXTO[fin], whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{texto}</span>
     </span>

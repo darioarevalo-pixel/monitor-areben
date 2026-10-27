@@ -15,7 +15,7 @@ const transferido = {
 }
 
 describe('ERP › Stock › Transferencias', () => {
-  it('un armado transferido: número de GN, depósito → local, pedidas/armadas/enviadas y lo que faltó', () => {
+  it('un armado transferido: número de Gestión Nube, depósito → local, pedidas/armadas/enviadas y lo que faltó', () => {
     const f = deArmado(transferido, 'bdi', 2)
     expect(f).toMatchObject({ numero: 'T-8138', desdeTexto: 'Depósito minorista', haciaTexto: 'Local', origenTexto: 'Reposición del monitor', pedidas: 3, armadas: 2, enviadas: 2, faltan: 1, paso: 4, fin: 'rayado', enLibro: 2 })
     expect(prendasTexto(f)).toBe('3 → 2')
@@ -41,15 +41,15 @@ describe('ERP › Stock › Transferencias', () => {
     expect(filtrar(filas, { desde: '2026-10-21' }).length).toBe(0)
   })
 
-  it('una hecha a mano en GN sale del libro: la pata que sale dice de dónde, la que entra adónde', () => {
+  it('una hecha a mano en Gestión Nube sale del ERP: la pata que sale dice de dónde, la que entra adónde', () => {
     const f = deLibro('gn_foto:1', [
       { product_id: 9, size_id: 3, sku: 'Z-9', deposito: 'deposito', cantidad: -2, ocurrido_en: '2026-10-20T15:00:00Z', detalle: { foto: 'x' } },
       { product_id: 9, size_id: 3, sku: 'Z-9', deposito: 'local', cantidad: 2, ocurrido_en: '2026-10-20T15:00:00Z', detalle: { foto: 'x' } },
     ])
-    expect(f).toMatchObject({ desdeTexto: 'Depósito', haciaTexto: 'Local', origenTexto: 'A mano en GN', estadoTexto: 'Hecha en GN', enviadas: 2, numero: null, paso: 4 })
+    expect(f).toMatchObject({ desdeTexto: 'Depósito', haciaTexto: 'Local', origenTexto: 'A mano en Gestión Nube', estadoTexto: 'Hecha en Gestión Nube', enviadas: 2, numero: null, paso: 4 })
   })
 
-  it('el servidor junta los armados con lo que anotó el libro y con las hechas en GN', async () => {
+  it('el servidor junta los armados con lo que anotó el ERP y con las hechas en Gestión Nube', async () => {
     const pg = {
       query: async (sql: string) => ({
         rows: sql.includes("origen = 'repo'") ? [{ armado: 'ra1', u: 2 }]

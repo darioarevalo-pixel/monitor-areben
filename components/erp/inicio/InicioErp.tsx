@@ -90,7 +90,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
           <TileResumen titulo="Ventas" valor={m ? m.ventas.toLocaleString('es-AR') : '…'} nota={m ? `ticket promedio ${formatMoney(m.ventas ? m.vendido / m.ventas : 0)}` : undefined} />
           <TileResumen titulo="Contra el mes pasado" valor={m && a ? `${(pct(m.vendido, a.vendido) ?? 0) >= 0 ? '+' : ''}${pct(m.vendido, a.vendido) ?? '—'}%` : '…'} nota={m && a ? `en ventas: ${m.ventas} contra ${a.ventas}` : undefined} />
         </div>
-        {m && a && <div style={{ fontSize: font.sm, color: color.mut }}>Margen contra el mes pasado: <Variacion ahora={m.margen} antes={a.margen} />{m.sinCosto ? ` · ${m.sinCosto} ventas sin costo en GN (suman su precio sin restar nada)` : ''}{res?.r?.gnHasta ? ` · GN llega hasta el ${fecha(res.r.gnHasta)}` : ''}</div>}
+        {m && a && <div style={{ fontSize: font.sm, color: color.mut }}>Margen contra el mes pasado: <Variacion ahora={m.margen} antes={a.margen} />{m.sinCosto ? ` · ${m.sinCosto} ventas sin costo en Gestión Nube (suman su precio sin restar nada)` : ''}{res?.r?.gnHasta ? ` · Gestión Nube llega hasta el ${fecha(res.r.gnHasta)}` : ''}</div>}
       </section>}
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
@@ -118,7 +118,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
             </div>
           ))}
         </div>
-        <div style={{ fontSize: font.sm, color: color.mut }}>Ventas cuenta las de este mes del ERP (en paralelo con GN). Lo que se hace afuera —conteos, transferencias, preparación— sigue en el monitor.</div>
+        <div style={{ fontSize: font.sm, color: color.mut }}>Ventas cuenta las de este mes del ERP (en paralelo con Gestión Nube). Lo que se hace afuera —conteos, transferencias, preparación— sigue en el monitor.</div>
       </section>
     </div>
   )

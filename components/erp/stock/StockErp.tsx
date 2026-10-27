@@ -43,7 +43,7 @@ const u = (n: number) => `${n.toLocaleString('es-AR')} u`
 function bajarCsv(filas: FilaStock[], marca: MarcaErp, titulos: Record<string, [string, ...unknown[]]>) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
   const deps = Object.keys(filas[0]?.deps ?? {})
-  const renglones = [['Prenda', 'Talle', 'SKU', 'Disponible', 'En estantería', ...deps.map((d) => titulos[`dep:${d}`]?.[0] ?? d), 'En pedidos', 'En GN', 'Línea'].map(c).join(';')]
+  const renglones = [['Producto', 'Variante', 'código', 'Disponible', 'Físico', ...deps.map((d) => titulos[`dep:${d}`]?.[0] ?? d), 'Reservado', 'En Gestión Nube', 'Línea'].map(c).join(';')]
   for (const f of filas) renglones.push([f.nombre, f.talleNombre, f.sku, f.disponible, f.estanteria, ...deps.map((d) => f.deps[d]), f.enPedidos, f.gn ?? '', LINEA[f.linea] ?? f.linea].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -114,7 +114,7 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
     if (k === 'est') return numero(f.estanteria)
     if (k.startsWith('dep:')) return numero(f.deps[k.slice(4)] ?? 0)
     if (k === 'ped') return f.enPedidos ? <span style={{ color: 'var(--mo-warning-ink)' }} title="Apartadas por pedidos de Tienda Nube sin pagar">{f.enPedidos}</span> : <span style={{ color: color.mut2 }}>—</span>
-    if (k === 'gn') return <span style={{ color: f.gn != null && f.gn !== f.estanteria ? 'var(--mo-warning-ink)' : color.mut }} title={f.gn != null && f.gn !== f.estanteria ? 'GN dice otro número que el ERP' : undefined}>{f.gn ?? '—'}</span>
+    if (k === 'gn') return <span style={{ color: f.gn != null && f.gn !== f.estanteria ? 'var(--mo-warning-ink)' : color.mut }} title={f.gn != null && f.gn !== f.estanteria ? 'Gestión Nube dice otro número que el ERP' : undefined}>{f.gn ?? '—'}</span>
     if (k === 'ult') return f.ultimo ? <span style={{ color: color.mut }} title={f.ultimo.ref ?? undefined}>{(NOMBRE_TIPO as Record<string, string>)[f.ultimo.tipo] ?? f.ultimo.tipo} · {cuandoCorto(f.ultimo.cuando)}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'linea') return <span style={{ color: color.ink2 }}>{LINEA[f.linea] ?? f.linea}</span>
     return null
@@ -123,14 +123,14 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
   const acciones = (f: FilaStock) => {
     const menu: AccionMenu[] = [
       { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrir(f) },
-      { key: 'ajustar', label: 'Ajustar', icono: 'conteo', onClick: () => ajustar(aAjustar(f)), hint: 'Abre «Nuevo ajuste» con esta prenda.' },
+      { key: 'ajustar', label: 'Ajustar', icono: 'conteo', onClick: () => ajustar(aAjustar(f)), hint: 'Abre «Nuevo ajuste» con este producto.' },
       { key: 'repo', label: 'Transferir en el monitor ↗', icono: 'abrir', onClick: () => window.open('/reposicion', '_blank', 'noopener') },
       { key: 'etiq', label: 'Etiquetas en el monitor ↗', icono: 'abrir', onClick: () => window.open('/etiquetas', '_blank', 'noopener') },
     ]
     return (
       <>
         <IconoFila label="Ajustar" onClick={() => ajustar(aAjustar(f))}><Icono nombre="conteo" size={16} /></IconoFila>
-        <MenuAcciones acciones={menu} etiqueta={`Más acciones de la prenda ${f.nombre} ${f.talleNombre}`} vertical alinear="izquierda" />
+        <MenuAcciones acciones={menu} etiqueta={`Más acciones del producto ${f.nombre} ${f.talleNombre}`} vertical alinear="izquierda" />
       </>
     )
   }
@@ -139,23 +139,22 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título «Stock» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
-      <p style={{ margin: 0, color: color.mut }}>Lo que hay de cada prenda, por lugar. Manda el disponible: lo que se puede vender.</p>
-      <Notice tone="warning">El stock del ERP corre <b>en paralelo</b> con Gestión Nube, que es el que sirve hoy: la venta y la Tienda Nube siguen saliendo de GN.</Notice>
+      <p style={{ margin: 0, color: color.mut }}>Lo que hay de cada producto, por lugar. Manda el disponible: lo que se puede vender.</p>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-      {!!datos?.sinVariante && <Notice tone="warning">{u(datos.sinVariante)} de pedidos sin pagar traen un SKU que GN no tiene: no se descuentan de ninguna prenda.</Notice>}
+      {!!datos?.sinVariante && <Notice tone="warning">{u(datos.sinVariante)} de pedidos sin pagar traen un código que Gestión Nube no tiene: no se descuentan de ningún producto.</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Disponible" valor={u(res.disponible)} oscuro nota="lo que se puede vender" />
-        <TileResumen titulo="En estantería" valor={u(res.estanteria)} nota={res.enPedidos ? `${res.enPedidos.toLocaleString('es-AR')} apartadas por pedidos sin pagar` : 'ninguna apartada por pedidos'} />
+        <TileResumen titulo="Físico" valor={u(res.estanteria)} nota={res.enPedidos ? `${res.enPedidos.toLocaleString('es-AR')} apartadas por pedidos sin pagar` : 'ninguna apartada por pedidos'} />
         {/* Los negativos se cuentan sobre todo lo buscado (⛔ sólo la vista): si no, el número no es el de la vista «Negativos». */}
         <TileResumen titulo="Negativos" valor={(conteo.neg ?? 0).toLocaleString('es-AR')} nota={conteo.neg ? 'para revisar' : 'ninguna'} />
-        <TileResumen titulo="Prendas" valor={res.prendas.toLocaleString('es-AR')} nota={nombreVista.toLowerCase()} />
+        <TileResumen titulo="Productos" valor={res.prendas.toLocaleString('es-AR')} nota={nombreVista.toLowerCase()} />
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en el stock" placeholder="Nombre, SKU o código de barras" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en el stock" placeholder="Nombre, código o código de barras" />
           {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
@@ -169,10 +168,10 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
         <ListaTrabajo
           columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={72}
           seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden} densidad={prefs.densidad}
-          activa={filaDeFicha?.id ?? null} onAbrir={abrir} etiquetaFila={(f) => `la prenda ${f.nombre} ${f.talleNombre}`}
+          activa={filaDeFicha?.id ?? null} onAbrir={abrir} etiquetaFila={(f) => `el producto ${f.nombre} ${f.talleNombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay prendas con ese nombre, SKU o código.' : 'No hay prendas en esta vista.'} />
+              <EmptyState title={q ? 'No hay productos con ese nombre o código.' : 'No hay productos en esta vista.'} />
               {vista !== 'todo' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todo')}>Ver todo</Button></div>}
             </div>
           ) : null}

@@ -69,8 +69,8 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
   const contraentrega = pagos.some((p) => cuentas.find((c) => c.id === p.cuenta)?.medio === 'entrega' && Number(p.monto) > 0)
   const conCliente = doc.replace(/\D/g, '').length >= 7 && nombre.trim().length > 1
   const sinPrecio = renglones.some((r) => r.precio === '')
-  const falta = !renglones.length ? 'Agregá al menos una prenda.'
-    : sinPrecio ? 'Falta el precio de alguna prenda.'
+  const falta = !renglones.length ? 'Agregá al menos un producto.'
+    : sinPrecio ? 'Falta el precio de alguna producto.'
     : pagos.some((p) => Number(p.monto) > 0 && !p.cuenta) ? 'Elegí la cuenta de cada pago.'
     : pagado !== total ? `Lo que paga (${$(pagado)}) no suma el total (${$(total)}).`
     : aCuenta && !conCliente ? 'Para que quede debiendo hace falta el cliente (documento y nombre).'
@@ -82,7 +82,7 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
     try {
       const r = await buscarPrendas(marca, q.trim())
       setEncontradas(r.variantes.filter((v) => (marca === 'bdi') || (linea === 'stunned') === String(v.sku ?? '').toUpperCase().startsWith('STU')))
-      if (!r.variantes.length) setError('No se encontró esa prenda.')
+      if (!r.variantes.length) setError('No se encontró ese producto.')
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo buscar.') } finally { setBuscando(false) }
   }
 
@@ -171,9 +171,9 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
         </section>
 
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-          <b style={{ color: color.ink }}>Prendas</b>
+          <b style={{ color: color.ink }}>Productos</b>
           <div style={fila}>
-            <Input aria-label="Buscar prenda" placeholder="SKU, código de barras o nombre" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') buscar() }} style={{ flex: '1 1 180px' }} />
+            <Input aria-label="Buscar producto" placeholder="código, código de barras o nombre" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') buscar() }} style={{ flex: '1 1 180px' }} />
             <Button variant="outline" disabled={buscando} onClick={buscar}>{buscando ? 'Buscando…' : 'Buscar'}</Button>
           </div>
           {encontradas.length > 0 && (

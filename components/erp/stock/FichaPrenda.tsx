@@ -44,12 +44,12 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
     let vivo = true
     leerStockDePrenda(marca, prenda.producto, prenda.talle)
       .then((x) => { if (vivo) { setS(x); setError(null) } })
-      .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudo leer el stock de la prenda.'))
+      .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudo leer el stock del producto.'))
     return () => { vivo = false }
   }, [marca, prenda.producto, prenda.talle])
 
   const f = prenda.fila
-  const nombre = f?.nombre ?? s?.prenda.nombre ?? 'Prenda'
+  const nombre = f?.nombre ?? s?.prenda.nombre ?? 'Producto'
   const talle = f?.talleNombre ?? s?.prenda.talleNombre ?? ''
   const sku = f?.sku ?? s?.prenda.sku ?? null
   const barcode = f?.barcode ?? s?.prenda.barcode ?? null
@@ -79,17 +79,17 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
   const h3: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
 
   return (
-    <FichaCostado abierta onCerrar={onCerrar} titulo={sku ? `Prenda · ${sku}` : 'Prenda'} etiqueta={`Ficha de la prenda ${nombre} ${talle}`}>
+    <FichaCostado abierta onCerrar={onCerrar} titulo={sku ? `Producto · ${sku}` : 'Producto'} etiqueta={`Ficha del producto ${nombre} ${talle}`}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: weight.bold, overflowWrap: 'anywhere' }}>{nombre}</h2>
-          <div style={{ color: color.mut }}>Talle {talle}</div>
+          <div style={{ color: color.mut }}>Variante {talle}</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
             {negativo && <ChipEstado mapa={{ n: ['danger', 'Negativo'] }} k="n" />}
             {!negativo && local <= 0 && (estanteria ?? 0) > 0 && <ChipEstado mapa={{ l: ['warning', 'Sin stock en el Local'] }} k="l" />}
-            {enPedidos > 0 && <ChipEstado mapa={{ p: ['action', `${enPedidos} en pedidos`] }} k="p" />}
+            {enPedidos > 0 && <ChipEstado mapa={{ p: ['action', `${enPedidos} reservado`] }} k="p" />}
           </div>
         </div>
         <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
@@ -100,13 +100,13 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
 
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         <Button variant="outline" disabled={!linea} onClick={() => linea && ajustar({ linea, producto: prenda.producto, talle: prenda.talle, sku, barcode, nombre, talleNombre: talle })}>Ajustar</Button>
-        <MenuAcciones acciones={menu} etiqueta={`Más acciones de la prenda ${nombre} ${talle}`} vertical />
+        <MenuAcciones acciones={menu} etiqueta={`Más acciones del producto ${nombre} ${talle}`} vertical />
       </div>
 
       <DatosFicha>
-        <DatoFicha titulo="En estantería">{estanteria ?? '…'}</DatoFicha>
-        <DatoFicha titulo="En pedidos">{enPedidos ? `${enPedidos} sin pagar` : '—'}</DatoFicha>
-        <DatoFicha titulo="SKU">{sku ?? '—'}</DatoFicha>
+        <DatoFicha titulo="Físico">{estanteria ?? '…'}</DatoFicha>
+        <DatoFicha titulo="Reservado">{enPedidos ? `${enPedidos} sin pagar` : '—'}</DatoFicha>
+        <DatoFicha titulo="código">{sku ?? '—'}</DatoFicha>
         <DatoFicha titulo="Código">{barcode ?? '—'}</DatoFicha>
         {linea && <DatoFicha titulo="Línea">{LINEA[linea] ?? linea}</DatoFicha>}
       </DatosFicha>
@@ -115,18 +115,18 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
         <h3 style={h3}>Por depósito</h3>
         {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : (
           <div role="table" aria-label="Stock por depósito" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 64px 64px 92px', columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
-            {['Depósito', 'ERP', 'GN', ''].map((t, i) => <span key={i} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>)}
+            {['Depósito', 'ERP', 'Gestión Nube', ''].map((t, i) => <span key={i} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>)}
             {s.depositos.map((d) => (
               <div key={d.deposito} role="row" style={{ display: 'contents' }}>
                 <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}` }}>{nombreDe(NOMBRE_DEPOSITO, d.deposito)}</span>
                 <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}`, textAlign: 'right', fontWeight: weight.semibold, color: d.libro < 0 ? 'var(--mo-danger-ink)' : color.ink }}>{d.libro}</span>
                 <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}`, textAlign: 'right', color: color.mut }}>{d.gn ?? '—'}</span>
-                <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}`, textAlign: 'right', fontSize: font.sm, color: d.diferencia ? 'var(--mo-warning-ink)' : color.mut2 }}>{d.diferencia == null ? '' : d.diferencia === 0 ? 'igual a GN' : `GN ${conSigno(d.diferencia)}`}</span>
+                <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}`, textAlign: 'right', fontSize: font.sm, color: d.diferencia ? 'var(--mo-warning-ink)' : color.mut2 }}>{d.diferencia == null ? '' : d.diferencia === 0 ? 'igual a Gestión Nube' : `Gestión Nube ${conSigno(d.diferencia)}`}</span>
               </div>
             ))}
           </div>
         )}
-        {!!s?.sinDeposito.length && <Notice tone="warning">GN tiene stock en depósitos que el ERP no conoce: {s.sinDeposito.join(', ')}.</Notice>}
+        {!!s?.sinDeposito.length && <Notice tone="warning">Gestión Nube tiene stock en depósitos que el ERP no conoce: {s.sinDeposito.join(', ')}.</Notice>}
       </section>
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
@@ -134,7 +134,7 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
           <h3 style={h3}>Historial</h3>
           <div style={{ fontSize: font.sm, color: color.mut }}>cada movimiento, con lo que quedó · nada se borra: una corrección es otro movimiento</div>
         </div>
-        {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : !hechos.length ? <span style={{ color: color.mut }}>El ERP todavía no tiene movimientos de esta prenda.</span> : <Historial hechos={hechos} cuandoTexto={cuandoCorto} />}
+        {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : !hechos.length ? <span style={{ color: color.mut }}>El ERP todavía no tiene movimientos de este producto.</span> : <Historial hechos={hechos} cuandoTexto={cuandoCorto} />}
       </section>
     </FichaCostado>
   )

@@ -148,7 +148,7 @@ export function Facturacion() {
           <ConfirmDetalle label="Punto de venta" valor={pv ?? '—'} />
           <p style={{ marginTop: space[3] }}>
             {prueba
-              ? 'Son facturas de PRUEBA (homologación de ARCA): no tienen validez fiscal.'
+              ? 'Son facturas de PRUEBA (modo de prueba de ARCA): no tienen validez fiscal.'
               : 'Son facturas REALES: una vez autorizadas no se pueden eliminar, sólo anular con nota de crédito.'}
           </p>
         </div>
@@ -180,7 +180,7 @@ export function Facturacion() {
           <ConfirmDetalle label="Anula la factura" valor={numeroComprobante(f)} />
           <ConfirmDetalle label="Total" valor={pesos(f.total)} />
           <p style={{ marginTop: space[3] }}>
-            {deVerdad ? 'Es REAL: una vez autorizada no se puede eliminar.' : 'Es de PRUEBA (homologación de ARCA): no tiene validez fiscal.'}
+            {deVerdad ? 'Es REAL: una vez autorizada no se puede eliminar.' : 'Es de PRUEBA (modo de prueba de ARCA): no tiene validez fiscal.'}
           </p>
         </div>
       ),
@@ -214,7 +214,7 @@ export function Facturacion() {
           <ConfirmDetalle label="Se suma a la factura" valor={numeroComprobante(f)} />
           <ConfirmDetalle label="Importe" valor={pesos(monto)} />
           <p style={{ marginTop: space[3] }}>
-            {deVerdad ? 'Es REAL: una vez autorizada no se puede eliminar; un error se corrige con una nota de crédito.' : 'Es de PRUEBA (homologación de ARCA): no tiene validez fiscal.'}
+            {deVerdad ? 'Es REAL: una vez autorizada no se puede eliminar; un error se corrige con una nota de crédito.' : 'Es de PRUEBA (modo de prueba de ARCA): no tiene validez fiscal.'}
           </p>
         </div>
       ),
@@ -250,7 +250,7 @@ export function Facturacion() {
         <div>
           <ConfirmDetalle label="Tope que queda fijo" valor={pesos(datos.techoCalculado)} />
           <p style={{ marginTop: space[3] }}>
-            Desde que se cierra, el tope ya no cambia aunque se reclasifique una cuenta o GN anule una venta. Se sigue
+            Desde que se cierra, el tope ya no cambia aunque se reclasifique una cuenta o Gestión Nube anule una venta. Se sigue
             facturando contra ese número.
           </p>
         </div>
@@ -279,7 +279,7 @@ export function Facturacion() {
 
   const nombreVenta = (f: Fila) => (f.numero ? `#${f.numero}` : f.ventaId)
   const celda = (f: Fila, k: string): React.ReactNode => {
-    if (k === 'nro') return <span style={{ color: color.ink2, fontVariantNumeric: 'tabular-nums' }} title={`Venta ${f.ventaId} en GN`}>{nombreVenta(f)}</span>
+    if (k === 'nro') return <span style={{ color: color.ink2, fontVariantNumeric: 'tabular-nums' }} title={`Venta ${f.ventaId} en Gestión Nube`}>{nombreVenta(f)}</span>
     if (k === 'cliente') return f.cliente ? <b style={{ color: color.ink }} title={f.cliente}>{f.cliente}</b> : <span style={{ color: color.mut2 }}>Consumidor final</span>
     if (k === 'fecha') return <span style={{ color: color.ink2 }}>{dia(f.fecha)}</span>
     if (k === 'cuentas') return <span style={{ color: color.ink2 }} title={(f.cuentas ?? []).join(', ')}>{(f.cuentas ?? []).join(', ')}</span>
@@ -325,7 +325,7 @@ export function Facturacion() {
         {datos && datos.estado !== 'cerrado' && <Button variant="outline" onClick={cerrar}>Cerrar mes</Button>}
       </div>
 
-      {datos?.ambiente === 'homologacion' && <Notice tone="warning">Facturación de PRUEBA (homologación de ARCA): las facturas que salen de acá no tienen validez fiscal.</Notice>}
+      {datos?.ambiente === 'homologacion' && <Notice tone="warning">Facturación de PRUEBA (modo de prueba de ARCA): las facturas que salen de acá no tienen validez fiscal.</Notice>}
       {datos && !datos.ambiente && <Notice tone="warning">{datos.errorAmbiente} Mientras tanto se factura en Gestión Nube: acá se ve el tope, lo facturado y lo que falta.</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {aviso && <Notice tone="success" onClose={() => setAviso(null)}>{aviso}</Notice>}
@@ -342,7 +342,7 @@ export function Facturacion() {
         <>
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
             <TileResumen oscuro titulo="Tope del mes" valor={pesosCortos(datos.techo)} nota={datos.estado === 'cerrado' ? 'fijo desde el cierre' : 'lo que entró a cuentas de Areben; cambia hasta cerrar el mes'} />
-            <TileResumen titulo="Facturado" valor={pesosCortos(datos.facturado)} nota={`${pctTope != null ? `${pctTope} % del tope · ` : ''}GN ${pesosCortos(datos.facturadoGN)} · ERP ${pesosCortos(datos.facturadoMonitor)}`} />
+            <TileResumen titulo="Facturado" valor={pesosCortos(datos.facturado)} nota={`${pctTope != null ? `${pctTope} % del tope · ` : ''}Gestión Nube ${pesosCortos(datos.facturadoGN)} · ERP ${pesosCortos(datos.facturadoMonitor)}`} />
             <TileResumen titulo="Pendiente de facturar" valor={pesosCortos(datos.pendiente)} nota={datos.pendiente < 0 ? 'se facturó de más' : 'las dos marcas'} />
             <TileResumen titulo={`Sin factura en ${NOMBRE_MARCA[marca]}`} valor={grupos.sin.length.toLocaleString('es-AR')} nota={`ventas · ${pesosCortos(sumaSin)}`} />
           </div>
@@ -360,11 +360,11 @@ export function Facturacion() {
             </div>
             {enVista === 'sin' && (
               <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>
-                Cobradas este mes en cuentas de Areben y sin factura de GN ni del ERP. «A facturar» es lo que entró a esas cuentas, no el total de la venta.
+                Cobradas este mes en cuentas de Areben y sin factura de Gestión Nube ni del ERP. «A facturar» es lo que entró a esas cuentas, no el total de la venta.
               </div>
             )}
             {enVista === 'notas' && !facturas && (
-              <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Las notas de crédito del ERP se ven cuando la facturación esté prendida. Las de GN no llegan al monitor.</div>
+              <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Las notas de crédito del ERP se ven cuando la facturación esté prendida. Las de Gestión Nube no llegan al monitor.</div>
             )}
             <ListaTrabajo
               columnas={enVista === 'sin' ? COLUMNAS_SIN : COLUMNAS_FACT} filas={filas} claveDe={(f) => f.id} celda={celda}
@@ -382,7 +382,7 @@ export function Facturacion() {
               </div>
             )}
             <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-              {NOMBRE_MARCA[marca]} factura con el punto de venta {pv ?? (datos.ambiente ? 'sin cargar' : 'de GN')} · las facturas de GN van por el día de la venta
+              {NOMBRE_MARCA[marca]} factura con el punto de venta {pv ?? (datos.ambiente ? 'sin cargar' : 'de Gestión Nube')} · las facturas de Gestión Nube van por el día de la venta
             </div>
           </div>
 

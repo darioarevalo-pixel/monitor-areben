@@ -23,7 +23,7 @@ import type { PrendaAAjustar } from './stock/StockErp'
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 /** Contra qué se compara cada fila (el `tipo` del motor). */
-const CONTRA: Record<string, string> = { stock_tn: 'Tienda Nube', stock_ml: 'Mercado Libre', pedido_erp: 'Pedido TN · ERP', pedido_gn: 'Pedido TN · GN', pedido_ml: 'Venta ML · GN' }
+const CONTRA: Record<string, string> = { stock_tn: 'Tienda Nube', stock_ml: 'Mercado Libre', pedido_erp: 'Pedido Tienda Nube · ERP', pedido_gn: 'Pedido Tienda Nube · Gestión Nube', pedido_ml: 'Venta Mercado Libre · Gestión Nube' }
 const dia = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
 const pesos = (n: number | null) => (n == null ? '—' : `$ ${n.toLocaleString('es-AR', { maximumFractionDigits: 2 })}`)
 const pct = (a: number, b: number) => (b ? `${((100 * a) / b).toFixed(1)}%` : '—')
@@ -31,11 +31,11 @@ const pct = (a: number, b: number) => (b ? `${((100 * a) / b).toFixed(1)}%` : '�
 type Fila = FilaConciliacion & { id: string; grupo: string; grupoNombre: string; mirar: string }
 
 const COLUMNAS = [
-  { key: 'que', titulo: 'Prenda o pedido', ancho: 'minmax(220px, 2fr)' },
+  { key: 'que', titulo: 'Producto o pedido', ancho: 'minmax(220px, 2fr)' },
   { key: 'contra', titulo: 'Contra', ancho: '128px' },
   { key: 'ellos', titulo: 'Ellos', ancho: '92px', derecha: true },
   { key: 'erp', titulo: 'ERP', ancho: '92px', derecha: true },
-  { key: 'gn', titulo: 'GN', ancho: '64px', derecha: true },
+  { key: 'gn', titulo: 'Gestión Nube', ancho: '64px', derecha: true },
   { key: 'dias', titulo: 'Días', ancho: '56px', derecha: true },
   { key: 'paso', titulo: 'Qué pasó', ancho: 'minmax(220px, 1.6fr)' },
 ]
@@ -98,7 +98,7 @@ export function ConciliacionDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => v
 
   const acciones = (f: Fila) => {
     const menu: AccionMenu[] = [
-      ...(f.producto && f.talle ? [{ key: 'ficha', label: 'Abrir la prenda', icono: 'abrir' as const, onClick: () => abrir(f) }] : []),
+      ...(f.producto && f.talle ? [{ key: 'ficha', label: 'Abrir el producto', icono: 'abrir' as const, onClick: () => abrir(f) }] : []),
       ...(f.link ? [{ key: 'tn', label: 'Ver en Tienda Nube ↗', icono: 'abrir' as const, onClick: () => window.open(f.link!, '_blank', 'noopener') }] : []),
     ]
     return menu.length ? <MenuAcciones acciones={menu} etiqueta={`Más acciones de ${esStock(f) ? prendaDe(f) : `#${f.numero}`}`} vertical alinear="izquierda" /> : null
@@ -107,7 +107,7 @@ export function ConciliacionDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => v
   const calculado = !!datos?.tarjetas.some((t) => t.calculado)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>El ERP contra Tienda Nube, GN y Mercado Libre: cuánto coincide y lo que no, con qué mirar. Se calcula una vez por día, a las 13:40.</p>
+      <p style={{ margin: 0, color: color.mut }}>El ERP contra Tienda Nube, Gestión Nube y Mercado Libre: cuánto coincide y lo que no, con qué mirar. Se calcula una vez por día, a las 13:40.</p>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         {marca === 'zattia' && (
           <Select aria-label="Tienda" style={ANCHO_SELECT} value={deZattia} onChange={(e) => { setDeZattia(e.target.value as TiendaErp); setFecha(null); setFicha(null) }}>
@@ -141,8 +141,8 @@ export function ConciliacionDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => v
                     : t.noCierran ? `${t.noCierran} de ${t.total} ${t.unidad} no coinciden (7 días)` : `Coinciden los ${t.total} ${t.unidad} (7 días)`}
               />
             ))}
-            <TileResumen titulo="Stock por depósito: GN y el ERP" valor={!datos.gn.calculado ? '—' : (datos.gn.sinExplicar ?? 0).toLocaleString('es-AR')}
-              nota={!datos.gn.calculado ? 'No se calculó ese día.' : datos.gn.sinExplicar ? 'sin explicar: verlas en Diferencias con GN' : 'Todo explicado (Diferencias con GN)'} />
+            <TileResumen titulo="Stock por depósito: Gestión Nube y el ERP" valor={!datos.gn.calculado ? '—' : (datos.gn.sinExplicar ?? 0).toLocaleString('es-AR')}
+              nota={!datos.gn.calculado ? 'No se calculó ese día.' : datos.gn.sinExplicar ? 'sin explicar: verlas en Diferencias con Gestión Nube' : 'Todo explicado (Diferencias con Gestión Nube)'} />
           </div>
           {datos.enVuelo > 0 && <Notice tone="neutral">Recién pagados, todavía en camino: {datos.enVuelo}.</Notice>}
           {datos.desconocidas > 0 && <Notice tone="warning">{datos.desconocidas} con una clase que esta pantalla todavía no conoce.</Notice>}
@@ -150,18 +150,18 @@ export function ConciliacionDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => v
           <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
             <VistasLista vistas={vistas} valor={enVista} conteo={conteo} onCambio={setVista} />
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-              <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la conciliación" placeholder="Prenda, SKU o número de pedido" />
+              <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la conciliación" placeholder="Producto, código o número de pedido" />
             </div>
             {enVista !== 'todas' && <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Qué mirar: {datos.grupos.find((g) => `${g.tipo}/${g.clase}` === enVista)?.mirar}{(() => { const g = datos.grupos.find((x) => `${x.tipo}/${x.clase}` === enVista); return g?.deAntes ? ` (${g.deAntes} vienen de días anteriores)` : '' })()}</div>}
             <ListaTrabajo
               columnas={COLUMNAS} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={40}
               activa={ficha ? filas.find((f) => f.producto === ficha.producto && f.talle === ficha.talle)?.id ?? null : null}
               onAbrir={(f) => (f.producto && f.talle ? abrir(f) : f.link ? window.open(f.link, '_blank', 'noopener') : undefined)}
-              etiquetaFila={(f) => (esStock(f) ? `la prenda ${prendaDe(f)}` : `el pedido #${f.numero}`)}
-              vacio={!cargando ? <div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con esa prenda o pedido.' : calculado ? 'Todo coincide.' : 'Ese día no se calculó.'} /></div> : null}
+              etiquetaFila={(f) => (esStock(f) ? `el producto ${prendaDe(f)}` : `el pedido #${f.numero}`)}
+              vacio={!cargando ? <div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con ese producto o pedido.' : calculado ? 'Todo coincide.' : 'Ese día no se calculó.'} /></div> : null}
             />
             <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-              {filas.length.toLocaleString('es-AR')} que no coinciden · el arreglo se hace en el monitor o en GN, no en el ERP
+              {filas.length.toLocaleString('es-AR')} que no coinciden · el arreglo se hace en el monitor o en Gestión Nube, no en el ERP
             </div>
           </div>
         </>
