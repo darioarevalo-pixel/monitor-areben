@@ -20,6 +20,8 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { EmptyState, Tabs, color, space, weight } from '@/components/ui'
+import { leerConfig } from '@/lib/caja/cliente'
+import { usarMarcaCaja } from '@/lib/caja/marca'
 import { CUENTAS } from '@/lib/cuentas'
 import type { Marca } from '@/lib/nav.datos'
 import { puedeVer } from '@/lib/permisos'
@@ -192,6 +194,16 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const [linea, setLineaEstado] = useState<LineaErp>(lineaElegida)
   const setLinea = (l: LineaErp) => { elegirLinea(l); setLineaEstado(l) }
   const lineaVista: LineaErp = marca === 'zattia' ? (linea === 'stunned' ? 'stunned' : 'zattia') : ''
+  // 🔑 El cartel de «modo paralelo» era fijo: después del corte de Stunned (`CAJA_STUNNED_ERP=1`) seguiría diciendo que GN sirve.
+  // Si la configuración no se puede leer queda el texto de siempre (el prudente).
+  const [stunnedReal, setStunnedReal] = useState(false)
+  useEffect(() => {
+    if (lineaVista !== 'stunned') return
+    let vivo = true
+    usarMarcaCaja('zattia')
+    leerConfig().then((c) => { if (vivo) setStunnedReal(!!c.stunned_erp) }).catch(() => {})
+    return () => { vivo = false }
+  }, [lineaVista])
   // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
   const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia', lineaVista)
   const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : [{ key: 'zattia', titulo: 'Zattia' }, { key: 'stunned', titulo: 'Stunned' }])
@@ -266,7 +278,9 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
           <div className="seccion-pad" style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
             <header style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
               <p style={{ margin: 0, padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4, borderLeft: `3px solid ${COLOR_DE_MARCA[opcionActiva]}` }}>
-                {lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy. Lo ven sólo los administradores.
+                {lineaVista === 'stunned' && stunnedReal
+                  ? 'Stunned · ya vende por el ERP. Lo ven sólo los administradores.'
+                  : `${lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy. Lo ven sólo los administradores.`}
               </p>
               {/* Título + pestañas en UNA línea (diseño §9). */}
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: space[5], flexWrap: 'wrap', borderBottom: `1px solid ${color.line}` }}>
