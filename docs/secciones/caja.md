@@ -505,6 +505,23 @@ Dos causas, medidas en prod:
    la entera por detrás; la liviana ⛔ pisa a la entera si llega tarde. La pestaña Caja sigue leyendo la
    entera (muestra el resumen).
 
+## La vista de celular del POS (27-oct-2026, Bruno)
+
+`components/caja/CajaPOS.tsx` tiene DOS formatos del mismo POS: el de la PC y el del celular (`if (movil)` antes del
+`return` de la PC). 🔑 **Comparten TODO lo que cobra**: el estado, `core.core.js`, y los diálogos (cobro, «Validar
+transferencia», prenda repetida, turnos) están UNA sola vez en `modalesJSX` / `modalesTurnoJSX`; lo mismo el buscador
+(`buscadorJSX`) y los renglones (`renglonesJSX`). ⛔ Ninguna regla de plata vive en la rama del celular.
+- **Cuándo**: `useEsMovil` (`lib/caja/movil.ts`): pantalla ≤ 640 px, o `?movil=1` (`?movil=0` la apaga). La PC de las
+  cajeras ⛔ cambia.
+- **Qué cambia**: barra de arriba de una fila (volver · caja · estado de GN · «⋯» con Ventas, Contar billetes,
+  + Ingreso, + Salida, sonido y Cerrar caja), franja fija de pedidos web, buscar primero, pedido con − / + de 40 px
+  (`FilaRenglon tactil`), mail y descuento debajo del pedido, y abajo el total con «Continuar al cobro».
+- 🔴 **⛔ Imprime en el celular**: `imprimir` del POS no hace nada con `movil` (sale el mail del servidor, `enviar.core.js`),
+  no hay «Reimprimir» / «Ticket de cambio» y el botón «Regalo» (que sólo manda a imprimir) no se muestra.
+- ⛔ Sin cámara (decidido el 27-oct: no lee las etiquetas). Un lector Bluetooth escribiría en el mismo campo.
+- ⚠️ **Sin probar en un celular real** al escribir esto: sólo `tests/caja-movil.test.tsx` (jsdom). Pendiente: la venta
+  en espera por transferencia al cerrar y volver a abrir la pestaña, y con qué cuenta se abre la caja (`puedeUsarPOS`).
+
 ## Pendiente
 
 - 🏁 `sql/migrate-caja-anulada-en-gn.sql` CORRIDA en las dos bases (12-oct), verificada leyendo la columna, el check y las 7 de prueba (`por: sync`).

@@ -61,6 +61,7 @@ import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { imprimirTicket, numeroProvisorio, plata, ticketDeVenta, type DatosTicket } from '@/lib/caja/ticket'
 import { claveMail, claveVista, leerMail, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
 import { mailOk } from '@/lib/caja/mail'
+import { useEsMovil } from '@/lib/caja/movil'
 import { MARCA_CAJA, marcaParaPOS, storeCaja, useMarcaDeLaUrl, usarMarcaCaja } from '@/lib/caja/marca'
 import {
   buscarNombre,
@@ -167,6 +168,10 @@ const CLAVE_SONIDO = 'caja:sonido'
 
 function POS() {
   const { perfil } = useSesion()
+  // 🔑 Vista de celular (`lib/caja/movil.ts`): el MISMO cobro, otra presentación. ⛔ Imprime ticket: va por mail.
+  const movil = useEsMovil()
+  const [menuMovil, setMenuMovil] = useState(false)
+  const imprimir: typeof imprimirTicket = (t, ms, que) => (movil ? Promise.resolve() : imprimirTicket(t, ms, que))
   const promos = useAgenda((st) => st.promos)
   const { datos } = useDatosMonitor()
   const tnIdx = useTnPromo(storeCaja())
@@ -751,7 +756,7 @@ function POS() {
     const regalo = regalos.current.delete(venta.id)
     setUltima({ venta, ticket, regalo })
     avisar(ventaLlego(venta) ? 'ok' : 'ojo')
-    imprimirTicket(ticket, ahora(), regalo ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
+    imprimir(ticket, ahora(), regalo ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
     refrescarPendientes()
     refrescarTurno()
   }
@@ -838,7 +843,7 @@ function POS() {
       setGnSenal(ventaLlego(r.venta) ? { ok: true, que: 'la última venta llegó' } : { ok: false, que: `la última venta quedó pendiente${r.venta.ultimo_error ? ` (${r.venta.ultimo_error})` : ''}` })
       setUltima({ venta: r.venta, ticket, regalo: conRegalo })
       avisar(ventaLlego(r.venta) ? 'ok' : 'ojo')
-      imprimirTicket(ticket, ahora(), conRegalo ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
+      imprimir(ticket, ahora(), conRegalo ? 'regalo' : 'ticket').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
       refrescarPendientes()
       refrescarTurno()
     } catch (e) {
@@ -949,90 +954,47 @@ function POS() {
   const gnPorque = gnSenal ? `Gestión Nube: ${gnSenal.que}.` : sinLlegar ? `Gestión Nube: ${sinLlegar} cobradas sin llegar.` : 'Gestión Nube: sin ventas pendientes.'
   const subtotalFilas = filas ? filas.reduce((s, f) => s + f.importe, 0) : null
 
-  return (
-    // 🔑 Todos los diálogos que se abren desde el POS —también los del turno y la calculadora, que se arman
-    // en otros archivos— toman el aspecto de la Caja (`Modal` con `variante="pos"`, opt-in).
-    <ModalVarianteContext.Provider value="pos">
-    <div style={{ minHeight: '100vh', background: 'var(--mo-canvas)' }}>
-      {/* La izquierda se estira; la derecha (el pedido) queda fija a la vista, con el total siempre abajo.
-          En el teléfono, una abajo de la otra. La cabecera mide 56 px: el pedido se calcula contra eso. */}
-      <style>{`
-        .pos-top { display: flex; align-items: center; flex-wrap: wrap; gap: ${space[2]}px ${space[3]}px; min-height: 56px; padding: ${space[2]}px ${space[4]}px; background: ${color.sideBg}; color: ${color.sideInk}; }
-        .pos-top .pos-tbtn { height: 36px; padding: 0 ${space[3]}px; border-radius: ${radius.md}px; border: 1px solid ${color.sideLine}; background: transparent; color: ${color.sideInk}; font-size: ${font.base}px; font-weight: ${weight.semibold}; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: ${space[2]}px; }
-        .pos-top .pos-tbtn:hover { background: ${color.sideHover}; }
-        .pos-top .pos-tbtn.icono { width: 36px; padding: 0; }
-        .pos-top .pos-tbtn[aria-pressed="true"] { color: ${color.sideAccent}; border-color: ${color.sideAccent}; }
-        .pos-top .pos-tbtn.peligro { color: ${color.dangerBorder}; border-color: ${color.dangerBorder}; }
-        .pos-gn { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: ${color.sideInk2}; white-space: nowrap; }
-        .pos-gn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #17b26a; box-shadow: 0 0 0 3px rgba(23,178,106,.22); }
-        .pos-gn.off::before { background: var(--mo-warning-solid); box-shadow: 0 0 0 3px rgba(220,104,3,.25); }
-        .pos-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: ${space[4]}px; padding: ${space[4]}px; align-items: start; }
-        .pos-scan { border: 1.5px solid ${color.line2} !important; }
-        .pos-scan:focus { border-color: ${color.brandSolid} !important; box-shadow: 0 0 0 4px ${color.brandRing} !important; }
-        .pos-alt { font-size: ${font.xs}px; font-weight: ${weight.semibold}; background: rgba(255,255,255,.22); border-radius: 5px; padding: 1px 6px; margin-left: ${space[1]}px; }
-        .pos-der { position: sticky; top: ${space[4]}px; max-height: calc(100vh - 56px - ${2 * space[4]}px); display: flex; flex-direction: column; min-height: 0; }
-        .pos-renglones { flex: 1; min-height: 0; overflow: auto; }
-        .caja-tarjeta { transition: border-color .12s, box-shadow .12s; }
-        .caja-tarjeta:hover, .caja-tarjeta:focus-visible { border-color: ${color.brandBorder} !important; box-shadow: ${shadow.md}; }
-        .caja-sacar:hover { background: ${color.dangerBg} !important; color: ${color.danger} !important; }
-        .pos-buscar { position: relative; flex: 1; min-width: 0; }
-        .pos-buscar svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: ${color.mut}; pointer-events: none; }
-        .cobro-grid { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: ${space[4]}px; }
-        @media (max-width: 1100px) { .pos-grid { grid-template-columns: minmax(0, 1fr) 350px; } .pos-turno { display: none; } }
-        @media (max-width: 900px) { .cobro-grid { grid-template-columns: 1fr; } }
-        @media (max-width: 860px) { .pos-grid { grid-template-columns: 1fr; } .pos-der { position: static; max-height: none; } }
-      `}</style>
-      <header className="pos-top">
-        <IrA href="/caja" className="pos-tbtn icono" aria-label="Volver" title="Volver" style={{ height: 36 }}>
-          <Icono nombre="atras" size={18} />
-        </IrA>
-        {/* El chip de la marca (prototipo del 5-oct): sale de la configuración (`lib/caja/marca.ts`). */}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 28, padding: '0 11px 0 5px', borderRadius: radius.pill, background: MARCA_CAJA.acentoBg, color: MARCA_CAJA.acento, fontWeight: weight.bold, fontSize: font.base, whiteSpace: 'nowrap' }}>
-          <b style={{ width: 19, height: 19, borderRadius: radius.pill, background: MARCA_CAJA.acento, color: MARCA_CAJA.acentoBg, display: 'grid', placeItems: 'center', fontSize: font.xs }}>{MARCA_CAJA.nombre[0]}</b>
-          Caja {MARCA_CAJA.nombre}
-        </span>
-        <span className="pos-turno" style={{ fontSize: font.base, color: color.sideInk2, whiteSpace: 'nowrap' }}>
-          caja abierta desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}
-        </span>
-        <span className={`pos-gn${gnOk ? '' : ' off'}`} title={gnPorque} role="status">
-          {gnOk ? 'Gestión Nube' : 'Gestión Nube sin respuesta'}
-        </span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
-          <button
-            type="button"
-            className="pos-tbtn icono"
-            onClick={() => cambiarSonido(!conSonido)}
-            aria-pressed={conSonido}
-            aria-label={conSonido ? 'Con sonido' : 'Sin sonido'}
-            title={conSonido ? 'Con sonido' : 'Sin sonido'}
-            style={{ height: 36 }}
-          >
-            <Icono nombre={conSonido ? 'sonido' : 'silencio'} size={18} />
-          </button>
-          <button type="button" className="pos-tbtn" onClick={() => setVerVentas(true)} style={{ height: 36 }}>
-            Ventas
-          </button>
-          <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('contar')} style={{ height: 36 }}>
-            Contar billetes
-          </button>
-          <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('salida')} style={{ height: 36 }}>
-            + Salida
-          </button>
-          <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('ingreso')} style={{ height: 36 }}>
-            + Ingreso
-          </button>
-          <button type="button" className="pos-tbtn peligro" onClick={() => setPanelTurno('cerrar')} style={{ height: 36 }}>
-            Cerrar caja
-          </button>
-        </div>
-      </header>
 
+  // Las piezas que comparten la PC y el celular: ⛔ se escriben dos veces.
+  const esperasJSX = (
+pendientes
+            .filter((v) => v.estado === 'esperando_pago' && v.id !== validando?.id)
+            .map((v) => (
+              <EsperaTransferencia key={v.id} venta={v} reglas={reglas} onLlego={llegoTransferencia} onCambio={refrescarPendientes} onCambiarPago={volverAlCarrito} />
+            ))
+  )
+  const avisoSinLlegarJSX =
+    sinLlegar > 0 && (
+            <Notice tone="danger">
+              Cobradas sin llegar a Gestión Nube: {sinLlegar}.{' '}
+              {rechazadas > 0
+                ? `${rechazadas === 1 ? 'Una la rechazó' : `${rechazadas} las rechazó`} Gestión Nube: revisar desde la pestaña Caja.`
+                : 'Se reintentan solas cada 3 min mientras el POS está abierto.'}
+            </Notice>
+    )
+  const ultimaJSX =
+    ultima && (
+            <UltimaVenta
+              venta={ultima.venta}
+              nombreCuenta={nombreCuenta}
+              esEfectivo={esEfectivo}
+              regalo={ultima.regalo}
+              onReimprimir={movil ? undefined : () => imprimir(ultima.ticket, ahora())}
+              onTicketCambio={movil ? undefined : () => imprimir(ultima.ticket, ahora(), 'cambio').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket de cambio: ${(e as Error).message}` }))}
+              onOtra={() => {
+                setUltima(null)
+                enfocar()
+              }}
+            />
+    )
+  const modalesTurnoJSX = (
+    <>
       {verVentas && (
         <VentasDelTurno
           nombreCuenta={nombreCuenta}
           onCerrar={() => setVerVentas(false)}
-          onReimprimir={(v) => imprimirTicket(ticketGuardado(v), ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))}
-          onTicketCambio={(v) => imprimirTicket(ticketGuardado(v), ahora(), 'cambio').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket de cambio: ${(e as Error).message}` }))}
+          onReimprimir={movil ? undefined : (v) => imprimir(ticketGuardado(v), ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))}
+          onTicketCambio={movil ? undefined : (v) => imprimir(ticketGuardado(v), ahora(), 'cambio').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket de cambio: ${(e as Error).message}` }))}
         />
       )}
 
@@ -1051,39 +1013,11 @@ function POS() {
           setTurno(null)
         }}
       />
-
-      <div className="pos-grid">
-        <div style={{ display: 'grid', gap: space[3], minWidth: 0 }}>
-          {pendientes
-            .filter((v) => v.estado === 'esperando_pago' && v.id !== validando?.id)
-            .map((v) => (
-              <EsperaTransferencia key={v.id} venta={v} reglas={reglas} onLlego={llegoTransferencia} onCambio={refrescarPendientes} onCambiarPago={volverAlCarrito} />
-            ))}
-          {sinLlegar > 0 && (
-            <Notice tone="danger">
-              Cobradas sin llegar a Gestión Nube: {sinLlegar}.{' '}
-              {rechazadas > 0
-                ? `${rechazadas === 1 ? 'Una la rechazó' : `${rechazadas} las rechazó`} Gestión Nube: revisar desde la pestaña Caja.`
-                : 'Se reintentan solas cada 3 min mientras el POS está abierto.'}
-            </Notice>
-          )}
-          <PedidosWebSinArmar datos={pedidosWeb} error={errPedidos} />
-
-          {ultima && (
-            <UltimaVenta
-              venta={ultima.venta}
-              nombreCuenta={nombreCuenta}
-              esEfectivo={esEfectivo}
-              regalo={ultima.regalo}
-              onReimprimir={() => imprimirTicket(ultima.ticket, ahora())}
-              onTicketCambio={() => imprimirTicket(ultima.ticket, ahora(), 'cambio').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket de cambio: ${(e as Error).message}` }))}
-              onOtra={() => {
-                setUltima(null)
-                enfocar()
-              }}
-            />
-          )}
-
+    </>
+  )
+  // 🔴 La prenda repetida (Bruno, 14-oct), «Validar transferencia» y el cobro: UNA sola vez, para los dos formatos.
+  const modalesJSX = (
+    <>
           {/* 🔴 La prenda repetida (Bruno, 14-oct): el foco y el Enter van a «No» — el lector que disparó dos
               veces manda su Enter acá —, y cerrar con Escape o el fondo también es «No». */}
           {pregunta && (
@@ -1145,7 +1079,8 @@ function POS() {
                   <Button variant="outline" onClick={() => setEnCobro(false)}>
                     Volver
                   </Button>
-                  <Button
+                  {!movil && (
+<Button
                     variant={regalo ? 'solid' : 'outline'}
                     tone={regalo ? 'brand' : undefined}
                     aria-pressed={regalo}
@@ -1155,6 +1090,7 @@ function POS() {
                   >
                     Regalo
                   </Button>
+)}
                   <Button size="lg" tone="success" variant="solid" disabled={!puedeConfirmar} loading={enviando} onClick={confirmar} iconLeft={<Icono nombre="check" />}>
                     {porTransferencia ? 'Validar transferencia' : 'Finalizar venta'} {c ? plata(c.total) : ''}
                   </Button>
@@ -1364,7 +1300,10 @@ function POS() {
               </div>
             </Modal>
           )}
-          <SectionCard title="Escanear o buscar" actions={<span style={{ fontSize: font.sm, color: color.mut }}>Variantes: ↑/↓ y Enter</span>}>
+    </>
+  )
+  const buscadorJSX = (
+    <>
               {/* 🔴 Sin <form>: el Enter del lector lo toma el campo. Con un form, el botón «Agregar» en
                   `loading` (deshabilitado) hacía que el navegador IGNORE el Enter, y el segundo escaneo
                   quedaba escrito sin entrar (visto en prod, 4-oct). */}
@@ -1385,7 +1324,7 @@ function POS() {
                     if (una) elegirProducto(sugeridas.conStock[0])
                     else escanear(codigo)
                   }}
-                  placeholder="Código de barras, SKU o nombre y talle"
+                  placeholder={movil ? 'Nombre o código de la prenda' : 'Código de barras, SKU o nombre y talle'}
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -1405,7 +1344,7 @@ function POS() {
                 </div>
               )}
               {/* Sin lista a la vista: qué se puede hacer acá (prototipo del 5-oct). */}
-              {!(sugeridas && sugeridas.q === codigo.trim()) && !candidatos && !aviso && (
+              {!movil && !(sugeridas && sugeridas.q === codigo.trim()) && !candidatos && !aviso && (
                 <div style={{ display: 'grid', justifyItems: 'center', textAlign: 'center', gap: space[1.5], padding: `${space[6]}px ${space[4]}px ${space[5]}px`, color: color.mut, fontSize: font.base }}>
                   {/* El lector de códigos (el ícono del prototipo; el kit ⛔ lo tiene). */}
                   <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ color: color.mut2 }}>
@@ -1456,7 +1395,239 @@ function POS() {
                   onElegir={elegirCandidato}
                 />
               )}
-            </SectionCard>
+    </>
+  )
+  const renglonesJSX = (
+    <>
+              {bor.renglones.length === 0 ? (
+                <div style={{ padding: `${space[6]}px 0`, textAlign: 'center', color: color.mut, fontSize: font.base }}>Pedido vacío: escanear o buscar una prenda.</div>
+              ) : (
+                bor.renglones.map((r, i) => (
+                  <FilaRenglon
+                    key={claveDe(r.variante)}
+                    r={r}
+                    feria={feriaIds.has(Number(r.variante.product_id))}
+                    tactil={movil}
+                    cargandoPrecios={!datos || !tnIdx || !tnIdxStunned}
+                    onCantidad={(n) => (n <= 0 ? sacarRenglon(i) : cambiarRenglon(i, { cantidad: n }))}
+                    onPrecio={(p) => cambiarRenglon(i, { precio: p })}
+                    onRebaja={(rb) => cambiarRenglon(i, { rebaja: rb })}
+                    importe={filas?.[i]?.importe ?? null}
+                    promos={(conPromo.items[i] as { promos?: string[] } | undefined)?.promos ?? null}
+                    onSacar={() => sacarRenglon(i)}
+                    avisoWeb={avisoWeb(r.variante, r.stock, r.cantidad)}
+                    mirandoWeb={!pedidosWeb && !errPedidos}
+                  />
+                ))
+              )}
+    </>
+  )
+
+  // ── Vista de CELULAR (Bruno, 27-oct): lo mismo, en una columna. Arriba una fila, en el medio buscar y el pedido,
+  // abajo el total y «Continuar al cobro». El cobro, «Validar transferencia», la prenda repetida y los turnos son
+  // los MISMOS diálogos de la PC (`Modal`): ⛔ se reescribe plata. ⛔ Imprime nada: el ticket va por mail.
+  if (movil) {
+    const opcion = (texto: string, accion: () => void, peligro = false) => (
+      <Button
+        key={texto}
+        variant="outline"
+        tone={peligro ? 'danger' : undefined}
+        size="lg"
+        fullWidth
+        onClick={() => {
+          setMenuMovil(false)
+          accion()
+        }}
+      >
+        {texto}
+      </Button>
+    )
+    return (
+      <ModalVarianteContext.Provider value="pos">
+        <style>{`
+          .pm { height: 100dvh; display: flex; flex-direction: column; background: var(--mo-canvas); }
+          .pm-top { display: flex; align-items: center; gap: ${space[2]}px; min-height: 56px; padding: ${space[2]}px max(${space[3]}px, env(safe-area-inset-right, 0px)) ${space[2]}px max(${space[3]}px, env(safe-area-inset-left, 0px)); padding-top: max(${space[2]}px, env(safe-area-inset-top, 0px)); background: ${color.sideBg}; color: ${color.sideInk}; flex: none; }
+          .pm-ic { width: 44px; height: 44px; border-radius: ${radius.lg}px; border: 1px solid ${color.sideLine}; background: transparent; color: ${color.sideInk}; display: grid; place-items: center; flex: none; cursor: pointer; padding: 0; }
+          .pm-gn { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: ${color.sideInk2}; white-space: nowrap; flex: none; }
+          .pm-gn::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #17b26a; }
+          .pm-gn.off::before { background: var(--mo-warning-solid); }
+          .pm-scroll { flex: 1; min-height: 0; overflow-y: auto; display: grid; gap: ${space[3]}px; align-content: start; padding: ${space[3]}px max(${space[3]}px, env(safe-area-inset-right, 0px)) ${space[3]}px max(${space[3]}px, env(safe-area-inset-left, 0px)); }
+          .pm-barra { flex: none; display: flex; align-items: center; gap: ${space[3]}px; background: ${color.surface}; border-top: 1px solid ${color.line}; padding: ${space[2]}px max(${space[3]}px, env(safe-area-inset-right, 0px)) max(${space[2]}px, env(safe-area-inset-bottom, 0px)) max(${space[3]}px, env(safe-area-inset-left, 0px)); }
+        `}</style>
+        <div className="pm">
+          <header className="pm-top">
+            <IrA href="/caja" className="pm-ic" aria-label="Volver" title="Volver" style={{ height: 44 }}>
+              <Icono nombre="atras" size={22} />
+            </IrA>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, fontWeight: weight.bold, fontSize: font.md }}>
+              <b style={{ width: 28, height: 28, borderRadius: radius.pill, background: MARCA_CAJA.acento, color: MARCA_CAJA.acentoBg, display: 'grid', placeItems: 'center', fontSize: font.sm, flex: 'none' }}>{MARCA_CAJA.nombre[0]}</b>
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Caja {MARCA_CAJA.nombre}</span>
+            </span>
+            <span className={`pm-gn${gnOk ? '' : ' off'}`} title={gnPorque} role="status">
+              {gnOk ? 'Gestión Nube' : 'GN sin respuesta'}
+            </span>
+            <button type="button" className="pm-ic" onClick={() => setMenuMovil(true)} aria-label="Más opciones" title="Más opciones" style={{ height: 44 }}>
+              <Icono nombre="puntos" size={22} />
+            </button>
+          </header>
+
+          {modalesTurnoJSX}
+
+          {/* La franja de pedidos web sin armar queda fija (Bruno: está bien así). */}
+          <div style={{ flex: 'none' }}>
+            <PedidosWebSinArmar datos={pedidosWeb} error={errPedidos} />
+          </div>
+
+          <div className="pm-scroll">
+            {esperasJSX}
+            {avisoSinLlegarJSX}
+            {ultimaJSX}
+            {modalesJSX}
+            <div>{buscadorJSX}</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[2] }}>
+              <h2 style={{ margin: 0, fontSize: font.lg, fontWeight: weight.bold, color: color.ink }}>{`Pedido · ${prendas === 1 ? '1 prenda' : `${prendas} prendas`}`}</h2>
+              <Button size="sm" variant="ghost" onClick={vaciar} disabled={bor.renglones.length === 0} style={{ height: 44 }}>
+                Vaciar pedido
+              </Button>
+            </div>
+            <Card style={{ padding: `0 ${space[3]}px` }}>{renglonesJSX}</Card>
+            {sinPrecio && <Notice tone="warning">Prenda sin precio: escribirlo en el renglón.</Notice>}
+            <Card style={{ display: 'grid', gap: space[2], padding: space[3] }}>
+              <Field label="Mail para el ticket (opcional)">
+                <CampoMail valor={bor.email} onCambio={(m) => setBor((b) => ({ ...b, email: m }))} />
+              </Field>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+                <span style={{ color: color.mut }}>Descuento</span>
+                <CampoRebaja valor={descuentoManual} onCambio={(rb) => setBor((b) => ({ ...b, descuentoVenta: rb }))} />
+              </div>
+              {!descuentoManual && conPromo.venta && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[2], fontSize: font.sm }}>
+                  <Badge tone="success">{conPromo.venta.nombre}</Badge>
+                  <b style={{ color: color.successInk, fontVariantNumeric: 'tabular-nums' }}>−{plata(conPromo.venta.pesos)}</b>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          <div className="pm-barra">
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: font.sm, color: color.mut }}>{prendas === 0 ? 'Sin prendas' : prendas === 1 ? '1 prenda' : `${prendas} prendas`}</div>
+              <div style={{ fontSize: font['2xl'], fontWeight: weight.heavy, color: color.brand, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+                {bor.renglones.length === 0 ? plata(0) : mostrarCobro && c ? plata(c.total) : aPagar != null ? plata(aPagar) : '—'}
+              </div>
+            </div>
+            <Button size="lg" tone="success" variant="solid" disabled={!puedeCobrar} onClick={abrirCobro} style={{ height: 52 }}>
+              Continuar al cobro
+            </Button>
+          </div>
+        </div>
+
+        <Modal abierto={menuMovil} onCerrar={() => setMenuMovil(false)} titulo={`Caja ${MARCA_CAJA.nombre}`}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: space[2] }}>
+            {opcion('Ventas', () => setVerVentas(true))}
+            {opcion('Contar billetes', () => setPanelTurno('contar'))}
+            {opcion('+ Ingreso', () => setPanelTurno('ingreso'))}
+            {opcion('+ Salida', () => setPanelTurno('salida'))}
+            {opcion(conSonido ? 'Con sonido' : 'Sin sonido', () => cambiarSonido(!conSonido))}
+            {opcion('Cerrar caja', () => setPanelTurno('cerrar'), true)}
+          </div>
+        </Modal>
+      </ModalVarianteContext.Provider>
+    )
+  }
+
+  return (
+    // 🔑 Todos los diálogos que se abren desde el POS —también los del turno y la calculadora, que se arman
+    // en otros archivos— toman el aspecto de la Caja (`Modal` con `variante="pos"`, opt-in).
+    <ModalVarianteContext.Provider value="pos">
+    <div style={{ minHeight: '100vh', background: 'var(--mo-canvas)' }}>
+      {/* La izquierda se estira; la derecha (el pedido) queda fija a la vista, con el total siempre abajo.
+          En el teléfono, una abajo de la otra. La cabecera mide 56 px: el pedido se calcula contra eso. */}
+      <style>{`
+        .pos-top { display: flex; align-items: center; flex-wrap: wrap; gap: ${space[2]}px ${space[3]}px; min-height: 56px; padding: ${space[2]}px ${space[4]}px; background: ${color.sideBg}; color: ${color.sideInk}; }
+        .pos-top .pos-tbtn { height: 36px; padding: 0 ${space[3]}px; border-radius: ${radius.md}px; border: 1px solid ${color.sideLine}; background: transparent; color: ${color.sideInk}; font-size: ${font.base}px; font-weight: ${weight.semibold}; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: ${space[2]}px; }
+        .pos-top .pos-tbtn:hover { background: ${color.sideHover}; }
+        .pos-top .pos-tbtn.icono { width: 36px; padding: 0; }
+        .pos-top .pos-tbtn[aria-pressed="true"] { color: ${color.sideAccent}; border-color: ${color.sideAccent}; }
+        .pos-top .pos-tbtn.peligro { color: ${color.dangerBorder}; border-color: ${color.dangerBorder}; }
+        .pos-gn { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: ${color.sideInk2}; white-space: nowrap; }
+        .pos-gn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #17b26a; box-shadow: 0 0 0 3px rgba(23,178,106,.22); }
+        .pos-gn.off::before { background: var(--mo-warning-solid); box-shadow: 0 0 0 3px rgba(220,104,3,.25); }
+        .pos-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: ${space[4]}px; padding: ${space[4]}px; align-items: start; }
+        .pos-scan { border: 1.5px solid ${color.line2} !important; }
+        .pos-scan:focus { border-color: ${color.brandSolid} !important; box-shadow: 0 0 0 4px ${color.brandRing} !important; }
+        .pos-alt { font-size: ${font.xs}px; font-weight: ${weight.semibold}; background: rgba(255,255,255,.22); border-radius: 5px; padding: 1px 6px; margin-left: ${space[1]}px; }
+        .pos-der { position: sticky; top: ${space[4]}px; max-height: calc(100vh - 56px - ${2 * space[4]}px); display: flex; flex-direction: column; min-height: 0; }
+        .pos-renglones { flex: 1; min-height: 0; overflow: auto; }
+        .caja-tarjeta { transition: border-color .12s, box-shadow .12s; }
+        .caja-tarjeta:hover, .caja-tarjeta:focus-visible { border-color: ${color.brandBorder} !important; box-shadow: ${shadow.md}; }
+        .caja-sacar:hover { background: ${color.dangerBg} !important; color: ${color.danger} !important; }
+        .pos-buscar { position: relative; flex: 1; min-width: 0; }
+        .pos-buscar svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: ${color.mut}; pointer-events: none; }
+        .cobro-grid { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: ${space[4]}px; }
+        @media (max-width: 1100px) { .pos-grid { grid-template-columns: minmax(0, 1fr) 350px; } .pos-turno { display: none; } }
+        @media (max-width: 900px) { .cobro-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 860px) { .pos-grid { grid-template-columns: 1fr; } .pos-der { position: static; max-height: none; } }
+      `}</style>
+      <header className="pos-top">
+        <IrA href="/caja" className="pos-tbtn icono" aria-label="Volver" title="Volver" style={{ height: 36 }}>
+          <Icono nombre="atras" size={18} />
+        </IrA>
+        {/* El chip de la marca (prototipo del 5-oct): sale de la configuración (`lib/caja/marca.ts`). */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 28, padding: '0 11px 0 5px', borderRadius: radius.pill, background: MARCA_CAJA.acentoBg, color: MARCA_CAJA.acento, fontWeight: weight.bold, fontSize: font.base, whiteSpace: 'nowrap' }}>
+          <b style={{ width: 19, height: 19, borderRadius: radius.pill, background: MARCA_CAJA.acento, color: MARCA_CAJA.acentoBg, display: 'grid', placeItems: 'center', fontSize: font.xs }}>{MARCA_CAJA.nombre[0]}</b>
+          Caja {MARCA_CAJA.nombre}
+        </span>
+        <span className="pos-turno" style={{ fontSize: font.base, color: color.sideInk2, whiteSpace: 'nowrap' }}>
+          caja abierta desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}
+        </span>
+        <span className={`pos-gn${gnOk ? '' : ' off'}`} title={gnPorque} role="status">
+          {gnOk ? 'Gestión Nube' : 'Gestión Nube sin respuesta'}
+        </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="pos-tbtn icono"
+            onClick={() => cambiarSonido(!conSonido)}
+            aria-pressed={conSonido}
+            aria-label={conSonido ? 'Con sonido' : 'Sin sonido'}
+            title={conSonido ? 'Con sonido' : 'Sin sonido'}
+            style={{ height: 36 }}
+          >
+            <Icono nombre={conSonido ? 'sonido' : 'silencio'} size={18} />
+          </button>
+          <button type="button" className="pos-tbtn" onClick={() => setVerVentas(true)} style={{ height: 36 }}>
+            Ventas
+          </button>
+          <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('contar')} style={{ height: 36 }}>
+            Contar billetes
+          </button>
+          <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('salida')} style={{ height: 36 }}>
+            + Salida
+          </button>
+          <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('ingreso')} style={{ height: 36 }}>
+            + Ingreso
+          </button>
+          <button type="button" className="pos-tbtn peligro" onClick={() => setPanelTurno('cerrar')} style={{ height: 36 }}>
+            Cerrar caja
+          </button>
+        </div>
+      </header>
+
+      {modalesTurnoJSX}
+
+      <div className="pos-grid">
+        <div style={{ display: 'grid', gap: space[3], minWidth: 0 }}>
+          {esperasJSX}
+          {avisoSinLlegarJSX}
+          <PedidosWebSinArmar datos={pedidosWeb} error={errPedidos} />
+
+          {ultimaJSX}
+
+          {modalesJSX}
+          <SectionCard title="Escanear o buscar" actions={<span style={{ fontSize: font.sm, color: color.mut }}>Variantes: ↑/↓ y Enter</span>}>
+            {buscadorJSX}
+          </SectionCard>
         </div>
 
         <div className="pos-der">
@@ -1470,26 +1641,7 @@ function POS() {
               </Button>
             </div>
             <div className="pos-renglones" style={{ padding: `0 ${space[4]}px` }}>
-              {bor.renglones.length === 0 ? (
-                <div style={{ padding: `${space[6]}px 0`, textAlign: 'center', color: color.mut, fontSize: font.base }}>Pedido vacío: escanear o buscar una prenda.</div>
-              ) : (
-                bor.renglones.map((r, i) => (
-                  <FilaRenglon
-                    key={claveDe(r.variante)}
-                    r={r}
-                    feria={feriaIds.has(Number(r.variante.product_id))}
-                    cargandoPrecios={!datos || !tnIdx || !tnIdxStunned}
-                    onCantidad={(n) => (n <= 0 ? sacarRenglon(i) : cambiarRenglon(i, { cantidad: n }))}
-                    onPrecio={(p) => cambiarRenglon(i, { precio: p })}
-                    onRebaja={(rb) => cambiarRenglon(i, { rebaja: rb })}
-                    importe={filas?.[i]?.importe ?? null}
-                    promos={(conPromo.items[i] as { promos?: string[] } | undefined)?.promos ?? null}
-                    onSacar={() => sacarRenglon(i)}
-                    avisoWeb={avisoWeb(r.variante, r.stock, r.cantidad)}
-                    mirandoWeb={!pedidosWeb && !errPedidos}
-                  />
-                ))
-              )}
+              {renglonesJSX}
             </div>
             {/* El pie SIEMPRE a la vista (prototipo del 6-oct): con el pedido vacío, TOTAL $0 y el cobro apagado. */}
             <div style={{ flexShrink: 0, display: 'grid', gap: space[2], padding: `${space[3]}px ${space[4]}px ${space[4]}px`, borderTop: `1px solid ${color.line}`, background: color.bg }}>

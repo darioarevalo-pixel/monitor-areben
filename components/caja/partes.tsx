@@ -430,8 +430,11 @@ export function FilaRenglon({
   mirandoWeb,
   feria = false,
   promos = null,
+  tactil = false,
 }: {
   r: Renglon
+  /** Vista de celular: los botones de cantidad y la cruz de 40 px (el pulgar), ⛔ los 28 de la PC. */
+  tactil?: boolean
   /** Las promos que le tocaron a esta prenda (W5), o null. Las aplica `aplicarPromos`, ⛔ la cajera. */
   promos?: string[] | null
   /** Producto de feria trabado (Bruno, 5-oct): precio final, sólo efectivo o transferencia. */
@@ -455,7 +458,7 @@ export function FilaRenglon({
   // Con descuento a mano: el de lista tachado y el que queda al lado (Bruno, 5-oct).
   const conRebaja = (!!r.rebaja || !!promos?.length) && importe != null && lista != null && lista - importe > 0.004
   const paso = (delta: number, etiqueta: string, signo: string) => (
-    <button type="button" onClick={() => onCantidad(r.cantidad + delta)} aria-label={etiqueta} style={{ height: 28, width: 28, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', color: color.ink2, fontSize: font.lg, cursor: 'pointer' }}>
+    <button type="button" onClick={() => onCantidad(r.cantidad + delta)} aria-label={etiqueta} style={{ height: tactil ? 40 : 28, width: tactil ? 40 : 28, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', color: color.ink2, fontSize: font.lg, cursor: 'pointer' }}>
       {signo}
     </button>
   )
@@ -464,7 +467,7 @@ export function FilaRenglon({
     // código, stock y ubicación en UNA línea; los avisos, sólo si hay alguno.
     // La cruz va ARRIBA a la derecha, al lado del importe (Bruno, 12-oct): en la fila de los controles la
     // hacía partir en dos renglones.
-    <div style={{ display: 'grid', gridTemplateColumns: '36px minmax(0, 1fr) auto 24px', columnGap: space[2], rowGap: space[1], padding: `${space[1.5]}px 0`, borderBottom: `1px solid ${color.bg2}` }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `36px minmax(0, 1fr) auto ${tactil ? 40 : 24}px`, columnGap: space[2], rowGap: space[1], padding: `${space[1.5]}px 0`, borderBottom: `1px solid ${color.bg2}` }}>
       <div style={{ gridRow: 'span 2' }}>
         <Foto src={r.foto} ancho={36} proporcion="1 / 1" />
       </div>
@@ -483,7 +486,7 @@ export function FilaRenglon({
         aria-label={`Sacar ${r.variante.product_name} · ${r.variante.size_name} del pedido`}
         title="Sacar del pedido"
         // La cruz en ROJO siempre (Bruno, 12-oct), ⛔ sólo al pasar el mouse.
-        style={{ gridRow: 'span 2', alignSelf: 'start', height: 24, width: 24, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', borderRadius: radius.md, color: color.danger, cursor: 'pointer', padding: 0 }}
+        style={{ gridRow: 'span 2', alignSelf: 'start', height: tactil ? 40 : 24, width: tactil ? 40 : 24, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', borderRadius: radius.md, color: color.danger, cursor: 'pointer', padding: 0 }}
       >
         <Icono nombre="cruz" size={16} />
       </button>
@@ -516,7 +519,7 @@ export function FilaRenglon({
       )}
       {/* Los controles van a lo ancho del renglón: con el precio editable ⛔ entran debajo del nombre. */}
       <div style={{ gridColumn: '1 / -1', display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'nowrap' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', height: 28, border: `1px solid ${color.line2}`, borderRadius: radius.md, background: color.surface, flexShrink: 0 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', height: tactil ? 44 : 28, border: `1px solid ${color.line2}`, borderRadius: radius.md, background: color.surface, flexShrink: 0 }}>
           {paso(-1, 'Una menos', '−')}
           <span style={{ minWidth: 28, textAlign: 'center', fontWeight: weight.semibold, fontSize: font.base, fontVariantNumeric: 'tabular-nums' }}>{r.cantidad}</span>
           {paso(1, 'Una más', '+')}
@@ -532,7 +535,7 @@ export function FilaRenglon({
             if (texto != null) onPrecio(aNumero(texto))
             setTexto(null)
           }}
-          style={{ width: 84, height: 28, textAlign: 'right', color: color.brand, fontWeight: weight.semibold, fontSize: font.base }}
+          style={{ width: tactil ? 96 : 84, height: tactil ? 44 : 28, textAlign: 'right', color: color.brand, fontWeight: weight.semibold, fontSize: font.base }}
           aria-label="Precio"
         />
         <CampoRebaja valor={r.rebaja ?? null} onCambio={onRebaja} chico />
@@ -693,7 +696,8 @@ export function UltimaVenta({
   regalo = false,
 }: {
   venta: Venta
-  onReimprimir: () => void
+  /** Sin él, ⛔ hay «Reimprimir» (el celular ⛔ imprime: el ticket va por mail). */
+  onReimprimir?: () => void
   /** El ticket de cambio solo (regalo, Bruno 13-oct): sin precios. */
   onTicketCambio?: () => void
   /**
@@ -747,9 +751,11 @@ export function UltimaVenta({
           <span style={{ display: 'block', fontSize: font.base, color: color.ink2 }}>Es regalo: si no salió el ticket de cambio, tocá «Imprimir ticket de cambio».</span>
         )}
       </div>
-      <Button variant="outline" onClick={onReimprimir}>
-        Reimprimir ticket
-      </Button>
+      {onReimprimir && (
+        <Button variant="outline" onClick={onReimprimir}>
+          Reimprimir ticket
+        </Button>
+      )}
       {onTicketCambio && (
         <Button variant={regalo ? 'solid' : 'outline'} tone={regalo ? 'brand' : undefined} onClick={onTicketCambio} title="Sin precios, para regalo">
           {regalo ? 'Imprimir ticket de cambio' : 'Ticket de cambio'}
