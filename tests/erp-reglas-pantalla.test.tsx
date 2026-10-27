@@ -55,7 +55,7 @@ describe('ERP › Reglas con el molde', () => {
     expect(leerReglas).toHaveBeenCalledWith('zattia')
     expect(host.querySelector('[aria-current="true"]')?.textContent).toContain('Regla de cobro')
     await clic([...host.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Ruta'))!)
-    expect(ir).toHaveBeenCalledWith('cuentas')
+    expect(ir).toHaveBeenCalledWith('rutas')
     expect(texto()).toContain('La Caja cobra con estas reglas')
   })
 
