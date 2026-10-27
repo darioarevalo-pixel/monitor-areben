@@ -399,6 +399,13 @@ el id del cliente (acción `poner-contacto`, verbo `ponerContactoCliente` del mo
 documento, y el botón «Escribir por WhatsApp» se prende al guardar. ⛔ borra un número ya cargado (vacío no se acepta). Test
 `erp-contacto-pantalla`, `erp-poner-contacto`.
 
+💸 **Gastos comerciales — la puerta (sin pantalla todavía)** (27-oct, Resto). Sólo admin. Son comisiones de plataformas, impuestos y
+lo que cuesta vender (⛔ estructura, socios ni operativos: esos siguen en el dashboard), para sacar el resultado ANTES de gastos
+operativos. La **comisión sale sola** de cada cobro (tasa de la ruta × monto) y ⛔ se carga; si una ruta con tarjeta o MP ⛔ tiene
+tasa, el cobro queda fuera y la lectura lo cuenta en `cobrosSinComision`. Los **impuestos y otros** se cargan a mano; un gasto es
+inmutable y se corrige cargando otro en negativo. `GET vista=gastos` (total, por tipo, por mes, lo cargado) y `POST registrar-gasto`.
+Test `erp-gastos`.
+
 🎨 **Búsqueda global (⌘K) y atajos** (26-oct, Resto; `Piezas.dc.html`). `components/erp/BusquedaGlobal.tsx` + núcleo `lib/erp/busqueda-global.core.js`
 (test `erp-busqueda-global`). ⌘K / Ctrl+K abren siempre; «/» y «?» sólo fuera de un campo (`accionDeTecla`); botón «Buscar» en el pie del menú.
 🔑 ⛔ **Sin lectura nueva**: reparte lo escrito entre `buscarVentas` (número o cliente), `buscarPrendas` (SKU, código, nombre) y

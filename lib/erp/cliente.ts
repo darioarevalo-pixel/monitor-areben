@@ -748,3 +748,21 @@ export const recibirTransferenciaDoc = (linea: TiendaErp, transferenciaId: strin
   pedir<ResultadoDoc>(post({ accion: 'transferencia-recibir', linea, transferenciaId, renglones }), '', 'No se pudo recibir la transferencia.')
 export const cancelarTransferenciaDoc = (linea: TiendaErp, transferenciaId: string, motivo: string) =>
   pedir<ResultadoDoc>(post({ accion: 'transferencia-cancelar', linea, transferenciaId, motivo }), '', 'No se pudo cancelar la transferencia.')
+
+// ── ERP › Gastos comerciales (`api/_erp-gastos.js`; `gastosComerciales` / `registrarGasto` del motor, sql/055) — sólo admin ──
+export type TipoGasto = 'comision' | 'impuesto' | 'otro'
+export type GastoCargado = { id: string; linea: string; fecha: string; tipo: TipoGasto; monto: number; detalle: string; cuenta: string | null; origen: 'manual' | 'automatico'; venta_id: string | null; usuario: string; creado_en: string }
+export type GastosDelPeriodo = {
+  desde: string; hasta: string; prueba: boolean; total: number; por_tipo: Record<TipoGasto, number>
+  meses: Array<{ mes: string; total: number; por_tipo: Record<TipoGasto, number> }>
+  /** La parte de «comisión» que salió sola de los cobros (el resto de los gastos se cargó a mano). */
+  comisionAutomatica: number
+  /** Cobros con tarjeta/MP cuya ruta ⛔ tiene tasa: la comisión de esos NO está en el total. */
+  cobrosSinComision: number
+  gastos: GastoCargado[]
+}
+export const leerGastos = (marca: MarcaErp, desde: string, hasta: string, prueba: boolean) =>
+  pedir<GastosDelPeriodo>(null, `&vista=gastos&marca=${marca}&desde=${desde}&hasta=${hasta}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudieron leer los gastos.')
+/** Un gasto a mano. Corregir uno cargado de más es cargar otro con el monto en NEGATIVO (el gasto es inmutable). */
+export const registrarGastoErp = (marca: MarcaErp, g: { linea?: string; fecha: string; tipo: TipoGasto; monto: number; detalle: string; cuenta?: string; prueba: boolean }) =>
+  pedir<{ ok: true; gasto: GastoCargado }>(post({ accion: 'registrar-gasto', marca, ...g }), '', 'No se pudo cargar el gasto.')

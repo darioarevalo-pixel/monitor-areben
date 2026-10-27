@@ -17,6 +17,8 @@
  *   GET  ?recurso=erp&vista=conciliacion&tienda=bdi|zattia|stunned&fecha=…  lo que ⛔ cierra contra TN y GN ese día (motor sql/024)
  *   GET  ?recurso=erp&vista=stock-lista&marca=bdi|zattia              la lista de Stock: cada prenda por depósito (`api/_erp-stock.js`)
  *   GET  ?recurso=erp&vista=cargar-venta&marca=…  ·  POST { accion: 'cargar-venta' }   Ventas › Cargar venta (`api/_erp-cargar.js`, sólo admin)
+ *   GET  ?recurso=erp&vista=gastos&marca=bdi|zattia&desde&hasta&prueba=0|1   Gastos comerciales (sólo admin; `api/_erp-gastos.js`)
+ *   POST { accion: 'registrar-gasto', marca, fecha, tipo, monto, detalle, cuenta?, prueba }                  cargar un gasto a mano (sólo admin)
  *   GET  ?recurso=erp&vista=cobros&marca=bdi|zattia&desde&hasta&prueba=0|1   Ventas › Cobros: `cobrosDe` del motor (`api/_erp-cobros.js`)
  *   GET  ?recurso=erp&vista=ventas-producto&marca=bdi|zattia&desde&hasta  Ventas › Por producto: renglones del espejo de GN (`api/_erp-por-producto.js`)
  *   GET  ?recurso=erp&vista=productos-lista&marca=bdi|zattia          la lista de Productos: uno por fila (`api/_erp-productos.js`)
@@ -121,6 +123,7 @@ import { cuentaDeCliente, cuentasDeLaMarca, fichaDeCliente, listaDeClientes, pon
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
 import { cobrosDelPeriodo, reintentarEntregasErp } from './_erp-cobros.js'
+import { gastosDelPeriodo, registrarGastoErp } from './_erp-gastos.js'
 import { cargarVentaManual, datosParaCargar } from './_erp-cargar.js'
 
 const MARCAS = ['bdi', 'zattia']
@@ -1603,6 +1606,14 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.vista === 'cobros') {
       const r = await cobrosDelPeriodo({ marca: String(req.query.marca || ''), desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), prueba: req.query.prueba === '1' }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'gastos') {
+      const r = await gastosDelPeriodo({ marca: String(req.query.marca || ''), desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), prueba: req.query.prueba === '1' }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'POST' && body.accion === 'registrar-gasto') {
+      const r = await registrarGastoErp({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'GET' && req.query.vista === 'ventas-producto') {
       const marca = String(req.query.marca || '')

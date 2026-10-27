@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "91fdd6712f2726922527b13f39c76619f9efd977",
-  "traido_en": "2026-10-27T11:51:32.985Z",
+  "commit": "b6b5318f853024b2869985f3b1df35743780d95a",
+  "traido_en": "2026-10-27T12:14:10.479Z",
   "archivos": {
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
     "arca/cliente.js": "fc1118e7392afdf716057de81175ec6fe2b7a16edd63ed7956241e8389fce168",
@@ -22,6 +22,7 @@
     "cuentas/rutas.mjs": "02515ffdb62402d10a68ad42b5564f24c5e64eb4a29f74cea74837c890041666",
     "db.mjs": "01c415367a1f3373a2d71ba9c4d7d61d5231a51867213cd702abea22b562d98c",
     "depositos.mjs": "c32579434ed01915978dc8176cd5cad84070b19d82c863aa94adcc5982aebf25",
+    "gasto/gasto.mjs": "f74cedeb52f8b90ba9288e66295123551e95be48e97657e0f39ab304fe10c623",
     "stock/ajuste.mjs": "5a0cb9193f56b4a5bb31bd17f97d2d9f49045af4162e07987d969922b24d584a",
     "stock/interruptores.mjs": "aa08ed1ff19812949617eddd01af87c08d907434256ea84258368173e715bb58",
     "stock/permisos-rol.mjs": "3acdf41fa5b87a7c89f9752932547672c46d508c40a21940a48f4025ff1f13da",
