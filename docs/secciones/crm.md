@@ -244,6 +244,9 @@ WhatsApp**: un local vive sólo acá («Sin contactar») hasta que **responde �
   🔑 Un local entra a UNA tanda y queda: sólo entran «sin contactar» sin tanda, y ese filtro va
   también EN EL UPDATE del servidor (dos tandas a la vez no se pisan). La cuenta de la tanda
   (`resumenTanda`) sale de sus locales. Sin la tabla, el botón no aparece y el mapa anda igual.
+- 🔴 **Tocar un medio NO anota el contacto**: abre el canal y la ficha pregunta «¿Le escribiste?»;
+  se anota sólo con «Sí». Antes se anotaba con el toque y abrir el chat para mirar dejaba el local
+  «Contactado» (le pasó a Darío el 27-oct; se limpió a mano).
 - ⏭️ Falta: estadística por medio y «compraron» por tanda, y los mayoristas actuales en el mapa.
 
 ## Lo que ya se rompió acá

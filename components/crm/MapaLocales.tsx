@@ -38,8 +38,10 @@ import { BuscarInput, Button, Chips, Field, Input, Modal, Notice, NumberField, S
  * KV del CRM. Cada toque es una fila del historial. Cuando un local **responde**, pasa a Leads
  * (`crm:leads:bdi`, con la relectura de siempre) y recién ahí entra al panel de WhatsApp.
  *
- * 🔑 Tocar un medio (WhatsApp, Llamada, Instagram, Correo) abre el canal **y** anota el contacto:
- * es un solo gesto. La ventana se abre ANTES del pedido al servidor, o el navegador la bloquea.
+ * 🔑 Tocar un medio (WhatsApp, Llamada, Instagram, Correo) abre el canal y la ficha pregunta
+ * «¿Le escribiste?»: el contacto se anota sólo con «Sí». 🔴 Antes se anotaba con el toque, y abrir
+ * el chat para mirar dejaba el local «Contactado» (27-oct, Darío). La ventana se abre en el mismo
+ * toque, o el navegador la bloquea.
  *
  * Tandas (parte 2, 27-oct): se trabaja de a grupos chicos («15 de Pinamar esta semana»). Un local
  * entra a una sola tanda y queda ahí; la cuenta de cada tanda sale de sus locales.
@@ -55,6 +57,13 @@ const TONO: Record<EstadoProspecto, Tone> = {
 }
 
 const ORDEN_MEDIOS: Medio[] = ['whatsapp', 'llamada', 'instagram', 'correo']
+
+const PREGUNTA: Record<Medio, string> = {
+  whatsapp: '¿Le escribiste por WhatsApp?',
+  llamada: '¿Hablaste con el local?',
+  instagram: '¿Le escribiste por Instagram?',
+  correo: '¿Le mandaste el correo?',
+}
 
 const fmtFechaHora = (iso: string) => {
   const d = new Date(iso)
@@ -77,6 +86,8 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
   const [sinTandas, setSinTandas] = useState(false)
   const [tanda, setTanda] = useState<number | 'todas'>('todas')
   const [armando, setArmando] = useState(false)
+  /** El medio que se abrió y espera el «¿Le escribiste?» de la ficha abierta. */
+  const [pendiente, setPendiente] = useState<Medio | null>(null)
 
   useEffect(() => {
     let vivo = true
@@ -122,10 +133,16 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
     }
   }
 
-  function contactar(local: Prospecto, medio: Medio, href: string) {
+  function contactar(medio: Medio, href: string) {
     if (medio === 'llamada' || medio === 'correo') window.location.href = href
     else window.open(href, '_blank', 'noopener')
-    void hacer({ action: 'contacto', id: local.id, medio })
+    setPendiente(medio)
+  }
+
+  async function confirmarContacto(local: Prospecto, si: boolean) {
+    const medio = pendiente
+    setPendiente(null)
+    if (si && medio) await hacer({ action: 'contacto', id: local.id, medio })
   }
 
   /**
@@ -267,9 +284,9 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
         </div>
       </div>
 
-      <Modal abierto={!!p} onCerrar={() => { setAbierto(null); setNota('') }} titulo={p?.nombre}>
+      <Modal abierto={!!p} onCerrar={() => { setAbierto(null); setNota(''); setPendiente(null) }} titulo={p?.nombre}>
         {p && <Ficha p={p} tanda={nombreTanda(p.tanda_id)} historial={historial} ocupado={ocupado} nota={nota} setNota={setNota}
-          onContactar={contactar} onRespondio={respondio} onEstado={(e) => hacer({ action: 'estado', id: p.id, estado: e })}
+          pendiente={pendiente} onContactar={contactar} onConfirmar={(si) => confirmarContacto(p, si)} onRespondio={respondio} onEstado={(e) => hacer({ action: 'estado', id: p.id, estado: e })}
           onGuardarNota={guardarNota} onVerLead={onVerLead} />}
       </Modal>
 
@@ -282,7 +299,7 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
 }
 
 function Ficha({
-  p, tanda, historial, ocupado, nota, setNota, onContactar, onRespondio, onEstado, onGuardarNota, onVerLead,
+  p, tanda, historial, ocupado, nota, setNota, pendiente, onContactar, onConfirmar, onRespondio, onEstado, onGuardarNota, onVerLead,
 }: {
   p: Prospecto
   tanda: string | null
@@ -290,7 +307,9 @@ function Ficha({
   ocupado: boolean
   nota: string
   setNota: (s: string) => void
-  onContactar: (p: Prospecto, m: Medio, href: string) => void
+  pendiente: Medio | null
+  onContactar: (m: Medio, href: string) => void
+  onConfirmar: (si: boolean) => void
   onRespondio: (p: Prospecto) => void
   onEstado: (e: EstadoProspecto) => void
   onGuardarNota: () => void
@@ -335,12 +354,19 @@ function Ficha({
           {ORDEN_MEDIOS.map((m) => {
             const href = hrefs[m]
             return (
-              <Button key={m} size="sm" variant="outline" disabled={!href || ocupado} onClick={() => href && onContactar(p, m, href)}>
+              <Button key={m} size="sm" variant="outline" disabled={!href || ocupado} onClick={() => href && onContactar(m, href)}>
                 {MEDIO_LABEL[m]}
               </Button>
             )
           })}
         </div>
+        {pendiente && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[2], marginTop: space[2], padding: '8px 12px', borderRadius: 10, background: color.brandBg }}>
+            <span style={{ flex: 1, fontSize: 13, color: color.ink }}>{PREGUNTA[pendiente]}</span>
+            <Button size="sm" variant="solid" disabled={ocupado} onClick={() => onConfirmar(true)}>Sí</Button>
+            <Button size="sm" variant="ghost" disabled={ocupado} onClick={() => onConfirmar(false)}>No</Button>
+          </div>
+        )}
         {hrefs.whatsapp && !p.whatsapp_seguro && (
           <div style={{ fontSize: 12, color: color.mut2, marginTop: 4 }}>El número puede no tener WhatsApp.</div>
         )}
