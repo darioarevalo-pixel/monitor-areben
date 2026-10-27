@@ -109,6 +109,7 @@ function Trazo({ d, size = 18 }: { d: string; size?: number }) {
 
 type AAbrir = { tipo: 'venta'; id: string; numero: number; periodo: string } | { tipo: 'cliente'; doc: string | null; nombre: string } | null
 let pedidoDeBusqueda: AAbrir = null
+let prendaAAjustarPendiente: PrendaAAjustar | null = null
 
 export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const router = useRouter()
@@ -117,7 +118,11 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   // De una ficha de prenda (Stock, Movimientos, Conciliación, Diferencias) a «Nuevo ajuste» con la prenda cargada
   // (Conteos y ajustes): viaja en memoria, la dirección sólo dice la pestaña. 🎨 19-oct: Conciliación y Diferencias abren la
   // ficha AL COSTADO, ⛔ saltan a Stock.
-  const [aAjustar, setAAjustar] = useState<PrendaAAjustar | null>(null)
+  // Igual que `pedidoDeBusqueda`: `Erp` se remonta al cambiar de pestaña ⇒ la prenda a ajustar vive en el módulo.
+  const [aAjustar, setAAjustarEstado] = useState<PrendaAAjustar | null>(() => prendaAAjustarPendiente)
+  const setAAjustar = (p: PrendaAAjustar | null) => { prendaAAjustarPendiente = p; setAAjustarEstado(p) }
+  // El estado ya la tomó: el módulo la suelta (si no, reaparecería en el próximo remonte, por ejemplo al volver por el menú).
+  useEffect(() => { prendaAAjustarPendiente = null; pedidoDeBusqueda = null }, [])
   const ir = (s: string, p?: string | null) => router.push(hrefErp(s, p))
   // Búsqueda global (⌘K) y atajos (?). Lo que se elige viaja en memoria (como `aAjustar`): la lista que lo abre lo recibe y lo suelta.
   const [panel, setPanel] = useState<'buscar' | 'atajos' | null>(null)
