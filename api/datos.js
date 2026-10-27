@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|logistica|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|erp|caja|repo-armado|reportes|tn-erp|prospectos|sesion&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|logistica|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|gastos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|erp|caja|repo-armado|reportes|tn-erp|prospectos|sesion&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -51,6 +51,7 @@ import compromisos from './_compromisos.js';
 import cuentas from './_cuentas.js';
 import adelantos from './_adelantos.js';
 import adelantosPuente from './_adelantos-puente.js';
+import gastosPuente from './_gastos-puente.js';
 import precios from './_precios.js';
 import destacados from './_destacados.js';
 import exhib from './_exhib.js';
@@ -204,6 +205,8 @@ const RECURSOS = {
   // sobre del dashboard, que es quien pregunta al liquidar. Mismo criterio que `votacion`.
   adelantos,
   'adelantos-puente': adelantosPuente,
+  // Los gastos comerciales del ERP para el Cierre de mes del dashboard: sin sesión, con el sobre (mismo criterio).
+  'gastos-puente': gastosPuente,
   // La lista de precios de una campaña de liquidación, para MARKETING. Va SEPARADO de
   // `liquidacion` a propósito y por dos motivos que se refuerzan: aquel handler ya tiene cuatro
   // llaves y su test de autorización se apoya en que una llave ajena corte antes de las `action`;
