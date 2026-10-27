@@ -197,16 +197,17 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
       <div className="shell-main">
         <div className="shell-content">
           <div className="seccion-pad" style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-            <header style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-              <div>
-                <h1 style={{ margin: 0, fontSize: 24, fontWeight: weight.bold, color: color.ink }}>{seccion.titulo}</h1>
-                <p style={{ margin: '4px 0 0', padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4 }}>
-                  {CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy. Lo ven sólo los administradores.
-                </p>
+            <header style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+              <p style={{ margin: 0, padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4 }}>
+                {CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy. Lo ven sólo los administradores.
+              </p>
+              {/* Título + pestañas en UNA línea (diseño §9). */}
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: space[5], flexWrap: 'wrap', borderBottom: `1px solid ${color.line}` }}>
+                <h1 style={{ margin: 0, paddingBottom: 6, fontSize: 20, fontWeight: weight.semibold, color: color.ink, whiteSpace: 'nowrap' }}>{seccion.titulo}</h1>
+                {seccion.pestanias.length > 1 && (
+                  <Tabs variant="underline" items={seccion.pestanias} value={pestania ?? ''} onChange={(k) => { setAAjustar(null); ir(seccion.key, k) }} style={{ borderBottom: 'none', flex: '1 1 auto' }} />
+                )}
               </div>
-              {seccion.pestanias.length > 1 && (
-                <Tabs variant="underline" items={seccion.pestanias} value={pestania ?? ''} onChange={(k) => { setAAjustar(null); ir(seccion.key, k) }} />
-              )}
             </header>
 
             {seccion.key === 'inicio' && <InicioErp key={marca} href={hrefErp} />}

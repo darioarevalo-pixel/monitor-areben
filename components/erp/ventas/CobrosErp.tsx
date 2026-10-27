@@ -19,7 +19,7 @@ import { Button, EmptyState, Notice, Select, color, font, space, useConfirmar, w
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion, DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
-import { BuscadorLista, ChipEstado, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerCobros, reintentarEntregas, type CobrosDelPeriodo, type MarcaErp } from '@/lib/erp/cliente'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import {
@@ -29,7 +29,7 @@ import {
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 
-type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
+type Prefs = { orden: string[]; visibles: string[] }
 type FilaCobro = ReturnType<typeof armarCobro> & Partial<Omit<ReturnType<typeof armarEntregaSinCobrar>, keyof ReturnType<typeof armarCobro>>>
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
@@ -210,18 +210,17 @@ export function CobrosErp() {
             {mediosDelPeriodo.map((m) => <option key={m} value={m}>{m === 'sin_medio' ? 'Sin medio' : (MEDIO[m] ?? m)}</option>)}
           </Select>
           {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
-          <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
-            onRestablecer={() => setPrefs({ ...normalizarPrefs(null), densidad: prefs.densidad })}
+            onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
           />
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
           columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda}
-          seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden} densidad={prefs.densidad}
+          seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden}
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `el cobro ${f.que}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>

@@ -16,7 +16,7 @@ import { Button, EmptyState, MenuAcciones, Notice, Select, color, font, space, w
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, estiloNombre } from '@/components/ui/PiezasLista'
 import { leerMovimientos, type FilaMovimiento, type ListaDeMovimientos, type MarcaErp } from '@/lib/erp/cliente'
 import {
   COLUMNAS, NOMBRE_LINEA, PERIODOS_MOV, VISTAS, alternarColumna, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar,
@@ -28,7 +28,7 @@ import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaPrenda } from './FichaPrenda'
 import type { PrendaAAjustar } from './StockErp'
 
-type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
+type Prefs = { orden: string[]; visibles: string[] }
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const LINEA = NOMBRE_LINEA as Record<string, string>
@@ -101,7 +101,7 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
   const celda = (f: FilaMovimiento, k: string): React.ReactNode => {
     if (k === 'h') return <span style={{ color: color.mut }} title={f.horaExacta ? undefined : 'La fuente sólo sabe el día'}>{f.horaExacta ? cuandoCorto(f.cuando) : `${cuandoCorto(f.cuando).slice(0, 5)} · día`}</span>
     if (k === 'tipo') return <span style={{ color: color.ink2 }}>{f.tipoTexto}</span>
-    if (k === 'p') return <span title={`${f.nombre} · ${f.talleNombre}`}><b style={{ color: color.ink }}>{f.nombre}</b> <span style={{ color: color.mut }}>{f.talleNombre}</span></span>
+    if (k === 'p') return <span title={`${f.nombre} · ${f.talleNombre}`}><span style={estiloNombre}>{f.nombre}</span> <span style={{ color: color.mut }}>{f.talleNombre}</span></span>
     if (k === 'sku') return <span style={{ color: color.mut }}>{f.sku ?? '—'}</span>
     if (k === 'dep') return <span style={{ color: color.ink2 }}>{f.depositoTexto}</span>
     if (k === 'cant') return <b style={{ color: f.cantidad > 0 ? 'var(--mo-success-ink)' : 'var(--mo-danger-ink)', fontVariantNumeric: 'tabular-nums' }}>{conSigno(f.cantidad)}</b>
@@ -148,18 +148,17 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
             {DEPOSITOS[marca].map((d) => <option key={d} value={d}>{(NOMBRE_DEPOSITO as Record<string, string>)[d] ?? d}</option>)}
           </Select>
           {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
-          <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
-            onRestablecer={() => setPrefs({ ...normalizarPrefs(null), densidad: prefs.densidad })}
+            onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
           />
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
           columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={44}
-          seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden} densidad={prefs.densidad}
+          seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden}
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `el movimiento de ${f.nombre} ${f.talleNombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>

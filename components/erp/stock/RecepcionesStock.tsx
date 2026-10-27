@@ -14,7 +14,7 @@ import { Button, EmptyState, MenuAcciones, Notice, color, font, space, weight, t
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
-import { BuscadorLista, InterruptorDensidad, TileResumen, VistasLista } from '@/components/ui/PiezasLista'
+import { BuscadorLista, TileResumen, VistasLista } from '@/components/ui/PiezasLista'
 import { leerRecepcion, leerRecepciones, type LineaConCruce } from '@/lib/recepciones/cliente'
 import { renglonesQueNoCerraron } from '@/lib/recepciones/core'
 import {
@@ -25,7 +25,7 @@ import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { BarraRecibidas } from './Barritas'
 
-type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
+type Prefs = { orden: string[]; visibles: string[] }
 type Datos = { filas: FilaRecepcion[]; clave: string; hoy: string }
 
 const DE_A = 300
@@ -131,18 +131,17 @@ export function RecepcionesStock() {
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en los ingresos" placeholder="Orden o proveedor" />
-          <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumnaDe(COLUMNAS, prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
-            onRestablecer={() => setPrefs({ ...normalizarPrefs(null), densidad: prefs.densidad })}
+            onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
           />
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
           columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={44}
-          orden={orden} onOrden={setOrden} densidad={prefs.densidad}
+          orden={orden} onOrden={setOrden}
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `la orden ${f.oc}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>

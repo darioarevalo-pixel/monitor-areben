@@ -19,7 +19,7 @@ import {
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, ChipEstado, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerListaDeVentas, type FilaVentaLista, type MarcaErp, type QueSabeElMotor } from '@/lib/erp/cliente'
 import {
   COBRO, COLUMNAS, ESTADO, ORIGEN, PERIODOS, VISTAS, accionesDeFila, alternarColumna, contarVistas, filtrar, moverColumna,
@@ -31,7 +31,7 @@ import { FichaVenta } from './FichaVenta'
 import { CargarVenta } from './CargarVenta'
 import { VentanaCobro, VentanaEditar } from './VentanasVenta'
 
-export type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
+export type Prefs = { orden: string[]; visibles: string[] }
 type Ventana = { tipo: 'cobro' | 'editar'; fila: FilaVentaLista; desdeFicha: boolean } | null
 
 /** El `Select` del kit es de ancho 100% (formularios): en la barra cada desplegable mide lo suyo, ⛔ una fila entera. */
@@ -226,18 +226,17 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => { setFicha(null); setPeriodo(e.target.value) }}>{PERIODOS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
           <Select aria-label="Origen" style={ANCHO_SELECT} value={origen} onChange={(e) => setOrigen(e.target.value)}>{ORIGENES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
           {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
-          <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
-            onRestablecer={() => setPrefs({ ...normalizarPrefs(null), densidad: prefs.densidad })}
+            onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
           />
           <Button variant="outline" disabled={cargando} onClick={() => cargar()}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
           columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={120}
-          seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden} densidad={prefs.densidad}
+          seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden}
           activa={ficha?.fila.id ?? null} onAbrir={(f) => abrirFicha(f)} etiquetaFila={(f) => `la venta ${f.ref}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>

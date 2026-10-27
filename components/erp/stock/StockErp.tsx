@@ -17,7 +17,7 @@ import { Button, EmptyState, Icono, MenuAcciones, Notice, Select, color, font, s
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, estiloNombre } from '@/components/ui/PiezasLista'
 import { leerListaDeStock, type FilaStock, type ListaDeStock, type MarcaErp } from '@/lib/erp/cliente'
 import {
   VISTAS, alternarColumna, columnasDe, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
@@ -27,7 +27,7 @@ import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaPrenda, type PrendaAbierta } from './FichaPrenda'
 
-type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
+type Prefs = { orden: string[]; visibles: string[] }
 
 /** La prenda que pide abrir otra pestaña (Diferencias, Conciliación): cada pedido nuevo es un objeto nuevo. */
 export type PrendaPedida = { marca: MarcaErp; producto: string; talle: string }
@@ -43,7 +43,7 @@ const u = (n: number) => `${n.toLocaleString('es-AR')} u`
 function bajarCsv(filas: FilaStock[], marca: MarcaErp, titulos: Record<string, [string, ...unknown[]]>) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
   const deps = Object.keys(filas[0]?.deps ?? {})
-  const renglones = [['Producto', 'Variante', 'código', 'Disponible', 'Físico', ...deps.map((d) => titulos[`dep:${d}`]?.[0] ?? d), 'Reservado', 'En Gestión Nube', 'Línea'].map(c).join(';')]
+  const renglones = [['Producto', 'Variante', 'código', 'Disponible', 'Físico', ...deps.map((d) => titulos[`dep:${d}`]?.[0] ?? d), 'Reservado', 'Gestión Nube', 'Línea'].map(c).join(';')]
   for (const f of filas) renglones.push([f.nombre, f.talleNombre, f.sku, f.disponible, f.estanteria, ...deps.map((d) => f.deps[d]), f.enPedidos, f.gn ?? '', LINEA[f.linea] ?? f.linea].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -107,7 +107,7 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
   const numero = (n: number, fuerte = false) => <span style={{ fontWeight: fuerte ? 700 : 500, color: n < 0 ? 'var(--mo-danger-ink)' : n === 0 ? color.mut2 : color.ink }}>{n}</span>
 
   const celda = (f: FilaStock, k: string): React.ReactNode => {
-    if (k === 'p') return <b title={f.nombre} style={{ color: color.ink }}>{f.nombre}</b>
+    if (k === 'p') return <span title={f.nombre} style={estiloNombre}>{f.nombre}</span>
     if (k === 't') return <span title={f.talleNombre} style={{ color: color.ink2 }}>{f.talleNombre}</span>
     if (k === 'sku') return <span style={{ color: color.mut }}>{f.sku ?? '—'}</span>
     if (k === 'disp') return numero(f.disponible, true)
@@ -139,7 +139,6 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título «Stock» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
-      <p style={{ margin: 0, color: color.mut }}>Lo que hay de cada producto, por lugar. Manda el disponible: lo que se puede vender.</p>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {!!datos?.sinVariante && <Notice tone="warning">{u(datos.sinVariante)} de pedidos sin pagar traen un código que Gestión Nube no tiene: no se descuentan de ningún producto.</Notice>}
 
@@ -156,18 +155,17 @@ export function StockErp({ pedida = null, ajustar }: { pedida?: PrendaPedida | n
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en el stock" placeholder="Nombre, código o código de barras" />
           {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
-          <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(marca, prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
-            onRestablecer={() => setPrefs({ ...normalizarPrefs(marca, null), densidad: prefs.densidad })}
+            onRestablecer={() => setPrefs({ ...normalizarPrefs(marca, null) })}
           />
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
           columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={72}
-          seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden} densidad={prefs.densidad}
+          seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden}
           activa={filaDeFicha?.id ?? null} onAbrir={abrir} etiquetaFila={(f) => `el producto ${f.nombre} ${f.talleNombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>

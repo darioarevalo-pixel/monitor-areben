@@ -148,7 +148,7 @@ export function EstructuraErp() {
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar marca o depósito" placeholder="Marca o depósito" />
         </div>
         <ListaTrabajo
-          columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} densidad="comoda" etiquetaFila={(f) => `la marca ${f.nombre}`}
+          columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} etiquetaFila={(f) => `la marca ${f.nombre}`}
           vacio={datos ? <div style={{ padding: space[6] }}><EmptyState title="No hay marcas ni depósitos con eso." /></div> : null}
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>

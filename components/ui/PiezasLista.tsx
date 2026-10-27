@@ -7,7 +7,6 @@
  *  - `TileResumen` — el resumen del filtro, ARRIBA de la lista. `oscuro` = el número que manda (uno por pantalla).
  *  - `VistasLista` — las vistas con su número («A preparar 12»): cada una ya dice cuántas hay antes de entrar.
  *  - `BuscadorLista` — el buscador de la sección (Bruno: «si no, no se encuentra nada»).
- *  - `InterruptorDensidad` — filas compactas (40 px) o cómodas (52 px).
  *  - `ChipEstado` — el estado de una fila desde un mapa `clave → [tono, texto]`; en una columna angosta termina en «…».
  *  - `cuandoCorto` — «18/10 10:40» en hora argentina: la fecha de una fila y de su ficha.
  */
@@ -24,11 +23,14 @@ export const cuandoCorto = (iso: string | null) => {
 }
 
 export function TileResumen({ titulo, valor, oscuro, nota }: { titulo: string; valor: string; oscuro?: boolean; nota?: string }) {
+  // Franja de ~54 px (diseño §9): título arriba, el número (18 px) y su nota en la misma línea.
   return (
-    <div style={{ flex: '1 1 180px', minWidth: 0, padding: '14px 16px', borderRadius: 14, background: oscuro ? 'var(--mo-side-bg)' : color.surface, border: oscuro ? 0 : `1px solid ${color.line}`, color: oscuro ? '#fff' : color.ink }}>
-      <div style={{ fontSize: font.sm, color: oscuro ? '#94a3b8' : color.mut }}>{titulo}</div>
-      <div style={{ fontSize: oscuro ? 26 : 20, fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{valor}</div>
-      {nota && <div style={{ fontSize: font.sm, color: oscuro ? '#94a3b8' : color.mut }}>{nota}</div>}
+    <div style={{ flex: '1 1 180px', minWidth: 0, padding: '8px 14px', borderRadius: 12, background: oscuro ? 'var(--mo-side-bg)' : color.surface, border: oscuro ? 0 : `1px solid ${color.line}`, color: oscuro ? '#fff' : color.ink }}>
+      <div style={{ fontSize: font.xs, lineHeight: '14px', color: oscuro ? '#94a3b8' : color.mut }}>{titulo}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+        <span style={{ fontSize: 18, lineHeight: '24px', fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{valor}</span>
+        {nota && <span title={nota} style={{ fontSize: font.xs, color: oscuro ? '#94a3b8' : color.mut, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{nota}</span>}
+      </div>
     </div>
   )
 }
@@ -67,20 +69,8 @@ export function BuscadorLista({ valor, onCambio, etiqueta, placeholder }: { valo
   )
 }
 
-export type Densidad = 'compacta' | 'comoda'
-
-export function InterruptorDensidad({ valor, onCambio }: { valor: Densidad; onCambio: (d: Densidad) => void }) {
-  return (
-    <span style={{ flex: '0 0 auto', display: 'inline-flex', padding: 3, borderRadius: 9, background: color.bg2 }} role="radiogroup" aria-label="Alto de las filas">
-      {(['compacta', 'comoda'] as const).map((d) => (
-        <button key={d} type="button" role="radio" aria-checked={valor === d} title={d === 'compacta' ? 'Filas compactas' : 'Filas cómodas'} onClick={() => onCambio(d)}
-          style={{ height: 28, padding: '0 10px', border: 0, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: font.sm, fontWeight: weight.semibold, background: valor === d ? color.surface : 'transparent', color: valor === d ? color.ink : color.mut, boxShadow: valor === d ? '0 1px 2px rgba(16,24,40,0.12)' : undefined }}>
-          {d === 'compacta' ? 'Compacta' : 'Cómoda'}
-        </button>
-      ))}
-    </span>
-  )
-}
+/** El nombre de un producto o cliente en una lista: peso 500, 12 px, gris oscuro (diseño §9: vienen en MAYÚSCULAS del catálogo, en negrita «gritaban»). */
+export const estiloNombre: React.CSSProperties = { fontWeight: 500, fontSize: 12, color: color.ink2 }
 
 export function ChipEstado({ mapa, k }: { mapa: Record<string, readonly [Tone, string]>; k: string }) {
   const [tono, texto] = mapa[k] || ['neutral', k]

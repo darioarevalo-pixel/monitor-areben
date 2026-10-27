@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, color, font, space, weight } from '@/components/ui'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
-import { BuscadorLista, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto, type Densidad } from '@/components/ui/PiezasLista'
+import { BuscadorLista, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import {
   armarTransferenciaDoc, buscarPrendas, cancelarTransferenciaDoc, crearTransferenciaDoc, enviarTransferenciaDoc, leerListaDeStock, leerTransferenciasDoc, recibirTransferenciaDoc,
   type AvisoDoc, type PrendaEncontrada, type TiendaErp, type TransferenciaDoc,
@@ -130,7 +130,6 @@ export function MoverYRecibir() {
   const [elegida, setVista] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [orden, setOrden] = useState<OrdenLista>(null)
-  const [densidad, setDensidad] = useState<Densidad>('compacta')
   const [fichaId, setFichaId] = useState<string | null>(null)
   const [recibiendo, setRecibiendo] = useState<{ doc: TransferenciaDoc; lista: Fila[] } | null>(null)
   const [trabajando, setTrabajando] = useState(false)
@@ -274,12 +273,11 @@ export function MoverYRecibir() {
         <VistasLista vistas={VISTAS_DOC} valor={vista} conteo={conteo} onCambio={setVista} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las transferencias" placeholder="Nº, producto o quién la hizo" />
-          <InterruptorDensidad valor={densidad} onCambio={setDensidad} />
           <Button variant="outline" disabled={!filas.length} onClick={() => bajarCsv(filas, linea)}>Exportar</Button>
           <Button variant="outline" onClick={() => setVuelta((n) => n + 1)}>Actualizar</Button>
         </div>
         <ListaTrabajo
-          columnas={COLUMNAS} filas={filas} claveDe={(d) => d.id} celda={celda} orden={orden} onOrden={setOrden} densidad={densidad}
+          columnas={COLUMNAS} filas={filas} claveDe={(d) => d.id} celda={celda} orden={orden} onOrden={setOrden}
           activa={fichaId} onAbrir={(d) => setFichaId(d.id)} etiquetaFila={(d) => `la transferencia T-${d.numero} de ${dep(d.desde)} a ${dep(d.hacia)}`}
           vacio={docs ? (
             <div style={{ padding: space[6] }}>

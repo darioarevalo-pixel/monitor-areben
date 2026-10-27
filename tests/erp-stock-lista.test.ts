@@ -105,3 +105,17 @@ describe('listaDeStock (el servidor)', () => {
     expect(await listaDeStock({ marca: 'stunned' }, deps)).toMatchObject({ status: 400 })
   })
 })
+
+describe('Diseño §9: una sola densidad y mínimos de columna', () => {
+  it('la columna del nombre mide ≥ 240 px, las numéricas son px fijos y sólo se estiran las de texto', () => {
+    const c = columnasDe('zattia')
+    expect(c.p[1]).toBe('minmax(240px, 2fr)')
+    expect(c.t[1]).toMatch(/^minmax\(104px/)
+    expect(c.ult[1]).toMatch(/^minmax\(150px/)
+    for (const k of ['sku', 'disp', 'est', 'dep:local', 'dep:deposito', 'ped', 'gn', 'linea']) expect(c[k][1]).toMatch(/^\d+px$/)
+    expect([c.disp[1], c.est[1], c['dep:local'][1], c.ped[1], c.gn[1]]).toEqual(['96px', '76px', '64px', '88px', '120px'])
+  })
+  it('las preferencias guardadas ya no llevan densidad', () => {
+    expect(normalizarPrefs('zattia', { orden: [], visibles: [], densidad: 'comoda' })).not.toHaveProperty('densidad')
+  })
+})

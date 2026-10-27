@@ -1,5 +1,5 @@
 /**
- * Lo que cada persona eligió en una lista del ERP (columnas, su orden, la densidad): «queda guardado por usuario»
+ * Lo que cada persona eligió en una lista del ERP (columnas y su orden): «queda guardado por usuario»
  * (diseño §3). Va en `localStorage` keyeado por usuario, como `lib/notificaciones/visto.ts`: es preferencia de este
  * navegador, ⛔ del equipo (en otra compu arranca con las de siempre). Si falla (privado, bloqueado), las de siempre.
  * Lo que se lee pasa por el `normalizar` de la lista: una columna que ya ⛔ existe se cae sola.

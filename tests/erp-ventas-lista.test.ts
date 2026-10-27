@@ -127,13 +127,12 @@ describe('la fila, las vistas y el resumen', () => {
 
 describe('las columnas guardadas por usuario', () => {
   it('lo guardado roto, viejo o vacío ⛔ rompe: las de siempre, las fijas siempre visibles', () => {
-    expect(normalizarPrefs(null)).toEqual({ ...COLUMNAS_DE_SIEMPRE, densidad: 'compacta' })
-    expect(normalizarPrefs('basura')).toEqual({ ...COLUMNAS_DE_SIEMPRE, densidad: 'compacta' })
-    const p = normalizarPrefs({ orden: ['total', 'vieja', 'c', 'c'], visibles: ['vieja', 'nota'], densidad: 'comoda' })
+    expect(normalizarPrefs(null)).toEqual({ ...COLUMNAS_DE_SIEMPRE })
+    expect(normalizarPrefs('basura')).toEqual({ ...COLUMNAS_DE_SIEMPRE })
+    const p = normalizarPrefs({ orden: ['total', 'vieja', 'c', 'c'], visibles: ['vieja', 'nota'] })
     expect(p.orden.slice(0, 2)).toEqual(['total', 'c'])
     expect(p.orden).toHaveLength(COLUMNAS_DE_SIEMPRE.orden.length)
     expect(p.visibles).toEqual(['total', 'c', 'n', 'nota'])
-    expect(p.densidad).toBe('comoda')
   })
   it('mover y alternar: los bordes ⛔ se mueven, las fijas ⛔ se ocultan', () => {
     const p = normalizarPrefs(null)

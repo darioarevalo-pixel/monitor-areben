@@ -17,7 +17,7 @@ import type { Tone } from '@/components/ui/tokens'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, ChipEstado, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto, estiloNombre } from '@/components/ui/PiezasLista'
 import { leerComparacion, type ComparacionTiendas, type FilaComparacion, type MarcaErp } from '@/lib/erp/cliente'
 import {
   COLUMNAS, QUE_PASA, VISTAS, alternarColumna, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
@@ -27,7 +27,7 @@ import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaPrenda } from './FichaPrenda'
 import type { PrendaAAjustar } from './StockErp'
 
-type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
+type Prefs = { orden: string[]; visibles: string[] }
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const TIENDA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
@@ -92,7 +92,7 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
   const num = (n: number | null, fuerte = false) => (n == null ? <span style={{ color: color.mut2 }}>—</span> : <span style={{ fontWeight: fuerte ? 700 : 500, color: n === 0 ? color.mut2 : color.ink }}>{n}</span>)
 
   const celda = (f: FilaComparacion, k: string): React.ReactNode => {
-    if (k === 'p') return <b title={f.nombre} style={{ color: color.ink }}>{f.nombre}{f.oculta && <span style={{ color: color.mut, fontWeight: 400 }}> · oculto en Tienda Nube</span>}</b>
+    if (k === 'p') return <span title={f.nombre} style={estiloNombre}>{f.nombre}{f.oculta && <span style={{ color: color.mut, fontWeight: 400 }}> · oculto en Tienda Nube</span>}</span>
     if (k === 't') return <span style={{ color: color.ink2 }}>{f.talleNombre}</span>
     if (k === 'sku') return <span style={{ color: color.mut }}>{f.sku ?? f.barcode ?? '—'}</span>
     if (k === 'tienda') return <span style={{ color: color.ink2 }}>{TIENDA[f.tienda]}</span>
@@ -133,19 +133,18 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la comparación" placeholder="Producto o código de barras" />
           {marca === 'zattia' && <Select aria-label="Tienda" style={ANCHO_SELECT} value={tienda} onChange={(e) => setTienda(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
-          <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k as keyof typeof COLUMNAS][0], visible: prefs.visibles.includes(k), fija: !!COLUMNAS[k as keyof typeof COLUMNAS][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
-            onRestablecer={() => setPrefs({ ...normalizarPrefs(null), densidad: prefs.densidad })}
+            onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
           />
           <Button variant="outline" disabled={!filas.length} onClick={() => bajarCsv(filas, marca)}>Exportar</Button>
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
           columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda}
-          seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden} densidad={prefs.densidad}
+          seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden}
           activa={ficha?.id ?? null} onAbrir={abrir} etiquetaFila={(f) => `el producto ${f.nombre} ${f.talleNombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>

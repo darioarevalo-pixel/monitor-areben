@@ -13,7 +13,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Notice, Select, color, font, space } from '@/components/ui'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
-import { BuscadorLista, InterruptorDensidad, TileResumen, VistasLista } from '@/components/ui/PiezasLista'
+import { BuscadorLista, TileResumen, VistasLista, estiloNombre } from '@/components/ui/PiezasLista'
 import { leerVentasPorProducto, type MarcaErp, type RenglonProducto } from '@/lib/erp/cliente'
 import {
   VISTAS, agrupar, alternarColumna, columnasDe, diaCorto, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
@@ -24,7 +24,7 @@ import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaProducto } from '../productos/FichaProducto'
 
 type Vista = 'agrupado' | 'renglones'
-type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
+type Prefs = { orden: string[]; visibles: string[] }
 type Grupo = ReturnType<typeof agrupar>[number]
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
@@ -100,7 +100,7 @@ export function PorProductoErp() {
   const sinCosto = <span style={{ color: color.mut2 }} title="El producto no tiene costo cargado en el ERP">sin costo</span>
 
   const celda = (f: Grupo | RenglonProducto, k: string): React.ReactNode => {
-    if (k === 'p') return <b title={f.nombre} style={{ color: color.ink }}>{f.nombre}</b>
+    if (k === 'p') return <span title={f.nombre} style={estiloNombre}>{f.nombre}</span>
     if (k === 'linea') return <span style={{ color: color.ink2 }}>{LINEA[f.linea] ?? f.linea}</span>
     if (vista === 'agrupado') {
       const g = f as Grupo
@@ -149,18 +149,17 @@ export function PorProductoErp() {
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>{PERIODOS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
           {marca === 'zattia' && <Select aria-label="Línea" style={ANCHO_SELECT} value={linea} onChange={(e) => setLinea(e.target.value)}><option value="">Zattia y Stunned</option><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select>}
           <Select aria-label="Origen" style={ANCHO_SELECT} value={canal} onChange={(e) => setCanal(e.target.value)}><option value="">Todos los orígenes</option>{canales.map((c) => <option key={c} value={c}>{c}</option>)}</Select>
-          <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.filter((k) => COLUMNAS[k]).map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(vista, costos, prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
-            onRestablecer={() => setPrefs({ ...normalizarPrefs(vista, costos, null), densidad: prefs.densidad })}
+            onRestablecer={() => setPrefs({ ...normalizarPrefs(vista, costos, null) })}
           />
           <Button variant="outline" disabled={!filas.length} onClick={() => bajarCsv(vista, filas, marca, costos)}>Exportar</Button>
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
-          columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda} orden={orden} onOrden={setOrden} densidad={prefs.densidad}
+          columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda} orden={orden} onOrden={setOrden}
           activa={null} onAbrir={(f) => setFicha(f.producto)} etiquetaFila={(f) => `el producto ${f.nombre}`}
           vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={q || linea || canal ? 'No hay ventas con eso.' : 'No hay ventas en este período.'} /></div> : null}
         />

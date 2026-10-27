@@ -13,7 +13,7 @@
  *  - Clic en el título de una columna que ordena: ↓ ↑. Tilde a la izquierda ⇒ selección (la barra la pone quien usa).
  *  - **Íconos A LA IZQUIERDA** (listas de TRABAJO), en la primera columna después del tilde: `acciones(fila)`.
  *  - Clic en la fila ⇒ `onAbrir` (la ficha al costado: la lista ⛔ se pierde). Los botones de adentro ⛔ la abren.
- *  - Densidad: compacta 40 px · cómoda 52 px.
+ *  - Una sola densidad: filas de 32 px (diseño §9; ⛔ interruptor Compacta/Cómoda).
  */
 
 import { color, font, radius, weight } from '@/components/ui/tokens'
@@ -46,8 +46,7 @@ export function anchoMinimo(anchos: string[]): number {
 }
 
 export function ListaTrabajo<T>({
-  columnas, filas, claveDe, celda, acciones, anchoAcciones = 132, seleccion, onSeleccion, orden, onOrden,
-  densidad = 'compacta', activa, onAbrir, etiquetaFila, vacio, maxAlto = 'calc(100vh - 260px)',
+  columnas, filas, claveDe, celda, acciones, anchoAcciones = 132, seleccion, onSeleccion, orden, onOrden, activa, onAbrir, etiquetaFila, vacio, maxAlto = 'calc(100vh - 260px)',
 }: {
   columnas: ColumnaLista[]
   filas: T[]
@@ -60,7 +59,6 @@ export function ListaTrabajo<T>({
   onSeleccion?: (s: Set<string>) => void
   orden?: OrdenLista
   onOrden?: (o: OrdenLista) => void
-  densidad?: 'compacta' | 'comoda'
   /** La fila con la ficha abierta (se pinta). */
   activa?: string | null
   onAbrir?: (f: T) => void
@@ -72,7 +70,7 @@ export function ListaTrabajo<T>({
   const conTilde = !!onSeleccion
   const anchos = [conTilde ? '36px' : null, acciones ? `${anchoAcciones}px` : null, ...columnas.map((c) => c.ancho)].filter((x): x is string => !!x)
   const plantilla = anchos.join(' ')
-  const alto = densidad === 'comoda' ? 52 : 40
+  const alto = 32
   const grilla: React.CSSProperties = {
     display: 'grid', gridTemplateColumns: plantilla, columnGap: HUECO, alignItems: 'center',
     // 🔴 todas las filas del mismo ancho (ver arriba): ⛔ `max-content`.

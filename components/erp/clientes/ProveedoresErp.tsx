@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, MenuAcciones, Notice, color, font, space, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
-import { BuscadorLista, ChipEstado, TileResumen, VistasLista } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, TileResumen, VistasLista, estiloNombre } from '@/components/ui/PiezasLista'
 import { leerProveedores, type MarcaErp, type ProveedorErp } from '@/lib/erp/cliente'
 import { normal } from '@/lib/erp/stock-lista.core.js'
 
@@ -58,7 +58,7 @@ export function ProveedoresErp() {
   }, [base, vista, orden])
 
   const celda = (p: ProveedorErp, k: string): React.ReactNode => {
-    if (k === 'p') return <b title={p.nombre} style={{ color: color.ink }}>{p.nombre}</b>
+    if (k === 'p') return <span title={p.nombre} style={estiloNombre}>{p.nombre}</span>
     if (k === 'gn') return <span style={{ color: p.nombreGn ? color.ink2 : color.mut2 }}>{p.nombreGn ?? '—'}</span>
     if (k === 'cuit') return <span style={{ color: p.cuit ? color.ink2 : color.mut2 }}>{p.cuit ?? '—'}</span>
     if (k === 'prod') return <span style={{ color: p.productos ? color.ink : color.mut2 }}>{p.productos}</span>
@@ -99,7 +99,7 @@ export function ProveedoresErp() {
         </div>
         <ListaTrabajo
           columnas={COLUMNAS} filas={filas} claveDe={(p) => p.id} celda={celda} acciones={acciones} anchoAcciones={44}
-          orden={orden} onOrden={setOrden} densidad="compacta" etiquetaFila={(p) => `el proveedor ${p.nombre}`}
+          orden={orden} onOrden={setOrden} etiquetaFila={(p) => `el proveedor ${p.nombre}`}
           vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={q ? 'No hay proveedores con ese nombre o CUIT.' : 'No hay proveedores en esta vista.'} /></div> : null}
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>

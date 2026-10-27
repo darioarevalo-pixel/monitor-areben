@@ -18,7 +18,7 @@ import { formatMoney } from '@/components/ui/MoneyText'
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, ChipEstado, InterruptorDensidad, TileResumen, VistasLista } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, TileResumen, VistasLista, estiloNombre } from '@/components/ui/PiezasLista'
 import { leerListaDeClientes, type FilaCliente, type ListaDeClientes, type MarcaErp } from '@/lib/erp/cliente'
 import {
   VISTAS, alternarColumna, columnasDe, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
@@ -27,7 +27,7 @@ import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaCliente, fechaCorta } from './FichaCliente'
 
-type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
+type Prefs = { orden: string[]; visibles: string[] }
 
 const COLUMNAS = columnasDe()
 /** Cuántas filas se dibujan de una (la lista ⛔ es virtual: BDI tiene más de 13.000 clientes). */
@@ -106,7 +106,7 @@ export function ClientesErp({ abrir, alAbrir }: {
   })
 
   const celda = (f: FilaCliente, k: string): React.ReactNode => {
-    if (k === 'c') return <b title={f.nombre} style={{ color: color.ink }}>{f.nombre}</b>
+    if (k === 'c') return <span title={f.nombre} style={estiloNombre}>{f.nombre}</span>
     if (k === 'tipo') return f.mayorista ? <ChipEstado mapa={{ m: ['action', 'Mayorista'] }} k="m" /> : <span style={{ color: color.mut }}>Minorista</span>
     if (k === 'doc') return <span style={{ color: f.doc ? color.ink2 : color.mut2 }}>{f.doc ?? '—'}</span>
     if (k === 'compras') return <span style={{ color: color.ink }}>{n(f.compras)}</span>
@@ -160,19 +160,18 @@ export function ClientesErp({ abrir, alAbrir }: {
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un cliente" placeholder="Nombre o DNI / CUIT" />
-          <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
-            onRestablecer={() => setPrefs({ ...normalizarPrefs(null), densidad: prefs.densidad })}
+            onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
           />
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((x) => x + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
           <Button variant="outline" disabled={!filas.length} onClick={() => bajarCsv(filas, marca)}>Exportar</Button>
         </div>
         <ListaTrabajo
           columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={72}
-          seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden} densidad={prefs.densidad}
+          seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden}
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `el cliente ${f.nombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>

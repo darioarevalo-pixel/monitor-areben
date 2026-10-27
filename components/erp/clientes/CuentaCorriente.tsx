@@ -21,7 +21,7 @@ import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, color, font
 import { formatMoney } from '@/components/ui/MoneyText'
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
-import { BuscadorLista, ChipEstado, InterruptorDensidad, TileResumen, VistasLista } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, TileResumen, VistasLista, estiloNombre } from '@/components/ui/PiezasLista'
 import { leerCuentasCorrientes, type CuentasDeLaMarca, type MarcaErp } from '@/lib/erp/cliente'
 import {
   NOMBRE_LINEA, TRAMOS, VISTAS, alternarColumna, armarFilasCuenta, columnasDe, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen, textoCredito,
@@ -33,7 +33,7 @@ import { imprimirResumenDeFila } from './resumen-cuenta'
 import { enlaceWhatsapp } from '@/lib/erp/resumen-cuenta.core.js'
 import { fechaCorta } from './FichaCliente'
 
-type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
+type Prefs = { orden: string[]; visibles: string[] }
 
 const COLUMNAS = columnasDe()
 const n = (x: number) => x.toLocaleString('es-AR')
@@ -79,7 +79,7 @@ export function CuentaCorriente() {
   })
 
   const celda = (f: FilaCuenta, k: string): React.ReactNode => {
-    if (k === 'c') return <span style={{ minWidth: 0 }}><b title={f.nombre} style={{ color: color.ink }}>{f.nombre}</b><span style={{ color: f.doc ? color.mut : color.mut2 }}> · {f.doc ?? 'sin documento'}</span></span>
+    if (k === 'c') return <span style={{ minWidth: 0 }}><span title={f.nombre} style={estiloNombre}>{f.nombre}</span><span style={{ color: f.doc ? color.mut : color.mut2 }}> · {f.doc ?? 'sin documento'}</span></span>
     if (k === 'linea') return <span style={{ color: color.mut }}>{NOMBRE_LINEA[f.linea as keyof typeof NOMBRE_LINEA] ?? f.linea}</span>
     if (k === 'debe') return f.debe ? <MoneyText value={f.debe} /> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'favor') return f.aFavor ? <span style={{ color: 'var(--mo-success-ink)' }}><MoneyText value={f.aFavor} /></span> : <span style={{ color: color.mut2 }}>—</span>
@@ -144,18 +144,17 @@ export function CuentaCorriente() {
             <Button variant={prueba ? 'outline' : 'solid'} aria-pressed={!prueba} onClick={() => { setPrueba(false); setFicha(null) }}>Reales</Button>
             <Button variant={prueba ? 'solid' : 'outline'} aria-pressed={prueba} onClick={() => { setPrueba(true); setFicha(null) }}>De prueba</Button>
           </div>
-          <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.filter((k) => variasLineas || k !== 'linea').map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
-            onRestablecer={() => setPrefs({ ...normalizarPrefs(null), densidad: prefs.densidad })}
+            onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
           />
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((x) => x + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
           columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={136}
-          orden={orden} onOrden={setOrden} densidad={prefs.densidad}
+          orden={orden} onOrden={setOrden}
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `la cuenta de ${f.nombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>

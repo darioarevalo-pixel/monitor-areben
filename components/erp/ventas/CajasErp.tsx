@@ -14,7 +14,7 @@ import { Button, EmptyState, MoneyText, Notice, Select, color, font, space } fro
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
-import { ChipEstado, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { ChipEstado, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerCajaAbierta, leerTurnosCaja, type MarcaErp } from '@/lib/erp/cliente'
 import {
   PERIODOS_CAJA, VISTAS_CAJA, alternarColumnaCaja, armarFilasCajas, columnasCaja, contarVistasCaja, filtrarCaja, moverColumna,
@@ -24,7 +24,7 @@ import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 
 type FilaCaja = ReturnType<typeof armarFilasCajas>[number]
-type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
+type Prefs = { orden: string[]; visibles: string[] }
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const COLUMNAS = columnasCaja()
@@ -139,18 +139,17 @@ export function CajasErp() {
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
             {PERIODOS_CAJA.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
           </Select>
-          <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumnaCaja(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
-            onRestablecer={() => setPrefs({ ...normalizarPrefsCaja(null), densidad: prefs.densidad })}
+            onRestablecer={() => setPrefs({ ...normalizarPrefsCaja(null) })}
           />
           <Button variant="outline" disabled={!filas.length} onClick={() => bajarCsv(filas, marca)}>Exportar</Button>
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
-          columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} orden={orden} onOrden={setOrden} densidad={prefs.densidad}
+          columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} orden={orden} onOrden={setOrden}
           activa={fichaFila?.id ?? null} onAbrir={(f) => setFicha(f.id)} etiquetaFila={(f) => `el turno del ${cuandoCorto(f.abiertoEn)}`}
           vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={vista === 'dif' ? 'Ningún cierre con diferencia en el período.' : 'No hubo turnos en el período.'} /></div> : null}
         />

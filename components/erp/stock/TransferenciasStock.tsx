@@ -17,7 +17,7 @@ import { Button, EmptyState, MenuAcciones, Notice, Select, color, font, space, w
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
-import { BuscadorLista, InterruptorDensidad, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { BuscadorLista, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerTransferencias, type FilaTransferencia, type ListaDeTransferencias, type MarcaErp } from '@/lib/erp/cliente'
 import {
   COLUMNAS, NOMBRE_ORIGEN, VISTAS, alternarColumna, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, prendasTexto, resumen,
@@ -27,7 +27,7 @@ import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { BarraPasos } from './Barritas'
 
-type Prefs = { orden: string[]; visibles: string[]; densidad: 'compacta' | 'comoda' }
+type Prefs = { orden: string[]; visibles: string[] }
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const ORIGEN = NOMBRE_ORIGEN as Record<string, string>
@@ -163,18 +163,17 @@ export function TransferenciasStock() {
             <option value="">Todos los orígenes</option>
             {Object.entries(ORIGEN).map(([k, t]) => <option key={k} value={k}>{t}</option>)}
           </Select>
-          <InterruptorDensidad valor={prefs.densidad} onCambio={(d) => setPrefs({ ...prefs, densidad: d })} />
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
-            onRestablecer={() => setPrefs({ ...normalizarPrefs(null), densidad: prefs.densidad })}
+            onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
           />
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
           columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={44}
-          orden={orden} onOrden={setOrden} densidad={prefs.densidad}
+          orden={orden} onOrden={setOrden}
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `la transferencia ${f.numero ?? ''} de ${f.desdeTexto} a ${f.haciaTexto}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
