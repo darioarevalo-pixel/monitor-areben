@@ -627,6 +627,9 @@ export const leerCuentaDeCliente = (marca: MarcaErp, p: { clienteId: string; lin
 /** El botón «Cobrar» de la cuenta: sin elegir venta, el motor paga la más vieja primero (FIFO). `ref` = una clave por ventana (⛔ duplica). */
 export const cobrarCuentaErp = (marca: MarcaErp, c: { clienteId: string; linea: string; monto: number; cuenta: string; fecha: string; ref: string; prueba: boolean }) =>
   pedir<{ ok: true; cuenta: unknown; yaExistia?: boolean }>(post({ accion: 'cobrar-cuenta', marca, ...c }), '', 'No se pudo registrar el cobro.')
+/** Cargar o corregir el WhatsApp / mail de un cliente (sólo admin). El motor valida el número; ⛔ borra un dato que no mandás. */
+export const ponerContactoCliente = (marca: MarcaErp, p: { clienteId: string; whatsapp?: string; email?: string }) =>
+  pedir<{ ok: true; contacto: { whatsapp: string | null; email: string | null } }>(post({ accion: 'poner-contacto', marca, ...p }), '', 'No se pudo guardar el contacto.')
 export const ponerCreditoCliente = (marca: MarcaErp, p: { clienteId: string; credito: boolean; tope: number | null; dias: number | null }) =>
   pedir<{ ok: true; credito: CreditoCliente }>(post({ accion: 'poner-credito', marca, ...p }), '', 'No se pudo marcar el crédito.')
 

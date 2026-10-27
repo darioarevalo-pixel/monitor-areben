@@ -189,3 +189,22 @@ export async function ponerCreditoCliente({ marca, body, usuario }, deps) {
     return r.ok ? { ok: true, credito: r.credito } : { status: 400, error: r.error?.mensaje ?? 'No se pudo marcar el crédito.' }
   })
 }
+
+/**
+ * Cargar o corregir el WhatsApp / mail de UN cliente por su id (sólo admin: lo chequea el handler). El motor normaliza el
+ * WhatsApp a 549 + 10 dígitos o lo rechaza (⛔ adivina: un número mal armado le escribe a otra persona) y ⛔ borra nada.
+ * @param {{ marca: string, body: any, usuario: string|null }} p
+ * @param {{ conMotor: Function }} deps
+ */
+export async function ponerContactoCliente({ marca, body, usuario }, deps) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'Falta el cliente' }
+  if (!usuario) return { status: 400, error: 'Falta quién lo carga' }
+  return deps.conMotor(marca, 'El contacto', async (pg) => {
+    const [c] = (await pg.query('select empresa_id from cliente where id = $1', [body.clienteId])).rows
+    if (!c) return { status: 404, error: 'No está ese cliente.' }
+    const { ponerContactoCliente: poner } = await import('../motor/venta/cliente.mjs')
+    const r = await poner(pg, { empresa_id: c.empresa_id, cliente_id: body.clienteId, whatsapp: body.whatsapp, email: body.email })
+    return r.ok ? { ok: true, contacto: { whatsapp: r.cliente.whatsapp, email: r.cliente.email } } : { status: r.error?.codigo === 'FALTA_CLIENTE' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo guardar el contacto.' }
+  })
+}
