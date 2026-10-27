@@ -160,7 +160,7 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
           {clientas.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {clientas.map((c) => (
-                <Button key={c.doc} variant="ghost" style={{ justifyContent: 'flex-start', height: 'auto' }} onClick={() => { setDoc(c.doc); setNombre(c.nombre); setClientas([]) }}>{c.nombre} · {c.doc}</Button>
+                <Button key={c.doc ?? c.nombre} variant="ghost" style={{ justifyContent: 'flex-start', height: 'auto' }} onClick={() => { setDoc(c.doc ?? ''); setNombre(c.nombre); setClientas([]) }}>{c.nombre}{c.doc ? ` · ${c.doc}` : ' · sin documento'}</Button>
               ))}
             </div>
           )}

@@ -63,7 +63,7 @@ export function FacturaCaja() {
 
   /** Completa la A con la ficha elegida (lo que la ficha ⛔ tiene queda como estaba). */
   const usarFicha = (c: Clienta) => {
-    setDoc(c.doc)
+    setDoc(c.doc ?? '')
     setRazonSocial(c.razonSocial || c.nombre)
     if (c.domicilio) setDomicilio(c.domicilio)
     if (c.condicion) setCondicion(c.condicion)

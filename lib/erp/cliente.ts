@@ -276,7 +276,7 @@ export const confirmarVuelta = (marca: MarcaErp, ventaId: string) =>
 export type PrendaNueva = { product_id: number; size_id: number; cantidad: number; precio: number; sku?: string | null }
 
 /** Una ficha de clienta (contrato §11) para la factura A: lo que la Caja completa sola. */
-export type Clienta = { doc: string; nombre: string; razonSocial: string | null; domicilio: string | null; condicion: 'ri' | 'monotributo' | null }
+export type Clienta = { doc: string | null; nombre: string; razonSocial: string | null; domicilio: string | null; condicion: 'ri' | 'monotributo' | null }
 export const buscarClientas = (marca: MarcaErp, q: string) =>
   pedir<{ clientas: Clienta[] }>(null, `&vista=clientas&marca=${marca}&q=${encodeURIComponent(q)}`, 'No se pudo buscar la clienta.')
 
