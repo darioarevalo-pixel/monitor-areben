@@ -255,7 +255,9 @@ export function CambioCaja() {
         {/* 🔑 El modo lo manda la venta (`prueba`: el motor ⛔ cambia una de prueba con un cambio real ni al revés). El cartel fijo
             seguía diciendo «el cambio de verdad se hace en GN» DESPUÉS del corte de Stunned: ahora sale sólo con una venta de prueba. */}
         {deEnsayo && <Notice tone="warning">Venta de prueba: el cambio no mueve el stock ni sale a Gestión Nube. El cambio de verdad de las ventas que siguen en Gestión Nube se hace allá.</Notice>}
-        {ficha && !ficha.venta.prueba && <Notice tone="info">Venta real: el cambio mueve el stock y queda atado a la venta #{ficha.venta.numero}.</Notice>}
+        {/* 🔑 El motor mueve el stock sólo si la venta NO es de prueba y NO tiene venta de GN (`mueveStock`, motor/venta/armar.mjs). */}
+        {ficha && !ficha.venta.prueba && !ficha.venta.gnSaleId && <Notice tone="info">Venta real: el cambio mueve el stock y queda atado a la venta #{ficha.venta.numero}.</Notice>}
+        {ficha && !ficha.venta.prueba && !!ficha.venta.gnSaleId && <Notice tone="info">Esta venta ya está en Gestión Nube: el cambio queda atado a la venta #{ficha.venta.numero} y no mueve el stock.</Notice>}
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="#123, nombre, DNI o mail" />
