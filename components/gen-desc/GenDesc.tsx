@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Badge, Button, Card, color, EmptyState, Field, font, Input, KpiCard, Lightbox, Notice, Select, Tabs, Toolbar, useToast,
 } from '@/components/ui'
@@ -73,6 +73,38 @@ export function GenDesc() {
   const [retenidos, setRetenidos] = useState<Set<string>>(new Set())
   const toast = useToast()
 
+  /**
+   * 🆕 **Publicar de a muchas** (Bruno, 27-oct-2026: «verifico todos, y luego estaría bueno
+   * seleccionar todos y publicar todos, sino tengo que apretar 60 botones»).
+   *
+   * 🔑 Cada tarjeta avisa acá **el texto que tiene en pantalla** —⛔ no el guardado—, con el mismo
+   * criterio que su botón: si el validador frena o falta la tela, ⛔ no está lista y ⛔ no se puede
+   * tildar. Va en un ref y ⛔ en estado porque cambia con cada tecla; el estado guarda sólo QUIÉNES
+   * están listas, que es lo que se dibuja.
+   */
+  const textos = useRef<Map<string, LoteTexto>>(new Map())
+  const [listas, setListas] = useState<Set<string>>(new Set())
+  const [elegidos, setElegidos] = useState<Set<string>>(new Set())
+  const [lote, setLote] = useState<{ hechos: number; total: number } | null>(null)
+  const alAvisarListo = useCallback((id: string, texto: LoteTexto | null) => {
+    if (texto) textos.current.set(id, texto)
+    else textos.current.delete(id)
+    setListas((prev) => {
+      if (!!texto === prev.has(id)) return prev
+      const proximo = new Set(prev)
+      if (texto) proximo.add(id)
+      else proximo.delete(id)
+      return proximo
+    })
+    // Una que deja de estar lista (el validador empezó a frenar) se destilda sola.
+    if (!texto) setElegidos((prev) => {
+      if (!prev.has(id)) return prev
+      const proximo = new Set(prev)
+      proximo.delete(id)
+      return proximo
+    })
+  }, [])
+
   const publicados = useMemo(() => productos.filter((p) => p.published), [productos])
   const tandas = useMemo(() => ultimasTandas(publicados), [publicados])
   const familiaDe = (p: ProductoTn): Familia | null => familiaDeProducto(p, cola[p.id])
@@ -106,6 +138,64 @@ export function GenDesc() {
     () => paraRevisar(publicados, { cola, busca, retenidos }),
     [publicados, cola, busca, retenidos],
   )
+
+  /**
+   * Una prenda a la tienda, por el mismo `revisar` del botón: guarda, aprueba, escribe y relee.
+   *
+   * 🔴 Se retiene ANTES de publicar y se SUELTA al final si salió bien: si no se retuviera durante
+   * el viaje, la tarjeta se iría de la lista en cuanto la fila cambia de estado, con el botón
+   * todavía diciendo «Publicando…». 🔑 Salió y se releyó bien ⇒ **se va de la cola**, que es lo que
+   * el botón prometía (pedido de Bruno, 8-sep-2026). Lo que ⛔ no verificó o falló se queda: ahí sí
+   * hay algo que mirar, y el cartel de la tarjeta es dónde se mira.
+   */
+  const publicarUna = async (id: string, nombre: string, borrador: LoteTexto['borrador'], conservarResiduo: boolean) => {
+    setRetenidos((prev) => (prev.has(id) ? prev : new Set(prev).add(id)))
+    const r = await revisar(id, nombre, borrador, conservarResiduo)
+    if (!r.error && r.verificado) {
+      setRetenidos((prev) => {
+        if (!prev.has(id)) return prev
+        const proximo = new Set(prev)
+        proximo.delete(id)
+        return proximo
+      })
+    }
+    return r
+  }
+
+  /**
+   * 🆕 Las tildadas, **de a una y en orden** —⛔ en paralelo: son escrituras a la tienda en vivo y
+   * TiendaNube limita los pedidos por segundo—. Un solo aviso al final con la cuenta, y lo que
+   * falló queda tildado y en pantalla para mirarlo.
+   */
+  const publicarElegidos = async () => {
+    const ids = paraLeer.map((p) => p.id).filter((id) => elegidos.has(id) && textos.current.has(id))
+    if (!ids.length) return
+    setLote({ hechos: 0, total: ids.length })
+    let bien = 0
+    const fallas: string[] = []
+    for (const id of ids) {
+      const t = textos.current.get(id)
+      if (!t) continue
+      // Un guardado del párrafo que salió al apretar (el blur) termina primero: si no, puede
+      // aterrizar DESPUÉS del aprobado y bajarlo a borrador.
+      await t.esperar()
+      const { error: err, verificado } = await publicarUna(id, t.nombre, t.borrador, t.conservarResiduo)
+      if (!err && verificado) {
+        bien++
+        setElegidos((prev) => {
+          const proximo = new Set(prev)
+          proximo.delete(id)
+          return proximo
+        })
+      } else fallas.push(t.nombre)
+      setLote({ hechos: bien + fallas.length, total: ids.length })
+    }
+    setLote(null)
+    if (!fallas.length) toast.ok(`${bien} publicadas en la tienda.`)
+    else toast.error(`${bien} publicadas. No salieron o no se pudieron verificar: ${fallas.join(', ')}. Quedaron tildadas.`)
+  }
+  const listasEnPantalla = paraLeer.slice(0, 60).filter((p) => listas.has(p.id))
+  const elegidosEnPantalla = listasEnPantalla.filter((p) => elegidos.has(p.id)).length
 
   /**
    * Guardar un dato de la ficha. Vive acá y ⛔ no adentro de cada tarjeta porque **las dos vistas
@@ -277,6 +367,26 @@ export function GenDesc() {
             />
           )}
 
+          {listasEnPantalla.length > 0 && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 2, background: color.bg, padding: '8px 0' }}>
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: font.sm, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  disabled={!!lote}
+                  checked={elegidosEnPantalla === listasEnPantalla.length}
+                  onChange={(e) => setElegidos(e.target.checked ? new Set(listasEnPantalla.map((p) => p.id)) : new Set())}
+                />
+                Seleccionar todas ({listasEnPantalla.length} listas)
+              </label>
+              <Button size="sm" disabled={!!lote || !elegidosEnPantalla} onClick={() => void publicarElegidos()}>
+                {lote ? `Publicando ${lote.hechos} de ${lote.total}…` : `Publicar seleccionadas (${elegidosEnPantalla})`}
+              </Button>
+              <span style={{ fontSize: font.xs, color: color.mut }}>
+                Tildá «Revisada» en cada una a medida que la mirás. Las que el validador frena no se pueden tildar.
+              </span>
+            </div>
+          )}
+
           <div style={{ display: 'grid', gap: 12 }}>
             {paraLeer.slice(0, 60).map((p) => (
               <TarjetaRevision
@@ -291,27 +401,21 @@ export function GenDesc() {
                   if (err) toast.error(err)
                   return err
                 }}
+                elegido={elegidos.has(p.id)}
+                onElegir={(si) => setElegidos((prev) => {
+                  const proximo = new Set(prev)
+                  if (si) proximo.add(p.id)
+                  else proximo.delete(p.id)
+                  return proximo
+                })}
+                enLote={!!lote}
+                onListo={alAvisarListo}
                 onPublicar={async (borrador, conservarResiduo) => {
-                  // 🔴 Se retiene ANTES de publicar y se SUELTA al final si salió bien: si no se
-                  // retuviera durante el viaje, la tarjeta se iría de la lista en cuanto la fila
-                  // cambia de estado, con el botón todavía diciendo «Publicando…».
-                  setRetenidos((prev) => (prev.has(p.id) ? prev : new Set(prev).add(p.id)))
-                  const { error: err, verificado } = await revisar(p.id, p.name, borrador, conservarResiduo)
+                  const { error: err, verificado } = await publicarUna(p.id, p.name, borrador, conservarResiduo)
                   if (err) toast.error(err)
                   else if (verificado) toast.ok('Publicado en la tienda.')
                   // ⛔ El PUT dio 200 y la relectura no coincidió: no se dice «listo».
                   else toast.error('Se escribió, pero la relectura no coincide. Miralo en la tienda.')
-                  // 🔑 Salió y se releyó bien ⇒ **se va de la cola**, que es lo que el botón
-                  // prometía (pedido de Bruno, 8-sep-2026). Lo que ⛔ no verificó o falló se queda:
-                  // ahí sí hay algo que mirar, y el cartel de la tarjeta es dónde se mira.
-                  if (!err && verificado) {
-                    setRetenidos((prev) => {
-                      if (!prev.has(p.id)) return prev
-                      const proximo = new Set(prev)
-                      proximo.delete(p.id)
-                      return proximo
-                    })
-                  }
                   return err
                 }}
               />
@@ -1063,13 +1167,29 @@ function CampoAtributo({
  * ⚠️ La tarjeta ⛔ no muestra las medidas ni el insumo: eso se carga con la prenda en la mano y es
  * la otra pestaña. Acá se lee y se decide.
  */
+/** Lo que una tarjeta lista le pasa a «Publicar seleccionadas»: su texto de ahora y su tilde de residuo. */
+type LoteTexto = {
+  nombre: string
+  borrador: { parrafo: string; bullets: { etiqueta: string; texto: string }[]; tip: string; chivatos?: Chivato[] }
+  conservarResiduo: boolean
+  /** El guardado del párrafo que esté en viaje: se espera antes de publicar. */
+  esperar: () => Promise<unknown>
+}
+
 function TarjetaRevision({
-  p, fila, ficha, familia, onAtributo, onGuardarTexto, onPublicar,
+  p, fila, ficha, familia, elegido, onElegir, enLote, onListo, onAtributo, onGuardarTexto, onPublicar,
 }: {
   p: ProductoTn
   fila: FilaCola | undefined
   ficha: Cargados
   familia: Familia | null
+  /** Tildada para «Publicar seleccionadas». */
+  elegido: boolean
+  onElegir: (si: boolean) => void
+  /** Hay una tanda publicándose: ⛔ se destilda ni se publica de a una mientras tanto. */
+  enLote: boolean
+  /** Avisa el texto de AHORA si está lista para salir, o `null` si no. */
+  onListo: (id: string, texto: LoteTexto | null) => void
   onAtributo: (atributo: Atributo, valor: string, propuesto?: boolean) => Promise<string | null>
   onGuardarTexto: (borrador: { parrafo: string; bullets: { etiqueta: string; texto: string }[]; tip: string }) => Promise<string | null>
   onPublicar: (
@@ -1124,6 +1244,21 @@ function TarjetaRevision({
    * el click, así que el click caía sobre un botón que se acababa de apagar y no pasaba nada.
    */
   const enViaje = useRef<Promise<unknown> | null>(null)
+
+  // 🆕 Le avisa a la lista el texto que hay EN PANTALLA, con el mismo criterio que el botón de abajo:
+  // lo que el botón ⛔ dejaría publicar tampoco se puede tildar para la tanda.
+  const lista = !vacio && !bloquean.length && !faltaTela && !enLaTienda
+  const chivatosGuardados = fila?.borrador?.chivatos
+  useEffect(() => {
+    onListo(p.id, lista ? {
+      nombre: p.name,
+      borrador: { parrafo, bullets, tip: tip.trim(), ...(chivatosGuardados ? { chivatos: chivatosGuardados } : {}) },
+      conservarResiduo,
+      esperar: () => enViaje.current || Promise.resolve(),
+    } : null)
+  }, [onListo, p.id, p.name, lista, parrafo, tip, bullets, chivatosGuardados, conservarResiduo])
+  // Al irse de la pantalla (se publicó, o la búsqueda la saca) deja de contar para la tanda.
+  useEffect(() => () => onListo(p.id, null), [onListo, p.id])
 
   /** 🔑 Se guarda al SALIR del campo, sin botón. Si no cambió nada, ⛔ no se escribe. */
   const alSalir = async () => {
@@ -1290,9 +1425,15 @@ function TarjetaRevision({
           )}
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {!enLaTienda && (
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: font.sm, cursor: lista ? 'pointer' : 'not-allowed', color: lista ? color.ink : color.mut }}>
+                <input type="checkbox" checked={elegido} disabled={!lista || enLote} onChange={(e) => onElegir(e.target.checked)} />
+                Revisada
+              </label>
+            )}
             <Button
               size="sm"
-              disabled={publicando || vacio || bloquean.length > 0 || faltaTela}
+              disabled={publicando || enLote || vacio || bloquean.length > 0 || faltaTela}
               // 🔑 Que apretarlo ⛔ le saque el foco al párrafo: `revisar` ya guarda el texto que
               // está en pantalla, así que el guardado del blur sería un segundo viaje compitiendo
               // con éste —y el que llega último deja la fila en «borrador»—.
