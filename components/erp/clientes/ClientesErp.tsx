@@ -47,8 +47,8 @@ function bajarCsv(filas: FilaCliente[], marca: MarcaErp) {
 }
 
 export function ClientesErp({ abrir, alAbrir }: {
-  /** Desde la búsqueda global (⌘K): el cliente (por documento) que se abre solo cuando llega la lista. */
-  abrir?: { doc: string } | null
+  /** Desde la búsqueda global (⌘K): el cliente (por documento; si no tiene, por nombre) que se abre solo cuando llega la lista. */
+  abrir?: { doc: string | null; nombre: string } | null
   alAbrir?: () => void
 } = {}) {
   const { marca: delShell, perfil } = useSesion()
@@ -78,9 +78,10 @@ export function ClientesErp({ abrir, alAbrir }: {
         setDatos({ ...d, clave }); setSeleccion(new Set()); setError(null)
         const { abrir: pedido, alAbrir: soltar } = abrirRef.current
         if (pedido) {
-          const f = d.filas.find((x) => x.doc === pedido.doc)
+          // Los clientes de GN no traen documento: ⛔ comparar `null === null` (abría la primera fila sin documento).
+          const f = pedido.doc ? d.filas.find((x) => x.doc === pedido.doc) : d.filas.find((x) => x.nombre.trim().toLowerCase() === pedido.nombre.trim().toLowerCase())
           if (f) setFicha(f)
-          else setError(`El documento ${pedido.doc} todavía no está en la lista de clientes.`)
+          else setError(`${pedido.doc ? `El documento ${pedido.doc}` : pedido.nombre} todavía no está en la lista de clientes.`)
           soltar?.()
         }
       })

@@ -40,6 +40,10 @@ describe('erp › búsqueda global', () => {
     expect(g[0].items[0].destino).toMatchObject({ tipo: 'venta', id: 'v1', marca: 'zattia' })
     expect(gruposDe(datos, { conMarca: true })[1].items[0].detalle).toContain('Zattia')
   })
+  it('un cliente sin documento viaja con el nombre (GN no trae doc: ⛔ se abría la primera fila sin documento)', () => {
+    const g = gruposDe({ ventas: [], prendas: [], clientas: [{ doc: '', nombre: 'Ludmila Acosta', razonSocial: null, buscadaEn: 'zattia' }] })
+    expect(g[0].items[0].destino).toEqual({ tipo: 'cliente', marca: 'zattia', doc: null, nombre: 'Ludmila Acosta' })
+  })
   it('el período de Ventas que contiene la venta (día argentino)', () => {
     expect(periodoDeVenta('2026-10-05T12:00:00Z', '2026-10-26')).toBe('mes')
     expect(periodoDeVenta('2026-10-01T01:00:00Z', '2026-10-26')).toBe('anterior') // 22:00 del 30-sep en Argentina

@@ -118,7 +118,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const ir = (s: string, p?: string | null) => router.push(hrefErp(s, p))
   // Búsqueda global (⌘K) y atajos (?). Lo que se elige viaja en memoria (como `aAjustar`): la lista que lo abre lo recibe y lo suelta.
   const [panel, setPanel] = useState<'buscar' | 'atajos' | null>(null)
-  const [aAbrir, setAAbrir] = useState<{ tipo: 'venta'; id: string; numero: number; periodo: string } | { tipo: 'cliente'; doc: string } | null>(null)
+  const [aAbrir, setAAbrir] = useState<{ tipo: 'venta'; id: string; numero: number; periodo: string } | { tipo: 'cliente'; doc: string | null; nombre: string } | null>(null)
   // Cada pedido de la búsqueda remonta la lista que lo recibe (ya montada, no volvería a leer ni a mirar `abrir`).
   const [pedidoN, setPedidoN] = useState(0)
   const [prendaGlobal, setPrendaGlobal] = useState<{ marca: Marca; producto: string; talle: string } | null>(null)
@@ -141,7 +141,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
       ir('ventas', 'ventas'); return
     }
     setPedidoN((n) => n + 1)
-    setAAbrir({ tipo: 'cliente', doc: d.doc })
+    setAAbrir({ tipo: 'cliente', doc: d.doc, nombre: d.nombre })
     ir('clientes', 'clientes')
   }
 

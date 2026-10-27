@@ -21,7 +21,7 @@ type Seccion = { key: string; titulo: string; pestanias: Array<{ key: string; la
 export type DestinoBusqueda =
   | { tipo: 'venta'; marca: MarcaErp; id: string; ocurridaEn: string; numero: number }
   | { tipo: 'prenda'; marca: MarcaErp; producto: string; talle: string }
-  | { tipo: 'cliente'; marca: MarcaErp; doc: string }
+  | { tipo: 'cliente'; marca: MarcaErp; doc: string | null; nombre: string }
   | { tipo: 'ir'; seccion: string; pestania: string | null }
 
 type Item = { id: string; titulo: string; detalle: string; destino: DestinoBusqueda }
