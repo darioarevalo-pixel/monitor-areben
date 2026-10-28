@@ -1,9 +1,10 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "e5e3bc2cf5e965d234e526ff66fc37f1a0242168",
-  "traido_en": "2026-10-28T00:08:56.844Z",
+  "commit": "4b0080dd00b49171a64d2bf28a4acb1c631204ba",
+  "traido_en": "2026-10-28T13:06:21.581Z",
   "archivos": {
+    "alerta.mjs": "a34c920b5972553a630914482236843fcd4a7d0aad5f96bd810ff9a9b29d32ec",
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
     "arca/cliente.js": "fc1118e7392afdf716057de81175ec6fe2b7a16edd63ed7956241e8389fce168",
     "arca/emisor-db.js": "278768915858aa5114f455a6c5c9c9864782b2d2fc5eb25a46eb106d23fef2fd",
@@ -22,6 +23,7 @@
     "cuentas/rutas.mjs": "02515ffdb62402d10a68ad42b5564f24c5e64eb4a29f74cea74837c890041666",
     "db.mjs": "01c415367a1f3373a2d71ba9c4d7d61d5231a51867213cd702abea22b562d98c",
     "depositos.mjs": "c32579434ed01915978dc8176cd5cad84070b19d82c863aa94adcc5982aebf25",
+    "evento.mjs": "1aef38f09e1ab537619ee73c14ccf4fb9fbf5dd5c8ae9087984ed88b8bc01568",
     "gasto/gasto.mjs": "f74cedeb52f8b90ba9288e66295123551e95be48e97657e0f39ab304fe10c623",
     "stock/ajuste.mjs": "5a0cb9193f56b4a5bb31bd17f97d2d9f49045af4162e07987d969922b24d584a",
     "stock/interruptores.mjs": "aa08ed1ff19812949617eddd01af87c08d907434256ea84258368173e715bb58",
@@ -35,6 +37,7 @@
     "tn/entrega.mjs": "e33f863f5ee634e26aecd03b54511c6f048c635b05e927ab4dbccfa3cb62acbd",
     "tn/guardar.mjs": "355cec93bdc320ba05087d8e4c94209e9db9ad28db815610134493ceba65d9c3",
     "tn/orden.mjs": "29d4a21e64e2372f88e73a98bf9285eba5e094b3e42dc6c14ca00dbe200eadbb",
+    "tn/pedido-stock.mjs": "60597c5d8b244eb560598fa92c8411da54ccd8dc192f787b64a735113a079992",
     "tn/stock.mjs": "e4dbf31e00ec51406b4967be514043ddb5144dde539bae70e20944aca8412358",
     "tn/venta.mjs": "365b1176c500b5cae01e82185c0a1d059d8e70192d4860c735c0ffcabb2abeed",
     "venta/armar.mjs": "ef9293edcebaeb7242f571a6cd780e310608c9ae7b3ec95e7f6d69db3addf0ec",
