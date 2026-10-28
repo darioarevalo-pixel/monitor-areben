@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Field, Input, Notice, Select, color, font, space } from '@/components/ui'
 import { FichaCostado } from '@/components/ui/FichaCostado'
+import { FormasDePago, type PagoCarga } from './FormasDePago'
 import {
   buscarClientas, buscarPrendas, cargarVenta, leerParaCargar, leerPrecioDeProducto,
   type Clienta, type DatosParaCargar, type MarcaErp, type PrendaEncontrada,
@@ -21,7 +22,7 @@ import { NOMBRE_CANAL, NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 
 type Renglon = { clave: string; prenda: PrendaEncontrada; cantidad: number; precio: number | '' }
-type Pago = { clave: string; cuenta: string; monto: number | '' }
+type Pago = PagoCarga
 
 /** Los frenos de la venta a cuenta que salta el PIN de un admin (los mismos que `FRENOS_DE_CUENTA` de `api/_erp-cargar.js`). */
 const FRENOS_DE_CUENTA = ['SIN_CREDITO', 'ATRASADO', 'SUPERA_TOPE']
@@ -68,6 +69,10 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
   }, [marca])
 
   const cuentas = useMemo(() => (datos?.cuentas ?? []).filter((c) => c.marca === linea), [datos, linea])
+  // Las formas de pago del POS (con su ruta) de la línea; si la Caja de la línea ⛔ tiene reglas, queda la lista de cuentas de siempre.
+  const formas = (datos?.formas?.[linea] ?? []).filter((f) => f.cuenta || f.clave === 'cuenta' || f.clave === 'entrega')
+  const conFormas = formas.some((f) => ['efectivo', 'transferencia', 'debito', 'credito'].includes(f.clave) && f.cuenta)
+  const sueltas = datos?.sueltas?.[linea] ?? []
   const total = pesos(renglones.reduce((a, r) => a + (r.precio === '' ? 0 : r.precio) * r.cantidad, 0))
   const pagado = pesos(pagos.reduce((a, p) => a + (p.monto === '' ? 0 : p.monto), 0))
   const aCuenta = pagos.some((p) => cuentas.find((c) => c.id === p.cuenta)?.medio === 'cuenta' && Number(p.monto) > 0)
@@ -210,11 +215,16 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
           <b style={{ color: color.ink }}>Cómo paga</b>
           {pagos.map((p, i) => (
-            <div key={p.clave} style={{ ...fila, alignItems: 'center' }}>
-              <Select aria-label="Cuenta" value={p.cuenta} style={{ flex: '1 1 180px' }} onChange={(e) => setPagos((x) => x.map((y) => (y.clave === p.clave ? { ...y, cuenta: e.target.value } : y)))}>
-                <option value="">Elegí la cuenta</option>
-                {cuentas.map((c) => <option key={c.id} value={c.id}>{c.medio === 'cuenta' ? `${c.nombre} (queda debiendo)` : c.medio === 'entrega' ? `${c.nombre} (lo cobra el cadete)` : c.nombre}</option>)}
-              </Select>
+            <div key={p.clave} style={{ ...fila, alignItems: 'center', ...(i > 0 ? { borderTop: `1px solid ${color.bg2}`, paddingTop: space[2] } : {}) }}>
+              {conFormas ? (
+                <FormasDePago formas={formas} sueltas={sueltas} canal={canal} pago={p}
+                  onCambio={(c) => setPagos((x) => x.map((y) => (y.clave === p.clave ? { ...y, ...c } : y)))} />
+              ) : (
+                <Select aria-label="Cuenta" value={p.cuenta} style={{ flex: '1 1 180px' }} onChange={(e) => setPagos((x) => x.map((y) => (y.clave === p.clave ? { ...y, cuenta: e.target.value } : y)))}>
+                  <option value="">Elegí la cuenta</option>
+                  {cuentas.map((c) => <option key={c.id} value={c.id}>{c.medio === 'cuenta' ? `${c.nombre} (queda debiendo)` : c.medio === 'entrega' ? `${c.nombre} (lo cobra el cadete)` : c.nombre}</option>)}
+                </Select>
+              )}
               <Input aria-label="Monto" type="number" min={0} step="0.01" value={p.monto} style={{ width: 120 }}
                 onChange={(e) => setPagos((x) => x.map((y) => (y.clave === p.clave ? { ...y, monto: e.target.value === '' ? '' : Number(e.target.value) } : y)))} />
               <Button variant="ghost" onClick={() => setPagos((x) => x.map((y) => (y.clave === p.clave ? { ...y, monto: pesos(total - (pagado - (y.monto === '' ? 0 : y.monto))) } : y)))}>Completar</Button>

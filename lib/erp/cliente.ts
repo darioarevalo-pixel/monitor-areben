@@ -653,7 +653,19 @@ export const leerVentasPorProducto = (marca: MarcaErp, desde: string, hasta: str
 
 // ── ERP › Ventas › Cargar venta (`api/_erp-cargar.js`, `origen: 'manual'` del motor, contrato §19) ──
 export type CuentaParaCargar = { id: string; nombre: string; medio: string; marca: string }
-export type DatosParaCargar = { lineas: string[]; cuentas: CuentaParaCargar[]; canales: string[]; depositos: string[]; manualHabilitado: boolean }
+/** Una forma de pago como la del POS: su cuenta de cobro, sus variantes (crédito: 6 cuotas, promo del banco) y la ruta de cada canal. */
+export type FormaDePagoCargar = {
+  clave: string; nombre: string; cuenta: string | null
+  opciones?: Array<{ clave: string; nombre: string; cuenta: string }>
+  rutas: Record<string, { cuenta: string | null; tasa: number | null; dias: number | null } | null>
+}
+export type DatosParaCargar = {
+  lineas: string[]; cuentas: CuentaParaCargar[]; canales: string[]; depositos: string[]; manualHabilitado: boolean
+  /** Por línea: las formas de pago del POS (+ «Queda debiendo» y «Contraentrega»), y las cuentas que ⛔ son de ninguna (`Otra cuenta`). */
+  formas?: Record<string, FormaDePagoCargar[]>; sueltas?: Record<string, CuentaParaCargar[]>
+  /** Las líneas cuya Caja ⛔ tiene reglas: ahí sólo se ve «Otra cuenta». */
+  sinReglas?: string[]
+}
 export const leerParaCargar = (marca: MarcaErp) =>
   pedir<DatosParaCargar>(null, `&vista=cargar-venta&marca=${marca}&nc=${Date.now()}`, 'No se pudo abrir «Cargar venta».')
 export type VentaACargar = {

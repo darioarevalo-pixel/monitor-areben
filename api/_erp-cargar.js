@@ -11,6 +11,7 @@
  */
 import { textoDelMotor } from '../lib/erp/venta.core.js'
 import { verificarPinErp } from './_erp-pin.js'
+import { cuentasSueltas, formasDePago } from '../lib/erp/formas-pago.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 const LINEAS = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] }
@@ -19,16 +20,35 @@ const pesos = (x) => Math.round(Number(x) * 100) / 100
 /** Los frenos de la venta A CUENTA que se saltan con el PIN de un admin (motor `frena`): la pantalla pide el PIN recién cuando llega uno. */
 export const FRENOS_DE_CUENTA = ['SIN_CREDITO', 'ATRASADO', 'SUPERA_TOPE']
 
-/** @param {{ marca: string }} p @param {{ conMotor: Function }} deps */
+/**
+ * @param {{ marca: string }} p
+ * @param {{ conMotor: Function, reglasDeCaja?: (linea: string) => Promise<any | null> }} deps  `reglasDeCaja`: `caja_config.reglas` de una línea (las MISMAS del POS)
+ * 🔑 `formas` = las formas de pago como las del POS, por línea, cada una con su cuenta de cobro y la RUTA de cada canal (cuenta real y tasa).
+ */
 export async function datosParaCargar({ marca }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const reglas = {}
+  for (const l of LINEAS[marca]) reglas[l] = deps.reglasDeCaja ? await deps.reglasDeCaja(l).catch(() => null) : null
   return deps.conMotor(marca, 'Cargar venta', async (pg) => {
     const cuentas = (await pg.query(
-      `select id::text, nombre, medio, marca from cuenta_cobro where marca = any($1) and activa and medio <> 'saldo' order by marca, nombre`,
+      `select id::text, nombre, medio, marca, gn_cuenta_id from cuenta_cobro where marca = any($1) and activa and medio <> 'saldo' order by marca, nombre`,
       [LINEAS[marca]])).rows
     const canales = (await pg.query('select id from canal order by id')).rows.map((r) => r.id)
     const [{ ok } = { ok: false }] = (await pg.query(`select pg_get_constraintdef(oid) like '%manual%' as ok from pg_constraint where conname = 'venta_origen_check'`)).rows
-    return { lineas: LINEAS[marca], cuentas, canales, depositos: DEPOSITOS[marca], manualHabilitado: Boolean(ok) }
+    // Las rutas (marca × canal × medio ⇒ cuenta real): sin la tabla, la forma de pago igual se ve, sin su ruta.
+    const [{ hay }] = (await pg.query(`select to_regclass('public.ruta_cobro') is not null as hay`)).rows
+    const { rutasVigentes } = hay ? await import('../motor/cuentas/rutas.mjs') : { rutasVigentes: null }
+    const formas = {}
+    const sueltas = {}
+    for (const l of LINEAS[marca]) {
+      const delaLinea = cuentas.filter((c) => c.marca === l)
+      formas[l] = formasDePago({ reglas: reglas[l], cuentas: delaLinea, rutas: rutasVigentes ? await rutasVigentes(pg, { marca: l }) : [], canales })
+      sueltas[l] = cuentasSueltas({ formas: formas[l], cuentas: delaLinea }).map(({ id, nombre, medio, marca: m }) => ({ id, nombre, medio, marca: m }))
+    }
+    return {
+      lineas: LINEAS[marca], cuentas: cuentas.map(({ id, nombre, medio, marca: m }) => ({ id, nombre, medio, marca: m })), canales, depositos: DEPOSITOS[marca],
+      manualHabilitado: Boolean(ok), formas, sueltas, sinReglas: LINEAS[marca].filter((l) => !reglas[l]?.medios),
+    }
   })
 }
 

@@ -1600,7 +1600,14 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cargar-venta') {
-      const r = await datosParaCargar({ marca: String(req.query.marca || '') }, { conMotor })
+      // `caja_config.reglas` de la línea: las MISMAS reglas con que cobra el POS (de la base de la marca; ⛔ el rol del motor la lee).
+      const reglasDeCaja = async (linea) => {
+        const { url, key } = cfgDeMarca(baseDeLinea(linea))
+        const { data, error } = await createClient(url, key).from('caja_config').select('reglas').eq('store', linea).maybeSingle()
+        if (error) throw new Error(error.message)
+        return data?.reglas ?? null
+      }
+      const r = await datosParaCargar({ marca: String(req.query.marca || '') }, { conMotor, reglasDeCaja })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cobros') {
