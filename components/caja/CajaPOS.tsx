@@ -438,8 +438,8 @@ function POS() {
       setCobrandoCambio(false)
     })
   }, [cambioHecho])
-  // Sin llevarse nada también se puede seguir: la diferencia queda a favor de la clienta (como en erp › Cambio).
-  const cambioListoParaCobrar = enCambio && pasoCambio === 2 && !cambio.sinPrecio && cambio.devueltas.length > 0
+  // Es un CAMBIO, ⛔ una devolución (Bruno, 27-oct): para seguir al cobro hay que llevarse algo; lo que sobra queda a favor.
+  const cambioListoParaCobrar = enCambio && pasoCambio === 2 && cambio.unidadesNuevas > 0 && !cambio.sinPrecio && cambio.devueltas.length > 0
   /** «Siguiente →»: sin venta pide el PIN de la encargada; con venta pasa directo a lo que se lleva. */
   const siguienteDelCambio = () => {
     if (!cambio.devueltas.length) return
