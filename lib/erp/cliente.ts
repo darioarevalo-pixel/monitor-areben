@@ -801,3 +801,16 @@ export const leerGastos = (marca: MarcaErp, desde: string, hasta: string, prueba
 /** Un gasto a mano. Corregir uno cargado de más es cargar otro con el monto en NEGATIVO (el gasto es inmutable). */
 export const registrarGastoErp = (marca: MarcaErp, g: { linea?: string; fecha: string; tipo: TipoGasto; monto: number; detalle: string; cuenta?: string; prueba: boolean }) =>
   pedir<{ ok: true; gasto: GastoCargado }>(post({ accion: 'registrar-gasto', marca, ...g }), '', 'No se pudo cargar el gasto.')
+
+// ── ERP › Stock › Diferencias: mandar el stock del ERP a Tienda Nube (`api/_erp-empuje-stock.js`; motor `lib/tn/pedido-stock.mjs`) — sólo admin ──
+/** Un envío de stock de la tienda ENTERA. `seco: true` = calculó lo que mandaría y ⛔ escribió (hasta el corte de esa tienda); `null` = todavía no corrió. */
+export type EmpujeStock = {
+  id: number; estado: 'pendiente' | 'corriendo' | 'hecho' | 'fallado' | 'abandonado'; pedidoPor: string | null; avisos: number
+  pedidoEn: string | null; terminadoEn: string | null; error: string | null
+  seco: boolean | null; cambios: number | null; unidades: number | null; escritos: number | null; quedan: number | null
+}
+export const leerEmpujesStock = (tienda: TiendaErp) =>
+  pedir<{ tienda: TiendaErp; empujes: EmpujeStock[] }>(null, `&vista=empujes-stock&marca=${tienda}&nc=${Date.now()}`, 'No se pudieron leer los envíos de stock.')
+/** Pide el envío (lo corre la cola del motor en el minuto). `yaEsperaba` = había uno esperando y se sumó a ése. */
+export const mandarStockATN = (tienda: TiendaErp) =>
+  pedir<{ ok: true; id: number; yaEsperaba: boolean }>(post({ accion: 'mandar-stock', marca: tienda }), '', 'No se pudo pedir el envío de stock.')
