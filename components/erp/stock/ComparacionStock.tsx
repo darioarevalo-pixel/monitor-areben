@@ -3,7 +3,8 @@
 /**
  * ERP › Stock › Comparación con TN y ML, con el molde del diseño (`~/Documents/erp-monitor/diseno.md` §3 y §7; tablero 3
  * del v8): por variante, lo que la tienda tendría que mostrar según el ERP contra lo que muestra Tienda Nube, con GN al
- * lado y «Qué pasa» (las palabras de Conciliación). De SÓLO LECTURA: el arreglo lo hace GN (hoy) o el monitor, ⛔ el ERP.
+ * lado y «Qué pasa» (las palabras de Conciliación). La lista es INFORMATIVA; el arreglo es «Enviar el stock a
+ * Tienda Nube» (`EnviarStockTN`: la tienda entera, seco hasta el corte de esa tienda).
  * Núcleo puro: `lib/erp/comparacion.core.js`; servidor: `api/_erp-stock.js` (`vista=comparacion`).
  *
  * 🔑 Arranca por «No coinciden», con la tienda que muestra DE MÁS arriba (lo que se puede vender sin tenerlo).
@@ -18,12 +19,13 @@ import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
-import { leerComparacion, type ComparacionTiendas, type FilaComparacion, type MarcaErp } from '@/lib/erp/cliente'
+import { leerComparacion, type ComparacionTiendas, type FilaComparacion, type MarcaErp, type TiendaErp } from '@/lib/erp/cliente'
 import {
   COLUMNAS, QUE_PASA, VISTAS, alternarColumna, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
 } from '@/lib/erp/comparacion.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
+import { EnviarStockTN } from './EnviarStockTN'
 import { FichaPrenda } from './FichaPrenda'
 import type { PrendaAAjustar } from './StockErp'
 import { useLineaErp } from '@/lib/erp/linea-erp'
@@ -58,6 +60,8 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
   const [vista, setVista] = useState('no')
   const [q, setQ] = useState('')
   const tienda = useLineaErp()
+  // A qué Tienda Nube se envía el stock: BDI tiene la suya; en Zattia, la de la línea elegida (Stunned tiene la propia).
+  const tiendaEnvio: TiendaErp = marca === 'bdi' ? 'bdi' : tienda || 'zattia'
   const [orden, setOrden] = useState<OrdenLista>(null)
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
   const [prefs, setPrefsState] = useState<Prefs>(() => normalizarPrefs(typeof window === 'undefined' ? null : leerPrefsDeLista(lista, usuario)))
@@ -114,7 +118,7 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>Por variante: lo que la tienda tendría que mostrar según el ERP (sus depósitos, menos lo apartado por pedidos sin pagar) contra lo que muestra. Arranca con las que no coinciden.</p>
-      <Notice tone="warning">Hoy el stock de la tienda lo manda <b>Gestión Nube</b>: si Gestión Nube y la tienda coinciden y el ERP no, lo que hay que mirar es el ERP. Esta pantalla no arregla nada: dice qué no coincide.</Notice>
+      <Notice tone="warning">Hasta el corte de cada tienda, su stock lo manda <b>Gestión Nube</b>: si Gestión Nube y la tienda coinciden y el ERP no, lo que hay que mirar es el ERP. Después del corte, el arreglo es <b>enviar el stock del ERP</b> a la tienda (abajo).</Notice>
       <Notice tone="neutral">
         <b>Mercado Libre todavía no se compara acá</b>: el ERP no guarda lo publicado en Mercado Libre.
         {datos?.ml ? <> La conciliación del {datos.ml.fecha.split('-').reverse().slice(0, 2).join('/')} encontró {datos.ml.noCierran} publicaciones que no coinciden. <Button variant="outline" onClick={irAConciliacion}>Ver en Conciliación</Button></> : ' Las que no coinciden salen una vez por día en Conciliación.'}
@@ -127,6 +131,8 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
         <TileResumen tono={tonoDeConteo(res.deMenos)} titulo="Muestra de menos" valor={res.deMenos.toLocaleString('es-AR')} nota={res.uMenos ? `${res.uMenos.toLocaleString('es-AR')} u que se dejan de vender` : 'ninguna'} />
         <TileResumen titulo="Tienda Nube leída" valor={leidas.length ? cuandoCorto(leidas.map(([, l]) => l).sort()[0]) : '—'} nota="se lee cada 2 horas" />
       </div>
+
+      <EnviarStockTN key={tiendaEnvio} tienda={tiendaEnvio} noCoinciden={res.noCoinciden} />
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
@@ -160,7 +166,6 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo la comparación…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')} · ${nombreVista.toLowerCase()}`}
           {datos && <> · el ERP llega hasta {cuandoCorto(datos.libroHasta)}{leidas.map(([t, l]) => ` · ${TIENDA[t]} leída ${cuandoCorto(l)}`).join('')}</>}
-          {' '}· el arreglo lo hace Gestión Nube o el monitor, no el ERP
         </div>
       </div>
 

@@ -73,6 +73,11 @@ en vivo y con TODAS las variantes: cruce por SKU y, si no, por código; SKU repe
 🔴 Mercado Libre ⛔ se compara: el motor ⛔ guarda lo publicado (`ml_publicaciones` de BDI quedó del 24-sep) ⇒ la pantalla lo dice y
 manda a Conciliación con cuántas ⛔ cerraron. Servidor `api/_erp-stock.js` (`vista=comparacion`, `tn_variante` + `tn_producto` por pg),
 núcleo `lib/erp/comparacion.core.js` (`tests/erp-comparacion*.test.ts*`).
+**Enviar el stock a Tienda Nube** (28-oct, Bruno: la diferencia es INFORMATIVA, el ERP manda el stock): bloque debajo de los totales
+(`components/erp/stock/EnviarStockTN.tsx`), sólo admin. 🔴 Va la tienda ENTERA (BDI, o Zattia/Stunned según la línea), ⛔ un producto;
+confirma antes. Avisa el trabajo `stock-tn:<tienda>` de la cola del motor (`api/_erp-empuje-stock.js`, `lib/tn/pedido-stock.mjs`) y
+lista los últimos 5 envíos. ⛔ Escribe en TN hasta que `STOCK_TN_MANDA` (Vercel de `areben-erp`) incluya esa tienda: antes dice
+«Sin enviar» y qué cambiaría. Si el último envío fue real, el aviso de la confirmación cambia a «de verdad». ⛔ GN ni ML.
 
 **Diferencias con GN** (14-oct, sólo lectura; 🎨 19-oct, Diseño 7: molde de REGISTRO — números arriba (sin explicar · sobreventa · explicadas solas), UNA lista con una vista por clase + «Sobreventa», buscador, y la fila abre `FichaPrenda` AL COSTADO; ⛔ cambió qué se calcula; `tests/erp-diferencias-pantalla.test.tsx`): lo que el libro ⛔ pudo explicar al comparar su día con
 el de GN (`stock_diff`), agrupado por clase con qué mirar, y la **sobreventa**: las prendas que el libro

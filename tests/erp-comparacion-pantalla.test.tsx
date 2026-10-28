@@ -24,7 +24,8 @@ const leerComparacion = vi.fn(async () => ({
   filas: FILAS, sinLimite: 0, tnLeidas: { zattia: '2026-10-20T11:50:00Z', stunned: '2026-10-20T11:50:00Z' },
   ml: { fecha: '2026-10-19', noCierran: 44 }, libroHasta: '2026-10-20T12:00:00Z', pedidosLeidosEn: null,
 }))
-vi.mock('@/lib/erp/cliente', () => ({ leerComparacion: () => leerComparacion() }))
+const leerEmpujesStock = vi.fn(async (_t: string) => ({ empujes: [] }))
+vi.mock('@/lib/erp/cliente', () => ({ leerComparacion: () => leerComparacion(), leerEmpujesStock: (t: string) => leerEmpujesStock(t), mandarStockATN: vi.fn() }))
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno' } }) }))
 const guardado = new Map<string, string>()
 vi.stubGlobal('localStorage', {
@@ -56,6 +57,13 @@ describe('Comparación con TN y ML', () => {
     expect(filas[0]).toContain('El ERP dice otro stock')
     expect(filas[1]).toContain('-2')
     expect(todo()).not.toContain('TOP 3/3')
+  })
+
+  it('el botón de enviar el stock va a la tienda de la línea (Zattia, sin línea elegida)', async () => {
+    await montar()
+    expect(leerEmpujesStock).toHaveBeenCalledWith('zattia')
+    expect(todo()).toContain('Enviar el stock a Tienda Nube · Zattia')
+    expect(todo()).not.toContain('no arregla nada')
   })
 
   it('Mercado Libre dice que no se compara y lleva a Conciliación', async () => {
