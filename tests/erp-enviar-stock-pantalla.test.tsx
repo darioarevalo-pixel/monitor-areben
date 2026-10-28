@@ -27,7 +27,7 @@ async function montar(tienda: 'bdi' | 'zattia' | 'stunned' = 'stunned') {
   const { EnviarStockTN } = await import('@/components/erp/stock/EnviarStockTN')
   const { ConfirmProvider } = await import('@/components/ui/Confirm')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<ConfirmProvider><EnviarStockTN tienda={tienda} noCoinciden={12} /></ConfirmProvider>) })
+  await act(async () => { root = createRoot(host); root.render(<ConfirmProvider><EnviarStockTN tienda={tienda} /></ConfirmProvider>) })
   await act(async () => {})
 }
 const todo = () => document.body.textContent ?? ''
@@ -57,7 +57,7 @@ describe('Enviar el stock a Tienda Nube', () => {
     await montar()
     await act(async () => { boton().click() })
     expect(todo()).toContain('el ERP sólo calcula qué cambiaría')
-    expect(todo()).toContain('hoy no coinciden 12 variantes')
+    expect(todo()).toContain('dio 3 variantes distintas')
     expect(mandarStockATN).not.toHaveBeenCalled()
     await apretar('Cancelar')
     expect(mandarStockATN).not.toHaveBeenCalled()

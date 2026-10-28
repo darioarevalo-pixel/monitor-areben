@@ -132,7 +132,7 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
         <TileResumen titulo="Tienda Nube leída" valor={leidas.length ? cuandoCorto(leidas.map(([, l]) => l).sort()[0]) : '—'} nota="se lee cada 2 horas" />
       </div>
 
-      <EnviarStockTN key={tiendaEnvio} tienda={tiendaEnvio} noCoinciden={res.noCoinciden} />
+      <EnviarStockTN key={tiendaEnvio} tienda={tiendaEnvio} />
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />

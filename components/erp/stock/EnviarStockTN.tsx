@@ -8,6 +8,8 @@
  * 🔑 Es la tienda ENTERA, ⛔ una variante (`reglas-vigentes.md` :12 y :94). Hasta el corte de esa tienda (`STOCK_TN_MANDA`,
  * Vercel de `areben-erp`) el motor sólo CALCULA y guarda qué cambiaría: la pantalla lo dice («Sin enviar») y ⛔ lo pinta de
  * éxito. El monitor ⛔ sabe si la llave está prendida: lo dice el último envío (`seco`).
+ * 🔴 Cuántas cambiarían lo dice el MOTOR (el último cálculo), ⛔ el «No coinciden» de la lista: ése cuenta también las que sólo
+ * difieren de GN, y la lista lee TN de la foto de cada 2 h (28-oct: Stunned 43 en la lista contra 18 del motor).
  * Lo corre la cola en el minuto ⇒ mientras haya uno en cola o corriendo, la lista se vuelve a leer sola.
  */
 
@@ -41,7 +43,7 @@ export function estadoDeEnvio(e: EmpujeStock): [Tone, string, string] {
   return ['success', 'Enviado', `${n(e.escritos ?? 0)} variantes cambiadas en Tienda Nube${quedan}.`]
 }
 
-export function EnviarStockTN({ tienda, noCoinciden }: { tienda: TiendaErp; noCoinciden: number }) {
+export function EnviarStockTN({ tienda }: { tienda: TiendaErp }) {
   const { confirmar } = useConfirmar()
   const [envios, setEnvios] = useState<{ de: TiendaErp; lista: EmpujeStock[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -74,7 +76,7 @@ export function EnviarStockTN({ tienda, noCoinciden }: { tienda: TiendaErp; noCo
       titulo: `Enviar el stock a Tienda Nube de ${nombre}`,
       mensaje: (
         <>
-          <p>Se iguala <b>toda la tienda {nombre}</b> al stock del ERP{noCoinciden ? <> (hoy no coinciden <b>{n(noCoinciden)}</b> variantes)</> : null}. No se puede elegir un solo producto.</p>
+          <p>Se iguala <b>toda la tienda {nombre}</b> al stock del ERP. No se puede elegir un solo producto.{ultimo?.cambios != null ? <> El último cálculo ({cuandoCorto(ultimo.terminadoEn)}) dio <b>{n(ultimo.cambios)} variantes distintas</b>.</> : null}</p>
           <p>{deVerdad
             ? <><b>Cambia el stock de la tienda de verdad.</b> Si el ERP quisiera cambiar de golpe más del 15 % de la tienda, frena y no toca nada.</>
             : <>Hasta el corte de {nombre} manda Gestión Nube: el ERP <b>sólo calcula</b> qué cambiaría y no toca la tienda.</>}</p>
