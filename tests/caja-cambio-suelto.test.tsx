@@ -154,3 +154,14 @@ describe('cambio suelto · el pedido al servidor', () => {
     expect(h.vuelve).toBe(15000)
   })
 })
+
+describe('cambio · buscar la venta', () => {
+  it('🔴 la pantalla del ERP ⛔ esconde las ventas de Zattia cuando Stunned se prende; el POS sí las saca', async () => {
+    const cliente = await import('@/lib/erp/cliente')
+    const venta = (id: string, marca: string) => ({ id, numero: Number(id), marca, tipo: 'venta', estado: 'confirmada', origen: 'caja', canal: 'local', deposito: 'local', total: 1000, prueba: true, ocurridaEn: '2026-10-27T12:00:00Z', cliente: null })
+    vi.spyOn(cliente, 'buscarVentas').mockResolvedValue({ ventas: [venta('1', 'zattia'), venta('2', 'stunned')], cortado: false } as never)
+    const { buscarVentasDelCambio } = await import('@/components/caja/useCambio')
+    expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true, soloStunned: false })).filas.map((f) => f.numero)).toEqual([1, 2])
+    expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true, soloStunned: true })).filas.map((f) => f.numero)).toEqual([2])
+  })
+})

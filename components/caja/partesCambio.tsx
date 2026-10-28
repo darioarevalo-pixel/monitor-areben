@@ -65,7 +65,7 @@ export function ModalVentaOriginal({ store, c, onCerrar }: { store: MarcaErp; c:
     setAviso(null)
     setMirando(null)
     try {
-      const r = await buscarVentasDelCambio(store, q, true)
+      const r = await buscarVentasDelCambio(store, q, { gn: true, soloStunned: true })
       setLista(r.filas)
       setAviso(r.aviso)
     } catch (e) {

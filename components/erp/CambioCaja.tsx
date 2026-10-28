@@ -70,7 +70,7 @@ export function CambioCaja() {
   const buscar = () => c.correr(async () => {
     c.empezarDeNuevo()
     c.setHecho(null)
-    const r = await buscarVentasDelCambio(store, q, conStunned)
+    const r = await buscarVentasDelCambio(store, q, { gn: conStunned, soloStunned: false })
     setVentas(r.filas)
     setAviso(r.aviso)
   }, 'No se pudo buscar.')
