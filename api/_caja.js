@@ -448,7 +448,7 @@ export default async function handler(req, res) {
         const conf = { ...leida, reglas: await reglasDeHoy(leida.reglas), ...(esAdmin(perfil) ? { campaniasLiq: await campaniasLiq() } : {}) }
         // `versiones`: las de las listas que la pantalla manda ENTERAS, para ⛔ pisar la de otro admin.
         const versiones = { promos: versionDe(conf.reglas, 'promos'), feriaProductos: versionDe(conf.reglas, 'feriaProductos') }
-        return res.status(200).json({ ...conf, versiones, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), stunned_erp: store === 'zattia' && process.env.CAJA_STUNNED_ERP === '1', marca: { store, nombre: marca.nombre, tienda: marca.tienda } })
+        return res.status(200).json({ ...conf, versiones, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), stunned_erp: store === 'zattia' && process.env.CAJA_STUNNED_ERP === '1', stunned_prueba: store === 'zattia' && process.env.CAJA_STUNNED_PRUEBA !== '0', marca: { store, nombre: marca.nombre, tienda: marca.tienda } })
       }
 
       if (accion === 'logo-tn') {

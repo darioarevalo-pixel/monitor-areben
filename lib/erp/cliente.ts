@@ -281,8 +281,23 @@ export const buscarClientas = (marca: MarcaErp, q: string) =>
   pedir<{ clientas: Clienta[] }>(null, `&vista=clientas&marca=${marca}&q=${encodeURIComponent(q)}`, 'No se pudo buscar la clienta.')
 
 /** El saldo a favor de una clienta en el libro de la venta que se cambia (`prueba` de esa venta). */
-export const leerSaldo = (marca: MarcaErp, doc: string, prueba = true) =>
-  pedir<{ cliente: { nombre: string } | null; saldo: number }>(null, `&vista=saldo&marca=${marca}&doc=${encodeURIComponent(doc)}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudo leer el saldo.')
+export const leerSaldo = (marca: MarcaErp, doc: string, prueba = true, linea?: 'stunned') =>
+  pedir<{ cliente: { nombre: string } | null; saldo: number }>(null, `&vista=saldo&marca=${marca}&doc=${encodeURIComponent(doc)}&prueba=${prueba ? 1 : 0}${linea ? `&linea=${linea}` : ''}&nc=${Date.now()}`, 'No se pudo leer el saldo.')
+
+/**
+ * Una venta de Gestión Nube para el cambio SUELTO de Stunned (`vista=venta-gn-cambio`): sólo sus productos, con lo que se pagó por
+ * unidad (el servidor lo pone desde el espejo) y cuántos ya se cambiaron. `id` = el id o el número de la venta.
+ */
+export type VentaGnCambio = {
+  venta: { id: string; numero: string | number; fecha: string | null; cliente: string | null; prueba: boolean }
+  lineas: Array<{ product_id: number; size_id: number; sku: string | null; nombre: string | null; talle: string | null; cantidad: number; precio: number; cambiado: number }>
+}
+export const leerVentaGnCambio = (id: string) =>
+  pedir<VentaGnCambio>(null, `&vista=venta-gn-cambio&marca=zattia&id=${encodeURIComponent(id)}&nc=${Date.now()}`, 'No se pudo leer la venta de Gestión Nube.')
+
+/** El PIN de la encargada, probado antes de seguir (el cambio sin ticket); el servidor lo vuelve a verificar al confirmar. */
+export const verificarPin = (persona: string, pin: string) =>
+  pedir<{ ok: true; persona: string }>(post({ accion: 'verificar-pin', marca: 'zattia', persona, pin }), '', 'No se pudo probar el PIN.')
 
 export type ClienteCambio = { doc: string; nombre: string; whatsapp?: string | null; email?: string | null }
 export type CruceCambio = { estado: string; motivo?: string }
@@ -295,8 +310,14 @@ export type RespuestaCambio =
  * El cambio. Con transferencia contesta `esperando` hasta que llega el pago: la pantalla repite el MISMO
  * pedido (mismo `id` y `desde`), y con `pago` (el que eligió) o `comprobante` (sin cuenta de MP).
  */
+export type DevueltaSuelta = { productId: number; sizeId: number; cantidad: number; sku?: string | null; precio?: number }
 export const cambiarVenta = (marca: MarcaErp, c: {
-  id: string; ventaId: string; devueltas: Array<{ lineaId: string; cantidad: number }>; items: PrendaNueva[]
+  id: string
+  /** Una venta del ERP (con `lineaId` en cada devuelta), o ⛔ ninguna: el cambio SUELTO de Stunned. */
+  ventaId?: string
+  /** El cambio SUELTO: una venta de Gestión Nube (el servidor pone el precio pagado) o, con `sinTicket`, ninguna (precio de la cajera + PIN). */
+  gnVentaId?: string; sinTicket?: boolean; pin?: string; pinPersona?: string
+  devueltas: Array<{ lineaId: string; cantidad: number } | DevueltaSuelta>; items: PrendaNueva[]
   pagos: Array<{ cuenta: number; base?: number }>; total: number; desde?: string | null; pago?: string | null; comprobante?: string | null; cliente?: ClienteCambio | null; saldo?: number
 }) =>
   pedir<RespuestaCambio>(post({ accion: 'cambiar', marca, ...c }), '', 'No se pudo registrar el cambio.')

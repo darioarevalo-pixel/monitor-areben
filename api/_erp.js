@@ -719,6 +719,7 @@ export async function confirmarVueltaPropia({ marca, body, usuario }) {
 /**
  * El saldo a favor de una clienta, por documento (el del MISMO libro que la venta que se cambia: `prueba`, por defecto el de prueba): para
  * ofrecerlo como forma de pago en el cambio. Lee la vista `saldo_favor` del motor (contrato §6).
+ * @param {{ marca: string, doc: any, prueba?: boolean, linea?: string | null }} x
  */
 export async function saldoDeClienta({ marca: base, doc, prueba = true, linea = null }) {
   if (!MARCAS.includes(base)) return { status: 400, error: 'Marca inválida' }

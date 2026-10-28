@@ -47,6 +47,7 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { esDeStunned, precioDeCaja } from '@/lib/caja/precio'
 import { traerAudit } from '@/lib/tn-audit'
+import type { MarcaErp } from '@/lib/erp/cliente'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
 import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, cuentaDeOferta, idsDeFeria, mediosOfertaAparte, nombreParaTicket, pagosDeMedio, pagosDeVarios, pctDeMedio, pctOfertaDeLinea, renglones, subtotal, subtotalDeFeria } from '@/lib/caja/core.core.js'
@@ -88,6 +89,8 @@ import {
   type Venta,
   ventaLlego,
 } from '@/lib/caja/cliente'
+import { BandaCambio, ModalCobroCambio, ModalEncargada, ModalVentaOriginal, PedidoCambio } from '@/components/caja/partesCambio'
+import { useCambio } from '@/components/caja/useCambio'
 import { Badge, Button, Card, Field, Icono, Input, Modal, Notice, SectionCard, color, font, radius, shadow, space, weight } from '@/components/ui'
 import { useConfirmar } from '@/components/ui/Confirm'
 import { ModalVarianteContext } from '@/components/ui/Modal'
@@ -408,6 +411,43 @@ function POS() {
     [datos],
   )
 
+  // ── El modo «Cambios» (Bruno, 27-oct): el cambio de Stunned en el POS. El estado y las cuentas viven en `useCambio`
+  // (el mismo que usa erp › Caja › Cambio); acá sólo se decide en qué paso está y qué se muestra. ──
+  const cambio = useCambio({ store: storeCaja() as MarcaErp, config, precioDe: (v) => precioDeProducto(v.product_id)?.precio ?? null, esStunned: esStunnedVariante })
+  const [enCambio, setEnCambio] = useState(false)
+  const [pasoCambio, setPasoCambio] = useState<1 | 2>(1)
+  const [verVentaOriginal, setVerVentaOriginal] = useState(false)
+  const [pidePin, setPidePin] = useState(false)
+  const [cobrandoCambio, setCobrandoCambio] = useState(false)
+  const salirDelCambio = () => {
+    cambio.empezarDeNuevo()
+    cambio.setError(null)
+    setEnCambio(false)
+    setPasoCambio(1)
+    setVerVentaOriginal(false)
+    setPidePin(false)
+    setCobrandoCambio(false)
+  }
+  // El cambio quedó registrado: se sale del modo y el cartel de «Cambio #N» queda arriba.
+  const cambioHecho = cambio.hecho
+  useEffect(() => {
+    if (!cambioHecho) return
+    void Promise.resolve().then(() => {
+      setEnCambio(false)
+      setPasoCambio(1)
+      setCobrandoCambio(false)
+    })
+  }, [cambioHecho])
+  const cambioListoParaCobrar = enCambio && pasoCambio === 2 && cambio.unidadesNuevas > 0 && !cambio.sinPrecio && cambio.devueltas.length > 0
+  /** «Siguiente →»: sin venta pide el PIN de la encargada; con venta pasa directo a lo que se lleva. */
+  const siguienteDelCambio = () => {
+    if (!cambio.devueltas.length) return
+    if (cambio.sinPrecioDevuelta) return cambio.setError('Escribí lo que pagó la clienta por cada producto que devuelve.')
+    cambio.setError(null)
+    if (cambio.tipo === 'suelto') setPidePin(true)
+    else setPasoCambio(2)
+  }
+
   /** Las categorías de Tienda Nube del producto (las promos por categoría, W5). La de GN está vacía en el 85 %. */
   const categoriasDe = useCallback((productId: number): string[] => precioDeProducto(productId)?.categorias ?? [], [precioDeProducto])
 
@@ -525,6 +565,20 @@ function POS() {
    * 14-oct, `lib/caja/repetida.core.js`). El «+» del renglón ⛔ pasa por acá: ése es a propósito.
    */
   function llego(variante: Variante, stock: Stock) {
+    // En el modo «Cambios» la prenda va a la devolución (paso 1) o a lo que se lleva (paso 2), ⛔ al pedido de venta.
+    if (enCambio) {
+      try {
+        if (pasoCambio === 1) cambio.devolverPrenda(variante)
+        else cambio.sumarNueva(variante)
+        cambio.setError(null)
+        setAviso(null)
+        avisar('ok')
+      } catch (e) {
+        avisar('no')
+        setAviso({ tono: 'danger', texto: (e as Error).message })
+      }
+      return
+    }
     const rep = repetida({ enPedido: cantidades.current.get(claveDe(variante)) ?? 0, local: stock.local })
     if (!rep) return agregar(variante, stock)
     avisar('ojo', 'Ya está en el pedido')
@@ -901,13 +955,21 @@ function POS() {
   // Alt+C: «Continuar al cobro», como el POS de GN.
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
-      if (!e.altKey || e.code !== 'KeyC' || !puedeCobrar) return
+      if (!e.altKey || e.code !== 'KeyC') return
+      // En el cambio, Alt+C va al cobro del cambio (cuando ya hay algo que se lleva).
+      if (enCambio) {
+        if (!cambioListoParaCobrar) return
+        e.preventDefault()
+        setCobrandoCambio(true)
+        return
+      }
+      if (!puedeCobrar) return
       e.preventDefault()
       abrirCobro()
     }
     window.addEventListener('keydown', tecla)
     return () => window.removeEventListener('keydown', tecla)
-  }, [puedeCobrar, abrirCobro])
+  }, [puedeCobrar, abrirCobro, enCambio, cambioListoParaCobrar])
 
   async function vaciar() {
     if (!(await preguntar({ titulo: 'Vaciar pedido', mensaje: `Se ${prendas === 1 ? 'saca la prenda' : `sacan las ${prendas} prendas`} del pedido. No se cobró nada.`, ok: 'Vaciar pedido', tono: 'warning' }))) return
@@ -1422,6 +1484,19 @@ pendientes
               )}
     </>
   )
+  const modalesCambioJSX = (
+    <>
+      {verVentaOriginal && <ModalVentaOriginal store={storeCaja() as MarcaErp} c={cambio} onCerrar={() => { setVerVentaOriginal(false); enfocar() }} />}
+      {pidePin && (
+        <ModalEncargada
+          c={cambio}
+          onCerrar={() => { setPidePin(false); cambio.setError(null) }}
+          onListo={() => { setPidePin(false); cambio.setError(null); setPasoCambio(2); enfocar() }}
+        />
+      )}
+      {cobrandoCambio && <ModalCobroCambio c={cambio} onCerrar={() => setCobrandoCambio(false)} />}
+    </>
+  )
 
   // ── Vista de CELULAR (Bruno, 27-oct): lo mismo, en una columna. Arriba una fila, en el medio buscar y el pedido,
   // abajo el total y «Continuar al cobro». El cobro, «Validar transferencia», la prenda repetida y los turnos son
@@ -1596,6 +1671,12 @@ pendientes
           >
             <Icono nombre={conSonido ? 'sonido' : 'silencio'} size={18} />
           </button>
+          {/* El cambio de Stunned (Bruno, 27-oct): sólo con Stunned vendiendo por el ERP. */}
+          {config?.stunned_erp && (
+            <button type="button" className="pos-tbtn" onClick={() => (enCambio ? salirDelCambio() : (cambio.setError(null), setEnCambio(true)))} aria-pressed={enCambio} style={{ height: 36 }}>
+              ⇄ Cambios
+            </button>
+          )}
           <button type="button" className="pos-tbtn" onClick={() => setVerVentas(true)} style={{ height: 36 }}>
             Ventas
           </button>
@@ -1616,6 +1697,18 @@ pendientes
 
       {modalesTurnoJSX}
 
+      {enCambio && (
+        <BandaCambio paso={pasoCambio} c={cambio} onBuscar={() => setVerVentaOriginal(true)} onSiguiente={siguienteDelCambio} onVolver={() => setPasoCambio(1)} onSalir={salirDelCambio} />
+      )}
+      {cambio.hecho && (
+        <div style={{ padding: `${space[3]}px ${space[4]}px 0` }}>
+          <Notice tone="success" onClose={() => cambio.setHecho(null)}>
+            Cambio #{cambio.hecho.numero} registrado.{' '}
+            {cambio.hecho.cobrado > 0 ? `Se cobraron ${plata(cambio.hecho.cobrado)}.` : cambio.hecho.aFavor > 0 ? `Quedan ${plata(cambio.hecho.aFavor)} a favor de la clienta${cambio.hecho.saldo != null ? ` (saldo: ${plata(cambio.hecho.saldo)})` : ''}.` : 'Sin diferencia.'}
+          </Notice>
+        </div>
+      )}
+
       <div className="pos-grid">
         <div style={{ display: 'grid', gap: space[3], minWidth: 0 }}>
           {esperasJSX}
@@ -1625,12 +1718,17 @@ pendientes
           {ultimaJSX}
 
           {modalesJSX}
-          <SectionCard title="Escanear o buscar" actions={<span style={{ fontSize: font.sm, color: color.mut }}>Variantes: ↑/↓ y Enter</span>}>
+          {modalesCambioJSX}
+          <SectionCard title={enCambio ? (pasoCambio === 1 ? 'Lo que devuelve' : 'Lo que se lleva') : 'Escanear o buscar'} actions={<span style={{ fontSize: font.sm, color: color.mut }}>Variantes: ↑/↓ y Enter</span>}>
             {buscadorJSX}
           </SectionCard>
         </div>
 
         <div className="pos-der">
+          {enCambio ? (
+            <PedidoCambio paso={pasoCambio} c={cambio} onCobro={() => setCobrandoCambio(true)} puedeCobrar={cambioListoParaCobrar} />
+          ) : (
+          <>
           {/* El pedido (prototipo del 5-oct): los renglones se desplazan y el pie —mail, total y «Continuar al
               cobro»— queda siempre a la vista. */}
           <Card style={{ padding: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
@@ -1677,6 +1775,8 @@ pendientes
                 )}
               </div>
           </Card>
+          </>
+          )}
         </div>
       </div>
     </div>

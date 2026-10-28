@@ -47,6 +47,14 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   qué cuenta como pago allá cambia qué confirma una venta acá.
 
 ## Reglas que el código no dice
+- 🔑 **El CAMBIO de Stunned en el POS (modo «⇄ Cambios», Bruno, 27-oct)**: botón en la cabecera (sólo con `stunned_erp`), banda con
+  «1 Lo que devuelve ▸ 2 Lo que se lleva». **Todo el estado y las cuentas viven en `components/caja/useCambio.ts`**, el MISMO que usa
+  erp › Caja › Cambio (`CambioCaja.tsx`): ⛔ copiar reglas ahí. Tres orígenes de lo devuelto: venta del ERP, venta de Gestión Nube
+  (`vista=venta-gn-cambio`: el servidor pone lo pagado) y **sin ticket** (precio de la cajera + PIN de la encargada, que el servidor
+  verifica ⛔ armado en el navegador). Con venta, `exigirDevolucion` frena devolver de más contando lo ya cambiado; el total se calcula
+  en el paso 2 (en el paso 1 el pie sólo dice «Devuelve»). El saldo de la clienta se lee con `linea=stunned`, y el modo (prueba o
+  real) lo da la venta, o `config.stunned_prueba` sin venta. Las piezas de pantalla: `partesCambio.tsx`. Tests: `caja-cambio-suelto`, `caja-pos-cambios`.
+
 
 - 🔴 **LA PRENDA REPETIDA (Bruno, 14-oct)** — en GN se escaneó dos veces la prenda devuelta en un cambio:
   descontó de más y el stock quedó con +1 que ⛔ existe. Las reglas viven en `lib/caja/repetida.core.js`.
