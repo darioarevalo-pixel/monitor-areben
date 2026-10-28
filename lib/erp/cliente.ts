@@ -50,7 +50,7 @@ export type ResultadoLote = {
 async function pedir<T>(init: RequestInit | null, query: string, fallo: string): Promise<T> {
   const r = await apiFetch(`/api/datos?recurso=erp${query}`, init || undefined)
   const j = await r.json().catch(() => null)
-  if (!r.ok) throw new Error((j && j.error) || fallo)
+  if (!r.ok) throw Object.assign(new Error((j && j.error) || fallo), { codigo: (j && j.codigo) as string | undefined })
   return j as T
 }
 
@@ -660,6 +660,8 @@ export type VentaACargar = {
   linea: string; origen_ref: string; ocurrida_en?: string; canal: string; deposito: string; cliente?: { doc: string; nombre: string }
   lineas: Array<{ producto: string; talle: string; cantidad: number; precio: number; sku?: string | null; barcode?: string | null }>
   pagos: Array<{ cuenta: string; monto: number }>; nota?: string
+  /** El PIN de un admin: sólo cuando la venta a cuenta quedó frenada (`SIN_CREDITO`, `ATRASADO`, `SUPERA_TOPE`). */
+  pin?: string
 }
 export const cargarVenta = (marca: MarcaErp, venta: VentaACargar) =>
   pedir<{ ok: true; venta: { id: string; numero: number; total: number; prueba: boolean }; yaExistia: boolean; avisos: Array<{ codigo: string }> }>(

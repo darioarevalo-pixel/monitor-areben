@@ -1751,8 +1751,8 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (body.accion === 'cargar-venta') {
-      const r = await cargarVentaManual({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null }, { conMotor })
-      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+      const r = await cargarVentaManual({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null, persona: perfil.user || perfil.name || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error, ...(r.codigo ? { codigo: r.codigo } : {}) } : r)
     }
     if (body.accion === 'anular') {
       const r = await anularVentaPropia({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })

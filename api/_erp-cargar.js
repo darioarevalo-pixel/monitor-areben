@@ -10,11 +10,14 @@
  * Sin permiso nombrado en `lib/permisos.core.js` ⇒ `configurar` (sólo admin) hasta que Bruno diga quién carga.
  */
 import { textoDelMotor } from '../lib/erp/venta.core.js'
+import { verificarPinErp } from './_erp-pin.js'
 
 const MARCAS = ['bdi', 'zattia']
 const LINEAS = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] }
 const DEPOSITOS = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
 const pesos = (x) => Math.round(Number(x) * 100) / 100
+/** Los frenos de la venta A CUENTA que se saltan con el PIN de un admin (motor `frena`): la pantalla pide el PIN recién cuando llega uno. */
+export const FRENOS_DE_CUENTA = ['SIN_CREDITO', 'ATRASADO', 'SUPERA_TOPE']
 
 /** @param {{ marca: string }} p @param {{ conMotor: Function }} deps */
 export async function datosParaCargar({ marca }, deps) {
@@ -72,15 +75,25 @@ export function entradaManual(b, marca, usuario, { stunnedReal = false } = {}) {
   }
 }
 
-/** @param {{ marca: string, body: any, usuario: string | null }} p @param {{ conMotor: Function }} deps */
-export async function cargarVentaManual({ marca, body, usuario }, deps) {
+/**
+ * @param {{ marca: string, body: any, usuario: string | null, persona?: string | null }} p @param {{ conMotor: Function }} deps
+ * 🔑 Una venta A CUENTA frenada (sin crédito, atrasado, pasa el tope) se salta con el PIN de un admin: el navegador manda sólo `pin`, y el
+ *    `autoriza` se arma ACÁ con la persona de la SESIÓN (⛔ se acepta uno que venga armado de afuera). El PIN se verifica antes de escribir.
+ */
+export async function cargarVentaManual({ marca, body, usuario, persona = null }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   // 🔑 Stunned pasa al ERP (Bruno, 26-oct): con `ERP_STUNNED_PRUEBA=0` SUS ventas son reales (mueven el libro y se facturan). BDI y Zattia siguen en prueba hasta su corte.
   const e = entradaManual(body, marca, usuario, { stunnedReal: process.env.ERP_STUNNED_PRUEBA === '0' })
   if ('error' in e) return { status: 400, error: e.error }
+  if (typeof body?.pin === 'string' && body.pin !== '') {
+    if (!persona) return { status: 400, error: 'Falta quién autoriza' }
+    const v = await verificarPinErp({ body: { marca, persona, pin: body.pin } }, deps)
+    if (!v.ok) return { status: v.status || 403, error: v.error || 'PIN incorrecto', ...(v.codigo ? { codigo: v.codigo } : {}) }
+    e.entrada.autoriza = { motivo: 'pin_admin', usuario: v.persona }
+  }
   return deps.conMotor(marca, 'Cargar venta', async (db, { registrarVenta }) => {
     const r = await registrarVenta(db, e.entrada)
-    if (!r.ok) return { status: r.error?.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: textoDelMotor(r.error) }
+    if (!r.ok) return { status: r.error?.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: textoDelMotor(r.error), ...(FRENOS_DE_CUENTA.includes(r.error?.codigo) ? { codigo: r.error.codigo } : {}) }
     return { ok: true, venta: r.venta, yaExistia: r.ya_existia, avisos: r.avisos ?? [] }
   })
 }

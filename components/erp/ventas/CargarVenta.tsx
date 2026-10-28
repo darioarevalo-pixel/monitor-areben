@@ -23,6 +23,8 @@ import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 type Renglon = { clave: string; prenda: PrendaEncontrada; cantidad: number; precio: number | '' }
 type Pago = { clave: string; cuenta: string; monto: number | '' }
 
+/** Los frenos de la venta a cuenta que salta el PIN de un admin (los mismos que `FRENOS_DE_CUENTA` de `api/_erp-cargar.js`). */
+const FRENOS_DE_CUENTA = ['SIN_CREDITO', 'ATRASADO', 'SUPERA_TOPE']
 const CANAL = NOMBRE_CANAL as Record<string, string>
 const MARCA = NOMBRE_MARCA as Record<string, string>
 const DEPOSITO = NOMBRE_DEPOSITO as Record<string, string>
@@ -54,6 +56,9 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
   const [renglones, setRenglones] = useState<Renglon[]>([])
   const [pagos, setPagos] = useState<Pago[]>([{ clave: 'p0', cuenta: '', monto: '' }])
   const [nota, setNota] = useState('')
+  // La venta a cuenta frenada (sin crédito, atrasado, pasa el tope) se salta con el PIN de un admin: se pide recién cuando el ERP la frena.
+  const [pidePin, setPidePin] = useState(false)
+  const [pin, setPin] = useState('')
   const [enviando, setEnviando] = useState(false)
 
   useEffect(() => {
@@ -115,9 +120,13 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
         lineas: renglones.map((x) => ({ producto: x.prenda.producto, talle: x.prenda.talle, cantidad: x.cantidad, precio: Number(x.precio), sku: x.prenda.sku, barcode: x.prenda.barcode })),
         pagos: pagos.filter((p) => Number(p.monto) > 0).map((p) => ({ cuenta: p.cuenta, monto: Number(p.monto) })),
         nota: nota.trim() || undefined,
+        ...(pidePin && pin ? { pin } : {}),
       })
       onCargada(`${r.yaExistia ? 'Ya estaba cargada' : 'Cargada'}: venta ${r.venta.numero} por ${$(r.venta.total)}${r.venta.prueba ? ' (de prueba)' : ''}.`)
     } catch (e) {
+      const codigo = (e as { codigo?: string }).codigo
+      if (codigo && FRENOS_DE_CUENTA.includes(codigo)) setPidePin(true)
+      if (pidePin) setPin('')
       setError(e instanceof Error ? e.message : 'No se pudo cargar la venta.')
     } finally { setEnviando(false) }
   }
@@ -213,7 +222,10 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
             </div>
           ))}
           <div><Button variant="outline" onClick={() => setPagos((x) => [...x, { clave: uuid(), cuenta: '', monto: '' }])}>Agregar otro pago</Button></div>
-          {aCuenta && <p style={{ margin: 0, color: color.mut, fontSize: font.sm }}>Si el cliente no tiene crédito, o pasó el tope o el plazo, el ERP no la deja quedar debiendo.</p>}
+          {aCuenta && <p style={{ margin: 0, color: color.mut, fontSize: font.sm }}>Si el cliente no tiene crédito, o pasó el tope o el plazo, la deja quedar debiendo sólo con el PIN de un admin.</p>}
+          {aCuenta && pidePin && (
+            <Field label="PIN de admin"><Input type="password" inputMode="numeric" autoComplete="off" maxLength={8} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} style={{ width: 140 }} aria-label="PIN de admin" /></Field>
+          )}
           {contraentrega && <p style={{ margin: 0, color: color.mut, fontSize: font.sm }}>Contraentrega: el cadete cobra al entregar. Hasta que el envío se marque entregado, la venta queda en Ventas › Cobros › Contraentrega.</p>}
         </section>
 
@@ -222,7 +234,7 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
         {falta && renglones.length > 0 && <p style={{ margin: 0, color: color.mut }}>{falta}</p>}
         <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
           <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-          <Button disabled={!!falta || enviando || !datos?.manualHabilitado} onClick={enviar}>{enviando ? 'Cargando…' : 'Cargar venta'}</Button>
+          <Button disabled={!!falta || enviando || !datos?.manualHabilitado || (aCuenta && pidePin && pin.length < 4)} onClick={enviar}>{enviando ? 'Cargando…' : pidePin && aCuenta ? 'Autorizar y cargar' : 'Cargar venta'}</Button>
         </div>
       </div>
     </FichaCostado>
