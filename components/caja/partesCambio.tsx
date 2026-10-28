@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import { Badge, Button, Card, Field, Input, Modal, Notice, NumberField, PasoCantidad, Select, color, font, radius, space, weight } from '@/components/ui'
 import { NOMBRE_MEDIO } from '@/lib/caja/core.core.js'
 import { plata } from '@/lib/caja/ticket'
-import { leerPines, type MarcaErp } from '@/lib/erp/cliente'
+import { leerEncargadas, type MarcaErp } from '@/lib/erp/cliente'
 import { cuandoCorto } from '@/components/ui/PiezasLista'
 import { MEDIOS_CAMBIO, buscarVentasDelCambio, type Cambio, type FilaVenta, type Origen, type VentaOriginal } from '@/components/caja/useCambio'
 
@@ -165,14 +165,14 @@ export function ModalVentaOriginal({ store, c, onCerrar }: { store: MarcaErp; c:
 }
 
 /**
- * «Autoriza la encargada»: un cambio sin venta pide el PIN (4 dígitos). La encargada se elige de la lista de quienes tienen PIN
- * (que sólo lee un administrador); si no se puede leer, se escribe su usuario del monitor.
+ * «Autoriza la encargada»: un cambio sin venta pide el PIN (4 dígitos). La encargada se elige de la lista de quienes cobran en
+ * la caja de la marca y tienen PIN (`vista=encargadas`, sin Admin ni las de la otra marca); si no se puede leer, se escribe su usuario.
  */
 export function ModalEncargada({ c, onCerrar, onListo }: { c: Cambio; onCerrar: () => void; onListo: () => void }) {
-  const [personas, setPersonas] = useState<string[] | null>(null)
+  const [personas, setPersonas] = useState<{ usuario: string; nombre: string }[] | null>(null)
   useEffect(() => {
     let vivo = true
-    leerPines('zattia').then((r) => vivo && setPersonas(r.pines.filter((p) => p.pin).map((p) => p.usuario))).catch(() => vivo && setPersonas([]))
+    leerEncargadas('zattia').then((r) => vivo && setPersonas(r.encargadas ?? [])).catch(() => vivo && setPersonas([]))
     return () => { vivo = false }
   }, [])
   const e = c.encargada
@@ -188,7 +188,7 @@ export function ModalEncargada({ c, onCerrar, onListo }: { c: Cambio; onCerrar: 
         <span style={{ color: color.mut }}>Un cambio sin venta lo autoriza la encargada con su PIN.</span>
         <Field label="Encargada">
           {personas && personas.length > 0
-            ? <Select value={e.persona} onChange={(ev) => c.setEncargada({ ...e, persona: ev.target.value })}><option value="">Elegir…</option>{personas.map((p) => <option key={p} value={p}>{p}</option>)}</Select>
+            ? <Select value={e.persona} onChange={(ev) => c.setEncargada({ ...e, persona: ev.target.value })}><option value="">Elegir…</option>{personas.map((p) => <option key={p.usuario} value={p.usuario}>{p.nombre}</option>)}</Select>
             : <Input value={e.persona} onChange={(ev) => c.setEncargada({ ...e, persona: ev.target.value })} placeholder="Su usuario del monitor" autoComplete="off" />}
         </Field>
         <Field label="PIN de 4 dígitos">

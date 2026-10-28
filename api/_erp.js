@@ -77,7 +77,7 @@
  * Contra qué ARCA se factura lo decide `ambienteDeEntorno` (homologación por defecto).
  */
 import { createClient } from '@supabase/supabase-js'
-import { exigirUsuario } from './_auth.js'
+import { exigirUsuario, padronParaEncargadas } from './_auth.js'
 import { esAdmin, permisoErpDe, permisosErp, puedeErp } from '../lib/permisos.core.js'
 import { baseDeLinea, esStunned } from '../lib/lineas.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
@@ -109,7 +109,7 @@ import { ponerRedondeoErp, redondeoDeMarca } from './_erp-redondeo.js'
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { estructuraDeMarca } from './_erp-estructura.js'
 import { configuracionDeMarcas, interruptoresDeMarcas, ponerInterruptorErp } from './_erp-interruptores.js'
-import { autorizarConPin, pinesErp, ponerPinErp, quitarPinErp, verificarPinErp } from './_erp-pin.js'
+import { autorizarConPin, encargadasErp, pinesErp, ponerPinErp, quitarPinErp, verificarPinErp } from './_erp-pin.js'
 import { ponerRolesErp, restablecerRolesErp, rolesGuardadosDeMarcas, vistaRoles } from './_erp-permisos-rol.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.js'
@@ -1569,6 +1569,10 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
+    if (req.method === 'GET' && req.query.vista === 'encargadas') {
+      const r = await encargadasErp({ marca: String(req.query.marca || '') }, { conMotor, padron: () => padronParaEncargadas(req) })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
     if (req.method === 'GET' && req.query.vista === 'pines') {
       const r = await pinesErp({ marca: String(req.query.marca || '') }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)

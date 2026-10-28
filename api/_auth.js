@@ -232,6 +232,24 @@ export async function equipoDelPadron(req, ahora = Date.now()) {
   }
 }
 
+/**
+ * El padrón para la lista de encargadas del POS (`lib/erp/encargadas.core.js`): `{name, apodo, funcion, admin, cuenta}`.
+ * Sin caché (se pide al abrir la ventana del PIN). `null` = no se pudo leer ⇒ la pantalla deja escribir el usuario.
+ * ⚠️ `admin` entra SÓLO para sacarlo de esa lista: el handler devuelve nombres, ⛔ este padrón.
+ */
+export async function padronParaEncargadas(req) {
+  const { user, pass, token } = credenciales(req);
+  const sobre = Buffer.from(JSON.stringify(token ? { token } : { user, pass }), 'utf8').toString('base64');
+  try {
+    const r = await fetch(USU_API, { headers: { 'x-monitor-auth': sobre } });
+    const users = (await r.json())?.config?.users;
+    if (!Array.isArray(users)) return null;
+    return users.filter((u) => u && u.name).map((u) => ({ name: u.name, apodo: u.apodo || null, funcion: u.funcion ?? null, admin: !!u.admin, cuenta: u.cuenta ?? null }));
+  } catch {
+    return null;
+  }
+}
+
 /** Sólo para los tests: el caché es de módulo y vive entre casos. */
 export function _olvidarEquipo() {
   equipoCache = { at: 0, lista: [] };

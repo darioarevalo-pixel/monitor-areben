@@ -743,6 +743,10 @@ export type PinPersona = { usuario: string; pin: string | null; cambiado_por: st
 export const leerPines = (marca: MarcaErp) =>
   pedir<{ marca: MarcaErp; pines: PinPersona[] }>(null, `&vista=pines&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los PINs.')
 
+/** «Autoriza la encargada» del POS: quien cobra en la caja de esa marca y tiene PIN (sólo nombres). `null` = no se pudo leer el padrón. */
+export const leerEncargadas = (marca: MarcaErp) =>
+  pedir<{ marca: MarcaErp; encargadas: { usuario: string; nombre: string }[] | null }>(null, `&vista=encargadas&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer quién autoriza.')
+
 /** Fija el PIN de una persona en las DOS marcas (es uno solo por persona). */
 export const ponerPin = async (persona: string, pin: string) => {
   for (const marca of ['bdi', 'zattia'] as const) await pedir(post({ accion: 'poner-pin', marca, persona, pin }), '', 'No se pudo guardar el PIN.')

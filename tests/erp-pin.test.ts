@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
-import { pinesErp, ponerPinErp, quitarPinErp, verificarPinErp, autorizarConPin } from '../api/_erp-pin.js'
+import { encargadasErp, pinesErp, ponerPinErp, quitarPinErp, verificarPinErp, autorizarConPin } from '../api/_erp-pin.js'
 import { puedeErp, permisoErpDe } from '../lib/permisos.core.js'
 import { entradaInvalida } from '../lib/erp/entrada.core.js'
+import { encargadasDeMarca } from '../lib/erp/encargadas.core.js'
 
 // El motor de verdad (`motor/stock/pin.mjs`) con un `db` falso: se mira qué se le pide y qué se contesta.
 type Db = { query: (sql: string, args?: unknown[]) => Promise<{ rows: unknown[] }> }
@@ -34,6 +35,7 @@ describe('api/_erp-pin.js', () => {
   it('las acciones y la vista tienen forma conocida para el handler', () => {
     expect(entradaInvalida({ method: 'POST', query: {}, body: { accion: 'poner-pin', marca: 'bdi', persona: 'ana', pin: '1234' } })).toBeNull()
     expect(entradaInvalida({ method: 'GET', query: { vista: 'pines', marca: 'bdi' } })).toBeNull()
+    expect(entradaInvalida({ method: 'GET', query: { vista: 'encargadas', marca: 'zattia' } })).toBeNull()
   })
 
   it('verifica el PIN bueno; el malo da 403 con `quedan` y ⛔ devuelve hash', async () => {
@@ -86,5 +88,35 @@ describe('api/_erp-pin.js', () => {
   it('`autorizarConPin` arma `autoriza` en el servidor, con el nombre normalizado, o devuelve el error', async () => {
     expect(await autorizarConPin({ marca: 'bdi', persona: 'Ana', pin: '1234' }, { conMotor: conMotor(dbPin()) })).toEqual({ autoriza: { usuario: 'ana', motivo: 'pin_encargada' } })
     expect(await autorizarConPin({ marca: 'bdi', persona: 'ana', pin: '0000' }, { conMotor: conMotor(dbPin()) })).toMatchObject({ status: 403 })
+  })
+
+  it('🔑 la lista del POS (Bruno 28-oct): quien cobra en la caja de ESA marca y tiene PIN; ⛔ Admin, ⛔ la otra marca', () => {
+    const usuarios = [
+      { name: 'Bruno Arevalo', admin: true, funcion: ['direccion'], cuenta: null },
+      { name: 'camilaquintana', admin: false, funcion: ['local'], cuenta: 'zattia' },
+      { name: 'josefinabatter', apodo: 'Jose', admin: false, funcion: ['local'], cuenta: 'zattia' },
+      { name: 'karenf', admin: false, funcion: ['local'], cuenta: 'bdi' },
+      { name: 'Lorena Reyes', admin: false, funcion: ['administracion', 'deposito', 'local'], cuenta: null },
+      { name: 'Camila Budek', admin: false, funcion: ['marketing'], cuenta: null },
+      { name: 'micaresolani', admin: false, funcion: 'local', cuenta: 'zattia' },
+    ]
+    const conPin = ['bruno arevalo', 'camilaquintana', 'josefinabatter', 'karenf', 'camila budek', 'lorena reyes']
+    expect(encargadasDeMarca({ usuarios, conPin, marca: 'zattia' })).toEqual([
+      { usuario: 'camilaquintana', nombre: 'camilaquintana' },
+      { usuario: 'josefinabatter', nombre: 'Jose' },
+      { usuario: 'lorena reyes', nombre: 'Lorena Reyes' },
+    ])
+    expect(encargadasDeMarca({ usuarios, conPin, marca: 'bdi' }).map((e) => e.usuario)).toEqual(['karenf', 'lorena reyes'])
+  })
+
+  it('la vista `encargadas` la lee quien autoriza; trae nombres, ⛔ el PIN; sin padrón ⇒ null (se escribe el usuario)', async () => {
+    expect(permisoErpDe({ method: 'GET', vista: 'encargadas' })).toBe('autorizar-pin')
+    const db: Db = { query: vi.fn(async () => ({ rows: [{ usuario: 'ana', pin: '4821', cambiado_por: 'bruno', cambiado_en: 'ayer', bloqueado: false, bloqueado_hasta: null, hash }] })) }
+    const padron = async () => [{ name: 'Ana', admin: false, funcion: ['local'], cuenta: 'zattia' }]
+    const r = await encargadasErp({ marca: 'zattia' }, { conMotor: conMotor(db), padron })
+    expect(r).toEqual({ marca: 'zattia', encargadas: [{ usuario: 'ana', nombre: 'Ana' }] })
+    expect(JSON.stringify(r)).not.toContain('4821')
+    expect(await encargadasErp({ marca: 'zattia' }, { conMotor: conMotor(db), padron: async () => null })).toEqual({ marca: 'zattia', encargadas: null })
+    expect(await encargadasErp({ marca: 'otra' }, { conMotor: conMotor(db), padron })).toMatchObject({ status: 400 })
   })
 })

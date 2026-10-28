@@ -42,6 +42,21 @@ export async function pinesErp({ marca }, { conMotor }) {
   return r?.status ? r : { marca, pines: r }
 }
 
+/**
+ * La lista de «Autoriza la encargada» del POS: quien cobra en la caja de esa marca y tiene PIN (`encargadasDeMarca`).
+ * Permiso `autorizar-pin` (la cajera la lee; `vista=pines` sigue siendo de Admin). Sin padrón ⇒ `encargadas: null`.
+ */
+export async function encargadasErp({ marca }, { conMotor, padron }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const { pinesDe } = await importar()
+  const r = await conTabla(marca, 'Los PINs', conMotor, (db) => pinesDe(db))
+  if (r?.status) return r
+  const usuarios = await padron()
+  if (!usuarios) return { marca, encargadas: null }
+  const { encargadasDeMarca } = await import('../lib/erp/encargadas.core.js')
+  return { marca, encargadas: encargadasDeMarca({ usuarios, conPin: r.map((p) => p.usuario), marca }) }
+}
+
 export async function ponerPinErp({ body, usuario }, { conMotor }) {
   const e = entrada(body, { conPin: true })
   if (e.status) return e
