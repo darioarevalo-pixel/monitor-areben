@@ -10,7 +10,7 @@
  * Devuelven `{ ok: true, … }` o `{ ok: false, error }`. Sólo lanzan si la BASE falla.
  */
 import { randomUUID } from 'node:crypto'
-import { armarAnulacion, armarCambio, armarVenta, movimientosDeAnulacion, mueveStock } from './armar.mjs'
+import { armarAnulacion, armarCambio, armarVenta, esCambioSuelto, movimientosDeAnulacion, mueveStock } from './armar.mjs'
 import { costosDe } from './costo.mjs'
 import { armarDevolucion, autorizacion, leerDevolucion, pagosDePlata, vueltaDe } from './devolucion.core.mjs'
 import { frena } from '../cuenta/cuenta.core.mjs'
@@ -310,6 +310,14 @@ async function leerParaCambiar(db, ventaId) {
   return { venta: { ...venta, numero: Number(venta.numero) }, lineas: lineas.map(num), tieneCambio: c.hay }
 }
 
+/** Lo ya devuelto de una venta de GN en cambios sueltos confirmados, por `producto:talle` (contra el DEVUELVE_DE_MAS). */
+async function devueltasDeGN(db, marca, saleId, prueba) {
+  const filas = await q(db, `select l.product_id, l.size_id, -sum(l.cantidad)::int as n from venta v join venta_linea l on l.venta_id = v.id
+    where v.marca = $1 and v.tipo = 'cambio' and v.estado = 'confirmada' and v.prueba = $3 and v.detalle->'cambio_de'->>'gn_venta' = $2
+      and l.cantidad < 0 group by 1, 2`, [marca, saleId, prueba === true])
+  return new Map(filas.map((f) => [`${Number(f.product_id)}:${Number(f.size_id)}`, Number(f.n)]))
+}
+
 /** ¿Tiene factura? (paso 6: `venta_factura`). Para avisar que falta la NC. */
 async function tieneFactura(db, ventaId) {
   const [r] = await q(db, `select exists (select 1 from venta_factura where venta_id = $1 and tipo = 'factura') as hay`, [ventaId])
@@ -323,13 +331,27 @@ export async function registrarCambio(db, e) {
   return conReintentoIdempotente(db, { ...e, total: undefined }, nuevas - devueltas, async () => {
     const ya = e && e.origen && e.origen_ref ? await yaRegistrada(db, e.origen, String(e.origen_ref).trim()) : null
     if (ya) return (await mismaVenta(db, ya, ya.marca, ya.total, nuevas - devueltas)) ? respuestaYaExistia(ya) : conflicto(e)
-    const original = await leerParaCambiar(db, e?.venta_original_id)
+    const suelto = esCambioSuelto(e)
+    const original = suelto ? null : await leerParaCambiar(db, e?.venta_original_id)
     if (original && e.marca && e.marca !== original.venta.marca) return { ok: false, error: { codigo: 'OTRA_MARCA', mensaje: 'Todavía no se puede hacer un cambio entre marcas', campo: 'marca' } }
-    const conf = original ? await leerConf(db, original.venta.marca) : { marcas: {}, cuentas: [] }
-    const armada = armarCambio(e, conf, original)
+    const marca = original ? original.venta.marca : suelto && typeof e.marca === 'string' ? e.marca : null
+    const conf = marca ? await leerConf(db, marca) : { marcas: {}, cuentas: [] }
+    const yaDevueltas = suelto && e.original_gn?.sale_id != null ? await devueltasDeGN(db, marca, String(e.original_gn.sale_id).trim(), e.prueba) : new Map()
+    const armada = armarCambio(e, conf, original, { yaDevueltas })
     if (!armada.ok) return armada
     const leida = leerDevolucion(e.devolucion)
     if (leida.ok === false) return leida
+    // Sin la venta del ERP ⛔ se sabe cómo se pagó ⇒ lo que queda a favor es saldo. Y sin ticket, el PIN SIEMPRE (Bruno,
+    // 14-oct: la prenda que vuelve sin venta la autoriza la encargada), con la llave de la devolución prendida o no.
+    if (suelto && leida.devolucion?.forma === 'plata') return falla('ENTRADA_INVALIDA', 'Sin la venta del ERP, lo que queda a favor va como saldo', 'devolucion')
+    let autorizaSinTicket = null
+    if (suelto && !e.original_gn) {
+      if (!(e.autoriza?.motivo === 'pin_encargada' && typeof e.autoriza.usuario === 'string' && e.autoriza.usuario.trim())) {
+        return falla('FALTA_PIN', 'Un cambio sin ticket necesita el PIN de la encargada', 'autoriza')
+      }
+      autorizaSinTicket = { motivo: 'pin_encargada', usuario: e.autoriza.usuario.trim() }
+      armada.venta.detalle = { ...armada.venta.detalle, autoriza: autorizaSinTicket }
+    }
     // §6.2: la clienta que vino en el cambio, o la de la venta original. Hace falta si queda saldo o si lo usa.
     const cli = await resolverCliente(db, armada.venta.empresa_id, e)
     if (cli.error) return cli.error
@@ -343,6 +365,8 @@ export async function registrarCambio(db, e) {
       if (a.ok === false) return a
       autoriza = a.autoriza
       if (leida.devolucion && !(await hayDevolucion(db))) return falla('ENTRADA_INVALIDA', 'Esta base todavía no registra devoluciones (falta sql/028)', 'devolucion')
+    }
+    if (armada.a_favor > 0 && original) {
       const o = original.venta
       // Lo pagado por lo devuelto: lo de lista con el descuento que tuvo la venta (13.500 por 15.000 en efectivo).
       const plata = Number(o.subtotal) > 0 ? (armada.a_favor * Number(o.total)) / Number(o.subtotal) : 0
@@ -378,7 +402,7 @@ export async function registrarCambio(db, e) {
       ok: true, venta: { id: venta.id, numero: venta.numero, tipo: 'cambio', diferencia: armada.diferencia, total: venta.total },
       movimientos: armada.movimientos.length, a_favor: enPlata ? 0 : armada.a_favor, avisos, devolucion: resumenDevolucion(dev),
       saldo: venta.cliente_id ? await saldoDe(db, venta.cliente_id, venta.marca, venta.prueba) : null,
-      nc_pendiente: await tieneFactura(db, original.venta.id),
+      nc_pendiente: original ? await tieneFactura(db, original.venta.id) : false,
     }
   })
 }

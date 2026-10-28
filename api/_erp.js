@@ -77,7 +77,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
 import { esAdmin, permisoErpDe, permisosErp, puedeErp } from '../lib/permisos.core.js'
-import { baseDeLinea } from '../lib/lineas.core.js'
+import { baseDeLinea, esStunned } from '../lib/lineas.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { SIN_ARCA, arcaConectado, baseFacturacion, clienteArcaDelEntorno, repoFacturas } from './_facturacion.js'
@@ -94,7 +94,7 @@ import { NO_SIN_PAGAR, STATUS_POR_COBRAR, armarPedidosSinPagar, cobradosEnGN } f
 import { esEntregadoSinCobrarTN } from '../motor/venta/pago-tn.mjs'
 import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { configPg } from '../lib/pg.core.js'
-import { armarFicha, cambiadasDe, devolucionDeFicha, cobroDelCambio, diferenciaDeCambio, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
+import { armarFicha, cambiadasDe, devolucionDeFicha, cobroDelCambio, diferenciaDeCambio, diferenciaDeCambioSuelto, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, pagadoEnGN, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { anotarAnuladaDelErp } from '../lib/caja/anulada-erp.core.js'
 import { NC_DESDE_LA_VENTA, armarFacturaDelCambio, claveDeFactura, esDeVentaPropia, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
@@ -107,7 +107,7 @@ import { ponerRedondeoErp, redondeoDeMarca } from './_erp-redondeo.js'
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { estructuraDeMarca } from './_erp-estructura.js'
 import { configuracionDeMarcas, interruptoresDeMarcas, ponerInterruptorErp } from './_erp-interruptores.js'
-import { pinesErp, ponerPinErp, quitarPinErp, verificarPinErp } from './_erp-pin.js'
+import { autorizarConPin, pinesErp, ponerPinErp, quitarPinErp, verificarPinErp } from './_erp-pin.js'
 import { ponerRolesErp, restablecerRolesErp, rolesGuardadosDeMarcas, vistaRoles } from './_erp-permisos-rol.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.js'
@@ -744,14 +744,56 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
   if (c.error) return { status: 400, error: c.error }
   const cajaDe = marcaDeCaja(marca)
   if (!cajaDe) return { status: 400, error: 'El cambio en la Caja es de Zattia y BDI.' }
+  // 🔑 El cambio SUELTO es de Stunned (Bruno, 27-oct: sin vuelta a GN): Zattia y BDI siguen cambiando en GN.
+  if (c.modo !== 'erp' && marca !== 'zattia') return { status: 400, error: 'El cambio sin venta del ERP es sólo de Stunned.' }
+  // Sin ticket, el PIN de la encargada se verifica ACÁ (⛔ un `autoriza` armado en el navegador), antes de abrir el cambio.
+  let autoriza = null
+  if (c.modo === 'sin_ticket') {
+    const a = await autorizarConPin({ marca, persona: c.pin.persona, pin: c.pin.pin }, { conMotor })
+    if (!a.autoriza) return { status: a.status || 403, error: a.error || 'PIN incorrecto' }
+    autoriza = a.autoriza
+  }
   const { url, key } = cfgDeMarca(marca)
   const sb = createClient(url, key)
   return conMotor(marca, 'El cambio', async (db, { registrarCambio }) => {
-    // La diferencia con la MISMA cuenta que el motor (lo devuelto al precio que se pagó), y su cobro con
-    // las reglas de HOY de la Caja: el descuento de la forma de pago lo pone el servidor.
-    const lineas = (await db.query('select id, cantidad, importe from venta_linea where venta_id = $1', [c.ventaId])).rows
-      .map((l) => ({ id: l.id, cantidad: Number(l.cantidad), importe: Number(l.importe) }))
-    const diferencia = diferenciaDeCambio({ lineas, devueltas: c.devueltas.map((d) => ({ lineaId: d.linea_id, cantidad: d.cantidad })), nuevas: c.nuevas })
+    // La venta que se cambia manda la MARCA y el `prueba` del cambio (el motor ⛔ cambia una de prueba con uno real ni
+    // al revés, ni entre marcas). Stunned vive en la base de Zattia con marca `stunned`: mandar la de la Caja daba OTRA_MARCA.
+    // El suelto es de Stunned y su `prueba` es el de la venta de la Caja (`CAJA_STUNNED_PRUEBA`).
+    let marcaVenta, prueba, devueltas, diferencia, original_gn = null
+    const pruebaStunned = process.env.CAJA_STUNNED_PRUEBA !== '0'
+    if (c.modo === 'erp') {
+      const [orig] = (await db.query('select prueba, marca from venta where id = $1', [c.ventaId])).rows
+      marcaVenta = orig ? orig.marca : marca
+      prueba = orig ? orig.prueba === true : true
+      devueltas = c.devueltas
+      // La diferencia con la MISMA cuenta que el motor (lo devuelto al precio que se pagó).
+      const lineas = (await db.query('select id, cantidad, importe from venta_linea where venta_id = $1', [c.ventaId])).rows
+        .map((l) => ({ id: l.id, cantidad: Number(l.cantidad), importe: Number(l.importe) }))
+      diferencia = diferenciaDeCambio({ lineas, devueltas: c.devueltas.map((d) => ({ lineaId: d.linea_id, cantidad: d.cantidad })), nuevas: c.nuevas })
+    } else {
+      marcaVenta = 'stunned'
+      prueba = pruebaStunned
+      if (c.modo === 'gn') {
+        const g = await ventaGnDeCambio({ sb, db, gnVentaId: c.gnVentaId, prueba })
+        if (g.status) return g
+        const porPrenda = new Map(g.lineas.map((l) => [`${l.product_id}:${l.size_id}`, l]))
+        devueltas = []
+        for (const d of c.devueltas) {
+          const l = porPrenda.get(`${d.product_id}:${d.size_id}`)
+          if (!l) return { status: 400, error: `Ese producto no es de Stunned en la venta ${g.venta.numero} de Gestión Nube.` }
+          devueltas.push({ product_id: d.product_id, size_id: d.size_id, sku: l.sku, cantidad: d.cantidad, precio: l.precio })
+        }
+        original_gn = { sale_id: g.venta.id, numero: g.venta.numero, fecha: g.venta.fecha, lineas: g.lineas.map((l) => ({ product_id: l.product_id, size_id: l.size_id, cantidad: l.cantidad })) }
+      } else {
+        const skus = await skusDeVariantes(sb, c.devueltas)
+        devueltas = c.devueltas.map((d) => ({ ...d, sku: skus.get(`${d.product_id}:${d.size_id}`) ?? d.sku ?? null }))
+        if (devueltas.some((d) => !esStunned(d.sku))) return { status: 400, error: 'El cambio sin ticket es de productos de Stunned.' }
+      }
+      // Un ticket es de UNA marca (Bruno, 26-oct): lo que se lleva también es de Stunned.
+      if (c.nuevas.some((n) => !esStunned(n.sku))) return { status: 400, error: 'Lo que se lleva tiene que ser de Stunned: un cambio es de una sola marca.' }
+      diferencia = diferenciaDeCambioSuelto({ devueltas, nuevas: c.nuevas })
+    }
+    // El cobro con las reglas de HOY de la Caja: el descuento de la forma de pago lo pone el servidor.
     /** @type {{ pagos: any[], total: number, espera: number }} */
     let cobrado
     try {
@@ -773,22 +815,60 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
     }
     // El saldo a favor paga con la cuenta «Saldo a favor» del motor (va por uuid: ⛔ tiene cuenta en GN).
     if (cobrado.pagos.some((p) => p.cuenta === 'saldo')) {
-      const [cs] = (await db.query(`select id from cuenta_cobro where marca = $1 and medio = 'saldo'`, [marca])).rows
+      const [cs] = (await db.query(`select id from cuenta_cobro where marca = $1 and medio = 'saldo'`, [marcaVenta])).rows
       if (!cs) return { status: 409, error: 'Falta la cuenta «Saldo a favor» en el ERP (sql/007 del motor).' }
       cobrado = { ...cobrado, pagos: cobrado.pagos.map((p) => (p.cuenta === 'saldo' ? { ...p, cuenta: cs.id } : p)) }
     }
-    // 🔑 `prueba` es la de la venta ORIGINAL: el motor ⛔ cambia una venta de prueba con un cambio real ni al revés
-    // (`armarCambio`). Sin la venta (id ajeno) queda `true` y el motor contesta NO_ENCONTRADA.
-    const [orig] = (await db.query('select prueba from venta where id = $1', [c.ventaId])).rows
     const r = await registrarCambio(db, {
-      origen: 'caja', origen_ref: c.id, marca, usuario: usuario || 'erp', prueba: orig ? orig.prueba === true : true, deposito: 'local',
-      venta_original_id: c.ventaId, devueltas: c.devueltas, nuevas: c.nuevas, pagos: cobrado.pagos,
+      origen: 'caja', origen_ref: c.id, marca: marcaVenta, usuario: usuario || 'erp', prueba, deposito: 'local',
+      ...(c.modo === 'erp' ? { venta_original_id: c.ventaId } : {}),
+      ...(original_gn ? { original_gn } : {}),
+      ...(autoriza ? { autoriza } : {}),
+      devueltas, nuevas: c.nuevas, pagos: cobrado.pagos,
       ...(c.cliente ? { cliente: c.cliente } : {}),
       ...(mp ? { detalle: { mp } } : {}),
     })
     if (!r.ok) return errorDelMotor(r)
     return { ok: true, venta: r.venta, total: cobrado.total, aFavor: r.a_favor, saldo: r.saldo ?? null, ncPendiente: r.nc_pendiente, yaExistia: !!r.ya_existia }
   })
+}
+
+/** Los SKU de unas variantes, del espejo `inventario` de la marca. Clave `producto:talle`. */
+async function skusDeVariantes(sb, prendas) {
+  const ids = [...new Set(prendas.map((p) => Number(p.product_id)))]
+  if (!ids.length) return new Map()
+  const { data, error } = await sb.from('inventario').select('product_id, size_id, sku').in('product_id', ids)
+  if (error) throw new Error(`inventario: ${error.message}`)
+  return new Map((data || []).filter((f) => f.sku).map((f) => [`${Number(f.product_id)}:${Number(f.size_id)}`, String(f.sku)]))
+}
+
+/**
+ * La venta de GESTIÓN NUBE para cambiar en el ERP (Bruno, 27-oct: Stunned ⛔ vuelve a GN; lo vendido allá antes del corte
+ * se cambia acá). Del espejo de Zattia (`ventas` + `venta_detalles`), por id o por número; sólo las prendas de STUNNED, con
+ * lo pagado por unidad (`pagadoEnGN`) y lo ya cambiado en el ERP. 🔑 El precio lo pone ESTO, ⛔ la pantalla.
+ */
+export async function ventaGnDeCambio({ sb, db, gnVentaId, prueba }) {
+  const n = String(gnVentaId).trim()
+  if (!/^\d{1,12}$/.test(n)) return { status: 400, error: 'Número de venta inválido' }
+  const cols = 'id, number, date_sale, total_price, client_name, sale_state'
+  let { data: vs, error } = await sb.from('ventas').select(cols).eq('id', n).limit(1)
+  if (!error && !(vs || []).length) ({ data: vs, error } = await sb.from('ventas').select(cols).eq('number', n).limit(1))
+  if (error) throw new Error(`ventas: ${error.message}`)
+  const v = (vs || [])[0]
+  if (!v) return { status: 404, error: `No está la venta ${n} de Gestión Nube (puede tardar unos minutos en llegar).` }
+  if (/anul|cancel/i.test(String(v.sale_state || ''))) return { status: 409, error: `La venta ${v.number ?? v.id} de Gestión Nube está anulada.` }
+  const { data: det, error: e2 } = await sb.from('venta_detalles').select('product_id, size_id, size, product_name, quantity, unit_price, total').eq('sale_id', v.id)
+  if (e2) throw new Error(`venta_detalles: ${e2.message}`)
+  const skus = await skusDeVariantes(sb, det || [])
+  const nombre = new Map((det || []).map((d) => [`${Number(d.product_id)}:${Number(d.size_id)}`, { nombre: d.product_name || null, talle: d.size || null }]))
+  const ya = new Map((await db.query(`select l.product_id, l.size_id, -sum(l.cantidad)::int as n from venta x join venta_linea l on l.venta_id = x.id
+    where x.marca = 'stunned' and x.tipo = 'cambio' and x.estado = 'confirmada' and x.prueba = $2 and x.detalle->'cambio_de'->>'gn_venta' = $1
+      and l.cantidad < 0 group by 1, 2`, [String(v.id), prueba === true])).rows.map((f) => [`${Number(f.product_id)}:${Number(f.size_id)}`, Number(f.n)]))
+  const lineas = pagadoEnGN(v, det || [])
+    .map((l) => { const k = `${l.product_id}:${l.size_id}`; return { ...l, sku: skus.get(k) ?? null, ...nombre.get(k), cambiado: ya.get(k) || 0 } })
+    .filter((l) => esStunned(l.sku))
+  if (!lineas.length) return { status: 409, error: `La venta ${v.number ?? v.id} de Gestión Nube no tiene productos de Stunned.` }
+  return { venta: { id: String(v.id), numero: v.number ?? String(v.id), fecha: v.date_sale ?? null, cliente: v.client_name ?? null, prueba: prueba === true }, lineas }
 }
 
 /**
@@ -1677,6 +1757,14 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && req.query.vista === 'ventas') {
       const r = await buscarVentas({ marca: String(req.query.marca || ''), q: req.query.q, desde: req.query.desde, hasta: req.query.hasta })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'venta-gn-cambio') {
+      const marca = String(req.query.marca || '')
+      if (marca !== 'zattia') return res.status(400).json({ error: 'El cambio de una venta de Gestión Nube es de Stunned.' })
+      const { url, key } = cfgDeMarca(marca)
+      const r = await conMotor(marca, 'El cambio', (db) => ventaGnDeCambio({ sb: createClient(url, key), db, gnVentaId: String(req.query.id || ''), prueba: process.env.CAJA_STUNNED_PRUEBA !== '0' }))
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

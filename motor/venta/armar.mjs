@@ -211,9 +211,10 @@ export function armarVenta(e, conf, { ahora = new Date() } = {}) {
  * @param {any} e la entrada del contrato (§1 registrarCambio) @param {Conf} conf
  * @param {{ venta: any, lineas: any[] }} original @param {{ ahora?: Date }} [op]
  */
-export function armarCambio(e, conf, original, { ahora = new Date() } = {}) {
+export function armarCambio(e, conf, original, { ahora = new Date(), yaDevueltas = new Map() } = {}) {
   const mal = validarCabecera(e)
   if (mal) return mal
+  if (esCambioSuelto(e)) return armarCambioSuelto(e, conf, { ahora, yaDevueltas })
   if (!original || !original.venta) return fallo('NO_ENCONTRADA', 'No está la venta que se cambia', 'venta_original_id')
   const o = original.venta
   if (o.estado === 'anulada') return fallo('ANULADA', `La venta ${o.numero} está anulada`, 'venta_original_id')
@@ -247,11 +248,16 @@ export function armarCambio(e, conf, original, { ahora = new Date() } = {}) {
       linea_origen_id: l.id, costo_unitario: l.costo_unitario ?? null, costo_fuente: l.costo_fuente ?? null,
     }))
   }
+  return cerrarCambio(e, conf, venta, lineas)
+}
+
+/** Lo común a los dos cambios: las nuevas, la diferencia, su cobro y los movimientos. */
+function cerrarCambio(e, conf, venta, lineas) {
   for (const l of e.nuevas || []) lineas.push(filaDeLinea(venta.id, l, lineas.length + 1, 1))
   const diferencia = pesos(lineas.reduce((s, l) => s + l.importe, 0))
   venta.subtotal = diferencia
   // §6.1: lo que se cobra de más lleva el descuento de la forma de pago ⇒ el total es lo cobrado.
-  const p = diferencia > 0 ? validarPagos(e.pagos || [], conf, o.marca, null, { base: diferencia }) : validarPagos(e.pagos || [], conf, o.marca, 0)
+  const p = diferencia > 0 ? validarPagos(e.pagos || [], conf, venta.marca, null, { base: diferencia }) : validarPagos(e.pagos || [], conf, venta.marca, 0)
   if (p.error) return p.error
   // La Contraentrega es de la venta que sale con el cadete (§20); el cambio se hace en el local.
   if (p.usa_entrega > 0) return fallo('ENTRADA_INVALIDA', 'Un cambio no se cobra contra entrega', 'pagos')
@@ -261,6 +267,53 @@ export function armarCambio(e, conf, original, { ahora = new Date() } = {}) {
   const { pagos } = c
   const movimientos = mueveStock(venta) ? lineas.map((l) => movimientoDe(venta, l, l.cantidad < 0 ? 'cambio_entra' : 'cambio_sale')) : []
   return { ok: true, venta, lineas, pagos, movimientos, diferencia, a_favor: diferencia < 0 ? -diferencia : 0, usa_saldo: p.usa_saldo, usa_cuenta: p.usa_cuenta, usa_entrega: p.usa_entrega }
+}
+
+/**
+ * ¿Es un cambio SIN venta del ERP detrás (Bruno, 27-oct)? La venta se hizo en GN (antes del corte) o la clienta no trae
+ * ticket: las devueltas vienen con su prenda y el precio que se pagó, ⛔ con `linea_id`. «El cambio es una venta +1 −1.»
+ */
+export function esCambioSuelto(e) {
+  return !!e && !e.venta_original_id && Array.isArray(e.devueltas) && e.devueltas.length > 0 &&
+    e.devueltas.every((d) => d && typeof d === 'object' && d.linea_id == null && d.product_id != null)
+}
+
+/**
+ * El cambio suelto. `e.original_gn` = la venta de GN de la que vuelve la prenda (`{ sale_id, numero?, fecha?, lineas:
+ * [{ product_id, size_id, cantidad }] }`, la lee el monitor del espejo): con ella ⛔ se devuelve más de lo comprado,
+ * contando lo ya cambiado (`yaDevueltas`, clave `producto:talle`). Sin ella es «sin ticket» ⇒ PIN (`registrar.mjs`).
+ * 🔑 La marca del detalle es `cambio_de`, ⛔ `gn_sale_id`: con ese nombre `mueveStock` lo tomaría por una venta de GN.
+ */
+function armarCambioSuelto(e, conf, { ahora, yaDevueltas }) {
+  const canal = e.canal ?? 'local'
+  const lugar = validarLugar({ marca: e.marca, deposito: e.deposito }, conf)
+  if (lugar) return lugar
+  if (!(conf.canales ?? CANALES).includes(canal)) return fallo('CANAL_DESCONOCIDO', `Canal desconocido: ${canal}`, 'canal')
+  const devueltas = e.devueltas.map((d) => ({ ...d, importe: pesos(num(d.precio) * num(d.cantidad)) }))
+  const malas = validarLineas(devueltas, 'devueltas') || (e.nuevas && e.nuevas.length ? validarLineas(e.nuevas, 'nuevas') : null)
+  if (malas) return malas
+  const g = e.original_gn ?? null
+  if (g != null) {
+    if (!(g && g.sale_id != null && String(g.sale_id).trim() && Array.isArray(g.lineas))) return fallo('ENTRADA_INVALIDA', 'La venta de GN viene incompleta', 'original_gn')
+    const pedidas = new Map()
+    for (const [i, d] of devueltas.entries()) {
+      const k = `${num(d.product_id)}:${num(d.size_id)}`
+      const compradas = g.lineas.filter((l) => `${num(l.product_id)}:${num(l.size_id)}` === k).reduce((s, l) => s + num(l.cantidad), 0)
+      if (!compradas) return fallo('ENTRADA_INVALIDA', 'Esa prenda no es de la venta', `devueltas[${i}].product_id`)
+      const ya = num(yaDevueltas.get(k) || 0)
+      pedidas.set(k, (pedidas.get(k) || 0) + num(d.cantidad))
+      if (pedidas.get(k) + ya > compradas) return fallo('DEVUELVE_DE_MAS', `Se vendieron ${compradas} y ya se cambiaron ${ya}`, `devueltas[${i}].cantidad`)
+    }
+  }
+  const cambio_de = g ? { gn_venta: String(g.sale_id).trim(), numero: g.numero ?? null, fecha: g.fecha ?? null } : { sin_ticket: true }
+  const venta = {
+    id: randomUUID(), empresa_id: conf.marcas[e.marca].empresa_id, marca: e.marca, tipo: 'cambio', estado: 'confirmada',
+    origen: e.origen, origen_ref: e.origen_ref.trim(), canal, deposito: e.deposito,
+    cliente_id: e.cliente_id ?? null, venta_original_id: null, subtotal: 0, total: 0, prueba: e.prueba,
+    usuario: e.usuario.trim(), ocurrida_en: new Date(e.ocurrida_en ?? ahora).toISOString(), detalle: { ...(e.detalle ?? {}), cambio_de },
+  }
+  const lineas = devueltas.map((d, i) => filaDeLinea(venta.id, d, i + 1, -1))
+  return cerrarCambio(e, conf, venta, lineas)
 }
 
 /**

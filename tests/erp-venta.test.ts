@@ -4,7 +4,7 @@
  * vendida, o un anular sin motivo que llega al motor.
  */
 import { describe, it, expect } from 'vitest'
-import { armarFicha, cambiadasDe, estaAcreditadaEntera, cobroDelCambio, diferenciaDeCambio, leerAnular, leerBusqueda, leerCambiar, leerClienteCambio, puedeAnular, rangoDeDias } from '../lib/erp/venta.core.js'
+import { armarFicha, cambiadasDe, estaAcreditadaEntera, cobroDelCambio, diferenciaDeCambio, diferenciaDeCambioSuelto, leerAnular, leerBusqueda, leerCambiar, leerClienteCambio, pagadoEnGN, puedeAnular, rangoDeDias } from '../lib/erp/venta.core.js'
 import { REGLAS_INICIALES } from '../lib/caja/core.core.js'
 
 describe('leerBusqueda', () => {
@@ -100,9 +100,23 @@ describe('el cambio (erp › Caja)', () => {
     expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], pagos: [{ cuenta: 'x' }] }).error).toBe('Pago inválido')
     const ok = leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], items: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 20000, sku: 'Z-1' }], pagos: [{ cuenta: 12921, monto: 5000 }], total: 4300 })
     expect(ok).toEqual({
-      id, ventaId: venta, devueltas: [{ linea_id: L1, cantidad: 1 }], nuevas: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 20000, descuento: 0, rebaja: 0, importe: 20000, sku: 'Z-1' }],
+      id, modo: 'erp', ventaId: venta, gnVentaId: null, pin: null, devueltas: [{ linea_id: L1, cantidad: 1 }], nuevas: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 20000, descuento: 0, rebaja: 0, importe: 20000, sku: 'Z-1' }],
       pagos: [{ cuenta: 12921 }], total: 4300, desde: null, pago: null, comprobante: null, cliente: null, saldo: 0,
     })
+    // Cambio SUELTO (Bruno, 27-oct): la venta de GN viaja por número y la prenda por producto y talle; el precio ⛔ (lo pone el servidor).
+    const gn = leerCambiar({ id, gnVentaId: '30982', devueltas: [{ productId: 7, sizeId: 3, cantidad: 1, precio: 1 }], pagos: [] })
+    expect([gn.modo, gn.ventaId, gn.gnVentaId, gn.devueltas]).toEqual(['gn', null, '30982', [{ product_id: 7, size_id: 3, cantidad: 1, sku: null }]])
+    expect(leerCambiar({ id, gnVentaId: '30982x', devueltas: [{ productId: 7, sizeId: 3, cantidad: 1 }] }).error).toMatch(/Gestión Nube/)
+    // Sin ticket: el precio lo pone la cajera y el PIN es obligatorio.
+    expect(leerCambiar({ id, sinTicket: true, devueltas: [{ productId: 7, sizeId: 3, cantidad: 1, precio: 15000 }] }).error).toMatch(/PIN/)
+    expect(leerCambiar({ id, sinTicket: true, devueltas: [{ productId: 7, sizeId: 3, cantidad: 1 }], pin: '1234', pinPersona: 'ana' }).error).toMatch(/precio/)
+    const st = leerCambiar({ id, sinTicket: true, devueltas: [{ productId: 7, sizeId: 3, cantidad: 2, precio: 15000 }], pin: '1234', pinPersona: 'ana' })
+    expect([st.modo, st.pin, st.devueltas[0].precio]).toEqual(['sin_ticket', { persona: 'ana', pin: '1234' }, 15000])
+    expect(diferenciaDeCambioSuelto({ devueltas: st.devueltas, nuevas: [{ importe: 45000 }] })).toBe(15000)
+    // Lo pagado en GN: el descuento de la venta prorrateado; el envío ⛔ se reparte; las devueltas de GN (cantidad < 0) no cuentan.
+    expect(pagadoEnGN({ total_price: 27000 }, [{ product_id: 1, size_id: 2, quantity: 2, unit_price: 15000, total: 30000 }, { product_id: 3, size_id: 4, quantity: -1, unit_price: 9000, total: -9000 }]))
+      .toEqual([{ product_id: 1, size_id: 2, cantidad: 2, precio: 13500 }])
+    expect(pagadoEnGN({ total_price: 33000 }, [{ product_id: 1, size_id: 2, quantity: 1, unit_price: 30000, total: 30000 }])[0].precio).toBe(30000)
     // Varios pagos: la base viaja en todos menos el último (como la Caja); el monto de la pantalla ⛔ viaja.
     expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], pagos: [{ cuenta: 12921, base: 2000 }, { cuenta: 25188, base: 1 }] }).pagos).toEqual([{ cuenta: 12921, base: 2000 }, { cuenta: 25188 }])
   })
