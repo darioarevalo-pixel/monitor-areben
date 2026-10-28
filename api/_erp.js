@@ -720,11 +720,14 @@ export async function confirmarVueltaPropia({ marca, body, usuario }) {
  * El saldo a favor de una clienta, por documento (el del MISMO libro que la venta que se cambia: `prueba`, por defecto el de prueba): para
  * ofrecerlo como forma de pago en el cambio. Lee la vista `saldo_favor` del motor (contrato §6).
  */
-export async function saldoDeClienta({ marca, doc, prueba = true }) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+export async function saldoDeClienta({ marca: base, doc, prueba = true, linea = null }) {
+  if (!MARCAS.includes(base)) return { status: 400, error: 'Marca inválida' }
+  // Stunned vive en la base de Zattia pero su saldo es de marca `stunned` (lo guarda el cambio con la marca de la venta).
+  if (linea != null && !(linea === 'stunned' && base === 'zattia')) return { status: 400, error: 'Línea inválida' }
+  const marca = linea || base
   const d = String(doc ?? '').replace(/\D/g, '')
   if (!/^\d{7,11}$/.test(d)) return { status: 400, error: 'Documento inválido' }
-  const { url, key } = cfgDeMarca(marca)
+  const { url, key } = cfgDeMarca(base)
   const sb = createClient(url, key)
   // La ficha es UNA por empresa y documento (§11): sin la empresa, dos empresas en la misma base harían
   // que `maybeSingle` falle con dos filas, o que el saldo saliera de la ficha de la otra.
@@ -1779,7 +1782,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET' && req.query.vista === 'saldo') {
-      const r = await saldoDeClienta({ marca: String(req.query.marca || ''), doc: req.query.doc, prueba: req.query.prueba !== '0' })
+      const r = await saldoDeClienta({ marca: String(req.query.marca || ''), doc: req.query.doc, prueba: req.query.prueba !== '0', linea: req.query.linea ? String(req.query.linea) : null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

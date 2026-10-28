@@ -63,3 +63,16 @@ describe('saldoDeClienta · libro de la venta', () => {
     expect(await saldoDeClienta({ marca: 'zattia', doc: '30111222' })).toEqual({ cliente: { nombre: 'Ana' }, saldo: 4500 })
   })
 })
+
+describe('saldoDeClienta · Stunned', () => {
+  it('Stunned (base Zattia) lee el saldo de marca `stunned`; otra línea u otra base, 400', async () => {
+    filas.marca = [{ id: 'zattia', empresa_id: 'e-areben' }, { id: 'stunned', empresa_id: 'e-areben' }]
+    filas.saldo_favor = [
+      { cliente_id: 'c1', marca: 'zattia', prueba: true, saldo: 4500 },
+      { cliente_id: 'c1', marca: 'stunned', prueba: true, saldo: 1200 },
+    ]
+    expect(await saldoDeClienta({ marca: 'zattia', doc: '30111222', linea: 'stunned' })).toEqual({ cliente: { nombre: 'Ana' }, saldo: 1200 })
+    expect(await saldoDeClienta({ marca: 'bdi', doc: '30111222', linea: 'stunned' })).toMatchObject({ status: 400 })
+    expect(await saldoDeClienta({ marca: 'zattia', doc: '30111222', linea: 'otra' })).toMatchObject({ status: 400 })
+  })
+})
