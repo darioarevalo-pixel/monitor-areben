@@ -37,6 +37,17 @@ describe('Caja · el precio según la línea (16-oct)', () => {
     expect(precioDeCaja(vestido, { store: 'zattia', idx: idxZattia, idxStunned, reglas: null }).precio).toBe(40000)
   })
 
+  it('Stunned con precio LOCAL cargado en el ERP cobra ESE (28-oct); la foto y la oferta siguen saliendo de su Tienda Nube', () => {
+    const r = precioDeCaja(sMail, { store: 'zattia', idx: idxZattia, idxStunned, reglas: null, localStunned: { '913512': 25000 } })
+    expect(r).toEqual({ precio: 25000, fueraDeTn: false, foto: 'https://x/s-mail.jpg', categorias: ['REMERAS'], oferta: true })
+    // Sin carga para ESE producto, sin lista (no se pudo leer) o un 0: lo de Tienda Nube, como siempre.
+    expect(precioDeCaja(sMail, { store: 'zattia', idx: idxZattia, idxStunned, reglas: null, localStunned: { '1': 25000 } }).precio).toBe(22090)
+    expect(precioDeCaja(sMail, { store: 'zattia', idx: idxZattia, idxStunned, reglas: null, localStunned: null }).precio).toBe(22090)
+    expect(precioDeCaja(sMail, { store: 'zattia', idx: idxZattia, idxStunned, reglas: null, localStunned: { '913512': 0 } }).precio).toBe(22090)
+    // El precio local de Stunned ⛔ toca a Zattia (aunque el id coincida).
+    expect(precioDeCaja(vestido, { store: 'zattia', idx: idxZattia, idxStunned, reglas: null, localStunned: { '700': 1 } }).precio).toBe(40000)
+  })
+
   it('el prefijo STU sólo cuenta en Zattia: en BDI ⛔ es Stunned', () => {
     expect(esDeStunned('zattia', sMail)).toBe(true)
     expect(esDeStunned('zattia', { sku: null }, 'STU-REM-0007-L')).toBe(true)

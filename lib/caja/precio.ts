@@ -6,6 +6,10 @@
  *
  * 🔑 **Stunned: SÓLO su Tienda Nube** (store 7516263, ⛔ la de Zattia), con la oferta vigente. ⛔ la lista
  * de GN, ⛔ la feria. Sin la prenda en su tienda ⇒ sin precio: el renglón pide que se escriba.
+ * 🔑 **Salvo el precio LOCAL cargado en el ERP** (Bruno, 28-oct: «el precio en local igual al de Tienda Nube o
+ * distinto»): la lista `local` del motor sigue a lo que cobra TN; si alguien la CARGA, el local cobra ESA
+ * (`localStunned`, product_id → precio, sólo lo cargado: lo lee la config de la Caja). La foto y si está en
+ * oferta siguen saliendo de TN.
  *
  * 🔴 Por qué existe (16-oct): el POS le pasaba a Stunned el índice de ZATTIA ⇒ `matchTn` ⛔ enganchaba y
  * caía a `retailer_price`. La REMERA S-MAIL GREY se cobraba $31.490 con la etiqueta en $22.090: 25 de
@@ -36,13 +40,14 @@ export const esDeStunned = (store: string, producto: { sku?: string | null }, sk
  */
 export function precioDeCaja(
   producto: ProductoCaja,
-  o: { store: string; skuVariante?: string | null; idx: IndiceTn; idxStunned: IndiceTn | null; reglas: Parameters<typeof precioDeFeria>[0] },
+  o: { store: string; skuVariante?: string | null; idx: IndiceTn; idxStunned: IndiceTn | null; reglas: Parameters<typeof precioDeFeria>[0]; localStunned?: Record<string, number> | null },
 ): PrecioDeCaja {
   if (esDeStunned(o.store, producto, o.skuVariante)) {
     if (!o.idxStunned) return { precio: null, fueraDeTn: false, foto: null, categorias: [], oferta: false }
     const tn = matchTn(producto, o.idxStunned)
     const vigente = ofertaVigente(tn?.price, tn?.promo_price)
-    const precio = vigente.aCobrar
+    const local = o.localStunned?.[String(producto.id)]
+    const precio = local != null && local > 0 ? local : vigente.aCobrar
     return { precio: precio && precio > 0 ? precio : null, fueraDeTn: false, foto: imagenDe(producto, o.idxStunned), categorias: tn?.categories ?? [], oferta: vigente.enOferta }
   }
   const { precios, fueraDeTn } = construirPrecios([producto], o.idx)

@@ -24,6 +24,10 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   de GN, ⛔ la feria; sin la prenda en su tienda, sin precio) — Bruno, 16-oct. La regla por línea vive en
   `lib/caja/precio.ts` (POS y tótem). Antes le pasaba el índice de Zattia y cobraba la lista: la REMERA
   S-MAIL GREY salía $31.490 con la etiqueta en $22.090 (25 de 40 productos de Stunned en oferta).
+  🔑 **Salvo el precio LOCAL cargado en el ERP** (Bruno, 28-oct: «el precio en local igual al de Tienda Nube o
+  distinto»): la config de la Caja trae `stunned_local` (la lista `local` del motor, SÓLO las filas cargadas,
+  `preciosLocalStunned` en `api/_caja-motor.js`) y `precioDeCaja` cobra ESE en el POS, el tótem y `erp › Cambio`.
+  Lo que no está cargado sigue a TN. Si ⛔ se puede leer, la Caja cobra lo de TN y lo AVISA (`stunned_local_error`).
   🔴 **Y la prenda de Stunned EN OFERTA en su tienda paga 10 % en efectivo Y en transferencia** (Bruno,
   26-oct: la STND SALE está a ~1,07× el costo y el −15 % del efectivo la dejaba abajo). `PCT_OFERTA_DE_LINEA`
   en `core.core.js`; la pantalla marca `oferta` en el renglón (de `precioDeCaja`, `enOferta` de su TN) y

@@ -92,7 +92,7 @@ import { enviarVentaErp } from '../lib/caja/enviar-erp.core.js'
 import { destinoDelTicket } from '../lib/caja/marca-ticket.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, ladoDelEspejo, marcaDeCaja, tokenDe } from '../lib/caja/marcas.core.js'
-import { anotarEnMotor, avisoDelMotor, registrarEnErp, repasarMotor } from './_caja-motor.js'
+import { anotarEnMotor, avisoDelMotor, preciosLocalStunned, registrarEnErp, repasarMotor } from './_caja-motor.js'
 import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { reglasDeHoy as reglasDeHoyDe } from './_caja-reglas.js'
 import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
@@ -448,7 +448,11 @@ export default async function handler(req, res) {
         const conf = { ...leida, reglas: await reglasDeHoy(leida.reglas), ...(esAdmin(perfil) ? { campaniasLiq: await campaniasLiq() } : {}) }
         // `versiones`: las de las listas que la pantalla manda ENTERAS, para ⛔ pisar la de otro admin.
         const versiones = { promos: versionDe(conf.reglas, 'promos'), feriaProductos: versionDe(conf.reglas, 'feriaProductos') }
-        return res.status(200).json({ ...conf, versiones, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), stunned_erp: store === 'zattia' && process.env.CAJA_STUNNED_ERP === '1', stunned_prueba: store === 'zattia' && process.env.CAJA_STUNNED_PRUEBA !== '0', marca: { store, nombre: marca.nombre, tienda: marca.tienda } })
+        // El precio LOCAL de Stunned cargado en el ERP (28-oct). Si ⛔ se puede leer, la Caja carga igual (cobra el de TN) y lo AVISA.
+        const local = store === 'zattia' ? await preciosLocalStunned() : null
+        if (local && !local.precios) console.error('[caja] precio local de Stunned:', local.error || 'sin conexión al motor')
+        const stunnedLocal = store !== 'zattia' ? {} : local.precios ? { stunned_local: local.precios } : { stunned_local: null, stunned_local_error: local.error ? 'No se pudo leer el precio local de Stunned del ERP: se cobra el de Tienda Nube.' : 'Sin conexión al ERP: el precio local de Stunned es el de Tienda Nube.' }
+        return res.status(200).json({ ...conf, versiones, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), ...stunnedLocal, stunned_erp: store === 'zattia' && process.env.CAJA_STUNNED_ERP === '1', stunned_prueba: store === 'zattia' && process.env.CAJA_STUNNED_PRUEBA !== '0', marca: { store, nombre: marca.nombre, tienda: marca.tienda } })
       }
 
       if (accion === 'logo-tn') {

@@ -391,9 +391,9 @@ function POS() {
     (productId: number) => {
       const p = datos?.allProductos.find((x) => String(x.id) === String(productId))
       if (!p || !tnIdx) return null
-      return precioDeCaja(p, { store: storeCaja(), idx: tnIdx, idxStunned: tnIdxStunned, reglas })
+      return precioDeCaja(p, { store: storeCaja(), idx: tnIdx, idxStunned: tnIdxStunned, reglas, localStunned: config?.stunned_local ?? null })
     },
-    [datos, tnIdx, tnIdxStunned, reglas],
+    [datos, tnIdx, tnIdxStunned, reglas, config?.stunned_local],
   )
 
   /** El precio de la etiqueta y la foto de un producto. */
@@ -1026,6 +1026,8 @@ pendientes
               <EsperaTransferencia key={v.id} venta={v} reglas={reglas} onLlego={llegoTransferencia} onCambio={refrescarPendientes} onCambiarPago={volverAlCarrito} />
             ))
   )
+  // El precio LOCAL de Stunned del ERP (28-oct) ⛔ se pudo leer: la Caja cobra el de Tienda Nube, y lo dice.
+  const avisoPrecioLocalJSX = config?.stunned_local_error ? <Notice tone="warning">{config.stunned_local_error}</Notice> : null
   const avisoSinLlegarJSX =
     sinLlegar > 0 && (
             <Notice tone="danger">
@@ -1556,6 +1558,7 @@ pendientes
 
           <div className="pm-scroll">
             {esperasJSX}
+            {avisoPrecioLocalJSX}
             {avisoSinLlegarJSX}
             {ultimaJSX}
             {modalesJSX}
@@ -1713,6 +1716,7 @@ pendientes
       <div className="pos-grid">
         <div style={{ display: 'grid', gap: space[3], minWidth: 0 }}>
           {esperasJSX}
+          {avisoPrecioLocalJSX}
           {avisoSinLlegarJSX}
           <PedidosWebSinArmar datos={pedidosWeb} error={errPedidos} />
 

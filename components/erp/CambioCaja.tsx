@@ -47,7 +47,7 @@ export function CambioCaja() {
   const precioDe = (v: Variante): number | null => {
     const p = datos?.allProductos.find((x) => String(x.id) === String(v.product_id))
     if (!p || !tnIdx) return null
-    return precioDeCaja(p, { store, skuVariante: v.sku, idx: tnIdx, idxStunned: tnIdxStunned, reglas: config?.reglas ?? null }).precio
+    return precioDeCaja(p, { store, skuVariante: v.sku, idx: tnIdx, idxStunned: tnIdxStunned, reglas: config?.reglas ?? null, localStunned: config?.stunned_local ?? null }).precio
   }
   const esStunned = (v: Variante): boolean => esDeStunned(store, { sku: datos?.allProductos.find((x) => String(x.id) === String(v.product_id))?.sku ?? null }, v.sku)
   const c = useCambio({ store, config, precioDe, esStunned })

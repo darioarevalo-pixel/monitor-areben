@@ -118,3 +118,17 @@ export function avisoDelMotor(r, que) {
   if (r.errorAnuladas) partes.push(`anuladas en GN sin leer: ${r.errorAnuladas}`)
   return partes.length ? `[caja→motor] ${que}: ${partes.join(' · ')}` : null
 }
+
+/**
+ * El precio LOCAL de Stunned CARGADO en el ERP (Bruno, 28-oct: el local puede cobrar igual que Tienda Nube o distinto):
+ * la lista `local` del motor, sólo las filas CARGADAS (lo que sigue a TN ⛔ viene: para eso la Caja ya lee TN).
+ * ⛔ Lanza: `{ precios }` (product_id → precio), `{ sinConexion: true }` o `{ error }`.
+ * @returns {Promise<{ precios: Record<string, number> } | { sinConexion: true } | { error: string }>}
+ */
+export async function preciosLocalStunned() {
+  return conMotor('zattia', async (db) => {
+    const { rows } = await db.query(`select product_id, precio from precio_lista
+      where marca = 'stunned' and lista = 'local' and de_lista = 'local' and fuente = 'carga' and precio > 0`)
+    return { precios: Object.fromEntries(rows.map((r) => [String(r.product_id), Number(r.precio)])) }
+  })
+}

@@ -103,10 +103,10 @@ function Totem() {
       if (!p || !tnIdx) return { precio: null, foto: null, categorias: [] as string[] }
       // Las categorías de Tienda Nube: las promos por categoría (las mismas que manda el POS).
       // Stunned, sólo su Tienda Nube (`lib/caja/precio.ts`). `reglas: null`: la oferta la pone `precioTotem`.
-      const { precio, foto, categorias } = precioDeCaja(p, { store: storeCaja(), idx: tnIdx, idxStunned: tnIdxStunned, reglas: null })
+      const { precio, foto, categorias } = precioDeCaja(p, { store: storeCaja(), idx: tnIdx, idxStunned: tnIdxStunned, reglas: null, localStunned: config?.stunned_local ?? null })
       return { precio, foto, categorias }
     },
-    [datos, tnIdx, tnIdxStunned],
+    [datos, tnIdx, tnIdxStunned, config?.stunned_local],
   )
 
   async function buscar(q: string) {
