@@ -19,6 +19,7 @@ import {
   enlaces,
   estadisticaPorMedio,
   filtrarProspectos,
+  rubros,
   leadExistente,
   leadsComprados,
   patchLeadDesdeProspecto,
@@ -91,6 +92,8 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
   const [tandas, setTandas] = useState<Tanda[]>([])
   const [sinTandas, setSinTandas] = useState(false)
   const [tanda, setTanda] = useState<number | 'todas'>('todas')
+  const [rubro, setRubro] = useState('todos')
+  const [fundas, setFundas] = useState(false)
   const [armando, setArmando] = useState(false)
   /** El medio que se abrió y espera el «¿Le escribiste?» de la ficha abierta. */
   const [pendiente, setPendiente] = useState<Medio | null>(null)
@@ -118,8 +121,14 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
     }
   }, [])
 
-  const deCiudad = useMemo(() => filtrarProspectos(locales, { ciudad, estado: 'todos', q: '', tanda }), [locales, ciudad, tanda])
-  const lista = useMemo(() => filtrarProspectos(locales, { ciudad, estado, q, tanda }), [locales, ciudad, estado, q, tanda])
+  const deCiudad = useMemo(() => filtrarProspectos(locales, { ciudad, estado: 'todos', q: '', tanda, rubro, fundas }), [locales, ciudad, tanda, rubro, fundas])
+  const lista = useMemo(() => filtrarProspectos(locales, { ciudad, estado, q, tanda, rubro, fundas }), [locales, ciudad, estado, q, tanda, rubro, fundas])
+  /** Los tipos se cuentan sin el propio filtro de tipo, para que se vea cuántos hay de cada uno. */
+  const listaRubros = useMemo(() => rubros(filtrarProspectos(locales, { ciudad, estado: 'todos', q: '', tanda, fundas })), [locales, ciudad, tanda, fundas])
+  const hayFundas = useMemo(() => locales.some((l) => l.vende_fundas), [locales])
+  /** Lo que entra en una tanda nueva: respeta el tipo y «venden fundas» (la ciudad se elige en la tanda). */
+  const paraTanda = useMemo(() => filtrarProspectos(locales, { ciudad: 'todas', estado: 'todos', q: '', rubro, fundas }), [locales, rubro, fundas])
+  const filtroTanda = [rubro === 'todos' ? null : rubro, fundas ? 'venden fundas' : null].filter(Boolean).join(' · ')
   const resumen = useMemo(() => (tanda === 'todas' ? null : resumenTanda(locales, tanda, comprados)), [locales, tanda, comprados])
   const nombreTanda = (id: number | null) => (id == null ? null : tandas.find((t) => t.id === id)?.nombre || null)
   const n = useMemo(() => contarPorEstado(deCiudad), [deCiudad])
@@ -220,6 +229,7 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
     { key: 'todos' as const, label: 'Todos', n: deCiudad.length },
     ...(['sin_contactar', 'contactado', 'respondio', 'descartado'] as EstadoProspecto[]).map((e) => ({ key: e, label: ESTADO_LABEL[e], n: n[e] })),
   ]
+  const opcionesRubro = [{ key: 'todos', label: 'Todos' }, ...listaRubros.map((r) => ({ key: r.rubro, label: r.rubro, n: r.n }))]
   const opcionesTanda = [
     { key: 'todas', label: 'Todas' },
     ...tandas.map((t) => ({ key: String(t.id), label: t.nombre, n: locales.filter((l) => l.tanda_id === t.id).length })),
@@ -235,6 +245,17 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[2], marginBottom: space[3] }}>
         <Chips opciones={opcionesCiudad} value={ciudad} onChange={setCiudad} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: color.mut2 }}>Tipo</span>
+          <Chips opciones={opcionesRubro} value={rubro} onChange={setRubro} />
+          {hayFundas && (
+            <Chips
+              opciones={[{ key: 'no', label: 'Todos' }, { key: 'si', label: 'Venden fundas', n: locales.filter((l) => l.vende_fundas).length }]}
+              value={fundas ? 'si' : 'no'}
+              onChange={(v) => setFundas(v === 'si')}
+            />
+          )}
+        </div>
         {!sinTandas && (
           <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, color: color.mut2 }}>Tanda</span>
@@ -287,6 +308,7 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
                     <div style={{ fontSize: 12, color: color.mut2 }}>
                       {l.ciudad}
                       {l.rubro ? ` · ${l.rubro}` : ''}
+                      {l.vende_fundas ? ' · Vende fundas' : ''}
                     </div>
                   </div>
                   <StatusPill tone={TONO[l.estado]} label={ESTADO_LABEL[l.estado]} />
@@ -304,7 +326,7 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
       </Modal>
 
       {armando && (
-        <ArmarTanda locales={locales} ciudades={listaCiudades.map((c) => c.ciudad)} ciudadInicial={ciudad}
+        <ArmarTanda locales={paraTanda} filtro={filtroTanda} ciudades={listaCiudades.map((c) => c.ciudad)} ciudadInicial={ciudad}
           ocupado={ocupado} onCerrar={() => setArmando(false)} onCrear={armarTanda} />
       )}
     </>
@@ -375,7 +397,7 @@ function Ficha({
       <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
         <StatusPill tone={TONO[p.estado]} label={ESTADO_LABEL[p.estado]} />
         <span style={{ fontSize: 13, color: color.mut }}>
-          {[p.rubro, p.ciudad].filter(Boolean).join(' · ')}
+          {[p.rubro, p.vende_fundas ? 'Vende fundas' : null, p.ciudad].filter(Boolean).join(' · ')}
           {p.estrellas != null ? ` · ★ ${p.estrellas}${p.resenas ? ` (${p.resenas})` : ''}` : ''}
           {tanda ? ` · Tanda ${tanda}` : ''}
         </span>
@@ -477,9 +499,11 @@ function Ficha({
  * (`elegirParaTanda`). Se ve la lista antes de confirmar.
  */
 function ArmarTanda({
-  locales, ciudades, ciudadInicial, ocupado, onCerrar, onCrear,
+  locales, filtro, ciudades, ciudadInicial, ocupado, onCerrar, onCrear,
 }: {
   locales: Prospecto[]
+  /** El tipo / «venden fundas» elegido en el mapa, para que se vea que la tanda sale de ahí. */
+  filtro: string
   ciudades: string[]
   ciudadInicial: string
   ocupado: boolean
@@ -534,7 +558,7 @@ function ArmarTanda({
         <div style={{ fontSize: 13, color: color.mut }}>
           {disponibles === 0
             ? 'No quedan locales sin contactar fuera de otra tanda en esta ciudad.'
-            : `Entran ${elegidos.length} de ${disponibles} disponibles. Primero los que tienen WhatsApp seguro.`}
+            : `Entran ${elegidos.length} de ${disponibles} disponibles${filtro ? ` (${filtro})` : ''}. Primero los que tienen WhatsApp seguro.`}
         </div>
 
         {elegidos.length > 0 && (

@@ -18,6 +18,8 @@ export type Prospecto = {
   id: string
   nombre: string
   rubro: string | null
+  /** Google lo devuelve al buscar «fundas» en su ciudad. Opcional: no existe hasta correr sql/migrate-prospectos-fundas.sql. */
+  vende_fundas?: boolean
   direccion: string | null
   ciudad: string | null
   lat: number | null
@@ -124,7 +126,16 @@ export function enlaceMaps(p: Prospecto): string | null {
   return `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`
 }
 
-export type FiltroProspectos = { ciudad: string; estado: EstadoProspecto | 'todos'; q: string; tanda?: number | 'todas' }
+export type FiltroProspectos = {
+  ciudad: string
+  estado: EstadoProspecto | 'todos'
+  q: string
+  tanda?: number | 'todas'
+  /** El tipo de local que pone Google (Accesorios, Reparación…). */
+  rubro?: string
+  /** Sólo los que Google muestra vendiendo fundas. */
+  fundas?: boolean
+}
 
 const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 
@@ -135,6 +146,8 @@ export function filtrarProspectos(lista: Prospecto[], f: FiltroProspectos): Pros
       (f.ciudad === 'todas' || p.ciudad === f.ciudad) &&
       (f.estado === 'todos' || p.estado === f.estado) &&
       (f.tanda == null || f.tanda === 'todas' || p.tanda_id === f.tanda) &&
+      (!f.rubro || f.rubro === 'todos' || p.rubro === f.rubro) &&
+      (!f.fundas || p.vende_fundas === true) &&
       (!q || sinTildes(`${p.nombre} ${p.direccion || ''} ${p.instagram || ''} ${p.telefono || ''}`).includes(q)),
   )
 }
@@ -144,6 +157,17 @@ export function contarPorEstado(lista: Prospecto[]): Record<EstadoProspecto, num
   const n: Record<EstadoProspecto, number> = { sin_contactar: 0, contactado: 0, respondio: 0, descartado: 0 }
   for (const p of lista) n[p.estado] = (n[p.estado] || 0) + 1
   return n
+}
+
+/** Primero los tipos que más se parecen a un comprador de fundas; uno nuevo de Google va al final. */
+const ORDEN_RUBRO = ['Accesorios', 'Celulares', 'Reparación', 'Informática', 'Electrónica']
+
+/** Los tipos de local con cuántos hay de cada uno. */
+export function rubros(lista: Prospecto[]): { rubro: string; n: number }[] {
+  const m = new Map<string, number>()
+  for (const p of lista) if (p.rubro) m.set(p.rubro, (m.get(p.rubro) || 0) + 1)
+  const pos = (r: string) => (ORDEN_RUBRO.includes(r) ? ORDEN_RUBRO.indexOf(r) : ORDEN_RUBRO.length)
+  return [...m.entries()].map(([rubro, n]) => ({ rubro, n })).sort((a, b) => pos(a.rubro) - pos(b.rubro) || b.n - a.n)
 }
 
 /** Las ciudades, de la que más locales tiene a la que menos. */

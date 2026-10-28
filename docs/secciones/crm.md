@@ -253,6 +253,13 @@ WhatsApp**: un local vive sólo acá («Sin contactar») hasta que **responde �
   atado está «comprado» en Leads (`leadsComprados`, se lee el KV al abrir; si falla, queda en 0).
   Va sobre lo filtrado (ciudad + tanda); sin contactos no se muestra. La línea de la tanda suma
   «compraron».
+- **Tipo y «Venden fundas» (28-oct)**: chips «Tipo» con el rubro de Google (Accesorios, Celulares,
+  Reparación, Informática, Electrónica — en ese orden, `rubros`) y, si hay alguno marcado, «Venden
+  fundas» (`vende_fundas`, sql/migrate-prospectos-fundas.sql). La marca la pone
+  `~/Bruno/leads-mapa/marcar_fundas.mjs` con las búsquedas «fundas para celulares / fundas iPhone
+  {ciudad}» de Maps (cruce por id, teléfono o cercanía). 🔑 «Crear tanda» respeta el tipo y las
+  fundas elegidos en el mapa (la ciudad se elige adentro). `vende_fundas` es opcional en el tipo:
+  la pantalla anda antes de correr el SQL.
 - ⏭️ Falta: los mayoristas actuales en el mapa. ⚠️ 28-oct: de 889 mayoristas sólo 85 tienen una
   dirección con número y 139 una ciudad en alguna venta: ubicarlos es por ciudad o a mano.
 

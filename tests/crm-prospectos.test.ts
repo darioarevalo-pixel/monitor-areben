@@ -6,6 +6,7 @@ import {
   enlaces,
   filtrarProspectos,
   leadExistente,
+  rubros,
   patchLeadDesdeProspecto,
   type Prospecto,
 } from '@/lib/crm/prospectos'
@@ -81,6 +82,19 @@ describe('mapa de locales', () => {
     expect(filtrarProspectos(lista, { ciudad: 'todas', estado: 'contactado', q: '' })[0].id).toBe('b')
     expect(filtrarProspectos(lista, { ciudad: 'todas', estado: 'todos', q: 'CLÍCK' })).toHaveLength(1)
     expect(contarPorEstado(lista)).toEqual({ sin_contactar: 1, contactado: 1, respondio: 0, descartado: 0 })
+  })
+
+  it('filtro por tipo y «venden fundas»; los tipos salen en orden de parecido a un comprador', () => {
+    const lista = [
+      p(),
+      p({ id: 'b', rubro: 'Reparación', vende_fundas: true }),
+      p({ id: 'c', rubro: 'Reparación' }),
+      p({ id: 'd', rubro: 'Informática' }),
+    ]
+    expect(filtrarProspectos(lista, { ciudad: 'todas', estado: 'todos', q: '', rubro: 'Reparación' }).map((x) => x.id)).toEqual(['b', 'c'])
+    expect(filtrarProspectos(lista, { ciudad: 'todas', estado: 'todos', q: '', rubro: 'Reparación', fundas: true }).map((x) => x.id)).toEqual(['b'])
+    expect(filtrarProspectos(lista, { ciudad: 'todas', estado: 'todos', q: '', rubro: 'todos' })).toHaveLength(4)
+    expect(rubros(lista)).toEqual([{ rubro: 'Accesorios', n: 1 }, { rubro: 'Reparación', n: 2 }, { rubro: 'Informática', n: 1 }])
   })
 
   it('pasar a Leads: nace con los datos del local, agendado y con nota de dónde vino', () => {
