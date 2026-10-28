@@ -441,6 +441,7 @@ export const NOMBRES_CATEGORIA: Record<string, string> = {
   SKR: 'Skorts',
   'STU-REM': 'Remeras',
   'STU-BUZ': 'Buzos',
+  'STU-CAM': 'Camperas',
 }
 
 export function nombreGrupo(grupo: string): string {
