@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { estadoTrasContacto, filaDesdeMaps, idDeLocal, validarAccion } from '@/lib/crm/prospectos.core.js'
-import { elegirParaTanda, resumenTanda } from '@/lib/crm/prospectos'
+import { elegirParaTanda, estadisticaPorMedio, leadsComprados, resumenTanda, type EventoProspecto } from '@/lib/crm/prospectos'
 import {
   contarPorEstado,
   enlaces,
@@ -121,7 +121,7 @@ describe('mapa de locales', () => {
       p({ id: 'd', tanda_id: 1, estado: 'descartado' }),
       p({ id: 'e', tanda_id: 2, estado: 'respondio' }),
     ]
-    expect(resumenTanda(ls, 1)).toEqual({ locales: 4, contactados: 3, respondieron: 1, descartados: 1 })
+    expect(resumenTanda(ls, 1)).toEqual({ locales: 4, contactados: 3, respondieron: 1, compraron: 0, descartados: 1 })
   })
 
   it('tanda: pide nombre y locales, sin repetidos, hasta el máximo', () => {
@@ -130,5 +130,44 @@ describe('mapa de locales', () => {
     expect(validarAccion({ action: 'tanda', nombre: 'Pinamar', ids: Array.from({ length: 101 }, (_, i) => 'x' + i) }).ok).toBe(false)
     const v = validarAccion({ action: 'tanda', nombre: 'Pinamar', ids: ['a', 'a', 'b'] })
     expect(v.ok && v.accion).toEqual({ action: 'tanda', nombre: 'Pinamar', ids: ['a', 'b'] })
+  })
+
+  it('por medio: el crédito de la respuesta es del último contacto ANTES de responder', () => {
+    let n = 0
+    const ev = (local_id: string, en: string, o: Partial<EventoProspecto>): EventoProspecto =>
+      ({ id: ++n, local_id, en, tipo: 'contacto', medio: null, estado: null, texto: null, por: null, ...o })
+    const ls = [
+      p({ id: 'a', estado: 'respondio', lead_id: 'L1', ultimo_medio: 'llamada' }),
+      p({ id: 'b', estado: 'contactado' }),
+      p({ id: 'c', estado: 'respondio', lead_id: 'L2' }),
+      p({ id: 'd' }),
+    ]
+    const eventos = [
+      // a: WhatsApp, después Instagram, responde; el seguimiento por llamada ⛔ se lleva el crédito
+      ev('a', '2026-10-28T10:00:00Z', { medio: 'whatsapp' }),
+      ev('a', '2026-10-28T11:00:00Z', { medio: 'instagram' }),
+      ev('a', '2026-10-28T12:00:00Z', { tipo: 'estado', estado: 'respondio' }),
+      ev('a', '2026-10-28T13:00:00Z', { medio: 'llamada' }),
+      ev('b', '2026-10-28T10:00:00Z', { medio: 'whatsapp' }),
+      ev('b', '2026-10-28T10:05:00Z', { medio: 'whatsapp' }),
+      // c: pasó a Leads sin contacto anotado
+      ev('c', '2026-10-28T10:00:00Z', { tipo: 'estado', estado: 'respondio' }),
+      ev('d', '2026-10-28T10:00:00Z', { tipo: 'nota', texto: 'cerrado' }),
+    ]
+    const r = estadisticaPorMedio(ls, eventos, new Set(['L1', 'L2']))
+    const de = (m: string) => r.filas.find((f) => f.medio === m)
+    expect(de('whatsapp')).toEqual({ medio: 'whatsapp', contactados: 2, respondieron: 0, compraron: 0 })
+    expect(de('instagram')).toEqual({ medio: 'instagram', contactados: 1, respondieron: 1, compraron: 1 })
+    expect(de('llamada')).toEqual({ medio: 'llamada', contactados: 1, respondieron: 0, compraron: 0 })
+    expect(r.sinMedio).toEqual({ respondieron: 1, compraron: 1 })
+  })
+
+  it('compraron: sólo los leads en «comprado»', () => {
+    const leads = {
+      L1: { id: 'L1', estado: 'comprado' },
+      L2: { id: 'L2', estado: 'activo' },
+    } as unknown as MapaLeads
+    const ls = [p({ id: 'a', tanda_id: 1, estado: 'respondio', lead_id: 'L1' }), p({ id: 'b', tanda_id: 1, estado: 'respondio', lead_id: 'L2' })]
+    expect(resumenTanda(ls, 1, leadsComprados(leads)).compraron).toBe(1)
   })
 })

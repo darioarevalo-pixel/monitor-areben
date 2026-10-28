@@ -17,13 +17,16 @@ import {
   elegirParaTanda,
   enlaceMaps,
   enlaces,
+  estadisticaPorMedio,
   filtrarProspectos,
   leadExistente,
+  leadsComprados,
   patchLeadDesdeProspecto,
   resumenTanda,
   textoEvento,
   type CuerpoAccion,
   type EstadoProspecto,
+  type EstadisticaMedios,
   type EventoProspecto,
   type Medio,
   type Prospecto,
@@ -45,6 +48,9 @@ import { BuscarInput, Button, Chips, Field, Input, Modal, Notice, NumberField, S
  *
  * Tandas (parte 2, 27-oct): se trabaja de a grupos chicos («15 de Pinamar esta semana»). Un local
  * entra a una sola tanda y queda ahí; la cuenta de cada tanda sale de sus locales.
+ *
+ * Por medio (28-oct): contactados → respondieron → compraron de cada medio, sobre lo filtrado
+ * (ciudad + tanda). «Compraron» sale de los leads «comprado» en Leads, que se leen al abrir.
  */
 
 const MapaLeaflet = dynamic(() => import('./MapaLeaflet').then((m) => m.MapaLeaflet), { ssr: false })
@@ -88,6 +94,7 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
   const [armando, setArmando] = useState(false)
   /** El medio que se abrió y espera el «¿Le escribiste?» de la ficha abierta. */
   const [pendiente, setPendiente] = useState<Medio | null>(null)
+  const [comprados, setComprados] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     let vivo = true
@@ -102,6 +109,10 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
       })
       .catch((e) => vivo && setError('No se pudo leer el mapa: ' + (e as Error).message))
       .finally(() => vivo && setCargando(false))
+    // Sin los leads el mapa anda igual: sólo «compraron» queda en cero.
+    leerMapa<Lead>('crmleads', 'bdi')
+      .then((r) => vivo && r.ok && setComprados(leadsComprados(r.dato)))
+      .catch(() => {})
     return () => {
       vivo = false
     }
@@ -109,9 +120,10 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
 
   const deCiudad = useMemo(() => filtrarProspectos(locales, { ciudad, estado: 'todos', q: '', tanda }), [locales, ciudad, tanda])
   const lista = useMemo(() => filtrarProspectos(locales, { ciudad, estado, q, tanda }), [locales, ciudad, estado, q, tanda])
-  const resumen = useMemo(() => (tanda === 'todas' ? null : resumenTanda(locales, tanda)), [locales, tanda])
+  const resumen = useMemo(() => (tanda === 'todas' ? null : resumenTanda(locales, tanda, comprados)), [locales, tanda, comprados])
   const nombreTanda = (id: number | null) => (id == null ? null : tandas.find((t) => t.id === id)?.nombre || null)
   const n = useMemo(() => contarPorEstado(deCiudad), [deCiudad])
+  const porMedio = useMemo(() => estadisticaPorMedio(deCiudad, eventos, comprados), [deCiudad, eventos, comprados])
   const listaCiudades = useMemo(() => ciudades(locales), [locales])
 
   const p = abierto ? locales.find((l) => l.id === abierto) || null : null
@@ -233,10 +245,11 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
         <Chips opciones={opcionesEstado} value={estado} onChange={(v) => setEstado(v as EstadoProspecto | 'todos')} />
         {resumen && (
           <div style={{ fontSize: 13, color: color.ink2 }}>
-            {resumen.locales} locales · {resumen.contactados} contactados · {resumen.respondieron} respondieron
+            {resumen.locales} locales · {resumen.contactados} contactados · {resumen.respondieron} respondieron · {resumen.compraron} compraron
             {resumen.descartados ? ` · ${resumen.descartados} descartados` : ''}
           </div>
         )}
+        <PorMedio e={porMedio} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: space[3] }}>
@@ -295,6 +308,44 @@ export function MapaLocales({ onVerLead }: { onVerLead: (leadId: string) => void
           ocupado={ocupado} onCerrar={() => setArmando(false)} onCrear={armarTanda} />
       )}
     </>
+  )
+}
+
+/** Contactados → respondieron → compraron de cada medio. Sin ningún contacto todavía, no se muestra. */
+function PorMedio({ e }: { e: EstadisticaMedios }) {
+  const filas = e.filas.filter((f) => f.contactados > 0)
+  if (filas.length === 0) return null
+  const celda = { padding: '4px 10px', textAlign: 'right' as const }
+  const pct = (a: number, b: number) => (b ? ` (${Math.round((a / b) * 100)}%)` : '')
+  return (
+    <table style={{ fontSize: 13, color: color.ink2, borderCollapse: 'collapse', alignSelf: 'flex-start' }}>
+      <thead>
+        <tr style={{ color: color.mut2, fontSize: 12 }}>
+          <th style={{ ...celda, textAlign: 'left', paddingLeft: 0 }}>Por medio</th>
+          <th style={celda}>Contactados</th>
+          <th style={celda}>Respondieron</th>
+          <th style={celda}>Compraron</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filas.map((f) => (
+          <tr key={f.medio} style={{ borderTop: `1px solid ${color.line}` }}>
+            <td style={{ ...celda, textAlign: 'left', paddingLeft: 0, color: color.ink }}>{MEDIO_LABEL[f.medio]}</td>
+            <td style={celda}>{f.contactados}</td>
+            <td style={celda}>{f.respondieron}{pct(f.respondieron, f.contactados)}</td>
+            <td style={celda}>{f.compraron}</td>
+          </tr>
+        ))}
+        {e.sinMedio.respondieron > 0 && (
+          <tr style={{ borderTop: `1px solid ${color.line}`, color: color.mut }}>
+            <td style={{ ...celda, textAlign: 'left', paddingLeft: 0 }}>Sin medio</td>
+            <td style={celda}>–</td>
+            <td style={celda}>{e.sinMedio.respondieron}</td>
+            <td style={celda}>{e.sinMedio.compraron}</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
   )
 }
 

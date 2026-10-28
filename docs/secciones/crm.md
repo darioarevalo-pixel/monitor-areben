@@ -247,7 +247,14 @@ WhatsApp**: un local vive sólo acá («Sin contactar») hasta que **responde �
 - 🔴 **Tocar un medio NO anota el contacto**: abre el canal y la ficha pregunta «¿Le escribiste?»;
   se anota sólo con «Sí». Antes se anotaba con el toque y abrir el chat para mirar dejaba el local
   «Contactado» (le pasó a Darío el 27-oct; se limpió a mano).
-- ⏭️ Falta: estadística por medio y «compraron» por tanda, y los mayoristas actuales en el mapa.
+- **Por medio (28-oct)**: `estadisticaPorMedio` — contactados (locales distintos por medio),
+  respondieron y compraron. 🔑 La respuesta se la lleva el ÚLTIMO contacto ANTES del «Respondió»,
+  sacado del historial: ⛔ no `ultimo_medio`, que se mueve con el seguimiento. «Compraron» = el lead
+  atado está «comprado» en Leads (`leadsComprados`, se lee el KV al abrir; si falla, queda en 0).
+  Va sobre lo filtrado (ciudad + tanda); sin contactos no se muestra. La línea de la tanda suma
+  «compraron».
+- ⏭️ Falta: los mayoristas actuales en el mapa. ⚠️ 28-oct: de 889 mayoristas sólo 85 tienen una
+  dirección con número y 139 una ciudad en alguna venta: ubicarlos es por ciudad o a mano.
 
 ## Lo que ya se rompió acá
 

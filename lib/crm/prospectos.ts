@@ -7,7 +7,7 @@
  */
 import { apiFetch } from '@/lib/api-fetch'
 import { agregar, agregarNota, leadsPorTelefono, setCampo, type MapaLeads } from './leads'
-import { ESTADO_LABEL, MEDIO_LABEL, elegirParaTanda as elegirCore, resumenTanda as resumenCore } from './prospectos.core.js'
+import { ESTADO_LABEL, MEDIO_LABEL, elegirParaTanda as elegirCore, estadisticaPorMedio as estadisticaCore, resumenTanda as resumenCore } from './prospectos.core.js'
 
 export { ESTADOS, ESTADO_LABEL, MAX_TANDA, MEDIOS, MEDIO_LABEL } from './prospectos.core.js'
 
@@ -79,8 +79,17 @@ export async function crearTanda(nombre: string, ids: string[]): Promise<{ tanda
 
 export const elegirParaTanda = elegirCore as (locales: Prospecto[], o: { ciudad?: string; cantidad: number }) => Prospecto[]
 
-export type ResumenTanda = { locales: number; contactados: number; respondieron: number; descartados: number }
-export const resumenTanda = resumenCore as (locales: Prospecto[], tandaId: number) => ResumenTanda
+export type ResumenTanda = { locales: number; contactados: number; respondieron: number; compraron: number; descartados: number }
+export const resumenTanda = resumenCore as (locales: Prospecto[], tandaId: number, comprados?: Set<string>) => ResumenTanda
+
+export type FilaMedio = { medio: Medio; contactados: number; respondieron: number; compraron: number }
+export type EstadisticaMedios = { filas: FilaMedio[]; sinMedio: { respondieron: number; compraron: number } }
+export const estadisticaPorMedio = estadisticaCore as (locales: Prospecto[], eventos: EventoProspecto[], comprados?: Set<string>) => EstadisticaMedios
+
+/** Los ids de los leads que ya compraron: de ahí sale «compraron» en el mapa. */
+export function leadsComprados(leads: MapaLeads): Set<string> {
+  return new Set(Object.values(leads).filter((l) => l.estado === 'comprado').map((l) => l.id))
+}
 
 export type CuerpoAccion =
   | { action: 'contacto'; id: string; medio: Medio }
