@@ -495,7 +495,7 @@ export function FilaRenglon({
         <span style={{ fontSize: font.sm }}>{r.variante.size_name}</span>
         {(r.variante.sku ?? r.variante.barcode) && <span style={{ color: color.mut2 }}>· {r.variante.sku ?? r.variante.barcode}</span>}
         <span>·</span>
-        {quedan < 0 ? <Badge tone="danger">Local: sin stock en Gestión Nube</Badge> : quedan === 0 ? <Badge tone="warning">ÚLTIMA</Badge> : <span>Local: quedan {quedan}</span>}
+        {quedan < 0 ? <Badge tone="danger">Local: sin stock en {r.stock.fuente === 'erp' ? 'el ERP' : 'Gestión Nube'}</Badge> : quedan === 0 ? <Badge tone="warning">ÚLTIMA</Badge> : <span>Local: quedan {quedan}</span>}
         {/* En el local «depósito» es el de atrás de la percha, que ya está en `local`. El Depósito de GN
             (18210) ⛔ vende desde la caja: sólo repone. */}
         <span>· Para reponer: {r.stock.deposito}</span>

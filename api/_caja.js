@@ -90,9 +90,11 @@ import { filtrarPorNombre, ordenParaLaBase, palabrasDeBusqueda, productosPorStoc
 import { COLUMNAS_VENTA as COLUMNAS, SIN_LLEGAR, enviarVenta, pendientesParaReintentar } from '../lib/caja/enviar.core.js'
 import { enviarVentaErp } from '../lib/caja/enviar-erp.core.js'
 import { destinoDelTicket } from '../lib/caja/marca-ticket.core.js'
+import { esStunned } from '../lib/lineas.core.js'
+import { lecturasStunnedErp } from '../lib/stunned/ventas-erp.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, ladoDelEspejo, marcaDeCaja, tokenDe } from '../lib/caja/marcas.core.js'
-import { anotarEnMotor, avisoDelMotor, preciosLocalStunned, registrarEnErp, repasarMotor } from './_caja-motor.js'
+import { anotarEnMotor, avisoDelMotor, preciosLocalStunned, registrarEnErp, repasarMotor, stockStunnedDelLibro } from './_caja-motor.js'
 import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { reglasDeHoy as reglasDeHoyDe } from './_caja-reglas.js'
 import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
@@ -505,6 +507,15 @@ export default async function handler(req, res) {
         }
         const [{ variante, espejo }] = variantes
         let stock
+        // 🔑 Stunned con el libro prendido (`LECTURAS_STUNNED_ERP=1`): el stock es el del ERP, ⛔ el de GN (la venta del
+        // ERP ⛔ baja GN: tras la #25 el POS decía «ÚLTIMA» con el local en 0, prueba del corte 28-oct). Si el ERP ⛔
+        // contesta, el espejo (sus filas STU también salen del libro) y la pantalla lo dice.
+        if (store === 'zattia' && lecturasStunnedErp() && esStunned(variante.sku)) {
+          const l = await stockStunnedDelLibro(store, variante.product_id, variante.size_id)
+          stock = l.error ? { ...espejo, fuente: 'espejo', motivo: sinSecretos(l.error) } : { ...l, fuente: 'erp' }
+          stock.atras = await estantesDe(sb, store, variante.sku)
+          return res.status(200).json({ variante, stock })
+        }
         try {
           // 🔴 Con el token de LECTURA de Zattia, ⛔ el de ventas: en producción `GN_TOKEN_VENTAS` caía
           // siempre al espejo (4-oct), y con éste `inventario/{id}` contesta 200 (es el de los Conteos).

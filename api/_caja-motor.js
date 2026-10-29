@@ -10,6 +10,7 @@
 // ⛔ Archivo `_`: NO es una ruta.
 import { COLUMNAS_MOTOR, DIAS_REPASO, REPASO_POR_VUELTA, anularEnMotor, entradaDelMotor, entradaDelMotorErp, faltanEnMotor } from '../lib/caja/motor.core.js'
 import { configPg } from '../lib/pg.core.js'
+import { SQL_STOCK_VARIANTE_STUNNED, stockDeVarianteStunned } from '../lib/stunned/inventario-erp.core.js'
 
 const PG_DE_STORE = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
 /** El motor tiene que contestar rápido: la cajera está esperando el ticket. Lo que no entra, lo sube el repaso. */
@@ -47,6 +48,16 @@ async function anotarCada(db, registrarVenta, ventas) {
  * general corre en prueba; la real se prende con `0`, y esa SÍ mueve el libro). ⛔ Lanza.
  * @param {string} store @param {any} venta la fila de `caja_venta` @returns {Promise<{ ok: true, numero: number | null } | { ok: false, error: string, reintentable?: boolean }>}
  */
+/**
+ * El stock de una variante de Stunned en el LIBRO (con `LECTURAS_STUNNED_ERP=1` el libro manda, ⛔ GN).
+ * @returns {Promise<{ local: number, deposito: number } | { error: string }>} ⛔ Lanza.
+ */
+export async function stockStunnedDelLibro(store, productId, sizeId) {
+  const r = await conMotor(store, async (db) => stockDeVarianteStunned((await db.query(SQL_STOCK_VARIANTE_STUNNED, [String(productId), String(sizeId)])).rows))
+  if (r.sinConexion) return { error: 'El ERP no está conectado (falta DATABASE_URL en Vercel)' }
+  return r
+}
+
 export async function registrarEnErp(store, venta, env = process.env) {
   const prueba = env.CAJA_STUNNED_PRUEBA !== '0';
   const r = await conMotor(store, async (db, registrarVenta) => {

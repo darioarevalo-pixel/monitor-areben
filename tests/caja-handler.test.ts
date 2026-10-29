@@ -167,6 +167,9 @@ function consulta(tabla: string) {
 // 🪙 El aviso de «falta cambio» (Bruno, 22-oct): ⛔ sale a ningún celular, se mira a quién y qué.
 const avisar = vi.fn(async () => ({ enviados: 1, fallas: 0, telefonos: 1 }))
 vi.mock('../api/_push.js', () => ({ avisar }))
+// El stock de Stunned del LIBRO (prueba del corte, 28-oct): ⛔ hay base en los tests.
+const stockStunnedDelLibro = vi.fn(async () => ({ local: 0, deposito: 14 }) as { local: number; deposito: number } | { error: string })
+vi.mock('../api/_caja-motor.js', async (orig) => ({ ...(await orig<object>()), stockStunnedDelLibro }))
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (t: string) => consulta(t) }) }))
 
 function resFalso() {
@@ -609,6 +612,28 @@ describe('caja · lecturas', () => {
     expect(r.body).toMatchObject({ variante: { product_id: 7, size_id: 8 }, stock: { local: 1, deposito: 4, fuente: 'vivo' } })
     // 🔴 el stock se lee con el token de Zattia: con el de ventas, en producción caía siempre al espejo
     expect(gn.authInventario).toEqual(['Bearer tok-zattia'])
+  })
+
+  it('🔑 Stunned con el libro prendido: el stock sale del ERP, ⛔ de GN (tras la venta #25 decía «ÚLTIMA» con el local en 0)', async () => {
+    conSesion(CAJERA)
+    vi.stubEnv('LECTURAS_STUNNED_ERP', '1')
+    base.inventario = [{ product_id: 70, size_id: 80, product_name: 'REMERA OFICIAL', size_name: 'M', sku: 'STU-REM-0010-M', barcode: '777001', available_quantity: 1, store_name: 'Local' }]
+    try {
+      const r = await correr(req('GET', { action: 'producto', codigo: '777001' }))
+      expect(r.body).toMatchObject({ stock: { local: 0, deposito: 14, fuente: 'erp' } })
+      expect(stockStunnedDelLibro).toHaveBeenCalledWith('zattia', 70, 80)
+      expect(gn.authInventario).toEqual([])
+      // El ERP ⛔ contesta: el espejo (sus filas STU también salen del libro), y se dice por qué.
+      stockStunnedDelLibro.mockResolvedValueOnce({ error: 'El ERP no está conectado' })
+      const r2 = await correr(req('GET', { action: 'producto', codigo: '777001' }))
+      expect(r2.body).toMatchObject({ stock: { fuente: 'espejo', motivo: 'El ERP no está conectado' } })
+      // Sin la llave, Stunned sigue leyendo GN en vivo.
+      vi.stubEnv('LECTURAS_STUNNED_ERP', '')
+      const r3 = await correr(req('GET', { action: 'producto', codigo: '777001' }))
+      expect(r3.body).toMatchObject({ stock: { fuente: 'vivo' } })
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   describe('producto por nombre y talle (Bruno, 4-oct)', () => {

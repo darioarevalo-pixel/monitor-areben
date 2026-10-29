@@ -542,7 +542,8 @@ function POS() {
     const k = claveDe(variante)
     const enCarrito = (cantidades.current.get(k) ?? 0) + 1
     cantidades.current.set(k, enCarrito)
-    setGnSenal(stock.fuente === 'vivo' ? { ok: true, que: 'el stock de la última prenda se leyó en vivo' } : { ok: false, que: `el stock de la última prenda es el de anoche${stock.motivo ? ` (${stock.motivo})` : ''}` })
+    // El de Stunned sale del ERP (`fuente: 'erp'`): ⛔ dice nada de GN.
+    if (stock.fuente !== 'erp') setGnSenal(stock.fuente === 'vivo' ? { ok: true, que: 'el stock de la última prenda se leyó en vivo' } : { ok: false, que: `el stock de la última prenda es el de anoche${stock.motivo ? ` (${stock.motivo})` : ''}` })
     setBor((b) => {
       const i = b.renglones.findIndex((r) => claveDe(r.variante) === claveDe(variante))
       if (i >= 0) {
