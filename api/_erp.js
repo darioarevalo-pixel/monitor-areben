@@ -1473,24 +1473,38 @@ export async function pedidosSinPagar({ marca }) {
   const b = createClient(url, key)
   const ordenes = await leerTodo(b, 'tn_orden', (x) => x.select('tienda, tn_id, numero, creada_en, status, payment_status, medio, gateway, total, estado')
     .in('status', STATUS_POR_COBRAR).not('payment_status', 'in', `(${NO_SIN_PAGAR.join(',')})`).order('creada_en'))
+  const t0 = Date.now(), tiempos = {}
+  const marcar = (k) => { tiempos[k] = Date.now() - t0 }
+  marcar('ped_ordenes')
   const ids = ordenes.map((o) => o.tn_id)
-  const lineas = []
-  for (let i = 0; i < ids.length; i += 200) {
-    lineas.push(...await leerTodo(b, 'tn_orden_linea', (x) => x.select('tienda, tn_id, nombre, sku, cantidad').in('tn_id', ids.slice(i, i + 200)).order('tn_id').order('linea_id')))
+  // Las prendas, la hora de la lectura y lo cobrado en GN ⛔ dependen entre sí: van a la par (29-oct: eran 5 pasos en fila).
+  const traerLineas = async () => {
+    const out = []
+    for (let i = 0; i < ids.length; i += 200) {
+      out.push(...await leerTodo(b, 'tn_orden_linea', (x) => x.select('tienda, tn_id, nombre, sku, cantidad').in('tn_id', ids.slice(i, i + 200)).order('tn_id').order('linea_id')))
+    }
+    return out
   }
-  const [lectura] = (await b.from('tn_lectura').select('tienda, leida_en').order('leida_en', { ascending: false }).limit(1)).data || []
   // Bruno, 19-oct: el entregado sin cobrar que GN ya tiene cobrado sale de la lista (el espejo `ventas` / `ventas_cobros`).
   const entregados = ordenes.filter(esEntregadoSinCobrarTN)
-  let cobradosGN = new Set()
-  if (entregados.length) {
+  const traerCobradosGN = async () => {
+    if (!entregados.length) return new Set()
     const ventasGN = await leerTodo(b, 'ventas', (x) => x.select('id, tn_order, date_sale').in('tn_order', entregados.map((o) => String(o.numero))))
     const cobros = ventasGN.length ? await leerTodo(b, 'ventas_cobros', (x) => x.select('venta_id, monto').in('venta_id', ventasGN.map((v) => v.id))) : []
-    cobradosGN = cobradosEnGN({ entregados, ventasGN, cobros })
+    return cobradosEnGN({ entregados, ventasGN, cobros })
   }
+  const [lineas, lecturas, cobradosGN] = await Promise.all([
+    traerLineas(),
+    b.from('tn_lectura').select('tienda, leida_en').order('leida_en', { ascending: false }).limit(1),
+    traerCobradosGN(),
+  ])
+  const [lectura] = lecturas.data || []
+  marcar('ped_base')
   const armado = armarPedidosSinPagar({ ordenes, lineas, ahora: Date.now(), cobradosGN })
   const nombres = await compradoresTn(armado.pedidos)
+  marcar('ped_nombres_tn')
   for (const p of armado.pedidos) p.comprador = nombres.get(`${p.tienda}/${p.tnId}`) ?? null
-  return { ...armado, leidaEn: lectura?.leida_en ?? null }
+  return { ...armado, leidaEn: lectura?.leida_en ?? null, tiempos: { ...tiempos, ped_cuantos: ordenes.length } }
 }
 
 /**
@@ -1796,7 +1810,8 @@ export default async function handler(req, res) {
       p.catch(() => {}) // si la lista corta antes (400), el rechazo ⛔ queda suelto; el await de adentro lo sigue tirando
       const r = await listaDeVentas({ marca, desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), pedidos: p.then((x) => x.pedidos || []), tnLeidaEn: p.then((x) => x.leidaEn ?? null), linea: String(req.query.linea || '') }, { compradores: compradoresTn })
       // Dónde se va el tiempo (DevTools › Network › Timing): para cazar los picos de 8 s.
-      res.setHeader('Server-Timing', [`pedidos;dur=${tPedidos}`, ...Object.entries(r.tiempos || {}).map(([k, v]) => `${k};dur=${v}`), `total;dur=${Date.now() - t0}`].join(', '))
+      const tp = await p.then((x) => x.tiempos || {}, () => ({}))
+      res.setHeader('Server-Timing', [`pedidos;dur=${tPedidos}`, ...Object.entries(tp).map(([k, v]) => `${k};dur=${v}`), ...Object.entries(r.tiempos || {}).map(([k, v]) => `${k};dur=${v}`), `total;dur=${Date.now() - t0}`].join(', '))
       delete r.tiempos
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
