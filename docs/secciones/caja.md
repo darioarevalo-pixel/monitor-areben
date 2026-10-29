@@ -58,11 +58,13 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   verifica ⛔ armado en el navegador). Con venta, `exigirDevolucion` frena devolver de más contando lo ya cambiado; el total se calcula
   en el paso 2 (en el paso 1 el pie sólo dice «Devuelve»). El saldo de la clienta se lee con `linea=stunned`, y el modo (prueba o
   real) lo da la venta, o `config.stunned_prueba` sin venta. Las piezas de pantalla: `partesCambio.tsx`. Tests: `caja-cambio-suelto`, `caja-pos-cambios`.
-  🔑 **Al registrarse sale el COMPROBANTE DEL CAMBIO** (prueba del corte, 28-oct: ⛔ emitía nada): número del cambio, de qué
-  venta, qué devuelve y qué se lleva con su valor, y cómo cerró (cobrado, a favor + saldo, sin diferencia). Lo arma `useCambio`
-  (`hecho.comprobante`, con lo que había en pantalla ANTES de vaciarla) y lo dibuja `armarComprobanteCambio` (`ticket.ts`); el
-  cartel «Cambio #N» lo reimprime. La «Última venta» se va al registrarlo: su «Ticket de cambio» era de la venta anterior.
-  ⛔ Lo imprime sólo el POS; erp › Caja › Cambio todavía ⛔.
+  🔑 **El cambio es a precio de LISTA, a los dos lados** (Bruno, 28-oct): de una venta de GN, `listaEnGN` (`unit_price`, ⛔ lo
+  pagado con el descuento del efectivo); de una del ERP, el importe de la línea (el descuento de la forma de pago va en los pagos).
+  🔑 **Al registrarse sale el COMPROBANTE con el MOLDE DEL TICKET DE VENTA** (Bruno, 28-oct): `useCambio` lo arma
+  (`hecho.comprobante`, ANTES de vaciar la pantalla) y `ticketDeCambio` ⇒ `armarTicket`; lo que vuelve va en renglones
+  NEGATIVOS y donde la venta dice TOTAL dice SIN DIFERENCIA / DIFERENCIA A COBRAR / SALDO A FAVOR. Queda la MISMA tarjeta
+  de «Última venta» («Cambio #N · en el ERP»): «Reimprimir ticket» = el comprobante, «Ticket de cambio» = el de regalo de lo
+  que se lleva. ⛔ Lo imprime sólo el POS; erp › Caja › Cambio todavía ⛔.
 - 🔑 **La venta del ERP (Stunned) lleva SU número** (`erp_numero`): `numeroDeLaVenta` = `gn_number ?? erp_numero`, en el ticket,
   la «Última venta» y la lista de Ventas («En el ERP»; ⛔ en Provisorias). Sin número todavía: «pendiente en el ERP», ⛔ en GN.
 - 🔑 **Con `LECTURAS_STUNNED_ERP=1`, el stock de una prenda de Stunned sale del LIBRO** (`stockStunnedDelLibro`,
