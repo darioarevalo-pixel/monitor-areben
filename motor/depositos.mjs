@@ -31,6 +31,11 @@ export function depositoDe(base, storeName) {
   return POR_NOMBRE[base]?.[String(storeName).trim().toLowerCase()] ?? null
 }
 
+/** ¿Es un depósito que GN conoce? El Evento (sql/058) ⛔: GN ⛔ lo tiene y el alineo ⛔ lo toca. */
+export function esDeGN(base, deposito) {
+  return Object.values(POR_NOMBRE[base] ?? {}).includes(deposito)
+}
+
 /** El depósito canónico de un `store_id` de GN, o null. */
 export function depositoDeId(base, storeId) {
   if (storeId == null) return null
@@ -45,6 +50,25 @@ export function depositoDeId(base, storeId) {
 export function lineaDe(base, sku) {
   if (base === 'zattia') return sku && /^stu/i.test(String(sku)) ? 'stunned' : 'zattia'
   return 'bdi'
+}
+
+/**
+ * 🔴 Desde cuándo GN ⛔ le dice nada al libro de una LÍNEA (error 13, Bruno 28-oct: «desde esta noche no se proyecta más, porque
+ * la venta entra bien»): la línea vive en el ERP y sus ventas (Caja, pedidos de TN) bajan el libro directo. Lo que GN siga
+ * trayendo —la integración de TN que se importó sola la #140 como GN #31028, una venta cargada a mano, un borrado— contaría
+ * DOS VECES. El instante es el del ALINEO del corte (`alinear --motivo "corte de Stunned"`, grupo `alineo:2026-10-28`):
+ * hasta ahí GN y el libro coinciden. ⛔ Zattia ni BDI: siguen vendiendo por GN y su proyección es lo único que el libro sabe.
+ */
+export const CORTES_GN = Object.freeze({ stunned: '2026-10-28T23:40:27.759Z' })
+
+/**
+ * ¿GN ya ⛔ manda en esa línea en ese instante? `cortes` es obligatorio (⛔ un default que olvida el corte callado).
+ * @param {string} linea @param {string|Date} instante @param {Record<string,string>} cortes
+ */
+export function gnYaNoManda(linea, instante, cortes) {
+  if (!cortes) throw new Error('gnYaNoManda: faltan los cortes (CORTES_GN).')
+  const c = cortes[linea]
+  return !!c && new Date(instante).getTime() >= Date.parse(c)
 }
 
 /** El día de Argentina (UTC−3, sin horario de verano) de un instante. */

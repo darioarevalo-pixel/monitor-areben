@@ -85,8 +85,9 @@ async function enTransaccion(db, fn) {
 async function contexto(db, linea) {
   const [m] = await q(db, 'select empresa_id from marca where id = $1', [linea])
   if (!m) return null
-  const depositos = (await q(db, 'select id from deposito where marca = $1', [linea])).map((d) => d.id)
-  return { empresa_id: m.empresa_id, depositos }
+  // Sólo los ACTIVOS (sql/058): al Evento apagado ⛔ entra ni sale nada. Sin la 058, todos.
+  const todos = await q(db, `select id, coalesce((to_jsonb(d) ->> 'activo')::boolean, true) as activo from deposito d where marca = $1`, [linea])
+  return { empresa_id: m.empresa_id, depositos: todos.filter((d) => d.activo).map((d) => d.id), apagados: todos.filter((d) => !d.activo).map((d) => d.id) }
 }
 
 const numerosA = (r) => ({ ...r, product_id: Number(r.product_id), size_id: Number(r.size_id) })
@@ -124,6 +125,9 @@ export async function crearTransferencia(db, e, { ahora = new Date() } = {}) {
     if (origen === 'reposicion' && !origenRef) return falla('ENTRADA_INVALIDA', 'Una transferencia de Reposición necesita el armado (origen_ref)', 'origen_ref')
     const ctx = await contexto(db, e.linea)
     if (!ctx) return falla('ENTRADA_INVALIDA', `Línea desconocida: ${e.linea}`, 'linea')
+    for (const [d, campo] of [[e.desde, 'desde'], [e.hacia, 'hacia']]) {
+      if (ctx.apagados.includes(d)) return falla('DEPOSITO_APAGADO', `El depósito ${d} está apagado: activalo antes de mover mercadería`, campo)
+    }
     if (!ctx.depositos.includes(e.desde)) return falla('ENTRADA_INVALIDA', `Depósito de salida desconocido para ${e.linea}: ${e.desde}`, 'desde')
     if (!ctx.depositos.includes(e.hacia)) return falla('ENTRADA_INVALIDA', `Depósito de llegada desconocido para ${e.linea}: ${e.hacia}`, 'hacia')
     if (e.desde === e.hacia) return falla('ENTRADA_INVALIDA', 'Sale y llega al mismo depósito', 'hacia')

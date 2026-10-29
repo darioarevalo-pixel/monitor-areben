@@ -185,8 +185,9 @@ async function conteosRecientes(db, deposito, renglones, ahora) {
 async function contexto(db, linea) {
   const [m] = await q(db, 'select empresa_id from marca where id = $1', [linea])
   if (!m) return null
-  const depositos = (await q(db, 'select id from deposito where marca = $1', [linea])).map((d) => d.id)
-  return { empresa_id: m.empresa_id, depositos }
+  // Sólo los ACTIVOS (sql/058): al Evento apagado ⛔ entra ni sale nada. Sin la 058, todos.
+  const todos = await q(db, `select id, coalesce((to_jsonb(d) ->> 'activo')::boolean, true) as activo from deposito d where marca = $1`, [linea])
+  return { empresa_id: m.empresa_id, depositos: todos.filter((d) => d.activo).map((d) => d.id), apagados: todos.filter((d) => !d.activo).map((d) => d.id) }
 }
 
 /**

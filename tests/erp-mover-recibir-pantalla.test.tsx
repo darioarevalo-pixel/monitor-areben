@@ -14,6 +14,7 @@ const doc = (x: Record<string, unknown>) => ({ id: 'a'.repeat(8) + '-aaaa-aaaa-a
 const res = (t: unknown, extra = {}) => ({ ok: true, transferencia: t, ya: false, movimientos: 1, unidades: 2, diferencias: [], avisos: [], ...extra })
 const m = vi.hoisted(() => ({
   buscarPrendas: vi.fn(), leerListaDeStock: vi.fn(), leerTransferenciasDoc: vi.fn(), crearTransferenciaDoc: vi.fn(), armarTransferenciaDoc: vi.fn(), enviarTransferenciaDoc: vi.fn(), recibirTransferenciaDoc: vi.fn(), cancelarTransferenciaDoc: vi.fn(),
+  leerDepositos: vi.fn(),
 }))
 vi.mock('@/lib/erp/cliente', () => m)
 
@@ -21,7 +22,11 @@ let root: Root | null = null
 let host: HTMLDivElement
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); document.body.innerHTML = ''; vi.clearAllMocks() })
-beforeEach(() => { m.leerListaDeStock.mockResolvedValue({ filas: [{ producto: '10', talle: '1', nombre: 'REMERA OVERSIZE', talleNombre: 'M' }] }) })
+beforeEach(() => {
+  m.leerListaDeStock.mockResolvedValue({ filas: [{ producto: '10', talle: '1', nombre: 'REMERA OVERSIZE', talleNombre: 'M' }] })
+  // El depósito Evento (motor sql/058) apagado: los selects son los de siempre.
+  m.leerDepositos.mockResolvedValue({ depositos: [{ id: 'evento', nombre: 'Evento', activo: false, deGN: false, unidades: 0 }] })
+})
 
 const esperar = () => act(async () => { await new Promise((r) => setTimeout(r, 0)) })
 async function montar() {
@@ -46,6 +51,18 @@ async function escanear(codigo: string) {
 }
 
 describe('Mover y recibir', () => {
+  it('el Evento (motor sql/058) aparece en «Sale de» y «Va a» sólo si está ACTIVO', async () => {
+    m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [], enTransito: [] })
+    await montar()
+    const opciones = () => [...document.querySelectorAll('select')].map((x) => [...x.options].map((o) => o.value))
+    expect(opciones().flat()).not.toContain('evento')
+    act(() => root?.unmount()); root = null; host.remove()
+    m.leerDepositos.mockResolvedValue({ depositos: [{ id: 'evento', nombre: 'Evento', activo: true, deGN: false, unidades: 0 }] })
+    await montar()
+    const [sale, va] = opciones()
+    expect(sale).toContain('evento'); expect(va).toContain('evento')
+  })
+
   it('dos escaneos suman 2 y «Mover» crea, arma y envía con esos renglones', async () => {
     m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [], enTransito: [] })
     m.buscarPrendas.mockResolvedValue({ variantes: [REM], cortado: false })

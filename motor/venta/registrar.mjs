@@ -34,9 +34,12 @@ async function enTransaccion(db, fn) {
   }
 }
 
-/** La configuración de la marca (§3 del contrato), con la forma que pide `armar.mjs`. */
+/**
+ * La configuración de la marca (§3 del contrato), con la forma que pide `armar.mjs`. Un depósito APAGADO (sql/058, el Evento
+ * fuera de un evento) ⛔ vende. `to_jsonb(d)->>'activo'` y ⛔ `d.activo`: una base sin la 058 sigue vendiendo como antes.
+ */
 export async function leerConf(db, marca) {
-  const marcas = await q(db, `select m.id, m.empresa_id, coalesce(array_agg(d.id) filter (where d.vende), '{}') as depositos
+  const marcas = await q(db, `select m.id, m.empresa_id, coalesce(array_agg(d.id) filter (where d.vende and coalesce((to_jsonb(d) ->> 'activo')::boolean, true)), '{}') as depositos
     from marca m left join deposito d on d.marca = m.id where m.id = $1 group by m.id, m.empresa_id`, [marca])
   const cuentas = await q(db, 'select id, marca, gn_cuenta_id, activa, medio, nombre from cuenta_cobro where marca = $1', [marca])
   // Los canales `gn_*` son de la historia de Gestión Nube (sql/041): ⛔ se eligen en una venta nueva.
