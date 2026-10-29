@@ -19,7 +19,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { EmptyState, Tabs, color, space, weight } from '@/components/ui'
+import { EmptyState, Modal, Tabs, color, space, weight } from '@/components/ui'
 import { leerConfig } from '@/lib/caja/cliente'
 import { usarMarcaCaja } from '@/lib/caja/marca'
 import { CUENTAS } from '@/lib/cuentas'
@@ -157,6 +157,13 @@ function Trazo({ d, size = 18 }: { d: string; size?: number }) {
   )
 }
 
+/** 📱 La barra de abajo del celular (Bruno, 29-oct): las 4 que más se usan; el resto, en «Más». */
+const ABAJO = ['inicio', 'ventas', 'caja', 'stock']
+const EN_MAS = SECCIONES_ERP.filter((s) => !ABAJO.includes(s.key))
+const TRAZO_MAS = 'M5 12h.01 M12 12h.01 M19 12h.01'
+const TRAZO_BUSCAR = 'M21 21l-4.3-4.3 M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z'
+const TRAZO_VOLVER = 'M19 12H5 M12 19l-7-7 7-7'
+
 type AAbrir = { tipo: 'venta'; id: string; numero: number; periodo: string } | { tipo: 'cliente'; doc: string | null; nombre: string } | null
 let pedidoDeBusqueda: AAbrir = null
 let prendaAAjustarPendiente: PrendaAAjustar | null = null
@@ -179,6 +186,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const ir = (s: string, p?: string | null, v?: string | null) => router.push(hrefErp(s, p, v))
   // Búsqueda global (⌘K) y atajos (?). Lo que se elige viaja en memoria (como `aAjustar`): la lista que lo abre lo recibe y lo suelta.
   const [panel, setPanel] = useState<'buscar' | 'atajos' | null>(null)
+  // 📱 La hoja de «Más» (sólo en el celular): marca, las secciones que no entran abajo, Buscar y Volver al monitor.
+  const [hojaMas, setHojaMas] = useState(false)
   // `Erp` se REMONTA al cambiar de sección (un `useState` se perdía en el camino): el pedido vive en el módulo y la lista lo suelta.
   const [aAbrir, setAAbrirEstado] = useState<AAbrir>(() => pedidoDeBusqueda)
   const setAAbrir = (v: AAbrir) => { pedidoDeBusqueda = v; setAAbrirEstado(v) }
@@ -233,8 +242,42 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
     ir('clientes', 'clientes')
   }
 
+  // El selector BDI · Zattia · Stunned: en el menú de la compu (oscuro) y en la hoja de «Más» del celular (claro).
+  const selectorMarca = (claro: boolean) => opciones.length > 1 && (
+    <div role="radiogroup" aria-label="Marca" style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 9, background: claro ? color.bg2 : 'rgba(255,255,255,0.08)' }}>
+      {opciones.map((o) => {
+        const on = opcionActiva === o.key
+        return (
+          <button
+            key={o.key} type="button" role="radio" aria-checked={on} onClick={() => elegirOpcion(o.key)}
+            style={{ flex: 1, height: claro ? 36 : 30, border: 0, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: weight.semibold, whiteSpace: 'nowrap', background: on ? (claro ? color.surface : 'rgba(255,255,255,0.16)') : 'transparent', color: on ? (claro ? color.ink : '#fff') : (claro ? color.mut : '#94a3b8'), boxShadow: on && claro ? '0 1px 2px rgba(16,24,40,.1)' : undefined }}
+          >
+            <span aria-hidden style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, marginRight: 6, background: COLOR_DE_MARCA[o.key] }} />
+            {o.titulo}
+          </button>
+        )
+      })}
+    </div>
+  )
+  const nombreMarca = opciones.find((o) => o.key === opcionActiva)?.titulo ?? CUENTAS[marca].nombre
+  const enMas = EN_MAS.some((s) => s.key === seccion.key)
+  const contadorMas = EN_MAS.reduce((a, s) => a + (contadores[s.key] ?? 0), 0)
+
   return (
     <div className="shell erp-app">
+      {/* 📱 Arriba en el celular: la sección, la marca (abre «Más», donde se cambia) y la lupa. En la compu ⛔ se dibuja (globals.css). */}
+      <div className="erp-movil-top">
+        <span className="erp-movil-titulo">{seccion.titulo}</span>
+        <button type="button" className="erp-movil-marca" onClick={() => setHojaMas(true)} aria-label={`Marca: ${nombreMarca}. Cambiar`}>
+          <span aria-hidden style={{ width: 8, height: 8, borderRadius: 4, background: COLOR_DE_MARCA[opcionActiva] }} />
+          {nombreMarca}
+          <span aria-hidden style={{ fontSize: 10, opacity: 0.8 }}>▾</span>
+        </button>
+        <button type="button" className="erp-movil-icono" onClick={() => setPanel('buscar')} aria-label="Buscar una venta, producto o cliente">
+          <Trazo d={TRAZO_BUSCAR} />
+        </button>
+      </div>
+
       <nav aria-label="Secciones del ERP" className="erp-menu">
         <div className="erp-menu-logo">
           <span aria-hidden style={{ width: 28, height: 28, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'var(--mo-brand-solid)', fontSize: 14 }}>A</span>
@@ -251,25 +294,13 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
           )
         })}
         <div className="erp-menu-pie">
-          {opciones.length > 1 && (
-            <div role="radiogroup" aria-label="Marca" style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 9, background: 'rgba(255,255,255,0.08)' }}>
-              {opciones.map((o) => (
-                <button
-                  key={o.key} type="button" role="radio" aria-checked={opcionActiva === o.key} onClick={() => elegirOpcion(o.key)}
-                  style={{ flex: 1, height: 30, border: 0, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: weight.semibold, whiteSpace: 'nowrap', background: opcionActiva === o.key ? 'rgba(255,255,255,0.16)' : 'transparent', color: opcionActiva === o.key ? '#fff' : '#94a3b8' }}
-                >
-                  <span aria-hidden style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, marginRight: 6, background: COLOR_DE_MARCA[o.key] }} />
-                  {o.titulo}
-                </button>
-              ))}
-            </div>
-          )}
+          {selectorMarca(false)}
           <button type="button" onClick={() => setPanel('buscar')} className="erp-menu-item" style={{ height: 'auto', border: 0, background: 'transparent', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
-            <Trazo d="M21 21l-4.3-4.3 M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z" />
+            <Trazo d={TRAZO_BUSCAR} />
             <span>Buscar</span><kbd style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.7 }}>⌘K</kbd>
           </button>
           <Link href="/inicio" className="erp-menu-item">
-            <Trazo d="M19 12H5 M12 19l-7-7 7-7" />
+            <Trazo d={TRAZO_VOLVER} />
             <span>Volver al monitor</span>
           </Link>
         </div>
@@ -285,8 +316,9 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
                   : `${lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy. Lo ven sólo los administradores.`}
               </p>
               {/* Título + pestañas en UNA línea (diseño §9). */}
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: space[5], flexWrap: 'wrap', borderBottom: `1px solid ${color.line}` }}>
-                <h1 style={{ margin: 0, paddingBottom: 6, fontSize: 20, fontWeight: weight.semibold, color: color.ink, whiteSpace: 'nowrap', borderLeft: `4px solid ${COLOR_DE_MARCA[opcionActiva]}`, paddingLeft: 10 }}>{seccion.titulo}</h1>
+              <div className="erp-pestanias" style={{ display: 'flex', alignItems: 'flex-end', gap: space[5], flexWrap: 'wrap', borderBottom: `1px solid ${color.line}` }}>
+                {/* 📱 En el celular el título va en la barra de arriba (`erp-movil-top`): acá se esconde. */}
+                <h1 className="erp-titulo" style={{ margin: 0, paddingBottom: 6, fontSize: 20, fontWeight: weight.semibold, color: color.ink, whiteSpace: 'nowrap', borderLeft: `4px solid ${COLOR_DE_MARCA[opcionActiva]}`, paddingLeft: 10 }}>{seccion.titulo}</h1>
                 {seccion.pestanias.length > 1 && (
                   <Tabs variant="underline" items={seccion.pestanias.map((p) => ({ ...p, badge: <Contador n={contadores[`${seccion.key}/${p.key}`]} titulo={TITULO_CONTADOR[seccion.key] ?? 'para hacer'} /> }))} value={pestania ?? ''} onChange={(k) => { setAAjustar(null); ir(seccion.key, k) }} style={{ borderBottom: 'none', flex: '1 1 auto' }} />
                 )}
@@ -294,7 +326,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             </header>
 
             {vista && (
-              <Tabs items={seccion.pestanias.find((p) => p.key === pestania)?.vistas ?? []} value={vista} onChange={(k) => ir(seccion.key, pestania, k)} />
+              // 📱 En el celular las vistas se deslizan de costado (`erp-vistas`, globals.css).
+              <div className="erp-vistas"><Tabs items={seccion.pestanias.find((p) => p.key === pestania)?.vistas ?? []} value={vista} onChange={(k) => ir(seccion.key, pestania, k)} /></div>
             )}
             {seccion.key === 'inicio' && <InicioErp key={marca} href={hrefErp} />}
             {seccion.vacia && <EmptyState title={seccion.vacia} />}
@@ -331,6 +364,46 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
         </div>
         </ProveedorLineaErp>
       </div>
+      {/* 📱 Abajo en el celular: Inicio · Ventas · Caja · Stock · Más (Bruno, 29-oct). En la compu ⛔ se dibuja (globals.css). */}
+      <nav aria-label="Secciones del ERP (celular)" className="erp-movil-nav">
+        {ABAJO.map((k) => {
+          const s = SECCIONES_ERP.find((x) => x.key === k)!
+          const on = s.key === seccion.key
+          return (
+            <Link key={k} href={hrefErp(k)} aria-current={on ? 'page' : undefined} className={`erp-movil-nav-item${on ? ' erp-movil-nav-item--on' : ''}`}>
+              <Trazo d={s.icono} size={20} />
+              <span>{s.titulo}</span>
+              {!!contadores[k] && <span className="erp-movil-nav-n" aria-label={`${contadores[k]} ${TITULO_CONTADOR[k] ?? 'para hacer'}`}>{contadores[k]}</span>}
+            </Link>
+          )
+        })}
+        <button type="button" onClick={() => setHojaMas(true)} aria-expanded={hojaMas} className={`erp-movil-nav-item${enMas ? ' erp-movil-nav-item--on' : ''}`}>
+          <Trazo d={TRAZO_MAS} size={20} />
+          <span>Más</span>
+          {contadorMas > 0 && <span className="erp-movil-nav-n" aria-label={`${contadorMas} para hacer`}>{contadorMas}</span>}
+        </button>
+      </nav>
+      <Modal abierto={hojaMas} onCerrar={() => setHojaMas(false)} titulo="Más">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {selectorMarca(true)}
+          {EN_MAS.map((s) => (
+            <Link key={s.key} href={hrefErp(s.key)} onClick={() => setHojaMas(false)} aria-current={s.key === seccion.key ? 'page' : undefined} className="erp-hoja-item">
+              <Trazo d={s.icono} />
+              <span>{s.titulo}</span>
+              <Contador n={contadores[s.key]} titulo={TITULO_CONTADOR[s.key] ?? 'para hacer'} />
+            </Link>
+          ))}
+          <div style={{ height: 1, background: color.line, margin: '4px 0' }} />
+          <button type="button" className="erp-hoja-item" onClick={() => { setHojaMas(false); setPanel('buscar') }}>
+            <Trazo d={TRAZO_BUSCAR} />
+            <span>Buscar una venta, producto o cliente</span>
+          </button>
+          <Link href="/inicio" className="erp-hoja-item">
+            <Trazo d={TRAZO_VOLVER} />
+            <span>Volver al monitor</span>
+          </Link>
+        </div>
+      </Modal>
       {panel === 'buscar' && <BusquedaGlobal marca={marca} marcas={marcas} secciones={SECCIONES_BUSCABLES} onElegir={elegirDeLaBusqueda} onCerrar={() => setPanel(null)} />}
       {panel === 'atajos' && <HojaDeAtajos onCerrar={() => setPanel(null)} />}
       {prendaGlobal && <FichaPrenda key={`${prendaGlobal.marca}/${prendaGlobal.producto}/${prendaGlobal.talle}`} marca={prendaGlobal.marca} prenda={{ producto: prendaGlobal.producto, talle: prendaGlobal.talle, fila: null }} onCerrar={() => setPrendaGlobal(null)} ajustar={ajustarPrenda} />}

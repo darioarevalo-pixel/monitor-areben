@@ -14,9 +14,18 @@
  *  - **Íconos A LA IZQUIERDA** (listas de TRABAJO), en la primera columna después del tilde: `acciones(fila)`.
  *  - Clic en la fila ⇒ `onAbrir` (la ficha al costado: la lista ⛔ se pierde). Los botones de adentro ⛔ la abren.
  *  - Una sola densidad: filas de 32 px (diseño §9; ⛔ interruptor Compacta/Cómoda).
+ *  - 📱 **En el celular (≤ 900 px, Bruno 29-oct) cada fila es una TARJETA**, si la pantalla declaró `movil` en sus columnas:
+ *    el `titulo` arriba a la izquierda, el `dato` grande a la derecha y abajo los `chico`s (los de texto a la izquierda,
+ *    separados por «·»; los números —`derecha`— a la derecha y con su nombre: «Local 3»). La `oculta` ⛔ se dibuja.
+ *    ⛔ tilde ni íconos: en el celular ⛔ se trabaja en lote, y la acción está en la ficha. Sin `movil` en ninguna
+ *    columna la lista queda como en la compu (se corre de costado) hasta que la pantalla lo declare.
  */
 
 import { color, font, radius, weight } from '@/components/ui/tokens'
+import { usePantallaAngosta } from '@/lib/movil'
+
+/** Qué es la columna en la tarjeta del celular (ver arriba). */
+export type MovilColumna = 'titulo' | 'dato' | 'chico' | 'oculta'
 
 export type ColumnaLista = {
   key: string
@@ -25,6 +34,14 @@ export type ColumnaLista = {
   ancho: string
   ordena?: boolean
   derecha?: boolean
+  movil?: MovilColumna
+}
+
+/** Cómo se reparte una fila en la tarjeta: las columnas de cada lugar, en el orden en que vienen. */
+export function partesDeTarjeta(columnas: ColumnaLista[]) {
+  const de = (m: MovilColumna) => columnas.filter((c) => c.movil === m)
+  const chicos = de('chico')
+  return { titulo: de('titulo')[0] ?? null, dato: de('dato')[0] ?? null, izquierda: chicos.filter((c) => !c.derecha), derecha: chicos.filter((c) => c.derecha) }
 }
 
 export type OrdenLista = { col: string; dir: 'asc' | 'desc' } | null
@@ -67,6 +84,10 @@ export function ListaTrabajo<T>({
   vacio?: React.ReactNode
   maxAlto?: number | string
 }) {
+  const angosta = usePantallaAngosta()
+  if (angosta && columnas.some((c) => c.movil)) {
+    return <Tarjetas columnas={columnas} filas={filas} claveDe={claveDe} celda={celda} activa={activa} onAbrir={onAbrir} etiquetaFila={etiquetaFila} vacio={vacio} />
+  }
   const conTilde = !!onSeleccion
   const anchos = [conTilde ? '36px' : null, acciones ? `${anchoAcciones}px` : null, ...columnas.map((c) => c.ancho)].filter((x): x is string => !!x)
   const plantilla = anchos.join(' ')
@@ -145,6 +166,50 @@ export function ListaTrabajo<T>({
                 {celda(f, c.key)}
               </span>
             ))}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function Tarjetas<T>({ columnas, filas, claveDe, celda, activa, onAbrir, etiquetaFila, vacio }: {
+  columnas: ColumnaLista[]
+  filas: T[]
+  claveDe: (f: T) => string
+  celda: (f: T, col: string) => React.ReactNode
+  activa?: string | null
+  onAbrir?: (f: T) => void
+  etiquetaFila: (f: T) => string
+  vacio?: React.ReactNode
+}) {
+  const { titulo, dato, izquierda, derecha } = partesDeTarjeta(columnas)
+  const linea: React.CSSProperties = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: font.sm, color: color.mut, fontVariantNumeric: 'tabular-nums' }
+  return (
+    <div role="list" className="mo-tarjetas" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8 }}>
+      {!filas.length && vacio}
+      {filas.map((f) => {
+        const k = claveDe(f)
+        return (
+          // 🔴 `height: 'auto'`: `.shell-content button` le fija la altura de un control (tests/boton-crudo-altura).
+          <div key={k} role="listitem">
+          <button
+            type="button" aria-current={activa === k || undefined} onClick={() => onAbrir?.(f)}
+            style={{
+              height: 'auto', width: '100%', textAlign: 'left', font: 'inherit', cursor: onAbrir ? 'pointer' : 'default',
+              display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '2px 10px', padding: '9px 10px', borderRadius: 11,
+              border: `1px solid ${activa === k ? 'var(--mo-brand-border)' : color.line}`, background: activa === k ? color.brandBg : color.surface, color: color.ink,
+            }}
+          >
+            <span data-movil="titulo" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: weight.semibold, fontSize: 13.5 }}>{titulo ? celda(f, titulo.key) : etiquetaFila(f)}</span>
+            <span data-movil="dato" style={{ textAlign: 'right', whiteSpace: 'nowrap', fontWeight: weight.bold, fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>{dato ? celda(f, dato.key) : null}</span>
+            <span style={linea}>
+              {izquierda.map((c, i) => <span key={c.key} data-movil="chico">{i > 0 && ' · '}{celda(f, c.key)}</span>)}
+            </span>
+            <span style={{ ...linea, textAlign: 'right' }}>
+              {derecha.map((c, i) => <span key={c.key} data-movil="chico">{i > 0 && ' · '}{c.titulo} {celda(f, c.key)}</span>)}
+            </span>
+          </button>
           </div>
         )
       })}

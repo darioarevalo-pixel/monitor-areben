@@ -15,12 +15,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import {
-  Button, EmptyState, Icono, MenuAcciones, Notice, Paginacion, Select, color, font, space, weight, type AccionMenu,
+  Button, EmptyState, Icono, MenuAcciones, Notice, Paginacion, color, font, space, weight, type AccionMenu,
 } from '@/components/ui'
-import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, IconoFila, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, FiltroOpciones, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { usePantallaAngosta } from '@/lib/movil'
 import { leerListaDeVentas, type FilaVentaLista, type MarcaErp, type QueSabeElMotor } from '@/lib/erp/cliente'
 import {
   COBRO, COLUMNAS, ESTADO, ORIGEN, PERIODOS, VISTAS, accionesDeFila, alternarColumna, contarVistas, filtrar, moverColumna,
@@ -42,6 +43,9 @@ export type Prefs = { orden: string[]; visibles: string[] }
 type Ventana = { tipo: 'cobro' | 'editar'; fila: FilaVentaLista; desdeFicha: boolean } | null
 
 /** El `Select` del kit es de ancho 100% (formularios): en la barra cada desplegable mide lo suyo, ⛔ una fila entera. */
+
+/** 📱 Qué es cada columna en la tarjeta del celular (artifact aprobado 29-oct): el dato grande es el TOTAL. */
+const MOVIL: Record<string, MovilColumna> = { c: 'titulo', total: 'dato', n: 'chico', h: 'chico', o: 'chico', p: 'chico' }
 
 const ORIGENES: Array<[string, string]> = [['', 'Todos los orígenes'], ['caja', 'Caja'], ['tn', 'Tienda Nube'], ['mayorista', 'Mayorista'], ['ml', 'Mercado Libre']]
 
@@ -142,9 +146,11 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   const cerrarVentana = () => setVentana(null)
   const despuesDeGuardar = (texto: string) => { setAviso(texto); setVentana(null); setVersion((v) => v + 1); cargar() }
 
-  const columnas = prefs.visibles.map((k) => {
+  // 📱 En el celular la tarjeta lleva lo de MOVIL aunque en la compu esa columna esté escondida (las columnas son de la compu).
+  const angosta = usePantallaAngosta()
+  const columnas = (angosta ? prefs.orden : prefs.visibles).map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
-    return { key: k, titulo: k === 'h' ? 'Fecha' : titulo, ancho, ordena, derecha: k === 'total' }
+    return { key: k, titulo: k === 'h' ? 'Fecha' : titulo, ancho, ordena, derecha: k === 'total', movil: MOVIL[k] ?? 'oculta' }
   })
 
   const celda = (f: FilaVentaLista, k: string): React.ReactNode => {
@@ -242,15 +248,20 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las ventas" placeholder="Número, pedido de Tienda Nube, cliente o nota" />
-          <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => { setFicha(null); setPeriodo(e.target.value) }}>{PERIODOS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
-          <Select aria-label="Origen" style={ANCHO_SELECT} value={origen} onChange={(e) => setOrigen(e.target.value)}>{ORIGENES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
-          <PanelColumnas
+          <BuscadorLista
+            valor={q} onCambio={setQ} etiqueta="Buscar en las ventas" placeholder="Número, pedido de Tienda Nube, cliente o nota"
+            filtrosActivos={(periodo !== 'mes' ? 1 : 0) + (origen ? 1 : 0)}
+            filtros={<>
+              <FiltroOpciones etiqueta="Período" style={ANCHO_SELECT} opciones={PERIODOS} valor={periodo} onCambio={(k) => { setFicha(null); setPeriodo(k) }} />
+              <FiltroOpciones etiqueta="Origen" style={ANCHO_SELECT} opciones={ORIGENES} valor={origen} onCambio={setOrigen} />
+            </>}
+          />
+          {!angosta && <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
             onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
-          />
+          />}
           <Button variant="outline" disabled={cargando} onClick={() => cargar()}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo

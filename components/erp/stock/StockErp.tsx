@@ -14,7 +14,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Icono, MenuAcciones, Notice, color, font, space, type AccionMenu } from '@/components/ui'
-import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, IconoFila, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { usePantallaAngosta } from '@/lib/movil'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
 import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
@@ -53,6 +54,9 @@ function bajarCsv(filas: FilaStock[], marca: MarcaErp, titulos: Record<string, [
   a.click()
   URL.revokeObjectURL(url)
 }
+
+/** 📱 Qué es cada columna en la tarjeta del celular (artifact aprobado 29-oct): el dato grande es el DISPONIBLE; cada depósito, chico y con su nombre («Local 3»). */
+const movilDe = (k: string): MovilColumna => (k === 'p' ? 'titulo' : k === 'disp' ? 'dato' : k === 't' || k.startsWith('dep:') ? 'chico' : 'oculta')
 
 export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedida | null; ajustar: (p: PrendaAAjustar) => void; /** Atajos de arriba (§9): saltan a Ajustes y a Mover y recibir sin pasar por las pestañas. */ irA?: (pestania: string, vista: string) => void }) {
   const { marca: delShell, perfil } = useSesion()
@@ -101,9 +105,11 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
   // La de otra pestaña llega sin fila: cuando está la lista, la toma de ahí (lo apartado por pedidos sale de la fila).
   const filaDeFicha = ficha && (ficha.prenda.fila ?? (ficha.marca === marca ? datos?.filas.find((x) => x.producto === ficha.prenda.producto && x.talle === ficha.prenda.talle) ?? null : null))
 
-  const columnas = prefs.visibles.map((k) => {
+  // 📱 En el celular la tarjeta lleva lo de `movilDe` aunque en la compu esa columna esté escondida (las columnas son de la compu).
+  const angosta = usePantallaAngosta()
+  const columnas = (angosta ? prefs.orden : prefs.visibles).map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
-    return { key: k, titulo, ancho, ordena, derecha: ['disp', 'est', 'ped', 'gn'].includes(k) || k.startsWith('dep:') }
+    return { key: k, titulo, ancho, ordena, derecha: ['disp', 'est', 'ped', 'gn'].includes(k) || k.startsWith('dep:'), movil: movilDe(k) }
   })
   const numero = (n: number, fuerte = false) => <span style={{ fontWeight: fuerte ? 700 : 500, color: n < 0 ? 'var(--mo-danger-ink)' : n === 0 ? color.mut2 : color.ink }}>{n}</span>
 
@@ -155,12 +161,12 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en el stock" placeholder="Nombre, código o código de barras" />
-          <PanelColumnas
+          {!angosta && <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(marca, prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
             onRestablecer={() => setPrefs({ ...normalizarPrefs(marca, null) })}
-          />
+          />}
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
           {irA && (
             <span style={{ marginLeft: 'auto', display: 'flex', gap: space[2] }}>

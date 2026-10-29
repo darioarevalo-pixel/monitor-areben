@@ -6,14 +6,21 @@
  *
  *  - `TileResumen` — el resumen del filtro, ARRIBA de la lista. `oscuro` = el número que manda (uno por pantalla).
  *  - `VistasLista` — las vistas con su número («A preparar 12»): cada una ya dice cuántas hay antes de entrar.
- *  - `BuscadorLista` — el buscador de la sección (Bruno: «si no, no se encuentra nada»).
+ *  - `BuscadorLista` — el buscador de la sección (Bruno: «si no, no se encuentra nada»). Con `filtros`, en la compu van al
+ *    lado; 📱 en el celular (≤ 900 px) se juntan en el botón «Filtros», que los abre en una hoja desde abajo.
+ *  - `FiltroOpciones` — un filtro de una opción: `select` en la compu, botones de a uno en la hoja del celular.
  *  - `ChipEstado` — el estado de una fila desde un mapa `clave → [tono, texto]`; en una columna angosta termina en «…».
  *  - `cuandoCorto` — «18/10 10:40» en hora argentina: la fecha de una fila y de su ficha.
  */
 
+import { useState } from 'react'
 import { StatusPill } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Select } from '@/components/ui/Field'
 import { Icono } from '@/components/ui/Icono'
+import { Modal } from '@/components/ui/Modal'
 import { color, font, weight, type Tone } from '@/components/ui/tokens'
+import { usePantallaAngosta } from '@/lib/movil'
 
 /** «18/10 10:40», en hora argentina (UTC−3, fijo: la hora es la del local, la vea quien la vea). Sin fecha, «—». */
 export const cuandoCorto = (iso: string | null) => {
@@ -39,7 +46,8 @@ export function TileResumen({ titulo, valor, oscuro, tono, nota }: { titulo: str
   // Franja de ~54 px (diseño §9): título arriba, el número (18 px) y su nota en la misma línea.
   const t = TILES[tono ?? (oscuro ? 'principal' : 'neutro')]
   return (
-    <div style={{ flex: '1 1 180px', minWidth: 0, padding: '8px 14px', borderRadius: 12, background: t.fondo, border: `1px solid ${t.borde}`, color: t.valor }}>
+    // `mo-tile`: en el celular van de a dos por renglón (globals.css).
+    <div className="mo-tile" style={{ flex: '1 1 180px', minWidth: 0, padding: '8px 14px', borderRadius: 12, background: t.fondo, border: `1px solid ${t.borde}`, color: t.valor }}>
       <div style={{ fontSize: font.xs, lineHeight: '14px', color: t.titulo }}>{titulo}</div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
         <span style={{ fontSize: 18, lineHeight: '24px', fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{valor}</span>
@@ -62,7 +70,8 @@ export function VistasLista({ vistas, valor, conteo, onCambio, todasRojas }: {
   onCambio: (k: string) => void
 }) {
   return (
-    <div role="tablist" aria-label="Vistas" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '12px 12px 0' }}>
+    // `mo-vistas`: en el celular se deslizan de costado en un solo renglón (globals.css).
+    <div role="tablist" aria-label="Vistas" className="mo-vistas" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '12px 12px 0' }}>
       {vistas.map(([k, nombre]) => {
         const on = valor === k
         const rojo = !on && (todasRojas || VISTAS_PROBLEMA.has(k)) && (conteo[k] ?? 0) > 0
@@ -80,12 +89,68 @@ export function VistasLista({ vistas, valor, conteo, onCambio, todasRojas }: {
   )
 }
 
-export function BuscadorLista({ valor, onCambio, etiqueta, placeholder }: { valor: string; onCambio: (q: string) => void; etiqueta: string; placeholder: string }) {
-  return (
-    <label style={{ flex: '1 1 240px', display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 10px', border: `1px solid ${color.line2}`, borderRadius: 9 }}>
+export function BuscadorLista({ valor, onCambio, etiqueta, placeholder, filtros, filtrosActivos = 0 }: {
+  valor: string
+  onCambio: (q: string) => void
+  etiqueta: string
+  placeholder: string
+  /** Los filtros de la lista (`FiltroOpciones`, `Select`…): al lado en la compu, en la hoja de «Filtros» en el celular. */
+  filtros?: React.ReactNode
+  /** Cuántos filtros están corridos de lo de siempre: el número del botón «Filtros». */
+  filtrosActivos?: number
+}) {
+  const angosta = usePantallaAngosta()
+  const [hoja, setHoja] = useState(false)
+  const campo = (
+    <label className="mo-buscador" style={{ flex: '1 1 240px', display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 10px', border: `1px solid ${color.line2}`, borderRadius: 9 }}>
       <Icono nombre="lupa" size={16} style={{ color: color.mut2 }} />
       <input aria-label={etiqueta} value={valor} onChange={(e) => onCambio(e.target.value)} placeholder={placeholder} style={{ flex: 1, border: 0, outline: 0, font: 'inherit', background: 'transparent', minWidth: 0 }} />
     </label>
+  )
+  if (!filtros) return campo
+  if (!angosta) return <>{campo}{filtros}</>
+  return (
+    <>
+      {campo}
+      <Button variant="outline" onClick={() => setHoja(true)} aria-label={filtrosActivos ? `Filtros (${filtrosActivos} puestos)` : 'Filtros'}>
+        Filtros
+        {filtrosActivos > 0 && <span aria-hidden style={{ minWidth: 18, height: 18, marginLeft: 6, padding: '0 5px', borderRadius: 9, display: 'inline-grid', placeItems: 'center', fontSize: 11, fontWeight: weight.bold, color: '#fff', background: 'var(--mo-brand-solid)' }}>{filtrosActivos}</span>}
+      </Button>
+      <Modal abierto={hoja} onCerrar={() => setHoja(false)} titulo="Filtros" pie={<Button onClick={() => setHoja(false)}>Ver la lista</Button>}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>{filtros}</div>
+      </Modal>
+    </>
+  )
+}
+
+/** Un filtro de UNA opción: `select` en la compu (como siempre), botones en la hoja del celular (se tocan con el dedo). */
+export function FiltroOpciones({ etiqueta, opciones, valor, onCambio, style }: {
+  etiqueta: string
+  opciones: ReadonlyArray<readonly [string, string]>
+  valor: string
+  onCambio: (k: string) => void
+  /** El ancho del `select` en la compu. */
+  style?: React.CSSProperties
+}) {
+  const angosta = usePantallaAngosta()
+  if (!angosta) return <Select aria-label={etiqueta} style={style} value={valor} onChange={(e) => onCambio(e.target.value)}>{opciones.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
+  return (
+    <div role="radiogroup" aria-label={etiqueta}>
+      <div style={{ fontSize: font.sm, color: color.mut, marginBottom: 6 }}>{etiqueta}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {opciones.map(([k, t]) => {
+          const on = k === valor
+          return (
+            <button
+              key={k} type="button" role="radio" aria-checked={on} onClick={() => onCambio(k)}
+              style={{ height: 34, padding: '0 12px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, fontWeight: on ? weight.semibold : 500, border: `1px solid ${on ? 'var(--mo-brand-solid)' : color.line2}`, background: on ? 'var(--mo-brand-bg)' : color.surface, color: on ? 'var(--mo-brand)' : color.ink2 }}
+            >
+              {t}
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 

@@ -323,6 +323,15 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
 
 ## Reglas que el código no dice
 
+- 📱 **El ERP en el celular (Bruno, 29-oct; artifact `~/Documents/erp-monitor/diseno/celular/erp-celular.html`)**: abajo de
+  900 px el menú de la izquierda se esconde; arriba van la sección, la marca y la lupa, y abajo Inicio · Ventas · Caja · Stock ·
+  Más (la hoja de «Más» trae la marca, las otras secciones, Buscar y Volver al monitor). Todo por CSS (`globals.css` § erp-menu),
+  ⛔ la compu cambia. `ListaTrabajo` pasa a TARJETAS sólo si la pantalla declara `movil` en sus columnas
+  (`'titulo' | 'dato' | 'chico' | 'oculta'`; sin declarar, sigue la tabla que se corre de costado): hoy Ventas (dato = total)
+  y Stock (dato = disponible). ⛔ tilde en el celular. La regla «es celular» vive en `lib/movil.ts` (`usePantallaAngosta`:
+  ≤ 900 px, con mouse o con dedo; `?movil=1`/`?movil=0` la fuerza); la Caja la usa con su propia medida (640 px Y táctil).
+  Los filtros de una lista van en `BuscadorLista` › `filtros` (`FiltroOpciones`): al lado en la compu, en la hoja «Filtros»
+  en el celular. `tests/erp-celular-lista.test.tsx`.
 - 🔑 **`erp › Caja` = el CAMBIO en el local** (`CambioCaja.tsx`, Bruno 14-oct): busca la venta propia, marca lo
   devuelto (al precio que se PAGÓ), escanea lo nuevo y cobra o deja a favor la diferencia; lo registra
   `registrarCambio` del motor por `cambiarVentaPropia` (`api/_erp.js`). 🔴 Usa el MISMO código de la Caja

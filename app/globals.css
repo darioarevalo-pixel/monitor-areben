@@ -1218,11 +1218,56 @@ a.apps-item:hover {
 .erp-contador { margin-left: auto; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 9px; display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; line-height: 1; color: #fff; background: #dc2626; }
 .erp-menu-pie { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 8px; }
 
-/* En el celular el menú pasa a una tira arriba que se corre de costado (⛔ cajón: el ERP lo usan admins en la compu). */
+/* 📱 Las barras del celular (Bruno, 29-oct; artifact `diseno/celular/erp-celular.html`): en la compu ⛔ se dibujan. */
+.erp-movil-top, .erp-movil-nav { display: none; }
+
+/* 📱 En el celular (Bruno, 29-oct): arriba la sección, la marca y la lupa; abajo Inicio · Ventas · Caja · Stock · Más.
+   El menú de la izquierda se esconde (lo que no entra abajo va en la hoja de «Más»). La compu queda igual. */
 @media (max-width: 900px) {
   .erp-app.shell { flex-direction: column; }
-  .erp-menu { flex: 0 0 auto; width: auto; flex-direction: row; align-items: center; overflow-x: auto; overflow-y: hidden; padding: 8px; }
-  .erp-menu-logo { display: none; }
-  .erp-menu-item--debajo { padding-left: 10px; }
-  .erp-menu-pie { margin: 0 0 0 auto; padding: 0; flex-direction: row; align-items: center; }
+  .erp-menu { display: none; }
+  .erp-movil-top {
+    display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
+    padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top));
+    background: var(--mo-side-bg); color: #fff;
+  }
+  .erp-movil-titulo { flex: 1; min-width: 0; font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .erp-movil-marca {
+    height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 8px;
+    background: rgba(255, 255, 255, 0.12); color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  .erp-movil-icono {
+    width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1); color: #fff; cursor: pointer;
+  }
+  .erp-movil-nav {
+    display: grid; grid-template-columns: repeat(5, 1fr); flex: 0 0 auto;
+    padding: 6px 4px; padding-bottom: max(8px, env(safe-area-inset-bottom));
+    background: var(--mo-surface); border-top: 1px solid var(--mo-line);
+  }
+  .erp-movil-nav-item {
+    position: relative; height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    padding: 0; border: 0; background: transparent; font: inherit; font-size: 11px; font-weight: 500; color: var(--mo-mut);
+    text-decoration: none; cursor: pointer;
+  }
+  .erp-movil-nav-item--on { color: var(--mo-brand); font-weight: 600; }
+  .erp-movil-nav-n {
+    position: absolute; top: 2px; left: calc(50% + 6px); min-width: 16px; height: 15px; padding: 0 4px; border-radius: 8px;
+    display: grid; place-items: center; font-size: 9.5px; font-weight: 700; line-height: 1; color: #fff; background: #dc2626;
+  }
+  /* El título va en la barra de arriba; las pestañas y las vistas se deslizan de costado (⛔ se parten en renglones). */
+  .erp-app .erp-titulo { display: none; }
+  .erp-app .erp-pestanias, .erp-app .erp-pestanias > div, .erp-app .erp-vistas > div { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; }
+  .erp-app .erp-pestanias > div > *, .erp-app .erp-vistas > div > * { flex-shrink: 0; }
+  /* Las piezas de arriba de la lista (`PiezasLista`): los resúmenes de a dos, las vistas en un renglón que se desliza. */
+  .erp-app .mo-tile { flex: 1 1 calc(50% - 12px) !important; }
+  .erp-app .mo-vistas { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; }
+  .erp-app .mo-vistas > * { flex-shrink: 0; }
+  .erp-app .mo-buscador { flex-basis: 160px !important; }
 }
+.erp-hoja-item {
+  display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 8px; border: 0; border-radius: 9px;
+  background: transparent; font: inherit; font-size: 15px; font-weight: 500; color: var(--mo-ink2); text-decoration: none; cursor: pointer; text-align: left;
+}
+.erp-hoja-item[aria-current='page'] { color: var(--mo-brand); font-weight: 600; background: var(--mo-brand-bg); }
+
