@@ -9,11 +9,11 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Button, Field, MenuAcciones, Modal, Notice, color, font, space, useConfirmar, weight, type AccionMenu } from '@/components/ui'
+import { Button, Field, MenuAcciones, Modal, Notice, Select, color, font, space, useConfirmar, weight, type AccionMenu } from '@/components/ui'
 import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial } from '@/components/ui/FichaCostado'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
 import {
-  anularVenta, corregirPrecioDeVenta, leerExtraDeVenta, leerFichaDeVenta, notaDeCreditoDeVenta,
+  anularVenta, corregirMedioDeVenta, corregirPrecioDeVenta, leerExtraDeVenta, leerFichaDeVenta, notaDeCreditoDeVenta,
   type ExtraDeVenta, type FichaDeVenta, type FilaVentaLista, type MarcaErp, type QueSabeElMotor,
 } from '@/lib/erp/cliente'
 import { COBRO, ESTADO, historialDeVenta, plata } from '@/lib/erp/ventas-lista.core.js'
@@ -21,6 +21,10 @@ import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import { MOTIVO_MINIMO, NOMBRE_CANAL } from '@/lib/erp/venta.core.js'
 import { textoDeVuelta } from '@/lib/erp/desarme.core.js'
 import { DesarmeVenta } from './DesarmeVenta'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
+
+/** Los medios en que entra plata (`MEDIOS_COBRO` del motor, `correccion-medio.mjs`), con el nombre de la pantalla. */
+const MEDIOS_CORREGIR = [['efectivo', 'Efectivo'], ['debito', 'Débito'], ['credito', 'Crédito'], ['transferencia', 'Transferencia'], ['mp', 'Mercado Pago'], ['pagonube', 'Pago Nube']] as const
 
 const COBRO_EN_ENTREGA = { efectivo: 'Efectivo', transferencia: 'Transferencia', ya_pagado: 'Ya estaba pagado' } as const
 const ENTREGA: Record<string, string> = { retira: 'Retira', envio: 'Envío', cadete: 'Cadete' }
@@ -42,6 +46,12 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const [error, setError] = useState<string | null>(null)
   const [anulando, setAnulando] = useState(accionInicial === 'anular')
   const [corrigiendo, setCorrigiendo] = useState(false)
+  // Corregir el MEDIO (29-oct, Bruno: lo hace el local): eligió «Efectivo» en Tienda Nube y pagó con tarjeta ⇒ el cierre de la
+  // Caja esperaría ese efectivo. ⛔ Mueve plata ni cambia el monto: cambia por dónde entró.
+  const [medioAbierto, setMedioAbierto] = useState(false)
+  const [medioNuevo, setMedioNuevo] = useState('')
+  const [motivoMedio, setMotivoMedio] = useState('')
+  const puedeErp = usePuedeErp(marca)
   const [precios, setPrecios] = useState<Record<number, string>>({})
   const [motivoPrecio, setMotivoPrecio] = useState('')
   const [motivo, setMotivo] = useState('')
@@ -114,6 +124,12 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     onCambio(`Precio de la venta ${fila.ref} corregido: total ${plata(r.correccion.total_despues)}.${d === 0 ? '' : d > 0 ? ` Faltan cobrar ${plata(d)}: registrá el cobro.` : ` Sobran ${plata(-d)}: hay que devolverlos.`} No se movió plata.`)
   }, 'No se pudo corregir el precio.')
 
+  const confirmarMedio = () => correr(async () => {
+    const r = await corregirMedioDeVenta(marca, fila.id, { medio: medioNuevo, motivo: motivoMedio })
+    setMedioAbierto(false)
+    onCambio(`Venta ${fila.ref}: el cobro de ${plata(r.correccion.monto)} pasó de ${r.correccion.cuenta_antes} a ${r.correccion.cuenta_despues}. No se movió plata.`)
+  }, 'No se pudo corregir el medio de cobro.')
+
   async function hacerNC() {
     const ok = await confirmar({
       titulo: `Nota de crédito de la venta ${fila.ref}`,
@@ -134,6 +150,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     ...(ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
     ...(!fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura') }] : []),
     ...(puede.corregir && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
+    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir medio de cobro…', icono: 'pesos' as const, hint: 'Pagó con otro medio que el que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
     { key: 'anular', label: 'Anular…', icono: 'anular', tone: 'danger', disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) },
   ]
   const hechos: HechoHistorial[] = ficha ? (historialDeVenta(ficha, { ...extra, tn: extra?.tn ?? undefined }) as HechoHistorial[]) : []
@@ -319,6 +336,29 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         </div>
         <Field label="Motivo" required hint="Queda guardado con tu nombre.">
           <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={motivoPrecio} onChange={(e) => setMotivoPrecio(e.target.value)} />
+        </Field>
+      </Modal>
+      <Modal
+        abierto={medioAbierto} onCerrar={() => setMedioAbierto(false)} titulo={`Corregir el medio de cobro de la venta ${fila.ref}`}
+        pie={<>
+          <Button variant="outline" onClick={() => setMedioAbierto(false)}>Cancelar</Button>
+          <Button disabled={trabajando || !medioNuevo || motivoMedio.trim().length < MOTIVO_MINIMO} onClick={() => void confirmarMedio()}>Corregir medio</Button>
+        </>}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: space[3], marginBottom: space[3] }}>
+          <Notice tone="neutral">
+            Figura: {(ficha?.pagos ?? []).filter((p) => p.medio !== 'cuenta' && p.medio !== 'saldo').map((p) => `${p.cuenta ?? p.medio ?? 'pago'} ${plata(p.monto)}`).join(' · ') || '—'}.
+            {' '}No mueve plata ni cambia el monto: cambia por dónde entró. Si era efectivo, deja de sumar al cierre de caja.
+          </Notice>
+          <Field label="Con qué pagó de verdad" required>
+            <Select value={medioNuevo} onChange={(e) => setMedioNuevo(e.target.value)}>
+              <option value="">Elegí el medio…</option>
+              {MEDIOS_CORREGIR.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+            </Select>
+          </Field>
+        </div>
+        <Field label="Motivo" required hint="Queda guardado con tu nombre.">
+          <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={motivoMedio} onChange={(e) => setMotivoMedio(e.target.value)} />
         </Field>
       </Modal>
     </FichaCostado>
