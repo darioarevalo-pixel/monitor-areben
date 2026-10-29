@@ -96,7 +96,7 @@ import { NO_SIN_PAGAR, STATUS_POR_COBRAR, armarPedidosSinPagar, cobradosEnGN } f
 import { esEntregadoSinCobrarTN } from '../motor/venta/pago-tn.mjs'
 import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto } from '../lib/erp/precio.core.js'
 import { configPg } from '../lib/pg.core.js'
-import { armarFicha, cambiadasDe, devolucionDeFicha, cobroDelCambio, diferenciaDeCambio, diferenciaDeCambioSuelto, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, pagadoEnGN, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
+import { armarFicha, cambiadasDe, devolucionDeFicha, cobroDelCambio, diferenciaDeCambio, diferenciaDeCambioSuelto, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, listaEnGN, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { anotarAnuladaDelErp } from '../lib/caja/anulada-erp.core.js'
 import { NC_DESDE_LA_VENTA, armarFacturaDelCambio, claveDeFactura, esDeVentaPropia, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
@@ -852,7 +852,7 @@ async function skusDeVariantes(sb, prendas) {
 /**
  * La venta de GESTIÓN NUBE para cambiar en el ERP (Bruno, 27-oct: Stunned ⛔ vuelve a GN; lo vendido allá antes del corte
  * se cambia acá). Del espejo de Zattia (`ventas` + `venta_detalles`), por id o por número; sólo las prendas de STUNNED, con
- * lo pagado por unidad (`pagadoEnGN`) y lo ya cambiado en el ERP. 🔑 El precio lo pone ESTO, ⛔ la pantalla.
+ * su precio de LISTA por unidad (`listaEnGN`, Bruno 28-oct: el cambio es a lista) y lo ya cambiado en el ERP. 🔑 El precio lo pone ESTO, ⛔ la pantalla.
  */
 export async function ventaGnDeCambio({ sb, db, gnVentaId, prueba }) {
   const n = String(gnVentaId).trim()
@@ -871,7 +871,7 @@ export async function ventaGnDeCambio({ sb, db, gnVentaId, prueba }) {
   const ya = new Map((await db.query(`select l.product_id, l.size_id, -sum(l.cantidad)::int as n from venta x join venta_linea l on l.venta_id = x.id
     where x.marca = 'stunned' and x.tipo = 'cambio' and x.estado = 'confirmada' and x.prueba = $2 and x.detalle->'cambio_de'->>'gn_venta' = $1
       and l.cantidad < 0 group by 1, 2`, [String(v.id), prueba === true])).rows.map((f) => [`${Number(f.product_id)}:${Number(f.size_id)}`, Number(f.n)]))
-  const lineas = pagadoEnGN(v, det || [])
+  const lineas = listaEnGN(det || [])
     .map((l) => { const k = `${l.product_id}:${l.size_id}`; return { ...l, sku: skus.get(k) ?? null, ...nombre.get(k), cambiado: ya.get(k) || 0 } })
     .filter((l) => esStunned(l.sku))
   if (!lineas.length) return { status: 409, error: `La venta ${v.number ?? v.id} de Gestión Nube no tiene productos de Stunned.` }

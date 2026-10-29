@@ -4,7 +4,7 @@
  * vendida, o un anular sin motivo que llega al motor.
  */
 import { describe, it, expect } from 'vitest'
-import { armarFicha, cambiadasDe, estaAcreditadaEntera, cobroDelCambio, diferenciaDeCambio, diferenciaDeCambioSuelto, leerAnular, leerBusqueda, leerCambiar, leerClienteCambio, pagadoEnGN, puedeAnular, rangoDeDias } from '../lib/erp/venta.core.js'
+import { armarFicha, cambiadasDe, estaAcreditadaEntera, cobroDelCambio, diferenciaDeCambio, diferenciaDeCambioSuelto, leerAnular, leerBusqueda, leerCambiar, leerClienteCambio, listaEnGN, puedeAnular, rangoDeDias } from '../lib/erp/venta.core.js'
 import { REGLAS_INICIALES } from '../lib/caja/core.core.js'
 
 describe('leerBusqueda', () => {
@@ -113,10 +113,11 @@ describe('el cambio (erp › Caja)', () => {
     const st = leerCambiar({ id, sinTicket: true, devueltas: [{ productId: 7, sizeId: 3, cantidad: 2, precio: 15000 }], pin: '1234', pinPersona: 'ana' })
     expect([st.modo, st.pin, st.devueltas[0].precio]).toEqual(['sin_ticket', { persona: 'ana', pin: '1234' }, 15000])
     expect(diferenciaDeCambioSuelto({ devueltas: st.devueltas, nuevas: [{ importe: 45000 }] })).toBe(15000)
-    // Lo pagado en GN: el descuento de la venta prorrateado; el envío ⛔ se reparte; las devueltas de GN (cantidad < 0) no cuentan.
-    expect(pagadoEnGN({ total_price: 27000 }, [{ product_id: 1, size_id: 2, quantity: 2, unit_price: 15000, total: 30000 }, { product_id: 3, size_id: 4, quantity: -1, unit_price: 9000, total: -9000 }]))
-      .toEqual([{ product_id: 1, size_id: 2, cantidad: 2, precio: 13500 }])
-    expect(pagadoEnGN({ total_price: 33000 }, [{ product_id: 1, size_id: 2, quantity: 1, unit_price: 30000, total: 30000 }])[0].precio).toBe(30000)
+    // 🔑 El cambio de GN es a precio de LISTA (Bruno, 28-oct): ⛔ el descuento del efectivo prorrateado (la #30970 volvía a
+    // $11.700 con lista $12.990). Las devueltas de GN (cantidad < 0) no cuentan; sin `unit_price`, el total por unidad.
+    expect(listaEnGN([{ product_id: 1, size_id: 2, quantity: 1, unit_price: 12990, total: 11700 }, { product_id: 3, size_id: 4, quantity: -1, unit_price: 9000, total: -9000 }]))
+      .toEqual([{ product_id: 1, size_id: 2, cantidad: 1, precio: 12990 }])
+    expect(listaEnGN([{ product_id: 1, size_id: 2, quantity: 2, unit_price: null, total: 30000 }])[0].precio).toBe(15000)
     // Varios pagos: la base viaja en todos menos el último (como la Caja); el monto de la pantalla ⛔ viaja.
     expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], pagos: [{ cuenta: 12921, base: 2000 }, { cuenta: 25188, base: 1 }] }).pagos).toEqual([{ cuenta: 12921, base: 2000 }, { cuenta: 25188 }])
   })
