@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import {
-  Button, EmptyState, Icono, MenuAcciones, Notice, Select, color, font, space, weight, type AccionMenu,
+  Button, EmptyState, Icono, MenuAcciones, Notice, Paginacion, Select, color, font, space, weight, type AccionMenu,
 } from '@/components/ui'
 import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
@@ -33,6 +33,9 @@ import { imprimirVentaErp } from '@/lib/erp/ticket-erp'
 import { CargarVenta } from './CargarVenta'
 import { VentanaCobro, VentanaEditar } from './VentanasVenta'
 import { useLineaErp } from '@/lib/erp/linea-erp'
+
+/** Filas por hoja (Bruno 29-oct: el mes de Zattia son ~1.250 y dibujarlas todas trababa la lista). */
+const POR_HOJA = 50
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
 export type Prefs = { orden: string[]; visibles: string[] }
@@ -91,11 +94,11 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
 
   // Cada lectura tiene su clave (marca · período · vuelta): mientras la de los datos ⛔ es la pedida, se está leyendo.
   const [vuelta, setVuelta] = useState(0)
-  const clave = `${marca}|${periodo}|${vuelta}`
+  const clave = `${marca}|${linea}|${periodo}|${vuelta}`
   useEffect(() => {
     let vivo = true
     const r = rangoDePeriodo(periodo, diaArgentino(Date.now()))
-    leerListaDeVentas(marca, r.desde, r.hasta)
+    leerListaDeVentas(marca, r.desde, r.hasta, linea)
       .then((d) => {
         if (!vivo) return
         setDatos({ filas: d.filas, puede: d.puede, tnLeidaEn: d.tnLeidaEn ?? null, clave })
@@ -112,7 +115,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
       })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer las ventas.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
-  }, [marca, periodo, clave])
+  }, [marca, linea, periodo, clave])
   const cargar = () => setVuelta((n) => n + 1)
   const cargando = datos?.clave !== clave
 
@@ -122,6 +125,13 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   const conteo = useMemo(() => contarVistas(base), [base])
   const filas: FilaVentaLista[] = useMemo(() => ordenar(filtrar(base, { vista }), orden), [base, vista, orden])
   const res = useMemo(() => resumen(filtrar(base, { vista })), [base, vista])
+  // La hoja vuelve a la 1 con cada filtro, orden o lectura nueva (el resumen y las vistas siguen contando TODAS).
+  const filtro = `${clave}|${q}|${origen}|${vista}|${JSON.stringify(orden)}`
+  const [hojaDe, setHojaDe] = useState({ filtro, n: 1 })
+  const paginas = Math.max(1, Math.ceil(filas.length / POR_HOJA))
+  const hoja = hojaDe.filtro === filtro ? Math.min(hojaDe.n, paginas) : 1
+  const setHoja = (n: number) => setHojaDe({ filtro, n })
+  const deLaHoja = useMemo(() => filas.slice((hoja - 1) * POR_HOJA, hoja * POR_HOJA), [filas, hoja])
   const elegidas = filas.filter((f) => seleccion.has(f.id))
   const vendedores = useMemo(() => [...new Set((datos?.filas ?? []).map((f) => f.vendio).filter((x) => x && x !== '—' && x !== 'Tienda Nube' && x !== 'Desde Gestión Nube'))].sort(), [datos])
   const nombrePeriodo = PERIODOS.find(([k]) => k === periodo)?.[1] ?? ''
@@ -244,7 +254,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           <Button variant="outline" disabled={cargando} onClick={() => cargar()}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
-          columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={120}
+          columnas={columnas} filas={deLaHoja} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={120}
           seleccion={seleccion} onSeleccion={setSeleccion} orden={orden} onOrden={setOrden}
           activa={ficha?.fila.id ?? null} onAbrir={(f) => abrirFicha(f)} etiquetaFila={(f) => `la venta ${f.ref}`}
           vacio={!cargando && datos ? (
@@ -254,6 +264,11 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
             </div>
           ) : null}
         />
+        {paginas > 1 && (
+          <div style={{ padding: '0 16px 8px' }}>
+            <Paginacion pagina={hoja} paginas={paginas} total={filas.length} onCambiar={setHoja} singular="venta" plural="ventas" />
+          </div>
+        )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo las ventas…' : `${filas.length.toLocaleString('es-AR')} de ${(conteo.todas ?? 0).toLocaleString('es-AR')} · ${nombrePeriodo.toLowerCase()}`}
           {' · '}los pedidos sin pagar son los abiertos hoy, de cualquier fecha{datos?.tnLeidaEn ? ` (Tienda Nube leída ${cuandoCorto(datos.tnLeidaEn)})` : ''}.

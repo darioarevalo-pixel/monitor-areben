@@ -139,12 +139,15 @@ const COLUMNAS_LISTA = 'id, numero, cliente_id, marca, tipo, estado, origen, ori
  * Las ventas propias del período (días argentinos, `desde`..`hasta` inclusive) + los pedidos de TN sin pagar (los
  * abiertos HOY, de cualquier fecha: `pedidos` ya leídos por `pedidosSinPagar`), armadas para la lista.
  */
-export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeidaEn = null }, deps = {}) {
+export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeidaEn = null, linea = '' }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  // La línea (Stunned / Zattia) se corta ACÁ: en Stunned se bajaban las ~1.250 ventas del mes de Zattia para mostrar 34 (29-oct, 6,3 s).
+  if (linea && !(marca === 'zattia' && ['zattia', 'stunned'].includes(linea))) return { status: 400, error: 'Línea inválida' }
   if (!DIA.test(String(desde || '')) || !DIA.test(String(hasta || '')) || desde > hasta) return { status: 400, error: 'Período inválido' }
   const sb = deps.sb || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
   const r = rangoDeDias(desde, hasta)
-  const leer = (cols) => leerTodo(sb, 'venta_ficha', (q) => q.select(cols).gte('ocurrida_en', r.desde).lt('ocurrida_en', r.hasta).order('ocurrida_en', { ascending: false }).order('id'))
+  const deLinea = (q) => (linea ? q.eq('marca', linea) : q)
+  const leer = (cols) => leerTodo(sb, 'venta_ficha', (q) => deLinea(q.select(cols).gte('ocurrida_en', r.desde).lt('ocurrida_en', r.hasta)).order('ocurrida_en', { ascending: false }).order('id'))
   // Con la 027 la vista trae lo editable y las notas vigentes; sin ella (otra base, antes de aplicarla) sigue con lo de antes.
   const ventas = await leer(`${COLUMNAS_LISTA}, ${COLUMNAS_027}`).catch(() => leer(COLUMNAS_LISTA))
   // §17: las anuladas que esperan el desarme (o volver) entran SIEMPRE, sean del mes que sean: hasta escanearlas, alguien
@@ -152,7 +155,7 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
   const pendientes028 = deps.sb ? { data: [] } : await sb.from('venta_vuelta_pendiente').select('venta_id, vuelta')
   const vueltas = new Map((pendientes028.error ? [] : pendientes028.data).map((x) => [x.venta_id, x.vuelta]))
   const fuera = [...vueltas.keys()].filter((id) => !ventas.some((v) => v.id === id))
-  if (fuera.length) ventas.push(...await enTandas(fuera, (t) => leerTodo(sb, 'venta_ficha', (q) => q.select(COLUMNAS_LISTA).in('id', t).order('id'))))
+  if (fuera.length) ventas.push(...await enTandas(fuera, (t) => leerTodo(sb, 'venta_ficha', (q) => deLinea(q.select(COLUMNAS_LISTA).in('id', t)).order('id'))))
   const numeros = new Map(ventas.map((v) => [v.id, v.numero]))
   const faltan = ventas.map((v) => v.venta_original_id).filter((id) => id && !numeros.has(id))
   for (const o of await enTandas(faltan, async (t) => (await sb.from('venta').select('id, numero').in('id', t)).data || [])) numeros.set(o.id, o.numero)
@@ -172,7 +175,7 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
   }
   const filas = [
     ...crudas.map((c) => armarFila(c)),
-    ...pedidos.map((p) => armarFila({
+    ...pedidos.filter((p) => !linea || p.tienda === linea).map((p) => armarFila({
       kind: 'pedido', tienda: p.tienda, tnId: p.tnId, tnNumero: p.numero, creadaEn: p.creadaEn, total: p.total, link: p.link, unidades: p.unidades,
       dias: p.dias, medio: p.medio, gateway: p.gateway, prendas: p.prendas, entregadoSinCobrar: !!p.entregadoSinCobrar, estado: p.estado ?? null, clienteGn: null, clienteTn: p.comprador ?? null,
     })),

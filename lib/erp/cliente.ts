@@ -459,8 +459,8 @@ export type FilaVentaLista = {
   entregadoSinCobrar?: boolean
 }
 export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean; corregir?: boolean; corregirMedio?: boolean }
-export const leerListaDeVentas = (marca: MarcaErp, desde: string, hasta: string) =>
-  pedir<{ filas: FilaVentaLista[]; desde: string; hasta: string; puede: QueSabeElMotor; tnLeidaEn?: string | null }>(null, `&vista=ventas-lista&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer las ventas.')
+export const leerListaDeVentas = (marca: MarcaErp, desde: string, hasta: string, linea: '' | 'zattia' | 'stunned' = '') =>
+  pedir<{ filas: FilaVentaLista[]; desde: string; hasta: string; puede: QueSabeElMotor; tnLeidaEn?: string | null }>(null, `&vista=ventas-lista&marca=${marca}&desde=${desde}&hasta=${hasta}${linea ? `&linea=${linea}` : ''}&nc=${Date.now()}`, 'No se pudieron leer las ventas.')
 
 export type ExtraDeVenta = {
   clienteGn: string | null; gnNumero: string | null; gnEstado: string | null; clienteId: string | null

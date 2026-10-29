@@ -34,7 +34,7 @@ function rutaActiva(it: NavItem, activa: string, sub?: string | null): boolean {
 // `sistema` está acá pero la condición mira además que el grupo tenga UNA sola key: hoy es
 // Novedades y se dibuja como una entrada suelta; el día que se le sume Manuales pasa a ser un
 // grupo desplegable solo, sin tocar esta línea.
-const APLANAR = new Set(['inicio', 'clientes', 'sistema', 'agenda'])
+const APLANAR = new Set(['inicio', 'clientes', 'sistema', 'agenda', 'erp'])
 
 export function Sidebar({
   activa,

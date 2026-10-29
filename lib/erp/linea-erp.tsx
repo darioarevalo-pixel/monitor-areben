@@ -27,6 +27,16 @@ export function useTiendaErp(): 'bdi' | 'zattia' | 'stunned' {
 }
 
 // `Erp` se remonta al cambiar de sección: la línea elegida vive acá, fuera del componente, para que no vuelva sola a Zattia.
-let elegida: LineaErp = 'zattia'
-export const lineaElegida = (): LineaErp => elegida
-export const elegirLinea = (l: LineaErp) => { elegida = l }
+// Y se guarda en el navegador: al recargar la página volvía a Zattia (Bruno, 29-oct). Sin `localStorage`, la de siempre.
+const CLAVE = 'erp:linea'
+let elegida: LineaErp | null = null
+export function lineaElegida(): LineaErp {
+  if (elegida) return elegida
+  if (typeof window === 'undefined') return 'zattia'
+  try { elegida = window.localStorage.getItem(CLAVE) === 'stunned' ? 'stunned' : 'zattia' } catch { elegida = 'zattia' }
+  return elegida
+}
+export const elegirLinea = (l: LineaErp) => {
+  elegida = l
+  try { window.localStorage.setItem(CLAVE, l) } catch { /* sin almacenamiento: dura hasta recargar */ }
+}
