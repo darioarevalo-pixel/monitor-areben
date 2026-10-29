@@ -106,6 +106,13 @@ export const KEYS_SIN_PERMISO = new Set(['usuarios', 'inicio', 'resumen', 'noved
  */
 export const KEYS_CROSS_MARCA = new Set(['meta-ads'])
 
+/**
+ * Secciones OCULTAS para todos —admins incluidos—, sin borrarlas: ⛔ salen en el menú y la URL rebota a Inicio.
+ * 🔴 `integraciones` (Bruno, 29-oct): era el puente GN↔TN de Stunned (mapeo, stock, importar ventas a GN); desde el corte
+ * del 28-oct Stunned vive en el ERP y ninguna pestaña sirve — dejarla a mano sólo invita a un clic que pisa TN o GN.
+ */
+export const KEYS_OCULTAS = new Set(['integraciones'])
+
 const PERM_POR_KEY = new Map<string, PermCat>(PERM_CAT.map((p) => [p.key, p]))
 
 export function permDe(key: string): PermCat | undefined {
@@ -375,6 +382,7 @@ export type NavCatVisible = Omit<NavCat, 'items' | 'grupos'> & {
  * que ver el renglón de Marketing en su sidebar.
  */
 export function keyVisibleEnMenu(perfil: Perfil | null, marca: Marca, key: string): boolean {
+  if (KEYS_OCULTAS.has(key)) return false
   if (!esDeMarca(key, marca)) return false
   if (key === 'usuarios') return esAdmin(perfil)
   if (key === 'inicio') return true

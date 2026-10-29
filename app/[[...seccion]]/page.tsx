@@ -20,7 +20,7 @@ import { ToastProvider } from '@/components/ui/Toast'
 import { ConfirmProvider } from '@/components/ui/Confirm'
 import { useSesion } from '@/components/SesionProvider'
 import { componenteDe } from '@/components/secciones/registro'
-import { esDeMarca, esKeyValida, keyDeRuta, KEYS_CROSS_MARCA, tituloDesde } from '@/lib/nav'
+import { esDeMarca, esKeyValida, keyDeRuta, KEYS_CROSS_MARCA, KEYS_OCULTAS, tituloDesde } from '@/lib/nav'
 import { esAdmin, marcasConAcceso, puedeVer, puedeVerAlguna } from '@/lib/permisos'
 import { Cargando } from '@/components/secciones/Cargando'
 import { personaDelEquipo } from '@/lib/agenda/equipo'
@@ -166,6 +166,7 @@ export default function Seccion() {
   const permitida =
     !!perfil &&
     esKeyValida(keyPermiso) &&
+    !KEYS_OCULTAS.has(keyPermiso) &&
     esDeMarca(keyPermiso, marca) &&
     (keyPermiso === 'usuarios'
       ? esAdmin(perfil)

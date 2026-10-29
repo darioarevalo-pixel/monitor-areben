@@ -103,3 +103,10 @@ describe('nav — puedeVerPropio sólo se aparta en el detalle', () => {
     expect(enMenu).toEqual(['sesion-fotos'])
   })
 })
+
+describe('nav — secciones ocultas para todos (Bruno, 29-oct)', () => {
+  it('Integraciones ⛔ sale en el menú de nadie, ni del admin', () => {
+    expect(grupos(perfil({ admin: true }))).not.toContain('integraciones')
+    expect(grupos(perfil({ acceso: { bdi: {}, zattia: { integraciones: true } } as Perfil['acceso'] }))).not.toContain('integraciones')
+  })
+})

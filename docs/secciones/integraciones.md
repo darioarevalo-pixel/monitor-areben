@@ -65,6 +65,8 @@ el token de ventas de GN.
 - 🔑 **`ESCRITURA_HABILITADA` (arriba del archivo) es el interruptor de la importación de ventas.**
   Prenderlo **no importa nada solo**: hace aparecer el botón por fila. Está en `true` desde el
   11-ago-2026.
+- 🔴 **OCULTA para todos desde el 29-oct-2026** (Bruno: «no la borraría, pero la ocultaría completa»): `KEYS_OCULTAS` de
+  `lib/nav.ts` ⇒ ⛔ sale en el menú (ni para admins) y la URL rebota a Inicio. El código queda.
 - 🔴 **Stunned cortó el 28-oct-2026 y vive en el ERP** (`TIENDAS_CORTADAS` en
   `lib/sync-tn/pausa.core.js`): sin botón «Importar» y la pestaña Stock es **sólo de lectura** —sin
   «Aplicar»—, con o sin `SYNC_GN_TN_PAUSADO`. El stock a TN lo manda el ERP (Stock › Diferencias ›
