@@ -6,7 +6,8 @@
  * cuántas hay, el resumen del filtro ARRIBA, columnas a elección (guardadas por usuario), tildar filas y la ficha AL
  * COSTADO. Núcleo puro: `lib/erp/ventas-lista.core.js`; servidor: `api/_erp-ventas.js`.
  *
- * 🔑 Botones (diseño §4): íconos A LA IZQUIERDA ($ cobro · lápiz editar · factura · ⋯). Desde la FILA, $ y Editar abren
+ * 🔑 Botones (diseño §4): íconos A LA IZQUIERDA ($ cobro · lápiz editar · impresora · ⋯). La impresora (Bruno, 29-oct) reemplaza a
+ * la factura: reimprime el ticket IDÉNTICO al del POS (`lib/erp/ticket-erp.ts`); facturar sigue en Ventas › Facturación. Desde la FILA, $ y Editar abren
  * SÓLO su ventana (⛔ la ficha detrás). Un botón sólo si la acción VIVE en el ERP: lo de afuera dice «↗».
  * 🔑 Todo lo del motor hoy es «Prueba» (en paralelo con GN, que es el que sirve): se dice arriba, siempre.
  */
@@ -28,6 +29,7 @@ import {
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaVenta } from './FichaVenta'
+import { imprimirVentaErp } from '@/lib/erp/ticket-erp'
 import { CargarVenta } from './CargarVenta'
 import { VentanaCobro, VentanaEditar } from './VentanasVenta'
 import { useLineaErp } from '@/lib/erp/linea-erp'
@@ -175,6 +177,12 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     return null
   }
 
+  // El ticket como el del POS; si la impresora o la lectura fallan, el aviso de arriba lo dice (⛔ en silencio).
+  const imprimir = (f: FilaVentaLista) => {
+    if (f.kind === 'pedido') return
+    imprimirVentaErp(marca, f.id, f.tipo === 'cambio' ? 'cambio' : 'venta').catch((e) => setError(`No se pudo imprimir el ticket de la venta ${f.ref}: ${e instanceof Error ? e.message : 'error'}`))
+  }
+
   const acciones = (f: FilaVentaLista) => {
     const a = accionesDeFila(f, puede)
     const menu: AccionMenu[] = f.kind === 'pedido'
@@ -187,6 +195,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrirFicha(f) },
           { key: 'cobro', label: 'Registrar cobro', icono: 'pesos', onClick: () => abrirVentana('cobro', f, false), disabled: !(f.saldo > 0), hint: f.saldo > 0 ? undefined : 'No tiene saldo.' },
           { key: 'editar', label: 'Editar', icono: 'lapiz', onClick: () => abrirVentana('editar', f, false), disabled: f.anulada },
+          { key: 'imprimir', label: 'Imprimir el ticket', icono: 'impresora', onClick: () => imprimir(f) },
           { key: 'cambio', label: 'Hacer cambio', icono: 'cambios', onClick: () => irACaja('cambio'), disabled: f.anulada, hint: 'Abre la Caja del ERP en Cambio.' },
           ...(f.link ? [{ key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir' as const, onClick: () => window.open(f.link!, '_blank', 'noopener') }] : []),
           { key: 'anular', label: 'Anular…', icono: 'anular', tone: 'danger', onClick: () => abrirFicha(f, 'anular'), disabled: f.anulada },
@@ -195,7 +204,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
       <>
         <IconoFila label={a.cobro.label} verde={a.cobro.verde} apagado={!a.cobro.activo} onClick={() => (f.kind === 'pedido' ? irACobranzas() : f.saldo > 0 ? abrirVentana('cobro', f, false) : abrirFicha(f))}><Icono nombre="pesos" size={16} /></IconoFila>
         <IconoFila label={a.editar.label} apagado={!a.editar.activo} onClick={() => abrirVentana('editar', f, false)}><Icono nombre="lapiz" size={16} /></IconoFila>
-        <IconoFila label={a.factura.label} verde={a.factura.verde} apagado={!a.factura.activo} onClick={() => (f.facturada ? abrirFicha(f) : irACaja('factura'))}><Icono nombre="factura" size={16} /></IconoFila>
+        <IconoFila label={f.kind === 'pedido' ? 'Un pedido sin pagar no tiene ticket' : 'Imprimir el ticket'} apagado={f.kind === 'pedido'} onClick={() => imprimir(f)}><Icono nombre="impresora" size={16} /></IconoFila>
         <MenuAcciones acciones={menu} etiqueta={`Más acciones de la venta ${f.ref}`} vertical alinear="izquierda" />
       </>
     )

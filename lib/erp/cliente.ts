@@ -246,6 +246,10 @@ export const buscarVentas = (marca: MarcaErp, f: { q: string; desde: string; has
 
 export const leerFichaDeVenta = (marca: MarcaErp, id: string) =>
   pedir<FichaDeVenta>(null, `&vista=venta&marca=${marca}&id=${id}&nc=${Date.now()}`, 'No se pudo leer la venta.')
+/** Para REIMPRIMIR desde ERP › Ventas (29-oct): la fila de la Caja si la venta es de ahí, y de qué venta salió un cambio. */
+export type TicketDeVentaErp = { cajaVenta: import('@/lib/caja/cliente').Venta | null; cambioDe: { sin_ticket?: boolean; numero?: string | number; gn_venta?: string | number; venta_id?: string } | null }
+export const leerTicketDeVenta = (marca: MarcaErp, id: string) =>
+  pedir<TicketDeVentaErp>(null, `&vista=ticket&marca=${marca}&id=${id}&nc=${Date.now()}`, 'No se pudo leer el ticket de la venta.')
 
 /** Adónde va la prenda de una anulación (37a): al instante, «a desarmar» (empaquetado) o «a recibir» (ya salió). */
 export type Vuelta = 'ya' | 'a_desarmar' | 'a_recibir'

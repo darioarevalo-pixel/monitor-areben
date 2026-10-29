@@ -619,6 +619,29 @@ export async function fichaDeVenta({ marca, id }) {
 }
 
 /**
+ * Lo que hace falta para REIMPRIMIR el ticket de una venta desde ERP › Ventas, idéntico al del POS (Bruno, 29-oct). Una venta
+ * de la Caja devuelve su fila de `caja_venta` (`origen_ref` = su id): la pantalla la pasa por la MISMA `ticketDeVenta` del POS.
+ * Cualquier otra (Tienda Nube, cargada a mano) se arma con la ficha. Un cambio devuelve de qué venta salió (`detalle.cambio_de`),
+ * que es lo que el comprobante dice arriba.
+ */
+export async function ticketDeVentaErp({ marca, id }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!/^[0-9a-f-]{36}$/i.test(String(id || ''))) return { status: 400, error: 'Venta inválida' }
+  const { url, key } = cfgDeMarca(marca)
+  const sb = createClient(url, key)
+  const { data: v, error } = await sb.from('venta').select('id, tipo, origen, origen_ref, detalle').eq('id', id).maybeSingle()
+  if (error) throw new Error(`venta: ${error.message}`)
+  if (!v) return { status: 404, error: 'La venta no existe.' }
+  let cajaVenta = null
+  if (v.origen === 'caja' && v.tipo === 'venta' && /^[0-9a-f-]{36}$/i.test(String(v.origen_ref || ''))) {
+    const r = await sb.from('caja_venta').select('id, estado, renglones, pagos, subtotal, total, paga_con, email, gn_number, erp_numero, destino, creada_en').eq('id', v.origen_ref).maybeSingle()
+    if (r.error) throw new Error(`caja_venta: ${r.error.message}`)
+    cajaVenta = r.data
+  }
+  return { cajaVenta, cambioDe: v.tipo === 'cambio' ? (v.detalle && v.detalle.cambio_de) || null : null }
+}
+
+/**
  * §17 Lo que la ficha lee para anular y desarmar: los pagos con el medio de su cuenta (qué fue plata), el estado del
  * pedido de TN (adónde iría la prenda), lo devuelto (`venta_devolucion`) y si la prenda ya volvió (`venta_vuelta`).
  * La regla (`vueltaDe`, `pagosDePlata`, `pinEn`) es la del motor. Sin la 028 en la base: `conDevolucion: false`.
@@ -1784,6 +1807,11 @@ export default async function handler(req, res) {
       if (marca !== 'zattia') return res.status(400).json({ error: 'El cambio de una venta de Gestión Nube es de Stunned.' })
       const { url, key } = cfgDeMarca(marca)
       const r = await conMotor(marca, 'El cambio', (db) => ventaGnDeCambio({ sb: createClient(url, key), db, gnVentaId: String(req.query.id || ''), prueba: process.env.CAJA_STUNNED_PRUEBA !== '0' }))
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'ticket') {
+      const r = await ticketDeVentaErp({ marca: String(req.query.marca || ''), id: req.query.id })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
