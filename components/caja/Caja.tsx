@@ -140,7 +140,7 @@ function CajaDeMarca({ store }: { store: string }) {
         {admin && config?.reglas.medios && <FormasDePago reglas={config.reglas} onGuardadas={(rg, v) => setConfig({ ...config, reglas: rg, versiones: v ?? config.versiones })} />}
         {admin && config && <LogoDelTicket marca={store} nombre={MARCA_CAJA.nombre} tienda={config.marca?.tienda ?? null} inicial={config.ticket_logo ?? null} onGuardado={(l) => setConfig({ ...config, ...l })} />}
         {/* Stunned es una línea de Zattia (SKU `STU…`): su logo sólo en la Caja de Zattia. */}
-        {admin && config && store === 'zattia' && <LogoDelTicket marca="stunned" nombre="Stunned" inicial={config.ticket_logo_stunned ?? null} onGuardado={(l) => setConfig({ ...config, ...l })} />}
+        {admin && config && store === 'zattia' && <LogoDelTicket marca="stunned" nombre="Stunned" tienda={config.marca?.tiendaStunned ?? null} inicial={config.ticket_logo_stunned ?? null} onGuardado={(l) => setConfig({ ...config, ...l })} />}
         {admin && <GiftCards />}
         {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
         <UltimosTurnos ultimos={ultimosTurnos} onVerVentas={(t) => setVerVentas({ turnoId: t.id, titulo: `Ventas de la caja del ${diaAr(t.abierto_en)}${t.abierto_por ? ` · ${t.abierto_por}` : ''}` })} />

@@ -481,7 +481,7 @@ export default async function handler(req, res) {
         const local = store === 'zattia' ? await preciosLocalStunned() : null
         if (local && !local.precios) console.error('[caja] precio local de Stunned:', local.error || 'sin conexión al motor')
         const stunnedLocal = store !== 'zattia' ? {} : local.precios ? { stunned_local: local.precios } : { stunned_local: null, stunned_local_error: local.error ? 'No se pudo leer el precio local de Stunned del ERP: se cobra el de Tienda Nube.' : 'Sin conexión al ERP: el precio local de Stunned es el de Tienda Nube.' }
-        return res.status(200).json({ ...conf, versiones, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), ...stunnedLocal, stunned_erp: store === 'zattia' && process.env.CAJA_STUNNED_ERP === '1', stunned_prueba: store === 'zattia' && process.env.CAJA_STUNNED_PRUEBA !== '0', marca: { store, nombre: marca.nombre, tienda: marca.tienda } })
+        return res.status(200).json({ ...conf, versiones, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), ...stunnedLocal, stunned_erp: store === 'zattia' && process.env.CAJA_STUNNED_ERP === '1', stunned_prueba: store === 'zattia' && process.env.CAJA_STUNNED_PRUEBA !== '0', marca: { store, nombre: marca.nombre, tienda: marca.tienda, ...(marca.tiendaStunned ? { tiendaStunned: marca.tiendaStunned } : {}) } })
       }
 
       if (accion === 'logo-tn') {
@@ -489,11 +489,13 @@ export default async function handler(req, res) {
         // trae en su HTML (`"logo": "https://acdn-us.mitiendanube.com/…png"`, verificado el 12-oct en las dos);
         // la CDN contesta con CORS abierto ⇒ la pantalla lo achica y lo pasa a PNG como uno subido a mano.
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia el logo del ticket.' })
-        if (!marca.tienda) return res.status(404).json({ error: `${marca.nombre} no tiene Tienda Nube propia: el logo se sube a mano.` })
-        const r = await fetch(`https://${marca.tienda}/`, { signal: AbortSignal.timeout(10_000) }).catch(() => null)
+        // `de=stunned` (29-oct): el de la Tienda Nube de Stunned, sólo en la Caja de Zattia (Stunned es una línea de Zattia).
+        const tienda = req.query.de === 'stunned' ? marca.tiendaStunned || null : marca.tienda
+        if (!tienda) return res.status(404).json({ error: `${req.query.de === 'stunned' ? 'Stunned' : marca.nombre} no tiene Tienda Nube propia acá: el logo se sube a mano.` })
+        const r = await fetch(`https://${tienda}/`, { signal: AbortSignal.timeout(10_000) }).catch(() => null)
         const html = r && r.ok ? await r.text() : ''
         const url = logoDeTienda(html)
-        if (!url) return res.status(502).json({ error: `No se encontró el logo en ${marca.tienda}.` })
+        if (!url) return res.status(502).json({ error: `No se encontró el logo en ${tienda}.` })
         return res.status(200).json({ url })
       }
 

@@ -37,7 +37,7 @@ export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 /** `versiones`: las de las listas que se guardan ENTERAS (promos, productos de feria): se mandan al guardar para ⛔ pisar a otro admin. */
 /** `campaniasLiq`: sólo a un admin, para elegir cuáles son de feria. */
 export type CampaniaLiq = { id: string; nombre: string; estado: string }
-export type Config = { /** Stunned ya vende por el ERP (`CAJA_STUNNED_ERP`): un ticket es de UNA marca. */ stunned_erp?: boolean; /** Las ventas de Stunned todavía son de prueba (`CAJA_STUNNED_PRUEBA`): el cambio suelto va con ese modo. */ stunned_prueba?: boolean; /** El precio LOCAL de Stunned CARGADO en el ERP (Bruno 28-oct), product_id → precio; null si no se pudo leer. */ stunned_local?: Record<string, number> | null; /** Por qué no se pudo leer el precio local del ERP (la Caja cobra el de TN y lo avisa). */ stunned_local_error?: string; reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; /** El de Stunned (Bruno, 12-oct): sale si el ticket lleva prendas de Stunned. */ ticket_logo_stunned?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string }; campaniasLiq?: CampaniaLiq[]; /** V4: la marca de la Caja (`tienda` = su Tienda Nube, de donde sale el logo). */ marca?: { store: string; nombre: string; tienda: string | null } }
+export type Config = { /** Stunned ya vende por el ERP (`CAJA_STUNNED_ERP`): un ticket es de UNA marca. */ stunned_erp?: boolean; /** Las ventas de Stunned todavía son de prueba (`CAJA_STUNNED_PRUEBA`): el cambio suelto va con ese modo. */ stunned_prueba?: boolean; /** El precio LOCAL de Stunned CARGADO en el ERP (Bruno 28-oct), product_id → precio; null si no se pudo leer. */ stunned_local?: Record<string, number> | null; /** Por qué no se pudo leer el precio local del ERP (la Caja cobra el de TN y lo avisa). */ stunned_local_error?: string; reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; /** El de Stunned (Bruno, 12-oct): sale si el ticket lleva prendas de Stunned. */ ticket_logo_stunned?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string }; campaniasLiq?: CampaniaLiq[]; /** V4: la marca de la Caja (`tienda` = su Tienda Nube, de donde sale el logo). */ marca?: { store: string; nombre: string; tienda: string | null; /** La Tienda Nube de Stunned (sólo Zattia): de ahí sale el logo de Stunned. */ tiendaStunned?: string | null } }
 
 /** Una cuenta de cobro de GN. `regla` en null ⇒ la Caja ⛔ la cobra (sin %, o con recargo). */
 export type CuentaGN = { id: number; nombre: string; regla: ReglaCuenta | null }
@@ -283,7 +283,8 @@ export type MarcaLogo = string
 export const guardarLogo = (logo: LogoTicket | null, marca: MarcaLogo = storeCaja()) =>
   post<{ ticket_logo: LogoTicket | null; ticket_logo_stunned: LogoTicket | null }>({ action: 'logo', logo, marca }, 'No se pudo guardar el logo.')
 /** V4: la URL del logo de la Tienda Nube de la marca (por defecto, el del ticket). Sólo admin. */
-export const leerLogoTN = () => get<{ url: string }>('action=logo-tn', 'No se pudo traer el logo de Tienda Nube.')
+/** `stunned`: el logo de la Tienda Nube de Stunned (Caja de Zattia); sin nada, el de la marca de la Caja. */
+export const leerLogoTN = (de?: 'stunned') => get<{ url: string }>(`action=logo-tn${de ? `&de=${de}` : ''}`, 'No se pudo traer el logo de Tienda Nube.')
 /** V4: las formas de pago de la tienda (cuenta de GN, %, cuotas, oferta, verificación). Sólo admin. */
 export const guardarFormasDePago = (formas: FormasDePago) =>
   post<{ reglas: Reglas; versiones?: Versiones }>({ action: 'formas-pago', formas }, 'No se pudieron guardar las formas de pago.')

@@ -2653,7 +2653,7 @@ export function LogoDelTicket({ marca, nombre, inicial, tienda = null, onGuardad
               loading={guardando}
               onClick={async () => {
                 try {
-                  await guardar(await logoDesdeUrl((await leerLogoTN()).url))
+                  await guardar(await logoDesdeUrl((await leerLogoTN(marca === 'stunned' ? 'stunned' : undefined)).url))
                 } catch (err) {
                   setMsg((err as Error).message)
                 }
