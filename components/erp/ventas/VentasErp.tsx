@@ -258,7 +258,8 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
 
       {ficha && (
         <FichaVenta
-          key={ficha.fila.id} marca={marca} fila={ficha.fila} accionInicial={ficha.accion} puede={puede}
+          // La fila RELEÍDA de la lista, ⛔ la del click: recién anulada seguía diciendo «Retirada · Cobrada» (prueba del corte, 28-oct).
+          key={ficha.fila.id} marca={marca} fila={base.find((f) => f.id === ficha.fila.id) ?? ficha.fila} accionInicial={ficha.accion} puede={puede}
           onCerrar={() => setFicha(null)} onCambio={(t) => { setAviso(t); setVersion((v) => v + 1); cargar() }}
           abrirVentana={(tipo) => abrirVentana(tipo, ficha.fila, true)} irACaja={irACaja}
           version={version}
