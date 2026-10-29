@@ -31,7 +31,7 @@ try {
 // Las filas STU que hoy tiene el espejo (paginado: PostgREST corta en 1000).
 const espejo = []
 for (let desde = 0; ; desde += 1000) {
-  const { data, error } = await sb.from('inventario').select('product_id,size_id,store_name,sku').ilike('sku', 'STU%').range(desde, desde + 999)
+  const { data, error } = await sb.from('inventario').select('product_id,size_id,store_name,sku,available_quantity').ilike('sku', 'STU%').range(desde, desde + 999)
   if (error) throw new Error(`leyendo inventario: ${error.message}`)
   espejo.push(...(data || []))
   if (!data || data.length < 1000) break
