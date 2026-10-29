@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { armarComparacion, contarVistas, filtrar, ordenar, resumen } from '@/lib/erp/comparacion.core.js'
+import { armarComparacion, contarVistas, envioPosteriorALaFoto, filtrar, ordenar, resumen } from '@/lib/erp/comparacion.core.js'
 import { comparacionConTiendas } from '../api/_erp-stock.js'
 
 // Filas de Stock (`armarFilasStock`) con la forma medida el 20-oct en BDI.
@@ -72,5 +72,21 @@ describe('comparacionConTiendas', () => {
     expect(await comparacionConTiendas({ marca: 'x' }, { conMotor: async () => ({}), pedidosSinPagar: async () => ({}) })).toMatchObject({ status: 400 })
     const r = await comparacionConTiendas({ marca: 'bdi' }, { conMotor: async () => ({ status: 409, error: 'sin conexión' }), pedidosSinPagar: async () => ({ pedidos: [] }), leerInventario: async () => [] })
     expect(r).toMatchObject({ status: 409 })
+  })
+})
+
+describe('la foto de TN anterior al último envío (Bruno, 28-oct: «No coinciden 35» con TN ya igual al libro)', () => {
+  const envio = (terminadoEn: string, extra: Record<string, unknown> = {}) => ({ estado: 'hecho', seco: false, escritos: 3, terminadoEn, ...extra })
+  it('un envío REAL después de la foto la deja vieja: devuelve el último', () => {
+    const e = envioPosteriorALaFoto('2026-10-28T22:42:00Z', [envio('2026-10-29T01:08:00Z'), envio('2026-10-29T01:48:00Z', { escritos: 1 })])
+    expect(e?.terminadoEn).toBe('2026-10-29T01:48:00Z')
+  })
+  it('⛔ cuentan los secos, los que no escribieron nada, los que no terminaron ni los anteriores a la foto', () => {
+    const foto = '2026-10-28T22:42:00Z'
+    expect(envioPosteriorALaFoto(foto, [envio('2026-10-29T01:00:00Z', { seco: true })])).toBeNull()
+    expect(envioPosteriorALaFoto(foto, [envio('2026-10-29T01:00:00Z', { escritos: 0 })])).toBeNull()
+    expect(envioPosteriorALaFoto(foto, [envio('2026-10-29T01:00:00Z', { estado: 'fallado' })])).toBeNull()
+    expect(envioPosteriorALaFoto(foto, [envio('2026-10-28T20:00:00Z')])).toBeNull()
+    expect(envioPosteriorALaFoto(null, [envio('2026-10-29T01:00:00Z')])).toBeNull()
   })
 })

@@ -13,7 +13,7 @@
  * Lo corre la cola en el minuto ⇒ mientras haya uno en cola o corriendo, la lista se vuelve a leer sola.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Notice, color, font, space, useConfirmar } from '@/components/ui'
 import type { Tone } from '@/components/ui/tokens'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
@@ -43,17 +43,21 @@ export function estadoDeEnvio(e: EmpujeStock): [Tone, string, string] {
   return ['success', 'Enviado', `${n(e.escritos ?? 0)} variantes cambiadas en Tienda Nube${quedan}.`]
 }
 
-export function EnviarStockTN({ tienda }: { tienda: TiendaErp }) {
+/** `onEnvios`: la lista que leyó, para que Diferencias diga si su foto de TN es anterior al último envío. */
+export function EnviarStockTN({ tienda, onEnvios }: { tienda: TiendaErp; onEnvios?: (lista: EmpujeStock[]) => void }) {
   const { confirmar } = useConfirmar()
   const [envios, setEnvios] = useState<{ de: TiendaErp; lista: EmpujeStock[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pidiendo, setPidiendo] = useState(false)
   const [vuelta, setVuelta] = useState(0)
+  // En un ref: el padre la pasa como flecha nueva en cada render y ⛔ tiene que volver a disparar la lectura.
+  const avisar = useRef(onEnvios)
+  useEffect(() => { avisar.current = onEnvios })
 
   useEffect(() => {
     let vivo = true
     leerEmpujesStock(tienda)
-      .then((d) => { if (vivo) setEnvios({ de: tienda, lista: d.empujes }) })
+      .then((d) => { if (vivo) { setEnvios({ de: tienda, lista: d.empujes }); avisar.current?.(d.empujes) } })
       .catch((e) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudieron leer los envíos de stock.') })
     return () => { vivo = false }
   }, [tienda, vuelta])

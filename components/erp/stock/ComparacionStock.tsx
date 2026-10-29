@@ -19,9 +19,9 @@ import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
-import { leerComparacion, type ComparacionTiendas, type FilaComparacion, type MarcaErp, type TiendaErp } from '@/lib/erp/cliente'
+import { leerComparacion, type ComparacionTiendas, type EmpujeStock, type FilaComparacion, type MarcaErp, type TiendaErp } from '@/lib/erp/cliente'
 import {
-  COLUMNAS, QUE_PASA, VISTAS, alternarColumna, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
+  COLUMNAS, QUE_PASA, VISTAS, alternarColumna, contarVistas, envioPosteriorALaFoto, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
 } from '@/lib/erp/comparacion.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
@@ -64,6 +64,7 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
   const tiendaEnvio: TiendaErp = marca === 'bdi' ? 'bdi' : tienda || 'zattia'
   const [orden, setOrden] = useState<OrdenLista>(null)
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
+  const [envios, setEnvios] = useState<{ de: TiendaErp; lista: EmpujeStock[] } | null>(null)
   const [prefs, setPrefsState] = useState<Prefs>(() => normalizarPrefs(typeof window === 'undefined' ? null : leerPrefsDeLista(lista, usuario)))
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [ficha, setFicha] = useState<FilaComparacion | null>(null)
@@ -117,6 +118,8 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
   const abrir = (f: FilaComparacion) => setFicha(f)
   const leidas = Object.entries(datos?.tnLeidas ?? {}).filter(([t]) => (marca === 'bdi' ? t === 'bdi' : t !== 'bdi'))
   const nombreVista = VISTAS.find(([k]) => k === vista)?.[1] ?? ''
+  const fotoTn = datos?.tnLeidas?.[tiendaEnvio] ?? null
+  const envioDespues = envios?.de === tiendaEnvio ? envioPosteriorALaFoto(fotoTn, envios.lista) : null
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>Por variante: lo que la tienda tendría que mostrar según el ERP (sus depósitos, menos lo apartado por pedidos sin pagar) contra lo que muestra. Arranca con las que no coinciden.</p>
@@ -136,7 +139,13 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
         <TileResumen titulo="Tienda Nube leída" valor={leidas.length ? cuandoCorto(leidas.map(([, l]) => l).sort()[0]) : '—'} nota="se lee cada 2 horas" />
       </div>
 
-      <EnviarStockTN key={tiendaEnvio} tienda={tiendaEnvio} />
+      {envioDespues && fotoTn && (
+        <Notice tone="warning">
+          Tienda Nube se leyó el {cuandoCorto(fotoTn)}, <b>antes del último envío</b> ({cuandoCorto(envioDespues.terminadoEn)}, {envioDespues.escritos} variantes cambiadas):
+          lo que figura como «Tienda Nube atrasada» puede estar ya arreglado. Se vuelve a leer cada 2 horas.
+        </Notice>
+      )}
+      <EnviarStockTN key={tiendaEnvio} tienda={tiendaEnvio} onEnvios={(lista) => setEnvios({ de: tiendaEnvio, lista })} />
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
