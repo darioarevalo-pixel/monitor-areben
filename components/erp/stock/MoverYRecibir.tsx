@@ -282,6 +282,8 @@ export function MoverYRecibir() {
           <Escaneo linea={linea} onPrenda={(p) => setRecibiendo((r) => r && { ...r, lista: sumarEscaneo(r.lista, p) as Fila[] })} />
           <TablaEscaneada conEnviada filas={cuenta.filas as Fila[]} onCantidad={(f, n) => setRecibiendo((r) => r && { ...r, lista: r.lista.map((x) => (x.producto === f.producto && x.talle === f.talle ? { ...x, cantidad: Math.max(0, Math.trunc(n) || 0) } : x)) })} />
           {cuenta.sobran > 0 && <Notice tone="warning" style={{ marginTop: space[2] }}>{recibiendo.modo === 'preparar' ? 'Hay productos que no están en lo pedido (o de más): sacalos de la lista.' : 'Hay productos que no salieron en esta transferencia: el ERP las rechaza. Si llegaron de más, se anotan como ajuste.'}</Notice>}
+          {/* El error AL LADO del botón: arriba de todo ⛔ se ve con la lista larga (29-oct: Camila «procesó todo» y era un 403). */}
+          {error && <Notice tone="danger" style={{ marginTop: space[3] }} onClose={() => setError(null)}>{error}</Notice>}
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3] }}>
             <Button disabled={trabajando || cuenta.sobran > 0 || (recibiendo.modo === 'preparar' && (cuenta.filas as Fila[]).every((f) => !f.cantidad))} onClick={recibir}>
               {recibiendo.modo === 'preparar' ? (cuenta.completa ? 'Enviar completa' : `Enviar con ${-cuenta.faltan} u de menos`) : cuenta.completa ? 'Recibir completa' : `Recibir con ${-cuenta.faltan} u de menos`}

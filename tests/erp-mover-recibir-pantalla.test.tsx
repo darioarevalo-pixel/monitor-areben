@@ -129,6 +129,22 @@ describe('Mover y recibir', () => {
     expect(document.body.textContent).toContain('en tránsito')
   })
 
+  it('si el ERP rechaza al preparar (rol sin permiso), el error se ve AL LADO del botón y lo escaneado queda', async () => {
+    const pedida = doc({ estado: 'borrador', enviada_por: null, enviada_en: null, renglones: [{ n: 1, product_id: 10, size_id: 1, sku: 'STU-REM-0019-M', barcode: '779001', pedida: 1, armada: 0, enviada: 0, recibida: null }] })
+    m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [pedida], enTransito: [] })
+    m.buscarPrendas.mockResolvedValue({ variantes: [REM], cortado: false })
+    m.armarTransferenciaDoc.mockRejectedValue(new Error('Tu rol no puede hacer esto en el ERP.'))
+    await montar()
+    await abrirFicha()
+    await act(async () => { boton('Preparar').click() })
+    await escanear('779001')
+    await act(async () => { boton('Enviar completa').click() })
+    await esperar()
+    const tarjeta = boton('Enviar completa').closest('section, [class*="card"], div')!.parentElement!
+    expect(tarjeta.textContent).toContain('Tu rol no puede hacer esto en el ERP.')
+    expect(m.enviarTransferenciaDoc).not.toHaveBeenCalled()
+  })
+
   it('una prenda que no salió en la transferencia frena «Recibir»', async () => {
     m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [doc({})], enTransito: [] })
     m.buscarPrendas.mockResolvedValue({ variantes: [{ ...REM, producto: '99', talle: '5', sku: 'STU-OTRA-S', barcode: '779999' }], cortado: false })
