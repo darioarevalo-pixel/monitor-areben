@@ -1164,6 +1164,13 @@ const estadoDeVenta = (v: Venta) => {
   const e = ESTADO_VENTA[v.estado] ?? { texto: v.estado, tono: 'neutral' as const }
   return v.destino === 'erp' && e.texto === 'Pendiente en GN' ? { ...e, texto: 'Pendiente en el ERP' } : e
 }
+/** Las ventas anuladas del turno que ⛔ suman, con el número de su sistema (GN o ERP). */
+function Anuladas({ donde, lista }: { donde: string; lista: NonNullable<ResumenTurno['anuladasGN']> }) {
+  if (!lista.length) return null
+  const numero = (v: (typeof lista)[number]) => { const n = numeroDeLaVenta({ gn_number: v.gn_number, erp_numero: v.erp_numero }); return n != null ? `#${n}` : numeroProvisorio(v.id) }
+  return <Notice tone="warning">Anuladas en {donde}: {lista.map(numero).join(' · ')} ({plata(lista.reduce((t, v) => t + v.total, 0))}). No suman a la caja.</Notice>
+}
+
 const numeroDeVenta = (v: Venta) => (numeroDeLaVenta(v) != null ? `#${numeroDeLaVenta(v)}` : `Provisoria ${numeroProvisorio(v.id)}`)
 
 /** El resumen de una venta (Bruno, 12-oct): qué se llevó, cómo pagó y quién la cobró, para identificarla rápido. */
@@ -2090,11 +2097,9 @@ export function ResumenTurnoDatos({
       {r.esperando.length > 0 && <Notice tone="warning">Transferencias en espera: {r.esperando.length}. No suman hasta que lleguen.</Notice>}
       {r.sinGN.length > 0 && <Notice tone="warning">Cobradas sin llegar a Gestión Nube: {r.sinGN.length}. Suman a la caja.</Notice>}
       {/* A12: GN ⛔ anula por API: la venta anulada a mano allá deja de sumar acá (la plata se devolvió). */}
-      {!!r.anuladasGN?.length && (
-        <Notice tone="warning">
-          Anuladas en Gestión Nube: {r.anuladasGN.map((v) => (v.gn_number ? `#${v.gn_number}` : numeroProvisorio(v.id))).join(' · ')} ({plata(r.anuladasGN.reduce((t, v) => t + v.total, 0))}). No suman a la caja.
-        </Notice>
-      )}
+      {/* La del ERP (Stunned) se anula en el ERP y tiene su número (Bruno, 28-oct: decía «Anuladas en Gestión Nube: 96A141DC»). */}
+      <Anuladas donde="Gestión Nube" lista={(r.anuladasGN ?? []).filter((v) => v.estado !== 'en_erp')} />
+      <Anuladas donde="el ERP" lista={(r.anuladasGN ?? []).filter((v) => v.estado === 'en_erp')} />
       {r.anuladasGN === null && <Notice tone="neutral">Ventas anuladas en Gestión Nube: sin mirar. Se miran al cerrar.</Notice>}
       {/* B5 (Bruno, 11-oct): el descuento a mano y el cambio de precio son libres, pero a la vista. */}
       {!!r.aMano?.ventas && (

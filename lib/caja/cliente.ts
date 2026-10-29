@@ -161,8 +161,9 @@ export type ResumenTurno = {
   cobrosGN: CobroGN[] | null
   esperando: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
   sinGN: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
-  /** A12: las que se anularon a mano en GN (⛔ suman). `null` = ⛔ se pudo mirar. */
-  anuladasGN?: { id: string; total: number; creada_en: string; gn_number: number | null }[] | null
+  /** A12: las anuladas del turno (⛔ suman): las anuladas a mano en GN y las del ERP (`estado = 'en_erp'`, Stunned, con su
+   *  `erp_numero`). `null` = ⛔ se pudo mirar GN. */
+  anuladasGN?: { id: string; estado?: string; total: number; creada_en: string; gn_number: number | null; erp_numero?: number | null }[] | null
   /** B5: lo hecho a mano en el turno. */
   aMano?: { ventas: number } & AMano
 }

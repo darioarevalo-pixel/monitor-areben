@@ -385,7 +385,7 @@ export default async function handler(req, res) {
   /** El turno con lo que cobró, por cuenta, y sus movimientos. Los nombres de las cuentas, los de GN si contesta. */
   async function conResumen(turno, fresco = false) {
     const [ventas, movs, { reglas }] = await Promise.all([
-      sb.from('caja_venta').select('id, estado, pagos, total, creada_en, gn_sale_id, gn_number, a_mano, anulada').eq('turno_id', turno.id).limit(2000),
+      sb.from('caja_venta').select('id, estado, pagos, total, creada_en, gn_sale_id, gn_number, erp_numero, a_mano, anulada').eq('turno_id', turno.id).limit(2000),
       sb.from('caja_turno_mov').select(COLS_MOV).eq('turno_id', turno.id).order('creado_en', { ascending: true }),
       leerConfig(),
     ])

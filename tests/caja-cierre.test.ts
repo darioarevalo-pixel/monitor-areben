@@ -299,6 +299,15 @@ describe('venta del ERP anulada (ensayo Caja Stunned, 26-oct)', () => {
     })
     expect(r.efectivo.esperado).toBe(0)
   })
+  it('se lista con SU número del ERP y marcada como del ERP (Bruno, 28-oct: decía «Anuladas en Gestión Nube: 96A141DC»)', () => {
+    const r = resumenTurno({
+      turno: { fondo: 0 },
+      ventas: [{ ...v('en_erp', [{ cuenta: 12921, monto: 11700 }]), erp_numero: 25, anulada: { por: 'Bruno', en: '2026-10-28T22:10:17Z', motivo: 'prueba' } }],
+      movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: [],
+    })
+    expect(r.anuladasGN).toEqual([expect.objectContaining({ estado: 'en_erp', erp_numero: 25, gn_number: null })])
+    expect(readFileSync('api/_caja.js', 'utf-8')).toMatch(/from\('caja_venta'\)\.select\('[^']*erp_numero[^']*'\)\.eq\('turno_id'/)
+  })
   it('la consulta del turno pide la columna `anulada` (sin ella la regla de arriba nunca se entera)', () => {
     const src = readFileSync('api/_caja.js', 'utf-8')
     expect(src).toMatch(/from\('caja_venta'\)\.select\('[^']*a_mano, anulada'\)\.eq\('turno_id'/)
