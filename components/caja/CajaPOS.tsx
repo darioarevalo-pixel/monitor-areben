@@ -70,10 +70,8 @@ import {
   cancelarVenta,
   confirmarVenta,
   elegirVariante,
-  elegirPuesto,
   leerConfig,
   leerPendientes,
-  puestoCaja,
   leerTurno,
   leerPedidosWeb,
   reintentarPendientes,
@@ -94,6 +92,7 @@ import {
 } from '@/lib/caja/cliente'
 import { BandaCambio, ModalCobroCambio, ModalEncargada, ModalVentaOriginal, PedidoCambio } from '@/components/caja/partesCambio'
 import { useCambio } from '@/components/caja/useCambio'
+import { FranjaPuesto } from '@/components/caja/FranjaPuesto'
 import { Badge, Button, Card, Field, Icono, Input, Modal, Notice, SectionCard, color, font, radius, shadow, space, weight } from '@/components/ui'
 import { useConfirmar } from '@/components/ui/Confirm'
 import { ModalVarianteContext } from '@/components/ui/Modal'
@@ -1664,18 +1663,8 @@ pendientes
         @media (max-width: 900px) { .cobro-grid { grid-template-columns: 1fr; } }
         @media (max-width: 860px) { .pos-grid { grid-template-columns: 1fr; } .pos-der { position: static; max-height: none; } }
       `}</style>
-      {/* El PUESTO (29-oct): con el depósito Evento prendido en el ERP, este equipo puede ser la caja del evento (su turno,
-          su plata, y Stunned que descuenta del Evento). Cambiar de puesto recarga: el turno y el stock son otros. */}
-      {(config?.evento_activo || puestoCaja() === 'evento') && (
-        <div role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap', padding: `${space[2]}px ${space[4]}px`,
-          background: puestoCaja() === 'evento' ? 'var(--mo-warning-solid)' : color.warningBg, color: puestoCaja() === 'evento' ? '#fff' : color.warningInk,
-          borderBottom: `1px solid ${color.warningBorder}`, fontWeight: weight.semibold }}>
-          <span>{puestoCaja() === 'evento' ? 'CAJA DEL EVENTO · sólo Stunned, descuenta del depósito Evento' : 'Caja del local · hay un evento activo'}</span>
-          <Button size="sm" variant="outline" onClick={() => { elegirPuesto(puestoCaja() === 'evento' ? 'local' : 'evento'); window.location.reload() }}>
-            {puestoCaja() === 'evento' ? 'Pasar a la caja del local' : 'Usar este equipo como caja del evento'}
-          </Button>
-        </div>
-      )}
+      {/* El PUESTO (29-oct): la caja del local o la del evento (components/caja/FranjaPuesto.tsx). */}
+      <FranjaPuesto config={config} />
       <header className="pos-top">
         <IrA href="/caja" className="pos-tbtn icono" aria-label="Volver" title="Volver" style={{ height: 36 }}>
           <Icono nombre="atras" size={18} />

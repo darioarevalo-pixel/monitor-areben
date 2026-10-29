@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { FranjaPuesto } from '@/components/caja/FranjaPuesto'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin } from '@/lib/permisos'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
@@ -112,6 +113,7 @@ function CajaDeMarca({ store }: { store: string }) {
       {/* Una columna debajo de 1100 px; arriba, la vista previa del ticket a la derecha (sólo admin). */}
       <style>{`@media (min-width: 1100px) { .caja-grilla.con-ticket { grid-template-columns: minmax(0, 1fr) 320px; } .caja-ticket { position: sticky; top: 0; } }`}</style>
       <div style={{ display: 'grid', gap: space[3], minWidth: 0 }}>
+        <FranjaPuesto config={config} />
         {errTurno && <Notice tone="danger">No se pudo leer la caja: {errTurno}</Notice>}
         {turno && !esMio && <Notice tone="neutral">Caja de {turno.abierto_por ?? 'otra cuenta'}: POS sólo para esa cuenta.</Notice>}
         {otras.length > 0 && <Pendientes ventas={otras} admin={admin} esMio={esMio} onCambio={() => { refrescarPendientes(); refrescarTurno() }} />}
