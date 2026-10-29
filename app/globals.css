@@ -1212,6 +1212,7 @@ a.apps-item:hover {
   text-decoration: none;
   color: #cbd5e1;
 }
+.erp-menu-item svg { flex-shrink: 0; } /* «Productos y precios» con su contador aplastaba el ícono a 0 px */
 .erp-menu-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
 .erp-menu-item--debajo { height: 34px; padding-left: 36px; font-size: 13.5px; color: #8391a7; }
 .erp-menu-item--on, .erp-menu-item--on:hover { background: var(--mo-brand-solid); color: #fff; font-weight: 600; }
@@ -1225,6 +1226,9 @@ a.apps-item:hover {
    El menú de la izquierda se esconde (lo que no entra abajo va en la hoja de «Más»). La compu queda igual. */
 @media (max-width: 900px) {
   .erp-app.shell { flex-direction: column; }
+  /* 🔴 Sin `min-height: 0`, en columna el contenido estira su caja hasta su alto entero y la barra de abajo queda
+     fuera de la pantalla (4.100 px abajo en Ventas, medido en prod el 29-oct): el que se desliza es `.shell-content`. */
+  .erp-app .shell-main { min-height: 0; }
   .erp-menu { display: none; }
   .erp-movil-top {
     display: flex; align-items: center; gap: 8px; flex: 0 0 auto;

@@ -44,8 +44,11 @@ type Ventana = { tipo: 'cobro' | 'editar'; fila: FilaVentaLista; desdeFicha: boo
 
 /** El `Select` del kit es de ancho 100% (formularios): en la barra cada desplegable mide lo suyo, ⛔ una fila entera. */
 
-/** 📱 Qué es cada columna en la tarjeta del celular (artifact aprobado 29-oct): el dato grande es el TOTAL. */
-const MOVIL: Record<string, MovilColumna> = { c: 'titulo', total: 'dato', n: 'chico', h: 'chico', o: 'chico', p: 'chico' }
+/**
+ * 📱 Qué es cada columna en la tarjeta del celular (artifact aprobado 29-oct): el dato grande es el TOTAL. El origen ⛔ entra:
+ * «Caja · Zattia» con su sigla se comía el cobro en 390 px (medido en prod, 29-oct), y el cobro es lo que se mira.
+ */
+const MOVIL: Record<string, MovilColumna> = { c: 'titulo', total: 'dato', n: 'chico', h: 'chico', p: 'chico' }
 
 const ORIGENES: Array<[string, string]> = [['', 'Todos los orígenes'], ['caja', 'Caja'], ['tn', 'Tienda Nube'], ['mayorista', 'Mayorista'], ['ml', 'Mercado Libre']]
 
@@ -254,6 +257,8 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
             filtros={<>
               <FiltroOpciones etiqueta="Período" style={ANCHO_SELECT} opciones={PERIODOS} valor={periodo} onCambio={(k) => { setFicha(null); setPeriodo(k) }} />
               <FiltroOpciones etiqueta="Origen" style={ANCHO_SELECT} opciones={ORIGENES} valor={origen} onCambio={setOrigen} />
+              {/* 📱 En el celular «Actualizar» va en la hoja: al lado del buscador y de «Filtros» quedaba solo en un renglón. */}
+              {angosta && <Button variant="outline" disabled={cargando} onClick={() => cargar()}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>}
             </>}
           />
           {!angosta && <PanelColumnas
@@ -262,7 +267,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
             onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
           />}
-          <Button variant="outline" disabled={cargando} onClick={() => cargar()}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
+          {!angosta && <Button variant="outline" disabled={cargando} onClick={() => cargar()}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>}
         </div>
         <ListaTrabajo
           columnas={columnas} filas={deLaHoja} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={120}

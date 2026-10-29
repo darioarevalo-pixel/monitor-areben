@@ -249,7 +249,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
         const on = opcionActiva === o.key
         return (
           <button
-            key={o.key} type="button" role="radio" aria-checked={on} onClick={() => elegirOpcion(o.key)}
+            // `data-foco`: la hoja enfoca la marca ELEGIDA (con el foco en la primera, BDI parecía la elegida).
+            key={o.key} type="button" role="radio" aria-checked={on} onClick={() => elegirOpcion(o.key)} data-foco={claro && on ? '' : undefined}
             style={{ flex: 1, height: claro ? 36 : 30, border: 0, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: weight.semibold, whiteSpace: 'nowrap', background: on ? (claro ? color.surface : 'rgba(255,255,255,0.16)') : 'transparent', color: on ? (claro ? color.ink : '#fff') : (claro ? color.mut : '#94a3b8'), boxShadow: on && claro ? '0 1px 2px rgba(16,24,40,.1)' : undefined }}
           >
             <span aria-hidden style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, marginRight: 6, background: COLOR_DE_MARCA[o.key] }} />
