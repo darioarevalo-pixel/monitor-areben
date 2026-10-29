@@ -2,6 +2,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { ProveedorLineaErp } from '@/lib/erp/linea-erp'
 
 /**
  * **ERP › Stock › Mover y recibir, del lado de la pantalla.** El oráculo es lo que se APRIETA y lo que viaja al motor:
@@ -26,7 +27,7 @@ const esperar = () => act(async () => { await new Promise((r) => setTimeout(r, 0
 async function montar() {
   const { MoverYRecibir } = await import('@/components/erp/stock/MoverYRecibir')
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host)
-  await act(async () => { root!.render(<MoverYRecibir />) })
+  await act(async () => { root!.render(<ProveedorLineaErp value="stunned"><MoverYRecibir /></ProveedorLineaErp>) })
   await esperar()
 }
 async function escribir(input: HTMLInputElement, valor: string) {

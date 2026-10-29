@@ -10,7 +10,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, color, font, space, weight } from '@/components/ui'
+import { Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, weight } from '@/components/ui'
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, tonoDeConteo } from '@/components/ui/PiezasLista'
@@ -26,7 +27,6 @@ import { BarraPasos } from './Barritas'
 import { DEPOSITOS_DE_LINEA, cuentaDeRecepcion, fijarCantidad, listaDeRecepcion, prendaExacta, renglonesParaMotor, sumarEscaneo, unidades } from '@/lib/erp/transferencia-escaneo.core.js'
 
 type Fila = { producto: string; talle: string; sku: string | null; barcode: string | null; nombre: string | null; talleNombre: string | null; cantidad: number; enviada?: number }
-const LINEAS: Array<{ key: TiendaErp; label: string }> = [{ key: 'stunned', label: 'Stunned' }, { key: 'zattia', label: 'Zattia' }, { key: 'bdi', label: 'BDI' }]
 const dep = (d: string) => (NOMBRE_DEPOSITO as Record<string, string>)[d] ?? d
 const baseDe = (l: TiendaErp) => (l === 'bdi' ? 'bdi' : 'zattia')
 const nombreDe = (f: Fila) => (f.nombre ? `${f.nombre}${f.talleNombre ? ` · ${f.talleNombre}` : ''}` : f.sku ?? `Producto ${f.producto}/${f.talle}`)
@@ -118,10 +118,11 @@ function TablaEscaneada({ filas, onCantidad, conEnviada }: { filas: Fila[]; onCa
 }
 
 export function MoverYRecibir() {
-  const [linea, setLinea] = useState<TiendaErp>('stunned')
+  // La del selector del menú (⛔ pestañas de otra marca: Bruno, 28-oct). Cambiarla remonta la pantalla (`key` en `Erp`).
+  const linea: TiendaErp = useTiendaErp()
   const deps = DEPOSITOS_DE_LINEA[linea] as string[]
-  const [desde, setDesde] = useState('deposito')
-  const [hacia, setHacia] = useState('local')
+  const [desde, setDesde] = useState(() => deps[1] ?? deps[0])
+  const [hacia, setHacia] = useState(() => deps[0])
   const [lista, setLista] = useState<Fila[]>([])
   const [nota, setNota] = useState('')
   const [docs, setDocs] = useState<TransferenciaDoc[] | null>(null)
@@ -152,12 +153,6 @@ export function MoverYRecibir() {
     })()
     return () => { vivo = false }
   }, [linea])
-
-  function cambiarLinea(k: string) {
-    const l = k as TiendaErp
-    const d = DEPOSITOS_DE_LINEA[l] as string[]
-    setLinea(l); setDesde(d[1] ?? d[0]); setHacia(d[0]); setLista([]); setNota(''); setDocs(null); setNombres({} as Nombres); setRecibiendo(null); setFichaId(null); setVista(null); setQ(''); setError(null); setHecho(null)
-  }
 
   async function mover() {
     if (desde === hacia) { setError('Elegí depósitos distintos.'); return }
@@ -229,8 +224,7 @@ export function MoverYRecibir() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard title="Mover y recibir" subtitle="Una transferencia entre el depósito y el local: se escanea lo que sale y, al llegar, lo que llegó. Lo que no llega queda marcado como diferencia.">
-        <Tabs items={LINEAS} value={linea} onChange={cambiarLinea} />
-        <Notice tone="neutral" style={{ marginTop: space[3] }}>Mueve sólo el stock del ERP: no toca Gestión Nube ni Tienda Nube. Mientras Zattia siga en Gestión Nube, sus transferencias se hacen como siempre.</Notice>
+        {linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mueve sólo el stock del ERP: no toca Gestión Nube ni Tienda Nube. Mientras {linea === 'bdi' ? 'BDI' : 'Zattia'} siga en Gestión Nube, sus transferencias se hacen como siempre.</Notice>}
       </SectionCard>
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}

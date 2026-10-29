@@ -23,9 +23,9 @@ import { avisoDeRuta, nombreDeCuenta, CANALES_DE_RUTA, NOMBRE_MEDIO, NOMBRE_TITU
 import { NOMBRE_CANAL, NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 import { normal } from '@/lib/erp/stock-lista.core.js'
 import { TiraConfiguracion, type PiezaConfiguracion } from './TiraConfiguracion'
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 
 const SE_ELIGE = ''
-const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
 /** El día argentino de hoy (UTC−3, sin horario de verano). */
 const hoyAR = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10)
@@ -58,7 +58,8 @@ export function RutasCobro({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const configura = usePuedeErp(marca)('configurar')
-  const [linea, setLinea] = useState<string>(marca)
+  // La línea es la del selector del menú (⛔ un selector de otra marca adentro: Bruno, 28-oct). Cambiarla remonta (`key` en `Erp`).
+  const linea: string = useTiendaErp()
   const [datos, setDatos] = useState<RutasDeMarca | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hecho, setHecho] = useState<string | null>(null)
@@ -201,11 +202,6 @@ export function RutasCobro({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {
         <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
           <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-            {lineas.length > 1 && (
-              <Select aria-label="Línea" style={ANCHO_SELECT} value={deLinea} onChange={(e) => { setLinea(e.target.value); setEditando(null) }}>
-                {lineas.map((l) => <option key={l} value={l}>{nombreLinea(l)}</option>)}
-              </Select>
-            )}
             <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las rutas" placeholder="Canal, medio o cuenta" />
           </div>
           {enCambios

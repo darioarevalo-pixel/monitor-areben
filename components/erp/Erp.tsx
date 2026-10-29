@@ -106,7 +106,9 @@ export const SECCIONES_ERP: Seccion[] = [
 const VIEJAS: Record<string, Record<string, [string, string, string | null]>> = {
   stock: {
     movimientos: ['stock', 'stock', 'movimientos'], mover: ['stock', 'transferencias', 'mover'], recepciones: ['stock', 'ajustes', 'ingresos'], ingresos: ['stock', 'ajustes', 'ingresos'],
-    comparacion: ['stock', 'diferencias', 'comparacion'], conciliacion: ['stock', 'diferencias', 'conciliacion'], diferencias: ['stock', 'diferencias', 'diferencias'],
+    comparacion: ['stock', 'diferencias', 'comparacion'], conciliacion: ['stock', 'diferencias', 'conciliacion'],
+    // 🔴 ⛔ `diferencias`: es el nombre de la pestaña NUEVA. Con esa entrada, `/erp/stock/diferencias` (la dirección de su primera
+    // vista, «Con Tienda Nube y Mercado Libre») caía siempre en «Con Gestión Nube» (prueba del corte, 28-oct).
   },
   ventas: { cajas: ['caja', 'cajas', null], factura: ['ventas', 'facturacion', 'factura'] },
   caja: { factura: ['ventas', 'facturacion', 'factura'] },
@@ -309,21 +311,21 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {vista === 'stock' && <StockErp key={marca} ajustar={ajustarPrenda} irA={(p, v) => ir('stock', p, v)} />}
             {vista === 'movimientos' && <MovimientosStock key={marca} ajustar={ajustarPrenda} />}
             {vista === 'transferencias' && <TransferenciasStock key={marca} />}
-            {vista === 'mover' && <MoverYRecibir />}
-            {vista === 'ajustes' && <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : 'lista'} pedida={aAjustar} />}
+            {vista === 'mover' && <MoverYRecibir key={lineaVista} />}
+            {vista === 'ajustes' && <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : `lista/${lineaVista}`} pedida={aAjustar} />}
             {vista === 'ingresos' && <RecepcionesStock key={marca} />}
             {vista === 'comparacion' && <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'diferencias', 'conciliacion')} />}
-            {vista === 'conciliacion' && <ConciliacionDia key={marca} ajustar={ajustarPrenda} />}
+            {vista === 'conciliacion' && <ConciliacionDia key={`${marca}/${lineaVista}`} ajustar={ajustarPrenda} />}
             {vista === 'diferencias' && <DiferenciasDia key={marca} ajustar={ajustarPrenda} />}
             {pestania === 'productos' && <ProductosErp />}
             {pestania === 'precios' && <PreciosErp key={marca} />}
             {vista === 'clientes' && <ClientesErp key={`${marca}/${pedidoN}`} abrir={aAbrir?.tipo === 'cliente' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
             {vista === 'cuenta-corriente' && <CuentaCorriente key={marca} />}
             {pestania === 'proveedores' && <ProveedoresErp key={marca} />}
-            {pestania === 'reglas' && <ReglasComerciales key={marca} ir={irAPieza} />}
-            {vista === 'rutas' && <RutasCobro key={marca} ir={irAPieza} />}
+            {pestania === 'reglas' && <ReglasComerciales key={`${marca}/${lineaVista}`} ir={irAPieza} />}
+            {vista === 'rutas' && <RutasCobro key={`${marca}/${lineaVista}`} ir={irAPieza} />}
             {vista === 'cuentas' && <CuentasErp key={marca} ir={irAPieza} />}
-            {pestania === 'redondeo' && <Redondeo key={marca} />}
+            {pestania === 'redondeo' && <Redondeo key={`${marca}/${lineaVista}`} />}
             {pestania === 'estructura' && <EstructuraErp key={marca} />}
           </div>
         </div>

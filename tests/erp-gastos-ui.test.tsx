@@ -2,6 +2,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { ProveedorLineaErp } from '@/lib/erp/linea-erp'
 
 /**
  * **ERP › Ventas › Gastos, la pantalla**: abre en «De prueba»; los números salen del motor; si hay cobros sin tasa lo dice
@@ -32,7 +33,7 @@ async function montar() {
   const { GastosErp } = await import('@/components/erp/ventas/GastosErp')
   const { ConfirmProvider } = await import('@/components/ui')
   const host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<ConfirmProvider><GastosErp /></ConfirmProvider>) })
+  await act(async () => { root = createRoot(host); root.render(<ProveedorLineaErp value="zattia"><ConfirmProvider><GastosErp /></ConfirmProvider></ProveedorLineaErp>) })
   await act(async () => {})
   return host
 }

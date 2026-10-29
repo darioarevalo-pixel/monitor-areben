@@ -16,13 +16,23 @@ describe('ERP › menú y direcciones', () => {
     expect(resolverRutaErp(['stock', 'transferencias', 'mover'])).toMatchObject({ pestania: 'transferencias', vista: 'mover', valida: true })
     expect(hrefErp('stock', 'diferencias', 'conciliacion')).toBe('/erp/stock/diferencias/conciliacion')
     expect(hrefErp('stock', 'diferencias', 'comparacion')).toBe('/erp/stock/diferencias')
-    for (const [vieja, nueva] of [['movimientos', '/erp/stock/stock/movimientos'], ['mover', '/erp/stock/transferencias/mover'], ['recepciones', '/erp/stock/ajustes/ingresos'], ['conciliacion', '/erp/stock/diferencias/conciliacion'], ['diferencias', '/erp/stock/diferencias/diferencias']]) {
+    for (const [vieja, nueva] of [['movimientos', '/erp/stock/stock/movimientos'], ['mover', '/erp/stock/transferencias/mover'], ['recepciones', '/erp/stock/ajustes/ingresos'], ['conciliacion', '/erp/stock/diferencias/conciliacion']]) {
       const r = resolverRutaErp(['stock', vieja])
       expect(r.valida).toBe(false)
       expect(hrefErp('stock', r.pestania, r.vista)).toBe(nueva)
       expect(hrefErp('stock', vieja)).toBe(nueva)
     }
     expect(resolverRutaErp(['ventas', 'ventas', 'x']).valida).toBe(false)
+  })
+
+  it('🔴 Diferencias: tocar «Con Tienda Nube y Mercado Libre» (la primera vista) la abre, ⛔ cae en «Con Gestión Nube» (prueba del corte, 28-oct)', () => {
+    const href = hrefErp('stock', 'diferencias', 'comparacion')
+    expect(resolverRutaErp(href.split('/').slice(2))).toMatchObject({ pestania: 'diferencias', vista: 'comparacion', valida: true })
+    expect(resolverRutaErp(hrefErp('stock', 'diferencias', 'diferencias').split('/').slice(2))).toMatchObject({ vista: 'diferencias', valida: true })
+    // Y TODAS: la dirección de cada vista vuelve a esa vista.
+    for (const sec of SECCIONES_ERP.filter((x) => x.key !== 'inicio')) for (const p of sec.pestanias) for (const v of p.vistas ?? [{ key: null }]) {
+      expect(resolverRutaErp(hrefErp(sec.key, p.key, v.key).split('/').slice(2)), `${sec.key}/${p.key}/${v.key}`).toMatchObject({ pestania: p.key, vista: v.key })
+    }
   })
 
   it('las secciones del diseño, en su orden', () => {

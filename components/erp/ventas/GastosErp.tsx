@@ -19,6 +19,7 @@ import {
   PERIODOS_GASTO, TIPOS_A_MANO, TIPO_GASTO, VISTAS_GASTO, armarFilasGastos, contarVistasGasto, filtrarGasto, rangoGasto, resumenGastos, validarGasto,
 } from '@/lib/erp/gastos.core.js'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 
 type FilaGasto = ReturnType<typeof armarFilasGastos>[number]
 
@@ -136,7 +137,7 @@ export function GastosErp() {
 
       {nuevo && (
         <NuevoGasto
-          marca={marca} prueba={prueba} onCerrar={() => setNuevo(false)}
+          prueba={prueba} onCerrar={() => setNuevo(false)}
           onGuardar={async (g) => {
             const ok = await confirmar({
               titulo: 'Cargar el gasto',
@@ -158,11 +159,13 @@ export function GastosErp() {
   )
 }
 
-function NuevoGasto({ marca, prueba, onCerrar, onGuardar }: {
-  marca: MarcaErp; prueba: boolean; onCerrar: () => void
+function NuevoGasto({ prueba, onCerrar, onGuardar }: {
+  prueba: boolean; onCerrar: () => void
   onGuardar: (g: { linea?: string; fecha: string; tipo: string; monto: number; detalle: string; cuenta?: string }) => Promise<string | null>
 }) {
-  const [f, setF] = useState(() => ({ fecha: diaArgentino(Date.now()), tipo: 'otro', monto: '', detalle: '', cuenta: '', linea: marca }))
+  // La línea del gasto es la del menú (Bruno, 28-oct: ⛔ opciones de otra marca adentro).
+  const linea = useTiendaErp()
+  const [f, setF] = useState(() => ({ fecha: diaArgentino(Date.now()), tipo: 'otro', monto: '', detalle: '', cuenta: '', linea }))
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
   const poner = (k: keyof typeof f, v: string) => setF((x) => ({ ...x, [k]: v }))
@@ -185,9 +188,6 @@ function NuevoGasto({ marca, prueba, onCerrar, onGuardar }: {
         <Field label="Monto" hint="Con signo menos corrige uno cargado de más. Ej.: 21.000 o -21.000"><Input inputMode="decimal" value={f.monto} onChange={(e) => poner('monto', e.target.value)} placeholder="$ 0" /></Field>
         <Field label="Detalle" hint="De qué es el gasto"><Input value={f.detalle} onChange={(e) => poner('detalle', e.target.value)} placeholder="Cadete · 6 envíos" /></Field>
         <Field label="Cuenta (opcional)" hint="De dónde salió la plata"><Input value={f.cuenta} onChange={(e) => poner('cuenta', e.target.value)} placeholder="Caja de efectivo" /></Field>
-        {marca === 'zattia' && (
-          <Field label="Marca"><Select value={f.linea} onChange={(e) => poner('linea', e.target.value)}><option value="zattia">Zattia</option><option value="stunned">Stunned</option></Select></Field>
-        )}
       </div>
     </Modal>
   )

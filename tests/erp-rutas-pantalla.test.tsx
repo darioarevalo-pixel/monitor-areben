@@ -2,6 +2,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { ProveedorLineaErp } from '@/lib/erp/linea-erp'
 
 /**
  * **ERP › Cuentas de cobro, del lado de la pantalla** (18-oct, Bruno: «que avise»). El oráculo es lo que se LEE y lo que
@@ -34,10 +35,10 @@ let host: HTMLDivElement
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); vi.clearAllMocks() })
 
-async function montar() {
+async function montar(linea: 'zattia' | 'stunned' = 'zattia') {
   const { RutasCobro } = await import('@/components/erp/RutasCobro')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<RutasCobro />) })
+  await act(async () => { root = createRoot(host); root.render(<ProveedorLineaErp value={linea}><RutasCobro /></ProveedorLineaErp>) })
   await act(async () => {})
 }
 /** La fila de la lista (canal Local, la primera vista): `role="row"` con el medio adentro. */
@@ -48,13 +49,6 @@ const elegir = async (cuenta: string) => {
   const sel = [...document.body.querySelectorAll('select')].find((x) => x.getAttribute('aria-label') !== 'Línea') as HTMLSelectElement
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, cuenta)
-    sel.dispatchEvent(new Event('change', { bubbles: true }))
-  })
-}
-const linea = async (l: string) => {
-  const sel = host.querySelector('select[aria-label="Línea"]') as HTMLSelectElement
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, l)
     sel.dispatchEvent(new Event('change', { bubbles: true }))
   })
 }
@@ -95,8 +89,8 @@ describe('RutasCobro', () => {
 
   it('Stunned: la misma pantalla con su línea', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    await montar()
-    await linea('stunned')
+    await montar('stunned')
+    expect(host.querySelector('select[aria-label="Línea"]')).toBeNull()
     expect(fila('Transferencia').textContent).toContain('Sin ruta')
     await abrir('Transferencia')
     await elegir(GAL)

@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { armarConciliacion } from '@/lib/erp/conciliacion.core.js'
 import type { ConciliacionDelDia } from '@/lib/erp/cliente'
+import { ProveedorLineaErp } from '@/lib/erp/linea-erp'
 
 /**
  * **ERP › Conciliación, del lado de la pantalla** (18-oct; 🎨 19-oct con el molde de REGISTRO). El oráculo es lo que se LEE:
@@ -35,10 +36,10 @@ const ajustar = vi.fn()
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); vi.clearAllMocks() })
 
-async function montar() {
+async function montar(linea: 'zattia' | 'stunned' = 'zattia') {
   const { ConciliacionDia } = await import('@/components/erp/ConciliacionDia')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<ConciliacionDia ajustar={ajustar} />) })
+  await act(async () => { root = createRoot(host); root.render(<ProveedorLineaErp value={linea}><ConciliacionDia ajustar={ajustar} /></ProveedorLineaErp>) })
   await act(async () => {})
 }
 const texto = () => host.textContent ?? ''
@@ -76,10 +77,9 @@ describe('ConciliacionDia', () => {
     expect(abrir).toHaveBeenCalledWith('https://zattiaco.mitiendanube.com/admin/orders/99', '_blank', 'noopener')
     abrir.mockRestore()
   })
-  it('Stunned se pide como stunned y abre el producto en la base de Zattia', async () => {
-    await montar()
-    const sel = host.querySelector('select[aria-label="Tienda"]') as HTMLSelectElement
-    await act(async () => { sel.value = 'stunned'; sel.dispatchEvent(new Event('change', { bubbles: true })) })
+  it('Stunned (la línea del menú) se pide como stunned y abre el producto en la base de Zattia; ⛔ selector de tienda adentro', async () => {
+    await montar('stunned')
+    expect(host.querySelector('select[aria-label="Tienda"]')).toBeNull()
     await act(async () => {})
     expect(leerConciliacion).toHaveBeenLastCalledWith('stunned', null)
     await clic(filaDe('Remera Lisa · M'))

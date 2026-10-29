@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ReglaComercial, ReglasDeMarca } from '@/lib/erp/cliente'
+import { ProveedorLineaErp } from '@/lib/erp/linea-erp'
 
 /**
  * **ERP › Configuración › Reglas con el molde, del lado de la pantalla** (🎨 Diseño 7). El oráculo es lo que se LEE y lo
@@ -37,10 +38,10 @@ let host: HTMLDivElement
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); vi.clearAllMocks() })
 
-async function montar(ir = vi.fn()) {
+async function montar(ir = vi.fn(), linea: 'zattia' | 'stunned' = 'zattia') {
   const { ReglasComerciales } = await import('@/components/erp/ReglasComerciales')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<ReglasComerciales ir={ir} />) })
+  await act(async () => { root = createRoot(host); root.render(<ProveedorLineaErp value={linea}><ReglasComerciales ir={ir} /></ProveedorLineaErp>) })
   await act(async () => {})
   return ir
 }
@@ -72,13 +73,9 @@ describe('ERP › Reglas con el molde', () => {
     expect(filas().some((f) => f.includes('Galicia 6 cuotas') && f.includes('De la Agenda'))).toBe(true)
   })
 
-  it('Stunned por el selector de línea; sin promos bancarias (son de la marca)', async () => {
-    await montar()
-    const sel = host.querySelector('select[aria-label="Línea"]') as HTMLSelectElement
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, 'stunned')
-      sel.dispatchEvent(new Event('change', { bubbles: true }))
-    })
+  it('Stunned por la línea del menú (⛔ selector adentro); sin promos bancarias (son de la marca)', async () => {
+    await montar(vi.fn(), 'stunned')
+    expect(host.querySelector('select[aria-label="Línea"]')).toBeNull()
     expect(filas().some((f) => f.includes('Stunned transferencia'))).toBe(true)
     expect(vista(/Promos bancarias/)).toBeUndefined()
   })

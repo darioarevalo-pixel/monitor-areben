@@ -17,6 +17,15 @@ export function useLineaErp(): LineaErp {
   return useContext(LineaCtx)
 }
 
+/**
+ * La tienda del selector del menú: `bdi`, `zattia` o `stunned`. 🔑 Adentro de una marca ⛔ hay opciones de otra (Bruno,
+ * 28-oct: «si estoy en Stunned, lo de adentro tiene que ser de Stunned»): las pantallas toman ESTO, ⛔ un selector propio.
+ */
+export function useTiendaErp(): 'bdi' | 'zattia' | 'stunned' {
+  const l = useContext(LineaCtx)
+  return l === '' ? 'bdi' : l
+}
+
 // `Erp` se remonta al cambiar de sección: la línea elegida vive acá, fuera del componente, para que no vuelva sola a Zattia.
 let elegida: LineaErp = 'zattia'
 export const lineaElegida = (): LineaErp => elegida

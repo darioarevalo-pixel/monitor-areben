@@ -19,8 +19,8 @@ import { leerRedondeo, ponerRedondeo, type CambioDeRedondeo, type CanalRuta, typ
 import { ejemploDeRedondeo, NOMBRE_MODO, PASOS, textoDeRedondeo } from '@/lib/erp/redondeo.core.js'
 import { NOMBRE_CANAL, NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 import { normal } from '@/lib/erp/stock-lista.core.js'
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 
-const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const CAMBIOS = 'cambios'
 const EJEMPLO = 12345.67
 
@@ -51,7 +51,8 @@ export function Redondeo() {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const configura = usePuedeErp(marca)('configurar')
-  const [linea, setLinea] = useState<string>(marca)
+  // La línea es la del selector del menú (⛔ un selector de otra marca adentro: Bruno, 28-oct). Cambiarla remonta (`key` en `Erp`).
+  const linea: string = useTiendaErp()
   const [datos, setDatos] = useState<RedondeoDeMarca | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hecho, setHecho] = useState<string | null>(null)
@@ -155,11 +156,6 @@ export function Redondeo() {
         <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
           <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-            {lineas.length > 1 && (
-              <Select aria-label="Línea" style={ANCHO_SELECT} value={deLinea} onChange={(e) => { setLinea(e.target.value); setEditando(null) }}>
-                {lineas.map((l) => <option key={l} value={l}>{nombreLinea(l)}</option>)}
-              </Select>
-            )}
             <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en el redondeo" placeholder="Canal o quién lo puso" />
           </div>
           {enCambios

@@ -20,6 +20,7 @@ import { leerConciliacion, type ConciliacionDelDia, type FilaConciliacion, type 
 import { normal } from '@/lib/erp/stock-lista.core.js'
 import { FichaPrenda, type PrendaAbierta } from './stock/FichaPrenda'
 import type { PrendaAAjustar } from './stock/StockErp'
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 /** Contra qué se compara cada fila (el `tipo` del motor). */
@@ -43,9 +44,9 @@ const COLUMNAS = [
 export function ConciliacionDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => void }) {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
-  // En la base de Zattia hay dos tiendas: Zattia y Stunned (su Tienda Nube es propia).
-  const [deZattia, setDeZattia] = useState<TiendaErp>('zattia')
-  const tienda: TiendaErp = marca === 'bdi' ? 'bdi' : deZattia
+  // En la base de Zattia hay dos tiendas: Zattia y Stunned (su Tienda Nube es propia). La del selector del menú (Bruno, 28-oct:
+  // ⛔ opciones de otra marca adentro); cambiarla remonta la pantalla (`key` en `Erp`).
+  const tienda: TiendaErp = useTiendaErp()
   const [fecha, setFecha] = useState<string | null>(null)
   const [datos, setDatos] = useState<ConciliacionDelDia | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -109,11 +110,6 @@ export function ConciliacionDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => v
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>El ERP contra Tienda Nube, Gestión Nube y Mercado Libre: cuánto coincide y lo que no, con qué mirar. Se calcula una vez por día, a las 13:40.</p>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
-        {marca === 'zattia' && (
-          <Select aria-label="Tienda" style={ANCHO_SELECT} value={deZattia} onChange={(e) => { setDeZattia(e.target.value as TiendaErp); setFecha(null); setFicha(null) }}>
-            <option value="zattia">Zattia</option><option value="stunned">Stunned</option>
-          </Select>
-        )}
         {datos && datos.dias.length > 0 && (
           <Select aria-label="Día" style={ANCHO_SELECT} value={datos.fecha ?? ''} onChange={(e) => setFecha(e.target.value)} disabled={cargando}>
             {datos.dias.map((d) => <option key={d} value={d}>{dia(d)}</option>)}

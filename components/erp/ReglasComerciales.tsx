@@ -32,6 +32,7 @@ import { indexarTn, matchTn, type IndiceTn, type TnProducto } from '@/lib/tn'
 import { ofertaVigente } from '@/lib/tienda.core.js'
 import { validarRegla } from '@/motor/venta/reglas.mjs'
 import { esStunned } from '@/lib/lineas'
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 
 const MARCAS: Array<{ key: MarcaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'bdi', label: 'BDI' }]
 const MEDIOS: Array<{ key: MedioRegla; label: string }> = [
@@ -92,7 +93,8 @@ export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void
   const [trabajando, setTrabajando] = useState(false)
   const [editando, setEditando] = useState<ReglaComercial | null>(null)
   // La línea que se mira (Stunned adentro de Zattia); en una marca sin líneas, la marca.
-  const [linea, setLinea] = useState<string>(marca)
+  // La línea es la del selector del menú (⛔ un selector de otra marca adentro: Bruno, 28-oct). Cambiarla remonta (`key` en `Erp`).
+  const linea: string = useTiendaErp()
   const [vista, setVista] = useState('prendidas')
   const [q, setQ] = useState('')
   const { confirmar } = useConfirmar()
@@ -298,11 +300,6 @@ export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void
         <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
           <VistasLista vistas={VISTAS_REGLAS} valor={enVista} conteo={conteo} onCambio={setVista} />
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-            {lineas && (
-              <Select aria-label="Línea" style={{ cursor: 'pointer', width: 'auto', flex: '0 0 auto' }} value={deLinea} onChange={(e) => { setLinea(e.target.value); setEditando(null) }}>
-                {lineas.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
-              </Select>
-            )}
             <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las reglas" placeholder="Regla, medio o campaña" />
           </div>
           {deAgenda && <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Las promos bancarias se cargan en la Agenda: acá sólo se ven.</div>}
@@ -462,6 +459,8 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
   const [error, setError] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState(false)
   const [enVivo, setEnVivo] = useState<ReglaComercial | null>(null)
+  // La línea es la del menú (Bruno, 28-oct): ⛔ se elige Zattia o Stunned por producto; uno escrito a mano es de esa línea.
+  const tienda = useTiendaErp()
   const conLineas = !!LINEAS[marca]
 
   useEffect(() => {
@@ -478,7 +477,9 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
   const buscar = () => correr(async () => {
     const r = await buscarPrendas(marca, texto)
     const por = new Map<string, { producto: string; nombre: string | null; sku: string | null }>()
-    for (const v of r.variantes) if (!por.has(v.producto)) por.set(v.producto, { producto: v.producto, nombre: v.nombre, sku: v.sku })
+    // Sólo los de la línea del menú (Bruno, 28-oct): en Stunned ⛔ aparecen los de Zattia, ni al revés.
+    const deLaLinea = (sku: string | null) => !conLineas || (tienda === 'stunned') === esStunned(sku)
+    for (const v of r.variantes) if (!por.has(v.producto) && deLaLinea(v.sku)) por.set(v.producto, { producto: v.producto, nombre: v.nombre, sku: v.sku })
     setEncontradas([...por.values()])
   }, 'No se pudo buscar.')
   // Precio (el de TN con su oferta, editable) y categorías de TN de la prenda encontrada.
@@ -488,7 +489,7 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
     // La línea por el SKU, como la Caja: la prenda de Stunned se simula con las reglas de Stunned.
     return { producto: e.producto, nombre: e.nombre ?? `Producto ${e.producto}`, precio: precio ? String(precio) : '', categorias: t?.categories ?? [], ...(conLineas && esStunned(e.sku) ? { linea: 'stunned' as const } : {}) }
   }
-  const agregar = (p: Partial<Prenda>) => setPrendas((xs) => [...xs, { producto: null, nombre: '', precio: '', cantidad: 1, ...p, clave: `${Date.now()}-${xs.length}` }])
+  const agregar = (p: Partial<Prenda>) => setPrendas((xs) => [...xs, { producto: null, nombre: '', precio: '', cantidad: 1, ...(tienda === 'stunned' ? { linea: 'stunned' as const } : {}), ...p, clave: `${Date.now()}-${xs.length}` }])
   const cambiar = (clave: string, x: Partial<Prenda>) => setPrendas((xs) => xs.map((p) => (p.clave === clave ? { ...p, ...x } : p)))
 
   const simular = () => correr(async () => {
@@ -519,21 +520,11 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
       {prendas.length > 0 && (
         <TableWrap style={{ marginTop: space[3] }}>
           <table>
-            <THead><Tr><Th>Producto</Th>{conLineas && <Th>Línea</Th>}<Th>Precio</Th><Th>Cantidad</Th><Th>Categorías</Th><Th>Campaña (producto suelto)</Th><Th /></Tr></THead>
+            <THead><Tr><Th>Producto</Th><Th>Precio</Th><Th>Cantidad</Th><Th>Categorías</Th><Th>Campaña (producto suelto)</Th><Th /></Tr></THead>
             <TBody>
               {prendas.map((p) => (
                 <Tr key={p.clave}>
                   <Td>{p.producto ? p.nombre : <Input value={p.nombre} onChange={(e) => cambiar(p.clave, { nombre: e.target.value })} />}</Td>
-                  {conLineas && (
-                    <Td>
-                      {p.producto ? (p.linea ? 'Stunned' : 'Zattia') : (
-                        <Select value={p.linea ?? ''} onChange={(e) => cambiar(p.clave, { linea: e.target.value === 'stunned' ? 'stunned' : undefined })}>
-                          <option value="">Zattia</option>
-                          <option value="stunned">Stunned</option>
-                        </Select>
-                      )}
-                    </Td>
-                  )}
                   <Td><Input inputMode="decimal" value={p.precio} onChange={(e) => cambiar(p.clave, { precio: e.target.value })} style={{ width: 120 }} /></Td>
                   <Td><Input inputMode="numeric" value={String(p.cantidad)} onChange={(e) => cambiar(p.clave, { cantidad: Number(e.target.value) || 1 })} style={{ width: 64 }} /></Td>
                   <Td>{p.producto ? (p.categorias?.length ? p.categorias.join(', ') : <span style={{ opacity: 0.7 }}>Sin categoría en Tienda Nube</span>) : (

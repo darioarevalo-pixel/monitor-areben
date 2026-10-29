@@ -5,6 +5,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { armarAContar, filaDeAjuste } from '@/lib/erp/ajuste.core.js'
 import type { AjustesDeLinea } from '@/lib/erp/cliente'
+import { ProveedorLineaErp } from '@/lib/erp/linea-erp'
 
 /**
  * **ERP › Stock › Conteos y ajustes, del lado de la pantalla** (Diseño, 19-oct). El oráculo es lo que se LEE y lo que se
@@ -41,7 +42,7 @@ afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); vi.cl
 async function montar(pedida: PrendaAAjustar | null = null) {
   const { AjustesStock } = await import('@/components/erp/AjustesStock')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<AjustesStock pedida={pedida} />) })
+  await act(async () => { root = createRoot(host); root.render(<ProveedorLineaErp value={pedida?.linea === 'stunned' ? 'stunned' : 'zattia'}><AjustesStock pedida={pedida} /></ProveedorLineaErp>) })
   await act(async () => {})
 }
 const texto = () => host.textContent ?? ''

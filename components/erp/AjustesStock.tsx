@@ -13,7 +13,7 @@
 
 import { useEffect, useState } from 'react'
 import {
-  Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, Tabs, space,
+  Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, space,
 } from '@/components/ui'
 import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { FichaCostado } from '@/components/ui/FichaCostado'
@@ -26,8 +26,8 @@ import {
 import { MOTIVOS, baseDe } from '@/lib/erp/ajuste.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import type { PrendaAAjustar } from './stock/StockErp'
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 
-const LINEAS: Array<{ key: LineaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'stunned', label: 'Stunned' }, { key: 'bdi', label: 'BDI' }]
 const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
 /** Los motivos que se cargan a mano: el conteo entra solo desde el monitor (⛔ va en el menú). */
 export const MOTIVOS_A_MANO = MOTIVOS.filter((m) => m.key !== 'conteo')
@@ -58,7 +58,8 @@ type PrendaDeAjuste = { producto: string; talle: string; sku: string | null; bar
 const renglonDe = (p: PrendaDeAjuste): Renglon => ({ producto: p.producto, talle: p.talle, sku: p.sku, barcode: p.barcode ?? null, nombre: p.nombre, talleNombre: p.talleNombre, porDeposito: null, valor: '' })
 
 export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null } = {}) {
-  const [linea, setLinea] = useState<LineaErp>((pedida?.linea as LineaErp | undefined) ?? 'zattia')
+  // La del selector del menú (⛔ pestañas de otra marca: Bruno, 28-oct). Cambiarla remonta la pantalla (`key` en `Erp`).
+  const linea: LineaErp = useTiendaErp()
   const base = baseDe(linea) as MarcaErp
   const [datos, setDatos] = useState<AjustesDeLinea | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -80,16 +81,6 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
       .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudieron leer los ajustes.'))
     return () => { vivo = false }
   }, [linea, vuelta])
-
-  function cambiarLinea(k: string) {
-    setLinea(k as LineaErp)
-    setDatos(null)
-    setBorrador(null)
-    setEncontradas(null)
-    setHecho(null)
-    setError(null)
-    setFicha(null)
-  }
 
   const motivo = MOTIVOS_A_MANO.find((m) => m.key === borrador?.motivo) ?? MOTIVOS_A_MANO[0]
 
@@ -200,10 +191,10 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard title="Ingresos y ajustes" subtitle="Lo que sale del stock fuera de una venta: fallados, canjes, regalos. Nada se borra: un ajuste equivocado se arregla con otro.">
         <div style={{ display: 'flex', gap: space[3], alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <Tabs items={LINEAS} value={linea} onChange={cambiarLinea} />
+          <span />
           {datos && !borrador && <Button onClick={() => setBorrador({ deposito: DEPOSITOS[base][0], motivo: MOTIVOS_A_MANO[0].key, detalle: '', renglones: [] })}>Nuevo ajuste</Button>}
         </div>
-        <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock del ERP: en Gestión Nube se ajusta como siempre. Los conteos se hacen en el módulo de Conteo del monitor y entran solos (se ven en el historial de cada producto, en Stock).</Notice>
+        {linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock del ERP: en Gestión Nube se ajusta como siempre. Los conteos se hacen en el módulo de Conteo del monitor y entran solos (se ven en el historial de cada producto, en Stock).</Notice>}
       </SectionCard>
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}

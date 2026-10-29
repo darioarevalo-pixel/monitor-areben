@@ -21,6 +21,7 @@ import { normal } from '@/lib/erp/stock-lista.core.js'
 import { FichaPrenda, type PrendaAbierta } from './stock/FichaPrenda'
 import type { PrendaAAjustar } from './stock/StockErp'
 import type { Tone } from '@/components/ui/tokens'
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const NOMBRE_LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
@@ -48,6 +49,7 @@ const COLUMNAS = [
 export function DiferenciasDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => void }) {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  const tienda = useTiendaErp()
   const [fecha, setFecha] = useState<string | null>(null)
   const [datos, setDatos] = useState<DiferenciasDelDia | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -114,7 +116,9 @@ export function DiferenciasDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => vo
   const grupo = datos?.grupos.find((g) => g.clase === enVista)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Sólo mientras convivimos con Gestión Nube: lo que nuestro stock no pudo explicar al compararse con Gestión Nube, y los productos que quedaron en negativo. Se va el día del corte.</p>
+      <p style={{ margin: 0, color: color.mut }}>{tienda === 'stunned'
+        ? 'Stunned ya vive en el ERP: lo que quedó de cuando se comparaba con Gestión Nube, y los productos en negativo.'
+        : 'Sólo mientras convivimos con Gestión Nube: lo que nuestro stock no pudo explicar al compararse con Gestión Nube, y los productos que quedaron en negativo. Se va el día del corte.'}</p>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         {datos && datos.dias.length > 0 && (
           <Select aria-label="Día" style={ANCHO_SELECT} value={datos.fecha ?? ''} onChange={(e) => setFecha(e.target.value)} disabled={cargando}>
