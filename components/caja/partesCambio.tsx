@@ -141,7 +141,7 @@ export function ModalVentaOriginal({ store, c, onCerrar }: { store: MarcaErp; c:
               <span style={{ color: color.mut }}>{mirando.origen.tipo !== 'suelto' && mirando.origen.cliente ? mirando.origen.cliente : 'Consumidor final'}</span>
               <span style={{ marginLeft: 'auto', ...tabular }}><b>{plata(mirando.total)}</b></span>
             </div>
-            <span style={{ color: color.mut, fontSize: font.sm }}>Se toma lo que pagó por cada producto; el cambio se guarda sin comprobantes.</span>
+            <span style={{ color: color.mut, fontSize: font.sm }}>Se toma lo que pagó por cada producto. Al registrar el cambio sale su comprobante (no es factura).</span>
             {mirando.vendidas.map((l) => {
               const tope = Math.max(0, l.cantidad - l.cambiado)
               return (

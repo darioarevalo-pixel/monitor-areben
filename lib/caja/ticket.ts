@@ -299,6 +299,94 @@ export function armarTicketCambio(t: DatosTicket, ahoraMs: number, partir: Medid
   return l.pagina()
 }
 
+/** Un renglón del comprobante del cambio: lo que vuelve o lo que se lleva, con lo que vale en pesos. */
+export type RenglonCambio = { nombre: string; talle?: string | null; cantidad: number; importe: number; stunned?: boolean }
+
+/** El COMPROBANTE DEL CAMBIO (prueba del corte, 28-oct: el cambio ⛔ emitía nada). */
+export type ComprobanteCambio = {
+  /** El número del cambio en el ERP. */
+  numero: number
+  /** De qué venta sale lo que vuelve: «Venta #25», «Venta #30930 de Gestión Nube» o «Sin ticket». */
+  origen: string
+  devueltas: RenglonCambio[]
+  nuevas: RenglonCambio[]
+  /** Lo que vale lo que vuelve (a lo que se pagó) y lo que se lleva. */
+  vuelve: number
+  lleva: number
+  /** Del saldo a favor de la clienta, usado para pagar la diferencia. */
+  saldoUsado: number
+  /** Lo que se cobró de diferencia (con el descuento de la forma de pago) y cómo. */
+  cobrado: number
+  pagos: { cuenta: number; monto: number }[]
+  /** Lo que queda a favor de la clienta, y su saldo total después del cambio (`null` si ⛔ se leyó). */
+  aFavor: number
+  saldo: number | null
+}
+
+/**
+ * El comprobante del cambio, para la clienta: número del cambio, de qué venta sale, qué devuelve y qué se lleva
+ * con su valor, y cómo cerró (cobrado, a favor o sin diferencia). Va con la política de cambio: lo que se lleva
+ * también se puede cambiar.
+ */
+export function armarComprobanteCambio(
+  c: ComprobanteCambio,
+  extra: Pick<DatosTicket, 'nombreCuenta' | 'politica' | 'logo' | 'logoStunned' | 'marca'>,
+  ahoraMs: number,
+  partir: Medidor,
+): { ops: (OpBase | OpImagen)[]; alto: number } {
+  const l = lienzo(partir)
+  const { escribir, par, regla } = l
+  logos(l, { ...extra, renglones: [...c.devueltas, ...c.nuevas].map((r) => ({ nombre: r.nombre, cantidad: r.cantidad, precio: 0, importe: 0, stunned: r.stunned })) })
+  escribir('COMPROBANTE DE CAMBIO', 12, true, 'centro')
+  regla()
+  escribir('DOCUMENTO NO VÁLIDO COMO FACTURA', 8, false, 'centro', 60)
+  regla()
+  escribir(`Cambio: #${c.numero}`, 10, true)
+  escribir(`De: ${c.origen}`, 10, false)
+  escribir(`Fecha: ${fechaConDia(ahoraMs)}`, 10, false)
+  regla()
+  const lista = (titulo: string, rs: RenglonCambio[], total: number) => {
+    escribir(titulo, 9, true)
+    for (const r of rs) {
+      const talle = talleVisible(r.talle)
+      par(`${r.cantidad} x ${talle ? `${r.nombre} - ${talle}` : r.nombre}`, plata(r.importe), 9)
+      l.y += 0.8
+    }
+    par('Subtotal', plata(total), 10)
+    regla()
+  }
+  lista('DEVUELVE', c.devueltas, c.vuelve)
+  lista('SE LLEVA', c.nuevas, c.lleva)
+  if (c.saldoUsado > 0) par('Del saldo a favor', `-${plata(c.saldoUsado)}`, 10)
+  if (c.cobrado > 0) {
+    par('DIFERENCIA COBRADA', plata(c.cobrado), 12, true)
+    for (const n of [...new Set(c.pagos.map((p) => extra.nombreCuenta(p.cuenta)))]) escribir(n, 9, false)
+  } else if (c.aFavor > 0) {
+    par('A FAVOR DE LA CLIENTA', plata(c.aFavor), 12, true)
+    if (c.saldo != null) par('Saldo a favor', plata(c.saldo), 10)
+  } else {
+    par('SIN DIFERENCIA', plata(0), 12, true)
+  }
+  regla()
+  if (extra.politica) {
+    escribir(extra.politica, 9, false)
+    l.y += 2
+  }
+  escribir('Fecha y hora de registro:', 8, false, 'centro', 60)
+  escribir(fechaTicket(ahoraMs), 8, false, 'centro', 60)
+  return l.pagina()
+}
+
+/** Imprime el comprobante del cambio en la térmica (una orden, como el ticket). */
+export async function imprimirComprobanteCambio(c: ComprobanteCambio, extra: Parameters<typeof armarComprobanteCambio>[1], ahoraMs: number) {
+  const rollo = await abrirRollo()
+  imprimirPdf(rollo.documento<OpImagen>([armarComprobanteCambio(c, extra, ahoraMs, rollo.medir)], (pdf, op) => {
+    if (op.k !== 'img') return false
+    pdf.addImage(op.src, /^data:image\/jpe?g/i.test(op.src) ? 'JPEG' : 'PNG', op.x, op.y, op.w, op.h)
+    return true
+  }))
+}
+
 /**
  * Arma el PDF y lo manda a la térmica (con `--kiosk-printing`, sin diálogo). `que`: el ticket solo, el
  * ticket + el de cambio (regalo) o sólo el de cambio.

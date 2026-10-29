@@ -18,6 +18,8 @@ import { exigirDevolucion } from '@/lib/caja/repetida.core.js'
 import type { Config, Variante } from '@/lib/caja/cliente'
 import { buscarVentas, cambiarVenta, leerFichaDeVenta, leerSaldo, leerVentaGnCambio, verificarPin, type CruceCambio, type FichaDeVenta, type MarcaErp, type PagoMp, type VentaGnCambio } from '@/lib/erp/cliente'
 import { cobroDelCambio, diferenciaDeCambio, diferenciaDeCambioSuelto } from '@/lib/erp/venta.core.js'
+import type { ComprobanteCambio } from '@/lib/caja/ticket'
+import { esStunned as skuEsStunned } from '@/lib/lineas'
 
 export type MedioCambio = 'efectivo' | 'transferencia' | 'debito' | 'credito'
 export const MEDIOS_CAMBIO: MedioCambio[] = ['efectivo', 'transferencia', 'debito', 'credito']
@@ -37,7 +39,7 @@ export type Origen =
 export type VentaOriginal = { origen: Origen; vendidas: Vendida[] }
 export type Devuelta = { clave: string; productId: number; sizeId: number; sku: string | null; nombre: string; talle: string; cantidad: number; precio: number | ''; lineaId?: string }
 export type Nueva = { variante: Variante; cantidad: number; precio: number | '' }
-export type Hecho = { numero: number; cobrado: number; aFavor: number; saldo: number | null; ncPendiente: boolean }
+export type Hecho = { numero: number; cobrado: number; aFavor: number; saldo: number | null; ncPendiente: boolean; /** Para imprimir (y reimprimir) el comprobante del cambio. */ comprobante: ComprobanteCambio }
 export type Espera = { desde: string; monto: number; cruce: CruceCambio; recientes: PagoMp[] }
 
 const nuevoId = () => crypto.randomUUID()
@@ -311,6 +313,28 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
     return bien
   }
 
+  /** El comprobante del cambio, con lo que había en pantalla al confirmarlo (después se vacía) y lo que contestó el servidor. */
+  function comprobanteDe(r: { venta: { numero: number }; total: number; aFavor: number; saldo: number | null }): ComprobanteCambio {
+    const o = venta?.origen
+    const porUnidad = (d: Devuelta) => {
+      const l = o?.tipo === 'erp' ? vendidas.find((x) => x.clave === d.clave) : null
+      return l && l.importe != null ? l.importe / l.cantidad : Number(d.precio || 0)
+    }
+    return {
+      numero: r.venta.numero,
+      origen: !o || o.tipo === 'suelto' ? 'Sin ticket' : o.tipo === 'erp' ? `Venta #${o.numero}` : `Venta #${o.numero} de Gestión Nube`,
+      devueltas: devueltas.map((d) => ({ nombre: d.nombre, talle: d.talle, cantidad: d.cantidad, importe: Math.round(porUnidad(d) * d.cantidad * 100) / 100, stunned: skuEsStunned(d.sku) })),
+      nuevas: nuevas.map((n, i) => ({ nombre: n.variante.product_name, talle: n.variante.size_name, cantidad: n.cantidad, importe: filas[i]?.importe ?? Number(n.precio) * n.cantidad, stunned: esStunned(n.variante) })),
+      vuelve,
+      lleva: Math.round(filas.reduce((s, f) => s + f.importe, 0) * 100) / 100,
+      saldoUsado,
+      cobrado: r.total,
+      pagos: cobrado.pagos,
+      aFavor: r.aFavor,
+      saldo: r.saldo,
+    }
+  }
+
   /** El pedido del cambio: el mismo cada vez (mismo `id`), así repetirlo no duplica. */
   async function mandar(extra: { pago?: string | null; comprobante?: string | null } = {}) {
     if (!venta) return
@@ -330,7 +354,7 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
       setEspera({ desde: r.desde, monto: r.espera, cruce: r.cruce, recientes: r.recientes ?? [] })
       return
     }
-    setHecho({ numero: r.venta.numero, cobrado: r.total, aFavor: r.aFavor, saldo: r.saldo, ncPendiente: r.ncPendiente })
+    setHecho({ numero: r.venta.numero, cobrado: r.total, aFavor: r.aFavor, saldo: r.saldo, ncPendiente: r.ncPendiente, comprobante: comprobanteDe(r) })
     empezarDeNuevo()
   }
 

@@ -58,6 +58,16 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   verifica ⛔ armado en el navegador). Con venta, `exigirDevolucion` frena devolver de más contando lo ya cambiado; el total se calcula
   en el paso 2 (en el paso 1 el pie sólo dice «Devuelve»). El saldo de la clienta se lee con `linea=stunned`, y el modo (prueba o
   real) lo da la venta, o `config.stunned_prueba` sin venta. Las piezas de pantalla: `partesCambio.tsx`. Tests: `caja-cambio-suelto`, `caja-pos-cambios`.
+  🔑 **Al registrarse sale el COMPROBANTE DEL CAMBIO** (prueba del corte, 28-oct: ⛔ emitía nada): número del cambio, de qué
+  venta, qué devuelve y qué se lleva con su valor, y cómo cerró (cobrado, a favor + saldo, sin diferencia). Lo arma `useCambio`
+  (`hecho.comprobante`, con lo que había en pantalla ANTES de vaciarla) y lo dibuja `armarComprobanteCambio` (`ticket.ts`); el
+  cartel «Cambio #N» lo reimprime. La «Última venta» se va al registrarlo: su «Ticket de cambio» era de la venta anterior.
+  ⛔ Lo imprime sólo el POS; erp › Caja › Cambio todavía ⛔.
+- 🔑 **La venta del ERP (Stunned) lleva SU número** (`erp_numero`): `numeroDeLaVenta` = `gn_number ?? erp_numero`, en el ticket,
+  la «Última venta» y la lista de Ventas («En el ERP»; ⛔ en Provisorias). Sin número todavía: «pendiente en el ERP», ⛔ en GN.
+- 🔑 **Con `LECTURAS_STUNNED_ERP=1`, el stock de una prenda de Stunned sale del LIBRO** (`stockStunnedDelLibro`,
+  `api/_caja-motor.js`; `fuente: 'erp'`), ⛔ de GN en vivo: la venta del ERP ⛔ baja GN y el POS decía «ÚLTIMA» con el local en 0.
+  Si el ERP ⛔ contesta, el espejo (sus filas STU también salen del libro) con el motivo.
 
 
 - 🔴 **LA PRENDA REPETIDA (Bruno, 14-oct)** — en GN se escaneó dos veces la prenda devuelta en un cambio:

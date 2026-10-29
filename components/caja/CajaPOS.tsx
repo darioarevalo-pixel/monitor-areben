@@ -59,7 +59,7 @@ import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
 import { registrarRespuesta, repetida } from '@/lib/caja/repetida.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
-import { imprimirTicket, numeroProvisorio, plata, ticketDeVenta, type DatosTicket } from '@/lib/caja/ticket'
+import { imprimirComprobanteCambio, imprimirTicket, numeroProvisorio, plata, ticketDeVenta, type ComprobanteCambio, type DatosTicket } from '@/lib/caja/ticket'
 import { claveMail, claveVista, leerMail, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
 import { mailOk } from '@/lib/caja/mail'
 import { useEsMovil } from '@/lib/caja/movil'
@@ -429,15 +429,25 @@ function POS() {
     setPidePin(false)
     setCobrandoCambio(false)
   }
-  // El cambio quedó registrado: se sale del modo y el cartel de «Cambio #N» queda arriba.
+  /** El comprobante del cambio en la térmica (prueba del corte, 28-oct: el cambio ⛔ emitía nada). */
+  const imprimirCambio = (c: ComprobanteCambio) => {
+    if (movil) return
+    imprimirComprobanteCambio(c, { nombreCuenta, politica: config?.politica_cambio ?? null, logo: config?.ticket_logo ?? null, logoStunned: config?.ticket_logo_stunned ?? null }, ahora())
+      .catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el comprobante del cambio: ${(e as Error).message}` }))
+  }
+  // El cambio quedó registrado: se sale del modo, sale su comprobante y el cartel de «Cambio #N» queda arriba.
+  // La «Última venta» se va: su «Ticket de cambio» apuntaba a la venta de ANTES del cambio.
   const cambioHecho = cambio.hecho
   useEffect(() => {
     if (!cambioHecho) return
+    imprimirCambio(cambioHecho.comprobante)
     void Promise.resolve().then(() => {
       setEnCambio(false)
       setPasoCambio(1)
       setCobrandoCambio(false)
+      setUltima(null)
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- una vez por cambio registrado
   }, [cambioHecho])
   // Es un CAMBIO, ⛔ una devolución (Bruno, 27-oct): para seguir al cobro hay que llevarse algo; lo que sobra queda a favor.
   const cambioListoParaCobrar = enCambio && pasoCambio === 2 && cambio.unidadesNuevas > 0 && !cambio.sinPrecio && cambio.devueltas.length > 0
@@ -1711,6 +1721,14 @@ pendientes
           <Notice tone="success" onClose={() => cambio.setHecho(null)}>
             Cambio #{cambio.hecho.numero} registrado.{' '}
             {cambio.hecho.cobrado > 0 ? `Se cobraron ${plata(cambio.hecho.cobrado)}.` : cambio.hecho.aFavor > 0 ? `Quedan ${plata(cambio.hecho.aFavor)} a favor de la clienta${cambio.hecho.saldo != null ? ` (saldo: ${plata(cambio.hecho.saldo)})` : ''}.` : 'Sin diferencia.'}
+            {!movil && (
+              <>
+                {' '}
+                <Button size="sm" variant="ghost" onClick={() => cambio.hecho && imprimirCambio(cambio.hecho.comprobante)}>
+                  <Icono nombre="impresora" size={14} /> Reimprimir comprobante
+                </Button>
+              </>
+            )}
           </Notice>
         </div>
       )}
