@@ -470,6 +470,9 @@ export type ExtraDeVenta = {
   cobroEnEntrega?: { entrego: string | null; fecha: string | null; formaPago: 'efectivo' | 'transferencia' | 'ya_pagado' | null; porVerificar: boolean } | null
   facturas: Array<{ numero: string; tipo: 'factura' | 'nc'; de: 'erp' | 'gn'; cuando: string | null }>
   cuentas: Array<{ id: string; nombre: string; medio: string }>
+  /** ERP › Cuentas para el canal de la venta: adónde va cada medio (la vigente es la de `desde` más nuevo ≤ hoy) y las cuentas reales. */
+  rutas?: Array<{ marca: string; canal: string; medio: string; cuenta_real_id: string | null; desde: string }>
+  cuentasReales?: Array<{ id: string; titular: string | null; nombre: string; banco: string | null }>
   ediciones: Array<{ campo: string; antes: string; despues: string; usuario: string; cuando: string }>
   notas: Array<{ cuando: string; texto: string; de: string; reemplaza: string | null }>
   nota: { id: string; texto: string; de: string } | null
@@ -496,7 +499,7 @@ export type CorreccionHecha = { total_antes: number; total_despues: number; cobr
 export const corregirPrecioDeVenta = (marca: MarcaErp, ventaId: string, motivo: string, lineas: Array<{ n: number; precio: number }>) =>
   pedir<{ ok: true; correccion: CorreccionHecha }>(post({ accion: 'corregir-precio', marca, ventaId, motivo, lineas }), '', 'No se pudo corregir el precio.')
 export type MedioCorregido = { medio_antes: string; medio_despues: string; cuenta_antes: string; cuenta_despues: string; monto: number; comision_despues: number | null }
-export const corregirMedioDeVenta = (marca: MarcaErp, ventaId: string, c: { medio: string; motivo: string; pagoId?: string; cuenta?: string | number }) =>
+export const corregirMedioDeVenta = (marca: MarcaErp, ventaId: string, c: { medio: string; motivo: string; pagoId?: string; cuenta?: string | number; cuentaReal?: string }) =>
   pedir<{ ok: true; correccion: MedioCorregido; avisos: string[] }>(post({ accion: 'corregir-medio', marca, ventaId, ...c }), '', 'No se pudo corregir el medio de cobro.')
 export const guardarNotaDeVenta = (marca: MarcaErp, ventaId: string, texto: string, reemplazaId: string | null) =>
   pedir<{ ok: true }>(post({ accion: 'nota-venta', marca, ventaId, texto, reemplazaId }), '', 'No se pudo guardar la nota.')

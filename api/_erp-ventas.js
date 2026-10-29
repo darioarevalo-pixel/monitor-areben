@@ -105,6 +105,24 @@ async function cuentasDeCobro(sb, linea) {
   return data
 }
 
+/**
+ * Adónde va la plata de cada medio en el canal de la venta (ERP › Cuentas, sql/019): las rutas y las cuentas REALES activas.
+ * «Corregir medio» muestra la de la ruta y deja elegir otra como excepción. Sin la 019 ⇒ vacías.
+ */
+async function destinosDeCobro(marca, linea, canal, deps) {
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
+  const r = await correr(async (db) => {
+    const [{ hay }] = (await db.query(`select to_regclass('public.ruta_cobro') is not null as hay`)).rows
+    if (!hay) return { rutas: [], cuentasReales: [] }
+    const [rutas, cuentasReales] = await Promise.all([
+      db.query('select marca, canal, medio, cuenta_real_id::text, desde from ruta_cobro where marca = $1 and canal = $2', [linea, canal]),
+      db.query('select id::text, titular, nombre, banco from cuenta_real where activa order by titular, banco, nombre'),
+    ])
+    return { rutas: rutas.rows, cuentasReales: cuentasReales.rows }
+  }).catch(() => null)
+  return r && !r.status && Array.isArray(r.rutas) ? r : { rutas: [], cuentasReales: [] }
+}
+
 /** La última nota vigente de la vista (`notas`, por fecha) como la lee la lista: texto y de dónde vino. */
 function notaVigente(notas) {
   const n = Array.isArray(notas) && notas.length ? notas[notas.length - 1] : null
@@ -396,7 +414,7 @@ export async function extraDeVenta({ marca, id }, deps = {}) {
   if (error) ({ data: v, error } = await sb.from('venta_ficha').select(COLUMNAS_LISTA).eq('id', id).maybeSingle())
   if (error) throw new Error(`venta_ficha: ${error.message}`)
   if (!v) return { status: 404, error: 'La venta no existe.' }
-  const [a, cuentas] = await Promise.all([deAfuera(sb, [v]), cuentasDeCobro(sb, v.marca)])
+  const [a, cuentas, destinos] = await Promise.all([deAfuera(sb, [v]), cuentasDeCobro(sb, v.marca), destinosDeCobro(marca, v.marca, v.canal, deps)])
   const g = a.deVenta(v)
   const o = a.orden(v)
   const fg = a.facGn(g)
@@ -410,7 +428,7 @@ export async function extraDeVenta({ marca, id }, deps = {}) {
     // 🔑 La ENTREGA QUE COBRA (motor sql/039): si Logística cobró al entregar, la venta lo lleva en `detalle.entrega` (quién, cuándo, con qué; la transferencia queda «por verificar»).
     cobroEnEntrega: v.detalle?.entrega ? { entrego: v.detalle.entrega.entrego ?? null, fecha: v.detalle.entrega.fecha ?? null, formaPago: v.detalle.entrega.forma_pago ?? null, porVerificar: v.detalle.entrega.por_verificar === true } : null,
     tn: o ? { numero: o.numero, estado: o.estado, envioTipo: o.envio_tipo, creadaEn: o.creada_en, actualizadaEn: o.actualizada_en, link: ADMIN[o.tienda] ? `${ADMIN[o.tienda]}/orders/${o.tn_id}` : null } : null,
-    facturas, cuentas, ...(await delMotorParaLaFicha(marca, id, deps)),
+    facturas, cuentas, ...destinos, ...(await delMotorParaLaFicha(marca, id, deps)),
   }
 }
 

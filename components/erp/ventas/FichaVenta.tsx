@@ -20,7 +20,7 @@ import { COBRO, ESTADO, historialDeVenta, plata } from '@/lib/erp/ventas-lista.c
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import { MOTIVO_MINIMO, NOMBRE_CANAL } from '@/lib/erp/venta.core.js'
 import { textoDeVuelta } from '@/lib/erp/desarme.core.js'
-import { medioDeCuenta } from '@/motor/cuentas/cuentas.mjs'
+import { rutaVigente } from '@/motor/cuentas/cuentas.mjs'
 import { DesarmeVenta } from './DesarmeVenta'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 
@@ -52,7 +52,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const [medioAbierto, setMedioAbierto] = useState(false)
   const [medioNuevo, setMedioNuevo] = useState('')
   const [motivoMedio, setMotivoMedio] = useState('')
-  const [cuentaNueva, setCuentaNueva] = useState('')
+  const [cuentaReal, setCuentaReal] = useState('')
   const puedeErp = usePuedeErp(marca)
   const [precios, setPrecios] = useState<Record<number, string>>({})
   const [motivoPrecio, setMotivoPrecio] = useState('')
@@ -126,12 +126,15 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     onCambio(`Precio de la venta ${fila.ref} corregido: total ${plata(r.correccion.total_despues)}.${d === 0 ? '' : d > 0 ? ` Faltan cobrar ${plata(d)}: registrá el cobro.` : ` Sobran ${plata(-d)}: hay que devolverlos.`} No se movió plata.`)
   }, 'No se pudo corregir el precio.')
 
-  // Con más de una cuenta de ese medio en la marca (Transferencia, Transferencia CG, Feria…) el motor pide cuál (FALTA_CUENTA).
-  const cuentasDelMedio = medioNuevo ? (extra?.cuentas ?? []).filter((c) => medioDeCuenta(c) === medioNuevo) : []
-  const faltaCuenta = cuentasDelMedio.length > 1 && !cuentaNueva
+  // Adónde fue la plata: la cuenta REAL que dice la ruta de ERP › Cuentas para el medio en este canal (⛔ las cuentas de GN), u
+  // otra elegida como excepción (Bruno 29-oct: el TN #135 eligió efectivo y transfirió al alias del local).
+  const cuentasReales = extra?.cuentasReales ?? []
+  const nombreReal = (id: string | null | undefined) => { const c = cuentasReales.find((x) => x.id === id); return c ? [c.banco, c.nombre, c.titular && c.titular !== 'areben' ? `de ${c.titular[0].toUpperCase()}${c.titular.slice(1)}` : null].filter(Boolean).join(' · ') : null }
+  const deLaRuta = medioNuevo ? (rutaVigente(extra?.rutas ?? [], { marca: fila.linea, canal: fila.canal ?? '', medio: medioNuevo, en: fila.ocurridaEn }) as { cuenta_real_id: string | null } | null) : null
+  const faltaCuenta = deLaRuta?.cuenta_real_id == null && !cuentaReal && cuentasReales.length > 0 && !!medioNuevo
 
   const confirmarMedio = () => correr(async () => {
-    const r = await corregirMedioDeVenta(marca, fila.id, { medio: medioNuevo, motivo: motivoMedio, ...(cuentaNueva ? { cuenta: cuentaNueva } : {}) })
+    const r = await corregirMedioDeVenta(marca, fila.id, { medio: medioNuevo, motivo: motivoMedio, ...(cuentaReal ? { cuentaReal } : {}) })
     setMedioAbierto(false)
     onCambio(`Venta ${fila.ref}: el cobro de ${plata(r.correccion.monto)} pasó de ${r.correccion.cuenta_antes} a ${r.correccion.cuenta_despues}. No se movió plata.`)
   }, 'No se pudo corregir el medio de cobro.')
@@ -156,7 +159,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     ...(ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
     ...(!fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura') }] : []),
     ...(puede.corregir && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
-    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir medio de cobro…', icono: 'pesos' as const, hint: 'Pagó con otro medio que el que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setCuentaNueva(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
+    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir medio de cobro…', icono: 'pesos' as const, hint: 'Pagó con otro medio que el que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
     { key: 'anular', label: 'Anular…', icono: 'anular', tone: 'danger', disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) },
   ]
   const hechos: HechoHistorial[] = ficha ? (historialDeVenta(ficha, { ...extra, tn: extra?.tn ?? undefined }) as HechoHistorial[]) : []
@@ -357,16 +360,16 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             {' '}No mueve plata ni cambia el monto: cambia por dónde entró. Si era efectivo, deja de sumar al cierre de caja.
           </Notice>
           <Field label="Con qué pagó de verdad" required>
-            <Select value={medioNuevo} onChange={(e) => { setMedioNuevo(e.target.value); setCuentaNueva('') }}>
+            <Select value={medioNuevo} onChange={(e) => { setMedioNuevo(e.target.value); setCuentaReal('') }}>
               <option value="">Elegí el medio…</option>
               {MEDIOS_CORREGIR.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
             </Select>
           </Field>
-          {cuentasDelMedio.length > 1 && (
-            <Field label="A qué cuenta" required>
-              <Select value={cuentaNueva} onChange={(e) => setCuentaNueva(e.target.value)}>
-                <option value="">Elegí la cuenta…</option>
-                {cuentasDelMedio.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          {medioNuevo && cuentasReales.length > 0 && (
+            <Field label="Adónde entró la plata" required hint={deLaRuta?.cuenta_real_id ? 'La que dice ERP › Cuentas para este medio. Elegí otra sólo si fue a otra cuenta.' : 'Este medio no tiene una cuenta fija en ERP › Cuentas: elegí cuál.'}>
+              <Select value={cuentaReal} onChange={(e) => setCuentaReal(e.target.value)}>
+                <option value="">{deLaRuta?.cuenta_real_id ? `${nombreReal(deLaRuta.cuenta_real_id) ?? 'La de la ruta'} (la de siempre)` : 'Elegí la cuenta…'}</option>
+                {cuentasReales.filter((c) => c.id !== deLaRuta?.cuenta_real_id).map((c) => <option key={c.id} value={c.id}>{nombreReal(c.id)}{deLaRuta?.cuenta_real_id ? ' (excepción)' : ''}</option>)}
               </Select>
             </Field>
           )}
