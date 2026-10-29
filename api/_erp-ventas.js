@@ -171,7 +171,8 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
   for (const v of ventas) if (v.id in pendientes) v.pendiente = pendientes[v.id]
   marcar('saldos')
   // Una venta de TN sin nombre ni del ERP ni de GN (Stunned no tiene GN detrás) ⛔ queda «sin nombre» para siempre: se lee de TN EN VIVO,
-  // como el pedido sin pagar (Bruno, 26-oct; ⛔ se guarda: lo declarado a TN).
+  // como el pedido sin pagar (Bruno, 26-oct). Desde la sql/059 del motor la venta `tn` nace con la ficha del comprador ⇒ esto
+  // queda para las que todavía ⛔ la tienen.
   const crudas = ventas.map((v) => ({ ...filaCruda(v, a, numeros), origen_ref: v.origen_ref }))
   const sinNombre = deps.compradores ? ventasDeTnSinNombre(crudas) : []
   if (sinNombre.length) {

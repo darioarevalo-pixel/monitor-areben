@@ -1474,8 +1474,11 @@ export async function pedidosSinPagar({ marca }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const { url, key } = cfgDeMarca(marca)
   const b = createClient(url, key)
-  const ordenes = await leerTodo(b, 'tn_orden', (x) => x.select('tienda, tn_id, numero, creada_en, status, payment_status, medio, gateway, total, estado')
+  const leerOrdenes = (cols) => leerTodo(b, 'tn_orden', (x) => x.select(cols)
     .in('status', STATUS_POR_COBRAR).not('payment_status', 'in', `(${NO_SIN_PAGAR.join(',')})`).order('creada_en'))
+  // Con la sql/059 del motor la orden apunta la ficha del comprador (`cliente_id`); sin ella (otra base, antes de aplicarla), como antes.
+  const COLS = 'tienda, tn_id, numero, creada_en, status, payment_status, medio, gateway, total, estado'
+  const ordenes = await leerOrdenes(`${COLS}, cliente_id`).catch(() => leerOrdenes(COLS))
   const t0 = Date.now(), tiempos = {}
   const marcar = (k) => { tiempos[k] = Date.now() - t0 }
   marcar('ped_ordenes')
@@ -1496,24 +1499,37 @@ export async function pedidosSinPagar({ marca }) {
     const cobros = ventasGN.length ? await leerTodo(b, 'ventas_cobros', (x) => x.select('venta_id, monto').in('venta_id', ventasGN.map((v) => v.id))) : []
     return cobradosEnGN({ entregados, ventasGN, cobros })
   }
-  const [lineas, lecturas, cobradosGN] = await Promise.all([
+  // El nombre del comprador, de su ficha (sql/059): TN en vivo sólo para lo que ⛔ tiene (Bruno 29-oct: el nombre ⛔ se sacrifica).
+  const traerNombres = async () => {
+    const ids = [...new Set(ordenes.map((o) => o.cliente_id).filter(Boolean))]
+    const out = new Map()
+    for (let i = 0; i < ids.length; i += 200) {
+      for (const c of await leerTodo(b, 'cliente', (x) => x.select('id, nombre').in('id', ids.slice(i, i + 200)).order('id'))) out.set(c.id, c.nombre)
+    }
+    return out
+  }
+  const [lineas, lecturas, cobradosGN, fichas] = await Promise.all([
     traerLineas(),
     b.from('tn_lectura').select('tienda, leida_en').order('leida_en', { ascending: false }).limit(1),
     traerCobradosGN(),
+    traerNombres(),
   ])
   const [lectura] = lecturas.data || []
   marcar('ped_base')
   const armado = armarPedidosSinPagar({ ordenes, lineas, ahora: Date.now(), cobradosGN })
-  const nombres = await compradoresTn(armado.pedidos)
+  const deFicha = new Map(ordenes.filter((o) => o.cliente_id && fichas.get(o.cliente_id)).map((o) => [`${o.tienda}/${o.tn_id}`, fichas.get(o.cliente_id)]))
+  const sinFicha = armado.pedidos.filter((p) => !deFicha.has(`${p.tienda}/${p.tnId}`))
+  const nombres = await compradoresTn(sinFicha)
   marcar('ped_nombres_tn')
-  for (const p of armado.pedidos) p.comprador = nombres.get(`${p.tienda}/${p.tnId}`) ?? null
-  return { ...armado, leidaEn: lectura?.leida_en ?? null, tiempos: { ...tiempos, ped_cuantos: ordenes.length } }
+  for (const p of armado.pedidos) p.comprador = deFicha.get(`${p.tienda}/${p.tnId}`) ?? nombres.get(`${p.tienda}/${p.tnId}`) ?? null
+  return { ...armado, leidaEn: lectura?.leida_en ?? null, tiempos: { ...tiempos, ped_cuantos: ordenes.length, ped_en_vivo: sinFicha.length } }
 }
 
 /**
  * El nombre del comprador de cada pedido, leído de TN EN VIVO por la puerta del ERP (`erp.arebensrl.com/api/tn-compradores`,
- * Bruno 19-oct: ⛔ se guarda en ningún lado). Sin `ERP_LLAVE_MONITOR`, o si la puerta ⛔ contesta en 6 s, la lista sale igual,
- * sin nombres. @returns {Promise<Map<string, string>>} `tienda/tnId` → nombre
+ * Bruno 19-oct). Desde la sql/059 del motor (29-oct) el comprador se guarda como ficha y esto queda sólo para lo que todavía
+ * ⛔ la tiene. Sin `ERP_LLAVE_MONITOR`, o si la puerta ⛔ contesta en 6 s, la lista sale igual, sin esos nombres.
+ * @returns {Promise<Map<string, string>>} `tienda/tnId` → nombre
  */
 export async function compradoresTn(pedidos, { env = process.env, pedir = fetch } = {}) {
   const out = new Map()

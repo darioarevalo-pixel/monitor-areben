@@ -3,10 +3,11 @@
 // una tienda desinstala la app (`store-redact`) o una clienta pide sus datos o que se borren
 // (`customers-data-request`, `customers-redact`).
 //
-// 🔑 La app ⛔ guarda datos personales: lee órdenes y productos y los escribe en el libro del ERP por
-// `product_id`/`size_id`, sin nombre ni contacto de la clienta ⇒ no hay nada que entregar ni que eliminar, y
-// cada pedido se contesta 200. ⛔ Se guarda el cuerpo (trae datos de la clienta): sólo la acción y la tienda.
-// El día que el ERP guarde clientas de TN (`cliente` del motor), esto pasa a eliminarlas de verdad.
+// 🔴 SE MUDARON (29-oct, sql/059 del motor): desde que el ERP guarda el comprador de TN como ficha, las 3 URLs BORRAN y
+// DEVUELVEN datos de verdad y exigen la firma de TN sobre el cuerpo CRUDO, que acá (`api/datos.js`) ⛔ hay ⇒ viven en
+// `https://erp.arebensrl.com/api/tn-privacidad?accion=…` (repo del motor). Esto queda hasta cambiarlas en el portal de
+// socios: contesta 200 como antes y lo dice FUERTE en el log, para que una llamada vieja ⛔ pase callada.
+// ⛔ Se guarda el cuerpo (trae datos de la clienta): sólo la acción y la tienda.
 //
 // Sin sesión: lo llama Tienda Nube. Entra por `api/datos.js?recurso=tn-erp&accion=…` (⛔ una ruta nueva:
 // el plan Hobby admite 12 funciones). ⛔ Archivo `_`: NO es una ruta.
@@ -19,9 +20,9 @@ export const ACCIONES_TN_ERP = ['store-redact', 'customers-redact', 'customers-d
 export default async function handler(req, res) {
   const accion = String(req.query?.accion || '')
   if (!ACCIONES_TN_ERP.includes(accion)) return res.status(404).json({ error: `acción desconocida (usá ${ACCIONES_TN_ERP.join(', ')})` })
-  if (req.method === 'GET') return res.status(200).json({ ok: true, accion, guarda: 'nada: la app no guarda datos personales' })
+  if (req.method === 'GET') return res.status(200).json({ ok: true, accion, mudada: `https://erp.arebensrl.com/api/tn-privacidad?accion=${accion}` })
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' })
   const tienda = req.body && (req.body.store_id ?? req.body.storeId)
-  console.log(`[tn-erp] ${accion} · tienda ${tienda ?? '¿?'} · sin datos personales guardados`)
+  console.error(`[tn-erp] ${accion} · tienda ${tienda ?? '¿?'} · 🔴 llegó a la URL VIEJA: no se borró ni devolvió nada. Cambiar la URL en el portal de socios a erp.arebensrl.com/api/tn-privacidad`)
   return res.status(200).json({ ok: true })
 }
