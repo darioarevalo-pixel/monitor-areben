@@ -47,6 +47,10 @@ import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
 
 const BASE = 'https://logistica.arebensrl.com/api/ext/v1';
 const ESPERA_MS = 10_000;
+// Leer el mensaje con la IA y armar la imagen de la etiqueta son lentos del lado de Logística: se les
+// da más aire (29-oct-2026). Queda debajo de los 30 s de `maxDuration` de `api/datos.js`.
+const ESPERA_LARGA_MS = 25_000;
+const esLenta = (ruta) => ruta === '/etiquetas/interpretar' || /\/etiqueta\/vista-previa/.test(ruta);
 
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
 const conToken = BLOB_TOKEN ? { token: BLOB_TOKEN } : {};
@@ -246,7 +250,7 @@ export default async function handler(req, res) {
       method: metodo,
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(cuerpo ? { 'Content-Type': 'application/json' } : {}) },
       ...(cuerpo ? { body: JSON.stringify(cuerpo) } : {}),
-      signal: AbortSignal.timeout(ESPERA_MS),
+      signal: AbortSignal.timeout(esLenta(ruta) ? ESPERA_LARGA_MS : ESPERA_MS),
     });
     // La vista previa es una imagen: vuelve en base64 para que el panel la muestre sin otra puerta.
     if (imagen && r.ok) {
@@ -277,7 +281,8 @@ export default async function handler(req, res) {
   } catch (e) {
     const tarde = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
     // En una carga, que no conteste no quiere decir que no guardó: se mira antes de repetir.
-    const motivo = tarde ? 'Logística tardó demasiado en contestar.' : 'No pude hablar con Logística.';
-    return res.status(502).json({ error: metodo === 'GET' ? motivo : `${motivo} Fijate en el pedido si quedó guardado antes de repetirlo.` });
+    const paso = ruta === '/etiquetas/interpretar' ? ' al leer el mensaje' : /\/etiqueta\/vista-previa/.test(ruta) ? ' al armar la etiqueta' : '';
+    const motivo = tarde ? `Logística tardó demasiado en contestar${paso}.` : `No pude hablar con Logística${paso}.`;
+    return res.status(502).json({ error: metodo === 'GET' || esLenta(ruta) ? motivo : `${motivo} Fijate en el pedido si quedó guardado antes de repetirlo.` });
   }
 }
