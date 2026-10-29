@@ -58,6 +58,9 @@ export type DatosTicket = {
   numero: number | null
   /** La venta va al ERP, ⛔ a GN: si ⛔ llegó, el ticket dice «pendiente en el ERP». */
   enErp?: boolean
+  /** Es el comprobante de un CAMBIO (Bruno, 28-oct: «casi idéntico» al de venta): donde la venta dice TOTAL, el cambio dice
+   *  SIN DIFERENCIA, DIFERENCIA A COBRAR o SALDO A FAVOR. */
+  cambio?: { origen: string; aFavor: number; saldo: number | null; saldoUsado: number }
   /** El id de la venta en la Caja (uuid): de ahí sale el número provisorio. */
   id: string
   renglones: RenglonTicket[]
@@ -206,7 +209,10 @@ function logos(l: ReturnType<typeof lienzo>, t: Pick<DatosTicket, 'renglones' | 
 
 /** El número de la venta, como lo escriben los dos tickets. */
 function numeroYFecha(l: ReturnType<typeof lienzo>, t: DatosTicket, ahoraMs: number) {
-  if (t.numero != null) {
+  if (t.cambio) {
+    l.escribir(`Comprobante: Cambio #${t.numero}`, 10, true)
+    l.escribir(`De: ${t.cambio.origen}`, 10, false)
+  } else if (t.numero != null) {
     l.escribir(`Comprobante: #${t.numero}`, 10, true)
   } else {
     l.escribir(`Comprobante: Provisorio ${numeroProvisorio(t.id)}`, 10, true)
@@ -239,14 +245,14 @@ export function armarTicket(
   for (const r of t.renglones) {
     const talle = talleVisible(r.talle)
     const lista = Math.round(r.cantidad * r.precio * 100) / 100
-    par(`${r.cantidad} x ${plata(r.precio)}`, plata(lista), 9)
+    par(`${r.cantidad} x ${plata(r.precio)}`, `${lista < 0 ? '-' : ''}${plata(lista)}`, 9)
     escribir(talle ? `${r.nombre} - ${talle}` : r.nombre, 9, false)
     if (lista - r.importe > 0.004) par(r.promos?.length ? `Promo ${r.promos.join(' + ')}` : 'Descuento', `-${plata(lista - r.importe)}`, 9)
     l.y += 0.8
   }
   regla()
 
-  par('Subtotal', plata(t.subtotal), 10)
+  par('Subtotal', `${t.subtotal < 0 ? '-' : ''}${plata(t.subtotal)}`, 10)
   const aVenta = Math.round(t.pagos.reduce((s, p) => s + (p.rebaja || 0), 0) * 100) / 100
   if (aVenta > 0) par('Descuento en la venta', `-${plata(aVenta)}`, 10)
   for (const p of t.pagos) {
@@ -255,7 +261,13 @@ export function armarTicket(
     if (p.redondeo < 0) par('Redondeo', `-${plata(p.redondeo)}`, 10)
   }
   l.y += 1
-  par('TOTAL', plata(t.total), 12, true)
+  if (t.cambio) {
+    if (t.cambio.saldoUsado > 0) par('Del saldo a favor', `-${plata(t.cambio.saldoUsado)}`, 10)
+    if (t.total - t.cambio.saldoUsado > 0.004) par('DIFERENCIA A COBRAR', plata(t.total - t.cambio.saldoUsado), 12, true)
+    else if (t.cambio.aFavor > 0) par('SALDO A FAVOR', plata(t.cambio.aFavor), 12, true)
+    else par(t.cambio.saldoUsado > 0 ? 'DIFERENCIA A COBRAR' : 'SIN DIFERENCIA', plata(0), 12, true)
+    if (t.cambio.aFavor > 0 && t.cambio.saldo != null && Math.abs(t.cambio.saldo - t.cambio.aFavor) > 0.004) par('Saldo a favor total', plata(t.cambio.saldo), 9)
+  } else par('TOTAL', plata(t.total), 12, true)
   regla()
 
   if (t.politica) {
@@ -284,7 +296,8 @@ export function armarTicketCambio(t: DatosTicket, ahoraMs: number, partir: Medid
   l.regla()
   l.escribir('Cant. · Descripción', 9, true)
   l.regla()
-  for (const r of t.renglones) {
+  // El de un CAMBIO lleva sólo lo que se lleva (lo que volvió va en negativo en el comprobante).
+  for (const r of t.renglones.filter((x) => x.cantidad > 0)) {
     const talle = talleVisible(r.talle)
     l.escribir(`${r.cantidad} x ${talle ? `${r.nombre} - ${talle}` : r.nombre}`, 9, false)
     l.y += 0.8
@@ -299,92 +312,34 @@ export function armarTicketCambio(t: DatosTicket, ahoraMs: number, partir: Medid
   return l.pagina()
 }
 
-/** Un renglón del comprobante del cambio: lo que vuelve o lo que se lleva, con lo que vale en pesos. */
-export type RenglonCambio = { nombre: string; talle?: string | null; cantidad: number; importe: number; stunned?: boolean }
-
-/** El COMPROBANTE DEL CAMBIO (prueba del corte, 28-oct: el cambio ⛔ emitía nada). */
+/**
+ * El COMPROBANTE DEL CAMBIO, como dato (prueba del corte, 28-oct): lo arma `useCambio` al registrarlo y sale con el MISMO
+ * molde del ticket de venta (`ticketDeCambio` ⇒ `armarTicket`). Lo que vuelve va en renglones NEGATIVOS.
+ */
 export type ComprobanteCambio = {
   /** El número del cambio en el ERP. */
   numero: number
   /** De qué venta sale lo que vuelve: «Venta #25», «Venta #30930 de Gestión Nube» o «Sin ticket». */
   origen: string
-  devueltas: RenglonCambio[]
-  nuevas: RenglonCambio[]
-  /** Lo que vale lo que vuelve (a lo que se pagó) y lo que se lleva. */
-  vuelve: number
-  lleva: number
-  /** Del saldo a favor de la clienta, usado para pagar la diferencia. */
+  renglones: RenglonTicket[]
+  /** Lo que se lleva menos lo que vuelve, a lista (Bruno, 28-oct). */
+  subtotal: number
+  /** El cobro de la diferencia, con el descuento de la forma de pago (⛔ el saldo: va aparte). */
+  pagos: PagoTicket[]
   saldoUsado: number
-  /** Lo que se cobró de diferencia (con el descuento de la forma de pago) y cómo. */
-  cobrado: number
-  pagos: { cuenta: number; monto: number }[]
-  /** Lo que queda a favor de la clienta, y su saldo total después del cambio (`null` si ⛔ se leyó). */
+  /** Lo cobrado (saldo incluido). */
+  total: number
   aFavor: number
+  /** El saldo a favor de la clienta después del cambio (`null` si ⛔ se leyó). */
   saldo: number | null
 }
 
-/**
- * El comprobante del cambio, para la clienta: número del cambio, de qué venta sale, qué devuelve y qué se lleva
- * con su valor, y cómo cerró (cobrado, a favor o sin diferencia). Va con la política de cambio: lo que se lleva
- * también se puede cambiar.
- */
-export function armarComprobanteCambio(
-  c: ComprobanteCambio,
-  extra: Pick<DatosTicket, 'nombreCuenta' | 'politica' | 'logo' | 'logoStunned' | 'marca'>,
-  ahoraMs: number,
-  partir: Medidor,
-): { ops: (OpBase | OpImagen)[]; alto: number } {
-  const l = lienzo(partir)
-  const { escribir, par, regla } = l
-  logos(l, { ...extra, renglones: [...c.devueltas, ...c.nuevas].map((r) => ({ nombre: r.nombre, cantidad: r.cantidad, precio: 0, importe: 0, stunned: r.stunned })) })
-  escribir('COMPROBANTE DE CAMBIO', 12, true, 'centro')
-  regla()
-  escribir('DOCUMENTO NO VÁLIDO COMO FACTURA', 8, false, 'centro', 60)
-  regla()
-  escribir(`Cambio: #${c.numero}`, 10, true)
-  escribir(`De: ${c.origen}`, 10, false)
-  escribir(`Fecha: ${fechaConDia(ahoraMs)}`, 10, false)
-  regla()
-  const lista = (titulo: string, rs: RenglonCambio[], total: number) => {
-    escribir(titulo, 9, true)
-    for (const r of rs) {
-      const talle = talleVisible(r.talle)
-      par(`${r.cantidad} x ${talle ? `${r.nombre} - ${talle}` : r.nombre}`, plata(r.importe), 9)
-      l.y += 0.8
-    }
-    par('Subtotal', plata(total), 10)
-    regla()
+/** El comprobante del cambio con los datos de la Caja (logo, política…), listo para `armarTicket`. */
+export function ticketDeCambio(c: ComprobanteCambio, extra: Pick<DatosTicket, 'nombreCuenta' | 'politica' | 'logo' | 'logoStunned' | 'marca'>): DatosTicket {
+  return {
+    ...extra, numero: c.numero, id: `cambio-${c.numero}`, renglones: c.renglones, subtotal: c.subtotal, pagos: c.pagos, total: c.total, pagaCon: null,
+    cambio: { origen: c.origen, aFavor: c.aFavor, saldo: c.saldo, saldoUsado: c.saldoUsado },
   }
-  lista('DEVUELVE', c.devueltas, c.vuelve)
-  lista('SE LLEVA', c.nuevas, c.lleva)
-  if (c.saldoUsado > 0) par('Del saldo a favor', `-${plata(c.saldoUsado)}`, 10)
-  if (c.cobrado > 0) {
-    par('DIFERENCIA COBRADA', plata(c.cobrado), 12, true)
-    for (const n of [...new Set(c.pagos.map((p) => extra.nombreCuenta(p.cuenta)))]) escribir(n, 9, false)
-  } else if (c.aFavor > 0) {
-    par('A FAVOR DE LA CLIENTA', plata(c.aFavor), 12, true)
-    if (c.saldo != null) par('Saldo a favor', plata(c.saldo), 10)
-  } else {
-    par('SIN DIFERENCIA', plata(0), 12, true)
-  }
-  regla()
-  if (extra.politica) {
-    escribir(extra.politica, 9, false)
-    l.y += 2
-  }
-  escribir('Fecha y hora de registro:', 8, false, 'centro', 60)
-  escribir(fechaTicket(ahoraMs), 8, false, 'centro', 60)
-  return l.pagina()
-}
-
-/** Imprime el comprobante del cambio en la térmica (una orden, como el ticket). */
-export async function imprimirComprobanteCambio(c: ComprobanteCambio, extra: Parameters<typeof armarComprobanteCambio>[1], ahoraMs: number) {
-  const rollo = await abrirRollo()
-  imprimirPdf(rollo.documento<OpImagen>([armarComprobanteCambio(c, extra, ahoraMs, rollo.medir)], (pdf, op) => {
-    if (op.k !== 'img') return false
-    pdf.addImage(op.src, /^data:image\/jpe?g/i.test(op.src) ? 'JPEG' : 'PNG', op.x, op.y, op.w, op.h)
-    return true
-  }))
 }
 
 /**

@@ -59,7 +59,7 @@ import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
 import { registrarRespuesta, repetida } from '@/lib/caja/repetida.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
-import { imprimirComprobanteCambio, imprimirTicket, numeroProvisorio, plata, ticketDeVenta, type ComprobanteCambio, type DatosTicket } from '@/lib/caja/ticket'
+import { imprimirTicket, numeroProvisorio, plata, ticketDeCambio, ticketDeVenta, type ComprobanteCambio, type DatosTicket } from '@/lib/caja/ticket'
 import { claveMail, claveVista, leerMail, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
 import { mailOk } from '@/lib/caja/mail'
 import { useEsMovil } from '@/lib/caja/movil'
@@ -258,7 +258,7 @@ function POS() {
   const [eligiendo, setEligiendo] = useState<ProductoLista | null>(null)
   const vuelta = useRef(0)
   const [enviando, setEnviando] = useState(false)
-  const [ultima, setUltima] = useState<{ venta: Venta; ticket: DatosTicket; regalo?: boolean } | null>(null)
+  const [ultima, setUltima] = useState<{ venta: Venta; ticket: DatosTicket; regalo?: boolean; /** Es un CAMBIO (Bruno, 28-oct): la misma tarjeta que la venta. */ cambio?: { aFavor: number } } | null>(null)
   const [pendientes, setPendientes] = useState<Venta[]>([])
   const scanRef = useRef<HTMLInputElement>(null)
 
@@ -429,23 +429,24 @@ function POS() {
     setPidePin(false)
     setCobrandoCambio(false)
   }
-  /** El comprobante del cambio en la térmica (prueba del corte, 28-oct: el cambio ⛔ emitía nada). */
-  const imprimirCambio = (c: ComprobanteCambio) => {
-    if (movil) return
-    imprimirComprobanteCambio(c, { nombreCuenta, politica: config?.politica_cambio ?? null, logo: config?.ticket_logo ?? null, logoStunned: config?.ticket_logo_stunned ?? null }, ahora())
-      .catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el comprobante del cambio: ${(e as Error).message}` }))
-  }
-  // El cambio quedó registrado: se sale del modo, sale su comprobante y el cartel de «Cambio #N» queda arriba.
-  // La «Última venta» se va: su «Ticket de cambio» apuntaba a la venta de ANTES del cambio.
+  // El cambio quedó registrado: se sale del modo, sale su comprobante y queda la MISMA tarjeta que la venta (Bruno, 28-oct):
+  // «Reimprimir ticket» es el comprobante y «Ticket de cambio» el de regalo de lo que se lleva, ⛔ el de la venta anterior.
   const cambioHecho = cambio.hecho
   useEffect(() => {
     if (!cambioHecho) return
-    imprimirCambio(cambioHecho.comprobante)
+    const c: ComprobanteCambio = cambioHecho.comprobante
+    const ticket = ticketDeCambio(c, { nombreCuenta, politica: config?.politica_cambio ?? null, logo: config?.ticket_logo ?? null, logoStunned: config?.ticket_logo_stunned ?? null })
+    const venta = {
+      id: ticket.id, estado: 'en_erp', destino: 'erp', erp_numero: c.numero, gn_number: null, pagos: c.pagos, subtotal: c.subtotal, total: c.total,
+      paga_con: null, email: null, usuario: null, intentos: 0, ultimo_error: null, reintentable: null, creada_en: new Date().toISOString(),
+    } as unknown as Venta
+    imprimir(ticket, ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el comprobante del cambio: ${(e as Error).message}` }))
     void Promise.resolve().then(() => {
       setEnCambio(false)
       setPasoCambio(1)
       setCobrandoCambio(false)
-      setUltima(null)
+      setUltima({ venta, ticket, cambio: { aFavor: c.aFavor } })
+      cambio.setHecho(null)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- una vez por cambio registrado
   }, [cambioHecho])
@@ -1056,6 +1057,7 @@ pendientes
               nombreCuenta={nombreCuenta}
               esEfectivo={esEfectivo}
               regalo={ultima.regalo}
+              cambio={ultima.cambio}
               onReimprimir={movil ? undefined : () => imprimir(ultima.ticket, ahora())}
               onTicketCambio={movil ? undefined : () => imprimir(ultima.ticket, ahora(), 'cambio').catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket de cambio: ${(e as Error).message}` }))}
               onOtra={() => {
@@ -1716,23 +1718,6 @@ pendientes
       {enCambio && (
         <BandaCambio paso={pasoCambio} c={cambio} onBuscar={() => setVerVentaOriginal(true)} onSiguiente={siguienteDelCambio} onVolver={() => setPasoCambio(1)} onSalir={salirDelCambio} />
       )}
-      {cambio.hecho && (
-        <div style={{ padding: `${space[3]}px ${space[4]}px 0` }}>
-          <Notice tone="success" onClose={() => cambio.setHecho(null)}>
-            Cambio #{cambio.hecho.numero} registrado.{' '}
-            {cambio.hecho.cobrado > 0 ? `Se cobraron ${plata(cambio.hecho.cobrado)}.` : cambio.hecho.aFavor > 0 ? `Quedan ${plata(cambio.hecho.aFavor)} a favor de la clienta${cambio.hecho.saldo != null ? ` (saldo: ${plata(cambio.hecho.saldo)})` : ''}.` : 'Sin diferencia.'}
-            {!movil && (
-              <>
-                {' '}
-                <Button size="sm" variant="ghost" onClick={() => cambio.hecho && imprimirCambio(cambio.hecho.comprobante)}>
-                  <Icono nombre="impresora" size={14} /> Reimprimir comprobante
-                </Button>
-              </>
-            )}
-          </Notice>
-        </div>
-      )}
-
       <div className="pos-grid">
         <div style={{ display: 'grid', gap: space[3], minWidth: 0 }}>
           {esperasJSX}

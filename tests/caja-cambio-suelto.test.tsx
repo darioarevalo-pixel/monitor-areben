@@ -120,21 +120,33 @@ describe('cambio suelto · el pedido al servidor', () => {
     expect(h.venta).toBeNull()
   })
 
-  it('🔑 el cambio deja su COMPROBANTE: número, de qué venta, qué vuelve y qué se lleva (prueba del corte, 28-oct: ⛔ emitía nada)', async () => {
+  it('🔑 el cambio deja su COMPROBANTE con el molde del ticket de venta: lo que vuelve en negativo y SIN DIFERENCIA donde iría el TOTAL (Bruno, 28-oct)', async () => {
     await montar()
     await hacer(() => h.devolverDeVenta(ventaDeGn(GN), { [claveDePrenda(7, 3)]: 1 }))
     await hacer(() => h.sumarNueva(OTRA_STU))
     await hacer(() => void h.confirmar())
     expect(h.hecho?.comprobante).toMatchObject({
-      numero: 5, origen: 'Venta #30930 de Gestión Nube',
-      devueltas: [{ nombre: 'Remera', talle: 'M', cantidad: 1, importe: 15000, stunned: true }],
-      nuevas: [{ nombre: 'Buzo', talle: 'M', cantidad: 1, importe: 15000, stunned: true }],
-      vuelve: 15000, lleva: 15000, cobrado: 0, aFavor: 0,
+      numero: 5, origen: 'Venta #30930 de Gestión Nube', subtotal: 0, total: 0, aFavor: 0,
+      renglones: [
+        { nombre: 'Remera', talle: 'M', cantidad: -1, precio: 15000, importe: -15000, stunned: true },
+        { nombre: 'Buzo', talle: 'M', cantidad: 1, precio: 15000, importe: 15000, stunned: true },
+      ],
     })
-    const { armarComprobanteCambio } = await import('@/lib/caja/ticket')
-    const txt = armarComprobanteCambio(h.hecho!.comprobante, { nombreCuenta: () => 'Efectivo', politica: null }, Date.parse('2026-10-28T22:00:00Z'), (t) => t.match(/.{1,40}/g) || [''])
-      .ops.filter((o) => o.k === 'txt').map((o) => (o as { txt: string }).txt)
-    for (const t of ['COMPROBANTE DE CAMBIO', 'Cambio: #5', 'De: Venta #30930 de Gestión Nube', 'DEVUELVE', '1 x Remera - M', 'SE LLEVA', '1 x Buzo - M', 'SIN DIFERENCIA']) expect(txt).toContain(t)
+    const { armarTicket, armarTicketCambio, ticketDeCambio } = await import('@/lib/caja/ticket')
+    const t = ticketDeCambio(h.hecho!.comprobante, { nombreCuenta: () => 'Efectivo', politica: null })
+    const medir = (x: string) => x.match(/.{1,40}/g) || ['']
+    const textos = (r: { ops: { k: string }[] }) => r.ops.filter((o) => o.k === 'txt').map((o) => (o as unknown as { txt: string }).txt)
+    const txt = textos(armarTicket(t, Date.parse('2026-10-28T22:00:00Z'), medir))
+    for (const x of ['COMPROBANTE', 'DOCUMENTO NO VÁLIDO COMO FACTURA', 'Comprobante: Cambio #5', 'De: Venta #30930 de Gestión Nube', 'Cliente: Consumidor Final', '-1 x $15.000', '-$15.000', 'Remera - M', '1 x $15.000', 'Buzo - M', 'SIN DIFERENCIA', 'Gracias por tu compra!']) expect(txt).toContain(x)
+    expect(txt).not.toContain('TOTAL')
+    // El de regalo: sólo lo que se lleva.
+    const regalo = textos(armarTicketCambio(t, Date.parse('2026-10-28T22:00:00Z'), medir))
+    expect(regalo).toContain('1 x Buzo - M')
+    expect(regalo.join(' ')).not.toContain('Remera')
+    // Con diferencia a favor de la clienta, en vez del TOTAL va el SALDO A FAVOR.
+    const aFavor = textos(armarTicket({ ...t, subtotal: -2000, cambio: { origen: 'Sin ticket', aFavor: 2000, saldo: 2000, saldoUsado: 0 } }, 0, medir))
+    expect(aFavor).toContain('SALDO A FAVOR')
+    expect(aFavor).toContain('-$2.000')
   })
 
   it('🔴 sin ticket: no se puede confirmar sin el PIN de la encargada ni sin lo que pagó', async () => {

@@ -313,23 +313,25 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
     return bien
   }
 
-  /** El comprobante del cambio, con lo que había en pantalla al confirmarlo (después se vacía) y lo que contestó el servidor. */
+  /** El comprobante del cambio, con lo que había en pantalla al confirmarlo (después se vacía) y lo que contestó el servidor.
+   *  Lo que vuelve va en renglones NEGATIVOS, a lista (Bruno, 28-oct), y lo que se lleva como en la venta. */
   function comprobanteDe(r: { venta: { numero: number }; total: number; aFavor: number; saldo: number | null }): ComprobanteCambio {
     const o = venta?.origen
     const porUnidad = (d: Devuelta) => {
       const l = o?.tipo === 'erp' ? vendidas.find((x) => x.clave === d.clave) : null
-      return l && l.importe != null ? l.importe / l.cantidad : Number(d.precio || 0)
+      return Math.round((l && l.importe != null ? l.importe / l.cantidad : Number(d.precio || 0)) * 100) / 100
     }
     return {
       numero: r.venta.numero,
       origen: !o || o.tipo === 'suelto' ? 'Sin ticket' : o.tipo === 'erp' ? `Venta #${o.numero}` : `Venta #${o.numero} de Gestión Nube`,
-      devueltas: devueltas.map((d) => ({ nombre: d.nombre, talle: d.talle, cantidad: d.cantidad, importe: Math.round(porUnidad(d) * d.cantidad * 100) / 100, stunned: skuEsStunned(d.sku) })),
-      nuevas: nuevas.map((n, i) => ({ nombre: n.variante.product_name, talle: n.variante.size_name, cantidad: n.cantidad, importe: filas[i]?.importe ?? Number(n.precio) * n.cantidad, stunned: esStunned(n.variante) })),
-      vuelve,
-      lleva: Math.round(filas.reduce((s, f) => s + f.importe, 0) * 100) / 100,
+      renglones: [
+        ...devueltas.map((d) => ({ nombre: d.nombre, talle: d.talle, cantidad: -d.cantidad, precio: porUnidad(d), importe: -Math.round(porUnidad(d) * d.cantidad * 100) / 100, stunned: skuEsStunned(d.sku) })),
+        ...nuevas.map((n, i) => ({ nombre: n.variante.product_name, talle: n.variante.size_name, cantidad: n.cantidad, precio: Number(n.precio), importe: filas[i]?.importe ?? Number(n.precio) * n.cantidad, stunned: esStunned(n.variante) })),
+      ],
+      subtotal: diferencia,
+      pagos: cobrado.pagos.filter((p) => typeof p.cuenta === 'number') as ComprobanteCambio['pagos'],
       saldoUsado,
-      cobrado: r.total,
-      pagos: cobrado.pagos,
+      total: r.total,
       aFavor: r.aFavor,
       saldo: r.saldo,
     }

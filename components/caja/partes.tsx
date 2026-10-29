@@ -695,8 +695,11 @@ export function UltimaVenta({
   nombreCuenta,
   esEfectivo,
   regalo = false,
+  cambio,
 }: {
   venta: Venta
+  /** Es un CAMBIO (Bruno, 28-oct): la misma tarjeta que la venta, con su número y lo que quedó a favor. */
+  cambio?: { aFavor: number }
   /** Sin él, ⛔ hay «Reimprimir» (el celular ⛔ imprime: el ticket va por mail). */
   onReimprimir?: () => void
   /** El ticket de cambio solo (regalo, Bruno 13-oct): sin precios. */
@@ -728,14 +731,15 @@ export function UltimaVenta({
       </span>
       <div style={{ flex: '1 1 200px', minWidth: 0 }}>
         <b style={{ display: 'block', fontSize: font.lg, color: color.ink }}>
-          {enGn ? `Venta #${enErp ? venta.erp_numero ?? '—' : venta.gn_number} · ${plata(venta.total)}` : `Venta provisoria ${numeroProvisorio(venta.id)} · ${plata(venta.total)}`}
+          {enGn ? `${cambio ? 'Cambio' : 'Venta'} #${enErp ? venta.erp_numero ?? '—' : venta.gn_number} · ${plata(venta.total)}` : `Venta provisoria ${numeroProvisorio(venta.id)} · ${plata(venta.total)}`}
         </b>
         <span style={{ display: 'block', fontSize: font.base, color: enGn ? color.ink2 : color.dangerInk }}>
           {enGn ? (enErp ? 'en el ERP' : 'en Gestión Nube') : `pendiente en Gestión Nube (${venta.ultimo_error ?? 'sin respuesta'}) · reintento automático`}
         </span>
-        {(medios || vuelto > 0 || venta.email) && (
+        {(medios || vuelto > 0 || venta.email || (cambio && cambio.aFavor > 0)) && (
           <span style={{ display: 'block', fontSize: font.base, color: color.ink2 }}>
             {[
+              cambio && cambio.aFavor > 0 && <span key="f">Saldo a favor {plata(cambio.aFavor)}</span>,
               medios && <span key="m">{medios}</span>,
               vuelto > 0 && (
                 <span key="v" style={{ color: color.successInk, fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums' }}>
