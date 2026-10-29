@@ -58,8 +58,9 @@ export type DatosTicket = {
   numero: number | null
   /** La venta va al ERP, ⛔ a GN: si ⛔ llegó, el ticket dice «pendiente en el ERP». */
   enErp?: boolean
-  /** Es el comprobante de un CAMBIO (Bruno, 28-oct: «casi idéntico» al de venta): donde la venta dice TOTAL, el cambio dice
-   *  SIN DIFERENCIA, DIFERENCIA A COBRAR o SALDO A FAVOR. */
+  /** Es el comprobante de un CAMBIO (Bruno, 28-oct: «LITERALMENTE el ticket de venta»): cada renglón con su rótulo DEVUELVE /
+   *  SE LLEVA (⛔ «-1» ni montos en negativo) y el final como un ticket: «Subtotal» (la diferencia, a lista), los descuentos de
+   *  la forma de pago sobre la diferencia y «TOTAL» —los dos, porque de ahí se ve si hay diferencia (23:15)—. */
   cambio?: { origen: string; aFavor: number; saldo: number | null; saldoUsado: number }
   /** El id de la venta en la Caja (uuid): de ahí sale el número provisorio. */
   id: string
@@ -244,10 +245,14 @@ export function armarTicket(
   regla()
   for (const r of t.renglones) {
     const talle = talleVisible(r.talle)
-    const lista = Math.round(r.cantidad * r.precio * 100) / 100
-    par(`${r.cantidad} x ${plata(r.precio)}`, `${lista < 0 ? '-' : ''}${plata(lista)}`, 9)
+    // En el cambio lo que vuelve viene con cantidad negativa: se imprime en positivo con su rótulo.
+    const rotulo = t.cambio ? (r.cantidad < 0 ? 'DEVUELVE ' : 'SE LLEVA ') : ''
+    const cantidad = t.cambio ? Math.abs(r.cantidad) : r.cantidad
+    const lista = Math.round(cantidad * r.precio * 100) / 100
+    const importe = t.cambio ? Math.abs(r.importe) : r.importe
+    par(`${rotulo}${cantidad} x ${plata(r.precio)}`, `${lista < 0 ? '-' : ''}${plata(lista)}`, 9)
     escribir(talle ? `${r.nombre} - ${talle}` : r.nombre, 9, false)
-    if (lista - r.importe > 0.004) par(r.promos?.length ? `Promo ${r.promos.join(' + ')}` : 'Descuento', `-${plata(lista - r.importe)}`, 9)
+    if (lista - importe > 0.004) par(r.promos?.length ? `Promo ${r.promos.join(' + ')}` : 'Descuento', `-${plata(lista - importe)}`, 9)
     l.y += 0.8
   }
   regla()
@@ -261,13 +266,13 @@ export function armarTicket(
     if (p.redondeo < 0) par('Redondeo', `-${plata(p.redondeo)}`, 10)
   }
   l.y += 1
+  par('TOTAL', plata(Math.max(t.total, 0)), 12, true)
   if (t.cambio) {
-    if (t.cambio.saldoUsado > 0) par('Del saldo a favor', `-${plata(t.cambio.saldoUsado)}`, 10)
-    if (t.total - t.cambio.saldoUsado > 0.004) par('DIFERENCIA A COBRAR', plata(t.total - t.cambio.saldoUsado), 12, true)
-    else if (t.cambio.aFavor > 0) par('SALDO A FAVOR', plata(t.cambio.aFavor), 12, true)
-    else par(t.cambio.saldoUsado > 0 ? 'DIFERENCIA A COBRAR' : 'SIN DIFERENCIA', plata(0), 12, true)
+    // Debajo del TOTAL, como el «Paga con» de una venta: con qué se pagó y lo que le queda a la clienta.
+    if (t.cambio.saldoUsado > 0) par('Pagado con saldo a favor', plata(t.cambio.saldoUsado), 9)
+    if (t.cambio.aFavor > 0) par('Queda a favor', plata(t.cambio.aFavor), 9)
     if (t.cambio.aFavor > 0 && t.cambio.saldo != null && Math.abs(t.cambio.saldo - t.cambio.aFavor) > 0.004) par('Saldo a favor total', plata(t.cambio.saldo), 9)
-  } else par('TOTAL', plata(t.total), 12, true)
+  }
   regla()
 
   if (t.politica) {
