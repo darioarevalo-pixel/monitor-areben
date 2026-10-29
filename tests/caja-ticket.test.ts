@@ -43,6 +43,19 @@ function montoDe(ops: { k: string }[], concepto: string): string | undefined {
 }
 
 describe('caja · ticket contra la pantalla de cobro de GN', () => {
+  it('🔑 la venta del ERP (Stunned) sale con SU número, ⛔ «Provisorio … pendiente en Gestión Nube» (prueba del corte, 28-oct)', async () => {
+    const { ticketDeVenta } = await import('@/lib/caja/ticket')
+    const venta = { id: ID, estado: 'en_erp', destino: 'erp', gn_number: null, erp_numero: 25, renglones: [], pagos: [], subtotal: 11700, total: 11700, paga_con: null } as never
+    const d = ticketDeVenta(venta, null, nombreCuenta)
+    expect(d.numero).toBe(25)
+    const txt = armarTicket(d, AHORA, medir).ops.filter((o) => o.k === 'txt').map((o) => (o as { txt: string }).txt)
+    expect(txt).toContain('Comprobante: #25')
+    expect(txt.join(' ')).not.toContain('Gestión Nube')
+    // Si ⛔ llegó al ERP: provisorio, pero pendiente en el ERP.
+    const sin = armarTicket(ticketDeVenta({ ...(venta as object), estado: 'error', erp_numero: null } as never, null, nombreCuenta), AHORA, medir).ops.filter((o) => o.k === 'txt').map((o) => (o as { txt: string }).txt)
+    expect(sin).toContain('Venta pendiente en el ERP')
+  })
+
   it('«Variante Única» ⛔ se imprime al lado del nombre; un talle real sí', () => {
     const base = ticket([{ precio: 4990 }], [{ cuenta: 12921 }])
     expect(base.txt).toContain('PRENDA 1 - S')

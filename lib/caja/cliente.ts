@@ -53,6 +53,8 @@ export type Producto = { variante: Variante; stock: Stock } | { candidatos: Cand
 /** `esperando_pago`: cobrada por transferencia, el pago todavía ⛔ apareció en MP (F5). `cancelada`: ⛔ llegó y la cajera la canceló. `descartada`: GN la rechazó y se resolvió que ⛔ se cobró (B2). */
 /** ¿La venta ya llegó adonde va (GN, o el ERP si es de Stunned)? */
 export const ventaLlego = (v: { estado: string }): boolean => v.estado === 'en_gn' || v.estado === 'en_erp'
+/** El número de la venta: el de GN o, si es del ERP (Stunned), el del ERP; `null` mientras ⛔ llegó a ninguno. */
+export const numeroDeLaVenta = (v: { gn_number: number | null; erp_numero?: number | null }): number | null => v.gn_number ?? v.erp_numero ?? null
 
 export type EstadoVenta = 'borrador' | 'enviando' | 'en_gn' | 'en_erp' | 'error' | 'esperando_pago' | 'cancelada' | 'descartada'
 /** B2: cómo se resolvió una venta que GN rechazó. */
@@ -73,6 +75,8 @@ export type Venta = {
   gn_number: number | null
   /** El número que le dio el ERP (ventas de Stunned, `destino = 'erp'`); `gn_number` es el de GN. */
   erp_numero?: number | null
+  /** `erp` = venta de Stunned que va al ERP, ⛔ a GN (`destino` de `caja_venta`). */
+  destino?: 'erp' | null
   /** Cómo quedó el ticket por mail: `encolado`, `ya estaba`, `sin automation`, `error: …`, o null. */
   ticket_mail?: string | null
   usuario: string | null

@@ -44,7 +44,7 @@ import { MARCA_CAJA } from './marca'
 import { armarSobre, billetesDe } from './conteo.core.js'
 import { codigoCaja } from './core.core.js'
 import { esStunned } from '../lineas.core.js'
-import type { Config, Venta } from './cliente'
+import { numeroDeLaVenta, type Config, type Venta } from './cliente'
 
 /** `importe` es lo que queda después del descuento a mano de esa prenda (si lo hubo). */
 /** `promos`: las que le tocaron (W5): el descuento del renglón sale con su nombre, ⛔ «Descuento». */
@@ -54,8 +54,10 @@ export type RenglonTicket = { nombre: string; talle?: string | null; cantidad: n
 export type PagoTicket = { cuenta: number; rebaja?: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
 
 export type DatosTicket = {
-  /** El número de la venta en GN; `null` si todavía ⛔ llegó. */
+  /** El número de la venta en GN (o en el ERP, si es de Stunned); `null` si todavía ⛔ llegó. */
   numero: number | null
+  /** La venta va al ERP, ⛔ a GN: si ⛔ llegó, el ticket dice «pendiente en el ERP». */
+  enErp?: boolean
   /** El id de la venta en la Caja (uuid): de ahí sale el número provisorio. */
   id: string
   renglones: RenglonTicket[]
@@ -87,7 +89,8 @@ export type LogoTicket = { src: string; ancho: number; alto: number }
  */
 export function ticketDeVenta(venta: Venta, config: Pick<Config, 'politica_cambio' | 'ticket_logo' | 'ticket_logo_stunned'> | null, nombreCuenta: (cuenta: number) => string): DatosTicket {
   return {
-    numero: venta.gn_number,
+    numero: numeroDeLaVenta(venta),
+    enErp: venta.destino === 'erp',
     id: venta.id,
     renglones: (venta.renglones ?? []).map((r) => ({
       nombre: r.nombre ?? `Producto ${r.product_id}`,
@@ -207,7 +210,7 @@ function numeroYFecha(l: ReturnType<typeof lienzo>, t: DatosTicket, ahoraMs: num
     l.escribir(`Comprobante: #${t.numero}`, 10, true)
   } else {
     l.escribir(`Comprobante: Provisorio ${numeroProvisorio(t.id)}`, 10, true)
-    l.escribir('Venta pendiente en Gestión Nube', 9, false, 'izq', 60)
+    l.escribir(t.enErp ? 'Venta pendiente en el ERP' : 'Venta pendiente en Gestión Nube', 9, false, 'izq', 60)
   }
   l.escribir(`Fecha: ${fechaConDia(ahoraMs)}`, 10, false)
 }

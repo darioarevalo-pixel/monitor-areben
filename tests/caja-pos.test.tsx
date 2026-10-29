@@ -423,6 +423,20 @@ describe('Ventas de la caja (Bruno, 12-oct)', () => {
     expect(r).toContain('Cobró: Sofi')
     expect(r).not.toContain('Provisorias (1)')
   })
+
+  it('🔑 la venta del ERP (Stunned) va en la lista con SU número y «En el ERP», ⛔ en Provisorias (prueba del corte, 28-oct)', async () => {
+    const { leerVentasTurno } = await import('@/lib/caja/cliente')
+    vi.mocked(leerVentasTurno).mockResolvedValueOnce({ ventas: [
+      v('a0000000-0000-4000-8000-000000000003', { estado: 'en_erp', destino: 'erp', erp_numero: 25 }),
+      v('a0000000-0000-4000-8000-000000000004', { gn_number: 31027 }),
+    ] } as never)
+    await montar(<VentasDelTurno nombreCuenta={() => 'Efectivo'} onReimprimir={() => {}} onCerrar={() => {}} />)
+    await hastaQue(() => (document.body.textContent || '').includes('#31027'))
+    const t = document.body.textContent || ''
+    expect(t).toContain('#25')
+    expect(t).toContain('En el ERP')
+    expect(t).not.toContain('Provisorias')
+  })
 })
 
 describe('POS · la oferta en varios pagos (Bruno, 13-oct)', () => {

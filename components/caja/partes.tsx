@@ -61,6 +61,7 @@ import {
   leerCuentasMp,
   usarCuentaMp,
   type CuentaMp,
+  numeroDeLaVenta,
 } from '@/lib/caja/cliente'
 import { Badge, Button, ButtonLink, Card, Field, Icono, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
 import { HeaderAcciones } from '@/components/layout/acciones'
@@ -1154,11 +1155,16 @@ function marcasDe(v: Venta): string[] {
   ].filter(Boolean) as string[]
 }
 
-const numeroDeVenta = (v: Venta) => (v.gn_number ? `#${v.gn_number}` : `Provisoria ${numeroProvisorio(v.id)}`)
+/** El estado como se lee en la lista: una venta del ERP (Stunned) que ⛔ llegó está pendiente en el ERP, ⛔ en GN. */
+const estadoDeVenta = (v: Venta) => {
+  const e = ESTADO_VENTA[v.estado] ?? { texto: v.estado, tono: 'neutral' as const }
+  return v.destino === 'erp' && e.texto === 'Pendiente en GN' ? { ...e, texto: 'Pendiente en el ERP' } : e
+}
+const numeroDeVenta = (v: Venta) => (numeroDeLaVenta(v) != null ? `#${numeroDeLaVenta(v)}` : `Provisoria ${numeroProvisorio(v.id)}`)
 
 /** El resumen de una venta (Bruno, 12-oct): qué se llevó, cómo pagó y quién la cobró, para identificarla rápido. */
 function ResumenVenta({ venta: v, nombreCuenta, onVolver, onReimprimir, onTicketCambio }: { venta: Venta; nombreCuenta: (id: number) => string; onVolver: () => void; onReimprimir?: () => void; onTicketCambio?: () => void }) {
-  const e = ESTADO_VENTA[v.estado] ?? { texto: v.estado, tono: 'neutral' as const }
+  const e = estadoDeVenta(v)
   const marcas = marcasDe(v)
   const fila: React.CSSProperties = { display: 'flex', gap: space[3], justifyContent: 'space-between', fontSize: font.base }
   const der: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }
@@ -1276,8 +1282,8 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onTicketCambio, onC
   const der: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
   const cobradas = (ventas ?? []).filter((v) => v.estado !== 'cancelada' && v.estado !== 'esperando_pago' && v.estado !== 'descartada')
   const conTicket = (v: Venta) => v.estado !== 'cancelada' && v.estado !== 'esperando_pago' && v.estado !== 'descartada'
-  const firmes = (ventas ?? []).filter((v) => v.gn_number != null)
-  const provisorias = (ventas ?? []).filter((v) => v.gn_number == null)
+  const firmes = (ventas ?? []).filter((v) => numeroDeLaVenta(v) != null)
+  const provisorias = (ventas ?? []).filter((v) => numeroDeLaVenta(v) == null)
 
   const tabla = (lista: Venta[]) => (
     <div style={{ overflowX: 'auto' }}>
@@ -1295,7 +1301,7 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onTicketCambio, onC
         </thead>
         <tbody>
           {lista.map((v) => {
-            const e = ESTADO_VENTA[v.estado] ?? { texto: v.estado, tono: 'neutral' as const }
+            const e = estadoDeVenta(v)
             const prendas = (v.renglones ?? []).reduce((t, r) => t + r.cantidad, 0)
             const marcas = marcasDe(v)
             return (
