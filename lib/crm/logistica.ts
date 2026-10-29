@@ -145,9 +145,14 @@ export async function pedidosDelCliente(clienteId: number | null, tel: string | 
   return porTel || { t: 'ok', datos: [] }
 }
 
+/** 4 Despachado y 5 Cancelado: ya no hay nada que hacer con el pedido, aunque a Logística le falte algún dato. */
+export const ESTADOS_CERRADOS = [4, 5]
+
 export async function pendientesLogistica(): Promise<Resultado<{ count: number; by_step: Record<string, number>; orders: PendienteLogistica[] }>> {
   const r = await pedir<{ count?: number; by_step?: Record<string, number>; orders?: PendienteLogistica[] }>({ action: 'pendientes' })
-  return r.t === 'ok' ? { t: 'ok', datos: { count: r.datos.count || 0, by_step: r.datos.by_step || {}, orders: r.datos.orders || [] } } : r
+  if (r.t !== 'ok') return r
+  const orders = (r.datos.orders || []).filter((o) => !ESTADOS_CERRADOS.includes(o.status?.code))
+  return { t: 'ok', datos: { count: orders.length, by_step: r.datos.by_step || {}, orders } }
 }
 
 let catalogosCache: Promise<Resultado<Catalogos>> | null = null
