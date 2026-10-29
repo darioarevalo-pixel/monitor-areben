@@ -25,6 +25,7 @@ import { proponerMapeo, type GnVar, type TnVar } from '@/lib/sku-map/proponer'
 import type { MatchMetodo, SkuMapRow } from '@/lib/sku-map/tipos'
 import { importarOrden, leerOrdenes, leerProcesados } from '@/lib/sync-tn/cliente'
 import { TEXTO_MOTIVO, planificar } from '@/lib/sync-tn/core'
+import { cortada } from '@/lib/sync-tn/pausa.core.js'
 import { armarFilasStock, FILTRO_SKU_STUNNED, stockGnPorSku, stockTnPorSku } from '@/lib/sync-tn/stock-plan.core.js'
 import { aplicarResultadoTanda, candidatasDeStock, enTandas, marcarSinConfirmar, type DryRow, type RespStock } from '@/lib/sync-tn/stock.core'
 import { CFG_STUNNED, CORTE_STUNNED } from '@/lib/sync-tn/config'
@@ -53,7 +54,11 @@ const STORE = 'stunned' as const
  * Por eso no hay "importar todo" ni cron: el volumen es de 1-2 órdenes online por mes y conviene que
  * un humano mire el cartel amarillo antes de crear la venta.
  */
-const ESCRITURA_HABILITADA = true
+// 🔴 Stunned cortó el 28-oct (`TIENDAS_CORTADAS`): sus ventas ⛔ van más a GN ⇒ sin botón «Importar».
+const ESCRITURA_HABILITADA = !cortada(STORE)
+
+/** El stock GN→TN de la pestaña Stock: el mismo freno del cron (`pausa.core.js`). Después del corte el stock a TN lo manda el ERP. */
+const STOCK_ESCRIBE = !cortada(STORE)
 
 /**
  * Cuántas variantes entran en cada llamada de "Aplicar las N con diferencia".
@@ -304,6 +309,7 @@ export function Integraciones() {
   // una sola puerta para que el error no tenga dos formas distintas de contarse.
   // tn-categorias lee la tienda del query param (?store=), no del body. Sin esto asume 'bdi'.
   const escribirTanda = useCallback(async (filas: DryRow[]): Promise<RespStock> => {
+    if (!STOCK_ESCRIBE) throw new Error('Stunned vive en el ERP: el stock de Gestión Nube ya no se escribe en Tienda Nube.')
     const resp = await apiFetch(`${TN_STOCK_API}?store=${STORE}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -508,7 +514,7 @@ export function Integraciones() {
           </>
         ) : tab === 'stock' ? (
           <>
-            {conDiferencia > 0 && (
+            {STOCK_ESCRIBE && conDiferencia > 0 && (
               <Button variant="outline" tone="warning" onClick={() => void aplicarTodas()} loading={progreso != null} disabled={dryLoading || aplicando != null}>
                 {progreso ? `Escribiendo… ${progreso.hechas} de ${progreso.total}` : `Aplicar las ${conDiferencia} con diferencia`}
               </Button>
@@ -609,10 +615,17 @@ export function Integraciones() {
         </>
       ) : tab === 'stock' ? (
         <>
-          <Notice tone="neutral" icon="ℹ" style={{ marginBottom: space[3] }}>
-            Simulación de <b>solo lectura</b>: compara GN contra TN y no escribe nada hasta que toques Aplicar —en una fila, o el botón de arriba para todas las que
-            tienen diferencia—. El stock de GN es la suma de todas las ubicaciones (Depósito + Local); la sincronización pondría TN = GN.
-          </Notice>
+          {STOCK_ESCRIBE ? (
+            <Notice tone="neutral" icon="ℹ" style={{ marginBottom: space[3] }}>
+              Simulación de <b>solo lectura</b>: compara GN contra TN y no escribe nada hasta que toques Aplicar —en una fila, o el botón de arriba para todas las que
+              tienen diferencia—. El stock de GN es la suma de todas las ubicaciones (Depósito + Local); la sincronización pondría TN = GN.
+            </Notice>
+          ) : (
+            <Notice tone="neutral" icon="ℹ" style={{ marginBottom: space[3] }}>
+              Stunned vive en el ERP desde el corte del 28 de octubre: el stock de Tienda Nube lo manda el ERP (<b>ERP › Stock › Diferencias › Con Tienda Nube</b>).
+              Esta comparación con Gestión Nube es <b>sólo de lectura</b> y no escribe nada.
+            </Notice>
+          )}
 
           {dryMsg && (
             <Notice tone="success" icon="✓" style={{ marginBottom: space[3] }}>
@@ -659,7 +672,7 @@ export function Integraciones() {
                             <span style={{ color: color.warningInk, fontWeight: 600 }}>
                               TN {r.tn} → {r.gn}
                             </span>
-                            {r.tnProductId && r.tnVariantId && (
+                            {STOCK_ESCRIBE && r.tnProductId && r.tnVariantId && (
                               <Button
                                 size="sm"
                                 variant="outline"

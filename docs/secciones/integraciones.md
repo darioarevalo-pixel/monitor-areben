@@ -65,6 +65,10 @@ el token de ventas de GN.
 - 🔑 **`ESCRITURA_HABILITADA` (arriba del archivo) es el interruptor de la importación de ventas.**
   Prenderlo **no importa nada solo**: hace aparecer el botón por fila. Está en `true` desde el
   11-ago-2026.
+- 🔴 **Stunned cortó el 28-oct-2026 y vive en el ERP** (`TIENDAS_CORTADAS` en
+  `lib/sync-tn/pausa.core.js`): sin botón «Importar» y la pestaña Stock es **sólo de lectura** —sin
+  «Aplicar»—, con o sin `SYNC_GN_TN_PAUSADO`. El stock a TN lo manda el ERP (Stock › Diferencias ›
+  Con Tienda Nube). El mismo freno para el cron diario.
 - 🔴 **`liberar` del ledger no es una lectura**: suelta la reserva de una orden. Liberar una que ya
   se importó es lo que habilita crear la venta dos veces en GN. Se usa sólo cuando GN cortó con 5xx
   y **alguien fue a mirar a GN**.
