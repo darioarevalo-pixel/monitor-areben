@@ -79,6 +79,8 @@ el token de ventas de GN.
 
 ## El stock se sincroniza SOLO, todos los días (9-oct-2026)
 
+- 🔴 **`sync-stock-stunned.yml` APAGADO desde el 29-oct-2026** (`gh workflow disable`, Bruno): Stunned vive en el ERP. Se
+  vuelve a prender con `gh workflow enable sync-stock-stunned.yml` (⛔ hace falta).
 - 🔑 **`sync-stock-stunned.yml` pone TN = GN sin botón**, cuando termina bien el sync diario de
   Zattia (`workflow_run`: lee el espejo recién bajado). Script `scripts/sync-stock-stunned.mjs`; la
   regla —qué filas y cuándo frenar— es `lib/sync-tn/stock-plan.core.js`, la MISMA que usa el botón.
