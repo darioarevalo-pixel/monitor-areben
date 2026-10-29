@@ -25,6 +25,7 @@ import {
 } from '@/lib/erp/transferencias.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
+import { useLineaErp } from '@/lib/erp/linea-erp'
 import { BarraPasos } from './Barritas'
 
 type Prefs = { orden: string[]; visibles: string[] }
@@ -58,6 +59,7 @@ function bajarCsv(filas: FilaTransferencia[], marca: MarcaErp) {
 export function TransferenciasStock() {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  const tienda = useLineaErp()
   const usuario = perfil?.name ?? null
   const lista = 'erp-transferencias'
   const [datos, setDatos] = useState<(ListaDeTransferencias & { clave: string; hoy: string }) | null>(null)
@@ -138,10 +140,13 @@ export function TransferenciasStock() {
         <Button disabled={!filas.length} onClick={() => bajarCsv(filas, marca)}>Exportar</Button>
         <Button variant="outline" onClick={abrirReposicion}>Abrir Reposición en el monitor ↗</Button>
       </div>
-      <Notice tone="warning">
-        <b>«Recibida» todavía no se controla</b>: Gestión Nube mueve el stock de un golpe y nadie la escanea al llegar al local (el último paso va rayado).
-        Tampoco hay transferencias armadas a mano fuera de Reposición: las que se hacen en la pantalla de Gestión Nube aparecen como «A mano en Gestión Nube».
-      </Notice>
+      {/* Stunned ya vive en el ERP (corte del 28-oct): la transferencia se mueve y se recibe acá, con sus faltantes (Bruno, 28-oct). */}
+      {tienda === 'stunned'
+        ? <Notice tone="neutral">Stunned ya vive en el ERP: la transferencia se mueve y se recibe acá. Lo que no llega al local queda como faltante («Transferida con faltantes»).</Notice>
+        : <Notice tone="warning">
+          <b>«Recibida» todavía no se controla</b>: Gestión Nube mueve el stock de un golpe y nadie la escanea al llegar al local (el último paso va rayado).
+          Tampoco hay transferencias armadas a mano fuera de Reposición: las que se hacen en la pantalla de Gestión Nube aparecen como «A mano en Gestión Nube».
+        </Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {datos?.cortado && <Notice tone="warning">Se ven las {datos.filas.length.toLocaleString('es-AR')} más nuevas.</Notice>}
 

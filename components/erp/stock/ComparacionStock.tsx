@@ -89,7 +89,9 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
   const mirada = `${vista}|${q}|${tienda}|${orden?.col ?? ''}|${orden?.dir ?? ''}`
   const mostrar = tanda.de === mirada ? tanda.n : DE_A
 
-  const columnas = prefs.visibles.map((k) => {
+  // Stunned ya vive en el ERP (corte del 28-oct): la columna de Gestión Nube ⛔ le dice nada (Bruno, 28-oct).
+  const sinGn = tienda === 'stunned'
+  const columnas = prefs.visibles.filter((k) => !(sinGn && k === 'gn')).map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k as keyof typeof COLUMNAS]
     return { key: k, titulo, ancho, ordena: !!ordena, derecha: ['para', 'tn', 'dif', 'gn', 'ped'].includes(k) }
   })
@@ -118,7 +120,9 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>Por variante: lo que la tienda tendría que mostrar según el ERP (sus depósitos, menos lo apartado por pedidos sin pagar) contra lo que muestra. Arranca con las que no coinciden.</p>
-      <Notice tone="warning">Hasta el corte de cada tienda, su stock lo manda <b>Gestión Nube</b>: si Gestión Nube y la tienda coinciden y el ERP no, lo que hay que mirar es el ERP. Después del corte, el arreglo es <b>enviar el stock del ERP</b> a la tienda (abajo).</Notice>
+      {sinGn
+        ? <Notice tone="neutral">Stunned ya vive en el ERP: el stock de la tienda lo manda el ERP. Si no coinciden, el arreglo es <b>enviar el stock del ERP</b> a la tienda (abajo).</Notice>
+        : <Notice tone="warning">Hasta el corte de cada tienda, su stock lo manda <b>Gestión Nube</b>: si Gestión Nube y la tienda coinciden y el ERP no, lo que hay que mirar es el ERP. Después del corte, el arreglo es <b>enviar el stock del ERP</b> a la tienda (abajo).</Notice>}
       <Notice tone="neutral">
         <b>Mercado Libre todavía no se compara acá</b>: el ERP no guarda lo publicado en Mercado Libre.
         {datos?.ml ? <> La conciliación del {datos.ml.fecha.split('-').reverse().slice(0, 2).join('/')} encontró {datos.ml.noCierran} publicaciones que no coinciden. <Button variant="outline" onClick={irAConciliacion}>Ver en Conciliación</Button></> : ' Las que no coinciden salen una vez por día en Conciliación.'}
@@ -139,7 +143,7 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la comparación" placeholder="Producto o código de barras" />
           <PanelColumnas
-            columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k as keyof typeof COLUMNAS][0], visible: prefs.visibles.includes(k), fija: !!COLUMNAS[k as keyof typeof COLUMNAS][3] }))}
+            columnas={prefs.orden.filter((k) => !(sinGn && k === 'gn')).map((k) => ({ key: k, titulo: COLUMNAS[k as keyof typeof COLUMNAS][0], visible: prefs.visibles.includes(k), fija: !!COLUMNAS[k as keyof typeof COLUMNAS][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
             onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
