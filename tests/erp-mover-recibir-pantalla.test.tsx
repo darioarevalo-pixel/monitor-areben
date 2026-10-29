@@ -110,6 +110,25 @@ describe('Mover y recibir', () => {
     expect(document.body.textContent).toContain('recibida con 1 u de menos')
   })
 
+  it('una transferencia PEDIDA (borrador) se PREPARA escaneando: arma lo escaneado y la envía', async () => {
+    const pedida = doc({ estado: 'borrador', enviada_por: null, enviada_en: null, renglones: [{ n: 1, product_id: 10, size_id: 1, sku: 'STU-REM-0019-M', barcode: '779001', pedida: 2, armada: 0, enviada: 0, recibida: null }] })
+    m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [pedida], enTransito: [] })
+    m.buscarPrendas.mockResolvedValue({ variantes: [REM], cortado: false })
+    m.armarTransferenciaDoc.mockResolvedValue(res(pedida)); m.enviarTransferenciaDoc.mockResolvedValue(res(doc({}), { unidades: 2 }))
+    await montar()
+    await abrirFicha()
+    expect(boton('Recibir')).toBeUndefined()
+    await act(async () => { boton('Preparar').click() })
+    expect((boton('Enviar con 2 u de menos') as HTMLButtonElement).disabled).toBe(true)
+    await escanear('779001'); await escanear('779001')
+    await act(async () => { boton('Enviar completa').click() })
+    await esperar()
+    const renglones = [{ product_id: '10', size_id: '1', sku: 'STU-REM-0019-M', barcode: '779001', cantidad: 2 }]
+    expect(m.armarTransferenciaDoc).toHaveBeenCalledWith('stunned', pedida.id, renglones)
+    expect(m.enviarTransferenciaDoc).toHaveBeenCalledWith('stunned', pedida.id)
+    expect(document.body.textContent).toContain('en tránsito')
+  })
+
   it('una prenda que no salió en la transferencia frena «Recibir»', async () => {
     m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [doc({})], enTransito: [] })
     m.buscarPrendas.mockResolvedValue({ variantes: [{ ...REM, producto: '99', talle: '5', sku: 'STU-OTRA-S', barcode: '779999' }], cortado: false })

@@ -141,7 +141,8 @@ export function MoverYRecibir() {
   const [q, setQ] = useState('')
   const [orden, setOrden] = useState<OrdenLista>(null)
   const [fichaId, setFichaId] = useState<string | null>(null)
-  const [recibiendo, setRecibiendo] = useState<{ doc: TransferenciaDoc; lista: Fila[] } | null>(null)
+  // Recibir lo que llegó, o PREPARAR una transferencia pedida (borrador, p. ej. la solicitud del evento): se escanea contra lo pedido.
+  const [recibiendo, setRecibiendo] = useState<{ doc: TransferenciaDoc; lista: Fila[]; modo: 'recibir' | 'preparar' } | null>(null)
   const [trabajando, setTrabajando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hecho, setHecho] = useState<{ texto: string; avisos: AvisoDoc[] } | null>(null)
@@ -187,6 +188,21 @@ export function MoverYRecibir() {
   async function recibir() {
     if (!recibiendo) return
     setTrabajando(true); setError(null)
+    if (recibiendo.modo === 'preparar') {
+      // armar (lo escaneado) → enviar: el stock sale del origen recién al enviar.
+      try {
+        const renglones = renglonesParaMotor(recibiendo.lista)
+        const a = await armarTransferenciaDoc(linea, recibiendo.doc.id, renglones)
+        const e = await enviarTransferenciaDoc(linea, recibiendo.doc.id)
+        setHecho({ texto: `T-${e.transferencia.numero} en tránsito: salieron ${e.unidades} u de ${dep(recibiendo.doc.desde)}. Falta recibirla en ${dep(recibiendo.doc.hacia)}.`, avisos: [...a.avisos, ...e.avisos] })
+        setRecibiendo(null)
+      } catch (err) {
+        setError(`${err instanceof Error ? err.message : 'No se pudo preparar.'} No salió nada del stock: reintentá.`)
+      } finally {
+        setTrabajando(false); setVuelta((v) => v + 1)
+      }
+      return
+    }
     try {
       const r = await recibirTransferenciaDoc(linea, recibiendo.doc.id, renglonesParaMotor(recibiendo.lista))
       const falt = r.diferencias.reduce((s, d) => s + Math.min(0, d.diferencia), 0)
@@ -207,7 +223,12 @@ export function MoverYRecibir() {
   }
 
   function abrirRecepcion(d: TransferenciaDoc) {
-    setRecibiendo({ doc: d, lista: listaDeRecepcion(d.renglones, nombres) as Fila[] }); setFichaId(null); setHecho(null); setError(null)
+    setRecibiendo({ doc: d, lista: listaDeRecepcion(d.renglones, nombres) as Fila[], modo: 'recibir' }); setFichaId(null); setHecho(null); setError(null)
+  }
+  function abrirPreparado(d: TransferenciaDoc) {
+    // La misma cuenta que al recibir, contra lo PEDIDO en lugar de lo enviado.
+    const pedido = d.renglones.map((r) => ({ ...r, enviada: r.pedida }))
+    setRecibiendo({ doc: d, lista: listaDeRecepcion(pedido, nombres) as Fila[], modo: 'preparar' }); setFichaId(null); setHecho(null); setError(null)
   }
 
   const todos = docs ?? []
@@ -255,12 +276,16 @@ export function MoverYRecibir() {
       )}
 
       {recibiendo && cuenta && (
-        <SectionCard title={`Recibir T-${recibiendo.doc.numero}`} subtitle={`${dep(recibiendo.doc.desde)} → ${dep(recibiendo.doc.hacia)}. Escaneá cada producto que llegó: lo que no escanees queda como faltante.`}>
+        <SectionCard title={`${recibiendo.modo === 'preparar' ? 'Preparar' : 'Recibir'} T-${recibiendo.doc.numero}`} subtitle={recibiendo.modo === 'preparar'
+          ? `${dep(recibiendo.doc.desde)} → ${dep(recibiendo.doc.hacia)}. Escaneá cada producto que separaste: sale sólo lo escaneado.`
+          : `${dep(recibiendo.doc.desde)} → ${dep(recibiendo.doc.hacia)}. Escaneá cada producto que llegó: lo que no escanees queda como faltante.`}>
           <Escaneo linea={linea} onPrenda={(p) => setRecibiendo((r) => r && { ...r, lista: sumarEscaneo(r.lista, p) as Fila[] })} />
           <TablaEscaneada conEnviada filas={cuenta.filas as Fila[]} onCantidad={(f, n) => setRecibiendo((r) => r && { ...r, lista: r.lista.map((x) => (x.producto === f.producto && x.talle === f.talle ? { ...x, cantidad: Math.max(0, Math.trunc(n) || 0) } : x)) })} />
-          {cuenta.sobran > 0 && <Notice tone="warning" style={{ marginTop: space[2] }}>Hay productos que no salieron en esta transferencia: el ERP las rechaza. Si llegaron de más, se anotan como ajuste.</Notice>}
+          {cuenta.sobran > 0 && <Notice tone="warning" style={{ marginTop: space[2] }}>{recibiendo.modo === 'preparar' ? 'Hay productos que no están en lo pedido (o de más): sacalos de la lista.' : 'Hay productos que no salieron en esta transferencia: el ERP las rechaza. Si llegaron de más, se anotan como ajuste.'}</Notice>}
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3] }}>
-            <Button disabled={trabajando || cuenta.sobran > 0} onClick={recibir}>{cuenta.completa ? 'Recibir completa' : `Recibir con ${-cuenta.faltan} u de menos`}</Button>
+            <Button disabled={trabajando || cuenta.sobran > 0 || (recibiendo.modo === 'preparar' && (cuenta.filas as Fila[]).every((f) => !f.cantidad))} onClick={recibir}>
+              {recibiendo.modo === 'preparar' ? (cuenta.completa ? 'Enviar completa' : `Enviar con ${-cuenta.faltan} u de menos`) : cuenta.completa ? 'Recibir completa' : `Recibir con ${-cuenta.faltan} u de menos`}
+            </Button>
             <Button variant="outline" onClick={() => setRecibiendo(null)}>Volver</Button>
           </div>
         </SectionCard>
@@ -291,12 +316,12 @@ export function MoverYRecibir() {
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>{filas.length.toLocaleString('es-AR')} de {todos.length.toLocaleString('es-AR')}</div>
       </div>
 
-      {ficha && <FichaDoc d={ficha} nombres={nombres} trabajando={trabajando} onCerrar={() => setFichaId(null)} onRecibir={() => abrirRecepcion(ficha)} onCancelar={() => cancelar(ficha)} />}
+      {ficha && <FichaDoc d={ficha} nombres={nombres} trabajando={trabajando} onCerrar={() => setFichaId(null)} onRecibir={() => abrirRecepcion(ficha)} onPreparar={() => abrirPreparado(ficha)} onCancelar={() => cancelar(ficha)} />}
     </div>
   )
 }
 
-function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onCancelar }: { d: TransferenciaDoc; nombres: Nombres; trabajando: boolean; onCerrar: () => void; onRecibir: () => void; onCancelar: () => void }) {
+function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onPreparar, onCancelar }: { d: TransferenciaDoc; nombres: Nombres; trabajando: boolean; onCerrar: () => void; onRecibir: () => void; onPreparar: () => void; onCancelar: () => void }) {
   const p = pasoDeDoc(d)
   const renglones = renglonesConDiferencia(d)
   const recibida = d.estado === 'recibida'
@@ -349,6 +374,7 @@ function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onCancelar }: {
       </div>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
         {d.estado === 'en_transito' && <Button disabled={trabajando} onClick={onRecibir}>Recibir</Button>}
+        {d.estado === 'borrador' && <Button disabled={trabajando} onClick={onPreparar}>Preparar</Button>}
         {(d.estado === 'borrador' || d.estado === 'armada') && <Button variant="outline" disabled={trabajando} onClick={onCancelar}>Cancelar</Button>}
         <Button variant="outline" onClick={() => imprimirRemito(d, nombres)}>Imprimir remito</Button>
       </div>
