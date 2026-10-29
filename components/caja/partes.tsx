@@ -1874,6 +1874,7 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
               Esperado = fondo {plata(r.efectivo.fondo)} + efectivo de la Caja {plata(r.efectivo.cobrado)}
               {!!r.efectivo.deEspera && <> + esperando transferencia {plata(r.efectivo.deEspera)}</>}
               {r.cobrosGN !== null && <> + cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</>}
+              {!!r.efectivo.cobradoERP && <> + pedidos web de Stunned (ERP) {plata(r.efectivo.cobradoERP)}</>}
               {!!r.efectivo.aportes && <> + ingresos {plata(r.efectivo.aportes)}</>}
               {!!r.efectivo.salidas && <> − salidas {plata(r.efectivo.salidas)}</>}
             </span>
@@ -1977,17 +1978,25 @@ export function SalidaModal({ tipo, onCerrar, onListo }: { tipo: 'salida' | 'apo
 /**
  * W3b: el efectivo que entró por Gestión Nube y ⛔ por la Caja. Suma al efectivo esperado: la plata está en
  * el cajón (Bruno, 4-oct). Dos listas: las ventas hechas en el POS de GN (13-oct, las dos cajas en
- * paralelo) y los cobros de pedidos web.
+ * paralelo) y los cobros de pedidos web. Desde el 29-oct, una tercera: los pedidos web de Stunned cobrados en efectivo,
+ * que nacen en el ERP (`cobrosERP`).
  */
 export function CobrosGN({ r }: { r: ResumenTurno }) {
-  if (r.cobrosGN === null) return <Notice tone="warning">Cobros de Gestión Nube: sin leer. No suman al esperado.</Notice>
-  if (r.cobrosGN.length === 0) return null
+  const erp = r.cobrosERP ?? []
+  const avisos = [
+    r.cobrosGN === null && <Notice key="gn" tone="warning">Cobros de Gestión Nube: sin leer. No suman al esperado.</Notice>,
+    r.cobrosERP === null && <Notice key="erp" tone="warning">Pedidos web de Stunned (ERP): sin leer. No suman al esperado.</Notice>,
+  ].filter(Boolean)
+  const gn = r.cobrosGN ?? []
   const grupos = [
-    { titulo: 'Ventas en efectivo en el POS de Gestión Nube', lista: r.cobrosGN.filter((c) => c.pos) },
-    { titulo: 'Cobros en efectivo de pedidos web (en Gestión Nube)', lista: r.cobrosGN.filter((c) => !c.pos) },
+    { titulo: 'Ventas en efectivo en el POS de Gestión Nube', lista: gn.filter((c) => c.pos) },
+    { titulo: 'Cobros en efectivo de pedidos web (en Gestión Nube)', lista: gn.filter((c) => !c.pos) },
+    { titulo: 'Pedidos web de Stunned cobrados en efectivo (en el ERP)', lista: erp },
   ].filter((g) => g.lista.length)
+  if (!avisos.length && !grupos.length) return null
   return (
     <div style={{ display: 'grid', gap: space[2] }}>
+      {avisos}
       {grupos.map((g) => (
         <div key={g.titulo} style={{ display: 'grid', gap: space[0.5] }}>
           <span>
@@ -2152,6 +2161,7 @@ export function ResumenTurnoDatos({
             <span>Fondo {plata(r.efectivo.fondo)}</span>
             <span>+ Efectivo cobrado {plata(r.efectivo.cobrado)}</span>
             {r.efectivo.cobradoGN > 0 && <span>+ Cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</span>}
+            {!!r.efectivo.cobradoERP && <span>+ Pedidos web de Stunned cobrados en efectivo (ERP) {plata(r.efectivo.cobradoERP)}</span>}
             {!!r.efectivo.deEspera && <span>+ Efectivo de ventas que esperan la transferencia {plata(r.efectivo.deEspera)}</span>}
             {!!r.efectivo.aportes && <span>+ Ingresos {plata(r.efectivo.aportes)}</span>}
             <span>− Salidas {plata(r.efectivo.salidas)}</span>

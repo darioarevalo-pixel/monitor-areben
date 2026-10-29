@@ -156,9 +156,12 @@ export type ResumenTurno = {
   total: number
   ventas: number
   /** `deEspera`: la parte en efectivo de las ventas que esperan la transferencia (A2): ya está en el cajón. */
-  efectivo: { fondo: number; cobrado: number; deEspera?: number; cobradoGN: number; aportes?: number; salidas: number; esperado: number }
+  efectivo: { fondo: number; cobrado: number; deEspera?: number; cobradoGN: number; cobradoERP?: number; aportes?: number; salidas: number; esperado: number }
   /** W3b: el efectivo cobrado EN GN durante el turno que ⛔ es venta presencial. `null` = GN ⛔ contestó. */
   cobrosGN: CobroGN[] | null
+  /** 29-oct: los pedidos web de Stunned cobrados en efectivo, del ERP (`id` = `erp-<número>`). `null` = el ERP ⛔ contestó; un
+   *  resumen guardado antes ⛔ lo trae. */
+  cobrosERP?: (Omit<CobroGN, 'id' | 'cuenta'> & { id: string })[] | null
   esperando: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
   sinGN: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
   /** A12: las anuladas del turno (⛔ suman): las anuladas a mano en GN y las del ERP (`estado = 'en_erp'`, Stunned, con su

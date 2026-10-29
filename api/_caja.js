@@ -99,7 +99,7 @@ import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, dias
 import { reglasDeHoy as reglasDeHoyDe } from './_caja-reglas.js'
 import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
-import { anuladasEnGN, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
+import { anuladasEnGN, cobrosDeERP, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
 import { armarSobre, avisoDeFaltaDeCambio, billetesDe, cambioDeLaCaja, limpiarConteo, quienesSeEnteranDelCambio, totalDeConteo } from '../lib/caja/conteo.core.js'
 import { anotarAnuladasDelCierre } from '../lib/caja/anuladas.js'
 import { aplicarPromos, normalizarPromos } from '../lib/caja/promos.core.js'
@@ -334,6 +334,22 @@ export default async function handler(req, res) {
   }
 
   /**
+   * El efectivo de los pedidos web de Stunned que se cobraron en el turno (29-oct): nacen en el ERP, ⛔ en GN. Sólo
+   * Zattia con `CAJA_STUNNED_ERP=1` (Stunned vende en el ERP); si no, `[]`. `null` si la base ⛔ contesta: ⛔ suman y el
+   * cierre frena, como con GN. Las ventas del ERP viven en la base de Zattia, la misma de `caja_venta`.
+   */
+  async function cobrosERPDelTurno(turno) {
+    if (store !== 'zattia' || process.env.CAJA_STUNNED_ERP !== '1') return []
+    const hasta = turno.cerrado_en || new Date().toISOString()
+    const { data, error } = await sb.from('venta')
+      .select('numero, estado, origen, prueba, ocurrida_en, detalle, venta_pago (monto, cuenta:cuenta_cobro_id (medio))')
+      .eq('marca', 'stunned').eq('origen', 'tn').eq('estado', 'confirmada').eq('prueba', false)
+      .gte('ocurrida_en', turno.abierto_en).lt('ocurrida_en', hasta).limit(500)
+    if (error) return null
+    return cobrosDeERP({ ventas: data || [], desde: turno.abierto_en, hasta })
+  }
+
+  /**
    * El conteo de billetes que mandó la pantalla, con el total RECALCULADO acá. `null` si ⛔ vino;
    * `{ error }` si una cantidad está mal o, con `monto`, si el total ⛔ es ese monto (el fondo o el contado).
    */
@@ -398,7 +414,8 @@ export default async function handler(req, res) {
     // De a una, ⛔ en paralelo: las dos juntas ya pasaban las 2 consultas por segundo de GN.
     const cobrosGN = await cobrosGNDelTurno(turno, reglas, fresco)
     const anuladasGN = await anuladasDelTurno(turno, ventas.data || [], fresco)
-    const resumen = resumenTurno({ turno, ventas: ventas.data || [], movs: movs.data || [], reglas, nombres, cobrosGN, anuladasGN })
+    const cobrosERP = await cobrosERPDelTurno(turno)
+    const resumen = resumenTurno({ turno, ventas: ventas.data || [], movs: movs.data || [], reglas, nombres, cobrosGN, cobrosERP, anuladasGN })
     // `salidas` sigue siendo el nombre de la lista (la pantalla la lee así): son TODOS los movimientos.
     return { ...turno, resumen, salidas: movs.data || [] }
   }
@@ -871,7 +888,10 @@ export default async function handler(req, res) {
         // 🔴 Auditoría A3 (11-oct): sin los cobros de GN el esperado queda CORTO y el cierre dice que
         // sobra plata, y ⛔ se reabre. Se frena; cerrar igual es una decisión explícita y con nota. Lo mismo
         // si ⛔ se pudo mirar qué ventas se anularon en GN (A12): el esperado podría quedar LARGO.
-        if (con.resumen.cobrosGN === null || con.resumen.anuladasGN === null) {
+        // Lo mismo sin los pedidos web de Stunned cobrados en el ERP (29-oct): el esperado queda CORTO. Misma salida con nota,
+        // ⛔ un freno sin salida: una lectura rota del ERP ⛔ puede dejar la caja sin cerrar.
+        if (con.resumen.cobrosERP === null && b.sinCobrosGN !== true) return res.status(409).json({ error: 'No se pudieron leer los pedidos web de Stunned cobrados en efectivo (ERP): sin eso el esperado puede quedar corto. Reintentar en un minuto.', sinCobrosGN: true })
+        if (con.resumen.cobrosGN === null || con.resumen.anuladasGN === null || con.resumen.cobrosERP === null) {
           if (b.sinCobrosGN !== true) return res.status(409).json({ error: 'Gestión Nube no contestó (los cobros web en efectivo o las ventas anuladas): sin eso el esperado puede quedar mal. Reintentar en un minuto.', sinCobrosGN: true })
           if (!nota) return res.status(400).json({ error: 'Para cerrar sin lo de Gestión Nube hace falta una nota.' })
         }

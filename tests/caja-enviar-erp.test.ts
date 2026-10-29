@@ -71,11 +71,11 @@ describe('resumenTurno con ventas del ERP', () => {
   const reglas = { cuentas: { 12921: { nombre: 'Efectivo', efectivo: true } } }
   const mk = (id: string, extra: Fila = {}) => ({ id, estado: 'en_erp', total: 100, pagos: [{ cuenta: 12921, monto: 100 }], creada_en: '2026-11-01T15:00:00Z', ...extra })
   it('suma el efectivo y NO la lista como pendiente de GN', () => {
-    const r = resumenTurno({ turno: { fondo: 0 }, ventas: [mk('a')], movs: [], reglas, nombres: {}, cobrosGN: [], anuladasGN: [] })
+    const r = resumenTurno({ turno: { fondo: 0 }, ventas: [mk('a')], movs: [], reglas, nombres: {}, cobrosGN: [], cobrosERP: [], anuladasGN: [] })
     expect(r.efectivo.cobrado).toBe(100); expect(r.sinGN).toHaveLength(0); expect(r.ventas).toBe(1)
   })
   it('la anulada del ERP deja de sumar y se lista aparte', () => {
-    const r = resumenTurno({ turno: { fondo: 0 }, ventas: [mk('a'), mk('b', { anulada: { por: 'ana', en: 'x' } })], movs: [], reglas, nombres: {}, cobrosGN: [], anuladasGN: [] })
+    const r = resumenTurno({ turno: { fondo: 0 }, ventas: [mk('a'), mk('b', { anulada: { por: 'ana', en: 'x' } })], movs: [], reglas, nombres: {}, cobrosGN: [], cobrosERP: [], anuladasGN: [] })
     expect(r.efectivo.cobrado).toBe(100); expect(r.anuladasGN).toHaveLength(1)
   })
 })

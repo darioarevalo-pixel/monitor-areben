@@ -422,7 +422,7 @@ export type DatosCierre = {
   resumen?: {
     total: number
     ventas: number
-    efectivo: { fondo: number; cobrado: number; deEspera?: number; cobradoGN: number; aportes?: number; salidas: number; esperado: number }
+    efectivo: { fondo: number; cobrado: number; deEspera?: number; cobradoGN: number; cobradoERP?: number; aportes?: number; salidas: number; esperado: number }
     diferencia?: number
   } | null
   conteos?: { cierre?: { billetes: Record<string, number>; total: number } | null } | null
@@ -457,6 +457,7 @@ export function armarTicketCierre(t: DatosCierre, ahoraMs: number, partir: Medid
     par('+ Ventas en efectivo', plata(e.cobrado), 9)
     if (e.deEspera) par('+ Transferencias en espera (efectivo)', plata(e.deEspera), 9)
     if (e.cobradoGN) par('+ Cobrado en Gestión Nube', plata(e.cobradoGN), 9)
+    if (e.cobradoERP) par('+ Pedidos web Stunned (ERP)', plata(e.cobradoERP), 9)
     if (e.aportes) par('+ Ingresos', plata(e.aportes), 9)
     if (e.salidas) par('- Salidas', `-${plata(e.salidas)}`, 9)
     l.y += 0.6

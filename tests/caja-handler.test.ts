@@ -9,6 +9,8 @@ type Fila = Record<string, unknown>
 
 const base = {
   ventas: new Map<string, Fila>(),
+  // Stunned (29-oct): las ventas del ERP que lee el turno (pedidos web cobrados en efectivo).
+  erpVentas: [] as Fila[],
   config: null as Fila | null,
   inventario: [] as Fila[],
   // F5: la cuenta de MP de Pagos recibidos y lo que «entró».
@@ -60,7 +62,7 @@ function consulta(tabla: string) {
       : tabla === 'mp_cuenta_uso' ? base.usos : tabla === 'mp_cuentas' ? base.llaves
       : tabla === 'caja_turno' ? base.turnos : tabla === 'caja_turno_mov' ? base.movs
       : tabla === 'agenda_promos' ? base.agenda : tabla === 'liquidacion_items' ? base.liqItems
-      : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_venta_mp' ? base.ventaMp : tabla === 'caja_gift_card' ? base.giftCards : base.inventario
+      : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_venta_mp' ? base.ventaMp : tabla === 'caja_gift_card' ? base.giftCards : tabla === 'venta' ? base.erpVentas ?? [] : base.inventario
     return todas.filter((f) => filtros.every((p) => p(f)))
   }
   const ejecutar = () => {
@@ -983,7 +985,7 @@ describe('caja · turno propio (v2, W3)', () => {
     expect((await correr(req('POST', {}, { action: 'salida', monto: 5000, motivo: 'Retiro para gerencia' }))).code).toBe(200)
     const t = await correr(req('GET', { action: 'turno' }))
     const turno = t.body?.turno as { resumen: { efectivo: Fila } }
-    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 21700, deEspera: 0, cobradoGN: 0, aportes: 0, salidas: 5000, esperado: 66700 })
+    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 21700, deEspera: 0, cobradoGN: 0, cobradoERP: 0, aportes: 0, salidas: 5000, esperado: 66700 })
     expect(JSON.stringify(t.body)).not.toMatch(/balance|114084283/)
 
     expect((await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID }))).code).toBe(400)
@@ -1014,7 +1016,7 @@ describe('caja · turno propio (v2, W3)', () => {
     ], meta: { has_more_pages: false } } }
     const t = await correr(req('GET', { action: 'turno' }))
     const turno = t.body?.turno as { resumen: { efectivo: Fila; cobrosGN: Fila[] } }
-    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 0, deEspera: 0, cobradoGN: 76482, aportes: 0, salidas: 0, esperado: 126482 })
+    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 0, deEspera: 0, cobradoGN: 76482, cobradoERP: 0, aportes: 0, salidas: 0, esperado: 126482 })
     expect(turno.resumen.cobrosGN.map((c) => [c.venta, c.pos])).toEqual([[29981, false], [29990, true]])
     // Se pide por cada cuenta de efectivo, con los cobros, 45 días de ventas para atrás (19-oct: con 10 se escapó un pedido de 11).
     const pedidas = gn.gets.filter((u) => u.includes('/ventas?'))
@@ -1024,6 +1026,35 @@ describe('caja · turno propio (v2, W3)', () => {
     expect(c.code).toBe(200)
     expect(base.turnos[0]).toMatchObject({ esperado: 126482, contado: 126482 })
     expect((base.turnos[0].resumen as Fila).diferencia).toBe(0)
+  })
+
+  it('Stunned (29-oct): el pedido web cobrado en efectivo nace en el ERP ⇒ suma al esperado y entra en la foto del cierre', async () => {
+    conSesion(CAJERA)
+    process.env.CAJA_STUNNED_ERP = '1'
+    const efectivo = [{ monto: '43795.00', cuenta: { medio: 'efectivo' } }]
+    const v = (numero: number, x: Fila = {}) => ({ numero, marca: 'stunned', origen: 'tn', estado: 'confirmada', prueba: false,
+      ocurrida_en: '2026-10-04T15:10:00.000Z', detalle: { tn: { numero: 135 } }, venta_pago: efectivo, ...x })
+    base.erpVentas = [v(34), v(35, { prueba: true }), v(36, { ocurrida_en: '2026-10-03T15:00:00.000Z' }), v(37, { marca: 'zattia' })]
+    try {
+      const t = await correr(req('GET', { action: 'turno' }))
+      const r = (t.body?.turno as { resumen: { efectivo: Fila; cobrosERP: Fila[] } }).resumen
+      expect(r.efectivo).toMatchObject({ cobradoERP: 43795, esperado: 93795 })
+      expect(r.cobrosERP.map((c) => [c.venta, c.tn])).toEqual([[34, '135']])
+      const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 93795 }))
+      expect(c.code).toBe(200)
+      expect(base.turnos[0]).toMatchObject({ esperado: 93795, contado: 93795 })
+    } finally { delete process.env.CAJA_STUNNED_ERP; base.erpVentas = [] }
+  })
+
+  it('Stunned: sin la llave CAJA_STUNNED_ERP ⛔ se leen ventas del ERP (BDI y Zattia antes del corte)', async () => {
+    conSesion(CAJERA)
+    base.erpVentas = [{ numero: 34, marca: 'stunned', origen: 'tn', estado: 'confirmada', prueba: false, ocurrida_en: '2026-10-04T15:10:00.000Z', venta_pago: [{ monto: 1000, cuenta: { medio: 'efectivo' } }] }]
+    try {
+      const t = await correr(req('GET', { action: 'turno' }))
+      const r = (t.body?.turno as { resumen: { efectivo: Fila; cobrosERP: Fila[] } }).resumen
+      expect(r.cobrosERP).toEqual([])
+      expect(r.efectivo.esperado).toBe(50000)
+    } finally { base.erpVentas = [] }
   })
 
   it('🔴 un 429 de GN (2 consultas por segundo) se espera y se reintenta: ⛔ es «GN no contestó» (13-oct)', async () => {
