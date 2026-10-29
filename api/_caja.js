@@ -342,11 +342,21 @@ export default async function handler(req, res) {
     if (store !== 'zattia' || process.env.CAJA_STUNNED_ERP !== '1') return []
     const hasta = turno.cerrado_en || new Date().toISOString()
     const { data, error } = await sb.from('venta')
-      .select('numero, estado, origen, prueba, ocurrida_en, detalle, venta_pago (monto, cuenta:cuenta_cobro_id (medio))')
+      .select('id, numero, estado, origen, prueba, ocurrida_en, detalle')
       .eq('marca', 'stunned').eq('origen', 'tn').eq('estado', 'confirmada').eq('prueba', false)
       .gte('ocurrida_en', turno.abierto_en).lt('ocurrida_en', hasta).limit(500)
     if (error) return null
-    return cobrosDeERP({ ventas: data || [], desde: turno.abierto_en, hasta })
+    if (!(data || []).length) return []
+    // 🔴 El pago como VALE HOY (`venta_pago_vigente`, ⛔ `venta_pago`): «Corregir medio» ⛔ edita el pago, agrega una corrección.
+    // Eligió «Efectivo» en TN y pagó con tarjeta ⇒ corregido, ⛔ suma al cajón.
+    const pagos = await sb.from('venta_pago_vigente').select('venta_id, monto, cuenta_cobro_id').in('venta_id', data.map((v) => v.id))
+    if (pagos.error) return null
+    const ids = [...new Set((pagos.data || []).map((p) => p.cuenta_cobro_id))]
+    const cuentas = ids.length ? await sb.from('cuenta_cobro').select('id, medio').in('id', ids) : { data: [] }
+    if (cuentas.error) return null
+    const medio = new Map((cuentas.data || []).map((c) => [c.id, c.medio]))
+    const ventas = data.map((v) => ({ ...v, venta_pago: (pagos.data || []).filter((p) => p.venta_id === v.id).map((p) => ({ monto: p.monto, cuenta: { medio: medio.get(p.cuenta_cobro_id) ?? null } })) }))
+    return cobrosDeERP({ ventas, desde: turno.abierto_en, hasta })
   }
 
   /**

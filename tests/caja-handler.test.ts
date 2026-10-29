@@ -11,6 +11,8 @@ const base = {
   ventas: new Map<string, Fila>(),
   // Stunned (29-oct): las ventas del ERP que lee el turno (pedidos web cobrados en efectivo).
   erpVentas: [] as Fila[],
+  erpPagos: [] as Fila[],
+  erpCuentas: [] as Fila[],
   config: null as Fila | null,
   inventario: [] as Fila[],
   // F5: la cuenta de MP de Pagos recibidos y lo que «entró».
@@ -62,7 +64,7 @@ function consulta(tabla: string) {
       : tabla === 'mp_cuenta_uso' ? base.usos : tabla === 'mp_cuentas' ? base.llaves
       : tabla === 'caja_turno' ? base.turnos : tabla === 'caja_turno_mov' ? base.movs
       : tabla === 'agenda_promos' ? base.agenda : tabla === 'liquidacion_items' ? base.liqItems
-      : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_venta_mp' ? base.ventaMp : tabla === 'caja_gift_card' ? base.giftCards : tabla === 'venta' ? base.erpVentas ?? [] : base.inventario
+      : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_venta_mp' ? base.ventaMp : tabla === 'caja_gift_card' ? base.giftCards : tabla === 'venta' ? base.erpVentas ?? [] : tabla === 'venta_pago_vigente' ? base.erpPagos ?? [] : tabla === 'cuenta_cobro' ? base.erpCuentas ?? [] : base.inventario
     return todas.filter((f) => filtros.every((p) => p(f)))
   }
   const ejecutar = () => {
@@ -1031,10 +1033,12 @@ describe('caja · turno propio (v2, W3)', () => {
   it('Stunned (29-oct): el pedido web cobrado en efectivo nace en el ERP ⇒ suma al esperado y entra en la foto del cierre', async () => {
     conSesion(CAJERA)
     process.env.CAJA_STUNNED_ERP = '1'
-    const efectivo = [{ monto: '43795.00', cuenta: { medio: 'efectivo' } }]
-    const v = (numero: number, x: Fila = {}) => ({ numero, marca: 'stunned', origen: 'tn', estado: 'confirmada', prueba: false,
-      ocurrida_en: '2026-10-04T15:10:00.000Z', detalle: { tn: { numero: 135 } }, venta_pago: efectivo, ...x })
-    base.erpVentas = [v(34), v(35, { prueba: true }), v(36, { ocurrida_en: '2026-10-03T15:00:00.000Z' }), v(37, { marca: 'zattia' })]
+    const v = (numero: number, x: Fila = {}) => ({ id: `v${numero}`, numero, marca: 'stunned', origen: 'tn', estado: 'confirmada', prueba: false,
+      ocurrida_en: '2026-10-04T15:10:00.000Z', detalle: { tn: { numero: 135 } }, ...x })
+    base.erpVentas = [v(34), v(35, { prueba: true }), v(36, { ocurrida_en: '2026-10-03T15:00:00.000Z' }), v(37, { marca: 'zattia' }), v(38)]
+    base.erpCuentas = [{ id: 'c-ef', medio: 'efectivo' }, { id: 'c-deb', medio: 'debito' }]
+    // La #38 eligió Efectivo en TN y pagó con débito: su pago VIGENTE (corregido) es de débito ⇒ ⛔ suma.
+    base.erpPagos = [34, 35, 36, 37].map((n) => ({ venta_id: `v${n}`, monto: '43795.00', cuenta_cobro_id: 'c-ef' })).concat([{ venta_id: 'v38', monto: '9000', cuenta_cobro_id: 'c-deb' }])
     try {
       const t = await correr(req('GET', { action: 'turno' }))
       const r = (t.body?.turno as { resumen: { efectivo: Fila; cobrosERP: Fila[] } }).resumen
@@ -1043,12 +1047,12 @@ describe('caja · turno propio (v2, W3)', () => {
       const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 93795 }))
       expect(c.code).toBe(200)
       expect(base.turnos[0]).toMatchObject({ esperado: 93795, contado: 93795 })
-    } finally { delete process.env.CAJA_STUNNED_ERP; base.erpVentas = [] }
+    } finally { delete process.env.CAJA_STUNNED_ERP; base.erpVentas = []; base.erpPagos = []; base.erpCuentas = [] }
   })
 
   it('Stunned: sin la llave CAJA_STUNNED_ERP ⛔ se leen ventas del ERP (BDI y Zattia antes del corte)', async () => {
     conSesion(CAJERA)
-    base.erpVentas = [{ numero: 34, marca: 'stunned', origen: 'tn', estado: 'confirmada', prueba: false, ocurrida_en: '2026-10-04T15:10:00.000Z', venta_pago: [{ monto: 1000, cuenta: { medio: 'efectivo' } }] }]
+    base.erpVentas = [{ id: 'v34', numero: 34, marca: 'stunned', origen: 'tn', estado: 'confirmada', prueba: false, ocurrida_en: '2026-10-04T15:10:00.000Z' }]
     try {
       const t = await correr(req('GET', { action: 'turno' }))
       const r = (t.body?.turno as { resumen: { efectivo: Fila; cobrosERP: Fila[] } }).resumen
