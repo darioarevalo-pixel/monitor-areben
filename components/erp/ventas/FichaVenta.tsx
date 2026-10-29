@@ -20,6 +20,7 @@ import { COBRO, ESTADO, historialDeVenta, plata } from '@/lib/erp/ventas-lista.c
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import { MOTIVO_MINIMO, NOMBRE_CANAL } from '@/lib/erp/venta.core.js'
 import { textoDeVuelta } from '@/lib/erp/desarme.core.js'
+import { medioDeCuenta } from '@/motor/cuentas/cuentas.mjs'
 import { DesarmeVenta } from './DesarmeVenta'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 
@@ -51,6 +52,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const [medioAbierto, setMedioAbierto] = useState(false)
   const [medioNuevo, setMedioNuevo] = useState('')
   const [motivoMedio, setMotivoMedio] = useState('')
+  const [cuentaNueva, setCuentaNueva] = useState('')
   const puedeErp = usePuedeErp(marca)
   const [precios, setPrecios] = useState<Record<number, string>>({})
   const [motivoPrecio, setMotivoPrecio] = useState('')
@@ -124,8 +126,12 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     onCambio(`Precio de la venta ${fila.ref} corregido: total ${plata(r.correccion.total_despues)}.${d === 0 ? '' : d > 0 ? ` Faltan cobrar ${plata(d)}: registrá el cobro.` : ` Sobran ${plata(-d)}: hay que devolverlos.`} No se movió plata.`)
   }, 'No se pudo corregir el precio.')
 
+  // Con más de una cuenta de ese medio en la marca (Transferencia, Transferencia CG, Feria…) el motor pide cuál (FALTA_CUENTA).
+  const cuentasDelMedio = medioNuevo ? (extra?.cuentas ?? []).filter((c) => medioDeCuenta(c) === medioNuevo) : []
+  const faltaCuenta = cuentasDelMedio.length > 1 && !cuentaNueva
+
   const confirmarMedio = () => correr(async () => {
-    const r = await corregirMedioDeVenta(marca, fila.id, { medio: medioNuevo, motivo: motivoMedio })
+    const r = await corregirMedioDeVenta(marca, fila.id, { medio: medioNuevo, motivo: motivoMedio, ...(cuentaNueva ? { cuenta: cuentaNueva } : {}) })
     setMedioAbierto(false)
     onCambio(`Venta ${fila.ref}: el cobro de ${plata(r.correccion.monto)} pasó de ${r.correccion.cuenta_antes} a ${r.correccion.cuenta_despues}. No se movió plata.`)
   }, 'No se pudo corregir el medio de cobro.')
@@ -150,7 +156,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     ...(ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
     ...(!fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura') }] : []),
     ...(puede.corregir && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
-    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir medio de cobro…', icono: 'pesos' as const, hint: 'Pagó con otro medio que el que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
+    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir medio de cobro…', icono: 'pesos' as const, hint: 'Pagó con otro medio que el que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setCuentaNueva(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
     { key: 'anular', label: 'Anular…', icono: 'anular', tone: 'danger', disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) },
   ]
   const hechos: HechoHistorial[] = ficha ? (historialDeVenta(ficha, { ...extra, tn: extra?.tn ?? undefined }) as HechoHistorial[]) : []
@@ -342,7 +348,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         abierto={medioAbierto} onCerrar={() => setMedioAbierto(false)} titulo={`Corregir el medio de cobro de la venta ${fila.ref}`}
         pie={<>
           <Button variant="outline" onClick={() => setMedioAbierto(false)}>Cancelar</Button>
-          <Button disabled={trabajando || !medioNuevo || motivoMedio.trim().length < MOTIVO_MINIMO} onClick={() => void confirmarMedio()}>Corregir medio</Button>
+          <Button disabled={trabajando || !medioNuevo || faltaCuenta || motivoMedio.trim().length < MOTIVO_MINIMO} onClick={() => void confirmarMedio()}>Corregir medio</Button>
         </>}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[3], marginBottom: space[3] }}>
@@ -351,11 +357,19 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             {' '}No mueve plata ni cambia el monto: cambia por dónde entró. Si era efectivo, deja de sumar al cierre de caja.
           </Notice>
           <Field label="Con qué pagó de verdad" required>
-            <Select value={medioNuevo} onChange={(e) => setMedioNuevo(e.target.value)}>
+            <Select value={medioNuevo} onChange={(e) => { setMedioNuevo(e.target.value); setCuentaNueva('') }}>
               <option value="">Elegí el medio…</option>
               {MEDIOS_CORREGIR.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
             </Select>
           </Field>
+          {cuentasDelMedio.length > 1 && (
+            <Field label="A qué cuenta" required>
+              <Select value={cuentaNueva} onChange={(e) => setCuentaNueva(e.target.value)}>
+                <option value="">Elegí la cuenta…</option>
+                {cuentasDelMedio.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </Select>
+            </Field>
+          )}
         </div>
         <Field label="Motivo" required hint="Queda guardado con tu nombre.">
           <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={motivoMedio} onChange={(e) => setMotivoMedio(e.target.value)} />
