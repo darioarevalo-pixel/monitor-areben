@@ -58,6 +58,20 @@ export async function stockStunnedDelLibro(store, productId, sizeId) {
   return r
 }
 
+/**
+ * ¿Está PRENDIDO el depósito Evento de Stunned en el ERP (motor sql/058)? Sin la 058 ⛔ hay fila ⇒ apagado.
+ * @returns {Promise<{ activo: boolean } | { error: string }>} ⛔ Lanza.
+ */
+export async function eventoActivo(store) {
+  const r = await conMotor(store, async (db) => {
+    const { rows } = await db.query(`select coalesce((to_jsonb(d) ->> 'activo')::boolean, false) as activo from deposito d where marca = 'stunned' and id = 'evento'`);
+    return { activo: rows[0]?.activo === true };
+  });
+  if (r.sinConexion) return { error: 'El ERP no está conectado (falta DATABASE_URL en Vercel)' };
+  if (r.error) return { error: `No se pudo leer el ERP (${r.error}).` };
+  return r;
+}
+
 export async function registrarEnErp(store, venta, env = process.env) {
   const prueba = env.CAJA_STUNNED_PRUEBA !== '0';
   const r = await conMotor(store, async (db, registrarVenta) => {

@@ -16,7 +16,7 @@ import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, tonoDeConteo } from '@/components/ui/PiezasLista'
 import {
-  armarTransferenciaDoc, buscarPrendas, cancelarTransferenciaDoc, crearTransferenciaDoc, enviarTransferenciaDoc, leerListaDeStock, leerTransferenciasDoc, recibirTransferenciaDoc,
+  armarTransferenciaDoc, buscarPrendas, cancelarTransferenciaDoc, crearTransferenciaDoc, enviarTransferenciaDoc, leerDepositos, leerListaDeStock, leerTransferenciasDoc, recibirTransferenciaDoc,
   type AvisoDoc, type PrendaEncontrada, type TiendaErp, type TransferenciaDoc,
 } from '@/lib/erp/cliente'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
@@ -120,7 +120,16 @@ function TablaEscaneada({ filas, onCantidad, conEnviada }: { filas: Fila[]; onCa
 export function MoverYRecibir() {
   // La del selector del menú (⛔ pestañas de otra marca: Bruno, 28-oct). Cambiarla remonta la pantalla (`key` en `Erp`).
   const linea: TiendaErp = useTiendaErp()
-  const deps = DEPOSITOS_DE_LINEA[linea] as string[]
+  // Los fijos de la línea, y el Evento si está PRENDIDO en el ERP (motor sql/058). Si ⛔ se puede leer, sólo los fijos.
+  const fijos = DEPOSITOS_DE_LINEA[linea] as string[]
+  const [conEvento, setConEvento] = useState(false)
+  useEffect(() => {
+    if (linea !== 'stunned') return
+    let vivo = true
+    leerDepositos(linea).then((r) => { if (vivo) setConEvento(r.depositos.some((d) => d.id === 'evento' && d.activo)) }).catch(() => {})
+    return () => { vivo = false }
+  }, [linea])
+  const deps = conEvento ? [...fijos, 'evento'] : fijos
   const [desde, setDesde] = useState(() => deps[1] ?? deps[0])
   const [hacia, setHacia] = useState(() => deps[0])
   const [lista, setLista] = useState<Fila[]>([])

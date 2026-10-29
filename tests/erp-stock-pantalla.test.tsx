@@ -110,12 +110,12 @@ describe('la lista de stock', () => {
 
   it('ocultar una columna queda guardado para ese usuario', async () => {
     await montar()
-    await clic(boton(/^Columnas · 8 de 11/))
+    await clic(boton(/^Columnas · 8 de 12/))
     await clic(document.getElementById('col-est')!)
     expect(host.querySelector('[role="row"]')!.textContent).not.toContain('Físico')
     act(() => root?.unmount()); root = null; host.remove()
     await montar()
     expect(host.querySelector('[role="row"]')!.textContent).not.toContain('Físico')
-    expect(boton(/^Columnas · 7 de 11/)).toBeTruthy()
+    expect(boton(/^Columnas · 7 de 12/)).toBeTruthy()
   })
 })

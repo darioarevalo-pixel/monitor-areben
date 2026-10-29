@@ -50,7 +50,7 @@ export type ResultadoLote = {
 async function pedir<T>(init: RequestInit | null, query: string, fallo: string): Promise<T> {
   const r = await apiFetch(`/api/datos?recurso=erp${query}`, init || undefined)
   const j = await r.json().catch(() => null)
-  if (!r.ok) throw Object.assign(new Error((j && j.error) || fallo), { codigo: (j && j.codigo) as string | undefined })
+  if (!r.ok) throw Object.assign(new Error((j && j.error) || fallo), { codigo: (j && j.codigo) as string | undefined, datos: j })
   return j as T
 }
 
@@ -791,6 +791,14 @@ export const recibirTransferenciaDoc = (linea: TiendaErp, transferenciaId: strin
   pedir<ResultadoDoc>(post({ accion: 'transferencia-recibir', linea, transferenciaId, renglones }), '', 'No se pudo recibir la transferencia.')
 export const cancelarTransferenciaDoc = (linea: TiendaErp, transferenciaId: string, motivo: string) =>
   pedir<ResultadoDoc>(post({ accion: 'transferencia-cancelar', linea, transferenciaId, motivo }), '', 'No se pudo cancelar la transferencia.')
+
+// ── ERP › Depósito Evento (`api/_erp-depositos.js`; motor sql/058): se activa para un evento y se apaga sólo en 0 ──
+export type DepositoErp = { id: string; nombre: string; activo: boolean; deGN: boolean; unidades: number }
+export type QuedaEnDeposito = { product_id: number; size_id: number; sku: string | null; cantidad: number }
+export const leerDepositos = (linea: TiendaErp) =>
+  pedir<{ depositos: DepositoErp[] }>(null, `&vista=depositos&marca=${linea}&nc=${Date.now()}`, 'No se pudieron leer los depósitos.')
+export const activarDeposito = (linea: TiendaErp, deposito: string, activar: boolean) =>
+  pedir<{ ok: true; ya?: boolean; depositos: DepositoErp[] }>(post({ accion: activar ? 'deposito-activar' : 'deposito-desactivar', linea, deposito }), '', activar ? 'No se pudo activar el depósito.' : 'No se pudo desactivar el depósito.')
 
 // ── ERP › Gastos comerciales (`api/_erp-gastos.js`; `gastosComerciales` / `registrarGasto` del motor, sql/055) — sólo admin ──
 export type TipoGasto = 'comision' | 'impuesto' | 'otro'

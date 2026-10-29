@@ -37,7 +37,7 @@ export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 /** `versiones`: las de las listas que se guardan ENTERAS (promos, productos de feria): se mandan al guardar para ⛔ pisar a otro admin. */
 /** `campaniasLiq`: sólo a un admin, para elegir cuáles son de feria. */
 export type CampaniaLiq = { id: string; nombre: string; estado: string }
-export type Config = { /** Stunned ya vende por el ERP (`CAJA_STUNNED_ERP`): un ticket es de UNA marca. */ stunned_erp?: boolean; /** Las ventas de Stunned todavía son de prueba (`CAJA_STUNNED_PRUEBA`): el cambio suelto va con ese modo. */ stunned_prueba?: boolean; /** El precio LOCAL de Stunned CARGADO en el ERP (Bruno 28-oct), product_id → precio; null si no se pudo leer. */ stunned_local?: Record<string, number> | null; /** Por qué no se pudo leer el precio local del ERP (la Caja cobra el de TN y lo avisa). */ stunned_local_error?: string; reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; /** El de Stunned (Bruno, 12-oct): sale si el ticket lleva prendas de Stunned. */ ticket_logo_stunned?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string }; campaniasLiq?: CampaniaLiq[]; /** V4: la marca de la Caja (`tienda` = su Tienda Nube, de donde sale el logo). */ marca?: { store: string; nombre: string; tienda: string | null; /** La Tienda Nube de Stunned (sólo Zattia): de ahí sale el logo de Stunned. */ tiendaStunned?: string | null } }
+export type Config = { /** El depósito Evento del ERP está PRENDIDO: se ofrece la «Caja del evento» (29-oct). */ evento_activo?: boolean; /** Stunned ya vende por el ERP (`CAJA_STUNNED_ERP`): un ticket es de UNA marca. */ stunned_erp?: boolean; /** Las ventas de Stunned todavía son de prueba (`CAJA_STUNNED_PRUEBA`): el cambio suelto va con ese modo. */ stunned_prueba?: boolean; /** El precio LOCAL de Stunned CARGADO en el ERP (Bruno 28-oct), product_id → precio; null si no se pudo leer. */ stunned_local?: Record<string, number> | null; /** Por qué no se pudo leer el precio local del ERP (la Caja cobra el de TN y lo avisa). */ stunned_local_error?: string; reglas: Reglas; politica_cambio: string | null; ticket_logo?: LogoTicket | null; /** El de Stunned (Bruno, 12-oct): sale si el ticket lleva prendas de Stunned. */ ticket_logo_stunned?: LogoTicket | null; versiones?: { promos: string; feriaProductos: string }; campaniasLiq?: CampaniaLiq[]; /** V4: la marca de la Caja (`tienda` = su Tienda Nube, de donde sale el logo). */ marca?: { store: string; nombre: string; tienda: string | null; /** La Tienda Nube de Stunned (sólo Zattia): de ahí sale el logo de Stunned. */ tiendaStunned?: string | null } }
 
 /** Una cuenta de cobro de GN. `regla` en null ⇒ la Caja ⛔ la cobra (sin %, o con recargo). */
 export type CuentaGN = { id: number; nombre: string; regla: ReglaCuenta | null }
@@ -119,14 +119,28 @@ async function leer<T>(r: Response, fallo: string): Promise<T> {
   return j as T
 }
 
+/**
+ * El PUESTO de este equipo (29-oct): el local o el EVENTO (lib/caja/puesto.core.js). Cada puesto tiene su turno; el del
+ * evento vende Stunned desde el depósito Evento del ERP. Lo elige la pantalla al abrir la caja y lo recuerda este navegador.
+ */
+export type Puesto = 'local' | 'evento'
+const CLAVE_PUESTO = 'caja-puesto'
+export function puestoCaja(): Puesto {
+  if (storeCaja() !== 'zattia') return 'local'
+  try { return localStorage.getItem(CLAVE_PUESTO) === 'evento' ? 'evento' : 'local' } catch { return 'local' }
+}
+export function elegirPuesto(p: Puesto) {
+  try { if (p === 'evento') localStorage.setItem(CLAVE_PUESTO, 'evento'); else localStorage.removeItem(CLAVE_PUESTO) } catch { /* sin almacenamiento: el local */ }
+}
+
 // V4: el `store` es el de la marca activa de la pestaña (`usarMarcaCaja`, lib/caja/marca.ts).
-const get = <T>(q: string, fallo: string) => apiFetch(`/api/datos?recurso=caja&store=${storeCaja()}&${q}&nc=${Date.now()}`).then((r) => leer<T>(r, fallo))
+const get = <T>(q: string, fallo: string) => apiFetch(`/api/datos?recurso=caja&store=${storeCaja()}&deposito=${puestoCaja()}&${q}&nc=${Date.now()}`).then((r) => leer<T>(r, fallo))
 
 const post = <T>(body: Record<string, unknown>, fallo: string) =>
   apiFetch('/api/datos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recurso: 'caja', store: storeCaja(), ...body }),
+    body: JSON.stringify({ recurso: 'caja', store: storeCaja(), deposito: puestoCaja(), ...body }),
   }).then((r) => leer<T>(r, fallo))
 
 export const leerConfig = () => get<Config>('action=config', 'No se pudo leer la configuración de la Caja.')

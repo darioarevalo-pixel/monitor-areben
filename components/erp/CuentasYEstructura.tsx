@@ -12,7 +12,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Notice, Select, color, font, space, weight } from '@/components/ui'
 import { ListaTrabajo } from '@/components/ui/ListaTrabajo'
 import { BuscadorLista, ChipEstado, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
-import { leerEstructura, type EstructuraDeMarca, type MarcaErp } from '@/lib/erp/cliente'
+import { activarDeposito, leerDepositos, leerEstructura, type DepositoErp, type EstructuraDeMarca, type MarcaErp, type QuedaEnDeposito } from '@/lib/erp/cliente'
 import {
   NOMBRE_TIPO, VISTAS_CUENTAS, armarCuentas, armarEstructura, contarVistasCuentas, cuitConGuiones, filtrarCuentas,
 } from '@/lib/erp/estructura.core.js'
@@ -108,6 +108,47 @@ export function CuentasErp({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {
   )
 }
 
+/**
+ * El DEPÓSITO EVENTO de Stunned (motor sql/058, Bruno 29-oct): se activa para una feria o un evento —aparece en Mover y
+ * recibir y en la Caja como «caja del evento»— y se desactiva SÓLO con el stock en 0. Si quedó algo, el ERP lo lista.
+ */
+function DepositoEvento() {
+  const [ev, setEv] = useState<DepositoErp | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [quedan, setQuedan] = useState<QuedaEnDeposito[]>([])
+  const [enCurso, setEnCurso] = useState(false)
+  const tomar = (ds: DepositoErp[]) => setEv(ds.find((d) => d.id === 'evento') ?? null)
+  useEffect(() => { leerDepositos('stunned').then((r) => tomar(r.depositos)).catch((e) => setError(e.message)) }, [])
+  const cambiar = async () => {
+    if (!ev) return
+    setEnCurso(true); setError(null); setQuedan([])
+    try { tomar((await activarDeposito('stunned', 'evento', !ev.activo)).depositos) }
+    catch (e) {
+      const x = e as Error & { datos?: { quedan?: QuedaEnDeposito[] } }
+      setError(x.message); setQuedan(x.datos?.quedan ?? [])
+    } finally { setEnCurso(false) }
+  }
+  if (!ev && !error) return null
+  return (
+    <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, padding: 16, display: 'flex', flexDirection: 'column', gap: space[2] }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap' }}>
+        <div>
+          <b style={{ color: color.ink }}>Depósito Evento · Stunned</b>
+          <div style={{ color: color.mut, fontSize: font.sm }}>
+            {!ev ? 'No se pudo leer.' : ev.activo ? `Activo · ${ev.unidades} ${ev.unidades === 1 ? 'prenda' : 'prendas'} adentro` : 'Desactivado'}
+            {' · '}Para una feria o un evento: se le mueve mercadería, se vende con la caja del evento y se desactiva cuando quedó en 0.
+          </div>
+        </div>
+        {ev && <Button size="sm" variant={ev.activo ? 'outline' : 'solid'} disabled={enCurso} onClick={cambiar}>{ev.activo ? 'Desactivar' : 'Activar'}</Button>}
+      </div>
+      {error && <Notice tone="danger" onClose={() => { setError(null); setQuedan([]) }}>
+        {error}
+        {quedan.length > 0 && <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{quedan.map((q) => <li key={`${q.product_id}:${q.size_id}`}>{q.sku ?? `${q.product_id}/${q.size_id}`} · {q.cantidad}</li>)}</ul>}
+      </Notice>}
+    </div>
+  )
+}
+
 export function EstructuraErp() {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
@@ -143,6 +184,7 @@ export function EstructuraErp() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>Qué marcas hay, dónde se guarda la mercadería y con qué punto de venta factura cada una.</p>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      {marca === 'zattia' && <DepositoEvento />}
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar marca o depósito" placeholder="Marca o depósito" />

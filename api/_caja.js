@@ -94,7 +94,8 @@ import { esStunned } from '../lib/lineas.core.js'
 import { lecturasStunnedErp } from '../lib/stunned/ventas-erp.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, ladoDelEspejo, marcaDeCaja, tokenDe } from '../lib/caja/marcas.core.js'
-import { anotarEnMotor, avisoDelMotor, preciosLocalStunned, registrarEnErp, repasarMotor, stockStunnedDelLibro } from './_caja-motor.js'
+import { anotarEnMotor, avisoDelMotor, eventoActivo, preciosLocalStunned, registrarEnErp, repasarMotor, stockStunnedDelLibro } from './_caja-motor.js'
+import { errorDelPuesto, faltaColumnaDeposito, puestoDe } from '../lib/caja/puesto.core.js'
 import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { reglasDeHoy as reglasDeHoyDe } from './_caja-reglas.js'
 import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
@@ -209,6 +210,9 @@ export default async function handler(req, res) {
   const sb = createClient(cfg.url, cfg.key)
   const { ventas: token, lectura: tokenLectura } = tokensGN(marca)
   const accion = String(req.query.action || (req.body && req.body.action) || '')
+  // El puesto (29-oct): el local o el EVENTO, cada uno con su turno (lib/caja/puesto.core.js). Sin nada = el local.
+  const puesto = puestoDe(req.query.deposito ?? (req.body && req.body.deposito), store)
+  if (!puesto) return res.status(400).json({ error: 'Puesto de caja inválido.' })
 
   /**
    * La configuración del cobro. La primera vez se siembra con lo que muestra el POS de GN DE ESA MARCA
@@ -281,11 +285,36 @@ export default async function handler(req, res) {
     return lista
   }
 
-  /** El turno abierto de la marca, o null. Hay uno solo: lo asegura el índice único parcial. */
+  /**
+   * El turno abierto de la marca EN ESTE PUESTO, o null. Uno solo por puesto: lo asegura el índice único parcial
+   * `(store, deposito)`. Sin `sql/migrate-caja-turno-deposito.sql` ⛔ hay columna ⇒ el local lee como antes y el evento ⛔ existe.
+   */
   async function turnoAbierto() {
+    const r = await sb.from('caja_turno').select(`${COLS_TURNO}, deposito`).eq('store', store).eq('deposito', puesto).is('cerrado_en', null).maybeSingle()
+    if (!r.error) return r.data
+    if (!faltaColumnaDeposito(r.error)) throw new Error(r.error.message)
+    if (puesto !== 'local') return null
     const { data, error } = await sb.from('caja_turno').select(COLS_TURNO).eq('store', store).is('cerrado_en', null).maybeSingle()
     if (error) throw new Error(error.message)
     return data
+  }
+
+  /**
+   * El depósito del ERP de donde sale una venta: el de su TURNO (el evento descuenta del Evento). Sin turno o sin la
+   * columna (⛔ puede haber turnos del evento) = el local. Otro error LANZA: callarlo descontaría del local lo del evento.
+   */
+  async function depositoDeVenta(v) {
+    let turnoId = v && v.turno_id
+    if (!turnoId && v && v.id) {
+      // La fila del envío puede venir sin `turno_id` (depende de qué columnas se leyeron): se busca, ⛔ se supone el local.
+      const r = await sb.from('caja_venta').select('turno_id').eq('id', v.id).maybeSingle()
+      if (r.error) throw new Error(r.error.message)
+      turnoId = r.data && r.data.turno_id
+    }
+    if (!turnoId) return 'local'
+    const { data, error } = await sb.from('caja_turno').select('deposito').eq('id', turnoId).maybeSingle()
+    if (error) { if (faltaColumnaDeposito(error)) return 'local'; throw new Error(error.message) }
+    return (data && data.deposito) || 'local'
   }
 
   /**
@@ -293,6 +322,7 @@ export default async function handler(req, res) {
    * el turno se muestra igual y dice que faltan.
    */
   async function cobrosGNDelTurno(turno, reglas, fresco) {
+    if (turno.deposito === 'evento') return []   // el evento cobra sólo Stunned, en el ERP: ⛔ hay GN que mirar
     const ahora = Date.now()
     if (!fresco && cacheCobrosGN && cacheCobrosGN.turno === turno.id && ahora - cacheCobrosGN.en < 60_000) return cacheCobrosGN.datos
     const cuentas = Object.entries(reglas.cuentas || {}).filter(([, r]) => r && r.efectivo).map(([id]) => Number(id))
@@ -339,6 +369,8 @@ export default async function handler(req, res) {
    * cierre frena, como con GN. Las ventas del ERP viven en la base de Zattia, la misma de `caja_venta`.
    */
   async function cobrosERPDelTurno(turno) {
+    // Los pedidos de TN cobrados van al cierre del LOCAL, ⛔ al del evento.
+    if (turno.deposito === 'evento') return []
     if (store !== 'zattia' || process.env.CAJA_STUNNED_ERP !== '1') return []
     const hasta = turno.cerrado_en || new Date().toISOString()
     const { data, error } = await sb.from('venta')
@@ -435,7 +467,7 @@ export default async function handler(req, res) {
   // 🔑 Opción (a) (Bruno, 14-oct): la que llega a GN se anota TAMBIÉN en el motor (`prueba`). ⛔ Frena: falla ⇒ log y el repaso.
   const enviar = async (fila) => {
     // 🔑 Stunned (26-oct): su ticket va al ERP, ⛔ a GN. `destino` queda en la fila, así un reintento no lo manda a GN.
-    if (fila.destino === 'erp') return enviarVentaErp(fila, { sb, mailer, registrar: (v) => registrarEnErp(store, v) })
+    if (fila.destino === 'erp') return enviarVentaErp(fila, { sb, mailer, registrar: async (v) => registrarEnErp(store, { ...v, deposito: await depositoDeVenta(v) }) })
     const out = await enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token, mailer })
     const aviso = avisoDelMotor(await anotarEnMotor(store, out.venta).catch((e) => ({ error: e.message })), 'al mandar')
     if (aviso) console.warn(aviso)
@@ -481,7 +513,9 @@ export default async function handler(req, res) {
         const local = store === 'zattia' ? await preciosLocalStunned() : null
         if (local && !local.precios) console.error('[caja] precio local de Stunned:', local.error || 'sin conexión al motor')
         const stunnedLocal = store !== 'zattia' ? {} : local.precios ? { stunned_local: local.precios } : { stunned_local: null, stunned_local_error: local.error ? 'No se pudo leer el precio local de Stunned del ERP: se cobra el de Tienda Nube.' : 'Sin conexión al ERP: el precio local de Stunned es el de Tienda Nube.' }
-        return res.status(200).json({ ...conf, versiones, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), ...stunnedLocal, stunned_erp: store === 'zattia' && process.env.CAJA_STUNNED_ERP === '1', stunned_prueba: store === 'zattia' && process.env.CAJA_STUNNED_PRUEBA !== '0', marca: { store, nombre: marca.nombre, tienda: marca.tienda, ...(marca.tiendaStunned ? { tiendaStunned: marca.tiendaStunned } : {}) } })
+        // ¿Se ofrece la «Caja del evento»? Sólo con el depósito Evento PRENDIDO en el ERP. Si el ERP ⛔ contesta, ⛔ se ofrece.
+        const ev = store === 'zattia' && process.env.CAJA_STUNNED_ERP === '1' ? await eventoActivo(store).catch(() => ({ activo: false })) : { activo: false }
+        return res.status(200).json({ ...conf, versiones, evento_activo: ev.activo === true, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), ...stunnedLocal, stunned_erp: store === 'zattia' && process.env.CAJA_STUNNED_ERP === '1', stunned_prueba: store === 'zattia' && process.env.CAJA_STUNNED_PRUEBA !== '0', marca: { store, nombre: marca.nombre, tienda: marca.tienda, ...(marca.tiendaStunned ? { tiendaStunned: marca.tiendaStunned } : {}) } })
       }
 
       if (accion === 'logo-tn') {
@@ -541,7 +575,10 @@ export default async function handler(req, res) {
         // contesta, el espejo (sus filas STU también salen del libro) y la pantalla lo dice.
         if (store === 'zattia' && lecturasStunnedErp() && esStunned(variante.sku)) {
           const l = await stockStunnedDelLibro(store, variante.product_id, variante.size_id)
-          stock = l.error ? { ...espejo, fuente: 'espejo', motivo: sinSecretos(l.error) } : { ...l, fuente: 'erp' }
+          // En la caja del EVENTO, «local» es lo que está en el evento y «para reponer», lo que quedó en el local y el depósito.
+          stock = l.error ? { ...espejo, fuente: 'espejo', motivo: sinSecretos(l.error) }
+            : puesto === 'evento' ? { local: l.evento, deposito: l.local + l.deposito, fuente: 'erp' }
+            : { local: l.local, deposito: l.deposito, fuente: 'erp' }
           stock.atras = await estantesDe(sb, store, variante.sku)
           return res.status(200).json({ variante, stock })
         }
@@ -820,9 +857,16 @@ export default async function handler(req, res) {
         // `abierto_por_usuario`: el dato de la cuenta que ⛔ cambia (el mail del padrón): la fase C lo usa para el POS.
         const fila = { store, fondo, abierto_por: perfil.name || null, abierto_por_usuario: usuarioDe(perfil) }
         if (c) fila.conteos = { apertura: c }
+        // La caja del EVENTO sólo con el depósito Evento PRENDIDO en el ERP (Configuración del ERP › Depósito Evento).
+        if (puesto === 'evento') {
+          const ev = await eventoActivo(store)
+          if (ev.error) return res.status(409).json({ error: ev.error })
+          if (!ev.activo) return res.status(409).json({ error: 'El depósito Evento está apagado: activalo en el ERP antes de abrir la caja del evento.' })
+          fila.deposito = 'evento'
+        }
         const ins = await sb.from('caja_turno').insert(fila).select(COLS_TURNO).single()
         // El índice único: ya hay un turno abierto (otra pantalla lo abrió recién).
-        if (ins.error && ins.error.code === '23505') return res.status(409).json({ error: 'Ya hay una caja abierta. Recargá la Caja.' })
+        if (ins.error && ins.error.code === '23505') return res.status(409).json({ error: puesto === 'evento' ? 'Ya hay una caja del evento abierta. Recargá la Caja.' : 'Ya hay una caja abierta. Recargá la Caja.' })
         if (ins.error) throw new Error(ins.error.message)
         return res.status(200).json({ turno: await conResumen(ins.data) })
       }
@@ -1051,6 +1095,8 @@ export default async function handler(req, res) {
         // 🔑 Un ticket es de UNA marca (Bruno, 26-oct). Con `CAJA_STUNNED_ERP=1`: Stunned ⇒ ERP, Zattia ⇒ GN, mezclado ⇒ 400.
         const aDonde = destinoDelTicket(store, conNombre.map((f, i) => ({ sku: f.sku, linea: (b.items[i] || {}).linea === 'stunned' ? 'stunned' : (b.items[i] || {}).linea === 'zattia' ? 'zattia' : null })), process.env.CAJA_STUNNED_ERP === '1')
         if (aDonde.error) return res.status(400).json({ error: aDonde.error, mixto: true })
+        const malPuesto = errorDelPuesto(turno, aDonde.destino)
+        if (malPuesto) return res.status(400).json({ error: malPuesto })
         const pagosConNombre = c.pagos.map(p => ({ ...p, nombre: nombreParaTicket(p.cuenta, reglas) }))
         const fila = {
           id, store, estado: espera > 0 ? 'esperando_pago' : 'borrador', espera_monto: espera > 0 ? espera : null, renglones: conNombre, pagos: pagosConNombre, subtotal: c.subtotal, total: c.total,

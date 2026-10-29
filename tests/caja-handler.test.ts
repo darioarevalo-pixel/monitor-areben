@@ -62,7 +62,8 @@ function consulta(tabla: string) {
   const filas = (): Fila[] => {
     const todas = tabla === 'caja_venta' ? [...base.ventas.values()] : tabla === 'caja_config' ? (base.config ? [base.config] : [])
       : tabla === 'mp_cuenta_uso' ? base.usos : tabla === 'mp_cuentas' ? base.llaves
-      : tabla === 'caja_turno' ? base.turnos : tabla === 'caja_turno_mov' ? base.movs
+      // `caja_turno.deposito` tiene default 'local' en la base (sql/migrate-caja-turno-deposito.sql): el mock lo pone igual.
+      : tabla === 'caja_turno' ? (base.turnos.forEach((t) => { t.deposito ??= 'local' }), base.turnos) : tabla === 'caja_turno_mov' ? base.movs
       : tabla === 'agenda_promos' ? base.agenda : tabla === 'liquidacion_items' ? base.liqItems
       : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_venta_mp' ? base.ventaMp : tabla === 'caja_gift_card' ? base.giftCards : tabla === 'venta' ? base.erpVentas ?? [] : tabla === 'venta_pago_vigente' ? base.erpPagos ?? [] : tabla === 'cuenta_cobro' ? base.erpCuentas ?? [] : base.inventario
     return todas.filter((f) => filtros.every((p) => p(f)))
@@ -104,8 +105,8 @@ function consulta(tabla: string) {
     }
     if (accion.tipo === 'insert' && tabla === 'caja_turno') {
       const nuevo = accion.fila
-      // El índice único parcial: un solo turno abierto por marca.
-      if (base.turnos.some((t) => t.store === nuevo.store && t.cerrado_en == null)) return { data: null, error: { code: '23505', message: 'duplicate key' } }
+      // El índice único parcial: un solo turno abierto por marca Y PUESTO (local / evento).
+      if (base.turnos.some((t) => t.store === nuevo.store && (t.deposito ?? 'local') === (nuevo.deposito ?? 'local') && t.cerrado_en == null)) return { data: null, error: { code: '23505', message: 'duplicate key' } }
       const t = { id: `0000000${base.turnos.length + 1}-0000-4000-8000-000000000000`.slice(-36), abierto_en: new Date().toISOString(), cerrado_en: null, ...accion.fila }
       base.turnos.push(t)
       return { data: [t], error: null }
@@ -173,7 +174,9 @@ const avisar = vi.fn(async () => ({ enviados: 1, fallas: 0, telefonos: 1 }))
 vi.mock('../api/_push.js', () => ({ avisar }))
 // El stock de Stunned del LIBRO (prueba del corte, 28-oct): ⛔ hay base en los tests.
 const stockStunnedDelLibro = vi.fn(async () => ({ local: 0, deposito: 14 }) as { local: number; deposito: number } | { error: string })
-vi.mock('../api/_caja-motor.js', async (orig) => ({ ...(await orig<object>()), stockStunnedDelLibro }))
+// El depósito Evento del ERP (motor sql/058): prendido o apagado, sin base.
+const eventoActivo = vi.fn(async () => ({ activo: false }) as { activo: boolean } | { error: string })
+vi.mock('../api/_caja-motor.js', async (orig) => ({ ...(await orig<object>()), stockStunnedDelLibro, eventoActivo }))
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (t: string) => consulta(t) }) }))
 
 function resFalso() {
@@ -977,6 +980,31 @@ describe('caja · turno propio (v2, W3)', () => {
     expect(r.code).toBe(200)
     expect(base.turnos).toHaveLength(1)
     expect(base.turnos[0]).toMatchObject({ fondo: 51900, abierto_por: 'cajera', cerrado_en: null })
+  })
+
+  it('la CAJA DEL EVENTO (29-oct): con el Evento apagado ⛔ abre; prendido abre su caja aparte del local; ⛔ cobra Zattia', async () => {
+    conSesion(CAJERA)
+    eventoActivo.mockResolvedValueOnce({ activo: false })
+    const apagado = await correr(req('POST', {}, { action: 'abrir-turno', fondo: 0, deposito: 'evento' }))
+    expect(apagado.code).toBe(409)
+    expect(apagado.body?.error).toMatch(/apagado/)
+    expect(base.turnos).toHaveLength(1)
+    eventoActivo.mockResolvedValueOnce({ activo: true })
+    const r = await correr(req('POST', {}, { action: 'abrir-turno', fondo: 0, deposito: 'evento' }))
+    expect(r.code).toBe(200)
+    expect(base.turnos).toHaveLength(2)
+    expect(base.turnos[1]).toMatchObject({ deposito: 'evento', cerrado_en: null })
+    eventoActivo.mockResolvedValueOnce({ activo: true })
+    expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: 0, deposito: 'evento' }))).code).toBe(409)
+    // La venta de Zattia (GN) en la caja del evento ⛔ entra; en la del local, sí.
+    const mal = await correr(req('POST', {}, { ...VENTA, deposito: 'evento' }))
+    expect(mal.code).toBe(400)
+    expect(mal.body?.error).toMatch(/sólo se cobra Stunned/)
+    expect(base.ventas.size).toBe(0)
+    expect((await correr(req('POST', {}, VENTA))).code).toBe(200)
+    expect(base.ventas.get(ID)!.turno_id).toBe(TURNO_ID)
+    // Un puesto que no existe, o el evento en BDI ⇒ 400.
+    expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: 0, deposito: 'feria' }))).code).toBe(400)
   })
 
   it('el ciclo: venta en efectivo + salida ⇒ el cierre guarda esperado, contado, la foto y la diferencia', async () => {
