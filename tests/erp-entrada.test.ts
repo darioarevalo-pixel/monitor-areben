@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { ACCIONES, entradaInvalida } from '@/lib/erp/entrada.core.js'
 import { ACCIONES as ACCIONES_CATALOGO } from '@/lib/erp/catalogo-edicion.core.js'
@@ -15,11 +16,19 @@ describe('ERP › la puerta de entrada (forma del pedido)', () => {
     expect(get({ vista: 'cuenta-cliente', marca: 'zattia', cliente: 'abc', linea: 'stunned', prueba: '1', desde: '', hasta: '' })).toBeNull()
     expect(get({ vista: 'conciliacion', tienda: 'stunned' })).toBeNull()
     expect(get({ vista: 'stock', marca: 'bdi', q: 'remera negra' })).toBeNull()
+    expect(get({ vista: 'venta-gn-cambio', marca: 'zattia', id: '30930' })).toBeNull()
     expect(post({ accion: 'facturar', marca: 'bdi', ventaIds: ['1', '2'], mes: '2026-10' })).toBeNull()
     expect(post({ accion: 'poner-ruta', marca: 'zattia', linea: '' })).toBeNull()
     expect(post({ accion: 'corregir-medio', marca: 'zattia', ventaId: 'x', medio: 'transferencia', motivo: 'TN lo marcó pagado antes' })).toBeNull()
     expect(post({ accion: 'poner-ruta', marca: 'zattia', linea: null })).toBeNull()
     expect(post({ accion: 'cargar-venta', marca: 'zattia', lineas: [{ sku: 'X', cantidad: 1 }], pagos: [{ medio: 'efectivo', monto: 100 }] })).toBeNull()
+  })
+
+  it('🔑 toda vista que atiende un handler del ERP está nombrada (si no, la puerta la rebota antes de llegar)', () => {
+    const fuentes = readdirSync('api').filter((f) => f.startsWith('_erp') && f.endsWith('.js')).map((f) => readFileSync(`api/${f}`, 'utf8')).join('\n')
+    const atendidas = [...new Set([...fuentes.matchAll(/vista === '([a-z-]+)'/g)].map((m) => m[1]))]
+    expect(atendidas).toContain('venta-gn-cambio')
+    expect(atendidas.filter((v) => get({ vista: v })?.campo === 'vista')).toEqual([])
   })
 
   it('🔑 una vista o acción que ⛔ está nombrada contesta 400 (nace cerrada)', () => {
