@@ -1789,8 +1789,15 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && req.query.vista === 'ventas-lista') {
       const marca = String(req.query.marca || '')
-      const p = MARCAS.includes(marca) ? await pedidosSinPagar({ marca }) : { pedidos: [] }
-      const r = await listaDeVentas({ marca, desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), pedidos: p.pedidos || [], tnLeidaEn: p.leidaEn ?? null, linea: String(req.query.linea || '') }, { compradores: compradoresTn })
+      // Los pedidos sin pagar (~1,5 s) se leen A LA PAR de las ventas, ⛔ antes (29-oct: eran la mitad de la espera).
+      const t0 = Date.now()
+      let tPedidos = 0
+      const p = (MARCAS.includes(marca) ? pedidosSinPagar({ marca }) : Promise.resolve({ pedidos: [] })).finally(() => { tPedidos = Date.now() - t0 })
+      p.catch(() => {}) // si la lista corta antes (400), el rechazo ⛔ queda suelto; el await de adentro lo sigue tirando
+      const r = await listaDeVentas({ marca, desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), pedidos: p.then((x) => x.pedidos || []), tnLeidaEn: p.then((x) => x.leidaEn ?? null), linea: String(req.query.linea || '') }, { compradores: compradoresTn })
+      // Dónde se va el tiempo (DevTools › Network › Timing): para cazar los picos de 8 s.
+      res.setHeader('Server-Timing', [`pedidos;dur=${tPedidos}`, ...Object.entries(r.tiempos || {}).map(([k, v]) => `${k};dur=${v}`), `total;dur=${Date.now() - t0}`].join(', '))
+      delete r.tiempos
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'venta-extra') {

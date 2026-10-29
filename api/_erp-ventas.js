@@ -146,10 +146,13 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
   if (!DIA.test(String(desde || '')) || !DIA.test(String(hasta || '')) || desde > hasta) return { status: 400, error: 'Período inválido' }
   const sb = deps.sb || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
   const r = rangoDeDias(desde, hasta)
+  const t0 = Date.now(), tiempos = {}
+  const marcar = (k) => { tiempos[k] = Date.now() - t0 }
   const deLinea = (q) => (linea ? q.eq('marca', linea) : q)
   const leer = (cols) => leerTodo(sb, 'venta_ficha', (q) => deLinea(q.select(cols).gte('ocurrida_en', r.desde).lt('ocurrida_en', r.hasta)).order('ocurrida_en', { ascending: false }).order('id'))
   // Con la 027 la vista trae lo editable y las notas vigentes; sin ella (otra base, antes de aplicarla) sigue con lo de antes.
   const ventas = await leer(`${COLUMNAS_LISTA}, ${COLUMNAS_027}`).catch(() => leer(COLUMNAS_LISTA))
+  marcar('ventas')
   // §17: las anuladas que esperan el desarme (o volver) entran SIEMPRE, sean del mes que sean: hasta escanearlas, alguien
   // tiene que hacer algo. Sin la 028 (otra base) la vista ⛔ está y ⛔ hay ninguna.
   const pendientes028 = deps.sb ? { data: [] } : await sb.from('venta_vuelta_pendiente').select('venta_id, vuelta')
@@ -160,11 +163,13 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
   const faltan = ventas.map((v) => v.venta_original_id).filter((id) => id && !numeros.has(id))
   for (const o of await enTandas(faltan, async (t) => (await sb.from('venta').select('id, numero').in('id', t)).data || [])) numeros.set(o.id, o.numero)
   const a = { ...await deAfuera(sb, ventas), vueltas }
+  marcar('afuera')
   const puede = await queSabeElMotor()
   // El saldo REAL (§16): sólo de las que dejaron algo a cuenta (las demás ⛔ deben nada: Σ pagos = total).
   const aCuenta = ventas.filter((v) => (v.pagos || []).some((p) => p.medio === 'cuenta')).map((v) => v.id)
   const pendientes = puede.cobrar && aCuenta.length && !deps.sb ? await leerPendientes(marca, aCuenta) : {}
   for (const v of ventas) if (v.id in pendientes) v.pendiente = pendientes[v.id]
+  marcar('saldos')
   // Una venta de TN sin nombre ni del ERP ni de GN (Stunned no tiene GN detrás) ⛔ queda «sin nombre» para siempre: se lee de TN EN VIVO,
   // como el pedido sin pagar (Bruno, 26-oct; ⛔ se guarda: lo declarado a TN).
   const crudas = ventas.map((v) => ({ ...filaCruda(v, a, numeros), origen_ref: v.origen_ref }))
@@ -173,6 +178,10 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
     const nombres = await deps.compradores(sinNombre.map(({ tienda, tnId }) => ({ tienda, tnId })))
     for (const { i, tienda, tnId } of sinNombre) crudas[i].clienteTn = nombres.get(`${tienda}/${tnId}`) ?? null
   }
+  marcar('nombres_tn')
+  // Los pedidos pueden llegar como promesa (el handler los lee a la par de las ventas).
+  ;[pedidos, tnLeidaEn] = await Promise.all([pedidos, tnLeidaEn])
+  marcar('espera_pedidos')
   const filas = [
     ...crudas.map((c) => armarFila(c)),
     ...pedidos.filter((p) => !linea || p.tienda === linea).map((p) => armarFila({
@@ -180,7 +189,7 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
       dias: p.dias, medio: p.medio, gateway: p.gateway, prendas: p.prendas, entregadoSinCobrar: !!p.entregadoSinCobrar, estado: p.estado ?? null, clienteGn: null, clienteTn: p.comprador ?? null,
     })),
   ]
-  return { filas, desde, hasta, puede, tnLeidaEn }
+  return { filas, desde, hasta, puede, tnLeidaEn, tiempos }
 }
 
 /**
