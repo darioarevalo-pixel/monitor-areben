@@ -442,10 +442,10 @@ export function armarTicketCierre(t: DatosCierre, ahoraMs: number, partir: Medid
   escribir(t.marca.toUpperCase(), 16, true, 'centro')
   l.y += 1
   escribir('CIERRE DE CAJA', 12, true, 'centro')
-  // 🧾 El código del sobre (arqueo, 30-oct): la cajera lo ve sin buscarlo y lo copia en el sobre.
+  // 🧾 El código de la caja (arqueo, 30-oct; «Caja Z-0040», Bruno): la cajera lo ve sin buscarlo y lo copia en el sobre.
   if (t.codigo) {
     l.y += 1
-    escribir(`SOBRE ${t.codigo}`, 16, true, 'centro')
+    escribir(`CAJA ${t.codigo}`, 16, true, 'centro')
   }
   regla()
   escribir(`Abrió: ${t.abierto_por ?? '—'} · ${cuando(t.abierto_en)}`, 9, false)

@@ -1907,6 +1907,24 @@ describe('caja · arqueo del sobre', () => {
     expect(corr.code).toBe(200)
     expect(turnoDe(CERRADA).arqueo).toMatchObject({ estado: 'diferencia', diferencia: -1000, nota: 'faltaban $1.000', anterior: { estado: 'bien' } })
   })
+  it('billete por billete: lo esperado de cada uno lo rearma el SERVIDOR; mismo total con otros billetes ⇒ diferencia', async () => {
+    // Fondo $5.000 y 3×20.000 + 5×1.000 contados ⇒ el fondo se arma con los de 1.000 y el sobre trae 3×20.000.
+    const CON = '33333333-3333-4333-8444-555555555555'
+    base.turnos.push({ id: CON, store: 'zattia', numero: 143, arqueo: null, fondo: 5000, contado: 65000, esperado: 65000, conteos: { cierre: { billetes: { 20000: 3, 1000: 5 } } },
+      abierto_en: '2026-10-29T12:00:00.000Z', cerrado_en: '2026-10-29T22:00:00.000Z', abierto_por: 'cajera', cerrado_por: 'cajera' })
+    conSesion(ADMIN_)
+    const g = await correr(req('GET', { action: 'arqueo', codigo: 'Z-0143' }))
+    expect(g.body).toMatchObject({ sobre: 60000, billetes: [{ valor: 20000, esperado: 3 }] })
+    // Seis de 10.000 = $ 60.000, pero ⛔ son los billetes esperados ⇒ pide nota.
+    const sinNota = await correr(req('POST', {}, { action: 'arqueo', id: CON, verificados: { 20000: 0, 10000: 6 } }))
+    expect(sinNota.code).toBe(400)
+    const bien = await correr(req('POST', {}, { action: 'arqueo', id: CON, verificados: { 20000: 3 }, contado: 1 }))
+    expect(bien.code).toBe(200)
+    expect(turnoDe(CON).arqueo).toMatchObject({ estado: 'bien', contado: 60000, diferencia: 0, billetes: { 20000: 3 }, esperados: { 20000: 3 } })
+    const raro = await correr(req('POST', {}, { action: 'arqueo', id: CON, verificados: { 20000: 2.5 }, corregir: true }))
+    expect(raro.code).toBe(400)
+    expect(turnoDe(CON).arqueo).toMatchObject({ estado: 'bien' })
+  })
   it('con diferencia y sin nota ⇒ 400', async () => {
     conSesion(ADMIN_)
     const r = await correr(req('POST', {}, { action: 'arqueo', id: CERRADA, contado: 9500 }))

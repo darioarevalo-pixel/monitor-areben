@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  billetesQueNoCoinciden,
   armarFilasCajas, cajaDelCodigo, contarVistasCaja, filtrarCaja, normalizarPrefsCaja, ordenarCaja, rangoCaja, resumenCaja,
 } from '@/lib/erp/cajas.core.js'
 
@@ -76,5 +77,14 @@ describe('rangoCaja', () => {
     expect(rangoCaja('pasado', '2026-10-20')).toEqual({ desde: '2026-09-01', hasta: '2026-09-30' })
     expect(rangoCaja('pasado', '2027-01-05')).toEqual({ desde: '2026-12-01', hasta: '2026-12-31' })
     expect(rangoCaja('7', '2026-10-03')).toEqual({ desde: '2026-09-27', hasta: '2026-10-03' })
+  })
+})
+
+describe('los billetes que no coincidieron', () => {
+  it('lo esperado contra lo verificado, de mayor a menor; los iguales ⛔', () => {
+    expect(billetesQueNoCoinciden({ 20000: 10, 2000: 18, 200: 3 }, { 20000: 10, 2000: 16, 200: 3, 500: 1 })).toEqual([
+      { valor: 2000, esperado: 18, verificado: 16 }, { valor: 500, esperado: 0, verificado: 1 },
+    ])
+    expect(billetesQueNoCoinciden({}, {})).toEqual([])
   })
 })

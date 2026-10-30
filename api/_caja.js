@@ -109,7 +109,7 @@ import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedid
 import { anuladasEnGN, avisoDeCierre, cobrosDeERP, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, quienesSeEnteranDelCierre, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
 import { billetesDe, limpiarConteo, totalDeConteo } from '../lib/caja/conteo.core.js'
 import { anotarAnuladasDelCierre } from '../lib/caja/anuladas.js'
-import { FALTA_ARQUEO, armarArqueo, faltaColumnaArqueo, leerCodigo, sobreEsperado } from '../lib/caja/arqueo.core.js'
+import { FALTA_ARQUEO, armarArqueo, billetesDelSobre, faltaColumnaArqueo, leerCodigo, sobreEsperado } from '../lib/caja/arqueo.core.js'
 import { aplicarPromos, normalizarPromos } from '../lib/caja/promos.core.js'
 import { MAX_LOTE, csvDeLote, generarCodigos } from '../lib/caja/gift.core.js'
 
@@ -721,7 +721,7 @@ export default async function handler(req, res) {
         if (faltaColumnaArqueo(error)) return res.status(409).json({ error: FALTA_ARQUEO })
         if (error) throw new Error(error.message)
         if (!data) return res.status(404).json({ error: 'No hay ninguna caja con ese código.' })
-        return res.status(200).json({ turno: data, sobre: sobreEsperado(data, billetesDe()) })
+        return res.status(200).json({ turno: data, sobre: sobreEsperado(data, billetesDe()), billetes: billetesDelSobre(data, billetesDe()) })
       }
       if (accion === 'gift-lotes' || accion === 'gift-lote') {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Los lotes de gift cards los ve un admin.' })
@@ -756,7 +756,9 @@ export default async function handler(req, res) {
         if (!t) return res.status(404).json({ error: 'Esa caja no existe.' })
         if (!t.cerrado_en) return res.status(409).json({ error: 'Esa caja todavía está abierta: el sobre sale al cerrarla.' })
         if (t.arqueo && b.corregir !== true) return res.status(409).json({ error: 'Ese sobre ya tiene su arqueo.', turno: t })
-        const r = armarArqueo({ esperado: sobreEsperado(t, billetesDe()), contado: b.contado, nota: b.nota })
+        // La revisión billete por billete (30-oct): lo esperado de cada billete lo rearma el SERVIDOR, ⛔ viaja de la pantalla.
+        const r = armarArqueo({ esperado: sobreEsperado(t, billetesDe()), contado: b.contado, nota: b.nota,
+          ...(b.verificados != null ? { verificados: b.verificados, esperados: billetesDelSobre(t, billetesDe()) } : {}) })
         if ('error' in r) return res.status(400).json({ error: r.error })
         const arqueo = { ...r.arqueo, por: perfil.name || null, por_usuario: usuarioDe(perfil), en: new Date().toISOString(), ...(t.arqueo ? { anterior: t.arqueo } : {}) }
         let q = sb.from('caja_turno').update({ arqueo }).eq('id', id).not('cerrado_en', 'is', null)

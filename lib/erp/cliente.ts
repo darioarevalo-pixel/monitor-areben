@@ -738,8 +738,8 @@ export const leerTurnosCaja = (marca: MarcaErp, desde: string, hasta: string) =>
 /** La caja de un sobre por su código (`Z-0142`), aunque sea de otro período. */
 export const leerCajaDelSobre = (marca: MarcaErp, codigo: string) =>
   deCaja<{ turno: Record<string, unknown>; sobre: number | null }>(marca, `action=arqueo&codigo=${encodeURIComponent(codigo)}`, 'No se encontró la caja de ese sobre.')
-/** El ARQUEO del sobre (sólo admin): lo que trajo; con diferencia, la nota. El servidor rearma lo esperado. */
-export async function arquearSobre(marca: MarcaErp, p: { id: string; contado: number; nota?: string | null; corregir?: boolean }) {
+/** El ARQUEO del sobre (sólo admin): los billetes verificados (o el monto, sin conteo); con diferencia, la nota. El servidor rearma lo esperado. */
+export async function arquearSobre(marca: MarcaErp, p: { id: string; contado?: number; verificados?: Record<string, number>; nota?: string | null; corregir?: boolean }) {
   const r = await apiFetch('/api/datos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { armarArqueo, codigoArqueo, estadoDelSobre, faltaColumnaArqueo, leerCodigo, sobreEsperado } from '@/lib/caja/arqueo.core.js'
+import { armarArqueo, billetesDelSobre, codigoArqueo, leerVerificados, estadoDelSobre, faltaColumnaArqueo, leerCodigo, sobreEsperado } from '@/lib/caja/arqueo.core.js'
 import { BILLETES_INICIALES } from '@/lib/caja/conteo.core.js'
 
 /**
@@ -61,5 +61,32 @@ describe('el arqueo', () => {
     expect(faltaColumnaArqueo({ message: 'column caja_turno.numero does not exist' })).toBe(true)
     expect(faltaColumnaArqueo({ message: 'permission denied for table caja_turno' })).toBe(false)
     expect(faltaColumnaArqueo(null)).toBe(false)
+  })
+})
+
+describe('la revisión billete por billete', () => {
+  // El sobre real Z-0040 (30-oct): fondo $ 55.100, contado $ 412.700.
+  const Z40 = { fondo: 55100, contado: 412700, conteos: { cierre: { billetes: { 100: 21, 200: 13, 500: 0, 1000: 50, 2000: 19, 10000: 12, 20000: 10 } } } }
+  it('los billetes del sobre son los del ticket, de mayor a menor, y suman lo esperado', () => {
+    const b = billetesDelSobre(Z40, [...BILLETES_INICIALES])!
+    expect(b).toEqual([{ valor: 20000, esperado: 10 }, { valor: 10000, esperado: 12 }, { valor: 2000, esperado: 18 }, { valor: 1000, esperado: 1 }, { valor: 200, esperado: 3 }])
+    expect(b.reduce((s, x) => s + x.valor * x.esperado, 0)).toBe(sobreEsperado(Z40, [...BILLETES_INICIALES]))
+  })
+  it('sin conteo de billetes o con la caja abierta ⇒ null (se revisa por el monto)', () => {
+    expect(billetesDelSobre({ fondo: 0, contado: 0 })).toBeNull()
+    expect(billetesDelSobre({ fondo: 1, contado: null, conteos: Z40.conteos })).toBeNull()
+  })
+  it('los verificados: enteros ≥ 0 de billetes de la lista; ⛔ se ignora uno raro', () => {
+    expect(leerVerificados({ 20000: 2, 1000: 0 }, [...BILLETES_INICIALES])).toEqual({ billetes: { 20000: 2 }, total: 40000 })
+    for (const v of [{ 20000: -1 }, { 20000: 1.5 }, { 20000: 'x' }, { 7: 1 }, null, []]) expect(leerVerificados(v, [...BILLETES_INICIALES])).toHaveProperty('error')
+  })
+  it('el arqueo con billetes: lo contado es la suma; todos coinciden ⇒ bien; alguno ⛔ ⇒ diferencia con nota', () => {
+    const esperados = [{ valor: 20000, esperado: 2 }]
+    expect(armarArqueo({ esperado: 40000, verificados: { 20000: 2 }, esperados })).toMatchObject({ arqueo: { estado: 'bien', contado: 40000, billetes: { 20000: 2 }, esperados: { 20000: 2 } } })
+    expect(armarArqueo({ esperado: 40000, verificados: { 20000: 1 }, esperados })).toHaveProperty('error')
+    expect(armarArqueo({ esperado: 40000, verificados: { 20000: 1 }, esperados, nota: 'falta uno' })).toMatchObject({ arqueo: { estado: 'diferencia', diferencia: -20000 } })
+    // Mismo total, otros billetes ⇒ diferencia en $ 0 (con nota).
+    expect(armarArqueo({ esperado: 40000, verificados: { 10000: 4 }, esperados })).toHaveProperty('error')
+    expect(armarArqueo({ esperado: 40000, verificados: { 10000: 4 }, esperados, nota: 'cambió billetes' })).toMatchObject({ arqueo: { estado: 'diferencia', diferencia: 0 } })
   })
 })

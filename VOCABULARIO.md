@@ -370,6 +370,7 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `Se factura cuando se pague` | `Sin factura: todavía no es una venta` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: decir qué pasa, no qué no es |
 | `Sin promo` (la cuenta del crédito sin cuotas ni promo) | `Normal` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct |
 | `producto sin código` | `Producto suelto` · `producto suelto` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: «suelto» se confundía con «fuera de un pack» |
+| `Caja Z-0040` · `Código de la caja` · `Revisar` · `Verificado` (el arqueo de caja) | `Código del sobre` · `Abrir el sobre` · `Tiene que haber en el sobre` · `Llegó bien` · `Llegó con diferencia` | monitor | `components/erp/ventas/CajasErp.tsx` · `lib/erp/cajas.core.js` | Bruno, 30-oct: «Caja Z-0040» y «en vez de contado, verificado»; el sobre se REVISA billete por billete (el «Contado» de la cajera, en El efectivo, sigue) |
 | (nada: el estado se dice en palabras: «todavía no disponible», «modo de prueba de ARCA») | `motor` · `sesión A` · `espejo` · `homologación` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: jerga de la construcción, ⛔ en pantalla |
 
 ⚠️ **Las excepciones van en el test, con su motivo, y se vacían solas**: un nombre que viene de otro

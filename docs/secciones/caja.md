@@ -556,7 +556,7 @@ transferencia», prenda repetida, turnos) están UNA sola vez en `modalesJSX` / 
 
 «Hoy tengo los cierres de caja pero no hay registro de si fue recibido o no.» Cada cierre lleva un **código de sobre**
 (`caja_turno.numero` ⇒ `Z-0142`, `lib/caja/arqueo.core.js`; `sql/migrate-caja-arqueo.sql`, numera los viejos por apertura):
-el ticket del cierre lo imprime arriba («SOBRE Z-0142») y abajo en barras CODE128 (`jsbarcode`, dibujado aparte en
+el ticket del cierre lo imprime arriba («CAJA Z-0142», Bruno 30-oct) y abajo en barras CODE128 (`jsbarcode`, dibujado aparte en
 `imprimirCierre`: `armarTicketCierre` sigue pura), y el aviso de caja cerrada lo muestra. El arqueo se hace en ERP › Ventas ›
 Cajas (sólo admin): ver `docs/secciones/erp.md`. 🔑 **El cierre ⛔ depende de la migración**: `numero`/`arqueo` se leen en
 una consulta APARTE (`conArqueo`) y sin columnas el ticket sale sin código. 🔑 «TOTAL SOBRE» del ticket y lo que se arquea

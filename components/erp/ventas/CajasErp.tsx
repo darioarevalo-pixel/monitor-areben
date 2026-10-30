@@ -8,23 +8,25 @@
  * cerrar siguen en la Caja (POS). Núcleo: `lib/erp/cajas.core.js`; servidor: `action=turnos` / `action=turno` de `api/_caja.js`.
  *
  * 🧾 ARQUEO DE CAJA (Bruno, 30-oct): cada cierre tiene el código de su sobre (impreso en el ticket del cierre, con barras).
- * Arriba, sólo admin, «Código del sobre»: se escanea o se tipea y abre esa caja; en la ficha, «Llegó bien» (⇒ Lista) o
- * «Llegó con diferencia» (lo que había + nota). Vistas Sin recibir · Sobre con diferencia · Listas. La Caja del local es UNA
+ * Arriba, sólo admin, «Código de la caja»: se escanea o se tipea y abre DIRECTO la revisión (billete por billete, con el ✓);
+ * desde la lista, la ficha con «Revisar». Vistas Sin recibir · Sobre con diferencia · Listas. La Caja del local es UNA
  * para Zattia y Stunned (un cajón): es lo único del ERP que ⛔ se separa por línea (Bruno, 30-oct).
  */
 
 import { parsearMonto } from '@/lib/compromisos/core'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Input, MoneyText, Notice, Select, color, font, space } from '@/components/ui'
+import { Icono } from '@/components/ui/Icono'
 import { ListaTrabajo, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { ChipEstado, TileResumen, VistasLista, cuandoCorto, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { arquearSobre, leerCajaAbierta, leerCajaDelSobre, leerTurnosCaja, type MarcaErp } from '@/lib/erp/cliente'
 import { esAdmin } from '@/lib/permisos'
+import { billetesDe } from '@/lib/caja/conteo.core.js'
 import {
-  PERIODOS_CAJA, VISTAS_CAJA, alternarColumnaCaja, armarFilasCajas, cajaDelCodigo, columnasCaja, contarVistasCaja, filtrarCaja, moverColumna,
+  PERIODOS_CAJA, VISTAS_CAJA, alternarColumnaCaja, armarFilasCajas, billetesQueNoCoinciden, cajaDelCodigo, columnasCaja, contarVistasCaja, filtrarCaja, moverColumna,
   normalizarPrefsCaja, ordenarCaja, rangoCaja, resumenCaja,
 } from '@/lib/erp/cajas.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
@@ -40,10 +42,13 @@ const MOVIL: Record<string, MovilColumna> = { abrio: 'titulo', dif: 'dato', esta
 /** La Caja del local es UNA para Zattia y Stunned (Bruno, 30-oct): ⛔ «Caja Zattia». */
 const NOMBRE: Record<MarcaErp, string> = { bdi: 'Caja BDI', zattia: 'Caja del local' }
 const SOBRE = { abierta: ['neutral', '—'], sin_recibir: ['warning', 'Sin recibir'], lista: ['success', 'Lista'], diferencia: ['danger', 'Sobre con diferencia'] } as const
+/** La revisión en curso: el chip cambia mientras se carga (Bruno, 30-oct: «si todos coinciden, estado Lista»). */
+const REVISION = { revision: ['neutral', 'En revisión'], lista: ['success', 'Lista'], diferencia: ['danger', 'Con diferencia'] } as const
+const GRILLA_REVISION: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.3fr) minmax(0, .8fr) 72px auto', alignItems: 'center', gap: 10 }
 const VACIO: Record<string, string> = {
   dif: 'Ningún cierre con diferencia en el período.',
   sin_recibir: 'No hay sobres sin recibir en el período.',
-  sobre_dif: 'Ningún sobre llegó con diferencia en el período.',
+  sobre_dif: 'Ningún sobre con diferencia en el período.',
   listas: 'Todavía no hay cajas listas en el período.',
 }
 const ESTADO = { abierta: ['action', 'Abierta'], cerrada: ['success', 'Cerró justo'], sobro: ['warning', 'Sobró'], falto: ['danger', 'Faltó'] } as const
@@ -54,7 +59,7 @@ const conSigno = (n: number) => `${n > 0 ? '+ ' : n < 0 ? '− ' : ''}$ ${Math.a
 
 function bajarCsv(filas: FilaCaja[], marca: MarcaErp) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Caja', 'Sobre', 'Abrió', 'Quién abrió', 'Cerró', 'Quién cerró', 'Ventas', 'Fondo', 'Efectivo esperado', 'Contado', 'Diferencia', 'Nota', 'Arqueo', 'Tenía que haber', 'Había', 'Arqueó', 'Nota del arqueo'].map(c).join(';')]
+  const renglones = [['Caja', 'Código', 'Abrió', 'Quién abrió', 'Cerró', 'Quién cerró', 'Ventas', 'Fondo', 'Efectivo esperado', 'Contado', 'Diferencia', 'Nota', 'Arqueo', 'Esperado en el sobre', 'Verificado', 'Revisó', 'Nota del arqueo'].map(c).join(';')]
   for (const f of filas) renglones.push([NOMBRE[marca], f.codigo ?? '', f.abiertoEn, f.abiertoPor, f.cerradoEn ?? '', f.cerradoPor ?? '', f.ventas ?? '', f.fondo, f.esperado ?? '', f.contado ?? '', f.diferencia ?? '', f.nota ?? '',
     SOBRE[f.sobreEstado][1], f.sobre ?? '', f.arqueo?.contado ?? '', f.arqueo ? `${f.arqueo.por ?? ''} ${f.arqueo.en}` : '', f.arqueo?.nota ?? ''].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
@@ -81,6 +86,8 @@ export function CajasErp() {
   const [abierta, setAbierta] = useState<Abierta | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ficha, setFicha] = useState<string | null>(null)
+  /** La caja que se está revisando (su id): la ficha muestra la revisión en lugar del cierre. */
+  const [revisar, setRevisar] = useState<string | null>(null)
   const [vuelta, setVuelta] = useState(0)
   const [arqueoNo, setArqueoNo] = useState<string | null>(null)
   const [codigo, setCodigo] = useState('')
@@ -118,18 +125,24 @@ export function CajasErp() {
   const filas = useMemo(() => ordenarCaja(filtrarCaja(todas, vista), orden), [todas, vista, orden])
   const abiertaFila = todas.find((f) => f.abierta) ?? null
   const fichaFila = ficha ? todas.find((f) => f.id === ficha) ?? (suelta?.id === ficha ? suelta : null) : null
+  const revisando = !!fichaFila && admin && revisar === fichaFila.id && !fichaFila.abierta
 
+  /** Abrir una caja. Escaneada y sin revisar ⇒ directo a la revisión (Bruno, 30-oct). */
+  function abrir(f: FilaCaja, escaneada = false) {
+    setFicha(f.id)
+    setRevisar(escaneada && admin && !f.abierta && !f.arqueo && !arqueoNo ? f.id : null)
+  }
   async function abrirSobre() {
     const t = codigo.trim()
     if (!t) return
     const enLista = cajaDelCodigo(todas, t, marca)
-    if (enLista) { setFicha(enLista.id); setCodigo(''); return }
+    if (enLista) { abrir(enLista, true); setCodigo(''); return }
     setBuscando(true)
     try {
       const r = await leerCajaDelSobre(marca, t)
       const [f] = armarFilasCajas([r.turno], marca)
       setSuelta(f)
-      setFicha(f.id)
+      abrir(f, true)
       setCodigo('')
       setError(null)
     } catch (e) {
@@ -143,6 +156,9 @@ export function CajasErp() {
     const [f] = armarFilasCajas([turno], marca)
     setDatos((d) => (d ? { ...d, filas: d.filas.map((x) => (x.id === f.id ? f : x)) } : d))
     setSuelta((x) => (x?.id === f.id ? f : x))
+    // «Listo» y salís de la revisión: el panel se cierra (Bruno, 30-oct).
+    setRevisar(null)
+    setFicha(null)
   }
   const nombrePeriodo = PERIODOS_CAJA.find(([k]) => k === periodo)?.[1] ?? ''
 
@@ -173,15 +189,15 @@ export function CajasErp() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Cada turno de la Caja: quién abrió y cerró, el efectivo que tenía que haber, lo que se contó y la diferencia. Abrir, contar y cerrar se hace en la Caja. El arqueo de caja registra que el sobre de cada cierre llegó y si llegó bien.</p>
+      <p style={{ margin: 0, color: color.mut }}>Cada turno de la Caja: quién abrió y cerró, el efectivo que tenía que haber, lo que se contó y la diferencia. Abrir, contar y cerrar se hace en la Caja. En el arqueo de caja se revisa el sobre de cada cierre, billete por billete.</p>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {arqueoNo && <Notice tone="warning">{arqueoNo}</Notice>}
       {admin && !arqueoNo && (
         <form onSubmit={(e) => { e.preventDefault(); void abrirSobre() }} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
           <label htmlFor="erp-cajas-sobre" style={{ fontWeight: 600 }}>Arqueo de caja</label>
-          <Input id="erp-cajas-sobre" aria-label="Código del sobre" placeholder="Código del sobre (escaneá o escribí, ej. Z-0142)" value={codigo}
+          <Input id="erp-cajas-sobre" aria-label="Código de la caja" placeholder="Código de la caja (escaneá o escribí, ej. Z-0142)" value={codigo}
             onChange={(e) => setCodigo(e.target.value)} style={{ maxWidth: 340 }} autoComplete="off" />
-          <Button type="submit" variant="outline" disabled={!codigo.trim() || buscando}>{buscando ? 'Buscando…' : 'Abrir el sobre'}</Button>
+          <Button type="submit" variant="outline" disabled={!codigo.trim() || buscando}>{buscando ? 'Buscando…' : 'Revisar'}</Button>
         </form>
       )}
 
@@ -212,7 +228,7 @@ export function CajasErp() {
         </div>
         <ListaTrabajo
           columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} orden={orden} onOrden={setOrden}
-          activa={fichaFila?.id ?? null} onAbrir={(f) => setFicha(f.id)} etiquetaFila={(f) => `el turno del ${cuandoCorto(f.abiertoEn)}`}
+          activa={fichaFila?.id ?? null} onAbrir={(f) => abrir(f)} etiquetaFila={(f) => `el turno del ${cuandoCorto(f.abiertoEn)}`}
           vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={VACIO[vista] ?? 'No hubo turnos en el período.'} /></div> : null}
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
@@ -220,11 +236,12 @@ export function CajasErp() {
         </div>
       </div>
 
-      <FichaCostado abierta={!!fichaFila} onCerrar={() => setFicha(null)} etiqueta="Ficha del turno de la caja"
-        titulo={fichaFila ? `${NOMBRE[marca]} · ${cuandoCorto(fichaFila.abiertoEn)}${fichaFila.codigo ? ` · sobre ${fichaFila.codigo}` : ''}` : ''}>
-        {fichaFila && (
+      <FichaCostado abierta={!!fichaFila} onCerrar={() => { setFicha(null); setRevisar(null) }} etiqueta={revisando ? 'Revisión de la caja' : 'Ficha del turno de la caja'}
+        titulo={!fichaFila ? '' : revisando ? `Revisión · ${fichaFila.codigo ? `Caja ${fichaFila.codigo}` : NOMBRE[marca]}` : `${NOMBRE[marca]} · ${cuandoCorto(fichaFila.abiertoEn)}${fichaFila.codigo ? ` · ${fichaFila.codigo}` : ''}`}>
+        {fichaFila && revisando && <RevisionDeLaCaja key={fichaFila.id} f={fichaFila} marca={marca} onGuardado={alArquear} onVolver={() => setRevisar(null)} />}
+        {fichaFila && !revisando && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-            {!fichaFila.abierta && !arqueoNo && <ArqueoDelSobre key={fichaFila.id} f={fichaFila} marca={marca} admin={admin} onListo={alArquear} />}
+            {!fichaFila.abierta && !arqueoNo && <ArqueoDeLaCaja f={fichaFila} admin={admin} onRevisar={() => setRevisar(fichaFila.id)} />}
             <DatosFicha>
               <DatoFicha titulo="Abrió">{cuandoCorto(fichaFila.abiertoEn)} · {fichaFila.abiertoPor ?? 'sin dato'}</DatoFicha>
               <DatoFicha titulo="Cerró">{fichaFila.cerradoEn ? `${cuandoCorto(fichaFila.cerradoEn)} · ${fichaFila.cerradoPor ?? 'sin dato'}` : 'Todavía abierta'}</DatoFicha>
@@ -255,66 +272,145 @@ export function CajasErp() {
 }
 
 /**
- * El arqueo del sobre de una caja cerrada. Admin: «Llegó bien» (trajo lo que tenía que traer ⇒ Lista) o «Llegó con
- * diferencia» (cuánto trajo + la nota, obligatoria). El resto ve el estado. El servidor rearma lo esperado.
+ * La tarjeta del arqueo arriba de la ficha. Sin recibir ⇒ «Revisar» (admin), que abre la revisión; revisada ⇒ lo
+ * verificado, quién y cuándo, los billetes que no coincidieron y «Corregir el arqueo» (vuelve a la revisión).
  */
-function ArqueoDelSobre({ f, marca, admin, onListo }: { f: FilaCaja; marca: MarcaErp; admin: boolean; onListo: (t: Record<string, unknown>) => void }) {
-  const [modo, setModo] = useState<'ver' | 'diferencia' | 'corregir'>('ver')
-  const [trajo, setTrajo] = useState('')
-  const [nota, setNota] = useState('')
-  const [guardando, setGuardando] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+function ArqueoDeLaCaja({ f, admin, onRevisar }: { f: FilaCaja; admin: boolean; onRevisar: () => void }) {
   const a = f.arqueo
-
-  async function guardar(contado: number, conNota: string | null) {
-    setGuardando(true)
-    try {
-      const r = await arquearSobre(marca, { id: f.id, contado, nota: conNota, corregir: !!a })
-      onListo(r.turno)
-      setModo('ver')
-      setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo guardar el arqueo.')
-    } finally {
-      setGuardando(false)
-    }
-  }
-  // El lector de plata del repo: «10.000», «9500,50» y también «9500.5» (un punto con 1 o 2 decimales es la coma).
-  const n = parsearMonto(trajo)
-
+  const malos = a?.billetes || a?.esperados ? billetesQueNoCoinciden(a.esperados ?? {}, a.billetes ?? {}) : []
   return (
     <div style={{ border: `1px solid ${color.line}`, borderRadius: 12, padding: space[3], display: 'flex', flexDirection: 'column', gap: space[2] }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2] }}>
-        <h3 style={{ margin: 0, fontSize: font.md }}>Arqueo de caja{f.codigo ? ` · sobre ${f.codigo}` : ''}</h3>
+        <h3 style={{ margin: 0, fontSize: font.md }}>{f.codigo ? `Caja ${f.codigo}` : 'Arqueo de caja'}</h3>
         <ChipEstado mapa={SOBRE} k={f.sobreEstado} />
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: color.mut }}>Tiene que haber en el sobre</span>{f.sobre == null ? '—' : <MoneyText value={f.sobre} />}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: color.mut }}>Esperado</span>{f.sobre == null ? '—' : <MoneyText value={f.sobre} />}</div>
       {a && (
         <>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: color.mut }}>Había</span><MoneyText value={a.contado} /></div>
-          {a.diferencia !== 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}><span>{a.diferencia > 0 ? 'Sobró' : 'Faltó'}</span><MoneyText value={Math.abs(a.diferencia)} /></div>}
-          <div style={{ color: color.mut, fontSize: font.sm }}>Arqueó {a.por ?? 'sin dato'} · {cuandoCorto(a.en)}{a.nota ? ` · ${a.nota}` : ''}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: color.mut }}>Verificado</span><MoneyText value={a.contado} /></div>
+          {malos.map((m) => (
+            <div key={m.valor} style={{ display: 'flex', justifyContent: 'space-between', gap: space[2] }}>
+              <span>{pesos(m.valor)} · {m.verificado} de {m.esperado}</span>
+              <b style={{ color: m.verificado < m.esperado ? 'var(--mo-danger-ink)' : 'var(--mo-warning-ink)' }}>{conSigno((m.verificado - m.esperado) * m.valor)}</b>
+            </div>
+          ))}
+          {!malos.length && a.diferencia !== 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}><span>Diferencia</span><span>{conSigno(a.diferencia)}</span></div>}
+          <div style={{ color: color.mut, fontSize: font.sm }}>{a.por ?? 'sin dato'} · {cuandoCorto(a.en)}{a.nota ? ` · «${a.nota}»` : ''}</div>
         </>
       )}
-      {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-      {admin && modo === 'ver' && (
-        <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-          {!a && <Button disabled={guardando || f.sobre == null} onClick={() => void guardar(f.sobre ?? 0, null)}>{guardando ? 'Guardando…' : 'Llegó bien'}</Button>}
-          {!a && <Button variant="outline" disabled={guardando} onClick={() => setModo('diferencia')}>Llegó con diferencia</Button>}
-          {a && <Button variant="ghost" size="sm" onClick={() => setModo('corregir')}>Corregir el arqueo</Button>}
+      {admin && !a && <Button variant="solid" tone="brand" fullWidth disabled={f.sobre == null} onClick={onRevisar}>Revisar</Button>}
+      {admin && a && <Button variant="ghost" size="sm" style={{ alignSelf: 'flex-start' }} onClick={onRevisar}>Corregir el arqueo</Button>}
+      {!admin && !a && <span style={{ color: color.mut, fontSize: font.sm }}>La revisa un admin cuando recibe el sobre.</span>}
+    </div>
+  )
+}
+
+/** Un renglón de la revisión: el billete (o el monto, sin conteo de billetes) y cuánto se tiene que verificar. */
+type RenglonRevision = { clave: string; valor: number | null; esperado: number }
+
+/**
+ * 🧾 LA REVISIÓN DE LA CAJA (Bruno, 30-oct): cada billete con lo esperado, se carga lo verificado a mano o con el ✓
+ * («Igual al esperado»). El ✓ ⛔ mueve el foco al siguiente (se revisa con el botón O escribiendo, ⛔ mezclado); Enter en
+ * el campo sí pasa al siguiente. Todos coinciden ⇒ «Listo» (Lista) y se cierra el panel; si alguno ⛔ coincide, nota y
+ * «Guardar con diferencia». Sin conteo de billetes en el cierre, un solo renglón con el monto.
+ */
+function RevisionDeLaCaja({ f, marca, onGuardado, onVolver }: { f: FilaCaja; marca: MarcaErp; onGuardado: (t: Record<string, unknown>) => void; onVolver: () => void }) {
+  const porBillete = !!f.billetesSobre?.length
+  const base: RenglonRevision[] = porBillete
+    ? (f.billetesSobre ?? []).map((b) => ({ clave: String(b.valor), valor: b.valor, esperado: b.esperado }))
+    : [{ clave: 'monto', valor: null, esperado: f.sobre ?? 0 }]
+  const [extras, setExtras] = useState<number[]>([])
+  const renglones = [...base, ...extras.map((v) => ({ clave: String(v), valor: v, esperado: 0 }))]
+  const anterior = f.arqueo?.billetes
+  const [valores, setValores] = useState<Record<string, string>>({})
+  const [nota, setNota] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const caja = useRef<HTMLDivElement>(null)
+  const libres = porBillete ? billetesDe().filter((v) => !renglones.some((r) => r.valor === v)).sort((a, b) => b - a) : []
+
+  const leer = (r: RenglonRevision): number | null => {
+    const t = (valores[r.clave] ?? '').trim()
+    if (!t) return null
+    const n = r.valor == null ? parsearMonto(t) : Number(t)
+    return Number.isFinite(n) && n >= 0 && (r.valor == null || Number.isInteger(n)) ? n : null
+  }
+  const hechos = renglones.filter((r) => leer(r) != null).length
+  const completo = hechos === renglones.length
+  const verificado = renglones.reduce((s, r) => s + (leer(r) ?? 0) * (r.valor ?? 1), 0)
+  const conDif = renglones.some((r) => { const n = leer(r); return n != null && Math.abs(n - r.esperado) > 0.005 })
+  const esperado = f.sobre ?? 0
+
+  async function guardar() {
+    setGuardando(true)
+    try {
+      const verificados = porBillete ? Object.fromEntries(renglones.map((r) => [String(r.valor), leer(r) ?? 0])) : undefined
+      const r = await arquearSobre(marca, { id: f.id, ...(verificados ? { verificados } : { contado: verificado }), nota: conDif ? nota.trim() : null, corregir: !!f.arqueo })
+      onGuardado(r.turno)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo guardar la revisión.')
+      setGuardando(false)
+    }
+  }
+  const siguiente = (i: number) => caja.current?.querySelectorAll<HTMLInputElement>('input[data-renglon]')[i + 1]?.focus()
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2] }}>
+        <h3 style={{ margin: 0, fontSize: font.md }}>{porBillete ? 'Billetes' : 'Efectivo'}</h3>
+        <ChipEstado mapa={REVISION} k={!completo ? 'revision' : conDif ? 'diferencia' : 'lista'} />
+      </div>
+      {anterior && <span style={{ color: color.mut, fontSize: font.sm }}>Corrigiendo la revisión de {f.arqueo?.por ?? 'sin dato'} · {cuandoCorto(f.arqueo?.en ?? '')}</span>}
+      <div ref={caja} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={GRILLA_REVISION}>
+          {[porBillete ? 'Billete' : '', 'Esperado', 'Verificado', ''].map((t, i) => <span key={i} style={{ fontSize: font.xs, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: color.mut, textAlign: i === 1 ? 'center' : undefined }}>{t}</span>)}
         </div>
+        {renglones.map((r, i) => {
+          const n = leer(r)
+          const estado = n == null ? null : Math.abs(n - r.esperado) > 0.005 ? 'dif' : 'ok'
+          const d = n == null ? 0 : n - r.esperado
+          return (
+            <div key={r.clave} style={{ ...GRILLA_REVISION, padding: '8px 10px', borderRadius: 10, border: `1px solid ${estado === 'ok' ? color.successBorder : estado === 'dif' ? color.warningBorder : color.line}`, background: estado === 'ok' ? color.successBg : estado === 'dif' ? color.warningBg : undefined }}>
+              <b style={{ fontVariantNumeric: 'tabular-nums' }}>{r.valor == null ? 'Monto' : pesos(r.valor)}</b>
+              <span style={{ textAlign: 'center', color: color.mut, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{r.valor == null ? pesos(r.esperado) : r.esperado}</span>
+              <Input data-renglon aria-label={`Verificado de ${r.valor == null ? 'el monto' : pesos(r.valor)}`} inputMode={r.valor == null ? 'decimal' : 'numeric'} autoComplete="off"
+                value={valores[r.clave] ?? ''} onChange={(e) => setValores((v) => ({ ...v, [r.clave]: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); siguiente(i) } }}
+                style={{ textAlign: 'center', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} />
+              <Button variant={estado === 'ok' ? 'solid' : 'outline'} tone={estado === 'ok' ? 'success' : 'neutral'} aria-label="Igual al esperado" title="Igual al esperado"
+                onClick={() => setValores((v) => ({ ...v, [r.clave]: r.valor == null ? String(r.esperado).replace('.', ',') : String(r.esperado) }))}
+                style={{ width: 38, padding: 0, justifyContent: 'center' }}><Icono nombre="check" size={18} /></Button>
+              {estado === 'dif' && (
+                <span style={{ gridColumn: '1 / -1', fontSize: font.sm, fontWeight: 600, color: 'var(--mo-warning-ink)', fontVariantNumeric: 'tabular-nums' }}>
+                  {r.valor == null ? conSigno(d) : `${d > 0 ? '+' : '−'}${Math.abs(d)} · ${conSigno(d * r.valor)}`}
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {libres.length > 0 && (
+        <Select aria-label="Otro billete" value="" style={{ cursor: 'pointer', width: 'auto', alignSelf: 'flex-start' }}
+          onChange={(e) => { const v = Number(e.target.value); if (v) setExtras((x) => [...x, v]) }}>
+          <option value="">+ Otro billete</option>
+          {libres.map((v) => <option key={v} value={v}>{pesos(v)}</option>)}
+        </Select>
       )}
-      {admin && modo !== 'ver' && (
-        <form onSubmit={(e) => { e.preventDefault(); if (Number.isFinite(n) && trajo.trim()) void guardar(n, nota.trim() || null) }} style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-          <Input aria-label="Cuánto había en el sobre" inputMode="decimal" placeholder="Cuánto había en el sobre" value={trajo} onChange={(e) => setTrajo(e.target.value)} autoFocus />
-          <Input aria-label="Nota del arqueo" placeholder="Qué pasó con el sobre (obligatorio si no coincide)" value={nota} onChange={(e) => setNota(e.target.value)} />
-          <div style={{ display: 'flex', gap: space[2] }}>
-            <Button type="submit" disabled={guardando || !trajo.trim() || !Number.isFinite(n)}>{guardando ? 'Guardando…' : 'Guardar el arqueo'}</Button>
-            <Button type="button" variant="ghost" onClick={() => setModo('ver')}>Cancelar</Button>
-          </div>
-        </form>
-      )}
-      {!admin && !a && <span style={{ color: color.mut, fontSize: font.sm }}>El arqueo lo hace un admin cuando recibe el sobre.</span>}
+      <div style={{ borderTop: `1px solid ${color.line}`, paddingTop: space[3], display: 'flex', flexDirection: 'column', gap: space[2] }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: color.mut }}>Esperado</span><MoneyText value={esperado} /></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}><span style={{ color: color.mut, fontWeight: 400 }}>Verificado</span><MoneyText value={verificado} /></div>
+        {completo && conDif && (
+          <Input aria-label="Nota" placeholder="Nota: qué pasó" value={nota} onChange={(e) => setNota(e.target.value)} />
+        )}
+        {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+        <Button variant="solid" tone="brand" fullWidth disabled={guardando || !completo || (conDif && !nota.trim())} onClick={() => void guardar()}>
+          {guardando ? 'Guardando…' : completo && conDif ? 'Guardar con diferencia' : 'Listo'}
+        </Button>
+        <div style={{ textAlign: 'center', fontSize: font.sm, color: color.mut, fontVariantNumeric: 'tabular-nums' }}>
+          {!completo ? `${hechos} de ${renglones.length} revisados` : conDif ? `Diferencia ${conSigno(verificado - esperado)}` : 'Coincide'}
+        </div>
+        <Button variant="ghost" size="sm" style={{ alignSelf: 'center' }} onClick={onVolver}>Volver a la caja</Button>
+      </div>
     </div>
   )
 }

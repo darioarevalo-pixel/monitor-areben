@@ -1707,7 +1707,7 @@ export function AvisoCierre({ t }: { t: Turno }) {
   const d = t.resumen?.diferencia ?? Number(t.contado) - Number(t.esperado)
   return (
     <SectionCard
-      title={`Caja cerrada ${t.cerrado_en ? horaAr(t.cerrado_en) : ''}${codigoArqueo(storeCaja(), t.numero) ? ` · sobre ${codigoArqueo(storeCaja(), t.numero)}` : ''}`}
+      title={`Caja cerrada ${t.cerrado_en ? horaAr(t.cerrado_en) : ''}${codigoArqueo(storeCaja(), t.numero) ? ` · Caja ${codigoArqueo(storeCaja(), t.numero)}` : ''}`}
       actions={
         <Button size="sm" variant="outline" onClick={() => void imprimirCierreDe(t)}>
           <Icono nombre="impresora" size={16} /> Imprimir cierre
