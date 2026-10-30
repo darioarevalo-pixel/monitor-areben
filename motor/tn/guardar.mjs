@@ -3,6 +3,8 @@
  */
 import { existe, tieneColumna } from '../db.mjs'
 import { claveNumero } from './cruce.mjs'
+import { guardarComprador } from './comprador.mjs'
+import { origenRef } from './venta.mjs'
 
 const COLS = ['tienda', 'tn_id', 'numero', 'creada_en', 'actualizada_en', 'pagada_en', 'cancelada_en', 'status',
   'payment_status', 'shipping_status', 'gateway', 'medio', 'moneda', 'subtotal', 'descuento', 'envio', 'total', 'cancel_reason']
@@ -27,10 +29,13 @@ export async function leidoHastaDe(db, tienda) {
 /**
  * Guarda un lote: la orden se pisa sólo si lo leído es igual o más nuevo que lo guardado (dos corridas
  * superpuestas ⛔ vuelven atrás una cancelación), y sus líneas se reemplazan con las de esa versión.
+ * `compradores` (tn_id → `compradorDeOrden`, sql/059): la ficha del comprador, que la orden apunta y la venta `tn` de esa
+ * orden hereda si todavía ⛔ tiene clienta. Sin la 059, o sin `compradores`, la orden se guarda como antes.
  */
-export async function guardarLote(db, tienda, filas, lineas, leidoHasta) {
+export async function guardarLote(db, tienda, filas, lineas, leidoHasta, compradores = null) {
   let pisadas = 0
   const cols = (await tieneColumna(db, 'tn_orden', 'estado')) ? [...COLS, ...COLS_ESTADO] : COLS
+  const conComprador = !!compradores && (await tieneColumna(db, 'tn_orden', 'cliente_id'))
   for (const f of filas) {
     const vals = cols.map((c) => f[c])
     const n = await db.run(
@@ -48,6 +53,7 @@ export async function guardarLote(db, tienda, filas, lineas, leidoHasta) {
         COLS_LINEA.map((c) => l[c]),
       )
     }
+    if (conComprador && compradores.get(f.tn_id)) await ligarComprador(db, tienda, f.tn_id, compradores.get(f.tn_id))
   }
   if (leidoHasta) {
     await db.run(
@@ -57,6 +63,16 @@ export async function guardarLote(db, tienda, filas, lineas, leidoHasta) {
     )
   }
   return pisadas
+}
+
+/** La ficha del comprador de UNA orden ya guardada ⇒ `tn_orden.cliente_id`, y la venta `tn` sin clienta la hereda. */
+export async function ligarComprador(db, tienda, tnId, comprador) {
+  const [o] = await db.q('select cliente_id::text from tn_orden where tienda = $1 and tn_id = $2', [tienda, tnId])
+  if (!o) return null
+  const id = await guardarComprador(db, { tienda, comprador, actual: o.cliente_id })
+  if (id && id !== o.cliente_id) await db.run('update tn_orden set cliente_id = $3 where tienda = $1 and tn_id = $2', [tienda, tnId, id])
+  if (id) await db.run(`update venta set cliente_id = $2 where origen = 'tn' and origen_ref = $1 and cliente_id is null`, [origenRef(tienda, tnId), id])
+  return id
 }
 
 /** Las órdenes creadas desde `desde` (ISO), con sus líneas, y todos los números conocidos de la tienda. */

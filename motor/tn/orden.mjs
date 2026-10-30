@@ -1,8 +1,8 @@
 /**
  * Una orden de Tienda Nube (`GET /orders`) → filas de `tn_orden` y `tn_orden_linea`. Puro.
  *
- * ⛔ Se guarda nada del cliente (nombre, mail, teléfono, dirección, documento): la sombra compara prendas
- * y cobros, y quién compró ya vive en GN y en el mailer.
+ * ⛔ Se guarda nada del cliente EN la orden: la sombra compara prendas y cobros. El comprador va a la FICHA de cliente del
+ * ERP (sql/059, `compradorDeOrden` en comprador.mjs) y la orden sólo la apunta (`tn_orden.cliente_id`).
  */
 
 import { DEVUELTA, PAGADA } from '../venta/pago-tn.mjs'

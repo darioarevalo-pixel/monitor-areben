@@ -13,7 +13,7 @@
  *
  * `db` conectado y sin transacción. Devuelven `{ ok: true, … }` o `{ ok: false, error: { codigo, mensaje, campo? } }`.
  */
-import { cobroReal, medioDeCuenta } from '../cuentas/cuentas.mjs'
+import { cobroReal, medioDeCuenta, rutaVigente } from '../cuentas/cuentas.mjs'
 import { leerConf } from './registrar.mjs'
 
 const q = async (db, sql, p = []) => (await db.query(sql, p)).rows
@@ -34,7 +34,9 @@ export async function pagosVigentes(db, ventaId) {
 /**
  * @param {{ venta_id: string, pago_id?: string, medio: string, cuenta?: string|number, cuenta_real?: string, motivo: string, usuario: string }} e
  *   `pago_id`: hace falta si la venta tiene más de un cobro en plata. `cuenta`: id o número de GN de la cuenta de cobro; sin
- *   ella, la ÚNICA de la marca con ese medio. `cuenta_real`: sólo si la ruta dice «se elige en cada cobro».
+ *   ella, la de la marca con ese medio (`cuentaDelMedio`). `cuenta_real`: adónde fue la plata, si ⛔ es la de la ruta. Con una
+ *   ruta «se elige en cada cobro» es la elegida; con una ruta que YA dice la cuenta es una EXCEPCIÓN (Bruno 29-oct: TN #135
+ *   eligió efectivo y transfirió al alias del local) ⇒ sin comisión ni acreditación de la ruta y aviso `FUERA_DE_RUTA`.
  */
 export async function corregirMedioCobro(db, e) {
   if (!UUID.test(String(e?.venta_id ?? ''))) return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id')
@@ -55,7 +57,15 @@ export async function corregirMedioCobro(db, e) {
   }
 }
 
-/** La cuenta de cobro del medio nuevo: la que dice la pantalla o la ÚNICA de la marca con ese medio (⛔ se elige entre varias). */
+const NOMBRE_DEL_MEDIO = { efectivo: 'efectivo', transferencia: 'transferencia', debito: 'debito', credito: 'credito', mp: 'mercado pago', pagonube: 'pago nube' }
+const llano = (t) => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+
+/**
+ * La cuenta de cobro del medio nuevo: la que dice la pantalla, o la de la marca con ese medio. Con varias (las de GN mezclan
+ * medio y regla: «Transferencia CG», «Feria - Efectivo», «Crédito 10% OFF») ⇒ la que se llama como el medio, y si ⛔ hay, la
+ * más vieja de GN. ⛔ Se le pregunta a nadie (Bruno 29-oct): adónde fue la plata lo dice la CUENTA REAL (ruta o excepción),
+ * y el monto ⛔ cambia ⇒ la regla de la cuenta de GN ⛔ juega en una corrección.
+ */
 function cuentaDelMedio(conf, marca, medio, cuenta) {
   const deLaMarca = conf.cuentas.filter((c) => c.marca === marca && c.activa !== false)
   if (cuenta != null && cuenta !== '') {
@@ -65,9 +75,10 @@ function cuentaDelMedio(conf, marca, medio, cuenta) {
     return { cuenta: c }
   }
   const hay = deLaMarca.filter((c) => medioDeCuenta(c) === medio)
-  if (hay.length === 1) return { cuenta: hay[0] }
   if (!hay.length) return falla('CUENTA_DESCONOCIDA', `${marca} no tiene una cuenta de ${medio}: hay que crearla o elegir otro medio`, 'medio')
-  return falla('FALTA_CUENTA', `${marca} tiene ${hay.length} cuentas de ${medio}: elegí cuál (${hay.map((c) => c.nombre).join(', ')})`, 'cuenta')
+  const igual = hay.find((c) => llano(c.nombre) === NOMBRE_DEL_MEDIO[medio])
+  const gn = (c) => (c.gn_cuenta_id == null ? Infinity : Number(c.gn_cuenta_id))
+  return { cuenta: igual ?? [...hay].sort((a, b) => gn(a) - gn(b) || String(a.nombre).localeCompare(String(b.nombre)))[0] }
 }
 
 async function dentro(db, e, motivo, usuario) {
@@ -93,10 +104,21 @@ async function dentro(db, e, motivo, usuario) {
   const c = cuentaDelMedio(conf, v.marca, e.medio, e.cuenta)
   if (!c.cuenta) return c
   const en = new Date(p.cobrado_en ?? v.ocurrida_en).toISOString()
-  const real = cobroReal({ monto: p.monto, elegida: e.cuenta_real ?? null }, c.cuenta, { marca: v.marca, canal: v.canal, en }, conf)
+  const pide = texto(e.cuenta_real)
+  const ruta = rutaVigente(conf.rutas ?? [], { marca: v.marca, canal: v.canal, medio: e.medio, en })
+  const seElige = ruta != null && ruta.cuenta_real_id == null
+  const real = cobroReal({ monto: p.monto, elegida: seElige ? pide : null }, c.cuenta, { marca: v.marca, canal: v.canal, en }, conf)
   if (!real.ok) return falla(real.codigo, real.mensaje, 'cuenta_real')
   const medioAntes = p.medio ?? medioDeCuenta({ medio: p.cuenta_medio, nombre: p.cuenta })
-  const nuevo = real.cobro
+  let nuevo = real.cobro
+  const avisos = []
+  if (pide && !seElige && pide !== nuevo.cuenta_real_id) {
+    // La EXCEPCIÓN: la plata fue a otra cuenta que la de la ruta. La tasa y el plazo son de la ruta ⇒ ⛔ se aplican.
+    const cr = (conf.cuentasReales ?? []).find((x) => x.id === pide)
+    if (!cr || !cr.activa) return falla('CUENTA_REAL_DESCONOCIDA', `La cuenta ${pide} no está o está inactiva`, 'cuenta_real')
+    nuevo = { ...nuevo, cuenta_real_id: pide, comision: null, acredita_el: null }
+    avisos.push('FUERA_DE_RUTA')
+  }
   if (p.cuenta_cobro_id === c.cuenta.id && medioAntes === nuevo.medio && (p.cuenta_real_id ?? null) === (nuevo.cuenta_real_id ?? null)) {
     return falla('SIN_CAMBIO', 'El cobro ya es de ese medio y esa cuenta')
   }
@@ -106,7 +128,7 @@ async function dentro(db, e, motivo, usuario) {
     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) returning id::text, creada_en`,
   [v.empresa_id, v.marca, v.id, p.id, medioAntes ?? 'sin_medio', nuevo.medio, p.cuenta_cobro_id, c.cuenta.id, p.cuenta_real_id ?? null, nuevo.cuenta_real_id ?? null,
     p.comision ?? null, nuevo.comision ?? null, p.acredita_el ?? null, nuevo.acredita_el ?? null, motivo, usuario, v.prueba])
-  const avisos = nuevo.cuenta_real_id == null ? ['SIN_CUENTA_REAL'] : []
+  if (nuevo.cuenta_real_id == null) avisos.push('SIN_CUENTA_REAL')
   return { ok: true, correccion: { id: k.id, venta_id: v.id, numero: Number(v.numero), pago_id: p.id, monto: p.monto,
     medio_antes: medioAntes, medio_despues: nuevo.medio, cuenta_antes: p.cuenta, cuenta_despues: c.cuenta.nombre,
     cuenta_real_antes: p.cuenta_real_id ?? null, cuenta_real_despues: nuevo.cuenta_real_id ?? null,

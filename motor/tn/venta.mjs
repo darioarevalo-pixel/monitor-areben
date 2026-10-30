@@ -114,6 +114,8 @@ export function planVentasTN({ tienda, ordenes, indice, cuentas, ya, real = fals
     registrar.push({
       origen: 'tn', origen_ref: ref, marca: tienda, canal: 'online', deposito: DEPOSITO_ONLINE[tienda],
       usuario: 'tienda-nube', prueba: !real, ocurrida_en: new Date(o.pagada_en).toISOString(),
+      // La ficha del comprador (sql/059), si la orden ya la tiene.
+      ...(o.cliente_id ? { cliente_id: String(o.cliente_id) } : {}),
       lineas, subtotal, total, pagos: [{ cuenta: cuenta.id, monto: total }],
       detalle: { tn: { numero: Number(o.numero), tn_id: Number(o.tn_id), gateway: o.gateway, medio: o.medio, ...(/^multiple$/i.test(o.gateway || '') ? { pago_multiple: true } : {}), envio: pesos(o.envio || 0), descuento: pesos(o.descuento || 0) } },
     })
