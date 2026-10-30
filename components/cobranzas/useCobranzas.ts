@@ -29,7 +29,7 @@ export function useCobranzas(marca: Marca) {
         const r = await leerCobranzas(marca)
         if (vivo) setDatos({ marca, r })
       } catch (e) {
-        if (vivo) setError(e instanceof Error ? e.message : 'No se pudieron leer las cobranzas.')
+        if (vivo) setError(e instanceof Error ? e.message : 'No se pudieron leer los cobros.')
       } finally {
         if (vivo) setRecargando(false)
       }

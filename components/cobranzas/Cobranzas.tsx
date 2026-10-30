@@ -112,7 +112,7 @@ export function Cobranzas() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard
-        title="Cobranzas"
+        title="Cobros"
         subtitle={r ? `Compras con pago manual en Tienda Nube desde el ${r.desde.split('-').reverse().join('/')}.` : 'Compras con pago manual en Tienda Nube.'}
         actions={
           <Button size="sm" variant="outline" onClick={recargar} loading={recargando}>

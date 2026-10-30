@@ -360,7 +360,7 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `Caja` | `Caja (POS)` · `POS` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
 | `Ingresos y ajustes` | `Conteos y ajustes` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
 | `forma de pago` · `formas de pago` | `medio de cobro` · `medios de cobro` · `medio de pago` · `medios de pago` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct-2026: «forma de pago está perfecto» (eran tres palabras para lo mismo) |
-| `Cobros` | `Cobranzas` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: Cobros en el ERP y en el monitor (la sección del monitor se renombra aparte) |
+| `Cobros` | `Cobranzas` | monitor | `components/erp` · `lib/erp` · `components/cobranzas` · `lib/cobranzas` · `lib/nav.datos.ts` | Bruno, 30-oct: Cobros en el ERP y en el monitor (la sección del monitor, 30-oct tanda 3) |
 | `preparar` · `preparada` · `sin preparar` | `armar` · `armada` · `armadas` · `sin armar` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: en Ventas ya decía «preparar»; las transferencias decían «armar» |
 | `Movido a la hora de la foto` · el nombre de cada lado (`ERP`, `Tienda Nube`, `Mercado Libre`, `Gestión Nube`) | `En vuelo` · `Nuestro` · `Ellos` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: en Diferencias no se entendía contra quién se compara |
 | `Con falla` | `Fallado` · `Fallada` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct |

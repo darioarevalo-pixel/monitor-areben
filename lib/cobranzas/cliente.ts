@@ -26,7 +26,7 @@ async function leer<T>(r: Response, fallo: string): Promise<T> {
 
 export async function leerCobranzas(store: Marca): Promise<Respuesta> {
   const r = await apiFetch(`/api/datos?recurso=cobranzas&store=${store}&nc=${Date.now()}`)
-  return leer<Respuesta>(r, 'No se pudieron leer las cobranzas.')
+  return leer<Respuesta>(r, 'No se pudieron leer los cobros.')
 }
 
 function post(body: Record<string, unknown>) {
