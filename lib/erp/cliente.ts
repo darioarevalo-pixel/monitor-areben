@@ -674,8 +674,9 @@ export type ResultadoDelMes = {
   mes: TramoResultado; anterior: TramoResultado; gnHasta: string | null
   dias?: Array<GrupoResultado & { dia: string }>; meses?: Array<GrupoResultado & { mes: string }>; canales?: Array<GrupoResultado & { canal: string }>
 }
-export const leerResultadoDelMes = (marca: MarcaErp) =>
-  pedir<ResultadoDelMes>(null, `&vista=inicio-resultado&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el resultado del mes.')
+/** De UNA línea (la tienda del menú): en Zattia, cada venta pesa en cada línea según sus renglones (Bruno, 30-oct). */
+export const leerResultadoDelMes = (marca: MarcaErp, linea: string) =>
+  pedir<ResultadoDelMes>(null, `&vista=inicio-resultado&marca=${marca}&linea=${linea}&nc=${Date.now()}`, 'No se pudo leer el resultado del mes.')
 
 // ── ERP › Ventas › Por producto (`api/_erp-por-producto.js`, núcleo `lib/erp/ventas-producto.core.js`) ──
 

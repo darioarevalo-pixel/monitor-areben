@@ -97,15 +97,15 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
     let vivo = true
     const fallo = (e: unknown) => (e instanceof Error ? e.message : 'No se pudo leer.')
     const poner = (k: 'ventas' | 'stock' | 'productos', v: Conteo | Crudo) => vivo && setConteos((c) => ({ ...(c.marca === marca ? c : { marca, ventas: null, stock: null, productos: null }), [k]: v }))
-    leerResultadoDelMes(marca)
+    leerResultadoDelMes(marca, tienda)
       .then((r) => {
         if (!vivo) return
-        setResultado({ marca, r, error: null })
+        setResultado({ marca: tienda, r, error: null })
         leerVentasPorProducto(marca, r.mes.desde, r.mes.hasta).then((d) => vivo && setPp({ marca, renglones: d.renglones, error: null }))
           .catch((e) => vivo && setPp({ marca, renglones: null, error: fallo(e) }))
         leerGastos(marca, tienda, r.mes.desde, r.mes.hasta, false).then((g) => vivo && setGastos({ marca: tienda, g, error: null })).catch((e) => vivo && setGastos({ marca: tienda, g: null, error: fallo(e) }))
       })
-      .catch((e) => vivo && setResultado({ marca, r: null, error: fallo(e) }))
+      .catch((e) => vivo && setResultado({ marca: tienda, r: null, error: fallo(e) }))
     const r = rangoDePeriodo('mes', diaArgentino(Date.now()))
     leerListaDeVentas(marca, r.desde, r.hasta).then((d) => poner('ventas', { filas: d.filas })).catch((e) => poner('ventas', fallo(e)))
     leerListaDeStock(marca).then((d) => poner('stock', { filas: d.filas })).catch((e) => poner('stock', fallo(e)))
@@ -113,7 +113,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
     return () => { vivo = false }
   }, [marca, tienda])
 
-  const res = resultado?.marca === marca ? resultado : null
+  const res = resultado?.marca === tienda ? resultado : null
   const m = res?.r?.mes, a = res?.r?.anterior
   const gs = gastos?.marca === tienda ? gastos : null
   const gTotal = gs?.g ? gs.g.total : null

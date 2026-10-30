@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { desdeDoceMeses, resultadoDelMes } from '../api/_erp-inicio.js'
+import { desdeDoceMeses, resultadoDelMes, ventasDeLinea } from '../api/_erp-inicio.js'
 import { acumulado, comoVieneElMes, doceMeses, masDejan, plataCorta, porCanal, rayasRedondas, stockACosto, vendidoDelDia } from '../lib/erp/inicio-panel.core.js'
 
 /**
@@ -16,13 +16,16 @@ describe('las lecturas agrupadas', () => {
 
   it('días, meses y canales son la MISMA consulta que el vendido, agrupada (mismo where, sin filtrar estado ni canal)', async () => {
     const sqls: string[] = []
-    const db = { query: async (s: string) => { sqls.push(s); return { rows: s.includes('max(date_sale)') ? [{ hasta: '2026-10-19' }] : s.includes('group by') ? [] : [{ ventas: 0, vendido: 0, costo: 0, sin_costo: 0 }] } } }
-    const r = await resultadoDelMes({ marca: 'zattia', hoy: '2026-10-19' }, { conMotor: async (_m: string, _q: string, fn: (pg: unknown) => unknown) => fn(db) }) as Record<string, unknown>
+    const db = { query: async (s: string) => { sqls.push(s); return { rows: s.includes('max(date_sale)') ? [{ hasta: '2026-10-19' }] : s.includes('group by 1') ? [] : [{ ventas: 0, vendido: 0, costo: 0, sin_costo: 0 }] } } }
+    const r = await resultadoDelMes({ marca: 'zattia', linea: 'zattia', hoy: '2026-10-19' }, { env: {}, conMotor: async (_m: string, _q: string, fn: (pg: unknown) => unknown) => fn(db) }) as Record<string, unknown>
     expect(r).toMatchObject({ dias: [], meses: [], canales: [] })
-    const agrupadas = sqls.filter((s) => s.includes('group by'))
+    const agrupadas = sqls.filter((s) => s.includes('group by 1'))
+    const [vendido] = sqls.filter((s) => s.includes('sin_costo'))
     expect(agrupadas).toHaveLength(3)
     for (const s of agrupadas) {
-      expect(s).toContain('from ventas where date_sale::date between $1::date and $2::date')
+      // La misma tabla de la línea que el vendido (desde 30-oct, la línea reparte cada venta por sus renglones).
+      expect(s).toContain(`from ${ventasDeLinea('zattia', {})}`)
+      expect(vendido).toContain(`from ${ventasDeLinea('zattia', {})}`)
       expect(s).not.toContain('sale_state')
     }
   })

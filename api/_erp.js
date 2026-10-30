@@ -1845,7 +1845,7 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'GET' && req.query.vista === 'inicio-resultado') {
-      const r = await resultadoDelMes({ marca: String(req.query.marca || '') }, { conMotor })
+      const r = await resultadoDelMes({ marca: String(req.query.marca || ''), linea: String(req.query.linea || '') }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'clientes-lista') {
