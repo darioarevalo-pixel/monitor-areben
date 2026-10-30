@@ -33,7 +33,7 @@ function cfgFor(store) {
 }
 
 const ESTADOS = ['cargada', 'recibida', 'confirmada', 'en_deposito', 'vendida_feria', 'descartada'];
-const COLS = 'id, store, sku, producto, variante, cantidad, motivo, valuacion_costo, valuacion_pvp_feria, precio_lista, estado, ubicacion, product_id, size_id, barcode, gn_integration_id, gn_venta_id, gn_venta_number, usuario, historial, created_at, updated_at';
+const COLS = 'id, store, sku, producto, variante, cantidad, motivo, valuacion_costo, valuacion_pvp_feria, precio_lista, estado, ubicacion, product_id, size_id, barcode, gn_integration_id, gn_venta_id, gn_venta_number, erp_ajuste, usuario, historial, created_at, updated_at';
 
 // Espejo de lib/postventa/barcode.ts (una función .js de Vercel no importa un .ts; se mantiene igual).
 function generarBarcodeFalla(store, id) {
@@ -184,6 +184,8 @@ export default async function handler(req, res) {
         const upd = { gn_integration_id: `falla-${id}`, updated_at: new Date().toISOString() };
         if (b.gn_venta_id != null && b.gn_venta_id !== '') upd.gn_venta_id = String(b.gn_venta_id);
         if (b.gn_venta_number != null && b.gn_venta_number !== '') upd.gn_venta_number = String(b.gn_venta_number);
+        // Stunned: la baja fue el ajuste A-N del ERP (sql/migrate-fallas-5.sql), ⛔ una venta de GN.
+        if (parseInt(b.erp_ajuste, 10) > 0) upd.erp_ajuste = parseInt(b.erp_ajuste, 10);
         upd.historial = await apilarHistorial(supabase, store, id, { estado: 'cargada', at: new Date().toISOString(), usuario: yo, nota: b.erp_ajuste ? `ajuste A-${parseInt(b.erp_ajuste, 10) || ''} del ERP (baja de stock)` : `venta GN ${b.gn_venta_number || b.gn_venta_id || ''} (baja de stock)` });
         const { error } = await supabase.from('fallas_deposito').update(upd).eq('id', id).eq('store', store);
         if (error) throw new Error(error.message);

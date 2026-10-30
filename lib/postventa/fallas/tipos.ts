@@ -49,6 +49,8 @@ export type FallaRow = {
   gn_integration_id?: string | null
   gn_venta_id?: string | null
   gn_venta_number?: string | null
+  /** El ajuste A-N del ERP que la descontó (Stunned, desde el corte): reemplaza a la venta de GN. */
+  erp_ajuste?: number | null
   usuario?: string | null
   historial?: FallaEvento[]
   created_at?: string

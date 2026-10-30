@@ -217,7 +217,9 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
   }, [marca, usuario])
 
   const eliminar = useCallback(async (f: FallaRow) => {
-    const aviso = f.gn_venta_id
+    const aviso = f.erp_ajuste
+      ? `Eliminar la falla de "${f.producto}" elimina el registro del Monitor, pero el ajuste A-${f.erp_ajuste} del ERP sigue aplicado: el producto NO vuelve al stock (se devuelve con otro ajuste en ERP › Ajustes). ¿Eliminar?`
+      : f.gn_venta_id
       ? `Eliminar la falla de "${f.producto}" elimina el registro del Monitor pero NO anula la venta ya hecha en GN (eso se anula a mano en GN si corresponde). ¿Eliminar?`
       : `Eliminar la falla de "${f.producto}"? Esta acción no se puede deshacer.`
     if (typeof window !== 'undefined' && !window.confirm(aviso)) return
@@ -323,7 +325,8 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
               {esAdmin && <Td align="right"><MoneyText value={f.valuacion_costo} /></Td>}
               <Td>
                 <StatusPill tone={ESTADO_TONE[f.estado]} label={ESTADO_LABEL[f.estado]} />
-                {f.gn_venta_number ? <div style={{ fontSize: 10, color: color.mut }}>venta GN #{f.gn_venta_number}</div> : null}
+                {f.erp_ajuste ? <div style={{ fontSize: 10, color: color.mut }}>ajuste ERP A-{f.erp_ajuste}</div>
+                  : f.gn_venta_number ? <div style={{ fontSize: 10, color: color.mut }}>venta GN #{f.gn_venta_number}</div> : null}
               </Td>
               <Td>{f.barcode ? <Button size="sm" variant="ghost" onClick={() => setEtiqueta(f)}> {f.barcode}</Button> : '—'}</Td>
               {esAdmin && (
