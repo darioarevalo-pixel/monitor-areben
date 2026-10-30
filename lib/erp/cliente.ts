@@ -822,8 +822,9 @@ export type GastosDelPeriodo = {
   cobrosSinComision: number
   gastos: GastoCargado[]
 }
-export const leerGastos = (marca: MarcaErp, desde: string, hasta: string, prueba: boolean) =>
-  pedir<GastosDelPeriodo>(null, `&vista=gastos&marca=${marca}&desde=${desde}&hasta=${hasta}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudieron leer los gastos.')
+/** De UNA línea (`linea` = la tienda del menú: bdi · zattia · stunned): en Zattia el servidor ⛔ suma las dos (Bruno, 30-oct). */
+export const leerGastos = (marca: MarcaErp, linea: string, desde: string, hasta: string, prueba: boolean) =>
+  pedir<GastosDelPeriodo>(null, `&vista=gastos&marca=${marca}&linea=${linea}&desde=${desde}&hasta=${hasta}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudieron leer los gastos.')
 /** Un gasto a mano. Corregir uno cargado de más es cargar otro con el monto en NEGATIVO (el gasto es inmutable). */
 export const registrarGastoErp = (marca: MarcaErp, g: { linea?: string; fecha: string; tipo: TipoGasto; monto: number; detalle: string; cuenta?: string; prueba: boolean }) =>
   pedir<{ ok: true; gasto: GastoCargado }>(post({ accion: 'registrar-gasto', marca, ...g }), '', 'No se pudo cargar el gasto.')

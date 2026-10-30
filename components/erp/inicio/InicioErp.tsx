@@ -18,7 +18,7 @@ import {
 import { contarVistas as vistasDeVentas, filtrar as filtrarVentas, rangoDePeriodo } from '@/lib/erp/ventas-lista.core.js'
 import { contarVistas as vistasDeStock, filtrar as filtrarStock } from '@/lib/erp/stock-lista.core.js'
 import { contarVistas as vistasDeProductos, filtrar as filtrarProductos } from '@/lib/erp/productos-lista.core.js'
-import { useLineaErp } from '@/lib/erp/linea-erp'
+import { useLineaErp, useTiendaErp } from '@/lib/erp/linea-erp'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { ROLES, VISTA, paraHacerDe, subtituloDe, verResultado } from '@/lib/erp/inicio-roles.core.js'
 import { esAdmin } from '@/lib/permisos'
@@ -84,6 +84,8 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const [rol, setRol] = useState('admin')
   const [hoy] = useState(() => diaArgentino(Date.now()))
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  // La tienda del menú: los gastos (y el resultado) son de ESA línea, ⛔ de Zattia + Stunned (Bruno, 30-oct).
+  const tienda = useTiendaErp()
   const [resultado, setResultado] = useState<{ marca: string; r: ResultadoDelMes | null; error: string | null } | null>(null)
   // Los gastos comerciales REALES del mismo mes (⛔ los de prueba: son de ventas que Gestión Nube no tiene).
   const [gastos, setGastos] = useState<{ marca: string; g: GastosDelPeriodo | null; error: string | null } | null>(null)
@@ -101,7 +103,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
         setResultado({ marca, r, error: null })
         leerVentasPorProducto(marca, r.mes.desde, r.mes.hasta).then((d) => vivo && setPp({ marca, renglones: d.renglones, error: null }))
           .catch((e) => vivo && setPp({ marca, renglones: null, error: fallo(e) }))
-        leerGastos(marca, r.mes.desde, r.mes.hasta, false).then((g) => vivo && setGastos({ marca, g, error: null })).catch((e) => vivo && setGastos({ marca, g: null, error: fallo(e) }))
+        leerGastos(marca, tienda, r.mes.desde, r.mes.hasta, false).then((g) => vivo && setGastos({ marca: tienda, g, error: null })).catch((e) => vivo && setGastos({ marca: tienda, g: null, error: fallo(e) }))
       })
       .catch((e) => vivo && setResultado({ marca, r: null, error: fallo(e) }))
     const r = rangoDePeriodo('mes', diaArgentino(Date.now()))
@@ -109,11 +111,11 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
     leerListaDeStock(marca).then((d) => poner('stock', { filas: d.filas })).catch((e) => poner('stock', fallo(e)))
     leerListaDeProductos(marca).then((d) => poner('productos', { filas: d.filas })).catch((e) => poner('productos', fallo(e)))
     return () => { vivo = false }
-  }, [marca])
+  }, [marca, tienda])
 
   const res = resultado?.marca === marca ? resultado : null
   const m = res?.r?.mes, a = res?.r?.anterior
-  const gs = gastos?.marca === marca ? gastos : null
+  const gs = gastos?.marca === tienda ? gastos : null
   const gTotal = gs?.g ? gs.g.total : null
   const linea = useLineaErp()
   const crudos = conteos.marca === marca ? conteos : { ventas: null, stock: null, productos: null }

@@ -2,11 +2,13 @@
  * ERP › Gastos COMERCIALES (Bruno, 26-oct; motor `lib/gasto/gasto.mjs`, `sql/055`): comisiones de plataformas, impuestos y otros
  * costos de vender, para sacar el resultado ANTES de gastos operativos (esos siguen en el dashboard, que LEE esto). Sólo admin.
  *
- *   GET  ?recurso=erp&vista=gastos&marca=bdi|zattia&desde&hasta&prueba=0|1   total, por tipo y por mes (+ los cargados a mano)
+ *   GET  ?recurso=erp&vista=gastos&marca=bdi|zattia&linea=…&desde&hasta&prueba=0|1   total, por tipo y por mes (+ los cargados a mano)
  *   POST {recurso:'erp', accion:'registrar-gasto', marca, linea?, fecha, tipo, monto, detalle, cuenta?, prueba}   un gasto a mano
  *
  * 🔑 Las COMISIONES salen solas de los cobros (tasa de la ruta × monto) y ⛔ se cargan acá; `cobrosSinComision` cuenta los cobros
- * con tarjeta/MP cuya ruta ⛔ tiene tasa (⛔ se inventa un porcentaje). Zattia suma sus líneas (Zattia y Stunned).
+ * con tarjeta/MP cuya ruta ⛔ tiene tasa (⛔ se inventa un porcentaje).
+ * 🔑 Con `linea`, SÓLO esa línea (el ERP: Bruno, 30-oct, «cada marca ve lo suyo»); sin `linea`, la marca entera —Zattia suma
+ * Zattia y Stunned—: eso lo pide únicamente el puente del dashboard (`api/_gastos-puente.js`), que es de Areben.
  * Un gasto es inmutable: corregir uno es cargar otro con el monto en negativo.
  */
 const MARCAS = ['bdi', 'zattia']
@@ -18,15 +20,16 @@ const pesos = (x) => Math.round(x * 100) / 100
 const errorDe = (r) => ({ status: r.error?.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: r.error?.mensaje ?? 'El motor no lo aceptó.' })
 
 /**
- * @param {{ marca: string, desde: string, hasta: string, prueba?: boolean }} p
+ * @param {{ marca: string, linea?: string, desde: string, hasta: string, prueba?: boolean }} p
  * @param {{ conMotor: Function }} deps
  */
-export async function gastosDelPeriodo({ marca, desde, hasta, prueba = false }, deps) {
+export async function gastosDelPeriodo({ marca, linea, desde, hasta, prueba = false }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (linea !== undefined && !LINEAS[marca].includes(linea)) return { status: 400, error: 'Esa línea no es de esta marca' }
   if (!FECHA.test(desde) || !FECHA.test(hasta)) return { status: 400, error: 'Período inválido' }
   return deps.conMotor(marca, 'Los gastos', async (pg) => {
     const { gastosComerciales } = await import('../motor/gasto/gasto.mjs')
-    const lineas = (await pg.query('select id, empresa_id::text from marca where id = any($1)', [LINEAS[marca]])).rows
+    const lineas = (await pg.query('select id, empresa_id::text from marca where id = any($1)', [linea !== undefined ? [linea] : LINEAS[marca]])).rows
     const por_tipo = cero()
     const meses = new Map()
     const gastos = []

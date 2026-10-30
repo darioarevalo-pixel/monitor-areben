@@ -17,7 +17,7 @@
  *   GET  ?recurso=erp&vista=conciliacion&tienda=bdi|zattia|stunned&fecha=…  lo que ⛔ cierra contra TN y GN ese día (motor sql/024)
  *   GET  ?recurso=erp&vista=stock-lista&marca=bdi|zattia              la lista de Stock: cada prenda por depósito (`api/_erp-stock.js`)
  *   GET  ?recurso=erp&vista=cargar-venta&marca=…  ·  POST { accion: 'cargar-venta' }   Ventas › Cargar venta (`api/_erp-cargar.js`, sólo admin)
- *   GET  ?recurso=erp&vista=gastos&marca=bdi|zattia&desde&hasta&prueba=0|1   Gastos comerciales (sólo admin; `api/_erp-gastos.js`)
+ *   GET  ?recurso=erp&vista=gastos&marca=bdi|zattia&linea=…&desde&hasta&prueba=0|1   Gastos comerciales de UNA línea (sólo admin; `api/_erp-gastos.js`)
  *   POST { accion: 'registrar-gasto', marca, fecha, tipo, monto, detalle, cuenta?, prueba }                  cargar un gasto a mano (sólo admin)
  *   GET  ?recurso=erp&vista=empujes-stock&marca=bdi|zattia|stunned    los últimos envíos de stock a TN de esa tienda (sólo admin; `api/_erp-empuje-stock.js`)
  *   POST { accion: 'mandar-stock', marca }                                                                  mandar el stock del ERP a TN, la tienda entera (sólo admin; SECO hasta `STOCK_TN_MANDA`)
@@ -913,6 +913,13 @@ export async function ventaGnDeCambio({ sb, db, gnVentaId, prueba }) {
  * 🔴 Una venta de prueba ⛔ se factura en producción (`puedeFacturar`).
  */
 /**
+ * 🔑 La línea que pide una pantalla del ERP (Bruno, 30-oct: «cada marca ve sus propias ventas»). BDI no tiene líneas; en Zattia
+ * es OBLIGATORIA (`zattia` | `stunned`): sin ella la vista contestaba las dos sumadas y nadie se enteraba ⇒ `null` = 400.
+ */
+export const lineaDelPedido = (marca, linea) => (marca === 'bdi' ? 'bdi' : marca === 'zattia' && (linea === 'zattia' || linea === 'stunned') ? linea : null)
+const SIN_LINEA = { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
+
+/**
  * 🔑 El punto de venta sale de la marca de la VENTA, ⛔ de la base: Stunned (línea de Zattia) factura con su PV PROPIO
  * (`ARCA_PTOVTA_STUNNED`, el 9 «STUNNED - FACTURA ERP», Bruno 26-oct). Antes caía en el de Zattia.
  */
@@ -1771,7 +1778,10 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'gastos') {
-      const r = await gastosDelPeriodo({ marca: String(req.query.marca || ''), desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), prueba: req.query.prueba === '1' }, { conMotor })
+      const marca = String(req.query.marca || '')
+      const linea = lineaDelPedido(marca, String(req.query.linea || ''))
+      if (!linea && MARCAS.includes(marca)) return res.status(SIN_LINEA.status).json({ error: SIN_LINEA.error })
+      const r = await gastosDelPeriodo({ marca, linea: linea ?? undefined, desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), prueba: req.query.prueba === '1' }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'POST' && body.accion === 'registrar-gasto') {

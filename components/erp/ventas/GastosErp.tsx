@@ -36,7 +36,7 @@ const TONO_TIPO = { comision: ['action', 'Comisión de plataforma'], impuesto: [
 const pesos = (n: number) => `${n < 0 ? '− ' : ''}$ ${Math.abs(n).toLocaleString('es-AR', { maximumFractionDigits: 2 })}`
 const dia = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
-function bajarCsv(filas: FilaGasto[], marca: MarcaErp, desde: string, hasta: string) {
+function bajarCsv(filas: FilaGasto[], marca: string, desde: string, hasta: string) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
   const renglones = [['Fecha', 'Tipo', 'Detalle', 'Cuenta', 'Carga', 'Quién', 'Monto'].map(c).join(';')]
   for (const f of filas) renglones.push([f.fecha, TIPO_GASTO[f.tipo], f.detalle, f.cuenta, f.carga === 'automatica' ? 'Automática' : 'A mano', f.quien, String(f.monto).replace('.', ',')].map(c).join(';'))
@@ -51,6 +51,8 @@ function bajarCsv(filas: FilaGasto[], marca: MarcaErp, desde: string, hasta: str
 export function GastosErp() {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  // Los gastos son de la tienda del menú: mirando Stunned, ⛔ los de Zattia (Bruno, 30-oct).
+  const tienda = useTiendaErp()
   const { confirmar } = useConfirmar()
   const [prueba, setPrueba] = useState(true)
   const [periodo, setPeriodo] = useState('mes')
@@ -61,16 +63,16 @@ export function GastosErp() {
   const [nuevo, setNuevo] = useState(false)
   const [cargado, setCargado] = useState<string | null>(null)
 
-  const clave = `${marca}|${periodo}|${prueba}|${vuelta}`
+  const clave = `${marca}|${tienda}|${periodo}|${prueba}|${vuelta}`
   useEffect(() => {
     let vivo = true
     // El día se toma al leer (⛔ en el render): «Este mes» es el de cuando se apretó.
     const { desde, hasta } = rangoGasto(periodo, diaArgentino(Date.now()))
-    leerGastos(marca, desde, hasta, prueba)
+    leerGastos(marca, tienda, desde, hasta, prueba)
       .then((d) => { if (vivo) { setDatos({ ...d, clave }); setError(null) } })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer los gastos.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
-  }, [marca, prueba, periodo, clave])
+  }, [marca, tienda, prueba, periodo, clave])
   const cargando = datos?.clave !== clave
 
   const todas = useMemo(() => (datos ? armarFilasGastos(datos) : []), [datos])
@@ -98,7 +100,7 @@ export function GastosErp() {
           <Button variant={prueba ? 'outline' : 'solid'} aria-pressed={!prueba} onClick={() => setPrueba(false)}>Reales</Button>
           <Button variant={prueba ? 'solid' : 'outline'} aria-pressed={prueba} onClick={() => setPrueba(true)}>De prueba</Button>
         </div>
-        <Button disabled={!filas.length || !datos} onClick={() => datos && bajarCsv(filas, marca, datos.desde, datos.hasta)}>Exportar</Button>
+        <Button disabled={!filas.length || !datos} onClick={() => datos && bajarCsv(filas, tienda, datos.desde, datos.hasta)}>Exportar</Button>
         <Button onClick={() => { setCargado(null); setNuevo(true) }}>Nuevo gasto</Button>
       </div>
       {prueba && <Notice tone="warning">Estás mirando los gastos <b>de prueba</b>: salen de las ventas que el ERP registra en paralelo con Gestión Nube hasta el corte. Lo que cargues acá queda anotado <b>de prueba</b>.</Notice>}

@@ -30,7 +30,7 @@ const RES = { mes: { desde: '2026-10-01', hasta: '2026-10-19', ventas: 637, vend
 vi.mock('@/lib/erp/cliente', () => ({
   leerResultadoDelMes: async () => RES,
   // Sólo los REALES (el cuarto parámetro `prueba` va en false): los de prueba ⛔ restan en Inicio.
-  leerGastos: async (_m: string, desde: string, hasta: string, prueba: boolean) => ({ desde, hasta, prueba, total: prueba ? 999 : 1_500_000, cobrosSinComision: prueba ? 0 : 2 }),
+  leerGastos: async (_m: string, _l: string, desde: string, hasta: string, prueba: boolean) => ({ desde, hasta, prueba, total: prueba ? 999 : 1_500_000, cobrosSinComision: prueba ? 0 : 2 }),
   leerListaDeVentas: async () => ({ filas: [{ estadoKey: 'a_preparar', cobroKey: 'sinpagar', kind: 'venta', tipo: 'venta', anulada: false, facturada: false }] }),
   leerListaDeStock: async () => { throw new Error('El stock del ERP todavía no está conectado') },
   leerListaDeProductos: async () => ({ filas: [

@@ -26,7 +26,7 @@ describe('gastos comerciales (puerta del monitor)', () => {
     expect(comerciales).not.toHaveBeenCalled()
   })
 
-  it('Zattia suma sus dos líneas (Zattia y Stunned): total, por tipo, por mes y los cargados', async () => {
+  it('sin línea (el puente del dashboard, que es de Areben) Zattia suma sus dos líneas: total, por tipo, por mes y los cargados', async () => {
     comerciales.mockImplementation(async (_pg, { marca }) => marca === 'zattia'
       ? { ...vacio, por_tipo: { comision: 675, impuesto: 1000, otro: 0 }, meses: [{ mes: '2026-10', total: 1675, por_tipo: { comision: 675, impuesto: 1000, otro: 0 } }], comision_automatica: 675, cobrosSinComision: 1,
         gastos: [{ id: 'g1', fecha: '2026-10-05', tipo: 'impuesto', monto: 1000 }] }
@@ -40,6 +40,25 @@ describe('gastos comerciales (puerta del monitor)', () => {
     expect(r.comisionAutomatica).toBe(700.5)
     expect(r.cobrosSinComision).toBe(1)
     expect(r.gastos).toEqual([{ id: 'g1', fecha: '2026-10-05', tipo: 'impuesto', monto: 1000, linea: 'zattia' }])
+  })
+
+  it('con línea, SÓLO esa (el ERP: mirando Stunned ⛔ se ven los gastos de Zattia, Bruno 30-oct)', async () => {
+    comerciales.mockImplementation(async (_pg, { marca }) => marca === 'zattia'
+      ? { ...vacio, por_tipo: { comision: 675, impuesto: 1000, otro: 0 }, meses: [{ mes: '2026-10', total: 1675, por_tipo: { comision: 675, impuesto: 1000, otro: 0 } }], comision_automatica: 675,
+        gastos: [{ id: 'g1', fecha: '2026-10-05', tipo: 'impuesto', monto: 1000 }] }
+      : { ...vacio, por_tipo: { comision: 25.5, impuesto: 0, otro: 0 }, meses: [{ mes: '2026-10', total: 25.5, por_tipo: { comision: 25.5, impuesto: 0, otro: 0 } }], comision_automatica: 25.5 })
+    const r = await gastosDelPeriodo({ marca: 'zattia', linea: 'stunned', desde: '2026-10-01', hasta: '2026-10-31' }, { conMotor })
+    expect(comerciales.mock.calls.map((c) => c[1].marca)).toEqual(['stunned'])
+    expect(r.total).toBe(25.5)
+    expect(r.comisionAutomatica).toBe(25.5)
+    expect(r.meses[0].total).toBe(25.5)
+    expect(r.gastos).toEqual([])
+  })
+
+  it('una línea que no es de la marca ⇒ 400 sin tocar el motor', async () => {
+    expect((await gastosDelPeriodo({ marca: 'bdi', linea: 'stunned', desde: '2026-10-01', hasta: '2026-10-31' }, { conMotor })).status).toBe(400)
+    expect((await gastosDelPeriodo({ marca: 'zattia', linea: '', desde: '2026-10-01', hasta: '2026-10-31' }, { conMotor })).status).toBe(400)
+    expect(comerciales).not.toHaveBeenCalled()
   })
 
   it('cargar un gasto: pide quién, valida la línea y le pasa al motor lo que escribió', async () => {

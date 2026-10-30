@@ -8,13 +8,13 @@ import { ProveedorLineaErp } from '@/lib/erp/linea-erp'
  * **ERP › Ventas › Gastos, la pantalla**: abre en «De prueba»; los números salen del motor; si hay cobros sin tasa lo dice
  * (esas comisiones NO están en el total); «Nuevo gasto» pide confirmar y manda el monto con su signo y el libro elegido.
  */
-const leer = vi.fn(async (_m: string, desde: string, hasta: string, prueba: boolean) => ({
+const leer = vi.fn(async (_m: string, _l: string, desde: string, hasta: string, prueba: boolean) => ({
   desde, hasta, prueba, total: 1_010_000, por_tipo: { comision: 450_000, impuesto: 200_000, otro: 360_000 }, meses: [], comisionAutomatica: 412_000, cobrosSinComision: 3,
   gastos: [{ id: '1', linea: 'zattia', fecha: '2026-10-17', tipo: 'otro', monto: 21_000, detalle: 'Cadete · 6 envíos', cuenta: 'Caja de efectivo', origen: 'manual', venta_id: null, usuario: 'Bruno', creado_en: '2026-10-17T15:00:00Z' }],
 }))
 const registrar = vi.fn(async () => ({ ok: true }))
 vi.mock('@/lib/erp/cliente', () => ({
-  leerGastos: (...a: [string, string, string, boolean]) => leer(...a),
+  leerGastos: (...a: [string, string, string, string, boolean]) => leer(...a),
   registrarGastoErp: (...a: unknown[]) => (registrar as (...x: unknown[]) => unknown)(...a),
 }))
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'Bruno' } }) }))
@@ -41,7 +41,8 @@ async function montar() {
 describe('la pantalla de Gastos', () => {
   it('abre en «De prueba», con los tiles, la comisión automática y el aviso de los cobros sin tasa', async () => {
     const host = await montar()
-    expect(leer.mock.calls[0][3]).toBe(true)
+    expect(leer.mock.calls[0][1]).toBe('zattia')
+    expect(leer.mock.calls[0][4]).toBe(true)
     const t = host.textContent ?? ''
     expect(t).toContain('1.010.000')
     expect(t).toContain('412.000 salen solas de los cobros')
@@ -50,7 +51,7 @@ describe('la pantalla de Gastos', () => {
     expect(t).toContain('Comisiones de plataformas de todos los cobros del período')
     expect(t).toContain('Cadete · 6 envíos')
     await clic(boton('Reales'))
-    expect(leer.mock.calls.at(-1)![3]).toBe(false)
+    expect(leer.mock.calls.at(-1)![4]).toBe(false)
   })
 
   it('Nuevo gasto: un monto vacío no sale; con signo menos sale negativo, de prueba, después de confirmar', async () => {
