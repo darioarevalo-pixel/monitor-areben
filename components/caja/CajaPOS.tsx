@@ -1298,7 +1298,8 @@ pendientes
                                 <>
                                   {regla && regla.descuento > 0 && <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{regla.descuento}% de descuento{modoOferta && modoOferta !== 'descuento' ? ' (sin la oferta)' : ''}</span>}
                                   {(() => {
-                                    const p = items.some((it) => 'oferta' in it && it.oferta) ? pctOfertaDeLinea('stunned', medio) : null
+                                    const conPct = items.find((x) => 'oferta' in x && x.oferta && pctOfertaDeLinea('stunned', medio, x.product_id) != null)
+                                    const p = conPct ? pctOfertaDeLinea('stunned', medio, conPct.product_id) : null
                                     return p != null && p !== regla?.descuento ? <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{p}% en Stunned en oferta</span> : null
                                   })()}
                                   {modoOferta === 'recargo' && <span style={{ fontSize: font.xs, color: color.warningInk, fontWeight: weight.semibold }}>+{ofertaDe(reglas).recargo}% en productos en oferta</span>}

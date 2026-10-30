@@ -11,7 +11,7 @@ describe('caja · la oferta de Stunned paga 10 % en efectivo y transferencia', (
   type R_ = Parameters<typeof cuentaDeMedio>[1]['reglas']
   const R = REGLAS_INICIALES as unknown as R_
   const no = { promoCreditoHoy: false, esDelBanco: false, seisCuotas: false }
-  const oficial = { product_id: 10, size_id: 1, cantidad: 1, precio: 12990, linea: 'stunned', oferta: true }
+  const oficial = { product_id: 913515, size_id: 1, cantidad: 1, precio: 12990, linea: 'stunned', oferta: true }
   const vestido = { product_id: 2, size_id: 1, cantidad: 1, precio: 20000 }
   const total = (medio: 'efectivo' | 'transferencia' | 'debito', items: Parameters<typeof renglones>[0], reglas: R_ = R) => {
     const filas = renglones(items)
@@ -25,6 +25,21 @@ describe('caja · la oferta de Stunned paga 10 % en efectivo y transferencia', (
 
   it('en transferencia también −10 % ⇒ $11.700', () => {
     expect(total('transferencia', [oficial]).total).toBe(11700)
+  })
+
+  it('🔑 el DROP 2 en oferta (Cyber, 30-oct) ⛔ va al 10/10: STARRY $27.990 efectivo −15 % ⇒ $23.791,50 ⇒ $23.800', () => {
+    const starry = { product_id: 1097604, size_id: 1, cantidad: 1, precio: 27990, linea: 'stunned', oferta: true }
+    expect(total('efectivo', [starry]).total).toBe(23800)
+  })
+
+  it('el drop 2 en oferta en transferencia, el 10 % de la cuenta: $27.990 ⇒ $25.191 ⇒ $25.200', () => {
+    const starry = { product_id: 1097604, size_id: 1, cantidad: 1, precio: 27990, linea: 'stunned', oferta: true }
+    expect(total('transferencia', [starry]).total).toBe(25200)
+  })
+
+  it('mixto drop 1 + drop 2 en efectivo: $11.691 + $23.791,50 = $35.482,50 ⇒ $35.500', () => {
+    const starry = { product_id: 1097604, size_id: 1, cantidad: 1, precio: 27990, linea: 'stunned', oferta: true }
+    expect(total('efectivo', [oficial, starry]).total).toBe(35500)
   })
 
   it('Stunned SIN oferta sigue con el 15 % del efectivo: $37.990 ⇒ $32.300', () => {
