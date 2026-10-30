@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import type { AlContar } from './ListasJuntas'
 import { Button, EmptyState, MenuAcciones, Notice, Select, color, font, space, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
@@ -41,7 +42,7 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'paso', titulo: 'Qué pasó', ancho: 'minmax(220px, 1.6fr)', movil: 'chico' },
 ]
 
-export function ConciliacionDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => void }) {
+export function ConciliacionDia({ ajustar, alContar }: { ajustar: (p: PrendaAAjustar) => void; alContar?: AlContar }) {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   // En la base de Zattia hay dos tiendas: Zattia y Stunned (su Tienda Nube es propia). La del selector del menú (Bruno, 28-oct:
@@ -75,6 +76,8 @@ export function ConciliacionDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => v
     return !t ? todas : todas.filter((f) => normal(`${prendaDe(f)} ${f.sku ?? ''} ${f.numero ?? ''}`).includes(t))
   }, [todas, q])
   const conteo = useMemo(() => Object.fromEntries(vistas.map(([k]) => [k, k === 'todas' ? buscadas.length : buscadas.filter((f) => f.grupo === k).length])), [vistas, buscadas])
+  // Pantalla junta (`ListasJuntas`): el número de su opción es el de la vista con la que abre.
+  useEffect(() => { alContar?.(cargando || !datos ? null : conteo.todas) }, [alContar, cargando, datos, conteo])
   // Una vista que ya ⛔ está (otro día, otra tienda) ⇒ todas.
   const enVista = vistas.some(([k]) => k === vista) ? vista : 'todas'
   const filas = enVista === 'todas' ? buscadas : buscadas.filter((f) => f.grupo === enVista)

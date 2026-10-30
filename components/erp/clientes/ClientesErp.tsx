@@ -28,6 +28,7 @@ import {
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaCliente, fechaCorta } from './FichaCliente'
+import { CuentaCorriente } from './CuentaCorriente'
 
 type Prefs = { orden: string[]; visibles: string[] }
 
@@ -50,7 +51,9 @@ function bajarCsv(filas: FilaCliente[], marca: MarcaErp) {
   URL.revokeObjectURL(url)
 }
 
-export function ClientesErp({ abrir, alAbrir }: {
+export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
+  /** La vista con la que abre (`saldo` desde la dirección vieja de Cuenta corriente). */
+  vistaInicial?: string
   /** Desde la búsqueda global (⌘K): el cliente (por documento; si no tiene, por nombre) que se abre solo cuando llega la lista. */
   abrir?: { doc: string | null; nombre: string } | null
   alAbrir?: () => void
@@ -63,7 +66,7 @@ export function ClientesErp({ abrir, alAbrir }: {
   const lista = 'erp-clientes'
   const [datos, setDatos] = useState<(ListaDeClientes & { clave: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [vista, setVista] = useState('todos')
+  const [vista, setVista] = useState(vistaInicial)
   const [q, setQ] = useState('')
   const [orden, setOrden] = useState<OrdenLista>(null)
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
@@ -97,7 +100,11 @@ export function ClientesErp({ abrir, alAbrir }: {
   const cargando = datos?.clave !== clave
 
   const base = useMemo(() => filtrar(datos?.filas ?? [], { q }), [datos, q])
-  const conteo = useMemo(() => contarVistas(base), [base])
+  // 🎨 Tanda 3 (30-oct, mapa del menú): «Con saldo» ES la cuenta corriente (⛔ pestaña aparte): su número y su lista son los de
+  // `CuentaCorriente` (su núcleo), que queda montada para dar el número aunque se mire otra vista.
+  const [conSaldo, setConSaldo] = useState<number | null>(null)
+  const conteo = useMemo(() => ({ ...contarVistas(base), saldo: conSaldo ?? 0 }), [base, conSaldo])
+  const enSaldo = vista === 'saldo'
   const enVista = useMemo(() => filtrar(base, { vista }), [base, vista])
   const filas: FilaCliente[] = useMemo(() => ordenar(enVista, orden), [enVista, orden])
   const res = useMemo(() => resumen(enVista), [enVista])
@@ -157,15 +164,16 @@ export function ClientesErp({ abrir, alAbrir }: {
       {datos && !datos.cuentaLista && <Notice tone="warning">No se pudo leer la cuenta corriente: el saldo no se muestra.</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
-      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+      {!enSaldo && <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Por cobrar" valor={sinCuentas ? '—' : formatMoney(res.porCobrar)} oscuro nota={sinCuentas ? 'todavía sin cuentas corrientes' : 'lo que deben − lo que tienen a favor'} />
         <TileResumen titulo="Compraron este mes" valor={n(res.compraron)} nota={`de ${n(res.clientes)} en ${nombreVista.toLowerCase()}`} />
         <TileResumen titulo="Mayoristas" valor={n(res.mayoristas)} nota="con alguna compra mayorista" />
         <TileResumen titulo="Comprado" valor={formatMoney(res.total)} nota={`${n(res.clientes)} clientes`} />
-      </div>
+      </div>}
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
+        {!enSaldo && <>
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un cliente" placeholder="Nombre o DNI / CUIT" />
           <PanelColumnas
@@ -197,7 +205,9 @@ export function ClientesErp({ abrir, alAbrir }: {
           {cargando && !datos ? 'Leyendo los clientes…' : `${n(Math.min(mostrar, filas.length))} de ${n(filas.length)}`}
           {datos && <> · compras de Gestión Nube hasta {fechaCorta(datos.gnHasta)} · sin «Consumidor Final»</>}
         </div>
+        </>}
       </div>
+      <div hidden={!enSaldo}><CuentaCorriente embebida alContar={setConSaldo} /></div>
 
       <BarraSeleccion cuantas={elegidas.length} onSoltar={() => setSeleccion(new Set())}>
         <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca)}>Exportar los elegidos</AccionSeleccion>

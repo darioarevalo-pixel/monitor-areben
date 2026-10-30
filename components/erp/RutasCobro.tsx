@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import type { AlContar } from './ListasJuntas'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { Button, EmptyState, Field, Input, MenuAcciones, Modal, Notice, Select, color, font, space, useConfirmar, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
@@ -54,7 +55,7 @@ const COLUMNAS_CAMBIOS: ColumnaLista[] = [
   { key: 'vale', titulo: 'Vale desde', ancho: '104px', movil: 'oculta' },
 ]
 
-export function RutasCobro({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {
+export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => void; alContar?: AlContar }) {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const configura = usePuedeErp(marca)('configurar')
@@ -93,6 +94,8 @@ export function RutasCobro({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {
     todas: buscadas.length, [SIN_RUTA]: buscadas.filter((f) => !f.vigente).length, [CAMBIOS]: cambios.length,
     ...Object.fromEntries(CANALES_DE_RUTA.map((c) => [c, buscadas.filter((f) => f.canal === c).length])),
   }
+  // Pantalla junta (`ListasJuntas`): el número de su opción es el de la vista con la que abre.
+  useEffect(() => { alContar?.(datos ? conteo.todas : null) }, [alContar, datos, conteo.todas])
   const filas = vista === 'todas' ? buscadas : vista === SIN_RUTA ? buscadas.filter((f) => !f.vigente) : buscadas.filter((f) => f.canal === vista)
 
   function empezar(f: FilaDeRuta) {

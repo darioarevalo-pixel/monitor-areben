@@ -40,6 +40,7 @@ import { ComparacionStock } from './stock/ComparacionStock'
 import { DiferenciasDia } from './DiferenciasDia'
 import { ConciliacionDia } from './ConciliacionDia'
 import { AjustesStock } from './AjustesStock'
+import { ListasJuntas, type AlContar } from './ListasJuntas'
 import { ProductosErp } from './productos/ProductosErp'
 import { PreciosErp } from './productos/PreciosErp'
 import { ReglasComerciales } from './ReglasComerciales'
@@ -52,7 +53,6 @@ import { CajasErp } from './ventas/CajasErp'
 import { CobrosErp } from './ventas/CobrosErp'
 import { GastosErp } from './ventas/GastosErp'
 import { ClientesErp } from './clientes/ClientesErp'
-import { CuentaCorriente } from './clientes/CuentaCorriente'
 import { ProveedoresErp } from './clientes/ProveedoresErp'
 import { InicioErp } from './inicio/InicioErp'
 import { BusquedaGlobal, HojaDeAtajos, useAtajosErp, type DestinoBusqueda } from './BusquedaGlobal'
@@ -67,7 +67,7 @@ type Seccion = {
   /** El trazo del ícono de línea (24×24), el mismo del diseño v8. */
   icono: string
   /** 🎨 30-oct (Bruno): cada pestaña es un ÍTEM del menú, debajo de su sección; sus vistas son las pestañas de arriba (como mucho 2-3). */
-  pestanias: Array<Item & { vistas?: Item[] }>
+  pestanias: Array<Item & { vistas?: Item[]; /** 🎨 Tanda 3 (30-oct): las vistas son UNA pantalla con un filtro arriba, cada opción con su número (`ListasJuntas`); el texto es lo que elige el filtro. */ junta?: string }>
   /** Qué dice la sección mientras no tiene pantallas. */
   vacia?: string
 }
@@ -95,19 +95,19 @@ export const SECCIONES_ERP: Seccion[] = [
     pestanias: [
       { key: 'stock', label: 'Stock', vistas: [{ key: 'stock', label: 'Productos' }, { key: 'movimientos', label: 'Movimientos' }] },
       { key: 'transferencias', label: 'Transferencias', vistas: [{ key: 'transferencias', label: 'Transferencias' }, { key: 'mover', label: 'Mover y recibir' }] },
-      { key: 'ajustes', label: 'Ingresos y ajustes', vistas: [{ key: 'ajustes', label: 'Ajustes' }, { key: 'ingresos', label: 'Ingresos de mercadería' }] },
-      { key: 'diferencias', label: 'Diferencias', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }] },
+      { key: 'ajustes', label: 'Ingresos y ajustes', junta: 'Tipo', vistas: [{ key: 'ajustes', label: 'Ajustes' }, { key: 'ingresos', label: 'Ingresos de mercadería' }] },
+      { key: 'diferencias', label: 'Diferencias', junta: 'Contra qué', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }] },
     ],
   },
   { key: 'productos', titulo: 'Productos y precios', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }] },
   {
     key: 'clientes', titulo: 'Clientes y proveedores', icono: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
-    pestanias: [{ key: 'clientes', label: 'Clientes', vistas: [{ key: 'clientes', label: 'Clientes' }, { key: 'cuenta-corriente', label: 'Cuenta corriente' }] }, { key: 'proveedores', label: 'Proveedores' }],
+    pestanias: [{ key: 'clientes', label: 'Clientes', vistas: [{ key: 'clientes', label: 'Clientes' }, { key: 'cuenta-corriente', label: 'Cuenta corriente', oculta: true }] }, { key: 'proveedores', label: 'Proveedores' }],
   },
   {
     key: 'configuracion', titulo: 'Configuración', icono: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M4 12h2 M18 12h2 M12 4v2 M12 18v2 M6.3 6.3l1.4 1.4 M16.3 16.3l1.4 1.4 M6.3 17.7l1.4-1.4 M16.3 7.7l1.4-1.4',
     pestanias: [
-      { key: 'cuentas', label: 'Cuentas y formas de pago', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: 'Rutas' }] },
+      { key: 'cuentas', label: 'Cuentas y formas de pago', junta: 'Qué lista', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: 'Rutas' }] },
       { key: 'reglas', label: 'Descuentos y redondeo', vistas: [{ key: 'reglas', label: 'Descuentos por forma de pago' }, { key: 'redondeo', label: 'Redondeo' }] },
       { key: 'estructura', label: 'Marcas, depósitos y puntos de venta' },
     ],
@@ -269,6 +269,18 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
     ir('clientes', 'clientes')
   }
 
+  // Las listas de una pantalla junta (`ListasJuntas`): todas montadas, cada una con su número; el filtro elige cuál se ve.
+  const parteJunta = (k: string, alContar: AlContar) => {
+    if (k === 'ajustes') return <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : `lista/${lineaVista}`} pedida={aAjustar} alContar={alContar} />
+    if (k === 'ingresos') return <RecepcionesStock key={marca} alContar={alContar} />
+    if (k === 'comparacion') return <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'diferencias', 'conciliacion')} alContar={alContar} />
+    if (k === 'conciliacion') return <ConciliacionDia key={`${marca}/${lineaVista}`} ajustar={ajustarPrenda} alContar={alContar} />
+    if (k === 'diferencias') return <DiferenciasDia key={marca} ajustar={ajustarPrenda} alContar={alContar} />
+    if (k === 'cuentas') return <CuentasErp key={marca} ir={irAPieza} alContar={alContar} />
+    if (k === 'rutas') return <RutasCobro key={`${marca}/${lineaVista}`} ir={irAPieza} alContar={alContar} />
+    return null
+  }
+
   // El selector BDI · Zattia · Stunned: en el menú de la compu (oscuro) y en la hoja de «Más» del celular (claro).
   const selectorMarca = (claro: boolean) => opciones.length > 1 && (
     <div role="radiogroup" aria-label="Marca" style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 9, background: claro ? color.bg2 : 'rgba(255,255,255,0.08)' }}>
@@ -365,7 +377,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
               </p>
             )}
             {seccion.key !== 'inicio' && (
-              <header style={{ display: 'flex', flexDirection: 'column', gap: space[2], borderBottom: vistasDeAca.length > 1 ? `1px solid ${color.line}` : undefined }}>
+              <header style={{ display: 'flex', flexDirection: 'column', gap: space[2], borderBottom: vistasDeAca.length > 1 && !itemActual?.junta ? `1px solid ${color.line}` : undefined }}>
                 {/* 📱 En el celular los ítems del grupo van como pestañas (el menú de costado ⛔ se ve): en la compu se esconden (globals.css). */}
                 {visibles(seccion.pestanias).length > 1 && (
                   <div className="erp-pestanias erp-pestanias-movil">
@@ -380,7 +392,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
                   {vista === 'factura' && <Button size="sm" variant="outline" onClick={() => ir('ventas', 'facturacion')}>Volver a Facturas</Button>}
                   {pestania === 'cambio' && <Button size="sm" variant="outline" onClick={() => ir('ventas', 'ventas')}>Volver a Ventas</Button>}
                 </div>
-                {vistasDeAca.length > 1 && (
+                {vistasDeAca.length > 1 && !itemActual?.junta && (
                   // 📱 En el celular las vistas se deslizan de costado (`erp-vistas`, globals.css).
                   <div className="erp-vistas" style={{ marginBottom: -1 }}><Tabs variant="underline" items={vistasDeAca} value={vista ?? ''} onChange={(k) => ir(seccion.key, pestania, k)} style={{ borderBottom: 'none' }} /></div>
                 )}
@@ -407,19 +419,15 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {/* 🔑 Línea con la transferencia en el ERP (Bruno, 30-oct): una sola lista, la de los documentos, con «Mover» adentro. */}
             {vista === 'transferencias' && (transferenciaEnErp ? <MoverYRecibir key={lineaVista} unificada /> : <TransferenciasStock key={marca} />)}
             {vista === 'mover' && (transferenciaEnErp ? <MoverYRecibir key={`${lineaVista}/mover`} unificada abrirMover /> : <MoverYRecibir key={lineaVista} />)}
-            {vista === 'ajustes' && <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : `lista/${lineaVista}`} pedida={aAjustar} />}
-            {vista === 'ingresos' && <RecepcionesStock key={marca} />}
-            {vista === 'comparacion' && <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'diferencias', 'conciliacion')} />}
-            {vista === 'conciliacion' && <ConciliacionDia key={`${marca}/${lineaVista}`} ajustar={ajustarPrenda} />}
-            {vista === 'diferencias' && <DiferenciasDia key={marca} ajustar={ajustarPrenda} />}
+            {itemActual?.junta && vista && (
+              <ListasJuntas key={`${seccion.key}/${pestania}`} etiqueta={itemActual.junta} partes={vistasDeAca} valor={vista} onCambio={(k) => ir(seccion.key, pestania, k)} render={parteJunta} />
+            )}
             {pestania === 'productos' && <ProductosErp />}
             {pestania === 'precios' && <PreciosErp key={marca} />}
-            {vista === 'clientes' && <ClientesErp key={`${marca}/${pedidoN}`} abrir={aAbrir?.tipo === 'cliente' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
-            {vista === 'cuenta-corriente' && <CuentaCorriente key={marca} />}
+            {/* 🎨 Tanda 3: la cuenta corriente es la vista «Con saldo» de Clientes; su dirección vieja abre ahí. */}
+            {(vista === 'clientes' || vista === 'cuenta-corriente') && <ClientesErp key={`${marca}/${pedidoN}/${vista}`} vistaInicial={vista === 'cuenta-corriente' ? 'saldo' : undefined} abrir={aAbrir?.tipo === 'cliente' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
             {pestania === 'proveedores' && <ProveedoresErp key={marca} />}
             {vista === 'reglas' && <ReglasComerciales key={`${marca}/${lineaVista}`} ir={irAPieza} />}
-            {vista === 'rutas' && <RutasCobro key={`${marca}/${lineaVista}`} ir={irAPieza} />}
-            {vista === 'cuentas' && <CuentasErp key={marca} ir={irAPieza} />}
             {vista === 'redondeo' && <Redondeo key={`${marca}/${lineaVista}`} />}
             {pestania === 'estructura' && <EstructuraErp key={marca} />}
           </div>

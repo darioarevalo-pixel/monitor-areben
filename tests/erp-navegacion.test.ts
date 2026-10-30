@@ -35,6 +35,20 @@ describe('ERP › menú y direcciones', () => {
     }
   })
 
+  it('🎨 tanda 3 (30-oct): Ingresos y ajustes, Diferencias y Cuentas son UNA pantalla con filtro; Cuenta corriente es «Con saldo» de Clientes', () => {
+    const item = (sec: string, p: string) => SECCIONES_ERP.find((s) => s.key === sec)!.pestanias.find((x) => x.key === p)!
+    expect(item('stock', 'ajustes').junta).toBe('Tipo')
+    expect(item('stock', 'diferencias').junta).toBe('Contra qué')
+    expect(item('configuracion', 'cuentas').junta).toBe('Qué lista')
+    // Las direcciones de cada opción del filtro siguen abriendo esa opción.
+    expect(resolverRutaErp(['stock', 'ajustes', 'ingresos'])).toMatchObject({ vista: 'ingresos', valida: true })
+    expect(resolverRutaErp(['configuracion', 'cuentas', 'rutas'])).toMatchObject({ vista: 'rutas', valida: true })
+    // Cuenta corriente ⛔ es pestaña: queda oculta (la dirección vieja abre Clientes en «Con saldo»).
+    const cc = item('clientes', 'clientes').vistas!.find((v) => v.key === 'cuenta-corriente')!
+    expect(cc).toMatchObject({ label: 'Cuenta corriente', oculta: true })
+    expect(resolverRutaErp(['clientes', 'cuenta-corriente'])).toMatchObject({ pestania: 'clientes', vista: 'cuenta-corriente', valida: false })
+  })
+
   it('las secciones del diseño, en su orden', () => {
     expect(SECCIONES_ERP.map((s) => s.titulo)).toEqual(['Inicio', 'Ventas', 'Stock', 'Productos y precios', 'Clientes y proveedores', 'Configuración'])
   })

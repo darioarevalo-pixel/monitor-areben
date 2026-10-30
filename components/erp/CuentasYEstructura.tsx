@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import type { AlContar } from './ListasJuntas'
 import { Button, EmptyState, Notice, Select, color, font, space, weight } from '@/components/ui'
 import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { BuscadorLista, ChipEstado, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
@@ -39,7 +40,7 @@ function useEstructura(marca: MarcaErp) {
   return { datos: datos?.marca === marca ? datos : null, error, setError }
 }
 
-export function CuentasErp({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {
+export function CuentasErp({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => void; alContar?: AlContar }) {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const { datos, error, setError } = useEstructura(marca)
@@ -51,6 +52,8 @@ export function CuentasErp({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {
   const todas = useMemo(() => (datos ? armarCuentas(datos) : []), [datos])
   const base = useMemo(() => filtrarCuentas(todas, { vista: '', q, titular, tipo }), [todas, q, titular, tipo])
   const conteo = useMemo(() => contarVistasCuentas(base), [base])
+  // Pantalla junta (`ListasJuntas`): el número de su opción es el de la vista con la que abre.
+  useEffect(() => { alContar?.(datos ? conteo.activas : null) }, [alContar, datos, conteo])
   const filas = useMemo(() => filtrarCuentas(base, { vista }), [base, vista])
   const titulares = [...new Set(todas.map((f) => f.titularClave))].filter(Boolean).sort()
   const tipos = [...new Set(todas.map((f) => f.tipoClave))].filter(Boolean).sort()

@@ -42,7 +42,8 @@ const COLUMNAS = columnasDe()
 const MOVIL: Record<string, MovilColumna> = { c: 'titulo', saldo: 'dato', linea: 'chico', dias: 'chico', estado: 'chico' }
 const n = (x: number) => x.toLocaleString('es-AR')
 
-export function CuentaCorriente() {
+/** 🎨 Tanda 3 (30-oct): ⛔ es pestaña aparte: es la vista «Con saldo» de Clientes (`embebida`), que muestra su número (`alContar`). */
+export function CuentaCorriente({ embebida = false, alContar }: { embebida?: boolean; alContar?: (n: number | null) => void } = {}) {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   // Las cuentas de la tienda del menú: mirando Stunned sumaba los saldos de Zattia (Bruno, 30-oct).
@@ -77,6 +78,8 @@ export function CuentaCorriente() {
   const conteo = useMemo(() => contarVistas(base), [base])
   const filas: FilaCuenta[] = useMemo(() => ordenar(filtrar(base, { vista }), orden), [base, vista, orden])
   const res = useMemo(() => resumen(base), [base])
+  // El número de «Con saldo» en Clientes: el de la vista con la que abre esta lista (el que daba la pantalla de antes).
+  useEffect(() => { alContar?.(cargando ? null : conteo.saldo) }, [alContar, cargando, conteo])
   // Ya llega UNA línea (la del menú): la columna «Línea» ⛔ hace falta.
   const variasLineas = false
 
@@ -125,7 +128,7 @@ export function CuentaCorriente() {
   const libro = prueba ? 'de prueba' : 'reales'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Un solo saldo por cliente: lo que deben sus ventas a cuenta, menos lo que tiene a favor.</p>
+      {!embebida && <p style={{ margin: 0, color: color.mut }}>Un solo saldo por cliente: lo que deben sus ventas a cuenta, menos lo que tiene a favor.</p>}
       {datos && datos.clientesErp === 0 && (
         <Notice tone="neutral">Esta marca todavía no tiene clientes en el ERP: la cuenta corriente empieza cuando se le venda a cuenta a un cliente desde el ERP.</Notice>
       )}

@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import type { AlContar } from './ListasJuntas'
 import { Button, EmptyState, MenuAcciones, Notice, Select, color, font, space, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
@@ -46,7 +47,7 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'paso', titulo: 'Qué pasó', ancho: 'minmax(220px, 1.6fr)', movil: 'chico' },
 ]
 
-export function DiferenciasDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => void }) {
+export function DiferenciasDia({ ajustar, alContar }: { ajustar: (p: PrendaAAjustar) => void; alContar?: AlContar }) {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const tienda = useTiendaErp()
@@ -91,6 +92,8 @@ export function DiferenciasDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => vo
     return !t ? todas : todas.filter((f) => normal(prendaDe(f)).includes(t))
   }, [todas, q])
   const conteo = useMemo(() => Object.fromEntries(vistas.map(([k]) => [k, buscadas.filter((f) => (k === 'todas' ? f.vista !== SOBRE : f.vista === k)).length])), [vistas, buscadas])
+  // Pantalla junta (`ListasJuntas`): el número de su opción es el de la vista con la que abre.
+  useEffect(() => { alContar?.(cargando || !datos ? null : conteo.todas) }, [alContar, cargando, datos, conteo])
   const enVista = vistas.some(([k]) => k === vista) ? vista : 'todas'
   const filas = buscadas.filter((f) => (enVista === 'todas' ? f.vista !== SOBRE : f.vista === enVista))
 

@@ -14,6 +14,7 @@
 import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import type { AlContar } from '../ListasJuntas'
 import { Button, EmptyState, Notice, color, font, space } from '@/components/ui'
 import type { Tone } from '@/components/ui/tokens'
 import { ListaTrabajo, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
@@ -53,7 +54,7 @@ function bajarCsv(filas: FilaComparacion[], marca: MarcaErp) {
   URL.revokeObjectURL(url)
 }
 
-export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: PrendaAAjustar) => void; irAConciliacion: () => void }) {
+export function ComparacionStock({ ajustar, irAConciliacion, alContar }: { ajustar: (p: PrendaAAjustar) => void; irAConciliacion: () => void; alContar?: AlContar }) {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const usuario = perfil?.name ?? null
@@ -86,6 +87,8 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
 
   const base = useMemo(() => filtrar(datos?.filas ?? [], { q, tienda }), [datos, q, tienda])
   const conteo = useMemo(() => contarVistas(base), [base])
+  // Pantalla junta (`ListasJuntas`): el número de su opción es el de la vista con la que abre.
+  useEffect(() => { alContar?.(cargando ? null : conteo.no) }, [alContar, cargando, conteo])
   const enVista = useMemo(() => filtrar(base, { vista }), [base, vista])
   const filas: FilaComparacion[] = useMemo(() => ordenar(enVista, orden), [enVista, orden])
   const res = useMemo(() => resumen(base), [base])

@@ -31,6 +31,7 @@ const MOVIMIENTOS = [armarMovimiento({
 }, N) as FilaMovimiento]
 
 vi.mock('@/lib/erp/cliente', () => ({
+  leerCuentasCorrientes: async () => ({ hoy: '2026-10-19', prueba: true, cuentas: [], clientesErp: 0, otroLibro: 0 }),
   leerListaDeClientes: async () => ({ filas: CLIENTES, gnHasta: '2026-10-19', clientesErp: 0, cuentaLista: true, porNombre: false }),
   leerListaDeProductos: async () => ({ filas: PRODUCTOS, libroHasta: '2026-10-19T16:00:00Z', pedidosLeidosEn: null, tnLeidaEn: '2026-10-19T15:00:00Z' }),
   leerMovimientos: async (_m: string, desde: string, hasta: string) => ({ filas: MOVIMIENTOS, desde, hasta, cortado: false, libroHasta: '2026-10-19T16:00:00Z' }),

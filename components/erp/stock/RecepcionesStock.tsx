@@ -12,6 +12,7 @@ import { useTiendaErp } from '@/lib/erp/linea-erp'
 import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import type { AlContar } from '../ListasJuntas'
 import { Button, EmptyState, MenuAcciones, Notice, color, font, space, weight, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
@@ -52,7 +53,7 @@ function bajarCsv(filas: FilaRecepcion[], marca: string) {
   URL.revokeObjectURL(url)
 }
 
-export function RecepcionesStock() {
+export function RecepcionesStock({ alContar }: { alContar?: AlContar } = {}) {
   const { marca: delShell, perfil } = useSesion()
   const marca = delShell === 'bdi' ? 'bdi' : 'zattia'
   // Las órdenes de la tienda del menú: mirando Stunned, ⛔ las de Zattia (Bruno, 30-oct).
@@ -84,6 +85,8 @@ export function RecepcionesStock() {
   const mes = (datos?.hoy ?? '').slice(0, 7)
   const base = useMemo(() => filtrar(datos?.filas ?? [], { q }), [datos, q])
   const conteo = useMemo(() => contarVistas(base, mes), [base, mes])
+  // Pantalla junta (`ListasJuntas`): el número de su opción es el de la vista con la que abre.
+  useEffect(() => { alContar?.(cargando ? null : conteo.todas) }, [alContar, cargando, conteo])
   const enVista = useMemo(() => filtrar(base, { vista, mes }), [base, vista, mes])
   const filas = useMemo(() => ordenar(enVista, orden), [enVista, orden])
   const res = useMemo(() => resumen(datos?.filas ?? [], mes), [datos, mes])

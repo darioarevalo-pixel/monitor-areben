@@ -31,6 +31,7 @@ import { MOTIVOS, baseDe } from '@/lib/erp/ajuste.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import type { PrendaAAjustar } from './stock/StockErp'
 import { deLaTienda, useTiendaErp } from '@/lib/erp/linea-erp'
+import type { AlContar } from './ListasJuntas'
 
 const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
 /** Los motivos que se cargan a mano: el conteo entra solo desde el monitor (⛔ va en el menú). */
@@ -61,7 +62,7 @@ type Borrador = { deposito: string; motivo: string; detalle: string; renglones: 
 type PrendaDeAjuste = { producto: string; talle: string; sku: string | null; barcode?: string | null; nombre: string | null; talleNombre: string | null }
 const renglonDe = (p: PrendaDeAjuste): Renglon => ({ producto: p.producto, talle: p.talle, sku: p.sku, barcode: p.barcode ?? null, nombre: p.nombre, talleNombre: p.talleNombre, porDeposito: null, valor: '' })
 
-export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null } = {}) {
+export function AjustesStock({ pedida = null, alContar }: { pedida?: PrendaAAjustar | null; alContar?: AlContar } = {}) {
   // La del selector del menú (⛔ pestañas de otra marca: Bruno, 28-oct). Cambiarla remonta la pantalla (`key` en `Erp`).
   const linea: LineaErp = useTiendaErp()
   const base = baseDe(linea) as MarcaErp
@@ -88,6 +89,9 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
       .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudieron leer los ajustes.'))
     return () => { vivo = false }
   }, [linea, vuelta])
+
+  // Pantalla junta (`ListasJuntas`): el número de su opción es el de la vista con la que abre.
+  useEffect(() => { alContar?.(datos ? datos.ajustes.length : null) }, [alContar, datos])
 
   const motivo = MOTIVOS_A_MANO.find((m) => m.key === borrador?.motivo) ?? MOTIVOS_A_MANO[0]
 
