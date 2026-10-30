@@ -1196,25 +1196,24 @@ describe('caja · calculadora de billetes (fase B)', () => {
     expect(conteos.intermedios).toEqual([{ total: 1 }])
   })
 
-  it('🪙 cerrar sin cambio (Bruno, 22-oct): les llega el aviso a los admins; con cambio, ⛔ nada', async () => {
+  it('🧾 cada cierre les avisa a los admins cómo fue el turno (Bruno, 30-oct): lo vendido y si cuadró el efectivo', async () => {
     conSesion(CAJERA)
     avisar.mockClear()
-    // Fondo $50.000 ⇒ hacen falta $25.000 en billetes de $1.000 o menos; quedan 4 × $1.000 + $500 = $4.500.
     expect((await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 64500, conteo: CONTEO }))).code).toBe(200)
     expect(avisar).toHaveBeenCalledTimes(1)
     expect(avisar).toHaveBeenCalledWith(['Bruno Arevalo', 'Dario Arevalo'], expect.objectContaining({
-      titulo: '🪙 Zattia: falta cambio en la caja', url: '/caja', tag: `cambio-${TURNO_ID}`,
-      cuerpo: expect.stringContaining('Quedaron $4.500 en billetes de $1.000 o menos; hacen falta $25.000'),
+      titulo: expect.stringContaining('🧾 Zattia'), url: '/caja', tag: `cierre-${TURNO_ID}`,
+      cuerpo: expect.stringContaining('Sobran $14.500 de efectivo'),
     }))
   })
 
-  it('🪙 cerrar con cambio ⇒ ⛔ avisa', async () => {
+  it('🧾 con la caja justa y con cambio, también avisa (⛔ hay aviso de «falta cambio»)', async () => {
     conSesion(CAJERA)
     avisar.mockClear()
-    // 1 × $20.000 + 25 × $1.000 + 10 × $500 = $50.000 = el fondo: queda todo ⇒ $30.000 de cambio.
-    // (Con 2 × $20.000 + 25 × $1.000 el sobre se lleva 15 de $1.000: suma el fondo justo con 2 × $20.000.)
     expect((await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 50000, conteo: { 20000: 1, 1000: 25, 500: 10 } }))).code).toBe(200)
-    expect(avisar).not.toHaveBeenCalled()
+    expect(avisar).toHaveBeenCalledTimes(1)
+    expect(avisar).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ cuerpo: expect.stringContaining('El efectivo cuadró ✓') }))
+    expect(JSON.stringify(avisar.mock.calls)).not.toContain('falta cambio')
   })
 
   it('🔑 los billetes ⛔ se configuran: una lista vieja en la config ⛔ cuenta, el conteo usa los de Argentina (Bruno, 12-oct)', async () => {
