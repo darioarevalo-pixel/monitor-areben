@@ -13,6 +13,16 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## ▶️ NORTE TIENE SU PROPIA COPIA DE «¿ES DE STUNNED?» — 30-oct-2026 (Bruno: «cargalo en los pendientes del monitor»)
+
+La regla que dice de qué línea es cada renglón vendido (SKU que empieza con `STU`; sin SKU, proveedor `STUNNED`) vive en
+**dos lugares**: `skusDe` de `api/_norte.js` (P&L de Norte) y `lib/erp/linea-gn.core.js` (el ERP: Inicio, Clientes,
+Facturación). **Hoy dan lo mismo** ⇒ en pantalla ⛔ cambia nada. 🔴 El riesgo: si la regla cambia (otro prefijo, otra
+excepción) y se toca una sola, **Norte y el ERP muestran ventas de Stunned distintas para el mismo mes, sin avisar** —ya
+pasó con el drop del 7-sep sin SKU: un mes contado como Zattia—. ▶️ Que `_norte.js` use `linea-gn.core.js` (era el plan
+del 30-oct, `~/.claude/plans/yo-haria-una-sola-ethereal-elephant.md`); ⛔ urgente, y **antes de tocar la regla**.
+Oráculo: el P&L de Stunned de un mes en Norte = Inicio › Resultado de Stunned del ERP (mismo período, sin las ventas del ERP).
+
 ## ▶️ META: LO QUE EL MONITOR TODAVÍA ⛔ NO PUEDE HACER — 8-oct-2026 (pedido por Bruno)
 
 🔑 Bruno, 8-oct: *«anotalo como pendiente, y sumemos cosas que no podemos hacer, como cambiar público
