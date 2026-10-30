@@ -12,8 +12,11 @@ const push = vi.fn()
 const replace = vi.fn()
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace }) }))
 const setMarca = vi.fn()
-vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'bdi', perfil: { name: 'bruno', admin: true }, setMarca }) }))
-vi.mock('@/lib/permisos', () => ({ puedeVer: () => true, esAdmin: () => true }))
+// El local (⛔ admin, sólo Zattia) se prueba cambiando estas dos.
+let sesion = { marca: 'bdi', perfil: { name: 'bruno', admin: true } }
+let admin = true
+vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ ...sesion, setMarca }) }))
+vi.mock('@/lib/permisos', () => ({ puedeVer: (_p: unknown, m: string) => admin || m === 'zattia', esAdmin: () => admin }))
 for (const [archivo, nombre] of [['CambioCaja', 'CambioCaja'], ['FacturaCaja', 'FacturaCaja'], ['Facturacion', 'Facturacion'], ['stock/StockErp', 'StockErp'], ['DiferenciasDia', 'DiferenciasDia'], ['ConciliacionDia', 'ConciliacionDia'], ['AjustesStock', 'AjustesStock'], ['PedidosSinPagar', 'PedidosSinPagar'], ['PreciosProducto', 'PreciosProducto'], ['ReglasComerciales', 'ReglasComerciales'], ['RutasCobro', 'RutasCobro'], ['ventas/VentasErp', 'VentasErp']]) {
   vi.doMock(`@/components/erp/${archivo}`, () => ({ [nombre]: () => <div data-pantalla={nombre} /> }))
 }
@@ -21,7 +24,10 @@ for (const [archivo, nombre] of [['CambioCaja', 'CambioCaja'], ['FacturaCaja', '
 let root: Root | null = null
 const div = document.createElement('div')
 document.body.appendChild(div)
-afterEach(() => { act(() => root?.unmount()); root = null; push.mockClear(); replace.mockClear() })
+afterEach(() => {
+  act(() => root?.unmount()); root = null; push.mockClear(); replace.mockClear()
+  sesion = { marca: 'bdi', perfil: { name: 'bruno', admin: true } }; admin = true
+})
 
 async function montar(ruta: string[]) {
   const { Erp } = await import('@/components/erp/Erp')
@@ -74,6 +80,13 @@ describe('ERP › el armazón propio', () => {
     act(() => radios().find((b) => b.textContent === 'Stunned')!.click())
     expect(setMarca).toHaveBeenCalledWith('zattia')
     expect(radios().find((b) => b.textContent === 'Stunned')!.getAttribute('aria-checked')).toBe('false') // la marca de este test sigue siendo bdi
+  })
+  it('el local (⛔ admin) ve SÓLO Stunned: la línea Zattia queda oculta hasta que Zattia pase al ERP (Bruno, 30-oct)', async () => {
+    sesion = { marca: 'zattia', perfil: { name: 'local', admin: false } }; admin = false
+    await montar([])
+    expect(div.querySelectorAll('[aria-label="Marca"] [role="radio"]')).toHaveLength(0) // una sola opción ⇒ sin selector
+    expect(div.querySelector('.erp-movil-marca')?.textContent).toContain('Stunned')
+    expect(div.querySelector('.erp-movil-marca')?.textContent).not.toContain('Zattia')
   })
   it('⌘K y el botón «Buscar» abren el buscador global; «?» los atajos; Esc cierra (🎨 26-oct)', async () => {
     await montar(['ventas', 'ventas'])

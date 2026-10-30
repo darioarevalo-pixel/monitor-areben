@@ -24,7 +24,7 @@ import { leerConfig } from '@/lib/caja/cliente'
 import { usarMarcaCaja } from '@/lib/caja/marca'
 import { CUENTAS } from '@/lib/cuentas'
 import type { Marca } from '@/lib/nav.datos'
-import { puedeVer } from '@/lib/permisos'
+import { esAdmin, puedeVer } from '@/lib/permisos'
 import { CambioCaja } from './CambioCaja'
 import { FacturaCaja } from './FacturaCaja'
 import { Facturacion } from './Facturacion'
@@ -204,7 +204,9 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   // Selector BDI · Zattia · Stunned (diseño §9). 🔴 Stunned no es una `Marca`: es marca zattia + línea `stunned` (`docs/lineas.md`).
   const [linea, setLineaEstado] = useState<LineaErp>(lineaElegida)
   const setLinea = (l: LineaErp) => { elegirLinea(l); setLineaEstado(l) }
-  const lineaVista: LineaErp = marca === 'zattia' ? (linea === 'stunned' ? 'stunned' : 'zattia') : ''
+  // 🎯 Bruno 30-oct: la línea Zattia queda oculta para el local (⛔ admin) hasta que Zattia pase al ERP ⇒ ven sólo Stunned.
+  const soloStunned = !esAdmin(perfil)
+  const lineaVista: LineaErp = marca === 'zattia' ? (soloStunned || linea === 'stunned' ? 'stunned' : 'zattia') : ''
   // 🔑 El cartel de «modo paralelo» era fijo: después del corte de Stunned (`CAJA_STUNNED_ERP=1`) seguiría diciendo que GN sirve.
   // Si la configuración no se puede leer queda el texto de siempre (el prudente).
   const [stunnedReal, setStunnedReal] = useState(false)
@@ -217,7 +219,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   }, [lineaVista])
   // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
   const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia', lineaVista)
-  const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : [{ key: 'zattia', titulo: 'Zattia' }, { key: 'stunned', titulo: 'Stunned' }])
+  const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : (soloStunned ? [] : [{ key: 'zattia', titulo: 'Zattia' } as Opcion]).concat({ key: 'stunned', titulo: 'Stunned' }))
   const opcionActiva = marca === 'bdi' ? 'bdi' : lineaVista === 'stunned' ? 'stunned' : 'zattia'
   const elegirOpcion = (k: 'bdi' | 'zattia' | 'stunned') => {
     if (k === 'bdi') { setMarca('bdi'); return }
