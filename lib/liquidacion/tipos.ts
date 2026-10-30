@@ -251,6 +251,11 @@ export interface AplicacionItem {
   precioEscrito?: number | null
   variantesEscritas: number | null
   categoriaSaleAgregada: boolean
+  /**
+   * Stunned: lo pedido al ERP que Tienda Nube todavía ⛔ confirmó (`lib/liquidacion/erp.core.js`). Mientras esté, el
+   * ítem sigue en su estado de antes; `releer-erp` lo pasa cuando la cola del motor relee TN y dice que quedó.
+   */
+  erp?: { modo: 'poner' | 'sacar'; valor: number; quiere: number | null; pedidoEn: string; por: string | null } | null
 }
 
 export interface LiquidacionItem {

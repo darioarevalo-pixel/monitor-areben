@@ -61,6 +61,9 @@ import { TIPOS_CAMPANIA, tipoDe } from '../lib/liquidacion/tipo.core.js';
 // Marketing, y dos definiciones de «firme» que se separen dejan a una de las dos etiquetando lo que
 // la otra todavía no aprobó.
 import { ESTADOS_VISIBLES, esFirme } from '../lib/precios/core.core.js';
+import { lineaDelProducto } from '../lib/erp/precio.core.js';
+import { estadoDePedidos, vaPorErp } from '../lib/liquidacion/erp.core.js';
+import { eventosDePrecio, lineasDe, pedirAlErp } from './_liquidacion-erp.js';
 // El diseño de la etiqueta de la campaña: qué va debajo del precio y de qué tamaño. Lista blanca,
 // porque esto se DIBUJA en un PDF y un objeto crudo del navegador se ve recién en la Zebra.
 import { etiquetaDeCampania } from '../lib/liquidacion/etiqueta.core.js';
@@ -300,6 +303,14 @@ export function itemDelBody(raw) {
       precioEscrito: a.precioEscrito == null ? null : num(a.precioEscrito),
       variantesEscritas: a.variantesEscritas == null ? null : num(a.variantesEscritas),
       categoriaSaleAgregada: !!a.categoriaSaleAgregada,
+      // Stunned: lo pedido al ERP que TN todavía ⛔ confirmó (`lib/liquidacion/erp.core.js`). Sin esto `aplicar` lo borra.
+      erp: a.erp && a.erp.pedidoEn ? {
+        modo: a.erp.modo === 'sacar' ? 'sacar' : 'poner',
+        valor: num(a.erp.valor),
+        quiere: a.erp.quiere == null ? null : num(a.erp.quiere),
+        pedidoEn: String(a.erp.pedidoEn),
+        por: txtOrNull(a.erp.por),
+      } : null,
     },
   };
 }
@@ -1243,6 +1254,56 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, ventasSync: ahora, truncado, ventas: conteo.ventas, detalles: conteo.detalles, clientes: conteo.clientes });
     }
 
+    // ── Stunned: lo pedido al ERP, ¿ya está en Tienda Nube? ─────────────────────────────────────────────────────────
+    // Lee la cola del motor: el envío que se tomó DESPUÉS del pedido relee TN y dice, por producto, si quedó. Recién con
+    // eso se anota en la bitácora y el ítem pasa de estado — lo mismo que hace `aplicar` con GN después de mirar lo que
+    // devolvió el PATCH. Un pedido aceptado ⛔ es un precio puesto.
+    if (b.action === 'releer-erp') {
+      if (!puede.aplicar) {
+        return res.status(403).json({ error: 'Releer lo pedido al ERP pide el permiso «Puede escribir los precios en Gestión Nube».' });
+      }
+      const { data: filas, error: e0 } = await supabase.from('liquidacion_items')
+        .select('pid, estado, datos').eq('store', store).eq('liq_id', id).in('estado', ['confirmado', 'aplicado']);
+      if (e0) throw new Error(e0.message);
+      const pedidos = (filas || [])
+        .map((f) => ({ fila: f, item: itemDelBody({ ...(f.datos || {}), pid: f.pid, estado: f.estado }) }))
+        .filter((x) => x.item && x.item.aplicacion.erp);
+      if (!pedidos.length) return res.status(200).json({ ok: true, quedaron: [], esperando: [], fallos: [] });
+      const estados = estadoDePedidos(pedidos.map((x) => ({ pid: x.item.pid, pedidoEn: x.item.aplicacion.erp.pedidoEn, quiere: x.item.aplicacion.erp.quiere })), await eventosDePrecio());
+      const { data: cab, error: eC } = await supabase.from('liquidaciones').select('nombre').eq('store', store).eq('id', id).maybeSingle();
+      if (eC) throw new Error(eC.message);
+      const liqNombre = (cab && cab.nombre) || '';
+      const quedan = estados.filter((e) => e.estado === 'quedo').map((e) => e.pid);
+      const { data: previos, error: eB } = quedan.length
+        ? await supabase.from('liquidacion_bitacora').select('pid, precio_a, cuando').eq('store', store).in('pid', quedan).order('cuando', { ascending: false })
+        : { data: [], error: null };
+      if (eB) throw new Error(eB.message);
+      const ultimoDe = new Map();
+      for (const f of previos || []) if (!ultimoDe.has(f.pid)) ultimoDe.set(f.pid, { precioA: f.precio_a });
+      const quedaron = [];
+      const fallos = estados.filter((e) => e.estado === 'fallo').map((e) => ({ pid: e.pid, error: e.error }));
+      for (const pid of quedan) {
+        const { item } = pedidos.find((x) => x.item.pid === pid);
+        const pedido = item.aplicacion.erp;
+        const { error: eL } = await supabase.from('liquidacion_bitacora').insert([
+          filaBitacora({ store, liqId: id, liqNombre, item, modo: pedido.modo, precioDe: precioAnterior(ultimoDe.get(pid), item.foto.promoPrevia), precioA: pedido.quiere, porQuien: pedido.por || yo, cuando: new Date().toISOString() }),
+        ]);
+        const nuevo = {
+          ...item,
+          estado: pedido.modo === 'poner' ? 'aplicado' : 'confirmado',
+          aplicacion: pedido.modo === 'poner'
+            ? { ...item.aplicacion, erp: null, aplicadoEn: Date.now(), precioEscrito: pedido.valor }
+            : { ...item.aplicacion, erp: null, aplicadoEn: null, precioEscrito: null },
+        };
+        const { error: eU } = await supabase.from('liquidacion_items')
+          .update({ estado: nuevo.estado, datos: nuevo, updated_at: new Date().toISOString() })
+          .eq('store', store).eq('liq_id', id).eq('pid', pid);
+        if (eU) fallos.push({ pid, error: `quedó en Tienda Nube pero no se pudo anotar acá: ${eU.message}` });
+        else quedaron.push(eL ? { pid, avisoBitacora: `no se pudo anotar en la bitácora: ${eL.message}` } : { pid });
+      }
+      return res.status(200).json({ ok: true, quedaron, esperando: estados.filter((e) => e.estado === 'esperando').map((e) => e.pid), fallos });
+    }
+
     if (b.action === 'aplicar') {
       const modo = b.modo === 'sacar' ? 'sacar' : 'poner';
       // A dónde vuelve el precio al sacar. `lista` le saca la oferta; `previa` le devuelve la que
@@ -1254,9 +1315,6 @@ export default async function handler(req, res) {
       if (!puede.aplicar) {
         return res.status(403).json({ error: 'Escribir los precios en Gestión Nube pide el permiso «Puede escribir los precios en Gestión Nube».' });
       }
-      const token = GN_TOKENS[store];
-      if (!token) return res.status(500).json({ error: `Falta el token de Gestión Nube de ${store} en el servidor.` });
-
       const pids = (Array.isArray(b.pids) ? b.pids : []).map(String).filter(Boolean);
       if (!pids.length) return res.status(400).json({ error: 'no vino ningún producto' });
       if (pids.length > TOPE_APLICAR) {
@@ -1285,11 +1343,44 @@ export default async function handler(req, res) {
       const ultimoDe = new Map();
       for (const f of previos || []) if (!ultimoDe.has(f.pid)) ultimoDe.set(f.pid, { precioA: f.precio_a });
 
-      const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' };
       const ahoraMs = Date.now();
       const resultados = [];
 
+      // ── Stunned: por el ERP, ⛔ por GN (Bruno 30-oct, `lib/liquidacion/erp.core.js`). ─────────────────────────────
+      // Se CARGA la oferta en el ERP y se avisa el envío a TN; el ítem queda como estaba, con el pedido anotado, hasta
+      // que `releer-erp` lea en la cola que TN quedó así. La bitácora y el estado, recién ahí.
+      const porGn = [];
+      const porErp = [];
+      const lineas = store === 'zattia' ? await lineasDe(supabase, store, pids, lineaDelProducto) : new Map();
       for (const pid of pids) {
+        const fila = (filas || []).find((f) => String(f.pid) === pid);
+        if (!fila || !vaPorErp(lineas.get(pid))) { porGn.push(pid); continue; }
+        const item = itemDelBody({ ...(fila.datos || {}), pid, estado: fila.estado });
+        if (modo === 'poner' && fila.estado !== 'confirmado') { resultados.push({ pid, ok: false, error: `está en «${fila.estado}», no confirmado` }); continue; }
+        if (modo === 'sacar' && fila.estado !== 'aplicado') { resultados.push({ pid, ok: false, error: `está en «${fila.estado}», no aplicado` }); continue; }
+        porErp.push({ pid, item, precioSale: item.decision.precioSale, promoPrevia: item.foto.promoPrevia });
+      }
+      if (porErp.length) {
+        const r = await pedirAlErp({ liqId: id, liqNombre, modo, destino, usuario: yo, items: porErp });
+        for (const x of r.resultados) {
+          if (!x.ok) { resultados.push({ pid: x.pid, ok: false, error: x.error }); continue; }
+          const { item } = porErp.find((i) => i.pid === x.pid);
+          const nuevo = { ...item, aplicacion: { ...item.aplicacion, erp: { modo, valor: x.valor, quiere: x.quiere, pedidoEn: r.pedidoEn, por: yo } } };
+          const { error: eU } = await supabase.from('liquidacion_items')
+            .update({ datos: nuevo, updated_at: new Date().toISOString() })
+            .eq('store', store).eq('liq_id', id).eq('pid', x.pid);
+          resultados.push(eU
+            ? { pid: x.pid, ok: false, error: `se cargó en el ERP pero no se pudo anotar acá: ${eU.message}` }
+            : { pid: x.pid, ok: true, pendiente: true, precio: x.quiere });
+        }
+      }
+      if (!porGn.length) return res.status(200).json({ ok: true, modo, resultados });
+
+      const token = GN_TOKENS[store];
+      if (!token) return res.status(500).json({ error: `Falta el token de Gestión Nube de ${store} en el servidor.` });
+      const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' };
+
+      for (const pid of porGn) {
         const fila = (filas || []).find((f) => String(f.pid) === pid);
         if (!fila) { resultados.push({ pid, ok: false, error: 'no está en la campaña' }); continue; }
         const item = itemDelBody({ ...(fila.datos || {}), pid, estado: fila.estado });

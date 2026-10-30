@@ -193,6 +193,8 @@ export async function decidirMasivo(store: Marca, liqId: string, items: Liquidac
 export interface ResultadoAplicar {
   pid: string
   ok: boolean
+  /** Stunned: se cargó en el ERP y se pidió el envío a Tienda Nube; queda hecho cuando `releerErp` lo confirme. */
+  pendiente?: boolean
   error?: string
   precio?: number | null
   /**
@@ -225,6 +227,22 @@ export async function aplicarPrecios(
     modo === 'poner' ? 'No se pudieron escribir los precios en Gestión Nube.' : 'No se pudieron sacar las ofertas en Gestión Nube.',
   )
   return (d.resultados || []) as ResultadoAplicar[]
+}
+
+/** Lo que dijo la cola del ERP de lo pedido para Stunned: lo que ya está en Tienda Nube, lo que falta y lo que falló. */
+export interface ResultadoReleerErp {
+  quedaron: { pid: string; avisoBitacora?: string }[]
+  esperando: string[]
+  fallos: { pid: string; error: string }[]
+}
+
+/**
+ * Stunned: ¿lo pedido al ERP ya está en Tienda Nube? El servidor lee la RELECTURA de TN que hizo la cola del motor y,
+ * a los que quedaron, los anota en la bitácora y les cambia el estado (`releer-erp`).
+ */
+export async function releerErp(store: Marca, liqId: string): Promise<ResultadoReleerErp> {
+  const d = await postear({ store, action: 'releer-erp', id: liqId }, 'No se pudo leer lo pedido al ERP.')
+  return { quedaron: d.quedaron || [], esperando: d.esperando || [], fallos: d.fallos || [] }
 }
 
 /** Lo que devolvió una sincronizada de ventas. */

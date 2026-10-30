@@ -58,9 +58,10 @@ import {
 } from '@/lib/liquidacion'
 import {
   aplicarPrecios, borrarCampania, cambiarEstadoCampania, compartirCampania, crearCampania,
-  decidirMasivo, estadoItem, guardarItem, leerCampanias, leerItems, quitarItem, renombrarCampania,
+  decidirMasivo, estadoItem, guardarItem, leerCampanias, leerItems, quitarItem, releerErp, renombrarCampania,
   revisarItem, type Permisos,
 } from '@/lib/liquidacion/persistencia'
+import { esStunned } from '@/lib/lineas'
 import { ponerPuenteAsignar } from '@/lib/tncat/puente'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useDestacados } from '@/components/destacados/useDestacados'
@@ -120,6 +121,12 @@ const ROTULO_ITEM: Record<EstadoItem, { label: string; tono: Tone }> = {
  * no hay una regla de negocio escondida, hay un renglón para no tipear seis números de cero.
  */
 const MESAS_SUGERIDAS = '5900, 9900, 14900, 19900, 24900, 29900'
+
+/**
+ * Cuánto espera la pantalla a que Tienda Nube muestre lo pedido al ERP (Stunned). La cola del motor corre cada minuto y
+ * escribe de a 40 variantes por vuelta: el drop 2 (13 productos × 4 talles) son dos vueltas.
+ */
+const ESPERA_TN = 6 * 60_000
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 function fechaCorta(f: string | null): string {
@@ -641,8 +648,10 @@ function DetalleCampania({
    * contra el tope de GN. Un spinner mudo durante seis minutos se lee como "se colgó", y quien mira
    * recarga la página en el medio.
    */
-  const [aplicando, setAplicando] = useState<{ modo: 'poner' | 'sacar'; hechos: number; total: number } | null>(null)
+  const [aplicando, setAplicando] = useState<{ modo: 'poner' | 'sacar'; hechos: number; total: number; esperandoTN?: boolean } | null>(null)
   const [fallidos, setFallidos] = useState<{ pid: string; error: string }[]>([])
+  // Stunned: cuántos esperan que Tienda Nube muestre lo pedido al ERP (null = ninguno o sin leer).
+  const [esperandoTN, setEsperandoTN] = useState<number | null>(null)
   /** Los masivos que sólo tocan nuestra base (confirmar todos, recalcular precios). */
   const [ocupadoMasivo, setOcupadoMasivo] = useState(false)
 
@@ -662,6 +671,32 @@ function DetalleCampania({
       await cargar()
     })()
   }, [cargar])
+
+  /**
+   * Stunned va por el ERP (`lib/liquidacion/erp.core.js`): «Aplicar» carga la oferta y pide el envío a Tienda Nube, y el
+   * producto queda hecho recién cuando la cola del motor relee TN y dice que quedó. Esto pregunta. Devuelve cuántos
+   * siguen esperando; los que fallaron van a la lista de abajo.
+   */
+  const releerTN = useCallback(async () => {
+    const r = await releerErp(marca, campania.id)
+    if (r.quedaron.length) await cargar()
+    if (r.fallos.length) setFallidos((prev) => [...prev.filter((f) => !r.fallos.some((x) => x.pid === f.pid)), ...r.fallos])
+    setEsperandoTN(r.esperando.length || null)
+    return r
+  }, [marca, campania.id, cargar])
+
+  // Al abrir una campaña con pedidos al ERP sin confirmar (se cerró la pestaña esperando), se pregunta una vez.
+  const hayPedidosErp = (items || []).some((i) => i.aplicacion.erp)
+  useEffect(() => {
+    if (!hayPedidosErp || !puede.aplicar) return
+    void (async () => {
+      try { await releerTN() } catch { /* el cartel de abajo ofrece releer a mano */ }
+    })()
+  }, [hayPedidosErp, puede.aplicar, releerTN])
+
+  // A dónde escribe «Aplicar»: Stunned ya ⛔ pasa por Gestión Nube (corte del 28-oct).
+  const porErp = (items || []).some((i) => esStunned(i.foto.sku))
+  const destinoTienda = porErp ? 'Tienda Nube' : 'Gestión Nube'
 
   // Qué clase de cambio de precio es: manda los rótulos y apaga los avisos que no aplican.
   const tipo = tipoDe(campania)
@@ -1057,7 +1092,7 @@ function DetalleCampania({
       toast.error(modo === 'poner' ? 'No hay precios confirmados para escribir.' : 'No hay ofertas puestas para sacar.')
       return
     }
-    const minutos = Math.max(1, Math.round((pids.length * 1.3) / 60))
+    const minutos = porErp ? 3 : Math.max(1, Math.round((pids.length * 1.3) / 60))
     const cuanto = minutos === 1 ? 'menos de un minuto' : `unos ${minutos} minutos`
     // Cuántos de los que se van a sacar tenían una oferta ANTES de la campaña. Es el número que
     // decide entre las dos salidas, y por eso va en el cartel: sin él, «volver a precio de lista»
@@ -1067,10 +1102,12 @@ function DetalleCampania({
       : 0
     const ok = await confirmar({
       titulo: modo === 'poner'
-        ? 'Escribir los precios en Gestión Nube'
+        ? `Escribir los precios en ${destinoTienda}`
         : destino === 'previa' ? 'Volver a la oferta que tenían' : 'Dejar todo a precio de lista',
       mensaje: modo === 'poner'
-        ? `Se le va a escribir el precio de sale a ${pids.length} ${pids.length === 1 ? 'producto' : 'productos'} en Gestión Nube, y de ahí pasa a la tienda. Tarda ${cuanto}: no cierres la pestaña. Si se corta, se puede retomar.`
+        ? porErp
+          ? `Se le carga el precio de sale a ${pids.length} ${pids.length === 1 ? 'producto' : 'productos'} en el ERP, y el ERP lo pone en Tienda Nube. Queda hecho cuando Tienda Nube lo muestra: tarda ${cuanto}. Si cerrás la pestaña, se confirma al volver a abrir la campaña.`
+          : `Se le va a escribir el precio de sale a ${pids.length} ${pids.length === 1 ? 'producto' : 'productos'} en Gestión Nube, y de ahí pasa a la tienda. Tarda ${cuanto}: no cierres la pestaña. Si se corta, se puede retomar.`
         : destino === 'previa'
           ? `A los ${conPrevia} que ya estaban en oferta cuando entraron a la campaña se les devuelve ESA oferta; los otros ${pids.length - conPrevia} quedan a precio de lista, que es como estaban. Tarda ${cuanto}.`
           : `${pids.length} ${pids.length === 1 ? 'producto vuelve' : 'productos vuelven'} a su precio de lista.${conPrevia > 0 ? ` ⚠️ Ojo: ${conPrevia} de ellos YA estaban en oferta antes del sale, así que a esos les vas a subir el precio por encima de donde estaban. Para eso está «Volver a la oferta que tenían».` : ''} Tarda ${cuanto}.`,
@@ -1082,15 +1119,27 @@ function DetalleCampania({
     setFallidos([])
     setAplicando({ modo, hechos: 0, total: pids.length })
     const malos: { pid: string; error: string }[] = []
+    let pendientes = 0
     try {
       for (let i = 0; i < pids.length; i += TOPE_APLICAR) {
         const tanda = pids.slice(i, i + TOPE_APLICAR)
         const res = await aplicarPrecios(marca, campania.id, tanda, modo, destino)
         for (const r of res) if (!r.ok) malos.push({ pid: r.pid, error: r.error || 'no se pudo' })
+        pendientes += res.filter((r) => r.ok && r.pendiente).length
         setFallidos([...malos])
         setAplicando({ modo, hechos: Math.min(i + TOPE_APLICAR, pids.length), total: pids.length })
       }
       await cargar()
+      // Stunned: lo pedido al ERP se da por hecho recién cuando Tienda Nube lo muestra. Se pregunta cada 15 s, hasta
+      // ESPERA_TN; lo que quede sigue esperando y se confirma al volver a abrir la campaña.
+      let esperan = pendientes
+      for (const fin = Date.now() + ESPERA_TN; esperan > 0 && Date.now() < fin;) {
+        setAplicando({ modo, hechos: pendientes - esperan, total: pendientes, esperandoTN: true })
+        await new Promise((r) => setTimeout(r, 15_000))
+        const r = await releerTN()
+        malos.push(...r.fallos)
+        esperan = r.esperando.length
+      }
       /*
        * El estado de la campaña sigue a lo que hay puesto en Gestión Nube, en los dos sentidos.
        *
@@ -1101,7 +1150,7 @@ function DetalleCampania({
        *
        * Si algo falló no se mueve: el estado diría que entraron todos.
        */
-      if (!malos.length) {
+      if (!malos.length && !esperan) {
         const destino = modo === 'poner' ? 'aplicada' : 'en_curso'
         const mover = modo === 'poner' ? campania.estado === 'en_curso' : campania.estado === 'aplicada'
         if (mover) {
@@ -1110,7 +1159,8 @@ function DetalleCampania({
       }
       onCambio()
       if (malos.length) toast.error(`Quedaron ${malos.length} sin ${modo === 'poner' ? 'escribir' : 'sacar'}. Están listados abajo.`)
-      else toast.ok(modo === 'poner' ? `Listo: ${pids.length} ${pids.length === 1 ? 'precio escrito' : 'precios escritos'} en Gestión Nube.` : 'Listo: las ofertas quedaron sacadas.')
+      else if (esperan) toast.error(`Tienda Nube todavía no muestra ${esperan} de ${pendientes}. Se confirman solos al volver a abrir la campaña, o con «Releer Tienda Nube».`)
+      else toast.ok(modo === 'poner' ? `Listo: ${pids.length} ${pids.length === 1 ? 'precio escrito' : 'precios escritos'} en ${destinoTienda}.` : 'Listo: las ofertas quedaron sacadas.')
     } catch (e) {
       // Se corta la tanda, pero lo ya escrito quedó escrito y anotado: por eso se recarga igual.
       await cargar()
@@ -1240,8 +1290,10 @@ function DetalleCampania({
               onClick={() => void aplicar('poner')}
             >
               {aplicando?.modo === 'poner'
-                ? `Escribiendo ${aplicando.hechos} de ${aplicando.total}…`
-                : `Escribir ${porAplicar} ${porAplicar === 1 ? 'precio' : 'precios'} en Gestión Nube`}
+                ? aplicando.esperandoTN
+                  ? `Esperando a Tienda Nube: ${aplicando.hechos} de ${aplicando.total}…`
+                  : `Escribiendo ${aplicando.hechos} de ${aplicando.total}…`
+                : `Escribir ${porAplicar} ${porAplicar === 1 ? 'precio' : 'precios'} en ${destinoTienda}`}
             </Button>
           )}
           {/*
@@ -1255,7 +1307,9 @@ function DetalleCampania({
             <>
               <Button variant="soft" tone="danger" size="sm" disabled={!!aplicando} onClick={() => void aplicar('sacar', 'lista')}>
                 {aplicando?.modo === 'sacar'
-                  ? `Sacando ${aplicando.hechos} de ${aplicando.total}…`
+                  ? aplicando.esperandoTN
+                    ? `Esperando a Tienda Nube: ${aplicando.hechos} de ${aplicando.total}…`
+                    : `Sacando ${aplicando.hechos} de ${aplicando.total}…`
                   : `Sacar ${porSacar} ${porSacar === 1 ? 'oferta' : 'ofertas'}`}
               </Button>
               {conOfertaPrevia > 0 && (
@@ -1333,6 +1387,14 @@ function DetalleCampania({
         una campaña de 260 obliga a revisarlos todos a mano para encontrar cuáles. Con el nombre y el
         motivo, se arreglan esos tres. Quedan a la vista hasta la próxima corrida.
       */}
+      {esperandoTN != null && !aplicando && (
+        <Notice tone="info" style={{ marginBottom: space[4] }}>
+          {esperandoTN === 1 ? 'Un producto espera' : `${esperandoTN} productos esperan`} que Tienda Nube muestre lo pedido al ERP.{' '}
+          <Button variant="ghost" size="sm" onClick={() => void releerTN().catch((e) => toast.error(e instanceof Error ? e.message : 'No se pudo releer.'))}>
+            Releer Tienda Nube
+          </Button>
+        </Notice>
+      )}
       {fallidos.length > 0 && (
         <Notice tone="warning" style={{ marginBottom: space[4] }}>
           <strong>{fallidos.length === 1 ? 'Un producto quedó sin escribir' : `${fallidos.length} productos quedaron sin escribir`}</strong>

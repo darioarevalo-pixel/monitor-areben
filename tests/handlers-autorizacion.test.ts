@@ -271,7 +271,7 @@ describe('_liquidacion · Ventas de Marketing no entra', () => {
 
   it('🔴 tampoco las dos lecturas que hace el Resultado por POST', async () => {
     sesionDe(SOLO_MKT)
-    for (const action of ['ventas-campania', 'stock-campania', 'aplicar', 'crear']) {
+    for (const action of ['ventas-campania', 'stock-campania', 'aplicar', 'releer-erp', 'crear']) {
       const res = await llamar('_liquidacion', conSesion({ method: 'POST', query: { store: 'bdi' }, body: { store: 'bdi', action, liq: 'l1', pids: ['1'] } }))
       expect(res.code, `action «${action}»`).toBe(403)
     }
@@ -312,7 +312,7 @@ describe('_precios · la puerta de Marketing, y la que sigue cerrada', () => {
 
   it('🔴 y tampoco por POST', async () => {
     sesionDe(SOLO_PRECIOS)
-    for (const action of ['crear', 'guardar-item', 'compartir', 'aplicar']) {
+    for (const action of ['crear', 'guardar-item', 'compartir', 'aplicar', 'releer-erp']) {
       const res = await llamar('_liquidacion', conSesion({ method: 'POST', query: { store: 'bdi' }, body: { store: 'bdi', action, liq: 'l1', pids: ['1'] } }))
       expect(res.code, `action «${action}»`).toBe(403)
     }
@@ -404,7 +404,7 @@ describe('_liquidacion · la llave de Etiquetas escribe una sola cosa', () => {
     // `stock-campania` y `ventas-campania` son lecturas, pero entran por el POST y contestan datos
     // de la campaña: la llave de Etiquetas no las abre. Van en la lista por lo mismo que las otras
     // —la garantía se ejerce, no se argumenta—, y porque las dos viven ARRIBA del guard del id.
-    for (const action of ['crear', 'borrar', 'guardar-item', 'revisar', 'decidir-masivo', 'sumar-items', 'quitar-item', 'ventas-campania', 'stock-campania', 'reposicion-campania', 'compartir']) {
+    for (const action of ['crear', 'borrar', 'guardar-item', 'revisar', 'decidir-masivo', 'sumar-items', 'quitar-item', 'ventas-campania', 'stock-campania', 'reposicion-campania', 'compartir', 'releer-erp']) {
       sesionDe(SOLO_ETIQUETAS)
       const res = await llamar('_liquidacion', postDe({ action, liq: 'l1' }))
       expect(res.code, `action «${action}» no puede entrar con la llave de Etiquetas`).toBe(403)
