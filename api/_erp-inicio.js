@@ -19,7 +19,10 @@ const MARCAS = ['bdi', 'zattia']
 
 /**
  * 🔑 De UNA línea (Bruno, 30-oct): en Zattia, cada venta de GN pesa en cada línea según la plata de sus renglones (como
- * `pylPorLinea` del P&L de Norte): una mixta reparte vendido y costo, y cuenta como venta en las dos. La que ⛔ tiene
+ * `pylPorLinea` del P&L de Norte): una mixta reparte vendido y costo, y cuenta como venta en las dos. 🔴 El peso PUEDE
+ * salir de [0, 1] —un renglón negativo, el cambio que devuelve Zattia y se lleva Stunned (Nº 30631: STU $19.290 de $4.800 de
+ * renglones)— y la otra línea queda NEGATIVA: se la cuenta igual (`<> 0`, como Norte). Con `> 0` se tiraba y la venta salía
+ * inflada: oct-2026, Zattia + Stunned daban $12.980,63 más que GN (`oraculos/sumas-por-linea-lectura.mjs`). La que ⛔ tiene
  * renglones es de Zattia. Stunned suma además sus ventas del ERP (las que GN ya ⛔ tiene, desde el corte) con la llave
  * `LECTURAS_STUNNED_ERP`, igual que memo y Norte. Devuelve la tabla `vl(date_sale, channel, total_price, total_cost)` del
  * período `$1..$2`, para el `from` de cada suma.
@@ -37,7 +40,7 @@ export function ventasDeLinea(linea, env = process.env) {
           from venta_detalles vd join ventas x on x.id = vd.sale_id and x.date_sale::date between $1::date and $2::date
           left join productos p on p.id = vd.product_id group by vd.sale_id
       ) lp on lp.sale_id = v.id
-     where ${periodo} and ${w} > 0`
+     where ${periodo} and ${w} <> 0`
   const erp = linea === 'stunned' && lecturasStunnedErp(env)
     ? `\n    union all\n    select e.date_sale::date, e.channel, e.total_price, e.total_cost from (${SQL_VENTAS}) e`
     : ''

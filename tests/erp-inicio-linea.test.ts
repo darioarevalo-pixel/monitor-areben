@@ -10,6 +10,16 @@ describe('Inicio › Resultado de UNA línea (Bruno, 30-oct)', () => {
     expect(z).not.toContain('union all')
   })
 
+  it('🔴 el peso puede salir de [0, 1] (un renglón negativo) y la otra línea queda NEGATIVA: se cuenta igual, como Norte', () => {
+    // Nº 30631 (oct-2026): STU $19.290 y Zattia −$14.490. Con `> 0` se tiraba la parte de Zattia y la venta salía inflada:
+    // Zattia + Stunned daban $12.980,63 más que GN (probado en un Postgres local: con `<> 0` la suma cierra al peso).
+    for (const l of ['zattia', 'stunned']) {
+      const q = ventasDeLinea(l, {})
+      expect(q).toMatch(/ <> 0\) vl$/)
+      expect(q).not.toMatch(/ > 0\) vl$/)
+    }
+  })
+
   it('Stunned suma sus ventas del ERP SÓLO con la llave LECTURAS_STUNNED_ERP (como memo y Norte); Zattia nunca', () => {
     expect(ventasDeLinea('stunned', { LECTURAS_STUNNED_ERP: '1' })).toContain('union all')
     expect(ventasDeLinea('stunned', {})).not.toContain('union all')
