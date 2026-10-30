@@ -135,7 +135,7 @@ export type MapaPromo = Record<string, Promo>
 export type LineaEtiqueta = { texto: string; tam: 'titulo' | 'subtitulo' | 'normal' | 'chico'; bold: boolean }
 
 /** Un elemento de la secuencia de impresión: una variante, un separador (null) o la etiqueta de formas de pago. */
-export type LabelItem = VarianteEti | null | { __fp: true }
+export type LabelItem = VarianteEti | null | { __fp: true; lineas?: LineaEtiqueta[] }
 
 /** Config del PDF libre. */
 export type LibreConfig = {

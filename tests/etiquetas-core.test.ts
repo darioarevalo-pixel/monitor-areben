@@ -6,6 +6,7 @@ import {
   categoriasDeCampania,
   filtrarProductosDeCampania,
   filtrarVariantes,
+  formasDePagoDePrenda,
   hermanasDe,
   nombrarSinPrecio,
   partirPorPrecio,
@@ -434,5 +435,23 @@ describe('productosDeCampania · la lista de la pestaña de feria', () => {
     const lista = productosDeCampania(PORPID, ESPEJO)
     expect(filtrarProductosDeCampania(lista, ESPEJO, 'RMI0056NG')).toEqual([])
     expect(filtrarProductosDeCampania(lista, ESPEJO, '')).toHaveLength(3)
+  })
+})
+
+describe('formasDePagoDePrenda (Cyber, 30-oct-2026)', () => {
+  it('dice los montos de ESA prenda: tarjeta = efectivo ÷ 0,9 al 90, como CYBER MONDAY ONLINE', () => {
+    const l = formasDePagoDePrenda(19990, { pctEfectivo: 10, cuotas: 3 })
+    expect(l.map((x) => x.texto)).toEqual([
+      'FORMAS DE PAGO',
+      'Efectivo o transf. $19.990',
+      'Tarjeta $22.190',
+      '3 cuotas sin interés de $7.397',
+    ])
+    // El mismo dibujo que la etiqueta de siempre: título en negrita, el resto normal.
+    expect(l.map((x) => [x.tam, x.bold])).toEqual([['titulo', true], ['normal', false], ['normal', false], ['normal', false]])
+  })
+  it('con 0% la tarjeta es el mismo precio, y con 1 cuota ⛔ hay renglón de cuotas', () => {
+    const l = formasDePagoDePrenda(9990, { pctEfectivo: 0, cuotas: 1 })
+    expect(l.map((x) => x.texto)).toEqual(['FORMAS DE PAGO', 'Efectivo o transf. $9.990', 'Tarjeta $9.990'])
   })
 })

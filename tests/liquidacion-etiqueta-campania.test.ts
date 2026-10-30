@@ -18,7 +18,7 @@ describe('etiquetaDeCampania', () => {
     // 🔴 El caso que ⛔ no puede fallar: las campañas que ya existen no tienen el campo, y tienen
     // que seguir sacando la etiqueta que sacaban antes de que esto existiera.
     for (const vacio of [undefined, null, {}]) {
-      expect(etiquetaDeCampania(vacio)).toEqual({ abajo: [], tamPrecio: TAM_PRECIO_DEFAULT, tamTitulo: 'titulo' })
+      expect(etiquetaDeCampania(vacio)).toEqual({ abajo: [], tamPrecio: TAM_PRECIO_DEFAULT, tamTitulo: 'titulo', porPrenda: false, pctEfectivo: 10, cuotas: 3 })
       expect(etiquetaPersonalizada(vacio)).toBe(false)
     }
   })
@@ -68,5 +68,22 @@ describe('etiquetaDeCampania', () => {
     expect(etiquetaPersonalizada({ tamTitulo: 'normal' })).toBe(true)
     // Escribir el default no es personalizar: un renglón vacío se descarta y el resto queda igual.
     expect(etiquetaPersonalizada({ abajo: [{ texto: '  ', tam: 'chico', bold: false }], tamPrecio: TAM_PRECIO_DEFAULT })).toBe(false)
+  })
+})
+
+describe('etiqueta por prenda (Cyber, 30-oct-2026)', () => {
+  it('apagada por default: una campaña vieja sigue con la etiqueta de mesa', () => {
+    expect(etiquetaDeCampania({}).porPrenda).toBe(false)
+    expect(etiquetaPersonalizada({})).toBe(false)
+    expect(etiquetaPersonalizada({ porPrenda: true })).toBe(true)
+  })
+  it('el % acepta 0 (efectivo = tarjeta) y se acota a 0-50; las cuotas a 1-12', () => {
+    expect(etiquetaDeCampania({ pctEfectivo: 0 }).pctEfectivo).toBe(0)
+    expect(etiquetaDeCampania({ pctEfectivo: 15 }).pctEfectivo).toBe(15)
+    expect(etiquetaDeCampania({ pctEfectivo: 90 }).pctEfectivo).toBe(50)
+    expect(etiquetaDeCampania({ pctEfectivo: 'x' }).pctEfectivo).toBe(10)
+    expect(etiquetaDeCampania({ pctEfectivo: null }).pctEfectivo).toBe(10)
+    expect(etiquetaDeCampania({ cuotas: 30 }).cuotas).toBe(12)
+    expect(etiquetaDeCampania({ cuotas: 6 }).cuotas).toBe(6)
   })
 })

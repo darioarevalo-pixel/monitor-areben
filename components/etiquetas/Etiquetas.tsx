@@ -7,7 +7,7 @@ import { BotonActualizarInventario } from '@/components/productos/BotonActualiza
 import { BotonRecargar } from '@/components/productos/BotonRecargar'
 import { useEtiquetasTn } from './useEtiquetasTn'
 import { pidsDe, useColaReetiquetado, type EstadoCola, type PrecioImpreso } from './useColaReetiquetado'
-import { dibujoDeCampania, useEtiquetasCampania, type PrecioCampania } from './useEtiquetasCampania'
+import { dibujoDeCampania, pdfPorPrenda, useEtiquetasCampania, type PrecioCampania } from './useEtiquetasCampania'
 import { etiquetasDesactualizadas, preciosDesalineados, type PrecioDesalineado } from '@/lib/etiquetas/cola'
 import {
   agruparCantidades,
@@ -1079,6 +1079,9 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
    * papel que se tiene en la mano. Antes de la primera, la mesa más barata de la campaña.
    */
   const [ultimoPrecio, setUltimoPrecio] = useState<number | null>(null)
+  /** Por prenda, la previa dibuja la ÚLTIMA PRENDA escaneada (con su nombre y sus montos). */
+  const [ultimaPrenda, setUltimaPrenda] = useState<{ v: VarianteEti; item: PrecioCampania } | null>(null)
+  const porPrenda = !!camp.rotulo?.etiqueta?.porPrenda
 
   /**
    * QUÉ PRODUCTOS ENTRAN Y A QUÉ MESA VA CADA UNO — la consulta sin el escáner.
@@ -1176,8 +1179,11 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
       inp.focus()
       return
     }
-    const pdf = await buildLibrePdf(dibujo(item.precio, n, conBarras ? String(v.barcode || '') : ''))
+    const pdf = porPrenda && camp.rotulo
+      ? await pdfPorPrenda(camp.rotulo, v, item, n)
+      : await buildLibrePdf(dibujo(item.precio, n, conBarras ? String(v.barcode || '') : ''))
     if (pdf) imprimirPdf(pdf)
+    if (porPrenda) setUltimaPrenda({ v, item })
     anotarTirada(item.precio, n)
     setUltimoPrecio(item.precio)
     setFeedback({
@@ -1191,9 +1197,22 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
   // Una sola copia: la previa es para MIRAR la etiqueta, y dibujar 176 páginas para verla cuesta lo
   // mismo que imprimirlas.
   const precioPrevia = ultimoPrecio ?? camp.porPrecio[0]?.precio ?? null
+  // Por prenda, una prenda real: la última escaneada o, antes de la primera, la primera de la lista.
+  const prendaPrevia = useMemo(() => {
+    if (ultimaPrenda) return ultimaPrenda
+    const v = varsDeCampania.find((x) => camp.porPid[x.pid])
+    return v ? { v, item: camp.porPid[v.pid] } : null
+  }, [ultimaPrenda, varsDeCampania, camp.porPid])
   const construirPrevia = useCallback(
-    () => (precioPrevia == null ? null : buildLibrePdf(dibujo(precioPrevia, 1, ''))),
-    [precioPrevia, dibujo],
+    () =>
+      porPrenda
+        ? prendaPrevia && camp.rotulo ? pdfPorPrenda(camp.rotulo, prendaPrevia.v, prendaPrevia.item, 1, 'prenda') : null
+        : precioPrevia == null ? null : buildLibrePdf(dibujo(precioPrevia, 1, '')),
+    [porPrenda, prendaPrevia, camp.rotulo, precioPrevia, dibujo],
+  )
+  const construirPreviaFP = useCallback(
+    () => (prendaPrevia && camp.rotulo ? pdfPorPrenda(camp.rotulo, prendaPrevia.v, prendaPrevia.item, 1, 'fp') : null),
+    [prendaPrevia, camp.rotulo],
   )
 
   const provisorios = camp.porPrecio.reduce((a, m) => a + (m.modelos - m.firmes), 0)
@@ -1206,7 +1225,11 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
     <Card>
       <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>🎪 Etiquetas de feria (escaneo)</div>
       <div style={{ fontSize: 12, color: color.mut2, marginBottom: 14 }}>
-        Escaneá una prenda y sale <b>su etiqueta de mesa: sólo el precio</b>, sacado de la campaña. No hace falta que el precio esté puesto en la tienda.
+        {porPrenda ? (
+          <>Escaneá una prenda y salen <b>sus dos etiquetas</b>: la de nombre, precio y código (con el de lista tachado) y detrás la de <b>formas de pago con sus montos</b>. El precio sale de la campaña.</>
+        ) : (
+          <>Escaneá una prenda y sale <b>su etiqueta de mesa: sólo el precio</b>, sacado de la campaña. No hace falta que el precio esté puesto en la tienda.</>
+        )}
       </div>
 
       {camp.error && <Notice tone="danger" icon="✗">{camp.error}</Notice>}
@@ -1234,10 +1257,12 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
       </div>
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
-        <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 5 }}>
-          <input type="checkbox" style={{ accentColor: 'var(--mo-brand-solid)' }} checked={conBarras} onChange={(e) => setConBarras(e.target.checked)} />
-          Incluir el código de barras <span style={{ color: color.mut2 }}>(si la etiqueta tapa la que ya tiene)</span>
-        </label>
+        {!porPrenda && (
+          <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <input type="checkbox" style={{ accentColor: 'var(--mo-brand-solid)' }} checked={conBarras} onChange={(e) => setConBarras(e.target.checked)} />
+            Incluir el código de barras <span style={{ color: color.mut2 }}>(si la etiqueta tapa la que ya tiene)</span>
+          </label>
+        )}
         <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 5 }}>
           <input type="checkbox" style={{ accentColor: 'var(--mo-brand-solid)' }} checked={conProvisorios} onChange={(e) => setConProvisorios(e.target.checked)} />
           Imprimir también los <b>provisorios</b>{provisorios > 0 ? ` (${provisorios} sin revisar)` : ''}
@@ -1285,7 +1310,20 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
               <div style={{ fontSize: 12, fontWeight: 700, color: color.mut, marginBottom: 6 }}>CÓMO SALE LA ETIQUETA</div>
               <PreviaPdf construir={construirPrevia} alt="Vista previa de la etiqueta de campaña" espera={250} vacio="(elegí una mesa)" />
             </div>
+            {porPrenda && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: color.mut, marginBottom: 6 }}>Y DETRÁS, FORMAS DE PAGO</div>
+                <PreviaPdf construir={construirPreviaFP} alt="Vista previa de la etiqueta de formas de pago de la prenda" espera={250} vacio="(escaneá una prenda)" />
+              </div>
+            )}
             <div style={{ fontSize: 12, color: color.mut2, maxWidth: 340, paddingTop: 22 }}>
+              {porPrenda ? (
+                <>
+                  Etiqueta <b>por prenda</b>: tarjeta = efectivo ÷ {(1 - (camp.rotulo?.etiqueta.pctEfectivo ?? 0) / 100).toLocaleString('es-AR')}, redondeado al 90, en{' '}
+                  {camp.rotulo?.etiqueta.cuotas} cuotas. Se diseña en <b>Liquidación → Editar campaña</b>.
+                  {prendaPrevia && <> La previa muestra <b>{prendaPrevia.item.nombre}</b>{ultimaPrenda ? ', lo último que salió' : ''}.</>}
+                </>
+              ) : (<>
               {camp.rotulo?.nombreComercial ? (
                 <>Sale con el título <b>«{camp.rotulo.nombreComercial}»</b> arriba del precio.</>
               ) : (
@@ -1298,6 +1336,7 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
                   se decide una vez, en la campaña, y ⛔ no una vez por computadora. */}
               <> Se diseña en <b>Liquidación → Editar campaña</b>, no acá: es el mismo para todos los que etiqueten.</>
               {precioPrevia != null && <> La previa muestra <b>${Math.round(precioPrevia).toLocaleString('es-AR')}</b>, que es {ultimoPrecio == null ? 'la mesa más barata' : 'lo último que salió'}.</>}
+              </>)}
             </div>
           </div>
 
@@ -1315,7 +1354,11 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
                 🔑 **Y por qué no alcanza con la pestaña Libre**, que ya imprime precio + copias: ahí
                 el precio se TIPEA. Un dedo de más en un `$4.990` sale igual de lindo y nadie lo ve
                 hasta que está colgado en la mesa. Acá las mesas son las de la campaña y ⛔ no se
-                puede inventar una. */}
+                puede inventar una.
+
+                ⛔ **Por prenda no hay mesas**: cada etiqueta lleva el nombre y el código de UNA
+                prenda, así que una tirada sin escanear ⛔ sabría qué imprimir. */}
+            {!porPrenda && (
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: color.mut, marginBottom: 2 }}>
                 LAS MESAS DE LA CAMPAÑA ({camp.porPrecio.length})
@@ -1362,6 +1405,7 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
                 </tbody>
               </table>
             </div>
+            )}
 
             {/* La tirada de hoy: cuántas etiquetas salieron de cada mesa. Sobrevive a un refresh —es
                 lo único que dice cuánto se avanzó, y la jornada dura más que una pestaña abierta. */}

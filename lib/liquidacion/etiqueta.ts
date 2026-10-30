@@ -12,6 +12,8 @@ import {
   TAM_PRECIO_DEFAULT as TAM_PRECIO_DEFAULT_JS,
   TAM_PRECIO_MAX as TAM_PRECIO_MAX_JS,
   TAM_PRECIO_MIN as TAM_PRECIO_MIN_JS,
+  PCT_EFECTIVO_DEFAULT as PCT_EFECTIVO_DEFAULT_JS,
+  CUOTAS_DEFAULT as CUOTAS_DEFAULT_JS,
 } from './etiqueta.core.js'
 import type { LineaEtiqueta } from '@/lib/etiquetas/tipos'
 
@@ -23,6 +25,12 @@ export interface EtiquetaCampania {
   tamPrecio: number
   /** Cuerpo del título (el nombre comercial), con la escala de `LineaEtiqueta`. */
   tamTitulo: LineaEtiqueta['tam']
+  /** Etiqueta completa por prenda + formas de pago con sus montos (ver `etiqueta.core.js`). */
+  porPrenda: boolean
+  /** % que efectivo/transferencia es más barato que la tarjeta. */
+  pctEfectivo: number
+  /** Cuotas sin interés con tarjeta. */
+  cuotas: number
 }
 
 export const etiquetaDeCampania = etiquetaDeCampaniaJs as (raw: unknown) => EtiquetaCampania
@@ -32,3 +40,5 @@ export const MAX_TEXTO_LINEA = MAX_TEXTO_LINEA_JS as number
 export const TAM_PRECIO_DEFAULT = TAM_PRECIO_DEFAULT_JS as number
 export const TAM_PRECIO_MIN = TAM_PRECIO_MIN_JS as number
 export const TAM_PRECIO_MAX = TAM_PRECIO_MAX_JS as number
+export const PCT_EFECTIVO_DEFAULT = PCT_EFECTIVO_DEFAULT_JS as number
+export const CUOTAS_DEFAULT = CUOTAS_DEFAULT_JS as number

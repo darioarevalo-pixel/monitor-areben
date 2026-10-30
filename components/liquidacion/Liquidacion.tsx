@@ -1990,6 +1990,29 @@ function ModalCampania({
           <PreviaEtiquetaCampania titulo={nombreComercial} eti={eti} />
         </div>
       </div>
+      {/* 🔑 **Por prenda** (Bruno, 30-oct-2026, Cyber de Zattia): el cartón del exhibido lleva dos
+          etiquetas y si cambia una cambian las dos ⇒ Etiquetas imprime la completa (lista tachada +
+          precio, nombre, talle, barras) y detrás la de formas de pago con los montos de esa prenda.
+          Vive acá y ⛔ en cada compu por lo mismo que el resto del diseño. */}
+      <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, marginTop: space[3] }}>
+        <input type="checkbox" style={{ accentColor: 'var(--mo-brand-solid)', marginTop: 3 }} checked={eti.porPrenda} onChange={(e) => setEti({ ...eti, porPrenda: e.target.checked })} />
+        <span>
+          <b>Etiqueta por prenda + formas de pago con sus montos</b>
+          <span style={{ display: 'block', fontSize: 12, color: color.mut2 }}>
+            Para el exhibido: nombre, talle, código y el precio de lista tachado; detrás, efectivo/transferencia, tarjeta y cuotas en pesos. Apagado es la etiqueta de mesa (sólo el precio).
+          </span>
+        </span>
+      </label>
+      {eti.porPrenda && (
+        <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap', marginTop: space[2] }}>
+          <Field label="Efectivo/transferencia, % menos que tarjeta" hint="El precio de la campaña es el de efectivo. Tarjeta = precio ÷ (1 − %), redondeado al 90.">
+            <Input type="number" min={0} max={50} value={String(eti.pctEfectivo)} onChange={(e) => setEti({ ...eti, pctEfectivo: Math.max(0, Math.min(50, Number(e.target.value) || 0)) })} style={{ width: 110 }} />
+          </Field>
+          <Field label="Cuotas sin interés" hint="Con tarjeta.">
+            <Input type="number" min={1} max={12} value={String(eti.cuotas)} onChange={(e) => setEti({ ...eti, cuotas: Math.max(1, Math.min(12, Number(e.target.value) || 1)) })} style={{ width: 110 }} />
+          </Field>
+        </div>
+      )}
       {/* ⚠️ El freno del alto ⛔ NO es una cuenta: es esto. Con el título, un precio grande y tres
           renglones abajo el conjunto se pasa de los 25 mm y sale cortado — y se ve acá. */}
     </Modal>

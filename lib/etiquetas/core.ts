@@ -5,10 +5,11 @@
  * DOM ni globales. El dibujo del PDF (no puro, usa jsPDF+JsBarcode) vive en pdf.ts.
  */
 
+import { redondear90 } from '../comisiones/core'
 import { tipoDePrenda } from '../liquidacion/core'
 import { ofertaVigente } from '../tienda'
 import { matchTn, type IndiceTn } from '../tn'
-import type { Cantidades, MapaPrecios, MapaPromo, ModoEtiqueta, VarianteEti } from './tipos'
+import type { Cantidades, LineaEtiqueta, MapaPrecios, MapaPromo, ModoEtiqueta, VarianteEti } from './tipos'
 
 /** El producto GN mínimo para el mapa de precios. */
 export type ProductoPrecio = { id: string; sku?: string | null; name?: string | null; retailer_price?: number }
@@ -308,4 +309,30 @@ export function hermanasDe(vars: VarianteEti[], v: VarianteEti): VarianteEti[] {
 export function conStock(hermanas: VarianteEti[], escaneada: VarianteEti): VarianteEti[] {
   const con = (hermanas || []).filter((x) => (x.stock || 0) > 0)
   return con.length ? con : (hermanas || []).filter((x) => x.id === escaneada.id)
+}
+
+/**
+ * LA ETIQUETA DE FORMAS DE PAGO CON LOS MONTOS DE UNA PRENDA (Bruno, 30-oct-2026, Cyber de Zattia).
+ *
+ * 🔑 **Mismo dibujo que la de siempre** (`FP_DEFAULT`: «FORMAS DE PAGO» en título negrita y
+ * renglones normales debajo); cambia que los renglones dicen PESOS de esta prenda en vez de un % que
+ * el cliente tiene que calcular. Por eso se imprime pegada a la etiqueta de la prenda: una de formas
+ * de pago suelta ⛔ sabe de qué precio habla.
+ *
+ * 🔑 **El precio de la campaña ES el de efectivo/transferencia** (Bruno, 29-oct: «los precios se
+ * arman siempre como precio final de efectivo/transferencia») ⇒ la tarjeta se DERIVA:
+ * `redondear90(efectivo ÷ (1 − pct))`, la misma cuenta que armó CYBER MONDAY ONLINE ⇒ el número de
+ * tarjeta del cartón es el de la tienda. `pct` y `cuotas` son obligatorios y salen del diseño de la
+ * campaña: ⛔ un 10 escondido acá.
+ */
+export function formasDePagoDePrenda(efectivo: number, o: { pctEfectivo: number; cuotas: number }): LineaEtiqueta[] {
+  const $ = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
+  const tarjeta = o.pctEfectivo > 0 ? redondear90(efectivo / (1 - o.pctEfectivo / 100)) : efectivo
+  const cuotas = Math.max(1, Math.round(o.cuotas))
+  return [
+    { texto: 'FORMAS DE PAGO', tam: 'titulo', bold: true },
+    { texto: `Efectivo o transf. ${$(efectivo)}`, tam: 'normal', bold: false },
+    { texto: `Tarjeta ${$(tarjeta)}`, tam: 'normal', bold: false },
+    ...(cuotas > 1 ? [{ texto: `${cuotas} cuotas sin interés de ${$(tarjeta / cuotas)}`, tam: 'normal' as const, bold: false }] : []),
+  ]
 }

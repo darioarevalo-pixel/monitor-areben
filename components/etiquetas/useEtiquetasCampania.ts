@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav.datos'
 import type { EtiquetaCampania } from '@/lib/liquidacion/etiqueta'
+import { formasDePagoDePrenda } from '@/lib/etiquetas/core'
+import { buildEtiquetasPdf } from '@/lib/etiquetas/pdf'
+import type { LabelItem, VarianteEti } from '@/lib/etiquetas/tipos'
 
 /**
  * LOS PRECIOS DE UNA CAMPAÑA, PARA ETIQUETAR ANTES DE APLICARLOS.
@@ -26,7 +29,7 @@ import type { EtiquetaCampania } from '@/lib/liquidacion/etiqueta'
 const API = '/api/datos?recurso=liquidacion'
 
 /** Un producto de la campaña, tal como sale de `preciosAEtiquetar`. */
-export type PrecioCampania = { pid: string; nombre: string; imagen: string | null; precio: number; firme: boolean }
+export type PrecioCampania = { pid: string; nombre: string; imagen: string | null; precio: number; lista: number | null; firme: boolean }
 
 export type CampaniaEti = { id: string; nombre: string; desde: string | null; hasta: string | null }
 
@@ -161,4 +164,26 @@ export function dibujoDeCampania(rotulo: RotuloCampania | null, precio: number, 
     lineasAbajo: rotulo?.etiqueta?.abajo || [],
     tamPrecio: rotulo?.etiqueta?.tamPrecio,
   }
+}
+
+/**
+ * LA ETIQUETA POR PRENDA de una campaña (Cyber de Zattia, 30-oct-2026): por cada copia, la etiqueta
+ * completa —lista tachada + precio de campaña, nombre, talle, barras, SKU— y DETRÁS la de formas de
+ * pago con los montos de esa prenda. Van de a pares porque en el cartón van juntas: si cambia una,
+ * cambia la otra. La usan la previa y el escaneo: una sola definición (`solo` es para la previa,
+ * que muestra cada una en su recuadro).
+ */
+export async function pdfPorPrenda(rotulo: RotuloCampania, v: VarianteEti, item: PrecioCampania, copias: number, solo?: 'prenda' | 'fp') {
+  const fp = formasDePagoDePrenda(item.precio, { pctEfectivo: rotulo.etiqueta.pctEfectivo, cuotas: rotulo.etiqueta.cuotas })
+  const labels: LabelItem[] = []
+  for (let c = 0; c < copias; c++) {
+    if (solo !== 'fp') labels.push(v)
+    if (solo !== 'prenda') labels.push({ __fp: true, lineas: fp })
+  }
+  return buildEtiquetasPdf(labels, 'promo', {
+    precioDe: () => item.precio,
+    promoDe: () => ({ normal: item.lista || item.precio, promo: item.precio }),
+    fpLines: fp,
+    rotuloPromo: { izq: rotulo.nombreComercial || '', bajoPrecio: rotulo.etiqueta.abajo.map((l) => l.texto).join(' · ') },
+  })
 }

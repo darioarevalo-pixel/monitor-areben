@@ -142,6 +142,20 @@ venga vinculada con los precios definidos en monitor»*.
   **294 modelos y 1.282 prendas**: 4,4 prendas por modelo, todas a la misma mesa ⇒ se escanea **una
   prenda por modelo** y se piden las copias que tenga. 294 escaneos, ⛔ no 1.282.
 
+- ✅ 🔑 **POR PRENDA: la etiqueta completa + la de formas de pago CON SUS MONTOS** (Bruno, 30-oct-2026,
+  Cyber de Zattia): *«el cartón del exhibido tiene dos etiquetas […] si la de formas de pago va a
+  cambiarse, la de arriba también»*. Se prende en **Liquidación → Editar campaña** (`porPrenda`,
+  con `pctEfectivo` y `cuotas`) y la pestaña cambia: cada escaneo imprime **de a pares** —la de
+  precio rebajado (lista tachada + precio de campaña, nombre, talle, barras) con el nombre comercial
+  a la izquierda y las condiciones («EFT/TRANSF») bajo el precio, y detrás la de formas de pago—.
+  Las tiradas por mesa desaparecen: cada etiqueta es de UNA prenda.
+  🔑 **La de formas de pago es el MISMO dibujo de siempre** (`drawFP`, título + renglones normales)
+  con los renglones en pesos de esa prenda: `formasDePagoDePrenda` (`lib/etiquetas/core.ts`). El
+  precio de la campaña ES el de efectivo; tarjeta = `redondear90(precio ÷ (1 − pct))`, la cuenta que
+  armó CYBER MONDAY ONLINE ⇒ el número de tarjeta del cartón es el de la tienda.
+  ⚠️ `lista` entró a la lista blanca de `preciosAEtiquetar` (el precio público, para tacharlo).
+  ⚠️ Con el encabezado alto, el SKU en texto **se cae si no entra** (`skuSiEntra`): las barras quedan.
+
 🔴 **POR QUÉ ESTO Y NO LAS DOS ALTERNATIVAS OBVIAS — medido el 11-sep-2026 sobre el local de Zattia:**
 
 - **«voy con las 17 tiradas y saco prenda por prenda»**: **el perchero ⛔ no ordena por mesa.** Los

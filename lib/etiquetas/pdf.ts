@@ -29,6 +29,13 @@ export type CtxEtiqueta = {
    * geometría: elige entre los dibujos que ya están.
    */
   modoDe?: (v: VarianteEti) => ModoEtiqueta
+  /**
+   * El rótulo de una CAMPAÑA sobre la etiqueta de precio rebajado (Cyber de Zattia, 30-oct-2026):
+   * el nombre comercial chico a la izquierda y las condiciones («EFT/TRANSF») debajo del precio
+   * nuevo. Sin esto puesto, la de precio rebajado sale exactamente como siempre (la cinta de
+   * `tests/etiquetas-pdf.test.ts`).
+   */
+  rotuloPromo?: { izq: string; bajoPrecio: string }
 }
 
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
@@ -79,9 +86,13 @@ function dibujarCuerpo(pdf: Pdf, v: VarianteEti, barras: (y: number, h: number) 
   pdf.setFontSize(cfg.nameFS)
   const nom = pdf.splitTextToSize((v.name || '—').toUpperCase(), W - M * 2).slice(0, 2)
   const nameH = nom.length * cfg.nameLineH
-  const skuBlock = v.sku ? cfg.gBarSku + cfg.skuLineH : 0
   const encBlock = enc ? enc.alto + enc.gap : 0
-  const nonBar = encBlock + nameH + cfg.gNameVar + cfg.varLineH + cfg.gVarBar + skuBlock
+  const sinSku = encBlock + nameH + cfg.gNameVar + cfg.varLineH + cfg.gVarBar
+  // `skuSiEntra`: el SKU en texto se cae antes que la etiqueta se desborde (el código de barras ya lo
+  // lleva adentro). Sólo lo pide la de campaña por prenda, que tiene el encabezado más alto.
+  const conSku = !!v.sku && !(cfg.skuSiEntra && sinSku + cfg.gBarSku + cfg.skuLineH + 4.5 > Hh - 2 * margin)
+  const skuBlock = conSku ? cfg.gBarSku + cfg.skuLineH : 0
+  const nonBar = sinSku + skuBlock
   let barH = cfg.barH
   if (nonBar + barH > Hh - 2 * margin) barH = Math.max(4.5, Hh - 2 * margin - nonBar)
   let y = Math.max(margin, (Hh - (nonBar + barH)) / 2)
@@ -101,7 +112,7 @@ function dibujarCuerpo(pdf: Pdf, v: VarianteEti, barras: (y: number, h: number) 
   y += cfg.varLineH + cfg.gVarBar
   barras(y, barH)
   y += barH
-  if (v.sku) {
+  if (conSku) {
     y += cfg.gBarSku
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(cfg.skuFS)
@@ -116,6 +127,8 @@ type CuerpoEtiqueta = {
   /** Alto que se le da a las barras si entra; se achica hasta 4,5 mm antes de desbordar. */
   barH: number
   nameBold?: boolean
+  /** El SKU en texto se omite si no entra (ver `dibujarCuerpo`). */
+  skuSiEntra?: boolean
   encabezado?: { alto: number; gap: number; dibujar: (y: number) => void } | null
 }
 
@@ -154,7 +167,8 @@ export async function buildEtiquetasPdf(labels: LabelItem[], modoLote: ModoEtiqu
     }
     pdf.setTextColor(0)
     if ('__fp' in v) {
-      drawFP(pdf, W, Hh, M, CX, ctx.fpLines)
+      // Las de una prenda traen sus propios renglones (con SUS montos); las sueltas, las de la compu.
+      drawFP(pdf, W, Hh, M, CX, v.lineas ?? ctx.fpLines)
       return
     }
     // El modo del lote, salvo que el llamador decida prenda por prenda (ver `modoDe`).
@@ -189,6 +203,51 @@ export async function buildEtiquetasPdf(labels: LabelItem[], modoLote: ModoEtiqu
     const conPrecio = modo === 'loc'
     const precio = conPrecio ? ctx.precioDe(v) : 0
     const hasPrecio = conPrecio && precio > 0
+
+    if (modo === 'promo' && ctx.rotuloPromo) {
+      const pr = ctx.promoDe(v) || { normal: ctx.precioDe(v), promo: ctx.precioDe(v) }
+      const { izq, bajoPrecio } = ctx.rotuloPromo
+      dibujarCuerpo(pdf, v, barras, {
+        ...CUERPO_CHICO,
+        skuSiEntra: true,
+        encabezado: {
+          alto: bajoPrecio ? 6.4 : 5.0,
+          gap: 1.4,
+          // Tres columnas: el nombre de la campaña chico, el de lista tachado y el nuevo grande. Sin
+          // un de lista MAYOR al nuevo ⛔ se tacha nada: un «antes» igual al «ahora» miente.
+          dibujar: (y) => {
+            const midY = y + 2.5
+            if (izq) {
+              pdf.setFont('helvetica', 'bold')
+              pdf.setFontSize(6)
+              const l = pdf.splitTextToSize(izq.toUpperCase(), 12).slice(0, 2)
+              pdf.text(l, 8, midY - (l.length - 1) * 1.15, { align: 'center', baseline: 'middle' })
+            }
+            if (pr.normal > pr.promo) {
+              const oldTxt = fmt(pr.normal)
+              pdf.setFont('helvetica', 'normal')
+              pdf.setFontSize(8)
+              pdf.setTextColor(120)
+              pdf.text(oldTxt, 21.5, midY, { align: 'center', baseline: 'middle' })
+              const ow = pdf.getTextWidth(oldTxt)
+              pdf.setDrawColor(120)
+              pdf.setLineWidth(0.35)
+              pdf.line(21.5 - ow / 2 - 0.4, midY, 21.5 + ow / 2 + 0.4, midY)
+              pdf.setTextColor(0)
+              pdf.setDrawColor(0)
+            }
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(13.5)
+            pdf.text(fmt(pr.promo), 37.5, midY, { align: 'center', baseline: 'middle' })
+            if (bajoPrecio) {
+              pdf.setFontSize(6)
+              pdf.text(bajoPrecio.toUpperCase(), 37.5, y + 5.4, { align: 'center', baseline: 'middle' })
+            }
+          },
+        },
+      })
+      return
+    }
 
     if (modo === 'promo') {
       const pr = ctx.promoDe(v) || { normal: ctx.precioDe(v), promo: ctx.precioDe(v) }

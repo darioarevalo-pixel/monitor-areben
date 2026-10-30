@@ -233,6 +233,9 @@ export function preciosAEtiquetar(items) {
       // el nombre, que es lo que hace quien camina el perchero.
       imagen: txtOrNull((i.foto || {}).imagen),
       precio,
+      // 🔑 El de LISTA, para tacharlo en la etiqueta por prenda (Cyber, 30-oct). Es el precio
+      // público de la tienda: ⛔ dice nada del costo, que sigue sin viajar.
+      lista: Number((i.foto || {}).precioNormal) > 0 ? Number(i.foto.precioNormal) : null,
       firme: esFirme(i.estado),
     });
   }
