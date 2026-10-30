@@ -332,6 +332,10 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   ≤ 900 px, con mouse o con dedo; `?movil=1`/`?movil=0` la fuerza); la Caja la usa con su propia medida (640 px Y táctil).
   Los filtros de una lista van en `BuscadorLista` › `filtros` (`FiltroOpciones`): al lado en la compu, en la hoja «Filtros»
   en el celular. `tests/erp-celular-lista.test.tsx`.
+  La FICHA (`FichaCostado` › `pie`, tanda 2, 30-oct): en el celular la acción principal va fija al pie (venta → Registrar
+  cobro · prenda → Ajustar · cliente → WhatsApp, con `normalizeArgPhone` · producto → Cargar precio o costo), una segunda
+  de borde y el resto en «⋯» (`MenuAcciones alPie`, abre hacia arriba). Cada ficha esconde su fila de botones de arriba
+  con `usePantallaAngosta` para ⛔ duplicarlos. `BarraSeleccion` ⛔ aparece en el celular. `tests/erp-celular-ficha.test.tsx`.
 - 🔑 **`erp › Caja` = el CAMBIO en el local** (`CambioCaja.tsx`, Bruno 14-oct): busca la venta propia, marca lo
   devuelto (al precio que se PAGÓ), escanea lo nuevo y cobra o deja a favor la diferencia; lo registra
   `registrarCambio` del motor por `cambiarVentaPropia` (`api/_erp.js`). 🔴 Usa el MISMO código de la Caja
