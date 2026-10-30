@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext } from 'react'
+import { lineaDe } from '@/lib/lineas.core.js'
 
 /**
  * La línea que se mira en el ERP: el selector de abajo a la izquierda ofrece BDI · Zattia · Stunned, pero en el
@@ -24,6 +25,14 @@ export function useLineaErp(): LineaErp {
 export function useTiendaErp(): 'bdi' | 'zattia' | 'stunned' {
   const l = useContext(LineaCtx)
   return l === '' ? 'bdi' : l
+}
+
+/**
+ * El buscador de productos lee la base de Zattia, que trae las DOS líneas: se queda con las de la tienda elegida (`lineaDe`:
+ * el prefijo `STU`). Sin esto, un ajuste o una transferencia de Stunned aceptaba un producto de Zattia (visto 30-oct).
+ */
+export function deLaTienda<T extends { sku: string | null }>(variantes: T[], tienda: 'bdi' | 'zattia' | 'stunned'): T[] {
+  return tienda === 'bdi' ? variantes : variantes.filter((v) => lineaDe('zattia', v.sku) === tienda)
 }
 
 // `Erp` se remonta al cambiar de sección: la línea elegida vive acá, fuera del componente, para que no vuelva sola a Zattia.

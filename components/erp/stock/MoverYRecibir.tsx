@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, EmptyState, Field, Input, Notice, PasoCantidad, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, weight } from '@/components/ui'
 import { toneTokens } from '@/components/ui/tokens'
 import { usePantallaAngosta } from '@/lib/movil'
-import { useTiendaErp } from '@/lib/erp/linea-erp'
+import { deLaTienda, useTiendaErp } from '@/lib/erp/linea-erp'
 import { ListaTrabajo, type ColumnaLista, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { BOTON_PIE, DatoFicha, DatosFicha, FichaCostado, PieFijo } from '@/components/ui/FichaCostado'
 import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, tonoDeConteo } from '@/components/ui/PiezasLista'
@@ -71,7 +71,7 @@ function Escaneo({ linea, onPrenda, autoFocus = true }: { linea: TiendaErp; onPr
     if (!q || ocupado) return
     setOcupado(true)
     try {
-      const { variantes } = await buscarPrendas(baseDe(linea), q)
+      const variantes = deLaTienda((await buscarPrendas(baseDe(linea), q)).variantes, linea)
       const una = prendaExacta(variantes, q) ?? (variantes.length === 1 ? variantes[0] : null)
       if (una) { onPrenda(una); setOpciones(null); setTexto(''); setError(null) }
       else if (!variantes.length) setError(`No encontré «${q}».`)

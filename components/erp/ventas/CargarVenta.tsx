@@ -20,6 +20,7 @@ import {
 } from '@/lib/erp/cliente'
 import { NOMBRE_CANAL, NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
+import { deLaTienda } from '@/lib/erp/linea-erp'
 
 type Renglon = { clave: string; prenda: PrendaEncontrada; cantidad: number; precio: number | '' }
 type Pago = PagoCarga
@@ -91,7 +92,7 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
     setBuscando(true)
     try {
       const r = await buscarPrendas(marca, q.trim())
-      setEncontradas(r.variantes.filter((v) => (marca === 'bdi') || (linea === 'stunned') === String(v.sku ?? '').toUpperCase().startsWith('STU')))
+      setEncontradas(marca === 'bdi' ? r.variantes : deLaTienda(r.variantes, linea === 'stunned' ? 'stunned' : 'zattia'))
       if (!r.variantes.length) setError('No se encontró ese producto.')
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo buscar.') } finally { setBuscando(false) }
   }

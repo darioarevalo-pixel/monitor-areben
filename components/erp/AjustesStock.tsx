@@ -30,7 +30,7 @@ import {
 import { MOTIVOS, baseDe } from '@/lib/erp/ajuste.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import type { PrendaAAjustar } from './stock/StockErp'
-import { useTiendaErp } from '@/lib/erp/linea-erp'
+import { deLaTienda, useTiendaErp } from '@/lib/erp/linea-erp'
 
 const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
 /** Los motivos que se cargan a mano: el conteo entra solo desde el monitor (⛔ va en el menú). */
@@ -119,7 +119,7 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
   async function buscar() {
     setTrabajando(true)
     try {
-      setEncontradas((await buscarPrendas(base, texto)).variantes)
+      setEncontradas(deLaTienda((await buscarPrendas(base, texto)).variantes, linea))
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo buscar.')
