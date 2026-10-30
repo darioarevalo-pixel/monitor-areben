@@ -42,6 +42,7 @@ import { OFFSET_AR_MS } from '../envios/portal.core.js'
 import { talleVisible } from './ticket-mail.core.js'
 import { MARCA_CAJA } from './marca'
 import { armarSobre, billetesDe } from './conteo.core.js'
+import { sobreEsperado } from './arqueo.core.js'
 import { codigoCaja } from './core.core.js'
 import { esStunned } from '../lineas.core.js'
 import { numeroDeLaVenta, type Config, type Venta } from './cliente'
@@ -428,6 +429,10 @@ export type DatosCierre = {
   conteos?: { cierre?: { billetes: Record<string, number>; total: number } | null } | null
   /** Las salidas e ingresos con su motivo (sólo al cerrar: la lista de cajas anteriores ⛔ los trae). */
   movimientos?: { tipo?: 'salida' | 'aporte'; monto: number; motivo: string; anulado_en?: string | null }[] | null
+  /** El código del sobre (`codigoArqueo`, 30-oct): va arriba grande y abajo en barras para el ARQUEO. Sin número, ⛔ sale. */
+  codigo?: string | null
+  /** El código de barras del sobre ya dibujado (data URL PNG): lo arma `imprimirCierre`, la función del papel es pura. */
+  barras?: string | null
 }
 
 export function armarTicketCierre(t: DatosCierre, ahoraMs: number, partir: Medidor): { ops: (OpBase | OpImagen)[]; alto: number } {
@@ -437,6 +442,11 @@ export function armarTicketCierre(t: DatosCierre, ahoraMs: number, partir: Medid
   escribir(t.marca.toUpperCase(), 16, true, 'centro')
   l.y += 1
   escribir('CIERRE DE CAJA', 12, true, 'centro')
+  // 🧾 El código del sobre (arqueo, 30-oct): la cajera lo ve sin buscarlo y lo copia en el sobre.
+  if (t.codigo) {
+    l.y += 1
+    escribir(`SOBRE ${t.codigo}`, 16, true, 'centro')
+  }
   regla()
   escribir(`Abrió: ${t.abierto_por ?? '—'} · ${cuando(t.abierto_en)}`, 9, false)
   escribir(`Cerró: ${t.cerrado_por ?? '—'} · ${cuando(t.cerrado_en)}`, 9, false)
@@ -491,7 +501,18 @@ export function armarTicketCierre(t: DatosCierre, ahoraMs: number, partir: Medid
       escribir(`Faltan ${plata(Number(t.fondo) - sb.totalFondo)} de fondo: completalo con cambio.`, 9, true)
     }
   } else {
-    par('TOTAL SOBRE', plata(Math.max(0, Number(t.contado ?? 0) - Number(t.fondo))), 12, true)
+    // La MISMA cuenta que se arquea después (`sobreEsperado`): lo contado menos el fondo.
+    par('TOTAL SOBRE', plata(sobreEsperado({ fondo: t.fondo, contado: t.contado ?? 0 }) ?? 0), 12, true)
+  }
+  if (t.codigo) {
+    // Las barras del sobre: en el ERP se escanea y abre esta caja para el arqueo. Sin dibujo, el código en letras.
+    l.y += 2
+    if (t.barras) {
+      l.ops.push({ k: 'img', src: t.barras, x: (W - 56) / 2, y: l.y, w: 56, h: 14 })
+      l.y += 16
+    }
+    escribir(t.codigo, 12, true, 'centro')
+    escribir('Abrochá este ticket al sobre.', 8, false, 'centro', 60)
   }
   if (t.nota?.trim()) {
     regla()
@@ -508,8 +529,24 @@ export function armarTicketCierre(t: DatosCierre, ahoraMs: number, partir: Medid
   return l.pagina()
 }
 
+/** Las barras CODE128 del código del sobre, como PNG. ⛔ Frena el ticket: sin dibujo sale el código en letras. */
+async function barrasDe(codigo: string): Promise<string | null> {
+  try {
+    const JsBarcode = (await import('jsbarcode')).default
+    const canvas = document.createElement('canvas')
+    JsBarcode(canvas, codigo, { format: 'CODE128', displayValue: false, width: 3, height: 70, margin: 0 })
+    return canvas.toDataURL('image/png')
+  } catch {
+    return null
+  }
+}
+
 /** El ticket del cierre a la térmica. */
 export async function imprimirCierre(t: DatosCierre, ahoraMs: number) {
-  const rollo = await abrirRollo()
-  imprimirPdf(rollo.documento<OpImagen>([armarTicketCierre(t, ahoraMs, rollo.medir)], () => false))
+  const [rollo, barras] = await Promise.all([abrirRollo(), t.codigo ? barrasDe(t.codigo) : Promise.resolve(null)])
+  imprimirPdf(rollo.documento<OpImagen>([armarTicketCierre({ ...t, barras }, ahoraMs, rollo.medir)], (pdf, op) => {
+    if (op.k !== 'img') return false
+    pdf.addImage(op.src, 'PNG', op.x, op.y, op.w, op.h)
+    return true
+  }))
 }

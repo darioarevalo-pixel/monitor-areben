@@ -198,6 +198,16 @@ Núcleo `lib/erp/facturacion-lista.core.js`; el Nº, la clienta y las facturas d
   efectivo esperado EN VIVO (el `action=turno` de siempre: lo calcula la Caja y lee GN, 1–10 s, por separado). Lista: lectura
   nueva `action=turnos&desde&hasta` de `api/_caja.js` (`caja_turno` por `abierto_en`, tope 500). Núcleo `lib/erp/cajas.core.js`
   (`tests/erp-cajas.test.ts`). Abrir, contar y cerrar ⛔ acá: en la Caja.
+  🧾 **ARQUEO DE CAJA (Bruno, 30-oct)**: ⛔ más sólo lectura. Cada cierre tiene el código de su sobre (`Z-0142` / `B-0031` =
+  `caja_turno.numero`, `sql/migrate-caja-arqueo.sql`), impreso en el ticket del cierre arriba y en barras CODE128 abajo. Un
+  admin escanea o escribe el código arriba de la lista («Arqueo de caja»; si es de otro período lo busca `action=arqueo&codigo=`)
+  y en la ficha marca «Llegó bien» (⇒ Lista) o «Llegó con diferencia» (lo que trajo + nota obligatoria); «Corregir el arqueo»
+  guarda el anterior adentro. Lo que tiene que traer = `sobreEsperado` (`lib/caja/arqueo.core.js`), la MISMA cuenta del
+  «TOTAL SOBRE» del ticket. POST `action=arqueo` de `api/_caja.js`, sólo admin; ⛔ toca el cierre (`caja_turno.arqueo` es otra
+  foto). Vistas Sin recibir · Sobre con diferencia · Listas, columnas Sobre / Arqueo (fija) / Tiene que traer. Sin la migración
+  la lista sale igual con el aviso y la Caja cierra igual (las columnas se leen APARTE de `COLS_TURNO`). La Caja del local es
+  UNA para Zattia y Stunned (un cajón, «Caja del local»): lo ÚNICO del ERP que ⛔ se separa por línea (Bruno, 30-oct).
+  Tests `caja-arqueo`, `erp-cajas`, `caja-handler` (§ arqueo), `caja-ticket`.
 - 🔑 **`erp › Productos y precios › Productos` › «Corregir datos»** (🎨 26-oct, Resto; el botón se llama como en el v8, tablero 5): en la ficha, nombre y categoría
   del producto y, de cada variante, talle · SKU · código de barras, más «Agregar una variante». Cada «Guardar» confirma con el antes → después y avisa que lo
   que venía de GN pasa a «cargada» (la copia de GN ⛔ lo pisa más); abajo, «Cambios de la ficha» (quién, antes → después). Sólo Admin (permiso `configurar`

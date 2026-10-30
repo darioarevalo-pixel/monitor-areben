@@ -10,7 +10,8 @@ import { useRouter } from 'next/navigation'
 import { MODOS_OFERTA, NOMBRE_MEDIO, msjOferta, ofertaDe } from '@/lib/caja/core.core.js'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { porFormaDePago } from '@/lib/caja/cierre.core.js'
-import { MARCA_CAJA } from '@/lib/caja/marca'
+import { MARCA_CAJA, storeCaja } from '@/lib/caja/marca'
+import { codigoArqueo } from '@/lib/caja/arqueo.core.js'
 import { DOMINIOS_MAIL, completarMail, mailOk } from '@/lib/caja/mail'
 import { imprimirCierre, numeroProvisorio, plata, type DatosCierre, type LogoTicket } from '@/lib/caja/ticket'
 import { titularesDe } from '@/lib/caja/otra-cuenta.core.js'
@@ -1696,6 +1697,7 @@ export const datosCierre = (t: Turno): DatosCierre => ({
   // Por forma de pago (13-oct); un cierre guardado antes, por cuenta como estaba.
   formas: t.resumen?.porForma ?? t.resumen?.porCuenta ?? null,
   movimientos: t.salidas ?? null,
+  codigo: codigoArqueo(storeCaja(), t.numero),
 })
 /** Imprime el ticket del cierre; el error vuelve como texto para el aviso de la pantalla. */
 export const imprimirCierreDe = (t: Turno) => imprimirCierre(datosCierre(t), Date.now())
@@ -1705,7 +1707,7 @@ export function AvisoCierre({ t }: { t: Turno }) {
   const d = t.resumen?.diferencia ?? Number(t.contado) - Number(t.esperado)
   return (
     <SectionCard
-      title={`Caja cerrada ${t.cerrado_en ? horaAr(t.cerrado_en) : ''}`}
+      title={`Caja cerrada ${t.cerrado_en ? horaAr(t.cerrado_en) : ''}${codigoArqueo(storeCaja(), t.numero) ? ` · sobre ${codigoArqueo(storeCaja(), t.numero)}` : ''}`}
       actions={
         <Button size="sm" variant="outline" onClick={() => void imprimirCierreDe(t)}>
           <Icono nombre="impresora" size={16} /> Imprimir cierre

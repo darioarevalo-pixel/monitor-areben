@@ -205,6 +205,14 @@ export type Turno = {
   conteos?: Conteos | null
   resumen?: ResumenTurno & { diferencia?: number }
   salidas?: SalidaTurno[]
+  /** El número del cierre = el código del sobre (`codigoArqueo`); sin sql/migrate-caja-arqueo.sql ⛔ viene. */
+  numero?: number | null
+  /** El arqueo del sobre (`lib/caja/arqueo.core.js`): null = sin recibir. */
+  arqueo?: ArqueoSobre | null
+}
+export type ArqueoSobre = {
+  estado: 'bien' | 'diferencia'; esperado: number; contado: number; diferencia: number; nota: string | null
+  por: string | null; por_usuario?: string | null; en: string; anterior?: ArqueoSobre | null
 }
 /**
  * `liviano`: la fila sola, sin `resumen` ni `ultimos` (⛔ consulta GN): para dibujar el POS sin esperar.

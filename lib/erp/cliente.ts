@@ -718,16 +718,30 @@ export const cargarVenta = (marca: MarcaErp, venta: VentaACargar) =>
   pedir<{ ok: true; venta: { id: string; numero: number; total: number; prueba: boolean }; yaExistia: boolean; avisos: Array<{ codigo: string }> }>(
     post({ accion: 'cargar-venta', marca, ...venta }), '', 'No se pudo cargar la venta.')
 
-// ── ERP › Ventas › Cajas (sólo lectura; los turnos de la Caja por `?recurso=caja`, núcleo `lib/erp/cajas.core.js`) ──
+// ── ERP › Ventas › Cajas (lectura + el arqueo del sobre; los turnos de la Caja por `?recurso=caja`, núcleo `lib/erp/cajas.core.js`) ──
 const deCaja = async <T>(marca: MarcaErp, query: string, fallo: string): Promise<T> => {
   const r = await apiFetch(`/api/datos?recurso=caja&store=${marca}&${query}&nc=${Date.now()}`)
   const j = await r.json().catch(() => null)
   if (!r.ok) throw new Error((j && j.error) || fallo)
   return j as T
 }
-/** Los turnos ABIERTOS en esos días argentinos (`caja_turno` tal cual). */
+/** Los turnos ABIERTOS en esos días argentinos (`caja_turno` tal cual) + si el arqueo de caja está disponible en la base. */
 export const leerTurnosCaja = (marca: MarcaErp, desde: string, hasta: string) =>
-  deCaja<{ turnos: Array<Record<string, unknown>> }>(marca, `action=turnos&desde=${desde}&hasta=${hasta}`, 'No se pudieron leer las cajas.')
+  deCaja<{ turnos: Array<Record<string, unknown>>; arqueo?: { disponible: boolean; error?: string } }>(marca, `action=turnos&desde=${desde}&hasta=${hasta}`, 'No se pudieron leer las cajas.')
+/** La caja de un sobre por su código (`Z-0142`), aunque sea de otro período. */
+export const leerCajaDelSobre = (marca: MarcaErp, codigo: string) =>
+  deCaja<{ turno: Record<string, unknown>; sobre: number | null }>(marca, `action=arqueo&codigo=${encodeURIComponent(codigo)}`, 'No se encontró la caja de ese sobre.')
+/** El ARQUEO del sobre (sólo admin): lo que trajo; con diferencia, la nota. El servidor rearma lo esperado. */
+export async function arquearSobre(marca: MarcaErp, p: { id: string; contado: number; nota?: string | null; corregir?: boolean }) {
+  const r = await apiFetch('/api/datos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recurso: 'caja', store: marca, action: 'arqueo', ...p }),
+  })
+  const j = await r.json().catch(() => null)
+  if (!r.ok) throw new Error((j && j.error) || 'No se pudo guardar el arqueo.')
+  return j as { turno: Record<string, unknown> }
+}
 /** El turno abierto con su resumen EN VIVO (el esperado lo calcula la Caja: lee GN, 1 a 10 s). */
 export const leerCajaAbierta = (marca: MarcaErp) =>
   deCaja<{ turno: (Record<string, unknown> & { resumen?: { ventas?: number; efectivo?: { esperado?: number } } }) | null }>(marca, 'action=turno', 'No se pudo leer la caja abierta.')

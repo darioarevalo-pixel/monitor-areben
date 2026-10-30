@@ -17,7 +17,9 @@
 //        { pedidos, porSku, noLeidas, leidoEn } — ver lib/caja/pedidos-web.core.js
 //   GET  ?recurso=caja&action=gift-lotes          → sólo admin: los lotes de gift cards generados (W6)
 //   GET  ?recurso=caja&action=gift-lote&lote=…    → sólo admin: { nombre, csv } del lote, para la imprenta
-//   GET  ?recurso=caja&action=turnos&desde=&hasta= → los turnos abiertos en esos días (ERP › Ventas › Cajas, sólo lectura)
+//   GET  ?recurso=caja&action=turnos&desde=&hasta= → los turnos abiertos en esos días (ERP › Ventas › Cajas), con su
+//        `numero` y `arqueo` y `arqueo: { disponible }` (sin sql/migrate-caja-arqueo.sql, las filas de siempre y el aviso)
+//   GET  ?recurso=caja&action=arqueo&codigo=Z-0142 → la caja de ese sobre + `sobre` (lo que tiene que traer, `sobreEsperado`)
 //   GET  ?recurso=caja&action=turno[&fresco=1]   → el turno abierto (o null) con su resumen y salidas, y
 //        los últimos cerrados (v2, W3), con el efectivo cobrado EN GN durante el turno (W3b) — ver lib/caja/cierre.core.js
 //   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, descuentoVenta, email?, pagaCon? }
@@ -41,6 +43,8 @@
 //   POST ?recurso=caja  { action: 'gift-lote', cantidad, nota? } → sólo admin: genera N tarjetas INACTIVAS (W6,
 //        sql/migrate-caja-gift-card.sql); el código lo arma `lib/caja/gift.core.js` con `crypto.randomInt`
 //   POST ?recurso=caja  { action: 'promos', promos }       → sólo admin: la lista entera de promos (W5), en `caja_config.reglas.promos`
+//   POST ?recurso=caja  { action: 'arqueo', id, contado, nota?, corregir? } → sólo admin: el ARQUEO del sobre de una caja
+//        cerrada (`lib/caja/arqueo.core.js`): llegó bien (⇒ Lista) o con diferencia (nota obligatoria). ⛔ Toca el cierre.
 //   POST ?recurso=caja  { action: 'politica', texto }      → sólo admin: la política de cambio del ticket
 //   POST ?recurso=caja  { action: 'logo', logo: { src, ancho, alto } | null } → sólo admin: el logo del ticket (sql/migrate-caja-logo.sql)
 //   POST ?recurso=caja  { action: 'bajadas', transferenciaPorMp?: { mp, gn }, billetes?, feriaProductos? } → sólo admin: a qué cuenta
@@ -103,6 +107,7 @@ import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedid
 import { anuladasEnGN, avisoDeCierre, cobrosDeERP, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, quienesSeEnteranDelCierre, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
 import { billetesDe, limpiarConteo, totalDeConteo } from '../lib/caja/conteo.core.js'
 import { anotarAnuladasDelCierre } from '../lib/caja/anuladas.js'
+import { FALTA_ARQUEO, armarArqueo, faltaColumnaArqueo, leerCodigo, sobreEsperado } from '../lib/caja/arqueo.core.js'
 import { aplicarPromos, normalizarPromos } from '../lib/caja/promos.core.js'
 import { MAX_LOTE, csvDeLote, generarCodigos } from '../lib/caja/gift.core.js'
 
@@ -297,6 +302,28 @@ export default async function handler(req, res) {
     const { data, error } = await sb.from('caja_turno').select(COLS_TURNO).eq('store', store).is('cerrado_en', null).maybeSingle()
     if (error) throw new Error(error.message)
     return data
+  }
+
+  /**
+   * El ARQUEO (sql/migrate-caja-arqueo.sql, 30-oct): el número del cierre (el código del sobre) y la foto del sobre, en
+   * una lectura APARTE de `COLS_TURNO` a propósito: sin la migración la Caja cierra igual que siempre y esto devuelve las
+   * filas como venían con `disponible: false` (la pantalla lo dice). Cualquier otro error, sí se tira.
+   * @param {Array<Record<string, any>>} filas
+   */
+  async function conArqueo(filas) {
+    const ids = filas.map((f) => f && f.id).filter(Boolean)
+    if (!ids.length) return { filas, disponible: true }
+    const { data, error } = await sb.from('caja_turno').select('id, numero, arqueo').in('id', ids)
+    if (error) {
+      if (faltaColumnaArqueo(error)) return { filas, disponible: false }
+      throw new Error(error.message)
+    }
+    const de = new Map((data || []).map((r) => [r.id, r]))
+    return { filas: filas.map((f) => (f && de.has(f.id) ? { ...f, numero: de.get(f.id).numero, arqueo: de.get(f.id).arqueo } : f)), disponible: true }
+  }
+  /** Un turno con su número, para el ticket del cierre. ⛔ Frena: el cierre ya está guardado; sin número, el ticket sale sin código. */
+  async function conNumero(t) {
+    try { return (await conArqueo([t])).filas[0] } catch (e) { console.warn(`[caja] cierre sin número de arqueo: ${e.message}`); return t }
   }
 
   /**
@@ -653,7 +680,8 @@ export default async function handler(req, res) {
         if (ultimos.error) throw new Error(ultimos.error.message)
         // `fresco=1` (22-oct): la ventana de cierre relee GN sin el cache de 60 s —el POS leía el turno al cargar
         // y el cierre del martes 20 mostró «sobran $13.000» por un cobro web cargado después—.
-        return res.status(200).json({ turno: turno ? await conResumen(turno, req.query.fresco === '1') : null, ultimos: ultimos.data || [] })
+        const conNumeros = await conArqueo(ultimos.data || []).catch(() => ({ filas: ultimos.data || [] }))
+        return res.status(200).json({ turno: turno ? await conResumen(turno, req.query.fresco === '1') : null, ultimos: conNumeros.filas })
       }
       // ERP › Ventas › Cajas (20-oct, sólo lectura): los turnos ABIERTOS en el período, días argentinos `desde`..`hasta`.
       if (accion === 'turnos') {
@@ -664,7 +692,18 @@ export default async function handler(req, res) {
           .gte('abierto_en', `${desde}T00:00:00-03:00`).lte('abierto_en', `${hasta}T23:59:59.999-03:00`)
           .order('abierto_en', { ascending: false }).limit(500)
         if (error) throw new Error(error.message)
-        return res.status(200).json({ turnos: data || [] })
+        const a = await conArqueo(data || [])
+        return res.status(200).json({ turnos: a.filas, arqueo: a.disponible ? { disponible: true } : { disponible: false, error: FALTA_ARQUEO } })
+      }
+      // El ARQUEO (30-oct): el sobre por su código (`Z-0142` escaneado o tipeado) ⇒ la caja, con lo que tiene que traer.
+      if (accion === 'arqueo') {
+        const numero = leerCodigo(req.query.codigo, store)
+        if (!numero) return res.status(400).json({ error: 'Ese código no es de un sobre de esta caja.' })
+        const { data, error } = await sb.from('caja_turno').select(`${COLS_TURNO}, numero, arqueo`).eq('store', store).eq('numero', numero).maybeSingle()
+        if (faltaColumnaArqueo(error)) return res.status(409).json({ error: FALTA_ARQUEO })
+        if (error) throw new Error(error.message)
+        if (!data) return res.status(404).json({ error: 'No hay ninguna caja con ese código.' })
+        return res.status(200).json({ turno: data, sobre: sobreEsperado(data, billetesDe()) })
       }
       if (accion === 'gift-lotes' || accion === 'gift-lote') {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Los lotes de gift cards los ve un admin.' })
@@ -682,11 +721,33 @@ export default async function handler(req, res) {
         if (!data || !data.length) return res.status(404).json({ error: 'Ese lote no tiene tarjetas.' })
         return res.status(200).json({ nombre: `gift-cards-${store}-lote-${lote}.csv`, csv: csvDeLote(data) })
       }
-      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, cuentas-mp, pendientes, ventas, pedidos-web, turno, gift-lotes, gift-lote)' })
+      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, cuentas-mp, pendientes, ventas, pedidos-web, turno, turnos, arqueo, gift-lotes, gift-lote)' })
     }
 
     if (req.method === 'POST') {
       const b = req.body || {}
+      // 🧾 El ARQUEO DE CAJA (Bruno, 30-oct): el sobre de una caja CERRADA llegó bien o con diferencia. Sólo admin.
+      // ⛔ Toca el cierre (contado, esperado, resumen): guarda aparte la foto del sobre. Ya arqueado ⇒ 409, salvo `corregir`.
+      if (accion === 'arqueo') {
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'El arqueo de caja lo hace un admin.' })
+        const id = String(b.id || '')
+        if (!UUID.test(id)) return res.status(400).json({ error: 'id de caja inválido.' })
+        const { data: t, error } = await sb.from('caja_turno').select(`${COLS_TURNO}, numero, arqueo`).eq('id', id).eq('store', store).maybeSingle()
+        if (faltaColumnaArqueo(error)) return res.status(409).json({ error: FALTA_ARQUEO })
+        if (error) throw new Error(error.message)
+        if (!t) return res.status(404).json({ error: 'Esa caja no existe.' })
+        if (!t.cerrado_en) return res.status(409).json({ error: 'Esa caja todavía está abierta: el sobre sale al cerrarla.' })
+        if (t.arqueo && b.corregir !== true) return res.status(409).json({ error: 'Ese sobre ya tiene su arqueo.', turno: t })
+        const r = armarArqueo({ esperado: sobreEsperado(t, billetesDe()), contado: b.contado, nota: b.nota })
+        if ('error' in r) return res.status(400).json({ error: r.error })
+        const arqueo = { ...r.arqueo, por: perfil.name || null, por_usuario: usuarioDe(perfil), en: new Date().toISOString(), ...(t.arqueo ? { anterior: t.arqueo } : {}) }
+        let q = sb.from('caja_turno').update({ arqueo }).eq('id', id).not('cerrado_en', 'is', null)
+        q = t.arqueo ? q : q.is('arqueo', null)
+        const up = await q.select(`${COLS_TURNO}, numero, arqueo`).maybeSingle()
+        if (up.error) throw new Error(up.error.message)
+        if (!up.data) return res.status(409).json({ error: 'Otro admin acaba de arquear ese sobre. Recargá la lista.' })
+        return res.status(200).json({ turno: up.data })
+      }
       if (accion === 'politica') {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia la política de cambio del ticket.' })
         const texto = String(b.texto ?? '').trim().slice(0, 1000) || null
@@ -989,12 +1050,12 @@ export default async function handler(req, res) {
         }
         if (JSON.stringify(despues.resumen) === JSON.stringify(con.resumen) && JSON.stringify(despues.salidas) === JSON.stringify(con.salidas)) {
           await avisarCierre(up.data)
-          return res.status(200).json({ turno: up.data })
+          return res.status(200).json({ turno: await conNumero(up.data) })
         }
         const fix = await sb.from('caja_turno').update(foto(despues)).eq('id', id).select(COLS_TURNO).maybeSingle()
         if (fix.error) throw new Error(fix.error.message)
         await avisarCierre(fix.data || up.data)
-        return res.status(200).json({ turno: fix.data || up.data, cambioAlCerrar: true })
+        return res.status(200).json({ turno: await conNumero(fix.data || up.data), cambioAlCerrar: true })
       }
 
       if (!token) return res.status(500).json({ error: 'Falta el token de Gestión Nube para escribir ventas.' })
@@ -1351,7 +1412,7 @@ export default async function handler(req, res) {
         if (ya.data.estado === 'cancelada') return res.status(200).json({ venta: ya.data })
         return res.status(409).json({ error: 'La transferencia ya llegó: la venta está cobrada y no se cancela desde acá.', venta: ya.data })
       }
-      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, reintentar-pendientes, cruzar, confirmar-varios, confirmar-otra-cuenta, cancelar, resolver, confirmar-transferencia, usar-mp, politica, logo, gift-lote, bajadas, abrir-turno, salida, anular-mov, contar, cerrar-turno)' })
+      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, reintentar-pendientes, cruzar, confirmar-varios, confirmar-otra-cuenta, cancelar, resolver, confirmar-transferencia, usar-mp, politica, logo, gift-lote, bajadas, abrir-turno, salida, anular-mov, contar, cerrar-turno, arqueo)' })
     }
     return res.status(405).json({ error: 'Método no permitido' })
   } catch (e) {

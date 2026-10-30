@@ -241,4 +241,15 @@ describe('ticket del cierre (Bruno, 13-oct)', () => {
     const txt = textos(armarTicketCierre({ ...cierre, conteos: { cierre: { billetes: { 20000: 5 }, total: 100000 } } }, AHORA, medir).ops)
     expect(txt.join('')).toContain('Faltan $10.000 de fondo: completalo con cambio.')
   })
+  it('🧾 arqueo (30-oct): el código del sobre arriba y en barras abajo; sin número, ⛔ sale nada', () => {
+    const con = armarTicketCierre({ ...cierre, codigo: 'Z-0142', barras: 'data:image/png;base64,AAAA' }, AHORA, medir).ops
+    expect(textos(con)).toContain('SOBRE Z-0142')
+    expect(textos(con)).toContain('Z-0142')
+    expect(con.filter((o) => o.k === 'img')).toHaveLength(1)
+    const sinBarras = armarTicketCierre({ ...cierre, codigo: 'Z-0142' }, AHORA, medir).ops
+    expect(textos(sinBarras)).toContain('Z-0142')
+    expect(sinBarras.filter((o) => o.k === 'img')).toHaveLength(0)
+    const sin = armarTicketCierre(cierre, AHORA, medir).ops
+    expect(textos(sin).some((t) => /Z-0142|SOBRE Z/.test(t))).toBe(false)
+  })
 })

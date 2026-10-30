@@ -33,6 +33,8 @@ const base = {
   ventaMp: [] as Fila[],
   giftChoques: 0,
   alCerrar: null as null | (() => void),
+  // El arqueo (sql/migrate-caja-arqueo.sql): true = la base todavía ⛔ tiene `numero` ni `arqueo`.
+  sinArqueo: false,
   antesDeInsertar: null as null | (() => void),
 }
 const gn = {
@@ -59,6 +61,7 @@ const mailer = { posts: [] as Array<{ body: Fila; key?: string; url: string }> }
 function consulta(tabla: string) {
   const filtros: Array<(f: Fila) => boolean> = []
   let accion: { tipo: 'select' } | { tipo: 'delete' } | { tipo: 'update'; cambios: Fila } | { tipo: 'insert'; fila: Fila } = { tipo: 'select' }
+  let columnas = ''
   const filas = (): Fila[] => {
     const todas = tabla === 'caja_venta' ? [...base.ventas.values()] : tabla === 'caja_config' ? (base.config ? [base.config] : [])
       : tabla === 'mp_cuenta_uso' ? base.usos : tabla === 'mp_cuentas' ? base.llaves
@@ -69,6 +72,10 @@ function consulta(tabla: string) {
     return todas.filter((f) => filtros.every((p) => p(f)))
   }
   const ejecutar = () => {
+    // Sin la migración del arqueo, Postgres rechaza leer o escribir sus columnas.
+    if (tabla === 'caja_turno' && base.sinArqueo && (/\b(numero|arqueo)\b/.test(columnas) || (accion.tipo === 'update' && 'arqueo' in accion.cambios))) {
+      return { data: null, error: { code: '42703', message: 'column caja_turno.numero does not exist' } }
+    }
     if (tabla.startsWith('caja_gift') && base.giftLotes === null) return { data: null, error: { code: 'PGRST205', message: `Could not find the table 'public.${tabla}' in the schema cache` } }
     if (accion.tipo === 'delete') {
       const fuera = new Set(filas())
@@ -139,7 +146,7 @@ function consulta(tabla: string) {
     return { data: filas(), error: null }
   }
   const q: Record<string, unknown> = {}
-  q.select = () => q
+  q.select = (c?: string) => { columnas = String(c ?? ''); return q }
   q.eq = (c: string, v: unknown) => { filtros.push((f) => String(f[c]) === String(v)); return q }
   q.neq = (c: string, v: unknown) => { filtros.push((f) => f[c] !== v); return q }
   // Como Postgres: `%` es comodín, `\%` y `\_` son literales; ⛔ ignora tildes.
@@ -269,7 +276,7 @@ beforeEach(async () => {
   gn.posts = []; gn.gets = []; gn.authInventario = []; gn.authPosts = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }; gn.creadas = []; base.agenda = [];
   base.giftLotes = []; base.giftCards = []; base.giftChoques = 0; base.ventaMp = []
   // Bruno, 11-oct: la cuenta de MP del test asienta en Transferencia (13015, Areben Comercial).
-  base.config = { store: 'zattia', reglas: { ...REGLAS_INICIALES, transferenciaPorMp: { [CUENTA_MP]: 13015 } }, politica_cambio: null }; base.alCerrar = null; base.antesDeInsertar = null
+  base.config = { store: 'zattia', reglas: { ...REGLAS_INICIALES, transferenciaPorMp: { [CUENTA_MP]: 13015 } }, politica_cambio: null }; base.alCerrar = null; base.antesDeInsertar = null; base.sinArqueo = false
   gn.lista = { status: 200, body: { data: [], meta: { has_more_pages: false } } }
   gn.rebotes = 0; gn.rebotesPost = 0
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
@@ -1854,5 +1861,82 @@ describe('caja · BDI (V4)', () => {
     const r = await correr(req('GET', { action: 'producto', codigo: '779', store: 'bdi' }))
     expect(r.code).toBe(200)
     expect(gn.authInventario[0]).toBe('Bearer tok-bdi')
+  })
+})
+
+// 🧾 El ARQUEO DE CAJA (Bruno, 30-oct): el sobre de una caja cerrada llegó bien o con diferencia. Sólo admin.
+describe('caja · arqueo del sobre', () => {
+  const ADMIN_ = { name: 'admin', admin: true, cuenta: null, acceso: {}, funcion: [] }
+  const CERRADA = '22222222-2222-4333-8444-555555555555'
+  beforeEach(() => {
+    // Una cerrada con $60.000 contados sobre $50.000 de fondo y sin billetes ⇒ el sobre trae $10.000.
+    base.turnos.push({ id: CERRADA, store: 'zattia', numero: 142, arqueo: null, fondo: 50000, contado: 60000, esperado: 60000,
+      abierto_en: '2026-10-29T12:00:00.000Z', cerrado_en: '2026-10-29T22:00:00.000Z', abierto_por: 'cajera', cerrado_por: 'cajera' })
+  })
+  const turnoDe = (id: string) => base.turnos.find((t) => t.id === id)!
+
+  it('una cajera ⇒ 403 y el sobre queda sin recibir', async () => {
+    conSesion(CAJERA)
+    const r = await correr(req('POST', {}, { action: 'arqueo', id: CERRADA, contado: 10000 }))
+    expect(r.code).toBe(403)
+    expect(turnoDe(CERRADA).arqueo).toBeNull()
+  })
+  it('la caja ABIERTA ⇒ 409: el sobre sale al cerrarla', async () => {
+    conSesion(ADMIN_)
+    const r = await correr(req('POST', {}, { action: 'arqueo', id: TURNO_ID, contado: 0 }))
+    expect(r.code).toBe(409)
+    expect(String(r.body?.error)).toMatch(/abierta/)
+    expect(turnoDe(TURNO_ID).arqueo).toBeUndefined()
+  })
+  it('llegó bien ⇒ Lista, con quién; ⛔ toca el cierre; la segunda vez ⇒ 409 salvo «corregir»', async () => {
+    conSesion(ADMIN_)
+    const r = await correr(req('POST', {}, { action: 'arqueo', id: CERRADA, contado: 10000 }))
+    expect(r.code).toBe(200)
+    expect(turnoDe(CERRADA).arqueo).toMatchObject({ estado: 'bien', esperado: 10000, contado: 10000, diferencia: 0, por: 'admin' })
+    expect(turnoDe(CERRADA)).toMatchObject({ contado: 60000, esperado: 60000 })
+    const otra = await correr(req('POST', {}, { action: 'arqueo', id: CERRADA, contado: 9000, nota: 'x' }))
+    expect(otra.code).toBe(409)
+    expect((turnoDe(CERRADA).arqueo as Fila).contado).toBe(10000)
+    const corr = await correr(req('POST', {}, { action: 'arqueo', id: CERRADA, contado: 9000, nota: 'faltaban $1.000', corregir: true }))
+    expect(corr.code).toBe(200)
+    expect(turnoDe(CERRADA).arqueo).toMatchObject({ estado: 'diferencia', diferencia: -1000, nota: 'faltaban $1.000', anterior: { estado: 'bien' } })
+  })
+  it('con diferencia y sin nota ⇒ 400', async () => {
+    conSesion(ADMIN_)
+    const r = await correr(req('POST', {}, { action: 'arqueo', id: CERRADA, contado: 9500 }))
+    expect(r.code).toBe(400)
+    expect(turnoDe(CERRADA).arqueo).toBeNull()
+  })
+  it('por el código del sobre: la caja y lo que tiene que traer; el de BDI ⛔ abre una de Zattia', async () => {
+    conSesion(CAJERA)
+    const r = await correr(req('GET', { action: 'arqueo', codigo: 'z-0142' }))
+    expect(r.code).toBe(200)
+    expect(r.body).toMatchObject({ turno: { id: CERRADA }, sobre: 10000 })
+    expect((await correr(req('GET', { action: 'arqueo', codigo: 'B-0142' }))).code).toBe(400)
+    expect((await correr(req('GET', { action: 'arqueo', codigo: 'Z-0999' }))).code).toBe(404)
+  })
+  it('sin la migración: la lista sale igual y AVISA; el arqueo ⇒ 409; la caja cierra igual', async () => {
+    base.sinArqueo = true
+    conSesion(ADMIN_)
+    const l = await correr(req('GET', { action: 'turnos', desde: '2026-10-01', hasta: '2026-10-31' }))
+    expect(l.code).toBe(200)
+    expect((l.body?.turnos as Fila[]).length).toBeGreaterThan(0)
+    expect(l.body?.arqueo).toMatchObject({ disponible: false })
+    expect((await correr(req('POST', {}, { action: 'arqueo', id: CERRADA, contado: 10000 }))).code).toBe(409)
+    conSesion(CAJERA)
+    const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 50000 }))
+    expect(c.code).toBe(200)
+    expect(turnoDe(TURNO_ID).cerrado_en).toBeTruthy()
+  })
+  it('con la migración: la lista trae el número y el cierre devuelve el número para el ticket', async () => {
+    conSesion(ADMIN_)
+    const l = await correr(req('GET', { action: 'turnos', desde: '2026-10-01', hasta: '2026-10-31' }))
+    expect(l.body?.arqueo).toMatchObject({ disponible: true })
+    expect((l.body?.turnos as Fila[]).find((t) => t.id === CERRADA)).toMatchObject({ numero: 142, arqueo: null })
+    turnoDe(TURNO_ID).numero = 143
+    conSesion(CAJERA)
+    const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 50000 }))
+    expect(c.code).toBe(200)
+    expect((c.body?.turno as Fila).numero).toBe(143)
   })
 })
