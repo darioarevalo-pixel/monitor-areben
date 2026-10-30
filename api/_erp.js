@@ -1648,7 +1648,10 @@ export default async function handler(req, res) {
   const guardados = (esAdmin(perfil) || (permiso === 'ver' && req.query.vista !== 'permisos'))
     ? undefined
     : await rolesGuardadosDeMarcas(req.query.vista === 'permisos' ? ['bdi', 'zattia'] : marcasDelPedido, { conMotor })
-  if (!marcasDelPedido.every((m) => puedeErp(perfil, m, permiso, aprobaciones, guardados))) {
+  // 🔴 El MAPA de permisos (`vista=permisos` sin marca, como lo pide `usePuedeErp`) alcanza con UNA marca: trae la otra en `false`.
+  // Con `every`, quien tiene el ERP en una sola (el local de Stunned) recibía 403, el menú se quedaba sin mapa y lo mostraba TODO (30-oct).
+  const alcanza = req.query.vista === 'permisos' && !base ? 'some' : 'every'
+  if (!marcasDelPedido[alcanza]((m) => puedeErp(perfil, m, permiso, aprobaciones, guardados))) {
     return res.status(403).json({ error: permiso === 'ver' ? 'No tenés acceso al ERP.' : 'Tu rol no puede hacer esto en el ERP.', permiso })
   }
   const invalida = entradaInvalida({ method: req.method, query: req.query, body })

@@ -66,6 +66,21 @@ describe('api/_erp.js · la puerta por rol', () => {
     expect(otra.code).toBe(403)
   })
 
+  it('🔴 el mapa SIN marca (como lo pide el menú) con el ERP en UNA sola: 200 y la otra en false (⛔ 403: el menú lo mostraba todo, 30-oct)', async () => {
+    const handler = await cargar()
+    perfilActual = perfil({ funcion: ['local'], acceso: { bdi: {}, zattia: { erp: true } } })
+    const r = res()
+    await handler({ method: 'GET', query: { vista: 'permisos' }, body: {} }, r)
+    expect(r.code).toBe(200)
+    expect(r.body.permisos?.zattia).toMatchObject({ ver: true, 'cargar-gasto': true, configurar: false, costos: false })
+    expect(Object.values(r.body.permisos?.bdi ?? {}).some(Boolean)).toBe(false)
+    // Sin el ERP en ninguna ⇒ 403 igual.
+    perfilActual = perfil({ funcion: ['local'] })
+    const nada = res()
+    await handler({ method: 'GET', query: { vista: 'permisos' }, body: {} }, nada)
+    expect(nada.code).toBe(403)
+  })
+
   it('roles guardados: pisan la tabla en el mapa de permisos; si la base no respondió, esa marca queda cerrada (sólo Admin)', async () => {
     const handler = await cargar()
     perfilActual = perfil({ funcion: ['administracion'], acceso: { bdi: { erp: true }, zattia: { erp: true } } })
