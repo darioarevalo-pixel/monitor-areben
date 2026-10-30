@@ -33,7 +33,14 @@ vi.mock('@/lib/erp/cliente', () => ({
   leerGastos: async (_m: string, desde: string, hasta: string, prueba: boolean) => ({ desde, hasta, prueba, total: prueba ? 999 : 1_500_000, cobrosSinComision: prueba ? 0 : 2 }),
   leerListaDeVentas: async () => ({ filas: [{ estadoKey: 'a_preparar', cobroKey: 'sinpagar', kind: 'venta', tipo: 'venta', anulada: false, facturada: false }] }),
   leerListaDeStock: async () => { throw new Error('El stock del ERP todavía no está conectado') },
-  leerListaDeProductos: async () => ({ filas: [{ disponible: 1, tn: 'si', costo: null, precios: { mayorista: null }, proveedor: null, sinBarra: false }] }),
+  leerListaDeProductos: async () => ({ filas: [
+    { disponible: 1, tn: 'si', costo: null, precios: { mayorista: null }, proveedor: null, sinBarra: false, linea: 'bdi' },
+    { disponible: 10, tn: 'si', costo: 5000, precios: { mayorista: 1 }, proveedor: 'x', sinBarra: false, linea: 'bdi' },
+  ] }),
+  leerVentasPorProducto: async () => ({ renglones: [
+    { id: '1', ventaId: 'v1', producto: 'p1', nombre: 'Funda Roja', talle: 'A', cantidad: 2, total: 30000, costo: 10000, canal: 'Local', linea: 'bdi', cuando: '2026-10-02' },
+    { id: '2', ventaId: 'v2', producto: 'p2', nombre: 'Funda Azul', talle: 'A', cantidad: 1, total: 9000, costo: null, canal: 'Local', linea: 'bdi', cuando: '2026-10-03' },
+  ] }),
 }))
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'bdi', perfil: { name: 'bruno' } }) }))
 
@@ -48,7 +55,12 @@ describe('la pantalla', () => {
     await act(async () => { root = createRoot(host); root.render(<InicioErp href={(s, p) => `/erp/${s}/${p}`} />) })
     await act(async () => {})
     const t = host.textContent ?? ''
-    expect(t).toContain('Resultado comercial del mes')
+    expect(host.querySelector('section[aria-label="Resultado comercial del mes"]')).not.toBeNull()
+    expect(t).toContain('Resultado comercial')
+    expect(t).toMatch(/Stock a costo\$\s50\.000/) // stock a costo: 10 u. × $ 5.000 (la de sin costo ⛔ suma: se avisa)
+    expect(t).toContain('1 producto con stock sin costo (1 unidad)')
+    expect(t).toContain('Funda Roja') // lo que más deja: la de sin costo ⛔ entra
+    expect(t).not.toContain('Funda Azul')
     expect(t).toContain('-18%') // 29,5 M contra 36,0 M
     expect(t).toContain('67% de lo vendido')
     const fila = (que: string) => [...host.querySelectorAll('a')].find((a) => a.textContent?.startsWith(que))!

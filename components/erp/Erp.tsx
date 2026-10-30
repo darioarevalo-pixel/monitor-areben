@@ -177,6 +177,8 @@ function Trazo({ d, size = 18 }: { d: string; size?: number }) {
 
 /** 📱 La barra de abajo del celular (Bruno, 29-oct): las 4 que más se usan; el resto, en «Más». */
 const ABAJO = ['inicio', 'ventas', 'stock', 'productos']
+/** El nombre en la barra de abajo del celular, donde no entra el largo («Productos y precios» se partía en 2 renglones). */
+const CORTO_ABAJO: Record<string, string> = { productos: 'Productos' }
 const EN_MAS = SECCIONES_ERP.filter((s) => !ABAJO.includes(s.key))
 const TRAZO_MAS = 'M5 12h.01 M12 12h.01 M19 12h.01'
 const TRAZO_BUSCAR = 'M21 21l-4.3-4.3 M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z'
@@ -432,7 +434,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
           return (
             <Link key={k} href={hrefErp(k)} aria-current={on ? 'page' : undefined} className={`erp-movil-nav-item${on ? ' erp-movil-nav-item--on' : ''}`}>
               <Trazo d={s.icono} size={20} />
-              <span>{s.titulo}</span>
+              <span>{CORTO_ABAJO[k] ?? s.titulo}</span>
               {!!contadores[k] && <span className="erp-movil-nav-n" aria-label={`${contadores[k]} ${TITULO_CONTADOR[k] ?? 'para hacer'}`}>{contadores[k]}</span>}
             </Link>
           )

@@ -48,7 +48,7 @@ describe('ERP › el armazón propio', () => {
       ['Volver al monitor', '/inicio'],
     ])
     // La barra de abajo del celular (ERP en el celular, tanda 1): las 4 primeras; el resto va en «Más».
-    expect(links('erp-movil-nav')).toEqual([['Inicio', '/erp'], ['Ventas', '/erp/ventas'], ['Stock', '/erp/stock'], ['Productos y precios', '/erp/productos']])
+    expect(links('erp-movil-nav')).toEqual([['Inicio', '/erp'], ['Ventas', '/erp/ventas'], ['Stock', '/erp/stock'], ['Productos', '/erp/productos']]) // en la barra de abajo, corto: el largo se partía en 2 renglones (30-oct)
     expect(div.querySelector('nav.erp-menu a[aria-current="page"]')?.textContent).toBe('Ingresos y ajustes')
     expect(div.querySelector('h1')?.textContent).toBe('Ingresos y ajustes')
     expect(pantalla()).toBe('AjustesStock')

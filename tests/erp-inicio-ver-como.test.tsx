@@ -32,6 +32,7 @@ vi.mock('@/lib/erp/cliente', () => ({
   leerListaDeVentas: async () => ({ filas: [{ estadoKey: 'a_preparar', cobroKey: 'sinpagar', kind: 'venta', tipo: 'venta', anulada: false, facturada: false }] }),
   leerListaDeStock: async () => ({ filas: [] }),
   leerListaDeProductos: async () => ({ filas: [] }),
+  leerVentasPorProducto: async () => ({ renglones: [] }),
 }))
 let admin = true
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'bdi', perfil: { name: 'bruno', admin } }) }))
@@ -53,14 +54,14 @@ const rol = (host: HTMLElement, nombre: string) => [...host.querySelectorAll('[r
 describe('Ver como — la pantalla', () => {
   it('Admin lo ve todo; con «Depósito» cambian las tarjetas y desaparece el resultado', async () => {
     const host = await montar()
-    expect(host.textContent).toContain('Resultado comercial del mes')
+    expect(host.textContent).toContain('Margen bruto')
     expect(host.textContent).toContain('Productos sin costo')
     expect(rol(host, 'Depósito')).toBeUndefined()
     await act(async () => { boton(host)!.click() })
     await act(async () => { rol(host, 'Depósito').click() })
     expect(boton(host)!.textContent).toContain('Depósito')
     expect(rol(host, 'Depósito')).toBeUndefined()
-    expect(host.textContent).not.toContain('Resultado comercial del mes')
+    expect(host.textContent).not.toContain('Margen bruto')
     expect(host.textContent).not.toContain('Productos sin costo')
     expect(host.textContent).toContain('Ventas a desarmar')
     expect(host.textContent).toContain('Depósito: lo que hay que preparar')

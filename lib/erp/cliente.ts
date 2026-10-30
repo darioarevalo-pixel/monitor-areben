@@ -663,7 +663,12 @@ export const ponerCreditoCliente = (marca: MarcaErp, p: { clienteId: string; cre
 
 // ── ERP › Inicio (`api/_erp-inicio.js`): el resultado comercial del mes, del espejo de GN ──
 export type TramoResultado = { desde: string; hasta: string; ventas: number; vendido: number; costo: number; sinCosto: number; margen: number }
-export type ResultadoDelMes = { mes: TramoResultado; anterior: TramoResultado; gnHasta: string | null }
+/** Para los gráficos del Inicio (tanda 2): la MISMA cuenta que `mes`, agrupada por día, por mes (12) y por canal. */
+export type GrupoResultado = { ventas: number; vendido: number; costo: number }
+export type ResultadoDelMes = {
+  mes: TramoResultado; anterior: TramoResultado; gnHasta: string | null
+  dias?: Array<GrupoResultado & { dia: string }>; meses?: Array<GrupoResultado & { mes: string }>; canales?: Array<GrupoResultado & { canal: string }>
+}
 export const leerResultadoDelMes = (marca: MarcaErp) =>
   pedir<ResultadoDelMes>(null, `&vista=inicio-resultado&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el resultado del mes.')
 

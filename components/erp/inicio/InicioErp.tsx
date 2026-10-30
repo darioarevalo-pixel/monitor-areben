@@ -12,9 +12,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, Notice, color, font, space, weight } from '@/components/ui'
 import { formatMoney } from '@/components/ui/MoneyText'
-import { TileResumen } from '@/components/ui/PiezasLista'
 import {
-  leerGastos, leerListaDeProductos, leerListaDeStock, leerListaDeVentas, leerResultadoDelMes, type GastosDelPeriodo, type MarcaErp, type ResultadoDelMes,
+  leerGastos, leerListaDeProductos, leerListaDeStock, leerListaDeVentas, leerResultadoDelMes, leerVentasPorProducto, type GastosDelPeriodo, type MarcaErp, type RenglonProducto, type ResultadoDelMes,
 } from '@/lib/erp/cliente'
 import { contarVistas as vistasDeVentas, filtrar as filtrarVentas, rangoDePeriodo } from '@/lib/erp/ventas-lista.core.js'
 import { contarVistas as vistasDeStock, filtrar as filtrarStock } from '@/lib/erp/stock-lista.core.js'
@@ -23,6 +22,9 @@ import { useLineaErp } from '@/lib/erp/linea-erp'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { ROLES, VISTA, paraHacerDe, subtituloDe, verResultado } from '@/lib/erp/inicio-roles.core.js'
 import { esAdmin } from '@/lib/permisos'
+import { agrupar as agruparPorProducto, filtrar as filtrarPorProducto } from '@/lib/erp/ventas-producto.core.js'
+import { comoVieneElMes, doceMeses, masDejan, porCanal, stockACosto, vendidoDelDia } from '@/lib/erp/inicio-panel.core.js'
+import { ComoViene, MasDejan, MesAMes, PorCanal, TarjetaVendido, rotulo, tarjeta } from './PanelInicio'
 
 /** Lo que se cuenta de cada lista: `null` = leyendo; un texto = no se pudo (y por qué). */
 type Conteo = Record<string, number> | string | null
@@ -31,6 +33,9 @@ type Crudo = { filas: unknown[] } | string | null
 
 const TITULO: Record<string, string> = { ventas: 'Ventas', stock: 'Stock', productos: 'Productos', facturacion: 'Facturación' }
 
+/** `2026-10-30` → `2026-10-29`. */
+const diaAnterior = (d: string) => new Date(Date.parse(`${d}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10)
+const cuantos = (n: number, uno: string, varios: string) => `${n.toLocaleString('es-AR')} ${n === 1 ? uno : varios}`
 const fecha = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
 const pct = (a: number, b: number) => (b ? Math.round((a / b - 1) * 100) : null)
 
@@ -82,6 +87,8 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const [resultado, setResultado] = useState<{ marca: string; r: ResultadoDelMes | null; error: string | null } | null>(null)
   // Los gastos comerciales REALES del mismo mes (⛔ los de prueba: son de ventas que Gestión Nube no tiene).
   const [gastos, setGastos] = useState<{ marca: string; g: GastosDelPeriodo | null; error: string | null } | null>(null)
+  // «Lo que más deja»: los renglones de Ventas › Por producto del mes (su mismo `agrupar`).
+  const [pp, setPp] = useState<{ marca: string; renglones: RenglonProducto[] | null; error: string | null } | null>(null)
   const [conteos, setConteos] = useState<{ marca: string; ventas: Crudo; stock: Crudo; productos: Crudo }>({ marca: '', ventas: null, stock: null, productos: null })
 
   useEffect(() => {
@@ -92,6 +99,8 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
       .then((r) => {
         if (!vivo) return
         setResultado({ marca, r, error: null })
+        leerVentasPorProducto(marca, r.mes.desde, r.mes.hasta).then((d) => vivo && setPp({ marca, renglones: d.renglones, error: null }))
+          .catch((e) => vivo && setPp({ marca, renglones: null, error: fallo(e) }))
         leerGastos(marca, r.mes.desde, r.mes.hasta, false).then((g) => vivo && setGastos({ marca, g, error: null })).catch((e) => vivo && setGastos({ marca, g: null, error: fallo(e) }))
       })
       .catch((e) => vivo && setResultado({ marca, r: null, error: fallo(e) }))
@@ -115,6 +124,26 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
     productos: typeof crudos.productos === 'object' && crudos.productos ? vistasDeProductos(filtrarProductos(crudos.productos.filas as never, { linea })) : crudos.productos,
   }
   const h2: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
+  // En el celular van de a dos por renglón: el monto se achica para no salirse de la caja (390 px, visto 30-oct).
+  const grande: React.CSSProperties = { fontSize: 'clamp(17px, 5vw, 24px)', fontWeight: weight.bold, letterSpacing: '-0.01em', color: color.ink, fontVariantNumeric: 'tabular-nums' }
+  const nota: React.CSSProperties = { fontSize: font.sm, color: color.mut }
+  const r = res?.r ?? null
+  // Lo vendido CADA día del mes hasta hoy (los días sin ventas, 0): la línea de la tarjeta grande.
+  // Hasta AYER: el día de hoy llega a medias desde la copia de GN y hundía la punta de la línea.
+  const diasDelMes = m && r?.dias ? Array.from({ length: Math.max(1, Number(m.hasta.slice(8, 10)) - 1) }, (_, i) => {
+    const dia = `${m.desde.slice(0, 8)}${String(i + 1).padStart(2, '0')}`
+    return { dia: i + 1, vendido: r.dias!.find((d) => d.dia === dia)?.vendido ?? 0 }
+  }) : []
+  // El stock a costo, de las MISMAS filas de Productos que cuentan «Para hacer» (su disponible es el de Stock).
+  const stock = typeof crudos.productos === 'object' && crudos.productos ? stockACosto(filtrarProductos(crudos.productos.filas as never, { linea }) as never) : null
+  const ppm = pp?.marca === marca ? pp : null
+  const top = ppm?.renglones ? masDejan(agruparPorProducto(filtrarPorProducto(ppm.renglones as never, { linea }))) : null
+  const avisos = [
+    gs?.g && gs.g.cobrosSinComision > 0 ? `${cuantos(gs.g.cobrosSinComision, 'cobro', 'cobros')} con tarjeta o Mercado Pago sin tasa cargada: esas comisiones no están en los gastos.` : null,
+    m?.sinCosto ? `${cuantos(m.sinCosto, 'venta', 'ventas')} sin costo en Gestión Nube: suman su precio sin restar nada.` : null,
+    stock?.productosSinCosto ? `${cuantos(stock.productosSinCosto, 'producto', 'productos')} con stock sin costo (${cuantos(stock.sinCosto, 'unidad', 'unidades')}): no suman al stock a costo.` : null,
+    r?.gnHasta && m && r.gnHasta < m.hasta ? `Gestión Nube llega hasta el ${fecha(r.gnHasta)}: lo de después todavía no está.` : null,
+  ].filter((t): t is string => !!t)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[5] }}>
@@ -126,28 +155,48 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
         </div>
         {esAdmin(perfil) && <VerComo rol={rol} setRol={setRol} />}
       </header>
-      {verResultado(rol) && <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-        <div>
-          <h2 style={h2}>Resultado comercial del mes</h2>
-          <div style={{ fontSize: font.sm, color: color.mut }}>
-            {m && a ? `del ${fecha(m.desde)} al ${fecha(m.hasta)}, contra el ${fecha(a.desde)} al ${fecha(a.hasta)} · de Gestión Nube (el que vende hoy), con su costo` : 'de Gestión Nube (el que vende hoy), con su costo'}
+      {verResultado(rol) && <section aria-label="Resultado comercial del mes" style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+        {res?.error && <Notice tone="danger">{res.error}</Notice>}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: space[3] }}>
+          <TarjetaVendido mesNombre={MESES[Number(hoy.slice(5, 7)) - 1]} vendido={m ? m.vendido : null} ayer={r?.dias && m && m.hasta > m.desde ? vendidoDelDia(r.dias, diaAnterior(m.hasta)) : null}
+            anterior={a ? a.vendido : null} variacion={m && a ? pct(m.vendido, a.vendido) : null} dias={diasDelMes} />
+          <div style={tarjeta}>
+            <span style={rotulo}>Margen bruto</span>
+            <span style={grande}>{m ? formatMoney(m.margen) : '…'}</span>
+            {m && <span style={nota}>{m.vendido ? Math.round((m.margen / m.vendido) * 100) : 0}% de lo vendido{a ? <> · <Variacion ahora={m.margen} antes={a.margen} /> contra el mes pasado</> : null}</span>}
+          </div>
+          <div style={tarjeta}>
+            <span style={rotulo}>Resultado comercial</span>
+            <span style={grande}>{m && gTotal != null ? formatMoney(m.margen - gTotal) : '…'}</span>
+            <span style={nota}>{gs?.error ? gs.error : gTotal == null ? 'margen menos gastos comerciales' : gTotal ? `margen menos gastos comerciales (${formatMoney(gTotal)}, reales del ERP)` : 'margen menos gastos comerciales: todavía no hay gastos reales en el ERP'}</span>
+          </div>
+          <div style={tarjeta}>
+            <span style={rotulo}>Ventas</span>
+            <span style={grande}>{m ? m.ventas.toLocaleString('es-AR') : '…'}</span>
+            {m && <span style={nota}>ticket promedio {formatMoney(m.ventas ? m.vendido / m.ventas : 0)}{a ? ` · ${m.ventas.toLocaleString('es-AR')} contra ${a.ventas.toLocaleString('es-AR')} del mes pasado` : ''}</span>}
+          </div>
+          <div style={tarjeta}>
+            <span style={rotulo}>Stock a costo</span>
+            <span style={grande}>{stock ? formatMoney(stock.costo) : typeof crudos.productos === 'string' ? 'No se pudo' : '…'}</span>
+            {stock && <span style={nota}>{stock.unidades.toLocaleString('es-AR')} unidades disponibles{m && m.costo > 0 && linea !== 'stunned' ? ` · ≈ ${(stock.costo / m.costo * (Number(m.hasta.slice(8, 10)) / 30)).toLocaleString('es-AR', { maximumFractionDigits: 1 })} meses de venta al costo` : ''}</span>}
           </div>
         </div>
-        {res?.error && <Notice tone="danger">{res.error}</Notice>}
-        <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-          <TileResumen titulo="Vendido" valor={m ? formatMoney(m.vendido) : '…'} oscuro nota={m && a ? `el mes pasado a esta altura ${formatMoney(a.vendido)}` : undefined} />
-          <TileResumen titulo="Margen bruto" valor={m ? formatMoney(m.margen) : '…'} nota={m ? `${m.vendido ? Math.round((m.margen / m.vendido) * 100) : 0}% de lo vendido · costo ${formatMoney(m.costo)}` : undefined} />
-          <TileResumen titulo="Ventas" valor={m ? m.ventas.toLocaleString('es-AR') : '…'} nota={m ? `ticket promedio ${formatMoney(m.ventas ? m.vendido / m.ventas : 0)}` : undefined} />
-          <TileResumen titulo="Contra el mes pasado" valor={m && a ? `${(pct(m.vendido, a.vendido) ?? 0) >= 0 ? '+' : ''}${pct(m.vendido, a.vendido) ?? '—'}%` : '…'} nota={m && a ? `en ventas: ${m.ventas} contra ${a.ventas}` : undefined} />
+        {avisos.length > 0 && (
+          <div role="note" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 14px', borderRadius: 12, background: 'var(--mo-warning-bg)', border: '1px solid var(--mo-warning-border)', color: 'var(--mo-warning-ink)', fontSize: font.sm }}>
+            {avisos.map((t) => <span key={t}>⚠️ {t}</span>)}
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))', gap: space[3] }}>
+          {r?.meses && <MesAMes meses={doceMeses(r.meses, m!.hasta)} />}
+          {r?.dias && m && a && <ComoViene filas={comoVieneElMes(r.dias, m, a)} ahora={tituloDelMes(m.desde).split(' ')[0]} antes={tituloDelMes(a.desde).split(' ')[0]} />}
         </div>
-        <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-          <TileResumen titulo="Gastos comerciales" valor={gTotal != null ? formatMoney(gTotal) : gs?.error ? 'No se pudo' : '…'}
-            nota={gs?.error ? gs.error : gTotal != null ? (gTotal ? 'comisiones, impuestos y lo que cuesta vender · reales del ERP' : 'todavía no hay gastos reales en el ERP: el resultado es antes de gastos') : undefined} />
-          <TileResumen titulo="Resultado después de gastos comerciales" valor={m && gTotal != null ? formatMoney(m.margen - gTotal) : '…'} oscuro
-            nota={m && gTotal != null ? `margen bruto ${formatMoney(m.margen)} menos gastos comerciales ${formatMoney(gTotal)}` : undefined} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))', gap: space[3] }}>
+          {r?.canales && <PorCanal canales={porCanal(r.canales)} />}
+          <MasDejan productos={top ?? []} estado={top ? null : pp?.error ?? '…'} href={href('ventas', 'por-producto')} />
         </div>
-        {gs?.g && gs.g.cobrosSinComision > 0 && <div style={{ fontSize: font.sm, color: 'var(--mo-warning-ink)' }}>Hay {gs.g.cobrosSinComision.toLocaleString('es-AR')} cobros con tarjeta o Mercado Pago sin tasa cargada: esas comisiones no están en los gastos.</div>}
-        {m && a && <div style={{ fontSize: font.sm, color: color.mut }}>Margen contra el mes pasado: <Variacion ahora={m.margen} antes={a.margen} />{m.sinCosto ? ` · ${m.sinCosto} ventas sin costo en Gestión Nube (suman su precio sin restar nada)` : ''}{res?.r?.gnHasta ? ` · Gestión Nube llega hasta el ${fecha(res.r.gnHasta)}` : ''}</div>}
+        <div style={{ fontSize: font.sm, color: color.mut }}>
+          {m && a ? `Del ${fecha(m.desde)} al ${fecha(m.hasta)}, contra el ${fecha(a.desde)} al ${fecha(a.hasta)}` : 'Este mes'} · lo vendido, el margen y los canales son de Gestión Nube (el que vende hoy), con su costo{linea === 'stunned' ? ' — la base de Zattia: Stunned vende por el ERP desde el 28-oct' : ''}. Lo que más deja usa el costo vigente del ERP, como Ventas › Por producto. El stock a costo es el disponible de Stock por el costo de cada producto.
+        </div>
       </section>}
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
