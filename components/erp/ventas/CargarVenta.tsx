@@ -20,7 +20,7 @@ import {
 } from '@/lib/erp/cliente'
 import { NOMBRE_CANAL, NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
-import { deLaTienda } from '@/lib/erp/linea-erp'
+import { deLaTienda, useTiendaErp } from '@/lib/erp/linea-erp'
 
 type Renglon = { clave: string; prenda: PrendaEncontrada; cantidad: number; precio: number | '' }
 type Pago = PagoCarga
@@ -44,7 +44,9 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
   const [clave] = useState(uuid)
   const [datos, setDatos] = useState<DatosParaCargar | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [linea, setLinea] = useState<string>(marca)
+  // Arranca en la tienda del menú: mirando Stunned arrancaba en Zattia (Bruno, 30-oct).
+  const tienda = useTiendaErp()
+  const [linea, setLinea] = useState<string>(marca === 'bdi' ? marca : tienda)
   const [cuando, setCuando] = useState(ahoraLocal)
   const [canal, setCanal] = useState('local')
   const [deposito, setDeposito] = useState('local')

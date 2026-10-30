@@ -7,6 +7,7 @@
  * por número (no hay lectura) y el cartel lo dice. Un escaneo del lector (sólo cifras + Enter) abre la prenda si es una sola.
  */
 
+import { deLaTienda, useTiendaErp } from '@/lib/erp/linea-erp'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icono } from '@/components/ui/Icono'
@@ -104,10 +105,14 @@ export function BusquedaGlobal({ marca, marcas, secciones, onElegir, onCerrar }:
   const onElegirRef = useRef(onElegir)
   useEffect(() => { onElegirRef.current = onElegir })
 
+  // En la base de Zattia viven Zattia y Stunned: se queda con la tienda del menú (Bruno, 30-oct: mirando Stunned, una venta
+  // de Zattia ⛔ aparece —y al elegirla Ventas decía «No encontré la venta»—). Las clientas son de la empresa: ⛔ tienen línea.
+  const tienda = useTiendaErp()
+  const lineaZ: 'zattia' | 'stunned' = tienda === 'stunned' ? 'stunned' : 'zattia'
   const donde: MarcaErp[] = todas ? marcas : [marca]
   const que = queBuscar(escrito)
   const hayLectura = que.ventas || que.prendas || que.clientas
-  const clave = `${donde.join('+')}|${que.texto}`
+  const clave = `${donde.join('+')}|${lineaZ}|${que.texto}`
   const lista = useMemo(() => saltosA(escrito, secciones), [escrito, secciones])
 
   useEffect(() => { entradaRef.current?.focus() }, [])
@@ -124,8 +129,8 @@ export function BusquedaGlobal({ marca, marcas, secciones, onElegir, onCerrar }:
       const quien = (m: MarcaErp, e: unknown) => errores.push(`${marcasDe.length > 1 ? `${NOMBRE_MARCA[m]}: ` : ''}${msj(e)}`)
       const salidas = await Promise.all(marcasDe.map(async (m) => {
         const [v, p, c] = await Promise.all([
-          que.ventas ? buscarVentas(m, { q: que.texto, desde: desdeBusquedaDeVentas(hoy), hasta: hoy }).then((r) => etiquetar(m, r.ventas)).catch((e) => { quien(m, e); return [] }) : [],
-          que.prendas ? buscarPrendas(m, que.texto).then((r) => etiquetar(m, r.variantes)).catch((e) => { quien(m, e); return [] }) : [],
+          que.ventas ? buscarVentas(m, { q: que.texto, desde: desdeBusquedaDeVentas(hoy), hasta: hoy }).then((r) => etiquetar(m, m === 'zattia' ? r.ventas.filter((x) => x.marca === lineaZ) : r.ventas)).catch((e) => { quien(m, e); return [] }) : [],
+          que.prendas ? buscarPrendas(m, que.texto).then((r) => etiquetar(m, m === 'zattia' ? deLaTienda(r.variantes, lineaZ) : r.variantes)).catch((e) => { quien(m, e); return [] }) : [],
           que.clientas ? buscarClientas(m, que.texto).then((r) => etiquetar(m, r.clientas)).catch((e) => { quien(m, e); return [] }) : [],
         ])
         return { v, p, c }

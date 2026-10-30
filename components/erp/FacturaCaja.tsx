@@ -12,6 +12,7 @@
  * servidor la frena (`puedeFacturar`). 🔴 Una factura con CAE ⛔ se elimina: se anula con nota de crédito.
  */
 
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 import { useEffect, useState } from 'react'
 import {
   Badge, Button, ConfirmDetalle, EmptyState, Field, Input, MoneyText, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, space, useConfirmar,
@@ -26,6 +27,8 @@ import { NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 export function FacturaCaja() {
   const { marca: delShell } = useSesion()
   const store = marcaParaPOS(null, delShell) as MarcaErp
+  // Las ventas de la tienda del menú: mirando Stunned, ⛔ las de Zattia (Bruno, 30-oct).
+  const tienda = useTiendaErp()
   usarMarcaCaja(store)
   const { confirmar } = useConfirmar()
 
@@ -100,7 +103,7 @@ export function FacturaCaja() {
 
   const buscar = () => correr(async () => {
     limpiar()
-    setVentas((await buscarVentas(store, { q, desde: '', hasta: '' })).ventas.filter((v) => v.estado === 'confirmada'))
+    setVentas((await buscarVentas(store, { q, desde: '', hasta: '' })).ventas.filter((v) => v.estado === 'confirmada' && (tienda === 'bdi' || v.marca === tienda)))
   }, 'No se pudo buscar.')
 
   const abrir = (id: string) => correr(async () => {

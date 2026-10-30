@@ -188,12 +188,13 @@ describe('cambio suelto · el pedido al servidor', () => {
 })
 
 describe('cambio · buscar la venta', () => {
-  it('🔴 la pantalla del ERP ⛔ esconde las ventas de Zattia cuando Stunned se prende; el POS sí las saca', async () => {
+  it('🔴 cada tienda ve SUS ventas (Bruno, 30-oct): mirando Stunned ⛔ salen las de Zattia ni al revés; sin línea (BDI), todas', async () => {
     const cliente = await import('@/lib/erp/cliente')
     const venta = (id: string, marca: string) => ({ id, numero: Number(id), marca, tipo: 'venta', estado: 'confirmada', origen: 'caja', canal: 'local', deposito: 'local', total: 1000, prueba: true, ocurridaEn: '2026-10-27T12:00:00Z', cliente: null })
     vi.spyOn(cliente, 'buscarVentas').mockResolvedValue({ ventas: [venta('1', 'zattia'), venta('2', 'stunned')], cortado: false } as never)
     const { buscarVentasDelCambio } = await import('@/components/caja/useCambio')
-    expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true, soloStunned: false })).filas.map((f) => f.numero)).toEqual([1, 2])
-    expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true, soloStunned: true })).filas.map((f) => f.numero)).toEqual([2])
+    expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true, linea: 'stunned' })).filas.map((f) => f.numero)).toEqual([2])
+    expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true, linea: 'zattia' })).filas.map((f) => f.numero)).toEqual([1])
+    expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true })).filas.map((f) => f.numero)).toEqual([1, 2])
   })
 })

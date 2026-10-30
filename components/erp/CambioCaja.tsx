@@ -14,6 +14,7 @@
  * que usa el modo «Cambios» del POS.
  */
 
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 import { useEffect, useState } from 'react'
 import {
   Badge, Button, EmptyState, Field, Input, MoneyText, Notice, NumberField, PasoCantidad, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, space,
@@ -34,6 +35,8 @@ export function CambioCaja() {
   const { marca: delShell } = useSesion()
   // La marca de la Caja ANTES de pedir nada (`lib/caja/cliente.ts` la lee en cada pedido), como la pestaña Caja.
   const store = marcaParaPOS(null, delShell) as MarcaErp
+  // Las ventas de la tienda del menú: mirando Stunned, ⛔ las de Zattia (Bruno, 30-oct).
+  const tienda = useTiendaErp()
   usarMarcaCaja(store)
   const { datos } = useDatosMonitor()
   const tnIdx = useTnPromo(store)
@@ -70,7 +73,7 @@ export function CambioCaja() {
   const buscar = () => c.correr(async () => {
     c.empezarDeNuevo()
     c.setHecho(null)
-    const r = await buscarVentasDelCambio(store, q, { gn: conStunned, soloStunned: false })
+    const r = await buscarVentasDelCambio(store, q, { gn: conStunned, linea: tienda === 'bdi' ? undefined : tienda })
     setVentas(r.filas)
     setAviso(r.aviso)
   }, 'No se pudo buscar.')

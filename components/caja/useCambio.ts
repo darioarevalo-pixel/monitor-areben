@@ -68,14 +68,15 @@ export type FilaVenta = { clave: string; numero: string | number; cliente: strin
 
 /**
  * Buscar la venta original: del ERP por número o cliente y, con `gn` (Stunned) y un número, también la de Gestión Nube con ese
- * número. `soloStunned` (el POS, que sólo cambia Stunned) saca las ventas de Zattia; la pantalla del ERP las deja: ⛔ se esconde el
- * cambio de Zattia cuando Stunned se prende. Devuelve las filas y, aparte, por qué no se encontró la de Gestión Nube (para decirlo).
+ * número. `linea`: sólo las ventas de ESA línea —el POS, que sólo cambia Stunned, y la pantalla del ERP, con la tienda del menú
+ * (Bruno, 30-oct: mirando Stunned ofrecía ventas de Zattia)—; sin `linea` (BDI), todas. El camino de GN es sólo de Stunned
+ * (`ventaGnDeCambio` deja sus renglones). Devuelve las filas y, aparte, por qué no se encontró la de Gestión Nube (para decirlo).
  */
-export async function buscarVentasDelCambio(store: MarcaErp, texto: string, { gn, soloStunned }: { gn: boolean; soloStunned: boolean }): Promise<{ filas: FilaVenta[]; aviso: string | null }> {
+export async function buscarVentasDelCambio(store: MarcaErp, texto: string, { gn, linea }: { gn: boolean; linea?: 'zattia' | 'stunned' }): Promise<{ filas: FilaVenta[]; aviso: string | null }> {
   const filas: FilaVenta[] = []
   let aviso: string | null = null
   const t = texto.trim()
-  if (gn && /^\d{1,12}$/.test(t)) {
+  if (gn && linea !== 'zattia' && /^\d{1,12}$/.test(t)) {
     try {
       const g = ventaDeGn(await leerVentaGnCambio(t))
       const o = g.origen as Extract<Origen, { tipo: 'gn' }>
@@ -85,7 +86,7 @@ export async function buscarVentasDelCambio(store: MarcaErp, texto: string, { gn
     }
   }
   const r = await buscarVentas(store, { q: t, desde: '', hasta: '' })
-  for (const v of r.ventas.filter((x) => x.tipo === 'venta' && x.estado === 'confirmada' && (!soloStunned || x.marca === 'stunned'))) {
+  for (const v of r.ventas.filter((x) => x.tipo === 'venta' && x.estado === 'confirmada' && (!linea || x.marca === linea))) {
     filas.push({ clave: `erp-${v.id}`, numero: v.numero, cliente: v.cliente, fecha: v.ocurridaEn, total: v.total, rotulo: 'ERP', prueba: v.prueba, abrir: async () => ventaDeFicha(await leerFichaDeVenta(store, v.id)) })
   }
   return { filas, aviso: filas.length ? null : aviso ?? 'No hay ventas con esa búsqueda.' }
