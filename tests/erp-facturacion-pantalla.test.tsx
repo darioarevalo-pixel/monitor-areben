@@ -13,18 +13,20 @@ import type { FacturaEmitida } from '@/lib/arca/factura-pdf'
 const base: MesFacturacion = {
   mes: '2026-10', ambiente: 'homologacion', errorAmbiente: null, estado: 'abierto', cerradoPor: null, cerradoEn: null,
   techo: 1_000_000, techoCalculado: 1_000_000, facturadoGN: 300_000, facturadoMonitor: 100_000, facturado: 400_000, pendiente: 600_000,
-  sinClasificar: [], porPedido: 100, puntosDeVenta: { zattia: 9, bdi: 8 },
+  sinClasificar: [], porPedido: 100, puntosDeVenta: { zattia: 9, bdi: 8, stunned: 11 },
   ventas: [
-    { marca: 'zattia', ventaId: '501', fecha: '2026-10-03', monto: 50_000, cuentas: ['Mercado Pago'], numero: '7001', cliente: 'Sofía R.' },
-    { marca: 'zattia', ventaId: '502', fecha: '2026-10-05', monto: 700_000, cuentas: ['Transferencia AREBEN'], numero: '7002', cliente: null },
-    { marca: 'bdi', ventaId: '900', fecha: '2026-10-04', monto: 10_000, cuentas: ['Pago Nube'], numero: '1', cliente: 'Otra marca' },
+    { marca: 'zattia', linea: 'zattia', ventaId: '501', fecha: '2026-10-03', monto: 50_000, cuentas: ['Mercado Pago'], numero: '7001', cliente: 'Sofía R.' },
+    { marca: 'zattia', linea: 'zattia', ventaId: '502', fecha: '2026-10-05', monto: 700_000, cuentas: ['Transferencia AREBEN'], numero: '7002', cliente: null },
+    { marca: 'zattia', linea: 'stunned', ventaId: '503', fecha: '2026-10-06', monto: 30_000, cuentas: ['Pago Nube Stunned'], numero: '7003', cliente: 'De Stunned' },
+    { marca: 'bdi', linea: 'bdi', ventaId: '900', fecha: '2026-10-04', monto: 10_000, cuentas: ['Pago Nube'], numero: '1', cliente: 'Otra marca' },
   ],
   facturasGN: [
-    { marca: 'zattia', ventaId: '480', numero: 'B 00005-00012144', tipo: 'B', cae: '7612', estado: 'APROBADO', fecha: '2026-10-02', monto: 300_000, venta: { numero: '6990', cliente: 'Juana' } },
+    { marca: 'zattia', linea: 'zattia', ventaId: '480', numero: 'B 00005-00012144', tipo: 'B', cae: '7612', estado: 'APROBADO', fecha: '2026-10-02', monto: 300_000, venta: { numero: '6990', cliente: 'Juana' } },
+    { marca: 'zattia', linea: 'stunned', ventaId: '481', numero: 'B 00005-00012145', tipo: 'B', cae: '7613', estado: 'APROBADO', fecha: '2026-10-02', monto: 20_000, venta: { numero: '6991', cliente: 'Factura de Stunned' } },
   ],
 }
 const emitida = (o: Partial<FacturaEmitida>): FacturaEmitida => ({
-  id: 'f1', ambiente: 'homologacion', marca: 'zattia', venta_id: '470', venta_numero: '6980', renglones: [], tipo: 6, pto_vta: 9, numero: 12,
+  id: 'f1', ambiente: 'homologacion', marca: 'zattia', linea: 'zattia', venta_id: '470', venta_numero: '6980', renglones: [], tipo: 6, pto_vta: 9, numero: 12,
   fecha: '2026-10-06', total: 100_000, neto: 82_644.63, iva: 17_355.37, doc_tipo: 99, doc_nro: 0, cond_iva: 5, estado: 'autorizada', cae: '7699', cae_vence: '2026-10-16', ...o,
 })
 let mes: MesFacturacion = base
@@ -43,10 +45,11 @@ let host: HTMLDivElement
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); vi.clearAllMocks(); mes = base })
 
-async function montar() {
+async function montar(linea: 'zattia' | 'stunned' = 'zattia') {
   const { Facturacion } = await import('@/components/erp/Facturacion')
+  const { ProveedorLineaErp } = await import('@/lib/erp/linea-erp')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<Facturacion />) })
+  await act(async () => { root = createRoot(host); root.render(<ProveedorLineaErp value={linea}><Facturacion /></ProveedorLineaErp>) })
   await act(async () => {})
 }
 const texto = () => host.textContent ?? ''
@@ -56,6 +59,19 @@ const clic = async (el: Element) => { await act(async () => { el.dispatchEvent(n
 const vista = (t: RegExp) => [...host.querySelectorAll('[role="tab"]')].find((b) => t.test(b.textContent ?? ''))!
 
 describe('ERP › Facturación con el molde', () => {
+  it('mirando Stunned: sólo sus ventas y facturas (⛔ las de Zattia), y el lote va con la línea y su punto de venta (Bruno, 30-oct)', async () => {
+    await montar('stunned')
+    expect(vista(/Sin factura/).textContent).toMatch(/1$/)
+    expect(vista(/^Facturas/).textContent).toMatch(/1$/)
+    expect(texto()).toContain('Sin factura en Stunned')
+    expect(filas().some((f) => f.includes('Sofía R.'))).toBe(false)
+    expect(filas().some((f) => f.includes('De Stunned'))).toBe(true)
+    const fila = [...host.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes('#7003'))!
+    await clic(fila)
+    await clic(boton(/^Facturar/)!)
+    expect(facturar).toHaveBeenCalledWith('2026-10', 'zattia', 'stunned', ['503'])
+  })
+
   it('arriba el tope, lo facturado con su % y lo pendiente; las vistas cuentan sólo la marca del menú', async () => {
     await montar()
     expect(texto()).toContain('Tope del mes')
@@ -65,6 +81,7 @@ describe('ERP › Facturación con el molde', () => {
     expect(vista(/^Facturas/).textContent).toMatch(/2$/)
     expect(vista(/Notas de crédito/).textContent).toMatch(/1$/)
     expect(filas().some((f) => f.includes('Otra marca'))).toBe(false)
+    expect(filas().some((f) => f.includes('De Stunned'))).toBe(false)
     expect(filas().some((f) => f.includes('#7001') && f.includes('Sofía R.'))).toBe(true)
     expect(filas().some((f) => f.includes('#7002') && f.includes('Consumidor final'))).toBe(true)
   })
@@ -76,7 +93,7 @@ describe('ERP › Facturación con el molde', () => {
     expect(texto()).toContain('1 elegida')
     await clic(boton(/^Facturar$/)!)
     expect(confirmar).toHaveBeenCalledOnce()
-    expect(facturar).toHaveBeenCalledWith('2026-10', 'zattia', ['501'])
+    expect(facturar).toHaveBeenCalledWith('2026-10', 'zattia', 'zattia', ['501'])
     expect(texto()).toMatch(/1 factura\(s\) autorizada\(s\)/)
   })
 

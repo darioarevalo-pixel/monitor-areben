@@ -11,10 +11,11 @@ import { diaArgentino } from '@/lib/envios/portal.core.js'
 export type MarcaErp = 'bdi' | 'zattia'
 
 /** `numero`/`cliente`: los de la venta en GN, sólo para mostrar (null si ⛔ se encontró). */
-export type VentaParaFacturar = { marca: MarcaErp; ventaId: string; fecha: string; monto: number; cuentas: string[]; numero?: string | null; cliente?: string | null }
+/** `linea`: la de la venta (Zattia/Stunned por sus renglones; en BDI, bdi). */
+export type VentaParaFacturar = { marca: MarcaErp; linea?: string; ventaId: string; fecha: string; monto: number; cuentas: string[]; numero?: string | null; cliente?: string | null }
 /** Una factura de GN del mes (`ventas_factura_gn`: la fecha es el día de la VENTA, GN ⛔ da el de la factura). */
 export type FacturaGN = {
-  marca: MarcaErp; ventaId: string; numero: string; tipo: string | null; cae: string | null; estado: string | null; fecha: string | null; monto: number
+  marca: MarcaErp; linea?: string; ventaId: string; numero: string; tipo: string | null; cae: string | null; estado: string | null; fecha: string | null; monto: number
   venta: { numero: string | null; cliente: string | null }
 }
 
@@ -36,7 +37,7 @@ export type MesFacturacion = {
   ventas: VentaParaFacturar[]
   facturasGN?: FacturaGN[]
   porPedido: number
-  puntosDeVenta: Partial<Record<MarcaErp, number | null>>
+  puntosDeVenta: Partial<Record<MarcaErp | 'stunned', number | null>>
 }
 
 export type ResultadoLote = {
@@ -64,8 +65,9 @@ export const leerMes = (mes: string) =>
 export const leerFacturas = (mes: string) =>
   pedir<{ ambiente: string; facturas: FacturaEmitida[] }>(null, `&vista=facturas&mes=${mes}&nc=${Date.now()}`, 'No se pudieron leer las facturas del mes.')
 
-export const facturar = (mes: string, marca: MarcaErp, ventaIds: string[]) =>
-  pedir<ResultadoLote>(post({ accion: 'facturar', mes, marca, ventaIds }), '', 'No se pudo facturar.')
+/** Un lote es de UNA línea: el servidor rechaza las ventas de la otra y factura con el punto de venta de ésta. */
+export const facturar = (mes: string, marca: MarcaErp, linea: string, ventaIds: string[]) =>
+  pedir<ResultadoLote>(post({ accion: 'facturar', mes, marca, linea, ventaIds }), '', 'No se pudo facturar.')
 
 export const notaDeCredito = (facturaId: string) =>
   pedir<{ ambiente: string; autorizada: { numero: number; cae: string; total: number } }>(post({ accion: 'nota-credito', facturaId }), '', 'No se pudo hacer la nota de crédito.')

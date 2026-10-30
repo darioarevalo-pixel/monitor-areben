@@ -9,6 +9,7 @@
  * que pase lo pendiente. La pantalla sólo propone. ⛔ cambia qué se calcula (`leerMes`, `facturarVentas`, el lote).
  */
 
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, ConfirmDetalle, EmptyState, Input, MenuAcciones, Notice, color, font, space, useConfirmar, type AccionMenu } from '@/components/ui'
@@ -23,7 +24,7 @@ import { descargarFactura, numeroComprobante, type FacturaEmitida } from '@/lib/
 import { EMISOR, faltanDelEmisor } from '@/motor/arca/emisor.core.js'
 import { esDeVentaPropia } from '@/lib/erp/factura.core.js'
 
-const NOMBRE_MARCA: Record<MarcaErp, string> = { zattia: 'Zattia', bdi: 'BDI' }
+const NOMBRE_MARCA: Record<MarcaErp | 'stunned', string> = { zattia: 'Zattia', bdi: 'BDI', stunned: 'Stunned' }
 const mesActual = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 7)
 const pesos = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 })
 const pesosCortos = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
@@ -58,6 +59,8 @@ const COLUMNAS_FACT: ColumnaLista[] = [
 export function Facturacion() {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  // La tienda del menú: mirando Stunned, sólo sus ventas y facturas, y el lote sale con SU punto de venta (Bruno, 30-oct).
+  const tienda = useTiendaErp()
   const { confirmar, pedirTexto } = useConfirmar()
   const [mes, setMes] = useState(mesActual)
   const [datos, setDatos] = useState<MesFacturacion | null>(null)
@@ -105,8 +108,8 @@ export function Facturacion() {
 
   // Lo elegido es de UNA marca: si cambia la del menú, la selección vieja ⛔ se manda (se filtra por las filas de ahora).
   const grupos = useMemo(
-    () => (datos ? filasDeFacturacion({ marca, ventas: datos.ventas, facturasGN: datos.facturasGN, facturas }) : { sin: [], facturas: [], notas: [] }),
-    [datos, facturas, marca],
+    () => (datos ? filasDeFacturacion({ marca, linea: tienda, ventas: datos.ventas, facturasGN: datos.facturasGN, facturas }) : { sin: [], facturas: [], notas: [] }),
+    [datos, facturas, marca, tienda],
   ) as { sin: Fila[]; facturas: Fila[]; notas: Fila[] }
   const t = normal(q)
   const buscadas = useMemo(() => Object.fromEntries(VISTAS.map(([k]) => [k, t ? grupos[k].filter((f) => f.busca.includes(t)) : grupos[k]])) as Record<Fila['vista'], Fila[]>, [grupos, t])
@@ -120,7 +123,7 @@ export function Facturacion() {
   const sumaSin = grupos.sin.reduce((a, f) => a + f.total, 0)
   const conNC = useMemo(() => ventasConNC(facturas), [facturas])
   const prueba = datos?.ambiente !== 'produccion'
-  const pv = datos?.puntosDeVenta[marca] ?? null
+  const pv = datos?.puntosDeVenta[tienda] ?? null
   // Por qué ⛔ se puede facturar lo elegido (null = se puede). Lo vuelve a frenar el servidor: esto es para decirlo antes.
   const freno = !datos ? 'Leyendo el mes…'
     : !datos.ambiente ? 'La facturación está apagada en este servidor.'
@@ -142,7 +145,7 @@ export function Facturacion() {
       titulo: prueba ? 'Facturar en el ambiente de prueba' : 'Facturar con ARCA',
       mensaje: (
         <div>
-          <ConfirmDetalle label="Marca" valor={NOMBRE_MARCA[marca]} />
+          <ConfirmDetalle label="Marca" valor={NOMBRE_MARCA[tienda]} />
           <ConfirmDetalle label="Ventas" valor={elegidasDeMarca.length} />
           <ConfirmDetalle label="Total" valor={pesos(sumaElegidas)} />
           <ConfirmDetalle label="Punto de venta" valor={pv ?? '—'} />
@@ -160,7 +163,7 @@ export function Facturacion() {
     setTrabajando(true)
     setResultado(null)
     try {
-      setResultado(await facturar(mes, marca, elegidasDeMarca.map((f) => f.ventaId)))
+      setResultado(await facturar(mes, marca, tienda, elegidasDeMarca.map((f) => f.ventaId)))
       setElegidas(new Set())
       await leer()
     } catch (e) {
@@ -341,10 +344,10 @@ export function Facturacion() {
       {datos && (
         <>
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-            <TileResumen oscuro titulo="Tope del mes" valor={pesosCortos(datos.techo)} nota={datos.estado === 'cerrado' ? 'fijo desde el cierre' : 'lo que entró a cuentas de Areben; cambia hasta cerrar el mes'} />
+            <TileResumen oscuro titulo="Tope del mes de Areben" valor={pesosCortos(datos.techo)} nota={datos.estado === 'cerrado' ? 'fijo desde el cierre · las dos marcas' : 'lo que entró a cuentas de Areben, las dos marcas; cambia hasta cerrar el mes'} />
             <TileResumen titulo="Facturado" valor={pesosCortos(datos.facturado)} nota={`${pctTope != null ? `${pctTope} % del tope · ` : ''}Gestión Nube ${pesosCortos(datos.facturadoGN)} · ERP ${pesosCortos(datos.facturadoMonitor)}`} />
             <TileResumen titulo="Pendiente de facturar" valor={pesosCortos(datos.pendiente)} nota={datos.pendiente < 0 ? 'se facturó de más' : 'las dos marcas'} />
-            <TileResumen tono={tonoDeConteo(grupos.sin.length)} titulo={`Sin factura en ${NOMBRE_MARCA[marca]}`} valor={grupos.sin.length.toLocaleString('es-AR')} nota={`ventas · ${pesosCortos(sumaSin)}`} />
+            <TileResumen tono={tonoDeConteo(grupos.sin.length)} titulo={`Sin factura en ${NOMBRE_MARCA[tienda]}`} valor={grupos.sin.length.toLocaleString('es-AR')} nota={`ventas · ${pesosCortos(sumaSin)}`} />
           </div>
           {sinCuenta.length > 0 && (
             <Notice tone="warning">Cuentas de cobro sin clasificar (no suman al tope): {sinCuenta.map((s) => `${s.cuenta} ${pesosCortos(s.monto)}`).join(' · ')}</Notice>
@@ -382,7 +385,7 @@ export function Facturacion() {
               </div>
             )}
             <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-              {NOMBRE_MARCA[marca]} factura con el punto de venta {pv ?? (datos.ambiente ? 'sin cargar' : 'de Gestión Nube')} · las facturas de Gestión Nube van por el día de la venta
+              {NOMBRE_MARCA[tienda]} factura con el punto de venta {pv ?? (datos.ambiente ? 'sin cargar' : 'de Gestión Nube')} · las facturas de Gestión Nube van por el día de la venta
             </div>
           </div>
 

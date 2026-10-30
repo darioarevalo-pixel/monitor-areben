@@ -19,6 +19,8 @@ export type FacturaEmitida = {
   id: string
   ambiente: 'homologacion' | 'produccion'
   marca: 'bdi' | 'zattia'
+  /** La línea de su venta (Zattia o Stunned, que facturan en la base de Zattia); la pone `facturasDelMes`. */
+  linea?: string
   venta_id: string
   /** El número de la venta en GN, para el renglón (null si no se encontró). */
   venta_numero: string | null

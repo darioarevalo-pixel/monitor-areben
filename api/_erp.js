@@ -81,7 +81,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario, padronParaEncargadas } from './_auth.js'
 import { esAdmin, permisoErpDe, permisosErp, puedeErp } from '../lib/permisos.core.js'
-import { baseDeLinea, esStunned } from '../lib/lineas.core.js'
+import { baseDeLinea, esStunned, skuParaLinea } from '../lib/lineas.core.js'
+import { lineasDeVenta } from '../lib/erp/linea-gn.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { SIN_ARCA, arcaConectado, baseFacturacion, clienteArcaDelEntorno, repoFacturas } from './_facturacion.js'
@@ -133,6 +134,13 @@ import { empujesDeStock, mandarStock } from './_erp-empuje-stock.js'
 import { cargarVentaManual, datosParaCargar } from './_erp-cargar.js'
 
 const MARCAS = ['bdi', 'zattia']
+
+/**
+ * 🔑 La línea que pide una pantalla del ERP (Bruno, 30-oct: «cada marca ve sus propias ventas»). BDI no tiene líneas; en Zattia
+ * es OBLIGATORIA (`zattia` | `stunned`): sin ella la vista contestaba las dos sumadas y nadie se enteraba ⇒ `null` = 400.
+ */
+export const lineaDelPedido = (marca, linea) => (marca === 'bdi' ? 'bdi' : marca === 'zattia' && (linea === 'zattia' || linea === 'stunned') ? linea : null)
+const SIN_LINEA = { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
 const UMBRAL_IDENTIFICAR = 10_000_000
 
@@ -143,6 +151,31 @@ const finDeMes = (mes) => {
 
 function ambienteSeguro() {
   try { return { ambiente: ambienteDeEntorno(process.env) } } catch (e) { return { ambiente: null, error: e.message } }
+}
+
+/**
+ * La LÍNEA de cada venta de GN de Zattia, para facturar (Bruno, 30-oct: «cada marca ve sus propias ventas»): una venta es UNA
+ * factura ⇒ de Stunned sólo si TODOS sus renglones son STU (criterio `factura` de `lib/erp/linea-gn.core.js`); la mixta y la que
+ * ⛔ tiene renglones, de Zattia. `venta_detalles` ⛔ trae SKU: sale de `productos` con `skuParaLinea` (respaldo del proveedor).
+ * @returns {Promise<Map<string, 'zattia' | 'stunned'>>} id de la venta → línea
+ */
+export async function lineasDeVentasGN(b, ids) {
+  const nums = [...new Set(ids.map(String))].filter((id) => /^\d+$/.test(id))
+  const skus = new Map(nums.map((id) => [id, []]))
+  const productos = new Set()
+  const renglones = []
+  for (let i = 0; i < nums.length; i += 300) {
+    const d = await leerTodo(b, 'venta_detalles', (q) => q.select('id, sale_id, product_id').in('sale_id', nums.slice(i, i + 300)).order('id'))
+    for (const r of d) { renglones.push(r); if (r.product_id != null) productos.add(Number(r.product_id)) }
+  }
+  const pids = [...productos]
+  const skuDe = new Map()
+  for (let i = 0; i < pids.length; i += 200) {
+    const ps = await leerTodo(b, 'productos', (q) => q.select('id, sku, proveedor').in('id', pids.slice(i, i + 200)).order('id'))
+    for (const p of ps) skuDe.set(String(p.id), skuParaLinea(p))
+  }
+  for (const r of renglones) skus.get(String(r.sale_id))?.push(skuDe.get(String(r.product_id)) ?? null)
+  return new Map([...skus].map(([id, s]) => [id, lineasDeVenta(s, 'factura')[0]]))
 }
 
 /** Todo lo que hace falta para mostrar (o facturar) un mes. */
@@ -159,6 +192,8 @@ export async function leerMes(mes) {
   const tipos = new Map(cuentas.map((c) => [c.nombre, c.tipo]))
 
   // Cobros del mes y facturas de GN, de la base de cada marca.
+  /** @type {Map<string, string>} `marca:venta` → línea */
+  const lineaGN = new Map()
   const porMarca = await Promise.all(MARCAS.map(async (marca) => {
     const { url, key } = cfgDeMarca(marca)
     const b = createClient(url, key)
@@ -172,6 +207,9 @@ export async function leerMes(mes) {
       if (error) throw new Error(`ventas_factura_gn (${marca}): ${error.message}`)
       for (const f of data) conFacturaGN.add(claveVenta(marca, f.venta_id))
     }
+    // Cada venta con su línea (Zattia o Stunned); en BDI, la marca.
+    const lineas = marca === 'zattia' ? await lineasDeVentasGN(b, [...ids, ...facturasGNDelMes.map((f) => f.venta_id)]) : new Map()
+    for (const [id, l] of lineas) lineaGN.set(claveVenta(marca, id), l)
     return {
       cobros: cobros.map((c) => ({ ...c, marca })),
       facturasGN: facturasGNDelMes.map((f) => ({ ...f, marca })),
@@ -194,10 +232,11 @@ export async function leerMes(mes) {
     facturasGN: porMarca.flatMap((p) => p.facturasGN),
     facturasMonitor: facturasMonitor.filter((f) => f.mes === mes),
   })
+  const lineaDe = (marca, id) => (marca === 'bdi' ? 'bdi' : lineaGN.get(claveVenta(marca, id)) ?? 'zattia')
   return {
     sb, ambiente, errorAmbiente, tipos, cobros, yaFacturadas, calculado,
-    periodo: periodo.data || null, resumen,
-    ventas: ventasParaFacturar(cobros, tipos, mes, yaFacturadas),
+    periodo: periodo.data || null, resumen, lineaDe,
+    ventas: ventasParaFacturar(cobros, tipos, mes, yaFacturadas).map((v) => ({ ...v, linea: lineaDe(v.marca, v.ventaId) })),
   }
 }
 
@@ -206,7 +245,7 @@ export async function leerMes(mes) {
  * factura, y las facturas de GN del mes (`ventas_factura_gn`, por el día de la VENTA). Sólo lectura: ⛔ entra en
  * `facturarVentas` ni en el tope.
  */
-async function vistaDeFacturacion(mes, ventas) {
+async function vistaDeFacturacion(mes, ventas, lineaDe) {
   const desde = `${mes}-01`, hasta = finDeMes(mes)
   const porMarca = await Promise.all(MARCAS.map(async (marca) => {
     const { url, key } = cfgDeMarca(marca)
@@ -225,7 +264,7 @@ async function vistaDeFacturacion(mes, ventas) {
   return {
     ventas: ventas.map((v) => ({ ...v, ...de(v.marca, v.ventaId) })),
     facturasGN: porMarca.flatMap((p) => p.gn.map((f) => ({
-      marca: p.marca, ventaId: String(f.venta_id), numero: f.numero, tipo: f.tipo, cae: f.cae, estado: f.estado, fecha: f.fecha,
+      marca: p.marca, linea: lineaDe(p.marca, f.venta_id), ventaId: String(f.venta_id), numero: f.numero, tipo: f.tipo, cae: f.cae, estado: f.estado, fecha: f.fecha,
       monto: Number(f.monto), venta: de(p.marca, f.venta_id),
     }))),
   }
@@ -235,8 +274,11 @@ async function vistaDeFacturacion(mes, ventas) {
  * Factura esas ventas de una marca (un lote). Devuelve `{ status, error }` si no se puede, o el
  * resultado del lote. Exportada para la prueba de punta a punta contra homologación.
  */
-export async function facturarVentas({ mes, marca, ventaIds, usuario }) {
+export async function facturarVentas({ mes, marca, linea, ventaIds, usuario }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  // 🔴 El lote es de UNA línea (30-oct): una venta de Stunned en el lote de Zattia salía con el PV de Zattia.
+  const l = lineaDelPedido(marca, linea)
+  if (!l) return SIN_LINEA
   const pedidos = [...new Set((Array.isArray(ventaIds) ? ventaIds : []).map(String))]
   if (!pedidos.length) return { status: 400, error: 'No hay ventas elegidas' }
   if (pedidos.length > POR_PEDIDO) return { status: 400, error: `Hasta ${POR_PEDIDO} ventas por vez` }
@@ -244,9 +286,9 @@ export async function facturarVentas({ mes, marca, ventaIds, usuario }) {
 
   const m = await leerMes(mes)
   if (!m.ambiente) return { status: 409, error: m.errorAmbiente }
-  const ptoVta = ptoVtaDe(m.ambiente, marca, process.env)
-  // El monto lo rearma el servidor: una venta que ya no está entre las facturables se informa.
-  const disponibles = new Map(m.ventas.filter((v) => v.marca === marca).map((v) => [v.ventaId, v]))
+  const ptoVta = ptoVtaDe(m.ambiente, marcaDePuntoDeVenta(marca, l), process.env)
+  // El monto lo rearma el servidor: una venta que ya no está entre las facturables (o es de la otra línea) se informa.
+  const disponibles = new Map(m.ventas.filter((v) => v.marca === marca && v.linea === l).map((v) => [v.ventaId, v]))
   const elegidas = pedidos.map((id) => disponibles.get(id)).filter(Boolean)
   const noDisponibles = pedidos.filter((id) => !disponibles.has(id))
   const suma = elegidas.reduce((a, v) => a + Math.round(v.monto * 100), 0) / 100
@@ -424,11 +466,12 @@ async function nombresDeVariantes(b, productos) {
 }
 
 /** Número y renglones de las ventas PROPIAS facturadas (por su uuid), de `venta_ficha`. */
-async function renglonesPropios(b, marca, ids, { numeros, detalles }) {
-  const fichas = await leerTodo(b, 'venta_ficha', (q) => q.select('id, numero, tipo, total, lineas, detalle').in('id', ids))
+async function renglonesPropios(b, marca, ids, { numeros, detalles, lineas }) {
+  const fichas = await leerTodo(b, 'venta_ficha', (q) => q.select('id, marca, numero, tipo, total, lineas, detalle').in('id', ids))
   const nombres = await nombresDeVariantes(b, fichas.flatMap((f) => (f.lineas || []).map((l) => l.product_id)))
   for (const f of fichas) {
     numeros.set(claveVenta(marca, f.id), String(f.detalle?.gn_number ?? f.numero))
+    if (lineas && f.marca) lineas.set(claveVenta(marca, f.id), f.marca)
     // Un CAMBIO tiene DOS comprobantes con su clave (la NC de lo devuelto y la factura de lo nuevo): sus líneas ⛔ suman
     // ninguno de los dos ⇒ sin detalle, el PDF lleva un renglón por el total de cada uno.
     if (f.tipo === 'cambio') continue
@@ -443,7 +486,7 @@ export async function facturasDelMes(mes) {
   const facturas = await leerTodo(sb, 'facturas', (q) => q
     .select('id, ambiente, marca, venta_id, tipo, pto_vta, numero, fecha, total, neto, iva, doc_tipo, doc_nro, cond_iva, estado, cae, cae_vence')
     .eq('ambiente', ambiente).eq('mes', mes).eq('estado', 'autorizada').order('creado_en'))
-  const numeros = new Map(), detalles = new Map(), receptores = new Map()
+  const numeros = new Map(), detalles = new Map(), receptores = new Map(), lineas = new Map()
   for (const marca of MARCAS) {
     const todas = [...new Set(facturas.filter((f) => f.marca === marca).map((f) => f.venta_id))]
     if (!todas.length) continue
@@ -462,7 +505,9 @@ export async function facturasDelMes(mes) {
     // Las de una venta propia sin venta de GN (la factura a pedido de la Caja) van por el uuid del motor.
     const ids = todas.filter((id) => /^\d+$/.test(id))
     const propias = todas.filter((id) => !/^\d+$/.test(id))
-    if (propias.length) await renglonesPropios(b, marca, propias, { numeros, detalles })
+    if (propias.length) await renglonesPropios(b, marca, propias, { numeros, detalles, lineas })
+    // La línea de cada factura (30-oct): la de su venta. Las de GN por sus renglones; las propias, `venta_ficha.marca`.
+    if (marca === 'zattia') for (const [id, l] of await lineasDeVentasGN(b, ids)) lineas.set(claveVenta(marca, id), l)
     for (let i = 0; i < ids.length; i += 300) {
       const tanda = ids.slice(i, i + 300)
       const { data, error: e } = await b.from('ventas').select('id, number, discount, shipping_cost').in('id', tanda)
@@ -486,7 +531,7 @@ export async function facturasDelMes(mes) {
   return {
     ambiente,
     facturas: facturas.map((f) => ({
-      ...f, total: Number(f.total), neto: Number(f.neto), iva: Number(f.iva), numero: Number(f.numero), doc_nro: Number(f.doc_nro),
+      ...f, linea: lineas.get(claveVenta(f.marca, f.venta_id)) ?? (f.marca === 'bdi' ? 'bdi' : 'zattia'), total: Number(f.total), neto: Number(f.neto), iva: Number(f.iva), numero: Number(f.numero), doc_nro: Number(f.doc_nro),
       venta_numero: numeros.get(claveVenta(f.marca, f.venta_id)) ?? null,
       renglones: detalles.get(claveVenta(f.marca, f.venta_id)) || [],
       receptor_nombre: receptores.get(`${f.marca}/${f.doc_nro}`)?.nombre ?? null,
@@ -912,12 +957,6 @@ export async function ventaGnDeCambio({ sb, db, gnVentaId, prueba }) {
  * pide la MISMA factura se ata y se devuelve (⛔ sale otra: el lote la ve facturada).
  * 🔴 Una venta de prueba ⛔ se factura en producción (`puedeFacturar`).
  */
-/**
- * 🔑 La línea que pide una pantalla del ERP (Bruno, 30-oct: «cada marca ve sus propias ventas»). BDI no tiene líneas; en Zattia
- * es OBLIGATORIA (`zattia` | `stunned`): sin ella la vista contestaba las dos sumadas y nadie se enteraba ⇒ `null` = 400.
- */
-export const lineaDelPedido = (marca, linea) => (marca === 'bdi' ? 'bdi' : marca === 'zattia' && (linea === 'zattia' || linea === 'stunned') ? linea : null)
-const SIN_LINEA = { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
 
 /**
  * 🔑 El punto de venta sale de la marca de la VENTA, ⛔ de la base: Stunned (línea de Zattia) factura con su PV PROPIO
@@ -1898,7 +1937,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const m = await leerMes(mes)
-      const vista = await vistaDeFacturacion(mes, m.ventas)
+      const vista = await vistaDeFacturacion(mes, m.ventas, m.lineaDe)
       return res.status(200).json({
         mes, ambiente: m.ambiente, errorAmbiente: m.errorAmbiente || null,
         estado: m.periodo?.estado || 'abierto', cerradoPor: m.periodo?.cerrado_por || null, cerradoEn: m.periodo?.cerrado_en || null,
@@ -1907,7 +1946,7 @@ export default async function handler(req, res) {
         ventas: vista.ventas,
         facturasGN: vista.facturasGN,
         porPedido: POR_PEDIDO,
-        puntosDeVenta: m.ambiente ? Object.fromEntries(MARCAS.map((x) => { try { return [x, ptoVtaDe(m.ambiente, x, process.env)] } catch { return [x, null] } })) : {},
+        puntosDeVenta: m.ambiente ? Object.fromEntries([...MARCAS, 'stunned'].map((x) => { try { return [x, ptoVtaDe(m.ambiente, x, process.env)] } catch { return [x, null] } })) : {},
       })
     }
 
@@ -1994,7 +2033,7 @@ export default async function handler(req, res) {
     }
 
     if (body.accion === 'facturar') {
-      const r = await facturarVentas({ mes, marca: String(body.marca || ''), ventaIds: body.ventaIds, usuario: perfil.name || perfil.user || null })
+      const r = await facturarVentas({ mes, marca: String(body.marca || ''), linea: String(body.linea || ''), ventaIds: body.ventaIds, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
