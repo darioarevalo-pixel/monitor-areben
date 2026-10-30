@@ -134,9 +134,9 @@ export const leerHistorialDeEdicion = (marca: MarcaErp, productId: string) =>
 
 /** Los proveedores del ERP (sql/013) para elegir en el costo. Sin la tabla, el API contesta 409 y se escribe el texto. */
 export type ProveedorErp = { id: string; nombre: string; cuit: string | null; nombreGn: string | null; productos: number; activo: boolean }
-/** De UNA línea (30-oct): en Zattia, sin `linea`, el servidor contesta 400. */
-export const leerProveedores = (marca: MarcaErp, linea: LineaErp) =>
-  pedir<{ proveedores: ProveedorErp[] }>(null, `&vista=proveedores&marca=${marca}&linea=${linea}&nc=${Date.now()}`, 'No se pudieron leer los proveedores.')
+/** De UNA línea (30-oct): en Zattia, sin `linea`, el servidor contesta 400. `elegir` («Cargar costo») suma los que todavía ⛔ tienen productos. */
+export const leerProveedores = (marca: MarcaErp, linea: LineaErp, elegir = false) =>
+  pedir<{ proveedores: ProveedorErp[] }>(null, `&vista=proveedores&marca=${marca}&linea=${linea}${elegir ? '&elegir=1' : ''}&nc=${Date.now()}`, 'No se pudieron leer los proveedores.')
 export const guardarProveedor = (marca: MarcaErp, p: { nombre: string; cuit?: string }) =>
   pedir<{ ok: true; yaExistia: boolean; proveedor: { id: string; nombre: string; cuit: string | null } }>(post({ accion: 'guardar-proveedor', marca, ...p }), '', 'No se pudo guardar el proveedor.')
 

@@ -26,7 +26,7 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
   onListo: (hecho: string, aviso?: string | null) => void
   onError: (e: string) => void
 }) {
-  // Los proveedores de la tienda del menú (Bruno, 30-oct): mirando Stunned, ⛔ los talleres de Zattia.
+  // Los proveedores de la tienda del menú (Bruno, 30-oct): mirando Stunned, ⛔ los talleres de Zattia; y los sin productos.
   const tienda = useTiendaErp()
   const [que, setQue] = useState('costo')
   const [monto, setMonto] = useState('')
@@ -45,7 +45,7 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
   const [vuelta, setVuelta] = useState(0)
   useEffect(() => {
     let vivo = true
-    leerProveedores(marca, tienda)
+    leerProveedores(marca, tienda, true)
       .then((r) => { if (vivo) { setProveedores(r.proveedores); setSinLista(null) } })
       .catch((e) => { if (vivo) { setProveedores([]); setSinLista(e instanceof Error ? e.message : 'No se pudieron leer los proveedores.') } })
     return () => { vivo = false }
@@ -97,7 +97,7 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
     const r = await guardarProveedor(marca, { nombre: nuevo.nombre, cuit: nuevo.cuit || undefined })
     setNuevo(null)
     // 🔴 Se elige recién cuando la lista se vuelve a leer: si no, el formulario mostraría «Sin proveedor» y mandaría el id.
-    const l = await leerProveedores(marca, tienda)
+    const l = await leerProveedores(marca, tienda, true)
     setProveedores(l.proveedores)
     if (!l.proveedores.some((p) => p.id === r.proveedor.id)) {
       // Ya existía y le hace productos a la OTRA tienda: la lista es de ésta (30-oct) ⇒ ⛔ se elige callado.

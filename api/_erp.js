@@ -82,7 +82,7 @@ import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario, padronParaEncargadas } from './_auth.js'
 import { esAdmin, permisoErpDe, permisosErp, puedeErp } from '../lib/permisos.core.js'
 import { baseDeLinea, esStunned, skuParaLinea } from '../lib/lineas.core.js'
-import { lineasDeVenta } from '../lib/erp/linea-gn.core.js'
+import { SQL_CTE_LINEA_GN, lineasDeVenta } from '../lib/erp/linea-gn.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { SIN_ARCA, arcaConectado, baseFacturacion, clienteArcaDelEntorno, repoFacturas } from './_facturacion.js'
@@ -125,7 +125,7 @@ import { ACCIONES as ACCIONES_CATALOGO } from '../lib/erp/catalogo-edicion.core.
 import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
-import { cuentaDeCliente, cuentasDeLaMarca, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeLinea } from './_erp-clientes.js'
+import { cuentaDeCliente, cuentasDeLaMarca, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
 import { cobrosDelPeriodo, reintentarEntregasErp } from './_erp-cobros.js'
@@ -1089,7 +1089,8 @@ export async function clientasDeLaCaja({ marca, q, linea = '' }, deps = {}) {
     if (!r.ok) return errorDelMotor(r)
     let clientes = r.clientes
     if (porLinea && clientes.length) {
-      const ids = new Set((await db.query(`select id::text from cliente where id = any($1::uuid[]) and ${sqlClienteDeLinea('cliente.id', 2)}`,
+      const ids = new Set((await db.query(`with ${SQL_CTE_LINEA_GN} select id::text from cliente where id = any($1::uuid[])
+        and (${sqlClienteDeLinea('cliente.id', 2)} or ${sqlClienteDeGn('cliente.nombre', l)})`,
         [clientes.map((c) => String(c.id)), l])).rows.map((x) => x.id))
       clientes = clientes.filter((c) => ids.has(String(c.id))).slice(0, 8)
     }
@@ -1499,11 +1500,12 @@ const tieneProveedores = async (db) => (await import('../motor/venta/proveedor.m
  * Los PROVEEDORES del ERP (`sql/013`, Bruno 15-oct: tabla propia cruzada con PRM) de la empresa de la marca, para elegir
  * en «Cargar costo». Sin 013 ⇒ 409 con aviso: la pantalla deja escribir el proveedor como texto, como antes.
  * 🔑 De UNA línea (Bruno, 30-oct: «los proveedores van en cada marca, sí o sí»): el proveedor es de la empresa, ⛔ tiene
- * línea; es de la línea si le hizo algún producto de ella (`producto.marca`), y `productos` cuenta sólo ésos. El que
- * todavía ⛔ tiene ninguno (recién dado de alta) sale en las dos: si no, ⛔ se lo podría elegir para su primer costo.
- * @param {{ marca: string, linea?: string, q?: string }} x @param {{ db?: any }} [deps]
+ * línea; es de la línea si le hizo algún producto de ella (`producto.marca`), y `productos` cuenta sólo ésos.
+ * El que todavía ⛔ tiene ninguno ⛔ es de ninguna (medido 30-oct: 6 de PRM, todos de fundas) ⇒ ⛔ va a la lista; sólo con
+ * `elegir` («Cargar costo»): si no, a un proveedor nuevo ⛔ se le podría cargar su primer costo.
+ * @param {{ marca: string, linea?: string, q?: string, elegir?: boolean }} x @param {{ db?: any }} [deps]
  */
-export async function proveedoresDeMarca({ marca, linea = '', q }, deps = {}) {
+export async function proveedoresDeMarca({ marca, linea = '', q, elegir = false }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const l = lineaDelPedido(marca, linea)
   if (!l) return SIN_LINEA
@@ -1517,7 +1519,7 @@ export async function proveedoresDeMarca({ marca, linea = '', q }, deps = {}) {
     if (marca !== 'bdi') {
       const deLinea = new Map((await db.query(`select proveedor_id::text as id, count(*) filter (where marca = $1)::int as n
         from producto where proveedor_id is not null group by 1`, [l])).rows.map((x) => [x.id, x.n]))
-      proveedores = proveedores.filter((p) => !p.productos || deLinea.get(String(p.id)) > 0)
+      proveedores = proveedores.filter((p) => (elegir && !p.productos) || deLinea.get(String(p.id)) > 0)
         .map((p) => ({ ...p, productos: deLinea.get(String(p.id)) ?? 0 }))
     }
     return { proveedores: proveedores.map((p) => ({ id: String(p.id), nombre: p.nombre, cuit: p.cuit ?? null, nombreGn: p.nombre_gn ?? null, productos: p.productos, activo: p.activo })) }
@@ -1803,7 +1805,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET' && req.query.vista === 'proveedores') {
-      const r = await proveedoresDeMarca({ marca: String(req.query.marca || ''), linea: String(req.query.linea || ''), q: req.query.q })
+      const r = await proveedoresDeMarca({ marca: String(req.query.marca || ''), linea: String(req.query.linea || ''), q: req.query.q, elegir: req.query.elegir === '1' })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'GET' && req.query.vista === 'precio') {

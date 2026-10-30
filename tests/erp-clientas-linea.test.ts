@@ -27,6 +27,10 @@ describe('clientasDeLaCaja', () => {
     const corte = pedidas.find((p) => p.sql.includes('from cliente where id = any'))!
     expect(corte.sql).toContain('v.marca = $2')
     expect(corte.sql).toContain('m.marca = $2')
+    expect(corte.sql).toContain('o.tienda = $2')
+    // Las clientas de GN sin nada en el motor (616 en Zattia, 30-oct): por nombre, con sus ventas de GN de la línea.
+    expect(corte.sql).toContain('with linea_gn as')
+    expect(corte.sql).toContain('coalesce(lg.tiene_stu, false)')
     expect(corte.params).toEqual([[ANA.id, BETI.id], 'stunned'])
   })
   it('sin línea (factura A, Cargar venta: ELIGEN una ficha): las de la empresa, ⛔ se corta', async () => {

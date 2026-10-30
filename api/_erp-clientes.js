@@ -32,13 +32,25 @@ const conLinea = (marca, linea) => (marca === 'bdi' ? { cte: '', join: '', donde
 })
 
 /**
- * 🔑 Una ficha del motor (`cliente`) es de la EMPRESA, ⛔ de una línea: es de la línea `$n` si tiene alguna venta o algún
- * movimiento de cuenta de ella (Bruno, 30-oct: «los clientes van en cada marca, sí o sí»). La usan Clientes y el ⌘K;
- * los buscadores que ELIGEN una clienta para escribir (factura A, Cargar venta) ⛔: ahí, sin verla, se cargaría repetida.
+ * 🔑 Una ficha del motor (`cliente`) es de la EMPRESA, ⛔ de una línea: es de la línea `$n` si tiene alguna venta, algún
+ * movimiento de cuenta o alguna orden de la Tienda Nube de ella (Bruno, 30-oct: «los clientes van en cada marca, sí o sí»).
+ * La usan Clientes y el ⌘K; los buscadores que ELIGEN una clienta para escribir (factura A, Cargar venta) ⛔: ahí, sin
+ * verla, se cargaría repetida.
+ * Medido 30-oct en Zattia (`scripts/medir-lineas-clientes-proveedores.mjs`): 5.634 fichas, 4.971 con venta o cuenta, 47 sólo
+ * con orden de TN y 616 clientas de GN sin nada en el motor ⇒ ésas las suma el ⌘K por NOMBRE con sus ventas de GN
+ * (`sqlClienteDeGn`); la lista de Clientes ya las cruza así.
  * @param {string} id la columna del id de la ficha @param {number} n el parámetro de la línea
  */
 export const sqlClienteDeLinea = (id, n) => `(exists (select 1 from venta v where v.cliente_id = ${id} and v.marca = $${n})
-  or exists (select 1 from cuenta_movimiento m where m.cliente_id = ${id} and m.marca = $${n}))`
+  or exists (select 1 from cuenta_movimiento m where m.cliente_id = ${id} and m.marca = $${n})
+  or exists (select 1 from tn_orden o where o.cliente_id = ${id} and o.tienda = $${n}))`
+
+/**
+ * La ficha tiene alguna compra de la línea en el espejo de GN, por NOMBRE (el espejo de Zattia ⛔ trae el id de la clienta).
+ * Va con `with ${SQL_CTE_LINEA_GN}` al principio de la consulta. @param {string} nombre la columna @param {'zattia'|'stunned'} linea
+ */
+export const sqlClienteDeGn = (nombre, linea) => `exists (select 1 from ventas gv left join linea_gn lg on lg.sale_id = gv.id
+  where lower(trim(gv.client_name)) = lower(trim(${nombre})) and ${sqlVentaDeLinea(linea, 'lista')})`
 
 /** Los clientes del motor y su cuenta corriente. Sin las tablas (motor viejo) ⇒ vacío y se dice. */
 async function delMotor(pg, marca, linea) {

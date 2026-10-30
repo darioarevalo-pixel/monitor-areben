@@ -76,13 +76,17 @@ describe('proveedores de UNA línea (Bruno, 30-oct: «los proveedores van en cad
       },
     }
   }
-  it('Stunned: los suyos y el que todavía ⛔ tiene productos; los productos, sólo los de Stunned', async () => {
+  it('Stunned: los suyos, y los productos sólo los de Stunned; el que ⛔ tiene productos, ⛔ (es de ninguna)', async () => {
     const r = await proveedoresDeMarca({ marca: 'zattia', linea: 'stunned' }, { db: db() }) as { proveedores: { nombre: string; productos: number }[] }
-    expect(r.proveedores.map((p) => [p.nombre, p.productos])).toEqual([['TALLER STU', 3], ['MIXTO', 2], ['NUEVO', 0]])
+    expect(r.proveedores.map((p) => [p.nombre, p.productos])).toEqual([['TALLER STU', 3], ['MIXTO', 2]])
   })
   it('Zattia: al revés', async () => {
     const r = await proveedoresDeMarca({ marca: 'zattia', linea: 'zattia' }, { db: db() }) as { proveedores: { nombre: string; productos: number }[] }
-    expect(r.proveedores.map((p) => [p.nombre, p.productos])).toEqual([['KHAN', 5], ['MIXTO', 1], ['NUEVO', 0]])
+    expect(r.proveedores.map((p) => [p.nombre, p.productos])).toEqual([['KHAN', 5], ['MIXTO', 1]])
+  })
+  it('para ELEGIR («Cargar costo»): también el que todavía ⛔ tiene productos, o ⛔ se le cargaría su primer costo', async () => {
+    const r = await proveedoresDeMarca({ marca: 'zattia', linea: 'stunned', elegir: true }, { db: db() }) as { proveedores: { nombre: string }[] }
+    expect(r.proveedores.map((p) => p.nombre)).toEqual(['TALLER STU', 'MIXTO', 'NUEVO'])
   })
   it('Zattia sin línea ⇒ 400; BDI ⛔ tiene líneas y ⛔ se corta', async () => {
     expect(await proveedoresDeMarca({ marca: 'zattia' }, { db: db() })).toMatchObject({ status: 400 })
