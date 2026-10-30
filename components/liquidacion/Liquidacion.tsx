@@ -788,6 +788,23 @@ function DetalleCampania({
   }, [datos])
   const ingresoDe = useCallback((pid: string) => ingresos[pid] ?? null, [ingresos])
 
+  /**
+   * El stock de HOY, del ETL, al lado del congelado. 🔑 ⛔ No pisa la foto: el margen que se
+   * aprobó sigue siendo el de ese día (decisión 2 del docblock). Pero para decidir precios días
+   * después el stock de la foto engaña — el 30-oct-2026 CORSET FRANK figuraba con 9 y no quedaba
+   * ninguno, y 9 de los 259 del Cyber estaban agotados (pedido de Bruno). `local` es lo que hay en
+   * el local; el resto está en depósito. `null` = el ETL no cargó o el producto ya no figura.
+   */
+  const stockHoy = useMemo(() => {
+    const m = new Map<string, { stock: number; local: number }>()
+    for (const p of datos?.allProductos ?? []) m.set(String(p.id), { stock: p.stock, local: 0 })
+    for (const v of datos?.allVariantes ?? []) {
+      const s = m.get(String(v.pid))
+      if (s) s.local += v.local
+    }
+    return datos ? m : null
+  }, [datos])
+
   async function guardarRevision(item: LiquidacionItem) {
     try {
       await revisarItem(marca, campania.id, item)
@@ -1567,7 +1584,7 @@ function DetalleCampania({
                   <Th align="right">Sale</Th>
                   <Th align="right">Desc.</Th>
                   <Th align="right">Margen</Th>
-                  <Th align="right">Stock</Th>
+                  <Th align="right">Stock hoy</Th>
                   <Th align="right">90 d</Th>
                   <Th>Estado</Th>
                   <Th />
@@ -1601,6 +1618,7 @@ function DetalleCampania({
                     onDescartar={() => void moverEstado(i, 'descartado')}
                     onVolver={() => void moverEstado(i, 'pendiente')}
                     onQuitar={() => void quitar(i)}
+                    hoy={stockHoy ? stockHoy.get(String(i.pid)) ?? { stock: 0, local: 0 } : null}
                   />
                     ))}
                   </Fragment>
@@ -1686,7 +1704,7 @@ function DetalleCampania({
 
 function FilaItem({
   item, tipo, puedeMover, onDefinir, onDescartar, onVolver, onQuitar, onFoto, marcable, marcado,
-  onMarcar, estrella, onEstrella,
+  onMarcar, estrella, onEstrella, hoy,
 }: {
   item: LiquidacionItem
   tipo: TipoCampania
@@ -1702,6 +1720,8 @@ function FilaItem({
   /** La ⭐ de ESTA campaña. `null` = no está destacado. Ver `sql/migrate-destacados.sql`. */
   estrella: Parameters<typeof Estrella>[0]['marcado']
   onEstrella: () => Promise<void>
+  /** El stock de hoy del ETL; `null` mientras no cargó. Ver `stockHoy`. */
+  hoy: { stock: number; local: number } | null
 }) {
   const rot = ROTULO_ITEM[item.estado] || ROTULO_ITEM.pendiente
   const problemas = avisos(item, tipo).filter((a) => a.nivel === 'alto')
@@ -1785,7 +1805,17 @@ function FilaItem({
       <Td align="right">{item.decision.precioSale ? formatMoney(item.decision.precioSale) : '—'}</Td>
       <Td align="right">{pct(item.decision.pctDesc)}</Td>
       <Td align="right">{item.foto.sinCosto ? '—' : pct(item.decision.margen)}</Td>
-      <Td align="right">{item.foto.stock}</Td>
+      <Td align="right" style={{ whiteSpace: 'nowrap' }}>
+        {hoy == null ? item.foto.stock : hoy.stock === 0 ? (
+          <b style={{ color: color.dangerInk }}>agotado</b>
+        ) : hoy.stock}
+        {hoy != null && (
+          <div style={{ color: color.mut, fontSize: font.sm }}>
+            {hoy.stock > 0 && `${hoy.local} en local`}
+            {hoy.stock !== item.foto.stock && <>{hoy.stock > 0 && ' · '}entró con {item.foto.stock}</>}
+          </div>
+        )}
+      </Td>
       <Td align="right">{item.foto.ventas90}</Td>
       <Td><StatusPill tone={rot.tono} label={rot.label} /></Td>
       {/*
