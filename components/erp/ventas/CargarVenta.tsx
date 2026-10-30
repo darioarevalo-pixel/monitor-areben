@@ -46,7 +46,7 @@ export function CargarVenta({ marca, onCerrar, onCargada }: { marca: MarcaErp; o
   const [error, setError] = useState<string | null>(null)
   // Arranca en la tienda del menú: mirando Stunned arrancaba en Zattia (Bruno, 30-oct).
   const tienda = useTiendaErp()
-  const [linea, setLinea] = useState<string>(marca === 'bdi' ? marca : tienda)
+  const [linea, setLinea] = useState<string>(marca === 'bdi' || tienda === 'bdi' ? marca : tienda)
   const [cuando, setCuando] = useState(ahoraLocal)
   const [canal, setCanal] = useState('local')
   const [deposito, setDeposito] = useState('local')
