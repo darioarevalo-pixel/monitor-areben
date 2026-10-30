@@ -326,6 +326,12 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
 
 ## Reglas que el código no dice
 
+- 🔴 **Cada línea ve lo suyo (Bruno, 30-oct: «no quiero que siga pasando»).** Zattia y Stunned comparten la base: toda
+  vista nueva que lea ventas, cobros, facturas, gastos o cuentas recibe `linea` y la exige en Zattia (`lineaDelPedido` en
+  `api/_erp.js`; sin ella, 400 — antes contestaba las dos sumadas y nadie se enteraba). El espejo de GN ⛔ tiene línea:
+  `lib/erp/linea-gn.core.js` (criterios lista / factura) y `ventasDeLinea` de `api/_erp-inicio.js` (plata por peso). El
+  lote de Facturación es de UNA línea y sale con su PV (`marcaDePuntoDeVenta`). ⛔ La Caja es la única unificada.
+
 - 📱 **El ERP en el celular (Bruno, 29-oct; artifact `~/Documents/erp-monitor/diseno/celular/erp-celular.html`)**: abajo de
   900 px el menú de la izquierda se esconde; arriba van la sección, la marca y la lupa, y abajo Inicio · Ventas · Caja · Stock ·
   Más (la hoja de «Más» trae la marca, las otras secciones, Buscar y Volver al monitor). Todo por CSS (`globals.css` § erp-menu),

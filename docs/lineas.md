@@ -114,6 +114,7 @@ Ponerle el selector sin tocar eso mostraría el total de la marca con el rótulo
 | dónde | cómo |
 |---|---|
 | Meta Ads | eje de la sección (`SelectorMeta`), asignación por campaña |
+| **ERP (todas las pantallas, 30-oct-2026)** | **la tienda del menú** (`useTiendaErp`/`useLineaErp`, `lib/erp/linea-erp.tsx`) va al servidor como `&linea=`; en Zattia es **obligatoria** (sin ella, 400). Las ventas del espejo de GN se cortan por los SKU de sus renglones con `lib/erp/linea-gn.core.js` (espejo en SQL de `skuParaLinea` + `esStunned`): **listas** = algún renglón de la línea · **factura** = todos STU · **plata** (Inicio) = peso de sus renglones. ⛔ La **Caja** es la excepción: un cajón, un cierre (Bruno). Proveedores y las clientas del ⌘K son de la empresa: ⛔ tienen línea |
 | Memo semanal · Norte (P&L) | `lineaDe(store, sku)` sobre `venta_detalles` |
 | Conteo Stunned | sección propia (`conteo-estandar-stunned`), por variantes |
 | Canjes · sync TN→GN · `sku_map` | `store = 'stunned'` |
