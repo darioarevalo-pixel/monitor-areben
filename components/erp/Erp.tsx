@@ -58,9 +58,14 @@ import { InicioErp } from './inicio/InicioErp'
 import { BusquedaGlobal, HojaDeAtajos, useAtajosErp, type DestinoBusqueda } from './BusquedaGlobal'
 import { FichaPrenda } from './stock/FichaPrenda'
 import { periodoDeVenta } from '@/lib/erp/busqueda-global.core.js'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 
-type Item = { key: string; label: string; /** Existe (tiene dirección y se llega por un botón) pero ⛔ va en el menú ni en las pestañas. */ oculta?: boolean }
+type Item = {
+  key: string; label: string; /** Existe (tiene dirección y se llega por un botón) pero ⛔ va en el menú ni en las pestañas. */ oculta?: boolean
+  /** 🔑 Bruno 30-oct: lo que el rol ⛔ puede abrir ⛔ se muestra (antes estaba y daba error). Alcanza con UNO (`puedeErp`); sin él, `ver`. El servidor frena igual. */
+  permiso?: string | string[]
+}
 type Seccion = {
   key: string
   titulo: string
@@ -85,8 +90,10 @@ export const SECCIONES_ERP: Seccion[] = [
     pestanias: [
       { key: 'ventas', label: 'Ventas', vistas: [{ key: 'ventas', label: 'Ventas' }, { key: 'por-producto', label: 'Por producto' }] },
       { key: 'cobros', label: 'Cobros' }, { key: 'cajas', label: 'Cajas' },
-      { key: 'facturacion', label: 'Facturación', vistas: [{ key: 'facturacion', label: 'Facturas' }, { key: 'factura', label: 'Facturar una venta', oculta: true }] },
-      { key: 'gastos', label: 'Gastos' },
+      // Facturación: la lista del mes es de la oficina; «Facturar una venta» (alguien pide factura en el local), de quien vende (Bruno 30-oct).
+      { key: 'facturacion', label: 'Facturación', permiso: ['facturacion', 'facturar-venta'], vistas: [{ key: 'facturacion', label: 'Facturas', permiso: 'facturacion' }, { key: 'factura', label: 'Facturar una venta', oculta: true, permiso: 'facturar-venta' }] },
+      // La lista de gastos: sólo Admin (Bruno 30-oct). ▶️ Cargar un gasto el local o la oficina: otra pantalla, otro permiso.
+      { key: 'gastos', label: 'Gastos', permiso: 'configurar' },
       { key: 'cambio', label: 'Cambio', oculta: true },
     ],
   },
@@ -96,20 +103,20 @@ export const SECCIONES_ERP: Seccion[] = [
       { key: 'stock', label: 'Stock', vistas: [{ key: 'stock', label: 'Productos' }, { key: 'movimientos', label: 'Movimientos' }] },
       { key: 'transferencias', label: 'Transferencias', vistas: [{ key: 'transferencias', label: 'Transferencias' }, { key: 'mover', label: 'Mover y recibir' }] },
       { key: 'ajustes', label: 'Ingresos y ajustes', junta: 'Tipo', vistas: [{ key: 'ajustes', label: 'Ajustes' }, { key: 'ingresos', label: 'Ingresos de mercadería' }] },
-      { key: 'diferencias', label: 'Diferencias', junta: 'Contra qué', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }] },
+      { key: 'diferencias', label: 'Diferencias', junta: 'Contra qué', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre', permiso: 'configurar' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }] },
     ],
   },
   { key: 'productos', titulo: 'Productos', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }] },
   {
     key: 'clientes', titulo: 'Clientes', icono: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
-    pestanias: [{ key: 'clientes', label: 'Clientes', vistas: [{ key: 'clientes', label: 'Clientes' }, { key: 'cuenta-corriente', label: 'Cuenta corriente', oculta: true }] }, { key: 'proveedores', label: 'Proveedores' }],
+    pestanias: [{ key: 'clientes', label: 'Clientes', vistas: [{ key: 'clientes', label: 'Clientes' }, { key: 'cuenta-corriente', label: 'Cuenta corriente', oculta: true, permiso: 'cuentas' }] }, { key: 'proveedores', label: 'Proveedores', permiso: 'proveedores' }],
   },
   {
     key: 'configuracion', titulo: 'Configuración', icono: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M4 12h2 M18 12h2 M12 4v2 M12 18v2 M6.3 6.3l1.4 1.4 M16.3 16.3l1.4 1.4 M6.3 17.7l1.4-1.4 M16.3 7.7l1.4-1.4',
     pestanias: [
-      { key: 'cuentas', label: 'Cuentas y formas de pago', junta: 'Qué lista', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: '¿A qué cuenta va?' }] },
-      { key: 'reglas', label: 'Descuentos y redondeo', vistas: [{ key: 'reglas', label: 'Descuentos por forma de pago' }, { key: 'redondeo', label: 'Redondeo' }] },
-      { key: 'estructura', label: 'Marcas, depósitos y puntos de venta' },
+      { key: 'cuentas', label: 'Cuentas y formas de pago', permiso: 'configurar', junta: 'Qué lista', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: '¿A qué cuenta va?' }] },
+      { key: 'reglas', label: 'Descuentos y redondeo', permiso: 'configurar', vistas: [{ key: 'reglas', label: 'Descuentos por forma de pago' }, { key: 'redondeo', label: 'Redondeo' }] },
+      { key: 'estructura', label: 'Marcas, depósitos y puntos de venta', permiso: 'configurar' },
     ],
   },
 ]
@@ -228,8 +235,21 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const transferenciaEnErp = transfiereEnErp(lineaVista || 'bdi')
   // «Mover y recibir» ⛔ va aparte para esa línea: es la misma lista (`MoverYRecibir unificada`).
   const itemActual = seccion.pestanias.find((p) => p.key === pestania)
+  // 🔑 Lo que el rol ⛔ puede abrir ⛔ se dibuja (menú, pestañas, vistas, «Más»); una sección que se queda sin ítems, tampoco.
+  const puede = usePuedeErp(marca === 'bdi' ? 'bdi' : 'zattia')
+  const deja = (x: Item) => !x.permiso || [x.permiso].flat().some(puede)
+  const paraVer = <T extends Item>(xs: T[] | undefined) => visibles(xs).filter(deja)
+  const seccionVisible = (s: Seccion) => !s.pestanias.length || paraVer(s.pestanias).length > 0
+  // Una dirección a algo que el rol ⛔ abre (el menú la llevaba a la primera vista: Facturas, Con Tienda Nube…) ⇒ la primera que SÍ
+  // (las ocultas cuentan: el local entra a Facturación por «Facturar una venta»); si ninguna, al Inicio.
+  const vistaActual = itemActual?.vistas?.find((v) => v.key === vista)
+  const otra = itemActual && deja(itemActual) ? itemActual.vistas?.find(deja) : undefined
+  const bloqueada = !!itemActual && (!deja(itemActual) || (!!vistaActual && !deja(vistaActual)))
+  useEffect(() => {
+    if (bloqueada) router.replace(otra ? hrefErp(seccion.key, pestania, otra.key) : hrefErp('inicio'))
+  }, [bloqueada, otra, seccion.key, pestania, router])
   // Las vistas ocultas (Facturar una venta) ⛔ son pestaña; Con Gestión Nube ⛔ para Stunned (ya ⛔ tiene GN).
-  const vistasDeAca = visibles(itemActual?.vistas).filter((v) => !(transferenciaEnErp && v.key === 'mover') && !(lineaVista === 'stunned' && v.key === 'diferencias'))
+  const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !(transferenciaEnErp && v.key === 'mover') && !(lineaVista === 'stunned' && v.key === 'diferencias'))
   // 🔑 El cartel de «modo paralelo» era fijo: después del corte de Stunned (`CAJA_STUNNED_ERP=1`) seguiría diciendo que GN sirve.
   // Si la configuración no se puede leer queda el texto de siempre (el prudente).
   const [stunnedReal, setStunnedReal] = useState(false)
@@ -322,9 +342,9 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
           Areben ERP
         </div>
         {/* 🎨 30-oct (Bruno): el menú es de GRUPOS. El grupo abierto muestra sus ítems (las pestañas de antes), cada uno con su contador. */}
-        {SECCIONES_ERP.map((s) => {
+        {SECCIONES_ERP.filter(seccionVisible).map((s) => {
           const abierta = s.key === seccion.key
-          const items = visibles(s.pestanias)
+          const items = paraVer(s.pestanias)
           const sinItems = items.length === 0
           return (
             <div key={s.key} style={{ display: 'flex', flexDirection: 'column' }}>
@@ -377,17 +397,17 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {seccion.key !== 'inicio' && (
               <header style={{ display: 'flex', flexDirection: 'column', gap: space[2], borderBottom: vistasDeAca.length > 1 && !itemActual?.junta ? `1px solid ${color.line}` : undefined }}>
                 {/* 📱 En el celular los ítems del grupo van como pestañas (el menú de costado ⛔ se ve): en la compu se esconden (globals.css). */}
-                {visibles(seccion.pestanias).length > 1 && (
+                {paraVer(seccion.pestanias).length > 1 && (
                   <div className="erp-pestanias erp-pestanias-movil">
-                    <Tabs variant="underline" items={visibles(seccion.pestanias).map((p) => ({ ...p, badge: <Contador n={contadores[`${seccion.key}/${p.key}`]} titulo={TITULO_CONTADOR[seccion.key] ?? 'para hacer'} /> }))} value={pestania ?? ''} onChange={(k) => { setAAjustar(null); ir(seccion.key, k) }} />
+                    <Tabs variant="underline" items={paraVer(seccion.pestanias).map((p) => ({ ...p, badge: <Contador n={contadores[`${seccion.key}/${p.key}`]} titulo={TITULO_CONTADOR[seccion.key] ?? 'para hacer'} /> }))} value={pestania ?? ''} onChange={(k) => { setAAjustar(null); ir(seccion.key, k) }} />
                   </div>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap' }}>
                   {/* 📱 En el celular el título va en la barra de arriba (`erp-movil-top`): acá se esconde. */}
                   <h1 className="erp-titulo" style={{ margin: 0, fontSize: 24, fontWeight: weight.bold, color: color.ink, whiteSpace: 'nowrap', borderLeft: `4px solid ${COLOR_DE_MARCA[opcionActiva]}`, paddingLeft: 10 }}>{itemActual?.label ?? seccion.titulo}</h1>
                   {/* Lo que era pestaña y es una ACCIÓN (mapa del menú, 30-oct): un botón al lado del título. */}
-                  {vista === 'facturacion' && <Button size="sm" onClick={() => ir('ventas', 'facturacion', 'factura')}>Facturar una venta</Button>}
-                  {vista === 'factura' && <Button size="sm" variant="outline" onClick={() => ir('ventas', 'facturacion')}>Volver a Facturas</Button>}
+                  {vista === 'facturacion' && puede('facturar-venta') && <Button size="sm" onClick={() => ir('ventas', 'facturacion', 'factura')}>Facturar una venta</Button>}
+                  {vista === 'factura' && puede('facturacion') && <Button size="sm" variant="outline" onClick={() => ir('ventas', 'facturacion')}>Volver a Facturas</Button>}
                   {pestania === 'cambio' && <Button size="sm" variant="outline" onClick={() => ir('ventas', 'ventas')}>Volver a Ventas</Button>}
                 </div>
                 {vistasDeAca.length > 1 && !itemActual?.junta && (
@@ -454,7 +474,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
       <Modal abierto={hojaMas} onCerrar={() => setHojaMas(false)} titulo="Más">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {selectorMarca(true)}
-          {EN_MAS.map((s) => (
+          {EN_MAS.filter(seccionVisible).map((s) => (
             <Link key={s.key} href={hrefErp(s.key)} onClick={() => setHojaMas(false)} aria-current={s.key === seccion.key ? 'page' : undefined} className="erp-hoja-item">
               <Trazo d={s.icono} />
               <span>{s.titulo}</span>

@@ -17,6 +17,10 @@ let sesion = { marca: 'bdi', perfil: { name: 'bruno', admin: true } }
 let admin = true
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ ...sesion, setMarca }) }))
 vi.mock('@/lib/permisos', () => ({ puedeVer: (_p: unknown, m: string) => admin || m === 'zattia', esAdmin: () => admin }))
+// Lo que el servidor dijo que NO (`vista=permisos`); vacío = todo (el admin).
+let negados: string[] = []
+vi.mock('@/lib/erp/usePuedeErp', () => ({ usePuedeErp: () => (p: string) => !negados.includes(p) }))
+const LOCAL_NO = ['configurar', 'facturacion', 'proveedores', 'costos']
 for (const [archivo, nombre] of [['CambioCaja', 'CambioCaja'], ['FacturaCaja', 'FacturaCaja'], ['Facturacion', 'Facturacion'], ['stock/StockErp', 'StockErp'], ['DiferenciasDia', 'DiferenciasDia'], ['ConciliacionDia', 'ConciliacionDia'], ['AjustesStock', 'AjustesStock'], ['PedidosSinPagar', 'PedidosSinPagar'], ['PreciosProducto', 'PreciosProducto'], ['ReglasComerciales', 'ReglasComerciales'], ['RutasCobro', 'RutasCobro'], ['ventas/VentasErp', 'VentasErp']]) {
   vi.doMock(`@/components/erp/${archivo}`, () => ({ [nombre]: () => <div data-pantalla={nombre} /> }))
 }
@@ -26,7 +30,7 @@ const div = document.createElement('div')
 document.body.appendChild(div)
 afterEach(() => {
   act(() => root?.unmount()); root = null; push.mockClear(); replace.mockClear()
-  sesion = { marca: 'bdi', perfil: { name: 'bruno', admin: true } }; admin = true
+  sesion = { marca: 'bdi', perfil: { name: 'bruno', admin: true } }; admin = true; negados = []
 })
 
 async function montar(ruta: string[]) {
@@ -37,6 +41,28 @@ async function montar(ruta: string[]) {
 const pantalla = () => div.querySelector('[data-pantalla]')?.getAttribute('data-pantalla') ?? null
 
 describe('ERP › el armazón propio', () => {
+  it('🔴 el local (Bruno 30-oct): ⛔ ve en el menú lo que ⛔ puede abrir — Gastos, Proveedores, Configuración —; Facturación sí, por «Facturar una venta»', async () => {
+    sesion = { marca: 'zattia', perfil: { name: 'josefina', admin: false } }; admin = false; negados = LOCAL_NO
+    await montar(['ventas', 'cobros'])
+    const textos = () => [...div.querySelectorAll('nav.erp-menu a')].map((a) => a.textContent)
+    expect(textos()).toEqual(['Inicio', 'Ventas', 'Ventas', 'Cobros', 'Cajas', 'Facturación', 'Abrir la Caja↗', 'Stock', 'Productos', 'Clientes', 'Volver al monitor'])
+    act(() => root?.unmount()); root = null
+    // Facturación abre en Facturas (de la oficina) ⇒ la manda a «Facturar una venta», y ⛔ hay botón «Volver a Facturas».
+    await montar(['ventas', 'facturacion'])
+    expect(replace).toHaveBeenCalledWith('/erp/ventas/facturacion/factura')
+    act(() => root?.unmount()); root = null; replace.mockClear()
+    await montar(['ventas', 'facturacion', 'factura'])
+    expect(replace).not.toHaveBeenCalled()
+    expect([...div.querySelectorAll('button')].some((b) => b.textContent === 'Volver a Facturas')).toBe(false)
+    act(() => root?.unmount()); root = null
+    // Una dirección a lo que ⛔ abre: Gastos ⇒ Inicio; Diferencias ⇒ la primera que sí (⛔ «Con Tienda Nube»).
+    await montar(['ventas', 'gastos'])
+    expect(replace).toHaveBeenCalledWith('/erp')
+    act(() => root?.unmount()); root = null; replace.mockClear()
+    await montar(['stock', 'diferencias'])
+    expect(replace).toHaveBeenCalledWith('/erp/stock/diferencias/conciliacion')
+  })
+
   it('el menú del diseño, con la sección marcada y «Volver al monitor»', async () => {
     await montar(['stock', 'ajustes'])
     const links = (nav: string) => [...div.querySelectorAll(`nav.${nav} a`)].map((a) => [a.textContent, a.getAttribute('href')])
