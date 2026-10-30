@@ -126,7 +126,7 @@ export async function fallaStunnedAlErp({ store, b, usuario }) {
   const ids = [...new Set((Array.isArray(b.items) ? b.items : []).map((it) => Number(it && it.product_id)).filter(Number.isInteger))]
   if (!ids.length) return null
   const conexion = process.env[PG_DE_STORE[store]]
-  if (!conexion) return { error: `Falta ${PG_DE_STORE[store]}: ⛔ se puede saber si la falla es de Stunned.` }
+  if (!conexion) return { error: `Falta ${PG_DE_STORE[store]}: no se puede saber si la falla es de Stunned.` }
   try {
     const [{ default: pg }, m] = await Promise.all([import('pg'), import('../motor/stock/ajuste.mjs')])
     const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: TECHO_MS, statement_timeout: TECHO_MS, query_timeout: TECHO_MS })
