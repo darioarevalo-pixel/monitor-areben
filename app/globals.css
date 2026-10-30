@@ -1268,6 +1268,8 @@ a.apps-item:hover {
   .erp-app .mo-vistas { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; }
   .erp-app .mo-vistas > * { flex-shrink: 0; }
   .erp-app .mo-buscador { flex-basis: 160px !important; }
+  /* «Reportar un problema» (fijo abajo, de todo el monitor) tapaba Stock y Más: sube arriba de la barra. */
+  body:has(.erp-app) .mo-boton-reportes { bottom: calc(72px + env(safe-area-inset-bottom)) !important; }
 }
 .erp-hoja-item {
   display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 8px; border: 0; border-radius: 9px;

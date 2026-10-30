@@ -67,6 +67,8 @@ export function BotonReportes({ seccion, admin, lado = 'derecha' }: { seccion: s
           setMsg(null)
         }}
         title="Reportar un problema o proponer una mejora"
+        // `mo-boton-reportes`: en el ERP del celular sube arriba de la barra de abajo (globals.css § erp).
+        className="mo-boton-reportes"
         style={{
           position: 'fixed',
           bottom: 16,
