@@ -43,7 +43,7 @@ export type AccionMenu = {
   disabled?: boolean
 }
 
-export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear = 'derecha' }: {
+export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear = 'derecha', alPie }: {
   acciones: AccionMenu[]
   /** Qué dice el lector de pantalla. Va con el nombre de la cosa adentro, ⛔ no «Más acciones». */
   etiqueta: string
@@ -52,6 +52,8 @@ export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear =
   vertical?: boolean
   /** De qué lado se abre el menú. 'izquierda' para el «⋯» que va en la PRIMERA columna (listas del ERP). */
   alinear?: 'izquierda' | 'derecha'
+  /** 📱 El «⋯» del pie de la ficha en el celular: botón de 44 px para el dedo, y el menú abre HACIA ARRIBA (abajo no hay lugar). */
+  alPie?: boolean
 }) {
   const [abierto, setAbierto] = useState(false)
   const caja = useRef<HTMLDivElement>(null)
@@ -90,8 +92,8 @@ export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear =
           // 🔴 `height` y `width` explícitas: `.shell-content button` del bloque legacy le fija a
           // TODO `<button>` crudo la altura de un control y un padding lateral de 14px, así que sin
           // esto el «⋯» sale con forma de botón de texto. Ver `tests/boton-crudo-altura.test.ts`.
-          height: 28, width: 28, padding: 0,
-          border: `1px solid ${abierto ? color.line2 : 'transparent'}`,
+          height: alPie ? 44 : 28, width: alPie ? 44 : 28, flex: alPie ? '0 0 44px' : undefined, padding: 0,
+          border: `1px solid ${abierto || alPie ? color.line2 : 'transparent'}`,
           borderRadius: radius.md,
           background: abierto ? color.bg2 : 'transparent',
           color: color.mut,
@@ -107,7 +109,7 @@ export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear =
           id={id}
           role="menu"
           style={{
-            position: 'absolute', zIndex: 40, top: 'calc(100% + 4px)', ...(alinear === 'izquierda' ? { left: 0 } : { right: 0 }), minWidth: 210,
+            position: 'absolute', zIndex: 40, ...(alPie ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 4px)' }), ...(alinear === 'izquierda' ? { left: 0 } : { right: 0 }), minWidth: 210,
             background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg,
             boxShadow: shadow.pop, padding: space[1],
           }}
@@ -123,7 +125,7 @@ export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear =
               style={{
                 display: 'flex', alignItems: 'center', gap: space[2], width: '100%',
                 // `auto` porque el rótulo puede envolver: es la misma trampa de la altura fija.
-                height: 'auto', minHeight: 32, padding: '6px 8px', textAlign: 'left',
+                height: 'auto', minHeight: alPie ? 44 : 32, padding: '6px 8px', textAlign: 'left',
                 background: 'transparent', border: 0, borderRadius: radius.sm,
                 fontFamily: 'inherit', fontSize: font.base, fontWeight: weight.medium,
                 color: a.disabled ? color.mut2 : a.tone === 'danger' ? color.dangerInk : color.ink2,

@@ -10,7 +10,8 @@
 
 import { useEffect, useState } from 'react'
 import { Button, Field, MenuAcciones, Modal, Notice, Select, color, font, space, useConfirmar, weight, type AccionMenu } from '@/components/ui'
-import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial } from '@/components/ui/FichaCostado'
+import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial, type PieFicha } from '@/components/ui/FichaCostado'
+import { usePantallaAngosta } from '@/lib/movil'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
 import {
   anularVenta, corregirMedioDeVenta, corregirPrecioDeVenta, leerExtraDeVenta, leerFichaDeVenta, notaDeCreditoDeVenta,
@@ -162,12 +163,22 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir medio de cobro…', icono: 'pesos' as const, hint: 'Pagó con otro medio que el que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
     { key: 'anular', label: 'Anular…', icono: 'anular', tone: 'danger', disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) },
   ]
+  // 📱 En el celular los botones de arriba bajan al pie: la principal es cobrar; lo demás, al «⋯».
+  const angosta = usePantallaAngosta()
+  const verEnTn: AccionMenu[] = fila.link ? [{ key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir', onClick: () => window.open(fila.link!, '_blank', 'noopener') }] : []
+  const pie: PieFicha = esPedido
+    ? { principal: { label: 'Cobrar en Cobranzas ↗', onClick: () => window.open('/cobranzas', '_blank', 'noopener') }, mas: verEnTn }
+    : {
+        principal: debe ? { label: 'Registrar cobro', onClick: () => abrirVentana('cobro') } : undefined,
+        otra: { label: 'Editar', disabled: fila.anulada, onClick: () => abrirVentana('editar') },
+        mas: [...verEnTn, { key: 'cambio', label: 'Hacer cambio', icono: 'cambios', disabled: fila.anulada, onClick: () => irACaja('cambio') }, ...menu],
+      }
   const hechos: HechoHistorial[] = ficha ? (historialDeVenta(ficha, { ...extra, tn: extra?.tn ?? undefined }) as HechoHistorial[]) : []
   const h3: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
   const nota = extra?.nota ?? fila.nota
 
   return (
-    <FichaCostado abierta onCerrar={onCerrar} titulo={titulo} etiqueta={`Ficha de la venta ${fila.ref}`}>
+    <FichaCostado abierta onCerrar={onCerrar} titulo={titulo} etiqueta={`Ficha de la venta ${fila.ref}`} pie={pie}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start' }}>
@@ -184,14 +195,14 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
+      {!angosta && <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         {debe && <Button onClick={() => abrirVentana('cobro')}>Registrar cobro</Button>}
         {esPedido && <Button onClick={() => window.open('/cobranzas', '_blank', 'noopener')}>Cobrar en Cobranzas ↗</Button>}
         {fila.link && <Button variant="outline" onClick={() => window.open(fila.link!, '_blank', 'noopener')}>Ver el pedido en Tienda Nube ↗</Button>}
         {!esPedido && <Button variant="outline" disabled={fila.anulada} onClick={() => abrirVentana('editar')}>Editar</Button>}
         {!esPedido && <Button variant="outline" disabled={fila.anulada} onClick={() => irACaja('cambio')}>Hacer cambio</Button>}
         <MenuAcciones acciones={menu} etiqueta={`Más acciones de la venta ${fila.ref}`} vertical />
-      </div>
+      </div>}
 
       {esPedido ? (
         <>

@@ -14,7 +14,8 @@
 
 import { useEffect, useState } from 'react'
 import { Button, ConfirmDetalle, MenuAcciones, MoneyText, Notice, color, font, space, useConfirmar, weight, type AccionMenu } from '@/components/ui'
-import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial } from '@/components/ui/FichaCostado'
+import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial, type PieFicha } from '@/components/ui/FichaCostado'
+import { usePantallaAngosta } from '@/lib/movil'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerHistorialDeEdicion, leerPrecioDeProducto, soltarPrecio, type FilaPrecio, type HechoEdicion, type FilaProducto, type MarcaErp, type PrecioDeProducto } from '@/lib/erp/cliente'
 import { NOMBRE_FUENTE } from '@/lib/erp/precio.core.js'
@@ -123,10 +124,16 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
   ]
   const h3: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
   const celda: React.CSSProperties = { padding: '8px 0', borderBottom: `1px solid ${color.bg2}` }
+  // 📱 En el celular la carga de precio va fija al pie; corregir datos, al «⋯».
+  const angosta = usePantallaAngosta()
+  const pie: PieFicha = {
+    principal: configura ? { label: cargar ? 'Cerrar la carga' : 'Cargar precio o costo', disabled: !f, onClick: () => setCargar((x) => !x) } : undefined,
+    mas: [...(configura ? [{ key: 'corregir', label: editar ? 'Cerrar la corrección' : 'Corregir datos', icono: 'lapiz' as const, disabled: !fila, onClick: () => setEditar((x) => !x) }] : []), ...menu],
+  }
   const encabezado = (t: string, i: number) => <span key={i} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>
 
   return (
-    <FichaCostado abierta onCerrar={onCerrar} titulo={`Producto · ${producto}`} etiqueta={`Ficha del producto ${nombre}`}>
+    <FichaCostado abierta onCerrar={onCerrar} titulo={`Producto · ${producto}`} etiqueta={`Ficha del producto ${nombre}`} pie={pie}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
 
@@ -146,11 +153,11 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
+      {!angosta && <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         {configura && <Button variant={cargar ? 'outline' : undefined} disabled={!f} onClick={() => setCargar((x) => !x)}>{cargar ? 'Cerrar la carga' : 'Cargar precio o costo'}</Button>}
         {configura && <Button variant="outline" disabled={!fila} onClick={() => setEditar((x) => !x)}>{editar ? 'Cerrar la corrección' : 'Corregir datos'}</Button>}
         <MenuAcciones acciones={menu} etiqueta={`Más acciones del producto ${nombre}`} vertical />
-      </div>
+      </div>}
 
       {f?.feria != null && <Notice tone="neutral">Está en oferta (Liquidación): en el local se cobra {plata(f.feria)}, el precio de su campaña, sin el descuento de la forma de pago. Tienda Nube muestra otro precio para la venta online.</Notice>}
       {f?.avisos.map((a) => <Notice key={a} tone="warning">{a}</Notice>)}

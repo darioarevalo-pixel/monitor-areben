@@ -12,7 +12,8 @@
 import { lineaDe } from '@/lib/lineas'
 import { useEffect, useState } from 'react'
 import { Button, MenuAcciones, Notice, color, font, space, weight, type AccionMenu } from '@/components/ui'
-import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial } from '@/components/ui/FichaCostado'
+import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial, type PieFicha } from '@/components/ui/FichaCostado'
+import { usePantallaAngosta } from '@/lib/movil'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerStockDePrenda, type FilaStock, type MarcaErp, type StockDePrenda } from '@/lib/erp/cliente'
 import { NOMBRE_DEPOSITO, NOMBRE_ORIGEN, NOMBRE_TIPO } from '@/lib/erp/stock.core.js'
@@ -77,9 +78,13 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
     { key: 'etiq', label: 'Etiquetas en el monitor ↗', icono: 'abrir', onClick: () => window.open('/etiquetas', '_blank', 'noopener') },
   ]
   const h3: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
+  const aAjustar = () => linea && ajustar({ linea, producto: prenda.producto, talle: prenda.talle, sku, barcode, nombre, talleNombre: talle })
+  // 📱 En el celular «Ajustar» va fijo al pie y el «⋯» con él.
+  const angosta = usePantallaAngosta()
+  const pie: PieFicha = { principal: { label: 'Ajustar', disabled: !linea, onClick: aAjustar }, mas: menu }
 
   return (
-    <FichaCostado abierta onCerrar={onCerrar} titulo={sku ? `Producto · ${sku}` : 'Producto'} etiqueta={`Ficha del producto ${nombre} ${talle}`}>
+    <FichaCostado abierta onCerrar={onCerrar} titulo={sku ? `Producto · ${sku}` : 'Producto'} etiqueta={`Ficha del producto ${nombre} ${talle}`} pie={pie}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start' }}>
@@ -98,10 +103,10 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
-        <Button variant="soft" tone="brand" disabled={!linea} onClick={() => linea && ajustar({ linea, producto: prenda.producto, talle: prenda.talle, sku, barcode, nombre, talleNombre: talle })}>Ajustar</Button>
+      {!angosta && <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
+        <Button variant="soft" tone="brand" disabled={!linea} onClick={aAjustar}>Ajustar</Button>
         <MenuAcciones acciones={menu} etiqueta={`Más acciones del producto ${nombre} ${talle}`} vertical />
-      </div>
+      </div>}
 
       <DatosFicha>
         <DatoFicha titulo="Físico">{estanteria ?? '…'}</DatoFicha>

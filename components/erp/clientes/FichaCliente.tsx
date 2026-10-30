@@ -9,7 +9,8 @@
 import { useEffect, useState } from 'react'
 import { MoneyText, Notice, color, font, space, weight } from '@/components/ui'
 import { formatMoney } from '@/components/ui/MoneyText'
-import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
+import { DatoFicha, DatosFicha, FichaCostado, type PieFicha } from '@/components/ui/FichaCostado'
+import { normalizeArgPhone } from '@/lib/crm/telefono.core.js'
 import { ChipEstado } from '@/components/ui/PiezasLista'
 import { leerFichaDeCliente, type FichaDeCliente, type FilaCliente, type MarcaErp } from '@/lib/erp/cliente'
 
@@ -33,9 +34,12 @@ export function FichaCliente({ marca, fila, onCerrar }: { marca: MarcaErp; fila:
   const c = s?.contacto ?? null
   const h3: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
   const celda: React.CSSProperties = { padding: '7px 0', borderBottom: `1px solid ${color.bg2}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+  // 📱 En el celular el pie es para escribirle por WhatsApp (el mismo número que arma los `wa.me` del CRM).
+  const wa = normalizeArgPhone(c?.phone)
+  const pie: PieFicha = { principal: wa ? { label: 'WhatsApp', onClick: () => window.open(`https://wa.me/${wa}`, '_blank', 'noopener') } : undefined }
 
   return (
-    <FichaCostado abierta onCerrar={onCerrar} titulo={fila.doc ? `Cliente · ${fila.doc}` : 'Cliente'} etiqueta={`Ficha del cliente ${fila.nombre}`}>
+    <FichaCostado abierta onCerrar={onCerrar} titulo={fila.doc ? `Cliente · ${fila.doc}` : 'Cliente'} etiqueta={`Ficha del cliente ${fila.nombre}`} pie={pie}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start' }}>

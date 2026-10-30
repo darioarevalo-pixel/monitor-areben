@@ -7,22 +7,37 @@
  * `Historial` — la línea de tiempo de una ficha: cada hecho con ícono, quién y cuándo; una edición, antes → después.
  * `BarraSeleccion` — la barra flotante de las filas tildadas (acciones en lote); `AccionSeleccion`, cada botón de adentro.
  * `DatoFicha` — un dato de la ficha (título chico arriba, valor abajo); van en una grilla que se acomoda sola.
+ *
+ * 📱 **En el celular (≤ 900 px, Bruno 29-oct) la acción principal va FIJA AL PIE**, donde llega el pulgar: `pie` dice cuál
+ * (venta → Registrar cobro · prenda → Ajustar · cliente → WhatsApp), una segunda opcional y el resto en «⋯». En la compu
+ * el pie ⛔ se dibuja: la ficha sigue con sus botones arriba, y cada ficha los esconde en el celular para ⛔ duplicarlos.
+ * `BarraSeleccion` ⛔ aparece en el celular: ahí ⛔ se trabaja en lote.
  */
 
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { Button } from '@/components/ui/Button'
 import { Icono, type NombreIcono } from '@/components/ui/Icono'
+import { MenuAcciones, type AccionMenu } from '@/components/ui/MenuAcciones'
+import { usePantallaAngosta } from '@/lib/movil'
 import { color, font, shadow, space, toneTokens, weight, type Tone } from '@/components/ui/tokens'
 
-export function FichaCostado({ abierta, onCerrar, titulo, etiqueta, children }: {
+export type BotonPie = { label: string; onClick: () => void; disabled?: boolean }
+/** Lo que va al pie en el celular: la principal (llena, a la derecha), una segunda (de borde) y el resto en «⋯». */
+export type PieFicha = { principal?: BotonPie; otra?: BotonPie; mas?: AccionMenu[] }
+
+export function FichaCostado({ abierta, onCerrar, titulo, etiqueta, pie, children }: {
   abierta: boolean
   onCerrar: () => void
   /** La línea de arriba («Venta #301 · 18/10 10:40»). */
   titulo: React.ReactNode
   /** Para el lector de pantalla («Ficha de la venta #301»). */
   etiqueta: string
+  /** 📱 Sólo en el celular: la barra fija al pie. */
+  pie?: PieFicha
   children: React.ReactNode
 }) {
+  const angosta = usePantallaAngosta()
   useEffect(() => {
     if (!abierta) return
     // Si hay un diálogo abierto encima (cobro, editar), Escape lo cierra a ÉL primero.
@@ -42,9 +57,23 @@ export function FichaCostado({ abierta, onCerrar, titulo, etiqueta, children }: 
           </button>
         </div>
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: space[5] }}>{children}</div>
+        {angosta && pie && <PieDeFicha pie={pie} etiqueta={etiqueta} />}
       </aside>
     </div>,
     document.body,
+  )
+}
+
+function PieDeFicha({ pie, etiqueta }: { pie: PieFicha; etiqueta: string }) {
+  const { principal, otra, mas = [] } = pie
+  if (!principal && !otra && !mas.length) return null
+  const boton: React.CSSProperties = { flex: '1 1 0', minWidth: 0, height: 44 }
+  return (
+    <div role="group" aria-label="Acciones de la ficha" data-pie-ficha style={{ position: 'sticky', bottom: 0, zIndex: 2, marginTop: 'auto', display: 'flex', alignItems: 'center', gap: space[2], padding: '8px 12px calc(12px + env(safe-area-inset-bottom))', background: color.surface, borderTop: `1px solid ${color.line}` }}>
+      {otra && <Button variant="outline" disabled={otra.disabled} onClick={otra.onClick} style={boton}>{otra.label}</Button>}
+      {principal && <Button variant="solid" tone="brand" disabled={principal.disabled} onClick={principal.onClick} style={boton}>{principal.label}</Button>}
+      <MenuAcciones acciones={mas} etiqueta={`Más acciones · ${etiqueta}`} alPie />
+    </div>
   )
 }
 
@@ -97,7 +126,8 @@ export function DatosFicha({ children }: { children: React.ReactNode }) {
 }
 
 export function BarraSeleccion({ cuantas, onSoltar, children }: { cuantas: number; onSoltar: () => void; children: React.ReactNode }) {
-  if (!cuantas) return null
+  const angosta = usePantallaAngosta()
+  if (!cuantas || angosta) return null
   return (
     <div role="region" aria-label="Acciones de las elegidas" style={{ position: 'sticky', bottom: 16, zIndex: 5, margin: '0 auto', width: 'fit-content', maxWidth: '100%', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: space[2], padding: '8px 10px 8px 16px', borderRadius: 12, background: 'var(--mo-side-bg)', color: '#fff', boxShadow: shadow.modal }}>
       <span style={{ fontWeight: weight.semibold, whiteSpace: 'nowrap' }}>{cuantas} {cuantas === 1 ? 'elegida' : 'elegidas'}</span>
