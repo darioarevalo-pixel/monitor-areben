@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { documentarTanda, renglonesDeTanda, transferenciaEnErp, transferirEnErp } from '../api/_repo-documento.js'
+import { avanzarDocumento, documentarTanda, renglonesDeTanda, transferenciaEnErp, transferirEnErp } from '../api/_repo-documento.js'
 
 describe('Reposición → documento del motor (en sombra)', () => {
   it('arma los renglones desde { product_id_size_id: n } y deja afuera lo inválido', () => {
@@ -51,15 +51,38 @@ describe('Stunned sin GN (llave TRANSFERENCIA_STUNNED_ERP)', () => {
     const antes = process.env.DATABASE_URL_ZATTIA
     delete process.env.DATABASE_URL_ZATTIA
     try {
-      const r = await transferirEnErp({ store: 'zattia', linea: 'stunned', armadoId: 'a', tanda: 1, prendas: { '1_2': 1 }, desde: 'deposito', hacia: 'local', usuario: 'x' })
+      const r = await transferirEnErp({ store: 'zattia', linea: 'stunned', armadoId: 'a', tanda: 1, prendas: { '1_2': 1 }, desde: 'deposito', hacia: 'local', recibir: 'al_armar', usuario: 'x' })
       expect(r).toMatchObject({ sinConexion: true })
       expect('error' in r && r.error).toBeTruthy()
       process.env.DATABASE_URL_ZATTIA = 'postgres://x:y@127.0.0.1:1/nada'
-      expect(await transferirEnErp({ store: 'zattia', linea: 'stunned', armadoId: 'a', tanda: 1, prendas: {}, desde: 'deposito', hacia: 'local', usuario: 'x' })).toMatchObject({ error: expect.any(String) })
-      expect(await transferirEnErp({ store: 'zattia', linea: 'stunned', armadoId: 'a', tanda: 1, prendas: { '1_2': 1 }, desde: 'deposito', hacia: 'local', usuario: 'x' })).toMatchObject({ error: expect.any(String) })
+      expect(await transferirEnErp({ store: 'zattia', linea: 'stunned', armadoId: 'a', tanda: 1, prendas: {}, desde: 'deposito', hacia: 'local', recibir: 'al_armar', usuario: 'x' })).toMatchObject({ error: expect.any(String) })
+      expect(await transferirEnErp({ store: 'zattia', linea: 'stunned', armadoId: 'a', tanda: 1, prendas: { '1_2': 1 }, desde: 'deposito', hacia: 'local', recibir: 'al_armar', usuario: 'x' })).toMatchObject({ error: expect.any(String) })
     } finally {
       if (antes === undefined) delete process.env.DATABASE_URL_ZATTIA
       else process.env.DATABASE_URL_ZATTIA = antes
     }
+  })
+  it('sin decir cuándo se recibe ⛔ transfiere', async () => {
+    const antes = process.env.DATABASE_URL_ZATTIA
+    process.env.DATABASE_URL_ZATTIA = 'postgres://x:y@127.0.0.1:1/nada'
+    try {
+      expect(await transferirEnErp({ store: 'zattia', linea: 'stunned', armadoId: 'a', tanda: 1, prendas: { '1_2': 1 }, desde: 'deposito', hacia: 'local', usuario: 'x' }))
+        .toEqual({ error: 'Falta decir si se recibe al armar o en destino.' })
+    } finally {
+      if (antes === undefined) delete process.env.DATABASE_URL_ZATTIA
+      else process.env.DATABASE_URL_ZATTIA = antes
+    }
+  })
+  it('«al armar» llega a Recibida; «en destino» frena En camino; y retoma desde donde quedó', async () => {
+    const hechos: string[] = []
+    const paso = (n: string) => async () => { hechos.push(n); return { ok: true, avisos: [] } }
+    const m = { armarTransferencia: paso('armar'), enviarTransferencia: paso('enviar'), recibirTransferencia: paso('recibir') }
+    const p = { id: 'd', renglones: [], usuario: 'x' }
+    expect(await avanzarDocumento(m, null, { ...p, estado: 'borrador', recibir: 'al_armar' })).toEqual({ estado: 'recibida', avisos: [] })
+    expect(hechos.splice(0)).toEqual(['armar', 'enviar', 'recibir'])
+    expect(await avanzarDocumento(m, null, { ...p, estado: 'borrador', recibir: 'en_destino' })).toEqual({ estado: 'en_transito', avisos: [] })
+    expect(hechos.splice(0)).toEqual(['armar', 'enviar'])
+    expect(await avanzarDocumento(m, null, { ...p, estado: 'en_transito', recibir: 'en_destino' })).toEqual({ estado: 'en_transito', avisos: [] })
+    expect(hechos).toEqual([])
   })
 })

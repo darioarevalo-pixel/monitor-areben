@@ -49,10 +49,12 @@ export type Armado = {
   transfer: {
     transfer_id?: string | number | null
     movement_id?: string | number | null
+    /** Línea con la transferencia en el ERP: el número del documento (T-n) de la última tanda. */
+    erp?: number | null
     /** Total transferido (todas las tandas). */
     unidades?: number
     /** «Transferir y continuar»: cada tanda con su transferencia de GN. */
-    tandas?: { transfer_id: string | number | null; unidades: number; hora: string }[]
+    tandas?: { transfer_id: string | number | null; erp?: number | null; unidades: number; hora: string }[]
     /** Lo ya transferido por variante: no se vuelve a mandar ni se puede restar. */
     transferido?: Record<string, number>
     /** La tanda que salió para GN y todavía no se anotó cómo terminó (para el cartel de «sin confirmar»). */

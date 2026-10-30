@@ -23,6 +23,7 @@ import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
 import { puedeVerAlguna } from '../lib/permisos.core.js'
 import { documentarTanda, transferirEnErp, transferenciaEnErp } from './_repo-documento.js'
+import { recibirDe } from '../lib/erp/transferencia-doc.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, dormir } from './_gn.js'
 import {
@@ -253,7 +254,9 @@ export default async function handler(req, res) {
       // 🔑 Uno TRABADO en `transfiriendo` (el servidor se cortó o no pudo anotar la respuesta de GN) se
       // resuelve igual: nadie lo está transfiriendo y no se sabe si salió.
       if (armado.estado !== 'revisar' && !trabado(armado)) return res.status(409).json({ error: 'Este armado no está para revisar.', armado })
-      const hecha = b.hecha === true
+      // 🔑 Línea con la transferencia en el ERP: ⛔ hay «¿está en GN?» que contestar. Siempre vuelve a `en_curso` y el próximo
+      // «Transferir» retoma el MISMO documento (`origen_ref` = armado + tanda), sin duplicarlo ni anotar depósitos de GN.
+      const hecha = b.hecha === true && !transferenciaEnErp(armado.linea)
       const t = armado.transfer || {}
       const enCurso = t.enCurso || {}
       // 🔑 La tanda guarda QUÉ prendas movió y de dónde a dónde: el libro de stock la lee prenda por prenda.
@@ -356,7 +359,7 @@ async function transferir(sb, res, armado, b, perfil) {
     // 🔑 Stunned sin GN: el documento del motor ES la transferencia (llave `TRANSFERENCIA_STUNNED_ERP`). Si falla, ⛔ quedó nada
     // movido que GN no sepa: el armado vuelve a `en_curso` y la pantalla lo dice; con `origen_ref` el reintento retoma el documento.
     const tandaN = (previo.tandas || []).length + 1
-    const doc = await transferirEnErp({ store: armado.store, linea: armado.linea, armadoId: armado.id, tanda: tandaN, prendas: pendiente, desde: desdeMotor, hacia: haciaMotor, usuario: perfil.name || armado.persona || 'reposicion' })
+    const doc = await transferirEnErp({ store: armado.store, linea: armado.linea, armadoId: armado.id, tanda: tandaN, prendas: pendiente, desde: desdeMotor, hacia: haciaMotor, recibir: recibirDe(armado.linea), usuario: perfil.name || armado.persona || 'reposicion' })
     if (!doc.ok) {
       await marcar({ estado: 'en_curso', error: null, transfer: sinTanda })
       console.error(`[repo-erp] ${armado.id} t${tandaN}: ${doc.error}`)

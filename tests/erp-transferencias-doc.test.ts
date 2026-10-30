@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { contarVistasDoc, csvDeDocs, faltantesDe, filtrarDocs, nombreDeRenglon, nombresDePrendas, ordenarDocs, pasoDeDoc, remitoHtml, vistaDeEntradaDoc } from '@/lib/erp/transferencias-doc.core.js'
+import { conFaltoArmar, recibidasDelMes, contarVistasDoc, csvDeDocs, faltantesDe, filtrarDocs, nombreDeRenglon, nombresDePrendas, ordenarDocs, pasoDeDoc, remitoHtml, vistaDeEntradaDoc } from '@/lib/erp/transferencias-doc.core.js'
 import { listaDeRecepcion } from '@/lib/erp/transferencia-escaneo.core.js'
 
 const r = (o = {}) => ({ n: 1, product_id: 10, size_id: 1, sku: 'STU-REM-M', barcode: '779', pedida: 0, armada: 3, enviada: 3, recibida: null, ...o })
@@ -50,5 +50,21 @@ describe('transferencias-doc', () => {
     expect(html).toContain('&lt;b&gt;x&lt;/b&gt;')
     expect(html).toContain('REMERA · M')
     expect(html).not.toContain('null')
+  })
+  it('faltó armar va UNA vez, en la última tanda de un armado cerrado; las sueltas en 0', () => {
+    const armado = { id: 'ra1', estado: 'transferido', pedido: [{ vid: 'a', cant: 6 }, { vid: 'b', cant: 4 }], transfer: { tandas: [{ unidades: 3 }, { unidades: 5 }] } }
+    const docs = [d({ id: 't1', origen: 'reposicion', origen_ref: 'ra1:t1' }), d({ id: 't2', origen: 'reposicion', origen_ref: 'ra1:t2' }), d({ id: 'l' })]
+    expect(conFaltoArmar(docs, [armado]).map((x) => x.faltoArmar)).toEqual([0, 2, 0])
+    expect(conFaltoArmar(docs, [{ ...armado, estado: 'en_curso' }]).map((x) => x.faltoArmar)).toEqual([0, 0, 0])
+    expect(conFaltoArmar(docs, []).map((x) => x.faltoArmar)).toEqual([0, 0, 0])
+  })
+  it('recibidas del mes: por la hora AR de recibida, sólo las recibidas', () => {
+    const docs = [
+      d({ estado: 'recibida', recibida_en: '2026-10-31T23:00:00Z', renglones: [r({ recibida: 3 })] }), // 31-oct 20:00 AR
+      d({ estado: 'recibida', recibida_en: '2026-11-01T02:00:00Z', renglones: [r({ recibida: 5 })] }), // 31-oct 23:00 AR
+      d({ estado: 'recibida', recibida_en: '2026-11-01T04:00:00Z', renglones: [r({ recibida: 7 })] }), // 1-nov AR
+      d({ estado: 'en_transito' }),
+    ]
+    expect(recibidasDelMes(docs, '2026-10')).toEqual({ cuantas: 2, unidades: 8 })
   })
 })

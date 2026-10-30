@@ -29,10 +29,10 @@ beforeEach(() => {
 })
 
 const esperar = () => act(async () => { await new Promise((r) => setTimeout(r, 0)) })
-async function montar() {
+async function montar(props: { unificada?: boolean; abrirMover?: boolean } = {}) {
   const { MoverYRecibir } = await import('@/components/erp/stock/MoverYRecibir')
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host)
-  await act(async () => { root!.render(<ProveedorLineaErp value="stunned"><MoverYRecibir /></ProveedorLineaErp>) })
+  await act(async () => { root!.render(<ProveedorLineaErp value="stunned"><MoverYRecibir {...props} /></ProveedorLineaErp>) })
   await esperar()
 }
 async function escribir(input: HTMLInputElement, valor: string) {
@@ -179,5 +179,22 @@ describe('Mover y recibir', () => {
     expect(document.body.textContent).toContain('2 (-1)')
     expect(boton('Recibir')).toBeUndefined()
     expect(boton('Imprimir remito')).toBeTruthy()
+  })
+  it('lista única (Bruno, 30-oct): todas juntas con su origen, lo que faltó armar, y «Mover» se abre con su botón', async () => {
+    m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [
+      doc({ id: 'r', numero: 9, origen: 'reposicion', origen_ref: 'ra1:t1', estado: 'recibida', faltoArmar: 4 }),
+      doc({ id: 'l', numero: 8, estado: 'recibida' }),
+    ], enTransito: [] })
+    await montar({ unificada: true })
+    const texto = document.body.textContent ?? ''
+    expect(texto).toContain('Reposición del monitor')
+    expect(texto).toContain('Movida a mano')
+    expect(texto).toContain('Faltó armar')
+    expect(document.querySelector('input[placeholder^="Código"]')).toBeNull()
+    await act(async () => { boton('Mover').click() })
+    expect(document.querySelector('input[placeholder^="Código"]')).not.toBeNull()
+    act(() => root?.unmount()); root = null; host.remove()
+    await montar({ unificada: true, abrirMover: true })
+    expect(document.querySelector('input[placeholder^="Código"]')).not.toBeNull()
   })
 })

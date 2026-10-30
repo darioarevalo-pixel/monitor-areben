@@ -777,6 +777,8 @@ export type TransferenciaDoc = {
   id: string; numero: number; linea: string; desde: string; hacia: string; origen: string; estado: 'borrador' | 'armada' | 'en_transito' | 'recibida' | 'cancelada'
   nota: string | null; creada_por: string; creada_en: string; enviada_por: string | null; enviada_en: string | null; recibida_por: string | null; recibida_en: string | null
   renglones: RenglonDoc[]; diferencias: Array<{ sku: string | null; enviada: number; recibida: number; diferencia: number }>
+  /** Sólo en la lista: de una de Reposición, lo pedido que ⛔ salió (lo pega `api/_erp-transferencia.js`). */
+  origen_ref?: string | null; faltoArmar?: number
 }
 export type AvisoDoc = { codigo: string; texto: string }
 export type RenglonAlMotor = { product_id: string; size_id: string; sku: string | null; barcode: string | null; cantidad: number }

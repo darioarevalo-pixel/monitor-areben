@@ -8,6 +8,9 @@
  * pedido, armado, enviado y recibido, remito para imprimir y «Exportar». Mueve SÓLO el libro del ERP: ⛔ GN ni Tienda Nube.
  * Núcleos: `lib/erp/transferencia-escaneo.core.js` (el escaneo) y `lib/erp/transferencias-doc.core.js` (la lista y la ficha).
  *
+ * 🔑 `unificada` (Bruno, 30-oct): para la línea con la transferencia en el ERP (`TRANSFERENCIA_EN_ERP`) ésta ES la pestaña
+ * Transferencias: la lista de TODAS (las de Reposición, que llegan recibidas, y las movidas a mano), con «Mover» como botón.
+ *
  * 📱 En el celular (Bruno, 29-oct; artifact molde 4): lo escaneado va en tarjetas con + y − grandes —al recibir, verde lo que
  * llegó entero y ámbar lo que falta— y recibir ocupa la pantalla, con el botón fijo al pie.
  */
@@ -26,7 +29,7 @@ import {
 } from '@/lib/erp/cliente'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import {
-  VISTAS_DOC, contarVistasDoc, csvDeDocs, faltantesDe, filtrarDocs, nombreDeRenglon, nombresDePrendas, ordenarDocs, pasoDeDoc, remitoHtml, renglonesConDiferencia, unidadesEnviadas, unidadesRecibidas, vistaDeEntradaDoc,
+  VISTAS_DOC, contarVistasDoc, csvDeDocs, faltantesDe, origenDeDoc, recibidasDelMes, filtrarDocs, nombreDeRenglon, nombresDePrendas, ordenarDocs, pasoDeDoc, remitoHtml, renglonesConDiferencia, unidadesEnviadas, unidadesRecibidas, vistaDeEntradaDoc,
 } from '@/lib/erp/transferencias-doc.core.js'
 import { BarraPasos } from './Barritas'
 import { DEPOSITOS_DE_LINEA, cuentaDeRecepcion, fijarCantidad, listaDeRecepcion, prendaExacta, renglonesParaMotor, sumarEscaneo, unidades } from '@/lib/erp/transferencia-escaneo.core.js'
@@ -46,6 +49,15 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'unidades', titulo: 'Productos', ancho: '90px', ordena: true, derecha: true, movil: 'dato' },
   { key: 'faltan', titulo: 'Faltaron', ancho: '90px', ordena: true, derecha: true, movil: 'oculta' },
 ]
+/** La lista única: + de dónde salió y lo que faltó armar en Reposición (⛔ es lo que faltó al recibir). */
+const COLUMNAS_UNIFICADA: ColumnaLista[] = [
+  ...COLUMNAS.slice(0, 3),
+  { key: 'origen', titulo: 'Origen', ancho: '170px', movil: 'oculta' },
+  ...COLUMNAS.slice(3),
+  { key: 'falto', titulo: 'Faltó armar', ancho: '100px', derecha: true, movil: 'oculta' },
+]
+const abrirReposicion = () => window.open('/reposicion', '_blank', 'noopener')
+const mesHoy = () => new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 7)
 
 function bajarCsv(docs: TransferenciaDoc[], linea: TiendaErp) {
   const url = URL.createObjectURL(new Blob([csvDeDocs(docs, dep)], { type: 'text/csv;charset=utf-8' }))
@@ -151,7 +163,7 @@ export function TarjetasEscaneadas({ filas, onCantidad, conEnviada, contra }: { 
   )
 }
 
-export function MoverYRecibir() {
+export function MoverYRecibir({ unificada = false, abrirMover = false }: { unificada?: boolean; abrirMover?: boolean } = {}) {
   // La del selector del menú (⛔ pestañas de otra marca: Bruno, 28-oct). Cambiarla remonta la pantalla (`key` en `Erp`).
   const linea: TiendaErp = useTiendaErp()
   // Los fijos de la línea, y el Evento si está PRENDIDO en el ERP (motor sql/058). Si ⛔ se puede leer, sólo los fijos.
@@ -168,6 +180,8 @@ export function MoverYRecibir() {
   const [hacia, setHacia] = useState(() => deps[0])
   const [lista, setLista] = useState<Fila[]>([])
   const [nota, setNota] = useState('')
+  // En la lista única el escaneo de «Mover» se abre con su botón (o viene abierto: el atajo de Stock › «Mover»).
+  const [moviendo, setMoviendo] = useState(!unificada || abrirMover)
   const [docs, setDocs] = useState<TransferenciaDoc[] | null>(null)
   const [nombres, setNombres] = useState<Nombres>({})
   const [vuelta, setVuelta] = useState(0)
@@ -214,6 +228,7 @@ export function MoverYRecibir() {
       const e = await enviarTransferenciaDoc(linea, id)
       setHecho({ texto: `T-${e.transferencia.numero} en tránsito: salieron ${e.unidades} u de ${dep(desde)}. Falta recibirla en ${dep(hacia)}.`, avisos: [...a.avisos, ...e.avisos] })
       setLista([]); setNota('')
+      if (unificada) setMoviendo(false)
     } catch (err) {
       setError(`${err instanceof Error ? err.message : 'No se pudo mover.'}${id ? ' La transferencia quedó sin enviar: no salió nada del stock. Cancelala abajo o reintentá.' : ''}`)
     } finally {
@@ -272,6 +287,7 @@ export function MoverYRecibir() {
   const vista = elegida ?? vistaDeEntradaDoc(conteo)
   const filas = useMemo(() => ordenarDocs(filtrarDocs(todos, { vista, q, nombres }), orden), [docs, vista, q, nombres, orden]) // eslint-disable-line react-hooks/exhaustive-deps
   const enCaminoU = todos.filter((d) => d.estado === 'en_transito').reduce((s, d) => s + unidadesEnviadas(d), 0)
+  const delMes = useMemo(() => recibidasDelMes(todos, mesHoy()), [docs]) // eslint-disable-line react-hooks/exhaustive-deps
   const faltantesU = todos.filter((d) => d.estado === 'recibida').reduce((s, d) => s + faltantesDe(d), 0)
   const cuenta = recibiendo ? cuentaDeRecepcion(recibiendo.lista) : null
   const ficha = fichaId ? todos.find((d) => d.id === fichaId) ?? null : null
@@ -287,13 +303,22 @@ export function MoverYRecibir() {
     if (k === 'quien') return <span style={{ color: color.ink2 }}>{d.recibida_por ?? d.enviada_por ?? d.creada_por}</span>
     if (k === 'estado') { const p = pasoDeDoc(d); return <BarraPasos paso={p.paso} fin={p.fin} texto={p.texto} /> }
     if (k === 'unidades') return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{unidadesEnviadas(d) || '—'}</span>
+    if (k === 'origen') return <span style={{ color: color.ink2 }}>{origenDeDoc(d)}</span>
+    if (k === 'falto') return <span style={{ fontVariantNumeric: 'tabular-nums', color: d.faltoArmar ? 'var(--mo-warning-ink)' : color.mut }}>{d.faltoArmar || '—'}</span>
     if (k === 'faltan') return <span style={{ fontVariantNumeric: 'tabular-nums', color: faltantesDe(d) ? 'var(--mo-danger-ink)' : color.mut }}>{faltantesDe(d) || '—'}</span>
     return null
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      {!(angosta && recibiendo) && (
+      {unificada && !(angosta && recibiendo) && (
+        <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ flex: '1 1 320px', color: color.ink2 }}>Cada transferencia entre depósitos: las de Reposición llegan recibidas al transferir; las que se mueven acá se reciben escaneando lo que llegó.</div>
+          {!moviendo && !recibiendo && <Button variant="solid" tone="info" onClick={() => { setMoviendo(true); setHecho(null); setError(null) }}>Mover</Button>}
+          <Button variant="outline" onClick={abrirReposicion}>Abrir Reposición en el monitor ↗</Button>
+        </div>
+      )}
+      {!unificada && !(angosta && recibiendo) && (
         <SectionCard title="Mover y recibir" subtitle="Una transferencia entre el depósito y el local: se escanea lo que sale y, al llegar, lo que llegó. Lo que no llega queda marcado como diferencia.">
           {linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mueve sólo el stock del ERP: no toca Gestión Nube ni Tienda Nube. Mientras {linea === 'bdi' ? 'BDI' : 'Zattia'} siga en Gestión Nube, sus transferencias se hacen como siempre.</Notice>}
         </SectionCard>
@@ -302,7 +327,7 @@ export function MoverYRecibir() {
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho.texto}{hecho.avisos.map((a, i) => <div key={i} style={{ marginTop: 4 }}>⚠️ {a.texto}</div>)}</Notice>}
 
-      {!recibiendo && (
+      {!recibiendo && moviendo && (
         <SectionCard title="Mover" subtitle="Escaneá lo que sale. El stock sale del origen al confirmar y queda «en tránsito» hasta que se reciba.">
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <Field label="Sale de"><Select value={desde} onChange={(e) => setDesde(e.target.value)}>{deps.map((d) => <option key={d} value={d}>{dep(d)}</option>)}</Select></Field>
@@ -313,6 +338,7 @@ export function MoverYRecibir() {
           <TablaEscaneada filas={lista} onCantidad={(f, n) => setLista((l) => fijarCantidad(l, f.producto, f.talle, n) as Fila[])} />
           <div style={{ marginTop: space[3] }}>
             <Button variant="solid" tone="info" disabled={trabajando || !lista.length} onClick={mover}>{lista.length ? `Mover ${unidades(lista)} u de ${dep(desde)} a ${dep(hacia)}` : 'Mover'}</Button>
+            {unificada && <Button variant="outline" style={{ marginLeft: space[2] }} disabled={trabajando} onClick={() => { setMoviendo(false); setLista([]); setNota('') }}>Cancelar</Button>}
           </div>
         </SectionCard>
       )}
@@ -348,6 +374,7 @@ export function MoverYRecibir() {
         <TileResumen titulo="En camino" valor={u(enCaminoU)} oscuro nota={`${conteo.en_camino ?? 0} sin recibir`} />
         <TileResumen tono={tonoDeConteo(conteo.sin_enviar)} titulo="Sin enviar" valor={(conteo.sin_enviar ?? 0).toLocaleString('es-AR')} nota="quedaron a medias: no salió nada" />
         <TileResumen tono={tonoDeConteo(faltantesU)} titulo="Faltantes recibidos" valor={u(faltantesU)} nota="esperan un ajuste en Ingresos y ajustes" />
+        {unificada && <TileResumen titulo="Recibidas este mes" valor={delMes.cuantas.toLocaleString('es-AR')} nota={`${u(delMes.unidades)} movidos`} />}
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
@@ -358,7 +385,7 @@ export function MoverYRecibir() {
           <Button variant="outline" onClick={() => setVuelta((n) => n + 1)}>Actualizar</Button>
         </div>
         <ListaTrabajo
-          columnas={COLUMNAS} filas={filas} claveDe={(d) => d.id} celda={celda} orden={orden} onOrden={setOrden}
+          columnas={unificada ? COLUMNAS_UNIFICADA : COLUMNAS} filas={filas} claveDe={(d) => d.id} celda={celda} orden={orden} onOrden={setOrden}
           activa={fichaId} onAbrir={(d) => setFichaId(d.id)} etiquetaFila={(d) => `la transferencia T-${d.numero} de ${dep(d.desde)} a ${dep(d.hacia)}`}
           vacio={docs ? (
             <div style={{ padding: space[6] }}>
@@ -391,12 +418,14 @@ function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onPreparar, onC
       </div>
       {falta > 0 && <Notice tone="warning">Faltaron {u(falta)} al recibir. La diferencia queda marcada y no se ajusta sola: la cierra un ajuste en Ingresos y ajustes.</Notice>}
       <DatosFicha>
+        <DatoFicha titulo="Origen">{origenDeDoc(d)}</DatoFicha>
         <DatoFicha titulo="Creó">{d.creada_por}</DatoFicha>
         {d.enviada_en && <DatoFicha titulo="Salió">{cuandoCorto(d.enviada_en)} · {d.enviada_por}</DatoFicha>}
         {d.recibida_en && <DatoFicha titulo="Llegó">{cuandoCorto(d.recibida_en)} · {d.recibida_por}</DatoFicha>}
         <DatoFicha titulo="Productos que salieron">{u(unidadesEnviadas(d))}</DatoFicha>
         {recibida && <DatoFicha titulo="Productos que llegaron">{u(unidadesRecibidas(d))}</DatoFicha>}
         {d.nota && <DatoFicha titulo="Nota">{d.nota}</DatoFicha>}
+        {!!d.faltoArmar && <DatoFicha titulo="Faltó armar">{u(d.faltoArmar)} de lo pedido en Reposición</DatoFicha>}
       </DatosFicha>
       <div>
         <div style={{ fontWeight: weight.semibold, color: color.ink, marginBottom: 6 }}>Productos ({renglones.length})</div>

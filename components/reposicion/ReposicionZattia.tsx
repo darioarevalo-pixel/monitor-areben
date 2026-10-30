@@ -45,6 +45,7 @@ import { HistorialArmados } from './HistorialArmados'
 import { SolicitudDevolucion, type DatoTn } from './SolicitudDevolucion'
 import { abrirArmado, articuloDe, cambiarCantidadesArmado, codigoArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type LineaPedido, type Sentido } from '@/lib/reposicion/armado'
 import { cambiarCantidades, transferidoDe } from '@/lib/reposicion/armado.core.js'
+import { transfiereEnErp } from '@/lib/erp/transferencia-doc.core.js'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 type Pestana = 'llevar' | 'devolver' | 'historial'
@@ -273,8 +274,9 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   }
 
   const onResolver = async (a: Armado, hecha: boolean) => {
-    // 🔴 «No está» habilita a transferir de nuevo: si en realidad estaba, las prendas viajan dos veces.
-    if (!hecha) {
+    // 🔴 «No está» habilita a transferir de nuevo: si en realidad estaba, las prendas viajan dos veces. En el ERP ⛔ hay riesgo:
+    // el reintento retoma el mismo documento.
+    if (!hecha && !transfiereEnErp(a.linea)) {
       const ok = await confirmar({
         titulo: '¿Seguro que no está en Gestión Nube?',
         tono: 'danger',
@@ -904,6 +906,7 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
   const art = articuloDe(armado.linea)
   const devolucion = armado.sentido === 'devolver'
   const ya = armado.transfer?.unidades ?? 0
+  const enErp = transfiereEnErp(armado.linea)
   const box = { marginBottom: space[3] }
   if (armado.estado === 'en_curso')
     return (
@@ -918,7 +921,9 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
       <div style={box}>
         <Notice tone="success" icon="✓">
           {devolucion ? 'Devolución transferida' : 'Reposición transferida'} a las {hhmm(armado.cerrado_en)}{quien} · {ya || r.escaneadas} {art.plural}
-          {armado.transfer?.transfer_id ? ` · Transferencia ${(armado.transfer.tandas?.length ?? 0) > 1 ? armado.transfer.tandas!.map((t) => t.transfer_id).join(', ') : armado.transfer.transfer_id}` : ''}. Actualizá el stock para ver la lista nueva.
+          {armado.transfer?.transfer_id ? ` · Transferencia ${(armado.transfer.tandas?.length ?? 0) > 1 ? armado.transfer.tandas!.map((t) => t.transfer_id).join(', ') : armado.transfer.transfer_id}` : ''}
+          {/* La línea en el ERP ⛔ tiene número de GN: el suyo es el del documento (T-n de ERP › Stock › Transferencias). */}
+          {!armado.transfer?.transfer_id && armado.transfer?.erp ? ` · Transferencia ${armado.transfer.tandas?.map((t) => t.erp).filter(Boolean).map((n) => `T-${n}`).join(', ') || `T-${armado.transfer.erp}`}` : ''}. Actualizá el stock para ver la lista nueva.
         </Notice>
       </div>
     )
@@ -926,7 +931,19 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
     return (
       <div style={box}>
         <Notice tone="brand" icon="⏳">
-          Transfiriendo en Gestión Nube{quien}…
+          Transfiriendo {enErp ? 'en el ERP' : 'en Gestión Nube'}{quien}…
+        </Notice>
+      </div>
+    )
+  // 🔑 Línea con la transferencia en el ERP: ⛔ hay nada que buscar en GN. Transferir de nuevo retoma el MISMO documento.
+  if (enErp && (armado.estado === 'revisar' || armado.estado === 'transfiriendo'))
+    return (
+      <div style={box}>
+        <Notice tone="danger" icon="⚠">
+          <div><b>Transferencia sin confirmar{quien}.</b> Se puede transferir de nuevo: el ERP sigue la misma transferencia, no la duplica.</div>
+          <div style={{ display: 'flex', gap: space[2], marginTop: space[2], flexWrap: 'wrap' }}>
+            <Button size="sm" variant="solid" tone="brand" onClick={() => onResolver(armado, false)}>Transferir de nuevo</Button>
+          </div>
         </Notice>
       </div>
     )

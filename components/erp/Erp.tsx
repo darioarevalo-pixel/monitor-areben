@@ -34,6 +34,7 @@ import { StockErp, type PrendaAAjustar } from './stock/StockErp'
 import { MovimientosStock } from './stock/MovimientosStock'
 import { TransferenciasStock } from './stock/TransferenciasStock'
 import { MoverYRecibir } from './stock/MoverYRecibir'
+import { transfiereEnErp } from '@/lib/erp/transferencia-doc.core.js'
 import { RecepcionesStock } from './stock/RecepcionesStock'
 import { ComparacionStock } from './stock/ComparacionStock'
 import { DiferenciasDia } from './DiferenciasDia'
@@ -207,6 +208,9 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   // 🎯 Bruno 30-oct: la línea Zattia queda oculta para el local (⛔ admin) hasta que Zattia pase al ERP ⇒ ven sólo Stunned.
   const soloStunned = !esAdmin(perfil)
   const lineaVista: LineaErp = marca === 'zattia' ? (soloStunned || linea === 'stunned' ? 'stunned' : 'zattia') : ''
+  const transferenciaEnErp = transfiereEnErp(lineaVista || 'bdi')
+  // «Mover y recibir» ⛔ va aparte para esa línea: es la misma lista (`MoverYRecibir unificada`).
+  const vistasDeAca = (seccion.pestanias.find((p) => p.key === pestania)?.vistas ?? []).filter((v) => !(transferenciaEnErp && v.key === 'mover'))
   // 🔑 El cartel de «modo paralelo» era fijo: después del corte de Stunned (`CAJA_STUNNED_ERP=1`) seguiría diciendo que GN sirve.
   // Si la configuración no se puede leer queda el texto de siempre (el prudente).
   const [stunnedReal, setStunnedReal] = useState(false)
@@ -328,9 +332,9 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
               </div>
             </header>
 
-            {vista && (
+            {vistasDeAca.length > 1 && (
               // 📱 En el celular las vistas se deslizan de costado (`erp-vistas`, globals.css).
-              <div className="erp-vistas"><Tabs items={seccion.pestanias.find((p) => p.key === pestania)?.vistas ?? []} value={vista} onChange={(k) => ir(seccion.key, pestania, k)} /></div>
+              <div className="erp-vistas"><Tabs items={vistasDeAca} value={vista ?? ''} onChange={(k) => ir(seccion.key, pestania, k)} /></div>
             )}
             {/* 📱 Las pantallas de compu se miran desde el celular, pero se cambian en la compu (Bruno, 29-oct). En la compu ⛔ se ve (globals.css). */}
             {(seccion.key === 'configuracion' || pestania === 'facturacion' || pestania === 'redondeo') && (
@@ -350,8 +354,9 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {pestania === 'cajas' && <CajasErp key={marca} />}
             {vista === 'stock' && <StockErp key={marca} ajustar={ajustarPrenda} irA={(p, v) => ir('stock', p, v)} />}
             {vista === 'movimientos' && <MovimientosStock key={marca} ajustar={ajustarPrenda} />}
-            {vista === 'transferencias' && <TransferenciasStock key={marca} />}
-            {vista === 'mover' && <MoverYRecibir key={lineaVista} />}
+            {/* 🔑 Línea con la transferencia en el ERP (Bruno, 30-oct): una sola lista, la de los documentos, con «Mover» adentro. */}
+            {vista === 'transferencias' && (transferenciaEnErp ? <MoverYRecibir key={lineaVista} unificada /> : <TransferenciasStock key={marca} />)}
+            {vista === 'mover' && (transferenciaEnErp ? <MoverYRecibir key={`${lineaVista}/mover`} unificada abrirMover /> : <MoverYRecibir key={lineaVista} />)}
             {vista === 'ajustes' && <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : `lista/${lineaVista}`} pedida={aAjustar} />}
             {vista === 'ingresos' && <RecepcionesStock key={marca} />}
             {vista === 'comparacion' && <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'diferencias', 'conciliacion')} />}

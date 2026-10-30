@@ -130,7 +130,7 @@ async function transferenciasDelLibro(pg) {
   return { enLibro, aMano, desde: desde ? new Date(desde).toISOString() : null }
 }
 
-function leerArmados(marca) {
+export function leerArmados(marca) {
   const { url, key } = cfgDeMarca(marca)
   return createClient(url, key).from('repo_armado')
     .select('id, store, linea, sentido, fecha, persona, estado, pedido, escaneos, faltantes, transfer, error, creado_en, cerrado_en')

@@ -227,6 +227,19 @@ diaria con tope (30) se reemplazó por una solicitud que deciden **Darío o Brun
 - ⏸️ BDI sigue con la pestaña oculta. Su prioridad pedida: primero los diseños que venden online y
   no tienen depósito (hoy BDI sólo mira ventas del local: falta traer las online).
 
+## Stunned: la transferencia vive en el ERP (corte 28-oct; lista única 30-oct-2026)
+
+- 🔑 **Qué línea va por el ERP lo dice UNA tabla**: `TRANSFERENCIA_EN_ERP` de `lib/erp/transferencia-doc.core.js` (hoy sólo
+  `stunned`, con su llave `TRANSFERENCIA_STUNNED_ERP=1` en Vercel). Pasar Zattia o BDI = una fila ahí + su llave, ⛔ pantallas.
+- Con la llave, «Transferir» ⛔ llama a GN: crea el documento del motor (`transferirEnErp`, `api/_repo-documento.js`) con
+  `origen_ref` = `<armado>:t<tanda>`. La tanda guarda `erp: <número>` en vez de `transfer_id`.
+- **Armar = transferido** (Bruno, 30-oct): `recibir: 'al_armar'` deja el documento «Recibida» al toque. Con `'en_destino'`
+  queda «En camino» y el local lo recibe escaneando en ERP › Stock › Transferencias. ⛔ Está prendido para ninguna línea.
+- ⛔ Hay «¿está en Gestión Nube?»: uno trabado se resuelve siempre como «transferir de nuevo», y el reintento retoma el MISMO
+  documento por `origen_ref` (⛔ se duplica).
+- La lista de esas transferencias es ERP › Stock › Transferencias (`MoverYRecibir unificada`): las de Reposición con lo que
+  **faltó armar** (lo pedido que ⛔ salió, en la última tanda) y las movidas a mano.
+
 ## La Zebra en el armado (tanda 4, 12-oct-2026)
 
 La Zebra está en la **misma compu** donde Lorena escanea (Darío). Sólo en la Reposición, no en la Devolución.
