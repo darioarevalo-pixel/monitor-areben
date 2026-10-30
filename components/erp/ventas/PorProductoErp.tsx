@@ -92,7 +92,8 @@ export function PorProductoErp() {
   const conteo = { agrupado: grupos.length, renglones: buscados.length }
   const filas = useMemo(() => ordenar(vista === 'agrupado' ? grupos : buscados, orden, vista), [vista, grupos, buscados, orden]) as Array<Grupo | RenglonProducto>
   const res = useMemo(() => resumen(buscados), [buscados])
-  const canales = useMemo(() => [...new Set((datos?.renglones ?? []).map((r) => r.canal))].sort(), [datos])
+  // Los canales de la línea que se mira (⛔ los de la otra tienda: elegirlo daba la lista vacía).
+  const canales = useMemo(() => [...new Set((datos?.renglones ?? []).filter((r) => !linea || r.linea === linea).map((r) => r.canal))].sort(), [datos, linea])
   const mirada = `${vista}|${periodo}|${q}|${linea}|${canal}|${orden?.col ?? ''}|${orden?.dir ?? ''}`
   const mostrar = tanda.de === mirada ? tanda.n : DE_A
 

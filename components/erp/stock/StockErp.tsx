@@ -143,11 +143,13 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
   }
 
   const nombreVista = VISTAS.find(([k]) => k === vista)?.[1] ?? ''
+  // El aviso es de los pedidos de la tienda del menú (BDI ⛔ tiene líneas: el total).
+  const sinVarianteAca = datos ? (linea ? datos.sinVariantePorTienda?.[linea] ?? 0 : datos.sinVariante) : 0
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título «Stock» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-      {!!datos?.sinVariante && <Notice tone="warning">{u(datos.sinVariante)} de pedidos sin pagar traen un código que {linea === 'stunned' ? 'el ERP' : 'Gestión Nube'} no tiene: no se descuentan de ningún producto.</Notice>}
+      {!!sinVarianteAca && <Notice tone="warning">{u(sinVarianteAca)} de pedidos sin pagar traen un código que {linea === 'stunned' ? 'el ERP' : 'Gestión Nube'} no tiene: no se descuentan de ningún producto.</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Disponible" valor={u(res.disponible)} oscuro nota="lo que se puede vender" />

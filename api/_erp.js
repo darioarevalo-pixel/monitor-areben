@@ -1752,7 +1752,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST' && body.accion === 'reintentar-entregas') {
-      const r = await reintentarEntregasErp({ marca: String(body.marca || '') }, { conMotor })
+      const r = await reintentarEntregasErp({ marca: String(body.marca || ''), linea: String(body.linea || '') }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
@@ -1813,7 +1813,7 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cobros') {
-      const r = await cobrosDelPeriodo({ marca: String(req.query.marca || ''), desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), prueba: req.query.prueba === '1' }, { conMotor })
+      const r = await cobrosDelPeriodo({ marca: String(req.query.marca || ''), linea: String(req.query.linea || ''), desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), prueba: req.query.prueba === '1' }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'gastos') {

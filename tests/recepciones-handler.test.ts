@@ -141,3 +141,27 @@ describe('las fotos de respaldo para Por producto (?fotos=1)', () => {
     expect((await correr({ store: 'bdi', fotos: '1' })).code).toBe(403)
   })
 })
+
+describe('Ingresos en el ERP: cada línea ve sus órdenes (Bruno, 30-oct)', () => {
+  const Z = (id: string) => ({ ...OC, id, store: 'zattia' })
+  beforeEach(() => {
+    base.tablas = {
+      recepcion_oc: [Z('zattia:1'), Z('zattia:2'), Z('zattia:3'), Z('zattia:4')],
+      recepcion_linea: [
+        { id: 1, oc_ref: 'zattia:1', sku: 'STU-REM-1' },
+        { id: 2, oc_ref: 'zattia:2', sku: 'ZAT-1' },
+        { id: 3, oc_ref: 'zattia:3', sku: 'STU-REM-2' }, { id: 4, oc_ref: 'zattia:3', sku: 'ZAT-2' },
+      ],
+      recepcion_evento: [],
+    }
+  })
+  const ids = (r: { body: Record<string, unknown> | null }) => ((r.body?.recepciones as Fila[]) || []).map((o) => o.id)
+
+  it('Stunned: las que tienen algún renglón STU (la mixta también); Zattia: las demás y la sin renglones; sin línea, todas', async () => {
+    sesionDe(ADMIN)
+    expect(ids(await correr({ store: 'zattia', linea: 'stunned' }))).toEqual(['zattia:1', 'zattia:3'])
+    expect(ids(await correr({ store: 'zattia', linea: 'zattia' }))).toEqual(['zattia:2', 'zattia:3', 'zattia:4'])
+    expect(ids(await correr({ store: 'zattia' }))).toEqual(['zattia:1', 'zattia:2', 'zattia:3', 'zattia:4'])
+    expect((await correr({ store: 'zattia', linea: 'otra' })).code).toBe(400)
+  })
+})

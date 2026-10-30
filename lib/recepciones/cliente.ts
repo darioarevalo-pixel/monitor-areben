@@ -50,11 +50,13 @@ const puedeDe = (d: { puede?: { proveedores?: unknown } } | null): Puede => ({
   proveedores: d?.puede?.proveedores === true,
 })
 
+/** `linea` (sólo el ERP): en Zattia, las órdenes con algún renglón de esa línea; sin ella, todas (la sección Ingresos). */
 export async function leerRecepciones(
   store: string,
   dias: number,
+  linea?: string,
 ): Promise<{ recepciones: Recepcion[]; eventos: Eventos; puede: Puede }> {
-  const r = await apiFetch(`${API}&store=${encodeURIComponent(store)}&dias=${dias}&nc=${Date.now()}`)
+  const r = await apiFetch(`${API}&store=${encodeURIComponent(store)}&dias=${dias}${linea ? `&linea=${encodeURIComponent(linea)}` : ''}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer las recepciones.')
   return {

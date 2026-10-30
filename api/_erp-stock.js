@@ -59,6 +59,9 @@ export async function listaDeStock({ marca }, deps) {
     pedidosLeidosEn: pedidos.leidaEn ?? null,
     pedidos: (pedidos.pedidos || []).length,
     sinVariante,
+    // El aviso es de la tienda que se mira (30-oct): cada pedido sabe de qué tienda es.
+    sinVariantePorTienda: Object.fromEntries([...new Set((pedidos.pedidos || []).map((p) => p.tienda).filter(Boolean))]
+      .map((t) => [t, reservadoPorVariante((pedidos.pedidos || []).filter((p) => p.tienda === t), inventario).sinVariante])),
   }
 }
 

@@ -8,6 +8,7 @@
  * Núcleo: `lib/erp/recepciones-lista.core.ts`; lee por la puerta de Ingresos (`api/_recepciones.js`, `lib/recepciones/cliente.ts`).
  */
 
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
@@ -54,6 +55,8 @@ function bajarCsv(filas: FilaRecepcion[], marca: string) {
 export function RecepcionesStock() {
   const { marca: delShell, perfil } = useSesion()
   const marca = delShell === 'bdi' ? 'bdi' : 'zattia'
+  // Las órdenes de la tienda del menú: mirando Stunned, ⛔ las de Zattia (Bruno, 30-oct).
+  const tienda = useTiendaErp()
   const usuario = perfil?.name ?? null
   const lista = 'erp-recepciones'
   const [datos, setDatos] = useState<Datos | null>(null)
@@ -67,15 +70,15 @@ export function RecepcionesStock() {
   const setPrefs = (p: Prefs) => { setPrefsState(p); guardarPrefsDeLista(lista, usuario, p) }
 
   const [vuelta, setVuelta] = useState(0)
-  const clave = `${marca}|${vuelta}`
+  const clave = `${marca}|${tienda}|${vuelta}`
   useEffect(() => {
     let vivo = true
-    leerRecepciones(marca, DIAS)
+    leerRecepciones(marca, DIAS, marca === 'zattia' ? tienda : undefined)
       // El día se toma al leer (⛔ en el render): «este mes» es el de cuando se leyó.
       .then((d) => { if (vivo) { setDatos({ filas: d.recepciones.map(armarFila), clave, hoy: diaArgentino(Date.now()) }); setError(null) } })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer los ingresos.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
-  }, [marca, clave])
+  }, [marca, tienda, clave])
   const cargando = datos?.clave !== clave
 
   const mes = (datos?.hoy ?? '').slice(0, 7)

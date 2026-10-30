@@ -29,7 +29,7 @@ import {
 } from '@/lib/erp/cobros.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
-import { useLineaErp } from '@/lib/erp/linea-erp'
+import { useLineaErp, useTiendaErp } from '@/lib/erp/linea-erp'
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
 type Prefs = { orden: string[]; visibles: string[] }
@@ -72,6 +72,8 @@ export function CobrosErp() {
   const [vista, setVista] = useState('todos')
   const [q, setQ] = useState('')
   const linea = useLineaErp()
+  // Al servidor va la tienda del menú: los cobros, «el otro libro» y el reintento son de ESA línea (Bruno, 30-oct).
+  const tienda = useTiendaErp()
   const [medio, setMedio] = useState('')
   const [orden, setOrden] = useState<OrdenLista>(null)
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
@@ -85,16 +87,16 @@ export function CobrosErp() {
   const { confirmar } = useConfirmar()
   const [reintentando, setReintentando] = useState(false)
   const [reintento, setReintento] = useState<{ texto: string; ok: boolean } | null>(null)
-  const clave = `${marca}|${periodo}|${prueba}|${vuelta}`
+  const clave = `${marca}|${periodo}|${prueba}|${vuelta}|${tienda}`
   useEffect(() => {
     let vivo = true
     // El día se toma al leer (⛔ en el render): «Hoy» es el de cuando se apretó.
     const { desde, hasta } = rangoDeCobros(clave.split('|')[1], diaArgentino(Date.now()))
-    leerCobros(marca, desde, hasta, prueba)
+    leerCobros(marca, tienda, desde, hasta, prueba)
       .then((d) => { if (vivo) { setDatos({ ...d, clave }); setSeleccion(new Set()); setError(null) } })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer los cobros.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
-  }, [marca, prueba, clave])
+  }, [marca, tienda, prueba, clave])
   const cargando = datos?.clave !== clave
   async function reintentar() {
     const ok = await confirmar({
@@ -106,7 +108,7 @@ export function CobrosErp() {
     setReintentando(true)
     setReintento(null)
     try {
-      const r = await reintentarEntregas(marca)
+      const r = await reintentarEntregas(marca, tienda)
       setReintento({ texto: textoDelReintento(r), ok: !r.siguen.length })
       setFicha(null)
       setVuelta((v) => v + 1)

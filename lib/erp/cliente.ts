@@ -517,7 +517,7 @@ export type FilaStock = {
   estanteria: number; enPedidos: number; disponible: number; gn: number | null; negativo: boolean
   ultimo: { tipo: string; origen: string; ref: string | null; cuando: string } | null
 }
-export type ListaDeStock = { filas: FilaStock[]; libroHasta: string | null; pedidosLeidosEn: string | null; pedidos: number; sinVariante: number }
+export type ListaDeStock = { filas: FilaStock[]; libroHasta: string | null; pedidosLeidosEn: string | null; pedidos: number; sinVariante: number; sinVariantePorTienda?: Record<string, number> }
 export const leerListaDeStock = (marca: MarcaErp) =>
   pedir<ListaDeStock>(null, `&vista=stock-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el stock.')
 
@@ -589,10 +589,12 @@ export type ContraentregaAbierta = { venta_id: string; numero: number | null; ca
 export type EntregaSinCobro = { id: string; linea: string; numero: string; forma_pago: 'efectivo' | 'transferencia'; monto: number | null; entrego: string; entregada_en: string; avisos: string[]; motivo: string | null; intento_en: string; intentos: number | string }
 export type CobrosDelPeriodo = { desde: string; hasta: string; prueba: boolean; cobros: CobroDelMotor[]; totales: Record<string, TotalesCobros>; contraentregas?: ContraentregaAbierta[]; entregasPendientes?: EntregaSinCobro[]; otroLibro: number }
 export type ReintentoDeEntregas = { ok: true; revisadas: number; registradas: number; siguen: { id: string; linea: string; motivo: string | null }[] }
-export const reintentarEntregas = (marca: MarcaErp) =>
-  pedir<ReintentoDeEntregas>(post({ accion: 'reintentar-entregas', marca }), '', 'No se pudo reintentar el cobro de las entregas.')
-export const leerCobros = (marca: MarcaErp, desde: string, hasta: string, prueba: boolean) =>
-  pedir<CobrosDelPeriodo>(null, `&vista=cobros&marca=${marca}&desde=${desde}&hasta=${hasta}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudieron leer los cobros.')
+/** De UNA línea (la tienda del menú), como la lista que lo muestra. */
+export const reintentarEntregas = (marca: MarcaErp, linea: string) =>
+  pedir<ReintentoDeEntregas>(post({ accion: 'reintentar-entregas', marca, linea }), '', 'No se pudo reintentar el cobro de las entregas.')
+/** De UNA línea (`linea` = la tienda del menú): en Zattia el servidor ⛔ suma las dos (Bruno, 30-oct). */
+export const leerCobros = (marca: MarcaErp, linea: string, desde: string, hasta: string, prueba: boolean) =>
+  pedir<CobrosDelPeriodo>(null, `&vista=cobros&marca=${marca}&linea=${linea}&desde=${desde}&hasta=${hasta}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudieron leer los cobros.')
 
 // ── ERP › Stock › Transferencias (sólo lectura; `api/_erp-stock.js`, núcleo `lib/erp/transferencias.core.js`) ──
 export type RenglonTransferencia = { vid: string; nombre: string | null; talle: string | null; sku: string | null; pedida: number; armada: number; enviada: number }

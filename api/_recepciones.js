@@ -16,6 +16,7 @@ import { esAdmin, marcaDePermisos, puedeSub, puedeVerAlguna } from '../lib/permi
 import { cfgDelMonitor, cfgDeMarca } from './_recepciones-base.js'
 import { leerEspejo, productoDeLinea, estaEnEspejo } from '../lib/recepciones/espejo.core.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
+import { esStunned } from '../lib/lineas.core.js'
 
 const PARA_VER = ['recepciones']
 /**
@@ -167,6 +168,20 @@ export default async function handler(req, res) {
       .limit(TOPE)
     if (error) throw new Error(error.message)
 
+    // 🔑 `linea` (el ERP, Bruno 30-oct): en Zattia, sólo las órdenes con algún renglón de esa línea —el SKU STU es Stunned—;
+    // una orden mixta sale en las dos. Sin `linea` (la sección Ingresos del local), todas: ahí se trabaja la mercadería entera.
+    const linea = String(req.query.linea || '')
+    let lista = data || []
+    if (store === 'zattia' && linea) {
+      if (linea !== 'zattia' && linea !== 'stunned') return res.status(400).json({ error: 'Línea inválida (zattia o stunned).' })
+      const ids = lista.map((o) => o.id)
+      const renglones = ids.length ? await leerTodo(sb, 'recepcion_linea', (q) => q.select('id, oc_ref, sku').in('oc_ref', ids).order('id')) : []
+      const de = new Map(ids.map((id) => [id, new Set()]))
+      for (const r of renglones) de.get(r.oc_ref)?.add(esStunned(r.sku) ? 'stunned' : 'zattia')
+      // Una orden sin renglones ⛔ tiene con qué ponerla en Stunned: es de Zattia, como la venta sin renglones.
+      lista = lista.filter((o) => (de.get(o.id)?.size ? de.get(o.id).has(linea) : linea === 'zattia'))
+    }
+
     // Los eventos que quedaron en `error` viajan aparte y siempre: son los que llegaron firmados y
     // no se pudieron procesar. Si no se muestran, la lista se ve completa y no lo está — que es
     // exactamente el modo de falla que un receptor de webhooks no puede tener.
@@ -186,7 +201,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      recepciones: verProveedores ? data || [] : (data || []).map(sinProveedor),
+      recepciones: verProveedores ? lista : lista.map(sinProveedor),
       puede: { proveedores: verProveedores },
       // 🔑 `rotos` no se filtra por marca: un evento que no se pudo procesar puede no tener marca
       // todavía —el error puede ser justamente que no se entendió de quién era—.

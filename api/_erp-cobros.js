@@ -40,17 +40,20 @@ export async function entregasSinCobro(pg, lineas) {
 }
 
 /**
- * @param {{ marca: string, desde: string, hasta: string, prueba?: boolean }} p
+ * @param {{ marca: string, linea: string, desde: string, hasta: string, prueba?: boolean }} p
  * @param {{ conMotor: Function }} deps
  */
-export async function cobrosDelPeriodo({ marca, desde, hasta, prueba = false }, deps) {
+export async function cobrosDelPeriodo({ marca, linea, desde, hasta, prueba = false }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  // 🔑 De UNA línea (Bruno, 30-oct): sin ella, «hay N cobros en el otro libro», los medios y las entregas sumaban las dos.
+  if (!LINEAS[marca].includes(linea)) return { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
+  const deLinea = [linea]
   if (!FECHA.test(desde) || !FECHA.test(hasta)) return { status: 400, error: 'Período inválido' }
   return deps.conMotor(marca, 'Los cobros', async (pg) => {
     const [{ cobrosDe }, { contraentregasAbiertas }] = await Promise.all([import('../motor/venta/cobros.mjs'), import('../motor/venta/contraentrega.mjs')])
     const [{ con032 }] = (await pg.query(`select exists (select 1 from information_schema.columns where table_schema = current_schema()
       and table_name = 'venta_pago' and column_name = 'cierre_de') as con032`)).rows
-    const lineas = (await pg.query('select id, empresa_id::text from marca where id = any($1)', [LINEAS[marca]])).rows
+    const lineas = (await pg.query('select id, empresa_id::text from marca where id = any($1)', [deLinea])).rows
     const cobros = []
     const contraentregas = []
     /** @type {Record<string, { plata: number, entro: number, salio: number, por_medio: Record<string, number> }>} */
@@ -68,8 +71,8 @@ export async function cobrosDelPeriodo({ marca, desde, hasta, prueba = false }, 
                 where v.marca = any($1) and v.prueba = $2 and (v.ocurrida_en ${AR})::date between $3::date and $4::date)
             + (select count(*) from cuenta_movimiento m
                 where m.tipo = 'pago' and m.marca = any($1) and m.prueba = $2 and (m.ocurrida_en ${AR})::date between $3::date and $4::date) as n`,
-      [LINEAS[marca], !prueba, desde, hasta])).rows
-    const entregasPendientes = await entregasSinCobro(pg, LINEAS[marca])
+      [deLinea, !prueba, desde, hasta])).rows
+    const entregasPendientes = await entregasSinCobro(pg, deLinea)
     return { desde, hasta, prueba, cobros, totales, contraentregas, entregasPendientes, otroLibro: Number(otroLibro) }
   })
 }
@@ -77,11 +80,13 @@ export async function cobrosDelPeriodo({ marca, desde, hasta, prueba = false }, 
 /**
  * Vuelve a intentar el cobro de las entregas de Logística que quedaron sin cobrar, línea por línea (el motor reintenta por tienda).
  * Una entrega que sigue sin poder cobrarse ⛔ ensucia: el motor sólo escribe cuando el cobro sale. Devuelve el resumen sumado.
- * @param {{ marca: string }} p
+ * @param {{ marca: string, linea: string }} p
  * @param {{ conMotor: Function }} deps
  */
-export async function reintentarEntregasErp({ marca }, deps) {
+export async function reintentarEntregasErp({ marca, linea }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  // El botón está en la lista de UNA línea: reintenta las de ésa (⛔ las de la otra tienda, que ⛔ se ven).
+  if (!LINEAS[marca].includes(linea)) return { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
   const { reintentarEntregas } = await import('../motor/tn/entrega.mjs')
   return deps.conMotor(marca, 'El reintento de las entregas', async (pg) => {
     const [{ hay }] = (await pg.query(`select to_regclass('public.entrega_cobro') is not null as hay`)).rows
@@ -91,11 +96,11 @@ export async function reintentarEntregasErp({ marca }, deps) {
     /** @type {{ id: string, linea: string, motivo: string | null }[]} */
     const siguen = []
     // Una conexión ⇒ una línea por vez (pg ⛔ las encola en paralelo).
-    for (const linea of LINEAS[marca]) {
-      const r = await reintentarEntregas({ conexion: pg, tienda: linea })
+    for (const l of [linea]) {
+      const r = await reintentarEntregas({ conexion: pg, tienda: l })
       revisadas += r.revisadas
       registradas += r.registradas
-      siguen.push(...r.siguen.map((s) => ({ id: String(s.id), linea, motivo: s.motivo ?? null })))
+      siguen.push(...r.siguen.map((s) => ({ id: String(s.id), linea: l, motivo: s.motivo ?? null })))
     }
     return { ok: true, revisadas, registradas, siguen }
   })
