@@ -29,6 +29,8 @@ update caja_turno t set numero = s.n
   from (select id, row_number() over (order by abierto_en, id) as n from caja_turno) s
  where s.id = t.id and t.numero is null;
 
+-- NOT NULL ANTES de la identidad: Postgres ⛔ agrega una identidad a una columna que acepta null (medido en un pg local).
+alter table caja_turno alter column numero set not null;
 do $$
 begin
   if not exists (select 1 from information_schema.columns
@@ -38,5 +40,4 @@ begin
   end if;
 end $$;
 
-alter table caja_turno alter column numero set not null;
 create unique index if not exists uq_caja_turno_numero on caja_turno (numero);
