@@ -13,6 +13,7 @@
  * para Zattia y Stunned (un cajón): es lo único del ERP que ⛔ se separa por línea (Bruno, 30-oct).
  */
 
+import { parsearMonto } from '@/lib/compromisos/core'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Input, MoneyText, Notice, Select, color, font, space } from '@/components/ui'
@@ -278,7 +279,8 @@ function ArqueoDelSobre({ f, marca, admin, onListo }: { f: FilaCaja; marca: Marc
       setGuardando(false)
     }
   }
-  const n = Number(trajo.replace(/\./g, '').replace(',', '.'))
+  // El lector de plata del repo: «10.000», «9500,50» y también «9500.5» (un punto con 1 o 2 decimales es la coma).
+  const n = parsearMonto(trajo)
 
   return (
     <div style={{ border: `1px solid ${color.line}`, borderRadius: 12, padding: space[3], display: 'flex', flexDirection: 'column', gap: space[2] }}>
