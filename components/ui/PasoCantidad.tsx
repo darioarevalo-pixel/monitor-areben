@@ -11,6 +11,8 @@
  *
  * El input del medio se queda: sirve para saltar de 1 a 12 sin doce clicks, y es lo que lee un
  * lector de pantalla.
+ *
+ * 📱 `grande` (ERP en el celular, Bruno 29-oct): botones de 44 px, el tamaño del pulgar, para recibir y ajustar de pie.
  */
 import { color, font, space } from '@/components/ui/tokens'
 
@@ -28,10 +30,12 @@ export type PasoCantidadProps = {
   etiquetaPlural?: string
   ancho?: number
   autoFocus?: boolean
+  /** 📱 Botones de 44 px y el número grande: para el dedo, en el celular. */
+  grande?: boolean
 }
 
 export function PasoCantidad({
-  valor, onCambio, min = 0, etiqueta, etiquetaPlural, ancho = 56, autoFocus,
+  valor, onCambio, min = 0, etiqueta, etiquetaPlural, ancho, autoFocus, grande,
 }: PasoCantidadProps) {
   const n = Number(valor) || 0
   const enElPiso = n <= min
@@ -44,7 +48,7 @@ export function PasoCantidad({
         aria-label={`Menos ${etiqueta}`}
         onClick={() => poner(n - 1)}
         disabled={enElPiso}
-        style={botonPaso(enElPiso)}
+        style={botonPaso(enElPiso, grande)}
       >
         −
       </button>
@@ -52,13 +56,15 @@ export function PasoCantidad({
         type="number"
         min={min}
         value={String(n)}
-        onChange={(e) => poner(parseInt(e.target.value, 10) || min)}
+        onChange={(e) => { const v = parseInt(e.target.value, 10); poner(Number.isNaN(v) ? min : v) }}
         aria-label={`Cuántas ${etiquetaPlural || etiqueta}`}
         autoFocus={autoFocus}
         style={{
-          width: ancho,
+          width: ancho ?? (grande ? 64 : 56),
+          height: grande ? 44 : undefined,
           textAlign: 'center',
-          fontSize: font.md,
+          fontSize: grande ? 20 : font.md,
+          fontWeight: grande ? 700 : undefined,
           padding: space[1],
           border: `1px solid ${color.line2}`,
           borderRadius: 6,
@@ -70,7 +76,7 @@ export function PasoCantidad({
         type="button"
         aria-label={`Más ${etiqueta}`}
         onClick={() => poner(n + 1)}
-        style={botonPaso(false)}
+        style={botonPaso(false, grande)}
       >
         +
       </button>
@@ -78,15 +84,15 @@ export function PasoCantidad({
   )
 }
 
-function botonPaso(deshabilitado: boolean): React.CSSProperties {
+function botonPaso(deshabilitado: boolean, grande?: boolean): React.CSSProperties {
   return {
-    width: 30,
-    height: 30,
-    borderRadius: 6,
+    width: grande ? 44 : 30,
+    height: grande ? 44 : 30,
+    borderRadius: grande ? 10 : 6,
     border: `1px solid ${color.line2}`,
     background: color.surface,
     color: deshabilitado ? color.mut2 : color.ink,
-    fontSize: font.md,
+    fontSize: grande ? 22 : font.md,
     lineHeight: 1,
     cursor: deshabilitado ? 'default' : 'pointer',
   }

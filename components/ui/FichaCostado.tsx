@@ -67,12 +67,26 @@ export function FichaCostado({ abierta, onCerrar, titulo, etiqueta, pie, childre
 function PieDeFicha({ pie, etiqueta }: { pie: PieFicha; etiqueta: string }) {
   const { principal, otra, mas = [] } = pie
   if (!principal && !otra && !mas.length) return null
-  const boton: React.CSSProperties = { flex: '1 1 0', minWidth: 0, height: 44 }
   return (
-    <div role="group" aria-label="Acciones de la ficha" data-pie-ficha style={{ position: 'sticky', bottom: 0, zIndex: 2, marginTop: 'auto', display: 'flex', alignItems: 'center', gap: space[2], padding: '8px 12px calc(12px + env(safe-area-inset-bottom))', background: color.surface, borderTop: `1px solid ${color.line}` }}>
-      {otra && <Button variant="outline" disabled={otra.disabled} onClick={otra.onClick} style={boton}>{otra.label}</Button>}
-      {principal && <Button variant="solid" tone="brand" disabled={principal.disabled} onClick={principal.onClick} style={boton}>{principal.label}</Button>}
+    <PieFijo etiqueta="Acciones de la ficha" data-pie-ficha>
+      {otra && <Button variant="outline" disabled={otra.disabled} onClick={otra.onClick} style={BOTON_PIE}>{otra.label}</Button>}
+      {principal && <Button variant="solid" tone="brand" disabled={principal.disabled} onClick={principal.onClick} style={BOTON_PIE}>{principal.label}</Button>}
       <MenuAcciones acciones={mas} etiqueta={`Más acciones · ${etiqueta}`} alPie />
+    </PieFijo>
+  )
+}
+
+/** Un botón del pie: todos del mismo ancho y de 44 px de alto (el pulgar). */
+export const BOTON_PIE: React.CSSProperties = { flex: '1 1 0', minWidth: 0, height: 44 }
+
+/**
+ * 📱 La barra fija al pie, donde llega el pulgar: la de la ficha y la de una TAREA del celular (recibir, ajustar — tanda 3,
+ * 30-oct). Se pega al pie de lo que se desliza (en el ERP, `.shell-content`, que termina arriba de la barra de abajo).
+ */
+export function PieFijo({ etiqueta, children, ...data }: { etiqueta: string; children: React.ReactNode } & Record<`data-${string}`, boolean | string>) {
+  return (
+    <div role="group" aria-label={etiqueta} {...data} style={{ position: 'sticky', bottom: 0, zIndex: 2, marginTop: 'auto', display: 'flex', alignItems: 'center', gap: space[2], padding: '8px 12px calc(12px + env(safe-area-inset-bottom))', background: color.surface, borderTop: `1px solid ${color.line}` }}>
+      {children}
     </div>
   )
 }

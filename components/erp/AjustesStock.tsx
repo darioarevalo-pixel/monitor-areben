@@ -9,16 +9,20 @@
  * La aprobación está APAGADA («somos pocos, burocracia») ⇒ «Guardar» = `crearAjuste` + `aprobarAjuste` en un gesto
  * (el contrato de B ⛔ cambia). Si el 2º paso falla, el ajuste queda «para aprobar» y se resuelve abajo.
  * Hasta el corte mueve SÓLO el stock del ERP (⛔ GN ni Tienda Nube). Nada se borra: un ajuste equivocado se arregla con otro.
+ *
+ * 📱 En el celular (Bruno, 29-oct; artifact molde 4) el nuevo ajuste ocupa la pantalla: cada producto en una tarjeta con la
+ * cantidad grande (+ y −) y el antes → después, y «Guardar ajuste» fijo al pie.
  */
 
 import { useEffect, useState } from 'react'
 import {
-  Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, space,
+  Button, EmptyState, Field, Input, Notice, PasoCantidad, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, space,
 } from '@/components/ui'
+import { usePantallaAngosta } from '@/lib/movil'
 import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
-import { FichaCostado } from '@/components/ui/FichaCostado'
+import { BOTON_PIE, FichaCostado, PieFijo } from '@/components/ui/FichaCostado'
 import { ChipEstado, cuandoCorto as cuando } from '@/components/ui/PiezasLista'
-import { color, font } from '@/components/ui/tokens'
+import { color, font, toneTokens } from '@/components/ui/tokens'
 import {
   aprobarAjuste, buscarPrendas, crearAjuste, descartarAjuste, leerAjustes, leerStockDePrenda,
   type AjusteStock, type AjustesDeLinea, type AvisoAjuste, type LineaErp, type MarcaErp, type PrendaEncontrada,
@@ -72,6 +76,9 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
   const [encontradas, setEncontradas] = useState<PrendaEncontrada[] | null>(null)
   const [descartando, setDescartando] = useState<{ id: string; motivo: string } | null>(null)
   const [ficha, setFicha] = useState<string | null>(null)
+  // 📱 En el celular el nuevo ajuste ocupa la pantalla: la lista vuelve al guardar o cancelar.
+  const angosta = usePantallaAngosta()
+  const enTarea = angosta && !!borrador
 
   useEffect(() => {
     let vivo = true
@@ -175,6 +182,8 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
   }
   const listo = !!borrador && borrador.renglones.length > 0 && borrador.renglones.every((r) => salen(r) != null) && (borrador.motivo !== 'otro' || borrador.detalle.trim().length >= 3)
 
+  const cancelarNuevo = () => { setBorrador(null); setEncontradas(null) }
+
   const celda = (a: AjusteStock, k: string): React.ReactNode => {
     if (k === 'n') return <b>A-{a.numero}</b>
     if (k === 'h') return <span style={{ color: color.mut }}>{cuando(a.creadoEn)}</span>
@@ -189,13 +198,13 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <SectionCard title="Ingresos y ajustes" subtitle="Lo que sale del stock fuera de una venta: fallados, canjes, regalos. Nada se borra: un ajuste equivocado se arregla con otro.">
+      {!enTarea && <SectionCard title="Ingresos y ajustes" subtitle="Lo que sale del stock fuera de una venta: fallados, canjes, regalos. Nada se borra: un ajuste equivocado se arregla con otro.">
         <div style={{ display: 'flex', gap: space[3], alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <span />
           {datos && !borrador && <Button onClick={() => setBorrador({ deposito: DEPOSITOS[base][0], motivo: MOTIVOS_A_MANO[0].key, detalle: '', renglones: [] })}>Nuevo ajuste</Button>}
         </div>
         {linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock del ERP: en Gestión Nube se ajusta como siempre. Los conteos se hacen en el módulo de Conteo del monitor y entran solos (se ven en el historial de cada producto, en Stock).</Notice>}
-      </SectionCard>
+      </SectionCard>}
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && (
@@ -225,9 +234,9 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
           </div>
 
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3], alignItems: 'flex-end' }}>
-            <Field label="Agregar un producto">
+            <div style={{ flex: '1 1 auto', minWidth: 0 }}><Field label="Agregar un producto">
               <Input value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && texto.trim()) buscar() }} placeholder="código, código de barras o nombre" />
-            </Field>
+            </Field></div>
             <Button variant="outline" disabled={trabajando || !texto.trim()} onClick={buscar}>Buscar</Button>
           </div>
           {encontradas && (encontradas.length === 0 ? <div style={{ marginTop: space[2] }}>No se encontró ningún producto.</div> : (
@@ -238,7 +247,15 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
             </div>
           ))}
 
-          {borrador.renglones.length > 0 ? (
+          {borrador.renglones.length > 0 && angosta ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: space[2], marginTop: space[3] }}>
+              {borrador.renglones.map((r) => (
+                <TarjetaDeAjuste key={`${r.producto}:${r.talle}`} r={r} deposito={borrador.deposito} pide={motivo.pide} cambio={salen(r)}
+                  onValor={(valor) => setBorrador({ ...borrador, renglones: borrador.renglones.map((x) => (x === r ? { ...x, valor } : x)) })}
+                  onSacar={() => setBorrador({ ...borrador, renglones: borrador.renglones.filter((x) => x !== r) })} />
+              ))}
+            </div>
+          ) : borrador.renglones.length > 0 ? (
             <TableWrap style={{ marginTop: space[3] }}>
               <THead>
                 <Tr>
@@ -270,14 +287,23 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
             </TableWrap>
           ) : <div style={{ marginTop: space[2], color: color.mut }}>Agregá los productos con el buscador.</div>}
 
-          <div style={{ display: 'flex', gap: space[2], marginTop: space[3] }}>
-            <Button disabled={trabajando || !listo} onClick={guardar}>Guardar ajuste</Button>
-            <Button variant="outline" disabled={trabajando} onClick={() => { setBorrador(null); setEncontradas(null) }}>Cancelar</Button>
-          </div>
+          {!angosta && (
+            <div style={{ display: 'flex', gap: space[2], marginTop: space[3] }}>
+              <Button disabled={trabajando || !listo} onClick={guardar}>Guardar ajuste</Button>
+              <Button variant="outline" disabled={trabajando} onClick={cancelarNuevo}>Cancelar</Button>
+            </div>
+          )}
         </SectionCard>
       )}
 
-      {sinAplicar.length > 0 && (
+      {enTarea && (
+        <PieFijo etiqueta="Acciones · nuevo ajuste" data-pie-tarea>
+          <Button variant="outline" disabled={trabajando} onClick={cancelarNuevo} style={{ ...BOTON_PIE, flex: '0 0 auto' }}>Cancelar</Button>
+          <Button variant="solid" tone="brand" disabled={trabajando || !listo} onClick={guardar} style={BOTON_PIE}>Guardar ajuste</Button>
+        </PieFijo>
+      )}
+
+      {!enTarea && sinAplicar.length > 0 && (
         <SectionCard title={`Sin confirmar · ${sinAplicar.length}`} subtitle="Se guardaron pero el stock del ERP todavía no cambió. Confirmalos o descartalos.">
           {sinAplicar.map((a) => (
             <div key={a.id} style={{ display: 'flex', gap: space[2], alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: space[3] }}>
@@ -296,7 +322,7 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
         </SectionCard>
       )}
 
-      {datos && (
+      {!enTarea && datos && (
         <SectionCard title={`Ajustes · ${datos.ajustes.length}`}>
           <ListaTrabajo
             columnas={COLUMNAS} filas={datos.ajustes} claveDe={(a) => a.id} celda={celda} activa={ficha}
@@ -334,6 +360,41 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
           </>
         )}
       </FichaCostado>
+    </div>
+  )
+}
+
+/**
+ * 📱 Un producto del nuevo ajuste, en el celular: lo que dice el ERP en ese depósito, la cantidad grande (+ y −) y el antes →
+ * después. Fallado, canje y regalo cuentan lo que SALE (0 para arriba); «Otro» va con signo (+ entra, − sale).
+ */
+export function TarjetaDeAjuste({ r, deposito: dep, pide, cambio, onValor, onSacar }: {
+  r: Renglon; deposito: string; pide: string; cambio: number | null; onValor: (valor: string) => void; onSacar: () => void
+}) {
+  const libro = r.porDeposito ? r.porDeposito[dep]?.libro ?? 0 : null
+  const n = Number(r.valor) || 0
+  const t = cambio == null ? null : toneTokens[cambio > 0 ? 'success' : 'warning']
+  const rotulo: React.CSSProperties = { fontSize: 11, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase', color: color.mut }
+  return (
+    <div data-tarjeta-ajuste style={{ display: 'flex', flexDirection: 'column', gap: space[2], padding: 12, borderRadius: 12, border: `1px solid ${color.line}`, background: color.surface }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: space[2] }}>
+        <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+          <div style={{ fontWeight: 600, color: color.ink }}>{prendaDe(r)}</div>
+          <div style={{ fontSize: font.sm, color: color.mut }}>{r.sku ?? '—'} · el ERP dice <b style={{ color: color.ink }}>{libro ?? '…'}</b> en {deposito(dep)}</div>
+        </div>
+        <Button variant="ghost" size="sm" onClick={onSacar}>Sacar</Button>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[2] }}>
+        <span style={rotulo}>{pide === 'sale' ? '¿Cuántas salen?' : 'Cantidad (+ entra, − sale)'}</span>
+        <PasoCantidad grande valor={n} min={pide === 'sale' ? 0 : -9999} onCambio={(v) => onValor(String(v))} etiqueta={prendaDe(r)} />
+      </div>
+      {libro != null && (
+        <div data-antes-despues style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', fontSize: font.base, color: color.mut }}>
+          <span>Antes <b style={{ color: color.ink }}>{libro}</b></span><span aria-hidden>→</span>
+          <span>Después <b style={{ color: color.ink }}>{cambio == null ? '—' : libro + cambio}</b></span>
+          {cambio != null && t && <span style={{ padding: '2px 8px', borderRadius: 999, background: t.bg, color: t.fg, fontWeight: 600 }}>{conSigno(cambio)}</span>}
+        </div>
+      )}
     </div>
   )
 }

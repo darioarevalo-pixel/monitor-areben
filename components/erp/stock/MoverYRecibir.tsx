@@ -7,13 +7,18 @@
  * ajusta sola). La lista de abajo es de TRABAJO: vistas con su número, buscador, barrita de 4 pasos, ficha al costado con lo
  * pedido, armado, enviado y recibido, remito para imprimir y «Exportar». Mueve SÓLO el libro del ERP: ⛔ GN ni Tienda Nube.
  * Núcleos: `lib/erp/transferencia-escaneo.core.js` (el escaneo) y `lib/erp/transferencias-doc.core.js` (la lista y la ficha).
+ *
+ * 📱 En el celular (Bruno, 29-oct; artifact molde 4): lo escaneado va en tarjetas con + y − grandes —al recibir, verde lo que
+ * llegó entero y ámbar lo que falta— y recibir ocupa la pantalla, con el botón fijo al pie.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, weight } from '@/components/ui'
+import { Button, EmptyState, Field, Input, Notice, PasoCantidad, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, weight } from '@/components/ui'
+import { toneTokens } from '@/components/ui/tokens'
+import { usePantallaAngosta } from '@/lib/movil'
 import { useTiendaErp } from '@/lib/erp/linea-erp'
 import { ListaTrabajo, type ColumnaLista, type OrdenLista } from '@/components/ui/ListaTrabajo'
-import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
+import { BOTON_PIE, DatoFicha, DatosFicha, FichaCostado, PieFijo } from '@/components/ui/FichaCostado'
 import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, tonoDeConteo } from '@/components/ui/PiezasLista'
 import {
   armarTransferenciaDoc, buscarPrendas, cancelarTransferenciaDoc, crearTransferenciaDoc, enviarTransferenciaDoc, leerDepositos, leerListaDeStock, leerTransferenciasDoc, recibirTransferenciaDoc,
@@ -55,7 +60,7 @@ function imprimirRemito(d: TransferenciaDoc, nombres: Nombres) {
 }
 
 /** Caja de escaneo: el lector escribe y manda Enter. Un código exacto suma 1; un texto con varias coincidencias deja elegir. */
-function Escaneo({ linea, onPrenda }: { linea: TiendaErp; onPrenda: (p: PrendaEncontrada) => void }) {
+function Escaneo({ linea, onPrenda, autoFocus = true }: { linea: TiendaErp; onPrenda: (p: PrendaEncontrada) => void; autoFocus?: boolean }) {
   const [texto, setTexto] = useState('')
   const [opciones, setOpciones] = useState<PrendaEncontrada[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -81,7 +86,7 @@ function Escaneo({ linea, onPrenda }: { linea: TiendaErp; onPrenda: (p: PrendaEn
   return (
     <div>
       <Field label="Escanear un producto">
-        <Input ref={caja} autoFocus value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void buscar() }} placeholder="Código de barras, código o nombre" />
+        <Input ref={caja} autoFocus={autoFocus} value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void buscar() }} placeholder="Código de barras, código o nombre" />
       </Field>
       {error && <Notice tone="warning" style={{ marginTop: space[2] }}>{error}</Notice>}
       {opciones && (
@@ -93,8 +98,10 @@ function Escaneo({ linea, onPrenda }: { linea: TiendaErp; onPrenda: (p: PrendaEn
   )
 }
 
-function TablaEscaneada({ filas, onCantidad, conEnviada }: { filas: Fila[]; onCantidad: (f: Fila, n: number) => void; conEnviada?: boolean }) {
+function TablaEscaneada({ filas, onCantidad, conEnviada, contra = 'vienen' }: { filas: Fila[]; onCantidad: (f: Fila, n: number) => void; conEnviada?: boolean; contra?: string }) {
+  const angosta = usePantallaAngosta()
   if (!filas.length) return <div style={{ marginTop: space[3] }}>Todavía no se escaneó nada.</div>
+  if (angosta) return <TarjetasEscaneadas filas={filas} onCantidad={onCantidad} conEnviada={conEnviada} contra={contra} />
   return (
     <TableWrap style={{ marginTop: space[3] }}>
       <THead><Tr><Th>Producto</Th><Th>código</Th>{conEnviada && <Th style={{ textAlign: 'right' }}>Salió</Th>}<Th style={{ textAlign: 'right' }}>{conEnviada ? 'Llegó' : 'Cantidad'}</Th></Tr></THead>
@@ -114,6 +121,33 @@ function TablaEscaneada({ filas, onCantidad, conEnviada }: { filas: Fila[]; onCa
         })}
       </TBody>
     </TableWrap>
+  )
+}
+
+/**
+ * 📱 Lo mismo que la tabla, en tarjetas para el dedo: el producto, + y − grandes y, contra lo que salió, cuánto falta.
+ * Verde = llegó entero · ámbar = llegó una parte · rojo = de más (el ERP la rechaza) · sin color = todavía nada.
+ */
+export function TarjetasEscaneadas({ filas, onCantidad, conEnviada, contra }: { filas: Fila[]; onCantidad: (f: Fila, n: number) => void; conEnviada?: boolean; contra: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space[2], marginTop: space[3] }}>
+      {filas.map((f) => {
+        const viene = f.enviada ?? 0
+        const dif = f.cantidad - viene
+        const tono = !conEnviada || !f.cantidad ? null : dif > 0 ? 'danger' : dif === 0 ? 'success' : 'warning'
+        const t = tono ? toneTokens[tono] : null
+        const cuenta = !conEnviada ? '' : ` · ${contra} ${viene}${dif === 0 ? ' ✓' : f.cantidad && dif < 0 ? ` · faltan ${-dif}` : dif > 0 ? ` · sobran ${dif}` : ''}`
+        return (
+          <div key={`${f.producto}:${f.talle}`} data-tono={tono ?? 'nada'} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'center', gap: space[2], padding: '10px 12px', borderRadius: 12, border: `1px solid ${t?.border ?? color.line}`, background: t?.bg ?? color.surface }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: weight.semibold, color: color.ink }}>{nombreDe(f)}</div>
+              <div style={{ fontSize: font.sm, color: t?.fg ?? color.mut }}>{f.sku ?? '—'}{cuenta}</div>
+            </div>
+            <PasoCantidad grande valor={f.cantidad} onCambio={(n) => onCantidad(f, n)} etiqueta={nombreDe(f)} />
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -146,6 +180,8 @@ export function MoverYRecibir() {
   const [trabajando, setTrabajando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hecho, setHecho] = useState<{ texto: string; avisos: AvisoDoc[] } | null>(null)
+  // 📱 En el celular, recibir (o preparar) ocupa la pantalla: la lista vuelve al terminar o con «Volver».
+  const angosta = usePantallaAngosta()
 
   useEffect(() => {
     let vivo = true
@@ -239,6 +275,10 @@ export function MoverYRecibir() {
   const faltantesU = todos.filter((d) => d.estado === 'recibida').reduce((s, d) => s + faltantesDe(d), 0)
   const cuenta = recibiendo ? cuentaDeRecepcion(recibiendo.lista) : null
   const ficha = fichaId ? todos.find((d) => d.id === fichaId) ?? null : null
+  const puedeRecibir = !!recibiendo && !!cuenta && !trabajando && cuenta.sobran <= 0 && !(recibiendo.modo === 'preparar' && (cuenta.filas as Fila[]).every((f) => !f.cantidad))
+  const textoRecibir = !recibiendo || !cuenta ? '' : recibiendo.modo === 'preparar'
+    ? (cuenta.completa ? 'Enviar completa' : `Enviar con ${-cuenta.faltan} u de menos`)
+    : cuenta.completa ? 'Recibir completa' : `Recibir con ${-cuenta.faltan} u de menos`
 
   const celda = (d: TransferenciaDoc, k: string): React.ReactNode => {
     if (k === 'n') return <b style={{ color: color.ink }}>T-{d.numero}</b>
@@ -253,9 +293,11 @@ export function MoverYRecibir() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <SectionCard title="Mover y recibir" subtitle="Una transferencia entre el depósito y el local: se escanea lo que sale y, al llegar, lo que llegó. Lo que no llega queda marcado como diferencia.">
-        {linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mueve sólo el stock del ERP: no toca Gestión Nube ni Tienda Nube. Mientras {linea === 'bdi' ? 'BDI' : 'Zattia'} siga en Gestión Nube, sus transferencias se hacen como siempre.</Notice>}
-      </SectionCard>
+      {!(angosta && recibiendo) && (
+        <SectionCard title="Mover y recibir" subtitle="Una transferencia entre el depósito y el local: se escanea lo que sale y, al llegar, lo que llegó. Lo que no llega queda marcado como diferencia.">
+          {linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mueve sólo el stock del ERP: no toca Gestión Nube ni Tienda Nube. Mientras {linea === 'bdi' ? 'BDI' : 'Zattia'} siga en Gestión Nube, sus transferencias se hacen como siempre.</Notice>}
+        </SectionCard>
+      )}
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho.texto}{hecho.avisos.map((a, i) => <div key={i} style={{ marginTop: 4 }}>⚠️ {a.texto}</div>)}</Notice>}
@@ -267,7 +309,7 @@ export function MoverYRecibir() {
             <Field label="Va a"><Select value={hacia} onChange={(e) => setHacia(e.target.value)}>{deps.map((d) => <option key={d} value={d}>{dep(d)}</option>)}</Select></Field>
             <div style={{ flex: '1 1 240px' }}><Field label="Nota (opcional)"><Input value={nota} maxLength={200} onChange={(e) => setNota(e.target.value)} placeholder="Para qué se mueve, quién la lleva…" /></Field></div>
           </div>
-          <div style={{ marginTop: space[3] }}><Escaneo linea={linea} onPrenda={(p) => setLista((l) => sumarEscaneo(l, p) as Fila[])} /></div>
+          <div style={{ marginTop: space[3] }}><Escaneo autoFocus={!angosta} linea={linea} onPrenda={(p) => setLista((l) => sumarEscaneo(l, p) as Fila[])} /></div>
           <TablaEscaneada filas={lista} onCantidad={(f, n) => setLista((l) => fijarCantidad(l, f.producto, f.talle, n) as Fila[])} />
           <div style={{ marginTop: space[3] }}>
             <Button variant="solid" tone="info" disabled={trabajando || !lista.length} onClick={mover}>{lista.length ? `Mover ${unidades(lista)} u de ${dep(desde)} a ${dep(hacia)}` : 'Mover'}</Button>
@@ -279,20 +321,29 @@ export function MoverYRecibir() {
         <SectionCard title={`${recibiendo.modo === 'preparar' ? 'Preparar' : 'Recibir'} T-${recibiendo.doc.numero}`} subtitle={recibiendo.modo === 'preparar'
           ? `${dep(recibiendo.doc.desde)} → ${dep(recibiendo.doc.hacia)}. Escaneá cada producto que separaste: sale sólo lo escaneado.`
           : `${dep(recibiendo.doc.desde)} → ${dep(recibiendo.doc.hacia)}. Escaneá cada producto que llegó: lo que no escanees queda como faltante.`}>
-          <Escaneo linea={linea} onPrenda={(p) => setRecibiendo((r) => r && { ...r, lista: sumarEscaneo(r.lista, p) as Fila[] })} />
-          <TablaEscaneada conEnviada filas={cuenta.filas as Fila[]} onCantidad={(f, n) => setRecibiendo((r) => r && { ...r, lista: r.lista.map((x) => (x.producto === f.producto && x.talle === f.talle ? { ...x, cantidad: Math.max(0, Math.trunc(n) || 0) } : x)) })} />
+          <Escaneo autoFocus={!angosta} linea={linea} onPrenda={(p) => setRecibiendo((r) => r && { ...r, lista: sumarEscaneo(r.lista, p) as Fila[] })} />
+          {angosta && <div style={{ marginTop: space[3], color: color.mut }}><b style={{ color: color.ink }}>{unidades(cuenta.filas as Fila[])} de {(cuenta.filas as Fila[]).reduce((s, f) => s + (f.enviada ?? 0), 0)}</b> unidades contadas · tocá + o escaneá</div>}
+          <TablaEscaneada conEnviada contra={recibiendo.modo === 'preparar' ? 'pidieron' : 'vienen'} filas={cuenta.filas as Fila[]} onCantidad={(f, n) => setRecibiendo((r) => r && { ...r, lista: r.lista.map((x) => (x.producto === f.producto && x.talle === f.talle ? { ...x, cantidad: Math.max(0, Math.trunc(n) || 0) } : x)) })} />
           {cuenta.sobran > 0 && <Notice tone="warning" style={{ marginTop: space[2] }}>{recibiendo.modo === 'preparar' ? 'Hay productos que no están en lo pedido (o de más): sacalos de la lista.' : 'Hay productos que no salieron en esta transferencia: el ERP las rechaza. Si llegaron de más, se anotan como ajuste.'}</Notice>}
           {/* El error AL LADO del botón: arriba de todo ⛔ se ve con la lista larga (29-oct: Camila «procesó todo» y era un 403). */}
           {error && <Notice tone="danger" style={{ marginTop: space[3] }} onClose={() => setError(null)}>{error}</Notice>}
-          <div style={{ display: 'flex', gap: space[2], marginTop: space[3] }}>
-            <Button disabled={trabajando || cuenta.sobran > 0 || (recibiendo.modo === 'preparar' && (cuenta.filas as Fila[]).every((f) => !f.cantidad))} onClick={recibir}>
-              {recibiendo.modo === 'preparar' ? (cuenta.completa ? 'Enviar completa' : `Enviar con ${-cuenta.faltan} u de menos`) : cuenta.completa ? 'Recibir completa' : `Recibir con ${-cuenta.faltan} u de menos`}
-            </Button>
-            <Button variant="outline" onClick={() => setRecibiendo(null)}>Volver</Button>
-          </div>
+          {!angosta && (
+            <div style={{ display: 'flex', gap: space[2], marginTop: space[3] }}>
+              <Button disabled={!puedeRecibir} onClick={recibir}>{textoRecibir}</Button>
+              <Button variant="outline" onClick={() => setRecibiendo(null)}>Volver</Button>
+            </div>
+          )}
         </SectionCard>
       )}
 
+      {recibiendo && cuenta && angosta && (
+        <PieFijo etiqueta={`Acciones · ${recibiendo.modo === 'preparar' ? 'preparar' : 'recibir'} T-${recibiendo.doc.numero}`} data-pie-tarea>
+          <Button variant="outline" onClick={() => setRecibiendo(null)} style={{ ...BOTON_PIE, flex: '0 0 auto' }}>Volver</Button>
+          <Button variant="solid" tone="brand" disabled={!puedeRecibir} onClick={recibir} style={BOTON_PIE}>{textoRecibir}</Button>
+        </PieFijo>
+      )}
+
+      {!(angosta && recibiendo) && <>
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="En camino" valor={u(enCaminoU)} oscuro nota={`${conteo.en_camino ?? 0} sin recibir`} />
         <TileResumen tono={tonoDeConteo(conteo.sin_enviar)} titulo="Sin enviar" valor={(conteo.sin_enviar ?? 0).toLocaleString('es-AR')} nota="quedaron a medias: no salió nada" />
@@ -317,6 +368,7 @@ export function MoverYRecibir() {
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>{filas.length.toLocaleString('es-AR')} de {todos.length.toLocaleString('es-AR')}</div>
       </div>
+      </>}
 
       {ficha && <FichaDoc d={ficha} nombres={nombres} trabajando={trabajando} onCerrar={() => setFichaId(null)} onRecibir={() => abrirRecepcion(ficha)} onPreparar={() => abrirPreparado(ficha)} onCancelar={() => cancelar(ficha)} />}
     </div>
@@ -348,7 +400,7 @@ function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onPreparar, onC
       </DatosFicha>
       <div>
         <div style={{ fontWeight: weight.semibold, color: color.ink, marginBottom: 6 }}>Productos ({renglones.length})</div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base }}>
+        <div className="erp-tabla-desliza"><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base }}>
           <thead>
             <tr>
               <th style={{ ...th, textAlign: 'left' }}>Producto</th>
@@ -372,7 +424,7 @@ function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onPreparar, onC
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
         {d.estado === 'en_transito' && <Button disabled={trabajando} onClick={onRecibir}>Recibir</Button>}
