@@ -19,7 +19,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { EmptyState, Modal, Tabs, color, space, weight } from '@/components/ui'
+import { Button, EmptyState, Modal, Tabs, color, space, weight } from '@/components/ui'
 import { leerConfig } from '@/lib/caja/cliente'
 import { usarMarcaCaja } from '@/lib/caja/marca'
 import { CUENTAS } from '@/lib/cuentas'
@@ -60,46 +60,57 @@ import { FichaPrenda } from './stock/FichaPrenda'
 import { periodoDeVenta } from '@/lib/erp/busqueda-global.core.js'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 
+type Item = { key: string; label: string; /** Existe (tiene dirección y se llega por un botón) pero ⛔ va en el menú ni en las pestañas. */ oculta?: boolean }
 type Seccion = {
   key: string
   titulo: string
   /** El trazo del ícono de línea (24×24), el mismo del diseño v8. */
   icono: string
-  /** Va colgada de la anterior (Caja (POS) debajo de Ventas). */
-  debajo?: boolean
-  pestanias: Array<{ key: string; label: string; /** Vistas de adentro (diseño §9: Stock 9 → 4): la primera es la de siempre. */ vistas?: Array<{ key: string; label: string }> }>
+  /** 🎨 30-oct (Bruno): cada pestaña es un ÍTEM del menú, debajo de su sección; sus vistas son las pestañas de arriba (como mucho 2-3). */
+  pestanias: Array<Item & { vistas?: Item[] }>
   /** Qué dice la sección mientras no tiene pantallas. */
   vacia?: string
 }
 
-/** Las 6 del diseño (+ la Caja debajo de Ventas), con las pestañas que hay hoy repartidas adentro. */
+/**
+ * 🎨 30-oct (Bruno, mapa del menú aprobado; `~/Documents/erp-monitor/erp-stunned.md` §7): el menú es de GRUPOS. Adentro de
+ * Ventas: Ventas (pestañas Ventas · Por producto), Cobros, Cajas, Facturación y Gastos. La sección «Caja» ⛔ existe más: Cajas
+ * pasó a Ventas y Cambio ⇒ el botón «Hacer cambio» de la venta (y el modo Cambios del POS). «Facturar una venta» ⇒ botón en
+ * Facturación. Redondeo ⇒ Configuración, junto a los descuentos por forma de pago.
+ */
 export const SECCIONES_ERP: Seccion[] = [
   { key: 'inicio', titulo: 'Inicio', icono: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z', pestanias: [] },
   {
     key: 'ventas', titulo: 'Ventas', icono: 'M6 2l-2 4v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6l-2-4z M4 6h16 M16 10a4 4 0 0 1-8 0',
     pestanias: [
-      { key: 'ventas', label: 'Ventas' }, { key: 'por-producto', label: 'Por producto' }, { key: 'cobros', label: 'Cobros' }, { key: 'gastos', label: 'Gastos' },
-      { key: 'facturacion', label: 'Facturación', vistas: [{ key: 'facturacion', label: 'Facturas' }, { key: 'factura', label: 'Facturar una venta' }] },
+      { key: 'ventas', label: 'Ventas', vistas: [{ key: 'ventas', label: 'Ventas' }, { key: 'por-producto', label: 'Por producto' }] },
+      { key: 'cobros', label: 'Cobros' }, { key: 'cajas', label: 'Cajas' },
+      { key: 'facturacion', label: 'Facturación', vistas: [{ key: 'facturacion', label: 'Facturas' }, { key: 'factura', label: 'Facturar una venta', oculta: true }] },
+      { key: 'gastos', label: 'Gastos' },
+      { key: 'cambio', label: 'Cambio', oculta: true },
     ],
   },
-  { key: 'caja', titulo: 'Caja', icono: 'M3 8h18v12H3z M7 8V4h10v4 M7 13h4', debajo: true, pestanias: [{ key: 'cambio', label: 'Cambio' }, { key: 'cajas', label: 'Cajas' }] },
   {
     key: 'stock', titulo: 'Stock', icono: 'M21 8l-9-5-9 5 9 5 9-5z M3 8v8l9 5 9-5V8 M12 13v8',
     pestanias: [
       { key: 'stock', label: 'Stock', vistas: [{ key: 'stock', label: 'Productos' }, { key: 'movimientos', label: 'Movimientos' }] },
       { key: 'transferencias', label: 'Transferencias', vistas: [{ key: 'transferencias', label: 'Transferencias' }, { key: 'mover', label: 'Mover y recibir' }] },
-      { key: 'ajustes', label: 'Ingresos y ajustes', vistas: [{ key: 'ajustes', label: 'Ajustes' }, { key: 'ingresos', label: 'Ingresos' }] },
+      { key: 'ajustes', label: 'Ingresos y ajustes', vistas: [{ key: 'ajustes', label: 'Ajustes' }, { key: 'ingresos', label: 'Ingresos de mercadería' }] },
       { key: 'diferencias', label: 'Diferencias', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }] },
     ],
   },
-  { key: 'productos', titulo: 'Productos y precios', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }, { key: 'redondeo', label: 'Redondeo' }] },
+  { key: 'productos', titulo: 'Productos y precios', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }] },
   {
     key: 'clientes', titulo: 'Clientes y proveedores', icono: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
     pestanias: [{ key: 'clientes', label: 'Clientes', vistas: [{ key: 'clientes', label: 'Clientes' }, { key: 'cuenta-corriente', label: 'Cuenta corriente' }] }, { key: 'proveedores', label: 'Proveedores' }],
   },
   {
     key: 'configuracion', titulo: 'Configuración', icono: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M4 12h2 M18 12h2 M12 4v2 M12 18v2 M6.3 6.3l1.4 1.4 M16.3 16.3l1.4 1.4 M6.3 17.7l1.4-1.4 M16.3 7.7l1.4-1.4',
-    pestanias: [{ key: 'cuentas', label: 'Cuentas y medios de cobro', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: 'Rutas' }] }, { key: 'reglas', label: 'Descuentos por forma de pago' }, { key: 'estructura', label: 'Marcas, depósitos y puntos de venta' }],
+    pestanias: [
+      { key: 'cuentas', label: 'Cuentas y formas de pago', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: 'Rutas' }] },
+      { key: 'reglas', label: 'Descuentos y redondeo', vistas: [{ key: 'reglas', label: 'Descuentos por forma de pago' }, { key: 'redondeo', label: 'Redondeo' }] },
+      { key: 'estructura', label: 'Marcas, depósitos y puntos de venta' },
+    ],
   },
 ]
 
@@ -111,12 +122,15 @@ const VIEJAS: Record<string, Record<string, [string, string, string | null]>> = 
     // 🔴 ⛔ `diferencias`: es el nombre de la pestaña NUEVA. Con esa entrada, `/erp/stock/diferencias` (la dirección de su primera
     // vista, «Con Tienda Nube y Mercado Libre») caía siempre en «Con Gestión Nube» (prueba del corte, 28-oct).
   },
-  ventas: { cajas: ['caja', 'cajas', null], factura: ['ventas', 'facturacion', 'factura'] },
-  caja: { factura: ['ventas', 'facturacion', 'factura'] },
+  ventas: { factura: ['ventas', 'facturacion', 'factura'], 'por-producto': ['ventas', 'ventas', 'por-producto'] },
+  // 🎨 30-oct: la sección Caja ⛔ existe: todo lo suyo cae en Ventas (también `/erp/caja` pelado, ver `viejaDe`).
+  caja: { factura: ['ventas', 'facturacion', 'factura'], cambio: ['ventas', 'cambio', null], cajas: ['ventas', 'cajas', null] },
+  productos: { redondeo: ['configuracion', 'reglas', 'redondeo'] },
   clientes: { 'cuenta-corriente': ['clientes', 'clientes', 'cuenta-corriente'] },
-  configuracion: { 'cuentas-reales': ['configuracion', 'cuentas', 'cuentas'], rutas: ['configuracion', 'cuentas', 'rutas'], redondeo: ['productos', 'redondeo', null] },
+  configuracion: { 'cuentas-reales': ['configuracion', 'cuentas', 'cuentas'], rutas: ['configuracion', 'cuentas', 'rutas'], redondeo: ['configuracion', 'reglas', 'redondeo'] },
 }
-const viejaDe = (seccion: string, pestania: string | null | undefined, vista: string | null | undefined) => (pestania && !vista ? VIEJAS[seccion]?.[pestania] : undefined)
+const SECCIONES_VIEJAS: Record<string, [string, string, string | null]> = { caja: ['ventas', 'cajas', null] }
+const viejaDe = (seccion: string, pestania: string | null | undefined, vista: string | null | undefined) => (pestania ? (!vista ? VIEJAS[seccion]?.[pestania] : undefined) : SECCIONES_VIEJAS[seccion])
 
 /** `['stock', 'ajustes']` → la sección, la pestaña y la vista; lo que no existe cae en Inicio o en la primera pestaña. */
 export function resolverRutaErp(ruta: string[]) {
@@ -139,8 +153,11 @@ export const hrefErp = (seccion: string, pestania?: string | null, vista?: strin
   return `/erp/${sec}${p ? `/${p}` : ''}${p && v && v !== primera ? `/${v}` : ''}`
 }
 
-/** Para ⌘K: cada pestaña con SUS vistas (la búsqueda salta a una vista, no a un grupo). */
+/** Para ⌘K: cada pestaña con SUS vistas (la búsqueda salta a una vista, no a un grupo); también las ocultas («Facturar una venta», «Cambio»). */
 export const SECCIONES_BUSCABLES: Seccion[] = SECCIONES_ERP.map((s) => ({ ...s, pestanias: s.pestanias.flatMap((p) => p.vistas ?? [p]) }))
+
+/** Lo que se dibuja (menú, pestañas): sin las ocultas. */
+const visibles = <T extends Item>(xs: T[] | undefined) => (xs ?? []).filter((x) => !x.oculta)
 
 const TITULO_CONTADOR: Record<string, string> = { stock: 'productos en negativo', productos: 'productos sin costo' }
 
@@ -159,7 +176,7 @@ function Trazo({ d, size = 18 }: { d: string; size?: number }) {
 }
 
 /** 📱 La barra de abajo del celular (Bruno, 29-oct): las 4 que más se usan; el resto, en «Más». */
-const ABAJO = ['inicio', 'ventas', 'caja', 'stock']
+const ABAJO = ['inicio', 'ventas', 'stock', 'productos']
 const EN_MAS = SECCIONES_ERP.filter((s) => !ABAJO.includes(s.key))
 const TRAZO_MAS = 'M5 12h.01 M12 12h.01 M19 12h.01'
 const TRAZO_BUSCAR = 'M21 21l-4.3-4.3 M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z'
@@ -210,7 +227,9 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const lineaVista: LineaErp = marca === 'zattia' ? (soloStunned || linea === 'stunned' ? 'stunned' : 'zattia') : ''
   const transferenciaEnErp = transfiereEnErp(lineaVista || 'bdi')
   // «Mover y recibir» ⛔ va aparte para esa línea: es la misma lista (`MoverYRecibir unificada`).
-  const vistasDeAca = (seccion.pestanias.find((p) => p.key === pestania)?.vistas ?? []).filter((v) => !(transferenciaEnErp && v.key === 'mover'))
+  const itemActual = seccion.pestanias.find((p) => p.key === pestania)
+  // Las vistas ocultas (Facturar una venta) ⛔ son pestaña; Con Gestión Nube ⛔ para Stunned (ya ⛔ tiene GN).
+  const vistasDeAca = visibles(itemActual?.vistas).filter((v) => !(transferenciaEnErp && v.key === 'mover') && !(lineaVista === 'stunned' && v.key === 'diferencias'))
   // 🔑 El cartel de «modo paralelo» era fijo: después del corte de Stunned (`CAJA_STUNNED_ERP=1`) seguiría diciendo que GN sirve.
   // Si la configuración no se puede leer queda el texto de siempre (el prudente).
   const [stunnedReal, setStunnedReal] = useState(false)
@@ -290,14 +309,35 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
           <span aria-hidden style={{ width: 28, height: 28, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'var(--mo-brand-solid)', fontSize: 14 }}>A</span>
           Areben ERP
         </div>
+        {/* 🎨 30-oct (Bruno): el menú es de GRUPOS. El grupo abierto muestra sus ítems (las pestañas de antes), cada uno con su contador. */}
         {SECCIONES_ERP.map((s) => {
-          const on = s.key === seccion.key
+          const abierta = s.key === seccion.key
+          const items = visibles(s.pestanias)
+          const sinItems = items.length === 0
           return (
-            <Link key={s.key} href={hrefErp(s.key)} aria-current={on ? 'page' : undefined} className={`erp-menu-item${s.debajo ? ' erp-menu-item--debajo' : ''}${on ? ' erp-menu-item--on' : ''}`}>
-              <Trazo d={s.icono} size={s.debajo ? 16 : 18} />
-              <span>{s.titulo}</span>
-              <Contador n={contadores[s.key]} titulo={TITULO_CONTADOR[s.key] ?? 'para hacer'} />
-            </Link>
+            <div key={s.key} style={{ display: 'flex', flexDirection: 'column' }}>
+              <Link href={hrefErp(s.key)} aria-current={abierta && sinItems ? 'page' : undefined} aria-expanded={sinItems ? undefined : abierta}
+                className={`erp-menu-item${abierta && sinItems ? ' erp-menu-item--on' : ''}${abierta && !sinItems ? ' erp-menu-item--abierta' : ''}`}>
+                <Trazo d={s.icono} />
+                <span>{s.titulo}</span>
+                {!abierta && <Contador n={contadores[s.key]} titulo={TITULO_CONTADOR[s.key] ?? 'para hacer'} />}
+              </Link>
+              {abierta && !sinItems && (
+                <div className="erp-menu-subs">
+                  {items.map((p) => {
+                    const on = p.key === pestania
+                    return (
+                      <Link key={p.key} href={hrefErp(s.key, p.key)} aria-current={on ? 'page' : undefined} className={`erp-menu-sub${on ? ' erp-menu-sub--on' : ''}`}>
+                        <span>{p.label}</span>
+                        <Contador n={contadores[`${s.key}/${p.key}`]} titulo={TITULO_CONTADOR[s.key] ?? 'para hacer'} />
+                      </Link>
+                    )
+                  })}
+                  {/* La Caja (el POS) ⛔ es una pantalla del ERP: se abre aparte, como siempre. */}
+                  {s.key === 'ventas' && <Link href="/pos" className="erp-menu-sub erp-menu-sub--afuera"><span>Abrir la Caja</span><span aria-hidden>↗</span></Link>}
+                </div>
+              )}
+            </div>
           )
         })}
         <div className="erp-menu-pie">
@@ -316,35 +356,43 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
         <ProveedorLineaErp value={lineaVista}>
         <div className="shell-content">
           <div className="seccion-pad" style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-            <header style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+            {/* 🎯 Bruno 30-oct: el cartel de Stunned «ya vende por el ERP» sobraba. Queda sólo donde Gestión Nube sigue siendo el que sirve. */}
+            {seccion.key !== 'inicio' && !(lineaVista === 'stunned' && stunnedReal) && (
               <p style={{ margin: 0, padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4, borderLeft: `3px solid ${COLOR_DE_MARCA[opcionActiva]}` }}>
-                {lineaVista === 'stunned' && stunnedReal
-                  ? 'Stunned · ya vende por el ERP. Lo ven sólo los administradores.'
-                  : `${lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy. Lo ven sólo los administradores.`}
+                {`${lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy.`}
               </p>
-              {/* Título + pestañas en UNA línea (diseño §9). */}
-              <div className="erp-pestanias" style={{ display: 'flex', alignItems: 'flex-end', gap: space[5], flexWrap: 'wrap', borderBottom: `1px solid ${color.line}` }}>
-                {/* 📱 En el celular el título va en la barra de arriba (`erp-movil-top`): acá se esconde. */}
-                <h1 className="erp-titulo" style={{ margin: 0, paddingBottom: 6, fontSize: 20, fontWeight: weight.semibold, color: color.ink, whiteSpace: 'nowrap', borderLeft: `4px solid ${COLOR_DE_MARCA[opcionActiva]}`, paddingLeft: 10 }}>{seccion.titulo}</h1>
-                {seccion.pestanias.length > 1 && (
-                  <Tabs variant="underline" items={seccion.pestanias.map((p) => ({ ...p, badge: <Contador n={contadores[`${seccion.key}/${p.key}`]} titulo={TITULO_CONTADOR[seccion.key] ?? 'para hacer'} /> }))} value={pestania ?? ''} onChange={(k) => { setAAjustar(null); ir(seccion.key, k) }} style={{ borderBottom: 'none', flex: '1 1 auto' }} />
+            )}
+            {seccion.key !== 'inicio' && (
+              <header style={{ display: 'flex', flexDirection: 'column', gap: space[2], borderBottom: vistasDeAca.length > 1 ? `1px solid ${color.line}` : undefined }}>
+                {/* 📱 En el celular los ítems del grupo van como pestañas (el menú de costado ⛔ se ve): en la compu se esconden (globals.css). */}
+                {visibles(seccion.pestanias).length > 1 && (
+                  <div className="erp-pestanias erp-pestanias-movil">
+                    <Tabs variant="underline" items={visibles(seccion.pestanias).map((p) => ({ ...p, badge: <Contador n={contadores[`${seccion.key}/${p.key}`]} titulo={TITULO_CONTADOR[seccion.key] ?? 'para hacer'} /> }))} value={pestania ?? ''} onChange={(k) => { setAAjustar(null); ir(seccion.key, k) }} />
+                  </div>
                 )}
-              </div>
-            </header>
-
-            {vistasDeAca.length > 1 && (
-              // 📱 En el celular las vistas se deslizan de costado (`erp-vistas`, globals.css).
-              <div className="erp-vistas"><Tabs items={vistasDeAca} value={vista ?? ''} onChange={(k) => ir(seccion.key, pestania, k)} /></div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap' }}>
+                  {/* 📱 En el celular el título va en la barra de arriba (`erp-movil-top`): acá se esconde. */}
+                  <h1 className="erp-titulo" style={{ margin: 0, fontSize: 24, fontWeight: weight.bold, color: color.ink, whiteSpace: 'nowrap', borderLeft: `4px solid ${COLOR_DE_MARCA[opcionActiva]}`, paddingLeft: 10 }}>{itemActual?.label ?? seccion.titulo}</h1>
+                  {/* Lo que era pestaña y es una ACCIÓN (mapa del menú, 30-oct): un botón al lado del título. */}
+                  {vista === 'facturacion' && <Button size="sm" onClick={() => ir('ventas', 'facturacion', 'factura')}>Facturar una venta</Button>}
+                  {vista === 'factura' && <Button size="sm" variant="outline" onClick={() => ir('ventas', 'facturacion')}>Volver a Facturas</Button>}
+                  {pestania === 'cambio' && <Button size="sm" variant="outline" onClick={() => ir('ventas', 'ventas')}>Volver a Ventas</Button>}
+                </div>
+                {vistasDeAca.length > 1 && (
+                  // 📱 En el celular las vistas se deslizan de costado (`erp-vistas`, globals.css).
+                  <div className="erp-vistas" style={{ marginBottom: -1 }}><Tabs variant="underline" items={vistasDeAca} value={vista ?? ''} onChange={(k) => ir(seccion.key, pestania, k)} style={{ borderBottom: 'none' }} /></div>
+                )}
+              </header>
             )}
             {/* 📱 Las pantallas de compu se miran desde el celular, pero se cambian en la compu (Bruno, 29-oct). En la compu ⛔ se ve (globals.css). */}
-            {(seccion.key === 'configuracion' || pestania === 'facturacion' || pestania === 'redondeo') && (
+            {(seccion.key === 'configuracion' || pestania === 'facturacion') && (
               <div className="erp-aviso-compu" role="note"><span aria-hidden>⌨︎</span><span>Esta pantalla se mira desde acá, pero se <b>cambia en la compu</b>.</span></div>
             )}
             {seccion.key === 'inicio' && <InicioErp key={marca} href={hrefErp} />}
             {seccion.vacia && <EmptyState title={seccion.vacia} />}
             {/* `key`: al cambiar de marca se cierra la ficha abierta (era de la otra marca) y se vuelve a leer. */}
-            {pestania === 'ventas' && <VentasErp key={`${marca}/${pedidoN}`} irACaja={(que) => ir('caja', que)} abrir={aAbrir?.tipo === 'venta' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
-            {pestania === 'por-producto' && <PorProductoErp key={marca} />}
+            {vista === 'ventas' && <VentasErp key={`${marca}/${pedidoN}`} irACaja={(que) => (que === 'cambio' ? ir('ventas', 'cambio') : ir('ventas', 'facturacion', 'factura'))} abrir={aAbrir?.tipo === 'venta' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
+            {vista === 'por-producto' && <PorProductoErp key={marca} />}
             {pestania === 'cobros' && <CobrosErp key={marca} />}
             {pestania === 'gastos' && <GastosErp key={marca} />}
             
@@ -367,16 +415,16 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {vista === 'clientes' && <ClientesErp key={`${marca}/${pedidoN}`} abrir={aAbrir?.tipo === 'cliente' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
             {vista === 'cuenta-corriente' && <CuentaCorriente key={marca} />}
             {pestania === 'proveedores' && <ProveedoresErp key={marca} />}
-            {pestania === 'reglas' && <ReglasComerciales key={`${marca}/${lineaVista}`} ir={irAPieza} />}
+            {vista === 'reglas' && <ReglasComerciales key={`${marca}/${lineaVista}`} ir={irAPieza} />}
             {vista === 'rutas' && <RutasCobro key={`${marca}/${lineaVista}`} ir={irAPieza} />}
             {vista === 'cuentas' && <CuentasErp key={marca} ir={irAPieza} />}
-            {pestania === 'redondeo' && <Redondeo key={`${marca}/${lineaVista}`} />}
+            {vista === 'redondeo' && <Redondeo key={`${marca}/${lineaVista}`} />}
             {pestania === 'estructura' && <EstructuraErp key={marca} />}
           </div>
         </div>
         </ProveedorLineaErp>
       </div>
-      {/* 📱 Abajo en el celular: Inicio · Ventas · Caja · Stock · Más (Bruno, 29-oct). En la compu ⛔ se dibuja (globals.css). */}
+      {/* 📱 Abajo en el celular: Inicio · Ventas · Stock · Productos · Más (Bruno, 29-oct; 30-oct la sección Caja pasó a Ventas). En la compu ⛔ se dibuja (globals.css). */}
       <nav aria-label="Secciones del ERP (celular)" className="erp-movil-nav">
         {ABAJO.map((k) => {
           const s = SECCIONES_ERP.find((x) => x.key === k)!

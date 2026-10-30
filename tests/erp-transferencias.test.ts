@@ -29,7 +29,7 @@ describe('ERP › Stock › Transferencias', () => {
     expect(prendasTexto(borrador)).toBe('3 en borrador')
     const armando = deArmado({ ...transferido, estado: 'en_curso', transfer: null }, 'bdi', 0)
     expect(armando).toMatchObject({ paso: 2, estadoTexto: 'Armándose', faltan: 0 })
-    expect(prendasTexto(armando)).toBe('2 de 3 armadas')
+    expect(prendasTexto(armando)).toBe('2 de 3 preparadas')
     const cancelada = deArmado({ ...transferido, estado: 'cancelado', transfer: null }, 'bdi', 0)
     expect(cancelada).toMatchObject({ paso: 0, fin: 'gris', faltan: 0 })
     const filas = [deArmado(transferido, 'bdi', 2), borrador, armando, cancelada]

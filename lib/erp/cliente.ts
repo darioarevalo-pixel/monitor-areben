@@ -200,7 +200,7 @@ export type RenglonNuevo = { producto: string; talle: string; sku?: string | nul
 export const leerAjustes = (linea: LineaErp) =>
   pedir<AjustesDeLinea>(null, `&vista=ajustes&linea=${linea}&nc=${Date.now()}`, 'No se pudieron leer los ajustes.')
 export const crearAjuste = (a: { linea: LineaErp; deposito: string; motivo: string; detalle: string; fuente: string; renglones: RenglonNuevo[] }) =>
-  pedir<{ ok: true; numero: number; id: string; renglones: number; avisos: AvisoAjuste[] }>(post({ accion: 'crear-ajuste', ...a }), '', 'No se pudo armar el ajuste.')
+  pedir<{ ok: true; numero: number; id: string; renglones: number; avisos: AvisoAjuste[] }>(post({ accion: 'crear-ajuste', ...a }), '', 'No se pudo preparar el ajuste.')
 export const aprobarAjuste = (linea: LineaErp, ajusteId: string) =>
   pedir<{ ok: true; numero: number; movimientos: number; avisos: AvisoAjuste[] }>(post({ accion: 'aprobar-ajuste', linea, ajusteId }), '', 'No se pudo aprobar el ajuste.')
 export const descartarAjuste = (linea: LineaErp, ajusteId: string, motivo: string) =>
@@ -500,7 +500,7 @@ export const corregirPrecioDeVenta = (marca: MarcaErp, ventaId: string, motivo: 
   pedir<{ ok: true; correccion: CorreccionHecha }>(post({ accion: 'corregir-precio', marca, ventaId, motivo, lineas }), '', 'No se pudo corregir el precio.')
 export type MedioCorregido = { medio_antes: string; medio_despues: string; cuenta_antes: string; cuenta_despues: string; monto: number; comision_despues: number | null }
 export const corregirMedioDeVenta = (marca: MarcaErp, ventaId: string, c: { medio: string; motivo: string; pagoId?: string; cuenta?: string | number; cuentaReal?: string }) =>
-  pedir<{ ok: true; correccion: MedioCorregido; avisos: string[] }>(post({ accion: 'corregir-medio', marca, ventaId, ...c }), '', 'No se pudo corregir el medio de cobro.')
+  pedir<{ ok: true; correccion: MedioCorregido; avisos: string[] }>(post({ accion: 'corregir-medio', marca, ventaId, ...c }), '', 'No se pudo corregir la forma de pago.')
 export const guardarNotaDeVenta = (marca: MarcaErp, ventaId: string, texto: string, reemplazaId: string | null) =>
   pedir<{ ok: true }>(post({ accion: 'nota-venta', marca, ventaId, texto, reemplazaId }), '', 'No se pudo guardar la nota.')
 export const cobrarVentaErp = (marca: MarcaErp, c: { ventaId: string; clienteId: string; linea: string; monto: number; saldo: number; cuenta: string; canal: string | null; fecha: string; ref: string; prueba: boolean }) =>
@@ -789,7 +789,7 @@ export const leerTransferenciasDoc = (linea: TiendaErp) =>
 export const crearTransferenciaDoc = (linea: TiendaErp, desde: string, hacia: string, renglones: RenglonAlMotor[], nota?: string) =>
   pedir<ResultadoDoc>(post({ accion: 'transferencia-crear', linea, desde, hacia, origen: 'libre', nota, renglones }), '', 'No se pudo crear la transferencia.')
 export const armarTransferenciaDoc = (linea: TiendaErp, transferenciaId: string, renglones: RenglonAlMotor[]) =>
-  pedir<ResultadoDoc>(post({ accion: 'transferencia-armar', linea, transferenciaId, renglones }), '', 'No se pudo armar la transferencia.')
+  pedir<ResultadoDoc>(post({ accion: 'transferencia-armar', linea, transferenciaId, renglones }), '', 'No se pudo preparar la transferencia.')
 export const enviarTransferenciaDoc = (linea: TiendaErp, transferenciaId: string) =>
   pedir<ResultadoDoc>(post({ accion: 'transferencia-enviar', linea, transferenciaId }), '', 'No se pudo enviar la transferencia.')
 export const recibirTransferenciaDoc = (linea: TiendaErp, transferenciaId: string, renglones: RenglonAlMotor[]) =>

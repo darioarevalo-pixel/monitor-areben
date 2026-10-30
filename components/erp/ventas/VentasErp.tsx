@@ -207,7 +207,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     const menu: AccionMenu[] = f.kind === 'pedido'
       ? [
           { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrirFicha(f) },
-          { key: 'cobrar', label: 'Cobrar en Cobranzas ↗', icono: 'pesos', onClick: irACobranzas, hint: 'Transferencia o efectivo: se registra en Cobranzas del monitor.' },
+          { key: 'cobrar', label: 'Cobrar en Cobros del monitor ↗', icono: 'pesos', onClick: irACobranzas, hint: 'Transferencia o efectivo: se registra en Cobros del monitor.' },
           { key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir', onClick: () => f.link && window.open(f.link, '_blank', 'noopener'), disabled: !f.link, hint: 'Para cancelarlo, en Tienda Nube.' },
         ]
       : [

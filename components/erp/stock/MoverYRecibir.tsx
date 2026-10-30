@@ -54,7 +54,7 @@ const COLUMNAS_UNIFICADA: ColumnaLista[] = [
   ...COLUMNAS.slice(0, 3),
   { key: 'origen', titulo: 'Origen', ancho: '170px', movil: 'oculta' },
   ...COLUMNAS.slice(3),
-  { key: 'falto', titulo: 'Faltó armar', ancho: '100px', derecha: true, movil: 'oculta' },
+  { key: 'falto', titulo: 'Faltó preparar', ancho: '100px', derecha: true, movil: 'oculta' },
 ]
 const abrirReposicion = () => window.open('/reposicion', '_blank', 'noopener')
 const mesHoy = () => new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 7)
@@ -425,7 +425,7 @@ function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onPreparar, onC
         <DatoFicha titulo="Productos que salieron">{u(unidadesEnviadas(d))}</DatoFicha>
         {recibida && <DatoFicha titulo="Productos que llegaron">{u(unidadesRecibidas(d))}</DatoFicha>}
         {d.nota && <DatoFicha titulo="Nota">{d.nota}</DatoFicha>}
-        {!!d.faltoArmar && <DatoFicha titulo="Faltó armar">{u(d.faltoArmar)} de lo pedido en Reposición</DatoFicha>}
+        {!!d.faltoArmar && <DatoFicha titulo="Faltó preparar">{u(d.faltoArmar)} de lo pedido en Reposición</DatoFicha>}
       </DatosFicha>
       <div>
         <div style={{ fontWeight: weight.semibold, color: color.ink, marginBottom: 6 }}>Productos ({renglones.length})</div>
@@ -434,7 +434,7 @@ function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onPreparar, onC
             <tr>
               <th style={{ ...th, textAlign: 'left' }}>Producto</th>
               {conPedida && <th style={th}>Pedida</th>}
-              {conPedida && <th style={th}>Armada</th>}
+              {conPedida && <th style={th}>Preparada</th>}
               <th style={th}>Salió</th>
               {recibida && <th style={th}>Llegó</th>}
             </tr>

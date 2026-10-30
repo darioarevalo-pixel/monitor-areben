@@ -46,15 +46,20 @@ async function montar() {
   await act(async () => {})
   return host
 }
-const rol = (host: HTMLElement, nombre: string) => [...host.querySelectorAll('[role=radio]')].find((b) => b.textContent === nombre) as HTMLButtonElement
+// 🎯 Bruno 30-oct: «Ver como» va escondido en un botón arriba a la derecha; los roles aparecen al abrirlo.
+const boton = (host: HTMLElement) => [...host.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Ver como')) as HTMLButtonElement | undefined
+const rol = (host: HTMLElement, nombre: string) => [...host.querySelectorAll('[role=menuitemradio]')].find((b) => b.textContent === nombre) as HTMLButtonElement
 
 describe('Ver como — la pantalla', () => {
   it('Admin lo ve todo; con «Depósito» cambian las tarjetas y desaparece el resultado', async () => {
     const host = await montar()
     expect(host.textContent).toContain('Resultado comercial del mes')
     expect(host.textContent).toContain('Productos sin costo')
+    expect(rol(host, 'Depósito')).toBeUndefined()
+    await act(async () => { boton(host)!.click() })
     await act(async () => { rol(host, 'Depósito').click() })
-    expect(rol(host, 'Depósito').getAttribute('aria-checked')).toBe('true')
+    expect(boton(host)!.textContent).toContain('Depósito')
+    expect(rol(host, 'Depósito')).toBeUndefined()
     expect(host.textContent).not.toContain('Resultado comercial del mes')
     expect(host.textContent).not.toContain('Productos sin costo')
     expect(host.textContent).toContain('Ventas a desarmar')
@@ -63,6 +68,6 @@ describe('Ver como — la pantalla', () => {
   it('⛔ el selector es sólo de admin', async () => {
     admin = false
     const host = await montar()
-    expect(host.querySelector('[role=radiogroup]')).toBeNull()
+    expect(boton(host)).toBeUndefined()
   })
 })

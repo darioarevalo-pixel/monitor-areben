@@ -1214,7 +1214,15 @@ a.apps-item:hover {
 }
 .erp-menu-item svg { flex-shrink: 0; } /* «Productos y precios» con su contador aplastaba el ícono a 0 px */
 .erp-menu-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
-.erp-menu-item--debajo { height: 34px; padding-left: 36px; font-size: 13.5px; color: #8391a7; }
+.erp-menu-item--abierta { color: #fff; font-weight: 600; }
+/* 🎨 30-oct (Bruno): los ítems del grupo abierto, colgados con una guía fina. */
+.erp-menu-subs { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 8px 19px; padding-left: 10px; border-left: 1px solid rgba(255, 255, 255, 0.1); }
+.erp-menu-sub { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border-radius: 8px; font-size: 13.5px; white-space: nowrap; text-decoration: none; color: #94a3b8; }
+.erp-menu-sub:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+.erp-menu-sub--on, .erp-menu-sub--on:hover { background: var(--mo-brand-solid); color: #fff; font-weight: 600; }
+.erp-menu-sub--afuera { color: #a5b4fc; }
+.erp-menu-sub--afuera > span:last-child { margin-left: auto; }
+.erp-pestanias-movil { display: none; }
 .erp-menu-item--on, .erp-menu-item--on:hover { background: var(--mo-brand-solid); color: #fff; font-weight: 600; }
 .erp-contador { margin-left: auto; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 9px; display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; line-height: 1; color: #fff; background: #dc2626; }
 .erp-menu-pie { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 8px; }
@@ -1261,6 +1269,7 @@ a.apps-item:hover {
   }
   /* El título va en la barra de arriba; las pestañas y las vistas se deslizan de costado (⛔ se parten en renglones). */
   .erp-app .erp-titulo { display: none; }
+  .erp-app .erp-pestanias-movil { display: block; }
   .erp-app .erp-pestanias, .erp-app .erp-pestanias > div, .erp-app .erp-vistas > div { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; }
   .erp-app .erp-pestanias > div > *, .erp-app .erp-vistas > div > * { flex-shrink: 0; }
   /* Las piezas de arriba de la lista (`PiezasLista`): los resúmenes de a dos, las vistas en un renglón que se desliza. */

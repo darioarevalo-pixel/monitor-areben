@@ -138,7 +138,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     const r = await corregirMedioDeVenta(marca, fila.id, { medio: medioNuevo, motivo: motivoMedio, ...(cuentaReal ? { cuentaReal } : {}) })
     setMedioAbierto(false)
     onCambio(`Venta ${fila.ref}: el cobro de ${plata(r.correccion.monto)} pasó de ${r.correccion.cuenta_antes} a ${r.correccion.cuenta_despues}. No se movió plata.`)
-  }, 'No se pudo corregir el medio de cobro.')
+  }, 'No se pudo corregir la forma de pago.')
 
   async function hacerNC() {
     const ok = await confirmar({
@@ -160,14 +160,14 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     ...(ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
     ...(!fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura') }] : []),
     ...(puede.corregir && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
-    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir medio de cobro…', icono: 'pesos' as const, hint: 'Pagó con otro medio que el que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
+    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir forma de pago…', icono: 'pesos' as const, hint: 'Pagó con otro medio que el que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
     { key: 'anular', label: 'Anular…', icono: 'anular', tone: 'danger', disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) },
   ]
   // 📱 En el celular los botones de arriba bajan al pie: la principal es cobrar; lo demás, al «⋯».
   const angosta = usePantallaAngosta()
   const verEnTn: AccionMenu[] = fila.link ? [{ key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir', onClick: () => window.open(fila.link!, '_blank', 'noopener') }] : []
   const pie: PieFicha = esPedido
-    ? { principal: { label: 'Cobrar en Cobranzas ↗', onClick: () => window.open('/cobranzas', '_blank', 'noopener') }, mas: verEnTn }
+    ? { principal: { label: 'Cobrar en Cobros del monitor ↗', onClick: () => window.open('/cobranzas', '_blank', 'noopener') }, mas: verEnTn }
     : {
         principal: debe ? { label: 'Registrar cobro', onClick: () => abrirVentana('cobro') } : undefined,
         otra: { label: 'Editar', disabled: fila.anulada, onClick: () => abrirVentana('editar') },
@@ -197,7 +197,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
 
       {!angosta && <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         {debe && <Button onClick={() => abrirVentana('cobro')}>Registrar cobro</Button>}
-        {esPedido && <Button onClick={() => window.open('/cobranzas', '_blank', 'noopener')}>Cobrar en Cobranzas ↗</Button>}
+        {esPedido && <Button onClick={() => window.open('/cobranzas', '_blank', 'noopener')}>Cobrar en Cobros del monitor ↗</Button>}
         {fila.link && <Button variant="outline" onClick={() => window.open(fila.link!, '_blank', 'noopener')}>Ver el pedido en Tienda Nube ↗</Button>}
         {!esPedido && <Button variant="outline" disabled={fila.anulada} onClick={() => abrirVentana('editar')}>Editar</Button>}
         {!esPedido && <Button variant="outline" disabled={fila.anulada} onClick={() => irACaja('cambio')}>Hacer cambio</Button>}
@@ -207,7 +207,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
       {esPedido ? (
         <>
           {fila.entregadoSinCobrar && <Notice tone="danger"><b>Entregado sin cobrar</b>: Tienda Nube lo cerró sin que se registrara el pago. Ya no retiene stock; queda acá hasta que se cobre o se cancele.</Notice>}
-          <Notice tone="warning">Pedido de Tienda Nube <b>sin pagar</b>: todavía no es una venta{fila.entregadoSinCobrar ? '' : ' y tiene los productos retenidos'}. Pasa a venta solo cuando Tienda Nube avisa que se pagó. Se cobra en Cobranzas (transferencia o efectivo) o se cancela en Tienda Nube.</Notice>
+          <Notice tone="warning">Pedido de Tienda Nube <b>sin pagar</b>: todavía no es una venta{fila.entregadoSinCobrar ? '' : ' y tiene los productos retenidos'}. Pasa a venta solo cuando Tienda Nube avisa que se pagó. Se cobra en Cobros del monitor (transferencia o efectivo) o se cancela en Tienda Nube.</Notice>
           <DatosFicha>
             <DatoFicha titulo="Entró">{`${cuandoCorto(fila.pedidoEn)}${fila.dias != null ? ` · ${fila.dias === 0 ? 'hoy' : fila.dias === 1 ? 'hace 1 día' : `hace ${fila.dias} días`}` : ''}`}</DatoFicha>
             <DatoFicha titulo="Eligió pagar con">{fila.medio ?? '—'}</DatoFicha>
@@ -359,7 +359,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         </Field>
       </Modal>
       <Modal
-        abierto={medioAbierto} onCerrar={() => setMedioAbierto(false)} titulo={`Corregir el medio de cobro de la venta ${fila.ref}`}
+        abierto={medioAbierto} onCerrar={() => setMedioAbierto(false)} titulo={`Corregir la forma de pago de la venta ${fila.ref}`}
         pie={<>
           <Button variant="outline" onClick={() => setMedioAbierto(false)}>Cancelar</Button>
           <Button disabled={trabajando || !medioNuevo || faltaCuenta || motivoMedio.trim().length < MOTIVO_MINIMO} onClick={() => void confirmarMedio()}>Corregir medio</Button>

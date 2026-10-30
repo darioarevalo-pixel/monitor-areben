@@ -34,7 +34,7 @@ type Fila = FilaConciliacion & { id: string; grupo: string; grupoNombre: string;
 const COLUMNAS: ColumnaLista[] = [
   { key: 'que', titulo: 'Producto o pedido', ancho: 'minmax(220px, 2fr)', movil: 'titulo' },
   { key: 'contra', titulo: 'Contra', ancho: '128px', movil: 'chico' },
-  { key: 'ellos', titulo: 'Ellos', ancho: '92px', derecha: true, movil: 'chico' },
+  { key: 'ellos', titulo: 'En la tienda', ancho: '92px', derecha: true, movil: 'chico' },
   { key: 'erp', titulo: 'ERP', ancho: '92px', derecha: true, movil: 'dato' },
   { key: 'gn', titulo: 'Gestión Nube', ancho: '64px', derecha: true, movil: 'oculta' },
   { key: 'dias', titulo: 'Días', ancho: '56px', derecha: true, movil: 'oculta' },

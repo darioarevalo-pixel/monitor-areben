@@ -39,7 +39,7 @@ type Fila = {
 const COLUMNAS: ColumnaLista[] = [
   { key: 'p', titulo: 'Producto', ancho: 'minmax(220px, 2fr)', movil: 'titulo' },
   { key: 'dep', titulo: 'Dónde', ancho: '104px', movil: 'chico' },
-  { key: 'libro', titulo: 'Nuestro', ancho: '76px', derecha: true, movil: 'dato' },
+  { key: 'libro', titulo: 'ERP', ancho: '76px', derecha: true, movil: 'dato' },
   { key: 'gn', titulo: 'Gestión Nube', ancho: '64px', derecha: true, movil: 'chico' },
   { key: 'dgn', titulo: 'Gestión Nube movió', ancho: '84px', derecha: true, movil: 'oculta' },
   { key: 'dlibro', titulo: 'ERP movió', ancho: '84px', derecha: true, movil: 'oculta' },
@@ -118,7 +118,7 @@ export function DiferenciasDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => vo
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>{tienda === 'stunned'
         ? 'Stunned ya vive en el ERP: lo que quedó de cuando se comparaba con Gestión Nube, y los productos en negativo.'
-        : 'Sólo mientras convivimos con Gestión Nube: lo que nuestro stock no pudo explicar al compararse con Gestión Nube, y los productos que quedaron en negativo. Se va el día del corte.'}</p>
+        : 'Sólo mientras convivimos con Gestión Nube: lo que el stock del ERP no pudo explicar al compararse con Gestión Nube, y los productos que quedaron en negativo. Se va el día del corte.'}</p>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         {datos && datos.dias.length > 0 && (
           <Select aria-label="Día" style={ANCHO_SELECT} value={datos.fecha ?? ''} onChange={(e) => setFecha(e.target.value)} disabled={cargando}>
@@ -137,7 +137,7 @@ export function DiferenciasDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => vo
         <>
           {datos.fecha && (
             <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-              <TileResumen oscuro titulo="Sin explicar" valor={datos.inexplicadas.toLocaleString('es-AR')} nota={datos.inexplicadas ? `stock nuestro ≠ Gestión Nube, el ${dia(datos.fecha)}` : `todo explicado el ${dia(datos.fecha)}`} />
+              <TileResumen oscuro titulo="Sin explicar" valor={datos.inexplicadas.toLocaleString('es-AR')} nota={datos.inexplicadas ? `stock del ERP ≠ Gestión Nube, el ${dia(datos.fecha)}` : `todo explicado el ${dia(datos.fecha)}`} />
               <TileResumen titulo="Sobreventa" valor={datos.sobreventaSinConexion || datos.sobreventaError ? '—' : datos.sobreventa.length.toLocaleString('es-AR')} nota={datos.sobreventaSinConexion ? 'falta la conexión al ERP' : datos.sobreventaError ? 'no se pudo sumar el ERP' : 'quedaron en negativo (hoy)'} />
               <TileResumen titulo="Explicadas solas" valor={explicadas.toLocaleString('es-AR')} nota={datos.explicadas.length ? datos.explicadas.map((e) => `${e.nombre} ${e.variantes}`).join(' · ') : 'ninguna'} />
             </div>

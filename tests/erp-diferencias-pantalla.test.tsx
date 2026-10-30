@@ -48,7 +48,7 @@ describe('DiferenciasDia', () => {
   it('los números arriba y cada clase como vista; la sobreventa aparte', async () => {
     await montar()
     expect(leerDiferencias).toHaveBeenCalledWith('zattia', null)
-    expect(texto()).toMatch(/Sin explicar2stock nuestro ≠ Gestión Nube, el 18\/10/)
+    expect(texto()).toMatch(/Sin explicar2stock del ERP ≠ Gestión Nube, el 18\/10/)
     expect(texto()).toMatch(/Sobreventa1quedaron en negativo/)
     expect(texto()).toMatch(/Explicadas solas7Transferencias 7/)
     expect(boton(/^Venta en Gestión Nube que no llegó al ERP/).textContent).toContain('2')

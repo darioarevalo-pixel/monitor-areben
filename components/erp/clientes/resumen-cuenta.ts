@@ -30,6 +30,6 @@ export async function imprimirResumenDeFila(marca: MarcaErp, fila: FilaCuenta, p
     return null
   } catch (e) {
     w.close()
-    return e instanceof Error ? e.message : 'No se pudo armar el resumen.'
+    return e instanceof Error ? e.message : 'No se pudo hacer el resumen.'
   }
 }

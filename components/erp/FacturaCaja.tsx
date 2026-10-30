@@ -180,9 +180,9 @@ export function FacturaCaja() {
     const r = await facturarVenta(store, { ventaId: ficha.venta.id, clase: 'B', reimprimir: true })
     setHecha({ factura: r.factura, yaEstaba: true })
     await descargarFactura(r.factura)
-  }, 'No se pudo armar el PDF.')
+  }, 'No se pudo hacer el PDF.')
 
-  const bajar = (f: FacturaEmitida) => correr(() => descargarFactura(f), 'No se pudo armar el PDF.')
+  const bajar = (f: FacturaEmitida) => correr(() => descargarFactura(f), 'No se pudo hacer el PDF.')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>

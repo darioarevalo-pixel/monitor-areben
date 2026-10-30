@@ -186,7 +186,7 @@ export function RutasCobro({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <TiraConfiguracion activa="rutas" ir={ir} />
       <p style={{ margin: 0, color: color.mut }}>
-        A qué cuenta va la plata de cada medio de pago. En el local se elige sólo el medio; el descuento sale de las reglas de ese medio.
+        A qué cuenta va la plata de cada forma de pago. En el local se elige sólo el medio; el descuento sale de las reglas de ese medio.
         Un cambio vale desde ese momento: lo cobrado antes no se toca.
       </p>
       <Notice tone="neutral">

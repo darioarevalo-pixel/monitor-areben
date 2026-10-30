@@ -49,7 +49,7 @@ function enElErp(f: FilaTransferencia, libroDesde: string | null) {
 
 function bajarCsv(filas: FilaTransferencia[], marca: MarcaErp) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Nº', 'Creada', 'De', 'A', 'Origen', 'Quién', 'Estado', 'Pedidas', 'Armadas', 'Enviadas', 'Faltan', 'En el ERP'].map(c).join(';')]
+  const renglones = [['Nº', 'Creada', 'De', 'A', 'Origen', 'Quién', 'Estado', 'Pedidas', 'Preparadas', 'Enviadas', 'Faltan', 'En el ERP'].map(c).join(';')]
   for (const f of filas) renglones.push([f.numero ?? '', cuandoCorto(f.creada), f.desdeTexto, f.haciaTexto, f.origenTexto, f.persona ?? '', f.estadoTexto, f.pedidas, f.armadas, f.enviadas, f.faltan, f.enLibro ?? ''].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -152,14 +152,14 @@ export function TransferenciasStock() {
         ? <Notice tone="neutral">Stunned ya vive en el ERP: la transferencia se mueve y se recibe acá. Lo que no llega al local queda como faltante («Transferida con faltantes»).</Notice>
         : <Notice tone="warning">
           <b>«Recibida» todavía no se controla</b>: Gestión Nube mueve el stock de un golpe y nadie la escanea al llegar al local (el último paso va rayado).
-          Tampoco hay transferencias armadas a mano fuera de Reposición: las que se hacen en la pantalla de Gestión Nube aparecen como «A mano en Gestión Nube».
+          Tampoco hay transferencias hechas a mano fuera de Reposición: las que se hacen en la pantalla de Gestión Nube aparecen como «A mano en Gestión Nube».
         </Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {datos?.cortado && <Notice tone="warning">Se ven las {datos.filas.length.toLocaleString('es-AR')} más nuevas.</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Abiertas" valor={res.abiertas.toLocaleString('es-AR')} oscuro nota="en borrador, armándose o yendo" />
-        <TileResumen titulo="En camino" valor={u(res.enCamino)} nota="armadas o enviándose" />
+        <TileResumen titulo="En camino" valor={u(res.enCamino)} nota="preparadas o enviándose" />
         <TileResumen titulo="Transferidas este mes" valor={res.hechasMes.toLocaleString('es-AR')} nota={res.conFaltantes ? `${res.conFaltantes} con faltantes` : 'sin faltantes'} />
         <TileResumen titulo="Productos movidos" valor={u(res.movidas)} nota="este mes" />
       </div>
@@ -226,7 +226,7 @@ function FichaTransferencia({ f, libroDesde, onCerrar }: { f: FilaTransferencia;
         <DatoFicha titulo="Origen">{f.origenTexto}</DatoFicha>
         <DatoFicha titulo="Quién">{f.persona ?? '—'}</DatoFicha>
         {f.origen !== 'gn' && <DatoFicha titulo="Pedidas">{u(f.pedidas)}</DatoFicha>}
-        {f.origen !== 'gn' && <DatoFicha titulo="Armadas">{u(f.armadas)}</DatoFicha>}
+        {f.origen !== 'gn' && <DatoFicha titulo="Preparadas">{u(f.armadas)}</DatoFicha>}
         <DatoFicha titulo="Enviadas">{u(f.enviadas)}</DatoFicha>
         {f.faltan > 0 && <DatoFicha titulo="Faltaron">{u(f.faltan)}</DatoFicha>}
         <DatoFicha titulo="En el ERP">{e.ayuda ? `${e.texto} · ${e.ayuda.toLowerCase()}` : e.texto}</DatoFicha>
@@ -244,7 +244,7 @@ function FichaTransferencia({ f, libroDesde, onCerrar }: { f: FilaTransferencia;
             <tr>
               <th style={{ ...th, textAlign: 'left' }}>Producto</th>
               {f.origen !== 'gn' && <th style={th}>Pedida</th>}
-              {f.origen !== 'gn' && <th style={th}>Armada</th>}
+              {f.origen !== 'gn' && <th style={th}>Preparada</th>}
               <th style={th}>Enviada</th>
             </tr>
           </thead>

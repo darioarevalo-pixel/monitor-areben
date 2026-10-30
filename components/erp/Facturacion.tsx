@@ -238,7 +238,7 @@ export function Facturacion() {
     try {
       await descargarFactura(f)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo armar el PDF.')
+      setError(e instanceof Error ? e.message : 'No se pudo hacer el PDF.')
     }
   }
 

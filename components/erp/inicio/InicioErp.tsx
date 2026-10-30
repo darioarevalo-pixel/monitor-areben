@@ -8,9 +8,9 @@
  */
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { Notice, color, font, space, weight } from '@/components/ui'
+import { Button, Notice, color, font, space, weight } from '@/components/ui'
 import { formatMoney } from '@/components/ui/MoneyText'
 import { TileResumen } from '@/components/ui/PiezasLista'
 import {
@@ -34,6 +34,40 @@ const TITULO: Record<string, string> = { ventas: 'Ventas', stock: 'Stock', produ
 const fecha = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
 const pct = (a: number, b: number) => (b ? Math.round((a / b - 1) * 100) : null)
 
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+/** `2026-10-30` → «Octubre 2026». */
+export const tituloDelMes = (dia: string) => { const m = MESES[Number(dia.slice(5, 7)) - 1]; return `${m[0].toUpperCase()}${m.slice(1)} ${dia.slice(0, 4)}` }
+
+/** «Ver como» (sólo admin): un botón que abre la lista de roles, ⛔ una tira siempre a la vista. */
+function VerComo({ rol, setRol }: { rol: string; setRol: (r: string) => void }) {
+  const [abierto, setAbierto] = useState(false)
+  const caja = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!abierto) return
+    const fuera = (e: MouseEvent) => { if (!caja.current?.contains(e.target as Node)) setAbierto(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setAbierto(false) }
+    document.addEventListener('mousedown', fuera)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', fuera); document.removeEventListener('keydown', esc) }
+  }, [abierto])
+  const nombre = ROLES.find(([k]) => k === rol)?.[1] ?? 'Admin'
+  return (
+    <div ref={caja} style={{ position: 'relative' }}>
+      <Button size="sm" variant="outline" aria-haspopup="menu" aria-expanded={abierto} onClick={() => setAbierto((v) => !v)}>Ver como: {nombre} ▾</Button>
+      {abierto && (
+        <div role="menu" aria-label="Ver como" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 20, minWidth: 200, padding: 6, borderRadius: 12, background: color.surface, border: `1px solid ${color.line}`, boxShadow: '0 12px 32px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {ROLES.map(([k, n]) => (
+            <button key={k} type="button" role="menuitemradio" aria-checked={rol === k} onClick={() => { setRol(k); setAbierto(false) }}
+              style={{ height: 34, padding: '0 10px', border: 0, borderRadius: 8, cursor: 'pointer', textAlign: 'left', font: 'inherit', fontWeight: weight.semibold, background: rol === k ? color.bg2 : 'transparent', color: color.ink }}>
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Variacion({ ahora, antes }: { ahora: number; antes: number }) {
   const p = pct(ahora, antes)
   if (p == null) return null
@@ -43,6 +77,7 @@ function Variacion({ ahora, antes }: { ahora: number; antes: number }) {
 export function InicioErp({ href }: { href: (seccion: string, pestania?: string) => string }) {
   const { marca: delShell, perfil } = useSesion()
   const [rol, setRol] = useState('admin')
+  const [hoy] = useState(() => diaArgentino(Date.now()))
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const [resultado, setResultado] = useState<{ marca: string; r: ResultadoDelMes | null; error: string | null } | null>(null)
   // Los gastos comerciales REALES del mismo mes (⛔ los de prueba: son de ventas que Gestión Nube no tiene).
@@ -83,19 +118,14 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[5] }}>
-      {esAdmin(perfil) && (
-        <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: font.sm, fontWeight: weight.semibold, color: color.mut }}>Ver como</span>
-          <div role="radiogroup" aria-label="Ver como" style={{ display: 'inline-flex', flexWrap: 'wrap', padding: 3, gap: 2, borderRadius: 10, background: color.bg2, border: `1px solid ${color.line}` }}>
-            {ROLES.map(([k, nombre]) => (
-              <button key={k} type="button" role="radio" aria-checked={rol === k} onClick={() => setRol(k)}
-                style={{ height: 30, padding: '0 12px', border: 0, borderRadius: 8, cursor: 'pointer', fontWeight: weight.semibold, background: rol === k ? color.surface : 'transparent', color: rol === k ? color.ink : color.mut, boxShadow: rol === k ? '0 1px 2px rgba(15,23,41,.12)' : 'none' }}>
-                {nombre}
-              </button>
-            ))}
-          </div>
+      {/* 🎯 Bruno 30-oct: el título es EL MES («Octubre 2026») y «Ver como» va escondido en un botón arriba a la derecha. */}
+      <header style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 30, fontWeight: weight.bold, letterSpacing: '-0.02em', color: color.ink }}>{tituloDelMes(hoy)}</h1>
+          <div style={{ fontSize: font.sm, color: color.mut }}>{rol === 'admin' ? `al ${Number(hoy.slice(8, 10))} de ${MESES[Number(hoy.slice(5, 7)) - 1]}` : `Viendo como ${ROLES.find(([k]) => k === rol)?.[1]}`}</div>
         </div>
-      )}
+        {esAdmin(perfil) && <VerComo rol={rol} setRol={setRol} />}
+      </header>
       {verResultado(rol) && <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <div>
           <h2 style={h2}>Resultado comercial del mes</h2>

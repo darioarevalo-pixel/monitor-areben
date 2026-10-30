@@ -189,7 +189,7 @@ describe('Mover y recibir', () => {
     const texto = document.body.textContent ?? ''
     expect(texto).toContain('Reposición del monitor')
     expect(texto).toContain('Movida a mano')
-    expect(texto).toContain('Faltó armar')
+    expect(texto).toContain('Faltó preparar')
     expect(document.querySelector('input[placeholder^="Código"]')).toBeNull()
     await act(async () => { boton('Mover').click() })
     expect(document.querySelector('input[placeholder^="Código"]')).not.toBeNull()

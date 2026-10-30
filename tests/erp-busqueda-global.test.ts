@@ -40,8 +40,14 @@ describe('erp › búsqueda global', () => {
     const a = (r: string[]) => { const x = resolverRutaErp(r); return [x.seccion.key, x.pestania, x.vista, x.valida] }
     expect(a(['configuracion', 'cuentas-reales'])).toEqual(['configuracion', 'cuentas', 'cuentas', false])
     expect(a(['configuracion', 'cuentas'])).toEqual(['configuracion', 'cuentas', 'cuentas', true])
-    expect(a(['configuracion', 'redondeo'])).toEqual(['productos', 'redondeo', null, false])
-    expect(a(['ventas', 'cajas'])).toEqual(['caja', 'cajas', null, false])
+    expect(a(['configuracion', 'redondeo'])).toEqual(['configuracion', 'reglas', 'redondeo', false])
+    // 🎨 30-oct (mapa del menú): la sección Caja ⛔ existe; Cajas y Cambio son de Ventas, y Redondeo vuelve a Configuración.
+    expect(a(['productos', 'redondeo'])).toEqual(['configuracion', 'reglas', 'redondeo', false])
+    expect(a(['ventas', 'cajas'])).toEqual(['ventas', 'cajas', null, true])
+    expect(a(['caja', 'cajas'])).toEqual(['ventas', 'cajas', null, false])
+    expect(a(['caja', 'cambio'])).toEqual(['ventas', 'cambio', null, false])
+    expect(a(['caja'])).toEqual(['ventas', 'cajas', null, false])
+    expect(a(['ventas', 'por-producto'])).toEqual(['ventas', 'ventas', 'por-producto', false])
     expect(a(['caja', 'factura'])).toEqual(['ventas', 'facturacion', 'factura', false])
     expect(a(['clientes', 'cuenta-corriente'])).toEqual(['clientes', 'clientes', 'cuenta-corriente', false])
     expect(hrefErp('caja', 'factura')).toBe('/erp/ventas/facturacion/factura')

@@ -348,7 +348,7 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `oferta` · `productos en oferta` | `feria` · `ferias` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct: «feria» es un nombre COMERCIAL de una campaña, ⛔ una regla de la caja |
 | `ingreso` · `+ Ingreso` | `aporte` · `aportes` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct: «+ Salida» y «+ Ingreso» |
 | `Validar transferencia` · `Transferencia pendiente` | `Confirmar transferencia` · `Validando` | monitor | `components/caja` · `lib/caja` | Bruno, 12-oct; 13-oct: «validar» se entiende como el paso intermedio |
-| `Ingresos` (la mercadería que entró por una orden de compra) | `Recepciones` · `Recepción` | monitor | `components/erp` · `lib/erp` | Bruno, 20-oct: «en vez de recepciones, pondría ingresos así se entiende» (la pestaña de Stock del ERP; la dirección sigue `/erp/stock/recepciones`) |
+| `Ingresos de mercadería` (lo que entró por una orden de compra; Bruno 30-oct: «Ingresos» solo se confunde con el `+ Ingreso` de plata de la Caja) | `Recepciones` · `Recepción` | monitor | `components/erp` · `lib/erp` | Bruno, 20-oct: «en vez de recepciones, pondría ingresos así se entiende» (la pestaña de Stock del ERP; la dirección sigue `/erp/stock/recepciones`) |
 | `Contraentrega` (la forma de pago: el cadete cobra al entregar) | `a cobrar en la entrega` · `Cobrar en la entrega` | monitor | `components/erp` · `lib/erp` | Bruno, 20-oct: «¿contraentrega te parece?» (contrato §20 del motor) |
 | `producto` · `productos` | `prenda` · `prendas` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: el ERP vende productos, no sólo ropa (diseno.md §9) |
 | `variante` · `variantes` | `talle` · `talles` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: la variante puede ser talle, color o medida |
@@ -359,6 +359,11 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `Tienda Nube` · `Gestión Nube` · `Mercado Libre` | `TN` · `GN` · `ML` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: sin siglas en pantalla |
 | `Caja` | `Caja (POS)` · `POS` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
 | `Ingresos y ajustes` | `Conteos y ajustes` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
+| `forma de pago` · `formas de pago` | `medio de cobro` · `medios de cobro` · `medio de pago` · `medios de pago` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct-2026: «forma de pago está perfecto» (eran tres palabras para lo mismo) |
+| `Cobros` | `Cobranzas` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: Cobros en el ERP y en el monitor (la sección del monitor se renombra aparte) |
+| `preparar` · `preparada` · `sin preparar` | `armar` · `armada` · `armadas` · `sin armar` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: en Ventas ya decía «preparar»; las transferencias decían «armar» |
+| `Movido a la hora de la foto` · el nombre de cada lado (`ERP`, `Tienda Nube`, `Mercado Libre`, `Gestión Nube`) | `En vuelo` · `Nuestro` · `Ellos` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: en Diferencias no se entendía contra quién se compara |
+| `Con falla` | `Fallado` · `Fallada` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct |
 | (nada: el estado se dice en palabras: «todavía no disponible», «modo de prueba de ARCA») | `motor` · `sesión A` · `espejo` · `homologación` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: jerga de la construcción, ⛔ en pantalla |
 
 ⚠️ **Las excepciones van en el test, con su motivo, y se vacían solas**: un nombre que viene de otro

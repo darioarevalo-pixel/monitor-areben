@@ -64,7 +64,7 @@ describe('Ingresos y ajustes', () => {
     expect(texto()).toContain('Igualado a Gestión Nube')
     await click(boton('Nuevo ajuste'))
     const motivos = [...host.querySelectorAll('option')].map((o) => o.textContent)
-    expect(motivos).toContain('Fallado')
+    expect(motivos).toContain('Con falla')
     expect(motivos).not.toContain('Conteo')
   })
 

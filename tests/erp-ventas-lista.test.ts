@@ -94,7 +94,7 @@ describe('la fila, las vistas y el resumen', () => {
     expect(p.entregadoSinCobrar).toBe(false)
     expect(armarFila({ kind: 'pedido', tienda: 'bdi', tnId: '2', tnNumero: 2, creadaEn: '2026-10-19T12:00:00Z', total: 1, entregadoSinCobrar: true }).entregadoSinCobrar).toBe(true)
     // Se cobra en Cobranzas (el ícono $ lleva ahí, ⛔ a una ventana del ERP).
-    expect(accionesDeFila(p).cobro).toMatchObject({ activo: true, label: 'Pedido sin pagar: se cobra en Cobranzas ↗' })
+    expect(accionesDeFila(p).cobro).toMatchObject({ activo: true, label: 'Pedido sin pagar: se cobra en Cobros del monitor ↗' })
   })
   it('las vistas cuentan lo suyo', () => {
     expect(contarVistas(filas)).toEqual({ todas: 6, preparar: 2, listas: 0, desarmar: 0, sinpagar: 1, saldo: 1, sinfactura: 2, anuladas: 1 })
