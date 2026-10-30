@@ -1270,8 +1270,8 @@ a.apps-item:hover {
   .erp-app .mo-buscador { flex-basis: 160px !important; }
   /* «Reportar un problema» (fijo abajo, de todo el monitor) tapaba Stock y Más: sube arriba de la barra. */
   body:has(.erp-app) .mo-boton-reportes { bottom: calc(72px + env(safe-area-inset-bottom)) !important; }
-  /* Con una tarea abierta (recibir, ajustar: su botón va fijo al pie) sube un poco más, para ⛔ tapar ese botón. */
-  body:has([data-pie-tarea]) .mo-boton-reportes { bottom: calc(136px + env(safe-area-inset-bottom)) !important; }
+  /* Con una tarea abierta (recibir, ajustar: su botón va fijo al pie) se esconde: subirlo tapaba la cantidad (visto 30-oct). */
+  body:has([data-pie-tarea]) .mo-boton-reportes { display: none !important; }
   /* Las pantallas de compu (Configuración, Facturación, Redondeo) se miran; el cartel avisa que se cambian en la compu. */
   .erp-app .erp-aviso-compu { display: flex; }
 }

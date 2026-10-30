@@ -339,7 +339,7 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   con `usePantallaAngosta` para ⛔ duplicarlos. `BarraSeleccion` ⛔ aparece en el celular. `tests/erp-celular-ficha.test.tsx`.
   Las TAREAS (tanda 3, 30-oct): **recibir/preparar** (`MoverYRecibir` › `TarjetasEscaneadas`) y el **nuevo ajuste**
   (`AjustesStock` › `TarjetaDeAjuste`) ocupan la pantalla (la lista vuelve al terminar), con `PasoCantidad grande` (44 px) y
-  el botón fijo al pie (`PieFijo`, el mismo de la ficha; `data-pie-tarea` sube «Reportar un problema»). Recibir: verde = llegó
+  el botón fijo al pie (`PieFijo`, el mismo de la ficha; `data-pie-tarea` esconde «Reportar un problema»). Recibir: verde = llegó
   entero, ámbar = una parte, rojo = de más. El ajuste conserva sus motivos (Fallado/Canje/Regalo cuentan lo que SALE, Otro con
   signo) ⛔ «Conteo». Las pantallas de compu (Configuración, Facturación, Redondeo) llevan el cartel `.erp-aviso-compu`
   (sólo ≤ 900 px) y las tablas sueltas van en `.erp-tabla-desliza`. `tests/erp-celular-tareas.test.tsx`.

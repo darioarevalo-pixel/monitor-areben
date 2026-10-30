@@ -94,6 +94,8 @@ export function AjustesStock({ pedida = null }: { pedida?: PrendaAAjustar | null
   async function agregar(p: PrendaDeAjuste) {
     if (!borrador || borrador.renglones.some((r) => r.producto === p.producto && r.talle === p.talle)) return
     setBorrador({ ...borrador, renglones: [...borrador.renglones, renglonDe(p)] })
+    // 📱 En el celular los resultados se cierran: abiertos empujaban la tarjeta abajo del pie.
+    if (angosta) { setEncontradas(null); setTexto('') }
     await leerRenglon(p)
   }
 
