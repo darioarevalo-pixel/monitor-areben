@@ -24,6 +24,7 @@ const MARCAS = ['bdi', 'zattia']
  * `LECTURAS_STUNNED_ERP`, igual que memo y Norte. Devuelve la tabla `vl(date_sale, channel, total_price, total_cost)` del
  * período `$1..$2`, para el `from` de cada suma.
  * @param {string} linea  bdi · zattia · stunned
+ * @param {Record<string, string | undefined>} [env]
  */
 export function ventasDeLinea(linea, env = process.env) {
   const periodo = 'v.date_sale::date between $1::date and $2::date'
