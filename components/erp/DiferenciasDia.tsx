@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, MenuAcciones, Notice, Select, color, font, space, type AccionMenu } from '@/components/ui'
-import { ListaTrabajo } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerDiferencias, type DiferenciasDelDia, type MarcaErp } from '@/lib/erp/cliente'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
@@ -36,14 +36,14 @@ type Fila = {
   deltaGN: number | null; deltaLibro: number | null; nivelGN: number | null; nivelLibro: number
 }
 
-const COLUMNAS = [
-  { key: 'p', titulo: 'Producto', ancho: 'minmax(220px, 2fr)' },
-  { key: 'dep', titulo: 'Dónde', ancho: '104px' },
-  { key: 'libro', titulo: 'Nuestro', ancho: '76px', derecha: true },
-  { key: 'gn', titulo: 'Gestión Nube', ancho: '64px', derecha: true },
-  { key: 'dgn', titulo: 'Gestión Nube movió', ancho: '84px', derecha: true },
-  { key: 'dlibro', titulo: 'ERP movió', ancho: '84px', derecha: true },
-  { key: 'paso', titulo: 'Qué pasó', ancho: 'minmax(220px, 1.6fr)' },
+const COLUMNAS: ColumnaLista[] = [
+  { key: 'p', titulo: 'Producto', ancho: 'minmax(220px, 2fr)', movil: 'titulo' },
+  { key: 'dep', titulo: 'Dónde', ancho: '104px', movil: 'chico' },
+  { key: 'libro', titulo: 'Nuestro', ancho: '76px', derecha: true, movil: 'dato' },
+  { key: 'gn', titulo: 'Gestión Nube', ancho: '64px', derecha: true, movil: 'chico' },
+  { key: 'dgn', titulo: 'Gestión Nube movió', ancho: '84px', derecha: true, movil: 'oculta' },
+  { key: 'dlibro', titulo: 'ERP movió', ancho: '84px', derecha: true, movil: 'oculta' },
+  { key: 'paso', titulo: 'Qué pasó', ancho: 'minmax(220px, 1.6fr)', movil: 'chico' },
 ]
 
 export function DiferenciasDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => void }) {

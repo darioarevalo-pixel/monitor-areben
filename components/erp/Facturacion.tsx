@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, ConfirmDetalle, EmptyState, Input, MenuAcciones, Notice, color, font, space, useConfirmar, type AccionMenu } from '@/components/ui'
-import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type ColumnaLista, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { cerrarMes, facturar, leerFacturas, leerMes, notaDeCredito, notaDeDebito, type MarcaErp, type MesFacturacion, type ResultadoLote, type VentaParaFacturar } from '@/lib/erp/cliente'
@@ -38,21 +38,21 @@ type Fila = {
 }
 
 const VISTAS = [['sin', 'Sin factura'], ['facturas', 'Facturas'], ['notas', 'Notas de crédito']] as const
-const COLUMNAS_SIN = [
-  { key: 'nro', titulo: 'Venta', ancho: '84px' },
-  { key: 'cliente', titulo: 'Cliente', ancho: 'minmax(180px, 1.6fr)', ordena: true },
-  { key: 'fecha', titulo: 'Último cobro', ancho: '104px', ordena: true },
-  { key: 'cuentas', titulo: 'Entró a', ancho: 'minmax(180px, 1.4fr)' },
-  { key: 'total', titulo: 'A facturar', ancho: '128px', derecha: true, ordena: true },
+const COLUMNAS_SIN: ColumnaLista[] = [
+  { key: 'nro', titulo: 'Venta', ancho: '84px', movil: 'chico' },
+  { key: 'cliente', titulo: 'Cliente', ancho: 'minmax(180px, 1.6fr)', ordena: true, movil: 'titulo' },
+  { key: 'fecha', titulo: 'Último cobro', ancho: '104px', ordena: true, movil: 'chico' },
+  { key: 'cuentas', titulo: 'Entró a', ancho: 'minmax(180px, 1.4fr)', movil: 'oculta' },
+  { key: 'total', titulo: 'A facturar', ancho: '128px', derecha: true, ordena: true, movil: 'dato' },
 ]
-const COLUMNAS_FACT = [
-  { key: 'comp', titulo: 'Comprobante', ancho: '200px' },
-  { key: 'fecha', titulo: 'Fecha', ancho: '72px', ordena: true },
-  { key: 'nro', titulo: 'Venta', ancho: '84px' },
-  { key: 'cliente', titulo: 'Cliente', ancho: 'minmax(170px, 1.4fr)', ordena: true },
-  { key: 'cae', titulo: 'CAE', ancho: '140px' },
-  { key: 'de', titulo: 'Salió de', ancho: '150px' },
-  { key: 'total', titulo: 'Total', ancho: '128px', derecha: true, ordena: true },
+const COLUMNAS_FACT: ColumnaLista[] = [
+  { key: 'comp', titulo: 'Comprobante', ancho: '200px', movil: 'chico' },
+  { key: 'fecha', titulo: 'Fecha', ancho: '72px', ordena: true, movil: 'chico' },
+  { key: 'nro', titulo: 'Venta', ancho: '84px', movil: 'oculta' },
+  { key: 'cliente', titulo: 'Cliente', ancho: 'minmax(170px, 1.4fr)', ordena: true, movil: 'titulo' },
+  { key: 'cae', titulo: 'CAE', ancho: '140px', movil: 'oculta' },
+  { key: 'de', titulo: 'Salió de', ancho: '150px', movil: 'oculta' },
+  { key: 'total', titulo: 'Total', ancho: '128px', derecha: true, ordena: true, movil: 'dato' },
 ]
 
 export function Facturacion() {

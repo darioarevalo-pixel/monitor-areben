@@ -33,14 +33,14 @@ const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minoris
 export const MOTIVOS_A_MANO = MOTIVOS.filter((m) => m.key !== 'conteo')
 const ESTADO = { para_aprobar: ['warning', 'Para aprobar'], aplicado: ['success', 'Aplicado'], rechazado: ['neutral', 'Descartado'] } as const
 const COLUMNAS: ColumnaLista[] = [
-  { key: 'n', titulo: 'Nº', ancho: '64px' },
-  { key: 'h', titulo: 'Fecha', ancho: '96px' },
-  { key: 'motivo', titulo: 'Motivo', ancho: 'minmax(200px, 1.6fr)' },
-  { key: 'dep', titulo: 'Depósito', ancho: '150px' },
-  { key: 'prendas', titulo: 'Productos', ancho: '72px', derecha: true },
-  { key: 'neto', titulo: 'Unidades', ancho: '80px', derecha: true },
-  { key: 'estado', titulo: 'Estado', ancho: '120px' },
-  { key: 'quien', titulo: 'Quién', ancho: 'minmax(120px, 1fr)' },
+  { key: 'n', titulo: 'Nº', ancho: '64px', movil: 'oculta' },
+  { key: 'h', titulo: 'Fecha', ancho: '96px', movil: 'chico' },
+  { key: 'motivo', titulo: 'Motivo', ancho: 'minmax(200px, 1.6fr)', movil: 'titulo' },
+  { key: 'dep', titulo: 'Depósito', ancho: '150px', movil: 'chico' },
+  { key: 'prendas', titulo: 'Productos', ancho: '72px', derecha: true, movil: 'oculta' },
+  { key: 'neto', titulo: 'Unidades', ancho: '80px', derecha: true, movil: 'dato' },
+  { key: 'estado', titulo: 'Estado', ancho: '120px', movil: 'chico' },
+  { key: 'quien', titulo: 'Quién', ancho: 'minmax(120px, 1fr)', movil: 'oculta' },
 ]
 const deposito = (d: string) => (NOMBRE_DEPOSITO as Record<string, string>)[d] ?? d
 const conSigno = (n: number) => (n > 0 ? `+${n}` : String(n))

@@ -13,10 +13,11 @@
  * ⛔ Todavía (motor, sesión A): por validar con lo que llegó a MP, cobros masivos, cheques ⇒ la pantalla lo dice.
  */
 
+import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Notice, color, font, space, useConfirmar, weight, Select } from '@/components/ui'
-import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion, DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
@@ -32,6 +33,8 @@ import { useLineaErp } from '@/lib/erp/linea-erp'
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
 type Prefs = { orden: string[]; visibles: string[] }
+/** 📱 Qué es cada columna en la tarjeta del celular; la que no está, `oculta`. */
+const MOVIL: Record<string, MovilColumna> = { que: 'titulo', monto: 'dato', h: 'chico', cliente: 'chico', medio: 'chico' }
 type FilaCobro = ReturnType<typeof armarCobro> & Partial<Omit<ReturnType<typeof armarEntregaSinCobrar>, keyof ReturnType<typeof armarCobro>>>
 
 const LINEA = NOMBRE_LINEA as Record<string, string>
@@ -126,9 +129,11 @@ export function CobrosErp() {
   const nombrePeriodo = (PERIODOS_COBROS.find(([k]) => k === periodo)?.[1] ?? '').toLowerCase()
   const mediosDelPeriodo = useMemo(() => [...new Set(todas.map((f) => f.medio ?? 'sin_medio'))].sort(), [todas])
 
-  const columnas = prefs.visibles.map((k) => {
+  // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
+  const angosta = usePantallaAngosta()
+  const columnas = (angosta ? prefs.orden : prefs.visibles).map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
-    return { key: k, titulo: vista === 'sin_cobrar' && k === 'cuenta' ? 'Por qué quedó sin cobrar' : titulo, ancho, ordena, derecha: k === 'monto' || k === 'comision' }
+    return { key: k, titulo: vista === 'sin_cobrar' && k === 'cuenta' ? 'Por qué quedó sin cobrar' : titulo, ancho, ordena, derecha: k === 'monto' || k === 'comision', movil: MOVIL[k] ?? 'oculta' }
   })
 
   const celda = (f: FilaCobro, k: string): React.ReactNode => {

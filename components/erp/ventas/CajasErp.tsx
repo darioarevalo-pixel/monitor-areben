@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, MoneyText, Notice, Select, color, font, space } from '@/components/ui'
-import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { ChipEstado, TileResumen, VistasLista, cuandoCorto, tonoDeConteo } from '@/components/ui/PiezasLista'
@@ -28,6 +28,8 @@ type Prefs = { orden: string[]; visibles: string[] }
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const COLUMNAS = columnasCaja()
+/** 📱 Qué es cada columna en la tarjeta del celular; la que no está, `oculta`. */
+const MOVIL: Record<string, MovilColumna> = { abrio: 'titulo', dif: 'dato', estado: 'chico', ventas: 'chico' }
 const NOMBRE: Record<MarcaErp, string> = { bdi: 'Caja BDI', zattia: 'Caja Zattia' }
 const ESTADO = { abierta: ['action', 'Abierta'], cerrada: ['success', 'Cerró justo'], sobro: ['warning', 'Sobró'], falto: ['danger', 'Faltó'] } as const
 const estadoDe = (f: FilaCaja): keyof typeof ESTADO => (f.abierta ? 'abierta' : !f.diferencia ? 'cerrada' : f.diferencia > 0 ? 'sobro' : 'falto')
@@ -98,7 +100,7 @@ export function CajasErp() {
 
   const columnas = prefs.visibles.map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
-    return { key: k, titulo, ancho, ordena, derecha: ['ventas', 'esp', 'cont', 'dif', 'fondo'].includes(k) }
+    return { key: k, titulo, ancho, ordena, derecha: ['ventas', 'esp', 'cont', 'dif', 'fondo'].includes(k), movil: MOVIL[k] ?? 'oculta' }
   })
   const plata = (n: number | null) => (n == null ? <span style={{ color: color.mut2 }}>—</span> : <MoneyText value={n} />)
 

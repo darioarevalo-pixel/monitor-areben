@@ -11,11 +11,12 @@
  * 🔑 Botones (§4, lista de TRABAJO): íconos a la izquierda. «Nuevo cliente» y «Registrar cobro a cuenta» esperan al motor.
  */
 
+import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, color, font, space, type AccionMenu } from '@/components/ui'
 import { formatMoney } from '@/components/ui/MoneyText'
-import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, IconoFila, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, estiloNombre } from '@/components/ui/PiezasLista'
@@ -30,6 +31,8 @@ import { FichaCliente, fechaCorta } from './FichaCliente'
 type Prefs = { orden: string[]; visibles: string[] }
 
 const COLUMNAS = columnasDe()
+/** 📱 Qué es cada columna en la tarjeta del celular; la que no está, `oculta`. */
+const MOVIL: Record<string, MovilColumna> = { c: 'titulo', total: 'dato', tipo: 'chico', compras: 'chico', ultima: 'chico' }
 /** Cuántas filas se dibujan de una (la lista ⛔ es virtual: BDI tiene más de 13.000 clientes). */
 const DE_A = 300
 const n = (x: number) => x.toLocaleString('es-AR')
@@ -100,9 +103,11 @@ export function ClientesErp({ abrir, alAbrir }: {
   const mostrar = tanda.de === mirada ? tanda.n : DE_A
   const sinCuentas = !!datos && datos.clientesErp === 0
 
-  const columnas = prefs.visibles.map((k) => {
+  // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
+  const angosta = usePantallaAngosta()
+  const columnas = (angosta ? prefs.orden : prefs.visibles).map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
-    return { key: k, titulo, ancho, ordena, derecha: ['compras', 'total', 'saldo'].includes(k) }
+    return { key: k, titulo, ancho, ordena, derecha: ['compras', 'total', 'saldo'].includes(k), movil: MOVIL[k] ?? 'oculta' }
   })
 
   const celda = (f: FilaCliente, k: string): React.ReactNode => {

@@ -18,7 +18,7 @@
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Field, Input, MenuAcciones, MoneyText, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, useConfirmar, type AccionMenu } from '@/components/ui'
-import { ListaTrabajo } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { BuscadorLista, ChipEstado, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { normal } from '@/lib/erp/stock-lista.core.js'
 import { TiraConfiguracion, type PiezaConfiguracion } from './TiraConfiguracion'
@@ -54,14 +54,14 @@ const hoyAR = () => diaAR(new Date().toISOString())
  * Las LÍNEAS con reglas propias dentro de una marca (Bruno, 17-oct: «cada negocio dentro del ERP puede configurar sus
  * propias reglas»): Stunned se cobra en la Caja de Zattia, con las suyas; sin ninguna, con las de Zattia.
  */
-const COLUMNAS_REGLAS = [
-  { key: 'regla', titulo: 'Regla', ancho: 'minmax(200px, 1.4fr)' },
-  { key: 'hace', titulo: 'Qué hace', ancho: 'minmax(200px, 1.4fr)' },
-  { key: 'prendas', titulo: 'En qué productos', ancho: 'minmax(150px, 1fr)' },
-  { key: 'campania', titulo: 'Campaña', ancho: '130px' },
-  { key: 'canal', titulo: 'Canal', ancho: '76px' },
-  { key: 'cuando', titulo: 'Cuándo', ancho: '140px' },
-  { key: 'estado', titulo: 'Estado', ancho: '124px' },
+const COLUMNAS_REGLAS: ColumnaLista[] = [
+  { key: 'regla', titulo: 'Regla', ancho: 'minmax(200px, 1.4fr)', movil: 'titulo' },
+  { key: 'hace', titulo: 'Qué hace', ancho: 'minmax(200px, 1.4fr)', movil: 'oculta' },
+  { key: 'prendas', titulo: 'En qué productos', ancho: 'minmax(150px, 1fr)', movil: 'oculta' },
+  { key: 'campania', titulo: 'Campaña', ancho: '130px', movil: 'oculta' },
+  { key: 'canal', titulo: 'Canal', ancho: '76px', movil: 'chico' },
+  { key: 'cuando', titulo: 'Cuándo', ancho: '140px', movil: 'chico' },
+  { key: 'estado', titulo: 'Estado', ancho: '124px', movil: 'chico' },
 ]
 
 const LINEAS: Partial<Record<MarcaErp, Array<{ key: string; label: string }>>> = { zattia: [{ key: 'zattia', label: 'Zattia' }, { key: 'stunned', label: 'Stunned' }] }

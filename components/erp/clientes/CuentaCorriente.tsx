@@ -15,11 +15,12 @@
  *    saldo en la fila (`cuentasCorrientes` ⛔ los trae), y el saldo de apertura de GN.
  */
 
+import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, color, font, space, type AccionMenu } from '@/components/ui'
 import { formatMoney } from '@/components/ui/MoneyText'
-import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, IconoFila, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { leerCuentasCorrientes, type CuentasDeLaMarca, type MarcaErp } from '@/lib/erp/cliente'
@@ -36,6 +37,8 @@ import { fechaCorta } from './FichaCliente'
 type Prefs = { orden: string[]; visibles: string[] }
 
 const COLUMNAS = columnasDe()
+/** 📱 Qué es cada columna en la tarjeta del celular; la que no está, `oculta`. */
+const MOVIL: Record<string, MovilColumna> = { c: 'titulo', saldo: 'dato', linea: 'chico', dias: 'chico', estado: 'chico' }
 const n = (x: number) => x.toLocaleString('es-AR')
 
 export function CuentaCorriente() {
@@ -73,9 +76,11 @@ export function CuentaCorriente() {
   const res = useMemo(() => resumen(base), [base])
   const variasLineas = marca === 'zattia'
 
-  const columnas = prefs.visibles.filter((k) => variasLineas || k !== 'linea').map((k) => {
+  // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
+  const angosta = usePantallaAngosta()
+  const columnas = (angosta ? prefs.orden : prefs.visibles).filter((k) => variasLineas || k !== 'linea').map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
-    return { key: k, titulo, ancho, ordena, derecha: ['debe', 'favor', 'saldo', 'vencido', 'dias', ...TRAMOS].includes(k) }
+    return { key: k, titulo, ancho, ordena, derecha: ['debe', 'favor', 'saldo', 'vencido', 'dias', ...TRAMOS].includes(k), movil: MOVIL[k] ?? 'oculta' }
   })
 
   const celda = (f: FilaCuenta, k: string): React.ReactNode => {

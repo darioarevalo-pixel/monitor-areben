@@ -327,8 +327,9 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   900 px el menú de la izquierda se esconde; arriba van la sección, la marca y la lupa, y abajo Inicio · Ventas · Caja · Stock ·
   Más (la hoja de «Más» trae la marca, las otras secciones, Buscar y Volver al monitor). Todo por CSS (`globals.css` § erp-menu),
   ⛔ la compu cambia. `ListaTrabajo` pasa a TARJETAS sólo si la pantalla declara `movil` en sus columnas
-  (`'titulo' | 'dato' | 'chico' | 'oculta'`; sin declarar, sigue la tabla que se corre de costado): hoy Ventas (dato = total)
-  y Stock (dato = disponible). ⛔ tilde en el celular. La regla «es celular» vive en `lib/movil.ts` (`usePantallaAngosta`:
+  (`'titulo' | 'dato' | 'chico' | 'oculta'`; sin declarar, sigue la tabla que se corre de costado): desde la tanda 2 (30-oct)
+  TODAS las listas del ERP (Ventas dato = total, Stock dato = disponible; `tests/erp-celular-listas.test.tsx`). Las que
+  arman las columnas desde las preferencias usan `prefs.orden` en el celular: una columna escondida en la compu igual llega. ⛔ tilde en el celular. La regla «es celular» vive en `lib/movil.ts` (`usePantallaAngosta`:
   ≤ 900 px, con mouse o con dedo; `?movil=1`/`?movil=0` la fuerza); la Caja la usa con su propia medida (640 px Y táctil).
   Los filtros de una lista van en `BuscadorLista` › `filtros` (`FiltroOpciones`): al lado en la compu, en la hoja «Filtros»
   en el celular. `tests/erp-celular-lista.test.tsx`.

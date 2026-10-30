@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, MenuAcciones, Notice, Select, color, font, space, type AccionMenu } from '@/components/ui'
-import { ListaTrabajo } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerConciliacion, type ConciliacionDelDia, type FilaConciliacion, type MarcaErp, type TiendaErp } from '@/lib/erp/cliente'
 import { normal } from '@/lib/erp/stock-lista.core.js'
@@ -31,14 +31,14 @@ const pct = (a: number, b: number) => (b ? `${((100 * a) / b).toFixed(1)}%` : '�
 
 type Fila = FilaConciliacion & { id: string; grupo: string; grupoNombre: string; mirar: string }
 
-const COLUMNAS = [
-  { key: 'que', titulo: 'Producto o pedido', ancho: 'minmax(220px, 2fr)' },
-  { key: 'contra', titulo: 'Contra', ancho: '128px' },
-  { key: 'ellos', titulo: 'Ellos', ancho: '92px', derecha: true },
-  { key: 'erp', titulo: 'ERP', ancho: '92px', derecha: true },
-  { key: 'gn', titulo: 'Gestión Nube', ancho: '64px', derecha: true },
-  { key: 'dias', titulo: 'Días', ancho: '56px', derecha: true },
-  { key: 'paso', titulo: 'Qué pasó', ancho: 'minmax(220px, 1.6fr)' },
+const COLUMNAS: ColumnaLista[] = [
+  { key: 'que', titulo: 'Producto o pedido', ancho: 'minmax(220px, 2fr)', movil: 'titulo' },
+  { key: 'contra', titulo: 'Contra', ancho: '128px', movil: 'chico' },
+  { key: 'ellos', titulo: 'Ellos', ancho: '92px', derecha: true, movil: 'chico' },
+  { key: 'erp', titulo: 'ERP', ancho: '92px', derecha: true, movil: 'dato' },
+  { key: 'gn', titulo: 'Gestión Nube', ancho: '64px', derecha: true, movil: 'oculta' },
+  { key: 'dias', titulo: 'Días', ancho: '56px', derecha: true, movil: 'oculta' },
+  { key: 'paso', titulo: 'Qué pasó', ancho: 'minmax(220px, 1.6fr)', movil: 'chico' },
 ]
 
 export function ConciliacionDia({ ajustar }: { ajustar: (p: PrendaAAjustar) => void }) {

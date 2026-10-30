@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, weight } from '@/components/ui'
 import { useTiendaErp } from '@/lib/erp/linea-erp'
-import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type ColumnaLista, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, tonoDeConteo } from '@/components/ui/PiezasLista'
 import {
@@ -32,14 +32,14 @@ const baseDe = (l: TiendaErp) => (l === 'bdi' ? 'bdi' : 'zattia')
 const nombreDe = (f: Fila) => (f.nombre ? `${f.nombre}${f.talleNombre ? ` · ${f.talleNombre}` : ''}` : f.sku ?? `Producto ${f.producto}/${f.talle}`)
 type Nombres = Record<string, { nombre: string | null; talleNombre: string | null }>
 const u = (n: number) => `${n.toLocaleString('es-AR')} u`
-const COLUMNAS = [
-  { key: 'n', titulo: 'Nº', ancho: '70px', ordena: true },
-  { key: 'creada', titulo: 'Creada', ancho: '110px', ordena: true },
-  { key: 'ruta', titulo: 'Ruta', ancho: 'minmax(170px, 1fr)' },
-  { key: 'quien', titulo: 'Quién', ancho: '110px' },
-  { key: 'estado', titulo: 'Paso', ancho: 'minmax(260px, 1.2fr)' },
-  { key: 'unidades', titulo: 'Productos', ancho: '90px', ordena: true, derecha: true },
-  { key: 'faltan', titulo: 'Faltaron', ancho: '90px', ordena: true, derecha: true },
+const COLUMNAS: ColumnaLista[] = [
+  { key: 'n', titulo: 'Nº', ancho: '70px', ordena: true, movil: 'oculta' },
+  { key: 'creada', titulo: 'Creada', ancho: '110px', ordena: true, movil: 'oculta' },
+  { key: 'ruta', titulo: 'Ruta', ancho: 'minmax(170px, 1fr)', movil: 'titulo' },
+  { key: 'quien', titulo: 'Quién', ancho: '110px', movil: 'oculta' },
+  { key: 'estado', titulo: 'Paso', ancho: 'minmax(260px, 1.2fr)', movil: 'chico' },
+  { key: 'unidades', titulo: 'Productos', ancho: '90px', ordena: true, derecha: true, movil: 'dato' },
+  { key: 'faltan', titulo: 'Faltaron', ancho: '90px', ordena: true, derecha: true, movil: 'oculta' },
 ]
 
 function bajarCsv(docs: TransferenciaDoc[], linea: TiendaErp) {

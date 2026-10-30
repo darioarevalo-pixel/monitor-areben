@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, MenuAcciones, Notice, color, font, space, type AccionMenu } from '@/components/ui'
-import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type ColumnaLista, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { leerProveedores, type MarcaErp, type ProveedorErp } from '@/lib/erp/cliente'
 import { normal } from '@/lib/erp/stock-lista.core.js'
@@ -21,12 +21,12 @@ const VISTAS: Array<[string, string, (p: ProveedorErp) => boolean]> = [
   ['sinprod', 'Sin productos', (p) => p.productos === 0],
   ['sincuit', 'Sin CUIT', (p) => !p.cuit],
 ]
-const COLUMNAS = [
-  { key: 'p', titulo: 'Proveedor', ancho: 'minmax(200px, 2fr)', ordena: true },
-  { key: 'gn', titulo: 'En Gestión Nube como', ancho: 'minmax(160px, 1.4fr)', ordena: false },
-  { key: 'cuit', titulo: 'CUIT', ancho: '124px', ordena: false },
-  { key: 'prod', titulo: 'Productos', ancho: '96px', ordena: true, derecha: true },
-  { key: 'estado', titulo: 'Estado', ancho: '96px', ordena: false },
+const COLUMNAS: ColumnaLista[] = [
+  { key: 'p', titulo: 'Proveedor', ancho: 'minmax(200px, 2fr)', ordena: true, movil: 'titulo' },
+  { key: 'gn', titulo: 'En Gestión Nube como', ancho: 'minmax(160px, 1.4fr)', ordena: false, movil: 'oculta' },
+  { key: 'cuit', titulo: 'CUIT', ancho: '124px', ordena: false, movil: 'chico' },
+  { key: 'prod', titulo: 'Productos', ancho: '96px', ordena: true, derecha: true, movil: 'dato' },
+  { key: 'estado', titulo: 'Estado', ancho: '96px', ordena: false, movil: 'chico' },
 ]
 const abrir = (ruta: string) => window.open(ruta, '_blank', 'noopener')
 

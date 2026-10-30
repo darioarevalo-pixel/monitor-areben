@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Field, Input, Modal, MoneyText, Notice, Select, color, font, space, useConfirmar } from '@/components/ui'
-import { ListaTrabajo } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { ChipEstado, TileResumen, VistasLista } from '@/components/ui/PiezasLista'
 import { leerGastos, registrarGastoErp, type GastosDelPeriodo, type MarcaErp, type TipoGasto } from '@/lib/erp/cliente'
 import {
@@ -24,13 +24,13 @@ import { useTiendaErp } from '@/lib/erp/linea-erp'
 type FilaGasto = ReturnType<typeof armarFilasGastos>[number]
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
-const COLUMNAS = [
-  { key: 'fecha', titulo: 'Fecha', ancho: '84px' },
-  { key: 'tipo', titulo: 'Tipo', ancho: '190px' },
-  { key: 'detalle', titulo: 'Detalle', ancho: 'minmax(260px, 1.6fr)' },
-  { key: 'cuenta', titulo: 'Cuenta', ancho: '140px' },
-  { key: 'carga', titulo: 'Carga', ancho: '150px' },
-  { key: 'monto', titulo: 'Monto', ancho: '120px', derecha: true },
+const COLUMNAS: ColumnaLista[] = [
+  { key: 'fecha', titulo: 'Fecha', ancho: '84px', movil: 'chico' },
+  { key: 'tipo', titulo: 'Tipo', ancho: '190px', movil: 'chico' },
+  { key: 'detalle', titulo: 'Detalle', ancho: 'minmax(260px, 1.6fr)', movil: 'titulo' },
+  { key: 'cuenta', titulo: 'Cuenta', ancho: '140px', movil: 'oculta' },
+  { key: 'carga', titulo: 'Carga', ancho: '150px', movil: 'oculta' },
+  { key: 'monto', titulo: 'Monto', ancho: '120px', derecha: true, movil: 'dato' },
 ]
 const TONO_TIPO = { comision: ['action', 'Comisión de plataforma'], impuesto: ['warning', 'Impuesto'], otro: ['neutral', 'Otro gasto'] } as const
 const pesos = (n: number) => `${n < 0 ? '− ' : ''}$ ${Math.abs(n).toLocaleString('es-AR', { maximumFractionDigits: 2 })}`

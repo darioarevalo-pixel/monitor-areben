@@ -8,10 +8,11 @@
  * Núcleo: `lib/erp/recepciones-lista.core.ts`; lee por la puerta de Ingresos (`api/_recepciones.js`, `lib/recepciones/cliente.ts`).
  */
 
+import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, MenuAcciones, Notice, color, font, space, weight, type AccionMenu } from '@/components/ui'
-import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { BuscadorLista, TileResumen, VistasLista, tonoDeConteo } from '@/components/ui/PiezasLista'
@@ -26,6 +27,8 @@ import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { BarraRecibidas } from './Barritas'
 
 type Prefs = { orden: string[]; visibles: string[] }
+/** 📱 Qué es cada columna en la tarjeta del celular; la que no está, `oculta`. */
+const MOVIL: Record<string, MovilColumna> = { de: 'titulo', recibidas: 'dato', oc: 'chico', llego: 'chico', estado: 'chico' }
 type Datos = { filas: FilaRecepcion[]; clave: string; hoy: string }
 
 const DE_A = 300
@@ -84,9 +87,11 @@ export function RecepcionesStock() {
   const mirada = `${clave}|${vista}|${q}|${orden?.col ?? ''}|${orden?.dir ?? ''}`
   const mostrar = tanda.de === mirada ? tanda.n : DE_A
 
-  const columnas = prefs.visibles.map((k) => {
+  // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
+  const angosta = usePantallaAngosta()
+  const columnas = (angosta ? prefs.orden : prefs.visibles).map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
-    return { key: k, titulo, ancho, ordena, derecha: k === 'pedidas' }
+    return { key: k, titulo, ancho, ordena, derecha: k === 'pedidas', movil: MOVIL[k] ?? 'oculta' }
   })
 
   const celda = (f: FilaRecepcion, k: string): React.ReactNode => {

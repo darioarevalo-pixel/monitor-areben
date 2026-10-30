@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Notice, Select, color, font, space, weight } from '@/components/ui'
-import { ListaTrabajo } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { BuscadorLista, ChipEstado, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { activarDeposito, leerDepositos, leerEstructura, type DepositoErp, type EstructuraDeMarca, type MarcaErp, type QuedaEnDeposito } from '@/lib/erp/cliente'
 import {
@@ -55,12 +55,12 @@ export function CuentasErp({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {
   const titulares = [...new Set(todas.map((f) => f.titularClave))].filter(Boolean).sort()
   const tipos = [...new Set(todas.map((f) => f.tipoClave))].filter(Boolean).sort()
 
-  const columnas = [
-    { key: 'cuenta', titulo: 'Cuenta', ancho: 'minmax(200px, 1.4fr)' },
-    { key: 'titular', titulo: 'Titular', ancho: '96px' },
-    { key: 'tipo', titulo: 'Tipo', ancho: '110px' },
-    { key: 'estado', titulo: 'Estado', ancho: '130px' },
-    { key: 'recibe', titulo: 'Recibe', ancho: 'minmax(220px, 2fr)' },
+  const columnas: ColumnaLista[] = [
+    { key: 'cuenta', titulo: 'Cuenta', ancho: 'minmax(200px, 1.4fr)', movil: 'titulo' },
+    { key: 'titular', titulo: 'Titular', ancho: '96px', movil: 'chico' },
+    { key: 'tipo', titulo: 'Tipo', ancho: '110px', movil: 'chico' },
+    { key: 'estado', titulo: 'Estado', ancho: '130px', movil: 'chico' },
+    { key: 'recibe', titulo: 'Recibe', ancho: 'minmax(220px, 2fr)', movil: 'oculta' },
   ]
   type Fila = ReturnType<typeof armarCuentas>[number]
   const celda = (f: Fila, k: string): React.ReactNode => {
@@ -159,11 +159,11 @@ export function EstructuraErp() {
   const filas = todas.filter((f) => !t || [f.nombre, ...f.depositos.map((d) => d.nombre)].join(' ').toLowerCase().includes(t))
   const cuits = new Set(todas.map((f) => f.cuit).filter(Boolean))
 
-  const columnas = [
-    { key: 'marca', titulo: 'Marca', ancho: '150px' },
-    { key: 'depositos', titulo: 'Depósitos', ancho: 'minmax(200px, 1.3fr)' },
-    { key: 'pv', titulo: 'Punto de venta', ancho: 'minmax(200px, 1.3fr)' },
-    { key: 'factura', titulo: 'Factura', ancho: 'minmax(200px, 1.2fr)' },
+  const columnas: ColumnaLista[] = [
+    { key: 'marca', titulo: 'Marca', ancho: '150px', movil: 'titulo' },
+    { key: 'depositos', titulo: 'Depósitos', ancho: 'minmax(200px, 1.3fr)', movil: 'oculta' },
+    { key: 'pv', titulo: 'Punto de venta', ancho: 'minmax(200px, 1.3fr)', movil: 'chico' },
+    { key: 'factura', titulo: 'Factura', ancho: 'minmax(200px, 1.2fr)', movil: 'oculta' },
   ]
   type Fila = ReturnType<typeof armarEstructura>[number]
   const dos = (a: React.ReactNode, b: React.ReactNode) => (

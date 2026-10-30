@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { Button, EmptyState, Field, Input, MenuAcciones, Modal, Notice, Select, color, font, space, useConfirmar, type AccionMenu } from '@/components/ui'
-import { ListaTrabajo } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { BuscadorLista, ChipEstado, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerRutas, ponerRuta, type CanalRuta, type CuentaReal, type FilaDeRuta, type MarcaErp, type RutaCobro, type RutasDeMarca } from '@/lib/erp/cliente'
 import { avisoDeRuta, nombreDeCuenta, CANALES_DE_RUTA, NOMBRE_MEDIO, NOMBRE_TITULAR } from '@/lib/erp/rutas.core.js'
@@ -36,22 +36,22 @@ const SIN_RUTA = 'sin'
 
 type Editando = { fila: FilaDeRuta; cuenta: string; tasa: string; dias: string; dia: string }
 
-const COLUMNAS = [
-  { key: 'canal', titulo: 'Canal', ancho: '120px' },
-  { key: 'medio', titulo: 'Medio', ancho: '130px' },
-  { key: 'cuenta', titulo: 'Va a la cuenta', ancho: 'minmax(230px, 1.6fr)' },
-  { key: 'factura', titulo: 'Se factura', ancho: '96px' },
-  { key: 'tasa', titulo: 'Comisión', ancho: '90px', derecha: true },
-  { key: 'dias', titulo: 'Acredita', ancho: '96px' },
-  { key: 'desde', titulo: 'Desde', ancho: 'minmax(150px, 1fr)' },
+const COLUMNAS: ColumnaLista[] = [
+  { key: 'canal', titulo: 'Canal', ancho: '120px', movil: 'chico' },
+  { key: 'medio', titulo: 'Medio', ancho: '130px', movil: 'titulo' },
+  { key: 'cuenta', titulo: 'Va a la cuenta', ancho: 'minmax(230px, 1.6fr)', movil: 'chico' },
+  { key: 'factura', titulo: 'Se factura', ancho: '96px', movil: 'oculta' },
+  { key: 'tasa', titulo: 'Comisión', ancho: '90px', derecha: true, movil: 'dato' },
+  { key: 'dias', titulo: 'Acredita', ancho: '96px', movil: 'chico' },
+  { key: 'desde', titulo: 'Desde', ancho: 'minmax(150px, 1fr)', movil: 'oculta' },
 ]
-const COLUMNAS_CAMBIOS = [
-  { key: 'puesta', titulo: 'Cuándo', ancho: '104px' },
-  { key: 'por', titulo: 'Quién', ancho: '130px' },
-  { key: 'canal', titulo: 'Canal', ancho: '120px' },
-  { key: 'medio', titulo: 'Medio', ancho: '130px' },
-  { key: 'cuenta', titulo: 'Va a la cuenta', ancho: 'minmax(230px, 1.6fr)' },
-  { key: 'vale', titulo: 'Vale desde', ancho: '104px' },
+const COLUMNAS_CAMBIOS: ColumnaLista[] = [
+  { key: 'puesta', titulo: 'Cuándo', ancho: '104px', movil: 'chico' },
+  { key: 'por', titulo: 'Quién', ancho: '130px', movil: 'oculta' },
+  { key: 'canal', titulo: 'Canal', ancho: '120px', movil: 'chico' },
+  { key: 'medio', titulo: 'Medio', ancho: '130px', movil: 'titulo' },
+  { key: 'cuenta', titulo: 'Va a la cuenta', ancho: 'minmax(230px, 1.6fr)', movil: 'chico' },
+  { key: 'vale', titulo: 'Vale desde', ancho: '104px', movil: 'oculta' },
 ]
 
 export function RutasCobro({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {

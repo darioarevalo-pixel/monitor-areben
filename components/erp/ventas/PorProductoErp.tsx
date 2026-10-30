@@ -8,10 +8,11 @@
  * servidor: `api/_erp-por-producto.js` (el espejo de GN: GN es el que vende hoy).
  */
 
+import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Notice, color, font, space, Select } from '@/components/ui'
-import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { BuscadorLista, TileResumen, VistasLista, estiloNombre } from '@/components/ui/PiezasLista'
 import { leerVentasPorProducto, type MarcaErp, type RenglonProducto } from '@/lib/erp/cliente'
@@ -27,6 +28,8 @@ const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', fl
 
 type Vista = 'agrupado' | 'renglones'
 type Prefs = { orden: string[]; visibles: string[] }
+/** 📱 Qué es cada columna en la tarjeta del celular; la que no está, `oculta`. */
+const MOVIL: Record<string, MovilColumna> = { p: 'titulo', v: 'dato', tot: 'dato', u: 'chico', ult: 'chico', f: 'chico', t: 'chico', c: 'chico' }
 type Grupo = ReturnType<typeof agrupar>[number]
 
 const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
@@ -93,9 +96,11 @@ export function PorProductoErp() {
   const mirada = `${vista}|${periodo}|${q}|${linea}|${canal}|${orden?.col ?? ''}|${orden?.dir ?? ''}`
   const mostrar = tanda.de === mirada ? tanda.n : DE_A
 
-  const columnas = prefs.visibles.filter((k) => COLUMNAS[k]).map((k) => {
+  // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
+  const angosta = usePantallaAngosta()
+  const columnas = (angosta ? prefs.orden : prefs.visibles).filter((k) => COLUMNAS[k]).map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
-    return { key: k, titulo, ancho, ordena, derecha: ['u', 'n', 'v', 'prom', 'm', 'c', 'pr', 'tot'].includes(k) }
+    return { key: k, titulo, ancho, ordena, derecha: ['u', 'n', 'v', 'prom', 'm', 'c', 'pr', 'tot'].includes(k), movil: MOVIL[k] ?? 'oculta' }
   })
   const num = (x: string, fuerte = false) => <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: fuerte ? 700 : 500, color: color.ink }}>{x}</span>
   const sinCosto = <span style={{ color: color.mut2 }} title="El producto no tiene costo cargado en el ERP">sin costo</span>

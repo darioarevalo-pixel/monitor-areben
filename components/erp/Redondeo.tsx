@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { Button, EmptyState, Field, Input, MenuAcciones, Modal, Notice, Select, color, font, space, useConfirmar, type AccionMenu } from '@/components/ui'
-import { ListaTrabajo } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { BuscadorLista, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerRedondeo, ponerRedondeo, type CambioDeRedondeo, type CanalRuta, type FilaDeRedondeo, type MarcaErp, type ModoRedondeo, type RedondeoDeMarca } from '@/lib/erp/cliente'
 import { ejemploDeRedondeo, NOMBRE_MODO, PASOS, textoDeRedondeo } from '@/lib/erp/redondeo.core.js'
@@ -32,19 +32,19 @@ const plata = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigi
 
 type Editando = { fila: FilaDeRedondeo; paso: string; modo: ModoRedondeo; dia: string }
 
-const COLUMNAS = [
-  { key: 'canal', titulo: 'Canal', ancho: '140px' },
-  { key: 'vale', titulo: 'Redondea', ancho: 'minmax(220px, 1.4fr)' },
-  { key: 'ejemplo', titulo: `Ejemplo (${plata(EJEMPLO)})`, ancho: '170px' },
-  { key: 'desde', titulo: 'Desde', ancho: 'minmax(160px, 1fr)' },
-  { key: 'viene', titulo: 'Lo que viene', ancho: 'minmax(200px, 1fr)' },
+const COLUMNAS: ColumnaLista[] = [
+  { key: 'canal', titulo: 'Canal', ancho: '140px', movil: 'titulo' },
+  { key: 'vale', titulo: 'Redondea', ancho: 'minmax(220px, 1.4fr)', movil: 'chico' },
+  { key: 'ejemplo', titulo: `Ejemplo (${plata(EJEMPLO)})`, ancho: '170px', movil: 'oculta' },
+  { key: 'desde', titulo: 'Desde', ancho: 'minmax(160px, 1fr)', movil: 'chico' },
+  { key: 'viene', titulo: 'Lo que viene', ancho: 'minmax(200px, 1fr)', movil: 'oculta' },
 ]
-const COLUMNAS_CAMBIOS = [
-  { key: 'puesta', titulo: 'Cuándo', ancho: '104px' },
-  { key: 'por', titulo: 'Quién', ancho: '130px' },
-  { key: 'canal', titulo: 'Canal', ancho: '140px' },
-  { key: 'vale', titulo: 'Redondea', ancho: 'minmax(220px, 1.4fr)' },
-  { key: 'desdeCambio', titulo: 'Vale desde', ancho: '104px' },
+const COLUMNAS_CAMBIOS: ColumnaLista[] = [
+  { key: 'puesta', titulo: 'Cuándo', ancho: '104px', movil: 'chico' },
+  { key: 'por', titulo: 'Quién', ancho: '130px', movil: 'oculta' },
+  { key: 'canal', titulo: 'Canal', ancho: '140px', movil: 'titulo' },
+  { key: 'vale', titulo: 'Redondea', ancho: 'minmax(220px, 1.4fr)', movil: 'chico' },
+  { key: 'desdeCambio', titulo: 'Vale desde', ancho: '104px', movil: 'chico' },
 ]
 
 export function Redondeo() {

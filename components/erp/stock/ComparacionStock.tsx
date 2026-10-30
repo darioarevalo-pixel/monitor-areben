@@ -11,11 +11,12 @@
  * 🔴 Mercado Libre ⛔ se compara todavía (el motor ⛔ guarda lo publicado): la pantalla lo dice y manda a Conciliación.
  */
 
+import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Notice, color, font, space } from '@/components/ui'
 import type { Tone } from '@/components/ui/tokens'
-import { ListaTrabajo, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
@@ -31,6 +32,8 @@ import type { PrendaAAjustar } from './StockErp'
 import { useLineaErp } from '@/lib/erp/linea-erp'
 
 type Prefs = { orden: string[]; visibles: string[] }
+/** 📱 Qué es cada columna en la tarjeta del celular; la que no está, `oculta`. */
+const MOVIL: Record<string, MovilColumna> = { p: 'titulo', dif: 'dato', t: 'chico', que: 'chico' }
 
 const TIENDA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
 const DE_A = 300
@@ -92,9 +95,11 @@ export function ComparacionStock({ ajustar, irAConciliacion }: { ajustar: (p: Pr
 
   // Stunned ya vive en el ERP (corte del 28-oct): la columna de Gestión Nube ⛔ le dice nada (Bruno, 28-oct).
   const sinGn = tienda === 'stunned'
-  const columnas = prefs.visibles.filter((k) => !(sinGn && k === 'gn')).map((k) => {
+  // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
+  const angosta = usePantallaAngosta()
+  const columnas = (angosta ? prefs.orden : prefs.visibles).filter((k) => !(sinGn && k === 'gn')).map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k as keyof typeof COLUMNAS]
-    return { key: k, titulo, ancho, ordena: !!ordena, derecha: ['para', 'tn', 'dif', 'gn', 'ped'].includes(k) }
+    return { key: k, titulo, ancho, ordena: !!ordena, derecha: ['para', 'tn', 'dif', 'gn', 'ped'].includes(k), movil: MOVIL[k] ?? 'oculta' }
   })
   const num = (n: number | null, fuerte = false) => (n == null ? <span style={{ color: color.mut2 }}>—</span> : <span style={{ fontWeight: fuerte ? 700 : 500, color: n === 0 ? color.mut2 : color.ink }}>{n}</span>)
 

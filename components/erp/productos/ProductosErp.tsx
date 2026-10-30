@@ -11,11 +11,12 @@
  *    ⛔ cambia lo que cobra la Caja ni lo que muestra Tienda Nube.
  */
 
+import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, color, font, space, type AccionMenu } from '@/components/ui'
-import { ListaTrabajo, IconoFila, type OrdenLista } from '@/components/ui/ListaTrabajo'
+import { ListaTrabajo, IconoFila, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
@@ -34,6 +35,8 @@ const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: '
 /** Cuántas filas se dibujan de una (la lista ⛔ es virtual). */
 const DE_A = 300
 const COLUMNAS = columnasDe()
+/** 📱 Qué es cada columna en la tarjeta del celular; la que no está, `oculta`. */
+const MOVIL: Record<string, MovilColumna> = { p: 'titulo', disp: 'dato', local: 'chico', tn: 'chico', cat: 'chico' }
 const u = (n: number) => `${n.toLocaleString('es-AR')} u`
 
 function bajarCsv(filas: FilaProducto[], marca: MarcaErp) {
@@ -94,9 +97,11 @@ export function ProductosErp() {
   const abrir = (f: FilaProducto, cargar = false) => setFicha({ marca, producto: f.producto, cargar })
   const filaDeFicha = ficha && ficha.marca === marca ? datos?.filas.find((x) => x.producto === ficha.producto) ?? null : null
 
-  const columnas = prefs.visibles.map((k) => {
+  // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
+  const angosta = usePantallaAngosta()
+  const columnas = (angosta ? prefs.orden : prefs.visibles).map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
-    return { key: k, titulo, ancho, ordena, derecha: ['var', 'disp', 'costo', ...LISTAS].includes(k) }
+    return { key: k, titulo, ancho, ordena, derecha: ['var', 'disp', 'costo', ...LISTAS].includes(k), movil: MOVIL[k] ?? 'oculta' }
   })
   const plata = (n: number | null, titulo?: string) => (n == null ? <span style={{ color: color.mut2 }} title={titulo}>—</span> : <MoneyText value={n} />)
 
