@@ -17,11 +17,12 @@ import { armarFilasProductos } from '../lib/erp/productos-lista.core.js'
 const MARCAS = ['bdi', 'zattia']
 
 /** Lo del motor para la lista: los activos con su proveedor, los precios y el costo vigentes, y si está en TN. */
-async function delMotor(pg) {
+async function delMotor(pg, { costos }) {
   const productos = (await pg.query(`select p.id, p.nombre, p.marca, p.categoria, pr.nombre as proveedor
     from producto p left join proveedor pr on pr.id = p.proveedor_id where p.activo`)).rows
   const precios = (await pg.query('select product_id, marca, lista, precio from precio_lista')).rows
-  const costos = (await pg.query('select product_id, marca, costo from costo_vigente')).rows
+  // 🔴 Sin el permiso `costos` (Admin y Administración) el costo ⛔ se lee: ⛔ viaja (Bruno 30-oct, el local lo veía en Productos).
+  const costosVigentes = costos ? (await pg.query('select product_id, marca, costo from costo_vigente')).rows : null
   // El SKU como lo guardó TN y en mayúsculas sin espacios: como cruza la copia del motor.
   const tn = (await pg.query(`select i.product_id, bool_or(t.publicado) as publicado
     from inventario i
@@ -41,15 +42,16 @@ async function delMotor(pg) {
         and vigente_desde >= date_trunc('month', now() at time zone 'America/Argentina/Buenos_Aires') at time zone 'America/Argentina/Buenos_Aires')
         over (partition by marca, product_id) as cambios_mes
     from h order by marca, product_id, vigente_desde desc, creada_en desc`)).rows
-  return { productos, precios, costos, tn, cambios, tnLeidaEn: leida ? new Date(leida).toISOString() : null }
+  return { productos, precios, costos: costosVigentes, tn, cambios, tnLeidaEn: leida ? new Date(leida).toISOString() : null }
 }
 
 /**
- * @param {{ marca: string }} p
+ * @param {{ marca: string, costos: boolean }} p `costos`: ¿el perfil ve costos? (`puedeErp(…, 'costos')`). OBLIGATORIO: sin él ⛔ hay lista.
  * @param {{ conMotor: Function, pedidosSinPagar: Function, leerInventario?: Function, leerLiquidaciones?: (marca: string) => Promise<Array<Record<string, unknown>>> }} deps
  */
-export async function listaDeProductos({ marca }, deps) {
+export async function listaDeProductos({ marca, costos }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (typeof costos !== 'boolean') throw new Error('listaDeProductos: falta decir si el perfil ve costos')
   // La liquidación EN CURSO del monitor (`liquidaciones`, la escribe Liquidación): es tabla del MONITOR ⇒ la lee el cliente
   // del monitor (`deps.leerLiquidaciones`), ⛔ el rol del motor (en prod: «permission denied for table liquidaciones», 20-oct).
   // Si falla, la lista sale igual y la pantalla lo dice.
@@ -58,7 +60,7 @@ export async function listaDeProductos({ marca }, deps) {
     : Promise.resolve({ filas: [], error: null })
   const [stock, motor, liquidaciones] = await Promise.all([
     listaDeStock({ marca }, deps),
-    deps.conMotor(marca, 'Los productos del ERP', (pg) => delMotor(pg)),
+    deps.conMotor(marca, 'Los productos del ERP', (pg) => delMotor(pg, { costos })),
     liq,
   ])
   if (stock.status) return stock
@@ -69,5 +71,7 @@ export async function listaDeProductos({ marca }, deps) {
     libroHasta: stock.libroHasta,
     pedidosLeidosEn: stock.pedidosLeidosEn,
     tnLeidaEn: motor.tnLeidaEn,
+    // La pantalla lo dice: sin costos ⛔ hay columna ni vista «Sin costo» (⛔ un «sin costo» que mienta).
+    costos,
   }
 }

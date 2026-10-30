@@ -5,6 +5,13 @@ menú y `esAdmin` en el handler. Bruno, 12-oct-2026: todo lo que el monitor cons
 acá, en pestañas, mientras dura el desarrollo —lo ven él y Darío, prueban y opinan—; cuando reemplace
 a GN se reparte en las secciones de siempre. Plan y mediciones del ERP: `~/Documents/erp-monitor/`.
 
+🔴 **EL COSTO (Bruno 30-oct): lo ven Admin y Administración (que lo carga); el resto ⛔, y lo corta el SERVIDOR** (`ERP_PERMISOS.costos`,
+`puedeErp(perfil, marca, 'costos')`). Desde el 30-oct el LOCAL entra (Stunned) y veía el costo en Productos y el stock a costo
+en el Inicio. Cada lectura con costo que el local abre pide `ver` y recibe `costos` OBLIGATORIO: `productos-lista`
+(`listaDeProductos`: ⛔ lee `costo_vigente`; la fila ⛔ lleva el campo ⇒ «Sin costo» ⛔ cuenta), `precio` (la ficha, abierta a
+todos: `sinCostos` saca el costo del ERP, de GN, de TN, sus avisos y su historial) y `ventas-producto` (el margen). La pantalla
+lee el `costos` de la respuesta (⛔ un «Sin costo» que mienta). Tests: `tests/erp-costos-rol.test.ts`.
+
 🔑 **`/erp` es una pantalla PROPIA, como el POS** (Bruno, 19-oct: «que abra una sección completa nueva, que se navegue
 solo sin ir atrás»): sale del shell en `app/[[...seccion]]/page.tsx` (`esERP`, antes de `permitida`: el ERP cambia la
 marca adentro) con SU menú (`components/erp/Erp.tsx`, `SECCIONES_ERP`): Inicio · Ventas + Caja (POS) · Stock ·

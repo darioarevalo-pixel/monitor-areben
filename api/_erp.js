@@ -97,7 +97,7 @@ import { armarConciliacion, TIENDAS as TIENDAS_CONCILIACION } from '../lib/erp/c
 import { entradaInvalida } from '../lib/erp/entrada.core.js'
 import { NO_SIN_PAGAR, STATUS_POR_COBRAR, armarPedidosSinPagar, cobradosEnGN } from '../lib/erp/pedidos-tn.core.js'
 import { esEntregadoSinCobrarTN } from '../motor/venta/pago-tn.mjs'
-import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto } from '../lib/erp/precio.core.js'
+import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto, sinCostos } from '../lib/erp/precio.core.js'
 import { configPg } from '../lib/pg.core.js'
 import { armarFicha, cambiadasDe, devolucionDeFicha, cobroDelCambio, diferenciaDeCambio, diferenciaDeCambioSuelto, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, listaEnGN, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
@@ -1351,8 +1351,10 @@ export async function conciliacionDelDia({ tienda, fecha: pedida }) {
 /** ¿El error de PostgREST es «esa vista/tabla ⛔ existe» (antes de su migración)? Otro error con el nombre ⛔ cuenta. */
 const VISTA_FALTA = (e, nombre) => new RegExp(nombre).test(e.message || '') && (e.code === '42P01' || e.code === 'PGRST205' || /does not exist|schema cache|Could not find/i.test(e.message || ''))
 
-export async function precioDeProducto({ marca, producto }) {
+/** @param {{ marca: string, producto: unknown, costos: boolean }} p `costos` OBLIGATORIO (`puedeErp(…, 'costos')`): sin él ⛔ viaja el costo. */
+export async function precioDeProducto({ marca, producto, costos }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (typeof costos !== 'boolean') throw new Error('precioDeProducto: falta decir si el perfil ve costos')
   if (!/^\d+$/.test(String(producto ?? ''))) return { status: 400, error: 'Producto inválido' }
   const { url, key } = cfgDeMarca(marca)
   const b = createClient(url, key)
@@ -1365,9 +1367,10 @@ export async function precioDeProducto({ marca, producto }) {
     b.from('lista_precio').select('id, nombre, sigue'),
     b.from('precio_vigente').select('lista, precio, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto),
     b.from('precio_lista').select('lista, precio, fuente, de_lista').eq('marca', linea).eq('product_id', producto),
-    b.from('costo_vigente').select('costo, proveedor, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto).limit(1),
+    // 🔴 Sin `costos` el costo ⛔ se lee (Bruno 30-oct): ni el vigente ni su historial.
+    costos ? b.from('costo_vigente').select('costo, proveedor, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto).limit(1) : { data: [] },
     b.from('producto_precio').select('lista, precio, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto).order('vigente_desde', { ascending: false }).limit(40),
-    b.from('producto_costo').select('costo, proveedor, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto).order('vigente_desde', { ascending: false }).limit(40),
+    costos ? b.from('producto_costo').select('costo, proveedor, fuente, vigente_desde, usuario, motivo').eq('marca', linea).eq('product_id', producto).order('vigente_desde', { ascending: false }).limit(40) : { data: [] },
     b.from('productos').select('retailer_price, wholesaler_price, unit_cost').eq('id', producto).maybeSingle(),
     b.from('tn_catalogo_lectura').select('tienda, leida_en'),
     // El proveedor del costo como FICHA (sql/013): el de la carga, o el que tiene ese texto de GN.
@@ -1435,7 +1438,7 @@ export async function precioDeProducto({ marca, producto }) {
   return {
     producto: String(producto), nombre: inv.data[0]?.product_name ?? null, skus: skus.length, linea,
     tnLeidaEn: (lecturas.data || []).find((x) => x.tienda === tienda)?.leida_en ?? null,
-    ...armado,
+    ...(costos ? armado : sinCostos(armado)),
   }
 }
 
@@ -1809,7 +1812,8 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'GET' && req.query.vista === 'precio') {
-      const r = await precioDeProducto({ marca: String(req.query.marca || ''), producto: req.query.producto })
+      const marca = String(req.query.marca || '')
+      const r = await precioDeProducto({ marca, producto: req.query.producto, costos: puedeErp(perfil, marca, 'costos') })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
@@ -1869,7 +1873,8 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'productos-lista') {
-      const r = await listaDeProductos({ marca: String(req.query.marca || '') }, { conMotor, pedidosSinPagar, leerLiquidaciones })
+      const marca = String(req.query.marca || '')
+      const r = await listaDeProductos({ marca, costos: puedeErp(perfil, marca, 'costos') }, { conMotor, pedidosSinPagar, leerLiquidaciones })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'GET' && req.query.vista === 'inicio-resultado') {

@@ -144,7 +144,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
             {fila && <ChipEstado mapa={EN_TN} k={fila.tn} />}
             {f?.feria != null && <ChipEstado mapa={{ o: ['brand', 'En oferta (Liquidación)'] }} k="o" />}
-            {fila?.costo == null && f && !f.costo && <ChipEstado mapa={{ c: ['warning', 'Sin costo'] }} k="c" />}
+            {f?.costos && fila?.costo == null && !f.costo && <ChipEstado mapa={{ c: ['warning', 'Sin costo'] }} k="c" />}
           </div>
         </div>
         <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
@@ -208,7 +208,8 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
                 </div>
               )
             })}
-            <div role="row" style={{ display: 'contents' }}>
+            {/* Sin `costos` el servidor ⛔ manda el costo: la fila ⛔ se dibuja (⛔ un «Sin costo» que mienta). */}
+            {f.costos && <div role="row" style={{ display: 'contents' }}>
               <span role="cell" style={celda}>
                 <span style={{ fontWeight: weight.semibold }}>Costo</span>
                 <div style={{ fontSize: font.sm, color: color.mut }}>{f.costo ? `${FUENTE[f.costo.fuente] ?? f.costo.fuente} · ${cuandoCorto(f.costo.desde)}` : 'Sin costo'}</div>
@@ -216,7 +217,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
               <span role="cell" style={{ ...celda, textAlign: 'right', fontWeight: weight.bold }}>{plata(f.costo?.costo)}</span>
               <span role="cell" style={{ ...celda, textAlign: 'right', color: color.mut }}>{plata(f.gn?.costo)}</span>
               <span role="cell" style={{ ...celda, textAlign: 'right', color: color.mut }}>{plata(f.tn?.costo)}</span>
-            </div>
+            </div>}
           </div>
         )}
         {f && <div style={{ fontSize: font.sm, color: color.mut }}>Tienda Nube leída {cuandoCorto(f.tnLeidaEn)}{tnVieja && ' (hace más de un día: puede haber cambiado)'}</div>}
@@ -269,10 +270,10 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <div>
-          <h3 style={h3}>Historial de precios y costos</h3>
-          <div style={{ fontSize: font.sm, color: color.mut }}>el más nuevo arriba · un precio o un costo nuevo es otra fila: lo anterior no se edita</div>
+          <h3 style={h3}>{f && !f.costos ? 'Historial de precios' : 'Historial de precios y costos'}</h3>
+          <div style={{ fontSize: font.sm, color: color.mut }}>{f && !f.costos ? 'el más nuevo arriba · un precio nuevo es otra fila: lo anterior no se edita' : 'el más nuevo arriba · un precio o un costo nuevo es otra fila: lo anterior no se edita'}</div>
         </div>
-        {!f ? <span style={{ color: color.mut }}>Leyendo…</span> : !hechos.length ? <span style={{ color: color.mut }}>Todavía no hay precios ni costos de este producto en el ERP.</span> : <Historial hechos={hechos} cuandoTexto={cuandoCorto} />}
+        {!f ? <span style={{ color: color.mut }}>Leyendo…</span> : !hechos.length ? <span style={{ color: color.mut }}>{f.costos ? 'Todavía no hay precios ni costos de este producto en el ERP.' : 'Todavía no hay precios de este producto en el ERP.'}</span> : <Historial hechos={hechos} cuandoTexto={cuandoCorto} />}
       </section>
     </FichaCostado>
   )

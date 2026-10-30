@@ -21,7 +21,8 @@ const FILAS = armarFilasProductos({
   costos: [{ product_id: 1, marca: 'zattia', costo: 7900 }],
   tn: [{ product_id: 1, publicado: true }],
 }) as FilaProducto[]
-const leerListaDeProductos = vi.fn(async () => ({ filas: FILAS, libroHasta: '2026-10-19T16:00:00Z', pedidosLeidosEn: null, tnLeidaEn: '2026-10-19T15:00:00Z' }))
+const leerListaDeProductos = vi.fn(async (): Promise<{ filas: FilaProducto[]; libroHasta: string; pedidosLeidosEn: null; tnLeidaEn: string; costos: boolean }> =>
+  ({ filas: FILAS, libroHasta: '2026-10-19T16:00:00Z', pedidosLeidosEn: null, tnLeidaEn: '2026-10-19T15:00:00Z', costos: true }))
 const precio: PrecioDeProducto = {
   producto: '1', nombre: 'TOP SAHARA', skus: 1, tnLeidaEn: '2026-10-19T15:00:00Z', feria: null, avisos: [],
   listas: [
@@ -33,8 +34,9 @@ const precio: PrecioDeProducto = {
   gn: { precio: 22990, mayorista: 13800, costo: 7900 },
   tn: { tienda: 'zattia', variantes: 1, precio: 22990, promocional: null, cobra: 22990, costo: null, distintos: false },
   historial: [{ que: 'precio', lista: 'local', valor: 22990, fuente: 'gn', desde: '2026-10-01T12:00:00Z', usuario: 'gn', motivo: null }],
+  costos: true,
 }
-const leerPrecioDeProducto = vi.fn(async () => precio)
+const leerPrecioDeProducto = vi.fn(async (): Promise<PrecioDeProducto> => precio)
 const editarProductoErp = vi.fn(async () => ({ ok: true, cambios: [{ campo: 'nombre', antes: 'TOP SAHARA', despues: 'TOP SAHARA NEGRO' }], desde_gn: true, variante: null, avisos: [] }))
 const editarVarianteErp = vi.fn(async () => ({ ok: true, cambios: [{ campo: 'barcode', antes: '771', despues: '999' }], desde_gn: true, variante: null, avisos: [] }))
 const cargarPrecioCosto = vi.fn(async () => ({ ok: true, futuro: false, aviso: null }))
@@ -75,6 +77,20 @@ const filaDe = (t: string) => [...host.querySelectorAll('[role="row"]')].find((r
 const ficha = () => document.querySelector('aside[aria-label^="Ficha del producto"]')
 
 describe('la lista de productos', () => {
+  it('🔴 sin costos (el local, Bruno 30-oct): ⛔ columna, vista ni tile «Sin costo», y la ficha abre sin la fila del costo', async () => {
+    const sin = armarFilasProductos({ productos: [], stock: [], precios: [], tn: [], costos: null })
+    leerListaDeProductos.mockResolvedValueOnce({ filas: FILAS.map(({ costo: _c, ...f }) => f as FilaProducto).concat(sin), libroHasta: '2026-10-19T16:00:00Z', pedidosLeidosEn: null, tnLeidaEn: '2026-10-19T15:00:00Z', costos: false })
+    leerPrecioDeProducto.mockResolvedValueOnce({ ...precio, costo: null, costos: false, gn: { precio: 22990, mayorista: 13800 }, tn: { ...precio.tn!, costo: undefined } })
+    await montar()
+    expect(host.querySelector('[role="table"]')!.textContent).not.toMatch(/Costo/)
+    expect([...host.querySelectorAll('button')].some((b) => /^Sin costo/.test(b.textContent ?? ''))).toBe(false)
+    expect(todo()).not.toMatch(/Sin costo/)
+    await clic(filaDe('TOP SAHARA'))
+    const f = ficha()!
+    expect(f.textContent).toContain('22.990')
+    expect(f.textContent).not.toMatch(/Costo|Sin costo|7\.900/)
+  })
+
   it('vistas con su número, el resumen arriba y el estado en Tienda Nube', async () => {
     await montar()
     expect(boton(/^Con stock/).textContent).toContain('1')

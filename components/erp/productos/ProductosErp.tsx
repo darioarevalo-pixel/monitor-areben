@@ -39,11 +39,11 @@ const COLUMNAS = columnasDe()
 const MOVIL: Record<string, MovilColumna> = { p: 'titulo', disp: 'dato', local: 'chico', tn: 'chico', cat: 'chico' }
 const u = (n: number) => `${n.toLocaleString('es-AR')} u`
 
-function bajarCsv(filas: FilaProducto[], marca: MarcaErp) {
+function bajarCsv(filas: FilaProducto[], marca: MarcaErp, conCosto: boolean) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Producto', 'Variantes', 'código', 'Disponible', 'Costo', 'Local', 'Online', 'Mayorista', 'En Tienda Nube', 'Categoría', 'Proveedor', 'Línea'].map(c).join(';')]
+  const renglones = [['Producto', 'Variantes', 'código', 'Disponible', ...(conCosto ? ['Costo'] : []), 'Local', 'Online', 'Mayorista', 'En Tienda Nube', 'Categoría', 'Proveedor', 'Línea'].map(c).join(';')]
   for (const f of filas) {
-    renglones.push([f.nombre, f.variantes.length, f.variantes.map((v) => v.sku).filter(Boolean).join(' '), f.disponible, f.costo ?? '', ...LISTAS.map((l) => f.precios[l] ?? ''),
+    renglones.push([f.nombre, f.variantes.length, f.variantes.map((v) => v.sku).filter(Boolean).join(' '), f.disponible, ...(conCosto ? [f.costo ?? ''] : []), ...LISTAS.map((l) => f.precios[l] ?? ''),
       EN_TN[f.tn][1], f.categoria, f.proveedor, LINEA[f.linea] ?? f.linea].map(c).join(';'))
   }
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
@@ -84,10 +84,14 @@ export function ProductosErp() {
     return () => { vivo = false }
   }, [marca, clave])
   const cargando = datos?.clave !== clave
+  // 🔴 Sin `costos` (todos menos Admin y Administración) el servidor ⛔ manda el costo: ⛔ columna, vista ni tile «Sin costo» (Bruno 30-oct).
+  const conCosto = datos?.costos === true
+  const vistas = conCosto ? VISTAS : VISTAS.filter(([k]) => k !== 'sincosto')
+  const sinCol = (ks: string[]) => (conCosto ? ks : ks.filter((k) => k !== 'costo'))
 
   const base = useMemo(() => filtrar(datos?.filas ?? [], { q, linea }), [datos, q, linea])
   const conteo = useMemo(() => contarVistas(base), [base])
-  const enVista = useMemo(() => filtrar(base, { vista }), [base, vista])
+  const enVista = useMemo(() => filtrar(base, { vista: vistas.some(([k]) => k === vista) ? vista : 'todos' }), [base, vista, vistas])
   const filas: FilaProducto[] = useMemo(() => ordenar(enVista, orden), [enVista, orden])
   const res = useMemo(() => resumen(enVista), [enVista])
   const elegidas = filas.filter((f) => seleccion.has(f.id))
@@ -99,7 +103,7 @@ export function ProductosErp() {
 
   // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
   const angosta = usePantallaAngosta()
-  const columnas = (angosta ? prefs.orden : prefs.visibles).map((k) => {
+  const columnas = sinCol(angosta ? prefs.orden : prefs.visibles).map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
     return { key: k, titulo, ancho, ordena, derecha: ['var', 'disp', 'costo', ...LISTAS].includes(k), movil: MOVIL[k] ?? 'oculta' }
   })
@@ -109,7 +113,7 @@ export function ProductosErp() {
     if (k === 'p') return <span title={f.nombre} style={estiloNombre}>{f.nombre}</span>
     if (k === 'var') return <span style={{ color: color.ink2 }} title={f.variantes.map((v) => v.talleNombre).join(' · ')}>{f.variantes.length}</span>
     if (k === 'disp') return <span style={{ fontWeight: 700, color: f.negativas ? 'var(--mo-danger-ink)' : f.disponible === 0 ? color.mut2 : color.ink }} title={f.negativas ? `${f.negativas} variante(s) en negativo` : undefined}>{f.disponible}</span>
-    if (k === 'costo') return plata(f.costo, 'Sin costo en el ERP')
+    if (k === 'costo') return plata(f.costo ?? null, 'Sin costo en el ERP')
     if ((LISTAS as string[]).includes(k)) return plata(f.precios[k], 'Sin precio en esta lista')
     if (k === 'tn') return <ChipEstado mapa={EN_TN} k={f.tn} />
     if (k === 'cat') return <span title={f.categoria ?? undefined} style={{ color: f.categoria ? color.ink2 : color.mut2 }}>{f.categoria ?? '—'}</span>
@@ -135,22 +139,22 @@ export function ProductosErp() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
-      <p style={{ margin: 0, color: color.mut }}>Cada producto con sus variantes, lo disponible, el costo y el precio de cada lista. Los productos nacen en Ingresos: acá no se dan de alta.</p>
+      <p style={{ margin: 0, color: color.mut }}>Cada producto con sus variantes, lo disponible,{conCosto ? ' el costo' : ''} y el precio de cada lista. Los productos nacen en Ingresos: acá no se dan de alta.</p>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Productos" valor={res.productos.toLocaleString('es-AR')} oscuro nota={`${res.variantes.toLocaleString('es-AR')} variantes`} />
         <TileResumen titulo="Disponible" valor={u(res.disponible)} nota="lo que se puede vender" />
-        <TileResumen tono={tonoDeConteo(res.sinCosto)} titulo="Sin costo" valor={res.sinCosto.toLocaleString('es-AR')} nota={res.sinCosto ? 'sin costo no hay margen' : 'todos tienen costo'} />
+        {conCosto && <TileResumen tono={tonoDeConteo(res.sinCosto)} titulo="Sin costo" valor={res.sinCosto.toLocaleString('es-AR')} nota={res.sinCosto ? 'sin costo no hay margen' : 'todos tienen costo'} />}
         <TileResumen titulo="Fuera de Tienda Nube" valor={res.fueraDeTn.toLocaleString('es-AR')} nota="ocultos o sin publicar" />
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
-        <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
+        <VistasLista vistas={vistas} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un producto" placeholder="Nombre, código, código de barras, categoría o proveedor" />
           <PanelColumnas
-            columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
+            columnas={sinCol(prefs.orden).map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
             onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
@@ -181,7 +185,7 @@ export function ProductosErp() {
 
       <BarraSeleccion cuantas={elegidas.length} onSoltar={() => setSeleccion(new Set())}>
         <span style={{ color: '#cbd5e1', fontVariantNumeric: 'tabular-nums' }}>{u(elegidas.reduce((a, f) => a + f.disponible, 0))} disponibles</span>
-        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca)}>Exportar los elegidos</AccionSeleccion>
+        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca, conCosto)}>Exportar los elegidos</AccionSeleccion>
       </BarraSeleccion>
 
       {ficha && (

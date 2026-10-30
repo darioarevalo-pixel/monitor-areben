@@ -32,12 +32,13 @@ describe('ERP · permisos por rol', () => {
     expect(puedeErp(abierto(['administracion']), 'bdi', 'anular')).toBe(false)
   })
 
-  it('Consulta ve y ⛔ toca nada; los costos y la Configuración son sólo Admin', () => {
+  it('Consulta ve y ⛔ toca nada; los costos son de Admin y Administración (que los carga, Bruno 30-oct); la Configuración, sólo Admin', () => {
     const c = abierto(['consulta'])
     expect(puedeErp(c, 'bdi', 'ver')).toBe(true)
     for (const p of ['editar-venta', 'cobrar', 'cambiar', 'anular', 'ajustar', 'facturacion', 'costos', 'configurar']) expect(puedeErp(c, 'bdi', p)).toBe(false)
+    for (const r of ['local', 'mayorista', 'deposito', 'consulta'] as const) for (const m of ['bdi', 'zattia']) expect(puedeErp(abierto([r]), m, 'costos')).toBe(false)
+    for (const m of ['bdi', 'zattia']) expect(puedeErp(abierto(['administracion']), m, 'costos')).toBe(true)
     const todos = abierto(['local', 'mayorista', 'deposito', 'administracion'])
-    expect(puedeErp(todos, 'bdi', 'costos')).toBe(false)
     expect(puedeErp(todos, 'bdi', 'configurar')).toBe(false)
   })
 
@@ -86,7 +87,10 @@ describe('ERP · permisos por rol', () => {
 
   it('cada vista y acción del handler pide un permiso; lo que ⛔ está en la tabla nace sólo Admin', () => {
     expect(permisoErpDe({ method: 'GET', vista: 'ventas-lista' })).toBe('ver')
-    expect(permisoErpDe({ method: 'GET', vista: 'precio' })).toBe('costos')
+    // La ficha del producto es de todos: el costo lo saca el SERVIDOR (`sinCostos`). La facturación del mes, de quien factura.
+    expect(permisoErpDe({ method: 'GET', vista: 'precio' })).toBe('ver')
+    expect(permisoErpDe({ method: 'GET', vista: 'facturacion' })).toBe('facturacion')
+    expect(permisoErpDe({ method: 'GET', vista: 'inicio-resultado' })).toBe('costos')
     expect(permisoErpDe({ method: 'GET', vista: 'rutas' })).toBe('configurar')
     expect(permisoErpDe({ method: 'GET' })).toBe('facturacion')
     expect(permisoErpDe({ method: 'POST', accion: 'cobrar-venta' })).toBe('cobrar')

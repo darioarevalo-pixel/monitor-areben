@@ -102,9 +102,11 @@ export type PrecioDeProducto = {
   costo: { costo: number | null; proveedor: string | null; proveedorId: string | null; fuente: string; desde: string; usuario: string; motivo: string | null } | null
   /** El proveedor del PRODUCTO: el de su última OC de Ingresos o, si ⛔ entró por ninguna, el texto de GN. */
   proveedor: { id: string; nombre: string; origen: 'ingresos' | 'gn'; oc: { label: string | null; /** AAAA-MM-DD */ fecha: string } | null } | null
-  gn: { precio: number | null; mayorista: number | null; costo: number | null } | null
-  tn: { tienda: string; variantes: number; precio: number | null; promocional: number | null; cobra: number | null; costo: number | null; distintos: boolean } | null
+  gn: { precio: number | null; mayorista: number | null; costo?: number | null } | null
+  tn: { tienda: string; variantes: number; precio: number | null; promocional: number | null; cobra: number | null; costo?: number | null; distintos: boolean } | null
   avisos: string[]
+  /** ¿Vino el costo? Sin `costos` (todos menos Admin y Administración) el servidor ⛔ lo manda: ni el del ERP, ni GN, ni TN, ni su historial. */
+  costos: boolean
   historial: Array<{ que: 'precio' | 'costo'; lista: string | null; valor: number | null; fuente: string; desde: string; usuario: string; motivo: string | null; proveedor?: string | null }>
 }
 export const leerPrecioDeProducto = (marca: MarcaErp, producto: string) =>
@@ -548,7 +550,8 @@ export type FilaProducto = {
   variantes: VarianteProducto[]; disponible: number; enPedidos: number; negativas: number
   /** El precio vigente de cada lista en el ERP (`precio_lista`): local · online · mayorista · oferta. */
   precios: Record<string, number | null>
-  costo: number | null
+  /** ⛔ viene si el perfil ⛔ ve costos (sólo Admin y Administración): lo corta el servidor. */
+  costo?: number | null
   tn: 'publicado' | 'oculto' | 'no'
   sinBarra: boolean
   /** El último renglón del historial de precios (`copia` = lo trajo la copia de GN o TN, ⛔ una persona). */
@@ -562,6 +565,8 @@ export type ListaDeProductos = {
   filas: FilaProducto[]; libroHasta: string | null; pedidosLeidosEn: string | null; tnLeidaEn: string | null
   /** El rol del motor ⛔ pudo leer las liquidaciones del monitor: la pantalla lo dice. */
   liquidacionesError?: string | null
+  /** ¿Vino el costo? (`puedeErp(…, 'costos')`): sin él, la pantalla ⛔ muestra columna ni vista «Sin costo». */
+  costos: boolean
 }
 export const leerListaDeProductos = (marca: MarcaErp) =>
   pedir<ListaDeProductos>(null, `&vista=productos-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los productos.')
