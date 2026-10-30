@@ -59,6 +59,26 @@ describe('la puerta', () => {
     expect((await accionDeCatalogo({ body: { ...body, marca: 'xx' }, usuario: 'ana' }, { conMotor: conMotor(pg) })).status).toBe(400)
     expect((await historialDeProducto({ marca: 'bdi', productId: 'x' }, { conMotor: conMotor(pg) })).status).toBe(400)
   })
+  it('🔴 un producto de Stunned pedido desde la lista de Zattia se edita en SU línea (⛔ «No está en esta marca»)', async () => {
+    // La base de Zattia con REMERA CIRCLE BROWN de stunned: el motor sólo la encuentra si la busca con marca = 'stunned'.
+    const buscadas: unknown[] = []
+    const pg = {
+      query: async (sql: string, params: unknown[] = []) => {
+        if (sql.includes('to_regclass')) return { rows: [{ hay: true }] }
+        if (sql.startsWith('select marca from producto')) return { rows: Number(params[0]) === 913520 ? [{ marca: 'stunned' }] : [] }
+        if (sql.includes('from marca')) return { rows: [{ empresa_id: 1 }] }
+        if (sql.includes('from producto where')) { buscadas.push(params[2]); return { rows: params[2] === 'stunned' ? [{ id: 913520, marca: 'stunned', nombre: 'REMERA CIRCLE BROWN', fuente: 'gn' }] : [] } }
+        return { rows: [] }
+      },
+    }
+    const body = { accion: 'producto-editar', marca: 'zattia', productId: '913520', cambios: { nombre: 'REMERA CIRCLE BROWN' } }
+    expect(await accionDeCatalogo({ body, usuario: 'ana' }, { conMotor: conMotor(pg) })).toEqual({ ok: true, cambios: [], desde_gn: false, variante: null, avisos: [] })
+    expect(buscadas).toEqual(['stunned'])
+    // Un producto que ⛔ está en la base sigue con la marca pedida y el motor dice 404.
+    const otro = await accionDeCatalogo({ body: { ...body, productId: '1' }, usuario: 'ana' }, { conMotor: conMotor(pg) })
+    expect(otro.status).toBe(404)
+    expect(buscadas).toEqual(['stunned', 'zattia'])
+  })
 })
 
 describe('permiso', () => {

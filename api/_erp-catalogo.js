@@ -9,12 +9,22 @@
  *
  * Permiso: `configurar` (sólo Admin) hasta que Bruno decida los roles (`reglas-vigentes.md`: «La llave `erp` queda cerrada»).
  * 🔴 Editar una fila que vino de GN la pasa a «cargada»: la copia de GN ⛔ la actualiza más (el motor lo dice en `desde_gn`).
+ * 🔴 En la base de Zattia conviven zattia y stunned, y la lista de Productos de Zattia trae los dos: la LÍNEA la dice el
+ * producto (`producto.marca`), ⛔ la pantalla. Sin esto, «Corregir datos» de un producto de Stunned daba «No está ese
+ * producto en esta marca» (el motor busca `marca = 'zattia'`). Igual que el precio (`lineaDelProducto` en `api/_erp.js`).
  */
 import { ACCIONES, baseDe, errorDe, leerAccion, MARCAS, textoDeAviso } from '../lib/erp/catalogo-edicion.core.js'
 
 const SIN_TABLA = 'La edición del producto todavía no está en la base del motor (migración 037).'
 const motor = () => import('../motor/catalogo-edicion.mjs')
 const hayTabla = async (pg) => (await pg.query(`select to_regclass('public.catalogo_edicion') is not null as hay`)).rows[0].hay
+
+/** La línea del producto en su base: BDI es una sola; en la de Zattia, zattia o stunned (sin el producto, la pedida: el motor dice 404). */
+async function lineaDelProducto(pg, marca, productId) {
+  if (baseDe(marca) === 'bdi') return marca
+  const [p] = (await pg.query(`select marca from producto where id = $1 and marca = any($2)`, [productId, MARCAS.filter((m) => baseDe(m) === 'zattia')])).rows
+  return p?.marca ?? marca
+}
 
 export async function historialDeProducto({ marca, productId }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
@@ -34,7 +44,7 @@ export async function accionDeCatalogo({ body, usuario }, deps) {
   const m = await motor()
   return deps.conMotor(baseDe(e.marca), 'La edición del producto', async (pg) => {
     if (!(await hayTabla(pg))) return { status: 409, error: SIN_TABLA }
-    const op = { ...e.entrada, usuario }
+    const op = { ...e.entrada, marca: await lineaDelProducto(pg, e.marca, e.entrada.product_id), usuario }
     const r = body.accion === 'producto-editar' ? await m.editarProducto(pg, op)
       : body.accion === 'variante-editar' ? await m.editarVariante(pg, op)
       : await m.agregarVariante(pg, op)
