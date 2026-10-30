@@ -20,7 +20,7 @@ import { contarVistas as vistasDeStock, filtrar as filtrarStock } from '@/lib/er
 import { contarVistas as vistasDeProductos, filtrar as filtrarProductos } from '@/lib/erp/productos-lista.core.js'
 import { useLineaErp, useTiendaErp } from '@/lib/erp/linea-erp'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
-import { ROLES, VISTA, paraHacerDe, subtituloDe, verResultado } from '@/lib/erp/inicio-roles.core.js'
+import { ROLES, VISTA, paraHacerDe, rolDe, subtituloDe, verResultado } from '@/lib/erp/inicio-roles.core.js'
 import { esAdmin } from '@/lib/permisos'
 import { agrupar as agruparPorProducto, filtrar as filtrarPorProducto } from '@/lib/erp/ventas-producto.core.js'
 import { comoVieneElMes, doceMeses, masDejan, porCanal, stockACosto, vendidoDelDia } from '@/lib/erp/inicio-panel.core.js'
@@ -81,7 +81,10 @@ function Variacion({ ahora, antes }: { ahora: number; antes: number }) {
 
 export function InicioErp({ href }: { href: (seccion: string, pestania?: string) => string }) {
   const { marca: delShell, perfil } = useSesion()
-  const [rol, setRol] = useState('admin')
+  // 🔴 Bruno 30-oct: el rol es el de la persona (todos abrían como Admin y el local veía costos); «Ver como» lo cambia sólo para el admin.
+  const admin = esAdmin(perfil)
+  const [elegido, setRol] = useState<string | null>(null)
+  const rol = admin ? (elegido ?? 'admin') : rolDe(perfil)
   const [hoy] = useState(() => diaArgentino(Date.now()))
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   // La tienda del menú: los gastos (y el resultado) son de ESA línea, ⛔ de Zattia + Stunned (Bruno, 30-oct).
@@ -97,7 +100,8 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
     let vivo = true
     const fallo = (e: unknown) => (e instanceof Error ? e.message : 'No se pudo leer.')
     const poner = (k: 'ventas' | 'stock' | 'productos', v: Conteo | Crudo) => vivo && setConteos((c) => ({ ...(c.marca === marca ? c : { marca, ventas: null, stock: null, productos: null }), [k]: v }))
-    leerResultadoDelMes(marca, tienda)
+    // Lo que lleva costo (resultado, lo que más deja, gastos) ⛔ se pide si no es admin: el servidor ya corta el resultado, el resto no.
+    if (admin) leerResultadoDelMes(marca, tienda)
       .then((r) => {
         if (!vivo) return
         setResultado({ marca: tienda, r, error: null })
@@ -111,7 +115,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
     leerListaDeStock(marca).then((d) => poner('stock', { filas: d.filas })).catch((e) => poner('stock', fallo(e)))
     leerListaDeProductos(marca).then((d) => poner('productos', { filas: d.filas })).catch((e) => poner('productos', fallo(e)))
     return () => { vivo = false }
-  }, [marca, tienda])
+  }, [marca, tienda, admin])
 
   const res = resultado?.marca === tienda ? resultado : null
   const m = res?.r?.mes, a = res?.r?.anterior

@@ -27,8 +27,9 @@ describe('el resultado del mes', () => {
 })
 
 const RES = { mes: { desde: '2026-10-01', hasta: '2026-10-19', ventas: 637, vendido: 29525438, costo: 9690802, sinCosto: 3, margen: 19834636 }, anterior: { desde: '2026-09-01', hasta: '2026-09-19', ventas: 753, vendido: 36035252, costo: 12575031, sinCosto: 7, margen: 23460221 }, gnHasta: '2026-10-19' }
+const leerResultadoDelMes = vi.fn(async () => RES)
 vi.mock('@/lib/erp/cliente', () => ({
-  leerResultadoDelMes: async () => RES,
+  leerResultadoDelMes: () => leerResultadoDelMes(),
   // Sólo los REALES (el cuarto parámetro `prueba` va en false): los de prueba ⛔ restan en Inicio.
   leerGastos: async (_m: string, _l: string, desde: string, hasta: string, prueba: boolean) => ({ desde, hasta, prueba, total: prueba ? 999 : 1_500_000, cobrosSinComision: prueba ? 0 : 2 }),
   leerListaDeVentas: async () => ({ filas: [{ estadoKey: 'a_preparar', cobroKey: 'sinpagar', kind: 'venta', tipo: 'venta', anulada: false, facturada: false }] }),
@@ -42,13 +43,30 @@ vi.mock('@/lib/erp/cliente', () => ({
     { id: '2', ventaId: 'v2', producto: 'p2', nombre: 'Funda Azul', talle: 'A', cantidad: 1, total: 9000, costo: null, canal: 'Local', linea: 'bdi', cuando: '2026-10-03' },
   ] }),
 }))
-vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'bdi', perfil: { name: 'bruno' } }) }))
+// El perfil de cada prueba: el admin (resultado con costo) o alguien del local.
+let perfil: Record<string, unknown> = { name: 'bruno', admin: true }
+vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'bdi', perfil }) }))
 
 let root: Root | null = null
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
 afterEach(() => { act(() => root?.unmount()); root = null; document.body.innerHTML = '' })
 
 describe('la pantalla', () => {
+  it('🔴 alguien del LOCAL abre como Local: ⛔ resultado, margen ni stock a costo, y ni se piden (Bruno 30-oct)', async () => {
+    perfil = { name: 'vendedora', funcion: ['local'] }
+    leerResultadoDelMes.mockClear()
+    const { InicioErp } = await import('@/components/erp/inicio/InicioErp')
+    const host = document.createElement('div'); document.body.appendChild(host)
+    await act(async () => { root = createRoot(host); root.render(<InicioErp href={(s, p) => `/erp/${s}/${p}`} />) })
+    await act(async () => {})
+    const t = host.textContent ?? ''
+    expect(host.querySelector('section[aria-label="Resultado comercial del mes"]')).toBeNull()
+    for (const no of ['Stock a costo', 'Margen bruto', 'Resultado comercial', 'Ver como']) expect(t).not.toContain(no)
+    expect(t).toContain('Viendo como Local')
+    expect(leerResultadoDelMes).not.toHaveBeenCalled()
+    perfil = { name: 'bruno', admin: true }
+  })
+
   it('el resultado arriba y «Para hacer» con el número de cada vista; la lista que falla lo dice', async () => {
     const { InicioErp } = await import('@/components/erp/inicio/InicioErp')
     const host = document.createElement('div'); document.body.appendChild(host)

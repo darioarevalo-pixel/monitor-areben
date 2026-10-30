@@ -2,7 +2,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { ROLES, paraHacerDe, verResultado } from '../lib/erp/inicio-roles.core.js'
+import { ROLES, paraHacerDe, rolDe, verResultado } from '../lib/erp/inicio-roles.core.js'
 import { ERP_ROLES } from '../lib/permisos.core.js'
 import { VISTAS as VENTAS } from '../lib/erp/ventas-lista.core.js'
 import { VISTAS as STOCK } from '../lib/erp/stock-lista.core.js'
@@ -24,6 +24,14 @@ describe('Ver como — el núcleo', () => {
   it('sólo Admin ve el resultado y los costos de Productos; Consulta ⛔ ve «sin costo»', () => {
     expect(ROLES.filter(([k]) => verResultado(k)).map(([k]) => k)).toEqual(['admin'])
     for (const [rol] of ROLES.filter(([k]) => k !== 'admin')) expect(JSON.stringify(paraHacerDe(rol))).not.toContain('sincosto')
+  })
+  it('🔴 el Inicio abre con el rol de la PERSONA (Bruno 30-oct: el local veía el stock a costo y el margen)', () => {
+    expect(rolDe({ admin: true, funcion: ['local'] })).toBe('admin')
+    expect(rolDe({ funcion: ['local'] })).toBe('local')
+    expect(rolDe({ funcion: ['deposito', 'local'] })).toBe('local')
+    expect(rolDe({ funcion: [] })).toBe('consulta')
+    expect(rolDe(null)).toBe('consulta')
+    expect(verResultado(rolDe({ funcion: ['local', 'administracion'] }))).toBe(false)
   })
 })
 
