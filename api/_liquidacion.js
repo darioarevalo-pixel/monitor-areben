@@ -696,13 +696,16 @@ export default async function handler(req, res) {
       const [c, i] = await Promise.all([
         supabase.from('liquidaciones').select('id, nombre, estado, datos')
           .eq('store', store).order('created_at', { ascending: false }),
-        supabase.from('liquidacion_items').select('liq_id, pid, estado').eq('store', store),
+        // 🔴 `leerTodo` y ⛔ un select pelado: PostgREST corta en 1.000 filas SIN avisar, y esto lee las
+        // de TODAS las campañas de la marca. El 30-oct-2026 Zattia pasó las 1.000 y la lista decía
+        // «7 productos» de una campaña de 411 y «116» de una de 259. `leerTodo` lanza si falla.
+        leerTodo(supabase, 'liquidacion_items', (q) =>
+          q.select('liq_id, pid, estado').eq('store', store).order('liq_id').order('pid')),
       ]);
       if (c.error) throw new Error(c.error.message);
-      if (i.error) throw new Error(i.error.message);
 
       const conteos = {};
-      for (const it of i.data || []) {
+      for (const it of i) {
         const k = conteos[it.liq_id] || (conteos[it.liq_id] = { total: 0, pendientes: 0, definidos: 0, confirmados: 0, descartados: 0, aplicados: 0 });
         k.total += 1;
         if (it.estado === 'pendiente') k.pendientes += 1;
@@ -715,7 +718,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ok: true,
         campanias: (c.data || []).map((r) => aCampania(r, conteos[r.id])),
-        colgadas: await leerColgadas(supabase, store, c.data || [], i.data || []),
+        colgadas: await leerColgadas(supabase, store, c.data || [], i),
         puede,
       });
     }
