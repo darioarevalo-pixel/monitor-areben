@@ -33,13 +33,15 @@ const pantalla = () => div.querySelector('[data-pantalla]')?.getAttribute('data-
 describe('ERP › el armazón propio', () => {
   it('el menú del diseño, con la sección marcada y «Volver al monitor»', async () => {
     await montar(['stock', 'ajustes'])
-    const links = [...div.querySelectorAll('nav a')].map((a) => [a.textContent, a.getAttribute('href')])
-    expect(links).toEqual([
+    const links = (nav: string) => [...div.querySelectorAll(`nav.${nav} a`)].map((a) => [a.textContent, a.getAttribute('href')])
+    expect(links('erp-menu')).toEqual([
       ['Inicio', '/erp'], ['Ventas', '/erp/ventas'], ['Caja', '/erp/caja'], ['Stock', '/erp/stock'],
       ['Productos y precios', '/erp/productos'], ['Clientes y proveedores', '/erp/clientes'], ['Configuración', '/erp/configuracion'],
       ['Volver al monitor', '/inicio'],
     ])
-    expect(div.querySelector('nav a[aria-current="page"]')?.textContent).toBe('Stock')
+    // La barra de abajo del celular (ERP en el celular, tanda 1): las 4 primeras; el resto va en «Más».
+    expect(links('erp-movil-nav')).toEqual([['Inicio', '/erp'], ['Ventas', '/erp/ventas'], ['Caja', '/erp/caja'], ['Stock', '/erp/stock']])
+    expect(div.querySelector('nav.erp-menu a[aria-current="page"]')?.textContent).toBe('Stock')
     expect(div.querySelector('h1')?.textContent).toBe('Stock')
     expect(pantalla()).toBe('AjustesStock')
     expect(replace).not.toHaveBeenCalled()
