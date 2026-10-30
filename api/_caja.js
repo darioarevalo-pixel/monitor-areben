@@ -100,8 +100,8 @@ import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, dias
 import { reglasDeHoy as reglasDeHoyDe } from './_caja-reglas.js'
 import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
-import { anuladasEnGN, cobrosDeERP, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
-import { armarSobre, avisoDeFaltaDeCambio, billetesDe, cambioDeLaCaja, limpiarConteo, quienesSeEnteranDelCambio, totalDeConteo } from '../lib/caja/conteo.core.js'
+import { anuladasEnGN, avisoDeCierre, cobrosDeERP, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, quienesSeEnteranDelCierre, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
+import { billetesDe, limpiarConteo, totalDeConteo } from '../lib/caja/conteo.core.js'
 import { anotarAnuladasDelCierre } from '../lib/caja/anuladas.js'
 import { aplicarPromos, normalizarPromos } from '../lib/caja/promos.core.js'
 import { MAX_LOTE, csvDeLote, generarCodigos } from '../lib/caja/gift.core.js'
@@ -976,27 +976,24 @@ export default async function handler(req, res) {
         } catch (e) {
           console.warn(`[caja] anuladas en GN sin anotar: ${e.message}`)
         }
-        // 🪙 Falta cambio (Bruno, 22-oct): lo que QUEDA en la caja ⛔ llega a la mitad del fondo en billetes de
-        // $1.000 o menos ⇒ aviso al celular de los admins. ⛔ Frena el cierre: la caja ya está cerrada.
-        if (c && c.billetes) {
+        // 🧾 El aviso al celular de los admins con cómo fue el turno (Bruno, 30-oct), de la foto que QUEDÓ.
+        // ⛔ Frena el cierre: la caja ya está cerrada.
+        const avisarCierre = async (t) => {
           try {
-            const billetes = billetesDe()
-            const queda = armarSobre(c.billetes, Number(turno.fondo) || 0, billetes).fondo
-            const aviso = avisoDeFaltaDeCambio(cambioDeLaCaja(queda, Number(turno.fondo) || 0, billetes), marca.nombre)
-            if (aviso) {
-              const { avisar } = await import('./_push.js') // recién acá: ⛔ carga web-push en cada cobro
-              const r = await avisar(quienesSeEnteranDelCambio(), { ...aviso, tag: `cambio-${id}` })
-              if (r.falta || !r.enviados) console.warn(`[caja] falta cambio sin avisar: ${r.falta || `${r.telefonos} teléfonos, ${r.fallas} fallas`}`)
-            }
+            const { avisar } = await import('./_push.js') // recién acá: ⛔ carga web-push en cada cobro
+            const r = await avisar(quienesSeEnteranDelCierre(), { ...avisoDeCierre(t, marca.nombre, { sinGN: b.sinCobrosGN === true }), tag: `cierre-${id}` })
+            if (r.falta || !r.enviados) console.warn(`[caja] cierre sin avisar: ${r.falta || `${r.telefonos} teléfonos, ${r.fallas} fallas`}`)
           } catch (e) {
-            console.warn(`[caja] falta cambio sin avisar: ${e.message}`)
+            console.warn(`[caja] cierre sin avisar: ${e.message}`)
           }
         }
         if (JSON.stringify(despues.resumen) === JSON.stringify(con.resumen) && JSON.stringify(despues.salidas) === JSON.stringify(con.salidas)) {
+          await avisarCierre(up.data)
           return res.status(200).json({ turno: up.data })
         }
         const fix = await sb.from('caja_turno').update(foto(despues)).eq('id', id).select(COLS_TURNO).maybeSingle()
         if (fix.error) throw new Error(fix.error.message)
+        await avisarCierre(fix.data || up.data)
         return res.status(200).json({ turno: fix.data || up.data, cambioAlCerrar: true })
       }
 

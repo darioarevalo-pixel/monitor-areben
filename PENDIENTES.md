@@ -189,8 +189,9 @@ robustez) hecha en la rama `caja`; la ficha `docs/secciones/caja.md` dice cómo 
 - ⚠️ `caja_venta.paga_con` existe pero es opcional: en BDI sólo 6 ventas lo traen.
 - ✅ **DECIDIDO (Bruno, 22-oct): el umbral es LA MITAD DEL FONDO** («es el 50% en cambio … tienen 50mil y 25mil en
   cambio chico») + el semáforo (los de $2.000 sacan de «falta», ⛔ llegan a «bien») + **aviso al celular a los admins**.
-  Hecho: `cambioDeLaCaja` + aviso en `cerrar-turno` (ver la ficha). ▶️ **Manos de Bruno**: «Activar avisos» en su
-  celular (Agenda) — sin eso el aviso ⛔ le llega. ▶️ Mirar el próximo cierre con poco cambio.
+  Hecho: `cambioDeLaCaja` (se ve al cerrar). 🔁 30-oct, Bruno: el aviso de «falta cambio» ⛔ lo mira nadie ⇒ el
+  celular ahora recibe **cada cierre con la venta del turno** (`avisoDeCierre`, ver la ficha). ▶️ **Manos de Bruno**:
+  «Activar avisos» en su celular (Agenda) — sin eso ⛔ le llega. ▶️ Mirar que llegue el próximo cierre.
 - ▶️ **Para Bruno**: el sobre arma el fondo EXACTO con la mayor cantidad de billetes, y eso puede llevarse billetes
   de $1.000 (2 × $20.000 + 25 × $1.000, fondo $50.000 ⇒ deja 10 de $1.000). ¿Que priorice el cambio sobre el exacto?
 

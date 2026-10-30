@@ -500,11 +500,15 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   tener cambio). ⛔ Exacto ⇒ lo más cerca por debajo y «Faltan $X de fondo».
 - 🪙 **Falta cambio** (`cambioDeLaCaja`, `conteo.core.js`; Bruno, 22-oct): lo que QUEDA en la caja (el fondo de
   `armarSobre`) tiene que tener **la mitad del fondo en billetes de $1.000 o menos**. Los de $2.000 suman con menos
-  peso: sacan de «falta» pero ⛔ llegan a «bien» (`bien` / `ojo` / `falta`). Se ve debajo del sobre al cerrar, y con
-  `falta` el cierre manda un **aviso al celular** (`api/_push.js`, el de la Agenda) a `quienesSeEnteranDelCambio`
-  (`AVISOS_CAJA_A`, por defecto Bruno y Darío). ⛔ Frena el cierre si el aviso falla. `_push.js` se importa
-  ADENTRO del cierre: arriba cargaba `web-push` en cada cobro. ⚠️ El sobre suma el fondo EXACTO con la mayor
-  cantidad de billetes: con 2 × $20.000 + 25 × $1.000 y fondo $50.000 deja 10 de $1.000 y se lleva 15.
+  peso: sacan de «falta» pero ⛔ llegan a «bien» (`bien` / `ojo` / `falta`). Se ve debajo del sobre al cerrar.
+  ⚠️ El sobre suma el fondo EXACTO con la mayor cantidad de billetes: con 2 × $20.000 + 25 × $1.000 y fondo $50.000
+  deja 10 de $1.000 y se lleva 15.
+- 🔔 **Aviso al celular de cada cierre** (`avisoDeCierre`, `cierre.core.js`; Bruno, 30-oct: «nos sirve para saber
+  cómo fue el día»): lo vendido en el turno y en cuántas ventas, por forma de pago, si el efectivo cuadró (o
+  cuánto sobra/falta), quién abrió y de qué hora a qué hora. Sale de la FOTO que quedó guardada (la rehecha, si
+  cambió al cerrar). Va a `quienesSeEnteranDelCierre` (`AVISOS_CAJA_A`, por defecto Bruno y Darío) por
+  `api/_push.js` (el de la Agenda). Reemplaza al de «falta cambio» (22-oct), que ⛔ miraba nadie. ⛔ Frena el
+  cierre si el aviso falla. `_push.js` se importa ADENTRO del cierre: arriba cargaba `web-push` en cada cobro.
 - 🧾 **El ticket del cierre**: VENTAS por forma de pago (`resumen.porForma`, guardado al cerrar), la cuenta
   del efectivo (esperado, contado, sobra/falta), salidas e ingresos, y de billetes **SÓLO EL SOBRE** (cada
   billete y el total) + nota y firma. ⛔ Billetes contados ni lo que queda de fondo (Bruno: «los 3 conteos

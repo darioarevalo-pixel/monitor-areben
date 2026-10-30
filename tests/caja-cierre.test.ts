@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { anuladasEnGN, cobrosDeERP, cobrosDeGN, diferencia, horaDeGN, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, resumenTurno, usuarioDe } from '@/lib/caja/cierre.core.js'
+import { anuladasEnGN, avisoDeCierre, cobrosDeERP, cobrosDeGN, diferencia, horaDeGN, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, quienesSeEnteranDelCierre, resumenTurno, usuarioDe } from '@/lib/caja/cierre.core.js'
 
 /**
  * Caja v2 · W3: el turno propio (Bruno, 4-oct-2026). Se cuenta sólo el efectivo: fondo + lo cobrado
@@ -346,5 +346,34 @@ describe('venta del ERP anulada (ensayo Caja Stunned, 26-oct)', () => {
   it('la consulta del turno pide la columna `anulada` (sin ella la regla de arriba nunca se entera)', () => {
     const src = readFileSync('api/_caja.js', 'utf-8')
     expect(src).toMatch(/from\('caja_venta'\)\.select\('[^']*a_mano, anulada'\)\.eq\('turno_id'/)
+  })
+})
+
+describe('avisoDeCierre (Bruno, 30-oct): el celular recibe cómo fue el turno', () => {
+  const turno = (resumen: Record<string, unknown>, contado = 50000) => ({
+    abierto_en: '2026-10-30T13:02:00Z', cerrado_en: '2026-10-30T22:58:00Z', abierto_por: 'Lorena', contado,
+    resumen: { ventas: 12, total: 523400, efectivo: { esperado: 50000 }, diferencia: 0, porForma: [
+      { nombre: 'Efectivo', monto: 210000 }, { nombre: 'Débito', monto: 150000 }, { nombre: 'Transferencia', monto: 0 }, { nombre: 'Crédito', monto: 163400 },
+    ], ...resumen },
+  })
+  it('lo vendido, por forma de pago (sin las de $0), el efectivo y el turno en hora argentina', () => {
+    expect(avisoDeCierre(turno({}), 'Zattia')).toEqual({
+      titulo: '🧾 Zattia: $523.400 en 12 ventas',
+      cuerpo: 'Efectivo $210.000 · Débito $150.000 · Crédito $163.400\nEl efectivo cuadró ✓\nLorena · 10:02 a 19:58',
+      url: '/caja',
+    })
+  })
+  it('sobra o falta efectivo, con el signo en palabras', () => {
+    expect(avisoDeCierre(turno({ diferencia: 1200 }), 'Zattia').cuerpo).toContain('Sobran $1.200 de efectivo')
+    expect(avisoDeCierre(turno({ diferencia: -3000 }), 'Zattia').cuerpo).toContain('Faltan $3.000 de efectivo')
+  })
+  it('sin ventas, y cerrada sin lo de GN', () => {
+    const a = avisoDeCierre(turno({ ventas: 0, total: 0, porForma: [] }), 'BDI', { sinGN: true })
+    expect(a.titulo).toBe('🧾 BDI: caja cerrada sin ventas')
+    expect(a.cuerpo).toBe('El efectivo cuadró ✓ (cerrada sin lo de GN: puede no ser exacto)\nLorena · 10:02 a 19:58')
+  })
+  it('a los admins, o a quienes diga AVISOS_CAJA_A', () => {
+    expect(quienesSeEnteranDelCierre({})).toEqual(['Bruno Arevalo', 'Dario Arevalo'])
+    expect(quienesSeEnteranDelCierre({ AVISOS_CAJA_A: ' Ana , Bruno Arevalo,' })).toEqual(['Ana', 'Bruno Arevalo'])
   })
 })
