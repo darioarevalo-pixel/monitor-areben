@@ -43,7 +43,7 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'cuenta', titulo: 'Va a la cuenta', ancho: 'minmax(230px, 1.6fr)', movil: 'chico' },
   { key: 'factura', titulo: 'Se factura', ancho: '96px', movil: 'oculta' },
   { key: 'tasa', titulo: 'Comisión', ancho: '90px', derecha: true, movil: 'dato' },
-  { key: 'dias', titulo: 'Acredita', ancho: '96px', movil: 'chico' },
+  { key: 'dias', titulo: 'La plata llega en', ancho: '96px', movil: 'chico' },
   { key: 'desde', titulo: 'Desde', ancho: 'minmax(150px, 1fr)', movil: 'oculta' },
 ]
 const COLUMNAS_CAMBIOS: ColumnaLista[] = [
@@ -85,11 +85,11 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
   const historial = (datos?.historial ?? []).filter((h) => h.marca === deLinea)
 
   const t = normal(q)
-  const textoDe = (f: FilaDeRuta) => normal([nombreCanal(f.canal), NOMBRE_MEDIO[f.medio], f.vigente ? nombreDeCuenta(f.cuenta) : 'sin ruta'].join(' '))
+  const textoDe = (f: FilaDeRuta) => normal([nombreCanal(f.canal), NOMBRE_MEDIO[f.medio], f.vigente ? nombreDeCuenta(f.cuenta) : 'sin cuenta'].join(' '))
   const textoCambio = (h: RutaCobro) => normal([nombreCanal(h.canal), NOMBRE_MEDIO[h.medio], h.puesta_por, h.cuenta_nombre, h.cuenta_banco].filter(Boolean).join(' '))
   const buscadas = t ? todas.filter((f) => textoDe(f).includes(t)) : todas
   const cambios = t ? historial.filter((h) => textoCambio(h).includes(t)) : historial
-  const VISTAS = [['todas', 'Todas'] as const, ...CANALES_DE_RUTA.map((c) => [c, nombreCanal(c)] as const), [SIN_RUTA, 'Sin ruta'] as const, [CAMBIOS, 'Cambios'] as const]
+  const VISTAS = [['todas', 'Todas'] as const, ...CANALES_DE_RUTA.map((c) => [c, nombreCanal(c)] as const), [SIN_RUTA, 'Sin cuenta'] as const, [CAMBIOS, 'Cambios'] as const]
   const conteo: Record<string, number> = {
     todas: buscadas.length, [SIN_RUTA]: buscadas.filter((f) => !f.vigente).length, [CAMBIOS]: cambios.length,
     ...Object.fromEntries(CANALES_DE_RUTA.map((c) => [c, buscadas.filter((f) => f.canal === c).length])),
@@ -115,7 +115,7 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
     const e = editando
     const { canal, medio } = e.fila
     const hoy = hoyAR()
-    if (e.dia < hoy) { setError('Una ruta vale desde ahora en adelante: el pasado no se cambia.'); return }
+    if (e.dia < hoy) { setError('El cambio vale desde ahora en adelante: el pasado no se cambia.'); return }
     const cuenta = e.cuenta ? cuentaPorId(e.cuenta) : null
     const cuando = e.dia === hoy ? 'desde ahora' : `desde el ${e.dia.slice(8, 10)}/${e.dia.slice(5, 7)}`
     const ok = await confirmar({
@@ -126,7 +126,7 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
           {avisoPrevio && <p style={{ color: 'var(--warning-text, #92400e)' }}>{avisoPrevio}</p>}
         </div>
       ),
-      ok: 'Cambiar la ruta',
+      ok: 'Cambiar la cuenta',
       tono: avisoPrevio ? 'warning' : undefined,
     })
     if (!ok) return
@@ -142,7 +142,7 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
       setDatos(await leerRutas(marca))
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo cambiar la ruta.')
+      setError(err instanceof Error ? err.message : 'No se pudo cambiar la cuenta.')
     } finally {
       setTrabajando(false)
     }
@@ -157,7 +157,7 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
       const principal = v ? (v.cuenta_real_id ? nombreDeCuenta(f.cuenta) : 'Se elige en cada cobro') : null
       return (
         <span title={[principal, detalle].filter(Boolean).join(' · ')}>
-          {principal ? <span style={{ color: color.ink, fontStyle: v?.cuenta_real_id ? undefined : 'italic' }}>{principal}</span> : <ChipEstado mapa={{ x: ['warning', 'Sin ruta'] }} k="x" />}
+          {principal ? <span style={{ color: color.ink, fontStyle: v?.cuenta_real_id ? undefined : 'italic' }}>{principal}</span> : <ChipEstado mapa={{ x: ['warning', 'Sin cuenta'] }} k="x" />}
           {detalle && <span style={{ color: f.aviso ? 'var(--mo-warning-ink)' : color.mut }}> · {detalle}</span>}
         </span>
       )
@@ -179,7 +179,7 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
   }
   const acciones = (f: FilaDeRuta) => {
     if (!configura) return null
-    const menu: AccionMenu[] = [{ key: 'cambiar', label: f.vigente ? 'Cambiar la ruta' : 'Poner la ruta', icono: 'lapiz', onClick: () => empezar(f), disabled: trabajando }]
+    const menu: AccionMenu[] = [{ key: 'cambiar', label: f.vigente ? 'Cambiar la cuenta' : 'Elegir la cuenta', icono: 'lapiz', onClick: () => empezar(f), disabled: trabajando }]
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones de ${NOMBRE_MEDIO[f.medio]} en ${nombreCanal(f.canal)}`} vertical alinear="izquierda" />
   }
 
@@ -200,12 +200,12 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
       {aviso && <Notice tone="warning" onClose={() => setAviso(null)}>{aviso}</Notice>}
 
-      {!datos && !error && <EmptyState title="Leyendo las rutas…" />}
+      {!datos && !error && <EmptyState title="Leyendo a qué cuenta va cada forma de pago…" />}
       {datos && (
         <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
           <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-            <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las rutas" placeholder="Canal, medio o cuenta" />
+            <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar una forma de pago" placeholder="Canal, medio o cuenta" />
           </div>
           {enCambios
             ? <ListaTrabajo columnas={COLUMNAS_CAMBIOS} filas={cambios} claveDe={(h) => h.id} celda={celdaCambio} etiquetaFila={(h) => `el cambio de ${NOMBRE_MEDIO[h.medio]} en ${nombreCanal(h.canal)}`} vacio={<div style={{ padding: space[6] }}><EmptyState title="Ningún cambio todavía." /></div>} />
@@ -213,25 +213,25 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
                 columnas={COLUMNAS} filas={filas} claveDe={(f) => `${f.canal}/${f.medio}`} celda={celda} acciones={acciones} anchoAcciones={40}
                 activa={editando ? `${editando.fila.canal}/${editando.fila.medio}` : null}
                 onAbrir={configura ? empezar : undefined} etiquetaFila={(f) => `${NOMBRE_MEDIO[f.medio]} en ${nombreCanal(f.canal)}`}
-                vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con esa búsqueda.' : 'Todos los medios tienen ruta.'} /></div>}
+                vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con esa búsqueda.' : 'Todas las formas de pago tienen cuenta.'} /></div>}
               />}
           <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-            {nombreLinea(deLinea)} · {todas.filter((f) => f.vigente).length} de {todas.length} con ruta · cada cambio queda con quién, cuándo y desde cuándo vale
+            {nombreLinea(deLinea)} · {todas.filter((f) => f.vigente).length} de {todas.length} con cuenta · cada cambio queda con quién, cuándo y desde cuándo vale
           </div>
         </div>
       )}
 
       {editando && datos && (
         <Modal
-          abierto onCerrar={() => setEditando(null)} titulo="Cambiar la ruta"
+          abierto onCerrar={() => setEditando(null)} titulo="Cambiar la cuenta"
           pie={(
             <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
               <Button variant="outline" onClick={() => setEditando(null)} disabled={trabajando}>Cancelar</Button>
-              <Button onClick={guardar} disabled={trabajando}>Cambiar la ruta</Button>
+              <Button onClick={guardar} disabled={trabajando}>Cambiar la cuenta</Button>
             </div>
           )}
         >
-          <p style={{ margin: `0 0 ${space[3]}`, color: color.mut }}>{nombreLinea(deLinea)} · {nombreCanal(editando.fila.canal)} · {NOMBRE_MEDIO[editando.fila.medio]}{editando.fila.vigente ? ` · hoy va a ${nombreDeCuenta(editando.fila.cuenta)}` : ' · hoy sin ruta'}</p>
+          <p style={{ margin: `0 0 ${space[3]}`, color: color.mut }}>{nombreLinea(deLinea)} · {nombreCanal(editando.fila.canal)} · {NOMBRE_MEDIO[editando.fila.medio]}{editando.fila.vigente ? ` · hoy va a ${nombreDeCuenta(editando.fila.cuenta)}` : ' · hoy sin cuenta'}</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: space[3] }}>
             <Field label="Desde ahora va a" required hint={editando.cuenta === SE_ELIGE ? 'Para la transferencia mayorista: la cuenta se elige al cobrar.' : undefined}>
               <Select value={editando.cuenta} onChange={(e) => setEditando({ ...editando, cuenta: e.target.value })}>

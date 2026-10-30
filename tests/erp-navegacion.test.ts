@@ -50,7 +50,7 @@ describe('ERP › menú y direcciones', () => {
   })
 
   it('las secciones del diseño, en su orden', () => {
-    expect(SECCIONES_ERP.map((s) => s.titulo)).toEqual(['Inicio', 'Ventas', 'Stock', 'Productos y precios', 'Clientes y proveedores', 'Configuración'])
+    expect(SECCIONES_ERP.map((s) => s.titulo)).toEqual(['Inicio', 'Ventas', 'Stock', 'Productos', 'Clientes', 'Configuración'])
   })
 
   it('cada dirección abre lo suyo; sin pestaña, la primera', () => {

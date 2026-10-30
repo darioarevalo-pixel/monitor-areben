@@ -67,7 +67,7 @@ export function ProveedoresErp() {
   }
   const acciones = (p: ProveedorErp) => {
     const menu: AccionMenu[] = [
-      { key: 'prm', label: 'Ver en PRM ↗', icono: 'abrir', onClick: () => abrir('/prm'), hint: 'Visitas, compromisos y cómo se mueve lo que se le compra.' },
+      { key: 'prm', label: 'Ver visitas y compromisos ↗', icono: 'abrir', onClick: () => abrir('/prm'), hint: 'Visitas, compromisos y cómo se mueve lo que se le compra.' },
       { key: 'rec', label: 'Lo que entró, en Ingresos ↗', icono: 'abrir', onClick: () => abrir('/recepciones') },
     ]
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones del proveedor ${p.nombre}`} vertical alinear="izquierda" />

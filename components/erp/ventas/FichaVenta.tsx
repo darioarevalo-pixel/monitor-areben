@@ -379,7 +379,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           {medioNuevo && cuentasReales.length > 0 && (
             <Field label="Adónde entró la plata" required hint={deLaRuta?.cuenta_real_id ? 'La que dice ERP › Cuentas para este medio. Elegí otra sólo si fue a otra cuenta.' : 'Este medio no tiene una cuenta fija en ERP › Cuentas: elegí cuál.'}>
               <Select value={cuentaReal} onChange={(e) => setCuentaReal(e.target.value)}>
-                <option value="">{deLaRuta?.cuenta_real_id ? `${nombreReal(deLaRuta.cuenta_real_id) ?? 'La de la ruta'} (la de siempre)` : 'Elegí la cuenta…'}</option>
+                <option value="">{deLaRuta?.cuenta_real_id ? `${nombreReal(deLaRuta.cuenta_real_id) ?? 'La de la forma de pago'} (la de siempre)` : 'Elegí la cuenta…'}</option>
                 {cuentasReales.filter((c) => c.id !== deLaRuta?.cuenta_real_id).map((c) => <option key={c.id} value={c.id}>{nombreReal(c.id)}{deLaRuta?.cuenta_real_id ? ' (excepción)' : ''}</option>)}
               </Select>
             </Field>

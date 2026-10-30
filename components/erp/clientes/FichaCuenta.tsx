@@ -358,7 +358,7 @@ function VentanaCobrarCuenta({ marca, fila, prueba, saldo, cuentas, onCerrar, on
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         <Field label="Monto"><Input inputMode="decimal" value={monto} onChange={(e) => setMonto(e.target.value)} /></Field>
         <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-          <Field label="Cuenta" hint="Medio y cuenta real salen de la ruta del día." style={{ flex: '1 1 220px' }}>
+          <Field label="Cuenta" hint="La forma de pago y la cuenta salen de «¿A qué cuenta va?» del día." style={{ flex: '1 1 220px' }}>
             <Select value={cuenta} onChange={(e) => setCuenta(e.target.value)}>
               <option value="">{cuentas.length ? 'Elegí la cuenta' : 'No hay cuentas para cobrar'}</option>
               {cuentas.map((c) => <option key={String(c.id)} value={String(c.id)}>{c.nombre}</option>)}

@@ -11,14 +11,14 @@ export type PiezaConfiguracion = 'cuentas' | 'rutas' | 'reglas'
 
 const PIEZAS: Array<{ k: string; titulo: string; nota: string; va?: PiezaConfiguracion }> = [
   { k: 'cuenta', titulo: 'Cuenta', nota: 'dónde cae la plata (las del dashboard)', va: 'cuentas' },
-  { k: 'medio', titulo: 'Medio', nota: 'con qué paga el cliente' },
-  { k: 'ruta', titulo: 'Ruta', nota: 'qué cuenta recibe cada medio', va: 'rutas' },
-  { k: 'regla', titulo: 'Regla de cobro', nota: 'el descuento o recargo del medio', va: 'reglas' },
+  { k: 'medio', titulo: 'Forma de pago', nota: 'con qué paga el cliente' },
+  { k: 'ruta', titulo: 'A qué cuenta va', nota: 'cada forma de pago, por canal', va: 'rutas' },
+  { k: 'regla', titulo: 'Descuento o recargo', nota: 'de cada forma de pago', va: 'reglas' },
 ]
 
 export function TiraConfiguracion({ activa, ir }: { activa: PiezaConfiguracion; ir?: (p: PiezaConfiguracion) => void }) {
   return (
-    <div role="list" aria-label="Cómo encajan cuenta, medio, ruta y regla" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+    <div role="list" aria-label="Cómo encajan la cuenta, la forma de pago, a qué cuenta va y el descuento" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       {PIEZAS.map((p) => {
         const on = p.va === activa
         const caja: React.CSSProperties = {

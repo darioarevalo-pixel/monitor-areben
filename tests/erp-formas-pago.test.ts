@@ -27,7 +27,7 @@ describe('Cargar venta: las formas de pago son las del POS', () => {
   it('el crédito trae sus variantes del POS: 6 cuotas y promo del banco, cada una con su cuenta', () => {
     const credito = formasDePago({ reglas, cuentas, rutas: [], canales: ['local'] }).find((x) => x.clave === 'credito')!
     expect(credito.opciones).toEqual([
-      { clave: 'normal', nombre: 'Normal', cuenta: 'c25188' }, { clave: 'seis', nombre: '6 cuotas', cuenta: 'c25173' }, { clave: 'promo', nombre: 'Promo del banco', cuenta: 'c25172' },
+      { clave: 'normal', nombre: 'Sin promo', cuenta: 'c25188' }, { clave: 'seis', nombre: '6 cuotas', cuenta: 'c25173' }, { clave: 'promo', nombre: 'Promo del banco', cuenta: 'c25172' },
     ])
   })
 

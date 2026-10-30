@@ -106,7 +106,7 @@ export function GastosErp() {
       {prueba && <Notice tone="warning">Estás mirando los gastos <b>de prueba</b>: salen de las ventas que el ERP registra en paralelo con Gestión Nube hasta el corte. Lo que cargues acá queda anotado <b>de prueba</b>.</Notice>}
       {res && res.sinComision > 0 && (
         <Notice tone="warning">
-          <b>{res.sinComision.toLocaleString('es-AR')} {res.sinComision === 1 ? 'cobro con tarjeta o Mercado Pago' : 'cobros con tarjeta o Mercado Pago'} no {res.sinComision === 1 ? 'tiene' : 'tienen'} comisión</b>: la ruta de cobro no tiene la tasa cargada. Esas comisiones <b>no están en el total</b>. La tasa se carga en Configuración › Rutas.
+          <b>{res.sinComision.toLocaleString('es-AR')} {res.sinComision === 1 ? 'cobro con tarjeta o Mercado Pago' : 'cobros con tarjeta o Mercado Pago'} no {res.sinComision === 1 ? 'tiene' : 'tienen'} comisión</b>: la forma de pago no tiene la tasa cargada. Esas comisiones <b>no están en el total</b>. La tasa se carga en Configuración › ¿A qué cuenta va?.
         </Notice>
       )}
       {cargado && <Notice tone="success" onClose={() => setCargado(null)}>{cargado}</Notice>}

@@ -364,6 +364,12 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `preparar` · `preparada` · `sin preparar` | `armar` · `armada` · `armadas` · `sin armar` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: en Ventas ya decía «preparar»; las transferencias decían «armar» |
 | `Movido a la hora de la foto` · el nombre de cada lado (`ERP`, `Tienda Nube`, `Mercado Libre`, `Gestión Nube`) | `En vuelo` · `Nuestro` · `Ellos` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: en Diferencias no se entendía contra quién se compara |
 | `Con falla` | `Fallado` · `Fallada` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct |
+| `¿A qué cuenta va?` · `La plata llega en` · `Descuento o recargo` | `Rutas` · `Ruta` · `ruta` · `rutas` · `Regla de cobro` | monitor | `components/erp/RutasCobro.tsx` · `components/erp/TiraConfiguracion.tsx` · `components/erp/CuentasYEstructura.tsx` · `components/erp/ventas/FormasDePago.tsx` · `components/erp/ventas/GastosErp.tsx` · `components/erp/ventas/CobrosErp.tsx` · `components/erp/ventas/VentanasVenta.tsx` · `components/erp/clientes/FichaCuenta.tsx` · `components/erp/ventas/FichaVenta.tsx` · `lib/erp/estructura.core.js` · `lib/erp/gastos.core.js` | Bruno, 30-oct (tanda 3, dibujado): la ruta de cobro se nombra por lo que hace. «Ruta» sigue siendo «De → A» en Transferencias |
+| `Ver visitas y compromisos ↗` | `Ver en PRM` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: sin siglas en pantalla |
+| `Productos` · `Clientes` (los grupos del menú del ERP) | `Productos y precios` · `Clientes y proveedores` | monitor | `components/erp/Erp.tsx` | Bruno, 30-oct: grupos cortos |
+| `Se factura cuando se pague` | `Sin factura: todavía no es una venta` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: decir qué pasa, no qué no es |
+| `Sin promo` (la cuenta del crédito sin cuotas ni promo) | `Normal` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct |
+| `producto sin código` | `Producto suelto` · `producto suelto` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: «suelto» se confundía con «fuera de un pack» |
 | (nada: el estado se dice en palabras: «todavía no disponible», «modo de prueba de ARCA») | `motor` · `sesión A` · `espejo` · `homologación` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: jerga de la construcción, ⛔ en pantalla |
 
 ⚠️ **Las excepciones van en el test, con su motivo, y se vacían solas**: un nombre que viene de otro

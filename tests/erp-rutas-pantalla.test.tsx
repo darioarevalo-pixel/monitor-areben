@@ -54,14 +54,14 @@ const elegir = async (cuenta: string) => {
 }
 
 describe('RutasCobro', () => {
-  it('la grilla dice adónde va cada medio, si factura, y lo sin ruta', async () => {
+  it('la grilla dice adónde va cada medio, si factura, y lo sin cuenta', async () => {
     await montar()
     expect(fila('Transferencia').textContent).toContain('Mercado Pago · Caja de Ahorro (Bruno)')
     expect(fila('Transferencia').textContent).toContain('No')
-    expect(fila('Efectivo').textContent).toContain('Sin ruta')
+    expect(fila('Efectivo').textContent).toContain('Sin cuenta')
     expect(host.textContent).toContain('la Caja sigue cobrando como hoy')
-    expect(host.textContent).toContain('Ruta')
-    expect(host.textContent).toMatch(/Sin ruta\s*23/)
+    expect(host.textContent).toContain('A qué cuenta va')
+    expect(host.textContent).toMatch(/Sin cuenta\s*23/)
     expect(host.textContent).toMatch(/Cambios\s*1/)
   })
 
@@ -79,7 +79,7 @@ describe('RutasCobro', () => {
     await montar()
     await abrir('Efectivo')
     await elegir(GAL)
-    await act(async () => [...document.body.querySelectorAll('button')].filter((b) => b.textContent === 'Cambiar la ruta').pop()!.click())
+    await act(async () => [...document.body.querySelectorAll('button')].filter((b) => b.textContent === 'Cambiar la cuenta').pop()!.click())
     await act(async () => {})
     expect(ponerRuta).toHaveBeenCalledWith('zattia', { linea: 'zattia', canal: 'local', medio: 'efectivo', cuenta_real_id: GAL, tasa: '', dias_acreditacion: '' })
     expect(host.textContent).toContain('Efectivo de Zattia en local va a Galicia · Cuenta Corriente (Areben) desde ahora.')
@@ -91,11 +91,11 @@ describe('RutasCobro', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await montar('stunned')
     expect(host.querySelector('select[aria-label="Línea"]')).toBeNull()
-    expect(fila('Transferencia').textContent).toContain('Sin ruta')
+    expect(fila('Transferencia').textContent).toContain('Sin cuenta')
     await abrir('Transferencia')
     await elegir(GAL)
     expect(pagina()).toContain('Transferencia de Stunned en local tiene −10 %')
-    await act(async () => [...document.body.querySelectorAll('button')].filter((b) => b.textContent === 'Cambiar la ruta').pop()!.click())
+    await act(async () => [...document.body.querySelectorAll('button')].filter((b) => b.textContent === 'Cambiar la cuenta').pop()!.click())
     expect(ponerRuta).toHaveBeenCalledWith('zattia', expect.objectContaining({ linea: 'stunned', medio: 'transferencia', cuenta_real_id: GAL }))
   })
 })

@@ -24,7 +24,7 @@ const DASHBOARD = 'https://dashboard.arebensrl.com/finanzas/saldos'
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const TIPO = NOMBRE_TIPO as Record<string, string>
 const TITULAR = NOMBRE_TITULAR as Record<string, string>
-const ESTADO = { si: ['success', 'Recibe plata'], no: ['neutral', 'Sin ruta'], baja: ['neutral', 'Dada de baja'] } as const
+const ESTADO = { si: ['success', 'Recibe plata'], no: ['neutral', 'No recibe'], baja: ['neutral', 'Dada de baja'] } as const
 
 /** Las dos pestañas leen lo mismo (una consulta chica): cada una lo pide al montarse. */
 function useEstructura(marca: MarcaErp) {
@@ -103,8 +103,8 @@ export function CuentasErp({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {datos ? `${filas.length} de ${todas.length} cuentas` : 'Leyendo las cuentas…'}
           {datos?.cuentasCopiadasEn ? ` · copiadas del dashboard el ${cuandoCorto(datos.cuentasCopiadasEn)}` : ''}
-          {' · '}«Recibe» son las rutas vigentes de esta marca; el saldo de cada cuenta está en el dashboard.
-          {ir && <> <Button variant="outline" onClick={() => ir('cuentas')}>Ver las rutas</Button></>}
+          {' · '}«Recibe» sale de «¿A qué cuenta va?» de esta marca; el saldo de cada cuenta está en el dashboard.
+          {ir && <> <Button variant="outline" onClick={() => ir('rutas')}>Ver a qué cuenta va</Button></>}
         </div>
       </div>
     </div>

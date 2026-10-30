@@ -13,7 +13,7 @@ const datos = {
   formas: { zattia: [
     { clave: 'efectivo', nombre: 'Efectivo', cuenta: 'c-ef', rutas: { local: { cuenta: 'Areben · Caja local', tasa: null, dias: 0 }, online: null } },
     { clave: 'credito', nombre: 'Tarjeta de crédito', cuenta: 'c-cr', rutas: { local: { cuenta: 'Areben · Mercado Pago', tasa: 3.5, dias: 2 }, online: null },
-      opciones: [{ clave: 'normal', nombre: 'Normal', cuenta: 'c-cr' }, { clave: 'seis', nombre: '6 cuotas', cuenta: 'c-6' }] },
+      opciones: [{ clave: 'normal', nombre: 'Sin promo', cuenta: 'c-cr' }, { clave: 'seis', nombre: '6 cuotas', cuenta: 'c-6' }] },
     { clave: 'cuenta', nombre: 'Queda debiendo', cuenta: 'cc', rutas: {} },
   ] },
   sueltas: { zattia: [{ id: 'mp', nombre: 'Mercado Pago', medio: 'mp', marca: 'zattia' }] },
@@ -61,7 +61,7 @@ describe('Cargar venta: formas de pago del POS con su ruta', () => {
     await act(async () => { boton('Efectivo')!.click() })
     const canal = [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => o.value === 'online'))!
     await escribir(canal, 'online')
-    expect(document.body.textContent).toContain('Sin ruta cargada para este canal')
+    expect(document.body.textContent).toContain('Esta forma de pago no tiene cuenta en este canal')
   })
 
   it('manda la CUENTA de la forma elegida, y la del crédito en 6 cuotas', async () => {

@@ -243,7 +243,7 @@ export function CobrosErp() {
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo los cobros…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {' · '}{vista === 'sin_cobrar' ? 'Las entregas que Logística hizo y el ERP todavía no pudo cobrar, sean del período que sean: se reintentan solas cuando se arregla lo que faltaba (la cuenta de cobro, la ruta, una variante).' : vista === 'contraentrega' ? 'Lo que está en la calle hoy, sea del período que sea: se cierra cuando el envío se marca entregado.' : 'El cobro de una venta lleva el día de la venta.'} «Cobrado» no suma lo anulado sin devolución (la plata se devolvió afuera) ni lo que quedó a cuenta.
+          {' · '}{vista === 'sin_cobrar' ? 'Las entregas que Logística hizo y el ERP todavía no pudo cobrar, sean del período que sean: se reintentan solas cuando se arregla lo que faltaba (la cuenta de cobro, a qué cuenta va, una variante).' : vista === 'contraentrega' ? 'Lo que está en la calle hoy, sea del período que sea: se cierra cuando el envío se marca entregado.' : 'El cobro de una venta lleva el día de la venta.'} «Cobrado» no suma lo anulado sin devolución (la plata se devolvió afuera) ni lo que quedó a cuenta.
         </div>
       </div>
 

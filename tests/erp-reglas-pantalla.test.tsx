@@ -51,11 +51,11 @@ const clic = async (el: Element) => { await act(async () => { el.dispatchEvent(n
 const vista = (t: RegExp) => [...host.querySelectorAll('[role="tab"]')].find((b) => t.test(b.textContent ?? ''))!
 
 describe('ERP › Reglas con el molde', () => {
-  it('lee la marca del menú; la tira marca la regla y «Ruta» lleva a Cuentas de cobro', async () => {
+  it('lee la marca del menú; la tira marca la regla y «A qué cuenta va» lleva a Cuentas de cobro', async () => {
     const ir = await montar()
     expect(leerReglas).toHaveBeenCalledWith('zattia')
-    expect(host.querySelector('[aria-current="true"]')?.textContent).toContain('Regla de cobro')
-    await clic([...host.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Ruta'))!)
+    expect(host.querySelector('[aria-current="true"]')?.textContent).toContain('Descuento o recargo')
+    await clic([...host.querySelectorAll('button')].find((b) => b.textContent?.startsWith('A qué cuenta va'))!)
     expect(ir).toHaveBeenCalledWith('rutas')
     expect(texto()).toContain('La Caja cobra con estas reglas')
   })

@@ -26,7 +26,7 @@ export type PagoCarga = { clave: string; cuenta: string; monto: number | ''; for
 export function textoDeRuta(forma: FormaDePagoCargar | undefined, canal: string): { texto: string; falta: boolean } | null {
   if (!forma || forma.clave === 'cuenta') return null
   const r = forma.rutas[canal]
-  if (!r) return { texto: `Sin ruta cargada para este canal: el cobro queda sin cuenta real (se carga en Configuración › Rutas).`, falta: true }
+  if (!r) return { texto: `Esta forma de pago no tiene cuenta en este canal: el cobro queda sin cuenta real (se elige en Configuración › ¿A qué cuenta va?).`, falta: true }
   const partes = [r.cuenta ? `Va a ${r.cuenta}` : 'Va a una cuenta sin nombre']
   if (r.tasa != null && r.tasa > 0) partes.push(`comisión ${String(r.tasa).replace('.', ',')} %`)
   if (r.dias != null) partes.push(r.dias === 0 ? 'se acredita en el día' : `se acredita en ${r.dias} ${r.dias === 1 ? 'día' : 'días'}`)

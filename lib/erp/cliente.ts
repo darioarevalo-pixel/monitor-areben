@@ -424,7 +424,7 @@ export const leerEstructura = (marca: MarcaErp) =>
 export const leerRutas = (marca: MarcaErp) =>
   pedir<RutasDeMarca>(null, `&vista=rutas&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer las cuentas de cobro.')
 export const ponerRuta = (marca: MarcaErp, ruta: RutaAPoner) =>
-  pedir<{ ok: true; ruta: { id: string; desde: string }; aviso: string | null }>(post({ accion: 'poner-ruta', marca, ...ruta }), '', 'No se pudo cambiar la ruta.')
+  pedir<{ ok: true; ruta: { id: string; desde: string }; aviso: string | null }>(post({ accion: 'poner-ruta', marca, ...ruta }), '', 'No se pudo cambiar la cuenta.')
 
 /** Lo que el perfil puede en el ERP, por marca (`permisosErp`): ocultar el botón que el servidor va a rechazar. */
 export type PermisosErp = Record<MarcaErp, Record<string, boolean>>

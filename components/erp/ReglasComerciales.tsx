@@ -509,7 +509,7 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <Field label="Buscar producto" hint="código o nombre"><Input value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && texto.trim()) void buscar() }} /></Field>
         <Button onClick={buscar} disabled={!texto.trim() || trabajando}>Buscar</Button>
-        <Button variant="outline" onClick={() => agregar({ nombre: 'Producto suelto' })}>Agregar producto suelto</Button>
+        <Button variant="outline" onClick={() => agregar({ nombre: 'Producto sin código' })}>Agregar un producto sin código</Button>
       </div>
       {encontradas && (
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
@@ -520,7 +520,7 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
       {prendas.length > 0 && (
         <TableWrap style={{ marginTop: space[3] }}>
           <table>
-            <THead><Tr><Th>Producto</Th><Th>Precio</Th><Th>Cantidad</Th><Th>Categorías</Th><Th>Campaña (producto suelto)</Th><Th /></Tr></THead>
+            <THead><Tr><Th>Producto</Th><Th>Precio</Th><Th>Cantidad</Th><Th>Categorías</Th><Th>Campaña (producto sin código)</Th><Th /></Tr></THead>
             <TBody>
               {prendas.map((p) => (
                 <Tr key={p.clave}>

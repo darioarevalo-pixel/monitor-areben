@@ -87,7 +87,7 @@ export function VentanaCobro({ marca, fila, puede, onCerrar, onHecho }: {
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         <Field label="Monto"><Input inputMode="decimal" value={monto} onChange={(e) => setMonto(e.target.value)} /></Field>
         <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-          <Field label="Cuenta" hint="Medio y cuenta real salen de la ruta del día." style={{ flex: '1 1 220px' }}>
+          <Field label="Cuenta" hint="La forma de pago y la cuenta salen de «¿A qué cuenta va?» del día." style={{ flex: '1 1 220px' }}>
             <Select value={cuenta} onChange={(e) => setCuenta(e.target.value)}>
               <option value="">{extra ? 'Elegí la cuenta' : 'Leyendo…'}</option>
               {cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}

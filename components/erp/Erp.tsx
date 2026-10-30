@@ -99,15 +99,15 @@ export const SECCIONES_ERP: Seccion[] = [
       { key: 'diferencias', label: 'Diferencias', junta: 'Contra qué', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }] },
     ],
   },
-  { key: 'productos', titulo: 'Productos y precios', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }] },
+  { key: 'productos', titulo: 'Productos', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }] },
   {
-    key: 'clientes', titulo: 'Clientes y proveedores', icono: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
+    key: 'clientes', titulo: 'Clientes', icono: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
     pestanias: [{ key: 'clientes', label: 'Clientes', vistas: [{ key: 'clientes', label: 'Clientes' }, { key: 'cuenta-corriente', label: 'Cuenta corriente', oculta: true }] }, { key: 'proveedores', label: 'Proveedores' }],
   },
   {
     key: 'configuracion', titulo: 'Configuración', icono: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M4 12h2 M18 12h2 M12 4v2 M12 18v2 M6.3 6.3l1.4 1.4 M16.3 16.3l1.4 1.4 M6.3 17.7l1.4-1.4 M16.3 7.7l1.4-1.4',
     pestanias: [
-      { key: 'cuentas', label: 'Cuentas y formas de pago', junta: 'Qué lista', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: 'Rutas' }] },
+      { key: 'cuentas', label: 'Cuentas y formas de pago', junta: 'Qué lista', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: '¿A qué cuenta va?' }] },
       { key: 'reglas', label: 'Descuentos y redondeo', vistas: [{ key: 'reglas', label: 'Descuentos por forma de pago' }, { key: 'redondeo', label: 'Redondeo' }] },
       { key: 'estructura', label: 'Marcas, depósitos y puntos de venta' },
     ],
@@ -177,8 +177,6 @@ function Trazo({ d, size = 18 }: { d: string; size?: number }) {
 
 /** 📱 La barra de abajo del celular (Bruno, 29-oct): las 4 que más se usan; el resto, en «Más». */
 const ABAJO = ['inicio', 'ventas', 'stock', 'productos']
-/** El nombre en la barra de abajo del celular, donde no entra el largo («Productos y precios» se partía en 2 renglones). */
-const CORTO_ABAJO: Record<string, string> = { productos: 'Productos' }
 const EN_MAS = SECCIONES_ERP.filter((s) => !ABAJO.includes(s.key))
 const TRAZO_MAS = 'M5 12h.01 M12 12h.01 M19 12h.01'
 const TRAZO_BUSCAR = 'M21 21l-4.3-4.3 M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z'
@@ -442,7 +440,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
           return (
             <Link key={k} href={hrefErp(k)} aria-current={on ? 'page' : undefined} className={`erp-movil-nav-item${on ? ' erp-movil-nav-item--on' : ''}`}>
               <Trazo d={s.icono} size={20} />
-              <span>{CORTO_ABAJO[k] ?? s.titulo}</span>
+              <span>{s.titulo}</span>
               {!!contadores[k] && <span className="erp-movil-nav-n" aria-label={`${contadores[k]} ${TITULO_CONTADOR[k] ?? 'para hacer'}`}>{contadores[k]}</span>}
             </Link>
           )

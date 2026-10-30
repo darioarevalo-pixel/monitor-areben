@@ -44,7 +44,7 @@ describe('ERP › el armazón propio', () => {
       // 🎨 30-oct (Bruno): menú de grupos; el abierto (Stock) muestra sus ítems con su dirección, y ⛔ hay sección Caja.
       ['Inicio', '/erp'], ['Ventas', '/erp/ventas'], ['Stock', '/erp/stock'],
       ['Stock', '/erp/stock/stock'], ['Transferencias', '/erp/stock/transferencias'], ['Ingresos y ajustes', '/erp/stock/ajustes'], ['Diferencias', '/erp/stock/diferencias'],
-      ['Productos y precios', '/erp/productos'], ['Clientes y proveedores', '/erp/clientes'], ['Configuración', '/erp/configuracion'],
+      ['Productos', '/erp/productos'], ['Clientes', '/erp/clientes'], ['Configuración', '/erp/configuracion'],
       ['Volver al monitor', '/inicio'],
     ])
     // La barra de abajo del celular (ERP en el celular, tanda 1): las 4 primeras; el resto va en «Más».
