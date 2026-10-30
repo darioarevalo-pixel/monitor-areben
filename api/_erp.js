@@ -46,7 +46,7 @@
  *   POST {recurso:'erp', accion:'anular', marca, ventaId, motivo, devolucion:{forma}, cliente?}  anula una venta propia (por el motor, §17)
  *   POST {recurso:'erp', accion:'confirmar-vuelta', marca, ventaId}    la prenda de una anulada a desarmar/recibir volvió (§17)
  *   GET  ?recurso=erp&vista=saldo&marca=…&doc=DNI                      el saldo a favor de la clienta (el de prueba)
- *   GET  ?recurso=erp&vista=clientas&marca=…&q=CUIT|nombre             las fichas de clientas (factura A en la Caja)
+ *   GET  ?recurso=erp&vista=clientas&marca=…&q=CUIT|nombre[&linea=…]    las fichas de clientas (factura A en la Caja; con línea, el ⌘K)
  *   POST {recurso:'erp', accion:'cambiar', marca, id, ventaId, devueltas, items, pagos, total, desde?, pago?, comprobante?, cliente?}
  *        el cambio en el local: cobra la diferencia con el descuento de la forma de pago y, con transferencia,
  *        contesta `esperando` hasta que llega el pago (la pantalla repite el MISMO pedido)
@@ -125,7 +125,7 @@ import { ACCIONES as ACCIONES_CATALOGO } from '../lib/erp/catalogo-edicion.core.
 import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
-import { cuentaDeCliente, cuentasDeLaMarca, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente } from './_erp-clientes.js'
+import { cuentaDeCliente, cuentasDeLaMarca, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeLinea } from './_erp-clientes.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
 import { cobrosDelPeriodo, reintentarEntregasErp } from './_erp-cobros.js'
@@ -1071,16 +1071,30 @@ async function receptorDeFicha(db, { empresaId, factura }) {
   return c ? { nombre: c.razon_social || c.nombre, domicilio: c.domicilio } : null
 }
 
-/** Las fichas de clientas para la factura A (`erp › Caja`): por CUIT/DNI (prefijo) o por nombre. */
-export async function clientasDeLaCaja({ marca, q }) {
+/**
+ * Las fichas de clientas para la factura A (`erp › Caja`): por CUIT/DNI (prefijo) o por nombre.
+ * Con `linea` (el ⌘K, Bruno 30-oct: «los clientes van en cada marca, sí o sí»), sólo las de esa línea (`sqlClienteDeLinea`).
+ * Sin ella, las de la empresa: la factura A y Cargar venta ELIGEN una ficha, y sin verla se cargaría repetida.
+ */
+export async function clientasDeLaCaja({ marca, q, linea = '' }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  return conMotor(marca, 'Buscar clientas', async (db, { buscarClientes }) => {
+  const l = linea ? lineaDelPedido(marca, linea) : null
+  if (linea && !l) return SIN_LINEA
+  const correr = deps.db ? (fn) => fn(deps.db, deps.motor) : (fn) => conMotor(marca, 'Buscar clientas', fn)
+  return correr(async (db, { buscarClientes }) => {
     const [m] = (await db.query('select empresa_id from marca where id = $1', [marca])).rows
     if (!m) return { status: 409, error: 'La marca no está en la base del motor.' }
-    const r = await buscarClientes(db, { empresa_id: m.empresa_id, texto: String(q ?? ''), limite: 8 })
+    const porLinea = !!l && marca !== 'bdi'
+    const r = await buscarClientes(db, { empresa_id: m.empresa_id, texto: String(q ?? ''), limite: porLinea ? 50 : 8 })
     if (!r.ok) return errorDelMotor(r)
+    let clientes = r.clientes
+    if (porLinea && clientes.length) {
+      const ids = new Set((await db.query(`select id::text from cliente where id = any($1::uuid[]) and ${sqlClienteDeLinea('cliente.id', 2)}`,
+        [clientes.map((c) => String(c.id)), l])).rows.map((x) => x.id))
+      clientes = clientes.filter((c) => ids.has(String(c.id))).slice(0, 8)
+    }
     return {
-      clientas: r.clientes.map((c) => ({
+      clientas: clientes.map((c) => ({
         doc: c.doc, nombre: c.nombre, razonSocial: c.razon_social, domicilio: c.domicilio, condicion: opcionDeCondicion(c.condicion_iva),
       })),
     }
@@ -1484,17 +1498,29 @@ const tieneProveedores = async (db) => (await import('../motor/venta/proveedor.m
 /**
  * Los PROVEEDORES del ERP (`sql/013`, Bruno 15-oct: tabla propia cruzada con PRM) de la empresa de la marca, para elegir
  * en «Cargar costo». Sin 013 ⇒ 409 con aviso: la pantalla deja escribir el proveedor como texto, como antes.
- * @param {{ marca: string, q?: string }} x @param {{ db?: any }} [deps]
+ * 🔑 De UNA línea (Bruno, 30-oct: «los proveedores van en cada marca, sí o sí»): el proveedor es de la empresa, ⛔ tiene
+ * línea; es de la línea si le hizo algún producto de ella (`producto.marca`), y `productos` cuenta sólo ésos. El que
+ * todavía ⛔ tiene ninguno (recién dado de alta) sale en las dos: si no, ⛔ se lo podría elegir para su primer costo.
+ * @param {{ marca: string, linea?: string, q?: string }} x @param {{ db?: any }} [deps]
  */
-export async function proveedoresDeMarca({ marca, q }, deps = {}) {
+export async function proveedoresDeMarca({ marca, linea = '', q }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  const l = lineaDelPedido(marca, linea)
+  if (!l) return SIN_LINEA
   const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'Los proveedores', fn)
   return correr(async (db) => {
     if (!(await tieneProveedores(db))) return { status: 409, error: SIN_PROVEEDORES }
     const { buscarProveedores } = await import('../motor/venta/proveedor.mjs')
     const r = await buscarProveedores(db, { marca, q: typeof q === 'string' ? q.slice(0, 80) : null, limite: 200 })
     if (!r.ok) return { status: 409, error: textoDelMotor(r.error) }
-    return { proveedores: r.proveedores.map((p) => ({ id: String(p.id), nombre: p.nombre, cuit: p.cuit ?? null, nombreGn: p.nombre_gn ?? null, productos: p.productos, activo: p.activo })) }
+    let proveedores = r.proveedores
+    if (marca !== 'bdi') {
+      const deLinea = new Map((await db.query(`select proveedor_id::text as id, count(*) filter (where marca = $1)::int as n
+        from producto where proveedor_id is not null group by 1`, [l])).rows.map((x) => [x.id, x.n]))
+      proveedores = proveedores.filter((p) => !p.productos || deLinea.get(String(p.id)) > 0)
+        .map((p) => ({ ...p, productos: deLinea.get(String(p.id)) ?? 0 }))
+    }
+    return { proveedores: proveedores.map((p) => ({ id: String(p.id), nombre: p.nombre, cuit: p.cuit ?? null, nombreGn: p.nombre_gn ?? null, productos: p.productos, activo: p.activo })) }
   })
 }
 
@@ -1777,7 +1803,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET' && req.query.vista === 'proveedores') {
-      const r = await proveedoresDeMarca({ marca: String(req.query.marca || ''), q: req.query.q })
+      const r = await proveedoresDeMarca({ marca: String(req.query.marca || ''), linea: String(req.query.linea || ''), q: req.query.q })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'GET' && req.query.vista === 'precio') {
@@ -1921,7 +1947,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET' && req.query.vista === 'clientas') {
-      const r = await clientasDeLaCaja({ marca: String(req.query.marca || ''), q: req.query.q })
+      const r = await clientasDeLaCaja({ marca: String(req.query.marca || ''), q: req.query.q, linea: req.query.linea ? String(req.query.linea) : '' })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

@@ -50,4 +50,12 @@ describe('⌘K: la tienda del menú', () => {
     expect(t).toContain('REMERA ZATTIA')
     expect(t).not.toContain('REMERA STU')
   })
+  it('las clientas también se piden con la línea (Bruno, 30-oct: «los clientes van en cada marca, sí o sí»)', async () => {
+    await buscar('stunned', 'ana')
+    expect(m.buscarClientas).toHaveBeenCalledWith('zattia', 'ana', 'stunned')
+    vi.clearAllMocks(); m.buscarClientas.mockResolvedValue({ clientas: [] })
+    act(() => root?.unmount()); root = null; host.remove()
+    await buscar('zattia', 'ana')
+    expect(m.buscarClientas).toHaveBeenCalledWith('zattia', 'ana', 'zattia')
+  })
 })

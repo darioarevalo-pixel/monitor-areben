@@ -47,10 +47,48 @@ describe('armarPrecioDeProducto: el proveedor DEL PRODUCTO (Bruno, 18-oct: nace 
 describe('proveedores sin la tabla (base sin sql/013)', () => {
   const sinTabla = { query: async () => ({ rows: [{ hay: false }] }) }
   it('lista y alta contestan 409 con el aviso (la pantalla deja el texto)', async () => {
-    expect(await proveedoresDeMarca({ marca: 'zattia' }, { db: sinTabla })).toMatchObject({ status: 409, error: expect.stringMatching(/a mano/) })
+    expect(await proveedoresDeMarca({ marca: 'zattia', linea: 'zattia' }, { db: sinTabla })).toMatchObject({ status: 409, error: expect.stringMatching(/a mano/) })
     expect(await altaDeProveedor({ marca: 'zattia', body: { nombre: 'X' } }, { db: sinTabla })).toMatchObject({ status: 409 })
   })
   it('marca inválida ⇒ 400 sin tocar la base', async () => {
     expect(await proveedoresDeMarca({ marca: 'otra' }, { db: null as never })).toMatchObject({ status: 400 })
+  })
+})
+
+describe('proveedores de UNA línea (Bruno, 30-oct: «los proveedores van en cada marca, sí o sí»)', () => {
+  const P = (id: number, nombre: string, productos: number) => ({ id, nombre, cuit: null, nombre_gn: null, productos, activo: true })
+  // KHAN le hace a Zattia, TALLER STU a Stunned, MIXTO a las dos y NUEVO todavía a nadie.
+  const PRODUCTOS: Record<string, Record<string, number>> = { 1: { zattia: 5 }, 2: { stunned: 3 }, 3: { zattia: 1, stunned: 2 } }
+  function db() {
+    const pedidas: { sql: string; params?: unknown[] }[] = []
+    return {
+      pedidas,
+      query: async (sql: string, params?: unknown[]) => {
+        pedidas.push({ sql, params })
+        if (sql.includes('to_regclass') || sql.includes('has_table_privilege') || /\bhay\b/.test(sql)) return { rows: [{ hay: true }] }
+        if (sql.includes('from marca')) return { rows: [{ empresa_id: 'areben' }] }
+        if (sql.includes('from proveedor p')) return { rows: [P(1, 'KHAN', 5), P(2, 'TALLER STU', 3), P(3, 'MIXTO', 3), P(4, 'NUEVO', 0)] }
+        if (sql.includes('from producto where proveedor_id')) {
+          const l = String(params?.[0])
+          return { rows: Object.entries(PRODUCTOS).map(([id, por]) => ({ id, n: por[l] ?? 0 })) }
+        }
+        throw new Error(`sin respuesta para: ${sql.slice(0, 80)}`)
+      },
+    }
+  }
+  it('Stunned: los suyos y el que todavía ⛔ tiene productos; los productos, sólo los de Stunned', async () => {
+    const r = await proveedoresDeMarca({ marca: 'zattia', linea: 'stunned' }, { db: db() }) as { proveedores: { nombre: string; productos: number }[] }
+    expect(r.proveedores.map((p) => [p.nombre, p.productos])).toEqual([['TALLER STU', 3], ['MIXTO', 2], ['NUEVO', 0]])
+  })
+  it('Zattia: al revés', async () => {
+    const r = await proveedoresDeMarca({ marca: 'zattia', linea: 'zattia' }, { db: db() }) as { proveedores: { nombre: string; productos: number }[] }
+    expect(r.proveedores.map((p) => [p.nombre, p.productos])).toEqual([['KHAN', 5], ['MIXTO', 1], ['NUEVO', 0]])
+  })
+  it('Zattia sin línea ⇒ 400; BDI ⛔ tiene líneas y ⛔ se corta', async () => {
+    expect(await proveedoresDeMarca({ marca: 'zattia' }, { db: db() })).toMatchObject({ status: 400 })
+    const b = db()
+    const r = await proveedoresDeMarca({ marca: 'bdi', linea: 'bdi' }, { db: b }) as { proveedores: unknown[] }
+    expect(r.proveedores).toHaveLength(4)
+    expect(b.pedidas.some((p) => p.sql.includes('from producto where proveedor_id'))).toBe(false)
   })
 })

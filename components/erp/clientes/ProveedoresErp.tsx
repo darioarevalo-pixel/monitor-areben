@@ -14,6 +14,7 @@ import { ListaTrabajo, type ColumnaLista, type OrdenLista } from '@/components/u
 import { BuscadorLista, ChipEstado, TileResumen, VistasLista, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { leerProveedores, type MarcaErp, type ProveedorErp } from '@/lib/erp/cliente'
 import { normal } from '@/lib/erp/stock-lista.core.js'
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 
 const VISTAS: Array<[string, string, (p: ProveedorErp) => boolean]> = [
   ['todos', 'Todos', () => true],
@@ -33,6 +34,8 @@ const abrir = (ruta: string) => window.open(ruta, '_blank', 'noopener')
 export function ProveedoresErp() {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  // De la tienda del menú (Bruno, 30-oct: «los proveedores van en cada marca, sí o sí»): Stunned y Zattia comparten base.
+  const tienda = useTiendaErp()
   const [datos, setDatos] = useState<{ marca: string; proveedores: ProveedorErp[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [vista, setVista] = useState('todos')
@@ -40,12 +43,12 @@ export function ProveedoresErp() {
   const [orden, setOrden] = useState<OrdenLista>(null)
   useEffect(() => {
     let vivo = true
-    leerProveedores(marca)
-      .then((d) => { if (vivo) { setDatos({ marca, proveedores: d.proveedores }); setError(null) } })
-      .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer los proveedores.'); setDatos({ marca, proveedores: [] }) } })
+    leerProveedores(marca, tienda)
+      .then((d) => { if (vivo) { setDatos({ marca: tienda, proveedores: d.proveedores }); setError(null) } })
+      .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer los proveedores.'); setDatos({ marca: tienda, proveedores: [] }) } })
     return () => { vivo = false }
-  }, [marca])
-  const cargando = datos?.marca !== marca
+  }, [marca, tienda])
+  const cargando = datos?.marca !== tienda
 
   const base = useMemo(() => (datos?.proveedores ?? []).filter((p) => !q || normal(`${p.nombre} ${p.nombreGn ?? ''} ${p.cuit ?? ''}`).includes(normal(q))), [datos, q])
   const conteo = useMemo(() => Object.fromEntries(VISTAS.map(([k, , entra]) => [k, base.filter(entra).length])), [base])

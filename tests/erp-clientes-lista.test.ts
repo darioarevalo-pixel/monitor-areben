@@ -26,7 +26,7 @@ describe('armarFilasClientes', () => {
   it('con motor: la cuenta se pega por gn_client_id o por nombre; uno sin compras en GN igual aparece', () => {
     const f = armarFilasClientes({
       gn: GN, hoy: HOY,
-      erp: [{ id: 'u1', nombre: 'Barbara', doc: '27111', gn_client_id: 10 }, { id: 'u2', nombre: 'JOSEFINA Batter', doc: null, gn_client_id: null }, { id: 'u3', nombre: 'Nueva', doc: '30', gn_client_id: null }],
+      erp: [{ id: 'u1', nombre: 'Barbara', doc: '27111', gn_client_id: 10 }, { id: 'u2', nombre: 'JOSEFINA Batter', doc: null, gn_client_id: null }, { id: 'u3', nombre: 'Nueva', doc: '30', gn_client_id: null, deLaLinea: true }],
       cuentas: [{ cliente_id: 'u1', saldo: 1500, a_favor: 0, vencido: 1500 }, { cliente_id: 'u2', saldo: -200, a_favor: 200, vencido: 0 }],
     })
     expect(f.find((x) => x.id === '10')).toMatchObject({ clienteId: 'u1', saldo: 1500, vencido: true, doc: '27111' })
@@ -34,6 +34,20 @@ describe('armarFilasClientes', () => {
     expect(f.find((x) => x.id === 'erp:u3')).toMatchObject({ soloErp: true, saldo: 0, compras: 0 })
     expect(contarVistas(f).saldo).toBe(2)
     expect(resumen(f).porCobrar).toBe(1300)
+  })
+
+  it('🔑 cada marca ve lo suyo (Bruno, 30-oct): la ficha del motor sin compras de la línea entra sólo si es de ella', () => {
+    const f = armarFilasClientes({
+      gn: GN, hoy: HOY,
+      erp: [
+        { id: 'u4', nombre: 'De Zattia', doc: '40', gn_client_id: null, deLaLinea: false },
+        { id: 'u5', nombre: 'Sin decir', doc: '50', gn_client_id: null },
+        { id: 'u1', nombre: 'Barbara', doc: '27111', gn_client_id: 10, deLaLinea: false },
+      ],
+    })
+    expect(f.some((x) => x.id === 'erp:u4' || x.id === 'erp:u5')).toBe(false)
+    // La que SÍ compró en la línea (fila de GN) igual lleva su ficha: el corte es de la fila nueva, ⛔ de la cuenta.
+    expect(f.find((x) => x.id === '10')).toMatchObject({ clienteId: 'u1' })
   })
 
   it('la tupla de viaje vuelve igual', () => {
@@ -82,6 +96,21 @@ describe('el servidor', () => {
     expect(consulta).toContain('coalesce(lg.tiene_otra, false) or lg.sale_id is null')
     expect(await listaDeClientes({ marca: 'zattia' }, { conMotor: conMotor(db) })).toMatchObject({ status: 400 })
     expect(await listaDeClientes({ marca: 'bdi', linea: 'stunned' }, { conMotor: conMotor(db) })).toMatchObject({ status: 400 })
+  })
+
+  it('las fichas del motor salen marcadas con su línea: en Stunned, ⛔ una de Zattia (Bruno, 30-oct)', async () => {
+    const pedidas: { sql: string; params?: unknown[] }[] = []
+    const db = pg({ 'group by 1': [], 'max(date_sale)': [{ hasta: '2026-10-19' }], 'from cliente': [{ id: 'u1', empresa_id: 'areben', nombre: 'Ana', doc: null, gn_client_id: null, de_la_linea: false }], 'distinct empresa_id': [] })
+    // La cuenta corriente del motor (`cuentasCorrientes`) lee su libro: acá, vacío.
+    const espia = { query: async (s: string, params?: unknown[]) => {
+      if (s.includes('as de_la_linea')) { pedidas.push({ sql: s, params }); return db.query(s) }
+      return { rows: s.includes('::date::text as d') ? [{ d: '2026-10-19' }] : s.includes('group by 1') || s.includes('max(date_sale)') ? (await db.query(s)).rows : [] }
+    } }
+    const r = await listaDeClientes({ marca: 'zattia', linea: 'stunned' }, { conMotor: conMotor(espia) }) as { erp: { deLaLinea: boolean }[] }
+    expect(pedidas[0].sql).toContain('v.marca = $1')
+    expect(pedidas[0].sql).toContain('m.marca = $1')
+    expect(pedidas[0].params).toEqual(['stunned'])
+    expect(r.erp[0].deLaLinea).toBe(false)
   })
 
   it('la ficha de BDI va por el id de GN y trae el contacto del CRM', async () => {

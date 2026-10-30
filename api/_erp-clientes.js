@@ -31,10 +31,22 @@ const conLinea = (marca, linea) => (marca === 'bdi' ? { cte: '', join: '', donde
   cte: `with ${SQL_CTE_LINEA_GN} `, join: 'left join linea_gn lg on lg.sale_id = v.id', donde: sqlVentaDeLinea(linea, 'lista'),
 })
 
+/**
+ * 🔑 Una ficha del motor (`cliente`) es de la EMPRESA, ⛔ de una línea: es de la línea `$n` si tiene alguna venta o algún
+ * movimiento de cuenta de ella (Bruno, 30-oct: «los clientes van en cada marca, sí o sí»). La usan Clientes y el ⌘K;
+ * los buscadores que ELIGEN una clienta para escribir (factura A, Cargar venta) ⛔: ahí, sin verla, se cargaría repetida.
+ * @param {string} id la columna del id de la ficha @param {number} n el parámetro de la línea
+ */
+export const sqlClienteDeLinea = (id, n) => `(exists (select 1 from venta v where v.cliente_id = ${id} and v.marca = $${n})
+  or exists (select 1 from cuenta_movimiento m where m.cliente_id = ${id} and m.marca = $${n}))`
+
 /** Los clientes del motor y su cuenta corriente. Sin las tablas (motor viejo) ⇒ vacío y se dice. */
 async function delMotor(pg, marca, linea) {
   try {
-    const erp = (await pg.query('select id::text, empresa_id, nombre, doc, gn_client_id from cliente')).rows
+    // `de_la_linea`: la ficha sin compras de GN de la línea entra a la lista sólo si es de ella (`armarFilasClientes`).
+    const erp = (await (marca === 'bdi'
+      ? pg.query('select id::text, empresa_id, nombre, doc, gn_client_id, true as de_la_linea from cliente')
+      : pg.query(`select id::text, empresa_id, nombre, doc, gn_client_id, ${sqlClienteDeLinea('cliente.id', 1)} as de_la_linea from cliente`, [linea]))).rows
     if (!erp.length) return { erp, cuentas: [], cuentaLista: true }
     const { cuentasCorrientes } = await import('../motor/cuenta/cuenta.mjs')
     const cuentas = []
@@ -67,7 +79,7 @@ export async function listaDeClientes({ marca, linea = marca === 'bdi' ? 'bdi' :
     const m = await delMotor(pg, marca, l)
     return {
       gn: gn.map(aTupla),
-      erp: m.erp.map((c) => ({ id: c.id, nombre: c.nombre, doc: c.doc, gn_client_id: c.gn_client_id == null ? null : String(c.gn_client_id) })),
+      erp: m.erp.map((c) => ({ id: c.id, nombre: c.nombre, doc: c.doc, gn_client_id: c.gn_client_id == null ? null : String(c.gn_client_id), deLaLinea: !!c.de_la_linea })),
       cuentas: m.cuentas.map((c) => ({ cliente_id: c.cliente_id, saldo: c.saldo, a_favor: c.a_favor, vencido: c.vencido })),
       gnHasta: hasta ?? null,
       clientesErp: m.erp.length,

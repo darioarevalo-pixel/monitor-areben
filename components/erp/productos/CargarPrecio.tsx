@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react'
 import { Button, ConfirmDetalle, Field, Input, MoneyText, Select, space, useConfirmar } from '@/components/ui'
 import { cargarPrecioCosto, guardarProveedor, leerProveedores, type MarcaErp, type PrecioDeProducto, type ProveedorErp } from '@/lib/erp/cliente'
 import { parsearMonto } from '@/lib/compromisos/plata.core.js'
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 
 /** En el selector de proveedor: escribir uno que ⛔ está en la lista (texto, como antes de la tabla). */
 const OTRO = 'otro'
@@ -25,6 +26,8 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
   onListo: (hecho: string, aviso?: string | null) => void
   onError: (e: string) => void
 }) {
+  // Los proveedores de la tienda del menú (Bruno, 30-oct): mirando Stunned, ⛔ los talleres de Zattia.
+  const tienda = useTiendaErp()
   const [que, setQue] = useState('costo')
   const [monto, setMonto] = useState('')
   const [desde, setDesde] = useState('')
@@ -42,11 +45,11 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
   const [vuelta, setVuelta] = useState(0)
   useEffect(() => {
     let vivo = true
-    leerProveedores(marca)
+    leerProveedores(marca, tienda)
       .then((r) => { if (vivo) { setProveedores(r.proveedores); setSinLista(null) } })
       .catch((e) => { if (vivo) { setProveedores([]); setSinLista(e instanceof Error ? e.message : 'No se pudieron leer los proveedores.') } })
     return () => { vivo = false }
-  }, [marca, vuelta])
+  }, [marca, tienda, vuelta])
 
   async function correr(fn: () => Promise<void>, fallo: string) {
     setTrabajando(true)
@@ -94,9 +97,13 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
     const r = await guardarProveedor(marca, { nombre: nuevo.nombre, cuit: nuevo.cuit || undefined })
     setNuevo(null)
     // 🔴 Se elige recién cuando la lista se vuelve a leer: si no, el formulario mostraría «Sin proveedor» y mandaría el id.
-    const l = await leerProveedores(marca)
+    const l = await leerProveedores(marca, tienda)
     setProveedores(l.proveedores)
-    if (!l.proveedores.some((p) => p.id === r.proveedor.id)) { setVuelta((x) => x + 1); return }
+    if (!l.proveedores.some((p) => p.id === r.proveedor.id)) {
+      // Ya existía y le hace productos a la OTRA tienda: la lista es de ésta (30-oct) ⇒ ⛔ se elige callado.
+      if (r.yaExistia) onError(`${r.proveedor.nombre} ya está cargado y es proveedor de la otra marca.`)
+      setVuelta((x) => x + 1); return
+    }
     setProveedorId(r.proveedor.id)
   }, 'No se pudo guardar el proveedor.')
 

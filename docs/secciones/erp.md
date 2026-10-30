@@ -341,6 +341,8 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   `api/_erp.js`; sin ella, 400 — antes contestaba las dos sumadas y nadie se enteraba). El espejo de GN ⛔ tiene línea:
   `lib/erp/linea-gn.core.js` (criterios lista / factura) y `ventasDeLinea` de `api/_erp-inicio.js` (plata por peso). El
   lote de Facturación es de UNA línea y sale con su PV (`marcaDePuntoDeVenta`). ⛔ La Caja es la única unificada.
+  Proveedores y clientas TAMBIÉN van por línea («sí o sí»): ver `docs/lineas.md`; ⛔ los buscadores que ELIGEN una ficha
+  para escribir (factura A, Cargar venta) no se cortan, o la clienta se carga repetida.
 
 - 📱 **El ERP en el celular (Bruno, 29-oct; artifact `~/Documents/erp-monitor/diseno/celular/erp-celular.html`)**: abajo de
   900 px el menú de la izquierda se esconde; arriba van la sección, la marca y la lupa, y abajo Inicio · Ventas · Caja · Stock ·

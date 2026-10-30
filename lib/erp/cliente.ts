@@ -134,8 +134,9 @@ export const leerHistorialDeEdicion = (marca: MarcaErp, productId: string) =>
 
 /** Los proveedores del ERP (sql/013) para elegir en el costo. Sin la tabla, el API contesta 409 y se escribe el texto. */
 export type ProveedorErp = { id: string; nombre: string; cuit: string | null; nombreGn: string | null; productos: number; activo: boolean }
-export const leerProveedores = (marca: MarcaErp) =>
-  pedir<{ proveedores: ProveedorErp[] }>(null, `&vista=proveedores&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los proveedores.')
+/** De UNA línea (30-oct): en Zattia, sin `linea`, el servidor contesta 400. */
+export const leerProveedores = (marca: MarcaErp, linea: LineaErp) =>
+  pedir<{ proveedores: ProveedorErp[] }>(null, `&vista=proveedores&marca=${marca}&linea=${linea}&nc=${Date.now()}`, 'No se pudieron leer los proveedores.')
 export const guardarProveedor = (marca: MarcaErp, p: { nombre: string; cuit?: string }) =>
   pedir<{ ok: true; yaExistia: boolean; proveedor: { id: string; nombre: string; cuit: string | null } }>(post({ accion: 'guardar-proveedor', marca, ...p }), '', 'No se pudo guardar el proveedor.')
 
@@ -283,8 +284,9 @@ export type PrendaNueva = { product_id: number; size_id: number; cantidad: numbe
 
 /** Una ficha de clienta (contrato §11) para la factura A: lo que la Caja completa sola. */
 export type Clienta = { doc: string | null; nombre: string; razonSocial: string | null; domicilio: string | null; condicion: 'ri' | 'monotributo' | null }
-export const buscarClientas = (marca: MarcaErp, q: string) =>
-  pedir<{ clientas: Clienta[] }>(null, `&vista=clientas&marca=${marca}&q=${encodeURIComponent(q)}`, 'No se pudo buscar la clienta.')
+/** Sin `linea`, las fichas de la empresa (factura A, Cargar venta: ELIGEN una); con ella, sólo las de esa línea (el ⌘K). */
+export const buscarClientas = (marca: MarcaErp, q: string, linea?: 'zattia' | 'stunned') =>
+  pedir<{ clientas: Clienta[] }>(null, `&vista=clientas&marca=${marca}&q=${encodeURIComponent(q)}${linea ? `&linea=${linea}` : ''}`, 'No se pudo buscar la clienta.')
 
 /** El saldo a favor de una clienta en el libro de la venta que se cambia (`prueba` de esa venta). */
 export const leerSaldo = (marca: MarcaErp, doc: string, prueba = true, linea?: 'stunned') =>

@@ -106,7 +106,7 @@ export function BusquedaGlobal({ marca, marcas, secciones, onElegir, onCerrar }:
   useEffect(() => { onElegirRef.current = onElegir })
 
   // En la base de Zattia viven Zattia y Stunned: se queda con la tienda del menú (Bruno, 30-oct: mirando Stunned, una venta
-  // de Zattia ⛔ aparece —y al elegirla Ventas decía «No encontré la venta»—). Las clientas son de la empresa: ⛔ tienen línea.
+  // de Zattia ⛔ aparece —y al elegirla Ventas decía «No encontré la venta»—). Y las clientas, sólo las de la línea (Bruno, 30-oct).
   const tienda = useTiendaErp()
   const lineaZ: 'zattia' | 'stunned' = tienda === 'stunned' ? 'stunned' : 'zattia'
   const donde: MarcaErp[] = todas ? marcas : [marca]
@@ -131,7 +131,7 @@ export function BusquedaGlobal({ marca, marcas, secciones, onElegir, onCerrar }:
         const [v, p, c] = await Promise.all([
           que.ventas ? buscarVentas(m, { q: que.texto, desde: desdeBusquedaDeVentas(hoy), hasta: hoy }).then((r) => etiquetar(m, m === 'zattia' ? r.ventas.filter((x) => x.marca === lineaZ) : r.ventas)).catch((e) => { quien(m, e); return [] }) : [],
           que.prendas ? buscarPrendas(m, que.texto).then((r) => etiquetar(m, m === 'zattia' ? deLaTienda(r.variantes, lineaZ) : r.variantes)).catch((e) => { quien(m, e); return [] }) : [],
-          que.clientas ? buscarClientas(m, que.texto).then((r) => etiquetar(m, r.clientas)).catch((e) => { quien(m, e); return [] }) : [],
+          que.clientas ? buscarClientas(m, que.texto, m === 'zattia' ? lineaZ : undefined).then((r) => etiquetar(m, r.clientas)).catch((e) => { quien(m, e); return [] }) : [],
         ])
         return { v, p, c }
       }))
