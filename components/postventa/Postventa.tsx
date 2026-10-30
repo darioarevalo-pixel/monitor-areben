@@ -192,8 +192,8 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
           setMsg(`Falla cargada${etiq}. Falta tu credencial del Monitor para descontar el stock en GN — se puede rehacer desde Administración.`)
         } else {
           try {
-            await registrarVentaGN(marca, { id, product_id: snap.product_id, size_id: snap.size_id, cantidad: snap.cantidad, sku: snap.sku, motivo: snap.motivo, barcode: barcode ?? null, ubicacion: snap.ubicacion, precio_lista: snap.precio_lista }, { usuario, cred })
-            setMsg(`Falla cargada${etiq} — venta $0 en GN, stock −1.`)
+            const { erpAjuste } = await registrarVentaGN(marca, { id, product_id: snap.product_id, size_id: snap.size_id, cantidad: snap.cantidad, sku: snap.sku, motivo: snap.motivo, barcode: barcode ?? null, ubicacion: snap.ubicacion, precio_lista: snap.precio_lista }, { usuario, cred })
+            setMsg(erpAjuste ? `Falla cargada${etiq} — ajuste A-${erpAjuste} en el ERP, stock −1.` : `Falla cargada${etiq} — venta $0 en GN, stock −1.`)
           } catch (ve) { setError(`Falla cargada${etiq}, pero la venta en GN falló: ${(ve as Error).message}`) }
         }
       } else { setMsg(`Falla cargada${etiq}.`) }

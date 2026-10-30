@@ -79,7 +79,7 @@ export async function registrarVentaGN(
    * una falla cargada a mano desde Post-venta.
    */
   nota?: string,
-): Promise<void> {
+): Promise<{ erpAjuste?: number }> {
   if (!falla.product_id || !falla.size_id) {
     throw new Error('La falla no está linkeada a un artículo de GN: elegí el artículo para poder descontar el stock.')
   }
@@ -96,14 +96,17 @@ export async function registrarVentaGN(
   }
   const r = await enviarVentaFetch(pedido)
   if (!r.ok) throw new Error(`No se pudo crear la venta en GN — ${r.error || ''}`)
+  // Stunned: la baja fue un ajuste del ERP, ⛔ una venta de GN ⇒ se anota el número del ajuste (`api/crear-venta.js`).
+  const erpAjuste = r.erp?.ajuste
 
   const resp = await apiFetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ store, action: 'venta', id: falla.id, gn_venta_id: r.venta?.id ?? null, gn_venta_number: r.venta?.number ?? null, usuario: ctx.usuario }),
+    body: JSON.stringify({ store, action: 'venta', id: falla.id, gn_venta_id: r.venta?.id ?? null, gn_venta_number: r.venta?.number ?? null, erp_ajuste: erpAjuste ?? null, usuario: ctx.usuario }),
   })
   const d = await resp.json()
-  if (!d || !d.ok) throw new Error((d && d.error) || 'La venta se creó en GN pero no se pudo registrar en la falla.')
+  if (!d || !d.ok) throw new Error((d && d.error) || (erpAjuste ? `El stock se descontó en el ERP (ajuste A-${erpAjuste}) pero no se pudo registrar en la falla.` : 'La venta se creó en GN pero no se pudo registrar en la falla.'))
+  return erpAjuste ? { erpAjuste } : {}
 }
 
 /** Administración valida los datos de la carga (marca 'confirmada'). NO toca GN (la venta ya se hizo). */

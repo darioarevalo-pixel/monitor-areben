@@ -10,7 +10,7 @@ import { confirmar as confirmarLedger, liberar as liberarLedger, reservar as res
 import { notaTnImport } from '../lib/sync-tn/nota.core.js';
 // Cada venta que sale de acá se anota en `gn_venta_monitor` (prendas, depósito, hora, de qué flujo):
 // es lo que el libro de stock necesita para que el monitor tenga el dato sin GN. Ver api/_ventas-monitor.js.
-import { documentarCanje } from './_salida-documento.js';
+import { documentarCanje, fallaStunnedAlErp } from './_salida-documento.js';
 import { anotar, filaDeVenta, leer as leerRegistro, marcarAnulada } from './_ventas-monitor.js';
 
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
@@ -342,6 +342,14 @@ export default async function handler(req, res) {
   if (malos.length) return res.status(400).json({ error: `Hay ${malos.length} renglón(es) sin producto de GN o con cantidad inválida: la venta se crea entera o no se crea.`, detalle: malos.slice(0, 5) });
 
   const store_id = cfg.store[b.origen];
+  // 🔑 La FALLA de Stunned ⛔ va a GN (Bruno 30-oct): el GN de Zattia ya ⛔ mueve el libro de Stunned desde el corte, así que la
+  // venta técnica descontaría una prenda que el ERP sigue vendiendo. Va al ERP como ajuste «Fallado» aplicado en el acto. Si el
+  // ERP ⛔ la puede anotar, FRENA: caer a GN sería volver al agujero sin que nadie se entere.
+  if (!esReingreso) {
+    const falla = await fallaStunnedAlErp({ store, b, usuario: perfil.name || perfil.user || null });
+    if (falla && falla.error) return res.status(409).json({ error: `La falla es de Stunned y el ERP no la pudo descontar: ${falla.error}` });
+    if (falla) return res.status(200).json({ ok: true, erp: { ajuste: falla.ajuste, ya: falla.ya } });
+  }
   // El canje se corta ACÁ si la marca no tiene cliente configurado: caer al de fotos dejaría la
   // venta atribuida a "Sesión de fotos" y GN no permite corregir eso por API.
   if (b.proposito === 'canje' && !CANJE_CLIENT[store]) {

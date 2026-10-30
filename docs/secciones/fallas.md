@@ -44,6 +44,12 @@ quien la carga, y que el negativo quede de ese lado es lo que después deja arre
 
 ## Reglas que el código no dice
 
+- 🔑 **La falla de STUNNED ⛔ va a GN** (Bruno 30-oct-2026): desde el corte (28-oct) el GN de Zattia ⛔ mueve el libro de
+  Stunned, así que `api/crear-venta.js` la manda al ERP como **ajuste «Fallado»** (línea `stunned`, `ref` = `falla-<id>:<depósito>`)
+  **aplicado en el acto** —baja al cargarla, como la venta de GN— (`fallaStunnedAlErp`, `api/_salida-documento.js`). La línea la
+  decide el servidor con `productos.sku` (⛔ el sku de la pantalla). Si el ERP ⛔ la puede anotar **frena (409)**, ⛔ cae a GN. La
+  falla queda sin `gn_venta_*`: el número del ajuste va al historial («ajuste A-N del ERP»). Eliminar la falla ⛔ deshace el ajuste.
+
 - **Una falla SIN `product_id`/`size_id` ⛔ no descuenta nada**: es la «falla libre» de
   Administración, que sólo anota. Es también lo que pasa cuando falta la credencial.
 - **`recibir` mueve `ubicacion` a `deposito`**, y ⛔ ése no es el mismo dato que el de dónde se

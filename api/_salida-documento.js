@@ -14,7 +14,9 @@
 //
 // ⛔ Archivo `_`: NO es una ruta.
 import { configPg } from '../lib/pg.core.js'
-import { canjeDe, consumoDe, devolverDe, pedidoDeSolicitud, volvioTodo } from '../lib/erp/salida-solicitud.core.js'
+import { canjeDe, consumoDe, devolverDe, fallaStunnedDe, pedidoDeSolicitud, volvioTodo } from '../lib/erp/salida-solicitud.core.js'
+import { lineaDe, skuParaLinea } from '../lib/lineas.core.js'
+import { lecturasStunnedErp } from '../lib/stunned/ventas-erp.core.js'
 
 const PG_DE_STORE = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA', stunned: 'DATABASE_URL_ZATTIA' }
 /** El guardado de la solicitud ya espera a Supabase: el documento no puede sumar mucho más que esto. */
@@ -109,4 +111,46 @@ export function documentarConsumo({ store, kind, solicitud, usuario }) {
  */
 export function documentarCanje({ store, b, usuario }) {
   return anotarAjustes({ store, pedidos: canjeDe(b, store), usuario })
+}
+
+/**
+ * La FALLA de Stunned al ERP, ⛔ a GN (Bruno 30-oct): ajuste `fallado` de la línea `stunned` que baja el libro al CARGARLA, como
+ * hacía la venta de GN ⇒ se crea y se aprueba en el acto, a nombre de quien la cargó (el `fallado` a mano de `erp › Ajustes`
+ * sigue esperando al admin). 🔴 A diferencia del canje ⛔ es sombra: es LA baja ⇒ si falla, FRENA (devuelve `error`) y ⛔ cae a GN.
+ * La línea sale del espejo (`productos.sku`, con el proveedor de respaldo), ⛔ del sku que manda la pantalla.
+ * @param {{ store: string, b: any, usuario: string|null }} p `b` = el cuerpo del pedido a crear-venta
+ * @returns {Promise<null | { ok: true, ajuste: number, ya: boolean } | { error: string }>} `null` = ⛔ es de Stunned: sigue a GN
+ */
+export async function fallaStunnedAlErp({ store, b, usuario }) {
+  if (!b || b.proposito !== 'falla' || store !== 'zattia' || !lecturasStunnedErp()) return null
+  const ids = [...new Set((Array.isArray(b.items) ? b.items : []).map((it) => Number(it && it.product_id)).filter(Number.isInteger))]
+  if (!ids.length) return null
+  const conexion = process.env[PG_DE_STORE[store]]
+  if (!conexion) return { error: `Falta ${PG_DE_STORE[store]}: ⛔ se puede saber si la falla es de Stunned.` }
+  try {
+    const [{ default: pg }, m] = await Promise.all([import('pg'), import('../motor/stock/ajuste.mjs')])
+    const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: TECHO_MS, statement_timeout: TECHO_MS, query_timeout: TECHO_MS })
+    try {
+      await db.connect()
+      const { rows } = await db.query('select id, sku, proveedor from productos where id = any($1::bigint[])', [ids])
+      const lineas = new Map(rows.map((p) => [Number(p.id), lineaDe(store, skuParaLinea(p))]))
+      const pedido = fallaStunnedDe(b, store, lineas)
+      if (!pedido) return null
+      if (pedido.error) return { error: pedido.error }
+      const quien = usuario || 'fallas'
+      const c = await m.crearAjuste(db, { ...pedido, usuario: quien })
+      if (!c.ok) return { error: mensaje(c) }
+      // Reintento de una falla ya anotada: el ajuste vuelve por su `ref`. Si quedó sin aprobar (se cortó entre los dos pasos), se aprueba ahora.
+      if (c.ajuste.estado === 'rechazado') return { error: `El ajuste A-${c.ajuste.numero} de esta falla está rechazado en ERP › Ajustes.` }
+      if (c.ajuste.estado !== 'aplicado') {
+        const a = await m.aprobarAjuste(db, { ajuste_id: c.ajuste.id, usuario: quien })
+        if (!a.ok) return { error: `El ajuste A-${c.ajuste.numero} quedó para aprobar en ERP › Ajustes (${mensaje(a)}).` }
+      }
+      return { ok: true, ajuste: Number(c.ajuste.numero), ya: c.ya === true }
+    } finally {
+      await db.end().catch(() => {})
+    }
+  } catch (e) {
+    return { error: String((e && e.message) || e).slice(0, 200) }
+  }
 }

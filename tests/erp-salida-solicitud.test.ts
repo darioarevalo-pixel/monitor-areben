@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canjeDe, consumoDe, motivoDeConsumo, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
+import { canjeDe, consumoDe, fallaStunnedDe, motivoDeConsumo, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const item = (o: Record<string, unknown>) => ({ vid: `${o.pid}_${o.sid}`, nombre: 'x', variante: 'M', sku: 'SKU', qty: 3, origen: 'deposito', ...o })
@@ -133,6 +133,35 @@ describe('canjeDe: el canje como ajuste `canje`', () => {
   })
   it('la `ref` es la misma al reintentar (idempotencia)', () => {
     expect(canjeDe(pedido(), 'bdi')).toEqual(canjeDe(pedido(), 'bdi'))
+  })
+})
+
+describe('fallaStunnedDe: la falla de Stunned como ajuste `fallado` (⛔ a GN)', () => {
+  const pedido = (o: Record<string, unknown> = {}): any => ({
+    proposito: 'falla', solicitudId: 'falla-31', origen: 'local', comments: 'Falla STU-REM-0001-L — costura',
+    items: [{ product_id: 7, size_id: 70, quantity: 1, unit_price: 39990 }], ...o,
+  })
+  const stu = new Map([[7, 'stunned'], [8, 'zattia']])
+  it('un ajuste `fallado` de la línea stunned, en el depósito del origen, con `ref` = falla:depósito', () => {
+    const a: any = fallaStunnedDe(pedido(), 'zattia', stu)
+    expect([a.linea, a.deposito, a.motivo, a.ref]).toEqual(['stunned', 'local', 'fallado', 'falla-31:local'])
+    expect(a.renglones.map((r: any) => [r.product_id, r.size_id, r.cantidad])).toEqual([[7, 70, -1]])
+    expect((fallaStunnedDe(pedido({ origen: 'deposito' }), 'zattia', stu) as any).deposito).toBe('deposito')
+  })
+  it('la línea la decide el mapa del SERVIDOR, ⛔ el sku que manda la pantalla', () => {
+    expect(fallaStunnedDe(pedido({ items: [{ product_id: 8, size_id: 80, quantity: 1, sku: 'STU-REM-0001-L' }] }), 'zattia', stu)).toBeNull()
+    expect(fallaStunnedDe(pedido(), 'zattia', new Map())).toBeNull()
+  })
+  it('⛔ corresponde si no es falla o la marca ⛔ es Zattia: sigue a GN', () => {
+    expect(fallaStunnedDe(pedido({ proposito: 'canje' }), 'zattia', stu)).toBeNull()
+    expect(fallaStunnedDe(pedido(), 'bdi', stu)).toBeNull()
+    expect(fallaStunnedDe(null, 'zattia', stu)).toBeNull()
+  })
+  it('frena (⛔ cae a GN) si mezcla líneas, falta el id, el origen ⛔ se conoce o un renglón es inválido', () => {
+    expect(fallaStunnedDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 1 }, { product_id: 8, size_id: 80, quantity: 1 }] }), 'zattia', stu)).toHaveProperty('error')
+    expect(fallaStunnedDe(pedido({ solicitudId: undefined }), 'zattia', stu)).toHaveProperty('error')
+    expect(fallaStunnedDe(pedido({ origen: 'evento' }), 'zattia', stu)).toHaveProperty('error')
+    expect(fallaStunnedDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 0 }] }), 'zattia', stu)).toHaveProperty('error')
   })
 })
 

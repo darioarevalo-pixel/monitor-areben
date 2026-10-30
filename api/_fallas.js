@@ -184,7 +184,7 @@ export default async function handler(req, res) {
         const upd = { gn_integration_id: `falla-${id}`, updated_at: new Date().toISOString() };
         if (b.gn_venta_id != null && b.gn_venta_id !== '') upd.gn_venta_id = String(b.gn_venta_id);
         if (b.gn_venta_number != null && b.gn_venta_number !== '') upd.gn_venta_number = String(b.gn_venta_number);
-        upd.historial = await apilarHistorial(supabase, store, id, { estado: 'cargada', at: new Date().toISOString(), usuario: yo, nota: `venta GN ${b.gn_venta_number || b.gn_venta_id || ''} (baja de stock)` });
+        upd.historial = await apilarHistorial(supabase, store, id, { estado: 'cargada', at: new Date().toISOString(), usuario: yo, nota: b.erp_ajuste ? `ajuste A-${parseInt(b.erp_ajuste, 10) || ''} del ERP (baja de stock)` : `venta GN ${b.gn_venta_number || b.gn_venta_id || ''} (baja de stock)` });
         const { error } = await supabase.from('fallas_deposito').update(upd).eq('id', id).eq('store', store);
         if (error) throw new Error(error.message);
         return res.status(200).json({ ok: true });

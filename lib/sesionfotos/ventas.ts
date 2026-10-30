@@ -80,7 +80,8 @@ export function construirPedidosVenta(s: Solicitud, ctx: CtxVenta): PedidoVenta[
   })
 }
 
-export type RespuestaEnvio = { ok: boolean; venta?: VentaGN; error?: string }
+/** `erp`: la falla de Stunned, que ⛔ va a GN sino a un ajuste del ERP (`api/crear-venta.js`). */
+export type RespuestaEnvio = { ok: boolean; venta?: VentaGN; erp?: { ajuste: number; ya?: boolean }; error?: string }
 /** Envía un pedido. Inyectable para testear la orquestación sin POST. */
 export type EnviarVenta = (pedido: PedidoVenta) => Promise<RespuestaEnvio>
 
@@ -89,7 +90,7 @@ export const enviarVentaFetch: EnviarVenta = async (pedido) => {
   try {
     const r = await fetch(SF_CREAR_VENTA_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pedido) })
     const d = await r.json()
-    if (d.ok) return { ok: true, venta: d.venta }
+    if (d.ok) return { ok: true, venta: d.venta, ...(d.erp ? { erp: d.erp } : {}) }
     return { ok: false, error: `${d.error || ''}${d.detalle ? ' — ' + JSON.stringify(d.detalle).slice(0, 200) : ''}` }
   } catch {
     return { ok: false, error: 'error de conexión' }
