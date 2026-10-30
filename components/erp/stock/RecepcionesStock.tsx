@@ -210,7 +210,7 @@ function FichaRecepcion({ f, marca, onCerrar }: { f: FilaRecepcion; marca: strin
           {lineas && noCerraron.length > 0 && <Button variant="outline" size="sm" onClick={() => setTodas(!todas)}>{todas ? 'Ver sólo los que no cerraron' : `Ver los ${lineas.length}`}</Button>}
         </div>
         {lineas && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base }}>
+          <div className="erp-tabla-desliza"><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base }}>
             <thead><tr><th style={{ ...th, textAlign: 'left' }}>Producto</th><th style={th}>Pedida</th><th style={th}>Recibida</th><th style={th}>Diferencia</th></tr></thead>
             <tbody>
               {ver.map((l) => {
@@ -228,7 +228,7 @@ function FichaRecepcion({ f, marca, onCerrar }: { f: FilaRecepcion; marca: strin
                 )
               })}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
       <div><Button variant="outline" onClick={() => abrirIngresos(f.id)}>Abrir en Ingresos del monitor ↗</Button></div>

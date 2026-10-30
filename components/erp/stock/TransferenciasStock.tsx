@@ -237,7 +237,7 @@ function FichaTransferencia({ f, libroDesde, onCerrar }: { f: FilaTransferencia;
       )}
       <div>
         <div style={{ fontWeight: weight.semibold, color: color.ink, marginBottom: 6 }}>Productos ({renglones.length})</div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base }}>
+        <div className="erp-tabla-desliza"><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base }}>
           <thead>
             <tr>
               <th style={{ ...th, textAlign: 'left' }}>Producto</th>
@@ -262,7 +262,7 @@ function FichaTransferencia({ f, libroDesde, onCerrar }: { f: FilaTransferencia;
               )
             })}
           </tbody>
-        </table>
+        </table></div>
       </div>
       <div><Button variant="outline" onClick={abrirReposicion}>Abrir Reposición en el monitor ↗</Button></div>
     </FichaCostado>

@@ -337,6 +337,12 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   cobro · prenda → Ajustar · cliente → WhatsApp, con `normalizeArgPhone` · producto → Cargar precio o costo), una segunda
   de borde y el resto en «⋯» (`MenuAcciones alPie`, abre hacia arriba). Cada ficha esconde su fila de botones de arriba
   con `usePantallaAngosta` para ⛔ duplicarlos. `BarraSeleccion` ⛔ aparece en el celular. `tests/erp-celular-ficha.test.tsx`.
+  Las TAREAS (tanda 3, 30-oct): **recibir/preparar** (`MoverYRecibir` › `TarjetasEscaneadas`) y el **nuevo ajuste**
+  (`AjustesStock` › `TarjetaDeAjuste`) ocupan la pantalla (la lista vuelve al terminar), con `PasoCantidad grande` (44 px) y
+  el botón fijo al pie (`PieFijo`, el mismo de la ficha; `data-pie-tarea` sube «Reportar un problema»). Recibir: verde = llegó
+  entero, ámbar = una parte, rojo = de más. El ajuste conserva sus motivos (Fallado/Canje/Regalo cuentan lo que SALE, Otro con
+  signo) ⛔ «Conteo». Las pantallas de compu (Configuración, Facturación, Redondeo) llevan el cartel `.erp-aviso-compu`
+  (sólo ≤ 900 px) y las tablas sueltas van en `.erp-tabla-desliza`. `tests/erp-celular-tareas.test.tsx`.
 - 🔑 **`erp › Caja` = el CAMBIO en el local** (`CambioCaja.tsx`, Bruno 14-oct): busca la venta propia, marca lo
   devuelto (al precio que se PAGÓ), escanea lo nuevo y cobra o deja a favor la diferencia; lo registra
   `registrarCambio` del motor por `cambiarVentaPropia` (`api/_erp.js`). 🔴 Usa el MISMO código de la Caja

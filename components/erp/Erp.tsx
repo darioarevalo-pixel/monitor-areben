@@ -332,6 +332,10 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
               // 📱 En el celular las vistas se deslizan de costado (`erp-vistas`, globals.css).
               <div className="erp-vistas"><Tabs items={seccion.pestanias.find((p) => p.key === pestania)?.vistas ?? []} value={vista} onChange={(k) => ir(seccion.key, pestania, k)} /></div>
             )}
+            {/* 📱 Las pantallas de compu se miran desde el celular, pero se cambian en la compu (Bruno, 29-oct). En la compu ⛔ se ve (globals.css). */}
+            {(seccion.key === 'configuracion' || pestania === 'facturacion' || pestania === 'redondeo') && (
+              <div className="erp-aviso-compu" role="note"><span aria-hidden>⌨︎</span><span>Esta pantalla se mira desde acá, pero se <b>cambia en la compu</b>.</span></div>
+            )}
             {seccion.key === 'inicio' && <InicioErp key={marca} href={hrefErp} />}
             {seccion.vacia && <EmptyState title={seccion.vacia} />}
             {/* `key`: al cambiar de marca se cierra la ficha abierta (era de la otra marca) y se vuelve a leer. */}

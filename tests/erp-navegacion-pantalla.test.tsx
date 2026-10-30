@@ -61,6 +61,18 @@ describe('ERP › el armazón propio', () => {
     expect(push).toHaveBeenCalledWith('/erp/ventas/facturacion')
   })
 
+  it('📱 el cartel «se cambia en la compu» va en Configuración, Facturación y Redondeo, ⛔ en Ventas (tanda 3, 30-oct)', async () => {
+    // Se muestra por CSS sólo abajo de 900 px (globals.css § erp-aviso-compu); acá se prueba en qué pantallas está.
+    const cartel = () => div.querySelector('.erp-aviso-compu')?.textContent ?? null
+    for (const ruta of [['configuracion', 'reglas'], ['ventas', 'facturacion'], ['productos', 'redondeo']]) {
+      await montar(ruta)
+      expect(cartel(), ruta.join('/')).toContain('se cambia en la compu')
+      act(() => root?.unmount()); root = null
+    }
+    await montar(['ventas'])
+    expect(cartel()).toBeNull()
+  })
+
   it('una dirección que ⛔ existe se corrige sola', async () => {
     await montar(['stock', 'nada'])
     expect(replace).toHaveBeenCalledWith('/erp/stock/stock')

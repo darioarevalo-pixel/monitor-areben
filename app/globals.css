@@ -1270,7 +1270,18 @@ a.apps-item:hover {
   .erp-app .mo-buscador { flex-basis: 160px !important; }
   /* «Reportar un problema» (fijo abajo, de todo el monitor) tapaba Stock y Más: sube arriba de la barra. */
   body:has(.erp-app) .mo-boton-reportes { bottom: calc(72px + env(safe-area-inset-bottom)) !important; }
+  /* Con una tarea abierta (recibir, ajustar: su botón va fijo al pie) sube un poco más, para ⛔ tapar ese botón. */
+  body:has([data-pie-tarea]) .mo-boton-reportes { bottom: calc(136px + env(safe-area-inset-bottom)) !important; }
+  /* Las pantallas de compu (Configuración, Facturación, Redondeo) se miran; el cartel avisa que se cambian en la compu. */
+  .erp-app .erp-aviso-compu { display: flex; }
 }
+/* 📱 El cartel de las pantallas de compu: sólo en el celular. */
+.erp-aviso-compu {
+  display: none; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px;
+  background: var(--mo-info-bg); color: var(--mo-ink2); font-size: 14px; line-height: 1.35;
+}
+/* Una tabla suelta (sin `TableWrap`) que en el celular no entra: se desliza de costado, ⛔ corre la página. */
+.erp-tabla-desliza { overflow-x: auto; max-width: 100%; }
 .erp-hoja-item {
   display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 8px; border: 0; border-radius: 9px;
   background: transparent; font: inherit; font-size: 15px; font-weight: 500; color: var(--mo-ink2); text-decoration: none; cursor: pointer; text-align: left;
