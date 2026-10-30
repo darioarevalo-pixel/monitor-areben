@@ -62,13 +62,26 @@ describe('el servidor', () => {
     let consulta = ''
     const db = pg({ 'group by 1': GN, 'max(date_sale)': [{ hasta: '2026-10-19' }], 'from cliente': [] })
     const espia = { query: async (s: string) => { if (s.includes('group by 1')) consulta = s; return db.query(s) } }
-    const r = await listaDeClientes({ marca: 'zattia' }, { conMotor: conMotor(espia) }) as { gn: unknown[][]; clientesErp: number; porNombre: boolean; gnHasta: string }
+    const r = await listaDeClientes({ marca: 'zattia', linea: 'zattia' }, { conMotor: conMotor(espia) }) as { gn: unknown[][]; clientesErp: number; porNombre: boolean; gnHasta: string }
     expect(consulta).toContain("<> 'consumidor final'")
     expect(consulta).not.toContain('client_id')
     expect(r).toMatchObject({ clientesErp: 0, porNombre: true, gnHasta: '2026-10-19' })
     expect(r.gn).toHaveLength(3)
     expect(r.gn[0]).toEqual(['10', 'Barbara Spagnoli', 26, 500000, '2025-02-16', '2026-10-03', 12, ['Mayorista', 'Showroom']])
     expect(await listaDeClientes({ marca: 'x' }, { conMotor: conMotor(db) })).toMatchObject({ status: 400 })
+  })
+
+  it('cada línea ve lo suyo (Bruno, 30-oct): Stunned cuenta sólo las ventas con algún renglón STU; Zattia ⛔ sin la línea', async () => {
+    let consulta = ''
+    const db = pg({ 'group by 1': GN, 'max(date_sale)': [{ hasta: '2026-10-19' }], 'from cliente': [] })
+    const espia = { query: async (s: string) => { if (s.includes('group by 1')) consulta = s; return db.query(s) } }
+    await listaDeClientes({ marca: 'zattia', linea: 'stunned' }, { conMotor: conMotor(espia) })
+    expect(consulta).toContain('linea_gn')
+    expect(consulta).toContain('coalesce(lg.tiene_stu, false)')
+    await listaDeClientes({ marca: 'zattia', linea: 'zattia' }, { conMotor: conMotor(espia) })
+    expect(consulta).toContain('coalesce(lg.tiene_otra, false) or lg.sale_id is null')
+    expect(await listaDeClientes({ marca: 'zattia' }, { conMotor: conMotor(db) })).toMatchObject({ status: 400 })
+    expect(await listaDeClientes({ marca: 'bdi', linea: 'stunned' }, { conMotor: conMotor(db) })).toMatchObject({ status: 400 })
   })
 
   it('la ficha de BDI va por el id de GN y trae el contacto del CRM', async () => {

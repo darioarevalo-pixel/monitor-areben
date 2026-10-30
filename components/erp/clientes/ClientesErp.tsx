@@ -11,6 +11,7 @@
  * 🔑 Botones (§4, lista de TRABAJO): íconos a la izquierda. «Nuevo cliente» y «Registrar cobro a cuenta» esperan al motor.
  */
 
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
@@ -56,6 +57,8 @@ export function ClientesErp({ abrir, alAbrir }: {
 } = {}) {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  // Los clientes de la tienda del menú: mirando Stunned, quienes le compraron a Stunned (Bruno, 30-oct).
+  const tienda = useTiendaErp()
   const usuario = perfil?.name ?? null
   const lista = 'erp-clientes'
   const [datos, setDatos] = useState<(ListaDeClientes & { clave: string }) | null>(null)
@@ -72,10 +75,10 @@ export function ClientesErp({ abrir, alAbrir }: {
   useEffect(() => { abrirRef.current = { abrir, alAbrir } })
 
   const [vuelta, setVuelta] = useState(0)
-  const clave = `${marca}|${vuelta}`
+  const clave = `${marca}|${tienda}|${vuelta}`
   useEffect(() => {
     let vivo = true
-    leerListaDeClientes(marca)
+    leerListaDeClientes(marca, tienda)
       .then((d) => {
         if (!vivo) return
         setDatos({ ...d, clave }); setSeleccion(new Set()); setError(null)

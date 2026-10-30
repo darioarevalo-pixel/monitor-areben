@@ -6,6 +6,7 @@
  * 🔑 Sin cliente en el motor ⇒ el saldo dice «sin cuenta» y por qué (⛔ un 0 que parece «al día»).
  */
 
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 import { useEffect, useState } from 'react'
 import { MoneyText, Notice, color, font, space, weight } from '@/components/ui'
 import { formatMoney } from '@/components/ui/MoneyText'
@@ -20,13 +21,15 @@ export const fechaCorta = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slic
 export function FichaCliente({ marca, fila, onCerrar }: { marca: MarcaErp; fila: FilaCliente; onCerrar: () => void }) {
   const [s, setS] = useState<FichaDeCliente | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // La cuenta y las compras de la tienda del menú: mirando Stunned mostraba la cuenta de ZATTIA (30-oct).
+  const tienda = useTiendaErp()
   useEffect(() => {
     let vivo = true
-    leerFichaDeCliente(marca, fila.id)
+    leerFichaDeCliente(marca, tienda, fila.id)
       .then((x) => { if (vivo) { setS(x); setError(null) } })
       .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudo leer el cliente.'))
     return () => { vivo = false }
-  }, [marca, fila.id])
+  }, [marca, tienda, fila.id])
 
   const cuenta = s?.cuenta ?? null
   const saldo = cuenta ? cuenta.estado.saldo : fila.saldo

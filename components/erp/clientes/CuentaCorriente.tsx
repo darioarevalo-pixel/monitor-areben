@@ -15,6 +15,7 @@
  *    saldo en la fila (`cuentasCorrientes` ⛔ los trae), y el saldo de apertura de GN.
  */
 
+import { useTiendaErp } from '@/lib/erp/linea-erp'
 import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
@@ -44,6 +45,8 @@ const n = (x: number) => x.toLocaleString('es-AR')
 export function CuentaCorriente() {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  // Las cuentas de la tienda del menú: mirando Stunned sumaba los saldos de Zattia (Bruno, 30-oct).
+  const tienda = useTiendaErp()
   const usuario = perfil?.name ?? null
   const admin = esAdmin(perfil)
   const lista = 'erp-cuenta-corriente'
@@ -59,10 +62,10 @@ export function CuentaCorriente() {
   const setPrefs = (p: Prefs) => { setPrefsState(p); guardarPrefsDeLista(lista, usuario, p) }
 
   const [vuelta, setVuelta] = useState(0)
-  const clave = `${marca}|${prueba}|${vuelta}`
+  const clave = `${marca}|${tienda}|${prueba}|${vuelta}`
   useEffect(() => {
     let vivo = true
-    leerCuentasCorrientes(marca, prueba)
+    leerCuentasCorrientes(marca, tienda, prueba)
       .then((d) => { if (vivo) { setDatos({ ...d, clave }); setError(null) } })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudo leer la cuenta corriente.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
@@ -74,7 +77,8 @@ export function CuentaCorriente() {
   const conteo = useMemo(() => contarVistas(base), [base])
   const filas: FilaCuenta[] = useMemo(() => ordenar(filtrar(base, { vista }), orden), [base, vista, orden])
   const res = useMemo(() => resumen(base), [base])
-  const variasLineas = marca === 'zattia'
+  // Ya llega UNA línea (la del menú): la columna «Línea» ⛔ hace falta.
+  const variasLineas = false
 
   // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
   const angosta = usePantallaAngosta()

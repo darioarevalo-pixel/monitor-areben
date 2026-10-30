@@ -614,8 +614,9 @@ export type FilaCliente = {
 }
 export type ListaDeClientes = { filas: FilaCliente[]; gnHasta: string | null; clientesErp: number; cuentaLista: boolean; porNombre: boolean }
 /** Los de GN llegan como tuplas (BDI son 13.000) y se arman acá, con el día argentino de hoy. */
-export const leerListaDeClientes = async (marca: MarcaErp): Promise<ListaDeClientes> => {
-  const r = await pedir<{ gn: unknown[][]; erp: never[]; cuentas: never[]; gnHasta: string | null; clientesErp: number; cuentaLista: boolean; porNombre: boolean }>(null, `&vista=clientes-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los clientes.')
+/** De UNA línea (`linea` = la tienda del menú): mirando Stunned, sólo quienes le compraron a Stunned (Bruno, 30-oct). */
+export const leerListaDeClientes = async (marca: MarcaErp, linea: string): Promise<ListaDeClientes> => {
+  const r = await pedir<{ gn: unknown[][]; erp: never[]; cuentas: never[]; gnHasta: string | null; clientesErp: number; cuentaLista: boolean; porNombre: boolean }>(null, `&vista=clientes-lista&marca=${marca}&linea=${linea}&nc=${Date.now()}`, 'No se pudieron leer los clientes.')
   const filas = armarFilasClientes({ gn: r.gn.map(deTupla), erp: r.erp, cuentas: r.cuentas, hoy: diaArgentino(Date.now()) }) as FilaCliente[]
   return { filas, gnHasta: r.gnHasta, clientesErp: r.clientesErp, cuentaLista: r.cuentaLista, porNombre: r.porNombre }
 }
@@ -627,8 +628,8 @@ export type FichaDeCliente = {
   contacto: { name: string | null; email: string | null; phone: string | null; city: string | null; province: string | null; address: string | null } | null
   cuenta: { cliente: { id: string; nombre: string; doc: string | null }; credito: unknown; estado: { saldo: number; a_favor: number; debe: number; pendientes?: PendienteCuenta[] }; ventas?: Record<string, string> } | null
 }
-export const leerFichaDeCliente = (marca: MarcaErp, clave: string) =>
-  pedir<FichaDeCliente>(null, `&vista=cliente-ficha&marca=${marca}&clave=${encodeURIComponent(clave)}&nc=${Date.now()}`, 'No se pudo leer el cliente.')
+export const leerFichaDeCliente = (marca: MarcaErp, linea: string, clave: string) =>
+  pedir<FichaDeCliente>(null, `&vista=cliente-ficha&marca=${marca}&linea=${linea}&clave=${encodeURIComponent(clave)}&nc=${Date.now()}`, 'No se pudo leer el cliente.')
 
 // ── ERP › Clientes › Cuenta corriente (`api/_erp-clientes.js`, núcleo `lib/erp/cuenta-corriente.core.js`; contrato §15) ──
 export type CreditoCliente = { credito: boolean; tope: number | null; dias: number | null; puesto_por: string | null; puesto_en: string | null } | null
@@ -638,8 +639,8 @@ export type CuentaDelMotor = {
   ventas_con_saldo?: number; ultimo_cobro?: { fecha: string; monto: number } | null
 }
 export type CuentasDeLaMarca = { hoy: string | null; prueba: boolean; cuentas: CuentaDelMotor[]; clientesErp: number; otroLibro: number }
-export const leerCuentasCorrientes = (marca: MarcaErp, prueba: boolean) =>
-  pedir<CuentasDeLaMarca>(null, `&vista=cuentas-corrientes&marca=${marca}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudo leer la cuenta corriente.')
+export const leerCuentasCorrientes = (marca: MarcaErp, linea: string, prueba: boolean) =>
+  pedir<CuentasDeLaMarca>(null, `&vista=cuentas-corrientes&marca=${marca}&linea=${linea}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudo leer la cuenta corriente.')
 
 export type RenglonMayor = { fecha: string; tipo: 'compra' | 'pago'; ref: string; detalle: string; debe: number; haber: number; saldo: number }
 export type CuentaDeCliente = {

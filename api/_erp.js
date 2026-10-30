@@ -1810,15 +1810,15 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'clientes-lista') {
-      const r = await listaDeClientes({ marca: String(req.query.marca || '') }, { conMotor })
+      const r = await listaDeClientes({ marca: String(req.query.marca || ''), linea: String(req.query.linea || '') }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cliente-ficha') {
-      const r = await fichaDeCliente({ marca: String(req.query.marca || ''), clave: String(req.query.clave || '') }, { conMotor })
+      const r = await fichaDeCliente({ marca: String(req.query.marca || ''), linea: String(req.query.linea || ''), clave: String(req.query.clave || '') }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cuentas-corrientes') {
-      const r = await cuentasDeLaMarca({ marca: String(req.query.marca || ''), prueba: req.query.prueba === '1' }, { conMotor })
+      const r = await cuentasDeLaMarca({ marca: String(req.query.marca || ''), linea: String(req.query.linea || ''), prueba: req.query.prueba === '1' }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cuenta-cliente') {
