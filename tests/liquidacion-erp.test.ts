@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { cargaDeCampania, estadoDePedidos, motivoDeCampania, MOTIVO_CAMPANIA, vaPorErp } from '../lib/liquidacion/erp.core.js'
-import { pedirAlErp } from '../api/_liquidacion-erp.js'
+import { lineasDe, pedirAlErp } from '../api/_liquidacion-erp.js'
+import { lineaDelProducto } from '../lib/erp/precio.core.js'
 
 describe('cargaDeCampania: qué oferta se carga en el ERP y qué promocional tiene que mostrar TN', () => {
   it('poner: la oferta es el precio de sale, y TN la muestra como promocional', () => {
@@ -98,4 +99,10 @@ describe('pedirAlErp: carga TODO o nada en el ERP y recién ahí avisa el envío
     expect(zat).toContain('rollback')
     expect(bdi).toEqual([])
   })
+})
+
+it('lineasDe: la línea sale del catálogo del MOTOR (⛔ el espejo), con cualquier SKU STU del producto; BDI ⛔ pregunta', async () => {
+  const conMotor = async (_b: string, fn: (db: unknown) => unknown) => fn({ query: async () => ({ rows: [{ product_id: 7, sku: null }, { product_id: 7, sku: 'STU-FLECK-M' }, { product_id: 8, sku: 'ZAT-1-S' }] }) })
+  expect(await lineasDe('zattia', ['7', '8', '9'], lineaDelProducto, { conMotor })).toEqual(new Map([['7', 'stunned'], ['8', 'zattia'], ['9', 'zattia']]))
+  expect(await lineasDe('bdi', ['7'], lineaDelProducto, { conMotor: async () => { throw new Error('⛔') } })).toEqual(new Map([['7', 'bdi']]))
 })

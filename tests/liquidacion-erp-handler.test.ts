@@ -60,7 +60,7 @@ const eventosDePrecio = vi.fn()
 vi.mock('../api/_liquidacion-erp.js', () => ({
   pedirAlErp: (...a: unknown[]) => pedirAlErp(...a),
   eventosDePrecio: (...a: unknown[]) => eventosDePrecio(...a),
-  lineasDe: async (_s: unknown, _st: unknown, pids: string[]) => new Map(pids.map((p) => [p, p === '7' ? 'stunned' : 'zattia'])),
+  lineasDe: async (_st: unknown, pids: string[]) => new Map(pids.map((p) => [p, p === '7' ? 'stunned' : 'zattia'])),
 }))
 
 async function llamar(req: unknown) {

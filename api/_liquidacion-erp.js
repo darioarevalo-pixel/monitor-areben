@@ -80,11 +80,16 @@ export async function eventosDePrecio(deps = { conMotor }) {
   });
 }
 
-/** product_id → línea, por los SKU del espejo (la MISMA regla que la carga de precios del ERP: `lineaDelProducto`). */
-export async function lineasDe(supabase, store, pids, lineaDelProducto) {
-  const { data, error } = await supabase.from('inventario').select('product_id, sku').in('product_id', pids.map(Number));
-  if (error) throw new Error(`inventario: ${error.message}`);
+/**
+ * product_id → línea, por los SKU del catálogo del MOTOR (`variante`; ⛔ el espejo de GN: `tests/espejo-puertas.test.ts`),
+ * con la MISMA regla que la carga de precios del ERP (`lineaDelProducto`). Sólo Zattia tiene líneas adentro.
+ */
+export async function lineasDe(store, pids, lineaDelProducto, deps = { conMotor }) {
+  if (store !== 'zattia') return new Map(pids.map((p) => [p, store]));
+  const filas = await deps.conMotor('zattia', async (db) => (await db.query(
+    'select product_id, sku from variante where product_id = any($1::bigint[])', [pids.map(Number)],
+  )).rows);
   const skus = new Map();
-  for (const f of data || []) skus.set(String(f.product_id), [...(skus.get(String(f.product_id)) || []), f.sku]);
+  for (const f of filas) skus.set(String(f.product_id), [...(skus.get(String(f.product_id)) || []), f.sku]);
   return new Map(pids.map((p) => [p, lineaDelProducto(store, skus.get(String(p)) || [])]));
 }

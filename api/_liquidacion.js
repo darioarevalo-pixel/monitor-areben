@@ -1351,7 +1351,7 @@ export default async function handler(req, res) {
       // que `releer-erp` lea en la cola que TN quedó así. La bitácora y el estado, recién ahí.
       const porGn = [];
       const porErp = [];
-      const lineas = store === 'zattia' ? await lineasDe(supabase, store, pids, lineaDelProducto) : new Map();
+      const lineas = await lineasDe(store, pids, lineaDelProducto);
       for (const pid of pids) {
         const fila = (filas || []).find((f) => String(f.pid) === pid);
         if (!fila || !vaPorErp(lineas.get(pid))) { porGn.push(pid); continue; }
