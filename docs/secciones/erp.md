@@ -12,6 +12,11 @@ en el Inicio. Cada lectura con costo que el local abre pide `ver` y recibe `cost
 todos: `sinCostos` saca el costo del ERP, de GN, de TN, sus avisos y su historial) y `ventas-producto` (el margen). La pantalla
 lee el `costos` de la respuesta (⛔ un «Sin costo» que mienta). Tests: `tests/erp-costos-rol.test.ts`.
 
+🔴 **CARGAR UN GASTO = la CAJA CHICA (Bruno 30-oct): una SALIDA de la caja abierta con `categoria`** (`lib/caja/gasto.core.js`,
+`sql/migrate-caja-gasto.sql`, en `api/_caja.js`: `salida` + `mis-gastos`) ⇒ resta sola del cierre. Permiso `cargar-gasto` (Local y
+Administración) + A8 (la cuenta que abrió la caja). Cada uno ve SÓLO lo que cargó: lo corta el SERVIDOR (`delQueCarga`). La lista
+de Gastos (comerciales, motor) sigue de Admin. ▶️ Lo de la oficina (gastos que ⛔ salen de la caja, Admin los filtra antes del dashboard): otra tanda.
+
 🔑 **`/erp` es una pantalla PROPIA, como el POS** (Bruno, 19-oct: «que abra una sección completa nueva, que se navegue
 solo sin ir atrás»): sale del shell en `app/[[...seccion]]/page.tsx` (`esERP`, antes de `permitida`: el ERP cambia la
 marca adentro) con SU menú (`components/erp/Erp.tsx`, `SECCIONES_ERP`): Inicio · Ventas + Caja (POS) · Stock ·

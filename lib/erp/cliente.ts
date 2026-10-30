@@ -753,6 +753,25 @@ export async function arquearSobre(marca: MarcaErp, p: { id: string; contado: nu
 export const leerCajaAbierta = (marca: MarcaErp) =>
   deCaja<{ turno: (Record<string, unknown> & { resumen?: { ventas?: number; efectivo?: { esperado?: number } } }) | null }>(marca, 'action=turno', 'No se pudo leer la caja abierta.')
 
+// ── ERP › Ventas › Cargar un gasto (30-oct): la CAJA CHICA = una salida de la caja abierta con categoría (`lib/caja/gasto.core.js`) ──
+export type GastoCaja = { id: string; monto: number; motivo: string; categoria: string; usuario: string | null; creado_en: string; anulado_en?: string | null; anulado_por?: string | null; anulado_motivo?: string | null }
+/** Lo que cargó ESTA cuenta (admin: todo) en los últimos `dias` días. El corte lo hace el servidor. */
+export const leerMisGastos = (marca: MarcaErp) => deCaja<{ gastos: GastoCaja[]; dias: number }>(marca, 'action=mis-gastos', 'No se pudieron leer tus gastos.')
+/** La caja abierta, sin el resumen (no lee GN): para saber si hay caja y quién la abrió. */
+export const leerCajaAbiertaLiviana = (marca: MarcaErp) =>
+  deCaja<{ turno: { id: string; abierto_por: string | null; abierto_por_usuario?: string | null } | null }>(marca, 'action=turno&liviano=1', 'No se pudo leer la caja abierta.')
+/** Cargar un gasto de caja chica: sale del efectivo de la caja abierta (resta del cierre). */
+export async function cargarGastoCaja(marca: MarcaErp, p: { monto: number; categoria: string; detalle: string }) {
+  const r = await apiFetch('/api/datos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recurso: 'caja', store: marca, action: 'salida', tipo: 'salida', monto: p.monto, categoria: p.categoria, motivo: p.detalle }),
+  })
+  const j = await r.json().catch(() => null)
+  if (!r.ok) throw new Error((j && j.error) || 'No se pudo cargar el gasto.')
+  return j as { turno: Record<string, unknown> }
+}
+
 export type ClaveInterruptor = 'anular' | 'conteo' | 'precio'
 export type Interruptores = Record<ClaveInterruptor, boolean>
 

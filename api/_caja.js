@@ -30,6 +30,7 @@
 //   POST ?recurso=caja  { action: 'confirmar-transferencia', id, comprobante } → sólo admin: la transferencia que el cruce ⛔ ve (B3)
 //   POST ?recurso=caja  { action: 'resolver', id, como: 'a_mano' | 'descartar', nota, gn_number? } → la venta que GN RECHAZÓ (B2)
 //   POST ?recurso=caja  { action: 'abrir-turno', fondo, conteo? }   → abre el turno (uno solo abierto por marca)
+//   GET  ?recurso=caja&action=mis-gastos → la caja chica que cargó ESTA cuenta (admin: todas), últimos DIAS_MIS_GASTOS días
 //   POST ?recurso=caja  { action: 'salida', monto, motivo, tipo? } → saca (o con `tipo: 'aporte'`, suma) efectivo del turno abierto;
 //        la carga la cuenta que abrió el turno o un admin (A8)
 //   POST ?recurso=caja  { action: 'anular-mov', id, motivo } → anula una salida o un aporte del turno abierto (B4)
@@ -77,7 +78,8 @@
 import { createHash, randomInt } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
-import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
+import { esAdmin, puedeErp, puedeVerAlguna } from '../lib/permisos.core.js'
+import { DIAS_MIS_GASTOS, FALTA_GASTO, categoriaValida, delQueCarga, faltaColumnaGasto, motivoDeGasto } from '../lib/caja/gasto.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, dormir, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
@@ -683,6 +685,22 @@ export default async function handler(req, res) {
         const conNumeros = await conArqueo(ultimos.data || []).catch(() => ({ filas: ultimos.data || [] }))
         return res.status(200).json({ turno: turno ? await conResumen(turno, req.query.fresco === '1') : null, ultimos: conNumeros.filas })
       }
+      // ERP › Ventas › Cargar un gasto (30-oct): la caja chica. Cada uno ve SÓLO lo que cargó: el corte es acá (`delQueCarga`).
+      if (accion === 'mis-gastos') {
+        if (!puedeErp(perfil, store, 'cargar-gasto')) return res.status(403).json({ error: 'No tenés permiso para cargar gastos.' })
+        const admin = esAdmin(perfil)
+        const cuenta = usuarioDe(perfil)
+        if (!admin && !cuenta) return res.status(200).json({ gastos: [] })
+        const desde = new Date(Date.now() - DIAS_MIS_GASTOS * 864e5).toISOString()
+        let q = sb.from('caja_turno_mov').select(`${COLS_MOV}, categoria, caja_turno!inner(store)`).eq('caja_turno.store', store)
+          .not('categoria', 'is', null).gte('creado_en', desde).order('creado_en', { ascending: false }).limit(300)
+        if (!admin) q = q.eq('usuario_cuenta', cuenta)
+        const { data, error } = await q
+        if (faltaColumnaGasto(error)) return res.status(409).json({ error: FALTA_GASTO })
+        if (error) throw new Error(error.message)
+        const gastos = delQueCarga(data || [], cuenta, admin).map(({ caja_turno: _t, ...g }) => g)
+        return res.status(200).json({ gastos, dias: DIAS_MIS_GASTOS })
+      }
       // ERP › Ventas › Cajas (20-oct, sólo lectura): los turnos ABIERTOS en el período, días argentinos `desde`..`hasta`.
       if (accion === 'turnos') {
         const dia = /^\d{4}-\d{2}-\d{2}$/
@@ -934,16 +952,21 @@ export default async function handler(req, res) {
       if (accion === 'salida') {
         // B4: `tipo: 'aporte'` es el efectivo que ENTRA (el cambio que trae alguien): suma al esperado.
         const tipo = b.tipo === 'aporte' ? 'aporte' : 'salida'
-        const nombre = tipo === 'aporte' ? 'El ingreso' : 'La salida'
+        // La CAJA CHICA (30-oct): una salida con `categoria` es un gasto ⇒ pide además `cargar-gasto` del ERP.
+        const categoria = tipo === 'salida' && b.categoria != null && b.categoria !== '' ? b.categoria : null
+        if (categoria !== null && !categoriaValida(categoria)) return res.status(400).json({ error: 'Esa categoría de gasto no existe.' })
+        if (categoria !== null && !puedeErp(perfil, store, 'cargar-gasto')) return res.status(403).json({ error: 'No tenés permiso para cargar gastos.' })
+        const nombre = categoria ? 'El gasto' : tipo === 'aporte' ? 'El ingreso' : 'La salida'
         const monto = Number(b.monto)
-        const motivo = String(b.motivo ?? '').trim().slice(0, 200)
+        const motivo = categoria ? (String(b.motivo ?? '').trim() ? motivoDeGasto(categoria, b.motivo) : '') : String(b.motivo ?? '').trim().slice(0, 200)
         if (!Number.isFinite(monto) || monto <= 0 || monto > MAX_MOVIMIENTO) return res.status(400).json({ error: `${nombre} tiene que ser un monto mayor a cero.` })
-        if (!motivo) return res.status(400).json({ error: `Falta el motivo ${tipo === 'aporte' ? 'del ingreso' : 'de la salida'}.` })
+        if (!motivo) return res.status(400).json({ error: categoria ? 'Falta el detalle: de qué es el gasto.' : `Falta el motivo ${tipo === 'aporte' ? 'del ingreso' : 'de la salida'}.` })
         const turno = await turnoAbierto()
         if (!turno) return res.status(409).json({ error: 'No hay una caja abierta.' })
         // 🔑 A8 (Bruno, 11-oct): la cuenta que abrió el turno y los admins; ⛔ otra cuenta con permiso de Caja.
         if (!puedeMoverEfectivo(turno, perfil, esAdmin(perfil))) return res.status(403).json({ error: `La caja la abrió ${turno.abierto_por || 'otra cuenta'}: sólo esa cuenta o un admin cargan efectivo que sale o entra.` })
-        const ins = await sb.from('caja_turno_mov').insert({ turno_id: turno.id, tipo, monto, motivo, usuario: perfil.name || null, usuario_cuenta: usuarioDe(perfil) })
+        const ins = await sb.from('caja_turno_mov').insert({ turno_id: turno.id, tipo, monto, motivo, usuario: perfil.name || null, usuario_cuenta: usuarioDe(perfil), ...(categoria ? { categoria } : {}) })
+        if (ins.error && faltaColumnaGasto(ins.error)) return res.status(409).json({ error: FALTA_GASTO })
         if (ins.error && turnoCerrado(ins.error)) return res.status(409).json({ error: 'La caja se cerró recién. Recargá la Caja.' })
         if (ins.error) throw new Error(ins.error.message)
         return res.status(200).json({ turno: await conResumen(turno) })

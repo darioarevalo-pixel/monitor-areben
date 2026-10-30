@@ -281,6 +281,8 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   `caja_turno_mov`, `sql/migrate-caja-turno.sql`): la API de GN ⛔ tiene turnos y **el de GN se deja de
   usar**. Se abre con el fondo, se anotan salidas de efectivo (motivo + monto) y se cierra contando
   **sólo el efectivo**: `esperado = fondo + efectivo cobrado (cuentas con efectivo: true) + aportes − salidas`.
+  🔑 **Una salida con `categoria` es un GASTO de caja chica** (30-oct, ERP › Ventas › Cargar un gasto): pide además `cargar-gasto` del
+  ERP; ver la ficha del ERP.
   🔑 **Salidas y APORTES (A8 + B4, Bruno 11-oct)**: los carga la cuenta que abrió el turno o un admin
   (`puedeMoverEfectivo`) — antes cualquiera con permiso de Caja, y otra cuenta podía tapar un faltante. El
   aporte es el efectivo que ENTRA (el cambio que trae alguien). ⛔ Se borran: se ANULAN con motivo

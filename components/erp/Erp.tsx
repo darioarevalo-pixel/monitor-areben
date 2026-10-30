@@ -52,6 +52,7 @@ import { PorProductoErp } from './ventas/PorProductoErp'
 import { CajasErp } from './ventas/CajasErp'
 import { CobrosErp } from './ventas/CobrosErp'
 import { GastosErp } from './ventas/GastosErp'
+import { CargarGasto } from './ventas/CargarGasto'
 import { ClientesErp } from './clientes/ClientesErp'
 import { ProveedoresErp } from './clientes/ProveedoresErp'
 import { InicioErp } from './inicio/InicioErp'
@@ -92,8 +93,9 @@ export const SECCIONES_ERP: Seccion[] = [
       { key: 'cobros', label: 'Cobros' }, { key: 'cajas', label: 'Cajas' },
       // Facturación: la lista del mes es de la oficina; «Facturar una venta» (alguien pide factura en el local), de quien vende (Bruno 30-oct).
       { key: 'facturacion', label: 'Facturación', permiso: ['facturacion', 'facturar-venta'], vistas: [{ key: 'facturacion', label: 'Facturas', permiso: 'facturacion' }, { key: 'factura', label: 'Facturar una venta', oculta: true, permiso: 'facturar-venta' }] },
-      // La lista de gastos: sólo Admin (Bruno 30-oct). ▶️ Cargar un gasto el local o la oficina: otra pantalla, otro permiso.
+      // La lista de gastos: sólo Admin (Bruno 30-oct). Cargar un gasto (caja chica): Local y Administración, cada uno ve lo suyo.
       { key: 'gastos', label: 'Gastos', permiso: 'configurar' },
+      { key: 'cargar-gasto', label: 'Cargar un gasto', permiso: 'cargar-gasto' },
       { key: 'cambio', label: 'Cambio', oculta: true },
     ],
   },
@@ -427,6 +429,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {vista === 'por-producto' && <PorProductoErp key={marca} />}
             {pestania === 'cobros' && <CobrosErp key={marca} />}
             {pestania === 'gastos' && <GastosErp key={marca} />}
+            {pestania === 'cargar-gasto' && <CargarGasto key={marca} marca={marca === 'bdi' ? 'bdi' : 'zattia'} />}
             
             {vista === 'facturacion' && <Facturacion key={marca} />}
             {vista === 'factura' && <FacturaCaja />}

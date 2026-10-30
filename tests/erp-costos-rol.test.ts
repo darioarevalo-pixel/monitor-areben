@@ -18,6 +18,14 @@ describe('quién ve costos', () => {
       for (const r of ['local', 'mayorista', 'deposito', 'consulta']) expect(puedeErp(persona([r]), m, 'costos')).toBe(false)
     }
   })
+  it('cargar un gasto (caja chica, Bruno 30-oct): Local y Administración sí; Mayorista, Depósito y Consulta ⛔; la lista de Gastos sigue de Admin', () => {
+    for (const m of ['bdi', 'zattia']) {
+      for (const r of ['local', 'administracion']) expect(puedeErp(persona([r]), m, 'cargar-gasto')).toBe(true)
+      for (const r of ['mayorista', 'deposito', 'consulta']) expect(puedeErp(persona([r]), m, 'cargar-gasto')).toBe(false)
+    }
+    expect(permisoErpDe({ method: 'GET', vista: 'gastos' })).toBe('configurar')
+    expect(permisoErpDe({ method: 'POST', accion: 'registrar-gasto' })).toBe('configurar')
+  })
   it('las lecturas con costo que el local abre piden `ver` y cortan adentro; el resultado del Inicio pide `costos`', () => {
     for (const v of ['productos-lista', 'precio', 'ventas-producto']) expect(permisoErpDe({ method: 'GET', vista: v })).toBe('ver')
     expect(permisoErpDe({ method: 'GET', vista: 'inicio-resultado' })).toBe('costos')

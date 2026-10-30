@@ -35,6 +35,8 @@ const base = {
   alCerrar: null as null | (() => void),
   // El arqueo (sql/migrate-caja-arqueo.sql): true = la base todavía ⛔ tiene `numero` ni `arqueo`.
   sinArqueo: false,
+  // Sin sql/migrate-caja-gasto.sql: la columna `categoria` ⛔ existe.
+  sinGasto: false,
   antesDeInsertar: null as null | (() => void),
 }
 const gn = {
@@ -75,6 +77,9 @@ function consulta(tabla: string) {
     // Sin la migración del arqueo, Postgres rechaza leer o escribir sus columnas.
     if (tabla === 'caja_turno' && base.sinArqueo && (/\b(numero|arqueo)\b/.test(columnas) || (accion.tipo === 'update' && 'arqueo' in accion.cambios))) {
       return { data: null, error: { code: '42703', message: 'column caja_turno.numero does not exist' } }
+    }
+    if (tabla === 'caja_turno_mov' && base.sinGasto && (/\bcategoria\b/.test(columnas) || (accion.tipo === 'insert' && 'categoria' in accion.fila))) {
+      return { data: null, error: { code: '42703', message: 'column caja_turno_mov.categoria does not exist' } }
     }
     if (tabla.startsWith('caja_gift') && base.giftLotes === null) return { data: null, error: { code: 'PGRST205', message: `Could not find the table 'public.${tabla}' in the schema cache` } }
     if (accion.tipo === 'delete') {
@@ -147,7 +152,8 @@ function consulta(tabla: string) {
   }
   const q: Record<string, unknown> = {}
   q.select = (c?: string) => { columnas = String(c ?? ''); return q }
-  q.eq = (c: string, v: unknown) => { filtros.push((f) => String(f[c]) === String(v)); return q }
+  // El filtro por la tabla embebida (`caja_turno!inner(store)`): el turno de la fila.
+  q.eq = (c: string, v: unknown) => { filtros.push((f) => String(c === 'caja_turno.store' ? base.turnos.find((t) => t.id === f.turno_id)?.store : f[c]) === String(v)); return q }
   q.neq = (c: string, v: unknown) => { filtros.push((f) => f[c] !== v); return q }
   // Como Postgres: `%` es comodín, `\%` y `\_` son literales; ⛔ ignora tildes.
   q.ilike = (c: string, v: string) => {
@@ -276,7 +282,7 @@ beforeEach(async () => {
   gn.posts = []; gn.gets = []; gn.authInventario = []; gn.authPosts = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }; gn.creadas = []; base.agenda = [];
   base.giftLotes = []; base.giftCards = []; base.giftChoques = 0; base.ventaMp = []
   // Bruno, 11-oct: la cuenta de MP del test asienta en Transferencia (13015, Areben Comercial).
-  base.config = { store: 'zattia', reglas: { ...REGLAS_INICIALES, transferenciaPorMp: { [CUENTA_MP]: 13015 } }, politica_cambio: null }; base.alCerrar = null; base.antesDeInsertar = null; base.sinArqueo = false
+  base.config = { store: 'zattia', reglas: { ...REGLAS_INICIALES, transferenciaPorMp: { [CUENTA_MP]: 13015 } }, politica_cambio: null }; base.alCerrar = null; base.antesDeInsertar = null; base.sinArqueo = false; base.sinGasto = false
   gn.lista = { status: 200, body: { data: [], meta: { has_more_pages: false } } }
   gn.rebotes = 0; gn.rebotesPost = 0
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
@@ -1938,5 +1944,82 @@ describe('caja · arqueo del sobre', () => {
     const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 50000 }))
     expect(c.code).toBe(200)
     expect((c.body?.turno as Fila).numero).toBe(143)
+  })
+})
+
+// La CAJA CHICA (Bruno 30-oct, erp-stunned.md §7): un gasto es una SALIDA con categoría; lo cargan Local y Administración
+// (`cargar-gasto`) y cada uno ve SÓLO lo suyo — lo corta el servidor.
+describe('caja · cargar un gasto (caja chica)', () => {
+  // La del local abrió la caja (`abierto_por_usuario: 'cajera'`) y tiene el rol Local en el ERP.
+  const LOCAL = { name: 'cajera', admin: false, cuenta: null, acceso: { zattia: { caja: true, erp: true } }, funcion: ['local'] }
+  const OFICINA = { name: 'lorena', admin: false, cuenta: null, acceso: { zattia: { caja: true, erp: true } }, funcion: ['administracion'] }
+  const ADMIN_ = { name: 'bruno', admin: true, cuenta: null, acceso: {}, funcion: [] }
+  const gasto = (x: Fila = {}) => ({ action: 'salida', monto: 4500, categoria: 'limpieza', motivo: 'lavandina y trapos', ...x })
+
+  it('el local carga: queda la salida con su categoría y resta del esperado', async () => {
+    conSesion(LOCAL)
+    const r = await correr(req('POST', {}, gasto()))
+    expect(r.code).toBe(200)
+    expect(base.movs).toEqual([expect.objectContaining({ tipo: 'salida', monto: 4500, categoria: 'limpieza', motivo: 'Gasto · Limpieza: lavandina y trapos', usuario_cuenta: 'cajera' })])
+    const t = await correr(req('GET', { action: 'turno' }))
+    expect((t.body?.turno as { resumen: { efectivo: Fila } }).resumen.efectivo).toMatchObject({ salidas: 4500, esperado: 45500 })
+  })
+
+  it('🔴 sin `cargar-gasto` (cajera sin rol del ERP) ⇒ 403 y ⛔ se guarda; su salida común sigue andando', async () => {
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, gasto()))).code).toBe(403)
+    expect(base.movs).toHaveLength(0)
+    expect((await correr(req('GET', { action: 'mis-gastos' }))).code).toBe(403)
+    expect((await correr(req('POST', {}, { action: 'salida', monto: 500, motivo: 'bolsas' }))).code).toBe(200)
+    expect(base.movs[0]).not.toHaveProperty('categoria')
+  })
+
+  it('categoría que ⛔ existe o sin detalle ⇒ 400; un ingreso ⛔ lleva categoría', async () => {
+    conSesion(LOCAL)
+    expect((await correr(req('POST', {}, gasto({ categoria: 'sueldos' })))).code).toBe(400)
+    expect((await correr(req('POST', {}, gasto({ motivo: '  ' })))).code).toBe(400)
+    expect(base.movs).toHaveLength(0)
+    expect((await correr(req('POST', {}, gasto({ tipo: 'aporte', motivo: 'cambio' })))).code).toBe(200)
+    expect(base.movs[0]).toMatchObject({ tipo: 'aporte', motivo: 'cambio' })
+    expect(base.movs[0]).not.toHaveProperty('categoria')
+  })
+
+  it('A8 vale igual: la oficina con `cargar-gasto` ⛔ carga en una caja que abrió otra cuenta', async () => {
+    conSesion(OFICINA)
+    expect((await correr(req('POST', {}, gasto()))).code).toBe(403)
+    expect(base.movs).toHaveLength(0)
+  })
+
+  it('🔑 «mis gastos»: cada uno ve SÓLO lo que cargó (⛔ las salidas comunes ni lo de otra marca); admin, todo', async () => {
+    const BDI = '99999999-2222-4333-8444-555555555555'
+    base.turnos.push({ id: BDI, store: 'bdi', fondo: 0, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null })
+    const ahora = new Date().toISOString()
+    base.movs.push(
+      { id: 'a', turno_id: TURNO_ID, tipo: 'salida', monto: 4500, motivo: 'Gasto · Limpieza: x', categoria: 'limpieza', usuario: 'cajera', usuario_cuenta: 'cajera', creado_en: ahora },
+      { id: 'b', turno_id: TURNO_ID, tipo: 'salida', monto: 900, motivo: 'Gasto · Otro: y', categoria: 'otro', usuario: 'lorena', usuario_cuenta: 'lorena', creado_en: ahora },
+      { id: 'c', turno_id: TURNO_ID, tipo: 'salida', monto: 2000, motivo: 'retiro', usuario: 'cajera', usuario_cuenta: 'cajera', creado_en: ahora },
+      { id: 'd', turno_id: BDI, tipo: 'salida', monto: 100, motivo: 'Gasto · Otro: z', categoria: 'otro', usuario: 'cajera', usuario_cuenta: 'cajera', creado_en: ahora },
+      { id: 'e', turno_id: TURNO_ID, tipo: 'salida', monto: 300, motivo: 'Gasto · Otro: viejo', categoria: 'otro', usuario: 'cajera', usuario_cuenta: 'cajera', creado_en: '2026-01-01T12:00:00.000Z' },
+    )
+    conSesion(LOCAL)
+    let r = await correr(req('GET', { action: 'mis-gastos' }))
+    expect(r.code).toBe(200)
+    expect((r.body?.gastos as Fila[]).map((g) => g.id)).toEqual(['a'])
+    expect(r.body?.gastos as Fila[]).not.toContainEqual(expect.objectContaining({ caja_turno: expect.anything() }))
+    conSesion(OFICINA)
+    r = await correr(req('GET', { action: 'mis-gastos' }))
+    expect((r.body?.gastos as Fila[]).map((g) => g.id)).toEqual(['b'])
+    conSesion(ADMIN_)
+    r = await correr(req('GET', { action: 'mis-gastos' }))
+    expect((r.body?.gastos as Fila[]).map((g) => g.id).sort()).toEqual(['a', 'b'])
+  })
+
+  it('sin la migración ⇒ 409 que lo dice (⛔ un 500), al cargar y al leer', async () => {
+    base.sinGasto = true
+    conSesion(LOCAL)
+    const r = await correr(req('POST', {}, gasto()))
+    expect(r.code).toBe(409)
+    expect(String(r.body?.error)).toMatch(/preparar la base/)
+    expect((await correr(req('GET', { action: 'mis-gastos' }))).code).toBe(409)
   })
 })

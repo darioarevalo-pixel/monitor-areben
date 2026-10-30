@@ -21,7 +21,7 @@ vi.mock('@/lib/permisos', () => ({ puedeVer: (_p: unknown, m: string) => admin |
 let negados: string[] = []
 vi.mock('@/lib/erp/usePuedeErp', () => ({ usePuedeErp: () => (p: string) => !negados.includes(p) }))
 const LOCAL_NO = ['configurar', 'facturacion', 'proveedores', 'costos']
-for (const [archivo, nombre] of [['CambioCaja', 'CambioCaja'], ['FacturaCaja', 'FacturaCaja'], ['Facturacion', 'Facturacion'], ['stock/StockErp', 'StockErp'], ['DiferenciasDia', 'DiferenciasDia'], ['ConciliacionDia', 'ConciliacionDia'], ['AjustesStock', 'AjustesStock'], ['PedidosSinPagar', 'PedidosSinPagar'], ['PreciosProducto', 'PreciosProducto'], ['ReglasComerciales', 'ReglasComerciales'], ['RutasCobro', 'RutasCobro'], ['ventas/VentasErp', 'VentasErp']]) {
+for (const [archivo, nombre] of [['CambioCaja', 'CambioCaja'], ['FacturaCaja', 'FacturaCaja'], ['Facturacion', 'Facturacion'], ['stock/StockErp', 'StockErp'], ['DiferenciasDia', 'DiferenciasDia'], ['ConciliacionDia', 'ConciliacionDia'], ['AjustesStock', 'AjustesStock'], ['PedidosSinPagar', 'PedidosSinPagar'], ['PreciosProducto', 'PreciosProducto'], ['ReglasComerciales', 'ReglasComerciales'], ['RutasCobro', 'RutasCobro'], ['ventas/VentasErp', 'VentasErp'], ['ventas/CargarGasto', 'CargarGasto']]) {
   vi.doMock(`@/components/erp/${archivo}`, () => ({ [nombre]: () => <div data-pantalla={nombre} /> }))
 }
 
@@ -45,8 +45,18 @@ describe('ERP › el armazón propio', () => {
     sesion = { marca: 'zattia', perfil: { name: 'josefina', admin: false } }; admin = false; negados = LOCAL_NO
     await montar(['ventas', 'cobros'])
     const textos = () => [...div.querySelectorAll('nav.erp-menu a')].map((a) => a.textContent)
-    expect(textos()).toEqual(['Inicio', 'Ventas', 'Ventas', 'Cobros', 'Cajas', 'Facturación', 'Abrir la Caja↗', 'Stock', 'Productos', 'Clientes', 'Volver al monitor'])
+    // «Cargar un gasto» (caja chica, Bruno 30-oct): el local SÍ; la lista de Gastos ⛔.
+    expect(textos()).toEqual(['Inicio', 'Ventas', 'Ventas', 'Cobros', 'Cajas', 'Facturación', 'Cargar un gasto', 'Abrir la Caja↗', 'Stock', 'Productos', 'Clientes', 'Volver al monitor'])
     act(() => root?.unmount()); root = null
+    await montar(['ventas', 'cargar-gasto'])
+    expect(replace).not.toHaveBeenCalled()
+    expect(pantalla()).toBe('CargarGasto')
+    act(() => root?.unmount()); root = null
+    // Sin `cargar-gasto` (depósito, consulta) ⛔ lo ve.
+    negados = [...LOCAL_NO, 'cargar-gasto']
+    await montar(['ventas', 'cobros'])
+    expect(textos()).not.toContain('Cargar un gasto')
+    act(() => root?.unmount()); root = null; negados = LOCAL_NO
     // Facturación abre en Facturas (de la oficina) ⇒ la manda a «Facturar una venta», y ⛔ hay botón «Volver a Facturas».
     await montar(['ventas', 'facturacion'])
     expect(replace).toHaveBeenCalledWith('/erp/ventas/facturacion/factura')
