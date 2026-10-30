@@ -124,7 +124,7 @@ export const TOPE_TRANSFERENCIAS = 500
 async function transferenciasDelLibro(pg) {
   const enLibro = (await pg.query(`select detalle->>'armado' as armado, sum(cantidad)::int as u from stock_movimiento
      where tipo = 'transferencia' and origen = 'repo' and cantidad > 0 group by 1`)).rows
-  const aMano = (await pg.query(`select id, grupo, product_id, size_id, sku, deposito, cantidad, ocurrido_en, detalle from stock_movimiento
+  const aMano = (await pg.query(`select id, grupo, linea, product_id, size_id, sku, deposito, cantidad, ocurrido_en, detalle from stock_movimiento
      where tipo = 'transferencia' and origen = 'gn_foto' order by ocurrido_en desc, id desc limit 5000`)).rows
   const [{ desde } = {}] = (await pg.query('select min(ocurrido_en) as desde from stock_movimiento')).rows
   return { enLibro, aMano, desde: desde ? new Date(desde).toISOString() : null }
@@ -154,7 +154,7 @@ export async function listaDeTransferencias({ marca }, deps) {
   for (const m of libro.aMano) grupos.set(m.grupo, [...(grupos.get(m.grupo) || []), m])
   const filas = [
     ...armados.map((a) => deArmado(a, marca, enLibro.get(a.id) ?? 0)),
-    ...[...grupos].map(([g, movs]) => deLibro(g, movs)),
+    ...[...grupos].map(([g, movs]) => deLibro(g, movs, marca)),
   ]
   // `libroDesde`: lo transferido antes de que arrancara el libro ⛔ está en el ERP, y está bien (medido 20-oct: T-7745 del 12).
   return { filas, cortado: armados.length >= TOPE_TRANSFERENCIAS, libroDesde: libro.desde }

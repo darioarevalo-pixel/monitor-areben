@@ -91,13 +91,15 @@ export function TransferenciasStock() {
 
   const hoy = datos?.hoy ?? '2000-01-01'
   const desde = periodo === 'mes' ? `${hoy.slice(0, 7)}-01` : periodo === '30d' ? atras(hoy, 29) : ''
-  const base = useMemo(() => filtrar(datos?.filas ?? [], { q, origen, desde }), [datos, q, origen, desde])
+  // 🔴 Stunned vive en la base de Zattia: la lista viene con las dos y se queda con la de la tienda elegida (30-oct).
+  const propias = useMemo(() => filtrar(datos?.filas ?? [], { linea: tienda }), [datos, tienda])
+  const base = useMemo(() => filtrar(propias, { q, origen, desde }), [propias, q, origen, desde])
   const conteo = useMemo(() => contarVistas(base), [base])
   // Se entra filtrado (§3): a las abiertas si hay, si ⛔ a todas; elegir una vista la deja fija.
-  const vista = elegida ?? vistaDeEntrada(contarVistas(datos?.filas ?? []))
+  const vista = elegida ?? vistaDeEntrada(contarVistas(propias))
   const enVista = useMemo(() => filtrar(base, { vista }), [base, vista])
   const filas: FilaTransferencia[] = useMemo(() => ordenar(enVista, orden), [enVista, orden])
-  const res = useMemo(() => resumen(datos?.filas ?? [], hoy.slice(0, 7)), [datos, hoy])
+  const res = useMemo(() => resumen(propias, hoy.slice(0, 7)), [propias, hoy])
   const mirada = `${clave}|${vista}|${q}|${origen}|${desde}|${orden?.col ?? ''}|${orden?.dir ?? ''}`
   const mostrar = tanda.de === mirada ? tanda.n : DE_A
   const libroDesde = datos?.libroDesde ?? null

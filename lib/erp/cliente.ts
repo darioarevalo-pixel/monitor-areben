@@ -595,7 +595,7 @@ export const leerCobros = (marca: MarcaErp, desde: string, hasta: string, prueba
 // ── ERP › Stock › Transferencias (sólo lectura; `api/_erp-stock.js`, núcleo `lib/erp/transferencias.core.js`) ──
 export type RenglonTransferencia = { vid: string; nombre: string | null; talle: string | null; sku: string | null; pedida: number; armada: number; enviada: number }
 export type FilaTransferencia = {
-  id: string; numero: string | null; creada: string; cerrada: string | null; desde: string | null; hacia: string | null
+  id: string; linea: string | null; numero: string | null; creada: string; cerrada: string | null; desde: string | null; hacia: string | null
   desdeTexto: string; haciaTexto: string; origen: 'reposicion' | 'devolucion' | 'gn'; origenTexto: string; persona: string | null
   estado: string; estadoTexto: string; tono: string; paso: number; fin: 'curso' | 'rayado' | 'rojo' | 'gris'
   pedidas: number; armadas: number; enviadas: number; faltan: number; enLibro: number | null

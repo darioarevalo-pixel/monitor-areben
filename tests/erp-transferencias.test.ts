@@ -49,6 +49,16 @@ describe('ERP › Stock › Transferencias', () => {
     expect(f).toMatchObject({ desdeTexto: 'Depósito', haciaTexto: 'Local', origenTexto: 'A mano en Gestión Nube', estadoTexto: 'Hecha en Gestión Nube', enviadas: 2, numero: null, paso: 4 })
   })
 
+  it('Stunned vive en la base de Zattia: cada fila trae su línea y el filtro deja sólo la elegida', () => {
+    const z = deArmado({ ...transferido, store: 'zattia', linea: 'zattia' }, 'zattia', 0)
+    const s = deArmado({ ...transferido, id: 'ra2', store: 'zattia', linea: 'stunned' }, 'zattia', 0)
+    const g = deLibro('g', [{ product_id: 9, size_id: 3, linea: 'zattia', deposito: 'local', cantidad: 1, ocurrido_en: '2026-10-20T15:00:00Z', detalle: {} }], 'zattia')
+    const sinLinea = deLibro('h', [{ product_id: 9, size_id: 3, deposito: 'local', cantidad: 1, ocurrido_en: '2026-10-20T15:00:00Z', detalle: {} }], 'zattia')
+    expect(filtrar([z, s, g, sinLinea], { linea: 'stunned' }).map((f) => f.id)).toEqual(['repo:ra2'])
+    expect(filtrar([z, s, g, sinLinea], { linea: 'zattia' }).length).toBe(3)
+    expect(filtrar([z, s, g, sinLinea], { linea: '' }).length).toBe(4)
+  })
+
   it('el servidor junta los armados con lo que anotó el ERP y con las hechas en Gestión Nube', async () => {
     const pg = {
       query: async (sql: string) => ({
