@@ -69,7 +69,7 @@ export function CuentaCorriente() {
       .then((d) => { if (vivo) { setDatos({ ...d, clave }); setError(null) } })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudo leer la cuenta corriente.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
-  }, [marca, prueba, clave])
+  }, [marca, tienda, prueba, clave])
   const cargando = datos?.clave !== clave
 
   const todas = useMemo(() => armarFilasCuenta(datos?.cuentas ?? []) as FilaCuenta[], [datos])

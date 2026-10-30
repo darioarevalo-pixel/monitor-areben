@@ -93,7 +93,7 @@ export function ClientesErp({ abrir, alAbrir }: {
       })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer los clientes.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
-  }, [marca, clave])
+  }, [marca, tienda, clave])
   const cargando = datos?.clave !== clave
 
   const base = useMemo(() => filtrar(datos?.filas ?? [], { q }), [datos, q])
