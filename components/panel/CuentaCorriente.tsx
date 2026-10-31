@@ -183,14 +183,22 @@ function QuienCompra({ cuenta, telChat, decir, onCambio }: {
 }
 
 /**
- * La hoja de «Cargar pago»: cuánto pagó, a qué cuenta entró y la fecha; antes de confirmar se ve qué compra cancela y cómo
- * queda el saldo. Una clave por hoja abierta: reintentar el MISMO pago ⛔ lo duplica (el motor deduplica por la clave).
+ * La hoja de «Cargar pago»: cuánto pagó, a qué cuenta entró, la fecha y el número de operación; antes de confirmar se ve qué
+ * compra cancela y cómo queda el saldo. Una clave por hoja abierta: reintentar el MISMO pago ⛔ lo duplica (el motor
+ * deduplica por la clave). Desde un PEDIDO (Darío §4: «le sumo otro pago al mismo pedido») el pago va primero a ese pedido
+ * y lo que sobra, a lo más viejo (regla del 18-oct). Número de operación ya usado ⇒ avisa y se puede «Cargar igual».
  */
-export function HojaCargarPago({ cuenta, onCerrar, onHecho }: { cuenta: CuentaConCliente; onCerrar: () => void; onHecho: (aviso: string) => void }) {
+export function HojaCargarPago({ cuenta, pedido = null, onCerrar, onHecho }: {
+  cuenta: CuentaConCliente; pedido?: { ventaId: string; numero: number; falta: number } | null
+  onCerrar: () => void; onHecho: (aviso: string) => void
+}) {
   const saldo = cuenta.estado.saldo
   const pendientes = cuenta.estado.pendientes
   const vieja = [...pendientes].sort((a, b) => a.fecha.localeCompare(b.fecha))[0]
-  const [monto, setMonto] = useState('')
+  const refPedido = pedido ? `venta:${pedido.ventaId}` : null
+  const [monto, setMonto] = useState(() => (pedido && pedido.falta > 0 ? paraEditar(pedido.falta) : ''))
+  const [operacion, setOperacion] = useState('')
+  const [repetida, setRepetida] = useState<string | null>(null)
   const [entro, setEntro] = useState(cuenta.cuentas.length === 1 ? String(cuenta.cuentas[0].id) : '')
   const [hoyDia] = useState(() => diaArgentino(Date.now()))
   const [fecha, setFecha] = useState(hoyDia)
@@ -198,19 +206,28 @@ export function HojaCargarPago({ cuenta, onCerrar, onHecho }: { cuenta: CuentaCo
   const [trabajando, setTrabajando] = useState(false)
   const [ref] = useState(() => crypto.randomUUID())
   const n = parsearMonto(monto)
-  const { partes, aFavor } = repartirPago(pendientes, n ?? 0)
-  const nombre = (r: string) => pendientes.find((p) => p.ref === r)?.nombre || 'Compra'
+  const { partes, aFavor } = repartirPago(pendientes, n ?? 0, refPedido)
+  const nombre = (r: string) => (r === refPedido && pedido ? `Pedido ${pedido.numero}` : pendientes.find((p) => p.ref === r)?.nombre || 'Compra')
+  const delPedido = refPedido ? pendientes.find((p) => p.ref === refPedido)?.pendiente ?? 0 : 0
   const despues = saldo - (n ?? 0)
 
-  async function confirmar() {
+  async function confirmar(igual = false) {
     if (n == null || n <= 0) return setError('Poné cuánto pagó.')
     if (!entro) return setError('Elegí a qué cuenta entró.')
     setTrabajando(true)
+    setError(null)
     try {
-      const r = await cobrarCuentaErp('bdi', { clienteId: cuenta.cliente.id, linea: 'bdi', monto: n, cuenta: entro, fecha, ref, prueba: cuenta.prueba })
+      const r = await cobrarCuentaErp('bdi', {
+        clienteId: cuenta.cliente.id, linea: 'bdi', monto: n, cuenta: entro, fecha, ref, prueba: cuenta.prueba,
+        ...(operacion.trim() ? { operacion: operacion.trim(), ...(igual ? { operacionRepetida: true } : {}) } : {}),
+        ...(pedido && delPedido > 0 ? { imputar: [{ ventaId: pedido.ventaId, monto: Math.min(n, delPedido) }] } : {}),
+      })
+      setRepetida(null)
       onHecho(r.yaExistia ? 'Ese pago ya estaba cargado.' : `Pago de ${plata(n)} cargado. ${despues > 0 ? `Ahora debe ${plata(despues)}.` : despues < 0 ? `Le quedan ${plata(-despues)} a favor.` : 'Quedó al día.'}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo cargar el pago.')
+      const txt = e instanceof Error ? e.message : 'No se pudo cargar el pago.'
+      if (txt.includes('(OPERACION_REPETIDA)')) setRepetida(txt.replace(/\s*\(OPERACION_REPETIDA\)\s*$/, ''))
+      else setError(txt)
     } finally {
       setTrabajando(false)
     }
@@ -218,21 +235,25 @@ export function HojaCargarPago({ cuenta, onCerrar, onHecho }: { cuenta: CuentaCo
 
   return (
     <Modal
-      abierto onCerrar={onCerrar} titulo="Cargar pago"
+      abierto onCerrar={onCerrar} titulo={pedido ? `Cargar pago · pedido ${pedido.numero}` : 'Cargar pago'}
       pie={<>
         <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-        <Button tone="success" disabled={trabajando || n == null || n <= 0 || !entro} onClick={() => void confirmar()}>Confirmar pago</Button>
+        {repetida
+          ? <Button tone="warning" disabled={trabajando} onClick={() => void confirmar(true)}>Cargar igual</Button>
+          : <Button tone="success" disabled={trabajando || n == null || n <= 0 || !entro} onClick={() => void confirmar()}>Confirmar pago</Button>}
       </>}
     >
       <p style={{ marginTop: 0, color: color.mut }}>{cuenta.cliente.nombre} · {saldo > 0 ? `debe ${plata(saldo)}` : saldo < 0 ? `${plata(-saldo)} a favor` : 'al día'}{cuenta.prueba ? ' · de prueba' : ''}</p>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      {repetida && <Notice tone="warning">{repetida}. Fijate que no sea el mismo comprobante; si es otro pago, «Cargar igual».</Notice>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         <Field label="Cuánto pagó">
           <Input inputMode="decimal" value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="$ 0" autoFocus />
         </Field>
         {(vieja || saldo > 0) && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: -6 }}>
-            {vieja && <Button size="sm" variant="outline" onClick={() => setMonto(paraEditar(vieja.pendiente))}>La más vieja · {plata(vieja.pendiente)}</Button>}
+            {pedido && delPedido > 0 && <Button size="sm" variant="outline" onClick={() => setMonto(paraEditar(delPedido))}>Lo que falta del pedido · {plata(delPedido)}</Button>}
+            {!pedido && vieja && <Button size="sm" variant="outline" onClick={() => setMonto(paraEditar(vieja.pendiente))}>La más vieja · {plata(vieja.pendiente)}</Button>}
             {saldo > 0 && <Button size="sm" variant="outline" onClick={() => setMonto(paraEditar(saldo))}>Todo · {plata(saldo)}</Button>}
           </div>
         )}
@@ -245,6 +266,9 @@ export function HojaCargarPago({ cuenta, onCerrar, onHecho }: { cuenta: CuentaCo
           </Field>
           <Field label="Fecha"><Input type="date" value={fecha} max={hoyDia} onChange={(e) => setFecha(e.target.value)} /></Field>
         </div>
+        <Field label="N° de operación (opcional)">
+          <Input value={operacion} onChange={(e) => { setOperacion(e.target.value); setRepetida(null) }} placeholder="El del comprobante" />
+        </Field>
         <div style={{ padding: '10px 12px', borderRadius: 9, background: color.bg, border: `1px solid ${color.line}`, display: 'flex', flexDirection: 'column', gap: 4, fontSize: font.sm }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Saldo hoy</span><b>{plata(saldo)}</b></div>
           {n != null && n > 0 ? (

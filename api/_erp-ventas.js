@@ -381,6 +381,7 @@ export async function cobrarVentaErp({ marca, body, usuario }, deps = {}) {
  * Registrar un cobro A LA CUENTA de un cliente, SIN elegir venta (el botón «Cobrar» de la cuenta corriente): `registrarPagoACuenta`
  * sin `imputar` ⇒ el motor lo aplica a la compra más VIEJA que debe, y lo que sobra a la siguiente (FIFO); sólo queda a favor si el
  * cliente no debe nada (Bruno y Darío, 18-oct). Hermana de `cobrarVentaErp`, que SÍ elige una venta. La clave `ref` evita duplicar.
+ * Desde un PEDIDO del panel (Darío §4) lleva `imputar` (esa parte a esa venta) y el número de `operacion` del comprobante.
  */
 export async function cobrarCuentaErp({ marca, body, usuario }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
@@ -389,6 +390,10 @@ export async function cobrarCuentaErp({ marca, body, usuario }, deps = {}) {
   if (!(monto > 0)) return { status: 400, error: 'Monto inválido' }
   if (!body?.cuenta) return { status: 400, error: 'Elegí la cuenta.' }
   if (!/^[0-9a-f-]{8,}$/i.test(String(body?.ref || ''))) return { status: 400, error: 'Falta la clave del cobro.' }
+  const operacion = body?.operacion == null ? '' : String(body.operacion).trim()
+  if (operacion.length > 60) return { status: 400, error: 'El número de operación es demasiado largo.' }
+  const imputar = body?.imputar == null ? [] : body.imputar
+  if (!Array.isArray(imputar) || imputar.length > 20 || imputar.some((x) => !UUID.test(String(x?.ventaId || '')) || !(Number(x?.monto) > 0))) return { status: 400, error: 'Imputación inválida.' }
   const m = deps.cuenta || await moduloDelMotor('cuenta')
   if (typeof m?.registrarPagoACuenta !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }
   const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
@@ -397,6 +402,8 @@ export async function cobrarCuentaErp({ marca, body, usuario }, deps = {}) {
       cliente_id: body.clienteId, marca: body.linea || marca, monto, cuenta: String(body.cuenta), origen_ref: `erp-cobro-cuenta:${body.ref}`,
       usuario, prueba: body.prueba !== false, ...(body.canal ? { canal: String(body.canal) } : {}),
       ...(body.fecha ? { ocurrida_en: `${body.fecha}T15:00:00.000Z` } : {}),
+      ...(operacion ? { operacion, ...(body.operacionRepetida === true ? { operacion_repetida: true } : {}) } : {}),
+      ...(imputar.length ? { imputar: imputar.map((x) => ({ venta_id: x.ventaId, monto: Math.round(Number(x.monto) * 100) / 100 })) } : {}),
     })
     return r.ok ? { ok: true, pago: r.pago, cuenta: r.cuenta, yaExistia: r.ya_existia } : errorDe(r.error)
   })

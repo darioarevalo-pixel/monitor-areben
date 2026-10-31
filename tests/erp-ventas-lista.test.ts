@@ -248,6 +248,17 @@ describe('el servidor: lo que ⛔ está en el motor se frena con el motivo', () 
     expect(await cobrarCuentaErp({ marca: 'bdi', body: { clienteId: V, monto: 10, cuenta: 'c', ref: V }, usuario: 'x' }, { cuenta: {}, db })).toMatchObject({ status: 409 })
     const rechaza = { registrarPagoACuenta: async () => ({ ok: false, error: { codigo: 'CUENTA_DESCONOCIDA', mensaje: 'Un pago a cuenta entra con plata' } }) }
     expect(await cobrarCuentaErp({ marca: 'bdi', body: { clienteId: V, monto: 10, cuenta: 'c', ref: V }, usuario: 'x' }, { cuenta: rechaza, db })).toMatchObject({ status: 409 })
+    // Desde un PEDIDO del panel (Darío §4): la imputación y el número de operación llegan al motor con sus nombres.
+    pedido = null
+    await cobrarCuentaErp({ marca: 'bdi', body: { clienteId: V, linea: 'bdi', monto: 700, cuenta: 'c1', ref: V, operacion: ' 0012-3456 ', operacionRepetida: true, imputar: [{ ventaId: V, monto: '500' }] }, usuario: 'Darío' }, { cuenta, db })
+    expect(pedido).toMatchObject({ operacion: '0012-3456', operacion_repetida: true, imputar: [{ venta_id: V, monto: 500 }] })
+    pedido = null
+    await cobrarCuentaErp({ marca: 'bdi', body: { clienteId: V, monto: 7, cuenta: 'c1', ref: V, operacion: '   ', operacionRepetida: true }, usuario: 'x' }, { cuenta, db })
+    expect(pedido).not.toHaveProperty('operacion')
+    expect(pedido).not.toHaveProperty('operacion_repetida')
+    for (const body of [{ imputar: [{ ventaId: 'x', monto: 1 }] }, { imputar: [{ ventaId: V, monto: 0 }] }, { imputar: 'x' }, { operacion: '9'.repeat(61) }]) {
+      expect(await cobrarCuentaErp({ marca: 'bdi', body: { clienteId: V, monto: 10, cuenta: 'c', ref: V, ...body }, usuario: 'x' }, { cuenta, db })).toMatchObject({ status: 400 })
+    }
   })
   it('los textos: el número de factura y lo editado', () => {
     expect(numeroDeFactura({ tipo: 6, pto_vta: 5, numero: 12351, ambiente: 'produccion' })).toBe('B 0005-00012351')

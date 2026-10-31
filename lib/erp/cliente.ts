@@ -665,7 +665,13 @@ export type CuentaDeCliente = {
 export const leerCuentaDeCliente = (marca: MarcaErp, p: { clienteId: string; linea: string; prueba: boolean; desde?: string; hasta?: string }) =>
   pedir<CuentaDeCliente>(null, `&vista=cuenta-cliente&marca=${marca}&cliente=${p.clienteId}&linea=${p.linea}&prueba=${p.prueba ? 1 : 0}&desde=${p.desde ?? ''}&hasta=${p.hasta ?? ''}&nc=${Date.now()}`, 'No se pudo leer la cuenta del cliente.')
 /** El botón «Cobrar» de la cuenta: sin elegir venta, el motor paga la más vieja primero (FIFO). `ref` = una clave por ventana (⛔ duplica). */
-export const cobrarCuentaErp = (marca: MarcaErp, c: { clienteId: string; linea: string; monto: number; cuenta: string; fecha: string; ref: string; prueba: boolean }) =>
+export const cobrarCuentaErp = (marca: MarcaErp, c: {
+  clienteId: string; linea: string; monto: number; cuenta: string; fecha: string; ref: string; prueba: boolean
+  /** Darío §4: el número de operación del comprobante; repetido ⇒ el motor contesta OPERACION_REPETIDA salvo `operacionRepetida`. */
+  operacion?: string; operacionRepetida?: boolean
+  /** Cargado DESDE un pedido: esa parte va a esa venta; lo que sobra, a lo más viejo (regla del 18-oct). */
+  imputar?: Array<{ ventaId: string; monto: number }>
+}) =>
   pedir<{ ok: true; cuenta: unknown; yaExistia?: boolean }>(post({ accion: 'cobrar-cuenta', marca, ...c }), '', 'No se pudo registrar el cobro.')
 /**
  * La cuenta del cliente del chat en el panel de WhatsApp (BDI). `prendido: false` = el interruptor `PANEL_CUENTA_CORRIENTE`
@@ -697,7 +703,7 @@ export const sacarWhatsappPanel = (id: string) =>
 export const leerCuentaPanel = (p: { gnId?: number | null; tel?: string | null; prueba: boolean }) =>
   pedir<CuentaPanel>(null, `&vista=cuenta-panel&marca=bdi&gnId=${p.gnId && p.gnId > 0 ? p.gnId : ''}&tel=${String(p.tel ?? '').replace(/\D/g, '').slice(0, 20)}&prueba=${p.prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudo leer la cuenta corriente.')
 // ── El pedido mayorista en el panel (`api/_erp-pedido.js`, plan «BDI directo al ERP» paso 3): escondido como la cuenta ──
-export type PagoPedido = { estado: 'pagado' | 'parcial' | 'sin_pagar'; falta: number; pagado: number }
+export type PagoPedido = { estado: 'pagado' | 'parcial' | 'sin_pagar'; falta: number; pagado: number; /** Faltan $1.000 o menos: se ve «Pagado», lo que falta sigue en la cuenta (Darío §4). */ tolerado?: boolean }
 export type EtapaPedido = 'sin_entrar' | 'pedido' | 'a_preparar' | 'en_preparacion' | 'preparado' | 'despachado' | 'anulado'
 export type PedidoDelCliente = {
   id: string; numero: number; recibido_en: string; etapa: EtapaPedido; total: number; unidades: number; persona: string | null; venta_id: string | null

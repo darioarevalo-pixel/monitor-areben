@@ -64,6 +64,12 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
     «Es nuevo» = **nombre + CUIT/DNI** (Bruno 31-oct), ficha y número juntos o ninguno (`cliente-nuevo-panel`). 🔴 Un
     documento que ya tiene ficha ⇒ 409 (⛔ se renombra: `guardarCliente` pisa el nombre). 🔴 «Es nuevo» va detrás de
     `VENTA_MAYORISTA_REAL`: mientras GN viva, la copia de GN da de alta por id de GN sin documento ⇒ quedaría repetida.
+  - **Pagos del pedido** (Darío §4): «$ Cargar pago» en la hoja del pedido abre la MISMA hoja de la cuenta, con lo que falta y
+    `imputar` a ese pedido; lo que sobra va a lo más viejo y recién sin deuda queda a favor (regla del 18-oct). **N° de
+    operación** opcional: si otro pago vivo ya lo usa, el motor contesta OPERACION_REPETIDA, la hoja dice cuál y «Cargar
+    igual» lo manda sabiendo. 🔴 **Tolerancia $1.000** (Bruno 31-oct): faltando eso o menos el pedido se ve «Pagado» y va a
+    «Despacho», pero ⛔ se perdona: la diferencia SIGUE en la cuenta. «A dónde fue la plata»: ⏸️ a futuro, con las deudas de
+    proveedores (`tests/pedido-cargar-pago.test.tsx`, `tests/panel-cuenta-pantalla.test.tsx`).
 
 ## Reglas que el código no dice
 

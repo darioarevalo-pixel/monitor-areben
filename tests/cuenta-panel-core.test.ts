@@ -37,3 +37,13 @@ describe('La vista previa del pago en el panel (igual que reparte el motor)', ()
     expect(mensajeDeSaldo({ nombre: 'Ana', saldo: 0, pendientes: [] }, plata)).toBeNull()
   })
 })
+
+describe('repartirPago desde un pedido (Darío §4)', () => {
+  it('el pedido elegido va primero aunque sea el más nuevo; lo que sobra, a lo más viejo; lo demás, a favor', () => {
+    const pend = [{ ref: 'venta:a', fecha: '2026-09-01', pendiente: 300 }, { ref: 'venta:b', fecha: '2026-10-01', pendiente: 500 }]
+    expect(repartirPago(pend, 600, 'venta:b')).toEqual({ aFavor: 0, partes: [
+      { ref: 'venta:b', fecha: '2026-10-01', paga: 500, queda: 0 }, { ref: 'venta:a', fecha: '2026-09-01', paga: 100, queda: 200 }] })
+    expect(repartirPago(pend, 900, 'venta:b').aFavor).toBe(100)
+    expect(repartirPago(pend, 600).partes[0].ref).toBe('venta:a')
+  })
+})

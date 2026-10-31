@@ -64,6 +64,49 @@ describe('Cargar pago desde el panel (pantalla)', () => {
     expect(onHecho).toHaveBeenCalledWith('Pago de $1.200 cargado. Ahora debe $300.')
   })
 
+  it('desde un PEDIDO (Darío §4): trae lo que falta, paga primero ese pedido y manda la imputación y el n° de operación', async () => {
+    const { HojaCargarPago } = await import('@/components/panel/CuentaCorriente')
+    const onHecho = vi.fn()
+    host = document.createElement('div'); document.body.appendChild(host)
+    await act(async () => { root = createRoot(host); root.render(<HojaCargarPago cuenta={cuenta} pedido={{ ventaId: 'b', numero: 4930, falta: 500 }} onCerrar={() => {}} onHecho={onHecho} />) })
+    expect(document.body.textContent).toContain('Cargar pago · pedido 4930')
+    const monto = document.querySelector('input[inputmode="decimal"]') as HTMLInputElement
+    expect(monto.value).toBe('$ 500')
+    await poner(monto, '700')
+    const texto = document.body.textContent ?? ''
+    expect(texto).toContain('Pedido 4930 (14/10): $500 · queda pagada')
+    expect(texto).toContain('Venta 4812 (22/09): $200 · le quedan $800')
+    await poner(document.querySelector('select') as HTMLSelectElement, '7')
+    await poner(document.querySelector('input[placeholder="El del comprobante"]') as HTMLInputElement, ' 0012-3456 ')
+    await act(async () => { boton('Confirmar pago')!.click() })
+    const [, c] = cobrarCuentaErp.mock.calls[0] as unknown as [string, Record<string, unknown>]
+    expect(c).toMatchObject({ monto: 700, cuenta: '7', operacion: '0012-3456', imputar: [{ ventaId: 'b', monto: 500 }] })
+    expect(c).not.toHaveProperty('operacionRepetida')
+  })
+
+  it('n° de operación ya usado: avisa con cuál, ⛔ carga, y «Cargar igual» lo manda sabiendo', async () => {
+    const { HojaCargarPago } = await import('@/components/panel/CuentaCorriente')
+    const onHecho = vi.fn()
+    cobrarCuentaErp.mockImplementationOnce(async () => { throw new Error('La operación 00123456 ya se usó: pago de Otro del 2026-10-20 por $700 (OPERACION_REPETIDA)') })
+    host = document.createElement('div'); document.body.appendChild(host)
+    await act(async () => { root = createRoot(host); root.render(<HojaCargarPago cuenta={cuenta} onCerrar={() => {}} onHecho={onHecho} />) })
+    await poner(document.querySelector('input[inputmode="decimal"]') as HTMLInputElement, '700')
+    await poner(document.querySelector('select') as HTMLSelectElement, '7')
+    await poner(document.querySelector('input[placeholder="El del comprobante"]') as HTMLInputElement, '00123456')
+    await act(async () => { boton('Confirmar pago')!.click() })
+    expect(onHecho).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('La operación 00123456 ya se usó: pago de Otro del 2026-10-20 por $700.')
+    expect(document.body.textContent).not.toContain('(OPERACION_REPETIDA)')
+    expect(boton('Confirmar pago')).toBeUndefined()
+    await act(async () => { boton('Cargar igual')!.click() })
+    expect(cobrarCuentaErp).toHaveBeenCalledTimes(2)
+    const [, c] = cobrarCuentaErp.mock.calls[1] as unknown as [string, Record<string, unknown>]
+    expect(c).toMatchObject({ operacion: '00123456', operacionRepetida: true })
+    expect(c.ref).toBe((cobrarCuentaErp.mock.calls[0] as unknown as [string, Record<string, unknown>])[1].ref)
+    expect(c).not.toHaveProperty('imputar')
+    expect(onHecho).toHaveBeenCalledTimes(1)
+  })
+
   it('la tarjeta: «Enviar saldo», quién compra, anotar el número del chat con quién es y sacar a alguien', async () => {
     const { TarjetaCuenta } = await import('@/components/panel/CuentaCorriente')
     const decir = vi.fn()

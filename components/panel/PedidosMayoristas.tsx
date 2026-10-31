@@ -17,7 +17,7 @@ import {
   anotarWhatsappPanel, anularPedidoPanel, buscarClientesPanel, buscarProductosPedido, cambiarPedidoPanel, clienteNuevoPanel, entrarPedidoPanel, leerPedidoPanel, leerPedidosPanel, leerPreparadosSinPagar, mandarAPrepararPanel,
   type ClienteDelPanel, type EtapaPedido, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel,
 } from '@/lib/erp/cliente'
-import { useCuentaPrendida } from './CuentaCorriente'
+import { HojaCargarPago, useCuentaPrendida, type CuentaConCliente } from './CuentaCorriente'
 
 const plata = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 const diaMes = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -59,8 +59,10 @@ const APAGADO = 'Los pedidos se manejan desde acá el día que BDI pasa al ERP. 
  * La tarjeta «Pedidos»: los entrados al ERP (el más nuevo primero) y los que llegaron con el número del chat y todavía no
  * entraron. Tocar uno abre la hoja.
  */
-export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, decir, onCambio }: {
+export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = null, decir, onCambio }: {
   pedidos: Extract<PedidosPanel, { prendido: true }>; clienteId: string | null; personaId: string | null; tel: string | null
+  /** La cuenta del cliente: con ella la hoja del pedido deja «Cargar pago» (Darío §4). */
+  cuenta?: CuentaConCliente | null
   decir: (txt: string, mal?: boolean) => void; onCambio: () => void
 }) {
   const [abierto, setAbierto] = useState<string | null>(null)
@@ -107,7 +109,7 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, decir, onCa
         </button>
       ))}
       {!pedidos.escribir && <div style={{ fontSize: 11, color: color.mut2, marginTop: 6 }}>{APAGADO}</div>}
-      {abierto && <HojaPedido pedidoId={abierto} onCerrar={() => setAbierto(null)} onHecho={(t) => { decir(t); onCambio() }} />}
+      {abierto && <HojaPedido pedidoId={abierto} cuenta={cuenta} onCerrar={() => setAbierto(null)} onHecho={(t) => { decir(t); onCambio() }} />}
     </section>
   )
 }
@@ -116,8 +118,9 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, decir, onCa
  * La hoja del pedido (Darío §2): los productos con el stock real al lado, cambiar cantidades (0 = se saca), agregar productos
  * (buscador del catálogo, precio de la lista mayorista), quién cambió qué, «Enviar a preparar» y anular. ⛔ se toca cuando el depósito ya empezó a escanear.
  */
-export function HojaPedido({ pedidoId, onCerrar, onHecho }: { pedidoId: string; onCerrar: () => void; onHecho: (txt: string) => void }) {
+export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { pedidoId: string; cuenta?: CuentaConCliente | null; onCerrar: () => void; onHecho: (txt: string) => void }) {
   const [ficha, setFicha] = useState<FichaPedido | null>(null)
+  const [pagando, setPagando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cantidades, setCantidades] = useState<Record<string, number>>({})
   /** Los renglones AGREGADOS sin guardar (su cantidad vive en `cantidades`, como la de los demás). */
@@ -188,7 +191,11 @@ export function HojaPedido({ pedidoId, onCerrar, onHecho }: { pedidoId: string; 
             {ETAPA[p.etapa]}{p.persona ? ` · pidió ${p.persona.nombre ?? p.persona.whatsapp}` : ''}
             {p.pago && <> · <b style={{ color: tonoPago(p.pago) }}>{textoPago(p.pago)}</b></>}
             {p.zona === 'pendiente_pago' && p.etapa !== 'anulado' && <div style={{ fontSize: font.xs, color: color.mut2 }}>Sin pagar y sin cuenta corriente: al terminar de prepararlo va a «Pendiente de pago».</div>}
+            {p.pago?.tolerado && <div style={{ fontSize: font.xs, color: color.mut2 }}>Le faltan {plata(p.pago.falta)}: menos de $1.000, se da por pagado y la diferencia queda en su cuenta.</div>}
           </div>
+          {cuenta && p.venta_id && p.pago && p.pago.falta > 0 && p.etapa !== 'anulado' && (
+            <div><Button size="sm" variant="outline" tone="success" onClick={() => setPagando(true)}>$ Cargar pago</Button></div>
+          )}
           {!ficha.escribir && <Notice tone="info">{APAGADO}</Notice>}
           {ficha.escribir && !p.editable && p.etapa !== 'anulado' && <Notice tone="info">El depósito ya empezó a prepararlo: no se cambia.</Notice>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -237,6 +244,10 @@ export function HojaPedido({ pedidoId, onCerrar, onHecho }: { pedidoId: string; 
             </div>
           ) : <Button size="sm" variant="ghost" tone="danger" onClick={() => setAnulando(true)}>Anular el pedido</Button>)}
         </div>
+      )}
+      {pagando && cuenta && p?.venta_id && p.pago && (
+        <HojaCargarPago cuenta={cuenta} pedido={{ ventaId: p.venta_id, numero: p.numero, falta: p.pago.falta }}
+          onCerrar={() => setPagando(false)} onHecho={(t) => { setPagando(false); onHecho(t); setVuelta((v) => v + 1) }} />
       )}
     </Modal>
   )
