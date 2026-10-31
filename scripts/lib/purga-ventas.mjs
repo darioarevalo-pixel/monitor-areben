@@ -37,6 +37,8 @@
  * las anulaciones sueltas de siempre.
  */
 
+import { esIdDelErp } from '../../lib/erp/ventas-espejo.core.js'
+
 /** Días hacia atrás que se releen completos en cada corrida. */
 export const DIAS_REPASO = 90
 
@@ -101,9 +103,10 @@ async function leerPaginado(query) {
  * @returns {Promise<number>} ventas borradas (o que se borrarían, en simulación)
  */
 export async function purgarVentas(supabase, idsGN, desde, hasta, { topePorc = 0.1, simular = false, respaldo = null } = {}) {
-  const espejo = await leerPaginado((a, b) =>
+  const espejo = (await leerPaginado((a, b) =>
     supabase.from('ventas').select('id').gte('date_sale', desde).lte('date_sale', hasta).order('id').range(a, b)
-  )
+  )).filter(v => !esIdDelErp(v.id))
+  // 🔑 Las ventas nacidas en el ERP (id ≥ 1.000.000.000, `lib/erp/ventas-espejo.core.js`) GN ⛔ las tiene: ⛔ se purgan acá.
   const aBorrar = espejo.filter(v => !idsGN.has(v.id)).map(v => v.id)
 
   if (!aBorrar.length) {

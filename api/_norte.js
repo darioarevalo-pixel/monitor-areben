@@ -160,7 +160,10 @@ async function contribucionDe(supabase, store, reglas) {
   // Stunned que nace en el ERP (llave `LECTURAS_STUNNED_ERP`, apagada hasta el corte): se suma con la forma de GN.
   // Con el ERP caído y la llave prendida el P&L sale igual, ⛔ callado: el aviso viaja en `aviso`.
   const erp = store === 'zattia' ? await ventasStunnedDelErp(hace45, new Date().toISOString().slice(0, 10)) : { activa: false };
-  const ventas = [...crudas.filter((v) => !esVentaTecnica(v)), ...(erp.ventas || [])].sort((x, y) => Number(x.id) - Number(y.id));
+  // 🔑 Las del ERP que YA están en el espejo (`scripts/erp-ventas-espejo.mjs`, línea cortada) ⛔ se suman otra vez.
+  const deEspejo = crudas.filter((v) => !esVentaTecnica(v));
+  const enEspejo = new Set(deEspejo.map((v) => Number(v.id)));
+  const ventas = [...deEspejo, ...(erp.ventas || []).filter((v) => !enEspejo.has(Number(v.id)))].sort((x, y) => Number(x.id) - Number(y.id));
 
   const ventana = ventanaUltimos(ventas.map((v) => v.date_sale), 30);
   if (!ventana) return sinPlata('No hay ventas en los últimos 45 días.', null);
@@ -171,15 +174,17 @@ async function contribucionDe(supabase, store, reglas) {
   });
   if (!enVentana.length) return sinPlata('No hay ventas en la ventana.', ventana);
 
-  // El rango de ids es SÓLO de GN: los del ERP arrancan en 1.000.000.000 y estirarían el `between` a toda la tabla.
-  const idsGn = enVentana.map((v) => Number(v.id)).filter((id) => id < 1_000_000_000);
+  // El rango de ids es el del ESPEJO (GN y, si la línea cortó, las del ERP ya copiadas, ids desde 1.000.000.000): los ids
+  // de GN crecen con el tiempo ⇒ desde el mínimo de la ventana sólo hay ventas recientes. Las del ERP que el espejo ⛔ tiene
+  // traen sus renglones de `erp.detalles`.
+  const idsGn = enVentana.map((v) => Number(v.id)).filter((id) => enEspejo.has(id));
   const min = idsGn[0] ?? 0;
   const max = idsGn[idsGn.length - 1] ?? 0;
   const detallesGn = idsGn.length
     ? await leerTodo(supabase, 'venta_detalles', (q) =>
       q.select('sale_id, product_id, quantity, total').gte('sale_id', min).lte('sale_id', max).order('sale_id'))
     : [];
-  const detalles = [...detallesGn, ...(erp.detalles || [])];
+  const detalles = [...detallesGn, ...(erp.detalles || []).filter((d) => !enEspejo.has(Number(d.sale_id)))];
 
   const comun = {
     ventas: enVentana,

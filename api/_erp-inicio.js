@@ -42,7 +42,7 @@ export function ventasDeLinea(linea, env = process.env) {
       ) lp on lp.sale_id = v.id
      where ${periodo} and ${w} <> 0`
   const erp = linea === 'stunned' && lecturasStunnedErp(env)
-    ? `\n    union all\n    select e.date_sale::date, e.channel, e.total_price, e.total_cost from (${SQL_VENTAS}) e`
+    ? `\n    union all\n    select e.date_sale::date, e.channel, e.total_price, e.total_cost from (${SQL_VENTAS}) e where not exists (select 1 from ventas g where g.id = e.id)`
     : ''
   return `(${gn}${erp}) vl`
 }

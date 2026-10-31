@@ -52,3 +52,13 @@ jobs:
           ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
           ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
         run: node scripts/stunned-erp-inventario.mjs
+
+      # Las ventas nacidas en el ERP DESPUÉS del corte de su línea (`erp_corte`: Stunned desde el 28-oct, Zattia el 23-nov), al
+      # espejo de `ventas` / `venta_detalles`: sin esto Liquidación, el ETL y Reposición ven 0 ventas de la línea cortada.
+      # Va DESPUÉS del sync de GN. Ver `lib/erp/ventas-espejo.core.js`.
+      - name: Ventas del ERP al espejo
+        env:
+          DATABASE_URL_ZATTIA: ${{ secrets.DATABASE_URL_ZATTIA }}
+          ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
+        run: node scripts/erp-ventas-espejo.mjs zattia

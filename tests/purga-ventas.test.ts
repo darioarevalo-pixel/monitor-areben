@@ -92,6 +92,18 @@ describe('purgarVentas', () => {
     expect(sb.tablas.ventas.map((v: FilaVenta) => v.id)).toEqual([1, 2])
   })
 
+  it('⛔ toca las ventas nacidas en el ERP (id ≥ 1.000.000.000): GN ⛔ las tiene y las borraría cada noche', async () => {
+    const sb = mock(
+      [{ id: 1, date_sale: '2026-07-01' }, { id: 1_000_000_007, date_sale: '2026-07-02' }],
+      [{ id: 10, sale_id: 1 }, { id: 1_000_000_070, sale_id: 1_000_000_007 }],
+    )
+    const borradas = await purgarVentas(sb, new Set([1]), '2026-06-01', '2026-07-31')
+
+    expect(borradas).toBe(0)
+    expect(sb.tablas.ventas.map((v: FilaVenta) => v.id)).toEqual([1, 1_000_000_007])
+    expect(sb.tablas.venta_detalles.map((d: FilaDetalle) => d.id)).toEqual([10, 1_000_000_070])
+  })
+
   it('ABORTA si borraría más del tope: una respuesta rara de GN no puede vaciar el espejo', async () => {
     const ventas = Array.from({ length: 100 }, (_, i) => ({ id: i + 1, date_sale: '2026-07-01' }))
     const sb = mock(ventas)

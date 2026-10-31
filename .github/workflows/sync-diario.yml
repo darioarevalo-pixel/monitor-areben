@@ -41,3 +41,13 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GN_TOKEN: ${{ secrets.GN_TOKEN }}
         run: node scripts/sync-diario.js
+
+      # Las ventas nacidas en el ERP DESPUÉS del corte de BDI (`erp_corte`, 15/16-nov), al espejo de `ventas` /
+      # `venta_detalles`: sin esto Liquidación, el ETL y Reposición ven 0 ventas desde el corte. Sin corte ⛔ copia nada.
+      # Va DESPUÉS del sync de GN. Ver `lib/erp/ventas-espejo.core.js`. 🔴 Pide el secret `DATABASE_URL_BDI`.
+      - name: Ventas del ERP al espejo
+        env:
+          DATABASE_URL_BDI: ${{ secrets.DATABASE_URL_BDI }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/erp-ventas-espejo.mjs bdi
