@@ -55,6 +55,10 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
   (`motor/pedido/venta.mjs`). 🔴 **DOS llaves**: leer = `PANEL_CUENTA_CORRIENTE`; ESCRIBIR = además `VENTA_MAYORISTA_REAL=bdi`
   (409 apagada). Mientras GN viva la venta mayorista la registra la copia de GN del motor: entrar un pedido acá reservaría
   dos veces ⇒ se prende el día del corte, junto con apagar esa copia. Enganches amarrados por el mismo test.
+  - **«Agregar producto»** en la hoja: busca en el catálogo del motor (`pedido-productos`, `productosParaPedido`) por nombre,
+    SKU o código, con el stock del depósito del pedido y el precio de la lista **mayorista** — el MISMO que cobra el cambio.
+    🔴 Sin precio mayorista cargado se ve pero ⛔ se agrega (el motor contesta SIN_PRECIO). El agregado viaja en el mismo
+    «Guardar» (`tests/pedido-agregar-producto.test.tsx`). ⛔ el buscador de la Caja: lee el espejo de GN y no trae ese precio.
 
 ## Reglas que el código no dice
 

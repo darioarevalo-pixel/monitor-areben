@@ -115,6 +115,25 @@ export async function preparadosSinPagarDelPanel({ usuario = null }, deps) {
   })
 }
 
+/**
+ * «Agregar producto» en la hoja (Darío §2): el catálogo de la marca del pedido por nombre, SKU o código, con la variante, el
+ * stock del depósito del pedido y el precio de la lista mayorista (el mismo que va a cobrar el cambio). Sin precio ⇒ `precio:
+ * null` y la pantalla ⛔ deja agregarlo. Es lectura: la misma llave que la ficha.
+ * @param {{ pedidoId: string, q?: string, usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
+ */
+export async function productosParaElPanel({ pedidoId = '', q = '', usuario = null }, deps) {
+  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  if (!UUID.test(String(pedidoId))) return { status: 400, error: 'Falta el pedido' }
+  const texto = String(q || '').trim().slice(0, 80)
+  if (texto.length < 2) return { prendido: true, productos: [] }
+  return deps.conMotor('bdi', 'Buscar el producto', async (pg) => {
+    const { productosParaPedido } = await import('../motor/pedido/venta.mjs')
+    const r = await productosParaPedido(pg, { pedido_id: String(pedidoId), q: texto })
+    if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADO' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo buscar.' }
+    return { prendido: true, productos: r.productos }
+  })
+}
+
 /** El código del motor ⇒ el status de la puerta. */
 const statusDe = (codigo) => (codigo === 'NO_ENCONTRADO' ? 404
   : ['ANULADO', 'EN_PREPARACION', 'SIN_ENTRAR', 'SIN_PRECIO', 'SIN_TALLE', 'SIN_RENGLONES', 'CAMBIO_DE_LLAVE', 'SIN_CUENTA_CORRIENTE', 'CONFLICTO_IDEMPOTENCIA'].includes(codigo) ? 409 : 400)

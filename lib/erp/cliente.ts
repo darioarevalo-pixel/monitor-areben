@@ -711,6 +711,13 @@ export const leerPedidosPanel = (p: { clienteId?: string | null; tel?: string | 
   pedir<PedidosPanel>(null, `&vista=pedidos-panel&marca=bdi&cliente=${p.clienteId ?? ''}&tel=${String(p.tel ?? '').replace(/\D/g, '').slice(0, 20)}&nc=${Date.now()}`, 'No se pudieron leer los pedidos.')
 export const leerPedidoPanel = (id: string) =>
   pedir<FichaPedido | { prendido: false }>(null, `&vista=pedido-panel&marca=bdi&id=${encodeURIComponent(id)}&nc=${Date.now()}`, 'No se pudo leer el pedido.')
+/** «Agregar producto» en la hoja: cada producto con el precio mayorista (null = sin cargar ⇒ ⛔ se agrega) y sus variantes. */
+export type ProductoParaPedido = {
+  product_id: number; nombre: string; precio: number | null
+  variantes: Array<{ size_id: number; talle: string | null; sku: string | null; stock: number; en_pedido: boolean }>
+}
+export const buscarProductosPedido = (pedidoId: string, q: string) =>
+  pedir<{ prendido: false } | { prendido: true; productos: ProductoParaPedido[] }>(null, `&vista=pedido-productos&marca=bdi&id=${encodeURIComponent(pedidoId)}&q=${encodeURIComponent(q.slice(0, 80))}&nc=${Date.now()}`, 'No se pudo buscar el producto.')
 export type PreparadoSinPagar = { id: string; numero: number; cliente_id: string; cliente: string; preparado_en: string; total: number; debe: number }
 export const leerPreparadosSinPagar = () =>
   pedir<{ prendido: false } | { prendido: true; pedidos: PreparadoSinPagar[]; falta064?: boolean }>(null, `&vista=preparados-sin-pagar&marca=bdi&nc=${Date.now()}`, 'No se pudo leer «Preparados sin pagar».')

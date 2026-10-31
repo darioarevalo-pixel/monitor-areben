@@ -14,8 +14,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Field, Input, Modal, Notice } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import {
-  anularPedidoPanel, cambiarPedidoPanel, entrarPedidoPanel, leerPedidoPanel, leerPedidosPanel, leerPreparadosSinPagar, mandarAPrepararPanel,
-  type EtapaPedido, type PreparadoSinPagar, type FichaPedido, type PagoPedido, type PedidosPanel,
+  anularPedidoPanel, buscarProductosPedido, cambiarPedidoPanel, entrarPedidoPanel, leerPedidoPanel, leerPedidosPanel, leerPreparadosSinPagar, mandarAPrepararPanel,
+  type EtapaPedido, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel,
 } from '@/lib/erp/cliente'
 import { useCuentaPrendida } from './CuentaCorriente'
 
@@ -110,13 +110,16 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, decir, onCambio 
 }
 
 /**
- * La hoja del pedido (Darío §2): los productos con el stock real al lado, cambiar cantidades (0 = se saca), quién cambió qué,
- * «Mandar a preparar» y anular. ⛔ se toca cuando el depósito ya empezó a escanear.
+ * La hoja del pedido (Darío §2): los productos con el stock real al lado, cambiar cantidades (0 = se saca), agregar productos
+ * (buscador del catálogo, precio de la lista mayorista), quién cambió qué, «Enviar a preparar» y anular. ⛔ se toca cuando el depósito ya empezó a escanear.
  */
 export function HojaPedido({ pedidoId, onCerrar, onHecho }: { pedidoId: string; onCerrar: () => void; onHecho: (txt: string) => void }) {
   const [ficha, setFicha] = useState<FichaPedido | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cantidades, setCantidades] = useState<Record<string, number>>({})
+  /** Los renglones AGREGADOS sin guardar (su cantidad vive en `cantidades`, como la de los demás). */
+  const [agregados, setAgregados] = useState<Agregado[]>([])
+  const [buscando, setBuscando] = useState(false)
   const [motivo, setMotivo] = useState('')
   const [anulando, setAnulando] = useState(false)
   const [ocupado, setOcupado] = useState(false)
@@ -129,12 +132,22 @@ export function HojaPedido({ pedidoId, onCerrar, onHecho }: { pedidoId: string; 
         if (!r.prendido) { setError('La cuenta corriente del panel está apagada.'); return }
         setFicha(r)
         setCantidades(Object.fromEntries(r.lineas.map((l) => [`${l.product_id}:${l.size_id}`, l.cantidad])))
+        setAgregados([])
       })
       .catch((e) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudo leer el pedido.') })
     return () => { vivo = false }
   }, [pedidoId, vuelta])
 
-  const cambiado = useMemo(() => !!ficha && ficha.lineas.some((l) => cantidades[`${l.product_id}:${l.size_id}`] !== l.cantidad), [ficha, cantidades])
+  const cambiado = useMemo(() => !!ficha && (ficha.lineas.some((l) => cantidades[`${l.product_id}:${l.size_id}`] !== l.cantidad)
+    || agregados.some((a) => (cantidades[a.k] ?? 0) > 0)), [ficha, cantidades, agregados])
+  /** Elegir una variante del buscador: si ya está en el pedido (o recién agregada), una más; si no, un renglón nuevo con 1. */
+  const agregar = (prod: ProductoParaPedido, v: ProductoParaPedido['variantes'][number]) => {
+    const k = `${prod.product_id}:${v.size_id}`
+    const ya = ficha?.lineas.some((l) => `${l.product_id}:${l.size_id}` === k) || agregados.some((a) => a.k === k)
+    if (!ya && prod.precio != null) setAgregados((as) => [...as, { k, product_id: prod.product_id, size_id: v.size_id, nombre: prod.nombre, talle: v.talle, precio: prod.precio as number, stock: v.stock }])
+    setCantidades((c) => ({ ...c, [k]: (c[k] ?? 0) + 1 }))
+    setBuscando(false)
+  }
   const hacer = async (fn: () => Promise<{ avisarDeposito?: boolean; sinCambios?: boolean }>, ok: string) => {
     setOcupado(true)
     setError(null)
@@ -158,7 +171,10 @@ export function HojaPedido({ pedidoId, onCerrar, onHecho }: { pedidoId: string; 
         <Button variant="outline" onClick={onCerrar}>Cerrar</Button>
         {cambiado
           ? <Button variant="solid" tone="brand" disabled={!puede || ocupado}
-              onClick={() => void hacer(() => cambiarPedidoPanel(pedidoId, ficha.lineas.filter((l) => l.size_id != null).map((l) => ({ productId: l.product_id, sizeId: l.size_id as number, cantidad: cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad }))), 'Cambio guardado.')}>Guardar</Button>
+              onClick={() => void hacer(() => cambiarPedidoPanel(pedidoId, [
+                ...ficha.lineas.filter((l) => l.size_id != null).map((l) => ({ productId: l.product_id, sizeId: l.size_id as number, cantidad: cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad })),
+                ...agregados.map((a) => ({ productId: a.product_id, sizeId: a.size_id, cantidad: cantidades[a.k] ?? 0 })).filter((a) => a.cantidad > 0),
+              ]), 'Cambio guardado.')}>Guardar</Button>
           : p?.etapa === 'pedido' && <Button variant="solid" tone="brand" disabled={!ficha.escribir || ocupado} onClick={() => void hacer(() => mandarAPrepararPanel(pedidoId), 'Enviado a preparar.')}>Enviar a preparar</Button>}
       </>)}>
       {error && <Notice tone="danger">{error}</Notice>}
@@ -173,13 +189,14 @@ export function HojaPedido({ pedidoId, onCerrar, onHecho }: { pedidoId: string; 
           {!ficha.escribir && <Notice tone="info">{APAGADO}</Notice>}
           {ficha.escribir && !p.editable && p.etapa !== 'anulado' && <Notice tone="info">El depósito ya empezó a prepararlo: no se cambia.</Notice>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {ficha.lineas.map((l) => {
+            {[...ficha.lineas.map((l) => ({ ...l, nuevo: false })), ...agregados.map((a) => ({ ...a, cantidad: 0, nuevo: true }))].map((l) => {
               const k = `${l.product_id}:${l.size_id}`
               const n = cantidades[k] ?? l.cantidad
+              if (l.nuevo && n <= 0) return null
               return (
                 <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: font.sm }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <b>{l.nombre ?? `Producto ${l.product_id}`}</b>{l.talle ? ` · ${l.talle}` : ''}
+                    <b>{l.nombre ?? `Producto ${l.product_id}`}</b>{l.talle ? ` · ${l.talle}` : ''}{l.nuevo && <span style={{ fontSize: font.xs, color: color.mut2 }}> · agregado</span>}
                     <div style={{ fontSize: font.xs, color: l.stock != null && l.stock < 0 ? color.dangerInk : color.mut2 }}>{plata(l.precio)} c/u · stock {l.stock ?? '—'}</div>
                   </div>
                   {puede && l.size_id != null ? (
@@ -193,6 +210,9 @@ export function HojaPedido({ pedidoId, onCerrar, onHecho }: { pedidoId: string; 
               )
             })}
           </div>
+          {puede && (buscando
+            ? <BuscarProducto pedidoId={pedidoId} onElegir={agregar} onCerrar={() => setBuscando(false)} />
+            : <div><Button size="sm" variant="outline" onClick={() => setBuscando(true)}>Agregar producto</Button></div>)}
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
             <span>Total{cambiado ? ' (se recalcula al guardar)' : ''}</span><b>{plata(p.total)}</b>
           </div>
@@ -216,6 +236,54 @@ export function HojaPedido({ pedidoId, onCerrar, onHecho }: { pedidoId: string; 
         </div>
       )}
     </Modal>
+  )
+}
+
+type Agregado = { k: string; product_id: number; size_id: number; nombre: string; talle: string | null; precio: number; stock: number }
+
+/**
+ * El buscador de «Agregar producto»: el catálogo de la marca del pedido por nombre, SKU o código, cada variante con su stock
+ * y el precio mayorista. Un producto SIN precio mayorista se ve pero ⛔ se agrega (el motor contestaría «sin precio»).
+ */
+function BuscarProducto({ pedidoId, onElegir, onCerrar }: { pedidoId: string; onElegir: (p: ProductoParaPedido, v: ProductoParaPedido['variantes'][number]) => void; onCerrar: () => void }) {
+  const [q, setQ] = useState('')
+  const [lista, setLista] = useState<ProductoParaPedido[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    const t = q.trim()
+    if (t.length < 2) return
+    let vivo = true
+    const espera = setTimeout(() => {
+      buscarProductosPedido(pedidoId, t)
+        .then((r) => { if (vivo) { setLista(r.prendido ? r.productos : []); setError(null) } })
+        .catch((e) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudo buscar.') })
+    }, 300)
+    return () => { vivo = false; clearTimeout(espera) }
+  }, [pedidoId, q])
+  // Con menos de 2 letras ⛔ se muestra la lista vieja.
+  const vista = q.trim().length < 2 ? null : lista
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, border: `1px solid ${color.line}`, borderRadius: radius.md, padding: space[2] }}>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre, SKU o código" aria-label="Buscar el producto" style={{ flex: 1 }} />
+        <Button size="sm" variant="ghost" onClick={onCerrar}>Cancelar</Button>
+      </div>
+      {error && <Notice tone="danger">{error}</Notice>}
+      {vista && !vista.length && !error && <div style={{ fontSize: font.xs, color: color.mut2 }}>No hay productos con «{q.trim()}».</div>}
+      {vista?.map((p) => (
+        <div key={p.product_id} style={{ fontSize: font.sm }}>
+          <b>{p.nombre}</b> <span style={{ fontSize: font.xs, color: p.precio == null ? color.dangerInk : color.mut2 }}>{p.precio == null ? '· sin precio mayorista: no se puede agregar' : `· ${plata(p.precio)} c/u`}</span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
+            {p.variantes.map((v) => (
+              <Button key={v.size_id} size="sm" variant="outline" disabled={p.precio == null} onClick={() => onElegir(p, v)}
+                title={v.en_pedido ? 'Ya está en el pedido: suma uno' : undefined}>
+                {v.talle ?? 'Única'} · stock {v.stock}{v.en_pedido ? ' · ya está' : ''}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 

@@ -11,10 +11,11 @@ const pv = {
   ventaMayoristaRealEn: vi.fn((m: string, env: Record<string, string>) => String(env.VENTA_MAYORISTA_REAL ?? '').split(',').includes(m)),
   pedidosMayoristasDe: vi.fn(), fichaDePedidoMayorista: vi.fn(), preparadosSinPagar: vi.fn(),
   entrarPedidoMayorista: vi.fn(), cambiarPedidoMayorista: vi.fn(), mandarAPreparar: vi.fn(), anularPedidoDelErp: vi.fn(),
+  productosParaPedido: vi.fn(),
 }
 vi.mock('../motor/pedido/venta.mjs', () => pv)
 
-import { accionDePedido, escribirPrendido, pedidoDelPanel, pedidosDelPanel } from '../api/_erp-pedido.js'
+import { accionDePedido, escribirPrendido, pedidoDelPanel, pedidosDelPanel, productosParaElPanel } from '../api/_erp-pedido.js'
 
 const base = (rows: Record<string, unknown[]>) => ({
   query: async (sql: string) => {
@@ -65,6 +66,20 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
     const r = await pedidosDelPanel({ clienteId: C, tel: '5493411234567' }, { conMotor: conMotor(db), prendido: true, escribir: false })
     expect(r).toEqual({ prendido: true, escribir: false, pedidos: [{ id: 'a', numero: 3 }], sinEntrar: [{ id: 'x', numero: 9, recibido_en: '2026-10-30', total: 1000, unidades: 2, nombre: 'Rodrigo' }] })
     expect(pv.pedidosMayoristasDe.mock.calls[0][1]).toEqual({ cliente_id: C, limite: 30 })
+  })
+
+  it('«Agregar producto»: escondido como la ficha; menos de 2 letras ⛔ abre la base; lo demás lo contesta el motor', async () => {
+    const abrir = vi.fn()
+    expect(await productosParaElPanel({ pedidoId: P, q: 'jean' }, { conMotor: abrir, prendido: false })).toEqual({ prendido: false })
+    expect(await productosParaElPanel({ pedidoId: 'x', q: 'jean' }, { conMotor: abrir, prendido: true })).toMatchObject({ status: 400 })
+    expect(await productosParaElPanel({ pedidoId: P, q: ' j ' }, { conMotor: abrir, prendido: true })).toEqual({ prendido: true, productos: [] })
+    expect(abrir).not.toHaveBeenCalled()
+    const productos = [{ product_id: 7, nombre: 'Funda X', precio: 900, variantes: [{ size_id: 70, talle: 'iPhone 15', sku: null, stock: 3, en_pedido: false }] }]
+    pv.productosParaPedido.mockResolvedValue({ ok: true, deposito: 'deposito_minorista', productos })
+    expect(await productosParaElPanel({ pedidoId: P, q: '  funda '.padEnd(200, 'x') }, { conMotor: conMotor(base({})), prendido: true })).toEqual({ prendido: true, productos })
+    expect(pv.productosParaPedido.mock.calls[0][1].q).toHaveLength(80)
+    pv.productosParaPedido.mockResolvedValue({ ok: false, error: { codigo: 'NO_ENCONTRADO', mensaje: 'No está ese pedido' } })
+    expect(await productosParaElPanel({ pedidoId: P, q: 'funda' }, { conMotor: conMotor(base({})), prendido: true })).toEqual({ status: 404, error: 'No está ese pedido' })
   })
 
   it('la ficha suma nombre y variante a cada renglón', async () => {
