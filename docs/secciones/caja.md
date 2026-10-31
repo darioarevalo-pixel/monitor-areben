@@ -291,7 +291,8 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   turno abierto. `usuario_cuenta` = el mail del padrón de quien lo cargó.
   🔴 **Sin turno abierto ⛔ se cobra** (409 `sinTurno`). Un solo turno abierto por marca (índice único
   parcial). La venta es del turno donde se COBRÓ (`caja_venta.turno_id`). El cierre guarda la foto
-  (`esperado`, `resumen`) y ⛔ se reabre. Un día puede tener dos turnos.
+  (`esperado`, `resumen`) y ⛔ se reabre. Un día puede tener dos turnos. Una venta corregida DESPUÉS de cerrar ⇒ un admin
+  lo **recalcula** desde ERP › Ventas › Cajas (`recalcular-cierre`, 31-oct; ⛔ toca lo contado: ver la ficha del ERP).
 - 🔑 **Los cobros de GN suman al turno (v2, W3b, Bruno 4-oct)** (`cobrosDeGN`, `cierre.core.js`): el
   pedido web que se paga al retirar se cobra **EN GN, a mano** —la API ⛔ deja agregarle un pago a una
   venta que ya existe (sólo `POST /ventas` con `payments[]`; medido en la doc el 4-oct)—. El turno lee

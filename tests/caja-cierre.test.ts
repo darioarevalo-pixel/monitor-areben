@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { anuladasEnGN, avisoDeCierre, cobrosDeERP, cobrosDeGN, diferencia, horaDeGN, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, quienesSeEnteranDelCierre, resumenTurno, usuarioDe } from '@/lib/caja/cierre.core.js'
+import { anuladasEnGN, avisoDeCierre, cobrosDeERP, cobrosDeGN, diferencia, horaDeGN, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, quienesSeEnteranDelCierre, resumenTurno, usuarioDe, fotoDelCierre, recalcularCierre } from '@/lib/caja/cierre.core.js'
 
 /**
  * Caja v2 · W3: el turno propio (Bruno, 4-oct-2026). Se cuenta sólo el efectivo: fondo + lo cobrado
@@ -375,5 +375,43 @@ describe('avisoDeCierre (Bruno, 30-oct): el celular recibe cómo fue el turno', 
   it('a los admins, o a quienes diga AVISOS_CAJA_A', () => {
     expect(quienesSeEnteranDelCierre({})).toEqual(['Bruno Arevalo', 'Dario Arevalo'])
     expect(quienesSeEnteranDelCierre({ AVISOS_CAJA_A: ' Ana , Bruno Arevalo,' })).toEqual(['Ana', 'Bruno Arevalo'])
+  })
+})
+
+// 🔄 Recalcular un cierre (Bruno, 31-oct): el caso real de Z-0038 — el pedido web de Stunned #36 entró como efectivo
+// ($ 43.795) y después se le corrigió el medio ⇒ el cierre decía que faltaban $ 43.795 con la plata bien.
+describe('recalcularCierre', () => {
+  const efectivo = (cobradoERP: number) => ({ fondo: 54900, cobrado: 214400, deEspera: 0, cobradoGN: 0, cobradoERP, aportes: 0, salidas: 0, esperado: 54900 + 214400 + cobradoERP })
+  const turno = {
+    contado: 269300, esperado: 313095,
+    resumen: { efectivo: efectivo(43795), cobrosERP: [{ id: 'erp-36', monto: 43795 }], diferencia: -43795 },
+    conteos: { cierre: { billetes: { 20000: 7 }, total: 269300, esperado: 313095, diferencia: -43795 }, intermedios: [1] },
+  }
+  const con = { resumen: { efectivo: efectivo(0), cobrosERP: [] }, salidas: [] }
+  it('rearma el esperado con lo de hoy y ⛔ toca lo contado', () => {
+    const r = recalcularCierre({ turno, con, por: 'Bruno', porUsuario: 'b@x', en: '2026-10-31T15:00:00Z' })
+    expect(r.cambia).toBe(true)
+    expect(r.antes).toEqual({ esperado: 313095, diferencia: -43795 })
+    expect(r.despues).toEqual({ esperado: 269300, diferencia: 0 })
+    expect(r.foto.esperado).toBe(269300)
+    expect(r.foto).not.toHaveProperty('contado')
+    expect(r.foto.conteos.cierre).toMatchObject({ billetes: { 20000: 7 }, total: 269300, esperado: 269300, diferencia: 0 })
+    expect(r.foto.conteos.intermedios).toEqual([1])
+    expect(r.foto.resumen.recalculos).toEqual([{ en: '2026-10-31T15:00:00Z', por: 'Bruno', por_usuario: 'b@x', antes: r.antes, despues: r.despues }])
+  })
+  it('suma al historial sin perder lo anterior', () => {
+    const una = recalcularCierre({ turno, con, por: 'A', porUsuario: null, en: '1' })
+    const otra = recalcularCierre({ turno: { ...turno, esperado: 269300, resumen: una.foto.resumen }, con: { ...con, resumen: { ...con.resumen, efectivo: efectivo(100) } }, por: 'B', porUsuario: null, en: '2' })
+    expect(otra.foto.resumen.recalculos.map((x: { por: string }) => x.por)).toEqual(['A', 'B'])
+  })
+  it('al día ⇒ ⛔ cambia', () => {
+    const r = recalcularCierre({ turno: { ...turno, esperado: 269300, resumen: { ...con.resumen } }, con, por: 'A', porUsuario: null, en: '1' })
+    expect(r.cambia).toBe(false)
+  })
+  it('caja abierta ⇒ error', () => {
+    expect(() => recalcularCierre({ turno: { ...turno, contado: null }, con, por: null, porUsuario: null, en: '1' })).toThrow(/abierta/)
+  })
+  it('sin conteo de billetes ⛔ inventa `conteos`', () => {
+    expect(fotoDelCierre({ con, contado: 100, conteos: null })).not.toHaveProperty('conteos')
   })
 })

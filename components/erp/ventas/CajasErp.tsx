@@ -22,7 +22,7 @@ import { ListaTrabajo, type MovilColumna, type OrdenLista } from '@/components/u
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { ChipEstado, TileResumen, VistasLista, cuandoCorto, tonoDeConteo } from '@/components/ui/PiezasLista'
-import { arquearSobre, leerCajaAbierta, leerCajaDelSobre, leerTurnosCaja, type MarcaErp } from '@/lib/erp/cliente'
+import { arquearSobre, leerCajaAbierta, leerCajaDelSobre, leerTurnosCaja, recalcularCierre, type EfectivoCierre, type MarcaErp } from '@/lib/erp/cliente'
 import { esAdmin } from '@/lib/permisos'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
 import {
@@ -160,6 +160,12 @@ export function CajasErp() {
     setRevisar(null)
     setFicha(null)
   }
+  /** El cierre recalculado reemplaza la fila; la ficha queda abierta para ver cómo quedó. */
+  function alRecalcular(turno: Record<string, unknown>) {
+    const [f] = armarFilasCajas([turno], marca)
+    setDatos((d) => (d ? { ...d, filas: d.filas.map((x) => (x.id === f.id ? f : x)) } : d))
+    setSuelta((x) => (x?.id === f.id ? f : x))
+  }
   const nombrePeriodo = PERIODOS_CAJA.find(([k]) => k === periodo)?.[1] ?? ''
 
   const columnas = prefs.visibles.map((k) => {
@@ -251,7 +257,7 @@ export function CajasErp() {
             {fichaFila.efectivo ? (
               <div>
                 <h3 style={{ margin: '0 0 8px', fontSize: font.md }}>El efectivo</h3>
-                {([['Fondo', fichaFila.efectivo.fondo], ['Cobrado en efectivo', fichaFila.efectivo.cobrado], ['Esperando transferencia', fichaFila.efectivo.deEspera], ['Cobrado en Gestión Nube', fichaFila.efectivo.cobradoGN], ['Ingresos', fichaFila.efectivo.aportes], ['Salidas', -fichaFila.efectivo.salidas]] as Array<[string, number]>)
+                {([['Fondo', fichaFila.efectivo.fondo], ['Cobrado en efectivo', fichaFila.efectivo.cobrado], ['Esperando transferencia', fichaFila.efectivo.deEspera], ['Cobrado en Gestión Nube', fichaFila.efectivo.cobradoGN], ['Pedidos web de Stunned', fichaFila.efectivo.cobradoERP ?? 0], ['Ingresos', fichaFila.efectivo.aportes], ['Salidas', -fichaFila.efectivo.salidas]] as Array<[string, number]>)
                   .filter(([, n]) => n).map(([t, n]) => <div key={t} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span style={{ color: color.mut }}>{t}</span><MoneyText value={n} /></div>)}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${color.line}`, fontWeight: 700 }}><span>Esperado</span><MoneyText value={fichaFila.efectivo.esperado} /></div>
                 {fichaFila.contado != null && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span>Contado</span><MoneyText value={fichaFila.contado} /></div>}
@@ -264,6 +270,7 @@ export function CajasErp() {
               </div>
             )}
             {fichaFila.nota && <DatoFicha titulo="Nota">{fichaFila.nota}</DatoFicha>}
+            {!fichaFila.abierta && (admin || fichaFila.recalculado) && <RecalcularElCierre key={fichaFila.id} f={fichaFila} marca={marca} admin={admin} onGuardado={alRecalcular} />}
           </div>
         )}
       </FichaCostado>
@@ -301,6 +308,64 @@ function ArqueoDeLaCaja({ f, admin, onRevisar }: { f: FilaCaja; admin: boolean; 
       {admin && !a && <Button variant="solid" tone="brand" fullWidth disabled={f.sobre == null} onClick={onRevisar}>Revisar</Button>}
       {admin && a && <Button variant="ghost" size="sm" style={{ alignSelf: 'flex-start' }} onClick={onRevisar}>Corregir el arqueo</Button>}
       {!admin && !a && <span style={{ color: color.mut, fontSize: font.sm }}>La revisa un admin cuando recibe el sobre.</span>}
+    </div>
+  )
+}
+
+/** Los renglones del efectivo que se comparan al recalcular (los mismos de «El efectivo»). */
+const RENGLONES_EFECTIVO: Array<[string, (e: EfectivoCierre) => number]> = [
+  ['Cobrado en efectivo', (e) => e.cobrado], ['Esperando transferencia', (e) => e.deEspera], ['Cobrado en Gestión Nube', (e) => e.cobradoGN],
+  ['Pedidos web de Stunned', (e) => e.cobradoERP ?? 0], ['Ingresos', (e) => e.aportes], ['Salidas', (e) => -e.salidas],
+]
+
+/**
+ * 🔄 RECALCULAR EL CIERRE (Bruno, 31-oct): una venta corregida después de cerrar (el medio de un pedido web, una anulada en
+ * Gestión Nube) deja la caja con una diferencia que ya no es. «Recalcular el cierre» muestra qué cambia con lo de hoy y
+ * «Guardar» lo escribe. Lo contado y el sobre ⛔ cambian; lo anterior queda anotado y se ve acá.
+ */
+function RecalcularElCierre({ f, marca, admin, onGuardado }: { f: FilaCaja; marca: MarcaErp; admin: boolean; onGuardado: (t: Record<string, unknown>) => void }) {
+  const [vista, setVista] = useState<Awaited<ReturnType<typeof recalcularCierre>> | null>(null)
+  const [leyendo, setLeyendo] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [guardado, setGuardado] = useState(false)
+  async function correr(guardar: boolean) {
+    setLeyendo(true); setError(null)
+    try {
+      const r = await recalcularCierre(marca, { id: f.id, guardar })
+      if (guardar && r.turno) { setVista(null); setGuardado(true); onGuardado(r.turno) } else setVista(r)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo recalcular el cierre.')
+    } finally {
+      setLeyendo(false)
+    }
+  }
+  const r = f.recalculado
+  const cambios = vista && vista.efectivoAntes ? RENGLONES_EFECTIVO.map(([t, de]) => [t, de(vista.efectivoAntes!), de(vista.efectivoDespues)] as const).filter(([, a, d]) => a !== d) : []
+  const fila = (t: string, a: number, d: number, fuerte = false, fmt: (n: number) => string = pesos) => (
+    <div key={t} style={{ display: 'flex', justifyContent: 'space-between', gap: space[2], padding: '4px 0', fontWeight: fuerte ? 700 : undefined }}>
+      <span style={{ color: fuerte ? undefined : color.mut }}>{t}</span><span>{fmt(a)} → {fmt(d)}</span>
+    </div>
+  )
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+      {r && <span style={{ color: color.mut, fontSize: font.sm }}>Recalculado · {r.por ?? 'sin dato'} · {cuandoCorto(r.en)} · esperado {pesos(r.antes.esperado)} → {pesos(r.despues.esperado)}</span>}
+      {guardado && <Notice tone="success">Cierre recalculado.</Notice>}
+      {error && <Notice tone="danger">{error}</Notice>}
+      {admin && !vista && <Button variant="ghost" size="sm" style={{ alignSelf: 'flex-start' }} disabled={leyendo} onClick={() => void correr(false)}>{leyendo ? 'Recalculando…' : 'Recalcular el cierre'}</Button>}
+      {vista && !vista.cambia && <Notice tone="neutral">El cierre ya está al día: no hay nada que recalcular.</Notice>}
+      {vista && vista.cambia && (
+        <div style={{ border: `1px solid ${color.line}`, borderRadius: 12, padding: space[3], display: 'flex', flexDirection: 'column', gap: space[1] }}>
+          <h3 style={{ margin: '0 0 4px', fontSize: font.md }}>Con lo de hoy</h3>
+          {cambios.map(([t, a, d]) => fila(t, a, d))}
+          {fila('Esperado', vista.antes.esperado, vista.despues.esperado, true)}
+          {fila('Diferencia', vista.antes.diferencia, vista.despues.diferencia, true, (n) => (n ? conSigno(n) : '$ 0'))}
+          <span style={{ color: color.mut, fontSize: font.sm }}>Lo contado y el sobre quedan como están.</span>
+          <div style={{ display: 'flex', gap: space[2], marginTop: space[2] }}>
+            <Button variant="solid" tone="brand" disabled={leyendo} onClick={() => void correr(true)}>{leyendo ? 'Guardando…' : 'Guardar'}</Button>
+            <Button variant="ghost" disabled={leyendo} onClick={() => setVista(null)}>Cancelar</Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

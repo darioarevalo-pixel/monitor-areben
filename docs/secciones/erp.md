@@ -226,6 +226,14 @@ Núcleo `lib/erp/facturacion-lista.core.js`; el Nº, la clienta y las facturas d
   la lista sale igual con el aviso y la Caja cierra igual (las columnas se leen APARTE de `COLS_TURNO`). La Caja del local es
   UNA para Zattia y Stunned (un cajón, «Caja del local»): lo ÚNICO del ERP que ⛔ se separa por línea (Bruno, 30-oct).
   Tests `caja-arqueo`, `erp-cajas`, `caja-handler` (§ arqueo), `caja-ticket`, `erp-cajas-arqueo-pantalla` (la revisión).
+- 🔄 **Recalcular el cierre** (Bruno, 31-oct: «que se pueda actualizar los cierres de caja con los cambios actuales»; el caso:
+  Z-0038, el pedido web de Stunned #36 entró como efectivo $ 43.795 y después se le corrigió el medio ⇒ el cierre decía que
+  faltaba eso con la plata bien). Botón de admin en la ficha: POST `action=recalcular-cierre` (`api/_caja.js`) rearma la foto con
+  `conResumen` fresco y `fotoDelCierre` —la MISMA cuenta del cierre— (`recalcularCierre`, `lib/caja/cierre.core.js`). Sin
+  `guardar` muestra qué cambia («Con lo de hoy»); con `guardar` escribe `esperado`/`resumen`/`conteos.cierre` y anota lo anterior
+  en `resumen.recalculos` (⛔ migración). 🔑 **Lo CONTADO ⛔ cambia ⇒ el sobre y su arqueo tampoco**: cambia sólo lo esperado y la
+  diferencia. GN o el ERP sin contestar ⇒ 409 (⛔ se guarda a medias). ⛔ manda el aviso de cierre otra vez. Tests `caja-cierre`
+  (§ recalcularCierre), `erp-cajas-recalcular-pantalla`.
 - 🔑 **`erp › Productos y precios › Productos` › «Corregir datos»** (🎨 26-oct, Resto; el botón se llama como en el v8, tablero 5): en la ficha, nombre y categoría
   del producto y, de cada variante, talle · SKU · código de barras, más «Agregar una variante». Cada «Guardar» confirma con el antes → después y avisa que lo
   que venía de GN pasa a «cargada» (la copia de GN ⛔ lo pisa más); abajo, «Cambios de la ficha» (quién, antes → después). Sólo Admin (permiso `configurar`

@@ -846,6 +846,23 @@ export async function arquearSobre(marca: MarcaErp, p: { id: string; contado?: n
   if (!r.ok) throw new Error((j && j.error) || 'No se pudo guardar el arqueo.')
   return j as { turno: Record<string, unknown> }
 }
+/** Lo que tiene el efectivo de un cierre (`resumen.efectivo`). */
+export type EfectivoCierre = { fondo: number; cobrado: number; deEspera: number; cobradoGN: number; cobradoERP?: number; aportes: number; salidas: number; esperado: number }
+/**
+ * 🔄 RECALCULAR UN CIERRE (sólo admin): el esperado rearmado con lo de hoy (una venta corregida después de cerrar). Sin
+ * `guardar`, sólo qué cambiaría; con `guardar`, lo escribe y vuelve la caja. ⛔ Toca lo contado ni el sobre.
+ */
+export async function recalcularCierre(marca: MarcaErp, p: { id: string; guardar?: boolean }) {
+  const r = await apiFetch('/api/datos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recurso: 'caja', store: marca, action: 'recalcular-cierre', ...p }),
+  })
+  const j = await r.json().catch(() => null)
+  if (!r.ok) throw new Error((j && j.error) || 'No se pudo recalcular el cierre.')
+  return j as { antes: { esperado: number; diferencia: number }; despues: { esperado: number; diferencia: number }; cambia: boolean
+    efectivoAntes: EfectivoCierre | null; efectivoDespues: EfectivoCierre; turno?: Record<string, unknown> }
+}
 /** El turno abierto con su resumen EN VIVO (el esperado lo calcula la Caja: lee GN, 1 a 10 s). */
 export const leerCajaAbierta = (marca: MarcaErp) =>
   deCaja<{ turno: (Record<string, unknown> & { resumen?: { ventas?: number; efectivo?: { esperado?: number } } }) | null }>(marca, 'action=turno', 'No se pudo leer la caja abierta.')

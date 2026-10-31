@@ -46,6 +46,8 @@
 //   POST ?recurso=caja  { action: 'promos', promos }       → sólo admin: la lista entera de promos (W5), en `caja_config.reglas.promos`
 //   POST ?recurso=caja  { action: 'arqueo', id, contado, nota?, corregir? } → sólo admin: el ARQUEO del sobre de una caja
 //        cerrada (`lib/caja/arqueo.core.js`): llegó bien (⇒ Lista) o con diferencia (nota obligatoria). ⛔ Toca el cierre.
+//   POST ?recurso=caja  { action: 'recalcular-cierre', id, guardar? } → sólo admin: el cierre de una caja CERRADA rearmado
+//        con lo de hoy (una venta corregida después). Sin `guardar`, sólo qué cambia; ⛔ toca lo contado ni el sobre.
 //   POST ?recurso=caja  { action: 'politica', texto }      → sólo admin: la política de cambio del ticket
 //   POST ?recurso=caja  { action: 'logo', logo: { src, ancho, alto } | null } → sólo admin: el logo del ticket (sql/migrate-caja-logo.sql)
 //   POST ?recurso=caja  { action: 'bajadas', transferenciaPorMp?: { mp, gn }, billetes?, feriaProductos? } → sólo admin: a qué cuenta
@@ -106,7 +108,7 @@ import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, dias
 import { reglasDeHoy as reglasDeHoyDe } from './_caja-reglas.js'
 import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
-import { anuladasEnGN, avisoDeCierre, cobrosDeERP, cobrosDeGN, diferencia, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, quienesSeEnteranDelCierre, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
+import { anuladasEnGN, avisoDeCierre, cobrosDeERP, cobrosDeGN, diferencia, fotoDelCierre, recalcularCierre, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, quienesSeEnteranDelCierre, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
 import { billetesDe, limpiarConteo, totalDeConteo } from '../lib/caja/conteo.core.js'
 import { anotarAnuladasDelCierre } from '../lib/caja/anuladas.js'
 import { FALTA_ARQUEO, armarArqueo, billetesDelSobre, faltaColumnaArqueo, leerCodigo, sobreEsperado } from '../lib/caja/arqueo.core.js'
@@ -768,6 +770,34 @@ export default async function handler(req, res) {
         if (!up.data) return res.status(409).json({ error: 'Otro admin acaba de arquear ese sobre. Recargá la lista.' })
         return res.status(200).json({ turno: up.data })
       }
+      // 🔄 RECALCULAR UN CIERRE (Bruno, 31-oct): una venta corregida después de cerrar (el medio de un pedido web, una
+      // anulada en GN) ⇒ el esperado se rearma con lo de HOY. Sin `guardar` sólo muestra qué cambiaría; con `guardar`
+      // lo escribe y anota lo anterior en `resumen.recalculos`. ⛔ Toca lo contado ni el sobre (`recalcularCierre`).
+      if (accion === 'recalcular-cierre') {
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Recalcular un cierre lo hace un admin.' })
+        const id = String(b.id || '')
+        if (!UUID.test(id)) return res.status(400).json({ error: 'id de caja inválido.' })
+        let r = await sb.from('caja_turno').select(`${COLS_TURNO}, deposito`).eq('id', id).eq('store', store).maybeSingle()
+        if (r.error && faltaColumnaDeposito(r.error)) r = await sb.from('caja_turno').select(COLS_TURNO).eq('id', id).eq('store', store).maybeSingle()
+        if (r.error) throw new Error(r.error.message)
+        const t = r.data
+        if (!t) return res.status(404).json({ error: 'Esa caja no existe.' })
+        if (!t.cerrado_en || t.contado == null) return res.status(409).json({ error: 'Esa caja todavía está abierta: se recalcula al cerrarla.' })
+        const con = await conResumen(t, true)
+        // Con algo sin leer, el esperado nuevo saldría MAL: ⛔ se guarda a medias.
+        if (con.resumen.cobrosGN === null || con.resumen.anuladasGN === null || con.resumen.cobrosERP === null) {
+          return res.status(409).json({ error: 'Gestión Nube o el ERP no contestaron: sin eso el cierre saldría mal. Reintentar en un minuto.' })
+        }
+        const rc = recalcularCierre({ turno: t, con, por: perfil.name || null, porUsuario: usuarioDe(perfil), en: new Date().toISOString() })
+        const vista = { antes: rc.antes, despues: rc.despues, cambia: rc.cambia, efectivoAntes: (t.resumen && t.resumen.efectivo) || null, efectivoDespues: rc.foto.resumen.efectivo }
+        if (b.guardar !== true) return res.status(200).json(vista)
+        if (!rc.cambia) return res.status(409).json({ error: 'El cierre ya está al día: no hay nada que recalcular.', ...vista })
+        // Si otro admin lo recalculó en el medio, ⛔ se pisa: se vuelve a mirar.
+        const up = await sb.from('caja_turno').update(rc.foto).eq('id', id).eq('esperado', t.esperado).not('cerrado_en', 'is', null).select(COLS_TURNO).maybeSingle()
+        if (up.error) throw new Error(up.error.message)
+        if (!up.data) return res.status(409).json({ error: 'Otro admin acaba de cambiar ese cierre. Recargá la lista.' })
+        return res.status(200).json({ ...vista, turno: await conNumero(up.data) })
+      }
       if (accion === 'politica') {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia la política de cambio del ticket.' })
         const texto = String(b.texto ?? '').trim().slice(0, 1000) || null
@@ -1038,13 +1068,8 @@ export default async function handler(req, res) {
           if (!nota) return res.status(400).json({ error: 'Para cerrar sin lo de Gestión Nube hace falta una nota.' })
         }
         // 🔑 La foto del cierre queda guardada: si después se toca una venta, el cierre ⛔ cambia.
-        const foto = (x) => {
-          const esperado = x.resumen.efectivo.esperado
-          const dif = diferencia(contado, esperado)
-          const f = { esperado, resumen: { ...x.resumen, salidas: x.salidas, diferencia: dif } }
-          if (c) f.conteos = { ...(turno.conteos || {}), cierre: { ...c, esperado, diferencia: dif } }
-          return f
-        }
+        // (Si se corrige una venta DESPUÉS, un admin lo recalcula: `recalcular-cierre`, con lo anterior anotado.)
+        const foto = (x) => fotoDelCierre({ con: x, contado, conteos: c ? turno.conteos : null, conteoCierre: c })
         const up = await sb.from('caja_turno')
           .update({ cerrado_en: new Date().toISOString(), cerrado_por: perfil.name || null, contado, nota, ...foto(con) })
           .eq('id', id).is('cerrado_en', null).select(COLS_TURNO).maybeSingle()
@@ -1437,7 +1462,7 @@ export default async function handler(req, res) {
         if (ya.data.estado === 'cancelada') return res.status(200).json({ venta: ya.data })
         return res.status(409).json({ error: 'La transferencia ya llegó: la venta está cobrada y no se cancela desde acá.', venta: ya.data })
       }
-      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, reintentar-pendientes, cruzar, confirmar-varios, confirmar-otra-cuenta, cancelar, resolver, confirmar-transferencia, usar-mp, politica, logo, gift-lote, bajadas, abrir-turno, salida, anular-mov, contar, cerrar-turno, arqueo)' })
+      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, reintentar-pendientes, cruzar, confirmar-varios, confirmar-otra-cuenta, cancelar, resolver, confirmar-transferencia, usar-mp, politica, logo, gift-lote, bajadas, abrir-turno, salida, anular-mov, contar, cerrar-turno, arqueo, recalcular-cierre)' })
     }
     return res.status(405).json({ error: 'Método no permitido' })
   } catch (e) {
