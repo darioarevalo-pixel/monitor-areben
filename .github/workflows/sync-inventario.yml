@@ -61,16 +61,20 @@ jobs:
           ZATTIA_SUPABASE_KEY: ${{ secrets.ZATTIA_SUPABASE_KEY }}
           ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
           GN_TOKEN_ZATTIA: ${{ secrets.GN_TOKEN_ZATTIA }}
-          LECTURAS_STUNNED_ERP: ${{ vars.LECTURAS_STUNNED_ERP }}
+          DATABASE_URL_BDI: ${{ secrets.DATABASE_URL_BDI }}
+          DATABASE_URL_ZATTIA: ${{ secrets.DATABASE_URL_ZATTIA }}
         run: node scripts/sync-inventario-solo.js
 
-      # Día del corte de Stunned (variable del repo `LECTURAS_STUNNED_ERP=1`): sus filas STU de `inventario` salen del LIBRO
-      # del motor, no de GN (que las trae en 0). Apagada la variable, el script sale sin tocar nada.
-      - name: Stock de Stunned desde el ERP
-        if: ${{ inputs.store == 'zattia' }}
+      # El stock de las líneas que ya pasaron al ERP (`erp_corte`: Stunned desde el 28-oct, BDI el 15/16-nov, Zattia el 23-nov)
+      # sale del LIBRO del motor, ⛔ de GN (el sync de arriba ya no escribe esas filas). Sin corte, el script sale sin tocar nada.
+      # Ver `lib/erp/inventario-espejo.core.js`.
+      - name: Stock del ERP al espejo
         env:
-          LECTURAS_STUNNED_ERP: ${{ vars.LECTURAS_STUNNED_ERP }}
+          INPUT_STORE: ${{ inputs.store }}
+          DATABASE_URL_BDI: ${{ secrets.DATABASE_URL_BDI }}
           DATABASE_URL_ZATTIA: ${{ secrets.DATABASE_URL_ZATTIA }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
           ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
-        run: node scripts/stunned-erp-inventario.mjs
+        run: node scripts/erp-inventario-espejo.mjs "$INPUT_STORE"

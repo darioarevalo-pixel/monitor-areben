@@ -10,8 +10,8 @@ import { refrescarVistas } from './lib/refrescar-vistas.mjs';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
 import { revisarCostos, sinCostoSiNoSeVe } from './lib/costos-espejo.mjs';
 import { registrarCambiosDeStock } from './lib/stock-cambios.mjs';
-import { lecturasStunnedErp } from '../lib/stunned/ventas-erp.core.js';
-import { esFilaStunned } from '../lib/stunned/inventario-erp.core.js';
+import { esDeLineas } from '../lib/erp/inventario-espejo.core.js';
+import { lineasCortadasDe } from './lib/lineas-cortadas.mjs';
 import { guardarFotoDelDia } from './lib/stock-foto.mjs';
 
 /** Ver el comentario gemelo en sync-diario.js: lo que falló sin frenar el sync. */
@@ -179,10 +179,14 @@ async function syncInventario(maps) {
     }
   });
 
-  // Con `LECTURAS_STUNNED_ERP=1` (día del corte) las filas STU las escribe el LIBRO del motor
-  // (`scripts/stunned-erp-inventario.mjs`): GN las trae en 0 y pisaría el stock real. Apagada, no cambia nada.
-  const stunnedDelErp = lecturasStunnedErp();
-  const inventario = Object.values(invMap).filter((r) => !(stunnedDelErp && esFilaStunned(r)));
+  // Las filas de una línea que ya pasó al ERP (`erp_corte`: Stunned desde el 28-oct, Zattia el 23-nov) las escribe el
+  // LIBRO del motor (`scripts/erp-inventario-espejo.mjs`): GN ya no se entera de lo que se vende y pisaría el stock real.
+  // 🔴 Sin poder leer los cortes ⛔ se escribe el stock (iría GN encima del libro): va a `problemas` y sigue con las ventas.
+  let cortadas;
+  try { cortadas = await lineasCortadasDe('zattia'); }
+  catch (e) { problemas.push(`inventario sin guardar: ${e.message}`); console.error(`[inventario] ⚠️ ${e.message}: no se guarda.`); return 0; }
+  const deLineaCortada = (r) => esDeLineas('zattia', cortadas, r);
+  const inventario = Object.values(invMap).filter((r) => !deLineaCortada(r));
   console.log(`[inventario] ${inventario.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inventario.length) return 0;
 
@@ -225,8 +229,8 @@ async function syncInventario(maps) {
       espejo.push(...(data || []));
       if (!data || data.length < 1000) break;
     }
-    // Las filas STU del libro (llave prendida) ⛔ se limpian acá: no vienen de GN.
-    const aBorrar = espejo.filter(r => !gnKeys.has(`${r.product_id}|${r.size_id}|${r.store_name}`) && !(stunnedDelErp && esFilaStunned(r)));
+    // Las filas de una línea cortada ⛔ se limpian acá: no vienen de GN, las escribe el libro.
+    const aBorrar = espejo.filter(r => !gnKeys.has(`${r.product_id}|${r.size_id}|${r.store_name}`) && !deLineaCortada(r));
     if (aBorrar.length > espejo.length * 0.3) {
       console.warn(`[inventario] limpieza ABORTADA por seguridad: borraría ${aBorrar.length}/${espejo.length} filas (>30%). Revisar a mano.`);
     } else {

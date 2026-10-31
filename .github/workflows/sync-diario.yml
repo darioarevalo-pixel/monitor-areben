@@ -40,7 +40,18 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GN_TOKEN: ${{ secrets.GN_TOKEN }}
+          DATABASE_URL_BDI: ${{ secrets.DATABASE_URL_BDI }}
         run: node scripts/sync-diario.js
+
+      # El stock de las líneas que ya pasaron al ERP (`erp_corte`: Stunned desde el 28-oct, BDI el 15/16-nov, Zattia el 23-nov)
+      # sale del LIBRO del motor, ⛔ de GN (el sync de arriba ya no escribe esas filas). Sin corte, el script sale sin tocar nada.
+      # Ver `lib/erp/inventario-espejo.core.js`.
+      - name: Stock del ERP al espejo
+        env:
+          DATABASE_URL_BDI: ${{ secrets.DATABASE_URL_BDI }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/erp-inventario-espejo.mjs bdi
 
       # Las ventas nacidas en el ERP DESPUÉS del corte de BDI (`erp_corte`, 15/16-nov), al espejo de `ventas` /
       # `venta_detalles`: sin esto Liquidación, el ETL y Reposición ven 0 ventas desde el corte. Sin corte ⛔ copia nada.

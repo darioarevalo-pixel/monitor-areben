@@ -10,6 +10,8 @@ import { refrescarVistas } from './lib/refrescar-vistas.mjs';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
 import { revisarCostos, sinCostoSiNoSeVe } from './lib/costos-espejo.mjs';
 import { guardarFotoDelDia } from './lib/stock-foto.mjs';
+import { esDeLineas } from '../lib/erp/inventario-espejo.core.js';
+import { lineasCortadasDe } from './lib/lineas-cortadas.mjs';
 
 /**
  * Lo que salió mal SIN frenar el sync (una purga, el refresco de vistas, el
@@ -158,7 +160,15 @@ async function syncInventario(maps) {
       observation:        r.observation ?? null,
     });
   }
-  const inventario = Array.from(seen.values());
+  // Desde el corte de BDI (`erp_corte`, 15/16-nov) su stock lo escribe el LIBRO del motor (`scripts/erp-inventario-espejo.mjs`):
+  // GN ya no se entera de lo que se vende y pisaría el stock real. 🔴 Sin poder leer los cortes ⛔ se escribe el stock (iría
+  // GN encima del libro): va a `problemas` y sigue con las ventas.
+  let cortadas;
+  try { cortadas = await lineasCortadasDe('bdi'); }
+  catch (e) { problemas.push(`inventario sin guardar: ${e.message}`); console.error(`[inventario] ⚠️ ${e.message}: no se guarda.`); return 0; }
+  const deLineaCortada = (r) => esDeLineas('bdi', cortadas, r);
+  const inventario = Array.from(seen.values()).filter((r) => !deLineaCortada(r));
+  if (cortadas.length) console.log(`[inventario] ${cortadas.join(', ')} ya pasó al ERP: su stock lo escribe el libro.`);
   console.log(`[inventario] ${inventario.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inventario.length) return 0;
 
@@ -190,13 +200,14 @@ async function syncInventario(maps) {
     for (let desde = 0; ; desde += 1000) { // paginado: la tabla supera el tope de 1000 filas
       const { data, error: e } = await supabase
         .from('inventario')
-        .select('product_id,size_id,store_name')
+        .select('product_id,size_id,store_name,sku')
         .range(desde, desde + 999);
       if (e) throw new Error(e.message);
       espejo.push(...(data || []));
       if (!data || data.length < 1000) break;
     }
-    const aBorrar = espejo.filter(r => !gnKeys.has(`${r.product_id}|${r.size_id}|${r.store_name}`));
+    // Las filas de una línea cortada ⛔ se limpian acá: no vienen de GN, las escribe el libro.
+    const aBorrar = espejo.filter(r => !gnKeys.has(`${r.product_id}|${r.size_id}|${r.store_name}`) && !deLineaCortada(r));
     if (aBorrar.length > espejo.length * 0.3) {
       console.warn(`[inventario] limpieza ABORTADA por seguridad: borraría ${aBorrar.length}/${espejo.length} filas (>30%). Revisar a mano.`);
     } else {

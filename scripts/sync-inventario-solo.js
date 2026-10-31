@@ -3,8 +3,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
 import { registrarCambiosDeStock } from './lib/stock-cambios.mjs';
-import { lecturasStunnedErp } from '../lib/stunned/ventas-erp.core.js';
-import { esFilaStunned } from '../lib/stunned/inventario-erp.core.js';
+import { esDeLineas } from '../lib/erp/inventario-espejo.core.js';
+import { lineasCortadasDe } from './lib/lineas-cortadas.mjs';
 
 const STORE = (process.env.INPUT_STORE || process.argv[2] || 'bdi').toLowerCase();
 
@@ -160,9 +160,10 @@ async function sellarHora() {
     });
   }
   console.log(`[inventario] ${skuCompletados} sku completados + ${bcCompletados} códigos tomados de la variante.`);
-  // Zattia con `LECTURAS_STUNNED_ERP=1` (día del corte): las filas STU las escribe el LIBRO del motor
-  // (`scripts/stunned-erp-inventario.mjs`); GN las trae en 0 y pisaría el stock real. Apagada, no cambia nada.
-  const inv = Array.from(seen.values()).filter((r) => !(STORE === 'zattia' && lecturasStunnedErp() && esFilaStunned(r)));
+  // Las filas de una línea que ya pasó al ERP (`erp_corte`) las escribe el LIBRO del motor (`scripts/erp-inventario-espejo.mjs`):
+  // GN ya no se entera de lo que se vende y pisaría el stock real. 🔴 Sin poder leer los cortes, TIRA (⛔ GN encima del libro).
+  const cortadas = await lineasCortadasDe(STORE);
+  const inv = Array.from(seen.values()).filter((r) => !esDeLineas(STORE, cortadas, r));
   console.log(`[inventario] ${inv.length} registros de activos (${saltInactivos} filas de inactivos salteadas). Guardando...`);
   if (!inv.length) { console.log('Nada que guardar.'); console.log(`\n[listo] — ${STORE}`); return; }
   // Historia de stock (sólo Zattia, para separar los ingresos del local): ANTES del upsert, que pisa

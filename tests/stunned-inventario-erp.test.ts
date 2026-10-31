@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-// `.core.js` sin tipos propios: los importan los syncs y `scripts/stunned-erp-inventario.mjs`, que corren en Node pelado.
+// `.core.js` sin tipos propios: los importan los syncs y `scripts/erp-inventario-espejo.mjs`, que corren en Node pelado.
 import { esFilaStunned, planDeInventario, SQL_INVENTARIO_STUNNED } from '../lib/stunned/inventario-erp.core.js'
 
 /** El stock de Stunned del espejo es EXACTAMENTE el libro: se escribe lo del libro y se saca lo colgado de GN. */
