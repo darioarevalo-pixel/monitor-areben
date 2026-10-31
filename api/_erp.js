@@ -1899,7 +1899,7 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cuenta-panel') {
-      const r = await cuentaDelPanel({ gnId: String(req.query.gnId || ''), tel: String(req.query.tel || ''), prueba: req.query.prueba === '1', usuario: perfil.user || null }, { conMotor })
+      const r = await cuentaDelPanel({ gnId: String(req.query.gnId || ''), tel: String(req.query.tel || ''), prueba: req.query.prueba === '1', usuario: [perfil.user, perfil.email] }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cuenta-cliente') {
@@ -1911,7 +1911,7 @@ export default async function handler(req, res) {
     }
     if (req.method === 'POST' && (body.accion === 'anotar-whatsapp' || body.accion === 'sacar-whatsapp')) {
       const f = body.accion === 'anotar-whatsapp' ? anotarWhatsappPanel : sacarWhatsappPanel
-      const r = await f({ body, usuario: perfil.user || perfil.name || null }, { conMotor })
+      const r = await f({ body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'POST' && body.accion === 'poner-credito') {

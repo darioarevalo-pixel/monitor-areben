@@ -49,6 +49,9 @@ describe('La cuenta corriente en el panel de WhatsApp (plan «BDI directo al ERP
     expect(panelCuentaPrendido({ PANEL_CUENTA_CORRIENTE: 'Bruno, otro' }, 'bruno')).toBe(true)
     expect(panelCuentaPrendido({ PANEL_CUENTA_CORRIENTE: 'bruno' }, 'dario')).toBe(false)
     expect(panelCuentaPrendido({ PANEL_CUENTA_CORRIENTE: 'bruno' }, null)).toBe(false)
+    // Con Google la sesión trae el MAIL: vale el usuario o el mail.
+    expect(panelCuentaPrendido({ PANEL_CUENTA_CORRIENTE: 'Yo@Ejemplo.com' }, ['', 'yo@ejemplo.com'])).toBe(true)
+    expect(panelCuentaPrendido({ PANEL_CUENTA_CORRIENTE: 'yo@ejemplo.com' }, [null, 'otro@ejemplo.com'])).toBe(false)
   })
 
   it('por id de GN: lee el libro que pide `prueba`, sólo BDI; nombra cada compra y trae los últimos pagos, el más nuevo primero', async () => {

@@ -259,13 +259,16 @@ export async function ponerContactoCliente({ marca, body, usuario }, deps) {
  * (`bruno,otro`) = sólo para ellos. 🔴 Mientras GN siga vivo un pago cargado acá ⛔ baja en GN ⇒ se prende primero sólo para
  * probar (Bruno/admin), ⛔ para Darío, hasta que Bruno lo acuerde. Apagado ⇒ el panel queda IDÉNTICO a hoy (la vista
  * contesta sin leer la base).
- * @param {Record<string, string|undefined>} [env] @param {string|null} [usuario]
+ * Cada persona se nombra por su usuario o su MAIL (quien entra con Google tiene mail).
+ * @param {Record<string, string|undefined>} [env] @param {string|null|Array<string|null|undefined>} [usuario] usuario y/o mail
  */
 export function panelCuentaPrendido(env = process.env, usuario = null) {
   const v = String(env.PANEL_CUENTA_CORRIENTE ?? '').trim()
   if (v === '1') return true
-  if (!v || !usuario) return false
-  return v.toLowerCase().split(',').map((x) => x.trim()).filter(Boolean).includes(String(usuario).toLowerCase())
+  const quienes = (Array.isArray(usuario) ? usuario : [usuario]).filter(Boolean).map((x) => String(x).trim().toLowerCase())
+  if (!v || !quienes.length) return false
+  const lista = v.toLowerCase().split(',').map((x) => x.trim()).filter(Boolean)
+  return quienes.some((q) => lista.includes(q))
 }
 
 /**
@@ -276,7 +279,7 @@ export function panelCuentaPrendido(env = process.env, usuario = null) {
  * mismo que `cuentaDeCliente`). 🔴 Lee el libro que diga `prueba` (⛔ el real fijo de `fichaDeCliente`): hoy BDI sólo tiene
  * el de PRUEBA. Cargar el pago va por `cobrar-cuenta` (`cobrarCuentaErp`), el mismo de ERP › Clientes.
  * Sin cliente (la solapa Pagos, sin chat) contesta sólo si está prendido.
- * @param {{ gnId?: string, tel?: string, prueba?: boolean, usuario?: string|null }} p
+ * @param {{ gnId?: string, tel?: string, prueba?: boolean, usuario?: string|null|Array<string|null|undefined> }} p
  * @param {{ conMotor: Function, prendido?: boolean }} deps
  */
 export async function cuentaDelPanel({ gnId = '', tel = '', prueba = false, usuario = null }, deps) {
@@ -326,10 +329,10 @@ export async function cuentaDelPanel({ gnId = '', tel = '', prueba = false, usua
 /**
  * Anotar el número del chat a la empresa, con quién es (pedido de Darío §1): desde ahí ese número entra solo a ese cliente.
  * Un número de OTRA ficha ⛔ se pisa (409, lo dice el motor). Sólo BDI, detrás del mismo interruptor que la vista.
- * @param {{ body: any, usuario: string|null }} p @param {{ conMotor: Function, prendido?: boolean }} deps
+ * @param {{ body: any, usuario: string|null, quien?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
  */
-export async function anotarWhatsappPanel({ body, usuario }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+export async function anotarWhatsappPanel({ body, usuario, quien = usuario }, deps) {
+  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
   if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'Falta el cliente' }
   if (!usuario) return { status: 400, error: 'Falta quién lo anota' }
   return deps.conMotor('bdi', 'Anotar el número', async (pg) => {
@@ -345,10 +348,10 @@ export async function anotarWhatsappPanel({ body, usuario }, deps) {
 
 /**
  * Sacar a una persona de la empresa (dejó de estar): ⛔ se borra, sus pedidos viejos la siguen nombrando.
- * @param {{ body: any, usuario: string|null }} p @param {{ conMotor: Function, prendido?: boolean }} deps
+ * @param {{ body: any, usuario: string|null, quien?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
  */
-export async function sacarWhatsappPanel({ body, usuario }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+export async function sacarWhatsappPanel({ body, usuario, quien = usuario }, deps) {
+  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
   if (!UUID.test(String(body?.id || ''))) return { status: 400, error: 'Falta el número' }
   if (!usuario) return { status: 400, error: 'Falta quién lo saca' }
   return deps.conMotor('bdi', 'Sacar el número', async (pg) => {
