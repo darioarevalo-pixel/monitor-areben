@@ -62,8 +62,8 @@ import { TIPOS_CAMPANIA, tipoDe } from '../lib/liquidacion/tipo.core.js';
 // la otra todavía no aprobó.
 import { ESTADOS_VISIBLES, esFirme } from '../lib/precios/core.core.js';
 import { lineaDelProducto } from '../lib/erp/precio.core.js';
-import { estadoDePedidos, vaPorErp } from '../lib/liquidacion/erp.core.js';
-import { eventosDePrecio, lineasDe, pedirAlErp } from './_liquidacion-erp.js';
+import { estadoDePedidos, hayQueRepedir, vaPorErp } from '../lib/liquidacion/erp.core.js';
+import { eventosDePrecio, lineasDe, pedirAlErp, pedirRelectura } from './_liquidacion-erp.js';
 // El diseño de la etiqueta de la campaña: qué va debajo del precio y de qué tamaño. Lista blanca,
 // porque esto se DIBUJA en un PDF y un objeto crudo del navegador se ve recién en la Zebra.
 import { etiquetaDeCampania } from '../lib/liquidacion/etiqueta.core.js';
@@ -1269,7 +1269,11 @@ export default async function handler(req, res) {
         .map((f) => ({ fila: f, item: itemDelBody({ ...(f.datos || {}), pid: f.pid, estado: f.estado }) }))
         .filter((x) => x.item && x.item.aplicacion.erp);
       if (!pedidos.length) return res.status(200).json({ ok: true, quedaron: [], esperando: [], fallos: [] });
-      const estados = estadoDePedidos(pedidos.map((x) => ({ pid: x.item.pid, pedidoEn: x.item.aplicacion.erp.pedidoEn, quiere: x.item.aplicacion.erp.quiere })), await eventosDePrecio());
+      const eventos = await eventosDePrecio();
+      const estados = estadoDePedidos(pedidos.map((x) => ({ pid: x.item.pid, pedidoEn: x.item.aplicacion.erp.pedidoEn, quiere: x.item.aplicacion.erp.quiere })), eventos);
+      // Lo que espera con la cola quieta: se pide otro envío, que relee TN (también lo que escribió el cron de 2 h).
+      const repedido = hayQueRepedir(estados.some((e) => e.estado === 'esperando'), eventos);
+      if (repedido) await pedirRelectura(yo);
       const { data: cab, error: eC } = await supabase.from('liquidaciones').select('nombre').eq('store', store).eq('id', id).maybeSingle();
       if (eC) throw new Error(eC.message);
       const liqNombre = (cab && cab.nombre) || '';
@@ -1301,7 +1305,7 @@ export default async function handler(req, res) {
         if (eU) fallos.push({ pid, error: `quedó en Tienda Nube pero no se pudo anotar acá: ${eU.message}` });
         else quedaron.push(eL ? { pid, avisoBitacora: `no se pudo anotar en la bitácora: ${eL.message}` } : { pid });
       }
-      return res.status(200).json({ ok: true, quedaron, esperando: estados.filter((e) => e.estado === 'esperando').map((e) => e.pid), fallos });
+      return res.status(200).json({ ok: true, quedaron, esperando: estados.filter((e) => e.estado === 'esperando').map((e) => e.pid), fallos, repedido });
     }
 
     if (b.action === 'aplicar') {

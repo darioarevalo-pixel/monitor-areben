@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cargaDeCampania, estadoDePedidos, motivoDeCampania, MOTIVO_CAMPANIA, vaPorErp } from '../lib/liquidacion/erp.core.js'
+import { cargaDeCampania, estadoDePedidos, hayQueRepedir, motivoDeCampania, MOTIVO_CAMPANIA, REPEDIR_MS, vaPorErp } from '../lib/liquidacion/erp.core.js'
 import { lineasDe, pedirAlErp } from '../api/_liquidacion-erp.js'
 import { lineaDelProducto } from '../lib/erp/precio.core.js'
 
@@ -105,4 +105,19 @@ it('lineasDe: la línea sale del catálogo del MOTOR (⛔ el espejo), con cualqu
   const conMotor = async (_b: string, fn: (db: unknown) => unknown) => fn({ query: async () => ({ rows: [{ product_id: 7, sku: null }, { product_id: 7, sku: 'STU-FLECK-M' }, { product_id: 8, sku: 'ZAT-1-S' }] }) })
   expect(await lineasDe('zattia', ['7', '8', '9'], lineaDelProducto, { conMotor })).toEqual(new Map([['7', 'stunned'], ['8', 'zattia'], ['9', 'zattia']]))
   expect(await lineasDe('bdi', ['7'], lineaDelProducto, { conMotor: async () => { throw new Error('⛔') } })).toEqual(new Map([['7', 'bdi']]))
+})
+
+describe('hayQueRepedir: con la cola quieta, se pide otro envío que relea TN', () => {
+  const ahora = Date.parse('2026-10-31T00:10:00Z')
+  const hecho = (min: number) => ({ id: 1, estado: 'hecho', tomado_en: null, terminado_en: new Date(ahora - min * 60_000).toISOString() })
+  it('🔴 el caso medido: un envío SECO hace rato y el cron ya escribió ⇒ se pide otro', () => {
+    expect(hayQueRepedir(true, [hecho(20)], ahora)).toBe(true)
+    expect(hayQueRepedir(true, [], ahora)).toBe(true)
+  })
+  it('⛔ si nada espera, si hay uno en la cola, o si el último terminó hace menos de un minuto', () => {
+    expect(hayQueRepedir(false, [hecho(20)], ahora)).toBe(false)
+    expect(hayQueRepedir(true, [hecho(20), { id: 2, estado: 'pendiente', tomado_en: null, terminado_en: null }], ahora)).toBe(false)
+    expect(hayQueRepedir(true, [hecho(20), { id: 2, estado: 'corriendo', tomado_en: new Date(ahora).toISOString(), terminado_en: null }], ahora)).toBe(false)
+    expect(hayQueRepedir(true, [{ ...hecho(0), terminado_en: new Date(ahora - REPEDIR_MS + 1000).toISOString() }], ahora)).toBe(false)
+  })
 })

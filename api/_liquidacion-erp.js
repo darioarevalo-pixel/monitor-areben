@@ -73,10 +73,19 @@ export async function pedirAlErp({ liqId, liqNombre, modo, destino, usuario, ite
 export async function eventosDePrecio(deps = { conMotor }) {
   return deps.conMotor('bdi', async (db) => {
     const { rows } = await db.query(
-      `select id, estado, tomado_en, error, resultado from motor_evento where tipo = $1 and clave = $2 order by id desc limit 20`,
+      `select id, estado, tomado_en, terminado_en, error, resultado from motor_evento where tipo = $1 and clave = $2 order by id desc limit 20`,
       [TRABAJO_PRECIO, TIENDA_ERP],
     );
-    return rows.map((e) => ({ ...e, id: Number(e.id), tomado_en: e.tomado_en ? new Date(e.tomado_en).toISOString() : null }));
+    const iso = (t) => (t ? new Date(t).toISOString() : null);
+    return rows.map((e) => ({ ...e, id: Number(e.id), tomado_en: iso(e.tomado_en), terminado_en: iso(e.terminado_en) }));
+  });
+}
+
+/** Pide otro envío de precio de Stunned (el que relee TN). La cola junta los avisos: dos pedidos seguidos son UNO. */
+export async function pedirRelectura(usuario, deps = { conMotor }) {
+  return deps.conMotor('bdi', async (db) => {
+    const { avisar } = await import('../motor/evento.mjs');
+    return avisar(db, { tipo: TRABAJO_PRECIO, clave: TIENDA_ERP, origen: `liquidacion-releer:${usuario || 'monitor'}`.slice(0, 60) });
   });
 }
 

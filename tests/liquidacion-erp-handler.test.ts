@@ -57,7 +57,9 @@ function sesionDe(perfil: unknown) {
 
 const pedirAlErp = vi.fn()
 const eventosDePrecio = vi.fn()
+const pedirRelectura = vi.fn()
 vi.mock('../api/_liquidacion-erp.js', () => ({
+  pedirRelectura: (...a: unknown[]) => pedirRelectura(...a),
   pedirAlErp: (...a: unknown[]) => pedirAlErp(...a),
   eventosDePrecio: (...a: unknown[]) => eventosDePrecio(...a),
   lineasDe: async (_st: unknown, pids: string[]) => new Map(pids.map((p) => [p, p === '7' ? 'stunned' : 'zattia'])),
@@ -84,12 +86,13 @@ beforeEach(() => {
   pedidosFetch.length = 0
   pedirAlErp.mockReset()
   eventosDePrecio.mockReset()
+  pedirRelectura.mockReset()
   process.env.ZATTIA_SUPABASE_URL = 'https://zattia.supabase.co'
   process.env.ZATTIA_SUPABASE_SERVICE_KEY = 'clave'
   process.env.GN_TOKEN_ZATTIA = 'token-gn'
   sesionDe(ADMIN)
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
 describe('aplicar: Stunned va por el ERP', () => {
   it('🔴 ⛔ le pega a Gestión Nube: carga en el ERP, anota el pedido y el ítem sigue confirmado', async () => {
@@ -115,17 +118,21 @@ describe('releer-erp: recién con la relectura de TN', () => {
     filasPorTabla = { liquidacion_items: [item('confirmado', pedido)], liquidaciones: [{ nombre: 'CYBER' }], liquidacion_bitacora: [] }
     eventosDePrecio.mockResolvedValue([{ id: 3, estado: 'hecho', tomado_en: '2026-11-01T10:00:40.000Z', error: null, resultado: { campanias: { 7: { campania: 'c1', quiere: 31990, tn: [31990], ok: true } } } }])
     const res = await llamar(post({ action: 'releer-erp' }))
-    expect(res.body).toMatchObject({ ok: true, quedaron: [{ pid: '7' }], esperando: [], fallos: [] })
+    expect(res.body).toMatchObject({ ok: true, quedaron: [{ pid: '7' }], esperando: [], fallos: [], repedido: false })
+    expect(pedirRelectura).not.toHaveBeenCalled()
     expect(pasosDe('liquidacion_bitacora', 'insert')).toHaveLength(1)
     const upd = pasosDe('liquidacion_items', 'update')[0].pasos.find((p) => p.startsWith('update'))!
     expect(upd).toContain('"estado":"aplicado"')
     expect(upd).toContain('"erp":null')
   })
   it('🔴 TN todavía ⛔ lo muestra: ⛔ bitácora ni estado', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-01T10:10:00Z'))
     filasPorTabla = { liquidacion_items: [item('confirmado', pedido)], liquidaciones: [{ nombre: 'CYBER' }], liquidacion_bitacora: [] }
     eventosDePrecio.mockResolvedValue([{ id: 3, estado: 'hecho', tomado_en: '2026-11-01T10:00:40.000Z', error: null, resultado: { campanias: { 7: { campania: 'c1', quiere: 31990, tn: [null], ok: false } } } }])
     const res = await llamar(post({ action: 'releer-erp' }))
-    expect(res.body).toMatchObject({ quedaron: [], esperando: ['7'] })
+    expect(res.body).toMatchObject({ quedaron: [], esperando: ['7'], repedido: true })
+    expect(pedirRelectura).toHaveBeenCalledTimes(1)
     expect(pasosDe('liquidacion_bitacora', 'insert')).toHaveLength(0)
     expect(pasosDe('liquidacion_items', 'update')).toHaveLength(0)
   })
