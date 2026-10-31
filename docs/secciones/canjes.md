@@ -47,6 +47,10 @@ Portal público sin sesión: `/canje/<token>`, fuera del nav y resuelto antes de
   que asuma que hay sesión, en esa rama no la tiene. Las reglas viven en `api/_canje-token.js`.
 - **La entrega en el mostrador escribe una venta real en Gestión Nube** por `api/crear-venta.js`,
   que es también de Sesión de fotos y de Fallas. 🔴 Su CORS no se puede sacar.
+  🔑 **Desde el corte de BDI** (`erp_corte`, 15/16-nov) el canje ⛔ va a GN: es un **ajuste «Canje» del ERP aplicado en el acto**
+  (`canjeAlErp`, `api/_salida-documento.js`; mismo `ref` que la sombra de antes, `canje-<id>:<depósito>`). La «venta» que vuelve es
+  `ERP A-N` (`gn_venta_number`), `gn_venta_id` queda vacío, y reintentar ⛔ descuenta dos veces. Antes del corte: venta de GN + el
+  ajuste en sombra (`documentarCanje`), como siempre.
 - `puedeAtenderRetiroLocal` (`lib/permisos.core.js:395`) es **la única rendija** por la que alguien
   sin la sección `canjes` —que es de Marketing— toca un canje.
 - `lib/canjes/seguimiento.ts` importa `diasDesde`/`addDiasISO` de `lib/crm/core.ts`, no los copia.

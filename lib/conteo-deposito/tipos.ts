@@ -86,19 +86,26 @@ export type Preview = {
    * (`separarYaAjustados`). No van al Excel: sumarlas de nuevo las ajustaría dos veces.
    */
   yaAjustados?: FilaAjuste[]
-  /** Las filas de Stunned: van al ERP, ⛔ al Excel (`conParteErp`). */
+  /** Las filas de las líneas que ya están en el ERP: van al ERP, ⛔ al Excel (`conParteErp`). */
   erp?: ParteErp<FilaAjuste>
 }
 
+/** Un renglón del conteo que va al ERP. `linea` la trae el vivo (la decide el servidor por el producto). */
+export type RenglonErp = { product_id: number; size_id: number; sku: string | null; barcode: string | null; dif: number; linea: string | null }
+
 /**
- * La parte de Stunned de un conteo (erp-stunned §8.4): `renglones` va al ERP como ajuste «Conteo» aplicado en el acto, `excel`
- * son las filas que SÍ van al Excel de GN. `ref` (uno por preview) hace que «Reintentar» ⛔ ajuste dos veces.
+ * La parte ERP de un conteo (erp-stunned §8.4): las prendas de una línea que ya cortó (`erp_corte`). `renglones` va al ERP como
+ * un ajuste «Conteo» por línea, aplicado en el acto; `excel` son las filas que SÍ van al Excel de GN. `ref` (uno por preview)
+ * hace que «Reintentar» ⛔ ajuste dos veces.
  */
 export type ParteErp<F> = {
   ref: string
-  renglones: Array<{ product_id: number; size_id: number; sku: string | null; barcode: string | null; dif: number }>
+  renglones: RenglonErp[]
   excel: F[]
 }
+
+/** Lo que el ERP ajustó al guardar: un ajuste por línea. */
+export type AjustesErp = Array<{ linea: string; ajuste: number; ya: boolean; renglones: number }>
 
 /** Un conteo aplicado del historial (`/api/deposito?recurso=conteos`). */
 export type ConteoHistorial = {

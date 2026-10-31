@@ -6,10 +6,10 @@ import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, puedeSub } from '@/lib/permisos'
 import { leerInventarioVivo, leerVivoProductos } from '@/lib/inventario-vivo/cliente'
 import { realMap } from '@/lib/inventario-vivo/core'
-import { ANCHOS_AJUSTE, aoaAjuste, conParteErp, filasExcel } from '@/lib/conteo-deposito/core'
+import { ANCHOS_AJUSTE, aoaAjuste, conParteErp, filasExcel, lineasDeParteErp, textoAjustesErp } from '@/lib/conteo-deposito/core'
 import { descargarXlsx } from '@/lib/excel'
 import { guardarConteo, leerHistorial } from '@/lib/conteo-deposito/cliente'
-import type { ConteoHistorial } from '@/lib/conteo-deposito/tipos'
+import type { AjustesErp, ConteoHistorial } from '@/lib/conteo-deposito/tipos'
 import {
   abrir,
   calcularAjuste,
@@ -37,7 +37,7 @@ import { DepositoLocal } from './DepositoLocal'
 import { ReporteColgar } from './ReporteColgar'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { ChipEstado, HistorialConteos, InstructivoConteo, ResumenConteo, fechaLabel, stockLabel } from '@/components/conteos/comunes'
+import { AvisoErp, ChipEstado, HistorialConteos, InstructivoConteo, ResumenConteo, fechaLabel, stockLabel } from '@/components/conteos/comunes'
 import {
   Badge,
   BuscarInput,
@@ -312,7 +312,7 @@ export function ConteoEstandar() {
           if (r.inventory_id != null) vivo[r.product_id + '_' + r.size_id] = r
         })
       }
-      // Las prendas de Stunned van al ERP, ⛔ al Excel (erp-stunned §8.4): el vivo ya trae su libro.
+      // Las prendas de una línea que ya está en el ERP van ahí, ⛔ al Excel (erp-stunned §8.4): el vivo ya trae su libro.
       const pv = conParteErp(calcularAjuste(terminados, state, vivo, d.store_name || 'Local', d.store || marca, stockTime, linea), vivo, crypto.randomUUID())
       setPreview(pv)
       setVista('preview')
@@ -339,12 +339,13 @@ export function ConteoEstandar() {
     const marcaU = (preview.store || marca).toUpperCase()
     const excel = filasExcel(preview)
     const nErp = preview.erp?.renglones.length || 0
+    const lineasErp = lineasDeParteErp(preview.erp)
     const ok = !excel.length
       ? await confirmar({
-          titulo: 'Ajustar Stunned en el ERP',
+          titulo: `Ajustar ${lineasErp} en el ERP`,
           tono: 'warning',
           ok: 'Ajustar y guardar',
-          mensaje: `Se ajustan ${nErp} ${nErp === 1 ? 'talle' : 'talles'} de Stunned en el ERP, en el acto: el stock pasa a lo contado. No se genera Excel.`,
+          mensaje: `Se ajustan ${nErp} ${nErp === 1 ? 'talle' : 'talles'} de ${lineasErp} en el ERP, en el acto: el stock pasa a lo contado. No se genera Excel.`,
         })
       : await confirmar({
       titulo: 'Generar el Excel del ajuste',
@@ -359,7 +360,7 @@ export function ConteoEstandar() {
           <div style={{ marginTop: space[3] }}>
             <ConfirmDetalle label="Líneas a ajustar" valor={excel.length} />
             <ConfirmDetalle label="Ubicación" valor={preview.ubicacion || '—'} />
-            {nErp > 0 && <ConfirmDetalle label="De Stunned, al ERP (sin Excel)" valor={nErp} />}
+            {nErp > 0 && <ConfirmDetalle label={`De ${lineasErp}, al ERP (sin Excel)`} valor={nErp} />}
           </div>
         </>
       ),
@@ -378,7 +379,7 @@ export function ConteoEstandar() {
       // jeans, 27-sep-2026). Ahora se avisa y se puede reintentar, y no se ofrece limpiar: limpiar
       // sin haber guardado es perder el conteo.
       let guardado = false
-      let erp: { ajuste: number; ya: boolean } | undefined
+      let erp: AjustesErp | undefined
       for (;;) {
         try {
           // Mismo `ref` en cada reintento ⇒ el ERP ⛔ ajusta dos veces.
@@ -392,17 +393,17 @@ export function ConteoEstandar() {
             tono: 'danger',
             ok: 'Reintentar',
             cancelar: 'Seguir sin guardar',
-            mensaje: `${excel.length ? 'El Excel se generó bien, pero n' : 'N'}o se pudo guardar el conteo (${(e as Error).message}). Sin guardar, el reporte «Para colgar» y el historial no lo van a tener${nErp ? ', y Stunned no se ajusta en el ERP' : ''}.`,
+            mensaje: `${excel.length ? 'El Excel se generó bien, pero n' : 'N'}o se pudo guardar el conteo (${(e as Error).message}). Sin guardar, el reporte «Para colgar» y el historial no lo van a tener${nErp ? `, y ${lineasErp} no se ajusta en el ERP` : ''}.`,
           })
           if (!otra) break
         }
       }
       if (!guardado) {
-        toast.error(excel.length ? 'Excel generado, pero el conteo no quedó guardado en el historial.' : 'El conteo no quedó guardado: Stunned no se ajustó en el ERP.')
+        toast.error(excel.length ? 'Excel generado, pero el conteo no quedó guardado en el historial.' : `El conteo no quedó guardado: ${lineasErp} no se ajustó en el ERP.`)
         return
       }
       await ce.refrescarUltimos()
-      const enErp = erp ? ` Stunned quedó ajustado en el ERP (A-${erp.ajuste}).` : ''
+      const enErp = textoAjustesErp(erp)
       toast.ok(excel.length ? `Excel generado (${excel.length} ${excel.length === 1 ? 'línea' : 'líneas'}) y conteo guardado.${enErp} Subilo a GN → "Importar y Ajustar".` : `Conteo guardado.${enErp}`)
       const limpiar = await confirmar({
         titulo: 'Conteo guardado',
@@ -958,12 +959,7 @@ function PreviewView({ preview, linea }: { preview: CePreview; linea: Linea }) {
         Ajuste del <b>Local de {marcaU}</b> · ubicación <b>{preview.ubicacion || '—'}</b>. El Excel se sube <b>solo</b> al GN de {marcaU}.
       </Notice>
 
-      {preview.erp && (
-        <Notice tone="warning" icon="👕" style={{ marginBottom: space[3] }}>
-          <b>{preview.erp.renglones.length}</b> {preview.erp.renglones.length === 1 ? 'talle es' : 'talles son'} de <b>Stunned</b>: se ajustan en el <b>ERP</b> al guardar,
-          en el acto, y <b>no van al Excel</b>. El «sistema» de Stunned es el stock del ERP.
-        </Notice>
-      )}
+      <AvisoErp erp={preview.erp} unidad={['talle', 'talles']} />
 
       <p style={{ fontSize: font.base, color: color.ink2, marginBottom: space[3] }}>
         Se ajustan <b>{resumen.lineas}</b> {resumen.lineas === 1 ? 'talle' : 'talles'}: <b style={{ color: color.warningInk }}>{resumen.mas}</b> con sobrante (+) y{' '}

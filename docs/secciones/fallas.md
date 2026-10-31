@@ -44,12 +44,13 @@ quien la carga, y que el negativo quede de ese lado es lo que después deja arre
 
 ## Reglas que el código no dice
 
-- 🔑 **La falla de STUNNED ⛔ va a GN** (Bruno 30-oct-2026): desde el corte (28-oct) el GN de Zattia ⛔ mueve el libro de
-  Stunned, así que `api/crear-venta.js` la manda al ERP como **ajuste «Fallado»** (línea `stunned`, `ref` = `falla-<id>:<depósito>`)
-  **aplicado en el acto** —baja al cargarla, como la venta de GN— (`fallaStunnedAlErp`, `api/_salida-documento.js`). La línea la
-  decide el servidor con `productos.sku` (⛔ el sku de la pantalla). Si el ERP ⛔ la puede anotar **frena (409)**, ⛔ cae a GN. La
-  falla queda sin `gn_venta_*` y con **`erp_ajuste`** (sql/migrate-fallas-5.sql): la lista muestra «ajuste ERP A-N». Eliminar la
-  falla ⛔ deshace el ajuste, y el cartel lo dice.
+- 🔑 **La falla de una línea que YA ESTÁ EN EL ERP ⛔ va a GN** (Bruno 30-oct-2026): «está en el ERP» = fila en `erp_corte` y el
+  instante ya pasó (`lib/erp/corte.core.js`: Stunned desde el 28-oct, BDI 15/16-nov, Zattia 23-nov). Desde el corte el GN de esa
+  línea ⛔ mueve el libro, así que `api/crear-venta.js` la manda al ERP como **ajuste «Fallado»** (su línea, `ref` =
+  `falla-<id>:<depósito>`) **aplicado en el acto** —baja al cargarla, como la venta de GN— (`fallaAlErp`, `api/_salida-documento.js`).
+  La línea la decide el servidor con `productos.sku` (⛔ el sku de la pantalla); una falla que mezcla líneas frena. Si el ERP ⛔ la
+  puede anotar —o ⛔ se puede leer `erp_corte`— **frena (409)**, ⛔ cae a GN. La falla queda sin `gn_venta_*` y con **`erp_ajuste`**
+  (sql/migrate-fallas-5.sql): la lista muestra «ajuste ERP A-N». Eliminar la falla ⛔ deshace el ajuste, y el cartel lo dice.
 
 - **Una falla SIN `product_id`/`size_id` ⛔ no descuenta nada**: es la «falla libre» de
   Administración, que sólo anota. Es también lo que pasa cuando falta la credencial.

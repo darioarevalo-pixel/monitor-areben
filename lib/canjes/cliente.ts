@@ -710,12 +710,20 @@ export async function entregarEnLocal(
       gn_venta_id: r.venta?.id ?? null, gn_venta_number: numero,
     })
   } catch (e) {
-    throw new Error(
-      `La venta se creó en Gestión Nube (nº ${numero || '?'}) pero no se pudo registrar en el canje: ` +
-      `${(e as Error)?.message || e}. Anulala a mano en GN antes de reintentar.`,
-    )
+    throw new Error(errorDeRegistro(r.venta?.erp, numero, e))
   }
   return { gn_venta_number: numero }
+}
+
+/**
+ * El error de «salió pero no se registró en el canje». Desde el corte de BDI (`erp_corte`) el canje es un ajuste del ERP (`erp`,
+ * «A-12»), ⛔ una venta de GN: reintentar devuelve el mismo ajuste (mismo `ref`) ⇒ ⛔ hay nada que anular.
+ */
+function errorDeRegistro(erp: string | undefined, numero: string | null, e: unknown): string {
+  const motivo = (e as Error)?.message || String(e)
+  return erp
+    ? `El stock se descontó en el ERP (ajuste ${erp}) pero no se pudo registrar en el canje: ${motivo}. Reintentá: el ERP no lo descuenta dos veces.`
+    : `La venta se creó en Gestión Nube (nº ${numero || '?'}) pero no se pudo registrar en el canje: ${motivo}. Anulala a mano en GN antes de reintentar.`
 }
 
 /**
@@ -779,10 +787,7 @@ export async function comprarEnGn(
       gn_venta_id: r.venta?.id ?? null, gn_venta_number: gnNumero,
     })
   } catch (e) {
-    throw new Error(
-      `La venta se creó en Gestión Nube (nº ${gnNumero || '?'}) pero no se pudo registrar en el canje: ` +
-      `${(e as Error)?.message || e}. Anulala a mano en GN antes de reintentar.`,
-    )
+    throw new Error(errorDeRegistro(r.venta?.erp, gnNumero, e))
   }
   return { gn_venta_number: gnNumero }
 }

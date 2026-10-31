@@ -96,7 +96,7 @@ export async function registrarVentaGN(
   }
   const r = await enviarVentaFetch(pedido)
   if (!r.ok) throw new Error(`No se pudo crear la venta en GN — ${r.error || ''}`)
-  // Stunned: la baja fue un ajuste del ERP, ⛔ una venta de GN ⇒ se anota el número del ajuste (`api/crear-venta.js`).
+  // Una línea que ya está en el ERP (`erp_corte`): la baja fue un ajuste del ERP, ⛔ una venta de GN ⇒ se anota el número del ajuste (`api/crear-venta.js`).
   const erpAjuste = r.erp?.ajuste
 
   const resp = await apiFetch(API, {

@@ -24,14 +24,16 @@ import {
   volverSinTerminar,
   conParteErp,
   filasExcel,
+  lineasDeParteErp,
+  textoAjustesErp,
 } from '@/lib/conteo-deposito/core'
 import { guardarConteo, leerHistorial } from '@/lib/conteo-deposito/cliente'
-import type { CdepProducto, CdepState, ConteoHistorial, Preview } from '@/lib/conteo-deposito/tipos'
+import type { AjustesErp, CdepProducto, CdepState, ConteoHistorial, Preview } from '@/lib/conteo-deposito/tipos'
 import { useConteoDeposito } from './useConteoDeposito'
 import { Estante } from './Estante'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { ChipEstado, HistorialConteos, InstructivoConteo, ResumenConteo, fechaLabel, stockLabel } from '@/components/conteos/comunes'
+import { AvisoErp, ChipEstado, HistorialConteos, InstructivoConteo, ResumenConteo, fechaLabel, stockLabel } from '@/components/conteos/comunes'
 import {
   BuscarInput,
   Button,
@@ -206,7 +208,7 @@ export function ConteoDeposito() {
     try {
       const d = await leerInventarioVivo(marca)
       const vivo = realMap(d.rows || [])
-      // Las prendas de Stunned van al ERP, ⛔ al Excel (erp-stunned §8.4): el vivo ya trae su libro.
+      // Las prendas de una línea que ya está en el ERP van ahí, ⛔ al Excel (erp-stunned §8.4): el vivo ya trae su libro.
       const pv = conParteErp(separarYaAjustados(calcularAjuste(terminados, state, vivo, d.store_name || 'Deposito Minorista', d.store || marca, stockTime)), vivo, crypto.randomUUID())
       setPreview(pv)
       setExcelHecho(false)
@@ -234,7 +236,7 @@ export function ConteoDeposito() {
    * preview abierto con el error en rojo y «Reintentar», que guarda sin volver a bajar el Excel.
    */
   const guardarRegistro = async (pv: Preview) => {
-    let erp: { ajuste: number; ya: boolean } | undefined
+    let erp: AjustesErp | undefined
     try {
       const r = await guardarConteo({ store: pv.store || marca, ubicacion: pv.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: pv.resumen, detalle: pv.registro, ...(pv.erp ? { erp: { ref: pv.erp.ref, renglones: pv.erp.renglones } } : {}) })
       erp = r.erp
@@ -247,7 +249,7 @@ export function ConteoDeposito() {
     setErrorGuardado(null)
     await cd.refrescarUltimos()
     const excel = filasExcel(pv)
-    const enErp = erp ? ` Stunned quedó ajustado en el ERP (A-${erp.ajuste}).` : ''
+    const enErp = textoAjustesErp(erp)
     toast.ok(excel.length ? `Conteo guardado.${enErp} Subí el Excel (${excel.length} ${excel.length === 1 ? 'línea' : 'líneas'}) a GN → "Importar y Ajustar".` : pv.rows.length ? `Conteo guardado.${enErp}` : 'Conteo guardado en el historial (sin ajuste)')
     const limpiar = await confirmar({
       titulo: 'Conteo guardado',
@@ -265,14 +267,14 @@ export function ConteoDeposito() {
     if (!preview || !preview.rows.length) return
     const marcaU = (preview.store || marca).toUpperCase()
     const excel = filasExcel(preview)
-    // Sólo Stunned: ⛔ hay Excel. Sus diferencias se ajustan en el ERP al guardar.
+    // Todo es de líneas que ya están en el ERP: ⛔ hay Excel. Las diferencias se ajustan en el ERP al guardar.
     if (!excel.length) {
       const n = preview.erp?.renglones.length || 0
       const okErp = await confirmar({
-        titulo: 'Ajustar Stunned en el ERP',
+        titulo: `Ajustar ${lineasDeParteErp(preview.erp)} en el ERP`,
         tono: 'warning',
         ok: 'Ajustar y guardar',
-        mensaje: `Se ajustan ${n} ${n === 1 ? 'variante' : 'variantes'} de Stunned en el ERP, en el acto: el stock pasa a lo contado. No se genera Excel.`,
+        mensaje: `Se ajustan ${n} ${n === 1 ? 'variante' : 'variantes'} de ${lineasDeParteErp(preview.erp)} en el ERP, en el acto: el stock pasa a lo contado. No se genera Excel.`,
       })
       if (okErp) await guardarRegistro(preview)
       return
@@ -290,7 +292,7 @@ export function ConteoDeposito() {
           <div style={{ marginTop: space[3] }}>
             <ConfirmDetalle label="Líneas a ajustar" valor={excel.length} />
             <ConfirmDetalle label="Ubicación" valor={preview.ubicacion || '—'} />
-            {preview.erp && <ConfirmDetalle label="De Stunned, al ERP (sin Excel)" valor={preview.erp.renglones.length} />}
+            {preview.erp && <ConfirmDetalle label={`De ${lineasDeParteErp(preview.erp)}, al ERP (sin Excel)`} valor={preview.erp.renglones.length} />}
           </div>
         </>
       ),
@@ -765,12 +767,7 @@ function PreviewView({ preview, errorGuardado, excelHecho }: { preview: Preview;
         <b style={{ color: color.dangerInk }}>{resumen.menos}</b> con faltante (−) · <b>{resumen.unidades_ajustadas}</b> u. de diferencia. El resto no se toca.
       </p>
 
-      {preview.erp && (
-        <Notice tone="warning" icon="👕" style={{ marginBottom: space[3] }}>
-          <b>{preview.erp.renglones.length}</b> {preview.erp.renglones.length === 1 ? 'variante es' : 'variantes son'} de <b>Stunned</b>: se ajustan en el <b>ERP</b> al guardar,
-          en el acto, y <b>no van al Excel</b>. El «sistema» de Stunned es el stock del ERP.
-        </Notice>
-      )}
+      <AvisoErp erp={preview.erp} unidad={['variante', 'variantes']} />
 
       {errorGuardado && (
         <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>

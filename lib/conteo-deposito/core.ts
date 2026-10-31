@@ -28,7 +28,8 @@ const prodVacio = (): EstadoDeProd => ({ estado: 'sin_iniciar', contado: {}, sna
 // Se re-exporta acá para no cambiar los imports de conteo-deposito/-estandar.
 export { ordenarModelo } from '../reposicion/grupos'
 import { ordenarModelo } from '../reposicion/grupos'
-import { partirExcel } from '../erp/conteo-stunned.core.js'
+import { grandes, partirExcel, UMBRAL_AVISO_CONTEO } from '../erp/conteo-erp.core.js'
+import { ETIQUETA_LINEA } from '../lineas.core.js'
 
 /** Agrupa las filas reales del vivo en productos con sus variantes. Port de conteoDepInit @11648-11655. */
 export function agruparVivo(realMap: Record<string, FilaVivo>): CdepProducto[] {
@@ -352,8 +353,8 @@ export function ultimosPorProducto(conteos: ConteoHistorial[], products: CdepPro
 }
 
 /**
- * Le suma al preview la parte de Stunned (erp-stunned §8.4): las filas cuyo vivo es el LIBRO (`fuente: 'erp'`) van al ERP y
- * salen del Excel. `rows` queda entera: es lo que se muestra antes de confirmar. Sin filas de Stunned, el preview como vino.
+ * Le suma al preview la parte ERP (erp-stunned §8.4): las filas cuyo vivo es el LIBRO (`fuente: 'erp'`, una línea que ya cortó)
+ * van al ERP y salen del Excel. `rows` queda entera: es lo que se muestra antes de confirmar. Sin filas de Stunned, el preview como vino.
  * La comparten el Conteo de depósito y el estándar.
  */
 export function conParteErp<F extends FilaAjuste, P extends { rows: F[]; erp?: ParteErp<F> }>(pv: P, vivo: Record<string, FilaVivo>, ref: string): P {
@@ -361,5 +362,19 @@ export function conParteErp<F extends FilaAjuste, P extends { rows: F[]; erp?: P
   return erp.length ? { ...pv, erp: { ref, renglones: erp, excel } } : pv
 }
 
-/** Las filas del preview que van al Excel de GN (sin las de Stunned). */
+/** Las filas del preview que van al Excel de GN (sin las del ERP). */
 export const filasExcel = <F extends FilaAjuste>(pv: { rows: F[]; erp?: ParteErp<F> }): F[] => (pv.erp ? pv.erp.excel : pv.rows)
+
+/** Los nombres de las líneas de la parte ERP, para los carteles: «Stunned», «BDI», «Zattia y Stunned». */
+export function lineasDeParteErp(erp: { renglones: Array<{ linea: string | null }> } | undefined): string {
+  const nombres = [...new Set((erp?.renglones || []).map((r) => (r.linea && (ETIQUETA_LINEA as Record<string, string>)[r.linea]) || r.linea || '?'))]
+  return nombres.length > 1 ? `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}` : nombres[0] || ''
+}
+
+/** Lo ajustado en el ERP para el aviso del guardado: « Quedó ajustado en el ERP (A-12, A-13).» o «». */
+export const textoAjustesErp = (ajustes: Array<{ ajuste: number }> | undefined): string =>
+  ajustes && ajustes.length ? ` Quedó ajustado en el ERP (${ajustes.map((a) => `A-${a.ajuste}`).join(', ')}).` : ''
+
+/** Las prendas del ERP que cambian mucho (≥ `UMBRAL_AVISO_CONTEO`): se marcan antes de confirmar (Bruno 30-oct). */
+export const cambiosGrandesErp = <R extends { dif: number }>(erp: { renglones: R[] } | undefined): R[] => grandes(erp?.renglones || []) as R[]
+export { UMBRAL_AVISO_CONTEO }

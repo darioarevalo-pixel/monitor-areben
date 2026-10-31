@@ -14,11 +14,10 @@
 //
 // ⛔ Archivo `_`: NO es una ruta.
 import { configPg } from '../lib/pg.core.js'
-import { canjeDe, consumoDe, devolverDe, fallaStunnedDe, pedidoDeSolicitud, salidasErpDe, sinOrigenesErp, solicitudStunnedDe, volvioTodo } from '../lib/erp/salida-solicitud.core.js'
-import { lineaDe, skuParaLinea } from '../lib/lineas.core.js'
-import { lecturasStunnedErp } from '../lib/stunned/ventas-erp.core.js'
-
-const PG_DE_STORE = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA', stunned: 'DATABASE_URL_ZATTIA' }
+import { canjeDe, canjeErpDe, consumoDe, devolverDe, fallaErpDe, pedidoDeSolicitud, salidasErpDe, sinOrigenesErp, solicitudErpDe, volvioTodo } from '../lib/erp/salida-solicitud.core.js'
+import { lineasEnErp } from '../lib/erp/corte.core.js'
+import { baseDeLinea } from '../lib/lineas.core.js'
+import { conBase, cortesDe, lineasDeProductos, PG_DE_STORE } from './_erp-corte.js'
 /** El guardado de la solicitud ya espera a Supabase: el documento no puede sumar mucho más que esto. */
 const TECHO_MS = 4000
 
@@ -32,7 +31,7 @@ export async function documentarSalida({ store, kind, solicitud, usuario }) {
   try {
     const conexion = process.env[PG_DE_STORE[store]]
     if (!conexion) return { sinConexion: true }
-    // Los orígenes que fueron al ERP (Stunned, §8.3) ya tienen su salida desde la carga: acá sólo se anota lo que VOLVIÓ.
+    // Los orígenes que fueron al ERP (una línea con corte, §8.3) ya tienen su salida desde la carga: acá sólo se anota lo que VOLVIÓ.
     const pedido = pedidoDeSolicitud(kind, sinOrigenesErp(solicitud), store)
     const delErp = salidasErpDe(kind, solicitud)
     if (!pedido && !delErp.length) return { salteada: true }
@@ -56,7 +55,7 @@ export async function documentarSalida({ store, kind, solicitud, usuario }) {
         if (err) return err
       }
       for (const e of delErp) {
-        const err = sumar({ ya: true, ...(await seguirSalida(db, m, { linea: 'stunned', ref: e.ref, solicitud: e.solicitud, store: 'stunned', kind, quien })) })
+        const err = sumar({ ya: true, ...(await seguirSalida(db, m, { linea: e.linea, ref: e.ref, solicitud: e.solicitud, store: e.linea, kind, quien })) })
         if (err) return err
       }
       if (!total.abierta) delete total.abierta
@@ -136,94 +135,87 @@ export function documentarCanje({ store, b, usuario }) {
   return anotarAjustes({ store, pedidos: canjeDe(b, store), usuario })
 }
 
+/** Un ajuste que ES la baja (falla, canje, consumo de una línea en el ERP): se crea y se aprueba en el acto, a nombre de quien cargó. */
+async function ajusteAplicado(db, aj, pedido, quien, que) {
+  const c = await aj.crearAjuste(db, { ...pedido, usuario: quien })
+  if (!c.ok) return { error: mensaje(c) }
+  // Reintento de uno ya anotado: el ajuste vuelve por su `ref`. Si quedó sin aprobar (se cortó entre los dos pasos), se aprueba ahora.
+  if (c.ajuste.estado === 'rechazado') return { error: `El ajuste A-${c.ajuste.numero} de ${que} está rechazado en ERP › Ajustes.` }
+  if (c.ajuste.estado !== 'aplicado') {
+    const a = await aj.aprobarAjuste(db, { ajuste_id: c.ajuste.id, usuario: quien })
+    if (!a.ok) return { error: `El ajuste A-${c.ajuste.numero} quedó para aprobar en ERP › Ajustes (${mensaje(a)}).` }
+  }
+  return { ok: true, linea: pedido.linea, ajuste: Number(c.ajuste.numero), ya: c.ya === true }
+}
+
 /**
- * La FALLA de Stunned al ERP, ⛔ a GN (Bruno 30-oct): ajuste `fallado` de la línea `stunned` que baja el libro al CARGARLA, como
- * hacía la venta de GN ⇒ se crea y se aprueba en el acto, a nombre de quien la cargó (el `fallado` a mano de `erp › Ajustes`
- * sigue esperando al admin). 🔴 A diferencia del canje ⛔ es sombra: es LA baja ⇒ si falla, FRENA (devuelve `error`) y ⛔ cae a GN.
- * La línea sale del espejo (`productos.sku`, con el proveedor de respaldo), ⛔ del sku que manda la pantalla.
- * @param {{ store: string, b: any, usuario: string|null }} p `b` = el cuerpo del pedido a crear-venta
- * @returns {Promise<null | { ok: true, ajuste: number, ya: boolean } | { error: string }>} `null` = ⛔ es de Stunned: sigue a GN
+ * Lee el corte y la línea de cada producto y arma el pedido con `armar(b, store, lineas, enErp)`. `null` = ninguna línea del
+ * pedido está en el ERP (sigue a GN). 🔴 Si la base ⛔ contesta, FRENA (`error`): ⛔ se sabe si la línea cortó, y caer a GN con
+ * una línea cortada es el agujero.
  */
-export async function fallaStunnedAlErp({ store, b, usuario }) {
-  if (!b || b.proposito !== 'falla' || store !== 'zattia' || !lecturasStunnedErp()) return null
-  const ids = [...new Set((Array.isArray(b.items) ? b.items : []).map((it) => Number(it && it.product_id)).filter(Number.isInteger))]
-  if (!ids.length) return null
-  const conexion = process.env[PG_DE_STORE[store]]
-  if (!conexion) return { error: `Falta ${PG_DE_STORE[store]}: no se puede saber si la falla es de Stunned.` }
+async function conPedidoErp({ store, b }, armar, fn) {
+  const base = baseDeLinea(store)
+  const ids = (Array.isArray(b.items) ? b.items : []).map((it) => it && it.product_id)
+  if (!base || !ids.length) return null
   try {
-    const [{ default: pg }, m] = await Promise.all([import('pg'), import('../motor/stock/ajuste.mjs')])
-    const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: TECHO_MS, statement_timeout: TECHO_MS, query_timeout: TECHO_MS })
-    try {
-      await db.connect()
-      const { rows } = await db.query('select id, sku, proveedor from productos where id = any($1::bigint[])', [ids])
-      const lineas = new Map(rows.map((p) => [Number(p.id), lineaDe(store, skuParaLinea(p))]))
-      const pedido = fallaStunnedDe(b, store, lineas)
-      if (!pedido) return null
-      if (pedido.error) return { error: pedido.error }
-      const quien = usuario || 'fallas'
-      const c = await m.crearAjuste(db, { ...pedido, usuario: quien })
-      if (!c.ok) return { error: mensaje(c) }
-      // Reintento de una falla ya anotada: el ajuste vuelve por su `ref`. Si quedó sin aprobar (se cortó entre los dos pasos), se aprueba ahora.
-      if (c.ajuste.estado === 'rechazado') return { error: `El ajuste A-${c.ajuste.numero} de esta falla está rechazado en ERP › Ajustes.` }
-      if (c.ajuste.estado !== 'aplicado') {
-        const a = await m.aprobarAjuste(db, { ajuste_id: c.ajuste.id, usuario: quien })
-        if (!a.ok) return { error: `El ajuste A-${c.ajuste.numero} quedó para aprobar en ERP › Ajustes (${mensaje(a)}).` }
-      }
-      return { ok: true, ajuste: Number(c.ajuste.numero), ya: c.ya === true }
-    } finally {
-      await db.end().catch(() => {})
-    }
+    return await conBase(base, async (db) => {
+      const enErp = lineasEnErp(await cortesDe(db), base)
+      if (!enErp.length) return null
+      const pedido = armar(b, base, await lineasDeProductos(db, base, ids), enErp)
+      if (!pedido || pedido.error) return pedido
+      return fn(db, pedido)
+    }, TECHO_MS)
   } catch (e) {
     return { error: String((e && e.message) || e).slice(0, 200) }
   }
 }
 
 /**
- * La SOLICITUD de Stunned (sesión de fotos / solicitud interna) al ERP, ⛔ a GN (Bruno 30-oct, erp-stunned §8.3): fotos y retornable
- * ⇒ salida con vuelta de la línea `stunned` (baja al cargarla; lo que vuelve sube al guardar la solicitud, `documentarSalida`);
- * consumo ⇒ ajuste `consumible`/`uso_interno` aprobado en el acto, como la venta de GN. 🔴 Como la falla ⛔ es sombra: es LA baja ⇒
- * si falla, FRENA (`error`) y ⛔ cae a GN. Con la llave `salida_mueve_libro` de Stunned apagada también frena: la salida ⛔ bajaría nada.
+ * La FALLA de una línea que ya está en el ERP (`erp_corte`: Stunned desde el 28-oct, BDI y Zattia desde su corte), ⛔ a GN (Bruno
+ * 30-oct): ajuste `fallado` que baja el libro al CARGARLA, como hacía la venta de GN ⇒ se aprueba en el acto (el `fallado` a mano
+ * de `erp › Ajustes` sigue esperando al admin). 🔴 ⛔ es sombra: es LA baja ⇒ si falla, FRENA (`error`) y ⛔ cae a GN.
+ * La línea sale del espejo (`productos.sku`, con el proveedor de respaldo), ⛔ del sku que manda la pantalla.
  * @param {{ store: string, b: any, usuario: string|null }} p `b` = el cuerpo del pedido a crear-venta
- * @returns {Promise<null | { ok: true, salida?: number, ajuste?: number, ya: boolean } | { error: string }>} `null` = ⛔ es de Stunned: sigue a GN
+ * @returns {Promise<null | { ok: true, linea: string, ajuste: number, ya: boolean } | { error: string }>} `null` = sigue a GN
  */
-export async function solicitudStunnedAlErp({ store, b, usuario }) {
-  if (!b || b.proposito || b.accion || store !== 'zattia' || !lecturasStunnedErp()) return null
-  const ids = [...new Set((Array.isArray(b.items) ? b.items : []).map((it) => Number(it && it.product_id)).filter(Number.isInteger))]
-  if (!ids.length) return null
-  const conexion = process.env[PG_DE_STORE[store]]
-  if (!conexion) return { error: `Falta ${PG_DE_STORE[store]}: no se puede saber si la solicitud es de Stunned.` }
-  try {
-    const [{ default: pg }, sal, aj, sw] = await Promise.all([import('pg'), import('../motor/stock/salida.mjs'), import('../motor/stock/ajuste.mjs'), import('../motor/stock/interruptores.mjs')])
-    const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: TECHO_MS, statement_timeout: TECHO_MS, query_timeout: TECHO_MS })
-    try {
-      await db.connect()
-      const { rows } = await db.query('select id, sku, proveedor from productos where id = any($1::bigint[])', [ids])
-      const lineas = new Map(rows.map((p) => [Number(p.id), lineaDe(store, skuParaLinea(p))]))
-      const pedido = solicitudStunnedDe(b, store, lineas)
-      if (!pedido) return null
-      if (pedido.error) return { error: pedido.error }
-      const quien = usuario || 'solicitudes'
-      if (pedido.ajuste) {
-        const c = await aj.crearAjuste(db, { ...pedido.ajuste, usuario: quien })
-        if (!c.ok) return { error: mensaje(c) }
-        if (c.ajuste.estado === 'rechazado') return { error: `El ajuste A-${c.ajuste.numero} de esta solicitud está rechazado en ERP › Ajustes.` }
-        if (c.ajuste.estado !== 'aplicado') {
-          const a = await aj.aprobarAjuste(db, { ajuste_id: c.ajuste.id, usuario: quien })
-          if (!a.ok) return { error: `El ajuste A-${c.ajuste.numero} quedó para aprobar en ERP › Ajustes (${mensaje(a)}).` }
-        }
-        return { ok: true, ajuste: Number(c.ajuste.numero), ya: c.ya === true }
-      }
-      if ((await sw.configuracionDe(db, { linea: 'stunned' })).salida_mueve_libro !== true) {
-        return { error: 'La salida de Stunned todavía no mueve el stock del ERP (la llave «salida_mueve_libro» está apagada): avisale a Bruno.' }
-      }
-      const c = await sal.crearSalida(db, { ...pedido.salida, usuario: quien })
-      if (!c.ok) return { error: mensaje(c) }
-      if (c.salida.mueve_libro !== true) return { error: `La salida S-${c.salida.numero} quedó anotada SIN bajar el stock del ERP: avisale a Bruno.` }
-      return { ok: true, salida: Number(c.salida.numero), ya: c.ya === true }
-    } finally {
-      await db.end().catch(() => {})
+export async function fallaAlErp({ store, b, usuario }) {
+  if (!b || b.proposito !== 'falla') return null
+  const aj = await import('../motor/stock/ajuste.mjs')
+  return conPedidoErp({ store, b }, fallaErpDe, (db, pedido) => ajusteAplicado(db, aj, pedido, usuario || 'fallas', 'esta falla'))
+}
+
+/**
+ * El CANJE de una línea que ya está en el ERP (hoy sólo BDI tiene canjes; corta el 15/16-nov), ⛔ a GN: ajuste `canje` aplicado en
+ * el acto. Antes del corte sigue la venta de GN + el ajuste en sombra (`documentarCanje`). Mismas reglas que la falla.
+ * @returns {Promise<null | { ok: true, linea: string, ajuste: number, ya: boolean } | { error: string }>} `null` = sigue a GN
+ */
+export async function canjeAlErp({ store, b, usuario }) {
+  if (!b || b.proposito !== 'canje') return null
+  const aj = await import('../motor/stock/ajuste.mjs')
+  return conPedidoErp({ store, b }, canjeErpDe, (db, pedido) => ajusteAplicado(db, aj, pedido, usuario || 'canjes', 'este canje'))
+}
+
+/**
+ * La SOLICITUD de una línea que ya está en el ERP (sesión de fotos / solicitud interna), ⛔ a GN (Bruno 30-oct, erp-stunned §8.3):
+ * fotos y retornable ⇒ salida con vuelta de la línea (baja al cargarla; lo que vuelve sube al guardar la solicitud,
+ * `documentarSalida`); consumo ⇒ ajuste `consumible`/`uso_interno` aprobado en el acto. 🔴 Como la falla ⛔ es sombra ⇒ si falla,
+ * FRENA. 🔑 El corte IMPLICA que la salida mueve el libro: con la llave `salida_mueve_libro` de la línea apagada también frena
+ * (la salida ⛔ bajaría nada) — el día del corte se prende con el alineo.
+ * @returns {Promise<null | { ok: true, linea: string, salida?: number, ajuste?: number, ya: boolean } | { error: string }>} `null` = sigue a GN
+ */
+export async function solicitudAlErp({ store, b, usuario }) {
+  if (!b || b.proposito || b.accion) return null
+  const [sal, aj, sw] = await Promise.all([import('../motor/stock/salida.mjs'), import('../motor/stock/ajuste.mjs'), import('../motor/stock/interruptores.mjs')])
+  const quien = usuario || 'solicitudes'
+  return conPedidoErp({ store, b }, solicitudErpDe, async (db, pedido) => {
+    if (pedido.ajuste) return ajusteAplicado(db, aj, pedido.ajuste, quien, 'esta solicitud')
+    const linea = pedido.salida.linea
+    if ((await sw.configuracionDe(db, { linea })).salida_mueve_libro !== true) {
+      return { error: `La salida de ${linea} todavía no mueve el stock del ERP (la llave «salida_mueve_libro» está apagada): avisale a Bruno.` }
     }
-  } catch (e) {
-    return { error: String((e && e.message) || e).slice(0, 200) }
-  }
+    const c = await sal.crearSalida(db, { ...pedido.salida, usuario: quien })
+    if (!c.ok) return { error: mensaje(c) }
+    if (c.salida.mueve_libro !== true) return { error: `La salida S-${c.salida.numero} quedó anotada SIN bajar el stock del ERP: avisale a Bruno.` }
+    return { ok: true, linea, salida: Number(c.salida.numero), ya: c.ya === true }
+  })
 }

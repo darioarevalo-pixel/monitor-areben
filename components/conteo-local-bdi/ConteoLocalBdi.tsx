@@ -6,7 +6,7 @@ import { esAdmin, puedeSub } from '@/lib/permisos'
 import { leerInventarioVivo } from '@/lib/inventario-vivo/cliente'
 import { realMap } from '@/lib/inventario-vivo/core'
 import { guardarConteo, leerHistorial } from '@/lib/conteo-deposito/cliente'
-import { ANCHOS_AJUSTE, aoaAjuste } from '@/lib/conteo-deposito/core'
+import { ANCHOS_AJUSTE, aoaAjuste, conParteErp, filasExcel, lineasDeParteErp, textoAjustesErp } from '@/lib/conteo-deposito/core'
 import { descargarXlsx } from '@/lib/excel'
 import type { ConteoHistorial } from '@/lib/conteo-deposito/tipos'
 import {
@@ -29,7 +29,7 @@ import type { LbPreview, LecturaFallida, ModeloGrupo } from '@/lib/conteo-local-
 import { useConteoLocalBdi } from './useConteoLocalBdi'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { HistorialConteos, InstructivoConteo } from '@/components/conteos/comunes'
+import { AvisoErp, HistorialConteos, InstructivoConteo } from '@/components/conteos/comunes'
 import {
   BuscarInput,
   Button,
@@ -266,7 +266,9 @@ export function ConteoLocalBdi() {
     setCerrando(true)
     try {
       const d = await leerInventarioVivo(marca, 'local')
-      const pv = calcularAjusteModelo(grupoSel, state, realMap(d.rows || []), d.store_name || 'Local', d.store || String(marca), stockTime)
+      const vivo = realMap(d.rows || [])
+      // Desde el corte de BDI (`erp_corte`) las fundas van al ERP, ⛔ al Excel (erp-stunned §8.4): el vivo ya trae su libro.
+      const pv = conParteErp(calcularAjusteModelo(grupoSel, state, vivo, d.store_name || 'Local', d.store || String(marca), stockTime), vivo, crypto.randomUUID())
       pv.resumen.control = { pila, escaneadas, no_contadas: fallasSel.length }
       setPreview(pv)
       setVista('preview')
@@ -281,17 +283,28 @@ export function ConteoLocalBdi() {
     if (!preview || !grupoSel) return
     const marcaU = (preview.store || marca).toUpperCase()
     const enCero = preview.registro.filter((r) => (r.contado || 0) === 0).length
+    const excel = filasExcel(preview)
+    const nErp = preview.erp?.renglones.length || 0
+    const lineasErp = lineasDeParteErp(preview.erp)
     const ok = await confirmar({
       titulo: `Cerrar el conteo de ${preview.modelo}`,
       tono: 'warning',
-      ok: 'Cerrar y generar',
+      ok: excel.length ? 'Cerrar y generar' : 'Cerrar y ajustar',
       mensaje: (
         <>
-          <p>
-            El Excel es del <b>Local de {marcaU}</b>. Subilo <b>solo</b> al Gestión Nube de {marcaU}.
-          </p>
+          {excel.length > 0 && (
+            <p>
+              El Excel es del <b>Local de {marcaU}</b>. Subilo <b>solo</b> al Gestión Nube de {marcaU}.
+            </p>
+          )}
+          {nErp > 0 && (
+            <p>
+              Las fundas de <b>{lineasErp}</b> se ajustan en el <b>ERP</b>, en el acto: el stock pasa a lo contado.
+            </p>
+          )}
           <div style={{ marginTop: space[3] }}>
-            <ConfirmDetalle label="Líneas a ajustar" valor={preview.rows.length} />
+            <ConfirmDetalle label="Líneas a ajustar" valor={excel.length} />
+            {nErp > 0 && <ConfirmDetalle label={`De ${lineasErp}, al ERP (sin Excel)`} valor={nErp} />}
             {enCero > 0 && <ConfirmDetalle label="Fundas sin escanear → quedan en 0" valor={enCero} />}
           </div>
         </>
@@ -299,26 +312,36 @@ export function ConteoLocalBdi() {
     })
     if (!ok) return
     try {
-      if (preview.rows.length) {
+      if (excel.length) {
         const fecha = new Date().toISOString().slice(0, 10)
-        await descargarXlsx(aoaAjuste(preview.rows), {
+        await descargarXlsx(aoaAjuste(excel), {
           archivo: `ajuste_fundas_${preview.store || marca}_${preview.modelo.replace(/\s+/g, '-')}_${fecha}.xlsx`,
           hoja: 'Worksheet',
           anchos: ANCHOS_AJUSTE,
         })
       }
+      let enErp = ''
       try {
-        await guardarConteo({ store: preview.store || String(marca), ubicacion: preview.ubicacion, usuario, fecha_inicio: null, resumen: preview.resumen, detalle: preview.registro })
+        // Mismo `ref` en cada intento ⇒ el ERP ⛔ ajusta dos veces.
+        const r = await guardarConteo({ store: preview.store || String(marca), ubicacion: preview.ubicacion, usuario, fecha_inicio: null, resumen: preview.resumen, detalle: preview.registro, ...(preview.erp ? { erp: { ref: preview.erp.ref, renglones: preview.erp.renglones } } : {}) })
+        enErp = textoAjustesErp(r.erp)
         await cf.refrescarUltimos()
-      } catch {
-        /* si falla el historial, el Excel ya se generó */
+      } catch (e) {
+        // Con parte ERP, el guardado ES el ajuste: ⛔ se limpia el conteo sin él (volver a «Cerrar» reintenta con el mismo `ref`).
+        if (nErp) {
+          toast.error(`El conteo no quedó guardado y ${lineasErp} no se ajustó en el ERP: ${(e as Error).message}. Volvé a tocar «Ajustar en el ERP y cerrar conteo».`)
+          return
+        }
+        /* sin parte ERP: si falla el historial, el Excel ya se generó */
       }
       cf.aplicar(limpiarModelo(state, grupoSel))
       cf.aplicarFallas(limpiarFallas(cf.fallas, grupoSel.modelo))
       toast.ok(
-        preview.rows.length
-          ? `Excel generado (${preview.rows.length} ${preview.rows.length === 1 ? 'línea' : 'líneas'}) y conteo de ${preview.modelo} guardado. Subilo a GN → "Importar y Ajustar".`
-          : `Conteo de ${preview.modelo} guardado: todo coincidió, sin ajuste.`,
+        excel.length
+          ? `Excel generado (${excel.length} ${excel.length === 1 ? 'línea' : 'líneas'}) y conteo de ${preview.modelo} guardado.${enErp} Subilo a GN → "Importar y Ajustar".`
+          : preview.rows.length
+            ? `Conteo de ${preview.modelo} guardado.${enErp}`
+            : `Conteo de ${preview.modelo} guardado: todo coincidió, sin ajuste.`,
       )
       setPreview(null)
       setModeloSel(null)
@@ -393,7 +416,7 @@ export function ConteoLocalBdi() {
  >
  ← Volver</Button>
             <Button variant="solid" tone="brand" onClick={() => void onGenerar()}>
-              {preview.rows.length ? 'Generar Excel y cerrar conteo' : 'Guardar el conteo igual'}
+              {filasExcel(preview).length ? 'Generar Excel y cerrar conteo' : preview.rows.length ? 'Ajustar en el ERP y cerrar conteo' : 'Guardar el conteo igual'}
             </Button>
           </>
         )}
@@ -904,6 +927,8 @@ function PreviewView({ preview, fallas }: { preview: LbPreview; fallas: LecturaF
       <Notice tone="brand" icon="🏷️" style={{ marginBottom: space[3] }}>
         Ajuste del <b>Local de {marcaU}</b> · <b>{preview.modelo}</b>. El Excel se sube <b>solo</b> al GN de {marcaU}.
       </Notice>
+
+      <AvisoErp erp={preview.erp} unidad={['talle', 'talles']} />
 
       <p style={{ fontSize: font.base, color: color.ink2, marginBottom: space[3] }}>
         Se ajustan <b>{resumen.lineas}</b> {resumen.lineas === 1 ? 'talle' : 'talles'}: <b style={{ color: color.warningInk }}>{resumen.mas}</b> con sobrante (+) y{' '}

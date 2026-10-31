@@ -56,14 +56,22 @@ legacy (`index.html:11549-12021`).
   ajuste. Sin esto, lo terminado que quedó en el teléfono sumaba la diferencia dos veces.
   ⚠️ Una venta que deja el vivo justo en lo contado se confunde con «ya ajustado»: por eso se lista.
 
-## 🔑 Stunned va al ERP, ⛔ al Excel (erp-stunned §8.4, Bruno 30-oct)
+## 🔑 Una línea que ya está en el ERP va al ERP, ⛔ al Excel (erp-stunned §8.4, Bruno 30-oct)
 
-Con `LECTURAS_STUNNED_ERP=1`, en Zattia: el vivo (`api/_inventario-vivo.js`) trae las prendas STU con el **libro del ERP** en vez
-de GN (`fuente: 'erp'`; si el ERP ⛔ contesta, el vivo da 503 —también para Zattia— ⇒ ⛔ se cuenta contra el GN viejo). Al
-guardar, sus diferencias son **un ajuste «Conteo» de la línea `stunned`, aplicado en el acto** (`api/_conteo-stunned.js`,
-regla en `lib/erp/conteo-stunned.core.js`): lo contado = libro de ahora + `dif`, como el Excel. Salen del Excel (`filasExcel`);
-el preview las muestra igual. `ref` por preview ⇒ «Reintentar» ⛔ ajusta dos veces. El historial guarda `resumen.erp_ajuste`.
-El proyector del motor (`lib/fuentes/conteos.mjs`) ⛔ proyecta renglones de una línea contados después de su corte.
+«Está en el ERP» = la línea tiene fila en **`erp_corte`** (motor sql/063) y el instante ya pasó (`lib/erp/corte.core.js`, la
+MISMA tabla que el proyector; ⛔ `LECTURAS_STUNNED_ERP`). Stunned desde el 28-oct; **BDI 15/16-nov, Zattia 23-nov** (el día de su
+`alinear --corte`). La línea sale del PRODUCTO (`productos.sku`, en el servidor). Vale para las **tres** pantallas: depósito,
+estándar y el Local de BDI (fundas).
+- El vivo (`api/_inventario-vivo.js` → `libroEnErp`, `api/_conteo-erp.js`) trae esas prendas con el **libro** en vez de GN
+  (`fuente: 'erp'`, `linea`). 🔴 Lee `erp_corte` en CADA pedido, también de BDI antes de su corte: si la base ⛔ contesta, el vivo da
+  503 ⇒ ⛔ se cuenta contra el GN viejo.
+- Al guardar, sus diferencias son **un ajuste «Conteo» POR LÍNEA, aplicado en el acto** (`conteoAlErp`, regla en
+  `lib/erp/conteo-erp.core.js`): lo contado = libro de ahora + `dif`, como el Excel. Salen del Excel (`filasExcel`); el preview
+  las muestra igual. `ref` = `conteo:<id del preview>` ⇒ «Reintentar» ⛔ ajusta dos veces. El historial guarda `resumen.erp_ajustes`.
+- Antes de confirmar, `AvisoErp` (`components/conteos/comunes.tsx`) marca las prendas que cambian **≥ `UMBRAL_AVISO_CONTEO` (2 u)**:
+  el libro manda a Tienda Nube y un error se ve enseguida en la tienda (Bruno 30-oct). Cambiar el umbral = cambiar esa constante.
+- En el Local de BDI, con parte ERP el guardado ES el ajuste: si falla ⛔ se limpia el conteo (sin parte ERP sigue como antes).
+- El proyector del motor (`lib/fuentes/conteos.mjs`) ⛔ proyecta renglones de una línea contados después de su corte.
 
 ## Zattia: la vista «Por estante (SKU)» (30-sep-2026)
 

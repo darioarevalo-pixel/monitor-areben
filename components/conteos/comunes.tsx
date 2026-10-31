@@ -12,7 +12,8 @@
  * (los tests de paridad son por sección).
  */
 import { Badge, Card, EmptyState, Esqueleto, Instructivo, Notice, TBody, THead, TableWrap, Td, Th, Tr, color, font, space } from '@/components/ui'
-import type { ConteoHistorial } from '@/lib/conteo-deposito/tipos'
+import type { ConteoHistorial, RenglonErp } from '@/lib/conteo-deposito/tipos'
+import { cambiosGrandesErp, lineasDeParteErp, UMBRAL_AVISO_CONTEO } from '@/lib/conteo-deposito/core'
 
 /** Estado de un producto dentro del conteo. */
 export function ChipEstado({ e }: { e: 'sin_iniciar' | 'en_progreso' | 'terminado' }) {
@@ -234,5 +235,34 @@ function ConteoGuardado({ c, conVivo, unidad }: { c: ConteoHistorial; conVivo?: 
         ) : null}
       </details>
     </Card>
+  )
+}
+
+/**
+ * El aviso de la parte ERP de un conteo (erp-stunned §8.4): qué prendas son de una línea que ya está en el ERP (se ajustan ahí al
+ * guardar, en el acto, ⛔ van al Excel) y cuáles cambian ≥ `UMBRAL_AVISO_CONTEO` u — el libro manda a Tienda Nube, un error se
+ * ve en la tienda enseguida (Bruno 30-oct). Lo comparten Depósito, Estándar y el Local de BDI.
+ */
+export function AvisoErp({ erp, unidad }: { erp: { renglones: RenglonErp[] } | undefined; unidad: [string, string] }) {
+  if (!erp || !erp.renglones.length) return null
+  const n = erp.renglones.length
+  const lineas = lineasDeParteErp(erp)
+  const grandes = cambiosGrandesErp(erp)
+  return (
+    <>
+      <Notice tone="warning" icon="📦" style={{ marginBottom: space[3] }}>
+        <b>{n}</b> {n === 1 ? `${unidad[0]} es` : `${unidad[1]} son`} de <b>{lineas}</b>, que ya trabaja con el <b>ERP</b>: se ajustan ahí al guardar,
+        en el acto, y <b>no van al Excel</b>. El «sistema» de {lineas} es el stock del ERP.
+      </Notice>
+      {grandes.length > 0 && (
+        <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>
+          <b>
+            {grandes.length} {grandes.length === 1 ? unidad[0] : unidad[1]} cambia{grandes.length === 1 ? '' : 'n'} {UMBRAL_AVISO_CONTEO} o más unidades
+          </b>
+          : revisalas antes de confirmar, el stock nuevo sale a la tienda enseguida.{' '}
+          {grandes.map((r) => `${r.sku || `${r.product_id}/${r.size_id}`} (${r.dif > 0 ? '+' : ''}${r.dif})`).join(' · ')}
+        </Notice>
+      )}
+    </>
   )
 }

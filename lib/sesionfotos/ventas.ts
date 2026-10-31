@@ -88,10 +88,10 @@ export function construirPedidosVenta(s: Solicitud, ctx: CtxVenta): PedidoVenta[
 }
 
 /**
- * `erp`: lo de Stunned, que ⛔ va a GN sino al ERP (`api/crear-venta.js`): la falla y el consumo como ajuste (A-N), la sesión de fotos y
+ * `erp`: lo de una línea que ya está en el ERP (`erp_corte`), que ⛔ va a GN sino al ERP (`api/crear-venta.js`): la falla y el consumo como ajuste (A-N), la sesión de fotos y
  * la retornable como salida con vuelta (S-N). En la solicitud, la `venta` que vuelve trae `erp` (ver `VentaGN`).
  */
-export type RespuestaEnvio = { ok: boolean; venta?: VentaGN; erp?: { ajuste?: number; salida?: number; ya?: boolean }; error?: string }
+export type RespuestaEnvio = { ok: boolean; venta?: VentaGN; erp?: { ajuste?: number; salida?: number; linea?: string; ya?: boolean }; error?: string }
 /** Envía un pedido. Inyectable para testear la orquestación sin POST. */
 export type EnviarVenta = (pedido: PedidoVenta) => Promise<RespuestaEnvio>
 
@@ -204,7 +204,7 @@ export async function idsParaCerrarCon<T extends SolCerrable>(
   consultar: Consultar = consultarEstadoGN,
 ): Promise<string[]> {
   const incluir = opts.incluir ?? (() => true)
-  // 🔑 Una solicitud con algo en el ERP (Stunned, `venta.erp`) ⛔ se cierra por GN: GN ⛔ tiene esa venta y contestaría «no existe» = anulada.
+  // 🔑 Una solicitud con algo en el ERP (una línea cortada, `venta.erp`) ⛔ se cierra por GN: GN ⛔ tiene esa venta y contestaría «no existe» = anulada.
   const pend = sols.filter((s) => incluir(s) && s.estado !== 'cerrada' && s.ventas && (['deposito', 'local'] as Origen[]).some((o) => s.ventas![o]?.id) && !Object.values(s.ventas).some((v) => v?.erp))
   const cerrar: string[] = []
   await Promise.all(

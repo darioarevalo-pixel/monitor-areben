@@ -4,7 +4,7 @@
  * Excel del Conteo de Depósito, y el vivo del Local. Un conteo = un modelo.
  */
 
-import type { FilaAjuste, ResumenAjuste } from '../conteo-deposito/tipos'
+import type { FilaAjuste, ParteErp, ResumenAjuste } from '../conteo-deposito/tipos'
 
 /** Una variante de funda (aplanada del vivo del Local). */
 export type FundaVar = {
@@ -75,4 +75,6 @@ export type LbPreview = {
   missing: { prod: string; size: string }[]
   ubicacion: string
   store: string
+  /** Las fundas de BDI desde su corte (`erp_corte`): van al ERP, ⛔ al Excel (`conParteErp`, erp-stunned §8.4). */
+  erp?: ParteErp<FilaAjuste>
 }

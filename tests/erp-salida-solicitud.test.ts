@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canjeDe, consumoDe, fallaStunnedDe, salidasErpDe, sinOrigenesErp, solicitudStunnedDe, motivoDeConsumo, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
+import { canjeDe, canjeErpDe, consumoDe, fallaErpDe, lineaErpDe, salidasErpDe, sinOrigenesErp, solicitudErpDe, motivoDeConsumo, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const item = (o: Record<string, unknown>) => ({ vid: `${o.pid}_${o.sid}`, nombre: 'x', variante: 'M', sku: 'SKU', qty: 3, origen: 'deposito', ...o })
@@ -136,32 +136,66 @@ describe('canjeDe: el canje como ajuste `canje`', () => {
   })
 })
 
-describe('fallaStunnedDe: la falla de Stunned como ajuste `fallado` (⛔ a GN)', () => {
+describe('fallaErpDe: la falla de una línea en el ERP como ajuste `fallado` (⛔ a GN)', () => {
   const pedido = (o: Record<string, unknown> = {}): any => ({
     proposito: 'falla', solicitudId: 'falla-31', origen: 'local', comments: 'Falla STU-REM-0001-L — costura',
     items: [{ product_id: 7, size_id: 70, quantity: 1, unit_price: 39990 }], ...o,
   })
   const stu = new Map([[7, 'stunned'], [8, 'zattia']])
+  const HOY = ['stunned'] // 31-oct: sólo Stunned cortó
   it('un ajuste `fallado` de la línea stunned, en el depósito del origen, con `ref` = falla:depósito', () => {
-    const a: any = fallaStunnedDe(pedido(), 'zattia', stu)
+    const a: any = fallaErpDe(pedido(), 'zattia', stu, HOY)
     expect([a.linea, a.deposito, a.motivo, a.ref]).toEqual(['stunned', 'local', 'fallado', 'falla-31:local'])
     expect(a.renglones.map((r: any) => [r.product_id, r.size_id, r.cantidad])).toEqual([[7, 70, -1]])
-    expect((fallaStunnedDe(pedido({ origen: 'deposito' }), 'zattia', stu) as any).deposito).toBe('deposito')
+    expect((fallaErpDe(pedido({ origen: 'deposito' }), 'zattia', stu, HOY) as any).deposito).toBe('deposito')
   })
   it('la línea la decide el mapa del SERVIDOR, ⛔ el sku que manda la pantalla', () => {
-    expect(fallaStunnedDe(pedido({ items: [{ product_id: 8, size_id: 80, quantity: 1, sku: 'STU-REM-0001-L' }] }), 'zattia', stu)).toBeNull()
-    expect(fallaStunnedDe(pedido(), 'zattia', new Map())).toBeNull()
+    expect(fallaErpDe(pedido({ items: [{ product_id: 8, size_id: 80, quantity: 1, sku: 'STU-REM-0001-L' }] }), 'zattia', stu, HOY)).toBeNull()
+    expect(fallaErpDe(pedido(), 'zattia', new Map(), HOY)).toBeNull()
   })
-  it('⛔ corresponde si no es falla o la marca ⛔ es Zattia: sigue a GN', () => {
-    expect(fallaStunnedDe(pedido({ proposito: 'canje' }), 'zattia', stu)).toBeNull()
-    expect(fallaStunnedDe(pedido(), 'bdi', stu)).toBeNull()
-    expect(fallaStunnedDe(null, 'zattia', stu)).toBeNull()
+  it('BDI sin corte ⇒ null (sigue a GN); con corte ⇒ ajuste de la línea bdi en el Minorista', () => {
+    const bdi = new Map([[5, 'bdi']])
+    const p = pedido({ origen: 'deposito', items: [{ product_id: 5, size_id: 50, quantity: 1 }] })
+    expect(fallaErpDe(p, 'bdi', bdi, [])).toBeNull()
+    expect(fallaErpDe(p, 'bdi', bdi, ['bdi'])).toMatchObject({ linea: 'bdi', deposito: 'deposito_minorista', motivo: 'fallado' })
   })
-  it('frena (⛔ cae a GN) si mezcla líneas, falta el id, el origen ⛔ se conoce o un renglón es inválido', () => {
-    expect(fallaStunnedDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 1 }, { product_id: 8, size_id: 80, quantity: 1 }] }), 'zattia', stu)).toHaveProperty('error')
-    expect(fallaStunnedDe(pedido({ solicitudId: undefined }), 'zattia', stu)).toHaveProperty('error')
-    expect(fallaStunnedDe(pedido({ origen: 'evento' }), 'zattia', stu)).toHaveProperty('error')
-    expect(fallaStunnedDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 0 }] }), 'zattia', stu)).toHaveProperty('error')
+  it('Zattia cortada (23-nov): su falla también va al ERP', () => {
+    expect(fallaErpDe(pedido({ items: [{ product_id: 8, size_id: 80, quantity: 1 }] }), 'zattia', stu, ['zattia', 'stunned'])).toMatchObject({ linea: 'zattia' })
+  })
+  it('⛔ corresponde si no es falla: sigue a GN', () => {
+    expect(fallaErpDe(pedido({ proposito: 'canje' }), 'zattia', stu, HOY)).toBeNull()
+    expect(fallaErpDe(null, 'zattia', stu, HOY)).toBeNull()
+  })
+  it('frena (⛔ cae a GN) si mezcla líneas —aunque las dos estén en el ERP—, falta el id, el origen ⛔ se conoce o un renglón es inválido', () => {
+    const mezcla = pedido({ items: [{ product_id: 7, size_id: 70, quantity: 1 }, { product_id: 8, size_id: 80, quantity: 1 }] })
+    expect(fallaErpDe(mezcla, 'zattia', stu, HOY)).toHaveProperty('error')
+    expect(fallaErpDe(mezcla, 'zattia', stu, ['zattia', 'stunned'])).toHaveProperty('error')
+    expect(fallaErpDe(pedido({ solicitudId: undefined }), 'zattia', stu, HOY)).toHaveProperty('error')
+    expect(fallaErpDe(pedido({ origen: 'evento' }), 'zattia', stu, HOY)).toHaveProperty('error')
+    expect(fallaErpDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 0 }] }), 'zattia', stu, HOY)).toHaveProperty('error')
+  })
+  it('lineaErpDe: un producto que ⛔ está en el espejo, junto a uno del ERP, también frena', () => {
+    expect(lineaErpDe([{ product_id: 7 }, { product_id: 99 }], stu, HOY, 'X')).toHaveProperty('error')
+    expect(lineaErpDe([{ product_id: 99 }], stu, HOY, 'X')).toBeNull()
+  })
+})
+
+describe('canjeErpDe: el canje de BDI desde su corte es el ajuste APLICADO (⛔ la venta de GN)', () => {
+  const pedido = (o: Record<string, unknown> = {}): any => ({ proposito: 'canje', solicitudId: 'canje-12', origen: 'local', items: [{ product_id: 5, size_id: 50, quantity: 2 }], ...o })
+  const bdi = new Map([[5, 'bdi']])
+  it('sin corte ⇒ null: venta de GN + sombra, como hoy', () => {
+    expect(canjeErpDe(pedido(), 'bdi', bdi, [])).toBeNull()
+  })
+  it('con corte ⇒ ajuste `canje` con el MISMO ref que la sombra (`canjeDe`)', () => {
+    const a: any = canjeErpDe(pedido(), 'bdi', bdi, ['bdi'])
+    expect([a.linea, a.deposito, a.motivo, a.ref]).toEqual(['bdi', 'local', 'canje', 'canje-12:local'])
+    expect(a.ref).toBe(canjeDe(pedido(), 'bdi')[0].ref)
+    expect(a.renglones.map((r: any) => r.cantidad)).toEqual([-2])
+    expect((canjeErpDe(pedido({ origen: 'deposito' }), 'bdi', bdi, ['bdi']) as any).deposito).toBe('deposito_minorista')
+  })
+  it('⛔ es canje ⇒ null; sin id ⇒ error', () => {
+    expect(canjeErpDe(pedido({ proposito: 'falla' }), 'bdi', bdi, ['bdi'])).toBeNull()
+    expect(canjeErpDe(pedido({ solicitudId: undefined }), 'bdi', bdi, ['bdi'])).toHaveProperty('error')
   })
 })
 
@@ -186,48 +220,50 @@ describe('la solicitud interna retornable sale con TODO su qty (no hay escaneo: 
   })
 })
 
-describe('solicitudStunnedDe: la solicitud de Stunned al ERP, ⛔ a GN (§8.3)', () => {
+describe('solicitudErpDe: la solicitud de una línea en el ERP, ⛔ a GN (§8.3)', () => {
   const pedido = (o: Record<string, unknown> = {}): any => ({
     solicitudId: 'sf-9', origen: 'deposito', comments: 'Sesión de fotos — drop 2 — solicitud sf-9 (Monitor)', salida: { kind: 'sesionfotos' },
     items: [{ product_id: 7, size_id: 70, quantity: 2 }, { product_id: 7, size_id: 71, quantity: 1 }], ...o,
   })
   const stu = new Map([[7, 'stunned'], [8, 'zattia']])
   it('sesión de fotos ⇒ salida `foto` de la línea stunned, cantidades POSITIVAS, `ref` = solicitud:depósito', () => {
-    const r: any = solicitudStunnedDe(pedido(), 'zattia', stu)
+    const r: any = solicitudErpDe(pedido(), 'zattia', stu, ['stunned'])
     expect([r.salida.linea, r.salida.tipo, r.salida.ref]).toEqual(['stunned', 'foto', 'sf-9:deposito'])
     expect(r.salida.renglones.map((x: any) => [x.product_id, x.size_id, x.deposito, x.cantidad])).toEqual([[7, 70, 'deposito', 2], [7, 71, 'deposito', 1]])
     expect(r.ajuste).toBeUndefined()
   })
   it('la misma variante dos veces se SUMA (el motor rechaza la prenda repetida)', () => {
-    const r: any = solicitudStunnedDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 2 }, { product_id: 7, size_id: 70, quantity: 1 }] }), 'zattia', stu)
+    const r: any = solicitudErpDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 2 }, { product_id: 7, size_id: 70, quantity: 1 }] }), 'zattia', stu, ['stunned'])
     expect(r.salida.renglones.map((x: any) => x.cantidad)).toEqual([3])
   })
   it('interna retornable ⇒ salida `interna` (o `produccion` por el motivo)', () => {
-    const r: any = solicitudStunnedDe(pedido({ salida: { kind: 'solicitudesinternas', tipo: 'retornable', motivo: 'Prueba' } }), 'zattia', stu)
+    const r: any = solicitudErpDe(pedido({ salida: { kind: 'solicitudesinternas', tipo: 'retornable', motivo: 'Prueba' } }), 'zattia', stu, ['stunned'])
     expect(r.salida.tipo).toBe('interna')
-    const p: any = solicitudStunnedDe(pedido({ salida: { kind: 'solicitudesinternas', tipo: 'retornable', motivo: 'Muestra para producción' } }), 'zattia', stu)
+    const p: any = solicitudErpDe(pedido({ salida: { kind: 'solicitudesinternas', tipo: 'retornable', motivo: 'Muestra para producción' } }), 'zattia', stu, ['stunned'])
     expect(p.salida.tipo).toBe('produccion')
   })
   it('interna consumo ⇒ AJUSTE con el mismo `ref` que `consumoDe` (guardar ⛔ lo repite) y el motivo de consumo', () => {
-    const r: any = solicitudStunnedDe(pedido({ origen: 'local', salida: { kind: 'solicitudesinternas', tipo: 'consumo', motivo: 'Video/contenido' } }), 'zattia', stu)
+    const r: any = solicitudErpDe(pedido({ origen: 'local', salida: { kind: 'solicitudesinternas', tipo: 'consumo', motivo: 'Video/contenido' } }), 'zattia', stu, ['stunned'])
     expect([r.ajuste.linea, r.ajuste.deposito, r.ajuste.motivo, r.ajuste.ref]).toEqual(['stunned', 'local', 'consumible', 'sf-9:local'])
     expect(r.ajuste.renglones.map((x: any) => x.cantidad)).toEqual([-2, -1])
-    expect((solicitudStunnedDe(pedido({ salida: { kind: 'solicitudesinternas', tipo: 'consumo', motivo: 'Moldería' } }), 'zattia', stu) as any).ajuste.motivo).toBe('uso_interno')
+    expect((solicitudErpDe(pedido({ salida: { kind: 'solicitudesinternas', tipo: 'consumo', motivo: 'Moldería' } }), 'zattia', stu, ['stunned']) as any).ajuste.motivo).toBe('uso_interno')
   })
-  it('⛔ corresponde: Zattia, otra base, con propósito o acción ⇒ null (sigue a GN)', () => {
-    expect(solicitudStunnedDe(pedido({ items: [{ product_id: 8, size_id: 80, quantity: 1 }] }), 'zattia', stu)).toBeNull()
-    expect(solicitudStunnedDe(pedido(), 'bdi', stu)).toBeNull()
-    expect(solicitudStunnedDe(pedido({ proposito: 'falla' }), 'zattia', stu)).toBeNull()
-    expect(solicitudStunnedDe(pedido({ proposito: 'canje' }), 'zattia', stu)).toBeNull()
-    expect(solicitudStunnedDe(pedido({ accion: 'reingreso' }), 'zattia', stu)).toBeNull()
+  it('⛔ corresponde: Zattia sin corte, BDI sin corte, con propósito o acción ⇒ null (sigue a GN); BDI con corte ⇒ su salida', () => {
+    expect(solicitudErpDe(pedido({ items: [{ product_id: 8, size_id: 80, quantity: 1 }] }), 'zattia', stu, ['stunned'])).toBeNull()
+    expect(solicitudErpDe(pedido(), 'bdi', new Map([[7, 'bdi']]), [])).toBeNull()
+    expect((solicitudErpDe(pedido(), 'bdi', new Map([[7, 'bdi']]), ['bdi']) as any).salida).toMatchObject({ linea: 'bdi', tipo: 'foto', ref: 'sf-9:deposito_minorista' })
+    expect((solicitudErpDe(pedido(), 'bdi', new Map([[7, 'bdi']]), ['bdi']) as any).salida.renglones[0].deposito).toBe('deposito_minorista')
+    expect(solicitudErpDe(pedido({ proposito: 'falla' }), 'zattia', stu, ['stunned'])).toBeNull()
+    expect(solicitudErpDe(pedido({ proposito: 'canje' }), 'zattia', stu, ['stunned'])).toBeNull()
+    expect(solicitudErpDe(pedido({ accion: 'reingreso' }), 'zattia', stu, ['stunned'])).toBeNull()
   })
   it('FRENA (⛔ cae a GN): mezcla, sin `salida` (pantalla vieja), sin id, origen raro, cantidad inválida', () => {
-    expect(solicitudStunnedDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 1 }, { product_id: 8, size_id: 80, quantity: 1 }] }), 'zattia', stu)).toHaveProperty('error')
-    expect(solicitudStunnedDe(pedido({ salida: undefined }), 'zattia', stu)).toHaveProperty('error')
-    expect(solicitudStunnedDe(pedido({ salida: { kind: 'solicitudesinternas', tipo: 'evento' } }), 'zattia', stu)).toHaveProperty('error')
-    expect(solicitudStunnedDe(pedido({ solicitudId: undefined }), 'zattia', stu)).toHaveProperty('error')
-    expect(solicitudStunnedDe(pedido({ origen: 'evento' }), 'zattia', stu)).toHaveProperty('error')
-    expect(solicitudStunnedDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 0 }] }), 'zattia', stu)).toHaveProperty('error')
+    expect(solicitudErpDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 1 }, { product_id: 8, size_id: 80, quantity: 1 }] }), 'zattia', stu, ['stunned'])).toHaveProperty('error')
+    expect(solicitudErpDe(pedido({ salida: undefined }), 'zattia', stu, ['stunned'])).toHaveProperty('error')
+    expect(solicitudErpDe(pedido({ salida: { kind: 'solicitudesinternas', tipo: 'evento' } }), 'zattia', stu, ['stunned'])).toHaveProperty('error')
+    expect(solicitudErpDe(pedido({ solicitudId: undefined }), 'zattia', stu, ['stunned'])).toHaveProperty('error')
+    expect(solicitudErpDe(pedido({ origen: 'evento' }), 'zattia', stu, ['stunned'])).toHaveProperty('error')
+    expect(solicitudErpDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 0 }] }), 'zattia', stu, ['stunned'])).toHaveProperty('error')
   })
 })
 
@@ -251,5 +287,10 @@ describe('al GUARDAR, lo que fue al ERP ⛔ se vuelve a anotar como sombra', () 
     const vuelto = { ...r[0].solicitud, devuelto: { '1_10': 2 } }
     expect(devolverDe(vuelto, 'stunned', [{ n: 1, product_id: 1, size_id: 10, deposito: 'deposito', cantidad: 3, devuelta: 0 }], 'sesionfotos')).toEqual([{ n: 1, cantidad: 2 }])
     expect(salidasErpDe('solicitudesinternas', sol({ tipo: 'consumo', ventas: { deposito: erp } }))).toEqual([])
+  })
+  it('salidasErpDe: la línea viaja en la venta (BDI ⇒ depósito minorista); sin línea = Stunned (las de antes del 31-oct)', () => {
+    expect(salidasErpDe('sesionfotos', sol({ ventas: { deposito: erp } }))[0].linea).toBe('stunned')
+    const r = salidasErpDe('sesionfotos', sol({ ventas: { deposito: { ...erp, linea: 'bdi' } } }))
+    expect(r.map((x) => [x.linea, x.ref])).toEqual([['bdi', 'sf-1:deposito_minorista']])
   })
 })

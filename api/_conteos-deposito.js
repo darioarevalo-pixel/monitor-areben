@@ -6,7 +6,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 import { puedeContar } from '../lib/permisos.core.js';
-import { conteoStunnedAlErp } from './_conteo-stunned.js';
+import { conteoAlErp } from './_conteo-erp.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -66,21 +66,22 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       const b = req.body || {};
-      // 🔑 Las diferencias de Stunned (`b.erp`) son un ajuste «Conteo» del ERP, aplicado en el acto (erp-stunned §8.4, Bruno 30-oct),
-      // ⛔ el Excel de GN. Va ANTES del historial: si el ERP ⛔ lo anota, FRENA y la pantalla ofrece reintentar (mismo `ref` ⇒ ⛔ dos veces).
-      const erp = await conteoStunnedAlErp({ store, b, usuario: yo });
-      if (erp && erp.error) return res.status(409).json({ ok: false, error: `El ajuste de Stunned no se pudo hacer en el ERP: ${erp.error}` });
+      // 🔑 Las diferencias de una línea que ya está en el ERP (`b.erp`: Stunned desde el 28-oct, BDI y Zattia desde su corte) son
+      // un ajuste «Conteo» por línea, aplicado en el acto (erp-stunned §8.4, Bruno 30-oct), ⛔ el Excel de GN. Va ANTES del
+      // historial: si el ERP ⛔ lo anota, FRENA y la pantalla ofrece reintentar (mismo `ref` ⇒ ⛔ dos veces).
+      const erp = await conteoAlErp({ store, b, usuario: yo });
+      if (erp && erp.error) return res.status(409).json({ ok: false, error: `El ajuste no se pudo hacer en el ERP: ${erp.error}` });
       const row = {
         store,
         ubicacion: b.ubicacion || null,
         usuario: yo,
         fecha_inicio: b.fecha_inicio || null,
-        resumen: { ...(b.resumen && typeof b.resumen === 'object' ? b.resumen : {}), ...(erp ? { erp_ajuste: erp.ajuste } : {}) },
+        resumen: { ...(b.resumen && typeof b.resumen === 'object' ? b.resumen : {}), ...(erp ? { erp_ajustes: erp.ajustes.map((a) => ({ linea: a.linea, ajuste: a.ajuste })) } : {}) },
         detalle: Array.isArray(b.detalle) ? b.detalle : [],
       };
       const { data, error } = await supabase.from('conteos_deposito').insert(row).select('id').single();
       if (error) throw new Error(error.message);
-      return res.status(200).json({ ok: true, id: data?.id, ...(erp ? { erp: { ajuste: erp.ajuste, ya: erp.ya } } : {}) });
+      return res.status(200).json({ ok: true, id: data?.id, ...(erp ? { erp: { ajustes: erp.ajustes } } : {}) });
     }
 
     return res.status(405).json({ error: 'método no permitido' });

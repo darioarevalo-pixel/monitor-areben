@@ -34,8 +34,10 @@ export type TipoSol = 'retornable' | 'consumo'
 export type VentaGN = {
   id: number | string
   number?: number | string
-  /** Stunned: la anotó el ERP (`S-12` / `A-34`), ⛔ GN (`api/crear-venta.js`, erp-stunned §8.3). ⛔ se le consulta a GN. */
+  /** Una línea que ya está en el ERP (`erp_corte`): la anotó el ERP (`S-12` / `A-34`), ⛔ GN (`api/crear-venta.js`, erp-stunned §8.3). ⛔ se le consulta a GN. */
   erp?: string
+  /** La línea del documento del ERP (`bdi|zattia|stunned`). Las de antes del 31-oct ⛔ la traen: son de Stunned. */
+  linea?: string
   [k: string]: unknown
 }
 
