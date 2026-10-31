@@ -41,11 +41,13 @@ export async function cortesDe(db) {
 /**
  * La línea de cada producto (`product_id` → `bdi|zattia|stunned`), del ESPEJO (`productos.sku`, con el proveedor de respaldo),
  * ⛔ de lo que manda la pantalla. Un producto que ⛔ está en el espejo ⛔ entra al Map.
+ * 🔴 `proveedor` existe SÓLO en el espejo de Zattia (lo usa Stunned): el de BDI ⛔ la tiene (medido en prod 31-oct) ⇒ se lee por
+ * `to_jsonb`, que da null si falta. Con `select proveedor` el corte de BDI frenaba TODA falla, canje, solicitud y conteo.
  */
 export async function lineasDeProductos(db, store, ids) {
   const base = baseDeLinea(store)
   const unicos = [...new Set((ids || []).map(Number).filter(Number.isInteger))]
   if (!unicos.length || !base) return new Map()
-  const { rows } = await db.query('select id, sku, proveedor from productos where id = any($1::bigint[])', [unicos])
+  const { rows } = await db.query(`select p.id, p.sku, to_jsonb(p)->>'proveedor' as proveedor from productos p where p.id = any($1::bigint[])`, [unicos])
   return new Map(rows.map((p) => [Number(p.id), lineaDe(base, skuParaLinea(p))]))
 }
