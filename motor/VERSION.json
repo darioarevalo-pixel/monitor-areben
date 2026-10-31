@@ -2,7 +2,7 @@
   "motor": "areben-motor",
   "version": "0.1.0",
   "commit": "86c873f9314235064a835d167e6056820b214324",
-  "traido_en": "2026-10-31T13:49:37.841Z",
+  "traido_en": "2026-10-31T13:55:53.141Z",
   "archivos": {
     "alerta.mjs": "a34c920b5972553a630914482236843fcd4a7d0aad5f96bd810ff9a9b29d32ec",
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
@@ -33,6 +33,7 @@
     "stock/pin.mjs": "32b5253f7e7a82d33ca64c249dbfffe6f5c438a221867d43552e60c4a5fba63d",
     "stock/salida.mjs": "65736bdd60c44828abec71cadf8c6adbbd15a446c8215eadce4294a9e3b5ecdd",
     "stock/transferencia.mjs": "bbce08c62fc3c93e5e724610c9fed832ae0989c5a9d3dcc8c11112121dd3f28b",
+    "stock/ubicacion.mjs": "a8b25286e86cea530c938c9378dd18aa9fb2ddd9a1dc55c842fb65b395f17950",
     "supabase-ca.mjs": "c55ad63e00c3880f29cec190050c8cdfa118921a02b69be84914f60c0703a87e",
     "tn/aplicar.mjs": "6fa5be0abf739f357239a7617bb0036a82bb2eb20d0702c42bad041a408ad1e4",
     "tn/comprador.mjs": "53ea860e64ce70d8942668f54dc6db598da248df0ea64ac10e875903d501c807",
