@@ -5,6 +5,7 @@ import { Button, Icono } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
 import { FranjaCuenta, HojaCargarPago, TarjetaCuenta, useCuentaPanel } from './CuentaCorriente'
+import { PreparadosSinPagar, TarjetaPedidos, usePedidosPanel } from './PedidosMayoristas'
 import { CalculadoraEnvio } from './CalculadoraEnvio'
 import { ProximoContacto, RayaEstado, estadoDeFicha } from './ProximoContacto'
 import { QueLeMando } from './QueLeMando'
@@ -994,6 +995,8 @@ function PanelInterno({
   const quien = quienPaga(estado, telNorm)
   const { cuenta, releer: releerCuenta } = useCuentaPanel(quien?.tipo === 'erp' ? quien.id : null, quien?.telefono ?? null)
   const [cargandoPago, setCargandoPago] = useState(false)
+  // Los pedidos mayoristas del ERP (paso 3 del plan, `PedidosMayoristas.tsx`): escondidos detrás del mismo interruptor.
+  const { pedidos: pedidosErp, releer: releerPedidos } = usePedidosPanel(cuenta?.cliente.id ?? null, quien?.telefono ?? null)
 
   const solapas = (
     <div style={{ display: 'flex', borderBottom: `1px solid ${color.sideBg}`, background: color.sideBg, position: 'sticky', top: 0, zIndex: 3 }}>
@@ -1028,6 +1031,7 @@ function PanelInterno({
     return (
       <Envoltorio aviso={aviso}>
         {solapas}
+        <Aislado nombre="Preparados sin pagar"><PreparadosSinPagar /></Aislado>
         {kvListo ? (
           <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} onAgendar={agendarDesdeLista} puedeAbrirChat={enExtension} escritos={escritos} ultimos={ultimos} />
         ) : (
@@ -1343,6 +1347,11 @@ function PanelInterno({
                 onHecho={(t) => { setCargandoPago(false); decir(t); releerCuenta() }}
               />
             )}
+          </Aislado>
+        )}
+        {pedidosErp && (
+          <Aislado nombre="Pedidos del ERP">
+            <TarjetaPedidos pedidos={pedidosErp} clienteId={cuenta?.cliente.id ?? null} personaId={cuenta?.delChat?.id ?? null} decir={decir} onCambio={() => { releerPedidos(); releerCuenta() }} />
           </Aislado>
         )}
         {/*

@@ -689,6 +689,40 @@ export const sacarWhatsappPanel = (id: string) =>
   pedir<{ ok: true; sacado: boolean }>(post({ accion: 'sacar-whatsapp', marca: 'bdi', id }), '', 'No se pudo sacar el número.')
 export const leerCuentaPanel = (p: { gnId?: number | null; tel?: string | null; prueba: boolean }) =>
   pedir<CuentaPanel>(null, `&vista=cuenta-panel&marca=bdi&gnId=${p.gnId && p.gnId > 0 ? p.gnId : ''}&tel=${String(p.tel ?? '').replace(/\D/g, '').slice(0, 20)}&prueba=${p.prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudo leer la cuenta corriente.')
+// ── El pedido mayorista en el panel (`api/_erp-pedido.js`, plan «BDI directo al ERP» paso 3): escondido como la cuenta ──
+export type PagoPedido = { estado: 'pagado' | 'parcial' | 'sin_pagar'; falta: number; pagado: number }
+export type EtapaPedido = 'sin_entrar' | 'pedido' | 'a_preparar' | 'en_preparacion' | 'preparado' | 'despachado' | 'anulado'
+export type PedidoDelCliente = {
+  id: string; numero: number; recibido_en: string; etapa: EtapaPedido; total: number; unidades: number; persona: string | null; venta_id: string | null
+  pago?: PagoPedido; cuenta_habilitada?: boolean; zona?: 'despacho' | 'pendiente_pago'
+}
+export type PedidoSinEntrar = { id: string; numero: number; recibido_en: string; total: number; unidades: number; nombre: string | null }
+export type PedidosPanel =
+  | { prendido: false }
+  | { prendido: true; escribir: boolean; pedidos: PedidoDelCliente[]; sinEntrar: PedidoSinEntrar[]; falta064?: boolean }
+export type RenglonPedido = { product_id: number; size_id: number | null; cantidad: number; precio: number; stock: number | null; nombre: string | null; talle: string | null }
+export type CambioPedido = { motivo: string; antes: unknown; despues: unknown; usuario: string | null; cuando: string }
+export type FichaPedido = {
+  prendido: true; escribir: boolean
+  pedido: PedidoDelCliente & { editable: boolean; persona: { id: string; nombre: string | null; whatsapp: string; activo: boolean } | null; a_preparar_por: string | null }
+  lineas: RenglonPedido[]; cambios: CambioPedido[]
+}
+export const leerPedidosPanel = (p: { clienteId?: string | null; tel?: string | null }) =>
+  pedir<PedidosPanel>(null, `&vista=pedidos-panel&marca=bdi&cliente=${p.clienteId ?? ''}&tel=${String(p.tel ?? '').replace(/\D/g, '').slice(0, 20)}&nc=${Date.now()}`, 'No se pudieron leer los pedidos.')
+export const leerPedidoPanel = (id: string) =>
+  pedir<FichaPedido | { prendido: false }>(null, `&vista=pedido-panel&marca=bdi&id=${encodeURIComponent(id)}&nc=${Date.now()}`, 'No se pudo leer el pedido.')
+export type PreparadoSinPagar = { id: string; numero: number; cliente_id: string; cliente: string; preparado_en: string; total: number; debe: number }
+export const leerPreparadosSinPagar = () =>
+  pedir<{ prendido: false } | { prendido: true; pedidos: PreparadoSinPagar[]; falta064?: boolean }>(null, `&vista=preparados-sin-pagar&marca=bdi&nc=${Date.now()}`, 'No se pudo leer «Preparados sin pagar».')
+type RespuestaPedido = { ok: true; ya: boolean; sinCambios: boolean; avisarDeposito: boolean; ventaId: string | null }
+export const entrarPedidoPanel = (p: { pedidoId: string; clienteId: string; personaId?: string | null }) =>
+  pedir<RespuestaPedido>(post({ accion: 'pedido-entrar', marca: 'bdi', ...p }), '', 'No se pudo entrar el pedido.')
+export const cambiarPedidoPanel = (pedidoId: string, lineas: Array<{ productId: number; sizeId: number; cantidad: number }>) =>
+  pedir<RespuestaPedido>(post({ accion: 'pedido-cambiar', marca: 'bdi', pedidoId, lineas }), '', 'No se pudo guardar el cambio.')
+export const mandarAPrepararPanel = (pedidoId: string) =>
+  pedir<RespuestaPedido>(post({ accion: 'pedido-a-preparar', marca: 'bdi', pedidoId }), '', 'No se pudo mandar a preparar.')
+export const anularPedidoPanel = (pedidoId: string, motivo: string) =>
+  pedir<RespuestaPedido>(post({ accion: 'pedido-anular', marca: 'bdi', pedidoId, motivo }), '', 'No se pudo anular el pedido.')
 /** Cargar o corregir el WhatsApp / mail de un cliente (sólo admin). El motor valida el número; ⛔ borra un dato que no mandás. */
 export const ponerContactoCliente = (marca: MarcaErp, p: { clienteId: string; whatsapp?: string; email?: string }) =>
   pedir<{ ok: true; contacto: { whatsapp: string | null; email: string | null } }>(post({ accion: 'poner-contacto', marca, ...p }), '', 'No se pudo guardar el contacto.')

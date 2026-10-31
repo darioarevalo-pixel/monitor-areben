@@ -49,6 +49,12 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
   si falta uno.
 - Servidor: la vista `cuenta-panel` y las acciones `anotar-whatsapp` / `sacar-whatsapp` de `api/_erp-clientes.js`
   (permiso `cuentas`); el pago es el mismo `cobrar-cuenta` de ERP › Clientes. Lee el libro de PRUEBA hasta el corte.
+- **Los PEDIDOS mayoristas del ERP** (paso 3, pedido de Darío §2-§3): la tarjeta «Pedidos» (con su pago: Pagado / Pagó una
+  parte / Sin pagar), la hoja del pedido (stock al lado, cambiar cantidades, «Enviar a preparar», anular) y «Preparados sin
+  pagar» arriba de Hoy. Vive en `components/panel/PedidosMayoristas.tsx` + `api/_erp-pedido.js`; el núcleo es del motor
+  (`motor/pedido/venta.mjs`). 🔴 **DOS llaves**: leer = `PANEL_CUENTA_CORRIENTE`; ESCRIBIR = además `VENTA_MAYORISTA_REAL=bdi`
+  (409 apagada). Mientras GN viva la venta mayorista la registra la copia de GN del motor: entrar un pedido acá reservaría
+  dos veces ⇒ se prende el día del corte, junto con apagar esa copia. Enganches amarrados por el mismo test.
 
 ## Reglas que el código no dice
 

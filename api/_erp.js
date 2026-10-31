@@ -33,6 +33,8 @@
  *   GET  ?recurso=erp&vista=cuenta-cliente&marca=…&cliente=…&linea=…  su estado y el mayor (desde/hasta) con su CSV
  *   GET  ?recurso=erp&vista=cuenta-panel&gnId=…&tel=…&prueba=0|1      la cuenta del cliente del chat (panel de WhatsApp, BDI)
  *   POST { accion: 'anotar-whatsapp' | 'sacar-whatsapp', … }           las personas que compran por la empresa (panel)
+ *   GET  ?vista=pedidos-panel&cliente=…&tel=… · pedido-panel&id=… · preparados-sin-pagar   el pedido mayorista en el panel
+ *   POST { accion: 'pedido-entrar' | 'pedido-cambiar' | 'pedido-a-preparar' | 'pedido-anular', pedidoId, … }  (VENTA_MAYORISTA_REAL)
  *   POST { accion: 'poner-credito', marca, clienteId, credito, tope?, dias? }   marcar o sacar el crédito (sólo admin)
  *   POST { accion: 'poner-contacto', marca, clienteId, whatsapp?, email? }       cargar o corregir el contacto (sólo admin)
  *   GET  ?recurso=erp&vista=inicio-resultado&marca=bdi|zattia         Inicio: vendido, costo y margen del mes (`api/_erp-inicio.js`)
@@ -128,6 +130,7 @@ import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, e
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
 import { anotarWhatsappPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
+import { ACCIONES_PEDIDO, accionDePedido, pedidoDelPanel, pedidosDelPanel, preparadosSinPagarDelPanel } from './_erp-pedido.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
 import { cobrosDelPeriodo, reintentarEntregasErp } from './_erp-cobros.js'
@@ -1908,6 +1911,24 @@ export default async function handler(req, res) {
         prueba: req.query.prueba === '1', desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''),
       }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    // El pedido mayorista en el panel (plan «BDI directo al ERP» paso 3, `api/_erp-pedido.js`): leer detrás del panel,
+    // escribir además detrás de VENTA_MAYORISTA_REAL (409 hasta el corte de BDI).
+    if (req.method === 'GET' && req.query.vista === 'pedidos-panel') {
+      const r = await pedidosDelPanel({ clienteId: String(req.query.cliente || ''), tel: String(req.query.tel || ''), usuario: [perfil.user, perfil.email] }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'pedido-panel') {
+      const r = await pedidoDelPanel({ pedidoId: String(req.query.id || ''), usuario: [perfil.user, perfil.email] }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'preparados-sin-pagar') {
+      const r = await preparadosSinPagarDelPanel({ usuario: [perfil.user, perfil.email] }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'POST' && ACCIONES_PEDIDO.includes(body.accion)) {
+      const r = await accionDePedido({ accion: body.accion, body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'POST' && (body.accion === 'anotar-whatsapp' || body.accion === 'sacar-whatsapp')) {
       const f = body.accion === 'anotar-whatsapp' ? anotarWhatsappPanel : sacarWhatsappPanel

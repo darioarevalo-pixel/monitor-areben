@@ -16,6 +16,12 @@ describe('la cuenta corriente sigue enganchada en el panel (escondida, ⛔ sacad
     expect(panel).toMatch(/useCuentaPanel\(/)
     for (const pieza of ['<FranjaCuenta', '<TarjetaCuenta', '<HojaCargarPago']) expect(panel).toContain(pieza)
   })
+  it('PanelWhatsApp: los pedidos mayoristas del ERP (paso 3 del plan) leen y dibujan su tarjeta', () => {
+    expect(panel).toMatch(/from '\.\/PedidosMayoristas'/)
+    expect(panel).toMatch(/usePedidosPanel\(/)
+    expect(panel).toContain('<TarjetaPedidos')
+    expect(panel).toContain('<PreparadosSinPagar />')
+  })
   it('Pagos: el segmento «Cuentas» detrás del interruptor', () => {
     expect(pagos).toMatch(/from '\.\/CuentaCorriente'/)
     expect(pagos).toMatch(/useCuentaPrendida\(\)/)

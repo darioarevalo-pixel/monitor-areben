@@ -5,6 +5,7 @@ import { ACCIONES as ACCIONES_CATALOGO } from '@/lib/erp/catalogo-edicion.core.j
 import { ACCIONES as ACCIONES_TRANSFERENCIA } from '@/lib/erp/transferencia-doc.core.js'
 import { ACCIONES as ACCIONES_SALIDA } from '@/lib/erp/salida.core.js'
 import { ACCIONES_DEPOSITO } from '../api/_erp-depositos.js'
+import { ACCIONES_PEDIDO } from '../api/_erp-pedido.js'
 
 const get = (query: Record<string, unknown>) => entradaInvalida({ method: 'GET', query: { recurso: 'erp', nc: '1729000000000', ...query } })
 const post = (body: unknown) => entradaInvalida({ method: 'POST', query: { recurso: 'erp' }, body })
@@ -68,8 +69,8 @@ describe('ERP › la puerta de entrada (forma del pedido)', () => {
     const enHandler = new Set([...src.matchAll(/accion === '([a-z-]+)'/g)].map((m) => m[1]))
     // `cargar-costo` y `nota-venta`/`cobrar-venta` se despachan por mapa, junto a su hermana.
     for (const a of ['cargar-costo', 'nota-venta', 'cobrar-venta', 'sembrar-reglas', 'simular-reglas', 'prender-caja-reglas']) enHandler.add(a)
-    // Las de las puertas con su propio módulo (transferencia como documento, salida con vuelta, editar el producto) se despachan por su lista.
-    for (const a of [...ACCIONES_TRANSFERENCIA, ...ACCIONES_CATALOGO, ...ACCIONES_SALIDA, ...ACCIONES_DEPOSITO]) enHandler.add(a)
+    // Las de las puertas con su propio módulo (transferencia como documento, salida con vuelta, editar el producto, el pedido mayorista del panel) se despachan por su lista.
+    for (const a of [...ACCIONES_TRANSFERENCIA, ...ACCIONES_CATALOGO, ...ACCIONES_SALIDA, ...ACCIONES_DEPOSITO, ...ACCIONES_PEDIDO]) enHandler.add(a)
     expect([...ACCIONES].sort()).toEqual([...enHandler].sort())
   })
 })
