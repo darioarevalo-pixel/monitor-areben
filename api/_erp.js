@@ -33,6 +33,7 @@
  *   GET  ?recurso=erp&vista=cuenta-cliente&marca=…&cliente=…&linea=…  su estado y el mayor (desde/hasta) con su CSV
  *   GET  ?recurso=erp&vista=cuenta-panel&gnId=…&tel=…&prueba=0|1      la cuenta del cliente del chat (panel de WhatsApp, BDI)
  *   POST { accion: 'anotar-whatsapp' | 'sacar-whatsapp', … }           las personas que compran por la empresa (panel)
+ *   GET  ?vista=clientes-panel&q=… · POST { accion: 'cliente-nuevo-panel' }   «¿Es de un cliente que ya tenés?» / «Es nuevo»
  *   GET  ?vista=pedidos-panel&cliente=…&tel=… · pedido-panel&id=… · pedido-productos&id=…&q=… · preparados-sin-pagar   el pedido mayorista en el panel
  *   POST { accion: 'pedido-entrar' | 'pedido-cambiar' | 'pedido-a-preparar' | 'pedido-anular', pedidoId, … }  (VENTA_MAYORISTA_REAL)
  *   POST { accion: 'poner-credito', marca, clienteId, credito, tope?, dias? }   marcar o sacar el crédito (sólo admin)
@@ -129,7 +130,7 @@ import { ACCIONES as ACCIONES_CATALOGO } from '../lib/erp/catalogo-edicion.core.
 import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
-import { anotarWhatsappPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
+import { anotarWhatsappPanel, clienteNuevoPanel, clientesDelPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
 import { ACCIONES_PEDIDO, accionDePedido, pedidoDelPanel, pedidosDelPanel, preparadosSinPagarDelPanel, productosParaElPanel } from './_erp-pedido.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
@@ -1933,6 +1934,14 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && ACCIONES_PEDIDO.includes(body.accion)) {
       const r = await accionDePedido({ accion: body.accion, body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'clientes-panel') {
+      const r = await clientesDelPanel({ q: String(req.query.q || ''), usuario: [perfil.user, perfil.email] }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'POST' && body.accion === 'cliente-nuevo-panel') {
+      const r = await clienteNuevoPanel({ body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error, existe: r.existe } : r)
     }
     if (req.method === 'POST' && (body.accion === 'anotar-whatsapp' || body.accion === 'sacar-whatsapp')) {
       const f = body.accion === 'anotar-whatsapp' ? anotarWhatsappPanel : sacarWhatsappPanel

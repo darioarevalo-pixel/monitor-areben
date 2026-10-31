@@ -685,6 +685,13 @@ export type CuentaPanel =
   }
 export const anotarWhatsappPanel = (p: { clienteId: string; whatsapp: string; nombre?: string }) =>
   pedir<{ ok: true; persona: { id: string; whatsapp: string; nombre: string | null }; yaEstaba: boolean }>(post({ accion: 'anotar-whatsapp', marca: 'bdi', ...p }), '', 'No se pudo anotar el número.')
+/** «¿Es de un cliente que ya tenés?»: las fichas del motor con su id (para anotarle el número del chat). */
+export type ClienteDelPanel = { id: string; nombre: string; doc: string | null }
+export const buscarClientesPanel = (q: string) =>
+  pedir<{ prendido: false } | { prendido: true; clientes: ClienteDelPanel[] }>(null, `&vista=clientes-panel&marca=bdi&q=${encodeURIComponent(q.slice(0, 80))}&nc=${Date.now()}`, 'No se pudo buscar el cliente.')
+/** «Es nuevo»: la ficha (nombre + CUIT/DNI) y el número del chat anotado en ella. 409 con `existe` si el documento ya tiene ficha. */
+export const clienteNuevoPanel = (p: { nombre: string; doc: string; whatsapp: string; persona?: string }) =>
+  pedir<{ ok: true; cliente: ClienteDelPanel }>(post({ accion: 'cliente-nuevo-panel', marca: 'bdi', ...p }), '', 'No se pudo cargar el cliente.')
 export const sacarWhatsappPanel = (id: string) =>
   pedir<{ ok: true; sacado: boolean }>(post({ accion: 'sacar-whatsapp', marca: 'bdi', id }), '', 'No se pudo sacar el número.')
 export const leerCuentaPanel = (p: { gnId?: number | null; tel?: string | null; prueba: boolean }) =>

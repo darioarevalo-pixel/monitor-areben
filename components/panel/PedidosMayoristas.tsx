@@ -14,8 +14,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Field, Input, Modal, Notice } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import {
-  anularPedidoPanel, buscarProductosPedido, cambiarPedidoPanel, entrarPedidoPanel, leerPedidoPanel, leerPedidosPanel, leerPreparadosSinPagar, mandarAPrepararPanel,
-  type EtapaPedido, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel,
+  anotarWhatsappPanel, anularPedidoPanel, buscarClientesPanel, buscarProductosPedido, cambiarPedidoPanel, clienteNuevoPanel, entrarPedidoPanel, leerPedidoPanel, leerPedidosPanel, leerPreparadosSinPagar, mandarAPrepararPanel,
+  type ClienteDelPanel, type EtapaPedido, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel,
 } from '@/lib/erp/cliente'
 import { useCuentaPrendida } from './CuentaCorriente'
 
@@ -59,8 +59,8 @@ const APAGADO = 'Los pedidos se manejan desde acá el día que BDI pasa al ERP. 
  * La tarjeta «Pedidos»: los entrados al ERP (el más nuevo primero) y los que llegaron con el número del chat y todavía no
  * entraron. Tocar uno abre la hoja.
  */
-export function TarjetaPedidos({ pedidos, clienteId, personaId, decir, onCambio }: {
-  pedidos: Extract<PedidosPanel, { prendido: true }>; clienteId: string | null; personaId: string | null
+export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, decir, onCambio }: {
+  pedidos: Extract<PedidosPanel, { prendido: true }>; clienteId: string | null; personaId: string | null; tel: string | null
   decir: (txt: string, mal?: boolean) => void; onCambio: () => void
 }) {
   const [abierto, setAbierto] = useState<string | null>(null)
@@ -82,6 +82,9 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, decir, onCambio 
   return (
     <section style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: `${space[2]}px ${space[3]}px ${space[3]}px`, margin: `0 ${space[2]}px ${space[2]}px` }}>
       <div style={{ ...ROTULO, marginBottom: 6 }}>Pedidos</div>
+      {!clienteId && tel && pedidos.sinEntrar.length > 0 && (
+        <ElegirCliente tel={tel} persona={pedidos.sinEntrar[0].nombre} escribir={pedidos.escribir} decir={decir} onCambio={onCambio} />
+      )}
       {pedidos.sinEntrar.map((p) => (
         <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: font.sm, padding: '4px 0' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -236,6 +239,73 @@ export function HojaPedido({ pedidoId, onCerrar, onHecho }: { pedidoId: string; 
         </div>
       )}
     </Modal>
+  )
+}
+
+/**
+ * «¿Es de un cliente que ya tenés?» (Darío §1): un pedido llegó con un número que el ERP ⛔ conoce. Se pregunta UNA vez:
+ * elegir la ficha anota el número en ella y desde ahí sus pedidos entran solos a ese cliente. «Es nuevo» crea la ficha con
+ * nombre + CUIT/DNI (Bruno 31-oct) — detrás de la llave de escribir hasta el corte de BDI.
+ */
+export function ElegirCliente({ tel, persona, escribir, decir, onCambio }: {
+  tel: string; persona: string | null; escribir: boolean; decir: (txt: string, mal?: boolean) => void; onCambio: () => void
+}) {
+  const [quien, setQuien] = useState(persona ?? '')
+  const [q, setQ] = useState('')
+  const [lista, setLista] = useState<ClienteDelPanel[] | null>(null)
+  const [nuevo, setNuevo] = useState(false)
+  const [nombre, setNombre] = useState('')
+  const [doc, setDoc] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [ocupado, setOcupado] = useState(false)
+  useEffect(() => {
+    const t = q.trim()
+    if (t.length < 2) return
+    let vivo = true
+    const espera = setTimeout(() => {
+      buscarClientesPanel(t)
+        .then((r) => { if (vivo) { setLista(r.prendido ? r.clientes : []); setError(null) } })
+        .catch((e) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudo buscar.') })
+    }, 300)
+    return () => { vivo = false; clearTimeout(espera) }
+  }, [q])
+  const vista = q.trim().length < 2 ? null : lista
+  const hacer = async (fn: () => Promise<string>) => {
+    setOcupado(true)
+    setError(null)
+    try { decir(await fn()); onCambio() } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo.') } finally { setOcupado(false) }
+  }
+  const elegir = (c: ClienteDelPanel) => void hacer(async () => {
+    await anotarWhatsappPanel({ clienteId: c.id, whatsapp: tel, nombre: quien.trim() || undefined })
+    return `Listo: este número entra solo a ${c.nombre}.`
+  })
+  const crear = () => void hacer(async () => {
+    const r = await clienteNuevoPanel({ nombre: nombre.trim(), doc: doc.trim(), whatsapp: tel, persona: quien.trim() || undefined })
+    return `Listo: ${r.cliente.nombre} está creado y este número entra solo ahí.`
+  })
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, border: `1px solid ${color.line}`, borderRadius: radius.md, padding: space[2], marginBottom: 6 }}>
+      <div style={{ fontSize: font.sm }}><b>¿Es de un cliente que ya tenés?</b> <span style={{ color: color.mut2 }}>Este número todavía no está en ningún cliente.</span></div>
+      <Field label="¿Quién es?"><Input value={quien} onChange={(e) => setQuien(e.target.value)} placeholder="Ej. Rodrigo, gerente" /></Field>
+      {error && <Notice tone="danger">{error}</Notice>}
+      {!nuevo ? (<>
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre o CUIT del cliente" aria-label="Buscar el cliente" />
+        {vista && !vista.length && !error && <div style={{ fontSize: font.xs, color: color.mut2 }}>No hay clientes con «{q.trim()}».</div>}
+        {vista?.map((c) => (
+          <Button key={c.id} size="sm" variant="outline" disabled={ocupado} onClick={() => elegir(c)}>
+            {c.nombre}{c.doc ? ` · ${c.doc}` : ''}
+          </Button>
+        ))}
+        <div><Button size="sm" variant="ghost" disabled={!escribir} title={escribir ? undefined : 'Los clientes nuevos se cargan desde acá el día que BDI pasa al ERP. Hasta entonces, en Gestión Nube.'} onClick={() => setNuevo(true)}>Es nuevo</Button></div>
+      </>) : (<>
+        <Field label="Nombre del cliente (la empresa)"><Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Celulares Rosario" /></Field>
+        <Field label="CUIT o DNI"><Input value={doc} onChange={(e) => setDoc(e.target.value)} inputMode="numeric" placeholder="30-71850818-1" /></Field>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <Button size="sm" variant="outline" onClick={() => setNuevo(false)}>Cancelar</Button>
+          <Button size="sm" variant="solid" tone="brand" disabled={!nombre.trim() || !doc.trim() || ocupado} onClick={crear}>Crear cliente</Button>
+        </div>
+      </>)}
+    </div>
   )
 }
 

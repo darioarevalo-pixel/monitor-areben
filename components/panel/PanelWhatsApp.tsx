@@ -1351,7 +1351,7 @@ function PanelInterno({
         )}
         {pedidosErp && (
           <Aislado nombre="Pedidos del ERP">
-            <TarjetaPedidos pedidos={pedidosErp} clienteId={cuenta?.cliente.id ?? null} personaId={cuenta?.delChat?.id ?? null} decir={decir} onCambio={() => { releerPedidos(); releerCuenta() }} />
+            <TarjetaPedidos pedidos={pedidosErp} clienteId={cuenta?.cliente.id ?? null} personaId={cuenta?.delChat?.id ?? null} tel={quien?.telefono ?? null} decir={decir} onCambio={() => { releerPedidos(); releerCuenta() }} />
           </Aislado>
         )}
         {/*
