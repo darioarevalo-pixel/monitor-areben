@@ -30,6 +30,9 @@ describe('conUbicacionErp (la mezcla de los lectores)', () => {
     // @ts-expect-error a propósito
     expect(() => conUbicacionErp(filas, 'zattia', undefined)).toThrow()
   })
+  it('una fila de línea cortada SIN size_id TIRA (⛔ vacía callada)', () => {
+    expect(() => conUbicacionErp([{ product_id: 2, sku: 'STU-BUZ-0008-M', store_name: 'Deposito ', observation: '7-4' }], 'zattia', erp)).toThrow(/size_id/)
+  })
   it('BDI: el Depósito Minorista', () => {
     const r = conUbicacionErp([fila(5, 1, 'BDI-1', 'Deposito Minorista', 'x')], 'bdi',
       { lineas: ['bdi'], filas: [{ deposito: 'deposito_minorista', product_id: 5, size_id: 1, texto: '2-3' }] })

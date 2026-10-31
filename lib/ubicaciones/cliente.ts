@@ -37,7 +37,7 @@ export async function cargarUbicaciones(marca: Marca): Promise<UbiProducto[]> {
     // aparece en "A reparar". `product_id,size_id` es único dentro de un depósito (verificado
     // contra la base: 2.703 renglones, 2.703 combinaciones). El orden por nombre que se ve en
     // pantalla lo pone `computarUbicaciones` al final, así que no se pierde nada.
-    fetchAll<FilaInvUbi>(cuenta, 'inventario', `select=product_id,product_name,sku,store_name,observation&store_name=eq.${encodeURIComponent(DEPOSITO[marca])}&order=product_id,size_id`),
+    fetchAll<FilaInvUbi>(cuenta, 'inventario', `select=product_id,size_id,product_name,sku,store_name,observation&store_name=eq.${encodeURIComponent(DEPOSITO[marca])}&order=product_id,size_id`),
     fetchAll<{ id: number | string }>(cuenta, 'productos', 'select=id&active=eq.1&order=id'),
   ])
   const activos = new Set(prods.map((p) => p.id))
