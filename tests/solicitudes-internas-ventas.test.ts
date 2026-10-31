@@ -28,7 +28,9 @@ describe('paridad de payload con siCrearVentas (OFFLINE, cero POST)', () => {
     const ctx = { store: 'bdi', cred: { user: 'ana', pass: 'secreta' } }
     const legacyBodies = await cargarCrearVentasBodies(S, ctx.store, ctx.cred.user, ctx.cred.pass)
     const portBodies: PedidoVenta[] = construirPedidosVenta(S, ctx)
-    expect(portBodies).toEqual(legacyBodies)
+    // Lo único agregado (30-oct, erp-stunned §8.3): `salida` dice QUÉ es, para que Stunned vaya al ERP y ⛔ a GN.
+    expect(portBodies.map(({ salida, ...resto }) => resto)).toEqual(legacyBodies)
+    expect(portBodies.map((p) => p.salida)).toEqual(portBodies.map(() => ({ kind: 'solicitudesinternas', tipo: 'consumo', motivo: 'Video/contenido' })))
   })
 
   it('un pedido por origen, comments de uso interno con motivo y tipo', () => {

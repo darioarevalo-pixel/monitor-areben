@@ -39,6 +39,11 @@ export type PedidoVenta = {
   solicitudId: string
   /** Marca la venta como técnica del Monitor → crear-venta usa el cliente propio de GN (Falla/Cambio/Canje). */
   proposito?: 'falla' | 'cambio' | 'canje'
+  /**
+   * QUÉ es la solicitud, para que Stunned vaya al ERP y ⛔ a GN (`api/crear-venta.js`, erp-stunned §8.3): fotos o retornable ⇒ salida
+   * con vuelta, consumo ⇒ ajuste. La LÍNEA la decide el servidor; sin esto, una prenda de Stunned frena.
+   */
+  salida?: { kind: 'sesionfotos' | 'solicitudesinternas'; tipo?: string; motivo?: string }
 } & Credencial
 
 /**
@@ -47,7 +52,7 @@ export type PedidoVenta = {
  * los ítems `nuevo`; internas los incluye a todos). La salida es byte-idéntica a la de
  * antes (lo verifican los tests de ventas de los dos módulos).
  */
-export function construirPedidos(s: Solicitud, ctx: CtxVenta, opts: { comments: string; incluir?: (i: ItemSolicitud) => boolean; cantidad?: (i: ItemSolicitud) => number }): PedidoVenta[] {
+export function construirPedidos(s: Solicitud, ctx: CtxVenta, opts: { comments: string; incluir?: (i: ItemSolicitud) => boolean; cantidad?: (i: ItemSolicitud) => number; salida?: PedidoVenta['salida'] }): PedidoVenta[] {
   const incluir = opts.incluir ?? (() => true)
   const cantidad = opts.cantidad ?? ((i) => i.qty)
   const origenes = (['deposito', 'local'] as Origen[]).filter((o) => s.items.some((i) => i.origen === o && incluir(i)))
@@ -57,6 +62,7 @@ export function construirPedidos(s: Solicitud, ctx: CtxVenta, opts: { comments: 
     items: s.items.filter((i) => i.origen === origen && incluir(i)).map((i) => ({ product_id: i.pid, size_id: i.sid, quantity: cantidad(i) })),
     comments: opts.comments,
     solicitudId: s.id,
+    ...(opts.salida ? { salida: opts.salida } : {}),
     ...ctx.cred,
   }))
 }
@@ -77,11 +83,15 @@ export function construirPedidosVenta(s: Solicitud, ctx: CtxVenta): PedidoVenta[
     comments: `Sesión de fotos — ${s.descripcion || ''} — solicitud ${s.id} (Monitor)`,
     incluir: (i) => !i.nuevo && preparado(s, i) > 0,
     cantidad: (i) => preparado(s, i),
+    salida: { kind: 'sesionfotos' },
   })
 }
 
-/** `erp`: la falla de Stunned, que ⛔ va a GN sino a un ajuste del ERP (`api/crear-venta.js`). */
-export type RespuestaEnvio = { ok: boolean; venta?: VentaGN; erp?: { ajuste: number; ya?: boolean }; error?: string }
+/**
+ * `erp`: lo de Stunned, que ⛔ va a GN sino al ERP (`api/crear-venta.js`): la falla y el consumo como ajuste (A-N), la sesión de fotos y
+ * la retornable como salida con vuelta (S-N). En la solicitud, la `venta` que vuelve trae `erp` (ver `VentaGN`).
+ */
+export type RespuestaEnvio = { ok: boolean; venta?: VentaGN; erp?: { ajuste?: number; salida?: number; ya?: boolean }; error?: string }
 /** Envía un pedido. Inyectable para testear la orquestación sin POST. */
 export type EnviarVenta = (pedido: PedidoVenta) => Promise<RespuestaEnvio>
 
@@ -194,7 +204,8 @@ export async function idsParaCerrarCon<T extends SolCerrable>(
   consultar: Consultar = consultarEstadoGN,
 ): Promise<string[]> {
   const incluir = opts.incluir ?? (() => true)
-  const pend = sols.filter((s) => incluir(s) && s.estado !== 'cerrada' && s.ventas && (['deposito', 'local'] as Origen[]).some((o) => s.ventas![o]?.id))
+  // 🔑 Una solicitud con algo en el ERP (Stunned, `venta.erp`) ⛔ se cierra por GN: GN ⛔ tiene esa venta y contestaría «no existe» = anulada.
+  const pend = sols.filter((s) => incluir(s) && s.estado !== 'cerrada' && s.ventas && (['deposito', 'local'] as Origen[]).some((o) => s.ventas![o]?.id) && !Object.values(s.ventas).some((v) => v?.erp))
   const cerrar: string[] = []
   await Promise.all(
     pend.map(async (s) => {

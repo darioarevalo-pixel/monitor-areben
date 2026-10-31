@@ -10,7 +10,7 @@ import { confirmar as confirmarLedger, liberar as liberarLedger, reservar as res
 import { notaTnImport } from '../lib/sync-tn/nota.core.js';
 // Cada venta que sale de acá se anota en `gn_venta_monitor` (prendas, depósito, hora, de qué flujo):
 // es lo que el libro de stock necesita para que el monitor tenga el dato sin GN. Ver api/_ventas-monitor.js.
-import { documentarCanje, fallaStunnedAlErp } from './_salida-documento.js';
+import { documentarCanje, fallaStunnedAlErp, solicitudStunnedAlErp } from './_salida-documento.js';
 import { anotar, filaDeVenta, leer as leerRegistro, marcarAnulada } from './_ventas-monitor.js';
 
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
@@ -349,6 +349,14 @@ export default async function handler(req, res) {
     const falla = await fallaStunnedAlErp({ store, b, usuario: perfil.name || perfil.user || null });
     if (falla && falla.error) return res.status(409).json({ error: `La falla es de Stunned y el ERP no la pudo descontar: ${falla.error}` });
     if (falla) return res.status(200).json({ ok: true, erp: { ajuste: falla.ajuste, ya: falla.ya } });
+    // Lo mismo para la sesión de fotos y la solicitud interna de Stunned (§8.3): salida con vuelta (o ajuste si es consumo) del ERP.
+    // La «venta» que vuelve es el documento del ERP (`erp`), para que la solicitud siga su camino sin consultarle a GN.
+    const sol = await solicitudStunnedAlErp({ store, b, usuario: perfil.name || perfil.user || null });
+    if (sol && sol.error) return res.status(409).json({ error: `La solicitud es de Stunned y el ERP no la pudo descontar: ${sol.error}` });
+    if (sol) {
+      const doc = sol.salida ? `S-${sol.salida}` : `A-${sol.ajuste}`;
+      return res.status(200).json({ ok: true, venta: { id: `erp:${doc}`, number: `ERP ${doc}`, erp: doc }, erp: sol.salida ? { salida: sol.salida, ya: sol.ya } : { ajuste: sol.ajuste, ya: sol.ya } });
+    }
   }
   // El canje se corta ACÁ si la marca no tiene cliente configurado: caer al de fotos dejaría la
   // venta atribuida a "Sesión de fotos" y GN no permite corregir eso por API.

@@ -53,11 +53,13 @@ export async function configuracionDeMarcas(marcas, { conMotor }) {
 /** Prende o apaga UNO en la base de esa marca. `body`: `{ marca, clave, valor }`. */
 export async function ponerInterruptorErp({ body, usuario }, { conMotor }) {
   const marca = String(body?.marca || '')
-  if (!['bdi', 'zattia'].includes(marca)) return { status: 400, error: 'Marca inválida' }
+  // Stunned (línea de Zattia, en su base) tiene UNA sola: la salida con vuelta mueve su libro desde que ⛔ pasa por GN (erp-stunned §8.3).
+  const stunned = marca === 'stunned' && body?.clave === 'salida_mueve_libro'
+  if (!['bdi', 'zattia'].includes(marca) && !stunned) return { status: 400, error: 'Marca inválida' }
   const { ponerInterruptor } = await importar()
   let r
   try {
-    r = await conMotor(marca, 'Los interruptores', (db) => ponerInterruptor(db, { linea: marca, clave: body.clave, valor: body.valor, usuario }))
+    r = await conMotor(stunned ? 'zattia' : marca, 'Los interruptores', (db) => ponerInterruptor(db, { linea: marca, clave: body.clave, valor: body.valor, usuario }))
   } catch (e) {
     if (e?.code === '42P01') return { status: 409, error: 'Los interruptores todavía no están en la base del motor (migración 035).' }
     if (e?.code === '23514') return { status: 409, error: 'Esa configuración todavía no está en la base del motor (migración 040).' }

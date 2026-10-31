@@ -37,7 +37,9 @@ describe('paridad de payload con sfCrearVentas (OFFLINE, cero POST)', () => {
     const ctx = { store: 'bdi', cred: { user: 'ana', pass: 'secreta' } }
     const legacyBodies = await cargarCrearVentasBodies(S, ctx.store, ctx.cred.user, ctx.cred.pass)
     const portBodies: PedidoVenta[] = construirPedidosVenta(S, ctx)
-    expect(portBodies).toEqual(legacyBodies)
+    // Lo único agregado (30-oct, erp-stunned §8.3): `salida` dice QUÉ es, para que Stunned vaya al ERP y ⛔ a GN.
+    expect(portBodies.map(({ salida, ...resto }) => resto)).toEqual(legacyBodies)
+    expect(portBodies.map((p) => p.salida)).toEqual(portBodies.map(() => ({ kind: 'sesionfotos' })))
   })
 
   it('excluye los ítems nuevo/manual y arma un pedido por origen con ítems vendibles', () => {
@@ -128,6 +130,12 @@ describe('anulaciones · ventaAnulada e idsParaCerrar', () => {
     const consultar = vi.fn(async () => ({ ok: true, existe: false }))
     const cerrar = await idsParaCerrar([sol({ id: 'x' }), sol({ id: 'y', estado: 'cerrada', ventas: { deposito: { id: 1 } } })], 'bdi', consultar)
     expect(cerrar).toEqual([])
+    expect(consultar).not.toHaveBeenCalled()
+  })
+  it('una solicitud con algo en el ERP (Stunned) ⛔ se le consulta a GN ni se cierra por «no existe»', async () => {
+    const consultar = vi.fn(async () => ({ ok: true, existe: false }))
+    const s = sol({ id: 'stu', estado: 'cargada', ventas: { deposito: { id: 'erp:S-3', number: 'ERP S-3', erp: 'S-3' } } })
+    expect(await idsParaCerrar([s], 'zattia', consultar)).toEqual([])
     expect(consultar).not.toHaveBeenCalled()
   })
 })

@@ -36,7 +36,7 @@ export function origenesVendibles(s: SolicitudInterna): Origen[] {
 
 /** Los pedidos de venta, uno por origen. Byte-idéntico al body de siCrearVentas @10961-10964. */
 export function construirPedidosVenta(s: SolicitudInterna, ctx: CtxVenta): PedidoVenta[] {
-  return construirPedidos(s, ctx, { comments: `Uso interno — ${s.motivo || ''} (${s.tipo}) — solicitud ${s.id} (Monitor)` })
+  return construirPedidos(s, ctx, { comments: `Uso interno — ${s.motivo || ''} (${s.tipo}) — solicitud ${s.id} (Monitor)`, salida: { kind: 'solicitudesinternas', tipo: s.tipo, motivo: s.motivo } })
 }
 
 /** Crea las ventas secuencialmente por origen. Delega el envío en el motor compartido. */

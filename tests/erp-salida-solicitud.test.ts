@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canjeDe, consumoDe, fallaStunnedDe, motivoDeConsumo, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
+import { canjeDe, consumoDe, fallaStunnedDe, salidasErpDe, sinOrigenesErp, solicitudStunnedDe, motivoDeConsumo, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const item = (o: Record<string, unknown>) => ({ vid: `${o.pid}_${o.sid}`, nombre: 'x', variante: 'M', sku: 'SKU', qty: 3, origen: 'deposito', ...o })
@@ -183,5 +183,73 @@ describe('la solicitud interna retornable sale con TODO su qty (no hay escaneo: 
   })
   it('la sesión de fotos sigue saliendo sólo con lo preparado', () => {
     expect(pedidoDeSolicitud('sesionfotos', sol({ verif: {} }), 'zattia')).toBeNull()
+  })
+})
+
+describe('solicitudStunnedDe: la solicitud de Stunned al ERP, ⛔ a GN (§8.3)', () => {
+  const pedido = (o: Record<string, unknown> = {}): any => ({
+    solicitudId: 'sf-9', origen: 'deposito', comments: 'Sesión de fotos — drop 2 — solicitud sf-9 (Monitor)', salida: { kind: 'sesionfotos' },
+    items: [{ product_id: 7, size_id: 70, quantity: 2 }, { product_id: 7, size_id: 71, quantity: 1 }], ...o,
+  })
+  const stu = new Map([[7, 'stunned'], [8, 'zattia']])
+  it('sesión de fotos ⇒ salida `foto` de la línea stunned, cantidades POSITIVAS, `ref` = solicitud:depósito', () => {
+    const r: any = solicitudStunnedDe(pedido(), 'zattia', stu)
+    expect([r.salida.linea, r.salida.tipo, r.salida.ref]).toEqual(['stunned', 'foto', 'sf-9:deposito'])
+    expect(r.salida.renglones.map((x: any) => [x.product_id, x.size_id, x.deposito, x.cantidad])).toEqual([[7, 70, 'deposito', 2], [7, 71, 'deposito', 1]])
+    expect(r.ajuste).toBeUndefined()
+  })
+  it('la misma variante dos veces se SUMA (el motor rechaza la prenda repetida)', () => {
+    const r: any = solicitudStunnedDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 2 }, { product_id: 7, size_id: 70, quantity: 1 }] }), 'zattia', stu)
+    expect(r.salida.renglones.map((x: any) => x.cantidad)).toEqual([3])
+  })
+  it('interna retornable ⇒ salida `interna` (o `produccion` por el motivo)', () => {
+    const r: any = solicitudStunnedDe(pedido({ salida: { kind: 'solicitudesinternas', tipo: 'retornable', motivo: 'Prueba' } }), 'zattia', stu)
+    expect(r.salida.tipo).toBe('interna')
+    const p: any = solicitudStunnedDe(pedido({ salida: { kind: 'solicitudesinternas', tipo: 'retornable', motivo: 'Muestra para producción' } }), 'zattia', stu)
+    expect(p.salida.tipo).toBe('produccion')
+  })
+  it('interna consumo ⇒ AJUSTE con el mismo `ref` que `consumoDe` (guardar ⛔ lo repite) y el motivo de consumo', () => {
+    const r: any = solicitudStunnedDe(pedido({ origen: 'local', salida: { kind: 'solicitudesinternas', tipo: 'consumo', motivo: 'Video/contenido' } }), 'zattia', stu)
+    expect([r.ajuste.linea, r.ajuste.deposito, r.ajuste.motivo, r.ajuste.ref]).toEqual(['stunned', 'local', 'consumible', 'sf-9:local'])
+    expect(r.ajuste.renglones.map((x: any) => x.cantidad)).toEqual([-2, -1])
+    expect((solicitudStunnedDe(pedido({ salida: { kind: 'solicitudesinternas', tipo: 'consumo', motivo: 'Moldería' } }), 'zattia', stu) as any).ajuste.motivo).toBe('uso_interno')
+  })
+  it('⛔ corresponde: Zattia, otra base, con propósito o acción ⇒ null (sigue a GN)', () => {
+    expect(solicitudStunnedDe(pedido({ items: [{ product_id: 8, size_id: 80, quantity: 1 }] }), 'zattia', stu)).toBeNull()
+    expect(solicitudStunnedDe(pedido(), 'bdi', stu)).toBeNull()
+    expect(solicitudStunnedDe(pedido({ proposito: 'falla' }), 'zattia', stu)).toBeNull()
+    expect(solicitudStunnedDe(pedido({ proposito: 'canje' }), 'zattia', stu)).toBeNull()
+    expect(solicitudStunnedDe(pedido({ accion: 'reingreso' }), 'zattia', stu)).toBeNull()
+  })
+  it('FRENA (⛔ cae a GN): mezcla, sin `salida` (pantalla vieja), sin id, origen raro, cantidad inválida', () => {
+    expect(solicitudStunnedDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 1 }, { product_id: 8, size_id: 80, quantity: 1 }] }), 'zattia', stu)).toHaveProperty('error')
+    expect(solicitudStunnedDe(pedido({ salida: undefined }), 'zattia', stu)).toHaveProperty('error')
+    expect(solicitudStunnedDe(pedido({ salida: { kind: 'solicitudesinternas', tipo: 'evento' } }), 'zattia', stu)).toHaveProperty('error')
+    expect(solicitudStunnedDe(pedido({ solicitudId: undefined }), 'zattia', stu)).toHaveProperty('error')
+    expect(solicitudStunnedDe(pedido({ origen: 'evento' }), 'zattia', stu)).toHaveProperty('error')
+    expect(solicitudStunnedDe(pedido({ items: [{ product_id: 7, size_id: 70, quantity: 0 }] }), 'zattia', stu)).toHaveProperty('error')
+  })
+})
+
+describe('al GUARDAR, lo que fue al ERP ⛔ se vuelve a anotar como sombra', () => {
+  const erp = { id: 'erp:S-3', number: 'ERP S-3', erp: 'S-3' }
+  it('sinOrigenesErp saca los ítems y la «venta» de los orígenes del ERP ⇒ todo en el ERP ⇒ ni salida ni consumo de sombra', () => {
+    const s = sol({ store: 'stunned', ventas: { deposito: erp, local: { id: 555 } } })
+    const g = sinOrigenesErp(s)
+    expect(Object.keys(g.ventas)).toEqual(['local'])
+    expect(g.items.map((i: any) => i.origen)).toEqual(['local'])
+    expect(pedidoDeSolicitud('sesionfotos', sinOrigenesErp(sol({ ventas: { deposito: erp, local: erp } })), 'stunned')).toBeNull()
+    expect(consumoDe('solicitudesinternas', sinOrigenesErp(sol({ tipo: 'consumo', estado: 'retirada', ventas: { deposito: erp, local: erp } })), 'stunned')).toEqual([])
+    const igual = sol()
+    expect(sinOrigenesErp(igual)).toBe(igual)
+  })
+  it('salidasErpDe: un `ref` por origen del ERP, con sólo sus ítems; el consumo ⛔ (⛔ vuelve)', () => {
+    const s = sol({ ventas: { deposito: erp, local: { id: 555 } } })
+    const r = salidasErpDe('sesionfotos', s)
+    expect(r.map((x) => [x.origen, x.ref, x.solicitud.items.length])).toEqual([['deposito', 'sf-1:deposito', 1]])
+    expect(devolverDe(r[0].solicitud, 'stunned', [{ n: 1, product_id: 1, size_id: 10, deposito: 'deposito', cantidad: 3, devuelta: 0 }], 'sesionfotos')).toEqual([])
+    const vuelto = { ...r[0].solicitud, devuelto: { '1_10': 2 } }
+    expect(devolverDe(vuelto, 'stunned', [{ n: 1, product_id: 1, size_id: 10, deposito: 'deposito', cantidad: 3, devuelta: 0 }], 'sesionfotos')).toEqual([{ n: 1, cantidad: 2 }])
+    expect(salidasErpDe('solicitudesinternas', sol({ tipo: 'consumo', ventas: { deposito: erp } }))).toEqual([])
   })
 })
