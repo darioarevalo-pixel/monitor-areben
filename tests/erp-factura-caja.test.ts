@@ -83,6 +83,11 @@ describe('puedeFacturar', () => {
     expect(puedeFacturar({ ...v, total: 0 }, h)).toMatch(/importe/)
     expect(puedeFacturar(v, { ...h, facturada: true })).toBe('La venta ya tiene factura.')
   })
+  it('frena la entera si la venta ya se factura por partes (mayoristas)', () => {
+    const h = { ambiente: 'homologacion', facturada: false }
+    expect(puedeFacturar(v, { ...h, conPartes: true })).toMatch(/por partes/)
+    expect(puedeFacturar(v, { ...h, conPartes: false })).toBeNull()
+  })
 })
 
 describe('renglonesDeVenta', () => {

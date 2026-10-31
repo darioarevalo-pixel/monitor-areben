@@ -1007,7 +1007,10 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
       if (otra) return { status: 409, error: otra }
     }
     // Con la factura ya hecha (`ya`), «ya tiene factura» ⛔ frena: se devuelve la misma (y se ata si faltaba).
-    const frena = puedeFacturar(f, { ambiente, facturada: !ya && (f?.facturas || []).some((x) => x.tipo === 'factura') })
+    // Con partes (mayoristas), la entera ⛔ sale: la misma condición que el disparador `facturas_no_pasarse`.
+    const partes = deps.tienePartes || ((k) => ventaConPartes(sb, { ambiente, marca, clave: k }))
+    const conPartes = !ya && !!f && (await partes(clave))
+    const frena = puedeFacturar(f, { ambiente, conPartes, facturada: !ya && (f?.facturas || []).some((x) => x.tipo === 'factura') })
     if (frena) return { status: f ? 409 : 404, error: frena }
     if (!ya && clave !== String(f.id)) {
       // La factura que GN ya le hizo (la cajera la facturó en el POS de GN) también cuenta.
@@ -1248,6 +1251,14 @@ export async function facturarCambio({ marca, body, usuario }, deps = {}) {
 }
 
 /** La factura (⛔ rechazada) que ya tiene esa clave en `facturas`, o null. */
+/** ¿La venta ya tiene facturas POR PARTES vivas? (la misma condición que `facturas_no_pasarse`, sql/migrate-facturas-mayorista.sql) */
+async function ventaConPartes(sb, { ambiente, marca, clave }) {
+  const { data, error } = await sb.from('facturas').select('id').eq('ambiente', ambiente).eq('marca', marca).eq('venta_ref', clave)
+    .eq('clase', 'parte').in('tipo', [CBTE.FACTURA_A, CBTE.FACTURA_B]).neq('estado', 'rechazada').limit(1)
+  if (error) throw new Error(`facturas (partes): ${error.message}`)
+  return data.length > 0
+}
+
 async function facturaDeClave(sb, { ambiente, marca, clave }) {
   const { data, error } = await sb.from('facturas').select('*').eq('ambiente', ambiente).eq('marca', marca).eq('venta_id', clave)
     .in('tipo', [CBTE.FACTURA_A, CBTE.FACTURA_B]).neq('estado', 'rechazada').order('creado_en').limit(1)
