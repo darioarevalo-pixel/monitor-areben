@@ -34,7 +34,15 @@ describe('armarFilasGastos', () => {
 
 describe('resumenGastos', () => {
   it('toma el total del motor; la comisión a mano es lo que sobra de la automática; avisa los cobros sin tasa', () => {
-    expect(resumenGastos(datos)).toEqual({ total: 1_010_000, comision: 450_000, comisionAutomatica: 412_000, comisionAMano: 38_000, impuesto: 200_000, otro: 360_000, sinComision: 3 })
+    expect(resumenGastos(datos)).toEqual({ total: 1_010_000, comision: 450_000, comisionAutomatica: 412_000, comisionAMano: 38_000, impuesto: 200_000, otro: 360_000, plataforma: 0, sinComision: 3 })
+  })
+  it('motor sql/061: el costo de Tienda Nube es su tile y su FILA automática, ⛔ dentro de las comisiones', () => {
+    const d = { ...datos, total: datos.total + 242, por_tipo: { ...datos.por_tipo, plataforma: 242 }, plataformaAutomatica: 242 }
+    const r = resumenGastos(d)
+    expect([r.plataforma, r.comision, r.total]).toEqual([242, 450_000, 1_010_242])
+    const f = armarFilasGastos(d).find((x) => x.id === 'plataforma-automatica')
+    expect(f).toMatchObject({ tipo: 'plataforma', carga: 'automatica', monto: 242 })
+    expect(armarFilasGastos(datos).some((x) => x.id === 'plataforma-automatica')).toBe(false)
   })
 })
 

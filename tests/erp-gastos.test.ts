@@ -34,12 +34,19 @@ describe('gastos comerciales (puerta del monitor)', () => {
     const r = await gastosDelPeriodo({ marca: 'zattia', desde: '2026-10-01', hasta: '2026-10-31', prueba: false }, { conMotor })
     expect(comerciales.mock.calls.map((c) => c[1].marca).sort()).toEqual(['stunned', 'zattia'])
     expect(r.total).toBe(1700.5)
-    expect(r.por_tipo).toEqual({ comision: 700.5, impuesto: 1000, otro: 0 })
+    expect(r.por_tipo).toEqual({ comision: 700.5, impuesto: 1000, otro: 0, plataforma: 0 })
     expect(r.meses).toHaveLength(1)
     expect(r.meses[0].total).toBe(1700.5)
     expect(r.comisionAutomatica).toBe(700.5)
     expect(r.cobrosSinComision).toBe(1)
     expect(r.gastos).toEqual([{ id: 'g1', fecha: '2026-10-05', tipo: 'impuesto', monto: 1000, linea: 'zattia' }])
+  })
+
+  it('motor sql/061: el costo de Tienda Nube llega en su RENGLÓN y DENTRO del total (⛔ mezclado con la comisión)', async () => {
+    comerciales.mockResolvedValue({ ...vacio, por_tipo: { comision: 1030, impuesto: 0, otro: 0, plataforma: 242 }, comision_automatica: 1030, plataforma_automatica: 242,
+      meses: [{ mes: '2026-10', total: 1272, por_tipo: { comision: 1030, impuesto: 0, otro: 0, plataforma: 242 } }] })
+    const r = await gastosDelPeriodo({ marca: 'zattia', linea: 'stunned', desde: '2026-10-01', hasta: '2026-10-31', prueba: false }, { conMotor })
+    expect([r.total, r.por_tipo.comision, r.por_tipo.plataforma, r.plataformaAutomatica, r.meses[0].por_tipo.plataforma]).toEqual([1272, 1030, 242, 242, 242])
   })
 
   it('con línea, SÓLO esa (el ERP: mirando Stunned ⛔ se ven los gastos de Zattia, Bruno 30-oct)', async () => {

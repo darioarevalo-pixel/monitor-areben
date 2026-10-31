@@ -115,6 +115,7 @@ export function GastosErp() {
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Gastos comerciales" valor={res ? pesos(res.total) : '…'} oscuro nota={`${nombrePeriodo.toLowerCase()} · ${libro} · restan en el resultado de Inicio`} />
         <TileResumen titulo="Comisiones de plataformas" valor={res ? pesos(res.comision) : '…'} nota={res ? `${pesos(res.comisionAutomatica)} salen solas de los cobros${res.comisionAMano ? ` · ${pesos(res.comisionAMano)} a mano` : ''}` : undefined} />
+        <TileResumen titulo="Costo de Tienda Nube" valor={res ? pesos(res.plataforma) : '…'} nota="sale solo de cada cobro de la tienda (con Pago Nube no cobra)" />
         <TileResumen titulo="Impuestos" valor={res ? pesos(res.impuesto) : '…'} nota="a mano: todavía no se calculan solos" />
         <TileResumen titulo="Otros gastos" valor={res ? pesos(res.otro) : '…'} nota="logística y lo demás, a mano" />
       </div>

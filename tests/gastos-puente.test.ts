@@ -40,7 +40,7 @@ describe('gastos-puente (la puerta del dashboard)', () => {
     const r = await llamar({ 'x-puente-auth': SECRETO })
     expect(r.code).toBe(200)
     expect(comerciales.mock.calls[0][1]).toMatchObject({ marca: 'bdi', prueba: false })
-    expect(r.body).toEqual({ desde: '2026-10-01', hasta: '2026-10-31', total: 10, por_tipo: { comision: 10, impuesto: 0, otro: 0 }, meses: vacio.meses, comisionAutomatica: 10, cobrosSinComision: 2 })
+    expect(r.body).toEqual({ desde: '2026-10-01', hasta: '2026-10-31', total: 10, por_tipo: { comision: 10, impuesto: 0, otro: 0, plataforma: 0 }, meses: [{ mes: '2026-10', total: 10, por_tipo: { comision: 10, impuesto: 0, otro: 0, plataforma: 0 } }], comisionAutomatica: 10, cobrosSinComision: 2 })
     expect(r.body.gastos).toBeUndefined()
   })
 
