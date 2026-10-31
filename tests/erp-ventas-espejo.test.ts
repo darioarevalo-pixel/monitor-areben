@@ -31,7 +31,7 @@ describe('ventas del ERP al espejo: el plan', () => {
   })
 
   it('⛔ escribe nada si el motor devuelve un id del rango de GN (pisaría una venta de GN)', () => {
-    expect(() => planVentasErp({ ventas: [{ id: 1560001 }], detalles: [] }, { ventas: [], detalles: [] }, COLS)).toThrow(/id de GN/)
+    expect(() => planVentasErp({ ventas: [{ id: 1560001 }], detalles: [] }, { ventas: [], detalles: [] }, COLS)).toThrow(/id de Gestión Nube/)
   })
 
   it('sin columnas ⛔ adivina', () => {
