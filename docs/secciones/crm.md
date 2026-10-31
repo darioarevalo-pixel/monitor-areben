@@ -34,6 +34,22 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   que el mismo cliente no se vea 🔥 en una pantalla y ámbar en la otra.
 - **`lib/kv/cliente.ts`** es de las 7 secciones que escriben en el KV, no del CRM.
 
+## 🔴 Lo ESCONDIDO del panel: la cuenta corriente del ERP (31-oct-2026)
+
+**Hay una cara del panel que hoy nadie ve, y ⛔ se saca.** Es la cuenta corriente de BDI en el ERP (plan «BDI directo al
+ERP», pedido de Darío del 30-oct): la franja con el saldo y «$ Cargar pago» en el encabezado oscuro, la tarjeta de compras
+con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de cargar pago y el segmento «Cuentas» de Pagos.
+- 🔑 **Se construye AL LADO de lo de Darío y se PRENDE el día que BDI pasa al ERP** (Bruno, 31-oct: antes «es basura
+  visual porque molesta y no le sirve»). El interruptor es `PANEL_CUENTA_CORRIENTE` en Vercel (`1` = todos los que tienen
+  el permiso; una lista de usuarios o mails = sólo ellos). Hoy: sólo el mail de Bruno ⇒ para el resto el panel es el de
+  siempre, y por eso **ni Darío ni su sesión lo ven en pantalla**.
+- Vive en `components/panel/CuentaCorriente.tsx`; del panel sólo hay ENGANCHES: en `PanelWhatsApp.tsx` (`useCuentaPanel`,
+  `FranjaCuenta`, `TarjetaCuenta`, `HojaCargarPago`) y en `Pagos.tsx` (`useCuentaPrendida`, `ListaCuentas`). Al
+  reordenar el panel, **los enganches se mueven con su bloque, ⛔ se borran**: `tests/panel-cuenta-enganche.test.ts` falla
+  si falta uno.
+- Servidor: la vista `cuenta-panel` y las acciones `anotar-whatsapp` / `sacar-whatsapp` de `api/_erp-clientes.js`
+  (permiso `cuentas`); el pago es el mismo `cobrar-cuenta` de ERP › Clientes. Lee el libro de PRUEBA hasta el corte.
+
 ## Reglas que el código no dice
 
 - 🔴 **La clave `crm:seg:bdi` no tiene backup en ningún lado.** Son 305 clientes, 274 ★ y las notas

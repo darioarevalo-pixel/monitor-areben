@@ -10,6 +10,11 @@ contador, el abogado) o a una **cuenta nuestra para algo puntual** (la cuota del
 transferencia se cancelan las dos deudas. Lo que faltaba registrar es el rato del medio: quién
 prometió, cuánto, a qué cuenta, y si ya pasó.
 
+
+> 🔴 **31-oct-2026 · `components/panel/Pagos.tsx` tiene un TERCER segmento ESCONDIDO, «Cuentas»** (la cuenta corriente de
+> BDI en el ERP): aparece sólo con `PANEL_CUENTA_CORRIENTE` prendido para quien mira, y se abre a todos el día que BDI pasa
+> al ERP. ⛔ se saca al tocar el control de segmentos: ver `docs/secciones/crm.md` § Lo ESCONDIDO del panel.
+
 ## Dónde vive
 
 - Pantalla: `components/acreedores/` — `Acreedores.tsx` (los del dashboard) ·
