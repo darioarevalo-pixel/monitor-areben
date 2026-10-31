@@ -1,15 +1,17 @@
 /**
- * Liquidación → ERP → Tienda Nube, la parte que habla con las bases (Stunned; Bruno 30-oct). La regla, en
- * `lib/liquidacion/erp.core.js`. Lo llama `api/_liquidacion.js` (`aplicar` y `releer-erp`); ⛔ es una ruta.
+ * Liquidación → ERP → Tienda Nube, la parte que habla con las bases (Stunned 30-oct; toda línea por su corte, 31-oct). La regla,
+ * en `lib/liquidacion/erp.core.js`. Lo llama `api/_liquidacion.js` (`aplicar` y `releer-erp`); ⛔ es una ruta.
  *
- * 🔑 Dos bases: la carga va a la del motor de Zattia (Stunned vive adentro, `marca = 'stunned'`), y el aviso a la cola, que
- * vive en la de BDI para las tres tiendas (como el botón de stock, `api/_erp-empuje-stock.js`).
+ * 🔑 Dos bases: la carga va a la del motor de la LÍNEA (`baseDeLinea`: BDI en la de BDI; Zattia y Stunned en la de Zattia,
+ * `marca = <línea>`), y el aviso a la cola, que vive en la de BDI para las tres tiendas (como el botón de stock,
+ * `api/_erp-empuje-stock.js`), con `clave = <línea>`.
  */
 import { configPg } from '../lib/pg.core.js';
-import { cargaDeCampania, motivoDeCampania, TIENDA_ERP, TRABAJO_PRECIO } from '../lib/liquidacion/erp.core.js';
+import { cargaDeCampania, motivoDeCampania, TRABAJO_PRECIO } from '../lib/liquidacion/erp.core.js';
+import { baseDeLinea } from '../lib/lineas.core.js';
 
 const PG_DE_MARCA = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' };
-const SIN_MOTOR = 'La campaña de Stunned va por el ERP y falta la conexión del motor en Vercel: no se tocó nada.';
+const SIN_MOTOR = 'La campaña va por el ERP y falta la conexión del motor en Vercel: no se tocó nada.';
 
 /** Abre la conexión del motor de esa base, corre `fn(db)` y la cierra. Sin la variable tira con el texto para la pantalla. */
 export async function conMotor(base, fn) {
@@ -26,17 +28,19 @@ export async function conMotor(base, fn) {
 }
 
 /**
- * CARGA la oferta de cada producto en el ERP (todo o nada) y avisa el envío a TN.
- * @param {{ liqId: string, liqNombre: string, modo: 'poner'|'sacar', destino: 'lista'|'previa', usuario: string,
+ * CARGA la oferta de cada producto de UNA línea en el ERP (todo o nada) y avisa el envío a la tienda de esa línea en TN.
+ * @param {{ marca: 'bdi'|'zattia'|'stunned', liqId: string, liqNombre: string, modo: 'poner'|'sacar', destino: 'lista'|'previa', usuario: string,
  *   items: Array<{ pid: string, precioSale: number|null, promoPrevia: number|null }> }} p
  * @returns {Promise<{ resultados: Array<{ pid: string, ok: boolean, valor?: number, quiere?: number|null, error?: string }>, pedidoEn: string|null }>}
  */
-export async function pedirAlErp({ liqId, liqNombre, modo, destino, usuario, items }, deps = { conMotor }) {
+export async function pedirAlErp({ marca, liqId, liqNombre, modo, destino, usuario, items }, deps = { conMotor }) {
+  const base = baseDeLinea(marca);
+  if (!base) throw new Error(`pedirAlErp: línea desconocida «${marca}»`);
   const quien = String(usuario || 'monitor');
-  const r = await deps.conMotor('zattia', async (db) => {
+  const r = await deps.conMotor(base, async (db) => {
     const { rows } = await db.query(
       `select product_id, precio from precio_lista where marca = $1 and lista = 'online' and product_id = any($2::bigint[])`,
-      [TIENDA_ERP, items.map((i) => Number(i.pid))],
+      [marca, items.map((i) => Number(i.pid))],
     );
     const lista = new Map(rows.map((f) => [String(f.product_id), f.precio == null ? null : Number(f.precio)]));
     const planes = items.map((i) => ({ pid: i.pid, ...cargaDeCampania({ modo, destino, precioSale: i.precioSale, promoPrevia: i.promoPrevia, listaErp: lista.get(i.pid) }) }));
@@ -46,7 +50,7 @@ export async function pedirAlErp({ liqId, liqNombre, modo, destino, usuario, ite
     await db.query('begin');
     try {
       for (const p of buenos) {
-        const c = await cargarPrecio(db, { marca: TIENDA_ERP, product_id: Number(p.pid), lista: 'oferta', precio: p.valor, usuario: quien, motivo: motivoDeCampania(liqId, liqNombre) });
+        const c = await cargarPrecio(db, { marca, product_id: Number(p.pid), lista: 'oferta', precio: p.valor, usuario: quien, motivo: motivoDeCampania(liqId, liqNombre) });
         if (!c.ok) throw new Error(`producto ${p.pid}: ${c.error?.mensaje || 'el ERP no lo aceptó'}`);
       }
       const { rows: [ahora] } = await db.query('select now() as t');
@@ -60,7 +64,7 @@ export async function pedirAlErp({ liqId, liqNombre, modo, destino, usuario, ite
   if (r.pedidoEn) {
     await deps.conMotor('bdi', async (db) => {
       const { avisar } = await import('../motor/evento.mjs');
-      await avisar(db, { tipo: TRABAJO_PRECIO, clave: TIENDA_ERP, origen: `liquidacion:${quien}`.slice(0, 60) });
+      await avisar(db, { tipo: TRABAJO_PRECIO, clave: marca, origen: `liquidacion:${quien}`.slice(0, 60) });
     });
   }
   return {
@@ -69,23 +73,23 @@ export async function pedirAlErp({ liqId, liqNombre, modo, destino, usuario, ite
   };
 }
 
-/** Los últimos envíos de precio de Stunned de la cola (el más nuevo primero), con lo que releyeron de TN. */
-export async function eventosDePrecio(deps = { conMotor }) {
+/** Los últimos envíos de precio de esa línea de la cola (el más nuevo primero), con lo que releyeron de TN. */
+export async function eventosDePrecio(marca, deps = { conMotor }) {
   return deps.conMotor('bdi', async (db) => {
     const { rows } = await db.query(
       `select id, estado, tomado_en, terminado_en, error, resultado from motor_evento where tipo = $1 and clave = $2 order by id desc limit 20`,
-      [TRABAJO_PRECIO, TIENDA_ERP],
+      [TRABAJO_PRECIO, marca],
     );
     const iso = (t) => (t ? new Date(t).toISOString() : null);
     return rows.map((e) => ({ ...e, id: Number(e.id), tomado_en: iso(e.tomado_en), terminado_en: iso(e.terminado_en) }));
   });
 }
 
-/** Pide otro envío de precio de Stunned (el que relee TN). La cola junta los avisos: dos pedidos seguidos son UNO. */
-export async function pedirRelectura(usuario, deps = { conMotor }) {
+/** Pide otro envío de precio de esa línea (el que relee TN). La cola junta los avisos: dos pedidos seguidos son UNO. */
+export async function pedirRelectura(usuario, marca, deps = { conMotor }) {
   return deps.conMotor('bdi', async (db) => {
     const { avisar } = await import('../motor/evento.mjs');
-    return avisar(db, { tipo: TRABAJO_PRECIO, clave: TIENDA_ERP, origen: `liquidacion-releer:${usuario || 'monitor'}`.slice(0, 60) });
+    return avisar(db, { tipo: TRABAJO_PRECIO, clave: marca, origen: `liquidacion-releer:${usuario || 'monitor'}`.slice(0, 60) });
   });
 }
 

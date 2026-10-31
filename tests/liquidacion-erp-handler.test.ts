@@ -65,6 +65,11 @@ vi.mock('../api/_liquidacion-erp.js', () => ({
   lineasDe: async (_st: unknown, pids: string[]) => new Map(pids.map((p) => [p, p === '7' ? 'stunned' : 'zattia'])),
 }))
 
+let cortes: Record<string, string> | Error = { stunned: '2026-10-28T23:00:00.000Z' }
+vi.mock('../api/_caja-corte.js', () => ({
+  cortesDeCaja: async () => { if (cortes instanceof Error) throw cortes; return cortes },
+}))
+
 async function llamar(req: unknown) {
   const mod = await import(/* @vite-ignore */ '@/api/_liquidacion.js')
   const res = resFalso()
@@ -87,6 +92,7 @@ beforeEach(() => {
   pedirAlErp.mockReset()
   eventosDePrecio.mockReset()
   pedirRelectura.mockReset()
+  cortes = { stunned: '2026-10-28T23:00:00.000Z' }
   process.env.ZATTIA_SUPABASE_URL = 'https://zattia.supabase.co'
   process.env.ZATTIA_SUPABASE_SERVICE_KEY = 'clave'
   process.env.GN_TOKEN_ZATTIA = 'token-gn'
@@ -105,10 +111,36 @@ describe('aplicar: Stunned va por el ERP', () => {
     expect(pedidosFetch.some((u) => /gestionnube|api\.gn/i.test(u))).toBe(false)
     expect(pedirAlErp.mock.calls[0][0]).toMatchObject({ liqId: 'c1', liqNombre: 'CYBER STUNNED · Drop 2', modo: 'poner', items: [{ pid: '7', precioSale: 31990 }] })
     const upd = pasosDe('liquidacion_items', 'update')[0].pasos.find((p) => p.startsWith('update'))!
-    expect(upd).toContain('"erp":{"modo":"poner","valor":31990,"quiere":31990,"pedidoEn":"2026-11-01T10:00:00.000Z","por":"Bruno"}')
+    expect(pedirAlErp.mock.calls[0][0].marca).toBe('stunned')
+    expect(upd).toContain('"erp":{"marca":"stunned","modo":"poner","valor":31990,"quiere":31990,"pedidoEn":"2026-11-01T10:00:00.000Z","por":"Bruno"}')
     expect(upd).toMatch(/^update\(\{"datos":/)
     expect(upd).not.toContain('"estado":"aplicado"')
     expect(pasosDe('liquidacion_bitacora', 'insert')).toHaveLength(0)
+  })
+  it('🔑 Zattia que ya CORTÓ también va por el ERP, UN pedido por línea (cada una su cola)', async () => {
+    cortes = { stunned: '2026-10-28T23:00:00.000Z', zattia: '2026-10-30T03:00:00.000Z' }
+    const z = { ...item('confirmado'), pid: '8' }
+    filasPorTabla = { liquidacion_items: [item('confirmado'), z], liquidaciones: [{ nombre: 'CYBER' }], liquidacion_bitacora: [] }
+    pedirAlErp.mockImplementation(async ({ items }: { items: { pid: string }[] }) => ({ pedidoEn: '2026-11-01T10:00:00.000Z', resultados: items.map((i) => ({ pid: i.pid, ok: true, valor: 31990, quiere: 31990 })) }))
+    const res = await llamar(post({ action: 'aplicar', pids: ['7', '8'], modo: 'poner' }))
+    expect(res.code).toBe(200)
+    expect(pedirAlErp.mock.calls.map((c) => [c[0].marca, c[0].items.map((i: { pid: string }) => i.pid)])).toEqual([['stunned', ['7']], ['zattia', ['8']]])
+    expect(pedidosFetch.some((u) => /gestionnube|api\.gn/i.test(u))).toBe(false)
+  })
+  it('Zattia SIN corte sigue por Gestión Nube (⛔ va al ERP)', async () => {
+    const z = { ...item('confirmado'), pid: '8' }
+    filasPorTabla = { liquidacion_items: [z], liquidaciones: [{ nombre: 'CYBER' }], liquidacion_bitacora: [] }
+    await llamar(post({ action: 'aplicar', pids: ['8'], modo: 'poner' }))
+    expect(pedirAlErp).not.toHaveBeenCalled()
+    expect(pedidosFetch.some((u) => /productos\/8/.test(u))).toBe(true)
+  })
+  it('🔴 sin poder leer los cortes: ⛔ GN ni ERP, error', async () => {
+    cortes = new Error('Falta la tabla erp_corte')
+    filasPorTabla = { liquidacion_items: [{ ...item('confirmado'), pid: '8' }], liquidaciones: [{ nombre: 'CYBER' }], liquidacion_bitacora: [] }
+    const res = await llamar(post({ action: 'aplicar', pids: ['8'], modo: 'poner' }))
+    expect(res.code).toBeGreaterThanOrEqual(500)
+    expect(pedirAlErp).not.toHaveBeenCalled()
+    expect(pedidosFetch.some((u) => /productos\/8/.test(u))).toBe(false)
   })
 })
 
@@ -133,6 +165,9 @@ describe('releer-erp: recién con la relectura de TN', () => {
     const res = await llamar(post({ action: 'releer-erp' }))
     expect(res.body).toMatchObject({ quedaron: [], esperando: ['7'], repedido: true })
     expect(pedirRelectura).toHaveBeenCalledTimes(1)
+    // El pedido de antes del 31-oct ⛔ trae `marca`: era de Stunned ⇒ su cola.
+    expect(eventosDePrecio.mock.calls[0][0]).toBe('stunned')
+    expect(pedirRelectura.mock.calls[0][1]).toBe('stunned')
     expect(pasosDe('liquidacion_bitacora', 'insert')).toHaveLength(0)
     expect(pasosDe('liquidacion_items', 'update')).toHaveLength(0)
   })

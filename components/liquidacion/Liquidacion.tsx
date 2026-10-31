@@ -61,7 +61,7 @@ import {
   decidirMasivo, estadoItem, guardarItem, leerCampanias, leerItems, quitarItem, releerErp, renombrarCampania,
   revisarItem, type Permisos,
 } from '@/lib/liquidacion/persistencia'
-import { esStunned } from '@/lib/lineas'
+import { lineaDe } from '@/lib/lineas'
 import { ponerPuenteAsignar } from '@/lib/tncat/puente'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useDestacados } from '@/components/destacados/useDestacados'
@@ -652,15 +652,20 @@ function DetalleCampania({
   const [fallidos, setFallidos] = useState<{ pid: string; error: string }[]>([])
   // Stunned: cuántos esperan que Tienda Nube muestre lo pedido al ERP (null = ninguno o sin leer).
   const [esperandoTN, setEsperandoTN] = useState<number | null>(null)
+  // Las líneas de esta base que ya pasaron al ERP (`erp_corte`); null = no se pudieron leer.
+  const [erpLineas, setErpLineas] = useState<string[] | null>(null)
   /** Los masivos que sólo tocan nuestra base (confirmar todos, recalcular precios). */
   const [ocupadoMasivo, setOcupadoMasivo] = useState(false)
 
   const cargar = useCallback(async () => {
     setError(null)
     try {
-      setItems(await leerItems(marca, campania.id))
+      const r = await leerItems(marca, campania.id)
+      setItems(r.items)
+      setErpLineas(r.erpLineas)
     } catch (e) {
       setItems([])
+      setErpLineas(null)
       setError(e instanceof Error ? e.message : 'No se pudieron leer los productos.')
     }
   }, [marca, campania.id])
@@ -694,9 +699,10 @@ function DetalleCampania({
     })()
   }, [hayPedidosErp, puede.aplicar, releerTN])
 
-  // A dónde escribe «Aplicar»: Stunned ya ⛔ pasa por Gestión Nube (corte del 28-oct).
-  const porErp = (items || []).some((i) => esStunned(i.foto.sku))
-  const destinoTienda = porErp ? 'Tienda Nube' : 'Gestión Nube'
+  // A dónde escribe «Aplicar»: la línea que ya CORTÓ (`erp_corte`) va por el ERP a Tienda Nube; la otra, por Gestión Nube.
+  // Sin los cortes (null) ⛔ se afirma ninguno de los dos.
+  const porErp = !!erpLineas && (items || []).some((i) => erpLineas.includes(lineaDe(marca, i.foto.sku)))
+  const destinoTienda = erpLineas == null ? 'la tienda' : porErp ? 'Tienda Nube' : 'Gestión Nube'
 
   // Qué clase de cambio de precio es: manda los rótulos y apaga los avisos que no aplican.
   const tipo = tipoDe(campania)

@@ -56,12 +56,15 @@ export async function leerCampanias(store: Marca): Promise<{
   }
 }
 
-/** Los ítems de una campaña, con la foto congelada de cada producto. */
-export async function leerItems(store: Marca, liqId: string): Promise<LiquidacionItem[]> {
+/**
+ * Los ítems de una campaña, con la foto congelada de cada producto, y las líneas de la base que ya pasaron al ERP
+ * (`erp_corte`): ésas escriben en Tienda Nube por el ERP. `erpLineas = null` = no se pudieron leer los cortes.
+ */
+export async function leerItems(store: Marca, liqId: string): Promise<{ items: LiquidacionItem[]; erpLineas: string[] | null }> {
   const r = await apiFetch(`${API}&store=${store}&liq=${encodeURIComponent(liqId)}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer los productos de la campaña.')
-  return (d.items || []) as LiquidacionItem[]
+  return { items: (d.items || []) as LiquidacionItem[], erpLineas: Array.isArray(d.erpLineas) ? (d.erpLineas as string[]) : null }
 }
 
 /** Lo que la campaña tiene, en dos columnas: qué pid ya está y en qué estado quedó. */

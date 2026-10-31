@@ -62,7 +62,9 @@ import { TIPOS_CAMPANIA, tipoDe } from '../lib/liquidacion/tipo.core.js';
 // la otra todavía no aprobó.
 import { ESTADOS_VISIBLES, esFirme } from '../lib/precios/core.core.js';
 import { lineaDelProducto } from '../lib/erp/precio.core.js';
-import { estadoDePedidos, hayQueRepedir, vaPorErp } from '../lib/liquidacion/erp.core.js';
+import { estadoDePedidos, hayQueRepedir, marcaDelPedido, vaPorErp } from '../lib/liquidacion/erp.core.js';
+import { lineasEnErp } from '../lib/erp/corte.core.js';
+import { cortesDeCaja } from './_caja-corte.js';
 import { eventosDePrecio, lineasDe, pedirAlErp, pedirRelectura } from './_liquidacion-erp.js';
 // El diseño de la etiqueta de la campaña: qué va debajo del precio y de qué tamaño. Lista blanca,
 // porque esto se DIBUJA en un PDF y un objeto crudo del navegador se ve recién en la Zebra.
@@ -306,8 +308,9 @@ export function itemDelBody(raw) {
       precioEscrito: a.precioEscrito == null ? null : num(a.precioEscrito),
       variantesEscritas: a.variantesEscritas == null ? null : num(a.variantesEscritas),
       categoriaSaleAgregada: !!a.categoriaSaleAgregada,
-      // Stunned: lo pedido al ERP que TN todavía ⛔ confirmó (`lib/liquidacion/erp.core.js`). Sin esto `aplicar` lo borra.
+      // Línea cortada: lo pedido al ERP que TN todavía ⛔ confirmó (`lib/liquidacion/erp.core.js`). Sin esto `aplicar` lo borra.
       erp: a.erp && a.erp.pedidoEn ? {
+        marca: marcaDelPedido(a.erp),
         modo: a.erp.modo === 'sacar' ? 'sacar' : 'poner',
         valor: num(a.erp.valor),
         quiere: a.erp.quiere == null ? null : num(a.erp.quiere),
@@ -707,7 +710,11 @@ export default async function handler(req, res) {
         const { data, error } = await supabase.from('liquidacion_items')
           .select('datos, created_at').eq('store', store).eq('liq_id', liq);
         if (error) throw new Error(error.message);
-        return res.status(200).json({ ok: true, items: (data || []).map((r) => ({ ...r.datos, entro: r.created_at || null })), puede });
+        // Las líneas de esta base que ya cortaron: la pantalla dice a dónde escribe «Aplicar» (TN por el ERP o GN). Sin
+        // poder leer los cortes va `null` y la pantalla ⛔ afirma ninguno de los dos (el `aplicar` mismo TIRA en ese caso).
+        let erpLineas = null;
+        try { erpLineas = lineasEnErp(await cortesDeCaja(store), store); } catch (e) { console.warn(`[liquidacion] erp_corte de ${store}: ${String((e && e.message) || e).slice(0, 120)}`); }
+        return res.status(200).json({ ok: true, items: (data || []).map((r) => ({ ...r.datos, entro: r.created_at || null })), erpLineas, puede });
       }
 
       const [c, i] = await Promise.all([
@@ -1272,11 +1279,17 @@ export default async function handler(req, res) {
         .map((f) => ({ fila: f, item: itemDelBody({ ...(f.datos || {}), pid: f.pid, estado: f.estado }) }))
         .filter((x) => x.item && x.item.aplicacion.erp);
       if (!pedidos.length) return res.status(200).json({ ok: true, quedaron: [], esperando: [], fallos: [] });
-      const eventos = await eventosDePrecio();
-      const estados = estadoDePedidos(pedidos.map((x) => ({ pid: x.item.pid, pedidoEn: x.item.aplicacion.erp.pedidoEn, quiere: x.item.aplicacion.erp.quiere })), eventos);
-      // Lo que espera con la cola quieta: se pide otro envío, que relee TN (también lo que escribió el cron de 2 h).
-      const repedido = hayQueRepedir(estados.some((e) => e.estado === 'esperando'), eventos);
-      if (repedido) await pedirRelectura(yo);
+      // Cada línea tiene su cola (`clave` = la tienda): una campaña de Zattia puede tener Stunned y Zattia adentro.
+      const estados = [];
+      let repedido = false;
+      for (const marca of [...new Set(pedidos.map((x) => x.item.aplicacion.erp.marca))]) {
+        const deLinea = pedidos.filter((x) => x.item.aplicacion.erp.marca === marca);
+        const eventos = await eventosDePrecio(marca);
+        const est = estadoDePedidos(deLinea.map((x) => ({ pid: x.item.pid, pedidoEn: x.item.aplicacion.erp.pedidoEn, quiere: x.item.aplicacion.erp.quiere })), eventos);
+        estados.push(...est);
+        // Lo que espera con la cola quieta: se pide otro envío, que relee TN (también lo que escribió el cron de 2 h).
+        if (hayQueRepedir(est.some((e) => e.estado === 'esperando'), eventos)) { await pedirRelectura(yo, marca); repedido = true; }
+      }
       const { data: cab, error: eC } = await supabase.from('liquidaciones').select('nombre').eq('store', store).eq('id', id).maybeSingle();
       if (eC) throw new Error(eC.message);
       const liqNombre = (cab && cab.nombre) || '';
@@ -1353,26 +1366,29 @@ export default async function handler(req, res) {
       const ahoraMs = Date.now();
       const resultados = [];
 
-      // ── Stunned: por el ERP, ⛔ por GN (Bruno 30-oct, `lib/liquidacion/erp.core.js`). ─────────────────────────────
+      // ── Línea que ya CORTÓ (`erp_corte`): por el ERP, ⛔ por GN (Stunned 30-oct; BDI y Zattia desde su corte). ─────────
       // Se CARGA la oferta en el ERP y se avisa el envío a TN; el ítem queda como estaba, con el pedido anotado, hasta
       // que `releer-erp` lea en la cola que TN quedó así. La bitácora y el estado, recién ahí.
+      // 🔴 Sin saber los cortes ⛔ se elige camino: `cortesDeCaja` usa la última lectura buena y, sin ninguna, TIRA.
       const porGn = [];
       const porErp = [];
       const lineas = await lineasDe(store, pids, lineaDelProducto);
+      const cortes = await cortesDeCaja(store);
       for (const pid of pids) {
         const fila = (filas || []).find((f) => String(f.pid) === pid);
-        if (!fila || !vaPorErp(lineas.get(pid))) { porGn.push(pid); continue; }
+        if (!fila || !vaPorErp(cortes, lineas.get(pid))) { porGn.push(pid); continue; }
         const item = itemDelBody({ ...(fila.datos || {}), pid, estado: fila.estado });
         if (modo === 'poner' && fila.estado !== 'confirmado') { resultados.push({ pid, ok: false, error: `está en «${fila.estado}», no confirmado` }); continue; }
         if (modo === 'sacar' && fila.estado !== 'aplicado') { resultados.push({ pid, ok: false, error: `está en «${fila.estado}», no aplicado` }); continue; }
-        porErp.push({ pid, item, precioSale: item.decision.precioSale, promoPrevia: item.foto.promoPrevia });
+        porErp.push({ pid, marca: lineas.get(pid), item, precioSale: item.decision.precioSale, promoPrevia: item.foto.promoPrevia });
       }
-      if (porErp.length) {
-        const r = await pedirAlErp({ liqId: id, liqNombre, modo, destino, usuario: yo, items: porErp });
+      for (const marca of [...new Set(porErp.map((i) => i.marca))]) {
+        const deLinea = porErp.filter((i) => i.marca === marca);
+        const r = await pedirAlErp({ marca, liqId: id, liqNombre, modo, destino, usuario: yo, items: deLinea });
         for (const x of r.resultados) {
           if (!x.ok) { resultados.push({ pid: x.pid, ok: false, error: x.error }); continue; }
           const { item } = porErp.find((i) => i.pid === x.pid);
-          const nuevo = { ...item, aplicacion: { ...item.aplicacion, erp: { modo, valor: x.valor, quiere: x.quiere, pedidoEn: r.pedidoEn, por: yo } } };
+          const nuevo = { ...item, aplicacion: { ...item.aplicacion, erp: { marca, modo, valor: x.valor, quiere: x.quiere, pedidoEn: r.pedidoEn, por: yo } } };
           const { error: eU } = await supabase.from('liquidacion_items')
             .update({ datos: nuevo, updated_at: new Date().toISOString() })
             .eq('store', store).eq('liq_id', id).eq('pid', x.pid);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cargaDeCampania, estadoDePedidos, hayQueRepedir, motivoDeCampania, MOTIVO_CAMPANIA, REPEDIR_MS, vaPorErp } from '../lib/liquidacion/erp.core.js'
+import { cargaDeCampania, estadoDePedidos, hayQueRepedir, marcaDelPedido, motivoDeCampania, MOTIVO_CAMPANIA, REPEDIR_MS, vaPorErp } from '../lib/liquidacion/erp.core.js'
 import { lineasDe, pedirAlErp } from '../api/_liquidacion-erp.js'
 import { lineaDelProducto } from '../lib/erp/precio.core.js'
 
@@ -26,8 +26,26 @@ describe('cargaDeCampania: qué oferta se carga en el ERP y qué promocional tie
 it('el motivo empieza con el prefijo que lee el motor y el id de la campaña', () => {
   expect(MOTIVO_CAMPANIA).toBe('campaña:')
   expect(motivoDeCampania('l1793370383592_hsuhtr', 'CYBER STUNNED · Drop 2')).toBe('campaña:l1793370383592_hsuhtr CYBER STUNNED · Drop 2')
-  expect(vaPorErp('stunned')).toBe(true)
-  expect(vaPorErp('zattia')).toBe(false)
+})
+
+describe('vaPorErp: va por el ERP la línea que ya CORTÓ (`erp_corte`), ⛔ una constante de Stunned', () => {
+  const ahora = new Date('2026-11-20T12:00:00Z')
+  const cortes = { stunned: '2026-10-28T23:00:00.000Z', bdi: '2026-11-16T03:00:00.000Z' }
+  it('cortada y con el instante pasado ⇒ ERP; sin corte o antes del instante ⇒ GN', () => {
+    expect(vaPorErp(cortes, 'stunned', ahora)).toBe(true)
+    expect(vaPorErp(cortes, 'bdi', ahora)).toBe(true)
+    expect(vaPorErp(cortes, 'zattia', ahora)).toBe(false)
+    expect(vaPorErp(cortes, 'bdi', new Date('2026-11-15T12:00:00Z'))).toBe(false)
+  })
+  it('🔴 sin los cortes TIRA (⛔ elige GN callado)', () => {
+    // @ts-expect-error — a propósito
+    expect(() => vaPorErp(undefined, 'stunned')).toThrow(/erp_corte/)
+  })
+  it('el pedido viejo sin `marca` era de Stunned', () => {
+    expect(marcaDelPedido({ pedidoEn: 'x' })).toBe('stunned')
+    expect(marcaDelPedido({ marca: 'bdi' })).toBe('bdi')
+    expect(marcaDelPedido({ marca: 'otra' })).toBe('stunned')
+  })
 })
 
 describe('estadoDePedidos: la campaña lee la RELECTURA de TN que hizo la cola', () => {
@@ -80,7 +98,7 @@ describe('pedirAlErp: carga TODO o nada en el ERP y recién ahí avisa el envío
     const zat: string[] = []; const bdi: string[] = []
     const bases: Record<string, ReturnType<typeof dbFalsa>> = { zattia: dbFalsa(zat), bdi: dbFalsa(bdi) }
     const r = await pedirAlErp(
-      { liqId: 'c1', liqNombre: 'CYBER', modo: 'poner', destino: 'lista', usuario: 'Bruno', items: [{ pid: '7', precioSale: 31990, promoPrevia: null }, { pid: '9', precioSale: 1000, promoPrevia: null }] },
+      { marca: 'stunned', liqId: 'c1', liqNombre: 'CYBER', modo: 'poner', destino: 'lista', usuario: 'Bruno', items: [{ pid: '7', precioSale: 31990, promoPrevia: null }, { pid: '9', precioSale: 1000, promoPrevia: null }] },
       { conMotor: async (base: string, fn: (db: unknown) => unknown) => fn(bases[base]) },
     )
     expect(r.pedidoEn).toBe('2026-11-01T10:00:00.000Z')
@@ -93,11 +111,30 @@ describe('pedirAlErp: carga TODO o nada en el ERP y recién ahí avisa el envío
     const zat: string[] = []; const bdi: string[] = []
     const bases: Record<string, ReturnType<typeof dbFalsa>> = { zattia: dbFalsa(zat, { falla: true }), bdi: dbFalsa(bdi) }
     await expect(pedirAlErp(
-      { liqId: 'c1', liqNombre: '', modo: 'poner', destino: 'lista', usuario: 'Bruno', items: [{ pid: '7', precioSale: 31990, promoPrevia: null }, { pid: '8', precioSale: 20000, promoPrevia: null }] },
+      { marca: 'stunned', liqId: 'c1', liqNombre: '', modo: 'poner', destino: 'lista', usuario: 'Bruno', items: [{ pid: '7', precioSale: 31990, promoPrevia: null }, { pid: '8', precioSale: 20000, promoPrevia: null }] },
       { conMotor: async (base: string, fn: (db: unknown) => unknown) => fn(bases[base]) },
     )).rejects.toThrow(/base caída/)
     expect(zat).toContain('rollback')
     expect(bdi).toEqual([])
+  })
+  it('BDI: la carga va a la base de BDI con `marca = bdi`, y el aviso a la cola con `clave = bdi`', async () => {
+    const zat: string[] = []; const params: unknown[][] = []
+    const bdiDb = { query: async (sql: string, p?: unknown[]) => { params.push([sql.trim().slice(0, 40), ...(p || [])]); return dbFalsa([]).query(sql, p) } }
+    const bases: Record<string, unknown> = { zattia: dbFalsa(zat), bdi: bdiDb }
+    const r = await pedirAlErp(
+      { marca: 'bdi', liqId: 'c1', liqNombre: 'CYBER', modo: 'poner', destino: 'lista', usuario: 'Bruno', items: [{ pid: '7', precioSale: 31990, promoPrevia: null }] },
+      { conMotor: async (base: string, fn: (db: unknown) => unknown) => fn(bases[base]) },
+    )
+    expect(r.resultados).toEqual([{ pid: '7', ok: true, valor: 31990, quiere: 31990 }])
+    expect(zat).toEqual([])
+    expect(params.find((x) => /from precio_lista/.test(String(x[0])) || /select product_id, precio/.test(String(x[0])))?.[1]).toBe('bdi')
+    expect(params.some((x) => /insert into motor_evento/.test(String(x[0])) && x.includes('bdi'))).toBe(true)
+  })
+  it('una línea desconocida TIRA antes de tocar una base', async () => {
+    await expect(pedirAlErp(
+      { marca: 'otra' as 'bdi', liqId: 'c1', liqNombre: '', modo: 'poner', destino: 'lista', usuario: 'B', items: [] },
+      { conMotor: async () => { throw new Error('⛔ base') } },
+    )).rejects.toThrow(/línea desconocida/)
   })
 })
 

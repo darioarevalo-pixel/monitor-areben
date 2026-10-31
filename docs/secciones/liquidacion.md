@@ -121,15 +121,20 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
   📌 Van en la pestaña **Productos** y ⛔ no en Revisión: es acá donde se elige *qué* se confirma, y
   «Marcar los N que se ven» trabaja sobre lo que el filtro deja a la vista ⇒ filtrar una mesa y
   confirmarla entera **ya es una tanda**.
-- 🆕 🔴 **Stunned ⛔ se escribe por Gestión Nube: va por el ERP** (Bruno 30-oct-2026; desde el corte del 28-oct Stunned
-  ⛔ pasa por GN). Por PRODUCTO (`lineaDelProducto`, los SKU `STU…`), ⛔ por campaña: en `aplicar`, un producto Stunned
-  **CARGA la lista `oferta` en el ERP** (motivo `campaña:<id>`) y avisa el trabajo `precio-tn:stunned` del motor, que la
+- 🆕 🔴 **La línea que ya CORTÓ ⛔ se escribe por Gestión Nube: va por el ERP** (Stunned 30-oct-2026; desde el 31-oct, TODA
+  línea con fila en `erp_corte`: Stunned 28-oct, BDI 15/16-nov, Zattia 23-nov — `vaPorErp(cortes, línea)`, ⛔ una constante).
+  Los cortes los lee `cortesDeCaja(store)` (caché 5 min + última lectura buena); sin ninguna, `aplicar` TIRA y ⛔ elige camino.
+  Por PRODUCTO (`lineaDelProducto`), ⛔ por campaña: una campaña de Zattia puede mandar Stunned al ERP y Zattia a GN. En
+  `aplicar`, cada línea cortada **CARGA la lista `oferta` en el ERP** de SU base (motivo `campaña:<id>`) y avisa el trabajo
+  `precio-tn:<línea>` del motor (el pedido guarda `aplicacion.erp.marca`; sin ella, era de Stunned), que la
   escribe en Tienda Nube con su registro y **RELEE TN después**. El ítem queda en su estado con `aplicacion.erp` (el
   pedido) y pasa a `aplicado` —con su renglón de bitácora— recién cuando `releer-erp` lee en la cola que **todas** sus
   variantes quedaron así (la misma regla que con GN: un pedido aceptado ⛔ es un precio puesto). La pantalla espera
   6 min; si se cierra, se confirma al volver a abrir la campaña. 🔴 **«Sacar» CARGA la oferta = la lista** (⛔ «soltar»:
   el empuje sólo mira lo cargado). ⚠️ Esa carga queda: una lista cargada después MÁS ALTA vuelve a dejarlo en oferta.
   🔑 El freno del 15 % del motor ⛔ cuenta las cargas con motivo `campaña:` (son decisiones); el doble/mitad y >80 %, sí.
+  🔴 Que TN reciba el precio de BDI/Zattia pide además `PRECIO_TN_MANDA` con esa tienda (variable del repo del motor): sin
+  ella el envío corre SECO y la campaña queda «esperando». Va en el checklist de cada corte.
   Regla en `lib/liquidacion/erp.core.js`, bases en `api/_liquidacion-erp.js`.
 - 🔴 **El sub-permiso `liquidacion.aplicar` no se hereda de la función**: hay que tildarlo a mano, y
   en las dos marcas. Es el único permiso del Monitor que escribe precios en la tienda.
