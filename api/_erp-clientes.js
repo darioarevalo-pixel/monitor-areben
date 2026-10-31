@@ -286,8 +286,9 @@ export async function cuentaDelPanel({ gnId = '', tel = '', prueba = false, usua
   if (!gn && !wa) return { prendido: true, prueba, cliente: null }
   return deps.conMotor('bdi', 'La cuenta corriente', async (pg) => {
     let clienteId = gn ? (await pg.query('select id::text from cliente where gn_client_id = $1::bigint limit 1', [gn])).rows[0]?.id ?? null : null
+    const motorCliente = await import('../motor/venta/cliente.mjs')
     if (!clienteId && wa) {
-      const { clientePorWhatsapp } = await import('../motor/venta/cliente.mjs')
+      const { clientePorWhatsapp } = motorCliente
       if (typeof clientePorWhatsapp === 'function') {
         const encontrados = []
         for (const { empresa_id } of (await pg.query('select distinct empresa_id from cliente')).rows) {
@@ -307,10 +308,55 @@ export async function cuentaDelPanel({ gnId = '', tel = '', prueba = false, usua
       .map((x) => ({ fecha: x.fecha, monto: x.haber, detalle: x.detalle }))
     const cuentas = await pg.query(`select id, nombre, medio from cuenta_cobro where marca = 'bdi' and activa and medio not in ('saldo', 'cuenta') order by nombre`)
       .then((x) => x.rows).catch(() => [])
+    // Las personas que compran por esta empresa (pedido de Darío §1, motor sql/061) y cuál es la del chat. Sin la 061 todavía
+    // en la base (o sin el motor nuevo), la ficha sale igual, sin la lista.
+    let personas = null
+    if (typeof motorCliente.whatsappsDe === 'function') personas = await motorCliente.whatsappsDe(pg, { cliente_id: clienteId }).catch(() => null)
+    const delChat = personas && wa ? personas.find((x) => x.whatsapp === motorCliente.numeroWhatsapp(wa)) ?? null : null
     return {
       prendido: true, prueba, hoy: r.hoy, cliente: r.cliente, linea: 'bdi', credito: r.credito,
       estado: { ...r.estado, pendientes: r.estado.pendientes.map((v) => ({ ...v, nombre: ventas.get(v.ref) ?? null })) },
       pagos, cuentas,
+      personas: personas?.map((x) => ({ id: x.id, whatsapp: x.whatsapp, nombre: x.nombre })) ?? null,
+      delChat: delChat ? { id: delChat.id, nombre: delChat.nombre } : null,
     }
+  })
+}
+
+/**
+ * Anotar el número del chat a la empresa, con quién es (pedido de Darío §1): desde ahí ese número entra solo a ese cliente.
+ * Un número de OTRA ficha ⛔ se pisa (409, lo dice el motor). Sólo BDI, detrás del mismo interruptor que la vista.
+ * @param {{ body: any, usuario: string|null }} p @param {{ conMotor: Function, prendido?: boolean }} deps
+ */
+export async function anotarWhatsappPanel({ body, usuario }, deps) {
+  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'Falta el cliente' }
+  if (!usuario) return { status: 400, error: 'Falta quién lo anota' }
+  return deps.conMotor('bdi', 'Anotar el número', async (pg) => {
+    const { anotarWhatsapp } = await import('../motor/venta/cliente.mjs')
+    if (typeof anotarWhatsapp !== 'function') return { status: 409, error: 'Todavía no se pueden anotar números.' }
+    const [c] = (await pg.query('select empresa_id from cliente where id = $1', [body.clienteId])).rows
+    if (!c) return { status: 404, error: 'No está ese cliente.' }
+    const r = await anotarWhatsapp(pg, { empresa_id: c.empresa_id, cliente_id: body.clienteId, whatsapp: String(body.whatsapp ?? ''), nombre: body.nombre, usuario })
+    if (r.ok) return { ok: true, persona: r.persona, yaEstaba: r.ya_estaba }
+    return { status: r.error?.codigo === 'YA_ANOTADO' ? 409 : r.error?.codigo === 'FALTA_CLIENTE' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo anotar el número.' }
+  })
+}
+
+/**
+ * Sacar a una persona de la empresa (dejó de estar): ⛔ se borra, sus pedidos viejos la siguen nombrando.
+ * @param {{ body: any, usuario: string|null }} p @param {{ conMotor: Function, prendido?: boolean }} deps
+ */
+export async function sacarWhatsappPanel({ body, usuario }, deps) {
+  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!UUID.test(String(body?.id || ''))) return { status: 400, error: 'Falta el número' }
+  if (!usuario) return { status: 400, error: 'Falta quién lo saca' }
+  return deps.conMotor('bdi', 'Sacar el número', async (pg) => {
+    const { sacarWhatsapp } = await import('../motor/venta/cliente.mjs')
+    if (typeof sacarWhatsapp !== 'function') return { status: 409, error: 'Todavía no se pueden sacar números.' }
+    const [w] = (await pg.query('select empresa_id from cliente_whatsapp where id = $1', [body.id])).rows
+    if (!w) return { status: 404, error: 'No está ese número.' }
+    const r = await sacarWhatsapp(pg, { empresa_id: w.empresa_id, id: body.id, usuario })
+    return r.ok ? { ok: true, sacado: r.sacado } : { status: 400, error: r.error?.mensaje ?? 'No se pudo sacar el número.' }
   })
 }

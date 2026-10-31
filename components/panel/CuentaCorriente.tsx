@@ -17,10 +17,10 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Button, Field, Input, Modal, Notice, Select } from '@/components/ui'
+import { Button, CopyButton, Field, Input, Modal, Notice, Select } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
-import { cobrarCuentaErp, leerCuentaPanel, leerCuentasCorrientes, type CuentaDelMotor, type CuentaPanel } from '@/lib/erp/cliente'
-import { repartirPago, textoSaldo } from '@/lib/erp/cuenta-panel.core.js'
+import { anotarWhatsappPanel, cobrarCuentaErp, leerCuentaPanel, leerCuentasCorrientes, sacarWhatsappPanel, type CuentaDelMotor, type CuentaPanel } from '@/lib/erp/cliente'
+import { mensajeDeSaldo, repartirPago, textoSaldo } from '@/lib/erp/cuenta-panel.core.js'
 import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 
@@ -86,12 +86,23 @@ export function FranjaCuenta({ cuenta, onCargar }: { cuenta: CuentaConCliente; o
   )
 }
 
-/** La tarjeta de abajo: las compras que deben (la más vieja primero) y los últimos pagos. */
-export function TarjetaCuenta({ cuenta }: { cuenta: CuentaConCliente }) {
+const ROTULO = { fontSize: font.xs, fontWeight: 700, letterSpacing: 0.4, color: color.mut2, textTransform: 'uppercase' } as const
+
+/**
+ * La tarjeta de abajo: las compras que deben (la más vieja primero), los últimos pagos, «Enviar saldo» (pedido de Darío §6)
+ * y quién compra por esta empresa (§1).
+ */
+export function TarjetaCuenta({ cuenta, telChat, decir, onCambio }: {
+  cuenta: CuentaConCliente; telChat: string | null; decir: (txt: string, mal?: boolean) => void; onCambio: () => void
+}) {
   const pendientes = [...cuenta.estado.pendientes].sort((a, b) => a.fecha.localeCompare(b.fecha))
+  const mensaje = mensajeDeSaldo({ nombre: cuenta.cliente.nombre, saldo: cuenta.estado.saldo, pendientes }, plata)
   return (
     <section style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: `${space[2]}px ${space[3]}px ${space[3]}px`, margin: `0 ${space[2]}px ${space[2]}px` }}>
-      <div style={{ fontSize: font.xs, fontWeight: 700, letterSpacing: 0.4, color: color.mut2, textTransform: 'uppercase', marginBottom: 6 }}>Cuenta corriente</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+        <div style={ROTULO}>Cuenta corriente</div>
+        {mensaje && <CopyButton getText={() => mensaje} label="Enviar saldo" copiedLabel="✓ Copiado, pegalo en el chat" iconLeft="💬" />}
+      </div>
       {pendientes.length ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {pendientes.map((p) => (
@@ -117,7 +128,57 @@ export function TarjetaCuenta({ cuenta }: { cuenta: CuentaConCliente }) {
         )) : <div style={{ fontSize: font.sm, color: color.mut2 }}>Todavía no hay pagos.</div>}
       </div>
       <div style={{ fontSize: 11, color: color.mut2, marginTop: 6 }}>Un pago cancela primero la compra más vieja.</div>
+      {cuenta.personas && <QuienCompra cuenta={cuenta} telChat={telChat} decir={decir} onCambio={onCambio} />}
     </section>
+  )
+}
+
+/**
+ * Quién compra por esta empresa (pedido de Darío §1: habla el dueño, los encargados…). Un número anotado entra solo a este
+ * cliente la próxima vez; si el del chat ⛔ está, se ofrece anotarlo con quién es. Sacar a alguien ⛔ borra su historial.
+ */
+function QuienCompra({ cuenta, telChat, decir, onCambio }: {
+  cuenta: CuentaConCliente; telChat: string | null; decir: (txt: string, mal?: boolean) => void; onCambio: () => void
+}) {
+  const [quien, setQuien] = useState('')
+  const [trabajando, setTrabajando] = useState(false)
+  const personas = cuenta.personas ?? []
+  const fin = (w: string) => `…${w.slice(-4)}`
+  async function correr(f: () => Promise<string>) {
+    setTrabajando(true)
+    try { decir(await f()); onCambio() } catch (e) { decir(e instanceof Error ? e.message : 'No se pudo.', true) } finally { setTrabajando(false) }
+  }
+  return (
+    <div style={{ borderTop: `1px solid ${color.line2}`, marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={ROTULO}>Quién compra</div>
+      {personas.length ? personas.map((p) => (
+        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: font.sm, gap: 8 }}>
+          <span>{p.nombre || 'Sin nombre'} <span style={{ color: color.mut2 }}>· {fin(p.whatsapp)}{cuenta.delChat?.id === p.id ? ' · este chat' : ''}</span></span>
+          <button
+            type="button" disabled={trabajando}
+            onClick={() => void correr(async () => { await sacarWhatsappPanel(p.id); return `${p.nombre || 'Ese número'} ya no compra por ${cuenta.cliente.nombre}.` })}
+            style={{ height: 'auto', padding: 0, border: 0, background: 'none', font: 'inherit', fontSize: font.xs, color: color.mut, cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            Sacar
+          </button>
+        </div>
+      )) : <div style={{ fontSize: font.sm, color: color.mut2 }}>Todavía no hay números anotados.</div>}
+      {telChat && !cuenta.delChat && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+          <Input value={quien} onChange={(e) => setQuien(e.target.value)} placeholder="¿Quién es? (ej. Rodrigo, gerente)" style={{ flex: 1, minWidth: 0 }} />
+          <Button
+            size="sm" variant="outline" disabled={trabajando}
+            onClick={() => void correr(async () => {
+              await anotarWhatsappPanel({ clienteId: cuenta.cliente.id, whatsapp: telChat, nombre: quien.trim() || undefined })
+              setQuien('')
+              return `Listo: este número entra solo a ${cuenta.cliente.nombre}.`
+            })}
+          >
+            Agregar este número
+          </Button>
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -1335,7 +1335,7 @@ function PanelInterno({
         <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} despacho={seg.despacho || ''} />
         {cuenta && (
           <Aislado nombre="Cuenta corriente">
-            <TarjetaCuenta cuenta={cuenta} />
+            <TarjetaCuenta cuenta={cuenta} telChat={via === 'id' ? null : telNorm || null} decir={decir} onCambio={releerCuenta} />
             {cargandoPago && (
               <HojaCargarPago
                 cuenta={cuenta}

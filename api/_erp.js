@@ -32,6 +32,7 @@
  *   GET  ?recurso=erp&vista=cuentas-corrientes&marca=…&prueba=0|1     Cuenta corriente: una fila por cliente × línea
  *   GET  ?recurso=erp&vista=cuenta-cliente&marca=…&cliente=…&linea=…  su estado y el mayor (desde/hasta) con su CSV
  *   GET  ?recurso=erp&vista=cuenta-panel&gnId=…&tel=…&prueba=0|1      la cuenta del cliente del chat (panel de WhatsApp, BDI)
+ *   POST { accion: 'anotar-whatsapp' | 'sacar-whatsapp', … }           las personas que compran por la empresa (panel)
  *   POST { accion: 'poner-credito', marca, clienteId, credito, tope?, dias? }   marcar o sacar el crédito (sólo admin)
  *   POST { accion: 'poner-contacto', marca, clienteId, whatsapp?, email? }       cargar o corregir el contacto (sólo admin)
  *   GET  ?recurso=erp&vista=inicio-resultado&marca=bdi|zattia         Inicio: vendido, costo y margen del mes (`api/_erp-inicio.js`)
@@ -126,7 +127,7 @@ import { ACCIONES as ACCIONES_CATALOGO } from '../lib/erp/catalogo-edicion.core.
 import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
-import { cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
+import { anotarWhatsappPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
 import { cobrosDelPeriodo, reintentarEntregasErp } from './_erp-cobros.js'
@@ -1907,6 +1908,11 @@ export default async function handler(req, res) {
         prueba: req.query.prueba === '1', desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''),
       }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'POST' && (body.accion === 'anotar-whatsapp' || body.accion === 'sacar-whatsapp')) {
+      const f = body.accion === 'anotar-whatsapp' ? anotarWhatsappPanel : sacarWhatsappPanel
+      const r = await f({ body, usuario: perfil.user || perfil.name || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'POST' && body.accion === 'poner-credito') {
       const r = await ponerCreditoCliente({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null }, { conMotor })

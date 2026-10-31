@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { repartirPago, textoSaldo } from '@/lib/erp/cuenta-panel.core.js'
+import { mensajeDeSaldo, repartirPago, textoSaldo } from '@/lib/erp/cuenta-panel.core.js'
 
 const P = [
   { ref: 'venta:b', fecha: '2026-10-07', pendiente: 540500 },
@@ -27,5 +27,13 @@ describe('La vista previa del pago en el panel (igual que reparte el motor)', ()
     expect(textoSaldo(10, plata)).toBe('$10')
     expect(textoSaldo(-5, plata)).toBe('$5 a favor')
     expect(textoSaldo(0, plata)).toBe('Al día')
+  })
+  it('«Enviar saldo»: los pedidos sin pagar, el más viejo primero, y el total; a favor, una línea; en cero, nada', () => {
+    const plata = (n: number) => `$${n}`
+    expect(mensajeDeSaldo({ nombre: 'Martín Ejemplo', saldo: 1500, pendientes: [
+      { fecha: '2026-10-14', pendiente: 500, nombre: 'Venta 4930' }, { fecha: '2026-09-22', pendiente: 1000, nombre: 'Venta 4812' }, { fecha: '2026-09-01', pendiente: 0 },
+    ] }, plata)).toBe('Hola Martín, te paso el saldo de tu cuenta en BDI:\n• Venta 4812 del 22/09: $1000\n• Venta 4930 del 14/10: $500\nTotal: $1500\n¡Gracias!')
+    expect(mensajeDeSaldo({ nombre: 'Ana', saldo: -300, pendientes: [] }, plata)).toContain('$300 a favor')
+    expect(mensajeDeSaldo({ nombre: 'Ana', saldo: 0, pendientes: [] }, plata)).toBeNull()
   })
 })

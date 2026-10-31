@@ -679,7 +679,14 @@ export type CuentaPanel =
     estado: Omit<CuentaDeCliente['estado'], 'pendientes'> & { pendientes: Array<PendienteCuenta & { nombre: string | null }> }
     pagos: Array<{ fecha: string; monto: number; detalle: string }>
     cuentas: Array<{ id: string | number; nombre: string; medio: string }>
+    /** Las personas que compran por la empresa; null = todavía sin la lista (motor sin la 061). */
+    personas: Array<{ id: string; whatsapp: string; nombre: string | null }> | null
+    delChat: { id: string; nombre: string | null } | null
   }
+export const anotarWhatsappPanel = (p: { clienteId: string; whatsapp: string; nombre?: string }) =>
+  pedir<{ ok: true; persona: { id: string; whatsapp: string; nombre: string | null }; yaEstaba: boolean }>(post({ accion: 'anotar-whatsapp', marca: 'bdi', ...p }), '', 'No se pudo anotar el número.')
+export const sacarWhatsappPanel = (id: string) =>
+  pedir<{ ok: true; sacado: boolean }>(post({ accion: 'sacar-whatsapp', marca: 'bdi', id }), '', 'No se pudo sacar el número.')
 export const leerCuentaPanel = (p: { gnId?: number | null; tel?: string | null; prueba: boolean }) =>
   pedir<CuentaPanel>(null, `&vista=cuenta-panel&marca=bdi&gnId=${p.gnId && p.gnId > 0 ? p.gnId : ''}&tel=${String(p.tel ?? '').replace(/\D/g, '').slice(0, 20)}&prueba=${p.prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudo leer la cuenta corriente.')
 /** Cargar o corregir el WhatsApp / mail de un cliente (sólo admin). El motor valida el número; ⛔ borra un dato que no mandás. */
