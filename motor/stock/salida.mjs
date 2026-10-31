@@ -6,6 +6,12 @@
  * 🔑 EN SOMBRA hasta el corte: con la llave `salida_mueve_libro` apagada el documento se anota y ⛔ mueve el libro (la venta
  * de GN ya lo hace). Prendida, los documentos NUEVOS nacen moviéndolo: sale al crear, entra al devolver. El valor se guarda
  * en el documento (`mueve_libro`) ⇒ prender la llave ⛔ cambia los que ya estaban sacados.
+ * 🔑 EL CORTE IMPLICA QUE LA SALIDA MUEVE EL LIBRO (Bruno 30-oct/31-oct): desde el corte de su línea (`erp_corte`, sql/063) ⛔ hay
+ * venta de GN ⇒ la salida nueva mueve el libro aunque la llave esté apagada (⛔ hay que acordarse de prenderla el día del corte).
+ * Y una salida que nació EN SOMBRA antes del corte y VUELVE después: el alineo del corte copió el stock de GN, que ya la tenía
+ * afuera ⇒ lo que vuelve (o se cancela) ENTRA al libro; si no, la prenda queda en 0 en el ERP estando en el depósito, callada.
+ * ⚠️ Si esa venta de GN ya se había cancelado en GN ANTES del corte (la prenda volvió en GN pero la solicitud se guardó después),
+ * entraría dos veces: el ERP ⛔ lo puede saber.
  *
  * Cerrar exige que cada prenda esté CONTADA (devuelta + consumida + dañada + perdida = lo que salió). Lo que no volvió
  * entero se vuelve ajuste con `sin_movimiento` (la prenda ya salió): consumida ⇒ `consumible` (al instante), dañada ⇒
@@ -14,6 +20,7 @@
 import { guardarAjuste, nivelesDe } from './ajuste.mjs'
 import { configuracionDe } from './interruptores.mjs'
 import { costosDe } from '../venta/costo.mjs'
+import { gnYaNoManda } from '../depositos.mjs'
 
 export const TIPOS = { foto: 'Sesión de fotos', produccion: 'Muestra para producción', interna: 'Solicitud interna' }
 /** Cómo se llama en el ajuste lo que no volvió entero. */
@@ -85,6 +92,20 @@ const escribirMovimientos = (db, movimientos) => movimientos.length
       from jsonb_populate_recordset(null::stock_movimiento, $1::jsonb)`, [JSON.stringify(movimientos)])
   : null
 
+/**
+ * ¿La línea ya cortó en `ahora`? Lee `erp_corte` (sql/063). 🔴 Sin la tabla FALLA (⛔ un «nadie cortó» callado).
+ * @param {import('pg').ClientBase} db @param {string} linea @param {Date} ahora
+ */
+export async function yaCorto(db, linea, ahora) {
+  const [{ hay }] = await q(db, `select to_regclass('erp_corte') is not null as hay`)
+  if (!hay) throw new Error('Falta la tabla erp_corte (sql/063): ⛔ se sabe si la salida mueve el libro.')
+  const filas = await q(db, 'select linea, instante from erp_corte where linea = $1', [linea])
+  return gnYaNoManda(linea, ahora, Object.fromEntries(filas.map((r) => [r.linea, new Date(r.instante).toISOString()])))
+}
+
+/** ¿Lo que VUELVE de esta salida entra al libro? Si nació moviéndolo, o si nació en sombra y su línea ya cortó (ver arriba). */
+const vueltaMueve = async (db, salida, ahora) => salida.mueve_libro === true || (await yaCorto(db, salida.linea, ahora))
+
 const num = (r) => ({ ...r, product_id: Number(r.product_id), size_id: Number(r.size_id), cantidad: Number(r.cantidad) })
 
 /**
@@ -101,7 +122,8 @@ export async function crearSalida(db, e, { ahora = new Date() } = {}) {
     const ids = [...new Set((Array.isArray(e.renglones) ? e.renglones : []).filter((r) => entero(r?.product_id)).map((r) => Number(r.product_id)))]
     const armado = armarSalida(e, { empresa_id: m.empresa_id, depositos, costos: await costosDe(db, ids) })
     if (!armado.ok) return armado
-    const mueve = (await configuracionDe(db, { linea: e.linea })).salida_mueve_libro === true
+    // La llave, o el corte de la línea: desde el corte ⛔ hay venta de GN que baje el stock.
+    const mueve = (await configuracionDe(db, { linea: e.linea })).salida_mueve_libro === true || (await yaCorto(db, e.linea, ahora))
     const [n] = await q(db, `insert into salida_numero (linea, ultimo) values ($1, 1)
       on conflict (linea) do update set ultimo = salida_numero.ultimo + 1 returning ultimo`, [e.linea])
     const s = armado.salida
@@ -151,6 +173,7 @@ export async function devolver(db, e, { ahora = new Date() } = {}) {
     const entrada = Array.isArray(e.renglones) ? e.renglones : []
     if (!entrada.length) return falla('ENTRADA_INVALIDA', 'No hay nada que devolver', 'renglones')
     const porN = new Map(l.renglones.map((r) => [r.n, r]))
+    const mueve = await vueltaMueve(db, l.salida, ahora)
     const movimientos = []
     const nuevas = new Map()
     for (const d of entrada) {
@@ -163,7 +186,7 @@ export async function devolver(db, e, { ahora = new Date() } = {}) {
         return falla('DEVUELVE_DE_MAS', `${r.sku || claveDe(r)}: salieron ${r.cantidad} y ya hay ${contada({ ...r, devuelta: antes })} contadas`, 'renglones')
       }
       nuevas.set(r.n, despues)
-      if (l.salida.mueve_libro) movimientos.push(movimientoDe(l.salida, r, { cantidad: Number(d.cantidad), tipo: 'vuelta', clave: `${l.salida.id}:${r.n}:vuelve:${despues}`, ahora }))
+      if (mueve) movimientos.push(movimientoDe(l.salida, r, { cantidad: Number(d.cantidad), tipo: 'vuelta', clave: `${l.salida.id}:${r.n}:vuelve:${despues}`, ahora }))
     }
     for (const [n, dev] of nuevas) await db.query('update salida_renglon set devuelta = $3 where salida_id = $1 and n = $2', [l.salida.id, n, dev])
     await escribirMovimientos(db, movimientos)
@@ -200,11 +223,12 @@ export async function cerrarSalida(db, e, { ahora = new Date() } = {}) {
       return falla('FALTA_CONTAR', 'Hay prendas que ⛔ volvieron ni se declararon consumidas, dañadas o perdidas', 'renglones',
         { renglones: sinContar.map((r) => ({ n: r.n, sku: r.sku, product_id: r.product_id, size_id: r.size_id, sale: r.cantidad, contadas: contada(r), diferencia: r.cantidad - contada(r) })) })
     }
+    const mueve = await vueltaMueve(db, l.salida, ahora)
     const movimientos = []
     for (const r of porN.values()) {
       await db.query('update salida_renglon set devuelta = $3, consumida = $4, danada = $5, perdida = $6 where salida_id = $1 and n = $2', [l.salida.id, r.n, r.devuelta, r.consumida, r.danada, r.perdida])
       const nuevaDev = devueltas.get(r.n)
-      if (nuevaDev && l.salida.mueve_libro) movimientos.push(movimientoDe(l.salida, r, { cantidad: nuevaDev, tipo: 'vuelta', clave: `${l.salida.id}:${r.n}:vuelve:${r.devuelta}`, ahora }))
+      if (nuevaDev && mueve) movimientos.push(movimientoDe(l.salida, r, { cantidad: nuevaDev, tipo: 'vuelta', clave: `${l.salida.id}:${r.n}:vuelve:${r.devuelta}`, ahora }))
     }
     await escribirMovimientos(db, movimientos)
     // Un ajuste por motivo y depósito: lo que no volvió entero.
@@ -228,7 +252,7 @@ export async function cerrarSalida(db, e, { ahora = new Date() } = {}) {
   })
 }
 
-/** Cancela una salida que ⛔ ocurrió (se escaneó mal). Sólo si nada volvió ni se declaró; con `mueve_libro` devuelve lo que sacó. */
+/** Cancela una salida que ⛔ ocurrió (se escaneó mal). Sólo si nada volvió ni se declaró; si mueve el libro (`vueltaMueve`) devuelve lo que sacó. */
 export async function cancelarSalida(db, e, { ahora = new Date() } = {}) {
   return enTransaccion(db, async () => {
     const usuario = String(e?.usuario ?? '').trim()
@@ -238,7 +262,7 @@ export async function cancelarSalida(db, e, { ahora = new Date() } = {}) {
     const l = await leerAbierta(db, e?.salida_id)
     if (!l.ok) return l
     if (l.renglones.some((r) => contada(r) > 0)) return falla('YA_TIENE_MOVIMIENTO', `La salida S-${l.salida.numero} ya tiene prendas devueltas o declaradas: se cierra, ⛔ se cancela`)
-    const movimientos = l.salida.mueve_libro
+    const movimientos = (await vueltaMueve(db, l.salida, ahora))
       ? l.renglones.map((r) => movimientoDe(l.salida, r, { cantidad: r.cantidad, tipo: 'vuelta', clave: `${l.salida.id}:${r.n}:cancela`, ahora }))
       : []
     await escribirMovimientos(db, movimientos)

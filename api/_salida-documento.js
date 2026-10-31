@@ -199,20 +199,17 @@ export async function canjeAlErp({ store, b, usuario }) {
  * La SOLICITUD de una línea que ya está en el ERP (sesión de fotos / solicitud interna), ⛔ a GN (Bruno 30-oct, erp-stunned §8.3):
  * fotos y retornable ⇒ salida con vuelta de la línea (baja al cargarla; lo que vuelve sube al guardar la solicitud,
  * `documentarSalida`); consumo ⇒ ajuste `consumible`/`uso_interno` aprobado en el acto. 🔴 Como la falla ⛔ es sombra ⇒ si falla,
- * FRENA. 🔑 El corte IMPLICA que la salida mueve el libro: con la llave `salida_mueve_libro` de la línea apagada también frena
- * (la salida ⛔ bajaría nada) — el día del corte se prende con el alineo.
+ * FRENA. 🔑 El corte IMPLICA que la salida mueve el libro: lo decide el MOTOR (`crearSalida`: la llave `salida_mueve_libro` o el
+ * corte de la línea), ⛔ hay que prender nada el día del corte. Si igual nació sin mover el libro, FRENA.
  * @returns {Promise<null | { ok: true, linea: string, salida?: number, ajuste?: number, ya: boolean } | { error: string }>} `null` = sigue a GN
  */
 export async function solicitudAlErp({ store, b, usuario }) {
   if (!b || b.proposito || b.accion) return null
-  const [sal, aj, sw] = await Promise.all([import('../motor/stock/salida.mjs'), import('../motor/stock/ajuste.mjs'), import('../motor/stock/interruptores.mjs')])
+  const [sal, aj] = await Promise.all([import('../motor/stock/salida.mjs'), import('../motor/stock/ajuste.mjs')])
   const quien = usuario || 'solicitudes'
   return conPedidoErp({ store, b }, solicitudErpDe, async (db, pedido) => {
     if (pedido.ajuste) return ajusteAplicado(db, aj, pedido.ajuste, quien, 'esta solicitud')
     const linea = pedido.salida.linea
-    if ((await sw.configuracionDe(db, { linea })).salida_mueve_libro !== true) {
-      return { error: `La salida de ${linea} todavía no mueve el stock del ERP (la llave «salida_mueve_libro» está apagada): avisale a Bruno.` }
-    }
     const c = await sal.crearSalida(db, { ...pedido.salida, usuario: quien })
     if (!c.ok) return { error: mensaje(c) }
     if (c.salida.mueve_libro !== true) return { error: `La salida S-${c.salida.numero} quedó anotada SIN bajar el stock del ERP: avisale a Bruno.` }
