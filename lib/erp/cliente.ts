@@ -754,12 +754,41 @@ export const leerCajaAbierta = (marca: MarcaErp) =>
   deCaja<{ turno: (Record<string, unknown> & { resumen?: { ventas?: number; efectivo?: { esperado?: number } } }) | null }>(marca, 'action=turno', 'No se pudo leer la caja abierta.')
 
 // ── ERP › Ventas › Cargar un gasto (30-oct): la CAJA CHICA = una salida de la caja abierta con categoría (`lib/caja/gasto.core.js`) ──
-export type GastoCaja = { id: string; monto: number; motivo: string; categoria: string; usuario: string | null; creado_en: string; anulado_en?: string | null; anulado_por?: string | null; anulado_motivo?: string | null }
+export type EstadoGasto = 'revisar' | 'aprobado' | 'rechazado' | 'anulado'
+export type NegocioGasto = 'BDI' | 'ZATTIA' | 'STUNNED' | 'GENERAL'
+/** Un gasto de la caja chica (`origen: 'caja'`, con `motivo`) o de la oficina (`origen: 'oficina'`, con `fecha`), con su revisión (tanda 2). */
+export type GastoCaja = {
+  id: string; origen: 'caja' | 'oficina'; monto: number; motivo?: string; detalle: string; categoria: string; fecha?: string
+  usuario: string | null; usuario_cuenta?: string | null; creado_en: string; anulado_en?: string | null; anulado_por?: string | null; anulado_motivo?: string | null
+  estado: EstadoGasto; negocio: NegocioGasto; revisado_por?: string | null; revisado_en?: string | null; revision_motivo?: string | null
+}
 /** Lo que cargó ESTA cuenta (admin: todo) en los últimos `dias` días. El corte lo hace el servidor. */
 export const leerMisGastos = (marca: MarcaErp) => deCaja<{ gastos: GastoCaja[]; dias: number }>(marca, 'action=mis-gastos', 'No se pudieron leer tus gastos.')
 /** La caja abierta, sin el resumen (no lee GN): para saber si hay caja y quién la abrió. */
 export const leerCajaAbiertaLiviana = (marca: MarcaErp) =>
   deCaja<{ turno: { id: string; abierto_por: string | null; abierto_por_usuario?: string | null } | null }>(marca, 'action=turno&liviano=1', 'No se pudo leer la caja abierta.')
+/** Tanda 2: un gasto de la OFICINA (⛔ sale de la caja). Queda para revisar. */
+export async function cargarGastoOficina(marca: MarcaErp, p: { monto: number; categoria: string; detalle: string; fecha: string }) {
+  const r = await apiFetch('/api/datos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recurso: 'caja', store: marca, action: 'gasto-oficina', ...p }),
+  })
+  const j = await r.json().catch(() => null)
+  if (!r.ok) throw new Error((j && j.error) || 'No se pudo cargar el gasto.')
+  return j as { gasto: GastoCaja }
+}
+/** Tanda 2, sólo admin: aprobar (⇒ se escribe en el dashboard) o rechazar un gasto. */
+export async function revisarGasto(marca: MarcaErp, p: { origen: GastoCaja['origen']; id: string; decision: 'aprobar' | 'rechazar'; categoria?: string; negocio?: NegocioGasto; motivo?: string }) {
+  const r = await apiFetch('/api/datos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recurso: 'caja', store: marca, action: 'revisar-gasto', ...p }),
+  })
+  const j = await r.json().catch(() => null)
+  if (!r.ok) throw new Error((j && j.error) || 'No se pudo revisar el gasto.')
+  return j as { gasto: GastoCaja }
+}
 /** Cargar un gasto de caja chica: sale del efectivo de la caja abierta (resta del cierre). */
 export async function cargarGastoCaja(marca: MarcaErp, p: { monto: number; categoria: string; detalle: string }) {
   const r = await apiFetch('/api/datos', {

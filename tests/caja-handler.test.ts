@@ -37,6 +37,9 @@ const base = {
   sinArqueo: false,
   // Sin sql/migrate-caja-gasto.sql: la columna `categoria` ⛔ existe.
   sinGasto: false,
+  // Tanda 2 (sql/migrate-gasto-revision.sql): los gastos de la oficina; `sinRevision` = la migración ⛔ corrió.
+  oficina: [] as Fila[],
+  sinRevision: false,
   antesDeInsertar: null as null | (() => void),
 }
 const gn = {
@@ -56,6 +59,8 @@ const gn = {
   rebotesPost: 0,
 }
 const mp = { busquedas: 0 }
+// El dashboard (`/api/puente/gastos`): lo que le llegó y lo que contesta.
+const dash = { posts: [] as Array<{ body: Fila; sobre?: string }>, respuesta: { status: 200, body: { gasto_id: 'g-dash-1' } as unknown } }
 // W1: el audit de TN (bdi-catalogo). `tramos` = la respuesta de cada pedido, en orden; anota la URL y el sobre.
 const tn = { pedidos: [] as Array<{ url: string; sobre?: string }>, tramos: [] as Array<{ status: number; body: unknown }> }
 const mailer = { posts: [] as Array<{ body: Fila; key?: string; url: string }> }
@@ -70,7 +75,7 @@ function consulta(tabla: string) {
       // `caja_turno.deposito` tiene default 'local' en la base (sql/migrate-caja-turno-deposito.sql): el mock lo pone igual.
       : tabla === 'caja_turno' ? (base.turnos.forEach((t) => { t.deposito ??= 'local' }), base.turnos) : tabla === 'caja_turno_mov' ? base.movs
       : tabla === 'agenda_promos' ? base.agenda : tabla === 'liquidacion_items' ? base.liqItems
-      : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_venta_mp' ? base.ventaMp : tabla === 'caja_gift_card' ? base.giftCards : tabla === 'venta' ? base.erpVentas ?? [] : tabla === 'venta_pago_vigente' ? base.erpPagos ?? [] : tabla === 'cuenta_cobro' ? base.erpCuentas ?? [] : base.inventario
+      : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_venta_mp' ? base.ventaMp : tabla === 'caja_gift_card' ? base.giftCards : tabla === 'venta' ? base.erpVentas ?? [] : tabla === 'venta_pago_vigente' ? base.erpPagos ?? [] : tabla === 'cuenta_cobro' ? base.erpCuentas ?? [] : tabla === 'gasto_oficina' ? base.oficina : base.inventario
     return todas.filter((f) => filtros.every((p) => p(f)))
   }
   const ejecutar = () => {
@@ -80,6 +85,16 @@ function consulta(tabla: string) {
     }
     if (tabla === 'caja_turno_mov' && base.sinGasto && (/\bcategoria\b/.test(columnas) || (accion.tipo === 'insert' && 'categoria' in accion.fila))) {
       return { data: null, error: { code: '42703', message: 'column caja_turno_mov.categoria does not exist' } }
+    }
+    if (base.sinRevision && (tabla === 'gasto_oficina' || /\brevision\b/.test(columnas) || (accion.tipo === 'update' && 'revision' in accion.cambios))) {
+      return tabla === 'gasto_oficina'
+        ? { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.gasto_oficina' in the schema cache" } }
+        : { data: null, error: { code: '42703', message: 'column caja_turno_mov.revision does not exist' } }
+    }
+    if (accion.tipo === 'insert' && tabla === 'gasto_oficina') {
+      const g = { id: `0000000${base.oficina.length + 1}-aaaa-4000-8000-000000000000`.slice(-36), creado_en: new Date().toISOString(), revision: null, ...accion.fila }
+      base.oficina.push(g)
+      return { data: [g], error: null }
     }
     if (tabla.startsWith('caja_gift') && base.giftLotes === null) return { data: null, error: { code: 'PGRST205', message: `Could not find the table 'public.${tabla}' in the schema cache` } }
     if (accion.tipo === 'delete') {
@@ -169,6 +184,12 @@ function consulta(tabla: string) {
   q.gte = (c: string, v: string | number) => { filtros.push((f) => f[c] != null && comparar(f[c], v) >= 0); return q }
   q.lte = (c: string, v: string | number) => { filtros.push((f) => f[c] != null && comparar(f[c], v) <= 0); return q }
   q.lt = (c: string, v: string) => { filtros.push((f) => String(f[c]) < v); return q }
+  // `.or('revision.is.null,revision.eq.rechazado')`: sólo lo que usa el handler (is.null / eq.<valor>).
+  q.or = (expr: string) => {
+    const partes = expr.split(',').map((x) => x.split('.'))
+    filtros.push((f) => partes.some(([c, op, v]) => (op === 'is' && v === 'null' ? f[c] == null : op === 'eq' ? String(f[c]) === v : false)))
+    return q
+  }
   q.order = () => q
   q.limit = () => q
   q.range = () => q
@@ -234,6 +255,10 @@ function conSesion(perfil: unknown) {
       if (String(url).includes('/inventario/')) return respuesta(200, { product_id: 7, variantes: [{ size_id: 8, stock_por_tienda: [{ store_id: 11780, available_quantity: 1 }, { store_id: 18210, available_quantity: 4 }] }] })
       return respuesta(404, {})
     }
+    if (String(url).includes('/api/puente/gastos')) {
+      dash.posts.push({ body: JSON.parse(String(opts?.body)), sobre: opts?.headers?.['x-puente-auth'] })
+      return respuesta(dash.respuesta.status, dash.respuesta.body)
+    }
     if (String(url).includes('tiendanube-audit')) {
       tn.pedidos.push({ url: String(url), sobre: opts?.headers?.['x-monitor-auth'] })
       const t = tn.tramos[tn.pedidos.length - 1] || { status: 200, body: { ok: true, ordenes: [], total_en_rango: 0 } }
@@ -283,6 +308,8 @@ beforeEach(async () => {
   base.giftLotes = []; base.giftCards = []; base.giftChoques = 0; base.ventaMp = []
   // Bruno, 11-oct: la cuenta de MP del test asienta en Transferencia (13015, Areben Comercial).
   base.config = { store: 'zattia', reglas: { ...REGLAS_INICIALES, transferenciaPorMp: { [CUENTA_MP]: 13015 } }, politica_cambio: null }; base.alCerrar = null; base.antesDeInsertar = null; base.sinArqueo = false; base.sinGasto = false
+  base.oficina = []; base.sinRevision = false; dash.posts = []; dash.respuesta = { status: 200, body: { gasto_id: 'g-dash-1' } }
+  process.env.DASHBOARD_PUENTE_SECRET = 's'.repeat(40)
   gn.lista = { status: 200, body: { data: [], meta: { has_more_pages: false } } }
   gn.rebotes = 0; gn.rebotesPost = 0
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
@@ -2011,7 +2038,8 @@ describe('caja · cargar un gasto (caja chica)', () => {
     expect((r.body?.gastos as Fila[]).map((g) => g.id)).toEqual(['b'])
     conSesion(ADMIN_)
     r = await correr(req('GET', { action: 'mis-gastos' }))
-    expect((r.body?.gastos as Fila[]).map((g) => g.id).sort()).toEqual(['a', 'b'])
+    // Tanda 2: el admin ve además lo PARA REVISAR de cuando sea ('e', de enero): un gasto sin revisar ⛔ se cae de la bandeja.
+    expect((r.body?.gastos as Fila[]).map((g) => g.id).sort()).toEqual(['a', 'b', 'e'])
   })
 
   it('sin la migración ⇒ 409 que lo dice (⛔ un 500), al cargar y al leer', async () => {
@@ -2021,5 +2049,132 @@ describe('caja · cargar un gasto (caja chica)', () => {
     expect(r.code).toBe(409)
     expect(String(r.body?.error)).toMatch(/preparar la base/)
     expect((await correr(req('GET', { action: 'mis-gastos' }))).code).toBe(409)
+  })
+})
+
+// LA OFICINA y LA REVISIÓN (Bruno 30-oct, tanda 2, erp-stunned.md §7): la oficina carga lo que ⛔ sale de la caja; TODO gasto —caja
+// chica incluida— queda PARA REVISAR y lo aprueba Bruno o Darío (admin) ⇒ el servidor lo escribe en el dashboard.
+describe('caja · gastos de la oficina y la revisión', () => {
+  const LOCAL = { name: 'cajera', admin: false, cuenta: null, acceso: { zattia: { caja: true, erp: true } }, funcion: ['local'] }
+  const OFICINA = { name: 'lorena', admin: false, cuenta: null, acceso: { zattia: { caja: true, erp: true } }, funcion: ['administracion'] }
+  const ADMIN_ = { name: 'bruno', admin: true, cuenta: null, acceso: {}, funcion: [] }
+  const MOV = '22222222-3333-4444-8555-666666666666'
+  const oficina = (x: Fila = {}) => ({ action: 'gasto-oficina', monto: 18000, categoria: 'servicios', detalle: 'internet de la oficina', ...x })
+  const cajaChica = (x: Fila = {}) => ({ id: MOV, turno_id: TURNO_ID, tipo: 'salida', monto: 4500, motivo: 'Gasto · Limpieza: lavandina', categoria: 'limpieza', usuario: 'cajera', usuario_cuenta: 'cajera', creado_en: '2026-10-30T15:00:00.000Z', ...x })
+  const revisar = (x: Fila) => req('POST', {}, { action: 'revisar-gasto', ...x })
+
+  it('la oficina carga: queda PARA REVISAR, ⛔ toca la caja y la ve sólo ella (admin, todo)', async () => {
+    conSesion(OFICINA)
+    const r = await correr(req('POST', {}, oficina()))
+    expect(r.code).toBe(200)
+    expect(base.oficina).toEqual([expect.objectContaining({ store: 'zattia', categoria: 'servicios', detalle: 'internet de la oficina', monto: 18000, usuario_cuenta: 'lorena', revision: null })])
+    expect(base.movs).toHaveLength(0)
+    expect(String((base.oficina[0] as Fila).fecha)).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    let l = await correr(req('GET', { action: 'mis-gastos' }))
+    expect(l.body?.gastos).toEqual([expect.objectContaining({ origen: 'oficina', estado: 'revisar', negocio: 'GENERAL' })])
+    conSesion(LOCAL)
+    l = await correr(req('GET', { action: 'mis-gastos' }))
+    expect(l.body?.gastos).toEqual([])
+    conSesion(ADMIN_)
+    l = await correr(req('GET', { action: 'mis-gastos' }))
+    expect((l.body?.gastos as Fila[]).map((g) => g.origen)).toEqual(['oficina'])
+  })
+
+  it('🔴 la oficina: sin `gasto-oficina` (cajera, local) 403; categoría del bot, sin detalle o fecha futura 400', async () => {
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, oficina()))).code).toBe(403)
+    // El LOCAL carga caja chica, ⛔ gastos de la oficina (`gasto-oficina`: sólo Administración).
+    conSesion(LOCAL)
+    expect((await correr(req('POST', {}, oficina()))).code).toBe(403)
+    conSesion(OFICINA)
+    expect((await correr(req('POST', {}, oficina({ categoria: 'sueldos' })))).code).toBe(400)
+    expect((await correr(req('POST', {}, oficina({ detalle: ' ' })))).code).toBe(400)
+    expect((await correr(req('POST', {}, oficina({ fecha: '2099-01-01' })))).code).toBe(400)
+    expect((await correr(req('POST', {}, oficina({ monto: 0 })))).code).toBe(400)
+    expect(base.oficina).toHaveLength(0)
+  })
+
+  it('🔑 aprobar la caja chica: viaja al dashboard con la categoría DEL DASHBOARD y queda aprobada', async () => {
+    base.movs.push(cajaChica())
+    conSesion(ADMIN_)
+    const r = await correr(revisar({ origen: 'caja', id: MOV, decision: 'aprobar' }))
+    expect(r.code).toBe(200)
+    expect(dash.posts).toEqual([{ sobre: 's'.repeat(40), body: { operacion_id: MOV, origen: 'caja', categoria: 'Mantenimiento', concepto: 'Limpieza: lavandina', monto: 4500, fecha: '2026-10-30', negocio: 'ZATTIA', cargado_por: 'cajera', aprobado_por: 'bruno' } }])
+    expect(base.movs[0]).toMatchObject({ revision: 'aprobado', revisado_por: 'bruno', dashboard_gasto_id: 'g-dash-1' })
+    // Aprobar otra vez ⛔ vuelve a mandarlo; anularlo en la caja ⛔ se puede (está en el dashboard).
+    expect((await correr(revisar({ origen: 'caja', id: MOV, decision: 'aprobar' }))).code).toBe(200)
+    expect(dash.posts).toHaveLength(1)
+    const a = await correr(req('POST', {}, { action: 'anular-mov', id: MOV, motivo: 'error' }))
+    expect(a.code).toBe(409)
+    expect(base.movs[0].anulado_en).toBeUndefined()
+  })
+
+  it('aprobar lo de la oficina con OTRA categoría y marca: viaja lo que eligió el admin', async () => {
+    conSesion(OFICINA)
+    await correr(req('POST', {}, oficina({ categoria: 'otro', detalle: 'regalo cliente' })))
+    const id = String(base.oficina[0].id)
+    conSesion(ADMIN_)
+    const r = await correr(revisar({ origen: 'oficina', id, decision: 'aprobar', categoria: 'consumo', negocio: 'BDI' }))
+    expect(r.code).toBe(200)
+    expect(dash.posts[0].body).toMatchObject({ operacion_id: id, origen: 'oficina', categoria: 'Comidas', concepto: 'Agua, café y comida: regalo cliente', negocio: 'BDI', cargado_por: 'lorena' })
+    expect(base.oficina[0]).toMatchObject({ revision: 'aprobado', categoria: 'consumo' })
+  })
+
+  it('🔴 si el dashboard ⛔ lo toma (mes cerrado), sigue PARA REVISAR y se dice por qué', async () => {
+    base.movs.push(cajaChica())
+    dash.respuesta = { status: 409, body: { error: 'El mes 2026-10 ya está cerrado en el dashboard' } }
+    conSesion(ADMIN_)
+    const r = await correr(revisar({ origen: 'caja', id: MOV, decision: 'aprobar' }))
+    expect(r.code).toBe(409)
+    expect(String(r.body?.error)).toMatch(/mes 2026-10 ya está cerrado.*sigue para revisar/)
+    expect(base.movs[0].revision).toBeUndefined()
+  })
+
+  it('🔴 sin el secreto del dashboard ⇒ 503 y ⛔ queda aprobado', async () => {
+    delete process.env.DASHBOARD_PUENTE_SECRET
+    base.movs.push(cajaChica())
+    conSesion(ADMIN_)
+    expect((await correr(revisar({ origen: 'caja', id: MOV, decision: 'aprobar' }))).code).toBe(503)
+    expect(base.movs[0].revision).toBeUndefined()
+  })
+
+  it('rechazar pide motivo, ⛔ va al dashboard, y lo rechazado se puede aprobar después', async () => {
+    base.movs.push(cajaChica())
+    conSesion(ADMIN_)
+    expect((await correr(revisar({ origen: 'caja', id: MOV, decision: 'rechazar' }))).code).toBe(400)
+    expect((await correr(revisar({ origen: 'caja', id: MOV, decision: 'rechazar', motivo: 'es personal' }))).code).toBe(200)
+    expect(base.movs[0]).toMatchObject({ revision: 'rechazado', revision_motivo: 'es personal' })
+    expect(dash.posts).toHaveLength(0)
+    expect((await correr(revisar({ origen: 'caja', id: MOV, decision: 'aprobar' }))).code).toBe(200)
+    expect(base.movs[0]).toMatchObject({ revision: 'aprobado', revision_motivo: null })
+  })
+
+  it('🔴 sólo un admin revisa; una salida anulada ⛔ se aprueba; un id de otra marca ⇒ 404', async () => {
+    base.movs.push(cajaChica())
+    conSesion(OFICINA)
+    expect((await correr(revisar({ origen: 'caja', id: MOV, decision: 'aprobar' }))).code).toBe(403)
+    conSesion(LOCAL)
+    expect((await correr(revisar({ origen: 'caja', id: MOV, decision: 'aprobar' }))).code).toBe(403)
+    base.movs[0].anulado_en = '2026-10-30T16:00:00.000Z'
+    conSesion(ADMIN_)
+    expect((await correr(revisar({ origen: 'caja', id: MOV, decision: 'aprobar' }))).code).toBe(409)
+    expect((await correr(req('POST', { store: 'bdi' }, { action: 'revisar-gasto', origen: 'caja', id: MOV, decision: 'aprobar' }))).code).not.toBe(200)
+    expect(dash.posts).toHaveLength(0)
+  })
+
+  it('sin la migración ⇒ 409 que lo dice, al cargar, leer y revisar', async () => {
+    base.sinRevision = true
+    base.movs.push(cajaChica())
+    conSesion(OFICINA)
+    const r = await correr(req('POST', {}, oficina()))
+    expect(r.code).toBe(409)
+    expect(String(r.body?.error)).toMatch(/preparar la base/)
+    expect((await correr(req('GET', { action: 'mis-gastos' }))).code).toBe(409)
+    conSesion(ADMIN_)
+    expect((await correr(revisar({ origen: 'caja', id: MOV, decision: 'aprobar' }))).code).toBe(409)
+    // La caja sigue: cargar un gasto de caja chica y anular una salida ⛔ dependen de la revisión.
+    conSesion(LOCAL)
+    expect((await correr(req('POST', {}, { action: 'salida', monto: 100, categoria: 'otro', motivo: 'x' }))).code).toBe(200)
+    expect((await correr(req('POST', {}, { action: 'anular-mov', id: MOV, motivo: 'error' }))).code).toBe(200)
   })
 })

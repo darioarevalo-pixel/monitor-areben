@@ -30,7 +30,9 @@
 //   POST ?recurso=caja  { action: 'confirmar-transferencia', id, comprobante } → sólo admin: la transferencia que el cruce ⛔ ve (B3)
 //   POST ?recurso=caja  { action: 'resolver', id, como: 'a_mano' | 'descartar', nota, gn_number? } → la venta que GN RECHAZÓ (B2)
 //   POST ?recurso=caja  { action: 'abrir-turno', fondo, conteo? }   → abre el turno (uno solo abierto por marca)
-//   GET  ?recurso=caja&action=mis-gastos → la caja chica que cargó ESTA cuenta (admin: todas), últimos DIAS_MIS_GASTOS días
+//   GET  ?recurso=caja&action=mis-gastos → los gastos (caja chica + oficina) que cargó ESTA cuenta (admin: todos + lo PARA REVISAR), últimos DIAS_MIS_GASTOS días
+//   POST action=gasto-oficina   { monto, categoria, detalle, fecha? } → un gasto de la oficina (⛔ sale de la caja), PARA REVISAR
+//   POST action=revisar-gasto   { origen, id, decision: aprobar|rechazar, categoria?, negocio?, motivo? } → sólo admin; aprobar lo escribe en el dashboard
 //   POST ?recurso=caja  { action: 'salida', monto, motivo, tipo? } → saca (o con `tipo: 'aporte'`, suma) efectivo del turno abierto;
 //        la carga la cuenta que abrió el turno o un admin (A8)
 //   POST ?recurso=caja  { action: 'anular-mov', id, motivo } → anula una salida o un aporte del turno abierto (B4)
@@ -79,7 +81,8 @@ import { createHash, randomInt } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
 import { esAdmin, puedeErp, puedeVerAlguna } from '../lib/permisos.core.js'
-import { DIAS_MIS_GASTOS, FALTA_GASTO, categoriaValida, delQueCarga, faltaColumnaGasto, motivoDeGasto } from '../lib/caja/gasto.core.js'
+import { DIAS_MIS_GASTOS, FALTA_GASTO, FALTA_REVISION, NEGOCIOS_DASHBOARD, categoriaDeOficinaValida, categoriaValida, cuerpoParaDashboard, delQueCarga, detalleDeMotivo, estadoDeGasto, faltaColumnaGasto, faltaRevision, motivoDeGasto, negocioPorDefecto } from '../lib/caja/gasto.core.js'
+import { mandarGastoAlDashboard } from '../lib/caja/gasto-puente.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, dormir, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
@@ -692,16 +695,32 @@ export default async function handler(req, res) {
         const cuenta = usuarioDe(perfil)
         if (!admin && !cuenta) return res.status(200).json({ gastos: [] })
         const desde = new Date(Date.now() - DIAS_MIS_GASTOS * 864e5).toISOString()
-        let q = sb.from('caja_turno_mov').select(`${COLS_MOV}, categoria, caja_turno!inner(store)`).eq('caja_turno.store', store)
-          .not('categoria', 'is', null).gte('creado_en', desde).order('creado_en', { ascending: false }).limit(300)
-        if (!admin) q = q.eq('usuario_cuenta', cuenta)
-        const { data, error } = await q
-        if (faltaColumnaGasto(error)) return res.status(409).json({ error: FALTA_GASTO })
-        if (error) throw new Error(error.message)
-        const gastos = delQueCarga(data || [], cuenta, admin).map(({ caja_turno: _t, ...g }) => g)
+        // Tanda 2 (30-oct): la caja chica Y la oficina, con su revisión. El admin ve además TODO lo PARA REVISAR, de cuando sea:
+        // un gasto sin revisar ⛔ se cae de la bandeja porque pasó el mes.
+        const deCaja = (ventana) => {
+          let q = sb.from('caja_turno_mov').select(`${COLS_MOV}, ${COLS_REVISION}, categoria, caja_turno!inner(store)`).eq('caja_turno.store', store).not('categoria', 'is', null)
+          q = ventana ? q.gte('creado_en', desde) : q.is('revision', null).is('anulado_en', null)
+          return admin ? q.order('creado_en', { ascending: false }).limit(300) : q.eq('usuario_cuenta', cuenta).order('creado_en', { ascending: false }).limit(300)
+        }
+        const deOficina = (ventana) => {
+          let q = sb.from('gasto_oficina').select(COLS_OFICINA).eq('store', store)
+          q = ventana ? q.gte('creado_en', desde) : q.is('revision', null)
+          return admin ? q.order('creado_en', { ascending: false }).limit(300) : q.eq('usuario_cuenta', cuenta).order('creado_en', { ascending: false }).limit(300)
+        }
+        const lecturas = await Promise.all([deCaja(true), deOficina(true), ...(admin ? [deCaja(false), deOficina(false)] : [])])
+        const conError = lecturas.find((r) => r.error)
+        if (conError && faltaColumnaGasto(conError.error)) return res.status(409).json({ error: FALTA_GASTO })
+        if (conError && faltaRevision(conError.error)) return res.status(409).json({ error: FALTA_REVISION })
+        if (conError) throw new Error(conError.error.message)
+        const vistos = new Set()
+        const caja = [lecturas[0], lecturas[2]].flatMap((r) => (r && r.data) || []).map(({ caja_turno: _t, ...g }) => ({ ...g, origen: 'caja', detalle: detalleDeMotivo(g.categoria, g.motivo) }))
+        const oficina = [lecturas[1], lecturas[3]].flatMap((r) => (r && r.data) || []).map((g) => ({ ...g, origen: 'oficina' }))
+        const gastos = delQueCarga([...caja, ...oficina], cuenta, admin)
+          .filter((g) => !vistos.has(`${g.origen}:${g.id}`) && vistos.add(`${g.origen}:${g.id}`))
+          .map((g) => ({ ...g, estado: estadoDeGasto(g), negocio: negocioPorDefecto(g.origen, store) }))
+          .sort((a, b) => String(b.creado_en).localeCompare(String(a.creado_en)))
         return res.status(200).json({ gastos, dias: DIAS_MIS_GASTOS })
       }
-      // ERP › Ventas › Cajas (20-oct, sólo lectura): los turnos ABIERTOS en el período, días argentinos `desde`..`hasta`.
       if (accion === 'turnos') {
         const dia = /^\d{4}-\d{2}-\d{2}$/
         const desde = String(req.query.desde || ''), hasta = String(req.query.hasta || '')
@@ -949,6 +968,69 @@ export default async function handler(req, res) {
         if (ins.error) throw new Error(ins.error.message)
         return res.status(200).json({ turno: await conResumen(ins.data) })
       }
+      // La OFICINA (Bruno 30-oct, tanda 2): un gasto que ⛔ sale de la caja. Queda PARA REVISAR; ⛔ toca el efectivo ni el cierre.
+      if (accion === 'gasto-oficina') {
+        if (!puedeErp(perfil, store, 'gasto-oficina')) return res.status(403).json({ error: 'Los gastos de la oficina los carga Administración.' })
+        if (!categoriaDeOficinaValida(b.categoria)) return res.status(400).json({ error: 'Esa categoría de gasto no existe.' })
+        const monto = Number(b.monto)
+        if (!Number.isFinite(monto) || monto <= 0 || monto > MAX_MOVIMIENTO) return res.status(400).json({ error: 'El gasto tiene que ser un monto mayor a cero.' })
+        const detalle = String(b.detalle ?? '').trim().slice(0, 200)
+        if (!detalle) return res.status(400).json({ error: 'Falta el detalle: de qué es el gasto.' })
+        const hoy = diaArgentino(Date.now())
+        const fecha = b.fecha == null || b.fecha === '' ? hoy : String(b.fecha)
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || Number.isNaN(Date.parse(fecha))) return res.status(400).json({ error: 'La fecha del gasto no se entiende.' })
+        if (fecha > hoy) return res.status(400).json({ error: 'La fecha del gasto no puede ser de un día que todavía no pasó.' })
+        const ins = await sb.from('gasto_oficina').insert({ store, categoria: b.categoria, detalle, monto, fecha, usuario: perfil.name || null, usuario_cuenta: usuarioDe(perfil) }).select(COLS_OFICINA).single()
+        if (ins.error && faltaRevision(ins.error)) return res.status(409).json({ error: FALTA_REVISION })
+        if (ins.error) throw new Error(ins.error.message)
+        return res.status(200).json({ gasto: { ...ins.data, origen: 'oficina', estado: 'revisar' } })
+      }
+      // LA REVISIÓN (Bruno 30-oct): Bruno o Darío (admin) aprueban o rechazan. Aprobar ⇒ el SERVIDOR lo escribe en el dashboard
+      // (`lib/caja/gasto-puente.js`) y RECIÉN después queda aprobado acá: si el dashboard ⛔ contesta, sigue para revisar. El id de la
+      // fila es el candado del dashboard ⇒ reintentar (o apretar dos veces) carga UN gasto.
+      if (accion === 'revisar-gasto') {
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Los gastos los revisa un admin.' })
+        const origen = b.origen === 'caja' || b.origen === 'oficina' ? b.origen : null
+        const id = String(b.id || '')
+        const decision = b.decision === 'aprobar' || b.decision === 'rechazar' ? b.decision : null
+        if (!origen || !UUID.test(id) || !decision) return res.status(400).json({ error: 'Falta qué gasto y qué hacer con él.' })
+        const tabla = origen === 'caja' ? 'caja_turno_mov' : 'gasto_oficina'
+        const leida = origen === 'caja'
+          ? await sb.from('caja_turno_mov').select(`${COLS_MOV}, ${COLS_REVISION}, categoria, caja_turno!inner(store)`).eq('id', id).eq('caja_turno.store', store).not('categoria', 'is', null).maybeSingle()
+          : await sb.from('gasto_oficina').select(COLS_OFICINA).eq('id', id).eq('store', store).maybeSingle()
+        if (leida.error && faltaRevision(leida.error)) return res.status(409).json({ error: FALTA_REVISION })
+        if (leida.error) throw new Error(leida.error.message)
+        const fila = leida.data
+        if (!fila) return res.status(404).json({ error: 'Ese gasto no existe en esta marca.' })
+        const estado = estadoDeGasto(fila)
+        if (estado === 'aprobado') {
+          if (decision === 'aprobar') return res.status(200).json({ gasto: { ...fila, origen, estado }, repetida: true })
+          return res.status(409).json({ error: 'Ese gasto ya está en el dashboard: se corrige allá.' })
+        }
+        if (estado === 'anulado') return res.status(409).json({ error: 'Ese gasto se anuló en la caja: no hay nada que revisar.' })
+        const quien = perfil.name || usuarioDe(perfil) || null
+        const marcar = (cambios) => sb.from(tabla).update({ ...cambios, revisado_por: quien, revisado_en: new Date().toISOString() })
+          .eq('id', id).or('revision.is.null,revision.eq.rechazado').select(origen === 'caja' ? `${COLS_MOV}, ${COLS_REVISION}, categoria` : COLS_OFICINA).maybeSingle()
+        if (decision === 'rechazar') {
+          const motivo = String(b.motivo ?? '').trim().slice(0, 200)
+          if (!motivo) return res.status(400).json({ error: 'Falta por qué se rechaza.' })
+          const up = await marcar({ revision: 'rechazado', revision_motivo: motivo })
+          if (up.error) throw new Error(up.error.message)
+          return res.status(200).json({ gasto: { ...(up.data || fila), origen, estado: 'rechazado' } })
+        }
+        const categoria = b.categoria == null || b.categoria === '' ? fila.categoria : String(b.categoria)
+        const negocio = b.negocio == null || b.negocio === '' ? negocioPorDefecto(origen, store) : String(b.negocio)
+        if (!NEGOCIOS_DASHBOARD.includes(negocio)) return res.status(400).json({ error: 'Esa marca no existe en el dashboard.' })
+        const fecha = origen === 'caja' ? diaArgentino(Date.parse(fila.creado_en)) : String(fila.fecha).slice(0, 10)
+        const armado = cuerpoParaDashboard({ origen, fila, categoria, negocio, fecha, aprobadoPor: quien })
+        if (!armado.ok) return res.status(400).json({ error: armado.error })
+        const enviado = await mandarGastoAlDashboard(armado.cuerpo)
+        if (!enviado.ok) return res.status(enviado.status).json({ error: enviado.error })
+        const up = await marcar({ revision: 'aprobado', revision_motivo: null, categoria, dashboard_gasto_id: enviado.gastoId })
+        // El dashboard YA lo tiene: si acá ⛔ se pudo anotar, reintentar es seguro (contesta lo de la 1ª vez).
+        if (up.error) return res.status(502).json({ error: `El gasto entró al dashboard pero acá no se pudo marcar aprobado (${up.error.message}). Volvé a aprobarlo: no se carga dos veces.` })
+        return res.status(200).json({ gasto: { ...(up.data || fila), origen, estado: 'aprobado' } })
+      }
       if (accion === 'salida') {
         // B4: `tipo: 'aporte'` es el efectivo que ENTRA (el cambio que trae alguien): suma al esperado.
         const tipo = b.tipo === 'aporte' ? 'aporte' : 'salida'
@@ -984,6 +1066,9 @@ export default async function handler(req, res) {
         if (mov.error) throw new Error(mov.error.message)
         if (!mov.data) return res.status(404).json({ error: 'Ese movimiento no es de la caja abierta.' })
         if (!puedeAnularMov(mov.data, turno, perfil, esAdmin(perfil))) return res.status(403).json({ error: 'Lo anula quien lo cargó (si abrió la caja) o un admin.' })
+        // Tanda 2: un gasto de caja chica ya APROBADO está en el dashboard ⇒ anularlo acá dejaría el gasto allá y el efectivo acá.
+        const rev = await sb.from('caja_turno_mov').select('revision').eq('id', id).maybeSingle()
+        if (!rev.error && rev.data && rev.data.revision === 'aprobado') return res.status(409).json({ error: 'Ese gasto ya se aprobó y está en el dashboard: anularlo pide sacarlo de allá primero.' })
         if (!mov.data.anulado_en) {
           const up = await sb.from('caja_turno_mov').update({ anulado_en: new Date().toISOString(), anulado_por: perfil.name || null, anulado_motivo: motivo })
             .eq('id', id).is('anulado_en', null).select('id').maybeSingle()
@@ -1448,6 +1533,9 @@ const COLUMNAS_ENVIO = `${COLUMNAS}, payload`
 const REINTENTOS_POR_VUELTA = 2
 // 🔴 `conteos` y `abierto_por_usuario` son de `sql/migrate-caja-conteos.sql`: sin correrlo, el turno ⛔ carga.
 const COLS_MOV = 'id, tipo, monto, motivo, usuario, usuario_cuenta, creado_en, anulado_en, anulado_por, anulado_motivo'
+// La revisión de los gastos (sql/migrate-gasto-revision.sql): en la caja chica y en la oficina, las mismas columnas.
+const COLS_REVISION = 'revision, revisado_por, revisado_en, revision_motivo, dashboard_gasto_id'
+const COLS_OFICINA = `id, store, categoria, detalle, monto, fecha, usuario, usuario_cuenta, creado_en, ${COLS_REVISION}`
 const COLS_TURNO = 'id, abierto_en, abierto_por, abierto_por_usuario, fondo, cerrado_en, cerrado_por, contado, esperado, resumen, nota, conteos'
 /** Los conteos intermedios que guarda un turno: los últimos. Un turno normal cuenta dos o tres veces. */
 const MAX_INTERMEDIOS = 50

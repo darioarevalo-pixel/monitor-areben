@@ -22,6 +22,9 @@ describe('quién ve costos', () => {
     for (const m of ['bdi', 'zattia']) {
       for (const r of ['local', 'administracion']) expect(puedeErp(persona([r]), m, 'cargar-gasto')).toBe(true)
       for (const r of ['mayorista', 'deposito', 'consulta']) expect(puedeErp(persona([r]), m, 'cargar-gasto')).toBe(false)
+      // Tanda 2: el gasto de la OFICINA (⛔ sale de la caja), sólo Administración.
+      expect(puedeErp(persona(['administracion']), m, 'gasto-oficina')).toBe(true)
+      for (const r of ['local', 'mayorista', 'deposito', 'consulta']) expect(puedeErp(persona([r]), m, 'gasto-oficina')).toBe(false)
     }
     expect(permisoErpDe({ method: 'GET', vista: 'gastos' })).toBe('configurar')
     expect(permisoErpDe({ method: 'POST', accion: 'registrar-gasto' })).toBe('configurar')
