@@ -18,6 +18,7 @@ import {
   type ClienteDelPanel, type EtapaPedido, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel,
 } from '@/lib/erp/cliente'
 import { HojaCargarPago, useCuentaPrendida, type CuentaConCliente } from './CuentaCorriente'
+import { FacturarPedido, LETRA, descargarFactura, numeroComprobante } from './FacturasCliente'
 
 const plata = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 const diaMes = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -121,6 +122,7 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
 export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { pedidoId: string; cuenta?: CuentaConCliente | null; onCerrar: () => void; onHecho: (txt: string) => void }) {
   const [ficha, setFicha] = useState<FichaPedido | null>(null)
   const [pagando, setPagando] = useState(false)
+  const [facturando, setFacturando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cantidades, setCantidades] = useState<Record<string, number>>({})
   /** Los renglones AGREGADOS sin guardar (su cantidad vive en `cantidades`, como la de los demás). */
@@ -226,6 +228,15 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
             <span>Total{cambiado ? ' (se recalcula al guardar)' : ''}</span><b>{plata(p.total)}</b>
           </div>
+          {p.venta_id && ficha.facturacion && (ficha.facturacion.entera ? (
+            <div style={{ fontSize: font.sm, color: color.successInk }}>
+              Facturado ✓ · {LETRA[ficha.facturacion.entera.tipo] ?? ''} {numeroComprobante(ficha.facturacion.entera)}
+            </div>
+          ) : ficha.facturacion.partes > 0 ? (
+            <div style={{ fontSize: font.sm }}>Facturado {plata(ficha.facturacion.facturado)} de {plata(ficha.facturacion.total)}</div>
+          ) : p.etapa !== 'anulado' && p.cliente_id && !cambiado && (
+            <div><Button size="sm" variant="outline" disabled={!ficha.escribir} title={ficha.escribir ? undefined : APAGADO} onClick={() => setFacturando(true)}>Facturar</Button></div>
+          ))}
           {ficha.cambios.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div style={ROTULO}>Cambios</div>
@@ -244,6 +255,16 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
             </div>
           ) : <Button size="sm" variant="ghost" tone="danger" onClick={() => setAnulando(true)}>Anular el pedido</Button>)}
         </div>
+      )}
+      {facturando && p?.cliente_id && (
+        <FacturarPedido pedidoId={pedidoId} clienteId={p.cliente_id} total={p.total} preparado={p.etapa === 'preparado' || p.etapa === 'despachado'}
+          onCerrar={() => setFacturando(false)}
+          onHecha={async (f, yaEstaba) => {
+            setFacturando(false)
+            onHecho(yaEstaba ? `El pedido ya tenía la factura ${LETRA[f.tipo] ?? ''} ${numeroComprobante(f)}.` : `Factura ${LETRA[f.tipo] ?? ''} ${numeroComprobante(f)} hecha.`)
+            setVuelta((v) => v + 1)
+            await descargarFactura(f).catch(() => {})
+          }} />
       )}
       {pagando && cuenta && p?.venta_id && p.pago && (
         <HojaCargarPago cuenta={cuenta} pedido={{ ventaId: p.venta_id, numero: p.numero, falta: p.pago.falta }}

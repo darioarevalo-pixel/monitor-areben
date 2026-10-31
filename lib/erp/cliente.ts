@@ -719,6 +719,9 @@ export const enviarFacturaPanel = (p: { clienteId: string; facturaId: string; pa
 /** La factura LIBRE (sin venta: ⛔ mueve stock ni la cuenta corriente). 409 con `falta` ⇒ pedir los datos fiscales en el mismo paso. */
 export const facturaLibrePanel = (p: { clienteId: string; renglones: Array<{ descripcion: string; cantidad: number; unitario: number }>; doc?: string; condicion?: string; razonSocial?: string; domicilio?: string }) =>
   pedir<{ ok: true; factura: FacturaDelPanel }>(post({ accion: 'factura-libre-panel', marca: 'bdi', ...p }), '', 'No se pudo hacer la factura.')
+/** «Facturar» desde la hoja del pedido: la factura ENTERA de su venta, a la ficha del pedido. 409 con `falta` ⇒ pedir los datos fiscales. */
+export const facturarPedidoPanel = (p: { pedidoId: string; doc?: string; condicion?: string; razonSocial?: string; domicilio?: string }) =>
+  pedir<{ ok: true; yaEstaba: boolean; factura: FacturaDelPanel }>(post({ accion: 'facturar-pedido-panel', marca: 'bdi', ...p }), '', 'No se pudo hacer la factura.')
 /** «Es nuevo»: la ficha (nombre + CUIT/DNI) y el número del chat anotado en ella. 409 con `existe` si el documento ya tiene ficha. */
 export const clienteNuevoPanel = (p: { nombre: string; doc: string; whatsapp: string; persona?: string }) =>
   pedir<{ ok: true; cliente: ClienteDelPanel }>(post({ accion: 'cliente-nuevo-panel', marca: 'bdi', ...p }), '', 'No se pudo cargar el cliente.')
@@ -741,8 +744,14 @@ export type RenglonPedido = { product_id: number; size_id: number | null; cantid
 export type CambioPedido = { motivo: string; antes: unknown; despues: unknown; usuario: string | null; cuando: string }
 export type FichaPedido = {
   prendido: true; escribir: boolean
-  pedido: PedidoDelCliente & { editable: boolean; persona: { id: string; nombre: string | null; whatsapp: string; activo: boolean } | null; a_preparar_por: string | null }
+  pedido: PedidoDelCliente & { editable: boolean; cliente_id: string | null; persona: { id: string; nombre: string | null; whatsapp: string; activo: boolean } | null; a_preparar_por: string | null }
   lineas: RenglonPedido[]; cambios: CambioPedido[]
+  /** En qué quedó la facturación de su venta (sin venta, `undefined`; si la base de facturas ⛔ contestó, `null`). */
+  facturacion?: FacturacionPedido | null
+}
+export type FacturacionPedido = {
+  entera: { id: string; tipo: number; pto_vta: number; numero: number; fecha: string | null; total: number } | null
+  partes: number; total: number; facturado: number; queda: number
 }
 export const leerPedidosPanel = (p: { clienteId?: string | null; tel?: string | null }) =>
   pedir<PedidosPanel>(null, `&vista=pedidos-panel&marca=bdi&cliente=${p.clienteId ?? ''}&tel=${String(p.tel ?? '').replace(/\D/g, '').slice(0, 20)}&nc=${Date.now()}`, 'No se pudieron leer los pedidos.')

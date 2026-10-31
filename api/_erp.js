@@ -131,7 +131,7 @@ import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, e
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
 import { anotarWhatsappPanel, bcraDelPanel, clienteNuevoPanel, clientesDelPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
-import { enviarFacturaPanel, facturaLibrePanel, facturasDeClientePanel } from './_erp-factura-mayorista.js'
+import { conFacturacion, enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, facturasDeClientePanel } from './_erp-factura-mayorista.js'
 import { ACCIONES_PEDIDO, accionDePedido, pedidoDelPanel, pedidosDelPanel, preparadosSinPagarDelPanel, productosParaElPanel } from './_erp-pedido.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
@@ -986,7 +986,9 @@ export const marcaDePuntoDeVenta = (marcaBase, marcaVenta) => (marcaVenta === 's
 
 export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  const p = leerFacturar(body)
+  // `deps.pedida`: el receptor ya armado por quien llama (la hoja del pedido mayorista arma el de la FICHA del cliente):
+  // sin `cliente` ⇒ ⛔ se guarda otra ficha (las de GN vienen sin documento y `guardarCliente` crearía una segunda).
+  const p = deps.pedida || leerFacturar(body)
   if (p.error) return { status: 400, error: p.error }
   const { ambiente, error: errorAmbiente } = ambienteSeguro()
   if (!ambiente) return { status: 409, error: errorAmbiente }
@@ -1040,7 +1042,9 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
     }
     if (factura.estado !== 'autorizada') return { status: 409, error: 'Esa venta tiene una factura a medio pedir: probá de nuevo en un minuto.' }
     const sinAtar = await atarFactura(db, { venta: f, facturaId: factura.id, tipo: 'factura' })
-    const { receptor, sinFicha } = p.cliente
+    const { receptor, sinFicha } = deps.receptorPdf
+      ? { receptor: deps.receptorPdf, sinFicha: null }
+      : p.cliente
       ? await guardarFichaA(db, { venta: f, doc: p.receptor.docNro, condicionIva: p.receptor.condicionIva, ...p.cliente })
       : { receptor: await receptorDeFicha(db, { empresaId: f.empresa_id, factura }), sinFicha: null }
     const nombres = await nombresDeVariantes(b, (f.lineas || []).map((l) => l.product_id))
@@ -1946,7 +1950,7 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && req.query.vista === 'pedido-panel') {
       const r = await pedidoDelPanel({ pedidoId: String(req.query.id || ''), usuario: [perfil.user, perfil.email] }, { conMotor })
-      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(await conFacturacion(r))
     }
     if (req.method === 'GET' && req.query.vista === 'pedido-productos') {
       const r = await productosParaElPanel({ pedidoId: String(req.query.id || ''), q: String(req.query.q || ''), usuario: [perfil.user, perfil.email] }, { conMotor })
@@ -1967,6 +1971,10 @@ export default async function handler(req, res) {
     }
     if (req.method === 'POST' && body.accion === 'factura-libre-panel') {
       const r = await facturaLibrePanel({ body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error, falta: r.falta } : r)
+    }
+    if (req.method === 'POST' && body.accion === 'facturar-pedido-panel') {
+      const r = await facturarPedidoPanel({ body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error, falta: r.falta } : r)
     }
     if (req.method === 'POST' && body.accion === 'factura-enviar-panel') {

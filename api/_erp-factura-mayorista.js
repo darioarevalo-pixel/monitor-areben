@@ -12,12 +12,12 @@
 import { ptoVtaDe } from '../motor/arca/arca.core.js'
 import { facturarLote } from '../motor/arca/lote.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
-import { leerFacturaLibre, opcionDeCondicionPanel, receptorMayorista } from '../lib/erp/factura-mayorista.core.js'
+import { facturacionDelPedido, leerFacturaLibre, opcionDeCondicionPanel, receptorMayorista } from '../lib/erp/factura-mayorista.core.js'
 import { SIN_ARCA, baseFacturacion, repoFacturas } from './_facturacion.js'
 import { panelCuentaPrendido } from './_erp-clientes.js'
 import { escribirPrendido } from './_erp-pedido.js'
 import { pedirFacturaPorMail } from '../lib/mailer/factura.core.js'
-import { UMBRAL_IDENTIFICAR, ambienteSeguro, arcaDe, filaParaPdf } from './_erp.js'
+import { UMBRAL_IDENTIFICAR, ambienteSeguro, arcaDe, facturarVentaPropia, filaParaPdf } from './_erp.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const SIN_MIGRAR = 'Falta la migración de la facturación de mayoristas (sql/migrate-facturas-mayorista.sql).'
@@ -126,6 +126,84 @@ export async function facturasDeClientePanel({ clienteId = '', usuario = null },
     prendido: true, ambiente, fiscal,
     facturas: (data || []).map((f) => ({ ...filaParaPdf(f, { numero: null, renglones: f.renglones || [], receptor }), clase: f.clase, venta_ref: f.venta_ref ?? null })),
   }
+}
+
+/**
+ * En qué quedó la facturación de la venta de un pedido (la hoja: «Facturado ✓» / «Facturado $X de $Y»). La entera está en
+ * `venta_id` = la venta; cada parte en `<venta>:parte:<uuid>` (con `venta_ref`); sus NC llevan el mismo `venta_id`.
+ * @param {any} sb @param {{ ambiente: string, ventaId: string, total: number }} p
+ */
+export async function facturacionDeVenta(sb, { ambiente, ventaId, total }) {
+  if (!UUID.test(String(ventaId))) return facturacionDelPedido([], total)
+  const { data, error } = await sb.from('facturas').select('id, tipo, clase, total, asociado_id, pto_vta, numero, fecha')
+    .eq('ambiente', ambiente).eq('estado', 'autorizada')
+    .or(`venta_id.eq.${ventaId},venta_id.like."${ventaId}:parte:*",venta_ref.eq.${ventaId}`)
+  if (error) throw new Error(`facturas: ${error.message}`)
+  return facturacionDelPedido(data || [], total)
+}
+
+/**
+ * La hoja del pedido con su facturación. Si la base de facturas ⛔ contesta, la hoja sale igual, sin el dato (`null`):
+ * la hoja es para trabajar el pedido, ⛔ se cae por esto.
+ * @param {any} r lo que devolvió `pedidoDelPanel` @param {{ sb?: any }} deps
+ */
+export async function conFacturacion(r, deps = {}) {
+  if (!r?.prendido || !r.pedido?.venta_id) return r
+  const { ambiente } = ambienteSeguro()
+  if (!ambiente) return { ...r, facturacion: null }
+  try {
+    const facturacion = await facturacionDeVenta(deps.sb || baseFacturacion(), { ambiente, ventaId: String(r.pedido.venta_id), total: Number(r.pedido.total) })
+    return { ...r, facturacion }
+  } catch (e) {
+    console.error(`[erp] facturación del pedido ${r.pedido.id}: ${e instanceof Error ? e.message.slice(0, 120) : 'error'}`)
+    return { ...r, facturacion: null }
+  }
+}
+
+/**
+ * «Facturar» desde la HOJA DEL PEDIDO: la factura ENTERA de su venta, a la FICHA del pedido (Darío §5). Es la misma puerta
+ * que la Caja (`facturarVentaPropia`: candado, «ya tiene factura», frena con partes), con el receptor de la ficha y la fila
+ * marcada `clase: 'venta'` + `cliente_id` (así sale en «Facturas» de la tarjeta y se manda por mail). Sin datos fiscales se
+ * piden en el mismo paso y se guardan en la MISMA ficha (`ponerFiscalCliente`).
+ * `body`: `{ pedidoId, doc?, condicion?, razonSocial?, domicilio? }`.
+ * @param {{ body: any, usuario: string|null, quien?: any }} p
+ * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, arca?: any, repo?: any, sb?: any, b?: any, leerPedido?: Function, buscarFactura?: Function, tienePartes?: Function }} deps
+ */
+export async function facturarPedidoPanel({ body, usuario, quien = usuario }, deps) {
+  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Se factura desde acá el día que BDI pasa al ERP. Hasta entonces, en Gestión Nube.' }
+  if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
+  const pedidoId = String(body?.pedidoId ?? '')
+  if (!UUID.test(pedidoId)) return { status: 400, error: 'Falta el pedido' }
+  const datos = { doc: body?.doc, condicion: body?.condicion, razonSocial: body?.razonSocial, domicilio: body?.domicilio }
+  const sb = deps.sb || (deps.repo ? null : baseFacturacion())
+
+  return deps.conMotor('bdi', 'La factura del pedido', async (pg) => {
+    const leer = deps.leerPedido || (async (db, e) => (await import('../motor/pedido/venta.mjs')).fichaDePedidoMayorista(db, e))
+    const r = await leer(pg, { pedido_id: pedidoId })
+    if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADO' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo leer el pedido.' }
+    const p = r.pedido
+    if (p.anulado_en) return { status: 409, error: 'El pedido está anulado: no se factura.' }
+    if (!p.venta_id || !p.cliente_id) return { status: 409, error: 'El pedido todavía no entró al ERP con un cliente.' }
+    const ficha = await leerFicha(pg, String(p.cliente_id))
+    if (!ficha) return { status: 404, error: 'No está la ficha del cliente del pedido.' }
+    const rec = receptorMayorista(ficha, datos)
+    if (rec.falta) return { status: 409, error: rec.falta, falta: true }
+    if (rec.guardar) {
+      const mal = await completarFicha(pg, ficha, rec.ficha)
+      if (mal) return mal
+    }
+    const ventaId = String(p.venta_id)
+    const repo = deps.repo || repoFacturas(sb)
+    const hecha = await facturarVentaPropia({ marca: 'bdi', body: { ventaId }, usuario }, {
+      db: pg, sb, arca: deps.arca, b: deps.b, buscarFactura: deps.buscarFactura, tienePartes: deps.tienePartes,
+      repo: { ...repo, reservar: (filas) => repo.reservar(filas.map((f) => ({ ...f, clase: 'venta', cliente_id: ficha.id }))) },
+      pedida: { ventaId, tipo: rec.tipo, receptor: rec.receptor },
+      receptorPdf: { nombre: rec.ficha.razonSocial || ficha.razon_social || ficha.nombre, domicilio: rec.ficha.domicilio || ficha.domicilio || null },
+    })
+    if (hecha.status) return hecha
+    return { ...hecha, factura: { ...hecha.factura, clase: 'venta' } }
+  })
 }
 
 const MAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/

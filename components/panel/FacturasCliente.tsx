@@ -9,15 +9,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select } from '@/components/ui'
 import { color, font } from '@/components/ui/tokens'
-import { enviarFacturaPanel, facturaLibrePanel, leerFacturasClientePanel, type FacturaDelPanel, type FiscalDelPanel } from '@/lib/erp/cliente'
+import { enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, leerFacturasClientePanel, type FacturaDelPanel, type FiscalDelPanel } from '@/lib/erp/cliente'
 import { parsearMonto } from '@/lib/compromisos/plata.core.js'
 
 /** El PDF (jsPDF + QR) se carga recién al pedirlo: ⛔ entra al paquete del panel. */
-const descargarFactura = async (f: FacturaDelPanel) => (await import('@/lib/arca/factura-pdf')).descargarFactura(f)
+export const descargarFactura = async (f: FacturaDelPanel) => (await import('@/lib/arca/factura-pdf')).descargarFactura(f)
 const facturaEnBase64 = async (f: FacturaDelPanel) => (await import('@/lib/arca/factura-pdf')).facturaEnBase64(f)
-const numeroComprobante = (f: { pto_vta: number; numero: number }) => `${String(f.pto_vta).padStart(5, '0')}-${String(f.numero).padStart(8, '0')}`
+export const numeroComprobante = (f: { pto_vta: number; numero: number }) => `${String(f.pto_vta).padStart(5, '0')}-${String(f.numero).padStart(8, '0')}`
 const plata = (n: number) => `$${n.toLocaleString('es-AR', { maximumFractionDigits: 2 })}`
-const LETRA: Record<number, string> = { 1: 'A', 6: 'B' }
+export const LETRA: Record<number, string> = { 1: 'A', 6: 'B' }
 const ROTULO = { fontSize: 11, fontWeight: 700, color: color.mut2, textTransform: 'uppercase' as const, letterSpacing: 0.4 }
 const CONDICIONES: Array<[string, string]> = [['ri', 'Responsable inscripto'], ['monotributo', 'Monotributo'], ['exento', 'Exento'], ['consumidor', 'Consumidor final']]
 type Renglon = { descripcion: string; cantidad: string; unitario: string }
@@ -79,31 +79,25 @@ function FacturaLibre({ clienteId, fiscal, onCerrar, onHecha }: {
   clienteId: string; fiscal: FiscalDelPanel; onCerrar: () => void; onHecha: (f: FacturaDelPanel) => void | Promise<void>
 }) {
   const [renglones, setRenglones] = useState<Renglon[]>([{ ...VACIO }])
-  const incompleta = !fiscal.condicion || ((fiscal.condicion === 'ri' || fiscal.condicion === 'monotributo') && (!fiscal.doc || !fiscal.razonSocial || !fiscal.domicilio))
-  const [pedirDatos, setPedirDatos] = useState(incompleta)
-  const [doc, setDoc] = useState(fiscal.doc ?? '')
-  const [condicion, setCondicion] = useState<string>(fiscal.condicion ?? '')
-  const [razonSocial, setRazonSocial] = useState(fiscal.razonSocial ?? '')
-  const [domicilio, setDomicilio] = useState(fiscal.domicilio ?? '')
+  const fis = useDatosFiscales(fiscal)
   const [error, setError] = useState('')
   const [enviando, setEnviando] = useState(false)
 
   const leidos = renglones.map((r) => ({ descripcion: r.descripcion.trim(), cantidad: Number(r.cantidad), unitario: parsearMonto(r.unitario) ?? NaN }))
   const total = leidos.reduce((a, r) => a + (Number.isFinite(r.cantidad * r.unitario) ? Math.round(r.cantidad * r.unitario * 100) : 0), 0) / 100
   const poner = (i: number, k: keyof Renglon, v: string) => setRenglones((rs) => rs.map((r, j) => (j === i ? { ...r, [k]: v } : r)))
-  const esA = condicion === 'ri' || condicion === 'monotributo'
 
   async function hacer() {
     setEnviando(true); setError('')
     try {
       const r = await facturaLibrePanel({
         clienteId, renglones: leidos,
-        ...(pedirDatos ? { doc: doc.replace(/\D/g, ''), condicion, razonSocial: razonSocial.trim(), domicilio: domicilio.trim() } : {}),
+        ...fis.cuerpo(),
       })
       await onHecha(r.factura)
     } catch (e) {
       const datos = (e as { datos?: { falta?: boolean } }).datos
-      if (datos?.falta) setPedirDatos(true)
+      if (datos?.falta) fis.setPedirDatos(true)
       setError(e instanceof Error ? e.message : 'No se pudo hacer la factura.')
     } finally { setEnviando(false) }
   }
@@ -128,26 +122,7 @@ function FacturaLibre({ clienteId, fiscal, onCerrar, onHecha }: {
         <Button size="sm" variant="outline" style={{ height: 'auto', alignSelf: 'flex-start' }} disabled={renglones.length >= 40} onClick={() => setRenglones((rs) => [...rs, { ...VACIO }])}>Agregar renglón</Button>
         <div style={{ fontSize: font.md, fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Total {plata(total)}</div>
 
-        {pedirDatos ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${color.line2}`, paddingTop: 8 }}>
-            <div style={ROTULO}>Datos para facturar (quedan en la ficha)</div>
-            <Field label="Condición frente al IVA">
-              <Select value={condicion} onChange={(e) => setCondicion(e.target.value)}>
-                <option value="">Elegir…</option>
-                {CONDICIONES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
-              </Select>
-            </Field>
-            <Field label={esA ? 'CUIT' : 'CUIT o DNI (opcional)'}><Input value={doc} inputMode="numeric" onChange={(e) => setDoc(e.target.value)} /></Field>
-            <Field label={esA ? 'Razón social' : 'Razón social (opcional)'}><Input value={razonSocial} maxLength={120} onChange={(e) => setRazonSocial(e.target.value)} /></Field>
-            <Field label={esA ? 'Domicilio' : 'Domicilio (opcional)'}><Input value={domicilio} maxLength={200} onChange={(e) => setDomicilio(e.target.value)} /></Field>
-            {condicion && <div style={{ fontSize: font.sm, color: color.mut2 }}>Sale factura {esA ? 'A' : 'B'}.</div>}
-          </div>
-        ) : (
-          <div style={{ fontSize: font.sm, color: color.mut2 }}>
-            Sale factura {fiscal.condicion === 'ri' || fiscal.condicion === 'monotributo' ? 'A' : 'B'} a {fiscal.razonSocial || 'el cliente'}{fiscal.doc ? ` (${fiscal.doc})` : ''}.{' '}
-            <Button size="sm" variant="ghost" style={{ height: 'auto' }} onClick={() => setPedirDatos(true)}>Cambiar datos</Button>
-          </div>
-        )}
+        <CamposFiscales fiscal={fiscal} f={fis} />
         {error && <Notice tone="danger">{error}</Notice>}
       </div>
     </Modal>
@@ -188,5 +163,98 @@ function EnviarPorMail({ clienteId, factura, sugerido, ambiente, onCerrar, onEnv
         {error && <Notice tone="danger">{error}</Notice>}
       </div>
     </Modal>
+  )
+}
+
+const esCondicionA = (c: string | null | undefined) => c === 'ri' || c === 'monotributo'
+
+/** Los datos fiscales del cliente, de la ficha o pedidos en el mismo paso (quedan en la ficha). Lo usan la libre y la del pedido. */
+function useDatosFiscales(fiscal: FiscalDelPanel) {
+  const incompleta = !fiscal.condicion || (esCondicionA(fiscal.condicion) && (!fiscal.doc || !fiscal.razonSocial || !fiscal.domicilio))
+  const [pedirDatos, setPedirDatos] = useState(incompleta)
+  const [doc, setDoc] = useState(fiscal.doc ?? '')
+  const [condicion, setCondicion] = useState<string>(fiscal.condicion ?? '')
+  const [razonSocial, setRazonSocial] = useState(fiscal.razonSocial ?? '')
+  const [domicilio, setDomicilio] = useState(fiscal.domicilio ?? '')
+  const cuerpo = () => (pedirDatos ? { doc: doc.replace(/\D/g, ''), condicion, razonSocial: razonSocial.trim(), domicilio: domicilio.trim() } : {})
+  return { pedirDatos, setPedirDatos, doc, setDoc, condicion, setCondicion, razonSocial, setRazonSocial, domicilio, setDomicilio, cuerpo }
+}
+
+function CamposFiscales({ fiscal, f }: { fiscal: FiscalDelPanel; f: ReturnType<typeof useDatosFiscales> }) {
+  const esA = esCondicionA(f.condicion)
+  return f.pedirDatos ? (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${color.line2}`, paddingTop: 8 }}>
+      <div style={ROTULO}>Datos para facturar (quedan en la ficha)</div>
+      <Field label="Condición frente al IVA">
+        <Select value={f.condicion} onChange={(e) => f.setCondicion(e.target.value)}>
+          <option value="">Elegir…</option>
+          {CONDICIONES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+        </Select>
+      </Field>
+      <Field label={esA ? 'CUIT' : 'CUIT o DNI (opcional)'}><Input value={f.doc} inputMode="numeric" onChange={(e) => f.setDoc(e.target.value)} /></Field>
+      <Field label={esA ? 'Razón social' : 'Razón social (opcional)'}><Input value={f.razonSocial} maxLength={120} onChange={(e) => f.setRazonSocial(e.target.value)} /></Field>
+      <Field label={esA ? 'Domicilio' : 'Domicilio (opcional)'}><Input value={f.domicilio} maxLength={200} onChange={(e) => f.setDomicilio(e.target.value)} /></Field>
+      {f.condicion && <div style={{ fontSize: font.sm, color: color.mut2 }}>Sale factura {esA ? 'A' : 'B'}.</div>}
+    </div>
+  ) : (
+    <div style={{ fontSize: font.sm, color: color.mut2 }}>
+      Sale factura {esCondicionA(fiscal.condicion) ? 'A' : 'B'} a {fiscal.razonSocial || 'el cliente'}{fiscal.doc ? ` (${fiscal.doc})` : ''}.{' '}
+      <Button size="sm" variant="ghost" style={{ height: 'auto' }} onClick={() => f.setPedirDatos(true)}>Cambiar datos</Button>
+    </div>
+  )
+}
+
+/**
+ * «Facturar» desde la HOJA DEL PEDIDO (Darío §5): la factura ENTERA de su venta, por el total del pedido como está ahora,
+ * a la ficha del pedido. Si faltan datos fiscales se piden acá mismo. Al salir, baja el PDF.
+ */
+export function FacturarPedido({ pedidoId, clienteId, total, preparado, onCerrar, onHecha }: {
+  pedidoId: string; clienteId: string; total: number; preparado: boolean; onCerrar: () => void; onHecha: (f: FacturaDelPanel, yaEstaba: boolean) => void | Promise<void>
+}) {
+  const [fiscal, setFiscal] = useState<FiscalDelPanel | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let vivo = true
+    leerFacturasClientePanel(clienteId)
+      .then((r) => { if (vivo) { if (r.prendido) setFiscal(r.fiscal); else setError('La cuenta corriente del panel está apagada.') } })
+      .catch((e) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudo leer la ficha del cliente.') })
+    return () => { vivo = false }
+  }, [clienteId])
+  return (
+    <Modal abierto onCerrar={onCerrar} titulo="Facturar el pedido" pie={!fiscal ? <Button variant="outline" onClick={onCerrar}>Cancelar</Button> : undefined}>
+      {!fiscal && !error && <div style={{ fontSize: font.sm, color: color.mut2 }}>Cargando…</div>}
+      {!fiscal && error && <Notice tone="danger">{error}</Notice>}
+      {fiscal && <FormFacturarPedido pedidoId={pedidoId} fiscal={fiscal} total={total} preparado={preparado} onCerrar={onCerrar} onHecha={onHecha} />}
+    </Modal>
+  )
+}
+
+function FormFacturarPedido({ pedidoId, fiscal, total, preparado, onCerrar, onHecha }: {
+  pedidoId: string; fiscal: FiscalDelPanel; total: number; preparado: boolean; onCerrar: () => void; onHecha: (f: FacturaDelPanel, yaEstaba: boolean) => void | Promise<void>
+}) {
+  const fis = useDatosFiscales(fiscal)
+  const [error, setError] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  async function hacer() {
+    setEnviando(true); setError('')
+    try {
+      const r = await facturarPedidoPanel({ pedidoId, ...fis.cuerpo() })
+      await onHecha(r.factura, r.yaEstaba)
+    } catch (e) {
+      if ((e as { datos?: { falta?: boolean } }).datos?.falta) fis.setPedirDatos(true)
+      setError(e instanceof Error ? e.message : 'No se pudo hacer la factura.')
+    } finally { setEnviando(false) }
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: font.md, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>Total del pedido {plata(total)}</div>
+      {!preparado && <Notice tone="info">El pedido todavía no está preparado. Si en el depósito falta algo, primero se corrige el pedido y después se factura.</Notice>}
+      <CamposFiscales fiscal={fiscal} f={fis} />
+      {error && <Notice tone="danger">{error}</Notice>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
+        <Button tone="brand" onClick={hacer} disabled={enviando || !(total > 0)}>{enviando ? 'Pidiendo el CAE…' : `Facturar ${plata(total)}`}</Button>
+      </div>
+    </div>
   )
 }

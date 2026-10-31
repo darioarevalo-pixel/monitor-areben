@@ -84,7 +84,13 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
   (RI y monotributo ⇒ A, medido 31-oct; «monotributo ⇒ B» de Darío queda como pregunta). Sin datos fiscales se piden en el
   mismo paso y se guardan con `ponerFiscalCliente` del motor (la MISMA ficha: las de GN vienen sin documento y `guardarCliente`
   crearía otra). 🔴 **«⛔ pasarse» lo frena la BASE** (`sql/migrate-facturas-mayorista.sql`, disparador con candado por venta):
-  clases `venta`/`parte`/`libre`. Falta la PARTE por monto (`partePorMonto` ya está, sin puerta): espera «lo que salió» (Ger).
+  clases `venta`/`parte`/`libre`. Falta la PARTE por monto (`partePorMonto` ya está, sin puerta). «Mail» en cada factura: Mailer
+  (SES), en homologación sólo a una casilla @arebensrl.com.
+- **«Facturar» en la HOJA DEL PEDIDO** (Darío §5, 31-oct): la factura ENTERA de la venta del pedido, por su total como está, a
+  la ficha del pedido (`facturarPedidoPanel` → la MISMA `facturarVentaPropia` de la Caja con el receptor ya armado: ⛔ guarda otra
+  ficha; la fila sale `clase: 'venta'` + `cliente_id` ⇒ aparece en «Facturas» de la tarjeta). La hoja muestra «Facturado ✓» con
+  el número, o «Facturado $X de $Y» con partes (`conFacturacion` + `facturacionDelPedido`; una factura que su NC dejó en cero ⛔
+  cuenta). Misma doble llave. Si el pedido ⛔ está preparado, avisa: lo que falte en el depósito se corrige ANTES de facturar.
 
 ## Reglas que el código no dice
 
