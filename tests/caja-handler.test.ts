@@ -1322,7 +1322,10 @@ describe('caja · auditoría 11-oct (A1, A3, A4, E, B1)', () => {
   it('🔑 A4: la venta de AYER cruza con el pago de HOY (se leen los dos días)', async () => {
     conSesion(CAJERA)
     await correr(req('POST', {}, TRANSF))
-    base.ventas.get(ID)!.creada_en = new Date(Date.now() - 26 * 3600_000).toISOString()
+    // AYER al mediodía de Argentina, ⛔ «hace 26 h»: entre las 00 y las 02 (AR) eso cae ANTEAYER y el cruce lee, bien, 3 días
+    // (el CI de main quedó rojo el 31-oct a las 00:01 por eso).
+    const ayerAR = new Date(Date.now() - 3 * 3600_000 - 86400_000).toISOString().slice(0, 10)
+    base.ventas.get(ID)!.creada_en = `${ayerAR}T15:00:00.000Z`
     base.mpPagos = [pagoMP(77, 22900)]
     const r = await correr(req('POST', {}, { action: 'cruzar', id: ID }))
     // Se leen los DOS días (A4), y como el pago llegó horas después, lo elige la cajera (A5).
