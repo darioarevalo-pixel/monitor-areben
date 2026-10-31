@@ -38,6 +38,8 @@ export function filaDeOrden(tienda, o, opciones = {}) {
     shipping_status: texto(o.shipping_status),
     gateway: texto(o.gateway_name || o.gateway),
     medio: texto(o.payment_details?.method),
+    // sql/061: las cuotas del pago (la tasa de MP cambia con ellas). ⛔ informadas o 0 ⇒ null.
+    cuotas: Number.isInteger(Number(o.payment_details?.installments)) && Number(o.payment_details.installments) > 0 ? Number(o.payment_details.installments) : null,
     moneda: texto(o.currency),
     subtotal: plata(o.subtotal),
     descuento: plata(o.discount),

@@ -5,7 +5,7 @@
  *
  * Devuelve `{ ok: true, … }` o `{ ok: false, error: { codigo, mensaje, campo? } }`, como la venta.
  */
-import { MEDIOS, rutaVigente } from './cuentas.mjs'
+import { CONCEPTOS, MEDIOS, TIPOS_PAGO, rutaVigente } from './cuentas.mjs'
 
 const fallo = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo, mensaje, campo } : { codigo, mensaje } })
 const q = async (db, sql, p) => (await db.query(sql, p)).rows
@@ -72,4 +72,48 @@ export async function ponerRuta(db, e, { ahora = new Date() } = {}) {
     if (err && err.code === '23505') return fallo('RUTA_REPETIDA', 'Ya hay una ruta para ese medio con esa misma fecha', 'desde')
     throw err
   }
+}
+
+/**
+ * Pone una TASA (sql/061): marca × canal × medio, con `tipo` y `cuotas` opcionales (null = cualquiera), para un `concepto`
+ * (`medio` = lo que se queda MP/Pago Nube/Payway; `plataforma` = lo que se queda TN). La tasa va CON IVA (2% + IVA = 2,42).
+ * ⛔ se edita: cambiar es poner otra con `desde` nuevo; ⛔ para atrás (el pasado ⛔ se recalcula).
+ * @param {{ marca: string, canal: string, medio: string, tipo?: string|null, cuotas?: number|null, concepto: string, tasa: number,
+ *   desde?: Date|string, usuario: string }} e
+ */
+export async function ponerTasa(db, e, { ahora = new Date() } = {}) {
+  if (!e || typeof e !== 'object') return fallo('ENTRADA_INVALIDA', 'Falta la tasa')
+  if (!(typeof e.usuario === 'string' && e.usuario.trim())) return fallo('ENTRADA_INVALIDA', 'Falta quién la pone', 'usuario')
+  if (!MEDIOS.includes(e.medio)) return fallo('ENTRADA_INVALIDA', `Medio desconocido: ${e.medio}`, 'medio')
+  if (!CONCEPTOS.includes(e.concepto)) return fallo('ENTRADA_INVALIDA', 'El concepto es «medio» o «plataforma»', 'concepto')
+  const tipo = e.tipo == null || e.tipo === '' ? null : e.tipo
+  if (tipo != null && !TIPOS_PAGO.includes(tipo)) return fallo('ENTRADA_INVALIDA', `Tipo de pago desconocido: ${tipo}`, 'tipo')
+  const cuotas = e.cuotas == null || e.cuotas === '' ? null : Number(e.cuotas)
+  if (cuotas != null && !(Number.isInteger(cuotas) && cuotas >= 1 && cuotas <= 24)) return fallo('ENTRADA_INVALIDA', 'Las cuotas van de 1 a 24', 'cuotas')
+  const tasa = Number(e.tasa)
+  if (e.tasa == null || e.tasa === '' || !(Number.isFinite(tasa) && tasa >= 0 && tasa < 100)) return fallo('ENTRADA_INVALIDA', 'La tasa es un % entre 0 y 100', 'tasa')
+  const desde = new Date(e.desde ?? ahora)
+  if (Number.isNaN(desde.getTime())) return fallo('ENTRADA_INVALIDA', 'Fecha inválida', 'desde')
+  if (desde.getTime() < ahora.getTime() - TOLERANCIA_MS) return fallo('DESDE_PASADO', 'Una tasa vale desde ahora en adelante: el pasado no se cambia', 'desde')
+  const [m] = await q(db, 'select empresa_id from marca where id = $1', [e.marca])
+  if (!m) return fallo('MARCA_DESCONOCIDA', `Marca desconocida: ${e.marca}`, 'marca')
+  const [c] = await q(db, 'select id from canal where id = $1', [e.canal])
+  if (!c) return fallo('CANAL_DESCONOCIDO', `Canal desconocido: ${e.canal}`, 'canal')
+  try {
+    const [r] = await q(db, `insert into tasa_cobro (empresa_id, marca, canal, medio, tipo, cuotas, concepto, tasa, desde, puesta_por)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id::text, desde`,
+      [m.empresa_id, e.marca, e.canal, e.medio, tipo, cuotas, e.concepto, tasa, desde.toISOString(), e.usuario.trim()])
+    return { ok: true, tasa: r }
+  } catch (err) {
+    if (err && err.code === '23505') return fallo('TASA_REPETIDA', 'Ya hay una tasa para eso con esa misma fecha', 'desde')
+    throw err
+  }
+}
+
+/** Las tasas vigentes de una marca (la última de cada combinación), para mostrar. */
+export async function tasasVigentes(db, { marca, en = new Date() }) {
+  return q(db, `select distinct on (canal, medio, coalesce(tipo, ''), coalesce(cuotas, 0), concepto)
+      canal, medio, tipo, cuotas, concepto, tasa::float, desde, puesta_por
+    from tasa_cobro where marca = $1 and desde <= $2
+    order by canal, medio, coalesce(tipo, ''), coalesce(cuotas, 0), concepto, desde desc`, [marca, new Date(en).toISOString()])
 }

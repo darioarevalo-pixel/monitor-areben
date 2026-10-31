@@ -45,6 +45,14 @@ export function ventaRealEn(tienda, env = process.env) {
   return lista.includes(tienda)
 }
 
+/**
+ * El TIPO de pago del ERP (sql/061) según el `payment_details.method` del pedido. Medido 30-oct (Stunned, 60 d): Pago Nube
+ * `wire_transfer` · Mercado Pago `credit_card` y `wallet` (dinero en cuenta) · Efectivo `custom`. Lo desconocido ⇒ null (la
+ * tasa general del medio).
+ */
+const TIPO_DE_METODO = { credit_card: 'credito', debit_card: 'debito', wallet: 'dinero_cuenta', account_money: 'dinero_cuenta', wire_transfer: 'transferencia' }
+export const tipoDePagoTN = (metodo) => TIPO_DE_METODO[String(metodo ?? '').toLowerCase()] ?? null
+
 export const origenRef = (tienda, tnId) => `${tienda}:${tnId}`
 const pesos = (x) => Math.round(Number(x) * 100) / 100
 
@@ -116,7 +124,8 @@ export function planVentasTN({ tienda, ordenes, indice, cuentas, ya, real = fals
       usuario: 'tienda-nube', prueba: !real, ocurrida_en: new Date(o.pagada_en).toISOString(),
       // La ficha del comprador (sql/059), si la orden ya la tiene.
       ...(o.cliente_id ? { cliente_id: String(o.cliente_id) } : {}),
-      lineas, subtotal, total, pagos: [{ cuenta: cuenta.id, monto: total }],
+      lineas, subtotal, total,
+      pagos: [{ cuenta: cuenta.id, monto: total, tipo_pago: tipoDePagoTN(o.medio), ...(o.cuotas ? { cuotas: Number(o.cuotas) } : {}) }],
       detalle: { tn: { numero: Number(o.numero), tn_id: Number(o.tn_id), gateway: o.gateway, medio: o.medio, ...(/^multiple$/i.test(o.gateway || '') ? { pago_multiple: true } : {}), envio: pesos(o.envio || 0), descuento: pesos(o.descuento || 0) } },
     })
   }

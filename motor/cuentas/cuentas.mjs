@@ -119,6 +119,31 @@ export function rutaVigente(rutas, { marca, canal, medio, en }) {
   return mejor
 }
 
+/** Con qué se pagó, dentro del medio (sql/061). La tasa de MP cambia con esto y con las cuotas. */
+export const TIPOS_PAGO = ['credito', 'debito', 'dinero_cuenta', 'transferencia']
+export const CONCEPTOS = ['medio', 'plataforma']
+
+/**
+ * La TASA vigente de un cobro (sql/061) para un `concepto`: `medio` (lo que se queda MP, Pago Nube, Payway) o `plataforma`
+ * (lo que se queda TN). Una fila con `tipo`/`cuotas` null vale para cualquiera. Gana la MÁS ESPECÍFICA que ya empezó
+ * (tipo+cuotas > tipo > cuotas > ninguna) y, en empate, la de `desde` más nuevo. null = ⛔ hay tasa (⛔ se inventa).
+ * @param {Array<{ marca, canal, medio, tipo: string|null, cuotas: number|null, concepto, tasa, desde }>} tasas
+ * @param {{ marca: string, canal: string, medio: string, tipo?: string|null, cuotas?: number|null, concepto: string, en: Date|string }} cobro
+ */
+export function tasaVigente(tasas, { marca, canal, medio, tipo = null, cuotas = null, concepto, en }) {
+  const t = new Date(en).getTime()
+  const peso = (x) => (x.tipo != null ? 2 : 0) + (x.cuotas != null ? 1 : 0)
+  let mejor = null
+  for (const x of tasas) {
+    if (x.marca !== marca || x.canal !== canal || x.medio !== medio || x.concepto !== concepto) continue
+    if (x.tipo != null && x.tipo !== tipo) continue
+    if (x.cuotas != null && Number(x.cuotas) !== Number(cuotas)) continue
+    if (new Date(x.desde).getTime() > t) continue
+    if (!mejor || peso(x) > peso(mejor) || (peso(x) === peso(mejor) && new Date(x.desde) > new Date(mejor.desde))) mejor = x
+  }
+  return mejor
+}
+
 /**
  * Bruno (17-oct): se factura SÓLO si el titular es Areben Y el medio ⛔ es efectivo (el efectivo es de Areben, pero la
  * forma de pago excluye la factura). Lo demás va al pendiente a facturar.
@@ -132,11 +157,15 @@ const centavos = (x) => Math.round(x * 100) / 100
  * Lo que la 020 le agrega a un cobro: su MEDIO, su CUENTA REAL (la de la ruta vigente a la hora del cobro) y lo que se
  * queda el procesador. Sin ruta ⇒ cuenta en BLANCO (⛔ se inventa). Una ruta «se elige en cada cobro» (cuenta null) toma
  * la que trae el pago (`elegida`); si la ruta YA dice la cuenta, el pago ⛔ la cambia (la decide gerencia, ⛔ la Caja).
- * @param {{ monto: number, elegida?: string|null }} pago
+ * La COMISIÓN sale de `tasa_cobro` (concepto `medio`, por tipo y cuotas, sql/061) y, si ⛔ hay, de la tasa de la ruta. El
+ * COSTO DE PLATAFORMA (concepto `plataforma`, lo que se queda TN) va APARTE en `costo_plataforma`: ⛔ se suma a la comisión
+ * (Bruno, 30-oct: el resultado ⛔ oculta ningún gasto).
+ * @param {{ monto: number, elegida?: string|null, tipo_pago?: string|null, cuotas?: number|null }} pago
  * @param {{ medio: string, nombre?: string }} cuenta  la `cuenta_cobro` del pago
  * @param {{ marca: string, canal: string, en: Date|string }} venta
- * @param {{ rutas: any[], cuentasReales: Array<{ id: string, activa: boolean }> }} conf
- * @returns {{ ok: true, cobro: { medio: string|null, cuenta_real_id: string|null, comision: number|null, acredita_el: string|null } }
+ * @param {{ rutas: any[], cuentasReales: Array<{ id: string, activa: boolean }>, tasas?: any[] }} conf
+ * @returns {{ ok: true, cobro: { medio: string|null, cuenta_real_id: string|null, comision: number|null, acredita_el: string|null,
+ *   tipo_pago: string|null, cuotas: number|null, costo_plataforma: number|null } }
  *   | { ok: false, codigo: string, mensaje: string }}
  */
 export function cobroReal(pago, cuenta, venta, conf) {
@@ -151,8 +180,14 @@ export function cobroReal(pago, cuenta, venta, conf) {
     if (!c || !c.activa) return { ok: false, codigo: 'CUENTA_REAL_DESCONOCIDA', mensaje: `La cuenta ${elegida} no está o está inactiva` }
   }
   const cuenta_real_id = ruta ? ruta.cuenta_real_id ?? elegida : null
-  const tasa = ruta && ruta.tasa != null ? Number(ruta.tasa) : null
+  const tipo_pago = pago.tipo_pago ?? null
+  const cuotas = pago.cuotas ?? null
+  const donde = { marca: venta.marca, canal: venta.canal, medio, tipo: tipo_pago, cuotas, en: venta.en }
+  const deMedio = medio ? tasaVigente(conf.tasas ?? [], { ...donde, concepto: 'medio' }) : null
+  const tasa = deMedio ? Number(deMedio.tasa) : ruta && ruta.tasa != null ? Number(ruta.tasa) : null
   const comision = tasa != null && pago.monto > 0 ? centavos(pago.monto * tasa / 100) : null
+  const dePlataforma = medio ? tasaVigente(conf.tasas ?? [], { ...donde, concepto: 'plataforma' }) : null
+  const costo_plataforma = dePlataforma && pago.monto > 0 ? centavos(pago.monto * Number(dePlataforma.tasa) / 100) : null
   let acredita_el = null
   if (ruta && ruta.dias_acreditacion != null) {
     // El día del cobro en Argentina (UTC−3, sin horario de verano) + el plazo.
@@ -160,5 +195,5 @@ export function cobroReal(pago, cuenta, venta, conf) {
     dia.setUTCDate(dia.getUTCDate() + Number(ruta.dias_acreditacion))
     acredita_el = dia.toISOString().slice(0, 10)
   }
-  return { ok: true, cobro: { medio, cuenta_real_id, comision, acredita_el } }
+  return { ok: true, cobro: { medio, cuenta_real_id, comision, acredita_el, tipo_pago, cuotas, costo_plataforma } }
 }

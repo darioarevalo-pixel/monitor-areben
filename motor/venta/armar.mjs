@@ -10,7 +10,7 @@
  * de negocio (la pantalla tiene que poder mostrarlo).
  */
 import { randomUUID } from 'node:crypto'
-import { cobroReal } from '../cuentas/cuentas.mjs'
+import { TIPOS_PAGO, cobroReal } from '../cuentas/cuentas.mjs'
 
 export const ORIGENES = ['caja', 'tn', 'mayorista', 'postventa', 'ml', 'manual']
 /** Los canales de la semilla (005). Manda la tabla `canal` (`conf.canales`); esto es para cuando no viene (tests). */
@@ -80,8 +80,13 @@ function validarPagos(pagos, conf, marca, total, { base = null } = {}) {
       if (!(f.monto > 0)) return { error: fallo('ENTRADA_INVALIDA', 'Lo que se cobra en la entrega es un monto mayor a 0', `pagos[${i}].monto`) }
       usa_entrega += f.monto
     }
+    // Con qué se pagó dentro del medio (sql/061: la tasa de MP cambia con el tipo y las cuotas). Opcional.
+    const tipo_pago = p.tipo_pago ?? null
+    if (tipo_pago != null && !TIPOS_PAGO.includes(tipo_pago)) return { error: fallo('ENTRADA_INVALIDA', `Tipo de pago desconocido: ${tipo_pago}`, `pagos[${i}].tipo_pago`) }
+    const cuotas = p.cuotas == null || p.cuotas === '' ? null : num(p.cuotas)
+    if (cuotas != null && !(Number.isInteger(cuotas) && cuotas >= 1 && cuotas <= 24)) return { error: fallo('ENTRADA_INVALIDA', 'Las cuotas van de 1 a 24', `pagos[${i}].cuotas`) }
     filas.push(f)
-    cuentas.push({ cuenta, elegida: p.cuenta_real ?? null })
+    cuentas.push({ cuenta, elegida: p.cuenta_real ?? null, tipo_pago, cuotas })
   }
   const suma = filas.reduce((s, p) => s + p.monto, 0)
   if (base != null) {
@@ -100,8 +105,8 @@ function validarPagos(pagos, conf, marca, total, { base = null } = {}) {
 function pagosConCuenta(p, conf, venta) {
   const pagos = []
   for (const [i, f] of p.filas.entries()) {
-    const { cuenta, elegida } = p.cuentas[i]
-    const r = cobroReal({ monto: f.monto, elegida }, cuenta, { marca: venta.marca, canal: venta.canal, en: venta.ocurrida_en }, conf)
+    const { cuenta, elegida, tipo_pago, cuotas } = p.cuentas[i]
+    const r = cobroReal({ monto: f.monto, elegida, tipo_pago, cuotas }, cuenta, { marca: venta.marca, canal: venta.canal, en: venta.ocurrida_en }, conf)
     if (!r.ok) return { error: fallo(r.codigo, r.mensaje, `pagos[${i}].cuenta_real`) }
     pagos.push({ id: randomUUID(), venta_id: venta.id, ...f, ...r.cobro })
   }

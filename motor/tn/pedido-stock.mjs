@@ -27,7 +27,8 @@ export async function pedirEmpujeStock(c, { tienda, usuario }) {
 }
 
 /**
- * Los últimos empujes de stock de esa tienda (los del botón y los que avisa el libro), el más nuevo primero: qué pasó,
+ * Los últimos empujes de stock de esa tienda (los del botón, los que avisa el libro y los PUNTUALES de lo que se movió,
+ * `tipo` = 'stock-tn-puntual'), el más nuevo primero: qué pasó,
  * cuándo, y lo que mandó o mandaría (`resultado`: `seco`, `cambios`, `unidades`, `escritos`, `quedan`, `cuenta`…).
  * La cola guarda 30 días (`GUARDAR_DIAS`).
  */
@@ -35,8 +36,8 @@ export async function empujesStock(c, { tienda, limite = 5 }) {
   if (!Object.hasOwn(DEPOSITOS_TN, tienda)) return mal('TIENDA', `Tienda desconocida: ${tienda}`)
   const n = Math.min(Math.max(Number(limite) || 5, 1), 50)
   const { rows } = await c.query(
-    `select id, estado, origen, avisos, intentos, creado_en, tomado_en, terminado_en, resultado, error
-       from motor_evento where empresa_id = $1 and tipo = 'stock-tn' and clave = $2 order by id desc limit $3`,
+    `select id, tipo, estado, origen, avisos, intentos, creado_en, tomado_en, terminado_en, resultado, error
+       from motor_evento where empresa_id = $1 and tipo in ('stock-tn', 'stock-tn-puntual') and clave = $2 order by id desc limit $3`,
     [EMPRESA, tienda, n],
   )
   return { ok: true, empujes: rows.map((r) => ({ ...r, id: Number(r.id) })) }

@@ -50,7 +50,8 @@ export async function registrarGasto(db, e) {
  * @param {import('pg').ClientBase} db
  * @param {{ empresa_id: string, marca: string, desde: string, hasta: string, prueba?: boolean }} e — días AR inclusive, hasta `MAX_DIAS`.
  * @returns {Promise<{ ok: true, total: number, por_tipo: Record<string, number>, meses: Array<{ mes: string, total: number,
- *   por_tipo: Record<string, number> }>, comision_automatica: number, cobrosSinComision: number, gastos: any[] } | { ok: false, error }>}
+ *   por_tipo: Record<string, number> }>, comision_automatica: number, plataforma_automatica: number, cobrosSinComision: number, gastos: any[] }
+ *   | { ok: false, error }>}  `por_tipo.plataforma` = el costo de la plataforma (TN) de los cobros (sql/061), en su renglón y DENTRO del total.
  */
 export async function gastosComerciales(db, { empresa_id, marca, desde, hasta, prueba = false }) {
   for (const [k, v] of [['desde', desde], ['hasta', hasta]]) if (!FECHA.test(String(v ?? ''))) return falla('ENTRADA_INVALIDA', `${k} es una fecha AAAA-MM-DD`, k)
@@ -58,9 +59,14 @@ export async function gastosComerciales(db, { empresa_id, marca, desde, hasta, p
   if ((Date.parse(hasta) - Date.parse(desde)) / 864e5 + 1 > MAX_DIAS) return falla('ENTRADA_INVALIDA', `El período es de ${MAX_DIAS} días como máximo`, 'hasta')
   const p = [empresa_id, marca, prueba, desde, hasta]
   const dia = `(coalesce(p.cobrado_en, v.ocurrida_en) ${AR})::date`
-  const auto = await q(db, `select to_char(${dia}, 'YYYY-MM') as mes, coalesce(sum(p.comision), 0)::float as monto,
+  // sql/061: lo que se queda la PLATAFORMA (TN) por cada cobro va en su renglón (`plataforma`), ⛔ dentro de la comisión.
+  const fuente = await fuentePagos(db)
+  const [{ hay_plataforma }] = await q(db, `select exists (select 1 from information_schema.columns where table_schema = current_schema()
+    and table_name = $1 and column_name = 'costo_plataforma') as hay_plataforma`, [fuente])
+  const plataforma = hay_plataforma ? 'coalesce(sum(p.costo_plataforma), 0)::float' : '0::float'
+  const auto = await q(db, `select to_char(${dia}, 'YYYY-MM') as mes, coalesce(sum(p.comision), 0)::float as monto, ${plataforma} as plataforma,
       count(*) filter (where p.comision is null and p.monto > 0 and p.medio in ('debito', 'credito', 'mp', 'pagonube'))::int as sin
-    from venta v join ${await fuentePagos(db)} p on p.venta_id = v.id 
+    from venta v join ${fuente} p on p.venta_id = v.id 
    where v.empresa_id = $1 and v.marca = $2 and v.prueba = $3 and v.estado = 'confirmada' and ${dia} between $4::date and $5::date
    group by 1`, p)
   const manual = await q(db, `select to_char(fecha, 'YYYY-MM') as mes, tipo, sum(monto)::float as monto
@@ -68,17 +74,23 @@ export async function gastosComerciales(db, { empresa_id, marca, desde, hasta, p
   const gastos = await q(db, `select id::text, fecha::text, tipo, monto::float, detalle, cuenta, origen, venta_id::text, usuario, creado_en
     from gasto where empresa_id = $1 and marca = $2 and prueba = $3 and fecha between $4::date and $5::date order by fecha desc, creado_en desc`, p)
   const meses = new Map()
-  const mes = (m) => { if (!meses.has(m)) meses.set(m, { mes: m, total: 0, por_tipo: { comision: 0, impuesto: 0, otro: 0 } }); return meses.get(m) }
+  const mes = (m) => { if (!meses.has(m)) meses.set(m, { mes: m, total: 0, por_tipo: { comision: 0, impuesto: 0, otro: 0, plataforma: 0 } }); return meses.get(m) }
   let comision_automatica = 0
+  let plataforma_automatica = 0
   let cobrosSinComision = 0
-  for (const a of auto) { mes(a.mes).por_tipo.comision += a.monto; comision_automatica += a.monto; cobrosSinComision += a.sin }
+  for (const a of auto) {
+    mes(a.mes).por_tipo.comision += a.monto; comision_automatica += a.monto; cobrosSinComision += a.sin
+    mes(a.mes).por_tipo.plataforma += a.plataforma; plataforma_automatica += a.plataforma
+  }
   for (const g of manual) mes(g.mes).por_tipo[g.tipo] += g.monto
-  const por_tipo = { comision: 0, impuesto: 0, otro: 0 }
+  const RENGLONES = [...TIPOS, 'plataforma']
+  const por_tipo = { comision: 0, impuesto: 0, otro: 0, plataforma: 0 }
   const lista = [...meses.values()].sort((a, b) => (a.mes < b.mes ? -1 : 1))
   for (const m of lista) {
-    for (const t of TIPOS) { m.por_tipo[t] = pesos(m.por_tipo[t]); por_tipo[t] += m.por_tipo[t] }
-    m.total = pesos(TIPOS.reduce((s, t) => s + m.por_tipo[t], 0))
+    for (const t of RENGLONES) { m.por_tipo[t] = pesos(m.por_tipo[t]); por_tipo[t] += m.por_tipo[t] }
+    m.total = pesos(RENGLONES.reduce((s, t) => s + m.por_tipo[t], 0))
   }
-  for (const t of TIPOS) por_tipo[t] = pesos(por_tipo[t])
-  return { ok: true, total: pesos(TIPOS.reduce((s, t) => s + por_tipo[t], 0)), por_tipo, meses: lista, comision_automatica: pesos(comision_automatica), cobrosSinComision, gastos }
+  for (const t of RENGLONES) por_tipo[t] = pesos(por_tipo[t])
+  return { ok: true, total: pesos(RENGLONES.reduce((s, t) => s + por_tipo[t], 0)), por_tipo, meses: lista, comision_automatica: pesos(comision_automatica),
+    plataforma_automatica: pesos(plataforma_automatica), cobrosSinComision, gastos }
 }

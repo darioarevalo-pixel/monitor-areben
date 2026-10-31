@@ -34,7 +34,9 @@ export async function leidoHastaDe(db, tienda) {
  */
 export async function guardarLote(db, tienda, filas, lineas, leidoHasta, compradores = null) {
   let pisadas = 0
-  const cols = (await tieneColumna(db, 'tn_orden', 'estado')) ? [...COLS, ...COLS_ESTADO] : COLS
+  const cols = (await tieneColumna(db, 'tn_orden', 'estado')) ? [...COLS, ...COLS_ESTADO] : [...COLS]
+  // sql/061: las cuotas del pago. Sin la migración se guarda como antes.
+  if (await tieneColumna(db, 'tn_orden', 'cuotas')) cols.push('cuotas')
   const conComprador = !!compradores && (await tieneColumna(db, 'tn_orden', 'cliente_id'))
   for (const f of filas) {
     const vals = cols.map((c) => f[c])

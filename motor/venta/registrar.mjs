@@ -49,7 +49,12 @@ export async function leerConf(db, marca) {
     where table_schema = current_schema() and table_name = 'ruta_cobro' and column_name = 'dias_acreditacion') as hay`)
   const rutas = hay ? await q(db, 'select marca, canal, medio, cuenta_real_id, tasa, dias_acreditacion, desde from ruta_cobro where marca = $1', [marca]) : []
   const cuentasReales = hay ? await q(db, 'select id, activa from cuenta_real') : []
-  return { marcas: Object.fromEntries(marcas.map((m) => [m.id, { empresa_id: m.empresa_id, depositos: m.depositos }])), cuentas, canales, rutas, cuentasReales }
+  // Las tasas por tipo de pago y cuotas, y el costo de la plataforma (sql/061). Sin la 061 ⇒ sólo la tasa de la ruta.
+  // 🔴 Con permiso, ⛔ sólo que exista: entre migrar y `rol-motor.mjs crear` el usuario `motor` (la Caja) ⛔ la puede leer, y un
+  // «permission denied» frenaría TODA venta. Sin permiso vende como antes.
+  const [{ tasa_cobro }] = await q(db, `select to_regclass('tasa_cobro') is not null and has_table_privilege('tasa_cobro', 'select') as tasa_cobro`)
+  const tasas = tasa_cobro ? await q(db, 'select marca, canal, medio, tipo, cuotas, concepto, tasa, desde from tasa_cobro where marca = $1', [marca]) : []
+  return { marcas: Object.fromEntries(marcas.map((m) => [m.id, { empresa_id: m.empresa_id, depositos: m.depositos }])), cuentas, canales, rutas, cuentasReales, tasas }
 }
 
 /** La venta que ya entró con esa clave, para devolverla igual (idempotencia). */
