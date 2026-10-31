@@ -131,6 +131,7 @@ import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, e
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
 import { anotarWhatsappPanel, bcraDelPanel, clienteNuevoPanel, clientesDelPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
+import { facturaLibrePanel, facturasDeClientePanel } from './_erp-factura-mayorista.js'
 import { ACCIONES_PEDIDO, accionDePedido, pedidoDelPanel, pedidosDelPanel, preparadosSinPagarDelPanel, productosParaElPanel } from './_erp-pedido.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
@@ -148,14 +149,14 @@ const MARCAS = ['bdi', 'zattia']
 export const lineaDelPedido = (marca, linea) => (marca === 'bdi' ? 'bdi' : marca === 'zattia' && (linea === 'zattia' || linea === 'stunned') ? linea : null)
 const SIN_LINEA = { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
 /** Desde este monto la factura B pide DNI (ARCA). ⚠️ Confirmar con el contador antes de producción. */
-const UMBRAL_IDENTIFICAR = 10_000_000
+export const UMBRAL_IDENTIFICAR = 10_000_000
 
 const finDeMes = (mes) => {
   const [y, m] = mes.split('-').map(Number)
   return `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`
 }
 
-function ambienteSeguro() {
+export function ambienteSeguro() {
   try { return { ambiente: ambienteDeEntorno(process.env) } } catch (e) { return { ambiente: null, error: e.message } }
 }
 
@@ -437,7 +438,7 @@ export function ajustesDeVenta(v) {
  * El cliente de ARCA de este servidor, o null si ⛔ tiene el certificado (prod hoy): la puerta que pide un CAE contesta
  * 409 `SIN_ARCA` ANTES de reservar nada, ⛔ un 500 de adentro del cliente. Un oráculo o un test lo inyecta en `deps.arca`.
  */
-function arcaDe(deps, sb) {
+export function arcaDe(deps, sb) {
   if (deps.arca) return deps.arca
   return arcaConectado() ? clienteArcaDelEntorno(sb).arca : null
 }
@@ -485,6 +486,17 @@ async function renglonesPropios(b, marca, ids, { numeros, detalles, lineas }) {
   }
 }
 
+/**
+ * Los renglones guardados en la fila (facturas de mayoristas por parte y libres, `sql/migrate-facturas-mayorista.sql`). Antes de
+ * esa migración la columna ⛔ existe: sin renglones (el PDF lleva uno por el total), ⛔ se rompe el mes.
+ */
+async function renglonesGuardados(sb, facturas, detalles) {
+  if (!facturas.length) return
+  const { data, error } = await sb.from('facturas').select('marca, venta_id, renglones').in('id', facturas.map((f) => f.id))
+  if (error) { if (error.code === '42703') return; throw new Error(`facturas (renglones): ${error.message}`) }
+  for (const f of data) if (Array.isArray(f.renglones)) detalles.set(claveVenta(f.marca, f.venta_id), f.renglones)
+}
+
 export async function facturasDelMes(mes) {
   const { ambiente, error } = ambienteSeguro()
   if (!ambiente) return { status: 409, error }
@@ -510,7 +522,8 @@ export async function facturasDelMes(mes) {
     }
     // Las de una venta propia sin venta de GN (la factura a pedido de la Caja) van por el uuid del motor.
     const ids = todas.filter((id) => /^\d+$/.test(id))
-    const propias = todas.filter((id) => !/^\d+$/.test(id))
+    // Las de mayoristas por PARTE o LIBRES (`venta:parte:…`, `libre:…`) traen sus renglones en la fila (`renglonesGuardados`).
+    const propias = todas.filter((id) => !/^\d+$/.test(id) && !id.includes(':'))
     if (propias.length) await renglonesPropios(b, marca, propias, { numeros, detalles, lineas })
     // La línea de cada factura (30-oct): la de su venta. Las de GN por sus renglones; las propias, `venta_ficha.marca`.
     if (marca === 'zattia') for (const [id, l] of await lineasDeVentasGN(b, ids)) lineas.set(claveVenta(marca, id), l)
@@ -534,6 +547,7 @@ export async function facturasDelMes(mes) {
       }
     }
   }
+  await renglonesGuardados(sb, facturas.filter((f) => String(f.venta_id).includes(':')), detalles)
   return {
     ambiente,
     facturas: facturas.map((f) => ({
@@ -1242,7 +1256,7 @@ async function facturaDeClave(sb, { ambiente, marca, clave }) {
 }
 
 /** Una fila de `facturas` con la forma de `FacturaEmitida` (el PDF). */
-function filaParaPdf(f, { numero, renglones, receptor = null }) {
+export function filaParaPdf(f, { numero, renglones, receptor = null }) {
   return {
     id: f.id, ambiente: f.ambiente, marca: f.marca, venta_id: f.venta_id, tipo: Number(f.tipo), pto_vta: Number(f.pto_vta),
     numero: Number(f.numero), fecha: f.fecha, total: Number(f.total), neto: Number(f.neto), iva: Number(f.iva),
@@ -1934,6 +1948,15 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && ACCIONES_PEDIDO.includes(body.accion)) {
       const r = await accionDePedido({ accion: body.accion, body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+    // La facturación de mayoristas desde el panel (pedido de Darío §5): la factura LIBRE y las facturas de la ficha.
+    if (req.method === 'GET' && req.query.vista === 'facturas-cliente-panel') {
+      const r = await facturasDeClientePanel({ clienteId: String(req.query.cliente || ''), usuario: [perfil.user, perfil.email] }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'POST' && body.accion === 'factura-libre-panel') {
+      const r = await facturaLibrePanel({ body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error, falta: r.falta } : r)
     }
     if (req.method === 'GET' && req.query.vista === 'bcra-panel') {
       const r = await bcraDelPanel({ clienteId: String(req.query.cliente || ''), usuario: [perfil.user, perfil.email] }, { conMotor })

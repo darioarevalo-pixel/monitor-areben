@@ -27,6 +27,8 @@ const sacar = vi.fn(async () => ({ ok: true, sacado: true }))
 vi.mock('@/lib/erp/cliente', () => ({
   cobrarCuentaErp: (...a: unknown[]) => cobrarCuentaErp(...(a as [])), leerCuentaPanel: vi.fn(), leerCuentasCorrientes: vi.fn(),
   anotarWhatsappPanel: (...a: unknown[]) => anotar(...(a as [])), sacarWhatsappPanel: (...a: unknown[]) => sacar(...(a as [])),
+  // Las facturas de la ficha (Darío §5): apagadas acá, las prueba tests/panel-facturas-pantalla.test.tsx.
+  leerFacturasClientePanel: async () => ({ prendido: false }), facturaLibrePanel: vi.fn(),
 }))
 
 let root: Root | null = null

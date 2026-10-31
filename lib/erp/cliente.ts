@@ -708,6 +708,14 @@ export type BcraDelPanel =
   }
 export const leerBcraPanel = (clienteId: string) =>
   pedir<BcraDelPanel>(null, `&vista=bcra-panel&marca=bdi&cliente=${encodeURIComponent(clienteId)}&nc=${Date.now()}`, 'No se pudo consultar el BCRA.')
+/** Las facturas de la ficha del cliente (facturación de mayoristas, Darío §5) y sus datos fiscales, para saber qué pedir. */
+export type FiscalDelPanel = { doc: string | null; razonSocial: string | null; domicilio: string | null; condicion: 'ri' | 'monotributo' | 'exento' | 'consumidor' | null }
+export type FacturaDelPanel = import('@/lib/arca/factura-pdf').FacturaEmitida & { clase: 'venta' | 'parte' | 'libre'; venta_ref?: string | null }
+export const leerFacturasClientePanel = (clienteId: string) =>
+  pedir<{ prendido: false } | { prendido: true; ambiente: string; fiscal: FiscalDelPanel; facturas: FacturaDelPanel[]; sinMigrar?: string }>(null, `&vista=facturas-cliente-panel&marca=bdi&cliente=${encodeURIComponent(clienteId)}&nc=${Date.now()}`, 'No se pudieron leer las facturas.')
+/** La factura LIBRE (sin venta: ⛔ mueve stock ni la cuenta corriente). 409 con `falta` ⇒ pedir los datos fiscales en el mismo paso. */
+export const facturaLibrePanel = (p: { clienteId: string; renglones: Array<{ descripcion: string; cantidad: number; unitario: number }>; doc?: string; condicion?: string; razonSocial?: string; domicilio?: string }) =>
+  pedir<{ ok: true; factura: FacturaDelPanel }>(post({ accion: 'factura-libre-panel', marca: 'bdi', ...p }), '', 'No se pudo hacer la factura.')
 /** «Es nuevo»: la ficha (nombre + CUIT/DNI) y el número del chat anotado en ella. 409 con `existe` si el documento ya tiene ficha. */
 export const clienteNuevoPanel = (p: { nombre: string; doc: string; whatsapp: string; persona?: string }) =>
   pedir<{ ok: true; cliente: ClienteDelPanel }>(post({ accion: 'cliente-nuevo-panel', marca: 'bdi', ...p }), '', 'No se pudo cargar el cliente.')

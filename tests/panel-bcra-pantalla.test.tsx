@@ -20,6 +20,8 @@ const leerBcraPanel = vi.fn()
 vi.mock('@/lib/erp/cliente', () => ({
   cobrarCuentaErp: vi.fn(), leerCuentaPanel: vi.fn(), leerCuentasCorrientes: vi.fn(), anotarWhatsappPanel: vi.fn(), sacarWhatsappPanel: vi.fn(),
   leerBcraPanel: (...a: unknown[]) => leerBcraPanel(...a),
+  // Las facturas de la ficha (Darío §5): apagadas acá, las prueba tests/panel-facturas-pantalla.test.tsx.
+  leerFacturasClientePanel: async () => ({ prendido: false }), facturaLibrePanel: vi.fn(),
 }))
 
 let root: Root | null = null

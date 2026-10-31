@@ -76,6 +76,15 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
   y cheques rechazados. 🔴 **El monto de las deudas viene en MILES de pesos** (manual del BCRA) y el de los cheques en pesos;
   un 404 «No se encontró» = ⛔ debe nada, ⛔ es error. El CUIT sale de la FICHA (⛔ del navegador); con DNI ⛔ hay consulta.
   ⛔ se guarda ni se consulta sola (`tests/erp-bcra.test.ts`, `tests/panel-bcra-pantalla.test.tsx`).
+- **Facturas del cliente** (facturación de mayoristas, Darío §5, Bruno 31-oct): bloque «Facturas» de la tarjeta
+  (`components/panel/FacturasCliente.tsx`; servidor `api/_erp-factura-mayorista.js`, núcleo `lib/erp/factura-mayorista.core.js`).
+  Lista las facturas de la FICHA (`facturas.cliente_id`) con su PDF (jsPDF se carga recién al pedirlo) y «Hacer factura libre»:
+  sin venta, renglones a mano, suma al techo del mes, ⛔ mueve stock ni la cuenta corriente. 🔴 **Doble llave**: verlo = panel;
+  facturar ADEMÁS `VENTA_MAYORISTA_REAL` (en prod el ARCA es el REAL). A/B por la condición de la ficha con lo que ACEPTA ARCA
+  (RI y monotributo ⇒ A, medido 31-oct; «monotributo ⇒ B» de Darío queda como pregunta). Sin datos fiscales se piden en el
+  mismo paso y se guardan con `ponerFiscalCliente` del motor (la MISMA ficha: las de GN vienen sin documento y `guardarCliente`
+  crearía otra). 🔴 **«⛔ pasarse» lo frena la BASE** (`sql/migrate-facturas-mayorista.sql`, disparador con candado por venta):
+  clases `venta`/`parte`/`libre`. Falta la PARTE por monto (`partePorMonto` ya está, sin puerta): espera «lo que salió» (Ger).
 
 ## Reglas que el código no dice
 

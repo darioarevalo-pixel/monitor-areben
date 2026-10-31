@@ -22,6 +22,7 @@ import { color, font, radius, space } from '@/components/ui/tokens'
 import { anotarWhatsappPanel, cobrarCuentaErp, leerBcraPanel, leerCuentaPanel, leerCuentasCorrientes, sacarWhatsappPanel, type BcraDelPanel, type CuentaDelMotor, type CuentaPanel } from '@/lib/erp/cliente'
 import { mensajeDeSaldo, repartirPago, textoSaldo } from '@/lib/erp/cuenta-panel.core.js'
 import { SITUACION_BCRA, mesBcra, tonoBcra } from '@/lib/erp/bcra.core.js'
+import { FacturasCliente } from './FacturasCliente'
 import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 
@@ -130,6 +131,7 @@ export function TarjetaCuenta({ cuenta, telChat, decir, onCambio }: {
       </div>
       <div style={{ fontSize: 11, color: color.mut2, marginTop: 6 }}>Un pago cancela primero la compra más vieja.</div>
       <SituacionBcra key={cuenta.cliente.id} clienteId={cuenta.cliente.id} />
+      <FacturasCliente key={`f-${cuenta.cliente.id}`} clienteId={cuenta.cliente.id} decir={decir} />
       {cuenta.personas && <QuienCompra cuenta={cuenta} telChat={telChat} decir={decir} onCambio={onCambio} />}
     </section>
   )
