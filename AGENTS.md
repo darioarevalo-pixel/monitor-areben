@@ -119,6 +119,9 @@ ya tienen ficha:
 - Mapa del local (percheros de Zattia) → **leer `docs/secciones/mapa-local.md`** antes de tocar
   `components/mapa-local/`, `lib/mapa-local/` o `api/_mapa-local.js`. ⛔ Se guarda el ARMADO, ⛔ no
   dónde cae cada prenda, y el cupo ⛔ nunca se pasa: lo que sobra sale como «No entran».
+- Ubicaciones (el depósito grande de cada marca) → **leer `docs/secciones/ubicaciones.md`** antes de tocar
+  `components/ubicaciones/`, `lib/ubicaciones/`, `api/_observaciones.js` o `api/_ubicaciones-erp.js`. 🔴 **Desde el corte de
+  la línea la ubicación vive SÓLO en el ERP** (antes, doble), y Reposición y Logística la leen.
 - Ubicaciones depósito (estantes de atrás del local de Zattia) → **leer `docs/secciones/ubicaciones-local.md`**
   antes de tocar `components/ubicaciones-local/`, `lib/ubicaciones-local/` o `api/_ubicaciones-local.js`.
   ⛔ **`claveDe` es LA regla de «qué es el producto»**: la reusan el Conteo estándar y las etiquetas.

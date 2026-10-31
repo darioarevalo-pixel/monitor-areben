@@ -11,6 +11,7 @@ import type { Marca } from '../nav.datos'
 import { fetchAll } from '../supabase/rest'
 import type { RepoCfg } from './tipos'
 import type { FilaInvRepo } from './inventario'
+import { conUbicacionDelErp } from '@/lib/ubicaciones/erp-cliente'
 
 const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion'
 
@@ -21,7 +22,9 @@ const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion'
  * usa el armado con el lector (12-oct-2026).
  */
 export async function leerInventario(marca: Marca): Promise<FilaInvRepo[]> {
-  return fetchAll<FilaInvRepo>(CUENTAS[marca], 'inventario', 'select=product_id,product_name,size_id,size_name,sku,barcode,available_quantity,store_name,observation')
+  const filas = await fetchAll<FilaInvRepo>(CUENTAS[marca], 'inventario', 'select=product_id,product_name,size_id,size_name,sku,barcode,available_quantity,store_name,observation')
+  // Las líneas que ya cortaron leen la ubicación del ERP (motor sql/066): ordena el armado y la columna «Ubic.» del PDF.
+  return conUbicacionDelErp(marca, filas)
 }
 
 /**

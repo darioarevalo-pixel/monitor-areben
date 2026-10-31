@@ -14,6 +14,7 @@ import { fetchAll } from '@/lib/supabase/rest'
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav'
 import { computarUbicaciones } from './core'
+import { conUbicacionDelErp } from './erp-cliente'
 import type { FilaInvUbi, UbiProducto } from './tipos'
 
 /**
@@ -40,7 +41,8 @@ export async function cargarUbicaciones(marca: Marca): Promise<UbiProducto[]> {
     fetchAll<{ id: number | string }>(cuenta, 'productos', 'select=id&active=eq.1&order=id'),
   ])
   const activos = new Set(prods.map((p) => p.id))
-  return computarUbicaciones(rows, activos)
+  // Las líneas que ya cortaron leen la ubicación del ERP (motor sql/066): GN ⛔ se escribe más para ellas.
+  return computarUbicaciones(await conUbicacionDelErp(marca, rows), activos)
 }
 
 /** Respuesta del endpoint de observaciones (por producto). */

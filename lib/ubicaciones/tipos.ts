@@ -7,6 +7,7 @@
 /** Fila cruda de inventario (una por variante) que se lee de Supabase. */
 export type FilaInvUbi = {
   product_id: number | string
+  size_id?: number | string
   product_name: string | null
   sku: string | null
   store_name: string | null

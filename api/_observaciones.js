@@ -1,5 +1,6 @@
-// Escribe la OBSERVACIÓN (ubicación física) del inventario en Gestión Nube,
+// Escribe la OBSERVACIÓN (ubicación física) del inventario en Gestión Nube Y en el ERP (motor sql/066),
 // para TODAS las variantes de un producto en el depósito de la marca.
+// 🔴 Desde el corte de la línea del producto (`erp_corte`) escribe SÓLO el ERP (Bruno 31-oct; docs/secciones/ubicaciones.md).
 // POST { marca?, productId, observation }
 //   - marca: 'bdi' (default, como era antes) | 'zattia' (sumada el 13-oct-2026, Darío).
 //   - observation: string (se recorta a 20 chars) o vacío/null para limpiar.
@@ -11,11 +12,16 @@
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 import { GN_TOKENS } from './_gn.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
+import { lineaEnErp } from '../lib/erp/corte.core.js';
+import { lineaDe } from '../lib/lineas.core.js';
+import { conBase, cortesDe, lineasDeProductos } from './_erp-corte.js';
 
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
 // El depósito de cada marca, con el nombre de GN. ⚠️ El de Zattia es 'Deposito ' (con espacio al
 // final); se compara sin espacios de los costados. Es el de Lorena, ⛔ el de atrás del local.
 const DEPOSITO = { bdi: 'Deposito Minorista', zattia: 'Deposito' };
+// El mismo depósito con el nombre canónico del ERP (motor `lib/depositos.mjs`).
+const DEPOSITO_ERP = { bdi: 'deposito_minorista', zattia: 'deposito' };
 const enDeposito = (f, dep) => String(f.store_name || '').trim().toLowerCase() === dep.toLowerCase();
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -56,6 +62,22 @@ export default async function handler(req, res) {
   const productId = body.productId;
   const obs = (body.observation == null ? '' : String(body.observation)).trim().slice(0, 20) || null;
   if (!productId) return res.status(400).json({ error: 'Falta productId' });
+
+  // 🔑 EL ERP (motor sql/066; erp-stunned §8.5, Bruno 31-oct): escritura DOBLE desde ya en todas las marcas, y desde el corte de
+  // la línea del producto (`erp_corte`) SÓLO el ERP. Sin saber si la línea cortó ⛔ se elige camino (503, como los conteos).
+  let erp;
+  try {
+    erp = await alErp({ marca, productId, obs, usuario: perfil.name || 'ubicaciones' });
+  } catch (e) {
+    return res.status(503).json({ error: `No se pudo saber si la línea ya está en el ERP: ${e instanceof Error ? e.message : String(e)}`, reintentable: true });
+  }
+  if (erp.enErp) {
+    const r = erp.resultado;
+    if (!r.ok) return res.status(200).json({ ok: false, productId, updated: 0, total: 0, error: `ERP: ${r.error.mensaje}`, reintentable: r.error.codigo !== 'SIN_VARIANTES' });
+    return res.status(200).json({ ok: true, productId, updated: r.variantes, total: r.variantes, yaEstaban: r.variantes - r.cambiadas, pendientes: 0, erp: { linea: erp.linea, soloErp: true } });
+  }
+  // Línea sin cortar: GN sigue siendo la verdad; si el ERP falló ⛔ frena (la copia del día antes del corte lo empareja).
+  if (!erp.resultado.ok) console.error(`[ubicaciones] ERP ⛔ guardó ${marca}/${productId}: ${erp.resultado.error.codigo} ${erp.resultado.error.mensaje}`);
 
   const headers = { 'Authorization': `Bearer ${TOKEN}`, 'Accept': 'application/json', 'Content-Type': 'application/json' };
 
@@ -131,8 +153,34 @@ export default async function handler(req, res) {
     }
     const pendientes = pend.length;
     // `updated` = variantes que quedaron con el valor puesto (escritas + las que ya lo tenían).
-    return res.status(200).json({ ok: pendientes === 0, productId, updated: total - pendientes, total, yaEstaban, pendientes, error: pendientes ? (lastErr || 'algunas variantes no se pudieron escribir') : undefined });
+    return res.status(200).json({ ok: pendientes === 0, productId, updated: total - pendientes, total, yaEstaban, pendientes, erp: { linea: erp.linea, ok: erp.resultado.ok }, error: pendientes ? (lastErr || 'algunas variantes no se pudieron escribir') : undefined });
   } catch (e) {
     return res.status(500).json({ error: e.message, reintentable: true });
   }
+}
+
+/**
+ * La parte ERP de una carga: la línea del producto (del espejo, ⛔ de la pantalla), si ya cortó, y la escritura en `ubicacion` con
+ * las variantes del catálogo + las del espejo en ese depósito. Una falla de la ESCRITURA vuelve en `resultado` (el que llama
+ * decide según el corte); una falla al leer el corte TIRA.
+ */
+async function alErp({ marca, productId, obs, usuario }) {
+  return conBase(marca, async (db) => {
+    const cortes = await cortesDe(db);
+    const pid = Number(productId);
+    const linea = (await lineasDeProductos(db, marca, [pid])).get(pid) ?? lineaDe(marca, null);
+    const enErp = lineaEnErp(cortes, linea);
+    let resultado;
+    try {
+      const { rows } = await db.query(
+        'select distinct size_id from inventario where product_id = $1 and lower(btrim(store_name)) = lower($2)', [pid, DEPOSITO[marca]]);
+      const { guardarUbicacion } = await import('../motor/stock/ubicacion.mjs');
+      resultado = await guardarUbicacion(db, {
+        linea, deposito: DEPOSITO_ERP[marca], product_id: pid, texto: obs || '', usuario, size_ids: rows.map((r) => Number(r.size_id)),
+      });
+    } catch (e) {
+      resultado = { ok: false, error: { codigo: 'ERP_CAIDO', mensaje: e instanceof Error ? e.message : String(e) } };
+    }
+    return { linea, enErp, resultado };
+  });
 }
