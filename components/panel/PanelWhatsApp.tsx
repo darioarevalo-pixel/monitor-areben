@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Icono } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
+import { FranjaCuenta, HojaCargarPago, TarjetaCuenta, useCuentaPanel } from './CuentaCorriente'
 import { CalculadoraEnvio } from './CalculadoraEnvio'
 import { ProximoContacto, RayaEstado, estadoDeFicha } from './ProximoContacto'
 import { QueLeMando } from './QueLeMando'
@@ -986,6 +987,14 @@ function PanelInterno({
     } catch {}
   }, [telNorm, pedido])
 
+  /**
+   * La cuenta corriente del cliente del chat (plan «BDI directo al ERP», 30-oct): ESCONDIDA detrás de
+   * `PANEL_CUENTA_CORRIENTE` ⇒ apagada, `cuenta` es null y el panel queda igual a hoy. Ver `CuentaCorriente.tsx`.
+   */
+  const quien = quienPaga(estado, telNorm)
+  const { cuenta, releer: releerCuenta } = useCuentaPanel(quien?.tipo === 'erp' ? quien.id : null, quien?.telefono ?? null)
+  const [cargandoPago, setCargandoPago] = useState(false)
+
   const solapas = (
     <div style={{ display: 'flex', borderBottom: `1px solid ${color.sideBg}`, background: color.sideBg, position: 'sticky', top: 0, zIndex: 3 }}>
       {([
@@ -1314,11 +1323,28 @@ function PanelInterno({
           <Dato k="Total" v={fmtMonto(c.total_amount)} />
           <Dato k="Último" v={c.dias_ultimo === null ? '—' : c.dias_ultimo === 0 ? 'hoy' : `hace ${c.dias_ultimo}d`} />
         </div>
+        {cuenta && (
+          <Aislado nombre="Cuenta corriente">
+            <FranjaCuenta cuenta={cuenta} onCargar={() => setCargandoPago(true)} />
+          </Aislado>
+        )}
       </Encabezado>
 
       <div style={{ paddingTop: space[2] }}>
         {/* Los pedidos en curso en Logística (22-oct-2026): sin pedidos no se dibuja. */}
         <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} despacho={seg.despacho || ''} />
+        {cuenta && (
+          <Aislado nombre="Cuenta corriente">
+            <TarjetaCuenta cuenta={cuenta} />
+            {cargandoPago && (
+              <HojaCargarPago
+                cuenta={cuenta}
+                onCerrar={() => setCargandoPago(false)}
+                onHecho={(t) => { setCargandoPago(false); decir(t); releerCuenta() }}
+              />
+            )}
+          </Aislado>
+        )}
         {/*
           Las notas arriba, abiertas: es dónde quedaste con esta persona (Darío, 19-oct-2026). El
           despacho va adentro; «Pendiente» y «Tener en cuenta» sólo se ven si están cargados

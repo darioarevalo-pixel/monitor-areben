@@ -31,6 +31,7 @@
  *   GET  ?recurso=erp&vista=cliente-ficha&marca=…&clave=…             la ficha de un cliente: compras y cuenta corriente
  *   GET  ?recurso=erp&vista=cuentas-corrientes&marca=…&prueba=0|1     Cuenta corriente: una fila por cliente × línea
  *   GET  ?recurso=erp&vista=cuenta-cliente&marca=…&cliente=…&linea=…  su estado y el mayor (desde/hasta) con su CSV
+ *   GET  ?recurso=erp&vista=cuenta-panel&gnId=…&tel=…&prueba=0|1      la cuenta del cliente del chat (panel de WhatsApp, BDI)
  *   POST { accion: 'poner-credito', marca, clienteId, credito, tope?, dias? }   marcar o sacar el crédito (sólo admin)
  *   POST { accion: 'poner-contacto', marca, clienteId, whatsapp?, email? }       cargar o corregir el contacto (sólo admin)
  *   GET  ?recurso=erp&vista=inicio-resultado&marca=bdi|zattia         Inicio: vendido, costo y margen del mes (`api/_erp-inicio.js`)
@@ -125,7 +126,7 @@ import { ACCIONES as ACCIONES_CATALOGO } from '../lib/erp/catalogo-edicion.core.
 import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
-import { cuentaDeCliente, cuentasDeLaMarca, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
+import { cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
 import { cobrosDelPeriodo, reintentarEntregasErp } from './_erp-cobros.js'
@@ -1894,6 +1895,10 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && req.query.vista === 'cuentas-corrientes') {
       const r = await cuentasDeLaMarca({ marca: String(req.query.marca || ''), linea: String(req.query.linea || ''), prueba: req.query.prueba === '1' }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'cuenta-panel') {
+      const r = await cuentaDelPanel({ gnId: String(req.query.gnId || ''), tel: String(req.query.tel || ''), prueba: req.query.prueba === '1', usuario: perfil.user || null }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cuenta-cliente') {

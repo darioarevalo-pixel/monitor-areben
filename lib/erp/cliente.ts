@@ -645,7 +645,7 @@ export const leerFichaDeCliente = (marca: MarcaErp, linea: string, clave: string
 // ── ERP › Clientes › Cuenta corriente (`api/_erp-clientes.js`, núcleo `lib/erp/cuenta-corriente.core.js`; contrato §15) ──
 export type CreditoCliente = { credito: boolean; tope: number | null; dias: number | null; puesto_por: string | null; puesto_en: string | null } | null
 export type CuentaDelMotor = {
-  cliente_id: string; linea: string; nombre: string; doc: string | null; whatsapp?: string | null; credito: CreditoCliente
+  cliente_id: string; linea: string; nombre: string; doc: string | null; whatsapp?: string | null; gn_client_id?: string | null; credito: CreditoCliente
   saldo: number; debe: number; a_favor: number; vencido: number; dias_mayor: number; atrasado: boolean; sin_credito: boolean; tramos: Record<string, number>
   ventas_con_saldo?: number; ultimo_cobro?: { fecha: string; monto: number } | null
 }
@@ -667,6 +667,21 @@ export const leerCuentaDeCliente = (marca: MarcaErp, p: { clienteId: string; lin
 /** El botón «Cobrar» de la cuenta: sin elegir venta, el motor paga la más vieja primero (FIFO). `ref` = una clave por ventana (⛔ duplica). */
 export const cobrarCuentaErp = (marca: MarcaErp, c: { clienteId: string; linea: string; monto: number; cuenta: string; fecha: string; ref: string; prueba: boolean }) =>
   pedir<{ ok: true; cuenta: unknown; yaExistia?: boolean }>(post({ accion: 'cobrar-cuenta', marca, ...c }), '', 'No se pudo registrar el cobro.')
+/**
+ * La cuenta del cliente del chat en el panel de WhatsApp (BDI). `prendido: false` = el interruptor `PANEL_CUENTA_CORRIENTE`
+ * está apagado para este usuario ⇒ el panel ⛔ dibuja nada. Sin `gnId` ni `tel` sólo dice si está prendido.
+ */
+export type CuentaPanel =
+  | { prendido: false }
+  | { prendido: true; prueba: boolean; cliente: null; ambiguo?: number }
+  | {
+    prendido: true; prueba: boolean; hoy: string; cliente: { id: string; nombre: string; doc: string | null }; linea: 'bdi'; credito: CreditoCliente
+    estado: Omit<CuentaDeCliente['estado'], 'pendientes'> & { pendientes: Array<PendienteCuenta & { nombre: string | null }> }
+    pagos: Array<{ fecha: string; monto: number; detalle: string }>
+    cuentas: Array<{ id: string | number; nombre: string; medio: string }>
+  }
+export const leerCuentaPanel = (p: { gnId?: number | null; tel?: string | null; prueba: boolean }) =>
+  pedir<CuentaPanel>(null, `&vista=cuenta-panel&marca=bdi&gnId=${p.gnId && p.gnId > 0 ? p.gnId : ''}&tel=${String(p.tel ?? '').replace(/\D/g, '').slice(0, 20)}&prueba=${p.prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudo leer la cuenta corriente.')
 /** Cargar o corregir el WhatsApp / mail de un cliente (sólo admin). El motor valida el número; ⛔ borra un dato que no mandás. */
 export const ponerContactoCliente = (marca: MarcaErp, p: { clienteId: string; whatsapp?: string; email?: string }) =>
   pedir<{ ok: true; contacto: { whatsapp: string | null; email: string | null } }>(post({ accion: 'poner-contacto', marca, ...p }), '', 'No se pudo guardar el contacto.')

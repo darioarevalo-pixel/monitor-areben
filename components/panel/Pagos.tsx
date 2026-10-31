@@ -46,6 +46,7 @@ import { DatosDeCuenta } from './DatosDeCuenta'
 import { useAcreedores } from '@/components/acreedores/useAcreedores'
 import { useCompromisos } from '@/components/acreedores/useCompromisos'
 import { NuevoCompromiso, type QuienPaga } from './NuevoCompromiso'
+import { ListaCuentas, useCuentaPrendida } from './CuentaCorriente'
 import type { Acreedor, CuentaBancaria } from '@/lib/acreedores/cliente'
 import { cambiarEstado, confirmarCompromiso, vincularCompromiso } from '@/lib/compromisos/cliente'
 import { destinoDeAcreedor, destinosDeCuentas, type DestinoCompromiso } from '@/lib/compromisos/destino'
@@ -678,7 +679,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
    */
   buscandoCliente?: boolean
   /** Saltar de una fila a esa persona: su chat si hay teléfono, su ficha si no. */
-  onIrAlCliente: ((c: Compromiso) => void) | null
+  onIrAlCliente: ((c: Pick<Compromiso, 'cliente_id' | 'cliente_telefono'>) => void) | null
 }) {
   const deudas = useAcreedores()
   const cobros = useCompromisos()
@@ -724,7 +725,12 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
    * y *"¿a quién le debemos y a qué alias?"* (los acreedores). Arranca en compromisos, que es la lista
    * de trabajo; la otra se mira cuando el cliente pregunta a dónde transferir.
    */
-  const [vista, setVista] = useState<'compromisos' | 'acreedores'>('compromisos')
+  const [vista, setVista] = useState<'compromisos' | 'acreedores' | 'cuentas'>('compromisos')
+  /**
+   * El tercero, «Cuentas» (plan «BDI directo al ERP», 30-oct): los que le deben a BDI en la cuenta corriente del ERP.
+   * ESCONDIDO detrás de `PANEL_CUENTA_CORRIENTE` (ver `CuentaCorriente.tsx`): apagado, el control queda como hoy.
+   */
+  const cuentaPrendida = useCuentaPrendida()
   const [hoy] = useState(() => hoyISO())
   /**
    * El aviso de "listo" / "no se pudo", **con vencimiento**.
@@ -895,7 +901,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
         borderBottom: `1px solid ${color.line2}`, padding: `${space[2]}px ${MARGEN}px`, marginBottom: space[2],
       }}>
         <div style={{ display: 'flex', gap: 2, padding: 2, background: color.bg2, borderRadius: radius.pill, border: `1px solid ${color.line2}` }}>
-          {([['compromisos', `Compromisos${abiertas ? ` · ${abiertas}` : ''}`], ['acreedores', 'A quién le debemos']] as const).map(([k, txt]) => (
+          {([['compromisos', `Compromisos${abiertas ? ` · ${abiertas}` : ''}`], ['acreedores', 'A quién le debemos'], ...(cuentaPrendida ? [['cuentas', 'Cuentas'] as const] : [])] as const).map(([k, txt]) => (
             <button
               key={k}
               type="button"
@@ -980,7 +986,9 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
         </Bloque>
       )}
 
-      {vista === 'acreedores' ? (
+      {vista === 'cuentas' && cuentaPrendida ? (
+        <ListaCuentas onIrAlCliente={onIrAlCliente} />
+      ) : vista === 'acreedores' ? (
         <div style={{ marginTop: space[2] }}>
           <VistaAcreedores
             acreedores={deudas.acreedores}

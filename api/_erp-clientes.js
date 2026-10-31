@@ -184,8 +184,9 @@ export async function cuentasDeLaMarca({ marca, linea = marca === 'bdi' ? 'bdi' 
     // El WhatsApp para el botón de la fila: una lectura aparte (el motor ⛔ lo trae en `cuentasCorrientes`). Si falla, la lista sale sin botón.
     try {
       const ids = [...new Set(cuentas.map((c) => c.cliente_id))]
-      const wa = new Map((ids.length ? (await pg.query('select id::text, whatsapp from cliente where id = any($1::uuid[])', [ids])).rows : []).map((r) => [r.id, r.whatsapp]))
-      for (const c of cuentas) c.whatsapp = wa.get(c.cliente_id) ?? null
+      // Y el id de GN: tocar el nombre en el panel de WhatsApp (Pagos › Cuentas) abre la ficha de ese cliente.
+      const wa = new Map((ids.length ? (await pg.query('select id::text, whatsapp, gn_client_id::text from cliente where id = any($1::uuid[])', [ids])).rows : []).map((r) => [r.id, r]))
+      for (const c of cuentas) { c.whatsapp = wa.get(c.cliente_id)?.whatsapp ?? null; c.gn_client_id = wa.get(c.cliente_id)?.gn_client_id ?? null }
     } catch { /* sin WhatsApp: el botón queda apagado */ }
     return { hoy, prueba, cuentas, clientesErp: empresas.length ? (await pg.query('select count(*)::int as n from cliente')).rows[0].n : 0, otroLibro }
   })
@@ -248,5 +249,68 @@ export async function ponerContactoCliente({ marca, body, usuario }, deps) {
     const { ponerContactoCliente: poner } = await import('../motor/venta/cliente.mjs')
     const r = await poner(pg, { empresa_id: c.empresa_id, cliente_id: body.clienteId, whatsapp: body.whatsapp, email: body.email })
     return r.ok ? { ok: true, contacto: { whatsapp: r.cliente.whatsapp, email: r.cliente.email } } : { status: r.error?.codigo === 'FALTA_CLIENTE' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo guardar el contacto.' }
+  })
+}
+
+// ── La cuenta corriente en el panel de WhatsApp (plan «BDI directo al ERP», Bruno 30-oct, fases 2 y 3) ──
+
+/**
+ * El interruptor del panel, `PANEL_CUENTA_CORRIENTE`: `1` = para todos los que tengan el permiso; una lista de usuarios
+ * (`bruno,otro`) = sólo para ellos. 🔴 Mientras GN siga vivo un pago cargado acá ⛔ baja en GN ⇒ se prende primero sólo para
+ * probar (Bruno/admin), ⛔ para Darío, hasta que Bruno lo acuerde. Apagado ⇒ el panel queda IDÉNTICO a hoy (la vista
+ * contesta sin leer la base).
+ * @param {Record<string, string|undefined>} [env] @param {string|null} [usuario]
+ */
+export function panelCuentaPrendido(env = process.env, usuario = null) {
+  const v = String(env.PANEL_CUENTA_CORRIENTE ?? '').trim()
+  if (v === '1') return true
+  if (!v || !usuario) return false
+  return v.toLowerCase().split(',').map((x) => x.trim()).filter(Boolean).includes(String(usuario).toLowerCase())
+}
+
+/**
+ * La cuenta del cliente del CHAT, para el panel de WhatsApp de Darío (`components/panel/PanelWhatsApp.tsx`): sólo BDI (la
+ * cuenta corriente es de BDI, Bruno 14-oct). Resuelve la ficha del motor por `gn_client_id` —el panel ya conoce el id de GN
+ * del cliente— y, si ⛔ hay, por el WhatsApp del chat (`clientePorWhatsapp` del motor, sql/061); con más de una ficha por ese
+ * número ⛔ elige: contesta `ambiguo`. Devuelve saldo, compras con saldo, últimos pagos y las cuentas con que se cobra (lo
+ * mismo que `cuentaDeCliente`). 🔴 Lee el libro que diga `prueba` (⛔ el real fijo de `fichaDeCliente`): hoy BDI sólo tiene
+ * el de PRUEBA. Cargar el pago va por `cobrar-cuenta` (`cobrarCuentaErp`), el mismo de ERP › Clientes.
+ * Sin cliente (la solapa Pagos, sin chat) contesta sólo si está prendido.
+ * @param {{ gnId?: string, tel?: string, prueba?: boolean, usuario?: string|null }} p
+ * @param {{ conMotor: Function, prendido?: boolean }} deps
+ */
+export async function cuentaDelPanel({ gnId = '', tel = '', prueba = false, usuario = null }, deps) {
+  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  const gn = /^\d{1,12}$/.test(String(gnId)) ? String(gnId) : null
+  const wa = String(tel || '').replace(/\D/g, '').slice(0, 20)
+  if (!gn && !wa) return { prendido: true, prueba, cliente: null }
+  return deps.conMotor('bdi', 'La cuenta corriente', async (pg) => {
+    let clienteId = gn ? (await pg.query('select id::text from cliente where gn_client_id = $1::bigint limit 1', [gn])).rows[0]?.id ?? null : null
+    if (!clienteId && wa) {
+      const { clientePorWhatsapp } = await import('../motor/venta/cliente.mjs')
+      if (typeof clientePorWhatsapp === 'function') {
+        const encontrados = []
+        for (const { empresa_id } of (await pg.query('select distinct empresa_id from cliente')).rows) {
+          const r = await clientePorWhatsapp(pg, { empresa_id, whatsapp: wa })
+          if (r.ok) encontrados.push(...r.clientes)
+        }
+        if (encontrados.length > 1) return { prendido: true, prueba, cliente: null, ambiguo: encontrados.length }
+        clienteId = encontrados[0]?.id ?? null
+      }
+    }
+    if (!clienteId) return { prendido: true, prueba, cliente: null }
+    const { cuentaDe } = await import('../motor/cuenta/cuenta.mjs')
+    const r = await cuentaDe(pg, { cliente_id: clienteId, marca: 'bdi', prueba })
+    if (!r.ok) return { status: 409, error: r.error?.mensaje ?? 'No se pudo leer la cuenta.' }
+    const ventas = nombresDeVentas(r.mayor)
+    const pagos = r.mayor.renglones.filter((x) => x.tipo === 'pago').slice(-4).reverse()
+      .map((x) => ({ fecha: x.fecha, monto: x.haber, detalle: x.detalle }))
+    const cuentas = await pg.query(`select id, nombre, medio from cuenta_cobro where marca = 'bdi' and activa and medio not in ('saldo', 'cuenta') order by nombre`)
+      .then((x) => x.rows).catch(() => [])
+    return {
+      prendido: true, prueba, hoy: r.hoy, cliente: r.cliente, linea: 'bdi', credito: r.credito,
+      estado: { ...r.estado, pendientes: r.estado.pendientes.map((v) => ({ ...v, nombre: ventas.get(v.ref) ?? null })) },
+      pagos, cuentas,
+    }
   })
 }
