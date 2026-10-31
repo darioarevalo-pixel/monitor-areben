@@ -47,6 +47,9 @@ export function depositoDeId(base, storeId) {
  * `lineaDe` de `lib/lineas.core.js` del monitor (esta app no lo importa). Lo mismo que allá: un
  * producto de Stunned sin SKU cae en Zattia, y no hay otra señal para separarlo.
  */
+/** Las líneas que viven en una base (las de `erp_corte`, sql/063). */
+export const lineasDeBase = (base) => (base === 'zattia' ? ['zattia', 'stunned'] : base === 'bdi' ? ['bdi'] : [])
+
 export function lineaDe(base, sku) {
   if (base === 'zattia') return sku && /^stu/i.test(String(sku)) ? 'stunned' : 'zattia'
   return 'bdi'
@@ -56,17 +59,17 @@ export function lineaDe(base, sku) {
  * 🔴 Desde cuándo GN ⛔ le dice nada al libro de una LÍNEA (error 13, Bruno 28-oct: «desde esta noche no se proyecta más, porque
  * la venta entra bien»): la línea vive en el ERP y sus ventas (Caja, pedidos de TN) bajan el libro directo. Lo que GN siga
  * trayendo —la integración de TN que se importó sola la #140 como GN #31028, una venta cargada a mano, un borrado— contaría
- * DOS VECES. El instante es el del ALINEO del corte (`alinear --motivo "corte de Stunned"`, grupo `alineo:2026-10-28`):
- * hasta ahí GN y el libro coinciden. ⛔ Zattia ni BDI: siguen vendiendo por GN y su proyección es lo único que el libro sabe.
+ * DOS VECES. El instante es el del ALINEO del corte: hasta ahí GN y el libro coinciden.
+ * 🔑 Los cortes viven en la tabla `erp_corte` (sql/063, inmutable): ⛔ en una constante. Era `CORTES_GN` acá + una llave aparte en
+ * el monitor, dos cosas que se desincronizan (30-oct). Los lee `cargarCortes` (lib/cargar.mjs); los escribe `alinear --corte`.
  */
-export const CORTES_GN = Object.freeze({ stunned: '2026-10-28T23:40:27.759Z' })
 
 /**
  * ¿GN ya ⛔ manda en esa línea en ese instante? `cortes` es obligatorio (⛔ un default que olvida el corte callado).
  * @param {string} linea @param {string|Date} instante @param {Record<string,string>} cortes
  */
 export function gnYaNoManda(linea, instante, cortes) {
-  if (!cortes) throw new Error('gnYaNoManda: faltan los cortes (CORTES_GN).')
+  if (!cortes) throw new Error('gnYaNoManda: faltan los cortes (erp_corte).')
   const c = cortes[linea]
   return !!c && new Date(instante).getTime() >= Date.parse(c)
 }

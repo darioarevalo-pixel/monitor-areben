@@ -149,7 +149,7 @@ const pesos = (x) => Math.round(Number(x) * 100) / 100
  * Lo que queda A CUENTA (§15, sql/025): hace falta el cliente, y `frena` (sin crédito, atrasado, pasa el tope) se
  * salta sólo con el PIN de un admin (`autoriza: { motivo: 'pin_admin', usuario }`, queda en `detalle.cuenta_autoriza`).
  * La mayorista que llega de GN (`origen 'mayorista'`, en paralelo) ya se vendió allá ⇒ `autoriza: { motivo: 'gn' }` la deja
- * pasar y el freno queda anotado (lo que el ERP HABRÍA frenado). Bloquea la cuenta del cliente hasta el commit. `null` si está bien.
+ * pasar y el freno queda anotado (lo que el ERP HABRÍA frenado). El pedido mayorista del ERP, igual con `{ motivo: 'pedido' }`. Bloquea la cuenta del cliente hasta el commit. `null` si está bien.
  */
 async function chequearCuenta(db, armada, e) {
   if (!(armada.usa_cuenta > 0)) return null
@@ -159,9 +159,11 @@ async function chequearCuenta(db, armada, e) {
   const f = frena({ cuenta: estado, credito, monto: armada.usa_cuenta })
   if (!f) return null
   const a = e?.autoriza
-  const porGN = a?.motivo === 'gn' && e.origen === 'mayorista'
-  if ((a?.motivo === 'pin_admin' || porGN) && typeof a.usuario === 'string' && a.usuario.trim()) {
-    v.detalle = { ...v.detalle, cuenta_autoriza: { usuario: a.usuario.trim(), codigo: f.codigo, ...(porGN ? { motivo: 'gn' } : {}) } }
+  // 🔑 El PEDIDO mayorista del ERP (sql/064, Bruno 30-oct): entra A CUENTA aunque el cliente ⛔ tenga crédito — el freno
+  // va en el DESPACHO (sin pagar + sin cuenta corriente ⇒ «Pendiente de pago»), ⛔ al entrar el pedido.
+  const porMotivo = e.origen === 'mayorista' && (a?.motivo === 'gn' || a?.motivo === 'pedido') ? a.motivo : null
+  if ((a?.motivo === 'pin_admin' || porMotivo) && typeof a.usuario === 'string' && a.usuario.trim()) {
+    v.detalle = { ...v.detalle, cuenta_autoriza: { usuario: a.usuario.trim(), codigo: f.codigo, ...(porMotivo ? { motivo: porMotivo } : {}) } }
     return null
   }
   return { ok: false, error: { codigo: f.codigo, mensaje: f.mensaje, campo: 'pagos', cuenta: { debe: estado.debe, vencido: estado.vencido, tope: credito?.tope ?? null } } }

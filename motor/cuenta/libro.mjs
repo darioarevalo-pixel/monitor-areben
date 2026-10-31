@@ -20,7 +20,7 @@ export async function creditoDe(db, clienteId) {
 
 /** Las filas del libro de un cliente, con el día AR y el detalle que se ve (el número de la venta, la cuenta del pago). */
 export async function filasDe(db, { cliente_id, marca, prueba }) {
-  return q(db, `select m.tipo, m.ref, m.monto, to_char(m.ocurrida_en ${AR}, 'YYYY-MM-DD') as fecha, m.detalle->'imputar' as imputar,
+  return q(db, `select m.tipo, m.ref, m.monto, to_char(m.ocurrida_en ${AR}, 'YYYY-MM-DD') as fecha, m.detalle->'imputar' as imputar, m.detalle->>'pedido' as pedido,
       case when m.tipo = 'compra' then 'Venta ' || v.numero when m.tipo = 'pago' then coalesce(c.nombre, '') else '' end as detalle
     from cuenta_movimiento m left join venta v on v.id = m.venta_id left join cuenta_cobro c on c.id = m.cuenta_cobro_id
     where m.cliente_id = $1 and m.marca = $2 and m.prueba = $3 order by m.ocurrida_en, m.creado_en`, [cliente_id, marca, prueba])
@@ -31,7 +31,7 @@ export async function filasDe(db, { cliente_id, marca, prueba }) {
  * columnas que `filasDe` más `cliente_id`, en el mismo orden.
  */
 export async function filasDeMarca(db, { empresa_id, marca, prueba }) {
-  return q(db, `select m.cliente_id::text, m.tipo, m.ref, m.monto, to_char(m.ocurrida_en ${AR}, 'YYYY-MM-DD') as fecha, m.detalle->'imputar' as imputar,
+  return q(db, `select m.cliente_id::text, m.tipo, m.ref, m.monto, to_char(m.ocurrida_en ${AR}, 'YYYY-MM-DD') as fecha, m.detalle->'imputar' as imputar, m.detalle->>'pedido' as pedido,
       case when m.tipo = 'compra' then 'Venta ' || v.numero when m.tipo = 'pago' then coalesce(c.nombre, '') else '' end as detalle
     from cuenta_movimiento m left join venta v on v.id = m.venta_id left join cuenta_cobro c on c.id = m.cuenta_cobro_id
     where m.empresa_id = $1 and m.marca = $2 and m.prueba = $3 order by m.ocurrida_en, m.creado_en`, [empresa_id, marca, prueba])
@@ -58,7 +58,9 @@ export async function cuentaBloqueada(db, { cliente_id, marca, prueba, hoy = nul
 /** La compra (+) de una venta con parte a cuenta. */
 export const filaCompra = (venta, monto, detalle = {}) => ({
   empresa_id: venta.empresa_id, marca: venta.marca, cliente_id: venta.cliente_id, tipo: 'compra', ref: `venta:${venta.id}`,
-  monto, venta_id: venta.id, detalle, prueba: venta.prueba, usuario: venta.usuario, ocurrida_en: venta.ocurrida_en,
+  monto, venta_id: venta.id, prueba: venta.prueba, usuario: venta.usuario, ocurrida_en: venta.ocurrida_en,
+  // La compra de un PEDIDO mayorista lleva el pedido (sql/064): el pago imputado lo sigue cuando se edita (`movimientosDeLibro`).
+  detalle: venta.detalle?.pedido_mayorista ? { pedido: String(venta.detalle.pedido_mayorista), ...detalle } : detalle,
 })
 
 export async function insertarFila(db, f) {

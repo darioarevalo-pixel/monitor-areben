@@ -79,11 +79,15 @@ export function aplicar(movs) {
 /**
  * Las filas de `cuenta_movimiento` (sql/025) → los movimientos de la cuenta. La anulación (`<ref>:anulacion`) se
  * NETEA con lo que da vuelta: una compra o un pago anulado del todo ⛔ aparece; la fecha es la del movimiento original.
- * @param {Array<{ tipo: string, ref: string, monto: any, fecha: string, detalle?: string }>} filas  `fecha` = el día AR
+ * @param {Array<{ tipo: string, ref: string, monto: any, fecha: string, detalle?: string, pedido?: string|null }>} filas  `fecha` = el día AR · `pedido`: el pedido mayorista de la compra
  */
 export function movimientosDeLibro(filas) {
   const por = new Map()
+  // El PEDIDO mayorista (sql/064): editarlo es `reemplazarVenta` ⇒ su compra cambia de `ref`. Un pago imputado a la venta
+  // de antes SIGUE al pedido (a su compra viva), ⛔ se va a la más vieja: si no, «Pagó una parte» pasaba a «Sin pagar».
+  const pedidoDe = new Map()
   for (const f of filas) {
+    if (f.tipo === 'compra' && f.pedido) pedidoDe.set(f.ref, String(f.pedido))
     const base = f.tipo === 'anulacion' ? String(f.ref).replace(/:anulacion$/, '') : f.ref
     const m = por.get(base) ?? { ref: base, neto: 0, fecha: null, detalle: '' }
     m.neto = pesos(m.neto + Number(f.monto))
@@ -91,12 +95,18 @@ export function movimientosDeLibro(filas) {
     por.set(base, m)
   }
   const movs = []
+  const vivaDe = new Map() // pedido → la ref de su compra que sigue viva
   for (const m of por.values()) {
     if (casi0(m.neto)) continue
     if (!m.fecha) throw new Error(`anulación sin su movimiento: ${m.ref}`)
     const mov = { tipo: m.neto > 0 ? 'compra' : 'pago', ref: m.ref, fecha: m.fecha, monto: Math.abs(m.neto), detalle: m.detalle }
     if (mov.tipo === 'pago' && m.imputar?.length) mov.imputar = m.imputar.map((x) => ({ ref: `venta:${x.venta_id}`, monto: Number(x.monto) }))
+    if (mov.tipo === 'compra' && pedidoDe.has(mov.ref)) vivaDe.set(pedidoDe.get(mov.ref), mov.ref)
     movs.push(mov)
+  }
+  for (const mov of movs) {
+    if (!mov.imputar) continue
+    mov.imputar = mov.imputar.map((x) => ({ ...x, ref: vivaDe.get(pedidoDe.get(x.ref)) ?? x.ref }))
   }
   return movs
 }

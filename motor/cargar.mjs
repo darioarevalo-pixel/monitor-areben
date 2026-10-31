@@ -13,6 +13,16 @@ export async function cargarIndice(db) {
   return indiceDeVariantes(await db.q('select product_id, size_id, sku, barcode from variante order by product_id, size_id'))
 }
 
+/**
+ * Los cortes por línea (`erp_corte`, sql/063): `{ stunned: '2026-10-28T23:40:27.759Z', … }`. 🔴 Sin la tabla FALLA: proyectar sin
+ * saber qué línea cortó contaría dos veces lo que GN siga trayendo de ella (⛔ un default vacío callado).
+ */
+export async function cargarCortes(db) {
+  if (!(await existe(db, 'erp_corte'))) throw new Error('Falta la tabla erp_corte (sql/063): sin ella no se sabe qué línea ya cortó.')
+  const rows = await db.q('select linea, instante from erp_corte')
+  return Object.freeze(Object.fromEntries(rows.map((r) => [r.linea, new Date(r.instante).toISOString()])))
+}
+
 /** La apertura del libro (T0), o null si todavía no se abrió (o si la tabla no existe). */
 export async function cargarApertura(db) {
   if (!(await existe(db, 'stock_movimiento'))) return null
