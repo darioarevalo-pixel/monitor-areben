@@ -70,6 +70,12 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
     igual» lo manda sabiendo. 🔴 **Tolerancia $1.000** (Bruno 31-oct): faltando eso o menos el pedido se ve «Pagado» y va a
     «Despacho», pero ⛔ se perdona: la diferencia SIGUE en la cuenta. «A dónde fue la plata»: ⏸️ a futuro, con las deudas de
     proveedores (`tests/pedido-cargar-pago.test.tsx`, `tests/panel-cuenta-pantalla.test.tsx`).
+- **Situación crediticia** (Bruno 31-oct, «sumalo»): en la tarjeta de cuenta, «Ver situación en el BCRA» consulta la
+  Central de Deudores PÚBLICA del BCRA (sin clave, gratis; `lib/erp/bcra.core.js` + `situacionBcra`/`bcraDelPanel` de
+  `api/_erp-clientes.js`, vista `bcra-panel`, permiso `cuentas`, misma llave del panel). Situación por banco, deuda, 12 meses
+  y cheques rechazados. 🔴 **El monto de las deudas viene en MILES de pesos** (manual del BCRA) y el de los cheques en pesos;
+  un 404 «No se encontró» = ⛔ debe nada, ⛔ es error. El CUIT sale de la FICHA (⛔ del navegador); con DNI ⛔ hay consulta.
+  ⛔ se guarda ni se consulta sola (`tests/erp-bcra.test.ts`, `tests/panel-bcra-pantalla.test.tsx`).
 
 ## Reglas que el código no dice
 

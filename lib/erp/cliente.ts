@@ -695,6 +695,19 @@ export const anotarWhatsappPanel = (p: { clienteId: string; whatsapp: string; no
 export type ClienteDelPanel = { id: string; nombre: string; doc: string | null }
 export const buscarClientesPanel = (q: string) =>
   pedir<{ prendido: false } | { prendido: true; clientes: ClienteDelPanel[] }>(null, `&vista=clientes-panel&marca=bdi&q=${encodeURIComponent(q.slice(0, 80))}&nc=${Date.now()}`, 'No se pudo buscar el cliente.')
+/** La situación crediticia del cliente en el BCRA (Central de Deudores; `lib/erp/bcra.core.js`). Montos en PESOS. */
+export type BcraDelPanel =
+  | { prendido: false }
+  | { prendido: true; sinCuit: true }
+  | { prendido: true; cuit: string; ok: false; error: string }
+  | {
+    prendido: true; cuit: string; ok: true; denominacion: string | null; periodo: string | null; peor: number; deuda: number
+    bancos: Array<{ entidad: string; situacion: number; monto: number; diasAtraso: number; juicio: boolean }>
+    historia: Array<{ periodo: string; peor: number }> | null; peor12: number | null
+    cheques: { total: number; sinPagar: number; monto: number } | null
+  }
+export const leerBcraPanel = (clienteId: string) =>
+  pedir<BcraDelPanel>(null, `&vista=bcra-panel&marca=bdi&cliente=${encodeURIComponent(clienteId)}&nc=${Date.now()}`, 'No se pudo consultar el BCRA.')
 /** «Es nuevo»: la ficha (nombre + CUIT/DNI) y el número del chat anotado en ella. 409 con `existe` si el documento ya tiene ficha. */
 export const clienteNuevoPanel = (p: { nombre: string; doc: string; whatsapp: string; persona?: string }) =>
   pedir<{ ok: true; cliente: ClienteDelPanel }>(post({ accion: 'cliente-nuevo-panel', marca: 'bdi', ...p }), '', 'No se pudo cargar el cliente.')

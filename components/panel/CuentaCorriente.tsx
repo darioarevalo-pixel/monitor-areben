@@ -16,11 +16,12 @@
  * más vieja; la vista previa (`repartirPago`) sólo lo dibuja antes de confirmar.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Button, CopyButton, Field, Input, Modal, Notice, Select } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
-import { anotarWhatsappPanel, cobrarCuentaErp, leerCuentaPanel, leerCuentasCorrientes, sacarWhatsappPanel, type CuentaDelMotor, type CuentaPanel } from '@/lib/erp/cliente'
+import { anotarWhatsappPanel, cobrarCuentaErp, leerBcraPanel, leerCuentaPanel, leerCuentasCorrientes, sacarWhatsappPanel, type BcraDelPanel, type CuentaDelMotor, type CuentaPanel } from '@/lib/erp/cliente'
 import { mensajeDeSaldo, repartirPago, textoSaldo } from '@/lib/erp/cuenta-panel.core.js'
+import { SITUACION_BCRA, mesBcra, tonoBcra } from '@/lib/erp/bcra.core.js'
 import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 
@@ -128,8 +129,64 @@ export function TarjetaCuenta({ cuenta, telChat, decir, onCambio }: {
         )) : <div style={{ fontSize: font.sm, color: color.mut2 }}>Todavía no hay pagos.</div>}
       </div>
       <div style={{ fontSize: 11, color: color.mut2, marginTop: 6 }}>Un pago cancela primero la compra más vieja.</div>
+      <SituacionBcra key={cuenta.cliente.id} clienteId={cuenta.cliente.id} />
       {cuenta.personas && <QuienCompra cuenta={cuenta} telChat={telChat} decir={decir} onCambio={onCambio} />}
     </section>
+  )
+}
+
+/**
+ * La situación crediticia del cliente en el BCRA (Central de Deudores, pública; Bruno 31-oct). Se consulta al ABRIR, ⛔ sola:
+ * son tres llamadas a afuera por chat. Cambiar de cliente la vuelve a cero (`key`). El CUIT lo lee el servidor de la ficha; con DNI o sin documento lo dice.
+ */
+function SituacionBcra({ clienteId }: { clienteId: string }) {
+  const [r, setR] = useState<BcraDelPanel | 'cargando' | null>(null)
+  const [error, setError] = useState('')
+  async function consultar() {
+    setR('cargando'); setError('')
+    try { setR(await leerBcraPanel(clienteId)) } catch (e) { setR(null); setError(e instanceof Error ? e.message : 'No se pudo consultar el BCRA.') }
+  }
+  const TONO = { verde: color.successInk, ambar: color.warningInk, rojo: color.dangerInk, neutro: color.mut2 } as const
+  let cuerpo: ReactNode
+  if (r === null) cuerpo = (
+    <Button size="sm" variant="outline" onClick={consultar} style={{ height: 'auto', alignSelf: 'flex-start' }}>Ver situación en el BCRA</Button>
+  )
+  else if (r === 'cargando') cuerpo = <div style={{ fontSize: font.sm, color: color.mut2 }}>Consultando el BCRA…</div>
+  else if (!r.prendido) cuerpo = null
+  else if ('sinCuit' in r) cuerpo = <div style={{ fontSize: font.sm, color: color.mut2 }}>Hace falta el CUIT del cliente (con DNI el BCRA no contesta).</div>
+  else if (!r.ok) cuerpo = <div style={{ fontSize: font.sm, color: color.dangerInk }}>{r.error}</div>
+  else {
+    const tono = TONO[tonoBcra(r)]
+    const resumen = r.bancos.length
+      ? `Situación ${r.peor} (${SITUACION_BCRA[r.peor as keyof typeof SITUACION_BCRA] ?? '?'}) · debe ${plata(r.deuda)} en ${r.bancos.length} ${r.bancos.length === 1 ? 'banco' : 'bancos'}`
+      : 'Sin deudas en bancos'
+    const cheques = r.cheques == null ? null
+      : r.cheques.total === 0 ? 'sin cheques rechazados'
+        : `${r.cheques.total} ${r.cheques.total === 1 ? 'cheque rechazado' : 'cheques rechazados'}${r.cheques.sinPagar ? ` · ${r.cheques.sinPagar} sin pagar (${plata(r.cheques.monto)})` : ''}`
+    cuerpo = (
+      <>
+        <div style={{ fontSize: font.sm, color: tono, fontWeight: 700 }}>{resumen}{cheques ? ` · ${cheques}` : ''}</div>
+        {r.bancos.slice(0, 4).map((b) => (
+          <div key={b.entidad} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: font.xs, color: color.mut2 }}>
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.entidad}</span>
+            <span style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>sit. {b.situacion}{b.diasAtraso ? ` · ${b.diasAtraso} días de atraso` : ''}{b.juicio ? ' · en juicio' : ''} · {plata(b.monto)}</span>
+          </div>
+        ))}
+        {r.peor12 != null && r.peor12 > r.peor && (
+          <div style={{ fontSize: font.xs, color: TONO.ambar }}>En los últimos 12 meses llegó a situación {r.peor12}.</div>
+        )}
+        <div style={{ fontSize: 11, color: color.mut2 }}>
+          {r.denominacion ? `${r.denominacion} · ` : ''}{r.periodo ? `informado a ${mesBcra(r.periodo)}` : 'último período'} · fuente: BCRA, Central de Deudores
+        </div>
+      </>
+    )
+  }
+  return (
+    <div style={{ borderTop: `1px solid ${color.line2}`, marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={ROTULO}>Situación crediticia</div>
+      {cuerpo}
+      {error && <div style={{ fontSize: font.sm, color: color.dangerInk }}>{error}</div>}
+    </div>
   )
 }
 

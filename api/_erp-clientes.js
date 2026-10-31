@@ -15,6 +15,7 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { aTupla } from '../lib/erp/clientes-lista.core.js'
 import { nombresDeVentas } from '../lib/erp/cuenta-corriente.core.js'
 import { SQL_CTE_LINEA_GN, sqlVentaDeLinea } from '../lib/erp/linea-gn.core.js'
+import { BCRA_URL, cuitParaBcra, leerRespuestaBcra, resumirBcra } from '../lib/erp/bcra.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Las líneas de cada base: Stunned vive en la de Zattia. */
@@ -419,4 +420,40 @@ export async function sacarWhatsappPanel({ body, usuario, quien = usuario }, dep
     const r = await sacarWhatsapp(pg, { empresa_id: w.empresa_id, id: body.id, usuario })
     return r.ok ? { ok: true, sacado: r.sacado } : { status: 400, error: r.error?.mensaje ?? 'No se pudo sacar el número.' }
   })
+}
+
+// ── La situación crediticia del cliente (BCRA, Central de Deudores; Bruno 31-oct) ──
+
+/**
+ * Las tres consultas PÚBLICAS del BCRA para un CUIT (`lib/erp/bcra.core.js`), en paralelo y con 12 s cada una. Sólo LEE y ⛔
+ * guarda nada. Si la de deudas falla, contesta `{ ok: false, error }`; si fallan las otras dos, sale sin historia o sin cheques.
+ * @param {string} cuit 11 dígitos @param {{ fetch?: typeof fetch }} [deps]
+ */
+export async function situacionBcra(cuit, { fetch: f = globalThis.fetch } = {}) {
+  const pedir = async (ruta) => {
+    try {
+      const r = await f(`${BCRA_URL}/${ruta}${cuit}`, { signal: AbortSignal.timeout(12_000), headers: { Accept: 'application/json' } })
+      return leerRespuestaBcra(r.status, await r.json().catch(() => null))
+    } catch (e) {
+      return { estado: 'error', mensaje: e?.name === 'TimeoutError' ? 'El BCRA no contestó.' : 'No se pudo hablar con el BCRA.' }
+    }
+  }
+  const [deudas, historicas, cheques] = await Promise.all([pedir(''), pedir('Historicas/'), pedir('ChequesRechazados/')])
+  return resumirBcra({ deudas, historicas: historicas.estado === 'error' ? null : historicas, cheques: cheques.estado === 'error' ? null : cheques })
+}
+
+/**
+ * La línea del BCRA de la tarjeta de cuenta del panel: el CUIT sale de la FICHA del motor (⛔ del navegador). Sin CUIT de 11
+ * dígitos (un DNI, o sin documento) contesta `sinCuit`. Detrás del mismo interruptor que la cuenta del panel.
+ * @param {{ clienteId?: string, usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean, fetch?: typeof fetch }} deps
+ */
+export async function bcraDelPanel({ clienteId = '', usuario = null }, deps) {
+  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  if (!UUID.test(String(clienteId))) return { status: 400, error: 'Falta el cliente' }
+  const doc = await deps.conMotor('bdi', 'El documento del cliente', async (pg) =>
+    (await pg.query('select doc from cliente where id = $1', [clienteId])).rows[0]?.doc ?? null)
+  if (doc && typeof doc === 'object' && doc.status) return doc
+  const cuit = cuitParaBcra(doc)
+  if (!cuit) return { prendido: true, sinCuit: true }
+  return { prendido: true, cuit, ...(await situacionBcra(cuit, { fetch: deps.fetch })) }
 }
