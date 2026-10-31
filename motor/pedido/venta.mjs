@@ -46,16 +46,22 @@ export function origenRefPedido(p, n = 1) {
   return n > 1 ? `${base}:${n}` : base
 }
 
+/** Darío §4 (Bruno 31-oct): si le faltan $1.000 o menos, el pedido se ve «Pagado» — ⛔ se perdona, sigue debiéndose en la cuenta. */
+export const TOLERANCIA_PAGO = 1000
+
 /**
- * El estado del pago del pedido (Darío §3), de lo que su compra DEBE en la cuenta corriente.
+ * El estado del pago del pedido (Darío §3-§4), de lo que su compra DEBE en la cuenta corriente.
+ * Con `falta` ≤ `TOLERANCIA_PAGO` (y algo pagado) es «pagado» con `tolerado: true` y la `falta` REAL: lo que falta queda
+ * en la cuenta («es como una cuenta», Bruno 31-oct) y la pantalla lo puede decir.
  * @param {{ total: number, pendiente: number }} p
- * @returns {{ estado: 'pagado'|'parcial'|'sin_pagar', falta: number, pagado: number }}
+ * @returns {{ estado: 'pagado'|'parcial'|'sin_pagar', falta: number, pagado: number, tolerado?: true }}
  */
 export function estadoDePago({ total, pendiente }) {
   const t = pesos(total), falta = Math.max(0, pesos(pendiente))
   const pagado = pesos(t - falta)
   if (falta < 0.5) return { estado: 'pagado', falta: 0, pagado: t }
   if (pagado < 0.5) return { estado: 'sin_pagar', falta, pagado: 0 }
+  if (falta <= TOLERANCIA_PAGO) return { estado: 'pagado', falta, pagado, tolerado: true }
   return { estado: 'parcial', falta, pagado }
 }
 

@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "2e5cf95103b153ae341871be3c54c6306d815248",
-  "traido_en": "2026-10-31T12:53:40.637Z",
+  "commit": "86c873f9314235064a835d167e6056820b214324",
+  "traido_en": "2026-10-31T13:49:37.841Z",
   "archivos": {
     "alerta.mjs": "a34c920b5972553a630914482236843fcd4a7d0aad5f96bd810ff9a9b29d32ec",
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
@@ -17,7 +17,7 @@
     "cargar.mjs": "6e870e068461af592071e5dc15f7d7efd3c445b096f74815025e14b09f96fd6d",
     "catalogo-edicion.mjs": "a68d708d998d64cd887ea36b2409f8c903b108a791a6d3ecb39321f6e7f3932f",
     "cuenta/cuenta.core.mjs": "4716e1d7a846879165374c96ccf57f5559ea48c78f681686db839c46433d9829",
-    "cuenta/cuenta.mjs": "d86a838dbb4d3ffc9c3e6f39166cca56fcf8c35eafcdfdf1d8918842c78fdbd4",
+    "cuenta/cuenta.mjs": "dd49bdc189b5a49d6ac4e42179a0b5024c587547a2a85ac4fd947f58b6b45124",
     "cuenta/libro.mjs": "146c7cbcbd7e144cb636345a4bc98237c7ea973d05c5113565b6ba70e895e0b7",
     "cuentas/cuentas.mjs": "684ff6fb8dd1406aae3a188f95de5c3b3608afeed31fba37e4d7ea70e89ab4cf",
     "cuentas/rutas.mjs": "cb4b905a7488b4b71c40c2dfe8102e3d29bb2100aa30ec92dcf210e78028e3b3",
@@ -25,7 +25,7 @@
     "depositos.mjs": "b1dc15a7667656554e40b083e25c4f90e98be5f065028ecbd6e093ce10718632",
     "evento.mjs": "1aef38f09e1ab537619ee73c14ccf4fb9fbf5dd5c8ae9087984ed88b8bc01568",
     "gasto/gasto.mjs": "96bba550cb8d59e493228be35fdca2d0dc7af5e7cd74d00dd34c42ad33174b97",
-    "pedido/venta.mjs": "e086c4ad2878d1da5cc4c71b811b3a3d22d6268df0b4bf49b50c7ffc752ffc90",
+    "pedido/venta.mjs": "a110f964c643808bd3f7ccb003b2f5007acfd69457e43714e25d5d71e96ec870",
     "stock/ajuste.mjs": "7b40b4a30fcafbfaa74cf28392f866201f130197dfa8b09054c17fe91e87d2c7",
     "stock/deposito.mjs": "1e0d9b5cc483f673264d072d8a1c866709347b8cd604b1745a056a86efce8b25",
     "stock/interruptores.mjs": "aa08ed1ff19812949617eddd01af87c08d907434256ea84258368173e715bb58",

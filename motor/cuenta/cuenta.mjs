@@ -147,9 +147,18 @@ export async function pendienteDeVentas(db, { venta_ids, hoy = null }) {
  * (sql/020), como el cobro de una venta. Repetir con el mismo `origen_ref` devuelve el mismo.
  * `imputar` («cobrar esta venta», contrato §16): `[{ venta_id, monto }]` — esa parte va a esas ventas (⛔ más que lo que
  * cada una debe); lo que sobra va a la más VIEJA que debe, y sólo queda a favor si ⛔ debe nada (Bruno y Darío, 18-oct).
+ * `operacion` (Darío §4): el número de operación del comprobante, en `detalle.operacion`. Si ya lo lleva OTRO pago vivo
+ * (⛔ anulado, mismo `prueba`) ⇒ `OPERACION_REPETIDA` con cuál; `operacion_repetida: true` lo carga igual (lo decidió una persona).
  * @param {{ cliente_id: string, marca: string, monto: number, cuenta: string|number, cuenta_real?: string, canal?: string,
- *   origen_ref: string, usuario: string, prueba: boolean, ocurrida_en?: string, imputar?: Array<{ venta_id: string, monto: number }> }} e
+ *   origen_ref: string, usuario: string, prueba: boolean, ocurrida_en?: string, imputar?: Array<{ venta_id: string, monto: number }>,
+ *   operacion?: string, operacion_repetida?: boolean }} e
  */
+/** El número de operación como se compara: sin espacios ni guiones, en mayúsculas («0012-3456 » = «00123456»). Vacío ⇒ null. */
+export function operacionDe(x) {
+  const t = String(x ?? '').replace(/[\s.\-_/]/g, '').toUpperCase()
+  return t || null
+}
+
 export async function registrarPagoACuenta(db, e) {
   if (!UUID.test(String(e?.cliente_id ?? ''))) return fallo('ENTRADA_INVALIDA', 'Falta el cliente', 'cliente_id')
   const monto = pesos(e.monto)
@@ -167,6 +176,9 @@ export async function registrarPagoACuenta(db, e) {
   }
   if (new Set(imputar.map((x) => x.venta_id)).size !== imputar.length) return fallo('ENTRADA_INVALIDA', 'Una venta aparece dos veces', 'imputar')
   if (pesos(imputar.reduce((s, x) => s + pesos(x.monto), 0)) > monto) return fallo('IMPUTA_DE_MAS', 'Lo imputado a las ventas suma más que el pago', 'imputar')
+  if (e.operacion != null && typeof e.operacion !== 'string') return fallo('ENTRADA_INVALIDA', 'El número de operación es un texto', 'operacion')
+  const operacion = operacionDe(e.operacion)
+  if (operacion && operacion.length > 60) return fallo('ENTRADA_INVALIDA', 'El número de operación es demasiado largo', 'operacion')
   return enTransaccion(db, async () => {
     const [c] = await q(db, 'select id::text, empresa_id from cliente where id = $1', [e.cliente_id])
     if (!c) return fallo('NO_ENCONTRADO', 'No está ese cliente', 'cliente_id')
@@ -182,6 +194,17 @@ export async function registrarPagoACuenta(db, e) {
     const cuenta = cuentaDeCobro(conf, e.marca, e.cuenta)
     if (!cuenta) return fallo('CUENTA_DESCONOCIDA', `La cuenta de cobro ${e.cuenta} no es de ${e.marca}`, 'cuenta')
     if (cuenta.medio === 'saldo' || cuenta.medio === 'cuenta') return fallo('CUENTA_DESCONOCIDA', `Un pago a cuenta entra con plata, no con «${cuenta.nombre}»`, 'cuenta')
+    if (operacion && e.operacion_repetida !== true) {
+      const [otro] = await q(db, `select m.ref, m.monto::float as monto, m.ocurrida_en, c.nombre as cliente from cuenta_movimiento m join cliente c on c.id = m.cliente_id
+        where m.empresa_id = $1 and m.tipo = 'pago' and m.prueba = $2 and m.detalle->>'operacion' = $3
+          and not exists (select 1 from cuenta_movimiento a where a.empresa_id = m.empresa_id and a.ref = m.ref || ':anulacion')
+        order by m.ocurrida_en limit 1`, [c.empresa_id, e.prueba, operacion])
+      if (otro) {
+        return { ok: false, error: { codigo: 'OPERACION_REPETIDA', campo: 'operacion',
+          mensaje: `La operación ${operacion} ya se usó: pago de ${otro.cliente ?? 'otro cliente'} del ${String(new Date(otro.ocurrida_en).toISOString()).slice(0, 10)} por $${-otro.monto}`,
+          otro: { ref: otro.ref, cliente: otro.cliente ?? null, monto: -otro.monto, ocurrida_en: otro.ocurrida_en } } }
+      }
+    }
     const en = new Date(e.ocurrida_en ?? Date.now()).toISOString()
     const real = cobroReal({ monto, elegida: e.cuenta_real ?? null }, cuenta, { marca: e.marca, canal: e.canal ?? 'mayorista', en }, conf)
     if (!real.ok) return fallo(real.codigo, real.mensaje, 'cuenta_real')
@@ -194,7 +217,10 @@ export async function registrarPagoACuenta(db, e) {
     await insertarFila(db, {
       empresa_id: c.empresa_id, marca: e.marca, cliente_id: c.id, tipo: 'pago', ref, monto: -monto, cuenta_cobro_id: cuenta.id,
       medio: real.cobro.medio ?? null, cuenta_real_id: real.cobro.cuenta_real_id ?? null,
-      detalle: imputar.length ? { imputar: imputar.map((x) => ({ venta_id: x.venta_id, monto: pesos(x.monto) })) } : {}, prueba: e.prueba, usuario, ocurrida_en: en,
+      detalle: {
+        ...(imputar.length ? { imputar: imputar.map((x) => ({ venta_id: x.venta_id, monto: pesos(x.monto) })) } : {}),
+        ...(operacion ? { operacion } : {}), ...(operacion && e.operacion_repetida === true ? { operacion_repetida: true } : {}),
+      }, prueba: e.prueba, usuario, ocurrida_en: en,
     })
     return { ok: true, pago: { ref, monto, cuenta: cuenta.nombre, medio: real.cobro.medio ?? null }, ya_existia: false, cuenta: await saldoDe(db, c.id, e.marca, e.prueba) }
   })
