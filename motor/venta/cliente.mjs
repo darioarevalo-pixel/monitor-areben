@@ -115,6 +115,46 @@ export async function ponerContactoCliente(db, e) {
 }
 
 /**
+ * Los datos FISCALES de UNA ficha, por id (facturación de mayoristas, pedido de Darío §5, 31-oct): documento, razón social,
+ * condición de IVA y domicilio. 🔑 Existe porque las mayoristas de BDI vienen de GN SIN documento (sql/030): `guardarCliente`
+ * busca por documento ⇒ con el CUIT nuevo CREARÍA otra ficha y partiría al cliente en dos. Acá se completa la MISMA.
+ * Lo que viene con dato pisa, lo ausente ⛔ se toca. 🔴 El documento ⛔ se cambia: si la ficha ya tiene OTRO, `DOC_DISTINTO`
+ * (corregirlo es otra mano); si ese documento ya es de OTRA ficha de la empresa, `DOC_DE_OTRA` (con su nombre, para unirlas a mano).
+ * RI o monotributo ⇒ con CUIT. `actualizado_en` cambia sólo si algo cambió.
+ * @param {import('pg').ClientBase} db
+ * @param {{ empresa_id: string, cliente_id: string, doc?: string, razon_social?: string, condicion_iva?: number, domicilio?: string }} e
+ */
+export async function ponerFiscalCliente(db, e) {
+  const id = typeof e?.cliente_id === 'string' ? e.cliente_id.trim().toLowerCase() : ''
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) return falla('FALTA_CLIENTE', 'Falta el cliente', 'cliente_id')
+  const crudoDoc = e.doc == null || String(e.doc).trim() === '' ? null : e.doc
+  const doc = crudoDoc == null ? null : docValido(crudoDoc)
+  if (crudoDoc != null && !doc) return falla('DOC_INVALIDO', 'El documento es un DNI (7 u 8 números) o un CUIT válido (11)', 'doc')
+  const cond = e.condicion_iva == null || e.condicion_iva === '' ? null : Number(e.condicion_iva)
+  if (cond != null && !CONDICIONES.has(cond)) return falla('ENTRADA_INVALIDA', 'La condición de IVA es 1 (RI), 4 (exento), 5 (consumidor final) o 6 (monotributo)', 'condicion_iva')
+  const razon = texto(e.razon_social), domicilio = texto(e.domicilio)
+  if (doc == null && cond == null && razon == null && domicilio == null) return falla('ENTRADA_INVALIDA', 'Falta algún dato fiscal', 'doc')
+  const [f] = await q(db, 'select doc, condicion_iva from cliente where empresa_id = $1 and id = $2 for update', [e.empresa_id, id])
+  if (!f) return falla('FALTA_CLIENTE', 'No está ese cliente en esa empresa', 'cliente_id')
+  if (doc && f.doc && f.doc !== doc) return falla('DOC_DISTINTO', `Esta ficha ya tiene otro documento (${f.doc})`, 'doc')
+  const docFinal = doc ?? f.doc
+  const condFinal = cond ?? (f.condicion_iva == null ? null : Number(f.condicion_iva))
+  if ((condFinal === COND_IVA.RESPONSABLE_INSCRIPTO || condFinal === COND_IVA.MONOTRIBUTO) && String(docFinal ?? '').length !== 11) {
+    return falla('DOC_INVALIDO', 'Un responsable inscripto o monotributista va con su CUIT', 'doc')
+  }
+  if (doc && !f.doc) {
+    const [otra] = await q(db, 'select nombre from cliente where empresa_id = $1 and doc = $2 and id <> $3', [e.empresa_id, doc, id])
+    if (otra) return falla('DOC_DE_OTRA', `Ese documento ya es de otra ficha: «${otra.nombre}»`, 'doc')
+  }
+  const [r] = await q(db, `update cliente set doc = coalesce($3, doc), razon_social = coalesce($4, razon_social),
+      condicion_iva = coalesce($5, condicion_iva), domicilio = coalesce($6, domicilio),
+      actualizado_en = case when (doc, razon_social, condicion_iva, domicilio)
+        is not distinct from (coalesce($3, doc), coalesce($4, razon_social), coalesce($5, condicion_iva), coalesce($6, domicilio)) then actualizado_en else now() end
+    where empresa_id = $1 and id = $2 returning ${COLUMNAS}`, [e.empresa_id, id, doc, razon, cond, domicilio])
+  return { ok: true, cliente: r }
+}
+
+/**
  * La ficha por WhatsApp (plan «BDI directo al ERP», 30-oct): el panel de WhatsApp de Darío reconoce al cliente del chat.
  * 🔑 El cliente es la EMPRESA con VARIAS PERSONAS que compran (pedido de Darío §1, Bruno 30-oct): primero va por los números
  * ANOTADOS (`cliente_whatsapp`, sql/062) —uno activo es de una sola ficha ⇒ da una—; si ⛔ está anotado, por el número de la
