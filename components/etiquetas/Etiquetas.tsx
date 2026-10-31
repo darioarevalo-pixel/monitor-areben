@@ -1319,8 +1319,12 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
             <div style={{ fontSize: 12, color: color.mut2, maxWidth: 340, paddingTop: 22 }}>
               {porPrenda ? (
                 <>
-                  Etiqueta <b>por prenda</b>: tarjeta = efectivo ÷ {(1 - (camp.rotulo?.etiqueta.pctEfectivo ?? 0) / 100).toLocaleString('es-AR')}, redondeado al 90, en{' '}
-                  {camp.rotulo?.etiqueta.cuotas} cuotas. Se diseña en <b>Liquidación → Editar campaña</b>.
+                  {camp.rotulo?.etiqueta.fpDescuentos?.length ? (
+                    <>Etiqueta <b>por prenda</b>: detrás va la de formas de pago con los descuentos{Object.keys(camp.rotulo.etiqueta.fpPorParte || {}).length ? ', la que corresponde a cada producto' : ''}.</>
+                  ) : (
+                    <>Etiqueta <b>por prenda</b>: tarjeta = efectivo ÷ {(1 - (camp.rotulo?.etiqueta.pctEfectivo ?? 0) / 100).toLocaleString('es-AR')}, redondeado al 90, en{' '}
+                    {camp.rotulo?.etiqueta.cuotas} cuotas.</>
+                  )}{' '}Se diseña en <b>Liquidación → Editar campaña</b>.
                   {prendaPrevia && <> La previa muestra <b>{prendaPrevia.item.nombre}</b>{ultimaPrenda ? ', lo último que salió' : ''}.</>}
                 </>
               ) : (<>

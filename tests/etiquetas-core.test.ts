@@ -7,6 +7,7 @@ import {
   filtrarProductosDeCampania,
   filtrarVariantes,
   formasDePagoDePrenda,
+  lineasFpDePrenda,
   hermanasDe,
   nombrarSinPrecio,
   partirPorPrecio,
@@ -453,5 +454,24 @@ describe('formasDePagoDePrenda (Cyber, 30-oct-2026)', () => {
   it('con 0% la tarjeta es el mismo precio, y con 1 cuota ⛔ hay renglón de cuotas', () => {
     const l = formasDePagoDePrenda(9990, { pctEfectivo: 0, cuotas: 1 })
     expect(l.map((x) => x.texto)).toEqual(['FORMAS DE PAGO', 'Efectivo o transf. $9.990', 'Tarjeta $9.990'])
+  })
+})
+
+describe('lineasFpDePrenda (Cyber, 31-oct-2026)', () => {
+  const T = { texto: 'FORMAS DE PAGO', tam: 'titulo' as const, bold: true }
+  const L = (t: string) => ({ texto: t, tam: 'normal' as const, bold: false })
+  const e = { pctEfectivo: 10, cuotas: 3, fpDescuentos: [T, L('10% OFF Efectivo')], fpPorParte: { 'Línea −10%': [T, L('15% OFF Efectivo')] } }
+  it('la parte con su etiqueta lleva la suya; sin montos', () => {
+    const l = lineasFpDePrenda(e, { precio: 16190, parte: 'Línea −10%' })
+    expect(l.map((x) => x.texto)).toEqual(['FORMAS DE PAGO', '15% OFF Efectivo'])
+    expect(JSON.stringify(l)).not.toContain('$')
+  })
+  it('la parte que no está —o sin parte— cae en la de descuentos, ⛔ en la de montos', () => {
+    expect(lineasFpDePrenda(e, { precio: 11110, parte: 'Venía de feria' })[1].texto).toBe('10% OFF Efectivo')
+    expect(lineasFpDePrenda(e, { precio: 11110 })[1].texto).toBe('10% OFF Efectivo')
+  })
+  it('sin `fpDescuentos` queda la de montos de siempre', () => {
+    const l = lineasFpDePrenda({ ...e, fpDescuentos: [] }, { precio: 19990, parte: 'Línea −10%' })
+    expect(l[1].texto).toBe('Efectivo o transf. $19.990')
   })
 })

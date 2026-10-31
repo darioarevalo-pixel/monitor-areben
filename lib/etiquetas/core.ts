@@ -336,3 +336,20 @@ export function formasDePagoDePrenda(efectivo: number, o: { pctEfectivo: number;
     ...(cuotas > 1 ? [{ texto: `${cuotas} cuotas sin interés de ${$(tarjeta / cuotas)}`, tam: 'normal' as const, bold: false }] : []),
   ]
 }
+
+/**
+ * QUÉ DICE DETRÁS LA ETIQUETA DE UNA PRENDA (31-oct-2026). Con `fpDescuentos` cargado va la de
+ * formas de pago DE SIEMPRE —sólo los %—, la de la PARTE del producto si la tiene; sin eso, la de
+ * montos de `formasDePagoDePrenda`. 🔴 Una parte que no está en `fpPorParte` ⛔ queda sin etiqueta:
+ * cae en `fpDescuentos`.
+ */
+export function lineasFpDePrenda(
+  e: { fpDescuentos: LineaEtiqueta[]; fpPorParte: Record<string, LineaEtiqueta[]>; pctEfectivo: number; cuotas: number },
+  item: { precio: number; parte?: string | null },
+): LineaEtiqueta[] {
+  if (e.fpDescuentos.length) {
+    const dePart = item.parte ? e.fpPorParte[item.parte] : undefined
+    return dePart && dePart.length ? dePart : e.fpDescuentos
+  }
+  return formasDePagoDePrenda(item.precio, { pctEfectivo: e.pctEfectivo, cuotas: e.cuotas })
+}

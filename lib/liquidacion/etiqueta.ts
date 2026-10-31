@@ -31,6 +31,10 @@ export interface EtiquetaCampania {
   pctEfectivo: number
   /** Cuotas sin interés con tarjeta. */
   cuotas: number
+  /** Formas de pago SÓLO con descuentos (sin montos). Vacío ⇒ la de montos. Ver `etiqueta.core.js`. */
+  fpDescuentos: LineaEtiqueta[]
+  /** La de descuentos de cada PARTE de la campaña; la parte que no está usa `fpDescuentos`. */
+  fpPorParte: Record<string, LineaEtiqueta[]>
 }
 
 export const etiquetaDeCampania = etiquetaDeCampaniaJs as (raw: unknown) => EtiquetaCampania

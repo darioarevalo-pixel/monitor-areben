@@ -239,6 +239,9 @@ export function preciosAEtiquetar(items) {
       // 🔑 El de LISTA, para tacharlo en la etiqueta por prenda (Cyber, 30-oct). Es el precio
       // público de la tienda: ⛔ dice nada del costo, que sigue sin viajar.
       lista: Number((i.foto || {}).precioNormal) > 0 ? Number(i.foto.precioNormal) : null,
+      // 🔑 La PARTE, para elegir qué etiqueta de formas de pago va detrás (31-oct: la línea paga 15%
+      // en efectivo, lo que no se vende 10/10). Es el nombre del grupo: ⛔ dice nada del costo.
+      parte: txtOrNull(i.parte),
       firme: esFirme(i.estado),
     });
   }

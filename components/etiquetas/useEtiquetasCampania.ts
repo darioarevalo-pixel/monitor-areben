@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav.datos'
 import type { EtiquetaCampania } from '@/lib/liquidacion/etiqueta'
-import { formasDePagoDePrenda } from '@/lib/etiquetas/core'
+import { lineasFpDePrenda } from '@/lib/etiquetas/core'
 import { buildEtiquetasPdf } from '@/lib/etiquetas/pdf'
 import type { LabelItem, VarianteEti } from '@/lib/etiquetas/tipos'
 
@@ -29,7 +29,7 @@ import type { LabelItem, VarianteEti } from '@/lib/etiquetas/tipos'
 const API = '/api/datos?recurso=liquidacion'
 
 /** Un producto de la campaña, tal como sale de `preciosAEtiquetar`. */
-export type PrecioCampania = { pid: string; nombre: string; imagen: string | null; precio: number; lista: number | null; firme: boolean }
+export type PrecioCampania = { pid: string; nombre: string; imagen: string | null; precio: number; lista: number | null; parte?: string | null; firme: boolean }
 
 export type CampaniaEti = { id: string; nombre: string; desde: string | null; hasta: string | null }
 
@@ -174,7 +174,7 @@ export function dibujoDeCampania(rotulo: RotuloCampania | null, precio: number, 
  * que muestra cada una en su recuadro).
  */
 export async function pdfPorPrenda(rotulo: RotuloCampania, v: VarianteEti, item: PrecioCampania, copias: number, solo?: 'prenda' | 'fp') {
-  const fp = formasDePagoDePrenda(item.precio, { pctEfectivo: rotulo.etiqueta.pctEfectivo, cuotas: rotulo.etiqueta.cuotas })
+  const fp = lineasFpDePrenda(rotulo.etiqueta, item)
   const labels: LabelItem[] = []
   for (let c = 0; c < copias; c++) {
     if (solo !== 'fp') labels.push(v)

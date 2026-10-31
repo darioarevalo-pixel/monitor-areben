@@ -18,7 +18,7 @@ describe('etiquetaDeCampania', () => {
     // 🔴 El caso que ⛔ no puede fallar: las campañas que ya existen no tienen el campo, y tienen
     // que seguir sacando la etiqueta que sacaban antes de que esto existiera.
     for (const vacio of [undefined, null, {}]) {
-      expect(etiquetaDeCampania(vacio)).toEqual({ abajo: [], tamPrecio: TAM_PRECIO_DEFAULT, tamTitulo: 'titulo', porPrenda: false, pctEfectivo: 10, cuotas: 3 })
+      expect(etiquetaDeCampania(vacio)).toEqual({ abajo: [], tamPrecio: TAM_PRECIO_DEFAULT, tamTitulo: 'titulo', porPrenda: false, pctEfectivo: 10, cuotas: 3, fpDescuentos: [], fpPorParte: {} })
       expect(etiquetaPersonalizada(vacio)).toBe(false)
     }
   })
@@ -85,5 +85,21 @@ describe('etiqueta por prenda (Cyber, 30-oct-2026)', () => {
     expect(etiquetaDeCampania({ pctEfectivo: null }).pctEfectivo).toBe(10)
     expect(etiquetaDeCampania({ cuotas: 30 }).cuotas).toBe(12)
     expect(etiquetaDeCampania({ cuotas: 6 }).cuotas).toBe(6)
+  })
+})
+
+describe('formas de pago con descuentos (31-oct-2026)', () => {
+  const T = { texto: 'FORMAS DE PAGO', tam: 'titulo', bold: true }
+  it('guarda la de descuentos y la de cada parte, con su cuerpo', () => {
+    const e = etiquetaDeCampania({ fpDescuentos: [T, { texto: '10% OFF Efectivo', tam: 'normal' }], fpPorParte: { 'Línea −10%': [T, { texto: '15% OFF Efectivo', tam: 'normal' }] } })
+    expect(e.fpDescuentos).toEqual([T, { texto: '10% OFF Efectivo', tam: 'normal', bold: false }])
+    expect((e.fpPorParte as Record<string, { texto: string }[]>)['Línea −10%'][1].texto).toBe('15% OFF Efectivo')
+    expect(etiquetaPersonalizada({ fpDescuentos: [T] })).toBe(true)
+  })
+  it('una parte sin renglones ⛔ se guarda, y basura ⛔ entra', () => {
+    const e = etiquetaDeCampania({ fpPorParte: { vacia: [{ texto: '  ' }], ' ': [T], lista: 'x' }, fpDescuentos: 'no' })
+    expect(e.fpPorParte).toEqual({})
+    expect(e.fpDescuentos).toEqual([])
+    expect(etiquetaDeCampania({ fpPorParte: [T] }).fpPorParte).toEqual({})
   })
 })

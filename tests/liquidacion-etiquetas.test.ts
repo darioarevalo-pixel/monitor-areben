@@ -104,8 +104,9 @@ describe('preciosAEtiquetar', () => {
     ])
     // 🔑 `imagen` entró el 12-sep y es lo único que se sumó: la foto pública de la tienda ⛔ no
     // dice nada del costo. `lista` entró el 30-oct (la etiqueta por prenda la tacha): es el precio
-    // público de la tienda. Si esta lista crece sin que nadie lo decida, el test lo frena acá.
-    expect(Object.keys(uno).sort()).toEqual(['firme', 'imagen', 'lista', 'nombre', 'pid', 'precio'])
+    // público de la tienda. `parte` entró el 31-oct (elige la etiqueta de formas de pago): es el nombre
+    // del grupo. Si esta lista crece sin que nadie lo decida, el test lo frena acá.
+    expect(Object.keys(uno).sort()).toEqual(['firme', 'imagen', 'lista', 'nombre', 'parte', 'pid', 'precio'])
     expect(uno.lista).toBe(18990)
     expect(uno.imagen).toBe('https://acdn-us.mitiendanube.com/x-1024-1024.jpg')
     expect(JSON.stringify(uno)).not.toContain('8295')
