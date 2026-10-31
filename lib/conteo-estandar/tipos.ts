@@ -6,7 +6,7 @@
  * index.html:12023-12402.
  */
 
-import type { EstadoProd, FilaAjuste, ResumenAjuste } from '../conteo-deposito/tipos'
+import type { EstadoProd, FilaAjuste, ParteErp, ResumenAjuste } from '../conteo-deposito/tipos'
 
 export type Linea = 'zattia' | 'stunned'
 
@@ -65,4 +65,6 @@ export type CePreview = {
   missing: { prod: string; size: string }[]
   ubicacion: string
   store: string
+  /** Las filas de Stunned: van al ERP, ⛔ al Excel (`conParteErp`). */
+  erp?: ParteErp<CeFilaAjuste>
 }

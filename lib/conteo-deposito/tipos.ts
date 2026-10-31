@@ -86,6 +86,18 @@ export type Preview = {
    * (`separarYaAjustados`). No van al Excel: sumarlas de nuevo las ajustaría dos veces.
    */
   yaAjustados?: FilaAjuste[]
+  /** Las filas de Stunned: van al ERP, ⛔ al Excel (`conParteErp`). */
+  erp?: ParteErp<FilaAjuste>
+}
+
+/**
+ * La parte de Stunned de un conteo (erp-stunned §8.4): `renglones` va al ERP como ajuste «Conteo» aplicado en el acto, `excel`
+ * son las filas que SÍ van al Excel de GN. `ref` (uno por preview) hace que «Reintentar» ⛔ ajuste dos veces.
+ */
+export type ParteErp<F> = {
+  ref: string
+  renglones: Array<{ product_id: number; size_id: number; sku: string | null; barcode: string | null; dif: number }>
+  excel: F[]
 }
 
 /** Un conteo aplicado del historial (`/api/deposito?recurso=conteos`). */

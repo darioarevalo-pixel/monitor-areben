@@ -6,7 +6,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, puedeSub } from '@/lib/permisos'
 import { leerInventarioVivo, leerVivoProductos } from '@/lib/inventario-vivo/cliente'
 import { realMap } from '@/lib/inventario-vivo/core'
-import { ANCHOS_AJUSTE, aoaAjuste } from '@/lib/conteo-deposito/core'
+import { ANCHOS_AJUSTE, aoaAjuste, conParteErp, filasExcel } from '@/lib/conteo-deposito/core'
 import { descargarXlsx } from '@/lib/excel'
 import { guardarConteo, leerHistorial } from '@/lib/conteo-deposito/cliente'
 import type { ConteoHistorial } from '@/lib/conteo-deposito/tipos'
@@ -312,7 +312,8 @@ export function ConteoEstandar() {
           if (r.inventory_id != null) vivo[r.product_id + '_' + r.size_id] = r
         })
       }
-      const pv = calcularAjuste(terminados, state, vivo, d.store_name || 'Local', d.store || marca, stockTime, linea)
+      // Las prendas de Stunned van al ERP, ⛔ al Excel (erp-stunned §8.4): el vivo ya trae su libro.
+      const pv = conParteErp(calcularAjuste(terminados, state, vivo, d.store_name || 'Local', d.store || marca, stockTime, linea), vivo, crypto.randomUUID())
       setPreview(pv)
       setVista('preview')
     } catch (e) {
@@ -336,7 +337,16 @@ export function ConteoEstandar() {
   const onConfirmar = async () => {
     if (!preview || !preview.rows.length) return
     const marcaU = (preview.store || marca).toUpperCase()
-    const ok = await confirmar({
+    const excel = filasExcel(preview)
+    const nErp = preview.erp?.renglones.length || 0
+    const ok = !excel.length
+      ? await confirmar({
+          titulo: 'Ajustar Stunned en el ERP',
+          tono: 'warning',
+          ok: 'Ajustar y guardar',
+          mensaje: `Se ajustan ${nErp} ${nErp === 1 ? 'talle' : 'talles'} de Stunned en el ERP, en el acto: el stock pasa a lo contado. No se genera Excel.`,
+        })
+      : await confirmar({
       titulo: 'Generar el Excel del ajuste',
       tono: 'warning',
       ok: 'Generar Excel',
@@ -347,8 +357,9 @@ export function ConteoEstandar() {
             marca descuadra el stock.
           </p>
           <div style={{ marginTop: space[3] }}>
-            <ConfirmDetalle label="Líneas a ajustar" valor={preview.rows.length} />
+            <ConfirmDetalle label="Líneas a ajustar" valor={excel.length} />
             <ConfirmDetalle label="Ubicación" valor={preview.ubicacion || '—'} />
+            {nErp > 0 && <ConfirmDetalle label="De Stunned, al ERP (sin Excel)" valor={nErp} />}
           </div>
         </>
       ),
@@ -356,19 +367,23 @@ export function ConteoEstandar() {
     if (!ok) return
     try {
       const fecha = new Date().toISOString().slice(0, 10)
-      await descargarXlsx(aoaAjuste(preview.rows), {
-        archivo: `ajuste_local_${preview.store || marca}_${linea}_${fecha}.xlsx`,
-        hoja: 'Worksheet',
-        anchos: ANCHOS_AJUSTE,
-      })
+      if (excel.length)
+        await descargarXlsx(aoaAjuste(excel), {
+          archivo: `ajuste_local_${preview.store || marca}_${linea}_${fecha}.xlsx`,
+          hoja: 'Worksheet',
+          anchos: ANCHOS_AJUSTE,
+        })
       // 🔴 El Excel ya salió; si el historial falla, antes se tragaba el error en silencio y el
       // reporte «Para colgar» quedaba con el guardado anterior sin que nadie lo supiera (conteo de
       // jeans, 27-sep-2026). Ahora se avisa y se puede reintentar, y no se ofrece limpiar: limpiar
       // sin haber guardado es perder el conteo.
       let guardado = false
+      let erp: { ajuste: number; ya: boolean } | undefined
       for (;;) {
         try {
-          await guardarConteo({ store: preview.store || marca, ubicacion: preview.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: preview.resumen, detalle: preview.registro })
+          // Mismo `ref` en cada reintento ⇒ el ERP ⛔ ajusta dos veces.
+          const r = await guardarConteo({ store: preview.store || marca, ubicacion: preview.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: preview.resumen, detalle: preview.registro, ...(preview.erp ? { erp: { ref: preview.erp.ref, renglones: preview.erp.renglones } } : {}) })
+          erp = r.erp
           guardado = true
           break
         } catch (e) {
@@ -377,17 +392,18 @@ export function ConteoEstandar() {
             tono: 'danger',
             ok: 'Reintentar',
             cancelar: 'Seguir sin guardar',
-            mensaje: `El Excel se generó bien, pero no se pudo guardar en el historial (${(e as Error).message}). Sin guardar, el reporte «Para colgar» y el historial no lo van a tener.`,
+            mensaje: `${excel.length ? 'El Excel se generó bien, pero n' : 'N'}o se pudo guardar el conteo (${(e as Error).message}). Sin guardar, el reporte «Para colgar» y el historial no lo van a tener${nErp ? ', y Stunned no se ajusta en el ERP' : ''}.`,
           })
           if (!otra) break
         }
       }
       if (!guardado) {
-        toast.error('Excel generado, pero el conteo no quedó guardado en el historial.')
+        toast.error(excel.length ? 'Excel generado, pero el conteo no quedó guardado en el historial.' : 'El conteo no quedó guardado: Stunned no se ajustó en el ERP.')
         return
       }
       await ce.refrescarUltimos()
-      toast.ok(`Excel generado (${preview.rows.length} ${preview.rows.length === 1 ? 'línea' : 'líneas'}) y conteo guardado. Subilo a GN → "Importar y Ajustar".`)
+      const enErp = erp ? ` Stunned quedó ajustado en el ERP (A-${erp.ajuste}).` : ''
+      toast.ok(excel.length ? `Excel generado (${excel.length} ${excel.length === 1 ? 'línea' : 'líneas'}) y conteo guardado.${enErp} Subilo a GN → "Importar y Ajustar".` : `Conteo guardado.${enErp}`)
       const limpiar = await confirmar({
         titulo: 'Conteo guardado',
         ok: 'Limpiar terminados',
@@ -505,7 +521,7 @@ export function ConteoEstandar() {
  ← Volver</Button>
             {preview.rows.length ? (
               <Button variant="solid" tone="brand" onClick={() => void onConfirmar()}>
-                Generar Excel y guardar
+                {filasExcel(preview).length ? 'Generar Excel y guardar' : 'Ajustar en el ERP y guardar'}
               </Button>
             ) : (
               <Button variant="solid" tone="brand" onClick={() => void onGuardarSinDif()}>
@@ -941,6 +957,13 @@ function PreviewView({ preview, linea }: { preview: CePreview; linea: Linea }) {
       <Notice tone="brand" icon="🏷️" style={{ marginBottom: space[3] }}>
         Ajuste del <b>Local de {marcaU}</b> · ubicación <b>{preview.ubicacion || '—'}</b>. El Excel se sube <b>solo</b> al GN de {marcaU}.
       </Notice>
+
+      {preview.erp && (
+        <Notice tone="warning" icon="👕" style={{ marginBottom: space[3] }}>
+          <b>{preview.erp.renglones.length}</b> {preview.erp.renglones.length === 1 ? 'talle es' : 'talles son'} de <b>Stunned</b>: se ajustan en el <b>ERP</b> al guardar,
+          en el acto, y <b>no van al Excel</b>. El «sistema» de Stunned es el stock del ERP.
+        </Notice>
+      )}
 
       <p style={{ fontSize: font.base, color: color.ink2, marginBottom: space[3] }}>
         Se ajustan <b>{resumen.lineas}</b> {resumen.lineas === 1 ? 'talle' : 'talles'}: <b style={{ color: color.warningInk }}>{resumen.mas}</b> con sobrante (+) y{' '}

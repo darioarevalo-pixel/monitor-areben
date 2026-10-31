@@ -6,6 +6,7 @@
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 import { puedeContar } from '../lib/permisos.core.js';
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js';
+import { libroStunnedEn } from './_conteo-stunned.js';
 
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
 
@@ -151,7 +152,10 @@ export default async function handler(req, res) {
       await sleep(40);
     }
     const storeName = (rows.length ? rows[0].store_name : null) || (MIRROR_STORE_NAME[store] && MIRROR_STORE_NAME[store][loc]) || null;
-    return res.status(200).json({ ok: true, store, loc, store_id: storeId, store_name: storeName, count: rows.length, from_directo: rows.length, pendientes, rows });
+    // 🔑 Stunned (erp-stunned §8.4): el «sistema» de sus prendas es el LIBRO del ERP, ⛔ el GN de Zattia (que desde el corte ⛔ lo mueve).
+    let conLibro;
+    try { conLibro = await libroStunnedEn(store, loc, rows); } catch (e) { return res.status(503).json({ ok: false, error: `No pude leer el stock de Stunned en el ERP: ${e.message}` }); }
+    return res.status(200).json({ ok: true, store, loc, store_id: storeId, store_name: storeName, count: rows.length, from_directo: rows.length, pendientes, rows: conLibro });
   }
 
   try {
@@ -205,7 +209,10 @@ export default async function handler(req, res) {
         fromEspejo++;
       }
     });
-    const merged = [...byKey.values()];
+    // 🔑 Stunned (erp-stunned §8.4): el «sistema» de sus prendas es el LIBRO del ERP, ⛔ el GN de Zattia. Si el ERP ⛔ contesta,
+    // ⛔ se cuenta: contra el stock viejo de GN es justo lo que esto evita.
+    let merged;
+    try { merged = await libroStunnedEn(store, loc, [...byKey.values()]); } catch (e) { return res.status(503).json({ ok: false, error: `No pude leer el stock de Stunned en el ERP: ${e.message}` }); }
     return res.status(200).json({ ok: true, store, loc, store_id: storeId, store_name: storeName, count: merged.length, from_vivo: dep.length, from_directo: fromDirecto, from_espejo: fromEspejo, rows: merged });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });

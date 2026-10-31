@@ -22,7 +22,8 @@ export type FilaVivo = {
   sku?: string
   barcode?: string
   available_quantity: number
-  fuente?: 'vivo' | 'directo' | 'espejo'
+  /** `erp`: prenda de Stunned, con el libro del ERP en vez de GN (erp-stunned §8.4). */
+  fuente?: 'vivo' | 'directo' | 'espejo' | 'erp'
 }
 
 /** La respuesta completa de `/api/deposito?recurso=inventario`. */

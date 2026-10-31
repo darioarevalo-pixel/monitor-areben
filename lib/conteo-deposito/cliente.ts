@@ -10,7 +10,7 @@
 
 import { apiFetch } from '../api-fetch'
 import type { Marca } from '../nav.datos'
-import type { ConteoHistorial, ResumenAjuste } from './tipos'
+import type { ConteoHistorial, ParteErp, ResumenAjuste } from './tipos'
 
 export async function leerHistorial(marca: Marca): Promise<ConteoHistorial[]> {
   const r = await apiFetch(`/api/deposito?recurso=conteos&store=${marca}&nc=${Date.now()}`)
@@ -26,23 +26,26 @@ export type GuardarConteo = {
   fecha_inicio: string | null
   resumen: ResumenAjuste
   detalle: Array<Record<string, unknown>>
+  /** Las diferencias de Stunned: van al ERP como ajuste «Conteo» aplicado, ⛔ al Excel (erp-stunned §8.4). */
+  erp?: Omit<ParteErp<unknown>, 'excel'>
 }
 
 /**
  * 🔴 Tira error si el servidor no lo guardó. Antes no miraba la respuesta: un 500 o un 403 se
  * daban por buenos y la pantalla decía «conteo guardado» (27-sep-2026, conteo de jeans).
  */
-export async function guardarConteo(payload: GuardarConteo): Promise<void> {
+export async function guardarConteo(payload: GuardarConteo): Promise<{ erp?: { ajuste: number; ya: boolean } }> {
   const r = await apiFetch('/api/deposito?recurso=conteos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  let d: { ok?: boolean; error?: string } | null = null
+  let d: { ok?: boolean; error?: string; erp?: { ajuste: number; ya: boolean } } | null = null
   try {
     d = await r.json()
   } catch {
     /* respuesta sin JSON */
   }
   if (!r.ok || !d || !d.ok) throw new Error((d && d.error) || `el servidor respondió ${r.status}`)
+  return d.erp ? { erp: d.erp } : {}
 }

@@ -56,6 +56,15 @@ legacy (`index.html:11549-12021`).
   ajuste. Sin esto, lo terminado que quedó en el teléfono sumaba la diferencia dos veces.
   ⚠️ Una venta que deja el vivo justo en lo contado se confunde con «ya ajustado»: por eso se lista.
 
+## 🔑 Stunned va al ERP, ⛔ al Excel (erp-stunned §8.4, Bruno 30-oct)
+
+Con `LECTURAS_STUNNED_ERP=1`, en Zattia: el vivo (`api/_inventario-vivo.js`) trae las prendas STU con el **libro del ERP** en vez
+de GN (`fuente: 'erp'`; si el ERP ⛔ contesta, el vivo da 503 —también para Zattia— ⇒ ⛔ se cuenta contra el GN viejo). Al
+guardar, sus diferencias son **un ajuste «Conteo» de la línea `stunned`, aplicado en el acto** (`api/_conteo-stunned.js`,
+regla en `lib/erp/conteo-stunned.core.js`): lo contado = libro de ahora + `dif`, como el Excel. Salen del Excel (`filasExcel`);
+el preview las muestra igual. `ref` por preview ⇒ «Reintentar» ⛔ ajusta dos veces. El historial guarda `resumen.erp_ajuste`.
+El proyector del motor (`lib/fuentes/conteos.mjs`) ⛔ proyecta renglones de una línea contados después de su corte.
+
 ## Zattia: la vista «Por estante (SKU)» (30-sep-2026)
 
 En Zattia la lista arranca en **«Por estante»** (`components/conteo-deposito/Estante.tsx`): el mismo

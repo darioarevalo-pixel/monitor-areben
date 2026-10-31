@@ -17,6 +17,7 @@ import type {
   ConteoHistorial,
   EstadoDeProd,
   FilaAjuste,
+  ParteErp,
   Preview,
   ResumenAjuste,
 } from './tipos'
@@ -27,6 +28,7 @@ const prodVacio = (): EstadoDeProd => ({ estado: 'sin_iniciar', contado: {}, sna
 // Se re-exporta acá para no cambiar los imports de conteo-deposito/-estandar.
 export { ordenarModelo } from '../reposicion/grupos'
 import { ordenarModelo } from '../reposicion/grupos'
+import { partirExcel } from '../erp/conteo-stunned.core.js'
 
 /** Agrupa las filas reales del vivo en productos con sus variantes. Port de conteoDepInit @11648-11655. */
 export function agruparVivo(realMap: Record<string, FilaVivo>): CdepProducto[] {
@@ -348,3 +350,16 @@ export function ultimosPorProducto(conteos: ConteoHistorial[], products: CdepPro
   })
   return map
 }
+
+/**
+ * Le suma al preview la parte de Stunned (erp-stunned §8.4): las filas cuyo vivo es el LIBRO (`fuente: 'erp'`) van al ERP y
+ * salen del Excel. `rows` queda entera: es lo que se muestra antes de confirmar. Sin filas de Stunned, el preview como vino.
+ * La comparten el Conteo de depósito y el estándar.
+ */
+export function conParteErp<F extends FilaAjuste, P extends { rows: F[]; erp?: ParteErp<F> }>(pv: P, vivo: Record<string, FilaVivo>, ref: string): P {
+  const { excel, erp } = partirExcel(pv.rows, vivo) as { excel: F[]; erp: ParteErp<F>['renglones'] }
+  return erp.length ? { ...pv, erp: { ref, renglones: erp, excel } } : pv
+}
+
+/** Las filas del preview que van al Excel de GN (sin las de Stunned). */
+export const filasExcel = <F extends FilaAjuste>(pv: { rows: F[]; erp?: ParteErp<F> }): F[] => (pv.erp ? pv.erp.excel : pv.rows)
