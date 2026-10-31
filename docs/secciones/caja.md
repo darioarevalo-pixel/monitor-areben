@@ -52,7 +52,7 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   qué cuenta como pago allá cambia qué confirma una venta acá.
 
 ## Reglas que el código no dice
-- 🔑 **El CAMBIO de Stunned en el POS (modo «⇄ Cambios», Bruno, 27-oct)**: botón en la cabecera (sólo con `stunned_erp`), banda con
+- 🔑 **El CAMBIO de Stunned en el POS (modo «⇄ Cambios», Bruno, 27-oct)**: botón en la cabecera (sólo con `stunned_erp` = Stunned en `erp_lineas`), banda con
   «1 Lo que devuelve ▸ 2 Lo que se lleva». **Todo el estado y las cuentas viven en `components/caja/useCambio.ts`**, el MISMO que usa
   erp › Caja › Cambio (`CambioCaja.tsx`): ⛔ copiar reglas ahí. Tres orígenes de lo devuelto: venta del ERP, venta de Gestión Nube
   (`vista=venta-gn-cambio`: el servidor pone lo pagado) y **sin ticket** (precio de la cajera + PIN de la encargada, que el servidor
@@ -68,9 +68,21 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   que se lleva. ⛔ Lo imprime sólo el POS; erp › Caja › Cambio todavía ⛔.
 - 🔑 **La venta del ERP (Stunned) lleva SU número** (`erp_numero`): `numeroDeLaVenta` = `gn_number ?? erp_numero`, en el ticket,
   la «Última venta» y la lista de Ventas («En el ERP»; ⛔ en Provisorias). Sin número todavía: «pendiente en el ERP», ⛔ en GN.
-- 🔑 **Con `LECTURAS_STUNNED_ERP=1`, el stock de una prenda de Stunned sale del LIBRO** (`stockStunnedDelLibro`,
-  `api/_caja-motor.js`; `fuente: 'erp'`), ⛔ de GN en vivo: la venta del ERP ⛔ baja GN y el POS decía «ÚLTIMA» con el local en 0.
-  Si el ERP ⛔ contesta, el espejo (sus filas STU también salen del libro) con el motivo.
+- 🔴🔑 **A DÓNDE VA EL TICKET LO DECIDE EL CORTE DE SU LÍNEA (`erp_corte`), ⛔ una llave** (Bruno 31-oct: «obvio, el día que sea
+  el corte la Caja tendría que mandar al ERP las ventas de BDI y las de Zattia»). `lib/caja/corte-caja.core.js` sobre la regla de
+  `lib/erp/corte.core.js` (la de conteos, fallas, canjes y `crear-venta`). Stunned desde el 28-oct, BDI 15/16-nov, Zattia 23-nov;
+  sin fila de corte ⇒ GN + la copia de prueba al motor, como siempre. Reemplazó a `CAJA_STUNNED_ERP` y `CAJA_STUNNED_PRUEBA`.
+  - **La línea sale del PRODUCTO** (`productos.sku`, proveedor de respaldo, y el SKU `STU` de la variante), ⛔ del `linea` de la
+    pantalla; queda en `caja_venta.renglones[].linea` y de ahí sale la MARCA de la venta en el motor (`marcaDeVentaErp`; las filas
+    de antes, sin línea, eran de Stunned). Lo que va al ERP es REAL (`prueba: false`).
+  - **Sin poder leer los cortes ⇒ 503 y la venta ⛔ se guarda** (⛔ se elige camino a ciegas). Para que una caída corta del motor
+    ⛔ frene el local, `api/_caja-corte.js` guarda la última lectura buena (5 min; las filas son inmutables). En frío y sin base, frena.
+  - Un ticket es de UNA marca: mezclado con alguna línea en el ERP ⇒ 400 «cobralas por separado» (también después del corte de Zattia).
+  - **Cierre**: los pedidos web cobrados en el local salen del ERP para cada línea cortada (`cobrosERPDelTurno`), y si TODAS las
+    líneas de la Caja cortaron antes de abrirla ⇒ ⛔ se le pregunta a GN (`todoEnErp`: el día que se apague, leerlo frenaría el cierre).
+  - **Stock**: de una línea cortada sale del LIBRO (`stockDelLibro`, `fuente: 'erp'`; en BDI el depósito es `deposito_minorista`),
+    ⛔ de GN en vivo: la venta del ERP ⛔ baja GN y el POS decía «ÚLTIMA» con el local en 0. Si el ERP ⛔ contesta, el espejo con el motivo.
+  - La pantalla recibe `erp_lineas` en la config. Tests: `caja-corte`, `caja-handler` («a dónde va el ticket»).
 
 
 - 🔴 **LA PRENDA REPETIDA (Bruno, 14-oct)** — en GN se escaneó dos veces la prenda devuelta en un cambio:

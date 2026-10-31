@@ -13,6 +13,8 @@ const base = {
   erpVentas: [] as Fila[],
   erpPagos: [] as Fila[],
   erpCuentas: [] as Fila[],
+  // El espejo de productos (la línea del renglón sale de acá: `lineasDelTicket`).
+  productos: [] as Fila[],
   config: null as Fila | null,
   inventario: [] as Fila[],
   // F5: la cuenta de MP de Pagos recibidos y lo que «entró».
@@ -70,7 +72,7 @@ function consulta(tabla: string) {
       // `caja_turno.deposito` tiene default 'local' en la base (sql/migrate-caja-turno-deposito.sql): el mock lo pone igual.
       : tabla === 'caja_turno' ? (base.turnos.forEach((t) => { t.deposito ??= 'local' }), base.turnos) : tabla === 'caja_turno_mov' ? base.movs
       : tabla === 'agenda_promos' ? base.agenda : tabla === 'liquidacion_items' ? base.liqItems
-      : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_venta_mp' ? base.ventaMp : tabla === 'caja_gift_card' ? base.giftCards : tabla === 'venta' ? base.erpVentas ?? [] : tabla === 'venta_pago_vigente' ? base.erpPagos ?? [] : tabla === 'cuenta_cobro' ? base.erpCuentas ?? [] : base.inventario
+      : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_venta_mp' ? base.ventaMp : tabla === 'caja_gift_card' ? base.giftCards : tabla === 'venta' ? base.erpVentas ?? [] : tabla === 'venta_pago_vigente' ? base.erpPagos ?? [] : tabla === 'cuenta_cobro' ? base.erpCuentas ?? [] : tabla === 'productos' ? base.productos : base.inventario
     return todas.filter((f) => filtros.every((p) => p(f)))
   }
   const ejecutar = () => {
@@ -186,10 +188,15 @@ function consulta(tabla: string) {
 const avisar = vi.fn(async () => ({ enviados: 1, fallas: 0, telefonos: 1 }))
 vi.mock('../api/_push.js', () => ({ avisar }))
 // El stock de Stunned del LIBRO (prueba del corte, 28-oct): ⛔ hay base en los tests.
-const stockStunnedDelLibro = vi.fn(async () => ({ local: 0, deposito: 14 }) as { local: number; deposito: number } | { error: string })
+const stockDelLibro = vi.fn(async (..._a: unknown[]) => ({ local: 0, deposito: 14 }) as { local: number; deposito: number } | { error: string })
+// La venta de una línea cortada, al motor: ⛔ hay base en los tests.
+const registrarEnErp = vi.fn(async (_s: string, _v: Fila) => ({ ok: true, numero: 41 }) as { ok: true; numero: number } | { ok: false; error: string; reintentable: boolean })
+// Los cortes (`erp_corte`) que ve la Caja. `falla` = la base ⛔ contesta y no hay lectura vieja.
+const corte = { cortes: {} as Record<string, string>, falla: false }
+vi.mock('../api/_caja-corte.js', () => ({ cortesDeCaja: async () => { if (corte.falla) throw new Error('sin base'); return corte.cortes } }))
 // El depósito Evento del ERP (motor sql/058): prendido o apagado, sin base.
 const eventoActivo = vi.fn(async () => ({ activo: false }) as { activo: boolean } | { error: string })
-vi.mock('../api/_caja-motor.js', async (orig) => ({ ...(await orig<object>()), stockStunnedDelLibro, eventoActivo }))
+vi.mock('../api/_caja-motor.js', async (orig) => ({ ...(await orig<object>()), stockDelLibro, registrarEnErp, eventoActivo }))
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (t: string) => consulta(t) }) }))
 
 function resFalso() {
@@ -272,7 +279,8 @@ const ID = '3f1c2b9e-6a4d-4c1e-9b7a-2d5e8f0a1b3c'
 const VENTA = { action: 'confirmar', id: ID, items: [{ product_id: 7, size_id: 8, cantidad: 1, precio: 25490 }], pagos: [{ cuenta: 12921 }], total: 21700, pagaCon: 22000 }
 
 beforeEach(async () => {
-  base.ventas = new Map(); base.config = null; base.inventario = []
+  base.ventas = new Map(); base.config = null; base.inventario = []; base.productos = []
+  corte.cortes = {}; corte.falla = false; registrarEnErp.mockClear(); stockDelLibro.mockClear()
   base.usos = [{ store: 'zattia', cuenta_id: CUENTA_MP, desde: '2026-10-01T12:00:00.000Z' }]
   base.llaves = [{ store: 'zattia', cuenta_id: CUENTA_MP, nombre: 'BDIACCESORIOS', token: 'APP_USR-llave' }]
   base.mpPagos = []; mp.busquedas = 0
@@ -597,6 +605,110 @@ describe('caja · confirmar', () => {
   })
 })
 
+describe('caja · a dónde va el ticket: por el CORTE de su línea (`erp_corte`), ⛔ por una llave (Bruno 31-oct)', () => {
+  const STU = { id: 7, sku: 'STU-REM-0001', proveedor: null }
+  const ZAT = { id: 7, sku: 'RFA-0022', proveedor: null }
+
+  it('sin corte de la línea ⇒ GN como siempre, y la fila anota la línea del renglón', async () => {
+    conSesion(CAJERA)
+    base.productos = [ZAT]
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(200)
+    expect(gn.posts).toHaveLength(1)
+    expect(registrarEnErp).not.toHaveBeenCalled()
+    const fila = base.ventas.get(ID) as Fila
+    expect(fila.destino).toBeUndefined()
+    expect((fila.renglones as Fila[])[0].linea).toBe('zattia')
+  })
+
+  it('la línea ya cortó ⇒ al ERP, REAL y de la marca de su línea; ⛔ sale a GN', async () => {
+    conSesion(CAJERA)
+    base.productos = [STU]
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(200)
+    expect(gn.posts).toHaveLength(0)
+    expect(base.ventas.get(ID)).toMatchObject({ destino: 'erp', estado: 'en_erp', erp_numero: 41 })
+    const [, enviada] = registrarEnErp.mock.calls[0]
+    expect((enviada.renglones as Fila[])[0].linea).toBe('stunned')
+  })
+
+  it('🔴 la línea sale del PRODUCTO, ⛔ de la pantalla: el renglón que dice `zattia` con un producto de Stunned va al ERP', async () => {
+    conSesion(CAJERA)
+    base.productos = [{ id: 7, sku: null, proveedor: 'STUNNED' }]
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
+    const r = await correr(req('POST', {}, { ...VENTA, items: VENTA.items.map((i) => ({ ...i, linea: 'zattia' })) }))
+    expect(r.code).toBe(200)
+    expect(base.ventas.get(ID)).toMatchObject({ destino: 'erp' })
+  })
+
+  it('el corte de ZATTIA (23-nov) se respeta: antes del instante GN, después el ERP con marca zattia', async () => {
+    conSesion(CAJERA)
+    base.productos = [ZAT]
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z', zattia: '2099-11-23T03:00:00Z' }
+    await correr(req('POST', {}, VENTA))
+    expect(gn.posts).toHaveLength(1)
+    base.ventas = new Map(); gn.posts = []
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z', zattia: '2026-10-01T03:00:00Z' }
+    await correr(req('POST', {}, VENTA))
+    expect(gn.posts).toHaveLength(0)
+    expect(base.ventas.get(ID)).toMatchObject({ destino: 'erp', estado: 'en_erp' })
+    expect(((registrarEnErp.mock.calls[0][1]).renglones as Fila[])[0].linea).toBe('zattia')
+  })
+
+  it('el ticket que mezcla líneas con alguna en el ERP se frena (un ticket es de UNA marca), y ⛔ se guarda', async () => {
+    conSesion(CAJERA)
+    base.productos = [STU, { id: 9, sku: 'RFA-0022', proveedor: null }]
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
+    const items = [VENTA.items[0], { product_id: 9, size_id: 8, cantidad: 1, precio: 25490 }]
+    // El total de dos prendas lo dice el servidor (el mismo núcleo que la pantalla).
+    const total = (await correr(req('POST', {}, { ...VENTA, items }))).body?.total
+    const r = await correr(req('POST', {}, { ...VENTA, items, total }))
+    expect(r.code).toBe(400)
+    expect(r.body).toMatchObject({ mixto: true })
+    expect(String(r.body?.error)).toMatch(/Zattia y de Stunned|Stunned y de Zattia/)
+    expect(base.ventas.size).toBe(0)
+  })
+
+  it('🔴 sin poder leer los cortes ⇒ 503 y ⛔ se guarda ni sale a ningún lado (⛔ se elige camino a ciegas)', async () => {
+    conSesion(CAJERA)
+    corte.falla = true
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(503)
+    expect(base.ventas.size).toBe(0)
+    expect(gn.posts).toHaveLength(0)
+    expect(registrarEnErp).not.toHaveBeenCalled()
+  })
+
+  it('el cierre: con TODAS las líneas de la Caja cortadas antes de abrir ⛔ se le pregunta a GN, y los pedidos web salen del ERP', async () => {
+    conSesion(CAJERA)
+    corte.cortes = { stunned: '2026-10-01T00:00:00Z', zattia: '2026-10-02T00:00:00Z' }
+    base.erpVentas = [
+      { id: 'v1', numero: 1, marca: 'zattia', origen: 'tn', estado: 'confirmada', prueba: false, ocurrida_en: '2026-10-04T15:10:00.000Z', detalle: {} },
+      { id: 'v2', numero: 2, marca: 'stunned', origen: 'tn', estado: 'confirmada', prueba: false, ocurrida_en: '2026-10-04T15:20:00.000Z', detalle: {} },
+    ]
+    base.erpCuentas = [{ id: 'c-ef', medio: 'efectivo' }]
+    base.erpPagos = [{ venta_id: 'v1', monto: '1000', cuenta_cobro_id: 'c-ef' }, { venta_id: 'v2', monto: '500', cuenta_cobro_id: 'c-ef' }]
+    try {
+      const t = await correr(req('GET', { action: 'turno' }))
+      const r = (t.body?.turno as { resumen: { efectivo: Fila } }).resumen
+      expect(gn.gets.filter((u) => u.includes('/ventas?'))).toEqual([])
+      expect(r.efectivo).toMatchObject({ cobradoGN: 0, cobradoERP: 1500 })
+      // Sólo Stunned cortada: GN se sigue leyendo y del ERP sólo lo de Stunned.
+      gn.gets = []
+      corte.cortes = { stunned: '2026-10-01T00:00:00Z' }
+      const t2 = await correr(req('GET', { action: 'turno', fresco: '1' }))
+      expect(gn.gets.some((u) => u.includes('/ventas?'))).toBe(true)
+      expect((t2.body?.turno as { resumen: { efectivo: Fila } }).resumen.efectivo).toMatchObject({ cobradoERP: 500 })
+      // Sin poder leer los cortes: lo del ERP ⛔ se sabe (null, el cierre lo dice) y GN se lee como siempre.
+      corte.falla = true
+      const t3 = await correr(req('GET', { action: 'turno', fresco: '1' }))
+      expect((t3.body?.turno as { resumen: { cobrosERP: unknown } }).resumen.cobrosERP).toBeNull()
+    } finally { base.erpVentas = []; base.erpPagos = []; base.erpCuentas = [] }
+  })
+})
+
 describe('caja · reintentar', () => {
   it('manda el payload GUARDADO tal cual, aunque la configuración haya cambiado', async () => {
     conSesion(CAJERA)
@@ -634,26 +746,29 @@ describe('caja · lecturas', () => {
     expect(gn.authInventario).toEqual(['Bearer tok-zattia'])
   })
 
-  it('🔑 Stunned con el libro prendido: el stock sale del ERP, ⛔ de GN (tras la venta #25 decía «ÚLTIMA» con el local en 0)', async () => {
+  it('🔑 una línea que ya cortó (`erp_corte`): el stock sale del LIBRO, ⛔ de GN (tras la venta #25 decía «ÚLTIMA» con el local en 0)', async () => {
     conSesion(CAJERA)
-    vi.stubEnv('LECTURAS_STUNNED_ERP', '1')
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
     base.inventario = [{ product_id: 70, size_id: 80, product_name: 'REMERA OFICIAL', size_name: 'M', sku: 'STU-REM-0010-M', barcode: '777001', available_quantity: 1, store_name: 'Local' }]
-    try {
-      const r = await correr(req('GET', { action: 'producto', codigo: '777001' }))
-      expect(r.body).toMatchObject({ stock: { local: 0, deposito: 14, fuente: 'erp' } })
-      expect(stockStunnedDelLibro).toHaveBeenCalledWith('zattia', 70, 80)
-      expect(gn.authInventario).toEqual([])
-      // El ERP ⛔ contesta: el espejo (sus filas STU también salen del libro), y se dice por qué.
-      stockStunnedDelLibro.mockResolvedValueOnce({ error: 'El ERP no está conectado' })
-      const r2 = await correr(req('GET', { action: 'producto', codigo: '777001' }))
-      expect(r2.body).toMatchObject({ stock: { fuente: 'espejo', motivo: 'El ERP no está conectado' } })
-      // Sin la llave, Stunned sigue leyendo GN en vivo.
-      vi.stubEnv('LECTURAS_STUNNED_ERP', '')
-      const r3 = await correr(req('GET', { action: 'producto', codigo: '777001' }))
-      expect(r3.body).toMatchObject({ stock: { fuente: 'vivo' } })
-    } finally {
-      vi.unstubAllEnvs()
-    }
+    const r = await correr(req('GET', { action: 'producto', codigo: '777001' }))
+    expect(r.body).toMatchObject({ stock: { local: 0, deposito: 14, fuente: 'erp' } })
+    expect(stockDelLibro).toHaveBeenCalledWith('zattia', 'stunned', 70, 80)
+    expect(gn.authInventario).toEqual([])
+    // El ERP ⛔ contesta: el espejo (sus filas también salen del libro), y se dice por qué.
+    stockDelLibro.mockResolvedValueOnce({ error: 'El ERP no está conectado' })
+    const r2 = await correr(req('GET', { action: 'producto', codigo: '777001' }))
+    expect(r2.body).toMatchObject({ stock: { fuente: 'espejo', motivo: 'El ERP no está conectado' } })
+    // Sin corte de la línea, GN en vivo.
+    corte.cortes = {}
+    const r3 = await correr(req('GET', { action: 'producto', codigo: '777001' }))
+    expect(r3.body).toMatchObject({ stock: { fuente: 'vivo' } })
+    // Zattia ANTES de su corte sigue en GN aunque Stunned cortó; DESPUÉS, el libro de la línea zattia.
+    base.inventario = [{ product_id: 7, size_id: 8, product_name: 'CORSET FRANK', size_name: 'S', sku: 'CF-S', barcode: '692479', available_quantity: 3, store_name: 'Local' }]
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z', zattia: '2099-11-23T03:00:00Z' }
+    expect((await correr(req('GET', { action: 'producto', codigo: '692479' }))).body).toMatchObject({ stock: { fuente: 'vivo' } })
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z', zattia: '2026-10-30T03:00:00Z' }
+    expect((await correr(req('GET', { action: 'producto', codigo: '692479' }))).body).toMatchObject({ stock: { fuente: 'erp' } })
+    expect(stockDelLibro).toHaveBeenLastCalledWith('zattia', 'zattia', 7, 8)
   })
 
   describe('producto por nombre y talle (Bruno, 4-oct)', () => {
@@ -1073,7 +1188,7 @@ describe('caja · turno propio (v2, W3)', () => {
 
   it('Stunned (29-oct): el pedido web cobrado en efectivo nace en el ERP ⇒ suma al esperado y entra en la foto del cierre', async () => {
     conSesion(CAJERA)
-    process.env.CAJA_STUNNED_ERP = '1'
+    corte.cortes = { stunned: '2026-10-01T00:00:00Z' }
     const v = (numero: number, x: Fila = {}) => ({ id: `v${numero}`, numero, marca: 'stunned', origen: 'tn', estado: 'confirmada', prueba: false,
       ocurrida_en: '2026-10-04T15:10:00.000Z', detalle: { tn: { numero: 135 } }, ...x })
     base.erpVentas = [v(34), v(35, { prueba: true }), v(36, { ocurrida_en: '2026-10-03T15:00:00.000Z' }), v(37, { marca: 'zattia' }), v(38)]
@@ -1088,10 +1203,10 @@ describe('caja · turno propio (v2, W3)', () => {
       const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 93795 }))
       expect(c.code).toBe(200)
       expect(base.turnos[0]).toMatchObject({ esperado: 93795, contado: 93795 })
-    } finally { delete process.env.CAJA_STUNNED_ERP; base.erpVentas = []; base.erpPagos = []; base.erpCuentas = [] }
+    } finally { base.erpVentas = []; base.erpPagos = []; base.erpCuentas = [] }
   })
 
-  it('Stunned: sin la llave CAJA_STUNNED_ERP ⛔ se leen ventas del ERP (BDI y Zattia antes del corte)', async () => {
+  it('sin corte de ninguna línea ⛔ se leen ventas del ERP (BDI y Zattia antes de su corte)', async () => {
     conSesion(CAJERA)
     base.erpVentas = [{ id: 'v34', numero: 34, marca: 'stunned', origen: 'tn', estado: 'confirmada', prueba: false, ocurrida_en: '2026-10-04T15:10:00.000Z' }]
     try {

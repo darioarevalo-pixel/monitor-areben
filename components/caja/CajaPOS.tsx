@@ -546,8 +546,9 @@ function POS() {
   }, [refrescarPendientes])
 
   function agregar(variante: Variante, stock: Stock) {
-    // 🔑 Un ticket es de UNA marca (Bruno, 26-oct): con Stunned en el ERP, la prenda de la otra marca se cobra aparte.
-    if (config?.stunned_erp && bor.renglones.some((r) => esStunnedVariante(r.variante) !== esStunnedVariante(variante))) {
+    // 🔑 Un ticket es de UNA marca (Bruno, 26-oct): con alguna línea de esta Caja en el ERP (`erp_lineas`, por su corte), la
+    // prenda de la otra se cobra aparte. El servidor frena igual (`destinoPorCorte`).
+    if ((config?.erp_lineas?.length || config?.stunned_erp) && bor.renglones.some((r) => esStunnedVariante(r.variante) !== esStunnedVariante(variante))) {
       setAviso({ tono: 'warning', texto: `Un ticket es de una sola marca: esta prenda es de ${esStunnedVariante(variante) ? 'Stunned' : 'Zattia'} y la venta de ahora es de ${esStunnedVariante(variante) ? 'Zattia' : 'Stunned'}. Cobrá una y después la otra.` })
       return
     }

@@ -97,12 +97,13 @@ import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
 import { filtrarPorNombre, ordenParaLaBase, palabrasDeBusqueda, productosPorStock } from '../lib/caja/buscar.core.js'
 import { COLUMNAS_VENTA as COLUMNAS, SIN_LLEGAR, enviarVenta, pendientesParaReintentar } from '../lib/caja/enviar.core.js'
 import { enviarVentaErp } from '../lib/caja/enviar-erp.core.js'
-import { destinoDelTicket } from '../lib/caja/marca-ticket.core.js'
-import { esStunned } from '../lib/lineas.core.js'
-import { lecturasStunnedErp } from '../lib/stunned/ventas-erp.core.js'
+import { destinoPorCorte, lineaDelRenglon, lineasErpDeStore, todoEnErp } from '../lib/caja/corte-caja.core.js'
+import { lineaEnErp } from '../lib/erp/corte.core.js'
+import { lineaDe } from '../lib/lineas.core.js'
+import { cortesDeCaja } from './_caja-corte.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, ladoDelEspejo, marcaDeCaja, tokenDe } from '../lib/caja/marcas.core.js'
-import { anotarEnMotor, avisoDelMotor, eventoActivo, preciosLocalStunned, registrarEnErp, repasarMotor, stockStunnedDelLibro } from './_caja-motor.js'
+import { anotarEnMotor, avisoDelMotor, eventoActivo, preciosLocalStunned, registrarEnErp, repasarMotor, stockDelLibro } from './_caja-motor.js'
 import { errorDelPuesto, faltaColumnaDeposito, puestoDe } from '../lib/caja/puesto.core.js'
 import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { reglasDeHoy as reglasDeHoyDe } from './_caja-reglas.js'
@@ -352,8 +353,11 @@ export default async function handler(req, res) {
    * El efectivo cobrado en GN dentro del turno que ⛔ es venta presencial (W3b). `null` si GN ⛔ contesta:
    * el turno se muestra igual y dice que faltan.
    */
-  async function cobrosGNDelTurno(turno, reglas, fresco) {
+  async function cobrosGNDelTurno(turno, reglas, fresco, cortes) {
     if (turno.deposito === 'evento') return []   // el evento cobra sólo Stunned, en el ERP: ⛔ hay GN que mirar
+    // 🔑 Todas las líneas de esta Caja ya estaban en el ERP al abrirla (`erp_corte`): GN ⛔ tiene ventas de este local, y
+    // el día que se apague leerlo frenaría el cierre. Sin saber los cortes (`null`), GN como siempre.
+    if (cortes && todoEnErp(cortes, store, new Date(turno.abierto_en))) return []
     const ahora = Date.now()
     if (!fresco && cacheCobrosGN && cacheCobrosGN.turno === turno.id && ahora - cacheCobrosGN.en < 60_000) return cacheCobrosGN.datos
     const cuentas = Object.entries(reglas.cuentas || {}).filter(([, r]) => r && r.efectivo).map(([id]) => Number(id))
@@ -395,18 +399,21 @@ export default async function handler(req, res) {
   }
 
   /**
-   * El efectivo de los pedidos web de Stunned que se cobraron en el turno (29-oct): nacen en el ERP, ⛔ en GN. Sólo
-   * Zattia con `CAJA_STUNNED_ERP=1` (Stunned vende en el ERP); si no, `[]`. `null` si la base ⛔ contesta: ⛔ suman y el
-   * cierre frena, como con GN. Las ventas del ERP viven en la base de Zattia, la misma de `caja_venta`.
+   * El efectivo de los pedidos web que se cobraron en el turno y nacen en el ERP, ⛔ en GN (Stunned desde el 29-oct): los de
+   * cada línea de esta Caja que ya cortó (`erp_corte`: BDI 15/16-nov, Zattia 23-nov). Ninguna ⇒ `[]`. `null` si la base o
+   * los cortes ⛔ contestan: ⛔ suman y el cierre frena, como con GN. Las ventas del ERP viven en la base de la marca, la misma
+   * de `caja_venta`.
    */
-  async function cobrosERPDelTurno(turno) {
+  async function cobrosERPDelTurno(turno, cortes) {
     // Los pedidos de TN cobrados van al cierre del LOCAL, ⛔ al del evento.
     if (turno.deposito === 'evento') return []
-    if (store !== 'zattia' || process.env.CAJA_STUNNED_ERP !== '1') return []
+    if (!cortes) return null
+    const lineas = lineasErpDeStore(cortes, store)
+    if (!lineas.length) return []
     const hasta = turno.cerrado_en || new Date().toISOString()
     const { data, error } = await sb.from('venta')
       .select('id, numero, estado, origen, prueba, ocurrida_en, detalle')
-      .eq('marca', 'stunned').eq('origen', 'tn').eq('estado', 'confirmada').eq('prueba', false)
+      .in('marca', lineas).eq('origen', 'tn').eq('estado', 'confirmada').eq('prueba', false)
       .gte('ocurrida_en', turno.abierto_en).lt('ocurrida_en', hasta).limit(500)
     if (error) return null
     if (!(data || []).length) return []
@@ -420,6 +427,19 @@ export default async function handler(req, res) {
     const medio = new Map((cuentas.data || []).map((c) => [c.id, c.medio]))
     const ventas = data.map((v) => ({ ...v, venta_pago: (pagos.data || []).filter((p) => p.venta_id === v.id).map((p) => ({ monto: p.monto, cuenta: { medio: medio.get(p.cuenta_cobro_id) ?? null } })) }))
     return cobrosDeERP({ ventas, desde: turno.abierto_en, hasta })
+  }
+
+  /**
+   * La línea de cada renglón del ticket, del PRODUCTO del espejo (`productos`: SKU y, en Zattia, el proveedor de respaldo) y
+   * el SKU de la variante (`lineaDelRenglon`). En BDI todo es BDI: ⛔ se consulta. TIRA si la base ⛔ contesta.
+   */
+  async function lineasDelTicket(renglones) {
+    if (store !== 'zattia') return renglones.map((r) => lineaDelRenglon(store, r, null))
+    const ids = [...new Set(renglones.map((r) => Number(r.product_id)).filter(Number.isInteger))]
+    const { data, error } = ids.length ? await sb.from('productos').select('id, sku, proveedor').in('id', ids) : { data: [], error: null }
+    if (error) throw new Error(error.message)
+    const porId = new Map((data || []).map((p) => [Number(p.id), p]))
+    return renglones.map((r) => lineaDelRenglon(store, r, porId.get(Number(r.product_id))))
   }
 
   /**
@@ -485,9 +505,10 @@ export default async function handler(req, res) {
       for (const c of await cuentasGN()) if (c.nombre) nombres[c.id] = c.nombre
     } catch { /* caen los nombres de las reglas */ }
     // De a una, ⛔ en paralelo: las dos juntas ya pasaban las 2 consultas por segundo de GN.
-    const cobrosGN = await cobrosGNDelTurno(turno, reglas, fresco)
+    const cortes = await cortesDeCaja(store).catch((e) => { console.error('[caja] erp_corte:', e && e.message); return null })
+    const cobrosGN = await cobrosGNDelTurno(turno, reglas, fresco, cortes)
     const anuladasGN = await anuladasDelTurno(turno, ventas.data || [], fresco)
-    const cobrosERP = await cobrosERPDelTurno(turno)
+    const cobrosERP = await cobrosERPDelTurno(turno, cortes)
     const resumen = resumenTurno({ turno, ventas: ventas.data || [], movs: movs.data || [], reglas, nombres, cobrosGN, cobrosERP, anuladasGN })
     // `salidas` sigue siendo el nombre de la lista (la pantalla la lee así): son TODOS los movimientos.
     return { ...turno, resumen, salidas: movs.data || [] }
@@ -544,9 +565,12 @@ export default async function handler(req, res) {
         const local = store === 'zattia' ? await preciosLocalStunned() : null
         if (local && !local.precios) console.error('[caja] precio local de Stunned:', local.error || 'sin conexión al motor')
         const stunnedLocal = store !== 'zattia' ? {} : local.precios ? { stunned_local: local.precios } : { stunned_local: null, stunned_local_error: local.error ? 'No se pudo leer el precio local de Stunned del ERP: se cobra el de Tienda Nube.' : 'Sin conexión al ERP: el precio local de Stunned es el de Tienda Nube.' }
+        // 🔑 Las líneas de esta Caja que ya venden por el ERP (`erp_corte`): la pantalla frena el ticket mezclado y ofrece el
+        // cambio. Sin poder leerlas, `null`: la Caja carga igual y el servidor decide al cobrar.
+        const erpLineas = await cortesDeCaja(store).then((c) => lineasErpDeStore(c, store)).catch((e) => { console.error('[caja] erp_corte:', e && e.message); return null })
         // ¿Se ofrece la «Caja del evento»? Sólo con el depósito Evento PRENDIDO en el ERP. Si el ERP ⛔ contesta, ⛔ se ofrece.
-        const ev = store === 'zattia' && process.env.CAJA_STUNNED_ERP === '1' ? await eventoActivo(store).catch(() => ({ activo: false })) : { activo: false }
-        return res.status(200).json({ ...conf, versiones, evento_activo: ev.activo === true, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), ...stunnedLocal, stunned_erp: store === 'zattia' && process.env.CAJA_STUNNED_ERP === '1', stunned_prueba: store === 'zattia' && process.env.CAJA_STUNNED_PRUEBA !== '0', marca: { store, nombre: marca.nombre, tienda: marca.tienda, ...(marca.tiendaStunned ? { tiendaStunned: marca.tiendaStunned } : {}) } })
+        const ev = erpLineas && erpLineas.includes('stunned') ? await eventoActivo(store).catch(() => ({ activo: false })) : { activo: false }
+        return res.status(200).json({ ...conf, versiones, evento_activo: ev.activo === true, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), ...stunnedLocal, erp_lineas: erpLineas, stunned_erp: !!erpLineas && erpLineas.includes('stunned'), stunned_prueba: !(erpLineas && erpLineas.includes('stunned')), marca: { store, nombre: marca.nombre, tienda: marca.tienda, ...(marca.tiendaStunned ? { tiendaStunned: marca.tiendaStunned } : {}) } })
       }
 
       if (accion === 'logo-tn') {
@@ -601,11 +625,20 @@ export default async function handler(req, res) {
         }
         const [{ variante, espejo }] = variantes
         let stock
-        // 🔑 Stunned con el libro prendido (`LECTURAS_STUNNED_ERP=1`): el stock es el del ERP, ⛔ el de GN (la venta del
-        // ERP ⛔ baja GN: tras la #25 el POS decía «ÚLTIMA» con el local en 0, prueba del corte 28-oct). Si el ERP ⛔
-        // contesta, el espejo (sus filas STU también salen del libro) y la pantalla lo dice.
-        if (store === 'zattia' && lecturasStunnedErp() && esStunned(variante.sku)) {
-          const l = await stockStunnedDelLibro(store, variante.product_id, variante.size_id)
+        // 🔑 Una línea que ya está en el ERP (`erp_corte`): el stock es el del LIBRO, ⛔ el de GN (la venta del ERP ⛔ baja GN:
+        // tras la #25 el POS decía «ÚLTIMA» con el local en 0, prueba del corte de Stunned 28-oct). Si el ERP ⛔ contesta, el
+        // espejo (las filas de la línea cortada también salen del libro) y la pantalla lo dice.
+        const lineaVar = lineaDe(store, variante.sku)
+        let cortesStock
+        try {
+          cortesStock = await cortesDeCaja(store)
+        } catch (e) {
+          stock = { ...espejo, fuente: 'espejo', motivo: sinSecretos(`No se pudo saber si la marca ya vende por el ERP (${e && e.message})`) }
+          stock.atras = await estantesDe(sb, store, variante.sku)
+          return res.status(200).json({ variante, stock })
+        }
+        if (lineaEnErp(cortesStock, lineaVar)) {
+          const l = await stockDelLibro(store, lineaVar, variante.product_id, variante.size_id)
           // En la caja del EVENTO, «local» es lo que está en el evento y «para reponer», lo que quedó en el local y el depósito.
           stock = l.error ? { ...espejo, fuente: 'espejo', motivo: sinSecretos(l.error) }
             : puesto === 'evento' ? { local: l.evento, deposito: l.local + l.deposito, fuente: 'erp' }
@@ -1200,14 +1233,23 @@ export default async function handler(req, res) {
           prendas: centavosJs(filas.reduce((s, f, i) => s + (conPromo.items[i].promos ? 0 : f.cantidad * f.precio - f.importe), 0)),
           precios: centavosJs(conNombre.reduce((s, f) => s + (f.precio_lista ? Math.max(0, f.precio_lista - f.precio) * f.cantidad : 0), 0)),
         }
-        // 🔑 Un ticket es de UNA marca (Bruno, 26-oct). Con `CAJA_STUNNED_ERP=1`: Stunned ⇒ ERP, Zattia ⇒ GN, mezclado ⇒ 400.
-        const aDonde = destinoDelTicket(store, conNombre.map((f, i) => ({ sku: f.sku, linea: (b.items[i] || {}).linea === 'stunned' ? 'stunned' : (b.items[i] || {}).linea === 'zattia' ? 'zattia' : null })), process.env.CAJA_STUNNED_ERP === '1')
+        // 🔑 Un ticket es de UNA marca (Bruno, 26-oct), y va al ERP si su línea ya cortó (`erp_corte`: Stunned 28-oct, BDI
+        // 15/16-nov, Zattia 23-nov), ⛔ por una llave. La línea sale del PRODUCTO, ⛔ de la pantalla. Sin saber los cortes ⇒ 503.
+        let aDonde, lineasT
+        try {
+          const cortes = await cortesDeCaja(store)
+          lineasT = await lineasDelTicket(conNombre)
+          aDonde = destinoPorCorte({ cortes, lineas: lineasT })
+        } catch (e) {
+          console.error('[caja] destino del ticket:', e && e.message)
+          return res.status(503).json({ error: 'No se pudo saber si esta marca ya vende por el ERP: la venta NO se guardó. Probá de nuevo en un momento.' })
+        }
         if (aDonde.error) return res.status(400).json({ error: aDonde.error, mixto: true })
         const malPuesto = errorDelPuesto(turno, aDonde.destino)
         if (malPuesto) return res.status(400).json({ error: malPuesto })
         const pagosConNombre = c.pagos.map(p => ({ ...p, nombre: nombreParaTicket(p.cuenta, reglas) }))
         const fila = {
-          id, store, estado: espera > 0 ? 'esperando_pago' : 'borrador', espera_monto: espera > 0 ? espera : null, renglones: conNombre, pagos: pagosConNombre, subtotal: c.subtotal, total: c.total,
+          id, store, estado: espera > 0 ? 'esperando_pago' : 'borrador', espera_monto: espera > 0 ? espera : null, renglones: conNombre.map((f, i) => ({ ...f, linea: lineasT[i] })), pagos: pagosConNombre, subtotal: c.subtotal, total: c.total,
           paga_con: Number.isFinite(pagaCon) ? pagaCon : null, email, payload, usuario: perfil.name || null, turno_id: turno.id, a_mano: aMano,
           // Sólo se manda la columna si el ticket va al ERP: sin `sql/migrate-caja-erp.sql` las ventas de GN siguen entrando.
           ...(aDonde.destino === 'erp' ? { destino: 'erp' } : {}),

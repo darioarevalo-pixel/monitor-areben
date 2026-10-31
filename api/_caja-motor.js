@@ -10,7 +10,8 @@
 // ⛔ Archivo `_`: NO es una ruta.
 import { COLUMNAS_MOTOR, DIAS_REPASO, REPASO_POR_VUELTA, anularEnMotor, entradaDelMotor, entradaDelMotorErp, faltanEnMotor } from '../lib/caja/motor.core.js'
 import { configPg } from '../lib/pg.core.js'
-import { SQL_STOCK_VARIANTE_STUNNED, stockDeVarianteStunned } from '../lib/stunned/inventario-erp.core.js'
+import { SQL_STOCK_VARIANTE_LIBRO, stockDeVarianteLibro } from '../lib/stunned/inventario-erp.core.js'
+import { marcaDeVentaErp } from '../lib/caja/corte-caja.core.js'
 
 const PG_DE_STORE = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
 /** El motor tiene que contestar rápido: la cajera está esperando el ticket. Lo que no entra, lo sube el repaso. */
@@ -43,17 +44,11 @@ async function anotarCada(db, registrarVenta, ventas) {
 }
 
 /**
- * La venta de STUNNED: el motor ES la venta (⛔ copia de GN). A diferencia de `anotarEnMotor`, sin conexión o con
- * error DEVUELVE el fallo (la cajera lo ve y se reintenta). `prueba`: `CAJA_STUNNED_PRUEBA !== '0'` (el ensayo
- * general corre en prueba; la real se prende con `0`, y esa SÍ mueve el libro). ⛔ Lanza.
- * @param {string} store @param {any} venta la fila de `caja_venta` @returns {Promise<{ ok: true, numero: number | null } | { ok: false, error: string, reintentable?: boolean }>}
+ * El stock de una variante de una línea que ya está en el ERP (`erp_corte`), en el LIBRO: GN ⛔ lo mueve desde el corte.
+ * @returns {Promise<{ local: number, deposito: number, evento: number } | { error: string }>} ⛔ Lanza.
  */
-/**
- * El stock de una variante de Stunned en el LIBRO (con `LECTURAS_STUNNED_ERP=1` el libro manda, ⛔ GN).
- * @returns {Promise<{ local: number, deposito: number } | { error: string }>} ⛔ Lanza.
- */
-export async function stockStunnedDelLibro(store, productId, sizeId) {
-  const r = await conMotor(store, async (db) => stockDeVarianteStunned((await db.query(SQL_STOCK_VARIANTE_STUNNED, [String(productId), String(sizeId)])).rows))
+export async function stockDelLibro(store, linea, productId, sizeId) {
+  const r = await conMotor(store, async (db) => stockDeVarianteLibro((await db.query(SQL_STOCK_VARIANTE_LIBRO, [String(productId), String(sizeId), String(linea)])).rows))
   if (r.sinConexion) return { error: 'El ERP no está conectado (falta DATABASE_URL en Vercel)' }
   return r
 }
@@ -72,10 +67,21 @@ export async function eventoActivo(store) {
   return r;
 }
 
-export async function registrarEnErp(store, venta, env = process.env) {
-  const prueba = env.CAJA_STUNNED_PRUEBA !== '0';
+/**
+ * La venta de una línea que ya está en el ERP (`erp_corte`): el motor ES la venta (⛔ copia de GN), REAL (`prueba: false`) y de
+ * la marca de su línea (`marcaDeVentaErp`). A diferencia de `anotarEnMotor`, sin conexión o con error DEVUELVE el fallo (la
+ * cajera lo ve y se reintenta). ⛔ Lanza.
+ * @param {string} store @param {any} venta la fila de `caja_venta` @returns {Promise<{ ok: true, numero: number | null } | { ok: false, error: string, reintentable?: boolean }>}
+ */
+export async function registrarEnErp(store, venta) {
+  let marca;
+  try {
+    marca = marcaDeVentaErp({ ...venta, store: venta.store || store });
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e), reintentable: false };
+  }
   const r = await conMotor(store, async (db, registrarVenta) => {
-    const out = await registrarVenta(db, entradaDelMotorErp(venta, { prueba }));
+    const out = await registrarVenta(db, entradaDelMotorErp(venta, { marca }));
     return out.ok ? { ok: true, numero: Number(out.venta?.numero) || null } : { ok: false, error: `${out.error.codigo}: ${out.error.mensaje}`, reintentable: out.error.codigo !== 'CONFLICTO_IDEMPOTENCIA' };
   });
   if (r.sinConexion) return { ok: false, error: 'El ERP no está conectado (falta DATABASE_URL en Vercel).', reintentable: true };
