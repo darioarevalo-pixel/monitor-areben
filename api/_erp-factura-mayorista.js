@@ -16,6 +16,7 @@ import { leerFacturaLibre, opcionDeCondicionPanel, receptorMayorista } from '../
 import { SIN_ARCA, baseFacturacion, repoFacturas } from './_facturacion.js'
 import { panelCuentaPrendido } from './_erp-clientes.js'
 import { escribirPrendido } from './_erp-pedido.js'
+import { pedirFacturaPorMail } from '../lib/mailer/factura.core.js'
 import { UMBRAL_IDENTIFICAR, ambienteSeguro, arcaDe, filaParaPdf } from './_erp.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -32,7 +33,7 @@ export function repoConExtras(repo, extras) {
 
 /** La ficha fiscal del cliente (motor de BDI). */
 const leerFicha = async (pg, clienteId) =>
-  (await pg.query('select id, empresa_id, doc, nombre, razon_social, condicion_iva, domicilio from cliente where id = $1', [clienteId])).rows[0] ?? null
+  (await pg.query('select id, empresa_id, doc, nombre, razon_social, condicion_iva, domicilio, email from cliente where id = $1', [clienteId])).rows[0] ?? null
 
 /**
  * Completa la ficha con lo que se pidió en el mismo paso (`ponerFiscalCliente` del motor: la MISMA ficha, ⛔ otra).
@@ -113,7 +114,7 @@ export async function facturasDeClientePanel({ clienteId = '', usuario = null },
     .select('id, ambiente, marca, venta_id, venta_ref, clase, tipo, pto_vta, numero, fecha, total, neto, iva, doc_tipo, doc_nro, cond_iva, estado, cae, cae_vence, renglones')
     .eq('ambiente', ambiente).eq('cliente_id', String(clienteId)).eq('estado', 'autorizada').order('creado_en', { ascending: false }).limit(100)
   const fiscal = {
-    doc: ficha.doc ?? null, razonSocial: ficha.razon_social ?? null, domicilio: ficha.domicilio ?? null,
+    doc: ficha.doc ?? null, razonSocial: ficha.razon_social ?? null, domicilio: ficha.domicilio ?? null, email: ficha.email ?? null,
     condicion: opcionDeCondicionPanel(ficha.condicion_iva),
   }
   if (e) {
@@ -125,4 +126,54 @@ export async function facturasDeClientePanel({ clienteId = '', usuario = null },
     prendido: true, ambiente, fiscal,
     facturas: (data || []).map((f) => ({ ...filaParaPdf(f, { numero: null, renglones: f.renglones || [], receptor }), clase: f.clase, venta_ref: f.venta_ref ?? null })),
   }
+}
+
+const MAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const LETRA = { 1: 'A', 6: 'B' }
+/** En homologación la factura es de PRUEBA: sólo a una casilla de la empresa, ⛔ a un cliente. */
+export const CASILLA_INTERNA = '@arebensrl.com'
+
+/**
+ * «Enviar por mail» una factura YA hecha de la ficha del cliente (Darío §5; Bruno 31-oct: un botón). El PDF lo arma el
+ * navegador (el mismo de «PDF»); acá se valida que la factura exista, sea de ESE cliente y esté autorizada, y el número,
+ * el total y la fecha salen de la BASE, ⛔ del pedido. Sale por Mailer (SES) con el remitente de la marca.
+ * `body`: `{ clienteId, facturaId, para, pdf }` (pdf en base64; `lib/erp/entrada.core.js` le da su propio tope).
+ * ⛔ pide `VENTA_MAYORISTA_REAL`: la factura ya está hecha; mandarla no factura nada.
+ * @param {{ body: any, quien?: any }} p
+ * @param {{ conMotor: Function, prendido?: boolean, sb?: any, mailer?: any, ambiente?: string }} deps
+ */
+export async function enviarFacturaPanel({ body, quien = null }, deps) {
+  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  const clienteId = String(body?.clienteId ?? ''), facturaId = String(body?.facturaId ?? '')
+  if (!UUID.test(clienteId) || !UUID.test(facturaId)) return { status: 400, error: 'Falta la factura o el cliente' }
+  const para = String(body?.para ?? '').trim().toLowerCase()
+  if (!MAIL.test(para) || para.length > 200) return { status: 400, error: 'El mail no es válido.' }
+  const pdf = String(body?.pdf ?? '')
+  if (!pdf) return { status: 400, error: 'Falta el PDF.' }
+  const ambiente = deps.ambiente || (() => { const a = ambienteSeguro(); return a.ambiente })()
+  if (!ambiente) return { status: 409, error: ambienteSeguro().error }
+  if (ambiente !== 'produccion' && !para.endsWith(CASILLA_INTERNA)) {
+    return { status: 409, error: `Es una factura de PRUEBA (homologación de ARCA): sólo se manda a una casilla ${CASILLA_INTERNA}.` }
+  }
+
+  const sb = deps.sb || baseFacturacion()
+  const { data, error } = await sb.from('facturas').select('id, ambiente, marca, tipo, pto_vta, numero, fecha, total, estado, cliente_id')
+    .eq('id', facturaId).eq('ambiente', ambiente).eq('cliente_id', clienteId).limit(1)
+  if (error) throw new Error(`facturas: ${error.message}`)
+  const f = data?.[0]
+  if (!f) return { status: 404, error: 'No está esa factura en la ficha de este cliente.' }
+  if (f.estado !== 'autorizada') return { status: 409, error: 'La factura no está autorizada por ARCA.' }
+  const letra = LETRA[Number(f.tipo)]
+  if (!letra) return { status: 409, error: 'Sólo se mandan facturas A o B.' }
+
+  const ficha = await deps.conMotor('bdi', 'La ficha del cliente', (pg) => leerFicha(pg, clienteId))
+  if (ficha && typeof ficha === 'object' && ficha.status) return ficha
+  const comprobante = `${letra} ${String(f.pto_vta).padStart(5, '0')}-${String(f.numero).padStart(8, '0')}`
+  const r = await pedirFacturaPorMail(deps.mailer || { url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch }, {
+    marca: f.marca, para, comprobante, cliente: ficha?.razon_social || ficha?.nombre || '', total: Number(f.total), fecha: String(f.fecha).slice(0, 10),
+    archivo: `Factura ${comprobante}.pdf`, pdf,
+  })
+  if (!r.ok && !r.configurado) return { status: 503, error: 'Falta la conexión con Mailer (MAILER_URL / MAILER_TICKET_KEY) en Vercel.' }
+  if (!r.ok) return { status: 502, error: `No salió: ${r.motivo}` }
+  return { ok: true, para, de: r.de, comprobante }
 }

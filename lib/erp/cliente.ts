@@ -709,10 +709,13 @@ export type BcraDelPanel =
 export const leerBcraPanel = (clienteId: string) =>
   pedir<BcraDelPanel>(null, `&vista=bcra-panel&marca=bdi&cliente=${encodeURIComponent(clienteId)}&nc=${Date.now()}`, 'No se pudo consultar el BCRA.')
 /** Las facturas de la ficha del cliente (facturación de mayoristas, Darío §5) y sus datos fiscales, para saber qué pedir. */
-export type FiscalDelPanel = { doc: string | null; razonSocial: string | null; domicilio: string | null; condicion: 'ri' | 'monotributo' | 'exento' | 'consumidor' | null }
+export type FiscalDelPanel = { doc: string | null; razonSocial: string | null; domicilio: string | null; email?: string | null; condicion: 'ri' | 'monotributo' | 'exento' | 'consumidor' | null }
 export type FacturaDelPanel = import('@/lib/arca/factura-pdf').FacturaEmitida & { clase: 'venta' | 'parte' | 'libre'; venta_ref?: string | null }
 export const leerFacturasClientePanel = (clienteId: string) =>
   pedir<{ prendido: false } | { prendido: true; ambiente: string; fiscal: FiscalDelPanel; facturas: FacturaDelPanel[]; sinMigrar?: string }>(null, `&vista=facturas-cliente-panel&marca=bdi&cliente=${encodeURIComponent(clienteId)}&nc=${Date.now()}`, 'No se pudieron leer las facturas.')
+/** «Enviar por mail» una factura ya hecha (el PDF en base64, armado en el navegador). Sale por Mailer con el remitente de la marca. */
+export const enviarFacturaPanel = (p: { clienteId: string; facturaId: string; para: string; pdf: string }) =>
+  pedir<{ ok: true; para: string; de: string; comprobante: string }>(post({ accion: 'factura-enviar-panel', marca: 'bdi', ...p }), '', 'No se pudo mandar la factura.')
 /** La factura LIBRE (sin venta: ⛔ mueve stock ni la cuenta corriente). 409 con `falta` ⇒ pedir los datos fiscales en el mismo paso. */
 export const facturaLibrePanel = (p: { clienteId: string; renglones: Array<{ descripcion: string; cantidad: number; unitario: number }>; doc?: string; condicion?: string; razonSocial?: string; domicilio?: string }) =>
   pedir<{ ok: true; factura: FacturaDelPanel }>(post({ accion: 'factura-libre-panel', marca: 'bdi', ...p }), '', 'No se pudo hacer la factura.')

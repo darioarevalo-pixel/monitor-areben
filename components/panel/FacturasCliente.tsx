@@ -9,11 +9,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select } from '@/components/ui'
 import { color, font } from '@/components/ui/tokens'
-import { facturaLibrePanel, leerFacturasClientePanel, type FacturaDelPanel, type FiscalDelPanel } from '@/lib/erp/cliente'
+import { enviarFacturaPanel, facturaLibrePanel, leerFacturasClientePanel, type FacturaDelPanel, type FiscalDelPanel } from '@/lib/erp/cliente'
 import { parsearMonto } from '@/lib/compromisos/plata.core.js'
 
 /** El PDF (jsPDF + QR) se carga recién al pedirlo: ⛔ entra al paquete del panel. */
 const descargarFactura = async (f: FacturaDelPanel) => (await import('@/lib/arca/factura-pdf')).descargarFactura(f)
+const facturaEnBase64 = async (f: FacturaDelPanel) => (await import('@/lib/arca/factura-pdf')).facturaEnBase64(f)
 const numeroComprobante = (f: { pto_vta: number; numero: number }) => `${String(f.pto_vta).padStart(5, '0')}-${String(f.numero).padStart(8, '0')}`
 const plata = (n: number) => `$${n.toLocaleString('es-AR', { maximumFractionDigits: 2 })}`
 const LETRA: Record<number, string> = { 1: 'A', 6: 'B' }
@@ -23,9 +24,10 @@ type Renglon = { descripcion: string; cantidad: string; unitario: string }
 const VACIO: Renglon = { descripcion: '', cantidad: '1', unitario: '' }
 
 export function FacturasCliente({ clienteId, decir }: { clienteId: string; decir: (t: string) => void }) {
-  const [datos, setDatos] = useState<{ fiscal: FiscalDelPanel; facturas: FacturaDelPanel[]; sinMigrar?: string } | null>(null)
+  const [datos, setDatos] = useState<{ ambiente: string; fiscal: FiscalDelPanel; facturas: FacturaDelPanel[]; sinMigrar?: string } | null>(null)
   const [error, setError] = useState('')
   const [abierta, setAbierta] = useState(false)
+  const [porMail, setPorMail] = useState<FacturaDelPanel | null>(null)
 
   const [vuelta, setVuelta] = useState(0)
   const cargar = useCallback(() => setVuelta((v) => v + 1), [])
@@ -56,9 +58,14 @@ export function FacturasCliente({ clienteId, decir }: { clienteId: string; decir
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
             <span style={{ fontVariantNumeric: 'tabular-nums' }}>{plata(f.total)}</span>
             <Button size="sm" variant="ghost" style={{ height: 'auto' }} onClick={() => descargarFactura(f).catch(() => decir('No se pudo hacer el PDF.'))}>PDF</Button>
+            <Button size="sm" variant="ghost" style={{ height: 'auto' }} onClick={() => setPorMail(f)}>Mail</Button>
           </span>
         </div>
       )) : <div style={{ fontSize: font.sm, color: color.mut2 }}>Todavía no hay facturas.</div>)}
+      {porMail && datos && (
+        <EnviarPorMail clienteId={clienteId} factura={porMail} sugerido={datos.fiscal.email ?? ''} ambiente={datos.ambiente}
+          onCerrar={() => setPorMail(null)} onEnviada={(t) => { setPorMail(null); decir(t) }} />
+      )}
       {abierta && datos && (
         <FacturaLibre clienteId={clienteId} fiscal={datos.fiscal} onCerrar={() => setAbierta(false)}
           onHecha={async (f) => { setAbierta(false); decir(`Factura ${LETRA[f.tipo] ?? ''} ${numeroComprobante(f)} hecha.`); cargar(); await descargarFactura(f).catch(() => {}) }} />
@@ -141,6 +148,43 @@ function FacturaLibre({ clienteId, fiscal, onCerrar, onHecha }: {
             <Button size="sm" variant="ghost" style={{ height: 'auto' }} onClick={() => setPedirDatos(true)}>Cambiar datos</Button>
           </div>
         )}
+        {error && <Notice tone="danger">{error}</Notice>}
+      </div>
+    </Modal>
+  )
+}
+
+/** «Enviar por mail»: el mismo PDF de «PDF», adjunto, al mail de la ficha (corregible). Sale con el remitente de la marca. */
+function EnviarPorMail({ clienteId, factura, sugerido, ambiente, onCerrar, onEnviada }: {
+  clienteId: string; factura: FacturaDelPanel; sugerido: string; ambiente: string; onCerrar: () => void; onEnviada: (texto: string) => void
+}) {
+  const [para, setPara] = useState(sugerido)
+  const [error, setError] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const valido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(para.trim())
+
+  async function enviar() {
+    setEnviando(true); setError('')
+    try {
+      const pdf = await facturaEnBase64(factura)
+      const r = await enviarFacturaPanel({ clienteId, facturaId: factura.id, para: para.trim(), pdf })
+      onEnviada(`Factura ${r.comprobante} enviada a ${r.para}.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo mandar la factura.')
+    } finally { setEnviando(false) }
+  }
+
+  return (
+    <Modal abierto onCerrar={onCerrar} titulo={`Enviar la factura ${LETRA[factura.tipo] ?? ''} ${numeroComprobante(factura)}`} pie={<>
+      <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
+      <Button tone="brand" onClick={enviar} disabled={enviando || !valido}>{enviando ? 'Enviando…' : 'Enviar'}</Button>
+    </>}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Field label="Mail del cliente"><Input value={para} type="email" inputMode="email" maxLength={200} placeholder="cliente@ejemplo.com" onChange={(e) => setPara(e.target.value)} /></Field>
+        <div style={{ fontSize: font.sm, color: color.mut2 }}>
+          Le llega con el PDF adjunto, por {plata(factura.total)}. Si contesta, la respuesta llega a la casilla de la marca.
+          {ambiente !== 'produccion' ? ' Es una factura de PRUEBA: sólo se manda a una casilla @arebensrl.com.' : ''}
+        </div>
         {error && <Notice tone="danger">{error}</Notice>}
       </div>
     </Modal>

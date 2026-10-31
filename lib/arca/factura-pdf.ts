@@ -228,12 +228,24 @@ export function armarFacturaPdf({ f, emisor, qrDataUrl, JsPDF }: { f: FacturaEmi
   return pdf
 }
 
-/** Arma el PDF con jsPDF y el QR de verdad, y lo comparte (teléfono) o lo descarga. */
-export async function descargarFactura(f: FacturaEmitida, emisor: Emisor = EMISOR): Promise<void> {
+/** El PDF con jsPDF y el QR de verdad: el MISMO para descargarlo y para mandarlo por mail. */
+async function pdfDeFactura(f: FacturaEmitida, emisor: Emisor) {
   const faltan = faltanDelEmisor(emisor, f.marca)
   if (faltan.length) throw new Error(`Faltan datos del emisor para imprimir la factura: ${faltan.join(', ')}`)
   const [{ jsPDF }, QR] = await Promise.all([import('jspdf'), import('qrcode')])
   const qrDataUrl = await QR.toDataURL(urlQR(datosQR(f)), { errorCorrectionLevel: 'M', margin: 0, width: 400 })
-  const pdf = armarFacturaPdf({ f, emisor, qrDataUrl, JsPDF: jsPDF })
+  return armarFacturaPdf({ f, emisor, qrDataUrl, JsPDF: jsPDF })
+}
+
+/** Arma el PDF y lo comparte (teléfono) o lo descarga. */
+export async function descargarFactura(f: FacturaEmitida, emisor: Emisor = EMISOR): Promise<void> {
+  const pdf = await pdfDeFactura(f, emisor)
   await compartirODescargarPDF(pdf, nombreArchivo(f), `Factura ${numeroComprobante(f)}`)
+}
+
+/** El PDF en base64 (sin el `data:`), para adjuntarlo al mail de «Enviar por mail». */
+export async function facturaEnBase64(f: FacturaEmitida, emisor: Emisor = EMISOR): Promise<string> {
+  const pdf = await pdfDeFactura(f, emisor)
+  const uri = String(pdf.output('datauristring'))
+  return uri.slice(uri.indexOf(',') + 1)
 }
