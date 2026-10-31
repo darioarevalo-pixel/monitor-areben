@@ -73,11 +73,11 @@ export default async function handler(req, res) {
   }
   if (erp.enErp) {
     const r = erp.resultado;
-    if (!r.ok) return res.status(200).json({ ok: false, productId, updated: 0, total: 0, error: `ERP: ${r.error.mensaje}`, reintentable: r.error.codigo !== 'SIN_VARIANTES' });
+    if (!r.ok) return res.status(200).json({ ok: false, productId, updated: 0, total: 0, error: `ERP: ${String(r.error.mensaje).replace(/\u26D4\s*/g, 'no ')}`, reintentable: r.error.codigo !== 'SIN_VARIANTES' });
     return res.status(200).json({ ok: true, productId, updated: r.variantes, total: r.variantes, yaEstaban: r.variantes - r.cambiadas, pendientes: 0, erp: { linea: erp.linea, soloErp: true } });
   }
   // Línea sin cortar: GN sigue siendo la verdad; si el ERP falló ⛔ frena (la copia del día antes del corte lo empareja).
-  if (!erp.resultado.ok) console.error(`[ubicaciones] ERP ⛔ guardó ${marca}/${productId}: ${erp.resultado.error.codigo} ${erp.resultado.error.mensaje}`);
+  if (!erp.resultado.ok) console.error(`[ubicaciones] el ERP no guardó ${marca}/${productId}: ${erp.resultado.error.codigo} ${erp.resultado.error.mensaje}`);
 
   const headers = { 'Authorization': `Bearer ${TOKEN}`, 'Accept': 'application/json', 'Content-Type': 'application/json' };
 
