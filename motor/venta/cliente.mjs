@@ -3,7 +3,7 @@
  * para operar —saldo a favor, factura A, mayoristas con cuenta corriente—, ⛔ un CRM. Una ficha POR EMPRESA, por documento.
  *
  * `guardarCliente`: la busca por documento o la crea; lo que viene con dato PISA (corregir un mail, sumar el CUIT de la
- * factura A), lo que viene vacío ⛔ borra. `buscarClientes`: por documento (prefijo) o por nombre, para la Caja.
+ * factura A), lo que viene vacío ⛔ borra. `buscarClientes`: por documento (prefijo) o por nombre, para la Caja. `clientePorWhatsapp` · `anotarWhatsapp` · `sacarWhatsapp` · `whatsappsDe`: el panel de WhatsApp (la empresa con varias personas).
  * Devuelven `{ ok: true, … }` o `{ ok: false, error }`. Sólo lanzan si la BASE falla.
  */
 import { COND_IVA, cuitValido } from '../arca/arca.core.js'
@@ -112,6 +112,76 @@ export async function ponerContactoCliente(db, e) {
     where empresa_id = $1 and id = $2 returning ${COLUMNAS}`, [e.empresa_id, id, whatsapp, email])
   if (!r) return falla('FALTA_CLIENTE', 'No está ese cliente en esa empresa', 'cliente_id')
   return { ok: true, cliente: r }
+}
+
+/**
+ * La ficha por WhatsApp (plan «BDI directo al ERP», 30-oct): el panel de WhatsApp de Darío reconoce al cliente del chat.
+ * 🔑 El cliente es la EMPRESA con VARIAS PERSONAS que compran (pedido de Darío §1, Bruno 30-oct): primero va por los números
+ * ANOTADOS (`cliente_whatsapp`, sql/062) —uno activo es de una sola ficha ⇒ da una—; si ⛔ está anotado, por el número de la
+ * ficha (`cliente.whatsapp`). 🔴 Ése está guardado CRUDO (medido en BDI 30-oct: 10.367 de 13.315 como `54…` sin el 9, con y
+ * sin «+», con el 15) ⇒ el índice va por los ÚLTIMOS 6 DÍGITOS y la igualdad la decide `numeroWhatsapp` acá. Ahí puede haber
+ * MÁS DE UNA (329 números repetidos medidos): devuelve todas, la que se movió último primero; elegir es del que llama
+ * (anotando el número, la próxima vez da una).
+ * @param {import('pg').ClientBase} db @param {{ empresa_id: string, whatsapp: string }} e
+ * @returns {Promise<{ ok: true, clientes: any[], persona: { id: string, nombre: string|null } | null } | { ok: false, error: any }>}
+ */
+export async function clientePorWhatsapp(db, e) {
+  const wa = numeroWhatsapp(e?.whatsapp)
+  if (!wa) return falla('ENTRADA_INVALIDA', 'No se puede asegurar ese WhatsApp: código de área + número, sin el 15', 'whatsapp')
+  const [anotado] = await q(db, `select ${COLUMNAS.split(', ').map((c) => `c.${c}`).join(', ')}, w.id::text as persona_id, w.nombre as persona
+    from cliente_whatsapp w join cliente c on c.id = w.cliente_id where w.empresa_id = $1 and w.whatsapp = $2 and w.activo`, [e.empresa_id, wa])
+  if (anotado) {
+    const { persona_id, persona, ...cliente } = anotado
+    return { ok: true, clientes: [cliente], persona: { id: persona_id, nombre: persona } }
+  }
+  const filas = await q(db, `select ${COLUMNAS} from cliente where empresa_id = $1 and whatsapp is not null and right(regexp_replace(whatsapp, '\\D', '', 'g'), 6) = $2
+    order by coalesce(actualizado_en, creado_en) desc, id`, [e.empresa_id, wa.slice(-6)])
+  return { ok: true, clientes: filas.filter((c) => numeroWhatsapp(c.whatsapp) === wa), persona: null }
+}
+
+/**
+ * Anotar un número a la ficha, con QUIÉN es («¿Es de un cliente que ya tenés?», pedido de Darío §1). Idempotente: el mismo
+ * número en la misma ficha sólo actualiza el nombre. Un número activo en OTRA ficha ⛔ se pisa: `YA_ANOTADO` (hay que sacarlo
+ * de allá primero, a la vista).
+ * @param {import('pg').ClientBase} db
+ * @param {{ empresa_id: string, cliente_id: string, whatsapp: string, nombre?: string, usuario: string }} e
+ */
+export async function anotarWhatsapp(db, e) {
+  const wa = numeroWhatsapp(e?.whatsapp)
+  if (!wa) return falla('ENTRADA_INVALIDA', 'No se puede asegurar ese WhatsApp: código de área + número, sin el 15', 'whatsapp')
+  const usuario = texto(e.usuario)
+  if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién lo anota', 'usuario')
+  const [c] = await q(db, 'select id::text, nombre from cliente where id::text = $1 and empresa_id = $2', [String(e.cliente_id ?? ''), e.empresa_id])
+  if (!c) return falla('FALTA_CLIENTE', 'No está ese cliente', 'cliente_id')
+  const nombre = texto(e.nombre)
+  const [ya] = await q(db, `select w.id::text, w.cliente_id::text, c.nombre as cliente from cliente_whatsapp w join cliente c on c.id = w.cliente_id
+    where w.empresa_id = $1 and w.whatsapp = $2 and w.activo`, [e.empresa_id, wa])
+  if (ya && ya.cliente_id !== c.id) return falla('YA_ANOTADO', `Ese número ya es de ${ya.cliente}`, 'whatsapp')
+  const [r] = ya
+    ? await q(db, `update cliente_whatsapp set nombre = coalesce($2, nombre) where id = $1 returning id::text, whatsapp, nombre, creado_en`, [ya.id, nombre])
+    : await q(db, `insert into cliente_whatsapp (empresa_id, cliente_id, whatsapp, nombre, usuario) values ($1, $2, $3, $4, $5)
+      returning id::text, whatsapp, nombre, creado_en`, [e.empresa_id, c.id, wa, nombre, usuario])
+  return { ok: true, persona: r, ya_estaba: !!ya }
+}
+
+/**
+ * Sacar a alguien de la lista (dejó de estar): ⛔ se borra, queda inactivo con quién y cuándo; sus pedidos viejos lo siguen
+ * nombrando. Sacar uno ya sacado ⇒ `ok` sin cambiar nada.
+ * @param {import('pg').ClientBase} db @param {{ empresa_id: string, id: string, usuario: string }} e
+ */
+export async function sacarWhatsapp(db, e) {
+  const usuario = texto(e?.usuario)
+  if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién lo saca', 'usuario')
+  const [r] = await q(db, `update cliente_whatsapp set activo = false, sacado_por = $3, sacado_en = now()
+    where id::text = $1 and empresa_id = $2 and activo returning id::text`, [String(e.id ?? ''), e.empresa_id, usuario])
+  if (r) return { ok: true, sacado: true }
+  const [hay] = await q(db, 'select 1 from cliente_whatsapp where id::text = $1 and empresa_id = $2', [String(e.id ?? ''), e.empresa_id])
+  return hay ? { ok: true, sacado: false } : falla('NO_ENCONTRADO', 'No está ese número', 'id')
+}
+
+/** Las personas (números activos) de una ficha, la más vieja primero. @param {import('pg').ClientBase} db @param {{ cliente_id: string }} e */
+export async function whatsappsDe(db, e) {
+  return q(db, `select id::text, whatsapp, nombre, usuario, creado_en from cliente_whatsapp where cliente_id::text = $1 and activo order by creado_en, id`, [String(e?.cliente_id ?? '')])
 }
 
 /**
