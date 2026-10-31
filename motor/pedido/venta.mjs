@@ -378,3 +378,46 @@ export async function preparadosSinPagar(db, e) {
     })),
   }
 }
+
+/** Las palabras de una búsqueda, sin tildes ni comodines de `ilike` (⛔ más de 5). */
+export function palabrasDeBusqueda(texto) {
+  return String(texto ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[%_\\]/g, ' ')
+    .split(/\s+/).filter((w) => w.length >= 2).slice(0, 5)
+}
+const SIN_TILDE = `translate(lower(%s), 'áéíóúüñ', 'aeiouun')`
+
+/**
+ * AGREGAR un producto al pedido (Darío §2): el catálogo de la MARCA del pedido por nombre o SKU (cada palabra tiene que
+ * estar), o el código de barras exacto; cada variante con su talle, el STOCK del depósito del pedido y el precio de la
+ * lista `mayorista` — el MISMO que va a tomar `cambiarPedidoMayorista` (`preciosMayoristas`). Sin precio cargado ⇒
+ * `precio: null`: la pantalla lo muestra y ⛔ deja agregarlo (el cambio contestaría SIN_PRECIO).
+ * @param {import('pg').ClientBase} db @param {{ pedido_id: string, q: string, limite?: number }} e
+ */
+export async function productosParaPedido(db, e) {
+  const p = await leerPedido(db, e?.pedido_id)
+  if (!p) return falla('NO_ENCONTRADO', 'No está ese pedido', 'pedido_id')
+  const palabras = palabrasDeBusqueda(e?.q)
+  const codigo = String(e?.q ?? '').trim()
+  if (!palabras.length && !/^\d{6,}$/.test(codigo)) return { ok: true, productos: [] }
+  const limite = Math.min(Math.max(Number(e.limite) || 12, 1), 40)
+  const filas = await q(db, `with prod as (
+      select distinct p.id from producto p join variante v on v.empresa_id = p.empresa_id and v.product_id = p.id
+      where p.empresa_id = $1 and p.marca = $2 and p.activo and v.activa
+        and (v.barcode = $4 or (cardinality($3::text[]) > 0 and (select bool_and(${SIN_TILDE.replace('%s', 'p.nombre')} like '%' || w || '%'
+          or lower(coalesce(v.sku, '')) like '%' || w || '%') from unnest($3::text[]) w)))
+      order by p.id desc limit $5)
+    select p.id::text as product_id, p.nombre, v.size_id::text as size_id, v.talle, v.sku
+    from prod join producto p on p.empresa_id = $1 and p.id = prod.id join variante v on v.empresa_id = $1 and v.product_id = p.id and v.activa
+    order by p.nombre, p.id, v.size_id`, [p.empresa_id, p.marca, palabras, codigo, limite])
+  const deposito = p.deposito ?? DEPOSITO_MAYORISTA[p.marca]
+  const niveles = await nivelesDe(db, deposito, filas)
+  const precios = await preciosMayoristas(db, p.marca, [...new Set(filas.map((f) => Number(f.product_id)))])
+  const en = new Set(p.lineas.map(claveVar))
+  const porProducto = new Map()
+  for (const f of filas) {
+    const id = Number(f.product_id)
+    if (!porProducto.has(id)) porProducto.set(id, { product_id: id, nombre: f.nombre, precio: precios.has(id) ? pesos(precios.get(id)) : null, variantes: [] })
+    porProducto.get(id).variantes.push({ size_id: Number(f.size_id), talle: f.talle, sku: f.sku, stock: niveles.get(claveVar(f)) ?? 0, en_pedido: en.has(claveVar(f)) })
+  }
+  return { ok: true, deposito, productos: [...porProducto.values()] }
+}
