@@ -709,6 +709,9 @@ export type BcraDelPanel =
   }
 export const leerBcraPanel = (clienteId: string) =>
   pedir<BcraDelPanel>(null, `&vista=bcra-panel&marca=bdi&cliente=${encodeURIComponent(clienteId)}&nc=${Date.now()}`, 'No se pudo consultar el BCRA.')
+/** El BCRA por un CUIT SUELTO (sin ficha): «Consultar un CUIT» y el recién traído del padrón de ARCA. */
+export const leerBcraCuit = (cuit: string) =>
+  pedir<BcraDelPanel>(null, `&vista=bcra-panel&marca=bdi&cuit=${encodeURIComponent(cuit.replace(/\D/g, ''))}&nc=${Date.now()}`, 'No se pudo consultar el BCRA.')
 
 /** El padrón de ARCA: CUIT ⇒ razón social, condición (la opción del panel) y domicilio fiscal. Corregibles. */
 export type PadronDelPanel =

@@ -16,6 +16,7 @@ import { aTupla } from '../lib/erp/clientes-lista.core.js'
 import { nombresDeVentas } from '../lib/erp/cuenta-corriente.core.js'
 import { SQL_CTE_LINEA_GN, sqlVentaDeLinea } from '../lib/erp/linea-gn.core.js'
 import { BCRA_URL, cuitParaBcra, leerRespuestaBcra, resumirBcra } from '../lib/erp/bcra.core.js'
+import { cuitValido } from '../motor/arca/arca.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 /** Las líneas de cada base: Stunned vive en la de Zattia. */
@@ -445,10 +446,16 @@ export async function situacionBcra(cuit, { fetch: f = globalThis.fetch } = {}) 
 /**
  * La línea del BCRA de la tarjeta de cuenta del panel: el CUIT sale de la FICHA del motor (⛔ del navegador). Sin CUIT de 11
  * dígitos (un DNI, o sin documento) contesta `sinCuit`. Detrás del mismo interruptor que la cuenta del panel.
- * @param {{ clienteId?: string, usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean, fetch?: typeof fetch }} deps
+ * @param {{ clienteId?: string, cuit?: string, usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean, fetch?: typeof fetch }} deps
  */
-export async function bcraDelPanel({ clienteId = '', usuario = null }, deps) {
+export async function bcraDelPanel({ clienteId = '', cuit: cuitSuelto = '', usuario = null }, deps) {
   if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  // Un CUIT SUELTO («Consultar un CUIT», o el recién traído del padrón de ARCA): sin ficha. Se valida el dígito ANTES de salir.
+  if (cuitSuelto) {
+    const c = String(cuitSuelto).replace(/\D/g, '')
+    if (!cuitValido(c)) return { status: 400, error: 'Ese CUIT no es válido: revisá los números.' }
+    return { prendido: true, cuit: c, ...(await situacionBcra(c, { fetch: deps.fetch })) }
+  }
   if (!UUID.test(String(clienteId))) return { status: 400, error: 'Falta el cliente' }
   const doc = await deps.conMotor('bdi', 'El documento del cliente', async (pg) =>
     (await pg.query('select doc from cliente where id = $1', [clienteId])).rows[0]?.doc ?? null)

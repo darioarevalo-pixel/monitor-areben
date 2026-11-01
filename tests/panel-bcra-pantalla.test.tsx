@@ -17,9 +17,12 @@ const cuenta = {
   pagos: [], cuentas: [], personas: null, delChat: null,
 }
 const leerBcraPanel = vi.fn()
+const leerBcraCuit = vi.fn()
+const leerPadronPanel = vi.fn()
 vi.mock('@/lib/erp/cliente', () => ({
   cobrarCuentaErp: vi.fn(), leerCuentaPanel: vi.fn(), leerCuentasCorrientes: vi.fn(), anotarWhatsappPanel: vi.fn(), sacarWhatsappPanel: vi.fn(),
   leerBcraPanel: (...a: unknown[]) => leerBcraPanel(...a),
+  leerBcraCuit: (...a: unknown[]) => leerBcraCuit(...a), leerPadronPanel: (...a: unknown[]) => leerPadronPanel(...a),
   // Las facturas de la ficha (Darío §5): apagadas acá, las prueba tests/panel-facturas-pantalla.test.tsx.
   leerFacturasClientePanel: async () => ({ prendido: false }), facturaLibrePanel: vi.fn(),
 }))
@@ -67,5 +70,29 @@ describe('Situación crediticia en la tarjeta de cuenta (pantalla)', () => {
     await act(async () => { boton('Ver situación en el BCRA')!.click() })
     expect(document.body.textContent).toContain('No se pudo consultar el BCRA.')
     expect(boton('Ver situación en el BCRA')).toBeDefined()
+  })
+
+  it('«Consultar un CUIT»: cualquier CUIT ⇒ ARCA y BCRA juntos; si ARCA falla, el BCRA se ve igual', async () => {
+    await montar()
+    await act(async () => { boton('Consultar un CUIT')!.click() })
+    const input = document.querySelector('input[placeholder="30-12345678-9"]') as HTMLInputElement
+    const exacto = (t: string) => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === t) as HTMLButtonElement
+    expect(exacto('Consultar').disabled).toBe(true)
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '20-12345678-6')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    leerPadronPanel.mockRejectedValue(new Error('ARCA dice: No existe persona con ese Id'))
+    leerBcraCuit.mockResolvedValue({ prendido: true, cuit: '20123456786', ok: true, denominacion: 'PEREZ JUANA', periodo: '202609', peor: 1, deuda: 50000,
+      bancos: [{ entidad: 'BANCO X', situacion: 1, monto: 50000, diasAtraso: 0, juicio: false }], historia: null, peor12: null, cheques: { total: 0, sinPagar: 0, monto: 0 } })
+    await act(async () => { exacto('Consultar').click() })
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+    expect(leerPadronPanel).toHaveBeenCalledWith('20123456786')
+    expect(leerBcraCuit).toHaveBeenCalledWith('20123456786')
+    expect(leerBcraPanel).not.toHaveBeenCalled()
+    const t = document.body.textContent || ''
+    expect(t).toContain('ARCA dice: No existe persona con ese Id')
+    expect(t).toContain('Situación 1')
+    expect(t).toContain('PEREZ JUANA')
   })
 })

@@ -119,6 +119,17 @@ describe('BCRA: la consulta y la vista del panel', () => {
     expect(f).not.toHaveBeenCalled()
   })
 
+  it('CUIT SUELTO («Consultar un CUIT»): sin ficha, consulta ese CUIT; con el dígito mal ⛔ sale', async () => {
+    const f = vi.fn(async (url: string) => url.endsWith('/Deudas/30718508181') ? respuesta(200, DEUDAS) : respuesta(404, NO_FIGURA))
+    const conMotor = vi.fn()
+    const r = await bcraDelPanel({ cuit: '30-71850818-1' }, { conMotor, prendido: true, fetch: f as unknown as typeof fetch })
+    expect(r).toMatchObject({ prendido: true, cuit: '30718508181', ok: true, denominacion: 'AREBEN COMERCIAL S. R. L.' })
+    expect(conMotor).not.toHaveBeenCalled()
+    const g = vi.fn()
+    expect(await bcraDelPanel({ cuit: '30718508182' }, { conMotor, prendido: true, fetch: g })).toMatchObject({ status: 400 })
+    expect(g).not.toHaveBeenCalled()
+  })
+
   it('sin id válido ⇒ 400', async () => {
     expect(await bcraDelPanel({ clienteId: 'x' }, { conMotor: conDoc('1'), prendido: true })).toMatchObject({ status: 400 })
   })

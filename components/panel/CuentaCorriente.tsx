@@ -16,12 +16,13 @@
  * más vieja; la vista previa (`repartirPago`) sólo lo dibuja antes de confirmar.
  */
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Button, CopyButton, Field, Input, Modal, Notice, Select } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import { anotarWhatsappPanel, cobrarCuentaErp, leerBcraPanel, leerCuentaPanel, leerCuentasCorrientes, sacarWhatsappPanel, type BcraDelPanel, type CuentaDelMotor, type CuentaPanel } from '@/lib/erp/cliente'
 import { mensajeDeSaldo, repartirPago, textoSaldo } from '@/lib/erp/cuenta-panel.core.js'
-import { SITUACION_BCRA, mesBcra, tonoBcra } from '@/lib/erp/bcra.core.js'
+import { ResumenBcra } from './Bcra'
+import { ConsultaCuit } from './ConsultaCuit'
 import { FacturasCliente } from './FacturasCliente'
 import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
@@ -144,50 +145,22 @@ export function TarjetaCuenta({ cuenta, telChat, decir, onCambio }: {
 function SituacionBcra({ clienteId }: { clienteId: string }) {
   const [r, setR] = useState<BcraDelPanel | 'cargando' | null>(null)
   const [error, setError] = useState('')
+  const [otro, setOtro] = useState(false)
   async function consultar() {
     setR('cargando'); setError('')
     try { setR(await leerBcraPanel(clienteId)) } catch (e) { setR(null); setError(e instanceof Error ? e.message : 'No se pudo consultar el BCRA.') }
   }
-  const TONO = { verde: color.successInk, ambar: color.warningInk, rojo: color.dangerInk, neutro: color.mut2 } as const
-  let cuerpo: ReactNode
-  if (r === null) cuerpo = (
-    <Button size="sm" variant="outline" onClick={consultar} style={{ height: 'auto', alignSelf: 'flex-start' }}>Ver situación en el BCRA</Button>
-  )
-  else if (r === 'cargando') cuerpo = <div style={{ fontSize: font.sm, color: color.mut2 }}>Consultando el BCRA…</div>
-  else if (!r.prendido) cuerpo = null
-  else if ('sinCuit' in r) cuerpo = <div style={{ fontSize: font.sm, color: color.mut2 }}>Hace falta el CUIT del cliente (con DNI el BCRA no contesta).</div>
-  else if (!r.ok) cuerpo = <div style={{ fontSize: font.sm, color: color.dangerInk }}>{r.error}</div>
-  else {
-    const tono = TONO[tonoBcra(r)]
-    const resumen = r.bancos.length
-      ? `Situación ${r.peor} (${SITUACION_BCRA[r.peor as keyof typeof SITUACION_BCRA] ?? '?'}) · debe ${plata(r.deuda)} en ${r.bancos.length} ${r.bancos.length === 1 ? 'banco' : 'bancos'}`
-      : 'Sin deudas en bancos'
-    const cheques = r.cheques == null ? null
-      : r.cheques.total === 0 ? 'sin cheques rechazados'
-        : `${r.cheques.total} ${r.cheques.total === 1 ? 'cheque rechazado' : 'cheques rechazados'}${r.cheques.sinPagar ? ` · ${r.cheques.sinPagar} sin pagar (${plata(r.cheques.monto)})` : ''}`
-    cuerpo = (
-      <>
-        <div style={{ fontSize: font.sm, color: tono, fontWeight: 700 }}>{resumen}{cheques ? ` · ${cheques}` : ''}</div>
-        {r.bancos.slice(0, 4).map((b) => (
-          <div key={b.entidad} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: font.xs, color: color.mut2 }}>
-            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.entidad}</span>
-            <span style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>sit. {b.situacion}{b.diasAtraso ? ` · ${b.diasAtraso} días de atraso` : ''}{b.juicio ? ' · en juicio' : ''} · {plata(b.monto)}</span>
-          </div>
-        ))}
-        {r.peor12 != null && r.peor12 > r.peor && (
-          <div style={{ fontSize: font.xs, color: TONO.ambar }}>En los últimos 12 meses llegó a situación {r.peor12}.</div>
-        )}
-        <div style={{ fontSize: 11, color: color.mut2 }}>
-          {r.denominacion ? `${r.denominacion} · ` : ''}{r.periodo ? `informado a ${mesBcra(r.periodo)}` : 'último período'} · fuente: BCRA, Central de Deudores
-        </div>
-      </>
-    )
-  }
   return (
     <div style={{ borderTop: `1px solid ${color.line2}`, marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={ROTULO}>Situación crediticia</div>
-      {cuerpo}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div style={ROTULO}>Situación crediticia</div>
+        <Button size="sm" variant="ghost" style={{ height: 'auto' }} onClick={() => setOtro(true)}>Consultar un CUIT</Button>
+      </div>
+      {r === null
+        ? <Button size="sm" variant="outline" onClick={consultar} style={{ height: 'auto', alignSelf: 'flex-start' }}>Ver situación en el BCRA</Button>
+        : <ResumenBcra r={r} />}
       {error && <div style={{ fontSize: font.sm, color: color.dangerInk }}>{error}</div>}
+      {otro && <ConsultaCuit onCerrar={() => setOtro(false)} />}
     </div>
   )
 }

@@ -2021,7 +2021,7 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'bcra-panel') {
-      const r = await bcraDelPanel({ clienteId: String(req.query.cliente || ''), usuario: [perfil.user, perfil.email] }, { conMotor })
+      const r = await bcraDelPanel({ clienteId: String(req.query.cliente || ''), cuit: String(req.query.cuit || ''), usuario: [perfil.user, perfil.email] }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'clientes-panel') {

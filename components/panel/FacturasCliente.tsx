@@ -10,10 +10,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select } from '@/components/ui'
 import { color, font } from '@/components/ui/tokens'
 import {
-  emitirPartePanel, enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, leerFacturasClientePanel, leerPadronPanel, proponerPartePanel,
-  type EstadoParte, type FacturaDelPanel, type FiscalDelPanel, type RenglonParte,
+  emitirPartePanel, enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, leerBcraCuit, leerFacturasClientePanel, leerPadronPanel, proponerPartePanel,
+  type BcraDelPanel, type EstadoParte, type FacturaDelPanel, type FiscalDelPanel, type RenglonParte,
 } from '@/lib/erp/cliente'
 import { parsearMonto } from '@/lib/compromisos/plata.core.js'
+import { ResumenBcra } from './Bcra'
 
 /** El PDF (jsPDF + QR) se carga recién al pedirlo: ⛔ entra al paquete del panel. */
 export const descargarFactura = async (f: FacturaDelPanel) => (await import('@/lib/arca/factura-pdf')).descargarFactura(f)
@@ -187,10 +188,13 @@ function CamposFiscales({ fiscal, f }: { fiscal: FiscalDelPanel; f: ReturnType<t
   const esA = esCondicionA(f.condicion)
   const [buscando, setBuscando] = useState(false)
   const [padron, setPadron] = useState<{ tono: 'ok' | 'aviso'; texto: string } | null>(null)
+  const [bcra, setBcra] = useState<BcraDelPanel | 'cargando' | null>(null)
   const cuit = f.doc.replace(/\D/g, '')
   // El padrón de ARCA llena razón social, condición y domicilio; quedan corregibles. Si ARCA no contesta, se tipea como siempre.
   const buscarEnArca = async () => {
-    setBuscando(true); setPadron(null)
+    setBuscando(true); setPadron(null); setBcra('cargando')
+    // El BCRA del mismo CUIT, al lado: si falla, ⛔ tapa lo de ARCA.
+    leerBcraCuit(cuit).then(setBcra, () => setBcra(null))
     try {
       const p = await leerPadronPanel(cuit)
       if (!p.prendido) { setPadron({ tono: 'aviso', texto: 'La búsqueda en ARCA está apagada: completalo a mano.' }); return }
@@ -214,11 +218,12 @@ function CamposFiscales({ fiscal, f }: { fiscal: FiscalDelPanel; f: ReturnType<t
       </Field>
       <Field label={esA ? 'CUIT' : 'CUIT o DNI (opcional)'}>
         <div style={{ display: 'flex', gap: 6 }}>
-          <Input value={f.doc} inputMode="numeric" onChange={(e) => { f.setDoc(e.target.value); setPadron(null) }} />
+          <Input value={f.doc} inputMode="numeric" onChange={(e) => { f.setDoc(e.target.value); setPadron(null); setBcra(null) }} />
           <Button size="sm" variant="outline" disabled={cuit.length !== 11 || buscando} onClick={buscarEnArca}>{buscando ? 'Buscando…' : 'Buscar en ARCA'}</Button>
         </div>
       </Field>
       {padron && <Notice tone={padron.tono === 'ok' ? 'success' : 'warning'}>{padron.texto}</Notice>}
+      {bcra && <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}><ResumenBcra r={bcra} /></div>}
       <Field label={esA ? 'Razón social' : 'Razón social (opcional)'}><Input value={f.razonSocial} maxLength={120} onChange={(e) => f.setRazonSocial(e.target.value)} /></Field>
       <Field label={esA ? 'Domicilio' : 'Domicilio (opcional)'}><Input value={f.domicilio} maxLength={200} onChange={(e) => f.setDomicilio(e.target.value)} /></Field>
       {f.condicion && <div style={{ fontSize: font.sm, color: color.mut2 }}>Sale factura {esA ? 'A' : 'B'}.</div>}

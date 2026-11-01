@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
  * condición y domicilio (corregibles); si ARCA falla, lo dice y los campos quedan como estaban para tipearlos.
  */
 const cliente = vi.hoisted(() => ({
-  leerFacturasClientePanel: vi.fn(), leerPadronPanel: vi.fn(), facturarPedidoPanel: vi.fn(), facturaLibrePanel: vi.fn(),
+  leerFacturasClientePanel: vi.fn(), leerPadronPanel: vi.fn(), leerBcraCuit: vi.fn(), facturarPedidoPanel: vi.fn(), facturaLibrePanel: vi.fn(),
   emitirPartePanel: vi.fn(), proponerPartePanel: vi.fn(), enviarFacturaPanel: vi.fn(),
 }))
 vi.mock('@/lib/erp/cliente', () => cliente)
@@ -46,9 +46,12 @@ describe('«Buscar en ARCA»', () => {
     await escribir(doc, '30-71850818-1')
     expect(boton('Buscar en ARCA')!.disabled).toBe(false)
     cliente.leerPadronPanel.mockResolvedValue({ prendido: true, cuit: '30718508181', razonSocial: 'AREBEN COMERCIAL S.R.L.', condicion: 'ri', domicilio: 'CORRIENTES 763, ROSARIO (2000), SANTA FE', estadoClave: 'ACTIVO', avisos: [] })
+    cliente.leerBcraCuit.mockResolvedValue({ prendido: true, cuit: '30718508181', ok: true, denominacion: null, periodo: '202609', peor: 1, deuda: 0, bancos: [], historia: null, peor12: null, cheques: null })
     await act(async () => { boton('Buscar en ARCA')!.click() })
     await esperar()
     expect(cliente.leerPadronPanel).toHaveBeenCalledWith('30718508181')
+    expect(cliente.leerBcraCuit).toHaveBeenCalledWith('30718508181')
+    expect(document.body.textContent).toContain('Sin deudas en bancos')
     const [, razon, dom] = inputs()
     expect(razon.value).toBe('AREBEN COMERCIAL S.R.L.')
     expect(dom.value).toBe('CORRIENTES 763, ROSARIO (2000), SANTA FE')
@@ -61,6 +64,7 @@ describe('«Buscar en ARCA»', () => {
     await escribir(inputs()[0], '30718508181')
     await escribir(inputs()[1], 'Lo que tipeó')
     cliente.leerPadronPanel.mockRejectedValue(new Error('ARCA dice: No existe persona con ese Id'))
+    cliente.leerBcraCuit.mockRejectedValue(new Error('No se pudo consultar el BCRA.'))
     await act(async () => { boton('Buscar en ARCA')!.click() })
     await esperar()
     expect(inputs()[1].value).toBe('Lo que tipeó')
