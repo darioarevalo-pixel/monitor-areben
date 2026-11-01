@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi, afterAll } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { MesFacturacion } from '@/lib/erp/cliente'
@@ -57,6 +57,11 @@ const boton = (t: RegExp) => [...host.querySelectorAll('button')].find((b) => t.
 const filas = () => [...host.querySelectorAll('[role="row"]')].map((r) => r.textContent ?? '')
 const clic = async (el: Element) => { await act(async () => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })) }); await act(async () => {}) }
 const vista = (t: RegExp) => [...host.querySelectorAll('[role="tab"]')].find((b) => t.test(b.textContent ?? ''))!
+
+// 🔑 La pantalla abre en el mes de HOY: sin fijar el reloj, estos tests caían el 1-nov (los datos son de octubre). Sólo `Date`: los
+// timers siguen reales para que testing-library espere.
+beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-20T15:00:00Z') }) })
+afterAll(() => { vi.useRealTimers() })
 
 describe('ERP › Facturación con el molde', () => {
   it('mirando Stunned: sólo sus ventas y facturas (⛔ las de Zattia), y el lote va con la línea y su punto de venta (Bruno, 30-oct)', async () => {
