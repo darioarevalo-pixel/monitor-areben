@@ -10,11 +10,15 @@ import { createRoot, type Root } from 'react-dom/client'
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const cambiarVenta = vi.fn()
+const verificarPin = vi.fn(async (..._a: unknown[]) => ({ ok: true, persona: 'ana' }))
+const leerSaldo = vi.fn(async (..._a: unknown[]) => ({ cliente: null, saldo: 0 }))
+const leerVentaGnCambio = vi.fn()
 vi.mock('@/lib/erp/cliente', async (orig) => ({
   ...(await orig<typeof import('@/lib/erp/cliente')>()),
   cambiarVenta: (...a: unknown[]) => cambiarVenta(...a),
-  verificarPin: vi.fn(async () => ({ ok: true, persona: 'ana' })),
-  leerSaldo: vi.fn(async () => ({ cliente: null, saldo: 0 })),
+  verificarPin: (...a: unknown[]) => verificarPin(...a),
+  leerSaldo: (...a: unknown[]) => leerSaldo(...a),
+  leerVentaGnCambio: (...a: unknown[]) => leerVentaGnCambio(...a),
 }))
 
 const { useCambio, ventaDeGn, ventaDeFicha, claveDePrenda } = await import('@/components/caja/useCambio')
@@ -25,12 +29,12 @@ const JEAN = { product_id: 9, size_id: 4, product_name: 'Jean', size_name: '40',
 const OTRA_STU = { product_id: 8, size_id: 3, product_name: 'Buzo', size_name: 'M', sku: 'STU-BUZ-M', barcode: null }
 const GN = {
   venta: { id: '30930', numero: '30930', fecha: '2026-09-01T12:00:00Z', cliente: 'Ana', prueba: true },
-  lineas: [{ product_id: 7, size_id: 3, sku: 'STU-REM-M', nombre: 'Remera', talle: 'M', cantidad: 2, precio: 15000, cambiado: 0 }],
+  lineas: [{ product_id: 7, size_id: 3, sku: 'STU-REM-M', nombre: 'Remera', talle: 'M', cantidad: 2, precio: 15000, cambiado: 0, linea: 'stunned' }],
 }
 
 let h: Cambio
-function Harness({ prueba = true, alCambio }: { prueba?: boolean; alCambio: (c: Cambio) => void }) {
-  const c = useCambio({ store: 'zattia', config: { stunned_erp: true, stunned_prueba: prueba, reglas: null, politica_cambio: null } as never, precioDe: () => 15000, esStunned: (v) => String(v.sku).startsWith('STU') })
+function Harness({ store = 'zattia', erpLineas = ['stunned'], alCambio }: { store?: 'zattia' | 'bdi'; erpLineas?: string[]; alCambio: (c: Cambio) => void }) {
+  const c = useCambio({ store, config: { erp_lineas: erpLineas, reglas: null, politica_cambio: null } as never, precioDe: () => 15000, esStunned: (v) => String(v.sku).startsWith('STU') })
   useEffect(() => alCambio(c))
   return null
 }
@@ -47,7 +51,7 @@ afterEach(() => {
   act(() => raiz.unmount())
   document.body.innerHTML = ''
 })
-const montar = () => act(async () => raiz.render(<Harness alCambio={(c) => { h = c }} />))
+const montar = (o: { store?: 'zattia' | 'bdi'; erpLineas?: string[] } = {}) => act(async () => raiz.render(<Harness {...o} alCambio={(c) => { h = c }} />))
 const hacer = (fn: () => void) => act(async () => void fn())
 const error = (fn: () => void) => { try { fn() } catch (e) { return (e as Error).message } return null }
 
@@ -61,9 +65,36 @@ describe('cambio suelto · devolver', () => {
     expect(h.vuelve).toBe(30000)
   })
 
-  it('🔴 sin venta sólo se devuelve Stunned', async () => {
+  it('🔴 sin venta se devuelve sólo lo de una línea que ya cortó (hoy, Stunned): Zattia todavía cambia en Gestión Nube', async () => {
     await montar()
-    expect(error(() => h.devolverPrenda(JEAN))).toMatch(/Stunned/)
+    expect(error(() => h.devolverPrenda(JEAN))).toBe('Los cambios de Zattia sin venta del ERP todavía se hacen en Gestión Nube.')
+  })
+
+  it('🔑 después del corte de Zattia: su prenda se devuelve suelta, y lo que se lleva es de Zattia (⛔ Stunned)', async () => {
+    await montar({ erpLineas: ['stunned', 'zattia'] })
+    await hacer(() => h.devolverPrenda(JEAN))
+    expect(h.devueltas).toMatchObject([{ productId: 9, linea: 'zattia' }])
+    expect(h.lineaDelCambio).toBe('zattia')
+    expect(error(() => h.devolverPrenda(REMERA))).toMatch(/mezcla productos de Zattia y de Stunned/)
+    expect(error(() => h.sumarNueva(OTRA_STU))).toBe('Lo que se lleva tiene que ser de Zattia: un cambio es de una sola marca.')
+  })
+
+  it('🔑 BDI después de su corte: sin ticket, el PIN y el saldo van a la base de BDI con la línea bdi, y es REAL', async () => {
+    await montar({ store: 'bdi', erpLineas: ['bdi'] })
+    const BUZO = { ...JEAN, product_id: 70, sku: 'B-70' }
+    await hacer(() => h.devolverPrenda(BUZO))
+    expect(h.deEnsayo).toBe(false)
+    await hacer(() => h.setEncargada({ persona: 'ana', pin: '1234' }))
+    await act(async () => { await h.probarPin() })
+    expect(verificarPin).toHaveBeenLastCalledWith('ana', '1234', 'bdi')
+    await hacer(() => h.setClienta({ doc: '30111222', nombre: 'Ana', whatsapp: '' }))
+    await act(async () => { await h.buscarSaldo() })
+    expect(leerSaldo).toHaveBeenLastCalledWith('bdi', '30111222', false, 'bdi')
+  })
+
+  it('BDI antes de su corte: sin ticket ⛔', async () => {
+    await montar({ store: 'bdi', erpLineas: [] })
+    expect(error(() => h.devolverPrenda({ ...JEAN, sku: 'B-70' }))).toBe('Los cambios de BDI sin venta del ERP todavía se hacen en Gestión Nube.')
   })
 
   it('🔴 con la venta de Gestión Nube ⛔ se devuelve de más ni lo que no compró (contando lo ya cambiado)', async () => {
@@ -193,8 +224,23 @@ describe('cambio · buscar la venta', () => {
     const venta = (id: string, marca: string) => ({ id, numero: Number(id), marca, tipo: 'venta', estado: 'confirmada', origen: 'caja', canal: 'local', deposito: 'local', total: 1000, prueba: true, ocurridaEn: '2026-10-27T12:00:00Z', cliente: null })
     vi.spyOn(cliente, 'buscarVentas').mockResolvedValue({ ventas: [venta('1', 'zattia'), venta('2', 'stunned')], cortado: false } as never)
     const { buscarVentasDelCambio } = await import('@/components/caja/useCambio')
-    expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true, linea: 'stunned' })).filas.map((f) => f.numero)).toEqual([2])
-    expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true, linea: 'zattia' })).filas.map((f) => f.numero)).toEqual([1])
+    expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true, lineas: ['stunned'] })).filas.map((f) => f.numero)).toEqual([2])
+    expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true, lineas: ['zattia'] })).filas.map((f) => f.numero)).toEqual([1])
     expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true })).filas.map((f) => f.numero)).toEqual([1, 2])
+  })
+})
+
+describe('cambio · la venta de Gestión Nube por las líneas que ya cortaron', () => {
+  it('se pide a la base de la Caja y quedan sólo los productos de las líneas pedidas', async () => {
+    const cliente = await import('@/lib/erp/cliente')
+    vi.spyOn(cliente, 'buscarVentas').mockResolvedValue({ ventas: [], cortado: false } as never)
+    leerVentaGnCambio.mockResolvedValue({ ...GN, lineas: [GN.lineas[0], { ...GN.lineas[0], product_id: 9, sku: 'ZAT-JEAN-40', linea: 'zattia' }] })
+    const { buscarVentasDelCambio } = await import('@/components/caja/useCambio')
+    const r = await buscarVentasDelCambio('zattia', '30930', { gn: true, lineas: ['stunned'] })
+    expect(leerVentaGnCambio).toHaveBeenLastCalledWith('30930', 'zattia')
+    expect((await r.filas[0].abrir()).vendidas.map((v) => [v.productId, v.linea])).toEqual([[7, 'stunned']])
+    // con una línea que la venta ⛔ tiene: el aviso lo dice
+    leerVentaGnCambio.mockResolvedValue({ ...GN, lineas: [{ ...GN.lineas[0], linea: 'stunned' }] })
+    expect((await buscarVentasDelCambio('zattia', '30930', { gn: true, lineas: ['zattia'] })).aviso).toBe('La venta 30930 de Gestión Nube no tiene productos de Zattia.')
   })
 })

@@ -52,13 +52,19 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   qué cuenta como pago allá cambia qué confirma una venta acá.
 
 ## Reglas que el código no dice
-- 🔑 **El CAMBIO de Stunned en el POS (modo «⇄ Cambios», Bruno, 27-oct)**: botón en la cabecera (sólo con `stunned_erp` = Stunned en `erp_lineas`), banda con
+- 🔑 **El CAMBIO en el POS (modo «⇄ Cambios», Bruno, 27-oct; nació para Stunned)**: botón en la cabecera (con alguna línea en `erp_lineas`), banda con
   «1 Lo que devuelve ▸ 2 Lo que se lleva». **Todo el estado y las cuentas viven en `components/caja/useCambio.ts`**, el MISMO que usa
   erp › Caja › Cambio (`CambioCaja.tsx`): ⛔ copiar reglas ahí. Tres orígenes de lo devuelto: venta del ERP, venta de Gestión Nube
   (`vista=venta-gn-cambio`: el servidor pone lo pagado) y **sin ticket** (precio de la cajera + PIN de la encargada, que el servidor
   verifica ⛔ armado en el navegador). Con venta, `exigirDevolucion` frena devolver de más contando lo ya cambiado; el total se calcula
-  en el paso 2 (en el paso 1 el pie sólo dice «Devuelve»). El saldo de la clienta se lee con `linea=stunned`, y el modo (prueba o
-  real) lo da la venta, o `config.stunned_prueba` sin venta. Las piezas de pantalla: `partesCambio.tsx`. Tests: `caja-cambio-suelto`, `caja-pos-cambios`.
+  en el paso 2 (en el paso 1 el pie sólo dice «Devuelve»). El saldo de la clienta se lee con la línea del cambio (`lineaDelCambio`), y el modo
+  (prueba o real) lo da la venta del ERP; venta de GN y sin ticket son siempre REALES.
+  🔴🔑 **Venta de GN y sin ticket van POR EL CORTE de la línea (`erp_corte`), ⛔ «sólo Stunned» con `CAJA_STUNNED_PRUEBA`** (tanda 2 de
+  la Caja por corte, 1-nov): la marca del cambio = la línea de lo devuelto Y de lo que se lleva, **del PRODUCTO** (`lineasDePrendas`,
+  la misma que la venta), permitido sólo si cortó (`marcaDelCambio`, `lib/caja/corte-caja.core.js`); `prueba: false`. Así BDI cambia
+  desde el 15/16-nov una prenda comprada en GN antes del corte (30 días de política). `venta-gn-cambio` deja sólo los productos de
+  las líneas cortadas de esa base, cada uno con su `linea`; el «ya cambiado» se cuenta por esas líneas y sólo lo real. Mezclado ⇒ 400.
+  La pantalla pide con `erp_lineas` (y el PIN, el saldo y la venta de GN, con la base de la Caja). Tests: `erp-cambio-corte`. Las piezas de pantalla: `partesCambio.tsx`. Tests: `caja-cambio-suelto`, `caja-pos-cambios`.
   🔑 **El cambio es a precio de LISTA, a los dos lados** (Bruno, 28-oct): de una venta de GN, `listaEnGN` (`unit_price`, ⛔ lo
   pagado con el descuento del efectivo); de una del ERP, el importe de la línea (el descuento de la forma de pago va en los pagos).
   🔑 **Al registrarse sale el COMPROBANTE con el MOLDE DEL TICKET DE VENTA** (Bruno, 28-oct): `useCambio` lo arma

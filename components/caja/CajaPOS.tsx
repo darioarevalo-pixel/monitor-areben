@@ -413,7 +413,7 @@ function POS() {
     [datos],
   )
 
-  // ── El modo «Cambios» (Bruno, 27-oct): el cambio de Stunned en el POS. El estado y las cuentas viven en `useCambio`
+  // ── El modo «Cambios» (Bruno, 27-oct): el cambio de las líneas que ya cortaron, en el POS. El estado y las cuentas viven en `useCambio`
   // (el mismo que usa erp › Caja › Cambio); acá sólo se decide en qué paso está y qué se muestra. ──
   const cambio = useCambio({ store: storeCaja() as MarcaErp, config, precioDe: (v) => precioDeProducto(v.product_id)?.precio ?? null, esStunned: esStunnedVariante })
   const [enCambio, setEnCambio] = useState(false)
@@ -1694,8 +1694,8 @@ pendientes
           >
             <Icono nombre={conSonido ? 'sonido' : 'silencio'} size={18} />
           </button>
-          {/* El cambio de Stunned (Bruno, 27-oct): sólo con Stunned vendiendo por el ERP. */}
-          {config?.stunned_erp && (
+          {/* El cambio en el POS (Bruno, 27-oct): con alguna línea de esta Caja vendiendo por el ERP (`erp_lineas`, su corte). */}
+          {(config?.erp_lineas?.length ?? 0) > 0 && (
             <button type="button" className="pos-tbtn" onClick={() => (enCambio ? salirDelCambio() : (cambio.setError(null), setEnCambio(true)))} aria-pressed={enCambio} style={{ height: 36 }}>
               ⇄ Cambios
             </button>

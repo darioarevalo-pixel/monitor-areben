@@ -291,23 +291,24 @@ export const buscarClientas = (marca: MarcaErp, q: string, linea?: 'zattia' | 's
   pedir<{ clientas: Clienta[] }>(null, `&vista=clientas&marca=${marca}&q=${encodeURIComponent(q)}${linea ? `&linea=${linea}` : ''}`, 'No se pudo buscar la clienta.')
 
 /** El saldo a favor de una clienta en el libro de la venta que se cambia (`prueba` de esa venta). */
-export const leerSaldo = (marca: MarcaErp, doc: string, prueba = true, linea?: 'stunned') =>
+export const leerSaldo = (marca: MarcaErp, doc: string, prueba = true, linea?: string) =>
   pedir<{ cliente: { nombre: string } | null; saldo: number }>(null, `&vista=saldo&marca=${marca}&doc=${encodeURIComponent(doc)}&prueba=${prueba ? 1 : 0}${linea ? `&linea=${linea}` : ''}&nc=${Date.now()}`, 'No se pudo leer el saldo.')
 
 /**
- * Una venta de Gestión Nube para el cambio SUELTO de Stunned (`vista=venta-gn-cambio`): sólo sus productos, con lo que se pagó por
- * unidad (el servidor lo pone desde el espejo) y cuántos ya se cambiaron. `id` = el id o el número de la venta.
+ * Una venta de Gestión Nube para el cambio SUELTO (`vista=venta-gn-cambio`): sólo los productos de las líneas de esa base que ya
+ * cortaron (`erp_corte`), cada uno con su `linea`, lo que se pagó por unidad (el servidor lo pone desde el espejo) y cuántos ya se
+ * cambiaron. `id` = el id o el número de la venta.
  */
 export type VentaGnCambio = {
   venta: { id: string; numero: string | number; fecha: string | null; cliente: string | null; prueba: boolean }
-  lineas: Array<{ product_id: number; size_id: number; sku: string | null; nombre: string | null; talle: string | null; cantidad: number; precio: number; cambiado: number }>
+  lineas: Array<{ product_id: number; size_id: number; sku: string | null; nombre: string | null; talle: string | null; cantidad: number; precio: number; cambiado: number; linea: string }>
 }
-export const leerVentaGnCambio = (id: string) =>
-  pedir<VentaGnCambio>(null, `&vista=venta-gn-cambio&marca=zattia&id=${encodeURIComponent(id)}&nc=${Date.now()}`, 'No se pudo leer la venta de Gestión Nube.')
+export const leerVentaGnCambio = (id: string, marca: MarcaErp) =>
+  pedir<VentaGnCambio>(null, `&vista=venta-gn-cambio&marca=${marca}&id=${encodeURIComponent(id)}&nc=${Date.now()}`, 'No se pudo leer la venta de Gestión Nube.')
 
 /** El PIN de la encargada, probado antes de seguir (el cambio sin ticket); el servidor lo vuelve a verificar al confirmar. */
-export const verificarPin = (persona: string, pin: string) =>
-  pedir<{ ok: true; persona: string }>(post({ accion: 'verificar-pin', marca: 'zattia', persona, pin }), '', 'No se pudo probar el PIN.')
+export const verificarPin = (persona: string, pin: string, marca: MarcaErp) =>
+  pedir<{ ok: true; persona: string }>(post({ accion: 'verificar-pin', marca, persona, pin }), '', 'No se pudo probar el PIN.')
 
 export type ClienteCambio = { doc: string; nombre: string; whatsapp?: string | null; email?: string | null }
 export type CruceCambio = { estado: string; motivo?: string }

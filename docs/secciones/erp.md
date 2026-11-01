@@ -486,6 +486,9 @@ mes pasado** (`desdeBusquedaDeVentas`): son los dos períodos que Ventas puede l
 factura (`TN-…`, `B-0005-…`) ⛔ tienen lectura por número ⇒ no se buscan (el cartel lo dice). «Buscar en todas las marcas» corre las
 lecturas en BDI y Zattia. Enter abre: la prenda en `FichaPrenda` encima de lo que hay; la venta/cliente viajan en memoria (`pedidoDeBusqueda`, a nivel de módulo: `Erp` se REMONTA al cambiar de sección y un `useState` se perdía) y `VentasErp`/`ClientesErp` la abren al llegar su lista (`abrir`/`alAbrir`). Un escaneo (8+ cifras) + Enter espera la lectura y
 abre si hay UNA sola coincidencia. Un cliente sin documento (los de GN) se abre por NOMBRE: ⛔ comparar `doc` nulos. «?» abre la hoja de atajos (`ATAJOS`; los de la Caja, F2/F4, ⛔ se tocan).
+- 🔑 **Ventas › Cargar venta (`api/_erp-cargar.js`): real o de prueba por el CORTE de la línea elegida** (`erp_corte`, la misma
+lectura con caché que la Caja, `cortesDeCaja`), ⛔ `ERP_STUNNED_PRUEBA` (1-nov). Sin poder leer los cortes ⇒ 503 y ⛔ se guarda.
+Se mira el corte AHORA, ⛔ en la fecha cargada (`ocurrida_en`): una venta de antes del corte cargada después sale real.
 
 ## Pendiente
 

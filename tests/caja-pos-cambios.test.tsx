@@ -18,7 +18,8 @@ vi.stubGlobal('localStorage', {
 
 const sesion = { perfil: { name: 'Sofi', email: 'sofi@zattia.com', admin: false, acceso: { zattia: { caja: true } } } as Record<string, unknown>, marca: 'zattia', setMarca: vi.fn() }
 const TURNO = { id: 't1', abierto_en: '2026-10-05T12:00:00.000Z', abierto_por: 'Sofi', abierto_por_usuario: 'sofi@zattia.com', fondo: 50000, cerrado_en: null, cerrado_por: null, contado: null, esperado: null, nota: null }
-let stunnedErp = true
+/** Las líneas de la Caja que ya venden por el ERP (`config.erp_lineas`, por su corte). */
+let erpLineas: string[] = ['stunned']
 const REMERA = { product_id: 7, size_id: 3, product_name: 'Remera', size_name: 'M', sku: 'STU-REM-M', barcode: null }
 
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => sesion }))
@@ -37,7 +38,7 @@ vi.mock('@/lib/erp/cliente', async (orig) => ({
 }))
 vi.mock('@/lib/caja/cliente', async (orig) => ({
   ...(await orig<typeof import('@/lib/caja/cliente')>()),
-  leerConfig: vi.fn(async () => ({ stunned_erp: stunnedErp, reglas: { redondeo: 100, cuentas: {} }, politica_cambio: null })),
+  leerConfig: vi.fn(async () => ({ erp_lineas: erpLineas, reglas: { redondeo: 100, cuentas: {} }, politica_cambio: null })),
   leerTurno: vi.fn(async () => ({ turno: TURNO, ultimos: [] })),
   leerPendientes: vi.fn(async () => ({ ventas: [] })),
   leerPedidosWeb: vi.fn(async () => ({ pedidos: [], porSku: {}, noLeidas: 0, leidoEn: new Date().toISOString() })),
@@ -51,7 +52,7 @@ const { CajaPOS } = await import('@/components/caja/CajaPOS')
 let raiz: Root
 beforeEach(() => {
   disco.clear()
-  stunnedErp = true
+  erpLineas = ['stunned']
   const el = document.createElement('div')
   document.body.appendChild(el)
   raiz = createRoot(el)
@@ -81,8 +82,8 @@ async function escanear(codigo: string) {
 }
 
 describe('POS · modo «Cambios»', () => {
-  it('🔑 el botón «⇄ Cambios» sale sólo con Stunned vendiendo por el ERP', async () => {
-    stunnedErp = false
+  it('🔑 el botón «⇄ Cambios» sale sólo con alguna línea de la Caja vendiendo por el ERP (su corte)', async () => {
+    erpLineas = []
     await montar()
     expect(boton('Cambios')).toBeUndefined()
   })

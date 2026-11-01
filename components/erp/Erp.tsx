@@ -252,16 +252,18 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   }, [bloqueada, otra, seccion.key, pestania, router])
   // Las vistas ocultas (Facturar una venta) ⛔ son pestaña; Con Gestión Nube ⛔ para Stunned (ya ⛔ tiene GN).
   const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !(transferenciaEnErp && v.key === 'mover') && !(lineaVista === 'stunned' && v.key === 'diferencias'))
-  // 🔑 El cartel de «modo paralelo» era fijo: después del corte de Stunned (`CAJA_STUNNED_ERP=1`) seguiría diciendo que GN sirve.
+  // 🔑 El cartel de «modo paralelo» era fijo: después del corte de una línea seguiría diciendo que GN sirve. Se va con el corte de
+  // la línea que se mira (`erp_lineas` de la Caja de su base: Stunned 28-oct, BDI 15/16-nov, Zattia 23-nov).
   // Si la configuración no se puede leer queda el texto de siempre (el prudente).
-  const [stunnedReal, setStunnedReal] = useState(false)
+  const lineaDelCartel = lineaVista || 'bdi'
+  const [cortada, setCortada] = useState<string | null>(null)
   useEffect(() => {
-    if (lineaVista !== 'stunned') return
     let vivo = true
-    usarMarcaCaja('zattia')
-    leerConfig().then((c) => { if (vivo) setStunnedReal(!!c.stunned_erp) }).catch(() => {})
+    usarMarcaCaja(marca === 'bdi' ? 'bdi' : 'zattia')
+    leerConfig().then((c) => { if (vivo) setCortada(c.erp_lineas?.includes(lineaDelCartel) ? lineaDelCartel : null) }).catch(() => {})
     return () => { vivo = false }
-  }, [lineaVista])
+  }, [lineaDelCartel, marca])
+  const lineaEnErp = cortada === lineaDelCartel
   // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
   const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia', lineaVista)
   const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : (soloStunned ? [] : [{ key: 'zattia', titulo: 'Zattia' } as Opcion]).concat({ key: 'stunned', titulo: 'Stunned' }))
@@ -391,7 +393,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
         <div className="shell-content">
           <div className="seccion-pad" style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
             {/* 🎯 Bruno 30-oct: el cartel de Stunned «ya vende por el ERP» sobraba. Queda sólo donde Gestión Nube sigue siendo el que sirve. */}
-            {seccion.key !== 'inicio' && !(lineaVista === 'stunned' && stunnedReal) && (
+            {seccion.key !== 'inicio' && !lineaEnErp && (
               <p style={{ margin: 0, padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4, borderLeft: `3px solid ${COLOR_DE_MARCA[opcionActiva]}` }}>
                 {`${lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy.`}
               </p>

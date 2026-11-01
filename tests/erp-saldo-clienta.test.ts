@@ -74,5 +74,10 @@ describe('saldoDeClienta · Stunned', () => {
     expect(await saldoDeClienta({ marca: 'zattia', doc: '30111222', linea: 'stunned' })).toEqual({ cliente: { nombre: 'Ana' }, saldo: 1200 })
     expect(await saldoDeClienta({ marca: 'bdi', doc: '30111222', linea: 'stunned' })).toMatchObject({ status: 400 })
     expect(await saldoDeClienta({ marca: 'zattia', doc: '30111222', linea: 'otra' })).toMatchObject({ status: 400 })
+    // Cada línea de SU base (BDI desde su corte cambia con `linea=bdi`); Zattia con `linea=bdi`, 400.
+    filas.marca = [{ id: 'bdi', empresa_id: 'e-areben' }]
+    filas.saldo_favor = [{ cliente_id: 'c1', marca: 'bdi', prueba: false, saldo: 700 }]
+    expect(await saldoDeClienta({ marca: 'bdi', doc: '30111222', linea: 'bdi', prueba: false })).toEqual({ cliente: { nombre: 'Ana' }, saldo: 700 })
+    expect(await saldoDeClienta({ marca: 'zattia', doc: '30111222', linea: 'bdi' })).toMatchObject({ status: 400 })
   })
 })

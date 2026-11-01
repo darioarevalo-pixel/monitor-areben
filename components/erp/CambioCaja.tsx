@@ -9,12 +9,14 @@
  * su precio (`precioDeCaja`: etiqueta o feria; Stunned, su Tienda Nube), el importe (`renglones`) y la regla de
  * la prenda repetida (`exigirDevolucion`). El día del corte de GN esto se muda al POS.
  * 🔑 Hasta el corte es de PRUEBA: ⛔ mueve el stock ni sale a GN (el local sigue cambiando en GN).
- * 🔑 Stunned (Bruno, 27-oct) tiene dos caminos más, sin venta del ERP: la venta de Gestión Nube (se busca por número) y el cambio
+ * 🔑 La línea que ya vende por el ERP (su corte: Stunned 28-oct, BDI 15/16-nov, Zattia 23-nov) tiene dos caminos más, sin venta del
+ * ERP (Bruno, 27-oct): la venta de Gestión Nube (se busca por número) y el cambio
  * sin ticket, que autoriza la encargada con su PIN. Todo el estado y las cuentas viven en `components/caja/useCambio.ts`, el MISMO
  * que usa el modo «Cambios» del POS.
  */
 
 import { useTiendaErp } from '@/lib/erp/linea-erp'
+import { ETIQUETA_LINEA, type Linea } from '@/lib/lineas'
 import { useEffect, useState } from 'react'
 import {
   Badge, Button, EmptyState, Field, Input, MoneyText, Notice, NumberField, PasoCantidad, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, space,
@@ -43,8 +45,8 @@ export function CambioCaja() {
   // Stunned cobra SU Tienda Nube (Bruno, 16-oct): su índice, como la Caja (`lib/caja/precio.ts`).
   const tnIdxStunned = useTnPromo(store === 'zattia' ? 'stunned' : store)
   const [config, setConfig] = useState<Config | null>(null)
-  // 🔑 Los dos caminos sin venta del ERP son del cambio de Stunned, mientras vende por el ERP (`CAJA_STUNNED_ERP`).
-  const conStunned = !!config?.stunned_erp
+  // 🔑 Los dos caminos sin venta del ERP son de la línea de la tienda del menú que ya vende por el ERP (`erp_lineas`, su corte).
+  const conCorte = !!config?.erp_lineas?.includes(tienda)
 
   /** El precio de la prenda con la MISMA regla de la Caja (`precioDeCaja`): Zattia etiqueta o feria; Stunned, su Tienda Nube. */
   const precioDe = (v: Variante): number | null => {
@@ -73,7 +75,7 @@ export function CambioCaja() {
   const buscar = () => c.correr(async () => {
     c.empezarDeNuevo()
     c.setHecho(null)
-    const r = await buscarVentasDelCambio(store, q, { gn: conStunned, linea: tienda === 'bdi' ? undefined : tienda })
+    const r = await buscarVentasDelCambio(store, q, { gn: conCorte, lineas: tienda === 'bdi' ? undefined : [tienda] })
     setVentas(r.filas)
     setAviso(r.aviso)
   }, 'No se pudo buscar.')
@@ -113,6 +115,8 @@ export function CambioCaja() {
   const deEnsayo = venta ? c.deEnsayo : (ventas ?? []).some((v) => v.prueba)
   const ventaDeGn = origen?.tipo === 'gn' ? origen : null
   const ventaErp = origen?.tipo === 'erp' ? origen : null
+  /** Cómo se llama la marca del cambio en los avisos (la de lo devuelto o, sin nada todavía, la de la tienda del menú). */
+  const marcaDelCambio = ETIQUETA_LINEA[(c.lineaDelCambio ?? tienda) as Linea] ?? tienda
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -123,14 +127,14 @@ export function CambioCaja() {
         {/* 🔑 El motor mueve el stock sólo si la venta NO es de prueba y NO tiene venta de GN (`mueveStock`, motor/venta/armar.mjs). */}
         {ventaErp && !ventaErp.prueba && !ventaErp.gnSaleId && <Notice tone="info">Venta real: el cambio mueve el stock y queda atado a la venta #{ventaErp.numero}.</Notice>}
         {ventaErp && !ventaErp.prueba && !!ventaErp.gnSaleId && <Notice tone="info">Esta venta ya está en Gestión Nube: el cambio queda atado a la venta #{ventaErp.numero} y no mueve el stock.</Notice>}
-        {ventaDeGn && !ventaDeGn.prueba && <Notice tone="info">Venta {ventaDeGn.numero} de Gestión Nube: el cambio devuelve lo que pagó y mueve el stock de Stunned en el ERP.</Notice>}
-        {tipo === 'suelto' && !deEnsayo && <Notice tone="info">Cambio sin venta: lo autoriza la encargada con su PIN y mueve el stock de Stunned en el ERP.</Notice>}
+        {ventaDeGn && !ventaDeGn.prueba && <Notice tone="info">Venta {ventaDeGn.numero} de Gestión Nube: el cambio devuelve lo que pagó y mueve el stock de {marcaDelCambio} en el ERP.</Notice>}
+        {tipo === 'suelto' && !deEnsayo && <Notice tone="info">Cambio sin venta: lo autoriza la encargada con su PIN y mueve el stock de {marcaDelCambio} en el ERP.</Notice>}
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={conStunned ? '#123, número de venta de Gestión Nube, nombre, DNI o mail' : '#123, nombre, DNI o mail'} />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={conCorte ? '#123, número de venta de Gestión Nube, nombre, DNI o mail' : '#123, nombre, DNI o mail'} />
           </Field>
           <Button type="submit" disabled={c.trabajando}>Buscar</Button>
-          {conStunned && <Button variant="outline" disabled={c.trabajando || tipo === 'suelto'} onClick={() => { c.empezarDeNuevo(); setVentas(null); c.elegirVenta({ origen: { tipo: 'suelto' }, vendidas: [] }) }}>Cambio sin venta</Button>}
+          {conCorte && <Button variant="outline" disabled={c.trabajando || tipo === 'suelto'} onClick={() => { c.empezarDeNuevo(); setVentas(null); c.elegirVenta({ origen: { tipo: 'suelto' }, vendidas: [] }) }}>Cambio sin venta</Button>}
         </form>
       </SectionCard>
 

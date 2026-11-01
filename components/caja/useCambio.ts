@@ -9,7 +9,8 @@
  *  - `erp`: una venta del ERP (la ficha); el motor ata el cambio a ella.
  *  - `gn`: una venta de Gestión Nube (la ven del espejo); el servidor pone lo que se pagó por unidad y frena devolver de más.
  *  - `suelto`: sin ticket. Lo que se pagó lo escribe la cajera y la encargada autoriza con su PIN.
- * Los dos últimos son sólo de Stunned (la base y la Caja son las de Zattia, la línea es `stunned`).
+ * Los dos últimos son de la línea que ya vende por el ERP (`config.erp_lineas`, por su corte: Stunned 28-oct, BDI 15/16-nov,
+ * Zattia 23-nov), ⛔ «sólo Stunned»: el servidor decide igual con la línea del PRODUCTO (`marcaDelCambio`). Un cambio es de UNA marca.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -19,7 +20,7 @@ import type { Config, Variante } from '@/lib/caja/cliente'
 import { buscarVentas, cambiarVenta, leerFichaDeVenta, leerSaldo, leerVentaGnCambio, verificarPin, type CruceCambio, type FichaDeVenta, type MarcaErp, type PagoMp, type VentaGnCambio } from '@/lib/erp/cliente'
 import { cobroDelCambio, diferenciaDeCambio, diferenciaDeCambioSuelto } from '@/lib/erp/venta.core.js'
 import type { ComprobanteCambio } from '@/lib/caja/ticket'
-import { esStunned as skuEsStunned } from '@/lib/lineas'
+import { ETIQUETA_LINEA, esStunned as skuEsStunned, type Linea } from '@/lib/lineas'
 
 export type MedioCambio = 'efectivo' | 'transferencia' | 'debito' | 'credito'
 export const MEDIOS_CAMBIO: MedioCambio[] = ['efectivo', 'transferencia', 'debito', 'credito']
@@ -31,13 +32,15 @@ export type Vendida = {
   cantidad: number; precio: number; cambiado: number
   /** Sólo en una venta del ERP: la línea y su importe exacto (la diferencia se cuenta con él). */
   lineaId?: string; importe?: number
+  /** Sólo en una venta de Gestión Nube: la marca del producto (la pone el servidor). */
+  linea?: string
 }
 export type Origen =
   | { tipo: 'gn'; id: string; numero: string | number; fecha: string | null; cliente: string | null; prueba: boolean }
-  | { tipo: 'erp'; ventaId: string; numero: number; cliente: string | null; prueba: boolean; gnSaleId: string | null; stunned: boolean }
+  | { tipo: 'erp'; ventaId: string; numero: number; cliente: string | null; prueba: boolean; gnSaleId: string | null; marca: string }
   | { tipo: 'suelto' }
 export type VentaOriginal = { origen: Origen; vendidas: Vendida[] }
-export type Devuelta = { clave: string; productId: number; sizeId: number; sku: string | null; nombre: string; talle: string; cantidad: number; precio: number | ''; lineaId?: string }
+export type Devuelta = { clave: string; productId: number; sizeId: number; sku: string | null; nombre: string; talle: string; cantidad: number; precio: number | ''; lineaId?: string; /** La marca (cambio suelto). */ linea?: string }
 export type Nueva = { variante: Variante; cantidad: number; precio: number | '' }
 export type Hecho = { numero: number; cobrado: number; aFavor: number; saldo: number | null; ncPendiente: boolean; /** Para imprimir (y reimprimir) el comprobante del cambio. */ comprobante: ComprobanteCambio }
 export type Espera = { desde: string; monto: number; cruce: CruceCambio; recientes: PagoMp[] }
@@ -45,11 +48,11 @@ export type Espera = { desde: string; monto: number; cruce: CruceCambio; recient
 const nuevoId = () => crypto.randomUUID()
 export const claveDePrenda = (productId: number, sizeId: number) => `${productId}_${sizeId}`
 
-/** Una venta de Gestión Nube (la vista `venta-gn-cambio`): lo que vendió de Stunned y lo que se pagó por unidad. */
+/** Una venta de Gestión Nube (la vista `venta-gn-cambio`): lo que vendió de las marcas que ya cortaron y lo que se pagó por unidad. */
 export function ventaDeGn(g: VentaGnCambio): VentaOriginal & { total: number } {
   return {
     origen: { tipo: 'gn', id: g.venta.id, numero: g.venta.numero, fecha: g.venta.fecha, cliente: g.venta.cliente, prueba: g.venta.prueba },
-    vendidas: g.lineas.map((l) => ({ clave: claveDePrenda(l.product_id, l.size_id), productId: l.product_id, sizeId: l.size_id, sku: l.sku, nombre: l.nombre ?? `Producto ${l.product_id}`, talle: l.talle ?? String(l.size_id), cantidad: l.cantidad, precio: l.precio, cambiado: l.cambiado })),
+    vendidas: g.lineas.map((l) => ({ clave: claveDePrenda(l.product_id, l.size_id), productId: l.product_id, sizeId: l.size_id, sku: l.sku, nombre: l.nombre ?? `Producto ${l.product_id}`, talle: l.talle ?? String(l.size_id), cantidad: l.cantidad, precio: l.precio, cambiado: l.cambiado, linea: l.linea })),
     total: g.lineas.reduce((s, l) => s + l.precio * l.cantidad, 0),
   }
 }
@@ -57,7 +60,7 @@ export function ventaDeGn(g: VentaGnCambio): VentaOriginal & { total: number } {
 /** Una venta del ERP (su ficha): cada línea con su importe exacto y cuántas unidades ya se cambiaron. */
 export function ventaDeFicha(f: FichaDeVenta): VentaOriginal & { total: number } {
   return {
-    origen: { tipo: 'erp', ventaId: f.venta.id, numero: f.venta.numero, cliente: f.cliente?.nombre ?? null, prueba: f.venta.prueba, gnSaleId: f.venta.gnSaleId, stunned: f.venta.marca === 'stunned' },
+    origen: { tipo: 'erp', ventaId: f.venta.id, numero: f.venta.numero, cliente: f.cliente?.nombre ?? null, prueba: f.venta.prueba, gnSaleId: f.venta.gnSaleId, marca: f.venta.marca },
     vendidas: f.lineas.filter((l) => l.cantidad > 0 && !l.devuelta).map((l) => ({ clave: l.id, productId: Number(l.producto), sizeId: Number(l.talle), sku: l.sku, nombre: l.nombre ?? `Producto ${l.producto}`, talle: l.talleNombre ?? l.talle, cantidad: l.cantidad, precio: Math.round((l.importe / l.cantidad) * 100) / 100, cambiado: l.cambiado, lineaId: l.id, importe: l.importe })),
     total: f.venta.total,
   }
@@ -67,18 +70,22 @@ export function ventaDeFicha(f: FichaDeVenta): VentaOriginal & { total: number }
 export type FilaVenta = { clave: string; numero: string | number; cliente: string | null; fecha: string | null; total: number; rotulo: 'ERP' | 'Gestión Nube'; prueba: boolean; abrir: () => Promise<VentaOriginal & { total: number }> }
 
 /**
- * Buscar la venta original: del ERP por número o cliente y, con `gn` (Stunned) y un número, también la de Gestión Nube con ese
- * número. `linea`: sólo las ventas de ESA línea —el POS, que sólo cambia Stunned, y la pantalla del ERP, con la tienda del menú
- * (Bruno, 30-oct: mirando Stunned ofrecía ventas de Zattia)—; sin `linea` (BDI), todas. El camino de GN es sólo de Stunned
- * (`ventaGnDeCambio` deja sus renglones). Devuelve las filas y, aparte, por qué no se encontró la de Gestión Nube (para decirlo).
+ * Buscar la venta original: del ERP por número o cliente y, con `gn` (alguna línea de `lineas` ya cortó) y un número, también la de
+ * Gestión Nube con ese número. `lineas`: sólo las ventas de ESAS líneas —el POS, con las de su Caja que ya cortaron, y la pantalla
+ * del ERP, con la tienda del menú (Bruno, 30-oct: mirando Stunned ofrecía ventas de Zattia)—; sin `lineas` (BDI), todas. De la de
+ * Gestión Nube quedan sólo los productos de esas líneas (el servidor ya dejó sólo las cortadas). Devuelve las filas y, aparte, por
+ * qué no se encontró la de Gestión Nube (para decirlo).
  */
-export async function buscarVentasDelCambio(store: MarcaErp, texto: string, { gn, linea }: { gn: boolean; linea?: 'zattia' | 'stunned' }): Promise<{ filas: FilaVenta[]; aviso: string | null }> {
+export async function buscarVentasDelCambio(store: MarcaErp, texto: string, { gn, lineas }: { gn: boolean; lineas?: readonly string[] }): Promise<{ filas: FilaVenta[]; aviso: string | null }> {
   const filas: FilaVenta[] = []
   let aviso: string | null = null
   const t = texto.trim()
-  if (gn && linea !== 'zattia' && /^\d{1,12}$/.test(t)) {
+  if (gn && /^\d{1,12}$/.test(t)) {
     try {
-      const g = ventaDeGn(await leerVentaGnCambio(t))
+      const leida = await leerVentaGnCambio(t, store)
+      const deAca = lineas ? leida.lineas.filter((l) => lineas.includes(l.linea)) : leida.lineas
+      if (!deAca.length) throw new Error(`La venta ${leida.venta.numero} de Gestión Nube no tiene productos de ${(lineas ?? []).map((l) => ETIQUETA_LINEA[l as Linea] ?? l).join(' ni de ')}.`)
+      const g = ventaDeGn({ ...leida, lineas: deAca })
       const o = g.origen as Extract<Origen, { tipo: 'gn' }>
       filas.push({ clave: `gn-${o.id}`, numero: o.numero, cliente: o.cliente, fecha: o.fecha, total: g.total, rotulo: 'Gestión Nube', prueba: o.prueba, abrir: async () => g })
     } catch (e) {
@@ -86,7 +93,7 @@ export async function buscarVentasDelCambio(store: MarcaErp, texto: string, { gn
     }
   }
   const r = await buscarVentas(store, { q: t, desde: '', hasta: '' })
-  for (const v of r.ventas.filter((x) => x.tipo === 'venta' && x.estado === 'confirmada' && (!linea || x.marca === linea))) {
+  for (const v of r.ventas.filter((x) => x.tipo === 'venta' && x.estado === 'confirmada' && (!lineas || lineas.includes(x.marca)))) {
     filas.push({ clave: `erp-${v.id}`, numero: v.numero, cliente: v.cliente, fecha: v.ocurridaEn, total: v.total, rotulo: 'ERP', prueba: v.prueba, abrir: async () => ventaDeFicha(await leerFichaDeVenta(store, v.id)) })
   }
   return { filas, aviso: filas.length ? null : aviso ?? 'No hay ventas con esa búsqueda.' }
@@ -101,7 +108,14 @@ type Entrada = {
   esStunned: (v: Variante) => boolean
 }
 
+/** Cómo se nombra una línea en un aviso. */
+const nombreDe = (l: string) => ETIQUETA_LINEA[l as Linea] ?? l
+
 export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
+  /** Las líneas de esta Caja que ya venden por el ERP (su corte): las únicas que cambian sin venta del ERP. Sin config, ninguna. */
+  const erpLineas = useMemo(() => config?.erp_lineas ?? [], [config])
+  /** La marca de una prenda en esta Caja (la de Zattia trae a Stunned de la mano). */
+  const lineaDe = (v: Variante): Linea => (store === 'bdi' ? 'bdi' : esStunned(v) ? 'stunned' : 'zattia')
   const [venta, setVenta] = useState<VentaOriginal | null>(null)
   const [devueltas, setDevueltas] = useState<Devuelta[]>([])
   const [nuevas, setNuevas] = useState<Nueva[]>([])
@@ -124,6 +138,8 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
   const origen = venta?.origen ?? null
   const tipo = origen?.tipo ?? null
   const vendidas = useMemo(() => venta?.vendidas ?? [], [venta])
+  /** La marca del cambio: la de la venta del ERP o, suelto, la de lo que devuelve (el saldo de la clienta es de esa marca). */
+  const lineaDelCambio: string | null = origen?.tipo === 'erp' ? origen.marca : devueltas.find((d) => d.linea)?.linea ?? null
 
   async function correr(fn: () => Promise<void>, fallo: string) {
     setTrabajando(true)
@@ -153,6 +169,8 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
 
   /** Con una venta elegida (gn o erp) no se devuelve de más: la regla de la Caja, contando lo ya cambiado. */
   function validar(v: VentaOriginal | null, lista: Devuelta[]) {
+    const marcas = [...new Set(lista.map((d) => d.linea).filter((l): l is string => !!l))]
+    if (marcas.length > 1) throw new Error(`Este cambio mezcla productos de ${marcas.map(nombreDe).join(' y de ')}: un cambio es de una sola marca.`)
     if (!v || v.origen.tipo === 'suelto') return
     const como = (x: { productId: number; sizeId: number; cantidad: number; nombre: string; talle: string }) => ({ product_id: x.productId, size_id: x.sizeId, cantidad: x.cantidad, nombre: x.nombre, talle: x.talle })
     exigirDevolucion({
@@ -178,7 +196,7 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
       .map((l): Devuelta => ({
         clave: l.clave, productId: l.productId, sizeId: l.sizeId, sku: l.sku, nombre: l.nombre, talle: l.talle,
         cantidad: (devueltas.find((d) => d.clave === l.clave)?.cantidad ?? 0) + cantidades[l.clave],
-        precio: l.precio, ...(l.lineaId ? { lineaId: l.lineaId } : {}),
+        precio: l.precio, ...(l.lineaId ? { lineaId: l.lineaId } : {}), ...(l.linea ? { linea: l.linea } : {}),
       }))
     if (!sumadas.length) throw new Error('Marcá cuántas unidades devuelve.')
     const lista = [...devueltas.filter((d) => !sumadas.some((s) => s.clave === d.clave)), ...sumadas]
@@ -195,13 +213,16 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
       cambiarCantidadDevuelta(l.clave, (devueltas.find((d) => d.clave === l.clave)?.cantidad ?? 0) + 1)
       return
     }
-    if (!esStunned(v)) throw new Error('El cambio sin venta es de productos de Stunned.')
+    const linea = lineaDe(v)
+    if (!erpLineas.includes(linea)) throw new Error(`Los cambios de ${nombreDe(linea)} sin venta del ERP todavía se hacen en Gestión Nube.`)
+    const otra = devueltas.find((d) => d.linea && d.linea !== linea)
+    if (otra) throw new Error(`Este cambio mezcla productos de ${nombreDe(otra.linea as string)} y de ${nombreDe(linea)}: un cambio es de una sola marca.`)
     const clave = claveDePrenda(v.product_id, v.size_id)
     setVenta({ origen: { tipo: 'suelto' }, vendidas: [] })
     setDevueltas((xs) => {
       const i = xs.findIndex((x) => x.clave === clave)
       if (i >= 0) return xs.map((x, j) => (j === i ? { ...x, cantidad: x.cantidad + 1 } : x))
-      return [...xs, { clave, productId: v.product_id, sizeId: v.size_id, sku: v.sku, nombre: v.product_name, talle: v.size_name, cantidad: 1, precio: precioDe(v) ?? '' }]
+      return [...xs, { clave, productId: v.product_id, sizeId: v.size_id, sku: v.sku, nombre: v.product_name, talle: v.size_name, cantidad: 1, precio: precioDe(v) ?? '', linea }]
     })
   }
 
@@ -210,7 +231,7 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
     if (!devueltas.some((d) => d.clave === clave) && n > 0) {
       const l = vendidas.find((x) => x.clave === clave)
       if (!l) return
-      lista.push({ clave, productId: l.productId, sizeId: l.sizeId, sku: l.sku, nombre: l.nombre, talle: l.talle, cantidad: n, precio: l.precio, ...(l.lineaId ? { lineaId: l.lineaId } : {}) })
+      lista.push({ clave, productId: l.productId, sizeId: l.sizeId, sku: l.sku, nombre: l.nombre, talle: l.talle, cantidad: n, precio: l.precio, ...(l.lineaId ? { lineaId: l.lineaId } : {}), ...(l.linea ? { linea: l.linea } : {}) })
     }
     validar(venta, lista)
     setDevueltas(lista)
@@ -221,8 +242,8 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
   const ponerPrecioDevuelta = (clave: string, p: number | '') => setDevueltas((xs) => xs.map((x) => (x.clave === clave ? { ...x, precio: p } : x)))
 
   function sumarNueva(v: Variante) {
-    // Un cambio es de UNA marca (Bruno, 26-oct): con el cambio suelto de Stunned, lo que se lleva también es de Stunned.
-    if (tipo && tipo !== 'erp' && !esStunned(v)) throw new Error('Lo que se lleva tiene que ser de Stunned: un cambio es de una sola marca.')
+    // Un cambio es de UNA marca (Bruno, 26-oct): en el cambio suelto, lo que se lleva es de la marca de lo que devuelve.
+    if (tipo && tipo !== 'erp' && lineaDelCambio && lineaDe(v) !== lineaDelCambio) throw new Error(`Lo que se lleva tiene que ser de ${nombreDe(lineaDelCambio)}: un cambio es de una sola marca.`)
     setNuevas((xs) => {
       const i = xs.findIndex((x) => x.variante.product_id === v.product_id && x.variante.size_id === v.size_id)
       if (i >= 0) return xs.map((x, j) => (j === i ? { ...x, cantidad: x.cantidad + 1 } : x))
@@ -292,13 +313,11 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
   const faltaClienta = pideClienta && !(docLimpio.length >= 7 && clienta.nombre.trim().length >= 3)
   const faltaPin = tipo === 'suelto' && !(encargada.persona.trim() && /^\d{4}$/.test(encargada.pin))
   const listo = !!venta && devueltas.length > 0 && !sinPrecio && !sinPrecioDevuelta && !errorCobro && (diferencia <= 0 || cobrado.total > 0) && !faltaClienta && !faltaPin
-  /** Stunned vive en la base de Zattia con su línea: el saldo y el cambio suelto se leen con `linea=stunned`. */
-  const deStunned = tipo === 'gn' || tipo === 'suelto' || (origen?.tipo === 'erp' && origen.stunned)
-  /** El modo de la venta que se cambia: de prueba o real (el motor ⛔ mezcla uno con otro). */
-  const deEnsayo = origen == null ? config?.stunned_prueba ?? true : origen.tipo === 'suelto' ? config?.stunned_prueba ?? true : origen.prueba
+  /** El modo de la venta que se cambia: de prueba o real (el motor ⛔ mezcla uno con otro). El suelto es de una línea que ya cortó ⇒ real. */
+  const deEnsayo = origen == null || origen.tipo === 'suelto' ? false : origen.prueba
 
   const buscarSaldo = () => correr(async () => {
-    const r = await leerSaldo(store, docLimpio, deEnsayo, deStunned ? 'stunned' : undefined)
+    const r = await leerSaldo(store, docLimpio, deEnsayo, lineaDelCambio ?? undefined)
     setSaldo({ doc: docLimpio, monto: r.saldo })
     if (r.cliente && !clienta.nombre.trim()) setClienta((x) => ({ ...x, nombre: r.cliente?.nombre ?? '' }))
     setUsaSaldo(r.saldo > 0)
@@ -308,7 +327,7 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
   const probarPin = async (): Promise<boolean> => {
     let bien = false
     await correr(async () => {
-      await verificarPin(encargada.persona.trim(), encargada.pin)
+      await verificarPin(encargada.persona.trim(), encargada.pin, store)
       bien = true
     }, 'No se pudo probar el PIN.')
     return bien
@@ -377,7 +396,7 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
     saldo, usaSaldo, setUsaSaldo, encargada, setEncargada, hecho, setHecho, error, setError, trabajando, correr,
     empezarDeNuevo, elegirVenta, devolverDeVenta, devolverPrenda, cambiarCantidadDevuelta, ponerPrecioDevuelta, sumarNueva, cambiarNueva, cambiarCantidadNueva,
     sinPrecio, sinPrecioDevuelta, unidadesDevueltas, unidadesNuevas, vuelve, diferencia, reglas, docLimpio, saldoUsado, resto, cuenta, errorCobro, cobrado,
-    aFavor, pideClienta, faltaClienta, faltaPin, listo, deStunned, deEnsayo, buscarSaldo, probarPin, confirmar,
+    aFavor, pideClienta, faltaClienta, faltaPin, listo, lineaDelCambio, erpLineas, deEnsayo, buscarSaldo, probarPin, confirmar,
     /** Lo que se lleva, en pesos (los importes de `renglones`). */
     seLleva: Math.round(filas.reduce((s, f) => s + f.importe, 0) * 100) / 100,
   }

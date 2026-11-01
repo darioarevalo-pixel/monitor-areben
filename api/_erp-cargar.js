@@ -4,14 +4,17 @@
  *   GET  ?recurso=erp&vista=cargar-venta&marca=bdi|zattia          lo que pide el formulario: cuentas de cobro, canales, depósitos
  *   POST { accion: 'cargar-venta', marca, linea, origen_ref, … }   registra la venta
  *
- * 🔴 Hasta el corte va SIEMPRE `prueba: true` (corre en paralelo con GN: ⛔ mueve el libro ni pasa a GN), como la Caja.
- *    Excepción: la línea Stunned con `ERP_STUNNED_PRUEBA=0` (ya vive en el ERP, ⛔ vuelta a GN).
+ * 🔴 Real o de prueba lo decide el CORTE de la línea (`erp_corte`), como la Caja, ⛔ una llave: desde el corte de su línea (Stunned
+ *    28-oct, BDI 15/16-nov, Zattia 23-nov) la venta es REAL (mueve el libro, se factura); antes, `prueba: true` (corre en paralelo
+ *    con GN). Reemplazó a `ERP_STUNNED_PRUEBA`. Sin poder leer los cortes ⇒ 503 (⛔ se elige a ciegas).
  * 🔑 `origen_ref` lo genera la pantalla al ABRIR el formulario ⇒ reintentar devuelve la misma venta (`ya_existia`).
  * Sin permiso nombrado en `lib/permisos.core.js` ⇒ `configurar` (sólo admin) hasta que Bruno diga quién carga.
  */
 import { textoDelMotor } from '../lib/erp/venta.core.js'
 import { verificarPinErp } from './_erp-pin.js'
 import { cuentasSueltas, formasDePago } from '../lib/erp/formas-pago.core.js'
+import { lineaEnErp } from '../lib/erp/corte.core.js'
+import { cortesDeCaja } from './_caja-corte.js'
 
 const MARCAS = ['bdi', 'zattia']
 const LINEAS = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] }
@@ -54,10 +57,13 @@ export async function datosParaCargar({ marca }, deps) {
 
 /**
  * Lo que manda el formulario ⇒ la entrada del motor. Puro (lo prueba `tests/erp-cargar-venta.test.ts`).
+ * `cortes` OBLIGATORIO (`erp_corte`, `{ linea: ISO }`): la venta es real si su línea ya cortó en `ahora`.
  * @param {any} b @param {string} marca @param {string | null} usuario
+ * @param {{ cortes: Record<string, string>, ahora?: Date }} o
  * @returns {{ entrada: any } | { error: string }}
  */
-export function entradaManual(b, marca, usuario, { stunnedReal = false } = {}) {
+export function entradaManual(b, marca, usuario, { cortes, ahora = new Date() }) {
+  if (!cortes || typeof cortes !== 'object') throw new Error('entradaManual: faltan los cortes (erp_corte).')
   const linea = String(b?.linea || '')
   if (!LINEAS[marca]?.includes(linea)) return { error: 'Línea inválida' }
   if (!/^[0-9a-f-]{36}$/i.test(String(b.origen_ref || ''))) return { error: 'Falta la clave del formulario: volvé a abrirlo.' }
@@ -89,21 +95,29 @@ export function entradaManual(b, marca, usuario, { stunnedReal = false } = {}) {
       origen: 'manual', origen_ref: String(b.origen_ref), marca: linea, canal: String(b.canal || ''), deposito: String(b.deposito),
       ...(doc && nombre ? { cliente: { doc, nombre } } : {}),
       ...(cuando ? { ocurrida_en: cuando.toISOString() } : {}),
-      usuario: usuario || 'admin', prueba: !(linea === 'stunned' && stunnedReal), lineas, pagos, subtotal, total: subtotal,
+      usuario: usuario || 'admin', prueba: !lineaEnErp(cortes, linea, ahora), lineas, pagos, subtotal, total: subtotal,
       ...(String(b.nota || '').trim() ? { detalle: { nota: String(b.nota).trim().slice(0, 500) } } : {}),
     },
   }
 }
 
 /**
- * @param {{ marca: string, body: any, usuario: string | null, persona?: string | null }} p @param {{ conMotor: Function }} deps
+ * @param {{ marca: string, body: any, usuario: string | null, persona?: string | null }} p
+ * @param {{ conMotor: Function, cortes?: (marca: string) => Promise<Record<string, string>> }} deps  `cortes`: para los tests
  * 🔑 Una venta A CUENTA frenada (sin crédito, atrasado, pasa el tope) se salta con el PIN de un admin: el navegador manda sólo `pin`, y el
  *    `autoriza` se arma ACÁ con la persona de la SESIÓN (⛔ se acepta uno que venga armado de afuera). El PIN se verifica antes de escribir.
  */
 export async function cargarVentaManual({ marca, body, usuario, persona = null }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  // 🔑 Stunned pasa al ERP (Bruno, 26-oct): con `ERP_STUNNED_PRUEBA=0` SUS ventas son reales (mueven el libro y se facturan). BDI y Zattia siguen en prueba hasta su corte.
-  const e = entradaManual(body, marca, usuario, { stunnedReal: process.env.ERP_STUNNED_PRUEBA === '0' })
+  // 🔑 Real desde el corte de su línea (`erp_corte`, la misma lectura con caché que la Caja), ⛔ `ERP_STUNNED_PRUEBA`.
+  let cortes
+  try {
+    cortes = await (deps.cortes || cortesDeCaja)(marca)
+  } catch (err) {
+    console.error('[erp] cargar venta, erp_corte:', err && err.message)
+    return { status: 503, error: 'No se pudo saber si esta marca ya vende por el ERP: la venta NO se guardó. Probá de nuevo en un momento.' }
+  }
+  const e = entradaManual(body, marca, usuario, { cortes })
   if ('error' in e) return { status: 400, error: e.error }
   if (typeof body?.pin === 'string' && body.pin !== '') {
     if (!persona) return { status: 400, error: 'Falta quién autoriza' }
