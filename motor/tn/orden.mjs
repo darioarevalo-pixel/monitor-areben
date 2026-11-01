@@ -44,6 +44,8 @@ export function filaDeOrden(tienda, o, opciones = {}) {
     subtotal: plata(o.subtotal),
     descuento: plata(o.discount),
     envio: plata(o.shipping_cost_customer),
+    // sql/067: lo que le cuesta el envío a la TIENDA (Envío Nube se lo factura); `envio` es lo que paga el cliente.
+    envio_costo: plata(o.shipping_cost_owner),
     total: plata(o.total),
     cancel_reason: texto(o.cancel_reason),
     envio_estado: envioEstado(o),
