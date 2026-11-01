@@ -102,7 +102,7 @@ export async function preciosDeCampanias(sb, store, ids) {
  */
 export async function pctDeCampanias(sb, store, lista) {
   if (!Array.isArray(lista) || !lista.length) return {}
-  /** @type {Record<string, { nombre: string, efectivo: number, transferencia: number }>} */
+  /** @type {Record<string, { nombre: string, efectivo: number, transferencia: number, debito?: number }>} */
   const pctDePrendas = {}
   for (const c of lista) {
     for (let desde = 0; desde < 20_000; desde += 1000) {
@@ -111,7 +111,7 @@ export async function pctDeCampanias(sb, store, lista) {
       if (error) throw new Error(`No se pudieron leer los productos de ${c.nombre} en Liquidación (${error.message}).`)
       for (const f of data || []) {
         const n = Number(f.pid)
-        if (Number.isInteger(n) && n > 0 && !pctDePrendas[n]) pctDePrendas[n] = { nombre: c.nombre, efectivo: c.efectivo, transferencia: c.transferencia }
+        if (Number.isInteger(n) && n > 0 && !pctDePrendas[n]) pctDePrendas[n] = { nombre: c.nombre, efectivo: c.efectivo, transferencia: c.transferencia, ...(c.debito != null ? { debito: c.debito } : {}) }
       }
       if (!data || data.length < 1000) break
     }

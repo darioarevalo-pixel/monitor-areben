@@ -1309,7 +1309,7 @@ pendientes
                                   {(() => {
                                     const conPct = items.find((x) => pctDePrenda(reglas, medio, x.product_id) != null)
                                     const p = conPct ? pctDePrenda(reglas, medio, conPct.product_id) : null
-                                    return conPct && p != null && p !== regla?.descuento ? <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{p}% en {reglas?.pctDePrendas?.[String(conPct.product_id)]?.nombre}</span> : null
+                                    return conPct && p != null && p !== regla?.descuento ? <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{p > 0 ? `${p}% en` : 'Sin descuento en'} {reglas?.pctDePrendas?.[String(conPct.product_id)]?.nombre}</span> : null
                                   })()}
                                   {modoOferta === 'recargo' && <span style={{ fontSize: font.xs, color: color.warningInk, fontWeight: weight.semibold }}>+{ofertaDe(reglas).recargo}% en productos en oferta</span>}
                                 </>

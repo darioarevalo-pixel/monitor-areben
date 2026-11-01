@@ -85,7 +85,7 @@ describe('caja · la oferta de Stunned paga 10 % en efectivo y transferencia', (
 describe('caja · el % por campaña lo decide el servidor, por el producto', () => {
   type R_ = Parameters<typeof cuentaDeMedio>[1]['reglas']
   const CYBER = 711918
-  const R = { ...REGLAS_INICIALES, transferenciaA: 13015, pctDePrendas: { [CYBER]: { nombre: 'Cyber', efectivo: 10, transferencia: 10 } } } as unknown as R_
+  const R = { ...REGLAS_INICIALES, transferenciaA: 13015, pctDePrendas: { [CYBER]: { nombre: 'Cyber', efectivo: 10, transferencia: 10, debito: 0 } } } as unknown as R_
   const no = { promoCreditoHoy: false, esDelBanco: false, seisCuotas: false }
   const cyber = { product_id: CYBER, size_id: 1, cantidad: 1, precio: 20000 }
   const linea = { product_id: 2, size_id: 1, cantidad: 1, precio: 20000 }
@@ -124,9 +124,23 @@ describe('caja · el % por campaña lo decide el servidor, por el producto', () 
   it('redondea a 100 como siempre: $18.990 −10 % = $17.091 ⇒ $17.100', () => {
     expect(pagar('efectivo', [{ ...cyber, precio: 18990 }]).total).toBe(17100)
   })
-  it('débito y crédito siguen con su cuenta', () => {
-    expect(pagar('debito', [cyber]).total).toBe(18000)
+  it('🔑 débito: el Cyber sin descuento ($20.000), la línea con su 10 % ($18.000), mixta $38.000 (Bruno, 1-nov)', () => {
+    expect(pagar('debito', [cyber]).total).toBe(20000)
+    expect(pagar('debito', [linea]).total).toBe(18000)
+    const c = pagar('debito', [cyber, linea])
+    expect(c.total).toBe(38000)
+    expect(c.pagos).toHaveLength(1)
+    expect(c.pagos[0].cuenta).toBe(20196)
+    expect(c.pagos[0].porcentaje).toBe(5)
+  })
+  it('🔑 crédito: la promo bancaria es compatible con el Cyber: −10 % de su cuenta', () => {
     expect(pagar('credito', [cyber]).total).toBe(20000)
+    const f = renglones([cyber])
+    expect(cobro({ filas: f, pagos: [{ cuenta: 25172 }], reglas: R, descuentoVenta: null }).total).toBe(18000)
+  })
+  it('sin `debito` cargado, paga su cuenta', () => {
+    const r2 = { ...R, pctDePrendas: { [CYBER]: { nombre: 'Cyber', efectivo: 10, transferencia: 10 } } } as unknown as R_
+    expect(pagar('debito', [cyber], r2).total).toBe(18000)
   })
   it('sin la lista, la misma prenda paga su cuenta (BDI y cualquier otra caja, ⛔ cambian)', () => {
     const { pctDePrendas: _p, ...sin } = R as unknown as Record<string, unknown>
@@ -147,7 +161,8 @@ describe('caja · el % por campaña lo decide el servidor, por el producto', () 
   })
   it('pctDePrenda: null fuera de la lista y en un medio sin % propio', () => {
     expect(pctDePrenda(R, 'efectivo', CYBER)).toBe(10)
-    expect(pctDePrenda(R, 'debito', CYBER)).toBeNull()
+    expect(pctDePrenda(R, 'debito', CYBER)).toBe(0)
+    expect(pctDePrenda(R, 'credito', CYBER)).toBeNull()
     expect(pctDePrenda(R, 'efectivo', 2)).toBeNull()
     expect(pctDePrenda(null, 'efectivo', CYBER)).toBeNull()
   })
@@ -160,5 +175,7 @@ describe('caja · el % por campaña lo decide el servidor, por el producto', () 
     expect(() => normalizarPctCampanias([{ campania: 'a', nombre: 'x', efectivo: 10 }])).toThrow()
     expect(() => normalizarPctCampanias([{ ...ok, efectivo: 101 }])).toThrow()
     expect(() => normalizarPctCampanias('a')).toThrow()
+    expect(normalizarPctCampanias([{ ...ok, debito: 0 }])).toEqual([{ ...ok, debito: 0 }])
+    expect(() => normalizarPctCampanias([{ ...ok, debito: -1 }])).toThrow()
   })
 })

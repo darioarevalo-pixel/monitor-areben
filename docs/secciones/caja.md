@@ -39,7 +39,7 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   NORMAL de GN. `reglasDeHoy` lo resuelve a `pctDePrendas` (producto → %), con los ítems `confirmado` Y `aplicado` (la de Zattia tiene todo
   `confirmado`: el precio lo escribió CYBER MONDAY ONLINE); si ⛔ se puede leer, la Caja ⛔ cobra. `pctDeCuenta` pesa el % por importe.
   🔴 **⛔ lo dice la pantalla** (a diferencia de `oferta` de Stunned, acá mentir da MÁS descuento): la que quedó abierta con otras reglas se
-  frena con el 409 de «Recargá la Caja». Débito y crédito siguen con su cuenta. 🔴 Sólo sin reglas comerciales (`comerciales` null): si se
+  frena con el 409 de «Recargá la Caja». `debito` es opcional: los 253 del Cyber van con `debito: 0` (Bruno, 1-nov), sin cargarlo paga su cuenta. Crédito sigue con su cuenta. 🔴 Sólo sin reglas comerciales (`comerciales` null): si se
   prenden, el % sale de las reglas y esto ⛔ corre. El cambio con una de estas prendas entre lo nuevo ⛔ se cobra (como la feria).
 - 🔴 **LA CAMPAÑA QUE MANDA EL PRECIO** (Bruno, 1-nov): `reglas.precioCampanias` (ids, por `bajadas`, sin pantalla) ⇒ `precioDeCaja` cobra el precio
   ESCRITO de sus ítems `aplicado` (`preciosDeCampania`), ⛔ el cruce por nombre con TN, y la prenda sigue pagando el % de la forma de pago (⛔ es

@@ -1779,6 +1779,9 @@ describe('caja · el % por campaña (Bruno, 1-nov, Cyber Monday)', () => {
     const g = await correr(req('POST', {}, { action: 'bajadas', pctCampanias: [CYBER] }))
     expect(g.code).toBe(200)
     expect(Object.keys((g.body?.reglas as Fila).pctDePrendas as Fila)).toEqual(['7', '8'])
+    const conDebito = await correr(req('POST', {}, { action: 'bajadas', pctCampanias: [{ ...CYBER, debito: 0 }] }))
+    expect(((conDebito.body?.reglas as Fila).pctDePrendas as Record<string, Fila>)['7'].debito).toBe(0)
+    await correr(req('POST', {}, { action: 'bajadas', pctCampanias: [CYBER] }))
     const guardadas = (base.config as { reglas: Fila }).reglas
     expect(guardadas.pctCampanias).toEqual([CYBER])
     expect(guardadas.pctDePrendas).toBeUndefined()
