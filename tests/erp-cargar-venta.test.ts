@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { entradaManual } from '../api/_erp-cargar.js'
 
 /** Los cortes de hoy (31-oct): sólo Stunned. */
@@ -55,6 +55,19 @@ describe('Real o de prueba por el CORTE de la línea (`erp_corte`), ⛔ ERP_STUN
     expect(prueba(bdi, 'bdi', '2026-11-16T02:59:59Z')).toBe(true)
     // después del de Zattia, todas reales
     expect([prueba(ok, 'zattia', '2026-11-25T15:00:00Z'), prueba(stu, 'zattia', '2026-11-25T15:00:00Z')]).toEqual([false, false])
+  })
+  it('🔑 manda la FECHA DE LA VENTA (Bruno, 1-nov): una de BDI de antes de su corte, cargada después, es de prueba', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-20T15:00:00Z'))
+    try {
+      const cargada = (ocurrida_en: string) => prueba({ ...bdi, ocurrida_en }, 'bdi', '2026-11-20T15:00:00Z')
+      expect(cargada('2026-11-10T15:00:00Z')).toBe(true)
+      expect(cargada('2026-11-18T15:00:00Z')).toBe(false)
+      // sin fecha, el momento de cargarla
+      expect(prueba(bdi, 'bdi', '2026-11-20T15:00:00Z')).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
   it('sin cortes TIRA (⛔ un default que diga «nadie cortó»)', () => {
     expect(() => entradaManual(stu, 'zattia', 'Bruno', {} as never)).toThrow(/cortes/)

@@ -57,7 +57,8 @@ export async function datosParaCargar({ marca }, deps) {
 
 /**
  * Lo que manda el formulario ⇒ la entrada del motor. Puro (lo prueba `tests/erp-cargar-venta.test.ts`).
- * `cortes` OBLIGATORIO (`erp_corte`, `{ linea: ISO }`): la venta es real si su línea ya cortó en `ahora`.
+ * `cortes` OBLIGATORIO (`erp_corte`, `{ linea: ISO }`): la venta es real si su línea ya había cortado cuando PASÓ (`ocurrida_en`;
+ * sin fecha, `ahora`). Bruno 1-nov: una venta de antes del corte cargada después ya está en GN ⇒ de prueba (⛔ descontarla dos veces).
  * @param {any} b @param {string} marca @param {string | null} usuario
  * @param {{ cortes: Record<string, string>, ahora?: Date }} o
  * @returns {{ entrada: any } | { error: string }}
@@ -95,7 +96,7 @@ export function entradaManual(b, marca, usuario, { cortes, ahora = new Date() })
       origen: 'manual', origen_ref: String(b.origen_ref), marca: linea, canal: String(b.canal || ''), deposito: String(b.deposito),
       ...(doc && nombre ? { cliente: { doc, nombre } } : {}),
       ...(cuando ? { ocurrida_en: cuando.toISOString() } : {}),
-      usuario: usuario || 'admin', prueba: !lineaEnErp(cortes, linea, ahora), lineas, pagos, subtotal, total: subtotal,
+      usuario: usuario || 'admin', prueba: !lineaEnErp(cortes, linea, cuando || ahora), lineas, pagos, subtotal, total: subtotal,
       ...(String(b.nota || '').trim() ? { detalle: { nota: String(b.nota).trim().slice(0, 500) } } : {}),
     },
   }

@@ -488,7 +488,8 @@ lecturas en BDI y Zattia. Enter abre: la prenda en `FichaPrenda` encima de lo qu
 abre si hay UNA sola coincidencia. Un cliente sin documento (los de GN) se abre por NOMBRE: ⛔ comparar `doc` nulos. «?» abre la hoja de atajos (`ATAJOS`; los de la Caja, F2/F4, ⛔ se tocan).
 - 🔑 **Ventas › Cargar venta (`api/_erp-cargar.js`): real o de prueba por el CORTE de la línea elegida** (`erp_corte`, la misma
 lectura con caché que la Caja, `cortesDeCaja`), ⛔ `ERP_STUNNED_PRUEBA` (1-nov). Sin poder leer los cortes ⇒ 503 y ⛔ se guarda.
-Se mira el corte AHORA, ⛔ en la fecha cargada (`ocurrida_en`): una venta de antes del corte cargada después sale real.
+Se mira el corte en la FECHA DE LA VENTA (`ocurrida_en`; sin fecha, ahora) — Bruno 1-nov: una venta de antes del corte cargada
+después ya está en GN ⇒ de prueba (⛔ se descuenta dos veces).
 
 ## Pendiente
 
