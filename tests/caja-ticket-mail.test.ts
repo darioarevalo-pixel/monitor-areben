@@ -38,6 +38,7 @@ describe('ticketParaMail', () => {
   it('V4: la marca es la de la venta (la automation TICKET de BDI); sin marca ⇒ tira', () => {
     expect(ticketParaMail({ ...V30049, store: 'bdi' }, CFG).marca).toBe('bdi')
     expect(() => ticketParaMail({ ...V30049, store: undefined }, CFG)).toThrow(/marca/)
+    expect(ticketParaMail({ ...V30049, store: 'bdi', destino: 'erp', renglones: [{ ...V30049.renglones[0], linea: 'bdi' }] }, CFG).marca).toBe('bdi')
   })
 
   it('sin pago en efectivo ⛔ hay vuelto aunque se haya anotado «paga con»', () => {
@@ -119,6 +120,46 @@ describe('mandarTicket', () => {
     const estado = await mandarTicket(V30049, { sb, fetch, url: 'https://mailer.test', key: 'llave-secreta-larguisima-0123456789abcdef0123' })
     expect(estado).toMatch(/^error: /)
     expect(estado).not.toContain('llave-secreta-larguisima')
+    expect(updates[0].cambios.ticket_mail).toBe(estado)
+  })
+
+  // 🔴 Por la LÍNEA, ⛔ por el destino: desde su corte (`erp_corte`) BDI y Zattia van al ERP y tienen que seguir mandando SU ticket.
+  const delErp = (store: string, linea: string | null) => ({
+    ...V30049, store, destino: 'erp', estado: 'en_erp', gn_number: null, erp_numero: 77,
+    renglones: V30049.renglones.map((r) => (linea ? { ...r, linea } : r)),
+  })
+  const mailerFalso = () => {
+    const cuerpos: Array<{ marca: string; ticket: { numero: number } }> = []
+    const fetch = (async (_: string, init: RequestInit) => {
+      cuerpos.push(JSON.parse(String(init.body)))
+      return new Response(JSON.stringify({ encolado: true }), { status: 200 })
+    }) as unknown as typeof globalThis.fetch
+    return { cuerpos, fetch }
+  }
+
+  it.each([['bdi', 'bdi'], ['zattia', 'zattia']])('venta de %s en el ERP (línea %s) ⇒ manda SU ticket, con su número del ERP', async (store, linea) => {
+    const { sb, updates } = sbFalso()
+    const { cuerpos, fetch } = mailerFalso()
+    expect(await mandarTicket(delErp(store, linea), { sb, fetch, url: 'https://m.test', key: 'k' })).toBe('encolado')
+    expect(cuerpos[0].marca).toBe(linea)
+    expect(cuerpos[0].ticket.numero).toBe(77)
+    expect(updates[0].cambios.ticket_mail).toBe('encolado')
+  })
+
+  it.each([['con la línea en el renglón', 'stunned'], ['fila vieja sin línea', null]])('Stunned en la Caja de Zattia (%s) ⇒ sigue APAGADO: ⛔ le pide al mailer', async (_, linea) => {
+    const { sb, updates } = sbFalso()
+    const { cuerpos, fetch } = mailerFalso()
+    expect(await mandarTicket(delErp('zattia', linea), { sb, fetch, url: 'https://m.test', key: 'k' })).toBe('apagado: Stunned sin remitente')
+    expect(cuerpos).toHaveLength(0)
+    expect(updates[0].cambios.ticket_mail).toBe('apagado: Stunned sin remitente')
+  })
+
+  it('una venta del ERP que ⛔ dice su línea en BDI ⛔ lanza: queda el error anotado', async () => {
+    const { sb, updates } = sbFalso()
+    const { cuerpos, fetch } = mailerFalso()
+    const estado = await mandarTicket(delErp('bdi', null), { sb, fetch, url: 'https://m.test', key: 'k' })
+    expect(estado).toMatch(/^error: /)
+    expect(cuerpos).toHaveLength(0)
     expect(updates[0].cambios.ticket_mail).toBe(estado)
   })
 
