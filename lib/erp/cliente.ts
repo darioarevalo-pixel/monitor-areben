@@ -1020,6 +1020,8 @@ export type GastosDelPeriodo = {
   envioAutomatico?: number
   /** Ventas de Tienda Nube cuyo pedido todavía ⛔ tiene ese costo: ⛔ está en el total. */
   enviosSinCosto?: number
+  /** Órdenes de Mercado Libre de una venta sin lo que ML se queda (motor sql/068): ⛔ está en el total. */
+  ordenesMlSinComision?: number
   /** Cobros con tarjeta/MP cuya ruta ⛔ tiene tasa: la comisión de esos NO está en el total. */
   cobrosSinComision: number
   gastos: GastoCargado[]

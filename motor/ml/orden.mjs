@@ -24,7 +24,15 @@ export function filaDeOrdenML(o) {
     total: plata(o.total_amount),
     pagado: plata(o.paid_amount),
     cancelacion: o.cancel_detail?.code ?? null,
+    comision: comisionDeOrden(o),
   }
+}
+
+/** sql/068: lo que ML se queda de la orden (`sale_fee` es por unidad). Un renglón sin el dato ⇒ null, ⛔ un número que afirma de menos. */
+function comisionDeOrden(o) {
+  const items = o.order_items || []
+  if (!items.length || items.some((it) => it.sale_fee == null)) return null
+  return plata(items.reduce((s, it) => s + Number(it.sale_fee) * Number(it.quantity), 0))
 }
 
 /** El seller_sku de un ítem: en el ítem o, si la variación lo lleva como atributo, ahí. */

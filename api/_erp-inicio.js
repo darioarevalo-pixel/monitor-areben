@@ -81,6 +81,8 @@ export async function resultadoDelMes({ marca, linea = marca === 'bdi' ? 'bdi' :
     }
     const [mes, anterior] = [await suma(t.mes), await suma(t.anterior)]
     const [{ hasta } = {}] = (await pg.query('select max(date_sale)::date::text as hasta from ventas')).rows
+    // Una línea que ya pasó al ERP ⛔ espera a GN: sin esto Inicio avisaba «lo de después todavía no está», y sí está.
+    const cortada = (await pg.query('select 1 from erp_corte where linea = $1 and instante <= now()', [linea])).rows.length > 0
     const num = (r) => ({ ventas: Number(r.ventas), vendido: Number(r.vendido), costo: Number(r.costo) })
     const agrupado = async (clave, desde, hasta) => (await pg.query(`select ${clave} as k, count(*)::int as ventas,
         coalesce(sum(total_price), 0)::float as vendido, coalesce(sum(total_cost), 0)::float as costo
@@ -88,6 +90,6 @@ export async function resultadoDelMes({ marca, linea = marca === 'bdi' ? 'bdi' :
     const dias = (await agrupado('date_sale::date::text', t.anterior.desde, t.mes.hasta)).map((r) => ({ dia: r.k, ...num(r) }))
     const meses = (await agrupado(`to_char(date_sale::date, 'YYYY-MM')`, desdeDoceMeses(t.mes.hasta), t.mes.hasta)).map((r) => ({ mes: r.k, ...num(r) }))
     const canales = (await agrupado(`coalesce(nullif(channel, ''), 'Ninguno')`, t.mes.desde, t.mes.hasta)).map((r) => ({ canal: r.k, ...num(r) }))
-    return { mes, anterior, gnHasta: hasta ?? null, dias, meses, canales }
+    return { mes, anterior, gnHasta: cortada ? null : hasta ?? null, dias, meses, canales }
   })
 }

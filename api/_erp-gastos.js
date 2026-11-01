@@ -41,6 +41,7 @@ export async function gastosDelPeriodo({ marca, linea, desde, hasta, prueba = fa
     let cobrosSinComision = 0
     let envioAutomatico = 0
     let enviosSinCosto = 0
+    let ordenesMlSinComision = 0
     for (const { id: linea, empresa_id } of lineas) {
       const r = await gastosComerciales(pg, { empresa_id, marca: linea, desde, hasta, prueba })
       if (!r.ok) return errorDe(r)
@@ -57,11 +58,12 @@ export async function gastosDelPeriodo({ marca, linea, desde, hasta, prueba = fa
       cobrosSinComision += r.cobrosSinComision
       envioAutomatico += r.envio_automatico ?? 0
       enviosSinCosto += r.enviosSinCosto ?? 0
+      ordenesMlSinComision += r.ordenesMlSinComision ?? 0
     }
     for (const t of TIPOS) por_tipo[t] = pesos(por_tipo[t])
     return {
       desde, hasta, prueba, total: pesos(TIPOS.reduce((s, t) => s + por_tipo[t], 0)), por_tipo,
-      meses: [...meses.values()].sort((a, b) => (a.mes < b.mes ? -1 : 1)), comisionAutomatica: pesos(comisionAutomatica), plataformaAutomatica: pesos(plataformaAutomatica), envioAutomatico: pesos(envioAutomatico), cobrosSinComision, enviosSinCosto,
+      meses: [...meses.values()].sort((a, b) => (a.mes < b.mes ? -1 : 1)), comisionAutomatica: pesos(comisionAutomatica), plataformaAutomatica: pesos(plataformaAutomatica), envioAutomatico: pesos(envioAutomatico), cobrosSinComision, enviosSinCosto, ordenesMlSinComision,
       gastos: gastos.sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0)),
     }
   })

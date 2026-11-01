@@ -43,9 +43,19 @@ describe('Inicio › Resultado de UNA línea (Bruno, 30-oct)', () => {
     const pg = { query: async (sql: string) => { sqls.push(sql); return { rows: sql.includes('max(date_sale)') ? [{ hasta: '2026-10-30' }] : sql.includes('group by 1') ? [] : [{ ventas: 0, vendido: 0, costo: 0, sin_costo: 0 }] } } }
     const conMotor = async (_m: string, _q: string, fn: (db: unknown) => unknown) => fn(pg)
     await resultadoDelMes({ marca: 'zattia', linea: 'stunned', hoy: '2026-10-30' }, { conMotor })
-    const sumas = sqls.filter((q) => !q.includes('max(date_sale)'))
+    const sumas = sqls.filter((q) => !q.includes('max(date_sale)') && !q.includes('from erp_corte where linea'))
     expect(sumas).toHaveLength(5)
     expect(sumas.length).toBeGreaterThan(0)
     expect(sumas.every((q) => q.includes('coalesce(lp.stu, 0) / lp.todo'))).toBe(true)
+  })
+
+  it('el aviso «Gestión Nube llega hasta…» es de la línea que sigue en GN: la que ya cortó ⛔ lo lleva', async () => {
+    const leer = async (cortada: boolean) => {
+      const pg = { query: async (sql: string, p?: unknown[]) => ({ rows: sql.includes('from erp_corte where linea') ? (cortada && p?.[0] === 'stunned' ? [{}] : []) : sql.includes('max(date_sale)') ? [{ hasta: '2026-10-30' }] : sql.includes('group by 1') ? [] : [{ ventas: 0, vendido: 0, costo: 0, sin_costo: 0 }] }) }
+      const conMotor = async (_m: string, _q: string, fn: (db: unknown) => unknown) => fn(pg)
+      return await resultadoDelMes({ marca: 'zattia', linea: 'stunned', hoy: '2026-10-30' }, { conMotor }) as { gnHasta: string | null }
+    }
+    expect((await leer(true)).gnHasta).toBeNull()
+    expect((await leer(false)).gnHasta).toBe('2026-10-30')
   })
 })

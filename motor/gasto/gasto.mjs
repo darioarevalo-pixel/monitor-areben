@@ -50,7 +50,7 @@ export async function registrarGasto(db, e) {
  * @param {import('pg').ClientBase} db
  * @param {{ empresa_id: string, marca: string, desde: string, hasta: string, prueba?: boolean }} e — días AR inclusive, hasta `MAX_DIAS`.
  * @returns {Promise<{ ok: true, total: number, por_tipo: Record<string, number>, meses: Array<{ mes: string, total: number,
- *   por_tipo: Record<string, number> }>, comision_automatica: number, plataforma_automatica: number, cobrosSinComision: number, envio_automatico: number, enviosSinCosto: number, gastos: any[] }
+ *   por_tipo: Record<string, number> }>, comision_automatica: number, plataforma_automatica: number, cobrosSinComision: number, envio_automatico: number, enviosSinCosto: number, ordenesMlSinComision: number, gastos: any[] }
  *   | { ok: false, error }>}  `por_tipo.plataforma` = el costo de la plataforma (TN) de los cobros (sql/061), en su renglón y DENTRO del total.
  *   `por_tipo.envio` = lo que le cuesta el envío a la tienda (sql/067), igual. `enviosSinCosto` = ventas de TN cuya orden todavía ⛔ tiene ese dato: su costo ⛔ está en el total.
  */
@@ -80,6 +80,15 @@ export async function gastosComerciales(db, { empresa_id, marca, desde, hasta, p
     from venta v join tn_orden o on v.origen_ref = o.tienda || ':' || o.tn_id
    where v.origen = 'tn' and v.empresa_id = $1 and v.marca = $2 and v.prueba = $3 and v.estado = 'confirmada' and ${diaVenta} between $4::date and $5::date
    group by 1`, p) : []
+  // sql/068: lo que ML se queda de cada orden de una venta confirmada (⛔ una tasa: cambia por mes). Suma a la comisión.
+  const [{ hay_ml }] = await q(db, `select exists (select 1 from information_schema.columns where table_schema = current_schema()
+    and table_name = 'ml_orden' and column_name = 'comision') as hay_ml`)
+  const deMl = hay_ml ? await q(db, `select to_char(${diaVenta}, 'YYYY-MM') as mes, coalesce(sum(o.comision), 0)::float as monto,
+      count(*) filter (where o.orden_id is null or o.comision is null)::int as sin
+    from venta v cross join lateral jsonb_array_elements_text(v.detalle->'ml'->'ordenes') as r(orden)
+    left join ml_orden o on o.orden_id = r.orden::bigint
+   where v.origen = 'ml' and v.empresa_id = $1 and v.marca = $2 and v.prueba = $3 and v.estado = 'confirmada' and ${diaVenta} between $4::date and $5::date
+   group by 1`, p) : []
   const manual = await q(db, `select to_char(fecha, 'YYYY-MM') as mes, tipo, sum(monto)::float as monto
     from gasto where empresa_id = $1 and marca = $2 and prueba = $3 and fecha between $4::date and $5::date group by 1, 2`, p)
   const gastos = await q(db, `select id::text, fecha::text, tipo, monto::float, detalle, cuenta, origen, venta_id::text, usuario, creado_en
@@ -91,10 +100,12 @@ export async function gastosComerciales(db, { empresa_id, marca, desde, hasta, p
   let cobrosSinComision = 0
   let envio_automatico = 0
   let enviosSinCosto = 0
+  let ordenesMlSinComision = 0
   for (const a of auto) {
     mes(a.mes).por_tipo.comision += a.monto; comision_automatica += a.monto; cobrosSinComision += a.sin
     mes(a.mes).por_tipo.plataforma += a.plataforma; plataforma_automatica += a.plataforma
   }
+  for (const c of deMl) { mes(c.mes).por_tipo.comision += c.monto; comision_automatica += c.monto; ordenesMlSinComision += c.sin }
   for (const e of envios) { mes(e.mes).por_tipo.envio += e.monto; envio_automatico += e.monto; enviosSinCosto += e.sin }
   for (const g of manual) mes(g.mes).por_tipo[g.tipo] += g.monto
   const RENGLONES = [...TIPOS, 'plataforma', 'envio']
@@ -106,5 +117,5 @@ export async function gastosComerciales(db, { empresa_id, marca, desde, hasta, p
   }
   for (const t of RENGLONES) por_tipo[t] = pesos(por_tipo[t])
   return { ok: true, total: pesos(RENGLONES.reduce((s, t) => s + por_tipo[t], 0)), por_tipo, meses: lista, comision_automatica: pesos(comision_automatica),
-    plataforma_automatica: pesos(plataforma_automatica), envio_automatico: pesos(envio_automatico), cobrosSinComision, enviosSinCosto, gastos }
+    plataforma_automatica: pesos(plataforma_automatica), envio_automatico: pesos(envio_automatico), cobrosSinComision, enviosSinCosto, ordenesMlSinComision, gastos }
 }
