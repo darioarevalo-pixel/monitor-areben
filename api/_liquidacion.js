@@ -1399,7 +1399,9 @@ export default async function handler(req, res) {
       }
       if (!porGn.length) return res.status(200).json({ ok: true, modo, resultados });
 
-      const token = GN_TOKENS[store];
+      // 🔴 El token general de Zattia lee y mueve stock pero rebota los precios (403 «Invalid ability
+      // provided»). El de precios va aparte para no cambiarle la credencial a Reposición y Ventas.
+      const token = (store === 'zattia' && process.env.GN_TOKEN_ZATTIA_PRECIOS) || GN_TOKENS[store];
       if (!token) return res.status(500).json({ error: `Falta el token de Gestión Nube de ${store} en el servidor.` });
       const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' };
 
