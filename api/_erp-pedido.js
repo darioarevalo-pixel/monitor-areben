@@ -39,7 +39,7 @@ async function hay064(pg) {
 }
 
 /** Los nombres del producto y del talle (catálogo propio, sql/012), por variante. */
-async function nombresDe(pg, lineas) {
+export async function nombresDe(pg, lineas) {
   const ids = [...new Set(lineas.map((l) => Number(l.product_id)).filter((x) => x > 0))]
   if (!ids.length) return { producto: new Map(), talle: new Map() }
   const prod = await pg.query('select id::text, nombre from producto where id = any($1::bigint[])', [ids]).then((r) => r.rows).catch(() => [])

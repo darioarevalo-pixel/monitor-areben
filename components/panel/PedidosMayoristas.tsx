@@ -18,7 +18,7 @@ import {
   type ClienteDelPanel, type EtapaPedido, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel,
 } from '@/lib/erp/cliente'
 import { HojaCargarPago, useCuentaPrendida, type CuentaConCliente } from './CuentaCorriente'
-import { FacturarPedido, LETRA, descargarFactura, numeroComprobante } from './FacturasCliente'
+import { FacturarParte, FacturarPedido, LETRA, descargarFactura, numeroComprobante } from './FacturasCliente'
 
 const plata = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 const diaMes = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -123,6 +123,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
   const [ficha, setFicha] = useState<FichaPedido | null>(null)
   const [pagando, setPagando] = useState(false)
   const [facturando, setFacturando] = useState(false)
+  const [porParte, setPorParte] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cantidades, setCantidades] = useState<Record<string, number>>({})
   /** Los renglones AGREGADOS sin guardar (su cantidad vive en `cantidades`, como la de los demás). */
@@ -232,10 +233,17 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
             <div style={{ fontSize: font.sm, color: color.successInk }}>
               Facturado ✓ · {LETRA[ficha.facturacion.entera.tipo] ?? ''} {numeroComprobante(ficha.facturacion.entera)}
             </div>
-          ) : ficha.facturacion.partes > 0 ? (
-            <div style={{ fontSize: font.sm }}>Facturado {plata(ficha.facturacion.facturado)} de {plata(ficha.facturacion.total)}</div>
-          ) : p.etapa !== 'anulado' && p.cliente_id && !cambiado && (
-            <div><Button size="sm" variant="outline" disabled={!ficha.escribir} title={ficha.escribir ? undefined : APAGADO} onClick={() => setFacturando(true)}>Facturar</Button></div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {ficha.facturacion.partes > 0 && <span style={{ fontSize: font.sm }}>Facturado {plata(ficha.facturacion.facturado)} de {plata(ficha.facturacion.total)}</span>}
+              {/* Sin facturas, las dos; con partes, sólo la parte (la entera ya ⛔ sale); con la entera, ninguna. */}
+              {p.etapa !== 'anulado' && p.cliente_id && !cambiado && ficha.facturacion.partes === 0 && (
+                <Button size="sm" variant="outline" disabled={!ficha.escribir} title={ficha.escribir ? undefined : APAGADO} onClick={() => setFacturando(true)}>Facturar</Button>
+              )}
+              {p.etapa !== 'anulado' && p.cliente_id && !cambiado && ficha.facturacion.queda > 0 && (
+                <Button size="sm" variant="outline" disabled={!ficha.escribir} title={ficha.escribir ? undefined : APAGADO} onClick={() => setPorParte(true)}>Facturar una parte</Button>
+              )}
+            </div>
           ))}
           {ficha.cambios.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -262,6 +270,16 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
           onHecha={async (f, yaEstaba) => {
             setFacturando(false)
             onHecho(yaEstaba ? `El pedido ya tenía la factura ${LETRA[f.tipo] ?? ''} ${numeroComprobante(f)}.` : `Factura ${LETRA[f.tipo] ?? ''} ${numeroComprobante(f)} hecha.`)
+            setVuelta((v) => v + 1)
+            await descargarFactura(f).catch(() => {})
+          }} />
+      )}
+      {porParte && p?.cliente_id && (
+        <FacturarParte pedidoId={pedidoId} clienteId={p.cliente_id}
+          onCerrar={() => setPorParte(false)}
+          onHecha={async (f, queda) => {
+            setPorParte(false)
+            onHecho(`Factura ${LETRA[f.tipo] ?? ''} ${numeroComprobante(f)} hecha por ${plata(f.total)}. Quedan ${plata(queda)} por facturar.`)
             setVuelta((v) => v + 1)
             await descargarFactura(f).catch(() => {})
           }} />

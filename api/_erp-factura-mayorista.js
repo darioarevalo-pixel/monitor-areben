@@ -9,13 +9,17 @@
  * Doble llave, como el pedido: verlo = `PANEL_CUENTA_CORRIENTE`; facturar ADEMÁS `VENTA_MAYORISTA_REAL` (en producción el
  * ambiente de ARCA es el REAL: una factura con CAE ⛔ se borra).
  */
-import { ptoVtaDe } from '../motor/arca/arca.core.js'
+import { CBTE, ptoVtaDe } from '../motor/arca/arca.core.js'
 import { facturarLote } from '../motor/arca/lote.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
-import { facturacionDelPedido, leerFacturaLibre, opcionDeCondicionPanel, receptorMayorista } from '../lib/erp/factura-mayorista.core.js'
+import {
+  facturacionDelPedido, leerFacturaLibre, leerParte, leerRenglones, opcionDeCondicionPanel, partePorMonto, productosPendientes, quedaPorFacturar,
+  receptorMayorista,
+} from '../lib/erp/factura-mayorista.core.js'
+import { claveDeFactura, clavesDeFactura, puedeFacturar } from '../lib/erp/factura.core.js'
 import { SIN_ARCA, baseFacturacion, repoFacturas } from './_facturacion.js'
 import { panelCuentaPrendido } from './_erp-clientes.js'
-import { escribirPrendido } from './_erp-pedido.js'
+import { escribirPrendido, nombresDe } from './_erp-pedido.js'
 import { pedirFacturaPorMail } from '../lib/mailer/factura.core.js'
 import { UMBRAL_IDENTIFICAR, ambienteSeguro, arcaDe, facturarVentaPropia, filaParaPdf } from './_erp.js'
 
@@ -203,6 +207,155 @@ export async function facturarPedidoPanel({ body, usuario, quien = usuario }, de
     })
     if (hecha.status) return hecha
     return { ...hecha, factura: { ...hecha.factura, clase: 'venta' } }
+  })
+}
+
+const FACTURAS = [CBTE.FACTURA_A, CBTE.FACTURA_B]
+const NCS = [CBTE.NC_A, CBTE.NC_B]
+const cts = (x) => Math.round(Number(x) * 100)
+const plataTexto = (n) => `$${Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 })}`
+
+/**
+ * Lo facturado de una venta, de `facturas` (la base de BDI): si tiene la ENTERA viva (cualquiera de sus claves, como la busca
+ * `facturarVentaPropia`) y sus PARTES (`venta_ref` = la clave) con sus renglones y lo que les acreditaron sus NC. Cuenta lo
+ * que ⛔ está rechazado, como el disparador `facturas_no_pasarse` (una reservada ya ocupa lugar).
+ * @param {any} sb @param {{ ambiente: string, clave: string, claves: string[] }} p
+ * @returns {Promise<{ sinMigrar: true } | { entera: boolean, partes: Array<{ id: string, total: number, acreditado: number, renglones: any[] }> }>}
+ */
+export async function facturasDeVentaParte(sb, { ambiente, clave, claves }) {
+  const ent = await sb.from('facturas').select('id').eq('ambiente', ambiente).eq('marca', 'bdi').in('venta_id', claves)
+    .eq('clase', 'venta').in('tipo', FACTURAS).neq('estado', 'rechazada').limit(1)
+  if (ent.error) {
+    if (ent.error.code === '42703') return { sinMigrar: true }
+    throw new Error(`facturas (entera): ${ent.error.message}`)
+  }
+  const ps = await sb.from('facturas').select('id, total, renglones').eq('ambiente', ambiente).eq('marca', 'bdi').eq('venta_ref', clave)
+    .eq('clase', 'parte').in('tipo', FACTURAS).neq('estado', 'rechazada')
+  if (ps.error) throw new Error(`facturas (partes): ${ps.error.message}`)
+  const ids = (ps.data || []).map((p) => String(p.id))
+  const acreditado = new Map()
+  if (ids.length) {
+    const nc = await sb.from('facturas').select('asociado_id, total').in('asociado_id', ids).in('tipo', NCS).neq('estado', 'rechazada')
+    if (nc.error) throw new Error(`facturas (NC de las partes): ${nc.error.message}`)
+    for (const n of nc.data || []) acreditado.set(String(n.asociado_id), (acreditado.get(String(n.asociado_id)) || 0) + cts(n.total))
+  }
+  return {
+    entera: (ent.data || []).length > 0,
+    partes: (ps.data || []).map((p) => ({ id: String(p.id), total: Number(p.total), acreditado: (acreditado.get(String(p.id)) || 0) / 100, renglones: p.renglones || [] })),
+  }
+}
+
+/** El motivo del disparador `facturas_no_pasarse`, dicho para la pantalla (la base frena aunque la puerta ya lo haya medido). */
+function motivoDeLaBase(e) {
+  const m = e instanceof Error ? e.message : String(e)
+  if (!/FACTURA_PARTE/.test(m)) return null
+  if (/entera/.test(m)) return 'La venta ya tiene la factura entera: no se factura por partes.'
+  if (/se pasa/.test(m)) return 'Con esta parte se pasa del total de la venta (otra parte salió recién): volvé a abrir y mirá cuánto queda.'
+  return 'La base no dejó hacer esta parte.'
+}
+
+/**
+ * «Facturar una PARTE» desde la HOJA DEL PEDIDO (Darío §5; Bruno 31-oct: «facturar por partes SÍ se hace»). Dos pasos, la
+ * misma acción:
+ *   - `proponer` (⛔ factura): lo que queda de la venta y los productos que todavía ⛔ entraron en una parte; con `monto`, la
+ *     propuesta de renglones (`partePorMonto`: 'ajustados' —el default, «la mayoría»: los precios cambian para que dé JUSTO el
+ *     monto— o 'reales').
+ *   - `emitir`: los renglones como los dejó Darío (corregibles) ⇒ una factura `clase: 'parte'` por su total, ≤ lo que queda.
+ * El tope es el TOTAL de la venta (`venta_ficha`); la llave es `<clave>:parte:<uuid>` con `venta_ref` = la clave con que
+ * factura la entera (`claveDeFactura`): así el freno de la entera (`conPartes`) y el de la parte se ven. 🔴 Con la entera viva
+ * la parte ⛔ sale; y pasarse lo frena además la BASE (dos partes a la vez). El mes del techo es el de HOY (la parte se
+ * factura hoy, como la libre). ⛔ mueve stock ni la cuenta corriente: la venta ya existe.
+ * @param {{ body: any, usuario: string|null, quien?: any }} p
+ * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, arca?: any, repo?: any, sb?: any, env?: any, leerPedido?: Function, facturasDeVenta?: Function, nombres?: Function }} deps
+ */
+export async function partePedidoPanel({ body, usuario, quien = usuario }, deps) {
+  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Se factura desde acá el día que BDI pasa al ERP. Hasta entonces, en Gestión Nube.' }
+  if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
+  const x = leerParte(body)
+  if (x.error) return { status: 400, error: x.error }
+  const { ambiente, error: errorAmbiente } = ambienteSeguro()
+  if (!ambiente) return { status: 409, error: errorAmbiente }
+  const sb = deps.sb || (deps.repo && deps.facturasDeVenta ? null : baseFacturacion())
+
+  return deps.conMotor('bdi', 'La parte del pedido', async (pg) => {
+    const leer = deps.leerPedido || (async (db, e) => (await import('../motor/pedido/venta.mjs')).fichaDePedidoMayorista(db, e))
+    const r = await leer(pg, { pedido_id: x.pedidoId })
+    if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADO' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo leer el pedido.' }
+    const p = r.pedido
+    if (p.anulado_en) return { status: 409, error: 'El pedido está anulado: no se factura.' }
+    if (!p.venta_id || !p.cliente_id) return { status: 409, error: 'El pedido todavía no entró al ERP con un cliente.' }
+    const [f] = (await pg.query('select * from venta_ficha where id = $1', [String(p.venta_id)])).rows
+    const frena = puedeFacturar(f, { ambiente, facturada: (f?.facturas || []).some((v) => v.tipo === 'factura') })
+    if (frena) return { status: f ? 409 : 404, error: frena }
+    const clave = claveDeFactura(f)
+    const hechas = await (deps.facturasDeVenta || facturasDeVentaParte)(sb, { ambiente, clave, claves: clavesDeFactura(f) })
+    if (hechas.sinMigrar) return { status: 409, error: SIN_MIGRAR }
+    if (hechas.entera) return { status: 409, error: 'La venta ya tiene la factura entera: no se factura por partes.' }
+
+    // Lo vendido, de la VENTA (sus precios reales: importe ÷ cantidad), con los nombres de la hoja.
+    const lineas = (f.lineas || []).filter((l) => Number(l.cantidad) > 0 && l.size_id != null)
+    const n = await (deps.nombres || nombresDe)(pg, lineas)
+    const vendidos = lineas.map((l) => {
+      const k = `${Number(l.product_id)}:${Number(l.size_id)}`
+      const nombre = n.producto.get(String(l.product_id)) ?? l.sku ?? `Producto ${l.product_id}`
+      return { clave: k, descripcion: [nombre, n.talle.get(k)].filter(Boolean).join(' - '), cantidad: Number(l.cantidad), unitario: Number(l.importe) / Number(l.cantidad) }
+    })
+    // Una parte que su NC dejó en cero devuelve también sus productos.
+    const vivas = hechas.partes.filter((q) => cts(q.total) - cts(q.acreditado) > 0)
+    const pendientes = productosPendientes(vendidos, vivas)
+    const estado = quedaPorFacturar(Number(f.total), hechas.partes)
+    if (!(estado.queda > 0)) return { status: 409, error: 'La venta ya está facturada entera, por partes.' }
+    if (x.monto != null && cts(x.monto) > cts(estado.queda)) return { status: 409, error: `Quedan ${plataTexto(estado.queda)} por facturar de esta venta.` }
+
+    if (x.paso === 'proponer') {
+      const base = { ok: true, ...estado, partes: hechas.partes.length, pendientes }
+      if (x.monto == null) return base
+      const prop = partePorMonto({ pendientes, monto: x.monto, precios: x.precios })
+      if (prop.error) return { status: 409, error: prop.error }
+      return { ...base, precios: x.precios, propuesta: prop }
+    }
+
+    const lr = leerRenglones(x.renglones, { claves: new Set(vendidos.map((v) => v.clave)) })
+    if (lr.error) return { status: 400, error: lr.error }
+    if (cts(lr.total) > cts(estado.queda)) return { status: 409, error: `Quedan ${plataTexto(estado.queda)} por facturar de esta venta: los renglones suman ${plataTexto(lr.total)}.` }
+    const ficha = await leerFicha(pg, String(p.cliente_id))
+    if (!ficha) return { status: 404, error: 'No está la ficha del cliente del pedido.' }
+    const rec = receptorMayorista(ficha, x.datos)
+    if (rec.falta) return { status: 409, error: rec.falta, falta: true }
+    const arca = arcaDe(deps, sb)
+    if (!arca) return { status: 409, error: SIN_ARCA }
+    if (rec.guardar) {
+      const mal = await completarFicha(pg, ficha, rec.ficha)
+      if (mal) return mal
+    }
+    const hoy = diaArgentino(Date.now())
+    const ventaId = `${clave}:parte:${globalThis.crypto.randomUUID()}`
+    const extras = new Map([[ventaId, { clase: 'parte', venta_ref: clave, tope: Number(f.total), renglones: lr.renglones, cliente_id: ficha.id }]])
+    let hecho
+    try {
+      hecho = await facturarLote({
+        arca, repo: repoConExtras(deps.repo || repoFacturas(sb), extras), ambiente, marca: 'bdi',
+        ptoVta: ptoVtaDe(ambiente, 'bdi', deps.env || process.env), tipo: rec.tipo,
+        comprobantes: [{ ventaId, mes: hoy.slice(0, 7), tipo: rec.tipo, fecha: hoy, total: lr.total, receptor: rec.receptor }],
+        reglas: { umbralIdentificar: UMBRAL_IDENTIFICAR, hoy },
+        lote: globalThis.crypto.randomUUID(), usuario,
+      })
+    } catch (e) {
+      const motivo = motivoDeLaBase(e)
+      if (motivo) return { status: 409, error: motivo }
+      throw e
+    }
+    const [hecha] = hecho.autorizadas
+    if (!hecha) {
+      const motivos = [...hecho.rechazadas, ...hecho.noSalen].flatMap((y) => y.motivos || [])
+      return { status: 409, error: `ARCA no la autorizó: ${motivos.join(' · ') || 'sin motivo'}` }
+    }
+    const receptor = { nombre: rec.ficha.razonSocial || ficha.razon_social || ficha.nombre, domicilio: rec.ficha.domicilio || ficha.domicilio || null }
+    return {
+      ok: true, ...quedaPorFacturar(Number(f.total), [...hechas.partes, { total: lr.total }]),
+      factura: { ...filaParaPdf(hecha, { numero: p.numero, renglones: lr.renglones, receptor }), clase: 'parte', venta_ref: clave },
+    }
   })
 }
 

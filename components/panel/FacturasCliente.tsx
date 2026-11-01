@@ -9,7 +9,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select } from '@/components/ui'
 import { color, font } from '@/components/ui/tokens'
-import { enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, leerFacturasClientePanel, type FacturaDelPanel, type FiscalDelPanel } from '@/lib/erp/cliente'
+import {
+  emitirPartePanel, enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, leerFacturasClientePanel, proponerPartePanel,
+  type EstadoParte, type FacturaDelPanel, type FiscalDelPanel, type RenglonParte,
+} from '@/lib/erp/cliente'
 import { parsearMonto } from '@/lib/compromisos/plata.core.js'
 
 /** El PDF (jsPDF + QR) se carga recién al pedirlo: ⛔ entra al paquete del panel. */
@@ -254,6 +257,125 @@ function FormFacturarPedido({ pedidoId, fiscal, total, preparado, onCerrar, onHe
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
         <Button tone="brand" onClick={hacer} disabled={enviando || !(total > 0)}>{enviando ? 'Pidiendo el CAE…' : `Facturar ${plata(total)}`}</Button>
+      </div>
+    </div>
+  )
+}
+
+type RenglonEditable = { clave: string | null; descripcion: string; cantidad: string; unitario: string }
+const editable = (r: RenglonParte): RenglonEditable => ({ clave: r.clave ?? null, descripcion: r.descripcion, cantidad: String(r.cantidad), unitario: String(r.unitario) })
+
+/**
+ * «Facturar una parte» desde la HOJA DEL PEDIDO (Darío §5; Bruno 31-oct): un MONTO de lo que queda de la venta. Primero se
+ * pregunta si el cliente quiere los precios REALES; si no —«la mayoría»— los precios se AJUSTAN para que el total dé justo el
+ * monto. Los renglones propuestos se pueden corregir antes de facturar. ⛔ mueve stock ni la cuenta corriente.
+ */
+export function FacturarParte({ pedidoId, clienteId, onCerrar, onHecha }: {
+  pedidoId: string; clienteId: string; onCerrar: () => void; onHecha: (f: FacturaDelPanel, queda: number) => void | Promise<void>
+}) {
+  const [fiscal, setFiscal] = useState<FiscalDelPanel | null>(null)
+  const [estado, setEstado] = useState<EstadoParte | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let vivo = true
+    Promise.all([leerFacturasClientePanel(clienteId), proponerPartePanel({ pedidoId })])
+      .then(([r, e]) => {
+        if (!vivo) return
+        if (!r.prendido) { setError('La cuenta corriente del panel está apagada.'); return }
+        setFiscal(r.fiscal); setEstado(e)
+      })
+      .catch((e) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudo leer el pedido.') })
+    return () => { vivo = false }
+  }, [clienteId, pedidoId])
+  const listo = fiscal && estado
+  return (
+    <Modal abierto onCerrar={onCerrar} titulo="Facturar una parte" pie={!listo ? <Button variant="outline" onClick={onCerrar}>Cancelar</Button> : undefined}>
+      {!listo && !error && <div style={{ fontSize: font.sm, color: color.mut2 }}>Cargando…</div>}
+      {!listo && error && <Notice tone="danger">{error}</Notice>}
+      {listo && <FormFacturarParte pedidoId={pedidoId} fiscal={fiscal} estado={estado} onCerrar={onCerrar} onHecha={onHecha} />}
+    </Modal>
+  )
+}
+
+function FormFacturarParte({ pedidoId, fiscal, estado, onCerrar, onHecha }: {
+  pedidoId: string; fiscal: FiscalDelPanel; estado: EstadoParte; onCerrar: () => void; onHecha: (f: FacturaDelPanel, queda: number) => void | Promise<void>
+}) {
+  const fis = useDatosFiscales(fiscal)
+  const [monto, setMonto] = useState('')
+  const [reales, setReales] = useState('no')
+  const [renglones, setRenglones] = useState<RenglonEditable[] | null>(null)
+  const [error, setError] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+
+  const leidos = (renglones ?? []).map((r) => ({ clave: r.clave, descripcion: r.descripcion.trim(), cantidad: Number(r.cantidad), unitario: parsearMonto(r.unitario) ?? NaN }))
+  const total = leidos.reduce((a, r) => a + (Number.isFinite(r.cantidad * r.unitario) ? Math.round(r.cantidad * r.unitario * 100) : 0), 0) / 100
+  const sePasa = Math.round(total * 100) > Math.round(estado.queda * 100)
+  const poner = (i: number, k: keyof RenglonEditable, v: string) => setRenglones((rs) => (rs ?? []).map((r, j) => (j === i ? { ...r, [k]: v } : r)))
+
+  async function proponer() {
+    const m = parsearMonto(monto)
+    if (!(m && m > 0)) { setError('Poné el monto a facturar.'); return }
+    setOcupado(true); setError('')
+    try {
+      const r = await proponerPartePanel({ pedidoId, monto: m, precios: reales === 'si' ? 'reales' : 'ajustados' })
+      setRenglones((r.propuesta?.renglones ?? []).map(editable))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo proponer la parte.')
+    } finally { setOcupado(false) }
+  }
+
+  async function facturar() {
+    setOcupado(true); setError('')
+    try {
+      const r = await emitirPartePanel({ pedidoId, renglones: leidos, ...fis.cuerpo() })
+      await onHecha(r.factura, r.queda)
+    } catch (e) {
+      if ((e as { datos?: { falta?: boolean } }).datos?.falta) fis.setPedirDatos(true)
+      setError(e instanceof Error ? e.message : 'No se pudo hacer la factura.')
+    } finally { setOcupado(false) }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: font.sm, color: color.mut2 }}>
+        Quedan <b style={{ color: color.ink, fontVariantNumeric: 'tabular-nums' }}>{plata(estado.queda)}</b> por facturar de {plata(estado.total)}. No mueve stock ni la cuenta corriente.
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 6, alignItems: 'end' }}>
+        <Field label="Monto a facturar"><Input value={monto} inputMode="decimal" placeholder="$" onChange={(e) => setMonto(e.target.value)} /></Field>
+        <Field label="¿Quiere los precios reales?">
+          <Select value={reales} onChange={(e) => setReales(e.target.value)}>
+            <option value="no">No: se ajustan al monto</option>
+            <option value="si">Sí: precios reales</option>
+          </Select>
+        </Field>
+      </div>
+      <Button size="sm" variant="outline" style={{ height: 'auto', alignSelf: 'flex-start' }} disabled={ocupado} onClick={proponer}>
+        {renglones ? 'Volver a proponer los renglones' : 'Proponer los renglones'}
+      </Button>
+
+      {renglones && renglones.map((r, i) => (
+        <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 70px 110px auto', gap: 6, alignItems: 'end' }}>
+          <Field label={i === 0 ? 'Producto' : ''}><Input value={r.descripcion} maxLength={120} onChange={(e) => poner(i, 'descripcion', e.target.value)} /></Field>
+          <Field label={i === 0 ? 'Cantidad' : ''}><Input value={r.cantidad} inputMode="numeric" onChange={(e) => poner(i, 'cantidad', e.target.value.replace(/\D/g, ''))} /></Field>
+          <Field label={i === 0 ? 'Precio unitario' : ''}><Input value={r.unitario} inputMode="decimal" placeholder="$" onChange={(e) => poner(i, 'unitario', e.target.value)} /></Field>
+          <Button size="sm" variant="ghost" style={{ height: 'auto' }} disabled={renglones.length === 1} onClick={() => setRenglones((rs) => (rs ?? []).filter((_, j) => j !== i))}>Sacar</Button>
+        </div>
+      ))}
+      {renglones && (
+        <>
+          <Button size="sm" variant="outline" style={{ height: 'auto', alignSelf: 'flex-start' }} disabled={renglones.length >= 40}
+            onClick={() => setRenglones((rs) => [...(rs ?? []), { clave: null, descripcion: '', cantidad: '1', unitario: '' }])}>Agregar renglón</Button>
+          <div style={{ fontSize: font.md, fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Total {plata(total)}</div>
+          {sePasa && <Notice tone="danger">Se pasa de lo que queda por facturar ({plata(estado.queda)}).</Notice>}
+          <CamposFiscales fiscal={fiscal} f={fis} />
+        </>
+      )}
+      {error && <Notice tone="danger">{error}</Notice>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
+        {renglones && (
+          <Button tone="brand" onClick={facturar} disabled={ocupado || !(total > 0) || sePasa}>{ocupado ? 'Pidiendo el CAE…' : `Facturar ${plata(total)}`}</Button>
+        )}
       </div>
     </div>
   )

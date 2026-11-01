@@ -723,6 +723,14 @@ export const facturaLibrePanel = (p: { clienteId: string; renglones: Array<{ des
 /** «Facturar» desde la hoja del pedido: la factura ENTERA de su venta, a la ficha del pedido. 409 con `falta` ⇒ pedir los datos fiscales. */
 export const facturarPedidoPanel = (p: { pedidoId: string; doc?: string; condicion?: string; razonSocial?: string; domicilio?: string }) =>
   pedir<{ ok: true; yaEstaba: boolean; factura: FacturaDelPanel }>(post({ accion: 'facturar-pedido-panel', marca: 'bdi', ...p }), '', 'No se pudo hacer la factura.')
+/** Un renglón de una PARTE: `clave` = la variante de la venta (con ella se descuenta de lo que queda); sin clave, escrito a mano. */
+export type RenglonParte = { clave?: string | null; descripcion: string; cantidad: number; unitario: number; importe?: number }
+export type EstadoParte = { ok: true; total: number; facturado: number; queda: number; partes: number; pendientes: RenglonParte[] }
+/** «Facturar una parte» — proponer (⛔ factura; sin monto, sólo lo que queda) y emitir (los renglones corregidos). 409 con `falta` ⇒ datos fiscales. */
+export const proponerPartePanel = (p: { pedidoId: string; monto?: number; precios?: 'ajustados' | 'reales' }) =>
+  pedir<EstadoParte & { precios?: 'ajustados' | 'reales'; propuesta?: { renglones: RenglonParte[]; total: number } }>(post({ accion: 'parte-pedido-panel', marca: 'bdi', paso: 'proponer', ...p }), '', 'No se pudo proponer la parte.')
+export const emitirPartePanel = (p: { pedidoId: string; renglones: RenglonParte[]; doc?: string; condicion?: string; razonSocial?: string; domicilio?: string }) =>
+  pedir<{ ok: true; total: number; facturado: number; queda: number; factura: FacturaDelPanel }>(post({ accion: 'parte-pedido-panel', marca: 'bdi', paso: 'emitir', ...p }), '', 'No se pudo hacer la factura.')
 /** «Es nuevo»: la ficha (nombre + CUIT/DNI) y el número del chat anotado en ella. 409 con `existe` si el documento ya tiene ficha. */
 export const clienteNuevoPanel = (p: { nombre: string; doc: string; whatsapp: string; persona?: string }) =>
   pedir<{ ok: true; cliente: ClienteDelPanel }>(post({ accion: 'cliente-nuevo-panel', marca: 'bdi', ...p }), '', 'No se pudo cargar el cliente.')
