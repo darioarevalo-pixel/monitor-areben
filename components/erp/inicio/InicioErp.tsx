@@ -147,7 +147,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const top = ppm?.renglones ? masDejan(agruparPorProducto(filtrarPorProducto(ppm.renglones as never, { linea }))) : null
   const avisos = [
     gs?.g && gs.g.cobrosSinComision > 0 ? `${cuantos(gs.g.cobrosSinComision, 'cobro', 'cobros')} con tarjeta o Mercado Pago sin tasa cargada: esas comisiones no están en los gastos.` : null,
-    gs?.g?.ordenesMlSinComision ? `${cuantos(gs.g.ordenesMlSinComision, 'orden', 'órdenes')} de Mercado Libre sin lo que cobra ML: esa comisión no está en los gastos.` : null,
+    gs?.g?.ordenesMlSinComision ? `${cuantos(gs.g.ordenesMlSinComision, 'orden', 'órdenes')} de Mercado Libre sin lo que cobra: esa comisión no está en los gastos.` : null,
     gs?.g?.enviosSinCosto ? `${cuantos(gs.g.enviosSinCosto, 'pedido', 'pedidos')} de Tienda Nube sin el costo de envío: ese costo no está en los gastos.` : null,
     m?.sinCosto ? `${cuantos(m.sinCosto, 'venta', 'ventas')} sin costo en Gestión Nube: suman su precio sin restar nada.` : null,
     stock?.productosSinCosto ? `${cuantos(stock.productosSinCosto, 'producto', 'productos')} con stock sin costo (${cuantos(stock.sinCosto, 'unidad', 'unidades')}): no suman al stock a costo.` : null,

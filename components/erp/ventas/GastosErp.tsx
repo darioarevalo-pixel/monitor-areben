@@ -109,7 +109,7 @@ export function GastosErp() {
           <b>{res.sinComision.toLocaleString('es-AR')} {res.sinComision === 1 ? 'cobro con tarjeta o Mercado Pago' : 'cobros con tarjeta o Mercado Pago'} no {res.sinComision === 1 ? 'tiene' : 'tienen'} comisión</b>: la forma de pago no tiene la tasa cargada. Esas comisiones <b>no están en el total</b>. La tasa se carga en Configuración › ¿A qué cuenta va?.
         </Notice>
       )}
-      {res && res.mlSinComision > 0 && <Notice tone="warning"><b>{res.mlSinComision.toLocaleString('es-AR')} {res.mlSinComision === 1 ? 'orden' : 'órdenes'} de Mercado Libre</b> sin lo que cobra ML: esa comisión <b>no está en el total</b>.</Notice>}
+      {res && res.mlSinComision > 0 && <Notice tone="warning"><b>{res.mlSinComision.toLocaleString('es-AR')} {res.mlSinComision === 1 ? 'orden' : 'órdenes'} de Mercado Libre</b> sin lo que cobra: esa comisión <b>no está en el total</b>.</Notice>}
       {cargado && <Notice tone="success" onClose={() => setCargado(null)}>{cargado}</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
