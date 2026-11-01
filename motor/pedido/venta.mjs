@@ -12,17 +12,18 @@
  * El que se cae ⇒ `anularVenta` (suelta la reserva; lo que ya pagó queda a favor en su cuenta).
  * ❓ (plan 1b) la reserva del mayorista ⛔ vence sola (la de TN, 15 días): se suelta A MANO, anulando.
  *
- * Interruptor `VENTA_MAYORISTA_REAL` (lista de marcas): apagado ⇒ la venta es de PRUEBA (⛔ mueve el libro). Mientras GN
+ * Interruptor: el corte de la marca o `VENTA_MAYORISTA_REAL` (`ventaMayoristaReal`, `lib/llave-corte.mjs`): apagado ⇒ PRUEBA (⛔ mueve el libro). Mientras GN
  * viva, el monitor ⛔ llama nada de esto (409): la venta mayorista la sigue registrando la copia de GN (`bin/mayorista.mjs`).
  *
  * Las funciones con `db` reciben un cliente pg CONECTADO y sin transacción (como `registrarVenta`, que abre la suya).
  * Devuelven `{ ok: true, … }` o `{ ok: false, error }`.
  */
-import { MARCAS_LLAVE, anularVenta, reemplazarVenta, registrarVenta } from '../venta/registrar.mjs'
+import { anularVenta, reemplazarVenta, registrarVenta } from '../venta/registrar.mjs'
 import { redondear } from '../venta/redondeo.mjs'
 import { redondeoDe } from '../venta/redondeo-db.mjs'
 import { pendienteDeVentas } from '../cuenta/cuenta.mjs'
 import { creditoDe } from '../cuenta/libro.mjs'
+import { leerCortes, ventaMayoristaReal } from '../llave-corte.mjs'
 
 const q = async (db, sql, p = []) => (await db.query(sql, p)).rows
 const pesos = (x) => Math.round(Number(x) * 100) / 100
@@ -33,12 +34,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /** Medido 15-oct (GN, 60 d): la mayorista sale del Depósito Minorista (216/217). El pedido trae el suyo si el catálogo lo mandó. */
 export const DEPOSITO_MAYORISTA = { bdi: 'deposito_minorista' }
 
-/** 🔑 La llave «el pedido mayorista del ERP es venta REAL»: `VENTA_MAYORISTA_REAL=bdi`. Se prende el día del corte. Un typo FALLA. */
-export function ventaMayoristaRealEn(marca, env = process.env) {
-  const lista = String(env.VENTA_MAYORISTA_REAL ?? '').split(',').map((m) => m.trim().toLowerCase()).filter(Boolean)
-  for (const m of lista) if (!MARCAS_LLAVE.includes(m)) throw new Error(`VENTA_MAYORISTA_REAL: marca desconocida «${m}»`)
-  return lista.includes(marca)
-}
+/** 🔑 La llave «el pedido mayorista del ERP es venta REAL»: el corte de la marca (`erp_corte`) o `VENTA_MAYORISTA_REAL` a mano
+ * (`lib/llave-corte.mjs`, Bruno 1-nov). La variable sola se re-exporta por compatibilidad (tests y puertas viejas). */
+export { ventaMayoristaRealEn } from '../llave-corte.mjs'
 
 /** `pedido:<clave>` (o `pedido:<id>` si entró sin clave, el de antes de la 033); la versión `n` > 1 de un pedido cambiado lleva `:<n>`. */
 export function origenRefPedido(p, n = 1) {
@@ -183,7 +181,7 @@ export async function entrarPedidoMayorista(db, e, { env = process.env } = {}) {
   if (p.lineas.some((l) => l.size_id == null)) return falla('SIN_TALLE', `El pedido ${p.numero} tiene un renglón sin talle: hay que cambiarlo antes`, 'lineas')
   const cuenta = await cuentaCorrienteDe(db, p.marca)
   if (!cuenta) return falla('SIN_CUENTA_CORRIENTE', `${p.marca} no tiene la cuenta «Cuenta corriente» (sql/025)`)
-  const nueva = ventaDePedido({ pedido: p, lineas: p.lineas, total: p.total, cliente_id: cli.id, cuenta, usuario, real: ventaMayoristaRealEn(p.marca, env) })
+  const nueva = ventaDePedido({ pedido: p, lineas: p.lineas, total: p.total, cliente_id: cli.id, cuenta, usuario, real: ventaMayoristaReal(p.marca, await leerCortes(db), env) })
   const r = await registrarVenta(db, nueva)
   if (!r.ok) return r
   // La venta ya quedó (idempotente por `origen_ref`): si esto falla, repetir la toma igual.
@@ -228,7 +226,7 @@ export async function cambiarPedidoMayorista(db, e, { env = process.env } = {}) 
   const [vieja] = await q(db, 'select cliente_id::text, prueba from venta where id = $1', [p.venta_id])
   const cuenta = await cuentaCorrienteDe(db, p.marca)
   if (!cuenta) return falla('SIN_CUENTA_CORRIENTE', `${p.marca} no tiene la cuenta «Cuenta corriente» (sql/025)`)
-  const real = ventaMayoristaRealEn(p.marca, env)
+  const real = ventaMayoristaReal(p.marca, await leerCortes(db), env)
   if (real === vieja.prueba) return falla('CAMBIO_DE_LLAVE', `El pedido ${p.numero} entró ${vieja.prueba ? 'de prueba' : 'real'} y la llave cambió: se anula y se vuelve a entrar`)
   const nueva = ventaDePedido({ pedido: p, lineas: c.lineas, total, cliente_id: vieja.cliente_id, cuenta, usuario, real, n: n + 1 })
   const r = await reemplazarVenta(db, { venta_id: p.venta_id, motivo: `Pedido ${p.numero}: cambiado por ${usuario}`, usuario, nueva })

@@ -45,10 +45,16 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
       expect(await accionDePedido({ accion, body: { pedidoId: P }, usuario: 'bruno' }, { conMotor: abrir, prendido: true, escribir: false })).toMatchObject({ status: 409 })
     }
     expect(abrir).not.toHaveBeenCalled()
-    expect(await escribirPrendido({} as NodeJS.ProcessEnv)).toBe(false)
-    expect(await escribirPrendido({ VENTA_MAYORISTA_REAL: 'bdi' } as unknown as NodeJS.ProcessEnv)).toBe(true)
-    pv.ventaMayoristaRealEn.mockImplementationOnce(() => { throw new Error('marca desconocida') })
-    expect(await escribirPrendido({ VENTA_MAYORISTA_REAL: 'bid' } as unknown as NodeJS.ProcessEnv)).toBe(false)
+    // La llave la decide el motor REAL (`motor/llave-corte.mjs`): el corte de BDI la prende sola (Bruno 1-nov).
+    const sinCorte = { cortes: async () => ({ stunned: '2026-10-28T23:40:27.759Z' }) }
+    const conCorte = { cortes: async () => ({ bdi: '2026-10-01T03:00:00.000Z' }) }
+    const env = (o: Record<string, string>) => o as unknown as NodeJS.ProcessEnv
+    expect(await escribirPrendido(env({}), sinCorte)).toBe(false)
+    expect(await escribirPrendido(env({ VENTA_MAYORISTA_REAL: 'bdi' }), sinCorte)).toBe(true)
+    expect(await escribirPrendido(env({}), conCorte)).toBe(true)
+    expect(await escribirPrendido(env({ ERP_NO_MANDA: 'bdi' }), conCorte)).toBe(false)
+    expect(await escribirPrendido(env({ VENTA_MAYORISTA_REAL: 'bid' }), sinCorte)).toBe(false)
+    expect(await escribirPrendido(env({}), { cortes: async () => { throw new Error('base caída') } })).toBe(false)
   })
 
   it('sin la sql/064 en la base: vacío, ⛔ rompe el panel', async () => {

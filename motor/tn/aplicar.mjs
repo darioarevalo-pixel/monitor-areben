@@ -5,7 +5,8 @@
  */
 import { cargarIndice } from '../cargar.mjs'
 import { anularVenta, registrarVenta } from '../venta/registrar.mjs'
-import { origenRef, planVentasTN, ventaRealEn } from './venta.mjs'
+import { origenRef, planVentasTN } from './venta.mjs'
+import { leerCortes, ventaTnReal } from '../llave-corte.mjs'
 
 /** @param {{ q: Function }} db  @param {string} tienda  @param {Array} ordenes  filas de `tn_orden` con `lineas` */
 export async function planDe(db, tienda, ordenes) {
@@ -13,7 +14,7 @@ export async function planDe(db, tienda, ordenes) {
   const cuentas = await db.q('select id, nombre, medio, activa from cuenta_cobro where marca = $1', [tienda])
   const refs = ordenes.map((o) => origenRef(tienda, o.tn_id))
   const ya = new Map((refs.length ? await db.q(`select origen_ref, id, estado from venta where origen = 'tn' and origen_ref = any($1)`, [refs]) : []).map((v) => [v.origen_ref, v]))
-  return planVentasTN({ tienda, ordenes, indice, cuentas, ya, real: ventaRealEn(tienda) })
+  return planVentasTN({ tienda, ordenes, indice, cuentas, ya, real: ventaTnReal(tienda, await leerCortes(db)) })
 }
 
 /** @param {import('pg').Client} conexion  sin transacción abierta: `registrarVenta` maneja la suya */

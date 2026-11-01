@@ -34,7 +34,8 @@ const CUENTA_DE_GATEWAY = [
 ]
 
 /**
- * 🔑 La llave de «el pedido de TN es venta REAL»: `VENTA_TN_REAL=stunned` (variable del repo `areben-motor` para el cron de
+ * La VARIABLE sola de «el pedido de TN es venta REAL» — ⛔ se llama fuera de `lib/llave-corte.mjs` (`ventaTnReal`: el corte
+ * de la tienda la prende solo, Bruno 1-nov). `VENTA_TN_REAL=stunned` (variable del repo `areben-motor` para el cron de
  * Actions Y variable de Vercel de `areben-erp` para el aviso al instante: ⛔ una sola no alcanza). Sin ella, todas en PRUEBA
  * (⛔ mueven el libro). Se prende con el corte de la marca, junto con el conteo inicial y `STOCK_TN_MANDA`. Un typo FALLA.
  * Las ventas que YA están (en prueba) ⛔ cambian: la clave es el pedido y se salta; lo anterior al corte está en el conteo.

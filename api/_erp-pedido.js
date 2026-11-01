@@ -12,16 +12,21 @@
  * Sin la sql/064 en la base, las lecturas contestan vacío (`falta064`) en vez de romper.
  */
 import { panelCuentaPrendido } from './_erp-clientes.js'
+import { cortesDeCaja } from './_caja-corte.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /** Los pedidos SIN ENTRAR que se buscan por el teléfono del chat: los de los últimos días (el catálogo manda el teléfono escrito a mano). */
 const DIAS_SIN_ENTRAR = 60
 
-/** ¿La llave de escribir está prendida? Sin el motor nuevo o con un typo en la variable ⇒ apagada (⛔ rompe el panel). */
-export async function escribirPrendido(env = process.env) {
+/**
+ * ¿La llave de escribir está prendida? = la venta mayorista de BDI es REAL: desde el CORTE de BDI (`erp_corte`) o con
+ * `VENTA_MAYORISTA_REAL=bdi` a mano; 🛑 `ERP_NO_MANDA=bdi` la apaga (motor `lib/llave-corte.mjs`, Bruno 1-nov: «todo con
+ * interruptor»). Sin el motor, sin poder leer los cortes o con un typo ⇒ APAGADA (409, ⛔ rompe el panel ni escribe).
+ */
+export async function escribirPrendido(env = process.env, { cortes = () => cortesDeCaja('bdi') } = {}) {
   try {
-    const { ventaMayoristaRealEn } = await import('../motor/pedido/venta.mjs')
-    return ventaMayoristaRealEn('bdi', env)
+    const { ventaMayoristaReal } = await import('../motor/llave-corte.mjs')
+    return ventaMayoristaReal('bdi', await cortes(), env)
   } catch {
     return false
   }
