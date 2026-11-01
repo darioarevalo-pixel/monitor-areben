@@ -29,8 +29,8 @@ export async function reglasGuardadas(sb, store, marca) {
  * Zattia ⛔ tiene `transferenciaFija` ⇒ sin mapeo sigue sin cobrar transferencia, como antes.
  */
 export async function reglasDeHoy(sb, store, reglas) {
-  const { feria: _f, feriaIdsCampania: _x, feriaPrecios: _p, reglasComerciales: _rc, comerciales: _c, ...guardadas } = reglas
-  const sinFeria = { ...guardadas, comerciales: await comercialesDeHoy(sb, store, reglas) }
+  const { feria: _f, feriaIdsCampania: _x, feriaPrecios: _p, pctDePrendas: _pp, reglasComerciales: _rc, comerciales: _c, ...guardadas } = reglas
+  const sinFeria = { ...guardadas, comerciales: await comercialesDeHoy(sb, store, reglas), ...(await pctDeCampanias(sb, store, reglas.pctCampanias)) }
   // 🔑 V4: la tienda que ⛔ verifica en Mercado Pago manda la transferencia a SU cuenta fija.
   if (!verificaTransferencias(reglas)) {
     const fija = Number(reglas.transferenciaFija)
@@ -81,6 +81,31 @@ export async function feriaDeCampanias(sb, store, ids) {
     if (!data || data.length < 1000) break
   }
   return { feriaIdsCampania: [...pids], feriaPrecios: precios }
+}
+
+/**
+ * 🔑 El % por campaña (`pctDePrenda` del núcleo; Bruno, 1-nov, Cyber Monday): producto → % de su campaña. Cuentan los ítems
+ * `confirmado` Y `aplicado`: la campaña puede tener el precio escrito por OTRA (la de Zattia, todos `confirmado`). Con el
+ * producto en dos campañas gana la primera de la lista. 🔴 Si la lectura falla, LANZA: cobrar el % de la cuenta le da de
+ * más a una prenda que puede estar al costo (lo mismo que la feria). Sin campañas ⇒ ⛔ agrega la clave.
+ */
+export async function pctDeCampanias(sb, store, lista) {
+  if (!Array.isArray(lista) || !lista.length) return {}
+  /** @type {Record<string, { nombre: string, efectivo: number, transferencia: number }>} */
+  const pctDePrendas = {}
+  for (const c of lista) {
+    for (let desde = 0; desde < 20_000; desde += 1000) {
+      const { data, error } = await sb.from('liquidacion_items').select('pid').eq('store', store).eq('liq_id', c.campania).in('estado', ['confirmado', 'aplicado'])
+        .order('pid').range(desde, desde + 999)
+      if (error) throw new Error(`No se pudieron leer los productos de ${c.nombre} en Liquidación (${error.message}).`)
+      for (const f of data || []) {
+        const n = Number(f.pid)
+        if (Number.isInteger(n) && n > 0 && !pctDePrendas[n]) pctDePrendas[n] = { nombre: c.nombre, efectivo: c.efectivo, transferencia: c.transferencia }
+      }
+      if (!data || data.length < 1000) break
+    }
+  }
+  return Object.keys(pctDePrendas).length ? { pctDePrendas } : {}
 }
 
 /**

@@ -28,6 +28,7 @@ const base = {
   agenda: [] as Fila[],
   // La feria de Liquidación (Bruno, 11-oct).
   liqItems: [] as Fila[],
+  liqCampanias: [] as Fila[],
   // W6: las gift cards (`null` = falta la migración).
   giftLotes: [] as Fila[] | null,
   giftCards: [] as Fila[],
@@ -71,7 +72,7 @@ function consulta(tabla: string) {
       : tabla === 'mp_cuenta_uso' ? base.usos : tabla === 'mp_cuentas' ? base.llaves
       // `caja_turno.deposito` tiene default 'local' en la base (sql/migrate-caja-turno-deposito.sql): el mock lo pone igual.
       : tabla === 'caja_turno' ? (base.turnos.forEach((t) => { t.deposito ??= 'local' }), base.turnos) : tabla === 'caja_turno_mov' ? base.movs
-      : tabla === 'agenda_promos' ? base.agenda : tabla === 'liquidacion_items' ? base.liqItems
+      : tabla === 'agenda_promos' ? base.agenda : tabla === 'liquidacion_items' ? base.liqItems : tabla === 'liquidaciones' ? base.liqCampanias
       : tabla === 'caja_gift_lote' ? base.giftLotes ?? [] : tabla === 'caja_venta_mp' ? base.ventaMp : tabla === 'caja_gift_card' ? base.giftCards : tabla === 'venta' ? base.erpVentas ?? [] : tabla === 'venta_pago_vigente' ? base.erpPagos ?? [] : tabla === 'cuenta_cobro' ? base.erpCuentas ?? [] : tabla === 'productos' ? base.productos : base.inventario
     return todas.filter((f) => filtros.every((p) => p(f)))
   }
@@ -285,6 +286,7 @@ beforeEach(async () => {
   base.llaves = [{ store: 'zattia', cuenta_id: CUENTA_MP, nombre: 'BDIACCESORIOS', token: 'APP_USR-llave' }]
   base.mpPagos = []; mp.busquedas = 0
   // Hay un turno abierto: las ventas de los tests de antes de W3 se cobran adentro de él.
+  base.liqCampanias = []
   base.turnos = [{ id: TURNO_ID, store: 'zattia', fondo: 50000, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null, abierto_por: 'cajera', abierto_por_usuario: 'cajera' }]; base.movs = []
   mailer.posts = []; delete process.env.MAILER_URL; delete process.env.MAILER_TICKET_KEY
   gn.posts = []; gn.gets = []; gn.authInventario = []; gn.authPosts = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }; gn.creadas = []; base.agenda = [];
@@ -1754,6 +1756,58 @@ describe('caja · la feria es la de Liquidación (Bruno, 11-oct)', () => {
     expect((await correr(req('POST', {}, VENTA))).code).toBe(400)
     const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25867 }], total: 25500, pagaCon: null }))
     expect(r.code).toBe(200)
+  })
+})
+
+describe('caja · el % por campaña (Bruno, 1-nov, Cyber Monday)', () => {
+  const ADMIN = { name: 'bruno', admin: true, cuenta: null, acceso: {}, funcion: [] }
+  const CYBER = { campania: 'cyber', nombre: 'Cyber', efectivo: 10, transferencia: 10 }
+  const cargar = () => {
+    base.liqCampanias = [{ id: 'cyber', store: 'zattia' }]
+    base.liqItems = [
+      { liq_id: 'cyber', store: 'zattia', pid: '7', estado: 'confirmado' },
+      { liq_id: 'cyber', store: 'zattia', pid: '8', estado: 'aplicado' },
+      { liq_id: 'cyber', store: 'zattia', pid: '9', estado: 'descartado' },
+      { liq_id: 'otra', store: 'zattia', pid: '10', estado: 'confirmado' },
+    ]
+  }
+  it('🔑 confirmados y aplicados pagan el %, descartados ⛔; sólo un admin lo carga; lo derivado ⛔ se guarda', async () => {
+    cargar()
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'bajadas', pctCampanias: [CYBER] }))).code).toBe(403)
+    conSesion(ADMIN)
+    const g = await correr(req('POST', {}, { action: 'bajadas', pctCampanias: [CYBER] }))
+    expect(g.code).toBe(200)
+    expect(Object.keys((g.body?.reglas as Fila).pctDePrendas as Fila)).toEqual(['7', '8'])
+    const guardadas = (base.config as { reglas: Fila }).reglas
+    expect(guardadas.pctCampanias).toEqual([CYBER])
+    expect(guardadas.pctDePrendas).toBeUndefined()
+  })
+  it('🔴 una campaña que ⛔ existe o un % sin cargar ⛔ se guardan', async () => {
+    conSesion(ADMIN)
+    expect((await correr(req('POST', {}, { action: 'bajadas', pctCampanias: [CYBER] }))).code).toBe(404)
+    expect((await correr(req('POST', {}, { action: 'bajadas', pctCampanias: [{ campania: 'cyber', nombre: 'x' }] }))).code).toBe(400)
+    expect((base.config as { reglas: Fila }).reglas.pctCampanias).toBeUndefined()
+  })
+  it('🔴 el servidor cobra el 10 % aunque la pantalla crea en el 15 %: 409, y con el total bueno entra a la cuenta normal', async () => {
+    cargar()
+    conSesion(ADMIN)
+    await correr(req('POST', {}, { action: 'bajadas', pctCampanias: [CYBER] }))
+    conSesion(CAJERA)
+    // Pantalla vieja: $25.490 −15 % = $21.700. El servidor: −10 % = $22.941 ⇒ $22.900.
+    const vieja = await correr(req('POST', {}, VENTA))
+    expect(vieja.code).toBe(409)
+    expect(vieja.body?.total).toBe(22900)
+    expect((await correr(req('POST', {}, { ...VENTA, total: 22900, pagaCon: 23000 }))).code).toBe(200)
+    expect(base.ventas.get(ID)?.pagos).toEqual([expect.objectContaining({ cuenta: 12921, monto: 22900, porcentaje: 10 })])
+  })
+  it('🔴 si Liquidación ⛔ se puede leer, LANZA: la Caja ⛔ cobra con el % de la cuenta', async () => {
+    const { pctDeCampanias } = await import('@/api/_caja-reglas.js')
+    const q: Record<string, unknown> = {}
+    for (const m of ['select', 'eq', 'in', 'order']) q[m] = () => q
+    q.range = async () => ({ data: null, error: { message: 'caída' } })
+    await expect(pctDeCampanias({ from: () => q }, 'zattia', [CYBER])).rejects.toThrow(/Liquidación/)
+    expect(await pctDeCampanias({ from: () => q }, 'zattia', [])).toEqual({})
   })
 })
 

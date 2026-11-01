@@ -34,6 +34,13 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   `pctDeCuenta` pesa el % por prenda en la MISMA cuenta de GN. ⛔ toca las cuentas de feria de Zattia (0 %) ni
   débito/crédito. ⚠️ Es POR OFERTA y **sólo para el DROP 1** (la lista `productos`; Bruno, 30-oct, Cyber Monday): el drop 2 en
   oferta paga su cuenta, 15 % efectivo / 10 % transferencia.
+- 🔴 **EL % POR CAMPAÑA** (Bruno, 1-nov, Cyber Monday de Zattia): `reglas.pctCampanias` (`[{ campania, nombre, efectivo, transferencia }]`, por
+  `bajadas`, sin pantalla todavía) hace que las prendas de esa campaña de Liquidación paguen ESE % en efectivo y transferencia, a la cuenta
+  NORMAL de GN. `reglasDeHoy` lo resuelve a `pctDePrendas` (producto → %), con los ítems `confirmado` Y `aplicado` (la de Zattia tiene todo
+  `confirmado`: el precio lo escribió CYBER MONDAY ONLINE); si ⛔ se puede leer, la Caja ⛔ cobra. `pctDeCuenta` pesa el % por importe.
+  🔴 **⛔ lo dice la pantalla** (a diferencia de `oferta` de Stunned, acá mentir da MÁS descuento): la que quedó abierta con otras reglas se
+  frena con el 409 de «Recargá la Caja». Débito y crédito siguen con su cuenta. 🔴 Sólo sin reglas comerciales (`comerciales` null): si se
+  prenden, el % sale de las reglas y esto ⛔ corre. El cambio con una de estas prendas entre lo nuevo ⛔ se cobra (como la feria).
 - 🔴 **EL % DE LA FORMA DE PAGO PUEDE SALIR DE `erp › Reglas`** (parte 3 de las reglas comerciales, 17-oct). Si la marca
   prendió «la Caja cobra con las reglas», `reglasDeHoy` (`api/_caja-reglas.js`) pone `reglas.comerciales` (la COPIA de
   `regla_comercial` guardada en `caja_config.reglas.reglasComerciales` + la Agenda leída + de qué campaña es cada producto)

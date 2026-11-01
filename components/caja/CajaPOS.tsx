@@ -50,7 +50,7 @@ import { traerAudit } from '@/lib/tn-audit'
 import type { MarcaErp } from '@/lib/erp/cliente'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
-import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, cuentaDeOferta, idsDeFeria, mediosOfertaAparte, nombreParaTicket, pagosDeMedio, pagosDeVarios, pctDeMedio, pctOfertaDeLinea, renglones, subtotal, subtotalDeFeria } from '@/lib/caja/core.core.js'
+import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuentaDeMedio, cuentaDeOferta, idsDeFeria, mediosOfertaAparte, nombreParaTicket, pagosDeMedio, pagosDeVarios, pctDeMedio, pctDePrenda, pctOfertaDeLinea, renglones, subtotal, subtotalDeFeria } from '@/lib/caja/core.core.js'
 import { hoyIso, promosDeCreditoEnMostrador } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
@@ -1262,7 +1262,10 @@ pendientes
                         const apagada = trabada || varios
                         const cuenta = reglas?.medios ? (() => { try { return cuentaDe(medio, reglas) } catch { return 0 } })() : 0
                         // El % que se dice: el de las reglas comerciales si la Caja cobra con ellas (`pctDeMedio`), si no el de la cuenta.
-                        const regla = cuenta && reglas?.cuentas[cuenta] ? { ...reglas.cuentas[cuenta], descuento: pctDeMedio(medio, reglas, cuenta) ?? 0 } : undefined
+                        // Si TODAS las prendas pagan el % de su campaña, ése es el que se dice; si es mixta, los dos (abajo).
+                        const pctsDeCampania = items.map((x) => pctDePrenda(reglas, medio, x.product_id))
+                        const todasConPct = pctsDeCampania.length > 0 && pctsDeCampania.every((p) => p != null)
+                        const regla = cuenta && reglas?.cuentas[cuenta] ? { ...reglas.cuentas[cuenta], descuento: todasConPct ? (pctsDeCampania[0] as number) : (pctDeMedio(medio, reglas, cuenta) ?? 0) } : undefined
                         const estilo = ESTILO_MEDIO[medio]
                         return (
                           <button
@@ -1302,6 +1305,11 @@ pendientes
                                     const conPct = items.find((x) => 'oferta' in x && x.oferta && pctOfertaDeLinea('stunned', medio, x.product_id) != null)
                                     const p = conPct ? pctOfertaDeLinea('stunned', medio, conPct.product_id) : null
                                     return p != null && p !== regla?.descuento ? <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{p}% en Stunned en oferta</span> : null
+                                  })()}
+                                  {(() => {
+                                    const conPct = items.find((x) => pctDePrenda(reglas, medio, x.product_id) != null)
+                                    const p = conPct ? pctDePrenda(reglas, medio, conPct.product_id) : null
+                                    return conPct && p != null && p !== regla?.descuento ? <span style={{ fontSize: font.xs, color: color.successInk, fontWeight: weight.semibold }}>{p}% en {reglas?.pctDePrendas?.[String(conPct.product_id)]?.nombre}</span> : null
                                   })()}
                                   {modoOferta === 'recargo' && <span style={{ fontSize: font.xs, color: color.warningInk, fontWeight: weight.semibold }}>+{ofertaDe(reglas).recargo}% en productos en oferta</span>}
                                 </>

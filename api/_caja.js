@@ -86,7 +86,7 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, dormir, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
 import { limpiarRepetida } from '../lib/caja/repetida.core.js'
-import { armarVentaGN, cobro, exigirCuentas, exigirFeria, cuentaDeOferta, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, normalizarOferta, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
+import { armarVentaGN, cobro, exigirCuentas, exigirFeria, cuentaDeOferta, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, normalizarOferta, normalizarPctCampanias, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { promosDeCreditoEnMostrador } from '../lib/agenda/promos.core.js'
 import { TOLERANCIA_TRANSFERENCIA, cruzarTransferencia, pagosRecientes, sumarCobros } from '../lib/pagos-recibidos/core.core.js'
 import { aOtraCuenta, mailOtraCuenta, titularDe } from '../lib/caja/otra-cuenta.core.js'
@@ -951,6 +951,21 @@ export default async function handler(req, res) {
           if (!Array.isArray(b.feriaCampanias) || b.feriaCampanias.length > 20) return res.status(400).json({ error: 'La lista de campañas de oferta es inválida.' })
           nuevas.feriaCampanias = [...new Set(b.feriaCampanias.map((x) => String(x).slice(0, 80)).filter(Boolean))]
         }
+        // Qué campañas pagan un % propio en efectivo y transferencia (Bruno, 1-nov, Cyber Monday): la lista entera.
+        if (b.pctCampanias != null) {
+          try {
+            nuevas.pctCampanias = normalizarPctCampanias(b.pctCampanias)
+          } catch (e) {
+            return res.status(400).json({ error: e.message })
+          }
+          const ids = nuevas.pctCampanias.map((c) => c.campania)
+          if (ids.length) {
+            const { data, error } = await sb.from('liquidaciones').select('id').eq('store', store).in('id', ids)
+            if (error) throw new Error(error.message)
+            const falta = ids.find((x) => !(data || []).some((c) => c.id === x))
+            if (falta) return res.status(404).json({ error: `La campaña ${falta} no existe en esta marca.` })
+          }
+        }
         let parMp = null
         if (b.transferenciaPorMp != null) {
           const mp = Number(b.transferenciaPorMp.mp), gn = Number(b.transferenciaPorMp.gn)
@@ -987,7 +1002,7 @@ export default async function handler(req, res) {
         }
         const deLista = b.feriaProductos != null ? { clave: 'feriaProductos', version: b.version } : null
         const g = await guardarReglas((actual) => {
-          const { feria: _f, transferenciaA: _t, feriaIdsCampania: _x, feriaPrecios: _p, ...resto } = actual
+          const { feria: _f, transferenciaA: _t, feriaIdsCampania: _x, feriaPrecios: _p, pctDePrendas: _pp, ...resto } = actual
           return { ...resto, ...nuevas, ...(parMp ? { transferenciaPorMp: { ...(actual.transferenciaPorMp || {}), [String(parMp.mp)]: parMp.gn } } : {}) }
         }, deLista)
         if (g.conflicto) return res.status(409).json({ error: 'Otro admin cambió la configuración recién. Recargá la Caja y volvé a cargar el cambio.', conflicto: true })
