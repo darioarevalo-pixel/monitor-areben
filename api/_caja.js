@@ -951,6 +951,11 @@ export default async function handler(req, res) {
           if (!Array.isArray(b.feriaCampanias) || b.feriaCampanias.length > 20) return res.status(400).json({ error: 'La lista de campañas de oferta es inválida.' })
           nuevas.feriaCampanias = [...new Set(b.feriaCampanias.map((x) => String(x).slice(0, 80)).filter(Boolean))]
         }
+        // Qué campañas mandan el precio del local (Bruno, 1-nov, Cyber Monday): la lista entera de ids.
+        if (b.precioCampanias != null) {
+          if (!Array.isArray(b.precioCampanias) || b.precioCampanias.length > 20) return res.status(400).json({ error: 'La lista de campañas que mandan el precio es inválida.' })
+          nuevas.precioCampanias = [...new Set(b.precioCampanias.map((x) => String(x).slice(0, 80)).filter(Boolean))]
+        }
         // Qué campañas pagan un % propio en efectivo y transferencia (Bruno, 1-nov, Cyber Monday): la lista entera.
         if (b.pctCampanias != null) {
           try {
@@ -958,13 +963,14 @@ export default async function handler(req, res) {
           } catch (e) {
             return res.status(400).json({ error: e.message })
           }
-          const ids = nuevas.pctCampanias.map((c) => c.campania)
-          if (ids.length) {
-            const { data, error } = await sb.from('liquidaciones').select('id').eq('store', store).in('id', ids)
-            if (error) throw new Error(error.message)
-            const falta = ids.find((x) => !(data || []).some((c) => c.id === x))
-            if (falta) return res.status(404).json({ error: `La campaña ${falta} no existe en esta marca.` })
-          }
+        }
+        // Un id mal escrito ⛔ da error en ningún otro lado: la Caja cobraría callada lo de siempre.
+        const idsACheckear = [...(nuevas.pctCampanias || []).map((c) => c.campania), ...(nuevas.precioCampanias || [])]
+        if (idsACheckear.length) {
+          const { data, error } = await sb.from('liquidaciones').select('id').eq('store', store).in('id', idsACheckear)
+          if (error) throw new Error(error.message)
+          const falta = idsACheckear.find((x) => !(data || []).some((c) => c.id === x))
+          if (falta) return res.status(404).json({ error: `La campaña ${falta} no existe en esta marca.` })
         }
         let parMp = null
         if (b.transferenciaPorMp != null) {
@@ -1002,7 +1008,7 @@ export default async function handler(req, res) {
         }
         const deLista = b.feriaProductos != null ? { clave: 'feriaProductos', version: b.version } : null
         const g = await guardarReglas((actual) => {
-          const { feria: _f, transferenciaA: _t, feriaIdsCampania: _x, feriaPrecios: _p, pctDePrendas: _pp, ...resto } = actual
+          const { feria: _f, transferenciaA: _t, feriaIdsCampania: _x, feriaPrecios: _p, pctDePrendas: _pp, preciosDeCampania: _pc, ...resto } = actual
           return { ...resto, ...nuevas, ...(parMp ? { transferenciaPorMp: { ...(actual.transferenciaPorMp || {}), [String(parMp.mp)]: parMp.gn } } : {}) }
         }, deLista)
         if (g.conflicto) return res.status(409).json({ error: 'Otro admin cambió la configuración recién. Recargá la Caja y volvé a cargar el cambio.', conflicto: true })

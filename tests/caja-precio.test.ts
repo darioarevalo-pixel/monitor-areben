@@ -53,4 +53,18 @@ describe('Caja · el precio según la línea (16-oct)', () => {
     expect(esDeStunned('zattia', { sku: null }, 'STU-REM-0007-L')).toBe(true)
     expect(esDeStunned('bdi', sMail)).toBe(false)
   })
+
+  it('🔑 la campaña que manda el precio gana al cruce con TN y a la lista, y ⛔ queda «fuera de TN» (Cyber, 1-nov)', () => {
+    const conCampania = { preciosDeCampania: { '913512': 6690, '700': 5390 } } as never
+    const r = precioDeCaja({ ...vestido, id: '700' }, { store: 'zattia', idx: idxZattia, idxStunned, reglas: conCampania })
+    expect(r.precio).toBe(5390)
+    expect(r.fueraDeTn).toBe(false)
+    const huerfano = precioDeCaja({ id: '701', name: 'ZZZ NADA', sku: 'ZZZ', retailer_price: 5990 } as never, { store: 'zattia', idx: idxZattia, idxStunned, reglas: { preciosDeCampania: { '701': 5390 } } as never })
+    expect(huerfano).toMatchObject({ precio: 5390, fueraDeTn: false })
+    const sinEntrada = precioDeCaja({ id: '702', name: 'ZZZ NADA', sku: 'ZZZ', retailer_price: 5990 } as never, { store: 'zattia', idx: idxZattia, idxStunned, reglas: conCampania })
+    expect(sinEntrada).toMatchObject({ precio: 5990, fueraDeTn: true })
+  })
+  it('🔴 Stunned ⛔ toma el precio de la campaña: sigue con SU tienda', () => {
+    expect(precioDeCaja(sMail, { store: 'zattia', idx: idxZattia, idxStunned, reglas: { preciosDeCampania: { '913512': 1 } } as never }).precio).toBe(22090)
+  })
 })

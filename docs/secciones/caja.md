@@ -41,6 +41,9 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   🔴 **⛔ lo dice la pantalla** (a diferencia de `oferta` de Stunned, acá mentir da MÁS descuento): la que quedó abierta con otras reglas se
   frena con el 409 de «Recargá la Caja». Débito y crédito siguen con su cuenta. 🔴 Sólo sin reglas comerciales (`comerciales` null): si se
   prenden, el % sale de las reglas y esto ⛔ corre. El cambio con una de estas prendas entre lo nuevo ⛔ se cobra (como la feria).
+- 🔴 **LA CAMPAÑA QUE MANDA EL PRECIO** (Bruno, 1-nov): `reglas.precioCampanias` (ids, por `bajadas`, sin pantalla) ⇒ `precioDeCaja` cobra el precio
+  ESCRITO de sus ítems `aplicado` (`preciosDeCampania`), ⛔ el cruce por nombre con TN, y la prenda sigue pagando el % de la forma de pago (⛔ es
+  feria). Por qué: `matchTn` le prestaba a CINTO 4 el precio de CINTO OUT ($13.890 con etiqueta $6.690) y 6 accesorios fuera de TN caían a la lista de GN.
 - 🔴 **EL % DE LA FORMA DE PAGO PUEDE SALIR DE `erp › Reglas`** (parte 3 de las reglas comerciales, 17-oct). Si la marca
   prendió «la Caja cobra con las reglas», `reglasDeHoy` (`api/_caja-reglas.js`) pone `reglas.comerciales` (la COPIA de
   `regla_comercial` guardada en `caja_config.reglas.reglasComerciales` + la Agenda leída + de qué campaña es cada producto)

@@ -29,8 +29,8 @@ export async function reglasGuardadas(sb, store, marca) {
  * Zattia ⛔ tiene `transferenciaFija` ⇒ sin mapeo sigue sin cobrar transferencia, como antes.
  */
 export async function reglasDeHoy(sb, store, reglas) {
-  const { feria: _f, feriaIdsCampania: _x, feriaPrecios: _p, pctDePrendas: _pp, reglasComerciales: _rc, comerciales: _c, ...guardadas } = reglas
-  const sinFeria = { ...guardadas, comerciales: await comercialesDeHoy(sb, store, reglas), ...(await pctDeCampanias(sb, store, reglas.pctCampanias)) }
+  const { feria: _f, feriaIdsCampania: _x, feriaPrecios: _p, pctDePrendas: _pp, preciosDeCampania: _pc, reglasComerciales: _rc, comerciales: _c, ...guardadas } = reglas
+  const sinFeria = { ...guardadas, comerciales: await comercialesDeHoy(sb, store, reglas), ...(await pctDeCampanias(sb, store, reglas.pctCampanias)), ...(await preciosDeCampanias(sb, store, reglas.precioCampanias)) }
   // 🔑 V4: la tienda que ⛔ verifica en Mercado Pago manda la transferencia a SU cuenta fija.
   if (!verificaTransferencias(reglas)) {
     const fija = Number(reglas.transferenciaFija)
@@ -81,6 +81,17 @@ export async function feriaDeCampanias(sb, store, ids) {
     if (!data || data.length < 1000) break
   }
   return { feriaIdsCampania: [...pids], feriaPrecios: precios }
+}
+
+/**
+ * 🔑 Las campañas que mandan el PRECIO del local (`precioDeCampania` del núcleo; Bruno, 1-nov, Cyber Monday): el precio escrito
+ * de sus ítems `aplicado`, con la misma lectura que la feria. Al «Sacar» la campaña, el precio vuelve solo al de la etiqueta.
+ * 🔴 Si la lectura falla, LANZA. Sin campañas ⇒ ⛔ agrega la clave.
+ */
+export async function preciosDeCampanias(sb, store, ids) {
+  if (!Array.isArray(ids) || !ids.length) return {}
+  const { feriaPrecios } = await feriaDeCampanias(sb, store, ids)
+  return Object.keys(feriaPrecios).length ? { preciosDeCampania: feriaPrecios } : {}
 }
 
 /**

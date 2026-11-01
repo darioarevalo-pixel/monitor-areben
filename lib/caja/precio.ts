@@ -20,7 +20,7 @@ import { construirPrecios } from '@/lib/etiquetas/core'
 import { esStunned } from '@/lib/lineas'
 import { ofertaVigente } from '@/lib/tienda'
 import { imagenDe, matchTn, type IndiceTn } from '@/lib/tn'
-import { precioDeFeria } from './core.core.js'
+import { precioDeCampania, precioDeFeria } from './core.core.js'
 
 type ProductoCaja = Parameters<typeof construirPrecios>[0][number]
 
@@ -52,6 +52,8 @@ export function precioDeCaja(
   }
   const { precios, fueraDeTn } = construirPrecios([producto], o.idx)
   // 🔑 La prenda de feria va al precio de SU campaña (13-oct): el de TN puede ser el de la «Feria Online».
-  const precio = precioDeFeria(o.reglas, Number(producto.id)) ?? (precios[producto.id] || null)
-  return { precio, fueraDeTn: fueraDeTn.has(producto.id), foto: imagenDe(producto, o.idx), categorias: matchTn(producto, o.idx)?.categories ?? [], oferta: false }
+  // 🔑 La campaña que manda el precio del local (Cyber, 1-nov): el escrito, ⛔ el cruce por nombre con TN.
+  const deCampania = precioDeCampania(o.reglas, Number(producto.id))
+  const precio = precioDeFeria(o.reglas, Number(producto.id)) ?? deCampania ?? (precios[producto.id] || null)
+  return { precio, fueraDeTn: deCampania == null && fueraDeTn.has(producto.id), foto: imagenDe(producto, o.idx), categorias: matchTn(producto, o.idx)?.categories ?? [], oferta: false }
 }
