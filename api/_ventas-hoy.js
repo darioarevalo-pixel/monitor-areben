@@ -22,6 +22,33 @@
 
 import { guardarVentasBatch } from '../scripts/lib/ventas-espejo.mjs';
 import { dormir, GN_BASE, GN_TOKENS, gnFetch, PAUSA_GN } from './_gn.js';
+import { configPg } from '../lib/pg.core.js';
+import { lineasEnErp } from '../lib/erp/corte.core.js';
+import { copiarVentasErp } from '../scripts/lib/erp-ventas-copia.mjs';
+import { cortesDeCaja } from './_caja-corte.js';
+import { PG_DE_STORE } from './_erp-corte.js';
+
+/**
+ * Las ventas del ERP de las líneas ya cortadas (`erp_corte`), copiadas al espejo como hace el sync diario
+ * (`scripts/lib/erp-ventas-copia.mjs`). Sin línea cortada en la base ⇒ ⛔ abre el motor.
+ * 🔴 `date` como texto: pg lo convierte a Date en la zona de la máquina y el día se correría (igual que el script).
+ * @returns {Promise<{ ventas: number, detalles: number, sacadas: number, freno: string | null } | null>}
+ */
+export async function traerVentasDelErp(supabase, store) {
+  if (!lineasEnErp(await cortesDeCaja(store), store).length) return null;
+  const conexion = process.env[PG_DE_STORE[store]];
+  if (!conexion) throw new Error(`falta ${PG_DE_STORE[store]} en el servidor`);
+  const { default: pg } = await import('pg');
+  const types = { getTypeParser: (oid, fmt) => (oid === 1082 ? (x) => x : pg.types.getTypeParser(oid, fmt)) };
+  const db = new pg.Client({ ...configPg(conexion), types, connectionTimeoutMillis: 5000, statement_timeout: 20000 });
+  await db.connect();
+  try {
+    const r = await copiarVentasErp(db, supabase);
+    return { ventas: r.ventas, detalles: r.detalles, sacadas: r.sacadas.ventas, freno: r.freno };
+  } finally {
+    await db.end().catch(() => {});
+  }
+}
 
 /**
  * Cuántas páginas de 50 ventas se bajan como mucho. Es un techo de seguridad, no un tope esperado:
@@ -53,14 +80,15 @@ export function ventanaVentasHoy(ahoraMs) {
 /**
  * Baja las ventas de la ventana y las escribe en el espejo.
  *
- * Devuelve `{ ok: true, ventas, detalles, clientes, truncado }`, o `{ ok: false, status, error }`
+ * Devuelve `{ ok: true, ventas, detalles, clientes, truncado, erp }` (`erp` = la copia del ERP de las líneas cortadas, o
+ * null si la base ⛔ tiene ninguna), o `{ ok: false, status, error }`
  * cuando Gestión Nube contesta mal — **no lanza por eso**: el llamador es un handler y el mensaje
  * de GN tiene que llegarle a la persona, no convertirse en un 500 anónimo.
  *
  * ⛔ **No mira permisos ni antirrebote**: los pone cada puerta. Acá adentro no hay forma de saber
  * quién llama, y una guarda a medias es peor que ninguna.
  */
-export async function traerVentasDeHoy(supabase, store, ahoraMs) {
+export async function traerVentasDeHoy(supabase, store, ahoraMs, deps = { erp: traerVentasDelErp }) {
   const token = GN_TOKENS[store];
   if (!token) return { ok: false, status: 500, error: `Falta el token de Gestión Nube de ${store} en el servidor.` };
 
@@ -90,5 +118,12 @@ export async function traerVentasDeHoy(supabase, store, ahoraMs) {
     ? await guardarVentasBatch(supabase, filas, { completo: store !== 'zattia' })
     : { ventas: 0, detalles: 0, clientes: 0 };
 
-  return { ok: true, truncado, ...conteo };
+  // Las de la línea que ya cortó viven en el ERP, ⛔ en GN: sin esto el botón traía «lo de hoy» sin ellas hasta la noche.
+  let erp = null;
+  try {
+    erp = await deps.erp(supabase, store);
+  } catch (e) {
+    return { ok: false, status: 502, error: `Se trajeron las de Gestión Nube, pero las del ERP no: ${String((e && e.message) || e).slice(0, 200)}` };
+  }
+  return { ok: true, truncado, ...conteo, erp };
 }

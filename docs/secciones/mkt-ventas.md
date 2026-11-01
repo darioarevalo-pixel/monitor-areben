@@ -95,7 +95,8 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
   es que nadie cargó la meta, que es una frase sobre el dato. **Zattia y Stunned no tienen ninguna**
   (medido el 18-ago: las 3 filas de `norte_metas` son de BDI).
 - 🔴 🔑 **El botón «Traer las ventas de hoy» son DOS pasos, y los dos hacen falta.** El primero le
-  pide a GN las ventas del día y las escribe en el espejo; el segundo **vuelve a bajar el ETL**,
+  pide a GN las ventas del día y las escribe en el espejo (y copia las del ERP de la línea que ya cortó, `erp_corte`: en GN
+  ya ⛔ están — `scripts/lib/erp-ventas-copia.mjs`, la misma copia del sync diario); el segundo **vuelve a bajar el ETL**,
   porque lo que dibuja el contador está en IndexedDB y no en el espejo. Sin el segundo, el botón
   escribiría en la base y la pantalla no se movería —que se lee como «no anduvo»—. ⚠️ El segundo
   cuesta ~20 s (~14,7 MB por marca) y por eso el botón dice lo que va a hacer.

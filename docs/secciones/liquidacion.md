@@ -193,6 +193,9 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
     de a uno). 🔑 **La base lleva el conjunto de `sale_id` que ya tiene descontados**: por eso lo que
     se repuso sale de la lista al releer sin restar dos veces lo vendido. Cada venta se resta de su
     tienda (`ventas.store`; en Zattia una venta de Tienda Nube sale del `Local`).
+  - 🔴 `sincronizar-ventas` (el mismo `traerVentasDeHoy` de Ventas de Marketing) trae también **las del ERP de la línea
+    que ya cortó** (`erp_corte`; Stunned hoy, BDI/Zattia desde su corte) con la MISMA copia del sync diario
+    (`scripts/lib/erp-ventas-copia.mjs`): en GN ya ⛔ están. Si esa copia falla, el botón da error («las del ERP no»), ⛔ ok.
   - Se refresca sola **cada 5 min con la pestaña visible**: `sincronizar-ventas` (1 s) + la acción
     `reposicion-campania`, que baja inventario por variante y las ventas desde el día del último sync.
   - 🔴 **Sólo productos que YA están en el local.** Medido antes de la primera venta: con «local ≤ 1 y

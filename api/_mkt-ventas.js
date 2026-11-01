@@ -117,7 +117,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true, traidoEn: ahora, truncado: traido.truncado,
-      ventas: traido.ventas, detalles: traido.detalles, clientes: traido.clientes,
+      ventas: traido.ventas, detalles: traido.detalles, clientes: traido.clientes, erp: traido.erp,
     });
   } catch (e) {
     return res.status(500).json({ error: e.message || 'error inesperado' });

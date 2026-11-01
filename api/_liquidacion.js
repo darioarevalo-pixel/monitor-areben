@@ -1261,7 +1261,7 @@ export default async function handler(req, res) {
         .update({ datos: { ...d, ventasSync: ahora }, updated_at: ahora }).eq('store', store).eq('id', id);
       if (error) throw new Error(error.message);
 
-      return res.status(200).json({ ok: true, ventasSync: ahora, truncado, ventas: conteo.ventas, detalles: conteo.detalles, clientes: conteo.clientes });
+      return res.status(200).json({ ok: true, ventasSync: ahora, truncado, ventas: conteo.ventas, detalles: conteo.detalles, clientes: conteo.clientes, erp: conteo.erp });
     }
 
     // ── Stunned: lo pedido al ERP, ¿ya está en Tienda Nube? ─────────────────────────────────────────────────────────
