@@ -19,6 +19,7 @@ import {
   AMBIENTES, authXml, leerCAE, leerConsulta, leerTA, leerUltimo, loteXml, reconciliar,
   sobreWsaa, sobreWsfe, taVigente, tag, traXml,
 } from './arca.core.js'
+import { PADRON, leerPersona, sobrePadron } from './padron.core.js'
 
 const ESPERA_MS = 25_000
 
@@ -77,20 +78,24 @@ async function soap(url, accion, cuerpo) {
 /**
  * @param {{ ambiente: 'homologacion'|'produccion', cuit: number, cert: string, key: string,
  *           almacenTA: { leer: () => Promise<any>, guardar: (ta: any) => Promise<void> },
+ *           almacenTAPadron?: { leer: () => Promise<any>, guardar: (ta: any) => Promise<void> },
  *           ahora?: () => Date }} cfg
+ *
+ * 🔴 `almacenTAPadron` es OTRO almacén a propósito: WSAA da un TA POR SERVICIO, y el del padrón guardado donde está
+ * el de la factura la dejaría sin permiso (o al revés). Sin él, `persona()` tira error en vez de pisar el de `wsfe`.
  */
-export function crearClienteArca({ ambiente, cuit, cert, key, almacenTA, ahora = () => new Date() }) {
+export function crearClienteArca({ ambiente, cuit, cert, key, almacenTA, almacenTAPadron, ahora = () => new Date() }) {
   const urls = AMBIENTES[ambiente]
   if (!urls) throw new Error(`Ambiente de ARCA inválido: ${ambiente}`)
   if (!cert || !key) throw new Error('Falta el certificado o la clave de ARCA')
   if (!almacenTA) throw new Error('Falta dónde guardar el permiso de ARCA')
 
-  async function permiso() {
-    const guardado = await almacenTA.leer()
+  async function permiso(servicio = 'wsfe', almacen = almacenTA) {
+    const guardado = await almacen.leer()
     if (taVigente(guardado, ahora())) return guardado
-    const cms = firmarTRA(traXml({ servicio: 'wsfe', ahora: ahora() }), cert, key)
+    const cms = firmarTRA(traXml({ servicio, ahora: ahora() }), cert, key)
     const ta = leerTA(await soap(urls.wsaa, '', sobreWsaa(cms)))
-    await almacenTA.guardar(ta)
+    await almacen.guardar(ta)
     return ta
   }
 
@@ -101,6 +106,18 @@ export function crearClienteArca({ ambiente, cuit, cert, key, almacenTA, ahora =
   }
 
   const cliente = {
+    /**
+     * El padrón (A5 `getPersona_v2`): CUIT ⇒ `leerPersona` (razón social, condición frente al IVA, domicilio fiscal).
+     * Sólo lee: ⛔ emite nada. El CUIT se valida antes de pedir permiso.
+     */
+    async persona(cuitConsultado) {
+      if (!almacenTAPadron) throw new Error('Falta dónde guardar el permiso del padrón de ARCA')
+      const sobre = (ta) => sobrePadron({ ...ta, cuitRepresentada: cuit, idPersona: cuitConsultado })
+      sobre({ token: '', sign: '' }) // valida el CUIT ANTES de pedirle permiso a WSAA
+      const ta = await permiso(PADRON.servicio, almacenTAPadron)
+      return leerPersona(await soap(PADRON.urls[ambiente], '', sobre(ta)))
+    },
+
     /** Si los tres servidores de ARCA están arriba. No pide permiso. */
     async dummy() {
       const xml = await soap(urls.wsfe, 'http://ar.gov.afip.dif.FEV1/FEDummy', sobreWsfe('FEDummy', ''))
