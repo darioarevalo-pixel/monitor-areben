@@ -283,6 +283,16 @@ dice cuáles van a la **bolsa de pedidos** (una sola, sin separar por pedido; el
 - **Apagado** frena el «llevar», salvo lo vendido: con el Local en negativo se lleva sólo eso (⛔ en BDI). **Todo exhibido** no
   lleva ni eso: un producto que se vende online desde el depósito va con **Cantidad fija 0**.
 
+## Exclusivo online y los grupos de la lista (Bruno, 1-nov-2026)
+
+- 🔑 **Exclusivo online** = se decidió que no se exhibe en el local, pero se vende por la tienda. Es `modo: 'online'` en
+  `modosProd` (Configurar → «Exclusivo online»). Objetivo 0: sin venta no aparece, con el Local en negativo lleva sólo lo vendido,
+  sus ventas no cuentan y lo que quede en el local se propone devolver. Sin «para exhibir» ni alarma, y apagado no lo frena.
+  ⛔ El botón «Agregar los que hoy están sólo en el depósito» no pisa a los que ya tienen otra marca.
+- 🔑 **La lista va en grupos: Pedidos · Para exhibir · Reposición**, lo ya vendido primero, en la pantalla, en el lector y en el A4
+  (`agruparLista`). Una variante con parte de pedido va entera a Pedidos: «1 para pedido + 2 reposición», y el lector avisa cuál es cuál.
+  Con un solo grupo no hay títulos. Los pedidos se leen al abrir, con cada stock nuevo y otra vez al iniciar el armado.
+
 ## Sin etiqueta de precio (Darío, 12-oct-2026)
 
 Configurar → «Sin etiqueta de precio»: productos que van a una caja de precio único (las bikinis «todo

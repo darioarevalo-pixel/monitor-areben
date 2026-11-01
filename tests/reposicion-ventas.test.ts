@@ -69,6 +69,24 @@ describe('llevar: se repone lo que se vendió', () => {
     expect(d(item({ local: -2 }), cfg({ apagados: ['1'] })).llevar).toBe(2)
     expect(d(item({ local: -2, deposito: 1 }), cfg({ apagados: ['1'] })).llevar).toBe(1)
   })
+  describe('Exclusivo online (1-nov)', () => {
+    const c = (over: Partial<RepoCfg> = {}) => cfg(over, { modosProd: { '1': { modo: 'online' } }, sinPrecio: { '1': {} } })
+    it('sin venta no aparece, por más que venda en la ventana', () => {
+      expect(d(item({ local: 0, vv: 120 }), c())).toMatchObject({ objetivo: 0, llevar: 0, devolver: 0, porque: 'Exclusivo online' })
+    })
+    it('con el Local en negativo lleva sólo lo vendido, sin exhibir ni alarma', () => {
+      expect(d(item({ local: -2, vv: 120 }), c())).toMatchObject({ llevar: 2, exhibir: false, soloAlarma: false })
+    })
+    it('no lleva más de lo que hay en el depósito', () => {
+      expect(d(item({ local: -2, deposito: 1 }), c()).llevar).toBe(1)
+    })
+    it('lo que queda en el local se propone devolver, aunque sea nuevo', () => {
+      expect(d(item({ local: 2, diasVivo: 3 }), c()).devolver).toBe(2)
+    })
+    it('apagado no lo frena', () => {
+      expect(d(item({ local: -1 }), c({ apagados: ['1'] })).llevar).toBe(1)
+    })
+  })
   it('sin stock en depósito, o apagado, no se pide', () => {
     expect(d(item({ local: 0, deposito: 0 })).llevar).toBe(0)
     expect(d(item({ local: 0 }), cfg({ apagados: ['1'] })).llevar).toBe(0)

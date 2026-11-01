@@ -39,7 +39,11 @@ import { ubicCmp } from './core'
 import { tipoBdi as tipoBdiJs } from './tipo-bdi.core.js'
 import type { RepoCfg, RepoItem } from './tipos'
 
-export type Modo = 'ventas' | 'exhibido' | 'fija'
+/**
+ * `online` = **Exclusivo online** (Bruno, 1-nov-2026): se decidió que no se exhibe en el local, pero se vende
+ * por la tienda. El objetivo en el local es 0: sólo se lleva lo vendido (el negativo) y lo que quede vuelve.
+ */
+export type Modo = 'ventas' | 'exhibido' | 'fija' | 'online'
 
 /** Una marca puesta a mano (por categoría o por producto). `hasta` vencido = no existe. */
 export type MarcaModo = { modo: Modo; n?: number; hasta?: string; motivo?: string }
@@ -308,6 +312,12 @@ export function decidir(it: RepoItem, cfg: RepoCfg, cv: CfgVentas, hoy: string, 
 
   if (modo.modo === 'exhibido') {
     return { ...base, pico, objetivo: null, llevar: 0, devolver: 0, porque: `Todo exhibido (${modo.motivo})` }
+  }
+
+  if (modo.modo === 'online') {
+    // ⛔ Sin «para exhibir» ni alarma: lo que viene va a un pedido. Sus ventas no cuentan, y apagado no lo frena.
+    const llevarOnline = it.local < 0 ? Math.min(-it.local, Math.max(0, it.deposito - cv.reservaDeposito)) : 0
+    return { ...base, pico, objetivo: 0, llevar: llevarOnline, devolver: Math.max(0, it.local), porque: 'Exclusivo online' }
   }
 
   let objetivo: number

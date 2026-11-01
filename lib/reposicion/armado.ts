@@ -8,7 +8,7 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import { normCode } from '@/lib/exhib/core'
-import { paraPedidoDe, type PrendaPedido } from './paraPedido'
+import { agruparLista, paraPedidoDe, type PrendaPedido } from './paraPedido'
 import type { FilaVentas, LineaZ } from './porVentas'
 import type { RepoItem } from './tipos'
 
@@ -77,7 +77,9 @@ export type Armado = {
 
 /** Lo que se congela al empezar: la lista de «Llevar» tal como está en pantalla (con lo corregido a mano). */
 export function pedidoDesde(filas: FilaVentas[], cantidad: (f: FilaVentas) => number, conCaja = false, enPedidos: Record<string, number> = {}): LineaPedido[] {
-  return filas
+  // El armado se congela en el orden de los grupos: lo de los pedidos arriba.
+  return agruparLista(filas, enPedidos, cantidad)
+    .flatMap((g) => g.filas)
     .map((f) => {
       const paraPedido = paraPedidoDe(f.it.local, enPedidos[f.it.vid] || 0, cantidad(f))
       return {

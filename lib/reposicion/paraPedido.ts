@@ -12,6 +12,7 @@
  * desempatan; si no coinciden, no hay alerta: mejor perchero que la prenda de otro pedido en la bolsa.
  */
 
+import type { FilaVentas } from './porVentas'
 import type { RepoItem } from './tipos'
 
 /** Una prenda de un pedido sin armar, como la manda `action=pedidos-web` de `repo-armado`. */
@@ -60,4 +61,37 @@ export function unidadesEnPedidos(todas: Variante[], prendas: PrendaPedido[]): R
 /** La menor entre lo que debe el Local y lo que hay en pedidos, sin pasarse de lo que se lleva. */
 export function paraPedidoDe(local: number, enPedidos: number, cant: number): number {
   return Math.max(0, Math.min(-local, enPedidos, cant))
+}
+
+/** Los grupos de la lista de reposición, en el orden en que se arman (Bruno, 1-nov-2026): lo ya vendido primero. */
+export const GRUPOS_REPOSICION = [
+  { clave: 'pedidos', titulo: 'Pedidos' },
+  { clave: 'exhibir', titulo: 'Para exhibir' },
+  { clave: 'reposicion', titulo: 'Reposición' },
+] as const
+export type ClaveGrupo = (typeof GRUPOS_REPOSICION)[number]['clave']
+
+/** Pedidos si alguna unidad es de un pedido, aunque el resto vaya al local: el lector avisa cuál es cuál. */
+export function grupoDe(exhibir: boolean, paraPedido: number): ClaveGrupo {
+  return paraPedido > 0 ? 'pedidos' : exhibir ? 'exhibir' : 'reposicion'
+}
+
+/** La lista partida en grupos, sin los vacíos y conservando el orden de cada uno. */
+export function agruparLista(filas: FilaVentas[], enPedidos: Record<string, number>, cantidad: (f: FilaVentas) => number) {
+  return GRUPOS_REPOSICION.map((g) => ({
+    ...g,
+    filas: filas.filter((f) => grupoDe(f.d.exhibir, paraPedidoDe(f.it.local, enPedidos[f.it.vid] || 0, cantidad(f))) === g.clave),
+  })).filter((g) => g.filas.length > 0)
+}
+
+/** Productos sin nada en el local y con stock en el depósito: los candidatos a Exclusivo online. */
+export function soloEnDeposito(filas: Pick<FilaVentas, 'it'>[]): string[] {
+  const por = new Map<string, { local: number; deposito: number }>()
+  for (const { it } of filas) {
+    const o = por.get(it.pid) ?? { local: 0, deposito: 0 }
+    o.local += Math.max(0, it.local)
+    o.deposito += Math.max(0, it.deposito)
+    por.set(it.pid, o)
+  }
+  return [...por].filter(([, o]) => o.local === 0 && o.deposito > 0).map(([pid]) => pid)
 }

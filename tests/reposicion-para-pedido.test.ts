@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { paraPedidoDe, unidadesEnPedidos } from '@/lib/reposicion/paraPedido'
+import { agruparLista, grupoDe, paraPedidoDe, soloEnDeposito, unidadesEnPedidos } from '@/lib/reposicion/paraPedido'
+import type { FilaVentas } from '@/lib/reposicion/porVentas'
 
 const V = (vid: string, sku: string, name: string, size: string, local = 0) => ({ vid, sku, name, size, local })
 
@@ -33,5 +34,28 @@ describe('unidadesEnPedidos', () => {
   })
   it('SKU repetido sin coincidencia, o SKU desconocido: no hay alerta', () => {
     expect(unidadesEnPedidos(inv, [{ sku: 'BKB-0002-VI-S', nombre: 'BIKINI TAYRA (S)', cantidad: 1 }, { sku: 'NADA', nombre: 'x', cantidad: 1 }])).toEqual({})
+  })
+})
+
+describe('los grupos de la lista', () => {
+  const F = (vid: string, local: number, llevar: number, exhibir = false, deposito = 5, pid = vid) => ({ it: { vid, pid, local, deposito }, d: { llevar, exhibir } }) as unknown as FilaVentas
+  const cant = (f: FilaVentas) => f.d.llevar
+
+  it('pedido gana a exhibir, y exhibir a reposición', () => {
+    expect(grupoDe(true, 1)).toBe('pedidos')
+    expect(grupoDe(true, 0)).toBe('exhibir')
+    expect(grupoDe(false, 0)).toBe('reposicion')
+  })
+  it('ordena Pedidos, Para exhibir, Reposición, y saca los vacíos', () => {
+    const g = agruparLista([F('r', 1, 1), F('e', 0, 2, true), F('p', -1, 3, true)], { p: 1 }, cant)
+    expect(g.map((x) => [x.clave, x.filas.map((f) => f.it.vid)])).toEqual([['pedidos', ['p']], ['exhibir', ['e']], ['reposicion', ['r']]])
+    expect(agruparLista([F('r', 1, 1)], {}, cant).map((x) => x.clave)).toEqual(['reposicion'])
+  })
+  it('negativo sin pedido no va a Pedidos', () => {
+    expect(agruparLista([F('n', -1, 3)], {}, cant)[0].clave).toBe('reposicion')
+  })
+  it('candidatos a Exclusivo online: nada en el local entre todas sus variantes, algo en el depósito', () => {
+    const f = [F('a1', 0, 0, false, 3, 'a'), F('a2', -1, 0, false, 0, 'a'), F('b1', 1, 0, false, 3, 'b'), F('b2', 0, 0, false, 3, 'b'), F('c1', 0, 0, false, 0, 'c')]
+    expect(soloEnDeposito(f)).toEqual(['a'])
   })
 })

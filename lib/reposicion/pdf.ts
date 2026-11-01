@@ -61,6 +61,8 @@ export type FilaA4 = {
   mover: number
   /** Una línea chica en gris debajo del producto (Zattia: por qué esa cantidad). */
   nota?: string
+  /** El grupo de la lista (Zattia, 1-nov-2026). Con más de uno, cada uno lleva su título en el papel. */
+  grupo?: string
 }
 
 /**
@@ -133,6 +135,7 @@ async function hojaA4(filas: FilaA4[], marca: string, sincronizado?: Date | null
     y += conStock ? 5.5 : 7
   }
   header()
+  const conGrupos = new Set(filas.map((f) => f.grupo)).size > 1
   filas.forEach((it, i) => {
     // Nombre COMPLETO en varias líneas (antes se truncaba a la 1ª con [0] → se perdía info).
     const anchoProd = (conStock ? X.loc : X.rep) - X.prod - 3
@@ -141,10 +144,18 @@ async function hojaA4(filas: FilaA4[], marca: string, sincronizado?: Date | null
     const lineas = pdf.splitTextToSize(talle ? `${it.name} · ${talle}` : it.name, anchoProd)
     const notas: string[] = it.nota ? pdf.splitTextToSize(it.nota, anchoProd) : []
     const rowH = Math.max(conStock ? 6.6 : 8, lineas.length * 4 + notas.length * 3.4 + 2.6)
-    if (y + rowH > 292) {
+    const tituloGrupo = conGrupos && it.grupo !== filas[i - 1]?.grupo ? it.grupo : null
+    if (y + rowH + (tituloGrupo ? 8 : 0) > 292) {
       pdf.addPage()
       y = 16
       header()
+    }
+    if (tituloGrupo) {
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(10)
+      pdf.setTextColor(20)
+      pdf.text(tituloGrupo, M, y)
+      y += 7
     }
     const mover = it.mover
     if (i % 2 === 1) {

@@ -43,12 +43,14 @@ import { ArmadoLector } from './ArmadoLector'
 import { OpcionesBdi } from './OpcionesBdi'
 import { HistorialArmados } from './HistorialArmados'
 import { SolicitudDevolucion, type DatoTn } from './SolicitudDevolucion'
-import { unidadesEnPedidos } from '@/lib/reposicion/paraPedido'
+import { agruparLista, paraPedidoDe, soloEnDeposito, unidadesEnPedidos, type PrendaPedido } from '@/lib/reposicion/paraPedido'
 import { abrirArmado, articuloDe, cambiarCantidadesArmado, codigoArmado, leerArmadoHoy, leerPedidosSinArmar, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type LineaPedido, type Sentido } from '@/lib/reposicion/armado'
 import { cambiarCantidades, transferidoDe } from '@/lib/reposicion/armado.core.js'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 type Pestana = 'llevar' | 'devolver' | 'historial'
+
+const SIN_PEDIDOS = { prendas: [] as PrendaPedido[], noLeidas: 0 }
 
 export function ReposicionZattia({ allProductos }: { allProductos: Producto[] }) {
   const { marca, perfil } = useSesion()
@@ -108,7 +110,32 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   const cantArmado = useMemo(() => (enCurso ? Object.fromEntries(enCurso.pedido.map((l) => [l.vid, l.cant])) : null), [enCurso])
   const cantLlevar = (f: FilaVentas) => (cantArmado ? (cantArmado[f.it.vid] ?? 0) : (manual[f.it.vid] ?? f.d.llevar))
   const totalLlevar = llevar.reduce((s, f) => s + cantLlevar(f), 0)
-  const paraExhibir = llevar.filter((f) => f.d.exhibir && cantLlevar(f) > 0).length
+  // Los pedidos web sin armar (Zattia, 1-nov-2026): dicen qué renglones van a la bolsa. Se leen al abrir y con cada
+  // stock nuevo. `null` = no se pudieron leer: la lista se ve igual y lo avisa.
+  const [prendasLeidas, setPrendasLeidas] = useState<{ prendas: PrendaPedido[]; noLeidas: number } | null>(SIN_PEDIDOS)
+  const hayNegativo = llevar.some((f) => f.it.local < 0)
+  const leePedidos = linea === 'zattia' && hayNegativo
+  useEffect(() => {
+    if (!leePedidos) return
+    let vivo = true
+    leerPedidosSinArmar(linea)
+      .then((d) => {
+        if (vivo) setPrendasLeidas(d)
+      })
+      .catch(() => {
+        if (vivo) setPrendasLeidas(null)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [linea, leePedidos, rep.lastUpdate])
+  const prendasWeb = leePedidos ? prendasLeidas : SIN_PEDIDOS
+  const enPedidos = useMemo(() => unidadesEnPedidos(inv, prendasWeb?.prendas ?? []), [inv, prendasWeb])
+  const paraPedido = (f: FilaVentas) => paraPedidoDe(f.it.local, enPedidos[f.it.vid] || 0, cantLlevar(f))
+  const totalPedidos = llevar.reduce((s, f) => s + paraPedido(f), 0)
+  const secciones = agruparLista(llevar, enPedidos, cantLlevar)
+  const exclusivos = useMemo(() => filas.filter((f) => f.d.modo.modo === 'online'), [filas])
+  const paraExhibir = llevar.filter((f) => f.d.exhibir && cantLlevar(f) > paraPedido(f)).length
   const conAlarma = llevar.filter((f) => f.d.soloAlarma).reduce((s, f) => s + cantLlevar(f), 0)
 
   // Desde cuándo se espera un «Actualizar stock» que tardó más de lo normal (`null` = no se espera).
@@ -244,13 +271,13 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     if (abierto(sentido)) return setArmando(sentido)
     // La devolución se arma sólo desde una solicitud enviada (ya está abierta): acá no se inicia.
     if (sentido === 'devolver') return
-    // La alerta «Pedido» (Zattia, 1-nov-2026): sólo hace falta leer los pedidos si hay algo en negativo.
-    let enPedidos: Record<string, number> = {}
-    if (linea === 'zattia' && llevar.some((f) => f.it.local < 0)) {
+    // La alerta «Pedido» (Zattia, 1-nov-2026): al iniciar se vuelven a leer, para congelar lo último.
+    let enPedidosAhora: Record<string, number> = {}
+    if (leePedidos) {
       let aviso = ''
       try {
         const d = await leerPedidosSinArmar(linea)
-        enPedidos = unidadesEnPedidos(inv, d.prendas)
+        enPedidosAhora = unidadesEnPedidos(inv, d.prendas)
         if (d.noLeidas > 0) aviso = `No se pudieron leer ${d.noLeidas === 1 ? '1 pedido' : `${d.noLeidas} pedidos`}: esas prendas no van a avisar «Pedido».`
       } catch {
         aviso = 'No se pudieron leer los pedidos web: ninguna prenda va a avisar «Pedido». Conviene reintentar.'
@@ -260,7 +287,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
         if (!ok) return
       }
     }
-    const pedido = pedidoDesde(llevar, cantLlevar, true, enPedidos)
+    const pedido = pedidoDesde(llevar, cantLlevar, true, enPedidosAhora)
     if (!pedido.length) return toast.aviso(`No hay ${art.plural} para reponer.`)
     // Una lista armada con stock viejo pide lo que ya se movió ayer.
     if (edadMin != null && edadMin >= 360) {
@@ -337,7 +364,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
       // El papel de Lorena lleva sólo lo que tiene que hacer: producto, talle y cuánto (Darío,
       // 11-oct). Ni stock ni ventas — eso lo ven el dueño y el socio en pantalla—, y tampoco «para
       // exhibir»: ese aviso lo da el Monitor al escanear (parte 3).
-      llevar.map((f) => ({ ubic: f.it.ubic, name: f.it.name, size: f.it.size, mover: cantLlevar(f) })),
+      secciones.flatMap((g) => g.filas.map((f) => ({ ubic: f.it.ubic, name: f.it.name, size: f.it.size, mover: cantLlevar(f), grupo: g.titulo }))),
       linea,
       rep.lastUpdate,
     )
@@ -463,6 +490,11 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             <span style={{ fontSize: font.md, color: color.ink2 }}>
               <b>{totalLlevar}</b> {art.plural} · {llevar.length} variantes
             </span>
+            {totalPedidos > 0 && (
+              <span title="Van a la bolsa de pedidos, no al local">
+                <Badge tone="success">{totalPedidos} para pedido</Badge>
+              </span>
+            )}
             {paraExhibir > 0 && (
               <span title="La primera va con alarma, etiqueta de precio y etiqueta de formas de pago">
                 <Badge tone="warning">{paraExhibir} para exhibir</Badge>
@@ -484,12 +516,20 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             {botonArmado('llevar', llevar.length > 0)}
           </div>
           <EstadoArmado armado={armados.llevar} onResolver={(a, h) => void onResolver(a, h)} />
+          {prendasWeb === null && (
+            <div style={{ marginBottom: space[3] }}>
+              <Notice tone="warning" icon="⚠">
+                No se pudieron leer los pedidos web: la lista no separa lo que va a la bolsa.
+              </Notice>
+            </div>
+          )}
           {!llevar.length ? (
             <EmptyState icon="🎉" title={`No hay ${art.plural} para reponer`} hint="El local tiene su stock ideal, o lo que falta no está en el depósito." dashed />
           ) : (
             <TablaVentas
-              filas={llevar}
+              secciones={secciones}
               cantidad={cantLlevar}
+              paraPedido={paraPedido}
               titulo="Reponer"
               editar={editarLlevar}
             />
@@ -521,6 +561,12 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
       {tab !== 'historial' && exhibidos.length > 0 && (
         <p style={{ marginTop: space[4], fontSize: font.sm, color: color.mut }}>
           Todo exhibido, fuera de las listas: {new Set(exhibidos.map((f) => f.it.pid)).size} productos · {[...new Set(exhibidos.map((f) => f.d.modo.motivo))].join(' · ')}
+        </p>
+      )}
+
+      {tab !== 'historial' && exclusivos.length > 0 && (
+        <p style={{ marginTop: space[2], fontSize: font.sm, color: color.mut }}>
+          Exclusivo online, sólo se lleva lo vendido: {new Set(exclusivos.map((f) => f.it.pid)).size} productos
         </p>
       )}
 
@@ -565,16 +611,20 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
  * antes era una tabla por producto con los encabezados repetidos). La cantidad es editable sólo en
  * «Reponer».
  */
-function TablaVentas({ filas, cantidad, titulo, editar }: { filas: FilaVentas[]; cantidad: (f: FilaVentas) => number; titulo: string; editar?: (f: FilaVentas, v: string) => void }) {
-  const grupos = useMemo(() => {
-    const g: { pid: string; name: string; filas: FilaVentas[] }[] = []
-    for (const f of filas) {
-      const ult = g[g.length - 1]
-      if (ult && ult.pid === f.it.pid) ult.filas.push(f)
-      else g.push({ pid: f.it.pid, name: f.it.name, filas: [f] })
-    }
-    return g
-  }, [filas])
+function TablaVentas({ secciones, cantidad, paraPedido, titulo, editar }: { secciones: { clave: string; titulo: string; filas: FilaVentas[] }[]; cantidad: (f: FilaVentas) => number; paraPedido: (f: FilaVentas) => number; titulo: string; editar?: (f: FilaVentas, v: string) => void }) {
+  const partes = useMemo(
+    () =>
+      secciones.map((s) => {
+        const g: { pid: string; name: string; filas: FilaVentas[] }[] = []
+        for (const f of s.filas) {
+          const ult = g[g.length - 1]
+          if (ult && ult.pid === f.it.pid) ult.filas.push(f)
+          else g.push({ pid: f.it.pid, name: f.it.name, filas: [f] })
+        }
+        return { ...s, grupos: g }
+      }),
+    [secciones],
+  )
   return (
     <TableWrap>
       <THead>
@@ -590,7 +640,17 @@ function TablaVentas({ filas, cantidad, titulo, editar }: { filas: FilaVentas[];
         </Tr>
       </THead>
       <TBody>
-        {grupos.map((g, i) => (
+        {partes.map((p) => (
+          <Fragment key={p.clave}>
+            {/* Con un solo grupo, el título no dice nada: la lista queda como siempre. */}
+            {partes.length > 1 && (
+              <Tr>
+                <Td colSpan={8} style={{ background: color.ink, color: 'var(--mo-bg, #fff)', fontWeight: 800, paddingTop: space[2], paddingBottom: space[2] }}>
+                  {p.titulo} · {p.filas.reduce((s, f) => s + cantidad(f), 0)}
+                </Td>
+              </Tr>
+            )}
+        {p.grupos.map((g, i) => (
           // Por SKU, un mismo producto puede quedar en dos grupos separados: la clave lleva la posición.
           <Fragment key={`${g.pid}-${i}`}>
             <Tr>
@@ -610,12 +670,17 @@ function TablaVentas({ filas, cantidad, titulo, editar }: { filas: FilaVentas[];
                 <Tr key={f.it.vid}>
                   <Td wrap>
                     {talle(f.it.size) || 'Única'}
-                    {f.d.exhibir && titulo === 'Reponer' && (
+                    {paraPedido(f) > 0 && (
+                      <span title="Las primeras que se escanean van a la bolsa de pedidos" style={{ marginLeft: 6 }}>
+                        <Badge tone="success">{paraPedido(f)} para pedido{n > paraPedido(f) ? ` + ${n - paraPedido(f)} reposición` : ''}</Badge>
+                      </span>
+                    )}
+                    {f.d.exhibir && n > paraPedido(f) && titulo === 'Reponer' && (
                       <span title="Local en 0: la primera va con alarma, etiqueta de precio y etiqueta de formas de pago" style={{ marginLeft: 6 }}>
                         <Badge tone="warning">para exhibir</Badge>
                       </span>
                     )}
-                    {f.d.soloAlarma && titulo === 'Reponer' && (
+                    {f.d.soloAlarma && n > paraPedido(f) && titulo === 'Reponer' && (
                       <span title="Todas con alarma, ninguna con etiqueta de precio" style={{ marginLeft: 6 }}>
                         <Badge tone="brand">con alarma, sin precio</Badge>
                       </span>
@@ -649,6 +714,8 @@ function TablaVentas({ filas, cantidad, titulo, editar }: { filas: FilaVentas[];
             })}
           </Fragment>
         ))}
+          </Fragment>
+        ))}
       </TBody>
     </TableWrap>
   )
@@ -658,6 +725,7 @@ const MODOS: { v: Modo; label: string }[] = [
   { v: 'ventas', label: 'Según ventas' },
   { v: 'exhibido', label: 'Todo exhibido' },
   { v: 'fija', label: 'Cantidad fija' },
+  { v: 'online', label: 'Exclusivo online' },
 ]
 
 /** Parámetros y marcas (por categoría y por producto). Editan sólo Darío y Bruno; el resto lo ve. */
@@ -693,6 +761,16 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
     const next = { ...cv.sinPrecio }
     pids.forEach((pid) => (v ? (next[pid] = v) : delete next[pid]))
     guardar({ ...cv, sinPrecio: next })
+  }
+  const [buscarOnline, setBuscarOnline] = useState('')
+  const exclusivosCfg = Object.keys(cv.modosProd).filter((pid) => cv.modosProd[pid].modo === 'online')
+  // Los que ya tienen otra marca a mano no se pisan con el botón: se cambian de a uno.
+  const candidatosOnline = soloEnDeposito(filas).filter((pid) => !cv.modosProd[pid])
+  const encontradosOnline = buscarOnline.trim().length >= 2 ? productos.filter(([pid, n]) => cv.modosProd[pid]?.modo !== 'online' && n.toLowerCase().includes(buscarOnline.trim().toLowerCase())).slice(0, 20) : []
+  const sumarExclusivos = (pids: string[]) => {
+    const next = { ...cv.modosProd }
+    pids.forEach((pid) => (next[pid] = { modo: 'online' }))
+    guardar({ ...cv, modosProd: next })
   }
   const encontrados = buscar.trim().length >= 2 ? productos.filter(([, n]) => n.toLowerCase().includes(buscar.toLowerCase())).slice(0, 20) : []
 
@@ -816,7 +894,9 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
           cálculo todavía la entiende (`modosCat`), por si vuelve. */}
       <div style={{ fontSize: 13, fontWeight: 700, margin: '6px 0' }}>Excepciones por producto</div>
       {!bdi && <div style={{ fontSize: 11.5, color: color.mut2, marginBottom: 8 }}>OUTLET y ACCESORIO ya van como «Todo exhibido».</div>}
-      {Object.keys(cv.modosProd).map((pid) => filaModo('modosProd', pid, productos.find(([p]) => p === pid)?.[1] ?? `Producto ${pid}`))}
+      {Object.keys(cv.modosProd)
+        .filter((pid) => cv.modosProd[pid].modo !== 'online')
+        .map((pid) => filaModo('modosProd', pid, productos.find(([p]) => p === pid)?.[1] ?? `Producto ${pid}`))}
       {puede && (
         <>
           <input className="mo-input" value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar producto…" style={{ margin: '6px 0' }} />
@@ -830,6 +910,47 @@ function ConfigZattia({ abierto, onClose, titulo, filas, cfgVentas: cv, puede, s
                 </Button>
               </div>
             ))}
+        </>
+      )}
+
+      {/* Bruno, 1-nov-2026: lo que se decide no exhibir en el local pero se vende por la tienda. */}
+      {!bdi && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 700, margin: '16px 0 6px' }}>Exclusivo online ({exclusivosCfg.length})</div>
+          <div style={{ fontSize: 11.5, color: color.mut2, marginBottom: 8 }}>
+            No se exhiben en el local. Sólo se lleva lo vendido, y lo que quede en el local se propone devolver.
+          </div>
+          {!exclusivosCfg.length && <div style={{ fontSize: 12, color: color.mut2, marginBottom: 6 }}>Ninguno.</div>}
+          {exclusivosCfg.map((pid) => (
+            <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '5px 8px', border: `1px solid ${color.bg2}`, borderRadius: 8, marginBottom: 4 }}>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{productos.find(([p]) => p === pid)?.[1] ?? `Producto ${pid}`}</span>
+              {puede && (
+                <Button size="sm" variant="ghost" onClick={() => setModo('modosProd', pid, null)}>
+                  Sacar
+                </Button>
+              )}
+            </div>
+          ))}
+          {puede && (
+            <>
+              {candidatosOnline.length > 0 && (
+                <div style={{ margin: '6px 0' }}>
+                  <Button size="sm" variant="outline" onClick={() => sumarExclusivos(candidatosOnline)}>
+                    Agregar los que hoy están sólo en el depósito ({candidatosOnline.length})
+                  </Button>
+                </div>
+              )}
+              <input className="mo-input" value={buscarOnline} onChange={(e) => setBuscarOnline(e.target.value)} placeholder="Buscar producto…" style={{ margin: '6px 0' }} />
+              {encontradosOnline.map(([pid, n]) => (
+                <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '3px 8px' }}>
+                  <span style={{ flex: 1 }}>{n}</span>
+                  <Button size="sm" variant="ghost" onClick={() => { sumarExclusivos([pid]); setBuscarOnline('') }}>
+                    Agregar
+                  </Button>
+                </div>
+              ))}
+            </>
+          )}
         </>
       )}
 

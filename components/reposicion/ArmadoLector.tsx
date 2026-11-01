@@ -16,7 +16,8 @@
  *   cierra la pestaña o se corta internet, no se pierde.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { GRUPOS_REPOSICION, grupoDe } from '@/lib/reposicion/paraPedido'
 import {
   articuloDe,
   cancelarArmado,
@@ -469,6 +470,12 @@ function UltimaLectura({ l, et, art, bolsa }: { l: Extract<Lectura, { tipo: 'sum
   )
 }
 
+/** El grupo del renglón, con el mismo orden y los mismos títulos que la lista. Sólo la reposición los tiene. */
+function tituloGrupo(l: LineaPedido): string {
+  const clave = grupoDe(l.exhibir && l.cant > (l.paraPedido || 0), l.paraPedido || 0)
+  return GRUPOS_REPOSICION.find((g) => g.clave === clave)!.titulo
+}
+
 function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, onCaja, et }: { lineas: LineaPedido[]; escaneos: Record<string, number>; faltantes: Record<string, MotivoFaltante>; transferido: Record<string, number>; onSacar: (l: LineaPedido) => void; onCaja: (l: LineaPedido) => void; et: EtiquetasArmado | null }) {
   return (
     <TableWrap>
@@ -483,10 +490,18 @@ function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, onC
         </Tr>
       </THead>
       <TBody>
-        {lineas.map((l) => {
+        {lineas.map((l, i) => {
           const n = escaneos[l.vid] || 0
+          const grupo = tituloGrupo(l)
+          const hayGrupos = new Set(lineas.map(tituloGrupo)).size > 1
           return (
-            <Tr key={l.vid}>
+            <Fragment key={l.vid}>
+            {hayGrupos && (i === 0 || tituloGrupo(lineas[i - 1]) !== grupo) && (
+              <Tr>
+                <Td colSpan={6} style={{ background: color.ink, color: 'var(--mo-bg, #fff)', fontWeight: 800 }}>{grupo}</Td>
+              </Tr>
+            )}
+            <Tr>
               <Td style={{ fontSize: font.sm, color: color.mut }}>{l.sku || '—'}</Td>
               <Td wrap>
                 {l.name}
@@ -539,6 +554,7 @@ function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, onC
                 )}
               </Td>
             </Tr>
+            </Fragment>
           )
         })}
       </TBody>
