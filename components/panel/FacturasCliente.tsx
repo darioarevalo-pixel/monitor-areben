@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select } from '@/components/ui'
 import { color, font } from '@/components/ui/tokens'
 import {
-  emitirPartePanel, enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, leerFacturasClientePanel, proponerPartePanel,
+  emitirPartePanel, enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, leerFacturasClientePanel, leerPadronPanel, proponerPartePanel,
   type EstadoParte, type FacturaDelPanel, type FiscalDelPanel, type RenglonParte,
 } from '@/lib/erp/cliente'
 import { parsearMonto } from '@/lib/compromisos/plata.core.js'
@@ -185,6 +185,24 @@ function useDatosFiscales(fiscal: FiscalDelPanel) {
 
 function CamposFiscales({ fiscal, f }: { fiscal: FiscalDelPanel; f: ReturnType<typeof useDatosFiscales> }) {
   const esA = esCondicionA(f.condicion)
+  const [buscando, setBuscando] = useState(false)
+  const [padron, setPadron] = useState<{ tono: 'ok' | 'aviso'; texto: string } | null>(null)
+  const cuit = f.doc.replace(/\D/g, '')
+  // El padrón de ARCA llena razón social, condición y domicilio; quedan corregibles. Si ARCA no contesta, se tipea como siempre.
+  const buscarEnArca = async () => {
+    setBuscando(true); setPadron(null)
+    try {
+      const p = await leerPadronPanel(cuit)
+      if (!p.prendido) { setPadron({ tono: 'aviso', texto: 'La búsqueda en ARCA está apagada: completalo a mano.' }); return }
+      if (p.razonSocial) f.setRazonSocial(p.razonSocial)
+      if (p.condicion) f.setCondicion(p.condicion)
+      if (p.domicilio) f.setDomicilio(p.domicilio)
+      const avisos = [...(p.estadoClave && p.estadoClave !== 'ACTIVO' ? [`El CUIT figura ${p.estadoClave.toLowerCase()} en ARCA.`] : []), ...p.avisos]
+      setPadron(avisos.length ? { tono: 'aviso', texto: `Datos de ARCA cargados. ${avisos.join(' ')}` } : { tono: 'ok', texto: 'Datos de ARCA cargados: revisalos antes de facturar.' })
+    } catch (e) {
+      setPadron({ tono: 'aviso', texto: `${e instanceof Error ? e.message : 'No se pudo consultar ARCA.'} Completalo a mano.` })
+    } finally { setBuscando(false) }
+  }
   return f.pedirDatos ? (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${color.line2}`, paddingTop: 8 }}>
       <div style={ROTULO}>Datos para facturar (quedan en la ficha)</div>
@@ -194,7 +212,13 @@ function CamposFiscales({ fiscal, f }: { fiscal: FiscalDelPanel; f: ReturnType<t
           {CONDICIONES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
         </Select>
       </Field>
-      <Field label={esA ? 'CUIT' : 'CUIT o DNI (opcional)'}><Input value={f.doc} inputMode="numeric" onChange={(e) => f.setDoc(e.target.value)} /></Field>
+      <Field label={esA ? 'CUIT' : 'CUIT o DNI (opcional)'}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <Input value={f.doc} inputMode="numeric" onChange={(e) => { f.setDoc(e.target.value); setPadron(null) }} />
+          <Button size="sm" variant="outline" disabled={cuit.length !== 11 || buscando} onClick={buscarEnArca}>{buscando ? 'Buscando…' : 'Buscar en ARCA'}</Button>
+        </div>
+      </Field>
+      {padron && <Notice tone={padron.tono === 'ok' ? 'success' : 'warning'}>{padron.texto}</Notice>}
       <Field label={esA ? 'Razón social' : 'Razón social (opcional)'}><Input value={f.razonSocial} maxLength={120} onChange={(e) => f.setRazonSocial(e.target.value)} /></Field>
       <Field label={esA ? 'Domicilio' : 'Domicilio (opcional)'}><Input value={f.domicilio} maxLength={200} onChange={(e) => f.setDomicilio(e.target.value)} /></Field>
       {f.condicion && <div style={{ fontSize: font.sm, color: color.mut2 }}>Sale factura {esA ? 'A' : 'B'}.</div>}

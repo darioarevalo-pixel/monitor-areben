@@ -9,7 +9,7 @@
  * Doble llave, como el pedido: verlo = `PANEL_CUENTA_CORRIENTE`; facturar ADEMÁS `VENTA_MAYORISTA_REAL` (en producción el
  * ambiente de ARCA es el REAL: una factura con CAE ⛔ se borra).
  */
-import { CBTE, ptoVtaDe } from '../motor/arca/arca.core.js'
+import { CBTE, cuitValido, ptoVtaDe } from '../motor/arca/arca.core.js'
 import { facturarLote } from '../motor/arca/lote.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import {
@@ -407,4 +407,34 @@ export async function enviarFacturaPanel({ body, quien = null }, deps) {
   if (!r.ok && !r.configurado) return { status: 503, error: 'Falta la conexión con Mailer (MAILER_URL / MAILER_TICKET_KEY) en Vercel.' }
   if (!r.ok) return { status: 502, error: `No salió: ${r.motivo}` }
   return { ok: true, para, de: r.de, comprobante }
+}
+
+/**
+ * El PADRÓN de ARCA (habilitado por Bruno 31-oct, F. 3283/E): CUIT ⇒ razón social, condición frente al IVA y domicilio fiscal,
+ * para llenar los datos fiscales al facturar (corregibles: ⛔ se guardan acá, se guardan al facturar). Sólo LEE de ARCA:
+ * ⛔ pide el corte de BDI, sí la cuenta del panel prendida. Si ARCA no contesta, el error sale dicho y se tipea como antes.
+ * 🔴 Con el cert de HOMOLOGACIÓN el padrón contesta «Computador no autorizado»: sólo anda en producción.
+ * @param {{ cuit?: string, usuario?: any }} p @param {{ prendido?: boolean, arca?: any, sb?: any }} deps
+ */
+export async function padronDelPanel({ cuit = '', usuario = null }, deps = {}) {
+  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  const c = String(cuit).replace(/\D/g, '')
+  if (!cuitValido(c)) return { status: 400, error: 'Ese CUIT no es válido: revisá los números.' }
+  const { ambiente, error: errorAmbiente } = ambienteSeguro()
+  if (!ambiente && !deps.arca) return { status: 409, error: errorAmbiente }
+  const arca = arcaDe(deps, deps.sb || (deps.arca ? null : baseFacturacion()))
+  if (!arca) return { status: 409, error: SIN_ARCA }
+  try {
+    const p = await arca.persona(c)
+    return {
+      prendido: true, cuit: c, razonSocial: p.razonSocial, condicion: opcionDeCondicionPanel(p.condicionIva),
+      domicilio: p.domicilioTexto, estadoClave: p.estadoClave, avisos: p.avisos,
+    }
+  } catch (e) {
+    const m = String(e?.message || e)
+    if (/arca_ta_servicio/.test(m) && /does not exist|schema cache|relation/i.test(m)) {
+      return { status: 409, error: 'Falta la migración del padrón de ARCA (sql/migrate-arca-ta-servicio.sql).' }
+    }
+    return { status: 502, error: /^Padrón de ARCA: /.test(m) ? `${m.replace(/^Padrón de ARCA: /, 'ARCA dice: ')}` : `No se pudo consultar ARCA (${m}).` }
+  }
 }

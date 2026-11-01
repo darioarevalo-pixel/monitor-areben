@@ -12,6 +12,7 @@ import { createClient } from '@supabase/supabase-js'
 import { cfgDelMonitor } from './_recepciones-base.js'
 import { crearClienteArca } from '../motor/arca/cliente.js'
 import { CUIT_AREBEN, ambienteDeEntorno } from '../motor/arca/arca.core.js'
+import { PADRON } from '../motor/arca/padron.core.js'
 
 /** Un candado más viejo que esto es de una corrida que murió: el lote entero entra en 30 s. */
 const CANDADO_VENCIDO_MS = 2 * 60_000
@@ -37,6 +38,24 @@ export function almacenTA(sb, ambiente) {
   }
 }
 
+/**
+ * El permiso de un servicio de ARCA que ⛔ es la factura (hoy, el padrón) en `arca_ta_servicio`
+ * (`sql/migrate-arca-ta-servicio.sql`): WSAA da un TA POR SERVICIO; en `arca_ta` pisaría el de la factura.
+ */
+export function almacenTAServicio(sb, ambiente, servicio) {
+  return {
+    async leer() {
+      const { data, error } = await sb.from('arca_ta_servicio').select('token, sign, vence').eq('ambiente', ambiente).eq('servicio', servicio).maybeSingle()
+      if (error) throw new Error(`arca_ta_servicio: ${error.message}`)
+      return data
+    },
+    async guardar(ta) {
+      const { error } = await sb.from('arca_ta_servicio').upsert({ ambiente, servicio, ...ta, pedido_en: new Date().toISOString() })
+      if (error) throw new Error(`arca_ta_servicio: ${error.message}`)
+    },
+  }
+}
+
 /** Sin certificado en el servidor, ARCA ⛔ se puede llamar: las puertas que piden CAE lo dicen ANTES (409), ⛔ con un 500. */
 export const SIN_ARCA = 'Este servidor todavía no tiene el certificado de ARCA cargado: no se puede facturar desde acá.'
 export const arcaConectado = (env = process.env) => !!(env.ARCA_CERT && env.ARCA_KEY)
@@ -50,6 +69,7 @@ export function clienteArcaDelEntorno(sb) {
       cert: (process.env.ARCA_CERT || '').replace(/\\n/g, '\n'),
       key: (process.env.ARCA_KEY || '').replace(/\\n/g, '\n'),
       almacenTA: almacenTA(sb, ambiente),
+      almacenTAPadron: almacenTAServicio(sb, ambiente, PADRON.servicio),
     }),
   }
 }

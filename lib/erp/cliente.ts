@@ -709,6 +709,13 @@ export type BcraDelPanel =
   }
 export const leerBcraPanel = (clienteId: string) =>
   pedir<BcraDelPanel>(null, `&vista=bcra-panel&marca=bdi&cliente=${encodeURIComponent(clienteId)}&nc=${Date.now()}`, 'No se pudo consultar el BCRA.')
+
+/** El padrón de ARCA: CUIT ⇒ razón social, condición (la opción del panel) y domicilio fiscal. Corregibles. */
+export type PadronDelPanel =
+  | { prendido: false }
+  | { prendido: true; cuit: string; razonSocial: string | null; condicion: string | null; domicilio: string | null; estadoClave: string | null; avisos: string[] }
+export const leerPadronPanel = (cuit: string) =>
+  pedir<PadronDelPanel>(null, `&vista=padron-panel&marca=bdi&cuit=${encodeURIComponent(cuit.replace(/\D/g, ''))}&nc=${Date.now()}`, 'No se pudo consultar ARCA.')
 /** Las facturas de la ficha del cliente (facturación de mayoristas, Darío §5) y sus datos fiscales, para saber qué pedir. */
 export type FiscalDelPanel = { doc: string | null; razonSocial: string | null; domicilio: string | null; email?: string | null; condicion: 'ri' | 'monotributo' | 'exento' | 'consumidor' | null }
 export type FacturaDelPanel = import('@/lib/arca/factura-pdf').FacturaEmitida & { clase: 'venta' | 'parte' | 'libre'; venta_ref?: string | null }
