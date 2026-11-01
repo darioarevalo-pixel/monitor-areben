@@ -43,7 +43,8 @@ import { ArmadoLector } from './ArmadoLector'
 import { OpcionesBdi } from './OpcionesBdi'
 import { HistorialArmados } from './HistorialArmados'
 import { SolicitudDevolucion, type DatoTn } from './SolicitudDevolucion'
-import { abrirArmado, articuloDe, cambiarCantidadesArmado, codigoArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type LineaPedido, type Sentido } from '@/lib/reposicion/armado'
+import { unidadesEnPedidos } from '@/lib/reposicion/paraPedido'
+import { abrirArmado, articuloDe, cambiarCantidadesArmado, codigoArmado, leerArmadoHoy, leerPedidosSinArmar, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type LineaPedido, type Sentido } from '@/lib/reposicion/armado'
 import { cambiarCantidades, transferidoDe } from '@/lib/reposicion/armado.core.js'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
@@ -243,7 +244,23 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     if (abierto(sentido)) return setArmando(sentido)
     // La devolución se arma sólo desde una solicitud enviada (ya está abierta): acá no se inicia.
     if (sentido === 'devolver') return
-    const pedido = pedidoDesde(llevar, cantLlevar, true)
+    // La alerta «Pedido» (Zattia, 1-nov-2026): sólo hace falta leer los pedidos si hay algo en negativo.
+    let enPedidos: Record<string, number> = {}
+    if (linea === 'zattia' && llevar.some((f) => f.it.local < 0)) {
+      let aviso = ''
+      try {
+        const d = await leerPedidosSinArmar(linea)
+        enPedidos = unidadesEnPedidos(inv, d.prendas)
+        if (d.noLeidas > 0) aviso = `No se pudieron leer ${d.noLeidas === 1 ? '1 pedido' : `${d.noLeidas} pedidos`}: esas prendas no van a avisar «Pedido».`
+      } catch {
+        aviso = 'No se pudieron leer los pedidos web: ninguna prenda va a avisar «Pedido». Conviene reintentar.'
+      }
+      if (aviso) {
+        const ok = await confirmar({ titulo: 'Pedidos web sin leer', tono: 'warning', ok: 'Iniciar igual', mensaje: aviso })
+        if (!ok) return
+      }
+    }
+    const pedido = pedidoDesde(llevar, cantLlevar, true, enPedidos)
     if (!pedido.length) return toast.aviso(`No hay ${art.plural} para reponer.`)
     // Una lista armada con stock viejo pide lo que ya se movió ayer.
     if (edadMin != null && edadMin >= 360) {

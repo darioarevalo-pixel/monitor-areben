@@ -65,6 +65,10 @@ describe('llevar: se repone lo que se vendió', () => {
     expect(d(item({ local: 1, vv: 38, s7: 16 })).llevar).toBe(5)
     expect(d(item({ local: 0, vv: 120, deposito: 2 })).llevar).toBe(2)
   })
+  it('apagado con el Local en negativo: se lleva sólo lo vendido (Zattia, 1-nov)', () => {
+    expect(d(item({ local: -2 }), cfg({ apagados: ['1'] })).llevar).toBe(2)
+    expect(d(item({ local: -2, deposito: 1 }), cfg({ apagados: ['1'] })).llevar).toBe(1)
+  })
   it('sin stock en depósito, o apagado, no se pide', () => {
     expect(d(item({ local: 0, deposito: 0 })).llevar).toBe(0)
     expect(d(item({ local: 0 }), cfg({ apagados: ['1'] })).llevar).toBe(0)

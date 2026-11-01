@@ -145,7 +145,7 @@ const DIA_MS = 86_400_000
 let cachePedidos = null
 export const olvidarPedidosWeb = () => { cachePedidos = null }
 
-async function leerPedidosWeb(sobre, ahora, store = STORE) {
+export async function leerPedidosWeb(sobre, ahora, store = STORE) {
   if (cachePedidos && cachePedidos.store === store && ahora - cachePedidos.en < 60_000) return cachePedidos.datos
   // Los tres EN PARALELO: de a uno tardaba ~4 s en frío y el aviso del renglón llegaba después del
   // escaneo (visto en prod, 4-oct). Son 6 consultas a TN contra un cupo de 40; si corta, lo dice `noLeidas`.

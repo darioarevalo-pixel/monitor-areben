@@ -402,6 +402,9 @@ export function decidir(it: RepoItem, cfg: RepoCfg, cv: CfgVentas, hoy: string, 
     // Con `loteMin` > 1 no se camina el depósito por una sola, salvo que quede sólo la exhibida.
     if (falta >= cv.loteMin || it.local <= 1) llevar = Math.min(falta, disponible)
   }
+  // Apagado no quiere decir que no se vende: con el Depósito en Tienda Nube (1-nov-2026) una venta online
+  // deja el Local en negativo, y ese negativo es lo único que se lleva. BDI no entra: sus apagados son otra cosa.
+  if (apagado && !bdi && it.local < 0 && disponible > 0) llevar = Math.min(-it.local, disponible)
   const devolver = !nuevo && it.local > objetivo ? it.local - objetivo : 0
   if (nuevo && it.local > objetivo) porque = [porque, 'Producto nuevo: no se devuelve'].filter(Boolean).join(' · ')
   // La columna «Vende x sem.» muestra el ritmo que decidió: el de la semana si se disparó, si no el largo.

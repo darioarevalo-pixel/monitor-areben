@@ -46,6 +46,30 @@ describe('lo puro', () => {
     expect(leerCodigo(pedido, { '1_1': 2 }, '779001', []).tipo).toBe('sobra')
   })
 
+  it('alerta «Pedido»: las primeras van a la bolsa y después sigue como siempre (1-nov)', () => {
+    const pedido = [L({ exhibir: true, cant: 3, paraPedido: 1 })]
+    const a = leerCodigo(pedido, {}, '779001', [])
+    expect(a).toMatchObject({ tipo: 'suma', n: 1, pedido: true, exhibir: false })
+    expect(frase(a as Extract<typeof a, { tipo: 'suma' }>)).toBe('Pedido')
+    const b = leerCodigo(pedido, { '1_1': 1 }, '779001', [])
+    expect(b).toMatchObject({ tipo: 'suma', n: 2, pedido: false, exhibir: true })
+    expect(frase(b as Extract<typeof b, { tipo: 'suma' }>)).toBe('Para exhibir')
+    expect(leerCodigo(pedido, { '1_1': 2 }, '779001', [])).toMatchObject({ pedido: false, exhibir: false })
+  })
+
+  it('la prenda de un pedido no sale con alarma, las del perchero sí', () => {
+    const pedido = [L({ soloAlarma: true, cant: 2, paraPedido: 1 })]
+    expect(leerCodigo(pedido, {}, '779001', [])).toMatchObject({ pedido: true, soloAlarma: false })
+    expect(leerCodigo(pedido, { '1_1': 1 }, '779001', [])).toMatchObject({ pedido: false, soloAlarma: true })
+  })
+
+  it('el servidor conserva cuántas son para pedido y no deja pasarse de lo pedido', () => {
+    const base = { pid: '1', sid: '1', name: 'TOP', size: 'S' }
+    expect(sanearPedido([{ ...base, cant: 2, paraPedido: 1 }])[0].paraPedido).toBe(1)
+    expect(sanearPedido([{ ...base, cant: 2, paraPedido: 9 }])[0].paraPedido).toBe(2)
+    expect(sanearPedido([{ ...base, cant: 2 }])[0].paraPedido).toBeUndefined()
+  })
+
   it('lo que no se pidió se nombra, y lo desconocido se dice', () => {
     const inv = [{ barcode: '555', sku: 'X', name: 'BODY LIA', size: 'M' }]
     expect(leerCodigo([L({})], {}, '555', inv)).toEqual({ tipo: 'no-pedida', nombre: 'BODY LIA M' })

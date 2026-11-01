@@ -8,6 +8,7 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import { normCode } from '@/lib/exhib/core'
+import { paraPedidoDe, type PrendaPedido } from './paraPedido'
 import type { FilaVentas, LineaZ } from './porVentas'
 import type { RepoItem } from './tipos'
 
@@ -24,6 +25,8 @@ export type LineaPedido = {
   cant: number
   exhibir: boolean
   soloAlarma?: boolean
+  /** Cuántas de este renglón son de un pedido web: las primeras que se escanean van a la bolsa (1-nov-2026). */
+  paraPedido?: number
   /**
    * Vidrios de BDI que van por caja: la caja cerrada NO tiene etiqueta (se etiqueta al abrirla, Darío
    * 12-oct-2026), así que no se puede escanear: se suma con el botón «Caja cerrada».
@@ -73,9 +76,11 @@ export type Armado = {
 }
 
 /** Lo que se congela al empezar: la lista de «Llevar» tal como está en pantalla (con lo corregido a mano). */
-export function pedidoDesde(filas: FilaVentas[], cantidad: (f: FilaVentas) => number, conCaja = false): LineaPedido[] {
+export function pedidoDesde(filas: FilaVentas[], cantidad: (f: FilaVentas) => number, conCaja = false, enPedidos: Record<string, number> = {}): LineaPedido[] {
   return filas
-    .map((f) => ({
+    .map((f) => {
+      const paraPedido = paraPedidoDe(f.it.local, enPedidos[f.it.vid] || 0, cantidad(f))
+      return {
       vid: f.it.vid,
       pid: f.it.pid,
       sid: f.it.sid,
@@ -86,14 +91,16 @@ export function pedidoDesde(filas: FilaVentas[], cantidad: (f: FilaVentas) => nu
       cant: cantidad(f),
       exhibir: f.d.exhibir,
       soloAlarma: f.d.soloAlarma,
+      ...(paraPedido > 0 ? { paraPedido } : {}),
       ...(conCaja && f.d.caja ? { caja: f.d.caja } : {}),
-    }))
+      }
+    })
     .filter((l) => l.cant > 0)
 }
 
 /** Qué pasó con un código que pasó por el lector. */
 export type Lectura =
-  | { tipo: 'suma'; linea: LineaPedido; n: number; faltan: number; exhibir: boolean; soloAlarma: boolean }
+  | { tipo: 'suma'; linea: LineaPedido; n: number; faltan: number; exhibir: boolean; soloAlarma: boolean; pedido: boolean }
   | { tipo: 'sobra'; linea: LineaPedido }
   | { tipo: 'no-pedida'; nombre: string }
   | { tipo: 'desconocido' }
@@ -123,9 +130,12 @@ export function leerCodigo(pedido: LineaPedido[], escaneos: Record<string, numbe
     const abierta = enPedido.find((l) => (escaneos[l.vid] || 0) < l.cant)
     if (!abierta) return { tipo: 'sobra', linea: enPedido[0] }
     const n = (escaneos[abierta.vid] || 0) + 1
-    // La marca «para exhibir» va con la PRIMERA: es la que sale con alarma y etiquetas.
-    // «Sin etiqueta de precio» va con TODAS: cada una sale con alarma (todo exhibido).
-    return { tipo: 'suma', linea: abierta, n, faltan: abierta.cant - n, exhibir: abierta.exhibir && n === 1, soloAlarma: !!abierta.soloAlarma }
+    // Primero lo de los pedidos: esas van a la bolsa, sin alarma ni etiquetas (1-nov-2026).
+    const deBolsa = abierta.paraPedido || 0
+    const pedido = n <= deBolsa
+    // La marca «para exhibir» va con la PRIMERA que va al perchero: es la que sale con alarma y etiquetas.
+    // «Sin etiqueta de precio» va con TODAS las del perchero: cada una sale con alarma (todo exhibido).
+    return { tipo: 'suma', linea: abierta, n, faltan: abierta.cant - n, exhibir: abierta.exhibir && n === deBolsa + 1, soloAlarma: !pedido && !!abierta.soloAlarma, pedido }
   }
   const otra = coinciden(inv.map((x) => ({ ...x, sku: x.sku || '', barcode: x.barcode || '' })), code)[0]
   return otra ? { tipo: 'no-pedida', nombre: `${otra.name}${talle(otra.size) ? ` ${talle(otra.size)}` : ''}` } : { tipo: 'desconocido' }
@@ -137,12 +147,12 @@ export function talle(size: string): string {
 }
 
 /**
- * Lo que dice la voz con una prenda bien escaneada: NADA, salvo «Para exhibir» o «Alarma» (Darío, 12-oct-2026:
+ * Lo que dice la voz con una prenda bien escaneada: NADA, salvo «Pedido», «Para exhibir» o «Alarma» (Darío, 12-oct-2026:
  * repetir cada producto «lo hace extenso» — la prenda ya está en la mano). El caso normal va sólo
  * con el pitido: uno si faltan más de esa prenda, dos cuando queda completa.
  */
 export function frase(l: Extract<Lectura, { tipo: 'suma' }>): string | undefined {
-  return l.exhibir ? 'Para exhibir' : l.soloAlarma ? 'Alarma' : undefined
+  return l.pedido ? 'Pedido' : l.exhibir ? 'Para exhibir' : l.soloAlarma ? 'Alarma' : undefined
 }
 
 // ─── El servidor ────────────────────────────────────────────────────────────────────────────────
@@ -186,6 +196,11 @@ const escribir = <T = { ok: true }>(linea: LineaZ, action: string, datos: Record
 export async function leerArmadoHoy(linea: LineaZ, sentido: Sentido): Promise<Armado | null> {
   const d = await pedir<{ armado: Armado | null }>(`${API(linea)}&action=hoy&linea=${linea}&sentido=${sentido}&nc=${Date.now()}`)
   return d.armado
+}
+
+/** Las prendas de los pedidos web sin armar, y cuántas órdenes no se pudieron leer. Tira error si Tienda Nube no contesta. */
+export async function leerPedidosSinArmar(linea: LineaZ): Promise<{ prendas: PrendaPedido[]; noLeidas: number }> {
+  return pedir<{ prendas: PrendaPedido[]; noLeidas: number }>(`${API(linea)}&action=pedidos-web&nc=${Date.now()}`)
 }
 
 /** Los últimos armados de la línea (sin los descartados), del más nuevo al más viejo. */

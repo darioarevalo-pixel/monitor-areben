@@ -23,6 +23,7 @@ import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
 import { puedeVerAlguna } from '../lib/permisos.core.js'
 import { documentarTanda, transferirEnErp, transferenciaEnErp } from './_repo-documento.js'
+import { leerPedidosWeb } from './_caja.js'
 import { recibirDe } from '../lib/erp/transferencia-doc.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, dormir } from './_gn.js'
@@ -118,7 +119,18 @@ export default async function handler(req, res) {
         if (error) throw new Error(error.message)
         return res.status(200).json({ ok: true, borrador: (data && data[0]) || null })
       }
-      if (accion !== 'hoy') return res.status(400).json({ error: 'action inválida (usá hoy, historial o borrador)' })
+      if (accion === 'pedidos-web') {
+        // Lo que necesita la alerta «Pedido» del armado: sólo la prenda, ni clienta ni plata. Va por acá porque
+        // quien arma puede no tener la Caja. La lectura y su caché son las de la Caja.
+        try {
+          const d = await leerPedidosWeb(req.headers && req.headers['x-monitor-auth'], Date.now(), store)
+          const prendas = d.pedidos.flatMap((p) => p.prendas.map((x) => ({ sku: x.sku, nombre: x.nombre, cantidad: x.cantidad })))
+          return res.status(200).json({ ok: true, prendas, noLeidas: d.noLeidas })
+        } catch {
+          return res.status(502).json({ error: 'No se pudieron leer los pedidos de Tienda Nube.' })
+        }
+      }
+      if (accion !== 'hoy') return res.status(400).json({ error: 'action inválida (usá hoy, historial, pedidos-web o borrador)' })
       const linea = LINEAS.includes(req.query.linea) ? req.query.linea : LINEAS[0]
       const sentido = SENTIDOS.includes(req.query.sentido) ? req.query.sentido : 'llevar'
       // Primero uno abierto (de cualquier día: uno que quedó de ayer sin cerrar tiene que verse), y

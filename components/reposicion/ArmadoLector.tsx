@@ -193,7 +193,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
       setEscaneos((e) => ({ ...e, [l.linea.vid]: l.n }))
       // Si estaba anotada como «no estaba», apareció: se saca la marca.
       if (faltantes[l.linea.vid]) setFaltantes(({ [l.linea.vid]: _, ...resto }) => resto)
-      avisar(l.exhibir || l.soloAlarma ? 'mira' : l.faltan > 0 ? 'ok' : 'suma', frase(l))
+      avisar(l.pedido || l.exhibir || l.soloAlarma ? 'mira' : l.faltan > 0 ? 'ok' : 'suma', frase(l))
       return
     }
     setExtra(0)
@@ -430,8 +430,9 @@ function UltimaLectura({ l, et, art, bolsa }: { l: Extract<Lectura, { tipo: 'sum
     )
   const ok = l.faltan === 0
   // «Para exhibir» en amarillo; «con alarma, sin precio» en índigo, para no confundirlas (Darío, 12-oct-2026).
-  const borde = l.exhibir ? color.warningInk : l.soloAlarma ? color.brand : ok ? color.successBorder : color.line
-  const fondo = l.exhibir ? 'var(--mo-warning-bg, #FEF3C7)' : l.soloAlarma ? color.brandBg : 'transparent'
+  // «Pedido» en verde y grande: no es un detalle de la prenda, cambia adónde va (1-nov-2026).
+  const borde = l.pedido ? color.successInk : l.exhibir ? color.warningInk : l.soloAlarma ? color.brand : ok ? color.successBorder : color.line
+  const fondo = l.pedido ? color.successBg : l.exhibir ? 'var(--mo-warning-bg, #FEF3C7)' : l.soloAlarma ? color.brandBg : 'transparent'
   return (
     <div
       role="status"
@@ -450,6 +451,7 @@ function UltimaLectura({ l, et, art, bolsa }: { l: Extract<Lectura, { tipo: 'sum
           {bolsa.va ? `${bolsa.va.nueva ? 'Bolsa nueva' : 'A la bolsa'} ${bolsa.va.bolsa}` : 'Suelta al carro'}
         </div>
       )}
+      {l.pedido && <div style={{ fontSize: 30, fontWeight: 800, color: color.successInk, marginBottom: space[2] }}>Pedido: a la bolsa</div>}
       {l.soloAlarma && <div style={{ fontSize: font.lg, fontWeight: 800, color: color.brand, marginBottom: space[2] }}>Con alarma · sin etiqueta de precio</div>}
       {l.exhibir && <div style={{ fontSize: font.lg, fontWeight: 800, color: color.warningInk, marginBottom: space[2] }}>Para exhibir: alarma y etiquetas</div>}
       {l.exhibir && et && (
@@ -488,17 +490,22 @@ function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, onC
               <Td style={{ fontSize: font.sm, color: color.mut }}>{l.sku || '—'}</Td>
               <Td wrap>
                 {l.name}
-                {l.exhibir && (
+                {(l.paraPedido || 0) > 0 && (
+                  <span style={{ marginLeft: 6 }} title="Las primeras que se escanean van a la bolsa de pedidos">
+                    <Badge tone="success">{l.paraPedido} para pedido</Badge>
+                  </span>
+                )}
+                {l.exhibir && l.cant > (l.paraPedido || 0) && (
                   <span style={{ marginLeft: 6 }}>
                     <Badge tone="warning">para exhibir</Badge>
                   </span>
                 )}
-                {l.soloAlarma && (
+                {l.soloAlarma && l.cant > (l.paraPedido || 0) && (
                   <span style={{ marginLeft: 6 }} title="Todas con alarma, ninguna con etiqueta de precio">
                     <Badge tone="brand">con alarma, sin precio</Badge>
                   </span>
                 )}
-                {l.exhibir && et && (
+                {l.exhibir && l.cant > (l.paraPedido || 0) && et && (
                   <span style={{ marginLeft: 6 }}>
                     <BotonEtiquetasExhibir v={varDeLinea(l)} et={et} size="sm" />
                   </span>

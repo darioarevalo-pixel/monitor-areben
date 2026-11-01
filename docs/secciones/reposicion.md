@@ -264,6 +264,25 @@ La Zebra está en la **misma compu** donde Lorena escanea (Darío). Sólo en la 
 - ⛔ «feria» en pantalla no: se dice «campaña» (VOCABULARIO §5); en el papel sale el título de la campaña.
 - ⏭️ Imprimir de verdad no se ensaya desde una sesión de IA: se prueba en la compu del depósito.
 
+## La alerta «Pedido» (Bruno y Darío, 1-nov-2026)
+
+Desde el Cyber, el Depósito de Zattia suma en Tienda Nube. La venta online sigue descontando del Local: si la prenda estaba
+en el depósito, el Local queda en negativo. La lista sigue siendo **una sola, con la suma de todo**, y al escanear la pantalla
+dice cuáles van a la **bolsa de pedidos** (una sola, sin separar por pedido; el local las reparte).
+
+- 🔑 **Cuántas = la menor entre el negativo del Local y lo que hay en pedidos sin armar** (`lib/reposicion/paraPedido.ts`).
+  Pedido con stock en el Local: se saca de ahí. Negativo sin pedido: va al perchero.
+- Las primeras `paraPedido` dicen **«Pedido: a la bolsa»** (voz «Pedido»), sin alarma ni etiquetas. Las siguientes siguen como
+  siempre: «para exhibir» pasa a la primera que va al perchero (`leerCodigo`).
+- 🔴 **Hay SKU repetidos** (17 el 1-nov; el corpiño y la bombacha Tayra comparten el suyo): ahí desempatan nombre y talle, y si
+  no coinciden no hay alerta.
+- Los pedidos se leen al **Iniciar armado**, por `action=pedidos-web` de `repo-armado` (permiso de Reposición: quien arma puede no
+  tener la Caja; sólo la prenda, ni clienta ni plata). Si no se pueden leer, la pantalla lo dice y pregunta. Quedan congelados en
+  el armado: ⛔ **un pedido cancelado con el armado empezado sigue diciendo «Pedido»**.
+- 🔴 **El negativo sale del último sync**: un pedido posterior no avisa. Por eso se actualiza el stock antes de iniciar.
+- **Apagado** frena el «llevar», salvo lo vendido: con el Local en negativo se lleva sólo eso (⛔ en BDI). **Todo exhibido** no
+  lleva ni eso: un producto que se vende online desde el depósito va con **Cantidad fija 0**.
+
 ## Sin etiqueta de precio (Darío, 12-oct-2026)
 
 Configurar → «Sin etiqueta de precio»: productos que van a una caja de precio único (las bikinis «todo
