@@ -8,7 +8,7 @@
  * pedido, armado, enviado y recibido, remito para imprimir y «Exportar». Mueve SÓLO el libro del ERP: ⛔ GN ni Tienda Nube.
  * Núcleos: `lib/erp/transferencia-escaneo.core.js` (el escaneo) y `lib/erp/transferencias-doc.core.js` (la lista y la ficha).
  *
- * 🔑 `unificada` (Bruno, 30-oct): para la línea con la transferencia en el ERP (`TRANSFERENCIA_EN_ERP`) ésta ES la pestaña
+ * 🔑 `unificada` (Bruno, 30-oct): para la línea cortada (`erp_corte`: su transferencia vive en el ERP) ésta ES la pestaña
  * Transferencias: la lista de TODAS (las de Reposición, que llegan recibidas, y las movidas a mano), con «Mover» como botón.
  *
  * 📱 En el celular (Bruno, 29-oct; artifact molde 4): lo escaneado va en tarjetas con + y − grandes —al recibir, verde lo que

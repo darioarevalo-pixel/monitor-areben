@@ -86,8 +86,8 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
           ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
-          # Día del corte de Stunned (variable `LECTURAS_STUNNED_ERP=1`): sus ventas del ERP se suman a las de GN. Apagada, no se usa.
-          LECTURAS_STUNNED_ERP: ${{ vars.LECTURAS_STUNNED_ERP }}
+          # Las ventas del ERP de las líneas cortadas (`erp_corte`) se suman a las del espejo.
+          DATABASE_URL_BDI: ${{ secrets.DATABASE_URL_BDI }}
           DATABASE_URL_ZATTIA: ${{ secrets.DATABASE_URL_ZATTIA }}
           # El mismo SES que ya usan la pauta y el PRM (`scripts/lib/mail.mjs`).
           AWS_REGION: ${{ secrets.AWS_REGION }}

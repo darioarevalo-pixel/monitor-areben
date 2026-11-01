@@ -229,8 +229,9 @@ diaria con tope (30) se reemplazó por una solicitud que deciden **Darío o Brun
 
 ## Stunned: la transferencia vive en el ERP (corte 28-oct; lista única 30-oct-2026)
 
-- 🔑 **Qué línea va por el ERP lo dice UNA tabla**: `TRANSFERENCIA_EN_ERP` de `lib/erp/transferencia-doc.core.js` (hoy sólo
-  `stunned`, con su llave `TRANSFERENCIA_STUNNED_ERP=1` en Vercel). Pasar Zattia o BDI = una fila ahí + su llave, ⛔ pantallas.
+- 🔑 **Qué línea va por el ERP lo dice su CORTE** (`erp_corte`, `api/_repo-documento.js` › `transferenciaEnErp`; Bruno 1-nov: «todo
+  con interruptor»), ⛔ una variable: Stunned 28-oct, BDI 15/16-nov, Zattia 23-nov. `RECIBIR_DE_LINEA` de `lib/erp/transferencia-doc.core.js`
+  dice sólo CÓMO se recibe. En BDI sale de `deposito_minorista` (`depositosEnMotor`).
 - Con la llave, «Transferir» ⛔ llama a GN: crea el documento del motor (`transferirEnErp`, `api/_repo-documento.js`) con
   `origen_ref` = `<armado>:t<tanda>`. La tanda guarda `erp: <número>` en vez de `transfer_id`.
 - **Armar = transferido** (Bruno, 30-oct): `recibir: 'al_armar'` deja el documento «Recibida» al toque. Con `'en_destino'`

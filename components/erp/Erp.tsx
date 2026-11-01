@@ -20,7 +20,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Modal, Tabs, color, space, weight } from '@/components/ui'
-import { leerConfig } from '@/lib/caja/cliente'
+import { leerCorteDeLinea } from '@/lib/erp/cliente'
 import { usarMarcaCaja } from '@/lib/caja/marca'
 import { CUENTAS } from '@/lib/cuentas'
 import type { Marca } from '@/lib/nav.datos'
@@ -34,7 +34,6 @@ import { StockErp, type PrendaAAjustar } from './stock/StockErp'
 import { MovimientosStock } from './stock/MovimientosStock'
 import { TransferenciasStock } from './stock/TransferenciasStock'
 import { MoverYRecibir } from './stock/MoverYRecibir'
-import { transfiereEnErp } from '@/lib/erp/transferencia-doc.core.js'
 import { RecepcionesStock } from './stock/RecepcionesStock'
 import { ComparacionStock } from './stock/ComparacionStock'
 import { DiferenciasDia } from './DiferenciasDia'
@@ -234,8 +233,6 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   // 🎯 Bruno 30-oct: la línea Zattia queda oculta para el local (⛔ admin) hasta que Zattia pase al ERP ⇒ ven sólo Stunned.
   const soloStunned = !esAdmin(perfil)
   const lineaVista: LineaErp = marca === 'zattia' ? (soloStunned || linea === 'stunned' ? 'stunned' : 'zattia') : ''
-  const transferenciaEnErp = transfiereEnErp(lineaVista || 'bdi')
-  // «Mover y recibir» ⛔ va aparte para esa línea: es la misma lista (`MoverYRecibir unificada`).
   const itemActual = seccion.pestanias.find((p) => p.key === pestania)
   // 🔑 Lo que el rol ⛔ puede abrir ⛔ se dibuja (menú, pestañas, vistas, «Más»); una sección que se queda sin ítems, tampoco.
   const puede = usePuedeErp(marca === 'bdi' ? 'bdi' : 'zattia')
@@ -250,20 +247,27 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   useEffect(() => {
     if (bloqueada) router.replace(otra ? hrefErp(seccion.key, pestania, otra.key) : hrefErp('inicio'))
   }, [bloqueada, otra, seccion.key, pestania, router])
-  // Las vistas ocultas (Facturar una venta) ⛔ son pestaña; Con Gestión Nube ⛔ para Stunned (ya ⛔ tiene GN).
-  const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !(transferenciaEnErp && v.key === 'mover') && !(lineaVista === 'stunned' && v.key === 'diferencias'))
   // 🔑 El cartel de «modo paralelo» era fijo: después del corte de una línea seguiría diciendo que GN sirve. Se va con el corte de
-  // la línea que se mira (`erp_lineas` de la Caja de su base: Stunned 28-oct, BDI 15/16-nov, Zattia 23-nov).
+  // la línea que se mira (`erp_corte`: Stunned 28-oct, BDI 15/16-nov, Zattia 23-nov).
   // Si la configuración no se puede leer queda el texto de siempre (el prudente).
   const lineaDelCartel = lineaVista || 'bdi'
   const [cortada, setCortada] = useState<string | null>(null)
+  const [leida, setLeida] = useState<string | null>(null)
   useEffect(() => {
     let vivo = true
     usarMarcaCaja(marca === 'bdi' ? 'bdi' : 'zattia')
-    leerConfig().then((c) => { if (vivo) setCortada(c.erp_lineas?.includes(lineaDelCartel) ? lineaDelCartel : null) }).catch(() => {})
+    leerCorteDeLinea(lineaDelCartel)
+      .then((c) => { if (vivo) { setCortada(c.en_erp ? lineaDelCartel : null); setLeida(lineaDelCartel) } })
+      .catch(() => { if (vivo) setLeida(lineaDelCartel) })
     return () => { vivo = false }
   }, [lineaDelCartel, marca])
   const lineaEnErp = cortada === lineaDelCartel
+  // 🔑 La transferencia de la línea cortada vive en el ERP: una sola lista, con «Mover» adentro (⛔ una variable). Hasta saberlo ⛔ se
+  // dibuja: la pantalla de GN le pegaría a GN con una línea que ya no está ahí.
+  const transferenciaEnErp = lineaEnErp
+  const corteLeido = leida === lineaDelCartel
+  // Las vistas ocultas (Facturar una venta) ⛔ son pestaña; «Mover y recibir» ⛔ va aparte de la línea cortada (`MoverYRecibir unificada`); Con Gestión Nube ⛔ para Stunned (ya ⛔ tiene GN).
+  const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !(transferenciaEnErp && v.key === 'mover') && !(lineaVista === 'stunned' && v.key === 'diferencias'))
   // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
   const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia', lineaVista)
   const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : (soloStunned ? [] : [{ key: 'zattia', titulo: 'Zattia' } as Opcion]).concat({ key: 'stunned', titulo: 'Stunned' }))
@@ -440,8 +444,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {vista === 'stock' && <StockErp key={marca} ajustar={ajustarPrenda} irA={(p, v) => ir('stock', p, v)} />}
             {vista === 'movimientos' && <MovimientosStock key={marca} ajustar={ajustarPrenda} />}
             {/* 🔑 Línea con la transferencia en el ERP (Bruno, 30-oct): una sola lista, la de los documentos, con «Mover» adentro. */}
-            {vista === 'transferencias' && (transferenciaEnErp ? <MoverYRecibir key={lineaVista} unificada /> : <TransferenciasStock key={marca} />)}
-            {vista === 'mover' && (transferenciaEnErp ? <MoverYRecibir key={`${lineaVista}/mover`} unificada abrirMover /> : <MoverYRecibir key={lineaVista} />)}
+            {vista === 'transferencias' && corteLeido && (transferenciaEnErp ? <MoverYRecibir key={lineaVista} unificada /> : <TransferenciasStock key={marca} />)}
+            {vista === 'mover' && corteLeido && (transferenciaEnErp ? <MoverYRecibir key={`${lineaVista}/mover`} unificada abrirMover /> : <MoverYRecibir key={lineaVista} />)}
             {itemActual?.junta && vista && (
               <ListasJuntas key={`${seccion.key}/${pestania}`} etiqueta={itemActual.junta} partes={vistasDeAca} valor={vista} onCambio={(k) => ir(seccion.key, pestania, k)} render={parteJunta} />
             )}

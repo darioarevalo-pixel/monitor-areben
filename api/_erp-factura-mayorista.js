@@ -18,7 +18,7 @@ import {
 } from '../lib/erp/factura-mayorista.core.js'
 import { claveDeFactura, clavesDeFactura, puedeFacturar } from '../lib/erp/factura.core.js'
 import { SIN_ARCA, baseFacturacion, repoFacturas } from './_facturacion.js'
-import { panelCuentaPrendido } from './_erp-clientes.js'
+import { panelAbierto } from './_erp-clientes.js'
 import { escribirPrendido, nombresDe } from './_erp-pedido.js'
 import { pedirFacturaPorMail } from '../lib/mailer/factura.core.js'
 import { UMBRAL_IDENTIFICAR, ambienteSeguro, arcaDe, facturarVentaPropia, filaParaPdf } from './_erp.js'
@@ -60,7 +60,7 @@ async function completarFicha(pg, ficha, datos) {
  * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, arca?: any, repo?: any, sb?: any, env?: any }} deps
  */
 export async function facturaLibrePanel({ body, usuario, quien = usuario }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
   if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Se factura desde acá el día que BDI pasa al ERP. Hasta entonces, en Gestión Nube.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
   const p = leerFacturaLibre(body)
@@ -106,7 +106,7 @@ export async function facturaLibrePanel({ body, usuario, quien = usuario }, deps
  * @param {{ clienteId?: string, usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean, sb?: any }} deps
  */
 export async function facturasDeClientePanel({ clienteId = '', usuario = null }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
   if (!UUID.test(String(clienteId))) return { status: 400, error: 'Falta el cliente' }
   const { ambiente, error } = ambienteSeguro()
   if (!ambiente) return { status: 409, error }
@@ -174,7 +174,7 @@ export async function conFacturacion(r, deps = {}) {
  * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, arca?: any, repo?: any, sb?: any, b?: any, leerPedido?: Function, buscarFactura?: Function, tienePartes?: Function }} deps
  */
 export async function facturarPedidoPanel({ body, usuario, quien = usuario }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
   if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Se factura desde acá el día que BDI pasa al ERP. Hasta entonces, en Gestión Nube.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
   const pedidoId = String(body?.pedidoId ?? '')
@@ -269,7 +269,7 @@ function motivoDeLaBase(e) {
  * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, arca?: any, repo?: any, sb?: any, env?: any, leerPedido?: Function, facturasDeVenta?: Function, nombres?: Function }} deps
  */
 export async function partePedidoPanel({ body, usuario, quien = usuario }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
   if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Se factura desde acá el día que BDI pasa al ERP. Hasta entonces, en Gestión Nube.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
   const x = leerParte(body)
@@ -374,7 +374,7 @@ export const CASILLA_INTERNA = '@arebensrl.com'
  * @param {{ conMotor: Function, prendido?: boolean, sb?: any, mailer?: any, ambiente?: string }} deps
  */
 export async function enviarFacturaPanel({ body, quien = null }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
   const clienteId = String(body?.clienteId ?? ''), facturaId = String(body?.facturaId ?? '')
   if (!UUID.test(clienteId) || !UUID.test(facturaId)) return { status: 400, error: 'Falta la factura o el cliente' }
   const para = String(body?.para ?? '').trim().toLowerCase()
@@ -417,7 +417,7 @@ export async function enviarFacturaPanel({ body, quien = null }, deps) {
  * @param {{ cuit?: string, usuario?: any }} p @param {{ prendido?: boolean, arca?: any, sb?: any }} deps
  */
 export async function padronDelPanel({ cuit = '', usuario = null }, deps = {}) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
   const c = String(cuit).replace(/\D/g, '')
   if (!cuitValido(c)) return { status: 400, error: 'Ese CUIT no es válido: revisá los números.' }
   const { ambiente, error: errorAmbiente } = ambienteSeguro()

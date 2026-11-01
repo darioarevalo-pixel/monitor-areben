@@ -39,6 +39,8 @@ export type Sentido = 'llevar' | 'devolver'
 export type Armado = {
   id: string
   linea: LineaZ
+  /** La línea ya cortó (`erp_corte`): su transferencia es del ERP, ⛔ de Gestión Nube. Lo trae la lectura de hoy. */
+  en_erp?: boolean
   sentido: Sentido
   fecha: string
   persona: string | null

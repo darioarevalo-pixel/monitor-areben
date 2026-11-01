@@ -38,7 +38,7 @@ import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
 import { baseDeLinea, esLinea, skuParaLinea } from '../lib/lineas.core.js';
 import { sumarVentasDelErp } from '../lib/stunned/ventas-erp.core.js';
-import { ventasStunnedDelErp } from './_stunned-erp.js';
+import { ventasDelErp } from './_stunned-erp.js';
 import { contribucionPorCanal, ventanaUltimos } from '../lib/norte/contribucion.core.js';
 import { pylPorLinea } from '../lib/norte/pyl.core.js';
 import { canalDeMeta, esMedidor, medidorDe } from '../lib/norte/medidores.core.js';
@@ -157,9 +157,9 @@ async function contribucionDe(supabase, store, reglas) {
   // medidos sobre poblaciones distintas — y multiplicar uno por otro daría un número que no
   // existe. Medido el 18-ago: en BDI son 11 unidades que aportan −$15.608 de contribución, porque
   // salen con descuento del 100% y el costo es real.
-  // Stunned que nace en el ERP (llave `LECTURAS_STUNNED_ERP`, apagada hasta el corte): se suma con la forma de GN.
-  // Con el ERP caído y la llave prendida el P&L sale igual, ⛔ callado: el aviso viaja en `aviso`.
-  const erp = store === 'zattia' ? await ventasStunnedDelErp(hace45, new Date().toISOString().slice(0, 10)) : { activa: false };
+  // Lo que nace en el ERP (línea cortada, `erp_corte`): se suma con la forma de GN.
+  // Con el ERP caído el P&L sale igual, ⛔ callado: el aviso viaja en `aviso`.
+  const erp = await ventasDelErp(store, hace45, new Date().toISOString().slice(0, 10));
   // 🔑 Las del ERP que YA están en el espejo (`scripts/erp-ventas-espejo.mjs`, línea cortada) ⛔ se suman otra vez.
   const deEspejo = crudas.filter((v) => !esVentaTecnica(v));
   const enEspejo = new Set(deEspejo.map((v) => Number(v.id)));

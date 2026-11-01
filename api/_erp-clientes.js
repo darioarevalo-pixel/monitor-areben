@@ -10,6 +10,8 @@
  *    `client_id` (y el contacto de `clientes`, el CRM); Zattia sólo por NOMBRE: su espejo ⛔ trae el id. La cuenta
  *    corriente del motor (contrato §15, `motor/cuenta/cuenta.mjs`) se suma encima; hoy ⛔ hay movimientos.
  */
+import { lineaEnErp } from '../lib/erp/corte.core.js'
+import { cortesDeCaja } from './_caja-corte.js'
 import { createClient } from '@supabase/supabase-js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { aTupla } from '../lib/erp/clientes-lista.core.js'
@@ -274,6 +276,24 @@ export function panelCuentaPrendido(env = process.env, usuario = null) {
 }
 
 /**
+ * ¿Se le abre el panel a este usuario? 🔑 Desde el CORTE de BDI (`erp_corte`), a todos los que tengan el permiso: se prende solo
+ * (Bruno 31-oct: aparece «cuando pasemos BDI al ERP»; 1-nov: «todo con interruptor»). Antes, sólo con la variable (para probar).
+ * Sin poder leer el corte ⇒ lo que diga la variable: ⛔ se abre a ciegas ni rompe el panel.
+ * @param {string|null|Array<string|null|undefined>} [usuario]
+ * @param {{ env?: Record<string, string|undefined>, cortes?: () => Promise<Record<string, string>> }} [o]
+ * @returns {Promise<boolean>}
+ */
+export async function panelAbierto(usuario = null, { env = process.env, cortes = () => cortesDeCaja('bdi') } = {}) {
+  if (panelCuentaPrendido(env, usuario)) return true
+  try {
+    return lineaEnErp(await cortes(), 'bdi')
+  } catch (e) {
+    console.error(`[panel] erp_corte: ${e && e.message}`)
+    return false
+  }
+}
+
+/**
  * La cuenta del cliente del CHAT, para el panel de WhatsApp de Darío (`components/panel/PanelWhatsApp.tsx`): sólo BDI (la
  * cuenta corriente es de BDI, Bruno 14-oct). Resuelve la ficha del motor por `gn_client_id` —el panel ya conoce el id de GN
  * del cliente— y, si ⛔ hay, por el WhatsApp del chat (`clientePorWhatsapp` del motor, sql/061); con más de una ficha por ese
@@ -285,7 +305,7 @@ export function panelCuentaPrendido(env = process.env, usuario = null) {
  * @param {{ conMotor: Function, prendido?: boolean }} deps
  */
 export async function cuentaDelPanel({ gnId = '', tel = '', prueba = false, usuario = null }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
   const gn = /^\d{1,12}$/.test(String(gnId)) ? String(gnId) : null
   const wa = String(tel || '').replace(/\D/g, '').slice(0, 20)
   if (!gn && !wa) return { prendido: true, prueba, cliente: null }
@@ -334,7 +354,7 @@ export async function cuentaDelPanel({ gnId = '', tel = '', prueba = false, usua
  * @param {{ body: any, usuario: string|null, quien?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
  */
 export async function anotarWhatsappPanel({ body, usuario, quien = usuario }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
   if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'Falta el cliente' }
   if (!usuario) return { status: 400, error: 'Falta quién lo anota' }
   return deps.conMotor('bdi', 'Anotar el número', async (pg) => {
@@ -354,7 +374,7 @@ export async function anotarWhatsappPanel({ body, usuario, quien = usuario }, de
  * @param {{ q?: string, usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
  */
 export async function clientesDelPanel({ q = '', usuario = null }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
   const texto = String(q || '').trim().slice(0, 80)
   if (texto.length < 2) return { prendido: true, clientes: [] }
   return deps.conMotor('bdi', 'Buscar el cliente', async (pg) => {
@@ -375,7 +395,7 @@ export async function clientesDelPanel({ q = '', usuario = null }, deps) {
  * @param {{ body: any, usuario: string|null, quien?: any }} p @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean }} deps
  */
 export async function clienteNuevoPanel({ body, usuario, quien = usuario }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
   const escribir = deps.escribir ?? (await import('./_erp-pedido.js').then((m) => m.escribirPrendido()))
   if (!escribir) return { status: 409, error: 'Los clientes nuevos se cargan desde acá el día que BDI pasa al ERP. Hasta entonces, en Gestión Nube.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo carga' }
@@ -410,7 +430,7 @@ export async function clienteNuevoPanel({ body, usuario, quien = usuario }, deps
  * @param {{ body: any, usuario: string|null, quien?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
  */
 export async function sacarWhatsappPanel({ body, usuario, quien = usuario }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
   if (!UUID.test(String(body?.id || ''))) return { status: 400, error: 'Falta el número' }
   if (!usuario) return { status: 400, error: 'Falta quién lo saca' }
   return deps.conMotor('bdi', 'Sacar el número', async (pg) => {
@@ -449,7 +469,7 @@ export async function situacionBcra(cuit, { fetch: f = globalThis.fetch } = {}) 
  * @param {{ clienteId?: string, cuit?: string, usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean, fetch?: typeof fetch }} deps
  */
 export async function bcraDelPanel({ clienteId = '', cuit: cuitSuelto = '', usuario = null }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
   // Un CUIT SUELTO («Consultar un CUIT», o el recién traído del padrón de ARCA): sin ficha. Se valida el dígito ANTES de salir.
   if (cuitSuelto) {
     const c = String(cuitSuelto).replace(/\D/g, '')

@@ -13,7 +13,7 @@
  */
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { SQL_RENGLON_STU } from '../lib/erp/linea-gn.core.js'
-import { lecturasStunnedErp, SQL_VENTAS } from '../lib/stunned/ventas-erp.core.js'
+import { sqlVentas } from '../lib/stunned/ventas-erp.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 
@@ -23,15 +23,15 @@ const MARCAS = ['bdi', 'zattia']
  * salir de [0, 1] —un renglón negativo, el cambio que devuelve Zattia y se lleva Stunned (Nº 30631: STU $19.290 de $4.800 de
  * renglones)— y la otra línea queda NEGATIVA: se la cuenta igual (`<> 0`, como Norte). Con `> 0` se tiraba y la venta salía
  * inflada: oct-2026, Zattia + Stunned daban $12.980,63 más que GN (`oraculos/sumas-por-linea-lectura.mjs`). La que ⛔ tiene
- * renglones es de Zattia. Stunned suma además sus ventas del ERP (las que GN ya ⛔ tiene, desde el corte) con la llave
- * `LECTURAS_STUNNED_ERP`, igual que memo y Norte. Devuelve la tabla `vl(date_sale, channel, total_price, total_cost)` del
+ * renglones es de Zattia. Cada línea suma además sus ventas del ERP (desde su corte, `erp_corte`), igual que memo y Norte. Devuelve la tabla `vl(date_sale, channel, total_price, total_cost)` del
  * período `$1..$2`, para el `from` de cada suma.
  * @param {string} linea  bdi · zattia · stunned
- * @param {Record<string, string | undefined>} [env]
  */
-export function ventasDeLinea(linea, env = process.env) {
+export function ventasDeLinea(linea) {
   const periodo = 'v.date_sale::date between $1::date and $2::date'
-  if (linea === 'bdi') return `(select v.date_sale::date as date_sale, v.channel, v.total_price, v.total_cost from ventas v where ${periodo}) vl`
+  // Lo que nació en el ERP (línea cortada, `erp_corte`: sin corte, 0 filas) y la copia nocturna todavía ⛔ llevó al espejo.
+  const erp = `\n    union all\n    select e.date_sale::date, e.channel, e.total_price, e.total_cost from (${sqlVentas([linea])}) e where not exists (select 1 from ventas g where g.id = e.id)`
+  if (linea === 'bdi') return `(select v.date_sale::date as date_sale, v.channel, v.total_price, v.total_cost from ventas v where ${periodo}${erp}) vl`
   const peso = `(case when lp.todo > 0 then coalesce(lp.stu, 0) / lp.todo else 0 end)`
   const w = linea === 'stunned' ? peso : `(1 - ${peso})`
   const gn = `select v.date_sale::date as date_sale, v.channel, v.total_price * ${w} as total_price, v.total_cost * ${w} as total_cost
@@ -41,9 +41,6 @@ export function ventasDeLinea(linea, env = process.env) {
           left join productos p on p.id = vd.product_id group by vd.sale_id
       ) lp on lp.sale_id = v.id
      where ${periodo} and ${w} <> 0`
-  const erp = linea === 'stunned' && lecturasStunnedErp(env)
-    ? `\n    union all\n    select e.date_sale::date, e.channel, e.total_price, e.total_cost from (${SQL_VENTAS}) e where not exists (select 1 from ventas g where g.id = e.id)`
-    : ''
   return `(${gn}${erp}) vl`
 }
 
@@ -68,12 +65,12 @@ export function desdeDoceMeses(hoy) {
 
 /**
  * @param {{ marca: string, linea?: string, hoy?: string }} p
- * @param {{ conMotor: Function, env?: Record<string, string | undefined> }} deps
+ * @param {{ conMotor: Function }} deps
  */
 export async function resultadoDelMes({ marca, linea = marca === 'bdi' ? 'bdi' : '', hoy = null }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   if (marca === 'bdi' ? linea !== 'bdi' : !['zattia', 'stunned'].includes(linea)) return { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
-  const vl = ventasDeLinea(linea, deps.env ?? process.env)
+  const vl = ventasDeLinea(linea)
   const t = tramosDelMes(hoy ?? diaArgentino(Date.now()))
   return deps.conMotor(marca, 'El resultado del mes', async (pg) => {
     const suma = async ({ desde, hasta }) => {

@@ -40,6 +40,7 @@ import {
   cambiarCantidades,
   conTransferido,
   depositosDelArmado,
+  depositosEnMotor,
   pendienteDeTransferir,
   sumar,
   transferidoDe,
@@ -125,10 +126,12 @@ export default async function handler(req, res) {
       const base = () => sb.from('repo_armado').select(COLUMNAS).eq('store', store).eq('linea', linea).eq('sentido', sentido)
       const abierto = await base().in('estado', ABIERTOS).order('creado_en', { ascending: false }).limit(1)
       if (abierto.error) throw new Error(abierto.error.message)
-      if (abierto.data && abierto.data[0]) return res.status(200).json({ ok: true, armado: abierto.data[0] })
+      // `en_erp` es sólo para el texto de la pantalla: sin poder leer el corte, el texto prudente (⛔ frena la lectura). Transferir sí frena.
+      const conCorte = async (a) => ({ ...a, en_erp: await transferenciaEnErp(a.linea).catch((e) => { console.error(`[repo-armado] erp_corte: ${e && e.message}`); return false }) })
+      if (abierto.data && abierto.data[0]) return res.status(200).json({ ok: true, armado: await conCorte(abierto.data[0]) })
       const hoy = await base().eq('fecha', fechaAR()).not('estado', 'in', `(cancelado,${SIN_ENVIAR})`).order('creado_en', { ascending: false }).limit(1)
       if (hoy.error) throw new Error(hoy.error.message)
-      return res.status(200).json({ ok: true, armado: (hoy.data && hoy.data[0]) || null })
+      return res.status(200).json({ ok: true, armado: hoy.data && hoy.data[0] ? await conCorte(hoy.data[0]) : null })
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' })
@@ -256,7 +259,7 @@ export default async function handler(req, res) {
       if (armado.estado !== 'revisar' && !trabado(armado)) return res.status(409).json({ error: 'Este armado no está para revisar.', armado })
       // 🔑 Línea con la transferencia en el ERP: ⛔ hay «¿está en GN?» que contestar. Siempre vuelve a `en_curso` y el próximo
       // «Transferir» retoma el MISMO documento (`origen_ref` = armado + tanda), sin duplicarlo ni anotar depósitos de GN.
-      const hecha = b.hecha === true && !transferenciaEnErp(armado.linea)
+      const hecha = b.hecha === true && !(await transferenciaEnErp(armado.linea))
       const t = armado.transfer || {}
       const enCurso = t.enCurso || {}
       // 🔑 La tanda guarda QUÉ prendas movió y de dónde a dónde: el libro de stock la lee prenda por prenda.
@@ -288,7 +291,7 @@ export default async function handler(req, res) {
  */
 async function transferir(sb, res, armado, b, perfil) {
   if (armado.estado !== 'en_curso') return res.status(409).json({ error: 'Este armado ya se cerró.', armado })
-  const enErp = transferenciaEnErp(armado.linea)
+  const enErp = await transferenciaEnErp(armado.linea)
   const token = GN_TOKENS[armado.store]
   const dep = DEPOSITOS_GN[armado.store]
   if (!enErp && (!token || !dep)) return res.status(500).json({ error: `Falta la clave de Gestión Nube de ${armado.store === 'bdi' ? 'BDI' : 'Zattia'} en el servidor.` })
@@ -318,7 +321,9 @@ async function transferir(sb, res, armado, b, perfil) {
 
   const devolucion = armado.sentido === 'devolver'
   const [desde, hacia] = depositosDelArmado(armado.sentido, dep)
-  // El motor nombra los depósitos `local`/`deposito` (no con el id de GN): lo que va al documento.
+  // Lo que va al documento EN SOMBRA, mientras sirve GN (`documentarTanda`). 🔴 En BDI el motor ⛔ conoce `deposito` y ese documento
+  // sale con error, callado (0 documentos de BDI, medido 1-nov): el libro la cuenta por el armado. Por eso ⛔ se corrige acá; la línea
+  // ya cortada usa `depositosEnMotor`.
   const [desdeMotor, haciaMotor] = devolucion ? ['local', 'deposito'] : ['deposito', 'local']
   // 🔑 El código del armado (#K3X9AB) va en la descripción: es lo que se busca en GN cuando la
   // transferencia queda sin confirmar, y lo que muestra el cartel de la pantalla.
@@ -356,16 +361,17 @@ async function transferir(sb, res, armado, b, perfil) {
   const limite = Date.now() + PLAZO_GN_MS
 
   if (enErp) {
-    // 🔑 Stunned sin GN: el documento del motor ES la transferencia (llave `TRANSFERENCIA_STUNNED_ERP`). Si falla, ⛔ quedó nada
+    // 🔑 Línea cortada (`erp_corte`), sin GN: el documento del motor ES la transferencia. Si falla, ⛔ quedó nada
     // movido que GN no sepa: el armado vuelve a `en_curso` y la pantalla lo dice; con `origen_ref` el reintento retoma el documento.
     const tandaN = (previo.tandas || []).length + 1
-    const doc = await transferirEnErp({ store: armado.store, linea: armado.linea, armadoId: armado.id, tanda: tandaN, prendas: pendiente, desde: desdeMotor, hacia: haciaMotor, recibir: recibirDe(armado.linea), usuario: perfil.name || armado.persona || 'reposicion' })
+    const enMotor = depositosEnMotor(armado.store, armado.sentido)
+    const doc = await transferirEnErp({ store: armado.store, linea: armado.linea, armadoId: armado.id, tanda: tandaN, prendas: pendiente, desde: enMotor[0], hacia: enMotor[1], recibir: recibirDe(armado.linea), usuario: perfil.name || armado.persona || 'reposicion' })
     if (!doc.ok) {
       await marcar({ estado: 'en_curso', error: null, transfer: sinTanda })
       console.error(`[repo-erp] ${armado.id} t${tandaN}: ${doc.error}`)
       return res.status(502).json({ error: `No se pudo registrar la transferencia en el ERP (no se movió nada): ${doc.error}` })
     }
-    const tanda = { transfer_id: null, movement_id: null, erp: doc.numero, unidades, hora: new Date().toISOString(), prendas: pendiente, desde: desdeMotor, hacia: haciaMotor }
+    const tanda = { transfer_id: null, movement_id: null, erp: doc.numero, unidades, hora: new Date().toISOString(), prendas: pendiente, desde: enMotor[0], hacia: enMotor[1] }
     const nuevoTransferido = sumar(transferido, pendiente)
     const transfer = { tandas: [...(previo.tandas || []), tanda], transferido: nuevoTransferido, transfer_id: null, erp: doc.numero, unidades: Object.values(nuevoTransferido).reduce((x, n) => x + n, 0), enCurso: null, seguir: null, descripcion: null, unidadesEnCurso: null }
     await marcar(seguir ? { estado: 'en_curso', transfer, error: null } : { estado: 'transferido', transfer, error: null, cerrado_en: new Date().toISOString() })

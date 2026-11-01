@@ -111,6 +111,14 @@ function consulta() {
   return q
 }
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: () => consulta() }) }))
+// `erp_corte` y el documento del motor: la base ⛔ está en estos tests.
+const corte = vi.hoisted(() => ({ cortes: {} as Record<string, string>, falla: false, documentos: [] as Record<string, unknown>[] }))
+vi.mock('../api/_caja-corte.js', () => ({ cortesDeCaja: async () => { if (corte.falla) throw new Error('la base no contesta'); return corte.cortes } }))
+vi.mock('../api/_repo-documento.js', async (original) => ({
+  ...(await original<typeof import('../api/_repo-documento.js')>()),
+  documentarTanda: async () => ({ ok: true }),
+  transferirEnErp: async (p: Record<string, unknown>) => { corte.documentos.push(p); return { ok: true, numero: 7, unidades: 1, avisos: [] } },
+}))
 
 const LORENA = { name: 'lorena', admin: false, cuenta: null, acceso: { zattia: { reposicion: true } }, funcion: [] }
 const DARIO = { name: 'Darío Arevalo', admin: true, cuenta: null, acceso: { zattia: { reposicion: true } }, funcion: [] }
@@ -123,6 +131,9 @@ let respuestaGN: () => { status: number; body: unknown } = () => ({ status: 201,
 beforeEach(() => {
   tabla.length = 0
   perfil = LORENA
+  corte.cortes = {}
+  corte.falla = false
+  corte.documentos = []
   llamadasGN = []
   respuestaGN = () => ({ status: 201, body: { executed: true, transfer_id: 7800, movement_id: 1 } })
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
@@ -177,6 +188,49 @@ describe('api/_repo-armado.js', () => {
     expect(llamadasGN).toHaveLength(1)
     expect(llamadasGN[0].body).toMatchObject({ from_store_id: 18210, to_store_id: 11780, items: [{ product_id: 10, size_id: 3, quantity: 2 }] })
     expect(tabla[0]).toMatchObject({ estado: 'transferido', faltantes: { '11_4': 'no-estaba' } })
+  })
+
+  describe('🔑 línea cortada (`erp_corte`): el documento del motor ES la transferencia, ⛔ una variable', () => {
+    it('Zattia con corte ⇒ ⛔ llama a GN, sale de `deposito`', async () => {
+      corte.cortes = { zattia: '2026-10-01T03:00:00.000Z' }
+      await abrir()
+      const r = await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 1 } })
+      expect(r.code).toBe(200)
+      expect(llamadasGN).toHaveLength(0)
+      expect(corte.documentos[0]).toMatchObject({ linea: 'zattia', desde: 'deposito', hacia: 'local', recibir: 'al_armar' })
+      expect(tabla[0]).toMatchObject({ estado: 'transferido' })
+    })
+    it('el corte de OTRA línea de la base (Stunned) ⛔ saca a Zattia de GN', async () => {
+      corte.cortes = { stunned: '2026-10-28T23:40:27.758Z' }
+      await abrir()
+      await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 1 } })
+      expect(llamadasGN).toHaveLength(1)
+      expect(corte.documentos).toHaveLength(0)
+    })
+    it('un corte a futuro ⛔ cuenta todavía', async () => {
+      corte.cortes = { zattia: '2099-01-01T00:00:00.000Z' }
+      await abrir()
+      await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 1 } })
+      expect(llamadasGN).toHaveLength(1)
+    })
+    it('🔴 sin poder leer el corte frena: ⛔ llama a GN ni al motor, y el armado sigue abierto', async () => {
+      await abrir()
+      corte.falla = true
+      const r = await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 1 } })
+      expect(r.code).toBe(500)
+      expect(llamadasGN).toHaveLength(0)
+      expect(corte.documentos).toHaveLength(0)
+      expect(tabla[0]).toMatchObject({ estado: 'en_curso' })
+    })
+    it('la lectura de hoy dice `en_erp` para la pantalla; sin poder leer el corte, `false` y ⛔ frena', async () => {
+      await abrir()
+      corte.cortes = { zattia: '2026-10-01T03:00:00.000Z' }
+      expect((await correrGet({ action: 'hoy', linea: 'zattia', sentido: 'llevar' })).body?.armado).toMatchObject({ en_erp: true })
+      corte.falla = true
+      const r = await correrGet({ action: 'hoy', linea: 'zattia', sentido: 'llevar' })
+      expect(r.code).toBe(200)
+      expect(r.body?.armado).toMatchObject({ en_erp: false })
+    })
   })
 
   it('🔴 un segundo «transferir» no vuelve a llamar a Gestión Nube', async () => {

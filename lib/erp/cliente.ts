@@ -996,6 +996,9 @@ export const cancelarTransferenciaDoc = (linea: TiendaErp, transferenciaId: stri
 // ── ERP › Depósito Evento (`api/_erp-depositos.js`; motor sql/058): se activa para un evento y se apaga sólo en 0 ──
 export type DepositoErp = { id: string; nombre: string; activo: boolean; deGN: boolean; unidades: number }
 export type QuedaEnDeposito = { product_id: number; size_id: number; sku: string | null; cantidad: number }
+/** ¿La línea ya pasó al ERP? (`erp_corte`, lo decide el servidor). */
+export const leerCorteDeLinea = (linea: TiendaErp) =>
+  pedir<{ en_erp: boolean }>(null, `&vista=corte&marca=${linea}&nc=${Date.now()}`, 'No se pudo leer el corte de la línea.')
 export const leerDepositos = (linea: TiendaErp) =>
   pedir<{ depositos: DepositoErp[] }>(null, `&vista=depositos&marca=${linea}&nc=${Date.now()}`, 'No se pudieron leer los depósitos.')
 export const activarDeposito = (linea: TiendaErp, deposito: string, activar: boolean) =>

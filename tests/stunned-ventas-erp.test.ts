@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 // `.core.js` sin tipos propios: los importan `api/_memo.js`, `api/_norte.js` y `api/_stunned-erp.js`, que corren en Node pelado.
-import { lecturasStunnedErp, normalizarDetalles, normalizarVentas, sumarVentasDelErp } from '../lib/stunned/ventas-erp.core.js'
+import { normalizarDetalles, normalizarVentas, sqlDetalles, sqlSkus, sqlVentas, sumarVentasDelErp } from '../lib/stunned/ventas-erp.core.js'
 import { ventaPorLinea } from '../lib/memo/foto.core.js'
-import { ventasStunnedDelErp } from '../api/_stunned-erp.js'
+import { ventasDelErp } from '../api/_stunned-erp.js'
 
 /**
  * Las ventas de Stunned que nacen en el ERP se SUMAN a las de GN con su misma forma, y el memo las cuenta en la
@@ -20,10 +20,15 @@ describe('Stunned: ventas del ERP con la forma de GN', () => {
     skuPor: new Map([['900', 'STU-REM-0015-M']]),
   }
 
-  it('la llave sólo prende con `1`', () => {
-    expect(lecturasStunnedErp({})).toBe(false)
-    expect(lecturasStunnedErp({ LECTURAS_STUNNED_ERP: 'si' })).toBe(false)
-    expect(lecturasStunnedErp({ LECTURAS_STUNNED_ERP: '1' })).toBe(true)
+  it('se prende por el corte de la línea, en el SQL: sólo lo nacido en el ERP DESPUÉS del corte, real y confirmado', () => {
+    for (const q of [sqlVentas(['bdi']), sqlDetalles(['bdi'])]) {
+      expect(q).toContain("v.marca in ('bdi')")
+      expect(q).toContain('exists (select 1 from erp_corte c where c.linea = v.marca and v.ocurrida_en >= c.instante)')
+      expect(q).toContain('v.gn_sale_id is null')
+      expect(q).toContain('not v.prueba')
+    }
+    expect(sqlVentas(['zattia', 'stunned'])).toContain("v.marca in ('zattia', 'stunned')")
+    expect(sqlSkus(['bdi'])).toContain("m.id in ('bdi')")
   })
 
   it('suma ventas, renglones y SKUs, ordenados por id, y no pisa el SKU que GN ya conoce', () => {
@@ -45,10 +50,10 @@ describe('Stunned: ventas del ERP con la forma de GN', () => {
     expect(JSON.stringify(sin)).not.toContain('45990')
   })
 
-  it('el cargador no hace nada con la llave apagada y AVISA (⛔ calla) si está prendida y no hay conexión', async () => {
-    expect(await ventasStunnedDelErp('2026-11-01', '2026-11-02', {})).toEqual({ activa: false })
-    const r = (await ventasStunnedDelErp('2026-11-01', '2026-11-02', { LECTURAS_STUNNED_ERP: '1' })) as { activa: boolean; error?: string }
+  it.each([['bdi', /DATABASE_URL_BDI/], ['zattia', /DATABASE_URL_ZATTIA/]])('sin la conexión de %s AVISA, ⛔ calla', async (base, falta) => {
+    const r = (await ventasDelErp(base as 'bdi' | 'zattia', '2026-11-01', '2026-11-02', {})) as { activa: boolean; error?: string }
     expect(r.activa).toBe(true)
     expect(r.error).toMatch(/NO están sumadas/)
+    expect(r.error).toMatch(falta)
   })
 })

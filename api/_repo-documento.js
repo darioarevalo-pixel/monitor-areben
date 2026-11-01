@@ -9,7 +9,9 @@
 //
 // ⛔ Archivo `_`: NO es una ruta.
 import { configPg } from '../lib/pg.core.js'
-import { TRANSFERENCIA_EN_ERP } from '../lib/erp/transferencia-doc.core.js'
+import { lineaEnErp } from '../lib/erp/corte.core.js'
+import { baseDeLinea } from '../lib/lineas.core.js'
+import { cortesDeCaja } from './_caja-corte.js'
 
 const PG_DE_STORE = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
 /** La Reposición ya esperó a GN (hasta 20 s): el documento no puede sumar más que esto. */
@@ -62,13 +64,12 @@ export async function documentarTanda(p) {
 }
 
 /**
- * 🔑 LLAVE por línea (`TRANSFERENCIA_EN_ERP` de `lib/erp/transferencia-doc.core.js`; Stunned = `TRANSFERENCIA_STUNNED_ERP=1` en
- * Vercel; sin definir = APAGADA, todo sigue por GN). Con ella, una tanda de esa línea ⛔ llama a GN: el documento del motor ES la
- * transferencia (Bruno 26-oct: Stunned sale de GN y no vuelve).
+ * 🔑 Por el CORTE de la línea (`erp_corte`, ⛔ una variable): desde ahí una tanda de esa línea ⛔ llama a GN, el documento del motor ES
+ * la transferencia. Sin corte, GN como hoy. 🔴 Sin saber si cortó, TIRA: ⛔ se elige un camino a ciegas (`cortesDeCaja`).
+ * @param {string} linea @param {{ cortes?: (store: string) => Promise<Record<string, string>> }} [deps] @returns {Promise<boolean>}
  */
-export const transferenciaEnErp = (linea) => {
-  const c = TRANSFERENCIA_EN_ERP[linea]
-  return !!c && /^(1|si|true)$/i.test(String(process.env[c.llave] ?? '').trim())
+export async function transferenciaEnErp(linea, { cortes = cortesDeCaja } = {}) {
+  return lineaEnErp(await cortes(baseDeLinea(linea)), linea)
 }
 
 /** Cuánto se le espera al motor en la vía del ERP: acá no hay GN que esperar, pero el armado está en `transfiriendo`. */

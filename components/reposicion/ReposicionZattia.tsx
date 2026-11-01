@@ -45,7 +45,6 @@ import { HistorialArmados } from './HistorialArmados'
 import { SolicitudDevolucion, type DatoTn } from './SolicitudDevolucion'
 import { abrirArmado, articuloDe, cambiarCantidadesArmado, codigoArmado, leerArmadoHoy, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type LineaPedido, type Sentido } from '@/lib/reposicion/armado'
 import { cambiarCantidades, transferidoDe } from '@/lib/reposicion/armado.core.js'
-import { transfiereEnErp } from '@/lib/erp/transferencia-doc.core.js'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
 
 type Pestana = 'llevar' | 'devolver' | 'historial'
@@ -276,7 +275,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   const onResolver = async (a: Armado, hecha: boolean) => {
     // 🔴 «No está» habilita a transferir de nuevo: si en realidad estaba, las prendas viajan dos veces. En el ERP ⛔ hay riesgo:
     // el reintento retoma el mismo documento.
-    if (!hecha && !transfiereEnErp(a.linea)) {
+    if (!hecha && !a.en_erp) {
       const ok = await confirmar({
         titulo: '¿Seguro que no está en Gestión Nube?',
         tono: 'danger',
@@ -906,7 +905,7 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
   const art = articuloDe(armado.linea)
   const devolucion = armado.sentido === 'devolver'
   const ya = armado.transfer?.unidades ?? 0
-  const enErp = transfiereEnErp(armado.linea)
+  const enErp = !!armado.en_erp
   const box = { marginBottom: space[3] }
   if (armado.estado === 'en_curso')
     return (

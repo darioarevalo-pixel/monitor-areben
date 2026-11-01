@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { avanzarDocumento, documentarTanda, renglonesDeTanda, transferenciaEnErp, transferirEnErp } from '../api/_repo-documento.js'
+import { depositosEnMotor } from '../lib/reposicion/armado.core.js'
 
 describe('Reposición → documento del motor (en sombra)', () => {
   it('arma los renglones desde { product_id_size_id: n } y deja afuera lo inválido', () => {
@@ -31,21 +32,23 @@ describe('Reposición → documento del motor (en sombra)', () => {
   })
 })
 
-describe('Stunned sin GN (llave TRANSFERENCIA_STUNNED_ERP)', () => {
-  const con = (v: string | undefined, fn: () => void) => {
+describe('la línea cortada, sin GN (`erp_corte`)', () => {
+  const cortes = async () => ({ stunned: '2026-10-28T23:40:27.758Z', bdi: '2026-11-16T03:00:00.000Z' })
+  it('por el CORTE de la línea (`erp_corte`), ⛔ por una variable', async () => {
     const antes = process.env.TRANSFERENCIA_STUNNED_ERP
-    if (v === undefined) delete process.env.TRANSFERENCIA_STUNNED_ERP
-    else process.env.TRANSFERENCIA_STUNNED_ERP = v
-    try { fn() } finally { if (antes === undefined) delete process.env.TRANSFERENCIA_STUNNED_ERP; else process.env.TRANSFERENCIA_STUNNED_ERP = antes }
-  }
-  it('apagada por defecto y sólo vale para Stunned', () => {
-    con(undefined, () => expect(transferenciaEnErp('stunned')).toBe(false))
-    con('1', () => {
-      expect(transferenciaEnErp('stunned')).toBe(true)
-      expect(transferenciaEnErp('zattia')).toBe(false)
-      expect(transferenciaEnErp('bdi')).toBe(false)
-    })
-    con('0', () => expect(transferenciaEnErp('stunned')).toBe(false))
+    process.env.TRANSFERENCIA_STUNNED_ERP = '1'
+    try { expect(await transferenciaEnErp('zattia', { cortes })).toBe(false) } finally { if (antes === undefined) delete process.env.TRANSFERENCIA_STUNNED_ERP; else process.env.TRANSFERENCIA_STUNNED_ERP = antes }
+    expect(await transferenciaEnErp('stunned', { cortes })).toBe(true)
+    expect(await transferenciaEnErp('stunned', { cortes: async () => ({}) })).toBe(false)
+  })
+  it('pide los cortes de la base de la línea: Stunned vive en la de Zattia', async () => {
+    const pedidas: string[] = []
+    await transferenciaEnErp('stunned', { cortes: async (s: string) => { pedidas.push(s); return {} } })
+    await transferenciaEnErp('bdi', { cortes: async (s: string) => { pedidas.push(s); return {} } })
+    expect(pedidas).toEqual(['zattia', 'bdi'])
+  })
+  it('sin poder leer los cortes TIRA: ⛔ elige un camino a ciegas', async () => {
+    await expect(transferenciaEnErp('bdi', { cortes: async () => { throw new Error('la base no contesta') } })).rejects.toThrow(/no contesta/)
   })
   it('sin conexión o sin prendas devuelve error, ⛔ lanza (acá el documento ES la transferencia)', async () => {
     const antes = process.env.DATABASE_URL_ZATTIA
@@ -84,5 +87,14 @@ describe('Stunned sin GN (llave TRANSFERENCIA_STUNNED_ERP)', () => {
     expect(hechos.splice(0)).toEqual(['armar', 'enviar'])
     expect(await avanzarDocumento(m, null, { ...p, estado: 'en_transito', recibir: 'en_destino' })).toEqual({ estado: 'en_transito', avisos: [] })
     expect(hechos).toEqual([])
+  })
+})
+
+describe('depositosEnMotor', () => {
+  it('🔴 BDI repone desde `deposito_minorista`: el motor ⛔ conoce `deposito` en esa línea', () => {
+    expect(depositosEnMotor('bdi', 'llevar')).toEqual(['deposito_minorista', 'local'])
+    expect(depositosEnMotor('bdi', 'devolver')).toEqual(['local', 'deposito_minorista'])
+    expect(depositosEnMotor('zattia', 'llevar')).toEqual(['deposito', 'local'])
+    expect(depositosEnMotor('zattia', 'devolver')).toEqual(['local', 'deposito'])
   })
 })

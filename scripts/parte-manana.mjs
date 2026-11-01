@@ -21,7 +21,7 @@ import { agruparHallazgos } from '../lib/meta-ads/reglas.core.js'
 import { armarMail as armarPauta } from '../lib/meta-ads/mail-hallazgos.core.js'
 import { ayerCompleto, ventaDeAyer } from '../lib/parte/ventas.core.js'
 import { sumarVentasDelErp } from '../lib/stunned/ventas-erp.core.js'
-import { ventasStunnedDelErp } from '../api/_stunned-erp.js'
+import { ventasDelErp } from '../api/_stunned-erp.js'
 import { armarUniverso, criticos, curvaRota, paradoEnDeposito, partirPorLinea, recompra, claveDe, DIAS_VELOCIDAD } from '../lib/parte/stock.core.js'
 import { fotoDe, indiceDeFotos } from '../lib/parte/fotos.core.js'
 import { abiertosPorTitulo, abiertosPorCasilla } from '../lib/parte/pendientes.core.js'
@@ -77,8 +77,8 @@ async function leerBase(base) {
   // ⚠️ `channel_id` sólo en BDI: Zattia ⛔ tiene la columna y PostgREST rechaza el select ENTERO.
   const cols = `id, date_sale, channel, discount, shipping_cost, total_price${base === 'bdi' ? ', channel_id' : ''}`
   const ventas = await leerTodo(sb, 'ventas', (q) => q.select(cols).gte('date_sale', desde).lte('date_sale', AYER).order('id'))
-  // Stunned que nace en el ERP (llave `LECTURAS_STUNNED_ERP`, día del corte): se suma con la forma de GN. Caído ⇒ ⛔ calla: tira.
-  const erp = base === 'zattia' ? await ventasStunnedDelErp(desde, AYER) : { activa: false }
+  // Lo que nace en el ERP (línea cortada, `erp_corte`): se suma con la forma de GN. Caído ⇒ ⛔ calla: tira.
+  const erp = await ventasDelErp(base, desde, AYER)
   if (erp.error) throw new Error(erp.error)
 
   let detalles = []

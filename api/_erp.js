@@ -69,6 +69,7 @@
  *   GET  ?recurso=erp&vista=estructura&marca=…   Configuración › Cuentas y Marcas, depósitos y puntos de venta (`api/_erp-estructura.js`, sólo lee)
  *   GET  ?recurso=erp&vista=ajustes&linea=bdi|zattia|stunned           los ajustes de stock (motor sql/026) + la lista «A contar»
  *   POST {recurso:'erp', accion:'crear-ajuste'|'aprobar-ajuste'|'descartar-ajuste', linea, …}   `api/_erp-ajustes.js`
+ *   GET  ?recurso=erp&vista=corte&marca=…   ¿la línea ya cortó? (`erp_corte`)
  *   GET  ?recurso=erp&vista=transferencias-doc&marca=…   las transferencias como DOCUMENTO del motor (sql/034) + lo en tránsito
  *   POST {recurso:'erp', accion:'transferencia-crear'|'-armar'|'-enviar'|'-recibir'|'-cancelar', linea, …}   `api/_erp-transferencia.js`
  *   GET  ?recurso=erp&vista=salidas&marca=…   las salidas con vuelta (fotos, producción) del motor (sql/048)
@@ -124,6 +125,7 @@ import { autorizarConPin, encargadasErp, pinesErp, ponerPinErp, quitarPinErp, ve
 import { ponerRolesErp, restablecerRolesErp, rolesGuardadosDeMarcas, vistaRoles } from './_erp-permisos-rol.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.js'
+import { transferenciaEnErp } from './_repo-documento.js'
 import { ACCIONES as ACCIONES_TRANSFERENCIA } from '../lib/erp/transferencia-doc.core.js'
 import { accionDeSalida, salidasDeLinea } from './_erp-salida.js'
 import { ACCIONES_DEPOSITO, accionDeDeposito, depositosDeLinea } from './_erp-depositos.js'
@@ -1814,6 +1816,11 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && ACCIONES_TRANSFERENCIA.includes(body.accion)) {
       const r = await accionDeTransferencia({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    // ¿La línea ya cortó (`erp_corte`)? Por acá, ⛔ por la configuración de la Caja: el que tiene Stock sin Caja recibiría 403.
+    if (req.method === 'GET' && req.query.vista === 'corte') {
+      return res.status(200).json({ en_erp: await transferenciaEnErp(String(req.query.marca)) })
     }
 
     if (req.method === 'GET' && req.query.vista === 'depositos') {

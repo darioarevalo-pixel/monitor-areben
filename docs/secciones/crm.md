@@ -40,9 +40,10 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
 ERP», pedido de Darío del 30-oct): la franja con el saldo y «$ Cargar pago» en el encabezado oscuro, la tarjeta de compras
 con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de cargar pago y el segmento «Cuentas» de Pagos.
 - 🔑 **Se construye AL LADO de lo de Darío y se PRENDE el día que BDI pasa al ERP** (Bruno, 31-oct: antes «es basura
-  visual porque molesta y no le sirve»). El interruptor es `PANEL_CUENTA_CORRIENTE` en Vercel (`1` = todos los que tienen
-  el permiso; una lista de usuarios o mails = sólo ellos). Hoy: sólo el mail de Bruno ⇒ para el resto el panel es el de
-  siempre, y por eso **ni Darío ni su sesión lo ven en pantalla**.
+  visual porque molesta y no le sirve»). El interruptor es el **corte de BDI** (`erp_corte`, `panelAbierto`): se abre solo, a
+  todos los que tienen el permiso. Hasta entonces `PANEL_CUENTA_CORRIENTE` en Vercel lo abre para probar (`1` = todos; una lista
+  de usuarios o mails = sólo ellos). Hoy: sólo el mail de Bruno ⇒ para el resto el panel es el de siempre, y por eso **ni
+  Darío ni su sesión lo ven en pantalla**.
 - Vive en `components/panel/CuentaCorriente.tsx`; del panel sólo hay ENGANCHES: en `PanelWhatsApp.tsx` (`useCuentaPanel`,
   `FranjaCuenta`, `TarjetaCuenta`, `HojaCargarPago`) y en `Pagos.tsx` (`useCuentaPrendida`, `ListaCuentas`). Al
   reordenar el panel, **los enganches se mueven con su bloque, ⛔ se borran**: `tests/panel-cuenta-enganche.test.ts` falla

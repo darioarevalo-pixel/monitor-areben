@@ -11,7 +11,7 @@
  *     reservaría dos veces. Se prende el día del corte de BDI, junto con apagar esa copia.
  * Sin la sql/064 en la base, las lecturas contestan vacío (`falta064`) en vez de romper.
  */
-import { panelCuentaPrendido } from './_erp-clientes.js'
+import { panelAbierto } from './_erp-clientes.js'
 import { cortesDeCaja } from './_caja-corte.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -53,7 +53,7 @@ export async function nombresDe(pg, lineas) {
  * @param {{ clienteId?: string, tel?: string, usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean }} deps
  */
 export async function pedidosDelPanel({ clienteId = '', tel = '', usuario = null }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
   const cli = UUID.test(String(clienteId)) ? String(clienteId) : null
   const wa = String(tel || '').replace(/\D/g, '').slice(0, 20)
   const escribir = deps.escribir ?? (await escribirPrendido())
@@ -89,7 +89,7 @@ export async function pedidosDelPanel({ clienteId = '', tel = '', usuario = null
  * @param {{ pedidoId: string, usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean }} deps
  */
 export async function pedidoDelPanel({ pedidoId = '', usuario = null }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
   if (!UUID.test(String(pedidoId))) return { status: 400, error: 'Falta el pedido' }
   const escribir = deps.escribir ?? (await escribirPrendido())
   return deps.conMotor('bdi', 'El pedido', async (pg) => {
@@ -111,7 +111,7 @@ export async function pedidoDelPanel({ pedidoId = '', usuario = null }, deps) {
  * @param {{ usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
  */
 export async function preparadosSinPagarDelPanel({ usuario = null }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
   return deps.conMotor('bdi', 'Preparados sin pagar', async (pg) => {
     if (!(await hay064(pg))) return { prendido: true, pedidos: [], falta064: true }
     const { preparadosSinPagar } = await import('../motor/pedido/venta.mjs')
@@ -127,7 +127,7 @@ export async function preparadosSinPagarDelPanel({ usuario = null }, deps) {
  * @param {{ pedidoId: string, q?: string, usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
  */
 export async function productosParaElPanel({ pedidoId = '', q = '', usuario = null }, deps) {
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, usuario))) return { prendido: false }
+  if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
   if (!UUID.test(String(pedidoId))) return { status: 400, error: 'Falta el pedido' }
   const texto = String(q || '').trim().slice(0, 80)
   if (texto.length < 2) return { prendido: true, productos: [] }
@@ -152,7 +152,7 @@ export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-pre
  */
 export async function accionDePedido({ accion, body, usuario, quien = usuario }, deps) {
   if (!ACCIONES_PEDIDO.includes(accion)) return { status: 400, error: 'Acción desconocida' }
-  if (!(deps.prendido ?? panelCuentaPrendido(process.env, quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
   if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Los pedidos se manejan desde acá el día que BDI pasa al ERP. Hasta entonces, en Gestión Nube.' }
   if (!UUID.test(String(body?.pedidoId || ''))) return { status: 400, error: 'Falta el pedido' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }

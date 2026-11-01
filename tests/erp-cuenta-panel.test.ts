@@ -14,7 +14,7 @@ vi.mock('../motor/venta/cliente.mjs', () => ({
   numeroWhatsapp: (t: string) => (String(t).replace(/\D/g, '').length === 13 ? String(t).replace(/\D/g, '') : null),
 }))
 
-import { anotarWhatsappPanel, cuentaDelPanel, panelCuentaPrendido, sacarWhatsappPanel } from '../api/_erp-clientes.js'
+import { anotarWhatsappPanel, cuentaDelPanel, panelAbierto, panelCuentaPrendido, sacarWhatsappPanel } from '../api/_erp-clientes.js'
 
 /** Una base de mentira que contesta por pedazo de SQL y anota cada consulta. */
 const base = (rows: Record<string, unknown[]>, sqls: string[] = []) => ({
@@ -122,5 +122,22 @@ describe('La cuenta corriente en el panel de WhatsApp (plan «BDI directo al ERP
     expect(post({ accion: 'anotar-whatsapp', marca: 'bdi', clienteId: 'c', whatsapp: '5493874401234', nombre: 'Rodrigo' })).toBeNull()
     expect(post({ accion: 'sacar-whatsapp', marca: 'bdi', id: 'w' })).toBeNull()
     for (const accion of ['anotar-whatsapp', 'sacar-whatsapp']) expect(permisoErpDe({ method: 'POST', accion })).toBe('cuentas')
+  })
+})
+
+describe('panelAbierto: se abre solo con el corte de BDI (Bruno 31-oct + 1-nov)', () => {
+  const env = {}
+  it('con el corte de BDI ⇒ a todos, sin variable', async () => {
+    expect(await panelAbierto('dario', { env, cortes: async () => ({ bdi: '2026-10-01T03:00:00.000Z' }) })).toBe(true)
+  })
+  it('sin corte, o con el de otra línea o a futuro ⇒ cerrado para Darío («basura visual»), abierto para el de la variable', async () => {
+    expect(await panelAbierto('dario', { env, cortes: async () => ({ stunned: '2026-10-28T23:40:27.758Z' }) })).toBe(false)
+    expect(await panelAbierto('dario', { env, cortes: async () => ({ bdi: '2099-01-01T00:00:00.000Z' }) })).toBe(false)
+    expect(await panelAbierto('bruno', { env: { PANEL_CUENTA_CORRIENTE: 'bruno' }, cortes: async () => ({}) })).toBe(true)
+  })
+  it('sin poder leer el corte ⇒ lo que diga la variable: ⛔ se abre a ciegas ni tira', async () => {
+    const cortes = async () => { throw new Error('la base no contesta') }
+    expect(await panelAbierto('dario', { env, cortes })).toBe(false)
+    expect(await panelAbierto('bruno', { env: { PANEL_CUENTA_CORRIENTE: 'bruno' }, cortes })).toBe(true)
   })
 })

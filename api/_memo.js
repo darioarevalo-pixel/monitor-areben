@@ -47,7 +47,7 @@ import { leerTodo } from '../lib/supabase/paginar.core.js';
 import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
 import { skuParaLinea } from '../lib/lineas.core.js';
 import { sumarVentasDelErp } from '../lib/stunned/ventas-erp.core.js';
-import { ventasStunnedDelErp } from './_stunned-erp.js';
+import { ventasDelErp } from './_stunned-erp.js';
 import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
 import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js';
 import { claveValida, cerrada, esFecha, hoyAr, idSemana, puedeEscribirBloque, semanaAnterior, semanaDe } from '../lib/memo/semana.core.js';
@@ -94,8 +94,8 @@ async function traerRango(store, desde, hasta) {
     // pestaña «Día a día», que usa `facturadoDeVenta` sobre las mismas ventas.
     const ventas = await leerTodo(sb, 'ventas', (q) =>
       q.select('id, date_sale, channel, discount, shipping_cost').gte('date_sale', desde).lte('date_sale', hasta).order('id'));
-    // Stunned que nace en el ERP (llave `LECTURAS_STUNNED_ERP`): se suma a lo de GN, con su misma forma.
-    const erp = store === 'zattia' ? await ventasStunnedDelErp(desde, hasta) : { activa: false };
+    // Lo que nace en el ERP (línea cortada, `erp_corte`): se suma a lo de GN, con su misma forma.
+    const erp = await ventasDelErp(store, desde, hasta);
     if (!ventas.length && !erp.ventas?.length) return { ventas: [], detalles: [], skuPor: null, ...(erp.error ? { error: erp.error } : {}) };
 
     // `venta_detalles` no tiene fecha propia: el sale_id es el único puente. El rango de ids
