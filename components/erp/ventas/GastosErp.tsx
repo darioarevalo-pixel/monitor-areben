@@ -32,7 +32,7 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'carga', titulo: 'Carga', ancho: '150px', movil: 'oculta' },
   { key: 'monto', titulo: 'Monto', ancho: '120px', derecha: true, movil: 'dato' },
 ]
-const TONO_TIPO = { comision: ['action', 'Comisión de plataforma'], impuesto: ['warning', 'Impuesto'], otro: ['neutral', 'Otro gasto'] } as const
+const TONO_TIPO = { comision: ['action', 'Comisión de plataforma'], impuesto: ['warning', 'Impuesto'], otro: ['neutral', 'Otro gasto'], plataforma: ['action', 'Costo de Tienda Nube'], envio: ['action', 'Costo de envío'] } as const
 const pesos = (n: number) => `${n < 0 ? '− ' : ''}$ ${Math.abs(n).toLocaleString('es-AR', { maximumFractionDigits: 2 })}`
 const dia = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
@@ -116,6 +116,7 @@ export function GastosErp() {
         <TileResumen titulo="Gastos comerciales" valor={res ? pesos(res.total) : '…'} oscuro nota={`${nombrePeriodo.toLowerCase()} · ${libro} · restan en el resultado de Inicio`} />
         <TileResumen titulo="Comisiones de plataformas" valor={res ? pesos(res.comision) : '…'} nota={res ? `${pesos(res.comisionAutomatica)} salen solas de los cobros${res.comisionAMano ? ` · ${pesos(res.comisionAMano)} a mano` : ''}` : undefined} />
         <TileResumen titulo="Costo de Tienda Nube" valor={res ? pesos(res.plataforma) : '…'} nota="sale solo de cada cobro de la tienda (con Pago Nube no cobra)" />
+        <TileResumen titulo="Costo de envío" valor={res ? pesos(res.envio) : '…'} nota={res?.enviosSinCosto ? `falta el de ${res.enviosSinCosto.toLocaleString('es-AR')} ${res.enviosSinCosto === 1 ? 'pedido' : 'pedidos'}: Tienda Nube todavía no lo informó` : 'sale solo de cada pedido de la tienda (lo que paga el cliente es venta)'} />
         <TileResumen titulo="Impuestos" valor={res ? pesos(res.impuesto) : '…'} nota="a mano: todavía no se calculan solos" />
         <TileResumen titulo="Otros gastos" valor={res ? pesos(res.otro) : '…'} nota="logística y lo demás, a mano" />
       </div>

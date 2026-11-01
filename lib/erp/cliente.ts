@@ -1006,8 +1006,8 @@ export const activarDeposito = (linea: TiendaErp, deposito: string, activar: boo
 
 // ── ERP › Gastos comerciales (`api/_erp-gastos.js`; `gastosComerciales` / `registrarGasto` del motor, sql/055) — sólo admin ──
 export type TipoGasto = 'comision' | 'impuesto' | 'otro'
-/** Los renglones del total: los tipos + el costo de la plataforma (⛔ se carga a mano: sale solo de los cobros). */
-export type RenglonGasto = TipoGasto | 'plataforma'
+/** Los renglones del total: los tipos + el costo de la plataforma y el del envío (⛔ se cargan a mano: salen solos de los cobros y de los pedidos). */
+export type RenglonGasto = TipoGasto | 'plataforma' | 'envio'
 export type GastoCargado = { id: string; linea: string; fecha: string; tipo: TipoGasto; monto: number; detalle: string; cuenta: string | null; origen: 'manual' | 'automatico'; venta_id: string | null; usuario: string; creado_en: string }
 export type GastosDelPeriodo = {
   desde: string; hasta: string; prueba: boolean; total: number; por_tipo: Record<RenglonGasto, number>
@@ -1016,6 +1016,10 @@ export type GastosDelPeriodo = {
   comisionAutomatica: number
   /** Lo que se queda la plataforma (Tienda Nube) por los cobros (motor sql/061): su renglón, dentro del total. */
   plataformaAutomatica: number
+  /** Lo que le cuesta el envío a la tienda (motor sql/067): su renglón, dentro del total. */
+  envioAutomatico?: number
+  /** Ventas de Tienda Nube cuyo pedido todavía ⛔ tiene ese costo: ⛔ está en el total. */
+  enviosSinCosto?: number
   /** Cobros con tarjeta/MP cuya ruta ⛔ tiene tasa: la comisión de esos NO está en el total. */
   cobrosSinComision: number
   gastos: GastoCargado[]

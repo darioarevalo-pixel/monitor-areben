@@ -13,6 +13,12 @@ const conMotor = async (_m: string, _q: string, fn: (pg: unknown) => Promise<unk
 const vacio = { ok: true, por_tipo: { comision: 0, impuesto: 0, otro: 0 }, meses: [], comision_automatica: 0, cobrosSinComision: 0, gastos: [] }
 
 describe('gastos comerciales (puerta del monitor)', () => {
+  it('motor sql/067: el costo de envío de cada línea suma en su renglón y en el total; lo que falta se cuenta', async () => {
+    comerciales.mockImplementation(async (_pg, { marca }) => ({ ...vacio, por_tipo: { comision: 0, impuesto: 0, otro: 0, plataforma: 0, envio: marca === 'zattia' ? 100 : 50 }, envio_automatico: marca === 'zattia' ? 100 : 50, enviosSinCosto: 1 }))
+    const r = await gastosDelPeriodo({ marca: 'zattia', desde: '2026-10-01', hasta: '2026-10-31', prueba: false }, { conMotor })
+    expect([r.por_tipo.envio, r.total, r.envioAutomatico, r.enviosSinCosto]).toEqual([150, 150, 150, 2])
+  })
+
   beforeEach(() => { comerciales.mockReset(); registrar.mockReset() })
 
   it('ver y cargar gastos es sólo de admin', () => {
@@ -34,7 +40,7 @@ describe('gastos comerciales (puerta del monitor)', () => {
     const r = await gastosDelPeriodo({ marca: 'zattia', desde: '2026-10-01', hasta: '2026-10-31', prueba: false }, { conMotor })
     expect(comerciales.mock.calls.map((c) => c[1].marca).sort()).toEqual(['stunned', 'zattia'])
     expect(r.total).toBe(1700.5)
-    expect(r.por_tipo).toEqual({ comision: 700.5, impuesto: 1000, otro: 0, plataforma: 0 })
+    expect(r.por_tipo).toEqual({ comision: 700.5, impuesto: 1000, otro: 0, plataforma: 0, envio: 0 })
     expect(r.meses).toHaveLength(1)
     expect(r.meses[0].total).toBe(1700.5)
     expect(r.comisionAutomatica).toBe(700.5)

@@ -20,6 +20,7 @@ import { contarVistas as vistasDeStock, filtrar as filtrarStock } from '@/lib/er
 import { contarVistas as vistasDeProductos, filtrar as filtrarProductos } from '@/lib/erp/productos-lista.core.js'
 import { useLineaErp, useTiendaErp } from '@/lib/erp/linea-erp'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
+import { renglonesDelResultado } from '@/lib/erp/gastos.core.js'
 import { ROLES, VISTA, paraHacerDe, rolDe, subtituloDe, verResultado } from '@/lib/erp/inicio-roles.core.js'
 import { esAdmin } from '@/lib/permisos'
 import { agrupar as agruparPorProducto, filtrar as filtrarPorProducto } from '@/lib/erp/ventas-producto.core.js'
@@ -146,6 +147,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const top = ppm?.renglones ? masDejan(agruparPorProducto(filtrarPorProducto(ppm.renglones as never, { linea }))) : null
   const avisos = [
     gs?.g && gs.g.cobrosSinComision > 0 ? `${cuantos(gs.g.cobrosSinComision, 'cobro', 'cobros')} con tarjeta o Mercado Pago sin tasa cargada: esas comisiones no están en los gastos.` : null,
+    gs?.g?.enviosSinCosto ? `${cuantos(gs.g.enviosSinCosto, 'pedido', 'pedidos')} de Tienda Nube sin el costo de envío: ese costo no está en los gastos.` : null,
     m?.sinCosto ? `${cuantos(m.sinCosto, 'venta', 'ventas')} sin costo en Gestión Nube: suman su precio sin restar nada.` : null,
     stock?.productosSinCosto ? `${cuantos(stock.productosSinCosto, 'producto', 'productos')} con stock sin costo (${cuantos(stock.sinCosto, 'unidad', 'unidades')}): no suman al stock a costo.` : null,
     r?.gnHasta && m && r.gnHasta < m.hasta ? `Gestión Nube llega hasta el ${fecha(r.gnHasta)}: lo de después todavía no está.` : null,
@@ -175,6 +177,9 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
             <span style={rotulo}>Resultado comercial</span>
             <span style={grande}>{m && gTotal != null ? formatMoney(m.margen - gTotal) : '…'}</span>
             <span style={nota}>{gs?.error ? gs.error : gTotal == null ? 'margen menos gastos comerciales' : gTotal ? `margen menos gastos comerciales (${formatMoney(gTotal)}, reales del ERP)` : 'margen menos gastos comerciales: todavía no hay gastos reales en el ERP'}</span>
+            {gs?.g && <div aria-label="Gastos del resultado" style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+              {renglonesDelResultado(gs.g).map(([k, v]) => <span key={k} style={{ ...nota, display: 'flex', justifyContent: 'space-between', gap: space[2] }}><span>{k}</span><span>{formatMoney(v)}</span></span>)}
+            </div>}
           </div>
           <div style={tarjeta}>
             <span style={rotulo}>Ventas</span>
@@ -201,7 +206,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
           <MasDejan productos={top ?? []} estado={top ? null : pp?.error ?? '…'} href={href('ventas', 'por-producto')} />
         </div>
         <div style={{ fontSize: font.sm, color: color.mut }}>
-          {m && a ? `Del ${fecha(m.desde)} al ${fecha(m.hasta)}, contra el ${fecha(a.desde)} al ${fecha(a.hasta)}` : 'Este mes'} · lo vendido, el margen y los canales son de Gestión Nube (el que vende hoy), con su costo{linea === 'stunned' ? ' — la base de Zattia: Stunned vende por el ERP desde el 28-oct' : ''}. Lo que más deja usa el costo vigente del ERP, como Ventas › Por producto. El stock a costo es el disponible de Stock por el costo de cada producto.
+          {m && a ? `Del ${fecha(m.desde)} al ${fecha(m.hasta)}, contra el ${fecha(a.desde)} al ${fecha(a.hasta)}` : 'Este mes'} · lo vendido, el margen y los canales son de Gestión Nube y, desde que la marca pasó al ERP, del ERP, con su costo. Lo que más deja usa el costo vigente del ERP, como Ventas › Por producto. El stock a costo es el disponible de Stock por el costo de cada producto.
         </div>
       </section>}
 

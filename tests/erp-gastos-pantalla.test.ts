@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { armarFilasGastos, contarVistasGasto, filtrarGasto, leerMonto, rangoGasto, resumenGastos, validarGasto } from '@/lib/erp/gastos.core.js'
+import { renglonesDelResultado, armarFilasGastos, contarVistasGasto, filtrarGasto, leerMonto, rangoGasto, resumenGastos, validarGasto } from '@/lib/erp/gastos.core.js'
 
 /**
  * **ERP › Ventas › Gastos, el núcleo**: la comisión que sale sola de los cobros llega SUMADA ⇒ una fila; lo cargado a mano, una
@@ -34,7 +34,7 @@ describe('armarFilasGastos', () => {
 
 describe('resumenGastos', () => {
   it('toma el total del motor; la comisión a mano es lo que sobra de la automática; avisa los cobros sin tasa', () => {
-    expect(resumenGastos(datos)).toEqual({ total: 1_010_000, comision: 450_000, comisionAutomatica: 412_000, comisionAMano: 38_000, impuesto: 200_000, otro: 360_000, plataforma: 0, sinComision: 3 })
+    expect(resumenGastos(datos)).toEqual({ total: 1_010_000, comision: 450_000, comisionAutomatica: 412_000, comisionAMano: 38_000, impuesto: 200_000, otro: 360_000, plataforma: 0, envio: 0, sinComision: 3, enviosSinCosto: 0 })
   })
   it('motor sql/061: el costo de Tienda Nube es su tile y su FILA automática, ⛔ dentro de las comisiones', () => {
     const d = { ...datos, total: datos.total + 242, por_tipo: { ...datos.por_tipo, plataforma: 242 }, plataformaAutomatica: 242 }
@@ -43,6 +43,22 @@ describe('resumenGastos', () => {
     const f = armarFilasGastos(d).find((x) => x.id === 'plataforma-automatica')
     expect(f).toMatchObject({ tipo: 'plataforma', carga: 'automatica', monto: 242 })
     expect(armarFilasGastos(datos).some((x) => x.id === 'plataforma-automatica')).toBe(false)
+  })
+})
+
+describe('el costo de envío (motor sql/067)', () => {
+  const d = { ...datos, total: datos.total + 6904, por_tipo: { ...datos.por_tipo, plataforma: 242, envio: 6904 }, envioAutomatico: 6904, enviosSinCosto: 2 }
+  it('su tile y su FILA automática; sin envío, ⛔ fila', () => {
+    const r = resumenGastos(d)
+    expect([r.envio, r.enviosSinCosto, r.total]).toEqual([6904, 2, 1_016_904])
+    expect(armarFilasGastos(d).find((x) => x.id === 'envio-automatico')).toMatchObject({ tipo: 'envio', carga: 'automatica', monto: 6904 })
+    expect(armarFilasGastos(datos).some((x) => x.id === 'envio-automatico')).toBe(false)
+  })
+  it('el Resultado de Inicio: cada gasto en su renglón, también los que dan 0, y suman el total', () => {
+    const rs = renglonesDelResultado(d)
+    expect(rs.map(([k]) => k)).toEqual(['Comisión de los cobros', 'Costo de Tienda Nube', 'Costo de envío', 'Impuestos', 'Otros gastos'])
+    expect(rs.reduce((s, [, v]) => s + v, 0)).toBe(450_000 + 242 + 6904 + 200_000 + 360_000)
+    expect(renglonesDelResultado({ por_tipo: { comision: 5 } }).map(([, v]) => v)).toEqual([5, 0, 0, 0, 0])
   })
 })
 
