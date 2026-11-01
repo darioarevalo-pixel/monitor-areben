@@ -16,7 +16,7 @@ import { armarDevolucion, autorizacion, leerDevolucion, pagosDePlata, vueltaDe }
 import { frena } from '../cuenta/cuenta.core.mjs'
 import { anularCompraDe, cuentaBloqueada, filaCompra, insertarFila } from '../cuenta/libro.mjs'
 import { guardarClienteGN } from './cliente.mjs'
-import { mandaEn } from '../tn/stock.mjs'
+import { leerCortes, stockTnManda } from '../llave-corte.mjs'
 import { fuentePagos } from './pagos-fuente.mjs'
 
 const q = async (db, sql, params = []) => (await db.query(sql, params)).rows
@@ -460,8 +460,9 @@ async function anularDentro(db, e) {
   const actual = await leerParaCambiar(db, e?.venta_id)
   const leida = leerDevolucion(e?.devolucion)
   if (leida.ok === false) return leida
-  // Con el libro mandando en la marca (la llave del corte), GN ya ⛔ devuelve la prenda: la anulación de una venta suya suma acá.
-  const armada = armarAnulacion(actual, { ...(e ?? {}), devolucion: leida.devolucion }, { corte: !!actual && mandaEn(actual.venta.marca) })
+  // Con el libro mandando en la marca (su corte, `lib/llave-corte.mjs`), GN ya ⛔ devuelve la prenda: la anulación de una venta
+  // suya suma acá.
+  const armada = armarAnulacion(actual, { ...(e ?? {}), devolucion: leida.devolucion }, { corte: !!actual && stockTnManda(actual.venta.marca, await leerCortes(db)) })
   if (!armada.ok) return armada
   const v = actual.venta
   const con028 = await hayDevolucion(db)
@@ -536,7 +537,7 @@ export async function confirmarVuelta(db, e) {
     if (a.volvio) return falla('YA_VOLVIO', `Las prendas de la venta ${actual.venta.numero} ya volvieron`, 'venta_id')
     const en = new Date().toISOString()
     await insertar(db, 'venta_vuelta', [{ venta_id: e.venta_id, usuario: e.usuario.trim(), vuelta_en: en }])
-    const movimientos = movimientosDeAnulacion(actual.venta, actual.lineas, en, { corte: mandaEn(actual.venta.marca) })
+    const movimientos = movimientosDeAnulacion(actual.venta, actual.lineas, en, { corte: stockTnManda(actual.venta.marca, await leerCortes(db)) })
       .map((m) => ({ ...m, detalle: { ...m.detalle, venta_numero: actual.venta.numero, vuelta: a.vuelta } }))
     await insertarMovimientos(db, movimientos)
     return { ok: true, venta: { id: actual.venta.id, numero: actual.venta.numero }, vuelta: a.vuelta, movimientos: movimientos.length }
