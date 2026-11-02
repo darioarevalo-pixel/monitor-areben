@@ -3,6 +3,7 @@
 //   GET ?recurso=adelantos   → { ok, empleados, aplicados } | { ok, aviso }
 //
 // `empleados`: a quién se le puede adelantar (los activos del dashboard, con su CBU si está cargado).
+// `saldos`: lo que falta pagar de cada sueldo ya liquidado; `null` si no se pudo leer.
 // `aplicados`: cuánto de cada adelanto ya entró en una nómina, y de qué mes — `{ adelanto_id, monto,
 // mes }`, donde `adelanto_id` es el `operacion_id` del compromiso.
 //
@@ -27,6 +28,6 @@ export default async function handler(req, res) {
   if (!puede) return res.status(403).json({ error: 'No tenés permiso para ver a quién le debemos.' });
 
   const r = await leerAdelantosDelDashboard();
-  if (r.aviso) return res.status(200).json({ ok: true, aviso: r.aviso, empleados: [], aplicados: [] });
-  return res.status(200).json({ ok: true, empleados: r.empleados, aplicados: r.aplicados });
+  if (r.aviso) return res.status(200).json({ ok: true, aviso: r.aviso, empleados: [], aplicados: [], saldos: null });
+  return res.status(200).json({ ok: true, empleados: r.empleados, aplicados: r.aplicados, saldos: r.saldos });
 }

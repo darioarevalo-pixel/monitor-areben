@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { leerAdelantos, type RespuestaAdelantos } from '@/lib/adelantos/cliente'
 
 export function useAdelantos() {
-  const [datos, setDatos] = useState<RespuestaAdelantos>({ empleados: [], aplicados: null, aviso: null })
+  const [datos, setDatos] = useState<RespuestaAdelantos>({ empleados: [], aplicados: null, saldos: null, aviso: null })
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)

@@ -6,12 +6,14 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
-import type { Aplicado, EmpleadoAdelanto } from './core'
+import type { Aplicado, EmpleadoAdelanto, SaldoSueldo } from './core'
 
 export type RespuestaAdelantos = {
   empleados: EmpleadoAdelanto[]
   /** `null` si el dashboard no contestó: no se sabe qué entró en un sueldo. */
   aplicados: Aplicado[] | null
+  /** Lo que falta pagar de cada sueldo liquidado. `null` si no se pudo leer. */
+  saldos: SaldoSueldo[] | null
   aviso: string | null
 }
 
@@ -23,6 +25,7 @@ export async function leerAdelantos(): Promise<RespuestaAdelantos> {
   return {
     empleados: (d?.empleados || []) as EmpleadoAdelanto[],
     aplicados: aviso ? null : ((d?.aplicados || []) as Aplicado[]),
+    saldos: aviso || !Array.isArray(d?.saldos) ? null : (d.saldos as SaldoSueldo[]),
     aviso,
   }
 }

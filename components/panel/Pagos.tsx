@@ -52,8 +52,8 @@ import { cambiarEstado, confirmarCompromiso, vincularCompromiso } from '@/lib/co
 import { destinoDeAcreedor, destinosDeCuentas, type DestinoCompromiso } from '@/lib/compromisos/destino'
 import { useCuentas } from '@/components/acreedores/useCuentas'
 import { useAdelantos } from '@/components/acreedores/useAdelantos'
-import { AdelantosEmpleados } from './AdelantosEmpleados'
-import { adelantosPorEmpleado, nombreDelMes, type AdelantosDeEmpleado, type LineaAdelanto } from '@/lib/adelantos/core'
+import { AdelantosEmpleados, SaldosSueldos } from './AdelantosEmpleados'
+import { adelantosPorEmpleado, nombreDelMes, type AdelantosDeEmpleado, type LineaAdelanto, type SaldoSueldo } from '@/lib/adelantos/core'
 import {
   colaDeCobranza, diasPara, comprometidoPorAcreedor, sePuedeComprometer, sinVincular,
   mostrar as plata, paraEditar, parsearMonto, escribirMonto, restanteTrasConfirmar,
@@ -424,11 +424,13 @@ function TarjetaDestino({ nombre, sePuede, apoyos, detalle, deAca, cuenta, donde
 
 export function VistaAcreedores({
   acreedores, manuales, compromisos, cargando, error, aviso,
-  adelantos = [], adelantosSinDashboard = false, puedeCancelarAdelanto = false, onCancelarAdelanto,
+  adelantos = [], saldosSueldos = [], adelantosSinDashboard = false, puedeCancelarAdelanto = false, onCancelarAdelanto,
 }: {
   acreedores: Acreedor[]
   /** Los adelantos de sueldo, por empleado (`adelantosPorEmpleado`). Van arriba de los acreedores. */
   adelantos?: AdelantosDeEmpleado[]
+  /** Lo que falta pagar de los sueldos ya liquidados. */
+  saldosSueldos?: SaldoSueldo[]
   adelantosSinDashboard?: boolean
   puedeCancelarAdelanto?: boolean
   onCancelarAdelanto?: (l: LineaAdelanto) => void
@@ -453,14 +455,17 @@ export function VistaAcreedores({
   const hayManuales = manuales.length > 0
   const [hoy] = useState(() => hoyISO())
   const fichaAdelantos = (
-    <AdelantosEmpleados
-      grupos={adelantos}
-      hoy={hoy}
-      sinDashboard={adelantosSinDashboard}
-      puedeCancelar={puedeCancelarAdelanto && !!onCancelarAdelanto}
-      onCancelar={(l) => onCancelarAdelanto?.(l)}
-      margen={MARGEN}
-    />
+    <>
+      <SaldosSueldos saldos={saldosSueldos} hoy={hoy} margen={MARGEN} />
+      <AdelantosEmpleados
+        grupos={adelantos}
+        hoy={hoy}
+        sinDashboard={adelantosSinDashboard}
+        puedeCancelar={puedeCancelarAdelanto && !!onCancelarAdelanto}
+        onCancelar={(l) => onCancelarAdelanto?.(l)}
+        margen={MARGEN}
+      />
+    </>
   )
 
   if (cargando && !hayManuales) return <Estado>Buscando a quién le debemos…</Estado>
@@ -485,7 +490,7 @@ export function VistaAcreedores({
     )
   }
   if (acreedores.length === 0 && !hayManuales) {
-    if (adelantos.length > 0) return fichaAdelantos
+    if (adelantos.length > 0 || saldosSueldos.length > 0) return fichaAdelantos
     return (
       <EmptyState
         title="No hay ninguna deuda con acreedores ahora"
@@ -998,6 +1003,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
             error={deudas.error}
             aviso={deudas.aviso}
             adelantos={porEmpleado}
+            saldosSueldos={adelantos.saldos ?? []}
             adelantosSinDashboard={adelantos.aplicados === null}
             puedeCancelarAdelanto={puede.confirmar}
             onCancelarAdelanto={(l) => correr(async () => {

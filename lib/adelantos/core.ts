@@ -24,6 +24,9 @@ export type EmpleadoAdelanto = {
 /** Cuánto de un adelanto entró en la nómina de qué mes. Un adelanto puede partirse en dos meses. */
 export type Aplicado = { adelanto_id: string; monto: number; mes: string | null }
 
+/** Lo que falta pagar de un sueldo ya liquidado. Lo calcula el dashboard. */
+export type SaldoSueldo = { empleado_id: string; nombre: string; mes: string; neto: number; pagado: number; saldo: number }
+
 export type LineaAdelanto = {
   compromiso: Compromiso
   monto: number

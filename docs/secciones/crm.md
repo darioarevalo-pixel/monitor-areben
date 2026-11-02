@@ -1375,3 +1375,9 @@ Antes la marca salía sólo en cliente y lead. Ahora `NumeroNuevo` recibe `marca
 número que muestra la pantalla (el del pedido si se llegó desde Logística; si no, el del chat).
 ⚠️ Un participante que Darío no tiene agendado puede no traducirse a teléfono (`sinTraducir` en
 `extension/pagina.js`) y salir «No está»: en esta pantalla es más probable que en un cliente.
+
+# ✅ 2-nov-2026 — Pagos: «Falta pagar de sueldos»
+
+`GET /api/puente/adelantos` del dashboard suma `saldos` (nóminas PENDIENTE: neto menos todos sus pagos)
+y lo muestra `SaldosSueldos` (`components/panel/AdelantosEmpleados.tsx`). ⛔ Los empleados BLANCO
+quedan afuera de `empleados` y `saldos`: se pagan siempre desde la cuenta de la empresa.

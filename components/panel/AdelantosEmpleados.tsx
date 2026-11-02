@@ -14,7 +14,7 @@
 import { Button } from '@/components/ui'
 import { color, font, space } from '@/components/ui/tokens'
 import { mostrar as plata } from '@/lib/compromisos/core'
-import { nombreDelMes, type AdelantosDeEmpleado, type LineaAdelanto } from '@/lib/adelantos/core'
+import { nombreDelMes, type AdelantosDeEmpleado, type LineaAdelanto, type SaldoSueldo } from '@/lib/adelantos/core'
 
 /** '2026-09-15' → '15/9', partido a mano: pasado a `Date` se lee UTC y muestra el día anterior. */
 function dia(iso: string | null | undefined): string {
@@ -30,6 +30,34 @@ function estadoDeLinea(l: LineaAdelanto, hoy: string, sinDashboard: boolean): st
   return l.pendiente > 0.005
     ? `${plata(l.aplicado)} en el sueldo de ${en}; ${plata(l.pendiente)} pasan al siguiente`
     : `en el sueldo de ${en}`
+}
+
+/**
+ * Lo que falta pagar de los sueldos ya liquidados (Darío, 2-nov-2026). Sale del dashboard y no se
+ * guarda acá. Una transferencia cargada como adelanto lo baja sola; los sueldos en blanco no entran.
+ */
+export function SaldosSueldos({ saldos, hoy, margen }: { saldos: SaldoSueldo[]; hoy: string; margen: number }) {
+  if (saldos.length === 0) return null
+  const total = saldos.reduce((a, s) => a + s.saldo, 0)
+  return (
+    <section style={{ marginBottom: space[3] }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, padding: `0 ${margen}px 6px`, fontSize: font.xs, fontWeight: 700, color: color.mut }}>
+        <span style={{ textTransform: 'uppercase', letterSpacing: 0.4 }}>Falta pagar de sueldos</span>
+        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{plata(total)}</span>
+      </div>
+      {saldos.map((s) => (
+        <div key={`${s.empleado_id}-${s.mes}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: color.surface, borderTop: `1px solid ${color.line2}`, padding: `${space[2]}px ${margen}px` }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>{s.nombre}</div>
+            <div style={{ fontSize: font.xs, color: color.mut2 }}>
+              Sueldo de {nombreDelMes(s.mes, hoy)} · ya cobró {plata(s.pagado)} de {plata(s.neto)}
+            </div>
+          </div>
+          <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{plata(s.saldo)}</div>
+        </div>
+      ))}
+    </section>
+  )
 }
 
 export function AdelantosEmpleados({ grupos, hoy, sinDashboard, puedeCancelar, onCancelar, margen }: {
