@@ -886,6 +886,7 @@ function POS() {
     setAviso(null)
     setBor((b) => (b.enviado ? b : { ...b, enviado: true }))
     const conRegalo = regalo
+    let ventanaPin = false
     try {
       const r = await confirmarVenta({
         id: bor.id,
@@ -927,6 +928,7 @@ function POS() {
       // El ERP da sin stock alguna prenda (⛔ se guardó nada): la ventana del PIN, con el error si fue un PIN mal puesto.
       const rebote = (e as { datos?: { sinStock?: boolean; faltan?: PrendaSinStock[] } }).datos
       if (rebote?.sinStock) {
+        ventanaPin = true
         setSinStock({ faltan: rebote.faltan ?? [], error: encargada ? (e as Error).message : null })
         return
       }
@@ -950,7 +952,8 @@ function POS() {
       setAviso({ tono: 'danger', texto: (e as Error).message })
     } finally {
       setEnviando(false)
-      enfocar()
+      // Con la ventana del PIN abierta, el foco ⛔ se va al lector de atrás.
+      if (!ventanaPin) enfocar()
     }
   }
 
@@ -1110,6 +1113,16 @@ pendientes
   // 🔴 La prenda repetida (Bruno, 14-oct), «Validar transferencia» y el cobro: UNA sola vez, para los dos formatos.
   const modalesJSX = (
     <>
+      {/* Acá, ⛔ en `modalesCambioJSX`: la vista de celular ⛔ monta ése. */}
+      {sinStock && (
+        <ModalSinStock
+          faltan={sinStock.faltan}
+          error={sinStock.error}
+          enviando={enviando}
+          onCerrar={() => setSinStock(null)}
+          onAutorizar={(encargada) => { void confirmar(encargada) }}
+        />
+      )}
           {/* 🔴 La prenda repetida (Bruno, 14-oct): el foco y el Enter van a «No» — el lector que disparó dos
               veces manda su Enter acá —, y cerrar con Escape o el fondo también es «No». */}
           {pregunta && (
@@ -1534,15 +1547,6 @@ pendientes
         />
       )}
       {cobrandoCambio && <ModalCobroCambio c={cambio} onCerrar={() => setCobrandoCambio(false)} />}
-      {sinStock && (
-        <ModalSinStock
-          faltan={sinStock.faltan}
-          error={sinStock.error}
-          enviando={enviando}
-          onCerrar={() => setSinStock(null)}
-          onAutorizar={(encargada) => { void confirmar(encargada) }}
-        />
-      )}
     </>
   )
 
