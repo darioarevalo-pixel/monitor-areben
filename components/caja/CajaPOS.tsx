@@ -54,7 +54,7 @@ import { NOMBRE_MEDIO, aPagarDe, msjOferta, ofertaDe, baseParaMonto, cobro, cuen
 import { hoyIso, promosDeCreditoEnMostrador } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
-import { avisoDeRenglon } from '@/lib/caja/pedidos-web.core.js'
+import { avisoDeRenglon, stockSinReservasWeb } from '@/lib/caja/pedidos-web.core.js'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
 import { registrarRespuesta, repetida } from '@/lib/caja/repetida.core.js'
@@ -90,6 +90,7 @@ import {
   type Venta,
   ventaLlego,
   numeroDeLaVenta,
+  puestoCaja,
 } from '@/lib/caja/cliente'
 import { BandaCambio, ModalCobroCambio, ModalEncargada, ModalVentaOriginal, PedidoCambio } from '@/components/caja/partesCambio'
 import { useCambio } from '@/components/caja/useCambio'
@@ -373,8 +374,12 @@ function POS() {
   }, [])
   /** El aviso del renglón: null sin pedidos leídos (el cartel de arriba ya dice que ⛔ se leyeron). */
   const avisoWeb = useCallback(
-    (v: Variante, stock: Stock, enCarrito: number) =>
-      pedidosWeb ? avisoDeRenglon({ sku: v.sku ?? '', local: stock.local, deposito: stock.deposito, enCarrito, porSku: pedidosWeb.porSku }) : null,
+    (v: Variante, stock: Stock, enCarrito: number) => {
+      if (!pedidosWeb) return null
+      const sku = v.sku ?? ''
+      const libre = stockSinReservasWeb({ store: storeCaja(), enEvento: puestoCaja() === 'evento', stock, sku, porSku: pedidosWeb.porSku })
+      return avisoDeRenglon({ sku, ...libre, enCarrito, porSku: pedidosWeb.porSku })
+    },
     [pedidosWeb],
   )
 
