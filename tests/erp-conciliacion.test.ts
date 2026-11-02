@@ -74,4 +74,21 @@ describe('armarConciliacion', () => {
     expect(bdi.grupos[0].filas[0]).toMatchObject({ estado: 'paid', link: null })
     expect(armarConciliacion({ tienda: 'zattia', filas: [], resumen: res, nombres }).tarjetas).toHaveLength(3)
   })
+
+  it('una tienda que YA CORTÓ: ⛔ nombra a Gestión Nube (Stunned 2-nov: «Gestión Nube dice otro stock» falso)', () => {
+    const res = { stock_tn: { sin_gn: true, comparadas: 160, cierran: 159, clases: { stock_tn: { tn_distinto: 1 } } }, pedidos: { sin_gn: true, pedidos: 23, clases: {} } }
+    const f = [{ tipo: 'stock_tn', clave: '1:10', clase: 'tn_distinto', product_id: 1, size_id: 10, sku: 'R-1', tn: 2, libro: 1, reservado: 0, gn: null, dias: 1, detalle: {} }]
+    const diaGN = { resumen: { porLinea: { stunned: { inexplicadas: 13 } } } }
+    const d = armarConciliacion({ tienda: 'stunned', filas: f, resumen: res, nombres, diaGN })
+    expect(d.tarjetas.map((t: { tipo: string }) => t.tipo)).toEqual(['stock_tn', 'pedido_erp'])
+    expect(d.tarjetas[0].nombre).toBe('Stock: Tienda Nube y el ERP')
+    expect(JSON.stringify(d.tarjetas)).not.toContain('Gestión Nube')
+    expect(d.gn).toEqual({ calculado: false, sinExplicar: null, sinGn: true })
+    expect(d.desconocidas).toBe(0)
+    expect(d.grupos[0]).toMatchObject({ clase: 'tn_distinto', nombre: 'Tienda Nube muestra otro número' })
+    // Un día de ANTES del corte se sigue viendo como era.
+    const viejo = armarConciliacion({ tienda: 'stunned', filas: [], resumen: { stock_tn: { comparadas: 1, cierran: 1 }, pedidos: { pedidos: 1 } }, nombres, diaGN })
+    expect(viejo.tarjetas).toHaveLength(3)
+    expect(viejo.gn).toEqual({ calculado: true, sinExplicar: 13 })
+  })
 })

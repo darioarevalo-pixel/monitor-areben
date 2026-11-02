@@ -111,7 +111,7 @@ export function ConciliacionDia({ ajustar, alContar }: { ajustar: (p: PrendaAAju
   const calculado = !!datos?.tarjetas.some((t) => t.calculado)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>El ERP contra Tienda Nube, Gestión Nube y Mercado Libre: cuánto coincide y lo que no, con qué mirar. Se calcula una vez por día, a las 13:40.</p>
+      <p style={{ margin: 0, color: color.mut }}>{datos?.gn.sinGn ? 'El ERP contra Tienda Nube y Mercado Libre' : 'El ERP contra Tienda Nube, Gestión Nube y Mercado Libre'}: cuánto coincide y lo que no, con qué mirar. Se calcula una vez por día, a las 13:40.</p>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         {datos && datos.dias.length > 0 && (
           <Select aria-label="Día" style={ANCHO_SELECT} value={datos.fecha ?? ''} onChange={(e) => setFecha(e.target.value)} disabled={cargando}>
@@ -140,8 +140,10 @@ export function ConciliacionDia({ ajustar, alContar }: { ajustar: (p: PrendaAAju
                     : t.noCierran ? `${t.noCierran} de ${t.total} ${t.unidad} no coinciden (7 días)` : `Coinciden los ${t.total} ${t.unidad} (7 días)`}
               />
             ))}
-            <TileResumen titulo="Stock por depósito: Gestión Nube y el ERP" valor={!datos.gn.calculado ? '—' : (datos.gn.sinExplicar ?? 0).toLocaleString('es-AR')}
-              nota={!datos.gn.calculado ? 'No se calculó ese día.' : datos.gn.sinExplicar ? 'sin explicar: verlas en Diferencias con Gestión Nube' : 'Todo explicado (Diferencias con Gestión Nube)'} />
+            {!datos.gn.sinGn && (
+              <TileResumen titulo="Stock por depósito: Gestión Nube y el ERP" valor={!datos.gn.calculado ? '—' : (datos.gn.sinExplicar ?? 0).toLocaleString('es-AR')}
+                nota={!datos.gn.calculado ? 'No se calculó ese día.' : datos.gn.sinExplicar ? 'sin explicar: verlas en Diferencias con Gestión Nube' : 'Todo explicado (Diferencias con Gestión Nube)'} />
+            )}
           </div>
           {datos.enVuelo > 0 && <Notice tone="neutral">Recién pagados, todavía en camino: {datos.enVuelo}.</Notice>}
           {datos.desconocidas > 0 && <Notice tone="warning">{datos.desconocidas} con una clase que esta pantalla todavía no conoce.</Notice>}
@@ -153,14 +155,14 @@ export function ConciliacionDia({ ajustar, alContar }: { ajustar: (p: PrendaAAju
             </div>
             {enVista !== 'todas' && <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Qué mirar: {datos.grupos.find((g) => `${g.tipo}/${g.clase}` === enVista)?.mirar}{(() => { const g = datos.grupos.find((x) => `${x.tipo}/${x.clase}` === enVista); return g?.deAntes ? ` (${g.deAntes} vienen de días anteriores)` : '' })()}</div>}
             <ListaTrabajo
-              columnas={COLUMNAS} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={40}
+              columnas={datos.gn.sinGn ? COLUMNAS.filter((c) => c.key !== 'gn') : COLUMNAS} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={40}
               activa={ficha ? filas.find((f) => f.producto === ficha.producto && f.talle === ficha.talle)?.id ?? null : null}
               onAbrir={(f) => (f.producto && f.talle ? abrir(f) : f.link ? window.open(f.link, '_blank', 'noopener') : undefined)}
               etiquetaFila={(f) => (esStock(f) ? `el producto ${prendaDe(f)}` : `el pedido #${f.numero}`)}
               vacio={!cargando ? <div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con ese producto o pedido.' : calculado ? 'Todo coincide.' : 'Ese día no se calculó.'} /></div> : null}
             />
             <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-              {filas.length.toLocaleString('es-AR')} que no coinciden · el arreglo se hace en el monitor o en Gestión Nube, no en el ERP
+              {filas.length.toLocaleString('es-AR')} que no coinciden · {datos.gn.sinGn ? 'el arreglo se hace en el ERP' : 'el arreglo se hace en el monitor o en Gestión Nube, no en el ERP'}
             </div>
           </div>
         </>

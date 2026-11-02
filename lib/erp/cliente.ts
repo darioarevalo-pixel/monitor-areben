@@ -175,7 +175,7 @@ export type ConciliacionDelDia = {
   sinTablas: boolean; fecha: string | null; dias: string[]; calculadoEn: string | null
   grupos: Array<{ tipo: string; clase: string; nombre: string; mirar: string; filas: FilaConciliacion[]; deAntes: number }>
   tarjetas: Array<{ tipo: string; nombre: string; unidad: string; calculado: boolean; total: number | null; cierran?: number | null; aparte?: number; noCierran?: number }>
-  gn: { calculado: boolean; sinExplicar: number | null }
+  gn: { calculado: boolean; sinExplicar: number | null; /** La tienda ya cortó: Gestión Nube ⛔ se compara. */ sinGn?: boolean }
   enVuelo: number; desconocidas: number; noCierran: number
 }
 

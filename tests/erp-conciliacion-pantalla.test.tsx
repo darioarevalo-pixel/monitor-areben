@@ -48,6 +48,13 @@ const filaDe = (t: string) => [...host.querySelectorAll('[role="row"]')].find((r
 const clic = async (el: Element) => { await act(async () => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })) }); await act(async () => {}) }
 
 describe('ConciliacionDia', () => {
+  it('una tienda que ya cortó: ⛔ muestra a Gestión Nube y el arreglo es en el ERP', async () => {
+    leerConciliacion.mockResolvedValueOnce({ ...conDatos(), gn: { calculado: false, sinExplicar: null, sinGn: true }, tarjetas: [], grupos: [], noCierran: 0 })
+    await montar('stunned')
+    expect(texto()).not.toContain('Stock por depósito')
+    expect(texto()).not.toContain('Gestión Nube')
+    expect(texto()).toContain('el arreglo se hace en el ERP')
+  })
   it('dice cuánto coincide, el diff de Gestión Nube, Mercado Libre sin conexión, y cada clase como vista con su número', async () => {
     await montar()
     expect(leerConciliacion).toHaveBeenCalledWith('zattia', null)
