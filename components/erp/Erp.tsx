@@ -46,6 +46,7 @@ import { ReglasComerciales } from './ReglasComerciales'
 import { Redondeo } from './Redondeo'
 import { RutasCobro } from './RutasCobro'
 import { CuentasErp, EstructuraErp } from './CuentasYEstructura'
+import { TokensApi } from './TokensApi'
 import { VentasErp } from './ventas/VentasErp'
 import { PorProductoErp } from './ventas/PorProductoErp'
 import { CajasErp } from './ventas/CajasErp'
@@ -118,6 +119,7 @@ export const SECCIONES_ERP: Seccion[] = [
       { key: 'cuentas', label: 'Cuentas y formas de pago', permiso: 'configurar', junta: 'Qué lista', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: '¿A qué cuenta va?' }] },
       { key: 'reglas', label: 'Descuentos y redondeo', permiso: 'configurar', vistas: [{ key: 'reglas', label: 'Descuentos por forma de pago' }, { key: 'redondeo', label: 'Redondeo' }] },
       { key: 'estructura', label: 'Marcas, depósitos y puntos de venta', permiso: 'configurar' },
+      { key: 'tokens', label: 'Tokens de la API', permiso: 'configurar' },
     ],
   },
 ]
@@ -457,6 +459,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {vista === 'reglas' && <ReglasComerciales key={`${marca}/${lineaVista}`} ir={irAPieza} />}
             {vista === 'redondeo' && <Redondeo key={`${marca}/${lineaVista}`} />}
             {pestania === 'estructura' && <EstructuraErp key={marca} />}
+            {pestania === 'tokens' && <TokensApi />}
           </div>
         </div>
         </ProveedorLineaErp>

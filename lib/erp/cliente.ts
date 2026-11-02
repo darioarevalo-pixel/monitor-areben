@@ -1033,6 +1033,23 @@ export const leerDepositos = (linea: TiendaErp) =>
 export const activarDeposito = (linea: TiendaErp, deposito: string, activar: boolean) =>
   pedir<{ ok: true; ya?: boolean; depositos: DepositoErp[] }>(post({ accion: activar ? 'deposito-activar' : 'deposito-desactivar', linea, deposito }), '', activar ? 'No se pudo activar el depósito.' : 'No se pudo desactivar el depósito.')
 
+// ── ERP › Configuración › Tokens de la API (`api/_erp-tokens.js`, motor sql/071) — sólo admin ──
+export type TokenApi = {
+  id: number | string; negocio: string; app: string; key_prefix: string; permisos: string[]; vence_en: string | null; revocado_en: string | null
+  ultimo_uso_en: string | null; ultimo_uso_ip: string | null; dueno: string; dueno_activo: boolean
+}
+export type CatalogoTokens = { tokens: TokenApi[]; permisos: Record<string, { explica: string; datos: string }>; nunca: string[]; negocios: Record<string, string> }
+export type ConsultaToken = { en: string; metodo: string; molde: string; status: number; code: string | null; ms: number; cantidad: number | null; ip: string | null }
+export type TokenEntregado = { ok: true; id: number; key_prefix: string; token: string }
+export type PruebaToken = { ok: boolean; code?: string; detalle?: string; token: { id: number; app: string; negocio: string; key_prefix: string; permisos: string[]; vence_en: string | null; dueno: string } | null }
+export const leerTokens = () => pedir<CatalogoTokens>(null, `&vista=tokens&nc=${Date.now()}`, 'No se pudieron leer los tokens.')
+export const leerActividadToken = (id: number | string) => pedir<{ consultas: ConsultaToken[] }>(null, `&vista=token-actividad&id=${id}&nc=${Date.now()}`, 'No se pudo leer la actividad.')
+export const crearTokenApi = (d: { negocio: string; app: string; dueno: string; permisos: string[]; vence: string }) => pedir<TokenEntregado>(post({ accion: 'token-crear', ...d }), '', 'No se pudo crear el token.')
+export const editarTokenApi = (id: number | string, d: { permisos: string[]; vence: string }) => pedir<{ ok: true }>(post({ accion: 'token-editar', id, ...d }), '', 'No se pudo guardar.')
+export const regenerarTokenApi = (id: number | string) => pedir<TokenEntregado>(post({ accion: 'token-regenerar', id }), '', 'No se pudo regenerar.')
+export const revocarTokenApi = (id: number | string) => pedir<{ ok: true }>(post({ accion: 'token-revocar', id }), '', 'No se pudo revocar.')
+export const probarTokenApi = (token: string) => pedir<PruebaToken>(post({ accion: 'token-probar', token }), '', 'No se pudo probar.')
+
 // ── ERP › Gastos comerciales (`api/_erp-gastos.js`; `gastosComerciales` / `registrarGasto` del motor, sql/055) — sólo admin ──
 export type TipoGasto = 'comision' | 'impuesto' | 'otro'
 /** Los renglones del total: los tipos + el costo de la plataforma y el del envío (⛔ se cargan a mano: salen solos de los cobros y de los pedidos). */

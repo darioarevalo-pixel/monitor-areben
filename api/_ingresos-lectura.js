@@ -2,6 +2,11 @@
 //
 //   GET ?recurso=ingresos-lectura&tarea=leer         → { ok, marcas } (el cron de vercel.json)
 //   GET ?recurso=ingresos-lectura&tarea=leer&seco=1  → lo mismo, sin escribir: dice qué leería
+//   GET ?recurso=ingresos-lectura&tarea=costos         → costo y tipo de ingreso (el cron de cada hora; motor `lib/conexion.mjs`). Los costos se
+//                                                         escriben sólo desde el corte de la marca (`costoIngresosManda`)
+//   GET ?recurso=ingresos-lectura&tarea=costos&seco=1  → qué cargaría, sin escribir nada: es lo que se mira antes de un corte
+//
+// Cada vuelta anota cómo salió en `conexion_lectura` (motor sql/074): de ahí avisa el vigía si el token se rechaza, vence o no se lee.
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js`. Sin sesión: lo llama el cron y se defiende con `CRON_SECRET`.
 // 🔴 El token va sólo en la cabecera y ⛔ se sigue una redirección: se lo llevaría a otro host.
@@ -10,6 +15,7 @@ import { cfgDelMonitor } from './_recepciones-base.js'
 import { procesarEvento } from './_recepciones-procesar.js'
 import { aProcesar, desdeDe, eventoDeOc, idDeEvento, mismaForma } from '../lib/recepciones/lectura.core.js'
 import { normalizarEvento } from '../lib/recepciones/webhook.core.js'
+import { configPg } from '../lib/pg.core.js'
 
 const BASE = 'https://ingreso2.arebensrl.com/api/ext/v1'
 const MARCAS = [
@@ -20,6 +26,9 @@ const ESPERA_MS = 10_000
 /** La función tiene 30 s: lo que no entre lo toma la vuelta siguiente, porque se procesa de la más vieja a la más nueva. */
 const PLAZO_MS = 20_000
 const POR_PAGINA = 200
+/** La vuelta de costos es más larga: la primera recorre el catálogo entero. Lo que ⛔ entre ⛔ avanza el cursor: se repite en la hora siguiente. */
+const PLAZO_COSTOS_MS = 25_000
+const PG_DE_MARCA = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
 
 async function pedir(ruta, token) {
   const r = await fetch(`${BASE}${ruta}`, {
@@ -28,7 +37,7 @@ async function pedir(ruta, token) {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'User-Agent': 'AreBenERP/1.0' },
   })
   const cuerpo = await r.json().catch(() => null)
-  if (!r.ok) throw new Error(`Ingresos contestó ${r.status}${cuerpo && cuerpo.code ? ` ${cuerpo.code}` : ''}`)
+  if (!r.ok) throw Object.assign(new Error(`Ingresos contestó ${r.status}${cuerpo && cuerpo.code ? ` ${cuerpo.code}` : ''}`), { status: r.status, code: cuerpo && cuerpo.code })
   return cuerpo
 }
 
@@ -103,18 +112,80 @@ async function leerMarca({ sb, store, token, seco, hasta }) {
   return salida
 }
 
+/** La base del motor de una marca. Sin la variable ⇒ `null`. */
+async function abrirBase(marca) {
+  const conexion = process.env[PG_DE_MARCA[marca]]
+  if (!conexion) return null
+  const { default: pg } = await import('pg')
+  const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: 5000, statement_timeout: 15000 })
+  await db.connect()
+  return db
+}
+
+/** Anota cómo salió la lectura de las OC y hasta cuándo sirve el token. 🔴 Un tropiezo acá ⛔ afecta a la lectura: lo que importa ya se guardó. */
+async function anotarLaLectura({ store, token, error }) {
+  let control
+  try {
+    control = await abrirBase('bdi')
+    if (!control) return
+    const { anotarLectura, mirarToken } = await import('../motor/conexion.mjs')
+    let falla = error
+    let vence
+    try { vence = (await mirarToken(store, { token })).vence } catch (e) { falla = falla || e }
+    await anotarLectura(control, { sistema: 'ingresos', negocio: store, ok: !falla, status: falla ? falla.status ?? null : 200, code: falla ? falla.code ?? 'sin_respuesta' : null, vence })
+  } catch (e) {
+    if (e?.code !== '42P01') console.error(`[ingresos-lectura] ${store}: no se pudo anotar la lectura (${e?.code ?? 'sin código'})`)
+  } finally {
+    if (control) await control.end().catch(() => {})
+  }
+}
+
+/** Costo y tipo de ingreso de una marca: el corte decide si se escribe. */
+async function costosDeMarca({ store, token, seco, hasta }) {
+  const control = await abrirBase('bdi')
+  if (!control) return { error: 'falta la conexión del motor' }
+  const db = store === 'bdi' ? control : await abrirBase(store)
+  try {
+    if (!db) return { error: 'falta la conexión del motor' }
+    const [{ correrCostos }, { costoIngresosManda, leerCortes }] = await Promise.all([import('../motor/conexion.mjs'), import('../motor/llave-corte.mjs')])
+    const manda = costoIngresosManda(store, await leerCortes(db), process.env)
+    return await correrCostos({ control, db, negocio: store, token, manda, seco, hasta })
+  } finally {
+    await control.end().catch(() => {})
+    if (db && db !== control) await db.end().catch(() => {})
+  }
+}
+
 export default async function handler(req, res) {
-  if (req.method !== 'GET' || String((req.query || {}).tarea || '') !== 'leer') {
-    return res.status(400).json({ error: 'Sólo GET con tarea=leer (lo llama el cron).' })
+  const tarea = String((req.query || {}).tarea || '')
+  if (req.method !== 'GET' || !['leer', 'costos'].includes(tarea)) {
+    return res.status(400).json({ error: 'Sólo GET con tarea=leer o tarea=costos (lo llama el cron).' })
   }
   const esperado = process.env.CRON_SECRET || ''
   if (!esperado) return res.status(503).json({ error: 'La lectura no está configurada (CRON_SECRET).' })
   if (String(req.headers.authorization || '') !== `Bearer ${esperado}`) return res.status(401).json({ error: 'no autorizado' })
 
+  const seco = String((req.query || {}).seco || '') === '1'
+  if (tarea === 'costos') {
+    const hastaCostos = Date.now() + PLAZO_COSTOS_MS
+    const marcas = {}
+    let fallo = false
+    for (const { store, variable } of MARCAS) {
+      const token = process.env[variable]
+      if (!token) { marcas[store] = { sinToken: true }; continue }
+      try {
+        marcas[store] = await costosDeMarca({ store, token, seco, hasta: hastaCostos })
+      } catch (e) {
+        marcas[store] = { error: e?.code ?? 'falló la base' }
+      }
+      if (marcas[store].error) { fallo = true; console.error(`[ingresos-lectura] costos ${store}: ${marcas[store].error}`) }
+    }
+    return res.status(fallo ? 502 : 200).json({ ok: !fallo, seco, marcas })
+  }
+
   const cfg = cfgDelMonitor()
   if (!cfg.url || !cfg.key) return res.status(503).json({ error: 'sin credenciales de base' })
   const sb = createClient(cfg.url, cfg.key)
-  const seco = String((req.query || {}).seco || '') === '1'
   const hasta = Date.now() + PLAZO_MS
 
   const marcas = {}
@@ -124,10 +195,12 @@ export default async function handler(req, res) {
     if (!token) { marcas[store] = { sinToken: true }; continue }
     try {
       marcas[store] = await leerMarca({ sb, store, token, seco, hasta })
+      if (!seco) await anotarLaLectura({ store, token })
     } catch (e) {
       fallo = true
       marcas[store] = { error: String((e && e.message) || e).slice(0, 300) }
       console.error(`[ingresos-lectura] ${store}: ${marcas[store].error}`)
+      if (!seco) await anotarLaLectura({ store, token, error: e })
     }
   }
   // Una marca caída contesta 502: queda en los logs de Vercel, y la otra igual se leyó.
