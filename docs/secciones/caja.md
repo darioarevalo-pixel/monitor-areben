@@ -34,6 +34,10 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   `pctDeCuenta` pesa el % por prenda en la MISMA cuenta de GN. ⛔ toca las cuentas de feria de Zattia (0 %) ni
   débito/crédito. ⚠️ Es POR OFERTA y **sólo para el DROP 1** (la lista `productos`; Bruno, 30-oct, Cyber Monday): el drop 2 en
   oferta paga su cuenta, 15 % efectivo / 10 % transferencia.
+- 🔴 **VENDER LO QUE EL ERP DA SIN STOCK PIDE EL PIN** (Bruno, 2-nov; `lib/caja/pin-venta.core.js`): en una línea que ya cortó (Stunned; Zattia desde
+  su corte; BDI más adelante), `confirmar` mira el libro ANTES de guardar. Si falta, 409 `sinStock` ⇒ `ModalSinStock`; con el PIN, el servidor arma `autoriza`,
+  lo guarda en el `payload` y el motor anota `detalle.contar` (se ve en «A contar»). Se pregunta antes porque la venta por transferencia llega al ERP más
+  tarde, sin nadie delante ⇒ `VENTA_SIN_NEGATIVOS` ⛔ se carga. Sin poder leer el libro ⛔ frena. Los cambios ⛔ pasan por acá.
 - 🔴 **EL % POR CAMPAÑA** (Bruno, 1-nov, Cyber Monday de Zattia): `reglas.pctCampanias` (`[{ campania, nombre, efectivo, transferencia }]`, por
   `bajadas`, sin pantalla todavía) hace que las prendas de esa campaña de Liquidación paguen ESE % en efectivo y transferencia, a la cuenta
   NORMAL de GN. `reglasDeHoy` lo resuelve a `pctDePrendas` (producto → %), con los ítems `confirmado` Y `aplicado` (la de Zattia tiene todo

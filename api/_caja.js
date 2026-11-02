@@ -103,7 +103,8 @@ import { lineaDe } from '../lib/lineas.core.js'
 import { cortesDeCaja } from './_caja-corte.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, ladoDelEspejo, marcaDeCaja, tokenDe } from '../lib/caja/marcas.core.js'
-import { anotarEnMotor, avisoDelMotor, eventoActivo, preciosLocalStunned, registrarEnErp, repasarMotor, stockDelLibro } from './_caja-motor.js'
+import { anotarEnMotor, autorizarPinDeVenta, avisoDelMotor, eventoActivo, faltanEnElLibro, preciosLocalStunned, registrarEnErp, repasarMotor, stockDelLibro } from './_caja-motor.js'
+import { pidePinDeVenta } from '../lib/caja/pin-venta.core.js'
 import { errorDelPuesto, faltaColumnaDeposito, puestoDe } from '../lib/caja/puesto.core.js'
 import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { reglasDeHoy as reglasDeHoyDe } from './_caja-reglas.js'
@@ -1276,10 +1277,24 @@ export default async function handler(req, res) {
         if (aDonde.error) return res.status(400).json({ error: aDonde.error, mixto: true })
         const malPuesto = errorDelPuesto(turno, aDonde.destino)
         if (malPuesto) return res.status(400).json({ error: malPuesto })
+        // 🔑 Lo que el ERP da sin stock pide el PIN de la encargada, ANTES de guardar (`lib/caja/pin-venta.core.js`). Sin poder leer el
+        // libro ⛔ se frena al local: la venta sigue, y si el ERP está caído lo dice al registrarla.
+        let autoriza = null
+        if (pidePinDeVenta(aDonde.destino, aDonde.marca)) {
+          const faltan = await faltanEnElLibro(store, aDonde.marca, await depositoDeVenta({ turno_id: turno.id }), conNombre)
+            .catch((e) => ({ error: e && e.message }))
+          if ('error' in faltan) console.warn('[caja] no se pudo leer el stock del ERP:', faltan.error)
+          else if (faltan.length) {
+            if (!b.encargada) return res.status(409).json({ error: 'El sistema dice que no hay stock: autoriza la encargada.', sinStock: true, faltan })
+            const a = await autorizarPinDeVenta(store, b.encargada.persona, b.encargada.pin)
+            if (!('autoriza' in a)) return res.status(a.status).json({ error: a.error, sinStock: true, faltan })
+            autoriza = a.autoriza
+          }
+        }
         const pagosConNombre = c.pagos.map(p => ({ ...p, nombre: nombreParaTicket(p.cuenta, reglas) }))
         const fila = {
           id, store, estado: espera > 0 ? 'esperando_pago' : 'borrador', espera_monto: espera > 0 ? espera : null, renglones: conNombre.map((f, i) => ({ ...f, linea: lineasT[i] })), pagos: pagosConNombre, subtotal: c.subtotal, total: c.total,
-          paga_con: Number.isFinite(pagaCon) ? pagaCon : null, email, payload, usuario: perfil.name || null, turno_id: turno.id, a_mano: aMano,
+          paga_con: Number.isFinite(pagaCon) ? pagaCon : null, email, payload: autoriza ? { ...payload, autoriza } : payload, usuario: perfil.name || null, turno_id: turno.id, a_mano: aMano,
           // Sólo se manda la columna si el ticket va al ERP: sin `sql/migrate-caja-erp.sql` las ventas de GN siguen entrando.
           ...(aDonde.destino === 'erp' ? { destino: 'erp' } : {}),
         }

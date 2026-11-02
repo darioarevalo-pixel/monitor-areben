@@ -12,6 +12,7 @@ import { COLUMNAS_MOTOR, DIAS_REPASO, REPASO_POR_VUELTA, anularEnMotor, entradaD
 import { configPg } from '../lib/pg.core.js'
 import { SQL_STOCK_VARIANTE_LIBRO, stockDeVarianteLibro } from '../lib/stunned/inventario-erp.core.js'
 import { marcaDeVentaErp } from '../lib/caja/corte-caja.core.js'
+import { prendasQueFaltan } from '../lib/caja/pin-venta.core.js'
 
 const PG_DE_STORE = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
 /** El motor tiene que contestar rápido: la cajera está esperando el ticket. Lo que no entra, lo sube el repaso. */
@@ -51,6 +52,41 @@ export async function stockDelLibro(store, linea, productId, sizeId) {
   const r = await conMotor(store, async (db) => stockDeVarianteLibro((await db.query(SQL_STOCK_VARIANTE_LIBRO, [String(productId), String(sizeId), String(linea)])).rows))
   if (r.sinConexion) return { error: 'El ERP no está conectado (falta DATABASE_URL en Vercel)' }
   return r
+}
+
+/**
+ * Las prendas del ticket que el libro ⛔ cubre en `deposito` (`lib/caja/pin-venta.core.js`). Sin poder leerlo devuelve `{ error }`.
+ * @returns {Promise<any[] | { error: string }>} ⛔ Lanza.
+ */
+export async function faltanEnElLibro(store, linea, deposito, renglones) {
+  const r = await conMotor(store, async (db) => {
+    const niveles = new Map()
+    for (const v of renglones) {
+      const clave = `${Number(v.product_id)}:${Number(v.size_id)}`
+      if (niveles.has(clave)) continue
+      const { rows } = await db.query(SQL_STOCK_VARIANTE_LIBRO, [String(v.product_id), String(v.size_id), String(linea)])
+      niveles.set(clave, stockDeVarianteLibro(rows)[deposito] ?? 0)
+    }
+    return { faltan: prendasQueFaltan(renglones, (p, s) => niveles.get(`${p}:${s}`) ?? 0) }
+  })
+  if (r.sinConexion) return { error: 'El ERP no está conectado (falta DATABASE_URL en Vercel)' }
+  return r.error ? { error: r.error } : r.faltan
+}
+
+/**
+ * El PIN de la encargada para vender sin stock: `{ autoriza }` armado ACÁ (⛔ se acepta uno que venga del navegador) o `{ status, error }`.
+ * @returns {Promise<{ autoriza: { usuario: string, motivo: 'pin_encargada' } } | { status: number, error: string }>} ⛔ Lanza.
+ */
+export async function autorizarPinDeVenta(store, persona, pin) {
+  const quien = String(persona ?? '').trim().toLowerCase()
+  if (!quien || quien.length > 100 || typeof pin !== 'string') return { status: 400, error: 'Elegí a la encargada y escribí su PIN.' }
+  const r = await conMotor(store, async (db) => {
+    const { verificarPin } = await import('../motor/stock/pin.mjs')
+    return verificarPin(db, { usuario: quien, pin })
+  })
+  if (r.sinConexion || (r.error && typeof r.error === 'string')) return { status: 503, error: 'No se pudo probar el PIN: la venta NO se guardó. Probá de nuevo en un momento.' }
+  if (r.error) return { status: 403, error: r.error.mensaje }
+  return { autoriza: { usuario: r.usuario, motivo: 'pin_encargada' } }
 }
 
 /**

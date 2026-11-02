@@ -143,6 +143,9 @@ const post = <T>(body: Record<string, unknown>, fallo: string) =>
     body: JSON.stringify({ recurso: 'caja', store: storeCaja(), deposito: puestoCaja(), ...body }),
   }).then((r) => leer<T>(r, fallo))
 
+/** Lo que `confirmar` rebota con `sinStock`: las prendas que el ERP da sin stock. La venta ⛔ se guardó. */
+export type PrendaSinStock = { product_id: number; size_id: number; nombre: string | null; talle: string | null; hay: number; pide: number }
+
 export const leerConfig = () => get<Config>('action=config', 'No se pudo leer la configuración de la Caja.')
 export const leerCuentas = () => get<{ cuentas: CuentaGN[] }>('action=referencias', 'No se pudieron leer las cuentas de cobro.')
 export const buscarProducto = (codigo: string) => get<Producto>(`action=producto&codigo=${encodeURIComponent(codigo)}`, 'No se pudo buscar la prenda.')
@@ -254,7 +257,7 @@ export type PagoConfirmar = { cuenta: number; base?: number }
 /** `reintentable` sólo importa si la venta quedó en `error`. */
 export type Resultado = { venta: Venta; reintentable?: boolean }
 
-export const confirmarVenta = (v: { id: string; items: ItemConfirmar[]; pagos: PagoConfirmar[]; total: number; descuentoVenta: Rebaja | null; email: string | null; pagaCon: number | null }) =>
+export const confirmarVenta = (v: { id: string; items: ItemConfirmar[]; pagos: PagoConfirmar[]; total: number; descuentoVenta: Rebaja | null; email: string | null; pagaCon: number | null; encargada?: { persona: string; pin: string } }) =>
   post<Resultado>({ action: 'confirmar', ...v }, 'No se pudo confirmar la venta.')
 
 /** Un pago de MP que puede ser el de la venta. ⛔ Trae datos de quien pagó. */

@@ -78,6 +78,7 @@ import {
   type Candidato,
   type Config,
   type ListaNombre,
+  type PrendaSinStock,
   type ProductoLista,
   type Medio,
   type PedidosWeb,
@@ -93,6 +94,7 @@ import {
 import { BandaCambio, ModalCobroCambio, ModalEncargada, ModalVentaOriginal, PedidoCambio } from '@/components/caja/partesCambio'
 import { useCambio } from '@/components/caja/useCambio'
 import { FranjaPuesto } from '@/components/caja/FranjaPuesto'
+import { ModalSinStock } from '@/components/caja/ModalSinStock'
 import { Badge, Button, Card, Field, Icono, Input, Modal, Notice, SectionCard, color, font, radius, shadow, space, weight } from '@/components/ui'
 import { useConfirmar } from '@/components/ui/Confirm'
 import { ModalVarianteContext } from '@/components/ui/Modal'
@@ -420,6 +422,7 @@ function POS() {
   const [pasoCambio, setPasoCambio] = useState<1 | 2>(1)
   const [verVentaOriginal, setVerVentaOriginal] = useState(false)
   const [pidePin, setPidePin] = useState(false)
+  const [sinStock, setSinStock] = useState<{ faltan: PrendaSinStock[]; error: string | null } | null>(null)
   const [cobrandoCambio, setCobrandoCambio] = useState(false)
   const salirDelCambio = () => {
     cambio.empezarDeNuevo()
@@ -877,7 +880,7 @@ function POS() {
     setRegalo(false)
   }
 
-  async function confirmar() {
+  async function confirmar(encargada?: { persona: string; pin: string }) {
     if (!c) return
     setEnviando(true)
     setAviso(null)
@@ -893,7 +896,9 @@ function POS() {
         descuentoVenta: descuentoManual,
         email: bor.email.trim() || null,
         pagaCon: enEfectivo > 0 ? pagaConN : null,
+        ...(encargada ? { encargada } : {}),
       })
+      setSinStock(null)
       // La venta quedó guardada (en GN, pendiente o esperando la transferencia): el carrito se cierra y nace otro id.
       setBor({ id: nuevoId(), renglones: [], email: '', descuentoVenta: null })
       limpiarCobro()
@@ -919,6 +924,12 @@ function POS() {
     } catch (e) {
       // ⛔ se renueva el id: el reintento tiene que llevar el MISMO, por si GN ya la tiene.
       avisar('no')
+      // El ERP da sin stock alguna prenda (⛔ se guardó nada): la ventana del PIN, con el error si fue un PIN mal puesto.
+      const rebote = (e as { datos?: { sinStock?: boolean; faltan?: PrendaSinStock[] } }).datos
+      if (rebote?.sinStock) {
+        setSinStock({ faltan: rebote.faltan ?? [], error: encargada ? (e as Error).message : null })
+        return
+      }
       // 🔴 A1: con este id ya se cobró OTRO pedido (la respuesta se había perdido). La cobrada pasa a
       // «Última venta» para reimprimir, y el carrito de ahora queda con un id nuevo: si es otra venta, se cobra.
       const yaCobrada = (e as { datos?: { yaCobrada?: boolean; venta?: Venta } }).datos
@@ -1172,7 +1183,7 @@ pendientes
                     Regalo
                   </Button>
 )}
-                  <Button size="lg" tone="success" variant="solid" disabled={!puedeConfirmar} loading={enviando} onClick={confirmar} iconLeft={<Icono nombre="check" />}>
+                  <Button size="lg" tone="success" variant="solid" disabled={!puedeConfirmar} loading={enviando} onClick={() => { void confirmar() }} iconLeft={<Icono nombre="check" />}>
                     {porTransferencia ? 'Validar transferencia' : 'Finalizar venta'} {c ? plata(c.total) : ''}
                   </Button>
                 </>
@@ -1523,6 +1534,15 @@ pendientes
         />
       )}
       {cobrandoCambio && <ModalCobroCambio c={cambio} onCerrar={() => setCobrandoCambio(false)} />}
+      {sinStock && (
+        <ModalSinStock
+          faltan={sinStock.faltan}
+          error={sinStock.error}
+          enviando={enviando}
+          onCerrar={() => setSinStock(null)}
+          onAutorizar={(encargada) => { void confirmar(encargada) }}
+        />
+      )}
     </>
   )
 

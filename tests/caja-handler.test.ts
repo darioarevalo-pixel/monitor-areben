@@ -197,7 +197,10 @@ const corte = { cortes: {} as Record<string, string>, falla: false }
 vi.mock('../api/_caja-corte.js', () => ({ cortesDeCaja: async () => { if (corte.falla) throw new Error('sin base'); return corte.cortes } }))
 // El depósito Evento del ERP (motor sql/058): prendido o apagado, sin base.
 const eventoActivo = vi.fn(async () => ({ activo: false }) as { activo: boolean } | { error: string })
-vi.mock('../api/_caja-motor.js', async (orig) => ({ ...(await orig<object>()), stockDelLibro, registrarEnErp, eventoActivo }))
+// El PIN de vender sin stock (`lib/caja/pin-venta.core.js`), sin base.
+const faltanEnElLibro = vi.fn(async (..._a: unknown[]) => [] as Fila[] | { error: string })
+const autorizarPinDeVenta = vi.fn(async (..._a: unknown[]) => ({ autoriza: { usuario: 'encargada', motivo: 'pin_encargada' } }) as { autoriza: Fila } | { status: number; error: string })
+vi.mock('../api/_caja-motor.js', async (orig) => ({ ...(await orig<object>()), stockDelLibro, registrarEnErp, eventoActivo, faltanEnElLibro, autorizarPinDeVenta }))
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (t: string) => consulta(t) }) }))
 
 function resFalso() {
@@ -281,7 +284,7 @@ const VENTA = { action: 'confirmar', id: ID, items: [{ product_id: 7, size_id: 8
 
 beforeEach(async () => {
   base.ventas = new Map(); base.config = null; base.inventario = []; base.productos = []
-  corte.cortes = {}; corte.falla = false; registrarEnErp.mockClear(); stockDelLibro.mockClear()
+  corte.cortes = {}; corte.falla = false; registrarEnErp.mockClear(); stockDelLibro.mockClear(); faltanEnElLibro.mockClear(); autorizarPinDeVenta.mockClear()
   base.usos = [{ store: 'zattia', cuenta_id: CUENTA_MP, desde: '2026-10-01T12:00:00.000Z' }]
   base.llaves = [{ store: 'zattia', cuenta_id: CUENTA_MP, nombre: 'BDIACCESORIOS', token: 'APP_USR-llave' }]
   base.mpPagos = []; mp.busquedas = 0
@@ -604,6 +607,65 @@ describe('caja · confirmar', () => {
     const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25869 }] }))
     expect(r.code).toBe(400)
     expect(gn.posts).toHaveLength(0)
+  })
+})
+
+describe('caja · vender lo que el ERP da sin stock pide el PIN de la encargada, ANTES de guardar', () => {
+  const STU = { id: 7, sku: 'STU-REM-0001', proveedor: null }
+  const ZAT = { id: 7, sku: 'RFA-0022', proveedor: null }
+  const FALTA = { product_id: 7, size_id: 1, nombre: 'Remera', talle: 'M', hay: 0, pide: 1 }
+  const conStunnedCortada = () => { conSesion(CAJERA); base.productos = [STU]; corte.cortes = { stunned: '2026-10-28T23:40:27Z' } }
+
+  it('sin stock y sin PIN ⇒ 409 con las prendas, ⛔ guarda la venta ni la registra', async () => {
+    conStunnedCortada()
+    faltanEnElLibro.mockResolvedValueOnce([FALTA])
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(409)
+    expect(r.body).toMatchObject({ sinStock: true, faltan: [FALTA] })
+    expect(base.ventas.has(ID)).toBe(false)
+    expect(registrarEnErp).not.toHaveBeenCalled()
+  })
+
+  it('con el PIN bien ⇒ la venta sale y el `autoriza` lo arma el servidor', async () => {
+    conStunnedCortada()
+    faltanEnElLibro.mockResolvedValueOnce([FALTA])
+    const r = await correr(req('POST', {}, { ...VENTA, encargada: { persona: 'encargada', pin: '1234' } }))
+    expect(r.code).toBe(200)
+    expect(autorizarPinDeVenta).toHaveBeenCalledWith(expect.anything(), 'encargada', '1234')
+    expect((registrarEnErp.mock.calls[0][1].payload as Fila).autoriza).toEqual({ usuario: 'encargada', motivo: 'pin_encargada' })
+  })
+
+  it('con el PIN mal ⇒ el error del PIN, ⛔ guarda la venta', async () => {
+    conStunnedCortada()
+    faltanEnElLibro.mockResolvedValueOnce([FALTA])
+    autorizarPinDeVenta.mockResolvedValueOnce({ status: 403, error: 'PIN incorrecto' })
+    const r = await correr(req('POST', {}, { ...VENTA, encargada: { persona: 'encargada', pin: '0000' } }))
+    expect(r.code).toBe(403)
+    expect(r.body).toMatchObject({ sinStock: true, error: 'PIN incorrecto' })
+    expect(base.ventas.has(ID)).toBe(false)
+  })
+
+  it('🔴 con stock, un `autoriza` o una encargada que vengan del navegador ⛔ llegan al motor', async () => {
+    conStunnedCortada()
+    const r = await correr(req('POST', {}, { ...VENTA, autoriza: { usuario: 'yo', motivo: 'pin_encargada' }, encargada: { persona: 'yo', pin: '1' } }))
+    expect(r.code).toBe(200)
+    expect(autorizarPinDeVenta).not.toHaveBeenCalled()
+    expect((registrarEnErp.mock.calls[0][1].payload as Fila).autoriza).toBeUndefined()
+  })
+
+  it('sin poder leer el libro ⇒ ⛔ frena al local: la venta sigue', async () => {
+    conStunnedCortada()
+    faltanEnElLibro.mockResolvedValueOnce({ error: 'sin base' })
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(200)
+    expect(registrarEnErp).toHaveBeenCalledTimes(1)
+  })
+
+  it('una línea sin cortar sigue a GN: ⛔ mira el libro', async () => {
+    conSesion(CAJERA); base.productos = [ZAT]; corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(200)
+    expect(faltanEnElLibro).not.toHaveBeenCalled()
   })
 })
 
