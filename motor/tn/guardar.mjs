@@ -192,6 +192,22 @@ export async function guardarProductos(db, tienda, filas, variantes, leidoHasta)
   return pisados
 }
 
+/**
+ * La foto del stock de TN, con lo que el ENVÍO leyó en vivo (sql/070): `tn.mjs productos` ⛔ alcanza, lee por `updated_at` y el
+ * stock cambia sin moverlo. `entera`: se leyó la tienda completa ⇒ anota la hora (el puntual lee unos productos: ⛔ la anota).
+ * @param {Array<{variant_id:number, stock:number|null}>} filas @returns {Promise<number>} las variantes que cambiaron
+ */
+export async function guardarStockLeido(db, tienda, filas, { entera = false } = {}) {
+  const n = filas.length ? await db.run(
+    `update tn_variante v set stock = x.stock
+       from unnest($2::bigint[], $3::int[]) as x(variant_id, stock)
+      where v.tienda = $1 and v.variant_id = x.variant_id and v.stock is distinct from x.stock`,
+    [tienda, filas.map((f) => f.variant_id), filas.map((f) => f.stock)],
+  ) : 0
+  if (entera) await db.run('update tn_catalogo_lectura set stock_leido_en = now() where tienda = $1', [tienda])
+  return n
+}
+
 /** Las variantes guardadas de una tienda, con la fecha de alta de su producto. */
 export async function cargarVariantesTN(db, tienda) {
   return db.q(

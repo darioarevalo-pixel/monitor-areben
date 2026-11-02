@@ -58,7 +58,17 @@ export function planStockTN({ tienda, productos, indice, libro, gn, reservado = 
   // marcan y ⛔ se escriben (`aEscribir`).
   const repetidas = [...vistas.values()].filter((n) => n > 1).length
   for (const c of cambios) if (vistas.get(`${c.product_id}:${c.size_id}`) > 1) c.repetida = true
-  return { cuenta: { ...cuenta, repetidas }, cambios }
+  return { cuenta: { ...cuenta, repetidas }, cambios, leido: productos.flatMap((p) => (p.variants || []).map((tv) => ({ variant_id: Number(tv.id), stock: tv.stock == null ? null : Number(tv.stock) }))) }
+}
+
+/**
+ * Lo que Tienda Nube tiene después de un envío: lo leído en vivo, con lo recién escrito encima. Puro.
+ * @param {Array<{variant_id:number, stock:number|null}>} leido @param {Array<{variant_id:number, stock:number}>} escritas
+ */
+export function stockDespuesDelEnvio(leido = [], escritas = []) {
+  const m = new Map(leido.map((v) => [v.variant_id, v.stock]))
+  for (const v of escritas) m.set(v.variant_id, v.stock)
+  return [...m].map(([variant_id, stock]) => ({ variant_id, stock }))
 }
 
 /**

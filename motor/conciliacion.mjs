@@ -29,6 +29,7 @@
  * (la pantalla lo separa) para que mañana, si sigue, cuente el día.
  * `dias`: cuántos días seguidos esa clave viene sin cerrar (con el día anterior calculado, cualquiera sea la clase).
  */
+import { gnYaNoManda } from './depositos.mjs'
 import { DEVUELTA, PAGADA, varianteDeLineaTN } from './tn/cruce.mjs'
 import { DEPOSITOS_TN, nivelDe } from './tn/stock.mjs'
 
@@ -38,10 +39,10 @@ export const TIPOS_ML = ['stock_ml', 'pedido_ml']
 
 /** Las clases que ⛔ cierran, por tipo (la pantalla del monitor las nombra; una que ⛔ conoce la avisa). */
 export const CLASES = {
-  stock_tn: ['libro_aparte', 'tn_atrasado', 'gn_aparte', 'los_tres', 'sin_variante'],
+  stock_tn: ['libro_aparte', 'tn_atrasado', 'gn_aparte', 'los_tres', 'sin_variante', 'tn_distinto'],
   pedido_erp: ['falta_venta', 'no_entra', 'venta_anulada', 'venta_de_cancelada', 'total_distinto', 'en_vuelo'],
   pedido_gn: ['sin_venta', 'prendas_distintas', 'cancelada_con_venta', 'varias_ventas', 'venta_sin_orden', 'en_vuelo'],
-  stock_ml: ['libro_aparte', 'ml_atrasado', 'gn_aparte', 'los_tres', 'sin_variante', 'sin_sku'],
+  stock_ml: ['libro_aparte', 'ml_atrasado', 'gn_aparte', 'los_tres', 'sin_variante', 'sin_sku', 'ml_distinto'],
   pedido_ml: ['sin_venta', 'prendas_distintas', 'cancelada_con_venta', 'varias_ventas', 'venta_sin_orden'],
 }
 
@@ -78,11 +79,13 @@ export function variantesML(item) {
  * El stock de ML (las publicaciones ACTIVAS) contra el libro y GN, como `conciliarStockTN`. Una publicación FULL (el stock
  * está en el depósito de ML) ⛔ se compara: se cuenta. Sin SKU ⇒ `sin_sku`; con SKU que el ERP ⛔ conoce ⇒ `sin_variante`.
  * 🔴 ML ⛔ resta reservas como TN: el libro va entero.
+ * 🔴 Si la línea ya cortó (`cortes`, obligatorio), GN ⛔ es testigo: sólo ML contra el libro (como `conciliarStockTN`).
  */
-export function conciliarStockML({ items, indice, libro, gn, depositos = DEPOSITOS_ML }) {
+export function conciliarStockML({ items, indice, libro, gn, cortes, ahora = new Date(), depositos = DEPOSITOS_ML }) {
+  const sinGn = gnYaNoManda('bdi', ahora, cortes)
   const deLibro = nivelDe(libro, depositos)
   const deGN = nivelDe(gn, depositos)
-  const cuenta = { variantes: 0, full: 0, repetidas: 0, comparadas: 0, cierran: 0 }
+  const cuenta = { variantes: 0, full: 0, repetidas: 0, comparadas: 0, cierran: 0, ...(sinGn ? { sin_gn: true } : {}) }
   const filas = []
   const vistas = new Map()
   for (const item of items) {
@@ -102,8 +105,10 @@ export function conciliarStockML({ items, indice, libro, gn, depositos = DEPOSIT
       cuenta.comparadas++
       const ml = mv.stock
       const l = deLibro(v.product_id, v.size_id)
-      const g = deGN(v.product_id, v.size_id)
-      const clase = ml === l && ml === g ? null : l === g ? 'ml_atrasado' : ml === g ? 'libro_aparte' : l === ml ? 'gn_aparte' : 'los_tres'
+      const g = sinGn ? null : deGN(v.product_id, v.size_id)
+      const clase = sinGn
+        ? (ml === l ? null : 'ml_distinto')
+        : ml === l && ml === g ? null : l === g ? 'ml_atrasado' : ml === g ? 'libro_aparte' : l === ml ? 'gn_aparte' : 'los_tres'
       if (!clase) { cuenta.cierran++; continue }
       // `tn` = lo que muestra el CANAL (acá ML): la columna es la misma para los dos.
       filas.push({ tipo: 'stock_ml', clave, clase, product_id: Number(v.product_id), size_id: Number(v.size_id), sku: mv.sku, tn: ml, libro: l, reservado: 0, gn: g, detalle: { ...detalle, otras_ml: otras } })
@@ -150,13 +155,15 @@ const nombreTN = (p) => (p?.name && typeof p.name === 'object' ? p.name.es ?? Ob
  * `cuenta.comparadas` = variantes del ERP (⛔ de TN: un SKU repetido en TN es UNA) ⇒ el % es `cierran / comparadas`.
  * @returns {{ cuenta: object, filas: Array }}
  */
-export function conciliarStockTN({ tienda, productos, indice, libro, gn, reservado = new Map() }) {
+export function conciliarStockTN({ tienda, productos, indice, libro, gn, cortes, ahora = new Date(), reservado = new Map() }) {
   const deps = DEPOSITOS_TN[tienda]
   if (!deps) throw new Error(`tienda desconocida: ${tienda}`)
+  // 🔴 Una tienda que ya CORTÓ: GN ⛔ es testigo (se quedó donde estaba) ⇒ compararlo sólo da falso rojo. TN contra el libro.
+  const sinGn = gnYaNoManda(tienda, ahora, cortes)
   const variante = varianteDeLineaTN(indice)
   const deLibro = nivelDe(libro, deps)
   const deGN = nivelDe(gn, deps)
-  const cuenta = { variantes: 0, sin_limite: 0, repetidas: 0, comparadas: 0, cierran: 0 }
+  const cuenta = { variantes: 0, sin_limite: 0, repetidas: 0, comparadas: 0, cierran: 0, ...(sinGn ? { sin_gn: true } : {}) }
   const filas = []
   const vistas = new Map()
   for (const p of productos) {
@@ -179,8 +186,10 @@ export function conciliarStockTN({ tienda, productos, indice, libro, gn, reserva
       cuenta.comparadas++
       const res = reservado.get(clave) || 0
       const l = Math.max(0, deLibro(v.product_id, v.size_id) - res)
-      const g = deGN(v.product_id, v.size_id)
-      const clase = tn === l && tn === g ? null : l === g ? 'tn_atrasado' : tn === g ? 'libro_aparte' : l === tn ? 'gn_aparte' : 'los_tres'
+      const g = sinGn ? null : deGN(v.product_id, v.size_id)
+      const clase = sinGn
+        ? (tn === l ? null : 'tn_distinto')
+        : tn === l && tn === g ? null : l === g ? 'tn_atrasado' : tn === g ? 'libro_aparte' : l === tn ? 'gn_aparte' : 'los_tres'
       if (!clase) { cuenta.cierran++; continue }
       filas.push({ tipo: 'stock_tn', clave, clase, product_id: Number(v.product_id), size_id: Number(v.size_id), sku: tv.sku ?? v.sku ?? null,
         tn, libro: l, reservado: res, gn: g, detalle: { tn_product_id: Number(p.id), variant_id: Number(tv.id), otras_tn: otras } })
@@ -197,9 +206,11 @@ export function conciliarStockTN({ tienda, productos, indice, libro, gn, reserva
  * @param {object} p.plan     `planVentasTN` de esas órdenes (`registrar`, `anular`, `saltadas`)
  * @param {Map<string, {estado, total}>} p.ventas  venta del ERP por `origen_ref` (`tienda:tn_id`)
  * @param {object} p.cruce    `cruzar` de esas órdenes contra GN (`filas`, `venta_sin_orden`)
+ * @param {Record<string,string>} p.cortes  `erp_corte`, obligatorio: una tienda que ya cortó ⛔ se cruza con GN (sus pedidos ya ⛔ van ahí)
  * @param {Date} [p.ahora]
  */
-export function conciliarPedidosTN({ tienda, ordenes, plan, ventas, cruce, ahora = new Date(), vueloMs = VUELO_MS }) {
+export function conciliarPedidosTN({ tienda, ordenes, plan, ventas, cruce, cortes, ahora = new Date(), vueloMs = VUELO_MS }) {
+  const sinGn = gnYaNoManda(tienda, ahora, cortes)
   const porNumero = new Map(ordenes.map((o) => [String(o.numero), o]))
   const reciente = (o) => !!o?.pagada_en && ahora.getTime() - new Date(o.pagada_en).getTime() < vueloMs
   const filas = []
@@ -228,17 +239,17 @@ export function conciliarPedidosTN({ tienda, ordenes, plan, ventas, cruce, ahora
     else if (Math.abs(num(v.total) - num(o.total)) > 0.01) fila('pedido_erp', o, 'total_distinto', { venta_id: Number(v.id), total_erp: num(v.total) })
   }
 
-  // GN: el cruce de siempre.
-  for (const c of cruce.filas) {
+  // GN: el cruce de siempre, mientras la tienda ⛔ haya cortado.
+  for (const c of sinGn ? [] : cruce.filas) {
     if (!NO_CIERRA_GN.has(c.clase)) continue
     const o = porNumero.get(String(c.numero))
     if (!o) continue
     fila('pedido_gn', o, c.clase === 'sin_venta' && reciente(o) ? 'en_vuelo' : c.clase, { ventas_gn: c.ventas, ...(c.dif ? { dif: c.dif } : {}) })
   }
-  for (const s of cruce.venta_sin_orden || []) {
+  for (const s of sinGn ? [] : cruce.venta_sin_orden || []) {
     filas.push({ tipo: 'pedido_gn', clave: `gn:${s.venta}`, clase: 'venta_sin_orden', numero: String(s.numero), detalle: { venta_gn: s.venta, date_sale: s.date_sale } })
   }
-  return { cuenta: { pedidos: ordenes.length, ventas_erp: ventas.size, pagados: ordenes.filter((o) => PAGADA.has(o.payment_status) && o.status !== 'cancelled').length, ...contar(filas) }, filas }
+  return { cuenta: { ...(sinGn ? { sin_gn: true } : {}), pedidos: ordenes.length, ventas_erp: ventas.size, pagados: ordenes.filter((o) => PAGADA.has(o.payment_status) && o.status !== 'cancelled').length, ...contar(filas) }, filas }
 }
 
 /** Los días seguidos sin cerrar: `anteriores` = clave 'tipo|clave' → dias del día calculado anterior. */

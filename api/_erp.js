@@ -122,6 +122,7 @@ import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { estructuraDeMarca } from './_erp-estructura.js'
 import { configuracionDeMarcas, interruptoresDeMarcas, ponerInterruptorErp } from './_erp-interruptores.js'
 import { autorizarConPin, encargadasErp, pinesErp, ponerPinErp, quitarPinErp, verificarPinErp } from './_erp-pin.js'
+import { actividadTokenErp, crearTokenErp, editarTokenErp, probarTokenErp, regenerarTokenErp, revocarTokenErp, tokensErp } from './_erp-tokens.js'
 import { ponerRolesErp, restablecerRolesErp, rolesGuardadosDeMarcas, vistaRoles } from './_erp-permisos-rol.js'
 import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.js'
@@ -1785,6 +1786,17 @@ export default async function handler(req, res) {
       const f = { 'poner-pin': ponerPinErp, 'quitar-pin': quitarPinErp, 'verificar-pin': verificarPinErp }[body.accion]
       const r = await f({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error, codigo: r.codigo, hasta: r.hasta, quedan: r.quedan } : r)
+    }
+
+    if (req.method === 'GET' && (req.query.vista === 'tokens' || req.query.vista === 'token-actividad')) {
+      const r = req.query.vista === 'tokens' ? await tokensErp({}, { conMotor }) : await actividadTokenErp({ id: req.query.id }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+    if (req.method === 'POST' && (body.accion === 'token-crear' || body.accion === 'token-editar' || body.accion === 'token-regenerar' || body.accion === 'token-revocar' || body.accion === 'token-probar')) {
+      const f = { 'token-crear': crearTokenErp, 'token-editar': editarTokenErp, 'token-regenerar': regenerarTokenErp, 'token-revocar': revocarTokenErp, 'token-probar': probarTokenErp }[body.accion]
+      const r = await f({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
+      res.setHeader('Cache-Control', 'no-store')
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
     if (req.method === 'POST' && body.accion === 'poner-interruptor') {
