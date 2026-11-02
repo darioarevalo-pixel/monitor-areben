@@ -111,7 +111,7 @@ import { pidePinDeVenta } from '../lib/caja/pin-venta.core.js'
 import { errorDelPuesto, faltaColumnaDeposito, puestoDe } from '../lib/caja/puesto.core.js'
 import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { reglasDeHoy as reglasDeHoyDe } from './_caja-reglas.js'
-import { aplicarFormasDePago } from '../lib/caja/formas-pago.core.js'
+import { aplicarFormasDePago, cuentasDeReglas } from '../lib/caja/formas-pago.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
 import { anuladasEnGN, avisoDeCierre, cobrosDeERP, cobrosDeGN, diferencia, fotoDelCierre, recalcularCierre, puedeAnularMov, puedeMoverEfectivo, puedeUsarPOS, quienesSeEnteranDelCierre, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
 import { billetesDe, limpiarConteo, totalDeConteo } from '../lib/caja/conteo.core.js'
@@ -137,6 +137,7 @@ const cabeceras = (token) => ({ Authorization: `Bearer ${token}`, Accept: 'appli
 
 /** Las cuentas de GN POR MARCA (cada una es otra empresa en GN), cacheadas por instancia: cambian una vez por año. */
 const cacheCuentas = new Map()
+const FALTA_TOKEN_GN = 'Falta el token de Gestión Nube para escribir ventas.'
 
 // Los pedidos web se leen del audit de bdi-catalogo (el mismo de Envíos y Cobranzas) en TRAMOS de 3
 // días: el audit corta en 200 órdenes y 10 días de Zattia eran 240 (medido el 4-oct) ⇒ de un saque
@@ -184,7 +185,7 @@ const DIAS_COBROS_GN = 45
 let cacheCobrosGN = null
 /** Lo mismo para las anuladas en GN (A12): una lectura de `ventas/obtener` por día del turno. */
 let cacheAnuladas = null
-export const olvidarCobrosGN = () => { cacheCobrosGN = null; cacheAnuladas = null }
+export const olvidarCobrosGN = () => { cacheCobrosGN = null; cacheAnuladas = null; cacheCuentas.clear() }
 
 /**
  * Una lectura de GN para el turno. 🔴 GN corta a **2 consultas por segundo, COMPARTIDAS con la casa** (el
@@ -285,6 +286,20 @@ export default async function handler(req, res) {
       .select('banco, medio, beneficio, regla, desde, hasta, canales, marcas, activa').eq('activa', true)
     if (error) throw new Error('No se pudo leer la Agenda para ver la promo de crédito de hoy. Reintentar.')
     return promosDeCreditoEnMostrador(data || [], fechaLocal(new Date()), store).length > 0
+  }
+
+  /**
+   * Las cuentas para CONFIGURAR las formas de pago: las de GN. 🔑 Con TODAS las líneas de esta Caja en el ERP (`erp_corte`), si GN ⛔
+   * contesta (token revocado, GN apagado) valen las que ya están en las reglas; antes del corte, el error de siempre.
+   */
+  async function cuentasParaConfigurar() {
+    try {
+      return await cuentasGN()
+    } catch (e) {
+      const cortes = await cortesDeCaja(store).catch(() => null)
+      if (!cortes || !todoEnErp(cortes, store, new Date())) throw e
+      return cuentasDeReglas((await leerConfig()).reglas)
+    }
   }
 
   /** Las cuentas de GN (id y nombre), cacheadas por instancia. Lanza si GN ⛔ contesta. */
@@ -524,6 +539,8 @@ export default async function handler(req, res) {
   const enviar = async (fila) => {
     // 🔑 Stunned (26-oct): su ticket va al ERP, ⛔ a GN. `destino` queda en la fila, así un reintento no lo manda a GN.
     if (fila.destino === 'erp') return enviarVentaErp(fila, { sb, mailer, registrar: async (v) => registrarEnErp(store, { ...v, deposito: await depositoDeVenta(v) }) })
+    // 🔑 El token de GN se exige acá, sólo a lo que VA a GN: lo del ERP ⛔ lo usa, y el día de revocarlo la Caja sigue cobrando.
+    if (!token) throw new Error(FALTA_TOKEN_GN)
     const out = await enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token, mailer })
     const aviso = avisoDelMotor(await anotarEnMotor(store, out.venta).catch((e) => ({ error: e.message })), 'al mandar')
     if (aviso) console.warn(aviso)
@@ -595,7 +612,7 @@ export default async function handler(req, res) {
       if (accion === 'referencias') {
         let lista
         try {
-          lista = await cuentasGN()
+          lista = await cuentasParaConfigurar()
         } catch (e) {
           return res.status(502).json({ error: e.message })
         }
@@ -944,7 +961,7 @@ export default async function handler(req, res) {
         if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia las formas de pago.' })
         let lista
         try {
-          lista = await cuentasGN()
+          lista = await cuentasParaConfigurar()
         } catch (e) {
           return res.status(502).json({ error: e.message })
         }
@@ -1257,8 +1274,6 @@ export default async function handler(req, res) {
         return res.status(200).json({ turno: await conNumero(fix.data || up.data), cambioAlCerrar: true })
       }
 
-      if (!token) return res.status(500).json({ error: 'Falta el token de Gestión Nube para escribir ventas.' })
-
       if (accion === 'confirmar') {
         const id = String(b.id || '')
         if (!UUID.test(id)) return res.status(400).json({ error: 'id inválido: lo genera la pantalla (uuid).' })
@@ -1361,6 +1376,8 @@ export default async function handler(req, res) {
           return res.status(503).json({ error: 'No se pudo saber si esta marca ya vende por el ERP: la venta NO se guardó. Probá de nuevo en un momento.' })
         }
         if (aDonde.error) return res.status(400).json({ error: aDonde.error, mixto: true })
+        // Lo que va a GN sin su token ⛔ se guarda: la venta quedaría cobrada y sin salir.
+        if (aDonde.destino !== 'erp' && !token) return res.status(500).json({ error: FALTA_TOKEN_GN })
         const malPuesto = errorDelPuesto(turno, aDonde.destino)
         if (malPuesto) return res.status(400).json({ error: malPuesto })
         // 🔑 Lo que el ERP da sin stock pide el PIN de la encargada, ANTES de guardar (`lib/caja/pin-venta.core.js`). Sin poder leer el
@@ -1416,6 +1433,7 @@ export default async function handler(req, res) {
         const { pendientes } = await pendientesParaReintentar(sb, store, { corteMs: 2 * 60 * 1000, limite: REINTENTOS_POR_VUELTA, ahora: Date.now() })
         let llegaron = 0
         for (const v of pendientes) {
+          if (v.destino !== 'erp' && !token) continue // sin token de GN, ⛔ traba las del ERP que vienen atrás
           const { venta } = await enviar(v)
           if (venta && venta.estado === 'en_gn') llegaron++
         }

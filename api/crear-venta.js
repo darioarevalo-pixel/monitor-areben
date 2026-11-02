@@ -159,7 +159,8 @@ export default async function handler(req, res) {
   const cfg = SF_CFG[store];
   if (!cfg) return res.status(400).json({ error: 'No hay configuración de ventas para esta cuenta.' });
   const TOKEN = TOKENS[store];
-  if (!TOKEN) return res.status(500).json({ error: `Falta el token de ventas de GN para ${store} en el entorno.` });
+  // 🔑 El token se exige justo antes de ir a GN, ⛔ acá arriba: la falla, el canje y la solicitud de una línea cortada van al ERP y ⛔ lo usan.
+  const faltaToken = () => res.status(500).json({ error: `Falta el token de ventas de GN para ${store} en el entorno.` });
 
   // `exigirUsuario` acepta el header `x-monitor-auth` Y el user/pass del body: es estrictamente más
   // permisivo que el chequeo que había, así que los llamadores viejos siguen andando igual, y los
@@ -182,6 +183,7 @@ export default async function handler(req, res) {
     const ventaId = parseInt(b.ventaId, 10);
     if (!ventaId) return res.status(400).json({ error: 'ventaId inválido' });
     try {
+      if (!TOKEN) return faltaToken();
       const r = await gnFetch(`${GN_BASE}/ventas/${ventaId}`, { headers: { Authorization: `Bearer ${TOKEN}`, Accept: 'application/json' } });
       if (r.status === 404) return res.status(200).json({ ok: true, existe: false });
       const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = null; }
@@ -205,6 +207,7 @@ export default async function handler(req, res) {
       const fila = await leerRegistro(store, ventaId);
       if (!fila) return res.status(404).json({ error: `La venta ${ventaId} no está en el registro del monitor.` });
       if (fila.anulada_en) return res.status(200).json({ ok: true, ya: true, anulada_en: fila.anulada_en });
+      if (!TOKEN) return faltaToken();
       const r = await gnFetch(`${GN_BASE}/ventas/${ventaId}`, { headers: { Authorization: `Bearer ${TOKEN}`, Accept: 'application/json' } });
       let activa = null;
       if (r.status === 404) activa = false;
@@ -240,6 +243,7 @@ export default async function handler(req, res) {
     const store_id = cfg.store[origen];
 
     // 1) Reservar. Si otra corrida (u otra pestaña) ya la tomó, no se postea NADA.
+    if (!TOKEN) return faltaToken(); // antes de reservar: ⛔ queda la orden tomada en el registro
     let reserva;
     try {
       reserva = await reservarLedger(store, tnOrder, { usuario: perfil.name || perfil.user || null, items: its.length });
@@ -319,6 +323,7 @@ export default async function handler(req, res) {
     // El ENVÍO NO va a la venta de GN (queda solo en Monitor): el total de la venta = cobro de productos.
     payload.is_exchange = true;
     try {
+      if (!TOKEN) return faltaToken();
       const r = await gnFetch(`${GN_BASE}/ventas`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) });
       const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = t.slice(0, 500); }
       if (!r.ok) return res.status(r.status).json({ error: 'GN rechazó la venta del cambio', status: r.status, detalle: d });
@@ -422,6 +427,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    if (!TOKEN) return faltaToken();
     const r = await gnFetch(`${GN_BASE}/ventas`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) });
     const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = t.slice(0, 500); }
     if (!r.ok) return res.status(r.status).json({ error: 'GN rechazó la venta', status: r.status, detalle: d });

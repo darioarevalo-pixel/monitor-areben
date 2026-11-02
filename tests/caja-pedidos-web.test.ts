@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { avisoDeRenglon, claveSku, estaSinArmar, indicePorSku, pedidosSinArmar } from '@/lib/caja/pedidos-web.core.js'
+import { avisoDeRenglon, stockSinReservasWeb, claveSku, estaSinArmar, indicePorSku, pedidosSinArmar } from '@/lib/caja/pedidos-web.core.js'
 
 /**
  * Caja v2 · W1: los pedidos web sin armar (4-oct-2026). Órdenes REALES de Zattia leídas de
@@ -309,5 +309,46 @@ describe('caja · el aviso del renglón', () => {
 
   it('sin el stock o el carrito ⛔ adivina', () => {
     expect(() => avisoDeRenglon({ sku: 'RVE-0022-RO', local: null, deposito: 0, enCarrito: 1, porSku } as never)).toThrow()
+  })
+})
+
+describe('stockSinReservasWeb: desde el corte, el pedido sin pagar ⛔ bajó del libro', () => {
+  const sinPagar = { 'STU-1': [{ numero: 7, cantidad: 1, sinPagar: true }] }
+  const pagado = { 'STU-1': [{ numero: 7, cantidad: 1, sinPagar: false }] }
+  const base = { store: 'zattia', enEvento: false, sku: 'stu-1' }
+
+  it('🔴 el último par reservado online: la Caja avisa «si la vendés, queda sin stock», ⛔ «armá el pedido»', () => {
+    const libre = stockSinReservasWeb({ ...base, stock: { local: 1, deposito: 0, fuente: 'erp' }, porSku: sinPagar })
+    expect(libre).toEqual({ local: 0, deposito: 0 })
+    const a = avisoDeRenglon({ sku: 'STU-1', ...libre, enCarrito: 1, porSku: sinPagar })
+    expect(a?.tipo).toBe('sin_stock')
+    expect(a?.texto).toMatch(/Reservada online/)
+  })
+  it('con otra en el depósito: traerla del depósito', () => {
+    const libre = stockSinReservasWeb({ ...base, stock: { local: 1, deposito: 2, fuente: 'erp' }, porSku: sinPagar })
+    expect(avisoDeRenglon({ sku: 'STU-1', ...libre, enCarrito: 1, porSku: sinPagar })?.tipo).toBe('reponer')
+  })
+  it('lo PAGADO ya bajó del libro: ⛔ se resta dos veces', () => {
+    expect(stockSinReservasWeb({ ...base, stock: { local: 1, deposito: 0, fuente: 'erp' }, porSku: pagado })).toEqual({ local: 1, deposito: 0 })
+  })
+  it('antes del corte (GN ya lo descontó) ⇒ igual que hoy', () => {
+    for (const fuente of ['vivo', 'espejo']) expect(stockSinReservasWeb({ ...base, stock: { local: 1, deposito: 0, fuente }, porSku: sinPagar })).toEqual({ local: 1, deposito: 0 })
+  })
+  it('BDI vende online del Depósito Minorista: se le resta a ése', () => {
+    expect(stockSinReservasWeb({ ...base, store: 'bdi', stock: { local: 1, deposito: 3, fuente: 'erp' }, porSku: sinPagar })).toEqual({ local: 1, deposito: 2 })
+  })
+  it('en la caja del evento ⛔ se resta: TN ⛔ vende de ahí', () => {
+    expect(stockSinReservasWeb({ ...base, enEvento: true, stock: { local: 1, deposito: 0, fuente: 'erp' }, porSku: sinPagar })).toEqual({ local: 1, deposito: 0 })
+  })
+  it('una prenda que ⛔ está en ningún pedido queda igual', () => {
+    expect(stockSinReservasWeb({ ...base, sku: 'OTRA', stock: { local: 1, deposito: 0, fuente: 'erp' }, porSku: sinPagar })).toEqual({ local: 1, deposito: 0 })
+  })
+})
+
+describe('stockSinReservasWeb está enganchado al aviso del POS', () => {
+  it('el renglón del POS pasa el stock por acá antes del aviso', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('components/caja/CajaPOS.tsx', 'utf8')
+    expect(src).toMatch(/const libre = stockSinReservasWeb\(\{[^}]*stock, sku[^}]*\}\)\s*\n\s*return avisoDeRenglon\(\{ sku, \.\.\.libre,/)
   })
 })
