@@ -23,11 +23,11 @@ let host: HTMLDivElement
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); document.body.innerHTML = ''; vi.clearAllMocks(); vi.useRealTimers() })
 
-async function montar(tienda: 'bdi' | 'zattia' | 'stunned' = 'stunned') {
+async function montar(tienda: 'bdi' | 'zattia' | 'stunned' = 'stunned', alTerminar?: () => void) {
   const { EnviarStockTN } = await import('@/components/erp/stock/EnviarStockTN')
   const { ConfirmProvider } = await import('@/components/ui/Confirm')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<ConfirmProvider><EnviarStockTN tienda={tienda} /></ConfirmProvider>) })
+  await act(async () => { root = createRoot(host); root.render(<ConfirmProvider><EnviarStockTN tienda={tienda} alTerminar={alTerminar} /></ConfirmProvider>) })
   await act(async () => {})
 }
 const todo = () => document.body.textContent ?? ''
@@ -87,5 +87,43 @@ describe('Enviar el stock a Tienda Nube', () => {
     expect(leerEmpujesStock).toHaveBeenCalledTimes(2)
     expect(todo()).not.toContain('En cola')
     expect(boton().disabled).toBe(false)
+  })
+
+  it('si una lectura falla mientras espera, lo dice y sigue leyendo: al terminar se destraba y se va el error', async () => {
+    vi.useFakeTimers()
+    const enCola = env({ id: 2, estado: 'pendiente', seco: null, cambios: null, terminadoEn: null })
+    lista = [enCola, env({})]
+    await montar()
+    leerEmpujesStock.mockRejectedValueOnce(new TypeError('Load failed'))
+    await act(async () => { vi.advanceTimersByTime(10_000) })
+    await act(async () => {})
+    expect(todo()).toContain('No se pudieron leer los envíos de stock.')
+    expect(todo()).not.toContain('Load failed')
+    expect(boton().disabled).toBe(true)
+    lista = [env({ id: 2 }), env({})]
+    await act(async () => { vi.advanceTimersByTime(10_000) })
+    await act(async () => {})
+    expect(leerEmpujesStock).toHaveBeenCalledTimes(3)
+    expect(todo()).not.toContain('En cola')
+    expect(todo()).not.toContain('No se pudieron leer')
+    expect(boton().disabled).toBe(false)
+  })
+
+  it('avisa una sola vez cuando el envío termina; ⛔ avisa si al entrar no había ninguno esperando', async () => {
+    vi.useFakeTimers()
+    const alTerminar = vi.fn()
+    lista = [env({})]
+    await montar('stunned', alTerminar)
+    expect(alTerminar).not.toHaveBeenCalled()
+    act(() => root?.unmount())
+    lista = [env({ id: 2, estado: 'pendiente', seco: null, cambios: null, terminadoEn: null }), env({})]
+    await montar('stunned', alTerminar)
+    expect(alTerminar).not.toHaveBeenCalled()
+    lista = [env({ id: 2 }), env({})]
+    await act(async () => { vi.advanceTimersByTime(10_000) })
+    await act(async () => {})
+    expect(alTerminar).toHaveBeenCalledTimes(1)
+    await act(async () => { vi.advanceTimersByTime(30_000) })
+    expect(alTerminar).toHaveBeenCalledTimes(1)
   })
 })

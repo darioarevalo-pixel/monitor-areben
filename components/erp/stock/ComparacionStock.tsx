@@ -144,7 +144,7 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar }: { ajust
         <TileResumen tono={tonoDeConteo(res.deMenos)} titulo="Muestra de menos" valor={res.deMenos.toLocaleString('es-AR')} nota={res.uMenos ? `${res.uMenos.toLocaleString('es-AR')} u que se dejan de vender` : 'ninguna'} />
       </div>
 
-      <EnviarStockTN key={tiendaEnvio} tienda={tiendaEnvio} />
+      <EnviarStockTN key={tiendaEnvio} tienda={tiendaEnvio} alTerminar={() => setVuelta((n) => n + 1)} />
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />

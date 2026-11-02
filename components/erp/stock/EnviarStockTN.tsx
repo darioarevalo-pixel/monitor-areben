@@ -10,10 +10,12 @@
  * éxito. El monitor ⛔ sabe si la llave está prendida: lo dice el último envío (`seco`).
  * 🔴 Cuántas cambiarían lo dice el MOTOR (el último cálculo), ⛔ el «No coinciden» de la lista: ése cuenta también las que sólo
  * difieren de GN, y compara el ERP de AHORA contra lo que leyó el último envío.
- * Lo corre la cola en el minuto ⇒ mientras haya uno en cola o corriendo, la lista se vuelve a leer sola.
+ * Lo corre la cola en el minuto ⇒ mientras haya uno en cola o corriendo, la lista se vuelve a leer sola, también si una lectura
+ * falla (Bruno 2-nov: un «Load failed» dejaba el botón en «Enviando…» con el envío ya terminado). Al terminar avisa `alTerminar`:
+ * ese envío actualizó lo leído de Tienda Nube, y la lista de arriba tiene que volver a leerlo.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Notice, color, font, space, useConfirmar } from '@/components/ui'
 import type { Tone } from '@/components/ui/tokens'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
@@ -43,7 +45,7 @@ export function estadoDeEnvio(e: EmpujeStock): [Tone, string, string] {
   return ['success', 'Enviado', `${n(e.escritos ?? 0)} variantes cambiadas en Tienda Nube${quedan}.`]
 }
 
-export function EnviarStockTN({ tienda }: { tienda: TiendaErp }) {
+export function EnviarStockTN({ tienda, alTerminar }: { tienda: TiendaErp; alTerminar?: () => void }) {
   const { confirmar } = useConfirmar()
   const [envios, setEnvios] = useState<{ de: TiendaErp; lista: EmpujeStock[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -53,8 +55,8 @@ export function EnviarStockTN({ tienda }: { tienda: TiendaErp }) {
   useEffect(() => {
     let vivo = true
     leerEmpujesStock(tienda)
-      .then((d) => { if (vivo) setEnvios({ de: tienda, lista: d.empujes }) })
-      .catch((e) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudieron leer los envíos de stock.') })
+      .then((d) => { if (vivo) { setEnvios({ de: tienda, lista: d.empujes }); setError(null) } })
+      .catch(() => { if (vivo) setError('No se pudieron leer los envíos de stock.') })
     return () => { vivo = false }
   }, [tienda, vuelta])
 
@@ -64,7 +66,14 @@ export function EnviarStockTN({ tienda }: { tienda: TiendaErp }) {
     if (!esperando) return
     const t = setTimeout(() => setVuelta((v) => v + 1), RELEER_MS)
     return () => clearTimeout(t)
-  }, [esperando, lista])
+    // `vuelta`: cada lectura, buena o mala, arma la siguiente. Con sólo `lista`, una que falla ⛔ la cambia y se corta la cadena.
+  }, [esperando, lista, vuelta])
+
+  const estabaEsperando = useRef(false)
+  useEffect(() => {
+    if (estabaEsperando.current && !esperando) alTerminar?.()
+    estabaEsperando.current = esperando
+  }, [esperando, alTerminar])
 
   const nombre = TIENDA[tienda]
   // El último que terminó dice si la llave de esa tienda está prendida (el monitor ⛔ la ve).

@@ -48,6 +48,20 @@ async function montar() {
 const todo = () => document.body.textContent ?? ''
 
 describe('Comparación con TN y ML', () => {
+  it('cuando termina un envío de stock, la lista vuelve a leer sola lo nuevo de Tienda Nube', async () => {
+    vi.useFakeTimers()
+    try {
+      const envio = { id: 2, estado: 'pendiente', pedidoPor: 'boton:Bruno', avisos: 1, pedidoEn: '2026-10-20T12:00:00Z', terminadoEn: null, error: null, seco: null, cambios: null, unidades: null, escritos: null, quedan: null }
+      leerEmpujesStock.mockResolvedValueOnce({ empujes: [envio] } as never)
+      await montar()
+      expect(leerComparacion).toHaveBeenCalledTimes(1)
+      leerEmpujesStock.mockResolvedValueOnce({ empujes: [{ ...envio, estado: 'hecho', seco: false, cambios: 0, escritos: 0, terminadoEn: '2026-10-20T12:01:00Z' }] } as never)
+      await act(async () => { vi.advanceTimersByTime(10_000) })
+      await act(async () => {})
+      expect(leerComparacion).toHaveBeenCalledTimes(2)
+    } finally { vi.useRealTimers() }
+  })
+
   it('entra a «No coinciden» con la que muestra de más arriba y la diferencia con signo', async () => {
     await montar()
     const filas = [...document.querySelectorAll('[role="row"]')].map((r) => r.textContent ?? '').filter((t) => t.includes('TOP'))
