@@ -1,7 +1,7 @@
 // La traducción de la API de Ingresos a la forma del aviso, contra el normalizador real: es lo que garantiza que una OC
 // leída se guarde igual que una avisada. Y el handler: autorización, marcas sin token, seco, y que una falla ⛔ avance.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { aProcesar, desdeDe, eventoDeOc, idDeEvento, LECTURA_DESDE } from '@/lib/recepciones/lectura.core.js'
+import { aProcesar, desdeDe, eventoDeOc, idDeEvento, LECTURA_DESDE, mismaForma } from '@/lib/recepciones/lectura.core.js'
 import { normalizarEvento } from '@/lib/recepciones/webhook.core.js'
 
 const linea = (id: number, o: Record<string, unknown> = {}) => ({
@@ -64,8 +64,29 @@ describe('qué se lee', () => {
   })
 })
 
+describe('mismaForma: lo que se relee ⛔ duplica stock', () => {
+  const r = (sku: string) => ({ sku, codigo_barras: `B${sku}` })
+  it('mismos renglones en las mismas posiciones: pasa, aunque cambie el conteo', () => {
+    expect(mismaForma([r('A'), r('B')], [{ ...r('A'), cantidad_contada: 9 }, r('B')])).toBe(true)
+  })
+  it('sin SKU compara por código de barras', () => {
+    expect(mismaForma([{ sku: null, codigo_barras: 'X' }], [{ sku: '', codigo_barras: 'X' }])).toBe(true)
+  })
+  it('dos talles juntados en un renglón (OC-3031) ⛔ pasan', () => {
+    expect(mismaForma([r('A-S'), r('B'), r('A-M')], [r('A'), r('B')])).toBe(false)
+  })
+  it('otro SKU en la misma posición (OC-3035) ⛔ pasa', () => {
+    expect(mismaForma([r('RMU-1')], [r('RBLU-1')])).toBe(false)
+  })
+  it('los mismos SKU en otro orden ⛔ pasan', () => {
+    expect(mismaForma([r('A'), r('B')], [r('B'), r('A')])).toBe(false)
+  })
+})
+
 const procesar = vi.fn()
+const anotar = vi.fn()
 let eventos: { webhook_id: string; estado: string }[] = []
+let guardadas: { sku: string; codigo_barras: string }[] = []
 vi.mock('@/api/_recepciones-procesar.js', () => ({ procesarEvento: (x: unknown) => procesar(x) }))
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
@@ -74,6 +95,8 @@ vi.mock('@supabase/supabase-js', () => ({
         select: () => q, like: () => q, eq: () => q, order: () => q, limit: () => q,
         maybeSingle: async () => ({ data: null, error: null }),
         in: async () => ({ data: eventos, error: null }),
+        upsert: async (x: unknown) => { anotar(x); return { error: null } },
+        then: (ok: (v: unknown) => unknown) => ok({ data: guardadas, error: null }),
       }
       return q
     },
@@ -97,7 +120,7 @@ describe('el handler', () => {
   }
   let fetchMock: ReturnType<typeof vi.fn>
   beforeEach(() => {
-    vi.resetModules(); procesar.mockReset(); procesar.mockResolvedValue({ oc: 'x', lineas: 2 }); eventos = []
+    vi.resetModules(); procesar.mockReset(); procesar.mockResolvedValue({ oc: 'x', lineas: 2 }); anotar.mockReset(); eventos = []; guardadas = []
     vi.stubEnv('CRON_SECRET', 'c'); vi.stubEnv('SUPABASE_URL', 'https://e.supabase.co'); vi.stubEnv('SUPABASE_SERVICE_KEY', 'k')
     vi.stubEnv('INGRESOS_TOKEN_ZATTIA', 'igk_z'); vi.stubEnv('INGRESOS_TOKEN_BDI', '')
     fetchMock = vi.fn(async (url: string) => (url.includes('/purchase-orders/3050')
@@ -132,6 +155,20 @@ describe('el handler', () => {
     eventos = [{ webhook_id: 'api:zattia:3050:2026-10-29T12:06:07Z', estado: 'error' }]
     await llamar()
     expect(procesar).toHaveBeenCalledTimes(1)
+  })
+  it('una OC ya guardada que cambió de forma ⛔ se pisa, y queda anotada para no volver a pedirla', async () => {
+    guardadas = [{ sku: 'S-10', codigo_barras: 'B-10' }, { sku: 'S-99', codigo_barras: 'B-99' }, { sku: 'S-11', codigo_barras: 'B-11' }]
+    const r = await llamar()
+    expect(procesar).not.toHaveBeenCalled()
+    expect(anotar.mock.calls[0][0]).toMatchObject({ estado: 'ignorado', webhook_id: 'api:zattia:3050:2026-10-29T12:06:07.717723Z' })
+    expect(r.code).toBe(200)
+    expect(JSON.stringify(r.body)).toContain('para no duplicar stock')
+  })
+  it('una OC ya guardada con los mismos renglones se vuelve a guardar: el libro ajusta el conteo', async () => {
+    guardadas = [{ sku: 'S-10', codigo_barras: 'B-10' }, { sku: 'S-11', codigo_barras: 'B-11' }]
+    await llamar()
+    expect(procesar).toHaveBeenCalledTimes(1)
+    expect(anotar).not.toHaveBeenCalled()
   })
   it('un token rechazado contesta 502 con el código, ⛔ con el token', async () => {
     fetchMock.mockResolvedValue(resp({ status: 401, code: 'token_expired', detail: 'x' }, 401))

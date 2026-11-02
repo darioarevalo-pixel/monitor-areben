@@ -8,7 +8,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { cfgDelMonitor } from './_recepciones-base.js'
 import { procesarEvento } from './_recepciones-procesar.js'
-import { aProcesar, desdeDe, eventoDeOc, idDeEvento } from '../lib/recepciones/lectura.core.js'
+import { aProcesar, desdeDe, eventoDeOc, idDeEvento, mismaForma } from '../lib/recepciones/lectura.core.js'
+import { normalizarEvento } from '../lib/recepciones/webhook.core.js'
 
 const BASE = 'https://ingreso2.arebensrl.com/api/ext/v1'
 const MARCAS = [
@@ -56,12 +57,28 @@ async function yaProcesados(sb, ids) {
   return new Set((data || []).filter((f) => f.estado !== 'error').map((f) => f.webhook_id))
 }
 
+async function renglonesGuardados(sb, store, ocId) {
+  const { data, error } = await sb.from('recepcion_linea').select('sku, codigo_barras').eq('oc_ref', `${store}:${ocId}`).order('orden')
+  if (error) throw new Error(`recepcion_linea: ${error.message}`)
+  return data || []
+}
+
+/** La OC que cambió de forma ⛔ se guarda (ver `mismaForma`): queda anotada, y como `ignorado` ⛔ se vuelve a pedir. */
+async function anotarFrenada(sb, { store, oc, idEvento, payload, motivo }) {
+  const { error } = await sb.from('recepcion_evento').upsert({
+    webhook_id: idEvento, tipo: payload.type, store, oc_id: oc.id, payload, estado: 'ignorado', error: motivo,
+    enviado_en: oc.updated_at, recibido_en: new Date().toISOString(),
+  }, { onConflict: 'webhook_id' })
+  if (error) throw new Error(`recepcion_evento: ${error.message}`)
+  console.error(`[ingresos-lectura] ${store} ${oc.code}: ${motivo}`)
+}
+
 async function leerMarca({ sb, store, token, seco, hasta }) {
   const desde = desdeDe(await ultimoLeido(sb, store))
   const candidatas = aProcesar(await listar(desde, token))
   const ya = await yaProcesados(sb, candidatas.map((oc) => idDeEvento(store, oc)))
   const pendientes = candidatas.filter((oc) => !ya.has(idDeEvento(store, oc)))
-  const salida = { desde, vistas: candidatas.length, pendientes: pendientes.map((oc) => oc.code), guardadas: [] }
+  const salida = { desde, vistas: candidatas.length, pendientes: pendientes.map((oc) => oc.code), guardadas: [], frenadas: [] }
   if (seco) return salida
 
   for (const resumen of pendientes) {
@@ -69,8 +86,18 @@ async function leerMarca({ sb, store, token, seco, hasta }) {
     const oc = await pedir(`/purchase-orders/${resumen.id}`, token)
     // 🔴 Un token de otro negocio guardaría la OC en la marca equivocada.
     if (oc.business?.slug !== store) throw new Error(`el token de ${store} leyó una OC de ${oc.business?.slug}`)
+    const idEvento = idDeEvento(store, oc)
+    const payload = eventoDeOc(oc)
+    const guardadas = await renglonesGuardados(sb, store, oc.id)
+    const norm = normalizarEvento(payload)
+    if (guardadas.length && norm.ok && !mismaForma(guardadas, norm.lineas)) {
+      const motivo = `cambió de forma: ${guardadas.length} renglones guardados, ${norm.lineas.length} en Ingresos o con otro SKU. Se deja como estaba, para no duplicar stock.`
+      await anotarFrenada(sb, { store, oc, idEvento, payload, motivo })
+      salida.frenadas.push({ oc: oc.code, motivo })
+      continue
+    }
     // Una falla corta la marca: seguir adelantaría la hora de lectura y esta OC ⛔ se volvería a pedir.
-    const r = await procesarEvento({ sb, idEvento: idDeEvento(store, oc), payload: eventoDeOc(oc), enviadoEn: oc.updated_at })
+    const r = await procesarEvento({ sb, idEvento, payload, enviadoEn: oc.updated_at })
     salida.guardadas.push({ oc: oc.code, ...r })
   }
   return salida
