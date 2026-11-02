@@ -85,6 +85,17 @@ describe('POS (/pos)', () => {
     expect(document.querySelector('a[aria-label="Volver"]')?.getAttribute('href')).toBe('/caja')
   })
 
+  it('la caja del EVENTO (sólo Stunned, al ERP) dice «Conectado», ⛔ «Gestión Nube»; la del local, sí', async () => {
+    const local = await montar(<CajaPOS />)
+    expect(document.querySelector('.pos-gn')?.textContent).toBe('Gestión Nube')
+    expect(local).toContain('Escanear o buscar')
+    disco.set('caja-puesto', 'evento')
+    try {
+      await montar(<CajaPOS />)
+      expect(document.querySelector('.pos-gn')?.textContent).toBe('Conectado')
+    } finally { disco.delete('caja-puesto') }
+  })
+
   it('🔴 otra cuenta ⇒ «la abrió Sofi», sin escanear ni cobrar', async () => {
     sesion.perfil = { ...sesion.perfil, name: 'Ana', email: 'ana@zattia.com' }
     const t = await montar(<CajaPOS />)

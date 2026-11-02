@@ -90,6 +90,7 @@ import {
   type Venta,
   ventaLlego,
   numeroDeLaVenta,
+  puestoCaja,
 } from '@/lib/caja/cliente'
 import { BandaCambio, ModalCobroCambio, ModalEncargada, ModalVentaOriginal, PedidoCambio } from '@/components/caja/partesCambio'
 import { useCambio } from '@/components/caja/useCambio'
@@ -1043,7 +1044,9 @@ function POS() {
   const sinLlegar = pendientes.filter((v) => v.estado !== 'esperando_pago').length
   const rechazadas = pendientes.filter((v) => v.estado !== 'esperando_pago' && v.reintentable === false).length
   const gnOk = gnSenal ? gnSenal.ok : sinLlegar === 0
-  const gnPorque = gnSenal ? `Gestión Nube: ${gnSenal.que}.` : sinLlegar ? `Gestión Nube: ${sinLlegar} cobradas sin llegar.` : 'Gestión Nube: sin ventas pendientes.'
+  // 🔴 La caja del EVENTO sólo vende Stunned, al ERP: ahí ⛔ hay Gestión Nube que nombrar (Bruno 29-oct: «que sea conectado o algo así»).
+  const enEvento = puestoCaja() === 'evento'
+  const gnPorque = enEvento ? (sinLlegar ? `${sinLlegar} cobradas sin llegar al ERP.` : 'Sin ventas pendientes.') : gnSenal ? `Gestión Nube: ${gnSenal.que}.` : sinLlegar ? `Gestión Nube: ${sinLlegar} cobradas sin llegar.` : 'Gestión Nube: sin ventas pendientes.'
   const subtotalFilas = filas ? filas.reduce((s, f) => s + f.importe, 0) : null
 
 
@@ -1060,9 +1063,9 @@ pendientes
   const avisoSinLlegarJSX =
     sinLlegar > 0 && (
             <Notice tone="danger">
-              Cobradas sin llegar a Gestión Nube: {sinLlegar}.{' '}
+              Cobradas sin llegar a {enEvento ? 'el ERP' : 'Gestión Nube'}: {sinLlegar}.{' '}
               {rechazadas > 0
-                ? `${rechazadas === 1 ? 'Una la rechazó' : `${rechazadas} las rechazó`} Gestión Nube: revisar desde la pestaña Caja.`
+                ? `${rechazadas === 1 ? 'Una la rechazó' : `${rechazadas} las rechazó`} {enEvento ? 'el ERP' : 'Gestión Nube'}: revisar desde la pestaña Caja.`
                 : 'Se reintentan solas cada 3 min mientras el POS está abierto.'}
             </Notice>
     )
@@ -1591,7 +1594,7 @@ pendientes
               <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Caja {MARCA_CAJA.nombre}</span>
             </span>
             <span className={`pm-gn${gnOk ? '' : ' off'}`} title={gnPorque} role="status">
-              {gnOk ? 'Gestión Nube' : 'GN sin respuesta'}
+              {enEvento ? (gnOk ? 'Conectado' : 'Sin conexión') : gnOk ? 'Gestión Nube' : 'GN sin respuesta'}
             </span>
             <button type="button" className="pm-ic" onClick={() => setMenuMovil(true)} aria-label="Más opciones" title="Más opciones" style={{ height: 44 }}>
               <Icono nombre="puntos" size={22} />
@@ -1712,7 +1715,7 @@ pendientes
           caja abierta desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}
         </span>
         <span className={`pos-gn${gnOk ? '' : ' off'}`} title={gnPorque} role="status">
-          {gnOk ? 'Gestión Nube' : 'Gestión Nube sin respuesta'}
+          {enEvento ? (gnOk ? 'Conectado' : 'Sin conexión') : gnOk ? 'Gestión Nube' : 'Gestión Nube sin respuesta'}
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
           <button
