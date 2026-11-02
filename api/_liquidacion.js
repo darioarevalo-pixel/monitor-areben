@@ -65,7 +65,7 @@ import { lineaDelProducto } from '../lib/erp/precio.core.js';
 import { estadoDePedidos, hayQueRepedir, marcaDelPedido, vaPorErp } from '../lib/liquidacion/erp.core.js';
 import { lineasEnErp } from '../lib/erp/corte.core.js';
 import { cortesDeCaja } from './_caja-corte.js';
-import { eventosDePrecio, lineasDe, pedirAlErp, pedirRelectura } from './_liquidacion-erp.js';
+import { eventosDePrecio, lineasDe, lineasDeCampanias, pedirAlErp, pedirRelectura } from './_liquidacion-erp.js';
 // El diseño de la etiqueta de la campaña: qué va debajo del precio y de qué tamaño. Lista blanca,
 // porque esto se DIBUJA en un PDF y un objeto crudo del navegador se ve recién en la Zebra.
 import { etiquetaDeCampania } from '../lib/liquidacion/etiqueta.core.js';
@@ -158,6 +158,7 @@ function aCampania(row, conteo) {
     // El rótulo para el cliente, el que sale impreso en la etiqueta. Distinto de `nombre`, que es
     // el interno. Vacío es válido: la etiqueta sale sólo con el precio.
     nombreComercial: d.nombreComercial || null,
+    ocultaEnEtiquetas: !!d.ocultaEnEtiquetas,
     // Cómo se dibuja su etiqueta. Siempre completo, también para una campaña vieja que no lo tiene.
     etiqueta: etiquetaDeCampania(d.etiqueta),
     creadoPor: d.creadoPor || null,
@@ -522,13 +523,17 @@ export default async function handler(req, res) {
         const { data, error } = await supabase.from('liquidaciones').select('id, nombre, datos')
           .eq('store', store).in('estado', ESTADOS_CAMPANIA_VIVA).order('created_at', { ascending: false });
         if (error) throw new Error(error.message);
+        // 🔑 Bruno (2-nov-2026): las que ya no van las oculta quien las arma, para que el local ⛔ imprima un precio viejo.
+        const vivas = (data || []).filter((r) => !(r.datos || {}).ocultaEnEtiquetas);
+        const lineas = await lineasDeCampanias(store, vivas.map((r) => r.id), { leerTodo: (armar) => leerTodo(supabase, 'liquidacion_items', armar), lineaDelProducto });
         return res.status(200).json({
           ok: true,
-          campanias: (data || []).map((r) => ({
+          campanias: vivas.map((r) => ({
             id: r.id,
             nombre: r.nombre,
             desde: (r.datos || {}).desde || null,
             hasta: (r.datos || {}).hasta || null,
+            linea: lineas.get(r.id) ?? null,
           })),
         });
       }
@@ -959,6 +964,7 @@ export default async function handler(req, res) {
           ? d.nombreComercial || null
           : txtOrNull(String(b.nombreComercial || '').trim().slice(0, 40)),
         etiqueta: etiquetaDeCampania(b.etiqueta === undefined ? d.etiqueta : b.etiqueta),
+        ocultaEnEtiquetas: b.ocultaEnEtiquetas === undefined ? !!d.ocultaEnEtiquetas : b.ocultaEnEtiquetas === true,
       };
       const { error } = await supabase.from('liquidaciones')
         .update({ nombre, datos, updated_at: ahora }).eq('store', store).eq('id', id);

@@ -113,7 +113,7 @@ export async function crearCampania(
 export async function renombrarCampania(
   store: Marca,
   id: string,
-  cambios: { nombre?: string; tipo?: TipoCampania; desde?: string | null; hasta?: string | null; nota?: string | null; nombreComercial?: string | null },
+  cambios: { ocultaEnEtiquetas?: boolean; nombre?: string; tipo?: TipoCampania; desde?: string | null; hasta?: string | null; nota?: string | null; nombreComercial?: string | null },
 ): Promise<Liquidacion> {
   const d = await postear({ store, action: 'renombrar', id, ...cambios }, 'No se pudo guardar la campaña.')
   return d.campania as Liquidacion

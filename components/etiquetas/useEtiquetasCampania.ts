@@ -31,7 +31,7 @@ const API = '/api/datos?recurso=liquidacion'
 /** Un producto de la campaña, tal como sale de `preciosAEtiquetar`. */
 export type PrecioCampania = { pid: string; nombre: string; imagen: string | null; precio: number; lista: number | null; parte?: string | null; firme: boolean }
 
-export type CampaniaEti = { id: string; nombre: string; desde: string | null; hasta: string | null }
+export type CampaniaEti = { id: string; nombre: string; desde: string | null; hasta: string | null; linea?: string | null }
 
 /**
  * Cómo se imprime la etiqueta de esta campaña: el título de arriba y el diseño (qué va debajo del
@@ -61,8 +61,10 @@ export interface EstadoCampania {
   liqEfectivo: string
 }
 
-export function useEtiquetasCampania(marca: Marca, liq: string, activo = true): EstadoCampania {
-  const [campanias, setCampanias] = useState<CampaniaEti[]>([])
+export function useEtiquetasCampania(marca: Marca, liq: string, activo = true, linea?: string): EstadoCampania {
+  const [todas, setCampanias] = useState<CampaniaEti[]>([])
+  // Sin marca elegida (Reposición), todas. Una campaña que mezcla marcas (`linea: null`) se ve en las dos.
+  const campanias = useMemo(() => (linea ? todas.filter((c) => !c.linea || c.linea === linea) : todas), [todas, linea])
   const [items, setItems] = useState<PrecioCampania[]>([])
   const [rotulo, setRotulo] = useState<RotuloCampania | null>(null)
   const [cargando, setCargando] = useState(false)
@@ -80,7 +82,9 @@ export function useEtiquetasCampania(marca: Marca, liq: string, activo = true): 
     }
   }, [marca, activo])
 
-  const liqEfectivo = liq || (campanias.length === 1 ? campanias[0].id : '')
+  // Con marca elegida, la campaña guardada vale sólo si sigue en la lista: oculta o de la otra marca ⛔ se etiqueta.
+  const liqValido = linea ? (campanias.some((c) => c.id === liq) ? liq : '') : liq
+  const liqEfectivo = liqValido || (campanias.length === 1 ? campanias[0].id : '')
 
   const traerItems = useCallback(async () => {
     if (!activo || !liqEfectivo) {

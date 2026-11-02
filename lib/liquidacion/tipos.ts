@@ -122,6 +122,8 @@ export interface Liquidacion {
    * falla que no se ve hasta que las prendas están en la mesa.
    */
   nombreComercial?: string | null
+  /** La campaña ⛔ se ofrece en Etiquetas ni en Reposición (Bruno, 2-nov-2026: las viejas confunden al local). */
+  ocultaEnEtiquetas?: boolean
   /**
    * Cómo se dibuja la etiqueta de esta campaña: qué va **debajo** del precio (las condiciones del
    * evento — «EFECTIVO · TRANSFERENCIA») y de qué tamaño sale el número y el título.

@@ -187,7 +187,7 @@ export function Liquidacion() {
     if (abierta && campanias && !laAbierta) setAbierta('')
   }, [abierta, campanias, laAbierta, setAbierta])
 
-  async function guardarCampania(datos: { nombre: string; nombreComercial: string | null; etiqueta: EtiquetaCampania; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) {
+  async function guardarCampania(datos: { nombre: string; nombreComercial: string | null; ocultaEnEtiquetas: boolean; etiqueta: EtiquetaCampania; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) {
     try {
       if (editando === 'nueva') {
         const c = await crearCampania(marca, { id: nuevoIdLiquidacion(), ...datos })
@@ -1936,7 +1936,7 @@ function ModalCampania({
 }: {
   editando: Campania | 'nueva'
   onCerrar: () => void
-  onGuardar: (d: { nombre: string; nombreComercial: string | null; etiqueta: EtiquetaCampania; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) => Promise<void>
+  onGuardar: (d: { nombre: string; nombreComercial: string | null; ocultaEnEtiquetas: boolean; etiqueta: EtiquetaCampania; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) => Promise<void>
 }) {
   const esNueva = editando === 'nueva'
   const previa = editando === 'nueva' ? null : editando
@@ -1944,6 +1944,7 @@ function ModalCampania({
   const [nombre, setNombre] = useState(previa?.nombre || '')
   const [nombreComercial, setNombreComercial] = useState(previa?.nombreComercial || '')
   const [eti, setEti] = useState<EtiquetaCampania>(() => etiquetaDeCampania(previa?.etiqueta))
+  const [ocultaEnEtiquetas, setOcultaEnEtiquetas] = useState(!!previa?.ocultaEnEtiquetas)
   const [tipo, setTipo] = useState<TipoCampania>(tipoDe(previa))
   const [desde, setDesde] = useState(previa?.desde || '')
   const [hasta, setHasta] = useState(previa?.hasta || '')
@@ -1956,7 +1957,7 @@ function ModalCampania({
     if (!nombre.trim() || malLasFechas || guardando) return
     setGuardando(true)
     try {
-      await onGuardar({ nombre: nombre.trim(), nombreComercial: nombreComercial.trim() || null, etiqueta: eti, tipo, desde: desde || null, hasta: hasta || null, nota: nota.trim() || null })
+      await onGuardar({ nombre: nombre.trim(), nombreComercial: nombreComercial.trim() || null, ocultaEnEtiquetas, etiqueta: eti, tipo, desde: desde || null, hasta: hasta || null, nota: nota.trim() || null })
     } finally {
       setGuardando(false)
     }
@@ -2003,6 +2004,12 @@ function ModalCampania({
         </Field>
       </div>
       {malLasFechas && <Notice tone="danger">La fecha de fin es anterior a la de inicio.</Notice>}
+      {!esNueva && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: space[3] }}>
+          <input type="checkbox" style={{ accentColor: 'var(--mo-brand-solid)' }} checked={ocultaEnEtiquetas} onChange={(e) => setOcultaEnEtiquetas(e.target.checked)} />
+          Ocultar en Etiquetas y Reposición
+        </label>
+      )}
       <Field label="Nota" hint="Opcional: por qué se arma, qué se busca mover.">
         <Input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Bajar el stock de camperas antes de la temporada" />
       </Field>

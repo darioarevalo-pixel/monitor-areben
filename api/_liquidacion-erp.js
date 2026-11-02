@@ -97,6 +97,25 @@ export async function pedirRelectura(usuario, marca, deps = { conMotor }) {
  * product_id → línea, por los SKU del catálogo del MOTOR (`variante`; ⛔ el espejo de GN: `tests/espejo-puertas.test.ts`),
  * con la MISMA regla que la carga de precios del ERP (`lineaDelProducto`). Sólo Zattia tiene líneas adentro.
  */
+export async function lineasDeCampanias(store, ids, { leerTodo, lineaDelProducto }, deps = { conMotor }) {
+  if (store !== 'zattia' || !ids.length) return new Map();
+  try {
+    const filas = await leerTodo((q) => q.select('liq_id, pid').eq('store', store).in('liq_id', ids).order('liq_id').order('pid'));
+    const lineas = await lineasDe(store, [...new Set(filas.map((f) => String(f.pid)))], lineaDelProducto, deps);
+    const porCampania = new Map();
+    for (const f of filas) {
+      const l = lineas.get(String(f.pid));
+      const previa = porCampania.get(f.liq_id);
+      porCampania.set(f.liq_id, previa === undefined || previa === l ? l : null);
+    }
+    return porCampania;
+  } catch (e) {
+    // Sin saber la marca, la campaña se ve en las dos: esconderla dejaría al local sin poder etiquetarla.
+    console.warn(`[liquidacion] línea de las campañas: ${String((e && e.message) || e).slice(0, 120)}`);
+    return new Map();
+  }
+}
+
 export async function lineasDe(store, pids, lineaDelProducto, deps = { conMotor }) {
   if (store !== 'zattia') return new Map(pids.map((p) => [p, store]));
   const filas = await deps.conMotor('zattia', async (db) => (await db.query(

@@ -50,6 +50,8 @@ import type { Marca } from '@/lib/nav.datos'
 import { fmtHace } from '@/lib/resumen'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Badge, Button, Card, Lightbox, Notice, Select, Tabs, color, space, useConfirmar } from '@/components/ui'
+import { Chips } from '@/components/ui/FilterBar'
+import { lineaDelProducto } from '@/lib/erp/precio.core.js'
 
 const CAP = 500
 
@@ -99,12 +101,14 @@ export function Etiquetas() {
   // Las huérfanas (stock en `inventario`, producto todavía no en `productos`) vienen aparte del
   // ETL a propósito y hay que sumarlas acá: si no, un producto recién cargado en GN no se puede
   // etiquetar aunque su código de barras ya esté. Con `?? []` para los cachés viejos de IndexedDB.
+  // 🔑 Bruno (2-nov-2026): Zattia y Stunned se separan arriba de esta sección, sin un menú aparte para cada una.
+  const [linea, setLinea] = useState<'zattia' | 'stunned'>('zattia')
   const allVariantes = useMemo<VarianteEti[]>(
     () => [
       ...((datos?.allVariantes ?? []) as VarianteEti[]),
       ...((datos?.allVariantesHuerfanas ?? []) as VarianteEti[]).map((v) => ({ ...v, sinProducto: true })),
-    ],
-    [datos],
+    ].filter((v) => marca !== 'zattia' || lineaDelProducto('zattia', [v.sku]) === linea),
+    [datos, marca, linea],
   )
   const nuevosSinCatalogo = useMemo(() => new Set((datos?.allVariantesHuerfanas ?? []).map((v) => v.pid)).size, [datos])
   const vars = useMemo(() => variantesEtiquetables(allVariantes), [allVariantes])
@@ -394,6 +398,11 @@ export function Etiquetas() {
         </Notice>
       )}
 
+      {marca === 'zattia' && (
+        <div style={{ marginBottom: 12 }}>
+          <Chips opciones={[{ key: 'zattia', label: 'Zattia' }, { key: 'stunned', label: 'Stunned' }]} value={linea} onChange={setLinea} />
+        </div>
+      )}
       <Tabs
         items={PESTANIAS.map((p) => {
           const { emoji, nombre } = rotuloPestania(p)
@@ -419,7 +428,7 @@ export function Etiquetas() {
           {marca === 'zattia' && <EstantesEditor />}
         </>
       ) : sub === 'campania' ? (
-        <PrecioDeCampania vars={vars} marca={marca} />
+        <PrecioDeCampania vars={vars} marca={marca} linea={marca === 'zattia' ? linea : undefined} />
       ) : (
         <ModoPanel
           key={sub === 'cola' ? `cola:${filtroCampania}` : sub}
@@ -1053,7 +1062,7 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
 // contra el precio de Tienda Nube; sellar acá el precio de feria —que en TN ⛔ no está, porque la
 // prenda se oculta— marcaría las 1.282 como «desactualizadas» al instante. La feria ⛔ no es un
 // reetiquetado: es una etiqueta paralela que se saca cuando la feria termina.
-function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }) {
+function PrecioDeCampania({ vars, marca, linea }: { vars: VarianteEti[]; marca: Marca; linea?: 'zattia' | 'stunned' }) {
   const [liq, setLiq] = useState(() => lsGet(keyCampaniaLiq(marca), ''))
   const [copias, setCopias] = useState('1')
   const [conBarras, setConBarras] = useState(false)
@@ -1061,7 +1070,7 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
   const [feedback, setFeedback] = useState<{ ok: boolean; tono?: 'warn'; html: string } | null>(null)
   const [tirada, setTirada] = useState<Record<string, number>>(() => lsGet(keyCampaniaTirada(marca), {}))
   const scanRef = useRef<HTMLInputElement>(null)
-  const camp = useEtiquetasCampania(marca, liq)
+  const camp = useEtiquetasCampania(marca, liq, true, linea)
 
   useEffect(() => {
     lsSet(keyCampaniaLiq(marca), liq)
@@ -1158,7 +1167,7 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
     const n = Math.max(1, Math.min(50, Number(copias) || 1))
     const v = resolverScan(vars, code)
     if (!v) {
-      setFeedback({ ok: false, html: `✗ No se encontró ningún producto con el código «${code}».` })
+      setFeedback({ ok: false, html: `✗ No se encontró ningún producto con el código «${code}».${marca === 'zattia' ? ' Si es de la otra marca, cambiala arriba.' : ''}` })
       inp.focus()
       return
     }
@@ -1275,7 +1284,7 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
           Las dos causas son distintas y las dos tienen arreglo, así que se nombran. */}
       {!camp.cargando && camp.campanias.length === 0 ? (
         <Notice tone="warning" icon="🎪">
-          <b>No hay ninguna campaña para etiquetar en {marca === 'bdi' ? 'BDI' : 'Zattia'}.</b> Acá aparecen sólo las que están{' '}
+          <b>No hay ninguna campaña para etiquetar en {marca === 'bdi' ? 'BDI' : linea === 'stunned' ? 'Stunned' : 'Zattia'}.</b> Acá aparecen sólo las que están{' '}
           <b>en curso</b> o <b>aplicadas</b>: una campaña en <b>borrador</b> no entra, aunque ya tenga los precios decididos.
           Se cambia desde <b>Liquidación</b>. {marca === 'bdi' ? 'Ojo con el selector de marca de arriba: la feria es de Zattia.' : ''}
         </Notice>
