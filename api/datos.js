@@ -46,6 +46,7 @@ import prm from './_prm.js';
 import insumos from './_insumos.js';
 import modelos from './_modelos.js';
 import ocWebhook from './_oc-webhook.js';
+import ingresosLectura from './_ingresos-lectura.js';
 import acreedores from './_acreedores.js';
 import compromisos from './_compromisos.js';
 import cuentas from './_cuentas.js';
@@ -176,6 +177,8 @@ const RECURSOS = {
   // nombre al recurso apaga el envío por LAS DOS sin que falle nada acá (lo frena
   // tests/erp-ingreso-ruta.test.ts).
   'oc-webhook': ocWebhook,
+  // La lectura de la API de Ingresos, que reemplaza a ese aviso. Sin sesión: la llama el cron con CRON_SECRET.
+  'ingresos-lectura': ingresosLectura,
   // Las URLs de privacidad de la app de TN «Areben ERP» (sin sesión: las llama Tienda Nube). En el Partner
   // Portal van como `/api/datos?recurso=tn-erp&accion=store-redact` (y `customers-redact`, `customers-data-request`).
   'tn-erp': tnErp,
