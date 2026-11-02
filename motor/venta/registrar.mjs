@@ -130,12 +130,14 @@ export function sinNegativosEn(marca, env = process.env) {
 function frenarSinStock(armada, avisos, e) {
   const v = armada.venta
   const faltan = avisos.filter((a) => a.codigo === 'SIN_STOCK_EN_LIBRO')
-  if (!faltan.length || !mueveStock(v) || v.origen !== 'caja' || !sinNegativosEn(v.marca)) return null
+  if (!faltan.length || !mueveStock(v) || v.origen !== 'caja') return null
   const a = e?.autoriza
+  // Con la llave apagada también se anota: el freno de la Caja vive en el monitor (lo pide ANTES de guardar la venta) y el PIN llega acá.
   if (a?.motivo === 'pin_encargada' && typeof a.usuario === 'string' && a.usuario.trim()) {
     v.detalle = { ...v.detalle, contar: faltan.map(({ product_id, size_id, nivel }) => ({ product_id, size_id, nivel, autoriza: a.usuario.trim() })) }
     return null
   }
+  if (!sinNegativosEn(v.marca)) return null
   const n = faltan.length
   return { ok: false, error: { codigo: 'SIN_STOCK', mensaje: `El libro dice que ${n === 1 ? 'esa prenda no está' : `${n} prendas no están`} en ${v.deposito}: hace falta el PIN de la encargada`, campo: 'lineas', faltan } }
 }

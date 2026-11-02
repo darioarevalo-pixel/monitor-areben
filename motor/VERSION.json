@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "6566a0a58e51d7ad762c9fa9b91442ab4ca8f8bd",
-  "traido_en": "2026-11-01T22:05:13.490Z",
+  "commit": "0a466ed9013af40271789f6e86900a10e4276c93",
+  "traido_en": "2026-11-02T11:54:38.108Z",
   "archivos": {
     "alerta.mjs": "a34c920b5972553a630914482236843fcd4a7d0aad5f96bd810ff9a9b29d32ec",
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
@@ -31,7 +31,7 @@
     "ml/orden.mjs": "d326aa82f21fefded84824dd0f64a40e217a614a18f1408163c95a8005585f39",
     "ml/stock.mjs": "909e7e0316030c267113776018f8de2f2afc73d394c983d513ad9d7419c0385f",
     "ml/venta.mjs": "354987bacc0c70af09fb4cb1de0e47deda6053e102ad47f0faad5996979ef306",
-    "pedido/venta.mjs": "e83da5eecd7a29ba97d6733a64fa17871702e09af2b2dbe32053e2bc55b67895",
+    "pedido/venta.mjs": "6a6fefe66f178ce4c05b864a073730749ab8db2cdcc26d437da5fde9e596ab13",
     "stock/ajuste.mjs": "7b40b4a30fcafbfaa74cf28392f866201f130197dfa8b09054c17fe91e87d2c7",
     "stock/deposito.mjs": "1e0d9b5cc483f673264d072d8a1c866709347b8cd604b1745a056a86efce8b25",
     "stock/interruptores.mjs": "aa08ed1ff19812949617eddd01af87c08d907434256ea84258368173e715bb58",
@@ -66,7 +66,7 @@
     "venta/proveedor.mjs": "bdbfde6aa0749296f5ddc6723dfb3856ce9596ef75a75fac7b2715479dd6f061",
     "venta/redondeo-db.mjs": "56ef4b54d3159b5f62db3c6743c77c5fabe722a30a7c215f1bbb9b3302582c9e",
     "venta/redondeo.mjs": "5e06ed407a5aa5e5dc32f7bfdaff3d61d48b14f78a79bb0e8a8a448f68a22a13",
-    "venta/registrar.mjs": "2443f3f2d28c5753e081ea02c85906842a754bfc8ffcf78cb159fc381e94ffd0",
+    "venta/registrar.mjs": "c77313b2aec9432f24c990d107794da7aeedbfeb0460221f8a8204f75bc501a3",
     "venta/reglas-db.mjs": "b8d0bf468b3bd5f8bcb966367139025f7c17f0383201a2fc8e4519af9aa6ef50",
     "venta/reglas.mjs": "c356d1743ce274a52b77c11628e4510510e3661360fcb5f18efcca66f5540ad4"
   }

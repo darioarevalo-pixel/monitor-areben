@@ -24,6 +24,7 @@ import { redondeoDe } from '../venta/redondeo-db.mjs'
 import { pendienteDeVentas } from '../cuenta/cuenta.mjs'
 import { creditoDe } from '../cuenta/libro.mjs'
 import { leerCortes, ventaMayoristaReal } from '../llave-corte.mjs'
+import { clientePorWhatsapp } from '../venta/cliente.mjs'
 
 const q = async (db, sql, p = []) => (await db.query(sql, p)).rows
 const pesos = (x) => Math.round(Number(x) * 100) / 100
@@ -193,6 +194,25 @@ export async function entrarPedidoMayorista(db, e, { env = process.env } = {}) {
   return { ok: true, ya: !quedo, pedido: { id: p.id, numero: p.numero }, venta_id: r.venta.id, venta: r.venta, avisos: r.avisos ?? [] }
 }
 
+/**
+ * El pedido del catálogo ENTRA SOLO cuando se sabe de quién es (Darío §1: «todos los pedidos con ese número entran solos a ese
+ * cliente»; Bruno 30-oct: «entra y RESERVA»). Sólo desde el corte: antes la venta la registra la copia de GN. Un número que ⛔ se
+ * conoce, o con dos fichas, queda «sin entrar» y lo decide Darío en el panel (⛔ se adivina a quién le pertenece).
+ * Nunca tira por el dato del cliente: el pedido ya está guardado.
+ * @param {import('pg').ClientBase} db  @param {{ pedido_id: string, telefono?: string|null }} e  @param {{ env?: object }} [op]
+ * @returns {Promise<{ entro: boolean, motivo?: string, venta_id?: string }>}
+ */
+export async function entrarSiSeConoce(db, e, { env = process.env } = {}) {
+  const [p] = await q(db, 'select empresa_id, marca from pedido_mayorista where id = $1', [e?.pedido_id])
+  if (!p) return { entro: false, motivo: 'no_encontrado' }
+  if (!ventaMayoristaReal(p.marca, await leerCortes(db), env)) return { entro: false, motivo: 'sin_corte' }
+  const r = await clientePorWhatsapp(db, { empresa_id: p.empresa_id, whatsapp: e.telefono })
+  if (!r.ok) return { entro: false, motivo: 'numero_invalido' }
+  if (r.clientes.length !== 1) return { entro: false, motivo: r.clientes.length ? 'varias_fichas' : 'numero_desconocido' }
+  const entro = await entrarPedidoMayorista(db, { pedido_id: e.pedido_id, cliente_id: r.clientes[0].id, persona_id: r.persona?.id ?? null, usuario: 'catálogo' }, { env })
+  return entro.ok ? { entro: true, venta_id: entro.venta_id } : { entro: false, motivo: entro.error?.codigo ?? 'no_entro' }
+}
+
 /** El precio de la lista `mayorista` vigente de cada producto. */
 async function preciosMayoristas(db, marca, ids) {
   if (!ids.length) return new Map()
@@ -309,6 +329,80 @@ async function pagosDe(db, pedidos) {
     out.set(p.id, { pago, cuenta_habilitada: cuentaHabilitada, zona: zonaDeDespacho({ pago, cuentaHabilitada }) })
   }
   return out
+}
+
+/** Los momentos que marca Logística: la columna que escribe cada uno. */
+const MOMENTOS = Object.freeze({ empezo: 'preparacion_en', terminado: 'preparado_en', despachado: 'despachado_en' })
+
+/**
+ * Logística marca el pedido (Darío §2-§3). Idempotente: repetir un momento ⇒ `ya`, con la hora de la primera vez. Un momento
+ * posterior completa los anteriores que ⛔ llegaron (si «terminado» llega sin «empezó», igual ya no se puede cambiar el pedido).
+ * 🔴 EL FRENO del despacho vive acá (Darío §3): sin pagar y sin cuenta corriente ⛔ se despacha.
+ * @param {import('pg').ClientBase} db
+ * @param {{ marca: string, numero: number, evento: 'empezo'|'terminado'|'despachado', usuario: string, en?: Date }} e
+ */
+export async function marcarLogistica(db, e) {
+  const usuario = texto(e?.usuario)
+  if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién lo marca', 'usuario')
+  const columna = MOMENTOS[e?.evento]
+  if (!columna) return falla('ENTRADA_INVALIDA', 'El evento es empezo, terminado o despachado', 'evento')
+  return enTransaccion(db, async () => {
+    const [fila] = await q(db, 'select id from pedido_mayorista where marca = $1 and numero = $2', [e.marca, e.numero])
+    const p = fila ? await leerPedido(db, fila.id, { bloquear: true }) : null
+    if (!p) return falla('NO_ENCONTRADO', `No está el pedido ${e.numero}`, 'numero')
+    if (p.anulado_en) return falla('ANULADO', `El pedido ${p.numero} está anulado`)
+    if (!p.a_preparar_en) return falla('SIN_MANDAR', `El pedido ${p.numero} todavía no se mandó a preparar`)
+    if (p[columna]) return { ok: true, ya: true, pedido: { id: p.id, numero: p.numero }, etapa: etapaDe(p), en: p[columna] }
+    if (e.evento === 'despachado') {
+      const pago = (await pagosDe(db, [p])).get(p.id)
+      if (pago?.zona !== 'despacho') return falla('SIN_PAGAR', `El pedido ${p.numero} está sin pagar y el cliente no tiene cuenta corriente: va a Pendiente de pago`)
+    }
+    const en = e.en ?? new Date()
+    const orden = Object.values(MOMENTOS)
+    const hasta = orden.slice(0, orden.indexOf(columna) + 1)
+    const [u] = await q(db, `update pedido_mayorista set ${hasta.map((c) => `${c} = coalesce(${c}, $2)`).join(', ')} where id = $1 returning *`, [p.id, en])
+    await cambio(db, p, e.evento, usuario, foto(p))
+    return { ok: true, ya: false, pedido: { id: p.id, numero: p.numero }, etapa: etapaDe(u), en: u[columna] }
+  })
+}
+
+/**
+ * LA COLA de Logística: lo mandado a preparar y sin despachar, con lo que el depósito necesita. Se lee entera cada vez: la zona
+ * cambia sola cuando Darío carga un pago, sin que el pedido se toque. `cambio_en` = se cambió DESPUÉS de mandarse a preparar
+ * (el aviso al depósito). `anulados`: los mandados a preparar y anulados en los últimos 7 días, para sacarlos de la app.
+ * @param {import('pg').ClientBase} db  @param {{ marca: string }} e
+ */
+export async function colaDeLogistica(db, { marca }) {
+  const filas = (await q(db, `select p.*, c.nombre as cliente, w.nombre as persona from pedido_mayorista p
+      left join cliente c on c.id = p.cliente_id left join cliente_whatsapp w on w.id = p.persona_id
+    where p.marca = $1 and p.a_preparar_en is not null and p.despachado_en is null and p.anulado_en is null order by p.a_preparar_en`, [marca]))
+    .map((p) => ({ ...p, lineas: p.lineas ?? [], numero: Number(p.numero), total: Number(p.total) }))
+  const anulados = await q(db, `select numero, anulado_en from pedido_mayorista where marca = $1 and a_preparar_en is not null and anulado_en > now() - interval '7 days' order by anulado_en desc`, [marca])
+  const lineas = filas.flatMap((p) => p.lineas.filter((l) => l.size_id != null).map((l) => ({ ...l, deposito: p.deposito ?? DEPOSITO_MAYORISTA[marca] })))
+  const ids = [...new Set(lineas.map((l) => Number(l.product_id)))]
+  const variantes = ids.length ? await q(db, `select v.product_id, v.size_id, v.talle, v.sku, v.barcode, p.nombre from variante v join producto p on p.empresa_id = v.empresa_id and p.id = v.product_id where v.product_id = any($1::bigint[])`, [ids]) : []
+  const ubicaciones = ids.length ? await q(db, 'select deposito, product_id, size_id, texto from ubicacion where linea = $1 and product_id = any($2::bigint[])', [marca, ids]) : []
+  const variante = new Map(variantes.map((v) => [claveVar(v), v]))
+  const ubicacion = new Map(ubicaciones.map((u) => [`${u.deposito}:${claveVar(u)}`, u.texto]))
+  const pagos = await pagosDe(db, filas)
+  return {
+    ok: true,
+    anulados: anulados.map((a) => ({ numero: Number(a.numero), anulado_en: a.anulado_en })),
+    pedidos: filas.map((p) => {
+      const deposito = p.deposito ?? DEPOSITO_MAYORISTA[marca]
+      const pago = pagos.get(p.id)
+      return {
+        numero: p.numero, etapa: etapaDe(p), deposito, cliente: p.cliente ?? null, persona: p.persona ?? null, entrega: p.contacto?.entrega ?? null, notas: p.contacto?.obs ?? null,
+        a_preparar_en: p.a_preparar_en, preparacion_en: p.preparacion_en, preparado_en: p.preparado_en,
+        cambio_en: p.editado_en && new Date(p.editado_en) > new Date(p.a_preparar_en) ? p.editado_en : null,
+        total: p.total, pagado: pago?.pago.estado === 'pagado', falta: pago?.pago.falta ?? p.total, cuenta_corriente: pago?.cuenta_habilitada ?? false, zona: pago?.zona ?? 'pendiente_pago',
+        renglones: p.lineas.map((l) => {
+          const v = variante.get(claveVar(l))
+          return { product_id: Number(l.product_id), size_id: l.size_id == null ? null : Number(l.size_id), sku: v?.sku ?? null, barcode: v?.barcode ?? null, nombre: v?.nombre ?? null, talle: v?.talle ?? null, cantidad: Number(l.cantidad), ubicacion: ubicacion.get(`${deposito}:${claveVar(l)}`) ?? null }
+        }),
+      }
+    }),
+  }
 }
 
 /** El estado que se ve del pedido. */
