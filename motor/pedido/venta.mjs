@@ -352,17 +352,46 @@ export async function marcarLogistica(db, e) {
     if (!p) return falla('NO_ENCONTRADO', `No está el pedido ${e.numero}`, 'numero')
     if (p.anulado_en) return falla('ANULADO', `El pedido ${p.numero} está anulado`)
     if (!p.a_preparar_en) return falla('SIN_MANDAR', `El pedido ${p.numero} todavía no se mandó a preparar`)
-    if (p[columna]) return { ok: true, ya: true, pedido: { id: p.id, numero: p.numero }, etapa: etapaDe(p), en: p[columna] }
-    if (e.evento === 'despachado') {
-      const pago = (await pagosDe(db, [p])).get(p.id)
-      if (pago?.zona !== 'despacho') return falla('SIN_PAGAR', `El pedido ${p.numero} está sin pagar y el cliente no tiene cuenta corriente: va a Pendiente de pago`)
-    }
-    const en = e.en ?? new Date()
-    const orden = Object.values(MOMENTOS)
-    const hasta = orden.slice(0, orden.indexOf(columna) + 1)
-    const [u] = await q(db, `update pedido_mayorista set ${hasta.map((c) => `${c} = coalesce(${c}, $2)`).join(', ')} where id = $1 returning *`, [p.id, en])
-    await cambio(db, p, e.evento, usuario, foto(p))
-    return { ok: true, ya: false, pedido: { id: p.id, numero: p.numero }, etapa: etapaDe(u), en: u[columna] }
+    return marcarEsteMomento(db, p, e, usuario, columna)
+  })
+}
+
+/** El momento, sobre el pedido ya bloqueado. Dentro de una transacción. */
+async function marcarEsteMomento(db, p, e, usuario, columna) {
+  if (p[columna]) return { ok: true, ya: true, pedido: { id: p.id, numero: p.numero }, etapa: etapaDe(p), en: p[columna] }
+  if (e.evento === 'despachado') {
+    const pago = (await pagosDe(db, [p])).get(p.id)
+    if (pago?.zona !== 'despacho') return falla('SIN_PAGAR', `El pedido ${p.numero} está sin pagar y el cliente no tiene cuenta corriente: va a Pendiente de pago`)
+  }
+  const en = e.en ?? new Date()
+  const orden = Object.values(MOMENTOS)
+  const hasta = orden.slice(0, orden.indexOf(columna) + 1)
+  const [u] = await q(db, `update pedido_mayorista set ${hasta.map((c) => `${c} = coalesce(${c}, $2)`).join(', ')} where id = $1 returning *`, [p.id, en])
+  await cambio(db, p, e.evento, usuario, foto(p))
+  return { ok: true, ya: false, pedido: { id: p.id, numero: p.numero }, etapa: etapaDe(u), en: u[columna] }
+}
+
+/**
+ * EMPEZAR A PREPARAR con la versión que vio el depósito (`start-picking` de la API externa, contrato de Ger §4.2). El orden importa:
+ * lo despachado y lo anulado frenan siempre; lo ya empezado contesta `ya` ANTES de mirar la versión, porque empezar mueve
+ * `actualizado_en` y un reintento trae la de antes. Lo no mandado a preparar ⛔ se publica ⇒ `NO_ENCONTRADO`, como otro negocio.
+ * @param {import('pg').ClientBase} db
+ * @param {{ marca: string, numero: number, esperado: Date, usuario: string }} e
+ * @returns {Promise<{ ok: true, ya: boolean } | { ok: false, error: { codigo: 'NO_ENCONTRADO'|'ANULADO'|'DESPACHADO'|'VERSION', mensaje: string } }>}
+ */
+export async function empezarPreparacion(db, e) {
+  const usuario = texto(e?.usuario)
+  if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién lo marca', 'usuario')
+  return enTransaccion(db, async () => {
+    const [fila] = await q(db, 'select id from pedido_mayorista where marca = $1 and numero = $2 and a_preparar_en is not null', [e.marca, e.numero])
+    const p = fila ? await leerPedido(db, fila.id, { bloquear: true }) : null
+    if (!p) return falla('NO_ENCONTRADO', `No está el pedido ${e.numero}`, 'numero')
+    if (p.anulado_en) return falla('ANULADO', `El pedido ${p.numero} está anulado`)
+    if (p.despachado_en) return falla('DESPACHADO', `El pedido ${p.numero} ya se despachó`)
+    if (p.preparacion_en) return { ok: true, ya: true }
+    if (new Date(p.actualizado_en).getTime() !== e.esperado.getTime()) return falla('VERSION', `El pedido ${p.numero} cambió desde que se leyó: mirá cómo quedó antes de empezar`)
+    const r = await marcarEsteMomento(db, p, { evento: 'empezo' }, usuario, MOMENTOS.empezo)
+    return r.ok ? { ok: true, ya: false } : r
   })
 }
 
@@ -373,11 +402,17 @@ export async function marcarLogistica(db, e) {
  * @param {import('pg').ClientBase} db  @param {{ marca: string }} e
  */
 export async function colaDeLogistica(db, { marca }) {
-  const filas = (await q(db, `select p.*, c.nombre as cliente, w.nombre as persona from pedido_mayorista p
+  const filas = await q(db, `select p.*, c.nombre as cliente, w.nombre as persona from pedido_mayorista p
       left join cliente c on c.id = p.cliente_id left join cliente_whatsapp w on w.id = p.persona_id
-    where p.marca = $1 and p.a_preparar_en is not null and p.despachado_en is null and p.anulado_en is null order by p.a_preparar_en`, [marca]))
-    .map((p) => ({ ...p, lineas: p.lineas ?? [], numero: Number(p.numero), total: Number(p.total) }))
+    where p.marca = $1 and p.a_preparar_en is not null and p.despachado_en is null and p.anulado_en is null order by p.a_preparar_en`, [marca])
   const anulados = await q(db, `select numero, anulado_en from pedido_mayorista where marca = $1 and a_preparar_en is not null and anulado_en > now() - interval '7 days' order by anulado_en desc`, [marca])
+  const pedidos = (await armarParaLogistica(db, filas, marca)).map(({ anulado_en: _a, actualizado_en: _v, ...p }) => p)
+  return { ok: true, anulados: anulados.map((a) => ({ numero: Number(a.numero), anulado_en: a.anulado_en })), pedidos }
+}
+
+/** Las filas de `pedido_mayorista`, con lo que el depósito necesita: variante, ubicación, pago y zona. */
+async function armarParaLogistica(db, crudas, marca) {
+  const filas = crudas.map((p) => ({ ...p, lineas: p.lineas ?? [], numero: Number(p.numero), total: Number(p.total) }))
   const lineas = filas.flatMap((p) => p.lineas.filter((l) => l.size_id != null).map((l) => ({ ...l, deposito: p.deposito ?? DEPOSITO_MAYORISTA[marca] })))
   const ids = [...new Set(lineas.map((l) => Number(l.product_id)))]
   const variantes = ids.length ? await q(db, `select v.product_id, v.size_id, v.talle, v.sku, v.barcode, p.nombre from variante v join producto p on p.empresa_id = v.empresa_id and p.id = v.product_id where v.product_id = any($1::bigint[])`, [ids]) : []
@@ -385,24 +420,40 @@ export async function colaDeLogistica(db, { marca }) {
   const variante = new Map(variantes.map((v) => [claveVar(v), v]))
   const ubicacion = new Map(ubicaciones.map((u) => [`${u.deposito}:${claveVar(u)}`, u.texto]))
   const pagos = await pagosDe(db, filas)
-  return {
-    ok: true,
-    anulados: anulados.map((a) => ({ numero: Number(a.numero), anulado_en: a.anulado_en })),
-    pedidos: filas.map((p) => {
-      const deposito = p.deposito ?? DEPOSITO_MAYORISTA[marca]
-      const pago = pagos.get(p.id)
-      return {
-        numero: p.numero, etapa: etapaDe(p), deposito, cliente: p.cliente ?? null, persona: p.persona ?? null, entrega: p.contacto?.entrega ?? null, notas: p.contacto?.obs ?? null,
-        a_preparar_en: p.a_preparar_en, preparacion_en: p.preparacion_en, preparado_en: p.preparado_en,
-        cambio_en: p.editado_en && new Date(p.editado_en) > new Date(p.a_preparar_en) ? p.editado_en : null,
-        total: p.total, pagado: pago?.pago.estado === 'pagado', falta: pago?.pago.falta ?? p.total, cuenta_corriente: pago?.cuenta_habilitada ?? false, zona: pago?.zona ?? 'pendiente_pago',
-        renglones: p.lineas.map((l) => {
-          const v = variante.get(claveVar(l))
-          return { product_id: Number(l.product_id), size_id: l.size_id == null ? null : Number(l.size_id), sku: v?.sku ?? null, barcode: v?.barcode ?? null, nombre: v?.nombre ?? null, talle: v?.talle ?? null, cantidad: Number(l.cantidad), ubicacion: ubicacion.get(`${deposito}:${claveVar(l)}`) ?? null }
-        }),
-      }
-    }),
-  }
+  return filas.map((p) => {
+    const deposito = p.deposito ?? DEPOSITO_MAYORISTA[marca]
+    const pago = pagos.get(p.id)
+    return {
+      numero: p.numero, etapa: etapaDe(p), deposito, cliente: p.cliente ?? null, persona: p.persona ?? null, entrega: p.contacto?.entrega ?? null, notas: p.contacto?.obs ?? null,
+      a_preparar_en: p.a_preparar_en, preparacion_en: p.preparacion_en, preparado_en: p.preparado_en, anulado_en: p.anulado_en, actualizado_en: p.actualizado_en,
+      cambio_en: p.editado_en && new Date(p.editado_en) > new Date(p.a_preparar_en) ? p.editado_en : null,
+      total: p.total, pagado: pago?.pago.estado === 'pagado', falta: pago?.pago.falta ?? p.total, cuenta_corriente: pago?.cuenta_habilitada ?? false, zona: pago?.zona ?? 'pendiente_pago',
+      renglones: p.lineas.map((l) => {
+        const v = variante.get(claveVar(l))
+        return { product_id: Number(l.product_id), size_id: l.size_id == null ? null : Number(l.size_id), sku: v?.sku ?? null, barcode: v?.barcode ?? null, nombre: v?.nombre ?? null, talle: v?.talle ?? null, cantidad: Number(l.cantidad), ubicacion: ubicacion.get(`${deposito}:${claveVar(l)}`) ?? null }
+      }),
+    }
+  })
+}
+
+const ETAPA_SQL = `case when p.anulado_en is not null then 'anulado' when p.despachado_en is not null then 'despachado' when p.preparado_en is not null then 'preparado'
+  when p.preparacion_en is not null then 'en_preparacion' else 'a_preparar' end`
+
+/**
+ * Lo que Logística puede leer por la API externa: TODO lo mandado a preparar, también lo despachado y lo anulado, porque un consumidor
+ * que se atrasó tiene que poder enterarse (Ger §4.1). Lo no mandado ⛔ sale: el pedido todavía es de Darío.
+ * @param {import('pg').ClientBase} db
+ * @param {{ marca: string, numero?: number, etapa?: string|null, desde?: Date|null, limit: number, offset: number }} e
+ * @returns {Promise<{ total: number, pedidos: any[] }>}
+ */
+export async function pedidosDeLogistica(db, { marca, numero = null, etapa = null, desde = null, limit, offset }) {
+  const where = `p.marca = $1 and p.a_preparar_en is not null and ($2::bigint is null or p.numero = $2) and ($3::text is null or (${ETAPA_SQL}) = $3) and ($4::timestamptz is null or p.actualizado_en >= $4)`
+  const filtros = [marca, numero, etapa, desde]
+  const [{ total }] = await q(db, `select count(*)::int as total from pedido_mayorista p where ${where}`, filtros)
+  const filas = await q(db, `select p.*, c.nombre as cliente, w.nombre as persona from pedido_mayorista p
+      left join cliente c on c.id = p.cliente_id left join cliente_whatsapp w on w.id = p.persona_id
+    where ${where} order by p.numero desc limit $5 offset $6`, [...filtros, limit, offset])
+  return { total, pedidos: await armarParaLogistica(db, filas, marca) }
 }
 
 /** El estado que se ve del pedido. */
