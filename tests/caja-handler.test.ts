@@ -696,6 +696,80 @@ describe('caja · vender lo que el ERP da sin stock pide el PIN de la encargada,
   })
 })
 
+describe('caja · sin el token de GN: se frena sólo lo que VA a GN (el día de revocarlo)', () => {
+  const STU = { id: 7, sku: 'STU-REM-0001', proveedor: null }
+  const ZAT = { id: 7, sku: 'RFA-0022', proveedor: null }
+  const sinTokens = () => { delete process.env.GN_TOKEN_VENTAS; delete process.env.GN_TOKEN_ZATTIA }
+  const CORTES_TODO = { stunned: '2026-10-28T23:40:27Z', zattia: '2026-10-29T03:00:00Z' }
+  const gnApagado = () => {
+    const antes = globalThis.fetch
+    vi.stubGlobal('fetch', vi.fn(async (url: string, o?: unknown) => {
+      if (String(url).includes('/ventas/referencias')) throw new Error('GN apagado')
+      return (antes as (u: string, x?: unknown) => Promise<unknown>)(url, o)
+    }))
+  }
+
+  it('la línea cortada cobra sin token', async () => {
+    conSesion(CAJERA); sinTokens()
+    base.productos = [STU]
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(200)
+    expect(base.ventas.get(ID)).toMatchObject({ destino: 'erp', estado: 'en_erp' })
+    expect(gn.posts).toHaveLength(0)
+  })
+
+  it('🔴 lo que va a GN sin token ⇒ 500 y la venta ⛔ se guarda', async () => {
+    conSesion(CAJERA); sinTokens()
+    base.productos = [ZAT]
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(500)
+    expect(String(r.body?.error)).toMatch(/token de Gestión Nube/)
+    expect(base.ventas.size).toBe(0)
+    expect(gn.posts).toHaveLength(0)
+  })
+
+  it('🔴 sin token ⛔ se le pega a GN con «Bearer undefined» al reintentar una de GN', async () => {
+    conSesion(CAJERA); sinTokens()
+    base.ventas.set(ID, { id: ID, store: 'zattia', estado: 'error', reintentable: true, total: 100, renglones: [], pagos: [], payload: {}, intentos: 1, creada_en: new Date().toISOString() })
+    const r = await correr(req('POST', {}, { action: 'reintentar', id: ID }))
+    expect(r.code).toBe(500)
+    expect(gn.posts).toHaveLength(0)
+  })
+
+  it('🔴 reintentar pendientes sin token: la de GN ⛔ traba a la del ERP que viene atrás', async () => {
+    conSesion(CAJERA); sinTokens()
+    const viejo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    const comun = { store: 'zattia', estado: 'error', reintentable: true, total: 100, pagos: [], payload: {}, intentos: 1, creada_en: viejo, actualizada_en: viejo, turno_id: TURNO_ID }
+    base.ventas.set('11111111-1111-4111-8111-111111111111', { ...comun, id: '11111111-1111-4111-8111-111111111111', renglones: [] })
+    base.ventas.set('22222222-2222-4222-8222-222222222222', { ...comun, id: '22222222-2222-4222-8222-222222222222', destino: 'erp', renglones: [{ linea: 'stunned' }] })
+    const r = await correr(req('POST', {}, { action: 'reintentar-pendientes' }))
+    expect(r.code).toBe(200)
+    expect(gn.posts).toHaveLength(0)
+    expect(registrarEnErp).toHaveBeenCalledTimes(1)
+  })
+
+  it('formas de pago, con TODO cortado y GN sin contestar: valen las cuentas de las reglas', async () => {
+    conSesion(CAJERA); sinTokens()
+    corte.cortes = CORTES_TODO
+    gnApagado()
+    const r = await correr(req('GET', { action: 'referencias' }))
+    expect(r.code).toBe(200)
+    const cuentas = (r.body as { cuentas: Array<{ id: number; balance?: unknown }> }).cuentas
+    expect(cuentas.length).toBeGreaterThan(0)
+    expect(cuentas.some((c) => c.id === 12921)).toBe(true)
+  })
+
+  it('formas de pago, antes del corte y GN sin contestar: el 502 de siempre', async () => {
+    conSesion(CAJERA); sinTokens()
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
+    gnApagado()
+    const r = await correr(req('GET', { action: 'referencias' }))
+    expect(r.code).toBe(502)
+  })
+})
+
 describe('caja · a dónde va el ticket: por el CORTE de su línea (`erp_corte`), ⛔ por una llave (Bruno 31-oct)', () => {
   const STU = { id: 7, sku: 'STU-REM-0001', proveedor: null }
   const ZAT = { id: 7, sku: 'RFA-0022', proveedor: null }

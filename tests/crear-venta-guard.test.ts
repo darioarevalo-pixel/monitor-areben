@@ -160,3 +160,38 @@ describe('crear-venta: la forma del endpoint', () => {
     expect(aGN).toEqual([])
   })
 })
+
+describe('crear-venta sin el token de GN: se frena sólo lo que VA a GN', () => {
+  const FALLA = { store: 'bdi', origen: 'local', proposito: 'falla', items: [{ product_id: 1, size_id: 2, quantity: 1, unit_price: 100 }] }
+  const conSesion = { 'x-monitor-auth': sobre({ user: 'x', pass: 'p' }) }
+
+  it('🔴 la falla de una línea cortada va al ERP sin token', async () => {
+    vi.resetModules()
+    vi.stubEnv('GN_TOKEN_VENTAS_BDI', '')
+    vi.doMock('@/api/_salida-documento.js', () => ({
+      fallaAlErp: async () => ({ ajuste: 9, linea: 'bdi', ya: false }), canjeAlErp: async () => null, solicitudAlErp: async () => null, documentarCanje: async () => null,
+    }))
+    const { aGN } = redFalsa({ kvDiceQueSi: true })
+    const res = resFalso()
+    await (await traerHandler())({ method: 'POST', headers: conSesion, body: FALLA }, res)
+    vi.doUnmock('@/api/_salida-documento.js')
+    expect(res.code).toBe(200)
+    expect(res.body).toMatchObject({ erp: { ajuste: 9 } })
+    expect(aGN).toEqual([])
+  })
+
+  it('🔴 lo que sigue en GN sin token ⇒ 500, y ⛔ sale a GN', async () => {
+    vi.resetModules()
+    vi.stubEnv('GN_TOKEN_VENTAS_BDI', '')
+    vi.doMock('@/api/_salida-documento.js', () => ({
+      fallaAlErp: async () => null, canjeAlErp: async () => null, solicitudAlErp: async () => null, documentarCanje: async () => null,
+    }))
+    const { aGN } = redFalsa({ kvDiceQueSi: true })
+    const res = resFalso()
+    await (await traerHandler())({ method: 'POST', headers: conSesion, body: FALLA }, res)
+    vi.doUnmock('@/api/_salida-documento.js')
+    expect(res.code).toBe(500)
+    expect(String(res.body?.error)).toMatch(/token de ventas/)
+    expect(aGN).toEqual([])
+  })
+})
