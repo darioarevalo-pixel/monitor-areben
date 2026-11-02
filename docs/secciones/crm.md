@@ -1368,3 +1368,10 @@ corrige: https://claude.ai/artifact/FgX8oBCpvQY3u58zqqrTwE (si cambia, se cambia
   `escribir-en-chat`) que lo pegue en el cuadro; `content.js` lo rechaza si el chat abierto no es
   de la ficha (`otro-chat`), y `pagina.js` lo pega como un «pegar» (si no, `insertText`) y verifica
   que quedó. Con la extensión vieja queda copiado. ⏭️ Probarlo en WhatsApp real (chat propio).
+
+# ✅ 2-nov-2026 — «Número nuevo» también dice si está en la comunidad
+
+Antes la marca salía sólo en cliente y lead. Ahora `NumeroNuevo` recibe `marcaComunidad` y compara el
+número que muestra la pantalla (el del pedido si se llegó desde Logística; si no, el del chat).
+⚠️ Un participante que Darío no tiene agendado puede no traducirse a teléfono (`sinTraducir` en
+`extension/pagina.js`) y salir «No está»: en esta pantalla es más probable que en un cliente.

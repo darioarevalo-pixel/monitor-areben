@@ -1188,6 +1188,7 @@ function PanelInterno({
           tel={pedido ? telDelChat(pedido.tel) || pedido.tel : telNorm}
           clienteId={pedido?.id || null}
           nombreAgendado={pedido ? '' : nombreChat}
+          marcaComunidad={<MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={[pedido ? telDelChat(pedido.tel) || pedido.tel : telNorm]} />}
           onCobranza={() => setSolapa('pagos')}
           onVinculado={async (cliente) => {
             // Se recarga la ficha por id: el número ya quedó guardado, pero el índice del servidor
@@ -2068,6 +2069,7 @@ function NumeroNuevo({
   tel,
   clienteId,
   nombreAgendado,
+  marcaComunidad,
   onVinculado,
   onGuardado,
   guardarLead,
@@ -2079,6 +2081,8 @@ function NumeroNuevo({
   clienteId: number | null
   /** Con qué nombre está agendado este chat. Vacío si no se sabe. */
   nombreAgendado: string
+  /** ¿Ya está en la comunidad? Sirve para decidir qué hacer con el número antes de guardarlo. */
+  marcaComunidad: React.ReactNode
   onVinculado: (cliente: FilaCliente) => void
   onGuardado: (lead: Lead) => void
   /** La fila de guardado de los leads del panel: el alta va en la misma fila que el resto. */
@@ -2110,7 +2114,8 @@ function NumeroNuevo({
   return (
     <div style={{ padding: space[3] }}>
       <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>Número nuevo</div>
-      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 12 }}>{tel || 'Sin teléfono'} · no está en el CRM</div>
+      <div style={{ fontSize: font.xs, color: color.mut2 }}>{tel || 'Sin teléfono'} · no está en el CRM</div>
+      <div style={{ marginBottom: 12 }}>{marcaComunidad}</div>
       {/* Un cliente nuevo de hoy ya puede tener el pedido en Logística: el padrón llega una vez por día. */}
       <div style={{ margin: `0 -${space[2]}px` }}>
         <PedidosLogistica clienteId={clienteId} tel={tel || null} />
