@@ -50,6 +50,16 @@ describe('botón de Diferencias: mandar el stock del ERP a Tienda Nube (puerta d
     expect(r.empujes[2]).toMatchObject({ pedidoPor: 'boton:Bruno', cambios: 3, escritos: 3, quedan: 0 })
   })
 
+  it('un envío puntual viejo (sin `seco`, con `hasta_id`) escribió de verdad; ⛔ es «Sin enviar»', async () => {
+    leer.mockResolvedValue({ ok: true, empujes: [
+      { id: 3, estado: 'hecho', origen: 'movimiento', avisos: 1, creado_en: 't', terminado_en: 't', resultado: { hasta_id: 90, cambios: 0, escritos: 0 }, error: null },
+      { id: 2, estado: 'hecho', origen: 'movimiento', avisos: 1, creado_en: 't', terminado_en: 't', resultado: { seco: true, no_manda: true }, error: null },
+      { id: 1, estado: 'hecho', origen: 'boton:Bruno', avisos: 1, creado_en: 't', terminado_en: 't', resultado: { cambios: 1 }, error: null },
+    ] })
+    const r = await empujesDeStock({ marca: 'stunned' }, { conMotor })
+    expect(r.empujes.map((e: { seco: boolean | null }) => e.seco)).toEqual([false, true, true])
+  })
+
   it('un rechazo del motor vuelve con su mensaje', async () => {
     pedir.mockResolvedValue({ ok: false, error: { codigo: 'TIENDA', mensaje: 'Tienda desconocida: x' } })
     expect(await mandarStock({ marca: 'bdi', usuario: 'b' }, { conMotor })).toEqual({ status: 400, error: 'Tienda desconocida: x' })

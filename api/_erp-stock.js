@@ -165,7 +165,7 @@ export async function listaDeTransferencias({ marca }, deps) {
 
 /**
  * ERP › Stock › Comparación con TN y ML (`lib/erp/comparacion.core.js`): cada variante con lo que la tienda tendría que
- * mostrar según el ERP contra `tn_variante` del motor (lo leyó `bin/tn.mjs traer`, cada ~2 h) y GN. Mercado Libre ⛔ (ver el
+ * mostrar según el ERP contra `tn_variante` del motor (el stock lo pisa cada envío, que lee TN en vivo: sql/070) y GN. Mercado Libre ⛔ (ver el
  * núcleo): de ML sólo se cuenta cuántas ⛔ cerraron en la última conciliación, para mandar a Conciliación.
  *
  *   GET ?recurso=erp&vista=comparacion&marca=bdi|zattia
@@ -174,7 +174,7 @@ async function tiendaNube(pg) {
   const tn = (await pg.query(`select v.tienda, v.variant_id, v.sku, v.barcode, v.stock, v.valores, p.nombre, p.publicado
     from tn_variante v left join tn_producto p on p.tienda = v.tienda and p.tn_id = v.tn_product_id
     order by v.tienda, v.tn_product_id, v.variant_id`)).rows
-  const lecturas = (await pg.query('select tienda, leida_en from tn_catalogo_lectura')).rows
+  const lecturas = (await pg.query('select tienda, coalesce(stock_leido_en, leida_en) as leida_en from tn_catalogo_lectura')).rows
   const [ml = {}] = (await pg.query(`select max(fecha) as fecha, count(*) filter (where fecha = (select max(fecha) from conciliacion_fila where tipo = 'stock_ml'))::int as n
     from conciliacion_fila where tipo = 'stock_ml'`)).rows
   const nombreTN = (n) => (n && typeof n === 'object' ? n.es ?? Object.values(n)[0] : n) ?? null

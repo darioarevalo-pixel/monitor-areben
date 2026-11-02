@@ -20,7 +20,8 @@ export function aEmpuje(e) {
   return {
     id: e.id, estado: e.estado, pedidoPor: e.origen ?? null, avisos: e.avisos ?? 1,
     pedidoEn: e.creado_en ?? null, terminadoEn: e.terminado_en ?? null, error: e.error ?? null,
-    seco: r ? r.seco !== false : null,
+    // 🔴 Los puntuales anteriores al 2-nov ⛔ traen `seco` (escribieron de verdad) y sí `hasta_id` ⇒ ⛔ son «Sin enviar».
+    seco: r ? (r.seco ?? r.hasta_id == null) : null,
     cambios: r?.cambios ?? null, unidades: r?.unidades ?? null, escritos: r?.escritos ?? null, quedan: r?.quedan ?? null,
   }
 }

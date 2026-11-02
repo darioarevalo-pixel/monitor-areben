@@ -66,6 +66,13 @@ describe('Comparación con TN y ML', () => {
     expect(todo()).not.toContain('no arregla nada')
   })
 
+  it('la hora de Tienda Nube va en el mismo renglón del número', async () => {
+    await montar()
+    const tile = [...document.querySelectorAll('*')].filter((e) => e.textContent?.startsWith('No coinciden') && e.textContent.includes('variantes publicadas')).pop()!
+    expect(tile.textContent).toMatch(/variantes publicadas · Tienda Nube leída \S/)
+    expect(todo()).not.toContain('se lee cada 2 horas')
+  })
+
   it('Mercado Libre dice que no se compara y lleva a Conciliación', async () => {
     await montar()
     expect(todo()).toContain('Mercado Libre todavía no se compara acá')

@@ -86,7 +86,10 @@ clic ⇒ la ficha de la prenda. 🔑 La cuenta y las palabras son las de la CONC
 en vivo y con TODAS las variantes: cruce por SKU y, si no, por código; SKU repetido en TN ⇒ decide la primera. 🔴 `DEPOSITOS_TN`
 (BDI depósito minorista · Zattia local · Stunned depósito + local) es COPIA del motor (`lib/tn/stock.mjs`) hasta que A traiga `lib/tn`.
 🔴 Mercado Libre ⛔ se compara: el motor ⛔ guarda lo publicado (`ml_publicaciones` de BDI quedó del 24-sep) ⇒ la pantalla lo dice y
-manda a Conciliación con cuántas ⛔ cerraron. Servidor `api/_erp-stock.js` (`vista=comparacion`, `tn_variante` + `tn_producto` por pg),
+manda a Conciliación con cuántas ⛔ cerraron. 🔴 **El número de TN sale del último ENVÍO, ⛔ del catálogo** (2-nov, sql/070): `tn.mjs productos`
+lee por `updated_at` y el stock cambia sin moverlo, así que la «foto» quedaba vieja con la hora de hoy y daba falso rojo (23 «no coinciden» con 0
+en el envío). Cada envío pisa `tn_variante.stock` con lo leído + lo escrito; el entero anota `stock_leido_en`, que es la hora de la pantalla.
+Servidor `api/_erp-stock.js` (`vista=comparacion`, `tn_variante` + `tn_producto` por pg),
 núcleo `lib/erp/comparacion.core.js` (`tests/erp-comparacion*.test.ts*`).
 **Enviar el stock a Tienda Nube** (28-oct, Bruno: la diferencia es INFORMATIVA, el ERP manda el stock): bloque debajo de los totales
 (`components/erp/stock/EnviarStockTN.tsx`), sólo admin. 🔴 Va la tienda ENTERA (BDI, o Zattia/Stunned según la línea), ⛔ un producto;
