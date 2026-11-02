@@ -30,7 +30,7 @@ export async function reglasGuardadas(sb, store, marca) {
  */
 export async function reglasDeHoy(sb, store, reglas) {
   const { feria: _f, feriaIdsCampania: _x, feriaPrecios: _p, pctDePrendas: _pp, preciosDeCampania: _pc, reglasComerciales: _rc, comerciales: _c, ...guardadas } = reglas
-  const sinFeria = { ...guardadas, comerciales: await comercialesDeHoy(sb, store, reglas), ...(await pctDeCampanias(sb, store, reglas.pctCampanias)), ...(await preciosDeCampanias(sb, store, reglas.precioCampanias)) }
+  const sinFeria = { ...guardadas, comerciales: await comercialesDeHoy(sb, store, reglas), ...(await pctDeCampanias(sb, store, reglas.pctCampanias)), ...(await preciosDeCampanias(sb, store, reglas.precioCampanias, reglas.preciosFijos)) }
   // 🔑 V4: la tienda que ⛔ verifica en Mercado Pago manda la transferencia a SU cuenta fija.
   if (!verificaTransferencias(reglas)) {
     const fija = Number(reglas.transferenciaFija)
@@ -88,10 +88,11 @@ export async function feriaDeCampanias(sb, store, ids) {
  * de sus ítems `aplicado`, con la misma lectura que la feria. Al «Sacar» la campaña, el precio vuelve solo al de la etiqueta.
  * 🔴 Si la lectura falla, LANZA. Sin campañas ⇒ ⛔ agrega la clave.
  */
-export async function preciosDeCampanias(sb, store, ids) {
-  if (!Array.isArray(ids) || !ids.length) return {}
-  const { feriaPrecios } = await feriaDeCampanias(sb, store, ids)
-  return Object.keys(feriaPrecios).length ? { preciosDeCampania: feriaPrecios } : {}
+export async function preciosDeCampanias(sb, store, ids, fijos) {
+  const deCampanias = Array.isArray(ids) && ids.length ? (await feriaDeCampanias(sb, store, ids)).feriaPrecios : {}
+  // Los cargados a mano (`preciosFijos`) ganan: son justo los que la campaña ⛔ pudo escribir.
+  const precios = { ...deCampanias, ...(fijos || {}) }
+  return Object.keys(precios).length ? { preciosDeCampania: precios } : {}
 }
 
 /**

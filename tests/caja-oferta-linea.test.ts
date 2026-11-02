@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { REGLAS_INICIALES, baseParaMonto, cobro, cuentaDeMedio, normalizarPctCampanias, pagosDeMedio, pctDePrenda, renglones, subtotal } from '@/lib/caja/core.core.js'
+import { REGLAS_INICIALES, baseParaMonto, cobro, cuentaDeMedio, normalizarPctCampanias, normalizarPreciosFijos, pagosDeMedio, pctDePrenda, renglones, subtotal } from '@/lib/caja/core.core.js'
 import { cobroDelCambio } from '@/lib/erp/venta.core.js'
 
 /**
@@ -165,6 +165,14 @@ describe('caja · el % por campaña lo decide el servidor, por el producto', () 
     expect(pctDePrenda(R, 'credito', CYBER)).toBeNull()
     expect(pctDePrenda(R, 'efectivo', 2)).toBeNull()
     expect(pctDePrenda(null, 'efectivo', CYBER)).toBeNull()
+  })
+  it('los precios fijos: ⛔ precio 0, ⛔ producto inválido, ⛔ lista', () => {
+    expect(normalizarPreciosFijos({ 936640: 3390 })).toEqual({ 936640: 3390 })
+    expect(normalizarPreciosFijos({})).toEqual({})
+    expect(() => normalizarPreciosFijos({ 936640: 0 })).toThrow()
+    expect(() => normalizarPreciosFijos({ abc: 3390 })).toThrow()
+    expect(() => normalizarPreciosFijos({ 936640: '3390' })).toThrow()
+    expect(() => normalizarPreciosFijos([1])).toThrow()
   })
   it('la lista que se carga: ⛔ sin nombre, ⛔ repetida, ⛔ un % sin cargar', () => {
     const ok = { campania: 'a', nombre: 'Cyber', efectivo: 10, transferencia: 10 }

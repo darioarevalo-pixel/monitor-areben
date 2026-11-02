@@ -1821,6 +1821,22 @@ describe('caja · el % por campaña (Bruno, 1-nov, Cyber Monday)', () => {
     // ⛔ es feria: la venta sigue yendo a la cuenta normal con su %.
     expect((g.body?.reglas as Fila).feriaIdsCampania).toEqual([])
   })
+  it('🔑 los precios fijos: sólo un admin, validados, ganan a la campaña y `{}` los saca', async () => {
+    base.liqCampanias = [{ id: 'online', store: 'zattia' }]
+    base.liqItems = [
+      { liq_id: 'online', store: 'zattia', pid: '7', estado: 'aplicado', datos: { aplicacion: { precioEscrito: 5390, aplicadoEn: 1 } } },
+      { liq_id: 'online', store: 'zattia', pid: '8', estado: 'aplicado', datos: { aplicacion: { precioEscrito: 100, aplicadoEn: 1 } } },
+    ]
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'bajadas', preciosFijos: { 7: 3390 } }))).code).toBe(403)
+    conSesion(ADMIN)
+    expect((await correr(req('POST', {}, { action: 'bajadas', preciosFijos: { 7: 0 } }))).code).toBe(400)
+    const g = await correr(req('POST', {}, { action: 'bajadas', precioCampanias: ['online'], preciosFijos: { 7: 3390, 20: 1990 } }))
+    expect((g.body?.reglas as Fila).preciosDeCampania).toEqual({ 7: 3390, 8: 100, 20: 1990 })
+    expect((base.config as { reglas: Fila }).reglas.preciosDeCampania).toBeUndefined()
+    const sin = await correr(req('POST', {}, { action: 'bajadas', preciosFijos: {} }))
+    expect((sin.body?.reglas as Fila).preciosDeCampania).toEqual({ 7: 5390, 8: 100 })
+  })
   it('🔴 si Liquidación ⛔ se puede leer, LANZA: la Caja ⛔ cobra con el % de la cuenta', async () => {
     const { pctDeCampanias } = await import('@/api/_caja-reglas.js')
     const q: Record<string, unknown> = {}

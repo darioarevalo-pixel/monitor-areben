@@ -86,7 +86,7 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, dormir, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
 import { limpiarRepetida } from '../lib/caja/repetida.core.js'
-import { armarVentaGN, cobro, exigirCuentas, exigirFeria, cuentaDeOferta, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, normalizarOferta, normalizarPctCampanias, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
+import { armarVentaGN, cobro, exigirCuentas, exigirFeria, cuentaDeOferta, idsDeFeria, medioDeCuenta, mismaVenta, montoAEsperar, nombreParaTicket, normalizarOferta, normalizarPctCampanias, normalizarPreciosFijos, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { promosDeCreditoEnMostrador } from '../lib/agenda/promos.core.js'
 import { TOLERANCIA_TRANSFERENCIA, cruzarTransferencia, pagosRecientes, sumarCobros } from '../lib/pagos-recibidos/core.core.js'
 import { aOtraCuenta, mailOtraCuenta, titularDe } from '../lib/caja/otra-cuenta.core.js'
@@ -955,6 +955,14 @@ export default async function handler(req, res) {
         if (b.precioCampanias != null) {
           if (!Array.isArray(b.precioCampanias) || b.precioCampanias.length > 20) return res.status(400).json({ error: 'La lista de campañas que mandan el precio es inválida.' })
           nuevas.precioCampanias = [...new Set(b.precioCampanias.map((x) => String(x).slice(0, 80)).filter(Boolean))]
+        }
+        // Los precios cargados a mano para el local (Bruno, 1-nov, Cyber de BDI): el mapa entero, `{}` los saca.
+        if (b.preciosFijos != null) {
+          try {
+            nuevas.preciosFijos = normalizarPreciosFijos(b.preciosFijos)
+          } catch (e) {
+            return res.status(400).json({ error: e.message })
+          }
         }
         // Qué campañas pagan un % propio en efectivo y transferencia (Bruno, 1-nov, Cyber Monday): la lista entera.
         if (b.pctCampanias != null) {
