@@ -13,6 +13,7 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { cortesDeFilas, lineasEnErp, SQL_CORTES } from '../lib/erp/corte.core.js'
 import { planInventarioErp, SQL_INVENTARIO_LINEAS } from '../lib/erp/inventario-espejo.core.js'
 import { configPg } from '../lib/pg.core.js'
+import { escribirInventario } from '../scripts/lib/erp-inventario-escribir.mjs'
 import { registrarCambiosDeStock } from '../scripts/lib/stock-cambios.mjs'
 
 const PG_DE_MARCA = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
@@ -40,7 +41,7 @@ async function recalcularLibro(marca, espera, { env = process.env, fetchFn = fet
     if (!r.ok) console.error(`[erp-stock-corte] ${marca}: el recálculo contestó ${r.status}`)
     return r.ok
   } catch (e) {
-    console.error(`[erp-stock-corte] ${marca}: el recálculo ⛔ contestó (${e?.name ?? 'error'})`)
+    console.error(`[erp-stock-corte] ${marca}: el recálculo no contestó (${e?.name ?? 'error'})`)
     return false
   }
 }
@@ -65,7 +66,6 @@ export async function refrescarStockDeCorte({ marca, skus, recalcular = true, es
   // Historia de stock (Reposición separa lo que entra al local): ANTES del upsert, como en los syncs. Si falla se dice y ⛔ frena: un stock sin historia es mejor que uno viejo.
   const historia = await (deps.registrar ?? registrarCambiosDeStock)(sb, plan.upserts, 'erp')
   if (historia.error) console.error(`[erp-stock-corte] ${marca}: historia de stock: ${historia.error}`)
-  const { error } = await sb.from('inventario').upsert(plan.upserts, { onConflict: 'product_id,size_id,store_name' })
-  if (error) throw new Error(`escribiendo inventario: ${error.message}`)
+  await escribirInventario(sb, plan.upserts)
   return { corrio: true, libro, filas: plan.upserts.length, unidades: plan.upserts.reduce((a, r) => a + r.available_quantity, 0) }
 }

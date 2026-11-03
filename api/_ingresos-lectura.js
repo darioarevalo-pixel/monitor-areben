@@ -285,7 +285,7 @@ export default async function handler(req, res) {
           const trajo = marcas[store].skus.length > 0
           marcas[store].stock = await refrescarStockDeCorte({ marca: store, skus: [...new Set([...marcas[store].skus, ...await skusDeOcsRecientes(sb, store)])], recalcular: trajo, espera: 6_000 })
         } catch (e) {
-          console.error(`[ingresos-lectura] ${store}: el stock ⛔ se refrescó (${e?.message ?? 'error'})`)
+          console.error(`[ingresos-lectura] ${store}: el stock no se refrescó (${e?.message ?? 'error'})`)
         }
       }
     } catch (e) {

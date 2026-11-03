@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 import { configPg } from '../lib/pg.core.js'
 import { planInventarioErp, SQL_INVENTARIO_LINEAS } from '../lib/erp/inventario-espejo.core.js'
 import { ENV_MOTOR, lineasCortadasDe } from './lib/lineas-cortadas.mjs'
+import { escribirInventario } from './lib/erp-inventario-escribir.mjs'
 import { registrarCambiosDeStock } from './lib/stock-cambios.mjs'
 
 const base = process.argv[2]
@@ -59,10 +60,7 @@ const historia = await registrarCambiosDeStock(sb, plan.upserts, 'erp')
 if (historia.error) { console.error(`[erp-inventario] historia de stock: ${historia.error}`); process.exitCode = 1 }
 else console.log(`[erp-inventario] historia: ${historia.cambios} variante(s) cambiaron.`)
 
-for (let i = 0; i < plan.upserts.length; i += 500) {
-  const { error } = await sb.from('inventario').upsert(plan.upserts.slice(i, i + 500), { onConflict: 'product_id,size_id,store_name' })
-  if (error) throw new Error(`escribiendo inventario: ${error.message}`)
-}
+await escribirInventario(sb, plan.upserts)
 for (const r of plan.borrar) {
   const { error } = await sb.from('inventario').delete().eq('product_id', r.product_id).eq('size_id', r.size_id).eq('store_name', r.store_name)
   if (error) throw new Error(`sacando fila colgada: ${error.message}`)

@@ -62,7 +62,7 @@ export async function productosDeIngresos({ marca, modo = 'habitual', admin }, d
       const { skus } = await leerOcs({ store: marca, token: a.token, hasta: Date.now() + PLAZO_OC_MS })
       if (skus.length) await refrescar({ marca, skus, espera: 8_000 })
     } catch (e) {
-      console.error(`[erp-ingresos] ${marca}: las OC ⛔ se pudieron leer al apretar (${e?.status ?? e?.message ?? 'error'})`)
+      console.error(`[erp-ingresos] ${marca}: las OC no se pudieron leer al apretar (${e?.status ?? e?.message ?? 'error'})`)
       oc_error = 'No se pudieron leer las órdenes de compra recién: la lista puede estar atrasada.'
     }
     const lista = await leerParaImportar({ ...a, admin, modo })
