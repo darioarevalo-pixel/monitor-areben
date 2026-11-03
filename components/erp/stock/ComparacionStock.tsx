@@ -54,7 +54,7 @@ function bajarCsv(filas: FilaComparacion[], marca: MarcaErp) {
   URL.revokeObjectURL(url)
 }
 
-export function ComparacionStock({ ajustar, irAConciliacion, alContar }: { ajustar: (p: PrendaAAjustar) => void; irAConciliacion: () => void; alContar?: AlContar }) {
+export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = false }: { ajustar: (p: PrendaAAjustar) => void; irAConciliacion: () => void; alContar?: AlContar; /** La línea ya cortó (`erp_corte`). */ enErp?: boolean }) {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const usuario = perfil?.name ?? null
@@ -95,8 +95,8 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar }: { ajust
   const mirada = `${vista}|${q}|${tienda}|${orden?.col ?? ''}|${orden?.dir ?? ''}`
   const mostrar = tanda.de === mirada ? tanda.n : DE_A
 
-  // Stunned ya vive en el ERP (corte del 28-oct): la columna de Gestión Nube ⛔ le dice nada (Bruno, 28-oct).
-  const sinGn = tienda === 'stunned'
+  // La línea cortada vive en el ERP: la columna de Gestión Nube ⛔ le dice nada (Bruno, 28-oct). Stunned ⛔ espera la lectura del corte.
+  const sinGn = enErp || tienda === 'stunned'
   // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
   const angosta = usePantallaAngosta()
   const columnas = (angosta ? prefs.orden : prefs.visibles).filter((k) => !(sinGn && k === 'gn')).map((k) => {
@@ -130,7 +130,7 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar }: { ajust
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>Por variante: lo que la tienda tendría que mostrar según el ERP (sus depósitos, menos lo apartado por pedidos sin pagar) contra lo que muestra. Arranca con las que no coinciden.</p>
       {sinGn
-        ? <Notice tone="neutral">Stunned ya vive en el ERP: el stock de la tienda lo manda el ERP. Si no coinciden, el arreglo es <b>enviar el stock del ERP</b> a la tienda (abajo).</Notice>
+        ? <Notice tone="neutral">{TIENDA[tiendaEnvio]} ya vive en el ERP: el stock de la tienda lo manda el ERP. Si no coinciden, el arreglo es <b>enviar el stock del ERP</b> a la tienda (abajo).</Notice>
         : <Notice tone="warning">Hasta el corte de cada tienda, su stock lo manda <b>Gestión Nube</b>: si Gestión Nube y la tienda coinciden y el ERP no, lo que hay que mirar es el ERP. Después del corte, el arreglo es <b>enviar el stock del ERP</b> a la tienda (abajo).</Notice>}
       <Notice tone="neutral">
         <b>Mercado Libre todavía no se compara acá</b>: el ERP no guarda lo publicado en Mercado Libre.

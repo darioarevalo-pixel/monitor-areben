@@ -268,8 +268,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   // dibuja: la pantalla de GN le pegaría a GN con una línea que ya no está ahí.
   const transferenciaEnErp = lineaEnErp
   const corteLeido = leida === lineaDelCartel
-  // Las vistas ocultas (Facturar una venta) ⛔ son pestaña; «Mover y recibir» ⛔ va aparte de la línea cortada (`MoverYRecibir unificada`); Con Gestión Nube ⛔ para Stunned (ya ⛔ tiene GN).
-  const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !(transferenciaEnErp && v.key === 'mover') && !(lineaVista === 'stunned' && v.key === 'diferencias'))
+  // Las vistas ocultas (Facturar una venta) ⛔ son pestaña; «Mover y recibir» ⛔ va aparte de la línea cortada (`MoverYRecibir unificada`); Con Gestión Nube ⛔ para la línea cortada (ya ⛔ tiene GN).
+  const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !(transferenciaEnErp && v.key === 'mover') && !((lineaEnErp || lineaVista === 'stunned') && v.key === 'diferencias'))
   // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
   const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia', lineaVista)
   const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : (soloStunned ? [] : [{ key: 'zattia', titulo: 'Zattia' } as Opcion]).concat({ key: 'stunned', titulo: 'Stunned' }))
@@ -299,9 +299,9 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
 
   // Las listas de una pantalla junta (`ListasJuntas`): todas montadas, cada una con su número; el filtro elige cuál se ve.
   const parteJunta = (k: string, alContar: AlContar) => {
-    if (k === 'ajustes') return <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : `lista/${lineaVista}`} pedida={aAjustar} alContar={alContar} />
+    if (k === 'ajustes') return <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : `lista/${lineaVista}`} pedida={aAjustar} alContar={alContar} enErp={lineaEnErp} />
     if (k === 'ingresos') return <RecepcionesStock key={marca} alContar={alContar} />
-    if (k === 'comparacion') return <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'diferencias', 'conciliacion')} alContar={alContar} />
+    if (k === 'comparacion') return <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'diferencias', 'conciliacion')} alContar={alContar} enErp={lineaEnErp} />
     if (k === 'conciliacion') return <ConciliacionDia key={`${marca}/${lineaVista}`} ajustar={ajustarPrenda} alContar={alContar} />
     if (k === 'diferencias') return <DiferenciasDia key={marca} ajustar={ajustarPrenda} alContar={alContar} />
     if (k === 'cuentas') return <CuentasErp key={marca} ir={irAPieza} alContar={alContar} />

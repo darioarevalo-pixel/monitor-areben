@@ -39,10 +39,10 @@ let host: HTMLDivElement
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); vi.clearAllMocks() })
 
-async function montar(pedida: PrendaAAjustar | null = null) {
+async function montar(pedida: PrendaAAjustar | null = null, enErp = false) {
   const { AjustesStock } = await import('@/components/erp/AjustesStock')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<ProveedorLineaErp value={pedida?.linea === 'stunned' ? 'stunned' : 'zattia'}><AjustesStock pedida={pedida} /></ProveedorLineaErp>) })
+  await act(async () => { root = createRoot(host); root.render(<ProveedorLineaErp value={pedida?.linea === 'stunned' ? 'stunned' : 'zattia'}><AjustesStock pedida={pedida} enErp={enErp} /></ProveedorLineaErp>) })
   await act(async () => {})
 }
 const texto = () => host.textContent ?? ''
@@ -54,6 +54,14 @@ function escribir(input: HTMLInputElement, valor: string) {
 }
 
 describe('Ingresos y ajustes', () => {
+  it('«en Gestión Nube se ajusta como siempre» se va con el corte de la línea', async () => {
+    await montar()
+    expect(texto()).toContain('Mientras convivimos con Gestión Nube')
+    act(() => root?.unmount()); host.remove(); root = null
+    await montar(null, true)
+    expect(texto()).not.toContain('Mientras convivimos con Gestión Nube')
+  })
+
   it('⛔ «A contar» ni «Conteo» a mano; lista los ajustes y lo que quedó sin aplicar', async () => {
     await montar()
     expect(leerAjustes).toHaveBeenCalledWith('zattia')

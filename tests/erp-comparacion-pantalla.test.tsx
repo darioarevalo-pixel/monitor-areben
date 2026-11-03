@@ -39,10 +39,10 @@ beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REAC
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); document.body.innerHTML = ''; localStorage.clear(); vi.clearAllMocks() })
 
 const irAConciliacion = vi.fn()
-async function montar() {
+async function montar(enErp = false) {
   const { ComparacionStock } = await import('@/components/erp/stock/ComparacionStock')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<ComparacionStock ajustar={() => {}} irAConciliacion={irAConciliacion} />) })
+  await act(async () => { root = createRoot(host); root.render(<ComparacionStock ajustar={() => {}} irAConciliacion={irAConciliacion} enErp={enErp} />) })
   await act(async () => {})
 }
 const todo = () => document.body.textContent ?? ''
@@ -85,6 +85,15 @@ describe('Comparación con TN y ML', () => {
     const tile = [...document.querySelectorAll('*')].filter((e) => e.textContent?.startsWith('No coinciden') && e.textContent.includes('variantes publicadas')).pop()!
     expect(tile.textContent).toMatch(/variantes publicadas · Tienda Nube leída \S/)
     expect(todo()).not.toContain('se lee cada 2 horas')
+  })
+
+  it('con la línea cortada dice que vive en el ERP y ⛔ muestra Gestión Nube; sin cortar, sí', async () => {
+    await montar()
+    expect(todo()).toContain('su stock lo manda Gestión Nube')
+    act(() => root?.unmount()); host.remove(); root = null
+    await montar(true)
+    expect(todo()).toContain('Zattia ya vive en el ERP')
+    expect(todo()).not.toContain('su stock lo manda Gestión Nube')
   })
 
   it('Mercado Libre dice que no se compara y lleva a Conciliación', async () => {

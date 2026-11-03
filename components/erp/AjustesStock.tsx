@@ -62,7 +62,7 @@ type Borrador = { deposito: string; motivo: string; detalle: string; renglones: 
 type PrendaDeAjuste = { producto: string; talle: string; sku: string | null; barcode?: string | null; nombre: string | null; talleNombre: string | null }
 const renglonDe = (p: PrendaDeAjuste): Renglon => ({ producto: p.producto, talle: p.talle, sku: p.sku, barcode: p.barcode ?? null, nombre: p.nombre, talleNombre: p.talleNombre, porDeposito: null, valor: '' })
 
-export function AjustesStock({ pedida = null, alContar }: { pedida?: PrendaAAjustar | null; alContar?: AlContar } = {}) {
+export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedida?: PrendaAAjustar | null; alContar?: AlContar; /** La línea ya cortó: ⛔ hay Gestión Nube donde ajustar. */ enErp?: boolean } = {}) {
   // La del selector del menú (⛔ pestañas de otra marca: Bruno, 28-oct). Cambiarla remonta la pantalla (`key` en `Erp`).
   const linea: LineaErp = useTiendaErp()
   const base = baseDe(linea) as MarcaErp
@@ -209,7 +209,7 @@ export function AjustesStock({ pedida = null, alContar }: { pedida?: PrendaAAjus
           <span />
           {datos && !borrador && <Button onClick={() => setBorrador({ deposito: DEPOSITOS[base][0], motivo: MOTIVOS_A_MANO[0].key, detalle: '', renglones: [] })}>Nuevo ajuste</Button>}
         </div>
-        {linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock del ERP: en Gestión Nube se ajusta como siempre. Los conteos se hacen en el módulo de Conteo del monitor y entran solos (se ven en el historial de cada producto, en Stock).</Notice>}
+        {!enErp && linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock del ERP: en Gestión Nube se ajusta como siempre. Los conteos se hacen en el módulo de Conteo del monitor y entran solos (se ven en el historial de cada producto, en Stock).</Notice>}
       </SectionCard>}
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
