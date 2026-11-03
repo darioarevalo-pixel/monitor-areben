@@ -62,7 +62,7 @@ import { useComunidad, type AvisoComunidad, type Comunidad } from './useComunida
 import { useHoy } from './useHoy'
 import { antiguedadFoto, estaEnComunidad } from '@/lib/crm/comunidad'
 import { coincideNombre, palabraParaBuscar, palabrasDelNombre } from '@/lib/crm/nombre.core.js'
-import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
+import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone, telDelChat } from '@/lib/crm/telefono.core.js'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import { cola } from '@/lib/crm/telefono.core.js'
 import type { UltimosMios } from '@/lib/crm/pedidos-catalogo'
@@ -149,22 +149,8 @@ function useEscritosHoy(): { escritos: EscritosHoy; ultimos: UltimosMios | null 
   return { escritos, ultimos }
 }
 
-/**
- * El teléfono del chat, **también si no es argentino** (16-oct-2026).
- *
- * 🔴 `normalizeArgPhone` devuelve '' para un número de otro país (+51 970 616 406, Perú): el panel
- * lo leía como "no hay chat abierto" y mostraba «Abrí el chat de una persona» con la conversación
- * delante, sin forma de cargarla como prospecto. Si no es argentino quedan los dígitos tal cual:
- * el servidor y los leads cruzan igual (por los últimos 8 dígitos).
- *
- * ⛔ No se arregla en `normalizeArgPhone`: es también de Envíos, Canjes y el portal del cadete.
- */
-export function telDelChat(t: string | null | undefined): string {
-  const arg = normalizeArgPhone(t || '')
-  if (arg) return arg
-  const d = String(t || '').replace(/\D/g, '')
-  return d.length >= 10 && d.length <= 15 ? d : ''
-}
+// Vive en `telefono.core.js`: la usa también la lista de «Hoy». Se sigue exportando desde acá.
+export { telDelChat }
 import { leerMapa } from '@/lib/kv/cliente'
 import { tomar } from '@/lib/crm/precarga'
 import { adelantarPedidos } from '@/lib/crm/logistica'

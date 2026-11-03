@@ -1308,6 +1308,11 @@ Ger (logistica.arebensrl.com) abrió una API para el panel: `https://logistica.a
   cómo quedó el pedido y decide la persona.
 - Test: `tests/crm-logistica.test.ts`.
 
+# ✅ 3-nov-2026 — «Pendientes en Logística»: el botón verde sin teléfono
+
+- 🔴 Logística puede traer `client_phone` vacío con `gn_client_id` cargado: el botón quedaba apagado pero se veía verde.
+  Ahora `FilaLogistica` lo busca en la ficha (`telefonoDeCliente`) y, si no hay en ningún lado, se ve apagado y lo dice.
+
 # ✅ 24-oct-2026 — Logística en el panel: el diseño nuevo («Lo que sigue»)
 
 Cerrado con Darío en la página de prueba (https://claude.ai/artifact/MY9cf71XDcjaKXtpRc4YUr, panel de

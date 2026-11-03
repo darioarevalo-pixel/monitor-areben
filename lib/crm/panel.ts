@@ -22,6 +22,7 @@ import { apiFetch } from '../api-fetch'
 import { guardarMapa, leerMapa } from '../kv/cliente'
 import { TANDA_FRIOS, TEMPERATURA_DEFAULT, calcularAgregado, estadoSeguimiento, normalizeArgPhone, resumenCompras, segmentoCliente } from './core'
 import { friosDelDia, grupoUrgencia, hechosHoy, listaDelDia, porTemperatura, type FilaListaDia, type VistaTemp } from './lista-dia'
+import { telDelChat } from './telefono.core.js'
 import type {
   ClienteCRM,
   EstadoSeg,
@@ -433,6 +434,26 @@ export async function vincularTelefono(clienteId: number, tel: string): Promise<
   const mapa = { ...previo.dato, [String(clienteId)]: tel }
   const r = await guardarMapa({ kind: 'crmtel', store: 'bdi', mapa, cargado: true })
   return r.ok ? { ok: true } : { ok: false, motivo: r.motivo }
+}
+
+/**
+ * El teléfono de un cliente de GN, listo para abrir su chat (o '' si no tiene o no se pudo leer).
+ *
+ * 🔴 Logística puede mandar un pedido con `client_phone` vacío aunque traiga el cliente de GN
+ * (Darío, 3-nov-2026): la lista de «Hoy» pregunta acá para que el botón verde abra el chat igual.
+ */
+export async function telefonoDeCliente(clienteId: number): Promise<string> {
+  try {
+    const r = await apiFetch('/api/datos?recurso=crm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'panel', clienteId }),
+    })
+    const d = (await r.json().catch(() => ({}))) as RespuestaPanel
+    return r.ok && d.ok ? telDelChat(d.cliente?.phone) : ''
+  } catch {
+    return ''
+  }
 }
 
 /**

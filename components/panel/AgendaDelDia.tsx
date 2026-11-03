@@ -5,7 +5,8 @@ import { color, font, radius, space } from '@/components/ui/tokens'
 import { Button, Icono } from '@/components/ui'
 import { SOBRE_OSCURO } from './oscuro'
 import { TEMP_UI } from '@/components/crm/temperatura'
-import { buscarClientesPorNombre, telsQueSonClientes, traerAgenda, traerPorFiltro, type FilaAgenda } from '@/lib/crm/panel'
+import { buscarClientesPorNombre, telefonoDeCliente, telsQueSonClientes, traerAgenda, traerPorFiltro, type FilaAgenda } from '@/lib/crm/panel'
+import { telDelChat } from '@/lib/crm/telefono.core.js'
 import { contarCola, contarPorTipo, vistaDe, type FiltroPanel, type VistaTemp } from '@/lib/crm/lista-dia'
 import { diasHasta } from '@/lib/crm/core'
 import { hoyISO } from '@/lib/crm/seguimiento'
@@ -758,7 +759,7 @@ function usePendientesLogistica(): { r: ResultadoLogistica | null; actualizar: (
  * 🟩 «Preparado» = despachar (o entregar, en etiqueta libre) · ⬜ depósito. El nombre abre la ficha y
  * el verde, el chat.
  */
-function FilaLogistica({
+export function FilaLogistica({
   p,
   onAbrir,
   onFicha,
@@ -772,7 +773,20 @@ function FilaLogistica({
   link?: LinkPedido
 }) {
   const id = Number(p.gn_client_id) || 0
-  const tel = p.client_phone || ''
+  const telPedido = telDelChat(p.client_phone)
+  // 🔴 Logística puede traer el pedido sin teléfono (Darío, 3-nov-2026: el botón verde no hacía nada).
+  // Se lo busca en la ficha del cliente; `null` = todavía buscando.
+  const [telFicha, setTelFicha] = useState<string | null>(null)
+  useEffect(() => {
+    if (telPedido || !id) return
+    let vivo = true
+    telefonoDeCliente(id).then((t) => vivo && setTelFicha(t))
+    return () => {
+      vivo = false
+    }
+  }, [telPedido, id])
+  const tel = telPedido || telFicha || ''
+  const buscandoTel = !telPedido && !!id && telFicha === null
   const paso = pasoPanel(p)
   const faltan = faltanUnidades(p)
   const chip = (tono: 'warning' | 'success' | 'neutral', txt: string) => (
@@ -824,9 +838,9 @@ function FilaLogistica({
           type="button"
           disabled={!tel}
           onClick={() => onAbrir(id, tel)}
-          title="Abrir el chat"
+          title={tel ? 'Abrir el chat' : buscandoTel ? 'Buscando el teléfono…' : 'No tiene teléfono cargado, así que no puedo abrir el chat'}
           aria-label={`Abrir el chat de ${p.client_name}`}
-          style={{ width: 32, minWidth: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', borderRadius: radius.md, border: 0, background: color.whatsapp, color: color.sideActiveInk, cursor: 'pointer' }}
+          style={{ width: 32, minWidth: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', borderRadius: radius.md, border: tel ? 0 : `1px solid ${color.line2}`, background: tel ? color.whatsapp : 'none', color: tel ? color.sideActiveInk : color.mut2, cursor: tel ? 'pointer' : 'default', opacity: tel ? 1 : 0.5 }}
         >
           <Icono nombre="whatsapp" size={16} />
         </button>
