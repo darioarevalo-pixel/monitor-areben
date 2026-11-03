@@ -164,6 +164,12 @@ describe('caja · el % por campaña lo decide el servidor, por el producto', () 
     expect(dos.pagos[0]).toMatchObject({ base: 5000, porcentaje: 12, descuento: 600 })
     expect(dos.total).toBe(4400)
   })
+  it('el cambio de una prenda en oferta de su línea paga el % de la prenda, con la marca que manda la pantalla', () => {
+    const nueva = (oferta: boolean) => renglones([{ product_id: 913515, size_id: 1, cantidad: 1, precio: 12990, linea: 'stunned', ...(oferta ? { oferta: true } : {}) }])
+    const cobrar = (nuevas: Array<{ product_id: number; importe: number }>) => cobroDelCambio({ diferencia: 5000, pagos: [{ cuenta: 12921 }], reglas: R, nuevas }).total
+    expect(cobrar(nueva(true))).toBe(4500) // 10 % de la oferta de la línea
+    expect(cobrar(nueva(false))).toBe(4300) // 15 % de la cuenta
+  })
   it('pctDePrenda: null fuera de la lista y en un medio sin % propio', () => {
     expect(pctDePrenda(R, 'efectivo', CYBER)).toBe(10)
     expect(pctDePrenda(R, 'debito', CYBER)).toBe(0)

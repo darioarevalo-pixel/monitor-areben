@@ -106,12 +106,14 @@ type Entrada = {
   precioDe: (v: Variante) => number | null
   /** ¿La prenda es de Stunned? (la misma pregunta que el precio). */
   esStunned: (v: Variante) => boolean
+  /** ¿La prenda está en la oferta de su línea? La misma pregunta que la venta: su diferencia paga el % de la prenda (Bruno, 3-nov). */
+  enOferta?: (v: Variante) => boolean
 }
 
 /** Cómo se nombra una línea en un aviso. */
 const nombreDe = (l: string) => ETIQUETA_LINEA[l as Linea] ?? l
 
-export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
+export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entrada) {
   /** Las líneas de esta Caja que ya venden por el ERP (su corte): las únicas que cambian sin venta del ERP. Sin config, ninguna. */
   const erpLineas = useMemo(() => config?.erp_lineas ?? [], [config])
   /** La marca de una prenda en esta Caja (la de Zattia trae a Stunned de la mano). */
@@ -256,7 +258,7 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
   // ── Lo que se lleva, con el importe de la Caja (`renglones`); sin precio todavía no se puede cobrar ──
   const sinPrecio = nuevas.some((n) => !(Number(n.precio) > 0))
   const sinPrecioDevuelta = tipo === 'suelto' && devueltas.some((d) => !(Number(d.precio) > 0))
-  const items = nuevas.map((n) => ({ product_id: n.variante.product_id, size_id: n.variante.size_id, cantidad: n.cantidad, precio: Number(n.precio), sku: n.variante.sku }))
+  const items = nuevas.map((n) => ({ product_id: n.variante.product_id, size_id: n.variante.size_id, cantidad: n.cantidad, precio: Number(n.precio), sku: n.variante.sku, ...(esStunned(n.variante) ? { linea: 'stunned', ...(enOferta?.(n.variante) ? { oferta: true } : {}) } : {}) }))
   let filas: Array<{ product_id: number; importe: number }> = []
   try {
     filas = sinPrecio || !items.length ? [] : renglones(items)

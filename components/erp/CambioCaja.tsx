@@ -49,13 +49,14 @@ export function CambioCaja() {
   const conCorte = !!config?.erp_lineas?.includes(tienda)
 
   /** El precio de la prenda con la MISMA regla de la Caja (`precioDeCaja`): Zattia etiqueta o feria; Stunned, su Tienda Nube. */
-  const precioDe = (v: Variante): number | null => {
+  const precioCaja = (v: Variante) => {
     const p = datos?.allProductos.find((x) => String(x.id) === String(v.product_id))
     if (!p || !tnIdx) return null
-    return precioDeCaja(p, { store, skuVariante: v.sku, idx: tnIdx, idxStunned: tnIdxStunned, reglas: config?.reglas ?? null, localStunned: config?.stunned_local ?? null }).precio
+    return precioDeCaja(p, { store, skuVariante: v.sku, idx: tnIdx, idxStunned: tnIdxStunned, reglas: config?.reglas ?? null, localStunned: config?.stunned_local ?? null })
   }
+  const precioDe = (v: Variante): number | null => precioCaja(v)?.precio ?? null
   const esStunned = (v: Variante): boolean => esDeStunned(store, { sku: datos?.allProductos.find((x) => String(x.id) === String(v.product_id))?.sku ?? null }, v.sku)
-  const c = useCambio({ store, config, precioDe, esStunned })
+  const c = useCambio({ store, config, precioDe, esStunned, enOferta: (v) => !!precioCaja(v)?.oferta })
   const { venta, origen, tipo, vendidas, devueltas, nuevas, error, hecho } = c
 
   const [q, setQ] = useState('')

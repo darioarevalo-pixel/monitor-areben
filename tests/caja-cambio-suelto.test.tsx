@@ -34,7 +34,7 @@ const GN = {
 
 let h: Cambio
 function Harness({ store = 'zattia', erpLineas = ['stunned'], alCambio }: { store?: 'zattia' | 'bdi'; erpLineas?: string[]; alCambio: (c: Cambio) => void }) {
-  const c = useCambio({ store, config: { erp_lineas: erpLineas, reglas: null, politica_cambio: null } as never, precioDe: () => 15000, esStunned: (v) => String(v.sku).startsWith('STU') })
+  const c = useCambio({ store, config: { erp_lineas: erpLineas, reglas: null, politica_cambio: null } as never, precioDe: () => 15000, esStunned: (v) => String(v.sku).startsWith('STU'), enOferta: () => true })
   useEffect(() => alCambio(c))
   return null
 }
@@ -144,7 +144,7 @@ describe('cambio suelto · el pedido al servidor', () => {
     await hacer(() => void h.confirmar())
     const [marca, p] = cambiarVenta.mock.calls[0]
     expect(marca).toBe('zattia')
-    expect(p).toMatchObject({ gnVentaId: '30930', devueltas: [{ productId: 7, sizeId: 3, cantidad: 1, sku: 'STU-REM-M' }], items: [{ product_id: 7, size_id: 3, cantidad: 1, precio: 15000, sku: 'STU-REM-M' }] })
+    expect(p).toMatchObject({ gnVentaId: '30930', devueltas: [{ productId: 7, sizeId: 3, cantidad: 1, sku: 'STU-REM-M' }], items: [{ product_id: 7, size_id: 3, cantidad: 1, precio: 15000, sku: 'STU-REM-M', linea: 'stunned', oferta: true }] })
     expect(p.devueltas[0]).not.toHaveProperty('precio')
     expect(p).not.toHaveProperty('sinTicket')
     expect(h.hecho?.numero).toBe(5)

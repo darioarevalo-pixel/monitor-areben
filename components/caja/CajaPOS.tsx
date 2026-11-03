@@ -422,7 +422,7 @@ function POS() {
 
   // ── El modo «Cambios» (Bruno, 27-oct): el cambio de las líneas que ya cortaron, en el POS. El estado y las cuentas viven en `useCambio`
   // (el mismo que usa erp › Caja › Cambio); acá sólo se decide en qué paso está y qué se muestra. ──
-  const cambio = useCambio({ store: storeCaja() as MarcaErp, config, precioDe: (v) => precioDeProducto(v.product_id)?.precio ?? null, esStunned: esStunnedVariante })
+  const cambio = useCambio({ store: storeCaja() as MarcaErp, config, precioDe: (v) => precioDeProducto(v.product_id)?.precio ?? null, esStunned: esStunnedVariante, enOferta: (v) => !!precioDeProducto(v.product_id)?.oferta })
   const [enCambio, setEnCambio] = useState(false)
   const [pasoCambio, setPasoCambio] = useState<1 | 2>(1)
   const [verVentaOriginal, setVerVentaOriginal] = useState(false)
