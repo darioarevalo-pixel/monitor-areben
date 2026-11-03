@@ -24,7 +24,7 @@ describe('cada movimiento', () => {
     expect(documentoDe(mov({ origen: 'repo', tipo: 'transferencia', origen_ref: 'repo:ra1:t1:1_1:entra', detalle: { transfer_id: 8101 } }))).toBe('Transferencia 8101')
     expect(documentoDe(mov({ origen: 'apertura', tipo: 'apertura', detalle: { anclaje: 'gn' } }))).toBe('Stock inicial (foto de Gestión Nube)')
     expect(documentoDe(mov({ origen: 'recepcion', tipo: 'ingreso', detalle: {} }))).toBe('Ingreso de mercadería')
-    expect(documentoDe(mov({ origen: 'recepcion', tipo: 'ingreso', detalle: { oc: 'OC-3049' } }))).toBe('Ingreso de mercadería OC-3049')
+    expect(documentoDe(mov({ origen: 'recepcion', tipo: 'ingreso', detalle: { oc: 'OC-3049' } }))).toBe('OC-3049 · Ingreso de mercadería')
   })
 
   it('«quién» es una persona sólo si el ERP la sabe; si no, de qué sistema vino', () => {
