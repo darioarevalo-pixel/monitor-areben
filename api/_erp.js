@@ -67,6 +67,7 @@
  *   POST {recurso:'erp', accion:'reintentar-entregas', marca}        vuelve a cobrar las entregas de Logística sin cobrar (`api/_erp-cobros.js`)
  *   POST {recurso:'erp', accion:'poner-redondeo', marca, linea?, canal, paso, modo, desde?}   `api/_erp-redondeo.js`
  *   GET  ?recurso=erp&vista=vinculos|vinculos-buscar&marca=…&tienda=…    y POST accion:'poner-vinculo'   `api/_erp-vincular.js`
+ *   GET  ?recurso=erp&vista=ingresos-productos&marca=bdi|zattia          y POST accion:'importar-ingresos'   `api/_erp-ingresos-productos.js`
  *   GET  ?recurso=erp&vista=estructura&marca=…   Configuración › Cuentas y Marcas, depósitos y puntos de venta (`api/_erp-estructura.js`, sólo lee)
  *   GET  ?recurso=erp&vista=ajustes&linea=bdi|zattia|stunned           los ajustes de stock (motor sql/026) + la lista «A contar»
  *   POST {recurso:'erp', accion:'crear-ajuste'|'aprobar-ajuste'|'descartar-ajuste', linea, …}   `api/_erp-ajustes.js`
@@ -121,6 +122,7 @@ import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce
 import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
 import { ponerRedondeoErp, redondeoDeMarca } from './_erp-redondeo.js'
 import { buscarVariantesVinculo, ponerVinculoErp, vinculosDeTienda } from './_erp-vincular.js'
+import { importarDeIngresosErp, productosDeIngresos } from './_erp-ingresos-productos.js'
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { estructuraDeMarca } from './_erp-estructura.js'
 import { configuracionDeMarcas, interruptoresDeMarcas, ponerInterruptorErp } from './_erp-interruptores.js'
@@ -1924,6 +1926,15 @@ export default async function handler(req, res) {
       const r = req.query.vista === 'vinculos' ? await vinculosDeTienda(pedido, { conMotor }) : await buscarVariantesVinculo(pedido, { conMotor })
       res.setHeader('Cache-Control', 'no-store')
       return res.status(r.status || 200).json(r.status ? { error: r.error, codigo: r.codigo } : r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'ingresos-productos') {
+      const r = await productosDeIngresos({ marca: String(req.query.marca || '') }, { conMotor })
+      res.setHeader('Cache-Control', 'no-store')
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+    if (req.method === 'POST' && body.accion === 'importar-ingresos') {
+      const r = await importarDeIngresosErp({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'POST' && body.accion === 'poner-vinculo') {
       const r = await ponerVinculoErp({ body, usuario: perfil.name || perfil.user || null }, { conMotor })

@@ -450,6 +450,26 @@ export const leerRedondeo = (marca: MarcaErp) =>
 export const ponerRedondeo = (marca: MarcaErp, redondeo: RedondeoAPoner) =>
   pedir<{ ok: true; id: string }>(post({ accion: 'poner-redondeo', marca, ...redondeo }), '', 'No se pudo cambiar el redondeo.')
 
+// ── ERP › Stock › Ingresos de mercadería › Actualizar Ingresos (`api/_erp-ingresos-productos.js`, motor `catalogo-ingresos.mjs`) ──
+
+export type VarianteDeIngresos = { ingresos_id: number | null; sku: string; barcode: string | null; talle: string }
+export type ProductoDeIngresos = { ingresos_id: number; nombre: string | null; status: string | null; updated_at: string | null; variantes: VarianteDeIngresos[]; ocs: string[]; product_id?: string; categoria?: string | null }
+export type ListaDeIngresos = {
+  manda: boolean
+  corte: string | null
+  motivo?: 'sin_corte' | 'frenada'
+  crear?: ProductoDeIngresos[]
+  agregar?: ProductoDeIngresos[]
+  listos?: Array<{ ingresos_id: number; nombre: string | null; status: string | null; updated_at: string | null; variantes: number }>
+  a_vincular?: Array<{ ingresos_id: number; nombre: string | null; motivo: string; talle?: string; ocs: string[] }>
+  oc_sin_producto?: Array<{ sku: string; oc: string | null }>
+}
+export type ImportadoDeIngresos = { manda: boolean; motivo?: string; productos_nuevos?: number; productos_con_agregadas?: number; variantes_nuevas?: number; no_disponibles?: number[] }
+export const leerProductosDeIngresos = (marca: MarcaErp) =>
+  pedir<ListaDeIngresos>(null, `&vista=ingresos-productos&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer Ingresos.')
+export const importarProductosDeIngresos = (marca: MarcaErp, elegidos: number[]) =>
+  pedir<ImportadoDeIngresos>(post({ accion: 'importar-ingresos', marca, elegidos }), '', 'No se pudo importar.')
+
 // ── ERP › Productos › Vincular (`api/_erp-vincular.js`, motor sql/076) ──
 
 export type FilaVinculo = { variant_id: number; producto: string; publicado: boolean; valores: string[]; sku: string | null; barcode: string | null; stock: number | null }

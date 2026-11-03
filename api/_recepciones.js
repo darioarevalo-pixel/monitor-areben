@@ -69,6 +69,18 @@ async function cruceDeHoy(store, lineas) {
   return leerEspejo(createClient(cfg.url, cfg.key), lineas)
 }
 
+/**
+ * Lo que esta OC ya sumó al libro (`grupo = recepcion:<oc>`). Vive en la base de la marca, las OC en la de BDI. `null` si ⛔ se pudo preguntar: ⛔ es lo mismo que «nada».
+ * Mejor esfuerzo: ⛔ puede voltear la ficha.
+ */
+async function enElLibro(store, oc) {
+  const cfg = cfgDeMarca(store)
+  if (!cfg.url || !cfg.key) return null
+  const { data, error } = await createClient(cfg.url, cfg.key).from('stock_movimiento').select('cantidad').eq('grupo', `recepcion:${oc}`)
+  if (error) return null
+  return { unidades: (data || []).reduce((t, m) => t + Number(m.cantidad || 0), 0), movimientos: (data || []).length }
+}
+
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res)
   if (!perfil) return
@@ -140,6 +152,7 @@ export default async function handler(req, res) {
         ok: true,
         recepcion: verProveedores ? cab : sinProveedor(cab),
         lineas: conCruce,
+        en_stock: await enElLibro(store, oc),
         espejo_consultado: Boolean(hoy),
         // Viaja el permiso y ⛔ no se deduce de que el campo venga vacío: hay órdenes que de verdad
         // llegaron sin proveedor, y la pantalla tiene que decir cosas distintas en cada caso.

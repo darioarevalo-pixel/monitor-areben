@@ -1,6 +1,6 @@
 // Lee las OC de la API de Ingresos y las guarda como si hubiera llegado el aviso. Qué traduce y por qué: lib/recepciones/lectura.core.js.
 //
-//   GET ?recurso=ingresos-lectura&tarea=leer         → { ok, marcas } (el cron de vercel.json)
+//   GET ?recurso=ingresos-lectura&tarea=leer         → { ok, marcas } (el cron de vercel.json, cada hora: Bruno, 3-nov, «no hay ingresos todos los días»)
 //   GET ?recurso=ingresos-lectura&tarea=leer&seco=1  → lo mismo, sin escribir: dice qué leería
 //   GET ?recurso=ingresos-lectura&tarea=costos         → costo y tipo de ingreso (el cron de cada hora; motor `lib/conexion.mjs`). Los costos se
 //                                                         escriben sólo desde el corte de la marca (`costoIngresosManda`)
@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { cfgDelMonitor } from './_recepciones-base.js'
 import { procesarEvento } from './_recepciones-procesar.js'
-import { aProcesar, desdeDe, eventoDeOc, idDeEvento, mismaForma } from '../lib/recepciones/lectura.core.js'
+import { aProcesar, aReleer, contadasDe, desdeDe, eventoDeOc, idDeEvento, idDeRelectura, mismaForma, RELECTURA_DIAS } from '../lib/recepciones/lectura.core.js'
 import { normalizarEvento } from '../lib/recepciones/webhook.core.js'
 import { configPg } from '../lib/pg.core.js'
 
@@ -23,7 +23,10 @@ const MARCAS = [
   { store: 'bdi', variable: 'INGRESOS_TOKEN_BDI' },
 ]
 const ESPERA_MS = 10_000
-/** La función tiene 30 s: lo que no entre lo toma la vuelta siguiente, porque se procesa de la más vieja a la más nueva. */
+/**
+ * La función tiene 30 s: lo que no entre lo toma la vuelta siguiente, porque se procesa de la más vieja a la más nueva y la hora de lectura es la de la última guardada.
+ * 🔴 Con la lectura cada hora pueden llegar varias juntas, y ⛔ se pierde ninguna: sólo tardan una vuelta más (`corto: true`).
+ */
 const PLAZO_MS = 20_000
 const POR_PAGINA = 200
 /** La vuelta de costos es más larga: cada una recorre el catálogo entero. Lo que ⛔ entre se repite en la hora siguiente. */
@@ -88,9 +91,8 @@ async function leerMarca({ sb, store, token, seco, hasta }) {
   const ya = await yaProcesados(sb, candidatas.map((oc) => idDeEvento(store, oc)))
   const pendientes = candidatas.filter((oc) => !ya.has(idDeEvento(store, oc)))
   const salida = { desde, vistas: candidatas.length, pendientes: pendientes.map((oc) => oc.code), guardadas: [], frenadas: [] }
-  if (seco) return salida
 
-  for (const resumen of pendientes) {
+  for (const resumen of seco ? [] : pendientes) {
     if (Date.now() > hasta) { salida.corto = true; break }
     const oc = await pedir(`/purchase-orders/${resumen.id}`, token)
     // 🔴 Un token de otro negocio guardaría la OC en la marca equivocada.
@@ -109,7 +111,50 @@ async function leerMarca({ sb, store, token, seco, hasta }) {
     const r = await procesarEvento({ sb, idEvento, payload, enviadoEn: oc.updated_at })
     salida.guardadas.push({ oc: oc.code, ...r })
   }
+
+  // 🔴 Lo que contó menos de lo pedido se vuelve a mirar: BDI confirma antes de contar y `updated_at` ⛔ siempre se mueve (OC-1580: 0 guardadas, 14.185 en la API).
+  // Si lo contado es lo mismo, ⛔ se toca nada. Y el libro decide qué hacer: lo de antes de su apertura o del corte de la línea ⛔ lo mueve.
+  const lista = await aMirarDeNuevo(sb, store, new Set(candidatas.map((oc) => Number(oc.id))))
+  salida.releidas = []
+  for (const g of aReleer(lista)) {
+    if (Date.now() > hasta) { salida.corto = true; break }
+    const oc = await pedir(`/purchase-orders/${g.oc_id}`, token)
+    if (oc.business?.slug !== store) throw new Error(`el token de ${store} leyó una OC de ${oc.business?.slug}`)
+    if (contadasDe(oc) === Number(g.unidades_contadas ?? 0)) continue
+    const idEvento = idDeRelectura(store, oc)
+    salida.releidas.push({ oc: oc.code, antes: Number(g.unidades_contadas ?? 0), ahora: contadasDe(oc) })
+    if (seco) continue
+    const payload = eventoDeOc(oc)
+    const norm = normalizarEvento(payload)
+    const guardadas = await renglonesGuardados(sb, store, oc.id)
+    if (guardadas.length && norm.ok && !mismaForma(guardadas, norm.lineas)) {
+      await anotarFrenada(sb, { store, oc, idEvento, payload, motivo: `cambió de forma: ${guardadas.length} renglones guardados, ${norm.lineas.length} en Ingresos o con otro SKU. Se deja como estaba, para no duplicar stock.` })
+      salida.frenadas.push({ oc: oc.code })
+      continue
+    }
+    await procesarEvento({ sb, idEvento, payload, enviadoEn: oc.updated_at })
+  }
   return salida
+}
+
+/** Lo guardado de esa marca en la ventana de relectura, sin lo que esta vuelta ya vio. */
+async function aMirarDeNuevo(sb, store, vistas) {
+  const desde = new Date(Date.now() - RELECTURA_DIAS * 864e5).toISOString()
+  const { data, error } = await sb.from('recepcion_oc').select('oc_id, unidades_pedidas, unidades_contadas, confirmada_at').eq('store', store).gte('confirmada_at', desde)
+  if (error) throw new Error(`recepcion_oc: ${error.message}`)
+  return (data || []).filter((o) => !vistas.has(Number(o.oc_id)))
+}
+
+/**
+ * Las OC que cambiaron y ⛔ se guardaron (`mismaForma`), de los últimos días: el aviso. Se relee cada vuelta porque la lectura se anota entera: sin esto la alerta se cerraría a los 5 min.
+ * ⛔ se pudo cambiar la clave a id de línea sin riesgo de duplicar (ver el PENDIENTES): queda frenada, y alguien la mira.
+ */
+const DIAS_AVISO_FRENADA = 14
+async function frenadasDe(sb, store) {
+  const desde = new Date(Date.now() - DIAS_AVISO_FRENADA * 864e5).toISOString()
+  const { data, error } = await sb.from('recepcion_evento').select('oc_id, payload').eq('store', store).eq('estado', 'ignorado').like('error', 'cambió de forma%').gte('recibido_en', desde)
+  if (error) throw new Error(`recepcion_evento: ${error.message}`)
+  return [...new Set((data || []).map((e) => e.payload?.data?.orden_compra?.label ?? `#${e.oc_id}`))]
 }
 
 /** La base del motor de una marca. Sin la variable ⇒ `null`. */
@@ -123,7 +168,7 @@ async function abrirBase(marca) {
 }
 
 /** Anota cómo salió la lectura de las OC y hasta cuándo sirve el token. 🔴 Un tropiezo acá ⛔ afecta a la lectura: lo que importa ya se guardó. */
-async function anotarLaLectura({ store, token, error }) {
+async function anotarLaLectura({ store, token, error, frenadas = [] }) {
   let control
   try {
     control = await abrirBase('bdi')
@@ -132,7 +177,7 @@ async function anotarLaLectura({ store, token, error }) {
     let falla = error
     let vence
     try { vence = (await mirarToken(store, { token })).vence } catch (e) { falla = falla || e }
-    await anotarLectura(control, { sistema: 'ingresos', negocio: store, ok: !falla, status: falla ? falla.status ?? null : 200, code: falla ? falla.code ?? 'sin_respuesta' : null, vence })
+    await anotarLectura(control, { sistema: 'ingresos', negocio: store, ok: !falla, status: falla ? falla.status ?? null : 200, code: falla ? falla.code ?? 'sin_respuesta' : frenadas.length ? 'oc_frenada' : null, detalle: !falla && frenadas.length ? `Sin guardar: ${frenadas.join(', ')}. Cambiaron en Ingresos: revisar a mano.` : null, vence })
   } catch (e) {
     if (e?.code !== '42P01') console.error(`[ingresos-lectura] ${store}: no se pudo anotar la lectura (${e?.code ?? 'sin código'})`)
   } finally {
@@ -195,7 +240,7 @@ export default async function handler(req, res) {
     if (!token) { marcas[store] = { sinToken: true }; continue }
     try {
       marcas[store] = await leerMarca({ sb, store, token, seco, hasta })
-      if (!seco) await anotarLaLectura({ store, token })
+      if (!seco) await anotarLaLectura({ store, token, frenadas: await frenadasDe(sb, store) })
     } catch (e) {
       fallo = true
       marcas[store] = { error: String((e && e.message) || e).slice(0, 300) }

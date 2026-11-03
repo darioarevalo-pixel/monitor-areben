@@ -1,7 +1,7 @@
 // La traducción de la API de Ingresos a la forma del aviso, contra el normalizador real: es lo que garantiza que una OC
 // leída se guarde igual que una avisada. Y el handler: autorización, marcas sin token, seco, y que una falla ⛔ avance.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { aProcesar, desdeDe, eventoDeOc, idDeEvento, LECTURA_DESDE, mismaForma } from '@/lib/recepciones/lectura.core.js'
+import { aProcesar, aReleer, contadasDe, desdeDe, eventoDeOc, idDeEvento, idDeRelectura, LECTURA_DESDE, mismaForma, RELECTURA_MAX } from '@/lib/recepciones/lectura.core.js'
 import { normalizarEvento } from '@/lib/recepciones/webhook.core.js'
 
 const linea = (id: number, o: Record<string, unknown> = {}) => ({
@@ -87,16 +87,17 @@ const procesar = vi.fn()
 const anotar = vi.fn()
 let eventos: { webhook_id: string; estado: string }[] = []
 let guardadas: { sku: string; codigo_barras: string }[] = []
+let ocs: Record<string, unknown>[] = []
 vi.mock('@/api/_recepciones-procesar.js', () => ({ procesarEvento: (x: unknown) => procesar(x) }))
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
-    from: () => {
+    from: (tabla: string) => {
       const q: Record<string, unknown> = {
-        select: () => q, like: () => q, eq: () => q, order: () => q, limit: () => q,
+        select: () => q, like: () => q, eq: () => q, order: () => q, limit: () => q, gte: () => q,
         maybeSingle: async () => ({ data: null, error: null }),
         in: async () => ({ data: eventos, error: null }),
         upsert: async (x: unknown) => { anotar(x); return { error: null } },
-        then: (ok: (v: unknown) => unknown) => ok({ data: guardadas, error: null }),
+        then: (ok: (v: unknown) => unknown) => ok({ data: tabla === 'recepcion_oc' ? ocs : tabla === 'recepcion_evento' ? [] : guardadas, error: null }),
       }
       return q
     },
@@ -111,6 +112,23 @@ function res() {
 const pedido = (query: Record<string, string> = { tarea: 'leer' }, auth = 'Bearer c') => ({ method: 'GET', query, headers: { authorization: auth } })
 const resp = (b: unknown, status = 200) => ({ ok: status < 400, status, json: async () => b })
 
+describe('la relectura: lo que contó menos de lo pedido', () => {
+  it('lo contado usa la misma regla con que se guarda', () => {
+    expect(contadasDe(oc({ lines: [linea(1, { quantity_counted: null }), linea(2, { confirmed_at: null }), linea(3, { quantity_counted: 4 })] }))).toBe(4)
+  })
+  it('sólo lo que contó de menos, la más nueva primero, con tope', () => {
+    const f = (oc_id: number, c: number, d: string) => ({ oc_id, unidades_pedidas: 10, unidades_contadas: c, confirmada_at: d })
+    expect(aReleer([f(1, 10, '2026-11-01'), f(2, 0, '2026-10-01'), f(3, 5, '2026-11-02')]).map((o: { oc_id: number }) => o.oc_id)).toEqual([3, 2])
+    expect(aReleer(Array.from({ length: 40 }, (_, i) => f(i + 1, 0, '2026-11-01')))).toHaveLength(RELECTURA_MAX)
+    expect(aReleer([f(1, 0, '2026-11-01')], new Set([1]))).toEqual([])
+  })
+  it('el id cambia con lo contado, ⛔ con releer lo mismo', () => {
+    const a = oc({ lines: [linea(1, { quantity_counted: null })] }); const b = oc({ lines: [linea(1, { quantity_counted: 5 })] })
+    expect(idDeRelectura('bdi', a)).not.toBe(idDeRelectura('bdi', b))
+    expect(idDeRelectura('bdi', b)).toBe(idDeRelectura('bdi', oc({ lines: [linea(1, { quantity_counted: 5 })] })))
+  })
+})
+
 describe('el handler', () => {
   async function llamar(req = pedido()) {
     const mod = await import('@/api/_ingresos-lectura.js')
@@ -120,7 +138,7 @@ describe('el handler', () => {
   }
   let fetchMock: ReturnType<typeof vi.fn>
   beforeEach(() => {
-    vi.resetModules(); procesar.mockReset(); procesar.mockResolvedValue({ oc: 'x', lineas: 2 }); anotar.mockReset(); eventos = []; guardadas = []
+    vi.resetModules(); procesar.mockReset(); procesar.mockResolvedValue({ oc: 'x', lineas: 2 }); anotar.mockReset(); eventos = []; guardadas = []; ocs = []
     vi.stubEnv('CRON_SECRET', 'c'); vi.stubEnv('SUPABASE_URL', 'https://e.supabase.co'); vi.stubEnv('SUPABASE_SERVICE_KEY', 'k')
     vi.stubEnv('INGRESOS_TOKEN_ZATTIA', 'igk_z'); vi.stubEnv('INGRESOS_TOKEN_BDI', '')
     fetchMock = vi.fn(async (url: string) => (url.includes('/purchase-orders/3050')
@@ -169,6 +187,49 @@ describe('el handler', () => {
     await llamar()
     expect(procesar).toHaveBeenCalledTimes(1)
     expect(anotar).not.toHaveBeenCalled()
+  })
+  it('la OC guardada con de menos y `updated_at` quieto se relee, y entra con su conteo', async () => {
+    guardadas = [{ sku: 'S-10', codigo_barras: 'B-10' }, { sku: 'S-11', codigo_barras: 'B-11' }]
+    ocs = [{ oc_id: 3050, unidades_pedidas: 10, unidades_contadas: 0, confirmada_at: '2026-10-29' }]
+    fetchMock.mockImplementation(async (url: string) => (url.includes('/purchase-orders/3050') ? resp(oc()) : resp({ items: [], total: 0 })))
+    const r = await llamar()
+    expect(procesar).toHaveBeenCalledTimes(1)
+    expect(procesar.mock.calls[0][0].idEvento).toBe('api:zattia:3050:2026-10-29T12:06:07.717723Z:c10')
+    expect(JSON.stringify(r.body)).toContain('"antes":0')
+  })
+  it('si lo contado es lo mismo ⛔ se toca; en seco lo dice y ⛔ escribe', async () => {
+    ocs = [{ oc_id: 3050, unidades_pedidas: 20, unidades_contadas: 10, confirmada_at: '2026-10-29' }]
+    fetchMock.mockImplementation(async (url: string) => (url.includes('/purchase-orders/3050') ? resp(oc()) : resp({ items: [], total: 0 })))
+    await llamar()
+    expect(procesar).not.toHaveBeenCalled()
+    ocs = [{ oc_id: 3050, unidades_pedidas: 20, unidades_contadas: 3, confirmada_at: '2026-10-29' }]
+    const r = await llamar(pedido({ tarea: 'leer', seco: '1' }))
+    expect(procesar).not.toHaveBeenCalled()
+    expect(JSON.stringify(r.body)).toContain('"ahora":10')
+  })
+  it('la relectura que cambió de forma ⛔ se guarda y queda anotada', async () => {
+    guardadas = [{ sku: 'OTRO', codigo_barras: 'B' }, { sku: 'S-11', codigo_barras: 'B-11' }]
+    ocs = [{ oc_id: 3050, unidades_pedidas: 10, unidades_contadas: 0, confirmada_at: '2026-10-29' }]
+    fetchMock.mockImplementation(async (url: string) => (url.includes('/purchase-orders/3050') ? resp(oc()) : resp({ items: [], total: 0 })))
+    await llamar()
+    expect(procesar).not.toHaveBeenCalled()
+    expect(anotar.mock.calls[0][0]).toMatchObject({ estado: 'ignorado', webhook_id: 'api:zattia:3050:2026-10-29T12:06:07.717723Z:c10' })
+  })
+  it('sin tiempo corta sin perder: la más vieja se guarda, y la otra queda para la vuelta siguiente', async () => {
+    const lista = [{ id: 3050, code: 'OC-3050', status: 'confirmed', updated_at: '2026-10-29T12:00:00Z' }, { id: 3051, code: 'OC-3051', status: 'confirmed', updated_at: '2026-10-29T13:00:00Z' }]
+    fetchMock.mockImplementation(async (url: string) => (url.includes('/purchase-orders/305') ? resp(oc({ id: Number(url.slice(-4)), code: `OC-${url.slice(-4)}` })) : resp({ items: lista, total: 2 })))
+    const reloj = Date.now()
+    procesar.mockImplementationOnce(async () => { vi.spyOn(Date, 'now').mockReturnValue(reloj + 60_000); return { oc: 'x', lineas: 2 } })
+    const r = await llamar()
+    vi.restoreAllMocks()
+    expect(procesar).toHaveBeenCalledTimes(1)
+    expect(procesar.mock.calls[0][0].payload.data.orden_compra.id).toBe(3050)
+    expect(JSON.stringify(r.body)).toContain('"corto":true')
+    expect(r.code).toBe(200)
+    // La vuelta siguiente: la primera ya está procesada, y entra la otra.
+    procesar.mockClear(); eventos = [{ webhook_id: `api:zattia:3050:${oc().updated_at}`, estado: 'procesado' }, { webhook_id: 'api:zattia:3050:2026-10-29T12:00:00Z', estado: 'procesado' }]
+    await llamar()
+    expect(procesar.mock.calls.map((c) => c[0].payload.data.orden_compra.id)).toEqual([3051])
   })
   it('un token rechazado contesta 502 con el código, ⛔ con el token', async () => {
     fetchMock.mockResolvedValue(resp({ status: 401, code: 'token_expired', detail: 'x' }, 401))

@@ -19,6 +19,7 @@ import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { BuscadorLista, TileResumen, VistasLista, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { leerRecepcion, leerRecepciones, type LineaConCruce } from '@/lib/recepciones/cliente'
+import { ActualizarIngresos } from '@/components/erp/productos/ActualizarIngresos'
 import { renglonesQueNoCerraron } from '@/lib/recepciones/core'
 import {
   COLUMNAS, COLUMNAS_DE_SIEMPRE, VISTAS, armarFila, contarVistas, filtrar, ordenar, resumen, type FilaRecepcion,
@@ -130,6 +131,7 @@ export function RecepcionesStock({ alContar }: { alContar?: AlContar } = {}) {
         Ingresos avisa cada orden <b>recién cuando se confirma</b> lo que llegó: todavía no se ven las <b>pedidas que no llegaron</b>, ni a qué depósito va cada una (el ERP supone el depósito de la marca).
       </Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      <ActualizarIngresos />
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Recibidas este mes" valor={res.ordenes.toLocaleString('es-AR')} oscuro nota="órdenes de Ingresos" />
@@ -180,10 +182,11 @@ function FichaRecepcion({ f, marca, onCerrar }: { f: FilaRecepcion; marca: strin
   const [lineas, setLineas] = useState<LineaConCruce[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [todas, setTodas] = useState(false)
+  const [enStock, setEnStock] = useState<{ unidades: number; movimientos: number } | null>(null)
   useEffect(() => {
     let vivo = true
     leerRecepcion(marca, f.id)
-      .then((d) => { if (vivo) setLineas(d.lineas) })
+      .then((d) => { if (vivo) { setLineas(d.lineas); setEnStock(d.enStock) } })
       .catch((e) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudo abrir la orden.') })
     return () => { vivo = false }
   }, [marca, f.id])
@@ -206,6 +209,7 @@ function FichaRecepcion({ f, marca, onCerrar }: { f: FilaRecepcion; marca: strin
         <DatoFicha titulo="Faltaron">{f.faltaron ? u(f.faltaron) : '—'}</DatoFicha>
         <DatoFicha titulo="Sobraron">{f.sobraron ? u(f.sobraron) : '—'}</DatoFicha>
         <DatoFicha titulo="Va a">{f.vaA} (supuesto)</DatoFicha>
+        {enStock && <DatoFicha titulo="Sumó al stock">{u(enStock.unidades)}</DatoFicha>}
       </DatosFicha>
       {error && <Notice tone="danger">{error}</Notice>}
       <div>

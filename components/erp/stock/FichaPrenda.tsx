@@ -17,6 +17,7 @@ import { usePantallaAngosta } from '@/lib/movil'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
 import { leerStockDePrenda, type FilaStock, type MarcaErp, type StockDePrenda } from '@/lib/erp/cliente'
 import { NOMBRE_DEPOSITO, NOMBRE_ORIGEN, NOMBRE_TIPO } from '@/lib/erp/stock.core.js'
+import { documentoDe } from '@/lib/erp/movimientos.core.js'
 import type { NombreIcono } from '@/components/ui/Icono'
 import type { Tone } from '@/components/ui/tokens'
 
@@ -69,7 +70,7 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
       cuando: m.ocurrido_en, icono, tono,
       titulo: `${nombreDe(NOMBRE_TIPO, m.tipo)} · ${conSigno(m.cantidad)}`,
       // La referencia es la clave técnica del libro («uuid:producto:talle:depósito»): ⛔ se muestra.
-      detalle: `${nombreDe(NOMBRE_DEPOSITO, m.deposito)} · quedan ${m.saldo} · ${nombreDe(NOMBRE_ORIGEN, m.origen)}`,
+      detalle: `${nombreDe(NOMBRE_DEPOSITO, m.deposito)} · quedan ${m.saldo} · ${m.origen === 'recepcion' ? documentoDe(m) : nombreDe(NOMBRE_ORIGEN, m.origen)}`,
     }
   })
 
