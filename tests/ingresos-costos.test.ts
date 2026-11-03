@@ -12,7 +12,7 @@ vi.mock('@/motor/llave-corte.mjs', async () => ({
   costoIngresosManda: (marca: string, cortes: Record<string, Date>, env: Record<string, string | undefined>) => !!cortes[marca] && env.ERP_NO_MANDA !== marca,
 }))
 vi.mock('@/api/_recepciones-procesar.js', () => ({ procesarEvento: vi.fn() }))
-vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: () => ({ select: () => ({ like: () => ({ eq: () => ({ order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }) }) }) }) }) }))
+vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: () => { const q: Record<string, unknown> = { select: () => q, like: () => q, eq: () => q, gte: () => q, order: () => q, limit: () => q, in: async () => ({ data: [], error: null }), maybeSingle: async () => ({ data: null, error: null }), then: (ok: (v: unknown) => unknown) => ok({ data: [], error: null }) }; return q } }) }))
 
 import handler from '@/api/_ingresos-lectura.js'
 
