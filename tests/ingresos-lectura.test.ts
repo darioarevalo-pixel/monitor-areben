@@ -207,6 +207,13 @@ describe('el handler', () => {
     expect(procesar).not.toHaveBeenCalled()
     expect(JSON.stringify(r.body)).toContain('"ahora":10')
   })
+  it('una OC que ya ⛔ está en Ingresos ⛔ traba la lectura', async () => {
+    ocs = [{ oc_id: 3050, unidades_pedidas: 10, unidades_contadas: 0, confirmada_at: '2026-10-29' }]
+    fetchMock.mockImplementation(async (url: string) => (url.includes('/purchase-orders/3050') ? resp({ code: 'not_found' }, 404) : resp({ items: [], total: 0 })))
+    const r = await llamar()
+    expect(r.code).toBe(200)
+    expect(procesar).not.toHaveBeenCalled()
+  })
   it('la relectura que cambió de forma ⛔ se guarda y queda anotada', async () => {
     guardadas = [{ sku: 'OTRO', codigo_barras: 'B' }, { sku: 'S-11', codigo_barras: 'B-11' }]
     ocs = [{ oc_id: 3050, unidades_pedidas: 10, unidades_contadas: 0, confirmada_at: '2026-10-29' }]

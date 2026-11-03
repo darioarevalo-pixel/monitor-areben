@@ -118,7 +118,14 @@ async function leerMarca({ sb, store, token, seco, hasta }) {
   salida.releidas = []
   for (const g of aReleer(lista)) {
     if (Date.now() > hasta) { salida.corto = true; break }
-    const oc = await pedir(`/purchase-orders/${g.oc_id}`, token)
+    let oc
+    try {
+      oc = await pedir(`/purchase-orders/${g.oc_id}`, token)
+    } catch (e) {
+      // Una OC que ya ⛔ está en Ingresos ⛔ traba al resto: queda como estaba.
+      if (e?.status === 404) continue
+      throw e
+    }
     if (oc.business?.slug !== store) throw new Error(`el token de ${store} leyó una OC de ${oc.business?.slug}`)
     if (contadasDe(oc) === Number(g.unidades_contadas ?? 0)) continue
     const idEvento = idDeRelectura(store, oc)
