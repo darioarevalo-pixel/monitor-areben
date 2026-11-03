@@ -21,7 +21,7 @@ import { cuandoCorto } from '@/components/ui/PiezasLista'
 import { useSesion } from '@/components/SesionProvider'
 import { marcaParaPOS, usarMarcaCaja } from '@/lib/caja/marca'
 import { descargarFactura, numeroComprobante, type FacturaEmitida } from '@/lib/arca/factura-pdf'
-import { buscarClientas, buscarVentas, facturarCambio, facturarVenta, leerFichaDeVenta, type CambioFacturado, type Clienta, type FichaDeVenta, type MarcaErp, type PedidoFactura, type VentaPropia } from '@/lib/erp/cliente'
+import { buscarClientas, buscarVentas, facturarCambio, facturarVenta, leerCorteDeLinea, leerFichaDeVenta, type CambioFacturado, type Clienta, type FichaDeVenta, type MarcaErp, type PedidoFactura, type VentaPropia } from '@/lib/erp/cliente'
 import { NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 
 export function FacturaCaja() {
@@ -31,6 +31,14 @@ export function FacturaCaja() {
   const tienda = useTiendaErp()
   usarMarcaCaja(store)
   const { confirmar } = useConfirmar()
+  // ¿Esta línea ya factura de verdad acá? Se prende solo con su corte (`erp_corte`). Sin poder leerlo ⛔ se afirma nada.
+  const [corte, setCorte] = useState<{ linea: string; enErp: boolean } | null>(null)
+  useEffect(() => {
+    let vivo = true
+    leerCorteDeLinea(tienda).then((r) => { if (vivo) setCorte({ linea: tienda, enErp: r.en_erp }) }).catch(() => {})
+    return () => { vivo = false }
+  }, [tienda])
+  const sinCortar = corte?.linea === tienda && !corte.enErp
 
   const [q, setQ] = useState('')
   const [ventas, setVentas] = useState<VentaPropia[] | null>(null)
@@ -190,7 +198,7 @@ export function FacturaCaja() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard title={`Factura · ${NOMBRE_MARCA[store] ?? store}`} subtitle="La factura que pide la clienta en el mostrador: buscá la venta y elegí A o B.">
-        <Notice tone="warning">Hasta que se apague Gestión Nube la factura real del local sale de Gestión Nube: acá sólo sale en el ambiente de prueba de ARCA.</Notice>
+        {sinCortar && <Notice tone="warning">Hasta el corte de esta marca la factura real del local sale de Gestión Nube: acá sólo sale en el ambiente de prueba de ARCA.</Notice>}
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="#123, nombre, DNI o mail" />
