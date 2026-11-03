@@ -195,15 +195,23 @@ async function contexto(db, linea) {
  * @param {import('pg').ClientBase} db @param {any} e la entrada de `armarAjuste` @param {{ ahora?: Date }} [op]
  */
 export async function crearAjuste(db, e, op = {}) {
+  const yaGuardado = async () => {
+    const [previo] = await q(db, 'select * from stock_ajuste where linea = $1 and ref = $2', [e.linea, String(e.ref).slice(0, 120)])
+    return previo ? { ok: true, ya: true, ajuste: previo, renglones: [], avisos: [], movimientos: 0 } : null
+  }
+  let r
   try {
-    return await enTransaccion(db, () => guardarAjuste(db, e, op))
+    r = await enTransaccion(db, () => guardarAjuste(db, e, op))
   } catch (err) {
     // Dos pedidos con el mismo `ref` a la vez: el segundo pierde contra el índice único y devuelve el que ganó.
     if (err?.code !== '23505' || !e?.ref) throw err
-    const [previo] = await q(db, 'select * from stock_ajuste where linea = $1 and ref = $2', [e.linea, String(e.ref).slice(0, 120)])
-    if (!previo) throw err
-    return { ok: true, ya: true, ajuste: previo, renglones: [], avisos: [], movimientos: 0 }
+    const ganador = await yaGuardado()
+    if (!ganador) throw err
+    return ganador
   }
+  // 🔴 También puede perder ANTES del índice: con la última unidad, el que ganó ya la sacó y a éste le da QUEDA_NEGATIVO.
+  if (!r.ok && e?.ref) return (await yaGuardado()) ?? r
+  return r
 }
 
 /** `crearAjuste` SIN transacción propia: la abre quien llama (el cierre de una salida arma varios juntos). */

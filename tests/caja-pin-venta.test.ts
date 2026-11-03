@@ -3,10 +3,10 @@ import { pidePinDeVenta, prendasQueFaltan } from '../lib/caja/pin-venta.core.js'
 import { entradaDelMotorErp } from '../lib/caja/motor.core.js'
 
 describe('el PIN de vender sin stock: a quién le toca', () => {
-  it('Stunned y Zattia una vez cortadas; BDI todavía no (Bruno, 1-nov); lo que va a GN nunca', () => {
+  it('las tres líneas una vez cortadas (Bruno, 3-nov); lo que va a GN nunca', () => {
     expect(pidePinDeVenta('erp', 'stunned')).toBe(true)
     expect(pidePinDeVenta('erp', 'zattia')).toBe(true)
-    expect(pidePinDeVenta('erp', 'bdi')).toBe(false)
+    expect(pidePinDeVenta('erp', 'bdi')).toBe(true)
     expect(pidePinDeVenta('gn', 'zattia')).toBe(false)
   })
 })
