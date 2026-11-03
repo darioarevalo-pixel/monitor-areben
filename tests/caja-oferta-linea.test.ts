@@ -155,9 +155,14 @@ describe('caja · el % por campaña lo decide el servidor, por el producto', () 
     const c = cobro({ filas, pagos: [{ cuenta: 12921 }], reglas: R, descuentoVenta: { tipo: 'pesos', valor: 2000 } })
     expect(c.total).toBe(16200)
   })
-  it('🔴 el cambio con una prenda Cyber entre lo nuevo ⛔ se cobra acá: pagaría el % de la cuenta', () => {
-    expect(() => cobroDelCambio({ diferencia: 5000, pagos: [{ cuenta: 12921 }], reglas: R, nuevas: [{ product_id: CYBER }] })).toThrow(/Gestión Nube/)
-    expect(cobroDelCambio({ diferencia: 5000, pagos: [{ cuenta: 12921 }], reglas: R, nuevas: [{ product_id: 2 }] }).total).toBe(4300)
+  it('el cambio cobra la diferencia con el % de la prenda que se lleva (Bruno, 3-nov)', () => {
+    const cobrar = (nuevas: Array<{ product_id: number; importe: number }>, diferencia = 5000) => cobroDelCambio({ diferencia, pagos: [{ cuenta: 12921 }], reglas: R, nuevas })
+    expect(cobrar([{ product_id: CYBER, importe: 8000 }]).total).toBe(4500) // 10 % de la campaña
+    expect(cobrar([{ product_id: 2, importe: 8000 }]).total).toBe(4300) // 15 % de la cuenta y el redondeo a 100
+    // Las dos: 12 % pesado por importe (10 % sobre 3.000 y 15 % sobre 2.000), como en la venta, y el redondeo a 100.
+    const dos = cobrar([{ product_id: CYBER, importe: 6000 }, { product_id: 2, importe: 4000 }])
+    expect(dos.pagos[0]).toMatchObject({ base: 5000, porcentaje: 12, descuento: 600 })
+    expect(dos.total).toBe(4400)
   })
   it('pctDePrenda: null fuera de la lista y en un medio sin % propio', () => {
     expect(pctDePrenda(R, 'efectivo', CYBER)).toBe(10)

@@ -257,7 +257,7 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
   const sinPrecio = nuevas.some((n) => !(Number(n.precio) > 0))
   const sinPrecioDevuelta = tipo === 'suelto' && devueltas.some((d) => !(Number(d.precio) > 0))
   const items = nuevas.map((n) => ({ product_id: n.variante.product_id, size_id: n.variante.size_id, cantidad: n.cantidad, precio: Number(n.precio), sku: n.variante.sku }))
-  let filas: Array<{ importe: number }> = []
+  let filas: Array<{ product_id: number; importe: number }> = []
   try {
     filas = sinPrecio || !items.length ? [] : renglones(items)
   } catch {
@@ -303,7 +303,7 @@ export function useCambio({ store, config, precioDe, esStunned }: Entrada) {
   // 🔑 El descuento de la forma de pago, con el MISMO cálculo que el servidor (`cobroDelCambio` = `cobro()` de la Caja).
   let cobrado: { pagos: Array<{ cuenta: number; monto: number }>; total: number; espera: number } = { pagos: [], total: 0, espera: 0 }
   try {
-    if (reglas && diferencia > 0 && (cuenta || !(resto > 0))) cobrado = cobroDelCambio({ diferencia, pagos: cuenta ? [{ cuenta }] : [], reglas, nuevas: items, saldo: saldoUsado })
+    if (reglas && diferencia > 0 && (cuenta || !(resto > 0))) cobrado = cobroDelCambio({ diferencia, pagos: cuenta ? [{ cuenta }] : [], reglas, nuevas: filas, saldo: saldoUsado })
   } catch (e) {
     errorCobro = e instanceof Error ? e.message : 'No se pudo calcular el cobro.'
   }
