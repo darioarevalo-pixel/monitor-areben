@@ -98,6 +98,7 @@ import { SIN_ARCA, arcaConectado, baseFacturacion, clienteArcaDelEntorno, repoFa
 import { CBTE, COND_IVA, DOC, ambienteDeEntorno, ptoVtaDe } from '../motor/arca/arca.core.js'
 import { techoDelMes } from '../motor/arca/techo.core.js'
 import { claveVenta, resumenDelMes, ventasParaFacturar } from '../motor/arca/mes.core.js'
+import { SQL_CUENTAS_SIN_PLATA, SQL_FICHAS_ERP, SQL_PAGOS_A_CUENTA_ERP, cobrosDeVentasErp } from '../lib/erp/facturacion-erp.core.js'
 import { POR_PEDIDO, facturarLote } from '../motor/arca/lote.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
@@ -207,6 +208,32 @@ export async function leerMes(mes) {
   // Cobros del mes y facturas de GN, de la base de cada marca.
   /** @type {Map<string, string>} `marca:venta` → línea */
   const lineaGN = new Map()
+  // Lo cobrado por las ventas del ERP (una línea cortada ⛔ llega a `ventas_cobros`). Sin poder leerlo FRENA: un tope sin esas
+  // ventas parecería bueno y sería menor, y cerrar el mes lo dejaría fijo.
+  /** @type {Map<string, { numero: string|null, cliente: string|null }>} `marca:venta` → lo que se muestra */
+  const datosErp = new Map()
+  const soloTope = new Set()
+  const yaFacturadasErp = new Set()
+  const delErp = await Promise.all(MARCAS.map(async (marca) => {
+    const leido = await conMotor(marca, 'La facturación de las ventas del ERP', async (db) => {
+      const { cobrosPropios } = await import('../motor/venta/facturar.mjs')
+      const { cobros: propios } = await cobrosPropios(db, mes)
+      const ids = [...new Set(propios.map((c) => c.venta_id))]
+      const [fichas, pagos, sinPlata] = await Promise.all([
+        ids.length ? db.query(SQL_FICHAS_ERP, [ids]) : { rows: [] },
+        db.query(SQL_PAGOS_A_CUENTA_ERP, [mes]),
+        db.query(SQL_CUENTAS_SIN_PLATA),
+      ])
+      return { propios, fichas: fichas.rows, pagos: pagos.rows, sinPlata: sinPlata.rows.map((r) => r.nombre) }
+    })
+    if (leido.error) throw new Error(leido.error)
+    const e = cobrosDeVentasErp(marca, leido)
+    for (const id of e.facturadas) yaFacturadasErp.add(claveVenta(marca, id))
+    for (const [id, l] of e.lineas) lineaGN.set(claveVenta(marca, id), l)
+    for (const [id, d] of e.datos) datosErp.set(claveVenta(marca, id), d)
+    for (const id of e.soloTope) soloTope.add(claveVenta(marca, id))
+    return e.cobros
+  }))
   const porMarca = await Promise.all(MARCAS.map(async (marca) => {
     const { url, key } = cfgDeMarca(marca)
     const b = createClient(url, key)
@@ -233,10 +260,10 @@ export async function leerMes(mes) {
   const facturasMonitor = ambiente
     ? await leerTodo(sb, 'facturas', (q) => q.select('marca, venta_id, tipo, total, estado, mes').eq('ambiente', ambiente).neq('estado', 'rechazada').order('creado_en'))
     : []
-  const yaFacturadas = new Set(porMarca.flatMap((p) => [...p.conFacturaGN]))
+  const yaFacturadas = new Set([...porMarca.flatMap((p) => [...p.conFacturaGN]), ...yaFacturadasErp])
   for (const f of facturasMonitor) if (f.tipo === CBTE.FACTURA_A || f.tipo === CBTE.FACTURA_B) yaFacturadas.add(claveVenta(f.marca, f.venta_id))
 
-  const cobros = porMarca.flatMap((p) => p.cobros)
+  const cobros = [...porMarca.flatMap((p) => p.cobros), ...delErp.flat()]
   const calculado = techoDelMes(cobros, tipos, mes)
   const cerrado = periodo.data?.estado === 'cerrado'
   const techo = cerrado ? Number(periodo.data.techo) : calculado.total
@@ -248,8 +275,10 @@ export async function leerMes(mes) {
   const lineaDe = (marca, id) => (marca === 'bdi' ? 'bdi' : lineaGN.get(claveVenta(marca, id)) ?? 'zattia')
   return {
     sb, ambiente, errorAmbiente, tipos, cobros, yaFacturadas, calculado,
-    periodo: periodo.data || null, resumen, lineaDe,
-    ventas: ventasParaFacturar(cobros, tipos, mes, yaFacturadas).map((v) => ({ ...v, linea: lineaDe(v.marca, v.ventaId) })),
+    periodo: periodo.data || null, resumen, lineaDe, datosErp,
+    ventas: ventasParaFacturar(cobros, tipos, mes, yaFacturadas)
+      .filter((v) => !soloTope.has(claveVenta(v.marca, v.ventaId)))
+      .map((v) => ({ ...v, linea: lineaDe(v.marca, v.ventaId) })),
   }
 }
 
@@ -258,7 +287,7 @@ export async function leerMes(mes) {
  * factura, y las facturas de GN del mes (`ventas_factura_gn`, por el día de la VENTA). Sólo lectura: ⛔ entra en
  * `facturarVentas` ni en el tope.
  */
-async function vistaDeFacturacion(mes, ventas, lineaDe) {
+async function vistaDeFacturacion(mes, ventas, lineaDe, datosErp) {
   const desde = `${mes}-01`, hasta = finDeMes(mes)
   const porMarca = await Promise.all(MARCAS.map(async (marca) => {
     const { url, key } = cfgDeMarca(marca)
@@ -273,7 +302,7 @@ async function vistaDeFacturacion(mes, ventas, lineaDe) {
     }
     return { marca, gn, datos }
   }))
-  const de = (marca, id) => porMarca.find((p) => p.marca === marca)?.datos.get(String(id)) ?? { numero: null, cliente: null }
+  const de = (marca, id) => datosErp.get(claveVenta(marca, id)) ?? porMarca.find((p) => p.marca === marca)?.datos.get(String(id)) ?? { numero: null, cliente: null }
   return {
     ventas: ventas.map((v) => ({ ...v, ...de(v.marca, v.ventaId) })),
     facturasGN: porMarca.flatMap((p) => p.gn.map((f) => ({
@@ -320,8 +349,21 @@ export async function facturarVentas({ mes, marca, linea, ventaIds, usuario }) {
     reglas: { umbralIdentificar: UMBRAL_IDENTIFICAR, hoy },
     lote: globalThis.crypto.randomUUID(), usuario,
   })
+  // La factura de una venta del ERP se ata a la venta: sin eso la ficha ⛔ la muestra. Ya tiene CAE ⇒ una falla acá se avisa, ⛔ frena.
+  const propias = r.autorizadas.filter((f) => esDeVentaPropia(f.venta_id))
+  const sinAtar = propias.length
+    ? await conMotor(marca, 'Atar las facturas a sus ventas', async (db) => {
+      const avisos = []
+      for (const f of propias) {
+        const aviso = await atarFactura(db, { venta: { id: f.venta_id }, facturaId: f.id, tipo: 'factura' })
+        if (aviso) avisos.push(aviso)
+      }
+      return avisos
+    })
+    : []
   return {
     ambiente: m.ambiente, ptoVta,
+    sinAtar: sinAtar.error ? [`Salieron con CAE, pero no quedaron atadas a sus ventas en el ERP: ${sinAtar.error}`] : sinAtar,
     autorizadas: r.autorizadas.map((f) => ({ ventaId: f.venta_id, numero: f.numero, cae: f.cae, total: f.total })),
     rechazadas: r.rechazadas.map((f) => ({ ventaId: f.venta_id, motivos: f.motivos })),
     noSalen: [...r.noSalen.map((c) => ({ ventaId: c.ventaId, motivos: c.motivos })), ...noDisponibles.map((id) => ({ ventaId: id, motivos: ['Ya no está entre las ventas para facturar'] }))],
@@ -2131,7 +2173,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const m = await leerMes(mes)
-      const vista = await vistaDeFacturacion(mes, m.ventas, m.lineaDe)
+      const vista = await vistaDeFacturacion(mes, m.ventas, m.lineaDe, m.datosErp)
       return res.status(200).json({
         mes, ambiente: m.ambiente, errorAmbiente: m.errorAmbiente || null,
         estado: m.periodo?.estado || 'abierto', cerradoPor: m.periodo?.cerrado_por || null, cerradoEn: m.periodo?.cerrado_en || null,

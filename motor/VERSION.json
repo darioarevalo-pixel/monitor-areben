@@ -2,7 +2,7 @@
   "motor": "areben-motor",
   "version": "0.1.0",
   "commit": "1b885db60d7134cb2e4cc7477bb3d54a04b2be2d",
-  "traido_en": "2026-11-03T00:11:20.430Z",
+  "traido_en": "2026-11-03T00:34:14.038Z",
   "archivos": {
     "alerta.mjs": "0715ba98ba4ec6df1d1b7bc61a9949fdc78e7312fb8d7ce8e88fa1d918e828de",
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
@@ -63,6 +63,7 @@
     "venta/correccion.mjs": "d9a01fd5d7eaa77ad19557cabdff4251d305dcd797424bab232e503768a0ef03",
     "venta/costo.mjs": "a69abcd98a827783f88dc9c3a22705710f7b349e050a9a5c11045e5d452d6fbb",
     "venta/devolucion.core.mjs": "399605fc2763704ee1582b731f649e0c138d115a7296ee4c8c8b41e703fd0d36",
+    "venta/facturar.mjs": "c8128e410e26022c8479fc899d0f47842f3e8052a30ab9a75163427d7a124c56",
     "venta/ficha.mjs": "71cd917ffc183b0a4e70a360a1fe6aae61de6abe12d7d8aacc852ac5c5e52052",
     "venta/pago-tn.mjs": "1de5fe256bcd2e97499c1980b7564c530d727a3d5d1edf966b0ca9a029468931",
     "venta/pagos-fuente.mjs": "e9039f610769670dab9a95f1ab80be93da810b4856c0e7034c1bd7138871ab3a",

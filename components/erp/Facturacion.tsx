@@ -333,10 +333,11 @@ export function Facturacion() {
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {aviso && <Notice tone="success" onClose={() => setAviso(null)}>{aviso}</Notice>}
       {resultado && (
-        <Notice tone={resultado.rechazadas.length || resultado.noSalen.length ? 'warning' : 'success'} onClose={() => setResultado(null)}>
+        <Notice tone={resultado.rechazadas.length || resultado.noSalen.length || resultado.sinAtar?.length ? 'warning' : 'success'} onClose={() => setResultado(null)}>
           {resultado.autorizadas.length} factura(s) autorizada(s) en el punto de venta {resultado.ptoVta}
           {resultado.rechazadas.length > 0 && ` · ${resultado.rechazadas.length} rechazada(s): ${resultado.rechazadas.map((r) => `${r.ventaId} (${r.motivos.join(', ')})`).join('; ')}`}
           {resultado.noSalen.length > 0 && ` · ${resultado.noSalen.length} sin facturar: ${resultado.noSalen.map((r) => `${r.ventaId} (${r.motivos.join(', ')})`).join('; ')}`}
+          {(resultado.sinAtar?.length ?? 0) > 0 && ` · ${resultado.sinAtar?.join(' · ')}`}
         </Notice>
       )}
 

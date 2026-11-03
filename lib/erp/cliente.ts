@@ -46,6 +46,8 @@ export type ResultadoLote = {
   autorizadas: Array<{ ventaId: string; numero: number; cae: string; total: number }>
   rechazadas: Array<{ ventaId: string; motivos: string[] }>
   noSalen: Array<{ ventaId: string; motivos: string[] }>
+  /** Con CAE, pero sin atar a su venta del ERP: la ficha todavía ⛔ la muestra. */
+  sinAtar?: string[]
 }
 
 async function pedir<T>(init: RequestInit | null, query: string, fallo: string): Promise<T> {
