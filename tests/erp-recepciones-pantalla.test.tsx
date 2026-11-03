@@ -25,6 +25,7 @@ const OCS = [
 ]
 const leerRecepciones = vi.fn(async () => ({ recepciones: OCS, eventos: { rotos: [], ultimo: null }, puede: { proveedores: true } }))
 const leerRecepcion = vi.fn(async () => ({
+  enStock: { unidades: 18, movimientos: 3 },
   recepcion: OCS[2], espejoConsultado: true, puede: { proveedores: true },
   lineas: [
     { id: 'a', oc_ref: 'zattia:3', orden: 1, sku: 'TOP-1', codigo_barras: null, nombre: 'TOP SAHARA', talle: 'S', color: 'NEGRO', cantidad_pedida: 2, cantidad_contada: 2, diferencia: 0, es_nuevo: false, en_gn_hoy: true },
@@ -77,6 +78,8 @@ describe('ERP › Stock › Recepciones', () => {
     await clic(filaDe('OC-0003').querySelector('[role="cell"]:last-child')!)
     const ficha = document.querySelector('aside[aria-label^="Ficha de la orden"]')!
     expect(ficha.textContent).toContain('Los que no cerraron (1 de 2)')
+    expect(ficha.textContent).toContain('Sumó al stock')
+    expect(ficha.textContent).toContain('18')
     expect(ficha.textContent).toContain('falta darlo de alta en Gestión Nube')
     expect(ficha.querySelectorAll('tbody tr').length).toBe(1)
     await clic(boton(/^Ver los 2/))

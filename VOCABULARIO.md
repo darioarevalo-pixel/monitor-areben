@@ -1,6 +1,6 @@
 # VOCABULARIO — el glosario compartido de MAKETA y el monitor
 
-Versión: 2026-10-12c
+Versión: 2026-11-03
 
 🔑 **Este archivo es el MISMO en los dos repos** (`areben-marketing` y `monitor-areben`), byte a
 byte. Si cambia acá, se copia allá en el mismo día y sube la `Versión:` de arriba. Cada repo tiene
@@ -349,6 +349,7 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `ingreso` · `+ Ingreso` | `aporte` · `aportes` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct: «+ Salida» y «+ Ingreso» |
 | `Validar transferencia` · `Transferencia pendiente` | `Confirmar transferencia` · `Validando` | monitor | `components/caja` · `lib/caja` | Bruno, 12-oct; 13-oct: «validar» se entiende como el paso intermedio |
 | `Ingresos de mercadería` (lo que entró por una orden de compra; Bruno 30-oct: «Ingresos» solo se confunde con el `+ Ingreso` de plata de la Caja) | `Recepciones` · `Recepción` | monitor | `components/erp` · `lib/erp` | Bruno, 20-oct: «en vez de recepciones, pondría ingresos así se entiende» (la pestaña de Stock del ERP; la dirección sigue `/erp/stock/recepciones`) |
+| `Actualizar Ingresos` (el botón de ERP › Stock › Ingresos de mercadería: lee los productos de la app Ingresos) · `Listo` (el ERP ya lo tiene) · `Pendiente` (falta, se elige y se importa) | `Recepciones` · `Sincronizar` · `Importado` | monitor | `components/erp` | Bruno, 3-nov: «boton de actualizar ingresos, ves lo nuevo, te aparece lo viejo como ya listo, y lo que no esta te aparece como pendiente» |
 | `Contraentrega` (la forma de pago: el cadete cobra al entregar) | `a cobrar en la entrega` · `Cobrar en la entrega` | monitor | `components/erp` · `lib/erp` | Bruno, 20-oct: «¿contraentrega te parece?» (contrato §20 del motor) |
 | `producto` · `productos` | `prenda` · `prendas` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: el ERP vende productos, no sólo ropa (diseno.md §9) |
 | `variante` · `variantes` | `talle` · `talles` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: la variante puede ser talle, color o medida |

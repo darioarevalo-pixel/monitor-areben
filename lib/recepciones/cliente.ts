@@ -69,7 +69,7 @@ export async function leerRecepciones(
 export async function leerRecepcion(
   store: string,
   oc: string,
-): Promise<{ recepcion: Recepcion; lineas: LineaConCruce[]; espejoConsultado: boolean; puede: Puede }> {
+): Promise<{ recepcion: Recepcion; lineas: LineaConCruce[]; espejoConsultado: boolean; puede: Puede; enStock: { unidades: number; movimientos: number } | null }> {
   const r = await apiFetch(`${API}&store=${encodeURIComponent(store)}&oc=${encodeURIComponent(oc)}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo abrir la orden.')
@@ -77,6 +77,7 @@ export async function leerRecepcion(
     recepcion: d.recepcion as Recepcion,
     lineas: (d.lineas || []) as LineaConCruce[],
     espejoConsultado: Boolean(d.espejo_consultado),
+    enStock: d.en_stock ?? null,
     puede: puedeDe(d),
   }
 }
