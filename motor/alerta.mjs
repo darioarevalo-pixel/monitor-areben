@@ -73,9 +73,13 @@ export function reglasDeFrescura(base, hechos, ahora) {
 export const DIAS_AVISO_TOKEN = 15
 const DIA = 24 * HORA
 /** Cuánto puede pasar sin una lectura buena, en horas: las OC se leen cada 5 min, los costos cada hora. */
-const LIMITE_LECTURA_H = { ingresos: 1, 'ingresos-costos': 3, logistica: 1 }
+// 🔴 La lectura de OC corre cada hora (Bruno, 3-nov): con un límite de 1 h, cada vuelta normal abriría la alerta.
+const LIMITE_LECTURA_H = { ingresos: 3, 'ingresos-costos': 3, logistica: 1 }
 const NOMBRE_SISTEMA = { ingresos: 'Ingresos', 'ingresos-costos': 'Costos de Ingresos', logistica: 'Logística' }
 const fechaAR = (d) => new Date(d).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })
+
+/** La lectura anduvo pero hay que mirar: la OC que cambió de forma y ⛔ se guardó. */
+const AVISO_DE_LECTURA = { oc_frenada: 'una OC cambió y ⛔ se guardó' }
 
 /**
  * Las reglas de la conexión: lo que ⛔ leemos bien de afuera (`conexion_lectura`, sql/074) y los tokens que dimos nosotros (`ext_token`).
@@ -91,6 +95,7 @@ export function reglasDeConexion({ lecturas = [], tokens = [] }, ahora) {
     const rechazo = l.status === 401
     out.push({ clave: `conexion-rechazo:${clave}`, falla: rechazo, titulo: `${quien}: rechazó el token`, detalle: `Contestó 401${l.code ? ` (${l.code})` : ''}: hay que pedir un token nuevo` })
     out.push({ clave: `conexion-permiso:${clave}`, falla: l.code === 'sin_permiso', titulo: `${quien}: al token le falta un permiso`, detalle: l.detalle })
+    out.push({ clave: `conexion-aviso:${clave}`, falla: !!AVISO_DE_LECTURA[l.code], titulo: `${quien}: ${AVISO_DE_LECTURA[l.code] ?? 'hay algo para mirar'}`, detalle: l.detalle })
     out.push({ clave: `conexion-vence:${clave}`, falla: porVencer(l.token_vence_en), titulo: `${quien}: el token está por vencer`, detalle: l.token_vence_en ? `Vence el ${fechaAR(l.token_vence_en)}` : null })
     const limite = LIMITE_LECTURA_H[l.sistema] ?? 3
     const sinLeer = !l.ultimo_ok_en || ahora - new Date(l.ultimo_ok_en) > limite * HORA

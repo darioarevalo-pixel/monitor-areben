@@ -45,6 +45,9 @@ export const stockMlManda = (cortes, env = process.env, ahora = new Date()) => !
 export const costoIngresosManda = (marca, cortes, env = process.env, ahora = new Date()) => !frenada(marca, env)
   && (corto(marca, cortes, ahora) || String(env.COSTO_INGRESOS_MANDA ?? '').split(',').map((t) => t.trim().toLowerCase()).includes(marca))
 
+/** ¿Se puede traer un producto nuevo de Ingresos? Sólo desde el corte de la marca (Bruno, 3-nov: «el corte es un antes y un después»), ⛔ hay variable para adelantarlo. */
+export const productoIngresosManda = (marca, cortes, env = process.env, ahora = new Date()) => !frenada(marca, env) && corto(marca, cortes, ahora)
+
 /** ¿El pedido de TN de esa tienda entra como venta REAL (mueve el libro)? */
 export const ventaTnReal = (tienda, cortes, env = process.env, ahora = new Date()) => !frenada(tienda, env) && (corto(tienda, cortes, ahora) || ventaRealEn(tienda, env))
 
