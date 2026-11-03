@@ -337,9 +337,10 @@ const MOMENTOS = Object.freeze({ empezo: 'preparacion_en', terminado: 'preparado
 /**
  * Logística marca el pedido (Darío §2-§3). Idempotente: repetir un momento ⇒ `ya`, con la hora de la primera vez. Un momento
  * posterior completa los anteriores que ⛔ llegaron (si «terminado» llega sin «empezó», igual ya no se puede cambiar el pedido).
- * 🔴 EL FRENO del despacho vive acá (Darío §3): sin pagar y sin cuenta corriente ⛔ se despacha.
+ * 🔴 EL FRENO del despacho vive acá (Darío §3): sin pagar y sin cuenta corriente ⛔ se despacha. `yaOcurrio` = lo LEÍDO de Logística
+ * (`lib/logistica/lectura.mjs`): es un hecho, y el freno lo tiene ella, que relee la zona antes de despachar (Ger §7).
  * @param {import('pg').ClientBase} db
- * @param {{ marca: string, numero: number, evento: 'empezo'|'terminado'|'despachado', usuario: string, en?: Date }} e
+ * @param {{ marca: string, numero: number, evento: 'empezo'|'terminado'|'despachado', usuario: string, en?: Date, yaOcurrio?: boolean }} e
  */
 export async function marcarLogistica(db, e) {
   const usuario = texto(e?.usuario)
@@ -359,7 +360,7 @@ export async function marcarLogistica(db, e) {
 /** El momento, sobre el pedido ya bloqueado. Dentro de una transacción. */
 async function marcarEsteMomento(db, p, e, usuario, columna) {
   if (p[columna]) return { ok: true, ya: true, pedido: { id: p.id, numero: p.numero }, etapa: etapaDe(p), en: p[columna] }
-  if (e.evento === 'despachado') {
+  if (e.evento === 'despachado' && !e.yaOcurrio) {
     const pago = (await pagosDe(db, [p])).get(p.id)
     if (pago?.zona !== 'despacho') return falla('SIN_PAGAR', `El pedido ${p.numero} está sin pagar y el cliente no tiene cuenta corriente: va a Pendiente de pago`)
   }

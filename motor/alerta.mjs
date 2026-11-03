@@ -69,6 +69,51 @@ export function reglasDeFrescura(base, hechos, ahora) {
   return out
 }
 
+/** Con cuánto tiempo antes avisa un token por vencer (hito «Aviso de la conexión»). */
+export const DIAS_AVISO_TOKEN = 15
+const DIA = 24 * HORA
+/** Cuánto puede pasar sin una lectura buena, en horas: las OC se leen cada 5 min, los costos cada hora. */
+const LIMITE_LECTURA_H = { ingresos: 1, 'ingresos-costos': 3, logistica: 1 }
+const NOMBRE_SISTEMA = { ingresos: 'Ingresos', 'ingresos-costos': 'Costos de Ingresos', logistica: 'Logística' }
+const fechaAR = (d) => new Date(d).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })
+
+/**
+ * Las reglas de la conexión: lo que ⛔ leemos bien de afuera (`conexion_lectura`, sql/074) y los tokens que dimos nosotros (`ext_token`).
+ * Toda fila da su regla también cuando está sana: así se cierra la alerta.
+ * @returns {{ clave, falla: boolean, titulo, detalle }[]}
+ */
+export function reglasDeConexion({ lecturas = [], tokens = [] }, ahora) {
+  const out = []
+  const porVencer = (vence) => vence != null && new Date(vence) - ahora < DIAS_AVISO_TOKEN * DIA
+  for (const l of lecturas) {
+    const quien = `${NOMBRE_SISTEMA[l.sistema] ?? l.sistema} de ${NOMBRE[l.negocio] ?? l.negocio}`
+    const clave = `${l.sistema}:${l.negocio}`
+    const rechazo = l.status === 401
+    out.push({ clave: `conexion-rechazo:${clave}`, falla: rechazo, titulo: `${quien}: rechazó el token`, detalle: `Contestó 401${l.code ? ` (${l.code})` : ''}: hay que pedir un token nuevo` })
+    out.push({ clave: `conexion-permiso:${clave}`, falla: l.code === 'sin_permiso', titulo: `${quien}: al token le falta un permiso`, detalle: l.detalle })
+    out.push({ clave: `conexion-vence:${clave}`, falla: porVencer(l.token_vence_en), titulo: `${quien}: el token está por vencer`, detalle: l.token_vence_en ? `Vence el ${fechaAR(l.token_vence_en)}` : null })
+    const limite = LIMITE_LECTURA_H[l.sistema] ?? 3
+    const sinLeer = !l.ultimo_ok_en || ahora - new Date(l.ultimo_ok_en) > limite * HORA
+    // Con el token rechazado ya hay un aviso que dice por qué ⛔ se lee.
+    out.push({ clave: `conexion-lectura:${clave}`, falla: sinLeer && !rechazo, titulo: `${quien}: ⛔ se está leyendo`,
+      detalle: `${l.ultimo_ok_en ? `La última buena, ${hace(l.ultimo_ok_en, ahora)}` : '⛔ salió bien nunca'} (límite ${limite} h)${l.code ? `; ${l.code}` : ''}` })
+  }
+  for (const t of tokens) {
+    out.push({ clave: `ext-token-vence:${t.id}`, falla: !t.revocado_en && porVencer(t.vence_en), titulo: `API del ERP: el token de ${t.app} (${NOMBRE[t.negocio] ?? t.negocio}) está por vencer`,
+      detalle: t.vence_en ? `Vence el ${fechaAR(t.vence_en)}. Se renueva en ERP › Configuración › Tokens de la API` : null })
+  }
+  return out
+}
+
+/** Lo que miran esas reglas, de la base de BDI. Antes de migrar la 074 ⇒ `null`. */
+export async function leerConexiones(c) {
+  const [h] = (await c.query(`select to_regclass('public.conexion_lectura') is not null as lecturas, to_regclass('public.ext_token') is not null as tokens`)).rows
+  if (!h.lecturas) return null
+  const lecturas = (await c.query('select sistema, negocio, ultimo_ok_en, status, code, detalle, token_vence_en from conexion_lectura')).rows
+  const tokens = h.tokens ? (await c.query('select id, app, negocio, vence_en, revocado_en from ext_token')).rows : []
+  return { lecturas, tokens }
+}
+
 /**
  * Lo que toca mandar ahora. `alertas` = las abiertas + las cerradas ya avisadas cuyo cierre ⛔ se avisó.
  * Nuevas: abiertas, sin avisar, pasada la espera · Siguen: avisadas hace ≥ 24 h · Resueltas: cerradas que se habían avisado

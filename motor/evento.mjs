@@ -26,6 +26,8 @@ export const ESPERA_ALERTA_MIN = 25
 export const GUARDAR_DIAS = 30
 
 const MIN = 60_000
+/** Los trabajos de la agenda de cada minuto: su historia dura un día. */
+const TIPOS_DE_AGENDA = ['logistica-lectura']
 
 /** Qué hacer tras un fallo: `{ estado, proximo }` (puro). `intentos` = los que ya se hicieron, contando éste. */
 export function trasFallo(intentos, ahora) {
@@ -153,7 +155,12 @@ export async function limpiar(c, ahora = new Date()) {
     `delete from motor_evento where empresa_id = $1 and estado in ('hecho', 'abandonado', 'fallado') and creado_en < $2`,
     [EMPRESA, new Date(ahora.getTime() - GUARDAR_DIAS * 24 * 60 * MIN)],
   )
-  return rowCount
+  // Lo que corre cada minuto sin que nadie lo avise (~2.900 filas por día) ⛔ se guarda 30 días: lo que falló, sí.
+  const { rowCount: agenda } = await c.query(
+    `delete from motor_evento where empresa_id = $1 and estado = 'hecho' and tipo = any($2) and creado_en < $3`,
+    [EMPRESA, TIPOS_DE_AGENDA, new Date(ahora.getTime() - 24 * 60 * MIN)],
+  )
+  return rowCount + agenda
 }
 
 /**

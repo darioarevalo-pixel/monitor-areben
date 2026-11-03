@@ -138,7 +138,7 @@ export const ESQUEMAS = Object.freeze({
   ExtWholesaleOrder: cerrado('Un pedido mayorista mandado a preparar. Los que todavía no se mandaron no se publican.', {
     id: s('integer', 'Numérico y estable.'),
     number: s('integer', 'El número que se ve.'),
-    status: s('string', '`preparing` lo pone `start-picking`. `prepared` y `dispatched` los actualiza el ERP leyendo `GET /orders` de Logística: hasta que el ERP lea esa ruta, no avanzan solos.', { enum: STATUS }),
+    status: s('string', '`preparing` lo pone `start-picking`. `prepared` y `dispatched` los actualiza el ERP leyendo `GET /orders` de Logística, desde el corte de BDI; antes de eso no avanzan solos.', { enum: STATUS }),
     warehouse: s('string', 'Depósito del que sale.'),
     customer_name: n('string', 'El cliente.'),
     contact_name: n('string', 'Quién lo pidió.'),

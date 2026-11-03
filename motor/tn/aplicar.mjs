@@ -29,7 +29,8 @@ export async function aplicarPlan(conexion, plan, { usuario = 'tienda-nube' } = 
   for (const a of plan.anular) {
     const r = await anularVenta(conexion, { venta_id: a.venta_id, motivo: a.motivo, usuario })
     if (r.ok) anuladas++
-    else mal.push(`#${a.numero} anular ${r.error.codigo}: ${r.error.mensaje}`)
+    // Dos avisos del mismo pedido a la vez (`order/cancelled` y `order/updated`): el otro ya la anuló, que es lo que se quería.
+    else if (r.error.codigo !== 'YA_ANULADA') mal.push(`#${a.numero} anular ${r.error.codigo}: ${r.error.mensaje}`)
   }
   return { registradas, anuladas, mal }
 }

@@ -41,6 +41,10 @@ export const precioTnManda = (tienda, cortes, env = process.env, ahora = new Dat
 /** ¿El libro manda el stock de Mercado Libre (sólo BDI)? */
 export const stockMlManda = (cortes, env = process.env, ahora = new Date()) => !frenada('bdi', env) && (corto('bdi', cortes, ahora) || mandaEnML('bdi', env))
 
+/** ¿El costo de esa marca lo manda Ingresos? Antes del corte sigue el de GN; `COSTO_INGRESOS_MANDA` (lista) sirve para probar antes. */
+export const costoIngresosManda = (marca, cortes, env = process.env, ahora = new Date()) => !frenada(marca, env)
+  && (corto(marca, cortes, ahora) || String(env.COSTO_INGRESOS_MANDA ?? '').split(',').map((t) => t.trim().toLowerCase()).includes(marca))
+
 /** ¿El pedido de TN de esa tienda entra como venta REAL (mueve el libro)? */
 export const ventaTnReal = (tienda, cortes, env = process.env, ahora = new Date()) => !frenada(tienda, env) && (corto(tienda, cortes, ahora) || ventaRealEn(tienda, env))
 
