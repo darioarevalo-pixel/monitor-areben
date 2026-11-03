@@ -5,7 +5,7 @@
  */
 import { cargarCostosDeIngresos, guardarTiposDeIngreso } from './costo-ingresos.mjs'
 import { candidatos, importarElegidos, skusDeOcSinCruzar, variantesDelErp } from './catalogo-ingresos.mjs'
-import { leerCortes, productoIngresosManda } from './llave-corte.mjs'
+import { leerCortes, productoIngresosManda, pruebaIngresos } from './llave-corte.mjs'
 
 export const BASE_INGRESOS = 'https://ingreso2.arebensrl.com/api/ext/v1'
 export const PERMISO_COSTOS = 'product_costs:read'
@@ -119,6 +119,8 @@ export async function correrCostos({ control, db, negocio, token, manda, seco = 
 async function puedeImportar(db, negocio, env, ahora) {
   const cortes = await leerCortes(db)
   if (productoIngresosManda(negocio, cortes, env, ahora)) return { manda: true, corte: cortes[negocio] }
+  const desde = cortes[negocio] ? null : pruebaIngresos(negocio, env)
+  if (desde) return { manda: true, corte: desde, prueba: true }
   return { manda: false, corte: cortes[negocio] ?? null, motivo: cortes[negocio] ? 'frenada' : 'sin_corte' }
 }
 

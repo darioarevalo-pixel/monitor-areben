@@ -45,8 +45,22 @@ export const stockMlManda = (cortes, env = process.env, ahora = new Date()) => !
 export const costoIngresosManda = (marca, cortes, env = process.env, ahora = new Date()) => !frenada(marca, env)
   && (corto(marca, cortes, ahora) || String(env.COSTO_INGRESOS_MANDA ?? '').split(',').map((t) => t.trim().toLowerCase()).includes(marca))
 
-/** ¿Se puede traer un producto nuevo de Ingresos? Sólo desde el corte de la marca (Bruno, 3-nov: «el corte es un antes y un después»), ⛔ hay variable para adelantarlo. */
+/** ¿Se puede traer un producto nuevo de Ingresos? Sólo desde el corte de la marca (Bruno, 3-nov: «el corte es un antes y un después»). Probarlo antes va aparte: `pruebaIngresos`. */
 export const productoIngresosManda = (marca, cortes, env = process.env, ahora = new Date()) => !frenada(marca, env) && corto(marca, cortes, ahora)
+
+/**
+ * Probar «Actualizar Ingresos» ANTES del corte (Bruno, 3-nov: «importar algo y luego eliminar, así se prueba»). `PRODUCTO_INGRESOS_PRUEBA=bdi=2026-10-25`: esa marca, y desde qué
+ * fecha se ofrecen los productos (sin corte ⛔ hay otra vara). Devuelve la fecha, o null. Un typo FALLA. `ERP_NO_MANDA` le gana. Se saca al terminar la prueba: ⛔ la necesita el corte.
+ */
+export function pruebaIngresos(marca, env = process.env) {
+  if (frenada(marca, env)) return null
+  for (const par of String(env.PRODUCTO_INGRESOS_PRUEBA ?? '').split(',').map((t) => t.trim()).filter(Boolean)) {
+    const [m, fecha] = par.split('=').map((t) => t.trim().toLowerCase())
+    if (!['bdi', 'zattia'].includes(m) || !/^\d{4}-\d{2}-\d{2}$/.test(fecha ?? '') || Number.isNaN(Date.parse(fecha))) throw new Error(`PRODUCTO_INGRESOS_PRUEBA: «${par}» ⛔ es marca=AAAA-MM-DD`)
+    if (m === marca) return new Date(`${fecha}T00:00:00-03:00`).toISOString()
+  }
+  return null
+}
 
 /** ¿El pedido de TN de esa tienda entra como venta REAL (mueve el libro)? */
 export const ventaTnReal = (tienda, cortes, env = process.env, ahora = new Date()) => !frenada(tienda, env) && (corto(tienda, cortes, ahora) || ventaRealEn(tienda, env))
