@@ -26,7 +26,7 @@ const ESPERA_MS = 10_000
 /** La función tiene 30 s: lo que no entre lo toma la vuelta siguiente, porque se procesa de la más vieja a la más nueva. */
 const PLAZO_MS = 20_000
 const POR_PAGINA = 200
-/** La vuelta de costos es más larga: la primera recorre el catálogo entero. Lo que ⛔ entre ⛔ avanza el cursor: se repite en la hora siguiente. */
+/** La vuelta de costos es más larga: cada una recorre el catálogo entero. Lo que ⛔ entre se repite en la hora siguiente. */
 const PLAZO_COSTOS_MS = 25_000
 const PG_DE_MARCA = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
 

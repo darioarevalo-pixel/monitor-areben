@@ -97,18 +97,14 @@ export async function correrCostos({ control, db, negocio, token, manda, seco = 
       await anotar({ ok: true, status: 200, code: 'sin_permiso', detalle, vence, resumen: salida })
       return { ...salida, sin_permiso: true }
     }
-    let cursor
     if (manda || seco) {
-      const [fila] = (await control.query(`select cursor from conexion_lectura where sistema = $1 and negocio = $2`, [sistema, negocio])).rows
-      const desde = fila?.cursor ? new Date(fila.cursor).toISOString() : null
-      const costos = await listarExt(`/product-costs${desde ? `?updated_since=${encodeURIComponent(desde)}` : ''}`, o)
+      // 🔴 Siempre la lista entera, ⛔ desde un cursor: un costo que hoy ⛔ cruza (el producto todavía ⛔ existe acá) se perdería al avanzar.
+      const costos = await listarExt('/product-costs', o)
       const productos = await productosDe([...new Set(costos.map((c) => Number(c.product_id)))], o)
       const { sin_cruce, ...r } = await cargarCostosDeIngresos(db, { marca: negocio, costos, productos, escribir: manda && !seco })
       salida.costos = { ...r, sin_cruce: sin_cruce.length }
-      // Avanza recién acá: lo leído ya quedó escrito.
-      if (manda && !seco && costos.length) cursor = new Date(Math.max(...costos.map((c) => new Date(c.updated_at).getTime()))).toISOString()
     }
-    await anotar({ ok: true, status: 200, vence, cursor, resumen: salida })
+    await anotar({ ok: true, status: 200, vence, resumen: salida })
     return salida
   } catch (e) {
     const d = datosDelError(e)

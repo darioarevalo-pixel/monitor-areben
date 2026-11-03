@@ -6,7 +6,9 @@
  * - El `product_id` es de Ingresos: se cruza por el SKU de sus variantes contra `variante` de ESA marca. Un SKU en dos productos
  *   nuestros (pasa en BDI) ⛔ se usa: ⛔ se sabe de cuál es. Dos costos distintos para un producto nuestro ⛔ se cargan.
  * - Va a `producto_costo` con `fuente = 'oc'`: la copia de GN y la de TN ya respetan esa fuente. La tabla es inmutable, así que el
- *   historial queda solo. Igual al vigente ⛔ escribe. Un costo `carga` más nuevo que el de Ingresos ⛔ se pisa.
+ *   historial queda solo.
+ * - 🔴 **Sólo se carga el producto SIN costo (Bruno, 3-nov):** los costos que ya están (los de GN) quedan como están, también en la
+ *   recompra, hasta decidir FIFO. El corte ⛔ los pisa.
  * - 🔑 Sin `escribir` corre LO MISMO en una transacción y la deshace: el seco cuenta exactamente lo que escribiría.
  */
 const q = async (db, sql, params = []) => (await db.query(sql, params)).rows
@@ -76,7 +78,7 @@ export async function cargarCostosDeIngresos(db, { marca, costos, productos, esc
     : []
   const plan = planCostos({ costos, productos, variantes, campo })
   const { cargar, ...r } = plan
-  Object.assign(r, { campo, productos: cargar.length, cambian: 0, iguales: 0, carga_mas_nueva: 0, cambios_grandes: 0, muestra: [] })
+  Object.assign(r, { campo, productos: cargar.length, sin_costo: 0, ya_tienen: 0, muestra: [] })
   await db.query('begin')
   try {
     await db.query(`select pg_advisory_xact_lock(hashtext('costo-oc'))`)
@@ -86,11 +88,9 @@ export async function cargarCostosDeIngresos(db, { marca, costos, productos, esc
     const filas = []
     for (const x of cargar) {
       const ult = vigentes.get(String(x.product_id))
-      if (ult && Number(ult.costo) === x.costo) { r.iguales++; continue }
-      if (ult?.fuente === 'carga' && new Date(ult.creada_en) > new Date(x.confirmado_en)) { r.carga_mas_nueva++; continue }
-      r.cambian++
-      if (ult && Number(ult.costo) > 0 && (x.costo > 2 * ult.costo || x.costo < ult.costo / 2)) r.cambios_grandes++
-      if (r.muestra.length < 10) r.muestra.push({ product_id: Number(x.product_id), antes: ult ? Number(ult.costo) : null, despues: x.costo })
+      if (ult && Number(ult.costo) > 0) { r.ya_tienen++; continue }
+      r.sin_costo++
+      if (r.muestra.length < 10) r.muestra.push({ product_id: Number(x.product_id), costo: x.costo })
       filas.push({ ...x, proveedor: ult?.proveedor ?? null, proveedor_id: ult?.proveedor_id ?? null })
     }
     if (filas.length) {
