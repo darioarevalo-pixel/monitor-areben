@@ -62,6 +62,8 @@ describe('Tokens de la API', () => {
     expect(texto()).not.toContain('Oraculo')
     await tocar(document.querySelector('button[aria-label$="erk__8NxNArB"]')!)
     for (const a of ['Editar', 'Regenerar', 'Revocar', 'Ver actividad']) expect(botones(a).length).toBe(1)
+    // Fijo a la pantalla: adentro de la lista, con pocas filas, la caja lo cortaba y sólo se veía «Editar».
+    expect((document.querySelector('[role=menu]') as HTMLElement).style.position).toBe('fixed')
     await tocar([...document.querySelectorAll('[role=tablist] button')].find((b) => b.textContent?.includes('Revocados'))!)
     expect(texto()).toContain('Oraculo')
     expect(texto()).not.toContain('Logistica')

@@ -31,6 +31,8 @@ import { Icono, type NombreIcono } from '@/components/ui/Icono'
 import { color, font, radius, shadow, space, weight } from '@/components/ui/tokens'
 import type { Tone } from '@/components/ui/tokens'
 
+const ALTO_MENU_FLOTANTE = 200
+
 export type AccionMenu = {
   key: string
   label: string
@@ -43,7 +45,7 @@ export type AccionMenu = {
   disabled?: boolean
 }
 
-export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear = 'derecha', alPie }: {
+export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear = 'derecha', alPie, flotante }: {
   acciones: AccionMenu[]
   /** Qué dice el lector de pantalla. Va con el nombre de la cosa adentro, ⛔ no «Más acciones». */
   etiqueta: string
@@ -54,8 +56,14 @@ export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear =
   alinear?: 'izquierda' | 'derecha'
   /** 📱 El «⋯» del pie de la ficha en el celular: botón de 44 px para el dedo, y el menú abre HACIA ARRIBA (abajo no hay lugar). */
   alPie?: boolean
+  /**
+   * El menú se dibuja fijo a la pantalla, ⛔ adentro de la lista: en una lista de pocas filas la caja que scrollea lo cortaba y
+   * sólo se veía la primera acción (Tokens de la API, 3-nov). Se cierra al scrollear: fijo, quedaría lejos de su fila.
+   */
+  flotante?: boolean
 }) {
   const [abierto, setAbierto] = useState(false)
+  const [lugar, setLugar] = useState<React.CSSProperties | null>(null)
   const caja = useRef<HTMLDivElement>(null)
   const id = useId()
 
@@ -66,12 +74,25 @@ export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear =
     }
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && setAbierto(false)
     document.addEventListener('mousedown', fuera)
+    const cerrar = () => setAbierto(false)
     document.addEventListener('keydown', esc)
+    if (flotante) { window.addEventListener('scroll', cerrar, true); window.addEventListener('resize', cerrar) }
     return () => {
       document.removeEventListener('mousedown', fuera)
       document.removeEventListener('keydown', esc)
+      window.removeEventListener('scroll', cerrar, true)
+      window.removeEventListener('resize', cerrar)
     }
-  }, [abierto])
+  }, [abierto, flotante])
+
+  const alternar = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (flotante && !abierto) {
+      const r = e.currentTarget.getBoundingClientRect()
+      // Abajo de la fila, o arriba si ⛔ entra (ALTO_MENU_FLOTANTE alcanza para las acciones de una fila).
+      setLugar({ position: 'fixed', left: r.left, ...(r.bottom + ALTO_MENU_FLOTANTE > window.innerHeight ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }) })
+    }
+    setAbierto((o) => !o)
+  }
 
   // ⛔ Sin acciones NO se dibuja el disparador: un «⋯» que abre un menú vacío es peor que no tenerlo,
   // porque enseña que apretarlo no sirve y después no se aprieta el que sí tiene algo.
@@ -86,7 +107,7 @@ export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear =
         aria-expanded={abierto}
         aria-controls={abierto ? id : undefined}
         disabled={disabled}
-        onClick={() => setAbierto((o) => !o)}
+        onClick={alternar}
         style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           // 🔴 `height` y `width` explícitas: `.shell-content button` del bloque legacy le fija a
@@ -110,6 +131,7 @@ export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear =
           role="menu"
           style={{
             position: 'absolute', zIndex: 40, ...(alPie ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 4px)' }), ...(alinear === 'izquierda' ? { left: 0 } : { right: 0 }), minWidth: 210,
+            ...(flotante && lugar ? { top: 'auto', right: 'auto', ...lugar } : null),
             background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg,
             boxShadow: shadow.pop, padding: space[1],
           }}
