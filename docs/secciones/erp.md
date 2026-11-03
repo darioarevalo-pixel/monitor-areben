@@ -209,7 +209,7 @@ Núcleo `lib/erp/facturacion-lista.core.js`; el Nº, la clienta y las facturas d
   `erp.arebensrl.com/api/ext/v1`. **Sólo Admin, lo corta el SERVIDOR** (`configurar`; ⛔ `PERMISOS_EDITABLES` lo reparte). Puerta `api/_erp-tokens.js`, núcleo
   `lib/erp/tokens.core.js`, pantalla `components/erp/TokensApi.tsx`; verbos del motor `motor/ext/tokens.mjs`, base de BDI también para Zattia. Lista con estado, nuevo con
   resumen (qué puede, qué datos salen, qué nunca: `PERMISOS` y `NUNCA` del contrato), editar sin cambiar el secreto, regenerar, revocar, probar (`autenticar`, la misma regla que
-  la API) y actividad (`ext_consulta`, 30 días). 🔴 El token sale UNA vez en la respuesta de crear/regenerar, vive en el estado de la ventana y ⛔ se guarda ni se loguea.
+  la API) y actividad (`ext_consulta`, 30 días). «Cómo conectarse» arriba de la lista (dirección, ejemplo, documentación), «Copiar todo para Bitwarden» al entregar (`textoDeEntrega`), «⋯» por fila y vistas Activos/Revocados. 🔴 El token sale UNA vez en la respuesta de crear/regenerar, vive en el estado de la ventana y ⛔ se guarda ni se loguea.
   El aviso de un token por vencer lo manda el vigía del motor (`reglasDeConexion`). Tests: `tests/erp-tokens*.test.*`.
 - 🔑 **`erp › Configuración › Cuentas` y `› Marcas, depósitos y puntos de venta`** (🎨 20-oct, Diseño 9: v8 `Configuracion.dc.html`,
   tabs `cuentas`/`estructura`): SÓLO LECTURA, `vista=estructura` (`api/_erp-estructura.js`, sin permiso propio ⇒ `configurar`).

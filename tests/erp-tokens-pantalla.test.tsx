@@ -39,17 +39,35 @@ const escribir = async (el: HTMLInputElement, v: string) => {
   })
 }
 const texto = () => document.body.textContent ?? ''
+/** Abre el «⋯» de un token por su prefijo y toca una acción. */
+const menu = async (prefijo: string, accion: string) => {
+  await tocar(document.querySelector(`button[aria-label$="${prefijo}"]`)!)
+  await tocar(botones(accion)[0])
+}
 
 describe('Tokens de la API', () => {
-  it('lista con su estado; un revocado sólo deja ver la actividad', async () => {
+  it('dice adónde conectarse y dónde está la documentación', async () => {
+    await montar()
+    expect(texto()).toContain('https://erp.arebensrl.com/api/ext/v1')
+    expect(texto()).toContain('Authorization: Bearer TU_TOKEN')
+    const links = [...document.querySelectorAll('a')].map((a) => a.getAttribute('href'))
+    expect(links).toContain('https://erp.arebensrl.com/api/ext/v1/docs')
+    expect(links).toContain('https://erp.arebensrl.com/api/ext/v1/openapi.json')
+  })
+
+  it('arranca en los activos; los revocados van aparte y sólo dejan ver la actividad', async () => {
     await montar()
     expect(texto()).toContain('Logistica')
-    expect(texto()).toContain('Revocado')
     expect(texto()).toContain('Activo')
-    expect(botones('Revocar').length).toBe(1)
-    expect(botones('Regenerar').length).toBe(1)
-    expect(botones('Editar').length).toBe(1)
-    expect(botones('Actividad').length).toBe(2)
+    expect(texto()).not.toContain('Oraculo')
+    await tocar(document.querySelector('button[aria-label$="erk__8NxNArB"]')!)
+    for (const a of ['Editar', 'Regenerar', 'Revocar', 'Ver actividad']) expect(botones(a).length).toBe(1)
+    await tocar([...document.querySelectorAll('[role=tablist] button')].find((b) => b.textContent?.includes('Revocados'))!)
+    expect(texto()).toContain('Oraculo')
+    expect(texto()).not.toContain('Logistica')
+    await tocar(document.querySelector('button[aria-label^="Más acciones de Oraculo"]')!)
+    expect(botones('Ver actividad').length).toBe(1)
+    for (const a of ['Editar', 'Regenerar', 'Revocar']) expect(botones(a).length).toBe(0)
   })
 
   it('nuevo: pide lo que falta, muestra el resumen ANTES de crear y el token una sola vez', async () => {
@@ -71,6 +89,7 @@ describe('Tokens de la API', () => {
     await tocar(botones('Crear token')[0])
     expect(m.crear.mock.calls[0][0]).toMatchObject({ app: 'App X', dueno: 'Bruno', negocio: 'bdi', permisos: ['locations:read'] })
     expect(document.querySelector('[data-testid=token-una-vez]')?.textContent).toBe('erk_EL_TOKEN')
+    expect(texto()).toContain('Copiar todo para Bitwarden')
     await tocar(botones('Ya lo guardé')[0])
     expect(texto()).not.toContain('erk_EL_TOKEN')
   })
@@ -79,10 +98,10 @@ describe('Tokens de la API', () => {
     m.regenerar.mockResolvedValue({ ok: true, id: 7, key_prefix: 'erk_otro', token: 'erk_NUEVO' })
     await montar()
     m.confirma = false
-    await tocar(botones('Regenerar')[0])
+    await menu('erk__8NxNArB', 'Regenerar')
     expect(m.regenerar).not.toHaveBeenCalled()
     m.confirma = true
-    await tocar(botones('Regenerar')[0])
+    await menu('erk__8NxNArB', 'Regenerar')
     expect(m.regenerar).toHaveBeenCalledWith(7)
     expect(document.querySelector('[data-testid=token-una-vez]')?.textContent).toBe('erk_NUEVO')
   })
@@ -90,7 +109,7 @@ describe('Tokens de la API', () => {
   it('revocar confirma', async () => {
     m.revocar.mockResolvedValue({ ok: true })
     await montar()
-    await tocar(botones('Revocar')[0])
+    await menu('erk__8NxNArB', 'Revocar')
     expect(m.revocar).toHaveBeenCalledWith(7)
   })
 
@@ -107,7 +126,7 @@ describe('Tokens de la API', () => {
   it('la actividad muestra lo consultado', async () => {
     m.actividad.mockResolvedValue({ consultas: [{ en: '2026-11-02T12:00:00Z', metodo: 'GET', molde: '/locations', status: 200, code: null, ms: 10, cantidad: 3, ip: '1.2.3.4' }] })
     await montar()
-    await tocar(botones('Actividad')[0])
+    await menu('erk__8NxNArB', 'Ver actividad')
     expect(m.actividad).toHaveBeenCalledWith(7)
     expect(texto()).toContain('GET /locations')
   })

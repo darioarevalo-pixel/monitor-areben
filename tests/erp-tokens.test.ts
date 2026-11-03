@@ -1,6 +1,6 @@
 // Los tokens de la API externa: el núcleo, y la puerta con el motor de verdad (`motor/ext/tokens.mjs`) contra un `db` falso.
 import { describe, it, expect, vi } from 'vitest'
-import { errorDeAlta, errorDeEdicion, estadoToken, resultadoDePrueba, resumenDePermisos, vencePorDefecto } from '@/lib/erp/tokens.core.js'
+import { API_DIRECCION, ejemploDeConexion, errorDeAlta, errorDeEdicion, estadoToken, resultadoDePrueba, resumenDePermisos, textoDeEntrega, vencePorDefecto, vistaDeToken } from '@/lib/erp/tokens.core.js'
 import { actividadTokenErp, crearTokenErp, editarTokenErp, probarTokenErp, regenerarTokenErp, revocarTokenErp, tokensErp } from '../api/_erp-tokens.js'
 import { puedeErp, permisoErpDe } from '../lib/permisos.core.js'
 import { entradaInvalida } from '../lib/erp/entrada.core.js'
@@ -19,6 +19,23 @@ describe('estadoToken', () => {
     expect(estadoToken({ vence_en: dias(-1) }, AHORA)).toBe('vencido')
     expect(estadoToken({ vence_en: dias(60), dueno_activo: false }, AHORA)).toBe('sin_dueno')
     expect(estadoToken({ vence_en: dias(-1), revocado_en: dias(-2), dueno_activo: false }, AHORA)).toBe('revocado')
+  })
+})
+
+describe('cómo conectarse', () => {
+  it('la entrega lleva todo lo que necesita quien recibe el token', () => {
+    const t = textoDeEntrega('erk_X')
+    expect(t).toContain(API_DIRECCION)
+    expect(t).toContain(`${API_DIRECCION}/docs`)
+    expect(t).toContain('Authorization: Bearer erk_X')
+    expect(t).toContain(`${API_DIRECCION}/me`)
+  })
+  it('el ejemplo sin token ⛔ inventa uno', () => {
+    expect(ejemploDeConexion()).toBe(`curl -H "Authorization: Bearer TU_TOKEN" ${API_DIRECCION}/me`)
+  })
+  it('un vencido sigue en activos: se puede regenerar; un revocado, ⛔', () => {
+    expect(vistaDeToken({ vence_en: dias(-1) })).toBe('activos')
+    expect(vistaDeToken({ revocado_en: dias(-1) })).toBe('revocados')
   })
 })
 

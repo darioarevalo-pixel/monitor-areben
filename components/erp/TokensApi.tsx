@@ -7,14 +7,16 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Button, EmptyState, Field, Input, Modal, Notice, Select, color, font, space, useConfirmar, weight } from '@/components/ui'
+import { Button, CopyButton, EmptyState, Field, Input, MenuAcciones, Modal, Notice, Select, color, font, space, useConfirmar, weight, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
-import { ChipEstado } from '@/components/ui/PiezasLista'
+import { ChipEstado, VistasLista } from '@/components/ui/PiezasLista'
 import {
   crearTokenApi, editarTokenApi, leerActividadToken, leerTokens, probarTokenApi, regenerarTokenApi, revocarTokenApi,
   type CatalogoTokens, type ConsultaToken, type PruebaToken, type TokenApi,
 } from '@/lib/erp/cliente'
-import { errorDeAlta, errorDeEdicion, ESTADOS_TOKEN, estadoToken, resumenDePermisos, vencePorDefecto } from '@/lib/erp/tokens.core.js'
+import {
+  API_CONTRATO, API_DIRECCION, API_DOCS, ejemploDeConexion, errorDeAlta, errorDeEdicion, ESTADOS_TOKEN, estadoToken, resumenDePermisos, textoDeEntrega, vencePorDefecto, VISTAS_TOKEN, vistaDeToken,
+} from '@/lib/erp/tokens.core.js'
 
 const ESTADOS = ESTADOS_TOKEN as unknown as Record<string, readonly ['success' | 'warning' | 'danger' | 'neutral', string]>
 const fecha = (x: string | null) => (x ? new Date(x).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : '—')
@@ -39,16 +41,48 @@ function ElegirPermisos({ catalogo, valor, onCambio }: { catalogo: CatalogoToken
   )
 }
 
+const codigo: React.CSSProperties = { wordBreak: 'break-all', padding: '8px 12px', background: color.bg2, borderRadius: 8, fontSize: font.sm }
+
+/** Un dato de la conexión: su nombre, el valor y cómo llevárselo. */
+function DatoConexion({ nombre, valor, children }: { nombre: string; valor: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
+      <span style={{ width: 110, color: color.mut, fontSize: font.sm }}>{nombre}</span>
+      <code style={{ ...codigo, flex: '1 1 320px', minWidth: 0 }}>{valor}</code>
+      {children}
+    </div>
+  )
+}
+
+const enlace = (href: string, texto: string) => <a href={href} target="_blank" rel="noreferrer" style={{ color: color.brand, fontSize: font.sm, fontWeight: weight.bold, whiteSpace: 'nowrap' }}>{texto} ↗</a>
+
+/** Lo que necesita quien recibe un token: adónde apunta, dónde está la documentación y cómo probar. */
+function ComoConectarse() {
+  return (
+    <section aria-label="Cómo conectarse" style={{ display: 'flex', flexDirection: 'column', gap: space[2], padding: space[4], background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14 }}>
+      <b style={{ color: color.ink }}>Cómo conectarse</b>
+      <DatoConexion nombre="Dirección" valor={API_DIRECCION}><CopyButton size="sm" variant="outline" getText={() => API_DIRECCION} /></DatoConexion>
+      <DatoConexion nombre="Para probar" valor={ejemploDeConexion()}><CopyButton size="sm" variant="outline" getText={() => ejemploDeConexion()} /></DatoConexion>
+      <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap', marginTop: 4 }}>
+        {enlace(API_DOCS, 'Ver la documentación')}
+        {enlace(API_CONTRATO, 'Ver el contrato (OpenAPI)')}
+      </div>
+    </section>
+  )
+}
+
 /** El token, la única vez. */
 function TokenUnaVez({ token, prefijo, onCerrar }: { token: string; prefijo: string; onCerrar: () => void }) {
-  const [copiado, setCopiado] = useState(false)
-  const copiar = async () => { await navigator.clipboard?.writeText(token); setCopiado(true) }
   return (
     <Modal abierto onCerrar={onCerrar} titulo={`Token ${prefijo}…`} cerrarConFondo={false} pie={<Button variant="outline" onClick={onCerrar}>Ya lo guardé</Button>}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         <Notice tone="warning">Se ve una sola vez. Guardalo en Bitwarden y pasalo por ahí: nunca por mail, WhatsApp ni chat.</Notice>
-        <code data-testid="token-una-vez" style={{ wordBreak: 'break-all', padding: 12, background: color.bg2, borderRadius: 8, fontSize: font.sm }}>{token}</code>
-        <div><Button onClick={copiar}>{copiado ? 'Copiado' : 'Copiar'}</Button></div>
+        <code data-testid="token-una-vez" style={{ ...codigo, padding: 12 }}>{token}</code>
+        <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+          <CopyButton label="Copiar todo para Bitwarden" getText={() => textoDeEntrega(token)} />
+          <CopyButton variant="outline" label="Copiar sólo el token" getText={() => token} />
+        </div>
+        <p style={nota}>«Copiar todo» lleva el token, la dirección ({API_DIRECCION}), la documentación y cómo probar la conexión.</p>
       </div>
     </Modal>
   )
@@ -168,6 +202,7 @@ export function TokensApi() {
   const [cat, setCat] = useState<CatalogoTokens | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ventana, setVentana] = useState<Ventana>(null)
+  const [vista, setVista] = useState('activos')
   const { confirmar } = useConfirmar()
   const leer = useCallback(() => leerTokens().then(setCat, (e) => setError(mensaje(e, 'No se pudieron leer los tokens.'))), [])
   useEffect(() => { void leer() }, [leer])
@@ -184,28 +219,30 @@ export function TokensApi() {
   }
 
   const columnas: ColumnaLista[] = [
-    { key: 'acciones', titulo: '', ancho: '300px', movil: 'oculta' },
     { key: 'app', titulo: 'App', ancho: 'minmax(170px, 1fr)', movil: 'titulo' },
+    { key: 'token', titulo: 'Token', ancho: '130px', movil: 'oculta' },
     { key: 'negocio', titulo: 'Negocio', ancho: '120px', movil: 'chico' },
-    { key: 'dueno', titulo: 'A nombre de', ancho: '140px', movil: 'oculta' },
-    { key: 'permisos', titulo: 'Permisos', ancho: '80px', movil: 'oculta' },
-    { key: 'vence', titulo: 'Vence', ancho: '100px', movil: 'chico' },
+    { key: 'dueno', titulo: 'A nombre de', ancho: '130px', movil: 'oculta' },
+    { key: 'permisos', titulo: 'Permisos', ancho: '70px', movil: 'oculta' },
+    { key: 'vence', titulo: 'Vence', ancho: '90px', movil: 'chico' },
     { key: 'uso', titulo: 'Último uso', ancho: '120px', movil: 'oculta' },
-    { key: 'estado', titulo: 'Estado', ancho: '140px', movil: 'chico' },
+    { key: 'estado', titulo: 'Estado', ancho: '120px', movil: 'chico' },
   ]
+  // Configuración es una lista de REGISTRO: sólo «⋯» a la izquierda (`diseno.md`). Un revocado sólo deja ver la actividad.
+  const acciones = (t: TokenApi) => {
+    const menu: AccionMenu[] = [
+      ...(t.revocado_en ? [] : [
+        { key: 'editar', label: 'Editar', icono: 'lapiz' as const, onClick: () => setVentana({ tipo: 'editar', t }) },
+        { key: 'regenerar', label: 'Regenerar', tone: 'danger' as const, hint: 'El token de ahora deja de funcionar en el acto.', onClick: () => void regenerar(t) },
+        { key: 'revocar', label: 'Revocar', tone: 'danger' as const, hint: 'Deja de funcionar para siempre.', onClick: () => void revocar(t) },
+      ]),
+      { key: 'actividad', label: 'Ver actividad', onClick: () => setVentana({ tipo: 'actividad', t }) },
+    ]
+    return <MenuAcciones acciones={menu} etiqueta={`Más acciones de ${t.app} · ${t.key_prefix}`} vertical alinear="izquierda" />
+  }
   const celda = (t: TokenApi, k: string): React.ReactNode => {
-    if (k === 'acciones') {
-      const vivo = !t.revocado_en
-      return (
-        <span style={{ display: 'flex', gap: 4 }}>
-          {vivo && <Button size="sm" variant="outline" onClick={() => setVentana({ tipo: 'editar', t })}>Editar</Button>}
-          {vivo && <Button size="sm" variant="outline" onClick={() => regenerar(t)}>Regenerar</Button>}
-          {vivo && <Button size="sm" variant="outline" onClick={() => revocar(t)}>Revocar</Button>}
-          <Button size="sm" variant="outline" onClick={() => setVentana({ tipo: 'actividad', t })}>Actividad</Button>
-        </span>
-      )
-    }
-    if (k === 'app') return <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}><b style={{ color: color.ink }}>{t.app}</b><span style={{ color: color.mut, fontSize: font.sm }}>{t.key_prefix}…</span></span>
+    if (k === 'app') return <b style={{ color: color.ink }}>{t.app}</b>
+    if (k === 'token') return <span style={{ color: color.mut, fontSize: font.sm }}>{t.key_prefix}…</span>
     if (k === 'negocio') return cat?.negocios[t.negocio] ?? t.negocio
     if (k === 'dueno') return t.dueno
     if (k === 'permisos') return <span title={t.permisos.map((p) => cat?.permisos[p]?.explica ?? p).join('\n')}>{t.permisos.length}</span>
@@ -215,6 +252,8 @@ export function TokensApi() {
     return null
   }
 
+  const tokens = cat?.tokens ?? []
+  const conteo = { activos: tokens.filter((t) => vistaDeToken(t) === 'activos').length, revocados: tokens.filter((t) => vistaDeToken(t) === 'revocados').length }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>Quién consulta el ERP desde afuera. Un token es de un solo negocio y actúa a nombre de una persona.</p>
@@ -223,10 +262,12 @@ export function TokensApi() {
         <Button onClick={() => setVentana({ tipo: 'nuevo' })} disabled={!cat}>Nuevo token</Button>
         <Button variant="outline" onClick={() => setVentana({ tipo: 'probar' })}>Probar un token</Button>
       </div>
+      <ComoConectarse />
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
+        <VistasLista vistas={VISTAS_TOKEN} valor={vista} conteo={conteo} onCambio={setVista} />
         <ListaTrabajo
-          columnas={columnas} filas={cat?.tokens ?? []} claveDe={(t: TokenApi) => String(t.id)} celda={celda} etiquetaFila={(t: TokenApi) => `el token de ${t.app}`}
-          vacio={cat ? <div style={{ padding: space[6] }}><EmptyState title="Todavía no hay tokens." /></div> : null}
+          columnas={columnas} filas={tokens.filter((t) => vistaDeToken(t) === vista)} claveDe={(t: TokenApi) => String(t.id)} celda={celda} acciones={acciones} anchoAcciones={40} etiquetaFila={(t: TokenApi) => `el token de ${t.app}`}
+          vacio={cat ? <div style={{ padding: space[6] }}><EmptyState title={vista === 'activos' ? 'Todavía no hay tokens activos.' : 'No hay tokens revocados.'} /></div> : null}
         />
       </div>
       {ventana?.tipo === 'nuevo' && cat && <NuevoToken cat={cat} onCerrar={() => setVentana(null)} onHecho={(t) => { setVentana({ tipo: 'entregado', token: t.token, prefijo: t.key_prefix }); void leer() }} />}
