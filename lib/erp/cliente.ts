@@ -463,12 +463,16 @@ export type ListaDeIngresos = {
   listos?: Array<{ ingresos_id: number; nombre: string | null; status: string | null; updated_at: string | null; variantes: number }>
   a_vincular?: Array<{ ingresos_id: number; nombre: string | null; motivo: string; talle?: string; ocs: string[] }>
   oc_sin_producto?: Array<{ sku: string; oc: string | null }>
+  /** Antes del corte, con `PRODUCTO_INGRESOS_PRUEBA`: se ve todo lo que falta. */
+  prueba?: boolean
+  oc_error?: string
 }
-export type ImportadoDeIngresos = { manda: boolean; motivo?: string; productos_nuevos?: number; productos_con_agregadas?: number; variantes_nuevas?: number; no_disponibles?: number[] }
-export const leerProductosDeIngresos = (marca: MarcaErp) =>
-  pedir<ListaDeIngresos>(null, `&vista=ingresos-productos&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer Ingresos.')
-export const importarProductosDeIngresos = (marca: MarcaErp, elegidos: number[]) =>
-  pedir<ImportadoDeIngresos>(post({ accion: 'importar-ingresos', marca, elegidos }), '', 'No se pudo importar.')
+export type ImportadoDeIngresos = { manda: boolean; motivo?: string; productos_nuevos?: number; productos_con_agregadas?: number; variantes_nuevas?: number; no_disponibles?: number[]; stock?: { corrio: boolean; libro?: boolean | null; filas?: number; unidades?: number } }
+export type ModoDeIngresos = 'habitual' | 'excepcional'
+export const leerProductosDeIngresos = (marca: MarcaErp, modo: ModoDeIngresos = 'habitual') =>
+  pedir<ListaDeIngresos>(null, `&vista=${modo === 'excepcional' ? 'ingresos-excepcional' : 'ingresos-productos'}&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer Ingresos.')
+export const importarProductosDeIngresos = (marca: MarcaErp, elegidos: number[], modo: ModoDeIngresos = 'habitual') =>
+  pedir<ImportadoDeIngresos>(post({ accion: modo === 'excepcional' ? 'importar-ingresos-excepcional' : 'importar-ingresos', marca, elegidos }), '', 'No se pudo importar.')
 
 // ── ERP › Productos › Vincular (`api/_erp-vincular.js`, motor sql/076) ──
 

@@ -89,13 +89,16 @@ let eventos: { webhook_id: string; estado: string }[] = []
 let guardadas: { sku: string; codigo_barras: string }[] = []
 let ocs: Record<string, unknown>[] = []
 vi.mock('@/api/_recepciones-procesar.js', () => ({ procesarEvento: (x: unknown) => procesar(x) }))
+const refrescar = vi.fn()
+let recientes: { sku: string }[] = []
+vi.mock('@/api/_erp-stock-corte.js', () => ({ refrescarStockDeCorte: (x: unknown) => refrescar(x) }))
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     from: (tabla: string) => {
       const q: Record<string, unknown> = {
         select: () => q, like: () => q, eq: () => q, order: () => q, limit: () => q, gte: () => q,
         maybeSingle: async () => ({ data: null, error: null }),
-        in: async () => ({ data: eventos, error: null }),
+        in: () => Object.assign(Promise.resolve({ data: eventos, error: null }), { gt: async () => ({ data: recientes, error: null }) }),
         upsert: async (x: unknown) => { anotar(x); return { error: null } },
         then: (ok: (v: unknown) => unknown) => ok({ data: tabla === 'recepcion_oc' ? ocs : tabla === 'recepcion_evento' ? [] : guardadas, error: null }),
       }
@@ -139,6 +142,7 @@ describe('el handler', () => {
   let fetchMock: ReturnType<typeof vi.fn>
   beforeEach(() => {
     vi.resetModules(); procesar.mockReset(); procesar.mockResolvedValue({ oc: 'x', lineas: 2 }); anotar.mockReset(); eventos = []; guardadas = []; ocs = []
+    refrescar.mockReset(); refrescar.mockResolvedValue({ corrio: false, motivo: 'sin_corte' }); recientes = []
     vi.stubEnv('CRON_SECRET', 'c'); vi.stubEnv('SUPABASE_URL', 'https://e.supabase.co'); vi.stubEnv('SUPABASE_SERVICE_KEY', 'k')
     vi.stubEnv('INGRESOS_TOKEN_ZATTIA', 'igk_z'); vi.stubEnv('INGRESOS_TOKEN_BDI', '')
     fetchMock = vi.fn(async (url: string) => (url.includes('/purchase-orders/3050')
@@ -161,10 +165,25 @@ describe('el handler', () => {
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: 'manual' })
     expect(fetchMock.mock.calls[0][0]).not.toContain('igk_')
   })
+  it('lo que trajo la vuelta recalcula el libro y el espejo, y una falla ahí ⛔ tira la lectura', async () => {
+    const r = await llamar()
+    expect(refrescar).toHaveBeenCalledWith(expect.objectContaining({ marca: 'zattia', recalcular: true }))
+    expect(refrescar.mock.calls[0][0].skus.sort()).toEqual(['S-10', 'S-11'])
+    expect(r.code).toBe(200)
+    refrescar.mockRejectedValueOnce(new Error('caída'))
+    expect((await llamar()).code).toBe(200)
+  })
+  it('sin nada nuevo, sólo repasa el espejo de las OC recientes, sin recalcular', async () => {
+    eventos = [{ webhook_id: 'api:zattia:3050:2026-10-29T12:06:07Z', estado: 'procesado' }]
+    ocs = [{ id: 'zattia:9' }]; recientes = [{ sku: 'X-1' }]
+    await llamar()
+    expect(refrescar).toHaveBeenCalledWith(expect.objectContaining({ marca: 'zattia', skus: ['X-1'], recalcular: false }))
+  })
   it('en seco dice qué leería y ⛔ escribe', async () => {
     const r = await llamar(pedido({ tarea: 'leer', seco: '1' }))
     expect(r.body?.marcas.zattia.pendientes).toEqual(['OC-3050'])
     expect(procesar).not.toHaveBeenCalled()
+    expect(refrescar).not.toHaveBeenCalled()
   })
   it('lo ya procesado ⛔ se vuelve a pedir; lo que quedó en error, sí', async () => {
     eventos = [{ webhook_id: 'api:zattia:3050:2026-10-29T12:06:07Z', estado: 'procesado' }]

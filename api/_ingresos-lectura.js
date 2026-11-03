@@ -16,6 +16,7 @@ import { procesarEvento } from './_recepciones-procesar.js'
 import { aProcesar, aReleer, contadasDe, desdeDe, eventoDeOc, idDeEvento, idDeRelectura, mismaForma, RELECTURA_DIAS } from '../lib/recepciones/lectura.core.js'
 import { normalizarEvento } from '../lib/recepciones/webhook.core.js'
 import { configPg } from '../lib/pg.core.js'
+import { refrescarStockDeCorte } from './_erp-stock-corte.js'
 
 const BASE = 'https://ingreso2.arebensrl.com/api/ext/v1'
 const MARCAS = [
@@ -91,6 +92,9 @@ async function leerMarca({ sb, store, token, seco, hasta }) {
   const ya = await yaProcesados(sb, candidatas.map((oc) => idDeEvento(store, oc)))
   const pendientes = candidatas.filter((oc) => !ya.has(idDeEvento(store, oc)))
   const salida = { desde, vistas: candidatas.length, pendientes: pendientes.map((oc) => oc.code), guardadas: [], frenadas: [] }
+  // Los códigos a los que esta vuelta les cambió lo contado: su stock ⛔ espera a la madrugada (`_erp-stock-corte.js`).
+  const skus = new Set()
+  const anotarSkus = (norm) => { if (norm.ok) for (const l of norm.lineas) if (l.sku && l.cantidad_contada > 0) skus.add(l.sku) }
 
   for (const resumen of seco ? [] : pendientes) {
     if (Date.now() > hasta) { salida.corto = true; break }
@@ -109,6 +113,7 @@ async function leerMarca({ sb, store, token, seco, hasta }) {
     }
     // Una falla corta la marca: seguir adelantaría la hora de lectura y esta OC ⛔ se volvería a pedir.
     const r = await procesarEvento({ sb, idEvento, payload, enviadoEn: oc.updated_at })
+    if (!r.repetido) anotarSkus(norm)
     salida.guardadas.push({ oc: oc.code, ...r })
   }
 
@@ -140,8 +145,34 @@ async function leerMarca({ sb, store, token, seco, hasta }) {
       continue
     }
     await procesarEvento({ sb, idEvento, payload, enviadoEn: oc.updated_at })
+    anotarSkus(norm)
   }
+  salida.skus = [...skus]
   return salida
+}
+
+/**
+ * Las OC de una marca, a pedido («Actualizar Ingresos»): el mismo camino y los mismos frenos que el cron. Devuelve los códigos a los que les cambió lo contado.
+ * @param {{ store: 'bdi'|'zattia', token: string, hasta: number }} p
+ */
+export async function leerOcsDeMarca({ store, token, hasta }) {
+  const cfg = cfgDelMonitor()
+  if (!cfg.url || !cfg.key) throw new Error('sin credenciales de base')
+  return leerMarca({ sb: createClient(cfg.url, cfg.key), store, token, seco: false, hasta })
+}
+
+/** Cuántos días se sigue mirando el espejo de una OC: cubre el recálculo que ⛔ contestó a tiempo al importar. */
+const DIAS_ESPEJO_OC = 7
+
+/** Los códigos de lo contado en las OC recientes de esa marca. */
+async function skusDeOcsRecientes(sb, store) {
+  const desde = new Date(Date.now() - DIAS_ESPEJO_OC * 864e5).toISOString()
+  const { data: ocs, error } = await sb.from('recepcion_oc').select('id').eq('store', store).gte('confirmada_at', desde)
+  if (error) throw new Error(`recepcion_oc: ${error.message}`)
+  if (!ocs?.length) return []
+  const { data, error: e2 } = await sb.from('recepcion_linea').select('sku, cantidad_contada').in('oc_ref', ocs.map((o) => o.id)).gt('cantidad_contada', 0)
+  if (e2) throw new Error(`recepcion_linea: ${e2.message}`)
+  return [...new Set((data || []).map((l) => l.sku).filter(Boolean))]
 }
 
 /** Lo guardado de esa marca en la ventana de relectura, sin lo que esta vuelta ya vio. */
@@ -248,6 +279,15 @@ export default async function handler(req, res) {
     try {
       marcas[store] = await leerMarca({ sb, store, token, seco, hasta })
       if (!seco) await anotarLaLectura({ store, token, frenadas: await frenadasDe(sb, store) })
+      // Desde el corte, lo que entró ⛔ espera a la madrugada. Recalcula si esta vuelta trajo algo; si ⛔, sólo repasa el espejo de las OC recientes. Sin corte, ⛔ hace nada. Un tropiezo acá ⛔ tira la lectura: lo importante ya se guardó.
+      if (!seco) {
+        try {
+          const trajo = marcas[store].skus.length > 0
+          marcas[store].stock = await refrescarStockDeCorte({ marca: store, skus: [...new Set([...marcas[store].skus, ...await skusDeOcsRecientes(sb, store)])], recalcular: trajo, espera: 6_000 })
+        } catch (e) {
+          console.error(`[ingresos-lectura] ${store}: el stock ⛔ se refrescó (${e?.message ?? 'error'})`)
+        }
+      }
     } catch (e) {
       fallo = true
       marcas[store] = { error: String((e && e.message) || e).slice(0, 300) }

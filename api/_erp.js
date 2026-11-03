@@ -67,7 +67,7 @@
  *   POST {recurso:'erp', accion:'reintentar-entregas', marca}        vuelve a cobrar las entregas de Logística sin cobrar (`api/_erp-cobros.js`)
  *   POST {recurso:'erp', accion:'poner-redondeo', marca, linea?, canal, paso, modo, desde?}   `api/_erp-redondeo.js`
  *   GET  ?recurso=erp&vista=vinculos|vinculos-buscar&marca=…&tienda=…    y POST accion:'poner-vinculo'   `api/_erp-vincular.js`
- *   GET  ?recurso=erp&vista=ingresos-productos&marca=bdi|zattia          y POST accion:'importar-ingresos'   `api/_erp-ingresos-productos.js`
+ *   GET  ?recurso=erp&vista=ingresos-productos|ingresos-excepcional&marca=bdi|zattia          y POST accion:'importar-ingresos'|'importar-ingresos-excepcional'   `api/_erp-ingresos-productos.js`
  *   GET  ?recurso=erp&vista=estructura&marca=…   Configuración › Cuentas y Marcas, depósitos y puntos de venta (`api/_erp-estructura.js`, sólo lee)
  *   GET  ?recurso=erp&vista=ajustes&linea=bdi|zattia|stunned           los ajustes de stock (motor sql/026) + la lista «A contar»
  *   POST {recurso:'erp', accion:'crear-ajuste'|'aprobar-ajuste'|'descartar-ajuste', linea, …}   `api/_erp-ajustes.js`
@@ -1927,13 +1927,14 @@ export default async function handler(req, res) {
       res.setHeader('Cache-Control', 'no-store')
       return res.status(r.status || 200).json(r.status ? { error: r.error, codigo: r.codigo } : r)
     }
-    if (req.method === 'GET' && req.query.vista === 'ingresos-productos') {
-      const r = await productosDeIngresos({ marca: String(req.query.marca || '') }, { conMotor })
+    if (req.method === 'GET' && (req.query.vista === 'ingresos-productos' || req.query.vista === 'ingresos-excepcional')) {
+      const marcaI = String(req.query.marca || '')
+      const r = await productosDeIngresos({ marca: marcaI, modo: req.query.vista === 'ingresos-excepcional' ? 'excepcional' : 'habitual', admin: puedeErp(perfil, marcaI, 'configurar', aprobaciones, guardados) }, { conMotor })
       res.setHeader('Cache-Control', 'no-store')
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
-    if (req.method === 'POST' && body.accion === 'importar-ingresos') {
-      const r = await importarDeIngresosErp({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
+    if (req.method === 'POST' && (body.accion === 'importar-ingresos' || body.accion === 'importar-ingresos-excepcional')) {
+      const r = await importarDeIngresosErp({ body, usuario: perfil.name || perfil.user || null, modo: body.accion === 'importar-ingresos-excepcional' ? 'excepcional' : 'habitual', admin: puedeErp(perfil, String(body.marca || ''), 'configurar', aprobaciones, guardados) }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'POST' && body.accion === 'poner-vinculo') {

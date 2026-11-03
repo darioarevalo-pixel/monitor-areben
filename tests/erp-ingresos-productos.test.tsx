@@ -15,11 +15,13 @@ vi.mock('@/lib/erp/cliente', () => ({
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'bdi', perfil: { name: 'bruno' } }) }))
 let linea = 'bdi'
 vi.mock('@/lib/erp/linea-erp', () => ({ useTiendaErp: () => linea }))
+let noPuede: string[] = []
+vi.mock('@/lib/erp/usePuedeErp', () => ({ usePuedeErp: () => (p: string) => !noPuede.includes(p) }))
 
 let root: Root | null = null
 let host: HTMLDivElement
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
-afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); document.body.innerHTML = ''; vi.clearAllMocks(); linea = 'bdi'; leerProductosDeIngresos.mockImplementation(async () => lista) })
+afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); document.body.innerHTML = ''; vi.clearAllMocks(); linea = 'bdi'; noPuede = []; leerProductosDeIngresos.mockImplementation(async () => lista) })
 
 async function montar() {
   const { ActualizarIngresos } = await import('@/components/erp/productos/ActualizarIngresos')
@@ -65,13 +67,52 @@ describe('Actualizar Ingresos (pantalla)', () => {
     expect(document.querySelector('input[aria-label="elegir YA ESTABA"]')).toBeNull()
     expect(boton('Importar')).toBeUndefined()
   })
+  it('Administración ve la habitual, ⛔ el botón excepcional; quien ⛔ puede, nada', async () => {
+    noPuede = ['configurar']
+    await montar()
+    expect(boton('Actualizar Ingresos')).toBeDefined()
+    expect(boton('Traer sin orden de compra')).toBeUndefined()
+    act(() => root?.unmount()); root = null; host.remove()
+    noPuede = ['configurar', 'importar-ingresos']
+    await montar()
+    expect(boton('Actualizar Ingresos')).toBeUndefined()
+  })
+  it('el botón excepcional lee e importa con su modo, y dice que entra con stock 0', async () => {
+    await montar()
+    await clic(boton('Traer sin orden de compra'))
+    expect(leerProductosDeIngresos).toHaveBeenCalledWith('bdi', 'excepcional')
+    expect(texto()).toContain('stock 0')
+    await clic(casilla('TOP NUEVO'))
+    await clic(boton('Importar'))
+    expect(importarProductosDeIngresos).toHaveBeenCalledWith('bdi', [1], 'excepcional')
+    expect(leerProductosDeIngresos).toHaveBeenLastCalledWith('bdi', 'excepcional')
+  })
+  it('importar dice las unidades que entraron; si el recálculo ⛔ contestó, que pueden tardar', async () => {
+    importarProductosDeIngresos.mockResolvedValueOnce({ manda: true, productos_nuevos: 1, variantes_nuevas: 1, no_disponibles: [], stock: { corrio: true, libro: true, filas: 1, unidades: 5 } })
+    await montar()
+    await clic(boton('Actualizar Ingresos'))
+    await clic(casilla('TOP NUEVO'))
+    await clic(boton('Importar'))
+    expect(texto()).toContain('Entraron 5 unidades')
+    importarProductosDeIngresos.mockResolvedValueOnce({ manda: true, productos_nuevos: 1, variantes_nuevas: 1, no_disponibles: [], stock: { corrio: true, libro: false, filas: 0, unidades: 0 } })
+    await clic(casilla('TOP NUEVO'))
+    await clic(boton('Importar'))
+    expect(texto()).toContain('hasta una hora')
+  })
+  it('antes del corte, con la prueba, lo dice; una OC sin leer se avisa', async () => {
+    leerProductosDeIngresos.mockResolvedValueOnce({ ...lista, prueba: true, oc_error: 'No se pudieron leer las órdenes de compra recién' })
+    await montar()
+    await clic(boton('Actualizar Ingresos'))
+    expect(texto()).toContain('Antes del corte')
+    expect(texto()).toContain('No se pudieron leer las órdenes de compra')
+  })
   it('manda SÓLO lo elegido, y relee', async () => {
     await montar()
     await clic(boton('Actualizar Ingresos'))
     await clic(casilla('TOP NUEVO'))
     await clic(casilla('REMERA'))
     await clic(boton('Importar'))
-    expect(importarProductosDeIngresos).toHaveBeenCalledWith('bdi', [1, 3])
+    expect(importarProductosDeIngresos).toHaveBeenCalledWith('bdi', [1, 3], 'habitual')
     expect(leerProductosDeIngresos).toHaveBeenCalledTimes(2)
     expect(texto()).toContain('Importado')
   })
@@ -84,8 +125,8 @@ describe('Actualizar Ingresos (pantalla)', () => {
 })
 
 describe('Actualizar Ingresos (puerta)', () => {
-  const motorMock = { leerParaImportar: vi.fn(async (a: unknown) => ({ manda: true, a })), importarDeIngresos: vi.fn(async (a: unknown) => ({ manda: true, a })) }
-  const deps = () => ({ conMotor: vi.fn(async (_m: string, _q: string, fn: (db: unknown) => unknown) => fn({ base: _m })) })
+  const motorMock = { puedeImportar: vi.fn(async () => ({ manda: true, corte: '2026-11-15T00:00:00Z', modo: 'habitual' })), leerParaImportar: vi.fn(async (a: unknown) => ({ manda: true, a })), importarDeIngresos: vi.fn(async (a: unknown) => ({ manda: true, a })) }
+  const deps = () => ({ conMotor: vi.fn(async (_m: string, _q: string, fn: (db: unknown) => unknown) => fn({ base: _m })), leerOcs: vi.fn(async () => ({ skus: [] as string[] })), refrescar: vi.fn(async () => ({ corrio: true, libro: true, filas: 1, unidades: 5 })) })
   async function puerta() {
     vi.resetModules()
     vi.doMock('../motor/conexion.mjs', () => motorMock)
@@ -94,21 +135,21 @@ describe('Actualizar Ingresos (puerta)', () => {
   it('marca inválida, sin token o Stunned ⛔ abren la base', async () => {
     const m = await puerta(); const d = deps()
     vi.stubEnv('INGRESOS_TOKEN_BDI', '')
-    expect((await m.productosDeIngresos({ marca: 'stunned' }, d)).status).toBe(400)
-    expect((await m.productosDeIngresos({ marca: 'bdi' }, d)).status).toBe(409)
+    expect((await m.productosDeIngresos({ marca: 'stunned', admin: true }, d)).status).toBe(400)
+    expect((await m.productosDeIngresos({ marca: 'bdi', admin: true }, d)).status).toBe(409)
     expect(d.conMotor).not.toHaveBeenCalled()
     vi.unstubAllEnvs()
   })
   it('sin elegidos, con ids raros o sin quién ⛔ importa', async () => {
     const m = await puerta(); const d = deps()
-    for (const body of [{ marca: 'bdi' }, { marca: 'bdi', elegidos: [] }, { marca: 'bdi', elegidos: ['1;drop'] }]) expect((await m.importarDeIngresosErp({ body, usuario: 'x' }, d)).status).toBe(400)
-    expect((await m.importarDeIngresosErp({ body: { marca: 'bdi', elegidos: [1] }, usuario: null }, d)).status).toBe(400)
+    for (const body of [{ marca: 'bdi' }, { marca: 'bdi', elegidos: [] }, { marca: 'bdi', elegidos: ['1;drop'] }]) expect((await m.importarDeIngresosErp({ body, usuario: 'x', admin: true }, d)).status).toBe(400)
+    expect((await m.importarDeIngresosErp({ body: { marca: 'bdi', elegidos: [1] }, usuario: null, admin: true }, d)).status).toBe(400)
     expect(d.conMotor).not.toHaveBeenCalled()
   })
   it('Zattia lee las OC de la base de BDI y los productos de la suya', async () => {
     const m = await puerta(); const d = deps()
     vi.stubEnv('INGRESOS_TOKEN_ZATTIA', 'igk_z')
-    const r = await m.productosDeIngresos({ marca: 'zattia' }, d) as { a: { control: { base: string }, db: { base: string }, negocio: string, token: string } }
+    const r = await m.productosDeIngresos({ marca: 'zattia', admin: true }, d) as { a: { control: { base: string }, db: { base: string }, negocio: string, token: string } }
     expect([r.a.control.base, r.a.db.base, r.a.negocio, r.a.token]).toEqual(['bdi', 'zattia', 'zattia', 'igk_z'])
     vi.unstubAllEnvs()
   })
@@ -116,17 +157,81 @@ describe('Actualizar Ingresos (puerta)', () => {
     const m = await puerta(); const d = deps()
     vi.stubEnv('INGRESOS_TOKEN_BDI', 'igk_b')
     motorMock.leerParaImportar.mockRejectedValueOnce(Object.assign(new Error('x'), { status: 401 }))
-    const r = await m.productosDeIngresos({ marca: 'bdi' }, d)
+    const r = await m.productosDeIngresos({ marca: 'bdi', admin: true }, d)
     expect(r.status).toBe(502)
     expect(JSON.stringify(r)).not.toContain('igk_')
     vi.unstubAllEnvs()
   })
-  it('sólo Admin, y la entrada del ERP lo deja pasar', async () => {
-    const { permisoErpDe } = await import('../lib/permisos.core.js')
-    expect(permisoErpDe({ method: 'GET', vista: 'ingresos-productos' })).toBe('configurar')
-    expect(permisoErpDe({ method: 'POST', accion: 'importar-ingresos' })).toBe('configurar')
+  it('mirar lee las OC ANTES de la lista; si trajo algo, refresca el stock', async () => {
+    const m = await puerta(); const d = deps()
+    vi.stubEnv('INGRESOS_TOKEN_BDI', 'igk_b')
+    d.leerOcs.mockResolvedValueOnce({ skus: ['A-1'] })
+    const orden: string[] = []
+    d.refrescar.mockImplementationOnce(async () => { orden.push('refrescar'); return { corrio: true, libro: true, filas: 1, unidades: 5 } })
+    motorMock.leerParaImportar.mockImplementationOnce(async (a: unknown) => { orden.push('lista'); return { manda: true, a } })
+    const r = await m.productosDeIngresos({ marca: 'bdi', admin: false }, d) as { manda: boolean, oc_error?: string }
+    expect(d.leerOcs).toHaveBeenCalledWith(expect.objectContaining({ store: 'bdi', token: 'igk_b' }))
+    expect(d.refrescar).toHaveBeenCalledWith(expect.objectContaining({ marca: 'bdi', skus: ['A-1'] }))
+    expect(orden).toEqual(['refrescar', 'lista'])
+    expect(r.oc_error).toBeUndefined()
+    vi.unstubAllEnvs()
+  })
+  it('una OC que ⛔ se pudo leer ⛔ esconde la lista: se avisa', async () => {
+    const m = await puerta(); const d = deps()
+    vi.stubEnv('INGRESOS_TOKEN_BDI', 'igk_b')
+    d.leerOcs.mockRejectedValueOnce(Object.assign(new Error('x'), { status: 500 }))
+    const r = await m.productosDeIngresos({ marca: 'bdi', admin: false }, d) as { manda: boolean, oc_error?: string }
+    expect(r.manda).toBe(true)
+    expect(r.oc_error).toContain('órdenes de compra')
+    vi.unstubAllEnvs()
+  })
+  it('sin corte ⛔ se le pregunta nada a Ingresos', async () => {
+    const m = await puerta(); const d = deps()
+    vi.stubEnv('INGRESOS_TOKEN_BDI', 'igk_b')
+    motorMock.puedeImportar.mockResolvedValueOnce({ manda: false, corte: null, motivo: 'sin_corte' } as never)
+    const llamadas = motorMock.leerParaImportar.mock.calls.length
+    const r = await m.productosDeIngresos({ marca: 'bdi', admin: false }, d) as { manda: boolean, motivo: string }
+    expect([r.manda, r.motivo]).toEqual([false, 'sin_corte'])
+    expect(d.leerOcs).not.toHaveBeenCalled()
+    expect(motorMock.leerParaImportar.mock.calls.length).toBe(llamadas)
+    vi.unstubAllEnvs()
+  })
+  it('importar: el modo y si es Admin llegan al motor; refresca lo importado; una falla ⛔ deshace y se dice', async () => {
+    const m = await puerta(); const d = deps()
+    vi.stubEnv('INGRESOS_TOKEN_BDI', 'igk_b')
+    motorMock.importarDeIngresos.mockImplementationOnce(async (a: unknown) => ({ manda: true, skus: ['N-1'], a }))
+    const r = await m.importarDeIngresosErp({ body: { marca: 'bdi', elegidos: [9] }, usuario: 'Lore', modo: 'excepcional', admin: true }, d) as { a: { modo: string, admin: boolean }, stock: { unidades: number } }
+    expect([r.a.modo, r.a.admin]).toEqual(['excepcional', true])
+    expect(d.refrescar).toHaveBeenCalledWith(expect.objectContaining({ marca: 'bdi', skus: ['N-1'] }))
+    expect(r.stock.unidades).toBe(5)
+    motorMock.importarDeIngresos.mockImplementationOnce((async () => ({ manda: true, skus: ['N-2'] })) as never)
+    d.refrescar.mockRejectedValueOnce(new Error('caída'))
+    const r2 = await m.importarDeIngresosErp({ body: { marca: 'bdi', elegidos: [9] }, usuario: 'Lore', admin: false }, d) as { stock: { libro: boolean } }
+    expect(r2.stock.libro).toBe(false)
+    vi.unstubAllEnvs()
+  })
+  it('sin nada importado ⛔ refresca', async () => {
+    const m = await puerta(); const d = deps()
+    vi.stubEnv('INGRESOS_TOKEN_BDI', 'igk_b')
+    motorMock.importarDeIngresos.mockImplementationOnce((async () => ({ manda: true, skus: [] })) as never)
+    await m.importarDeIngresosErp({ body: { marca: 'bdi', elegidos: [9] }, usuario: 'Lore', admin: true }, d)
+    expect(d.refrescar).not.toHaveBeenCalled()
+    vi.unstubAllEnvs()
+  })
+  it('la habitual es de Admin y Administración; la excepcional, sólo de Admin: lo exige el servidor', async () => {
+    const { permisoErpDe, puedeErp } = await import('../lib/permisos.core.js')
+    expect(permisoErpDe({ method: 'GET', vista: 'ingresos-productos' })).toBe('importar-ingresos')
+    expect(permisoErpDe({ method: 'POST', accion: 'importar-ingresos' })).toBe('importar-ingresos')
+    expect(permisoErpDe({ method: 'GET', vista: 'ingresos-excepcional' })).toBe('configurar')
+    expect(permisoErpDe({ method: 'POST', accion: 'importar-ingresos-excepcional' })).toBe('configurar')
+    const persona = (funcion: string[]) => ({ user: 'x', funcion, acceso: { bdi: { erp: true }, zattia: { erp: true } } })
+    expect(puedeErp(persona(['administracion']), 'bdi', 'importar-ingresos')).toBe(true)
+    expect(puedeErp(persona(['administracion']), 'bdi', 'configurar')).toBe(false)
+    for (const f of ['local', 'deposito', 'mayorista', 'consulta']) expect(puedeErp(persona([f]), 'bdi', 'importar-ingresos')).toBe(false)
     const { entradaInvalida } = await import('../lib/erp/entrada.core.js')
     expect(entradaInvalida({ method: 'GET', query: { vista: 'ingresos-productos', marca: 'bdi' } })).toBeNull()
+    expect(entradaInvalida({ method: 'GET', query: { vista: 'ingresos-excepcional', marca: 'bdi' } })).toBeNull()
     expect(entradaInvalida({ method: 'POST', body: { accion: 'importar-ingresos', marca: 'bdi', elegidos: [1] } })).toBeNull()
+    expect(entradaInvalida({ method: 'POST', body: { accion: 'importar-ingresos-excepcional', marca: 'bdi', elegidos: [1] } })).toBeNull()
   })
 })
