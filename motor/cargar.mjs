@@ -10,7 +10,10 @@ import { diaSiguiente, fechaAR, indiceDeVariantes, medianocheAR } from './deposi
  * ganaba la que el espejo devolviera última).
  */
 export async function cargarIndice(db) {
-  return indiceDeVariantes(await db.q('select product_id, size_id, sku, barcode from variante order by product_id, size_id'))
+  const filas = await db.q('select product_id, size_id, sku, barcode from variante order by product_id, size_id')
+  // 🔴 Entre migrar y `rol-motor crear` el usuario `motor` ⛔ puede leer `tn_vinculo`: sin esto se frenaría todo lo que usa el índice.
+  const [{ puede }] = await db.q(`select to_regclass('public.tn_vinculo') is not null and has_table_privilege('public.tn_vinculo', 'select') as puede`)
+  return indiceDeVariantes(filas, puede ? await db.q('select variant_id, product_id, size_id from tn_vinculo') : [])
 }
 
 /**

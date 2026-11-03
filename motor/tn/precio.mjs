@@ -46,7 +46,7 @@ export function planPrecioTN({ productos, indice, online, oferta = new Map() }) 
   for (const p of productos) {
     for (const tv of p.variants || []) {
       cuenta.variantes++
-      const v = variante({ sku: tv.sku, barcode: tv.barcode })
+      const v = variante({ variant_id: tv.id, sku: tv.sku, barcode: tv.barcode })
       if (!v) { cuenta.sin_variante++; continue }
       const m = online.get(Number(v.product_id))
       if (!m || pesos(m.precio) == null) { cuenta.sin_precio++; continue }

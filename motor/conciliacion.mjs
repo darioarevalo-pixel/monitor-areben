@@ -171,7 +171,7 @@ export function conciliarStockTN({ tienda, productos, indice, libro, gn, cortes,
       cuenta.variantes++
       if (tv.stock == null) { cuenta.sin_limite++; continue }
       const tn = Number(tv.stock)
-      const v = variante({ sku: tv.sku, barcode: tv.barcode })
+      const v = variante({ variant_id: tv.id, sku: tv.sku, barcode: tv.barcode })
       if (!v) {
         filas.push({ tipo: 'stock_tn', clave: `tn:${tv.id}`, clase: 'sin_variante', sku: tv.sku ?? null, tn,
           detalle: { tn_product_id: Number(p.id), variant_id: Number(tv.id), barcode: tv.barcode ?? null, nombre: nombreTN(p) } })

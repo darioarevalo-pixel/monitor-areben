@@ -10,6 +10,7 @@
  * límite»: ⛔ se toca. Una variante de TN sin SKU/código o sin variante en GN ⛔ se puede empujar: se cuenta.
  */
 import { varianteDeLineaTN } from './cruce.mjs'
+import { grupoComparte } from './vinculo.mjs'
 
 export const DEPOSITOS_TN = { bdi: ['deposito_minorista'], zattia: ['local'], stunned: ['deposito', 'local'] }
 
@@ -41,10 +42,11 @@ export function planStockTN({ tienda, productos, indice, libro, gn, reservado = 
     for (const tv of p.variants || []) {
       cuenta.variantes++
       if (tv.stock == null) { cuenta.sin_limite++; continue }
-      const v = variante({ sku: tv.sku, barcode: tv.barcode })
+      const v = variante({ variant_id: tv.id, sku: tv.sku, barcode: tv.barcode })
       if (!v) { cuenta.sin_variante++; continue }
       const k = `${v.product_id}:${v.size_id}`
-      vistas.set(k, (vistas.get(k) || 0) + 1)
+      if (!vistas.has(k)) vistas.set(k, [])
+      vistas.get(k).push(tv)
       const tn = Number(tv.stock)
       const l = Math.max(0, deLibro(v.product_id, v.size_id) - (reservado.get(k) || 0))
       const g = deGN(v.product_id, v.size_id)
@@ -54,11 +56,14 @@ export function planStockTN({ tienda, productos, indice, libro, gn, reservado = 
       if (l !== tn) cambios.push({ tn_product_id: Number(p.id), variant_id: Number(tv.id), sku: tv.sku ?? null, product_id: v.product_id, size_id: v.size_id, tn, libro: l, gn: g })
     }
   }
-  // La misma variante de GN en dos variantes de TN (SKU repetido): empujar las dos con el mismo número la duplica ⇒ se
-  // marcan y ⛔ se escriben (`aEscribir`).
-  const repetidas = [...vistas.values()].filter((n) => n > 1).length
-  for (const c of cambios) if (vistas.get(`${c.product_id}:${c.size_id}`) > 1) c.repetida = true
-  return { cuenta: { ...cuenta, repetidas }, cambios, leido: productos.flatMap((p) => (p.variants || []).map((tv) => ({ variant_id: Number(tv.id), stock: tv.stock == null ? null : Number(tv.stock) }))) }
+  // La misma variante del ERP en varias de TN. Si están VINCULADAS y sólo cambia el modelo, llevan el mismo stock (Bruno 3-nov:
+  // iPhone 17 Pro y 18 Pro). Si no (SKU repetido sin vínculo, o colores distintos), se marcan y ⛔ se escriben (`aEscribir`).
+  const grupos = [...vistas.entries()].filter(([, tvs]) => tvs.length > 1)
+  const trabadas = new Set(grupos.filter(([, tvs]) => !grupoComparte(tvs, indice)).map(([k]) => k))
+  const repetidas = trabadas.size
+  const compartidas = grupos.length - repetidas
+  for (const c of cambios) if (trabadas.has(`${c.product_id}:${c.size_id}`)) c.repetida = true
+  return { cuenta: { ...cuenta, repetidas, ...(compartidas ? { compartidas } : {}) }, cambios, leido: productos.flatMap((p) => (p.variants || []).map((tv) => ({ variant_id: Number(tv.id), stock: tv.stock == null ? null : Number(tv.stock) }))) }
 }
 
 /**
@@ -98,7 +103,7 @@ export function frenoStock({ cuenta, cambios }, max = FRENO_STOCK) {
   return parte > max ? `el libro cambiaría ${cambios.length} de ${empujables} variantes (${Math.round(parte * 100)}%, el freno es ${Math.round(max * 100)}%)` : null
 }
 
-/** Los cambios que SÍ se escriben: sin las variantes de SKU repetido. */
+/** Los cambios que SÍ se escriben: sin las variantes repetidas que ⛔ pueden compartir stock. */
 export const aEscribir = (cambios) => cambios.filter((c) => !c.repetida)
 
 /** Lo que se le manda a TN por un cambio (la forma de `pedidoDePrecio`). */

@@ -66,6 +66,7 @@
  *   GET  ?recurso=erp&vista=redondeo&marca=…                           a cuánto se redondea el precio de cada canal (motor sql/029)
  *   POST {recurso:'erp', accion:'reintentar-entregas', marca}        vuelve a cobrar las entregas de Logística sin cobrar (`api/_erp-cobros.js`)
  *   POST {recurso:'erp', accion:'poner-redondeo', marca, linea?, canal, paso, modo, desde?}   `api/_erp-redondeo.js`
+ *   GET  ?recurso=erp&vista=vinculos|vinculos-buscar&marca=…&tienda=…    y POST accion:'poner-vinculo'   `api/_erp-vincular.js`
  *   GET  ?recurso=erp&vista=estructura&marca=…   Configuración › Cuentas y Marcas, depósitos y puntos de venta (`api/_erp-estructura.js`, sólo lee)
  *   GET  ?recurso=erp&vista=ajustes&linea=bdi|zattia|stunned           los ajustes de stock (motor sql/026) + la lista «A contar»
  *   POST {recurso:'erp', accion:'crear-ajuste'|'aprobar-ajuste'|'descartar-ajuste', linea, …}   `api/_erp-ajustes.js`
@@ -119,6 +120,7 @@ import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
 import { ponerRedondeoErp, redondeoDeMarca } from './_erp-redondeo.js'
+import { buscarVariantesVinculo, ponerVinculoErp, vinculosDeTienda } from './_erp-vincular.js'
 import { ponerRutaErp, rutasDeMarca } from './_erp-rutas.js'
 import { estructuraDeMarca } from './_erp-estructura.js'
 import { configuracionDeMarcas, interruptoresDeMarcas, ponerInterruptorErp } from './_erp-interruptores.js'
@@ -1915,6 +1917,17 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && body.accion === 'reintentar-entregas') {
       const r = await reintentarEntregasErp({ marca: String(body.marca || ''), linea: String(body.linea || '') }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && (req.query.vista === 'vinculos' || req.query.vista === 'vinculos-buscar')) {
+      const pedido = { marca: String(req.query.marca || ''), tienda: String(req.query.tienda || ''), q: String(req.query.q || '') }
+      const r = req.query.vista === 'vinculos' ? await vinculosDeTienda(pedido, { conMotor }) : await buscarVariantesVinculo(pedido, { conMotor })
+      res.setHeader('Cache-Control', 'no-store')
+      return res.status(r.status || 200).json(r.status ? { error: r.error, codigo: r.codigo } : r)
+    }
+    if (req.method === 'POST' && body.accion === 'poner-vinculo') {
+      const r = await ponerVinculoErp({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error, codigo: r.codigo } : r)
     }
 
     if (req.method === 'GET' && req.query.vista === 'redondeo') {

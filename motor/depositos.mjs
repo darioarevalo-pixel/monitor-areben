@@ -97,7 +97,7 @@ export function diaSiguiente(fecha, n = 1) {
  * barcode ⇒ variante y sku ⇒ variante, para las fuentes que no traen la variante de GN.
  * @param {Array<{product_id:number,size_id:number,sku?:string,barcode?:string}>} filas
  */
-export function indiceDeVariantes(filas) {
+export function indiceDeVariantes(filas, vinculos = []) {
   const porVariante = new Map()
   const porBarcode = new Map()
   const porSku = new Map()
@@ -108,8 +108,15 @@ export function indiceDeVariantes(filas) {
     if (f.barcode) porBarcode.set(String(f.barcode).trim().toUpperCase(), v)
     if (f.sku) porSku.set(String(f.sku).trim().toUpperCase(), v)
   }
+  // 🔑 Los vínculos de TN (sql/076) ganan al código y al SKU; uno que apunta a una variante que ⛔ está se ignora.
+  const porVarianteTN = new Map()
+  for (const f of vinculos) {
+    const v = porVariante.get(`${f.product_id}:${f.size_id}`)
+    if (v) porVarianteTN.set(String(f.variant_id), v)
+  }
   return {
     variante: (pid, sid) => porVariante.get(`${pid}:${sid}`) ?? null,
+    porVarianteTN: (id) => (id != null ? porVarianteTN.get(String(id)) ?? null : null),
     porBarcode: (b) => (b ? porBarcode.get(String(b).trim().toUpperCase()) ?? null : null),
     porSku: (s) => (s ? porSku.get(String(s).trim().toUpperCase()) ?? null : null),
   }

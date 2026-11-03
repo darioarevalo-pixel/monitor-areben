@@ -65,7 +65,7 @@ function sumarPorVariante(lineas, varianteDe) {
 }
 
 /** La variante de GN de una línea de TN: por código de barras y, si no, por SKU. */
-export const varianteDeLineaTN = (indice) => (l) => indice.porBarcode?.(l.barcode) ?? indice.porSku?.(norm(l.sku)) ?? null
+export const varianteDeLineaTN = (indice) => (l) => indice.porVarianteTN?.(l.variant_id) ?? indice.porBarcode?.(l.barcode) ?? indice.porSku?.(norm(l.sku)) ?? null
 
 const igual = (a, b) => a.size === b.size && [...a].every(([k, v]) => b.get(k) === v)
 

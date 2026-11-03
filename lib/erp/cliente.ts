@@ -450,6 +450,22 @@ export const leerRedondeo = (marca: MarcaErp) =>
 export const ponerRedondeo = (marca: MarcaErp, redondeo: RedondeoAPoner) =>
   pedir<{ ok: true; id: string }>(post({ accion: 'poner-redondeo', marca, ...redondeo }), '', 'No se pudo cambiar el redondeo.')
 
+// ── ERP › Productos › Vincular (`api/_erp-vincular.js`, motor sql/076) ──
+
+export type FilaVinculo = { variant_id: number; producto: string; publicado: boolean; valores: string[]; sku: string | null; barcode: string | null; stock: number | null }
+export type VariantesDeVinculo = {
+  sin_par: FilaVinculo[]
+  trabados: Array<{ product_id: number; size_id: number; nombre: string | null; variantes: FilaVinculo[] }>
+  elegidas: Array<FilaVinculo & { product_id: number; size_id: number; nombre: string | null; usuario: string | null; actualizado_en: string }>
+}
+export type VariantePorVincular = { product_id: number; size_id: number; producto: string; talle: string; sku: string | null; barcode: string | null }
+export const leerVinculos = (marca: MarcaErp, tienda: string) =>
+  pedir<VariantesDeVinculo>(null, `&vista=vinculos&marca=${marca}&tienda=${tienda}&nc=${Date.now()}`, 'No se pudieron leer los vínculos.')
+export const buscarVariantesVinculo = (marca: MarcaErp, tienda: string, q: string) =>
+  pedir<{ variantes: VariantePorVincular[] }>(null, `&vista=vinculos-buscar&marca=${marca}&tienda=${tienda}&q=${encodeURIComponent(q)}`, 'No se pudo buscar.')
+export const ponerVinculo = (v: { marca: MarcaErp; tienda: string; variant_id: number; product_id: number; size_id: number }) =>
+  pedir<{ ok: true; vinculadas: number }>(post({ accion: 'poner-vinculo', ...v }), '', 'No se pudo guardar el vínculo.')
+
 // ── ERP › Ventas, el PILOTO del diseño (lista + ficha; `api/_erp-ventas.js`, núcleo `lib/erp/ventas-lista.core.js`) ──
 
 export type FilaVentaLista = {
