@@ -155,7 +155,7 @@ export function VincularTN() {
             </div>
           )}
         >
-          <p style={{ margin: `0 0 ${space[3]}`, color: color.mut }}>En Tienda Nube: <b style={{ color: color.ink }}>{abierta.producto} · {nombreVariante(abierta)}</b></p>
+          <p style={{ margin: `0 0 ${space[3]}px`, color: color.mut }}>En Tienda Nube: <b style={{ color: color.ink }}>{abierta.producto} · {nombreVariante(abierta)}</b></p>
           {errorModal && <div style={{ marginBottom: space[3] }}><Notice tone="danger" onClose={() => setErrorModal(null)}>{errorModal}</Notice></div>}
           <Field label="Buscar en el ERP">
             <Input value={texto} onChange={(e) => { setTexto(e.target.value); setElegida(null) }} placeholder="Nombre, variante o código" autoFocus />

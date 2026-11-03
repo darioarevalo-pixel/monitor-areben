@@ -13,6 +13,10 @@ const SIN_TABLA = fallo('SIN_TABLA', 'Los vínculos de Tienda Nube todavía no e
 const hayTabla = async (db) => (await db.q(`select to_regclass('public.tn_vinculo') is not null as hay`))[0].hay
 const baseDe = (tienda) => (tienda === 'bdi' ? 'bdi' : 'zattia')
 const TIENDAS = ['bdi', 'zattia', 'stunned']
+// 🔴 Tienda Nube dice «CÁMARA» y GN «CAMARA»: sin esto, el nombre que trae la pantalla ⛔ encuentra nada (visto en prod, 3-nov).
+const TILDES = 'ÁÉÍÓÚÜÑáéíóúüñ'
+const SIN = 'AEIOUUNaeiouun'
+const sinTildes = (t) => String(t ?? '').replace(/[ÁÉÍÓÚÜÑáéíóúüñ]/g, (c) => SIN[TILDES.indexOf(c)])
 
 const variantesDeTN = async (db, tienda) => (await db.q(
   `select v.variant_id, v.tn_product_id, v.sku, v.barcode, v.valores, v.stock, p.nombre, p.publicado
@@ -61,12 +65,12 @@ export async function leerVinculos(db, { tienda }) {
 /** Las variantes del ERP de esa línea que coinciden con TODAS las palabras buscadas (nombre, variante o SKU). */
 export async function buscarVariantes(db, { tienda, texto, limite = 30 }) {
   if (!TIENDAS.includes(tienda)) return fallo('TIENDA_DESCONOCIDA', `Tienda desconocida: ${tienda}`)
-  const palabras = String(texto ?? '').trim().split(/\s+/).filter(Boolean).slice(0, 6).map((p) => `%${p.replace(/[\\%_]/g, '\\$&')}%`)
+  const palabras = sinTildes(texto).trim().split(/\s+/).filter(Boolean).slice(0, 6).map((p) => `%${p.replace(/[\\%_]/g, '\\$&')}%`)
   if (!palabras.length) return { ok: true, variantes: [] }
   const filas = await db.q(
     `select distinct i.product_id, i.size_id, i.product_name, i.size_name, v.sku, v.barcode
        from inventario i join variante v on v.product_id = i.product_id and v.size_id = i.size_id
-      where (select bool_and(i.product_name || ' ' || i.size_name || ' ' || coalesce(v.sku, '') ilike p) from unnest($1::text[]) p)
+      where (select bool_and(translate(i.product_name || ' ' || i.size_name || ' ' || coalesce(v.sku, ''), '${TILDES}', '${SIN}') ilike p) from unnest($1::text[]) p)
       order by i.product_name, i.size_name limit 500`, [palabras],
   )
   const variantes = filas
