@@ -16,6 +16,14 @@ describe('armarPedidosSinPagar', () => {
     expect(r.pedidos[1].link).toBe('https://stunned3.mitiendanube.com/admin/orders/6')
     expect(r.porTienda).toEqual({ zattia: { pedidos: 2, unidades: 3, total: 2001 }, stunned: { pedidos: 1, unidades: 0, total: 1000.5 } })
   })
+  it('para cancelar (Bruno, 3-nov): sin pagar desde los 15 días, borde incluido; ni antes, ni entregado, ni pagado', () => {
+    const creada = (dias: number) => new Date(ahora - dias * 86_400_000).toISOString()
+    const r = armarPedidosSinPagar({
+      ordenes: [o(1, { creada_en: creada(14.9) }), o(2, { creada_en: creada(15) }), o(3, { creada_en: creada(40), status: 'closed' }), o(4, { creada_en: creada(40), payment_status: 'paid' })],
+      lineas: [], ahora,
+    })
+    expect(Object.fromEntries(r.pedidos.map((p) => [p.tnId, p.paraCancelar]))).toEqual({ 1: false, 2: true, 3: false })
+  })
   it('entregado sin cobrar (Bruno, 19-oct): el CERRADO sin pago sigue, marcado, y ⛔ suma unidades retenidas', async () => {
     const { STATUS_POR_COBRAR } = await import('../lib/erp/pedidos-tn.core.js')
     const r = armarPedidosSinPagar({

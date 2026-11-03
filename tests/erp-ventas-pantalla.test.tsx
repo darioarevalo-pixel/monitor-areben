@@ -69,7 +69,7 @@ describe('la lista', () => {
   it('vistas con su número, resumen arriba y la prueba dicha', async () => {
     await montar()
     const vistas = [...host.querySelectorAll('[role="tab"]')].map((t) => t.textContent)
-    expect(vistas).toEqual(['Todas3', 'A preparar1', 'Listas0', 'A desarmar0', 'Sin pagar0', 'Con saldo1', 'Sin factura2', 'Anuladas1'])
+    expect(vistas).toEqual(['Todas3', 'A preparar1', 'Listas0', 'A desarmar0', 'Sin pagar0', 'Para cancelar0', 'Con saldo1', 'Sin factura2', 'Anuladas1'])
     expect(todo()).toContain('$ 205.390') // vendido: 18.990 + 186.400 (la anulada ⛔)
     expect(todo()).toContain('$ 93.200') // por cobrar
     await clic(boton(/^Con saldo/))

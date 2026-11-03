@@ -96,8 +96,13 @@ describe('la fila, las vistas y el resumen', () => {
     // Se cobra en Cobranzas (el ícono $ lleva ahí, ⛔ a una ventana del ERP).
     expect(accionesDeFila(p).cobro).toMatchObject({ activo: true, label: 'Pedido sin pagar: se cobra en Cobros del monitor ↗' })
   })
+  it('un pedido para cancelar entra en su vista y en Sin pagar', () => {
+    const p = armarFila({ kind: 'pedido', tienda: 'zattia', tnId: '1', tnNumero: 7, creadaEn: '2026-10-01T00:00:00Z', total: 100, dias: 15, paraCancelar: true })
+    expect(contarVistas([p])).toMatchObject({ cancelar: 1, sinpagar: 1 })
+    expect(contarVistas([armarFila({ kind: 'pedido', tienda: 'zattia', tnId: '2', tnNumero: 8, creadaEn: '2026-10-01T00:00:00Z', total: 100, dias: 14 })])).toMatchObject({ cancelar: 0, sinpagar: 1 })
+  })
   it('las vistas cuentan lo suyo', () => {
-    expect(contarVistas(filas)).toEqual({ todas: 6, preparar: 2, listas: 0, desarmar: 0, sinpagar: 1, saldo: 1, sinfactura: 2, anuladas: 1 })
+    expect(contarVistas(filas)).toEqual({ cancelar: 0, todas: 6, preparar: 2, listas: 0, desarmar: 0, sinpagar: 1, saldo: 1, sinfactura: 2, anuladas: 1 })
   })
   it('el buscador lee número, pedido de Tienda Nube, cliente y nota, sin tildes', () => {
     expect(filtrar(filas, { q: '#293' }).map((f: { id: string }) => f.id)).toEqual(['v3'])

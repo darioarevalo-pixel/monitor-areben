@@ -207,6 +207,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
       {esPedido ? (
         <>
           {fila.entregadoSinCobrar && <Notice tone="danger"><b>Entregado sin cobrar</b>: Tienda Nube lo cerró sin que se registrara el pago. Ya no retiene stock; queda acá hasta que se cobre o se cancele.</Notice>}
+          {fila.paraCancelar && <Notice tone="danger"><b>Para cancelar</b>: lleva {fila.dias} días sin pagar. Hay que cancelarlo en Tienda Nube. Los productos siguen retenidos hasta que se cancele.</Notice>}
           <Notice tone="warning">Pedido de Tienda Nube <b>sin pagar</b>: todavía no es una venta{fila.entregadoSinCobrar ? '' : ' y tiene los productos retenidos'}. Pasa a venta solo cuando Tienda Nube avisa que se pagó. Se cobra en Cobros del monitor (transferencia o efectivo) o se cancela en Tienda Nube.</Notice>
           <DatosFicha>
             <DatoFicha titulo="Entró">{`${cuandoCorto(fila.pedidoEn)}${fila.dias != null ? ` · ${fila.dias === 0 ? 'hoy' : fila.dias === 1 ? 'hace 1 día' : `hace ${fila.dias} días`}` : ''}`}</DatoFicha>

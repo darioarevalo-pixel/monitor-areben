@@ -155,6 +155,7 @@ mismo molde. ⛔ se copian en la pantalla nueva (Ajustes y Stock ya las usan).
   ⛔ un camino inventado. Lo económico (prendas, precios, pagos) ⛔ se edita: lleva a Hacer cambio / Registrar cobro / Anular.
 - 🔑 El cobro va IMPUTADO a esa venta (`registrarPagoACuenta`, `imputar`, nunca más que su saldo); lo que sobra va a la venta
   más vieja que deba (lo hace el motor). Clave por ventana abierta (`erp-cobro:<uuid>`): reintentar ⛔ duplica.
+- 🔑 **Para cancelar** (Bruno, 3-nov): a los `DIAS_PARA_CANCELAR` (15, `motor/venta/pago-tn.mjs`) el pedido sin pagar entra en la vista «Para cancelar», con la marca en la fila y el aviso en la ficha. Se cancela a mano en Tienda Nube (el ERP ⛔ escribe ahí) y sigue reteniendo hasta entonces. Quién cancela: sin definir.
 - 🔑 **Los pedidos sin pagar viven ACÁ** (Bruno, 17-oct: «Ventas abarca todo lo que es venta… se separan con FILTROS»; la
   pestaña se fue el 19-oct): la fila dice el medio que eligió en el origen y, desde `PEDIDO_VIEJO_DIAS` (3), cuántos días lleva
   colgado al lado del estado; el $ y el «⋯» llevan a **Cobranzas** del monitor (↗, ahí se cobra transferencia o efectivo) y a

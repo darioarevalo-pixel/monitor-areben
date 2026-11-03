@@ -466,6 +466,8 @@ export type FilaVentaLista = {
   dias?: number | null; medio?: string | null; prendas?: Array<{ nombre: string | null; sku: string | null; cantidad: number }>
   /** Cerrado en TN sin pago: ⛔ retiene stock, se muestra «entregado sin cobrar». */
   entregadoSinCobrar?: boolean
+  /** Sin pagar y pasado el plazo: hay que cancelarlo en Tienda Nube. Sigue reteniendo hasta que se cancele. */
+  paraCancelar?: boolean
 }
 export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean; corregir?: boolean; corregirMedio?: boolean }
 export const leerListaDeVentas = (marca: MarcaErp, desde: string, hasta: string, linea: '' | 'zattia' | 'stunned' = '') =>

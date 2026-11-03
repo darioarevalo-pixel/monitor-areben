@@ -7,6 +7,12 @@
  * re-exporta.
  */
 
+/**
+ * 🔑 Bruno, 3-nov: a los 15 días de creado, el pedido sin pagar se avisa «para cancelar». Se cancela a mano en TN: el ERP
+ * ⛔ escribe ahí, y el pedido sigue reteniendo hasta que lo cancelen.
+ */
+export const DIAS_PARA_CANCELAR = 15
+
 export const PAGADA = new Set(['paid', 'partially_paid', 'authorized'])
 export const DEVUELTA = new Set(['refunded', 'voided', 'partially_refunded'])
 

@@ -25,8 +25,8 @@ export function nivelDe(niveles, depositos) {
  * @param {object} p.indice    indiceDeVariantes del inventario
  * @param {Map<string, number>} p.libro  nivel del libro por 'pid:sid:deposito'
  * @param {Map<string, number>} p.gn     nivel de GN (inventario) por 'pid:sid:deposito'
- * @param {Map<string, number>} [p.reservado] 'pid:sid' → unidades de los pedidos de TN sin pagar con la reserva
- *   VIGENTE (`reservasTN`): TN ya las apartó ⇒ el motor empuja el libro MENOS eso (si no, se venden dos veces).
+ * @param {Map<string, number>} [p.reservado] 'pid:sid' → unidades de los pedidos de TN sin pagar que siguen abiertos,
+ *   vencidos o no (`reservasTN`): TN ya las apartó ⇒ el motor empuja el libro MENOS eso (si no, se venden dos veces).
  */
 export function planStockTN({ tienda, productos, indice, libro, gn, reservado = new Map() }) {
   const deps = DEPOSITOS_TN[tienda]
