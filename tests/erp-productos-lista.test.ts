@@ -71,3 +71,27 @@ describe('vistas, buscador, resumen y orden', () => {
     expect(normalizarPrefs({ orden: ['p', 'vieja'], visibles: ['p', 'vieja'] }).visibles).not.toContain('vieja')
   })
 })
+
+describe('lo importado de Ingresos sin stock (prueba de Bruno, 3-nov)', () => {
+  const base = { precios: [], costos: [], tn: [], cambios: [], liquidaciones: [] }
+  const productos = [{ id: '1000000043', nombre: 'ADAPTADOR', marca: 'bdi', categoria: null, proveedor: null }]
+  const sinEspejo = [{ product_id: '1000000043', size_id: '1000000044', talle: 'Variante Única', sku: 'AC-0012', barcode: 'AC0012' }]
+
+  it('aparece con su variante y su código, con stock 0', () => {
+    const [f] = armarFilasProductos({ ...base, productos, stock: [], sinEspejo })
+    expect(f.variantes).toHaveLength(1)
+    expect(f.variantes[0]).toMatchObject({ sku: 'AC-0012', barcode: 'AC0012', talleNombre: 'Variante Única', disponible: 0 })
+    expect(f.disponible).toBe(0)
+  })
+
+  it('con stock ya sale del espejo: ⛔ se duplica', () => {
+    const stock = [{ producto: '1000000043', talle: '1000000044', talleNombre: 'Variante Única', nombre: 'ADAPTADOR', linea: 'bdi', sku: 'AC-0012', barcode: 'AC0012', deps: { local: 0, deposito: 5 }, estanteria: 5, enPedidos: 0, disponible: 5 }]
+    const [f] = armarFilasProductos({ ...base, productos, stock, sinEspejo })
+    expect(f.variantes).toHaveLength(1)
+    expect(f.disponible).toBe(5)
+  })
+
+  it('el producto inactivo ⛔ vuelve por su variante', () => {
+    expect(armarFilasProductos({ ...base, productos: [], stock: [], sinEspejo })).toHaveLength(0)
+  })
+})

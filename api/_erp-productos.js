@@ -21,6 +21,7 @@ async function delMotor(pg, { costos }) {
   const productos = (await pg.query(`select p.id, p.nombre, p.marca, p.categoria, pr.nombre as proveedor
     from producto p left join proveedor pr on pr.id = p.proveedor_id where p.activo`)).rows
   const precios = (await pg.query('select product_id, marca, lista, precio from precio_lista')).rows
+  const sinEspejo = (await pg.query(`select product_id, size_id, talle, sku, barcode from variante where fuente = 'carga' and activa`)).rows
   // 🔴 Sin el permiso `costos` (Admin y Administración) el costo ⛔ se lee: ⛔ viaja (Bruno 30-oct, el local lo veía en Productos).
   const costosVigentes = costos ? (await pg.query('select product_id, marca, costo from costo_vigente')).rows : null
   // El SKU como lo guardó TN y en mayúsculas sin espacios: como cruza la copia del motor.
@@ -42,7 +43,7 @@ async function delMotor(pg, { costos }) {
         and vigente_desde >= date_trunc('month', now() at time zone 'America/Argentina/Buenos_Aires') at time zone 'America/Argentina/Buenos_Aires')
         over (partition by marca, product_id) as cambios_mes
     from h order by marca, product_id, vigente_desde desc, creada_en desc`)).rows
-  return { productos, precios, costos: costosVigentes, tn, cambios, tnLeidaEn: leida ? new Date(leida).toISOString() : null }
+  return { productos, precios, costos: costosVigentes, tn, cambios, sinEspejo, tnLeidaEn: leida ? new Date(leida).toISOString() : null }
 }
 
 /**
@@ -66,7 +67,7 @@ export async function listaDeProductos({ marca, costos }, deps) {
   if (stock.status) return stock
   if (motor.status) return motor
   return {
-    filas: armarFilasProductos({ productos: motor.productos, stock: stock.filas, precios: motor.precios, costos: motor.costos, tn: motor.tn, cambios: motor.cambios, liquidaciones: liquidaciones.filas }),
+    filas: armarFilasProductos({ productos: motor.productos, stock: stock.filas, precios: motor.precios, costos: motor.costos, tn: motor.tn, cambios: motor.cambios, liquidaciones: liquidaciones.filas, sinEspejo: motor.sinEspejo }),
     liquidacionesError: liquidaciones.error,
     libroHasta: stock.libroHasta,
     pedidosLeidosEn: stock.pedidosLeidosEn,
