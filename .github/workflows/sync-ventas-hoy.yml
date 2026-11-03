@@ -56,3 +56,17 @@ jobs:
           ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
           GN_TOKEN_ZATTIA: ${{ secrets.GN_TOKEN_ZATTIA }}
         run: node scripts/sync-ventas-hoy.js
+
+      # Las ventas nacidas en el ERP DESPUÉS del corte de su línea (`erp_corte`): sin esto «Actualizar ventas» trae sólo GN y lo de
+      # la línea cortada recién aparece con el diario de las 06:00 UTC. Va DESPUÉS del sync de GN, igual que en los diarios.
+      # Sin línea cortada ⛔ copia nada. Ver `lib/erp/ventas-espejo.core.js`.
+      - name: Ventas del ERP al espejo
+        env:
+          DATABASE_URL_BDI: ${{ secrets.DATABASE_URL_BDI }}
+          DATABASE_URL_ZATTIA: ${{ secrets.DATABASE_URL_ZATTIA }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
+          STORE: ${{ inputs.store }}
+        run: node scripts/erp-ventas-espejo.mjs "$STORE"
