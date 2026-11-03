@@ -8,6 +8,8 @@
 export const NEGOCIOS = Object.freeze({
   bdi: Object.freeze({ id: 1, name: 'BDI Accesorios', slug: 'bdi', base: 'bdi' }),
   zattia: Object.freeze({ id: 2, name: 'Zattia', slug: 'zattia', base: 'zattia' }),
+  // Bruno, 3-nov: Stunned pasa por Logística. Vive en la base de Zattia; sus ubicaciones se filtran por su línea y no tiene mayoristas (0 y 404).
+  stunned: Object.freeze({ id: 3, name: 'Stunned', slug: 'stunned', base: 'zattia' }),
 })
 
 /** Los permisos: qué deja hacer y qué datos salen (B.4). Es lo que acepta quien da de alta el token. */

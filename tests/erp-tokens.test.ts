@@ -90,7 +90,7 @@ describe('la puerta', () => {
     const { db, conMotor } = armar()
     const r = await tokensErp({}, { conMotor })
     expect(Object.keys(r.permisos)).toContain('locations:read')
-    expect(r.negocios).toEqual({ bdi: 'BDI Accesorios', zattia: 'Zattia' })
+    expect(r.negocios).toEqual({ bdi: 'BDI Accesorios', zattia: 'Zattia', stunned: 'Stunned' })
     expect(r.nunca.length).toBeGreaterThan(0)
     expect(String(db.query.mock.calls[0][0])).not.toContain('key_hash')
   })
