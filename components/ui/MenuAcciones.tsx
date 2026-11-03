@@ -31,7 +31,32 @@ import { Icono, type NombreIcono } from '@/components/ui/Icono'
 import { color, font, radius, shadow, space, weight } from '@/components/ui/tokens'
 import type { Tone } from '@/components/ui/tokens'
 
-const ALTO_MENU_FLOTANTE = 200
+/** Alto de cada acción y lo que suman el relleno y el borde del menú (medido: 7 acciones = 234 px). */
+const ALTO_ACCION = 32
+const ALTO_MARCO = 10
+const MARGEN = 4
+
+/**
+ * Dónde va el menú fijo a la pantalla: abajo del «⋯»; si ⛔ entra, arriba; si ⛔ entra en ninguno de los dos, del lado con más
+ * lugar y con scroll adentro. Se calcula con la CANTIDAD de acciones: el «⋯» de una venta trae 7 y un alto fijo se quedaba corto.
+ */
+export function lugarDelMenu(
+  boton: { left: number; right: number; top: number; bottom: number },
+  pantalla: { ancho: number; alto: number },
+  cuantas: number,
+  alinear: 'izquierda' | 'derecha',
+): React.CSSProperties {
+  const alto = cuantas * ALTO_ACCION + ALTO_MARCO
+  const abajo = pantalla.alto - boton.bottom - MARGEN * 2
+  const arriba = boton.top - MARGEN * 2
+  const vaAbajo = alto <= abajo || abajo >= arriba
+  return {
+    position: 'fixed',
+    ...(alinear === 'izquierda' ? { left: boton.left, right: 'auto' } : { right: pantalla.ancho - boton.right, left: 'auto' }),
+    ...(vaAbajo ? { top: boton.bottom + MARGEN, bottom: 'auto' } : { bottom: pantalla.alto - boton.top + MARGEN, top: 'auto' }),
+    ...(alto > (vaAbajo ? abajo : arriba) ? { maxHeight: vaAbajo ? abajo : arriba, overflowY: 'auto' } : null),
+  }
+}
 
 export type AccionMenu = {
   key: string
@@ -45,7 +70,7 @@ export type AccionMenu = {
   disabled?: boolean
 }
 
-export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear = 'derecha', alPie, flotante }: {
+export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear = 'derecha', alPie, flotante = !!vertical && !alPie }: {
   acciones: AccionMenu[]
   /** Qué dice el lector de pantalla. Va con el nombre de la cosa adentro, ⛔ no «Más acciones». */
   etiqueta: string
@@ -57,8 +82,9 @@ export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear =
   /** 📱 El «⋯» del pie de la ficha en el celular: botón de 44 px para el dedo, y el menú abre HACIA ARRIBA (abajo no hay lugar). */
   alPie?: boolean
   /**
-   * El menú se dibuja fijo a la pantalla, ⛔ adentro de la lista: en una lista de pocas filas la caja que scrollea lo cortaba y
-   * sólo se veía la primera acción (Tokens de la API, 3-nov). Se cierra al scrollear: fijo, quedaría lejos de su fila.
+   * El menú se dibuja fijo a la pantalla, ⛔ adentro de la lista: la caja que scrollea lo cortaba y en las últimas filas ⛔ se veía
+   * ninguna acción (medido 3-nov: Ventas, Redondeo, Tokens). Es lo de siempre en el «⋯» vertical, el de las listas del ERP.
+   * Se cierra al scrollear: fijo, quedaría lejos de su fila.
    */
   flotante?: boolean
 }) {
@@ -75,21 +101,21 @@ export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear =
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && setAbierto(false)
     document.addEventListener('mousedown', fuera)
     const cerrar = () => setAbierto(false)
+    // El scroll del propio menú ⛔ lo cierra: si ⛔ entra en la pantalla, scrollea adentro.
+    const alScrollear = (e: Event) => { if (!(e.target instanceof Node && caja.current?.contains(e.target))) setAbierto(false) }
     document.addEventListener('keydown', esc)
-    if (flotante) { window.addEventListener('scroll', cerrar, true); window.addEventListener('resize', cerrar) }
+    if (flotante) { window.addEventListener('scroll', alScrollear, true); window.addEventListener('resize', cerrar) }
     return () => {
       document.removeEventListener('mousedown', fuera)
       document.removeEventListener('keydown', esc)
-      window.removeEventListener('scroll', cerrar, true)
+      window.removeEventListener('scroll', alScrollear, true)
       window.removeEventListener('resize', cerrar)
     }
   }, [abierto, flotante])
 
   const alternar = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (flotante && !abierto) {
-      const r = e.currentTarget.getBoundingClientRect()
-      // Abajo de la fila, o arriba si ⛔ entra (ALTO_MENU_FLOTANTE alcanza para las acciones de una fila).
-      setLugar({ position: 'fixed', left: r.left, ...(r.bottom + ALTO_MENU_FLOTANTE > window.innerHeight ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }) })
+      setLugar(lugarDelMenu(e.currentTarget.getBoundingClientRect(), { ancho: window.innerWidth, alto: window.innerHeight }, acciones.length, alinear))
     }
     setAbierto((o) => !o)
   }
@@ -131,7 +157,7 @@ export function MenuAcciones({ acciones, etiqueta, disabled, vertical, alinear =
           role="menu"
           style={{
             position: 'absolute', zIndex: 40, ...(alPie ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 4px)' }), ...(alinear === 'izquierda' ? { left: 0 } : { right: 0 }), minWidth: 210,
-            ...(flotante && lugar ? { top: 'auto', right: 'auto', ...lugar } : null),
+            ...(flotante && lugar ? lugar : null),
             background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg,
             boxShadow: shadow.pop, padding: space[1],
           }}

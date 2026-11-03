@@ -238,7 +238,7 @@ export function TokensApi() {
       ]),
       { key: 'actividad', label: 'Ver actividad', onClick: () => setVentana({ tipo: 'actividad', t }) },
     ]
-    return <MenuAcciones acciones={menu} etiqueta={`Más acciones de ${t.app} · ${t.key_prefix}`} vertical alinear="izquierda" flotante />
+    return <MenuAcciones acciones={menu} etiqueta={`Más acciones de ${t.app} · ${t.key_prefix}`} vertical alinear="izquierda" />
   }
   const celda = (t: TokenApi, k: string): React.ReactNode => {
     if (k === 'app') return <b style={{ color: color.ink }}>{t.app}</b>
