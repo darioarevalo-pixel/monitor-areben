@@ -17,11 +17,11 @@ vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zatt
 vi.mock('@/components/fundas/useDatosMonitor', () => ({ useDatosMonitor: () => ({ datos: { allProductos: [{ id: 5 }] } }) }))
 vi.mock('@/components/productos/useTnImages', () => ({ useTnPromo: () => ({}) }))
 vi.mock('@/lib/etiquetas/core', () => ({ construirPrecios: () => ({ precios: { 5: 18900 }, fueraDeTn: new Set() }) }))
-vi.mock('@/lib/tn', () => ({ imagenDe: () => null, matchTn: () => null }))
+vi.mock('@/lib/tn', () => ({ imagenDe: () => null, imagenesDe: () => ['tienda-2.jpg'], matchTn: () => null }))
 vi.mock('@/lib/tn-audit', () => ({
   traerAudit: () =>
     Promise.resolve([
-      { id: 1, name: 'BLAZER NEREA', variantes: [{ sku: 'RBT-0137', color: 'NEGRO', image_url: 'negro.jpg' }, { sku: 'RBT-0138', color: 'CHOCOLATE', image_url: null }] },
+      { id: 1, name: 'BLAZER NEREA', imagenes: [{ id: 1, src: 'negro.jpg' }, { id: 2, src: 'atras.jpg' }], variantes: [{ sku: 'RBT-0137', color: 'NEGRO', image_url: 'negro.jpg' }, { sku: 'RBT-0138', color: 'CHOCOLATE', image_url: null }] },
     ]),
 }))
 vi.mock('@/lib/caja/cliente', () => ({
@@ -93,6 +93,21 @@ describe('CajaTotem', () => {
     expect(caja.querySelector('img')?.getAttribute('src')).toBe('negro.jpg')
     const s = [...caja.querySelectorAll('span')].find((x) => x.textContent === 'S')!
     expect(s.style.textDecoration).toBe('line-through')
+  })
+
+  it('muestra los DOS precios y la galería avanza con las flechas, empezando por la foto del color', async () => {
+    const t = await escanear('7790001')
+    expect(t).toContain('Con transferencia')
+    expect(t).toContain('$17.000')
+    const foto = () => caja.querySelector('img')?.getAttribute('src')
+    expect(foto()).toBe('negro.jpg')
+    const siguiente = caja.querySelector('button[aria-label="Foto siguiente"]') as HTMLButtonElement
+    await act(async () => siguiente.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(foto()).toBe('atras.jpg')
+    await act(async () => siguiente.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(foto()).toBe('tienda-2.jpg')
+    await act(async () => siguiente.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(foto()).toBe('negro.jpg')
   })
 
   it('modo prueba (`?prueba=1`): la entrada se ve y un nombre lleva a la lista y a la prenda', async () => {

@@ -29,7 +29,7 @@ describe('precioTotem', () => {
 
   it('el precio en efectivo es el del cobro: 15 % y redondeo a $100', () => {
     // Transferencia es 10 % ($17.000) ⇒ ⛔ vale lo mismo: el rótulo dice sólo «En efectivo».
-    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: R, hoy: HOY, categorias: [] })).toEqual({ feria: false, lista: 18900, efectivo: 16100, ahorro: 2800, conTransferencia: false, promo: null })
+    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: R, hoy: HOY, categorias: [] })).toEqual({ feria: false, lista: 18900, efectivo: 16100, transferencia: 17000, ahorro: 2800, conTransferencia: false, promo: null })
   })
 
   it('«o transferencia» sólo si el cobro por transferencia da el MISMO total', () => {
@@ -89,6 +89,7 @@ describe('coloresDelProducto', () => {
       ],
       actual: 'CHOCOLATE',
       foto: 'c.jpg',
+      fotos: [],
     })
     expect(coloresDelProducto(audit, null).colores).toEqual([])
     expect(coloresDelProducto(audit, 'NO-ESTA').colores).toEqual([])

@@ -22,7 +22,7 @@ import type { Reglas } from '@/lib/caja/cliente'
 /** `promo`: el nombre de la promo del local que le toca a la prenda sola (W5), o null. */
 export type PrecioTotem =
   | { feria: true; lista: number; final: number }
-  | { feria: false; lista: number; efectivo: number; ahorro: number; conTransferencia: boolean; promo: string | null }
+  | { feria: false; lista: number; efectivo: number; /** `null`: sin cuenta de transferencia configurada. */ transferencia: number | null; ahorro: number; conTransferencia: boolean; promo: string | null }
 
 /**
  * El precio de una prenda para el tótem; `null` si no tiene precio o la Caja no tiene formas de pago.
@@ -52,7 +52,7 @@ export function precioTotem(a: { product_id: number; size_id: number; precio: nu
   } catch {
     /* sin cuenta de transferencia configurada: el rótulo dice sólo «En efectivo» */
   }
-  return { feria: false, lista: precio, efectivo: total, ahorro: Math.round((precio - total) * 100) / 100, conTransferencia: transferencia === total, promo: nombres.length ? nombres.join(' + ') : null }
+  return { feria: false, lista: precio, efectivo: total, transferencia, ahorro: Math.round((precio - total) * 100) / 100, conTransferencia: transferencia === total, promo: nombres.length ? nombres.join(' + ') : null }
 }
 
 /** Los talles del producto en el local (stock de anoche): sin repetir, en el orden de la lista. */
@@ -72,11 +72,11 @@ export function tallesDelLocal(variantes: { size_name: string; local?: number }[
  * (TN ⛔ trae el hex del color: es un nombre libre, «CHOCOLATE»). `foto` = la del color escaneado.
  */
 export function coloresDelProducto(
-  ps: { variantes?: { sku?: string | null; image_url?: string | null; color?: string | null }[] }[],
+  ps: { imagenes?: { src: string }[]; variantes?: { sku?: string | null; image_url?: string | null; color?: string | null }[] }[],
   sku: string | null,
-): { colores: { nombre: string; foto: string | null }[]; actual: string | null; foto: string | null } {
+): { colores: { nombre: string; foto: string | null }[]; actual: string | null; foto: string | null; fotos: string[] } {
   const k = sku?.toLowerCase().trim()
-  const nada = { colores: [], actual: null, foto: null }
+  const nada = { colores: [], actual: null, foto: null, fotos: [] }
   if (!k) return nada
   for (const p of ps) {
     const vs = p.variantes ?? []
@@ -88,9 +88,15 @@ export function coloresDelProducto(
       if (!c) continue
       if (!m.get(c)) m.set(c, v.image_url || null)
     }
-    return { colores: [...m].map(([nombre, foto]) => ({ nombre, foto })), actual: propia.color?.trim() || null, foto: propia.image_url || null }
+    return { colores: [...m].map(([nombre, foto]) => ({ nombre, foto })), actual: propia.color?.trim() || null, foto: propia.image_url || null, fotos: (p.imagenes ?? []).map((i) => i.src).filter(Boolean) }
   }
   return nada
+}
+
+/** Las fotos de la galería: primero la del color escaneado, después las del producto, sin repetir. */
+export function fotosDeLaPrenda(...grupos: (string | null | undefined | (string | null | undefined)[])[]): string[] {
+  const todas = grupos.flat().filter((f): f is string => !!f)
+  return [...new Set(todas)]
 }
 
 /** Cuánto queda a la vista una prenda escaneada antes de volver a «Escaneá una prenda». */

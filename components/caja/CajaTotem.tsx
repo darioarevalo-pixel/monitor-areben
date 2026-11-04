@@ -21,21 +21,22 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
+import { imagenesDe } from '@/lib/tn'
 import { precioDeCaja } from '@/lib/caja/precio'
 import { hoyIso } from '@/lib/agenda'
 import { buscarNombre, buscarProducto, leerConfig, type Config, type ProductoLista, type Variante } from '@/lib/caja/cliente'
 import { plata } from '@/lib/caja/ticket'
-import { coloresDelProducto, precioTotem, tallesDelLocal, TOTEM_MS, type PrecioTotem } from '@/lib/caja/totem'
+import { coloresDelProducto, fotosDeLaPrenda, precioTotem, tallesDelLocal, TOTEM_MS, type PrecioTotem } from '@/lib/caja/totem'
 import { nombreDeColor } from '@/lib/caja/pantalla-cliente'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { MARCA_CAJA, marcaParaPOS, storeCaja, useMarcaDeLaUrl, usarMarcaCaja } from '@/lib/caja/marca'
 import type { Marca } from '@/lib/nav.datos'
-import { CabeceraMarca, ESTILOS_CLIENTA, FONDO_FOTO, FotoPrenda } from '@/components/caja/CajaCliente'
+import { CabeceraMarca, ESTILOS_CLIENTA, FONDO_FOTO } from '@/components/caja/CajaCliente'
 import { color, font, radius, space, weight } from '@/components/ui'
 
 type Color = { nombre: string; foto: string | null }
-type Resultado = { variante: Variante; foto: string | null; precio: PrecioTotem | null; talles: { talle: string; hay: boolean }[]; colores: Color[]; colorActual: string | null }
+type Resultado = { variante: Variante; fotos: string[]; precio: PrecioTotem | null; talles: { talle: string; hay: boolean }[]; colores: Color[]; colorActual: string | null }
 
 /** El marco del lector con las barras (espera) y la alerta (no encontrada): trazos del prototipo aprobado. */
 const TRAZO = {
@@ -104,11 +105,12 @@ function Totem() {
   const precioYFoto = useCallback(
     (productId: number) => {
       const p = datos?.allProductos.find((x) => String(x.id) === String(productId))
-      if (!p || !tnIdx) return { precio: null, foto: null, categorias: [] as string[] }
+      if (!p || !tnIdx) return { precio: null, foto: null, fotos: [] as string[], categorias: [] as string[] }
       // Las categorías de Tienda Nube: las promos por categoría (las mismas que manda el POS).
       // Stunned, sólo su Tienda Nube (`lib/caja/precio.ts`). `reglas: null`: la oferta la pone `precioTotem`.
       const { precio, foto, categorias } = precioDeCaja(p, { store: storeCaja(), idx: tnIdx, idxStunned: tnIdxStunned, reglas: null, localStunned: config?.stunned_local ?? null })
-      return { precio, foto, categorias }
+      const fotos = [...imagenesDe(p, tnIdx), ...(tnIdxStunned ? imagenesDe(p, tnIdxStunned) : [])]
+      return { precio, foto, fotos, categorias }
     },
     [datos, tnIdx, tnIdxStunned, config?.stunned_local],
   )
@@ -119,13 +121,13 @@ function Totem() {
     const lista = await buscarNombre(variante.product_name).catch(() => null)
     const prod = lista && [...lista.conStock, ...lista.sinStock].find((p) => p.product_id === variante.product_id)
     if (vuelta.current !== n) return
-    const { precio, foto, categorias } = precioYFoto(variante.product_id)
+    const { precio, foto, fotos, categorias } = precioYFoto(variante.product_id)
     const cols = coloresDelProducto(audit, variante.sku)
     setEstado({
       que: 'ok',
       r: {
         variante,
-        foto: cols.foto || foto,
+        fotos: fotosDeLaPrenda(cols.foto, cols.fotos, foto, fotos),
         colores: cols.colores,
         colorActual: cols.actual,
         precio: precioTotem({ product_id: variante.product_id, size_id: variante.size_id, precio, reglas: config?.reglas ?? null, hoy: hoyIso(), categorias }),
@@ -180,7 +182,7 @@ function Totem() {
 
   return (
     <div
-      style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: color.surface, color: color.ink }}
+      style={{ height: '100dvh', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: color.surface, color: color.ink }}
       // El lector tipea donde esté el foco: se lo devuelve siempre a la entrada.
       onClick={() => entrada.current?.focus()}
     >
@@ -207,7 +209,7 @@ function Totem() {
       />
       <main style={{ flex: 1, minHeight: 0, display: 'flex' }}>
         {estado.que === 'ok' ? (
-          <Prenda r={estado.r} />
+          <Prenda key={`${estado.r.variante.product_id}-${estado.r.variante.size_id}`} r={estado.r} tocar={() => volverEn(TOTEM_MS.encontrada)} />
         ) : estado.que === 'lista' ? (
           <ListaPrueba productos={estado.productos} elegir={(p) => void elegir(p)} />
         ) : (
@@ -247,17 +249,76 @@ function Espera({ no: noEsta, falla, buscando }: { no: boolean; falla: boolean; 
   )
 }
 
-function Prenda({ r }: { r: Resultado }) {
+/** Foto grande con flechas, puntos y deslizar. Cada toque le da otros 10 segundos a la ficha (`tocar`). */
+function Galeria({ fotos, tocar }: { fotos: string[]; tocar: () => void }) {
+  const [i, setI] = useState(0)
+  const inicioX = useRef<number | null>(null)
+  const hay = fotos.length > 1
+  const ir = (paso: number) => {
+    setI((a) => (a + paso + fotos.length) % fotos.length)
+    tocar()
+  }
+  const flecha = (paso: number, rotulo: string, d: string) => (
+    <button
+      type="button"
+      aria-label={rotulo}
+      tabIndex={-1}
+      onClick={() => ir(paso)}
+      style={{ position: 'absolute', top: '50%', [paso < 0 ? 'left' : 'right']: space[3], transform: 'translateY(-50%)', width: 64, height: 64, borderRadius: '50%', border: 'none', background: 'rgba(255, 255, 255, .88)', color: color.ink, boxShadow: '0 4px 12px rgba(16, 24, 40, .22)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}
+    >
+      <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{ width: 30, height: 30 }}>
+        <path d={d} />
+      </svg>
+    </button>
+  )
+  return (
+    <div
+      style={{ position: 'relative', minHeight: 0, background: FONDO_FOTO, overflow: 'hidden', touchAction: 'pan-y' }}
+      onPointerDown={(e) => {
+        inicioX.current = e.clientX
+      }}
+      onPointerUp={(e) => {
+        if (inicioX.current == null || !hay) return
+        const dx = e.clientX - inicioX.current
+        inicioX.current = null
+        if (Math.abs(dx) > 50) ir(dx < 0 ? 1 : -1)
+      }}
+    >
+      {fotos[i] && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={fotos[i]} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', userSelect: 'none' }} />
+      )}
+      {hay && (
+        <>
+          {flecha(-1, 'Foto anterior', 'M15 5l-7 7 7 7')}
+          {flecha(1, 'Foto siguiente', 'M9 5l7 7-7 7')}
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: space[4], display: 'flex', justifyContent: 'center', gap: space[1.5] }}>
+            {fotos.map((f, n) => (
+              <i key={f} aria-hidden style={{ width: 10, height: 10, borderRadius: '50%', background: n === i ? MARCA_CAJA.acento : 'rgba(255, 255, 255, .85)', boxShadow: '0 0 0 1px rgba(0, 0, 0, .12)' }} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function Prenda({ r, tocar }: { r: Resultado; tocar: () => void }) {
   const { variante, precio, talles } = r
   const sinStock = talles.length > 0 && !talles.some((t) => t.hay)
+  // Cada toque reinicia el reloj y, con la `key`, la barra que lo muestra.
+  const [toques, setToques] = useState(0)
   return (
-    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', position: 'relative' }}>
-      <div style={{ display: 'grid', placeItems: 'center', padding: space[6], background: FONDO_FOTO }}>
-        <div style={{ width: 'min(100%, 420px)' }}>
-          <FotoPrenda src={r.foto} sombra="grande" />
-        </div>
-      </div>
-      <div style={{ padding: 'clamp(20px, 3.4vw, 48px)', display: 'grid', alignContent: 'center', gap: space[4] }}>
+    <div className="totem-prenda" style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'grid', position: 'relative' }}>
+      <style>{`.totem-prenda { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); } @media (max-aspect-ratio: 1/1) { .totem-prenda { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; } }`}</style>
+      <Galeria
+        fotos={r.fotos}
+        tocar={() => {
+          tocar()
+          setToques((n) => n + 1)
+        }}
+      />
+      <div style={{ padding: 'clamp(16px, 2.6vw, 40px)', display: 'grid', alignContent: 'center', gap: space[3], overflowY: 'auto', minHeight: 0 }}>
         {variante.sku && <p style={{ margin: 0, color: color.mut, fontSize: font.lg, letterSpacing: '0.04em' }}>{variante.sku}</p>}
         <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 54px)', letterSpacing: '-0.03em', lineHeight: 1.05 }}>{variante.product_name}</h1>
         {r.colores.length > 0 && (
@@ -311,13 +372,14 @@ function Prenda({ r }: { r: Resultado }) {
               <b style={{ fontSize: font['2xl'] + 4, fontVariantNumeric: 'tabular-nums' }}>{plata(precio.lista)}</b>
             </div>
             <Precio rotulo={precio.conTransferencia ? 'En efectivo o transferencia' : 'En efectivo'} monto={precio.efectivo} pie={[precio.promo, precio.ahorro > 0 ? `Ahorrás ${plata(precio.ahorro)}` : ''].filter(Boolean).join(' · ')} />
+            {precio.transferencia != null && !precio.conTransferencia && <Precio rotulo="Con transferencia" monto={precio.transferencia} pie="" />}
           </>
         )}
       </div>
       {/* Lo que falta para volver a «Escaneá una prenda». */}
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 5, background: color.bg2 }}>
         <style>{`@keyframes totem-vaciar { from { width: 100%; } to { width: 0; } } @media (prefers-reduced-motion: reduce) { .totem-barra { animation: none !important; } }`}</style>
-        <i className="totem-barra" style={{ display: 'block', height: '100%', background: MARCA_CAJA.acento, animation: `totem-vaciar ${TOTEM_MS.encontrada}ms linear forwards` }} />
+        <i key={toques} className="totem-barra" style={{ display: 'block', height: '100%', background: MARCA_CAJA.acento, animation: `totem-vaciar ${TOTEM_MS.encontrada}ms linear forwards` }} />
       </div>
     </div>
   )
@@ -327,7 +389,7 @@ function Precio({ rotulo, monto, pie }: { rotulo: string; monto: number; pie: st
   return (
     <div style={{ background: MARCA_CAJA.acento, color: color.surface, borderRadius: 16, padding: `${space[4]}px ${space[5]}px`, display: 'grid', gap: space[0.5] }}>
       <span style={{ fontSize: font.xl, fontWeight: weight.semibold, opacity: 0.9 }}>{rotulo}</span>
-      <strong style={{ fontSize: 'clamp(40px, 6vw, 80px)', letterSpacing: '-0.03em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{plata(monto)}</strong>
+      <strong style={{ fontSize: 'clamp(34px, 4.6vw, 64px)', letterSpacing: '-0.03em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{plata(monto)}</strong>
       {pie && <small style={{ fontSize: font.lg, opacity: 0.85 }}>{pie}</small>}
     </div>
   )
