@@ -9,6 +9,8 @@
 //   GET  ?recurso=caja&action=buscar&q=…         → la lista MIENTRAS se escribe, POR PRODUCTO: { conStock, sinStock, masCon, masSin }
 //        de `{ product_id, product_name, local, variantes[] }` (`productosPorStock`)
 //        con el stock del local de anoche (⛔ pega a GN: tipear ⛔ gasta el cupo de 60/min)
+//   GET  ?recurso=caja&action=stock-producto&product_id=…  → { variantes: [{ size_id, size_name, local }] }: el stock del
+//        local AHORA de todo el producto (el tótem). Si GN o el ERP ⛔ contestan, 503: ⛔ cae al espejo, «no sé» ⛔ se dibuja como dato
 //   GET  ?recurso=caja&action=cuentas-mp          → { enUso, cuentas? }: dónde se detectan las transferencias
 //        (la cuenta de MP en uso de Pagos recibidos, `mp_cuenta_uso`); la lista sólo para admin
 //   GET  ?recurso=caja&action=pendientes          → las ventas que ⛔ llegaron a GN
@@ -106,7 +108,7 @@ import { lineaDe } from '../lib/lineas.core.js'
 import { cortesDeCaja } from './_caja-corte.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, ladoDelEspejo, marcaDeCaja, tokenDe } from '../lib/caja/marcas.core.js'
-import { anotarEnMotor, autorizarPinDeVenta, avisoDelMotor, eventoActivo, faltanEnElLibro, preciosLocalStunned, registrarEnErp, repasarMotor, stockDelLibro } from './_caja-motor.js'
+import { anotarEnMotor, autorizarPinDeVenta, avisoDelMotor, eventoActivo, faltanEnElLibro, preciosLocalStunned, registrarEnErp, repasarMotor, stockDelProductoLibro, stockDelLibro } from './_caja-motor.js'
 import { pidePinDeVenta } from '../lib/caja/pin-venta.core.js'
 import { errorDelPuesto, faltaColumnaDeposito, puestoDe } from '../lib/caja/puesto.core.js'
 import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, diasDelCruce } from '../lib/caja/cruce.core.js'
@@ -682,6 +684,41 @@ export default async function handler(req, res) {
         }
         stock.atras = await estantesDe(sb, store, variante.sku)
         return res.status(200).json({ variante, stock })
+      }
+
+      if (accion === 'stock-producto') {
+        const pid = Number(req.query.product_id)
+        if (!(pid > 0)) return res.status(400).json({ error: 'Falta el producto.' })
+        const { data, error } = await sb.from('inventario').select('size_id, size_name, sku').eq('product_id', pid).limit(500)
+        if (error) throw new Error(error.message)
+        const talles = new Map()
+        for (const f of data || []) if (!talles.has(Number(f.size_id))) talles.set(Number(f.size_id), f)
+        if (!talles.size) return res.status(404).json({ error: 'Esa prenda no está en el inventario.' })
+        try {
+          const cortes = await cortesDeCaja(store)
+          const local = new Map()
+          const delLibro = new Map()
+          const deGn = []
+          for (const [sizeId, f] of talles) {
+            const linea = lineaDe(store, f.sku)
+            if (lineaEnErp(cortes, linea)) delLibro.set(linea, [...(delLibro.get(linea) || []), sizeId])
+            else deGn.push(sizeId)
+          }
+          for (const [linea, sizeIds] of delLibro) {
+            const l = await stockDelProductoLibro(store, linea, pid, sizeIds)
+            if (l.error) throw new Error(l.error)
+            for (const sizeId of sizeIds) local.set(sizeId, puesto === 'evento' ? l.por[sizeId].evento : l.por[sizeId].local)
+          }
+          if (deGn.length) {
+            const resp = await gnFetch(`${GN_BASE}/inventario/${pid}`, { headers: cabeceras(tokenLectura || token) }, 1)
+            if (!resp.ok) throw new Error(`Gestión Nube contestó ${resp.status}`)
+            const filas = filasVivas(await leerJson(resp), [marca.local]).filter(f => f.store_id === marca.local)
+            for (const sizeId of deGn) local.set(sizeId, filas.filter(f => Number(f.size_id) === sizeId).reduce((t, f) => t + Number(f.available_quantity || 0), 0))
+          }
+          return res.status(200).json({ variantes: [...talles].map(([size_id, f]) => ({ size_id, size_name: f.size_name, local: local.get(size_id) })) })
+        } catch (e) {
+          return res.status(503).json({ error: sinSecretos(e && e.message) })
+        }
       }
 
       if (accion === 'buscar') {

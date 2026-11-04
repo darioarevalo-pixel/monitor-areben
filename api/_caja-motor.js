@@ -55,6 +55,20 @@ export async function stockDelLibro(store, linea, productId, sizeId) {
 }
 
 /**
+ * El stock del libro de varias variantes de un producto, con UNA conexión: `{ por: { [sizeId]: { local, deposito, evento } } }`.
+ * Sin poder leerlo devuelve `{ error }`. ⛔ Lanza.
+ */
+export async function stockDelProductoLibro(store, linea, productId, sizeIds) {
+  const r = await conMotor(store, async (db) => {
+    const por = {}
+    for (const sizeId of sizeIds) por[sizeId] = stockDeVarianteLibro((await db.query(SQL_STOCK_VARIANTE_LIBRO, [String(productId), String(sizeId), String(linea)])).rows)
+    return { por }
+  })
+  if (r.sinConexion) return { error: 'El ERP no está conectado (falta DATABASE_URL en Vercel)' }
+  return r
+}
+
+/**
  * Las prendas del ticket que el libro ⛔ cubre en `deposito` (`lib/caja/pin-venta.core.js`). Sin poder leerlo devuelve `{ error }`.
  * @returns {Promise<any[] | { error: string }>} ⛔ Lanza.
  */

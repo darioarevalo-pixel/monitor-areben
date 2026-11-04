@@ -5,9 +5,11 @@
  * con el lector y ve la foto, los talles que hay en el local, el precio de lista y el de efectivo. Diez
  * segundos después vuelve a «Escaneá una prenda». Es SÓLO lectura: ⛔ cobra ni escribe.
  *
- * - 🔑 La prenda y sus talles salen de lo que el tótem ya cargó (`indiceDelTotem`): aparecen al escanear, sin ir
- *   al servidor ni gastar el cupo de Gestión Nube. Stock del local de ANOCHE, que alcanza para «hay / no hay».
- * - Si el código ⛔ está cargado o lo comparten varias prendas, como el POS (`buscarProducto`) y `buscarNombre`.
+ * - 🔑 La prenda y el precio salen de lo que el tótem ya cargó (`indiceDelTotem`): aparecen al escanear. Si el código
+ *   ⛔ está cargado o lo comparten varias prendas, como el POS (`buscarProducto`).
+ * - 🔴 El stock se dibuja recién CONFIRMADO en vivo (`stockEnVivo`, una lectura de Gestión Nube o del ERP): lo cargado
+ *   atrasa en lo vendido hoy (medido el 4-nov: decía «hay» de una prenda en 0). Hasta entonces, sin afirmar nada; si
+ *   ⛔ se pudo confirmar, lo dice y manda a caja.
  * - El precio de lista, de los datos de Zattia como en el POS; el de efectivo, del núcleo (`lib/caja/totem.ts`).
  *
  * - 🔑 La tarjeta de la encargada (`TARJETA_ENCARGADA`): con una prenda en pantalla, suma dónde está en el
@@ -27,9 +29,9 @@ import { useTnPromo } from '@/components/productos/useTnImages'
 import { imagenesDe } from '@/lib/tn'
 import { precioDeCaja } from '@/lib/caja/precio'
 import { hoyIso } from '@/lib/agenda'
-import { buscarNombre, buscarProducto, elegirVariante, leerConfig, type Config, type ProductoLista, type Variante } from '@/lib/caja/cliente'
+import { buscarNombre, buscarProducto, elegirVariante, leerConfig, stockEnVivo, type Candidato, type Config, type ProductoLista, type Variante } from '@/lib/caja/cliente'
 import { plata } from '@/lib/caja/ticket'
-import { coloresDelProducto, esTarjetaEncargada, fotosDeLaPrenda, indiceDelTotem, opcionesDelLocal, precioTotem, TOTEM_MS, varianteDelCodigo, type ColorTotem, type PrecioTotem } from '@/lib/caja/totem'
+import { coloresDelProducto, esTarjetaEncargada, fotosDeLaPrenda, indiceDelTotem, opcionesDelLocal, precioTotem, primeroLosDelLocal, TOTEM_MS, varianteDelCodigo, type ColorTotem, type PrecioTotem } from '@/lib/caja/totem'
 import { TTL_MS } from '@/lib/cache'
 import { nombreDeColor } from '@/lib/caja/pantalla-cliente'
 import { traerAudit } from '@/lib/tn-audit'
@@ -39,7 +41,7 @@ import type { Marca } from '@/lib/nav.datos'
 import { CabeceraMarca, ESTILOS_CLIENTA, FONDO_FOTO } from '@/components/caja/CajaCliente'
 import { color, font, radius, space, weight } from '@/components/ui'
 
-type Resultado = { variante: Variante; fotos: string[]; precio: PrecioTotem | null; talles: { talle: string; hay: boolean }[]; colores: ColorTotem[]; colorActual: string | null }
+type Resultado = { variante: Variante; fotos: string[]; precio: PrecioTotem | null; talles: { talle: string; hay: boolean }[]; colores: ColorTotem[]; colorActual: string | null; stock: 'confirmando' | 'confirmado' | 'sin-confirmar' }
 /** Lo que ve la encargada al pasar su tarjeta. */
 type Ubicacion = { que: 'buscando' } | { que: 'falla' } | { que: 'ok'; atras: string[]; deposito: number; local: number }
 
@@ -154,16 +156,12 @@ function Totem() {
 
   /** Arma la prenda con sus talles y su precio. `n`: la vuelta que la pidió; si ya hubo otra, ⛔ se muestra. */
   async function mostrar(variante: Variante, n: number) {
-    // Los talles del producto, con el stock del local de anoche: los cargados, sin ir al servidor; si ⛔ están, la lista por nombre.
-    let variantes = indice?.porProducto.get(variante.product_id)
-    if (!variantes) {
-      const lista = await buscarNombre(variante.product_name).catch(() => null)
-      variantes = (lista && [...lista.conStock, ...lista.sinStock].find((p) => p.product_id === variante.product_id))?.variantes
-    }
+    // Los talles cargados, para dibujarlos ya: el stock de cada uno ⛔ se afirma hasta confirmarlo.
+    const variantes = indice?.porProducto.get(variante.product_id) ?? []
     if (vuelta.current !== n) return
     const { precio, foto, fotos, categorias } = precioYFoto(variante.product_id)
     const cols = coloresDelProducto(audit, variante.sku)
-    const opciones = opcionesDelLocal(variantes ?? [], cols.colores)
+    const opciones = opcionesDelLocal(variantes, cols.colores)
     const fotoDelColor = opciones.colores.map((c) => c.foto)
     setEstado({
       que: 'ok',
@@ -174,9 +172,26 @@ function Totem() {
         colorActual: cols.actual ?? (opciones.talles.length ? null : variante.size_name),
         precio: precioTotem({ product_id: variante.product_id, size_id: variante.size_id, precio, reglas: config?.reglas ?? null, hoy: hoyIso(), categorias }),
         talles: opciones.talles,
+        stock: 'confirmando',
       },
     })
     volverEn(TOTEM_MS.encontrada)
+    void confirmarStock(variante, cols.colores)
+  }
+
+  /** Con un reintento: el 429 de Gestión Nube se pasa en segundos. ⛔ Toca el reloj de la ficha. */
+  async function confirmarStock(variante: Variante, colores: { nombre: string; foto: string | null }[]) {
+    const poner = (cambio: Partial<Resultado>) =>
+      setEstado((e) => (e.que === 'ok' && e.r.variante === variante ? { que: 'ok', r: { ...e.r, ...cambio } } : e))
+    let vivos: Candidato[] | null = null
+    for (const espera of [0, TOTEM_MS.reintentoStock]) {
+      if (espera) await new Promise((r) => setTimeout(r, espera))
+      vivos = await stockEnVivo(variante.product_id).then((r) => r.variantes).catch(() => null)
+      if (vivos) break
+    }
+    if (!vivos) return poner({ stock: 'sin-confirmar' })
+    const { colores: conStock, talles } = opcionesDelLocal([...vivos].sort(primeroLosDelLocal), colores)
+    poner({ stock: 'confirmado', colores: conStock, talles })
   }
 
   async function pedirUbicacion(variante: Variante, n: number) {
@@ -395,7 +410,8 @@ function Prenda({ r, ubicacion, arranques, msReloj, tocar }: { r: Resultado; ubi
   const { variante, precio, talles } = r
   // Un color con `hay: null` ⛔ sabe de stock: decide lo que sí se sabe.
   const conocidas = [...talles, ...r.colores].filter((o) => o.hay !== null)
-  const sinStock = conocidas.length > 0 && conocidas.every((o) => o.hay === false)
+  const confirmado = r.stock === 'confirmado'
+  const sinStock = confirmado && conocidas.length > 0 && conocidas.every((o) => o.hay === false)
   const [foto, setFoto] = useState(0)
   const [elegido, setElegido] = useState(r.colorActual)
   const mismo = (a: string | null, b: string) => a?.trim().toLowerCase() === b.trim().toLowerCase()
@@ -422,7 +438,7 @@ function Prenda({ r, ubicacion, arranques, msReloj, tocar }: { r: Resultado; ubi
                 tabIndex={-1}
                 onClick={() => elegirColor(c)}
                 aria-pressed={mismo(elegido, c.nombre)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: space[1.5], minHeight: 56, padding: `0 ${space[3]}px`, borderRadius: radius.xl, background: color.surface, cursor: 'pointer', font: 'inherit', fontWeight: mismo(elegido, c.nombre) ? weight.bold : weight.medium, color: c.hay === false ? color.mut2 : color.ink2, textDecoration: c.hay === false ? 'line-through' : 'none', border: mismo(elegido, c.nombre) ? `2px solid ${MARCA_CAJA.acento}` : `1px ${c.hay === false ? 'dashed' : 'solid'} ${color.line2}` }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: space[1.5], minHeight: 56, padding: `0 ${space[3]}px`, borderRadius: radius.xl, background: color.surface, cursor: 'pointer', font: 'inherit', fontWeight: mismo(elegido, c.nombre) ? weight.bold : weight.medium, color: confirmado && c.hay === false ? color.mut2 : color.ink2, textDecoration: confirmado && c.hay === false ? 'line-through' : 'none', border: mismo(elegido, c.nombre) ? `2px solid ${MARCA_CAJA.acento}` : `1px ${confirmado && c.hay === false ? 'dashed' : 'solid'} ${color.line2}` }}
               >
                 {/* TN ⛔ trae el hex: el punto es la foto del color en un círculo (sin foto, vacío). */}
                 <i
@@ -447,9 +463,9 @@ function Prenda({ r, ubicacion, arranques, msReloj, tocar }: { r: Resultado; ubi
                   key={t.talle}
                   style={{
                     minWidth: 56, height: 56, padding: `0 ${space[3]}px`, borderRadius: radius.xl, display: 'grid', placeItems: 'center', fontWeight: weight.bold, fontSize: font.xl,
-                    border: t.hay ? `1.5px solid ${MARCA_CAJA.acento}` : `1.5px dashed ${color.line2}`,
-                    color: t.hay ? MARCA_CAJA.acento : color.mut2,
-                    textDecoration: t.hay ? 'none' : 'line-through',
+                    border: !confirmado ? `1.5px solid ${color.line2}` : t.hay ? `1.5px solid ${MARCA_CAJA.acento}` : `1.5px dashed ${color.line2}`,
+                    color: !confirmado ? color.ink2 : t.hay ? MARCA_CAJA.acento : color.mut2,
+                    textDecoration: !confirmado || t.hay ? 'none' : 'line-through',
                   }}
                 >
                   {t.talle}
@@ -458,6 +474,8 @@ function Prenda({ r, ubicacion, arranques, msReloj, tocar }: { r: Resultado; ubi
             </div>
           </>
         )}
+        {r.stock === 'confirmando' && <p style={{ margin: 0, color: color.mut, fontSize: font.lg }}>Confirmando stock…</p>}
+        {r.stock === 'sin-confirmar' && <p style={{ margin: 0, color: color.ink2, fontSize: font.lg }}>No se pudo confirmar el stock. Consultá en caja.</p>}
         {sinStock ? (
           <div style={{ background: color.bg2, color: color.ink2, borderRadius: radius.xl, padding: space[4], fontSize: font.xl }}>Sin stock en el local. Consultá en caja.</div>
         ) : !precio ? (

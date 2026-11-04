@@ -154,6 +154,9 @@ export const buscarProducto = (codigo: string) => get<Producto>(`action=producto
 export type ProductoLista = { product_id: number; product_name: string; local: number; variantes: Candidato[] }
 export type ListaNombre = { conStock: ProductoLista[]; sinStock: ProductoLista[]; masCon: number; masSin: number }
 export const buscarNombre = (q: string) => get<ListaNombre>(`action=buscar&q=${encodeURIComponent(q)}`, 'No se pudo buscar la prenda.')
+/** El stock del local AHORA de todo el producto. Falla si Gestión Nube o el ERP ⛔ contestan. */
+export const stockEnVivo = (productId: number) =>
+  get<{ variantes: Candidato[] }>(`action=stock-producto&product_id=${productId}`, 'No se pudo confirmar el stock.')
 export const elegirVariante = (v: Variante) =>
   get<Producto>(`action=producto&product_id=${v.product_id}&size_id=${v.size_id}`, 'No se pudo traer la prenda.')
 export const leerPendientes = () => get<{ ventas: Venta[] }>('action=pendientes', 'No se pudieron leer las ventas pendientes.')

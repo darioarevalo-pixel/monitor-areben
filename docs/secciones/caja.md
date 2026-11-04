@@ -383,11 +383,14 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   el pedido viaje al servidor. Pide el permiso de Caja y ⛔ escribe en la base. La marca vive en
   `lib/caja/marca.ts` hasta la V4.
 - 🔑 **El tótem (`/pos/totem`, rediseño fase 4 = V2)**: se escanea una prenda y se ve foto, talles
-  del local (el stock de ANOCHE, por `buscarNombre`), precio de lista y **precio en efectivo**, que sale
+  del local, precio de lista y **precio en efectivo**, que sale
   de `cobro()` con `pagosDeMedio('efectivo')` (`lib/caja/totem.ts`): el % de la cuenta, el redondeo y
   la traba de feria —una prenda de feria muestra su precio FINAL—. ⛔ «precio × 0,85» a mano. La prenda
-  y sus talles salen de lo ya cargado (`indiceDelTotem`), sin ir al servidor; si el código ⛔ está o lo comparten
-  varias, `buscarProducto` como el POS (UNA lectura de GN). Sólo lectura. 🔴 Queda prendido días ⇒ en espera se
+  y el precio salen de lo ya cargado (`indiceDelTotem`), sin ir al servidor; si el código ⛔ está o lo comparten
+  varias, `buscarProducto` como el POS. 🔴 **El stock se afirma recién confirmado en vivo** (`action=stock-producto`:
+  GN o el ERP según la línea; UNA lectura por escaneo; con un 429 da 503, ⛔ cae al espejo): lo cargado atrasa en lo
+  vendido hoy (4-nov: de 11 vendidas, 6 con 1 de más y 1 decía «hay» con 0). Sin confirmar, lo dice y manda a caja.
+  Sólo lectura. 🔴 Queda prendido días ⇒ en espera se
   recarga solo al vencer el caché (6 h + 10 min), o los precios quedaban los del día que se abrió.
   Muestra los dos precios (efectivo y transferencia; uno solo si dan igual) y todas las fotos del producto,
   con flechas y deslizar: cada toque le da otros 10 segundos a la ficha. 🔴 En Zattia la variante de GN

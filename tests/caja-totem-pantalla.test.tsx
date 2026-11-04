@@ -13,6 +13,9 @@ const BLAZER = { product_id: 5, size_id: 2, product_name: 'BLAZER NEREA', size_n
 const stockDe: Record<string, number> = { S: 0, M: 3, L: 1 }
 let todoSinStock = false
 let cargadas: object[] = []
+let stockCaido = false
+let stockPendiente = false
+let pedidosDeStock = 0
 
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', setMarca: () => {} }) }))
 vi.mock('@/components/fundas/useDatosMonitor', () => ({ useDatosMonitor: () => ({ datos: { allProductos: [{ id: 5 }], allVariantes: cargadas } }) }))
@@ -31,6 +34,12 @@ vi.mock('@/lib/caja/cliente', () => ({
   buscarProducto: (codigo: string) =>
     codigo === BLAZER.barcode ? Promise.resolve({ variante: BLAZER, stock: { local: 3, deposito: 0, fuente: 'vivo' } }) : codigo === 'CAIDO' ? Promise.reject(Object.assign(new Error('Gestión Nube no contestó'), { status: 502 }))
       : Promise.reject(Object.assign(new Error('El código no está en el inventario.'), { status: 404 })),
+  stockEnVivo: () => {
+    pedidosDeStock++
+    if (stockCaido) return Promise.reject(new Error('Gestión Nube contestó 429'))
+    if (stockPendiente) return new Promise(() => {})
+    return Promise.resolve({ variantes: ['S', 'M', 'L'].map((t, i) => ({ ...BLAZER, size_id: i + 1, size_name: t, local: todoSinStock ? 0 : stockDe[t] })) })
+  },
   buscarNombre: () =>
     Promise.resolve({
       conStock: [{ product_id: 5, product_name: 'BLAZER NEREA', local: 4, variantes: ['S', 'M', 'L'].map((t) => ({ ...BLAZER, size_name: t, local: todoSinStock ? 0 : stockDe[t] })) }],
@@ -46,6 +55,9 @@ let caja: HTMLDivElement
 beforeEach(() => {
   todoSinStock = false
   cargadas = []
+  stockCaido = false
+  stockPendiente = false
+  pedidosDeStock = 0
   caja = document.createElement('div')
   document.body.appendChild(caja)
   raiz = createRoot(caja)
@@ -74,6 +86,37 @@ async function escanear(codigo: string) {
 }
 
 describe('CajaTotem', () => {
+  it('muestra la prenda y el precio sin afirmar stock hasta confirmarlo', async () => {
+    stockPendiente = true
+    cargadas = ['S', 'M'].map((size, i) => ({ pid: '5', sid: String(i + 1), name: 'BLAZER NEREA', size, local: 0, sku: `RBT-${i}`, barcode: `77900${i}` }))
+    const t = await escanear('779000')
+    expect(t).toContain('BLAZER NEREA')
+    expect(t).toContain('16.100')
+    expect(t).toContain('Confirmando stock')
+    expect(t).not.toContain('Sin stock en el local')
+    expect(caja.querySelector('span[style*="line-through"]')).toBeNull()
+  })
+
+  it('el stock confirmado manda sobre el cargado: en 0 lo cargado, con stock en vivo', async () => {
+    cargadas = [{ pid: '5', sid: '2', name: 'BLAZER NEREA', size: 'M', local: 0, sku: 'RBT-1', barcode: '779001' }]
+    const t = await escanear('779001')
+    expect(t).not.toContain('Confirmando stock')
+    expect(t).not.toContain('Sin stock en el local')
+    expect(pedidosDeStock).toBe(1)
+  })
+
+  it('si no se puede confirmar, reintenta una vez, lo dice y no afirma stock', async () => {
+    stockCaido = true
+    cargadas = [{ pid: '5', sid: '2', name: 'BLAZER NEREA', size: 'M', local: 7, sku: 'RBT-1', barcode: '779001' }]
+    await escanear('779001')
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 1_600))
+    })
+    expect(pedidosDeStock).toBe(2)
+    expect(caja.textContent).toContain('No se pudo confirmar el stock')
+    expect(caja.textContent).toContain('16.100')
+  })
+
   it('un código ya cargado muestra la prenda sin ir al servidor (`buscarProducto` contesta 404 a este)', async () => {
     cargadas = [{ pid: '5', sid: '9', name: 'BLAZER NEREA', size: 'M', local: 2, sku: 'RBT-0999', barcode: '7790099' }]
     const t = await escanear('7790099')

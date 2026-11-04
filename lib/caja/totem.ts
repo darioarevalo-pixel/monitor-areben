@@ -139,9 +139,12 @@ export function indiceDelTotem(variantes: VarianteCargada[]): IndiceTotem {
     if (x.sku) sumar(indice.porSku, x.sku.trim().toLowerCase(), v)
     sumar(indice.porProducto, v.product_id, v)
   }
-  for (const lista of indice.porProducto.values()) lista.sort((a, b) => Number((b.local ?? 0) > 0) - Number((a.local ?? 0) > 0) || porTalle(a, b))
+  for (const lista of indice.porProducto.values()) lista.sort(primeroLosDelLocal)
   return indice
 }
+
+/** Primero lo que hay en el local, como `productosPorStock`. */
+export const primeroLosDelLocal = (a: Candidato, b: Candidato) => Number((b.local ?? 0) > 0) - Number((a.local ?? 0) > 0) || porTalle(a, b)
 
 /**
  * La variante del código, en el orden de `variantesDelCodigo` (`api/_caja.js`): barcode y después SKU, tal cual
@@ -165,4 +168,4 @@ export function fotosDeLaPrenda(...grupos: (string | null | undefined | (string 
 }
 
 /** Cuánto queda a la vista una prenda escaneada antes de volver a «Escaneá una prenda». */
-export const TOTEM_MS = { encontrada: 10_000, noEncontrada: 5_000, encargada: 30_000 } as const
+export const TOTEM_MS = { encontrada: 10_000, noEncontrada: 5_000, encargada: 30_000, reintentoStock: 1_500 } as const
