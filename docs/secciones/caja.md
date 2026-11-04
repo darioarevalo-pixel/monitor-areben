@@ -389,7 +389,7 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   y el precio salen de lo ya cargado (`indiceDelTotem`), sin ir al servidor; si el código ⛔ está o lo comparten
   varias, `buscarProducto` como el POS. 🔴 **El stock se afirma recién confirmado en vivo** (`action=stock-producto`:
   GN o el ERP según la línea; UNA lectura por escaneo; con un 429 da 503, ⛔ cae al espejo): lo cargado atrasa en lo
-  vendido hoy (4-nov: de 11 vendidas, 6 con 1 de más y 1 decía «hay» con 0). Sin confirmar, lo dice y manda a caja.
+  vendido hoy (4-nov: de 11 vendidas, 6 con 1 de más y 1 decía «hay» con 0). Mientras confirma, cuadros vacíos (Bruno: con el nombre parecían disponibles y después se tachaban); sin confirmar, lo dice y manda a caja, sin talles.
   Sólo lectura. 🔴 Queda prendido días ⇒ en espera se
   recarga solo al vencer el caché (6 h + 10 min), o los precios quedaban los del día que se abrió.
   Muestra los dos precios (efectivo y transferencia; uno solo si dan igual) y todas las fotos del producto,

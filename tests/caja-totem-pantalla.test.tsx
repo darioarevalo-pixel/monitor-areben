@@ -95,6 +95,9 @@ describe('CajaTotem', () => {
     expect(t).toContain('Confirmando stock')
     expect(t).not.toContain('Sin stock en el local')
     expect(caja.querySelector('span[style*="line-through"]')).toBeNull()
+    // Vacíos: con el talle a la vista parecería disponible.
+    expect(caja.querySelectorAll('[data-vacio]').length).toBe(2)
+    expect([...caja.querySelectorAll('span')].some((x) => x.textContent === 'S')).toBe(false)
   })
 
   it('el stock confirmado manda sobre el cargado: en 0 lo cargado, con stock en vivo', async () => {
@@ -114,6 +117,8 @@ describe('CajaTotem', () => {
     })
     expect(pedidosDeStock).toBe(2)
     expect(caja.textContent).toContain('No se pudo confirmar el stock')
+    expect(caja.querySelector('[data-vacio]')).toBeNull()
+    expect([...caja.querySelectorAll('span')].some((x) => x.textContent === 'M')).toBe(false)
     expect(caja.textContent).toContain('16.100')
   })
 

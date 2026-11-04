@@ -8,8 +8,8 @@
  * - 🔑 La prenda y el precio salen de lo que el tótem ya cargó (`indiceDelTotem`): aparecen al escanear. Si el código
  *   ⛔ está cargado o lo comparten varias prendas, como el POS (`buscarProducto`).
  * - 🔴 El stock se dibuja recién CONFIRMADO en vivo (`stockEnVivo`, una lectura de Gestión Nube o del ERP): lo cargado
- *   atrasa en lo vendido hoy (medido el 4-nov: decía «hay» de una prenda en 0). Hasta entonces, sin afirmar nada; si
- *   ⛔ se pudo confirmar, lo dice y manda a caja.
+ *   atrasa en lo vendido hoy (medido el 4-nov: decía «hay» de una prenda en 0). Hasta entonces, cuadros vacíos; si
+ *   ⛔ se pudo confirmar, lo dice, manda a caja y ⛔ dibuja talles.
  * - El precio de lista, de los datos de Zattia como en el POS; el de efectivo, del núcleo (`lib/caja/totem.ts`).
  *
  * - 🔑 La tarjeta de la encargada (`TARJETA_ENCARGADA`): con una prenda en pantalla, suma dónde está en el
@@ -412,6 +412,8 @@ function Prenda({ r, ubicacion, arranques, msReloj, tocar }: { r: Resultado; ubi
   const conocidas = [...talles, ...r.colores].filter((o) => o.hay !== null)
   const confirmado = r.stock === 'confirmado'
   const sinStock = confirmado && conocidas.length > 0 && conocidas.every((o) => o.hay === false)
+  // 🔴 Lo que depende del stock va vacío hasta confirmarlo: con el nombre a la vista parece disponible y después se tacha.
+  const coloresAVer = r.stock === 'sin-confirmar' ? r.colores.filter((c) => c.hay === null) : r.colores
   const [foto, setFoto] = useState(0)
   const [elegido, setElegido] = useState(r.colorActual)
   const mismo = (a: string | null, b: string) => a?.trim().toLowerCase() === b.trim().toLowerCase()
@@ -429,16 +431,16 @@ function Prenda({ r, ubicacion, arranques, msReloj, tocar }: { r: Resultado; ubi
         {ubicacion && <PanelUbicacion u={ubicacion} />}
         {variante.sku && <p style={{ margin: 0, color: color.mut, fontSize: font.lg, letterSpacing: '0.04em' }}>{variante.sku}</p>}
         <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 54px)', letterSpacing: '-0.03em', lineHeight: 1.05 }}>{variante.product_name}</h1>
-        {r.colores.length > 0 && (
+        {coloresAVer.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: `${space[2]}px ${space[4]}px`, fontSize: font.lg, color: color.ink2 }}>
-            {r.colores.map((c) => (
-              <button
+            {coloresAVer.map((c) => (
+              !confirmado && c.hay !== null ? <span key={c.nombre} data-vacio aria-hidden style={{ width: 112, height: 56, borderRadius: radius.xl, background: color.bg2 }} /> : <button
                 key={c.nombre}
                 type="button"
                 tabIndex={-1}
                 onClick={() => elegirColor(c)}
                 aria-pressed={mismo(elegido, c.nombre)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: space[1.5], minHeight: 56, padding: `0 ${space[3]}px`, borderRadius: radius.xl, background: color.surface, cursor: 'pointer', font: 'inherit', fontWeight: mismo(elegido, c.nombre) ? weight.bold : weight.medium, color: confirmado && c.hay === false ? color.mut2 : color.ink2, textDecoration: confirmado && c.hay === false ? 'line-through' : 'none', border: mismo(elegido, c.nombre) ? `2px solid ${MARCA_CAJA.acento}` : `1px ${confirmado && c.hay === false ? 'dashed' : 'solid'} ${color.line2}` }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: space[1.5], minHeight: 56, padding: `0 ${space[3]}px`, borderRadius: radius.xl, background: color.surface, cursor: 'pointer', font: 'inherit', fontWeight: mismo(elegido, c.nombre) ? weight.bold : weight.medium, color: c.hay === false ? color.mut2 : color.ink2, textDecoration: c.hay === false ? 'line-through' : 'none', border: mismo(elegido, c.nombre) ? `2px solid ${MARCA_CAJA.acento}` : `1px ${c.hay === false ? 'dashed' : 'solid'} ${color.line2}` }}
               >
                 {/* TN ⛔ trae el hex: el punto es la foto del color en un círculo (sin foto, vacío). */}
                 <i
@@ -454,18 +456,18 @@ function Prenda({ r, ubicacion, arranques, msReloj, tocar }: { r: Resultado; ubi
             ))}
           </div>
         )}
-        {talles.length > 0 && (
+        {talles.length > 0 && r.stock !== 'sin-confirmar' && (
           <>
             <h2 style={{ margin: 0, fontSize: font.md, textTransform: 'uppercase', letterSpacing: '0.08em', color: color.mut }}>Talles en el local</h2>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: space[2] }}>
               {talles.map((t) => (
-                <span
+                !confirmado ? <span key={t.talle} data-vacio aria-hidden style={{ width: 56, height: 56, borderRadius: radius.xl, background: color.bg2 }} /> : <span
                   key={t.talle}
                   style={{
                     minWidth: 56, height: 56, padding: `0 ${space[3]}px`, borderRadius: radius.xl, display: 'grid', placeItems: 'center', fontWeight: weight.bold, fontSize: font.xl,
-                    border: !confirmado ? `1.5px solid ${color.line2}` : t.hay ? `1.5px solid ${MARCA_CAJA.acento}` : `1.5px dashed ${color.line2}`,
-                    color: !confirmado ? color.ink2 : t.hay ? MARCA_CAJA.acento : color.mut2,
-                    textDecoration: !confirmado || t.hay ? 'none' : 'line-through',
+                    border: t.hay ? `1.5px solid ${MARCA_CAJA.acento}` : `1.5px dashed ${color.line2}`,
+                    color: t.hay ? MARCA_CAJA.acento : color.mut2,
+                    textDecoration: t.hay ? 'none' : 'line-through',
                   }}
                 >
                   {t.talle}
