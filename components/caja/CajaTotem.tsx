@@ -10,6 +10,9 @@
  *   para «hay / no hay» y ⛔ gasta el cupo de Gestión Nube.
  * - El precio de lista, de los datos de Zattia como en el POS; el de efectivo, del núcleo (`lib/caja/totem.ts`).
  *
+ * - 🔑 `?prueba=1`: la entrada se ve y también busca por nombre, para probar sin lector ni etiqueta. Sin
+ *   eso, la pantalla de la clienta sigue igual: sólo el escaneo.
+ *
  * ⛔ Decidido: si es la misma tablet que la pantalla de la clienta, y si escanea con la cámara (plan v3,
  * paso 0 de V2). Esta ruta sirve para cualquiera de los dos casos; la cámara, fuera.
  */
@@ -20,7 +23,7 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { precioDeCaja } from '@/lib/caja/precio'
 import { hoyIso } from '@/lib/agenda'
-import { buscarNombre, buscarProducto, leerConfig, type Config, type Variante } from '@/lib/caja/cliente'
+import { buscarNombre, buscarProducto, leerConfig, type Config, type ProductoLista, type Variante } from '@/lib/caja/cliente'
 import { plata } from '@/lib/caja/ticket'
 import { coloresDelProducto, precioTotem, tallesDelLocal, TOTEM_MS, type PrecioTotem } from '@/lib/caja/totem'
 import { nombreDeColor } from '@/lib/caja/pantalla-cliente'
@@ -47,7 +50,7 @@ function Trazo({ d }: { d: keyof typeof TRAZO }) {
   )
 }
 /** `no`: la prenda ⛔ está (404). `falla`: ⛔ se pudo consultar (GN, la red): son cosas distintas (robustez, 11-oct). */
-type Estado = { que: 'espera' } | { que: 'buscando' } | { que: 'no' } | { que: 'falla' } | { que: 'ok'; r: Resultado }
+type Estado = { que: 'espera' } | { que: 'buscando' } | { que: 'no' } | { que: 'falla' } | { que: 'lista'; productos: ProductoLista[] } | { que: 'ok'; r: Resultado }
 
 export function CajaTotem() {
   const { marca, setMarca } = useSesion()
@@ -85,6 +88,7 @@ function Totem() {
     }
   }, [])
 
+  const [prueba] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('prueba') === '1')
   const [estado, setEstado] = useState<Estado>({ que: 'espera' })
   const [codigo, setCodigo] = useState('')
   const entrada = useRef<HTMLInputElement>(null)
@@ -109,6 +113,28 @@ function Totem() {
     [datos, tnIdx, tnIdxStunned, config?.stunned_local],
   )
 
+  /** Arma la prenda con sus talles y su precio. `n`: la vuelta que la pidió; si ya hubo otra, ⛔ se muestra. */
+  async function mostrar(variante: Variante, n: number) {
+    // Los talles del producto: la lista por nombre trae cada variante con el stock del local de anoche.
+    const lista = await buscarNombre(variante.product_name).catch(() => null)
+    const prod = lista && [...lista.conStock, ...lista.sinStock].find((p) => p.product_id === variante.product_id)
+    if (vuelta.current !== n) return
+    const { precio, foto, categorias } = precioYFoto(variante.product_id)
+    const cols = coloresDelProducto(audit, variante.sku)
+    setEstado({
+      que: 'ok',
+      r: {
+        variante,
+        foto: cols.foto || foto,
+        colores: cols.colores,
+        colorActual: cols.actual,
+        precio: precioTotem({ product_id: variante.product_id, size_id: variante.size_id, precio, reglas: config?.reglas ?? null, hoy: hoyIso(), categorias }),
+        talles: prod ? tallesDelLocal(prod.variantes) : [],
+      },
+    })
+    volverEn(TOTEM_MS.encontrada)
+  }
+
   async function buscar(q: string) {
     const n = ++vuelta.current
     setEstado({ que: 'buscando' })
@@ -116,28 +142,38 @@ function Totem() {
       const r = await buscarProducto(q)
       const variante = 'variante' in r ? r.variante : r.candidatos[0]
       if (!variante) throw new Error('sin prenda')
-      // Los talles del producto: la lista por nombre trae cada variante con el stock del local de anoche.
-      const lista = await buscarNombre(variante.product_name).catch(() => null)
-      const prod = lista && [...lista.conStock, ...lista.sinStock].find((p) => p.product_id === variante.product_id)
-      if (vuelta.current !== n) return
-      const { precio, foto, categorias } = precioYFoto(variante.product_id)
-      const cols = coloresDelProducto(audit, variante.sku)
-      setEstado({
-        que: 'ok',
-        r: {
-          variante,
-          foto: cols.foto || foto,
-          colores: cols.colores,
-          colorActual: cols.actual,
-          precio: precioTotem({ product_id: variante.product_id, size_id: variante.size_id, precio, reglas: config?.reglas ?? null, hoy: hoyIso(), categorias }),
-          talles: prod ? tallesDelLocal(prod.variantes) : [],
-        },
-      })
-      volverEn(TOTEM_MS.encontrada)
+      await mostrar(variante, n)
     } catch (e) {
       if (vuelta.current !== n) return
       const status = (e as { status?: number }).status
-      setEstado({ que: status === 404 || (e as Error).message === 'sin prenda' ? 'no' : 'falla' })
+      const noEsta = status === 404 || (e as Error).message === 'sin prenda'
+      // Modo prueba: lo que ⛔ es un código puede ser un nombre.
+      if (prueba && noEsta) {
+        const lista = await buscarNombre(q).catch(() => null)
+        if (vuelta.current !== n) return
+        const productos = lista ? [...lista.conStock, ...lista.sinStock] : []
+        if (productos.length > 0) {
+          if (reloj.current) clearTimeout(reloj.current)
+          setEstado({ que: 'lista', productos })
+          return
+        }
+      }
+      setEstado({ que: noEsta ? 'no' : 'falla' })
+      volverEn(TOTEM_MS.noEncontrada)
+    }
+  }
+
+  async function elegir(p: ProductoLista) {
+    // Una variante con stock si hay: la foto y el color salen de ella.
+    const variante = p.variantes.find((v) => (v.local ?? 0) > 0) ?? p.variantes[0]
+    if (!variante) return
+    const n = ++vuelta.current
+    setEstado({ que: 'buscando' })
+    try {
+      await mostrar(variante, n)
+    } catch {
+      if (vuelta.current !== n) return
+      setEstado({ que: 'falla' })
       volverEn(TOTEM_MS.noEncontrada)
     }
   }
@@ -163,18 +199,35 @@ function Totem() {
           if (q) void buscar(q)
         }}
         aria-label="Código de la prenda"
+        placeholder={prueba ? 'Modo prueba: código, SKU o nombre, y Enter' : undefined}
         autoComplete="off"
         spellCheck={false}
         // Invisible pero enfocable: la clienta ⛔ tipea, escanea.
-        style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
+        style={prueba ? { margin: `${space[2]}px ${space[4]}px`, padding: `${space[2]}px ${space[3]}px`, fontSize: font.lg, border: `1.5px dashed ${color.line2}`, borderRadius: radius.xl, background: color.surface, color: color.ink } : { position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
       />
       <main style={{ flex: 1, minHeight: 0, display: 'flex' }}>
         {estado.que === 'ok' ? (
           <Prenda r={estado.r} />
+        ) : estado.que === 'lista' ? (
+          <ListaPrueba productos={estado.productos} elegir={(p) => void elegir(p)} />
         ) : (
           <Espera no={estado.que === 'no'} falla={estado.que === 'falla'} buscando={estado.que === 'buscando'} />
         )}
       </main>
+    </div>
+  )
+}
+
+/** Sólo con `?prueba=1`: lo que encontró la búsqueda por nombre. */
+function ListaPrueba({ productos, elegir }: { productos: ProductoLista[]; elegir: (p: ProductoLista) => void }) {
+  return (
+    <div style={{ flex: 1, display: 'grid', alignContent: 'start', gap: space[2], padding: space[4] }}>
+      {productos.map((p) => (
+        <button key={p.product_id} type="button" onClick={() => elegir(p)} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], padding: space[3], fontSize: font.lg, textAlign: 'left', background: color.surface, color: color.ink, border: `1px solid ${color.line2}`, borderRadius: radius.xl, cursor: 'pointer' }}>
+          <span>{p.product_name}</span>
+          <span style={{ color: color.mut, flex: 'none' }}>{p.local > 0 ? `${p.local} en el local` : 'Sin stock en el local'}</span>
+        </button>
+      ))}
     </div>
   )
 }

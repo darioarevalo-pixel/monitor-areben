@@ -95,6 +95,33 @@ describe('CajaTotem', () => {
     expect(s.style.textDecoration).toBe('line-through')
   })
 
+  it('modo prueba (`?prueba=1`): la entrada se ve y un nombre lleva a la lista y a la prenda', async () => {
+    window.history.pushState({}, '', '/pos/totem?prueba=1')
+    try {
+      const t = await escanear('blazer')
+      expect(t).not.toContain('No encontramos esta prenda')
+      const input = caja.querySelector('input[aria-label="Código de la prenda"]') as HTMLInputElement
+      expect(input.style.opacity).toBe('')
+      const boton = [...caja.querySelectorAll('button')].find((b) => b.textContent?.includes('BLAZER NEREA'))!
+      await act(async () => {
+        boton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0))
+      })
+      expect(caja.textContent).toContain('$16.100')
+    } finally {
+      window.history.pushState({}, '', '/')
+    }
+  })
+
+  it('sin modo prueba, un nombre ⛔ busca y la entrada sigue invisible', async () => {
+    expect(await escanear('blazer')).toContain('No encontramos esta prenda')
+    const input = caja.querySelector('input[aria-label="Código de la prenda"]') as HTMLInputElement
+    expect(input.style.opacity).toBe('0')
+    expect(caja.querySelector('button')).toBeNull()
+  })
+
   it('un código que no existe', async () => {
     expect(await escanear('000')).toContain('No encontramos esta prenda')
   })
