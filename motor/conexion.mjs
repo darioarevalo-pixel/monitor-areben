@@ -115,39 +115,45 @@ export async function correrCostos({ control, db, negocio, token, manda, seco = 
   }
 }
 
-/** Sólo desde el corte de la marca y sin el freno (`ERP_NO_MANDA`). Sin eso, el motivo: la pantalla lo dice y ⛔ se le pregunta nada a Ingresos. */
-async function puedeImportar(db, negocio, env, ahora) {
+/**
+ * ¿Se puede usar «Actualizar Ingresos» y con qué lista? Sólo desde el corte de la marca y sin el freno (`ERP_NO_MANDA`). Antes del corte, con `PRODUCTO_INGRESOS_PRUEBA` y sólo un Admin: todo lo
+ * que falta, para traer lo cargado antes de cortar. Sin eso, el motivo: la pantalla lo dice y ⛔ se le pregunta nada a Ingresos.
+ * @param {{ db: any, negocio: 'bdi'|'zattia', admin: boolean, modo?: 'habitual'|'excepcional', env?: any, ahora?: Date }} a `admin` OBLIGATORIO: sin saber quién pide ⛔ se abre la lista de prueba
+ */
+export async function puedeImportar({ db, negocio, admin, modo = 'habitual', env = process.env, ahora = new Date() }) {
+  if (typeof admin !== 'boolean') throw new Error('puedeImportar: falta decir si es Admin')
+  if (modo === 'excepcional' && !admin) throw new Error('puedeImportar: el botón excepcional es sólo de Admin')
   const cortes = await leerCortes(db)
-  if (productoIngresosManda(negocio, cortes, env, ahora)) return { manda: true, corte: cortes[negocio] }
-  const desde = cortes[negocio] ? null : pruebaIngresos(negocio, env)
-  if (desde) return { manda: true, corte: desde, prueba: true }
+  if (productoIngresosManda(negocio, cortes, env, ahora)) return { manda: true, corte: cortes[negocio], modo }
+  const desde = cortes[negocio] || !admin ? null : pruebaIngresos(negocio, env)
+  if (desde) return { manda: true, corte: desde, prueba: true, modo: 'prueba' }
   return { manda: false, corte: cortes[negocio] ?? null, motivo: cortes[negocio] ? 'frenada' : 'sin_corte' }
 }
 
 /**
  * «Actualizar Ingresos»: lo que Ingresos tiene y el ERP ⛔, para elegir. Lee, ⛔ escribe. A PEDIDO: ⛔ tiene cron (Bruno, 3-nov).
- * @param {{ control: any, db: any, negocio: 'bdi'|'zattia', token: string, env?: any, fetch?: typeof globalThis.fetch, ahora?: Date }} a
+ * @param {{ control: any, db: any, negocio: 'bdi'|'zattia', token: string, admin: boolean, modo?: 'habitual'|'excepcional', env?: any, fetch?: typeof globalThis.fetch, ahora?: Date }} a
  */
-export async function leerParaImportar({ control, db, negocio, token, env = process.env, fetch = globalThis.fetch, ahora = new Date() }) {
-  const p = await puedeImportar(db, negocio, env, ahora)
+export async function leerParaImportar({ control, db, negocio, token, admin, modo = 'habitual', env = process.env, fetch = globalThis.fetch, ahora = new Date() }) {
+  const p = await puedeImportar({ db, negocio, admin, modo, env, ahora })
   if (!p.manda) return p
   const o = { token, fetch }
   await mirarToken(negocio, o)
   const productos = await listarExt('/products', o)
   const skusDeOc = await skusDeOcSinCruzar({ control, db, marca: negocio, corte: p.corte })
-  return { ...p, ...candidatos({ marca: negocio, productos, variantes: await variantesDelErp(db), corte: p.corte, skusDeOc }) }
+  return { ...p, ...candidatos({ marca: negocio, productos, variantes: await variantesDelErp(db), corte: p.corte, skusDeOc, modo: p.modo }) }
 }
 
 /**
  * Importa lo elegido. Vuelve a mirar el corte y a leer Ingresos: ⛔ se confía en lo que la pantalla leyó hace un rato.
- * @param {{ control: any, db: any, negocio: 'bdi'|'zattia', token: string, elegidos: number[], usuario: string, env?: any, fetch?: typeof globalThis.fetch, ahora?: Date }} a
+ * @param {{ control: any, db: any, negocio: 'bdi'|'zattia', token: string, elegidos: number[], usuario: string, admin: boolean, modo?: 'habitual'|'excepcional', env?: any, fetch?: typeof globalThis.fetch, ahora?: Date }} a
  */
-export async function importarDeIngresos({ control, db, negocio, token, elegidos, usuario, env = process.env, fetch = globalThis.fetch, ahora = new Date() }) {
-  const p = await puedeImportar(db, negocio, env, ahora)
+export async function importarDeIngresos({ control, db, negocio, token, elegidos, usuario, admin, modo = 'habitual', env = process.env, fetch = globalThis.fetch, ahora = new Date() }) {
+  const p = await puedeImportar({ db, negocio, admin, modo, env, ahora })
   if (!p.manda) return p
   const o = { token, fetch }
   await mirarToken(negocio, o)
   const productos = await listarExt('/products', o)
   const skusDeOc = await skusDeOcSinCruzar({ control, db, marca: negocio, corte: p.corte })
-  return { manda: true, ...(await importarElegidos(db, { marca: negocio, productos, corte: p.corte, skusDeOc, elegidos, usuario })) }
+  return { manda: true, prueba: p.prueba === true, ...(await importarElegidos(db, { marca: negocio, productos, corte: p.corte, skusDeOc, elegidos, usuario, modo: p.modo })) }
 }

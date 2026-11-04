@@ -48,6 +48,9 @@ export function depositoDeId(base, storeId) {
  * producto de Stunned sin SKU cae en Zattia, y no hay otra señal para separarlo.
  */
 /** Las líneas que viven en una base (las de `erp_corte`, sql/063). */
+/** Desde acá arrancan los ids nacidos en el ERP (`catalogo_id`, sql/012): GN ⛔ los tuvo. */
+export const CATALOGO_ID_DESDE = 1_000_000_000
+
 export const lineasDeBase = (base) => (base === 'zattia' ? ['zattia', 'stunned'] : base === 'bdi' ? ['bdi'] : [])
 
 export function lineaDe(base, sku) {

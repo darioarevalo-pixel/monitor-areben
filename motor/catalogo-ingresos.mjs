@@ -4,8 +4,10 @@
  * con el corte, porque Ingresos puede tener productos en precarga. Medido 3-nov: Zattia 285 de 285 productos creados en TN desde agosto tienen SKU en Ingresos, BDI 99 de 100.
  *
  * - En la lista, lo que ya está es «Listo» (`listos`) y lo que falta, «Pendiente» (Bruno, 3-nov: «te aparece lo viejo como ya listo»).
- * - QUÉ SE OFRECE (`candidatos`): el producto de Ingresos ⛔ trae fecha de creación ⇒ entra si su `updated_at` es desde el corte, O si tiene un SKU de una OC confirmada desde
- *   el corte que ⛔ cruza con el ERP, aunque su `updated_at` sea anterior (sin eso, ese restock quedaría sin stock y sin forma de importarlo). `deleted` ⛔ se ofrece.
+ * - QUÉ SE OFRECE (`candidatos`), Bruno 3-nov: «OC confirmada, se trae». `habitual` (Admin y Administración): sólo el producto con un renglón confirmado de una OC desde el corte que
+ *   ⛔ cruza con el ERP, aunque su `updated_at` sea anterior (sin eso, ese restock quedaría sin stock). `excepcional` (sólo Admin): el producto SIN esa OC tocado en Ingresos desde el
+ *   corte: entra con stock 0. `prueba` (`PRODUCTO_INGRESOS_PRUEBA`, antes del corte, sólo Admin): todo lo que falta, para traerlo antes de cortar. `deleted` ⛔ se ofrece en ninguna.
+ *   Lo cargado antes del corte, sin OC nueva, ⛔ aparece en las de después del corte: se trae antes de cortar.
  * - El vínculo es el SKU (o el código): una variante que ya cruza con el ERP ⛔ se crea.
  * - Producto sin ninguna variante en el ERP ⇒ producto nuevo con sus variantes. Con variantes en UN producto nuestro ⇒ lo que falta se le agrega a ése. Con variantes en DOS o
  *   más, o un talle ya ocupado ⇒ ⛔ se crea: va a `a_vincular`, lo decide una persona.
@@ -90,15 +92,24 @@ export function planImportar({ marca, productos, variantes }) {
 
 const leerVariantes = async (db) => (await db.query('select product_id, sku, barcode, talle from variante')).rows
 
+/** Qué lista se pide. */
+export const MODOS = ['habitual', 'excepcional', 'prueba']
+
 /**
  * Lo que Ingresos tiene y el ERP ⛔, para elegir. Puro.
- * @param {{ marca: 'bdi'|'zattia', productos: any[], variantes: any[], corte: string, skusDeOc?: Map<string, { oc: string }> }} o `skusDeOc`: los de OC desde el corte que ⛔ cruzan, por SKU normalizado
+ * @param {{ marca: 'bdi'|'zattia', productos: any[], variantes: any[], corte: string, skusDeOc?: Map<string, { oc: string }>, modo: 'habitual'|'excepcional'|'prueba' }} o `skusDeOc`: los de OC desde el corte que ⛔ cruzan, por SKU normalizado
  */
-export function candidatos({ marca, productos, variantes, corte, skusDeOc = new Map() }) {
+export function candidatos({ marca, productos, variantes, corte, skusDeOc = new Map(), modo }) {
+  if (!MODOS.includes(modo)) throw new Error(`candidatos: modo desconocido «${modo}»`)
   const desde = Date.parse(corte)
   if (Number.isNaN(desde)) throw new Error('candidatos: falta el instante del corte')
   const deOc = (p) => (p.variants ?? []).filter((v) => skusDeOc.has(norm(v.sku)))
-  const elegibles = productos.filter((p) => Date.parse(p.updated_at ?? '') >= desde || deOc(p).length)
+  const entra = {
+    habitual: (p) => deOc(p).length > 0,
+    excepcional: (p) => !deOc(p).length && Date.parse(p.updated_at ?? '') >= desde,
+    prueba: () => true,
+  }[modo]
+  const elegibles = productos.filter(entra)
   const plan = planImportar({ marca, productos: elegibles, variantes })
   const oc = new Map(productos.map((p) => [p.id, [...new Set(deOc(p).map((v) => skusDeOc.get(norm(v.sku)).oc))]]))
   // «Listo»: todo lo que Ingresos tiene vivo y el ERP ya tiene, sea de cuando sea. «Pendiente» sí mira el corte; esto ⛔ importa nada.
@@ -111,12 +122,13 @@ export function candidatos({ marca, productos, variantes, corte, skusDeOc = new 
 }
 
 /**
- * Los SKU de las OC confirmadas desde el corte que ⛔ cruzan con el ERP. Las OC viven en la base de BDI para las dos marcas.
+ * Los SKU de los renglones CONFIRMADOS de OC desde el corte que ⛔ cruzan con el ERP. Una OC `confirmada` lo está entera (BDI confirma antes de contar); de una `parcial`, cuenta el
+ * renglón que ya contó: el aviso guarda 0 en el que todavía ⛔ se confirmó. Las OC viven en la base de BDI para las dos marcas.
  * @returns {Promise<Map<string, { oc: string }>>}
  */
 export async function skusDeOcSinCruzar({ control, db, marca, corte }) {
   const lineas = (await control.query(`select l.sku, l.codigo_barras, o.oc_label from recepcion_linea l join recepcion_oc o on o.id = l.oc_ref
-    where o.store = $1 and o.confirmada_at >= $2 and l.sku is not null`, [marca, corte])).rows
+    where o.store = $1 and o.confirmada_at >= $2 and l.sku is not null and (o.oc_estado <> 'parcial' or coalesce(l.cantidad_contada, 0) > 0)`, [marca, corte])).rows
   const hay = await leerVariantes(db)
   const skus = new Set(hay.map((v) => norm(v.sku)).filter(Boolean))
   const codigos = new Set(hay.map((v) => norm(v.barcode)).filter(Boolean))
@@ -132,9 +144,9 @@ export async function skusDeOcSinCruzar({ control, db, marca, corte }) {
  * Importa los productos ELEGIDOS, de los que hoy se ofrecen. Se vuelve a calcular con el candado: lo que entró en el medio ⛔ se duplica, y un id que ya ⛔ se ofrece
  * ⛔ se importa (vuelve en `no_disponibles`).
  * @param {import('pg').ClientBase} db la base de la marca, sin transacción abierta
- * @param {{ marca: 'bdi'|'zattia', productos: any[], corte: string, skusDeOc?: Map<string, { oc: string }>, elegidos: number[], usuario: string }} o
+ * @param {{ marca: 'bdi'|'zattia', productos: any[], corte: string, skusDeOc?: Map<string, { oc: string }>, elegidos: number[], usuario: string, modo: 'habitual'|'excepcional'|'prueba' }} o
  */
-export async function importarElegidos(db, { marca, productos, corte, skusDeOc, elegidos, usuario }) {
+export async function importarElegidos(db, { marca, productos, corte, skusDeOc, elegidos, usuario, modo }) {
   if (!String(usuario ?? '').trim()) throw new Error('importarElegidos: falta quién importa')
   const pedidos = new Set(elegidos.map(Number))
   const [{ empresa_id: empresa } = {}] = (await db.query('select empresa_id from marca where id = $1', [marca])).rows
@@ -146,7 +158,7 @@ export async function importarElegidos(db, { marca, productos, corte, skusDeOc, 
   await db.query('begin')
   try {
     await db.query(`select pg_advisory_xact_lock(hashtext('copiar-catalogo'))`)
-    const plan = candidatos({ marca, productos, variantes: await leerVariantes(db), corte, skusDeOc })
+    const plan = candidatos({ marca, productos, variantes: await leerVariantes(db), corte, skusDeOc, modo })
     const crear = plan.crear.filter((p) => pedidos.has(Number(p.ingresos_id)))
     const agregar = plan.agregar.filter((p) => pedidos.has(Number(p.ingresos_id)))
     const hechos = new Set([...crear, ...agregar].map((p) => Number(p.ingresos_id)))
@@ -171,6 +183,8 @@ export async function importarElegidos(db, { marca, productos, corte, skusDeOc, 
       productos_nuevos: crear.length, productos_con_agregadas: agregar.length,
       variantes_nuevas: [...crear, ...agregar].reduce((a, p) => a + p.variantes.length, 0),
       no_disponibles: [...pedidos].filter((id) => !hechos.has(id)),
+      // Los códigos que entraron: quien llama recalcula su stock y el espejo de esas variantes.
+      skus: [...crear, ...agregar].flatMap((p) => p.variantes.map((v) => v.sku)),
     }
   } catch (e) {
     await db.query('rollback').catch(() => {})
