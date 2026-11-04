@@ -93,6 +93,17 @@ function Totem() {
     }
   }, [])
 
+  // 🔑 Instalarlo desde acá abre el tótem a pantalla completa: el manifest general arranca en Inicio.
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')
+    if (!link) return
+    const general = link.getAttribute('href')
+    link.setAttribute('href', '/totem.webmanifest')
+    return () => {
+      if (general) link.setAttribute('href', general)
+    }
+  }, [])
+
   const [prueba] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('prueba') === '1')
   const [estado, setEstado] = useState<Estado>({ que: 'espera' })
   const [codigo, setCodigo] = useState('')
