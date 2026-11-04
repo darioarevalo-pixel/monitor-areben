@@ -17,6 +17,7 @@ export const PERMISOS = Object.freeze({
   'wholesale_orders:read': { explica: 'Leer los pedidos mayoristas mandados a preparar.', datos: 'Cliente y quién pidió, entrega, notas, renglones con ubicación, total, saldo y zona de despacho.' },
   'wholesale_orders:write': { explica: 'Marcar que el depósito empezó a preparar un pedido mayorista.', datos: 'El pedido como queda.' },
   'locations:read': { explica: 'Leer la ubicación física de cada variante por depósito.', datos: 'Código de barras, SKU, depósito y ubicación.' },
+  'variants:read': { explica: 'Leer el catálogo de variantes, para escanear.', datos: 'Producto, talle o modelo, SKU, código de barras y si está activa.' },
 })
 
 /** Lo que un token ⛔ puede hacer nunca (B.4). Cada línea tiene su control y su prueba en `test/ext-pg.mjs` y `test/ext.test.mjs`. */
@@ -57,6 +58,7 @@ export function pedidoExterno(p) {
     id: p.numero,
     number: p.numero,
     status: ETAPA_A_STATUS[p.etapa],
+    is_test: p.prueba === true,
     warehouse: DEPOSITO_A_WAREHOUSE[p.deposito] ?? 'other',
     customer_name: p.cliente,
     contact_name: p.persona,
@@ -82,6 +84,11 @@ export function pedidoExterno(p) {
 /** Una fila de `ubicacionesExternas`, en el contrato. `code` va TAL CUAL: de «estantería-piso» sale el orden de armado en Logística. */
 export function ubicacionExterna(u) {
   return { id: Number(u.id), barcode: u.barcode ?? null, sku: u.sku ?? null, warehouse: DEPOSITO_A_WAREHOUSE[u.deposito] ?? 'other', code: u.texto, updated_at: instante(u.actualizado_en) }
+}
+
+/** Una fila de `listarVariantes`, en el contrato. */
+export function varianteExterna(v) {
+  return { product_id: Number(v.product_id), size_id: Number(v.size_id), sku: v.sku ?? null, barcode: v.barcode ?? null, name: v.nombre ?? null, size: v.talle ?? null, active: v.activa === true, updated_at: instante(v.actualizado_en) }
 }
 
 /** `GET /me` (B.5). */
@@ -141,6 +148,7 @@ export const ESQUEMAS = Object.freeze({
     id: s('integer', 'Numérico y estable.'),
     number: s('integer', 'El número que se ve.'),
     status: s('string', '`preparing` lo pone `start-picking`. `prepared` y `dispatched` los actualiza el ERP leyendo `GET /orders` de Logística, desde el corte de BDI; antes de eso no avanzan solos.', { enum: STATUS }),
+    is_test: s('boolean', '`true`: pedido de prueba. No mueve stock y no hay que prepararlo físicamente.'),
     warehouse: s('string', 'Depósito del que sale.'),
     customer_name: n('string', 'El cliente.'),
     contact_name: n('string', 'Quién lo pidió.'),
@@ -169,6 +177,17 @@ export const ESQUEMAS = Object.freeze({
     updated_at: s('string', 'Último cambio.', { format: 'date-time' }),
   }),
   ExtLocationsPage: pagina('Una página de ubicaciones.', 'ExtLocation'),
+  ExtVariant: cerrado('Una variante del catálogo del negocio del token.', {
+    product_id: s('integer', 'Producto. Con `size_id` identifica la variante.'),
+    size_id: s('integer', 'Talle o modelo.'),
+    sku: n('string', 'SKU. En BDI hay variantes sin SKU o que lo comparten: para identificar, `barcode`.'),
+    barcode: n('string', 'Código de barras.'),
+    name: n('string', 'Nombre del producto.'),
+    size: n('string', 'Talle o modelo.'),
+    active: s('boolean', 'La variante y su producto están activos. Las inactivas siguen saliendo para poder darlas de baja.'),
+    updated_at: s('string', 'Último cambio de la variante o de su producto.', { format: 'date-time' }),
+  }),
+  ExtVariantsPage: pagina('Una página de variantes.', 'ExtVariant'),
   ExtStartPickingRequest: cerrado('La versión del pedido que vio el depósito.', {
     expected: cerrado('Lo que se vio.', { updated_at: s('string', 'El `updated_at` leído.', { format: 'date-time' }) }),
   }),
