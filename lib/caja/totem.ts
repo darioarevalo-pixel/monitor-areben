@@ -12,6 +12,7 @@
 
 import { cobro, idsDeFeria, pagosDeMedio, precioDeFeria, renglones } from '@/lib/caja/core.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
+import { talleVisible } from '@/lib/caja/ticket-mail.core.js'
 import type { Reglas } from '@/lib/caja/cliente'
 
 /**
@@ -93,6 +94,32 @@ export function coloresDelProducto(
   return nada
 }
 
+const ES_TALLE = /^(XXS|XS|S|M|L|XL|XXL|XXXL|U|UNICO|ÚNICO|TU|T\.U\.|\d{1,3}|[SMLX]+\/[SMLX]+)$/i
+
+/** `hay: null`: sin el stock del local (la lista por nombre ⛔ contestó): se muestra el color, ⛔ se afirma si hay. */
+export type ColorTotem = { nombre: string; foto: string | null; hay: boolean | null }
+
+/**
+ * Colores y talles para la ficha. 🔴 En Zattia la variante de Gestión Nube suele SER el color (`size_name`
+ * «NEGRO»: 257 de 383 productos medidos el 4-nov, y ninguno mezclaba colores con talles): ahí el stock va
+ * en la fila de colores y ⛔ hay fila de talles. Si la variante es el talle, los colores salen de Tienda Nube.
+ */
+export function opcionesDelLocal(
+  variantes: { size_name: string; local?: number }[],
+  colores: { nombre: string; foto: string | null }[],
+): { colores: ColorTotem[]; talles: { talle: string; hay: boolean }[] } {
+  const delLocal = tallesDelLocal(variantes).filter((t) => talleVisible(t.talle))
+  const sinStockDeColor = colores.map((c) => ({ ...c, hay: null }))
+  if (!delLocal.length || delLocal.every((t) => ES_TALLE.test(t.talle))) return { colores: sinStockDeColor, talles: delLocal }
+  const clave = (c: string) => c.trim().toLowerCase()
+  const fotoDe = new Map(colores.map((c) => [clave(c.nombre), c.foto]))
+  return { colores: delLocal.map((t) => ({ nombre: t.talle, foto: fotoDe.get(clave(t.talle)) ?? null, hay: t.hay })), talles: [] }
+}
+
+/** El código de la tarjeta de la encargada: sólo letras, porque un lector con teclado en castellano cambia el guion. */
+export const TARJETA_ENCARGADA = 'ENCARGADA'
+export const esTarjetaEncargada = (codigo: string) => codigo.trim().toUpperCase() === TARJETA_ENCARGADA
+
 /** Las fotos de la galería: primero la del color escaneado, después las del producto, sin repetir. */
 export function fotosDeLaPrenda(...grupos: (string | null | undefined | (string | null | undefined)[])[]): string[] {
   const todas = grupos.flat().filter((f): f is string => !!f)
@@ -100,4 +127,4 @@ export function fotosDeLaPrenda(...grupos: (string | null | undefined | (string 
 }
 
 /** Cuánto queda a la vista una prenda escaneada antes de volver a «Escaneá una prenda». */
-export const TOTEM_MS = { encontrada: 10_000, noEncontrada: 5_000 } as const
+export const TOTEM_MS = { encontrada: 10_000, noEncontrada: 5_000, encargada: 30_000 } as const

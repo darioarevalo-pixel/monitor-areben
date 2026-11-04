@@ -10,6 +10,9 @@
  *   para «hay / no hay» y ⛔ gasta el cupo de Gestión Nube.
  * - El precio de lista, de los datos de Zattia como en el POS; el de efectivo, del núcleo (`lib/caja/totem.ts`).
  *
+ * - 🔑 La tarjeta de la encargada (`TARJETA_ENCARGADA`): con una prenda en pantalla, suma dónde está en el
+ *   depósito y su stock (`elegirVariante`, una lectura de GN sólo cuando se pide); sin prenda, espera la
+ *   próxima 30 segundos.
  * - 🔑 `?prueba=1`: la entrada se ve y también busca por nombre, para probar sin lector ni etiqueta. Sin
  *   eso, la pantalla de la clienta sigue igual: sólo el escaneo.
  *
@@ -24,9 +27,9 @@ import { useTnPromo } from '@/components/productos/useTnImages'
 import { imagenesDe } from '@/lib/tn'
 import { precioDeCaja } from '@/lib/caja/precio'
 import { hoyIso } from '@/lib/agenda'
-import { buscarNombre, buscarProducto, leerConfig, type Config, type ProductoLista, type Variante } from '@/lib/caja/cliente'
+import { buscarNombre, buscarProducto, elegirVariante, leerConfig, type Config, type ProductoLista, type Variante } from '@/lib/caja/cliente'
 import { plata } from '@/lib/caja/ticket'
-import { coloresDelProducto, fotosDeLaPrenda, precioTotem, tallesDelLocal, TOTEM_MS, type PrecioTotem } from '@/lib/caja/totem'
+import { coloresDelProducto, esTarjetaEncargada, fotosDeLaPrenda, opcionesDelLocal, precioTotem, TOTEM_MS, type ColorTotem, type PrecioTotem } from '@/lib/caja/totem'
 import { nombreDeColor } from '@/lib/caja/pantalla-cliente'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
@@ -35,8 +38,9 @@ import type { Marca } from '@/lib/nav.datos'
 import { CabeceraMarca, ESTILOS_CLIENTA, FONDO_FOTO } from '@/components/caja/CajaCliente'
 import { color, font, radius, space, weight } from '@/components/ui'
 
-type Color = { nombre: string; foto: string | null }
-type Resultado = { variante: Variante; fotos: string[]; precio: PrecioTotem | null; talles: { talle: string; hay: boolean }[]; colores: Color[]; colorActual: string | null }
+type Resultado = { variante: Variante; fotos: string[]; precio: PrecioTotem | null; talles: { talle: string; hay: boolean }[]; colores: ColorTotem[]; colorActual: string | null }
+/** Lo que ve la encargada al pasar su tarjeta. */
+type Ubicacion = { que: 'buscando' } | { que: 'falla' } | { que: 'ok'; atras: string[]; deposito: number; local: number }
 
 /** El marco del lector con las barras (espera) y la alerta (no encontrada): trazos del prototipo aprobado. */
 const TRAZO = {
@@ -51,7 +55,7 @@ function Trazo({ d }: { d: keyof typeof TRAZO }) {
   )
 }
 /** `no`: la prenda ⛔ está (404). `falla`: ⛔ se pudo consultar (GN, la red): son cosas distintas (robustez, 11-oct). */
-type Estado = { que: 'espera' } | { que: 'buscando' } | { que: 'no' } | { que: 'falla' } | { que: 'lista'; productos: ProductoLista[] } | { que: 'ok'; r: Resultado }
+type Estado = { que: 'espera' } | { que: 'buscando' } | { que: 'no' } | { que: 'falla' } | { que: 'lista'; productos: ProductoLista[] } | { que: 'encargada' } | { que: 'ok'; r: Resultado }
 
 export function CajaTotem() {
   const { marca, setMarca } = useSesion()
@@ -95,10 +99,19 @@ function Totem() {
   const entrada = useRef<HTMLInputElement>(null)
   const reloj = useRef<ReturnType<typeof setTimeout> | null>(null)
   const vuelta = useRef(0)
+  const encargada = useRef(false)
+  const [ubicacion, setUbicacion] = useState<Ubicacion | null>(null)
+  // Cada vez que arranca el reloj, la barra que lo muestra vuelve a empezar.
+  const [arranques, setArranques] = useState(0)
 
   const volverEn = useCallback((ms: number) => {
     if (reloj.current) clearTimeout(reloj.current)
-    reloj.current = setTimeout(() => setEstado({ que: 'espera' }), ms)
+    setArranques((n) => n + 1)
+    reloj.current = setTimeout(() => {
+      encargada.current = false
+      setUbicacion(null)
+      setEstado({ que: 'espera' })
+    }, ms)
   }, [])
   useEffect(() => () => void (reloj.current && clearTimeout(reloj.current)), [])
 
@@ -123,43 +136,75 @@ function Totem() {
     if (vuelta.current !== n) return
     const { precio, foto, fotos, categorias } = precioYFoto(variante.product_id)
     const cols = coloresDelProducto(audit, variante.sku)
+    const opciones = opcionesDelLocal(prod?.variantes ?? [], cols.colores)
+    const fotoDelColor = opciones.colores.map((c) => c.foto)
     setEstado({
       que: 'ok',
       r: {
         variante,
-        fotos: fotosDeLaPrenda(cols.foto, cols.fotos, foto, fotos),
-        colores: cols.colores,
-        colorActual: cols.actual,
+        fotos: fotosDeLaPrenda(cols.foto, cols.fotos, foto, fotos, fotoDelColor),
+        colores: opciones.colores,
+        colorActual: cols.actual ?? (opciones.talles.length ? null : variante.size_name),
         precio: precioTotem({ product_id: variante.product_id, size_id: variante.size_id, precio, reglas: config?.reglas ?? null, hoy: hoyIso(), categorias }),
-        talles: prod ? tallesDelLocal(prod.variantes) : [],
+        talles: opciones.talles,
       },
     })
     volverEn(TOTEM_MS.encontrada)
   }
 
+  async function pedirUbicacion(variante: Variante, n: number) {
+    setUbicacion({ que: 'buscando' })
+    volverEn(TOTEM_MS.encargada)
+    try {
+      const r = await elegirVariante(variante)
+      if (vuelta.current !== n) return
+      setUbicacion('variante' in r ? { que: 'ok', atras: r.stock.atras ?? [], deposito: r.stock.deposito, local: r.stock.local } : { que: 'falla' })
+    } catch {
+      if (vuelta.current === n) setUbicacion({ que: 'falla' })
+    }
+  }
+
+  /** Modo prueba: lo que se tipeó puede ser un nombre. `true` si encontró productos y mostró la lista. */
+  async function mostrarLista(q: string, n: number) {
+    const lista = await buscarNombre(q).catch(() => null)
+    if (vuelta.current !== n) return true
+    const productos = lista ? [...lista.conStock, ...lista.sinStock] : []
+    if (!productos.length) return false
+    if (reloj.current) clearTimeout(reloj.current)
+    setEstado({ que: 'lista', productos })
+    return true
+  }
+
   async function buscar(q: string) {
     const n = ++vuelta.current
+    if (esTarjetaEncargada(q)) {
+      if (estado.que === 'ok') {
+        void pedirUbicacion(estado.r.variante, n)
+      } else {
+        encargada.current = true
+        setEstado({ que: 'encargada' })
+        volverEn(TOTEM_MS.encargada)
+      }
+      return
+    }
+    const conUbicacion = encargada.current
+    encargada.current = false
+    setUbicacion(null)
     setEstado({ que: 'buscando' })
     try {
       const r = await buscarProducto(q)
+      if (prueba && 'candidatos' in r && r.candidatos.length > 1 && (await mostrarLista(q, n))) return
+      if (vuelta.current !== n) return
       const variante = 'variante' in r ? r.variante : r.candidatos[0]
       if (!variante) throw new Error('sin prenda')
       await mostrar(variante, n)
+      if (conUbicacion && vuelta.current === n) void pedirUbicacion(variante, n)
     } catch (e) {
       if (vuelta.current !== n) return
       const status = (e as { status?: number }).status
       const noEsta = status === 404 || (e as Error).message === 'sin prenda'
-      // Modo prueba: lo que ⛔ es un código puede ser un nombre.
-      if (prueba && noEsta) {
-        const lista = await buscarNombre(q).catch(() => null)
-        if (vuelta.current !== n) return
-        const productos = lista ? [...lista.conStock, ...lista.sinStock] : []
-        if (productos.length > 0) {
-          if (reloj.current) clearTimeout(reloj.current)
-          setEstado({ que: 'lista', productos })
-          return
-        }
-      }
+      if (prueba && noEsta && (await mostrarLista(q, n))) return
+      if (vuelta.current !== n) return
       setEstado({ que: noEsta ? 'no' : 'falla' })
       volverEn(TOTEM_MS.noEncontrada)
     }
@@ -209,11 +254,11 @@ function Totem() {
       />
       <main style={{ flex: 1, minHeight: 0, display: 'flex' }}>
         {estado.que === 'ok' ? (
-          <Prenda key={`${estado.r.variante.product_id}-${estado.r.variante.size_id}`} r={estado.r} tocar={() => volverEn(TOTEM_MS.encontrada)} />
+          <Prenda key={`${estado.r.variante.product_id}-${estado.r.variante.size_id}`} r={estado.r} ubicacion={ubicacion} arranques={arranques} tocar={() => volverEn(ubicacion ? TOTEM_MS.encargada : TOTEM_MS.encontrada)} msReloj={ubicacion ? TOTEM_MS.encargada : TOTEM_MS.encontrada} />
         ) : estado.que === 'lista' ? (
           <ListaPrueba productos={estado.productos} elegir={(p) => void elegir(p)} />
         ) : (
-          <Espera no={estado.que === 'no'} falla={estado.que === 'falla'} buscando={estado.que === 'buscando'} />
+          <Espera no={estado.que === 'no'} falla={estado.que === 'falla'} buscando={estado.que === 'buscando'} encargada={estado.que === 'encargada'} />
         )}
       </main>
     </div>
@@ -234,7 +279,7 @@ function ListaPrueba({ productos, elegir }: { productos: ProductoLista[]; elegir
   )
 }
 
-function Espera({ no: noEsta, falla, buscando }: { no: boolean; falla: boolean; buscando: boolean }) {
+function Espera({ no: noEsta, falla, buscando, encargada }: { no: boolean; falla: boolean; buscando: boolean; encargada: boolean }) {
   const no = noEsta || falla
   return (
     <div style={{ flex: 1, display: 'grid', placeItems: 'center', alignContent: 'center', textAlign: 'center', gap: space[4], padding: space[8], background: `radial-gradient(circle at 50% 40%, ${MARCA_CAJA.acentoBg}, ${color.surface} 60%)` }}>
@@ -242,7 +287,7 @@ function Espera({ no: noEsta, falla, buscando }: { no: boolean; falla: boolean; 
         <Trazo d={no ? 'alerta' : 'lector'} />
       </div>
       <h1 style={{ margin: 0, fontSize: 'clamp(30px, 4.6vw, 60px)', letterSpacing: '-0.03em', maxWidth: '18ch', textWrap: 'balance' }}>
-        {falla ? 'No pudimos consultar el precio' : no ? 'No encontramos esta prenda' : buscando ? 'Buscando…' : 'Escaneá una prenda para ver su precio'}
+        {encargada ? 'Escaneá la prenda para ver su ubicación' : falla ? 'No pudimos consultar el precio' : no ? 'No encontramos esta prenda' : buscando ? 'Buscando…' : 'Escaneá una prenda para ver su precio'}
       </h1>
       <p style={{ margin: 0, fontSize: 'clamp(16px, 1.8vw, 24px)', color: color.mut }}>{falla ? 'Probá de nuevo en un momento o consultá en caja.' : no ? 'Consultá en caja y te ayudamos.' : 'Acercá la etiqueta al lector.'}</p>
     </div>
@@ -250,12 +295,11 @@ function Espera({ no: noEsta, falla, buscando }: { no: boolean; falla: boolean; 
 }
 
 /** Foto grande con flechas, puntos y deslizar. Cada toque le da otros 10 segundos a la ficha (`tocar`). */
-function Galeria({ fotos, tocar }: { fotos: string[]; tocar: () => void }) {
-  const [i, setI] = useState(0)
+function Galeria({ fotos, i, setI, tocar }: { fotos: string[]; i: number; setI: (i: number) => void; tocar: () => void }) {
   const inicioX = useRef<number | null>(null)
   const hay = fotos.length > 1
   const ir = (paso: number) => {
-    setI((a) => (a + paso + fotos.length) % fotos.length)
+    setI((i + paso + fotos.length) % fotos.length)
     tocar()
   }
   const flecha = (paso: number, rotulo: string, d: string) => (
@@ -303,39 +347,64 @@ function Galeria({ fotos, tocar }: { fotos: string[]; tocar: () => void }) {
   )
 }
 
-function Prenda({ r, tocar }: { r: Resultado; tocar: () => void }) {
+/** Sólo con la tarjeta de la encargada: dónde está la prenda y cuánto hay. */
+function PanelUbicacion({ u }: { u: Ubicacion }) {
+  const caja: React.CSSProperties = { background: color.ink, color: color.surface, borderRadius: radius.xl, padding: space[4], display: 'grid', gap: space[1], fontSize: font.lg }
+  if (u.que === 'buscando') return <div style={caja}>Buscando la ubicación…</div>
+  if (u.que === 'falla') return <div style={caja}>No se pudo consultar la ubicación.</div>
+  return (
+    <div style={caja}>
+      <span>Ubicación en depósito</span>
+      <strong style={{ fontSize: font['2xl'] + 4 }}>{u.atras.length ? u.atras.join(' · ') : 'Sin estante cargado'}</strong>
+      <span>Stock: {u.deposito} en depósito · {u.local} en el local</span>
+    </div>
+  )
+}
+
+function Prenda({ r, ubicacion, arranques, msReloj, tocar }: { r: Resultado; ubicacion: Ubicacion | null; arranques: number; msReloj: number; tocar: () => void }) {
   const { variante, precio, talles } = r
-  const sinStock = talles.length > 0 && !talles.some((t) => t.hay)
-  // Cada toque reinicia el reloj y, con la `key`, la barra que lo muestra.
-  const [toques, setToques] = useState(0)
+  // Un color con `hay: null` ⛔ sabe de stock: decide lo que sí se sabe.
+  const conocidas = [...talles, ...r.colores].filter((o) => o.hay !== null)
+  const sinStock = conocidas.length > 0 && conocidas.every((o) => o.hay === false)
+  const [foto, setFoto] = useState(0)
+  const [elegido, setElegido] = useState(r.colorActual)
+  const mismo = (a: string | null, b: string) => a?.trim().toLowerCase() === b.trim().toLowerCase()
+  const elegirColor = (c: ColorTotem) => {
+    setElegido(c.nombre)
+    const n = c.foto ? r.fotos.indexOf(c.foto) : -1
+    if (n >= 0) setFoto(n)
+    tocar()
+  }
   return (
     <div className="totem-prenda" style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'grid', position: 'relative' }}>
       <style>{`.totem-prenda { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); } @media (max-aspect-ratio: 1/1) { .totem-prenda { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; } }`}</style>
-      <Galeria
-        fotos={r.fotos}
-        tocar={() => {
-          tocar()
-          setToques((n) => n + 1)
-        }}
-      />
+      <Galeria fotos={r.fotos} i={foto} setI={setFoto} tocar={tocar} />
       <div style={{ padding: 'clamp(16px, 2.6vw, 40px)', display: 'grid', alignContent: 'center', gap: space[3], overflowY: 'auto', minHeight: 0 }}>
+        {ubicacion && <PanelUbicacion u={ubicacion} />}
         {variante.sku && <p style={{ margin: 0, color: color.mut, fontSize: font.lg, letterSpacing: '0.04em' }}>{variante.sku}</p>}
         <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 54px)', letterSpacing: '-0.03em', lineHeight: 1.05 }}>{variante.product_name}</h1>
         {r.colores.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: `${space[2]}px ${space[4]}px`, fontSize: font.lg, color: color.ink2 }}>
             {r.colores.map((c) => (
-              <span key={c.nombre} style={{ display: 'inline-flex', alignItems: 'center', gap: space[1.5], fontWeight: c.nombre === r.colorActual ? weight.bold : weight.medium }}>
+              <button
+                key={c.nombre}
+                type="button"
+                tabIndex={-1}
+                onClick={() => elegirColor(c)}
+                aria-pressed={mismo(elegido, c.nombre)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: space[1.5], minHeight: 56, padding: `0 ${space[3]}px`, borderRadius: radius.xl, background: color.surface, cursor: 'pointer', font: 'inherit', fontWeight: mismo(elegido, c.nombre) ? weight.bold : weight.medium, color: c.hay === false ? color.mut2 : color.ink2, textDecoration: c.hay === false ? 'line-through' : 'none', border: mismo(elegido, c.nombre) ? `2px solid ${MARCA_CAJA.acento}` : `1px ${c.hay === false ? 'dashed' : 'solid'} ${color.line2}` }}
+              >
                 {/* TN ⛔ trae el hex: el punto es la foto del color en un círculo (sin foto, vacío). */}
                 <i
                   aria-hidden
                   style={{
                     width: 22, height: 22, borderRadius: '50%', flex: 'none',
-                    border: c.nombre === r.colorActual ? `2px solid ${MARCA_CAJA.acento}` : '1px solid rgba(0, 0, 0, .12)',
+                    border: '1px solid rgba(0, 0, 0, .12)',
                     background: c.foto ? `center / cover no-repeat url("${c.foto.replace(/"/g, '%22')}")` : FONDO_FOTO,
                   }}
                 />
                 {nombreDeColor(c.nombre)}
-              </span>
+              </button>
             ))}
           </div>
         )}
@@ -379,7 +448,7 @@ function Prenda({ r, tocar }: { r: Resultado; tocar: () => void }) {
       {/* Lo que falta para volver a «Escaneá una prenda». */}
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 5, background: color.bg2 }}>
         <style>{`@keyframes totem-vaciar { from { width: 100%; } to { width: 0; } } @media (prefers-reduced-motion: reduce) { .totem-barra { animation: none !important; } }`}</style>
-        <i key={toques} className="totem-barra" style={{ display: 'block', height: '100%', background: MARCA_CAJA.acento, animation: `totem-vaciar ${TOTEM_MS.encontrada}ms linear forwards` }} />
+        <i key={arranques} className="totem-barra" style={{ display: 'block', height: '100%', background: MARCA_CAJA.acento, animation: `totem-vaciar ${msReloj}ms linear forwards` }} />
       </div>
     </div>
   )

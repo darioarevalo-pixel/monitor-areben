@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { REGLAS_INICIALES } from '@/lib/caja/core.core.js'
 import type { Reglas } from '@/lib/caja/cliente'
-import { coloresDelProducto, precioTotem, tallesDelLocal } from '@/lib/caja/totem'
+import { esTarjetaEncargada, opcionesDelLocal, coloresDelProducto, precioTotem, tallesDelLocal } from '@/lib/caja/totem'
 
 /**
  * El tótem (rediseño, fase 4). Oráculo a mano con las reglas iniciales: efectivo 15 % y redondeo a $100.
@@ -66,6 +66,32 @@ describe('tallesDelLocal', () => {
       { talle: 'M', hay: true },
       { talle: 'L', hay: false },
     ])
+  })
+})
+
+describe('opcionesDelLocal', () => {
+  const tn = [{ nombre: 'NEGRO', foto: 'n.jpg' }, { nombre: 'BORDO', foto: null }]
+  it('la variante de GN ES el color: el stock va en los colores y ⛔ hay talles', () => {
+    expect(opcionesDelLocal([{ size_name: 'NEGRO', local: 2 }, { size_name: 'Bordo', local: 0 }, { size_name: 'ROSA', local: 1 }], tn)).toEqual({
+      colores: [{ nombre: 'NEGRO', foto: 'n.jpg', hay: true }, { nombre: 'Bordo', foto: null, hay: false }, { nombre: 'ROSA', foto: null, hay: true }],
+      talles: [],
+    })
+  })
+  it('la variante es el talle: talles con stock, colores de TN sin afirmar stock', () => {
+    expect(opcionesDelLocal([{ size_name: 'M', local: 2 }, { size_name: '38', local: 0 }], tn)).toEqual({
+      colores: [{ nombre: 'NEGRO', foto: 'n.jpg', hay: null }, { nombre: 'BORDO', foto: null, hay: null }],
+      talles: [{ talle: 'M', hay: true }, { talle: '38', hay: false }],
+    })
+  })
+  it('sin lista de GN: los colores, sin afirmar stock', () => {
+    expect(opcionesDelLocal([], tn).colores.every((c) => c.hay === null)).toBe(true)
+  })
+})
+
+describe('esTarjetaEncargada', () => {
+  it('sin importar mayúsculas ni espacios, y nada más', () => {
+    expect(esTarjetaEncargada(' encargada ')).toBe(true)
+    expect(esTarjetaEncargada('ENCARGADA2')).toBe(false)
   })
 })
 

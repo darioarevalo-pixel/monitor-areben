@@ -388,7 +388,11 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   la traba de feria —una prenda de feria muestra su precio FINAL—. ⛔ «precio × 0,85» a mano. La prenda
   se resuelve con `buscarProducto`, como el POS (UNA lectura de GN por escaneo). Sólo lectura.
   Muestra los dos precios (efectivo y transferencia; uno solo si dan igual) y todas las fotos del producto,
-  con flechas y deslizar: cada toque le da otros 10 segundos a la ficha. **`/pos/totem?prueba=1`** muestra la entrada y agrega la búsqueda por nombre, para probar sin lector;
+  con flechas y deslizar: cada toque le da otros 10 segundos a la ficha. 🔴 En Zattia la variante de GN
+  suele SER el color (257 de 383 productos medidos el 4-nov, ninguno mezcla): ahí el stock va en la fila
+  de colores (tocables, cambian la foto) y ⛔ hay fila de talles (`opcionesDelLocal`). La **tarjeta de la
+  encargada** (código `ENCARGADA`, Code 128) suma estante y stock en vivo a la prenda en pantalla; sin
+  prenda, espera la próxima 30 segundos. **`/pos/totem?prueba=1`** muestra la entrada y agrega la búsqueda por nombre, para probar sin lector;
   sin ese parámetro la clienta sólo escanea.
 - 🔑 **La marca es CONFIGURACIÓN (rediseño fase 5 + V4)**: nombre, Local, Depósito, modo Local de GN,
   tokens de GN, los `store_name` del espejo, la Tienda Nube y la SIEMBRA de las formas de pago viven en

@@ -25,6 +25,7 @@ vi.mock('@/lib/tn-audit', () => ({
     ]),
 }))
 vi.mock('@/lib/caja/cliente', () => ({
+  elegirVariante: () => Promise.resolve({ variante: BLAZER, stock: { local: 3, deposito: 5, fuente: 'vivo', atras: ['A1', 'A2'] } }),
   leerConfig: () => Promise.resolve({ reglas: REGLAS_INICIALES, politica_cambio: null, ticket_logo: null }),
   buscarProducto: (codigo: string) =>
     codigo === BLAZER.barcode ? Promise.resolve({ variante: BLAZER, stock: { local: 3, deposito: 0, fuente: 'vivo' } }) : codigo === 'CAIDO' ? Promise.reject(Object.assign(new Error('Gestión Nube no contestó'), { status: 502 }))
@@ -108,6 +109,52 @@ describe('CajaTotem', () => {
     expect(foto()).toBe('tienda-2.jpg')
     await act(async () => siguiente.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     expect(foto()).toBe('negro.jpg')
+  })
+
+  it('tocar un color cambia la foto y lo marca', async () => {
+    await escanear('7790001')
+    const blanco = [...caja.querySelectorAll('button')].find((b) => b.textContent?.includes('Negro')) as HTMLButtonElement
+    expect(blanco.getAttribute('aria-pressed')).toBe('true')
+    const siguiente = caja.querySelector('button[aria-label="Foto siguiente"]') as HTMLButtonElement
+    await act(async () => siguiente.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(caja.querySelector('img')?.getAttribute('src')).toBe('atras.jpg')
+    await act(async () => blanco.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(caja.querySelector('img')?.getAttribute('src')).toBe('negro.jpg')
+    const chocolate = [...caja.querySelectorAll('button')].find((b) => b.textContent?.includes('Chocolate')) as HTMLButtonElement
+    await act(async () => chocolate.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(chocolate.getAttribute('aria-pressed')).toBe('true')
+    expect(blanco.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  async function pasar(codigo: string) {
+    const input = caja.querySelector('input[aria-label="Código de la prenda"]') as HTMLInputElement
+    const escribir = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    await act(async () => {
+      escribir.call(input, codigo)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    return caja.textContent ?? ''
+  }
+
+  it('la tarjeta con una prenda en pantalla muestra su ubicación; sin tarjeta, la clienta ⛔ la ve', async () => {
+    expect(await escanear('7790001')).not.toContain('Ubicación en depósito')
+    const t = await pasar('encargada')
+    expect(t).toContain('BLAZER NEREA')
+    expect(t).toContain('Ubicación en depósito')
+    expect(t).toContain('A1 · A2')
+    expect(t).toContain('5 en depósito')
+  })
+
+  it('la tarjeta sin prenda espera la próxima, y a la siguiente ya ⛔ vale', async () => {
+    expect(await escanear('ENCARGADA')).toContain('Escaneá la prenda para ver su ubicación')
+    expect(await pasar('7790001')).toContain('A1 · A2')
+    expect(await pasar('7790001')).not.toContain('A1 · A2')
   })
 
   it('modo prueba (`?prueba=1`): la entrada se ve y un nombre lleva a la lista y a la prenda', async () => {
