@@ -260,6 +260,8 @@ function Totem() {
         placeholder={prueba ? 'Modo prueba: código, SKU o nombre, y Enter' : undefined}
         autoComplete="off"
         spellCheck={false}
+        // 🔑 El lector escribe igual; tocar la pantalla ⛔ abre el teclado. En modo prueba hace falta para tipear.
+        inputMode={prueba ? undefined : 'none'}
         // Invisible pero enfocable: la clienta ⛔ tipea, escanea.
         style={prueba ? { margin: `${space[2]}px ${space[4]}px`, padding: `${space[2]}px ${space[3]}px`, fontSize: font.lg, border: `1.5px dashed ${color.line2}`, borderRadius: radius.xl, background: color.surface, color: color.ink } : { position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
       />
