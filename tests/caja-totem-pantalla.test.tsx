@@ -12,9 +12,10 @@ import { REGLAS_INICIALES } from '@/lib/caja/core.core.js'
 const BLAZER = { product_id: 5, size_id: 2, product_name: 'BLAZER NEREA', size_name: 'M', sku: 'RBT-0137', barcode: '7790001' }
 const stockDe: Record<string, number> = { S: 0, M: 3, L: 1 }
 let todoSinStock = false
+let cargadas: object[] = []
 
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', setMarca: () => {} }) }))
-vi.mock('@/components/fundas/useDatosMonitor', () => ({ useDatosMonitor: () => ({ datos: { allProductos: [{ id: 5 }] } }) }))
+vi.mock('@/components/fundas/useDatosMonitor', () => ({ useDatosMonitor: () => ({ datos: { allProductos: [{ id: 5 }], allVariantes: cargadas } }) }))
 vi.mock('@/components/productos/useTnImages', () => ({ useTnPromo: () => ({}) }))
 vi.mock('@/lib/etiquetas/core', () => ({ construirPrecios: () => ({ precios: { 5: 18900 }, fueraDeTn: new Set() }) }))
 vi.mock('@/lib/tn', () => ({ imagenDe: () => null, imagenesDe: () => ['tienda-2.jpg'], matchTn: () => null }))
@@ -44,6 +45,7 @@ let raiz: Root
 let caja: HTMLDivElement
 beforeEach(() => {
   todoSinStock = false
+  cargadas = []
   caja = document.createElement('div')
   document.body.appendChild(caja)
   raiz = createRoot(caja)
@@ -72,6 +74,13 @@ async function escanear(codigo: string) {
 }
 
 describe('CajaTotem', () => {
+  it('un código ya cargado muestra la prenda sin ir al servidor (`buscarProducto` contesta 404 a este)', async () => {
+    cargadas = [{ pid: '5', sid: '9', name: 'BLAZER NEREA', size: 'M', local: 2, sku: 'RBT-0999', barcode: '7790099' }]
+    const t = await escanear('7790099')
+    expect(t).toContain('BLAZER NEREA')
+    expect(t).toContain('16.100')
+  })
+
   it('espera con «Escaneá una prenda»', async () => {
     const { CajaTotem } = await import('@/components/caja/CajaTotem')
     await act(async () => raiz.render(<CajaTotem />))

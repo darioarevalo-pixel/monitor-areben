@@ -13,7 +13,9 @@
 import { cobro, idsDeFeria, pagosDeMedio, precioDeFeria, renglones } from '@/lib/caja/core.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
 import { talleVisible } from '@/lib/caja/ticket-mail.core.js'
-import type { Reglas } from '@/lib/caja/cliente'
+import { porTalle } from '@/lib/caja/buscar.core.js'
+import { normCode } from '@/lib/caja/gn.core.js'
+import type { Candidato, Reglas, Variante } from '@/lib/caja/cliente'
 
 /**
  * `conTransferencia`: el MISMO cobro por transferencia da el mismo total ⇒ el rótulo dice «En efectivo o
@@ -114,6 +116,42 @@ export function opcionesDelLocal(
   const clave = (c: string) => c.trim().toLowerCase()
   const fotoDe = new Map(colores.map((c) => [clave(c.nombre), c.foto]))
   return { colores: delLocal.map((t) => ({ nombre: t.talle, foto: fotoDe.get(clave(t.talle)) ?? null, hay: t.hay })), talles: [] }
+}
+
+/** Una variante como la trae el monitor al cargar (`allVariantes`). */
+type VarianteCargada = { pid: string; sid: string; name: string; size: string; local: number; sku: string; barcode: string }
+export type IndiceTotem = { porBarcode: Map<string, Candidato[]>; porSku: Map<string, Candidato[]>; porProducto: Map<number, Candidato[]> }
+
+/**
+ * 🔑 El escaneo sin ir al servidor: las variantes ya están en el tótem, con el mismo stock del local que
+ * contesta `action=buscar`. Las de cada producto, en el orden del servidor (`productosPorStock`).
+ */
+export function indiceDelTotem(variantes: VarianteCargada[]): IndiceTotem {
+  const sumar = <K>(m: Map<K, Candidato[]>, k: K, v: Candidato) => {
+    const lista = m.get(k)
+    if (lista) lista.push(v)
+    else m.set(k, [v])
+  }
+  const indice: IndiceTotem = { porBarcode: new Map(), porSku: new Map(), porProducto: new Map() }
+  for (const x of variantes) {
+    const v: Candidato = { product_id: Number(x.pid), size_id: Number(x.sid), product_name: x.name, size_name: x.size, sku: x.sku || null, barcode: x.barcode || null, local: x.local }
+    if (x.barcode) sumar(indice.porBarcode, x.barcode, v)
+    if (x.sku) sumar(indice.porSku, x.sku.trim().toLowerCase(), v)
+    sumar(indice.porProducto, v.product_id, v)
+  }
+  for (const lista of indice.porProducto.values()) lista.sort((a, b) => Number((b.local ?? 0) > 0) - Number((a.local ?? 0) > 0) || porTalle(a, b))
+  return indice
+}
+
+/**
+ * La variante del código, en el orden de `variantesDelCodigo` (`api/_caja.js`): barcode y después SKU, tal cual
+ * y normalizado. `null` si ⛔ está o lo comparten varias: ahí decide el servidor.
+ */
+export function varianteDelCodigo(indice: IndiceTotem, codigo: string): Variante | null {
+  const crudo = codigo.trim()
+  const nc = normCode(crudo)
+  const lista = indice.porBarcode.get(crudo) ?? indice.porBarcode.get(nc) ?? indice.porSku.get(crudo.toLowerCase()) ?? indice.porSku.get(nc)
+  return lista?.length === 1 ? lista[0] : null
 }
 
 /** El código de la tarjeta de la encargada: sólo letras, porque un lector con teclado en castellano cambia el guion. */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { REGLAS_INICIALES } from '@/lib/caja/core.core.js'
 import type { Reglas } from '@/lib/caja/cliente'
-import { esTarjetaEncargada, opcionesDelLocal, coloresDelProducto, precioTotem, tallesDelLocal } from '@/lib/caja/totem'
+import { esTarjetaEncargada, indiceDelTotem, opcionesDelLocal, coloresDelProducto, precioTotem, tallesDelLocal, varianteDelCodigo } from '@/lib/caja/totem'
 
 /**
  * El tótem (rediseño, fase 4). Oráculo a mano con las reglas iniciales: efectivo 15 % y redondeo a $100.
@@ -119,5 +119,25 @@ describe('coloresDelProducto', () => {
     })
     expect(coloresDelProducto(audit, null).colores).toEqual([])
     expect(coloresDelProducto(audit, 'NO-ESTA').colores).toEqual([])
+  })
+})
+
+describe('varianteDelCodigo', () => {
+  const v = (sid: string, size: string, local: number, sku: string, barcode: string) => ({ pid: '5', sid, name: 'BLAZER', size, local, sku, barcode })
+  const indice = indiceDelTotem([v('1', 'S', 0, 'RBT-01-S', '0779001'), v('2', 'M', 3, 'RBT01M', '779002'), v('3', 'L', 1, 'RBT-01-L', 'REPETIDO'), { ...v('4', 'U', 1, 'OTRO', 'REPETIDO'), pid: '6' }])
+
+  it('encuentra por barcode y por SKU, tal cual o normalizado, como el servidor', () => {
+    expect(varianteDelCodigo(indice, '0779001')?.size_id).toBe(1)
+    expect(varianteDelCodigo(indice, ' 779002 ')?.size_id).toBe(2)
+    expect(varianteDelCodigo(indice, '0779002')?.size_id).toBe(2)
+    expect(varianteDelCodigo(indice, 'rbt-01-s')?.size_id).toBe(1)
+    expect(varianteDelCodigo(indice, 'RBT-01-M')?.size_id).toBe(2)
+  })
+  it('un código que ⛔ está o que comparten varias prendas lo decide el servidor', () => {
+    expect(varianteDelCodigo(indice, 'NO-ESTA')).toBeNull()
+    expect(varianteDelCodigo(indice, 'REPETIDO')).toBeNull()
+  })
+  it('los talles del producto, primero los que hay en el local, como `productosPorStock`', () => {
+    expect(indice.porProducto.get(5)?.map((x) => x.size_name)).toEqual(['L', 'M', 'S'])
   })
 })

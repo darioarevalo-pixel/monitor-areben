@@ -5,9 +5,9 @@
  * con el lector y ve la foto, los talles que hay en el local, el precio de lista y el de efectivo. Diez
  * segundos después vuelve a «Escaneá una prenda». Es SÓLO lectura: ⛔ cobra ni escribe.
  *
- * - La prenda se resuelve igual que en el POS (`buscarProducto`: código de barras o SKU).
- * - Los talles salen de la lista por producto (`buscarNombre`): el stock del local de ANOCHE, que alcanza
- *   para «hay / no hay» y ⛔ gasta el cupo de Gestión Nube.
+ * - 🔑 La prenda y sus talles salen de lo que el tótem ya cargó (`indiceDelTotem`): aparecen al escanear, sin ir
+ *   al servidor ni gastar el cupo de Gestión Nube. Stock del local de ANOCHE, que alcanza para «hay / no hay».
+ * - Si el código ⛔ está cargado o lo comparten varias prendas, como el POS (`buscarProducto`) y `buscarNombre`.
  * - El precio de lista, de los datos de Zattia como en el POS; el de efectivo, del núcleo (`lib/caja/totem.ts`).
  *
  * - 🔑 La tarjeta de la encargada (`TARJETA_ENCARGADA`): con una prenda en pantalla, suma dónde está en el
@@ -20,7 +20,7 @@
  * paso 0 de V2). Esta ruta sirve para cualquiera de los dos casos; la cámara, fuera.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
@@ -29,7 +29,8 @@ import { precioDeCaja } from '@/lib/caja/precio'
 import { hoyIso } from '@/lib/agenda'
 import { buscarNombre, buscarProducto, elegirVariante, leerConfig, type Config, type ProductoLista, type Variante } from '@/lib/caja/cliente'
 import { plata } from '@/lib/caja/ticket'
-import { coloresDelProducto, esTarjetaEncargada, fotosDeLaPrenda, opcionesDelLocal, precioTotem, TOTEM_MS, type ColorTotem, type PrecioTotem } from '@/lib/caja/totem'
+import { coloresDelProducto, esTarjetaEncargada, fotosDeLaPrenda, indiceDelTotem, opcionesDelLocal, precioTotem, TOTEM_MS, varianteDelCodigo, type ColorTotem, type PrecioTotem } from '@/lib/caja/totem'
+import { TTL_MS } from '@/lib/cache'
 import { nombreDeColor } from '@/lib/caja/pantalla-cliente'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
@@ -73,6 +74,7 @@ function Totem() {
   const { datos } = useDatosMonitor()
   const tnIdx = useTnPromo(storeCaja())
   const tnIdxStunned = useTnPromo(storeCaja() === 'zattia' ? 'stunned' : storeCaja())
+  const indice = useMemo(() => (datos ? indiceDelTotem(datos.allVariantes) : null), [datos])
   const [config, setConfig] = useState<Config | null>(null)
   useEffect(() => {
     leerConfig()
@@ -126,6 +128,17 @@ function Totem() {
   }, [])
   useEffect(() => () => void (reloj.current && clearTimeout(reloj.current)), [])
 
+  // 🔑 El tótem queda prendido días: sin recargar, seguiría con los precios y el stock del día que se abrió.
+  // Pasado el vencimiento del caché (más un margen, para que la recarga lo encuentre vencido), y sólo en espera.
+  const [abierto] = useState(() => Date.now())
+  useEffect(() => {
+    if (estado.que !== 'espera') return
+    const t = setInterval(() => {
+      if (navigator.onLine && Date.now() - abierto > TTL_MS + 10 * 60_000) window.location.reload()
+    }, 60_000)
+    return () => clearInterval(t)
+  }, [estado.que, abierto])
+
   const precioYFoto = useCallback(
     (productId: number) => {
       const p = datos?.allProductos.find((x) => String(x.id) === String(productId))
@@ -141,13 +154,16 @@ function Totem() {
 
   /** Arma la prenda con sus talles y su precio. `n`: la vuelta que la pidió; si ya hubo otra, ⛔ se muestra. */
   async function mostrar(variante: Variante, n: number) {
-    // Los talles del producto: la lista por nombre trae cada variante con el stock del local de anoche.
-    const lista = await buscarNombre(variante.product_name).catch(() => null)
-    const prod = lista && [...lista.conStock, ...lista.sinStock].find((p) => p.product_id === variante.product_id)
+    // Los talles del producto, con el stock del local de anoche: los cargados, sin ir al servidor; si ⛔ están, la lista por nombre.
+    let variantes = indice?.porProducto.get(variante.product_id)
+    if (!variantes) {
+      const lista = await buscarNombre(variante.product_name).catch(() => null)
+      variantes = (lista && [...lista.conStock, ...lista.sinStock].find((p) => p.product_id === variante.product_id))?.variantes
+    }
     if (vuelta.current !== n) return
     const { precio, foto, fotos, categorias } = precioYFoto(variante.product_id)
     const cols = coloresDelProducto(audit, variante.sku)
-    const opciones = opcionesDelLocal(prod?.variantes ?? [], cols.colores)
+    const opciones = opcionesDelLocal(variantes ?? [], cols.colores)
     const fotoDelColor = opciones.colores.map((c) => c.foto)
     setEstado({
       que: 'ok',
@@ -201,9 +217,10 @@ function Totem() {
     const conUbicacion = encargada.current
     encargada.current = false
     setUbicacion(null)
-    setEstado({ que: 'buscando' })
+    const cargada = indice && varianteDelCodigo(indice, q)
+    if (!cargada) setEstado({ que: 'buscando' })
     try {
-      const r = await buscarProducto(q)
+      const r = cargada ? { variante: cargada } : await buscarProducto(q)
       if (prueba && 'candidatos' in r && r.candidatos.length > 1 && (await mostrarLista(q, n))) return
       if (vuelta.current !== n) return
       const variante = 'variante' in r ? r.variante : r.candidatos[0]

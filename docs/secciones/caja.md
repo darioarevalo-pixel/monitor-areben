@@ -386,7 +386,9 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   del local (el stock de ANOCHE, por `buscarNombre`), precio de lista y **precio en efectivo**, que sale
   de `cobro()` con `pagosDeMedio('efectivo')` (`lib/caja/totem.ts`): el % de la cuenta, el redondeo y
   la traba de feria —una prenda de feria muestra su precio FINAL—. ⛔ «precio × 0,85» a mano. La prenda
-  se resuelve con `buscarProducto`, como el POS (UNA lectura de GN por escaneo). Sólo lectura.
+  y sus talles salen de lo ya cargado (`indiceDelTotem`), sin ir al servidor; si el código ⛔ está o lo comparten
+  varias, `buscarProducto` como el POS (UNA lectura de GN). Sólo lectura. 🔴 Queda prendido días ⇒ en espera se
+  recarga solo al vencer el caché (6 h + 10 min), o los precios quedaban los del día que se abrió.
   Muestra los dos precios (efectivo y transferencia; uno solo si dan igual) y todas las fotos del producto,
   con flechas y deslizar: cada toque le da otros 10 segundos a la ficha. 🔴 En Zattia la variante de GN
   suele SER el color (257 de 383 productos medidos el 4-nov, ninguno mezcla): ahí el stock va en la fila
