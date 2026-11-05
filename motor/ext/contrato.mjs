@@ -16,14 +16,17 @@ export const NEGOCIOS = Object.freeze({
 export const PERMISOS = Object.freeze({
   'wholesale_orders:read': { explica: 'Leer los pedidos mayoristas mandados a preparar.', datos: 'Cliente y quién pidió, entrega, notas, renglones con ubicación, total, saldo y zona de despacho.' },
   'wholesale_orders:write': { explica: 'Marcar que el depósito empezó a preparar un pedido mayorista.', datos: 'El pedido como queda.' },
+  'wholesale_orders:sensitive': { explica: 'Ver el contacto del cliente y el precio por renglón de los pedidos mayoristas. Sin este permiso esos campos vienen en `null`.', datos: 'Id del cliente, teléfono, mail y precio por renglón.' },
+  'internal_orders:read': { explica: 'Leer las incidencias que pasan por el depósito: canjes y reemplazos.', datos: 'Motivo, descripción, depósito y renglones con ubicación.' },
   'locations:read': { explica: 'Leer la ubicación física de cada variante por depósito.', datos: 'Código de barras, SKU, depósito y ubicación.' },
   'variants:read': { explica: 'Leer el catálogo de variantes, para escanear.', datos: 'Producto, talle o modelo, SKU, código de barras y si está activa.' },
 })
 
 /** Lo que un token ⛔ puede hacer nunca (B.4). Cada línea tiene su control y su prueba en `test/ext-pg.mjs` y `test/ext.test.mjs`. */
 export const NUNCA = Object.freeze([
-  'Ver costos, márgenes, precios por renglón ni listas de precios.',
-  'Ver el teléfono, el mail o el documento del cliente.',
+  'Ver costos, márgenes ni listas de precios.',
+  'Ver el documento o el domicilio del cliente.',
+  'Ver el teléfono o el mail del cliente, o el precio por renglón, sin `wholesale_orders:sensitive`.',
   'Leer datos de otro negocio.',
   'Actuar a nombre de otra persona: no hay cabecera para declararlo.',
   'Cambiar renglones, cobrar o anular un pedido.',
@@ -53,7 +56,8 @@ export function metodoDeEntrega(texto) {
 }
 
 /** Un pedido de `pedidosDeLogistica` (`lib/pedido/venta.mjs`), en el contrato. */
-export function pedidoExterno(p) {
+export function pedidoExterno(p, { sensibles = false } = {}) {
+  const cli = sensibles ? p.cliente_datos ?? null : null
   return {
     id: p.numero,
     number: p.numero,
@@ -61,6 +65,7 @@ export function pedidoExterno(p) {
     is_test: p.prueba === true,
     warehouse: DEPOSITO_A_WAREHOUSE[p.deposito] ?? 'other',
     customer_name: p.cliente,
+    customer: cli && { id: cli.id ?? null, gn_id: cli.gn_id == null ? null : Number(cli.gn_id), phone: cli.telefono ?? null, email: cli.email ?? null },
     contact_name: p.persona,
     delivery_method: metodoDeEntrega(p.entrega),
     notes: p.notas,
@@ -77,6 +82,28 @@ export function pedidoExterno(p) {
     updated_at: instante(p.actualizado_en),
     lines: p.renglones.map((l) => ({
       product_id: l.product_id, size_id: l.size_id, sku: l.sku, barcode: l.barcode, name: l.nombre, size: l.talle, quantity: l.cantidad, location: l.ubicacion,
+      unit_price: sensibles && l.precio != null ? monto(l.precio) : null,
+    })),
+  }
+}
+
+/** El cliente general de toda incidencia (Bruno, 5-nov): ⛔ un nombre por caso; el detalle va en la descripción. */
+export const CLIENTE_INCIDENCIA = 'Incidencia'
+const RAZON_DE_MOTIVO = Object.freeze({ canje: 'canje', fallado: 'replacement' })
+
+/** Un ajuste que pasa por el depósito, con sus renglones, en el contrato. */
+export function incidenciaExterna(a) {
+  return {
+    id: `A-${a.numero}`,
+    is_test: a.prueba === true,
+    reason: RAZON_DE_MOTIVO[a.motivo],
+    customer_name: CLIENTE_INCIDENCIA,
+    description: a.detalle ?? null,
+    warehouse: DEPOSITO_A_WAREHOUSE[a.deposito] ?? 'other',
+    created_at: instante(a.creado_en),
+    updated_at: instante(a.actualizado_en),
+    lines: a.renglones.map((l) => ({
+      product_id: Number(l.product_id), size_id: Number(l.size_id), sku: l.sku ?? null, barcode: l.barcode ?? null, name: l.nombre ?? null, size: l.talle ?? null, quantity: Math.abs(Number(l.diferencia)), location: l.ubicacion ?? null,
     })),
   }
 }
@@ -143,6 +170,13 @@ export const ESQUEMAS = Object.freeze({
     size: n('string', 'Talle o modelo.'),
     quantity: s('integer', 'Cantidad pedida.'),
     location: n('string', 'Ubicación actual en el depósito del pedido, «estantería-piso». No mueve `updated_at`.'),
+    unit_price: { ...montoS('Precio por unidad. Viene en `null` sin `wholesale_orders:sensitive`.'), nullable: true },
+  }),
+  ExtWholesaleOrderCustomer: cerrado('El cliente. Solo con `wholesale_orders:sensitive`.', {
+    id: n('string', 'Id del cliente en el ERP.'),
+    gn_id: n('integer', 'Id del cliente en Gestión Nube, si viene de ahí. Los clientes nuevos no lo tienen.'),
+    phone: n('string', 'WhatsApp de quien pidió o, si no está, el del cliente.'),
+    email: n('string', 'Mail del cliente.'),
   }),
   ExtWholesaleOrder: cerrado('Un pedido mayorista mandado a preparar. Los que todavía no se mandaron no se publican.', {
     id: s('integer', 'Numérico y estable.'),
@@ -151,6 +185,7 @@ export const ESQUEMAS = Object.freeze({
     is_test: s('boolean', '`true`: pedido de prueba. No mueve stock y no hay que prepararlo físicamente.'),
     warehouse: s('string', 'Depósito del que sale.'),
     customer_name: n('string', 'El cliente.'),
+    customer: { allOf: [{ $ref: '#/components/schemas/ExtWholesaleOrderCustomer' }], nullable: true, description: 'Viene en `null` sin `wholesale_orders:sensitive`.' },
     contact_name: n('string', 'Quién lo pidió.'),
     delivery_method: n('string', '`pickup`, `shipping` u `other` (texto libre del panel).'),
     notes: n('string', 'Notas del pedido.'),
@@ -188,6 +223,28 @@ export const ESQUEMAS = Object.freeze({
     updated_at: s('string', 'Último cambio de la variante o de su producto.', { format: 'date-time' }),
   }),
   ExtVariantsPage: pagina('Una página de variantes.', 'ExtVariant'),
+  ExtInternalOrderLine: cerrado('Un renglón para escanear.', {
+    product_id: s('integer', 'Producto.'),
+    size_id: s('integer', 'Talle o modelo.'),
+    sku: n('string', 'SKU.'),
+    barcode: n('string', 'Código de barras.'),
+    name: n('string', 'Nombre del producto.'),
+    size: n('string', 'Talle o modelo.'),
+    quantity: s('integer', 'Cantidad.'),
+    location: n('string', 'Ubicación actual en el depósito, tal cual. No mueve `updated_at`.'),
+  }),
+  ExtInternalOrder: cerrado('Una incidencia que pasa por el depósito. El stock ya salió al crearse, y no se anula: un error se corrige con otro ajuste.', {
+    id: s('string', 'Estable, con la forma `A-90`. No se puede repetir con el `id` numérico de un mayorista.'),
+    is_test: s('boolean', '`true`: es de antes del corte del negocio, cuando la venta todavía sale de Gestión Nube. Sirve para probar: no hay que prepararla.'),
+    reason: s('string', '`canje` o `replacement` (el reemplazo de un reclamo).', { enum: Object.values(RAZON_DE_MOTIVO) }),
+    customer_name: s('string', 'Siempre «Incidencia»: el detalle va en `description`.'),
+    description: n('string', 'Todo el detalle: de quién es y a qué venta refiere, cuando se conoce.'),
+    warehouse: s('string', 'Depósito del que sale.'),
+    created_at: s('string', 'Cuándo se creó.', { format: 'date-time' }),
+    updated_at: s('string', 'Cuándo se aplicó.', { format: 'date-time' }),
+    lines: { type: 'array', description: 'Los renglones.', items: { $ref: '#/components/schemas/ExtInternalOrderLine' } },
+  }),
+  ExtInternalOrdersPage: pagina('Una página de incidencias.', 'ExtInternalOrder'),
   ExtStartPickingRequest: cerrado('La versión del pedido que vio el depósito.', {
     expected: cerrado('Lo que se vio.', { updated_at: s('string', 'El `updated_at` leído.', { format: 'date-time' }) }),
   }),
