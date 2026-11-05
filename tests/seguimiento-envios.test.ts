@@ -5,6 +5,7 @@ import {
   esDelCorreo,
   instanteCorreo,
   leerHistoriaCorreo,
+  leerPiezaCorreo,
   situacionDe,
   tramosDeFechas,
 } from '@/lib/seguimiento-envios/core.core.js'
@@ -38,6 +39,14 @@ describe('leerHistoriaCorreo', () => {
     expect(leerHistoriaCorreo('<p>Sin resultados</p>')).toEqual([])
     expect(leerHistoriaCorreo(html(['2026/11/03', 'A', 'B', '']))).toEqual([])
     expect(instanteCorreo('cualquier cosa')).toBeNull()
+  })
+})
+
+describe('leerPiezaCorreo', () => {
+  it('saca el HC o el HE del título, y `null` si no está', () => {
+    expect(leerPiezaCorreo('<p>Resultados de la consulta para la pieza: <span class="badge">HC-560088547-AR </span></p>')).toBe('HC-560088547-AR')
+    expect(leerPiezaCorreo('pieza: <span class="badge">HE-035921676-AR</span>')).toBe('HE-035921676-AR')
+    expect(leerPiezaCorreo('<p>Sin resultados</p>')).toBeNull()
   })
 })
 
@@ -128,7 +137,7 @@ describe('armarSolapas', () => {
   it('reparte, ordena el más viejo primero y ⛔ pierde lo que no se pudo leer', () => {
     const r = armarSolapas(
       [
-        { tienda: 'bdi', orden: orden(1), filas: hist(['04-11-2026 10:00', 'A', 'I', 'EN ESPERA EN SUCURSAL']) },
+        { tienda: 'bdi', orden: orden(1), pieza: 'HC-1-AR', filas: hist(['04-11-2026 10:00', 'A', 'I', 'EN ESPERA EN SUCURSAL']) },
         { tienda: 'bdi', orden: orden(2), filas: hist(['25-10-2026 10:00', 'B', 'I', 'EN ESPERA EN SUCURSAL']) },
         { tienda: 'bdi', orden: orden(3), filas: hist(['01-10-2026 10:00', 'C', 'EN PROCESO DE CLASIFICACIÓN', '']) },
         { tienda: 'bdi', orden: orden(4), filas: null },
@@ -139,6 +148,7 @@ describe('armarSolapas', () => {
       AHORA,
     )
     expect(r.retiro.map((f: { numero: number }) => f.numero)).toEqual([2, 1])
+    expect(r.retiro.map((f: { pieza: string | null }) => f.pieza)).toEqual([null, 'HC-1-AR'])
     expect(r.trabados.map((f: { numero: number }) => f.numero)).toEqual([3])
     expect(r.resumen.sinLeer.map((x: { numero: number }) => x.numero)).toEqual([4])
     expect(r.volvieron.map((f: { numero: number; planta: string }) => [f.numero, f.planta])).toEqual([[7, 'CDD']])

@@ -11,7 +11,7 @@
 // 🔴 Una lectura incompleta de TN contesta error: ⛔ una lista a medias, que parecería que no hay nada más.
 import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
-import { armarSolapas, esDelCorreo, leerHistoriaCorreo, tramosDeFechas } from '../lib/seguimiento-envios/core.core.js';
+import { armarSolapas, esDelCorreo, leerHistoriaCorreo, leerPiezaCorreo, tramosDeFechas } from '../lib/seguimiento-envios/core.core.js';
 
 const AUDIT = process.env.CATALOGO_AUDIT_URL || 'https://bdi-catalogo.vercel.app/api/tiendanube-audit';
 const CORREO = 'https://www.correoargentino.com.ar/sites/all/modules/custom/ca_forms/api/wsFacade.php';
@@ -63,7 +63,7 @@ async function ordenesDelTramo(tienda, sobre, desde, hasta, intento = 0) {
   return [...a, ...b];
 }
 
-/** La historia de un paquete. `null` si el Correo no contestó o vino sin filas: es el aviso de que cambió la página. */
+/** La historia y el HC de un paquete. `filas: null` si el Correo no contestó o vino sin filas: es el aviso de que cambió la página. */
 async function historiaDelCorreo(codigo) {
   try {
     const r = await fetch(CORREO, {
@@ -72,11 +72,12 @@ async function historiaDelCorreo(codigo) {
       body: `action=ecommerce&id=${encodeURIComponent(codigo)}`,
       signal: AbortSignal.timeout(8000),
     });
-    if (!r.ok) return null;
-    const filas = leerHistoriaCorreo(await r.text());
-    return filas.length ? filas : null;
+    if (!r.ok) return { filas: null, pieza: null };
+    const html = await r.text();
+    const filas = leerHistoriaCorreo(html);
+    return { filas: filas.length ? filas : null, pieza: leerPiezaCorreo(html) };
   } catch {
-    return null;
+    return { filas: null, pieza: null };
   }
 }
 
@@ -93,7 +94,7 @@ async function leerSeguimiento(store, sobre) {
 
   const paraConsultar = unicas.filter((x) => esDelCorreo(x.orden));
   const sinCodigo = unicas.filter((x) => x.orden.envio_estado === 'shipped' && x.orden.estado_orden !== 'cancelled' && !x.orden.envio_tracking).length;
-  const leidos = await enTandas(paraConsultar, A_LA_VEZ_CORREO, async (x) => ({ ...x, filas: await historiaDelCorreo(x.orden.envio_tracking) }));
+  const leidos = await enTandas(paraConsultar, A_LA_VEZ_CORREO, async (x) => ({ ...x, ...(await historiaDelCorreo(x.orden.envio_tracking)) }));
 
   const solapas = armarSolapas(leidos, ahora.getTime());
   return {

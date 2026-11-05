@@ -12,7 +12,10 @@ export type FilaSeguimiento = {
   numero: number | string
   cliente: string | null
   envio: string
+  /** El número de seguimiento de Tienda Nube. */
   codigo: string
+  /** El HC del Correo. */
+  pieza: string | null
   pedido: string | null
   planta: string
   ultimo: string

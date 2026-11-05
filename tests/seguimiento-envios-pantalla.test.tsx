@@ -22,7 +22,7 @@ vi.mock('@/lib/seguimiento-envios/cliente', async (original) => ({
 const { SeguimientoEnvios } = await import('@/components/seguimiento-envios/SeguimientoEnvios')
 
 const fila = (extra: Partial<FilaSeguimiento>): FilaSeguimiento => ({
-  tienda: 'zattia', id: 1, numero: 100, cliente: 'Clienta', envio: 'Punto de retiro', codigo: 'C1',
+  tienda: 'zattia', id: 1, numero: 100, cliente: 'Clienta', envio: 'Punto de retiro', codigo: 'C1', pieza: 'HC-560088547-AR',
   pedido: '2026-10-01', planta: 'FUNES', ultimo: 'EN ESPERA EN SUCURSAL', dias: 3, volvio: false, motivo: null,
   ...extra,
 })
@@ -62,6 +62,8 @@ describe('SeguimientoEnvios', () => {
     expect(host.textContent).toContain('Volvió: lo buscamos nosotros')
     expect(host.textContent!.match(/Volvió: lo buscamos nosotros/g)).toHaveLength(1)
     expect(host.textContent).toContain('Sin aviso')
+    expect(host.textContent).toContain('HC-560088547-AR')
+    expect(host.textContent).toContain('C1')
     expect(host.textContent).toContain('todavía no le avisa a nadie')
     expect(host.querySelector('a[href*="stunned3.mitiendanube.com/admin/orders/2"]')).not.toBeNull()
   })

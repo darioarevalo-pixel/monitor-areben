@@ -152,7 +152,8 @@ export function SeguimientoEnvios() {
               {solapa === 'trabados' && <Th>Último estado</Th>}
               <Th align="right">{COLUMNA_DIAS[solapa]}</Th>
               {solapa === 'retiro' && <Th>Aviso</Th>}
-              <Th>Código</Th>
+              <Th>HC</Th>
+              <Th>Seguimiento</Th>
             </Tr>
           </THead>
           <TBody>
@@ -180,8 +181,9 @@ export function SeguimientoEnvios() {
                   <Dias n={f.dias} />
                 </Td>
                 {solapa === 'retiro' && <Td>Sin aviso</Td>}
-                <Td>
-                  <CopyButton getText={() => f.codigo} label="Copiar" />
+                <Td mono>{f.pieza || '—'}</Td>
+                <Td mono>
+                  {f.codigo} <CopyButton getText={() => f.codigo} label="Copiar" />
                 </Td>
               </Tr>
             ))}
