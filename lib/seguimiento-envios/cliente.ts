@@ -38,6 +38,7 @@ export type Seguimiento = {
   sinCodigo: number
   correoCaido: boolean
   desde: string
+  leidoEn: string
 }
 
 export async function leerSeguimiento(store: Marca): Promise<Seguimiento> {

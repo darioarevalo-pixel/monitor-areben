@@ -8,7 +8,7 @@ nadie.** Lo que falta y su orden, en el `PENDIENTES.md`.
 
 `components/seguimiento-envios/` · `lib/seguimiento-envios/core.core.js` (todas las decisiones) ·
 `api/_seguimiento-envios.js`, por `?recurso=seguimiento-envios`. ⛔ Sin tabla: se lee en vivo.
-Tests: `tests/seguimiento-envios.test.ts`.
+Tests: `tests/seguimiento-envios*.test.*`.
 
 ## Lo que el código no dice
 
@@ -26,6 +26,10 @@ Tests: `tests/seguimiento-envios.test.ts`.
 - 📏 **Trabados = 7 días (`DIAS_TRABADO`)**: el 5-nov había 6 paquetes con 22 días o más y el resto con
   2 o menos, sin nada en el medio.
 - ⚠️ Stunned entra por `zattia`: tiene tienda propia, pero en el monitor es línea de Zattia.
+- 🔴 **El cupo de TN es compartido.** La primera versión hacía unos 66 pedidos en BDI por apertura y dio
+  429 en la pantalla de Bruno (5-nov): cada consulta a `tiendanube-audit` son 3 pedidos, y un tramo de más
+  de 200 órdenes se tira y se repite. Por eso `LARGO_TRAMO` va por tienda y se recuerda 5 minutos. El
+  arreglo de fondo es una lectura periódica guardada en una tabla, cuando la alerta la necesite.
 - ⚠️ `api/datos.js` corta a los 30 s. Se consultan 90 días de todas las tiendas de la marca.
 - ⚠️ La consulta al Correo es la de su página pública, ⛔ una API oficial. `correoCaido` y `sinLeer` son
   el aviso de que dejó de contestar. Andreani ⛔ entra todavía.

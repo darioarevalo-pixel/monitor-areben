@@ -1,10 +1,13 @@
 // Seguimiento de envíos: los paquetes despachados y lo que dice el Correo de cada uno. Sólo lee.
 //
-//   GET ?recurso=seguimiento-envios&store=bdi|zattia → { ok, retiro, trabados, volvieron, resumen, desde, sinCodigo, correoCaido }
+//   GET ?recurso=seguimiento-envios&store=bdi|zattia → { ok, retiro, trabados, volvieron, resumen, desde, leidoEn, sinCodigo, correoCaido }
 //
 // ⛔ Archivo `_`: entra por `api/datos.js`. Las decisiones viven en `lib/seguimiento-envios/core.core.js`.
-// 🔑 Se lee en vivo, ⛔ hay tabla: nada de esto se guarda hasta que haya avisos que registrar.
+// 🔑 Se lee en vivo y se recuerda unos minutos, ⛔ hay tabla hasta que haya avisos que registrar.
 // 🔴 `api/datos.js` corta a los 30 s: de ahí los tramos en paralelo.
+// 🔴 Cada tramo son 3 pedidos a TN, con un cupo compartido con Envíos, Cobros y el resto. Un tramo que pasa
+// de 200 órdenes se tira y se repite: con 15 días en BDI eran unos 66 pedidos y dio 429 (5-nov). Por eso cada
+// tienda tiene su largo, y el resultado se recuerda unos minutos.
 // 🔴 Una lectura incompleta de TN contesta error: ⛔ una lista a medias, que parecería que no hay nada más.
 import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
@@ -15,8 +18,12 @@ const CORREO = 'https://www.correoargentino.com.ar/sites/all/modules/custom/ca_f
 // 🔑 Stunned tiene Tienda Nube propia pero en el monitor es una línea de Zattia.
 const TIENDAS = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] };
 const DIAS = 90;
-const LARGO_TRAMO = 15;
-const A_LA_VEZ_TN = 4;
+// Órdenes en 90 días, medido 5-nov: BDI 1.454 · Zattia 780 · Stunned 41. Quedan por debajo del corte de 200.
+const LARGO_TRAMO = { bdi: 10, zattia: 15, stunned: DIAS };
+const A_LA_VEZ_TN = 3;
+const MEMORIA_MS = 5 * 60_000;
+const ESPERA_429_MS = 2_000;
+const REINTENTOS_429 = 2;
 const A_LA_VEZ_CORREO = 6;
 
 const diaAR = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(d);
@@ -31,12 +38,23 @@ async function enTandas(items, n, fn) {
   return res;
 }
 
+const dormir = (ms) => new Promise((ok) => setTimeout(ok, ms));
+
 /** Órdenes de un tramo. Si TN corta en el límite de 200, se parte en dos: ⛔ se pierde ninguna. */
-async function ordenesDelTramo(tienda, sobre, desde, hasta) {
+async function ordenesDelTramo(tienda, sobre, desde, hasta, intento = 0) {
   const qs = `ordenes=1&store=${tienda}&from=${diaAR(desde)}&to=${diaAR(hasta)}&limite=200&modo=lista`;
   const r = await fetch(`${AUDIT}?${qs}`, { headers: { 'x-monitor-auth': sobre } });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok || !d.ok) throw new Error(d.error || `No se pudieron leer las órdenes de ${tienda} (${r.status}).`);
+  if (!r.ok || !d.ok) {
+    if (/\b429\b/.test(String(d.error)) || r.status === 429) {
+      if (intento < REINTENTOS_429) {
+        await dormir(ESPERA_429_MS * (intento + 1));
+        return ordenesDelTramo(tienda, sobre, desde, hasta, intento + 1);
+      }
+      throw new Error('Tienda Nube está recibiendo demasiados pedidos. Probá de nuevo en unos minutos.');
+    }
+    throw new Error(d.error || `No se pudieron leer las órdenes de ${tienda} (${r.status}).`);
+  }
   if (!d.truncado) return d.ordenes || [];
   if (diaAR(desde) === diaAR(hasta)) throw new Error(`Tienda Nube cortó las órdenes de ${tienda} del ${diaAR(desde)}.`);
   const medio = new Date((desde.getTime() + hasta.getTime()) / 2);
@@ -62,6 +80,46 @@ async function historiaDelCorreo(codigo) {
   }
 }
 
+async function leerSeguimiento(store, sobre) {
+  const ahora = new Date();
+  const trabajos = TIENDAS[store].flatMap((tienda) => (
+    tramosDeFechas(ahora, DIAS, LARGO_TRAMO[tienda]).map((t) => ({ tienda, ...t }))
+  ));
+  const partes = await enTandas(trabajos, A_LA_VEZ_TN, async (t) => (
+    (await ordenesDelTramo(t.tienda, sobre, t.desde, t.hasta)).map((orden) => ({ tienda: t.tienda, orden }))
+  ));
+  // Los tramos no se pisan, pero el corte por día de TN puede repetir una orden en el borde.
+  const unicas = [...new Map(partes.flat().map((x) => [`${x.tienda}/${x.orden.id}`, x])).values()];
+
+  const paraConsultar = unicas.filter((x) => esDelCorreo(x.orden));
+  const sinCodigo = unicas.filter((x) => x.orden.envio_estado === 'shipped' && x.orden.estado_orden !== 'cancelled' && !x.orden.envio_tracking).length;
+  const leidos = await enTandas(paraConsultar, A_LA_VEZ_CORREO, async (x) => ({ ...x, filas: await historiaDelCorreo(x.orden.envio_tracking) }));
+
+  const solapas = armarSolapas(leidos, ahora.getTime());
+  return {
+    ok: true,
+    ...solapas,
+    sinCodigo,
+    // ⚠️ Es la página pública del Correo, ⛔ una API oficial: si deja de dar filas, se tiene que notar.
+    correoCaido: leidos.length > 0 && solapas.resumen.sinLeer.length === leidos.length,
+    desde: diaAR(new Date(ahora.getTime() - (DIAS - 1) * 86_400_000)),
+    leidoEn: ahora.toISOString(),
+  };
+}
+
+// Por marca, en la memoria de la función: abrir la pantalla varias veces ⛔ vuelve a gastar el cupo de TN, y dos
+// pedidos a la vez comparten la misma lectura. Se chequea el permiso ANTES. Lo que falla ⛔ se recuerda.
+const memoria = new Map();
+
+function recordado(store, sobre) {
+  const hay = memoria.get(store);
+  if (hay && Date.now() - hay.cuando < MEMORIA_MS) return hay.lectura;
+  const lectura = leerSeguimiento(store, sobre);
+  memoria.set(store, { cuando: Date.now(), lectura });
+  lectura.catch(() => { memoria.delete(store); });
+  return lectura;
+}
+
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
   if (!perfil) return;
@@ -76,28 +134,7 @@ export default async function handler(req, res) {
   if (!sobre) return res.status(400).json({ error: 'Falta la credencial para hablar con el catálogo.' });
 
   try {
-    const ahora = new Date();
-    const tramos = tramosDeFechas(ahora, DIAS, LARGO_TRAMO);
-    const trabajos = TIENDAS[store].flatMap((tienda) => tramos.map((t) => ({ tienda, ...t })));
-    const partes = await enTandas(trabajos, A_LA_VEZ_TN, async (t) => (
-      (await ordenesDelTramo(t.tienda, sobre, t.desde, t.hasta)).map((orden) => ({ tienda: t.tienda, orden }))
-    ));
-    // Los tramos no se pisan, pero el corte por día de TN puede repetir una orden en el borde.
-    const unicas = [...new Map(partes.flat().map((x) => [`${x.tienda}/${x.orden.id}`, x])).values()];
-
-    const paraConsultar = unicas.filter((x) => esDelCorreo(x.orden));
-    const sinCodigo = unicas.filter((x) => x.orden.envio_estado === 'shipped' && x.orden.estado_orden !== 'cancelled' && !x.orden.envio_tracking).length;
-    const leidos = await enTandas(paraConsultar, A_LA_VEZ_CORREO, async (x) => ({ ...x, filas: await historiaDelCorreo(x.orden.envio_tracking) }));
-
-    const solapas = armarSolapas(leidos, ahora.getTime());
-    return res.status(200).json({
-      ok: true,
-      ...solapas,
-      sinCodigo,
-      // ⚠️ Es la página pública del Correo, ⛔ una API oficial: si deja de dar filas, se tiene que notar.
-      correoCaido: leidos.length > 0 && solapas.resumen.sinLeer.length === leidos.length,
-      desde: diaAR(tramos[tramos.length - 1].desde),
-    });
+    return res.status(200).json(await recordado(store, sobre));
   } catch (e) {
     return res.status(502).json({ error: e instanceof Error ? e.message : 'No se pudo leer el seguimiento.' });
   }

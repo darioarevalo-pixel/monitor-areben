@@ -38,6 +38,7 @@ const base = (): Seguimiento => ({
   sinCodigo: 0,
   correoCaido: false,
   desde: '2026-08-08',
+  leidoEn: '2026-11-05T13:02:00Z',
 })
 
 async function montar() {

@@ -35,6 +35,9 @@ const VACIO: Record<Solapa, string> = {
 }
 const COLUMNA_DIAS: Record<Solapa, string> = { retiro: 'En sucursal hace', trabados: 'Sin movimiento', volvieron: 'Volvió hace' }
 
+const horaDe = (iso: string) =>
+  new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date(iso))
+
 function Pedido({ f }: { f: FilaSeguimiento }) {
   const link = linkDelPedido(f.tienda, f.id)
   const texto = `${f.tienda === 'stunned' ? 'Stunned ' : ''}#${f.numero}`
@@ -93,7 +96,7 @@ export function SeguimientoEnvios() {
         title="Seguimiento de envíos"
         subtitle={
           r
-            ? `Pedidos enviados por Correo Argentino desde el ${r.desde.split('-').reverse().join('/')}. Esta pantalla todavía no le avisa a nadie.`
+            ? `Pedidos enviados por Correo Argentino desde el ${r.desde.split('-').reverse().join('/')}, leídos a las ${horaDe(r.leidoEn)}. Esta pantalla todavía no le avisa a nadie.`
             : 'Consultando Tienda Nube y el Correo, puede tardar unos segundos.'
         }
         actions={
