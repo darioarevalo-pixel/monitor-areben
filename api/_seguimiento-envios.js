@@ -1,0 +1,104 @@
+// Seguimiento de envíos: los paquetes despachados y lo que dice el Correo de cada uno. Sólo lee.
+//
+//   GET ?recurso=seguimiento-envios&store=bdi|zattia → { ok, retiro, trabados, volvieron, resumen, desde, sinCodigo, correoCaido }
+//
+// ⛔ Archivo `_`: entra por `api/datos.js`. Las decisiones viven en `lib/seguimiento-envios/core.core.js`.
+// 🔑 Se lee en vivo, ⛔ hay tabla: nada de esto se guarda hasta que haya avisos que registrar.
+// 🔴 `api/datos.js` corta a los 30 s: de ahí los tramos en paralelo.
+// 🔴 Una lectura incompleta de TN contesta error: ⛔ una lista a medias, que parecería que no hay nada más.
+import { exigirUsuario } from './_auth.js';
+import { puedeVerAlguna } from '../lib/permisos.core.js';
+import { armarSolapas, esDelCorreo, leerHistoriaCorreo, tramosDeFechas } from '../lib/seguimiento-envios/core.core.js';
+
+const AUDIT = process.env.CATALOGO_AUDIT_URL || 'https://bdi-catalogo.vercel.app/api/tiendanube-audit';
+const CORREO = 'https://www.correoargentino.com.ar/sites/all/modules/custom/ca_forms/api/wsFacade.php';
+// 🔑 Stunned tiene Tienda Nube propia pero en el monitor es una línea de Zattia.
+const TIENDAS = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] };
+const DIAS = 90;
+const LARGO_TRAMO = 15;
+const A_LA_VEZ_TN = 4;
+const A_LA_VEZ_CORREO = 6;
+
+const diaAR = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(d);
+
+async function enTandas(items, n, fn) {
+  const res = new Array(items.length);
+  let i = 0;
+  const trabajar = async () => {
+    while (i < items.length) { const k = i++; res[k] = await fn(items[k]); }
+  };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, trabajar));
+  return res;
+}
+
+/** Órdenes de un tramo. Si TN corta en el límite de 200, se parte en dos: ⛔ se pierde ninguna. */
+async function ordenesDelTramo(tienda, sobre, desde, hasta) {
+  const qs = `ordenes=1&store=${tienda}&from=${diaAR(desde)}&to=${diaAR(hasta)}&limite=200&modo=lista`;
+  const r = await fetch(`${AUDIT}?${qs}`, { headers: { 'x-monitor-auth': sobre } });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.ok) throw new Error(d.error || `No se pudieron leer las órdenes de ${tienda} (${r.status}).`);
+  if (!d.truncado) return d.ordenes || [];
+  if (diaAR(desde) === diaAR(hasta)) throw new Error(`Tienda Nube cortó las órdenes de ${tienda} del ${diaAR(desde)}.`);
+  const medio = new Date((desde.getTime() + hasta.getTime()) / 2);
+  const siguiente = new Date(medio.getTime() + 86_400_000);
+  const [a, b] = await Promise.all([ordenesDelTramo(tienda, sobre, desde, medio), ordenesDelTramo(tienda, sobre, siguiente, hasta)]);
+  return [...a, ...b];
+}
+
+/** La historia de un paquete. `null` si el Correo no contestó o vino sin filas: es el aviso de que cambió la página. */
+async function historiaDelCorreo(codigo) {
+  try {
+    const r = await fetch(CORREO, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest', 'User-Agent': 'Mozilla/5.0' },
+      body: `action=ecommerce&id=${encodeURIComponent(codigo)}`,
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return null;
+    const filas = leerHistoriaCorreo(await r.text());
+    return filas.length ? filas : null;
+  } catch {
+    return null;
+  }
+}
+
+export default async function handler(req, res) {
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
+  if (req.method !== 'GET') return res.status(405).json({ error: 'método no permitido' });
+
+  const store = String(req.query.store || '').toLowerCase();
+  if (!TIENDAS[store]) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
+  if (!puedeVerAlguna(perfil, store, ['seguimiento-envios'])) {
+    return res.status(403).json({ error: 'No tenés acceso a Seguimiento de envíos de esta marca.' });
+  }
+  const sobre = req.headers && req.headers['x-monitor-auth'];
+  if (!sobre) return res.status(400).json({ error: 'Falta la credencial para hablar con el catálogo.' });
+
+  try {
+    const ahora = new Date();
+    const tramos = tramosDeFechas(ahora, DIAS, LARGO_TRAMO);
+    const trabajos = TIENDAS[store].flatMap((tienda) => tramos.map((t) => ({ tienda, ...t })));
+    const partes = await enTandas(trabajos, A_LA_VEZ_TN, async (t) => (
+      (await ordenesDelTramo(t.tienda, sobre, t.desde, t.hasta)).map((orden) => ({ tienda: t.tienda, orden }))
+    ));
+    // Los tramos no se pisan, pero el corte por día de TN puede repetir una orden en el borde.
+    const unicas = [...new Map(partes.flat().map((x) => [`${x.tienda}/${x.orden.id}`, x])).values()];
+
+    const paraConsultar = unicas.filter((x) => esDelCorreo(x.orden));
+    const sinCodigo = unicas.filter((x) => x.orden.envio_estado === 'shipped' && x.orden.estado_orden !== 'cancelled' && !x.orden.envio_tracking).length;
+    const leidos = await enTandas(paraConsultar, A_LA_VEZ_CORREO, async (x) => ({ ...x, filas: await historiaDelCorreo(x.orden.envio_tracking) }));
+
+    const solapas = armarSolapas(leidos, ahora.getTime());
+    return res.status(200).json({
+      ok: true,
+      ...solapas,
+      sinCodigo,
+      // ⚠️ Es la página pública del Correo, ⛔ una API oficial: si deja de dar filas, se tiene que notar.
+      correoCaido: leidos.length > 0 && solapas.resumen.sinLeer.length === leidos.length,
+      desde: diaAR(tramos[tramos.length - 1].desde),
+    });
+  } catch (e) {
+    return res.status(502).json({ error: e instanceof Error ? e.message : 'No se pudo leer el seguimiento.' });
+  }
+}

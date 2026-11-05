@@ -13,6 +13,40 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## ▶️ SEGUIMIENTO DE ENVÍOS, por fuera de Reclamos — 4-nov-2026 (dictado por Bruno, sin construir)
+
+Problema: los paquetes quedan en sucursal, la gente no se entera y las devoluciones se pierden.
+- **Sección nueva en Administración, ⛔ dentro de Reclamos**: solo para seguir paquetes.
+- **Alerta al cliente** para que retire su pedido.
+- **Devoluciones: mail de alerta interno al equipo.** Sale por `/api/externo/aviso` del mailer (SES).
+- **Plazo de 5 días: Bruno cree que es la política, ⛔ confirmado.** Medido 5-nov, 18 paquetes de `EN ESPERA` a `PLAZO VENCIDO NO RECLAMO`: de 4 a 13 días corridos, mediana 8.
+- **Destinatarios de la alerta de devoluciones (Bruno, 4-nov): la casilla de Administración, Darío y Bruno.** Responsable: Administración (a confirmar). Solo sale si hay algo que hacer.
+- **Mail al cliente SIN número de días** hasta confirmar el plazo: «lo guarda solo por unos días».
+
+**Pantalla** (`seguimiento-envios`, área Administración, primera entrega sin mandar nada a nadie):
+| solapa | qué | origen |
+|---|---|---|
+| Esperando retiro | en sucursal, hace cuántos días, si ya se avisó | automático |
+| Trabados | robados, o 7 días o más sin movimiento (5-nov: 6 con 22 días o más, el resto con 2 o menos) | automático |
+| Volvieron | el Correo los da por entregados después de retornar: hay que confirmarlos con el paquete (Bruno, 5-nov) | automático |
+| Devoluciones | lo que tiene que volver y si llegó | a mano, SOLO pedido + código |
+
+**Orden:** (1) pantalla con las solapas automáticas (armada 5-nov en la rama `seguimiento-envios`; falta probar el Correo desde Vercel) · (2) alerta del Correo al cliente, reutilizando en el mailer la serie de retiro (`lib/tn/retiro.ts`, `lib/email/pedido.ts`) · (3) devoluciones + Andreani.
+⛔ Sin usar `devoluciones` ni `Retornos`: dependen de Reclamos, que casi no se usa (4 filas en BDI, última 7-sep; 0 en Zattia). Nada de esto mueve stock ni plata.
+
+**Cómo se lee el estado** (medido 4-nov):
+- **Tienda Nube:** `shipping_status='shipped'` + `shipping_tracking_url`. Solo dice «enviado». 🔴 **Corregido 5-nov: lo «enviado» con el Correo en ENTREGADO ⛔ es TN atrasada, es lo que VOLVIÓ**: 23 de los 25 entregados de 105 paquetes pasaron por `RETORNAND0` y todos los firma una planta de Rosario. Oráculo: 160 pedidos `delivered` en TN, 0 con `RETORNAND0`. Nadie lo vio con el paquete en la mano.
+- **Correo:** `POST https://www.correoargentino.com.ar/sites/all/modules/custom/ca_forms/api/wsFacade.php`, cuerpo `action=ecommerce&id=<id de la URL de seguimiento>`. Anduvo 77 de 77, sin captcha. Devuelve HTML, lo más nuevo primero; leer por `data-title` (Fecha, Planta, Historia, Estado). ⚠️ No es API oficial: tiene que avisar si deja de devolver filas.
+- **Estados del Correo:** `EN ESPERA EN SUCURSAL` → `ENTREGA EN SUCURSAL` (110 de 110 retiros entregados) · a domicilio, `ENTREGADO` · también `DOMICILIO CERRADO/1 VISITA`.
+- **Foto del 4-nov:** en espera BDI 11 y Zattia 3 · BDI #21792 y #21789 sin movimiento desde el 13-oct.
+- **Andreani:** `andreani.com/envio/<código>` muestra los estados y «Tenés tiempo hasta el dd/mm/aaaa» (visto en 3 pedidos, con navegador). Carga por `tracking-api.andreani.com`; sin navegador dio 401 y 000 ⇒ **probar primero si se puede leer desde un servidor**.
+- **Paquete vencido que vuelve:** `PLAZO VENCIDO NO RECLAMO` → `RETORNAND0` (con cero) → `ENTREGADO` en Rosario, o `EN ESPERA` en `OAM-ROSARIO SUCURSAL`. 🔴 **La alerta al cliente ⛔ puede salir para estos: `volvio` en la fila.**
+- **También aparece:** `sustraído en un asalto` (BDI #21038 y #21000) · `ARCHIVO GRAL.-REBUT-` (BDI #21325).
+- **Sin saber:** si los códigos de una devolución se leen igual.
+- `orders/{id}/fulfillment-orders` da 403 (falta `read_fulfillment_orders`).
+
+---
+
 ## ▶️ NORTE TIENE SU PROPIA COPIA DE «¿ES DE STUNNED?» — 30-oct-2026 (Bruno: «cargalo en los pendientes del monitor»)
 
 La regla que dice de qué línea es cada renglón vendido (SKU que empieza con `STU`; sin SKU, proveedor `STUNNED`) vive en

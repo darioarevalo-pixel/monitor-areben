@@ -62,6 +62,7 @@ const ConteoEstandar = dynamic(() => import('@/components/conteo-estandar/Conteo
 const ConteoLocalBdi = dynamic(() => import('@/components/conteo-local-bdi/ConteoLocalBdi').then((m) => m.ConteoLocalBdi), { loading: Cargando })
 const Reposicion = dynamic(() => import('@/components/reposicion/Reposicion').then((m) => m.Reposicion), { loading: Cargando })
 const Cobranzas = dynamic(() => import('@/components/cobranzas/Cobranzas').then((m) => m.Cobranzas), { loading: Cargando })
+const SeguimientoEnvios = dynamic(() => import('@/components/seguimiento-envios/SeguimientoEnvios').then((m) => m.SeguimientoEnvios), { loading: Cargando })
 const Caja = dynamic(() => import('@/components/caja/Caja').then((m) => m.Caja), { loading: Cargando })
 const PagosRecibidos = dynamic(() => import('@/components/pagos-recibidos/PagosRecibidos').then((m) => m.PagosRecibidos), { loading: Cargando })
 const Erp = dynamic(() => import('@/components/erp/Erp').then((m) => m.Erp), { loading: Cargando })
@@ -264,6 +265,7 @@ export const SECCIONES: Record<string, ComponentType> = {
   // Rollback: mover esta línea a SOMBRAS.
   reposicion: Reposicion,
   cobranzas: Cobranzas,
+  'seguimiento-envios': SeguimientoEnvios,
   // Lo que entró a Mercado Pago (contra la app falsa). Sólo lee, de MP directo.
   // El POS propio del local: cobra y manda la venta a Gestión Nube (`?recurso=caja`).
   caja: Caja,

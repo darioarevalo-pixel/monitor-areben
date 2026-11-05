@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-70 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+71 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -75,7 +75,9 @@ papel. Stock **por lugar** —depósito y los dos locales— porque el que se qu
 local mientras el depósito tiene. ⛔ No es stock de mercadería: un insumo no existe en GN) ·
 `cobranzas → components/cobranzas + lib/cobranzas` (las compras de TN con pago MANUAL y su cobro, por
 `?recurso=cobranzas`; tabla `tn_cobros` **sólo en la base de BDI**, como `envios_reparto`, a quien le
-pone en cero el saldo del cadete. ⛔ TN no deja marcar pagado por API: el «pagado» se aprieta allá)
+pone en cero el saldo del cadete. ⛔ TN no deja marcar pagado por API: el «pagado» se aprieta allá) ·
+`seguimiento-envios → components/seguimiento-envios + lib/seguimiento-envios` (los paquetes del Correo:
+en sucursal y trabados, por `?recurso=seguimiento-envios`, en vivo y sin tabla)
 
 **Dirección** — `gerencial` · `memo` (semanal, por `?recurso=memo`, sin `store`) ·
 `norte → components/norte + lib/norte` (cruza el ETL con el KV de `ingresos`, por `?recurso=norte`) ·

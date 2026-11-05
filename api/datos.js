@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|logistica|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|gastos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|erp|caja|repo-armado|reportes|tn-erp|prospectos|sesion&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|logistica|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|gastos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|seguimiento-envios|pagos-recibidos|erp|caja|repo-armado|reportes|tn-erp|prospectos|sesion&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -59,6 +59,7 @@ import exhib from './_exhib.js';
 import mapaLocal from './_mapa-local.js';
 import ubicacionesLocal from './_ubicaciones-local.js';
 import cobranzas from './_cobranzas.js';
+import seguimientoEnvios from './_seguimiento-envios.js';
 import pagosRecibidos from './_pagos-recibidos.js';
 import erp from './_erp.js';
 import sesion from './_sesion.js';
@@ -236,6 +237,7 @@ const RECURSOS = {
   // Cobranzas: las órdenes de TN con medio de pago MANUAL y su cobro (`tn_cobros`, base de BDI).
   // Escribe la nota interna de la orden por `bdi-catalogo` y le pone en cero el saldo al cadete.
   cobranzas,
+  'seguimiento-envios': seguimientoEnvios,
   // Pagos recibidos: lo que entró a la cuenta de Mercado Pago del local, para que la empleada
   // verifique el cobro sin mirar el teléfono de la clienta. ⛔ Sólo LEE, y de MP directo: no hay
   // tabla propia. El total y los otros días los ve sólo un admin (lo decide el handler).

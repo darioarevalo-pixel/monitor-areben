@@ -608,6 +608,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "seguimiento-envios",
+    "area": "administracion",
+    "label": "Seguimiento de envíos",
+    "info": "Los pedidos enviados por Correo Argentino y lo que dice el Correo de cada uno: cuáles esperan en una sucursal y hace cuánto, cuáles están trabados sin movimiento y cuáles volvieron. Por ahora sólo se mira: no le manda nada a nadie.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "cobranzas",
     "area": "administracion",
     "label": "Cobros",
@@ -1278,7 +1288,8 @@ export const NAV_CATS: NavCat[] = [
       "reposicion",
       "caducados",
       "insumos",
-      "cobranzas"
+      "cobranzas",
+      "seguimiento-envios"
     ],
     "labels": {
       "solicitudes": "Solicitudes de todas las marcas"

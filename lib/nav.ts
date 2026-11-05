@@ -243,6 +243,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   // Administración / Compras
   reposicion: 'reposicion',
   cobranzas: 'presupuesto',
+  'seguimiento-envios': 'envios',
   'pagos-recibidos': 'comisiones',
   erp: 'integraciones',
   caja: 'presupuesto',
@@ -511,6 +512,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   ubicaciones: 'Ubicación física (NN-N) de cada producto en el depósito.',
   reposicion: 'Reposición diaria del local.',
   cobranzas: 'Compras online con pago manual: cuáles faltan cobrar, registrar el cobro y dejarlo listo para marcar pagado en Tienda Nube.',
+  'seguimiento-envios': 'Los pedidos enviados por Correo Argentino: cuáles esperan en una sucursal, cuáles están trabados y cuáles volvieron.',
   insumos: 'Lo que se consume y no se vende: bolsas, rollos, papel. Qué hay en cada lugar, cuánto sale y cuánto dura.',
   modelos: 'El padrón de las modelos: quién es cada una, cómo se la contacta, quién la representa, qué talle usa y cuánto mide. El talle y la altura de acá son los que salen a la descripción del producto cuando la modelo se elige en la sesión de fotos.',
   exhib: 'Recorrido con lector para verificar qué está colgado en el local.',
