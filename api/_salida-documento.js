@@ -119,16 +119,17 @@ async function anotarAjustes({ store, pedidos, usuario }) {
 }
 
 /**
- * El CONSUMO de una solicitud interna, anotado como ajustes `consumible` del motor (gasto de marketing al costo real; mueve el
- * libro del ERP al instante, a nombre de quien guardó).
+ * El CONSUMO de una solicitud interna, anotado como ajustes `consumible` del motor (gasto de marketing al costo real, a nombre de
+ * quien guardó). EN SOMBRA ⛔ mueve el libro (`sin_movimiento`): la prenda la baja la venta de GN (7-nov).
  */
 export function documentarConsumo({ store, kind, solicitud, usuario }) {
   return anotarAjustes({ store, pedidos: consumoDe(kind, sinOrigenesErp(solicitud), store), usuario })
 }
 
 /**
- * El CANJE (venta de GN ya creada), anotado como ajuste `canje` del motor. EN SOMBRA: la venta de GN descuenta GN; el ajuste
- * descuenta el libro del ERP (el canje ⛔ pasa por el motor como venta) y deja el gasto de marketing al costo real.
+ * El CANJE (venta de GN ya creada), anotado como ajuste `canje` del motor. EN SOMBRA: la venta de GN baja GN Y el libro (entra por
+ * el registro del monitor) ⇒ el ajuste ⛔ mueve el libro (`sin_movimiento`, 7-nov: C-0090 y C-0054 bajaron dos veces): deja el
+ * gasto de marketing al costo real.
  * @param {{ store: string, b: any, usuario: string|null }} p `b` = el cuerpo del pedido a crear-venta
  */
 export function documentarCanje({ store, b, usuario }) {

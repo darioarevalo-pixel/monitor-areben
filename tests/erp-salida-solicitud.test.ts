@@ -81,6 +81,12 @@ describe('consumoDe: la baja definitiva como ajustes `consumible`', () => {
     expect(r[1].renglones[0].cantidad).toBe(-2)
     expect(consumoDe('solicitudesinternas', consumo(), 'bdi')[0].deposito).toBe('deposito_minorista')
   })
+
+  it('EN SOMBRA ⛔ mueve el libro (7-nov): la venta de GN ya bajó la prenda y el libro la ve por el registro del monitor', () => {
+    const r = consumoDe('solicitudesinternas', consumo(), 'zattia')
+    expect(r.map((x: any) => x.sin_movimiento)).toEqual([true, true])
+    for (const m of ['Moldería', 'Consumo']) expect(consumoDe('solicitudesinternas', consumo({ motivo: m }), 'zattia')[0].sin_movimiento).toBe(true)
+  })
   it('suma la misma variante repetida en un depósito', () => {
     const r = consumoDe('solicitudesinternas', consumo({ items: [item({ pid: '1', sid: '10' }), item({ pid: '1', sid: '10', qty: 2 })] }), 'zattia')
     expect(r).toHaveLength(1)
@@ -118,6 +124,10 @@ describe('canjeDe: el canje como ajuste `canje`', () => {
     expect([a.deposito, a.motivo, a.ref, a.linea]).toEqual(['local', 'canje', 'canje-12:local', 'bdi'])
     expect(a.renglones.map((r: any) => [r.product_id, r.size_id, r.cantidad])).toEqual([[1, 10, -2], [2, 20, -1]])
     expect(canjeDe(pedido({ origen: 'deposito' }), 'bdi')[0].deposito).toBe('deposito_minorista')
+  })
+
+  it('EN SOMBRA ⛔ mueve el libro (7-nov, C-0090 y C-0054 bajaron dos veces): lo baja la venta de GN', () => {
+    expect(canjeDe(pedido(), 'bdi')[0].sin_movimiento).toBe(true)
   })
   it('suma la variante repetida y deja afuera los renglones sin variante o cantidad', () => {
     const [a] = canjeDe(pedido({ items: [{ product_id: 1, size_id: 10, quantity: 1 }, { product_id: 1, size_id: 10, quantity: 2 }, { product_id: null, size_id: 3, quantity: 1 }, { product_id: 4, size_id: 40, quantity: 0 }] }), 'bdi')
