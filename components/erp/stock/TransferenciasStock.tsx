@@ -44,7 +44,7 @@ const atras = (hoy: string, n: number) => new Date(Date.parse(`${hoy}T12:00:00Z`
 function enElErp(f: FilaTransferencia, libroDesde: string | null) {
   if (f.estado === 'cancelado' || !f.enviadas) return { texto: '—', ok: true, ayuda: undefined }
   if (!f.enLibro && libroDesde && f.creada < libroDesde) return { texto: 'antes del ERP', ok: true, ayuda: `El ERP del ERP arranca el ${cuandoCorto(libroDesde)}` }
-  return { texto: u(f.enLibro ?? 0), ok: f.enLibro === f.enviadas, ayuda: f.enLibro === f.enviadas ? 'El ERP del ERP la tiene entera' : `El ERP anotó ${f.enLibro ?? 0} de ${f.enviadas}` }
+  return { texto: u(f.enLibro ?? 0), ok: f.enLibro === f.enviadas, ayuda: f.enLibro === f.enviadas ? 'El ERP la anotó entera' : `El ERP anotó ${f.enLibro ?? 0} de ${f.enviadas}` }
 }
 
 function bajarCsv(filas: FilaTransferencia[], marca: MarcaErp) {
