@@ -173,6 +173,27 @@ export async function cargarNivel(db, act) {
   return new Map(rows.map((r) => [`${r.product_id}:${r.size_id}:${r.deposito}`, r.n]))
 }
 
+/**
+ * Lo que necesita `apartadoDePedidosAbiertos` (lib/alineo.mjs): los pedidos de TN de la tienda de la LÍNEA creados hasta la
+ * foto (60 días: más que los 15 de la reserva) y los renglones de las ventas de GN que llevan su número.
+ * La tienda de TN de una línea se llama igual que la línea (bdi, zattia, stunned).
+ */
+export async function cargarPedidosAbiertosGN(db, { linea, foto }) {
+  const ordenes = await db.q(
+    `select numero, creada_en, pagada_en, payment_status, status, shipping_status from tn_orden
+      where tienda = $1 and creada_en <= $2 and creada_en > $2::timestamptz - interval '60 days'`,
+    [linea, foto.tomada_en],
+  )
+  if (!ordenes.length) return { ordenes, ventasGN: [] }
+  const ventasGN = await db.q(
+    `select v.id, v.tn_order, v.store, v.sale_state, v.gn_created_at, d.product_id, d.size_id, d.quantity
+       from ventas v join venta_detalles d on d.sale_id = v.id
+      where v.tn_order = any($1) and v.gn_created_at <= $2`,
+    [ordenes.map((o) => String(o.numero)), foto.tomada_en],
+  )
+  return { ordenes, ventasGN }
+}
+
 export async function cargarResiduos(db, fecha) {
   if (!(await existe(db, 'stock_diff'))) return new Map()
   const rows = await db.q('select product_id, size_id, deposito, delta_gn - delta_libro as r from stock_diff where fecha = $1', [fecha])

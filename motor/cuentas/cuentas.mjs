@@ -159,7 +159,7 @@ const centavos = (x) => Math.round(x * 100) / 100
  * la que trae el pago (`elegida`); si la ruta YA dice la cuenta, el pago ⛔ la cambia (la decide gerencia, ⛔ la Caja).
  * La COMISIÓN sale de `tasa_cobro` (concepto `medio`, por tipo y cuotas, sql/061) y, si ⛔ hay, de la tasa de la ruta. El
  * COSTO DE PLATAFORMA (concepto `plataforma`, lo que se queda TN) va APARTE en `costo_plataforma`: ⛔ se suma a la comisión
- * (Bruno, 30-oct: el resultado ⛔ oculta ningún gasto).
+ * (Bruno, 30-oct: el resultado ⛔ oculta ningún gasto). Con Pago Nube es 0 (TN ⛔ lo cobra); sin tasa cargada, null.
  * @param {{ monto: number, elegida?: string|null, tipo_pago?: string|null, cuotas?: number|null }} pago
  * @param {{ medio: string, nombre?: string }} cuenta  la `cuenta_cobro` del pago
  * @param {{ marca: string, canal: string, en: Date|string }} venta
@@ -187,7 +187,9 @@ export function cobroReal(pago, cuenta, venta, conf) {
   const tasa = deMedio ? Number(deMedio.tasa) : ruta && ruta.tasa != null ? Number(ruta.tasa) : null
   const comision = tasa != null && pago.monto > 0 ? centavos(pago.monto * tasa / 100) : null
   const dePlataforma = medio ? tasaVigente(conf.tasas ?? [], { ...donde, concepto: 'plataforma' }) : null
-  const costo_plataforma = dePlataforma && pago.monto > 0 ? centavos(pago.monto * Number(dePlataforma.tasa) / 100) : null
+  // 🔑 Pago Nube ⇒ TN ⛔ cobra plataforma (Bruno, 6-nov: «si es pago nube, no cobra tienda nube, pero sí cobra la comisión de pago
+  // nube») ⇒ 0, ⛔ null: se SABE que es 0. Una fila `plataforma` para pagonube manda igual (si TN algún día la cobra, se carga la tasa).
+  const costo_plataforma = dePlataforma && pago.monto > 0 ? centavos(pago.monto * Number(dePlataforma.tasa) / 100) : medio === 'pagonube' ? 0 : null
   let acredita_el = null
   if (ruta && ruta.dias_acreditacion != null) {
     // El día del cobro en Argentina (UTC−3, sin horario de verano) + el plazo.
