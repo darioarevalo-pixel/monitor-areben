@@ -136,6 +136,11 @@ export function plata(n: number): string {
   const conCentavos = Math.round(r * 100) % 100 !== 0
   return '$' + Math.abs(r).toLocaleString('es-AR', { minimumFractionDigits: conCentavos ? 2 : 0, maximumFractionDigits: 2 })
 }
+/** Como `plata`, con el «-» si es negativo (8-nov: un esperado NEGATIVO —salió más efectivo del que había— se leía
+ *  POSITIVO en la Caja y en el ticket del cierre, porque `plata` va sin signo y el que llama pone el «-» a mano). */
+export function plataConSigno(n: number): string {
+  return (Math.round(n * 100) / 100 < 0 ? '-' : '') + plata(n)
+}
 
 /** El número provisorio: el código de la venta en la Caja, el mismo que va en el comentario de GN. */
 export const numeroProvisorio = (id: string): string => codigoCaja(id)
@@ -471,7 +476,7 @@ export function armarTicketCierre(t: DatosCierre, ahoraMs: number, partir: Medid
     if (e.aportes) par('+ Ingresos', plata(e.aportes), 9)
     if (e.salidas) par('- Salidas', `-${plata(e.salidas)}`, 9)
     l.y += 0.6
-    par('ESPERADO', plata(Number(t.esperado ?? e.esperado)), 11, true)
+    par('ESPERADO', plataConSigno(Number(t.esperado ?? e.esperado)), 11, true)
   }
   if (t.contado != null) par('CONTADO', plata(Number(t.contado)), 11, true)
   const dif = r?.diferencia ?? (t.contado != null && t.esperado != null ? Number(t.contado) - Number(t.esperado) : null)
