@@ -13,7 +13,7 @@ import { porFormaDePago } from '@/lib/caja/cierre.core.js'
 import { MARCA_CAJA, storeCaja } from '@/lib/caja/marca'
 import { codigoArqueo } from '@/lib/caja/arqueo.core.js'
 import { DOMINIOS_MAIL, completarMail, mailOk } from '@/lib/caja/mail'
-import { imprimirCierre, numeroProvisorio, plata, type DatosCierre, type LogoTicket } from '@/lib/caja/ticket'
+import { imprimirCierre, numeroProvisorio, plata, plataConSigno, type DatosCierre, type LogoTicket } from '@/lib/caja/ticket'
 import { titularesDe } from '@/lib/caja/otra-cuenta.core.js'
 import { TOLERANCIA_TRANSFERENCIA } from '@/lib/pagos-recibidos/core.core.js'
 import { ArmadoDelSobre, CalculadoraBilletes, olvidarConteo } from '@/components/caja/CalculadoraBilletes'
@@ -1715,7 +1715,7 @@ export function AvisoCierre({ t }: { t: Turno }) {
       }
     >
       <div style={grillaDatos}>
-        <Dato rotulo="Esperado" valor={plata(Number(t.esperado))} />
+        <Dato rotulo="Esperado" valor={plataConSigno(Number(t.esperado))} />
         <Dato rotulo="Contado" valor={plata(Number(t.contado))} />
         <Dato rotulo="Diferencia" valor={textoDiferencia(d)} tono={tonoDiferencia(d)} />
       </div>
@@ -1906,10 +1906,10 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
           titulo: 'Cerrar caja',
           mensaje: (
             <div style={{ display: 'grid', gap: space[2] }}>
-              {esperado != null && <ConfirmDetalle label="Esperado" valor={plata(esperado)} />}
+              {esperado != null && <ConfirmDetalle label="Esperado" valor={plataConSigno(esperado)} />}
               <ConfirmDetalle label="Contado" valor={plata(total)} />
               {dif != null && <ConfirmDetalle label="Diferencia" valor={textoDiferencia(dif)} />}
-              {total === 0 && !!esperado && <b style={{ color: color.dangerInk }}>Contado $0 contra {plata(esperado)} esperados.</b>}
+              {total === 0 && !!esperado && <b style={{ color: color.dangerInk }}>Contado $0 contra {plataConSigno(esperado)} esperados.</b>}
               <span>El cierre queda guardado y no se reabre.</span>
             </div>
           ),
@@ -2092,7 +2092,7 @@ export function ResumenTurnoDatos({
     <div style={{ display: 'grid', gap: space[3], fontSize: font.sm }}>
       <div style={grillaDatos}>
         <Dato rotulo="Ventas" valor={plata(r.total)} tono="brand" detalle={r.ventas === 1 ? '1 venta' : `${r.ventas} ventas`} />
-        <Dato rotulo="Efectivo esperado" valor={plata(r.efectivo.esperado)} tono="success" detalle={`Fondo ${plata(r.efectivo.fondo)}`} />
+        <Dato rotulo="Efectivo esperado" valor={plataConSigno(r.efectivo.esperado)} tono="success" detalle={`Fondo ${plata(r.efectivo.fondo)}`} />
         <Dato
           rotulo={r.efectivo.aportes ? 'Salidas e ingresos' : 'Salidas'}
           valor={plata(r.efectivo.salidas)}
@@ -2167,7 +2167,7 @@ export function ResumenTurnoDatos({
             {!!r.efectivo.deEspera && <span>+ Efectivo de ventas que esperan la transferencia {plata(r.efectivo.deEspera)}</span>}
             {!!r.efectivo.aportes && <span>+ Ingresos {plata(r.efectivo.aportes)}</span>}
             <span>− Salidas {plata(r.efectivo.salidas)}</span>
-            <b>= Efectivo esperado {plata(r.efectivo.esperado)}</b>
+            <b>= Efectivo esperado {plataConSigno(r.efectivo.esperado)}</b>
           </div>
           {(turno.salidas ?? []).map((m) => (
             <Movimiento key={m.id} m={m} puedeAnular={puedeAnular && !turno.cerrado_en} onCambio={onCambio} />
@@ -2329,7 +2329,7 @@ export function UltimosTurnos({ ultimos, onVerVentas }: { ultimos: Turno[]; /** 
                     {t.nota && <span style={{ color: color.mut }}> · «{t.nota}»</span>}
                   </td>
                   <td style={td}>{t.abierto_por ?? ''}</td>
-                  <td style={{ ...td, ...der }}>{plata(Number(t.esperado))}</td>
+                  <td style={{ ...td, ...der }}>{plataConSigno(Number(t.esperado))}</td>
                   <td style={{ ...td, ...der }}>{plata(Number(t.contado))}</td>
                   <td style={{ ...td, ...der, fontWeight: weight.bold, color: tintaDiferencia(d) }}>{textoDiferencia(d)}</td>
                   <td style={{ ...td, textAlign: 'right' }}>

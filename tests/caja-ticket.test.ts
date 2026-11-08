@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { armarTicket, armarTicketCambio, armarTicketCierre, fechaConDia, fechaTicket, marcasDelTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
+import { armarTicket, armarTicketCambio, armarTicketCierre, fechaConDia, fechaTicket, marcasDelTicket, numeroProvisorio, plata, plataConSigno, type DatosTicket } from '@/lib/caja/ticket'
 import { REGLAS_INICIALES, cobro, nombreParaTicket, renglones } from '@/lib/caja/core.core.js'
 
 const medir = (txt: string) => txt.match(/.{1,40}/g) || ['']
@@ -223,6 +223,20 @@ describe('ticket del cierre (Bruno, 13-oct)', () => {
     expect(montoDe(ops, 'Limpieza')).toBe('-$2.000')
     expect(txt).not.toContain('anulada')
     expect(txt).toContain('Nota: faltan 200')
+  })
+  it('🔴 un esperado NEGATIVO se imprime con signo (8-nov: fondo $0 − salida $100 salía «ESPERADO $100»)', () => {
+    const neg = { ...cierre, fondo: 0, contado: 0, esperado: -100, formas: [], movimientos: [{ tipo: 'salida' as const, monto: 100, motivo: 'Gasto' }],
+      resumen: { total: 0, ventas: 0, efectivo: { fondo: 0, cobrado: 0, cobradoGN: 0, salidas: 100, esperado: -100 }, diferencia: 100 }, conteos: null }
+    const { ops } = armarTicketCierre(neg, AHORA, medir)
+    expect(montoDe(ops, 'ESPERADO')).toBe('-$100')
+    expect(montoDe(ops, 'SOBRA')).toBe('$100')
+  })
+  it('plataConSigno: el «-» sólo cuando es negativo', () => {
+    expect(plataConSigno(-100)).toBe('-$100')
+    expect(plataConSigno(-748.5)).toBe('-$748,50')
+    expect(plataConSigno(4200)).toBe('$4.200')
+    expect(plataConSigno(0)).toBe('$0')
+    expect(plataConSigno(-0.001)).toBe('$0')
   })
   it('🔑 de billetes, SÓLO el sobre (⛔ los contados ni lo que queda de fondo): el fondo queda con los chicos', () => {
     const { ops } = armarTicketCierre(cierre, AHORA, medir)
