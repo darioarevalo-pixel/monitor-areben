@@ -109,7 +109,7 @@ async function cuentasDeCobro(sb, linea) {
  * Adónde va la plata de cada medio en el canal de la venta (ERP › Cuentas, sql/019): las rutas y las cuentas REALES activas.
  * «Corregir medio» muestra la de la ruta y deja elegir otra como excepción. Sin la 019 ⇒ vacías.
  */
-async function destinosDeCobro(marca, linea, canal, deps) {
+export async function destinosDeCobro(marca, linea, canal, deps) {
   const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
   const r = await correr(async (db) => {
     const [{ hay }] = (await db.query(`select to_regclass('public.ruta_cobro') is not null as hay`)).rows
@@ -364,12 +364,14 @@ export async function cobrarVentaErp({ marca, body, usuario }, deps = {}) {
   if (!(monto > 0)) return { status: 400, error: 'Monto inválido' }
   if (!body?.cuenta) return { status: 400, error: 'Elegí la cuenta.' }
   if (!/^[0-9a-f-]{8,}$/i.test(String(body?.ref || ''))) return { status: 400, error: 'Falta la clave del cobro.' }
+  if (body?.cuentaReal != null && !UUID.test(String(body.cuentaReal))) return { status: 400, error: 'La cuenta donde entró la plata no es válida.' }
   const m = deps.cuenta || await moduloDelMotor('cuenta')
   if (typeof m?.registrarPagoACuenta !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }
   const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
   return correr(async (db) => {
     const r = await m.registrarPagoACuenta(db, {
       cliente_id: body.clienteId, marca: body.linea || marca, monto, cuenta: String(body.cuenta), origen_ref: `erp-cobro:${body.ref}`,
+      ...(body.cuentaReal ? { cuenta_real: String(body.cuentaReal) } : {}),
       usuario, prueba: body.prueba !== false, ...(body.canal ? { canal: String(body.canal) } : {}), imputar: [{ venta_id: body.ventaId, monto: Math.min(monto, Number(body.saldo) || monto) }],
       ...(body.fecha ? { ocurrida_en: `${body.fecha}T15:00:00.000Z` } : {}),
     })
@@ -390,6 +392,7 @@ export async function cobrarCuentaErp({ marca, body, usuario }, deps = {}) {
   if (!(monto > 0)) return { status: 400, error: 'Monto inválido' }
   if (!body?.cuenta) return { status: 400, error: 'Elegí la cuenta.' }
   if (!/^[0-9a-f-]{8,}$/i.test(String(body?.ref || ''))) return { status: 400, error: 'Falta la clave del cobro.' }
+  if (body?.cuentaReal != null && !UUID.test(String(body.cuentaReal))) return { status: 400, error: 'La cuenta donde entró la plata no es válida.' }
   const operacion = body?.operacion == null ? '' : String(body.operacion).trim()
   if (operacion.length > 60) return { status: 400, error: 'El número de operación es demasiado largo.' }
   const imputar = body?.imputar == null ? [] : body.imputar
@@ -400,6 +403,7 @@ export async function cobrarCuentaErp({ marca, body, usuario }, deps = {}) {
   return correr(async (db) => {
     const r = await m.registrarPagoACuenta(db, {
       cliente_id: body.clienteId, marca: body.linea || marca, monto, cuenta: String(body.cuenta), origen_ref: `erp-cobro-cuenta:${body.ref}`,
+      ...(body.cuentaReal ? { cuenta_real: String(body.cuentaReal) } : {}),
       usuario, prueba: body.prueba !== false, ...(body.canal ? { canal: String(body.canal) } : {}),
       ...(body.fecha ? { ocurrida_en: `${body.fecha}T15:00:00.000Z` } : {}),
       ...(operacion ? { operacion, ...(body.operacionRepetida === true ? { operacion_repetida: true } : {}) } : {}),

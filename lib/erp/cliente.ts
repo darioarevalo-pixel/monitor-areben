@@ -522,8 +522,8 @@ export type ExtraDeVenta = {
   facturas: Array<{ numero: string; tipo: 'factura' | 'nc'; de: 'erp' | 'gn'; cuando: string | null }>
   cuentas: Array<{ id: string; nombre: string; medio: string }>
   /** ERP › Cuentas para el canal de la venta: adónde va cada medio (la vigente es la de `desde` más nuevo ≤ hoy) y las cuentas reales. */
-  rutas?: Array<{ marca: string; canal: string; medio: string; cuenta_real_id: string | null; desde: string }>
-  cuentasReales?: Array<{ id: string; titular: string | null; nombre: string; banco: string | null }>
+  rutas?: RutaDeCobroLeida[]
+  cuentasReales?: CuentaRealDeCobro[]
   ediciones: Array<{ campo: string; antes: string; despues: string; usuario: string; cuando: string }>
   notas: Array<{ cuando: string; texto: string; de: string; reemplaza: string | null }>
   nota: { id: string; texto: string; de: string } | null
@@ -554,7 +554,7 @@ export const corregirMedioDeVenta = (marca: MarcaErp, ventaId: string, c: { medi
   pedir<{ ok: true; correccion: MedioCorregido; avisos: string[] }>(post({ accion: 'corregir-medio', marca, ventaId, ...c }), '', 'No se pudo corregir la forma de pago.')
 export const guardarNotaDeVenta = (marca: MarcaErp, ventaId: string, texto: string, reemplazaId: string | null) =>
   pedir<{ ok: true }>(post({ accion: 'nota-venta', marca, ventaId, texto, reemplazaId }), '', 'No se pudo guardar la nota.')
-export const cobrarVentaErp = (marca: MarcaErp, c: { ventaId: string; clienteId: string; linea: string; monto: number; saldo: number; cuenta: string; canal: string | null; fecha: string; ref: string; prueba: boolean }) =>
+export const cobrarVentaErp = (marca: MarcaErp, c: { ventaId: string; clienteId: string; linea: string; monto: number; saldo: number; cuenta: string; cuentaReal?: string; canal: string | null; fecha: string; ref: string; prueba: boolean }) =>
   pedir<{ ok: true; cuenta: unknown }>(post({ accion: 'cobrar-venta', marca, ...c }), '', 'No se pudo registrar el cobro.')
 
 // ── ERP › Stock › Stock, con el molde (lista + ficha; `api/_erp-stock.js`, núcleo `lib/erp/stock-lista.core.js`) ──
@@ -695,15 +695,19 @@ export type CuentaDelMotor = {
   ventas_con_saldo?: number; ultimo_cobro?: { fecha: string; monto: number } | null
 }
 export type CuentasDeLaMarca = { hoy: string | null; prueba: boolean; cuentas: CuentaDelMotor[]; clientesErp: number; otroLibro: number }
-export const leerCuentasCorrientes = (marca: MarcaErp, linea: string, prueba: boolean) =>
-  pedir<CuentasDeLaMarca>(null, `&vista=cuentas-corrientes&marca=${marca}&linea=${linea}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudo leer la cuenta corriente.')
+export const leerCuentasCorrientes = (marca: MarcaErp, linea: string, prueba: boolean, o?: { panel?: boolean }) =>
+  pedir<CuentasDeLaMarca>(null, `&vista=cuentas-corrientes&marca=${marca}&linea=${linea}&prueba=${prueba ? 1 : 0}${o?.panel ? '&panel=1' : ''}&nc=${Date.now()}`, 'No se pudo leer la cuenta corriente.')
 
 export type RenglonMayor = { fecha: string; tipo: 'compra' | 'pago'; ref: string; detalle: string; debe: number; haber: number; saldo: number }
+export type RutaDeCobroLeida = { marca: string; canal: string; medio: string; cuenta_real_id: string | null; desde: string }
+export type CuentaRealDeCobro = { id: string; titular: string | null; nombre: string; banco: string | null }
 export type CuentaDeCliente = {
   hoy: string; cliente: { id: string; nombre: string; doc: string | null }; credito: CreditoCliente
   estado: { saldo: number; debe: number; a_favor: number; vencido: number; dias_mayor: number; atrasado: boolean; sin_credito: boolean; tramos: Record<string, number>; pendientes: PendienteCuenta[] }
   mayor: { anterior: number; renglones: RenglonMayor[]; final: number }
   csv: string
+  /** Adónde va cada medio en el canal mayorista y las cuentas reales: la ruta «se elige en cada cobro» pide una (`pideCuentaReal`). */
+  rutas?: RutaDeCobroLeida[]; cuentasReales?: CuentaRealDeCobro[]
   /** Las cuentas con las que se puede cobrar (`cuenta_cobro`). */
   cuentas?: Array<{ id: string | number; nombre: string; medio: string }>
 }
@@ -712,6 +716,8 @@ export const leerCuentaDeCliente = (marca: MarcaErp, p: { clienteId: string; lin
 /** El botón «Cobrar» de la cuenta: sin elegir venta, el motor paga la más vieja primero (FIFO). `ref` = una clave por ventana (⛔ duplica). */
 export const cobrarCuentaErp = (marca: MarcaErp, c: {
   clienteId: string; linea: string; monto: number; cuenta: string; fecha: string; ref: string; prueba: boolean
+  /** A qué cuenta entró la plata, cuando la ruta la deja abierta (`pideCuentaReal`). */
+  cuentaReal?: string
   /** Darío §4: el número de operación del comprobante; repetido ⇒ el motor contesta OPERACION_REPETIDA salvo `operacionRepetida`. */
   operacion?: string; operacionRepetida?: boolean
   /** Cargado DESDE un pedido: esa parte va a esa venta; lo que sobra, a lo más viejo (regla del 18-oct). */
@@ -730,6 +736,8 @@ export type CuentaPanel =
     estado: Omit<CuentaDeCliente['estado'], 'pendientes'> & { pendientes: Array<PendienteCuenta & { nombre: string | null }> }
     pagos: Array<{ fecha: string; monto: number; detalle: string }>
     cuentas: Array<{ id: string | number; nombre: string; medio: string }>
+    /** Adónde va cada medio en el canal mayorista y las cuentas reales: la ruta «se elige en cada cobro» pide una (`pideCuentaReal`). */
+    rutas?: RutaDeCobroLeida[]; cuentasReales?: CuentaRealDeCobro[]
     /** Las personas que compran por la empresa; null = todavía sin la lista (motor sin la 061). */
     personas: Array<{ id: string; whatsapp: string; nombre: string | null }> | null
     delChat: { id: string; nombre: string | null } | null

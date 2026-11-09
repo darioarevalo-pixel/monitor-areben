@@ -21,6 +21,8 @@ import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { plata } from '@/lib/erp/ventas-lista.core.js'
 import { cuandoCorto } from '@/components/ui/PiezasLista'
+import { CampoCuentaReal } from './CampoCuentaReal'
+import { pideCuentaReal } from '@/lib/erp/cobro-destino.core.js'
 
 const ESPERA = 'Todavía no está disponible: se prende cuando esté lista la ficha de la venta.'
 
@@ -58,13 +60,17 @@ export function VentanaCobro({ marca, fila, puede, onCerrar, onHecho }: {
   const sinCliente = !fila.clienteId
   const bloqueo = !puede.cobrar ? ESPERA : sinCliente ? 'La venta no tiene cliente del ERP: sin cliente no hay cuenta corriente.' : null
   const resto = n != null && n > fila.saldo ? Math.round((n - fila.saldo) * 100) / 100 : 0
+  const [cuentaReal, setCuentaReal] = useState('')
+  const pide = pideCuentaReal({ cuenta: cuentas.find((c) => String(c.id) === cuenta), rutas: extra?.rutas, cuentasReales: extra?.cuentasReales, marca: fila.linea, canal: fila.canal, fecha })
+  const faltaReal = pide && !cuentaReal
 
   async function registrar() {
     if (n == null || n <= 0) return setError('Escribí el monto.')
     if (!cuenta) return setError('Elegí la cuenta.')
+    if (faltaReal) return setError('Elegí a qué cuenta entró la plata.')
     setTrabajando(true)
     try {
-      await cobrarVentaErp(marca, { ventaId: fila.id, clienteId: fila.clienteId!, linea: fila.linea, monto: n, saldo: fila.saldo, cuenta, canal: fila.canal ?? null, fecha, ref, prueba: fila.prueba })
+      await cobrarVentaErp(marca, { ventaId: fila.id, clienteId: fila.clienteId!, linea: fila.linea, monto: n, saldo: fila.saldo, cuenta, ...(pide ? { cuentaReal } : {}), canal: fila.canal ?? null, fecha, ref, prueba: fila.prueba })
       onHecho(`Cobro de ${plata(n)} registrado en la venta ${fila.ref}.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo registrar el cobro.')
@@ -78,7 +84,7 @@ export function VentanaCobro({ marca, fila, puede, onCerrar, onHecho }: {
       abierto onCerrar={onCerrar} titulo="Registrar cobro"
       pie={<>
         <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-        <Button disabled={!!bloqueo || trabajando || n == null || n <= 0 || !cuenta} onClick={() => void registrar()}>Registrar {n != null && n > 0 ? plata(n) : ''}</Button>
+        <Button disabled={!!bloqueo || trabajando || n == null || n <= 0 || !cuenta || faltaReal} onClick={() => void registrar()}>Registrar {n != null && n > 0 ? plata(n) : ''}</Button>
       </>}
     >
       <p style={{ marginTop: 0, color: color.mut }}>Venta {fila.ref} · {fila.cliente} · saldo {plata(fila.saldo)}</p>
@@ -95,6 +101,7 @@ export function VentanaCobro({ marca, fila, puede, onCerrar, onHecho }: {
           </Field>
           <Field label="Fecha"><Input type="date" value={fecha} max={hoyDia} onChange={(e) => setFecha(e.target.value)} /></Field>
         </div>
+        {pide && <CampoCuentaReal cuentas={extra?.cuentasReales ?? []} valor={cuentaReal} onCambio={setCuentaReal} />}
         <div style={{ padding: '10px 12px', borderRadius: 9, background: color.bg, border: `1px solid ${color.line}`, display: 'flex', flexDirection: 'column', gap: 4, fontSize: font.base }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Saldo de la venta</span><b>{plata(fila.saldo)} → {plata(Math.max(0, fila.saldo - (n ?? 0)))}</b></div>
           {resto > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Lo que sobra ({plata(resto)})</span><span>a la venta más vieja que deba</span></div>}

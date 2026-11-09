@@ -63,4 +63,21 @@ describe('Cobrar a la cuenta (pantalla)', () => {
     expect(boton('Cobrar $')?.disabled).toBe(true)
     expect(cobrarCuentaErp).not.toHaveBeenCalled()
   })
+
+  it('con la ruta «se elige en cada cobro» pide a qué cuenta entró y la manda', async () => {
+    const real = { id: '00000000-0000-0000-0000-00000000aaaa', titular: 'areben', nombre: 'Cuenta corriente', banco: 'Galicia' }
+    leerCuentaDeCliente.mockResolvedValueOnce({ ...cuenta, rutas: [{ marca: 'bdi', canal: 'mayorista', medio: 'transferencia', cuenta_real_id: null, desde: '2026-01-01T03:00:00Z' }], cuentasReales: [real] } as typeof cuenta)
+    await montar()
+    await act(async () => { boton('Cobrar')!.click() })
+    await elegirCuenta()
+    const monto = document.querySelector('input[inputmode="decimal"]') as HTMLInputElement
+    const setI = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    await act(async () => { setI.call(monto, '1000'); monto.dispatchEvent(new Event('input', { bubbles: true })) })
+    expect(boton('Cobrar $')?.disabled).toBe(true)
+    const sel = document.querySelector('select[aria-label="Cuenta donde entró la plata"]') as HTMLSelectElement
+    const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
+    await act(async () => { set.call(sel, real.id); sel.dispatchEvent(new Event('change', { bubbles: true })) })
+    await act(async () => { boton('Cobrar $')!.click() })
+    expect((cobrarCuentaErp.mock.calls[0] as unknown as [string, Record<string, unknown>])[1]).toMatchObject({ cuentaReal: real.id })
+  })
 })
