@@ -200,6 +200,9 @@ let prendaAAjustarPendiente: PrendaAAjustar | null = null
 export const COLOR_DE_MARCA = { bdi: '#0d9488', zattia: '#db2777', stunned: '#7c3aed' } as const
 type Opcion = { key: 'bdi' | 'zattia' | 'stunned'; titulo: string }
 
+/** La venta que «Facturar» lleva a su pantalla: `Erp` se remonta al cambiar de pestaña, así que viaja en el módulo, como `pedidoDeBusqueda`. */
+let ventaAFacturarPendiente: string | null = null
+
 export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const router = useRouter()
   const { perfil, marca, setMarca } = useSesion()
@@ -211,7 +214,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const [aAjustar, setAAjustarEstado] = useState<PrendaAAjustar | null>(() => prendaAAjustarPendiente)
   const setAAjustar = (p: PrendaAAjustar | null) => { prendaAAjustarPendiente = p; setAAjustarEstado(p) }
   // El estado ya la tomó: el módulo la suelta (si no, reaparecería en el próximo remonte, por ejemplo al volver por el menú).
-  useEffect(() => { prendaAAjustarPendiente = null; pedidoDeBusqueda = null }, [])
+  useEffect(() => { prendaAAjustarPendiente = null; pedidoDeBusqueda = null; ventaAFacturarPendiente = null }, [])
   const ir = (s: string, p?: string | null, v?: string | null) => router.push(hrefErp(s, p, v))
   // Búsqueda global (⌘K) y atajos (?). Lo que se elige viaja en memoria (como `aAjustar`): la lista que lo abre lo recibe y lo suelta.
   const [panel, setPanel] = useState<'buscar' | 'atajos' | null>(null)
@@ -222,6 +225,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const setAAbrir = (v: AAbrir) => { pedidoDeBusqueda = v; setAAbrirEstado(v) }
   // Cada pedido de la búsqueda remonta la lista que lo recibe (ya montada, no volvería a leer ni a mirar `abrir`).
   const [pedidoN, setPedidoN] = useState(0)
+  const [aFacturar, setAFacturarEstado] = useState<string | null>(() => ventaAFacturarPendiente)
+  const setAFacturar = (id: string | null) => { ventaAFacturarPendiente = id; setAFacturarEstado(id) }
   const [prendaGlobal, setPrendaGlobal] = useState<{ marca: Marca; producto: string; talle: string } | null>(null)
   useAtajosErp(setPanel)
   // Una dirección vieja o mal escrita ⇒ la que corresponde (⛔ una pantalla en blanco).
@@ -417,7 +422,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
                   {/* 📱 En el celular el título va en la barra de arriba (`erp-movil-top`): acá se esconde. */}
                   <h1 className="erp-titulo" style={{ margin: 0, fontSize: 24, fontWeight: weight.bold, color: color.ink, whiteSpace: 'nowrap', borderLeft: `4px solid ${COLOR_DE_MARCA[opcionActiva]}`, paddingLeft: 10 }}>{itemActual?.label ?? seccion.titulo}</h1>
                   {/* Lo que era pestaña y es una ACCIÓN (mapa del menú, 30-oct): un botón al lado del título. */}
-                  {vista === 'facturacion' && puede('facturar-venta') && <Button size="sm" onClick={() => ir('ventas', 'facturacion', 'factura')}>Facturar una venta</Button>}
+                  {vista === 'facturacion' && puede('facturar-venta') && <Button size="sm" onClick={() => { setAFacturar(null); ir('ventas', 'facturacion', 'factura') }}>Facturar una venta</Button>}
                   {vista === 'factura' && puede('facturacion') && <Button size="sm" variant="outline" onClick={() => ir('ventas', 'facturacion')}>Volver a Facturas</Button>}
                   {pestania === 'cambio' && <Button size="sm" variant="outline" onClick={() => ir('ventas', 'ventas')}>Volver a Ventas</Button>}
                 </div>
@@ -434,14 +439,14 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {seccion.key === 'inicio' && <InicioErp key={marca} href={hrefErp} />}
             {seccion.vacia && <EmptyState title={seccion.vacia} />}
             {/* `key`: al cambiar de marca se cierra la ficha abierta (era de la otra marca) y se vuelve a leer. */}
-            {vista === 'ventas' && <VentasErp key={`${marca}/${pedidoN}`} irACaja={(que) => (que === 'cambio' ? ir('ventas', 'cambio') : ir('ventas', 'facturacion', 'factura'))} abrir={aAbrir?.tipo === 'venta' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
+            {vista === 'ventas' && <VentasErp key={`${marca}/${pedidoN}`} irACaja={(que, ventaId) => { if (que === 'cambio') { ir('ventas', 'cambio'); return } setAFacturar(ventaId ?? null); ir('ventas', 'facturacion', 'factura') }} abrir={aAbrir?.tipo === 'venta' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
             {vista === 'por-producto' && <PorProductoErp key={marca} />}
             {pestania === 'cobros' && <CobrosErp key={marca} />}
             {pestania === 'gastos' && <GastosErp key={marca} />}
             {pestania === 'cargar-gasto' && <CargarGasto key={marca} marca={marca === 'bdi' ? 'bdi' : 'zattia'} />}
             
             {vista === 'facturacion' && <Facturacion key={marca} />}
-            {vista === 'factura' && <FacturaCaja />}
+            {vista === 'factura' && <FacturaCaja key={aFacturar ?? 'buscar'} ventaInicial={aFacturar} />}
             {pestania === 'cambio' && <CambioCaja />}
             {pestania === 'cajas' && <CajasErp key={marca} />}
             {vista === 'stock' && <StockErp key={marca} ajustar={ajustarPrenda} irA={(p, v) => ir('stock', p, v)} />}

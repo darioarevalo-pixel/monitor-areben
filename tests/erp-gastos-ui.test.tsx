@@ -14,6 +14,7 @@ const leer = vi.fn(async (_m: string, _l: string, desde: string, hasta: string, 
 }))
 const registrar = vi.fn(async () => ({ ok: true }))
 vi.mock('@/lib/erp/cliente', () => ({
+  leerCorteDeLinea: async () => ({ en_erp: false }),
   leerGastos: (...a: [string, string, string, string, boolean]) => leer(...a),
   registrarGastoErp: (...a: unknown[]) => (registrar as (...x: unknown[]) => unknown)(...a),
 }))

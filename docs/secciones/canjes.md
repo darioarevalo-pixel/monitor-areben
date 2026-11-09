@@ -51,6 +51,9 @@ Portal público sin sesión: `/canje/<token>`, fuera del nav y resuelto antes de
   (`canjeAlErp`, `api/_salida-documento.js`; mismo `ref` que la sombra de antes, `canje-<id>:<depósito>`). La «venta» que vuelve es
   `ERP A-N` (`gn_venta_number`), `gn_venta_id` queda vacío, y reintentar ⛔ descuenta dos veces. Antes del corte: venta de GN + el
   ajuste en sombra (`documentarCanje`), como siempre.
+  🔑 **Cancelar con el stock ya descontado lo decide dónde está la prenda** (`cancelarDevuelveStock`, Bruno 9-nov): sigue acá ⇒ vuelve
+  al mismo depósito con su costo (`devolverCanje` del motor, sólo lo salido desde el corte), y si no se puede devolver el canje ⛔ se
+  cancela. Ya recibida o despachada ⇒ ⛔ vuelve sola. 🔴 El despacho que ve esto es el que se marca en la ficha: Logística ⛔ lo escribe.
 - `puedeAtenderRetiroLocal` (`lib/permisos.core.js:395`) es **la única rendija** por la que alguien
   sin la sección `canjes` —que es de Marketing— toca un canje.
 - `lib/canjes/seguimiento.ts` importa `diasDesde`/`addDiasISO` de `lib/crm/core.ts`, no los copia.

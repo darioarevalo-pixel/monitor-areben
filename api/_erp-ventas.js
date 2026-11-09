@@ -10,7 +10,7 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { baseFacturacion } from './_facturacion.js'
 import { rangoDeDias } from '../lib/erp/venta.core.js'
-import { armarFila, ventasDeTnSinNombre } from '../lib/erp/ventas-lista.core.js'
+import { armarFila, etapaDePedido, ventasDeTnSinNombre } from '../lib/erp/ventas-lista.core.js'
 import { ADMIN } from '../lib/erp/pedidos-tn.core.js'
 import { configPg } from '../lib/pg.core.js'
 
@@ -85,7 +85,13 @@ async function deAfuera(sb, ventas) {
   })
   const facGn = new Map(facturasGn.map((f) => [String(f.venta_id), f]))
   const erp = await facturasDelErp(ventas.flatMap((v) => (v.facturas || []).map((f) => f.factura_id)))
-  return { deVenta, orden: (v) => orden.get(tnIdDe(v)) || null, facGn: (g) => (g ? facGn.get(String(g.id)) || null : null), erp }
+  // La etapa del pedido mayorista. Si la tabla ⛔ responde (Zattia ⛔ vende mayorista), la lista sigue sin ella.
+  const filasPedido = await enTandas(ventas.filter((v) => v.origen === 'mayorista' && !v.prueba).map((v) => String(v.id)), async (t) => {
+    const { data, error } = await sb.from('pedido_mayorista').select('venta_id, a_preparar_en, preparacion_en, preparado_en, despachado_en, anulado_en').in('venta_id', t)
+    return error ? [] : data
+  })
+  const pedidos = new Map(filasPedido.map((p) => [String(p.venta_id), p]))
+  return { pedido: (v) => etapaDePedido(pedidos.get(String(v.id))), deVenta, orden: (v) => orden.get(tnIdDe(v)) || null, facGn: (g) => (g ? facGn.get(String(g.id)) || null : null), erp }
 }
 
 /** `pendienteDeVentas` del motor (§16) → { venta_id: $ }. Si falla, la lista sigue con lo que dejó a cuenta (dicho en la ficha). */
@@ -140,7 +146,7 @@ function filaCruda(v, a, numeros) {
     canal: v.canal, deposito: v.deposito, total: v.total, prueba: v.prueba, usuario: v.vendedor || v.usuario, ocurridaEn: v.ocurrida_en, tnCreadaEn: o?.creada_en ?? null,
     nota: notaVigente(v.notas), entrega: v.entrega ?? null, clienteId: v.cliente_id ?? null, vueltaPendiente: a.vueltas.get(v.id) ?? null,
     cliente: v.cliente, clienteGn: g?.client_name ?? null, gnNumero: g?.number ?? null, gnEstado: v.detalle?.sale_state ?? g?.sale_state ?? null,
-    tnNumero: v.detalle?.tn?.numero ?? o?.numero ?? null, tnEstado: o?.estado ?? null, envioTipo: o?.envio_tipo ?? null,
+    tnNumero: v.detalle?.tn?.numero ?? o?.numero ?? null, tnEstado: o?.estado ?? null, pedidoEtapa: a.pedido(v), envioTipo: o?.envio_tipo ?? null,
     pagos: (v.pagos || []).map((p) => ({ medio: p.medio, cuenta: p.cuenta, monto: Number(p.monto) })),
     facturaErp: fe?.numero ?? null, facturaGn: fg?.numero ?? null, tieneCambio: v.tiene_cambio,
     pendiente: v.pendiente ?? null,

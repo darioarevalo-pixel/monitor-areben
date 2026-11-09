@@ -214,7 +214,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <div>
           <h2 style={h2}>Para hacer</h2>
-          <div style={{ fontSize: font.sm, color: color.mut }}>{rol === 'admin' ? 'por rol, con el número de cada lista · hoy el ERP lo ven sólo los administradores' : `${ROLES.find(([k]) => k === rol)?.[1]}: ${subtituloDe(rol)}`}</div>
+          <div style={{ fontSize: font.sm, color: color.mut }}>{rol === 'admin' ? 'por rol, con el número de cada lista' : `${ROLES.find(([k]) => k === rol)?.[1]}: ${subtituloDe(rol)}`}</div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: space[3] }}>
           {paraHacerDe(rol).map(([tarjeta, items]) => (

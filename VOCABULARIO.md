@@ -359,6 +359,7 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `código` | `SKU` · `SKUs` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
 | `Tienda Nube` · `Gestión Nube` · `Mercado Libre` | `TN` · `GN` · `ML` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: sin siglas en pantalla |
 | `Caja` | `Caja (POS)` · `POS` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
+| `Ingreso de plata` · `Salida de plata` (los resúmenes y filtros de ERP › Cobros) | `Entró` · `Salió` · `Entró plata` · `Salió plata` | monitor | `components/erp/ventas/CobrosErp.tsx` · `lib/erp/cobros.core.js` | Bruno, 9-nov: «le falta vocabulario a entró y salió» |
 | `Ingresos y ajustes` | `Conteos y ajustes` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
 | `forma de pago` · `formas de pago` | `medio de cobro` · `medios de cobro` · `medio de pago` · `medios de pago` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct-2026: «forma de pago está perfecto» (eran tres palabras para lo mismo) |
 | `Cobros` | `Cobranzas` | monitor | `components/erp` · `lib/erp` · `components/cobranzas` · `lib/cobranzas` · `lib/nav.datos.ts` | Bruno, 30-oct: Cobros en el ERP y en el monitor (la sección del monitor, 30-oct tanda 3) |
