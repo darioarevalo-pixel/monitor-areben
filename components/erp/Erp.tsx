@@ -441,7 +441,11 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
             {/* `key`: al cambiar de marca se cierra la ficha abierta (era de la otra marca) y se vuelve a leer. */}
             {vista === 'ventas' && <VentasErp key={`${marca}/${pedidoN}`} irACaja={(que, ventaId) => { if (que === 'cambio') { ir('ventas', 'cambio'); return } setAFacturar(ventaId ?? null); ir('ventas', 'facturacion', 'factura') }} abrir={aAbrir?.tipo === 'venta' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
             {vista === 'por-producto' && <PorProductoErp key={marca} />}
-            {pestania === 'cobros' && <CobrosErp key={marca} />}
+            {pestania === 'cobros' && <CobrosErp
+              key={marca}
+              abrirVenta={(v) => { setPedidoN((n) => n + 1); setAAbrir({ tipo: 'venta', id: v.id, numero: v.numero, periodo: periodoDeVenta(v.cuando, diaArgentino(Date.now())) ?? 'mes' }); ir('ventas', 'ventas') }}
+              abrirCliente={(nombre) => { setPedidoN((n) => n + 1); setAAbrir({ tipo: 'cliente', doc: null, nombre }); ir('clientes', 'clientes') }}
+            />}
             {pestania === 'gastos' && <GastosErp key={marca} />}
             {pestania === 'cargar-gasto' && <CargarGasto key={marca} marca={marca === 'bdi' ? 'bdi' : 'zattia'} />}
             
