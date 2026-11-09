@@ -10,6 +10,7 @@
  * Un gasto de caja ⛔ se edita: se anula desde la Caja mientras está abierta (queda tachado), como cualquier salida.
  */
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Field, Input, Notice, Select, StatusPill, Tabs, color, font, space, type Tone } from '@/components/ui'
@@ -43,7 +44,7 @@ export function CargarGasto({ marca }: { marca: MarcaErp }) {
   const [dias, setDias] = useState(31)
   const [deOficina, setDeOficina] = useState(false)
   const [errorLectura, setErrorLectura] = useState<string | null>(null)
-  const [origen, setOrigen] = useState<Origen>('caja')
+  const [origen, setOrigen] = useState<Origen | null>(null)
   const [monto, setMonto] = useState('')
   const [categoria, setCategoria] = useState('')
   const [detalle, setDetalle] = useState('')
@@ -69,7 +70,9 @@ export function CargarGasto({ marca }: { marca: MarcaErp }) {
     return () => { vivo = false }
   }, [marca])
 
-  const enOficina = origen === 'oficina' && deOficina
+  // Sin caja abierta, quien puede cargar de la oficina arranca ahí: Administración no usa la Caja (Bruno, 9-nov).
+  const enOficina = deOficina && (origen ?? (caja === null ? 'oficina' : 'caja')) === 'oficina'
+  const sinCaja = !enOficina && caja === null
   const montoN = aNumero(monto)
   // A8: la carga la cuenta que abrió la caja (o un admin): la MISMA regla que el servidor; esto sólo lo dice antes.
   const deOtro = !enOficina && !!caja && !puedeMoverEfectivo(caja, perfil, admin)
@@ -120,8 +123,13 @@ export function CargarGasto({ marca }: { marca: MarcaErp }) {
             : 'El gasto se paga con el efectivo de la caja abierta: resta del cierre. Queda para revisar antes de pasar al dashboard.'}
         </span>
         {!enOficina && caja === undefined && !errorLectura && <span style={{ color: color.mut }}>Mirando la caja…</span>}
-        {!enOficina && caja === null && <Notice tone="warning">No hay una caja abierta. Abrila en la Caja para cargar un gasto.</Notice>}
+        {sinCaja && (
+          <Notice tone="warning">
+            No hay una caja abierta. <Link href="/pos">Abrir la Caja ↗</Link>
+          </Notice>
+        )}
         {deOtro && <Notice tone="warning">La caja la abrió {caja?.abierto_por || 'otra cuenta'}: el gasto lo carga esa cuenta o un admin.</Notice>}
+        {!sinCaja && <>
         <Field label="Monto">
           <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" autoComplete="off" placeholder="$" data-foco />
         </Field>
@@ -146,6 +154,7 @@ export function CargarGasto({ marca }: { marca: MarcaErp }) {
             Cargar gasto
           </Button>
         </div>
+        </>}
       </div>
 
       {errorLectura && <Notice tone="danger">{errorLectura}</Notice>}
