@@ -12,6 +12,7 @@
  */
 import { lineaEnErp } from '../lib/erp/corte.core.js'
 import { cortesDeCaja } from './_caja-corte.js'
+import { destinosDeCobro } from './_erp-ventas.js'
 import { createClient } from '@supabase/supabase-js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { aTupla } from '../lib/erp/clientes-lista.core.js'
@@ -215,8 +216,25 @@ export async function cuentaDeCliente({ marca, clienteId, linea, prueba = false,
     // Con qué cuentas se puede COBRAR (las mismas que la venta: ⛔ «Saldo a favor» ni «Cuenta corriente», que no son plata que entra).
     const cuentas = await pg.query(`select id, nombre, medio from cuenta_cobro where marca = $1 and activa and medio not in ('saldo', 'cuenta') order by nombre`, [linea])
       .then((x) => x.rows).catch(() => [])
-    return { hoy: r.hoy, cliente: r.cliente, credito: r.credito, estado: r.estado, mayor: r.mayor, csv, cuentas }
+    const destinos = await destinosDeCobro(marca, linea, 'mayorista', { db: pg })
+    return { hoy: r.hoy, cliente: r.cliente, credito: r.credito, estado: r.estado, mayor: r.mayor, csv, cuentas, ...destinos }
   })
+}
+
+/**
+ * El libro que muestra y carga el panel: el de PRUEBA hasta el corte de BDI y el REAL desde entonces. Lo decide el servidor, y la
+ * pantalla manda el cobro con el `prueba` que recibió. Si el corte no se puede leer, queda en prueba: un pago nunca entra al libro
+ * real sin saber que BDI cortó (y en ese caso `panelAbierto` tampoco le abre el panel a Darío).
+ * @param {{ cortes?: () => Promise<Record<string, string>> }} [o]
+ * @returns {Promise<boolean>} true = libro de prueba
+ */
+export async function libroDePruebaDelPanel({ cortes = () => cortesDeCaja('bdi') } = {}) {
+  try {
+    return !lineaEnErp(await cortes(), 'bdi')
+  } catch (e) {
+    console.error(`[panel] erp_corte, libro de prueba: ${e && e.message}`)
+    return true
+  }
 }
 
 /**
@@ -302,10 +320,11 @@ export async function panelAbierto(usuario = null, { env = process.env, cortes =
  * el de PRUEBA. Cargar el pago va por `cobrar-cuenta` (`cobrarCuentaErp`), el mismo de ERP › Clientes.
  * Sin cliente (la solapa Pagos, sin chat) contesta sólo si está prendido.
  * @param {{ gnId?: string, tel?: string, prueba?: boolean, usuario?: string|null|Array<string|null|undefined> }} p
- * @param {{ conMotor: Function, prendido?: boolean }} deps
+ * @param {{ conMotor: Function, prendido?: boolean, cortes?: () => Promise<Record<string, string>> }} deps
  */
-export async function cuentaDelPanel({ gnId = '', tel = '', prueba = false, usuario = null }, deps) {
+export async function cuentaDelPanel({ gnId = '', tel = '', prueba: pedida = false, usuario = null }, deps) {
   if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
+  const prueba = pedida && await libroDePruebaDelPanel({ cortes: deps.cortes })
   const gn = /^\d{1,12}$/.test(String(gnId)) ? String(gnId) : null
   const wa = String(tel || '').replace(/\D/g, '').slice(0, 20)
   if (!gn && !wa) return { prendido: true, prueba, cliente: null }
@@ -341,7 +360,7 @@ export async function cuentaDelPanel({ gnId = '', tel = '', prueba = false, usua
     return {
       prendido: true, prueba, hoy: r.hoy, cliente: r.cliente, linea: 'bdi', credito: r.credito,
       estado: { ...r.estado, pendientes: r.estado.pendientes.map((v) => ({ ...v, nombre: ventas.get(v.ref) ?? null })) },
-      pagos, cuentas,
+      pagos, cuentas, ...(await destinosDeCobro('bdi', 'bdi', 'mayorista', { db: pg })),
       personas: personas?.map((x) => ({ id: x.id, whatsapp: x.whatsapp, nombre: x.nombre })) ?? null,
       delChat: delChat ? { id: delChat.id, nombre: delChat.nombre } : null,
     }

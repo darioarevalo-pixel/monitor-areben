@@ -141,7 +141,7 @@ import { ACCIONES as ACCIONES_CATALOGO } from '../lib/erp/catalogo-edicion.core.
 import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
-import { anotarWhatsappPanel, bcraDelPanel, clienteNuevoPanel, clientesDelPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
+import { anotarWhatsappPanel, bcraDelPanel, clienteNuevoPanel, clientesDelPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, libroDePruebaDelPanel, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
 import { conFacturacion, enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, facturasDeClientePanel, padronDelPanel, partePedidoPanel } from './_erp-factura-mayorista.js'
 import { ACCIONES_PEDIDO, accionDePedido, pedidoDelPanel, pedidosDelPanel, preparadosSinPagarDelPanel, productosParaElPanel } from './_erp-pedido.js'
 import { resultadoDelMes } from './_erp-inicio.js'
@@ -2045,7 +2045,7 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cuentas-corrientes') {
-      const r = await cuentasDeLaMarca({ marca: String(req.query.marca || ''), linea: String(req.query.linea || ''), prueba: req.query.prueba === '1' }, { conMotor })
+      const r = await cuentasDeLaMarca({ marca: String(req.query.marca || ''), linea: String(req.query.linea || ''), prueba: req.query.panel === '1' ? await libroDePruebaDelPanel() : req.query.prueba === '1' }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cuenta-panel') {

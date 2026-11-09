@@ -14,7 +14,7 @@ vi.mock('../motor/venta/cliente.mjs', () => ({
   numeroWhatsapp: (t: string) => (String(t).replace(/\D/g, '').length === 13 ? String(t).replace(/\D/g, '') : null),
 }))
 
-import { anotarWhatsappPanel, cuentaDelPanel, panelAbierto, panelCuentaPrendido, sacarWhatsappPanel } from '../api/_erp-clientes.js'
+import { anotarWhatsappPanel, cuentaDelPanel, libroDePruebaDelPanel, panelAbierto, panelCuentaPrendido, sacarWhatsappPanel } from '../api/_erp-clientes.js'
 
 /** Una base de mentira que contesta por pedazo de SQL y anota cada consulta. */
 const base = (rows: Record<string, unknown[]>, sqls: string[] = []) => ({
@@ -139,5 +139,29 @@ describe('panelAbierto: se abre solo con el corte de BDI (Bruno 31-oct + 1-nov)'
     const cortes = async () => { throw new Error('la base no contesta') }
     expect(await panelAbierto('dario', { env, cortes })).toBe(false)
     expect(await panelAbierto('bruno', { env: { PANEL_CUENTA_CORRIENTE: 'bruno' }, cortes })).toBe(true)
+  })
+})
+
+describe('El libro del panel sigue al corte de BDI', () => {
+  const cuentaBase = base({ gn_client_id: [{ id: 'c1' }] })
+  beforeEach(() => { cuentaDe.mockReset(); cuentaDe.mockResolvedValue(CUENTA); whatsappsDe.mockResolvedValue([]) })
+
+  it('antes del corte lee y contesta el de prueba', async () => {
+    const r = await cuentaDelPanel({ gnId: '7', prueba: true }, { conMotor: conMotor(cuentaBase), prendido: true, cortes: async () => ({}) }) as { prueba: boolean }
+    expect(r.prueba).toBe(true)
+    expect(cuentaDe.mock.calls[0][1]).toMatchObject({ prueba: true })
+  })
+  it('desde el corte lee y contesta el REAL, aunque la pantalla pida prueba', async () => {
+    const r = await cuentaDelPanel({ gnId: '7', prueba: true }, { conMotor: conMotor(cuentaBase), prendido: true, cortes: async () => ({ bdi: '2020-01-01T00:00:00Z' }) }) as { prueba: boolean }
+    expect(r.prueba).toBe(false)
+    expect(cuentaDe.mock.calls[0][1]).toMatchObject({ prueba: false })
+  })
+  it('el corte de OTRA línea no lo cambia', async () => {
+    expect(await libroDePruebaDelPanel({ cortes: async () => ({ stunned: '2026-10-28T23:40:27Z' }) })).toBe(true)
+  })
+  it('sin poder leer el corte queda en prueba', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await libroDePruebaDelPanel({ cortes: async () => { throw new Error('caída') } })).toBe(true)
+    err.mockRestore()
   })
 })

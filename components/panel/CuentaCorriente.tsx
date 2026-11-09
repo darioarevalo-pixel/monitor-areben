@@ -9,8 +9,9 @@
  * apagado ⇒ ⛔ se dibuja nada y el panel queda igual a hoy. Se pregunta UNA vez por sesión; recién prendido se lee la cuenta
  * de cada chat. Si el servidor rebota (sin permiso de cuentas corrientes) también queda apagado, callado.
  *
- * 🔴 Lee el libro de PRUEBA (`LIBRO_DE_PRUEBA`): hasta el corte de BDI, la cuenta corriente del ERP es la de las ventas en
- * paralelo con Gestión Nube, y un pago cargado acá ⛔ baja en Gestión Nube.
+ * 🔴 El libro lo decide el SERVIDOR (`libroDePruebaDelPanel`): hasta el corte de BDI es el de PRUEBA (las ventas en paralelo con
+ * Gestión Nube; un pago cargado acá ⛔ baja en Gestión Nube) y desde el corte, el REAL. La pantalla pide prueba y carga el pago con el
+ * `prueba` que le contestaron.
  *
  * Cargar el pago es el mismo «Cobrar a la cuenta» de ERP › Clientes (`cobrarCuentaErp`): el motor paga primero la compra
  * más vieja; la vista previa (`repartirPago`) sólo lo dibuja antes de confirmar.
@@ -19,6 +20,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button, CopyButton, Field, Input, Modal, Notice, Select } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
+import { CampoCuentaReal } from '@/components/erp/ventas/CampoCuentaReal'
+import { pideCuentaReal } from '@/lib/erp/cobro-destino.core.js'
 import { anotarWhatsappPanel, cobrarCuentaErp, leerBcraPanel, leerCuentaPanel, leerCuentasCorrientes, sacarWhatsappPanel, type BcraDelPanel, type CuentaDelMotor, type CuentaPanel } from '@/lib/erp/cliente'
 import { mensajeDeSaldo, repartirPago, textoSaldo } from '@/lib/erp/cuenta-panel.core.js'
 import { ResumenBcra } from './Bcra'
@@ -232,6 +235,7 @@ export function HojaCargarPago({ cuenta, pedido = null, onCerrar, onHecho }: {
   const [operacion, setOperacion] = useState('')
   const [repetida, setRepetida] = useState<string | null>(null)
   const [entro, setEntro] = useState(cuenta.cuentas.length === 1 ? String(cuenta.cuentas[0].id) : '')
+  const [cuentaReal, setCuentaReal] = useState('')
   const [hoyDia] = useState(() => diaArgentino(Date.now()))
   const [fecha, setFecha] = useState(hoyDia)
   const [error, setError] = useState<string | null>(null)
@@ -242,15 +246,18 @@ export function HojaCargarPago({ cuenta, pedido = null, onCerrar, onHecho }: {
   const nombre = (r: string) => (r === refPedido && pedido ? `Pedido ${pedido.numero}` : pendientes.find((p) => p.ref === r)?.nombre || 'Compra')
   const delPedido = refPedido ? pendientes.find((p) => p.ref === refPedido)?.pendiente ?? 0 : 0
   const despues = saldo - (n ?? 0)
+  const pide = pideCuentaReal({ cuenta: cuenta.cuentas.find((c) => String(c.id) === entro), rutas: cuenta.rutas, cuentasReales: cuenta.cuentasReales, marca: 'bdi', canal: 'mayorista', fecha })
+  const faltaReal = pide && !cuentaReal
 
   async function confirmar(igual = false) {
     if (n == null || n <= 0) return setError('Poné cuánto pagó.')
     if (!entro) return setError('Elegí a qué cuenta entró.')
+    if (faltaReal) return setError('Elegí a qué cuenta entró la plata.')
     setTrabajando(true)
     setError(null)
     try {
       const r = await cobrarCuentaErp('bdi', {
-        clienteId: cuenta.cliente.id, linea: 'bdi', monto: n, cuenta: entro, fecha, ref, prueba: cuenta.prueba,
+        clienteId: cuenta.cliente.id, linea: 'bdi', monto: n, cuenta: entro, ...(pide ? { cuentaReal } : {}), fecha, ref, prueba: cuenta.prueba,
         ...(operacion.trim() ? { operacion: operacion.trim(), ...(igual ? { operacionRepetida: true } : {}) } : {}),
         ...(pedido && delPedido > 0 ? { imputar: [{ ventaId: pedido.ventaId, monto: Math.min(n, delPedido) }] } : {}),
       })
@@ -272,7 +279,7 @@ export function HojaCargarPago({ cuenta, pedido = null, onCerrar, onHecho }: {
         <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
         {repetida
           ? <Button tone="warning" disabled={trabajando} onClick={() => void confirmar(true)}>Cargar igual</Button>
-          : <Button tone="success" disabled={trabajando || n == null || n <= 0 || !entro} onClick={() => void confirmar()}>Confirmar pago</Button>}
+          : <Button tone="success" disabled={trabajando || n == null || n <= 0 || !entro || faltaReal} onClick={() => void confirmar()}>Confirmar pago</Button>}
       </>}
     >
       <p style={{ marginTop: 0, color: color.mut }}>{cuenta.cliente.nombre} · {saldo > 0 ? `debe ${plata(saldo)}` : saldo < 0 ? `${plata(-saldo)} a favor` : 'al día'}{cuenta.prueba ? ' · de prueba' : ''}</p>
@@ -298,6 +305,7 @@ export function HojaCargarPago({ cuenta, pedido = null, onCerrar, onHecho }: {
           </Field>
           <Field label="Fecha"><Input type="date" value={fecha} max={hoyDia} onChange={(e) => setFecha(e.target.value)} /></Field>
         </div>
+        {pide && <CampoCuentaReal cuentas={cuenta.cuentasReales ?? []} valor={cuentaReal} onCambio={setCuentaReal} />}
         <Field label="N° de operación (opcional)">
           <Input value={operacion} onChange={(e) => { setOperacion(e.target.value); setRepetida(null) }} placeholder="El del comprobante" />
         </Field>
@@ -333,7 +341,7 @@ export function ListaCuentas({ onIrAlCliente }: { onIrAlCliente: ((c: { cliente_
   const [vuelta, setVuelta] = useState(0)
   useEffect(() => {
     let vivo = true
-    leerCuentasCorrientes('bdi', 'bdi', LIBRO_DE_PRUEBA)
+    leerCuentasCorrientes('bdi', 'bdi', LIBRO_DE_PRUEBA, { panel: true })
       .then((r) => { if (vivo) setFilas(r.cuentas.filter((c) => c.saldo > 0).sort((a, b) => b.dias_mayor - a.dias_mayor)) })
       .catch((e) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudo leer la cuenta corriente.') })
     return () => { vivo = false }
