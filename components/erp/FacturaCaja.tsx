@@ -157,7 +157,9 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
 
   // Desde la ficha: la venta ya está elegida, ⛔ se busca de nuevo.
   useEffect(() => {
-    if (ventaInicial) void abrir(ventaInicial)
+    if (!ventaInicial) return
+    const t = setTimeout(() => void abrir(ventaInicial), 0)
+    return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ventaInicial])
 
