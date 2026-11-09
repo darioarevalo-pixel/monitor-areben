@@ -88,7 +88,7 @@
  */
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario, padronParaEncargadas } from './_auth.js'
-import { esAdmin, permisoErpDe, permisosErp, puedeErp } from '../lib/permisos.core.js'
+import { esAdmin, perfilVistoComo, permisoErpDe, permisosErp, puedeErp } from '../lib/permisos.core.js'
 import { ETIQUETA_LINEA, baseDeLinea, skuParaLinea } from '../lib/lineas.core.js'
 import { lineasEnErp } from '../lib/erp/corte.core.js'
 import { lineaDelRenglon, marcaDelCambio } from '../lib/caja/corte-caja.core.js'
@@ -1742,8 +1742,10 @@ export async function compradoresTn(pedidos, { env = process.env, pedir = fetch 
 }
 
 export default async function handler(req, res) {
-  const perfil = await exigirUsuario(req, res)
-  if (!perfil) return
+  const quien = await exigirUsuario(req, res)
+  if (!quien) return
+  // «Ver como»: el Admin recibe lo que recibiría ese rol, costos incluidos. A quien no es Admin no le cambia nada.
+  const perfil = perfilVistoComo(quien, String(req.headers?.['x-erp-ver-como'] || ''))
   if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'método no permitido' })
 
   const body = req.body || {}

@@ -21,6 +21,7 @@ import { contarVistas as vistasDeProductos, filtrar as filtrarProductos } from '
 import { useLineaErp, useTiendaErp } from '@/lib/erp/linea-erp'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { renglonesDelResultado } from '@/lib/erp/gastos.core.js'
+import { elegirRolVisto, useRolVisto } from '@/lib/erp/ver-como'
 import { ROLES, VISTA, paraHacerDe, rolDe, subtituloDe, verResultado } from '@/lib/erp/inicio-roles.core.js'
 import { esAdmin } from '@/lib/permisos'
 import { agrupar as agruparPorProducto, filtrar as filtrarPorProducto } from '@/lib/erp/ventas-producto.core.js'
@@ -84,8 +85,8 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const { marca: delShell, perfil } = useSesion()
   // 🔴 Bruno 30-oct: el rol es el de la persona (todos abrían como Admin y el local veía costos); «Ver como» lo cambia sólo para el admin.
   const admin = esAdmin(perfil)
-  const [elegido, setRol] = useState<string | null>(null)
-  const rol = admin ? (elegido ?? 'admin') : rolDe(perfil)
+  const visto = useRolVisto()
+  const rol = visto ?? (admin ? 'admin' : rolDe(perfil))
   const [hoy] = useState(() => diaArgentino(Date.now()))
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   // La tienda del menú: los gastos (y el resultado) son de ESA línea, ⛔ de Zattia + Stunned (Bruno, 30-oct).
@@ -162,7 +163,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: weight.bold, letterSpacing: '-0.02em', color: color.ink }}>{tituloDelMes(hoy)}</h1>
           <div style={{ fontSize: font.sm, color: color.mut }}>{rol === 'admin' ? `al ${Number(hoy.slice(8, 10))} de ${MESES[Number(hoy.slice(5, 7)) - 1]}` : `Viendo como ${ROLES.find(([k]) => k === rol)?.[1]}`}</div>
         </div>
-        {esAdmin(perfil) && <VerComo rol={rol} setRol={setRol} />}
+        {(esAdmin(perfil) || visto) && <VerComo rol={rol} setRol={elegirRolVisto} />}
       </header>
       {verResultado(rol) && <section aria-label="Resultado comercial del mes" style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         {res?.error && <Notice tone="danger">{res.error}</Notice>}

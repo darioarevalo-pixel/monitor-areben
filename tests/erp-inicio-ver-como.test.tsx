@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ROLES, paraHacerDe, rolDe, verResultado } from '../lib/erp/inicio-roles.core.js'
 import { ERP_ROLES } from '../lib/permisos.core.js'
+import { elegirRolVisto } from '../lib/erp/ver-como'
 import { VISTAS as VENTAS } from '../lib/erp/ventas-lista.core.js'
 import { VISTAS as STOCK } from '../lib/erp/stock-lista.core.js'
 import { VISTAS as PRODUCTOS } from '../lib/erp/productos-lista.core.js'
@@ -46,7 +47,7 @@ let admin = true
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'bdi', perfil: { name: 'bruno', admin } }) }))
 let root: Root | null = null
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
-afterEach(() => { act(() => root?.unmount()); root = null; document.body.innerHTML = ''; admin = true })
+afterEach(() => { act(() => { elegirRolVisto(null); root?.unmount() }); root = null; document.body.innerHTML = ''; admin = true })
 
 async function montar() {
   const { InicioErp } = await import('@/components/erp/inicio/InicioErp')

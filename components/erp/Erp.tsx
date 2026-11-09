@@ -17,14 +17,16 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
-import { useSesion } from '@/components/SesionProvider'
-import { Button, EmptyState, Modal, Tabs, color, space, weight } from '@/components/ui'
+import { useEffect, useMemo, useState } from 'react'
+import { SesionConPerfil, useSesion } from '@/components/SesionProvider'
+import { elegirRolVisto, useRolVisto } from '@/lib/erp/ver-como'
+import { ROLES } from '@/lib/erp/inicio-roles.core.js'
+import { Button, EmptyState, Modal, Notice, Tabs, color, space, weight } from '@/components/ui'
 import { leerCorteDeLinea } from '@/lib/erp/cliente'
 import { usarMarcaCaja } from '@/lib/caja/marca'
 import { CUENTAS } from '@/lib/cuentas'
 import type { Marca } from '@/lib/nav.datos'
-import { esAdmin, puedeVer } from '@/lib/permisos'
+import { esAdmin, perfilVistoComo, puedeVer, type Perfil } from '@/lib/permisos'
 import { CambioCaja } from './CambioCaja'
 import { FacturaCaja } from './FacturaCaja'
 import { Facturacion } from './Facturacion'
@@ -203,8 +205,18 @@ type Opcion = { key: 'bdi' | 'zattia' | 'stunned'; titulo: string }
 /** La venta que «Facturar» lleva a su pantalla: `Erp` se remonta al cambiar de pestaña, así que viaja en el módulo, como `pedidoDeBusqueda`. */
 let ventaAFacturarPendiente: string | null = null
 
+/** «Ver como»: mientras el Admin mira con otro rol, todo lo de adentro recibe ese perfil. La `key` rearma las pantallas al cambiar. */
 export function Erp({ ruta = [] }: { ruta?: string[] }) {
+  const { perfil } = useSesion()
+  const visto = useRolVisto()
+  const vistoComo = useMemo(() => (visto && perfil ? perfilVistoComo(perfil, visto) as Perfil : null), [visto, perfil])
+  if (!vistoComo) return <ErpAdentro ruta={ruta} />
+  return <SesionConPerfil key={visto} perfil={vistoComo}><ErpAdentro ruta={ruta} /></SesionConPerfil>
+}
+
+function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
   const router = useRouter()
+  const rolQueSeVe = useRolVisto()
   const { perfil, marca, setMarca } = useSesion()
   const { seccion, pestania, vista, valida } = resolverRutaErp(ruta)
   // De una ficha de prenda (Stock, Movimientos, Conciliación, Diferencias) a «Nuevo ajuste» con la prenda cargada
@@ -404,6 +416,12 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
         <ProveedorLineaErp value={lineaVista}>
         <div className="shell-content">
           <div className="seccion-pad" style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
+            {rolQueSeVe && (
+              <Notice tone="warning">
+                Estás viendo el ERP como <b>{ROLES.find(([k]) => k === rolQueSeVe)?.[1]}</b>: el menú, los botones y los datos de ese rol. No se guarda nada.{' '}
+                <Button size="sm" variant="outline" onClick={() => elegirRolVisto(null)}>Volver a Admin</Button>
+              </Notice>
+            )}
             {/* 🎯 Bruno 30-oct: el cartel de Stunned «ya vende por el ERP» sobraba. Queda sólo donde Gestión Nube sigue siendo el que sirve. */}
             {seccion.key !== 'inicio' && !lineaEnErp && (
               <p style={{ margin: 0, padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4, borderLeft: `3px solid ${COLOR_DE_MARCA[opcionActiva]}` }}>
