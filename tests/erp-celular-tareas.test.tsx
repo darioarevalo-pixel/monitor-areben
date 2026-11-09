@@ -41,6 +41,11 @@ async function montar(el: React.ReactElement, url: string) {
   await act(async () => { root!.render(el) })
   await esperar()
 }
+const elegirSalida = async (motivo = 'fallado') => {
+  await act(async () => { ([...document.querySelectorAll('button')].find((b) => b.textContent === 'Salida') as HTMLButtonElement).click() })
+  const sel = [...document.querySelectorAll('select')].find((x) => [...x.options].some((o) => o.value === motivo)) as HTMLSelectElement
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, motivo); sel.dispatchEvent(new Event('change', { bubbles: true })) })
+}
 const boton = (t: string | RegExp) => [...document.querySelectorAll('button')].find((b) => (typeof t === 'string' ? b.textContent === t : t.test(b.textContent ?? ''))) as HTMLButtonElement
 const click = async (b: Element) => { await act(async () => { (b as HTMLElement).click() }); await esperar() }
 const elPie = () => host.querySelector('[data-pie-tarea]')
@@ -92,6 +97,7 @@ describe('Nuevo ajuste en el celular', () => {
 
   it('la cantidad grande con el antes → después; «Guardar ajuste» fijo al pie manda lo que sale', async () => {
     await abrirAjuste('/erp/stock/ajustes?movil=1')
+    await elegirSalida()
     const tarjeta = host.querySelector('[data-tarjeta-ajuste]') as HTMLElement
     expect(tarjeta.textContent).toContain('TOP ZARA · NEGRO')
     expect(tarjeta.textContent).toContain('el ERP dice 5 en Local')
