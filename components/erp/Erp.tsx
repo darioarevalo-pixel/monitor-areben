@@ -200,6 +200,9 @@ let prendaAAjustarPendiente: PrendaAAjustar | null = null
 export const COLOR_DE_MARCA = { bdi: '#0d9488', zattia: '#db2777', stunned: '#7c3aed' } as const
 type Opcion = { key: 'bdi' | 'zattia' | 'stunned'; titulo: string }
 
+/** La venta que «Facturar» lleva a su pantalla: `Erp` se remonta al cambiar de pestaña, así que viaja en el módulo, como `pedidoDeBusqueda`. */
+let ventaAFacturarPendiente: string | null = null
+
 export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const router = useRouter()
   const { perfil, marca, setMarca } = useSesion()
@@ -211,7 +214,7 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const [aAjustar, setAAjustarEstado] = useState<PrendaAAjustar | null>(() => prendaAAjustarPendiente)
   const setAAjustar = (p: PrendaAAjustar | null) => { prendaAAjustarPendiente = p; setAAjustarEstado(p) }
   // El estado ya la tomó: el módulo la suelta (si no, reaparecería en el próximo remonte, por ejemplo al volver por el menú).
-  useEffect(() => { prendaAAjustarPendiente = null; pedidoDeBusqueda = null }, [])
+  useEffect(() => { prendaAAjustarPendiente = null; pedidoDeBusqueda = null; ventaAFacturarPendiente = null }, [])
   const ir = (s: string, p?: string | null, v?: string | null) => router.push(hrefErp(s, p, v))
   // Búsqueda global (⌘K) y atajos (?). Lo que se elige viaja en memoria (como `aAjustar`): la lista que lo abre lo recibe y lo suelta.
   const [panel, setPanel] = useState<'buscar' | 'atajos' | null>(null)
@@ -222,7 +225,8 @@ export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const setAAbrir = (v: AAbrir) => { pedidoDeBusqueda = v; setAAbrirEstado(v) }
   // Cada pedido de la búsqueda remonta la lista que lo recibe (ya montada, no volvería a leer ni a mirar `abrir`).
   const [pedidoN, setPedidoN] = useState(0)
-  const [aFacturar, setAFacturar] = useState<string | null>(null)
+  const [aFacturar, setAFacturarEstado] = useState<string | null>(() => ventaAFacturarPendiente)
+  const setAFacturar = (id: string | null) => { ventaAFacturarPendiente = id; setAFacturarEstado(id) }
   const [prendaGlobal, setPrendaGlobal] = useState<{ marca: Marca; producto: string; talle: string } | null>(null)
   useAtajosErp(setPanel)
   // Una dirección vieja o mal escrita ⇒ la que corresponde (⛔ una pantalla en blanco).
