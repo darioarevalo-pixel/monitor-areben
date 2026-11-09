@@ -61,7 +61,11 @@ function bajarCsv(filas: FilaCobro[], marca: MarcaErp, desde: string, hasta: str
   URL.revokeObjectURL(url)
 }
 
-export function CobrosErp() {
+export function CobrosErp({ abrirVenta, abrirCliente }: {
+  /** Desde la ficha del cobro: llevan a la venta o al cliente, en su pantalla. */
+  abrirVenta?: (v: { id: string; numero: number; cuando: string }) => void
+  abrirCliente?: (nombre: string) => void
+} = {}) {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const usuario = perfil?.name ?? null
@@ -287,7 +291,10 @@ export function CobrosErp() {
               {ficha.ref && <DatoFicha titulo="Referencia">{ficha.ref}</DatoFicha>}
             </DatosFicha>
             )}
-            {ficha.ventaNumero != null && <p style={{ margin: 0, color: color.mut, fontSize: font.sm }}>La venta {ficha.ventaNumero} se abre en Ventas buscando su número.</p>}
+            <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+              {abrirVenta && ficha.ventaId && ficha.ventaNumero != null && <Button variant="outline" onClick={() => abrirVenta({ id: ficha.ventaId!, numero: ficha.ventaNumero!, cuando: ficha.cuando })}>Abrir la venta #{ficha.ventaNumero}</Button>}
+              {abrirCliente && ficha.cliente && <Button variant="outline" onClick={() => abrirCliente(ficha.cliente!)}>Abrir el cliente</Button>}
+            </div>
           </div>
         )}
       </FichaCostado>
