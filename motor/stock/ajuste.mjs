@@ -59,7 +59,7 @@ const claveDe = (r) => `${r.product_id}:${r.size_id}`
  * @param {{ empresa_id: string, depositos: string[], niveles: Map<string, number>, costos?: Map<number, { costo: number, fuente: string }> }} ctx
  *   el libro de ese depósito, por variante, y el costo por producto (`costosDe`)
  */
-export function armarAjuste(e, { empresa_id, depositos, niveles, costos = new Map() }) {
+export function armarAjuste(e, { empresa_id, depositos, niveles, costos = new Map(), devuelveCanje = false }) {
   if (!e || typeof e !== 'object') return falla('ENTRADA_INVALIDA', 'Falta el ajuste')
   const usuario = String(e.usuario ?? '').trim()
   if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién hace el ajuste', 'usuario')
@@ -90,7 +90,7 @@ export function armarAjuste(e, { empresa_id, depositos, niveles, costos = new Ma
     } else {
       if (!entero(r.cantidad) || Number(r.cantidad) === 0) return falla('ENTRADA_INVALIDA', `Falta la cantidad de ${r.sku || k}`, 'renglones')
       diferencia = Number(r.cantidad)
-      if (SOLO_SALEN.has(e.motivo) && diferencia > 0) return falla('ENTRADA_INVALIDA', `«${MOTIVOS[e.motivo]}» saca prendas: la cantidad va en negativo (${r.sku || k})`, 'renglones')
+      if (SOLO_SALEN.has(e.motivo) && diferencia > 0 && !(devuelveCanje && e.motivo === 'canje')) return falla('ENTRADA_INVALIDA', `«${MOTIVOS[e.motivo]}» saca prendas: la cantidad va en negativo (${r.sku || k})`, 'renglones')
       // Un ajuste de CIERRE de una salida (`sin_movimiento`) ⛔ toca el libro: la prenda ya salió con la salida ⇒ el nivel no importa.
       if (!e.sin_movimiento && antes + diferencia < 0) return falla('QUEDA_NEGATIVO', `${r.sku || k}: el libro tiene ${antes} en ${e.deposito} y el ajuste saca ${-diferencia}. Si la prenda está, primero hay que contarla`, 'renglones')
     }
@@ -214,8 +214,35 @@ export async function crearAjuste(db, e, op = {}) {
   return r
 }
 
+/**
+ * Un canje cancelado con la prenda todavía acá (Bruno 9-nov): vuelve al libro lo que sacó su ajuste, al mismo depósito y con el
+ * mismo costo, así el gasto de marketing se compensa. Sólo los ajustes de DESPUÉS del corte: los de antes (la baja la hizo la
+ * venta de GN; A-13 y A-14 movieron el libro de más y el alineo ya lo pisó) ⛔ tienen qué devolver. Se puede repetir (`ref`).
+ * @param {import('pg').ClientBase} db @param {{ canje_id: number|string, usuario: string }} e @param {{ ahora?: Date }} [op]
+ * @returns {Promise<{ ok: true, ajustes: number[] } | { ok: false, error: { codigo: string, mensaje: string } }>}
+ */
+export async function devolverCanje(db, e, { ahora = new Date() } = {}) {
+  if (!entero(e?.canje_id)) return falla('ENTRADA_INVALIDA', 'Falta el canje', 'canje_id')
+  const id = Number(e.canje_id)
+  const originales = await q(db, `select a.* from stock_ajuste a join erp_corte k on k.linea = a.linea
+    where a.motivo = 'canje' and a.estado = 'aplicado' and a.sin_movimiento is not true and a.creado_en >= k.instante and a.ref like $1
+    order by a.numero`, [`canje-${id}:%`])
+  const ajustes = []
+  for (const o of originales) {
+    const renglones = await q(db, 'select * from stock_ajuste_renglon where ajuste_id = $1 order by n', [o.id])
+    const r = await crearAjuste(db, {
+      linea: o.linea, deposito: o.deposito, motivo: 'canje', usuario: e.usuario, ref: `canje-${id}-anulado:${o.deposito}`,
+      detalle: `Canje cancelado: vuelve lo de A-${o.numero}`,
+      renglones: renglones.map((x) => ({ product_id: x.product_id, size_id: x.size_id, sku: x.sku, barcode: x.barcode, cantidad: -x.diferencia })),
+    }, { ahora, devolucionCanje: { costos: new Map(renglones.map((x) => [Number(x.product_id), { costo: Number(x.costo_unitario), fuente: x.costo_fuente }])) } })
+    if (!r.ok) return r
+    ajustes.push(Number(r.ajuste.numero))
+  }
+  return { ok: true, ajustes }
+}
+
 /** `crearAjuste` SIN transacción propia: la abre quien llama (el cierre de una salida arma varios juntos). */
-export async function guardarAjuste(db, e, { ahora = new Date() } = {}) {
+export async function guardarAjuste(db, e, { ahora = new Date(), devolucionCanje = null } = {}) {
   const ctx = await contexto(db, e?.linea)
   if (!ctx) return falla('ENTRADA_INVALIDA', `Línea desconocida: ${e?.linea}`, 'linea')
   // Con `ref` el ajuste es idempotente (sql/050): repetir el pedido devuelve el que ya está. ⛔ se nombra la columna sin `ref`.
@@ -226,8 +253,8 @@ export async function guardarAjuste(db, e, { ahora = new Date() } = {}) {
   }
   const variantes = Array.isArray(e.renglones) ? e.renglones.filter((r) => entero(r?.product_id) && entero(r?.size_id)) : []
   const niveles = await nivelesDe(db, e.deposito, variantes)
-  const costos = await costosDe(db, [...new Set(variantes.map((v) => Number(v.product_id)))])
-  const armado = armarAjuste(e, { ...ctx, niveles, costos })
+  const costos = devolucionCanje?.costos ?? await costosDe(db, [...new Set(variantes.map((v) => Number(v.product_id)))])
+  const armado = armarAjuste(e, { ...ctx, niveles, costos, devuelveCanje: Boolean(devolucionCanje) })
   if (!armado.ok) return armado
   const [n] = await q(db, `insert into stock_ajuste_numero (linea, ultimo) values ($1, 1)
     on conflict (linea) do update set ultimo = stock_ajuste_numero.ultimo + 1 returning ultimo`, [e.linea])

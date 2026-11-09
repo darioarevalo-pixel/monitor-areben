@@ -91,15 +91,27 @@ export function pedidoExterno(p, { sensibles = false } = {}) {
 export const CLIENTE_INCIDENCIA = 'Incidencia'
 const RAZON_DE_MOTIVO = Object.freeze({ canje: 'canje', fallado: 'replacement' })
 
+/** El reemplazo de un reclamo siempre se le manda al cliente (`lib/reclamos/nota.ts` del monitor); el canje dice el suyo. Sin el caso, null. */
+function entregaDeIncidencia(a) {
+  if (a.motivo === 'fallado') return 'shipping'
+  if (a.retiro_local === true) return 'pickup'
+  if (a.retiro_local === false) return 'shipping'
+  return null
+}
+
 /** Un ajuste que pasa por el depósito, con sus renglones, en el contrato. */
 export function incidenciaExterna(a) {
   return {
     id: `A-${a.numero}`,
     is_test: a.prueba === true,
     reason: RAZON_DE_MOTIVO[a.motivo],
+    status: a.anulado_en ? 'cancelled' : 'active',
+    cancelled_at: a.anulado_en ? instante(a.anulado_en) : null,
     customer_name: CLIENTE_INCIDENCIA,
     description: a.detalle ?? null,
     warehouse: DEPOSITO_A_WAREHOUSE[a.deposito] ?? 'other',
+    delivery_method: entregaDeIncidencia(a),
+    tiendanube_order: a.orden_tn ?? null,
     created_at: instante(a.creado_en),
     updated_at: instante(a.actualizado_en),
     lines: a.renglones.map((l) => ({
@@ -115,7 +127,7 @@ export function ubicacionExterna(u) {
 
 /** Una fila de `listarVariantes`, en el contrato. */
 export function varianteExterna(v) {
-  return { product_id: Number(v.product_id), size_id: Number(v.size_id), sku: v.sku ?? null, barcode: v.barcode ?? null, name: v.nombre ?? null, size: v.talle ?? null, active: v.activa === true, updated_at: instante(v.actualizado_en) }
+  return { product_id: Number(v.product_id), size_id: Number(v.size_id), sku: v.sku ?? null, barcode: v.barcode ?? null, name: v.nombre ?? null, size: v.talle ?? null, image_url: v.foto ?? null, active: v.activa === true, updated_at: instante(v.actualizado_en) }
 }
 
 /** `GET /me` (B.5). */
@@ -219,6 +231,7 @@ export const ESQUEMAS = Object.freeze({
     barcode: n('string', 'Código de barras.'),
     name: n('string', 'Nombre del producto.'),
     size: n('string', 'Talle o modelo.'),
+    image_url: n('string', 'Foto de la variante o, si no tiene, la de su producto. Copiada de GN; puede faltar.'),
     active: s('boolean', 'La variante y su producto están activos. Las inactivas siguen saliendo para poder darlas de baja.'),
     updated_at: s('string', 'Último cambio de la variante o de su producto.', { format: 'date-time' }),
   }),
@@ -233,15 +246,19 @@ export const ESQUEMAS = Object.freeze({
     quantity: s('integer', 'Cantidad.'),
     location: n('string', 'Ubicación actual en el depósito, tal cual. No mueve `updated_at`.'),
   }),
-  ExtInternalOrder: cerrado('Una incidencia que pasa por el depósito. El stock ya salió al crearse, y no se anula: un error se corrige con otro ajuste.', {
+  ExtInternalOrder: cerrado('Una incidencia que pasa por el depósito. El stock ya salió al crearse. Si el canje o el reclamo se anula, sale con `status: cancelled` y deja de haber que prepararla.', {
     id: s('string', 'Estable, con la forma `A-90`. No se puede repetir con el `id` numérico de un mayorista.'),
     is_test: s('boolean', '`true`: es de antes del corte del negocio, cuando la venta todavía sale de Gestión Nube. Sirve para probar: no hay que prepararla.'),
     reason: s('string', '`canje` o `replacement` (el reemplazo de un reclamo).', { enum: Object.values(RAZON_DE_MOTIVO) }),
+    status: s('string', '`active` o `cancelled`. Una anulación mueve `updated_at`.', { enum: ['active', 'cancelled'] }),
+    cancelled_at: instanteS('Cuándo se anuló.'),
     customer_name: s('string', 'Siempre «Incidencia»: el detalle va en `description`.'),
     description: n('string', 'Todo el detalle: de quién es y a qué venta refiere, cuando se conoce.'),
-    warehouse: s('string', 'Depósito del que sale.'),
+    warehouse: s('string', 'Depósito del que sale. Con `store` (el local), la entrega el mostrador: no pasa por el depósito.'),
+    delivery_method: n('string', '`pickup` (retiro en el local) o `shipping`. El reemplazo de un reclamo siempre es `shipping`.', { enum: ['pickup', 'shipping', null] }),
+    tiendanube_order: n('string', 'El número de la venta de Tienda Nube a la que refiere, cuando se conoce. El mismo dato que puede venir en `description`.'),
     created_at: s('string', 'Cuándo se creó.', { format: 'date-time' }),
-    updated_at: s('string', 'Cuándo se aplicó.', { format: 'date-time' }),
+    updated_at: s('string', 'Cuándo se aplicó o, si se anuló, cuándo se anuló.', { format: 'date-time' }),
     lines: { type: 'array', description: 'Los renglones.', items: { $ref: '#/components/schemas/ExtInternalOrderLine' } },
   }),
   ExtInternalOrdersPage: pagina('Una página de incidencias.', 'ExtInternalOrder'),

@@ -92,7 +92,8 @@ import { provinciaCorregida } from '../lib/canjes/direccion.core.js';
 // handler no puede arrastrar `_auth.js` + `permisos.core.js` por una función de quince líneas.
 // Las reglas duras, LA implementación. El grafo lo consulta `puedeIr` y por eso `TRANSICIONES` no
 // se importa: se importaba sólo para re-exportarlo al test de espejo, que ya no existe.
-import { ESTADOS, fechaISO, MOTIVOS_NO_ACEPTO, noSePuedeEntregar, noSePuedeVenderEnGn, numeroCanje, puedeIr, resultadosDe, retiroLocalDisponible, seVaDelTope, TERMINALES } from '../lib/canjes/reglas.core.js';
+import { cancelarDevuelveStock, ESTADOS, fechaISO, MOTIVOS_NO_ACEPTO, noSePuedeEntregar, noSePuedeVenderEnGn, numeroCanje, puedeIr, resultadosDe, retiroLocalDisponible, seVaDelTope, TERMINALES } from '../lib/canjes/reglas.core.js';
+import { devolverCanjeAlErp } from './_salida-documento.js';
 
 /**
  * La base maestra. NO recibe `store` a propósito: no hay a dónde rutear. Si algún día se separa
@@ -1690,14 +1691,24 @@ export default async function handler(req, res) {
       if (destino === 'cancelado' && !motivo) return res.status(400).json({ error: 'para cancelar hace falta un motivo' });
 
       const extra = { estado: destino };
+      let nota = motivo;
       if (destino === 'cancelado') {
+        // Primero el stock: si no se puede devolver, el canje sigue vivo y la prenda no se pierde. Repetir no devuelve dos veces.
+        if (cancelarDevuelveStock(canje)) {
+          const devuelto = await devolverCanjeAlErp({ store: canje.store, canjeId, usuario });
+          if (devuelto.error) return res.status(409).json({ error: `No se canceló: el stock no se pudo devolver (${devuelto.error}).` });
+          if (devuelto.ajustes.length) {
+            extra.stock_estado = 'no_aplica';
+            nota = `${motivo} · stock devuelto (${devuelto.ajustes.map((n) => `A-${n}`).join(', ')})`;
+          }
+        }
         extra.cancelado_motivo = motivo;
         // Cancelar REVOCA el link: si no, el token sigue vivo y ella carga datos para un canje
         // que ya no existe.
         extra.token = null;
         extra.token_vence = null;
       }
-      await apilar(supabase, 'canjes', canjeId, { estado: destino, at: ahora(), usuario, nota: motivo }, extra);
+      await apilar(supabase, 'canjes', canjeId, { estado: destino, at: ahora(), usuario, nota }, extra);
       return res.status(200).json({ ok: true });
     }
 

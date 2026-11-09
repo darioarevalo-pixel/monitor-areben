@@ -197,6 +197,26 @@ export async function canjeAlErp({ store, b, usuario }) {
 }
 
 /**
+ * Un canje cancelado con la prenda todavía acá: devuelve al libro lo que sacó su ajuste. El motor sólo devuelve lo salido desde el
+ * corte; antes, el stock lo bajó una venta de GN (se corrige a mano en GN) y `ajustes` vuelve vacío.
+ * @param {{ store: string, canjeId: number, usuario: string|null }} p
+ * @returns {Promise<{ ok: true, ajustes: number[] } | { error: string }>} ⛔ lanza
+ */
+export async function devolverCanjeAlErp({ store, canjeId, usuario }) {
+  const base = baseDeLinea(store)
+  if (!base) return { error: `Marca desconocida: ${store}` }
+  try {
+    const aj = await import('../motor/stock/ajuste.mjs')
+    return await conBase(base, async (db) => {
+      const r = await aj.devolverCanje(db, { canje_id: canjeId, usuario: usuario || 'canjes' })
+      return r.ok ? { ok: true, ajustes: r.ajustes } : { error: mensaje(r) }
+    }, TECHO_MS)
+  } catch (e) {
+    return { error: String((e && e.message) || e).slice(0, 200) }
+  }
+}
+
+/**
  * La SOLICITUD de una línea que ya está en el ERP (sesión de fotos / solicitud interna), ⛔ a GN (Bruno 30-oct, erp-stunned §8.3):
  * fotos y retornable ⇒ salida con vuelta de la línea (baja al cargarla; lo que vuelve sube al guardar la solicitud,
  * `documentarSalida`); consumo ⇒ ajuste `consumible`/`uso_interno` aprobado en el acto. 🔴 Como la falla ⛔ es sombra ⇒ si falla,

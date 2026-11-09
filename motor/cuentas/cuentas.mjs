@@ -169,7 +169,9 @@ const centavos = (x) => Math.round(x * 100) / 100
  *   | { ok: false, codigo: string, mensaje: string }}
  */
 export function cobroReal(pago, cuenta, venta, conf) {
-  const medio = medioDeCuenta(cuenta)
+  // 🔑 Bruno, 8-nov: lo cobrado por Mercado Libre entra al Mercado Pago de Areben. Va acá y ⛔ en `medioDeCuenta`: la cuenta «Mercado Libre»
+  // ⛔ es una cuenta de MP para elegir al corregir el medio de otra venta.
+  const medio = medioDeCuenta(cuenta) ?? (venta.canal === 'ml' ? 'mp' : null)
   const ruta = medio ? rutaVigente(conf.rutas ?? [], { marca: venta.marca, canal: venta.canal, medio, en: venta.en }) : null
   const elegida = pago.elegida ?? null
   if (elegida != null) {
