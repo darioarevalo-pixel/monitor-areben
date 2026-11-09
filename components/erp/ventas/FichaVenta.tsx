@@ -40,7 +40,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   onCerrar: () => void
   onCambio: (aviso: string) => void
   abrirVentana: (tipo: 'cobro' | 'editar') => void
-  irACaja: (que: 'cambio' | 'factura') => void
+  irACaja: (que: 'cambio' | 'factura', ventaId?: string) => void
   version: number
 }) {
   const [ficha, setFicha] = useState<FichaDeVenta | null>(null)
@@ -158,7 +158,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const v = ficha?.venta
   const menu: AccionMenu[] = esPedido ? [] : [
     ...(ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
-    ...(!fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura') }] : []),
+    ...(!fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura', fila.id) }] : []),
     ...(puede.corregir && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
     ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir forma de pago…', icono: 'pesos' as const, hint: 'Pagó con otro medio que el que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
     { key: 'anular', label: 'Anular…', icono: 'anular', tone: 'danger', disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) },

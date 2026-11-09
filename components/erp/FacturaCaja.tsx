@@ -24,7 +24,7 @@ import { descargarFactura, numeroComprobante, type FacturaEmitida } from '@/lib/
 import { buscarClientas, buscarVentas, facturarCambio, facturarVenta, leerCorteDeLinea, leerFichaDeVenta, type CambioFacturado, type Clienta, type FichaDeVenta, type MarcaErp, type PedidoFactura, type VentaPropia } from '@/lib/erp/cliente'
 import { NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 
-export function FacturaCaja() {
+export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar» en la ficha de la venta: abre con ella cargada (Bruno, 9-nov). */ ventaInicial?: string | null }) {
   const { marca: delShell } = useSesion()
   const store = marcaParaPOS(null, delShell) as MarcaErp
   // Las ventas de la tienda del menú: mirando Stunned, ⛔ las de Zattia (Bruno, 30-oct).
@@ -118,6 +118,8 @@ export function FacturaCaja() {
     limpiar()
     const f = await leerFichaDeVenta(store, id)
     setFicha(f)
+    // Si la venta ya tiene cliente identificado, su documento viene puesto.
+    if (f.cliente?.doc) setDoc(f.cliente.doc)
     // Un cambio: cuánto saldría de nota de crédito y de factura (⛔ pide nada a ARCA). Si ⛔ se puede, dice por qué.
     if (f.venta.tipo === 'cambio') {
       const r = await facturarCambio(store, id, true)
@@ -152,6 +154,12 @@ export function FacturaCaja() {
       setFicha(await leerFichaDeVenta(store, ficha.venta.id))
     }, 'No se pudo facturar el cambio.')
   }
+
+  // Desde la ficha: la venta ya está elegida, ⛔ se busca de nuevo.
+  useEffect(() => {
+    if (ventaInicial) void abrir(ventaInicial)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ventaInicial])
 
   const docLimpio = doc.replace(/\D/g, '')
   const faltaDato = clase === 'A' ? docLimpio.length !== 11 || !condicion || razonSocial.trim().length < 2 || domicilio.trim().length < 3 : !!docLimpio && ![7, 8, 11].includes(docLimpio.length)
@@ -296,15 +304,15 @@ export function FacturaCaja() {
           {/* Ya facturada: sólo el PDF (arriba). El formulario ofrecía «Facturar» otra vez (caminado 16-oct, #235). */}
           {ficha.venta.tipo !== 'cambio' && !ficha.facturada && (<>
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <Field label="Factura">
+            <Field label="¿A quién se factura?">
               <Select value={clase} onChange={(e) => { setClase(e.target.value as 'A' | 'B'); limpiarA() }}>
-                <option value="B">B · consumidor final</option>
-                <option value="A">A · responsable inscripta o monotributista</option>
+                <option value="B">Consumidor final · sale factura B</option>
+                <option value="A">Responsable inscripto o monotributista · sale factura A</option>
               </Select>
             </Field>
             {clase === 'A' && (
-              <Field label="Buscar ficha (CUIT o nombre)" style={{ flex: '1 1 100%' }}>
-                <Input value={buscaClienta} onChange={(e) => setBuscaClienta(e.target.value)} placeholder="Si ya facturó A antes, aparece acá" />
+              <Field label="Buscar cliente (CUIT o nombre)" style={{ flex: '1 1 100%' }}>
+                <Input value={buscaClienta} onChange={(e) => setBuscaClienta(e.target.value)} placeholder="Si no aparece, completá los datos de abajo y el cliente queda creado al facturar" />
                 {buscaClienta.trim().length >= 2 && clientas.length > 0 && (
                   <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
                     {clientas.map((c) => (

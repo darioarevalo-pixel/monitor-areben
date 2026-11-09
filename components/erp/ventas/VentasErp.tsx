@@ -69,7 +69,7 @@ function bajarCsv(filas: FilaVentaLista[]) {
 }
 
 export function VentasErp({ irACaja, abrir, alAbrir }: {
-  irACaja: (que: 'cambio' | 'factura') => void
+  irACaja: (que: 'cambio' | 'factura', ventaId?: string) => void
   /** Desde la búsqueda global (⌘K): la venta que se abre sola cuando llega la lista (en su período). */
   abrir?: { id: string; numero: number; periodo: string } | null
   alAbrir?: () => void
