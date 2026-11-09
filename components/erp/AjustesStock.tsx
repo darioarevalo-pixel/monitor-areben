@@ -57,7 +57,8 @@ type Renglon = {
   producto: string; talle: string; sku: string | null; barcode: string | null; nombre: string | null; talleNombre: string | null
   porDeposito: Record<string, { libro: number; gn: number | null }> | null; valor: string
 }
-type Borrador = { deposito: string; motivo: string; detalle: string; renglones: Renglon[] }
+type Sentido = 'ingreso' | 'salida'
+type Borrador = { deposito: string; sentido: Sentido | null; motivo: string; detalle: string; renglones: Renglon[] }
 
 type PrendaDeAjuste = { producto: string; talle: string; sku: string | null; barcode?: string | null; nombre: string | null; talleNombre: string | null }
 const renglonDe = (p: PrendaDeAjuste): Renglon => ({ producto: p.producto, talle: p.talle, sku: p.sku, barcode: p.barcode ?? null, nombre: p.nombre, talleNombre: p.talleNombre, porDeposito: null, valor: '' })
@@ -72,7 +73,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
   const [vuelta, setVuelta] = useState(0)
   const [trabajando, setTrabajando] = useState(false)
   // Desde la lista de Stock («Ajustar»): arranca con el ajuste abierto y la prenda cargada.
-  const [borrador, setBorrador] = useState<Borrador | null>(() => (pedida ? { deposito: DEPOSITOS[baseDe(pedida.linea) as MarcaErp][0], motivo: MOTIVOS_A_MANO[0].key, detalle: '', renglones: [renglonDe(pedida)] } : null))
+  const [borrador, setBorrador] = useState<Borrador | null>(() => (pedida ? { deposito: DEPOSITOS[baseDe(pedida.linea) as MarcaErp][0], sentido: null, motivo: '', detalle: '', renglones: [renglonDe(pedida)] } : null))
   const [texto, setTexto] = useState('')
   const [encontradas, setEncontradas] = useState<PrendaEncontrada[] | null>(null)
   const [descartando, setDescartando] = useState<{ id: string; motivo: string } | null>(null)
@@ -140,8 +141,8 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
     try {
       creado = await crearAjuste({
         linea, deposito: borrador.deposito, motivo: borrador.motivo, detalle: borrador.detalle, fuente: 'mano',
-        // Fallado/Canje/Regalo: lo que sale, en positivo (contrato de B); Otro: con signo.
-        renglones: borrador.renglones.map((x) => ({ producto: x.producto, talle: x.talle, sku: x.sku, barcode: x.barcode, cantidad: motivo.pide === 'sale' ? Math.abs(Number(x.valor)) : Number(x.valor) })),
+        // Fallado/Canje/Regalo: lo que sale, en positivo (contrato de B); Otro: con signo, según Ingreso o Salida.
+        renglones: borrador.renglones.map((x) => ({ producto: x.producto, talle: x.talle, sku: x.sku, barcode: x.barcode, cantidad: motivo.pide === 'sale' ? Math.abs(Number(x.valor)) : salen(x) ?? 0 })),
       })
       const r = await aprobarAjuste(linea, creado.id)
       setHecho({ texto: `Ajuste A-${r.numero} guardado: el stock del ERP cambió en ${r.movimientos} ${r.movimientos === 1 ? 'producto' : 'productos'}.`, avisos: [...creado.avisos, ...r.avisos] })
@@ -183,10 +184,17 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
   const abierta = datos?.ajustes.find((a) => a.id === ficha) ?? null
   const salen = (r: Renglon) => {
     if (r.valor.trim() === '' || !Number.isInteger(Number(r.valor)) || Number(r.valor) === 0) return null
-    const n = Number(r.valor)
-    return motivo.pide === 'sale' ? -Math.abs(n) : n
+    const n = Math.abs(Number(r.valor))
+    return borrador?.sentido === 'ingreso' ? n : -n
   }
-  const listo = !!borrador && borrador.renglones.length > 0 && borrador.renglones.every((r) => salen(r) != null) && (borrador.motivo !== 'otro' || borrador.detalle.trim().length >= 3)
+  const faltante = !borrador ? null
+    : !borrador.sentido ? 'Elegí si es un ingreso o una salida'
+      : !borrador.motivo ? 'Elegí el motivo'
+        : borrador.motivo === 'otro' && !borrador.detalle.trim() ? 'Escribí el porqué'
+          : !borrador.renglones.length ? 'Agregá un producto'
+            : borrador.renglones.some((r) => salen(r) == null) ? 'Escribí la cantidad'
+              : null
+  const listo = !!borrador && !faltante
 
   const cancelarNuevo = () => { setBorrador(null); setEncontradas(null) }
 
@@ -204,10 +212,10 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      {!enTarea && <SectionCard title="Ingresos y ajustes" subtitle="Lo que sale del stock fuera de una venta: fallados, canjes, regalos. Nada se borra: un ajuste equivocado se arregla con otro.">
+      {!enTarea && <SectionCard title="Ingresos y ajustes" subtitle="Lo que ingresa o sale del stock fuera de una venta: fallados, canjes, regalos, lo que apareció. Nada se borra: un ajuste equivocado se arregla con otro.">
         <div style={{ display: 'flex', gap: space[3], alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <span />
-          {datos && !borrador && <Button onClick={() => setBorrador({ deposito: DEPOSITOS[base][0], motivo: MOTIVOS_A_MANO[0].key, detalle: '', renglones: [] })}>Nuevo ajuste</Button>}
+          {datos && !borrador && <Button onClick={() => setBorrador({ deposito: DEPOSITOS[base][0], sentido: null, motivo: '', detalle: '', renglones: [] })}>Nuevo ajuste</Button>}
         </div>
         {!enErp && linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock del ERP: en Gestión Nube se ajusta como siempre. Los conteos se hacen en el módulo de Conteo del monitor y entran solos (se ven en el historial de cada producto, en Stock).</Notice>}
       </SectionCard>}
@@ -222,13 +230,26 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
       {!datos && !error && <EmptyState title="Leyendo los ajustes…" />}
 
       {borrador && (
-        <SectionCard title="Nuevo ajuste" subtitle={motivo.pide === 'sale' ? 'Escribí cuántas salen de ese depósito.' : 'Escribí la cantidad: + entra, − sale.'}>
+        <SectionCard title="Nuevo ajuste" subtitle="Primero elegí si es un ingreso o una salida. La cantidad va siempre en positivo.">
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <Field label="Motivo">
-              <Select value={borrador.motivo} onChange={(e) => setBorrador({ ...borrador, motivo: e.target.value, renglones: borrador.renglones.map((r) => ({ ...r, valor: '' })) })}>
-                {MOTIVOS_A_MANO.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-              </Select>
+            <Field label="Tipo">
+              <div role="group" aria-label="Ingreso o salida" style={{ display: 'flex', gap: space[1] }}>
+                {(['ingreso', 'salida'] as const).map((t) => (
+                  <Button key={t} variant={borrador.sentido === t ? 'solid' : 'outline'} aria-pressed={borrador.sentido === t}
+                    onClick={() => setBorrador({ ...borrador, sentido: t, motivo: t === 'ingreso' ? 'otro' : '', renglones: borrador.renglones.map((r) => ({ ...r, valor: '' })) })}>
+                    {t === 'ingreso' ? 'Ingreso' : 'Salida'}
+                  </Button>
+                ))}
+              </div>
             </Field>
+            {borrador.sentido === 'salida' && (
+              <Field label="Motivo">
+                <Select value={borrador.motivo} onChange={(e) => setBorrador({ ...borrador, motivo: e.target.value })}>
+                  <option value="">Elegir…</option>
+                  {MOTIVOS_A_MANO.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+                </Select>
+              </Field>
+            )}
             <Field label="Depósito">
               <Select value={borrador.deposito} onChange={(e) => setBorrador({ ...borrador, deposito: e.target.value })}>
                 {DEPOSITOS[base].map((d) => <option key={d} value={d}>{deposito(d)}</option>)}
@@ -256,7 +277,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
           {borrador.renglones.length > 0 && angosta ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: space[2], marginTop: space[3] }}>
               {borrador.renglones.map((r) => (
-                <TarjetaDeAjuste key={`${r.producto}:${r.talle}`} r={r} deposito={borrador.deposito} pide={motivo.pide} cambio={salen(r)}
+                <TarjetaDeAjuste key={`${r.producto}:${r.talle}`} r={r} deposito={borrador.deposito} pide={borrador.sentido === 'ingreso' ? 'ingreso' : 'sale'} cambio={salen(r)}
                   onValor={(valor) => setBorrador({ ...borrador, renglones: borrador.renglones.map((x) => (x === r ? { ...x, valor } : x)) })}
                   onSacar={() => setBorrador({ ...borrador, renglones: borrador.renglones.filter((x) => x !== r) })} />
               ))}
@@ -267,7 +288,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
                 <Tr>
                   <Th>Producto</Th><Th>código</Th>
                   <Th style={{ textAlign: 'right' }}>ERP en {deposito(borrador.deposito)}</Th>
-                  <Th style={{ textAlign: 'right' }}>{motivo.pide === 'sale' ? 'Salen' : 'Cantidad (+ o −)'}</Th>
+                  <Th style={{ textAlign: 'right' }}>{borrador.sentido === 'ingreso' ? 'Ingresa' : 'Cantidad'}</Th>
                   <Th style={{ textAlign: 'right' }}>Queda</Th><Th />
                 </Tr>
               </THead>
@@ -297,6 +318,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
             <div style={{ display: 'flex', gap: space[2], marginTop: space[3] }}>
               <Button disabled={trabajando || !listo} onClick={guardar}>Guardar ajuste</Button>
               <Button variant="outline" disabled={trabajando} onClick={cancelarNuevo}>Cancelar</Button>
+              {faltante && <span data-falta style={{ alignSelf: 'center', fontSize: font.sm, color: color.mut }}>{faltante}</span>}
             </div>
           )}
         </SectionCard>
@@ -391,8 +413,8 @@ export function TarjetaDeAjuste({ r, deposito: dep, pide, cambio, onValor, onSac
         <Button variant="ghost" size="sm" onClick={onSacar}>Sacar</Button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[2] }}>
-        <span style={rotulo}>{pide === 'sale' ? '¿Cuántas salen?' : 'Cantidad (+ entra, − sale)'}</span>
-        <PasoCantidad grande valor={n} min={pide === 'sale' ? 0 : -9999} onCambio={(v) => onValor(String(v))} etiqueta={prendaDe(r)} />
+        <span style={rotulo}>{pide === 'sale' ? 'Cantidad' : 'Ingresa'}</span>
+        <PasoCantidad grande valor={n} min={0} onCambio={(v) => onValor(String(v))} etiqueta={prendaDe(r)} />
       </div>
       {libro != null && (
         <div data-antes-despues style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', fontSize: font.base, color: color.mut }}>

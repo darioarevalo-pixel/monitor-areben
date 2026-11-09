@@ -46,6 +46,11 @@ async function montar(pedida: PrendaAAjustar | null = null, enErp = false) {
   await act(async () => {})
 }
 const texto = () => host.textContent ?? ''
+const elegirSalida = async (motivo = 'fallado') => {
+  await act(async () => { ([...document.querySelectorAll('button')].find((b) => b.textContent === 'Salida') as HTMLButtonElement).click() })
+  const sel = [...document.querySelectorAll('select')].find((x) => [...x.options].some((o) => o.value === motivo)) as HTMLSelectElement
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, motivo); sel.dispatchEvent(new Event('change', { bubbles: true })) })
+}
 const boton = (t: string | RegExp) => [...host.querySelectorAll('button')].find((b) => (typeof t === 'string' ? b.textContent === t : t.test(b.textContent ?? ''))) as HTMLButtonElement
 const click = async (b: HTMLButtonElement) => { await act(async () => { b.click() }); await act(async () => {}) }
 function escribir(input: HTMLInputElement, valor: string) {
@@ -71,6 +76,7 @@ describe('Ingresos y ajustes', () => {
     expect(texto()).toContain('Sin confirmar · 1')
     expect(texto()).toContain('Igualado a Gestión Nube')
     await click(boton('Nuevo ajuste'))
+    await elegirSalida()
     const motivos = [...host.querySelectorAll('option')].map((o) => o.textContent)
     expect(motivos).toContain('Con falla')
     expect(motivos).not.toContain('Conteo')
@@ -79,6 +85,7 @@ describe('Ingresos y ajustes', () => {
   it('«Guardar ajuste» manda lo que sale en positivo y lo aplica en el mismo gesto', async () => {
     await montar()
     await click(boton('Nuevo ajuste'))
+    await elegirSalida()
     escribir(host.querySelector('input[placeholder="código, código de barras o nombre"]') as HTMLInputElement, 'zara')
     await click(boton('Buscar'))
     await click(boton(/TOP ZARA · NEGRO/))
@@ -94,6 +101,26 @@ describe('Ingresos y ajustes', () => {
     expect(texto()).toContain('C-31')
   })
 
+  it('«Ingreso» suma con el porqué escrito y el botón dice qué falta (Bruno, 9-nov)', async () => {
+    await montar()
+    await click(boton('Nuevo ajuste'))
+    expect(texto()).toContain('Elegí si es un ingreso o una salida')
+    await click(boton('Ingreso'))
+    escribir(host.querySelector('input[placeholder="código, código de barras o nombre"]') as HTMLInputElement, 'zara')
+    await click(boton('Buscar'))
+    await click(boton(/TOP ZARA · NEGRO/))
+    escribir(host.querySelector('input[aria-label="Cantidad de TOP ZARA · NEGRO"]') as HTMLInputElement, '2')
+    await act(async () => {})
+    expect(texto()).toContain('Escribí el porqué')
+    expect(boton('Guardar ajuste').disabled).toBe(true)
+    const porque = [...host.querySelectorAll('input')].find((i) => i.closest('label, div')?.textContent?.includes('Por qué')) as HTMLInputElement
+    escribir(porque, 'apareció en el depósito')
+    await act(async () => {})
+    await click(boton('Guardar ajuste'))
+    expect(crearAjuste).toHaveBeenCalledWith({ linea: 'zattia', deposito: 'local', motivo: 'otro', detalle: 'apareció en el depósito', fuente: 'mano',
+      renglones: [{ producto: '828948', talle: '229042', sku: 'RTO-0152-NG', barcode: '7790152', cantidad: 2 }] })
+  })
+
   it('desde Stock («Ajustar»): abre «Nuevo ajuste» en su línea con el producto cargada y lo que dice el ERP', async () => {
     await montar({ linea: 'stunned', producto: '828948', talle: '229042', sku: 'STU-0152-NG', barcode: null, nombre: 'TOP ZARA', talleNombre: 'NEGRO' })
     expect(leerAjustes).toHaveBeenCalledWith('stunned')
@@ -106,6 +133,7 @@ describe('Ingresos y ajustes', () => {
     aprobarAjuste.mockRejectedValueOnce(new Error('se cortó'))
     await montar()
     await click(boton('Nuevo ajuste'))
+    await elegirSalida()
     escribir(host.querySelector('input[placeholder="código, código de barras o nombre"]') as HTMLInputElement, 'zara')
     await click(boton('Buscar'))
     await click(boton(/TOP ZARA · NEGRO/))
