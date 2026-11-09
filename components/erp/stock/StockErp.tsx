@@ -20,7 +20,9 @@ import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
 import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
 import { BarraNivel } from './Barritas'
-import { leerListaDeStock, type FilaStock, type ListaDeStock, type MarcaErp } from '@/lib/erp/cliente'
+import { leerListaDeProductos, leerListaDeStock, type FilaStock, type ListaDeStock, type MarcaErp } from '@/lib/erp/cliente'
+import { stockACosto } from '@/lib/erp/inicio-panel.core.js'
+import { filtrar as filtrarProductos } from '@/lib/erp/productos-lista.core.js'
 import {
   VISTAS, alternarColumna, columnasDe, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
 } from '@/lib/erp/stock-lista.core.js'
@@ -69,6 +71,14 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
   const [vista, setVista] = useState('constock')
   const [q, setQ] = useState('')
   const linea = useLineaErp()
+  // Stock a costo (Bruno, 9-nov): el servidor saca el costo a quien no lo puede ver y la tarjeta ⛔ aparece.
+  const [productos, setProductos] = useState<{ marca: string; filas: unknown[] } | null>(null)
+  useEffect(() => {
+    let vivo = true
+    leerListaDeProductos(marca).then((d) => { if (vivo) setProductos({ marca, filas: d.filas }) }).catch(() => {})
+    return () => { vivo = false }
+  }, [marca])
+  const aCosto = productos?.marca === marca ? stockACosto(filtrarProductos(productos.filas as never, { linea }) as never) : null
   const [orden, setOrden] = useState<OrdenLista>(null)
   // Cuántas se dibujan: vuelve a la primera tanda cuando cambia lo que se mira (la tanda es de ESA mirada).
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
@@ -157,6 +167,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
         {/* Los negativos se cuentan sobre todo lo buscado (⛔ sólo la vista): si no, el número no es el de la vista «Negativos». */}
         <TileResumen tono={tonoDeConteo(conteo.neg)} titulo="Negativos" valor={(conteo.neg ?? 0).toLocaleString('es-AR')} nota={conteo.neg ? 'para revisar' : 'ninguna'} />
         <TileResumen titulo="Productos" valor={res.prendas.toLocaleString('es-AR')} nota={nombreVista.toLowerCase()} />
+        {aCosto && aCosto.unidades > aCosto.sinCosto && <TileResumen titulo="Stock a costo" valor={`$ ${Math.round(aCosto.costo).toLocaleString('es-AR')}`} nota={aCosto.sinCosto ? `${aCosto.sinCosto.toLocaleString('es-AR')} u sin costo` : 'lo disponible, a su costo'} />}
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>

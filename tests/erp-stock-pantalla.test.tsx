@@ -32,7 +32,8 @@ const ficha: StockDePrenda = {
   sinDeposito: [],
 }
 const leerStockDePrenda = vi.fn(async () => ficha)
-vi.mock('@/lib/erp/cliente', () => ({ leerListaDeStock: () => leerListaDeStock(), leerStockDePrenda: () => leerStockDePrenda() }))
+vi.mock('@/lib/erp/cliente', () => ({
+  leerListaDeProductos: async () => ({ filas: [] }), leerListaDeStock: () => leerListaDeStock(), leerStockDePrenda: () => leerStockDePrenda() }))
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno' } }) }))
 
 const guardado = new Map<string, string>()
