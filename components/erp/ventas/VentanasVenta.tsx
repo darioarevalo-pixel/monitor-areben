@@ -114,7 +114,7 @@ type PropsEditar = {
   vendedores: string[]
   onCerrar: () => void
   onHecho: (aviso: string) => void
-  irACaja: (que: 'cambio' | 'factura') => void
+  irACaja: (que: 'cambio' | 'factura', ventaId?: string) => void
   abrirCobro: () => void
   anular: () => void
 }
