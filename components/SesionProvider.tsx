@@ -179,6 +179,13 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
   return <SesionCtx.Provider value={valor}>{children}</SesionCtx.Provider>
 }
 
+/** Lo de adentro ve este perfil en vez del real: es el «Ver como» del ERP. La sesión y sus credenciales siguen siendo las mismas. */
+export function SesionConPerfil({ perfil, children }: { perfil: Perfil; children: React.ReactNode }) {
+  const c = useSesion()
+  const valor = useMemo(() => ({ ...c, perfil }), [c, perfil])
+  return <SesionCtx.Provider value={valor}>{children}</SesionCtx.Provider>
+}
+
 export function useSesion(): Ctx {
   const c = useContext(SesionCtx)
   if (!c) throw new Error('useSesion tiene que usarse dentro de <SesionProvider>')

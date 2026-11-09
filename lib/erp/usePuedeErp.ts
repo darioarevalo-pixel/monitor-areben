@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { alCambiarRolVisto } from './ver-como'
 import { leerPermisos, type MarcaErp, type PermisosErp } from './cliente'
 
 let pendiente: Promise<PermisosErp | null> | null = null
@@ -16,6 +17,8 @@ const unaVez = () => (pendiente ??= Promise.resolve().then(() => leerPermisos())
 
 /** Para los tests: olvida lo leído. */
 export const olvidarPermisosErp = () => { pendiente = null }
+// «Ver como»: al cambiar de rol, los permisos se vuelven a pedir.
+alCambiarRolVisto(olvidarPermisosErp)
 
 /** @returns `puede(permiso)`: `false` sólo si el servidor dijo que no. */
 export function usePuedeErp(marca: MarcaErp): (permiso: string) => boolean {

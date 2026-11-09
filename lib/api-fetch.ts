@@ -26,6 +26,7 @@
  * que pedir, y preguntarles una sería exactamente el paso que el SSO viene a sacar.
  */
 
+import { rolVisto, viendoComoEnErp } from './erp/ver-como'
 import type { Perfil } from './permisos'
 import {
   credencialActual,
@@ -135,7 +136,19 @@ const reenviable = (opts: RequestInit) => opts.body == null || typeof opts.body 
  * Si tampoco se puede, vuelve el 403 original y la pantalla avisa como siempre.
  * ⛔ No aplica a las sesiones de contraseña: ahí no hay nada que renovar.
  */
-export async function apiFetch(url: string, opts: RequestInit = {}): Promise<Response> {
+export async function apiFetch(url: string, opts0: RequestInit = {}): Promise<Response> {
+  let opts = opts0
+  // «Ver como» del ERP: se lee con el rol elegido y no se guarda nada, venga de la pantalla que venga.
+  if (viendoComoEnErp()) {
+    if ((opts.method ?? 'GET').toUpperCase() !== 'GET') {
+      return new Response(JSON.stringify({ error: 'Estás viendo el ERP con otro rol: no se guarda nada. Volvé a Admin para hacerlo.' }), { status: 403, headers: { 'Content-Type': 'application/json' } })
+    }
+    if (url.includes('recurso=erp')) {
+      const headers = new Headers(opts.headers || {})
+      headers.set('x-erp-ver-como', rolVisto()!)
+      opts = { ...opts, headers }
+    }
+  }
   await asegurarPass()
   const r = await fetchConAuth(url, opts)
   if (r.status !== 403 || !reenviable(opts) || leerSesion()?.via !== 'google') return r
