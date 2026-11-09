@@ -6,7 +6,7 @@
  * de los gastos operativos. Arriba los números; abajo la lista (Todos · Automáticos · A mano) y «Nuevo gasto».
  * 🔑 La comisión sale sola de cada cobro: se muestra SUMADA en una fila. Si hay cobros cuya ruta no tiene tasa, se dice: esa
  *    comisión NO está en el total. 🔑 Un gasto no se edita ni se borra: corregir uno de más es cargar otro en negativo.
- * 🔑 Hasta el corte todo lo del ERP es DE PRUEBA ⇒ abre en «De prueba», como Cobros. Núcleo: `lib/erp/gastos.core.js`.
+ * 🔑 Hasta el corte todo lo del ERP es DE PRUEBA ⇒ abre en «De prueba» hasta el corte de la línea y en «Reales» desde entonces, como Cobros. Núcleo: `lib/erp/gastos.core.js`.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -20,6 +20,7 @@ import {
 } from '@/lib/erp/gastos.core.js'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { useTiendaErp } from '@/lib/erp/linea-erp'
+import { usePruebaSegunCorte } from '@/lib/erp/prueba-corte'
 
 type FilaGasto = ReturnType<typeof armarFilasGastos>[number]
 
@@ -54,7 +55,7 @@ export function GastosErp() {
   // Los gastos son de la tienda del menú: mirando Stunned, ⛔ los de Zattia (Bruno, 30-oct).
   const tienda = useTiendaErp()
   const { confirmar } = useConfirmar()
-  const [prueba, setPrueba] = useState(true)
+  const { prueba, setPrueba, listo } = usePruebaSegunCorte(tienda)
   const [periodo, setPeriodo] = useState('mes')
   const [vista, setVista] = useState('todos')
   const [datos, setDatos] = useState<(GastosDelPeriodo & { clave: string }) | null>(null)
@@ -65,6 +66,7 @@ export function GastosErp() {
 
   const clave = `${marca}|${tienda}|${periodo}|${prueba}|${vuelta}`
   useEffect(() => {
+    if (!listo) return
     let vivo = true
     // El día se toma al leer (⛔ en el render): «Este mes» es el de cuando se apretó.
     const { desde, hasta } = rangoGasto(periodo, diaArgentino(Date.now()))
@@ -72,7 +74,7 @@ export function GastosErp() {
       .then((d) => { if (vivo) { setDatos({ ...d, clave }); setError(null) } })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer los gastos.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
-  }, [marca, tienda, prueba, periodo, clave])
+  }, [marca, tienda, prueba, periodo, clave, listo])
   const cargando = datos?.clave !== clave
 
   const todas = useMemo(() => (datos ? armarFilasGastos(datos) : []), [datos])

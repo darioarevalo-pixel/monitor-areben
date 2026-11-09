@@ -22,7 +22,8 @@ const leerFichaDeCliente = vi.fn(async () => ({
   compras: [{ id: '1', number: 9123, fecha: '2026-10-03', channel: 'Mayorista', total: 250000, sale_state: 'Entregado', payment_method: null, tn_order: null }],
   contacto: { name: 'Barbara', email: 'barbara@x.com', phone: '341', city: 'Rosario', province: 'Santa Fe', address: null }, cuenta: null, cortado: false,
 }))
-vi.mock('@/lib/erp/cliente', () => ({ leerListaDeClientes: () => leerListaDeClientes(), leerFichaDeCliente: () => leerFichaDeCliente(),
+vi.mock('@/lib/erp/cliente', () => ({
+  leerCorteDeLinea: async () => ({ en_erp: false }), leerListaDeClientes: () => leerListaDeClientes(), leerFichaDeCliente: () => leerFichaDeCliente(),
   // «Con saldo» es la cuenta corriente (tanda 3, 30-oct): queda montada para dar su número.
   leerCuentasCorrientes: async () => ({ hoy: '2026-10-19', prueba: true, cuentas: [], clientesErp: 0, otroLibro: 0 }) }))
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'bdi', perfil: { name: 'bruno' } }) }))
