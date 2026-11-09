@@ -39,6 +39,10 @@ describe('el estado de cada venta', () => {
     expect(estadoDeVenta(venta({ estado: 'anulada' }))).toBe('anulada')
     expect(estadoDeVenta(venta({ origen: 'mayorista', gnEstado: 'Compra Pendiente' }))).toBe('pendiente_gn')
     expect(estadoDeVenta(venta({ origen: 'mayorista', gnEstado: 'Cerrado' }))).toBe('cerrada_gn')
+    // Desde el corte manda el pedido; la de prueba sigue con lo de Gestión Nube.
+    expect(estadoDeVenta(venta({ origen: 'mayorista', prueba: false, pedidoEtapa: 'en_preparacion' }))).toBe('en_preparacion')
+    expect(estadoDeVenta(venta({ origen: 'mayorista', prueba: true, pedidoEtapa: 'en_preparacion', gnEstado: 'Compra Pendiente' }))).toBe('pendiente_gn')
+    expect(estadoDeVenta(venta({ origen: 'mayorista', prueba: false }))).toBe('sin_pedido')
     expect(estadoDeVenta(venta({ origen: 'tn', tnEstado: 'a_preparar' }))).toBe('a_preparar')
     expect(estadoDeVenta(venta({ origen: 'tn', tnEstado: 'listo', envioTipo: 'pickup' }))).toBe('listo_retira')
     expect(estadoDeVenta(venta({ origen: 'tn', tnEstado: 'listo', envioTipo: 'ship' }))).toBe('listo_envio')
