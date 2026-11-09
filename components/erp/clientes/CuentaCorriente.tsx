@@ -31,6 +31,7 @@ import {
 } from '@/lib/erp/cuenta-corriente.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { esAdmin } from '@/lib/permisos'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { ESTADO_CUENTA, FichaCuenta, type FilaCuenta } from './FichaCuenta'
 import { imprimirResumenDeFila } from './resumen-cuenta'
 import { enlaceWhatsapp } from '@/lib/erp/resumen-cuenta.core.js'
@@ -43,8 +44,14 @@ const COLUMNAS = columnasDe()
 const MOVIL: Record<string, MovilColumna> = { c: 'titulo', saldo: 'dato', linea: 'chico', dias: 'chico', estado: 'chico' }
 const n = (x: number) => x.toLocaleString('es-AR')
 
-/** 🎨 Tanda 3 (30-oct): ⛔ es pestaña aparte: es la vista «Con saldo» de Clientes (`embebida`), que muestra su número (`alContar`). */
-export function CuentaCorriente({ embebida = false, alContar }: { embebida?: boolean; alContar?: (n: number | null) => void } = {}) {
+/** Lo que Clientes muestra de las cuentas en su única fila de vistas y su único «Por cobrar». */
+export type ResumenDeCuentas = { conteo: Record<string, number>; porCobrar: number; prueba: boolean }
+
+/**
+ * 🎨 Tanda 3 (30-oct): ⛔ es pestaña aparte: es la vista «Con saldo» de Clientes (`embebida`), que muestra su número (`alContar`).
+ * 🎨 9-nov (Bruno): embebida ⛔ dibuja otra fila de vistas: las elige Clientes (`vistaDeAfuera`).
+ */
+export function CuentaCorriente({ embebida = false, vistaDeAfuera = 'saldo', alContar }: { embebida?: boolean; vistaDeAfuera?: string; alContar?: (r: ResumenDeCuentas | null) => void } = {}) {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   // Las cuentas de la tienda del menú: mirando Stunned sumaba los saldos de Zattia (Bruno, 30-oct).
@@ -56,11 +63,17 @@ export function CuentaCorriente({ embebida = false, alContar }: { embebida?: boo
   const { prueba, setPrueba, listo } = usePruebaSegunCorte(tienda)
   const [datos, setDatos] = useState<(CuentasDeLaMarca & { clave: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [vista, setVista] = useState('saldo')
+  const [vistaPropia, setVista] = useState('saldo')
+  const vista = embebida ? vistaDeAfuera : vistaPropia
   const [q, setQ] = useState('')
   const [orden, setOrden] = useState<OrdenLista>(null)
   const [prefs, setPrefsState] = useState<Prefs>(() => normalizarPrefs(typeof window === 'undefined' ? null : leerPrefsDeLista(lista, usuario)))
   const [ficha, setFicha] = useState<FilaCuenta | null>(null)
+  // Cuántas veces se apretó el $: entra en la `key` de la ficha para que abra la ventana de cobrar, aunque ya estuviera abierta.
+  const [cobroPedido, setCobroPedido] = useState(0)
+  const puedeCobrar = usePuedeErp(marca)('cobrar')
+  const abrirFicha = (f: FilaCuenta) => { setFicha(f); setCobroPedido(0) }
+  const cobrar = (f: FilaCuenta) => { setFicha(f); setCobroPedido((x) => x + 1) }
   const setPrefs = (p: Prefs) => { setPrefsState(p); guardarPrefsDeLista(lista, usuario, p) }
 
   const [vuelta, setVuelta] = useState(0)
@@ -80,8 +93,9 @@ export function CuentaCorriente({ embebida = false, alContar }: { embebida?: boo
   const conteo = useMemo(() => contarVistas(base), [base])
   const filas: FilaCuenta[] = useMemo(() => ordenar(filtrar(base, { vista }), orden), [base, vista, orden])
   const res = useMemo(() => resumen(base), [base])
-  // El número de «Con saldo» en Clientes: el de la vista con la que abre esta lista (el que daba la pantalla de antes).
-  useEffect(() => { alContar?.(cargando ? null : conteo.saldo) }, [alContar, cargando, conteo])
+  // Las vistas y el total de Clientes salen de acá: el total es el de TODAS las cuentas, sin el buscador.
+  const porCobrar = useMemo(() => resumen(todas).porCobrar, [todas])
+  useEffect(() => { alContar?.(cargando ? null : { conteo, porCobrar, prueba }) }, [alContar, cargando, conteo, porCobrar, prueba])
   // Ya llega UNA línea (la del menú): la columna «Línea» ⛔ hace falta.
   const variasLineas = false
 
@@ -113,13 +127,15 @@ export function CuentaCorriente({ embebida = false, alContar }: { embebida?: boo
     const escribir = () => wa.url && window.open(wa.url, '_blank', 'noopener')
     const imprimir = () => { void imprimirResumenDeFila(marca, f, prueba).then((e) => e && setError(e)) }
     const menu: AccionMenu[] = [
-      { key: 'ficha', label: 'Abrir la cuenta', icono: 'abrir', onClick: () => setFicha(f) },
+      ...(puedeCobrar && f.saldo > 0 ? [{ key: 'cobrar', label: 'Cobrar', icono: 'pesos', onClick: () => cobrar(f) } as AccionMenu] : []),
+      { key: 'ficha', label: 'Abrir la cuenta', icono: 'abrir', onClick: () => abrirFicha(f) },
       { key: 'wa', label: 'Escribir por WhatsApp', icono: 'whatsapp', onClick: escribir, disabled: !wa.url, hint: wa.motivo ?? undefined },
       { key: 'imprimir', label: 'Imprimir resumen de cuenta', icono: 'impresora', onClick: imprimir },
     ]
     return (
       <>
-        <IconoFila label="Abrir la cuenta" onClick={() => setFicha(f)}><Icono nombre="abrir" size={16} /></IconoFila>
+        {puedeCobrar && f.saldo > 0 && <IconoFila label={`Cobrar a ${f.nombre}`} onClick={() => cobrar(f)}><Icono nombre="pesos" size={16} /></IconoFila>}
+        <IconoFila label="Abrir la cuenta" onClick={() => abrirFicha(f)}><Icono nombre="abrir" size={16} /></IconoFila>
         <IconoFila label={wa.motivo ? `Escribir por WhatsApp · ${wa.motivo}` : 'Escribir por WhatsApp'} apagado={!wa.url} verde={!!wa.url} onClick={escribir}><Icono nombre="whatsapp" size={16} /></IconoFila>
         <IconoFila label="Imprimir resumen de cuenta" onClick={imprimir}><Icono nombre="impresora" size={16} /></IconoFila>
         <MenuAcciones acciones={menu} etiqueta={`Más acciones de la cuenta de ${f.nombre}`} vertical alinear="izquierda" />
@@ -151,7 +167,7 @@ export function CuentaCorriente({ embebida = false, alContar }: { embebida?: boo
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
-        <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
+        {!embebida && <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />}
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un cliente" placeholder="Nombre o DNI / CUIT" />
           <div role="group" aria-label="Qué cuentas" style={{ display: 'flex', gap: 4 }}>
@@ -167,13 +183,13 @@ export function CuentaCorriente({ embebida = false, alContar }: { embebida?: boo
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((x) => x + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
-          columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={136}
+          columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={168}
           orden={orden} onOrden={setOrden}
-          activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `la cuenta de ${f.nombre}`}
+          activa={ficha?.id ?? null} onAbrir={abrirFicha} etiquetaFila={(f) => `la cuenta de ${f.nombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
               <EmptyState title={q ? 'No hay cuentas con ese nombre o documento.' : todas.length ? 'No hay cuentas en esta vista.' : `No hay cuentas corrientes ${libro} todavía.`} />
-              {vista !== 'todas' && todas.length > 0 && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todas')}>Ver todas</Button></div>}
+              {!embebida && vista !== 'todas' && todas.length > 0 && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todas')}>Ver todas</Button></div>}
             </div>
           ) : null}
         />
@@ -183,7 +199,7 @@ export function CuentaCorriente({ embebida = false, alContar }: { embebida?: boo
         </div>
       </div>
 
-      {ficha && <FichaCuenta key={`${marca}/${prueba}/${ficha.id}`} marca={marca} fila={ficha} prueba={prueba} admin={admin} onCerrar={() => setFicha(null)} onCambio={() => setVuelta((x) => x + 1)} />}
+      {ficha && <FichaCuenta key={`${marca}/${prueba}/${ficha.id}/${cobroPedido}`} marca={marca} fila={ficha} prueba={prueba} admin={admin} cobrarAlAbrir={cobroPedido > 0} onCerrar={() => setFicha(null)} onCambio={() => setVuelta((x) => x + 1)} />}
     </div>
   )
 }

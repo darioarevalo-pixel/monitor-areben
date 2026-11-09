@@ -138,7 +138,7 @@ import { ACCIONES_DEPOSITO, accionDeDeposito, depositosDeLinea } from './_erp-de
 import { ACCIONES as ACCIONES_SALIDA } from '../lib/erp/salida.core.js'
 import { accionDeCatalogo, historialDeProducto } from './_erp-catalogo.js'
 import { ACCIONES as ACCIONES_CATALOGO } from '../lib/erp/catalogo-edicion.core.js'
-import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
+import { anularPagoCuentaErp, cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
 import { anotarWhatsappPanel, bcraDelPanel, clienteNuevoPanel, clientesDelPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, libroDePruebaDelPanel, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
@@ -2247,8 +2247,8 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
-    if (body.accion === 'editar-venta' || body.accion === 'nota-venta' || body.accion === 'cobrar-venta' || body.accion === 'cobrar-cuenta') {
-      const fn = { 'editar-venta': editarVentaErp, 'nota-venta': notaDeVentaErp, 'cobrar-venta': cobrarVentaErp, 'cobrar-cuenta': cobrarCuentaErp }[body.accion]
+    if (body.accion === 'editar-venta' || body.accion === 'nota-venta' || body.accion === 'cobrar-venta' || body.accion === 'cobrar-cuenta' || body.accion === 'anular-pago-cuenta') {
+      const fn = { 'editar-venta': editarVentaErp, 'nota-venta': notaDeVentaErp, 'cobrar-venta': cobrarVentaErp, 'cobrar-cuenta': cobrarCuentaErp, 'anular-pago-cuenta': anularPagoCuentaErp }[body.accion]
       const r = await fn({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || 'admin' })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
