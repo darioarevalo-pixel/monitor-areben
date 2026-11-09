@@ -197,7 +197,7 @@ export function FacturaCaja() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <SectionCard title={`Factura · ${NOMBRE_MARCA[store] ?? store}`} subtitle="La factura que pide la clienta en el mostrador: buscá la venta y elegí A o B.">
+      <SectionCard title={`Factura · ${NOMBRE_MARCA[tienda] ?? tienda}`} subtitle="La factura que pide la clienta en el mostrador: buscá la venta y elegí A o B.">
         {sinCortar && <Notice tone="warning">Hasta el corte de esta marca la factura real del local sale de Gestión Nube: acá sólo sale en el ambiente de prueba de ARCA.</Notice>}
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>

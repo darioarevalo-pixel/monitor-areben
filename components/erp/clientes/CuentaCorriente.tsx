@@ -16,6 +16,7 @@
  */
 
 import { useTiendaErp } from '@/lib/erp/linea-erp'
+import { usePruebaSegunCorte } from '@/lib/erp/prueba-corte'
 import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
@@ -52,7 +53,7 @@ export function CuentaCorriente({ embebida = false, alContar }: { embebida?: boo
   const admin = esAdmin(perfil)
   const lista = 'erp-cuenta-corriente'
   // Hasta el corte con GN, las mayoristas de BDI son de PRUEBA (corren en sombra): se abre en ese libro (A, 20-oct).
-  const [prueba, setPrueba] = useState(true)
+  const { prueba, setPrueba, listo } = usePruebaSegunCorte(tienda)
   const [datos, setDatos] = useState<(CuentasDeLaMarca & { clave: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [vista, setVista] = useState('saldo')
@@ -65,12 +66,13 @@ export function CuentaCorriente({ embebida = false, alContar }: { embebida?: boo
   const [vuelta, setVuelta] = useState(0)
   const clave = `${marca}|${tienda}|${prueba}|${vuelta}`
   useEffect(() => {
+    if (!listo) return
     let vivo = true
     leerCuentasCorrientes(marca, tienda, prueba)
       .then((d) => { if (vivo) { setDatos({ ...d, clave }); setError(null) } })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudo leer la cuenta corriente.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
-  }, [marca, tienda, prueba, clave])
+  }, [marca, tienda, prueba, clave, listo])
   const cargando = datos?.clave !== clave
 
   const todas = useMemo(() => armarFilasCuenta(datos?.cuentas ?? []) as FilaCuenta[], [datos])
