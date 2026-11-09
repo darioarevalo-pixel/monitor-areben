@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { esAdmin } from '@/lib/permisos'
 import {
   Button, EmptyState, Icono, MenuAcciones, Notice, Paginacion, color, font, space, weight, type AccionMenu,
 } from '@/components/ui'
@@ -235,7 +236,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
       {/* El título «Ventas» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
         <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Caja, Tienda Nube, mayoristas y cambios, en una sola lista.</p>
-        <Button onClick={() => setCargarAbierta(true)}>Cargar venta</Button>
+        {perfil && esAdmin(perfil) && <Button onClick={() => setCargarAbierta(true)}>Cargar venta</Button>}
       </div>
       {cargarAbierta && <CargarVenta marca={marca} onCerrar={() => setCargarAbierta(false)} onCargada={(t) => { setCargarAbierta(false); setAviso(t); cargar() }} />}
 
