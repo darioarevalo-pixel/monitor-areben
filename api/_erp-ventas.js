@@ -420,6 +420,30 @@ export async function cobrarCuentaErp({ marca, body, usuario }, deps = {}) {
 }
 
 /**
+ * Anular un pago a cuenta cargado mal (sólo Admin: `configurar`). El motor escribe la fila contraria con el motivo: la deuda vuelve
+ * y en Cobros queda marcado como anulado. 🔑 El pago se busca con su cliente y su línea: la ficha ⛔ puede anular el de otra cuenta.
+ */
+export async function anularPagoCuentaErp({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'Elegí el cliente.' }
+  const ref = String(body?.ref || '').trim()
+  if (!ref || ref.startsWith('venta:') || ref.endsWith(':anulacion')) return { status: 400, error: 'Ese movimiento no es un pago a cuenta.' }
+  const motivo = String(body?.motivo || '').trim()
+  if (!motivo) return { status: 400, error: 'Escribí el motivo.' }
+  const m = deps.cuenta || await moduloDelMotor('cuenta')
+  if (typeof m?.anularPagoACuenta !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
+  return correr(async (db) => {
+    const { rows: [pago] } = await db.query(
+      `select empresa_id from cuenta_movimiento where ref = $1 and tipo = 'pago' and cliente_id = $2 and marca = $3`,
+      [ref, body.clienteId, body.linea || marca])
+    if (!pago) return { status: 404, error: 'Ese pago no está en esta cuenta.' }
+    const r = await m.anularPagoACuenta(db, { empresa_id: pago.empresa_id, origen_ref: ref, motivo, usuario })
+    return r.ok ? { ok: true, cuenta: r.cuenta } : errorDe(r.error)
+  })
+}
+
+/**
  * Lo de AFUERA del motor para la ficha de UNA venta: cliente y número de GN, pedido de TN (con su link), facturas con
  * número y fecha (del ERP y de GN) para el historial. Las ediciones y notas, cuando el motor las tenga (§16).
  */

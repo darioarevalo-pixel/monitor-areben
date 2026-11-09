@@ -724,6 +724,9 @@ export const cobrarCuentaErp = (marca: MarcaErp, c: {
   imputar?: Array<{ ventaId: string; monto: number }>
 }) =>
   pedir<{ ok: true; cuenta: unknown; yaExistia?: boolean }>(post({ accion: 'cobrar-cuenta', marca, ...c }), '', 'No se pudo registrar el cobro.')
+/** Anular un pago a cuenta cargado mal, con el motivo (sólo Admin): la deuda vuelve. */
+export const anularPagoCuentaErp = (marca: MarcaErp, a: { clienteId: string; linea: string; ref: string; motivo: string }) =>
+  pedir<{ ok: true; cuenta: unknown }>(post({ accion: 'anular-pago-cuenta', marca, ...a }), '', 'No se pudo anular el pago.')
 /**
  * La cuenta del cliente del chat en el panel de WhatsApp (BDI). `prendido: false` = el interruptor `PANEL_CUENTA_CORRIENTE`
  * está apagado para este usuario ⇒ el panel ⛔ dibuja nada. Sin `gnId` ni `tel` sólo dice si está prendido.

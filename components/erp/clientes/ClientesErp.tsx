@@ -28,7 +28,8 @@ import {
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaCliente, fechaCorta } from './FichaCliente'
-import { CuentaCorriente } from './CuentaCorriente'
+import { CuentaCorriente, type ResumenDeCuentas } from './CuentaCorriente'
+import { VISTAS as VISTAS_DE_CUENTA } from '@/lib/erp/cuenta-corriente.core.js'
 
 type Prefs = { orden: string[]; visibles: string[] }
 
@@ -38,6 +39,11 @@ const MOVIL: Record<string, MovilColumna> = { c: 'titulo', total: 'dato', tipo: 
 /** Cuántas filas se dibujan de una (la lista ⛔ es virtual: BDI tiene más de 13.000 clientes). */
 const DE_A = 300
 const n = (x: number) => x.toLocaleString('es-AR')
+type Vista = readonly [string, string, ...unknown[]]
+/** 🎨 9-nov (Bruno): una sola fila de vistas. Las de cuenta van pegadas a «Con saldo» y muestran la lista de cuentas. */
+const CUENTA_EXTRA: Vista[] = (VISTAS_DE_CUENTA as Vista[]).filter(([k]) => k !== 'saldo' && k !== 'todas')
+const TODAS_LAS_VISTAS: Vista[] = (VISTAS as Vista[]).flatMap((v) => (v[0] === 'saldo' ? [v, ...CUENTA_EXTRA] : [v]))
+const ES_DE_CUENTA = new Set(['saldo', ...CUENTA_EXTRA.map(([k]) => k)])
 
 function bajarCsv(filas: FilaCliente[], marca: MarcaErp) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
@@ -102,10 +108,10 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
   const base = useMemo(() => filtrar(datos?.filas ?? [], { q }), [datos, q])
   // 🎨 Tanda 3 (30-oct, mapa del menú): «Con saldo» ES la cuenta corriente (⛔ pestaña aparte): su número y su lista son los de
   // `CuentaCorriente` (su núcleo), que queda montada para dar el número aunque se mire otra vista.
-  const [conSaldo, setConSaldo] = useState<number | null>(null)
-  const conteo = useMemo(() => ({ ...contarVistas(base), saldo: conSaldo ?? 0 }), [base, conSaldo])
-  const enSaldo = vista === 'saldo'
-  const enVista = useMemo(() => filtrar(base, { vista }), [base, vista])
+  const [cuentas, setCuentas] = useState<ResumenDeCuentas | null>(null)
+  const conteo = useMemo(() => ({ ...contarVistas(base), ...cuentas?.conteo, saldo: cuentas?.conteo.saldo ?? 0 }), [base, cuentas])
+  const enSaldo = ES_DE_CUENTA.has(vista)
+  const enVista = useMemo(() => filtrar(base, { vista: enSaldo ? 'todos' : vista }), [base, vista, enSaldo])
   const filas: FilaCliente[] = useMemo(() => ordenar(enVista, orden), [enVista, orden])
   const res = useMemo(() => resumen(enVista), [enVista])
   const elegidas = filas.filter((f) => seleccion.has(f.id))
@@ -150,7 +156,7 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
     )
   }
 
-  const nombreVista = VISTAS.find(([k]) => k === vista)?.[1] ?? ''
+  const nombreVista = TODAS_LAS_VISTAS.find(([k]) => k === vista)?.[1] ?? ''
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>Cada cliente con lo que compró y el saldo de su cuenta.</p>
@@ -165,14 +171,14 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       {!enSaldo && <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-        <TileResumen titulo="Por cobrar" valor={sinCuentas ? '—' : formatMoney(res.porCobrar)} oscuro nota={sinCuentas ? 'todavía sin cuentas corrientes' : 'lo que deben − lo que tienen a favor'} />
+        <TileResumen titulo="Por cobrar" valor={sinCuentas ? '—' : cuentas ? formatMoney(cuentas.porCobrar) : '…'} oscuro nota={sinCuentas ? 'todavía sin cuentas corrientes' : `todas las cuentas${cuentas?.prueba ? ', de prueba' : ''} · lo que deben − lo que tienen a favor`} />
         <TileResumen titulo="Compraron este mes" valor={n(res.compraron)} nota={`de ${n(res.clientes)} en ${nombreVista.toLowerCase()}`} />
         <TileResumen titulo="Mayoristas" valor={n(res.mayoristas)} nota="con alguna compra mayorista" />
         <TileResumen titulo="Comprado" valor={formatMoney(res.total)} nota={`${n(res.clientes)} clientes`} />
       </div>}
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
-        <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
+        <VistasLista vistas={TODAS_LAS_VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         {!enSaldo && <>
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un cliente" placeholder="Nombre o DNI / CUIT" />
@@ -207,7 +213,7 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
         </div>
         </>}
       </div>
-      <div hidden={!enSaldo}><CuentaCorriente embebida alContar={setConSaldo} /></div>
+      <div hidden={!enSaldo}><CuentaCorriente embebida vistaDeAfuera={enSaldo ? vista : 'saldo'} alContar={setCuentas} /></div>
 
       <BarraSeleccion cuantas={elegidas.length} onSoltar={() => setSeleccion(new Set())}>
         <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca)}>Exportar los elegidos</AccionSeleccion>

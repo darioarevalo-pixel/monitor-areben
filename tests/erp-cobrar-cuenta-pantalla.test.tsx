@@ -20,8 +20,10 @@ const cuenta = {
 }
 const leerCuentaDeCliente = vi.fn(async () => cuenta)
 const cobrarCuentaErp = vi.fn(async () => ({ ok: true, cuenta: {} }))
+const anularPagoCuentaErp = vi.fn(async () => ({ ok: true, cuenta: {} }))
 vi.mock('@/lib/erp/cliente', () => ({
   leerCuentaDeCliente: (...a: unknown[]) => leerCuentaDeCliente(...(a as [])), cobrarCuentaErp: (...a: unknown[]) => cobrarCuentaErp(...(a as [])),
+  anularPagoCuentaErp: (...a: unknown[]) => anularPagoCuentaErp(...(a as [])),
   ponerCreditoCliente: vi.fn(), leerPermisos: async () => ({ permisos: { bdi: {}, zattia: {} } }),
 }))
 
@@ -79,5 +81,21 @@ describe('Cobrar a la cuenta (pantalla)', () => {
     await act(async () => { set.call(sel, real.id); sel.dispatchEvent(new Event('change', { bubbles: true })) })
     await act(async () => { boton('Cobrar $')!.click() })
     expect((cobrarCuentaErp.mock.calls[0] as unknown as [string, Record<string, unknown>])[1]).toMatchObject({ cuentaReal: real.id })
+  })
+
+  it('«Anular con motivo»: sin motivo no sale; manda la clave del pago y el motivo, y dice cómo queda el saldo', async () => {
+    leerCuentaDeCliente.mockResolvedValueOnce({ ...cuenta, mayor: { anterior: 0, final: 1000, renglones: [
+      { ref: 'erp-cobro-cuenta:a', tipo: 'pago', fecha: '2026-10-25', detalle: 'Galicia', debe: 0, haber: 500, saldo: 1000 },
+    ] } } as typeof cuenta)
+    await montar()
+    await act(async () => { (document.querySelector('button[aria-label^="Más acciones del pago"]') as HTMLButtonElement).click() })
+    await act(async () => { [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('Anular con motivo'))!.click() })
+    expect(document.body.textContent).toMatch(/\$\s1\.000 → \$\s1\.500/)
+    expect(boton('Anular el pago de')?.disabled).toBe(true)
+    const motivo = document.querySelector('input:not([type="date"])') as HTMLInputElement
+    const setI = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    await act(async () => { setI.call(motivo, 'Se cargó dos veces'); motivo.dispatchEvent(new Event('input', { bubbles: true })) })
+    await act(async () => { boton('Anular el pago de')!.click() })
+    expect(anularPagoCuentaErp.mock.calls[0]).toEqual(['bdi', { clienteId: CLIENTE, linea: 'bdi', ref: 'erp-cobro-cuenta:a', motivo: 'Se cargó dos veces' }])
   })
 })

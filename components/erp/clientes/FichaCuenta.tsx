@@ -7,13 +7,13 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Button, Field, Input, Modal, MoneyText, Notice, Select, color, font, space, weight } from '@/components/ui'
+import { Button, Field, Input, MenuAcciones, Modal, MoneyText, Notice, Select, color, font, space, weight } from '@/components/ui'
 import { formatMoney } from '@/components/ui/MoneyText'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
 import { CampoCuentaReal } from '@/components/erp/ventas/CampoCuentaReal'
 import { pideCuentaReal } from '@/lib/erp/cobro-destino.core.js'
-import { cobrarCuentaErp, leerCuentaDeCliente, ponerContactoCliente, ponerCreditoCliente, type CreditoCliente, type CuentaDeCliente, type MarcaErp } from '@/lib/erp/cliente'
+import { anularPagoCuentaErp, cobrarCuentaErp, leerCuentaDeCliente, ponerContactoCliente, ponerCreditoCliente, type CreditoCliente, type CuentaDeCliente, type MarcaErp } from '@/lib/erp/cliente'
 import { NOMBRE_LINEA, TRAMOS, nombresDeVentas, textoCredito } from '@/lib/erp/cuenta-corriente.core.js'
 import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { fechaCorta } from './FichaCliente'
@@ -25,6 +25,8 @@ import { imprimirResumenCon } from './resumen-cuenta'
 export const ESTADO_CUENTA: Record<string, [tono: 'danger' | 'success' | 'action' | 'neutral', texto: string]> = {
   atrasada: ['danger', 'Atrasada'], aldia: ['success', 'Al día'], favor: ['action', 'A favor'], cero: ['neutral', 'Sin saldo'],
 }
+
+type RenglonMayor = CuentaDeCliente['mayor']['renglones'][number]
 
 export type FilaCuenta = {
   id: string; clienteId: string; linea: string; nombre: string; doc: string | null; whatsapp?: string | null
@@ -44,7 +46,9 @@ function bajar(texto: string, nombre: string) {
 
 const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
-export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: {
+export function FichaCuenta({ marca, fila, prueba, admin, cobrarAlAbrir = false, onCerrar, onCambio }: {
+  /** Desde el $ de la fila: la ventana de cobrar se abre sola, sin pasar por la ficha. */
+  cobrarAlAbrir?: boolean
   marca: MarcaErp; fila: FilaCuenta; prueba: boolean; admin: boolean; onCerrar: () => void; onCambio: () => void
 }) {
   const [desde, setDesde] = useState('')
@@ -55,7 +59,8 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
   const [contactando, setContactando] = useState(false)
   // El WhatsApp recién guardado: la lista de arriba se refresca con `onCambio`, pero la ficha ya lo usa.
   const [whatsappNuevo, setWhatsappNuevo] = useState<string | null>(null)
-  const [cobrando, setCobrando] = useState(false)
+  const [cobrando, setCobrando] = useState(cobrarAlAbrir)
+  const [anulando, setAnulando] = useState<RenglonMayor | null>(null)
   const [hecho, setHecho] = useState<string | null>(null)
   const puedeCobrar = usePuedeErp(marca)('cobrar')
   const [vuelta, setVuelta] = useState(0)
@@ -160,14 +165,15 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
           <Field label="Hasta"><Input type="date" value={hasta} min={desde || undefined} onChange={(ev) => setHasta(ev.target.value)} /></Field>
         </div>
         {s && (
-          <div role="table" aria-label="Mayor de la cuenta" style={{ display: 'grid', gridTemplateColumns: '72px minmax(0, 1fr) 96px 96px 104px', columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
-            {cab('Fecha', false)}{cab('Movimiento', false)}{cab('Debe', true)}{cab('Haber', true)}{cab('Saldo', true)}
+          <div role="table" aria-label="Mayor de la cuenta" style={{ display: 'grid', gridTemplateColumns: `72px minmax(0, 1fr) 96px 96px 104px${admin ? ' 32px' : ''}`, columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
+            {cab('Fecha', false)}{cab('Movimiento', false)}{cab('Debe', true)}{cab('Haber', true)}{cab('Saldo', true)}{admin && cab('', false)}
             {(desde || s.mayor.anterior !== 0) && (
               <div role="row" style={{ display: 'contents' }}>
                 <span role="cell" style={celda} />
                 <span role="cell" style={{ ...celda, color: color.mut }}>Saldo anterior</span>
                 <span role="cell" style={celda} /><span role="cell" style={celda} />
                 <span role="cell" style={{ ...celda, textAlign: 'right' }}><MoneyText value={s.mayor.anterior} /></span>
+                {admin && <span role="cell" style={celda} />}
               </div>
             )}
             {s.mayor.renglones.map((r) => (
@@ -177,6 +183,11 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
                 <span role="cell" style={{ ...celda, textAlign: 'right' }}>{r.debe ? <MoneyText value={r.debe} /> : ''}</span>
                 <span role="cell" style={{ ...celda, textAlign: 'right', color: 'var(--mo-success-ink)' }}>{r.haber ? <MoneyText value={r.haber} /> : ''}</span>
                 <span role="cell" style={{ ...celda, textAlign: 'right', fontWeight: weight.semibold }}><MoneyText value={r.saldo} /></span>
+                {admin && (
+                  <span role="cell" style={{ ...celda, overflow: 'visible' }}>
+                    {r.tipo === 'pago' && <MenuAcciones acciones={[{ key: 'anular', label: 'Anular con motivo', icono: 'anular', onClick: () => { setHecho(null); setAnulando(r) } }]} etiqueta={`Más acciones del pago del ${fechaCorta(r.fecha)}`} vertical alinear="izquierda" />}
+                  </span>
+                )}
               </div>
             ))}
             {!s.mayor.renglones.length && <span style={{ gridColumn: '1 / -1', padding: '8px 0', color: color.mut }}>Sin movimientos entre esas fechas.</span>}
@@ -188,6 +199,13 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
         <VentanaCobrarCuenta
           marca={marca} fila={fila} prueba={prueba} saldo={saldo} cuentas={s.cuentas ?? []} rutas={s.rutas} cuentasReales={s.cuentasReales} onCerrar={() => setCobrando(false)}
           onHecho={(m) => { setCobrando(false); setHecho(m); setVuelta((n) => n + 1); onCambio() }}
+        />
+      )}
+
+      {anulando && (
+        <VentanaAnularPago
+          marca={marca} fila={fila} renglon={anulando} saldo={saldo} onCerrar={() => setAnulando(null)}
+          onHecho={(m) => { setAnulando(null); setHecho(m); setVuelta((x) => x + 1); onCambio() }}
         />
       )}
 
@@ -205,6 +223,48 @@ export function FichaCuenta({ marca, fila, prueba, admin, onCerrar, onCambio }: 
         />
       )}
     </FichaCostado>
+  )
+}
+
+/** Anular un pago a cuenta cargado mal (sólo Admin): el motivo es obligatorio, la deuda vuelve y en Cobros queda marcado. */
+function VentanaAnularPago({ marca, fila, renglon, saldo, onCerrar, onHecho }: {
+  marca: MarcaErp; fila: FilaCuenta; renglon: RenglonMayor; saldo: number; onCerrar: () => void; onHecho: (aviso: string) => void
+}) {
+  const [motivo, setMotivo] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [trabajando, setTrabajando] = useState(false)
+  const monto = renglon.haber ?? 0
+
+  async function anular() {
+    setTrabajando(true)
+    try {
+      await anularPagoCuentaErp(marca, { clienteId: fila.clienteId, linea: fila.linea, ref: renglon.ref, motivo: motivo.trim() })
+      onHecho(`Pago de ${formatMoney(monto)} anulado. La deuda volvió a la cuenta de ${fila.nombre}.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo anular el pago.')
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
+  return (
+    <Modal
+      abierto onCerrar={onCerrar} titulo="Anular el pago"
+      pie={<>
+        <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
+        <Button tone="danger" disabled={trabajando || !motivo.trim()} onClick={() => void anular()}>Anular el pago de {formatMoney(monto)}</Button>
+      </>}
+    >
+      <p style={{ marginTop: 0, color: color.mut }}>{fila.nombre} · {fechaCorta(renglon.fecha)}{renglon.detalle ? ` · ${renglon.detalle}` : ''}</p>
+      {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+        <Field label="Motivo"><Input value={motivo} onChange={(ev) => setMotivo(ev.target.value)} autoFocus /></Field>
+        <div style={{ padding: '10px 12px', borderRadius: 9, background: color.bg, border: `1px solid ${color.line}`, display: 'flex', flexDirection: 'column', gap: 4, fontSize: font.base }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Saldo de la cuenta</span><b>{formatMoney(saldo)} → {formatMoney(saldo + monto)}</b></div>
+          <div style={{ color: color.mut }}>El pago sale de la cuenta y la deuda vuelve. En Cobros queda marcado como anulado. No se puede deshacer.</div>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
