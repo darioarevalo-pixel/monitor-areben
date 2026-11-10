@@ -415,6 +415,13 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   la base y `fechaLocal` (Argentina). Las categorías de TN las manda la pantalla (el servidor ⛔ tiene
   el catálogo): mentirlas da, a lo sumo, una promo, lo mismo que un descuento a mano. El nombre de la
   promo queda en `caja_venta.renglones[].promos` y sale en el ticket («Promo 3x2» en vez de «Descuento»).
+- 🔑 **Promo «por cantidad» (escalera, Bruno 10-nov)**: tipo `cantidad` con `escalones` `[{desde, pct}]`.
+  Con N unidades del alcance, el % del escalón MÁS ALTO alcanzado (⛔ se suman) va a todas, cada una sobre
+  su precio, redondeado al centavo por unidad (el redondeo a $100 es el de la forma de pago, después). Es
+  la regla de la web de BDI (Resorty, modo `todo`, `acumula:false`); oráculo en
+  `tests/caja-promos-cantidad.test.ts`. 🔴 **La de descuento a mano y la de oferta ⛔ cuentan para el
+  escalón** (son las que la promo ⛔ toca). Todo alcance que ⛔ sea por productos admite **`excluidos`**
+  («Menos estos productos»): ids de la CAJA, ⛔ de TN.
 - ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
   turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
   🔴 **Salvo su parte en EFECTIVO (auditoría A2, 11-oct)**: el billete ya está en el cajón ⇒ suma al
