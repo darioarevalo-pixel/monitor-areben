@@ -2035,7 +2035,7 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && req.query.vista === 'ventas-producto') {
       const marca = String(req.query.marca || '')
-      const r = await ventasPorProducto({ marca, desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), costos: puedeErp(perfil, marca, 'costos') }, { conMotor })
+      const r = await ventasPorProducto({ marca, desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), costos: puedeErp(perfil, marca, 'margen') }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'productos-lista') {

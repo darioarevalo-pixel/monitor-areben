@@ -91,7 +91,7 @@ describe('ERP · permisos por rol', () => {
     // La ficha del producto es de todos: el costo lo saca el SERVIDOR (`sinCostos`). La facturación del mes, de quien factura.
     expect(permisoErpDe({ method: 'GET', vista: 'precio' })).toBe('ver')
     expect(permisoErpDe({ method: 'GET', vista: 'facturacion' })).toBe('facturacion')
-    expect(permisoErpDe({ method: 'GET', vista: 'inicio-resultado' })).toBe('costos')
+    expect(permisoErpDe({ method: 'GET', vista: 'inicio-resultado' })).toBe('margen')
     expect(permisoErpDe({ method: 'GET', vista: 'rutas' })).toBe('configurar')
     expect(permisoErpDe({ method: 'GET' })).toBe('facturacion')
     expect(permisoErpDe({ method: 'POST', accion: 'cobrar-venta' })).toBe('cobrar')
@@ -123,9 +123,16 @@ describe('ERP · permisos por rol', () => {
     expect(sinNombrar('accion', acciones)).toEqual([])
   })
 
+  it('🎯 Bruno 10-nov: el LOCAL recibe transferencias (y Depósito); mover y cancelar siguen de Depósito', () => {
+    expect(permisoErpDe({ method: 'POST', accion: 'transferencia-recibir' })).toBe('recibir')
+    for (const r of ['local', 'deposito'] as Funcion[]) expect(puedeErp(abierto([r]), 'zattia', 'recibir')).toBe(true)
+    for (const r of ['mayorista', 'administracion', 'consulta'] as Funcion[]) expect(puedeErp(abierto([r]), 'zattia', 'recibir')).toBe(false)
+    expect(puedeErp(abierto(['local']), 'zattia', permisoErpDe({ method: 'POST', accion: 'transferencia-crear' }))).toBe(false)
+  })
+
   it('el Local lee clientes, productos y cobros; el resultado del Inicio y la Configuración siguen siendo del Admin', () => {
     for (const vista of ['clientes-lista', 'cliente-ficha', 'productos-lista', 'cobros', 'transferencias']) expect(permisoErpDe({ method: 'GET', vista })).toBe('ver')
-    expect(permisoErpDe({ method: 'GET', vista: 'inicio-resultado' })).toBe('costos')
+    expect(permisoErpDe({ method: 'GET', vista: 'inicio-resultado' })).toBe('margen')
     for (const vista of ['configuracion', 'reglas', 'rutas', 'interruptores']) expect(permisoErpDe({ method: 'GET', vista })).toBe('configurar')
     expect(puedeErp(abierto(['local']), 'bdi', permisoErpDe({ method: 'GET', vista: 'inicio-resultado' }))).toBe(false)
     expect(puedeErp(abierto(['local']), 'bdi', permisoErpDe({ method: 'GET', vista: 'clientes-lista' }))).toBe(true)
@@ -156,6 +163,7 @@ describe('ERP · permisos por rol', () => {
     expect(puedeErp(abierto(['local']), 'bdi', 'anular', undefined, g)).toBe(false) // rol inventado se descarta
     expect(permisosErp(abierto(['consulta']), undefined, g).bdi.cuentas).toBe(true)
     expect(PERMISOS_EDITABLES).not.toContain('costos')
+    expect(PERMISOS_EDITABLES).not.toContain('margen')
     expect(PERMISOS_EDITABLES).not.toContain('ver')
   })
 })
