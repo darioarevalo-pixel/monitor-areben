@@ -22,6 +22,8 @@ import { cortesDeCaja } from './_caja-corte.js'
 
 const MARCAS = ['bdi', 'zattia']
 const LINEAS = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] }
+/** La Caja que vende cada línea, si ⛔ es la suya. */
+const CAJA_DE_LINEA = { stunned: 'zattia' }
 const DEPOSITOS = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
 const pesos = (x) => Math.round(Number(x) * 100) / 100
 /** Los frenos de la venta A CUENTA que se saltan con el PIN de un admin (motor `frena`): la pantalla pide el PIN recién cuando llega uno. */
@@ -35,7 +37,10 @@ export const FRENOS_DE_CUENTA = ['SIN_CREDITO', 'ATRASADO', 'SUPERA_TOPE']
 export async function datosParaCargar({ marca }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const reglas = {}
-  for (const l of LINEAS[marca]) reglas[l] = deps.reglasDeCaja ? await deps.reglasDeCaja(l).catch(() => null) : null
+  // 🔴 Stunned ⛔ tiene Caja propia: la vende el POS de Zattia (`caja_config` sólo tiene la fila `zattia`) ⇒ usa SUS reglas, resueltas
+  // contra las cuentas de Stunned (mismos `gn_cuenta_id`). Sin esto, Stunned —la única línea que ya vende por el ERP— quedaba sin las
+  // cuatro formas de pago y con CG en «Más» (leído en prod el 10-nov).
+  for (const l of LINEAS[marca]) reglas[l] = deps.reglasDeCaja ? await deps.reglasDeCaja(CAJA_DE_LINEA[l] ?? l).catch(() => null) : null
   return deps.conMotor(marca, 'Cargar venta', async (pg) => {
     const cuentas = (await pg.query(
       `select id::text, nombre, medio, marca, gn_cuenta_id from cuenta_cobro where marca = any($1) and activa and medio not in ('saldo', 'cheque') order by marca, nombre`,
