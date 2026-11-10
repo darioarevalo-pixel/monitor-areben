@@ -88,6 +88,11 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   NEGATIVOS y donde la venta dice TOTAL dice SIN DIFERENCIA / DIFERENCIA A COBRAR / SALDO A FAVOR. Queda la MISMA tarjeta
   de «Última venta» («Cambio #N · en el ERP»): «Reimprimir ticket» = el comprobante, «Ticket de cambio» = el de regalo de lo
   que se lleva. ⛔ Lo imprime sólo el POS; erp › Caja › Cambio todavía ⛔.
+- 🎯 **«ERP sin CG; GN igual» (Bruno, 10-nov):** la venta de una línea en el ERP (`entradaDelMotorErp`, `reglas` OBLIGATORIO) anota el pago a
+  «Transferencia CG» (Caja Gerencia: 20595 Zattia/Stunned, 20597 BDI, salen de `opciones`/`transferenciaFija`/`titulares`, `cajaGerencia`) como la
+  «Transferencia» de Areben (`titulares.areben`); adónde fue la plata lo dice la cuenta REAL (la ruta del medio). `caja_venta.pagos` y lo que va a
+  GN ⛔ cambian, ni la copia de PRUEBA. 🔴 Apagar la cuenta CG de una línea (`activa=false`) recién DESPUÉS de este código y de su corte: si no, el
+  motor contesta `CUENTA_DESCONOCIDA`. Tests: `caja-sin-cg`.
 - 🔑 **La venta del ERP (Stunned) lleva SU número** (`erp_numero`): `numeroDeLaVenta` = `gn_number ?? erp_numero`, en el ticket,
   la «Última venta» y la lista de Ventas («En el ERP»; ⛔ en Provisorias). Sin número todavía: «pendiente en el ERP», ⛔ en GN.
 - 🔴🔑 **A DÓNDE VA EL TICKET LO DECIDE EL CORTE DE SU LÍNEA (`erp_corte`), ⛔ una llave** (Bruno 31-oct: «obvio, el día que sea

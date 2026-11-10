@@ -540,7 +540,7 @@ export default async function handler(req, res) {
   // 🔑 Opción (a) (Bruno, 14-oct): la que llega a GN se anota TAMBIÉN en el motor (`prueba`). ⛔ Frena: falla ⇒ log y el repaso.
   const enviar = async (fila) => {
     // 🔑 Stunned (26-oct): su ticket va al ERP, ⛔ a GN. `destino` queda en la fila, así un reintento no lo manda a GN.
-    if (fila.destino === 'erp') return enviarVentaErp(fila, { sb, mailer, registrar: async (v) => registrarEnErp(store, { ...v, deposito: await depositoDeVenta(v) }) })
+    if (fila.destino === 'erp') return enviarVentaErp(fila, { sb, mailer, registrar: async (v) => registrarEnErp(store, { ...v, deposito: await depositoDeVenta(v) }, { reglas: await leerConfig().then((c) => c.reglas, () => null) }) })
     // 🔑 El token de GN se exige acá, sólo a lo que VA a GN: lo del ERP ⛔ lo usa, y el día de revocarlo la Caja sigue cobrando.
     if (!token) throw new Error(FALTA_TOKEN_GN)
     const out = await enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token, mailer })

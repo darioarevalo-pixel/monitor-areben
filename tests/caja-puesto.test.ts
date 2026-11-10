@@ -27,8 +27,8 @@ describe('puesto de la caja', () => {
 describe('de qué depósito del ERP sale la venta de la caja', () => {
   const venta = { id: 'v1', store: 'zattia', renglones: [], pagos: [], subtotal: 0, total: 0, creada_en: '2026-10-29T20:00:00Z' }
   it('del turno del evento ⇒ evento; sin dato o cualquier otro ⇒ local', () => {
-    expect(entradaDelMotorErp({ ...venta, deposito: 'evento' }, { marca: 'stunned' }).deposito).toBe('evento')
-    expect(entradaDelMotorErp(venta, { marca: 'stunned' }).deposito).toBe('local')
-    expect(entradaDelMotorErp({ ...venta, deposito: 'deposito' }, { marca: 'stunned' }).deposito).toBe('local')
+    expect(entradaDelMotorErp({ ...venta, deposito: 'evento' }, { marca: 'stunned', reglas: null }).deposito).toBe('evento')
+    expect(entradaDelMotorErp(venta, { marca: 'stunned', reglas: null }).deposito).toBe('local')
+    expect(entradaDelMotorErp({ ...venta, deposito: 'deposito' }, { marca: 'stunned', reglas: null }).deposito).toBe('local')
   })
 })
