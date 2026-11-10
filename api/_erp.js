@@ -147,6 +147,7 @@ import { ACCIONES_PEDIDO, accionDePedido, pedidoDelPanel, pedidosDelPanel, prepa
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
 import { cobrosDelPeriodo, reintentarEntregasErp } from './_erp-cobros.js'
+import { accionDeCheque, carteraDeCheques } from './_erp-cheques.js'
 import { gastosDelPeriodo, registrarGastoErp } from './_erp-gastos.js'
 import { empujesDeStock, mandarStock } from './_erp-empuje-stock.js'
 import { cargarVentaManual, datosParaCargar } from './_erp-cargar.js'
@@ -2001,6 +2002,14 @@ export default async function handler(req, res) {
       const r = await datosParaCargar({ marca: String(req.query.marca || '') }, { conMotor, reglasDeCaja })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
+    if (req.method === 'GET' && req.query.vista === 'cheques') {
+      const r = await carteraDeCheques({ marca: String(req.query.marca || ''), linea: String(req.query.linea || ''), prueba: req.query.prueba === '1' }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'POST' && (body.accion === 'cheque-depositar' || body.accion === 'cheque-acreditar' || body.accion === 'cheque-rechazar')) {
+      const r = await accionDeCheque({ accion: body.accion, marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || 'admin' }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
     if (req.method === 'GET' && req.query.vista === 'cobros') {
       const r = await cobrosDelPeriodo({ marca: String(req.query.marca || ''), linea: String(req.query.linea || ''), desde: String(req.query.desde || ''), hasta: String(req.query.hasta || ''), prueba: req.query.prueba === '1' }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
@@ -2250,6 +2259,10 @@ export default async function handler(req, res) {
     }
 
     if (body.accion === 'editar-venta' || body.accion === 'nota-venta' || body.accion === 'cobrar-venta' || body.accion === 'cobrar-cuenta' || body.accion === 'anular-pago-cuenta') {
+      // 🔴 El CHEQUE lo cargan sólo los admin (Bruno, 10-nov): «Cobrar» es de quien cobra, pero con cheque pide `configurar`.
+      if ((body.accion === 'cobrar-venta' || body.accion === 'cobrar-cuenta') && body.cheque != null && !puedeErp(perfil, String(body.marca || ''), 'configurar', aprobaciones, guardados)) {
+        return res.status(403).json({ error: 'Los cheques los cargan sólo los admin.' })
+      }
       const fn = { 'editar-venta': editarVentaErp, 'nota-venta': notaDeVentaErp, 'cobrar-venta': cobrarVentaErp, 'cobrar-cuenta': cobrarCuentaErp, 'anular-pago-cuenta': anularPagoCuentaErp }[body.accion]
       const r = await fn({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || 'admin' })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)

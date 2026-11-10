@@ -14,6 +14,7 @@ import { creditoDe, creditosDe, cuentaBloqueada, filasDe, filasDeMarca, hoyAR, i
 import { cuentaDe as cuentaDeCobro } from '../venta/armar.mjs'
 import { leerConf } from '../venta/registrar.mjs'
 import { cobroReal } from '../cuentas/cuentas.mjs'
+import { anotarCheque, validarCheque } from './cheque.mjs'
 
 const fallo = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo, mensaje, campo } : { codigo, mensaje } })
 const q = async (db, sql, p = []) => (await db.query(sql, p)).rows
@@ -194,6 +195,15 @@ export async function registrarPagoACuenta(db, e) {
     const cuenta = cuentaDeCobro(conf, e.marca, e.cuenta)
     if (!cuenta) return fallo('CUENTA_DESCONOCIDA', `La cuenta de cobro ${e.cuenta} no es de ${e.marca}`, 'cuenta')
     if (cuenta.medio === 'saldo' || cuenta.medio === 'cuenta') return fallo('CUENTA_DESCONOCIDA', `Un pago a cuenta entra con plata, no con «${cuenta.nombre}»`, 'cuenta')
+    // El CHEQUE (sql/079, Bruno 10-nov): baja la deuda al recibirlo y queda en cartera, ⛔ cuenta real (se elige al depositarlo).
+    const esCheque = cuenta.medio === 'cheque'
+    let cheque = null
+    if (esCheque) {
+      const v = validarCheque(e.cheque)
+      if (!v.ok) return v
+      cheque = v.cheque
+      if (e.cuenta_real != null) return fallo('CUENTA_REAL_NO_SE_ELIGE', 'La cuenta del cheque se elige al depositarlo', 'cuenta_real')
+    } else if (e.cheque != null) return fallo('ENTRADA_INVALIDA', 'Los datos del cheque van con la cuenta «Cheque»', 'cheque')
     if (operacion && e.operacion_repetida !== true) {
       const [otro] = await q(db, `select m.ref, m.monto::float as monto, m.ocurrida_en, c.nombre as cliente from cuenta_movimiento m join cliente c on c.id = m.cliente_id
         where m.empresa_id = $1 and m.tipo = 'pago' and m.prueba = $2 and m.detalle->>'operacion' = $3
@@ -214,15 +224,22 @@ export async function registrarPagoACuenta(db, e) {
       if (!pend) return fallo('VENTA_SIN_SALDO', 'Esa venta no debe nada en la cuenta de este cliente', `imputar[${i}].venta_id`)
       if (pesos(x.monto) > pend + 0.005) return fallo('IMPUTA_DE_MAS', `Esa venta debe ${pend}`, `imputar[${i}].monto`)
     }
+    let cheque_id = null
+    if (esCheque) {
+      const ch = await anotarCheque(db, { empresa_id: c.empresa_id, marca: e.marca, cliente_id: c.id, pago_ref: ref, monto, prueba: e.prueba, usuario, cheque })
+      if (!ch.ok) return ch
+      cheque_id = ch.id
+    }
     await insertarFila(db, {
       empresa_id: c.empresa_id, marca: e.marca, cliente_id: c.id, tipo: 'pago', ref, monto: -monto, cuenta_cobro_id: cuenta.id,
       medio: real.cobro.medio ?? null, cuenta_real_id: real.cobro.cuenta_real_id ?? null,
       detalle: {
         ...(imputar.length ? { imputar: imputar.map((x) => ({ venta_id: x.venta_id, monto: pesos(x.monto) })) } : {}),
         ...(operacion ? { operacion } : {}), ...(operacion && e.operacion_repetida === true ? { operacion_repetida: true } : {}),
+        ...(cheque_id ? { cheque_id } : {}),
       }, prueba: e.prueba, usuario, ocurrida_en: en,
     })
-    return { ok: true, pago: { ref, monto, cuenta: cuenta.nombre, medio: real.cobro.medio ?? null }, ya_existia: false, cuenta: await saldoDe(db, c.id, e.marca, e.prueba) }
+    return { ok: true, pago: { ref, monto, cuenta: cuenta.nombre, medio: real.cobro.medio ?? null, ...(cheque_id ? { cheque_id } : {}) }, ya_existia: false, cuenta: await saldoDe(db, c.id, e.marca, e.prueba) }
   })
 }
 
@@ -241,6 +258,11 @@ export async function anularPagoACuenta(db, e) {
     await cuentaBloqueada(db, { cliente_id: p.cliente_id, marca: p.marca, prueba: p.prueba })
     const [ya] = await q(db, 'select 1 from cuenta_movimiento where empresa_id = $1 and ref = $2', [e.empresa_id, `${ref}:anulacion`])
     if (ya) return fallo('YA_ANULADO', 'Ese pago ya está anulado')
+    // El pago de un cheque que ya salió de cartera ⛔ se anula: si rebotó, se marca Rechazado (y la deuda vuelve igual).
+    if ((await q(db, `select to_regclass('cheque') is not null as hay`))[0].hay) {
+      const [ch] = await q(db, `select estado from cheque_estado where empresa_id = $1 and pago_ref = $2`, [e.empresa_id, ref])
+      if (ch && ch.estado !== 'en_cartera') return fallo('CHEQUE_DEPOSITADO', 'Ese cheque ya se depositó: si rebotó, se marca como rechazado', 'origen_ref')
+    }
     await insertarFila(db, {
       empresa_id: p.empresa_id, marca: p.marca, cliente_id: p.cliente_id, tipo: 'anulacion', ref: `${ref}:anulacion`, monto: -Number(p.monto),
       detalle: { motivo: e.motivo.trim() }, prueba: p.prueba, usuario: e.usuario.trim(), ocurrida_en: new Date().toISOString(),

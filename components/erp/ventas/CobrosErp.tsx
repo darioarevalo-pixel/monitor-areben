@@ -10,7 +10,8 @@
  * 🔴 Hasta el corte todo lo del ERP es DE PRUEBA (corre en paralelo con GN) ⇒ abre en «De prueba» hasta el corte de la línea y en «Reales» desde entonces (Bruno, 9-nov), como Cuenta corriente.
  * La vista «Contraentrega» muestra lo que está EN LA CALLE hoy (ventas que cobra el cadete al entregar, contrato §20): ⛔ es
  * un cobro ni depende del período; su cierre sí, y entra con los demás.
- * ⛔ Todavía (motor, sesión A): por validar con lo que llegó a MP, cobros masivos, cheques ⇒ la pantalla lo dice.
+ * ⛔ Todavía (motor, sesión A): por validar con lo que llegó a MP y cobros masivos ⇒ la pantalla lo dice. Los cheques tienen su vista
+ * («Cheques», `ChequesErp.tsx`, sólo admin).
  */
 
 import { usePantallaAngosta } from '@/lib/movil'
@@ -189,7 +190,7 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
             : <>En este período hay {datos.otroLibro.toLocaleString('es-AR')} cobros <b>de prueba</b>, que no se suman acá. <Button variant="outline" onClick={() => setPrueba(true)}>Ver los de prueba</Button></>}
         </Notice>
       )}
-      <Notice tone="neutral">Todavía no están <b>Por validar</b> (lo que llegó a Mercado Pago), <b>Cobros masivos</b> ni <b>Cheques</b>: los está armando el ERP. Un cobro a cuenta se registra desde Clientes › Cuenta corriente o desde la venta.</Notice>
+      <Notice tone="neutral">Todavía no están <b>Por validar</b> (lo que llegó a Mercado Pago) ni <b>Cobros masivos</b>: los está armando el ERP. Un cobro a cuenta se registra desde Clientes › Cuenta corriente o desde la venta.</Notice>
       {res.sinCobrar > 0 && vista !== 'sin_cobrar' && (
         <Notice tone="warning">
           Hay <b>{res.sinCobrar.toLocaleString('es-AR')} {res.sinCobrar === 1 ? 'entrega' : 'entregas'} sin cobrar en el ERP</b>, desde el {diaCorto(diaArgentino(Date.parse(res.sinCobrarDesde ?? '')))}: Logística las entregó y el ERP no pudo anotar el cobro. <Button variant="outline" onClick={() => setVista('sin_cobrar')}>Verlas</Button>

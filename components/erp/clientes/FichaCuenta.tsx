@@ -13,6 +13,7 @@ import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostad
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
 import { CampoCuentaReal } from '@/components/erp/ventas/CampoCuentaReal'
 import { pideCuentaReal } from '@/lib/erp/cobro-destino.core.js'
+import { useChequeDelCobro } from '@/components/erp/ventas/CamposCheque'
 import { anularPagoCuentaErp, cobrarCuentaErp, leerCuentaDeCliente, ponerContactoCliente, ponerCreditoCliente, type CreditoCliente, type CuentaDeCliente, type MarcaErp } from '@/lib/erp/cliente'
 import { NOMBRE_LINEA, TRAMOS, nombresDeVentas, textoCredito } from '@/lib/erp/cuenta-corriente.core.js'
 import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
@@ -379,7 +380,7 @@ function VentanaCredito({ marca, fila, credito, onCerrar, onHecho }: {
  * que sobra a la siguiente (FIFO); sólo queda a favor si no debe nada (Bruno y Darío, 18-oct). Una clave por ventana abierta:
  * reintentar el MISMO cobro ⛔ lo duplica (el motor deduplica por `origen_ref`).
  */
-function VentanaCobrarCuenta({ marca, fila, prueba, saldo, cuentas, rutas, cuentasReales, onCerrar, onHecho }: {
+function VentanaCobrarCuenta({ marca, fila, prueba, saldo, cuentas: todasLasCuentas, rutas, cuentasReales, onCerrar, onHecho }: {
   marca: MarcaErp; fila: FilaCuenta; prueba: boolean; saldo: number; cuentas: Array<{ id: string | number; nombre: string; medio: string }>; rutas?: CuentaDeCliente['rutas']; cuentasReales?: CuentaDeCliente['cuentasReales']; onCerrar: () => void; onHecho: (aviso: string) => void
 }) {
   const [monto, setMonto] = useState(saldo > 0 ? paraEditar(saldo) : '')
@@ -392,6 +393,8 @@ function VentanaCobrarCuenta({ marca, fila, prueba, saldo, cuentas, rutas, cuent
   const n = parsearMonto(monto)
   const debe = Math.max(0, saldo)
   const quedaAFavor = n != null && n > debe ? Math.round((n - debe) * 100) / 100 : 0
+  const chq = useChequeDelCobro(marca, todasLasCuentas, cuenta)
+  const cuentas = chq.cuentas
 
   const [cuentaReal, setCuentaReal] = useState('')
   const pide = pideCuentaReal({ cuenta: cuentas.find((c) => String(c.id) === cuenta), rutas, cuentasReales, marca: fila.linea, canal: 'mayorista', fecha })
@@ -401,9 +404,10 @@ function VentanaCobrarCuenta({ marca, fila, prueba, saldo, cuentas, rutas, cuent
     if (n == null || n <= 0) return setError('Escribí el monto.')
     if (!cuenta) return setError('Elegí la cuenta.')
     if (faltaReal) return setError('Elegí a qué cuenta entró la plata.')
+    if (chq.falta) return setError(chq.falta)
     setTrabajando(true)
     try {
-      const r = await cobrarCuentaErp(marca, { clienteId: fila.clienteId, linea: fila.linea, monto: n, cuenta, ...(pide ? { cuentaReal } : {}), fecha, ref, prueba })
+      const r = await cobrarCuentaErp(marca, { clienteId: fila.clienteId, linea: fila.linea, monto: n, cuenta, ...(pide ? { cuentaReal } : {}), fecha, ref, prueba, ...chq.extra })
       onHecho(r.yaExistia ? 'Ese cobro ya estaba registrado.' : `Cobro de ${formatMoney(n)} registrado en la cuenta de ${fila.nombre}.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo registrar el cobro.')
@@ -417,7 +421,7 @@ function VentanaCobrarCuenta({ marca, fila, prueba, saldo, cuentas, rutas, cuent
       abierto onCerrar={onCerrar} titulo="Cobrar a la cuenta"
       pie={<>
         <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-        <Button disabled={trabajando || n == null || n <= 0 || !cuenta || faltaReal} onClick={() => void registrar()}>Cobrar {n != null && n > 0 ? formatMoney(n) : ''}</Button>
+        <Button disabled={trabajando || n == null || n <= 0 || !cuenta || faltaReal || !!chq.falta} onClick={() => void registrar()}>Cobrar {n != null && n > 0 ? formatMoney(n) : ''}</Button>
       </>}
     >
       <p style={{ marginTop: 0, color: color.mut }}>{fila.nombre} · {saldo > 0 ? `debe ${formatMoney(saldo)}` : saldo < 0 ? `a favor ${formatMoney(-saldo)}` : 'sin saldo'}{prueba ? ' · de prueba' : ''}</p>
@@ -434,6 +438,7 @@ function VentanaCobrarCuenta({ marca, fila, prueba, saldo, cuentas, rutas, cuent
           <Field label="Fecha"><Input type="date" value={fecha} max={hoyDia} onChange={(e) => setFecha(e.target.value)} /></Field>
         </div>
         {pide && <CampoCuentaReal cuentas={cuentasReales ?? []} valor={cuentaReal} onCambio={setCuentaReal} />}
+        {chq.campos}
         <div style={{ padding: '10px 12px', borderRadius: 9, background: color.bg, border: `1px solid ${color.line}`, display: 'flex', flexDirection: 'column', gap: 4, fontSize: font.base }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Saldo de la cuenta</span><b>{formatMoney(saldo)} → {formatMoney(saldo - (n ?? 0))}</b></div>
           {quedaAFavor > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Queda a favor</span><b>{formatMoney(quedaAFavor)}</b></div>}
