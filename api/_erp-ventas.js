@@ -268,7 +268,8 @@ async function conPg(marca, fn) {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** El texto de un error del motor para la pantalla (el código va entre paréntesis para quien lo reporte). */
-const errorDe = (e) => ({ status: e.codigo === 'NO_ENCONTRADA' ? 404 : 409, error: `${e.mensaje || 'El motor no lo aceptó.'} (${e.codigo})` })
+// Lo que el motor rechaza por la ENTRADA (p. ej. «Cheque» sin sus datos) es 400, como lo que frena el handler antes; lo demás, 409.
+const errorDe = (e) => ({ status: e.codigo === 'NO_ENCONTRADA' ? 404 : e.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: `${e.mensaje || 'El motor no lo aceptó.'} (${e.codigo})` })
 
 /** Editar lo que ⛔ mueve stock ni plata (contrato §16): cliente, vendedor, entrega, datos para facturar. */
 export async function editarVentaErp({ marca, body, usuario }, deps = {}) {
