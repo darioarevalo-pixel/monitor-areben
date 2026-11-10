@@ -125,8 +125,8 @@ describe('ERP · permisos por rol', () => {
 
   it('🎯 Bruno 10-nov: el LOCAL recibe transferencias (y Depósito); mover y cancelar siguen de Depósito', () => {
     expect(permisoErpDe({ method: 'POST', accion: 'transferencia-recibir' })).toBe('recibir')
-    for (const r of ['local', 'deposito']) expect(puedeErp(abierto([r]), 'zattia', 'recibir')).toBe(true)
-    for (const r of ['mayorista', 'administracion', 'consulta']) expect(puedeErp(abierto([r]), 'zattia', 'recibir')).toBe(false)
+    for (const r of ['local', 'deposito'] as Funcion[]) expect(puedeErp(abierto([r]), 'zattia', 'recibir')).toBe(true)
+    for (const r of ['mayorista', 'administracion', 'consulta'] as Funcion[]) expect(puedeErp(abierto([r]), 'zattia', 'recibir')).toBe(false)
     expect(puedeErp(abierto(['local']), 'zattia', permisoErpDe({ method: 'POST', accion: 'transferencia-crear' }))).toBe(false)
   })
 
