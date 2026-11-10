@@ -109,8 +109,9 @@ describe('GET ?etiquetas=1&cola=1 — la cola sale de la bitácora, no de una ca
     expect((res.body?.pendientes as { pid: string }[]).map((p) => p.pid)).toEqual(['1'])
     expect((res.body?.hechas as { pid: string }[]).map((p) => p.pid)).toEqual(['2'])
     expect((res.body?.sinStock as { pid: string }[]).map((p) => p.pid)).toEqual(['3'])
-    // 🔑 Ni una consulta a `liquidaciones`: la campaña dejó de ser la que dice qué etiquetar.
-    expect(consultas.map((c) => c.tabla)).not.toContain('liquidaciones')
+    // 🔑 La campaña ⛔ dice qué etiquetar: ni una consulta a sus ÍTEMS. `liquidaciones` se lee sólo
+    // por el RÓTULO (Bruno, 10-nov-2026: «por precio o por título, se tiene que reetiquetar»).
+    expect(consultas.map((c) => c.tabla)).not.toContain('liquidacion_items')
   })
 
   it('el stock suma los dos depósitos: Local y Depósito son la misma prenda', async () => {

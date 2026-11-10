@@ -37,6 +37,12 @@ export type CtxEtiqueta = {
    */
   rotuloPromo?: { izq: string; bajoPrecio: string }
   /**
+   * El rótulo POR PRENDA: «Para reetiquetar» mezcla campañas, y cada prenda lleva el de la suya
+   * (Bruno, 10-nov-2026: la cola imprime «OFERTAS» como «Precio de campaña»). Manda sobre
+   * `rotuloPromo`; `null` = sin rótulo, la de precio rebajado de siempre.
+   */
+  rotuloPromoDe?: (v: VarianteEti) => { izq: string; bajoPrecio: string } | null
+  /**
    * Los renglones de la de formas de pago de ESTA prenda (la que va justo antes), cuando ⛔ son los
    * de la compu: «Para reetiquetar» los saca de la Caja (Bruno, 10-nov-2026, `fpCaja.core.js`).
    * `null` = la de la compu. ⛔ Toca la geometría: elige el texto, el dibujo es `drawFP`.
@@ -213,9 +219,10 @@ export async function buildEtiquetasPdf(labels: LabelItem[], modoLote: ModoEtiqu
     const precio = conPrecio ? ctx.precioDe(v) : 0
     const hasPrecio = conPrecio && precio > 0
 
-    if (modo === 'promo' && ctx.rotuloPromo) {
+    const rotulo = ctx.rotuloPromoDe ? ctx.rotuloPromoDe(v) : ctx.rotuloPromo
+    if (modo === 'promo' && rotulo) {
       const pr = ctx.promoDe(v) || { normal: ctx.precioDe(v), promo: ctx.precioDe(v) }
-      const { izq, bajoPrecio } = ctx.rotuloPromo
+      const { izq, bajoPrecio } = rotulo
       dibujarCuerpo(pdf, v, barras, {
         ...CUERPO_CHICO,
         skuSiEntra: true,

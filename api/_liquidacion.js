@@ -51,7 +51,7 @@ import { aEvento, filaBitacora, precioAnterior } from '../lib/liquidacion/bitaco
 import { lineasEnSale, primerDiaEnSale, ventanasDe } from '../lib/liquidacion/vendido.core.js';
 // La cola de reetiquetado: la regla vive afuera para poder testearla y mutarla sin levantar el
 // handler. Ver `lib/etiquetas/cola.core.js`.
-import { armarCola } from '../lib/etiquetas/cola.core.js';
+import { armarCola, cambioElRotulo, conCambioDeRotulo } from '../lib/etiquetas/cola.core.js';
 // La etiqueta de formas de pago de la cola sale de la CAJA (Bruno, 10-nov): las reglas con las que
 // cobra hoy, con SUS funciones. Ver `lib/etiquetas/fpCaja.core.js`.
 import { fpDeCaja } from '../lib/etiquetas/fpCaja.core.js';
@@ -467,7 +467,7 @@ export default async function handler(req, res) {
       // navegador. Lo destapó Bruno: cambió el precio de MINI BLUSH —17 unidades en el Local— y la
       // prenda no aparecía. El modo de falla es el caro: siempre de menos, y una cola corta se ve
       // igual que una cola al día.
-      const [ev, im, inv] = await Promise.all([
+      const [ev, im, inv, liqs] = await Promise.all([
         leerTodo(supabase, 'liquidacion_bitacora', (q) =>
           q.select('pid, producto, sku, cuando, precio_a, precio_lista, liq_nombre, modo')
             // 🔑 El `pid` desempata: sin un orden total, dos filas con el mismo `cuando` pueden
@@ -477,7 +477,24 @@ export default async function handler(req, res) {
           q.select('pid, cuando, modo, precio, precio_lista').eq('store', store).order('pid')),
         leerTodo(supabase, 'inventario', (q) =>
           q.select('product_id, available_quantity').order('product_id')),
+        // El rótulo de cada campaña: lo que imprime arriba y abajo del precio, y desde cuándo.
+        leerTodo(supabase, 'liquidaciones', (q) => q.select('id, nombre, datos').eq('store', store).order('id')),
       ]);
+
+      // 🔑 **Sólo las campañas de etiqueta POR PRENDA llevan rótulo en la cola** (hoy, el Cyber):
+      // es el único dibujo con el nombre comercial al costado del precio. Las demás se etiquetan
+      // como siempre, y su rótulo ⛔ devuelve nada a la cola.
+      const rotulos = {};
+      for (const r of liqs) {
+        const d = r.datos || {};
+        const et = etiquetaDeCampania(d.etiqueta);
+        if (!et.porPrenda) continue;
+        rotulos[r.nombre] = {
+          izq: d.nombreComercial || '',
+          bajoPrecio: et.abajo.map((l) => l.texto).join(' · '),
+          desde: d.rotuloDesde || null,
+        };
+      }
 
       // Uno por producto: el más nuevo. 🔑 **Se cuenta por el ÚLTIMO movimiento y no por evento**
       // —la etiqueta es de la prenda, no del cambio de precio—: tres cambios en una tarde son UNA
@@ -503,7 +520,7 @@ export default async function handler(req, res) {
         liqNombre: r.liq_nombre || null,
         modo: r.modo,
       }));
-      const cola = armarCola(eventos, impresas, stock);
+      const cola = armarCola(conCambioDeRotulo(eventos, rotulos), impresas, stock);
       // Los sellos con su número van enteros: la comparación «¿la etiqueta dice lo que se paga
       // hoy?» se hace en el navegador, que es donde están los precios de Tienda Nube. El servidor
       // no los tiene y traerlos acá sería una consulta externa por request.
@@ -532,7 +549,7 @@ export default async function handler(req, res) {
       }
       // 🔑 **`leidoEn` va SIEMPRE**: sin él, una cola vacía porque está todo hecho se ve igual que
       // una cola vacía porque la consulta se rompió.
-      return res.status(200).json({ ok: true, ...cola, sellos, stock, fpCaja, fpCajaError, leidoEn: ahora });
+      return res.status(200).json({ ok: true, ...cola, sellos, stock, rotulos, fpCaja, fpCajaError, leidoEn: ahora });
     }
 
     if (vistaEtiquetas) {
@@ -985,6 +1002,9 @@ export default async function handler(req, res) {
         etiqueta: etiquetaDeCampania(b.etiqueta === undefined ? d.etiqueta : b.etiqueta),
         ocultaEnEtiquetas: b.ocultaEnEtiquetas === undefined ? !!d.ocultaEnEtiquetas : b.ocultaEnEtiquetas === true,
       };
+      // 🔑 **Cambiar lo que se imprime manda sus prendas a «Para reetiquetar»** (Bruno, 10-nov):
+      // el sello es el instante del cambio. `reetiquetar: true` lo sella a pedido, sin cambiar nada.
+      if (cambioElRotulo(d, datos) || b.reetiquetar === true) datos.rotuloDesde = ahora;
       const { error } = await supabase.from('liquidaciones')
         .update({ nombre, datos, updated_at: ahora }).eq('store', store).eq('id', id);
       if (error) throw new Error(error.message);

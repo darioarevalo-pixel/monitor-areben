@@ -8,6 +8,8 @@
 
 import {
   armarCola as armarColaJs,
+  cambioElRotulo as cambioElRotuloJs,
+  conCambioDeRotulo as conCambioDeRotuloJs,
   etiquetasDesactualizadas as etiquetasDesactualizadasJs,
   preciosDesalineados as preciosDesalineadosJs,
   precioQueQuedo as precioQueQuedoJs,
@@ -28,6 +30,8 @@ export interface EventoDePrecio {
   /** De qué campaña vino, si vino de alguna. Sirve de filtro, no de condición. */
   liqNombre: string | null
   modo: 'poner' | 'sacar'
+  /** La cola la trajo porque cambió el RÓTULO de su campaña, ⛔ el precio. */
+  porRotulo?: boolean
 }
 
 /** Una fila de la cola: el evento, más en qué estado está su etiqueta. */
@@ -107,3 +111,13 @@ export const preciosDesalineados = preciosDesalineadosJs as (
   listaPorPid: Record<string, { gn: number | null; tienda: number | null }>,
   stockPorPid: Record<string, number>,
 ) => PrecioDesalineado[]
+
+/** liqNombre → lo que imprime esa campaña arriba y abajo del precio, y desde cuándo. */
+export type RotuloCola = { izq: string; bajoPrecio: string; desde: string | null }
+
+export const conCambioDeRotulo = conCambioDeRotuloJs as (
+  eventos: EventoDePrecio[],
+  rotulos: Record<string, { desde: string | null }>,
+) => EventoDePrecio[]
+
+export const cambioElRotulo = cambioElRotuloJs as (antes: unknown, despues: unknown) => boolean
