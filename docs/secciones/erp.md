@@ -6,6 +6,7 @@ acá, en pestañas, mientras dura el desarrollo —lo ven él y Darío, prueban 
 a GN se reparte en las secciones de siempre. Plan y mediciones del ERP: `~/Documents/erp-monitor/`.
 
 🔴 **UN BOTÓN QUE ESCRIBE PREGUNTA SU PERMISO (10-nov):** cada acción que guarda se dibuja sólo si `usePuedeErp(marca)(permiso)` lo deja (el mismo permiso que `permisoErpDe` le pide en el servidor). Caminado con «Ver como»: Consulta veía Editar/Hacer cambio/Anular…, Local veía Nuevo ajuste/Mover, y el 403 llegaba recién al guardar. Falla ABIERTO (sin respuesta, se ve; el servidor frena igual). Sin `cuentas`, Clientes ⛔ muestra «Por cobrar» ni las vistas de cuenta (antes: «…» eterno y ceros). Test: `tests/erp-botones-por-rol-pantalla.test.tsx`.
+🔴 **MARGEN Y RESULTADO COMERCIAL: SÓLO ADMIN (Bruno 10-nov: «administracion costos si, margen y resultado comercial NO»).** Permiso `margen` (lista vacía, ⛔ editable): `inicio-resultado` y el margen de `ventas-producto`. El COSTO sigue en `costos`. **RECIBIR una transferencia: Local y Depósito** (permiso `recibir`, Bruno 10-nov); mover, preparar y cancelar siguen en `ajustar`.
 🔴 **EL COSTO (Bruno 30-oct): lo ven Admin y Administración (que lo carga); el resto ⛔, y lo corta el SERVIDOR** (`ERP_PERMISOS.costos`,
 `puedeErp(perfil, marca, 'costos')`). Desde el 30-oct el LOCAL entra (Stunned) y veía el costo en Productos y el stock a costo
 en el Inicio. Cada lectura con costo que el local abre pide `ver` y recibe `costos` OBLIGATORIO: `productos-lista`

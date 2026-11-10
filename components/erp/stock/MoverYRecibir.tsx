@@ -167,8 +167,9 @@ export function TarjetasEscaneadas({ filas, onCantidad, conEnviada, contra }: { 
 export function MoverYRecibir({ unificada = false, abrirMover = false }: { unificada?: boolean; abrirMover?: boolean } = {}) {
   // La del selector del menú (⛔ pestañas de otra marca: Bruno, 28-oct). Cambiarla remonta la pantalla (`key` en `Erp`).
   const linea: TiendaErp = useTiendaErp()
-  // 10-nov: mover, preparar, recibir y cancelar son `ajustar` (Depósito; `lib/permisos.core.js`): el rol que ⛔ puede ⛔ ve el botón.
-  const toca = usePuedeErp(baseDe(linea))('ajustar')
+  // 10-nov: mover, preparar y cancelar son `ajustar` (Depósito); RECIBIR es `recibir` (Local y Depósito, Bruno 10-nov): el rol que ⛔ puede ⛔ ve el botón.
+  const puede = usePuedeErp(baseDe(linea))
+  const toca = puede('ajustar'), recibe = puede('recibir')
   // Los fijos de la línea, y el Evento si está PRENDIDO en el ERP (motor sql/058). Si ⛔ se puede leer, sólo los fijos.
   const fijos = DEPOSITOS_DE_LINEA[linea] as string[]
   const [conEvento, setConEvento] = useState(false)
@@ -400,12 +401,12 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
       </div>
       </>}
 
-      {ficha && <FichaDoc d={ficha} nombres={nombres} trabajando={trabajando} toca={toca} onCerrar={() => setFichaId(null)} onRecibir={() => abrirRecepcion(ficha)} onPreparar={() => abrirPreparado(ficha)} onCancelar={() => cancelar(ficha)} />}
+      {ficha && <FichaDoc d={ficha} nombres={nombres} trabajando={trabajando} toca={toca} recibe={recibe} onCerrar={() => setFichaId(null)} onRecibir={() => abrirRecepcion(ficha)} onPreparar={() => abrirPreparado(ficha)} onCancelar={() => cancelar(ficha)} />}
     </div>
   )
 }
 
-function FichaDoc({ d, nombres, trabajando, toca, onCerrar, onRecibir, onPreparar, onCancelar }: { d: TransferenciaDoc; nombres: Nombres; trabajando: boolean; toca: boolean; onCerrar: () => void; onRecibir: () => void; onPreparar: () => void; onCancelar: () => void }) {
+function FichaDoc({ d, nombres, trabajando, toca, recibe, onCerrar, onRecibir, onPreparar, onCancelar }: { d: TransferenciaDoc; nombres: Nombres; trabajando: boolean; toca: boolean; recibe: boolean; onCerrar: () => void; onRecibir: () => void; onPreparar: () => void; onCancelar: () => void }) {
   const p = pasoDeDoc(d)
   const renglones = renglonesConDiferencia(d)
   const recibida = d.estado === 'recibida'
@@ -459,7 +460,7 @@ function FichaDoc({ d, nombres, trabajando, toca, onCerrar, onRecibir, onPrepara
         </table></div>
       </div>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-        {toca && d.estado === 'en_transito' && <Button disabled={trabajando} onClick={onRecibir}>Recibir</Button>}
+        {recibe && d.estado === 'en_transito' && <Button disabled={trabajando} onClick={onRecibir}>Recibir</Button>}
         {toca && d.estado === 'borrador' && <Button disabled={trabajando} onClick={onPreparar}>Preparar</Button>}
         {toca && (d.estado === 'borrador' || d.estado === 'armada') && <Button variant="outline" disabled={trabajando} onClick={onCancelar}>Cancelar</Button>}
         <Button variant="outline" onClick={() => imprimirRemito(d, nombres)}>Imprimir remito</Button>

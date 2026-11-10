@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { listaDeProductos } from '../api/_erp-productos.js'
 import { armarFilasProductos, contarVistas, resumen } from '../lib/erp/productos-lista.core.js'
 import { armarPrecioDeProducto, sinCostos } from '../lib/erp/precio.core.js'
-import { permisoErpDe, puedeErp } from '../lib/permisos.core.js'
+import { ERP_ROLES, permisoErpDe, puedeErp } from '../lib/permisos.core.js'
 
 const persona = (funcion: string[]) => ({ admin: false, funcion, acceso: { bdi: { erp: true }, zattia: { erp: true } } })
 
@@ -29,9 +29,15 @@ describe('quién ve costos', () => {
     expect(permisoErpDe({ method: 'GET', vista: 'gastos' })).toBe('configurar')
     expect(permisoErpDe({ method: 'POST', accion: 'registrar-gasto' })).toBe('configurar')
   })
-  it('las lecturas con costo que el local abre piden `ver` y cortan adentro; el resultado del Inicio pide `costos`', () => {
+  it('las lecturas con costo que el local abre piden `ver` y cortan adentro; el resultado del Inicio pide `margen`', () => {
     for (const v of ['productos-lista', 'precio', 'ventas-producto']) expect(permisoErpDe({ method: 'GET', vista: v })).toBe('ver')
-    expect(permisoErpDe({ method: 'GET', vista: 'inicio-resultado' })).toBe('costos')
+    expect(permisoErpDe({ method: 'GET', vista: 'inicio-resultado' })).toBe('margen')
+  })
+  it('🎯 Bruno 10-nov: Administración ve COSTOS, ⛔ margen ni resultado comercial (sólo Admin)', () => {
+    for (const m of ['bdi', 'zattia']) {
+      expect(puedeErp(persona(['administracion']), m, 'costos')).toBe(true)
+      for (const r of ERP_ROLES) expect(puedeErp(persona([r]), m, 'margen')).toBe(false)
+    }
   })
 })
 

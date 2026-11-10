@@ -49,7 +49,8 @@ describe('errorDe y avisos', () => {
 
 describe('permisos', () => {
   it('cada acción pide su permiso y la lista es de lectura', () => {
-    for (const a of ACCIONES) expect(permisoErpDe({ method: 'POST', accion: a })).toBe('ajustar')
+    // Recibir: el Local también (Bruno 10-nov, `recibir`); lo demás, Depósito (`ajustar`).
+    for (const a of ACCIONES) expect(permisoErpDe({ method: 'POST', accion: a })).toBe(a === 'transferencia-recibir' ? 'recibir' : 'ajustar')
     expect(permisoErpDe({ method: 'GET', vista: 'transferencias-doc' })).toBe('ver')
   })
 })
