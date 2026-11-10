@@ -57,6 +57,13 @@ la prenda a «Nuevo ajuste» de Conteos y ajustes (`AjustesStock` › `pedida`);
 La ficha sigue leyendo `vista=stock&producto=…` (núcleo `lib/erp/stock.core.js`, `tests/erp-stock.test.ts`). La cuenta
 de las columnas elegidas es una sola para todas las listas: `lib/erp/lista-columnas.core.js`.
 
+**Chequeo de movimientos** (Stock › Diferencias, sólo Admin; Bruno 10-nov: «ver contenciones nocturnas para chequeo correcto de los
+movimientos»): las MISMAS reglas que el motor corre cada noche («Reglas del libro», `motor/invariantes.mjs`, traído con `npm run
+traer-motor`), corridas EN VIVO contra la base de la marca (`vista=reglas-libro`, `api/_erp-chequeo-libro.js`, ~4 s). Error (gravedad
+«falla» con filas) · Para mirar (aviso) · Sin revisar (falta la tabla) · Bien; las primeras 5 filas de cada una. 🔑 Las reglas son de la
+BASE (Zattia trae Stunned). Los títulos del motor pasan por `enPalabras` (`lib/erp/chequeo-libro.core.js`): ⛔ «libro», «GN», «motor» en
+pantalla. Tests: `tests/erp-chequeo-libro*.test.ts*`.
+
 **Movimientos** (🎨 19-oct, Diseño 7, sólo lectura; lista de REGISTRO, tablero 3 del v8): cada fila del libro
 (`stock_movimiento`) del período (Hoy · Ayer · 7 días · Este mes) — cuándo · tipo · prenda · dónde · cantidad · **queda** ·
 documento · quién — con vistas (Todos · Ventas, con las anulaciones · Transferencias · Ajustes · Ingresos · Del libro),
