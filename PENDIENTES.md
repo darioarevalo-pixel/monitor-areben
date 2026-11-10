@@ -165,6 +165,15 @@ la pantalla, sistemas del hermano, volumen de facturas ARCA, tokens TN por tiend
 Abiertas para Bruno: primera marca a cortar (propuesta Zattia+Stunned), ARCA propio desde el día 1 o
 portal hasta F5, cuánto queda GN en sólo-lectura.
 
+## ▶️ CAJA: PROMO «POR CANTIDAD» (ESCALERA) — 10-nov-2026 (pedido de Bruno: programarla; la ACTIVA él)
+
+- Tipo nuevo «% según cuántas lleva» en Caja › Promociones, + «Menos estos productos» en cualquier alcance
+  que ⛔ sea por productos. Tests con el oráculo de Resorty: `tests/caja-promos-cantidad.test.ts`.
+- ▶️ **⛔ cargada.** La de BDI, cuando Bruno diga: FUNDAS · 2: 15 % · 3: 25 % · 4 o más: 30 % · 16-nov al
+  26-nov · menos TEMPLADO 9D PREMIUM, VIDRIO TEMPLADO PREMIUM CON COLOCADOR, PROTECTOR DE CÁMARA COMPLETO,
+  PROTECTOR CAMARA BRILLO (elegirlos con el buscador: el id es el de la Caja, ⛔ el de TN).
+- Decidido sin preguntar (avisado a Bruno): la funda con descuento a mano ⛔ cuenta para el escalón.
+
 ## ▶️ CAJA: LA NOTA EN GN PARA UBICAR UNA VENTA — 14-oct-2026 (Bruno)
 - Pasó: un 429 de GN dejó la venta 5C65E1EF con ticket «Provisorio»; entró sola a los 2 min como **#30489**
   (mail del ticket salió con #30489), pero desde el ticket ⛔ había cómo encontrarla en GN (Consumidor Final, sin mail).

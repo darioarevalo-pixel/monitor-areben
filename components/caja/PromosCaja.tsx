@@ -16,7 +16,7 @@ import { buscarNombre, guardarPromos, type AlcancePromo, type ProductoLista, typ
 import { Badge, Button, Field, Input, Notice, Plegable, Select, color, font, radius, space } from '@/components/ui'
 import { storeCaja } from '@/lib/caja/marca'
 
-const TIPOS: TipoPromo[] = ['nxm', 'segunda_unidad', 'pct', 'monto_minimo']
+const TIPOS: TipoPromo[] = ['nxm', 'segunda_unidad', 'pct', 'cantidad', 'monto_minimo']
 
 /** dd/mm de una fecha `AAAA-MM-DD`. */
 const dm = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
@@ -27,9 +27,12 @@ function resumen(p: PromoCaja): string {
     p.tipo === 'nxm' ? `${p.lleva}x${p.paga}`
     : p.tipo === 'segunda_unidad' ? `2ª unidad al ${p.pct}%`
     : p.tipo === 'pct' ? `${p.pct}% de descuento`
+    : p.tipo === 'cantidad' ? (p.escalones ?? []).map((e, i, l) => `${e.desde}${i === l.length - 1 ? ' o más' : ''}: ${e.pct}%`).join(' · ')
     : `${plata(p.pesos ?? 0)} de descuento desde ${plata(p.minimo ?? 0)}`
   const a = p.alcance
-  const donde = p.tipo === 'monto_minimo' ? null : a.tipo === 'todo' ? 'todo el local' : a.tipo === 'categorias' ? a.categorias.join(', ') : a.productos.map((x) => x.nombre || `Producto ${x.id}`).join(', ')
+  const nombreProd = (x: { id: number; nombre: string }) => x.nombre || `Producto ${x.id}`
+  const sin = a.tipo !== 'productos' && a.excluidos?.length ? ` (menos ${a.excluidos.map(nombreProd).join(', ')})` : ''
+  const donde = p.tipo === 'monto_minimo' ? null : (a.tipo === 'todo' ? 'todo el local' : a.tipo === 'categorias' ? a.categorias.join(', ') : a.productos.map(nombreProd).join(', ')) + sin
   const cuando = p.hasta ? `del ${dm(p.desde)} al ${dm(p.hasta)}` : `desde el ${dm(p.desde)}`
   return [que, donde, cuando].filter(Boolean).join(' · ')
 }
@@ -41,18 +44,20 @@ function estado(p: PromoCaja, hoy: string): { tono: 'success' | 'neutral' | 'war
   return { tono: 'success', texto: 'Vigente' }
 }
 
-type Form = { nombre: string; tipo: TipoPromo; lleva: string; paga: string; pct: string; minimo: string; pesos: string; alcance: AlcancePromo['tipo']; categorias: string[]; productos: Array<{ id: number; nombre: string }>; desde: string; hasta: string }
-const formVacio = (): Form => ({ nombre: '', tipo: 'nxm', lleva: '3', paga: '2', pct: '', minimo: '', pesos: '', alcance: 'todo', categorias: [], productos: [], desde: hoyIso(), hasta: '' })
+type Form = { nombre: string; tipo: TipoPromo; lleva: string; paga: string; pct: string; minimo: string; pesos: string; escalones: Array<{ desde: string; pct: string }>; alcance: AlcancePromo['tipo']; categorias: string[]; productos: Array<{ id: number; nombre: string }>; excluidos: Array<{ id: number; nombre: string }>; desde: string; hasta: string }
+const formVacio = (): Form => ({ nombre: '', tipo: 'nxm', lleva: '3', paga: '2', pct: '', minimo: '', pesos: '', escalones: [{ desde: '2', pct: '' }], alcance: 'todo', categorias: [], productos: [], excluidos: [], desde: hoyIso(), hasta: '' })
 
 function aPromo(f: Form): PromoCaja {
   const alcance: AlcancePromo =
-    f.tipo === 'monto_minimo' || f.alcance === 'todo' ? { tipo: 'todo' }
-    : f.alcance === 'categorias' ? { tipo: 'categorias', categorias: f.categorias }
+    f.tipo === 'monto_minimo' ? { tipo: 'todo' }
+    : f.alcance === 'todo' ? { tipo: 'todo', ...(f.excluidos.length ? { excluidos: f.excluidos } : {}) }
+    : f.alcance === 'categorias' ? { tipo: 'categorias', categorias: f.categorias, ...(f.excluidos.length ? { excluidos: f.excluidos } : {}) }
     : { tipo: 'productos', productos: f.productos }
   const p: PromoCaja = { id: `pr${Date.now().toString(36)}`, nombre: f.nombre.trim(), tipo: f.tipo, alcance, desde: f.desde, hasta: f.hasta || null, activa: true }
   if (f.tipo === 'nxm') Object.assign(p, { lleva: Number(f.lleva), paga: Number(f.paga) })
   if (f.tipo === 'segunda_unidad' || f.tipo === 'pct') p.pct = Number(f.pct)
   if (f.tipo === 'monto_minimo') Object.assign(p, { minimo: Number(f.minimo), pesos: Number(f.pesos) })
+  if (f.tipo === 'cantidad') p.escalones = f.escalones.map((e) => ({ desde: Number(e.desde), pct: Number(e.pct) }))
   return p
 }
 
@@ -139,24 +144,8 @@ function FormPromo({ form, setForm, guardando, onCancelar, onGuardar }: { form: 
     for (const p of Object.values(tnIdx.bySku)) for (const c of p.categories ?? []) set.add(normCategoria(c))
     return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b, 'es'))
   }, [tnIdx])
-  const [q, setQ] = useState('')
-  const [resultado, setResultado] = useState<ProductoLista[] | null>(null)
-  useEffect(() => {
-    const t = q.trim()
-    if (t.length < 2) return
-    let vivo = true
-    const reloj = setTimeout(() => {
-      buscarNombre(t)
-        .then((r) => vivo && setResultado([...r.conStock, ...r.sinStock]))
-        .catch(() => vivo && setResultado([]))
-    }, 250)
-    return () => {
-      vivo = false
-      clearTimeout(reloj)
-    }
-  }, [q])
   const num = (s: string) => s.replace(/[^\d]/g, '')
-  const ids = new Set(form.productos.map((p) => p.id))
+  const escalon = (i: number, c: Partial<{ desde: string; pct: string }>) => cambiar({ escalones: form.escalones.map((e, j) => (j === i ? { ...e, ...c } : e)) })
 
   return (
     <div style={{ display: 'grid', gap: space[2], border: `1px solid ${color.line}`, borderRadius: radius.md, padding: space[3] }}>
@@ -185,6 +174,34 @@ function FormPromo({ form, setForm, guardando, onCancelar, onGuardar }: { form: 
       {(form.tipo === 'segunda_unidad' || form.tipo === 'pct') && (
         <Field label={form.tipo === 'pct' ? 'Descuento (%)' : 'Descuento de la 2ª unidad (%)'}>
           <Input inputMode="numeric" value={form.pct} onChange={(e) => cambiar({ pct: num(e.target.value) })} style={{ width: 100 }} />
+        </Field>
+      )}
+      {form.tipo === 'cantidad' && (
+        <Field label="Escalones: desde cuántas unidades, qué % a todas">
+          <div style={{ display: 'grid', gap: space[1.5] }}>
+            {form.escalones.map((e, i) => (
+              <div key={i} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+                <span>Desde</span>
+                <Input inputMode="numeric" aria-label="Unidades" value={e.desde} onChange={(ev) => escalon(i, { desde: num(ev.target.value) })} style={{ width: 70 }} />
+                <span>unidades:</span>
+                <Input inputMode="numeric" aria-label="Descuento (%)" value={e.pct} onChange={(ev) => escalon(i, { pct: num(ev.target.value) })} style={{ width: 70 }} />
+                <span>%</span>
+                {form.escalones.length > 1 && (
+                  <Button size="sm" variant="ghost" onClick={() => cambiar({ escalones: form.escalones.filter((_, j) => j !== i) })}>
+                    Sacar
+                  </Button>
+                )}
+              </div>
+            ))}
+            {form.escalones.length < 10 && (
+              <div>
+                <Button size="sm" variant="outline" onClick={() => cambiar({ escalones: [...form.escalones, { desde: String((Number(form.escalones[form.escalones.length - 1]?.desde) || 1) + 1), pct: '' }] })}>
+                  Agregar escalón
+                </Button>
+              </div>
+            )}
+            <span style={{ color: color.mut, fontSize: font.sm }}>Vale el escalón más alto al que llega la venta, sobre todas las unidades. Las prendas con descuento a mano o en oferta no cuentan.</span>
+          </div>
         </Field>
       )}
       {form.tipo === 'monto_minimo' && (
@@ -219,29 +236,11 @@ function FormPromo({ form, setForm, guardando, onCancelar, onGuardar }: { form: 
           })}
         </div>
       )}
-      {form.tipo !== 'monto_minimo' && form.alcance === 'productos' && (
-        <div style={{ display: 'grid', gap: space[1.5] }}>
-          {form.productos.map((p) => (
-            <div key={p.id} style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
-              <span style={{ flex: 1 }}>{p.nombre}</span>
-              <Button size="sm" variant="ghost" onClick={() => cambiar({ productos: form.productos.filter((x) => x.id !== p.id) })}>
-                Sacar
-              </Button>
-            </div>
-          ))}
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar un producto por nombre" autoComplete="off" spellCheck={false} />
-          {q.trim().length >= 2 &&
-            resultado?.map((p) => (
-              <div key={p.product_id} style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
-                <span style={{ flex: 1 }}>{p.product_name}</span>
-                {!ids.has(p.product_id) && (
-                  <Button size="sm" variant="outline" onClick={() => cambiar({ productos: [...form.productos, { id: p.product_id, nombre: p.product_name }] })}>
-                    Agregar
-                  </Button>
-                )}
-              </div>
-            ))}
-        </div>
+      {form.tipo !== 'monto_minimo' && form.alcance === 'productos' && <ListaProductos lista={form.productos} onCambiar={(productos) => cambiar({ productos })} />}
+      {form.tipo !== 'monto_minimo' && form.alcance !== 'productos' && (
+        <Field label="Menos estos productos (opcional)">
+          <ListaProductos lista={form.excluidos} onCambiar={(excluidos) => cambiar({ excluidos })} />
+        </Field>
       )}
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
         <Field label="Desde">
@@ -259,6 +258,51 @@ function FormPromo({ form, setForm, guardando, onCancelar, onGuardar }: { form: 
           Cancelar
         </Button>
       </div>
+    </div>
+  )
+}
+
+/** Los productos elegidos y el buscador para sumar más (los de la promo, o los que se restan). */
+function ListaProductos({ lista, onCambiar }: { lista: Array<{ id: number; nombre: string }>; onCambiar: (l: Array<{ id: number; nombre: string }>) => void }) {
+  const [q, setQ] = useState('')
+  const [resultado, setResultado] = useState<ProductoLista[] | null>(null)
+  useEffect(() => {
+    const t = q.trim()
+    if (t.length < 2) return
+    let vivo = true
+    const reloj = setTimeout(() => {
+      buscarNombre(t)
+        .then((r) => vivo && setResultado([...r.conStock, ...r.sinStock]))
+        .catch(() => vivo && setResultado([]))
+    }, 250)
+    return () => {
+      vivo = false
+      clearTimeout(reloj)
+    }
+  }, [q])
+  const ids = new Set(lista.map((p) => p.id))
+  return (
+    <div style={{ display: 'grid', gap: space[1.5] }}>
+      {lista.map((p) => (
+        <div key={p.id} style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+          <span style={{ flex: 1 }}>{p.nombre}</span>
+          <Button size="sm" variant="ghost" onClick={() => onCambiar(lista.filter((x) => x.id !== p.id))}>
+            Sacar
+          </Button>
+        </div>
+      ))}
+      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar un producto por nombre" autoComplete="off" spellCheck={false} />
+      {q.trim().length >= 2 &&
+        resultado?.map((p) => (
+          <div key={p.product_id} style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+            <span style={{ flex: 1 }}>{p.product_name}</span>
+            {!ids.has(p.product_id) && (
+              <Button size="sm" variant="outline" onClick={() => onCambiar([...lista, { id: p.product_id, nombre: p.product_name }])}>
+                Agregar
+              </Button>
+            )}
+          </div>
+        ))}
     </div>
   )
 }
