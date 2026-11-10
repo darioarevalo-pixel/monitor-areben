@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { Button, EmptyState, Field, Input, Modal, MoneyText, Notice, Select, color, font, space, useConfirmar } from '@/components/ui'
+import { Button, EmptyState, Field, Input, MenuAcciones, Modal, MoneyText, Notice, Select, color, font, space, useConfirmar, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
 import { ChipEstado, TileResumen, VistasLista } from '@/components/ui/PiezasLista'
 import { accionDeCheque, leerCheques, type CarteraDeCheques, type Cheque, type MarcaErp } from '@/lib/erp/cliente'
@@ -90,14 +90,16 @@ export function ChequesErp() {
   }
   const acciones = (c: Cheque) => {
     const a = accionesDeCheque(c, hoy)
-    return (
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-        {a.depositar && <Button size="sm" onClick={() => setAbierta({ tipo: 'depositar', cheque: c })}>Depositar</Button>}
-        {a.depositarDesde && <span style={{ fontSize: font.sm, color: color.mut }}>Se deposita desde el {dia(a.depositarDesde)}</span>}
-        {a.acreditar && <Button size="sm" onClick={() => setAbierta({ tipo: 'acreditar', cheque: c })}>Marcar acreditado</Button>}
-        {a.rechazar && <Button size="sm" variant="outline" onClick={() => setAbierta({ tipo: 'rechazar', cheque: c })}>Marcar rechazado</Button>}
-      </div>
-    )
+    const menu: AccionMenu[] = []
+    if (a.depositar || a.depositarDesde) menu.push({
+      key: 'depositar', label: a.depositarDesde ? `Depositar (desde el ${dia(a.depositarDesde)})` : 'Depositar', icono: 'bajar',
+      disabled: !!a.depositarDesde, hint: a.depositarDesde ? 'Se deposita desde la fecha de pago.' : 'Elegir la cuenta donde se deposita.',
+      onClick: () => setAbierta({ tipo: 'depositar', cheque: c }),
+    })
+    if (a.acreditar) menu.push({ key: 'acreditar', label: 'Marcar acreditado', icono: 'check', onClick: () => setAbierta({ tipo: 'acreditar', cheque: c }) })
+    if (a.rechazar) menu.push({ key: 'rechazar', label: 'Marcar rechazado', icono: 'anular', tone: 'danger', hint: 'La deuda vuelve al cliente.', onClick: () => setAbierta({ tipo: 'rechazar', cheque: c }) })
+    if (!menu.length) return null
+    return <MenuAcciones acciones={menu} etiqueta={`Más acciones del cheque ${c.numero} del ${c.banco}`} vertical alinear="izquierda" />
   }
 
   return (
@@ -127,7 +129,7 @@ export function ChequesErp() {
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
-          columnas={COLUMNAS} filas={filas} claveDe={(c) => c.id} celda={celda} acciones={acciones} anchoAcciones={260} orden={null} onOrden={() => {}}
+          columnas={COLUMNAS} filas={filas} claveDe={(c) => c.id} celda={celda} acciones={acciones} anchoAcciones={40} orden={null} onOrden={() => {}}
           etiquetaFila={(c) => `el cheque ${c.numero} del ${c.banco}`}
           vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={vista === 'en_cartera' ? 'No hay cheques en cartera.' : vista === 'todos' ? 'Todavía no se cargó ningún cheque.' : `No hay cheques en «${VISTAS.find(([k]) => k === vista)?.[1]}».`} /></div> : null}
         />

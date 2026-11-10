@@ -7,6 +7,13 @@ vi.mock('../api/_auth.js', () => ({ exigirUsuario: async () => perfilActual }))
 // Los roles guardados (motor sql/049) ⛔ se leen de una base: acá se eligen. Una marca con `__error` es una base que no respondió.
 let guardadosActual: Record<string, unknown> = {}
 vi.mock('../api/_erp-permisos-rol.js', async (orig) => ({ ...(await orig<object>()), rolesGuardadosDeMarcas: async () => guardadosActual }))
+// «Cobrar» ⛔ toca la base en el test: se anota quién llegó a cobrar (para ver que la puerta del cheque deja pasar lo demás).
+const cobros: string[] = []
+vi.mock('../api/_erp-ventas.js', async (orig) => ({
+  ...(await orig<object>()),
+  cobrarVentaErp: async () => { cobros.push('venta'); return { ok: true } },
+  cobrarCuentaErp: async () => { cobros.push('cuenta'); return { ok: true } },
+}))
 vi.mock('../api/_facturacion.js', () => ({ arcaConectado: () => false, SIN_ARCA: 'sin certificado', baseFacturacion: () => null, clienteArcaDelEntorno: () => null, repoFacturas: () => null }))
 
 type Resp = { code: number; body: { permiso?: string; permisos?: Record<string, Record<string, boolean>> }; status(c: number): Resp; json(b: unknown): Resp }
@@ -19,7 +26,7 @@ const cargar = async () => (await import('../api/_erp.js')).default as unknown a
 const perfil = (over: Record<string, unknown> = {}) => ({ name: 'Ana', admin: false, cuenta: null, acceso: { bdi: {}, zattia: {} }, funcion: [], ...over })
 
 describe('api/_erp.js · la puerta por rol', () => {
-  beforeEach(() => { perfilActual = null; guardadosActual = {} })
+  beforeEach(() => { perfilActual = null; guardadosActual = {}; cobros.length = 0 })
 
   it('🔑 con la llave cerrada, un Local recibe 403 aunque tenga la función (como hasta el 19-oct)', async () => {
     const handler = await cargar()
@@ -108,5 +115,27 @@ describe('api/_erp.js · la puerta por rol', () => {
       await handler({ method, query, body }, r)
       expect(r.code).toBe(403)
     }
+  })
+
+  it('🔴 «Cobrar» con CHEQUE: quien cobra y ⛔ es admin recibe 403 y ⛔ llega a cobrar; sin cheque, cobra (Bruno 10-nov)', async () => {
+    const handler = await cargar()
+    perfilActual = perfil({ funcion: ['local'], acceso: { bdi: { erp: true }, zattia: {} } })
+    const cheque = { tipo: 'fisico', numero: '1', banco: 'Nación', librador: 'X', vence_el: '2026-11-20' }
+    for (const accion of ['cobrar-venta', 'cobrar-cuenta']) {
+      const con = res()
+      await handler({ method: 'POST', query: {}, body: { accion, marca: 'bdi', cheque } }, con)
+      expect(con.code).toBe(403)
+      expect(String((con.body as { error?: string }).error)).toMatch(/cheques.*admin/)
+      const sin = res()
+      await handler({ method: 'POST', query: {}, body: { accion, marca: 'bdi' } }, sin)
+      expect(sin.code).toBe(200)
+    }
+    expect(cobros).toEqual(['venta', 'cuenta'])
+    // El admin con cheque pasa.
+    perfilActual = perfil({ admin: true })
+    const admin = res()
+    await handler({ method: 'POST', query: {}, body: { accion: 'cobrar-cuenta', marca: 'bdi', cheque } }, admin)
+    expect(admin.code).toBe(200)
+    expect(cobros).toEqual(['venta', 'cuenta', 'cuenta'])
   })
 })

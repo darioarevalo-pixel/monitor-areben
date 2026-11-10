@@ -80,6 +80,12 @@ describe('El servidor', () => {
     expect(chequeDelCobro({ cheque: 'x' })).toHaveProperty('error')
     expect((await cobrarCuentaErp({ marca: 'bdi', body: { ...base, cheque: [1] }, usuario: 'x' }, { cuenta: motor(), db: {} })).status).toBe(400)
   })
+  it('«Cheque» sin sus datos: el motor lo frena y la respuesta es 400 (⛔ 409); lo demás del motor sigue en 409', async () => {
+    const rechaza = (codigo: string) => ({ registrarPagoACuenta: vi.fn(async () => ({ ok: false, error: { codigo, mensaje: 'Faltan los datos del cheque', campo: 'cheque' } })) })
+    expect(await cobrarCuentaErp({ marca: 'bdi', body: base, usuario: 'x' }, { cuenta: rechaza('ENTRADA_INVALIDA'), db: {} })).toEqual({ status: 400, error: 'Faltan los datos del cheque (ENTRADA_INVALIDA)' })
+    expect((await cobrarVentaErp({ marca: 'bdi', body: { ...base, ventaId: CH, saldo: 100 }, usuario: 'x' }, { cuenta: rechaza('ENTRADA_INVALIDA'), db: {} })).status).toBe(400)
+    expect((await cobrarCuentaErp({ marca: 'bdi', body: base, usuario: 'x' }, { cuenta: rechaza('CHEQUE_REPETIDO'), db: {} })).status).toBe(409)
+  })
 
   const conMotor = (filas: Record<string, unknown[]>) => async (_m: string, _t: string, fn: (pg: unknown) => unknown) =>
     fn({ query: async (sql: string) => ({ rows: sql.includes('to_regclass') ? [{ hay: filas.hay ?? true }] : sql.includes('from cheque') ? filas.cheque ?? [] : [] }) })
