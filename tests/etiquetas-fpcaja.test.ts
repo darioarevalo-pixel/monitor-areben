@@ -73,15 +73,16 @@ describe('fpDeCaja', () => {
 })
 
 describe('lineasFpDeCaja', () => {
-  it('el mismo dibujo que la de la campaña: título, transferencia y efectivo', () => {
+  it('el mismo dibujo y orden que la de la campaña: título, 3 cuotas, transferencia y efectivo', () => {
     expect(lineasFpDeCaja({ efectivo: 15, transferencia: 10 })).toEqual([
       { texto: 'FORMAS DE PAGO', tam: 'titulo', bold: true },
+      { texto: '3 cuotas sin interés', tam: 'normal', bold: false },
       { texto: '10% OFF Transferencia', tam: 'normal', bold: false },
       { texto: '15% OFF Efectivo', tam: 'normal', bold: false },
     ])
   })
 
   it('un 0 o un null ⛔ se escriben', () => {
-    expect(lineasFpDeCaja({ efectivo: 0, transferencia: null }).map((l) => l.texto)).toEqual(['FORMAS DE PAGO'])
+    expect(lineasFpDeCaja({ efectivo: 0, transferencia: null }).map((l) => l.texto)).toEqual(['FORMAS DE PAGO', '3 cuotas sin interés'])
   })
 })

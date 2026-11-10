@@ -304,14 +304,15 @@ en caja»*.
 
 - 🔴 **El problema:** la de formas de pago era texto escrito a mano y guardado EN CADA COMPU
   (`claveFormasDePago`), y la Caja cobra con su propia config. El 10-nov ya ⛔ coincidían: la
-  etiqueta decía «3 cuotas sin interés», la Caja tiene 6 cuotas desde $250.000 y débito 10 % que ⛔
-  figuraba. Cambiar un % en la Caja ⛔ movía una sola etiqueta.
+  etiqueta ⛔ decía el débito 10 % que cobra la Caja. Cambiar un % en la Caja ⛔ movía una sola etiqueta.
 - 🔑 **Ahora, en la cola, los % los decide la Caja con SUS funciones** (`lib/etiquetas/fpCaja.core.js`
   importa `pctDeMedio` e `idsDeFeria` de `lib/caja/core.core.js`, ⛔ una copia): la prenda con % de
   campaña (`pctDePrendas`) lleva el de la campaña; la de feria, 0 (su precio ya es el final); el
   resto, la cuenta normal de efectivo y la de transferencia en uso. Renglones: «FORMAS DE PAGO» +
-  «N% OFF Transferencia» + «N% OFF Efectivo», el dibujo de `fpDescuentos` de la campaña. Débito,
-  crédito y cuotas ⛔ van: se resuelven en el mostrador.
+  «3 cuotas sin interés» + «N% OFF Transferencia» + «N% OFF Efectivo», el dibujo y orden de
+  `fpDescuentos` de la campaña. 🔑 **Las 3 cuotas SON del precio de lista** (Bruno: *«el precio de
+  lista es con 3 cuotas»*; en la Caja, la cuenta de crédito normal «Nro 1 o 13»), pero ⛔ hay un dato
+  que diga «3» ⇒ `CUOTAS_SIN_INTERES`. Débito y crédito con descuento ⛔ van: se resuelven en el mostrador.
 - 🔑 **Viaja con la cola** (`?etiquetas=1&cola=1` ⇒ `fpCaja`), con el permiso de Etiquetas: la
   Caja ⛔ se le abre a quien no la tiene. Son % que ya están impresos en el local: ⛔ plata.
 - 🔑 **La prenda de cada etiqueta de formas de pago es la que va JUSTO ANTES** (`ctx.fpDe` en
