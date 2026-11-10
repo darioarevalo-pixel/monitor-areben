@@ -81,3 +81,43 @@ describe('Real o de prueba por el CORTE de la línea (`erp_corte`), ⛔ ERP_STUN
     }
   })
 })
+
+describe('Nueva venta (Bruno 10-nov): precio de lista, descuento por producto y % de la forma de pago', () => {
+  const nv = {
+    linea: 'zattia', origen_ref: '0f8fad5b-d9cb-469f-a165-70867728950e', canal: 'local', deposito: 'local', modo: 'local', paso: 100,
+    lineas: [{ producto: '101', talle: '7', cantidad: 1, precio: 32900, descuento_pct: 0 }, { producto: '102', talle: '1', cantidad: 1, precio: 27500, descuento_pct: 20 }],
+    pagos: [{ cuenta: 'tr', base: null, porcentaje: 10, redondear: true }],
+  }
+
+  it('la línea lleva su descuento en pesos y el pago su % y su redondeo (⛔ 0 y 0 como antes)', () => {
+    const r = entradaManual(nv, 'zattia', 'Bruno', HOY)
+    if ('error' in r) throw new Error(r.error)
+    expect(r.entrada.lineas[1]).toMatchObject({ precio: 27500, descuento: 5500, importe: 22000 })
+    expect(r.entrada.subtotal).toBe(54900)
+    expect(r.entrada.pagos[0]).toMatchObject({ cuenta: 'tr', base: 54900, porcentaje: 10, descuento: 5490, redondeo: -10, monto: 49400 })
+    expect(r.entrada.total).toBe(49400)
+  })
+
+  it('el servidor rearma los montos: un monto mentido por el navegador ⛔ pasa', () => {
+    const r = entradaManual({ ...nv, pagos: [{ cuenta: 'tr', base: null, porcentaje: 10, redondear: true, monto: 1 }] }, 'zattia', null, HOY)
+    if ('error' in r) throw new Error(r.error)
+    expect(r.entrada.total).toBe(49400)
+  })
+
+  it('dos formas de pago: la primera paga su parte y la última lo que falta', () => {
+    const r = entradaManual({ ...nv, pagos: [{ cuenta: 'ef', base: 20000, porcentaje: 15, redondear: true }, { cuenta: 'tr', base: null, porcentaje: 10, redondear: true }] }, 'zattia', null, HOY)
+    if ('error' in r) throw new Error(r.error)
+    expect(r.entrada.pagos.map((p: { base: number; monto: number }) => [p.base, p.monto])).toEqual([[20000, 17000], [34900, 31400]])
+    expect(r.entrada.total).toBe(48400)
+  })
+
+  it('«Corregir una venta pasada» pide motivo y fecha, y los guarda; la del local es de AHORA', () => {
+    const e = (b: object) => { const r = entradaManual({ ...nv, ...b }, 'zattia', null, HOY); return 'error' in r ? r.error : r.entrada }
+    expect(e({ modo: 'corregir', ocurrida_en: '2026-10-30T15:00:00Z' })).toMatch(/por qué/)
+    expect(e({ modo: 'corregir', motivo: 'se olvidó en la caja' })).toMatch(/cuándo/)
+    const ok = e({ modo: 'corregir', motivo: 'se olvidó en la caja', ocurrida_en: '2026-10-30T15:00:00Z' }) as { detalle: unknown; ocurrida_en: string }
+    expect(ok.detalle).toEqual({ modo: 'corregir', motivo: 'se olvidó en la caja' })
+    expect(ok.ocurrida_en).toBe('2026-10-30T15:00:00.000Z')
+    expect((e({ ocurrida_en: '2026-10-01T15:00:00Z' }) as { ocurrida_en?: string }).ocurrida_en).toBeUndefined()
+  })
+})

@@ -513,6 +513,16 @@ mes pasado** (`desdeBusquedaDeVentas`): son los dos períodos que Ventas puede l
 factura (`TN-…`, `B-0005-…`) ⛔ tienen lectura por número ⇒ no se buscan (el cartel lo dice). «Buscar en todas las marcas» corre las
 lecturas en BDI y Zattia. Enter abre: la prenda en `FichaPrenda` encima de lo que hay; la venta/cliente viajan en memoria (`pedidoDeBusqueda`, a nivel de módulo: `Erp` se REMONTA al cambiar de sección y un `useState` se perdía) y `VentasErp`/`ClientesErp` la abren al llegar su lista (`abrir`/`alAbrir`). Un escaneo (8+ cifras) + Enter espera la lectura y
 abre si hay UNA sola coincidencia. Un cliente sin documento (los de GN) se abre por NOMBRE: ⛔ comparar `doc` nulos. «?» abre la hoja de atajos (`ATAJOS`; los de la Caja, F2/F4, ⛔ se tocan).
+- 🎯 **Ventas › «Nueva venta» (Bruno 10-nov, ex «Cargar venta»; maqueta aprobada https://claude.ai/artifact/3Nutg1d5DUosBacCS6JZnF)**:
+`components/erp/ventas/NuevaVenta.tsx` ocupa la pantalla de Ventas. «Muy parecido al POS, pero sin la validación», «más manual y más
+libre»: UN «Sale de» para toda la venta; precio de lista, descuento % por producto y % de la forma de pago EDITABLES (arrancan en los
+de la Caja: `pct` de `formasDePago`); el redondeo es el de la Caja; la cuenta la rearma el SERVIDOR con `cuentaDeNuevaVenta`
+(`lib/erp/nueva-venta.core.js`, la misma que la pantalla). «Entra a» = la cuenta real de la configuración, editable: si se cambia,
+la venta nace con la de la ruta y se corrige con `corregirMedioCobro` (fila inmutable). 🔴 **⛔ suma a la caja** («el POS sólo recibe
+ventas del local en el POS o cobros de pedidos de TN»). Modos: «Venta del local» (ahora; permiso `nueva-venta`: Local y
+Administración) y «Corregir una venta pasada» (fecha + motivo obligatorios en `detalle`; permiso `venta-pasada`: Administración).
+**ERP sin CG**: la transferencia es la de Areben (`transferenciaDeAreben`) y CG ⛔ se ofrece en «Más». Tests:
+`erp-cargar-venta`, `erp-formas-pago`, `erp-nueva-venta-pantalla`.
 - 🔑 **Ventas › Cargar venta (`api/_erp-cargar.js`): real o de prueba por el CORTE de la línea elegida** (`erp_corte`, la misma
 lectura con caché que la Caja, `cortesDeCaja`), ⛔ `ERP_STUNNED_PRUEBA` (1-nov). Sin poder leer los cortes ⇒ 503 y ⛔ se guarda.
 Se mira el corte en la FECHA DE LA VENTA (`ocurrida_en`; sin fecha, ahora) — Bruno 1-nov: una venta de antes del corte cargada
