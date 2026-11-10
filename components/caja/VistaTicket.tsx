@@ -25,8 +25,8 @@ export function ticketDeMuestra(logo: LogoTicket | null, politica: string | null
     numero: 0,
     id: 'muestra',
     renglones: [
-      { nombre: 'PRENDA DE MUESTRA', talle: 'M', cantidad: 1, precio: 20000, importe: 20000 },
-      { nombre: 'OTRA PRENDA', talle: '38', cantidad: 2, precio: 12000, importe: 22000 },
+      { nombre: 'PRODUCTO DE MUESTRA', talle: 'M', cantidad: 1, precio: 20000, importe: 20000 },
+      { nombre: 'OTRO PRODUCTO', talle: '38', cantidad: 2, precio: 12000, importe: 22000 },
     ],
     subtotal: 42000,
     pagos: [{ cuenta: 0, porcentaje: 10, descuento: 4200, redondeo: 0, monto: 37800 }],

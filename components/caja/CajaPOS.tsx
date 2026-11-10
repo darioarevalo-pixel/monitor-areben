@@ -557,14 +557,14 @@ function POS() {
     // 🔑 Un ticket es de UNA marca (Bruno, 26-oct): con alguna línea de esta Caja en el ERP (`erp_lineas`, por su corte), la
     // prenda de la otra se cobra aparte. El servidor frena igual (`destinoPorCorte`).
     if ((config?.erp_lineas?.length || config?.stunned_erp) && bor.renglones.some((r) => esStunnedVariante(r.variante) !== esStunnedVariante(variante))) {
-      setAviso({ tono: 'warning', texto: `Un ticket es de una sola marca: esta prenda es de ${esStunnedVariante(variante) ? 'Stunned' : 'Zattia'} y la venta de ahora es de ${esStunnedVariante(variante) ? 'Zattia' : 'Stunned'}. Cobrá una y después la otra.` })
+      setAviso({ tono: 'warning', texto: `Un ticket es de una sola marca: este producto es de ${esStunnedVariante(variante) ? 'Stunned' : 'Zattia'} y la venta de ahora es de ${esStunnedVariante(variante) ? 'Zattia' : 'Stunned'}. Cobrá una y después la otra.` })
       return
     }
     const k = claveDe(variante)
     const enCarrito = (cantidades.current.get(k) ?? 0) + 1
     cantidades.current.set(k, enCarrito)
     // El de Stunned sale del ERP (`fuente: 'erp'`): ⛔ dice nada de GN.
-    if (stock.fuente !== 'erp') setGnSenal(stock.fuente === 'vivo' ? { ok: true, que: 'el stock de la última prenda se leyó en vivo' } : { ok: false, que: `el stock de la última prenda es el de anoche${stock.motivo ? ` (${stock.motivo})` : ''}` })
+    if (stock.fuente !== 'erp') setGnSenal(stock.fuente === 'vivo' ? { ok: true, que: 'el stock del último producto se leyó en vivo' } : { ok: false, que: `el stock del último producto es el de anoche${stock.motivo ? ` (${stock.motivo})` : ''}` })
     setBor((b) => {
       const i = b.renglones.findIndex((r) => claveDe(r.variante) === claveDe(variante))
       if (i >= 0) {
@@ -846,14 +846,14 @@ function POS() {
    * mezclaría dos clientas. Tira el error para que lo muestre la transferencia pendiente.
    */
   async function volverAlCarrito(venta: Venta) {
-    if (bor.renglones.length) throw new Error('Hay otra venta en el carrito: cobrala o sacá sus prendas antes de cambiar la forma de pago.')
+    if (bor.renglones.length) throw new Error('Hay otra venta en el carrito: cobrala o sacá sus productos antes de cambiar la forma de pago.')
     const guardados = venta.renglones ?? []
-    if (!guardados.length) throw new Error('La venta no tiene las prendas guardadas: cancelala y escaneá de nuevo.')
+    if (!guardados.length) throw new Error('La venta no tiene los productos guardados: cancelala y escaneá de nuevo.')
     // Primero las prendas, después cancelar: si una ⛔ se puede traer, la venta sigue esperando.
     const leidas = await Promise.all(
       guardados.map(async (g) => {
         const r = await elegirVariante({ product_id: g.product_id, size_id: g.size_id, product_name: g.nombre ?? '', size_name: g.talle ?? '', sku: g.sku ?? null, barcode: null })
-        if (!('variante' in r)) throw new Error(`No se pudo traer ${g.nombre ?? 'una prenda'}: cancelá la venta y escaneala de nuevo.`)
+        if (!('variante' in r)) throw new Error(`No se pudo traer ${g.nombre ?? 'un producto'}: cancelá la venta y escanealo de nuevo.`)
         return { g, ...r }
       }),
     )
@@ -870,7 +870,7 @@ function POS() {
     const aparte = venta.total - (venta.espera_monto ?? venta.total)
     setAviso({
       tono: 'warning',
-      texto: `La venta ${numeroProvisorio(venta.id)} se canceló y sus prendas volvieron al carrito: elegí la forma de pago nueva.${aparte > 0 ? ` Ya se cobraron ${plata(aparte)} aparte: tenelo en cuenta al cobrar.` : ''}${venta.a_mano?.venta || venta.a_mano?.prendas ? ' Los descuentos a mano hay que cargarlos de nuevo.' : ''}`,
+      texto: `La venta ${numeroProvisorio(venta.id)} se canceló y sus productos volvieron al carrito: elegí la forma de pago nueva.${aparte > 0 ? ` Ya se cobraron ${plata(aparte)} aparte: tenelo en cuenta al cobrar.` : ''}${venta.a_mano?.venta || venta.a_mano?.prendas ? ' Los descuentos a mano hay que cargarlos de nuevo.' : ''}`,
     })
     refrescarPendientes()
     refrescarTurno()
@@ -1007,7 +1007,7 @@ function POS() {
   }, [puedeCobrar, abrirCobro, enCambio, cambioListoParaCobrar])
 
   async function vaciar() {
-    if (!(await preguntar({ titulo: 'Vaciar pedido', mensaje: `Se ${prendas === 1 ? 'saca la prenda' : `sacan las ${prendas} prendas`} del pedido. No se cobró nada.`, ok: 'Vaciar pedido', tono: 'warning' }))) return
+    if (!(await preguntar({ titulo: 'Vaciar pedido', mensaje: `Se ${prendas === 1 ? 'saca el producto' : `sacan los ${prendas} productos`} del pedido. No se cobró nada.`, ok: 'Vaciar pedido', tono: 'warning' }))) return
     // 🔑 A1: el id se renueva sólo si ⛔ se mandó nada con él. Si se mandó y la respuesta se perdió, la
     // venta puede estar cobrada: con el mismo id, el pedido nuevo da 409 y se ve cuál era.
     setBor((b) => ({ ...b, id: b.enviado ? b.id : nuevoId(), renglones: [], email: '', descuentoVenta: null }))
@@ -1136,7 +1136,7 @@ pendientes
             <Modal
               abierto
               onCerrar={() => responder(false)}
-              titulo="Esta prenda ya está en el pedido"
+              titulo="Este producto ya está en el pedido"
               pie={
                 <>
                   <Button variant="outline" onClick={() => responder(true)}>
@@ -1155,7 +1155,7 @@ pendientes
                 <div>
                   Ya hay {pregunta.enPedido} en el pedido. ¿La clienta se lleva {pregunta.quedaria} iguales, o se escaneó dos veces la misma?
                 </div>
-                {pregunta.superaStock && <Notice tone="danger">En el local quedan {pregunta.stock.local}: casi seguro es la misma prenda.</Notice>}
+                {pregunta.superaStock && <Notice tone="danger">En el local quedan {pregunta.stock.local}: casi seguro es el mismo producto.</Notice>}
               </div>
             </Modal>
           )}
@@ -1214,7 +1214,7 @@ pendientes
                 <div style={{ display: 'grid', gap: space[3], alignContent: 'start', border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: space[4], background: color.surface }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                     <b style={{ fontSize: font.lg, color: color.ink }}>Resumen de la venta</b>
-                    <span style={{ color: color.mut, fontSize: font.sm }}>{prendas === 1 ? '1 prenda' : `${prendas} prendas`}</span>
+                    <span style={{ color: color.mut, fontSize: font.sm }}>{prendas === 1 ? '1 producto' : `${prendas} productos`}</span>
                   </div>
                   <div style={{ background: color.bg, borderRadius: radius.md, padding: `${space[2]}px ${space[3]}px`, color: color.ink2, fontSize: font.sm, overflowWrap: 'anywhere' }}>
                     Cliente: {bor.email.trim() || 'Consumidor final'}
@@ -1445,7 +1445,7 @@ pendientes
                     if (una) elegirProducto(sugeridas.conStock[0])
                     else escanear(codigo)
                   }}
-                  placeholder={movil ? 'Nombre o código de la prenda' : 'Código de barras, SKU o nombre y talle'}
+                  placeholder={movil ? 'Nombre o código del producto' : 'Código de barras, SKU o nombre y talle'}
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -1505,7 +1505,7 @@ pendientes
               {candidatos && (
                 <ListaPrendas
                   grilla
-                  titulo="Ese código es de varias prendas: elegí cuál."
+                  titulo="Ese código es de varios productos: elegí cuál."
                   con={candidatos.lista}
                   masCon={candidatos.mas}
                   sin={[]}
@@ -1521,7 +1521,7 @@ pendientes
   const renglonesJSX = (
     <>
               {bor.renglones.length === 0 ? (
-                <div style={{ padding: `${space[6]}px 0`, textAlign: 'center', color: color.mut, fontSize: font.base }}>Pedido vacío: escanear o buscar una prenda.</div>
+                <div style={{ padding: `${space[6]}px 0`, textAlign: 'center', color: color.mut, fontSize: font.base }}>Pedido vacío: escanear o buscar un producto.</div>
               ) : (
                 bor.renglones.map((r, i) => (
                   <FilaRenglon
@@ -1620,13 +1620,13 @@ pendientes
             {modalesJSX}
             <div>{buscadorJSX}</div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[2] }}>
-              <h2 style={{ margin: 0, fontSize: font.lg, fontWeight: weight.bold, color: color.ink }}>{`Pedido · ${prendas === 1 ? '1 prenda' : `${prendas} prendas`}`}</h2>
+              <h2 style={{ margin: 0, fontSize: font.lg, fontWeight: weight.bold, color: color.ink }}>{`Pedido · ${prendas === 1 ? '1 producto' : `${prendas} productos`}`}</h2>
               <Button size="sm" variant="ghost" onClick={vaciar} disabled={bor.renglones.length === 0} style={{ height: 44 }}>
                 Vaciar pedido
               </Button>
             </div>
             <Card style={{ padding: `0 ${space[3]}px` }}>{renglonesJSX}</Card>
-            {sinPrecio && <Notice tone="warning">Prenda sin precio: escribirlo en el renglón.</Notice>}
+            {sinPrecio && <Notice tone="warning">Producto sin precio: escribirlo en el renglón.</Notice>}
             <Card style={{ display: 'grid', gap: space[2], padding: space[3] }}>
               <Field label="Mail para el ticket (opcional)">
                 <CampoMail valor={bor.email} onCambio={(m) => setBor((b) => ({ ...b, email: m }))} />
@@ -1646,7 +1646,7 @@ pendientes
 
           <div className="pm-barra">
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: font.sm, color: color.mut }}>{prendas === 0 ? 'Sin prendas' : prendas === 1 ? '1 prenda' : `${prendas} prendas`}</div>
+              <div style={{ fontSize: font.sm, color: color.mut }}>{prendas === 0 ? 'Sin productos' : prendas === 1 ? '1 producto' : `${prendas} productos`}</div>
               <div style={{ fontSize: font['2xl'], fontWeight: weight.heavy, color: color.brand, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
                 {bor.renglones.length === 0 ? plata(0) : mostrarCobro && c ? plata(c.total) : aPagar != null ? plata(aPagar) : '—'}
               </div>
@@ -1787,7 +1787,7 @@ pendientes
               cobro»— queda siempre a la vista. */}
           <Card style={{ padding: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3], padding: `${space[3]}px ${space[4]}px`, borderBottom: `1px solid ${color.line}` }}>
-              <h2 style={{ margin: 0, fontSize: font.lg, fontWeight: weight.bold, color: color.ink }}>{`Pedido · ${prendas === 1 ? '1 prenda' : `${prendas} prendas`}`}</h2>
+              <h2 style={{ margin: 0, fontSize: font.lg, fontWeight: weight.bold, color: color.ink }}>{`Pedido · ${prendas === 1 ? '1 producto' : `${prendas} productos`}`}</h2>
               <Button size="sm" variant="ghost" onClick={vaciar} disabled={bor.renglones.length === 0}>
                 Vaciar pedido
               </Button>
@@ -1821,7 +1821,7 @@ pendientes
                   </span>
                 </div>
                 {!mostrarCobro && <span style={{ color: color.mut, fontSize: font.sm }}>El descuento de la forma de pago se ve al cobrar.</span>}
-                {sinPrecio && <Notice tone="warning">Prenda sin precio: escribirlo en el renglón.</Notice>}
+                {sinPrecio && <Notice tone="warning">Producto sin precio: escribirlo en el renglón.</Notice>}
                 {!mostrarCobro && (
                   <Button size="lg" tone="success" variant="solid" fullWidth disabled={!puedeCobrar} onClick={abrirCobro} style={{ height: 52 }}>
                     Continuar al cobro <span className="pos-alt">Alt+C</span>

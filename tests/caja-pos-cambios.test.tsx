@@ -90,7 +90,7 @@ describe('POS · modo «Cambios»', () => {
 
   it('🔑 «⇄ Cambios» abre la banda de los dos pasos, y el pedido de venta deja su lugar al del cambio', async () => {
     await montar()
-    expect(texto()).toContain('Pedido · 0 prendas')
+    expect(texto()).toContain('Pedido · 0 productos')
     await act(async () => boton('Cambios')!.click())
     const t = texto()
     expect(t).toContain('1 Lo que devuelve')
@@ -98,7 +98,7 @@ describe('POS · modo «Cambios»', () => {
     expect(t).toContain('Buscar la venta')
     expect(t).toContain('Siguiente →')
     expect(t).toContain('Salir del cambio')
-    expect(t).not.toContain('Pedido · 0 prendas')
+    expect(t).not.toContain('Pedido · 0 productos')
     expect(t).toContain('DEVUELVE')
   })
 
@@ -141,7 +141,7 @@ describe('POS · modo «Cambios»', () => {
     await montar()
     await act(async () => boton('Cambios')!.click())
     await act(async () => boton('Salir del cambio')!.click())
-    expect(texto()).toContain('Pedido · 0 prendas')
+    expect(texto()).toContain('Pedido · 0 productos')
     expect(texto()).not.toContain('1 Lo que devuelve')
   })
 })

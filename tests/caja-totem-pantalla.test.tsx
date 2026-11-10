@@ -6,7 +6,7 @@ import { REGLAS_INICIALES } from '@/lib/caja/core.core.js'
 
 /**
  * La pantalla del tótem (rediseño, fase 4): escanear ⇒ la prenda con su precio en efectivo y sus
- * talles; un código que no existe ⇒ «No encontramos esta prenda»; todo sin stock ⇒ lo dice y ⛔ muestra
+ * talles; un código que no existe ⇒ «No encontramos este producto»; todo sin stock ⇒ lo dice y ⛔ muestra
  * precio. Oráculo: $18.900 en efectivo = $16.100 (15 % y redondeo a $100, ver `caja-totem.test.ts`).
  */
 const BLAZER = { product_id: 5, size_id: 2, product_name: 'BLAZER NEREA', size_name: 'M', sku: 'RBT-0137', barcode: '7790001' }
@@ -70,7 +70,7 @@ afterEach(() => {
 async function escanear(codigo: string) {
   const { CajaTotem } = await import('@/components/caja/CajaTotem')
   await act(async () => raiz.render(<CajaTotem />))
-  const input = caja.querySelector('input[aria-label="Código de la prenda"]') as HTMLInputElement
+  const input = caja.querySelector('input[aria-label="Código del producto"]') as HTMLInputElement
   const escribir = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
   await act(async () => {
     escribir.call(input, codigo)
@@ -129,10 +129,10 @@ describe('CajaTotem', () => {
     expect(t).toContain('16.100')
   })
 
-  it('espera con «Escaneá una prenda»', async () => {
+  it('espera con «Escaneá un producto»', async () => {
     const { CajaTotem } = await import('@/components/caja/CajaTotem')
     await act(async () => raiz.render(<CajaTotem />))
-    expect(caja.textContent).toContain('Escaneá una prenda para ver su precio')
+    expect(caja.textContent).toContain('Escaneá un producto para ver su precio')
   })
 
   it('una prenda: nombre, talles del local, lista y efectivo del núcleo', async () => {
@@ -184,7 +184,7 @@ describe('CajaTotem', () => {
   })
 
   async function pasar(codigo: string) {
-    const input = caja.querySelector('input[aria-label="Código de la prenda"]') as HTMLInputElement
+    const input = caja.querySelector('input[aria-label="Código del producto"]') as HTMLInputElement
     const escribir = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
     await act(async () => {
       escribir.call(input, codigo)
@@ -209,7 +209,7 @@ describe('CajaTotem', () => {
   })
 
   it('la tarjeta sin prenda espera la próxima, y a la siguiente ya ⛔ vale', async () => {
-    expect(await escanear('ENCARGADA')).toContain('Escaneá la prenda para ver su ubicación')
+    expect(await escanear('ENCARGADA')).toContain('Escaneá el producto para ver su ubicación')
     expect(await pasar('7790001')).toContain('A1 · A2')
     expect(await pasar('7790001')).not.toContain('A1 · A2')
   })
@@ -218,8 +218,8 @@ describe('CajaTotem', () => {
     window.history.pushState({}, '', '/pos/totem?prueba=1')
     try {
       const t = await escanear('blazer')
-      expect(t).not.toContain('No encontramos esta prenda')
-      const input = caja.querySelector('input[aria-label="Código de la prenda"]') as HTMLInputElement
+      expect(t).not.toContain('No encontramos este producto')
+      const input = caja.querySelector('input[aria-label="Código del producto"]') as HTMLInputElement
       expect(input.style.opacity).toBe('')
       const boton = [...caja.querySelectorAll('button')].find((b) => b.textContent?.includes('BLAZER NEREA'))!
       await act(async () => {
@@ -235,20 +235,20 @@ describe('CajaTotem', () => {
   })
 
   it('sin modo prueba, un nombre ⛔ busca y la entrada sigue invisible', async () => {
-    expect(await escanear('blazer')).toContain('No encontramos esta prenda')
-    const input = caja.querySelector('input[aria-label="Código de la prenda"]') as HTMLInputElement
+    expect(await escanear('blazer')).toContain('No encontramos este producto')
+    const input = caja.querySelector('input[aria-label="Código del producto"]') as HTMLInputElement
     expect(input.style.opacity).toBe('0')
     expect(caja.querySelector('button')).toBeNull()
   })
 
   it('un código que no existe', async () => {
-    expect(await escanear('000')).toContain('No encontramos esta prenda')
+    expect(await escanear('000')).toContain('No encontramos este producto')
   })
 
   it('robustez: GN caído ⛔ dice «no encontramos»: dice que no se pudo consultar', async () => {
     const t = await escanear('CAIDO')
     expect(t).toContain('No pudimos consultar el precio')
-    expect(t).not.toContain('No encontramos esta prenda')
+    expect(t).not.toContain('No encontramos este producto')
   })
 
   it('todo sin stock en el local: lo dice, ⛔ muestra precio', async () => {

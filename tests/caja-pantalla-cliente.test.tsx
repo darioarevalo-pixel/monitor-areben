@@ -92,7 +92,7 @@ describe('CajaCliente', () => {
     disco.set(claveVista(), JSON.stringify(vistaParaCliente({ carrito, filas, aPagar: 40000, cobro: null, medio: null, email: '', ultima: null })))
     await act(async () => raiz.render(<CajaCliente />))
     const t = caja.textContent ?? ''
-    expect(t).toContain('Tu compra · 3 prendas')
+    expect(t).toContain('Tu compra · 3 productos')
     expect(t).toContain('BLAZER NEREA')
     expect(t).toContain('$40.000')
     // El renglón: «color · talle · ×n».

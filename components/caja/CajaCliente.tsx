@@ -198,7 +198,7 @@ function Compra({ v }: { v: Extract<VistaCliente, { estado: 'compra' }> }) {
     <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', minHeight: 0 }}>
       <section style={{ display: 'flex', flexDirection: 'column', minHeight: 0, padding: 'clamp(16px, 2.4vw, 32px)', gap: space[3] }}>
         <h2 style={{ margin: 0, fontSize: 'clamp(18px, 2vw, 26px)' }}>
-          Tu compra · {v.prendas} {v.prendas === 1 ? 'prenda' : 'prendas'}
+          Tu compra · {v.prendas} {v.prendas === 1 ? 'producto' : 'productos'}
         </h2>
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           {v.renglones.map((r, i) => (

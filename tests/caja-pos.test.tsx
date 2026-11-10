@@ -78,7 +78,7 @@ describe('POS (/pos)', () => {
   it('🔑 la cuenta que abrió la caja ve el POS: escanear, el pedido y «Cerrar turno»', async () => {
     const t = await montar(<CajaPOS />)
     expect(t).toContain('Escanear o buscar')
-    expect(t).toContain('Pedido · 0 prendas')
+    expect(t).toContain('Pedido · 0 productos')
     expect(t).toContain('Cerrar caja')
     // Sólo una flecha (Bruno, 5-oct), ⛔ «Volver al monitor».
     expect(t).not.toContain('Volver al monitor')
@@ -381,7 +381,7 @@ describe('POS · la transferencia que ⛔ llega justa (Bruno, 12-oct, segunda ta
     await hastaQue(() => vi.mocked(cancelarVenta).mock.calls.length > 0)
     expect(vi.mocked(cancelarVenta)).toHaveBeenCalledWith(VENTA.id, 'cambio_pago')
     expect(borrador().renglones).toHaveLength(1)
-    expect(document.body.textContent).toContain('sus prendas volvieron al carrito')
+    expect(document.body.textContent).toContain('sus productos volvieron al carrito')
     vi.mocked(leerPendientes).mockResolvedValue({ ventas: [] } as never)
   })
 
