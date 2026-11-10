@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
-import type { Cola, FilaCola, SelloEtiqueta } from '@/lib/etiquetas/cola'
+import type { Cola, FilaCola, RotuloCola, SelloEtiqueta } from '@/lib/etiquetas/cola'
 import type { FpCaja } from '@/lib/etiquetas/fpCaja'
 import type { Marca } from '@/lib/nav.datos'
 
@@ -37,6 +37,8 @@ export interface EstadoCola extends Cola {
   campanias: string[]
   /** Lo que dice la etiqueta de cada producto, para comparar contra el precio de hoy. */
   sellos: Record<string, SelloEtiqueta>
+  /** liqNombre → el rótulo que imprime esa campaña (sólo las de etiqueta por prenda). */
+  rotulos: Record<string, RotuloCola>
   /** El stock de hoy por producto, tal como lo vio el servidor. */
   stock: Record<string, number>
   /**
@@ -63,6 +65,7 @@ export interface EstadoCola extends Cola {
 export function useColaReetiquetado(marca: Marca, activo = true): EstadoCola {
   const [cola, setCola] = useState<Cola>(VACIA)
   const [sellos, setSellos] = useState<Record<string, SelloEtiqueta>>({})
+  const [rotulos, setRotulos] = useState<Record<string, RotuloCola>>({})
   const [stock, setStock] = useState<Record<string, number>>({})
   const [fpCaja, setFpCaja] = useState<FpCaja | null>(null)
   const [fpCajaError, setFpCajaError] = useState<string | null>(null)
@@ -83,6 +86,7 @@ export function useColaReetiquetado(marca: Marca, activo = true): EstadoCola {
       if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer qué hay para reetiquetar.')
       setCola({ pendientes: d.pendientes || [], hechas: d.hechas || [], sinStock: d.sinStock || [] })
       setSellos(d.sellos || {})
+      setRotulos(d.rotulos || {})
       setStock(d.stock || {})
       setFpCaja(d.fpCaja || null)
       // Un servidor viejo ⛔ manda ninguno de los dos: eso también es «no se sabe qué cobra la Caja».
@@ -93,6 +97,7 @@ export function useColaReetiquetado(marca: Marca, activo = true): EstadoCola {
       // cartel chico es peor: se sigue etiquetando contra datos que ya no se están leyendo.
       setCola(VACIA)
       setSellos({})
+      setRotulos({})
       setStock({})
       setFpCaja(null)
       setFpCajaError(null)
@@ -137,7 +142,7 @@ export function useColaReetiquetado(marca: Marca, activo = true): EstadoCola {
     return [...vistas].sort((a, b) => a.localeCompare(b, 'es'))
   }, [cola.pendientes])
 
-  return { ...cola, sellos, stock, fpCaja, fpCajaError, leidoEn, cargando, error, campanias, recargar: traer, marcar }
+  return { ...cola, sellos, rotulos, stock, fpCaja, fpCajaError, leidoEn, cargando, error, campanias, recargar: traer, marcar }
 }
 
 /** Los pid de una lista de filas, que es lo que la tabla usa para acotar las variantes. */

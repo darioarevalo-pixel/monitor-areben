@@ -38,6 +38,14 @@ es sólo de la pestaña de Precio: va detrás de cualquiera de las dos que dicen
   descuentos entren por el Monitor** (decisión de Bruno del 16-ago-2026). Un precio cargado a mano
   en Gestión Nube no deja evento; lo que igual lo caza es que la etiqueta guarde **qué número dijo**
   (ver abajo).
+- 🔑 **La cola también trae lo que cambió de RÓTULO, ⛔ sólo de precio** (Bruno, 10-nov-2026: «ya sea
+  por precio o por título, se tiene que reetiquetar» — el Cyber pasó a «OFERTAS» con el mismo precio).
+  Editar el nombre comercial o los renglones de abajo de una campaña sella `datos.rotuloDesde`
+  (`renombrar` con `reetiquetar: true` lo sella a pedido) y `conCambioDeRotulo` le corre el `cuando`
+  a las prendas que **siguen puestas** ahí. La cola dibuja el rótulo de la campaña de cada prenda
+  (`rotuloPromoDe`), ⛔ para todas: sólo las de **etiqueta por prenda** (hoy, el Cyber).
+- 🔑 **Escanear en la cola imprime siempre** (10-nov-2026): la cola es por PRODUCTO y escanear lo da
+  por hecho ⇒ la 2ª talla, o reescanear la que no salió, rebotaba con «no está en la lista».
 - **El resto que la cola descarta va al chequeo de exhibición**: `sinEtiquetar()` lo consume
   `components/exhib/Exhib.tsx` con `sospechososNoExhibidos` (`lib/exhib/core.ts`).
 - ⚠️ **Para Zattia se fusiona el catálogo de Stunned y en Exhibición no** ⇒ un producto de Stunned

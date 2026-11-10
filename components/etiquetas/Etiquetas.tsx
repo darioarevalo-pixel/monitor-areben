@@ -299,7 +299,22 @@ export function Etiquetas() {
     () => (fpCaja ? (v: VarianteEti) => lineasFpDeCaja(pctDeEtiqueta(fpCaja, v.pid)) : undefined),
     [fpCaja],
   )
-  const ctxCola: CtxEtiqueta = useMemo(() => ({ ...ctx, modoDe: modoDeCola, fpDe: fpDeCola }), [ctx, modoDeCola, fpDeCola])
+  // 🔑 **Y el rótulo de su campaña** («OFERTAS»), como lo imprime «Precio de campaña» (Bruno,
+  // 10-nov-2026: «ya sea por precio o por título, se tiene que reetiquetar»). Sólo si la prenda
+  // SIGUE puesta en esa campaña: la que volvió a lista lleva la de precio, sin rótulo.
+  const { rotulos, pendientes: colaPend, hechas: colaHechas, sinStock: colaSinStock } = cola
+  const rotuloDeCola = useMemo(() => {
+    const porPid: Record<string, { izq: string; bajoPrecio: string }> = {}
+    for (const f of [...colaPend, ...colaHechas, ...colaSinStock]) {
+      const r = f.modo === 'poner' && f.liqNombre ? rotulos[f.liqNombre] : null
+      if (r && (r.izq || r.bajoPrecio)) porPid[f.pid] = { izq: r.izq, bajoPrecio: r.bajoPrecio }
+    }
+    return (v: VarianteEti) => porPid[v.pid] ?? null
+  }, [rotulos, colaPend, colaHechas, colaSinStock])
+  const ctxCola: CtxEtiqueta = useMemo(
+    () => ({ ...ctx, modoDe: modoDeCola, fpDe: fpDeCola, rotuloPromoDe: rotuloDeCola }),
+    [ctx, modoDeCola, fpDeCola, rotuloDeCola],
+  )
   const ctxDe = (slot: Slot): CtxEtiqueta => (slot === 'cola' ? ctxCola : ctx)
 
   /**
