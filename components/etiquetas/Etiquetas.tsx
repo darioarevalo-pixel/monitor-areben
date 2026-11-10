@@ -710,13 +710,13 @@ function ModoPanel({
       inp.focus()
       return
     }
-    // La campaña se pregunta ANTES que la promo: si la prenda no entra al sale, eso es lo que hay
-    // que decir, y no que "no está en promoción" —que suena a un problema de precios—.
-    if (campania && !campania.pids.has(v.pid)) {
-      setFeedback({ ok: false, html: `✗ ${v.name || ''} no está en «${campania.nombre}»: no lleva etiqueta de este sale.` })
-      inp.focus()
-      return
-    }
+    // 🔑 **En «Para reetiquetar» el escaneo NO pregunta si la prenda está en la lista** (Bruno,
+    // 10-nov-2026, post Cyber Zattia). La lista es por PRODUCTO y escanear lo da por hecho: la 2ª
+    // talla del mismo producto, o volver a escanear la que no salió porque no apretaron Enter,
+    // rebotaba con «no está en la lista». La etiqueta sale igual con el precio de HOY de Tienda
+    // Nube (`modoDeCola` elige promo o lista), así que reimprimir es gratis —como ya decía el
+    // cartel de arriba—. Sólo se avisa que estaba fuera de la lista.
+    const fueraDeLista = !!campania && !campania.pids.has(v.pid)
     if (modoV === 'promo' && !promoDe(v)) {
       setFeedback({
         ok: false,
@@ -736,7 +736,7 @@ function ModoPanel({
       : modoV === 'loc' && p
         ? ` · $${Math.round(p).toLocaleString('es-AR')}`
         : ''
-    setFeedback({ ok: true, html: `✓ Imprimiendo: ${v.name || ''} · ${v.size || ''}${extra}` })
+    setFeedback({ ok: true, html: `✓ Imprimiendo: ${v.name || ''} · ${v.size || ''}${extra}${fueraDeLista ? ' · (ya no estaba en la lista: se reimprime)' : ''}` })
     inp.focus()
   }
 
