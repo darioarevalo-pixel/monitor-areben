@@ -96,7 +96,7 @@ describe('POS en el celular', () => {
     window.history.replaceState(null, '', '/pos?movil=1')
     const t = await montar(<CajaPOS />)
     expect(document.querySelector('button[aria-label="Más opciones"]')).toBeTruthy()
-    expect(t).toContain('Pedido · 0 prendas')
+    expect(t).toContain('Pedido · 0 productos')
     expect(t).toContain('Continuar al cobro')
     expect(t).not.toContain('Alt+C')
     // Ventas, Contar billetes, Ingreso, Salida y Cerrar caja viven en el menú, no en la barra.

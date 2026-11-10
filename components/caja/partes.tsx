@@ -1213,7 +1213,7 @@ function ResumenVenta({ venta: v, nombreCuenta, onVolver, onReimprimir, onTicket
             <span style={der}>{plata(r.importe ?? r.cantidad * r.precio)}</span>
           </div>
         ))}
-        {!v.renglones?.length && <span style={{ color: color.mut }}>La venta no tiene las prendas guardadas.</span>}
+        {!v.renglones?.length && <span style={{ color: color.mut }}>La venta no tiene los productos guardados.</span>}
       </div>
       <div style={{ display: 'grid', gap: space[1], borderTop: `1px solid ${color.line}`, paddingTop: space[2] }}>
         {v.subtotal !== v.total && (
@@ -1304,7 +1304,7 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onTicketCambio, onC
           <tr>
             <th style={th}>Hora</th>
             <th style={th}>Venta</th>
-            <th style={{ ...th, ...der }}>Prendas</th>
+            <th style={{ ...th, ...der }}>Productos</th>
             <th style={th}>Forma de pago</th>
             <th style={{ ...th, ...der }}>Total</th>
             <th style={th}>Estado</th>
@@ -2117,7 +2117,7 @@ export function ResumenTurnoDatos({
         <span style={{ color: color.ink2 }}>
           Hecho a mano: {r.aMano.ventas === 1 ? '1 venta' : `${r.aMano.ventas} ventas`}
           {r.aMano.venta > 0 && ` · descuento a la venta ${plata(r.aMano.venta)}`}
-          {r.aMano.prendas > 0 && ` · descuento a prendas ${plata(r.aMano.prendas)}`}
+          {r.aMano.prendas > 0 && ` · descuento a productos ${plata(r.aMano.prendas)}`}
           {r.aMano.precios > 0 && ` · precio bajado ${plata(r.aMano.precios)}`}
         </span>
       )}
@@ -2639,7 +2639,7 @@ export function LogoDelTicket({ marca, nombre, inicial, tienda = null, onGuardad
     }
   }
   return (
-    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo={`Logo del ticket · ${nombre}`} ayuda={`Sale cuando el ticket lleva prendas de ${nombre}. PNG o JPG; se achica a 400 px de ancho. Sólo lo cambia un admin.`}>
+    <Plegable variante="tarjeta" abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo={`Logo del ticket · ${nombre}`} ayuda={`Sale cuando el ticket lleva productos de ${nombre}. PNG o JPG; se achica a 400 px de ancho. Sólo lo cambia un admin.`}>
       <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
         {inicial ? (
           // eslint-disable-next-line @next/next/no-img-element

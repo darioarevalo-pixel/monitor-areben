@@ -40,10 +40,10 @@ export function ModalSinStock({ faltan, error, enviando, onCerrar, onAutorizar }
           El sistema dice que no hay stock de:
           <ul style={{ margin: `${space[1]}px 0 0`, paddingLeft: space[4] }}>
             {faltan.map((f) => (
-              <li key={`${f.product_id}:${f.size_id}`}>{f.nombre || 'Prenda'}{f.talle ? ` · ${f.talle}` : ''} (hay {Math.max(0, f.hay)}, se lleva {f.pide})</li>
+              <li key={`${f.product_id}:${f.size_id}`}>{f.nombre || 'Producto'}{f.talle ? ` · ${f.talle}` : ''} (hay {Math.max(0, f.hay)}, se lleva {f.pide})</li>
             ))}
           </ul>
-          Si la prenda está acá, la encargada autoriza y queda para contar.
+          Si el producto está acá, la encargada autoriza y queda para contar.
         </div>
         <Field label="Encargada">
           {personas && personas.length > 0

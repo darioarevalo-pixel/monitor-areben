@@ -635,14 +635,14 @@ export default async function handler(req, res) {
           // La elegida de la lista: por la variante EXACTA. Re-escanear su barcode volvía a dar la lista
           // si el código lo comparten varias prendas.
           variantes = await variantesExactas(sb, marca, pid, sid)
-          if (!variantes.length) return res.status(404).json({ error: 'Esa prenda no está en el inventario.' })
+          if (!variantes.length) return res.status(404).json({ error: 'Ese producto no está en el inventario.' })
         } else {
           if (!codigo) return res.status(400).json({ error: 'Falta el código.' })
           variantes = await variantesDelCodigo(sb, marca, codigo)
           let mas = 0
           const palabras = palabrasDeBusqueda(codigo)
           if (!variantes.length && palabras.length) ({ grupos: variantes, mas } = await variantesDelNombre(sb, marca, palabras))
-          if (!variantes.length) return res.status(404).json({ error: palabras.length ? `Ninguna prenda se llama «${codigo}».` : `El código ${codigo} no está en el inventario.` })
+          if (!variantes.length) return res.status(404).json({ error: palabras.length ? `Ningún producto se llama «${codigo}».` : `El código ${codigo} no está en el inventario.` })
           // Con la lista va el stock del LOCAL de anoche: alcanza para elegir; el vivo se lee al elegir.
           if (variantes.length > 1) return res.status(200).json({ candidatos: variantes.map(v => ({ ...v.variante, local: v.espejo.local })), mas })
         }
@@ -693,7 +693,7 @@ export default async function handler(req, res) {
         if (error) throw new Error(error.message)
         const talles = new Map()
         for (const f of data || []) if (!talles.has(Number(f.size_id))) talles.set(Number(f.size_id), f)
-        if (!talles.size) return res.status(404).json({ error: 'Esa prenda no está en el inventario.' })
+        if (!talles.size) return res.status(404).json({ error: 'Ese producto no está en el inventario.' })
         try {
           const cortes = await cortesDeCaja(store)
           const local = new Map()

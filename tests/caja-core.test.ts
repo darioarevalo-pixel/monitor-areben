@@ -374,7 +374,7 @@ describe('caja · descuentos a mano', () => {
     expect(v.discount_amount).toBe(6500)
   })
 
-  it('topes: ⛔ negativo, ⛔ más que el importe, ⛔ dos descuentos en la misma prenda, y null es obligatorio', () => {
+  it('topes: ⛔ negativo, ⛔ más que el importe, ⛔ dos descuentos en el mismo producto, y null es obligatorio', () => {
     expect(() => renglones([item(1000, { tipo: 'pesos', valor: 1001 })])).toThrow(/pasa el precio/)
     expect(() => renglones([item(1000, { tipo: 'pct', valor: -5 })])).toThrow(/inválido/)
     expect(() => renglones([{ ...item(1000, { tipo: 'pct', valor: 5 }), descuento: 10 }])).toThrow(/dos descuentos/)

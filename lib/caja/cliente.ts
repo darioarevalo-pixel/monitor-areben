@@ -151,17 +151,17 @@ export type PrendaSinStock = { product_id: number; size_id: number; nombre: stri
 
 export const leerConfig = () => get<Config>('action=config', 'No se pudo leer la configuración de la Caja.')
 export const leerCuentas = () => get<{ cuentas: CuentaGN[] }>('action=referencias', 'No se pudieron leer las cuentas de cobro.')
-export const buscarProducto = (codigo: string) => get<Producto>(`action=producto&codigo=${encodeURIComponent(codigo)}`, 'No se pudo buscar la prenda.')
+export const buscarProducto = (codigo: string) => get<Producto>(`action=producto&codigo=${encodeURIComponent(codigo)}`, 'No se pudo buscar el producto.')
 /** La lista mientras se escribe: con stock en el local, y aparte las que ⛔ tienen (el botón «Mostrar sin stock»). */
 /** Un producto de la lista del POS (Bruno, 5-oct): sus variantes que coinciden, las del local primero. `local` = de anoche. */
 export type ProductoLista = { product_id: number; product_name: string; local: number; variantes: Candidato[] }
 export type ListaNombre = { conStock: ProductoLista[]; sinStock: ProductoLista[]; masCon: number; masSin: number }
-export const buscarNombre = (q: string) => get<ListaNombre>(`action=buscar&q=${encodeURIComponent(q)}`, 'No se pudo buscar la prenda.')
+export const buscarNombre = (q: string) => get<ListaNombre>(`action=buscar&q=${encodeURIComponent(q)}`, 'No se pudo buscar el producto.')
 /** El stock del local AHORA de todo el producto. Falla si Gestión Nube o el ERP ⛔ contestan. */
 export const stockEnVivo = (productId: number) =>
   get<{ variantes: Candidato[] }>(`action=stock-producto&product_id=${productId}`, 'No se pudo confirmar el stock.')
 export const elegirVariante = (v: Variante) =>
-  get<Producto>(`action=producto&product_id=${v.product_id}&size_id=${v.size_id}`, 'No se pudo traer la prenda.')
+  get<Producto>(`action=producto&product_id=${v.product_id}&size_id=${v.size_id}`, 'No se pudo traer el producto.')
 export const leerPendientes = () => get<{ ventas: Venta[] }>('action=pendientes', 'No se pudieron leer las ventas pendientes.')
 /** B1: las ventas del turno (sin id, el abierto), de la más nueva a la más vieja: para reimprimir. */
 export const leerVentasTurno = (turnoId?: string) =>

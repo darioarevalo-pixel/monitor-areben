@@ -89,7 +89,7 @@ export function PromosCaja({ reglas, admin, version, onGuardadas }: { reglas: Re
       abierto={abierto}
       onToggle={() => setAbierto(!abierto)}
       titulo="Promociones"
-      ayuda="Se aplican solas en el POS: una por prenda, la que más ahorra, y además el descuento de la forma de pago. Los productos en oferta y las prendas que tienen descuento a mano quedan afuera. Sólo las carga un admin."
+      ayuda="Se aplican solas en el POS: una por producto, la que más ahorra, y además el descuento de la forma de pago. Los productos en oferta y los que tienen descuento a mano quedan afuera. Sólo las carga un admin."
     >
       <div style={{ display: 'grid', gap: space[3], maxWidth: 720 }}>
         {lista.length === 0 ? (
@@ -200,7 +200,7 @@ function FormPromo({ form, setForm, guardando, onCancelar, onGuardar }: { form: 
                 </Button>
               </div>
             )}
-            <span style={{ color: color.mut, fontSize: font.sm }}>Vale el escalón más alto al que llega la venta, sobre todas las unidades. Las prendas con descuento a mano o en oferta no cuentan.</span>
+            <span style={{ color: color.mut, fontSize: font.sm }}>Vale el escalón más alto al que llega la venta, sobre todas las unidades. Los productos con descuento a mano o en oferta no cuentan.</span>
           </div>
         </Field>
       )}
@@ -215,7 +215,7 @@ function FormPromo({ form, setForm, guardando, onCancelar, onGuardar }: { form: 
         </div>
       )}
       {form.tipo !== 'monto_minimo' && (
-        <Field label="A qué prendas">
+        <Field label="A qué productos">
           <Select value={form.alcance} onChange={(e) => cambiar({ alcance: e.target.value as AlcancePromo['tipo'] })}>
             <option value="todo">Todo el local</option>
             <option value="categorias">Categorías de Tienda Nube</option>

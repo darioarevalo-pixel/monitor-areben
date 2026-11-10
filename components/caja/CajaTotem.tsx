@@ -239,13 +239,13 @@ function Totem() {
       if (prueba && 'candidatos' in r && r.candidatos.length > 1 && (await mostrarLista(q, n))) return
       if (vuelta.current !== n) return
       const variante = 'variante' in r ? r.variante : r.candidatos[0]
-      if (!variante) throw new Error('sin prenda')
+      if (!variante) throw new Error('sin producto')
       await mostrar(variante, n)
       if (conUbicacion && vuelta.current === n) void pedirUbicacion(variante, n)
     } catch (e) {
       if (vuelta.current !== n) return
       const status = (e as { status?: number }).status
-      const noEsta = status === 404 || (e as Error).message === 'sin prenda'
+      const noEsta = status === 404 || (e as Error).message === 'sin producto'
       if (prueba && noEsta && (await mostrarLista(q, n))) return
       if (vuelta.current !== n) return
       setEstado({ que: noEsta ? 'no' : 'falla' })
@@ -288,7 +288,7 @@ function Totem() {
           setCodigo('')
           if (q) void buscar(q)
         }}
-        aria-label="Código de la prenda"
+        aria-label="Código del producto"
         placeholder={prueba ? 'Modo prueba: código, SKU o nombre, y Enter' : undefined}
         autoComplete="off"
         spellCheck={false}
@@ -332,7 +332,7 @@ function Espera({ no: noEsta, falla, buscando, encargada }: { no: boolean; falla
         <Trazo d={no ? 'alerta' : 'lector'} />
       </div>
       <h1 style={{ margin: 0, fontSize: 'clamp(30px, 4.6vw, 60px)', letterSpacing: '-0.03em', maxWidth: '18ch', textWrap: 'balance' }}>
-        {encargada ? 'Escaneá la prenda para ver su ubicación' : falla ? 'No pudimos consultar el precio' : no ? 'No encontramos esta prenda' : buscando ? 'Buscando…' : 'Escaneá una prenda para ver su precio'}
+        {encargada ? 'Escaneá el producto para ver su ubicación' : falla ? 'No pudimos consultar el precio' : no ? 'No encontramos este producto' : buscando ? 'Buscando…' : 'Escaneá un producto para ver su precio'}
       </h1>
       <p style={{ margin: 0, fontSize: 'clamp(16px, 1.8vw, 24px)', color: color.mut }}>{falla ? 'Probá de nuevo en un momento o consultá en caja.' : no ? 'Consultá en caja y te ayudamos.' : 'Acercá la etiqueta al lector.'}</p>
     </div>
