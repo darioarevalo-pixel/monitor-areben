@@ -221,7 +221,7 @@ describe('api/_repo-armado.js', () => {
       const r = await correr({ action: 'transferir', id: 'ra1', escaneos: { '10_3': 1 } })
       expect(r.code).toBe(200)
       expect(llamadasGN).toHaveLength(0)
-      expect(corte.documentos[0]).toMatchObject({ linea: 'zattia', desde: 'deposito', hacia: 'local', recibir: 'al_armar' })
+      expect(corte.documentos[0]).toMatchObject({ linea: 'zattia', desde: 'deposito', hacia: 'local', recibir: 'en_destino' })
       expect(tabla[0]).toMatchObject({ estado: 'transferido' })
     })
     it('el corte de OTRA línea de la base (Stunned) ⛔ saca a Zattia de GN', async () => {
