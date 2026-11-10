@@ -180,8 +180,12 @@ portal hasta F5, cuánto queda GN en sólo-lectura.
   Oráculo: `tests/caja-promos-llevando.test.ts`. Una funda habilita UN templado (el más caro); las fundas
   de la escalera, de oferta o con descuento a mano habilitan igual; un templado ⛔ se habilita a sí mismo.
 - La de BDI: 15 % · VIDRIOS TEMPLADOS · llevando FUNDAS menos los mismos 4 de la escalera.
-- ⚠️ TEMPLADO 9D y TEMPLADO 9D ANTIESPIA PREMIUM (despublicados en TN) están en FUNDAS y ⛔ en los excluidos de
-  la escalera: si se venden en el local, cuentan como funda en la escalera.
+- 🔑 Bruno (10-nov): **un templado por funda** (2 fundas ⇒ 2 templados) y **los templados quedan excluidos de la
+  escalera también en el local**. 🏁 Cargado ese día en `bdi-escalera-nov26`: + TEMPLADO 9D (679952), 9D ANTIESPIA
+  (720653), 9D ANTIESPIA PREMIUM (679954), VIDRIO TEMPLADO PREMIUM AUTOMATICO (1128872), TEMPLADO CAMARA ACRILICO
+  MAYORISTA (320990), TEMPLADO COMUN (237784). Verificado releyendo la config: 2 fundas + TEMPLADO 9D ⇒ 15 % sólo a las fundas.
+- ▶️ Sin decidir: los PROTECTORES DE CÁMARA STRASS / METALIZADO / LISO (y los de la Caja 936640, 936639) viven en
+  FUNDAS en TN y ⛔ están excluidos: cuentan como funda en la escalera (en la web también).
 
 ## ▶️ CAJA: LA NOTA EN GN PARA UBICAR UNA VENTA — 14-oct-2026 (Bruno)
 - Pasó: un 429 de GN dejó la venta 5C65E1EF con ticket «Provisorio»; entró sola a los 2 min como **#30489**
