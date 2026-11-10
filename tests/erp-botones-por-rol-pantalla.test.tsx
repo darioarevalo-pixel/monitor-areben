@@ -21,7 +21,7 @@ const V = (o: Record<string, unknown>) => armarFila({
 }) as FilaVentaLista
 const FILAS_VENTA = [V({})]
 const ficha: FichaDeVenta = {
-  venta: { id: 'v1', numero: 301, marca: 'bdi', tipo: 'venta', estado: 'confirmada', origen: 'caja', canal: 'local', deposito: 'local', total: 18990, prueba: true, ocurridaEn: '2026-10-18T13:40:00Z', cliente: null, subtotal: 18990, usuario: 'camila', registradaEn: '2026-10-18T13:40:00Z', origenRef: null, gnSaleId: null, ventaOriginalId: null },
+  venta: { id: 'v1', numero: 301, marca: 'bdi', tipo: 'venta', estado: 'confirmada', origen: 'caja', canal: 'local', deposito: 'local', total: 18990, prueba: true, ocurridaEn: '2026-10-18T13:40:00Z', cliente: null, subtotal: 18990, usuario: 'camila', registradaEn: '2026-10-18T13:40:00Z', origenRef: 'caja:1', gnSaleId: null, ventaOriginalId: null },
   cliente: null, lineas: [], pagos: [], anulacion: null, facturas: [],
   facturada: false, conNotaDeCredito: false, acreditadaEntera: false, cambios: [], original: null, puedeAnular: null, devolucion: null,
 }
