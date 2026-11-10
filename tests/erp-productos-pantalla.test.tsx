@@ -40,7 +40,9 @@ const leerPrecioDeProducto = vi.fn(async (): Promise<PrecioDeProducto> => precio
 const editarProductoErp = vi.fn(async () => ({ ok: true, cambios: [{ campo: 'nombre', antes: 'TOP SAHARA', despues: 'TOP SAHARA NEGRO' }], desde_gn: true, variante: null, avisos: [] }))
 const editarVarianteErp = vi.fn(async () => ({ ok: true, cambios: [{ campo: 'barcode', antes: '771', despues: '999' }], desde_gn: true, variante: null, avisos: [] }))
 const cargarPrecioCosto = vi.fn(async () => ({ ok: true, futuro: false, aviso: null }))
+let enErp = false
 vi.mock('@/lib/erp/cliente', () => ({
+  leerCorteDeLinea: async () => ({ en_erp: enErp }),
   leerListaDeProductos: () => leerListaDeProductos(),
   leerPrecioDeProducto: () => leerPrecioDeProducto(),
   leerProveedores: async () => ({ proveedores: [{ id: '40', nombre: 'AREBEN', cuit: null }] }),
@@ -160,5 +162,19 @@ describe('la lista de productos', () => {
     await act(async () => {})
     await clic(boton('Cargar precio o costo', filaDe('TOP SAHARA')))
     expect(ficha()!.textContent).toContain('Cargar en el ERP')
+  })
+
+  it('🔴 Precios: el cartel sigue al CORTE (revisión 10-nov: decía «no cambia Tienda Nube» fijo, también ya cortada)', async () => {
+    const { PreciosErp } = await import('@/components/erp/productos/PreciosErp')
+    for (const [corto, dice, noDice] of [[false, 'Mientras Gestión Nube funcione', 'ya vive en el ERP'], [true, 'llega a Tienda Nube en las próximas 2 horas', 'Mientras Gestión Nube funcione']] as const) {
+      enErp = corto
+      host = document.createElement('div'); document.body.appendChild(host)
+      await act(async () => { root = createRoot(host); root.render(<PreciosErp />) })
+      await act(async () => {})
+      expect(todo()).toContain(dice)
+      expect(todo()).not.toContain(noDice)
+      act(() => root?.unmount()); root = null; host.remove()
+    }
+    enErp = false
   })
 })

@@ -93,7 +93,9 @@ export async function buscarVentasDelCambio(store: MarcaErp, texto: string, { gn
     }
   }
   const r = await buscarVentas(store, { q: t, desde: '', hasta: '' })
-  for (const v of r.ventas.filter((x) => x.tipo === 'venta' && x.estado === 'confirmada' && (!lineas || lineas.includes(x.marca)))) {
+  // 🔴 Con la línea cortada (`gn`), una venta del ERP DE PRUEBA es la copia del paralelo de una de GN: cambiarla ⛔ movería el
+  // stock (revisión 10-nov). Se ofrece sólo la de Gestión Nube; el servidor también la frena (`cambiarVentaPropia`).
+  for (const v of r.ventas.filter((x) => x.tipo === 'venta' && x.estado === 'confirmada' && (!lineas || lineas.includes(x.marca)) && !(gn && x.prueba))) {
     filas.push({ clave: `erp-${v.id}`, numero: v.numero, cliente: v.cliente, fecha: v.ocurridaEn, total: v.total, rotulo: 'ERP', prueba: v.prueba, abrir: async () => ventaDeFicha(await leerFichaDeVenta(store, v.id)) })
   }
   return { filas, aviso: filas.length ? null : aviso ?? 'No hay ventas con esa búsqueda.' }

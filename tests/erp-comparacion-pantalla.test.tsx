@@ -15,7 +15,7 @@ const fila = (id: string, sku: string, deps: Record<string, number>, linea = 'za
   linea, deps, estanteria: 0, enPedidos: 0, disponible: 0, gn: null, negativo: false, ultimo: null,
 })
 const FILAS = armarComparacion({
-  marca: 'zattia',
+  cortes: { stunned: '2026-10-28T23:00:00Z' }, marca: 'zattia',
   filas: [fila('1/1', 'Z-1', { local: 1, deposito: 0 }), fila('2/2', 'Z-2', { local: 5, deposito: 0 }), fila('3/3', 'Z-3', { local: 2, deposito: 0 })],
   inventario: [{ product_id: '1', size_id: '1', store_name: 'Local', available_quantity: 4 }, { product_id: '3', size_id: '3', store_name: 'Local', available_quantity: 2 }],
   tn: [{ tienda: 'zattia', variant_id: 1, sku: 'Z-1', barcode: null, stock: 4 }, { tienda: 'zattia', variant_id: 2, sku: 'Z-2', barcode: null, stock: 3 }, { tienda: 'zattia', variant_id: 3, sku: 'Z-3', barcode: null, stock: 2 }],

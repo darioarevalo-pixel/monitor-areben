@@ -17,6 +17,7 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { armarFilasStock, reservadoPorVariante } from '../lib/erp/stock-lista.core.js'
 import { armarComparacion } from '../lib/erp/comparacion.core.js'
+import { SQL_CORTES, cortesDeFilas } from '../lib/erp/corte.core.js'
 import { armarMovimiento } from '../lib/erp/movimientos.core.js'
 import { deArmado, deLibro } from '../lib/erp/transferencias.core.js'
 import { rangoDeDias } from '../lib/erp/venta.core.js'
@@ -178,7 +179,9 @@ async function tiendaNube(pg) {
   const [ml = {}] = (await pg.query(`select max(fecha) as fecha, count(*) filter (where fecha = (select max(fecha) from conciliacion_fila where tipo = 'stock_ml'))::int as n
     from conciliacion_fila where tipo = 'stock_ml'`)).rows
   const nombreTN = (n) => (n && typeof n === 'object' ? n.es ?? Object.values(n)[0] : n) ?? null
+  const cortes = cortesDeFilas((await pg.query(SQL_CORTES)).rows)
   return {
+    cortes,
     tn: tn.map((v) => ({ ...v, nombre: nombreTN(v.nombre) })),
     leidas: Object.fromEntries(lecturas.map((l) => [l.tienda, new Date(l.leida_en).toISOString()])),
     ml: ml.fecha ? { fecha: new Date(ml.fecha).toISOString().slice(0, 10), noCierran: ml.n } : null,
@@ -201,6 +204,6 @@ export async function comparacionConTiendas({ marca }, deps) {
   if (tienda.status) return tienda
   const { reservado } = reservadoPorVariante(pedidos.pedidos || [], inventario)
   const filas = armarFilasStock({ marca, niveles: libro.niveles, ultimos: libro.ultimos, inventario, reservado })
-  const r = armarComparacion({ marca, filas, inventario, tn: tienda.tn })
+  const r = armarComparacion({ marca, filas, inventario, tn: tienda.tn, cortes: tienda.cortes })
   return { filas: r.filas, sinLimite: r.sinLimite, tnLeidas: tienda.leidas, ml: tienda.ml, libroHasta: libro.hasta, pedidosLeidosEn: pedidos.leidaEn ?? null }
 }

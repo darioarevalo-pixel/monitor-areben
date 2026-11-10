@@ -221,12 +221,23 @@ describe('cambio suelto · el pedido al servidor', () => {
 describe('cambio · buscar la venta', () => {
   it('🔴 cada tienda ve SUS ventas (Bruno, 30-oct): mirando Stunned ⛔ salen las de Zattia ni al revés; sin línea (BDI), todas', async () => {
     const cliente = await import('@/lib/erp/cliente')
-    const venta = (id: string, marca: string) => ({ id, numero: Number(id), marca, tipo: 'venta', estado: 'confirmada', origen: 'caja', canal: 'local', deposito: 'local', total: 1000, prueba: true, ocurridaEn: '2026-10-27T12:00:00Z', cliente: null })
+    const venta = (id: string, marca: string) => ({ id, numero: Number(id), marca, tipo: 'venta', estado: 'confirmada', origen: 'caja', canal: 'local', deposito: 'local', total: 1000, prueba: false, ocurridaEn: '2026-10-27T12:00:00Z', cliente: null })
     vi.spyOn(cliente, 'buscarVentas').mockResolvedValue({ ventas: [venta('1', 'zattia'), venta('2', 'stunned')], cortado: false } as never)
     const { buscarVentasDelCambio } = await import('@/components/caja/useCambio')
     expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true, lineas: ['stunned'] })).filas.map((f) => f.numero)).toEqual([2])
     expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true, lineas: ['zattia'] })).filas.map((f) => f.numero)).toEqual([1])
     expect((await buscarVentasDelCambio('zattia', 'ana', { gn: true })).filas.map((f) => f.numero)).toEqual([1, 2])
+  })
+})
+
+describe('cambio · 🔴 la copia DE PRUEBA de una línea cortada ⛔ se ofrece (revisión 10-nov)', () => {
+  it('con `gn` (la línea cortó) se esconde la venta del ERP de prueba; sin corte se sigue ofreciendo', async () => {
+    const cliente = await import('@/lib/erp/cliente')
+    const venta = (id: string, prueba: boolean) => ({ id, numero: Number(id), marca: 'bdi', tipo: 'venta', estado: 'confirmada', origen: 'caja', canal: 'local', deposito: 'local', total: 1000, prueba, ocurridaEn: '2026-11-13T12:00:00Z', cliente: null })
+    vi.spyOn(cliente, 'buscarVentas').mockResolvedValue({ ventas: [venta('1', true), venta('2', false)], cortado: false } as never)
+    const { buscarVentasDelCambio } = await import('@/components/caja/useCambio')
+    expect((await buscarVentasDelCambio('bdi', 'ana', { gn: true, lineas: ['bdi'] })).filas.map((f) => f.numero)).toEqual([2])
+    expect((await buscarVentasDelCambio('bdi', 'ana', { gn: false })).filas.map((f) => f.numero)).toEqual([1, 2])
   })
 })
 
