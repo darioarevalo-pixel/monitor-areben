@@ -8,8 +8,13 @@ describe('ERP › menú y direcciones', () => {
     // Stock 9 → 4 (diseño §9): las nueve de antes son VISTAS de cuatro pestañas.
     const todas = SECCIONES_ERP.flatMap((s) => s.pestanias.flatMap((p) => p.vistas?.map((v) => v.key) ?? [p.key]))
     expect(new Set(todas).size).toBe(todas.length)
-    expect(todas.sort()).toEqual(['ajustes', 'cajas', 'cambio', 'cargar-gasto', 'clientes', 'cobros', 'comparacion', 'conciliacion', 'cuenta-corriente', 'cuentas', 'diferencias', 'estructura', 'factura', 'facturacion', 'gastos', 'ingresos', 'mover', 'movimientos', 'por-producto', 'precios', 'productos', 'proveedores', 'redondeo', 'reglas', 'rutas', 'stock', 'tokens', 'transferencias', 'ventas', 'vincular'])
+    expect(todas.sort()).toEqual(['ajustes', 'cajas', 'cambio', 'cargar-gasto', 'cheques', 'clientes', 'cobros', 'comparacion', 'conciliacion', 'cuenta-corriente', 'cuentas', 'diferencias', 'estructura', 'factura', 'facturacion', 'gastos', 'ingresos', 'mover', 'movimientos', 'por-producto', 'precios', 'productos', 'proveedores', 'redondeo', 'reglas', 'rutas', 'stock', 'tokens', 'transferencias', 'ventas', 'vincular'])
     expect(SECCIONES_ERP.find((s) => s.key === 'stock')!.pestanias.map((p) => p.key)).toEqual(['stock', 'transferencias', 'ajustes', 'diferencias'])
+  })
+
+  it('Cheques es una vista de Cobros, sólo admin', () => {
+    expect(resolverRutaErp(['ventas', 'cobros', 'cheques'])).toMatchObject({ pestania: 'cobros', vista: 'cheques', valida: true })
+    expect(SECCIONES_ERP.find((s) => s.key === 'ventas')!.pestanias.find((p) => p.key === 'cobros')!.vistas!.find((v) => v.key === 'cheques')!.permiso).toBe('configurar')
   })
 
   it('Stock: la vista va en la dirección y las pestañas viejas caen en su lugar', () => {

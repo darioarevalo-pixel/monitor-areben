@@ -34,7 +34,7 @@ export async function datosParaCargar({ marca }, deps) {
   for (const l of LINEAS[marca]) reglas[l] = deps.reglasDeCaja ? await deps.reglasDeCaja(l).catch(() => null) : null
   return deps.conMotor(marca, 'Cargar venta', async (pg) => {
     const cuentas = (await pg.query(
-      `select id::text, nombre, medio, marca, gn_cuenta_id from cuenta_cobro where marca = any($1) and activa and medio <> 'saldo' order by marca, nombre`,
+      `select id::text, nombre, medio, marca, gn_cuenta_id from cuenta_cobro where marca = any($1) and activa and medio not in ('saldo', 'cheque') order by marca, nombre`,
       [LINEAS[marca]])).rows
     const canales = (await pg.query('select id from canal order by id')).rows.map((r) => r.id)
     const [{ ok } = { ok: false }] = (await pg.query(`select pg_get_constraintdef(oid) like '%manual%' as ok from pg_constraint where conname = 'venta_origen_check'`)).rows

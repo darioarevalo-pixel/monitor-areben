@@ -198,6 +198,12 @@ Núcleo `lib/erp/facturacion-lista.core.js`; el Nº, la clienta y las facturas d
   ⛔ son cobros: filas de clase `entrega` SÓLO en su vista, fuera de «Todos» y del cobrado; tarjeta «Contraentrega» con cuántas y
   desde cuándo; ⛔ dependen del período. El cierre (al marcar entregado en Envíos, ⛔ conectado todavía: lo hace A) sí es un cobro y
   llega por `cobrosDe` el día que se cerró. En «Cargar venta» la cuenta se ve «Contraentrega (lo cobra el cadete)».
+- 🔑 **`erp › Ventas › Cobros` · vista «Cheques»** (Bruno 10-nov; motor sql/079, `cuenta/cheque.mjs`): la CARTERA de cheques recibidos, SÓLO
+  ADMIN (vista y acciones `configurar`; «Cobrar» con `cheque` también, chequeado en `api/_erp.js`). 🔑 Recibir = «Cobrar» con la cuenta «Cheque»
+  (`useChequeDelCobro` en los TRES «Cobrar»): baja la deuda AL RECIBIRLO y queda en cartera SIN cuenta real. Depositar (desde la fecha de pago,
+  a la cuenta que se ELIGE) · Marcar acreditado · Marcar rechazado (la deuda VUELVE: anula su pago a cuenta). ⛔ endoso («más adelante»).
+  🔴 La cuenta «Cheque» ⛔ paga una venta (el motor la rechaza; «Cargar venta» ⛔ la ofrece). `api/_erp-cheques.js`, `lib/erp/cheque.core.js`,
+  `components/erp/ventas/ChequesErp.tsx`, `tests/erp-cheques.test.ts`.
 - 🔑 **`erp › Ventas › Cobros` · vista «Entrega sin cobrar»** (🎨 26-oct, Resto): las entregas de Logística cuyo ÚLTIMO intento en `entrega_cobro` quedó `pendiente`
   (falta la cuenta de ese medio, una variante…). Sale del GET de Cobros como `entregasPendientes` (`entregasSinCobro` en `api/_erp-cobros.js`, SQL sobre
   `entrega`/`entrega_cobro` del motor sql/039; base sin la tabla ⇒ vacía; ⛔ depende del período). Filas de clase `sin_cobrar` SÓLO en su vista (fuera de «Todos»

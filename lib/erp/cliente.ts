@@ -554,7 +554,7 @@ export const corregirMedioDeVenta = (marca: MarcaErp, ventaId: string, c: { medi
   pedir<{ ok: true; correccion: MedioCorregido; avisos: string[] }>(post({ accion: 'corregir-medio', marca, ventaId, ...c }), '', 'No se pudo corregir la forma de pago.')
 export const guardarNotaDeVenta = (marca: MarcaErp, ventaId: string, texto: string, reemplazaId: string | null) =>
   pedir<{ ok: true }>(post({ accion: 'nota-venta', marca, ventaId, texto, reemplazaId }), '', 'No se pudo guardar la nota.')
-export const cobrarVentaErp = (marca: MarcaErp, c: { ventaId: string; clienteId: string; linea: string; monto: number; saldo: number; cuenta: string; cuentaReal?: string; canal: string | null; fecha: string; ref: string; prueba: boolean }) =>
+export const cobrarVentaErp = (marca: MarcaErp, c: { ventaId: string; clienteId: string; linea: string; monto: number; saldo: number; cuenta: string; cuentaReal?: string; canal: string | null; fecha: string; ref: string; prueba: boolean; cheque?: ChequeACobrar }) =>
   pedir<{ ok: true; cuenta: unknown }>(post({ accion: 'cobrar-venta', marca, ...c }), '', 'No se pudo registrar el cobro.')
 
 // ── ERP › Stock › Stock, con el molde (lista + ficha; `api/_erp-stock.js`, núcleo `lib/erp/stock-lista.core.js`) ──
@@ -645,6 +645,24 @@ export type ReintentoDeEntregas = { ok: true; revisadas: number; registradas: nu
 export const reintentarEntregas = (marca: MarcaErp, linea: string) =>
   pedir<ReintentoDeEntregas>(post({ accion: 'reintentar-entregas', marca, linea }), '', 'No se pudo reintentar el cobro de las entregas.')
 /** De UNA línea (`linea` = la tienda del menú): en Zattia el servidor ⛔ suma las dos (Bruno, 30-oct). */
+// ── ERP › Ventas › Cobros › Cheques (sólo admin; `api/_erp-cheques.js`, núcleo `lib/erp/cheque.core.js`) ──
+export type ChequeACobrar = { tipo: 'fisico' | 'echeq'; numero: string; banco: string; librador: string; vence_el: string; librador_cuit?: string }
+export type EstadoCheque = 'en_cartera' | 'depositado' | 'acreditado' | 'rechazado' | 'anulado'
+export type Cheque = {
+  id: string; cliente_id: string; cliente: string | null; tipo: 'fisico' | 'echeq'; numero: string; banco: string; librador: string; librador_cuit: string | null
+  emitido_el: string | null; vence_el: string; monto: number; estado: EstadoCheque; pago_ref: string; usuario: string; creado_en: string
+  cuenta_real_id: string | null; cuenta_real: string | null; cuenta_real_banco: string | null; cuenta_real_titular: string | null
+  depositado_en: string | null; acreditado_en: string | null; rechazado_en: string | null; motivo_rechazo: string | null
+}
+export type CarteraDeCheques = {
+  hoy: string; prueba: boolean; cheques: Cheque[]; totales: Record<EstadoCheque, { cantidad: number; monto: number }>
+  cuentasDeposito: CuentaRealDeCobro[]
+}
+export const leerCheques = (marca: MarcaErp, linea: string, prueba: boolean) =>
+  pedir<CarteraDeCheques>(null, `&vista=cheques&marca=${marca}&linea=${linea}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudieron leer los cheques.')
+export const accionDeCheque = (marca: MarcaErp, a: { accion: 'cheque-depositar' | 'cheque-acreditar' | 'cheque-rechazar'; linea: string; chequeId: string; cuentaReal?: string; motivo?: string; fecha?: string }) =>
+  pedir<{ ok: true; cheque: { id: string; estado: EstadoCheque } }>(post({ marca, ...a }), '', 'No se pudo registrar el cheque.')
+
 export const leerCobros = (marca: MarcaErp, linea: string, desde: string, hasta: string, prueba: boolean) =>
   pedir<CobrosDelPeriodo>(null, `&vista=cobros&marca=${marca}&linea=${linea}&desde=${desde}&hasta=${hasta}&prueba=${prueba ? 1 : 0}&nc=${Date.now()}`, 'No se pudieron leer los cobros.')
 
@@ -722,6 +740,8 @@ export const cobrarCuentaErp = (marca: MarcaErp, c: {
   operacion?: string; operacionRepetida?: boolean
   /** Cargado DESDE un pedido: esa parte va a esa venta; lo que sobra, a lo más viejo (regla del 18-oct). */
   imputar?: Array<{ ventaId: string; monto: number }>
+  /** Con la cuenta «Cheque» (sólo admin): sus datos; baja la deuda y queda en cartera (motor sql/079). */
+  cheque?: ChequeACobrar
 }) =>
   pedir<{ ok: true; cuenta: unknown; yaExistia?: boolean }>(post({ accion: 'cobrar-cuenta', marca, ...c }), '', 'No se pudo registrar el cobro.')
 /** Anular un pago a cuenta cargado mal, con el motivo (sólo Admin): la deuda vuelve. */

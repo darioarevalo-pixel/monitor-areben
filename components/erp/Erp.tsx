@@ -54,6 +54,7 @@ import { VentasErp } from './ventas/VentasErp'
 import { PorProductoErp } from './ventas/PorProductoErp'
 import { CajasErp } from './ventas/CajasErp'
 import { CobrosErp } from './ventas/CobrosErp'
+import { ChequesErp } from './ventas/ChequesErp'
 import { GastosErp } from './ventas/GastosErp'
 import { CargarGasto } from './ventas/CargarGasto'
 import { ClientesErp } from './clientes/ClientesErp'
@@ -93,7 +94,8 @@ export const SECCIONES_ERP: Seccion[] = [
     key: 'ventas', titulo: 'Ventas', icono: 'M6 2l-2 4v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6l-2-4z M4 6h16 M16 10a4 4 0 0 1-8 0',
     pestanias: [
       { key: 'ventas', label: 'Ventas', vistas: [{ key: 'ventas', label: 'Ventas' }, { key: 'por-producto', label: 'Por producto' }] },
-      { key: 'cobros', label: 'Cobros' }, { key: 'cajas', label: 'Cajas' },
+      // Los cheques recibidos (motor sql/079): sólo Admin («los cargan los admin, administración no usa cheques», Bruno 10-nov).
+      { key: 'cobros', label: 'Cobros', vistas: [{ key: 'cobros', label: 'Cobros' }, { key: 'cheques', label: 'Cheques', permiso: 'configurar' }] }, { key: 'cajas', label: 'Cajas' },
       // Facturación: la lista del mes es de la oficina; «Facturar una venta» (alguien pide factura en el local), de quien vende (Bruno 30-oct).
       { key: 'facturacion', label: 'Facturación', permiso: ['facturacion', 'facturar-venta'], vistas: [{ key: 'facturacion', label: 'Facturas', permiso: 'facturacion' }, { key: 'factura', label: 'Facturar una venta', oculta: true, permiso: 'facturar-venta' }] },
       // La lista de gastos: sólo Admin (Bruno 30-oct). Cargar un gasto (caja chica): Local y Administración, cada uno ve lo suyo.
@@ -459,7 +461,8 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
             {/* `key`: al cambiar de marca se cierra la ficha abierta (era de la otra marca) y se vuelve a leer. */}
             {vista === 'ventas' && <VentasErp key={`${marca}/${pedidoN}`} irACaja={(que, ventaId) => { if (que === 'cambio') { ir('ventas', 'cambio'); return } setAFacturar(ventaId ?? null); ir('ventas', 'facturacion', 'factura') }} abrir={aAbrir?.tipo === 'venta' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
             {vista === 'por-producto' && <PorProductoErp key={marca} />}
-            {pestania === 'cobros' && <CobrosErp
+            {vista === 'cheques' && <ChequesErp key={marca} />}
+            {vista === 'cobros' && <CobrosErp
               key={marca}
               abrirVenta={(v) => { setPedidoN((n) => n + 1); setAAbrir({ tipo: 'venta', id: v.id, numero: v.numero, periodo: periodoDeVenta(v.cuando, diaArgentino(Date.now())) ?? 'mes' }); ir('ventas', 'ventas') }}
               abrirCliente={(nombre) => { setPedidoN((n) => n + 1); setAAbrir({ tipo: 'cliente', doc: null, nombre }); ir('clientes', 'clientes') }}

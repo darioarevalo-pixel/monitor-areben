@@ -71,6 +71,8 @@ function validarPagos(pagos, conf, marca, total, { base = null } = {}) {
     if (base != null && !cierra(f.base - f.descuento + f.redondeo, f.monto)) {
       return { error: fallo('PAGOS_NO_CIERRAN', `El pago ${i + 1}: ${f.base} − ${f.descuento} + ${f.redondeo} no da ${f.monto}`, `pagos[${i}].monto`) }
     }
+    // El cheque entra por «Cobrar» (un pago a cuenta, sql/079), ⛔ como pago de una venta.
+    if (cuenta.medio === 'cheque') return { error: fallo('CUENTA_DESCONOCIDA', 'El cheque se carga desde «Cobrar», como un pago a la cuenta del cliente', `pagos[${i}].cuenta`) }
     if (cuenta.medio === 'saldo') usa_saldo += f.monto
     if (cuenta.medio === 'cuenta') {
       if (!(f.monto > 0)) return { error: fallo('ENTRADA_INVALIDA', 'Lo que queda a cuenta es un monto mayor a 0', `pagos[${i}].monto`) }

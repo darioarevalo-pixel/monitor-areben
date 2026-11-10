@@ -22,6 +22,7 @@ import { Button, CopyButton, Field, Input, Modal, Notice, Select } from '@/compo
 import { color, font, radius, space } from '@/components/ui/tokens'
 import { CampoCuentaReal } from '@/components/erp/ventas/CampoCuentaReal'
 import { pideCuentaReal } from '@/lib/erp/cobro-destino.core.js'
+import { useChequeDelCobro } from '@/components/erp/ventas/CamposCheque'
 import { anotarWhatsappPanel, cobrarCuentaErp, leerBcraPanel, leerCuentaPanel, leerCuentasCorrientes, sacarWhatsappPanel, type BcraDelPanel, type CuentaDelMotor, type CuentaPanel } from '@/lib/erp/cliente'
 import { mensajeDeSaldo, repartirPago, textoSaldo } from '@/lib/erp/cuenta-panel.core.js'
 import { ResumenBcra } from './Bcra'
@@ -246,13 +247,15 @@ export function HojaCargarPago({ cuenta, pedido = null, onCerrar, onHecho }: {
   const nombre = (r: string) => (r === refPedido && pedido ? `Pedido ${pedido.numero}` : pendientes.find((p) => p.ref === r)?.nombre || 'Compra')
   const delPedido = refPedido ? pendientes.find((p) => p.ref === refPedido)?.pendiente ?? 0 : 0
   const despues = saldo - (n ?? 0)
-  const pide = pideCuentaReal({ cuenta: cuenta.cuentas.find((c) => String(c.id) === entro), rutas: cuenta.rutas, cuentasReales: cuenta.cuentasReales, marca: 'bdi', canal: 'mayorista', fecha })
+  const chq = useChequeDelCobro('bdi', cuenta.cuentas, entro)
+  const pide = pideCuentaReal({ cuenta: chq.cuentas.find((c) => String(c.id) === entro), rutas: cuenta.rutas, cuentasReales: cuenta.cuentasReales, marca: 'bdi', canal: 'mayorista', fecha })
   const faltaReal = pide && !cuentaReal
 
   async function confirmar(igual = false) {
     if (n == null || n <= 0) return setError('Poné cuánto pagó.')
     if (!entro) return setError('Elegí a qué cuenta entró.')
     if (faltaReal) return setError('Elegí a qué cuenta entró la plata.')
+    if (chq.falta) return setError(chq.falta)
     setTrabajando(true)
     setError(null)
     try {
@@ -260,6 +263,7 @@ export function HojaCargarPago({ cuenta, pedido = null, onCerrar, onHecho }: {
         clienteId: cuenta.cliente.id, linea: 'bdi', monto: n, cuenta: entro, ...(pide ? { cuentaReal } : {}), fecha, ref, prueba: cuenta.prueba,
         ...(operacion.trim() ? { operacion: operacion.trim(), ...(igual ? { operacionRepetida: true } : {}) } : {}),
         ...(pedido && delPedido > 0 ? { imputar: [{ ventaId: pedido.ventaId, monto: Math.min(n, delPedido) }] } : {}),
+        ...chq.extra,
       })
       setRepetida(null)
       onHecho(r.yaExistia ? 'Ese pago ya estaba cargado.' : `Pago de ${plata(n)} cargado. ${despues > 0 ? `Ahora debe ${plata(despues)}.` : despues < 0 ? `Le quedan ${plata(-despues)} a favor.` : 'Quedó al día.'}`)
@@ -279,7 +283,7 @@ export function HojaCargarPago({ cuenta, pedido = null, onCerrar, onHecho }: {
         <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
         {repetida
           ? <Button tone="warning" disabled={trabajando} onClick={() => void confirmar(true)}>Cargar igual</Button>
-          : <Button tone="success" disabled={trabajando || n == null || n <= 0 || !entro || faltaReal} onClick={() => void confirmar()}>Confirmar pago</Button>}
+          : <Button tone="success" disabled={trabajando || n == null || n <= 0 || !entro || faltaReal || !!chq.falta} onClick={() => void confirmar()}>Confirmar pago</Button>}
       </>}
     >
       <p style={{ marginTop: 0, color: color.mut }}>{cuenta.cliente.nombre} · {saldo > 0 ? `debe ${plata(saldo)}` : saldo < 0 ? `${plata(-saldo)} a favor` : 'al día'}{cuenta.prueba ? ' · de prueba' : ''}</p>
@@ -299,13 +303,14 @@ export function HojaCargarPago({ cuenta, pedido = null, onCerrar, onHecho }: {
         <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
           <Field label="Entró a" style={{ flex: '1 1 180px' }}>
             <Select value={entro} onChange={(e) => setEntro(e.target.value)}>
-              <option value="">{cuenta.cuentas.length ? 'Elegí la cuenta' : 'No hay cuentas para cobrar'}</option>
-              {cuenta.cuentas.map((c) => <option key={String(c.id)} value={String(c.id)}>{c.nombre}</option>)}
+              <option value="">{chq.cuentas.length ? 'Elegí la cuenta' : 'No hay cuentas para cobrar'}</option>
+              {chq.cuentas.map((c) => <option key={String(c.id)} value={String(c.id)}>{c.nombre}</option>)}
             </Select>
           </Field>
           <Field label="Fecha"><Input type="date" value={fecha} max={hoyDia} onChange={(e) => setFecha(e.target.value)} /></Field>
         </div>
         {pide && <CampoCuentaReal cuentas={cuenta.cuentasReales ?? []} valor={cuentaReal} onCambio={setCuentaReal} />}
+        {chq.campos}
         <Field label="N° de operación (opcional)">
           <Input value={operacion} onChange={(e) => { setOperacion(e.target.value); setRepetida(null) }} placeholder="El del comprobante" />
         </Field>

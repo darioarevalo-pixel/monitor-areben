@@ -10,6 +10,7 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { baseFacturacion } from './_facturacion.js'
 import { rangoDeDias } from '../lib/erp/venta.core.js'
+import { chequeDelCobro } from './_erp-cheques.js'
 import { armarFila, etapaDePedido, ventasDeTnSinNombre } from '../lib/erp/ventas-lista.core.js'
 import { ADMIN } from '../lib/erp/pedidos-tn.core.js'
 import { configPg } from '../lib/pg.core.js'
@@ -371,6 +372,9 @@ export async function cobrarVentaErp({ marca, body, usuario }, deps = {}) {
   if (!body?.cuenta) return { status: 400, error: 'Elegí la cuenta.' }
   if (!/^[0-9a-f-]{8,}$/i.test(String(body?.ref || ''))) return { status: 400, error: 'Falta la clave del cobro.' }
   if (body?.cuentaReal != null && !UUID.test(String(body.cuentaReal))) return { status: 400, error: 'La cuenta donde entró la plata no es válida.' }
+  // El CHEQUE (sql/079): con la cuenta «Cheque», sus datos; el motor los valida (sólo admin: lo chequea `api/_erp.js`).
+  const ch = chequeDelCobro(body)
+  if ('error' in ch) return { status: 400, error: ch.error }
   const m = deps.cuenta || await moduloDelMotor('cuenta')
   if (typeof m?.registrarPagoACuenta !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }
   const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
@@ -378,6 +382,7 @@ export async function cobrarVentaErp({ marca, body, usuario }, deps = {}) {
     const r = await m.registrarPagoACuenta(db, {
       cliente_id: body.clienteId, marca: body.linea || marca, monto, cuenta: String(body.cuenta), origen_ref: `erp-cobro:${body.ref}`,
       ...(body.cuentaReal ? { cuenta_real: String(body.cuentaReal) } : {}),
+      ...(ch.cheque ? { cheque: ch.cheque } : {}),
       usuario, prueba: body.prueba !== false, ...(body.canal ? { canal: String(body.canal) } : {}), imputar: [{ venta_id: body.ventaId, monto: Math.min(monto, Number(body.saldo) || monto) }],
       ...(body.fecha ? { ocurrida_en: `${body.fecha}T15:00:00.000Z` } : {}),
     })
@@ -403,6 +408,8 @@ export async function cobrarCuentaErp({ marca, body, usuario }, deps = {}) {
   if (operacion.length > 60) return { status: 400, error: 'El número de operación es demasiado largo.' }
   const imputar = body?.imputar == null ? [] : body.imputar
   if (!Array.isArray(imputar) || imputar.length > 20 || imputar.some((x) => !UUID.test(String(x?.ventaId || '')) || !(Number(x?.monto) > 0))) return { status: 400, error: 'Imputación inválida.' }
+  const ch = chequeDelCobro(body)
+  if ('error' in ch) return { status: 400, error: ch.error }
   const m = deps.cuenta || await moduloDelMotor('cuenta')
   if (typeof m?.registrarPagoACuenta !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }
   const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
@@ -410,6 +417,7 @@ export async function cobrarCuentaErp({ marca, body, usuario }, deps = {}) {
     const r = await m.registrarPagoACuenta(db, {
       cliente_id: body.clienteId, marca: body.linea || marca, monto, cuenta: String(body.cuenta), origen_ref: `erp-cobro-cuenta:${body.ref}`,
       ...(body.cuentaReal ? { cuenta_real: String(body.cuentaReal) } : {}),
+      ...(ch.cheque ? { cheque: ch.cheque } : {}),
       usuario, prueba: body.prueba !== false, ...(body.canal ? { canal: String(body.canal) } : {}),
       ...(body.fecha ? { ocurrida_en: `${body.fecha}T15:00:00.000Z` } : {}),
       ...(operacion ? { operacion, ...(body.operacionRepetida === true ? { operacion_repetida: true } : {}) } : {}),

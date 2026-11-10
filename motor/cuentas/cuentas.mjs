@@ -16,6 +16,8 @@ export function medioDeCuenta(c) {
   if (c.medio === 'cuenta') return 'cuenta'
   // «Contraentrega» (sql/032): tampoco ⇒ la plata entra al cerrarla, con su propio medio.
   if (c.medio === 'entrega') return 'entrega'
+  // «Cheque» (sql/079): entra a cartera ⇒ ⛔ ruta ni cuenta real al recibirlo (se elige al depositarlo).
+  if (c.medio === 'cheque') return 'cheque'
   if (c.medio !== 'otro') return null
   const nombre = String(c.nombre ?? '')
   if (/pago ?nube/i.test(nombre)) return 'pagonube'
