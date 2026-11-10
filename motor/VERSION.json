@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "eb9dda9cc88e9941ebdef4c02ad26509018cb7ff",
-  "traido_en": "2026-11-10T12:00:24.932Z",
+  "commit": "edc4b0a867381918bfd208825cc5478a395156a4",
+  "traido_en": "2026-11-10T19:35:23.432Z",
   "archivos": {
     "alerta.mjs": "8c4ea3f813cdd8d8644e9ed0a426d7c6202618971249eca0b41f780e40d904f6",
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
@@ -33,6 +33,7 @@
     "ext/contrato.mjs": "49d8ec2b769cd607beea1b8373cdf17b0aa97341afa1e3acf017308c9fc487ec",
     "ext/tokens.mjs": "d2f44970dfa9097e560ce38385515e6976e9aad1a730cbaa1e481611bf44a2d2",
     "gasto/gasto.mjs": "97f5e1fdb81642f2ce68c7cb19cf2ff1db9bf96e119b0e96254f23250ea30743",
+    "invariantes.mjs": "f53f71b6affafa0d432b649090d2fe38abeb735ca63fbf35839494d5a1edaa90",
     "llave-corte.mjs": "2c06cdffdf3778e1e18b39a48da6d181158f04807b57554d53eb0e197e3eab82",
     "ml/orden.mjs": "d326aa82f21fefded84824dd0f64a40e217a614a18f1408163c95a8005585f39",
     "ml/stock.mjs": "909e7e0316030c267113776018f8de2f2afc73d394c983d513ad9d7419c0385f",

@@ -40,6 +40,7 @@ import { RecepcionesStock } from './stock/RecepcionesStock'
 import { ComparacionStock } from './stock/ComparacionStock'
 import { DiferenciasDia } from './DiferenciasDia'
 import { ConciliacionDia } from './ConciliacionDia'
+import { ChequeoLibro } from './ChequeoLibro'
 import { AjustesStock } from './AjustesStock'
 import { ListasJuntas, type AlContar } from './ListasJuntas'
 import { ProductosErp } from './productos/ProductosErp'
@@ -110,7 +111,7 @@ export const SECCIONES_ERP: Seccion[] = [
       { key: 'stock', label: 'Stock', vistas: [{ key: 'stock', label: 'Productos' }, { key: 'movimientos', label: 'Movimientos' }] },
       { key: 'transferencias', label: 'Transferencias', vistas: [{ key: 'transferencias', label: 'Transferencias' }, { key: 'mover', label: 'Mover y recibir' }] },
       { key: 'ajustes', label: 'Ingresos y ajustes', junta: 'Tipo', vistas: [{ key: 'ajustes', label: 'Ajustes' }, { key: 'ingresos', label: 'Ingresos de mercadería' }] },
-      { key: 'diferencias', label: 'Diferencias', junta: 'Contra qué', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre', permiso: 'configurar' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }] },
+      { key: 'diferencias', label: 'Diferencias', junta: 'Contra qué', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre', permiso: 'configurar' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }, { key: 'chequeo', label: 'Chequeo de movimientos', permiso: 'configurar' }] },
     ],
   },
   { key: 'productos', titulo: 'Productos', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }, { key: 'vincular', label: 'Vincular', permiso: 'configurar' }] },
@@ -324,6 +325,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
     if (k === 'comparacion') return <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'diferencias', 'conciliacion')} alContar={alContar} enErp={lineaEnErp} />
     if (k === 'conciliacion') return <ConciliacionDia key={`${marca}/${lineaVista}`} ajustar={ajustarPrenda} alContar={alContar} />
     if (k === 'diferencias') return <DiferenciasDia key={marca} ajustar={ajustarPrenda} alContar={alContar} />
+    if (k === 'chequeo') return <ChequeoLibro key={marca} alContar={alContar} />
     if (k === 'cuentas') return <CuentasErp key={marca} ir={irAPieza} alContar={alContar} />
     if (k === 'rutas') return <RutasCobro key={`${marca}/${lineaVista}`} ir={irAPieza} alContar={alContar} />
     return null

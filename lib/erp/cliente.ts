@@ -1167,3 +1167,10 @@ export const leerEmpujesStock = (tienda: TiendaErp) =>
 /** Pide el envío (lo corre la cola del motor en el minuto). `yaEsperaba` = había uno esperando y se sumó a ése. */
 export const mandarStockATN = (tienda: TiendaErp) =>
   pedir<{ ok: true; id: number; yaEsperaba: boolean }>(post({ accion: 'mandar-stock', marca: tienda }), '', 'No se pudo pedir el envío de stock.')
+
+/** «Chequeo de movimientos»: las reglas de los movimientos de stock (las nocturnas del motor), corridas en vivo para la base de la marca. */
+export type EstadoReglaLibro = 'falla' | 'aviso' | 'omitida' | 'ok'
+export type ReglaDelLibro = { id: string; titulo: string; estado: EstadoReglaLibro; total: number; ejemplos: Array<{ ref: string; detalle: string }>; porque: string | null }
+export type ChequeoDelLibro = { marca: MarcaErp; revisadoEn: string; reglas: ReglaDelLibro[]; cuenta: Record<EstadoReglaLibro, number> }
+export const leerChequeoDelLibro = (marca: MarcaErp) =>
+  pedir<ChequeoDelLibro>(null, `&vista=reglas-libro&marca=${marca}&nc=${Date.now()}`, 'No se pudieron revisar los movimientos de stock.')

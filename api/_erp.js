@@ -89,6 +89,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario, padronParaEncargadas } from './_auth.js'
 import { esAdmin, perfilVistoComo, permisoErpDe, permisosErp, puedeErp } from '../lib/permisos.core.js'
+import { reglasDelLibro } from './_erp-chequeo-libro.js'
 import { ETIQUETA_LINEA, baseDeLinea, skuParaLinea } from '../lib/lineas.core.js'
 import { lineasEnErp } from '../lib/erp/corte.core.js'
 import { lineaDelRenglon, marcaDelCambio } from '../lib/caja/corte-caja.core.js'
@@ -1803,6 +1804,11 @@ export default async function handler(req, res) {
       const f = { 'guardar-regla': guardarReglaErp, 'sembrar-reglas': sembrarReglasErp, 'simular-reglas': simularReglasErp, 'prender-caja-reglas': prenderCajaErp }[body.accion]
       const r = await f({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error, campo: r.campo ?? null } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'reglas-libro') {
+      const r = await reglasDelLibro({ marca: String(req.query.marca || '') }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
     if (req.method === 'GET' && req.query.vista === 'interruptores') {
