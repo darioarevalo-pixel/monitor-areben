@@ -84,9 +84,9 @@ describe('El servidor', () => {
   const conMotor = (filas: Record<string, unknown[]>) => async (_m: string, _t: string, fn: (pg: unknown) => unknown) =>
     fn({ query: async (sql: string) => ({ rows: sql.includes('to_regclass') ? [{ hay: filas.hay ?? true }] : sql.includes('from cheque') ? filas.cheque ?? [] : [] }) })
   const m = () => ({
-    depositarCheque: vi.fn(async () => ({ ok: true, cheque: { id: CH, estado: 'depositado' } })),
-    acreditarCheque: vi.fn(async () => ({ ok: true, cheque: { id: CH, estado: 'acreditado' } })),
-    rechazarCheque: vi.fn(async () => ({ ok: true, cheque: { id: CH, estado: 'rechazado' }, cuenta: 1000 })),
+    depositarCheque: vi.fn(async (_pg: unknown, _e: Record<string, unknown>) => ({ ok: true, cheque: { id: CH, estado: 'depositado' } })),
+    acreditarCheque: vi.fn(async (_pg: unknown, _e: Record<string, unknown>) => ({ ok: true, cheque: { id: CH, estado: 'acreditado' } })),
+    rechazarCheque: vi.fn(async (_pg: unknown, _e: Record<string, unknown>) => ({ ok: true, cheque: { id: CH, estado: 'rechazado' }, cuenta: 1000 })),
   })
   const delCheque = { cheque: [{ empresa_id: 'areben' }] }
   it('depositar exige la cuenta y la manda; la fecha va al mediodía de Argentina', async () => {
