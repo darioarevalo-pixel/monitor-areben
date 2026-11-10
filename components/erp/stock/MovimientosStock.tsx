@@ -29,6 +29,7 @@ import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaPrenda } from './FichaPrenda'
 import type { PrendaAAjustar } from './StockErp'
 import { useLineaErp } from '@/lib/erp/linea-erp'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
 type Prefs = { orden: string[]; visibles: string[] }
@@ -57,6 +58,7 @@ function bajarCsv(filas: FilaMovimiento[], marca: MarcaErp, desde: string, hasta
 export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => void }) {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  const ajusta = usePuedeErp(marca)('ajustar')
   const usuario = perfil?.name ?? null
   const lista = 'erp-movimientos'
   const [periodo, setPeriodo] = useState('hoy')
@@ -121,7 +123,7 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
   const acciones = (f: FilaMovimiento) => {
     const menu: AccionMenu[] = [
       { key: 'ficha', label: 'Abrir la ficha del producto', icono: 'abrir', onClick: () => setFicha(f) },
-      { key: 'ajustar', label: 'Ajustar el producto', icono: 'conteo', onClick: () => ajustar(aAjustar(f)), hint: 'Abre «Nuevo ajuste» con este producto.' },
+      ...(ajusta ? [{ key: 'ajustar', label: 'Ajustar el producto', icono: 'conteo' as const, onClick: () => ajustar(aAjustar(f)), hint: 'Abre «Nuevo ajuste» con este producto.' }] : []),
     ]
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones del movimiento de ${f.nombre} ${f.talleNombre}`} vertical alinear="izquierda" />
   }

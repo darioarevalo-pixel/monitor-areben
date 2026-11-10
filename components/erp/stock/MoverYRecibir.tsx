@@ -20,6 +20,7 @@ import { Button, EmptyState, Field, Input, Notice, PasoCantidad, SectionCard, Se
 import { toneTokens } from '@/components/ui/tokens'
 import { usePantallaAngosta } from '@/lib/movil'
 import { deLaTienda, useTiendaErp } from '@/lib/erp/linea-erp'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { ListaTrabajo, type ColumnaLista, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { BOTON_PIE, DatoFicha, DatosFicha, FichaCostado, PieFijo } from '@/components/ui/FichaCostado'
 import { BuscadorLista, TileResumen, VistasLista, cuandoCorto, tonoDeConteo } from '@/components/ui/PiezasLista'
@@ -166,6 +167,8 @@ export function TarjetasEscaneadas({ filas, onCantidad, conEnviada, contra }: { 
 export function MoverYRecibir({ unificada = false, abrirMover = false }: { unificada?: boolean; abrirMover?: boolean } = {}) {
   // La del selector del menú (⛔ pestañas de otra marca: Bruno, 28-oct). Cambiarla remonta la pantalla (`key` en `Erp`).
   const linea: TiendaErp = useTiendaErp()
+  // 10-nov: mover, preparar, recibir y cancelar son `ajustar` (Depósito; `lib/permisos.core.js`): el rol que ⛔ puede ⛔ ve el botón.
+  const toca = usePuedeErp(baseDe(linea))('ajustar')
   // Los fijos de la línea, y el Evento si está PRENDIDO en el ERP (motor sql/058). Si ⛔ se puede leer, sólo los fijos.
   const fijos = DEPOSITOS_DE_LINEA[linea] as string[]
   const [conEvento, setConEvento] = useState(false)
@@ -314,7 +317,7 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
       {unificada && !(angosta && recibiendo) && (
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ flex: '1 1 320px', color: color.ink2 }}>Cada transferencia entre depósitos: las de Reposición llegan recibidas al transferir; las que se mueven acá se reciben escaneando lo que llegó.</div>
-          {!moviendo && !recibiendo && <Button variant="solid" tone="info" onClick={() => { setMoviendo(true); setHecho(null); setError(null) }}>Mover</Button>}
+          {toca && !moviendo && !recibiendo && <Button variant="solid" tone="info" onClick={() => { setMoviendo(true); setHecho(null); setError(null) }}>Mover</Button>}
           <Button variant="outline" onClick={abrirReposicion}>Abrir Reposición en el monitor ↗</Button>
         </div>
       )}
@@ -397,12 +400,12 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
       </div>
       </>}
 
-      {ficha && <FichaDoc d={ficha} nombres={nombres} trabajando={trabajando} onCerrar={() => setFichaId(null)} onRecibir={() => abrirRecepcion(ficha)} onPreparar={() => abrirPreparado(ficha)} onCancelar={() => cancelar(ficha)} />}
+      {ficha && <FichaDoc d={ficha} nombres={nombres} trabajando={trabajando} toca={toca} onCerrar={() => setFichaId(null)} onRecibir={() => abrirRecepcion(ficha)} onPreparar={() => abrirPreparado(ficha)} onCancelar={() => cancelar(ficha)} />}
     </div>
   )
 }
 
-function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onPreparar, onCancelar }: { d: TransferenciaDoc; nombres: Nombres; trabajando: boolean; onCerrar: () => void; onRecibir: () => void; onPreparar: () => void; onCancelar: () => void }) {
+function FichaDoc({ d, nombres, trabajando, toca, onCerrar, onRecibir, onPreparar, onCancelar }: { d: TransferenciaDoc; nombres: Nombres; trabajando: boolean; toca: boolean; onCerrar: () => void; onRecibir: () => void; onPreparar: () => void; onCancelar: () => void }) {
   const p = pasoDeDoc(d)
   const renglones = renglonesConDiferencia(d)
   const recibida = d.estado === 'recibida'
@@ -456,9 +459,9 @@ function FichaDoc({ d, nombres, trabajando, onCerrar, onRecibir, onPreparar, onC
         </table></div>
       </div>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-        {d.estado === 'en_transito' && <Button disabled={trabajando} onClick={onRecibir}>Recibir</Button>}
-        {d.estado === 'borrador' && <Button disabled={trabajando} onClick={onPreparar}>Preparar</Button>}
-        {(d.estado === 'borrador' || d.estado === 'armada') && <Button variant="outline" disabled={trabajando} onClick={onCancelar}>Cancelar</Button>}
+        {toca && d.estado === 'en_transito' && <Button disabled={trabajando} onClick={onRecibir}>Recibir</Button>}
+        {toca && d.estado === 'borrador' && <Button disabled={trabajando} onClick={onPreparar}>Preparar</Button>}
+        {toca && (d.estado === 'borrador' || d.estado === 'armada') && <Button variant="outline" disabled={trabajando} onClick={onCancelar}>Cancelar</Button>}
         <Button variant="outline" onClick={() => imprimirRemito(d, nombres)}>Imprimir remito</Button>
       </div>
     </FichaCostado>

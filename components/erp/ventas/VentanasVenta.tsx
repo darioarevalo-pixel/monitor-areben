@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { Button, Field, Input, Modal, Notice, Select, color, font, space, weight } from '@/components/ui'
 import {
   cobrarVentaErp, editarVentaErp, guardarNotaDeVenta, leerExtraDeVenta,
@@ -158,6 +159,8 @@ function FormEditar({ marca, fila, puede, vendedores, onCerrar, onHecho, irACaja
   const [nota, setNota] = useState(hoy.nota)
   const [error, setError] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState(false)
+  // 10-nov: los caminos de abajo, sólo los que el rol puede (el servidor frena igual; ⛔ un botón que termina en 403).
+  const rol = usePuedeErp(marca)
 
   const cambios: CambiosDeVenta = {}
   if (vendedor.trim() !== hoy.vendedor) cambios.vendedor = vendedor.trim() || null
@@ -230,9 +233,9 @@ function FormEditar({ marca, fila, puede, vendedores, onCerrar, onHecho, irACaja
           <span style={{ fontWeight: weight.semibold }}>Productos, precios y cobros</span>
           <span style={{ fontSize: font.base, color: color.mut }}>No se editan acá: mueven stock, plata o la factura. Para cambiarlos:</span>
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-            <Button size="sm" variant="outline" onClick={() => irACaja('cambio')}>Hacer cambio</Button>
-            <Button size="sm" variant="outline" disabled={!(fila.saldo > 0)} onClick={abrirCobro}>Registrar cobro</Button>
-            <Button size="sm" variant="outline" tone="danger" onClick={anular}>Anular…</Button>
+            {rol('cambiar') && <Button size="sm" variant="outline" onClick={() => irACaja('cambio')}>Hacer cambio</Button>}
+            {rol('cobrar') && <Button size="sm" variant="outline" disabled={!(fila.saldo > 0)} onClick={abrirCobro}>Registrar cobro</Button>}
+            {rol('anular') && <Button size="sm" variant="outline" tone="danger" onClick={anular}>Anular…</Button>}
           </div>
         </div>
       </div>
