@@ -47,6 +47,9 @@ jobs:
       # sale del LIBRO del motor, ⛔ de GN (el sync de arriba ya no escribe esas filas). Sin corte, el script sale sin tocar nada.
       # Ver `lib/erp/inventario-espejo.core.js`.
       - name: Stock del ERP al espejo
+        # 🔴 Corre AUNQUE falle el paso de GN (un 429 es frecuente): sin esto el espejo de la línea que ya vive en el ERP quedaba
+        # congelado —Caja, Reposición, Liquidación y el parte con stock viejo y 0 ventas— (revisión 10-nov). Escribe sólo esas filas.
+        if: ${{ !cancelled() }}
         env:
           DATABASE_URL_BDI: ${{ secrets.DATABASE_URL_BDI }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -57,6 +60,9 @@ jobs:
       # `venta_detalles`: sin esto Liquidación, el ETL y Reposición ven 0 ventas desde el corte. Sin corte ⛔ copia nada.
       # Va DESPUÉS del sync de GN. Ver `lib/erp/ventas-espejo.core.js`. 🔴 Pide el secret `DATABASE_URL_BDI`.
       - name: Ventas del ERP al espejo
+        # 🔴 Corre AUNQUE falle el paso de GN (un 429 es frecuente): sin esto el espejo de la línea que ya vive en el ERP quedaba
+        # congelado —Caja, Reposición, Liquidación y el parte con stock viejo y 0 ventas— (revisión 10-nov). Escribe sólo esas filas.
+        if: ${{ !cancelled() }}
         env:
           DATABASE_URL_BDI: ${{ secrets.DATABASE_URL_BDI }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

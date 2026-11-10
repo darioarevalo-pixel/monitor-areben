@@ -90,7 +90,7 @@ import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario, padronParaEncargadas } from './_auth.js'
 import { esAdmin, perfilVistoComo, permisoErpDe, permisosErp, puedeErp } from '../lib/permisos.core.js'
 import { ETIQUETA_LINEA, baseDeLinea, skuParaLinea } from '../lib/lineas.core.js'
-import { lineasEnErp } from '../lib/erp/corte.core.js'
+import { lineaEnErp, lineasEnErp } from '../lib/erp/corte.core.js'
 import { lineaDelRenglon, marcaDelCambio } from '../lib/caja/corte-caja.core.js'
 import { cortesDe } from './_erp-corte.js'
 import { SQL_CTE_LINEA_GN, lineasDeVenta } from '../lib/erp/linea-gn.core.js'
@@ -919,6 +919,11 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
       const [orig] = (await db.query('select prueba, marca from venta where id = $1', [c.ventaId])).rows
       marcaVenta = orig ? orig.marca : marca
       prueba = orig ? orig.prueba === true : true
+      // 🔴 Revisión 10-nov: la venta DE PRUEBA de una línea que ya cortó es la copia del paralelo de una venta de GN. Cambiarla
+      // dejaba el cambio de prueba y ⛔ movía el stock, callado. Se cambia como venta de Gestión Nube (real).
+      if (prueba && orig && lineaEnErp(await cortesDe(db), orig.marca)) {
+        return { status: 409, error: 'Esa es la copia de prueba de una venta de Gestión Nube, de antes del corte: buscala por su número de Gestión Nube y elegí la fila «Gestión Nube».' }
+      }
       devueltas = c.devueltas
       // La diferencia con la MISMA cuenta que el motor (lo devuelto al precio que se pagó).
       const lineas = (await db.query('select id, cantidad, importe from venta_linea where venta_id = $1', [c.ventaId])).rows

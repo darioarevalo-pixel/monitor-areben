@@ -13,6 +13,7 @@
  *    por forma de pago ya viven en Configuración › Reglas. La «Mayorista especial» del v8 ⛔ existe en el motor ⇒ ⛔ columna (lo dice el pie).
  */
 
+import { useAvisoPrecio } from '@/lib/erp/precio-manda'
 import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
@@ -69,6 +70,7 @@ function bajarCsv(filas: FilaProducto[], marca: MarcaErp) {
 
 export function PreciosErp() {
   const { marca: delShell, perfil } = useSesion()
+  const aviso = useAvisoPrecio()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const puede = usePuedeErp(marca)
   const usuario = perfil?.name ?? null
@@ -154,7 +156,7 @@ export function PreciosErp() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
       <p style={{ margin: 0, color: color.mut }}>Todas las listas de cada producto en una grilla, con su oferta o liquidación y el último cambio. El $ de cada fila carga un precio (de cualquier lista) o el costo; abrí un producto para ver su historial.</p>
-      <Notice tone="neutral">Un precio cargado acá queda en el ERP, con quién y cuándo, y manda sobre la copia de Gestión Nube. Mientras Gestión Nube funcione, no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</Notice>
+      <Notice tone="neutral">Un precio cargado acá queda en el ERP, con quién y cuándo, y manda sobre la copia de Gestión Nube. {aviso.largo}</Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {datos?.liquidacionesError && <Notice tone="warning">No se pudieron leer las liquidaciones del monitor: la columna «Oferta o liquidación» muestra sólo las ofertas de Tienda Nube.</Notice>}
 

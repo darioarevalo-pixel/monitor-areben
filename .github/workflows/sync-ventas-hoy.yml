@@ -61,6 +61,9 @@ jobs:
       # la línea cortada recién aparece con el diario de las 06:00 UTC. Va DESPUÉS del sync de GN, igual que en los diarios.
       # Sin línea cortada ⛔ copia nada. Ver `lib/erp/ventas-espejo.core.js`.
       - name: Ventas del ERP al espejo
+        # 🔴 Corre AUNQUE falle el paso de GN (un 429 es frecuente): sin esto el espejo de la línea que ya vive en el ERP quedaba
+        # congelado —Caja, Reposición, Liquidación y el parte con stock viejo y 0 ventas— (revisión 10-nov). Escribe sólo esas filas.
+        if: ${{ !cancelled() }}
         env:
           DATABASE_URL_BDI: ${{ secrets.DATABASE_URL_BDI }}
           DATABASE_URL_ZATTIA: ${{ secrets.DATABASE_URL_ZATTIA }}

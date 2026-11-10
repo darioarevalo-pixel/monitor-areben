@@ -11,6 +11,7 @@ import { REGLAS_INICIALES } from '../lib/caja/core.core.js'
 type Fila = Record<string, unknown>
 const tablas: Record<string, Fila[]> = {}
 let cortes: Array<{ linea: string; instante: string }> = []
+let ventaOriginal: { prueba: boolean; marca: string } | null = null
 const consultas: Array<{ sql: string; params: unknown[] }> = []
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -38,6 +39,7 @@ vi.mock('pg', () => ({
       async query(sql: string, params: unknown[] = []) {
         consultas.push({ sql, params })
         if (/from erp_corte/.test(sql)) return { rows: cortes }
+        if (/select prueba, marca from venta where id/.test(sql)) return { rows: ventaOriginal ? [ventaOriginal] : [] }
         return { rows: [] }
       }
     },
@@ -175,5 +177,32 @@ describe('ventaGnDeCambio: sólo las líneas cortadas, cada renglón con su lín
     expect(ya?.sql).toMatch(/x\.marca = any\(\$2::text\[\]\)/)
     expect(ya?.sql).toMatch(/x\.prueba = false/)
     expect(ya?.params).toEqual(['30930', ['stunned']])
+  })
+})
+
+describe('🔴 cambio contra una venta del ERP DE PRUEBA (revisión 10-nov)', () => {
+  const LINEA = '0f8fad5b-d9cb-469f-a165-000000000001'
+  const VENTA = '0f8fad5b-d9cb-469f-a165-000000000002'
+  const desdeErp = (marca: string) => cambio(marca, { ventaId: VENTA, devueltas: [{ lineaId: LINEA, cantidad: 1 }], items: [] })
+
+  it('con la línea cortada, la copia de prueba ⛔ se cambia (dejaba el cambio de prueba y el stock sin mover)', async () => {
+    cortes = [STUNNED, BDI]
+    ventaOriginal = { prueba: true, marca: 'bdi' }
+    expect(await desdeErp('bdi')).toMatchObject({ status: 409, error: expect.stringMatching(/copia de prueba.*Gestión Nube/) })
+    expect(registrarCambio).not.toHaveBeenCalled()
+  })
+
+  it('antes del corte de su línea, la de prueba sigue cambiándose de prueba (el paralelo)', async () => {
+    cortes = HOY
+    ventaOriginal = { prueba: true, marca: 'bdi' }
+    await desdeErp('bdi')
+    expect(registrado()).toEqual([{ marca: 'bdi', prueba: true }])
+  })
+
+  it('una venta REAL del ERP, con la línea cortada, se cambia real', async () => {
+    cortes = [STUNNED, BDI]
+    ventaOriginal = { prueba: false, marca: 'bdi' }
+    await desdeErp('bdi')
+    expect(registrado()).toEqual([{ marca: 'bdi', prueba: false }])
   })
 })

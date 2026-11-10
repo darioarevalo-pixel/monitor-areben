@@ -10,6 +10,7 @@
  * 🔑 El monto pasa por `parsearMonto` (el de compromisos): el punto decimal de `String(n)` ⛔ se lee como miles.
  */
 
+import { useAvisoPrecio } from '@/lib/erp/precio-manda'
 import { useEffect, useState } from 'react'
 import { Button, ConfirmDetalle, Field, Input, MoneyText, Select, space, useConfirmar } from '@/components/ui'
 import { cargarPrecioCosto, guardarProveedor, leerProveedores, type MarcaErp, type PrecioDeProducto, type ProveedorErp } from '@/lib/erp/cliente'
@@ -28,6 +29,7 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
 }) {
   // Los proveedores de la tienda del menú (Bruno, 30-oct): mirando Stunned, ⛔ los talleres de Zattia; y los sin productos.
   const tienda = useTiendaErp()
+  const aviso = useAvisoPrecio()
   const [que, setQue] = useState('costo')
   const [monto, setMonto] = useState('')
   const [desde, setDesde] = useState('')
@@ -77,7 +79,7 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
           <ConfirmDetalle label={nombre} valor={<MoneyText value={n} />} />
           <ConfirmDetalle label="Desde" valor={desde || 'Ahora'} />
           {esCosto && <ConfirmDetalle label="Proveedor" valor={nombreProveedor ?? 'Sin proveedor'} />}
-          <p style={{ marginTop: space[3] }}>Queda en el ERP y manda sobre la copia de Gestión Nube. Mientras Gestión Nube funcione, no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</p>
+          <p style={{ marginTop: space[3] }}>Queda en el ERP y manda sobre la copia de Gestión Nube. {aviso.largo}</p>
         </div>
       ),
       ok: 'Cargar',

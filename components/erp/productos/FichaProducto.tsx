@@ -12,6 +12,7 @@
  *    una sola cosa (talle, modelo de celular) ⇒ una fila por variante, con su stock por depósito.
  */
 
+import { useAvisoPrecio } from '@/lib/erp/precio-manda'
 import { useEffect, useState } from 'react'
 import { Button, ConfirmDetalle, MenuAcciones, MoneyText, Notice, color, font, space, useConfirmar, weight, type AccionMenu } from '@/components/ui'
 import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial, type PieFicha } from '@/components/ui/FichaCostado'
@@ -46,6 +47,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
   onCargado: () => void
 }) {
   const puede = usePuedeErp(marca)
+  const aviso = useAvisoPrecio()
   const configura = puede('configurar')
   const [f, setF] = useState<PrecioDeProducto | null>(null)
   // Se mide al LEER (⛔ en el render: `Date.now` ahí es impuro).
@@ -86,7 +88,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
         <div>
           <ConfirmDetalle label="Cargado hoy" valor={<MoneyText value={l.precio ?? 0} />} />
           <ConfirmDetalle label={`Pasa a valer (${aQuien?.nombre ?? l.sigue})`} valor={aQuien?.precio != null ? <MoneyText value={aQuien.precio} /> : 'Sin precio'} />
-          <p style={{ marginTop: space[3] }}>El precio cargado queda en el historial. Mientras Gestión Nube funcione, no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.</p>
+          <p style={{ marginTop: space[3] }}>El precio cargado queda en el historial. {aviso.largo}</p>
         </div>
       ),
       ok: 'Volver a seguir',
@@ -176,7 +178,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2], padding: space[3], border: `1px solid ${color.line}`, borderRadius: 12 }}>
           <div>
             <h3 style={h3}>Cargar en el ERP</h3>
-            <div style={{ fontSize: font.sm, color: color.mut }}>una fila nueva: lo anterior queda en el historial · mientras Gestión Nube funcione, no cambia la Caja ni Tienda Nube</div>
+            <div style={{ fontSize: font.sm, color: color.mut }}>una fila nueva: lo anterior queda en el historial · {aviso.corto}</div>
           </div>
           <CargarPrecio marca={marca} ficha={f} onError={setError} onListo={(h, aviso) => { setHecho(h); if (aviso) setError(aviso); setCargar(false); releer() }} />
         </section>
