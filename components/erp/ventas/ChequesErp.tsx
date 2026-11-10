@@ -27,14 +27,15 @@ const TONO = {
   en_cartera: ['action', NOMBRE_ESTADO_CHEQUE.en_cartera], depositado: ['warning', NOMBRE_ESTADO_CHEQUE.depositado], acreditado: ['success', NOMBRE_ESTADO_CHEQUE.acreditado],
   rechazado: ['danger', NOMBRE_ESTADO_CHEQUE.rechazado], anulado: ['neutral', NOMBRE_ESTADO_CHEQUE.anulado],
 } as const
+// Lo que decide va primero (estado y monto): a 1200 px las dos de texto largo quedan al final, detrás del scroll (visto en prod, 10-nov).
 const COLUMNAS: ColumnaLista[] = [
   { key: 'vence', titulo: 'Fecha de pago', ancho: '120px', movil: 'chico' },
   { key: 'cheque', titulo: 'Cheque', ancho: 'minmax(200px, 1.2fr)', movil: 'titulo' },
   { key: 'cliente', titulo: 'Cliente', ancho: 'minmax(160px, 1fr)', movil: 'chico' },
-  { key: 'librador', titulo: 'Quién lo firma', ancho: 'minmax(150px, 1fr)', movil: 'oculta' },
   { key: 'estado', titulo: 'Estado', ancho: '120px', movil: 'chico' },
-  { key: 'cuenta', titulo: 'Depositado en', ancho: 'minmax(150px, 1fr)', movil: 'oculta' },
   { key: 'monto', titulo: 'Monto', ancho: '120px', derecha: true, movil: 'dato' },
+  { key: 'librador', titulo: 'Quién lo firma', ancho: 'minmax(150px, 1fr)', movil: 'oculta' },
+  { key: 'cuenta', titulo: 'Depositado en', ancho: 'minmax(150px, 1fr)', movil: 'oculta' },
 ]
 const pesos = (n: number) => `$ ${n.toLocaleString('es-AR', { maximumFractionDigits: 2 })}`
 const dia = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}` : '—')
