@@ -80,9 +80,31 @@ describe('GET cargar-venta: lleva las formas de pago de cada línea', () => {
     } }
     const conMotor = async (_m: string, _q: string, fn: (pg: unknown) => Promise<unknown>) => fn(pg)
     const r = await datosParaCargar({ marca: 'zattia' }, { conMotor, reglasDeCaja }) as { formas: Record<string, { clave: string; cuenta: string | null }[]>; sinReglas: string[] }
-    expect(reglasDeCaja.mock.calls.map((c) => c[0]).sort()).toEqual(['stunned', 'zattia'])
+    // Stunned ⛔ tiene Caja propia: se leen las de Zattia (dos veces la misma Caja).
+    expect(reglasDeCaja.mock.calls.map((c) => c[0])).toEqual(['zattia', 'zattia'])
     expect(r.formas.zattia.find((f) => f.clave === 'efectivo')!.cuenta).toBe('c12921')
-    expect(r.sinReglas).toEqual(['stunned']) // su Caja ⛔ tiene reglas ⇒ la pantalla cae a la lista de cuentas
-    expect(r.formas.stunned.find((f) => f.clave === 'efectivo')!.cuenta).toBeNull()
+  })
+
+  it('🔴 Stunned (leído en prod el 10-nov): con su caja en null, usa las reglas de la Caja de Zattia ⇒ 4 formas con SU cuenta y sin CG en «Más»', async () => {
+    const { datosParaCargar } = await import('../api/_erp-cargar.js')
+    const deStunned = [...GN.map((g) => ({ id: `s${g}`, nombre: g === 20595 ? 'Transferencia CG' : `Cuenta ${g}`, medio: 'x', gn_cuenta_id: g, marca: 'stunned' }))]
+    const reglasDeCaja = vi.fn(async (l: string) => (l === 'zattia' ? { ...reglas, titulares: { areben: 13015, dario: 20595 } } : null))
+    const pg = { query: async (sql: string) => {
+      if (/from cuenta_cobro/.test(sql)) return { rows: [...cuentas, ...deStunned] }
+      if (/from canal/.test(sql)) return { rows: [{ id: 'local' }] }
+      if (/venta_origen_check/.test(sql)) return { rows: [{ ok: true }] }
+      if (/from cuenta_real/.test(sql)) return { rows: [] }
+      return { rows: [{ hay: false }] }
+    } }
+    const conMotor = async (_m: string, _q: string, fn: (pg: unknown) => Promise<unknown>) => fn(pg)
+    const r = await datosParaCargar({ marca: 'zattia' }, { conMotor, reglasDeCaja }) as { formas: Record<string, { clave: string; cuenta: string | null }[]>; sueltas: Record<string, { id: string; nombre: string }[]>; sinReglas: string[] }
+    expect(Object.fromEntries(r.formas.stunned.slice(0, 4).map((f) => [f.clave, f.cuenta]))).toEqual({ efectivo: 's12921', transferencia: 's13015', debito: 's20196', credito: 's25188' })
+    expect(r.sueltas.stunned.some((c) => /CG/.test(c.nombre))).toBe(false)
+    expect(r.sinReglas).toEqual([])
+  })
+
+  it('CG ⛔ aparece en «Más» aunque la línea llegue SIN reglas (por el nombre)', () => {
+    const conCG = [{ id: 'x', nombre: 'Transferencia CG', medio: 'transferencia', gn_cuenta_id: 20597, marca: 'bdi' }, { id: 'y', nombre: 'Pago Nube', medio: 'otro', gn_cuenta_id: null, marca: 'bdi' }]
+    expect(cuentasSueltas({ formas: [], cuentas: conCG, reglas: null }).map((c: { id: string }) => c.id)).toEqual(['y'])
   })
 })
