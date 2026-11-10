@@ -24,6 +24,7 @@ import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaProducto } from '../productos/FichaProducto'
 import { useLineaErp } from '@/lib/erp/linea-erp'
+import { conMesesAnteriores } from '@/lib/erp/meses.core.js'
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
 type Vista = 'agrupado' | 'renglones'
@@ -60,6 +61,8 @@ export function PorProductoErp() {
   const [datos, setDatos] = useState<{ renglones: RenglonProducto[]; costos: boolean; gnHasta: string | null; clave: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [periodo, setPeriodo] = useState('mes')
+  // 🎯 Bruno 10-nov: «no veo como ir para atras en los meses» ⇒ los meses de antes, en el mismo selector (`meses.core.js`).
+  const [periodos] = useState(() => conMesesAnteriores(PERIODOS, diaArgentino(Date.now())))
   const [vista, setVista] = useState<Vista>('agrupado')
   const [q, setQ] = useState('')
   const linea = useLineaErp()
@@ -135,7 +138,7 @@ export function PorProductoErp() {
     return null
   }
 
-  const nombrePeriodo = PERIODOS.find(([k]) => k === periodo)?.[1] ?? ''
+  const nombrePeriodo = periodos.find(([k]) => k === periodo)?.[1] ?? ''
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>Qué se vendió de cada producto. Hacé clic en uno para ver su ficha.</p>
@@ -153,7 +156,7 @@ export function PorProductoErp() {
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k as Vista); setOrden(null) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las ventas por producto" placeholder="Producto, código, venta o cliente" />
-          <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>{PERIODOS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
+          <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>{periodos.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select>
           <Select aria-label="Origen" style={ANCHO_SELECT} value={canal} onChange={(e) => setCanal(e.target.value)}><option value="">Todos los orígenes</option>{canales.map((c) => <option key={c} value={c}>{c}</option>)}</Select>
           <PanelColumnas
             columnas={prefs.orden.filter((k) => COLUMNAS[k]).map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}

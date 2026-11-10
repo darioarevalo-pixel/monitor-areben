@@ -27,6 +27,7 @@ import { esAdmin } from '@/lib/permisos'
 import { agrupar as agruparPorProducto, filtrar as filtrarPorProducto } from '@/lib/erp/ventas-producto.core.js'
 import { comoVieneElMes, doceMeses, masDejan, porCanal, stockACosto, vendidoDelDia } from '@/lib/erp/inicio-panel.core.js'
 import { ComoViene, MasDejan, MesAMes, PorCanal, TarjetaVendido, rotulo, tarjeta } from './PanelInicio'
+import { MESES_ATRAS, correrMes, ultimoDiaDelMes } from '@/lib/erp/meses.core.js'
 
 /** Lo que se cuenta de cada lista: `null` = leyendo; un texto = no se pudo (y por qué). */
 type Conteo = Record<string, number> | string | null
@@ -88,40 +89,51 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const visto = useRolVisto()
   const rol = visto ?? (admin ? 'admin' : rolDe(perfil))
   const [hoy] = useState(() => diaArgentino(Date.now()))
+  // 🎯 Bruno 10-nov: «no veo como ir para atras en los meses» ⇒ ‹ › al lado del título mueven el RESULTADO (Para hacer sigue siendo de hoy).
+  const [mes, setMes] = useState(() => hoy.slice(0, 7))
+  const pasado = mes < hoy.slice(0, 7)
+  const finDelMes = pasado ? ultimoDiaDelMes(mes) : hoy
+  const masViejo = correrMes(hoy.slice(0, 7), -(MESES_ATRAS - 1))
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   // La tienda del menú: los gastos (y el resultado) son de ESA línea, ⛔ de Zattia + Stunned (Bruno, 30-oct).
   const tienda = useTiendaErp()
-  const [resultado, setResultado] = useState<{ marca: string; r: ResultadoDelMes | null; error: string | null } | null>(null)
+  const [resultado, setResultado] = useState<{ marca: string; mes: string; r: ResultadoDelMes | null; error: string | null } | null>(null)
   // Los gastos comerciales REALES del mismo mes (⛔ los de prueba: son de ventas que Gestión Nube no tiene).
-  const [gastos, setGastos] = useState<{ marca: string; g: GastosDelPeriodo | null; error: string | null } | null>(null)
+  const [gastos, setGastos] = useState<{ marca: string; mes: string; g: GastosDelPeriodo | null; error: string | null } | null>(null)
   // «Lo que más deja»: los renglones de Ventas › Por producto del mes (su mismo `agrupar`).
-  const [pp, setPp] = useState<{ marca: string; renglones: RenglonProducto[] | null; error: string | null } | null>(null)
+  const [pp, setPp] = useState<{ marca: string; mes: string; renglones: RenglonProducto[] | null; error: string | null } | null>(null)
   const [conteos, setConteos] = useState<{ marca: string; ventas: Crudo; stock: Crudo; productos: Crudo }>({ marca: '', ventas: null, stock: null, productos: null })
 
   useEffect(() => {
     let vivo = true
     const fallo = (e: unknown) => (e instanceof Error ? e.message : 'No se pudo leer.')
-    const poner = (k: 'ventas' | 'stock' | 'productos', v: Conteo | Crudo) => vivo && setConteos((c) => ({ ...(c.marca === marca ? c : { marca, ventas: null, stock: null, productos: null }), [k]: v }))
     // Lo que lleva costo (resultado, lo que más deja, gastos) ⛔ se pide si no es admin: el servidor ya corta el resultado, el resto no.
-    if (admin) leerResultadoDelMes(marca, tienda)
+    if (admin) leerResultadoDelMes(marca, tienda, pasado ? mes : null)
       .then((r) => {
         if (!vivo) return
-        setResultado({ marca: tienda, r, error: null })
-        leerVentasPorProducto(marca, r.mes.desde, r.mes.hasta).then((d) => vivo && setPp({ marca, renglones: d.renglones, error: null }))
-          .catch((e) => vivo && setPp({ marca, renglones: null, error: fallo(e) }))
-        leerGastos(marca, tienda, r.mes.desde, r.mes.hasta, false).then((g) => vivo && setGastos({ marca: tienda, g, error: null })).catch((e) => vivo && setGastos({ marca: tienda, g: null, error: fallo(e) }))
+        setResultado({ marca: tienda, mes, r, error: null })
+        leerVentasPorProducto(marca, r.mes.desde, r.mes.hasta).then((d) => vivo && setPp({ marca, mes, renglones: d.renglones, error: null }))
+          .catch((e) => vivo && setPp({ marca, mes, renglones: null, error: fallo(e) }))
+        leerGastos(marca, tienda, r.mes.desde, r.mes.hasta, false).then((g) => vivo && setGastos({ marca: tienda, mes, g, error: null })).catch((e) => vivo && setGastos({ marca: tienda, mes, g: null, error: fallo(e) }))
       })
-      .catch((e) => vivo && setResultado({ marca: tienda, r: null, error: fallo(e) }))
+      .catch((e) => vivo && setResultado({ marca: tienda, mes, r: null, error: fallo(e) }))
+    return () => { vivo = false }
+  }, [marca, tienda, admin, mes, pasado])
+
+  useEffect(() => {
+    let vivo = true
+    const fallo = (e: unknown) => (e instanceof Error ? e.message : 'No se pudo leer.')
+    const poner = (k: 'ventas' | 'stock' | 'productos', v: Conteo | Crudo) => vivo && setConteos((c) => ({ ...(c.marca === marca ? c : { marca, ventas: null, stock: null, productos: null }), [k]: v }))
     const r = rangoDePeriodo('mes', diaArgentino(Date.now()))
     leerListaDeVentas(marca, r.desde, r.hasta).then((d) => poner('ventas', { filas: d.filas })).catch((e) => poner('ventas', fallo(e)))
     leerListaDeStock(marca).then((d) => poner('stock', { filas: d.filas })).catch((e) => poner('stock', fallo(e)))
     leerListaDeProductos(marca).then((d) => poner('productos', { filas: d.filas })).catch((e) => poner('productos', fallo(e)))
     return () => { vivo = false }
-  }, [marca, tienda, admin])
+  }, [marca])
 
-  const res = resultado?.marca === tienda ? resultado : null
+  const res = resultado?.marca === tienda && resultado.mes === mes ? resultado : null
   const m = res?.r?.mes, a = res?.r?.anterior
-  const gs = gastos?.marca === tienda ? gastos : null
+  const gs = gastos?.marca === tienda && gastos.mes === mes ? gastos : null
   const gTotal = gs?.g ? gs.g.total : null
   const linea = useLineaErp()
   const crudos = conteos.marca === marca ? conteos : { ventas: null, stock: null, productos: null }
@@ -138,13 +150,14 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const r = res?.r ?? null
   // Lo vendido CADA día del mes hasta hoy (los días sin ventas, 0): la línea de la tarjeta grande.
   // Hasta AYER: el día de hoy llega a medias desde la copia de GN y hundía la punta de la línea.
-  const diasDelMes = m && r?.dias ? Array.from({ length: Math.max(1, Number(m.hasta.slice(8, 10)) - 1) }, (_, i) => {
+  // Un mes de ANTES va entero (hasta su último día).
+  const diasDelMes = m && r?.dias ? Array.from({ length: pasado ? Number(m.hasta.slice(8, 10)) : Math.max(1, Number(m.hasta.slice(8, 10)) - 1) }, (_, i) => {
     const dia = `${m.desde.slice(0, 8)}${String(i + 1).padStart(2, '0')}`
     return { dia: i + 1, vendido: r.dias!.find((d) => d.dia === dia)?.vendido ?? 0 }
   }) : []
   // El stock a costo, de las MISMAS filas de Productos que cuentan «Para hacer» (su disponible es el de Stock).
   const stock = typeof crudos.productos === 'object' && crudos.productos ? stockACosto(filtrarProductos(crudos.productos.filas as never, { linea }) as never) : null
-  const ppm = pp?.marca === marca ? pp : null
+  const ppm = pp?.marca === marca && pp.mes === mes ? pp : null
   const top = ppm?.renglones ? masDejan(agruparPorProducto(filtrarPorProducto(ppm.renglones as never, { linea }))) : null
   const avisos = [
     gs?.g && gs.g.cobrosSinComision > 0 ? `${cuantos(gs.g.cobrosSinComision, 'cobro', 'cobros')} con tarjeta o Mercado Pago sin tasa cargada: esas comisiones no están en los gastos.` : null,
@@ -160,20 +173,24 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
       {/* 🎯 Bruno 30-oct: el título es EL MES («Octubre 2026») y «Ver como» va escondido en un botón arriba a la derecha. */}
       <header style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 30, fontWeight: weight.bold, letterSpacing: '-0.02em', color: color.ink }}>{tituloDelMes(hoy)}</h1>
-          <div style={{ fontSize: font.sm, color: color.mut }}>{rol === 'admin' ? `al ${Number(hoy.slice(8, 10))} de ${MESES[Number(hoy.slice(5, 7)) - 1]}` : `Viendo como ${ROLES.find(([k]) => k === rol)?.[1]}`}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[2] }}>
+            {verResultado(rol) && <Button size="sm" variant="ghost" aria-label="Mes anterior" disabled={mes <= masViejo} onClick={() => setMes((x) => correrMes(x, -1))}>‹</Button>}
+            <h1 style={{ margin: 0, fontSize: 30, fontWeight: weight.bold, letterSpacing: '-0.02em', color: color.ink }}>{tituloDelMes(verResultado(rol) ? finDelMes : hoy)}</h1>
+            {verResultado(rol) && <Button size="sm" variant="ghost" aria-label="Mes siguiente" disabled={!pasado} onClick={() => setMes((x) => correrMes(x, 1))}>›</Button>}
+          </div>
+          <div style={{ fontSize: font.sm, color: color.mut }}>{rol === 'admin' ? (pasado ? <>mes completo · <button type="button" onClick={() => setMes(hoy.slice(0, 7))} style={{ height: 'auto', padding: 0, border: 0, background: 'none', color: 'var(--mo-accent, inherit)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}>Volver a {MESES[Number(hoy.slice(5, 7)) - 1]}</button></> : `al ${Number(hoy.slice(8, 10))} de ${MESES[Number(hoy.slice(5, 7)) - 1]}`) : `Viendo como ${ROLES.find(([k]) => k === rol)?.[1]}`}</div>
         </div>
         {(esAdmin(perfil) || visto) && <VerComo rol={rol} setRol={elegirRolVisto} />}
       </header>
       {verResultado(rol) && <section aria-label="Resultado comercial del mes" style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         {res?.error && <Notice tone="danger">{res.error}</Notice>}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: space[3] }}>
-          <TarjetaVendido mesNombre={MESES[Number(hoy.slice(5, 7)) - 1]} vendido={m ? m.vendido : null} ayer={r?.dias && m && m.hasta > m.desde ? vendidoDelDia(r.dias, diaAnterior(m.hasta)) : null}
+          <TarjetaVendido mesNombre={MESES[Number(finDelMes.slice(5, 7)) - 1]} vendido={m ? m.vendido : null} ayer={!pasado && r?.dias && m && m.hasta > m.desde ? vendidoDelDia(r.dias, diaAnterior(m.hasta)) : null}
             anterior={a ? a.vendido : null} variacion={m && a ? pct(m.vendido, a.vendido) : null} dias={diasDelMes} />
           <div style={tarjeta}>
             <span style={rotulo}>Margen bruto</span>
             <span style={grande}>{m ? formatMoney(m.margen) : '…'}</span>
-            {m && <span style={nota}>{m.vendido ? Math.round((m.margen / m.vendido) * 100) : 0}% de lo vendido{a ? <> · <Variacion ahora={m.margen} antes={a.margen} /> contra el mes pasado</> : null}</span>}
+            {m && <span style={nota}>{m.vendido ? Math.round((m.margen / m.vendido) * 100) : 0}% de lo vendido{a ? <> · <Variacion ahora={m.margen} antes={a.margen} /> contra {pasado ? 'el mes anterior' : 'el mes pasado'}</> : null}</span>}
           </div>
           <div style={tarjeta}>
             <span style={rotulo}>Resultado comercial</span>
@@ -186,7 +203,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
           <div style={tarjeta}>
             <span style={rotulo}>Ventas</span>
             <span style={grande}>{m ? m.ventas.toLocaleString('es-AR') : '…'}</span>
-            {m && <span style={nota}>ticket promedio {formatMoney(m.ventas ? m.vendido / m.ventas : 0)}{a ? ` · ${m.ventas.toLocaleString('es-AR')} contra ${a.ventas.toLocaleString('es-AR')} del mes pasado` : ''}</span>}
+            {m && <span style={nota}>ticket promedio {formatMoney(m.ventas ? m.vendido / m.ventas : 0)}{a ? ` · ${m.ventas.toLocaleString('es-AR')} contra ${a.ventas.toLocaleString('es-AR')} del ${pasado ? 'mes anterior' : 'mes pasado'}` : ''}</span>}
           </div>
           <div style={tarjeta}>
             <span style={rotulo}>Stock a costo</span>

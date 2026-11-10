@@ -885,8 +885,9 @@ export type ResultadoDelMes = {
   dias?: Array<GrupoResultado & { dia: string }>; meses?: Array<GrupoResultado & { mes: string }>; canales?: Array<GrupoResultado & { canal: string }>
 }
 /** De UNA línea (la tienda del menú): en Zattia, cada venta pesa en cada línea según sus renglones (Bruno, 30-oct). */
-export const leerResultadoDelMes = (marca: MarcaErp, linea: string) =>
-  pedir<ResultadoDelMes>(null, `&vista=inicio-resultado&marca=${marca}&linea=${linea}&nc=${Date.now()}`, 'No se pudo leer el resultado del mes.')
+/** `mes` (AAAA-MM): un mes de ANTES, entero; sin él, el de hoy. */
+export const leerResultadoDelMes = (marca: MarcaErp, linea: string, mes?: string | null) =>
+  pedir<ResultadoDelMes>(null, `&vista=inicio-resultado&marca=${marca}&linea=${linea}${mes ? `&mes=${mes}` : ''}&nc=${Date.now()}`, 'No se pudo leer el resultado del mes.')
 
 // ── ERP › Ventas › Por producto (`api/_erp-por-producto.js`, núcleo `lib/erp/ventas-producto.core.js`) ──
 

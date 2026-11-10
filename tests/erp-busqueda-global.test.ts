@@ -72,7 +72,9 @@ describe('erp › búsqueda global', () => {
     expect(periodoDeVenta('2026-10-05T12:00:00Z', '2026-10-26')).toBe('mes')
     expect(periodoDeVenta('2026-10-01T01:00:00Z', '2026-10-26')).toBe('anterior') // 22:00 del 30-sep en Argentina
     expect(periodoDeVenta('2026-09-10T12:00:00Z', '2026-10-26')).toBe('anterior')
-    expect(periodoDeVenta('2026-08-10T12:00:00Z', '2026-10-26')).toBeNull()
+    // 🎯 10-nov: los meses de antes también se abren (`meses.core.js`); más de un año atrás, ⛔.
+    expect(periodoDeVenta('2026-08-10T12:00:00Z', '2026-10-26')).toBe('m:2026-08')
+    expect(periodoDeVenta('2025-08-10T12:00:00Z', '2026-10-26')).toBeNull()
     expect(desdeBusquedaDeVentas('2026-10-26')).toBe('2026-09-01')
     expect(desdeBusquedaDeVentas('2026-01-15')).toBe('2025-12-01')
   })

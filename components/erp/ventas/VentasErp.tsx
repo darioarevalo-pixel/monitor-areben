@@ -36,6 +36,7 @@ import { CargarVenta } from './CargarVenta'
 import { VentanaCobro, VentanaEditar } from './VentanasVenta'
 import { useLineaErp } from '@/lib/erp/linea-erp'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
+import { conMesesAnteriores } from '@/lib/erp/meses.core.js'
 
 /** Filas por hoja (Bruno 29-oct: el mes de Zattia son ~1.250 y dibujarlas todas trababa la lista). */
 const POR_HOJA = 50
@@ -81,6 +82,8 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const usuario = perfil?.name ?? null
   const [periodo, setPeriodo] = useState(abrir?.periodo ?? 'mes')
+  // 🎯 Bruno 10-nov: «no veo como ir para atras en los meses» ⇒ los meses de antes, en el mismo selector (`meses.core.js`).
+  const [periodos] = useState(() => conMesesAnteriores(PERIODOS, diaArgentino(Date.now())))
   const abrirRef = useRef({ abrir, alAbrir })
   useEffect(() => { abrirRef.current = { abrir, alAbrir } })
   const [datos, setDatos] = useState<{ filas: FilaVentaLista[]; puede: QueSabeElMotor; tnLeidaEn: string | null; clave: string } | null>(null)
@@ -118,13 +121,13 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
         if (pedida) {
           const f = d.filas.find((x: FilaVentaLista) => x.id === pedida.id)
           if (f) setFicha({ fila: f })
-          else setAviso(`No encontré la venta #${pedida.numero} en ${PERIODOS.find(([k]) => k === periodo)?.[1].toLowerCase() ?? 'este período'}.`)
+          else setAviso(`No encontré la venta #${pedida.numero} en ${periodos.find(([k]) => k === periodo)?.[1].toLowerCase() ?? 'este período'}.`)
           soltar?.()
         }
       })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer las ventas.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
-  }, [marca, linea, periodo, clave])
+  }, [marca, linea, periodo, clave, periodos])
   const cargar = () => setVuelta((n) => n + 1)
   const cargando = datos?.clave !== clave
 
@@ -146,7 +149,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   const deLaHoja = useMemo(() => filas.slice((hoja - 1) * POR_HOJA, hoja * POR_HOJA), [filas, hoja])
   const elegidas = filas.filter((f) => seleccion.has(f.id))
   const vendedores = useMemo(() => [...new Set((datos?.filas ?? []).map((f) => f.vendio).filter((x) => x && x !== '—' && x !== 'Tienda Nube' && x !== 'Desde Gestión Nube'))].sort(), [datos])
-  const nombrePeriodo = PERIODOS.find(([k]) => k === periodo)?.[1] ?? ''
+  const nombrePeriodo = periodos.find(([k]) => k === periodo)?.[1] ?? ''
 
   const irACobranzas = () => window.open('/cobranzas', '_blank', 'noopener')
   const abrirFicha = (fila: FilaVentaLista, accion?: 'anular') => { setVentana(null); setFicha({ fila, accion }) }
@@ -262,7 +265,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
             valor={q} onCambio={setQ} etiqueta="Buscar en las ventas" placeholder="Número, pedido de Tienda Nube, cliente o nota"
             filtrosActivos={(periodo !== 'mes' ? 1 : 0) + (origen ? 1 : 0)}
             filtros={<>
-              <FiltroOpciones etiqueta="Período" style={ANCHO_SELECT} opciones={PERIODOS} valor={periodo} onCambio={(k) => { setFicha(null); setPeriodo(k) }} />
+              <FiltroOpciones etiqueta="Período" style={ANCHO_SELECT} opciones={periodos} valor={periodo} onCambio={(k) => { setFicha(null); setPeriodo(k) }} />
               <FiltroOpciones etiqueta="Origen" style={ANCHO_SELECT} opciones={ORIGENES} valor={origen} onCambio={setOrigen} />
               {/* 📱 En el celular «Actualizar» va en la hoja: al lado del buscador y de «Filtros» quedaba solo en un renglón. */}
               {angosta && <Button variant="outline" disabled={cargando} onClick={() => cargar()}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>}
