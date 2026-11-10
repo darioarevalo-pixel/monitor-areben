@@ -243,8 +243,7 @@ diaria con tope (30) se reemplazó por una solicitud que deciden **Darío o Brun
 - Con la llave, «Transferir» ⛔ llama a GN: crea el documento del motor (`transferirEnErp`, `api/_repo-documento.js`) con
   `origen_ref` = `<armado>:t<tanda>`. La tanda guarda `erp: <número>` en vez de `transfer_id`.
 - **Armar = transferido** (Bruno, 30-oct): `recibir: 'al_armar'` deja el documento «Recibida» al toque. Con `'en_destino'`
-  queda «En camino» y el local lo recibe escaneando en ERP › Stock › Transferencias. 🎯 **PRENDIDO en las tres desde el 10-nov** (Bruno:
-  «el local si recibe transferencias, eso es general»): lo armado ⛔ suma al Local hasta que alguien lo recibe (permiso `recibir`: Local y Depósito).
+  queda «En camino» y el local lo recibe escaneando en ERP › Stock › Transferencias. ⛔ Está prendido para ninguna línea.
 - ⛔ Hay «¿está en Gestión Nube?»: uno trabado se resuelve siempre como «transferir de nuevo», y el reintento retoma el MISMO
   documento por `origen_ref` (⛔ se duplica).
 - La lista de esas transferencias es ERP › Stock › Transferencias (`MoverYRecibir unificada`): las de Reposición con lo que
