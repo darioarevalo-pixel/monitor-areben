@@ -1,5 +1,8 @@
 /**
- * ERP › Ventas › Cargar venta (a mano, «Manual»): `registrarVenta` del motor con `origen: 'manual'` (contrato §19, sql/031).
+ * ERP › Ventas › «Nueva venta» (ex «Cargar venta»; a mano, «Manual»): `registrarVenta` del motor con `origen: 'manual'` (contrato §19, sql/031).
+ * Bruno 10-nov: «muy parecido al POS, pero sin la validación», «más manual y más libre». Precio de lista, descuento % por prenda y
+ * % de la forma de pago se eligen en la pantalla y la cuenta la rearma ACÁ (`cuentaDeNuevaVenta`). ⛔ Suma a ninguna caja.
+ * Dos modos: «Venta del local» (ahora) y «Corregir una venta pasada» (fecha + motivo obligatorios, permiso `venta-pasada`).
  *
  *   GET  ?recurso=erp&vista=cargar-venta&marca=bdi|zattia          lo que pide el formulario: cuentas de cobro, canales, depósitos
  *   POST { accion: 'cargar-venta', marca, linea, origen_ref, … }   registra la venta
@@ -8,11 +11,12 @@
  *    28-oct, BDI 15/16-nov, Zattia 23-nov) la venta es REAL (mueve el libro, se factura); antes, `prueba: true` (corre en paralelo
  *    con GN). Reemplazó a `ERP_STUNNED_PRUEBA`. Sin poder leer los cortes ⇒ 503 (⛔ se elige a ciegas).
  * 🔑 `origen_ref` lo genera la pantalla al ABRIR el formulario ⇒ reintentar devuelve la misma venta (`ya_existia`).
- * Sin permiso nombrado en `lib/permisos.core.js` ⇒ `configurar` (sólo admin) hasta que Bruno diga quién carga.
+ * Permisos (`lib/permisos.core.js`): `nueva-venta` (Local y Administración) y, para la venta pasada, `venta-pasada` (Administración).
  */
 import { textoDelMotor } from '../lib/erp/venta.core.js'
 import { verificarPinErp } from './_erp-pin.js'
 import { cuentasSueltas, formasDePago } from '../lib/erp/formas-pago.core.js'
+import { cuentaDeNuevaVenta, pasoDeRedondeo } from '../lib/erp/nueva-venta.core.js'
 import { lineaEnErp } from '../lib/erp/corte.core.js'
 import { cortesDeCaja } from './_caja-corte.js'
 
@@ -25,7 +29,7 @@ export const FRENOS_DE_CUENTA = ['SIN_CREDITO', 'ATRASADO', 'SUPERA_TOPE']
 
 /**
  * @param {{ marca: string }} p
- * @param {{ conMotor: Function, reglasDeCaja?: (linea: string) => Promise<any | null> }} deps  `reglasDeCaja`: `caja_config.reglas` de una línea (las MISMAS del POS)
+ * @param {{ conMotor: Function, reglasDeCaja?: (linea: string) => Promise<any | null>, cortes?: (marca: string) => Promise<Record<string, string>> }} deps  `reglasDeCaja`: `caja_config.reglas` de una línea (las MISMAS del POS)
  * 🔑 `formas` = las formas de pago como las del POS, por línea, cada una con su cuenta de cobro y la RUTA de cada canal (cuenta real y tasa).
  */
 export async function datosParaCargar({ marca }, deps) {
@@ -46,11 +50,19 @@ export async function datosParaCargar({ marca }, deps) {
     for (const l of LINEAS[marca]) {
       const delaLinea = cuentas.filter((c) => c.marca === l)
       formas[l] = formasDePago({ reglas: reglas[l], cuentas: delaLinea, rutas: rutasVigentes ? await rutasVigentes(pg, { marca: l }) : [], canales })
-      sueltas[l] = cuentasSueltas({ formas: formas[l], cuentas: delaLinea }).map(({ id, nombre, medio, marca: m }) => ({ id, nombre, medio, marca: m }))
+      sueltas[l] = cuentasSueltas({ formas: formas[l], cuentas: delaLinea, reglas: reglas[l] }).map(({ id, nombre, medio, marca: m }) => ({ id, nombre, medio, marca: m }))
     }
+    // «Entra a»: las cuentas reales activas, para cambiar la de la ruta (Bruno 10-nov: «la cuenta de pago también se podría editar»).
+    const cuentasReales = hay ? (await pg.query(`select id::text, titular, nombre, banco from cuenta_real where activa order by titular, banco, nombre`)).rows
+      .map((c) => ({ id: c.id, nombre: [c.titular, c.nombre].filter(Boolean).join(' · ') || c.banco || c.id })) : []
+    // Real o de prueba: el corte de cada línea (la pantalla dice «de prueba» sólo donde la línea ⛔ cortó). Sin poder leerlos: se dice prueba.
+    let cortes = null
+    try { cortes = deps.cortes ? await deps.cortes(marca) : null } catch { cortes = null }
+    const enErp = Object.fromEntries(LINEAS[marca].map((l) => [l, cortes ? lineaEnErp(cortes, l, new Date()) : false]))
+    const redondeo = Object.fromEntries(LINEAS[marca].map((l) => [l, pasoDeRedondeo(reglas[l]?.redondeo)]))
     return {
       lineas: LINEAS[marca], cuentas: cuentas.map(({ id, nombre, medio, marca: m }) => ({ id, nombre, medio, marca: m })), canales, depositos: DEPOSITOS[marca],
-      manualHabilitado: Boolean(ok), formas, sueltas, sinReglas: LINEAS[marca].filter((l) => !reglas[l]?.medios),
+      manualHabilitado: Boolean(ok), formas, sueltas, sinReglas: LINEAS[marca].filter((l) => !reglas[l]?.medios), cuentasReales, enErp, redondeo,
     }
   })
 }
@@ -69,42 +81,55 @@ export function entradaManual(b, marca, usuario, { cortes, ahora = new Date() })
   if (!LINEAS[marca]?.includes(linea)) return { error: 'Línea inválida' }
   if (!/^[0-9a-f-]{36}$/i.test(String(b.origen_ref || ''))) return { error: 'Falta la clave del formulario: volvé a abrirlo.' }
   if (!DEPOSITOS[marca].includes(String(b.deposito || ''))) return { error: 'Elegí de dónde sale.' }
+  // «Corregir una venta pasada» (Bruno 10-nov): con fecha y motivo obligatorios. «Venta del local»: es de AHORA (⛔ se le cambia la fecha).
+  const corregir = b?.modo === 'corregir'
+  const motivo = String(b?.motivo ?? '').trim()
+  if (corregir && motivo.length < 3) return { error: 'Escribí por qué se carga ahora.' }
+  if (corregir && !b.ocurrida_en) return { error: 'Falta cuándo fue la venta.' }
   const prendas = Array.isArray(b.lineas) ? b.lineas : []
   if (!prendas.length) return { error: 'Agregá al menos una prenda.' }
-  const lineas = []
   for (const l of prendas) {
-    const cantidad = Number(l.cantidad), precio = pesos(l.precio)
+    const cantidad = Number(l.cantidad)
     if (!Number.isInteger(cantidad) || cantidad <= 0) return { error: 'Cada prenda lleva una cantidad entera mayor a 0.' }
-    if (!(precio >= 0)) return { error: 'Cada prenda lleva un precio.' }
-    lineas.push({
-      product_id: Number(l.producto), size_id: Number(l.talle), cantidad, precio, descuento: 0, rebaja: 0, importe: pesos(precio * cantidad),
-      ...(l.sku ? { sku: String(l.sku) } : {}), ...(l.barcode ? { barcode: String(l.barcode) } : {}),
-    })
+    if (!(pesos(l.precio) >= 0)) return { error: 'Cada prenda lleva un precio.' }
   }
-  const subtotal = pesos(lineas.reduce((a, l) => a + l.importe, 0))
-  const pagos = (Array.isArray(b.pagos) ? b.pagos : []).filter((p) => Number(p.monto) > 0)
-    .map((p) => ({ cuenta: String(p.cuenta), base: pesos(p.monto), porcentaje: 0, descuento: 0, redondeo: 0, monto: pesos(p.monto) }))
-  if (!pagos.length) return { error: 'Falta cómo paga.' }
-  if (pesos(pagos.reduce((a, p) => a + p.monto, 0)) !== subtotal) return { error: 'Lo que paga no suma el total.' }
+  // 🔑 La cuenta la rearma el SERVIDOR con lo elegido (precio de lista, descuento %, % de la forma de pago), ⛔ los montos del navegador.
+  // Un pago sin `base` ni `porcentaje` (la forma vieja, `monto`) paga ese monto tal cual.
+  const legado = (p) => p.base == null && p.porcentaje == null && p.monto != null
+  const pagosIn = (Array.isArray(b.pagos) ? b.pagos : []).filter((p) => p && p.cuenta && !(legado(p) && !(Number(p.monto) > 0)))
+  if (!pagosIn.length) return { error: 'Falta cómo paga.' }
+  const c = cuentaDeNuevaVenta({
+    lineas: prendas.map((l) => ({ precio: pesos(l.precio), cantidad: Number(l.cantidad), descuentoPct: Number(l.descuento_pct ?? 0) })),
+    pagos: pagosIn.map((p, i) => ({ base: legado(p) ? pesos(p.monto) : (p.base == null || p.base === '' ? (i === pagosIn.length - 1 ? null : NaN) : pesos(p.base)), porcentaje: legado(p) ? 0 : Number(p.porcentaje ?? 0), redondear: !legado(p) && !!p.redondear })),
+    paso: b.paso,
+  })
+  if (!c.ok) return { error: /cubren/.test(c.error) ? `Lo que paga no suma el total. ${c.error}` : c.error }
+  const lineas = prendas.map((l, i) => ({
+    product_id: Number(l.producto), size_id: Number(l.talle), cantidad: c.lineas[i].cantidad, precio: c.lineas[i].precio, descuento: c.lineas[i].descuento, rebaja: 0, importe: c.lineas[i].importe,
+    ...(l.sku ? { sku: String(l.sku) } : {}), ...(l.barcode ? { barcode: String(l.barcode) } : {}),
+  }))
+  const pagos = pagosIn.map((p, i) => ({ cuenta: String(p.cuenta), ...c.pagos[i] }))
   const doc = String(b.cliente?.doc ?? '').replace(/\D/g, '')
   const nombre = String(b.cliente?.nombre ?? '').trim()
-  const cuando = b.ocurrida_en ? new Date(b.ocurrida_en) : null
+  const cuando = corregir && b.ocurrida_en ? new Date(b.ocurrida_en) : (!corregir && b.ocurrida_en && b.modo == null ? new Date(b.ocurrida_en) : null)
   if (cuando && Number.isNaN(cuando.getTime())) return { error: 'La fecha no se entiende.' }
   if (cuando && cuando.getTime() > Date.now() + 60_000) return { error: 'La fecha no puede ser futura.' }
+  const nota = String(b.nota || '').trim().slice(0, 500)
+  const detalle = { ...(nota ? { nota } : {}), ...(corregir ? { modo: 'corregir', motivo: motivo.slice(0, 500) } : {}) }
   return {
     entrada: {
       origen: 'manual', origen_ref: String(b.origen_ref), marca: linea, canal: String(b.canal || ''), deposito: String(b.deposito),
       ...(doc && nombre ? { cliente: { doc, nombre } } : {}),
       ...(cuando ? { ocurrida_en: cuando.toISOString() } : {}),
-      usuario: usuario || 'admin', prueba: !lineaEnErp(cortes, linea, cuando || ahora), lineas, pagos, subtotal, total: subtotal,
-      ...(String(b.nota || '').trim() ? { detalle: { nota: String(b.nota).trim().slice(0, 500) } } : {}),
+      usuario: usuario || 'admin', prueba: !lineaEnErp(cortes, linea, cuando || ahora), lineas, pagos, subtotal: c.subtotal, total: c.total,
+      ...(Object.keys(detalle).length ? { detalle } : {}),
     },
   }
 }
 
 /**
  * @param {{ marca: string, body: any, usuario: string | null, persona?: string | null }} p
- * @param {{ conMotor: Function, cortes?: (marca: string) => Promise<Record<string, string>> }} deps  `cortes`: para los tests
+ * @param {{ conMotor: Function, cortes?: (marca: string) => Promise<Record<string, string>>, correccionMedio?: any }} deps  `cortes` y `correccionMedio`: para los tests
  * 🔑 Una venta A CUENTA frenada (sin crédito, atrasado, pasa el tope) se salta con el PIN de un admin: el navegador manda sólo `pin`, y el
  *    `autoriza` se arma ACÁ con la persona de la SESIÓN (⛔ se acepta uno que venga armado de afuera). El PIN se verifica antes de escribir.
  */
@@ -126,9 +151,32 @@ export async function cargarVentaManual({ marca, body, usuario, persona = null }
     if (!v.ok) return { status: v.status || 403, error: v.error || 'PIN incorrecto', ...(v.codigo ? { codigo: v.codigo } : {}) }
     e.entrada.autoriza = { motivo: 'pin_admin', usuario: v.persona }
   }
-  return deps.conMotor(marca, 'Cargar venta', async (db, { registrarVenta }) => {
+  return deps.conMotor(marca, 'Nueva venta', async (db, { registrarVenta }) => {
     const r = await registrarVenta(db, e.entrada)
     if (!r.ok) return { status: r.error?.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: textoDelMotor(r.error), ...(FRENOS_DE_CUENTA.includes(r.error?.codigo) ? { codigo: r.error.codigo } : {}) }
-    return { ok: true, venta: r.venta, yaExistia: r.ya_existia, avisos: r.avisos ?? [] }
+    const avisos = [...(r.avisos ?? [])]
+    // «Entra a» cambiado a mano (Bruno 10-nov): la venta nace con la cuenta real de la RUTA y se corrige con el verbo del motor
+    // (`corregirMedioCobro`, fila inmutable con antes y después). ⛔ Frena: si no se pudo, la venta queda y se avisa.
+    const elegidas = (Array.isArray(body?.pagos) ? body.pagos : []).map((p, i) => ({ i, real: p?.cuenta_real ? String(p.cuenta_real) : null })).filter((x) => x.real)
+    if (!r.ya_existia && elegidas.length) {
+      try {
+        const m = deps.correccionMedio || await import('../motor/venta/correccion-medio.mjs')
+        const vigentes = await m.pagosVigentes(db, r.venta.id)
+        const usados = new Set()
+        for (const { i, real } of elegidas) {
+          const p = e.entrada.pagos[i]
+          const v = vigentes.find((x) => !usados.has(x.id) && Math.abs(Number(x.monto) - Number(p.monto)) < 0.01 && String(x.cuenta_cobro_id) === String(p.cuenta))
+            ?? vigentes.find((x) => !usados.has(x.id) && Math.abs(Number(x.monto) - Number(p.monto)) < 0.01)
+          if (!v) { avisos.push({ codigo: 'CUENTA_REAL_SIN_CAMBIAR' }); continue }
+          usados.add(v.id)
+          if (v.cuenta_real_id === real || !v.medio) continue
+          const c = await m.corregirMedioCobro(db, { venta_id: r.venta.id, pago_id: v.id, medio: v.medio, cuenta: v.cuenta_cobro_id, cuenta_real: real, motivo: 'Cuenta elegida al cargar la venta', usuario: usuario || 'admin' })
+          if (!c.ok) avisos.push({ codigo: 'CUENTA_REAL_SIN_CAMBIAR', texto: textoDelMotor(c.error) })
+        }
+      } catch (err) {
+        avisos.push({ codigo: 'CUENTA_REAL_SIN_CAMBIAR', texto: String((err && err.message) || err).slice(0, 200) })
+      }
+    }
+    return { ok: true, venta: r.venta, yaExistia: r.ya_existia, avisos }
   })
 }

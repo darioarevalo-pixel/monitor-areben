@@ -74,10 +74,10 @@ describe('la venta al ERP: marca de su línea y REAL', () => {
     expect(() => marcaDeVentaErp({ ...fila, store: 'zattia', renglones: [{ linea: 'stunned' }, { linea: 'zattia' }] })).toThrow(/mezcla/)
   })
   it('entradaDelMotorErp: la marca que le dicen, prueba false, sin datos de GN', () => {
-    const e = entradaDelMotorErp(fila, { marca: 'bdi' })
+    const e = entradaDelMotorErp(fila, { marca: 'bdi', reglas: null })
     expect(e).toMatchObject({ marca: 'bdi', prueba: false, origen: 'caja', origen_ref: 'u1' })
     expect(e.detalle).toEqual({ paga_con: 200 })
-    expect(() => entradaDelMotorErp(fila, { marca: '' })).toThrow(/marca/)
+    expect(() => entradaDelMotorErp(fila, { marca: '', reglas: null })).toThrow(/marca/)
   })
   it('la copia de GN sigue igual (marca de la tienda, prueba)', () => {
     expect(entradaDelMotor(fila)).toMatchObject({ marca: 'bdi', prueba: true })

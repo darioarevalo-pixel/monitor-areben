@@ -29,7 +29,7 @@ describe('entradaDelMotorErp lleva el PIN que verificó el servidor', () => {
   const venta = { id: 'x', store: 'zattia', renglones: [], pagos: [], subtotal: 0, total: 0 }
   it('con `payload.autoriza` lo pasa; sin él, ⛔ agrega nada', () => {
     const autoriza = { usuario: 'encargada', motivo: 'pin_encargada' }
-    expect(entradaDelMotorErp({ ...venta, payload: { autoriza } }, { marca: 'stunned' }).autoriza).toEqual(autoriza)
-    expect(entradaDelMotorErp(venta, { marca: 'stunned' })).not.toHaveProperty('autoriza')
+    expect(entradaDelMotorErp({ ...venta, payload: { autoriza } }, { marca: 'stunned', reglas: null }).autoriza).toEqual(autoriza)
+    expect(entradaDelMotorErp(venta, { marca: 'stunned', reglas: null })).not.toHaveProperty('autoriza')
   })
 })

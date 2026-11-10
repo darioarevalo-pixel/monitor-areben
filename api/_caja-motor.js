@@ -121,9 +121,11 @@ export async function eventoActivo(store) {
  * La venta de una línea que ya está en el ERP (`erp_corte`): el motor ES la venta (⛔ copia de GN), REAL (`prueba: false`) y de
  * la marca de su línea (`marcaDeVentaErp`). A diferencia de `anotarEnMotor`, sin conexión o con error DEVUELVE el fallo (la
  * cajera lo ve y se reintenta). ⛔ Lanza.
- * @param {string} store @param {any} venta la fila de `caja_venta` @returns {Promise<{ ok: true, numero: number | null } | { ok: false, error: string, reintentable?: boolean }>}
+ * 🔑 `reglas` (las de `caja_config`, null si ⛔ se pudieron leer): el pago a «Transferencia CG» entra como «Transferencia» (Bruno 10-nov).
+ * @param {string} store @param {any} venta la fila de `caja_venta` @param {{ reglas: any }} o
+ * @returns {Promise<{ ok: true, numero: number | null } | { ok: false, error: string, reintentable?: boolean }>}
  */
-export async function registrarEnErp(store, venta) {
+export async function registrarEnErp(store, venta, { reglas }) {
   let marca;
   try {
     marca = marcaDeVentaErp({ ...venta, store: venta.store || store });
@@ -131,7 +133,7 @@ export async function registrarEnErp(store, venta) {
     return { ok: false, error: String((e && e.message) || e), reintentable: false };
   }
   const r = await conMotor(store, async (db, registrarVenta) => {
-    const out = await registrarVenta(db, entradaDelMotorErp(venta, { marca }));
+    const out = await registrarVenta(db, entradaDelMotorErp(venta, { marca, reglas }));
     return out.ok ? { ok: true, numero: Number(out.venta?.numero) || null } : { ok: false, error: `${out.error.codigo}: ${out.error.mensaje}`, reintentable: out.error.codigo !== 'CONFLICTO_IDEMPOTENCIA' };
   });
   if (r.sinConexion) return { ok: false, error: 'El ERP no está conectado (falta DATABASE_URL en Vercel).', reintentable: true };

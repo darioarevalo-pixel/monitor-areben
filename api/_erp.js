@@ -104,7 +104,7 @@ import { claveVenta, resumenDelMes, ventasParaFacturar } from '../motor/arca/mes
 import { SQL_CUENTAS_SIN_PLATA, SQL_FICHAS_ERP, SQL_PAGOS_A_CUENTA_ERP, cobrosDeVentasErp } from '../lib/erp/facturacion-erp.core.js'
 import { POR_PEDIDO, facturarLote } from '../motor/arca/lote.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
-import { stockDeVariante } from '../lib/erp/stock.core.js'
+import { depositoDe, stockDeVariante } from '../lib/erp/stock.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { armarConciliacion, TIENDAS as TIENDAS_CONCILIACION } from '../lib/erp/conciliacion.core.js'
 import { entradaInvalida } from '../lib/erp/entrada.core.js'
@@ -118,6 +118,7 @@ import { anotarAnuladaDelErp } from '../lib/caja/anulada-erp.core.js'
 import { NC_DESDE_LA_VENTA, armarFacturaDelCambio, claveDeFactura, esDeVentaPropia, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { feriaDeCampanias, reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
+import { cortesDeCaja } from './_caja-corte.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
@@ -635,8 +636,11 @@ export async function stockDePrenda({ marca, q, producto, talle }) {
     const porVariante = new Map()
     for (const r of data) {
       const k = `${r.product_id}/${r.size_id}`
-      const v = porVariante.get(k) || { producto: String(r.product_id), talle: String(r.size_id), nombre: r.product_name, talleNombre: r.size_name, sku: r.sku, barcode: r.barcode, gn: 0 }
+      const v = porVariante.get(k) || { producto: String(r.product_id), talle: String(r.size_id), nombre: r.product_name, talleNombre: r.size_name, sku: r.sku, barcode: r.barcode, gn: 0, porDeposito: {} }
       v.gn += Number(r.available_quantity || 0)
+      // Por depósito (Nueva venta muestra el stock del lugar de donde sale): el del espejo, por `depositoDe`.
+      const d = depositoDe(marca, r.store_name)
+      if (d) v.porDeposito[d] = (v.porDeposito[d] || 0) + Number(r.available_quantity || 0)
       porVariante.set(k, v)
     }
     return { variantes: [...porVariante.values()].slice(0, 60), cortado: porVariante.size > 60 }
@@ -2005,7 +2009,7 @@ export default async function handler(req, res) {
         const sb = createClient(url, key)
         return reglasDeHoy(sb, linea, await reglasGuardadas(sb, linea, marcaDeCaja(linea)))
       }
-      const r = await datosParaCargar({ marca: String(req.query.marca || '') }, { conMotor, reglasDeCaja })
+      const r = await datosParaCargar({ marca: String(req.query.marca || '') }, { conMotor, reglasDeCaja, cortes: cortesDeCaja })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cheques') {
@@ -2274,6 +2278,10 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (body.accion === 'cargar-venta') {
+      // «Corregir una venta pasada»: además de `nueva-venta`, `venta-pasada` (Bruno 10-nov: la corrige Administración).
+      if (body.modo === 'corregir' && !puedeErp(perfil, String(body.marca || ''), 'venta-pasada', aprobaciones, guardados)) {
+        return res.status(403).json({ error: 'Cargar una venta pasada es de Administración.' })
+      }
       const r = await cargarVentaManual({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null, persona: perfil.user || perfil.name || null }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error, ...(r.codigo ? { codigo: r.codigo } : {}) } : r)
     }

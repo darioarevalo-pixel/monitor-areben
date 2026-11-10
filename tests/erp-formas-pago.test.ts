@@ -27,21 +27,28 @@ describe('Cargar venta: las formas de pago son las del POS', () => {
   it('el crédito trae sus variantes del POS: 6 cuotas y promo del banco, cada una con su cuenta', () => {
     const credito = formasDePago({ reglas, cuentas, rutas: [], canales: ['local'] }).find((x) => x.clave === 'credito')!
     expect(credito.opciones).toEqual([
-      { clave: 'normal', nombre: 'Sin promo', cuenta: 'c25188' }, { clave: 'seis', nombre: '6 cuotas', cuenta: 'c25173' }, { clave: 'promo', nombre: 'Promo del banco', cuenta: 'c25172' },
+      { clave: 'normal', nombre: 'Sin promo', cuenta: 'c25188', pct: 0 }, { clave: 'seis', nombre: '6 cuotas', cuenta: 'c25173', pct: 0 }, { clave: 'promo', nombre: 'Promo del banco', cuenta: 'c25172', pct: 0 },
     ])
   })
 
-  it('si la Caja manda la transferencia a la otra cuenta, el ERP también (no hay una segunda regla)', () => {
-    const f = formasDePago({ reglas: { ...reglas, transferenciaA: 20595 }, cuentas, rutas: [], canales: ['local'] })
-    expect(f.find((x) => x.clave === 'transferencia')!.cuenta).toBe('c20595')
+  it('ERP sin CG (Bruno 10-nov): aunque la Caja mande la transferencia a CG, en el ERP es la de Areben', () => {
+    const f = formasDePago({ reglas: { ...reglas, transferenciaA: 20595, titulares: { areben: 13015, dario: 20595 } }, cuentas, rutas: [], canales: ['local'] })
+    expect(f.find((x) => x.clave === 'transferencia')!.cuenta).toBe('c13015')
+  })
+
+  it('cada forma trae el % de descuento de su cuenta en la Caja (Nueva venta lo deja editar)', () => {
+    const conPct = { ...reglas, cuentas: { 12921: { nombre: 'Efectivo', descuento: 15 }, 13015: { nombre: 'Transferencia', descuento: 10 }, 20196: { nombre: 'Débito', descuento: 10 }, 25188: { nombre: 'Crédito', descuento: 0 }, 25172: { nombre: 'Crédito 10%', descuento: 10 }, 25173: { nombre: '6 cuotas', descuento: 0 } } }
+    const f = formasDePago({ reglas: conPct, cuentas, rutas: [], canales: ['local'] })
+    expect(Object.fromEntries(f.slice(0, 4).map((x) => [x.clave, x.pct]))).toEqual({ efectivo: 15, transferencia: 10, debito: 10, credito: 0 })
+    expect(f.find((x) => x.clave === 'credito')!.opciones!.find((o) => o.clave === 'promo')!.pct).toBe(10)
   })
 
   it('la RUTA de cada canal sale con la cuenta real, la comisión y los días; sin ruta es null (se dice, ⛔ se inventa)', async () => {
     const { rutasVigentes } = await import('../motor/cuentas/rutas.mjs')
     const rutas = await (rutasVigentes as unknown as () => Promise<never[]>)()
     const f = formasDePago({ reglas, cuentas, rutas, canales: ['local', 'online'] })
-    expect(f.find((x) => x.clave === 'credito')!.rutas.local).toEqual({ cuenta: 'Areben · Mercado Pago', tasa: 3.5, dias: 2 })
-    expect(f.find((x) => x.clave === 'efectivo')!.rutas.local).toEqual({ cuenta: 'Areben · Caja local', tasa: null, dias: 0 })
+    expect(f.find((x) => x.clave === 'credito')!.rutas.local).toEqual({ cuenta: 'Areben · Mercado Pago', cuentaId: 'r2', tasa: 3.5, dias: 2 })
+    expect(f.find((x) => x.clave === 'efectivo')!.rutas.local).toEqual({ cuenta: 'Areben · Caja local', cuentaId: 'r1', tasa: null, dias: 0 })
     expect(f.find((x) => x.clave === 'efectivo')!.rutas.online).toBeNull()
   })
 
@@ -53,6 +60,11 @@ describe('Cargar venta: las formas de pago son las del POS', () => {
   it('lo que ⛔ es del POS (Mercado Pago, feria…) va a «Otra cuenta»', () => {
     const f = formasDePago({ reglas, cuentas, rutas: [], canales: ['local'] })
     expect(cuentasSueltas({ formas: f, cuentas }).map((c: { id: string }) => c.id).sort()).toEqual(['c20595', 'c25867', 'c25869', 'mp'])
+  })
+
+  it('«Más» ⛔ ofrece la transferencia a un particular (CG): la cuenta real dice adónde fue', () => {
+    const f = formasDePago({ reglas, cuentas, rutas: [], canales: ['local'] })
+    expect(cuentasSueltas({ formas: f, cuentas, reglas }).map((c: { id: string }) => c.id).sort()).toEqual(['c25867', 'c25869', 'mp'])
   })
 })
 

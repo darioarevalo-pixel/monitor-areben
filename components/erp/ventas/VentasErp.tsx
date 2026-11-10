@@ -14,7 +14,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { esAdmin } from '@/lib/permisos'
 import {
   Button, EmptyState, Icono, MenuAcciones, Notice, Paginacion, color, font, space, weight, type AccionMenu,
 } from '@/components/ui'
@@ -32,7 +31,7 @@ import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaVenta } from './FichaVenta'
 import { imprimirVentaErp } from '@/lib/erp/ticket-erp'
-import { CargarVenta } from './CargarVenta'
+import { NuevaVenta, type VentaGuardada } from './NuevaVenta'
 import { VentanaCobro, VentanaEditar } from './VentanasVenta'
 import { useLineaErp } from '@/lib/erp/linea-erp'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
@@ -78,7 +77,10 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   alAbrir?: () => void
 }) {
   const { marca: delShell, perfil } = useSesion()
-  const [cargarAbierta, setCargarAbierta] = useState(false)
+  // «Nueva venta» (Bruno 10-nov) ocupa la pantalla entera de Ventas mientras está abierta.
+  const [nuevaAbierta, setNuevaAbierta] = useState(false)
+  // «Ver la venta» desde la venta recién guardada: se abre su ficha cuando llega la lista.
+  const verDespues = useRef<VentaGuardada | null>(null)
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const usuario = perfil?.name ?? null
   const [periodo, setPeriodo] = useState(abrir?.periodo ?? 'mes')
@@ -117,6 +119,13 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
         // Lo tildado ⛔ sobrevive a una lectura nueva: puede haber cambiado (una anulada ya no se exporta igual).
         setSeleccion(new Set())
         setError(null)
+        const recien = verDespues.current
+        if (recien) {
+          verDespues.current = null
+          const f = d.filas.find((x: FilaVentaLista) => x.id === recien.id)
+          if (f) setFicha({ fila: f })
+          else setAviso(`La venta #${recien.numero} no está en ${periodos.find(([k]) => k === periodo)?.[1].toLowerCase() ?? 'este período'}: buscala por su número.`)
+        }
         const { abrir: pedida, alAbrir: soltar } = abrirRef.current
         if (pedida) {
           const f = d.filas.find((x: FilaVentaLista) => x.id === pedida.id)
@@ -239,14 +248,21 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     )
   }
 
+  if (nuevaAbierta) {
+    return (
+      <NuevaVenta marca={marca} onCerrar={() => setNuevaAbierta(false)} onGuardada={() => cargar()}
+        onVer={(v) => { verDespues.current = v; setNuevaAbierta(false); cargar() }}
+        onFacturar={(v) => { setNuevaAbierta(false); irACaja('factura', v.id) }} />
+    )
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título «Ventas» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
         <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Caja, Tienda Nube, mayoristas y cambios, en una sola lista.</p>
-        {perfil && esAdmin(perfil) && <Button onClick={() => setCargarAbierta(true)}>Cargar venta</Button>}
+        {rol('nueva-venta') && <Button onClick={() => setNuevaAbierta(true)}>Nueva venta</Button>}
       </div>
-      {cargarAbierta && <CargarVenta marca={marca} onCerrar={() => setCargarAbierta(false)} onCargada={(t) => { setCargarAbierta(false); setAviso(t); cargar() }} />}
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {aviso && <Notice tone="success" onClose={() => setAviso(null)}>{aviso}</Notice>}
