@@ -32,6 +32,7 @@ import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { useLineaErp, useTiendaErp } from '@/lib/erp/linea-erp'
 import { usePruebaSegunCorte } from '@/lib/erp/prueba-corte'
+import { conMesesAnteriores } from '@/lib/erp/meses.core.js'
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
 type Prefs = { orden: string[]; visibles: string[] }
@@ -74,6 +75,8 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
   const tienda = useTiendaErp()
   const { prueba, setPrueba, listo } = usePruebaSegunCorte(tienda)
   const [periodo, setPeriodo] = useState('mes')
+  // 🎯 Bruno 10-nov: «no veo como ir para atras en los meses» ⇒ los meses de antes, en el mismo selector (`meses.core.js`).
+  const [periodos] = useState(() => conMesesAnteriores(PERIODOS_COBROS, diaArgentino(Date.now())))
   const [datos, setDatos] = useState<(CobrosDelPeriodo & { clave: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [vista, setVista] = useState('todos')
@@ -135,7 +138,7 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
   const elegidas = filas.filter((f) => seleccion.has(f.id))
   const mirada = `${clave}|${vista}|${q}|${linea}|${medio}|${orden?.col ?? ''}|${orden?.dir ?? ''}`
   const mostrar = tanda.de === mirada ? tanda.n : DE_A
-  const nombrePeriodo = (PERIODOS_COBROS.find(([k]) => k === periodo)?.[1] ?? '').toLowerCase()
+  const nombrePeriodo = (periodos.find(([k]) => k === periodo)?.[1] ?? '').toLowerCase()
   const mediosDelPeriodo = useMemo(() => [...new Set(todas.map((f) => f.medio ?? 'sin_medio'))].sort(), [todas])
 
   // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
@@ -218,7 +221,7 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en los cobros" placeholder="Nº de venta, cliente, medio, cuenta o quién" />
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
-            {PERIODOS_COBROS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+            {periodos.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
           </Select>
           <Select aria-label="Medio" style={ANCHO_SELECT} value={medio} onChange={(e) => setMedio(e.target.value)}>
             <option value="">Todos los medios</option>

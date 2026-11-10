@@ -425,7 +425,8 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
               </Notice>
             )}
             {/* 🎯 Bruno 30-oct: el cartel de Stunned «ya vende por el ERP» sobraba. Queda sólo donde Gestión Nube sigue siendo el que sirve. */}
-            {seccion.key !== 'inicio' && !lineaEnErp && (
+            {/* 🐛 Bruno 10-nov: en Stunned salía «modo paralelo» los primeros segundos ⇒ se dibuja recién leído el corte (si la lectura falla, `leida` igual se pone y el cartel sale: el prudente). */}
+            {seccion.key !== 'inicio' && corteLeido && !lineaEnErp && (
               <p style={{ margin: 0, padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4, borderLeft: `3px solid ${COLOR_DE_MARCA[opcionActiva]}` }}>
                 {`${lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy.`}
               </p>

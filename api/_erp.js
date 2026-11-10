@@ -38,7 +38,7 @@
  *   POST { accion: 'pedido-entrar' | 'pedido-cambiar' | 'pedido-a-preparar' | 'pedido-anular', pedidoId, … }  (VENTA_MAYORISTA_REAL)
  *   POST { accion: 'poner-credito', marca, clienteId, credito, tope?, dias? }   marcar o sacar el crédito (sólo admin)
  *   POST { accion: 'poner-contacto', marca, clienteId, whatsapp?, email? }       cargar o corregir el contacto (sólo admin)
- *   GET  ?recurso=erp&vista=inicio-resultado&marca=bdi|zattia         Inicio: vendido, costo y margen del mes (`api/_erp-inicio.js`)
+ *   GET  ?recurso=erp&vista=inicio-resultado&marca=bdi|zattia[&mes=AAAA-MM]   Inicio: vendido, costo y margen del mes, o de uno de antes (`api/_erp-inicio.js`)
  *   GET  ?recurso=erp&vista=stock&marca=bdi|zattia&q=texto            busca prendas (SKU, código, nombre)
  *   GET  ?recurso=erp&vista=precio&marca=…&producto=ID                precio por lista y costo del producto, con GN y TN al lado
  *   POST {recurso:'erp', accion:'cargar-precio'|'cargar-costo', marca, producto, monto, lista?, desde?, motivo?, proveedor?, proveedorId?}
@@ -2044,7 +2044,7 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'GET' && req.query.vista === 'inicio-resultado') {
-      const r = await resultadoDelMes({ marca: String(req.query.marca || ''), linea: String(req.query.linea || '') }, { conMotor })
+      const r = await resultadoDelMes({ marca: String(req.query.marca || ''), linea: String(req.query.linea || ''), mes: req.query.mes ? String(req.query.mes) : null }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'clientes-lista') {

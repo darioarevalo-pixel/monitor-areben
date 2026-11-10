@@ -31,6 +31,7 @@ import {
 } from '@/lib/erp/cajas.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
+import { conMesesAnteriores } from '@/lib/erp/meses.core.js'
 
 type FilaCaja = ReturnType<typeof armarFilasCajas>[number]
 type Prefs = { orden: string[]; visibles: string[] }
@@ -79,6 +80,8 @@ export function CajasErp() {
   const admin = esAdmin(perfil)
   const lista = 'erp-cajas'
   const [periodo, setPeriodo] = useState('mes')
+  // 🎯 Bruno 10-nov: «no veo como ir para atras en los meses» ⇒ los meses de antes, en el mismo selector (`meses.core.js`).
+  const [periodos] = useState(() => conMesesAnteriores(PERIODOS_CAJA, diaArgentino(Date.now())))
   const [vista, setVista] = useState('todas')
   const [orden, setOrden] = useState<OrdenLista>(null)
   const [prefs, setPrefsState] = useState<Prefs>(() => normalizarPrefsCaja(typeof window === 'undefined' ? null : leerPrefsDeLista(lista, usuario)))
@@ -166,7 +169,7 @@ export function CajasErp() {
     setDatos((d) => (d ? { ...d, filas: d.filas.map((x) => (x.id === f.id ? f : x)) } : d))
     setSuelta((x) => (x?.id === f.id ? f : x))
   }
-  const nombrePeriodo = PERIODOS_CAJA.find(([k]) => k === periodo)?.[1] ?? ''
+  const nombrePeriodo = periodos.find(([k]) => k === periodo)?.[1] ?? ''
 
   const columnas = prefs.visibles.map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
@@ -221,7 +224,7 @@ export function CajasErp() {
         <VistasLista vistas={VISTAS_CAJA} valor={vista} conteo={conteo} onCambio={setVista} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
-            {PERIODOS_CAJA.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+            {periodos.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
           </Select>
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}

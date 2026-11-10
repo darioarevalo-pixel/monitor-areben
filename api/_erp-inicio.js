@@ -12,6 +12,7 @@
  *    agrupada: la suma de los días del mes, la del mes en los 12 meses y la de los canales dan el `mes.vendido` (el oráculo).
  */
 import { diaArgentino } from '../lib/envios/portal.core.js'
+import { ultimoDiaDelMes } from '../lib/erp/meses.core.js'
 import { SQL_RENGLON_STU } from '../lib/erp/linea-gn.core.js'
 import { sqlVentas } from '../lib/stunned/ventas-erp.core.js'
 
@@ -44,15 +45,19 @@ export function ventasDeLinea(linea) {
   return `(${gn}${erp}) vl`
 }
 
-/** El mismo tramo del mes anterior: del 1 al mismo día (o al último, si el anterior es más corto). @param {string} hoy AAAA-MM-DD */
-export function tramosDelMes(hoy) {
+/**
+ * El mismo tramo del mes anterior: del 1 al mismo día (o al último, si el anterior es más corto). @param {string} hoy AAAA-MM-DD
+ * `completo` (un mes de ANTES elegido en Inicio, `hoy` = su último día): el anterior va ENTERO (30-sep ⇒ 1 al 31-ago).
+ * @param {{ completo?: boolean }} [o]
+ */
+export function tramosDelMes(hoy, { completo = false } = {}) {
   const [a, m, d] = hoy.split('-').map(Number)
   const pa = m === 1 ? a - 1 : a, pm = m === 1 ? 12 : m - 1
   const ultimo = new Date(Date.UTC(pa, pm, 0)).getUTCDate()
   const z = (n) => String(n).padStart(2, '0')
   return {
     mes: { desde: `${a}-${z(m)}-01`, hasta: hoy },
-    anterior: { desde: `${pa}-${z(pm)}-01`, hasta: `${pa}-${z(pm)}-${z(Math.min(d, ultimo))}` },
+    anterior: { desde: `${pa}-${z(pm)}-01`, hasta: `${pa}-${z(pm)}-${z(completo ? ultimo : Math.min(d, ultimo))}` },
   }
 }
 
@@ -64,14 +69,25 @@ export function desdeDoceMeses(hoy) {
 }
 
 /**
- * @param {{ marca: string, linea?: string, hoy?: string }} p
+ * El `hoy` del resultado: el de hoy, o el ÚLTIMO día de un mes de antes (`mes` = AAAA-MM, Bruno 10-nov: «ir para atrás en los meses»).
+ * Un mes inválido, el actual o uno futuro ⇒ hoy. @param {string | null | undefined} mes @param {string} hoy AAAA-MM-DD
+ * @returns {{ hoy: string, completo: boolean }}
+ */
+export function hoyDelResultado(mes, hoy) {
+  const ym = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(mes ?? '')) ? String(mes) : null
+  return ym && ym < hoy.slice(0, 7) ? { hoy: ultimoDiaDelMes(ym), completo: true } : { hoy, completo: false }
+}
+
+/**
+ * @param {{ marca: string, linea?: string, hoy?: string, mes?: string | null }} p  `mes`: AAAA-MM de antes (Inicio, ‹ ›)
  * @param {{ conMotor: Function }} deps
  */
-export async function resultadoDelMes({ marca, linea = marca === 'bdi' ? 'bdi' : '', hoy = null }, deps) {
+export async function resultadoDelMes({ marca, linea = marca === 'bdi' ? 'bdi' : '', hoy = null, mes = null }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   if (marca === 'bdi' ? linea !== 'bdi' : !['zattia', 'stunned'].includes(linea)) return { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
   const vl = ventasDeLinea(linea)
-  const t = tramosDelMes(hoy ?? diaArgentino(Date.now()))
+  const dh = hoyDelResultado(mes, hoy ?? diaArgentino(Date.now()))
+  const t = tramosDelMes(dh.hoy, { completo: dh.completo })
   return deps.conMotor(marca, 'El resultado del mes', async (pg) => {
     const suma = async ({ desde, hasta }) => {
       const [r] = (await pg.query(`select count(*)::int as ventas, coalesce(sum(total_price), 0)::float as vendido,

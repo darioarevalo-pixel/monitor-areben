@@ -21,6 +21,7 @@ import {
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { useTiendaErp } from '@/lib/erp/linea-erp'
 import { usePruebaSegunCorte } from '@/lib/erp/prueba-corte'
+import { conMesesAnteriores } from '@/lib/erp/meses.core.js'
 
 type FilaGasto = ReturnType<typeof armarFilasGastos>[number]
 
@@ -57,6 +58,8 @@ export function GastosErp() {
   const { confirmar } = useConfirmar()
   const { prueba, setPrueba, listo } = usePruebaSegunCorte(tienda)
   const [periodo, setPeriodo] = useState('mes')
+  // 🎯 Bruno 10-nov: «no veo como ir para atras en los meses» ⇒ los meses de antes, en el mismo selector (`meses.core.js`).
+  const [periodos] = useState(() => conMesesAnteriores(PERIODOS_GASTO, diaArgentino(Date.now())))
   const [vista, setVista] = useState('todos')
   const [datos, setDatos] = useState<(GastosDelPeriodo & { clave: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -81,7 +84,7 @@ export function GastosErp() {
   const conteo = useMemo(() => contarVistasGasto(todas), [todas])
   const res = useMemo(() => (datos ? resumenGastos(datos) : null), [datos])
   const filas = useMemo(() => filtrarGasto(todas, vista), [todas, vista])
-  const nombrePeriodo = PERIODOS_GASTO.find(([k]) => k === periodo)?.[1] ?? ''
+  const nombrePeriodo = periodos.find(([k]) => k === periodo)?.[1] ?? ''
   const libro = prueba ? 'de prueba' : 'reales'
 
   const celda = (f: FilaGasto, k: string): React.ReactNode => {
@@ -128,7 +131,7 @@ export function GastosErp() {
         <VistasLista vistas={VISTAS_GASTO} valor={vista} conteo={conteo} onCambio={setVista} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
-            {PERIODOS_GASTO.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+            {periodos.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
           </Select>
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
