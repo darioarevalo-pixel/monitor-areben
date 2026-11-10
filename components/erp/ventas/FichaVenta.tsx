@@ -157,11 +157,11 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const debe = fila.saldo > 0 && !esPedido
   const v = ficha?.venta
   const menu: AccionMenu[] = esPedido ? [] : [
-    ...(ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
-    ...(!fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura', fila.id) }] : []),
-    ...(puede.corregir && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
+    ...(puedeErp('facturar-venta') && ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
+    ...(puedeErp('facturar-venta') && !fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura', fila.id) }] : []),
+    ...(puede.corregir && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
     ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir forma de pago…', icono: 'pesos' as const, hint: 'Pagó con otro medio que el que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
-    { key: 'anular', label: 'Anular…', icono: 'anular', tone: 'danger', disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) },
+    ...(puedeErp('anular') ? [{ key: 'anular', label: 'Anular…', icono: 'anular' as const, tone: 'danger' as const, disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) }] : []),
   ]
   // 📱 En el celular los botones de arriba bajan al pie: la principal es cobrar; lo demás, al «⋯».
   const angosta = usePantallaAngosta()
@@ -169,9 +169,9 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const pie: PieFicha = esPedido
     ? { principal: { label: 'Cobrar en Cobros del monitor ↗', onClick: () => window.open('/cobranzas', '_blank', 'noopener') }, mas: verEnTn }
     : {
-        principal: debe ? { label: 'Registrar cobro', onClick: () => abrirVentana('cobro') } : undefined,
-        otra: { label: 'Editar', disabled: fila.anulada, onClick: () => abrirVentana('editar') },
-        mas: [...verEnTn, { key: 'cambio', label: 'Hacer cambio', icono: 'cambios', disabled: fila.anulada, onClick: () => irACaja('cambio') }, ...menu],
+        principal: debe && puedeErp('cobrar') ? { label: 'Registrar cobro', onClick: () => abrirVentana('cobro') } : undefined,
+        otra: puedeErp('editar-venta') ? { label: 'Editar', disabled: fila.anulada, onClick: () => abrirVentana('editar') } : undefined,
+        mas: [...verEnTn, ...(puedeErp('cambiar') ? [{ key: 'cambio', label: 'Hacer cambio', icono: 'cambios' as const, disabled: fila.anulada, onClick: () => irACaja('cambio') }] : []), ...menu],
       }
   const hechos: HechoHistorial[] = ficha ? (historialDeVenta(ficha, { ...extra, tn: extra?.tn ?? undefined }) as HechoHistorial[]) : []
   const h3: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
@@ -196,12 +196,12 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
       </div>
 
       {!angosta && <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
-        {debe && <Button onClick={() => abrirVentana('cobro')}>Registrar cobro</Button>}
+        {debe && puedeErp('cobrar') && <Button onClick={() => abrirVentana('cobro')}>Registrar cobro</Button>}
         {esPedido && <Button onClick={() => window.open('/cobranzas', '_blank', 'noopener')}>Cobrar en Cobros del monitor ↗</Button>}
         {fila.link && <Button variant="outline" onClick={() => window.open(fila.link!, '_blank', 'noopener')}>Ver el pedido en Tienda Nube ↗</Button>}
-        {!esPedido && <Button variant="outline" disabled={fila.anulada} onClick={() => abrirVentana('editar')}>Editar</Button>}
-        {!esPedido && <Button variant="outline" disabled={fila.anulada} onClick={() => irACaja('cambio')}>Hacer cambio</Button>}
-        <MenuAcciones acciones={menu} etiqueta={`Más acciones de la venta ${fila.ref}`} vertical />
+        {!esPedido && puedeErp('editar-venta') && <Button variant="outline" disabled={fila.anulada} onClick={() => abrirVentana('editar')}>Editar</Button>}
+        {!esPedido && puedeErp('cambiar') && <Button variant="outline" disabled={fila.anulada} onClick={() => irACaja('cambio')}>Hacer cambio</Button>}
+        {menu.length > 0 && <MenuAcciones acciones={menu} etiqueta={`Más acciones de la venta ${fila.ref}`} vertical />}
       </div>}
 
       {esPedido ? (

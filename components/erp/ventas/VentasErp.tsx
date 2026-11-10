@@ -35,6 +35,7 @@ import { imprimirVentaErp } from '@/lib/erp/ticket-erp'
 import { CargarVenta } from './CargarVenta'
 import { VentanaCobro, VentanaEditar } from './VentanasVenta'
 import { useLineaErp } from '@/lib/erp/linea-erp'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 
 /** Filas por hoja (Bruno 29-oct: el mes de Zattia son ~1.250 y dibujarlas todas trababa la lista). */
 const POR_HOJA = 50
@@ -128,6 +129,9 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   const cargando = datos?.clave !== clave
 
   const puede = datos?.puede ?? { editar: false, notas: false, cobrar: false }
+  // 10-nov (caminado con «Ver como»): `puede` dice qué sabe hacer el MOTOR; lo que puede el ROL es `rol` ⇒ Consulta y Depósito
+  // veían Editar, Hacer cambio y Anular… que el servidor les frenaba con 403 al guardar.
+  const rol = usePuedeErp(marca)
   // Lo que filtran el buscador, el origen y la línea: sobre eso se cuentan las vistas y se arma el resumen.
   const base = useMemo(() => filtrar(datos?.filas ?? [], { q, origenes: origen ? [origen] : [] }).filter((f: FilaVentaLista) => !linea || f.linea === linea), [datos, q, origen, linea])
   const conteo = useMemo(() => contarVistas(base), [base])
@@ -206,6 +210,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
 
   const acciones = (f: FilaVentaLista) => {
     const a = accionesDeFila(f, puede)
+    const cobra = rol('cobrar'), edita = rol('editar-venta')
     const menu: AccionMenu[] = f.kind === 'pedido'
       ? [
           { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrirFicha(f) },
@@ -214,17 +219,17 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
         ]
       : [
           { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrirFicha(f) },
-          { key: 'cobro', label: 'Registrar cobro', icono: 'pesos', onClick: () => abrirVentana('cobro', f, false), disabled: !(f.saldo > 0), hint: f.saldo > 0 ? undefined : 'No tiene saldo.' },
-          { key: 'editar', label: 'Editar', icono: 'lapiz', onClick: () => abrirVentana('editar', f, false), disabled: f.anulada },
+          ...(cobra ? [{ key: 'cobro', label: 'Registrar cobro', icono: 'pesos' as const, onClick: () => abrirVentana('cobro', f, false), disabled: !(f.saldo > 0), hint: f.saldo > 0 ? undefined : 'No tiene saldo.' }] : []),
+          ...(edita ? [{ key: 'editar', label: 'Editar', icono: 'lapiz' as const, onClick: () => abrirVentana('editar', f, false), disabled: f.anulada }] : []),
           { key: 'imprimir', label: 'Imprimir el ticket', icono: 'impresora', onClick: () => imprimir(f) },
-          { key: 'cambio', label: 'Hacer cambio', icono: 'cambios', onClick: () => irACaja('cambio'), disabled: f.anulada, hint: 'Abre la Caja del ERP en Cambio.' },
+          ...(rol('cambiar') ? [{ key: 'cambio', label: 'Hacer cambio', icono: 'cambios' as const, onClick: () => irACaja('cambio'), disabled: f.anulada, hint: 'Abre la Caja del ERP en Cambio.' }] : []),
           ...(f.link ? [{ key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir' as const, onClick: () => window.open(f.link!, '_blank', 'noopener') }] : []),
-          { key: 'anular', label: 'Anular…', icono: 'anular', tone: 'danger', onClick: () => abrirFicha(f, 'anular'), disabled: f.anulada },
+          ...(rol('anular') ? [{ key: 'anular', label: 'Anular…', icono: 'anular' as const, tone: 'danger' as const, onClick: () => abrirFicha(f, 'anular'), disabled: f.anulada }] : []),
         ]
     return (
       <>
-        <IconoFila label={a.cobro.label} verde={a.cobro.verde} apagado={!a.cobro.activo} onClick={() => (f.kind === 'pedido' ? irACobranzas() : f.saldo > 0 ? abrirVentana('cobro', f, false) : abrirFicha(f))}><Icono nombre="pesos" size={16} /></IconoFila>
-        <IconoFila label={a.editar.label} apagado={!a.editar.activo} onClick={() => abrirVentana('editar', f, false)}><Icono nombre="lapiz" size={16} /></IconoFila>
+        <IconoFila label={a.cobro.label} verde={a.cobro.verde} apagado={!a.cobro.activo} onClick={() => (f.kind === 'pedido' ? irACobranzas() : f.saldo > 0 && cobra ? abrirVentana('cobro', f, false) : abrirFicha(f))}><Icono nombre="pesos" size={16} /></IconoFila>
+        <IconoFila label={edita ? a.editar.label : 'Tu rol no edita ventas'} apagado={!a.editar.activo || !edita} onClick={() => edita && abrirVentana('editar', f, false)}><Icono nombre="lapiz" size={16} /></IconoFila>
         <IconoFila label={f.kind === 'pedido' ? 'Un pedido sin pagar no tiene ticket' : 'Imprimir el ticket'} apagado={f.kind === 'pedido'} onClick={() => imprimir(f)}><Icono nombre="impresora" size={16} /></IconoFila>
         <MenuAcciones acciones={menu} etiqueta={`Más acciones de la venta ${f.ref}`} vertical alinear="izquierda" />
       </>

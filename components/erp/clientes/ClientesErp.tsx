@@ -12,6 +12,7 @@
  */
 
 import { useTiendaErp } from '@/lib/erp/linea-erp'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
@@ -109,13 +110,19 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
   // 🎨 Tanda 3 (30-oct, mapa del menú): «Con saldo» ES la cuenta corriente (⛔ pestaña aparte): su número y su lista son los de
   // `CuentaCorriente` (su núcleo), que queda montada para dar el número aunque se mire otra vista.
   const [cuentas, setCuentas] = useState<ResumenDeCuentas | null>(null)
+  // 🔴 10-nov (caminado con «Ver como»): sin el permiso `cuentas` (BDI: Local, Depósito, Consulta) el servidor ⛔ da las cuentas y
+  // la pantalla dejaba «Por cobrar …» para siempre y «Con saldo», «Atrasadas», «Con crédito» en 0 ⇒ un cero que AFIRMA. Sin el
+  // permiso ⛔ se muestra nada de la cuenta corriente: ni la tarjeta, ni esas vistas, ni se monta `CuentaCorriente`.
+  const conCuentas = usePuedeErp(marca)('cuentas')
+  const vistas = conCuentas ? TODAS_LAS_VISTAS : TODAS_LAS_VISTAS.filter(([k]) => !ES_DE_CUENTA.has(k))
+  const vistaVale = conCuentas || !ES_DE_CUENTA.has(vista) ? vista : 'todos'
   const conteo = useMemo(() => ({ ...contarVistas(base), ...cuentas?.conteo, saldo: cuentas?.conteo.saldo ?? 0 }), [base, cuentas])
-  const enSaldo = ES_DE_CUENTA.has(vista)
-  const enVista = useMemo(() => filtrar(base, { vista: enSaldo ? 'todos' : vista }), [base, vista, enSaldo])
+  const enSaldo = ES_DE_CUENTA.has(vistaVale)
+  const enVista = useMemo(() => filtrar(base, { vista: enSaldo ? 'todos' : vistaVale }), [base, vistaVale, enSaldo])
   const filas: FilaCliente[] = useMemo(() => ordenar(enVista, orden), [enVista, orden])
   const res = useMemo(() => resumen(enVista), [enVista])
   const elegidas = filas.filter((f) => seleccion.has(f.id))
-  const mirada = `${vista}|${q}|${orden?.col ?? ''}|${orden?.dir ?? ''}`
+  const mirada = `${vistaVale}|${q}|${orden?.col ?? ''}|${orden?.dir ?? ''}`
   const mostrar = tanda.de === mirada ? tanda.n : DE_A
   const sinCuentas = !!datos && datos.clientesErp === 0
 
@@ -156,7 +163,7 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
     )
   }
 
-  const nombreVista = TODAS_LAS_VISTAS.find(([k]) => k === vista)?.[1] ?? ''
+  const nombreVista = TODAS_LAS_VISTAS.find(([k]) => k === vistaVale)?.[1] ?? ''
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>Cada cliente con lo que compró y el saldo de su cuenta.</p>
@@ -171,14 +178,14 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       {!enSaldo && <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-        <TileResumen titulo="Por cobrar" valor={sinCuentas ? '—' : cuentas ? formatMoney(cuentas.porCobrar) : '…'} oscuro nota={sinCuentas ? 'todavía sin cuentas corrientes' : `todas las cuentas${cuentas?.prueba ? ', de prueba' : ''} · lo que deben − lo que tienen a favor`} />
+        {conCuentas && <TileResumen titulo="Por cobrar" valor={sinCuentas ? '—' : cuentas ? formatMoney(cuentas.porCobrar) : '…'} oscuro nota={sinCuentas ? 'todavía sin cuentas corrientes' : `todas las cuentas${cuentas?.prueba ? ', de prueba' : ''} · lo que deben − lo que tienen a favor`} />}
         <TileResumen titulo="Compraron este mes" valor={n(res.compraron)} nota={`de ${n(res.clientes)} en ${nombreVista.toLowerCase()}`} />
         <TileResumen titulo="Mayoristas" valor={n(res.mayoristas)} nota="con alguna compra mayorista" />
         <TileResumen titulo="Comprado" valor={formatMoney(res.total)} nota={`${n(res.clientes)} clientes`} />
       </div>}
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
-        <VistasLista vistas={TODAS_LAS_VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
+        <VistasLista vistas={vistas} valor={vistaVale} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         {!enSaldo && <>
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un cliente" placeholder="Nombre o DNI / CUIT" />
@@ -213,7 +220,7 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
         </div>
         </>}
       </div>
-      <div hidden={!enSaldo}><CuentaCorriente embebida vistaDeAfuera={enSaldo ? vista : 'saldo'} alContar={setCuentas} /></div>
+      {conCuentas && <div hidden={!enSaldo}><CuentaCorriente embebida vistaDeAfuera={enSaldo ? vistaVale : 'saldo'} alContar={setCuentas} /></div>}
 
       <BarraSeleccion cuantas={elegidas.length} onSoltar={() => setSeleccion(new Set())}>
         <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca)}>Exportar los elegidos</AccionSeleccion>

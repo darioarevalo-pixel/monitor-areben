@@ -31,6 +31,7 @@ import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaPrenda, type PrendaAbierta } from './FichaPrenda'
 import { useLineaErp } from '@/lib/erp/linea-erp'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 
 type Prefs = { orden: string[]; visibles: string[] }
 
@@ -63,6 +64,9 @@ const movilDe = (k: string): MovilColumna => (k === 'p' ? 'titulo' : k === 'disp
 export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedida | null; ajustar: (p: PrendaAAjustar) => void; /** Atajos de arriba (§9): saltan a Ajustes y a Mover y recibir sin pasar por las pestañas. */ irA?: (pestania: string, vista: string) => void }) {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
+  // 10-nov (caminado con «Ver como»): Ajustar, Nuevo ajuste y Mover son `ajustar` (Depósito); Local y Consulta los veían y el servidor
+  // los frenaba con 403 al guardar.
+  const ajusta = usePuedeErp(marca)('ajustar')
   const usuario = perfil?.name ?? null
   const lista = `erp-stock-${marca}`
   const COLUMNAS = useMemo(() => columnasDe(marca), [marca])
@@ -140,13 +144,13 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
   const acciones = (f: FilaStock) => {
     const menu: AccionMenu[] = [
       { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrir(f) },
-      { key: 'ajustar', label: 'Ajustar', icono: 'conteo', onClick: () => ajustar(aAjustar(f)), hint: 'Abre «Nuevo ajuste» con este producto.' },
+      ...(ajusta ? [{ key: 'ajustar', label: 'Ajustar', icono: 'conteo' as const, onClick: () => ajustar(aAjustar(f)), hint: 'Abre «Nuevo ajuste» con este producto.' }] : []),
       { key: 'repo', label: 'Transferir en el monitor ↗', icono: 'abrir', onClick: () => window.open('/reposicion', '_blank', 'noopener') },
       { key: 'etiq', label: 'Etiquetas en el monitor ↗', icono: 'abrir', onClick: () => window.open('/etiquetas', '_blank', 'noopener') },
     ]
     return (
       <>
-        <IconoFila label="Ajustar" onClick={() => ajustar(aAjustar(f))}><Icono nombre="conteo" size={16} /></IconoFila>
+        <IconoFila label={ajusta ? 'Ajustar' : 'Tu rol no ajusta stock'} apagado={!ajusta} onClick={() => ajusta && ajustar(aAjustar(f))}><Icono nombre="conteo" size={16} /></IconoFila>
         <MenuAcciones acciones={menu} etiqueta={`Más acciones del producto ${f.nombre} ${f.talleNombre}`} vertical alinear="izquierda" />
       </>
     )
@@ -181,7 +185,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
             onRestablecer={() => setPrefs({ ...normalizarPrefs(marca, null) })}
           />}
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
-          {irA && (
+          {irA && ajusta && (
             <span style={{ marginLeft: 'auto', display: 'flex', gap: space[2] }}>
               <Button variant="soft" tone="brand" onClick={() => irA('ajustes', 'ajustes')}>Nuevo ajuste</Button>
               <Button variant="soft" tone="info" onClick={() => irA('transferencias', 'mover')}>Mover</Button>

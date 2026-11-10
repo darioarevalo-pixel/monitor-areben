@@ -31,6 +31,7 @@ import { MOTIVOS, baseDe } from '@/lib/erp/ajuste.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import type { PrendaAAjustar } from './stock/StockErp'
 import { deLaTienda, useTiendaErp } from '@/lib/erp/linea-erp'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import type { AlContar } from './ListasJuntas'
 
 const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
@@ -67,6 +68,8 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
   // La del selector del menú (⛔ pestañas de otra marca: Bruno, 28-oct). Cambiarla remonta la pantalla (`key` en `Erp`).
   const linea: LineaErp = useTiendaErp()
   const base = baseDe(linea) as MarcaErp
+  // 10-nov: cargar un ajuste es `ajustar` (Depósito): el rol que ⛔ puede ⛔ ve «Nuevo ajuste».
+  const ajusta = usePuedeErp(base)('ajustar')
   const [datos, setDatos] = useState<AjustesDeLinea | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hecho, setHecho] = useState<{ texto: string; avisos: AvisoAjuste[] } | null>(null)
@@ -215,7 +218,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
       {!enTarea && <SectionCard title="Ingresos y ajustes" subtitle="Lo que ingresa o sale del stock fuera de una venta: fallados, canjes, regalos, lo que apareció. Nada se borra: un ajuste equivocado se arregla con otro.">
         <div style={{ display: 'flex', gap: space[3], alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <span />
-          {datos && !borrador && <Button onClick={() => setBorrador({ deposito: DEPOSITOS[base][0], sentido: null, motivo: '', detalle: '', renglones: [] })}>Nuevo ajuste</Button>}
+          {ajusta && datos && !borrador && <Button onClick={() => setBorrador({ deposito: DEPOSITOS[base][0], sentido: null, motivo: '', detalle: '', renglones: [] })}>Nuevo ajuste</Button>}
         </div>
         {!enErp && linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock del ERP: en Gestión Nube se ajusta como siempre. Los conteos se hacen en el módulo de Conteo del monitor y entran solos (se ven en el historial de cada producto, en Stock).</Notice>}
       </SectionCard>}
