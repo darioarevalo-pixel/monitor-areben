@@ -9,6 +9,7 @@ import { useEtiquetasTn } from './useEtiquetasTn'
 import { pidsDe, useColaReetiquetado, type EstadoCola, type PrecioImpreso } from './useColaReetiquetado'
 import { dibujoDeCampania, pdfPorPrenda, useEtiquetasCampania, type PrecioCampania } from './useEtiquetasCampania'
 import { etiquetasDesactualizadas, preciosDesalineados, type PrecioDesalineado } from '@/lib/etiquetas/cola'
+import { lineasFpDeCaja, pctDeEtiqueta } from '@/lib/etiquetas/fpCaja'
 import {
   agruparCantidades,
   conStock,
@@ -290,7 +291,15 @@ export function Etiquetas() {
   // nuevo en cada render la dejaría redibujando el PDF para siempre.
   const ctx: CtxEtiqueta = useMemo(() => ({ precioDe, promoDe, fpLines }), [precioDe, promoDe, fpLines])
   // En la cola el dibujo se elige prenda por prenda; en las otras pestañas manda el de la pestaña.
-  const ctxCola: CtxEtiqueta = useMemo(() => ({ ...ctx, modoDe: modoDeCola }), [ctx, modoDeCola])
+  // 🔑 Y la de formas de pago de la cola sale de la CAJA, prenda por prenda (Bruno, 10-nov-2026): el %
+  // con el que se cobra hoy, ⛔ el texto guardado en esta compu. Sin la Caja leída, la de la compu, y
+  // la cabecera lo avisa en rojo.
+  const fpCaja = cola.fpCaja
+  const fpDeCola = useMemo(
+    () => (fpCaja ? (v: VarianteEti) => lineasFpDeCaja(pctDeEtiqueta(fpCaja, v.pid)) : undefined),
+    [fpCaja],
+  )
+  const ctxCola: CtxEtiqueta = useMemo(() => ({ ...ctx, modoDe: modoDeCola, fpDe: fpDeCola }), [ctx, modoDeCola, fpDeCola])
   const ctxDe = (slot: Slot): CtxEtiqueta => (slot === 'cola' ? ctxCola : ctx)
 
   /**
@@ -511,7 +520,38 @@ function CabeceraCola({ cola, filtro, setFiltro, porNumero }: { cola: EstadoCola
         {porNumero > 0 && ` ${porNumero} ${porNumero === 1 ? 'entró' : 'entraron'} porque la etiqueta dice otro número del que se cobra hoy — eso incluye los precios de lista cambiados a mano en Gestión Nube.`}
         {cola.sinStock.length > 0 && ` ${cola.sinStock.length} quedaron afuera por no tener stock.`}
       </div>
+      <FormasDePagoDeCaja cola={cola} />
     </Card>
+  )
+}
+
+/**
+ * De dónde sale la etiqueta de formas de pago de la cola (Bruno, 10-nov-2026): de la Caja. Dice los %
+ * de HOY, así quien imprime ve lo mismo que va a cobrar el mostrador. 🔴 Si la Caja ⛔ se pudo leer,
+ * lo dice en rojo: la que sale es la de esta compu y nadie lo notaría mirando el papel.
+ */
+function FormasDePagoDeCaja({ cola }: { cola: EstadoCola }) {
+  if (cola.cargando) return null
+  if (!cola.fpCaja) {
+    return (
+      <div style={{ marginTop: 8 }}>
+        <Notice tone="danger" icon="✗">
+          {cola.fpCajaError || 'No se pudieron leer los descuentos de la Caja.'} La etiqueta de formas de pago va a salir con el texto
+          guardado en esta computadora, que puede no ser lo que cobra la Caja. Probá «🔄 Revisar de nuevo».
+        </Notice>
+      </div>
+    )
+  }
+  const pct = (p: { efectivo: number | null; transferencia: number | null }) =>
+    [p.efectivo ? `${p.efectivo}% en efectivo` : null, p.transferencia ? `${p.transferencia}% en transferencia` : null].filter(Boolean).join(' y ') ||
+    'sin descuento'
+  const distintas = Object.keys(cola.fpCaja.porPrenda).length
+  return (
+    <div style={{ fontSize: 12, color: color.mut, marginTop: 6 }}>
+      💳 La etiqueta de formas de pago sale de la Caja: {pct(cola.fpCaja.tienda)}.
+      {distintas > 0 && ` Las prendas de una oferta con su propio descuento llevan el de la oferta (${distintas} prendas).`}
+      {cola.fpCaja.conReglasComerciales && ' La Caja cobra con reglas comerciales: el descuento de una prenda puede ser otro en el mostrador.'}
+    </div>
   )
 }
 

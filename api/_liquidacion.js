@@ -52,6 +52,11 @@ import { lineasEnSale, primerDiaEnSale, ventanasDe } from '../lib/liquidacion/ve
 // La cola de reetiquetado: la regla vive afuera para poder testearla y mutarla sin levantar el
 // handler. Ver `lib/etiquetas/cola.core.js`.
 import { armarCola } from '../lib/etiquetas/cola.core.js';
+// La etiqueta de formas de pago de la cola sale de la CAJA (Bruno, 10-nov): las reglas con las que
+// cobra hoy, con SUS funciones. Ver `lib/etiquetas/fpCaja.core.js`.
+import { fpDeCaja } from '../lib/etiquetas/fpCaja.core.js';
+import { reglasDeHoy as reglasDeHoyCaja, reglasGuardadas as reglasGuardadasCaja } from './_caja-reglas.js';
+import { marcaDeCaja } from '../lib/caja/marcas.core.js';
 // El aviso de la portada: ofertas escritas en la tienda sin campaña viva que las justifique.
 import { ofertasColgadas } from '../lib/liquidacion/colgadas.core.js';
 // Qué clase de cambio de precio es la campaña: la lista de tipos válidos y su default.
@@ -511,9 +516,23 @@ export default async function handler(req, res) {
           precioLista: r.precio_lista == null ? null : Number(r.precio_lista),
         };
       }
+      // 🔑 **La etiqueta de formas de pago sale de la Caja** (Bruno, 10-nov): los % con los que cobra
+      // HOY. 🔴 Si ⛔ se puede leer, la cola carga igual (las etiquetas de precio no dependen de esto)
+      // y `fpCajaError` lo dice: la pantalla ⛔ imprime la de formas de pago con el texto de la compu
+      // como si fuera de la Caja.
+      let fpCaja = null;
+      let fpCajaError = null;
+      try {
+        const mc = marcaDeCaja(store);
+        if (!mc) throw new Error(`${store} no tiene Caja.`);
+        fpCaja = fpDeCaja(await reglasDeHoyCaja(supabase, store, await reglasGuardadasCaja(supabase, store, mc)));
+      } catch (e) {
+        console.error('[etiquetas] formas de pago de la Caja:', e && e.message);
+        fpCajaError = `No se pudieron leer los descuentos de la Caja (${(e && e.message) || 'error'}).`;
+      }
       // 🔑 **`leidoEn` va SIEMPRE**: sin él, una cola vacía porque está todo hecho se ve igual que
       // una cola vacía porque la consulta se rompió.
-      return res.status(200).json({ ok: true, ...cola, sellos, stock, leidoEn: ahora });
+      return res.status(200).json({ ok: true, ...cola, sellos, stock, fpCaja, fpCajaError, leidoEn: ahora });
     }
 
     if (vistaEtiquetas) {

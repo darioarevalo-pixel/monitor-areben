@@ -234,6 +234,28 @@ describe('el dibujo de las etiquetas no se mueve', () => {
    * 🔴 Sin esto salía un PDF con una hoja en blanco y se mandaba a la impresora igual: la etiqueta
    * de SKU sin SKU no dibuja nada, y nadie se entera hasta que la Zebra escupe una etiqueta vacía.
    */
+  /**
+   * 🔑 La de formas de pago de la cola sale de la Caja prenda por prenda (Bruno, 10-nov-2026): cada
+   * una lleva los renglones de la prenda que va JUSTO ANTES, ⛔ los de la compu.
+   */
+  it('fpDe: la de formas de pago dice lo de la prenda anterior, y los renglones propios mandan', async () => {
+    // El doble parte los renglones largos con «⏎»: se busca un PEDAZO, sin espacios en las marcas.
+    const tiene = async (labels: Parameters<typeof buildEtiquetasPdf>[0], ctx: Parameters<typeof buildEtiquetasPdf>[2], pedazo: string) =>
+      (await grabar(() => buildEtiquetasPdf(labels, 'loc', ctx))).some((o) => o.startsWith('text(') && o.includes(pedazo))
+    const fpDe = (v: VarianteEti) => [{ texto: 'FP' + (v.sku || 'NOSKU'), tam: 'normal' as const, bold: false }]
+    const lote = [PRENDA, { __fp: true as const }, null, SIN_SKU, { __fp: true as const }]
+    expect(await tiene(lote, { ...CTX, fpDe }, 'FPJF-38')).toBe(true)
+    expect(await tiene(lote, { ...CTX, fpDe }, 'FPNOSKU')).toBe(true)
+    expect(await tiene(lote, { ...CTX, fpDe }, 'cuotas')).toBe(false)
+    // Los renglones del propio label (los de una campaña) ganan.
+    const conPropios = [PRENDA, { __fp: true as const, lineas: [{ texto: 'DECAMPAÑA', tam: 'normal' as const, bold: false }] }]
+    expect(await tiene(conPropios, { ...CTX, fpDe }, 'DECAMPAÑA')).toBe(true)
+    expect(await tiene(conPropios, { ...CTX, fpDe }, 'FPJF-38')).toBe(false)
+    // `null` = la de la compu; y una suelta (sin prenda antes) también.
+    expect(await tiene([PRENDA, { __fp: true }], { ...CTX, fpDe: () => null }, 'cuotas')).toBe(true)
+    expect(await tiene([{ __fp: true }], { ...CTX, fpDe }, 'cuotas')).toBe(true)
+  })
+
   it('la etiqueta de bolsa sin ninguna variante con SKU devuelve null', async () => {
     expect(await buildSkuGrandePdf([{ producto: 'Top Aurea', variantes: [SIN_SKU] }])).toBeNull()
     expect(await buildSkuGrandePdf([])).toBeNull()

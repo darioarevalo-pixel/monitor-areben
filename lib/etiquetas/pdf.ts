@@ -36,6 +36,12 @@ export type CtxEtiqueta = {
    * `tests/etiquetas-pdf.test.ts`).
    */
   rotuloPromo?: { izq: string; bajoPrecio: string }
+  /**
+   * Los renglones de la de formas de pago de ESTA prenda (la que va justo antes), cuando ⛔ son los
+   * de la compu: «Para reetiquetar» los saca de la Caja (Bruno, 10-nov-2026, `fpCaja.core.js`).
+   * `null` = la de la compu. ⛔ Toca la geometría: elige el texto, el dibujo es `drawFP`.
+   */
+  fpDe?: (v: VarianteEti) => LineaEtiqueta[] | null
 }
 
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
@@ -158,6 +164,8 @@ export async function buildEtiquetasPdf(labels: LabelItem[], modoLote: ModoEtiqu
   const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: 'landscape' })
   const bw = 44
 
+  // La última prenda dibujada: la de formas de pago que la sigue es SUYA (`fpDe`).
+  let ultima: VarianteEti | null = null
   labels.forEach((v, i) => {
     if (i > 0) pdf.addPage([W, Hh], 'landscape')
     if (!v) {
@@ -168,9 +176,10 @@ export async function buildEtiquetasPdf(labels: LabelItem[], modoLote: ModoEtiqu
     pdf.setTextColor(0)
     if ('__fp' in v) {
       // Las de una prenda traen sus propios renglones (con SUS montos); las sueltas, las de la compu.
-      drawFP(pdf, W, Hh, M, CX, v.lineas ?? ctx.fpLines)
+      drawFP(pdf, W, Hh, M, CX, v.lineas ?? (ctx.fpDe && ultima ? ctx.fpDe(ultima) : null) ?? ctx.fpLines)
       return
     }
+    ultima = v
     // El modo del lote, salvo que el llamador decida prenda por prenda (ver `modoDe`).
     const modo = ctx.modoDe ? ctx.modoDe(v) : modoLote
     const barras = (y: number, h: number) => {

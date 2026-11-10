@@ -296,6 +296,33 @@ venga vinculada con los precios definidos en monitor»*.
 - ⚠️ **En jsPDF el corte de línea depende de la fuente activa** ⇒ el `setFont` va **antes** del
   `splitTextToSize`. Medir en normal y escribir en negrita parte el nombre en otro lado.
 
+### 💳 La de formas de pago de «Para reetiquetar» sale de la CAJA (10-nov-2026)
+
+Bruno, desarmando el Cyber de Zattia: *«tiene que ser la misma configuración que armamos con la de
+precios de campaña, que viene con el dto en efectivo y en transferencia, después las otras se marcan
+en caja»*.
+
+- 🔴 **El problema:** la de formas de pago era texto escrito a mano y guardado EN CADA COMPU
+  (`claveFormasDePago`), y la Caja cobra con su propia config. El 10-nov ya ⛔ coincidían: la
+  etiqueta ⛔ decía el débito 10 % que cobra la Caja. Cambiar un % en la Caja ⛔ movía una sola etiqueta.
+- 🔑 **Ahora, en la cola, los % los decide la Caja con SUS funciones** (`lib/etiquetas/fpCaja.core.js`
+  importa `pctDeMedio` e `idsDeFeria` de `lib/caja/core.core.js`, ⛔ una copia): la prenda con % de
+  campaña (`pctDePrendas`) lleva el de la campaña; la de feria, 0 (su precio ya es el final); el
+  resto, la cuenta normal de efectivo y la de transferencia en uso. Renglones: «FORMAS DE PAGO» +
+  «3 cuotas sin interés» + «N% OFF Transferencia» + «N% OFF Efectivo», el dibujo y orden de
+  `fpDescuentos` de la campaña. 🔑 **Las 3 cuotas SON del precio de lista** (Bruno: *«el precio de
+  lista es con 3 cuotas»*; en la Caja, la cuenta de crédito normal «Nro 1 o 13»), pero ⛔ hay un dato
+  que diga «3» ⇒ `CUOTAS_SIN_INTERES`. Débito y crédito con descuento ⛔ van: se resuelven en el mostrador.
+- 🔑 **Viaja con la cola** (`?etiquetas=1&cola=1` ⇒ `fpCaja`), con el permiso de Etiquetas: la
+  Caja ⛔ se le abre a quien no la tiene. Son % que ya están impresos en el local: ⛔ plata.
+- 🔑 **La prenda de cada etiqueta de formas de pago es la que va JUSTO ANTES** (`ctx.fpDe` en
+  `buildEtiquetasPdf`); los `lineas` propios del label (los de una campaña) mandan. ⛔ Toca geometría:
+  la cinta de paridad ⛔ se movió.
+- 🔴 **Sin la Caja leída, la cola carga igual y lo dice en ROJO** (`fpCajaError`): sale la de la compu
+  y nadie lo notaría mirando el papel. Con reglas comerciales prendidas el % por prenda ⛔ se anticipa
+  (lo arma el motor con la venta entera): va el de la tienda y la cabecera lo avisa.
+- ⚠️ Las otras pestañas (Precio, Precio rebajado) siguen con el texto de la compu: lo pedido fue la cola.
+
 ### 📋 La lista de la campaña, abajo del escaneo (12-sep-2026)
 
 Pedido de Bruno: *«en el mismo lugar donde se imprime la etiqueta se pueda ver abajo los productos
