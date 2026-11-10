@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
 import type { Cola, FilaCola, SelloEtiqueta } from '@/lib/etiquetas/cola'
+import type { FpCaja } from '@/lib/etiquetas/fpCaja'
 import type { Marca } from '@/lib/nav.datos'
 
 /**
@@ -38,6 +39,12 @@ export interface EstadoCola extends Cola {
   sellos: Record<string, SelloEtiqueta>
   /** El stock de hoy por producto, tal como lo vio el servidor. */
   stock: Record<string, number>
+  /**
+   * Los % de efectivo y transferencia con los que la Caja cobra HOY (Bruno, 10-nov): de acá sale la
+   * etiqueta de formas de pago de la cola. `null` con `fpCajaError` = ⛔ se pudo leer la Caja.
+   */
+  fpCaja: FpCaja | null
+  fpCajaError: string | null
   recargar: () => Promise<void>
   /**
    * Da por hecha la etiqueta de estos productos. `ya_estaba` = se sacó a mano, no se imprimió.
@@ -57,6 +64,8 @@ export function useColaReetiquetado(marca: Marca, activo = true): EstadoCola {
   const [cola, setCola] = useState<Cola>(VACIA)
   const [sellos, setSellos] = useState<Record<string, SelloEtiqueta>>({})
   const [stock, setStock] = useState<Record<string, number>>({})
+  const [fpCaja, setFpCaja] = useState<FpCaja | null>(null)
+  const [fpCajaError, setFpCajaError] = useState<string | null>(null)
   const [leidoEn, setLeidoEn] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -75,6 +84,9 @@ export function useColaReetiquetado(marca: Marca, activo = true): EstadoCola {
       setCola({ pendientes: d.pendientes || [], hechas: d.hechas || [], sinStock: d.sinStock || [] })
       setSellos(d.sellos || {})
       setStock(d.stock || {})
+      setFpCaja(d.fpCaja || null)
+      // Un servidor viejo ⛔ manda ninguno de los dos: eso también es «no se sabe qué cobra la Caja».
+      setFpCajaError(d.fpCaja ? null : d.fpCajaError || 'No se pudieron leer los descuentos de la Caja.')
       setLeidoEn(d.leidoEn || null)
     } catch (e) {
       // 🔑 La cola se vacía al fallar, y el error queda a la vista. Dejar la lista vieja con un
@@ -82,6 +94,8 @@ export function useColaReetiquetado(marca: Marca, activo = true): EstadoCola {
       setCola(VACIA)
       setSellos({})
       setStock({})
+      setFpCaja(null)
+      setFpCajaError(null)
       setLeidoEn(null)
       setError(e instanceof Error ? e.message : 'No se pudo leer qué hay para reetiquetar.')
     } finally {
@@ -123,7 +137,7 @@ export function useColaReetiquetado(marca: Marca, activo = true): EstadoCola {
     return [...vistas].sort((a, b) => a.localeCompare(b, 'es'))
   }, [cola.pendientes])
 
-  return { ...cola, sellos, stock, leidoEn, cargando, error, campanias, recargar: traer, marcar }
+  return { ...cola, sellos, stock, fpCaja, fpCajaError, leidoEn, cargando, error, campanias, recargar: traer, marcar }
 }
 
 /** Los pid de una lista de filas, que es lo que la tabla usa para acotar las variantes. */
