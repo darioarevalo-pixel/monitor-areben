@@ -16,7 +16,7 @@ import { buscarNombre, guardarPromos, type AlcancePromo, type ProductoLista, typ
 import { Badge, Button, Field, Input, Notice, Plegable, Select, color, font, radius, space } from '@/components/ui'
 import { storeCaja } from '@/lib/caja/marca'
 
-const TIPOS: TipoPromo[] = ['nxm', 'segunda_unidad', 'pct', 'cantidad', 'monto_minimo']
+const TIPOS: TipoPromo[] = ['nxm', 'segunda_unidad', 'pct', 'cantidad', 'llevando', 'monto_minimo']
 
 /** dd/mm de una fecha `AAAA-MM-DD`. */
 const dm = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
@@ -27,14 +27,19 @@ function resumen(p: PromoCaja): string {
     p.tipo === 'nxm' ? `${p.lleva}x${p.paga}`
     : p.tipo === 'segunda_unidad' ? `2ª unidad al ${p.pct}%`
     : p.tipo === 'pct' ? `${p.pct}% de descuento`
+    : p.tipo === 'llevando' ? `${p.pct}% llevando ${p.requiere ? queAlcance(p.requiere) : '—'}`
     : p.tipo === 'cantidad' ? (p.escalones ?? []).map((e, i, l) => `${e.desde}${i === l.length - 1 ? ' o más' : ''}: ${e.pct}%`).join(' · ')
     : `${plata(p.pesos ?? 0)} de descuento desde ${plata(p.minimo ?? 0)}`
-  const a = p.alcance
-  const nombreProd = (x: { id: number; nombre: string }) => x.nombre || `Producto ${x.id}`
-  const sin = a.tipo !== 'productos' && a.excluidos?.length ? ` (menos ${a.excluidos.map(nombreProd).join(', ')})` : ''
-  const donde = p.tipo === 'monto_minimo' ? null : (a.tipo === 'todo' ? 'todo el local' : a.tipo === 'categorias' ? a.categorias.join(', ') : a.productos.map(nombreProd).join(', ')) + sin
+  const donde = p.tipo === 'monto_minimo' ? null : (p.tipo === 'llevando' ? 'en ' : '') + queAlcance(p.alcance)
   const cuando = p.hasta ? `del ${dm(p.desde)} al ${dm(p.hasta)}` : `desde el ${dm(p.desde)}`
   return [que, donde, cuando].filter(Boolean).join(' · ')
+}
+
+/** «FUNDAS (menos TEMPLADO 9D)», «todo el local», o los productos. */
+function queAlcance(a: AlcancePromo): string {
+  const nombreProd = (x: { id: number; nombre: string }) => x.nombre || `Producto ${x.id}`
+  const sin = a.tipo !== 'productos' && a.excluidos?.length ? ` (menos ${a.excluidos.map(nombreProd).join(', ')})` : ''
+  return (a.tipo === 'todo' ? 'todo el local' : a.tipo === 'categorias' ? a.categorias.join(', ') : a.productos.map(nombreProd).join(', ')) + sin
 }
 
 function estado(p: PromoCaja, hoy: string): { tono: 'success' | 'neutral' | 'warning'; texto: string } {
@@ -44,18 +49,24 @@ function estado(p: PromoCaja, hoy: string): { tono: 'success' | 'neutral' | 'war
   return { tono: 'success', texto: 'Vigente' }
 }
 
-type Form = { nombre: string; tipo: TipoPromo; lleva: string; paga: string; pct: string; minimo: string; pesos: string; escalones: Array<{ desde: string; pct: string }>; alcance: AlcancePromo['tipo']; categorias: string[]; productos: Array<{ id: number; nombre: string }>; excluidos: Array<{ id: number; nombre: string }>; desde: string; hasta: string }
-const formVacio = (): Form => ({ nombre: '', tipo: 'nxm', lleva: '3', paga: '2', pct: '', minimo: '', pesos: '', escalones: [{ desde: '2', pct: '' }], alcance: 'todo', categorias: [], productos: [], excluidos: [], desde: hoyIso(), hasta: '' })
+type Productos = Array<{ id: number; nombre: string }>
+/** Un alcance mientras se edita: a qué productos (lo que se descuenta, o lo que hay que llevar). */
+type FormAlcance = { tipo: AlcancePromo['tipo']; categorias: string[]; productos: Productos; excluidos: Productos }
+type Form = { nombre: string; tipo: TipoPromo; lleva: string; paga: string; pct: string; minimo: string; pesos: string; escalones: Array<{ desde: string; pct: string }>; alcance: FormAlcance; requiere: FormAlcance; desde: string; hasta: string }
+const alcanceVacio = (): FormAlcance => ({ tipo: 'todo', categorias: [], productos: [], excluidos: [] })
+const formVacio = (): Form => ({ nombre: '', tipo: 'nxm', lleva: '3', paga: '2', pct: '', minimo: '', pesos: '', escalones: [{ desde: '2', pct: '' }], alcance: alcanceVacio(), requiere: { ...alcanceVacio(), tipo: 'categorias' }, desde: hoyIso(), hasta: '' })
+
+function aAlcance(a: FormAlcance): AlcancePromo {
+  const resta = a.excluidos.length ? { excluidos: a.excluidos } : {}
+  return a.tipo === 'todo' ? { tipo: 'todo', ...resta } : a.tipo === 'categorias' ? { tipo: 'categorias', categorias: a.categorias, ...resta } : { tipo: 'productos', productos: a.productos }
+}
 
 function aPromo(f: Form): PromoCaja {
-  const alcance: AlcancePromo =
-    f.tipo === 'monto_minimo' ? { tipo: 'todo' }
-    : f.alcance === 'todo' ? { tipo: 'todo', ...(f.excluidos.length ? { excluidos: f.excluidos } : {}) }
-    : f.alcance === 'categorias' ? { tipo: 'categorias', categorias: f.categorias, ...(f.excluidos.length ? { excluidos: f.excluidos } : {}) }
-    : { tipo: 'productos', productos: f.productos }
+  const alcance: AlcancePromo = f.tipo === 'monto_minimo' ? { tipo: 'todo' } : aAlcance(f.alcance)
   const p: PromoCaja = { id: `pr${Date.now().toString(36)}`, nombre: f.nombre.trim(), tipo: f.tipo, alcance, desde: f.desde, hasta: f.hasta || null, activa: true }
   if (f.tipo === 'nxm') Object.assign(p, { lleva: Number(f.lleva), paga: Number(f.paga) })
-  if (f.tipo === 'segunda_unidad' || f.tipo === 'pct') p.pct = Number(f.pct)
+  if (f.tipo === 'segunda_unidad' || f.tipo === 'pct' || f.tipo === 'llevando') p.pct = Number(f.pct)
+  if (f.tipo === 'llevando') p.requiere = aAlcance(f.requiere)
   if (f.tipo === 'monto_minimo') Object.assign(p, { minimo: Number(f.minimo), pesos: Number(f.pesos) })
   if (f.tipo === 'cantidad') p.escalones = f.escalones.map((e) => ({ desde: Number(e.desde), pct: Number(e.pct) }))
   return p
@@ -171,8 +182,8 @@ function FormPromo({ form, setForm, guardando, onCancelar, onGuardar }: { form: 
           </Field>
         </div>
       )}
-      {(form.tipo === 'segunda_unidad' || form.tipo === 'pct') && (
-        <Field label={form.tipo === 'pct' ? 'Descuento (%)' : 'Descuento de la 2ª unidad (%)'}>
+      {(form.tipo === 'segunda_unidad' || form.tipo === 'pct' || form.tipo === 'llevando') && (
+        <Field label={form.tipo === 'segunda_unidad' ? 'Descuento de la 2ª unidad (%)' : 'Descuento (%)'}>
           <Input inputMode="numeric" value={form.pct} onChange={(e) => cambiar({ pct: num(e.target.value) })} style={{ width: 100 }} />
         </Field>
       )}
@@ -215,32 +226,13 @@ function FormPromo({ form, setForm, guardando, onCancelar, onGuardar }: { form: 
         </div>
       )}
       {form.tipo !== 'monto_minimo' && (
-        <Field label="A qué productos">
-          <Select value={form.alcance} onChange={(e) => cambiar({ alcance: e.target.value as AlcancePromo['tipo'] })}>
-            <option value="todo">Todo el local</option>
-            <option value="categorias">Categorías de Tienda Nube</option>
-            <option value="productos">Productos</option>
-          </Select>
-        </Field>
+        <ElegirAlcance titulo={form.tipo === 'llevando' ? 'Qué productos tienen el descuento' : 'A qué productos'} valor={form.alcance} onCambiar={(alcance) => cambiar({ alcance })} categorias={categorias} cargando={!tnIdx} />
       )}
-      {form.tipo !== 'monto_minimo' && form.alcance === 'categorias' && (
-        <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap' }}>
-          {!tnIdx && <span style={{ color: color.mut, fontSize: font.sm }}>Cargando las categorías de Tienda Nube…</span>}
-          {categorias.map((c) => {
-            const on = form.categorias.includes(c)
-            return (
-              <Button key={c} size="sm" variant={on ? 'solid' : 'outline'} onClick={() => cambiar({ categorias: on ? form.categorias.filter((x) => x !== c) : [...form.categorias, c] })}>
-                {c}
-              </Button>
-            )
-          })}
-        </div>
-      )}
-      {form.tipo !== 'monto_minimo' && form.alcance === 'productos' && <ListaProductos lista={form.productos} onCambiar={(productos) => cambiar({ productos })} />}
-      {form.tipo !== 'monto_minimo' && form.alcance !== 'productos' && (
-        <Field label="Menos estos productos (opcional)">
-          <ListaProductos lista={form.excluidos} onCambiar={(excluidos) => cambiar({ excluidos })} />
-        </Field>
+      {form.tipo === 'llevando' && (
+        <>
+          <ElegirAlcance titulo="Llevando alguno de estos productos" valor={form.requiere} onCambiar={(requiere) => cambiar({ requiere })} categorias={categorias} cargando={!tnIdx} />
+          <span style={{ color: color.mut, fontSize: font.sm }}>Cada producto que se lleva habilita el descuento en uno solo (el más caro). Cuentan también los que tienen otra promo, descuento a mano o están en oferta. Un producto con el descuento nunca habilita a otro.</span>
+        </>
       )}
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
         <Field label="Desde">
@@ -259,6 +251,41 @@ function FormPromo({ form, setForm, guardando, onCancelar, onGuardar }: { form: 
         </Button>
       </div>
     </div>
+  )
+}
+
+/** A qué productos: todo el local, categorías de Tienda Nube (con «menos estos») o productos. */
+function ElegirAlcance({ titulo, valor, onCambiar, categorias, cargando }: { titulo: string; valor: FormAlcance; onCambiar: (a: FormAlcance) => void; categorias: string[]; cargando: boolean }) {
+  const cambiar = (c: Partial<FormAlcance>) => onCambiar({ ...valor, ...c })
+  return (
+    <>
+      <Field label={titulo}>
+        <Select value={valor.tipo} onChange={(e) => cambiar({ tipo: e.target.value as AlcancePromo['tipo'] })}>
+          <option value="todo">Todo el local</option>
+          <option value="categorias">Categorías de Tienda Nube</option>
+          <option value="productos">Productos</option>
+        </Select>
+      </Field>
+      {valor.tipo === 'categorias' && (
+        <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap' }}>
+          {cargando && <span style={{ color: color.mut, fontSize: font.sm }}>Cargando las categorías de Tienda Nube…</span>}
+          {categorias.map((c) => {
+            const on = valor.categorias.includes(c)
+            return (
+              <Button key={c} size="sm" variant={on ? 'solid' : 'outline'} onClick={() => cambiar({ categorias: on ? valor.categorias.filter((x) => x !== c) : [...valor.categorias, c] })}>
+                {c}
+              </Button>
+            )
+          })}
+        </div>
+      )}
+      {valor.tipo === 'productos' && <ListaProductos lista={valor.productos} onCambiar={(productos) => cambiar({ productos })} />}
+      {valor.tipo !== 'productos' && (
+        <Field label="Menos estos productos (opcional)">
+          <ListaProductos lista={valor.excluidos} onCambiar={(excluidos) => cambiar({ excluidos })} />
+        </Field>
+      )}
+    </>
   )
 }
 
