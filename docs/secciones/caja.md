@@ -422,6 +422,14 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   `tests/caja-promos-cantidad.test.ts`. 🔴 **La de descuento a mano y la de oferta ⛔ cuentan para el
   escalón** (son las que la promo ⛔ toca). Todo alcance que ⛔ sea por productos admite **`excluidos`**
   («Menos estos productos»): ids de la CAJA, ⛔ de TN.
+- 🔑 **Promo «% llevando otro producto» (Bruno 10-nov: «llevando una funda, 15 % en el templado»)**: tipo
+  `llevando` con `pct`, `alcance` (lo que se descuenta) y **`requiere`** (lo que lo habilita; un alcance
+  más, con `excluidos`). **Cada unidad que habilita habilita UNA** (1 funda + 2 templados ⇒ uno solo, el
+  más caro). 🔴 Las que habilitan se cuentan sobre TODO el carrito —oferta, descuento a mano y **las que
+  ya usó la escalera**— y ⛔ se gastan: contarlas sobre las libres dejaba al templado sin descuento con
+  la escalera viva. 🔴 **Lo que entra en el `alcance` ⛔ habilita nunca**: en TN los 4 templados viven
+  TAMBIÉN en FUNDAS (dos, despublicados, ⛔ están en los excluidos). El templado de oferta o con
+  descuento a mano ⛔ la lleva. Oráculo y mutantes: `tests/caja-promos-llevando.test.ts`.
 - ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
   turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
   🔴 **Salvo su parte en EFECTIVO (auditoría A2, 11-oct)**: el billete ya está en el cajón ⇒ suma al

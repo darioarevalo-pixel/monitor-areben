@@ -169,10 +169,19 @@ portal hasta F5, cuánto queda GN en sólo-lectura.
 
 - Tipo nuevo «% según cuántas lleva» en Caja › Promociones, + «Menos estos productos» en cualquier alcance
   que ⛔ sea por productos. Tests con el oráculo de Resorty: `tests/caja-promos-cantidad.test.ts`.
-- ▶️ **⛔ cargada.** La de BDI, cuando Bruno diga: FUNDAS · 2: 15 % · 3: 25 % · 4 o más: 30 % · 16-nov al
-  26-nov · menos TEMPLADO 9D PREMIUM, VIDRIO TEMPLADO PREMIUM CON COLOCADOR, PROTECTOR DE CÁMARA COMPLETO,
+- 🏁 **CARGADA en BDI** (10-nov, Bruno): `bdi-escalera-nov26`, del 10-nov al 26-nov. FUNDAS · 2: 15 % · 3: 25 % · 4 o más: 30 %
+  · menos TEMPLADO 9D PREMIUM, VIDRIO TEMPLADO PREMIUM CON COLOCADOR, PROTECTOR DE CÁMARA COMPLETO,
   PROTECTOR CAMARA BRILLO (elegirlos con el buscador: el id es el de la Caja, ⛔ el de TN).
 - Decidido sin preguntar (avisado a Bruno): la funda con descuento a mano ⛔ cuenta para el escalón.
+
+## ▶️ CAJA: «LLEVANDO UNA FUNDA, 15 % EN EL TEMPLADO» — 10-nov-2026 (Bruno: programarla, publicarla y cargarla en BDI)
+
+- Tipo nuevo «% llevando otro producto» en Caja › Promociones (`requiere` = lo que hay que llevar).
+  Oráculo: `tests/caja-promos-llevando.test.ts`. Una funda habilita UN templado (el más caro); las fundas
+  de la escalera, de oferta o con descuento a mano habilitan igual; un templado ⛔ se habilita a sí mismo.
+- La de BDI: 15 % · VIDRIOS TEMPLADOS · llevando FUNDAS menos los mismos 4 de la escalera.
+- ⚠️ TEMPLADO 9D y TEMPLADO 9D ANTIESPIA PREMIUM (despublicados en TN) están en FUNDAS y ⛔ en los excluidos de
+  la escalera: si se venden en el local, cuentan como funda en la escalera.
 
 ## ▶️ CAJA: LA NOTA EN GN PARA UBICAR UNA VENTA — 14-oct-2026 (Bruno)
 - Pasó: un 429 de GN dejó la venta 5C65E1EF con ticket «Provisorio»; entró sola a los 2 min como **#30489**
