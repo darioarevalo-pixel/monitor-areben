@@ -18,6 +18,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GRUPOS_REPOSICION, grupoDe } from '@/lib/reposicion/paraPedido'
+import { modeloDe, ordenarModelo } from '@/lib/reposicion/grupos'
+import { buildEtiquetasPdf, imprimirPdf } from '@/lib/etiquetas/pdf'
 import {
   articuloDe,
   cancelarArmado,
@@ -51,6 +53,22 @@ type Guardado = 'ok' | 'guardando' | 'error'
 type Cartel = { titulo: string; texto: string; nombre?: string }
 
 const claveLocal = (id: string) => `monitor_repo_armado_${id}`
+const claveModelo = (id: string) => `monitor_repo_armado_modelo_${id}`
+const SIN_MODELO = 'Otros'
+/** El modelo de iPhone de una funda (sin el color), o «Otros». */
+const modeloFunda = (l: Pick<LineaPedido, 'size'>) => modeloDe(l.size) ?? SIN_MODELO
+
+/**
+ * La etiqueta de depósito de UNA funda (nombre, modelo, código de barras y SKU), apenas se escanea
+ * (Darío, 10-nov-2026: «escaneás una funda y te abre la ventana de impresión»). Un marco por
+ * impresión: dos seguidas en el mismo se pisan y sale una sola.
+ */
+let nImpresion = 0
+async function imprimirEtiquetaFunda(v: VarianteEti) {
+  const pdf = await buildEtiquetasPdf([v], 'dep', { precioDe: () => 0, promoDe: () => null, fpLines: [] })
+  nImpresion = (nImpresion + 1) % 6
+  imprimirPdf(pdf, `eti-funda-${nImpresion}`)
+}
 
 function leerLocal(id: string): { escaneos: Record<string, number>; faltantes: Record<string, MotivoFaltante> } | null {
   try {
@@ -118,6 +136,41 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
   const et = bdi ? null : etZ
   const art = articuloDe(armado.linea)
   const [rapida, setRapida] = useState(false)
+  // 🔑 BDI, la devolución grande de fundas (Darío, 10-nov-2026): Lorena escanea en el depósito UN
+  // modelo por vez, y cada funda escaneada imprime su etiqueta al toque (sin juntar de a 10 para
+  // después buscar cuál es cuál). Lo de otro modelo frena, como lo que no está pedido.
+  const fundas = bdi && devolucion
+  const [modelo, setModeloSt] = useState<string | null>(() => {
+    if (!fundas) return null
+    try {
+      return localStorage.getItem(claveModelo(armado.id))
+    } catch {
+      return null
+    }
+  })
+  const setModelo = (m: string | null) => {
+    setModeloSt(m)
+    try {
+      if (m) localStorage.setItem(claveModelo(armado.id), m)
+      else localStorage.removeItem(claveModelo(armado.id))
+    } catch {
+      /* sin almacenamiento: se elige de nuevo */
+    }
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+  const [imprimir, setImprimir] = useState(true)
+  const imprimirFunda = (l: LineaPedido) => {
+    if (!imprimir) return
+    if (!l.barcode) return toast.aviso(`${l.name} ${talle(l.size)}: no tiene código de barras en Gestión Nube. No se imprime.`)
+    imprimirEtiquetaFunda(varDeLinea(l)).catch((e) => toast.error('No se pudo armar la etiqueta: ' + (e as Error).message))
+  }
+  // Al cerrar la ventana de impresión, el lector vuelve a escuchar solo.
+  useEffect(() => {
+    if (!fundas) return
+    const volver = () => setTimeout(() => inputRef.current?.focus(), 0)
+    window.addEventListener('focus', volver)
+    return () => window.removeEventListener('focus', volver)
+  }, [fundas])
   const varsInv = useMemo(() => inv.map(aVarianteEti), [inv])
 
   // ── Guardar: en el aparato al instante, en la base cada 1,5 s ──────────────────────────────
@@ -187,6 +240,12 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
       return
     }
     const l = leerCodigo(pedido, escaneos, codigo, inv)
+    if (fundas && (l.tipo === 'suma' || l.tipo === 'sobra') && modeloFunda(l.linea) !== modelo) {
+      setExtra(0)
+      setCartel({ titulo: 'Es de otro modelo', texto: `Esta funda es de ${modeloFunda(l.linea)}. Ahora estás con ${modelo}: separala.`, nombre: `${l.linea.name} · ${talle(l.linea.size)}` })
+      avisar('no', 'Otro modelo')
+      return
+    }
     if (l.tipo === 'suma') {
       setUltima(l)
       // Devolución: a qué bolsa va (la primera de un producto abre su bolsa) o suelta al carro.
@@ -195,6 +254,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
       // Si estaba anotada como «no estaba», apareció: se saca la marca.
       if (faltantes[l.linea.vid]) setFaltantes(({ [l.linea.vid]: _, ...resto }) => resto)
       avisar(l.pedido || l.exhibir || l.soloAlarma ? 'mira' : l.faltan > 0 ? 'ok' : 'suma', frase(l))
+      if (fundas) imprimirFunda(l.linea)
       return
     }
     setExtra(0)
@@ -220,6 +280,18 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
     setTimeout(() => inputRef.current?.focus(), 0)
   }
 
+  // BDI: una funda cuya etiqueta del local no tiene código se suma a mano (y se imprime la suya).
+  const sumarUna = (l: LineaPedido) => {
+    const n = escaneos[l.vid] || 0
+    if (n >= l.cant) return
+    setEscaneos((e) => ({ ...e, [l.vid]: n + 1 }))
+    if (faltantes[l.vid]) setFaltantes(({ [l.vid]: _, ...resto }) => resto)
+    setUltima({ tipo: 'suma', linea: l, n: n + 1, faltan: l.cant - n - 1 } as Extract<Lectura, { tipo: 'suma' }>)
+    avisar(n + 1 >= l.cant ? 'suma' : 'ok')
+    imprimirFunda(l)
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
   const sacarUna = (l: LineaPedido) => setEscaneos((e) => {
     const n = Math.max(transferido[l.vid] || 0, (e[l.vid] || 0) - 1)
     const { [l.vid]: _, ...resto } = e
@@ -227,8 +299,22 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
   })
 
   const r = resumenArmado(pedido, escaneos)
-  const abiertas = pedido.filter((l) => (escaneos[l.vid] || 0) < l.cant)
-  const completas = pedido.filter((l) => (escaneos[l.vid] || 0) >= l.cant)
+  const modelos = useMemo(() => {
+    if (!fundas) return []
+    const m = new Map<string, { pedidas: number; escaneadas: number }>()
+    for (const l of pedido) {
+      const k = modeloFunda(l)
+      const x = m.get(k) || { pedidas: 0, escaneadas: 0 }
+      x.pedidas += l.cant
+      x.escaneadas += Math.min(l.cant, escaneos[l.vid] || 0)
+      m.set(k, x)
+    }
+    return [...m.entries()].map(([nombre, x]) => ({ nombre, ...x })).sort((a, b) => (a.nombre === SIN_MODELO ? 1 : b.nombre === SIN_MODELO ? -1 : ordenarModelo(a.nombre, b.nombre)))
+  }, [fundas, pedido, escaneos])
+  const delModelo = fundas ? pedido.filter((l) => modeloFunda(l) === modelo) : pedido
+  const abiertas = delModelo.filter((l) => (escaneos[l.vid] || 0) < l.cant)
+  const completas = delModelo.filter((l) => (escaneos[l.vid] || 0) >= l.cant)
+  const rModelo = fundas ? modelos.find((m) => m.nombre === modelo) : undefined
   const yaTransferidas = Object.values(transferido).reduce((x, n) => x + n, 0)
   const porTransferir = r.escaneadas - yaTransferidas
 
@@ -281,7 +367,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
         </Button>
       </div>
 
-      {devolucion && (
+      {devolucion && !fundas && (
         <div style={{ marginBottom: space[3] }}>
           <Notice tone="warning" icon="⚠">
             <b>Retirar solo de la reserva, nunca la exhibida.</b>
@@ -289,10 +375,33 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
         </div>
       )}
 
+      {fundas && (
+        <SelectorModelo
+          modelos={modelos}
+          modelo={modelo}
+          onElegir={setModelo}
+          imprimir={imprimir}
+          setImprimir={(v) => {
+            setImprimir(v)
+            setTimeout(() => inputRef.current?.focus(), 0)
+          }}
+        />
+      )}
+
       <div style={{ height: 8, background: color.bg2, borderRadius: 4, overflow: 'hidden', marginBottom: space[3] }}>
         <div style={{ width: `${r.pedidas ? Math.round((r.escaneadas / r.pedidas) * 100) : 0}%`, height: '100%', background: 'var(--mo-brand-solid)' }} />
       </div>
 
+      {fundas && rModelo && (
+        <div style={{ fontSize: font.lg, color: color.ink, marginBottom: space[2] }}>
+          <b>{modelo}</b> — escaneadas <b>{rModelo.escaneadas}</b> de {rModelo.pedidas}
+        </div>
+      )}
+      {fundas && !modelo ? (
+        <div style={{ padding: space[4], border: `1px dashed ${color.line}`, borderRadius: 'var(--mo-r-xl)', textAlign: 'center', color: color.mut, fontSize: font.md }}>
+          Elegí el modelo con el que vas a trabajar.
+        </div>
+      ) : (
       <input
         ref={inputRef}
         className="mo-input"
@@ -331,7 +440,8 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
         }}
         style={{ height: 52, fontSize: 18, borderWidth: 3, borderColor: escuchando ? color.successBorder : color.line }}
       />
-      {!escuchando && !cartel && !terminar && (
+      )}
+      {!escuchando && !cartel && !terminar && (!fundas || modelo) && (
         <button
           type="button"
           onClick={() => inputRef.current?.focus()}
@@ -357,7 +467,7 @@ export function ArmadoLector({ armado, inv, allProductos, campaniaEtiqueta, onSa
       {abiertas.length > 0 && (
         <>
           <h3 style={{ fontSize: font.md, margin: `${space[4]}px 0 ${space[2]}px`, color: color.ink }}>Pendientes ({abiertas.length})</h3>
-          <TablaRenglones lineas={abiertas} escaneos={escaneos} faltantes={faltantes} transferido={transferido} onSacar={sacarUna} onCaja={sumarCaja} et={devolucion ? null : et} />
+          <TablaRenglones lineas={abiertas} escaneos={escaneos} faltantes={faltantes} transferido={transferido} onSacar={sacarUna} onCaja={sumarCaja} onSumar={fundas ? sumarUna : undefined} et={devolucion ? null : et} />
         </>
       )}
       {completas.length > 0 && (
@@ -476,7 +586,7 @@ function tituloGrupo(l: LineaPedido): string {
   return GRUPOS_REPOSICION.find((g) => g.clave === clave)!.titulo
 }
 
-function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, onCaja, et }: { lineas: LineaPedido[]; escaneos: Record<string, number>; faltantes: Record<string, MotivoFaltante>; transferido: Record<string, number>; onSacar: (l: LineaPedido) => void; onCaja: (l: LineaPedido) => void; et: EtiquetasArmado | null }) {
+function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, onCaja, onSumar, et }: { lineas: LineaPedido[]; escaneos: Record<string, number>; faltantes: Record<string, MotivoFaltante>; transferido: Record<string, number>; onSacar: (l: LineaPedido) => void; onCaja: (l: LineaPedido) => void; onSumar?: (l: LineaPedido) => void; et: EtiquetasArmado | null }) {
   return (
     <TableWrap>
       <THead>
@@ -547,6 +657,11 @@ function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, onC
                     Caja cerrada (+{Math.min(l.caja, l.cant - n)})
                   </Button>
                 )}
+                {onSumar && n < l.cant && (
+                  <Button size="sm" variant="outline" onMouseDown={(e) => e.preventDefault()} onClick={() => onSumar(l)} title="Para una funda sin código de barras: la suma e imprime su etiqueta" aria-label={`Sumar una de «${l.name}» sin escanear`}>
+                    +1 sin código
+                  </Button>
+                )}
                 {n > (transferido[l.vid] || 0) && (
                   <Button size="sm" variant="ghost" onMouseDown={(e) => e.preventDefault()} onClick={() => onSacar(l)} title="Restar una (escaneo por error)" aria-label={`Restar una de «${l.name}»`}>
                     −1
@@ -559,6 +674,43 @@ function TablaRenglones({ lineas, escaneos, faltantes, transferido, onSacar, onC
         })}
       </TBody>
     </TableWrap>
+  )
+}
+
+/** BDI: el modelo con el que se trabaja, con lo escaneado de cada uno, y si imprime al escanear. */
+function SelectorModelo({ modelos, modelo, onElegir, imprimir, setImprimir }: {
+  modelos: { nombre: string; pedidas: number; escaneadas: number }[]
+  modelo: string | null
+  onElegir: (m: string) => void
+  imprimir: boolean
+  setImprimir: (v: boolean) => void
+}) {
+  return (
+    <div style={{ marginBottom: space[3] }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[2] }}>
+        <b style={{ fontSize: font.md, color: color.ink }}>Modelo</b>
+        <label style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.ink2, cursor: 'pointer' }}>
+          <input type="checkbox" checked={imprimir} onChange={(e) => setImprimir(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)', width: 16, height: 16 }} />
+          Imprimir la etiqueta al escanear
+        </label>
+      </div>
+      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+        {modelos.map((m) => {
+          const elegido = m.nombre === modelo
+          const listo = m.escaneadas >= m.pedidas
+          return (
+            <Button key={m.nombre} size="sm" variant={elegido ? 'solid' : 'outline'} tone={elegido ? 'brand' : 'neutral'} onMouseDown={(e) => e.preventDefault()} onClick={() => onElegir(m.nombre)}>
+              {m.nombre} · {listo ? '✓' : `${m.escaneadas}/${m.pedidas}`}
+            </Button>
+          )
+        })}
+      </div>
+      {imprimir && (
+        <div style={{ fontSize: font.sm, color: color.mut, marginTop: space[2] }}>
+          Cada funda abre la ventana de impresión: la primera vez, elegí la Zebra. Después, Enter.
+        </div>
+      )}
+    </div>
   )
 }
 

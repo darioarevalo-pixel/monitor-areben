@@ -34,6 +34,7 @@ import { aplicarCats } from '@/lib/reposicion/core'
 import { CAMPO_LINEA, cfgVentas, decidirTodo, hoyAR, listaLlevar, type CfgVentas, type FilaVentas, type LineaZ, type MarcaModo, type Modo } from '@/lib/reposicion/porVentas'
 import { esStunned, ETIQUETA_LINEA } from '@/lib/lineas'
 import { apagarProductos, prenderProductos } from '@/lib/reposicion/sinReponer'
+import { filasDevolucionBdi } from '@/lib/reposicion/devolucionBdi'
 import { reposicionPDFFilas } from '@/lib/reposicion/pdf'
 import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
@@ -95,6 +96,8 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     [tnIdx, prodById],
   )
   const llevar = useMemo(() => listaLlevar(filas), [filas])
+  // BDI: la devolución no sale de lo que sobra sino de la lista que decidió Darío (4-nov-2026).
+  const filasDevolver = useMemo(() => (bdi ? filasDevolucionBdi(filas) : filas), [bdi, filas])
   const exhibidos = useMemo(() => filas.filter((f) => f.d.modo.modo === 'exhibido'), [filas])
 
   const [tab, setTab] = useState<Pestana>('llevar')
@@ -417,7 +420,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             venden {cv.umbralCaja} o más por semana van por caja de {cv.cajaTemplado}, cuando en el local quedan {cv.diasPedidoTemplado} días de venta o menos.
             Los accesorios que venden {cv.umbralAccesorio} o más por semana tienen en el local lo que se vende en {cv.diasAccesorio} días.
             <br />
-            <b>Devolución</b>: una solicitud que eligen Darío o Bruno entre lo que supera el stock ideal; primero lo que no se vende.
+            <b>Devolución</b>: las fundas que vuelven al depósito. Los diseños que se cierran vuelven enteros; en los demás queda 1 por modelo.
             <br />
             <br />
             Ventas del local: últimos {cv.ventanaDias} días y última semana.
@@ -469,9 +472,8 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
           onChange={(k) => setTab(k as Pestana)}
           items={[
             { key: 'llevar', label: 'Reposición', badge: totalLlevar || undefined },
-            // ⏸️ BDI: la devolución queda EN PAUSA (Darío, 12-oct-2026: «pendiente de analizar»). El
-            // cálculo está hecho (100 por día); se vuelve a mostrar sacando esta condición.
-            ...(bdi ? [] : [{ key: 'devolver', label: 'Devolución', badge: (abierto('devolver') ? resumenArmado(abierto('devolver')!.pedido, {}).pedidas : 0) || undefined }]),
+            // BDI: vuelve el 10-nov-2026 para la devolución grande de fundas (`devolucionBdi.ts`).
+            { key: 'devolver', label: 'Devolución', badge: (abierto('devolver') ? resumenArmado(abierto('devolver')!.pedido, {}).pedidas : 0) || undefined },
             { key: 'historial', label: 'Historial' },
           ]}
         />
@@ -542,7 +544,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
           <SolicitudDevolucion
             linea={linea}
             rotulo={ETIQUETA_LINEA[linea]}
-            filas={filas}
+            filas={filasDevolver}
             vv={vv}
             tnDe={tnDe}
             armado={armados.devolver}

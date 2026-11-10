@@ -224,8 +224,16 @@ diaria con tope (30) se reemplazó por una solicitud que deciden **Darío o Brun
 - Al escanear, la pantalla dice **«Bolsa nueva RTO-0065»** (la primera del producto), **«A la bolsa…»**
   o **«Suelta al carro»**. La voz sigue callada.
 - Medido el 15-oct: 633 prendas sobran en 225 productos; 45 sin ventas (129 prendas).
-- ⏸️ BDI sigue con la pestaña oculta. Su prioridad pedida: primero los diseños que venden online y
-  no tienen depósito (hoy BDI sólo mira ventas del local: falta traer las online).
+- **BDI: la devolución grande de fundas (Darío, 4/10-nov-2026)**, `lib/reposicion/devolucionBdi.ts`. La
+  pestaña vuelve, pero la Propuesta ⛔ no sale de lo que sobra: sale de la lista decidida el 4-nov, por id de
+  producto. **Se cierran** (85 diseños) vuelve todo; **queda 1 por modelo** (106) vuelve todo menos 1 por
+  variante. Cantidad con el stock del día. Fundas sueltas, sin bolsa. Confirmar ⛔ apaga los de «queda 1».
+- El lector, en BDI devolución: Lorena escanea en el **depósito** (la mitad ya estaba ahí, sin transferir)
+  **un modelo por vez** (botones arriba, se recuerda en la compu); lo de otro modelo frena con el cartel
+  rojo. 🔑 **Cada funda escaneada imprime su etiqueta de depósito** (`'dep'`, un marco por impresión) —
+  «si escaneás 10, después tenés que compatibilizar las 10» (Darío). «+1 sin código» para la funda cuya
+  etiqueta del local no tiene barras. Se transfiere con «Transferir y continuar» al terminar el modelo.
+- ⏳ Es de la semana del corte: con la llave del ERP prendida, el mismo «Transferir» ya va por el ERP.
 
 ## Stunned: la transferencia vive en el ERP (corte 28-oct; lista única 30-oct-2026)
 

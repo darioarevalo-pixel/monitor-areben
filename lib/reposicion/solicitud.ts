@@ -18,12 +18,17 @@ import { claveDe, cmpSku } from '../ubicaciones-local/core.core.js'
 import type { LineaPedido } from './armado'
 import type { FilaVentas } from './porVentas'
 
-export type Prioridad = 'sin-ventas' | 'con-ventas'
+/** `cierra` y `queda-1`: la devolución grande de BDI (`devolucionBdi.ts`), que no va por ventas. */
+export type Prioridad = 'sin-ventas' | 'con-ventas' | 'cierra' | 'queda-1'
 
 export const ROTULO_PRIORIDAD: Record<Prioridad, string> = {
   'sin-ventas': 'Sin ventas en 60 días',
   'con-ventas': 'Con ventas: primero lo que más semanas de stock tiene',
+  cierra: 'Se cierran: vuelve todo',
+  'queda-1': 'Queda 1 por modelo en el local',
 }
+
+export const ORDEN_PRIORIDAD: Prioridad[] = ['cierra', 'queda-1', 'sin-ventas', 'con-ventas']
 
 /**
  * Lo que NO va en bolsa: va suelto en el carro (Darío, 15-oct-2026: «de los shorts, bermudas y jeans
@@ -83,7 +88,7 @@ export function vendidasPorProducto(vv: Record<string, number>): Record<string, 
  * solicitud (confirmada o enviada) y todavía no se descontó del stock: no se propone dos veces.
  * `vendidasProd` = `vendidasPorProducto(vv)`; sin él, se suman las de `filas` (sólo talles con stock).
  */
-export function propuesta(filas: FilaVentas[], yaPedido: Record<string, number> = {}, vendidasProd?: Record<string, number>): GrupoPropuesta[] {
+export function propuesta(filas: FilaVentas[], yaPedido: Record<string, number> = {}, vendidasProd?: Record<string, number>, prioridadDe?: (pid: string) => Prioridad | null): GrupoPropuesta[] {
   const desdeFilas = new Map<string, number>()
   for (const f of filas) desdeFilas.set(f.it.pid, (desdeFilas.get(f.it.pid) || 0) + (f.d.vendidas || 0))
   const vendidasDe = (pid: string) => (vendidasProd ? vendidasProd[pid] || 0 : desdeFilas.get(pid) || 0)
@@ -106,7 +111,7 @@ export function propuesta(filas: FilaVentas[], yaPedido: Record<string, number> 
       const porSemana = (vendidas / Math.max(1, diasProd.get(f.it.pid) || 60)) * 7
       // Un cambio que deja el neto en 0 (o menos) es «sin ventas».
       const semanas = vendidas > 0 ? Math.round((local / porSemana) * 10) / 10 : null
-      g = { pid: f.it.pid, name: f.it.name, cat: f.it.cat || '', sku: f.it.sku || '', clave: claveDe(f.it.sku), prioridad: vendidas > 0 ? 'con-ventas' : 'sin-ventas', vendidas, sobra: 0, local, semanas, variantes: [] }
+      g = { pid: f.it.pid, name: f.it.name, cat: f.it.cat || '', sku: f.it.sku || '', clave: claveDe(f.it.sku), prioridad: prioridadDe?.(f.it.pid) ?? (vendidas > 0 ? 'con-ventas' : 'sin-ventas'), vendidas, sobra: 0, local, semanas, variantes: [] }
       grupos.set(f.it.pid, g)
     }
     if (!g.clave && f.it.sku) g.clave = claveDe(f.it.sku)
@@ -116,7 +121,7 @@ export function propuesta(filas: FilaVentas[], yaPedido: Record<string, number> 
   }
   const out = [...grupos.values()]
   for (const g of out) g.variantes.sort((a, b) => cmpSku(a.f.it.sku || '~', b.f.it.sku || '~'))
-  const peso = (p: Prioridad) => (p === 'sin-ventas' ? 0 : 1)
+  const peso = (p: Prioridad) => ORDEN_PRIORIDAD.indexOf(p)
   return out.sort((a, b) => peso(a.prioridad) - peso(b.prioridad) || (b.semanas ?? 0) - (a.semanas ?? 0) || b.sobra - a.sobra || a.name.localeCompare(b.name, 'es'))
 }
 

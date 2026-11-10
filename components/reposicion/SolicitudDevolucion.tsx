@@ -26,6 +26,7 @@ import {
   porProducto,
   propuesta,
   resumenSolicitud,
+  ORDEN_PRIORIDAD,
   ROTULO_PRIORIDAD,
   sumarPedidos,
   vendidasPorProducto,
@@ -33,6 +34,7 @@ import {
   type Prioridad,
   type VariantePropuesta,
 } from '@/lib/reposicion/solicitud'
+import { grupoBdi } from '@/lib/reposicion/devolucionBdi'
 import { Button, EmptyState, Modal, Notice, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useToast } from '@/components/ui'
 
 const ABIERTOS = ['en_curso', 'transfiriendo', 'revisar']
@@ -82,6 +84,9 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
 }) {
   const toast = useToast()
   const art = articuloDe(linea)
+  // BDI (10-nov-2026): la devolución grande de fundas. La lista sale de lo que decidió Darío el 4-nov
+  // (`devolucionBdi.ts`) y las fundas van sueltas, sin etiqueta de bolsa.
+  const bdi = linea === 'bdi'
   const [borrador, setBorrador] = useState<Armado | null>(null)
   // La línea cuya solicitud ya se leyó: al cambiar de Zattia a Stunned no se muestra la de la otra.
   const [cargadoDe, setCargadoDe] = useState<LineaZ | null>(null)
@@ -114,10 +119,10 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
     [borrador, enLocal, armado, stockViejo],
   )
   const vendidasProd = useMemo(() => (vv ? vendidasPorProducto(vv) : undefined), [vv])
-  const grupos = useMemo(() => propuesta(filas, yaPedido, vendidasProd), [filas, yaPedido, vendidasProd])
+  const grupos = useMemo(() => propuesta(filas, yaPedido, vendidasProd, bdi ? grupoBdi : undefined), [filas, yaPedido, vendidasProd, bdi])
   // Lo elegido sigue elegido aunque el buscador lo esconda: el filtro es sólo de la tabla.
   const visibles = useMemo(() => filtrarPropuesta(grupos, buscar), [grupos, buscar])
-  const bolsaDe = (g: { pid: string; name: string; sku?: string }) => conBolsa(g, bolsaProd)
+  const bolsaDe = (g: { pid: string; name: string; sku?: string }) => !bdi && conBolsa(g, bolsaProd)
   const cantDe = (v: VariantePropuesta) => Math.min(v.sobra, cant[v.f.it.vid] ?? v.sobra)
   const prendasDe = (g: GrupoPropuesta) => g.variantes.reduce((s, v) => s + cantDe(v), 0)
   const elegidos = grupos.filter((g) => sel[g.pid])
@@ -146,7 +151,8 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
     const n = nuevas.reduce((s, l) => s + l.cant, 0)
     if (await guardar(fusionar(confirmados, nuevas), `${n} ${n === 1 ? art.singular : art.plural} confirmadas`)) {
       // Lo confirmado se apaga de la reposición hasta que alguien lo prenda (Darío, 26-oct-2026).
-      apagar(elegidos.map((g) => g.pid))
+      // ⛔ En BDI, los de «queda 1 por modelo» siguen en el local y se siguen reponiendo.
+      apagar(elegidos.filter((g) => g.prioridad !== 'queda-1').map((g) => g.pid))
       setSel({})
       setCant({})
     }
@@ -197,7 +203,7 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
                 <span style={{ fontSize: font.md, color: color.ink2 }}>
-                  <b>{totalSobra}</b> {art.plural} sobran en el local · {grupos.length} productos
+                  <b>{totalSobra}</b> {art.plural} {bdi ? 'vuelven al depósito' : 'sobran en el local'} · {grupos.length} productos
                 </span>
                 <input className="mo-input" type="search" value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar producto o código…" aria-label="Buscar producto o código" style={{ width: 240 }} />
                 <span style={{ marginLeft: 'auto', fontSize: font.md, color: color.ink2 }}>
@@ -212,7 +218,7 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
                 </Button>
               </div>
               {!grupos.length ? (
-                <EmptyState icon="🎉" title={`No hay ${art.plural} para devolver`} hint="Ninguna variante supera su stock ideal, o ya está en una solicitud." dashed />
+                <EmptyState icon="🎉" title={`No hay ${art.plural} para devolver`} hint={bdi ? 'Lo de la lista ya está en una solicitud, o ya no queda en el local.' : 'Ninguna variante supera su stock ideal, o ya está en una solicitud.'} dashed />
               ) : !visibles.length ? (
                 <EmptyState icon="🔍" title="Sin resultados" hint={`Ningún producto coincide con «${buscar.trim()}».`} dashed />
               ) : (
@@ -228,6 +234,7 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
                   setCant={(vid, n) => setCant((c) => ({ ...c, [vid]: n }))}
                   bolsaDe={bolsaDe}
                   cambiarBolsa={cambiarBolsa}
+                  sinBolsa={bdi}
                 />
               )}
             </>
@@ -246,8 +253,9 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
               ) : (
                 <TablaConfirmados
                   pedido={confirmados}
+                  sinBolsa={bdi}
                   onBolsa={cambiarBolsa}
-                  onSacar={(pid) => void guardar(confirmados.filter((l) => l.pid !== pid)).then((ok) => ok && prender([pid]))}
+                  onSacar={(pid) => void guardar(confirmados.filter((l) => l.pid !== pid)).then((ok) => ok && (!bdi || grupoBdi(pid) !== 'queda-1') && prender([pid]))}
                   guardando={guardando}
                 />
               )}
@@ -361,7 +369,7 @@ export type DatoTn = { alta: string | null; promo: boolean }
 /** «2026-08-12T…» → «12/08/26». */
 const fechaCorta = (iso: string | null) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}` : '—')
 
-function TablaPropuesta({ grupos, tnDe, sel, setSel, abiertos, setAbiertos, cantDe, prendasDe, setCant, bolsaDe, cambiarBolsa }: {
+function TablaPropuesta({ grupos, tnDe, sel, setSel, abiertos, setAbiertos, cantDe, prendasDe, setCant, bolsaDe, cambiarBolsa, sinBolsa }: {
   grupos: GrupoPropuesta[]
   tnDe: (g: GrupoPropuesta) => DatoTn | null
   sel: Record<string, boolean>
@@ -373,8 +381,10 @@ function TablaPropuesta({ grupos, tnDe, sel, setSel, abiertos, setAbiertos, cant
   setCant: (vid: string, n: number) => void
   bolsaDe: (g: GrupoPropuesta) => boolean
   cambiarBolsa: (pid: string, v: boolean) => void
+  /** BDI: las fundas van sueltas y la columna «Va» no se muestra. */
+  sinBolsa?: boolean
 }) {
-  const secciones = (['sin-ventas', 'con-ventas'] as Prioridad[]).map((p) => ({ p, gs: grupos.filter((g) => g.prioridad === p) })).filter((x) => x.gs.length)
+  const secciones = (ORDEN_PRIORIDAD as Prioridad[]).map((p) => ({ p, gs: grupos.filter((g) => g.prioridad === p) })).filter((x) => x.gs.length)
   return (
     <TableWrap>
       <THead>
@@ -389,7 +399,7 @@ function TablaPropuesta({ grupos, tnDe, sel, setSel, abiertos, setAbiertos, cant
           <Th align="center" width={90}>Semanas de stock</Th>
           <Th align="center" width={80}>Sobran</Th>
           <Th align="center" width={80}>Devolver</Th>
-          <Th width={120}>Va</Th>
+          {!sinBolsa && <Th width={120}>Va</Th>}
         </Tr>
       </THead>
       <TBody>
@@ -398,9 +408,9 @@ function TablaPropuesta({ grupos, tnDe, sel, setSel, abiertos, setAbiertos, cant
           return (
             <Fragment key={p}>
               <Tr>
-                <Td colSpan={11} style={{ background: color.bg2, paddingTop: space[2], paddingBottom: space[2] }}>
+                <Td colSpan={sinBolsa ? 10 : 11} style={{ background: color.bg2, paddingTop: space[2], paddingBottom: space[2] }}>
                   <b style={{ color: color.ink }}>{ROTULO_PRIORIDAD[p]}</b>
-                  <span style={{ color: color.mut2, fontSize: font.sm }}> · {gs.length} productos · {gs.reduce((s, g) => s + g.sobra, 0)} prendas</span>
+                  <span style={{ color: color.mut2, fontSize: font.sm }}> · {gs.length} productos · {gs.reduce((s, g) => s + g.sobra, 0)} {sinBolsa ? 'fundas' : 'prendas'}</span>
                   <Button size="sm" variant="ghost" style={{ marginLeft: space[2] }} onClick={() => setSel((s) => ({ ...s, ...Object.fromEntries(gs.map((g) => [g.pid, !todos])) }))}>
                     {todos ? 'Sacar todos' : 'Elegir todos'}
                   </Button>
@@ -435,9 +445,11 @@ function TablaPropuesta({ grupos, tnDe, sel, setSel, abiertos, setAbiertos, cant
                       <Td align="center">{g.semanas != null ? g.semanas.toLocaleString('es-AR') : '—'}</Td>
                       <Td align="center">{g.sobra}</Td>
                       <Td align="center" style={{ fontWeight: 700 }}>{prendasDe(g)}</Td>
-                      <Td>
-                        <BotonBolsa bolsa={bolsa} onChange={(v) => cambiarBolsa(g.pid, v)} />
-                      </Td>
+                      {!sinBolsa && (
+                        <Td>
+                          <BotonBolsa bolsa={bolsa} onChange={(v) => cambiarBolsa(g.pid, v)} />
+                        </Td>
+                      )}
                     </Tr>
                     {abierto &&
                       g.variantes.map((v) => (
@@ -464,7 +476,7 @@ function TablaPropuesta({ grupos, tnDe, sel, setSel, abiertos, setAbiertos, cant
                               style={{ width: 64, textAlign: 'center', padding: '0 6px', fontWeight: 700 }}
                             />
                           </Td>
-                          <Td />
+                          {!sinBolsa && <Td />}
                         </Tr>
                       ))}
                   </Fragment>
@@ -486,7 +498,7 @@ function BotonBolsa({ bolsa, onChange, disabled }: { bolsa: boolean; onChange: (
   )
 }
 
-function TablaConfirmados({ pedido, onBolsa, onSacar, guardando }: { pedido: LineaPedido[]; onBolsa: (pid: string, v: boolean) => void; onSacar: (pid: string) => void; guardando: boolean }) {
+function TablaConfirmados({ pedido, sinBolsa, onBolsa, onSacar, guardando }: { pedido: LineaPedido[]; sinBolsa?: boolean; onBolsa: (pid: string, v: boolean) => void; onSacar: (pid: string) => void; guardando: boolean }) {
   const [abiertos, setAbiertos] = useState<Record<string, boolean>>({})
   return (
     <TableWrap>
@@ -495,7 +507,7 @@ function TablaConfirmados({ pedido, onBolsa, onSacar, guardando }: { pedido: Lin
           <Th>Producto</Th>
           <Th width={110}>Código</Th>
           <Th align="center" width={80}>Cant.</Th>
-          <Th width={120}>Va</Th>
+          {!sinBolsa && <Th width={120}>Va</Th>}
           <Th width={90} />
         </Tr>
       </THead>
@@ -514,9 +526,11 @@ function TablaConfirmados({ pedido, onBolsa, onSacar, guardando }: { pedido: Lin
               </Td>
               <Td style={{ fontSize: font.sm, color: color.mut }}>{p.clave || '—'}</Td>
               <Td align="center" style={{ fontWeight: 700 }}>{p.prendas}</Td>
-              <Td>
-                <BotonBolsa bolsa={p.bolsa} onChange={(v) => onBolsa(p.pid, v)} disabled={guardando} />
-              </Td>
+              {!sinBolsa && (
+                <Td>
+                  <BotonBolsa bolsa={p.bolsa} onChange={(v) => onBolsa(p.pid, v)} disabled={guardando} />
+                </Td>
+              )}
               <Td align="right">
                 <Button size="sm" variant="ghost" onClick={() => onSacar(p.pid)} disabled={guardando} aria-label={`Sacar ${p.name} de la solicitud`}>
                   Sacar
@@ -532,7 +546,7 @@ function TablaConfirmados({ pedido, onBolsa, onSacar, guardando }: { pedido: Lin
                   </Td>
                   <Td />
                   <Td align="center">{l.cant}</Td>
-                  <Td />
+                  {!sinBolsa && <Td />}
                   <Td />
                 </Tr>
               ))}
