@@ -80,7 +80,7 @@ export const notaDeDebito = (facturaId: string, monto: number) =>
 export const cerrarMes = (mes: string) =>
   pedir<{ ok: true; techo: number }>(post({ accion: 'cerrar', mes }), '', 'No se pudo cerrar el mes.')
 
-export type PrendaEncontrada = { producto: string; talle: string; nombre: string | null; talleNombre: string | null; sku: string | null; barcode: string | null; gn: number }
+export type PrendaEncontrada = { producto: string; talle: string; nombre: string | null; talleNombre: string | null; sku: string | null; barcode: string | null; gn: number; /** Stock por depósito del espejo (Nueva venta). */ porDeposito?: Record<string, number> }
 
 export type MovimientoLibro = {
   id: string; deposito: string; cantidad: number; saldo: number; tipo: string; origen: string
@@ -906,8 +906,10 @@ export type CuentaParaCargar = { id: string; nombre: string; medio: string; marc
 /** Una forma de pago como la del POS: su cuenta de cobro, sus variantes (crédito: 6 cuotas, promo del banco) y la ruta de cada canal. */
 export type FormaDePagoCargar = {
   clave: string; nombre: string; cuenta: string | null
-  opciones?: Array<{ clave: string; nombre: string; cuenta: string }>
-  rutas: Record<string, { cuenta: string | null; tasa: number | null; dias: number | null } | null>
+  /** El % de descuento de la cuenta en el POS (Nueva venta lo deja editar). */
+  pct?: number
+  opciones?: Array<{ clave: string; nombre: string; cuenta: string; pct?: number }>
+  rutas: Record<string, { cuenta: string | null; cuentaId?: string | null; tasa: number | null; dias: number | null } | null>
 }
 export type DatosParaCargar = {
   lineas: string[]; cuentas: CuentaParaCargar[]; canales: string[]; depositos: string[]; manualHabilitado: boolean
@@ -915,19 +917,27 @@ export type DatosParaCargar = {
   formas?: Record<string, FormaDePagoCargar[]>; sueltas?: Record<string, CuentaParaCargar[]>
   /** Las líneas cuya Caja ⛔ tiene reglas: ahí sólo se ve «Otra cuenta». */
   sinReglas?: string[]
+  /** «Entra a»: las cuentas reales activas. */
+  cuentasReales?: Array<{ id: string; nombre: string }>
+  /** ¿La línea ya vende por el ERP? (sin cortar, la venta es de prueba). */
+  enErp?: Record<string, boolean>
+  /** El paso de redondeo de la Caja de cada línea (0 = sin redondeo). */
+  redondeo?: Record<string, number>
 }
 export const leerParaCargar = (marca: MarcaErp) =>
-  pedir<DatosParaCargar>(null, `&vista=cargar-venta&marca=${marca}&nc=${Date.now()}`, 'No se pudo abrir «Cargar venta».')
+  pedir<DatosParaCargar>(null, `&vista=cargar-venta&marca=${marca}&nc=${Date.now()}`, 'No se pudo abrir «Nueva venta».')
 export type VentaACargar = {
   linea: string; origen_ref: string; ocurrida_en?: string; canal: string; deposito: string; cliente?: { doc: string; nombre: string }
-  lineas: Array<{ producto: string; talle: string; cantidad: number; precio: number; sku?: string | null; barcode?: string | null }>
-  pagos: Array<{ cuenta: string; monto: number }>; nota?: string
+  /** «corregir» = una venta pasada: fecha y motivo obligatorios. */
+  modo?: 'local' | 'corregir'; motivo?: string; paso?: number
+  lineas: Array<{ producto: string; talle: string; cantidad: number; precio: number; descuento_pct?: number; sku?: string | null; barcode?: string | null }>
+  pagos: Array<{ cuenta: string; monto?: number; base?: number | null; porcentaje?: number; redondear?: boolean; cuenta_real?: string }>; nota?: string
   /** El PIN de un admin: sólo cuando la venta a cuenta quedó frenada (`SIN_CREDITO`, `ATRASADO`, `SUPERA_TOPE`). */
   pin?: string
 }
 export const cargarVenta = (marca: MarcaErp, venta: VentaACargar) =>
-  pedir<{ ok: true; venta: { id: string; numero: number; total: number; prueba: boolean }; yaExistia: boolean; avisos: Array<{ codigo: string }> }>(
-    post({ accion: 'cargar-venta', marca, ...venta }), '', 'No se pudo cargar la venta.')
+  pedir<{ ok: true; venta: { id: string; numero: number; total: number; prueba: boolean }; yaExistia: boolean; avisos: Array<{ codigo: string; texto?: string }> }>(
+    post({ accion: 'cargar-venta', marca, ...venta }), '', 'No se pudo guardar la venta.')
 
 // ── ERP › Ventas › Cajas (lectura + el arqueo del sobre; los turnos de la Caja por `?recurso=caja`, núcleo `lib/erp/cajas.core.js`) ──
 const deCaja = async <T>(marca: MarcaErp, query: string, fallo: string): Promise<T> => {
