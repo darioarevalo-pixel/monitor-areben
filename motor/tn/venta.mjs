@@ -80,7 +80,10 @@ export function cuentaDeGateway(tienda, gateway, cuentas) {
  * @param {object} p.indice   indiceDeVariantes del inventario
  * @param {Array} p.cuentas   `cuenta_cobro` de la marca
  * @param {Map<string, { id: string, estado: string }>} p.ya  las ventas `tn` que ya están, por `origen_ref`
- * @param {boolean} [p.real]  `ventaRealEn`: la venta mueve el libro (`prueba: false`); por defecto PRUEBA
+ * @param {boolean | ((instante: string) => boolean)} [p.real]  la venta mueve el libro (`prueba: false`); por defecto PRUEBA.
+ *   🔴 Una FUNCIÓN del instante de PAGO (`ventaTnReal` con `ahora = pagada_en`, lo que manda `aplicar.mjs`): un pedido pagado
+ *   ANTES del corte que se registra después (salteado hasta que se copió su vínculo, la red de 2 h) ⛔ entra real — GN ya lo
+ *   descontó y el alineo del corte copió ese stock ⇒ bajaría dos veces (revisión 10-nov). Un booleano vale para todos.
  * @returns {{ registrar: any[], anular: Array<{ venta_id: string, motivo: string, numero: number }>, saltadas: Record<string, number[]>, ya: number }}
  */
 export function planVentasTN({ tienda, ordenes, indice, cuentas, ya, real = false }) {
@@ -122,7 +125,7 @@ export function planVentasTN({ tienda, ordenes, indice, cuentas, ya, real = fals
 
     registrar.push({
       origen: 'tn', origen_ref: ref, marca: tienda, canal: 'online', deposito: DEPOSITO_ONLINE[tienda],
-      usuario: 'tienda-nube', prueba: !real, ocurrida_en: new Date(o.pagada_en).toISOString(),
+      usuario: 'tienda-nube', prueba: !(typeof real === 'function' ? real(new Date(o.pagada_en).toISOString()) : real), ocurrida_en: new Date(o.pagada_en).toISOString(),
       // La ficha del comprador (sql/059), si la orden ya la tiene.
       ...(o.cliente_id ? { cliente_id: String(o.cliente_id) } : {}),
       lineas, subtotal, total,

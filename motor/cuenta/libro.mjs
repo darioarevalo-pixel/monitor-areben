@@ -21,7 +21,7 @@ export async function creditoDe(db, clienteId) {
 /** Las filas del libro de un cliente, con el día AR y el detalle que se ve (el número de la venta, la cuenta del pago). */
 export async function filasDe(db, { cliente_id, marca, prueba }) {
   return q(db, `select m.tipo, m.ref, m.monto, to_char(m.ocurrida_en ${AR}, 'YYYY-MM-DD') as fecha, m.detalle->'imputar' as imputar, m.detalle->>'pedido' as pedido,
-      case when m.tipo = 'compra' then 'Venta ' || v.numero when m.tipo = 'pago' then coalesce(c.nombre, '') else '' end as detalle
+      case when m.tipo = 'compra' then 'Venta ' || v.numero when m.tipo = 'pago' then coalesce(c.nombre, '') when m.tipo = 'apertura' then 'Saldo de apertura' else '' end as detalle
     from cuenta_movimiento m left join venta v on v.id = m.venta_id left join cuenta_cobro c on c.id = m.cuenta_cobro_id
     where m.cliente_id = $1 and m.marca = $2 and m.prueba = $3 order by m.ocurrida_en, m.creado_en`, [cliente_id, marca, prueba])
 }
@@ -32,7 +32,7 @@ export async function filasDe(db, { cliente_id, marca, prueba }) {
  */
 export async function filasDeMarca(db, { empresa_id, marca, prueba }) {
   return q(db, `select m.cliente_id::text, m.tipo, m.ref, m.monto, to_char(m.ocurrida_en ${AR}, 'YYYY-MM-DD') as fecha, m.detalle->'imputar' as imputar, m.detalle->>'pedido' as pedido,
-      case when m.tipo = 'compra' then 'Venta ' || v.numero when m.tipo = 'pago' then coalesce(c.nombre, '') else '' end as detalle
+      case when m.tipo = 'compra' then 'Venta ' || v.numero when m.tipo = 'pago' then coalesce(c.nombre, '') when m.tipo = 'apertura' then 'Saldo de apertura' else '' end as detalle
     from cuenta_movimiento m left join venta v on v.id = m.venta_id left join cuenta_cobro c on c.id = m.cuenta_cobro_id
     where m.empresa_id = $1 and m.marca = $2 and m.prueba = $3 order by m.ocurrida_en, m.creado_en`, [empresa_id, marca, prueba])
 }

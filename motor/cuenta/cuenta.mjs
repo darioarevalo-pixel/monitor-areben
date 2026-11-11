@@ -21,6 +21,7 @@ const q = async (db, sql, p = []) => (await db.query(sql, p)).rows
 const pesos = (x) => Math.round(Number(x) * 100) / 100
 const FECHA = /^\d{4}-\d{2}-\d{2}$/
 const UUID = /^[0-9a-f-]{36}$/i
+const AR_SQL = `at time zone 'America/Argentina/Buenos_Aires'`
 
 async function enTransaccion(db, fn) {
   await db.query('begin')
@@ -268,5 +269,58 @@ export async function anularPagoACuenta(db, e) {
       detalle: { motivo: e.motivo.trim() }, prueba: p.prueba, usuario: e.usuario.trim(), ocurrida_en: new Date().toISOString(),
     })
     return { ok: true, anulado: ref, cuenta: await saldoDe(db, p.cliente_id, p.marca, p.prueba) }
+  })
+}
+
+/**
+ * El SALDO DE APERTURA de un cliente al cortar GN (sql/081; Bruno 11-nov: lo pasa Darío de su Excel). `monto` con signo:
+ * + debe · − a favor. `fecha` (AAAA-MM-DD) = la de la deuda más vieja si se sabe, si no la del corte: es lo que mide
+ * «Atrasadas» desde el día 1. Una sola VIVA por (cliente, marca, prueba):
+ *   - repetir la misma (mismo monto y fecha) = la misma (`ya_existia`), para correr la carga dos veces sin miedo;
+ *   - otra distinta FRENA (`YA_TIENE_APERTURA`) salvo `reemplazar: true`: anula la viva y carga la nueva (Darío se equivocó).
+ * La clave lleva el número de carga (`apertura:<marca>:[prueba:]<cliente>:<n>`): la anulada ⛔ se vuelve a usar.
+ * @param {{ cliente_id: string, marca: string, monto: number, fecha: string, usuario: string, prueba: boolean,
+ *   detalle?: object, reemplazar?: boolean }} e
+ */
+export async function registrarApertura(db, e) {
+  if (!UUID.test(String(e?.cliente_id ?? ''))) return fallo('ENTRADA_INVALIDA', 'Falta el cliente', 'cliente_id')
+  const monto = pesos(e.monto)
+  if (!Number.isFinite(monto) || monto === 0) return fallo('ENTRADA_INVALIDA', 'El saldo de apertura es un monto distinto de 0 (+ debe, − a favor)', 'monto')
+  if (!FECHA.test(String(e.fecha ?? '')) || Number.isNaN(Date.parse(e.fecha))) return fallo('ENTRADA_INVALIDA', 'Fecha inválida (AAAA-MM-DD)', 'fecha')
+  const usuario = typeof e.usuario === 'string' ? e.usuario.trim() : ''
+  if (!usuario) return fallo('ENTRADA_INVALIDA', 'Falta quién lo carga', 'usuario')
+  if (typeof e.prueba !== 'boolean') return fallo('ENTRADA_INVALIDA', 'Falta decir si es de prueba', 'prueba')
+  if (typeof e.marca !== 'string' || !e.marca) return fallo('ENTRADA_INVALIDA', 'Falta la marca', 'marca')
+  return enTransaccion(db, async () => {
+    if (e.fecha > await hoyAR(db)) return fallo('ENTRADA_INVALIDA', 'La fecha de la deuda no puede ser futura', 'fecha')
+    const [c] = await q(db, 'select id::text, empresa_id from cliente where id = $1', [e.cliente_id])
+    if (!c) return fallo('NO_ENCONTRADO', 'No está ese cliente', 'cliente_id')
+    const conf = await leerConf(db, e.marca)
+    if (!conf.marcas[e.marca]) return fallo('MARCA_DESCONOCIDA', `Marca desconocida: ${e.marca}`, 'marca')
+    await cuentaBloqueada(db, { cliente_id: c.id, marca: e.marca, prueba: e.prueba })
+    const todas = await q(db, `select m.ref, m.monto::float as monto, to_char(m.ocurrida_en ${AR_SQL}, 'YYYY-MM-DD') as fecha,
+        exists (select 1 from cuenta_movimiento a where a.empresa_id = m.empresa_id and a.ref = m.ref || ':anulacion') as anulada
+      from cuenta_movimiento m where m.empresa_id = $1 and m.cliente_id = $2 and m.marca = $3 and m.prueba = $4 and m.tipo = 'apertura'`,
+    [c.empresa_id, c.id, e.marca, e.prueba])
+    const viva = todas.find((x) => !x.anulada)
+    if (viva && viva.monto === monto && viva.fecha === e.fecha) return { ok: true, apertura: { ref: viva.ref, monto, fecha: e.fecha }, ya_existia: true, cuenta: await saldoDe(db, c.id, e.marca, e.prueba) }
+    if (viva && e.reemplazar !== true) {
+      return fallo('YA_TIENE_APERTURA', `Ya tiene un saldo de apertura de ${viva.monto} (${viva.fecha}): para cambiarlo, cargalo de nuevo reemplazando`, 'monto')
+    }
+    const ahora = new Date().toISOString()
+    if (viva) {
+      await insertarFila(db, {
+        empresa_id: c.empresa_id, marca: e.marca, cliente_id: c.id, tipo: 'anulacion', ref: `${viva.ref}:anulacion`, monto: -viva.monto,
+        detalle: { motivo: `Saldo de apertura reemplazado: ${viva.monto} ⇒ ${monto}` }, prueba: e.prueba, usuario, ocurrida_en: ahora,
+      })
+    }
+    const ref = `apertura:${e.marca}:${e.prueba ? 'prueba:' : ''}${c.id}:${todas.length + 1}`
+    await insertarFila(db, {
+      // A la medianoche de Argentina de ese día: es lo primero del día (la compra del día va después).
+      empresa_id: c.empresa_id, marca: e.marca, cliente_id: c.id, tipo: 'apertura', ref, monto,
+      detalle: { ...(e.detalle && typeof e.detalle === 'object' ? e.detalle : {}) }, prueba: e.prueba, usuario,
+      ocurrida_en: `${e.fecha}T03:00:00.000Z`,
+    })
+    return { ok: true, apertura: { ref, monto, fecha: e.fecha }, ya_existia: false, reemplazo: viva?.ref ?? null, cuenta: await saldoDe(db, c.id, e.marca, e.prueba) }
   })
 }
