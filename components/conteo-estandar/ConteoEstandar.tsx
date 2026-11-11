@@ -546,7 +546,7 @@ export function ConteoEstandar() {
       {ce.cargando && !products.length ? (
         <>
           <Notice tone="neutral" icon="⏳" style={{ marginBottom: space[3] }}>
-            Cargando el Local en vivo desde Gestión Nube…
+            {linea === 'stunned' ? 'Cargando el stock del local desde el ERP…' : 'Cargando el Local en vivo desde Gestión Nube…'}
           </Notice>
           <Esqueleto forma="tabla" filas={8} />
         </>
