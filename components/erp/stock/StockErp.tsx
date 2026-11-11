@@ -30,7 +30,8 @@ import { NOMBRE_TIPO } from '@/lib/erp/stock.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaPrenda, type PrendaAbierta } from './FichaPrenda'
-import { useLineaErp } from '@/lib/erp/linea-erp'
+import { useLineaErp, useTiendaErp } from '@/lib/erp/linea-erp'
+import { useLineaEnErp } from '@/lib/erp/prueba-corte'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 
 type Prefs = { orden: string[]; visibles: string[] }
@@ -75,6 +76,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
   const [vista, setVista] = useState('constock')
   const [q, setQ] = useState('')
   const linea = useLineaErp()
+  const enErp = useLineaEnErp(useTiendaErp()) === true
   // Stock a costo (Bruno, 9-nov): el servidor saca el costo a quien no lo puede ver y la tarjeta ⛔ aparece.
   const [productos, setProductos] = useState<{ marca: string; filas: unknown[] } | null>(null)
   useEffect(() => {
@@ -163,7 +165,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título «Stock» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-      {!!sinVarianteAca && <Notice tone="warning">{u(sinVarianteAca)} de pedidos sin pagar traen un código que {linea === 'stunned' ? 'el ERP' : 'Gestión Nube'} no tiene: no se descuentan de ningún producto.</Notice>}
+      {!!sinVarianteAca && <Notice tone="warning">{u(sinVarianteAca)} de pedidos sin pagar traen un código que {enErp || linea === 'stunned' ? 'el ERP' : 'Gestión Nube'} no tiene: no se descuentan de ningún producto.</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Disponible" valor={u(res.disponible)} oscuro nota="lo que se puede vender" />

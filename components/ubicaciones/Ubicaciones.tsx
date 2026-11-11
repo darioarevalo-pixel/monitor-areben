@@ -6,6 +6,7 @@ import { dispararSyncStock } from '@/lib/sync-gn'
 import { cargarUbicaciones, guardarObservacion } from '@/lib/ubicaciones/cliente'
 import { cambiosPendientes, esNNN, filtrar, ubiValido, valorMostrado } from '@/lib/ubicaciones/core'
 import type { UbiProducto } from '@/lib/ubicaciones/tipos'
+import { useLineaEnErp } from '@/lib/erp/prueba-corte'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
   Badge,
@@ -72,6 +73,8 @@ export function Ubicaciones() {
   const { marca } = useSesion()
   const { confirmar } = useConfirmar()
   const toast = useToast()
+  // 🔑 Desde el corte el servidor escribe SÓLO al ERP (`api/_observaciones.js`): los textos lo dicen (BDI desde el 14-nov).
+  const enErp = useLineaEnErp(marca === 'bdi' ? 'bdi' : 'zattia') === true
 
   const [data, setData] = useState<UbiProducto[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -169,13 +172,15 @@ export function Ubicaciones() {
       return
     }
     const ok = await confirmar({
-      titulo: 'Guardar ubicaciones en Gestión Nube',
+      titulo: enErp ? 'Guardar ubicaciones en el ERP' : 'Guardar ubicaciones en Gestión Nube',
       tono: 'brand',
       ok: `Guardar ${validos.length}`,
       mensaje: (
         <>
           <p>
-            Se escribe la ubicación en la observación de <b>todas las variantes</b> de cada producto, en el depósito{marca === 'bdi' ? ' Minorista' : ''}.
+            {enErp
+              ? <>Se guarda en el ERP la ubicación de <b>todas las variantes</b> de cada producto.</>
+              : <>Se escribe la ubicación en la observación de <b>todas las variantes</b> de cada producto, en el depósito{marca === 'bdi' ? ' Minorista' : ''}.</>}
           </p>
           <div style={{ marginTop: space[3] }}>
             <ConfirmDetalle label="Productos a escribir" valor={validos.length} />
@@ -249,7 +254,7 @@ export function Ubicaciones() {
       titulo: 'Descartar lo tipeado',
       tono: 'danger',
       ok: `Descartar ${nPend}`,
-      mensaje: `Se eliminan ${nPend} ${nPend === 1 ? 'ubicación cargada' : 'ubicaciones cargadas'} que todavía no se ${nPend === 1 ? 'guardó' : 'guardaron'} en GN. Lo ya guardado no se toca.`,
+      mensaje: `Se eliminan ${nPend} ${nPend === 1 ? 'ubicación cargada' : 'ubicaciones cargadas'} que todavía no se ${nPend === 1 ? 'guardó' : 'guardaron'}${enErp ? '' : ' en GN'}. Lo ya guardado no se toca.`,
     })
     if (!ok) return
     setCambios({})

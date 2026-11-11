@@ -1829,6 +1829,39 @@ describe('caja · auditoría 11-oct, fase 2 (A5–A12, B2–B5, robustez)', () =
     expect((await correr(req('POST', {}, { action: 'resolver', id: ID, como: 'descartar', nota: 'otra vez' }))).code).toBe(409)
   })
 
+  it('🔴 B2: la RECHAZADA que iba al ERP ⛔ se «carga a mano en GN» (quedaría en_gn y el ERP ⛔ la tendría)', async () => {
+    conSesion(CAJERA)
+    gn.respuestaPost = { status: 422, body: { message: 'Sin stock' } }
+    await correr(req('POST', {}, VENTA))
+    base.ventas.set(ID, { ...base.ventas.get(ID), destino: 'erp' })
+    const r = await correr(req('POST', {}, { action: 'resolver', id: ID, como: 'a_mano', gn_number: 30777, nota: 'la cargué en GN' }))
+    expect(r.code).toBe(409)
+    expect(r.body?.error).toMatch(/iba al ERP/)
+    expect(base.ventas.get(ID)).toMatchObject({ estado: 'error', reintentable: false })
+    // Descartarla sigue siendo del admin.
+    conSesion(ADMIN)
+    expect((await correr(req('POST', {}, { action: 'resolver', id: ID, como: 'descartar', nota: 'se carga por ERP › Ventas' }))).code).toBe(200)
+  })
+
+  it('🔑 el resumen dice si la Caja ya está ENTERA en el ERP (`soloErp`): la pantalla deja de nombrar a GN', async () => {
+    conSesion(CAJERA)
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
+    let t = await correr(req('GET', { action: 'turno' }))
+    expect((t.body?.turno as { resumen: { soloErp: boolean } }).resumen.soloErp).toBe(false)
+    // Cortadas las dos, pero el turno se abrió ANTES (4-oct): todavía cuenta GN.
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z', zattia: '2026-10-29T03:00:00Z' }
+    t = await correr(req('GET', { action: 'turno' }))
+    expect((t.body?.turno as { resumen: { soloErp: boolean } }).resumen.soloErp).toBe(false)
+    base.turnos[0].abierto_en = '2026-11-01T12:00:00.000Z'
+    ;(await import('../api/_caja.js')).olvidarCobrosGN()
+    t = await correr(req('GET', { action: 'turno' }))
+    expect((t.body?.turno as { resumen: { soloErp: boolean } }).resumen.soloErp).toBe(true)
+    // Sin poder leer los cortes: como siempre (nombra a GN).
+    corte.falla = true
+    t = await correr(req('GET', { action: 'turno' }))
+    expect((t.body?.turno as { resumen: { soloErp: boolean } }).resumen.soloErp).toBe(false)
+  })
+
   it('🔴 B2: la que tiene error REINTENTABLE ⛔ se resuelve a mano (puede estar en GN: duplicaría)', async () => {
     conSesion(ADMIN)
     base.turnos[0].abierto_por_usuario = 'bruno'; base.turnos[0].abierto_por = 'bruno'

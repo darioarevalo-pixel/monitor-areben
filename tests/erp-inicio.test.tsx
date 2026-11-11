@@ -29,6 +29,7 @@ describe('el resultado del mes', () => {
 const RES = { mes: { desde: '2026-10-01', hasta: '2026-10-19', ventas: 637, vendido: 29525438, costo: 9690802, sinCosto: 3, margen: 19834636 }, anterior: { desde: '2026-09-01', hasta: '2026-09-19', ventas: 753, vendido: 36035252, costo: 12575031, sinCosto: 7, margen: 23460221 }, gnHasta: '2026-10-19' }
 const leerResultadoDelMes = vi.fn(async () => RES)
 vi.mock('@/lib/erp/cliente', () => ({
+  leerCorteDeLinea: async () => ({ en_erp: false }), // sin corte: los carteles de siempre (`useLineaEnErp`)
   leerResultadoDelMes: () => leerResultadoDelMes(),
   // Sólo los REALES (el cuarto parámetro `prueba` va en false): los de prueba ⛔ restan en Inicio.
   leerGastos: async (_m: string, _l: string, desde: string, hasta: string, prueba: boolean) => ({ desde, hasta, prueba, total: prueba ? 999 : 1_500_000, cobrosSinComision: prueba ? 0 : 2 }),

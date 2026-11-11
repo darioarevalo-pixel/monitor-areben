@@ -19,6 +19,7 @@ import { contarVistas as vistasDeVentas, filtrar as filtrarVentas, rangoDePeriod
 import { contarVistas as vistasDeStock, filtrar as filtrarStock } from '@/lib/erp/stock-lista.core.js'
 import { contarVistas as vistasDeProductos, filtrar as filtrarProductos } from '@/lib/erp/productos-lista.core.js'
 import { useLineaErp, useTiendaErp } from '@/lib/erp/linea-erp'
+import { useLineaEnErp } from '@/lib/erp/prueba-corte'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { renglonesDelResultado } from '@/lib/erp/gastos.core.js'
 import { elegirRolVisto, useRolVisto } from '@/lib/erp/ver-como'
@@ -97,6 +98,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   // La tienda del menú: los gastos (y el resultado) son de ESA línea, ⛔ de Zattia + Stunned (Bruno, 30-oct).
   const tienda = useTiendaErp()
+  const enErp = useLineaEnErp(tienda) === true
   const [resultado, setResultado] = useState<{ marca: string; mes: string; r: ResultadoDelMes | null; error: string | null } | null>(null)
   // Los gastos comerciales REALES del mismo mes (⛔ los de prueba: son de ventas que Gestión Nube no tiene).
   const [gastos, setGastos] = useState<{ marca: string; mes: string; g: GastosDelPeriodo | null; error: string | null } | null>(null)
@@ -254,7 +256,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
             </div>
           ))}
         </div>
-        <div style={{ fontSize: font.sm, color: color.mut }}>Ventas cuenta las de este mes del ERP (en paralelo con Gestión Nube). Lo que se hace afuera —conteos, transferencias, preparación— sigue en el monitor.</div>
+        <div style={{ fontSize: font.sm, color: color.mut }}>Ventas cuenta las de este mes del ERP{enErp ? '' : ' (en paralelo con Gestión Nube)'}. Lo que se hace afuera —conteos, transferencias, preparación— sigue en el monitor.</div>
       </section>
     </div>
   )
