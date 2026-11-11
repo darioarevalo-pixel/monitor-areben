@@ -531,6 +531,9 @@ export default async function handler(req, res) {
     const anuladasGN = await anuladasDelTurno(turno, ventas.data || [], fresco)
     const cobrosERP = await cobrosERPDelTurno(turno, cortes)
     const resumen = resumenTurno({ turno, ventas: ventas.data || [], movs: movs.data || [], reglas, nombres, cobrosGN, cobrosERP, anuladasGN })
+    // 🔑 Todas las líneas de esta Caja ya estaban en el ERP al abrirla (BDI desde su corte): GN ⛔ cuenta nada y la pantalla
+    // ⛔ lo nombra. Sin saber los cortes (`null`), como siempre.
+    resumen.soloErp = !!cortes && todoEnErp(cortes, store, new Date(turno.abierto_en))
     // `salidas` sigue siendo el nombre de la lista (la pantalla la lee así): son TODOS los movimientos.
     return { ...turno, resumen, salidas: movs.data || [] }
   }
@@ -1265,7 +1268,7 @@ export default async function handler(req, res) {
         // si ⛔ se pudo mirar qué ventas se anularon en GN (A12): el esperado podría quedar LARGO.
         // Lo mismo sin los pedidos web de Stunned cobrados en el ERP (29-oct): el esperado queda CORTO. Misma salida con nota,
         // ⛔ un freno sin salida: una lectura rota del ERP ⛔ puede dejar la caja sin cerrar.
-        if (con.resumen.cobrosERP === null && b.sinCobrosGN !== true) return res.status(409).json({ error: 'No se pudieron leer los pedidos web de Stunned cobrados en efectivo (ERP): sin eso el esperado puede quedar corto. Reintentar en un minuto.', sinCobrosGN: true })
+        if (con.resumen.cobrosERP === null && b.sinCobrosGN !== true) return res.status(409).json({ error: 'No se pudieron leer los pedidos web cobrados en efectivo (ERP): sin eso el esperado puede quedar corto. Reintentar en un minuto.', sinCobrosGN: true })
         if (con.resumen.cobrosGN === null || con.resumen.anuladasGN === null || con.resumen.cobrosERP === null) {
           if (b.sinCobrosGN !== true) return res.status(409).json({ error: 'Gestión Nube no contestó (los cobros web en efectivo o las ventas anuladas): sin eso el esperado puede quedar mal. Reintentar en un minuto.', sinCobrosGN: true })
           if (!nota) return res.status(400).json({ error: 'Para cerrar sin lo de Gestión Nube hace falta una nota.' })
@@ -1629,6 +1632,9 @@ export default async function handler(req, res) {
         if (v.error) throw new Error(v.error.message)
         if (!v.data) return res.status(404).json({ error: 'La venta no existe.' })
         if (!(v.data.estado === 'error' && v.data.reintentable === false)) return res.status(409).json({ error: 'Se resuelve a mano sólo una venta que Gestión Nube rechazó. Ésta se sigue reintentando sola.', venta: v.data })
+        // 🔴 La que iba al ERP (Stunned, BDI desde su corte) ⛔ se «carga a mano en GN»: quedaría `en_gn` con un número de GN y el
+        // ERP ⛔ la tendría (stock y cuenta sin mover). Nunca pasó (0 rechazadas en las dos bases, 11-nov) ⇒ sólo descartar.
+        if (como === 'a_mano' && v.data.destino === 'erp') return res.status(409).json({ error: 'Esta venta iba al ERP: no se carga a mano en Gestión Nube. Un admin la descarta y se carga por ERP › Ventas.', venta: v.data })
         const ahora = new Date().toISOString()
         const resolucion = { tipo: como, por: perfil.name || null, en: ahora, nota, ...(como === 'a_mano' ? { gn_number: gnNumber } : {}) }
         const cambios = como === 'a_mano'

@@ -23,7 +23,8 @@ import { PERIODOS, plata, rangoDePeriodo } from '@/lib/erp/ventas-lista.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaProducto } from '../productos/FichaProducto'
-import { useLineaErp } from '@/lib/erp/linea-erp'
+import { useLineaErp, useTiendaErp } from '@/lib/erp/linea-erp'
+import { useLineaEnErp } from '@/lib/erp/prueba-corte'
 import { conMesesAnteriores } from '@/lib/erp/meses.core.js'
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 
@@ -66,6 +67,8 @@ export function PorProductoErp() {
   const [vista, setVista] = useState<Vista>('agrupado')
   const [q, setQ] = useState('')
   const linea = useLineaErp()
+  // Desde el corte las ventas del ERP se copian al mismo espejo (`Ventas del ERP al espejo`): el cartel ⛔ dice más «GN vende hoy».
+  const enErp = useLineaEnErp(useTiendaErp()) === true
   const [canal, setCanal] = useState('')
   const [orden, setOrden] = useState<OrdenLista>(null)
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
@@ -142,7 +145,9 @@ export function PorProductoErp() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>Qué se vendió de cada producto. Hacé clic en uno para ver su ficha.</p>
-      <Notice tone="warning">Sale de <b>Gestión Nube</b>, que es el que vende hoy: todas las ventas, de todos los canales. El margen usa el costo de hoy del ERP.</Notice>
+      {enErp
+        ? <Notice tone="neutral">Todas las ventas, de todos los canales: las de antes del corte salen de Gestión Nube y las de después, del ERP. El margen usa el costo de hoy del ERP.</Notice>
+        : <Notice tone="warning">Sale de <b>Gestión Nube</b>, que es el que vende hoy: todas las ventas, de todos los canales. El margen usa el costo de hoy del ERP.</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>

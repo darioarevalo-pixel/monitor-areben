@@ -93,6 +93,11 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   «Transferencia» de Areben (`titulares.areben`); adónde fue la plata lo dice la cuenta REAL (la ruta del medio). `caja_venta.pagos` y lo que va a
   GN ⛔ cambian, ni la copia de PRUEBA. 🔴 Apagar la cuenta CG de una línea (`activa=false`) recién DESPUÉS de este código y de su corte: si no, el
   motor contesta `CUENTA_DESCONOCIDA`. Tests: `caja-sin-cg`.
+- 🔑 **La Caja ENTERA en el ERP (BDI desde su corte, la primera; 11-nov)**: `resumen.soloErp` (`todoEnErp` al abrir la caja) ⇒ el
+  cierre ⛔ nombra a GN («Consultar cobros del ERP», ⛔ «+ cobrado en Gestión Nube»). Los pedidos web del ERP son «Pedidos web (ERP)»,
+  ⛔ «de Stunned». 🔴 **La rechazada que iba al ERP (`destino = 'erp'`) ⛔ se «carga a mano en GN»** (quedaba `en_gn` y el ERP ⛔ la
+  tenía): 409 y sin botón; la descarta un admin y se carga por ERP › Ventas. Nunca pasó (0 rechazadas en las dos bases).
+  Tests: `caja-textos-corte`, `caja-handler` («iba al ERP», «ENTERA en el ERP»).
 - 🔑 **La venta del ERP (Stunned) lleva SU número** (`erp_numero`): `numeroDeLaVenta` = `gn_number ?? erp_numero`, en el ticket,
   la «Última venta» y la lista de Ventas («En el ERP»; ⛔ en Provisorias). Sin número todavía: «pendiente en el ERP», ⛔ en GN.
 - 🔴🔑 **A DÓNDE VA EL TICKET LO DECIDE EL CORTE DE SU LÍNEA (`erp_corte`), ⛔ una llave** (Bruno 31-oct: «obvio, el día que sea

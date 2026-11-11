@@ -1364,7 +1364,7 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onTicketCambio, onC
           <span style={{ fontSize: font.sm, color: color.ink2 }}>
             {cobradas.length === 1 ? '1 venta cobrada' : `${cobradas.length} ventas cobradas`} · {plata(cobradas.reduce((t, v) => t + v.total, 0))}
           </span>
-          {firmes.length > 0 ? tabla(firmes) : <span style={{ color: color.mut, fontSize: font.sm }}>Ninguna venta con número de Gestión Nube todavía.</span>}
+          {firmes.length > 0 ? tabla(firmes) : <span style={{ color: color.mut, fontSize: font.sm }}>Ninguna venta con número todavía.</span>}
           {provisorias.length > 0 && (
             <div style={{ display: 'grid', gap: space[1], marginTop: space[3] }}>
               <button
@@ -1378,7 +1378,7 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onTicketCambio, onC
               </button>
               {verProvisorias && (
                 <>
-                  <span style={{ fontSize: font.xs, color: color.mut }}>Sin número de Gestión Nube: esperan la transferencia, no llegaron a GN, o se cancelaron.</span>
+                  <span style={{ fontSize: font.xs, color: color.mut }}>Sin número de Gestión Nube ni del ERP: esperan la transferencia, no llegaron, o se cancelaron.</span>
                   {tabla(provisorias)}
                 </>
               )}
@@ -1410,7 +1410,7 @@ export function Pendientes({ ventas, onCambio, admin = false, esMio = false }: {
     <Notice tone="danger">
       <div style={{ display: 'grid', gap: space[2] }}>
         <b>
-          Cobradas sin llegar a Gestión Nube: {ventas.length}
+          Cobradas sin llegar {ventas.every((v) => v.destino === 'erp') ? 'al ERP' : ventas.some((v) => v.destino === 'erp') ? 'a Gestión Nube o al ERP' : 'a Gestión Nube'}: {ventas.length}
         </b>
         {ventas.map((v) => {
           const rechazada = v.estado === 'error' && v.reintentable === false
@@ -1424,7 +1424,8 @@ export function Pendientes({ ventas, onCambio, admin = false, esMio = false }: {
                 {rechazada ? (
                   <>
                     {/* B2 (auditoría, 11-oct): la rechazada quedaba en rojo para siempre. */}
-                    {(admin || esMio) && (
+                    {/* La que iba al ERP ⛔ se carga en GN: la descarta un admin y se carga por ERP › Ventas (el servidor da 409). */}
+                    {(admin || esMio) && v.destino !== 'erp' && (
                       <Button size="sm" variant="outline" onClick={() => setResolviendo({ id: v.id, como: 'a_mano' })}>
                         Cargada a mano en GN
                       </Button>
@@ -1800,6 +1801,9 @@ export function ConteoModal({ turno, billetes, onCerrar, onListo }: { turno: Tur
 }
 
 /** Cerrar el turno: se cuenta el efectivo (con el fondo) y el botón cierra. */
+/** Dónde se cobra lo que no pasó por esta Caja: GN, o el ERP cuando la Caja ya está entera ahí (BDI desde su corte). */
+const dondeCobra = (r?: Pick<ResumenTurno, 'soloErp'> | null) => (r?.soloErp ? 'el ERP' : 'Gestión Nube')
+
 export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { turno: Turno; billetes: number[]; onCerrar: () => void; onCerrado: (t: Turno) => void }) {
   const [nota, setNota] = useState('')
   const [trabajando, setTrabajando] = useState(false)
@@ -1867,32 +1871,32 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
       onCerrar={onCerrar}
       extra={
         <div style={{ display: 'grid', gap: space[1], fontSize: font.sm }}>
-          <Field label={sinGN ? 'Nota (obligatoria para cerrar sin los cobros de Gestión Nube)' : 'Nota (opcional)'}>
+          <Field label={sinGN ? `Nota (obligatoria para cerrar sin los cobros de ${dondeCobra(r)})` : 'Nota (opcional)'}>
             <Input value={nota} onChange={(e) => setNota(e.target.value)} autoComplete="off" />
           </Field>
-          {consultando && <span style={{ color: color.mut }}>Consultando los cobros de Gestión Nube…</span>}
+          {consultando && <span style={{ color: color.mut }}>Consultando los cobros de {dondeCobra(r)}…</span>}
           {!consultando && r && (
             <span style={{ color: color.mut }}>
               Esperado = fondo {plata(r.efectivo.fondo)} + efectivo de la Caja {plata(r.efectivo.cobrado)}
               {!!r.efectivo.deEspera && <> + esperando transferencia {plata(r.efectivo.deEspera)}</>}
-              {r.cobrosGN !== null && <> + cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</>}
-              {!!r.efectivo.cobradoERP && <> + pedidos web de Stunned (ERP) {plata(r.efectivo.cobradoERP)}</>}
+              {r.cobrosGN !== null && !r.soloErp && <> + cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</>}
+              {!!r.efectivo.cobradoERP && <> + pedidos web (ERP) {plata(r.efectivo.cobradoERP)}</>}
               {!!r.efectivo.aportes && <> + ingresos {plata(r.efectivo.aportes)}</>}
               {!!r.efectivo.salidas && <> − salidas {plata(r.efectivo.salidas)}</>}
             </span>
           )}
           {!consultando && r && <CobrosGN r={r} />}
-          {errConsulta && <span style={{ color: color.warningInk }}>No se pudo consultar Gestión Nube ({errConsulta}). Se relee al cerrar.</span>}
+          {errConsulta && <span style={{ color: color.warningInk }}>No se pudo consultar {dondeCobra(r)} ({errConsulta}). Se relee al cerrar.</span>}
           <div>
             <Button size="sm" variant="outline" loading={consultando} disabled={trabajando} onClick={() => void consultar()}>
-              Consultar cobros de Gestión Nube
+              Consultar cobros de {dondeCobra(r)}
             </Button>
           </div>
           {!!r?.esperando.length && <span style={{ color: color.warningInk }}>Transferencias en espera: {r.esperando.length}. Si llegan después, no entran en el cierre.</span>}
           {sinGN && (
             <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
               <Button size="sm" variant="outline" tone="danger" disabled={!nota.trim() || trabajando} onClick={() => void cerrar(sinGN.total, sinGN.conteo, true)}>
-                Cerrar sin los cobros de Gestión Nube
+                Cerrar sin los cobros de {dondeCobra(r)}
               </Button>
             </div>
           )}
@@ -1987,13 +1991,13 @@ export function CobrosGN({ r }: { r: ResumenTurno }) {
   const erp = r.cobrosERP ?? []
   const avisos = [
     r.cobrosGN === null && <Notice key="gn" tone="warning">Cobros de Gestión Nube: sin leer. No suman al esperado.</Notice>,
-    r.cobrosERP === null && <Notice key="erp" tone="warning">Pedidos web de Stunned (ERP): sin leer. No suman al esperado.</Notice>,
+    r.cobrosERP === null && <Notice key="erp" tone="warning">Pedidos web (ERP): sin leer. No suman al esperado.</Notice>,
   ].filter(Boolean)
   const gn = r.cobrosGN ?? []
   const grupos = [
     { titulo: 'Ventas en efectivo en el POS de Gestión Nube', lista: gn.filter((c) => c.pos) },
     { titulo: 'Cobros en efectivo de pedidos web (en Gestión Nube)', lista: gn.filter((c) => !c.pos) },
-    { titulo: 'Pedidos web de Stunned cobrados en efectivo (en el ERP)', lista: erp },
+    { titulo: 'Pedidos web cobrados en efectivo (en el ERP)', lista: erp },
   ].filter((g) => g.lista.length)
   if (!avisos.length && !grupos.length) return null
   return (
@@ -2106,7 +2110,7 @@ export function ResumenTurnoDatos({
         />
       </div>
       {r.esperando.length > 0 && <Notice tone="warning">Transferencias en espera: {r.esperando.length}. No suman hasta que lleguen.</Notice>}
-      {r.sinGN.length > 0 && <Notice tone="warning">Cobradas sin llegar a Gestión Nube: {r.sinGN.length}. Suman a la caja.</Notice>}
+      {r.sinGN.length > 0 && <Notice tone="warning">Cobradas sin llegar {r.soloErp ? 'al ERP' : 'a Gestión Nube'}: {r.sinGN.length}. Suman a la caja.</Notice>}
       {/* A12: GN ⛔ anula por API: la venta anulada a mano allá deja de sumar acá (la plata se devolvió). */}
       {/* La del ERP (Stunned) se anula en el ERP y tiene su número (Bruno, 28-oct: decía «Anuladas en Gestión Nube: 96A141DC»). */}
       <Anuladas donde="Gestión Nube" lista={(r.anuladasGN ?? []).filter((v) => v.estado !== 'en_erp')} />
@@ -2163,7 +2167,7 @@ export function ResumenTurnoDatos({
             <span>Fondo {plata(r.efectivo.fondo)}</span>
             <span>+ Efectivo cobrado {plata(r.efectivo.cobrado)}</span>
             {r.efectivo.cobradoGN > 0 && <span>+ Cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</span>}
-            {!!r.efectivo.cobradoERP && <span>+ Pedidos web de Stunned cobrados en efectivo (ERP) {plata(r.efectivo.cobradoERP)}</span>}
+            {!!r.efectivo.cobradoERP && <span>+ Pedidos web cobrados en efectivo (ERP) {plata(r.efectivo.cobradoERP)}</span>}
             {!!r.efectivo.deEspera && <span>+ Efectivo de ventas que esperan la transferencia {plata(r.efectivo.deEspera)}</span>}
             {!!r.efectivo.aportes && <span>+ Ingresos {plata(r.efectivo.aportes)}</span>}
             <span>− Salidas {plata(r.efectivo.salidas)}</span>

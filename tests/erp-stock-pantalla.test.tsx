@@ -33,6 +33,7 @@ const ficha: StockDePrenda = {
 }
 const leerStockDePrenda = vi.fn(async () => ficha)
 vi.mock('@/lib/erp/cliente', () => ({
+  leerCorteDeLinea: async () => ({ en_erp: false }), // sin corte: los carteles de siempre (`useLineaEnErp`)
   leerListaDeProductos: async () => ({ filas: [] }), leerListaDeStock: () => leerListaDeStock(), leerStockDePrenda: () => leerStockDePrenda() }))
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno' } }) }))
 

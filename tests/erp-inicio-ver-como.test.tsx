@@ -37,6 +37,7 @@ describe('Ver como — el núcleo', () => {
 })
 
 vi.mock('@/lib/erp/cliente', () => ({
+  leerCorteDeLinea: async () => ({ en_erp: false }), // sin corte: los carteles de siempre (`useLineaEnErp`)
   leerResultadoDelMes: async () => ({ mes: { desde: '2026-10-01', hasta: '2026-10-19', ventas: 1, vendido: 100, costo: 40, sinCosto: 0, margen: 60 }, anterior: { desde: '2026-09-01', hasta: '2026-09-19', ventas: 1, vendido: 100, costo: 40, sinCosto: 0, margen: 60 }, gnHasta: null }),
   leerListaDeVentas: async () => ({ filas: [{ estadoKey: 'a_preparar', cobroKey: 'sinpagar', kind: 'venta', tipo: 'venta', anulada: false, facturada: false }] }),
   leerListaDeStock: async () => ({ filas: [] }),

@@ -192,6 +192,9 @@ export type ResumenTurno = {
   anuladasGN?: { id: string; estado?: string; total: number; creada_en: string; gn_number: number | null; erp_numero?: number | null }[] | null
   /** B5: lo hecho a mano en el turno. */
   aMano?: { ventas: number } & AMano
+  /** Todas las líneas de esta Caja ya estaban en el ERP al abrirla (BDI desde su corte): GN ⛔ cuenta. Un resumen guardado
+   *  antes ⛔ lo trae. */
+  soloErp?: boolean
 }
 /** Fase B: cuántos billetes de cada valor (`{ "20000": 3 }`). El total lo rearma el servidor. */
 export type Conteo = Record<string, number>

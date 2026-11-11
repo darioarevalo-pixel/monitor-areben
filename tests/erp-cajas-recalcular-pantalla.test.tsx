@@ -44,9 +44,9 @@ const boton = (texto: string) => [...document.querySelectorAll('button')].find((
 const texto = () => (document.body.textContent ?? '').replace(/\s/g, ' ')
 
 describe('ERP › Cajas › Recalcular el cierre', () => {
-  it('la ficha muestra el efectivo de los pedidos web de Stunned', async () => {
+  it('la ficha muestra el efectivo de los pedidos web del ERP', async () => {
     await abrirFicha(true)
-    expect(texto()).toContain('Pedidos web de Stunned')
+    expect(texto()).toContain('Pedidos web (ERP)')
   })
 
   it('admin: muestra qué cambia y «Guardar» lo escribe', async () => {
@@ -57,7 +57,7 @@ describe('ERP › Cajas › Recalcular el cierre', () => {
     await act(async () => { boton('Recalcular el cierre')!.click() })
     expect(m.recalcularCierre).toHaveBeenLastCalledWith('zattia', { id: 't38', guardar: false })
     expect(texto()).toContain('Con lo de hoy')
-    expect(texto()).toMatch(/Pedidos web de Stunned\$ 43\.795 → \$ 0/)
+    expect(texto()).toMatch(/Pedidos web \(ERP\)\$ 43\.795 → \$ 0/)
     expect(texto()).toMatch(/Diferencia− \$ 43\.795 → \$ 0/)
     await act(async () => { boton('Guardar')!.click() })
     expect(m.recalcularCierre).toHaveBeenLastCalledWith('zattia', { id: 't38', guardar: true })

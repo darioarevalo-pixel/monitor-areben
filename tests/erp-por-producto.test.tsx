@@ -41,7 +41,8 @@ describe('el núcleo', () => {
 })
 
 const leer = vi.fn(async () => ({ renglones: R, desde: '2026-10-01', hasta: '2026-10-20', costos: true, gnHasta: '2026-10-20T03:00:00Z' }))
-vi.mock('@/lib/erp/cliente', () => ({ leerVentasPorProducto: () => leer() }))
+const corte = { en_erp: false }
+vi.mock('@/lib/erp/cliente', () => ({ leerVentasPorProducto: () => leer(), leerCorteDeLinea: async () => corte }))
 vi.mock('@/components/erp/productos/FichaProducto', () => ({ FichaProducto: ({ producto }: { producto: string }) => <aside aria-label="ficha">Ficha del producto {producto}</aside> }))
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno' } }) }))
 const guardado = new Map<string, string>()
@@ -70,5 +71,18 @@ describe('la pantalla', () => {
     expect(filas()[0].textContent).toContain('18/10')
     await clic(filas()[0].querySelectorAll('[role="cell"]')[2])
     expect(document.querySelector('aside[aria-label="ficha"]')?.textContent).toContain('Ficha del producto')
+    expect(document.body.textContent).toContain('que es el que vende hoy')
+  })
+
+  it('🔑 con la línea ya en el ERP (BDI desde su corte) ⛔ dice que «GN es el que vende hoy»', async () => {
+    corte.en_erp = true
+    try {
+      const { PorProductoErp } = await import('@/components/erp/ventas/PorProductoErp')
+      const host = document.createElement('div'); document.body.appendChild(host)
+      await act(async () => { root = createRoot(host); root.render(<PorProductoErp />) })
+      await act(async () => {})
+      expect(document.body.textContent).not.toContain('que es el que vende hoy')
+      expect(document.body.textContent).toContain('las de después, del ERP')
+    } finally { corte.en_erp = false }
   })
 })

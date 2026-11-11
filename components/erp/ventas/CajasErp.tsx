@@ -260,7 +260,7 @@ export function CajasErp() {
             {fichaFila.efectivo ? (
               <div>
                 <h3 style={{ margin: '0 0 8px', fontSize: font.md }}>El efectivo</h3>
-                {([['Fondo', fichaFila.efectivo.fondo], ['Cobrado en efectivo', fichaFila.efectivo.cobrado], ['Esperando transferencia', fichaFila.efectivo.deEspera], ['Cobrado en Gestión Nube', fichaFila.efectivo.cobradoGN], ['Pedidos web de Stunned', fichaFila.efectivo.cobradoERP ?? 0], ['Ingresos', fichaFila.efectivo.aportes], ['Salidas', -fichaFila.efectivo.salidas]] as Array<[string, number]>)
+                {([['Fondo', fichaFila.efectivo.fondo], ['Cobrado en efectivo', fichaFila.efectivo.cobrado], ['Esperando transferencia', fichaFila.efectivo.deEspera], ['Cobrado en Gestión Nube', fichaFila.efectivo.cobradoGN], ['Pedidos web (ERP)', fichaFila.efectivo.cobradoERP ?? 0], ['Ingresos', fichaFila.efectivo.aportes], ['Salidas', -fichaFila.efectivo.salidas]] as Array<[string, number]>)
                   .filter(([, n]) => n).map(([t, n]) => <div key={t} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span style={{ color: color.mut }}>{t}</span><MoneyText value={n} /></div>)}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${color.line}`, fontWeight: 700 }}><span>Esperado</span><MoneyText value={fichaFila.efectivo.esperado} /></div>
                 {fichaFila.contado != null && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span>Contado</span><MoneyText value={fichaFila.contado} /></div>}
@@ -318,7 +318,7 @@ function ArqueoDeLaCaja({ f, admin, onRevisar }: { f: FilaCaja; admin: boolean; 
 /** Los renglones del efectivo que se comparan al recalcular (los mismos de «El efectivo»). */
 const RENGLONES_EFECTIVO: Array<[string, (e: EfectivoCierre) => number]> = [
   ['Cobrado en efectivo', (e) => e.cobrado], ['Esperando transferencia', (e) => e.deEspera], ['Cobrado en Gestión Nube', (e) => e.cobradoGN],
-  ['Pedidos web de Stunned', (e) => e.cobradoERP ?? 0], ['Ingresos', (e) => e.aportes], ['Salidas', (e) => -e.salidas],
+  ['Pedidos web (ERP)', (e) => e.cobradoERP ?? 0], ['Ingresos', (e) => e.aportes], ['Salidas', (e) => -e.salidas],
 ]
 
 /**
