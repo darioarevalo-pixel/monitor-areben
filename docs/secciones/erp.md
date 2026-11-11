@@ -136,6 +136,7 @@ Influencer / canje · Regalo / sorteo / donación (sacan) · Otro (con porqué).
 libro (`antes`) y al aprobarlo el motor (`motor/stock/ajuste.mjs`, sql/026, por pg en UNA transacción) escribe un
 movimiento `ajuste` por renglón; descartar ⛔ mueve nada; ⛔ se edita ni se borra (otro ajuste). Handler
 `api/_erp-ajustes.js`, núcleo `lib/erp/ajuste.core.js` (`tests/erp-ajuste*.test.ts*`).
+🔴 **Salida que deja el depósito en NEGATIVO (11-nov):** el motor la rechaza (`QUEDA_NEGATIVO`) ⇒ la pantalla la frena ANTES: «Queda» en rojo y el porqué al lado del botón —también en el celular, donde el pie fijo dejaba «Guardar» gris sin explicar—, y manda a Conteo de depósito / de fundas (⛔ al motivo «Conteo», que ⛔ está en el menú). Los motivos que llegan de otros flujos (`uso_interno`, `consumible`…) se muestran con nombre.
 🔴 EN SOMBRA: mueve SÓLO el libro, ⛔ GN ni TN (el diff lo explica como `ajuste_erp`). La lista «A contar» es
 `libro_aparte` de la Conciliación (TN y ML) + `venta.detalle.contar` (Caja con PIN). 🔴 Un ajuste APROBADO antes de que
 se calculara la conciliación ⛔ cierra la fila: si sigue sin coincidir, vuelve a la lista. 🔴 Un conteo del módulo de

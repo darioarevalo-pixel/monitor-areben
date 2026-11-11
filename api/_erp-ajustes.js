@@ -20,7 +20,7 @@ const motor = () => import('../motor/stock/ajuste.mjs')
 /** Lo que el motor dice en palabras del motor («libro», «aplicado», `local`), dicho como en la pantalla. */
 const MENSAJE = {
   SIN_DIFERENCIAS: 'Lo contado coincide con el ERP: no hay nada que ajustar.',
-  QUEDA_NEGATIVO: 'En ese depósito el ERP tiene menos de las que salen. Si la prenda está, primero contala (motivo «Conteo»).',
+  QUEDA_NEGATIVO: 'En ese depósito el ERP tiene menos de las que salen. Si el producto está, contalo primero en Conteo de depósito (o de fundas): el conteo entra solo al ERP.',
   YA_RESUELTO: 'Ese ajuste ya se aprobó o se descartó: volvé a leer.',
   NO_ENCONTRADO: 'No está ese ajuste.',
 }

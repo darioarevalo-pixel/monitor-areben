@@ -37,6 +37,8 @@ import type { AlContar } from './ListasJuntas'
 const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
 /** Los motivos que se cargan a mano: el conteo entra solo desde el monitor (⛔ va en el menú). */
 export const MOTIVOS_A_MANO = MOTIVOS.filter((m) => m.key !== 'conteo')
+/** El mismo porqué que da el servidor (`api/_erp-ajustes.js`), antes de guardar. */
+export const QUEDA_NEGATIVO = 'En ese depósito el ERP tiene menos de las que salen. Si el producto está, contalo primero en Conteo de depósito (o de fundas): el conteo entra solo al ERP.'
 const ESTADO = { para_aprobar: ['warning', 'Para aprobar'], aplicado: ['success', 'Aplicado'], rechazado: ['neutral', 'Descartado'] } as const
 const COLUMNAS: ColumnaLista[] = [
   { key: 'n', titulo: 'Nº', ancho: '64px', movil: 'oculta' },
@@ -190,13 +192,20 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
     const n = Math.abs(Number(r.valor))
     return borrador?.sentido === 'ingreso' ? n : -n
   }
+  /** Una salida que deja el depósito en negativo: el motor la rechaza (`QUEDA_NEGATIVO`) ⇒ se avisa antes de guardar. */
+  const quedaNegativo = (r: Renglon) => {
+    const d = salen(r)
+    const libro = r.porDeposito?.[borrador?.deposito ?? '']?.libro
+    return d != null && d < 0 && !!r.porDeposito && (libro ?? 0) + d < 0
+  }
   const faltante = !borrador ? null
     : !borrador.sentido ? 'Elegí si es un ingreso o una salida'
       : !borrador.motivo ? 'Elegí el motivo'
         : borrador.motivo === 'otro' && !borrador.detalle.trim() ? 'Escribí el porqué'
           : !borrador.renglones.length ? 'Agregá un producto'
             : borrador.renglones.some((r) => salen(r) == null) ? 'Escribí la cantidad'
-              : null
+              : borrador.renglones.some((r) => quedaNegativo(r)) ? QUEDA_NEGATIVO
+                : null
   const listo = !!borrador && !faltante
 
   const cancelarNuevo = () => { setBorrador(null); setEncontradas(null) }
@@ -308,7 +317,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
                         <Input value={r.valor} inputMode="numeric" aria-label={`Cantidad de ${prendaDe(r)}`} style={{ width: 80, textAlign: 'right' }}
                           onChange={(e) => setBorrador({ ...borrador, renglones: borrador.renglones.map((x) => (x === r ? { ...x, valor: e.target.value } : x)) })} />
                       </Td>
-                      <Td style={{ textAlign: 'right' }}>{d == null || !r.porDeposito ? '—' : (libro ?? 0) + d}</Td>
+                      <Td style={{ textAlign: 'right' }}>{d == null || !r.porDeposito ? '—' : quedaNegativo(r) ? <span data-negativo style={{ color: color.danger, fontWeight: 600 }}>{(libro ?? 0) + d}</span> : (libro ?? 0) + d}</Td>
                       <Td><Button variant="ghost" size="sm" onClick={() => setBorrador({ ...borrador, renglones: borrador.renglones.filter((x) => x !== r) })}>Sacar</Button></Td>
                     </Tr>
                   )
@@ -317,11 +326,14 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
             </TableWrap>
           ) : <div style={{ marginTop: space[2], color: color.mut }}>Agregá los productos con el buscador.</div>}
 
+          {/* 📱 El pie fijo ⛔ tiene lugar para el porqué: sin esto «Guardar» quedaba gris sin explicar. */}
+          {angosta && faltante && <div data-falta style={{ marginTop: space[3], fontSize: font.sm, color: faltante === QUEDA_NEGATIVO ? color.danger : color.mut }}>{faltante}</div>}
+
           {!angosta && (
             <div style={{ display: 'flex', gap: space[2], marginTop: space[3] }}>
               <Button disabled={trabajando || !listo} onClick={guardar}>Guardar ajuste</Button>
               <Button variant="outline" disabled={trabajando} onClick={cancelarNuevo}>Cancelar</Button>
-              {faltante && <span data-falta style={{ alignSelf: 'center', fontSize: font.sm, color: color.mut }}>{faltante}</span>}
+              {faltante && <span data-falta style={{ alignSelf: 'center', fontSize: font.sm, color: faltante === QUEDA_NEGATIVO ? color.danger : color.mut }}>{faltante}</span>}
             </div>
           )}
         </SectionCard>

@@ -79,3 +79,13 @@ describe('filaDeAjuste y avisos', () => {
     expect(textoDeAviso({ codigo: 'LIBRO_SE_MOVIO', sku: 'S1', antes: 40, ahora: 39 })).toMatch(/S1.*40 → 39/)
   })
 })
+
+describe('el nombre del motivo (A-12 mostraba `uso_interno`)', () => {
+  it('cada motivo del motor tiene su nombre en la pantalla, ⛔ la clave cruda', async () => {
+    const { MOTIVOS: DEL_MOTOR } = await import('../motor/stock/ajuste.mjs')
+    const { NOMBRE_MOTIVO } = await import('../lib/erp/ajuste.core.js')
+    for (const k of Object.keys(DEL_MOTOR)) expect((NOMBRE_MOTIVO as Record<string, string>)[k], k).toBeTruthy()
+    expect(NOMBRE_MOTIVO.uso_interno).toBe('Uso interno')
+  })
+})
+
