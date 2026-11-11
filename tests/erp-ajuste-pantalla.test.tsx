@@ -24,7 +24,7 @@ const datos = (): AjustesDeLinea => ({ ...armarAContar({ linea: 'zattia', concil
 const prenda = { producto: '828948', talle: '229042', nombre: 'TOP ZARA', talleNombre: 'NEGRO', sku: 'RTO-0152-NG', barcode: '7790152' }
 const leerAjustes = vi.fn(async (..._a: unknown[]) => datos())
 const leerStockDePrenda = vi.fn(async (..._a: unknown[]) => ({ prenda: { producto: '828948', talle: '229042', nombre: 'TOP ZARA', talleNombre: 'NEGRO', sku: 'RTO-0152-NG', barcode: '7790152' },
-  depositos: [{ deposito: 'local', libro: 0, gn: 12, diferencia: 12 }, { deposito: 'deposito', libro: 3, gn: 3, diferencia: 0 }], historial: [], sinDeposito: [] }))
+  depositos: [{ deposito: 'local', libro: 5, gn: 12, diferencia: 7 }, { deposito: 'deposito', libro: 3, gn: 3, diferencia: 0 }], historial: [], sinDeposito: [] }))
 const crearAjuste = vi.fn(async (..._a: unknown[]) => ({ ok: true, numero: 8, id: 'nuevo-8', renglones: 1, avisos: [{ codigo: 'CONTEO_DE_DEPOSITO_RECIENTE', texto: 'Este producto tiene un conteo de Depósito (C-31)' }] }))
 const aprobarAjuste = vi.fn(async (..._a: unknown[]) => ({ ok: true, numero: 7, movimientos: 1, avisos: [] }))
 const descartarAjuste = vi.fn(async (..._a: unknown[]) => ({ ok: true, numero: 7 }))
@@ -99,6 +99,25 @@ describe('Ingresos y ajustes', () => {
       renglones: [{ producto: '828948', talle: '229042', sku: 'RTO-0152-NG', barcode: '7790152', cantidad: 2 }] })
     expect(aprobarAjuste).toHaveBeenCalledWith('zattia', 'nuevo-8')
     expect(texto()).toContain('C-31')
+  })
+
+  it('🔴 una salida que deja el depósito en negativo: «Queda» en rojo, el porqué y ⛔ se guarda (el motor la rechaza)', async () => {
+    await montar()
+    await click(boton('Nuevo ajuste'))
+    await elegirSalida()
+    escribir(host.querySelector('input[placeholder="código, código de barras o nombre"]') as HTMLInputElement, 'zara')
+    await click(boton('Buscar'))
+    await click(boton(/TOP ZARA · NEGRO/))
+    escribir(host.querySelector('input[aria-label="Cantidad de TOP ZARA · NEGRO"]') as HTMLInputElement, '-8')
+    await act(async () => {})
+    expect(host.querySelector('[data-negativo]')?.textContent).toBe('-3')
+    expect(host.querySelector('[data-falta]')?.textContent).toContain('Conteo de depósito')
+    expect(texto()).not.toContain('motivo «Conteo»')
+    expect(boton('Guardar ajuste').disabled).toBe(true)
+    escribir(host.querySelector('input[aria-label="Cantidad de TOP ZARA · NEGRO"]') as HTMLInputElement, '-5')
+    await act(async () => {})
+    expect(host.querySelector('[data-negativo]')).toBeNull()
+    expect(boton('Guardar ajuste').disabled).toBe(false)
   })
 
   it('«Ingreso» suma con el porqué escrito y el botón dice qué falta (Bruno, 9-nov)', async () => {
