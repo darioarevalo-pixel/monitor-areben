@@ -77,6 +77,11 @@ a {
   max-width: var(--mo-page-max);
   margin: 0 auto;
 }
+/* 📱 «Reportar un problema» va fijo abajo y tapaba la última fila (Conteo Stunned, Darío 11-nov): al
+   final de cada pantalla queda un aire de su alto, así lo último se puede subir por encima del botón. */
+@media (max-width: 900px) {
+  .shell-content::after { content: ''; display: block; height: 72px; }
+}
 
 /* ══ Encabezado de sección ════════════════════════════════════
    Eyebrow de categoría + título + descripción, y a la derecha las ACCIONES: el rediseño

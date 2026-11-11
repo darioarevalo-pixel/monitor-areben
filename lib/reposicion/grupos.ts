@@ -17,7 +17,24 @@ export function ordenarModelo(a: string, b: string): number {
   const pa = parse(a)
   const pb = parse(b)
   if (pa.n !== pb.n) return pa.n - pb.n
+  if (pa.n === 99) return ordenarTalle(a, b)
   return (rank[pa.suf] ?? 9) - (rank[pb.suf] ?? 9)
+}
+
+/** Talles de ropa de chico a grande (Darío 11-nov: «del S al XL»): XXS…XXXL, después los números (36, 38…), el resto al final sin reordenar. */
+const TALLES_ROPA = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
+export function ordenarTalle(a: string, b: string): number {
+  const clave = (s: string): [number, number] => {
+    const t = String(s || '').trim().toUpperCase()
+    const i = TALLES_ROPA.indexOf(t === '2XL' ? 'XXL' : t === '3XL' ? 'XXXL' : t)
+    if (i >= 0) return [0, i]
+    const n = parseFloat(t)
+    return Number.isFinite(n) ? [1, n] : [2, 0]
+  }
+  const [ga, va] = clave(a)
+  const [gb, vb] = clave(b)
+  if (ga !== gb) return ga - gb
+  return va - vb // lo que no es talle (colores, etc.) queda en el orden en que vino, como antes
 }
 
 /** Modelo de iPhone de un talle, ignorando el color (ej. "iPhone 13 Negro" → "iPhone 13"). Port de _repoModelo. */
