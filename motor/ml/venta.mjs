@@ -40,7 +40,9 @@ const pesos = (x) => Math.round(Number(x) * 100) / 100
  * @param {object} p.indice   indiceDeVariantes del inventario
  * @param {Array} p.cuentas   `cuenta_cobro` de BDI
  * @param {Map<string, { id: string, estado: string }>} p.ya  las ventas `ml` que ya están, por `origen_ref`
- * @param {boolean} [p.real]  `ventaMLRealEn`: la venta mueve el libro (`prueba: false`); por defecto PRUEBA
+ * @param {boolean | ((instante: string) => boolean)} [p.real]  la venta mueve el libro (`prueba: false`); por defecto PRUEBA.
+ *   🔴 Una FUNCIÓN del instante del pack (cierre o creación; sin fecha, ahora): pagado ANTES del corte ⛔ entra real aunque
+ *   se registre después (GN ya lo descontó; revisión 10-nov). Ver `planVentasTN`.
  * @returns {{ registrar: any[], anular: Array<{ venta_id: string, motivo: string, numero: string }>, saltadas: Record<string, string[]>, ya: number }}
  */
 export function planVentasML({ ordenes, indice, cuentas, ya, real = false }) {
@@ -92,7 +94,7 @@ export function planVentasML({ ordenes, indice, cuentas, ya, real = false }) {
 
     registrar.push({
       origen: 'ml', origen_ref: ref, marca: 'bdi', canal: 'ml', deposito: DEPOSITO_ONLINE.bdi,
-      usuario: 'mercado-libre', prueba: !real, ...(fecha ? { ocurrida_en: fecha } : {}),
+      usuario: 'mercado-libre', prueba: !(typeof real === 'function' ? real(fecha ?? new Date().toISOString()) : real), ...(fecha ? { ocurrida_en: fecha } : {}),
       lineas, subtotal, total, pagos: [{ cuenta: cuenta.id, monto: total }],
       detalle: { ml: { pack: clave, ordenes: vivas.map((o) => String(o.orden_id)), medio: vivas[0].medio ?? null } },
     })

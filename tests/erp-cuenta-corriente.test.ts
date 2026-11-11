@@ -49,6 +49,11 @@ describe('cuenta corriente — núcleo', () => {
     expect(m.get('venta:x')).toBe('Venta 860')
     expect(m.has('pago:1')).toBe(false)
   })
+
+  it('el saldo de apertura del corte (motor sql/081) se nombra «Saldo de apertura», ⛔ su clave interna', () => {
+    const m = nombresDeVentas({ renglones: [{ ref: 'apertura:bdi:c1:2', detalle: '' }] })
+    expect(m.get('apertura:bdi:c1:2')).toBe('Saldo de apertura')
+  })
 })
 
 describe('Cuenta corriente: las dos columnas del motor (§18)', () => {

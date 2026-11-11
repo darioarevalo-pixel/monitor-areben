@@ -77,6 +77,7 @@ export function aplicar(movs) {
 }
 
 /**
+ * El SALDO DE APERTURA (`apertura`, sql/081) entra por su signo: + es una compra (la más vieja), − un pago (a favor).
  * Las filas de `cuenta_movimiento` (sql/025) → los movimientos de la cuenta. La anulación (`<ref>:anulacion`) se
  * NETEA con lo que da vuelta: una compra o un pago anulado del todo ⛔ aparece; la fecha es la del movimiento original.
  * @param {Array<{ tipo: string, ref: string, monto: any, fecha: string, detalle?: string, pedido?: string|null }>} filas  `fecha` = el día AR · `pedido`: el pedido mayorista de la compra
@@ -197,6 +198,8 @@ export function mayorCSV(m, cab) {
     // La compra se nombra por su venta («Venta 12»), ⛔ por la clave interna; el pago, por su comprobante y su cuenta.
     ...m.renglones.map((r) => {
       const interna = String(r.ref).startsWith('venta:')
+      // El saldo de apertura (sql/081): lo que debía (o tenía a favor) en GN al cortar; ⛔ la clave interna.
+      if (String(r.ref).startsWith('apertura:')) return [r.fecha, 'Saldo de apertura', '', 'De Gestión Nube al corte', num(r.debe), num(r.haber), num(r.saldo) || '0,00']
       return [r.fecha, r.tipo === 'compra' ? 'Compra' : 'Pago', interna ? r.detalle : r.ref, interna ? '' : r.detalle, num(r.debe), num(r.haber), num(r.saldo) || '0,00']
     }),
     ['', 'Saldo final', '', '', '', '', num(m.final) || '0,00'],

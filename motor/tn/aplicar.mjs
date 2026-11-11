@@ -14,7 +14,9 @@ export async function planDe(db, tienda, ordenes) {
   const cuentas = await db.q('select id, nombre, medio, activa from cuenta_cobro where marca = $1', [tienda])
   const refs = ordenes.map((o) => origenRef(tienda, o.tn_id))
   const ya = new Map((refs.length ? await db.q(`select origen_ref, id, estado from venta where origen = 'tn' and origen_ref = any($1)`, [refs]) : []).map((v) => [v.origen_ref, v]))
-  return planVentasTN({ tienda, ordenes, indice, cuentas, ya, real: ventaTnReal(tienda, await leerCortes(db)) })
+  // Real según el instante de PAGO de cada pedido, ⛔ la hora de esta corrida (ver `planVentasTN`).
+  const cortes = await leerCortes(db)
+  return planVentasTN({ tienda, ordenes, indice, cuentas, ya, real: (pagada) => ventaTnReal(tienda, cortes, process.env, new Date(pagada)) })
 }
 
 /** @param {import('pg').Client} conexion  sin transacción abierta: `registrarVenta` maneja la suya */
