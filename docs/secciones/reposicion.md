@@ -279,7 +279,13 @@ en el depósito, el Local queda en negativo. La lista sigue siendo **una sola, c
 dice cuáles van a la **bolsa de pedidos** (una sola, sin separar por pedido; el local las reparte).
 
 - 🔑 **Cuántas = la menor entre el negativo del Local y lo que hay en pedidos sin armar** (`lib/reposicion/paraPedido.ts`).
-  Pedido con stock en el Local: se saca de ahí. Negativo sin pedido: va al perchero.
+  Pedido con stock en el Local: se saca de ahí.
+- 🔴 **Negativo sin pedido = «A revisar», ⛔ se repone** (Darío, 12-nov-2026; reemplaza «va al perchero» del 1-nov): la prenda
+  ya salió por otro lado (venta de la Caja de una que el sistema ⛔ tenía en el Local, pedido armado desde el depósito sin
+  transferir). `separarNegativos` sube ese Local a lo que cubren los pedidos (sin pedido ⇒ 0) ANTES de `decidirTodo`, y la
+  lista «A revisar» va debajo, sólo en pantalla. Mientras se leen los pedidos o si fallan, el negativo cuenta como antes.
+- **Stunned lee los pedidos de SU Tienda Nube** (`action=pedidos-web&linea=stunned`, 12-nov-2026): su venta online también
+  descuenta del Local (motor `DEPOSITO_ONLINE`) y su tienda muestra Local + Depósito (`DEPOSITOS_TN`). BDI no lee pedidos.
 - Las primeras `paraPedido` dicen **«Pedido: a la bolsa»** (voz «Pedido»), sin alarma ni etiquetas. Las siguientes siguen como
   siempre: «para exhibir» pasa a la primera que va al perchero (`leerCodigo`).
 - 🔴 **Hay SKU repetidos** (17 el 1-nov; el corpiño y la bombacha Tayra comparten el suyo): ahí desempatan nombre y talle, y si

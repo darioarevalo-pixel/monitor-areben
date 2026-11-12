@@ -202,7 +202,7 @@ export async function leerArmadoHoy(linea: LineaZ, sentido: Sentido): Promise<Ar
 
 /** Las prendas de los pedidos web sin armar, y cuántas órdenes no se pudieron leer. Tira error si Tienda Nube no contesta. */
 export async function leerPedidosSinArmar(linea: LineaZ): Promise<{ prendas: PrendaPedido[]; noLeidas: number }> {
-  return pedir<{ prendas: PrendaPedido[]; noLeidas: number }>(`${API(linea)}&action=pedidos-web&nc=${Date.now()}`)
+  return pedir<{ prendas: PrendaPedido[]; noLeidas: number }>(`${API(linea)}&action=pedidos-web&linea=${linea}&nc=${Date.now()}`)
 }
 
 /** Los últimos armados de la línea (sin los descartados), del más nuevo al más viejo. */

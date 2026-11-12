@@ -58,6 +58,33 @@ export function unidadesEnPedidos(todas: Variante[], prendas: PrendaPedido[]): R
   return out
 }
 
+/** Una variante con el Local en negativo que ningún pedido sin armar explica: cuántas faltan explicar. */
+export type NegativoSinPedido<T> = { it: T; sinPedido: number }
+
+/**
+ * 🔑 **Un negativo en el Local sin pedido detrás es un error de stock, no algo para reponer** (Darío, 12-nov-2026: «estaría
+ * mal que un producto en negativo en local pida 1u y no es de un pedido»). La venta online descuenta del Local aunque la
+ * prenda esté en el depósito (motor `DEPOSITO_ONLINE`): ese negativo es lo que el depósito le debe al Local SÓLO mientras
+ * haya un pedido sin armar que lleve la prenda. Sin pedido, la prenda ya salió por otro lado (una venta de la Caja de una
+ * que el sistema no tenía en el Local, un pedido armado desde el depósito sin transferir): pedirla haría buscar en el
+ * depósito algo que no está, o colgar una de más. Reemplaza la regla del 1-nov («negativo sin pedido → al perchero»).
+ *
+ * Devuelve el inventario con el Local de esas variantes subido hasta lo que cubren los pedidos (sin pedido ⇒ 0), para que
+ * el cálculo no lleve por esa diferencia, y la lista «A revisar». Puro.
+ */
+export function separarNegativos<T extends Pick<RepoItem, 'vid' | 'local'>>(inv: T[], enPedidos: Record<string, number>): { inv: T[]; revisar: NegativoSinPedido<T>[] } {
+  const revisar: NegativoSinPedido<T>[] = []
+  const out = inv.map((it) => {
+    if (it.local >= 0) return it
+    const cubierto = Math.min(-it.local, Math.max(0, enPedidos[it.vid] || 0))
+    const sinPedido = -it.local - cubierto
+    if (sinPedido <= 0) return it
+    revisar.push({ it, sinPedido })
+    return { ...it, local: cubierto > 0 ? -cubierto : 0 }
+  })
+  return { inv: out, revisar }
+}
+
 /** La menor entre lo que debe el Local y lo que hay en pedidos, sin pasarse de lo que se lleva. */
 export function paraPedidoDe(local: number, enPedidos: number, cant: number): number {
   return Math.max(0, Math.min(-local, enPedidos, cant))

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { agruparLista, grupoDe, paraPedidoDe, soloEnDeposito, unidadesEnPedidos } from '@/lib/reposicion/paraPedido'
+import { agruparLista, grupoDe, paraPedidoDe, separarNegativos, soloEnDeposito, unidadesEnPedidos } from '@/lib/reposicion/paraPedido'
+import { decidir, cfgVentas } from '@/lib/reposicion/porVentas'
+import { repoCfgDefault, type RepoItem } from '@/lib/reposicion/tipos'
 import type { FilaVentas } from '@/lib/reposicion/porVentas'
 
 const V = (vid: string, sku: string, name: string, size: string, local = 0) => ({ vid, sku, name, size, local })
@@ -57,5 +59,41 @@ describe('los grupos de la lista', () => {
   it('candidatos a Exclusivo online: nada en el local entre todas sus variantes, algo en el depósito', () => {
     const f = [F('a1', 0, 0, false, 3, 'a'), F('a2', -1, 0, false, 0, 'a'), F('b1', 1, 0, false, 3, 'b'), F('b2', 0, 0, false, 3, 'b'), F('c1', 0, 0, false, 0, 'c')]
     expect(soloEnDeposito(f)).toEqual(['a'])
+  })
+})
+
+describe('separarNegativos: negativo sin pedido = a revisar, ⛔ se repone (Darío, 12-nov-2026)', () => {
+  const I = (vid: string, local: number) => ({ vid, local, deposito: 1 })
+  it('sin pedido: el Local pasa a 0 y va a revisar con lo que falta explicar', () => {
+    const r = separarNegativos([I('a', -1)], {})
+    expect(r.inv[0].local).toBe(0)
+    expect(r.revisar).toEqual([{ it: I('a', -1), sinPedido: 1 }])
+  })
+  it('con pedido que lo cubre: queda igual y nada a revisar', () => {
+    const r = separarNegativos([I('a', -1)], { a: 1 })
+    expect(r.inv[0].local).toBe(-1)
+    expect(r.revisar).toEqual([])
+  })
+  it('pedido que cubre una parte: queda el negativo del pedido y el resto a revisar', () => {
+    const r = separarNegativos([I('a', -3)], { a: 1 })
+    expect(r.inv[0].local).toBe(-1)
+    expect(r.revisar[0].sinPedido).toBe(2)
+  })
+  it('Local en 0 o positivo: no se toca, aunque haya pedido', () => {
+    const inv = [I('a', 0), I('b', 2)]
+    const r = separarNegativos(inv, { a: 1, b: 1 })
+    expect(r.inv).toEqual(inv)
+    expect(r.revisar).toEqual([])
+  })
+  it('la Remera F*ck M (Stunned, 12-nov): −1 / 1 sin pedido ⇒ no pide llevarla «para exhibir» por el negativo', () => {
+    const it0 = { vid: 'f', pid: '1', sid: '1', name: 'REMERA F*CK', size: 'M', sku: 'STU-REM-0014-M', barcode: '', local: -1, deposito: 1, cats: [], catFallback: '', cat: '', subcat: null, modelo: null, s7: 0, ubic: '', vv: 0 } as unknown as RepoItem
+    const cfg = repoCfgDefault()
+    const cv = cfgVentas(cfg, 'stunned')
+    const antes = decidir(it0, cfg, cv, '2026-11-12')
+    const sinPedido = decidir(separarNegativos([it0], {}).inv[0], cfg, cv, '2026-11-12')
+    const conPedido = decidir(separarNegativos([it0], { f: 1 }).inv[0], cfg, cv, '2026-11-12')
+    // Lo que se lleva ya no cuenta la prenda que debía el negativo: con pedido, sí.
+    expect(sinPedido.llevar).toBeLessThanOrEqual(antes.llevar)
+    expect(conPedido.llevar).toBe(antes.llevar)
   })
 })

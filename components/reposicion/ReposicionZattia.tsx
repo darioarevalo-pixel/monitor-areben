@@ -44,7 +44,7 @@ import { ArmadoLector } from './ArmadoLector'
 import { OpcionesBdi } from './OpcionesBdi'
 import { HistorialArmados } from './HistorialArmados'
 import { SolicitudDevolucion, type DatoTn } from './SolicitudDevolucion'
-import { agruparLista, paraPedidoDe, soloEnDeposito, unidadesEnPedidos, type PrendaPedido } from '@/lib/reposicion/paraPedido'
+import { agruparLista, paraPedidoDe, separarNegativos, soloEnDeposito, unidadesEnPedidos, type NegativoSinPedido, type PrendaPedido } from '@/lib/reposicion/paraPedido'
 import { abrirArmado, articuloDe, cambiarCantidadesArmado, codigoArmado, leerArmadoHoy, leerPedidosSinArmar, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type LineaPedido, type Sentido } from '@/lib/reposicion/armado'
 import { cambiarCantidades, transferidoDe } from '@/lib/reposicion/armado.core.js'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
@@ -81,7 +81,37 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
       ),
     [rep.rawInv, prodById, tnIdx, rep.s7, vv, cfg.catsOff, linea],
   )
-  const filas = useMemo(() => decidirTodo(inv, cfg, hoy, linea), [inv, cfg, hoy, linea])
+  // Los pedidos web sin armar (Zattia 1-nov-2026, Stunned 12-nov): dicen qué negativos del Local son de un pedido. Se leen
+  // al abrir y con cada stock nuevo, de la Tienda Nube DE LA LÍNEA. `undefined` = leyendo · `null` = no se pudieron leer.
+  // La lectura queda con la clave de lo que se leyó (línea + stock): con otra clave es «leyendo», ⛔ la de la otra línea.
+  const [lectura, setLectura] = useState<{ clave: string; datos: { prendas: PrendaPedido[]; noLeidas: number } | null } | null>(null)
+  const hayNegativo = useMemo(() => inv.some((it) => it.local < 0), [inv])
+  const leePedidos = !bdi && hayNegativo
+  const claveLectura = `${linea}|${rep.lastUpdate?.getTime() ?? ''}`
+  const prendasLeidas = lectura && lectura.clave === claveLectura ? lectura.datos : undefined
+  useEffect(() => {
+    if (!leePedidos) return
+    let vivo = true
+    leerPedidosSinArmar(linea)
+      .then((d) => {
+        if (vivo) setLectura({ clave: claveLectura, datos: d })
+      })
+      .catch(() => {
+        if (vivo) setLectura({ clave: claveLectura, datos: null })
+      })
+    return () => {
+      vivo = false
+    }
+  }, [linea, leePedidos, claveLectura])
+  const prendasWeb = leePedidos ? prendasLeidas : SIN_PEDIDOS
+  const enPedidos = useMemo(() => unidadesEnPedidos(inv, prendasWeb?.prendas ?? []), [inv, prendasWeb])
+  // 🔑 Negativo sin pedido = error de stock, ⛔ se repone (Darío, 12-nov-2026): va a «A revisar» y el cálculo lo toma como 0.
+  // Mientras se leen o si no se pudieron leer, el negativo cuenta como antes: ⛔ se sabe si es de un pedido.
+  const { inv: invCalculo, revisar } = useMemo(
+    () => (prendasWeb ? separarNegativos(inv, enPedidos) : { inv, revisar: [] as NegativoSinPedido<(typeof inv)[number]>[] }),
+    [inv, enPedidos, prendasWeb],
+  )
+  const filas = useMemo(() => decidirTodo(invCalculo, cfg, hoy, linea), [invCalculo, cfg, hoy, linea])
   // La Propuesta de devolución muestra el alta en Tienda Nube y si tiene precio promocional (Darío,
   // 19-oct-2026). Se cruza con el producto de GN (su SKU y nombre), como las categorías.
   const tnDe = useCallback(
@@ -113,27 +143,6 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   const cantArmado = useMemo(() => (enCurso ? Object.fromEntries(enCurso.pedido.map((l) => [l.vid, l.cant])) : null), [enCurso])
   const cantLlevar = (f: FilaVentas) => (cantArmado ? (cantArmado[f.it.vid] ?? 0) : (manual[f.it.vid] ?? f.d.llevar))
   const totalLlevar = llevar.reduce((s, f) => s + cantLlevar(f), 0)
-  // Los pedidos web sin armar (Zattia, 1-nov-2026): dicen qué renglones van a la bolsa. Se leen al abrir y con cada
-  // stock nuevo. `null` = no se pudieron leer: la lista se ve igual y lo avisa.
-  const [prendasLeidas, setPrendasLeidas] = useState<{ prendas: PrendaPedido[]; noLeidas: number } | null>(SIN_PEDIDOS)
-  const hayNegativo = llevar.some((f) => f.it.local < 0)
-  const leePedidos = linea === 'zattia' && hayNegativo
-  useEffect(() => {
-    if (!leePedidos) return
-    let vivo = true
-    leerPedidosSinArmar(linea)
-      .then((d) => {
-        if (vivo) setPrendasLeidas(d)
-      })
-      .catch(() => {
-        if (vivo) setPrendasLeidas(null)
-      })
-    return () => {
-      vivo = false
-    }
-  }, [linea, leePedidos, rep.lastUpdate])
-  const prendasWeb = leePedidos ? prendasLeidas : SIN_PEDIDOS
-  const enPedidos = useMemo(() => unidadesEnPedidos(inv, prendasWeb?.prendas ?? []), [inv, prendasWeb])
   const paraPedido = (f: FilaVentas) => paraPedidoDe(f.it.local, enPedidos[f.it.vid] || 0, cantLlevar(f))
   const totalPedidos = llevar.reduce((s, f) => s + paraPedido(f), 0)
   const secciones = agruparLista(llevar, enPedidos, cantLlevar)
@@ -274,7 +283,9 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     if (abierto(sentido)) return setArmando(sentido)
     // La devolución se arma sólo desde una solicitud enviada (ya está abierta): acá no se inicia.
     if (sentido === 'devolver') return
-    // La alerta «Pedido» (Zattia, 1-nov-2026): al iniciar se vuelven a leer, para congelar lo último.
+    // La lista sale de los pedidos: hasta leerlos no se sabe qué negativo se lleva.
+    if (leePedidos && prendasLeidas === undefined) return toast.aviso('Leyendo los pedidos web. Probá de nuevo en unos segundos.')
+    // La alerta «Pedido» (Zattia 1-nov-2026, Stunned 12-nov): al iniciar se vuelven a leer, para congelar lo último.
     let enPedidosAhora: Record<string, number> = {}
     if (leePedidos) {
       let aviso = ''
@@ -536,6 +547,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
               editar={editarLlevar}
             />
           )}
+          {revisar.length > 0 && <RevisarNegativos filas={revisar} />}
         </>
       ) : (
         <>
@@ -613,6 +625,46 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
  * antes era una tabla por producto con los encabezados repetidos). La cantidad es editable sólo en
  * «Reponer».
  */
+/**
+ * El Local en negativo sin un pedido sin armar que lo explique (Darío, 12-nov-2026): ⛔ se repone, se cuenta. La prenda ya
+ * salió por otro lado (una venta de la Caja que el sistema ⛔ tenía en el Local, un pedido armado desde el depósito sin
+ * transferir). Sólo en pantalla: ⛔ va en los papeles de Lorena ni de Camila.
+ */
+function RevisarNegativos({ filas }: { filas: NegativoSinPedido<FilaVentas['it']>[] }) {
+  const orden = [...filas].sort((a, b) => String(a.it.sku).localeCompare(String(b.it.sku), 'es', { numeric: true }))
+  return (
+    <div style={{ marginTop: space[5] }}>
+      <h3 style={{ fontSize: font.md, fontWeight: 800, color: color.ink, margin: `0 0 ${space[1]}px` }}>A revisar · {filas.length}</h3>
+      <p style={{ fontSize: font.sm, color: color.mut, margin: `0 0 ${space[2]}px` }}>
+        Stock del local en negativo sin un pedido pendiente: no se repone. Contar la prenda en el local y en el depósito, y corregir el stock.
+      </p>
+      <TableWrap>
+        <THead>
+          <Tr>
+            <Th>Producto</Th>
+            <Th width={150}>SKU</Th>
+            <Th align="center" width={70}>Local</Th>
+            <Th align="center" width={80}>Depósito</Th>
+          </Tr>
+        </THead>
+        <TBody>
+          {orden.map(({ it }) => (
+            <Tr key={it.vid}>
+              <Td wrap>
+                <b style={{ color: color.ink }}>{it.name}</b>
+                <span style={{ color: color.mut }}> · {talle(it.size) || 'Única'}</span>
+              </Td>
+              <Td style={{ fontSize: font.sm, color: color.mut }}>{it.sku || '—'}</Td>
+              <Td align="center" style={{ color: color.danger, fontWeight: 700 }}>{it.local}</Td>
+              <Td align="center">{it.deposito}</Td>
+            </Tr>
+          ))}
+        </TBody>
+      </TableWrap>
+    </div>
+  )
+}
+
 function TablaVentas({ secciones, cantidad, paraPedido, titulo, editar }: { secciones: { clave: string; titulo: string; filas: FilaVentas[] }[]; cantidad: (f: FilaVentas) => number; paraPedido: (f: FilaVentas) => number; titulo: string; editar?: (f: FilaVentas, v: string) => void }) {
   const partes = useMemo(
     () =>

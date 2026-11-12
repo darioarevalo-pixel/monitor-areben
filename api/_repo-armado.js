@@ -122,8 +122,10 @@ export default async function handler(req, res) {
       if (accion === 'pedidos-web') {
         // Lo que necesita la alerta «Pedido» del armado: sólo la prenda, ni clienta ni plata. Va por acá porque
         // quien arma puede no tener la Caja. La lectura y su caché son las de la Caja.
+        // 🔑 De la Tienda Nube DE LA LÍNEA (12-nov-2026): Stunned tiene la suya (`docs/lineas.md`), con la base de Zattia.
+        const tienda = store === 'zattia' && req.query.linea === 'stunned' ? 'stunned' : store
         try {
-          const d = await leerPedidosWeb(req.headers && req.headers['x-monitor-auth'], Date.now(), store)
+          const d = await leerPedidosWeb(req.headers && req.headers['x-monitor-auth'], Date.now(), tienda)
           const prendas = d.pedidos.flatMap((p) => p.prendas.map((x) => ({ sku: x.sku, nombre: x.nombre, cantidad: x.cantidad })))
           return res.status(200).json({ ok: true, prendas, noLeidas: d.noLeidas })
         } catch {
