@@ -87,7 +87,7 @@ const STORE_LABEL = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' };
 
 /** Espejo de `numeroCanje` en `lib/canjes/tipos.ts`. Mismo formato o los números no coinciden. */
 function numeroCanje(id) {
-  return 'C-' + String(id).padStart(4, '0');
+  return 'CJ-' + String(id).padStart(4, '0');
 }
 
 const TALLES = ['remera', 'pantalon', 'calzado'];

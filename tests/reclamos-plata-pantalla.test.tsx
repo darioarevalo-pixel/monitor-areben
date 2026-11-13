@@ -58,7 +58,7 @@ describe('devolver la plata con el producto todavía en la calle', () => {
    */
   it('🔴 el botón ESTÁ, aunque el producto no haya vuelto', async () => {
     const { div, root } = await montar(EN_LA_CALLE)
-    expect(div.textContent).toContain('R-0022')
+    expect(div.textContent).toContain('CB-0022')
     expect([...div.querySelectorAll('button')].some((b) => (b.textContent || '').includes('Devolver la plata'))).toBe(true)
     await act(async () => { root.unmount() })
     div.remove()

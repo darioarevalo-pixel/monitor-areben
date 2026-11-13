@@ -76,7 +76,7 @@ describe('lo que ve la creadora en el link público', () => {
   const json = JSON.stringify(salida)
 
   it('trae sus propios datos, prellenados', () => {
-    expect(salida.numero).toBe('C-0042') // derivado del id 42
+    expect(salida.numero).toBe('CJ-0042') // derivado del id 42
     expect(salida.marca).toBe('Zattia')
     expect(salida.datos.calle).toBe('Av. Siempreviva')
     expect(salida.datos.dni).toBe('38111222')

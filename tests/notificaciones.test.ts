@@ -226,7 +226,7 @@ describe('avisos de reclamos durmiendo', () => {
   it('un reclamo dormido llega al sidebar de Administración', () => {
     const [a] = avisosDeReclamo([reclamo()], 'bdi', administracion)
     expect(a.tipo).toBe('reclamo')
-    expect(a.titulo).toContain('R-0042')
+    expect(a.titulo).toContain('CB-0042')
     expect(a.detalle).toContain('El cliente no responde')
   })
 
@@ -354,7 +354,7 @@ describe('avisos de reclamos durmiendo', () => {
 
     it('🔴 el paquete que no aparece le llega a DEPÓSITO, que ⛔ no puede abrir Reclamos', () => {
       const [a] = avisosDeRetorno([retorno()], 'bdi', deposito)
-      expect(a.titulo).toContain('R-0042')
+      expect(a.titulo).toContain('CB-0042')
       expect(a.detalle).toContain('días que no llega')
       expect(a.ruta).toBe('/retornos')
       expect(a.tono).toBe('warning')

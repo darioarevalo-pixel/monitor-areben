@@ -90,7 +90,7 @@ export function paraElCliente(fila) {
     // El número se DERIVA del id (`R-0042`), no se guarda: es una forma de mostrarlo, no un dato.
     // Espejo de `numeroReclamo` en lib/reclamos/tipos.ts (acá no se puede importar TS): si cambia
     // uno hay que cambiar el otro, y este es el que ve el cliente.
-    numero: 'R-' + String(fila.id ?? '').padStart(4, '0'),
+    numero: 'CB-' + String(fila.id ?? '').padStart(4, '0'),
     orden: fila.orden_tn,
     estado: fila.estado,
     // Solo qué productos son: ni precio, ni costo, ni ids de Gestión Nube.

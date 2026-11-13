@@ -80,7 +80,7 @@ describe('cargar el cupón', () => {
 
   it('🔴 pregunta el código Y el vencimiento, y manda los dos', async () => {
     const r = await apretarCargarCupon(['ABC123', '30/09/2026'])
-    expect(r.visible).toContain('R-0022')
+    expect(r.visible).toContain('CB-0022')
     expect(r.hayBoton).toBe(true)
     expect(r.veces).toBe(2)
     expect(r.textos[1]).toContain('Hasta cuándo')

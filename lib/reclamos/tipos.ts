@@ -2697,6 +2697,15 @@ export function conAlerta(filas: ReclamoRow[], ahora = Date.now()): number {
  * ya mandados a clientes.
  */
 export function numeroReclamo(id: number): string {
+  return 'CB-' + String(id).padStart(4, '0')
+}
+
+/**
+ * 🔑 **`CB-` desde el 13-nov-2026** (Bruno, pedido de Ger del 12-nov): `R-` empezaba igual que los remitos de traslado de
+ * Logística (`R` + 6, sin guion), y el código va impreso en la comanda y se lee al escanear. El número es el mismo. Lo ya
+ * mandado a los clientes dice `R-0042`: el buscador lo sigue encontrando con esto.
+ */
+export function numeroReclamoViejo(id: number): string {
   return 'R-' + String(id).padStart(4, '0')
 }
 

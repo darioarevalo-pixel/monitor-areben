@@ -142,14 +142,14 @@ describe('links de perfil', () => {
 // ── El número ────────────────────────────────────────────────────────────────────
 
 describe('numeroCanje', () => {
-  it('C-0007 y no C-7', () => {
-    expect(numeroCanje(7)).toBe('C-0007')
-    expect(numeroCanje(31)).toBe('C-0031')
-    expect(numeroCanje(1234)).toBe('C-1234')
+  it('CJ-0007 y no CJ-7 (CJ- desde el 13-nov: el mismo código que el ERP y Logística)', () => {
+    expect(numeroCanje(7)).toBe('CJ-0007')
+    expect(numeroCanje(31)).toBe('CJ-0031')
+    expect(numeroCanje(1234)).toBe('CJ-1234')
   })
 
   it('un id de cinco cifras no se trunca', () => {
-    expect(numeroCanje(12345)).toBe('C-12345')
+    expect(numeroCanje(12345)).toBe('CJ-12345')
   })
 
   /**
@@ -489,7 +489,7 @@ describe('resumenCiego — lo que ve quien no tiene esa marca', () => {
     expect(r.store).toBe('bdi')
     expect(r.estado).toBe('cerrado')
     expect(r.acordado_at).toBe('2026-05-01T00:00:00.000Z')
-    expect(r.numero).toBe('C-0031')
+    expect(r.numero).toBe('CJ-0031')
     expect(r.ciego).toBe(true)
   })
 

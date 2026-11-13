@@ -88,7 +88,7 @@ describe('el portal contesta', () => {
   it('sobre un reclamo que sigue esperando al cliente', async () => {
     const res = await abrir()
     expect(res.code).toBe(200)
-    expect((res.body?.reclamo as Record<string, unknown>)?.numero).toBe('R-0042')
+    expect((res.body?.reclamo as Record<string, unknown>)?.numero).toBe('CB-0042')
   })
 
   it('y el cliente puede mandar su relato', async () => {

@@ -468,7 +468,7 @@ describe('puedeProponerCanje — §2 bis', () => {
     const r = puedeProponerCanje({ vetada: false }, [vencido], cfg({ bloquear_por_vencidos: true }), HOY)
     expect(r.ok).toBe(false)
     if (!r.ok) {
-      expect(r.motivo).toContain('C-0031')
+      expect(r.motivo).toContain('CJ-0031')
       expect(r.motivo).toContain('historias')
     }
   })

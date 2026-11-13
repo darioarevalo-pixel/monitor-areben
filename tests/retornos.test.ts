@@ -228,7 +228,7 @@ describe('lo que se lee y se copia', () => {
   it('el renglón para el correo lleva el número, el seguimiento y hace cuánto que no aparece', () => {
     const f = bandejaDeRetornos([con({ historial: [{ estado: 'en_transito', at: hace(21) }] })], AHORA).esperando[0]
     const t = textoDeReclamoAlCorreo(f)
-    expect(t).toContain('R-0042')
+    expect(t).toContain('CB-0042')
     expect(t).toContain('AR123')
     expect(t).toContain('21 días')
     expect(t).toContain('Buzo Girlhood')

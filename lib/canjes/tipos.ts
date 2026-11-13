@@ -29,6 +29,7 @@ import {
   MOTIVO_NO_ACEPTO_OTRO as MOTIVO_NO_ACEPTO_OTRO_JS,
   MOTIVOS_NO_ACEPTO as MOTIVOS_NO_ACEPTO_JS,
   numeroCanje as numeroCanjeJS,
+  numeroCanjeViejo as numeroCanjeViejoJS,
   puedeIr as puedeIrJS,
   RESULTADOS as RESULTADOS_JS,
   RESULTADOS_UGC as RESULTADOS_UGC_JS,
@@ -325,6 +326,8 @@ export const listoParaVenderEnGn: (
  * tiene.
  */
 export const numeroCanje: (id: number) => string = numeroCanjeJS
+/** El código de antes del 13-nov (`C-0090`), sólo para buscar. */
+export const numeroCanjeViejo: (id: number) => string = numeroCanjeViejoJS
 
 // ── Los pendientes (no son estados) ─────────────────────────────────────────────
 
