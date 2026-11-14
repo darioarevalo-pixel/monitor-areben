@@ -150,6 +150,17 @@ describe('cambio sin ticket, por el corte de la línea', () => {
     expect(registrado()).toEqual([{ marca: 'stunned', prueba: false }])
   })
 
+  it('🔑 DESESTIMAR (Bruno, 14-nov): viaja al motor como `devolucion: desestima` con el PIN verificado en el servidor; sin pedirlo, ⛔', async () => {
+    cortes = HOY
+    registrarCambio.mockResolvedValue({ ok: true, venta: { id: 'c1', numero: 1 }, a_favor: 0, desestimado: 10000, saldo: null, nc_pendiente: false, ya_existia: false })
+    const r = await cambio('zattia', { sinTicket: true, desestimar: true, pin: '1234', pinPersona: 'Encargada', devueltas: [{ productId: 3, sizeId: 10, cantidad: 1, precio: 10000 }], items: [] })
+    expect(r).toMatchObject({ ok: true, aFavor: 0, desestimado: 10000 })
+    expect(registrarCambio.mock.calls[0][1]).toMatchObject({ devolucion: { forma: 'desestima' }, autoriza: { motivo: 'pin_encargada', usuario: 'Encargada' } })
+    registrarCambio.mockClear()
+    await sinTicket('zattia', 3, [])
+    expect(registrarCambio.mock.calls[0][1].devolucion).toBeUndefined()
+  })
+
   it('Zattia y BDI antes de su corte ⛔ — dicen dónde se hacen', async () => {
     cortes = HOY
     expect(await sinTicket('zattia', 2, [4])).toMatchObject({ status: 400, error: 'Los cambios de Zattia sin venta de Areben Gestión todavía se hacen en Gestión Nube.' })

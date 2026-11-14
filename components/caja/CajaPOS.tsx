@@ -262,7 +262,7 @@ function POS() {
   const [eligiendo, setEligiendo] = useState<ProductoLista | null>(null)
   const vuelta = useRef(0)
   const [enviando, setEnviando] = useState(false)
-  const [ultima, setUltima] = useState<{ venta: Venta; ticket: DatosTicket; regalo?: boolean; /** Es un CAMBIO (Bruno, 28-oct): la misma tarjeta que la venta. */ cambio?: { aFavor: number } } | null>(null)
+  const [ultima, setUltima] = useState<{ venta: Venta; ticket: DatosTicket; regalo?: boolean; /** Es un CAMBIO (Bruno, 28-oct): la misma tarjeta que la venta. */ cambio?: { aFavor: number; desestimado?: number } } | null>(null)
   const [pendientes, setPendientes] = useState<Venta[]>([])
   const scanRef = useRef<HTMLInputElement>(null)
 
@@ -454,7 +454,7 @@ function POS() {
       setEnCambio(false)
       setPasoCambio(1)
       setCobrandoCambio(false)
-      setUltima({ venta, ticket, cambio: { aFavor: c.aFavor } })
+      setUltima({ venta, ticket, cambio: { aFavor: c.aFavor, desestimado: cambioHecho.desestimado } })
       cambio.setHecho(null)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- una vez por cambio registrado

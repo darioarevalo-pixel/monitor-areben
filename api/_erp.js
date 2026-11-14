@@ -904,7 +904,7 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
   // Zattia desde su corte. Lo decide `marcaDelCambio` adentro, con la línea del PRODUCTO.
   // Sin ticket, el PIN de la encargada se verifica ACÁ (⛔ un `autoriza` armado en el navegador), antes de abrir el cambio.
   let autoriza = null
-  if (c.modo === 'sin_ticket') {
+  if (c.modo === 'sin_ticket' || c.desestimar) {
     const a = await autorizarConPin({ marca, persona: c.pin.persona, pin: c.pin.pin }, { conMotor })
     if (!a.autoriza) return { status: a.status || 403, error: a.error || 'PIN incorrecto' }
     autoriza = a.autoriza
@@ -992,12 +992,13 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
       ...(c.modo === 'erp' ? { venta_original_id: c.ventaId } : {}),
       ...(original_gn ? { original_gn } : {}),
       ...(autoriza ? { autoriza } : {}),
+      ...(c.desestimar ? { devolucion: { forma: 'desestima' } } : {}),
       devueltas, nuevas: c.nuevas, pagos: cobrado.pagos,
       ...(c.cliente ? { cliente: c.cliente } : {}),
       ...(mp ? { detalle: { mp } } : {}),
     })
     if (!r.ok) return errorDelMotor(r)
-    return { ok: true, venta: r.venta, total: cobrado.total, aFavor: r.a_favor, saldo: r.saldo ?? null, ncPendiente: r.nc_pendiente, yaExistia: !!r.ya_existia }
+    return { ok: true, venta: r.venta, total: cobrado.total, aFavor: r.a_favor, desestimado: r.desestimado ?? 0, saldo: r.saldo ?? null, ncPendiente: r.nc_pendiente, yaExistia: !!r.ya_existia }
   })
 }
 

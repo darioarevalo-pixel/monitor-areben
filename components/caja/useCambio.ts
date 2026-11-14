@@ -42,7 +42,7 @@ export type Origen =
 export type VentaOriginal = { origen: Origen; vendidas: Vendida[] }
 export type Devuelta = { clave: string; productId: number; sizeId: number; sku: string | null; nombre: string; talle: string; cantidad: number; precio: number | ''; lineaId?: string; /** La marca (cambio suelto). */ linea?: string }
 export type Nueva = { variante: Variante; cantidad: number; precio: number | '' }
-export type Hecho = { numero: number; cobrado: number; aFavor: number; saldo: number | null; ncPendiente: boolean; /** Para imprimir (y reimprimir) el comprobante del cambio. */ comprobante: ComprobanteCambio }
+export type Hecho = { numero: number; cobrado: number; aFavor: number; /** Lo que la clienta dejó (desestimado con PIN). */ desestimado: number; saldo: number | null; ncPendiente: boolean; /** Para imprimir (y reimprimir) el comprobante del cambio. */ comprobante: ComprobanteCambio }
 export type Espera = { desde: string; monto: number; cruce: CruceCambio; recientes: PagoMp[] }
 
 const nuevoId = () => crypto.randomUUID()
@@ -132,6 +132,8 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
   const [usaSaldo, setUsaSaldo] = useState(false)
   /** La encargada que autoriza el cambio sin ticket: quién y su PIN (sólo en memoria). */
   const [encargada, setEncargada] = useState({ persona: '', pin: '' })
+  /** Bruno (14-nov): la clienta DEJA lo que queda a favor ⇒ ⛔ se guarda saldo ni se pide la clienta, pero sí el PIN de la encargada. */
+  const [desestima, setDesestima] = useState(false)
   const [id, setId] = useState(nuevoId)
   const [hecho, setHecho] = useState<Hecho | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -168,6 +170,7 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
     setSaldo(null)
     setUsaSaldo(false)
     setEncargada({ persona: '', pin: '' })
+    setDesestima(false)
     setId(nuevoId())
   }
 
@@ -313,9 +316,10 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
   }
   const aFavor = diferencia < 0 ? -diferencia : 0
   // Saldo a favor (Bruno, 14-oct): se guarda a nombre de la clienta ⇒ DNI y nombre obligatorios.
-  const pideClienta = aFavor > 0 || saldoUsado > 0
+  const desestimaSaldo = desestima && aFavor > 0
+  const pideClienta = (aFavor > 0 && !desestimaSaldo) || saldoUsado > 0
   const faltaClienta = pideClienta && !(docLimpio.length >= 7 && clienta.nombre.trim().length >= 3)
-  const faltaPin = tipo === 'suelto' && !(encargada.persona.trim() && /^\d{4}$/.test(encargada.pin))
+  const faltaPin = (tipo === 'suelto' || desestimaSaldo) && !(encargada.persona.trim() && /^\d{4}$/.test(encargada.pin))
   const listo = !!venta && devueltas.length > 0 && !sinPrecio && !sinPrecioDevuelta && !errorCobro && (diferencia <= 0 || cobrado.total > 0) && !faltaClienta && !faltaPin
   /** El modo de la venta que se cambia: de prueba o real (el motor ⛔ mezcla uno con otro). El suelto es de una línea que ya cortó ⇒ real. */
   const deEnsayo = origen == null || origen.tipo === 'suelto' ? false : origen.prueba
@@ -368,6 +372,7 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
       id, items,
       pagos: resto > 0 && cuenta ? [{ cuenta }] : [], total: cobrado.total, desde: espera?.desde ?? null, saldo: saldoUsado,
       cliente: pideClienta ? { doc: clienta.doc, nombre: clienta.nombre, whatsapp: clienta.whatsapp || null } : null,
+      ...(desestimaSaldo ? { desestimar: true, pin: encargada.pin, pinPersona: encargada.persona.trim() } : {}),
       ...extra,
     }
     const suelta = devueltas.map((d) => ({ productId: d.productId, sizeId: d.sizeId, cantidad: d.cantidad, sku: d.sku, ...(venta.origen.tipo === 'suelto' ? { precio: Number(d.precio) } : {}) }))
@@ -380,7 +385,7 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
       setEspera({ desde: r.desde, monto: r.espera, cruce: r.cruce, recientes: r.recientes ?? [] })
       return
     }
-    setHecho({ numero: r.venta.numero, cobrado: r.total, aFavor: r.aFavor, saldo: r.saldo, ncPendiente: r.ncPendiente, comprobante: comprobanteDe(r) })
+    setHecho({ numero: r.venta.numero, cobrado: r.total, aFavor: r.aFavor, desestimado: r.desestimado ?? 0, saldo: r.saldo, ncPendiente: r.ncPendiente, comprobante: comprobanteDe(r) })
     empezarDeNuevo()
   }
 
@@ -397,7 +402,7 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
 
   return {
     venta, origen, tipo, vendidas, devueltas, nuevas, medio, setMedio, clienta, setClienta, espera, setEspera, comprobante, setComprobante,
-    saldo, usaSaldo, setUsaSaldo, encargada, setEncargada, hecho, setHecho, error, setError, trabajando, correr,
+    saldo, usaSaldo, setUsaSaldo, encargada, setEncargada, desestima, setDesestima, desestimaSaldo, hecho, setHecho, error, setError, trabajando, correr,
     empezarDeNuevo, elegirVenta, devolverDeVenta, devolverPrenda, cambiarCantidadDevuelta, ponerPrecioDevuelta, sumarNueva, cambiarNueva, cambiarCantidadNueva,
     sinPrecio, sinPrecioDevuelta, unidadesDevueltas, unidadesNuevas, vuelve, diferencia, reglas, docLimpio, saldoUsado, resto, cuenta, errorCobro, cobrado,
     aFavor, pideClienta, faltaClienta, faltaPin, listo, lineaDelCambio, erpLineas, deEnsayo, buscarSaldo, probarPin, confirmar,
