@@ -110,14 +110,14 @@ describe('🔴 D13 · anular un reclamo que no debió existir', () => {
   it('⛔ sobre uno cerrado ⛔ no aparece — y la fila SÍ está', async () => {
     const cerrado = { ...base, estado: 'cerrado', compensacion: 'plata_total' } as unknown as ReclamoRow
     const { botones, texto } = await enReclamos([cerrado], 'Todos')
-    expect(texto).toContain('R-0001')
+    expect(texto).toContain('CB-0001')
     expect(botones.some((b) => b.includes('Anular el reclamo'))).toBe(false)
   })
 
   it('⛔ ni sobre uno ya anulado — y la fila SÍ está', async () => {
     const anulado = { ...base, estado: 'anulado' } as unknown as ReclamoRow
     const { botones, texto } = await enReclamos([anulado], 'Todos')
-    expect(texto).toContain('R-0001')
+    expect(texto).toContain('CB-0001')
     expect(botones.some((b) => b.includes('Anular el reclamo'))).toBe(false)
   })
 
@@ -180,14 +180,14 @@ describe('🔴 D14 · despachar un cambio, sin cambiar de pantalla', () => {
   it('⛔ y ⛔ no aparece cuando ya se despachó', async () => {
     const hecho = { ...CAMBIO, envio_nuevo_estado: 'hecho' } as unknown as ReclamoRow
     const { botones, texto } = await enCambios([hecho])
-    expect(texto).toContain('R-0001')
+    expect(texto).toContain('CB-0001')
     expect(botones.some((b) => /Despach/.test(b))).toBe(false)
   })
 
   it('⛔ ni cuando el cambio ⛔ no manda nada', async () => {
     const nada = { ...CAMBIO, envio_nuevo_estado: 'no_aplica' } as unknown as ReclamoRow
     const { botones, texto } = await enCambios([nada])
-    expect(texto).toContain('R-0001')
+    expect(texto).toContain('CB-0001')
     expect(botones.some((b) => /Despach/.test(b))).toBe(false)
   })
 })

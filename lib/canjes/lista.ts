@@ -10,7 +10,7 @@
 
 import { normalizarValor } from './vitrina'
 import {
-  PESO_TRAMO, enTransito, numeroCanje, tramoDeCanje,
+  PESO_TRAMO, enTransito, numeroCanje, numeroCanjeViejo, tramoDeCanje,
   type CanjeRow, type CanjeStore, type TramoCanje,
 } from './tipos'
 
@@ -122,7 +122,7 @@ export function pasaPorEstado(c: CanjeDecorado, f: FiltroEstado): boolean {
 }
 
 /**
- * Busca por nombre, por @, por número (`C-0004`, o `4` pelado) y por el título de la acción.
+ * Busca por nombre, por @, por número (`CJ-0004`, el `C-0004` de antes del 13-nov, o `4` pelado) y por el título de la acción.
  *
  * Los cuatro a la vez y no un selector de "buscar por": quien la conoce por el @ tipea el @, quien
  * la conoce por el nombre tipea el nombre, y ninguno de los dos tiene por qué saber cuál guardamos.
@@ -132,7 +132,7 @@ export function coincideTexto(c: CanjeDecorado, q: string): boolean {
   const busca = normalizarValor(q)
   if (!busca) return true
   const numero = c.numero || numeroCanje(c.id)
-  return [c._persona, c._instagram, numero, String(c.id), c.titulo || '']
+  return [c._persona, c._instagram, numero, numeroCanjeViejo(c.id), String(c.id), c.titulo || '']
     .some((campo) => normalizarValor(campo).includes(busca))
 }
 

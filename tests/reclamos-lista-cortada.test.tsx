@@ -58,13 +58,13 @@ describe('cuando el servidor tuvo que cortar la lista', () => {
     expect(t).toContain('más reclamos de los que entran en esta lista')
     expect(t).toContain('sobre lo que bajó')
     // Y la fila sigue estando: avisar ⛔ no es en lugar de mostrar.
-    expect(t).toContain('R-0001')
+    expect(t).toContain('CB-0001')
   })
 
   /** ⛔ Y sin corte ⛔ no grita: un cartel que sale siempre es ruido que se aprende a ignorar. */
   it('⛔ sin corte ⛔ no aparece', async () => {
     const t = await pintar(false)
     expect(t).not.toContain('más reclamos de los que entran')
-    expect(t).toContain('R-0001')
+    expect(t).toContain('CB-0001')
   })
 })

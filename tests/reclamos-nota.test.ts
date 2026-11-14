@@ -65,12 +65,12 @@ describe('notaVentaTecnica', () => {
 
   it('omite el campo que no vino en vez de escribir "null" o dejar un separador huérfano', () => {
     const nota = notaVentaTecnica('cambio', { id: 7, orden_tn: '1188', cliente: null, motivo_detalle: null })
-    expect(nota).toBe('Reclamo R-0007 — lo que se lleva el cliente en el cambio · Orden TN: 1188 · (Monitor)')
+    expect(nota).toBe('Reclamo CB-0007 — lo que se lleva el cliente en el cambio · Orden TN: 1188 · (Monitor)')
     expect(nota).not.toMatch(/null|undefined|·\s*·/)
   })
 
   it('sin número guardado lo deriva del id: la nota nunca sale sin llave', () => {
-    expect(notaVentaTecnica('reemplazo', { id: 7 })).toContain('Reclamo R-0007')
+    expect(notaVentaTecnica('reemplazo', { id: 7 })).toContain('Reclamo CB-0007')
   })
 
   // Los topes son POR CAMPO y eso es el mecanismo: no alcanza con que la nota entera entre en el

@@ -1206,9 +1206,9 @@ describe('costoDelCaso con los DOS envíos', () => {
 describe('numeroReclamo', () => {
   // Un solo prefijo para todo el post-venta: antes convivían D- (Devoluciones) y C- (Cambios), y
   // Administración tenía que seguir dos colas para lo mismo.
-  it('formatea como R-0007', () => {
-    expect(numeroReclamo(7)).toBe('R-0007')
-    expect(numeroReclamo(1234)).toBe('R-1234')
+  it('formatea como CB-0007 (CB- desde el 13-nov: R- chocaba con los remitos de Logística)', () => {
+    expect(numeroReclamo(7)).toBe('CB-0007')
+    expect(numeroReclamo(1234)).toBe('CB-1234')
   })
 })
 

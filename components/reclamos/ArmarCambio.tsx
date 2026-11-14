@@ -43,7 +43,7 @@ import {
 import {
   DIAS_CAMBIO, ESTADO_LABEL, estadoEnCriollo, MOTIVO_LABEL, MOTIVOS_CAMBIO, VIA_LABEL, VIAS_CAMBIO,
   calcularCambio, detalleCambioTexto, esCambio, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
-  numeroEM, numeroReclamo, pagadoPorItem, pideSeguimiento, trackingPortalUrl, trackingUrl,
+  numeroEM, numeroReclamo, numeroReclamoViejo, pagadoPorItem, pideSeguimiento, trackingPortalUrl, trackingUrl,
   type EnvioPaga, type EstadoReclamo, type FormaPago, type ItemReclamo, type MotivoReclamo,
   type OrdenTN, type ProductoOrdenTN, type ReclamoRow, type ViaRetorno,
 } from '@/lib/reclamos/tipos'
@@ -507,7 +507,7 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
     return cambios
       .filter((c) => (esAdmin ? true : c.estado !== 'cerrado' && c.estado !== 'anulado'))
       .filter((c) => f.match(c.estado))
-      .filter((c) => !q || numeroReclamo(c.id).toLowerCase().includes(q) || (c.cliente || '').toLowerCase().includes(q) || (c.orden_tn || '').toLowerCase().includes(q))
+      .filter((c) => !q || numeroReclamo(c.id).toLowerCase().includes(q) || numeroReclamoViejo(c.id).toLowerCase().includes(q) || (c.cliente || '').toLowerCase().includes(q) || (c.orden_tn || '').toLowerCase().includes(q))
   }, [cambios, filtro, busqueda, esAdmin])
 
   const detalleForm = () => detalleCambioTexto({

@@ -19,6 +19,7 @@ import {
 } from '@/lib/erp/cliente'
 import { HojaCargarPago, useCuentaPrendida, type CuentaConCliente } from './CuentaCorriente'
 import { FacturarParte, FacturarPedido, LETRA, descargarFactura, numeroComprobante } from './FacturasCliente'
+import { codigoPedido } from '@/lib/erp/codigos.core.js'
 
 const plata = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 const diaMes = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -91,7 +92,7 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
       {pedidos.sinEntrar.map((p) => (
         <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: font.sm, padding: '4px 0' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <b>Pedido {p.numero}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.recibido_en)} · {p.unidades} u · {plata(p.total)}</span>
+            <b>Pedido {codigoPedido(p.numero)}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.recibido_en)} · {p.unidades} u · {plata(p.total)}</span>
             <div style={{ fontSize: font.xs, color: color.mut2 }}>Llegó con este número{p.nombre ? ` · «${p.nombre}»` : ''} · sin entrar</div>
           </div>
           <Button size="sm" variant="outline" disabled={!pedidos.escribir || !clienteId || entrando === p.id} title={pedidos.escribir ? undefined : APAGADO} onClick={() => void entrar(p.id)}>
@@ -103,7 +104,7 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
         <button key={p.id} type="button" onClick={() => setAbierto(p.id)}
           style={{ display: 'flex', width: '100%', height: 'auto', alignItems: 'center', gap: 8, textAlign: 'left', background: 'none', border: 0, borderTop: `1px solid ${color.line2}`, padding: '6px 0', cursor: 'pointer', fontSize: font.sm, color: 'inherit' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <b>Pedido {p.numero}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.recibido_en)}{p.persona ? ` · pidió ${p.persona}` : ''}</span>
+            <b>Pedido {codigoPedido(p.numero)}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.recibido_en)}{p.persona ? ` · pidió ${p.persona}` : ''}</span>
             <div style={{ fontSize: font.xs, color: color.mut2 }}>{ETAPA[p.etapa]} · {p.unidades} u · {plata(p.total)}</div>
           </div>
           {p.pago && p.etapa !== 'anulado' && <b style={{ fontSize: font.xs, color: tonoPago(p.pago), whiteSpace: 'nowrap' }}>{textoPago(p.pago)}</b>}
@@ -175,7 +176,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
   const p = ficha?.pedido
   const puede = !!ficha?.escribir && !!p?.editable
   return (
-    <Modal abierto onCerrar={onCerrar} titulo={p ? `Pedido ${p.numero}` : 'Pedido'}
+    <Modal abierto onCerrar={onCerrar} titulo={p ? `Pedido ${codigoPedido(p.numero)}` : 'Pedido'}
       pie={ficha && (<>
         <Button variant="outline" onClick={onCerrar}>Cerrar</Button>
         {cambiado
@@ -432,7 +433,7 @@ export function PreparadosSinPagar() {
       <div style={{ ...ROTULO, marginBottom: 6 }}>Preparados sin pagar</div>
       {lista.map((p) => (
         <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: font.sm, padding: '3px 0' }}>
-          <div style={{ minWidth: 0 }}><b>{p.cliente}</b> <span style={{ color: color.mut2 }}>· pedido {p.numero} · listo hace {p.dias} días</span></div>
+          <div style={{ minWidth: 0 }}><b>{p.cliente}</b> <span style={{ color: color.mut2 }}>· pedido {codigoPedido(p.numero)} · listo hace {p.dias} días</span></div>
           <b style={{ color: color.dangerInk, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{plata(p.debe)}</b>
         </div>
       ))}

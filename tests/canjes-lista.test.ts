@@ -195,7 +195,8 @@ describe('filtrarCanjes — marca y texto', () => {
     const busca = (q: string) => filtrarCanjes(lista, filtro({ q })).map((c) => c.id)
     expect(busca('lucía')).toEqual([1])
     expect(busca('lucia.mkp')).toEqual([1])
-    expect(busca('C-0002')).toEqual([2])
+    expect(busca('CJ-0002')).toEqual([2])
+    expect(busca('C-0002')).toEqual([2]) // el código de antes del 13-nov, que la gente ya tiene escrito
     expect(busca('cápsula')).toEqual([1])
   })
 

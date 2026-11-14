@@ -92,7 +92,7 @@ try {
   sembradas.push(vivo.id);
   const r1 = await abrir(vivo.token);
   chequear('el link abre (200)', r1.status === 200, JSON.stringify(r1).slice(0, 160));
-  chequear('y trae su número', r1.reclamo?.numero === `R-${String(vivo.id).padStart(4, '0')}`, r1.reclamo?.numero);
+  chequear('y trae su número', r1.reclamo?.numero === `CB-${String(vivo.id).padStart(4, '0')}`, r1.reclamo?.numero);
   chequear('🔑 y ⛔ NO filtra `compensacion` (entró al select por la regla)',
     !('compensacion' in (r1.reclamo || {})), JSON.stringify(Object.keys(r1.reclamo || {})));
 
