@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useMonitorStore } from '@/store/useMonitorStore'
 import { useSesion } from '@/components/SesionProvider'
 import { veVentasHistoricas } from '@/lib/permisos'
@@ -76,9 +76,12 @@ export function useDatosMonitor(opciones?: { porLinea?: boolean }): {
   setLinea: (linea: Linea) => void
   /** Las líneas entre las que se puede elegir. Una sola ⇒ la pantalla no dibuja el selector. */
   lineas: Linea[]
+  /** Vuelve a bajar todo sin sacar lo que se ve (`store.actualizar`). Lanza si la bajada falla. */
+  actualizar: () => Promise<void>
 } {
   const { perfil, marca } = useSesion()
   const cargar = useMonitorStore((s) => s.cargar)
+  const actualizarStore = useMonitorStore((s) => s.actualizar)
   const datos = useMonitorStore((s) => s.datos)
   const payload = useMonitorStore((s) => s.payload)
   const estado = useMonitorStore((s) => s.estado)
@@ -91,6 +94,11 @@ export function useDatosMonitor(opciones?: { porLinea?: boolean }): {
   useEffect(() => {
     cargar(marca, veVentasHistoricas(perfil, marca))
   }, [marca, perfil, cargar])
+
+  const actualizar = useCallback(
+    () => actualizarStore(marca, veVentasHistoricas(perfil, marca)),
+    [actualizarStore, marca, perfil],
+  )
 
   const listoParaEstaMarca = estado === 'listo' && marcaCargada === marca
   const corta = !!opciones?.porLinea && lineas.length > 1
@@ -123,5 +131,6 @@ export function useDatosMonitor(opciones?: { porLinea?: boolean }): {
     linea,
     setLinea,
     lineas,
+    actualizar,
   }
 }

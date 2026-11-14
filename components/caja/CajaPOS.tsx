@@ -181,7 +181,15 @@ function POS() {
   const [menuMovil, setMenuMovil] = useState(false)
   const imprimir: typeof imprimirTicket = (t, ms, que) => (movil ? Promise.resolve() : imprimirTicket(t, ms, que))
   const promos = useAgenda((st) => st.promos)
-  const { datos } = useDatosMonitor()
+  const { datos, actualizar: actualizarDatos, origen: origenDatos } = useDatosMonitor()
+  // 🔑 «Actualizar productos» (Bruno, 14-nov): un producto dado de alta en GN hoy ⛔ tenía precio hasta que
+  // vencía el caché de 6 h (F5 lee el caché). Se baja en segundo plano: se sigue cobrando con lo de ahora.
+  const [errorActualizar, setErrorActualizar] = useState<string | null>(null)
+  const actualizandoProductos = origenDatos?.tipo === 'cache' && origenDatos.refrescando
+  const actualizarProductos = useCallback(() => {
+    setErrorActualizar(null)
+    actualizarDatos().catch((e) => setErrorActualizar(e instanceof Error ? e.message : String(e)))
+  }, [actualizarDatos])
   const tnIdx = useTnPromo(storeCaja())
   // 🔑 Stunned tiene SU Tienda Nube (16-oct): su precio sale de ahí, ⛔ de la de Zattia. En BDI es el mismo índice.
   const tnIdxStunned = useTnPromo(storeCaja() === 'zattia' ? 'stunned' : storeCaja())
@@ -1739,6 +1747,16 @@ pendientes
               ⇄ Cambios
             </button>
           )}
+          <button
+            type="button"
+            className="pos-tbtn"
+            onClick={actualizarProductos}
+            disabled={actualizandoProductos}
+            title={errorActualizar ? `No se pudo actualizar: ${errorActualizar}` : 'Trae los productos y precios cargados hoy en Gestión Nube'}
+            style={{ height: 36 }}
+          >
+            {actualizandoProductos ? 'Actualizando…' : errorActualizar ? 'Actualizar productos ⚠' : 'Actualizar productos'}
+          </button>
           <button type="button" className="pos-tbtn" onClick={() => setVerVentas(true)} style={{ height: 36 }}>
             Ventas
           </button>
