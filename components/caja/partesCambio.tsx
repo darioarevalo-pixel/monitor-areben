@@ -200,6 +200,45 @@ export function ModalEncargada({ c, onCerrar, onListo }: { c: Cambio; onCerrar: 
   )
 }
 
+/**
+ * Bruno (14-nov): lo que queda a favor se puede DESESTIMAR (la clienta deja los $200 y eso ⛔ traba el cambio). ⛔ se guarda
+ * saldo ni se pide la clienta, pero SIEMPRE con el PIN de la encargada, y queda registrado en el cambio. Sin venta, la
+ * encargada ya autorizó con su PIN al empezar: se usa ese.
+ */
+export function DesestimarSaldo({ c }: { c: Cambio }) {
+  const [personas, setPersonas] = useState<{ usuario: string; nombre: string }[] | null>(null)
+  const pidePin = c.desestima && c.tipo !== 'suelto'
+  useEffect(() => {
+    if (!pidePin || personas) return
+    let vivo = true
+    leerEncargadas('zattia').then((r) => vivo && setPersonas(r.encargadas ?? [])).catch(() => vivo && setPersonas([]))
+    return () => { vivo = false }
+  }, [pidePin, personas])
+  if (!(c.aFavor > 0)) return null
+  const e = c.encargada
+  return (
+    <div style={{ display: 'grid', gap: space[2] }}>
+      <label style={{ display: 'flex', gap: space[1], alignItems: 'center' }}>
+        <input type="checkbox" checked={c.desestima} disabled={!!c.espera} onChange={(ev) => c.setDesestima(ev.target.checked)} />
+        La clienta deja los {plata(c.aFavor)}: desestimar el saldo (PIN de la encargada)
+      </label>
+      {pidePin && (
+        <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <Field label="Encargada">
+            {personas && personas.length > 0
+              ? <Select value={e.persona} onChange={(ev) => c.setEncargada({ ...e, persona: ev.target.value })}><option value="">Elegir…</option>{personas.map((p) => <option key={p.usuario} value={p.usuario}>{p.nombre}</option>)}</Select>
+              : <Input value={e.persona} onChange={(ev) => c.setEncargada({ ...e, persona: ev.target.value })} placeholder="Su usuario del monitor" autoComplete="off" />}
+          </Field>
+          <Field label="PIN de 4 dígitos">
+            <Input type="password" inputMode="numeric" maxLength={4} value={e.pin} onChange={(ev) => c.setEncargada({ ...e, pin: ev.target.value.replace(/\D/g, '').slice(0, 4) })} autoComplete="off" style={{ letterSpacing: '0.4em', width: 120 }} />
+          </Field>
+        </div>
+      )}
+      {c.desestimaSaldo && c.faltaPin && <Notice tone="action">Para desestimar el saldo, la encargada elige su usuario y pone su PIN.</Notice>}
+    </div>
+  )
+}
+
 /** El pedido del cambio (la tarjeta fija de la derecha): lo que devuelve, lo que se lleva y el total siempre abajo. */
 export function PedidoCambio({ paso, c, onCobro, puedeCobrar }: { paso: 1 | 2; c: Cambio; onCobro: () => void; puedeCobrar: boolean }) {
   const fila = (izq: React.ReactNode, der: React.ReactNode, fuerte = false) => (
@@ -313,7 +352,8 @@ export function ModalCobroCambio({ c, onCerrar }: { c: Cambio; onCerrar: () => v
             </Select>
           </Field>
         )}
-        {(aFavor > 0 || diferencia > 0) && (
+        <DesestimarSaldo c={c} />
+        {((aFavor > 0 && !c.desestimaSaldo) || diferencia > 0) && (
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }}>
             {/* El saldo se busca por DNI: se tipea, así que se muestra a quién pertenece antes de usarlo. */}
             <Field label={aFavor > 0 ? 'DNI o CUIT de la clienta' : '¿Tiene saldo a favor? DNI o CUIT'}>

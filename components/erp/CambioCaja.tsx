@@ -32,6 +32,7 @@ import { marcaParaPOS, usarMarcaCaja } from '@/lib/caja/marca'
 import type { MarcaErp } from '@/lib/erp/cliente'
 import { NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 import { MEDIOS_CAMBIO, buscarVentasDelCambio, useCambio, type FilaVenta } from '@/components/caja/useCambio'
+import { DesestimarSaldo } from '@/components/caja/partesCambio'
 
 export function CambioCaja() {
   const { marca: delShell } = useSesion()
@@ -143,7 +144,7 @@ export function CambioCaja() {
       {hecho && (
         <Notice tone="success" onClose={() => c.setHecho(null)}>
           Cambio #{hecho.numero} registrado.{' '}
-          {hecho.cobrado > 0 ? <>Se cobraron <MoneyText value={hecho.cobrado} />.</> : hecho.aFavor > 0 ? <>Quedan <MoneyText value={hecho.aFavor} /> a favor de la clienta{hecho.saldo != null && <> (saldo: <MoneyText value={hecho.saldo} />)</>}.</> : 'Sin diferencia.'}
+          {hecho.cobrado > 0 ? <>Se cobraron <MoneyText value={hecho.cobrado} />.</> : hecho.aFavor > 0 ? <>Quedan <MoneyText value={hecho.aFavor} /> a favor de la clienta{hecho.saldo != null && <> (saldo: <MoneyText value={hecho.saldo} />)</>}.</> : hecho.desestimado > 0 ? <>La clienta dejó <MoneyText value={hecho.desestimado} /> (saldo desestimado con PIN).</> : 'Sin diferencia.'}
           {hecho.ncPendiente && ' La venta tenía factura: facturá el cambio en Caja › Factura (nota de crédito por lo devuelto y factura por lo nuevo).'}
         </Notice>
       )}
@@ -281,7 +282,8 @@ export function CambioCaja() {
                 <Field label="PIN de 4 dígitos"><Input type="password" inputMode="numeric" maxLength={4} value={c.encargada.pin} onChange={(e) => c.setEncargada({ ...c.encargada, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })} autoComplete="off" style={{ width: 100 }} /></Field>
               </div>
             )}
-            {(aFavor > 0 || diferencia > 0) && (
+            <div style={{ marginTop: space[3] }}><DesestimarSaldo c={c} /></div>
+            {((aFavor > 0 && !c.desestimaSaldo) || diferencia > 0) && (
               <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[3], alignItems: 'flex-end' }}>
                 <Field label={aFavor > 0 ? 'DNI o CUIT de la clienta' : '¿Tiene saldo a favor? DNI o CUIT'}><Input value={c.clienta.doc} onChange={(e) => c.setClienta({ ...c.clienta, doc: e.target.value })} inputMode="numeric" /></Field>
                 {diferencia > 0 && <Button variant="outline" disabled={c.trabajando || c.docLimpio.length < 7 || !!espera} onClick={() => void c.buscarSaldo()}>Ver saldo</Button>}

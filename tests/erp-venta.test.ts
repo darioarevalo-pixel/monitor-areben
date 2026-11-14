@@ -100,7 +100,7 @@ describe('el cambio (erp › Caja)', () => {
     expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], pagos: [{ cuenta: 'x' }] }).error).toBe('Pago inválido')
     const ok = leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], items: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 20000, sku: 'Z-1' }], pagos: [{ cuenta: 12921, monto: 5000 }], total: 4300 })
     expect(ok).toEqual({
-      id, modo: 'erp', ventaId: venta, gnVentaId: null, pin: null, devueltas: [{ linea_id: L1, cantidad: 1 }], nuevas: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 20000, descuento: 0, rebaja: 0, importe: 20000, sku: 'Z-1' }],
+      id, modo: 'erp', ventaId: venta, gnVentaId: null, pin: null, desestimar: false, devueltas: [{ linea_id: L1, cantidad: 1 }], nuevas: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 20000, descuento: 0, rebaja: 0, importe: 20000, sku: 'Z-1' }],
       pagos: [{ cuenta: 12921 }], total: 4300, desde: null, pago: null, comprobante: null, cliente: null, saldo: 0,
     })
     // Cambio SUELTO (Bruno, 27-oct): la venta de GN viaja por número y la prenda por producto y talle; el precio ⛔ (lo pone el servidor).
@@ -118,6 +118,11 @@ describe('el cambio (erp › Caja)', () => {
     expect(listaEnGN([{ product_id: 1, size_id: 2, quantity: 1, unit_price: 12990, total: 11700 }, { product_id: 3, size_id: 4, quantity: -1, unit_price: 9000, total: -9000 }]))
       .toEqual([{ product_id: 1, size_id: 2, cantidad: 1, precio: 12990 }])
     expect(listaEnGN([{ product_id: 1, size_id: 2, quantity: 2, unit_price: null, total: 30000 }])[0].precio).toBe(15000)
+    // 🔑 Bruno (14-nov): DESESTIMAR lo que queda a favor pide el PIN de la encargada, con venta o sin ella.
+    expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], desestimar: true }).error).toMatch(/Desestimar el saldo necesita el PIN/)
+    const de = leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], desestimar: true, pin: '1234', pinPersona: ' ana ' })
+    expect([de.modo, de.desestimar, de.pin]).toEqual(['erp', true, { persona: 'ana', pin: '1234' }])
+    expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], desestimar: 'si', pin: '1234', pinPersona: 'ana' }).desestimar).toBe(false)
     // Varios pagos: la base viaja en todos menos el último (como la Caja); el monto de la pantalla ⛔ viaja.
     expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], pagos: [{ cuenta: 12921, base: 2000 }, { cuenta: 25188, base: 1 }] }).pagos).toEqual([{ cuenta: 12921, base: 2000 }, { cuenta: 25188 }])
   })

@@ -700,7 +700,7 @@ export function UltimaVenta({
 }: {
   venta: Venta
   /** Es un CAMBIO (Bruno, 28-oct): la misma tarjeta que la venta, con su número y lo que quedó a favor. */
-  cambio?: { aFavor: number }
+  cambio?: { aFavor: number; desestimado?: number }
   /** Sin él, ⛔ hay «Reimprimir» (el celular ⛔ imprime: el ticket va por mail). */
   onReimprimir?: () => void
   /** El ticket de cambio solo (regalo, Bruno 13-oct): sin precios. */
@@ -737,10 +737,11 @@ export function UltimaVenta({
         <span style={{ display: 'block', fontSize: font.base, color: enGn ? color.ink2 : color.dangerInk }}>
           {enGn ? (enErp ? 'en Areben Gestión' : 'en Gestión Nube') : `pendiente en ${venta.destino === 'erp' ? 'Areben Gestión' : 'Gestión Nube'} (${venta.ultimo_error ?? 'sin respuesta'}) · reintento automático`}
         </span>
-        {(medios || vuelto > 0 || venta.email || (cambio && cambio.aFavor > 0)) && (
+        {(medios || vuelto > 0 || venta.email || (cambio && (cambio.aFavor > 0 || (cambio.desestimado ?? 0) > 0))) && (
           <span style={{ display: 'block', fontSize: font.base, color: color.ink2 }}>
             {[
               cambio && cambio.aFavor > 0 && <span key="f">Saldo a favor {plata(cambio.aFavor)}</span>,
+              cambio && (cambio.desestimado ?? 0) > 0 && <span key="d">Saldo desestimado {plata(cambio.desestimado ?? 0)} (PIN)</span>,
               medios && <span key="m">{medios}</span>,
               vuelto > 0 && (
                 <span key="v" style={{ color: color.successInk, fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums' }}>

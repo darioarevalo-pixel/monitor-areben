@@ -316,7 +316,7 @@ export type ClienteCambio = { doc: string; nombre: string; whatsapp?: string | n
 export type CruceCambio = { estado: string; motivo?: string }
 export type PagoMp = { id: string; monto: number; cuando: string; origen?: string; coincide: boolean; diferencia: number }
 export type RespuestaCambio =
-  | { ok: true; esperando?: false; venta: { id: string; numero: number; diferencia?: number }; total: number; aFavor: number; saldo: number | null; ncPendiente: boolean; yaExistia: boolean }
+  | { ok: true; esperando?: false; venta: { id: string; numero: number; diferencia?: number }; total: number; aFavor: number; desestimado?: number; saldo: number | null; ncPendiente: boolean; yaExistia: boolean }
   | { ok: true; esperando: true; espera: number; total: number; desde: string; cruce: CruceCambio; recientes?: PagoMp[] }
 
 /**
@@ -330,6 +330,8 @@ export const cambiarVenta = (marca: MarcaErp, c: {
   ventaId?: string
   /** El cambio SUELTO: una venta de Gestión Nube (el servidor pone el precio pagado) o, con `sinTicket`, ninguna (precio de la cajera + PIN). */
   gnVentaId?: string; sinTicket?: boolean; pin?: string; pinPersona?: string
+  /** Bruno (14-nov): lo que queda a favor ⛔ se guarda (la clienta lo deja). Va con `pin` y `pinPersona` de la encargada. */
+  desestimar?: boolean
   devueltas: Array<{ lineaId: string; cantidad: number } | DevueltaSuelta>; items: PrendaNueva[]
   pagos: Array<{ cuenta: number; base?: number }>; total: number; desde?: string | null; pago?: string | null; comprobante?: string | null; cliente?: ClienteCambio | null; saldo?: number
 }) =>
