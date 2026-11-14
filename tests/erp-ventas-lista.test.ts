@@ -49,14 +49,22 @@ describe('el estado de cada venta', () => {
     expect(estadoDeVenta(venta({ origen: 'tn', tnEstado: null }))).toBe('sin_estado')
     expect(estadoDeVenta(venta({ origen: 'tn', tnEstado: 'algo_nuevo' }))).toBe('sin_estado')
   })
-  it('Mercado Libre ⛔ dice «Sin estado de Tienda Nube»: dice que le falta el suyo, ⛔ inventa uno (Bruno, 14-nov)', () => {
-    // Todas las ventas se arman en Logística; el estado sale del envío, y el de Mercado Libre ⛔ está en el motor todavía.
-    for (const tnEstado of [null, 'a_preparar', 'listo'])
-      expect(estadoDeVenta(venta({ origen: 'ml', tnEstado, envioTipo: 'ship' }))).toBe('sin_estado_ml')
-    expect(estadoDeVenta(venta({ origen: 'ml', estado: 'anulada' }))).toBe('anulada')
-    const ml = armarFila(venta({ origen: 'ml', prueba: false }))
-    expect(ESTADO[ml.estadoKey]).toEqual(['neutral', 'Sin estado de Mercado Libre'])
-    expect(filtrar([ml], { vista: 'todas', origenes: ['ml'] })).toHaveLength(1)
+  it('Mercado Libre: el estado lo da Logística, como a todas; sin pedido en Logística ⛔ se inventa (Bruno, 14-nov)', () => {
+    const ml = (mlEstado: string | null, o: Record<string, unknown> = {}) => estadoDeVenta(venta({ origen: 'ml', mlEstado, tnEstado: 'a_preparar', ...o }))
+    expect(ml('pending')).toBe('a_preparar')
+    expect(ml('preparing')).toBe('en_preparacion')
+    expect(ml('ready')).toBe('listo_envio')
+    expect(ml('dispatched')).toBe('despachado')
+    expect(ml('cancelled')).toBe('cancelado_ml')
+    // Antes decía «Sin estado de Tienda Nube»; y ⛔ toma el estado de un pedido de Tienda Nube.
+    expect(ml(null)).toBe('sin_estado_ml')
+    expect(ml('algo_nuevo')).toBe('sin_estado_ml')
+    expect(ml('dispatched', { estado: 'anulada' })).toBe('anulada')
+    expect(ESTADO.sin_estado_ml).toEqual(['neutral', 'Sin estado de Mercado Libre'])
+    expect(ESTADO.cancelado_ml).toEqual(['danger', 'Cancelado en Mercado Libre'])
+    // «A preparar» la cuenta como a cualquier otra.
+    const filas = [armarFila(venta({ origen: 'ml', mlEstado: 'pending', prueba: false })), armarFila(venta({ id: 'v2', origen: 'ml', mlEstado: 'dispatched', prueba: false }))]
+    expect(contarVistas(filas).preparar).toBe(1)
   })
   it('el saldo: lo que quedó a cuenta, o lo del motor si vino; una anulada ⛔ debe', () => {
     const aCuenta = venta({ pagos: [{ medio: 'efectivo', monto: 1000 }, { medio: 'cuenta', monto: 17990 }] })
