@@ -351,8 +351,18 @@ export async function registrarCambio(db, e) {
     const yaDevueltas = suelto && e.original_gn?.sale_id != null ? await devueltasDeGN(db, marca, String(e.original_gn.sale_id).trim(), e.prueba) : new Map()
     const armada = armarCambio(e, conf, original, { yaDevueltas })
     if (!armada.ok) return armada
-    const leida = leerDevolucion(e.devolucion)
+    // 14-nov (Bruno): lo que queda a favor se puede DESESTIMAR (la clienta deja los $200): ⛔ se guarda saldo ni se pide la
+    // clienta, pero SIEMPRE con el PIN de la encargada (con la llave o sin ella) y queda en `detalle.saldo_desestimado`.
+    const desestima = e?.devolucion != null && typeof e.devolucion === 'object' && !Array.isArray(e.devolucion) && e.devolucion.forma === 'desestima'
+    const leida = desestima ? { devolucion: null } : leerDevolucion(e.devolucion)
     if (leida.ok === false) return leida
+    if (desestima) {
+      if (!(armada.a_favor > 0)) return falla('ENTRADA_INVALIDA', 'No queda nada a favor para desestimar', 'devolucion')
+      if (!(e.autoriza?.motivo === 'pin_encargada' && typeof e.autoriza.usuario === 'string' && e.autoriza.usuario.trim())) {
+        return falla('FALTA_PIN', 'Desestimar el saldo necesita el PIN de la encargada', 'autoriza')
+      }
+      armada.venta.detalle = { ...armada.venta.detalle, saldo_desestimado: { monto: armada.a_favor, autoriza: { motivo: 'pin_encargada', usuario: e.autoriza.usuario.trim() } } }
+    }
     // Sin la venta del ERP ⛔ se sabe cómo se pagó ⇒ lo que queda a favor es saldo. Y sin ticket, el PIN SIEMPRE (Bruno,
     // 14-oct: la prenda que vuelve sin venta la autoriza la encargada), con la llave de la devolución prendida o no.
     if (suelto && leida.devolucion?.forma === 'plata') return falla('ENTRADA_INVALIDA', 'Sin la venta del ERP, lo que queda a favor va como saldo', 'devolucion')
@@ -370,9 +380,9 @@ export async function registrarCambio(db, e) {
     armada.venta.cliente_id = cli.id ?? armada.venta.cliente_id
     // §17: lo que queda a favor se devuelve en PLATA si el local lo eligió; si no, es saldo (como siempre). Con la llave, PIN.
     const enPlata = armada.a_favor > 0 && leida.devolucion?.forma === 'plata'
-    if (armada.a_favor > 0 && !enPlata && !armada.venta.cliente_id) return falla('FALTA_CLIENTE', `Quedan ${armada.a_favor} a favor: hace falta la clienta para guardarlos`, 'cliente')
+    if (armada.a_favor > 0 && !enPlata && !desestima && !armada.venta.cliente_id) return falla('FALTA_CLIENTE', `Quedan ${armada.a_favor} a favor: hace falta la clienta para guardarlos`, 'cliente')
     let dev = null, autoriza = null
-    if (armada.a_favor > 0) {
+    if (armada.a_favor > 0 && !desestima) {
       const a = autorizacion(armada.venta.marca, e.autoriza)
       if (a.ok === false) return a
       autoriza = a.autoriza
@@ -405,14 +415,15 @@ export async function registrarCambio(db, e) {
     if (sinStock) return sinStock
     const venta = await escribir(db, armada)
     const usuario = venta.usuario
-    if (armada.a_favor > 0 && !enPlata) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, armada.a_favor, 'cambio', usuario)])
+    if (armada.a_favor > 0 && !enPlata && !desestima) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, armada.a_favor, 'cambio', usuario)])
     if (dev) await insertarDevolucion(db, venta, dev.filas, { usuario, autoriza, en: venta.ocurrida_en })
     if (armada.usa_saldo > 0) await insertar(db, 'saldo_favor_movimiento', [movSaldo(venta, -armada.usa_saldo, 'uso', usuario)])
     const enCuenta = await anotarCompra(db, venta, armada.usa_cuenta)
     return {
       ...enCuenta,
       ok: true, venta: { id: venta.id, numero: venta.numero, tipo: 'cambio', diferencia: armada.diferencia, total: venta.total },
-      movimientos: armada.movimientos.length, a_favor: enPlata ? 0 : armada.a_favor, avisos, devolucion: resumenDevolucion(dev),
+      movimientos: armada.movimientos.length, a_favor: enPlata || desestima ? 0 : armada.a_favor, avisos, devolucion: resumenDevolucion(dev),
+      ...(desestima ? { desestimado: armada.a_favor } : {}),
       saldo: venta.cliente_id ? await saldoDe(db, venta.cliente_id, venta.marca, venta.prueba) : null,
       nc_pendiente: original ? await tieneFactura(db, original.venta.id) : false,
     }
