@@ -265,7 +265,7 @@ export default function Seccion() {
   // adentro, así que alcanza con una marca en la que se vea; cada pestaña lee la marca elegida y el servidor la vuelve a pedir.
   if (esERP) {
     if (!['bdi', 'zattia'].some((m) => puedeVer(perfil, m as typeof marca, 'erp'))) {
-      return <div style={{ padding: 16, fontSize: 13 }}>Tu usuario no tiene acceso al ERP.</div>
+      return <div style={{ padding: 16, fontSize: 13 }}>Tu usuario no tiene acceso a Areben Gestión.</div>
     }
     return (
       <ToastProvider>

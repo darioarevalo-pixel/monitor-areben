@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import type { EmpujeStock } from '@/lib/erp/cliente'
 
 /**
- * **ERP › Diferencias › «Enviar el stock a Tienda Nube», del lado de la pantalla.** El oráculo es lo que se LEE: un envío SECO
+ * **Areben Gestión › Diferencias › «Enviar el stock a Tienda Nube», del lado de la pantalla.** El oráculo es lo que se LEE: un envío SECO
  * dice «Sin enviar» (⛔ se pinta de éxito), el botón confirma ANTES y dice si es prueba o de verdad según el último envío,
  * cancelar ⛔ pide nada, y mientras uno espera en la cola el botón se traba y la lista se vuelve a leer.
  */
@@ -40,14 +40,14 @@ const apretar = async (texto: string) => {
 const boton = () => [...document.querySelectorAll('button')].find((b) => /Enviar el stock|Enviando|Pidiendo/.test(b.textContent ?? ''))!
 
 describe('Enviar el stock a Tienda Nube', () => {
-  it('un envío seco dice «Sin enviar» y qué cambiaría, ⛔ «Enviado»; el automático dice que lo pidió el ERP', async () => {
+  it('un envío seco dice «Sin enviar» y qué cambiaría, ⛔ «Enviado»; el automático dice que lo pidió Areben Gestión', async () => {
     lista = [env({ id: 3, pedidoPor: 'libro:zattia' }), env({ id: 1 })]
     await montar()
     expect(leerEmpujesStock).toHaveBeenCalledWith('stunned')
     expect(todo()).toContain('Sin enviar')
     expect(todo()).toContain('3 variantes distintas (5 u)')
     expect(todo()).not.toContain('Enviado')
-    expect(todo()).toContain('el ERP, solo')
+    expect(todo()).toContain('Areben Gestión, solo')
     expect(todo()).toContain('Bruno')
     expect(todo()).toContain('Hasta el corte de Stunned es una prueba')
   })
@@ -56,7 +56,7 @@ describe('Enviar el stock a Tienda Nube', () => {
     lista = [env({})]
     await montar()
     await act(async () => { boton().click() })
-    expect(todo()).toContain('el ERP sólo calcula qué cambiaría')
+    expect(todo()).toContain('Areben Gestión sólo calcula qué cambiaría')
     expect(todo()).toContain('dio 3 variantes distintas')
     expect(mandarStockATN).not.toHaveBeenCalled()
     await apretar('Cancelar')

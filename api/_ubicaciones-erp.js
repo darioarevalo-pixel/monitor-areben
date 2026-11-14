@@ -33,6 +33,6 @@ export default async function handler(req, res) {
     })
     return res.status(200).json(r)
   } catch (e) {
-    return res.status(503).json({ error: `No se pudo leer la ubicación del ERP: ${e instanceof Error ? e.message : String(e)}` })
+    return res.status(503).json({ error: `No se pudo leer la ubicación de Areben Gestión: ${e instanceof Error ? e.message : String(e)}` })
   }
 }

@@ -15,11 +15,11 @@ const MARCAS = ['bdi', 'zattia']
 const LINEAS = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] }
 const UUID = /^[0-9a-f-]{36}$/i
 const FECHA = /^\d{4}-\d{2}-\d{2}$/
-const SIN_079 = { status: 409, error: 'Los cheques todavía no están en la base del ERP (falta la migración 079).' }
+const SIN_079 = { status: 409, error: 'Los cheques todavía no están en la base de Areben Gestión (falta la migración 079).' }
 const TIPOS_DEPOSITO = ['banco', 'billetera', 'caja']
 
 const hay079 = async (pg) => (await pg.query(`select to_regclass('public.cheque') is not null as hay`)).rows[0].hay
-const errorDe = (e) => ({ status: e?.codigo === 'NO_ENCONTRADO' ? 404 : e?.codigo === 'ENTRADA_INVALIDA' || e?.codigo === 'FALTA_MOTIVO' ? 400 : 409, error: e?.mensaje ?? 'El ERP no pudo registrarlo.' })
+const errorDe = (e) => ({ status: e?.codigo === 'NO_ENCONTRADO' ? 404 : e?.codigo === 'ENTRADA_INVALIDA' || e?.codigo === 'FALTA_MOTIVO' ? 400 : 409, error: e?.mensaje ?? 'Areben Gestión no pudo registrarlo.' })
 
 /**
  * @param {{ marca: string, linea: string, prueba?: boolean }} p

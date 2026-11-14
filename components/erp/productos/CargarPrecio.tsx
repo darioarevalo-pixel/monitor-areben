@@ -79,7 +79,7 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
           <ConfirmDetalle label={nombre} valor={<MoneyText value={n} />} />
           <ConfirmDetalle label="Desde" valor={desde || 'Ahora'} />
           {esCosto && <ConfirmDetalle label="Proveedor" valor={nombreProveedor ?? 'Sin proveedor'} />}
-          <p style={{ marginTop: space[3] }}>Queda en el ERP y manda sobre la copia de Gestión Nube. {aviso.largo}</p>
+          <p style={{ marginTop: space[3] }}>Queda en Areben Gestión y manda sobre la copia de Gestión Nube. {aviso.largo}</p>
         </div>
       ),
       ok: 'Cargar',

@@ -92,7 +92,15 @@ async function deAfuera(sb, ventas) {
     return error ? [] : data
   })
   const pedidos = new Map(filasPedido.map((p) => [String(p.venta_id), p]))
-  return { pedido: (v) => etapaDePedido(pedidos.get(String(v.id))), deVenta, orden: (v) => orden.get(tnIdDe(v)) || null, facGn: (g) => (g ? facGn.get(String(g.id)) || null : null), erp }
+  // Mercado Libre: el estado lo publica Logística (`GET /orders`, canal `mercadolibre`) y el motor lo guarda en `logistica_pedido`;
+  // su `external_id` es el PACK (medido 14-nov: venta 2038 ⇔ pack 2000016018734109). Si la tabla ⛔ responde, la lista sigue sin él.
+  const filasMl = await enTandas([...new Set(ventas.filter((v) => v.origen === 'ml').flatMap(clavesMl))], async (t) => {
+    const { data, error } = await sb.from('logistica_pedido').select('negocio, external_id, estado').eq('canal', 'mercadolibre').in('external_id', t)
+    return error ? [] : data
+  })
+  const ml = new Map(filasMl.map((l) => [`${l.negocio}:${l.external_id}`, l.estado]))
+  const deMl = (v) => clavesMl(v).map((k) => ml.get(`${v.marca}:${k}`)).find(Boolean) ?? null
+  return { pedido: (v) => etapaDePedido(pedidos.get(String(v.id))), ml: deMl, deVenta, orden: (v) => orden.get(tnIdDe(v)) || null, facGn: (g) => (g ? facGn.get(String(g.id)) || null : null), erp }
 }
 
 /** `pendienteDeVentas` del motor (§16) → { venta_id: $ }. Si falla, la lista sigue con lo que dejó a cuenta (dicho en la ficha). */
@@ -136,6 +144,9 @@ function notaVigente(notas) {
   return n ? { id: n.id, texto: n.texto, de: deDondeNota(n) } : null
 }
 
+/** Con qué número la conoce Logística: el pack y, si la orden vino suelta, la orden. */
+const clavesMl = (v) => [v.detalle?.ml?.pack, ...(v.detalle?.ml?.ordenes ?? [])].filter((x) => x != null).map(String)
+
 /** La fila cruda que entiende `armarFila`. */
 function filaCruda(v, a, numeros) {
   const g = a.deVenta(v)
@@ -147,7 +158,7 @@ function filaCruda(v, a, numeros) {
     canal: v.canal, deposito: v.deposito, total: v.total, prueba: v.prueba, usuario: v.vendedor || v.usuario, ocurridaEn: v.ocurrida_en, tnCreadaEn: o?.creada_en ?? null,
     nota: notaVigente(v.notas), entrega: v.entrega ?? null, clienteId: v.cliente_id ?? null, vueltaPendiente: a.vueltas.get(v.id) ?? null,
     cliente: v.cliente, clienteGn: g?.client_name ?? null, gnNumero: g?.number ?? null, gnEstado: v.detalle?.sale_state ?? g?.sale_state ?? null,
-    tnNumero: v.detalle?.tn?.numero ?? o?.numero ?? null, tnEstado: o?.estado ?? null, pedidoEtapa: a.pedido(v), envioTipo: o?.envio_tipo ?? null,
+    tnNumero: v.detalle?.tn?.numero ?? o?.numero ?? null, tnEstado: o?.estado ?? null, pedidoEtapa: a.pedido(v), mlEstado: a.ml ? a.ml(v) : null, envioTipo: o?.envio_tipo ?? null,
     pagos: (v.pagos || []).map((p) => ({ medio: p.medio, cuenta: p.cuenta, monto: Number(p.monto) })),
     facturaErp: fe?.numero ?? null, facturaGn: fg?.numero ?? null, tieneCambio: v.tiene_cambio,
     pendiente: v.pendiente ?? null,
@@ -288,7 +299,7 @@ export async function editarVentaErp({ marca, body, usuario }, deps = {}) {
     // La pantalla elige al cliente por su documento (la ficha de `cliente`, §11): acá se vuelve su id, de la MISMA empresa.
     if (doc != null) {
       const [c] = (await db.query('select c.id::text from cliente c join venta v on v.empresa_id = c.empresa_id where v.id = $1 and c.doc = $2 limit 1', [body.ventaId, doc])).rows
-      if (!c) return { status: 409, error: 'Ese documento no tiene ficha de cliente en el ERP (nace al hacer una factura A o en Clientes).' }
+      if (!c) return { status: 409, error: 'Ese documento no tiene ficha de cliente en Areben Gestión (nace al hacer una factura A o en Clientes).' }
       cambios.cliente_id = c.id
     }
     const r = await m.editarVenta(db, { venta_id: body.ventaId, cambios, usuario })
@@ -367,7 +378,7 @@ export async function notaDeVentaErp({ marca, body, usuario }, deps = {}) {
 export async function cobrarVentaErp({ marca, body, usuario }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   if (!UUID.test(String(body?.ventaId || ''))) return { status: 400, error: 'Venta inválida' }
-  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'La venta no tiene cliente del ERP: sin cliente no hay cuenta corriente.' }
+  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'La venta no tiene cliente de Areben Gestión: sin cliente no hay cuenta corriente.' }
   const monto = Math.round(Number(body?.monto) * 100) / 100
   if (!(monto > 0)) return { status: 400, error: 'Monto inválido' }
   if (!body?.cuenta) return { status: 400, error: 'Elegí la cuenta.' }

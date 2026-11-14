@@ -291,7 +291,7 @@ export function Facturacion() {
     if (k === 'de') {
       if (f.de === 'gn') return <ChipEstado mapa={{ x: [f.estado && f.estado !== 'APROBADO' ? 'warning' : 'neutral', `Gestión Nube${f.estado && f.estado !== 'APROBADO' ? ` · ${f.estado.toLowerCase()}` : ''}`] }} k="x" />
       const anulada = f.vista === 'facturas' && conNC.has(`${marca}:${f.ventaId}`)
-      return <ChipEstado mapa={{ x: anulada ? ['danger', 'ERP · anulada con NC'] : ['success', f.emitida?.ambiente === 'produccion' ? 'ERP' : 'ERP · de prueba'] }} k="x" />
+      return <ChipEstado mapa={{ x: anulada ? ['danger', 'Areben Gestión · anulada con NC'] : ['success', f.emitida?.ambiente === 'produccion' ? 'Areben Gestión' : 'Areben Gestión · de prueba'] }} k="x" />
     }
     if (k === 'total') return <span style={{ fontWeight: 600, color: f.total < 0 ? 'var(--mo-danger-ink)' : color.ink, fontVariantNumeric: 'tabular-nums' }}>{f.total < 0 ? `− ${pesos(-f.total)}` : pesos(f.total)}</span>
     return null
@@ -308,7 +308,7 @@ export function Facturacion() {
     }]
     if (f.vista === 'facturas' && !conNC.has(`${e.marca}:${e.venta_id}`)) {
       menu.push(esDeVentaPropia(e.venta_id)
-        ? { key: 'nc', label: 'Nota de crédito desde Ventas', icono: 'anular', onClick: () => undefined, disabled: true, hint: 'Una venta del ERP se anula desde su ficha en Ventas, y la nota de crédito sale sola.' }
+        ? { key: 'nc', label: 'Nota de crédito desde Ventas', icono: 'anular', onClick: () => undefined, disabled: true, hint: 'Una venta de Areben Gestión se anula desde su ficha en Ventas, y la nota de crédito sale sola.' }
         : { key: 'nc', label: 'Hacer nota de crédito', icono: 'anular', tone: 'danger', onClick: () => void anularConNC(e), disabled: trabajando, hint: 'Anula la factura entera con ARCA.' })
     }
     if (f.vista === 'facturas' && !esDeVentaPropia(e.venta_id)) {
@@ -346,7 +346,7 @@ export function Facturacion() {
         <>
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
             <TileResumen oscuro titulo="Tope del mes de Areben" valor={pesosCortos(datos.techo)} nota={datos.estado === 'cerrado' ? 'fijo desde el cierre · las dos marcas' : 'lo que entró a cuentas de Areben, las dos marcas; cambia hasta cerrar el mes'} />
-            <TileResumen titulo="Facturado" valor={pesosCortos(datos.facturado)} nota={`${pctTope != null ? `${pctTope} % del tope · ` : ''}Gestión Nube ${pesosCortos(datos.facturadoGN)} · ERP ${pesosCortos(datos.facturadoMonitor)}`} />
+            <TileResumen titulo="Facturado" valor={pesosCortos(datos.facturado)} nota={`${pctTope != null ? `${pctTope} % del tope · ` : ''}Gestión Nube ${pesosCortos(datos.facturadoGN)} · Areben Gestión ${pesosCortos(datos.facturadoMonitor)}`} />
             <TileResumen titulo="Pendiente de facturar" valor={pesosCortos(datos.pendiente)} nota={datos.pendiente < 0 ? 'se facturó de más' : 'las dos marcas'} />
             <TileResumen tono={tonoDeConteo(grupos.sin.length)} titulo={`Sin factura en ${NOMBRE_MARCA[tienda]}`} valor={grupos.sin.length.toLocaleString('es-AR')} nota={`ventas · ${pesosCortos(sumaSin)}`} />
           </div>
@@ -364,11 +364,11 @@ export function Facturacion() {
             </div>
             {enVista === 'sin' && (
               <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>
-                Cobradas este mes en cuentas de Areben y sin factura de Gestión Nube ni del ERP. «A facturar» es lo que entró a esas cuentas, no el total de la venta.
+                Cobradas este mes en cuentas de Areben y sin factura de Gestión Nube ni de Areben Gestión. «A facturar» es lo que entró a esas cuentas, no el total de la venta.
               </div>
             )}
             {enVista === 'notas' && !facturas && (
-              <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Las notas de crédito del ERP se ven cuando la facturación esté prendida. Las de Gestión Nube no llegan al monitor.</div>
+              <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Las notas de crédito de Areben Gestión se ven cuando la facturación esté prendida. Las de Gestión Nube no llegan al monitor.</div>
             )}
             <ListaTrabajo
               columnas={enVista === 'sin' ? COLUMNAS_SIN : COLUMNAS_FACT} filas={filas} claveDe={(f) => f.id} celda={celda}

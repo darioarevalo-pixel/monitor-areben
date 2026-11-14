@@ -38,7 +38,7 @@ const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minoris
 /** Los motivos que se cargan a mano: el conteo entra solo desde el monitor (⛔ va en el menú). */
 export const MOTIVOS_A_MANO = MOTIVOS.filter((m) => m.key !== 'conteo')
 /** El mismo porqué que da el servidor (`api/_erp-ajustes.js`), antes de guardar. */
-export const QUEDA_NEGATIVO = 'En ese depósito el ERP tiene menos de las que salen. Si el producto está, contalo primero en Conteo de depósito (o de fundas): el conteo entra solo al ERP.'
+export const QUEDA_NEGATIVO = 'En ese depósito Areben Gestión tiene menos de las que salen. Si el producto está, contalo primero en Conteo de depósito (o de fundas): el conteo entra solo a Areben Gestión.'
 const ESTADO = { para_aprobar: ['warning', 'Para aprobar'], aplicado: ['success', 'Aplicado'], rechazado: ['neutral', 'Descartado'] } as const
 const COLUMNAS: ColumnaLista[] = [
   { key: 'n', titulo: 'Nº', ancho: '64px', movil: 'oculta' },
@@ -150,7 +150,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
         renglones: borrador.renglones.map((x) => ({ producto: x.producto, talle: x.talle, sku: x.sku, barcode: x.barcode, cantidad: motivo.pide === 'sale' ? Math.abs(Number(x.valor)) : salen(x) ?? 0 })),
       })
       const r = await aprobarAjuste(linea, creado.id)
-      setHecho({ texto: `Ajuste A-${r.numero} guardado: el stock del ERP cambió en ${r.movimientos} ${r.movimientos === 1 ? 'producto' : 'productos'}.`, avisos: [...creado.avisos, ...r.avisos] })
+      setHecho({ texto: `Ajuste A-${r.numero} guardado: el stock de Areben Gestión cambió en ${r.movimientos} ${r.movimientos === 1 ? 'producto' : 'productos'}.`, avisos: [...creado.avisos, ...r.avisos] })
       setBorrador(null)
       setEncontradas(null)
       setError(null)
@@ -170,7 +170,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
     try {
       if (aplicar) {
         const r = await aprobarAjuste(linea, a.id)
-        setHecho({ texto: `A-${r.numero} aplicado: el stock del ERP cambió en ${r.movimientos} ${r.movimientos === 1 ? 'producto' : 'productos'}.`, avisos: r.avisos })
+        setHecho({ texto: `A-${r.numero} aplicado: el stock de Areben Gestión cambió en ${r.movimientos} ${r.movimientos === 1 ? 'producto' : 'productos'}.`, avisos: r.avisos })
       } else {
         const r = await descartarAjuste(linea, a.id, descartando?.motivo ?? '')
         setHecho({ texto: `A-${r.numero} descartado: el stock no cambió.`, avisos: [] })
@@ -229,7 +229,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
           <span />
           {ajusta && datos && !borrador && <Button onClick={() => setBorrador({ deposito: DEPOSITOS[base][0], sentido: null, motivo: '', detalle: '', renglones: [] })}>Nuevo ajuste</Button>}
         </div>
-        {!enErp && linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock del ERP: en Gestión Nube se ajusta como siempre. Los conteos se hacen en el módulo de Conteo del monitor y entran solos (se ven en el historial de cada producto, en Stock).</Notice>}
+        {!enErp && linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mientras convivimos con Gestión Nube, el ajuste cambia sólo el stock de Areben Gestión: en Gestión Nube se ajusta como siempre. Los conteos se hacen en el módulo de Conteo del monitor y entran solos (se ven en el historial de cada producto, en Stock).</Notice>}
       </SectionCard>}
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
@@ -299,7 +299,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
               <THead>
                 <Tr>
                   <Th>Producto</Th><Th>código</Th>
-                  <Th style={{ textAlign: 'right' }}>ERP en {deposito(borrador.deposito)}</Th>
+                  <Th style={{ textAlign: 'right' }}>Areben Gestión en {deposito(borrador.deposito)}</Th>
                   <Th style={{ textAlign: 'right' }}>{borrador.sentido === 'ingreso' ? 'Ingresa' : 'Cantidad'}</Th>
                   <Th style={{ textAlign: 'right' }}>Queda</Th><Th />
                 </Tr>
@@ -347,7 +347,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
       )}
 
       {!enTarea && sinAplicar.length > 0 && (
-        <SectionCard title={`Sin confirmar · ${sinAplicar.length}`} subtitle="Se guardaron pero el stock del ERP todavía no cambió. Confirmalos o descartalos.">
+        <SectionCard title={`Sin confirmar · ${sinAplicar.length}`} subtitle="Se guardaron pero el stock de Areben Gestión todavía no cambió. Confirmalos o descartalos.">
           {sinAplicar.map((a) => (
             <div key={a.id} style={{ display: 'flex', gap: space[2], alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: space[3] }}>
               <span style={{ alignSelf: 'center' }}><b>A-{a.numero}</b> · {a.motivoNombre} · {deposito(a.deposito)} · {conSigno(a.neto)} u · {a.creadoPor} {cuando(a.creadoEn)}</span>
@@ -423,7 +423,7 @@ export function TarjetaDeAjuste({ r, deposito: dep, pide, cambio, onValor, onSac
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: space[2] }}>
         <div style={{ flex: '1 1 auto', minWidth: 0 }}>
           <div style={{ fontWeight: 600, color: color.ink }}>{prendaDe(r)}</div>
-          <div style={{ fontSize: font.sm, color: color.mut }}>{r.sku ?? '—'} · el ERP dice <b style={{ color: color.ink }}>{libro ?? '…'}</b> en {deposito(dep)}</div>
+          <div style={{ fontSize: font.sm, color: color.mut }}>{r.sku ?? '—'} · Areben Gestión dice <b style={{ color: color.ink }}>{libro ?? '…'}</b> en {deposito(dep)}</div>
         </div>
         <Button variant="ghost" size="sm" onClick={onSacar}>Sacar</Button>
       </div>

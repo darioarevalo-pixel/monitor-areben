@@ -128,8 +128,8 @@ export function CambioCaja() {
         {/* 🔑 El motor mueve el stock sólo si la venta NO es de prueba y NO tiene venta de GN (`mueveStock`, motor/venta/armar.mjs). */}
         {ventaErp && !ventaErp.prueba && !ventaErp.gnSaleId && <Notice tone="info">Venta real: el cambio mueve el stock y queda atado a la venta #{ventaErp.numero}.</Notice>}
         {ventaErp && !ventaErp.prueba && !!ventaErp.gnSaleId && <Notice tone="info">Esta venta ya está en Gestión Nube: el cambio queda atado a la venta #{ventaErp.numero} y no mueve el stock.</Notice>}
-        {ventaDeGn && !ventaDeGn.prueba && <Notice tone="info">Venta {ventaDeGn.numero} de Gestión Nube: el cambio devuelve lo que pagó y mueve el stock de {marcaDelCambio} en el ERP.</Notice>}
-        {tipo === 'suelto' && !deEnsayo && <Notice tone="info">Cambio sin venta: lo autoriza la encargada con su PIN y mueve el stock de {marcaDelCambio} en el ERP.</Notice>}
+        {ventaDeGn && !ventaDeGn.prueba && <Notice tone="info">Venta {ventaDeGn.numero} de Gestión Nube: el cambio devuelve lo que pagó y mueve el stock de {marcaDelCambio} en Areben Gestión.</Notice>}
+        {tipo === 'suelto' && !deEnsayo && <Notice tone="info">Cambio sin venta: lo autoriza la encargada con su PIN y mueve el stock de {marcaDelCambio} en Areben Gestión.</Notice>}
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={conCorte ? '#123, número de venta de Gestión Nube, nombre, DNI o mail' : '#123, nombre, DNI o mail'} />
@@ -158,7 +158,7 @@ export function CambioCaja() {
                 <TBody>
                   {ventas.map((v) => (
                     <Tr key={v.clave} onClick={() => void abrir(v)} style={{ cursor: 'pointer' }}>
-                      <Td>#{v.numero} <Badge tone={v.rotulo === 'ERP' ? 'brand' : 'neutral'}>{v.rotulo}</Badge>{v.prueba && <> <Badge tone="warning">Prueba</Badge></>}</Td>
+                      <Td>#{v.numero} <Badge tone={v.rotulo === 'Areben Gestión' ? 'brand' : 'neutral'}>{v.rotulo}</Badge>{v.prueba && <> <Badge tone="warning">Prueba</Badge></>}</Td>
                       <Td>{v.fecha ? cuandoCorto(v.fecha) : ''}</Td>
                       <Td>{v.cliente ?? 'Consumidor final'}</Td>
                       <Td style={{ textAlign: 'right' }}><MoneyText value={v.total} /></Td>

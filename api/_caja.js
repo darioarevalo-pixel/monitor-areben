@@ -590,7 +590,7 @@ export default async function handler(req, res) {
         // El precio LOCAL de Stunned cargado en el ERP (28-oct). Si ⛔ se puede leer, la Caja carga igual (cobra el de TN) y lo AVISA.
         const local = store === 'zattia' ? await preciosLocalStunned() : null
         if (local && !local.precios) console.error('[caja] precio local de Stunned:', local.error || 'sin conexión al motor')
-        const stunnedLocal = store !== 'zattia' ? {} : local.precios ? { stunned_local: local.precios } : { stunned_local: null, stunned_local_error: local.error ? 'No se pudo leer el precio local de Stunned del ERP: se cobra el de Tienda Nube.' : 'Sin conexión al ERP: el precio local de Stunned es el de Tienda Nube.' }
+        const stunnedLocal = store !== 'zattia' ? {} : local.precios ? { stunned_local: local.precios } : { stunned_local: null, stunned_local_error: local.error ? 'No se pudo leer el precio local de Stunned de Areben Gestión: se cobra el de Tienda Nube.' : 'Sin conexión a Areben Gestión: el precio local de Stunned es el de Tienda Nube.' }
         // 🔑 Las líneas de esta Caja que ya venden por el ERP (`erp_corte`): la pantalla frena el ticket mezclado y ofrece el
         // cambio. Sin poder leerlas, `null`: la Caja carga igual y el servidor decide al cobrar.
         const erpLineas = await cortesDeCaja(store).then((c) => lineasErpDeStore(c, store)).catch((e) => { console.error('[caja] erp_corte:', e && e.message); return null })
@@ -659,7 +659,7 @@ export default async function handler(req, res) {
         try {
           cortesStock = await cortesDeCaja(store)
         } catch (e) {
-          stock = { ...espejo, fuente: 'espejo', motivo: sinSecretos(`No se pudo saber si la marca ya vende por el ERP (${e && e.message})`) }
+          stock = { ...espejo, fuente: 'espejo', motivo: sinSecretos(`No se pudo saber si la marca ya vende por Areben Gestión (${e && e.message})`) }
           stock.atras = await estantesDe(sb, store, variante.sku)
           return res.status(200).json({ variante, stock })
         }
@@ -897,7 +897,7 @@ export default async function handler(req, res) {
         const con = await conResumen(t, true)
         // Con algo sin leer, el esperado nuevo saldría MAL: ⛔ se guarda a medias.
         if (con.resumen.cobrosGN === null || con.resumen.anuladasGN === null || con.resumen.cobrosERP === null) {
-          return res.status(409).json({ error: 'Gestión Nube o el ERP no contestaron: sin eso el cierre saldría mal. Reintentar en un minuto.' })
+          return res.status(409).json({ error: 'Gestión Nube o Areben Gestión no contestaron: sin eso el cierre saldría mal. Reintentar en un minuto.' })
         }
         const rc = recalcularCierre({ turno: t, con, por: perfil.name || null, porUsuario: usuarioDe(perfil), en: new Date().toISOString() })
         const vista = { antes: rc.antes, despues: rc.despues, cambia: rc.cambia, efectivoAntes: (t.resumen && t.resumen.efectivo) || null, efectivoDespues: rc.foto.resumen.efectivo }
@@ -1112,7 +1112,7 @@ export default async function handler(req, res) {
         if (puesto === 'evento') {
           const ev = await eventoActivo(store)
           if (ev.error) return res.status(409).json({ error: ev.error })
-          if (!ev.activo) return res.status(409).json({ error: 'El depósito Evento está apagado: activalo en el ERP antes de abrir la caja del evento.' })
+          if (!ev.activo) return res.status(409).json({ error: 'El depósito Evento está apagado: activalo en Areben Gestión antes de abrir la caja del evento.' })
           fila.deposito = 'evento'
         }
         const ins = await sb.from('caja_turno').insert(fila).select(COLS_TURNO).single()
@@ -1268,7 +1268,7 @@ export default async function handler(req, res) {
         // si ⛔ se pudo mirar qué ventas se anularon en GN (A12): el esperado podría quedar LARGO.
         // Lo mismo sin los pedidos web de Stunned cobrados en el ERP (29-oct): el esperado queda CORTO. Misma salida con nota,
         // ⛔ un freno sin salida: una lectura rota del ERP ⛔ puede dejar la caja sin cerrar.
-        if (con.resumen.cobrosERP === null && b.sinCobrosGN !== true) return res.status(409).json({ error: 'No se pudieron leer los pedidos web cobrados en efectivo (ERP): sin eso el esperado puede quedar corto. Reintentar en un minuto.', sinCobrosGN: true })
+        if (con.resumen.cobrosERP === null && b.sinCobrosGN !== true) return res.status(409).json({ error: 'No se pudieron leer los pedidos web cobrados en efectivo (Areben Gestión): sin eso el esperado puede quedar corto. Reintentar en un minuto.', sinCobrosGN: true })
         if (con.resumen.cobrosGN === null || con.resumen.anuladasGN === null || con.resumen.cobrosERP === null) {
           if (b.sinCobrosGN !== true) return res.status(409).json({ error: 'Gestión Nube no contestó (los cobros web en efectivo o las ventas anuladas): sin eso el esperado puede quedar mal. Reintentar en un minuto.', sinCobrosGN: true })
           if (!nota) return res.status(400).json({ error: 'Para cerrar sin lo de Gestión Nube hace falta una nota.' })
@@ -1413,7 +1413,7 @@ export default async function handler(req, res) {
           aDonde = destinoPorCorte({ cortes, lineas: lineasT })
         } catch (e) {
           console.error('[caja] destino del ticket:', e && e.message)
-          return res.status(503).json({ error: 'No se pudo saber si esta marca ya vende por el ERP: la venta NO se guardó. Probá de nuevo en un momento.' })
+          return res.status(503).json({ error: 'No se pudo saber si esta marca ya vende por Areben Gestión: la venta NO se guardó. Probá de nuevo en un momento.' })
         }
         if (aDonde.error) return res.status(400).json({ error: aDonde.error, mixto: true })
         // Lo que va a GN sin su token ⛔ se guarda: la venta quedaría cobrada y sin salir.
@@ -1426,7 +1426,7 @@ export default async function handler(req, res) {
         if (pidePinDeVenta(aDonde.destino, aDonde.marca)) {
           const faltan = await faltanEnElLibro(store, aDonde.marca, await depositoDeVenta({ turno_id: turno.id }), conNombre)
             .catch((e) => ({ error: e && e.message }))
-          if ('error' in faltan) console.warn('[caja] no se pudo leer el stock del ERP:', faltan.error)
+          if ('error' in faltan) console.warn('[caja] no se pudo leer el stock de Areben Gestión:', faltan.error)
           else if (faltan.length) {
             if (!b.encargada) return res.status(409).json({ error: 'El sistema dice que no hay stock: autoriza la encargada.', sinStock: true, faltan })
             const a = await autorizarPinDeVenta(store, b.encargada.persona, b.encargada.pin)
@@ -1634,7 +1634,7 @@ export default async function handler(req, res) {
         if (!(v.data.estado === 'error' && v.data.reintentable === false)) return res.status(409).json({ error: 'Se resuelve a mano sólo una venta que Gestión Nube rechazó. Ésta se sigue reintentando sola.', venta: v.data })
         // 🔴 La que iba al ERP (Stunned, BDI desde su corte) ⛔ se «carga a mano en GN»: quedaría `en_gn` con un número de GN y el
         // ERP ⛔ la tendría (stock y cuenta sin mover). Nunca pasó (0 rechazadas en las dos bases, 11-nov) ⇒ sólo descartar.
-        if (como === 'a_mano' && v.data.destino === 'erp') return res.status(409).json({ error: 'Esta venta iba al ERP: no se carga a mano en Gestión Nube. Un admin la descarta y se carga por ERP › Ventas.', venta: v.data })
+        if (como === 'a_mano' && v.data.destino === 'erp') return res.status(409).json({ error: 'Esta venta iba a Areben Gestión: no se carga a mano en Gestión Nube. Un admin la descarta y se carga por Areben Gestión › Ventas.', venta: v.data })
         const ahora = new Date().toISOString()
         const resolucion = { tipo: como, por: perfil.name || null, en: ahora, nota, ...(como === 'a_mano' ? { gn_number: gnNumber } : {}) }
         const cambios = como === 'a_mano'

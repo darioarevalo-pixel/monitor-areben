@@ -17,7 +17,7 @@ export function useAvisoPrecio(): { largo: string; corto: string } {
         corto: 'mientras Gestión Nube funcione, no cambia la Caja ni Tienda Nube',
       }
     : {
-        largo: 'Esta marca ya vive en el ERP: el precio llega a Tienda Nube en las próximas 2 horas y cambia lo que cobra la Caja.',
+        largo: 'Esta marca ya vive en Areben Gestión: el precio llega a Tienda Nube en las próximas 2 horas y cambia lo que cobra la Caja.',
         corto: 'llega a Tienda Nube en hasta 2 horas y cambia lo que cobra la Caja',
       }
 }

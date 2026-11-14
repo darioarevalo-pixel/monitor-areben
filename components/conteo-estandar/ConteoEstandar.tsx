@@ -342,10 +342,10 @@ export function ConteoEstandar() {
     const lineasErp = lineasDeParteErp(preview.erp)
     const ok = !excel.length
       ? await confirmar({
-          titulo: `Ajustar ${lineasErp} en el ERP`,
+          titulo: `Ajustar ${lineasErp} en Areben Gestión`,
           tono: 'warning',
           ok: 'Ajustar y guardar',
-          mensaje: `Se ajustan ${nErp} ${nErp === 1 ? 'talle' : 'talles'} de ${lineasErp} en el ERP, en el acto: el stock pasa a lo contado. No se genera Excel.`,
+          mensaje: `Se ajustan ${nErp} ${nErp === 1 ? 'talle' : 'talles'} de ${lineasErp} en Areben Gestión, en el acto: el stock pasa a lo contado. No se genera Excel.`,
         })
       : await confirmar({
       titulo: 'Generar el Excel del ajuste',
@@ -360,7 +360,7 @@ export function ConteoEstandar() {
           <div style={{ marginTop: space[3] }}>
             <ConfirmDetalle label="Líneas a ajustar" valor={excel.length} />
             <ConfirmDetalle label="Ubicación" valor={preview.ubicacion || '—'} />
-            {nErp > 0 && <ConfirmDetalle label={`De ${lineasErp}, al ERP (sin Excel)`} valor={nErp} />}
+            {nErp > 0 && <ConfirmDetalle label={`De ${lineasErp}, a Areben Gestión (sin Excel)`} valor={nErp} />}
           </div>
         </>
       ),
@@ -393,13 +393,13 @@ export function ConteoEstandar() {
             tono: 'danger',
             ok: 'Reintentar',
             cancelar: 'Seguir sin guardar',
-            mensaje: `${excel.length ? 'El Excel se generó bien, pero n' : 'N'}o se pudo guardar el conteo (${(e as Error).message}). Sin guardar, el reporte «Para colgar» y el historial no lo van a tener${nErp ? `, y ${lineasErp} no se ajusta en el ERP` : ''}.`,
+            mensaje: `${excel.length ? 'El Excel se generó bien, pero n' : 'N'}o se pudo guardar el conteo (${(e as Error).message}). Sin guardar, el reporte «Para colgar» y el historial no lo van a tener${nErp ? `, y ${lineasErp} no se ajusta en Areben Gestión` : ''}.`,
           })
           if (!otra) break
         }
       }
       if (!guardado) {
-        toast.error(excel.length ? 'Excel generado, pero el conteo no quedó guardado en el historial.' : `El conteo no quedó guardado: ${lineasErp} no se ajustó en el ERP.`)
+        toast.error(excel.length ? 'Excel generado, pero el conteo no quedó guardado en el historial.' : `El conteo no quedó guardado: ${lineasErp} no se ajustó en Areben Gestión.`)
         return
       }
       await ce.refrescarUltimos()
@@ -522,7 +522,7 @@ export function ConteoEstandar() {
  ← Volver</Button>
             {preview.rows.length ? (
               <Button variant="solid" tone="brand" onClick={() => void onConfirmar()}>
-                {filasExcel(preview).length ? 'Generar Excel y guardar' : 'Ajustar en el ERP y guardar'}
+                {filasExcel(preview).length ? 'Generar Excel y guardar' : 'Ajustar en Areben Gestión y guardar'}
               </Button>
             ) : (
               <Button variant="solid" tone="brand" onClick={() => void onGuardarSinDif()}>
@@ -546,7 +546,7 @@ export function ConteoEstandar() {
       {ce.cargando && !products.length ? (
         <>
           <Notice tone="neutral" icon="⏳" style={{ marginBottom: space[3] }}>
-            {linea === 'stunned' ? 'Cargando el stock del local desde el ERP…' : 'Cargando el Local en vivo desde Gestión Nube…'}
+            {linea === 'stunned' ? 'Cargando el stock del local desde Areben Gestión…' : 'Cargando el Local en vivo desde Gestión Nube…'}
           </Notice>
           <Esqueleto forma="tabla" filas={8} />
         </>

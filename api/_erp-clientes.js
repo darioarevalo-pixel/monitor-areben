@@ -87,7 +87,7 @@ export async function listaDeClientes({ marca, linea = marca === 'bdi' ? 'bdi' :
   if (!lineaValida(marca, linea)) return { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
   const l = marca === 'bdi' ? 'bdi' : linea
   const k = conLinea(marca, l)
-  return deps.conMotor(marca, 'Los clientes del ERP', async (pg) => {
+  return deps.conMotor(marca, 'Los clientes de Areben Gestión', async (pg) => {
     const gn = (await pg.query(`${k.cte}select ${CLAVE[marca]} as clave, max(client_name) as nombre, count(*)::int as compras,
         sum(total_price)::float as total, min(date_sale)::date::text as primera, max(date_sale)::date::text as ultima,
         count(*) filter (where channel = 'Mayorista')::int as mayorista, array_agg(distinct channel) as canales
@@ -416,7 +416,7 @@ export async function clientesDelPanel({ q = '', usuario = null }, deps) {
 export async function clienteNuevoPanel({ body, usuario, quien = usuario }, deps) {
   if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
   const escribir = deps.escribir ?? (await import('./_erp-pedido.js').then((m) => m.escribirPrendido()))
-  if (!escribir) return { status: 409, error: 'Los clientes nuevos se cargan desde acá el día que BDI pasa al ERP. Hasta entonces, en Gestión Nube.' }
+  if (!escribir) return { status: 409, error: 'Los clientes nuevos se cargan desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo carga' }
   const nombre = String(body?.nombre ?? '').trim()
   if (!nombre) return { status: 400, error: 'Falta el nombre del cliente' }

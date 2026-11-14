@@ -222,7 +222,7 @@ export async function leerMes(mes) {
   const soloTope = new Set()
   const yaFacturadasErp = new Set()
   const delErp = await Promise.all(MARCAS.map(async (marca) => {
-    const leido = await conMotor(marca, 'La facturación de las ventas del ERP', async (db) => {
+    const leido = await conMotor(marca, 'La facturación de las ventas de Areben Gestión', async (db) => {
       const { cobrosPropios } = await import('../motor/venta/facturar.mjs')
       const { cobros: propios } = await cobrosPropios(db, mes)
       const ids = [...new Set(propios.map((c) => c.venta_id))]
@@ -370,7 +370,7 @@ export async function facturarVentas({ mes, marca, linea, ventaIds, usuario }) {
     : []
   return {
     ambiente: m.ambiente, ptoVta,
-    sinAtar: sinAtar.error ? [`Salieron con CAE, pero no quedaron atadas a sus ventas en el ERP: ${sinAtar.error}`] : sinAtar,
+    sinAtar: sinAtar.error ? [`Salieron con CAE, pero no quedaron atadas a sus ventas en Areben Gestión: ${sinAtar.error}`] : sinAtar,
     autorizadas: r.autorizadas.map((f) => ({ ventaId: f.venta_id, numero: f.numero, cae: f.cae, total: f.total })),
     rechazadas: r.rechazadas.map((f) => ({ ventaId: f.venta_id, motivos: f.motivos })),
     noSalen: [...r.noSalen.map((c) => ({ ventaId: c.ventaId, motivos: c.motivos })), ...noDisponibles.map((id) => ({ ventaId: id, motivos: ['Ya no está entre las ventas para facturar'] }))],
@@ -453,7 +453,7 @@ export async function notaDeDebito({ facturaId, monto, usuario }, deps = {}) {
   })()
   if (!f || f.ambiente !== ambiente) return { status: 404, error: 'La factura no existe en este ambiente.' }
   if (f.estado !== 'autorizada') return { status: 409, error: 'Sólo una factura autorizada (con CAE) lleva nota de débito.' }
-  if (esDeVentaPropia(f.venta_id)) return { status: 409, error: 'La nota de débito de una venta del ERP todavía no se hace desde acá.' }
+  if (esDeVentaPropia(f.venta_id)) return { status: 409, error: 'La nota de débito de una venta de Areben Gestión todavía no se hace desde acá.' }
   const tipo = { [CBTE.FACTURA_A]: CBTE.ND_A, [CBTE.FACTURA_B]: CBTE.ND_B }[f.tipo]
   if (!tipo) return { status: 409, error: 'La nota de débito se suma a una factura, no a una nota de crédito ni a otra de débito.' }
   const arca = arcaDe(deps, sb)
@@ -984,7 +984,7 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
     // El saldo a favor paga con la cuenta «Saldo a favor» del motor (va por uuid: ⛔ tiene cuenta en GN).
     if (cobrado.pagos.some((p) => p.cuenta === 'saldo')) {
       const [cs] = (await db.query(`select id from cuenta_cobro where marca = $1 and medio = 'saldo'`, [marcaVenta])).rows
-      if (!cs) return { status: 409, error: 'Falta la cuenta «Saldo a favor» en el ERP (sql/007 del motor).' }
+      if (!cs) return { status: 409, error: 'Falta la cuenta «Saldo a favor» en Areben Gestión (sql/007 del motor).' }
       cobrado = { ...cobrado, pagos: cobrado.pagos.map((p) => (p.cuenta === 'saldo' ? { ...p, cuenta: cs.id } : p)) }
     }
     const r = await registrarCambio(db, {
@@ -1231,7 +1231,7 @@ async function atarFactura(db, { venta, facturaId, tipo }) {
   const r = await vincularFactura(db, { venta_id: venta.id, factura_id: String(facturaId), tipo })
   if (r.ok) return null
   console.error(`[erp] ${tipo} ${facturaId} sin atar a la venta ${venta.id}: ${r.error.codigo} ${r.error.mensaje}`)
-  return `Salió con CAE, pero no quedó atada a la venta en el ERP: ${textoDelMotor(r.error)}`
+  return `Salió con CAE, pero no quedó atada a la venta en Areben Gestión: ${textoDelMotor(r.error)}`
 }
 
 /** Las NC (⛔ rechazadas) asociadas a una factura: lo que ya se le acreditó. */
@@ -1780,7 +1780,7 @@ export default async function handler(req, res) {
   // Con `every`, quien tiene el ERP en una sola (el local de Stunned) recibía 403, el menú se quedaba sin mapa y lo mostraba TODO (30-oct).
   const alcanza = req.query.vista === 'permisos' && !base ? 'some' : 'every'
   if (!marcasDelPedido[alcanza]((m) => puedeErp(perfil, m, permiso, aprobaciones, guardados))) {
-    return res.status(403).json({ error: permiso === 'ver' ? 'No tenés acceso al ERP.' : 'Tu rol no puede hacer esto en el ERP.', permiso })
+    return res.status(403).json({ error: permiso === 'ver' ? 'No tenés acceso a Areben Gestión.' : 'Tu rol no puede hacer esto en Areben Gestión.', permiso })
   }
   const invalida = entradaInvalida({ method: req.method, query: req.query, body })
   if (invalida) return res.status(invalida.status).json({ error: invalida.error, campo: invalida.campo })

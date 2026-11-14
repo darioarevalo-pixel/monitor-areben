@@ -146,7 +146,7 @@ export async function cargarVentaManual({ marca, body, usuario, persona = null }
     cortes = await (deps.cortes || cortesDeCaja)(marca)
   } catch (err) {
     console.error('[erp] cargar venta, erp_corte:', err && err.message)
-    return { status: 503, error: 'No se pudo saber si esta marca ya vende por el ERP: la venta NO se guardó. Probá de nuevo en un momento.' }
+    return { status: 503, error: 'No se pudo saber si esta marca ya vende por Areben Gestión: la venta NO se guardó. Probá de nuevo en un momento.' }
   }
   const e = entradaManual(body, marca, usuario, { cortes })
   if ('error' in e) return { status: 400, error: e.error }

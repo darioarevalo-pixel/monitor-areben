@@ -11,7 +11,7 @@ import { cargaDeCampania, motivoDeCampania, TRABAJO_PRECIO } from '../lib/liquid
 import { baseDeLinea } from '../lib/lineas.core.js';
 
 const PG_DE_MARCA = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' };
-const SIN_MOTOR = 'La campaña va por el ERP y falta la conexión del motor en Vercel: no se tocó nada.';
+const SIN_MOTOR = 'La campaña va por Areben Gestión y falta la conexión del motor en Vercel: no se tocó nada.';
 
 /** Abre la conexión del motor de esa base, corre `fn(db)` y la cierra. Sin la variable tira con el texto para la pantalla. */
 export async function conMotor(base, fn) {
@@ -51,7 +51,7 @@ export async function pedirAlErp({ marca, liqId, liqNombre, modo, destino, usuar
     try {
       for (const p of buenos) {
         const c = await cargarPrecio(db, { marca, product_id: Number(p.pid), lista: 'oferta', precio: p.valor, usuario: quien, motivo: motivoDeCampania(liqId, liqNombre) });
-        if (!c.ok) throw new Error(`producto ${p.pid}: ${c.error?.mensaje || 'el ERP no lo aceptó'}`);
+        if (!c.ok) throw new Error(`producto ${p.pid}: ${c.error?.mensaje || 'Areben Gestión no lo aceptó'}`);
       }
       const { rows: [ahora] } = await db.query('select now() as t');
       await db.query('commit');

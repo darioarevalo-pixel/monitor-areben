@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 
 /**
  * El CAMBIO SUELTO de Stunned en la pantalla (Bruno, 27-oct): el estado y las cuentas de `useCambio`, que usan el POS (modo «Cambios») y
- * erp › Caja › Cambio. Tres orígenes de lo que se devuelve: venta del ERP, venta de Gestión Nube y sin ticket (PIN de la encargada).
+ * erp › Caja › Cambio. Tres orígenes de lo que se devuelve: venta de Areben Gestión, venta de Gestión Nube y sin ticket (PIN de la encargada).
  */
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -67,7 +67,7 @@ describe('cambio suelto · devolver', () => {
 
   it('🔴 sin venta se devuelve sólo lo de una línea que ya cortó (hoy, Stunned): Zattia todavía cambia en Gestión Nube', async () => {
     await montar()
-    expect(error(() => h.devolverPrenda(JEAN))).toBe('Los cambios de Zattia sin venta del ERP todavía se hacen en Gestión Nube.')
+    expect(error(() => h.devolverPrenda(JEAN))).toBe('Los cambios de Zattia sin venta de Areben Gestión todavía se hacen en Gestión Nube.')
   })
 
   it('🔑 después del corte de Zattia: su prenda se devuelve suelta, y lo que se lleva es de Zattia (⛔ Stunned)', async () => {
@@ -94,7 +94,7 @@ describe('cambio suelto · devolver', () => {
 
   it('BDI antes de su corte: sin ticket ⛔', async () => {
     await montar({ store: 'bdi', erpLineas: [] })
-    expect(error(() => h.devolverPrenda({ ...JEAN, sku: 'B-70' }))).toBe('Los cambios de BDI sin venta del ERP todavía se hacen en Gestión Nube.')
+    expect(error(() => h.devolverPrenda({ ...JEAN, sku: 'B-70' }))).toBe('Los cambios de BDI sin venta de Areben Gestión todavía se hacen en Gestión Nube.')
   })
 
   it('🔴 con la venta de Gestión Nube ⛔ se devuelve de más ni lo que no compró (contando lo ya cambiado)', async () => {
@@ -120,7 +120,7 @@ describe('cambio suelto · devolver', () => {
     expect(h.nuevas).toHaveLength(1)
   })
 
-  it('una venta del ERP: la diferencia sale del importe exacto de la línea', async () => {
+  it('una venta de Areben Gestión: la diferencia sale del importe exacto de la línea', async () => {
     await montar()
     const f = ventaDeFicha({
       venta: { id: 'e1', numero: 802, marca: 'stunned', prueba: true, gnSaleId: null, total: 10000 },
@@ -231,7 +231,7 @@ describe('cambio · buscar la venta', () => {
 })
 
 describe('cambio · 🔴 la copia DE PRUEBA de una línea cortada ⛔ se ofrece (revisión 10-nov)', () => {
-  it('con `gn` (la línea cortó) se esconde la venta del ERP de prueba; sin corte se sigue ofreciendo', async () => {
+  it('con `gn` (la línea cortó) se esconde la venta de Areben Gestión de prueba; sin corte se sigue ofreciendo', async () => {
     const cliente = await import('@/lib/erp/cliente')
     const venta = (id: string, prueba: boolean) => ({ id, numero: Number(id), marca: 'bdi', tipo: 'venta', estado: 'confirmada', origen: 'caja', canal: 'local', deposito: 'local', total: 1000, prueba, ocurridaEn: '2026-11-13T12:00:00Z', cliente: null })
     vi.spyOn(cliente, 'buscarVentas').mockResolvedValue({ ventas: [venta('1', true), venta('2', false)], cortado: false } as never)

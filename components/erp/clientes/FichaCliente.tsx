@@ -65,7 +65,7 @@ export function FichaCliente({ marca, fila, onCerrar }: { marca: MarcaErp; fila:
       </div>
 
       {saldo == null && (
-        <Notice tone="neutral">El ERP todavía no lleva la cuenta de este cliente: sus compras son de Gestión Nube. El saldo aparece cuando se le venda a cuenta desde el ERP.</Notice>
+        <Notice tone="neutral">Areben Gestión todavía no lleva la cuenta de este cliente: sus compras son de Gestión Nube. El saldo aparece cuando se le venda a cuenta desde Areben Gestión.</Notice>
       )}
 
       {cuenta && (

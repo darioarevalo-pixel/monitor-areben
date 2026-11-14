@@ -324,7 +324,7 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
       )}
       {!unificada && !(angosta && recibiendo) && (
         <SectionCard title="Mover y recibir" subtitle="Una transferencia entre el depósito y el local: se escanea lo que sale y, al llegar, lo que llegó. Lo que no llega queda marcado como diferencia.">
-          {linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mueve sólo el stock del ERP: no toca Gestión Nube ni Tienda Nube. Mientras {linea === 'bdi' ? 'BDI' : 'Zattia'} siga en Gestión Nube, sus transferencias se hacen como siempre.</Notice>}
+          {linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mueve sólo el stock de Areben Gestión: no toca Gestión Nube ni Tienda Nube. Mientras {linea === 'bdi' ? 'BDI' : 'Zattia'} siga en Gestión Nube, sus transferencias se hacen como siempre.</Notice>}
         </SectionCard>
       )}
 
@@ -354,7 +354,7 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
           <Escaneo autoFocus={!angosta} linea={linea} onPrenda={(p) => setRecibiendo((r) => r && { ...r, lista: sumarEscaneo(r.lista, p) as Fila[] })} />
           {angosta && <div style={{ marginTop: space[3], color: color.mut }}><b style={{ color: color.ink }}>{unidades(cuenta.filas as Fila[])} de {(cuenta.filas as Fila[]).reduce((s, f) => s + (f.enviada ?? 0), 0)}</b> unidades contadas · tocá + o escaneá</div>}
           <TablaEscaneada conEnviada contra={recibiendo.modo === 'preparar' ? 'pidieron' : 'vienen'} filas={cuenta.filas as Fila[]} onCantidad={(f, n) => setRecibiendo((r) => r && { ...r, lista: r.lista.map((x) => (x.producto === f.producto && x.talle === f.talle ? { ...x, cantidad: Math.max(0, Math.trunc(n) || 0) } : x)) })} />
-          {cuenta.sobran > 0 && <Notice tone="warning" style={{ marginTop: space[2] }}>{recibiendo.modo === 'preparar' ? 'Hay productos que no están en lo pedido (o de más): sacalos de la lista.' : 'Hay productos que no salieron en esta transferencia: el ERP las rechaza. Si llegaron de más, se anotan como ajuste.'}</Notice>}
+          {cuenta.sobran > 0 && <Notice tone="warning" style={{ marginTop: space[2] }}>{recibiendo.modo === 'preparar' ? 'Hay productos que no están en lo pedido (o de más): sacalos de la lista.' : 'Hay productos que no salieron en esta transferencia: Areben Gestión las rechaza. Si llegaron de más, se anotan como ajuste.'}</Notice>}
           {/* El error AL LADO del botón: arriba de todo ⛔ se ve con la lista larga (29-oct: Camila «procesó todo» y era un 403). */}
           {error && <Notice tone="danger" style={{ marginTop: space[3] }} onClose={() => setError(null)}>{error}</Notice>}
           {!angosta && (

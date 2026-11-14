@@ -40,10 +40,10 @@ type Fila = {
 const COLUMNAS: ColumnaLista[] = [
   { key: 'p', titulo: 'Producto', ancho: 'minmax(220px, 2fr)', movil: 'titulo' },
   { key: 'dep', titulo: 'Dónde', ancho: '104px', movil: 'chico' },
-  { key: 'libro', titulo: 'ERP', ancho: '76px', derecha: true, movil: 'dato' },
+  { key: 'libro', titulo: 'Areben Gestión', ancho: '76px', derecha: true, movil: 'dato' },
   { key: 'gn', titulo: 'Gestión Nube', ancho: '64px', derecha: true, movil: 'chico' },
   { key: 'dgn', titulo: 'Gestión Nube movió', ancho: '84px', derecha: true, movil: 'oculta' },
-  { key: 'dlibro', titulo: 'ERP movió', ancho: '84px', derecha: true, movil: 'oculta' },
+  { key: 'dlibro', titulo: 'Areben Gestión movió', ancho: '84px', derecha: true, movil: 'oculta' },
   { key: 'paso', titulo: 'Qué pasó', ancho: 'minmax(220px, 1.6fr)', movil: 'chico' },
 ]
 
@@ -120,8 +120,8 @@ export function DiferenciasDia({ ajustar, alContar }: { ajustar: (p: PrendaAAjus
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>{tienda === 'stunned'
-        ? 'Stunned ya vive en el ERP: lo que quedó de cuando se comparaba con Gestión Nube, y los productos en negativo.'
-        : 'Sólo mientras convivimos con Gestión Nube: lo que el stock del ERP no pudo explicar al compararse con Gestión Nube, y los productos que quedaron en negativo. Se va el día del corte.'}</p>
+        ? 'Stunned ya vive en Areben Gestión: lo que quedó de cuando se comparaba con Gestión Nube, y los productos en negativo.'
+        : 'Sólo mientras convivimos con Gestión Nube: lo que el stock de Areben Gestión no pudo explicar al compararse con Gestión Nube, y los productos que quedaron en negativo. Se va el día del corte.'}</p>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         {datos && datos.dias.length > 0 && (
           <Select aria-label="Día" style={ANCHO_SELECT} value={datos.fecha ?? ''} onChange={(e) => setFecha(e.target.value)} disabled={cargando}>
@@ -133,21 +133,21 @@ export function DiferenciasDia({ ajustar, alContar }: { ajustar: (p: PrendaAAjus
       </div>
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-      {cargando && !datos && <EmptyState title="Leyendo el ERP…" />}
-      {datos && !datos.fecha && <EmptyState title="El ERP todavía no calculó ningún día." />}
+      {cargando && !datos && <EmptyState title="Leyendo Areben Gestión…" />}
+      {datos && !datos.fecha && <EmptyState title="Areben Gestión todavía no calculó ningún día." />}
 
       {datos && (
         <>
           {datos.fecha && (
             <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-              <TileResumen oscuro titulo="Sin explicar" valor={datos.inexplicadas.toLocaleString('es-AR')} nota={datos.inexplicadas ? `stock del ERP ≠ Gestión Nube, el ${dia(datos.fecha)}` : `todo explicado el ${dia(datos.fecha)}`} />
-              <TileResumen titulo="Sobreventa" valor={datos.sobreventaSinConexion || datos.sobreventaError ? '—' : datos.sobreventa.length.toLocaleString('es-AR')} nota={datos.sobreventaSinConexion ? 'falta la conexión al ERP' : datos.sobreventaError ? 'no se pudo sumar el ERP' : 'quedaron en negativo (hoy)'} />
+              <TileResumen oscuro titulo="Sin explicar" valor={datos.inexplicadas.toLocaleString('es-AR')} nota={datos.inexplicadas ? `stock de Areben Gestión ≠ Gestión Nube, el ${dia(datos.fecha)}` : `todo explicado el ${dia(datos.fecha)}`} />
+              <TileResumen titulo="Sobreventa" valor={datos.sobreventaSinConexion || datos.sobreventaError ? '—' : datos.sobreventa.length.toLocaleString('es-AR')} nota={datos.sobreventaSinConexion ? 'falta la conexión a Areben Gestión' : datos.sobreventaError ? 'no se pudo sumar Areben Gestión' : 'quedaron en negativo (hoy)'} />
               <TileResumen titulo="Explicadas solas" valor={explicadas.toLocaleString('es-AR')} nota={datos.explicadas.length ? datos.explicadas.map((e) => `${e.nombre} ${e.variantes}`).join(' · ') : 'ninguna'} />
             </div>
           )}
           {datos.desconocidas > 0 && <Notice tone="warning">{datos.desconocidas} con una clase que esta pantalla todavía no conoce.</Notice>}
-          {datos.sobreventaSinConexion && <Notice tone="warning">Falta la conexión al ERP en este servidor: la sobreventa se ve en producción.</Notice>}
-          {datos.sobreventaError && <Notice tone="danger">No se pudo sumar el ERP: {datos.sobreventaError}</Notice>}
+          {datos.sobreventaSinConexion && <Notice tone="warning">Falta la conexión a Areben Gestión en este servidor: la sobreventa se ve en producción.</Notice>}
+          {datos.sobreventaError && <Notice tone="danger">No se pudo sumar Areben Gestión: {datos.sobreventaError}</Notice>}
 
           <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
             <VistasLista todasRojas vistas={vistas} valor={enVista} conteo={conteo} onCambio={setVista} />

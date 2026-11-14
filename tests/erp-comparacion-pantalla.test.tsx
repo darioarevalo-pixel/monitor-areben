@@ -6,7 +6,7 @@ import { armarComparacion } from '@/lib/erp/comparacion.core.js'
 import type { FilaComparacion } from '@/lib/erp/cliente'
 
 /**
- * **ERP › Stock › Comparación con TN y ML, del lado de la pantalla.** El oráculo es lo que se LEE: se entra a «No coinciden»
+ * **Areben Gestión › Stock › Comparación con TN y ML, del lado de la pantalla.** El oráculo es lo que se LEE: se entra a «No coinciden»
  * con la que muestra DE MÁS arriba, la diferencia lleva su signo, «Qué pasa» habla como Conciliación, Mercado Libre dice que
  * ⛔ se compara y manda a Conciliación. Las filas pasan por el núcleo real.
  */
@@ -68,7 +68,7 @@ describe('Comparación con TN y ML', () => {
     expect(filas).toHaveLength(2)
     expect(filas[0]).toContain('TOP 1/1')
     expect(filas[0]).toContain('+3')
-    expect(filas[0]).toContain('El ERP dice otro stock')
+    expect(filas[0]).toContain('Areben Gestión dice otro stock')
     expect(filas[1]).toContain('-2')
     expect(todo()).not.toContain('TOP 3/3')
   })
@@ -87,12 +87,12 @@ describe('Comparación con TN y ML', () => {
     expect(todo()).not.toContain('se lee cada 2 horas')
   })
 
-  it('con la línea cortada dice que vive en el ERP y ⛔ muestra Gestión Nube; sin cortar, sí', async () => {
+  it('con la línea cortada dice que vive en Areben Gestión y ⛔ muestra Gestión Nube; sin cortar, sí', async () => {
     await montar()
     expect(todo()).toContain('su stock lo manda Gestión Nube')
     act(() => root?.unmount()); host.remove(); root = null
     await montar(true)
-    expect(todo()).toContain('Zattia ya vive en el ERP')
+    expect(todo()).toContain('Zattia ya vive en Areben Gestión')
     expect(todo()).not.toContain('su stock lo manda Gestión Nube')
   })
 

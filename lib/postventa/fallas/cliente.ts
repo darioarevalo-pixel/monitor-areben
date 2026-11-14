@@ -105,7 +105,7 @@ export async function registrarVentaGN(
     body: JSON.stringify({ store, action: 'venta', id: falla.id, gn_venta_id: r.venta?.id ?? null, gn_venta_number: r.venta?.number ?? null, erp_ajuste: erpAjuste ?? null, usuario: ctx.usuario }),
   })
   const d = await resp.json()
-  if (!d || !d.ok) throw new Error((d && d.error) || (erpAjuste ? `El stock se descontó en el ERP (ajuste A-${erpAjuste}) pero no se pudo registrar en la falla.` : 'La venta se creó en GN pero no se pudo registrar en la falla.'))
+  if (!d || !d.ok) throw new Error((d && d.error) || (erpAjuste ? `El stock se descontó en Areben Gestión (ajuste A-${erpAjuste}) pero no se pudo registrar en la falla.` : 'La venta se creó en GN pero no se pudo registrar en la falla.'))
   return erpAjuste ? { erpAjuste } : {}
 }
 

@@ -46,7 +46,7 @@ export function BandaCambio({ paso, c, onBuscar, onSiguiente, onVolver, onSalir 
 /** La venta que se está mirando en el modal, con sus productos. */
 type Mirando = VentaOriginal & { total: number }
 
-const rotuloDe = (o: Origen) => (o.tipo === 'gn' ? 'Gestión Nube' : 'ERP')
+const rotuloDe = (o: Origen) => (o.tipo === 'gn' ? 'Gestión Nube' : 'Areben Gestión')
 
 /**
  * «Venta original del cambio»: se busca por número de venta (de Gestión Nube o del ERP) o por cliente (las del ERP). Al elegir una,
@@ -123,7 +123,7 @@ export function ModalVentaOriginal({ store, c, onCerrar }: { store: MarcaErp; c:
                   <button key={f.clave} type="button" onClick={() => void abrir(f)} style={{ height: 'auto', display: 'flex', alignItems: 'center', gap: space[3], textAlign: 'left', padding: `${space[2]}px ${space[3]}px`, border: `1px solid ${color.line}`, borderRadius: radius.lg, background: color.surface, cursor: 'pointer', color: color.ink }}>
                     <b style={{ minWidth: 64 }}>#{f.numero}</b>
                     <span style={{ flex: 1, minWidth: 0 }}>{f.cliente ?? 'Consumidor final'}</span>
-                    <Badge tone={f.rotulo === 'ERP' ? 'brand' : 'neutral'}>{f.rotulo}</Badge>
+                    <Badge tone={f.rotulo === 'Areben Gestión' ? 'brand' : 'neutral'}>{f.rotulo}</Badge>
                     {f.prueba && <Badge tone="warning">Prueba</Badge>}
                     <span style={{ color: color.mut, fontSize: font.sm }}>{f.fecha ? cuandoCorto(f.fecha) : ''}</span>
                     <b style={tabular}>{plata(f.total)}</b>

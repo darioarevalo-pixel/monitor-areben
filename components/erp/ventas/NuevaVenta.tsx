@@ -266,7 +266,7 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
         </div>
       </header>
 
-      {datos && !enErp && <Notice tone="warning">{MARCA[linea] ?? linea} todavía no vende por el ERP: esta venta queda <b>de prueba</b> (no mueve el stock ni pasa a Gestión Nube).</Notice>}
+      {datos && !enErp && <Notice tone="warning">{MARCA[linea] ?? linea} todavía no vende por Areben Gestión: esta venta queda <b>de prueba</b> (no mueve el stock ni pasa a Gestión Nube).</Notice>}
       {datos && !datos.manualHabilitado && <Notice tone="danger">La base de esta marca todavía no acepta ventas a mano.</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 

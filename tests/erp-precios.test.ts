@@ -1,5 +1,5 @@
 /**
- * ERP › Precios: la ficha de precio y costo de un producto (`armarPrecioDeProducto`), pura.
+ * Areben Gestión › Precios: la ficha de precio y costo de un producto (`armarPrecioDeProducto`), pura.
  */
 import { describe, it, expect } from 'vitest'
 import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto, NOMBRE_FUENTE } from '../lib/erp/precio.core.js'
@@ -16,12 +16,12 @@ describe('armarPrecioDeProducto', () => {
     expect(r.costo).toMatchObject({ costo: 12000, proveedor: 'Textil Sur', fuente: 'gn' })
     expect(r.avisos).toEqual([])
   })
-  it('avisa lo que hay que mirar al cortar Gestión Nube: local ≠ Tienda Nube, sin costo, costo de Tienda Nube ≠ el del ERP', () => {
+  it('avisa lo que hay que mirar al cortar Gestión Nube: local ≠ Tienda Nube, sin costo, costo de Tienda Nube ≠ el de Areben Gestión', () => {
     expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: COSTO, tn: [tnV(27000)] }).avisos)
       .toEqual(['El precio del local ($25500) no es el que cobra Tienda Nube ($27000).'])
-    expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: null, tn: [tnV(25500, null)] }).avisos).toEqual(['Sin costo en el ERP.'])
+    expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: null, tn: [tnV(25500, null)] }).avisos).toEqual(['Sin costo en Areben Gestión.'])
     expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: COSTO, tn: [tnV(25500, 13000)] }).avisos)
-      .toEqual(['El costo de Tienda Nube ($13000) no es el del ERP ($12000).'])
+      .toEqual(['El costo de Tienda Nube ($13000) no es el de Areben Gestión ($12000).'])
     // Un peso de diferencia es redondeo, ⛔ aviso.
     expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: COSTO, tn: [tnV(25500.5, 12000.9)] }).avisos).toEqual([])
   })

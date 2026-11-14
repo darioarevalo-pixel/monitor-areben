@@ -51,8 +51,8 @@ export const FUNCIONES: { key: Funcion; label: string; info: string }[] = [
   { key: 'local', label: 'Local', info: 'Ve solo lo que tiene que RETIRAR en local (ítems de origen local).' },
   { key: 'deposito', label: 'Depósito', info: 'PREPARA los productos de depósito (ítems de origen depósito).' },
   { key: 'administracion', label: 'Administración', info: 'Rol de oficina/coordinación. Distinto de Dirección.' },
-  { key: 'mayorista', label: 'Mayorista', info: 'ERP: ventas mayoristas, sus clientes y su cuenta corriente.' },
-  { key: 'consulta', label: 'Consulta', info: 'ERP: ve todo, no toca nada y no ve costos.' },
+  { key: 'mayorista', label: 'Mayorista', info: 'Areben Gestión: ventas mayoristas, sus clientes y su cuenta corriente.' },
+  { key: 'consulta', label: 'Consulta', info: 'Areben Gestión: ve todo, no toca nada y no ve costos.' },
 ]
 
 /** Qué ve cada función, por ÁREA del menú. Ver el core para el porqué. */

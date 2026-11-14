@@ -1,7 +1,7 @@
 /**
  * El cambio SUELTO (venta de Gestión Nube o sin ticket) por el CORTE de la línea (`erp_corte`), ⛔ «sólo Stunned» con
  * `CAJA_STUNNED_PRUEBA`. Lo que no se ve si falla: BDI sigue sin poder cambiar después de su corte, un cambio de Zattia entra
- * al ERP antes del suyo (y el libro lo descuenta con GN también), o se cuela de prueba uno real.
+ * a Areben Gestión antes del suyo (y el libro lo descuenta con GN también), o se cuela de prueba uno real.
  *
  * Las 3 marcas × antes/después de su corte, por venta de GN y sin ticket. La línea sale del PRODUCTO, ⛔ del SKU de la pantalla.
  */
@@ -78,7 +78,7 @@ const sinTicket = (marca: string, devuelve: number, lleva: number[] = []) =>
 const registrado = () => registrarCambio.mock.calls.map((c) => ({ marca: c[1].marca, prueba: c[1].prueba }))
 
 beforeEach(() => {
-  // El reloj DESPUÉS de los tres cortes: qué línea está en el ERP lo dicen sólo las filas de `erp_corte` de cada test.
+  // El reloj DESPUÉS de los tres cortes: qué línea está en Areben Gestión lo dicen sólo las filas de `erp_corte` de cada test.
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-11-25T15:00:00Z'))
   registrarCambio.mockReset()
@@ -152,8 +152,8 @@ describe('cambio sin ticket, por el corte de la línea', () => {
 
   it('Zattia y BDI antes de su corte ⛔ — dicen dónde se hacen', async () => {
     cortes = HOY
-    expect(await sinTicket('zattia', 2, [4])).toMatchObject({ status: 400, error: 'Los cambios de Zattia sin venta del ERP todavía se hacen en Gestión Nube.' })
-    expect(await sinTicket('bdi', 7, [8])).toMatchObject({ status: 400, error: 'Los cambios de BDI sin venta del ERP todavía se hacen en Gestión Nube.' })
+    expect(await sinTicket('zattia', 2, [4])).toMatchObject({ status: 400, error: 'Los cambios de Zattia sin venta de Areben Gestión todavía se hacen en Gestión Nube.' })
+    expect(await sinTicket('bdi', 7, [8])).toMatchObject({ status: 400, error: 'Los cambios de BDI sin venta de Areben Gestión todavía se hacen en Gestión Nube.' })
     expect(registrarCambio).not.toHaveBeenCalled()
   })
 
@@ -180,7 +180,7 @@ describe('ventaGnDeCambio: sólo las líneas cortadas, cada renglón con su lín
   })
 })
 
-describe('🔴 cambio contra una venta del ERP DE PRUEBA (revisión 10-nov)', () => {
+describe('🔴 cambio contra una venta de Areben Gestión DE PRUEBA (revisión 10-nov)', () => {
   const LINEA = '0f8fad5b-d9cb-469f-a165-000000000001'
   const VENTA = '0f8fad5b-d9cb-469f-a165-000000000002'
   const desdeErp = (marca: string) => cambio(marca, { ventaId: VENTA, devueltas: [{ lineaId: LINEA, cantidad: 1 }], items: [] })
@@ -199,7 +199,7 @@ describe('🔴 cambio contra una venta del ERP DE PRUEBA (revisión 10-nov)', ()
     expect(registrado()).toEqual([{ marca: 'bdi', prueba: true }])
   })
 
-  it('una venta REAL del ERP, con la línea cortada, se cambia real', async () => {
+  it('una venta REAL de Areben Gestión, con la línea cortada, se cambia real', async () => {
     cortes = [STUNNED, BDI]
     ventaOriginal = { prueba: false, marca: 'bdi' }
     await desdeErp('bdi')

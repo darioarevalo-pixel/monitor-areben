@@ -37,7 +37,7 @@ export function Aprobaciones() {
 
   return (
     <Card padding={4} style={{ marginTop: space[4] }}>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>Aprobaciones del ERP</div>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Aprobaciones de Areben Gestión</div>
       <div style={{ color: color.mut2, fontSize: 13, marginBottom: 12 }}>
         Apagado: lo hace quien tenga el permiso de su rol y queda anotado quién fue. Prendido: sólo un Admin.
       </div>

@@ -40,7 +40,7 @@ async function montar(ruta: string[]) {
 }
 const pantalla = () => div.querySelector('[data-pantalla]')?.getAttribute('data-pantalla') ?? null
 
-describe('ERP › el armazón propio', () => {
+describe('Areben Gestión › el armazón propio', () => {
   it('🔴 el local (Bruno 30-oct): ⛔ ve en el menú lo que ⛔ puede abrir — Gastos, Proveedores, Configuración —; Facturación sí, por «Facturar una venta»', async () => {
     sesion = { marca: 'zattia', perfil: { name: 'josefina', admin: false } }; admin = false; negados = LOCAL_NO
     await montar(['ventas', 'cobros'])
@@ -83,7 +83,7 @@ describe('ERP › el armazón propio', () => {
       ['Productos', '/erp/productos'], ['Clientes', '/erp/clientes'], ['Configuración', '/erp/configuracion'],
       ['Volver al monitor', '/inicio'],
     ])
-    // La barra de abajo del celular (ERP en el celular, tanda 1): las 4 primeras; el resto va en «Más».
+    // La barra de abajo del celular (Areben Gestión en el celular, tanda 1): las 4 primeras; el resto va en «Más».
     expect(links('erp-movil-nav')).toEqual([['Inicio', '/erp'], ['Ventas', '/erp/ventas'], ['Stock', '/erp/stock'], ['Productos', '/erp/productos']]) // en la barra de abajo, corto: el largo se partía en 2 renglones (30-oct)
     expect(div.querySelector('nav.erp-menu a[aria-current="page"]')?.textContent).toBe('Ingresos y ajustes')
     expect(div.querySelector('h1')?.textContent).toBe('Ingresos y ajustes')
@@ -131,7 +131,7 @@ describe('ERP › el armazón propio', () => {
     expect(setMarca).toHaveBeenCalledWith('zattia')
     expect(radios().find((b) => b.textContent === 'Stunned')!.getAttribute('aria-checked')).toBe('false') // la marca de este test sigue siendo bdi
   })
-  it('el local (⛔ admin) ve SÓLO Stunned: la línea Zattia queda oculta hasta que Zattia pase al ERP (Bruno, 30-oct)', async () => {
+  it('el local (⛔ admin) ve SÓLO Stunned: la línea Zattia queda oculta hasta que Zattia pase a Areben Gestión (Bruno, 30-oct)', async () => {
     sesion = { marca: 'zattia', perfil: { name: 'local', admin: false } }; admin = false
     await montar([])
     expect(div.querySelectorAll('[aria-label="Marca"] [role="radio"]')).toHaveLength(0) // una sola opción ⇒ sin selector
@@ -143,11 +143,11 @@ describe('ERP › el armazón propio', () => {
     const dialogo = () => document.querySelector('[role="dialog"]')?.getAttribute('aria-label') ?? null
     expect(dialogo()).toBeNull()
     act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })) })
-    expect(dialogo()).toBe('Buscar en el ERP')
+    expect(dialogo()).toBe('Buscar en Areben Gestión')
     act(() => { document.querySelector('[aria-label="Buscar venta, producto o cliente"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
     expect(dialogo()).toBeNull()
     act(() => { [...div.querySelectorAll('nav button')].find((b) => b.textContent?.includes('Buscar'))?.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    expect(dialogo()).toBe('Buscar en el ERP')
+    expect(dialogo()).toBe('Buscar en Areben Gestión')
     act(() => { document.querySelector('[aria-label="Buscar venta, producto o cliente"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
     act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })) })
     expect(dialogo()).toBe('Atajos de teclado')

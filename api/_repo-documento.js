@@ -110,7 +110,7 @@ export async function avanzarDocumento(m, db, { id, estado: inicial, renglones, 
 export async function transferirEnErp(p) {
   try {
     const conexion = process.env[PG_DE_STORE[p.store]]
-    if (!conexion) return { sinConexion: true, error: 'El monitor no está conectado a la base del ERP.' }
+    if (!conexion) return { sinConexion: true, error: 'El monitor no está conectado a la base de Areben Gestión.' }
     if (p.recibir !== 'al_armar' && p.recibir !== 'en_destino') return { error: 'Falta decir si se recibe al armar o en destino.' }
     const renglones = renglonesDeTanda(p.prendas)
     if (!renglones.length) return { error: 'No hay prendas para transferir.' }

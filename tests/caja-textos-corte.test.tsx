@@ -6,9 +6,9 @@ import { CobrosGN, Pendientes } from '@/components/caja/partes'
 import type { ResumenTurno, Venta } from '@/lib/caja/cliente'
 
 /**
- * 🔑 **Los textos de la Caja desde el corte de BDI** (revisión del 10-nov, ERP general 24ª): BDI es la primera Caja con TODAS
- * sus líneas en el ERP ⇒ la venta rechazada que iba al ERP ⛔ ofrece «Cargada a mano en GN» (quedaría `en_gn` y el ERP ⛔ la
- * tendría) y los pedidos web del ERP ⛔ son «de Stunned».
+ * 🔑 **Los textos de la Caja desde el corte de BDI** (revisión del 10-nov, Areben Gestión general 24ª): BDI es la primera Caja con TODAS
+ * sus líneas en Areben Gestión ⇒ la venta rechazada que iba a Areben Gestión ⛔ ofrece «Cargada a mano en GN» (quedaría `en_gn` y Areben Gestión ⛔ la
+ * tendría) y los pedidos web de Areben Gestión ⛔ son «de Stunned».
  */
 let root: Root | null = null
 let host: HTMLDivElement
@@ -32,24 +32,24 @@ describe('venta rechazada (Pendientes)', () => {
     expect(boton('Cargada a mano en GN')).not.toBeNull()
   })
 
-  it('🔴 la que iba al ERP: «sin llegar al ERP» y ⛔ «Cargada a mano en GN»; descartar sigue', async () => {
+  it('🔴 la que iba a Areben Gestión: «sin llegar a Areben Gestión» y ⛔ «Cargada a mano en GN»; descartar sigue', async () => {
     await dibujar(<Pendientes ventas={[rechazada('erp')]} onCambio={() => {}} admin />)
-    expect(texto()).toContain('Cobradas sin llegar al ERP: 1')
+    expect(texto()).toContain('Cobradas sin llegar a Areben Gestión: 1')
     expect(boton('Cargada a mano en GN')).toBeNull()
     expect(boton('Descartar')).not.toBeNull()
   })
 
   it('mezcladas: nombra a los dos', async () => {
     await dibujar(<Pendientes ventas={[rechazada(null), rechazada('erp', 'aaaaaaaa-0000-4000-8000-000000000002')]} onCambio={() => {}} admin />)
-    expect(texto()).toContain('Cobradas sin llegar a Gestión Nube o al ERP: 2')
+    expect(texto()).toContain('Cobradas sin llegar a Gestión Nube o a Areben Gestión: 2')
   })
 })
 
 describe('cobros que ⛔ pasaron por la Caja (CobrosGN)', () => {
-  it('los pedidos web del ERP ⛔ son «de Stunned» (en BDI también salen del ERP)', async () => {
+  it('los pedidos web de Areben Gestión ⛔ son «de Stunned» (en BDI también salen de Areben Gestión)', async () => {
     const r = { cobrosGN: [], cobrosERP: [{ id: 'erp-12', en: '2026-11-15T14:00:00Z', venta: 12, tn: 9001, cliente: 'Ana', monto: 20000, pos: false }], soloErp: true } as unknown as ResumenTurno
     await dibujar(<CobrosGN r={r} />)
-    expect(texto()).toContain('Pedidos web cobrados en efectivo (en el ERP): 1')
+    expect(texto()).toContain('Pedidos web cobrados en efectivo (en Areben Gestión): 1')
     expect(texto()).not.toContain('Stunned')
   })
 })

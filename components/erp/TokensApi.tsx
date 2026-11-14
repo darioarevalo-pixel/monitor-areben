@@ -256,7 +256,7 @@ export function TokensApi() {
   const conteo = { activos: tokens.filter((t) => vistaDeToken(t) === 'activos').length, revocados: tokens.filter((t) => vistaDeToken(t) === 'revocados').length }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Quién consulta el ERP desde afuera. Un token es de un solo negocio y actúa a nombre de una persona.</p>
+      <p style={{ margin: 0, color: color.mut }}>Quién consulta Areben Gestión desde afuera. Un token es de un solo negocio y actúa a nombre de una persona.</p>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       <div style={{ display: 'flex', gap: space[2] }}>
         <Button onClick={() => setVentana({ tipo: 'nuevo' })} disabled={!cat}>Nuevo token</Button>

@@ -177,7 +177,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
       {configura && cargar && f && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2], padding: space[3], border: `1px solid ${color.line}`, borderRadius: 12 }}>
           <div>
-            <h3 style={h3}>Cargar en el ERP</h3>
+            <h3 style={h3}>Cargar en Areben Gestión</h3>
             <div style={{ fontSize: font.sm, color: color.mut }}>una fila nueva: lo anterior queda en el historial · {aviso.corto}</div>
           </div>
           <CargarPrecio marca={marca} ficha={f} onError={setError} onListo={(h, aviso) => { setHecho(h); if (aviso) setError(aviso); setCargar(false); releer() }} />
@@ -188,7 +188,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
         <h3 style={h3}>Listas</h3>
         {!f ? <span style={{ color: color.mut }}>Leyendo…</span> : (
           <div role="table" aria-label="Precio por lista" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) 92px 84px 92px', columnGap: 10, fontVariantNumeric: 'tabular-nums', alignItems: 'baseline' }}>
-            {['Lista', 'ERP', 'Gestión Nube', 'Tienda Nube'].map(encabezado)}
+            {['Lista', 'Areben Gestión', 'Gestión Nube', 'Tienda Nube'].map(encabezado)}
             {f.listas.map((l) => {
               const gn = l.lista === 'local' ? f.gn?.precio : l.lista === 'mayorista' ? f.gn?.mayorista : null
               const tn = l.lista === 'online' ? f.tn?.precio : l.lista === 'local' || l.lista === 'oferta' ? f.tn?.cobra : null
@@ -238,7 +238,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <div>
           <h3 style={h3}>Variantes</h3>
-          <div style={{ fontSize: font.sm, color: color.mut }}>lo que dice el ERP en cada lugar · disponible = físico − pedidos de Tienda Nube sin pagar</div>
+          <div style={{ fontSize: font.sm, color: color.mut }}>lo que dice Areben Gestión en cada lugar · disponible = físico − pedidos de Tienda Nube sin pagar</div>
         </div>
         {!fila ? <span style={{ color: color.mut }}>Leyendo…</span> : !fila.variantes.length ? <span style={{ color: color.mut }}>Este producto no tiene variantes en el stock.</span> : (
           <div style={{ overflowX: 'auto' }}>
@@ -275,7 +275,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
           <h3 style={h3}>{f && !f.costos ? 'Historial de precios' : 'Historial de precios y costos'}</h3>
           <div style={{ fontSize: font.sm, color: color.mut }}>{f && !f.costos ? 'el más nuevo arriba · un precio nuevo es otra fila: lo anterior no se edita' : 'el más nuevo arriba · un precio o un costo nuevo es otra fila: lo anterior no se edita'}</div>
         </div>
-        {!f ? <span style={{ color: color.mut }}>Leyendo…</span> : !hechos.length ? <span style={{ color: color.mut }}>{f.costos ? 'Todavía no hay precios ni costos de este producto en el ERP.' : 'Todavía no hay precios de este producto en el ERP.'}</span> : <Historial hechos={hechos} cuandoTexto={cuandoCorto} />}
+        {!f ? <span style={{ color: color.mut }}>Leyendo…</span> : !hechos.length ? <span style={{ color: color.mut }}>{f.costos ? 'Todavía no hay precios ni costos de este producto en Areben Gestión.' : 'Todavía no hay precios de este producto en Areben Gestión.'}</span> : <Historial hechos={hechos} cuandoTexto={cuandoCorto} />}
       </section>
     </FichaCostado>
   )

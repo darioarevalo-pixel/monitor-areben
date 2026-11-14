@@ -355,20 +355,20 @@ export default async function handler(req, res) {
   if (!esReingreso) {
     const quien = perfil.name || perfil.user || null;
     const falla = await fallaAlErp({ store, b, usuario: quien });
-    if (falla && falla.error) return res.status(409).json({ error: `La falla es de una línea que ya va por el ERP y el ERP no la pudo descontar: ${falla.error}` });
+    if (falla && falla.error) return res.status(409).json({ error: `La falla es de una línea que ya va por Areben Gestión y Areben Gestión no la pudo descontar: ${falla.error}` });
     if (falla) return res.status(200).json({ ok: true, erp: { ajuste: falla.ajuste, linea: falla.linea, ya: falla.ya } });
     const canjeErp = await canjeAlErp({ store, b, usuario: quien });
-    if (canjeErp && canjeErp.error) return res.status(409).json({ error: `El canje es de una línea que ya va por el ERP y el ERP no lo pudo descontar: ${canjeErp.error}` });
+    if (canjeErp && canjeErp.error) return res.status(409).json({ error: `El canje es de una línea que ya va por Areben Gestión y Areben Gestión no lo pudo descontar: ${canjeErp.error}` });
     if (canjeErp) {
       const doc = `A-${canjeErp.ajuste}`;
-      return res.status(200).json({ ok: true, venta: { id: `erp:${doc}`, number: `ERP ${doc}`, erp: doc, linea: canjeErp.linea }, erp: { ajuste: canjeErp.ajuste, linea: canjeErp.linea, ya: canjeErp.ya } });
+      return res.status(200).json({ ok: true, venta: { id: `erp:${doc}`, number: `Areben Gestión ${doc}`, erp: doc, linea: canjeErp.linea }, erp: { ajuste: canjeErp.ajuste, linea: canjeErp.linea, ya: canjeErp.ya } });
     }
     // La «venta» que vuelve es el documento del ERP (`erp`, con su `linea`), para que la solicitud siga su camino sin consultarle a GN.
     const sol = await solicitudAlErp({ store, b, usuario: quien });
-    if (sol && sol.error) return res.status(409).json({ error: `La solicitud es de una línea que ya va por el ERP y el ERP no la pudo descontar: ${sol.error}` });
+    if (sol && sol.error) return res.status(409).json({ error: `La solicitud es de una línea que ya va por Areben Gestión y Areben Gestión no la pudo descontar: ${sol.error}` });
     if (sol) {
       const doc = sol.salida ? `S-${sol.salida}` : `A-${sol.ajuste}`;
-      return res.status(200).json({ ok: true, venta: { id: `erp:${doc}`, number: `ERP ${doc}`, erp: doc, linea: sol.linea }, erp: sol.salida ? { salida: sol.salida, linea: sol.linea, ya: sol.ya } : { ajuste: sol.ajuste, linea: sol.linea, ya: sol.ya } });
+      return res.status(200).json({ ok: true, venta: { id: `erp:${doc}`, number: `Areben Gestión ${doc}`, erp: doc, linea: sol.linea }, erp: sol.salida ? { salida: sol.salida, linea: sol.linea, ya: sol.ya } : { ajuste: sol.ajuste, linea: sol.linea, ya: sol.ya } });
     }
   }
   // El canje se corta ACÁ si la marca no tiene cliente configurado: caer al de fotos dejaría la

@@ -50,14 +50,14 @@ describe('UltimaVenta · de qué sistema es el número', () => {
     pintar(VENTA)
     expect(caja.textContent).toContain('Venta #30613'); expect(caja.textContent).toContain('en Gestión Nube')
   })
-  it('una venta del ERP dice SU número y «en el ERP» (⛔ #null ni Gestión Nube)', () => {
+  it('una venta de Areben Gestión dice SU número y «en Areben Gestión» (⛔ #null ni Gestión Nube)', () => {
     pintar({ ...(VENTA as object), estado: 'en_erp', gn_number: null, erp_numero: 19 })
-    expect(caja.textContent).toContain('Venta #19'); expect(caja.textContent).toContain('en el ERP')
+    expect(caja.textContent).toContain('Venta #19'); expect(caja.textContent).toContain('en Areben Gestión')
     expect(caja.textContent).not.toContain('null'); expect(caja.textContent).not.toContain('Gestión Nube')
   })
-  it('la del ERP que ⛔ llegó queda pendiente en el ERP, ⛔ en Gestión Nube; la de GN, en Gestión Nube', () => {
+  it('la de Areben Gestión que ⛔ llegó queda pendiente en Areben Gestión, ⛔ en Gestión Nube; la de GN, en Gestión Nube', () => {
     pintar({ ...(VENTA as object), estado: 'error', destino: 'erp', gn_number: null, erp_numero: null, ultimo_error: 'sin respuesta' })
-    expect(caja.textContent).toContain('pendiente en el ERP'); expect(caja.textContent).not.toContain('Gestión Nube')
+    expect(caja.textContent).toContain('pendiente en Areben Gestión'); expect(caja.textContent).not.toContain('Gestión Nube')
     pintar({ ...(VENTA as object), estado: 'error', gn_number: null, ultimo_error: 'sin respuesta' })
     expect(caja.textContent).toContain('pendiente en Gestión Nube')
   })

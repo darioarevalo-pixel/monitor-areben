@@ -85,7 +85,7 @@ describe('POS (/pos)', () => {
     expect(document.querySelector('a[aria-label="Volver"]')?.getAttribute('href')).toBe('/caja')
   })
 
-  it('la caja del EVENTO (sólo Stunned, al ERP) dice «Conectado», ⛔ «Gestión Nube»; la del local, sí', async () => {
+  it('la caja del EVENTO (sólo Stunned, a Areben Gestión) dice «Conectado», ⛔ «Gestión Nube»; la del local, sí', async () => {
     const local = await montar(<CajaPOS />)
     expect(document.querySelector('.pos-gn')?.textContent).toBe('Gestión Nube')
     expect(local).toContain('Escanear o buscar')
@@ -435,7 +435,7 @@ describe('Ventas de la caja (Bruno, 12-oct)', () => {
     expect(r).not.toContain('Provisorias (1)')
   })
 
-  it('🔑 la venta del ERP (Stunned) va en la lista con SU número y «En el ERP», ⛔ en Provisorias (prueba del corte, 28-oct)', async () => {
+  it('🔑 la venta de Areben Gestión (Stunned) va en la lista con SU número y «En Areben Gestión», ⛔ en Provisorias (prueba del corte, 28-oct)', async () => {
     const { leerVentasTurno } = await import('@/lib/caja/cliente')
     vi.mocked(leerVentasTurno).mockResolvedValueOnce({ ventas: [
       v('a0000000-0000-4000-8000-000000000003', { estado: 'en_erp', destino: 'erp', erp_numero: 25 }),
@@ -445,7 +445,7 @@ describe('Ventas de la caja (Bruno, 12-oct)', () => {
     await hastaQue(() => (document.body.textContent || '').includes('#31027'))
     const t = document.body.textContent || ''
     expect(t).toContain('#25')
-    expect(t).toContain('En el ERP')
+    expect(t).toContain('En Areben Gestión')
     expect(t).not.toContain('Provisorias')
   })
 })

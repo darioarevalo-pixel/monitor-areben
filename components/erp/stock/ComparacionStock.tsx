@@ -44,7 +44,7 @@ const tono = (f: FilaComparacion): Tone => (f.clase === 'coincide' ? 'success' :
 
 function bajarCsv(filas: FilaComparacion[], marca: MarcaErp) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Producto', 'Variante', 'código', 'Tienda', 'Según el ERP', 'Tienda Nube', 'Diferencia', 'En Gestión Nube', 'Reservado', 'Qué pasa'].map(c).join(';')]
+  const renglones = [['Producto', 'Variante', 'código', 'Tienda', 'Según Areben Gestión', 'Tienda Nube', 'Diferencia', 'En Gestión Nube', 'Reservado', 'Qué pasa'].map(c).join(';')]
   for (const f of filas) renglones.push([f.nombre, f.talleNombre, f.sku, TIENDA[f.tienda], f.paraTienda ?? '', f.tn ?? '', f.diferencia ?? '', f.gn ?? '', f.enPedidos, QUE[f.clase]?.nombre ?? f.clase].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -128,12 +128,12 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
   const tnLeida = leidas.length ? cuandoCorto(leidas.map(([, l]) => l).sort()[0]) : '—'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Por variante: lo que la tienda tendría que mostrar según el ERP (sus depósitos, menos lo apartado por pedidos sin pagar) contra lo que muestra. Arranca con las que no coinciden.</p>
+      <p style={{ margin: 0, color: color.mut }}>Por variante: lo que la tienda tendría que mostrar según Areben Gestión (sus depósitos, menos lo apartado por pedidos sin pagar) contra lo que muestra. Arranca con las que no coinciden.</p>
       {sinGn
-        ? <Notice tone="neutral">{TIENDA[tiendaEnvio]} ya vive en el ERP: el stock de la tienda lo manda el ERP. Si no coinciden, el arreglo es <b>enviar el stock del ERP</b> a la tienda (abajo).</Notice>
-        : <Notice tone="warning">Hasta el corte de cada tienda, su stock lo manda <b>Gestión Nube</b>: si Gestión Nube y la tienda coinciden y el ERP no, lo que hay que mirar es el ERP. Después del corte, el arreglo es <b>enviar el stock del ERP</b> a la tienda (abajo).</Notice>}
+        ? <Notice tone="neutral">{TIENDA[tiendaEnvio]} ya vive en Areben Gestión: el stock de la tienda lo manda Areben Gestión. Si no coinciden, el arreglo es <b>enviar el stock de Areben Gestión</b> a la tienda (abajo).</Notice>
+        : <Notice tone="warning">Hasta el corte de cada tienda, su stock lo manda <b>Gestión Nube</b>: si Gestión Nube y la tienda coinciden y Areben Gestión no, lo que hay que mirar es Areben Gestión. Después del corte, el arreglo es <b>enviar el stock de Areben Gestión</b> a la tienda (abajo).</Notice>}
       <Notice tone="neutral">
-        <b>Mercado Libre todavía no se compara acá</b>: el ERP no guarda lo publicado en Mercado Libre.
+        <b>Mercado Libre todavía no se compara acá</b>: Areben Gestión no guarda lo publicado en Mercado Libre.
         {datos?.ml ? <> La conciliación del {datos.ml.fecha.split('-').reverse().slice(0, 2).join('/')} encontró {datos.ml.noCierran} publicaciones que no coinciden. <Button variant="outline" onClick={irAConciliacion}>Ver en Conciliación</Button></> : ' Las que no coinciden salen una vez por día en Conciliación.'}
       </Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
@@ -177,7 +177,7 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo la comparación…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')} · ${nombreVista.toLowerCase()}`}
-          {datos && <> · el ERP llega hasta {cuandoCorto(datos.libroHasta)}{leidas.map(([t, l]) => ` · ${TIENDA[t]} leída ${cuandoCorto(l)}`).join('')}</>}
+          {datos && <> · Areben Gestión llega hasta {cuandoCorto(datos.libroHasta)}{leidas.map(([t, l]) => ` · ${TIENDA[t]} leída ${cuandoCorto(l)}`).join('')}</>}
         </div>
       </div>
 

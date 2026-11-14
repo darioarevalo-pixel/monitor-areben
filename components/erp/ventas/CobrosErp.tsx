@@ -111,7 +111,7 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
   async function reintentar() {
     const ok = await confirmar({
       titulo: 'Reintentar el cobro de las entregas',
-      mensaje: <p>El ERP vuelve a intentar anotar el cobro de cada entrega sin cobrar. Las que ahora sí se pueden cobrar <b>crean una venta</b> que después no se borra. Las que siguen sin poder, quedan como están.</p>,
+      mensaje: <p>Areben Gestión vuelve a intentar anotar el cobro de cada entrega sin cobrar. Las que ahora sí se pueden cobrar <b>crean una venta</b> que después no se borra. Las que siguen sin poder, quedan como están.</p>,
       ok: 'Reintentar',
     })
     if (!ok) return
@@ -162,7 +162,7 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
     if (k === 'medio') return <span style={{ color: f.clase === 'plata' ? color.ink2 : color.mut }}>{f.medioTexto}</span>
     if (k === 'cuenta') return <span style={{ color: color.ink2 }} title={f.cuenta}>{f.cuenta}</span>
     if (k === 'entra') return f.entraA ? <span style={{ color: color.ink2 }}>{f.entraA}</span> : <span style={{ color: color.mut2 }}>—</span>
-    if (k === 'monto' && f.clase === 'sin_cobrar') return <span style={{ color: f.montoDicho ? color.ink2 : color.mut2, fontVariantNumeric: 'tabular-nums' }} title="Lo que dijo Logística; el ERP usa el monto del pedido">{f.montoDicho ? $exacto(f.monto) : '—'}</span>
+    if (k === 'monto' && f.clase === 'sin_cobrar') return <span style={{ color: f.montoDicho ? color.ink2 : color.mut2, fontVariantNumeric: 'tabular-nums' }} title="Lo que dijo Logística; Areben Gestión usa el monto del pedido">{f.montoDicho ? $exacto(f.monto) : '—'}</span>
     if (k === 'monto') {
       const tono = f.anulado || f.clase !== 'plata' ? color.mut : f.monto < 0 ? 'var(--mo-danger-ink)' : color.ink
       return <b title={f.clase === 'a_cuenta' ? 'Quedó debiendo: no es plata que ingresó' : f.clase === 'saldo' ? 'Pagó con saldo a favor: no es plata que ingresó' : f.clase === 'entrega' ? 'Contraentrega: lo cobra el cadete al entregar, todavía no ingresó' : undefined} style={{ color: tono, fontVariantNumeric: 'tabular-nums', textDecoration: f.anulado ? 'line-through' : undefined, fontStyle: f.clase !== 'plata' ? 'italic' : undefined }}>{$exacto(f.monto)}</b>
@@ -189,14 +189,14 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
       {datos && (prueba || datos.otroLibro > 0) && (
         <Notice tone={prueba ? 'warning' : 'neutral'}>
           {prueba
-            ? <>Estás mirando los cobros <b>de prueba</b>: las ventas que el ERP registra en paralelo con Gestión Nube hasta el corte. Los cobros a cuenta que se cargan en Gestión Nube todavía no llegan acá. {datos.otroLibro ? `En este período hay ${datos.otroLibro.toLocaleString('es-AR')} cobros reales.` : 'Todavía no hay ningún cobro real.'}</>
+            ? <>Estás mirando los cobros <b>de prueba</b>: las ventas que Areben Gestión registra en paralelo con Gestión Nube hasta el corte. Los cobros a cuenta que se cargan en Gestión Nube todavía no llegan acá. {datos.otroLibro ? `En este período hay ${datos.otroLibro.toLocaleString('es-AR')} cobros reales.` : 'Todavía no hay ningún cobro real.'}</>
             : <>En este período hay {datos.otroLibro.toLocaleString('es-AR')} cobros <b>de prueba</b>, que no se suman acá. <Button variant="outline" onClick={() => setPrueba(true)}>Ver los de prueba</Button></>}
         </Notice>
       )}
-      <Notice tone="neutral">Todavía no están <b>Por validar</b> (lo que llegó a Mercado Pago) ni <b>Cobros masivos</b>: los está armando el ERP. Un cobro a cuenta se registra desde Clientes › Cuenta corriente o desde la venta.</Notice>
+      <Notice tone="neutral">Todavía no están <b>Por validar</b> (lo que llegó a Mercado Pago) ni <b>Cobros masivos</b>: los está armando Areben Gestión. Un cobro a cuenta se registra desde Clientes › Cuenta corriente o desde la venta.</Notice>
       {res.sinCobrar > 0 && vista !== 'sin_cobrar' && (
         <Notice tone="warning">
-          Hay <b>{res.sinCobrar.toLocaleString('es-AR')} {res.sinCobrar === 1 ? 'entrega' : 'entregas'} sin cobrar en el ERP</b>, desde el {diaCorto(diaArgentino(Date.parse(res.sinCobrarDesde ?? '')))}: Logística las entregó y el ERP no pudo anotar el cobro. <Button variant="outline" onClick={() => setVista('sin_cobrar')}>Verlas</Button>
+          Hay <b>{res.sinCobrar.toLocaleString('es-AR')} {res.sinCobrar === 1 ? 'entrega' : 'entregas'} sin cobrar en Areben Gestión</b>, desde el {diaCorto(diaArgentino(Date.parse(res.sinCobrarDesde ?? '')))}: Logística las entregó y Areben Gestión no pudo anotar el cobro. <Button variant="outline" onClick={() => setVista('sin_cobrar')}>Verlas</Button>
         </Notice>
       )}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
@@ -253,7 +253,7 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo los cobros…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {' · '}{vista === 'sin_cobrar' ? 'Las entregas que Logística hizo y el ERP todavía no pudo cobrar, sean del período que sean: se reintentan solas cuando se arregla lo que faltaba (la cuenta de cobro, a qué cuenta va, una variante).' : vista === 'contraentrega' ? 'Lo que está en la calle hoy, sea del período que sea: se cierra cuando el envío se marca entregado.' : 'El cobro de una venta lleva el día de la venta.'} «Cobrado» no suma lo anulado sin devolución (la plata se devolvió afuera) ni lo que quedó a cuenta.
+          {' · '}{vista === 'sin_cobrar' ? 'Las entregas que Logística hizo y Areben Gestión todavía no pudo cobrar, sean del período que sean: se reintentan solas cuando se arregla lo que faltaba (la cuenta de cobro, a qué cuenta va, una variante).' : vista === 'contraentrega' ? 'Lo que está en la calle hoy, sea del período que sea: se cierra cuando el envío se marca entregado.' : 'El cobro de una venta lleva el día de la venta.'} «Cobrado» no suma lo anulado sin devolución (la plata se devolvió afuera) ni lo que quedó a cuenta.
         </div>
       </div>
 
@@ -267,9 +267,9 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
             {ficha.anulado && <Notice tone="neutral">{ficha.origen === 'pago_a_cuenta' ? 'Este pago a cuenta se dio vuelta.' : 'La venta está anulada.'}</Notice>}
             {ficha.clase === 'a_cuenta' && <Notice tone="warning">Quedó debiendo: no es plata que ingresó. Se cobra desde Clientes › Cuenta corriente.</Notice>}
-            {ficha.clase === 'sin_cobrar' && <Notice tone="warning">Logística entregó este pedido y el ERP no pudo anotar el cobro. La entrega no se frena nunca por esto: queda anotada y se reintenta cuando se arregla lo que faltaba. <b>Por qué:</b> {ficha.motivo}</Notice>}
+            {ficha.clase === 'sin_cobrar' && <Notice tone="warning">Logística entregó este pedido y Areben Gestión no pudo anotar el cobro. La entrega no se frena nunca por esto: queda anotada y se reintenta cuando se arregla lo que faltaba. <b>Por qué:</b> {ficha.motivo}</Notice>}
             {ficha.clase === 'sin_cobrar' && ficha.medio === 'transferencia' && <Notice tone="neutral">Fue una transferencia: cuando el cobro se anote va a quedar «por verificar» hasta cruzarla en Pagos recibidos.</Notice>}
-            {ficha.clase === 'entrega' && <Notice tone="warning">Contraentrega: lo cobra el cadete al entregar y todavía no ingresó. Se cierra cuando Envíos marca el envío entregado (eso todavía no está conectado: lo está armando el ERP).</Notice>}
+            {ficha.clase === 'entrega' && <Notice tone="warning">Contraentrega: lo cobra el cadete al entregar y todavía no ingresó. Se cierra cuando Envíos marca el envío entregado (eso todavía no está conectado: lo está armando Areben Gestión).</Notice>}
             {ficha.clase === 'sin_cobrar' ? (
               <DatosFicha>
                 <DatoFicha titulo="Entregada">{cuandoCorto(ficha.cuando)}</DatoFicha>

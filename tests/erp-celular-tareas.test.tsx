@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { ProveedorLineaErp } from '@/lib/erp/linea-erp'
 
 /**
- * 📱 **El ERP en el celular, tanda 3** (Bruno, 29-oct; artifact `diseno/celular/erp-celular.html`, molde 4): las dos tareas
+ * 📱 **Areben Gestión en el celular, tanda 3** (Bruno, 29-oct; artifact `diseno/celular/erp-celular.html`, molde 4): las dos tareas
  * que se hacen de pie. **Recibir**: cada producto en una tarjeta con + y − grandes, verde si llegó entero y ámbar si falta, y
  * el botón fijo al pie. **Nuevo ajuste**: la cantidad grande con el antes → después, y «Guardar ajuste» fijo al pie. En la
  * compu ⛔ cambia nada: sigue la tabla con su campo de número y los botones abajo del formulario.
@@ -100,7 +100,7 @@ describe('Nuevo ajuste en el celular', () => {
     await elegirSalida()
     const tarjeta = host.querySelector('[data-tarjeta-ajuste]') as HTMLElement
     expect(tarjeta.textContent).toContain('TOP ZARA · NEGRO')
-    expect(tarjeta.textContent).toContain('el ERP dice 5 en Local')
+    expect(tarjeta.textContent).toContain('Areben Gestión dice 5 en Local')
     const guardar = () => [...elPie()!.querySelectorAll('button')].find((b) => b.textContent === 'Guardar ajuste')!
     expect(guardar().disabled).toBe(true)
     await click(host.querySelector('button[aria-label="Más TOP ZARA · NEGRO"]')!)

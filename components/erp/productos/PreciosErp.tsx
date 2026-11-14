@@ -156,7 +156,7 @@ export function PreciosErp() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
       <p style={{ margin: 0, color: color.mut }}>Todas las listas de cada producto en una grilla, con su oferta o liquidación y el último cambio. El $ de cada fila carga un precio (de cualquier lista) o el costo; abrí un producto para ver su historial.</p>
-      <Notice tone="neutral">Un precio cargado acá queda en el ERP, con quién y cuándo, y manda sobre la copia de Gestión Nube. {aviso.largo}</Notice>
+      <Notice tone="neutral">Un precio cargado acá queda en Areben Gestión, con quién y cuándo, y manda sobre la copia de Gestión Nube. {aviso.largo}</Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {datos?.liquidacionesError && <Notice tone="warning">No se pudieron leer las liquidaciones del monitor: la columna «Oferta o liquidación» muestra sólo las ofertas de Tienda Nube.</Notice>}
 
@@ -198,7 +198,7 @@ export function PreciosErp() {
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo los precios…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {' · '}la «Mayorista especial» todavía no es una lista del ERP{datos && <> · Tienda Nube leída {cuandoCorto(datos.tnLeidaEn)}</>}
+          {' · '}la «Mayorista especial» todavía no es una lista de Areben Gestión{datos && <> · Tienda Nube leída {cuandoCorto(datos.tnLeidaEn)}</>}
         </div>
       </div>
 

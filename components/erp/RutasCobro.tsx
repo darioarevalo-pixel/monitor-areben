@@ -193,7 +193,7 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
         Un cambio vale desde ese momento: lo cobrado antes no se toca.
       </p>
       <Notice tone="neutral">
-        Por ahora se anota en las ventas del ERP: la Caja sigue cobrando como hoy hasta que se active el ERP.
+        Por ahora se anota en las ventas de Areben Gestión: la Caja sigue cobrando como hoy hasta que se active Areben Gestión.
         {datos?.cuentasCopiadasEn ? ` Las cuentas son las del dashboard (copiadas el ${cuandoCorto(datos.cuentasCopiadasEn)}).` : ''}
       </Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}

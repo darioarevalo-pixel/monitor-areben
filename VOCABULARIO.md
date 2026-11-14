@@ -355,7 +355,7 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `variante` · `variantes` | `talle` · `talles` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: la variante puede ser talle, color o medida |
 | `Físico` (lo que hay en el local y el depósito) | `En estantería` · `estantería` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
 | `Reservado` (lo que ya tiene dueño) | `En pedidos` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
-| `movimientos de stock` · `el ERP` | `libro` · `el libro` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: «libro» es jerga de quien lo construyó |
+| `movimientos de stock` · `Areben Gestión` | `libro` · `el libro` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: «libro» es jerga de quien lo construyó |
 | `código` | `SKU` · `SKUs` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
 | `Tienda Nube` · `Gestión Nube` · `Mercado Libre` | `TN` · `GN` · `ML` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: sin siglas en pantalla |
 | `Caja` | `Caja (POS)` · `POS` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
@@ -364,7 +364,7 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `forma de pago` · `formas de pago` | `medio de cobro` · `medios de cobro` · `medio de pago` · `medios de pago` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct-2026: «forma de pago está perfecto» (eran tres palabras para lo mismo) |
 | `Cobros` | `Cobranzas` | monitor | `components/erp` · `lib/erp` · `components/cobranzas` · `lib/cobranzas` · `lib/nav.datos.ts` | Bruno, 30-oct: Cobros en el ERP y en el monitor (la sección del monitor, 30-oct tanda 3) |
 | `preparar` · `preparada` · `sin preparar` | `armar` · `armada` · `armadas` · `sin armar` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: en Ventas ya decía «preparar»; las transferencias decían «armar» |
-| `Movido a la hora de la foto` · el nombre de cada lado (`ERP`, `Tienda Nube`, `Mercado Libre`, `Gestión Nube`) | `En vuelo` · `Nuestro` · `Ellos` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: en Diferencias no se entendía contra quién se compara |
+| `Movido a la hora de la foto` · el nombre de cada lado (`Areben Gestión`, `Tienda Nube`, `Mercado Libre`, `Gestión Nube`) | `En vuelo` · `Nuestro` · `Ellos` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: en Diferencias no se entendía contra quién se compara |
 | `Con falla` | `Fallado` · `Fallada` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct |
 | `¿A qué cuenta va?` · `La plata llega en` · `Descuento o recargo` | `Rutas` · `Ruta` · `ruta` · `rutas` · `Regla de cobro` | monitor | `components/erp/RutasCobro.tsx` · `components/erp/TiraConfiguracion.tsx` · `components/erp/CuentasYEstructura.tsx` · `components/erp/ventas/FormasDePago.tsx` · `components/erp/ventas/GastosErp.tsx` · `components/erp/ventas/CobrosErp.tsx` · `components/erp/ventas/VentanasVenta.tsx` · `components/erp/clientes/FichaCuenta.tsx` · `components/erp/ventas/FichaVenta.tsx` · `lib/erp/estructura.core.js` · `lib/erp/gastos.core.js` | Bruno, 30-oct (tanda 3, dibujado): la ruta de cobro se nombra por lo que hace. «Ruta» sigue siendo «De → A» en Transferencias |
 | `Ver visitas y compromisos ↗` | `Ver en PRM` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: sin siglas en pantalla |
@@ -375,6 +375,7 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `Caja Z-0040` · `Código de la caja` · `Revisar` · `Verificado` (el arqueo de caja) | `Código del sobre` · `Abrir el sobre` · `Tiene que haber en el sobre` · `Llegó bien` · `Llegó con diferencia` | monitor | `components/erp/ventas/CajasErp.tsx` · `lib/erp/cajas.core.js` | Bruno, 30-oct: «Caja Z-0040» y «en vez de contado, verificado»; el sobre se REVISA billete por billete (el «Contado» de la cajera, en El efectivo, sigue) |
 | `En cartera` · `Depositado` · `Acreditado` · `Rechazado` (los estados del cheque recibido; `Anulado` si se cargó mal) | `Rebotado` · `Cobrado` | monitor | `components/erp/ventas/ChequesErp.tsx` · `lib/erp/cheque.core.js` | Bruno, 10-nov: «cuatro estados», la cartera completa (sesión cheques) |
 | `Nueva venta` · `Guardar venta` (la venta a mano del ERP, fuera de la Caja) | `Cargar venta` | monitor | `components/erp` · `lib/erp` | Bruno, 10-nov: «en vez de cargar venta sería nueva venta» |
+| `Areben Gestión` (el sistema: «a Areben Gestión», «de Areben Gestión»; las direcciones `/erp/…`, el dominio, las tablas y los nombres del código siguen igual) | `ERP` | monitor | `components` · `app` · `lib` · `api` | Bruno, 14-nov-2026: ERP es la función, no el nombre (pedido de Ger del 8-nov) |
 | (nada: el estado se dice en palabras: «todavía no disponible», «modo de prueba de ARCA») | `motor` · `sesión A` · `espejo` · `homologación` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: jerga de la construcción, ⛔ en pantalla |
 
 ⚠️ **Las excepciones van en el test, con su motivo, y se vacían solas**: un nombre que viene de otro

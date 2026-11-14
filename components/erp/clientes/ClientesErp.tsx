@@ -143,7 +143,7 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
     if (k === 'primera') return <span style={{ color: color.mut }}>{fechaCorta(f.primera)}</span>
     if (k === 'canales') return <span title={f.canales.join(', ')} style={{ color: color.mut }}>{f.canales.join(' · ') || '—'}</span>
     if (k === 'saldo') {
-      if (f.saldo == null) return <span style={{ color: color.mut2 }} title="El ERP todavía no lleva la cuenta de este cliente">sin cuenta</span>
+      if (f.saldo == null) return <span style={{ color: color.mut2 }} title="Areben Gestión todavía no lleva la cuenta de este cliente">sin cuenta</span>
       if (f.saldo === 0) return <span style={{ color: color.mut }}>al día</span>
       return <span style={{ fontWeight: 700, color: f.vencido ? 'var(--mo-danger-ink)' : f.saldo < 0 ? 'var(--mo-success-ink)' : color.ink }}>{f.saldo < 0 ? `${formatMoney(-f.saldo)} a favor` : formatMoney(f.saldo)}</span>
     }
@@ -169,8 +169,8 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
       <p style={{ margin: 0, color: color.mut }}>Cada cliente con lo que compró y el saldo de su cuenta.</p>
       {sinCuentas && (
         <Notice tone="warning">
-          Los clientes salen de <b>Gestión Nube</b>: el ERP todavía no tiene clientes propios (ninguna venta del ERP trae cliente),
-          así que todavía no lleva cuentas corrientes. El saldo aparece acá cuando se venda a cuenta desde el ERP.
+          Los clientes salen de <b>Gestión Nube</b>: Areben Gestión todavía no tiene clientes propios (ninguna venta de Areben Gestión trae cliente),
+          así que todavía no lleva cuentas corrientes. El saldo aparece acá cuando se venda a cuenta desde Areben Gestión.
           {datos?.porNombre && <> En Zattia, Gestión Nube no manda el número de cliente: se juntan por <b>nombre</b> (dos con el mismo nombre se ven como uno).</>}
         </Notice>
       )}

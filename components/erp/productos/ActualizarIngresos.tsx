@@ -68,7 +68,7 @@ export function ActualizarIngresos() {
     setImportando(true); setError(null); setHecho(null)
     try {
       const r = await importarProductosDeIngresos(marca, [...elegidos], modo)
-      if (!r.manda) throw new Error('Esta marca todavía no pasó al ERP: no se importó nada.')
+      if (!r.manda) throw new Error('Esta marca todavía no pasó a Areben Gestión: no se importó nada.')
       const salteados = r.no_disponibles?.length ?? 0
       const unidades = r.stock?.unidades ?? 0
       const stock = r.stock?.corrio && r.stock.libro === false ? ' Las unidades de su orden de compra pueden tardar hasta una hora.' : unidades > 0 ? ` Entraron ${plural(unidades, 'unidad', 'unidades')} al stock.` : ''
@@ -97,7 +97,7 @@ export function ActualizarIngresos() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
-        <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Los productos de Ingresos: lo que el ERP ya tiene está Listo, y lo que llegó en una orden de compra confirmada y falta queda Pendiente. Al importarlo, sus unidades entran al stock.</p>
+        <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Los productos de Ingresos: lo que Areben Gestión ya tiene está Listo, y lo que llegó en una orden de compra confirmada y falta queda Pendiente. Al importarlo, sus unidades entran al stock.</p>
         <Button variant="outline" onClick={() => actualizar('habitual')} disabled={leyendo || importando}>{leyendo && modo === 'habitual' ? 'Leyendo…' : 'Actualizar Ingresos'}</Button>
         {puede('configurar') && <Button variant="ghost" onClick={() => actualizar('excepcional')} disabled={leyendo || importando}>{leyendo && modo === 'excepcional' ? 'Leyendo…' : 'Traer sin orden de compra'}</Button>}
       </div>
@@ -107,8 +107,8 @@ export function ActualizarIngresos() {
       {datos && !datos.manda && (
         <Notice tone="neutral">
           {datos.motivo === 'frenada'
-            ? 'El envío al ERP de esta marca está frenado: no se puede importar.'
-            : 'Todavía no corresponde: esta marca no pasó al ERP. Hasta el corte, los productos llegan desde Gestión Nube.'}
+            ? 'El envío a Areben Gestión de esta marca está frenado: no se puede importar.'
+            : 'Todavía no corresponde: esta marca no pasó a Areben Gestión. Hasta el corte, los productos llegan desde Gestión Nube.'}
         </Notice>
       )}
       {datos?.manda && (
@@ -120,7 +120,7 @@ export function ActualizarIngresos() {
             <Notice tone="warning">Hay mercadería que no se puede importar porque Ingresos ya no tiene el producto: {datos.oc_sin_producto!.map((x) => `${x.sku}${x.oc ? ` (${x.oc})` : ''}`).join(', ')}.</Notice>
           )}
           {(datos.a_vincular?.length ?? 0) > 0 && (
-            <Notice tone="warning">No se pueden importar porque ya hay algo parecido en el ERP, hay que resolverlos en Vincular: {datos.a_vincular!.map((x) => x.nombre ?? `Producto ${x.ingresos_id}`).join(', ')}.</Notice>
+            <Notice tone="warning">No se pueden importar porque ya hay algo parecido en Areben Gestión, hay que resolverlos en Vincular: {datos.a_vincular!.map((x) => x.nombre ?? `Producto ${x.ingresos_id}`).join(', ')}.</Notice>
           )}
           <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
             <VistasLista vistas={VISTAS} valor={vista} conteo={{ pendiente: lista.length, listo: listos.length }} onCambio={(v) => setVista(v as 'pendiente' | 'listo')} />

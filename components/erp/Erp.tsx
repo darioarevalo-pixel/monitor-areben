@@ -368,10 +368,10 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
         </button>
       </div>
 
-      <nav aria-label="Secciones del ERP" className="erp-menu">
+      <nav aria-label="Secciones de Areben Gestión" className="erp-menu">
         <div className="erp-menu-logo">
           <span aria-hidden style={{ width: 28, height: 28, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'var(--mo-brand-solid)', fontSize: 14 }}>A</span>
-          Areben ERP
+          Areben Gestión
         </div>
         {/* 🎨 30-oct (Bruno): el menú es de GRUPOS. El grupo abierto muestra sus ítems (las pestañas de antes), cada uno con su contador. */}
         {SECCIONES_ERP.filter(seccionVisible).map((s) => {
@@ -422,7 +422,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
           <div className="seccion-pad" style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
             {rolQueSeVe && (
               <Notice tone="warning">
-                Estás viendo el ERP como <b>{ROLES.find(([k]) => k === rolQueSeVe)?.[1]}</b>: el menú, los botones y los datos de ese rol. No se guarda nada.{' '}
+                Estás viendo Areben Gestión como <b>{ROLES.find(([k]) => k === rolQueSeVe)?.[1]}</b>: el menú, los botones y los datos de ese rol. No se guarda nada.{' '}
                 <Button size="sm" variant="outline" onClick={() => elegirRolVisto(null)}>Volver a Admin</Button>
               </Notice>
             )}
@@ -500,7 +500,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
         </ProveedorLineaErp>
       </div>
       {/* 📱 Abajo en el celular: Inicio · Ventas · Stock · Productos · Más (Bruno, 29-oct; 30-oct la sección Caja pasó a Ventas). En la compu ⛔ se dibuja (globals.css). */}
-      <nav aria-label="Secciones del ERP (celular)" className="erp-movil-nav">
+      <nav aria-label="Secciones de Areben Gestión (celular)" className="erp-movil-nav">
         {ABAJO.map((k) => {
           const s = SECCIONES_ERP.find((x) => x.key === k)!
           const on = s.key === seccion.key

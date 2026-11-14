@@ -29,13 +29,13 @@ const n = (x: number) => x.toLocaleString('es-AR')
 /** Quién lo pidió, en palabras: el botón guarda `boton:<nombre>`; el resto lo avisó el ERP solo. */
 export function quienPidio(origen: string | null): string {
   if (origen?.startsWith('boton:')) return origen.slice(6)
-  return 'el ERP, solo (cambió el stock)'
+  return 'Areben Gestión, solo (cambió el stock)'
 }
 
 /** El estado de un envío: [tono, rótulo, detalle]. */
 export function estadoDeEnvio(e: EmpujeStock): [Tone, string, string] {
   if (e.estado === 'pendiente') return ['neutral', 'En cola', 'Se envía en el próximo minuto.']
-  if (e.estado === 'corriendo') return ['info', 'Enviando', 'Leyendo Tienda Nube y comparando con el ERP.']
+  if (e.estado === 'corriendo') return ['info', 'Enviando', 'Leyendo Tienda Nube y comparando con Areben Gestión.']
   if (e.estado === 'fallado') return ['danger', 'No se pudo', e.error ?? 'El envío falló: avisá.']
   if (e.estado === 'abandonado') return ['neutral', 'Reemplazado', 'Lo cubrió otro envío posterior.']
   const cambios = e.cambios ?? 0
@@ -85,10 +85,10 @@ export function EnviarStockTN({ tienda, alTerminar }: { tienda: TiendaErp; alTer
       titulo: `Enviar el stock a Tienda Nube de ${nombre}`,
       mensaje: (
         <>
-          <p>Se iguala <b>toda la tienda {nombre}</b> al stock del ERP. No se puede elegir un solo producto.{ultimo?.cambios != null ? <> El último cálculo ({cuandoCorto(ultimo.terminadoEn)}) dio <b>{n(ultimo.cambios)} variantes distintas</b>.</> : null}</p>
+          <p>Se iguala <b>toda la tienda {nombre}</b> al stock de Areben Gestión. No se puede elegir un solo producto.{ultimo?.cambios != null ? <> El último cálculo ({cuandoCorto(ultimo.terminadoEn)}) dio <b>{n(ultimo.cambios)} variantes distintas</b>.</> : null}</p>
           <p>{deVerdad
-            ? <><b>Cambia el stock de la tienda de verdad.</b> Si el ERP quisiera cambiar de golpe más del 15 % de la tienda, frena y no toca nada.</>
-            : <>Hasta el corte de {nombre} manda Gestión Nube: el ERP <b>sólo calcula</b> qué cambiaría y no toca la tienda.</>}</p>
+            ? <><b>Cambia el stock de la tienda de verdad.</b> Si Areben Gestión quisiera cambiar de golpe más del 15 % de la tienda, frena y no toca nada.</>
+            : <>Hasta el corte de {nombre} manda Gestión Nube: Areben Gestión <b>sólo calcula</b> qué cambiaría y no toca la tienda.</>}</p>
         </>
       ),
       ok: 'Enviar',
@@ -112,8 +112,8 @@ export function EnviarStockTN({ tienda, alTerminar }: { tienda: TiendaErp; alTer
         <div style={{ minWidth: 0, flex: '1 1 320px' }}>
           <div style={{ fontWeight: 700, color: color.ink }}>Enviar el stock a Tienda Nube · {nombre}</div>
           <div style={{ fontSize: font.sm, color: color.mut }}>
-            El ERP le pone a cada variante de la tienda su stock (sus depósitos, menos lo apartado por pedidos sin pagar). Va la tienda entera.
-            {' '}{deVerdad ? 'Además se envía solo cada vez que cambia el stock del ERP.' : `Hasta el corte de ${nombre} es una prueba: calcula y no toca la tienda.`}
+            Areben Gestión le pone a cada variante de la tienda su stock (sus depósitos, menos lo apartado por pedidos sin pagar). Va la tienda entera.
+            {' '}{deVerdad ? 'Además se envía solo cada vez que cambia el stock de Areben Gestión.' : `Hasta el corte de ${nombre} es una prueba: calcula y no toca la tienda.`}
           </div>
         </div>
         <Button disabled={pidiendo || esperando} onClick={() => void enviar()}>

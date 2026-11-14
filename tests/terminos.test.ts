@@ -102,7 +102,9 @@ describe('VOCABULARIO §5 · los términos del negocio', () => {
   for (const f of filas()) {
     it(`se dice ${f.dice}, ⛔ ${f.prohibidas.join(' / ')}`, () => {
       // Bordes: ⛔ adentro de un nombre de código (`pos-turno`, `turno_id`, `&turno=`, `.turno`).
-      const re = new RegExp(`(^|[^\\p{L}_.&?=-])(${f.prohibidas.map(escapar).join('|')})(?![\\p{L}_=-])`, 'iu')
+      // Una SIGLA (`ERP`, `TN`) se busca en mayúsculas: en minúscula es código (`/erp/…`, `[erp]`, `erp:<id>`, `erp.arebensrl.com`).
+      const sigla = f.prohibidas.every((p) => p === p.toUpperCase())
+      const re = new RegExp(`(^|[^\\p{L}_.&?=-])(${f.prohibidas.map(escapar).join('|')})(?![\\p{L}_=-])`, sigla ? 'u' : 'iu')
       const malas: string[] = []
       let leidas = 0
       for (const d of f.donde)

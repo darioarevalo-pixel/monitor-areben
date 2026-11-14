@@ -7,7 +7,7 @@ import type { ConciliacionDelDia } from '@/lib/erp/cliente'
 import { ProveedorLineaErp } from '@/lib/erp/linea-erp'
 
 /**
- * **ERP › Conciliación, del lado de la pantalla** (18-oct; 🎨 19-oct con el molde de REGISTRO). El oráculo es lo que se LEE:
+ * **Areben Gestión › Conciliación, del lado de la pantalla** (18-oct; 🎨 19-oct con el molde de REGISTRO). El oráculo es lo que se LEE:
  * cuánto coincide sale del resumen del motor, cada clase es una vista con su número y qué mirar, la prenda abre su ficha AL
  * COSTADO, el pedido abre Tienda Nube, y una base sin la 024 o un día sin calcular lo DICEN (⛔ muestran «todo coincide»).
  * Los datos pasan por el núcleo real (`armarConciliacion`).
@@ -48,26 +48,26 @@ const filaDe = (t: string) => [...host.querySelectorAll('[role="row"]')].find((r
 const clic = async (el: Element) => { await act(async () => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })) }); await act(async () => {}) }
 
 describe('ConciliacionDia', () => {
-  it('una tienda que ya cortó: ⛔ muestra a Gestión Nube y el arreglo es en el ERP', async () => {
+  it('una tienda que ya cortó: ⛔ muestra a Gestión Nube y el arreglo es en Areben Gestión', async () => {
     leerConciliacion.mockResolvedValueOnce({ ...conDatos(), gn: { calculado: false, sinExplicar: null, sinGn: true }, tarjetas: [], grupos: [], noCierran: 0 })
     await montar('stunned')
     expect(texto()).not.toContain('Stock por depósito')
     expect(texto()).not.toContain('Gestión Nube')
-    expect(texto()).toContain('el arreglo se hace en el ERP')
+    expect(texto()).toContain('el arreglo se hace en Areben Gestión')
   })
   it('dice cuánto coincide, el diff de Gestión Nube, Mercado Libre sin conexión, y cada clase como vista con su número', async () => {
     await montar()
     expect(leerConciliacion).toHaveBeenCalledWith('zattia', null)
     expect(texto()).toMatch(/No coinciden3del 18\/10/)
-    expect(texto()).toContain('Coinciden 8 de 10 variantes · 1 de la tienda sin producto en el ERP')
+    expect(texto()).toContain('Coinciden 8 de 10 variantes · 1 de la tienda sin producto en Areben Gestión')
     expect(texto()).toContain('80.0%')
     expect(texto()).toContain('1 de 20 pedidos no coinciden (7 días)')
     expect(texto()).toContain('Coinciden los 20 pedidos (7 días)')
     expect(texto()).toContain('sin explicar: verlas en Diferencias con Gestión Nube')
     expect(texto()).not.toContain('Stock: Mercado Libre')   // Zattia ⛔ vende en ML: sin tarjeta
-    expect(boton(/^El ERP dice otro stock/).textContent).toContain('1')
+    expect(boton(/^Areben Gestión dice otro stock/).textContent).toContain('1')
     expect(boton(/^Cancelado con la venta activa en Gestión Nube/).textContent).toContain('1')
-    await clic(boton(/^El ERP dice otro stock/))
+    await clic(boton(/^Areben Gestión dice otro stock/))
     expect(texto()).toContain('(1 vienen de días anteriores)')
     expect(host.querySelectorAll('[role="row"]').length).toBeGreaterThan(0)
     expect(texto()).not.toContain('#7331')

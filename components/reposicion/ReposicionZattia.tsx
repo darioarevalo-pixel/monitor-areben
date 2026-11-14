@@ -1122,7 +1122,7 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
     return (
       <div style={box}>
         <Notice tone="brand" icon="⏳">
-          Transfiriendo {enErp ? 'en el ERP' : 'en Gestión Nube'}{quien}…
+          Transfiriendo {enErp ? 'en Areben Gestión' : 'en Gestión Nube'}{quien}…
         </Notice>
       </div>
     )
@@ -1131,7 +1131,7 @@ function EstadoArmado({ armado, onResolver }: { armado: Armado | null; onResolve
     return (
       <div style={box}>
         <Notice tone="danger" icon="⚠">
-          <div><b>Transferencia sin confirmar{quien}.</b> Se puede transferir de nuevo: el ERP sigue la misma transferencia, no la duplica.</div>
+          <div><b>Transferencia sin confirmar{quien}.</b> Se puede transferir de nuevo: Areben Gestión sigue la misma transferencia, no la duplica.</div>
           <div style={{ display: 'flex', gap: space[2], marginTop: space[2], flexWrap: 'wrap' }}>
             <Button size="sm" variant="solid" tone="brand" onClick={() => onResolver(armado, false)}>Transferir de nuevo</Button>
           </div>

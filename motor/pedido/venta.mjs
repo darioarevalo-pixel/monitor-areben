@@ -425,7 +425,7 @@ async function armarParaLogistica(db, crudas, marca, { sensibles = false } = {})
     const deposito = p.deposito ?? DEPOSITO_MAYORISTA[marca]
     const pago = pagos.get(p.id)
     return {
-      numero: p.numero, etapa: etapaDe(p), prueba: p.venta_prueba === true, deposito, cliente: p.cliente ?? null, persona: p.persona ?? null, entrega: p.contacto?.entrega ?? null, notas: p.contacto?.obs ?? null,
+      numero: p.numero, venta_numero: p.venta_numero == null ? null : Number(p.venta_numero), etapa: etapaDe(p), prueba: p.venta_prueba === true, deposito, cliente: p.cliente ?? null, persona: p.persona ?? null, entrega: p.contacto?.entrega ?? null, notas: p.contacto?.obs ?? null,
       a_preparar_en: p.a_preparar_en, preparacion_en: p.preparacion_en, preparado_en: p.preparado_en, anulado_en: p.anulado_en, actualizado_en: p.actualizado_en,
       cambio_en: p.editado_en && new Date(p.editado_en) > new Date(p.a_preparar_en) ? p.editado_en : null,
       ...(sensibles ? { cliente_datos: { id: p.cliente_id ?? null, gn_id: p.cliente_gn_id ?? null, telefono: p.persona_whatsapp ?? p.cliente_whatsapp ?? null, email: p.cliente_email ?? null } } : {}),
@@ -452,7 +452,7 @@ export async function pedidosDeLogistica(db, { marca, numero = null, etapa = nul
   const where = `p.marca = $1 and p.a_preparar_en is not null and ($2::bigint is null or p.numero = $2) and ($3::text is null or (${ETAPA_SQL}) = $3) and ($4::timestamptz is null or p.actualizado_en >= $4)`
   const filtros = [marca, numero, etapa, desde]
   const [{ total }] = await q(db, `select count(*)::int as total from pedido_mayorista p where ${where}`, filtros)
-  const filas = await q(db, `select p.*, c.nombre as cliente, w.nombre as persona, vta.prueba as venta_prueba, c.gn_client_id as cliente_gn_id, c.whatsapp as cliente_whatsapp, c.email as cliente_email, w.whatsapp as persona_whatsapp from pedido_mayorista p
+  const filas = await q(db, `select p.*, c.nombre as cliente, w.nombre as persona, vta.prueba as venta_prueba, vta.numero as venta_numero, c.gn_client_id as cliente_gn_id, c.whatsapp as cliente_whatsapp, c.email as cliente_email, w.whatsapp as persona_whatsapp from pedido_mayorista p
       left join cliente c on c.id = p.cliente_id left join cliente_whatsapp w on w.id = p.persona_id left join venta vta on vta.id = p.venta_id
     where ${where} order by p.numero desc limit $5 offset $6`, [...filtros, limit, offset])
   return { total, pedidos: await armarParaLogistica(db, filas, marca, { sensibles }) }

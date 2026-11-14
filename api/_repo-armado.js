@@ -383,7 +383,7 @@ async function transferir(sb, res, armado, b, perfil) {
     if (!doc.ok) {
       await marcar({ estado: 'en_curso', error: null, transfer: sinTanda })
       console.error(`[repo-erp] ${armado.id} t${tandaN}: ${doc.error}`)
-      return res.status(502).json({ error: `No se pudo registrar la transferencia en el ERP (no se movió nada): ${doc.error}` })
+      return res.status(502).json({ error: `No se pudo registrar la transferencia en Areben Gestión (no se movió nada): ${doc.error}` })
     }
     const tanda = { transfer_id: null, movement_id: null, erp: doc.numero, unidades, hora: new Date().toISOString(), prendas: pendiente, desde: enMotor[0], hacia: enMotor[1] }
     const nuevoTransferido = sumar(transferido, pendiente)

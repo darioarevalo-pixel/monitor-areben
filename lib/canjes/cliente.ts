@@ -722,7 +722,7 @@ export async function entregarEnLocal(
 function errorDeRegistro(erp: string | undefined, numero: string | null, e: unknown): string {
   const motivo = (e as Error)?.message || String(e)
   return erp
-    ? `El stock se descontó en el ERP (ajuste ${erp}) pero no se pudo registrar en el canje: ${motivo}. Reintentá: el ERP no lo descuenta dos veces.`
+    ? `El stock se descontó en Areben Gestión (ajuste ${erp}) pero no se pudo registrar en el canje: ${motivo}. Reintentá: Areben Gestión no lo descuenta dos veces.`
     : `La venta se creó en Gestión Nube (nº ${numero || '?'}) pero no se pudo registrar en el canje: ${motivo}. Anulala a mano en GN antes de reintentar.`
 }
 

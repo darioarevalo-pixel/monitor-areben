@@ -496,7 +496,7 @@ export function FilaRenglon({
         <span style={{ fontSize: font.sm }}>{r.variante.size_name}</span>
         {(r.variante.sku ?? r.variante.barcode) && <span style={{ color: color.mut2 }}>· {r.variante.sku ?? r.variante.barcode}</span>}
         <span>·</span>
-        {quedan < 0 ? <Badge tone="danger">Local: sin stock en {r.stock.fuente === 'erp' ? 'el ERP' : 'Gestión Nube'}</Badge> : quedan === 0 ? <Badge tone="warning">ÚLTIMA</Badge> : <span>Local: quedan {quedan}</span>}
+        {quedan < 0 ? <Badge tone="danger">Local: sin stock en {r.stock.fuente === 'erp' ? 'Areben Gestión' : 'Gestión Nube'}</Badge> : quedan === 0 ? <Badge tone="warning">ÚLTIMA</Badge> : <span>Local: quedan {quedan}</span>}
         {/* En el local «depósito» es el de atrás de la percha, que ya está en `local`. El Depósito de GN
             (18210) ⛔ vende desde la caja: sólo repone. */}
         <span>· Para reponer: {r.stock.deposito}</span>
@@ -735,7 +735,7 @@ export function UltimaVenta({
           {enGn ? `${cambio ? 'Cambio' : 'Venta'} #${enErp ? venta.erp_numero ?? '—' : venta.gn_number} · ${plata(venta.total)}` : `Venta provisoria ${numeroProvisorio(venta.id)} · ${plata(venta.total)}`}
         </b>
         <span style={{ display: 'block', fontSize: font.base, color: enGn ? color.ink2 : color.dangerInk }}>
-          {enGn ? (enErp ? 'en el ERP' : 'en Gestión Nube') : `pendiente en ${venta.destino === 'erp' ? 'el ERP' : 'Gestión Nube'} (${venta.ultimo_error ?? 'sin respuesta'}) · reintento automático`}
+          {enGn ? (enErp ? 'en Areben Gestión' : 'en Gestión Nube') : `pendiente en ${venta.destino === 'erp' ? 'Areben Gestión' : 'Gestión Nube'} (${venta.ultimo_error ?? 'sin respuesta'}) · reintento automático`}
         </span>
         {(medios || vuelto > 0 || venta.email || (cambio && cambio.aFavor > 0)) && (
           <span style={{ display: 'block', fontSize: font.base, color: color.ink2 }}>
@@ -1132,7 +1132,7 @@ export function PedidosWebSinArmar({ datos, error }: { datos: PedidosWeb | null;
 
 const ESTADO_VENTA: Record<string, { texto: string; tono: 'success' | 'danger' | 'warning' | 'neutral' }> = {
   en_gn: { texto: 'En Gestión Nube', tono: 'success' },
-  en_erp: { texto: 'En el ERP', tono: 'success' },
+  en_erp: { texto: 'En Areben Gestión', tono: 'success' },
   borrador: { texto: 'Pendiente en GN', tono: 'danger' },
   enviando: { texto: 'Pendiente en GN', tono: 'danger' },
   error: { texto: 'Pendiente en GN', tono: 'danger' },
@@ -1163,7 +1163,7 @@ function marcasDe(v: Venta): string[] {
 /** El estado como se lee en la lista: una venta del ERP (Stunned) que ⛔ llegó está pendiente en el ERP, ⛔ en GN. */
 const estadoDeVenta = (v: Venta) => {
   const e = ESTADO_VENTA[v.estado] ?? { texto: v.estado, tono: 'neutral' as const }
-  return v.destino === 'erp' && e.texto === 'Pendiente en GN' ? { ...e, texto: 'Pendiente en el ERP' } : e
+  return v.destino === 'erp' && e.texto === 'Pendiente en GN' ? { ...e, texto: 'Pendiente en Areben Gestión' } : e
 }
 /** Las ventas anuladas del turno que ⛔ suman, con el número de su sistema (GN o ERP). */
 function Anuladas({ donde, lista }: { donde: string; lista: NonNullable<ResumenTurno['anuladasGN']> }) {
@@ -1378,7 +1378,7 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onTicketCambio, onC
               </button>
               {verProvisorias && (
                 <>
-                  <span style={{ fontSize: font.xs, color: color.mut }}>Sin número de Gestión Nube ni del ERP: esperan la transferencia, no llegaron, o se cancelaron.</span>
+                  <span style={{ fontSize: font.xs, color: color.mut }}>Sin número de Gestión Nube ni de Areben Gestión: esperan la transferencia, no llegaron, o se cancelaron.</span>
                   {tabla(provisorias)}
                 </>
               )}
@@ -1410,7 +1410,7 @@ export function Pendientes({ ventas, onCambio, admin = false, esMio = false }: {
     <Notice tone="danger">
       <div style={{ display: 'grid', gap: space[2] }}>
         <b>
-          Cobradas sin llegar {ventas.every((v) => v.destino === 'erp') ? 'al ERP' : ventas.some((v) => v.destino === 'erp') ? 'a Gestión Nube o al ERP' : 'a Gestión Nube'}: {ventas.length}
+          Cobradas sin llegar {ventas.every((v) => v.destino === 'erp') ? 'a Areben Gestión' : ventas.some((v) => v.destino === 'erp') ? 'a Gestión Nube o a Areben Gestión' : 'a Gestión Nube'}: {ventas.length}
         </b>
         {ventas.map((v) => {
           const rechazada = v.estado === 'error' && v.reintentable === false
@@ -1802,7 +1802,7 @@ export function ConteoModal({ turno, billetes, onCerrar, onListo }: { turno: Tur
 
 /** Cerrar el turno: se cuenta el efectivo (con el fondo) y el botón cierra. */
 /** Dónde se cobra lo que no pasó por esta Caja: GN, o el ERP cuando la Caja ya está entera ahí (BDI desde su corte). */
-const dondeCobra = (r?: Pick<ResumenTurno, 'soloErp'> | null) => (r?.soloErp ? 'el ERP' : 'Gestión Nube')
+const dondeCobra = (r?: Pick<ResumenTurno, 'soloErp'> | null) => (r?.soloErp ? 'Areben Gestión' : 'Gestión Nube')
 
 export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { turno: Turno; billetes: number[]; onCerrar: () => void; onCerrado: (t: Turno) => void }) {
   const [nota, setNota] = useState('')
@@ -1880,7 +1880,7 @@ export function CerrarTurnoModal({ turno, billetes, onCerrar, onCerrado }: { tur
               Esperado = fondo {plata(r.efectivo.fondo)} + efectivo de la Caja {plata(r.efectivo.cobrado)}
               {!!r.efectivo.deEspera && <> + esperando transferencia {plata(r.efectivo.deEspera)}</>}
               {r.cobrosGN !== null && !r.soloErp && <> + cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</>}
-              {!!r.efectivo.cobradoERP && <> + pedidos web (ERP) {plata(r.efectivo.cobradoERP)}</>}
+              {!!r.efectivo.cobradoERP && <> + pedidos web (Areben Gestión) {plata(r.efectivo.cobradoERP)}</>}
               {!!r.efectivo.aportes && <> + ingresos {plata(r.efectivo.aportes)}</>}
               {!!r.efectivo.salidas && <> − salidas {plata(r.efectivo.salidas)}</>}
             </span>
@@ -1991,13 +1991,13 @@ export function CobrosGN({ r }: { r: ResumenTurno }) {
   const erp = r.cobrosERP ?? []
   const avisos = [
     r.cobrosGN === null && <Notice key="gn" tone="warning">Cobros de Gestión Nube: sin leer. No suman al esperado.</Notice>,
-    r.cobrosERP === null && <Notice key="erp" tone="warning">Pedidos web (ERP): sin leer. No suman al esperado.</Notice>,
+    r.cobrosERP === null && <Notice key="erp" tone="warning">Pedidos web (Areben Gestión): sin leer. No suman al esperado.</Notice>,
   ].filter(Boolean)
   const gn = r.cobrosGN ?? []
   const grupos = [
     { titulo: 'Ventas en efectivo en el POS de Gestión Nube', lista: gn.filter((c) => c.pos) },
     { titulo: 'Cobros en efectivo de pedidos web (en Gestión Nube)', lista: gn.filter((c) => !c.pos) },
-    { titulo: 'Pedidos web cobrados en efectivo (en el ERP)', lista: erp },
+    { titulo: 'Pedidos web cobrados en efectivo (en Areben Gestión)', lista: erp },
   ].filter((g) => g.lista.length)
   if (!avisos.length && !grupos.length) return null
   return (
@@ -2110,11 +2110,11 @@ export function ResumenTurnoDatos({
         />
       </div>
       {r.esperando.length > 0 && <Notice tone="warning">Transferencias en espera: {r.esperando.length}. No suman hasta que lleguen.</Notice>}
-      {r.sinGN.length > 0 && <Notice tone="warning">Cobradas sin llegar {r.soloErp ? 'al ERP' : 'a Gestión Nube'}: {r.sinGN.length}. Suman a la caja.</Notice>}
+      {r.sinGN.length > 0 && <Notice tone="warning">Cobradas sin llegar {r.soloErp ? 'a Areben Gestión' : 'a Gestión Nube'}: {r.sinGN.length}. Suman a la caja.</Notice>}
       {/* A12: GN ⛔ anula por API: la venta anulada a mano allá deja de sumar acá (la plata se devolvió). */}
       {/* La del ERP (Stunned) se anula en el ERP y tiene su número (Bruno, 28-oct: decía «Anuladas en Gestión Nube: 96A141DC»). */}
       <Anuladas donde="Gestión Nube" lista={(r.anuladasGN ?? []).filter((v) => v.estado !== 'en_erp')} />
-      <Anuladas donde="el ERP" lista={(r.anuladasGN ?? []).filter((v) => v.estado === 'en_erp')} />
+      <Anuladas donde="Areben Gestión" lista={(r.anuladasGN ?? []).filter((v) => v.estado === 'en_erp')} />
       {r.anuladasGN === null && <Notice tone="neutral">Ventas anuladas en Gestión Nube: sin mirar. Se miran al cerrar.</Notice>}
       {/* B5 (Bruno, 11-oct): el descuento a mano y el cambio de precio son libres, pero a la vista. */}
       {!!r.aMano?.ventas && (
@@ -2167,7 +2167,7 @@ export function ResumenTurnoDatos({
             <span>Fondo {plata(r.efectivo.fondo)}</span>
             <span>+ Efectivo cobrado {plata(r.efectivo.cobrado)}</span>
             {r.efectivo.cobradoGN > 0 && <span>+ Cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</span>}
-            {!!r.efectivo.cobradoERP && <span>+ Pedidos web cobrados en efectivo (ERP) {plata(r.efectivo.cobradoERP)}</span>}
+            {!!r.efectivo.cobradoERP && <span>+ Pedidos web cobrados en efectivo (Areben Gestión) {plata(r.efectivo.cobradoERP)}</span>}
             {!!r.efectivo.deEspera && <span>+ Efectivo de ventas que esperan la transferencia {plata(r.efectivo.deEspera)}</span>}
             {!!r.efectivo.aportes && <span>+ Ingresos {plata(r.efectivo.aportes)}</span>}
             <span>− Salidas {plata(r.efectivo.salidas)}</span>

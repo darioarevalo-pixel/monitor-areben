@@ -9,7 +9,7 @@ const stu = fila({ inventory_id: 2, product_id: 2, size_id: 20, sku: 'STU-REM-00
 const zat = fila({})
 const ajusteFila = (o: Record<string, unknown>): any => ({ inventory_id: 1, product_code: '', producto: 'x', variante: 'M', ubicacion: 'Local', barcode: 'b', vivo: 5, dif: -1, nuevo: 4, sistema: 5, contado: 4, ...o })
 
-describe('¿la línea ya está en el ERP? (erp_corte)', () => {
+describe('¿la línea ya está en Areben Gestión? (erp_corte)', () => {
   const cortes = cortesDeFilas([{ linea: 'stunned', instante: new Date('2026-10-28T23:40:27.759Z') }, { linea: 'bdi', instante: '2026-11-16T03:00:00Z' }])
   it('hay fila y el instante ya pasó', () => {
     expect(lineaEnErp(cortes, 'stunned', new Date('2026-10-31T12:00:00Z'))).toBe(true)
@@ -58,7 +58,7 @@ describe('el «sistema» de una línea cortada es el libro', () => {
 
 describe('partirExcel', () => {
   const vivo = { '1_10': zat, '2_20': { ...stu, fuente: 'erp', linea: 'stunned' } }
-  it('las del libro van al ERP con su dif y su línea; el resto, al Excel', () => {
+  it('las del libro van a Areben Gestión con su dif y su línea; el resto, al Excel', () => {
     const r = partirExcel([ajusteFila({}), ajusteFila({ inventory_id: 2, dif: 2 })], vivo)
     expect(r.excel.map((x: any) => x.inventory_id)).toEqual([1])
     expect(r.erp).toEqual([{ product_id: 2, size_id: 20, sku: 'STU-REM-0001-M', barcode: 'b', dif: 2, linea: 'stunned' }])
@@ -68,7 +68,7 @@ describe('partirExcel', () => {
     expect(r.erp).toEqual([])
     expect(r.excel).toHaveLength(1)
   })
-  it('conParteErp deja `rows` entera (se muestra) y filasExcel saca las del ERP', () => {
+  it('conParteErp deja `rows` entera (se muestra) y filasExcel saca las de Areben Gestión', () => {
     const pv: any = { rows: [ajusteFila({}), ajusteFila({ inventory_id: 2, dif: 2 })] }
     const con = conParteErp(pv, vivo as any, 'ref-123456')
     expect(con.rows).toHaveLength(2)
@@ -81,7 +81,7 @@ describe('partirExcel', () => {
   it('los carteles nombran las líneas y los ajustes', () => {
     expect(lineasDeParteErp({ renglones: [{ linea: 'stunned' }, { linea: 'zattia' }, { linea: 'stunned' }] })).toBe('Stunned y Zattia')
     expect(lineasDeParteErp({ renglones: [{ linea: 'bdi' }] })).toBe('BDI')
-    expect(textoAjustesErp([{ ajuste: 12 }, { ajuste: 13 }])).toBe(' Quedó ajustado en el ERP (A-12, A-13).')
+    expect(textoAjustesErp([{ ajuste: 12 }, { ajuste: 13 }])).toBe(' Quedó ajustado en Areben Gestión (A-12, A-13).')
     expect(textoAjustesErp(undefined)).toBe('')
   })
   it('aviso: las prendas que cambian ≥ 2 u (Bruno 30-oct)', () => {
@@ -114,7 +114,7 @@ describe('ajustesDeConteo', () => {
     const a: any = ajustesDeConteo(b(), 'zattia', lineas, ['stunned'], new Map([['2:20', 1]]))
     expect(a[0].renglones[0].contado).toBe(0)
   })
-  it('sin parte ERP, o sólo dif 0 ⇒ []', () => {
+  it('sin parte Areben Gestión, o sólo dif 0 ⇒ []', () => {
     expect(ajustesDeConteo({ ubicacion: 'Local' }, 'zattia', lineas, ['stunned'], new Map())).toEqual([])
     expect(ajustesDeConteo(b({ erp: { ref: 'abcdef-1234', renglones: [{ product_id: 2, size_id: 20, dif: 0 }] } }), 'zattia', lineas, ['stunned'], new Map())).toEqual([])
   })

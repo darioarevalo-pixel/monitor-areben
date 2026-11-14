@@ -67,7 +67,7 @@ export function ventaDeFicha(f: FichaDeVenta): VentaOriginal & { total: number }
 }
 
 /** Una venta que salió de la búsqueda: lo que se ve en la lista y cómo abrirla. */
-export type FilaVenta = { clave: string; numero: string | number; cliente: string | null; fecha: string | null; total: number; rotulo: 'ERP' | 'Gestión Nube'; prueba: boolean; abrir: () => Promise<VentaOriginal & { total: number }> }
+export type FilaVenta = { clave: string; numero: string | number; cliente: string | null; fecha: string | null; total: number; rotulo: 'Areben Gestión' | 'Gestión Nube'; prueba: boolean; abrir: () => Promise<VentaOriginal & { total: number }> }
 
 /**
  * Buscar la venta original: del ERP por número o cliente y, con `gn` (alguna línea de `lineas` ya cortó) y un número, también la de
@@ -96,7 +96,7 @@ export async function buscarVentasDelCambio(store: MarcaErp, texto: string, { gn
   // 🔴 Con la línea cortada (`gn`), una venta del ERP DE PRUEBA es la copia del paralelo de una de GN: cambiarla ⛔ movería el
   // stock (revisión 10-nov). Se ofrece sólo la de Gestión Nube; el servidor también la frena (`cambiarVentaPropia`).
   for (const v of r.ventas.filter((x) => x.tipo === 'venta' && x.estado === 'confirmada' && (!lineas || lineas.includes(x.marca)) && !(gn && x.prueba))) {
-    filas.push({ clave: `erp-${v.id}`, numero: v.numero, cliente: v.cliente, fecha: v.ocurridaEn, total: v.total, rotulo: 'ERP', prueba: v.prueba, abrir: async () => ventaDeFicha(await leerFichaDeVenta(store, v.id)) })
+    filas.push({ clave: `erp-${v.id}`, numero: v.numero, cliente: v.cliente, fecha: v.ocurridaEn, total: v.total, rotulo: 'Areben Gestión', prueba: v.prueba, abrir: async () => ventaDeFicha(await leerFichaDeVenta(store, v.id)) })
   }
   return { filas, aviso: filas.length ? null : aviso ?? 'No hay ventas con esa búsqueda.' }
 }
@@ -218,7 +218,7 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
       return
     }
     const linea = lineaDe(v)
-    if (!erpLineas.includes(linea)) throw new Error(`Los cambios de ${nombreDe(linea)} sin venta del ERP todavía se hacen en Gestión Nube.`)
+    if (!erpLineas.includes(linea)) throw new Error(`Los cambios de ${nombreDe(linea)} sin venta de Areben Gestión todavía se hacen en Gestión Nube.`)
     const otra = devueltas.find((d) => d.linea && d.linea !== linea)
     if (otra) throw new Error(`Este cambio mezcla productos de ${nombreDe(otra.linea as string)} y de ${nombreDe(linea)}: un cambio es de una sola marca.`)
     const clave = claveDePrenda(v.product_id, v.size_id)

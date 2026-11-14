@@ -197,7 +197,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
           <div style={tarjeta}>
             <span style={rotulo}>Resultado comercial</span>
             <span style={grande}>{m && gTotal != null ? formatMoney(m.margen - gTotal) : '…'}</span>
-            <span style={nota}>{gs?.error ? gs.error : gTotal == null ? 'margen menos gastos comerciales' : gTotal ? `margen menos gastos comerciales (${formatMoney(gTotal)}, reales del ERP)` : 'margen menos gastos comerciales: todavía no hay gastos reales en el ERP'}</span>
+            <span style={nota}>{gs?.error ? gs.error : gTotal == null ? 'margen menos gastos comerciales' : gTotal ? `margen menos gastos comerciales (${formatMoney(gTotal)}, reales de Areben Gestión)` : 'margen menos gastos comerciales: todavía no hay gastos reales en Areben Gestión'}</span>
             {gs?.g && <div aria-label="Gastos del resultado" style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
               {renglonesDelResultado(gs.g).map(([k, v]) => <span key={k} style={{ ...nota, display: 'flex', justifyContent: 'space-between', gap: space[2] }}><span>{k}</span><span>{formatMoney(v)}</span></span>)}
             </div>}
@@ -227,7 +227,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
           <MasDejan productos={top ?? []} estado={top ? null : pp?.error ?? '…'} href={href('ventas', 'por-producto')} />
         </div>
         <div style={{ fontSize: font.sm, color: color.mut }}>
-          {m && a ? `Del ${fecha(m.desde)} al ${fecha(m.hasta)}, contra el ${fecha(a.desde)} al ${fecha(a.hasta)}` : 'Este mes'} · lo vendido, el margen y los canales son de Gestión Nube y, desde que la marca pasó al ERP, del ERP, con su costo. Lo que más deja usa el costo vigente del ERP, como Ventas › Por producto. El stock a costo es el disponible de Stock por el costo de cada producto.
+          {m && a ? `Del ${fecha(m.desde)} al ${fecha(m.hasta)}, contra el ${fecha(a.desde)} al ${fecha(a.hasta)}` : 'Este mes'} · lo vendido, el margen y los canales son de Gestión Nube y, desde que la marca pasó a Areben Gestión, de Areben Gestión, con su costo. Lo que más deja usa el costo vigente de Areben Gestión, como Ventas › Por producto. El stock a costo es el disponible de Stock por el costo de cada producto.
         </div>
       </section>}
 
@@ -256,7 +256,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
             </div>
           ))}
         </div>
-        <div style={{ fontSize: font.sm, color: color.mut }}>Ventas cuenta las de este mes del ERP{enErp ? '' : ' (en paralelo con Gestión Nube)'}. Lo que se hace afuera —conteos, transferencias, preparación— sigue en el monitor.</div>
+        <div style={{ fontSize: font.sm, color: color.mut }}>Ventas cuenta las de este mes de Areben Gestión{enErp ? '' : ' (en paralelo con Gestión Nube)'}. Lo que se hace afuera —conteos, transferencias, preparación— sigue en el monitor.</div>
       </section>
     </div>
   )

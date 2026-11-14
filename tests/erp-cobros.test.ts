@@ -7,7 +7,7 @@ const c = (o: Record<string, unknown>) => ({
   cliente: null, usuario: 'Lorena', comision: null, acredita_el: null, anulado: false, ref: null, linea: 'zattia', ...o,
 })
 
-describe('ERP › Cobros', () => {
+describe('Areben Gestión › Cobros', () => {
   const filas = [
     c({ id: '1' }),
     c({ id: '2', monto: -200, venta: { id: 'v2', numero: 861, canal: null, origen: 'caja' } }),
@@ -69,7 +69,7 @@ describe('ERP › Cobros', () => {
     const e = (o: Record<string, unknown>) => ({ id: 'ent-1', linea: 'bdi', numero: '4512', forma_pago: 'transferencia', monto: null, entrego: 'Ger', entregada_en: '2026-10-25T15:00:00.000Z', avisos: [], motivo: 'sin_cuenta', intento_en: '2026-10-26T09:00:00.000Z', intentos: '2', ...o })
     const sin = [e({}), e({ id: 'ent-2', numero: '4513', forma_pago: 'efectivo', monto: 12500.5, motivo: null, entregada_en: '2026-10-24T10:00:00.000Z' })].map(armarEntregaSinCobrar)
     expect(sin[0]).toMatchObject({ id: 'sin_cobrar:ent-1', que: 'Pedido 4512 · entregó Ger', medioTexto: 'Transferencia', clase: 'sin_cobrar', montoDicho: false, motivo: 'sin_cuenta', intentos: 2 })
-    expect(sin[1]).toMatchObject({ montoDicho: true, monto: 12500.5, medioTexto: 'Efectivo', motivo: 'El ERP no dejó el motivo.' })
+    expect(sin[1]).toMatchObject({ montoDicho: true, monto: 12500.5, medioTexto: 'Efectivo', motivo: 'Areben Gestión no dejó el motivo.' })
     const todas = [...filas, ...sin]
     expect(contarVistas(todas)).toMatchObject({ todos: 6, sin_cobrar: 2 })
     expect(filtrar(todas, { vista: 'sin_cobrar', q: '4513' }).map((f) => f.id)).toEqual(['sin_cobrar:ent-2'])

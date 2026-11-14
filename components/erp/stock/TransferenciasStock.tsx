@@ -43,13 +43,13 @@ const atras = (hoy: string, n: number) => new Date(Date.parse(`${hoy}T12:00:00Z`
 /** Lo que dice «En el ERP»: lo que anotó el libro, o por qué ⛔ (anterior al libro, cancelada). */
 function enElErp(f: FilaTransferencia, libroDesde: string | null) {
   if (f.estado === 'cancelado' || !f.enviadas) return { texto: '—', ok: true, ayuda: undefined }
-  if (!f.enLibro && libroDesde && f.creada < libroDesde) return { texto: 'antes del ERP', ok: true, ayuda: `El ERP del ERP arranca el ${cuandoCorto(libroDesde)}` }
-  return { texto: u(f.enLibro ?? 0), ok: f.enLibro === f.enviadas, ayuda: f.enLibro === f.enviadas ? 'El ERP la anotó entera' : `El ERP anotó ${f.enLibro ?? 0} de ${f.enviadas}` }
+  if (!f.enLibro && libroDesde && f.creada < libroDesde) return { texto: 'antes de Areben Gestión', ok: true, ayuda: `Areben Gestión de Areben Gestión arranca el ${cuandoCorto(libroDesde)}` }
+  return { texto: u(f.enLibro ?? 0), ok: f.enLibro === f.enviadas, ayuda: f.enLibro === f.enviadas ? 'Areben Gestión la anotó entera' : `Areben Gestión anotó ${f.enLibro ?? 0} de ${f.enviadas}` }
 }
 
 function bajarCsv(filas: FilaTransferencia[], marca: MarcaErp) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Nº', 'Creada', 'De', 'A', 'Origen', 'Quién', 'Estado', 'Pedidas', 'Preparadas', 'Enviadas', 'Faltan', 'En el ERP'].map(c).join(';')]
+  const renglones = [['Nº', 'Creada', 'De', 'A', 'Origen', 'Quién', 'Estado', 'Pedidas', 'Preparadas', 'Enviadas', 'Faltan', 'En Areben Gestión'].map(c).join(';')]
   for (const f of filas) renglones.push([f.numero ?? '', cuandoCorto(f.creada), f.desdeTexto, f.haciaTexto, f.origenTexto, f.persona ?? '', f.estadoTexto, f.pedidas, f.armadas, f.enviadas, f.faltan, f.enLibro ?? ''].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -149,7 +149,7 @@ export function TransferenciasStock() {
       </div>
       {/* Stunned ya vive en el ERP (corte del 28-oct): la transferencia se mueve y se recibe acá, con sus faltantes (Bruno, 28-oct). */}
       {tienda === 'stunned'
-        ? <Notice tone="neutral">Stunned ya vive en el ERP: la transferencia se mueve y se recibe acá. Lo que no llega al local queda como faltante («Transferida con faltantes»).</Notice>
+        ? <Notice tone="neutral">Stunned ya vive en Areben Gestión: la transferencia se mueve y se recibe acá. Lo que no llega al local queda como faltante («Transferida con faltantes»).</Notice>
         : <Notice tone="warning">
           <b>«Recibida» todavía no se controla</b>: Gestión Nube mueve el stock de un golpe y nadie la escanea al llegar al local (el último paso va rayado).
           Tampoco hay transferencias hechas a mano fuera de Reposición: las que se hacen en la pantalla de Gestión Nube aparecen como «A mano en Gestión Nube».
@@ -200,7 +200,7 @@ export function TransferenciasStock() {
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo las transferencias…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {libroDesde && <> · el ERP del ERP arranca el {cuandoCorto(libroDesde)}</>}
+          {libroDesde && <> · Areben Gestión de Areben Gestión arranca el {cuandoCorto(libroDesde)}</>}
         </div>
       </div>
 
@@ -229,7 +229,7 @@ function FichaTransferencia({ f, libroDesde, onCerrar }: { f: FilaTransferencia;
         {f.origen !== 'gn' && <DatoFicha titulo="Preparadas">{u(f.armadas)}</DatoFicha>}
         <DatoFicha titulo="Enviadas">{u(f.enviadas)}</DatoFicha>
         {f.faltan > 0 && <DatoFicha titulo="Faltaron">{u(f.faltan)}</DatoFicha>}
-        <DatoFicha titulo="En el ERP">{e.ayuda ? `${e.texto} · ${e.ayuda.toLowerCase()}` : e.texto}</DatoFicha>
+        <DatoFicha titulo="En Areben Gestión">{e.ayuda ? `${e.texto} · ${e.ayuda.toLowerCase()}` : e.texto}</DatoFicha>
         {f.cerrada && <DatoFicha titulo={cerrada ? 'Transferida' : 'Cerrada'}>{cuandoCorto(f.cerrada)}</DatoFicha>}
       </DatosFicha>
       {f.tandas.length > 1 && (
