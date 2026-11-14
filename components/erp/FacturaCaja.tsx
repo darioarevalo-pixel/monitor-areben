@@ -23,6 +23,7 @@ import { marcaParaPOS, usarMarcaCaja } from '@/lib/caja/marca'
 import { descargarFactura, numeroComprobante, type FacturaEmitida } from '@/lib/arca/factura-pdf'
 import { buscarClientas, buscarVentas, facturarCambio, facturarVenta, leerCorteDeLinea, leerFichaDeVenta, type CambioFacturado, type Clienta, type FichaDeVenta, type MarcaErp, type PedidoFactura, type VentaPropia } from '@/lib/erp/cliente'
 import { NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
+import { seOfreceParaFacturar } from '@/lib/erp/factura.core.js'
 
 export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar» en la ficha de la venta: abre con ella cargada (Bruno, 9-nov). */ ventaInicial?: string | null }) {
   const { marca: delShell } = useSesion()
@@ -111,7 +112,7 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
 
   const buscar = () => correr(async () => {
     limpiar()
-    setVentas((await buscarVentas(store, { q, desde: '', hasta: '' })).ventas.filter((v) => v.estado === 'confirmada' && (tienda === 'bdi' || v.marca === tienda)))
+    setVentas((await buscarVentas(store, { q, desde: '', hasta: '', propias: true })).ventas.filter((v) => seOfreceParaFacturar(v) && (tienda === 'bdi' || v.marca === tienda)))
   }, 'No se pudo buscar.')
 
   const abrir = (id: string) => correr(async () => {

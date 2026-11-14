@@ -4,7 +4,7 @@
  * prueba facturada en producción, o un PDF cuyos renglones ⛔ suman lo facturado.
  */
 import { describe, it, expect } from 'vitest'
-import { armarFacturaDelCambio, claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
+import { armarFacturaDelCambio, claveDeFactura, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta, seOfreceParaFacturar } from '../lib/erp/factura.core.js'
 import { CBTE, COND_IVA, DOC } from '../motor/arca/arca.core.js'
 
 const ID = '0b5e7a52-6d1c-4b8e-9a51-2f6c7d8e9f01'
@@ -70,6 +70,16 @@ describe('mesDeVenta', () => {
 
 describe('puedeFacturar', () => {
   const v = { estado: 'confirmada', tipo: 'venta', total: 1000, prueba: true }
+  it('la historia de GN (origen gn, Bruno 14-nov) ⛔ se factura desde el ERP: ni en producción ni sin ser de prueba', () => {
+    const gn = { ...v, prueba: false, origen: 'gn' }
+    expect(puedeFacturar(gn, { ambiente: 'produccion', facturada: false })).toMatch(/Gestión Nube/)
+    expect(puedeFacturar(gn, { ambiente: 'homologacion', facturada: false })).toMatch(/Gestión Nube/)
+    expect(puedeFacturar({ ...gn, origen: 'tn' }, { ambiente: 'produccion', facturada: false })).toBeNull()
+  })
+  it('la lista de «Facturar una venta» deja afuera la de GN y la anulada (el #2097 del 14-nov traía las dos)', () => {
+    const filas = [{ numero: 2097, estado: 'confirmada', origen: 'gn' }, { numero: 2097, estado: 'anulada', origen: 'caja' }, { numero: 2098, estado: 'confirmada', origen: 'tn' }]
+    expect(filas.filter(seOfreceParaFacturar).map((f) => f.origen)).toEqual(['tn'])
+  })
   it('una venta de prueba sale en homologación y ⛔ en producción', () => {
     expect(puedeFacturar(v, { ambiente: 'homologacion', facturada: false })).toBeNull()
     expect(puedeFacturar(v, { ambiente: 'produccion', facturada: false })).toMatch(/PRUEBA/)

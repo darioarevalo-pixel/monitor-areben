@@ -687,7 +687,7 @@ async function negativosDelLibro(marca) {
  * Ventas propias (las que escribe el motor, `motor/venta/`): busca por número, cliente o fecha. Lee
  * directo de la base (contrato de la venta, §2); ⛔ escribe. Stunned vive en la base de Zattia.
  */
-export async function buscarVentas({ marca, q, desde, hasta }) {
+export async function buscarVentas({ marca, q, desde, hasta, propias = false }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const b = leerBusqueda({ q, desde, hasta })
   if (b.error) return { status: 400, error: b.error }
@@ -695,6 +695,8 @@ export async function buscarVentas({ marca, q, desde, hasta }) {
   const sb = createClient(url, key)
   let consulta = sb.from('venta').select('id, numero, marca, tipo, estado, origen, canal, deposito, total, prueba, ocurrida_en, cliente:cliente_id (nombre, doc)')
   if (b.numero != null) consulta = consulta.eq('numero', b.numero)
+  // Sin la historia de GN ANTES del tope de 100 (una clienta con muchas compras en GN taparía las del ERP).
+  if (propias) consulta = consulta.neq('origen', 'gn')
   if (b.cliente) {
     const like = `%${b.cliente}%`
     const { data, error } = await sb.from('cliente').select('id').or(`nombre.ilike.${like},doc.ilike.${like},email.ilike.${like},whatsapp.ilike.${like}`).limit(200)
@@ -2181,7 +2183,7 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'ventas') {
-      const r = await buscarVentas({ marca: String(req.query.marca || ''), q: req.query.q, desde: req.query.desde, hasta: req.query.hasta })
+      const r = await buscarVentas({ marca: String(req.query.marca || ''), q: req.query.q, desde: req.query.desde, hasta: req.query.hasta, propias: req.query.propias === '1' })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

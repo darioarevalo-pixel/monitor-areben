@@ -248,8 +248,9 @@ export type FichaDeVenta = {
   puedeAnular: string | null
 }
 
-export const buscarVentas = (marca: MarcaErp, f: { q: string; desde: string; hasta: string }) =>
-  pedir<{ ventas: VentaPropia[]; cortado: boolean }>(null, `&vista=ventas&marca=${marca}&q=${encodeURIComponent(f.q)}&desde=${f.desde}&hasta=${f.hasta}&nc=${Date.now()}`, 'No se pudo buscar.')
+/** `propias`: sin la historia importada de GN (`origen = 'gn'`), que repite números del ERP. */
+export const buscarVentas = (marca: MarcaErp, f: { q: string; desde: string; hasta: string; propias?: boolean }) =>
+  pedir<{ ventas: VentaPropia[]; cortado: boolean }>(null, `&vista=ventas&marca=${marca}&q=${encodeURIComponent(f.q)}&desde=${f.desde}&hasta=${f.hasta}${f.propias ? '&propias=1' : ''}&nc=${Date.now()}`, 'No se pudo buscar.')
 
 export const leerFichaDeVenta = (marca: MarcaErp, id: string) =>
   pedir<FichaDeVenta>(null, `&vista=venta&marca=${marca}&id=${id}&nc=${Date.now()}`, 'No se pudo leer la venta.')
