@@ -58,6 +58,16 @@ type MonitorState = {
    * medianoche y el sello dejaría de coincidir consigo mismo.
    */
   cargar: (marca: Marca, historiaCompleta: boolean, forzar?: boolean) => Promise<void>
+  /**
+   * Baja todo de nuevo **sin sacar lo que se está viendo**: lo de ahora sigue en pantalla
+   * (`origen.refrescando`) y lo nuevo lo reemplaza recién cuando llegó entero.
+   *
+   * 🔑 Existe por la Caja (Bruno, 14-nov): un producto dado de alta en GN a media mañana ⛔ tenía
+   * precio en el POS hasta que vencía el caché de 6 h —F5 lee el caché, ⛔ la red—. `cargar(…, true)`
+   * no sirve ahí: baja `estado` a `'cargando'` y la Caja se queda ~20 s sin productos, con una
+   * clienta delante. Lanza si la bajada falla; lo que se veía queda igual.
+   */
+  actualizar: (marca: Marca, historiaCompleta: boolean) => Promise<void>
   limpiar: () => void
 
   /**
@@ -167,6 +177,23 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
       await refrescar(marca, desde, publicar)
     } catch (e) {
       publicar({ estado: 'error', error: e instanceof Error ? e.message : String(e), progreso: null })
+    }
+  },
+
+  async actualizar(marca, historiaCompleta) {
+    // Sin los datos de ESTA marca en pantalla no hay nada que conservar: es una carga normal.
+    if (get().marca !== marca || get().estado !== 'listo') return get().cargar(marca, historiaCompleta, true)
+    // El mismo guard por marca que `cargar`: lo que llega tarde, con la marca ya cambiada, se descarta.
+    const publicar = (parcial: Partial<MonitorState>) => {
+      if (get().marca === marca) set(parcial)
+    }
+    const antes = get().origen
+    publicar({ origen: { tipo: 'cache', edadMin: antes?.tipo === 'cache' ? antes.edadMin : 0, refrescando: true } })
+    try {
+      await refrescar(marca, desdeVentas(historiaCompleta, ahora()), publicar)
+    } catch (e) {
+      publicar({ origen: antes })
+      throw e
     }
   },
 
