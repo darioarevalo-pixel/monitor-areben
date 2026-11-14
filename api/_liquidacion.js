@@ -1315,7 +1315,7 @@ export default async function handler(req, res) {
     // devolvió el PATCH. Un pedido aceptado ⛔ es un precio puesto.
     if (b.action === 'releer-erp') {
       if (!puede.aplicar) {
-        return res.status(403).json({ error: 'Releer lo pedido al ERP pide el permiso «Puede escribir los precios en Gestión Nube».' });
+        return res.status(403).json({ error: 'Releer lo pedido a Areben Gestión pide el permiso «Puede escribir los precios en Gestión Nube».' });
       }
       const { data: filas, error: e0 } = await supabase.from('liquidacion_items')
         .select('pid, estado, datos').eq('store', store).eq('liq_id', id).in('estado', ['confirmado', 'aplicado']);
@@ -1438,7 +1438,7 @@ export default async function handler(req, res) {
             .update({ datos: nuevo, updated_at: new Date().toISOString() })
             .eq('store', store).eq('liq_id', id).eq('pid', x.pid);
           resultados.push(eU
-            ? { pid: x.pid, ok: false, error: `se cargó en el ERP pero no se pudo anotar acá: ${eU.message}` }
+            ? { pid: x.pid, ok: false, error: `se cargó en Areben Gestión pero no se pudo anotar acá: ${eU.message}` }
             : { pid: x.pid, ok: true, pendiente: true, precio: x.quiere });
         }
       }

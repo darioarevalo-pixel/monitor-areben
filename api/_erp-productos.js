@@ -61,7 +61,7 @@ export async function listaDeProductos({ marca, costos }, deps) {
     : Promise.resolve({ filas: [], error: null })
   const [stock, motor, liquidaciones] = await Promise.all([
     listaDeStock({ marca }, deps),
-    deps.conMotor(marca, 'Los productos del ERP', (pg) => delMotor(pg, { costos })),
+    deps.conMotor(marca, 'Los productos de Areben Gestión', (pg) => delMotor(pg, { costos })),
     liq,
   ])
   if (stock.status) return stock

@@ -271,10 +271,10 @@ export function ConteoDeposito() {
     if (!excel.length) {
       const n = preview.erp?.renglones.length || 0
       const okErp = await confirmar({
-        titulo: `Ajustar ${lineasDeParteErp(preview.erp)} en el ERP`,
+        titulo: `Ajustar ${lineasDeParteErp(preview.erp)} en Areben Gestión`,
         tono: 'warning',
         ok: 'Ajustar y guardar',
-        mensaje: `Se ajustan ${n} ${n === 1 ? 'variante' : 'variantes'} de ${lineasDeParteErp(preview.erp)} en el ERP, en el acto: el stock pasa a lo contado. No se genera Excel.`,
+        mensaje: `Se ajustan ${n} ${n === 1 ? 'variante' : 'variantes'} de ${lineasDeParteErp(preview.erp)} en Areben Gestión, en el acto: el stock pasa a lo contado. No se genera Excel.`,
       })
       if (okErp) await guardarRegistro(preview)
       return
@@ -292,7 +292,7 @@ export function ConteoDeposito() {
           <div style={{ marginTop: space[3] }}>
             <ConfirmDetalle label="Líneas a ajustar" valor={excel.length} />
             <ConfirmDetalle label="Ubicación" valor={preview.ubicacion || '—'} />
-            {preview.erp && <ConfirmDetalle label={`De ${lineasDeParteErp(preview.erp)}, al ERP (sin Excel)`} valor={preview.erp.renglones.length} />}
+            {preview.erp && <ConfirmDetalle label={`De ${lineasDeParteErp(preview.erp)}, a Areben Gestión (sin Excel)`} valor={preview.erp.renglones.length} />}
           </div>
         </>
       ),
@@ -420,7 +420,7 @@ export function ConteoDeposito() {
               </Button>
             ) : preview.rows.length && !excelHecho ? (
               <Button variant="solid" tone="brand" onClick={() => void onConfirmar()}>
-                {filasExcel(preview).length ? 'Generar Excel y guardar' : 'Ajustar en el ERP y guardar'}
+                {filasExcel(preview).length ? 'Generar Excel y guardar' : 'Ajustar en Areben Gestión y guardar'}
               </Button>
             ) : (
               <Button variant="solid" tone="brand" onClick={() => void onGuardarSinDif()}>

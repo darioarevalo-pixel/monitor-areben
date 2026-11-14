@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  COLUMNAS_DE_SIEMPRE, accionesDeFila, alternarColumna, armarFila, clienteDe, contarVistas, estadoDeVenta, filtrar, ventasDeTnSinNombre,
+  COLUMNAS_DE_SIEMPRE, ESTADO, accionesDeFila, alternarColumna, armarFila, clienteDe, contarVistas, estadoDeVenta, filtrar, ventasDeTnSinNombre,
   historialDeVenta, moverColumna, normalizarPrefs, ordenar, rangoDePeriodo, resumen, saldoDeVenta,
 } from '@/lib/erp/ventas-lista.core.js'
 import { cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, notaDeVentaErp, numeroDeFactura, textoDeCampo } from '../api/_erp-ventas.js'
@@ -48,6 +48,21 @@ describe('el estado de cada venta', () => {
     expect(estadoDeVenta(venta({ origen: 'tn', tnEstado: 'listo', envioTipo: 'ship' }))).toBe('listo_envio')
     expect(estadoDeVenta(venta({ origen: 'tn', tnEstado: null }))).toBe('sin_estado')
     expect(estadoDeVenta(venta({ origen: 'tn', tnEstado: 'algo_nuevo' }))).toBe('sin_estado')
+  })
+  it('Mercado Libre se arma en Logística: se registra acá pero ⛔ entra en «A preparar» ni en «Listas» (Bruno, 14-nov)', () => {
+    // Antes: «Sin estado de Tienda Nube»; y con un estado de pedido colgado, caía en «A preparar».
+    for (const tnEstado of [null, 'a_preparar', 'en_preparacion', 'listo'])
+      expect(estadoDeVenta(venta({ origen: 'ml', tnEstado, envioTipo: 'ship' }))).toBe('en_logistica')
+    expect(estadoDeVenta(venta({ origen: 'ml', estado: 'anulada' }))).toBe('anulada')
+    const ml = armarFila(venta({ origen: 'ml', tnEstado: 'a_preparar', prueba: false }))
+    const tn = armarFila(venta({ id: 'v2', origen: 'tn', tnEstado: 'a_preparar', prueba: false }))
+    expect(ESTADO[ml.estadoKey]).toEqual(['neutral', 'Se arma en Logística'])
+    const n = contarVistas([ml, tn])
+    expect(n.preparar).toBe(1)
+    expect(n.listas).toBe(0)
+    expect(filtrar([ml, tn], { vista: 'preparar' }).map((f) => f.id)).toEqual(['v2'])
+    // Sigue en «Todas» y en el filtro de su origen: se registra en Areben Gestión.
+    expect(filtrar([ml, tn], { vista: 'todas', origenes: ['ml'] }).map((f) => f.id)).toEqual(['v1'])
   })
   it('el saldo: lo que quedó a cuenta, o lo del motor si vino; una anulada ⛔ debe', () => {
     const aCuenta = venta({ pagos: [{ medio: 'efectivo', monto: 1000 }, { medio: 'cuenta', monto: 17990 }] })

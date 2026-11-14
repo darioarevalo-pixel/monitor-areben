@@ -16,7 +16,7 @@ export const PG_DE_STORE = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATT
 export async function conBase(store, fn, techoMs = 6000) {
   const nombre = PG_DE_STORE[store]
   const conexion = nombre && process.env[nombre]
-  if (!conexion) throw new Error(`Falta ${nombre || `la base de ${store}`}: no se puede saber si la línea ya está en el ERP.`)
+  if (!conexion) throw new Error(`Falta ${nombre || `la base de ${store}`}: no se puede saber si la línea ya está en Areben Gestión.`)
   const { default: pg } = await import('pg')
   const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: techoMs, statement_timeout: techoMs, query_timeout: techoMs })
   await db.connect()
@@ -33,7 +33,7 @@ export async function cortesDe(db) {
     const { rows } = await db.query(SQL_CORTES)
     return cortesDeFilas(rows)
   } catch (e) {
-    if (e && e.code === '42P01') throw new Error('Falta la tabla erp_corte (motor sql/063): no se sabe qué línea ya está en el ERP.')
+    if (e && e.code === '42P01') throw new Error('Falta la tabla erp_corte (motor sql/063): no se sabe qué línea ya está en Areben Gestión.')
     throw e
   }
 }

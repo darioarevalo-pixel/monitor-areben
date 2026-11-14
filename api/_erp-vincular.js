@@ -35,7 +35,7 @@ export async function ponerVinculoErp({ body, usuario }, deps) {
   const { marca, tienda, variant_id, product_id, size_id } = body ?? {}
   const mal = invalido(marca, tienda)
   if (mal) return { status: 400, error: mal }
-  if (![variant_id, product_id, size_id].every(idValido)) return { status: 400, error: 'Faltan la variante de Tienda Nube y la del ERP.' }
+  if (![variant_id, product_id, size_id].every(idValido)) return { status: 400, error: 'Faltan la variante de Tienda Nube y la de Areben Gestión.' }
   const { guardarVinculoDelERP } = await motor()
   return deps.conMotor(marca, 'Vincular', async (pg) => delMotor(await guardarVinculoDelERP(envolver(pg), {
     tienda, variant_id: Number(variant_id), product_id: Number(product_id), size_id: Number(size_id), usuario: usuario || null,

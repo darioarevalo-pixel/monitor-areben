@@ -80,7 +80,7 @@ export function ProveedoresErp() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap', alignItems: 'center' }}>
-        <p style={{ margin: 0, color: color.mut }}>Los proveedores del ERP, para ver. Nacen en Ingresos, con la orden de compra.</p>
+        <p style={{ margin: 0, color: color.mut }}>Los proveedores de Areben Gestión, para ver. Nacen en Ingresos, con la orden de compra.</p>
         <div style={{ display: 'flex', gap: space[2] }}>
           <Button variant="outline" onClick={() => abrir('/prm')}>Abrir PRM ↗</Button>
           <Button variant="outline" onClick={() => abrir('/recepciones')}>Abrir Ingresos ↗</Button>

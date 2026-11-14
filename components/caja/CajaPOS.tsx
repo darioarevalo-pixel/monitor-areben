@@ -1050,7 +1050,7 @@ function POS() {
   const gnOk = gnSenal ? gnSenal.ok : sinLlegar === 0
   // 🔴 La caja del EVENTO sólo vende Stunned, al ERP: ahí ⛔ hay Gestión Nube que nombrar (Bruno 29-oct: «que sea conectado o algo así»).
   const enEvento = puestoCaja() === 'evento'
-  const gnPorque = enEvento ? (sinLlegar ? `${sinLlegar} cobradas sin llegar al ERP.` : 'Sin ventas pendientes.') : gnSenal ? `Gestión Nube: ${gnSenal.que}.` : sinLlegar ? `Gestión Nube: ${sinLlegar} cobradas sin llegar.` : 'Gestión Nube: sin ventas pendientes.'
+  const gnPorque = enEvento ? (sinLlegar ? `${sinLlegar} cobradas sin llegar a Areben Gestión.` : 'Sin ventas pendientes.') : gnSenal ? `Gestión Nube: ${gnSenal.que}.` : sinLlegar ? `Gestión Nube: ${sinLlegar} cobradas sin llegar.` : 'Gestión Nube: sin ventas pendientes.'
   const subtotalFilas = filas ? filas.reduce((s, f) => s + f.importe, 0) : null
 
 
@@ -1067,9 +1067,9 @@ pendientes
   const avisoSinLlegarJSX =
     sinLlegar > 0 && (
             <Notice tone="danger">
-              Cobradas sin llegar a {enEvento ? 'el ERP' : 'Gestión Nube'}: {sinLlegar}.{' '}
+              Cobradas sin llegar a {enEvento ? 'Areben Gestión' : 'Gestión Nube'}: {sinLlegar}.{' '}
               {rechazadas > 0
-                ? `${rechazadas === 1 ? 'Una la rechazó' : `${rechazadas} las rechazó`} {enEvento ? 'el ERP' : 'Gestión Nube'}: revisar desde la pestaña Caja.`
+                ? `${rechazadas === 1 ? 'Una la rechazó' : `${rechazadas} las rechazó`} {enEvento ? 'Areben Gestión' : 'Gestión Nube'}: revisar desde la pestaña Caja.`
                 : 'Se reintentan solas cada 3 min mientras el POS está abierto.'}
             </Notice>
     )

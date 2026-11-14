@@ -244,7 +244,7 @@ export interface ResultadoReleerErp {
  * a los que quedaron, los anota en la bitácora y les cambia el estado (`releer-erp`).
  */
 export async function releerErp(store: Marca, liqId: string): Promise<ResultadoReleerErp> {
-  const d = await postear({ store, action: 'releer-erp', id: liqId }, 'No se pudo leer lo pedido al ERP.')
+  const d = await postear({ store, action: 'releer-erp', id: liqId }, 'No se pudo leer lo pedido a Areben Gestión.')
   return { quedaron: d.quedaron || [], esperando: d.esperando || [], fallos: d.fallos || [] }
 }
 

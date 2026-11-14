@@ -55,7 +55,7 @@ export function usePedidosPanel(clienteId: string | null, tel: string | null): {
   return { pedidos, releer }
 }
 
-const APAGADO = 'Los pedidos se manejan desde acá el día que BDI pasa al ERP. Hasta entonces, en Gestión Nube.'
+const APAGADO = 'Los pedidos se manejan desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.'
 
 /**
  * La tarjeta «Pedidos»: los entrados al ERP (el más nuevo primero) y los que llegaron con el número del chat y todavía no
@@ -347,7 +347,7 @@ export function ElegirCliente({ tel, persona, escribir, decir, onCambio }: {
             {c.nombre}{c.doc ? ` · ${c.doc}` : ''}
           </Button>
         ))}
-        <div><Button size="sm" variant="ghost" disabled={!escribir} title={escribir ? undefined : 'Los clientes nuevos se cargan desde acá el día que BDI pasa al ERP. Hasta entonces, en Gestión Nube.'} onClick={() => setNuevo(true)}>Es nuevo</Button></div>
+        <div><Button size="sm" variant="ghost" disabled={!escribir} title={escribir ? undefined : 'Los clientes nuevos se cargan desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.'} onClick={() => setNuevo(true)}>Es nuevo</Button></div>
       </>) : (<>
         <Field label="Nombre del cliente (la empresa)"><Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Celulares Rosario" /></Field>
         <Field label="CUIT o DNI"><Input value={doc} onChange={(e) => setDoc(e.target.value)} inputMode="numeric" placeholder="30-71850818-1" /></Field>

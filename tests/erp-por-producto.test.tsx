@@ -6,7 +6,7 @@ import { agrupar, armarRenglon, filtrar, resumen } from '@/lib/erp/ventas-produc
 import type { RenglonProducto } from '@/lib/erp/cliente'
 
 /**
- * **ERP › Ventas › Por producto** (Diseño 8). El oráculo: lo agrupado suma lo mismo que los renglones (unidades NETAS: una
+ * **Areben Gestión › Ventas › Por producto** (Diseño 8). El oráculo: lo agrupado suma lo mismo que los renglones (unidades NETAS: una
  * devolución de GN resta), el margen sólo con costo de TODOS sus renglones (si no, «sin costo», ⛔ un 0), y la pantalla
  * arranca agrupada, pasa a «Cada renglón» con su número y abre la ficha del producto al clic.
  */
@@ -74,7 +74,7 @@ describe('la pantalla', () => {
     expect(document.body.textContent).toContain('que es el que vende hoy')
   })
 
-  it('🔑 con la línea ya en el ERP (BDI desde su corte) ⛔ dice que «GN es el que vende hoy»', async () => {
+  it('🔑 con la línea ya en Areben Gestión (BDI desde su corte) ⛔ dice que «GN es el que vende hoy»', async () => {
     corte.en_erp = true
     try {
       const { PorProductoErp } = await import('@/components/erp/ventas/PorProductoErp')
@@ -82,7 +82,7 @@ describe('la pantalla', () => {
       await act(async () => { root = createRoot(host); root.render(<PorProductoErp />) })
       await act(async () => {})
       expect(document.body.textContent).not.toContain('que es el que vende hoy')
-      expect(document.body.textContent).toContain('las de después, del ERP')
+      expect(document.body.textContent).toContain('las de después, de Areben Gestión')
     } finally { corte.en_erp = false }
   })
 })

@@ -223,7 +223,7 @@ function numeroYFecha(l: ReturnType<typeof lienzo>, t: DatosTicket, ahoraMs: num
     l.escribir(`Comprobante: #${t.numero}`, 10, true)
   } else {
     l.escribir(`Comprobante: Provisorio ${numeroProvisorio(t.id)}`, 10, true)
-    l.escribir(t.enErp ? 'Venta pendiente en el ERP' : 'Venta pendiente en Gestión Nube', 9, false, 'izq', 60)
+    l.escribir(t.enErp ? 'Venta pendiente en Areben Gestión' : 'Venta pendiente en Gestión Nube', 9, false, 'izq', 60)
   }
   l.escribir(`Fecha: ${fechaConDia(ahoraMs)}`, 10, false)
 }
@@ -472,7 +472,7 @@ export function armarTicketCierre(t: DatosCierre, ahoraMs: number, partir: Medid
     par('+ Ventas en efectivo', plata(e.cobrado), 9)
     if (e.deEspera) par('+ Transferencias en espera (efectivo)', plata(e.deEspera), 9)
     if (e.cobradoGN) par('+ Cobrado en Gestión Nube', plata(e.cobradoGN), 9)
-    if (e.cobradoERP) par('+ Pedidos web (ERP)', plata(e.cobradoERP), 9)
+    if (e.cobradoERP) par('+ Pedidos web (Areben Gestión)', plata(e.cobradoERP), 9)
     if (e.aportes) par('+ Ingresos', plata(e.aportes), 9)
     if (e.salidas) par('- Salidas', `-${plata(e.salidas)}`, 9)
     l.y += 0.6

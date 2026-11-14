@@ -113,7 +113,7 @@ export function ProductosErp() {
     if (k === 'p') return <span title={f.nombre} style={estiloNombre}>{f.nombre}</span>
     if (k === 'var') return <span style={{ color: color.ink2 }} title={f.variantes.map((v) => v.talleNombre).join(' · ')}>{f.variantes.length}</span>
     if (k === 'disp') return <span style={{ fontWeight: 700, color: f.negativas ? 'var(--mo-danger-ink)' : f.disponible === 0 ? color.mut2 : color.ink }} title={f.negativas ? `${f.negativas} variante(s) en negativo` : undefined}>{f.disponible}</span>
-    if (k === 'costo') return plata(f.costo ?? null, 'Sin costo en el ERP')
+    if (k === 'costo') return plata(f.costo ?? null, 'Sin costo en Areben Gestión')
     if ((LISTAS as string[]).includes(k)) return plata(f.precios[k], 'Sin precio en esta lista')
     if (k === 'tn') return <ChipEstado mapa={EN_TN} k={f.tn} />
     if (k === 'cat') return <span title={f.categoria ?? undefined} style={{ color: f.categoria ? color.ink2 : color.mut2 }}>{f.categoria ?? '—'}</span>

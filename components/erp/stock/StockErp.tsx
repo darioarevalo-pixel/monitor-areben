@@ -137,7 +137,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
     if (k === 'est') return numero(f.estanteria)
     if (k.startsWith('dep:')) return numero(f.deps[k.slice(4)] ?? 0)
     if (k === 'ped') return f.enPedidos ? <span style={{ color: 'var(--mo-warning-ink)' }} title="Apartadas por pedidos de Tienda Nube sin pagar">{f.enPedidos}</span> : <span style={{ color: color.mut2 }}>—</span>
-    if (k === 'gn') return <span style={{ color: f.gn != null && f.gn !== f.estanteria ? 'var(--mo-warning-ink)' : color.mut }} title={f.gn != null && f.gn !== f.estanteria ? 'Gestión Nube dice otro número que el ERP' : undefined}>{f.gn ?? '—'}</span>
+    if (k === 'gn') return <span style={{ color: f.gn != null && f.gn !== f.estanteria ? 'var(--mo-warning-ink)' : color.mut }} title={f.gn != null && f.gn !== f.estanteria ? 'Gestión Nube dice otro número que Areben Gestión' : undefined}>{f.gn ?? '—'}</span>
     if (k === 'ult') return f.ultimo ? <span style={{ color: color.mut }} title={f.ultimo.ref ?? undefined}>{(NOMBRE_TIPO as Record<string, string>)[f.ultimo.tipo] ?? f.ultimo.tipo} · {cuandoCorto(f.ultimo.cuando)}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'linea') return <span style={{ color: color.ink2 }}>{LINEA[f.linea] ?? f.linea}</span>
     return null
@@ -165,7 +165,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título «Stock» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-      {!!sinVarianteAca && <Notice tone="warning">{u(sinVarianteAca)} de pedidos sin pagar traen un código que {enErp || linea === 'stunned' ? 'el ERP' : 'Gestión Nube'} no tiene: no se descuentan de ningún producto.</Notice>}
+      {!!sinVarianteAca && <Notice tone="warning">{u(sinVarianteAca)} de pedidos sin pagar traen un código que {enErp || linea === 'stunned' ? 'Areben Gestión' : 'Gestión Nube'} no tiene: no se descuentan de ningún producto.</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Disponible" valor={u(res.disponible)} oscuro nota="lo que se puede vender" />
@@ -212,7 +212,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo el stock…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {datos && <> · el ERP llega hasta {cuandoCorto(datos.libroHasta)} · {datos.pedidos.toLocaleString('es-AR')} pedidos sin pagar{datos.pedidosLeidosEn ? `, leídos ${cuandoCorto(datos.pedidosLeidosEn)}` : ''}</>}
+          {datos && <> · Areben Gestión llega hasta {cuandoCorto(datos.libroHasta)} · {datos.pedidos.toLocaleString('es-AR')} pedidos sin pagar{datos.pedidosLeidosEn ? `, leídos ${cuandoCorto(datos.pedidosLeidosEn)}` : ''}</>}
         </div>
       </div>
 

@@ -61,7 +61,7 @@ export function VentanaCobro({ marca, fila, puede, onCerrar, onHecho }: {
   const chq = useChequeDelCobro(marca, extra?.cuentas ?? [], cuenta)
   const cuentas = chq.cuentas
   const sinCliente = !fila.clienteId
-  const bloqueo = !puede.cobrar ? ESPERA : sinCliente ? 'La venta no tiene cliente del ERP: sin cliente no hay cuenta corriente.' : null
+  const bloqueo = !puede.cobrar ? ESPERA : sinCliente ? 'La venta no tiene cliente de Areben Gestión: sin cliente no hay cuenta corriente.' : null
   const resto = n != null && n > fila.saldo ? Math.round((n - fila.saldo) * 100) / 100 : 0
   const [cuentaReal, setCuentaReal] = useState('')
   const pide = pideCuentaReal({ cuenta: cuentas.find((c) => String(c.id) === cuenta), rutas: extra?.rutas, cuentasReales: extra?.cuentasReales, marca: fila.linea, canal: fila.canal, fecha })

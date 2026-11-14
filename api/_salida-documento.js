@@ -141,10 +141,10 @@ async function ajusteAplicado(db, aj, pedido, quien, que) {
   const c = await aj.crearAjuste(db, { ...pedido, usuario: quien })
   if (!c.ok) return { error: mensaje(c) }
   // Reintento de uno ya anotado: el ajuste vuelve por su `ref`. Si quedó sin aprobar (se cortó entre los dos pasos), se aprueba ahora.
-  if (c.ajuste.estado === 'rechazado') return { error: `El ajuste A-${c.ajuste.numero} de ${que} está rechazado en ERP › Ajustes.` }
+  if (c.ajuste.estado === 'rechazado') return { error: `El ajuste A-${c.ajuste.numero} de ${que} está rechazado en Areben Gestión › Ajustes.` }
   if (c.ajuste.estado !== 'aplicado') {
     const a = await aj.aprobarAjuste(db, { ajuste_id: c.ajuste.id, usuario: quien })
-    if (!a.ok) return { error: `El ajuste A-${c.ajuste.numero} quedó para aprobar en ERP › Ajustes (${mensaje(a)}).` }
+    if (!a.ok) return { error: `El ajuste A-${c.ajuste.numero} quedó para aprobar en Areben Gestión › Ajustes (${mensaje(a)}).` }
   }
   return { ok: true, linea: pedido.linea, ajuste: Number(c.ajuste.numero), ya: c.ya === true }
 }
@@ -233,7 +233,7 @@ export async function solicitudAlErp({ store, b, usuario }) {
     const linea = pedido.salida.linea
     const c = await sal.crearSalida(db, { ...pedido.salida, usuario: quien })
     if (!c.ok) return { error: mensaje(c) }
-    if (c.salida.mueve_libro !== true) return { error: `La salida S-${c.salida.numero} quedó anotada SIN bajar el stock del ERP: avisale a Bruno.` }
+    if (c.salida.mueve_libro !== true) return { error: `La salida S-${c.salida.numero} quedó anotada SIN bajar el stock de Areben Gestión: avisale a Bruno.` }
     return { ok: true, linea, salida: Number(c.salida.numero), ya: c.ya === true }
   })
 }

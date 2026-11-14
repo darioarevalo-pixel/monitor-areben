@@ -22,7 +22,7 @@ export async function libroEnErp(store, loc, rows) {
     const enErp = lineasEnErp(await cortesDe(db), base)
     if (!enErp.length) return rows
     const deposito = depositoDeLoc(base, loc)
-    if (!deposito) throw new Error(`Depósito desconocido para el ERP: ${loc}`)
+    if (!deposito) throw new Error(`Depósito desconocido para Areben Gestión: ${loc}`)
     const lineas = await lineasDeProductos(db, base, rows.map((r) => r && r.product_id))
     const variantes = variantesEnErp(rows, lineas, enErp)
     if (!variantes.length) return rows
@@ -57,10 +57,10 @@ export async function conteoAlErp({ store, b, usuario }) {
         // El libro ya está en lo contado (otra vuelta lo dejó ahí): ⛔ hay nada que mover en esa línea.
         if (!c.ok && c.error.codigo === 'SIN_DIFERENCIAS') continue
         if (!c.ok) return { error: `${pedido.linea}: ${mensaje(c)}` }
-        if (c.ajuste.estado === 'rechazado') return { error: `El ajuste A-${c.ajuste.numero} de este conteo está rechazado en ERP › Ajustes.` }
+        if (c.ajuste.estado === 'rechazado') return { error: `El ajuste A-${c.ajuste.numero} de este conteo está rechazado en Areben Gestión › Ajustes.` }
         if (c.ajuste.estado !== 'aplicado') {
           const a = await m.aprobarAjuste(db, { ajuste_id: c.ajuste.id, usuario: quien })
-          if (!a.ok) return { error: `El ajuste A-${c.ajuste.numero} quedó para aprobar en ERP › Ajustes (${mensaje(a)}).` }
+          if (!a.ok) return { error: `El ajuste A-${c.ajuste.numero} quedó para aprobar en Areben Gestión › Ajustes (${mensaje(a)}).` }
         }
         ajustes.push({ linea: pedido.linea, ajuste: Number(c.ajuste.numero), ya: c.ya === true, renglones: pedido.renglones.length })
       }

@@ -233,8 +233,8 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         <span style={{ color: color.mut }}>Leyendo la venta…</span>
       ) : (
         <>
-          {v?.prueba && <Notice tone="warning">De prueba: corre en paralelo con Gestión Nube y no movió el stock del ERP. La factura real sale de Gestión Nube.</Notice>}
-          {ficha?.sinCreditoGN && <Notice tone="neutral">Gestión Nube la vendió a cuenta a un cliente sin crédito marcado. Desde el ERP, esta venta se habría frenado hasta que un admin la autorizara.</Notice>}
+          {v?.prueba && <Notice tone="warning">De prueba: corre en paralelo con Gestión Nube y no movió el stock de Areben Gestión. La factura real sale de Gestión Nube.</Notice>}
+          {ficha?.sinCreditoGN && <Notice tone="neutral">Gestión Nube la vendió a cuenta a un cliente sin crédito marcado. Desde Areben Gestión, esta venta se habría frenado hasta que un admin la autorizara.</Notice>}
           {ficha.anulacion && <Notice tone="danger">Anulada el {cuandoCorto(ficha.anulacion.anuladaEn)} por {ficha.anulacion.usuario}: «{ficha.anulacion.motivo}».</Notice>}
           {ficha.anulacion && ficha.anulacion.vuelta !== 'ya' && dev && !dev.volvio && (
             <DesarmeVenta marca={marca} ficha={ficha} refVenta={fila.ref} onListo={onCambio} />
@@ -378,7 +378,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             </Select>
           </Field>
           {medioNuevo && cuentasReales.length > 0 && (
-            <Field label="Adónde entró la plata" required hint={deLaRuta?.cuenta_real_id ? 'La que dice ERP › Cuentas para este medio. Elegí otra sólo si fue a otra cuenta.' : 'Este medio no tiene una cuenta fija en ERP › Cuentas: elegí cuál.'}>
+            <Field label="Adónde entró la plata" required hint={deLaRuta?.cuenta_real_id ? 'La que dice Areben Gestión › Cuentas para este medio. Elegí otra sólo si fue a otra cuenta.' : 'Este medio no tiene una cuenta fija en Areben Gestión › Cuentas: elegí cuál.'}>
               <Select value={cuentaReal} onChange={(e) => setCuentaReal(e.target.value)}>
                 <option value="">{deLaRuta?.cuenta_real_id ? `${nombreReal(deLaRuta.cuenta_real_id) ?? 'La de la forma de pago'} (la de siempre)` : 'Elegí la cuenta…'}</option>
                 {cuentasReales.filter((c) => c.id !== deLaRuta?.cuenta_real_id).map((c) => <option key={c.id} value={c.id}>{nombreReal(c.id)}{deLaRuta?.cuenta_real_id ? ' (excepción)' : ''}</option>)}

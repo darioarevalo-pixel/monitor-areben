@@ -121,7 +121,7 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
         <h3 style={h3}>Por depósito</h3>
         {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : (
           <div role="table" aria-label="Stock por depósito" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 64px 64px 92px', columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
-            {['Depósito', 'ERP', 'Gestión Nube', ''].map((t, i) => <span key={i} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>)}
+            {['Depósito', 'Areben Gestión', 'Gestión Nube', ''].map((t, i) => <span key={i} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>)}
             {s.depositos.map((d) => (
               <div key={d.deposito} role="row" style={{ display: 'contents' }}>
                 <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}` }}>{nombreDe(NOMBRE_DEPOSITO, d.deposito)}</span>
@@ -132,7 +132,7 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
             ))}
           </div>
         )}
-        {!!s?.sinDeposito.length && <Notice tone="warning">Gestión Nube tiene stock en depósitos que el ERP no conoce: {s.sinDeposito.join(', ')}.</Notice>}
+        {!!s?.sinDeposito.length && <Notice tone="warning">Gestión Nube tiene stock en depósitos que Areben Gestión no conoce: {s.sinDeposito.join(', ')}.</Notice>}
       </section>
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
@@ -140,7 +140,7 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
           <h3 style={h3}>Historial</h3>
           <div style={{ fontSize: font.sm, color: color.mut }}>cada movimiento, con lo que quedó · nada se borra: una corrección es otro movimiento</div>
         </div>
-        {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : !hechos.length ? <span style={{ color: color.mut }}>El ERP todavía no tiene movimientos de este producto.</span> : <Historial hechos={hechos} cuandoTexto={cuandoCorto} />}
+        {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : !hechos.length ? <span style={{ color: color.mut }}>Areben Gestión todavía no tiene movimientos de este producto.</span> : <Historial hechos={hechos} cuandoTexto={cuandoCorto} />}
       </section>
     </FichaCostado>
   )

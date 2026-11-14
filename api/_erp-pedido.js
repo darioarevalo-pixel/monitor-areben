@@ -153,7 +153,7 @@ export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-pre
 export async function accionDePedido({ accion, body, usuario, quien = usuario }, deps) {
   if (!ACCIONES_PEDIDO.includes(accion)) return { status: 400, error: 'Acción desconocida' }
   if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
-  if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Los pedidos se manejan desde acá el día que BDI pasa al ERP. Hasta entonces, en Gestión Nube.' }
+  if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Los pedidos se manejan desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.' }
   if (!UUID.test(String(body?.pedidoId || ''))) return { status: 400, error: 'Falta el pedido' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
   return deps.conMotor('bdi', 'El pedido', async (pg) => {

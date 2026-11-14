@@ -6,9 +6,9 @@ import { armarFilasProductos } from '@/lib/erp/productos-lista.core.js'
 import type { FilaProducto, PrecioDeProducto } from '@/lib/erp/cliente'
 
 /**
- * **ERP › Productos y precios › Productos, del lado de la pantalla** (el molde del diseño). El oráculo es lo que se LEE y lo
+ * **Areben Gestión › Productos y precios › Productos, del lado de la pantalla** (el molde del diseño). El oráculo es lo que se LEE y lo
  * que se APRIETA: las vistas con su número, el resumen arriba, que la fila abra la ficha al costado con las listas, las
- * variantes y el historial, y que el $ de la fila abra «Cargar en el ERP» y cargue con el monto bien leído.
+ * variantes y el historial, y que el $ de la fila abra «Cargar en Areben Gestión» y cargue con el monto bien leído.
  * Las filas pasan por el núcleo real (`armarFilasProductos`).
  */
 const FILAS = armarFilasProductos({
@@ -116,14 +116,14 @@ describe('la lista de productos', () => {
     expect(f.querySelector('[aria-label="Stock por variante"]')!.textContent).toMatch(/TOP-0110-S/)
     expect(f.textContent).toContain('de Ingresos, OC 12 del 20/09')
     expect(f.textContent).toContain('Precio Local · $ 22.990')
-    expect(f.textContent).not.toContain('Cargar en el ERP')
+    expect(f.textContent).not.toContain('Cargar en Areben Gestión')
   })
 
-  it('el $ de la fila abre «Cargar en el ERP» y carga el costo con el monto bien leído', async () => {
+  it('el $ de la fila abre «Cargar en Areben Gestión» y carga el costo con el monto bien leído', async () => {
     await montar()
     await clic(boton('Cargar precio o costo', filaDe('TOP SAHARA')))
     const f = ficha()!
-    expect(f.textContent).toContain('Cargar en el ERP')
+    expect(f.textContent).toContain('Cargar en Areben Gestión')
     const monto = [...f.querySelectorAll('input')].find((i) => i.getAttribute('placeholder') === '$ 0')!
     await act(async () => {
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
@@ -155,18 +155,18 @@ describe('la lista de productos', () => {
     expect(editarVarianteErp).toHaveBeenCalledWith('zattia', '1', '1', { barcode: '999' })
   })
 
-  it('Precios: el $ de la fila abre la ficha con «Cargar en el ERP» a la vista', async () => {
+  it('Precios: el $ de la fila abre la ficha con «Cargar en Areben Gestión» a la vista', async () => {
     const { PreciosErp } = await import('@/components/erp/productos/PreciosErp')
     host = document.createElement('div'); document.body.appendChild(host)
     await act(async () => { root = createRoot(host); root.render(<PreciosErp />) })
     await act(async () => {})
     await clic(boton('Cargar precio o costo', filaDe('TOP SAHARA')))
-    expect(ficha()!.textContent).toContain('Cargar en el ERP')
+    expect(ficha()!.textContent).toContain('Cargar en Areben Gestión')
   })
 
   it('🔴 Precios: el cartel sigue al CORTE (revisión 10-nov: decía «no cambia Tienda Nube» fijo, también ya cortada)', async () => {
     const { PreciosErp } = await import('@/components/erp/productos/PreciosErp')
-    for (const [corto, dice, noDice] of [[false, 'Mientras Gestión Nube funcione', 'ya vive en el ERP'], [true, 'llega a Tienda Nube en las próximas 2 horas', 'Mientras Gestión Nube funcione']] as const) {
+    for (const [corto, dice, noDice] of [[false, 'Mientras Gestión Nube funcione', 'ya vive en Areben Gestión'], [true, 'llega a Tienda Nube en las próximas 2 horas', 'Mientras Gestión Nube funcione']] as const) {
       enErp = corto
       host = document.createElement('div'); document.body.appendChild(host)
       await act(async () => { root = createRoot(host); root.render(<PreciosErp />) })

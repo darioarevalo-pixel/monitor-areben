@@ -3,7 +3,7 @@ import { ID_DESDE_ERP } from '../lib/erp/ventas-espejo.core.js'
 import { copiarVentasErp } from '../scripts/lib/erp-ventas-copia.mjs'
 
 /**
- * «Traer las ventas de hoy» (Liquidación y Ventas de Marketing) trae también las del ERP de la línea que ya cortó: la MISMA
+ * «Traer las ventas de hoy» (Liquidación y Ventas de Marketing) trae también las de Areben Gestión de la línea que ya cortó: la MISMA
  * copia que el sync diario (`scripts/lib/erp-ventas-copia.mjs`), ⛔ otra.
  */
 let cortes: Record<string, string> = {}
@@ -44,7 +44,7 @@ function sbFalso(ids: { ventas: number[]; venta_detalles: number[] }) {
 }
 
 describe('copiarVentasErp: la copia común del sync diario y del botón', () => {
-  it('escribe las del ERP y saca la anulada, renglones primero', async () => {
+  it('escribe las de Areben Gestión y saca la anulada, renglones primero', async () => {
     const { sb, log } = sbFalso({ ventas: [E(1), E(2)], venta_detalles: [E(10), E(20)] })
     const r = await copiarVentasErp(dbFalsa([{ id: E(1), total_price: '100', extra: 1 }], [{ id: E(10), sale_id: E(1) }]), sb)
     expect(r).toMatchObject({ ventas: 1, detalles: 1, sacadas: { ventas: 1, detalles: 1 }, freno: null })
@@ -65,18 +65,18 @@ describe('copiarVentasErp: la copia común del sync diario y del botón', () => 
   })
 })
 
-describe('traerVentasDeHoy: también las del ERP', () => {
+describe('traerVentasDeHoy: también las de Areben Gestión', () => {
   beforeEach(() => { cortes = {} })
   const sbVacio = { from: () => ({ upsert: async () => ({ error: null }) }) }
-  it('las del ERP vuelven en `erp`', async () => {
+  it('las de Areben Gestión vuelven en `erp`', async () => {
     const { traerVentasDeHoy } = await import('../api/_ventas-hoy.js')
     const r = await traerVentasDeHoy(sbVacio, 'zattia', Date.parse('2026-11-01T15:00:00Z'), { erp: async () => ({ ventas: 3, detalles: 4, sacadas: 0, freno: null }) })
     expect(r).toMatchObject({ ok: true, ventas: 0, erp: { ventas: 3 } })
   })
-  it('🔴 si la copia del ERP falla, ⛔ ok callado: el error dice que faltan las del ERP', async () => {
+  it('🔴 si la copia de Areben Gestión falla, ⛔ ok callado: el error dice que faltan las de Areben Gestión', async () => {
     const { traerVentasDeHoy } = await import('../api/_ventas-hoy.js')
     const r = await traerVentasDeHoy(sbVacio, 'zattia', Date.parse('2026-11-01T15:00:00Z'), { erp: async () => { throw new Error('base caída') } })
-    expect(r).toMatchObject({ ok: false, status: 502, error: expect.stringMatching(/ERP no: base caída/) })
+    expect(r).toMatchObject({ ok: false, status: 502, error: expect.stringMatching(/Areben Gestión no: base caída/) })
   })
   it('sin línea cortada en la base ⇒ ⛔ abre el motor (null)', async () => {
     const { traerVentasDelErp } = await import('../api/_ventas-hoy.js')

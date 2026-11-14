@@ -1,4 +1,4 @@
-// ERP › Conciliación: el día de la conciliación armado para mirarlo (lib/erp/conciliacion.core.js).
+// Areben Gestión › Conciliación: el día de la conciliación armado para mirarlo (lib/erp/conciliacion.core.js).
 import { describe, it, expect } from 'vitest'
 import { CLASE, MOTIVO, TIENDAS, armarConciliacion } from '../lib/erp/conciliacion.core.js'
 
@@ -40,7 +40,7 @@ describe('armarConciliacion', () => {
     const d = armarConciliacion({ tienda: 'stunned', filas, resumen, nombres, diaGN: { resumen: { porLinea: { zattia: { inexplicadas: 9 }, stunned: { inexplicadas: 2 } } } } })
     expect(d.enVuelo).toBe(1)
     expect(d.desconocidas).toBe(1)
-    expect(d.noCierran).toBe(7)   // 4 de stock + 2 del ERP (una desconocida) + 1 de GN
+    expect(d.noCierran).toBe(7)   // 4 de stock + 2 de Areben Gestión (una desconocida) + 1 de GN
     expect(d.tarjetas[0]).toMatchObject({ tipo: 'stock_tn', calculado: true, cierran: 7, total: 10, aparte: 1 })
     expect(d.tarjetas[1]).toMatchObject({ tipo: 'pedido_erp', total: 20, noCierran: 2 })
     expect(d.tarjetas[2]).toMatchObject({ tipo: 'pedido_gn', total: 20, noCierran: 1 })
@@ -81,7 +81,7 @@ describe('armarConciliacion', () => {
     const diaGN = { resumen: { porLinea: { stunned: { inexplicadas: 13 } } } }
     const d = armarConciliacion({ tienda: 'stunned', filas: f, resumen: res, nombres, diaGN })
     expect(d.tarjetas.map((t: { tipo: string }) => t.tipo)).toEqual(['stock_tn', 'pedido_erp'])
-    expect(d.tarjetas[0].nombre).toBe('Stock: Tienda Nube y el ERP')
+    expect(d.tarjetas[0].nombre).toBe('Stock: Tienda Nube y Areben Gestión')
     expect(JSON.stringify(d.tarjetas)).not.toContain('Gestión Nube')
     expect(d.gn).toEqual({ calculado: false, sinExplicar: null, sinGn: true })
     expect(d.desconocidas).toBe(0)

@@ -110,7 +110,7 @@ export function PorProductoErp() {
     return { key: k, titulo, ancho, ordena, derecha: ['u', 'n', 'v', 'prom', 'm', 'c', 'pr', 'tot'].includes(k), movil: MOVIL[k] ?? 'oculta' }
   })
   const num = (x: string, fuerte = false) => <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: fuerte ? 700 : 500, color: color.ink }}>{x}</span>
-  const sinCosto = <span style={{ color: color.mut2 }} title="El producto no tiene costo cargado en el ERP">sin costo</span>
+  const sinCosto = <span style={{ color: color.mut2 }} title="El producto no tiene costo cargado en Areben Gestión">sin costo</span>
 
   const celda = (f: Grupo | RenglonProducto, k: string): React.ReactNode => {
     if (k === 'p') return <span title={f.nombre} style={estiloNombre}>{f.nombre}</span>
@@ -146,8 +146,8 @@ export function PorProductoErp() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <p style={{ margin: 0, color: color.mut }}>Qué se vendió de cada producto. Hacé clic en uno para ver su ficha.</p>
       {enErp
-        ? <Notice tone="neutral">Todas las ventas, de todos los canales: las de antes del corte salen de Gestión Nube y las de después, del ERP. El margen usa el costo de hoy del ERP.</Notice>
-        : <Notice tone="warning">Sale de <b>Gestión Nube</b>, que es el que vende hoy: todas las ventas, de todos los canales. El margen usa el costo de hoy del ERP.</Notice>}
+        ? <Notice tone="neutral">Todas las ventas, de todos los canales: las de antes del corte salen de Gestión Nube y las de después, de Areben Gestión. El margen usa el costo de hoy de Areben Gestión.</Notice>
+        : <Notice tone="warning">Sale de <b>Gestión Nube</b>, que es el que vende hoy: todas las ventas, de todos los canales. El margen usa el costo de hoy de Areben Gestión.</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>

@@ -43,7 +43,7 @@ export function RolesPermisos() {
 
   return (
     <Card padding={4} style={{ marginTop: space[4] }}>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>Quién puede qué en el ERP</div>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Quién puede qué en Areben Gestión</div>
       <div style={{ color: color.mut2, fontSize: 13, marginBottom: 12 }}>
         Tildá los roles que pueden hacer cada cosa en cada marca. El Admin siempre puede; los costos y la Configuración son sólo del Admin. El cambio vale en el próximo pedido.
       </div>

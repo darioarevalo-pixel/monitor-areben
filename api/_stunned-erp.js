@@ -15,7 +15,7 @@ const CONEXION = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
  */
 export async function ventasDelErp(base, desde, hasta, env = process.env) {
   const conexion = env[CONEXION[base]]
-  if (!conexion) return { activa: true, error: `ERP: falta ${CONEXION[base] || `la base de ${base}`}, las ventas del ERP NO están sumadas.` }
+  if (!conexion) return { activa: true, error: `Areben Gestión: falta ${CONEXION[base] || `la base de ${base}`}, las ventas de Areben Gestión NO están sumadas.` }
   const lineas = lineasDeMarca(base)
   const { default: pg } = await import('pg')
   const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: TECHO_MS, statement_timeout: TECHO_MS, query_timeout: TECHO_MS })
@@ -24,7 +24,7 @@ export async function ventasDelErp(base, desde, hasta, env = process.env) {
     const [v, d, s] = await Promise.all([db.query(sqlVentas(lineas), [desde, hasta]), db.query(sqlDetalles(lineas), [desde, hasta]), db.query(sqlSkus(lineas))])
     return { activa: true, ventas: normalizarVentas(v.rows), detalles: normalizarDetalles(d.rows), skuPor: new Map(s.rows.map((r) => [String(r.product_id), r.sku])) }
   } catch (e) {
-    return { activa: true, error: `ERP: ${String((e && e.message) || e).slice(0, 160)} — las ventas del ERP NO están sumadas.` }
+    return { activa: true, error: `Areben Gestión: ${String((e && e.message) || e).slice(0, 160)} — las ventas de Areben Gestión NO están sumadas.` }
   } finally {
     await db.end().catch(() => {})
   }

@@ -31,8 +31,8 @@ async function conMotor(store, fn) {
 }
 
 const TEXTO = {
-  corregir: 'No se pudo anotar el cobro en la venta del ERP',
-  reabrir: 'No se pudo volver a dejar la venta del ERP sin cobrar',
+  corregir: 'No se pudo anotar el cobro en la venta de Areben Gestión',
+  reabrir: 'No se pudo volver a dejar la venta de Areben Gestión sin cobrar',
 }
 
 /**
@@ -49,7 +49,7 @@ export async function seguirVenta({ antes, despues, usuario }) {
         ? m.corregirContraentrega(db, { venta_id: v.venta_id, como: v.como, usuario: usuario || 'envíos' })
         : m.reabrirContraentrega(db, { venta_id: v.venta_id, usuario: usuario || 'envíos' }),
     )
-    if (r === null) return { aviso: `${TEXTO[v.verbo]}: el ERP de ${store} no está conectado.` }
+    if (r === null) return { aviso: `${TEXTO[v.verbo]}: Areben Gestión de ${store} no está conectado.` }
     if (r.ok || SIN_AVISO.includes(r.error?.codigo)) return {}
     console.error(`[envios-venta] ${v.verbo} ${v.venta_id}: ${r.error?.codigo} ${r.error?.mensaje}`)
     return { aviso: `${TEXTO[v.verbo]}: ${r.error?.mensaje || r.error?.codigo}.` }
@@ -75,7 +75,7 @@ export async function anularVentaDeEnvio({ envio, usuario }) {
       devolucion: { forma: 'plata' },
     })
   })
-  if (r === null) return { status: 409, error: `El ERP de ${envio.store} no está conectado.` }
+  if (r === null) return { status: 409, error: `Areben Gestión de ${envio.store} no está conectado.` }
   if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADA' ? 404 : 409, error: r.error?.mensaje || 'No se pudo anular la venta.' }
   return { ok: true, vuelta: r.vuelta ?? null }
 }

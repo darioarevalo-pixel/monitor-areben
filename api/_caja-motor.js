@@ -50,7 +50,7 @@ async function anotarCada(db, registrarVenta, ventas) {
  */
 export async function stockDelLibro(store, linea, productId, sizeId) {
   const r = await conMotor(store, async (db) => stockDeVarianteLibro((await db.query(SQL_STOCK_VARIANTE_LIBRO, [String(productId), String(sizeId), String(linea)])).rows))
-  if (r.sinConexion) return { error: 'El ERP no está conectado (falta DATABASE_URL en Vercel)' }
+  if (r.sinConexion) return { error: 'Areben Gestión no está conectado (falta DATABASE_URL en Vercel)' }
   return r
 }
 
@@ -64,7 +64,7 @@ export async function stockDelProductoLibro(store, linea, productId, sizeIds) {
     for (const sizeId of sizeIds) por[sizeId] = stockDeVarianteLibro((await db.query(SQL_STOCK_VARIANTE_LIBRO, [String(productId), String(sizeId), String(linea)])).rows)
     return { por }
   })
-  if (r.sinConexion) return { error: 'El ERP no está conectado (falta DATABASE_URL en Vercel)' }
+  if (r.sinConexion) return { error: 'Areben Gestión no está conectado (falta DATABASE_URL en Vercel)' }
   return r
 }
 
@@ -83,7 +83,7 @@ export async function faltanEnElLibro(store, linea, deposito, renglones) {
     }
     return { faltan: prendasQueFaltan(renglones, (p, s) => niveles.get(`${p}:${s}`) ?? 0) }
   })
-  if (r.sinConexion) return { error: 'El ERP no está conectado (falta DATABASE_URL en Vercel)' }
+  if (r.sinConexion) return { error: 'Areben Gestión no está conectado (falta DATABASE_URL en Vercel)' }
   return r.error ? { error: r.error } : r.faltan
 }
 
@@ -112,8 +112,8 @@ export async function eventoActivo(store) {
     const { rows } = await db.query(`select coalesce((to_jsonb(d) ->> 'activo')::boolean, false) as activo from deposito d where marca = 'stunned' and id = 'evento'`);
     return { activo: rows[0]?.activo === true };
   });
-  if (r.sinConexion) return { error: 'El ERP no está conectado (falta DATABASE_URL en Vercel)' };
-  if (r.error) return { error: `No se pudo leer el ERP (${r.error}).` };
+  if (r.sinConexion) return { error: 'Areben Gestión no está conectado (falta DATABASE_URL en Vercel)' };
+  if (r.error) return { error: `No se pudo leer Areben Gestión (${r.error}).` };
   return r;
 }
 
@@ -136,8 +136,8 @@ export async function registrarEnErp(store, venta, { reglas }) {
     const out = await registrarVenta(db, entradaDelMotorErp(venta, { marca, reglas }));
     return out.ok ? { ok: true, numero: Number(out.venta?.numero) || null } : { ok: false, error: `${out.error.codigo}: ${out.error.mensaje}`, reintentable: out.error.codigo !== 'CONFLICTO_IDEMPOTENCIA' };
   });
-  if (r.sinConexion) return { ok: false, error: 'El ERP no está conectado (falta DATABASE_URL en Vercel).', reintentable: true };
-  if (r.error) return { ok: false, error: `No se pudo hablar con el ERP (${r.error}).`, reintentable: true };
+  if (r.sinConexion) return { ok: false, error: 'Areben Gestión no está conectado (falta DATABASE_URL en Vercel).', reintentable: true };
+  if (r.error) return { ok: false, error: `No se pudo hablar con Areben Gestión (${r.error}).`, reintentable: true };
   return r;
 }
 

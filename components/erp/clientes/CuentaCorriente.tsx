@@ -148,12 +148,12 @@ export function CuentaCorriente({ embebida = false, vistaDeAfuera = 'saldo', alC
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {!embebida && <p style={{ margin: 0, color: color.mut }}>Un solo saldo por cliente: lo que deben sus ventas a cuenta, menos lo que tiene a favor.</p>}
       {datos && datos.clientesErp === 0 && (
-        <Notice tone="neutral">Esta marca todavía no tiene clientes en el ERP: la cuenta corriente empieza cuando se le venda a cuenta a un cliente desde el ERP.</Notice>
+        <Notice tone="neutral">Esta marca todavía no tiene clientes en Areben Gestión: la cuenta corriente empieza cuando se le venda a cuenta a un cliente desde Areben Gestión.</Notice>
       )}
       {datos && datos.clientesErp > 0 && (prueba || datos.otroLibro > 0) && (
         <Notice tone={prueba ? 'warning' : 'neutral'}>
           {prueba
-            ? <>Estás mirando las cuentas <b>de prueba</b>: las ventas mayoristas que el ERP copia de Gestión Nube hasta el corte. Los cobros a cuenta que se cargan en Gestión Nube todavía no llegan acá, así que algunos saldos dan de más. {datos.otroLibro ? `Hay ${n(datos.otroLibro)} ${datos.otroLibro === 1 ? 'cliente' : 'clientes'} con movimientos reales.` : 'Todavía no hay ninguna cuenta real.'}</>
+            ? <>Estás mirando las cuentas <b>de prueba</b>: las ventas mayoristas que Areben Gestión copia de Gestión Nube hasta el corte. Los cobros a cuenta que se cargan en Gestión Nube todavía no llegan acá, así que algunos saldos dan de más. {datos.otroLibro ? `Hay ${n(datos.otroLibro)} ${datos.otroLibro === 1 ? 'cliente' : 'clientes'} con movimientos reales.` : 'Todavía no hay ninguna cuenta real.'}</>
             : <>Hay {n(datos.otroLibro)} {datos.otroLibro === 1 ? 'cliente' : 'clientes'} con movimientos <b>de prueba</b>, que no se suman acá. <Button variant="outline" onClick={() => setPrueba(true)}>Ver las de prueba</Button></>}
         </Notice>
       )}

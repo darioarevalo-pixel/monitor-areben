@@ -48,7 +48,7 @@ function leerInventario(marca) {
 export async function listaDeStock({ marca }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const [libro, inventario, pedidos] = await Promise.all([
-    deps.conMotor(marca, 'El stock del ERP', (pg) => libroSumado(pg)),
+    deps.conMotor(marca, 'El stock de Areben Gestión', (pg) => libroSumado(pg)),
     (deps.leerInventario ?? leerInventario)(marca),
     deps.pedidosSinPagar({ marca }),
   ])
@@ -103,7 +103,7 @@ export async function listaDeMovimientos({ marca, desde, hasta }, deps) {
   if (!DIA.test(String(desde || '')) || !DIA.test(String(hasta || '')) || desde > hasta) return { status: 400, error: 'Período inválido' }
   const r = rangoDeDias(desde, hasta)
   const [libro, inventario] = await Promise.all([
-    deps.conMotor(marca, 'Los movimientos del ERP', (pg) => movimientosDelLibro(pg, r)),
+    deps.conMotor(marca, 'Los movimientos de Areben Gestión', (pg) => movimientosDelLibro(pg, r)),
     (deps.leerInventario ?? leerInventario)(marca),
   ])
   if (libro.status) return libro
@@ -149,7 +149,7 @@ export function leerArmados(marca) {
 export async function listaDeTransferencias({ marca }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const [libro, armados] = await Promise.all([
-    deps.conMotor(marca, 'Las transferencias del ERP', (pg) => transferenciasDelLibro(pg)),
+    deps.conMotor(marca, 'Las transferencias de Areben Gestión', (pg) => transferenciasDelLibro(pg)),
     (deps.leerArmados ?? leerArmados)(marca),
   ])
   if (libro.status) return libro
@@ -195,7 +195,7 @@ async function tiendaNube(pg) {
 export async function comparacionConTiendas({ marca }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const [libro, tienda, inventario, pedidos] = await Promise.all([
-    deps.conMotor(marca, 'El stock del ERP', (pg) => libroSumado(pg)),
+    deps.conMotor(marca, 'El stock de Areben Gestión', (pg) => libroSumado(pg)),
     deps.conMotor(marca, 'Lo publicado en Tienda Nube', (pg) => tiendaNube(pg)),
     (deps.leerInventario ?? leerInventario)(marca),
     deps.pedidosSinPagar({ marca }),

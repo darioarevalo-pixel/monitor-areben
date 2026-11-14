@@ -6,7 +6,7 @@ import { deArmado } from '@/lib/erp/transferencias.core.js'
 import type { FilaTransferencia } from '@/lib/erp/cliente'
 
 /**
- * **ERP › Stock › Transferencias, del lado de la pantalla.** El oráculo es lo que se LEE y lo que se APRIETA: se entra a
+ * **Areben Gestión › Stock › Transferencias, del lado de la pantalla.** El oráculo es lo que se LEE y lo que se APRIETA: se entra a
  * «Todas» si no hay abiertas, la barrita dice el estado, «Prendas» dice pedidas → enviadas, la de antes del libro ⛔ sale en
  * rojo, y la fila abre la ficha AL COSTADO con lo pedido, armado y enviado de cada prenda. Las filas pasan por el núcleo real.
  */
@@ -61,10 +61,10 @@ describe('la lista de transferencias', () => {
     expect(todo()).toMatch(/«Recibida» todavía no se controla/)
   })
 
-  it('la fila abre la ficha al costado con cada producto; la de antes del ERP lo dice', async () => {
+  it('la fila abre la ficha al costado con cada producto; la de antes de Areben Gestión lo dice', async () => {
     await montar()
     await clic(filaDe('T-7745').querySelector('[role="cell"]:last-child')!)
-    expect(document.querySelector('aside[aria-label^="Ficha de la transferencia"]')!.textContent).toContain('antes del ERP')
+    expect(document.querySelector('aside[aria-label^="Ficha de la transferencia"]')!.textContent).toContain('antes de Areben Gestión')
     await clic(filaDe('T-8101').querySelector('[role="cell"]:last-child')!)
     const ficha = document.querySelector('aside[aria-label^="Ficha de la transferencia"]')!
     expect(ficha).toBeTruthy()

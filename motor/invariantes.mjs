@@ -11,7 +11,7 @@
  */
 
 /** Lo que cada regla necesita para poder evaluarse: si falta una tabla, la regla se OMITE y la corrida lo dice. */
-const T = { venta: 'venta', linea: 'venta_linea', anulacion: 'venta_anulacion', pendiente: 'venta_vuelta_pendiente', variante: 'variante', deposito: 'deposito', transferencia: 'stock_transferencia', transferenciaRenglon: 'stock_transferencia_renglon', cheque: 'cheque', chequeEvento: 'cheque_evento' }
+const T = { venta: 'venta', linea: 'venta_linea', anulacion: 'venta_anulacion', pendiente: 'venta_vuelta_pendiente', variante: 'variante', deposito: 'deposito', transferencia: 'stock_transferencia', transferenciaRenglon: 'stock_transferencia_renglon', cheque: 'cheque', chequeEvento: 'cheque_evento', factura: 'venta_factura' }
 
 /** Una venta que mueve stock en el libro (`mueveStock` de lib/venta/armar.mjs): propia, ⛔ de prueba, ⛔ reflejada por GN. */
 const VENTA_QUE_MUEVE = `not v.prueba and v.gn_sale_id is null and coalesce(v.detalle->>'gn_sale_id', '') = '' and v.origen <> 'gn'`
@@ -145,6 +145,19 @@ export const REGLAS = [
             and not exists (select 1 from stock_movimiento m
                             where m.origen = 'motor' and m.tipo = 'anulacion' and m.origen_ref = v.id::text || ':' || l.id::text || ':anulacion'
                               and m.cantidad = l.cantidad)`,
+  },
+  {
+    // Revisión 10-nov: TN cancela una venta ya FACTURADA ⇒ `anularVenta` devuelve `nc_pendiente` y nadie lo guarda: la factura
+    // queda viva en ARCA, callada. Desde el corte de BDI pasa con plata real. Medido 11-nov: 0 en las dos bases (nace verde).
+    // Se cierra sola cuando se emite la NC (`venta_factura` tipo `nc`).
+    id: 'anulada_facturada_sin_nc',
+    titulo: 'Una venta anulada que tenía factura y todavía no tiene su nota de crédito',
+    gravedad: 'falla',
+    necesita: [T.venta, T.factura],
+    sql: `select 'venta ' || v.numero || ' (' || v.marca || ')' as ref, 'anulada con la factura ' || f.factura_id || ' y sin nota de crédito' as detalle
+          from venta v join venta_factura f on f.venta_id = v.id and f.tipo = 'factura'
+          where v.estado = 'anulada' and not v.prueba
+            and not exists (select 1 from venta_factura n where n.venta_id = v.id and n.tipo = 'nc')`,
   },
   {
     id: 'negativo',

@@ -193,7 +193,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
         } else {
           try {
             const { erpAjuste } = await registrarVentaGN(marca, { id, product_id: snap.product_id, size_id: snap.size_id, cantidad: snap.cantidad, sku: snap.sku, motivo: snap.motivo, barcode: barcode ?? null, ubicacion: snap.ubicacion, precio_lista: snap.precio_lista }, { usuario, cred })
-            setMsg(erpAjuste ? `Falla cargada${etiq} — ajuste A-${erpAjuste} en el ERP, stock −1.` : `Falla cargada${etiq} — venta $0 en GN, stock −1.`)
+            setMsg(erpAjuste ? `Falla cargada${etiq} — ajuste A-${erpAjuste} en Areben Gestión, stock −1.` : `Falla cargada${etiq} — venta $0 en GN, stock −1.`)
           } catch (ve) { setError(`Falla cargada${etiq}, pero la venta en GN falló: ${(ve as Error).message}`) }
         }
       } else { setMsg(`Falla cargada${etiq}.`) }
@@ -218,7 +218,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
 
   const eliminar = useCallback(async (f: FallaRow) => {
     const aviso = f.erp_ajuste
-      ? `Eliminar la falla de "${f.producto}" elimina el registro del Monitor, pero el ajuste A-${f.erp_ajuste} del ERP sigue aplicado: el producto NO vuelve al stock (se devuelve con otro ajuste en ERP › Ajustes). ¿Eliminar?`
+      ? `Eliminar la falla de "${f.producto}" elimina el registro del Monitor, pero el ajuste A-${f.erp_ajuste} de Areben Gestión sigue aplicado: el producto NO vuelve al stock (se devuelve con otro ajuste en Areben Gestión › Ajustes). ¿Eliminar?`
       : f.gn_venta_id
       ? `Eliminar la falla de "${f.producto}" elimina el registro del Monitor pero NO anula la venta ya hecha en GN (eso se anula a mano en GN si corresponde). ¿Eliminar?`
       : `Eliminar la falla de "${f.producto}"? Esta acción no se puede deshacer.`
@@ -325,7 +325,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
               {esAdmin && <Td align="right"><MoneyText value={f.valuacion_costo} /></Td>}
               <Td>
                 <StatusPill tone={ESTADO_TONE[f.estado]} label={ESTADO_LABEL[f.estado]} />
-                {f.erp_ajuste ? <div style={{ fontSize: 10, color: color.mut }}>ajuste ERP A-{f.erp_ajuste}</div>
+                {f.erp_ajuste ? <div style={{ fontSize: 10, color: color.mut }}>ajuste Areben Gestión A-{f.erp_ajuste}</div>
                   : f.gn_venta_number ? <div style={{ fontSize: 10, color: color.mut }}>venta GN #{f.gn_venta_number}</div> : null}
               </Td>
               <Td>{f.barcode ? <Button size="sm" variant="ghost" onClick={() => setEtiqueta(f)}> {f.barcode}</Button> : '—'}</Td>

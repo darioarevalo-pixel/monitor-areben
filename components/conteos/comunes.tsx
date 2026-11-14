@@ -251,8 +251,8 @@ export function AvisoErp({ erp, unidad }: { erp: { renglones: RenglonErp[] } | u
   return (
     <>
       <Notice tone="warning" icon="📦" style={{ marginBottom: space[3] }}>
-        <b>{n}</b> {n === 1 ? `${unidad[0]} es` : `${unidad[1]} son`} de <b>{lineas}</b>, que ya trabaja con el <b>ERP</b>: se ajustan ahí al guardar,
-        en el acto, y <b>no van al Excel</b>. El «sistema» de {lineas} es el stock del ERP.
+        <b>{n}</b> {n === 1 ? `${unidad[0]} es` : `${unidad[1]} son`} de <b>{lineas}</b>, que ya trabaja con <b>Areben Gestión</b>: se ajustan ahí al guardar,
+        en el acto, y <b>no van al Excel</b>. El «sistema» de {lineas} es el stock de Areben Gestión.
       </Notice>
       {grandes.length > 0 && (
         <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>

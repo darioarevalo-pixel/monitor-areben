@@ -6,7 +6,7 @@ import { armarFilasClientes } from '@/lib/erp/clientes-lista.core.js'
 import type { FilaCliente } from '@/lib/erp/cliente'
 
 /**
- * **ERP › Clientes, del lado de la pantalla.** El oráculo es lo que se LEE: el aviso de que los clientes salen de GN
+ * **Areben Gestión › Clientes, del lado de la pantalla.** El oráculo es lo que se LEE: el aviso de que los clientes salen de GN
  * (el motor ⛔ tiene), las vistas con número, «sin cuenta» en vez de un 0, y la ficha al costado con sus compras.
  * Las filas pasan por el núcleo real.
  */
@@ -49,7 +49,7 @@ const filaDe = (t: string) => [...host.querySelectorAll('[role="row"]')].find((r
 describe('la lista de clientes', () => {
   it('dice que salen de GN, vistas con número y «sin cuenta» en el saldo', async () => {
     await montar()
-    expect(todo()).toContain('el ERP todavía no tiene clientes propios')
+    expect(todo()).toContain('Areben Gestión todavía no tiene clientes propios')
     expect(boton(/^Compraron este mes/).textContent).toContain('1')
     expect(boton(/^Mayoristas/).textContent).toContain('1')
     expect(boton(/^Sin comprar hace \+90 días/).textContent).toContain('1')
@@ -64,7 +64,7 @@ describe('la lista de clientes', () => {
     await clic(filaDe('Barbara Spagnoli').querySelector('[role="cell"]:last-child')!)
     const f = document.querySelector('aside[aria-label^="Ficha del cliente"]')!
     expect(f.textContent).toContain('Saldo de la cuenta')
-    expect(f.textContent).toContain('El ERP todavía no lleva la cuenta de este cliente')
+    expect(f.textContent).toContain('Areben Gestión todavía no lleva la cuenta de este cliente')
     expect(f.textContent).toContain('barbara@x.com')
     expect(f.textContent).toContain('9123')
     expect(f.textContent).toContain('03/10/26')

@@ -115,7 +115,7 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
     if (k === 'cant') return <b style={{ color: f.cantidad > 0 ? 'var(--mo-success-ink)' : 'var(--mo-danger-ink)', fontVariantNumeric: 'tabular-nums' }}>{conSigno(f.cantidad)}</b>
     if (k === 'queda') return <span style={{ fontVariantNumeric: 'tabular-nums', color: f.queda < 0 ? 'var(--mo-danger-ink)' : color.ink }}>{f.queda}</span>
     if (k === 'doc') return <span style={{ color: color.ink2 }} title={f.documento}>{f.documento}</span>
-    if (k === 'quien') return <span title={f.quienDe === 'sistema' ? 'El ERP no guarda quién: es el sistema de donde vino' : undefined} style={{ color: f.quienDe === 'sistema' ? color.mut2 : color.ink2, fontStyle: f.quienDe === 'sistema' ? 'italic' : undefined }}>{f.quien}</span>
+    if (k === 'quien') return <span title={f.quienDe === 'sistema' ? 'Areben Gestión no guarda quién: es el sistema de donde vino' : undefined} style={{ color: f.quienDe === 'sistema' ? color.mut2 : color.ink2, fontStyle: f.quienDe === 'sistema' ? 'italic' : undefined }}>{f.quien}</span>
     if (k === 'linea') return <span style={{ color: color.ink2 }}>{LINEA[f.linea] ?? f.linea}</span>
     return null
   }
@@ -181,7 +181,7 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo los movimientos…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {datos?.libroHasta && <> · el ERP llega hasta {cuandoCorto(datos.libroHasta)}</>}
+          {datos?.libroHasta && <> · Areben Gestión llega hasta {cuandoCorto(datos.libroHasta)}</>}
           {' · '}<span style={{ fontWeight: weight.medium }}>Queda</span> = lo que quedó del producto en ese lugar después del movimiento.
         </div>
       </div>

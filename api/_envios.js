@@ -366,7 +366,7 @@ export default async function handler(req, res) {
       if (mal) return res.status(400).json({ error: mal });
       // 🔑 La venta del ERP sólo se toca si vino en el cuerpo: la ficha que no la conoce ⛔ la suelta al guardar.
       const ventaId = ventaIdDe((b.envio || {}).venta_id);
-      if (ventaId === false) return res.status(400).json({ error: 'La venta del ERP no es válida.' });
+      if (ventaId === false) return res.status(400).json({ error: 'La venta de Areben Gestión no es válida.' });
       if (ventaId !== undefined) fila.venta_id = ventaId;
 
       // Se lee antes: `guardar` también puede cambiar el estado, y el motor tiene que enterarse igual.
@@ -676,7 +676,7 @@ export default async function handler(req, res) {
       if (eLeer) throw new Error(eLeer.message);
       if (!envio) return res.status(404).json({ error: 'Ese envío ya no está.' });
       if (!puedeErp(perfil, envio.store, permisoErpDe({ method: 'POST', accion: 'anular' }))) {
-        return res.status(403).json({ error: 'Tu rol no puede anular ventas en el ERP.' });
+        return res.status(403).json({ error: 'Tu rol no puede anular ventas en Areben Gestión.' });
       }
       if (!puedeAnularVenta(envio)) return res.status(409).json({ error: 'Sólo se anula la venta de un envío «no entregado».' });
       const r = await anularVentaDeEnvio({ envio, usuario: yo || 'envíos' });

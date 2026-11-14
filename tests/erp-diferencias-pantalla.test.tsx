@@ -5,14 +5,14 @@ import { createRoot, type Root } from 'react-dom/client'
 import type { DiferenciasDelDia } from '@/lib/erp/cliente'
 
 /**
- * **ERP › Diferencias con GN, del lado de la pantalla** (🎨 19-oct, molde de REGISTRO). El oráculo es lo que se LEE y lo que se
+ * **Areben Gestión › Diferencias con GN, del lado de la pantalla** (🎨 19-oct, molde de REGISTRO). El oráculo es lo que se LEE y lo que se
  * APRIETA: los números arriba (sin explicar, sobreventa, explicadas solas), cada clase y la sobreventa como vistas con su
  * número, qué mirar, y que la fila abra la ficha de la prenda AL COSTADO (⛔ salta a Stock). Sin conexión al libro, lo DICE.
  */
 const datos: DiferenciasDelDia = {
   fecha: '2026-10-18', dias: ['2026-10-18', '2026-10-17'], fotoDesde: '2026-10-17T09:40:00Z', fotoHasta: '2026-10-18T09:40:00Z',
   grupos: [
-    { clase: 'venta_gn', nombre: 'Venta en Gestión Nube que no llegó al ERP', mirar: 'mirar ventas de Gestión Nube de ayer', unidades: 2, filas: [
+    { clase: 'venta_gn', nombre: 'Venta en Gestión Nube que no llegó a Areben Gestión', mirar: 'mirar ventas de Gestión Nube de ayer', unidades: 2, filas: [
       { producto: '1', talle: '10', nombre: 'TOP SAHARA', talleNombre: 'S', linea: 'zattia', deposito: 'local', clase: 'venta_gn', explicacion: null, deltaGN: -1, deltaLibro: 0, nivelGN: 2, nivelLibro: 3, diferencia: 1 },
       { producto: '2', talle: '20', nombre: 'BIKINI SOL', talleNombre: 'M', linea: 'stunned', deposito: 'deposito', clase: 'venta_gn', explicacion: 'ojo: Stunned', deltaGN: -1, deltaLibro: 0, nivelGN: 4, nivelLibro: 5, diferencia: 1 },
     ] },
@@ -48,10 +48,10 @@ describe('DiferenciasDia', () => {
   it('los números arriba y cada clase como vista; la sobreventa aparte', async () => {
     await montar()
     expect(leerDiferencias).toHaveBeenCalledWith('zattia', null)
-    expect(texto()).toMatch(/Sin explicar2stock del ERP ≠ Gestión Nube, el 18\/10/)
+    expect(texto()).toMatch(/Sin explicar2stock de Areben Gestión ≠ Gestión Nube, el 18\/10/)
     expect(texto()).toMatch(/Sobreventa1quedaron en negativo/)
     expect(texto()).toMatch(/Explicadas solas7Transferencias 7/)
-    expect(boton(/^Venta en Gestión Nube que no llegó al ERP/).textContent).toContain('2')
+    expect(boton(/^Venta en Gestión Nube que no llegó a Areben Gestión/).textContent).toContain('2')
     expect(filas().some((r) => r.includes('TOP SAHARA · S'))).toBe(true)
     expect(filas().some((r) => r.includes('BUZO ROMA'))).toBe(false)
     expect(filas().find((r) => r.includes('BIKINI SOL'))).toContain('Stunned')
@@ -64,10 +64,10 @@ describe('DiferenciasDia', () => {
     await clic([...host.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes('TOP SAHARA'))!)
     expect(fichaDe).toHaveBeenCalledWith('zattia', '1', '10')
   })
-  it('sin conexión al ERP lo dice (⛔ «ninguna en negativo»)', async () => {
+  it('sin conexión a Areben Gestión lo dice (⛔ «ninguna en negativo»)', async () => {
     leerDiferencias.mockResolvedValueOnce({ ...datos, sobreventa: [], sobreventaSinConexion: true })
     await montar()
-    expect(texto()).toContain('Falta la conexión al ERP')
-    expect(texto()).toMatch(/Sobreventa—falta la conexión al ERP/)
+    expect(texto()).toContain('Falta la conexión a Areben Gestión')
+    expect(texto()).toMatch(/Sobreventa—falta la conexión a Areben Gestión/)
   })
 })

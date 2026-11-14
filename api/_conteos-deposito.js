@@ -70,7 +70,7 @@ export default async function handler(req, res) {
       // un ajuste «Conteo» por línea, aplicado en el acto (erp-stunned §8.4, Bruno 30-oct), ⛔ el Excel de GN. Va ANTES del
       // historial: si el ERP ⛔ lo anota, FRENA y la pantalla ofrece reintentar (mismo `ref` ⇒ ⛔ dos veces).
       const erp = await conteoAlErp({ store, b, usuario: yo });
-      if (erp && erp.error) return res.status(409).json({ ok: false, error: `El ajuste no se pudo hacer en el ERP: ${erp.error}` });
+      if (erp && erp.error) return res.status(409).json({ ok: false, error: `El ajuste no se pudo hacer en Areben Gestión: ${erp.error}` });
       const row = {
         store,
         ubicacion: b.ubicacion || null,

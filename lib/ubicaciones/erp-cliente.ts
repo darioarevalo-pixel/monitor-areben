@@ -12,7 +12,7 @@ export type UbicacionesErp = { lineas: string[]; filas: Array<{ deposito: string
 export async function leerUbicacionesErp(marca: Marca): Promise<UbicacionesErp> {
   const r = await apiFetch(`/api/deposito?recurso=ubicaciones-erp&marca=${marca}`)
   const d = await r.json().catch(() => ({}))
-  if (!r.ok || !Array.isArray(d?.lineas)) throw new Error(d?.error || `No se pudo leer la ubicación del ERP (HTTP ${r.status})`)
+  if (!r.ok || !Array.isArray(d?.lineas)) throw new Error(d?.error || `No se pudo leer la ubicación de Areben Gestión (HTTP ${r.status})`)
   return d as UbicacionesErp
 }
 

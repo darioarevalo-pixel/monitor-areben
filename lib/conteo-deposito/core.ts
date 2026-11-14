@@ -373,7 +373,7 @@ export function lineasDeParteErp(erp: { renglones: Array<{ linea: string | null 
 
 /** Lo ajustado en el ERP para el aviso del guardado: « Quedó ajustado en el ERP (A-12, A-13).» o «». */
 export const textoAjustesErp = (ajustes: Array<{ ajuste: number }> | undefined): string =>
-  ajustes && ajustes.length ? ` Quedó ajustado en el ERP (${ajustes.map((a) => `A-${a.ajuste}`).join(', ')}).` : ''
+  ajustes && ajustes.length ? ` Quedó ajustado en Areben Gestión (${ajustes.map((a) => `A-${a.ajuste}`).join(', ')}).` : ''
 
 /** Las prendas del ERP que cambian mucho (≥ `UMBRAL_AVISO_CONTEO`): se marcan antes de confirmar (Bruno 30-oct). */
 export const cambiosGrandesErp = <R extends { dif: number }>(erp: { renglones: R[] } | undefined): R[] => grandes(erp?.renglones || []) as R[]

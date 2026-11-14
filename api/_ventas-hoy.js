@@ -123,7 +123,7 @@ export async function traerVentasDeHoy(supabase, store, ahoraMs, deps = { erp: t
   try {
     erp = await deps.erp(supabase, store);
   } catch (e) {
-    return { ok: false, status: 502, error: `Se trajeron las de Gestión Nube, pero las del ERP no: ${String((e && e.message) || e).slice(0, 200)}` };
+    return { ok: false, status: 502, error: `Se trajeron las de Gestión Nube, pero las de Areben Gestión no: ${String((e && e.message) || e).slice(0, 200)}` };
   }
   return { ok: true, truncado, ...conteo, erp };
 }

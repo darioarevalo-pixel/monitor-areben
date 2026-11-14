@@ -1,4 +1,4 @@
-// El ticket de Stunned al ERP: se toma la venta, se anota en el motor y queda `en_erp`; si el motor falla queda
+// El ticket de Stunned a Areben Gestión: se toma la venta, se anota en el motor y queda `en_erp`; si el motor falla queda
 // `error` y se reintenta; ⛔ jamás va a GN (ni `enviarVenta` la acepta).
 import { describe, it, expect } from 'vitest'
 import { enviarVentaErp } from '../lib/caja/enviar-erp.core.js'
@@ -35,7 +35,7 @@ describe('enviarVentaErp', () => {
     const r = await enviarVentaErp({ ...venta }, { sb, registrar: async () => { llamadas++; return { ok: true } } })
     expect(llamadas).toBe(1); expect(f.estado).toBe('en_erp'); expect(r.venta.estado).toBe('en_erp'); expect(r.reintentable).toBe(false)
   })
-  it('guarda el número que el ERP le dio a la venta (⛔ en gn_number: es de otro sistema)', async () => {
+  it('guarda el número que Areben Gestión le dio a la venta (⛔ en gn_number: es de otro sistema)', async () => {
     const { sb, f } = baseFalsa(venta)
     await enviarVentaErp({ ...venta }, { sb, registrar: async () => ({ ok: true, numero: 19 }) })
     expect(f.erp_numero).toBe(19); expect(f.gn_number).toBeUndefined()
@@ -60,21 +60,21 @@ describe('enviarVentaErp', () => {
     await enviarVentaErp({ ...venta, estado: 'en_erp' }, { sb, registrar: async () => { llamadas++; return { ok: true } } })
     expect(llamadas).toBe(0)
   })
-  it('una de GN no entra por acá, y una del ERP no entra a GN', async () => {
+  it('una de GN no entra por acá, y una de Areben Gestión no entra a GN', async () => {
     const { sb } = baseFalsa(venta)
     await expect(enviarVentaErp({ ...venta, destino: 'gn' }, { sb, registrar: async () => ({ ok: true }) })).rejects.toThrow(/GN/)
-    await expect(enviarVenta({ ...venta, payload: {} }, { sb, gnFetch: async () => { throw new Error('NO DEBE LLAMAR A GN') }, base: 'x', token: 't' })).rejects.toThrow(/ERP/)
+    await expect(enviarVenta({ ...venta, payload: {} }, { sb, gnFetch: async () => { throw new Error('NO DEBE LLAMAR A GN') }, base: 'x', token: 't' })).rejects.toThrow(/Areben Gestión/)
   })
 })
 
-describe('resumenTurno con ventas del ERP', () => {
+describe('resumenTurno con ventas de Areben Gestión', () => {
   const reglas = { cuentas: { 12921: { nombre: 'Efectivo', efectivo: true } } }
   const mk = (id: string, extra: Fila = {}) => ({ id, estado: 'en_erp', total: 100, pagos: [{ cuenta: 12921, monto: 100 }], creada_en: '2026-11-01T15:00:00Z', ...extra })
   it('suma el efectivo y NO la lista como pendiente de GN', () => {
     const r = resumenTurno({ turno: { fondo: 0 }, ventas: [mk('a')], movs: [], reglas, nombres: {}, cobrosGN: [], cobrosERP: [], anuladasGN: [] })
     expect(r.efectivo.cobrado).toBe(100); expect(r.sinGN).toHaveLength(0); expect(r.ventas).toBe(1)
   })
-  it('la anulada del ERP deja de sumar y se lista aparte', () => {
+  it('la anulada de Areben Gestión deja de sumar y se lista aparte', () => {
     const r = resumenTurno({ turno: { fondo: 0 }, ventas: [mk('a'), mk('b', { anulada: { por: 'ana', en: 'x' } })], movs: [], reglas, nombres: {}, cobrosGN: [], cobrosERP: [], anuladasGN: [] })
     expect(r.efectivo.cobrado).toBe(100); expect(r.anuladasGN).toHaveLength(1)
   })
@@ -94,7 +94,7 @@ describe('cierres de la Caja por marca (Stunned)', () => {
     await enviarVentaErp({ ...venta, store: 'zattia', email: 'a@b.co' }, { sb, registrar: async () => ({ ok: false, error: 'x' }), mailer: { url: 'http://m', key: 'k', fetch: fetchFalso } })
     expect(n).toBe(0)
   })
-  it('anular en el ERP escribe `anulada` SÓLO en la fila del ERP y sin pisar una ya anotada', async () => {
+  it('anular en Areben Gestión escribe `anulada` SÓLO en la fila de Areben Gestión y sin pisar una ya anotada', async () => {
     const { anotarAnuladaDelErp } = await import('../lib/caja/anulada-erp.core.js')
     const visto: Record<string, unknown> = {}; const eq: Array<[string, unknown]> = []; const es: string[] = []
     const q: any = {

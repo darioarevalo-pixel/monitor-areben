@@ -172,14 +172,14 @@ export function Ubicaciones() {
       return
     }
     const ok = await confirmar({
-      titulo: enErp ? 'Guardar ubicaciones en el ERP' : 'Guardar ubicaciones en Gestión Nube',
+      titulo: enErp ? 'Guardar ubicaciones en Areben Gestión' : 'Guardar ubicaciones en Gestión Nube',
       tono: 'brand',
       ok: `Guardar ${validos.length}`,
       mensaje: (
         <>
           <p>
             {enErp
-              ? <>Se guarda en el ERP la ubicación de <b>todas las variantes</b> de cada producto.</>
+              ? <>Se guarda en Areben Gestión la ubicación de <b>todas las variantes</b> de cada producto.</>
               : <>Se escribe la ubicación en la observación de <b>todas las variantes</b> de cada producto, en el depósito{marca === 'bdi' ? ' Minorista' : ''}.</>}
           </p>
           <div style={{ marginTop: space[3] }}>

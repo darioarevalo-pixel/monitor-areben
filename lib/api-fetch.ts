@@ -141,7 +141,7 @@ export async function apiFetch(url: string, opts0: RequestInit = {}): Promise<Re
   // «Ver como» del ERP: se lee con el rol elegido y no se guarda nada, venga de la pantalla que venga.
   if (viendoComoEnErp()) {
     if ((opts.method ?? 'GET').toUpperCase() !== 'GET') {
-      return new Response(JSON.stringify({ error: 'Estás viendo el ERP con otro rol: no se guarda nada. Volvé a Admin para hacerlo.' }), { status: 403, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Estás viendo Areben Gestión con otro rol: no se guarda nada. Volvé a Admin para hacerlo.' }), { status: 403, headers: { 'Content-Type': 'application/json' } })
     }
     if (url.includes('recurso=erp')) {
       const headers = new Headers(opts.headers || {})

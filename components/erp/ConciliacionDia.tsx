@@ -25,7 +25,7 @@ import { useTiendaErp } from '@/lib/erp/linea-erp'
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 /** Contra qué se compara cada fila (el `tipo` del motor). */
-const CONTRA: Record<string, string> = { stock_tn: 'Tienda Nube', stock_ml: 'Mercado Libre', pedido_erp: 'Pedido Tienda Nube · ERP', pedido_gn: 'Pedido Tienda Nube · Gestión Nube', pedido_ml: 'Venta Mercado Libre · Gestión Nube' }
+const CONTRA: Record<string, string> = { stock_tn: 'Tienda Nube', stock_ml: 'Mercado Libre', pedido_erp: 'Pedido Tienda Nube · Areben Gestión', pedido_gn: 'Pedido Tienda Nube · Gestión Nube', pedido_ml: 'Venta Mercado Libre · Gestión Nube' }
 const dia = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
 const pesos = (n: number | null) => (n == null ? '—' : `$ ${n.toLocaleString('es-AR', { maximumFractionDigits: 2 })}`)
 const pct = (a: number, b: number) => (b ? `${((100 * a) / b).toFixed(1)}%` : '—')
@@ -36,7 +36,7 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'que', titulo: 'Producto o pedido', ancho: 'minmax(220px, 2fr)', movil: 'titulo' },
   { key: 'contra', titulo: 'Contra', ancho: '128px', movil: 'chico' },
   { key: 'ellos', titulo: 'En la tienda', ancho: '92px', derecha: true, movil: 'chico' },
-  { key: 'erp', titulo: 'ERP', ancho: '92px', derecha: true, movil: 'dato' },
+  { key: 'erp', titulo: 'Areben Gestión', ancho: '92px', derecha: true, movil: 'dato' },
   { key: 'gn', titulo: 'Gestión Nube', ancho: '64px', derecha: true, movil: 'oculta' },
   { key: 'dias', titulo: 'Días', ancho: '56px', derecha: true, movil: 'oculta' },
   { key: 'paso', titulo: 'Qué pasó', ancho: 'minmax(220px, 1.6fr)', movil: 'chico' },
@@ -111,7 +111,7 @@ export function ConciliacionDia({ ajustar, alContar }: { ajustar: (p: PrendaAAju
   const calculado = !!datos?.tarjetas.some((t) => t.calculado)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>{datos?.gn.sinGn ? 'El ERP contra Tienda Nube y Mercado Libre' : 'El ERP contra Tienda Nube, Gestión Nube y Mercado Libre'}: cuánto coincide y lo que no, con qué mirar. Se calcula una vez por día, a las 13:40.</p>
+      <p style={{ margin: 0, color: color.mut }}>{datos?.gn.sinGn ? 'Areben Gestión contra Tienda Nube y Mercado Libre' : 'Areben Gestión contra Tienda Nube, Gestión Nube y Mercado Libre'}: cuánto coincide y lo que no, con qué mirar. Se calcula una vez por día, a las 13:40.</p>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         {datos && datos.dias.length > 0 && (
           <Select aria-label="Día" style={ANCHO_SELECT} value={datos.fecha ?? ''} onChange={(e) => setFecha(e.target.value)} disabled={cargando}>
@@ -136,12 +136,12 @@ export function ConciliacionDia({ ajustar, alContar }: { ajustar: (p: PrendaAAju
                 key={t.tipo} titulo={t.nombre}
                 valor={!t.calculado ? '—' : t.tipo.startsWith('stock_') ? pct(t.cierran ?? 0, t.total ?? 0) : (t.noCierran ?? 0).toLocaleString('es-AR')}
                 nota={!t.calculado ? 'No se calculó ese día.'
-                  : t.tipo.startsWith('stock_') ? `Coinciden ${t.cierran} de ${t.total} ${t.unidad}${t.aparte ? ` · ${t.aparte} ${t.tipo === 'stock_ml' ? 'publicaciones' : 'de la tienda'} sin producto en el ERP` : ''}`
+                  : t.tipo.startsWith('stock_') ? `Coinciden ${t.cierran} de ${t.total} ${t.unidad}${t.aparte ? ` · ${t.aparte} ${t.tipo === 'stock_ml' ? 'publicaciones' : 'de la tienda'} sin producto en Areben Gestión` : ''}`
                     : t.noCierran ? `${t.noCierran} de ${t.total} ${t.unidad} no coinciden (7 días)` : `Coinciden los ${t.total} ${t.unidad} (7 días)`}
               />
             ))}
             {!datos.gn.sinGn && (
-              <TileResumen titulo="Stock por depósito: Gestión Nube y el ERP" valor={!datos.gn.calculado ? '—' : (datos.gn.sinExplicar ?? 0).toLocaleString('es-AR')}
+              <TileResumen titulo="Stock por depósito: Gestión Nube y Areben Gestión" valor={!datos.gn.calculado ? '—' : (datos.gn.sinExplicar ?? 0).toLocaleString('es-AR')}
                 nota={!datos.gn.calculado ? 'No se calculó ese día.' : datos.gn.sinExplicar ? 'sin explicar: verlas en Diferencias con Gestión Nube' : 'Todo explicado (Diferencias con Gestión Nube)'} />
             )}
           </div>
@@ -162,7 +162,7 @@ export function ConciliacionDia({ ajustar, alContar }: { ajustar: (p: PrendaAAju
               vacio={!cargando ? <div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con ese producto o pedido.' : calculado ? 'Todo coincide.' : 'Ese día no se calculó.'} /></div> : null}
             />
             <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-              {filas.length.toLocaleString('es-AR')} que no coinciden · {datos.gn.sinGn ? 'el arreglo se hace en el ERP' : 'el arreglo se hace en el monitor o en Gestión Nube, no en el ERP'}
+              {filas.length.toLocaleString('es-AR')} que no coinciden · {datos.gn.sinGn ? 'el arreglo se hace en Areben Gestión' : 'el arreglo se hace en el monitor o en Gestión Nube, no en Areben Gestión'}
             </div>
           </div>
         </>

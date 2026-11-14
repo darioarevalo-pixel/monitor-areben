@@ -178,7 +178,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     if (k === 'h') return <span style={{ color: color.mut }}>{cuandoCorto(f.pedidoEn)}</span>
     if (k === 'c') {
       return (
-        <span title={`${f.cliente}${f.clienteDe === 'gn' ? ' · el nombre sale de Gestión Nube (la venta todavía no tiene cliente del ERP)' : f.clienteDe === 'falta' ? (f.kind === 'pedido' ? ' · un pedido sin pagar todavía no llegó a Gestión Nube: el nombre aparece cuando se cobra' : ' · el nombre llega de Gestión Nube, al otro día') : ''}`}>
+        <span title={`${f.cliente}${f.clienteDe === 'gn' ? ' · el nombre sale de Gestión Nube (la venta todavía no tiene cliente de Areben Gestión)' : f.clienteDe === 'falta' ? (f.kind === 'pedido' ? ' · un pedido sin pagar todavía no llegó a Gestión Nube: el nombre aparece cuando se cobra' : ' · el nombre llega de Gestión Nube, al otro día') : ''}`}>
           <span style={{ color: f.clienteDe === 'falta' ? color.mut2 : color.ink, fontStyle: f.clienteDe === 'falta' ? 'italic' : undefined }}>{f.cliente}</span>
           {f.clienteDe === 'gn' && <span style={{ marginLeft: 6, fontSize: font.xs, color: color.mut2 }}>de Gestión Nube</span>}
         </span>
@@ -234,7 +234,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           ...(cobra ? [{ key: 'cobro', label: 'Registrar cobro', icono: 'pesos' as const, onClick: () => abrirVentana('cobro', f, false), disabled: !(f.saldo > 0), hint: f.saldo > 0 ? undefined : 'No tiene saldo.' }] : []),
           ...(edita ? [{ key: 'editar', label: 'Editar', icono: 'lapiz' as const, onClick: () => abrirVentana('editar', f, false), disabled: f.anulada }] : []),
           { key: 'imprimir', label: 'Imprimir el ticket', icono: 'impresora', onClick: () => imprimir(f) },
-          ...(rol('cambiar') ? [{ key: 'cambio', label: 'Hacer cambio', icono: 'cambios' as const, onClick: () => irACaja('cambio'), disabled: f.anulada, hint: 'Abre la Caja del ERP en Cambio.' }] : []),
+          ...(rol('cambiar') ? [{ key: 'cambio', label: 'Hacer cambio', icono: 'cambios' as const, onClick: () => irACaja('cambio'), disabled: f.anulada, hint: 'Abre la Caja de Areben Gestión en Cambio.' }] : []),
           ...(f.link ? [{ key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir' as const, onClick: () => window.open(f.link!, '_blank', 'noopener') }] : []),
           ...(rol('anular') ? [{ key: 'anular', label: 'Anular…', icono: 'anular' as const, tone: 'danger' as const, onClick: () => abrirFicha(f, 'anular'), disabled: f.anulada }] : []),
         ]

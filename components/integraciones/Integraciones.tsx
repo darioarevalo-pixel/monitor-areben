@@ -309,7 +309,7 @@ export function Integraciones() {
   // una sola puerta para que el error no tenga dos formas distintas de contarse.
   // tn-categorias lee la tienda del query param (?store=), no del body. Sin esto asume 'bdi'.
   const escribirTanda = useCallback(async (filas: DryRow[]): Promise<RespStock> => {
-    if (!STOCK_ESCRIBE) throw new Error('Stunned vive en el ERP: el stock de Gestión Nube ya no se escribe en Tienda Nube.')
+    if (!STOCK_ESCRIBE) throw new Error('Stunned vive en Areben Gestión: el stock de Gestión Nube ya no se escribe en Tienda Nube.')
     const resp = await apiFetch(`${TN_STOCK_API}?store=${STORE}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -622,7 +622,7 @@ export function Integraciones() {
             </Notice>
           ) : (
             <Notice tone="neutral" icon="ℹ" style={{ marginBottom: space[3] }}>
-              Stunned vive en el ERP desde el corte del 28 de octubre: el stock de Tienda Nube lo manda el ERP (<b>ERP › Stock › Diferencias › Con Tienda Nube</b>).
+              Stunned vive en Areben Gestión desde el corte del 28 de octubre: el stock de Tienda Nube lo manda Areben Gestión (<b>Areben Gestión › Stock › Diferencias › Con Tienda Nube</b>).
               Esta comparación con Gestión Nube es <b>sólo de lectura</b> y no escribe nada.
             </Notice>
           )}

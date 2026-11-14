@@ -4,7 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 
 /**
- * 🔄 **Recalcular el cierre, la pantalla** (Bruno, 31-oct; ERP › Ventas › Cajas): el caso real de Z-0038 — el pedido web
+ * 🔄 **Recalcular el cierre, la pantalla** (Bruno, 31-oct; Areben Gestión › Ventas › Cajas): el caso real de Z-0038 — el pedido web
  * de Stunned #36 entró como efectivo y después se le corrigió el medio. Sólo un admin ve «Recalcular el cierre»: primero
  * muestra qué cambia con lo de hoy, «Guardar» lo escribe. El que ⛔ es admin ve, a lo sumo, que se recalculó.
  */
@@ -43,10 +43,10 @@ async function abrirFicha(admin: boolean) {
 const boton = (texto: string) => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === texto) ?? null
 const texto = () => (document.body.textContent ?? '').replace(/\s/g, ' ')
 
-describe('ERP › Cajas › Recalcular el cierre', () => {
-  it('la ficha muestra el efectivo de los pedidos web del ERP', async () => {
+describe('Areben Gestión › Cajas › Recalcular el cierre', () => {
+  it('la ficha muestra el efectivo de los pedidos web de Areben Gestión', async () => {
     await abrirFicha(true)
-    expect(texto()).toContain('Pedidos web (ERP)')
+    expect(texto()).toContain('Pedidos web (Areben Gestión)')
   })
 
   it('admin: muestra qué cambia y «Guardar» lo escribe', async () => {
@@ -57,7 +57,7 @@ describe('ERP › Cajas › Recalcular el cierre', () => {
     await act(async () => { boton('Recalcular el cierre')!.click() })
     expect(m.recalcularCierre).toHaveBeenLastCalledWith('zattia', { id: 't38', guardar: false })
     expect(texto()).toContain('Con lo de hoy')
-    expect(texto()).toMatch(/Pedidos web \(ERP\)\$ 43\.795 → \$ 0/)
+    expect(texto()).toMatch(/Pedidos web \(Areben Gestión\)\$ 43\.795 → \$ 0/)
     expect(texto()).toMatch(/Diferencia− \$ 43\.795 → \$ 0/)
     await act(async () => { boton('Guardar')!.click() })
     expect(m.recalcularCierre).toHaveBeenLastCalledWith('zattia', { id: 't38', guardar: true })

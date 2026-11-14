@@ -288,7 +288,7 @@ export async function editarVentaErp({ marca, body, usuario }, deps = {}) {
     // La pantalla elige al cliente por su documento (la ficha de `cliente`, §11): acá se vuelve su id, de la MISMA empresa.
     if (doc != null) {
       const [c] = (await db.query('select c.id::text from cliente c join venta v on v.empresa_id = c.empresa_id where v.id = $1 and c.doc = $2 limit 1', [body.ventaId, doc])).rows
-      if (!c) return { status: 409, error: 'Ese documento no tiene ficha de cliente en el ERP (nace al hacer una factura A o en Clientes).' }
+      if (!c) return { status: 409, error: 'Ese documento no tiene ficha de cliente en Areben Gestión (nace al hacer una factura A o en Clientes).' }
       cambios.cliente_id = c.id
     }
     const r = await m.editarVenta(db, { venta_id: body.ventaId, cambios, usuario })
@@ -367,7 +367,7 @@ export async function notaDeVentaErp({ marca, body, usuario }, deps = {}) {
 export async function cobrarVentaErp({ marca, body, usuario }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   if (!UUID.test(String(body?.ventaId || ''))) return { status: 400, error: 'Venta inválida' }
-  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'La venta no tiene cliente del ERP: sin cliente no hay cuenta corriente.' }
+  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'La venta no tiene cliente de Areben Gestión: sin cliente no hay cuenta corriente.' }
   const monto = Math.round(Number(body?.monto) * 100) / 100
   if (!(monto > 0)) return { status: 400, error: 'Monto inválido' }
   if (!body?.cuenta) return { status: 400, error: 'Elegí la cuenta.' }

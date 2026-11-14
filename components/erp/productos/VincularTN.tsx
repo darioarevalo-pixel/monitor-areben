@@ -31,8 +31,8 @@ const COLUMNAS: Record<string, ColumnaLista[]> = {
 }
 const VISTAS = [['sin_par', 'Sin vincular'] as const, ['trabados', 'Repetidas'] as const, ['elegidas', 'Elegidas acá'] as const]
 const AYUDA: Record<string, string> = {
-  sin_par: 'No cruzan con ninguna variante del ERP: no reciben stock. Si no aparece en el buscador, primero hay que cargar el producto.',
-  trabados: 'Varias variantes de Tienda Nube sobre una sola del ERP, sin poder llevar el mismo stock (cambia algo más que el modelo, o falta vincular alguna): no reciben stock hasta resolverlas.',
+  sin_par: 'No cruzan con ninguna variante de Areben Gestión: no reciben stock. Si no aparece en el buscador, primero hay que cargar el producto.',
+  trabados: 'Varias variantes de Tienda Nube sobre una sola de Areben Gestión, sin poder llevar el mismo stock (cambia algo más que el modelo, o falta vincular alguna): no reciben stock hasta resolverlas.',
   elegidas: 'Lo que ya se eligió en esta pantalla. La copia desde Gestión Nube no lo pisa. Para corregir una, abrila y elegí otra.',
 }
 
@@ -116,7 +116,7 @@ export function VincularTN() {
     if (k === 'sku') return f.sku ? <span style={{ color: color.mut }}>{f.sku}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'estado') return <span style={{ color: f.publicado ? color.ink2 : color.mut2 }}>{f.publicado ? 'Publicada' : 'Oculta'}</span>
     if (k === 'stock') return f.stock == null ? <span style={{ color: color.mut2 }} title="Tienda Nube no controla el stock de esta variante">—</span> : <span>{f.stock}</span>
-    if (k === 'grupo') return <span style={{ color: f.grupo ? color.ink2 : color.mut2 }}>{f.grupo ?? 'Ya no está en el ERP'}</span>
+    if (k === 'grupo') return <span style={{ color: f.grupo ? color.ink2 : color.mut2 }}>{f.grupo ?? 'Ya no está en Areben Gestión'}</span>
     if (k === 'por') return <span style={{ color: color.mut }}>{f.usuario ?? '—'}</span>
     if (k === 'cuando') return <span style={{ color: color.mut }}>{f.actualizado_en ? cuandoCorto(f.actualizado_en) : '—'}</span>
     return null
@@ -124,7 +124,7 @@ export function VincularTN() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Qué variante del ERP es cada variante de Tienda Nube. {AYUDA[vista]}</p>
+      <p style={{ margin: 0, color: color.mut }}>Qué variante de Areben Gestión es cada variante de Tienda Nube. {AYUDA[vista]}</p>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
       {!datos && !error && <EmptyState title="Leyendo los vínculos…" />}
@@ -147,7 +147,7 @@ export function VincularTN() {
 
       {abierta && (
         <Modal
-          abierto onCerrar={() => setAbierta(null)} titulo="Vincular con una variante del ERP"
+          abierto onCerrar={() => setAbierta(null)} titulo="Vincular con una variante de Areben Gestión"
           pie={(
             <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
               <Button variant="outline" onClick={() => setAbierta(null)} disabled={trabajando}>Cancelar</Button>
@@ -157,10 +157,10 @@ export function VincularTN() {
         >
           <p style={{ margin: `0 0 ${space[3]}px`, color: color.mut }}>En Tienda Nube: <b style={{ color: color.ink }}>{abierta.producto} · {nombreVariante(abierta)}</b></p>
           {errorModal && <div style={{ marginBottom: space[3] }}><Notice tone="danger" onClose={() => setErrorModal(null)}>{errorModal}</Notice></div>}
-          <Field label="Buscar en el ERP">
+          <Field label="Buscar en Areben Gestión">
             <Input value={texto} onChange={(e) => { setTexto(e.target.value); setElegida(null) }} placeholder="Nombre, variante o código" autoFocus />
           </Field>
-          <div role="listbox" aria-label="Variantes del ERP" style={{ marginTop: space[3], maxHeight: 280, overflowY: 'auto', border: `1px solid ${color.line}`, borderRadius: 10 }}>
+          <div role="listbox" aria-label="Variantes de Areben Gestión" style={{ marginTop: space[3], maxHeight: 280, overflowY: 'auto', border: `1px solid ${color.line}`, borderRadius: 10 }}>
             {resultados === null && <div style={{ padding: space[3], color: color.mut }}>Buscando…</div>}
             {resultados?.length === 0 && <div style={{ padding: space[3], color: color.mut }}>No aparece con ese texto. Probá con menos palabras; si no está, hay que cargar el producto.</div>}
             {resultados?.map((v) => {

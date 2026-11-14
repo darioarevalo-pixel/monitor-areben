@@ -707,7 +707,7 @@ function NotaContribucion({ contribucion }: { contribucion: Contribucion }) {
   const c = contribucion.cobertura
   const avisoErp = contribucion.aviso && (
     <div style={{ marginBottom: space[1] }}>
-      🔴 <strong>Stunned puede faltar:</strong> el ERP no contestó ({contribucion.aviso}). Lo de Stunned no está sumado.
+      🔴 <strong>Stunned puede faltar:</strong> Areben Gestión no contestó ({contribucion.aviso}). Lo de Stunned no está sumado.
     </div>
   )
   if (!c) return avisoErp || null

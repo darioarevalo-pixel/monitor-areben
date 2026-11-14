@@ -172,7 +172,7 @@ export function BusquedaGlobal({ marca, marcas, secciones, onElegir, onCerrar }:
   }
 
   return (
-    <Marco etiqueta="Buscar en el ERP" onCerrar={onCerrar}>
+    <Marco etiqueta="Buscar en Areben Gestión" onCerrar={onCerrar}>
       <div style={{ display: 'flex', alignItems: 'center', gap: space[3], padding: '0 16px', height: 52, borderBottom: `1px solid ${color.bg2}`, color: color.mut }}>
         <Icono nombre="lupa" size={18} />
         <input

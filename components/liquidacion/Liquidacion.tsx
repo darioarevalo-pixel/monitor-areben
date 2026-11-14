@@ -1112,7 +1112,7 @@ function DetalleCampania({
         : destino === 'previa' ? 'Volver a la oferta que tenían' : 'Dejar todo a precio de lista',
       mensaje: modo === 'poner'
         ? porErp
-          ? `Se le carga el precio de sale a ${pids.length} ${pids.length === 1 ? 'producto' : 'productos'} en el ERP, y el ERP lo pone en Tienda Nube. Queda hecho cuando Tienda Nube lo muestra: tarda ${cuanto}. Si cerrás la pestaña, se confirma al volver a abrir la campaña.`
+          ? `Se le carga el precio de sale a ${pids.length} ${pids.length === 1 ? 'producto' : 'productos'} en Areben Gestión, y Areben Gestión lo pone en Tienda Nube. Queda hecho cuando Tienda Nube lo muestra: tarda ${cuanto}. Si cerrás la pestaña, se confirma al volver a abrir la campaña.`
           : `Se le va a escribir el precio de sale a ${pids.length} ${pids.length === 1 ? 'producto' : 'productos'} en Gestión Nube, y de ahí pasa a la tienda. Tarda ${cuanto}: no cierres la pestaña. Si se corta, se puede retomar.`
         : destino === 'previa'
           ? `A los ${conPrevia} que ya estaban en oferta cuando entraron a la campaña se les devuelve ESA oferta; los otros ${pids.length - conPrevia} quedan a precio de lista, que es como estaban. Tarda ${cuanto}.`
@@ -1395,7 +1395,7 @@ function DetalleCampania({
       */}
       {esperandoTN != null && !aplicando && (
         <Notice tone="info" style={{ marginBottom: space[4] }}>
-          {esperandoTN === 1 ? 'Un producto espera' : `${esperandoTN} productos esperan`} que Tienda Nube muestre lo pedido al ERP.{' '}
+          {esperandoTN === 1 ? 'Un producto espera' : `${esperandoTN} productos esperan`} que Tienda Nube muestre lo pedido a Areben Gestión.{' '}
           <Button variant="ghost" size="sm" onClick={() => void releerTN().catch((e) => toast.error(e instanceof Error ? e.message : 'No se pudo releer.'))}>
             Releer Tienda Nube
           </Button>

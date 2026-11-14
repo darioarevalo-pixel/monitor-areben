@@ -299,12 +299,12 @@ export function ConteoLocalBdi() {
           )}
           {nErp > 0 && (
             <p>
-              Las fundas de <b>{lineasErp}</b> se ajustan en el <b>ERP</b>, en el acto: el stock pasa a lo contado.
+              Las fundas de <b>{lineasErp}</b> se ajustan en <b>Areben Gestión</b>, en el acto: el stock pasa a lo contado.
             </p>
           )}
           <div style={{ marginTop: space[3] }}>
             <ConfirmDetalle label="Líneas a ajustar" valor={excel.length} />
-            {nErp > 0 && <ConfirmDetalle label={`De ${lineasErp}, al ERP (sin Excel)`} valor={nErp} />}
+            {nErp > 0 && <ConfirmDetalle label={`De ${lineasErp}, a Areben Gestión (sin Excel)`} valor={nErp} />}
             {enCero > 0 && <ConfirmDetalle label="Fundas sin escanear → quedan en 0" valor={enCero} />}
           </div>
         </>
@@ -329,7 +329,7 @@ export function ConteoLocalBdi() {
       } catch (e) {
         // Con parte ERP, el guardado ES el ajuste: ⛔ se limpia el conteo sin él (volver a «Cerrar» reintenta con el mismo `ref`).
         if (nErp) {
-          toast.error(`El conteo no quedó guardado y ${lineasErp} no se ajustó en el ERP: ${(e as Error).message}. Volvé a tocar «Ajustar en el ERP y cerrar conteo».`)
+          toast.error(`El conteo no quedó guardado y ${lineasErp} no se ajustó en Areben Gestión: ${(e as Error).message}. Volvé a tocar «Ajustar en Areben Gestión y cerrar conteo».`)
           return
         }
         /* sin parte ERP: si falla el historial, el Excel ya se generó */
@@ -416,7 +416,7 @@ export function ConteoLocalBdi() {
  >
  ← Volver</Button>
             <Button variant="solid" tone="brand" onClick={() => void onGenerar()}>
-              {filasExcel(preview).length ? 'Generar Excel y cerrar conteo' : preview.rows.length ? 'Ajustar en el ERP y cerrar conteo' : 'Guardar el conteo igual'}
+              {filasExcel(preview).length ? 'Generar Excel y cerrar conteo' : preview.rows.length ? 'Ajustar en Areben Gestión y cerrar conteo' : 'Guardar el conteo igual'}
             </Button>
           </>
         )}

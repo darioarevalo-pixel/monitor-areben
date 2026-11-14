@@ -37,7 +37,7 @@ export function PylLinea({ pyl }: { pyl: Pyl }) {
     >
       {pyl.aviso && (
         <div style={{ marginBottom: space[2], color: color.mut, fontSize: font.sm }}>
-          🔴 <strong>Stunned puede faltar:</strong> el ERP no contestó ({pyl.aviso}). Lo de Stunned no está sumado.
+          🔴 <strong>Stunned puede faltar:</strong> Areben Gestión no contestó ({pyl.aviso}). Lo de Stunned no está sumado.
         </div>
       )}
       {!pyl.disponible || columnas.length === 0 ? (

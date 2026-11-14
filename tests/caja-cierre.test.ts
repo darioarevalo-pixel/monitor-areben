@@ -266,7 +266,7 @@ describe('resumenTurno con los cobros de GN', () => {
   })
 })
 
-describe('los pedidos web de Stunned cobrados en efectivo en el ERP (29-oct)', () => {
+describe('los pedidos web de Stunned cobrados en efectivo en Areben Gestión (29-oct)', () => {
   const TURNO_T = { desde: '2026-10-29T12:00:00.000Z', hasta: '2026-10-29T21:00:00.000Z' }
   const efectivo = { cuenta: { medio: 'efectivo' } }
   // El TN #135 real (Efectivo, $43.795, sin pagar el 29-oct a la mañana): cuando lo marcan pagado al retirar, nace así.
@@ -274,7 +274,7 @@ describe('los pedidos web de Stunned cobrados en efectivo en el ERP (29-oct)', (
     numero: 34, estado: 'confirmada', origen: 'tn', prueba: false, ocurrida_en: '2026-10-29T15:10:00Z',
     detalle: { tn: { numero: 135 } }, venta_pago: [{ monto: '43795.00', ...efectivo }], ...x,
   })
-  it('entra el efectivo del turno, con el número del ERP y el del pedido', () => {
+  it('entra el efectivo del turno, con el número de Areben Gestión y el del pedido', () => {
     expect(cobrosDeERP({ ventas: [venta()], ...TURNO_T })).toEqual([
       { id: 'erp-34', venta: 34, tn: '135', cliente: null, monto: 43795, en: '2026-10-29T15:10:00.000Z' },
     ])
@@ -297,7 +297,7 @@ describe('los pedidos web de Stunned cobrados en efectivo en el ERP (29-oct)', (
     expect(sin.efectivo.esperado).toBe(51900)
   })
   it('es obligatorio: sin el dato ⛔ se calcula un esperado corto', () => {
-    expect(() => resumenTurno({ turno: TURNO, ventas: [], movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: [] } as never)).toThrow(/cobros del ERP/)
+    expect(() => resumenTurno({ turno: TURNO, ventas: [], movs: [], reglas: REGLAS, nombres: {}, cobrosGN: [], anuladasGN: [] } as never)).toThrow(/cobros de Areben Gestión/)
   })
 })
 
@@ -325,7 +325,7 @@ describe('puedeUsarPOS (fase C: sólo la cuenta que abrió la caja)', () => {
   })
 })
 
-describe('venta del ERP anulada (ensayo Caja Stunned, 26-oct)', () => {
+describe('venta de Areben Gestión anulada (ensayo Caja Stunned, 26-oct)', () => {
   it('una venta en_erp con `anulada` ⛔ suma al efectivo esperado', () => {
     const r = resumenTurno({
       turno: { fondo: 0 },
@@ -334,7 +334,7 @@ describe('venta del ERP anulada (ensayo Caja Stunned, 26-oct)', () => {
     })
     expect(r.efectivo.esperado).toBe(0)
   })
-  it('se lista con SU número del ERP y marcada como del ERP (Bruno, 28-oct: decía «Anuladas en Gestión Nube: 96A141DC»)', () => {
+  it('se lista con SU número de Areben Gestión y marcada como de Areben Gestión (Bruno, 28-oct: decía «Anuladas en Gestión Nube: 96A141DC»)', () => {
     const r = resumenTurno({
       turno: { fondo: 0 },
       ventas: [{ ...v('en_erp', [{ cuenta: 12921, monto: 11700 }]), erp_numero: 25, anulada: { por: 'Bruno', en: '2026-10-28T22:10:17Z', motivo: 'prueba' } }],

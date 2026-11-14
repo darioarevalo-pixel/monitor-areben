@@ -105,7 +105,7 @@ export function RecepcionesStock({ alContar }: { alContar?: AlContar } = {}) {
     if (k === 'oc') return <b style={{ color: color.ink }}>{f.oc}</b>
     if (k === 'llego') return <span style={{ color: color.mut }}>{f.fecha}</span>
     if (k === 'de') return f.proveedor ? <span style={{ color: color.ink2 }} title={f.proveedor}>{f.proveedor}</span> : <span style={{ color: color.mut2 }}>—</span>
-    if (k === 'va') return <span style={{ color: color.mut }} title="Ingresos todavía no dice a qué depósito va: el ERP lo supone">{f.vaA}</span>
+    if (k === 'va') return <span style={{ color: color.mut }} title="Ingresos todavía no dice a qué depósito va: Areben Gestión lo supone">{f.vaA}</span>
     if (k === 'pedidas') return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{f.pedidas.toLocaleString('es-AR')}</span>
     if (k === 'recibidas') return f.pedidas ? <BarraRecibidas recibidas={f.recibidas} pedidas={f.pedidas} tono={f.tono} /> : <span style={{ color: color.mut }}>{u(f.recibidas)}</span>
     if (k === 'estado') return <span style={{ fontWeight: 600, fontSize: 13, color: COLOR_ESTADO[f.estado] }} title={f.estadoTexto}>{f.estadoTexto}</span>
@@ -128,7 +128,7 @@ export function RecepcionesStock({ alContar }: { alContar?: AlContar } = {}) {
         <Button variant="outline" onClick={() => abrirIngresos()}>Abrir Ingresos en el monitor ↗</Button>
       </div>
       <Notice tone="warning">
-        Ingresos avisa cada orden <b>recién cuando se confirma</b> lo que llegó: todavía no se ven las <b>pedidas que no llegaron</b>, ni a qué depósito va cada una (el ERP supone el depósito de la marca).
+        Ingresos avisa cada orden <b>recién cuando se confirma</b> lo que llegó: todavía no se ven las <b>pedidas que no llegaron</b>, ni a qué depósito va cada una (Areben Gestión supone el depósito de la marca).
       </Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       <ActualizarIngresos />

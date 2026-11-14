@@ -154,7 +154,7 @@ export default async function handler(req, res) {
     const storeName = (rows.length ? rows[0].store_name : null) || (MIRROR_STORE_NAME[store] && MIRROR_STORE_NAME[store][loc]) || null;
     // 🔑 Las líneas que ya están en el ERP (`erp_corte`, erp-stunned §8.4): el «sistema» de sus prendas es el LIBRO, ⛔ GN (que desde el corte ⛔ lo mueve).
     let conLibro;
-    try { conLibro = await libroEnErp(store, loc, rows); } catch (e) { return res.status(503).json({ ok: false, error: `No pude leer el stock del ERP: ${e.message}` }); }
+    try { conLibro = await libroEnErp(store, loc, rows); } catch (e) { return res.status(503).json({ ok: false, error: `No pude leer el stock de Areben Gestión: ${e.message}` }); }
     return res.status(200).json({ ok: true, store, loc, store_id: storeId, store_name: storeName, count: rows.length, from_directo: rows.length, pendientes, rows: conLibro });
   }
 
@@ -212,7 +212,7 @@ export default async function handler(req, res) {
     // 🔑 Las líneas que ya están en el ERP (`erp_corte`, erp-stunned §8.4): el «sistema» de sus prendas es el LIBRO, ⛔ GN. Si el
     // ERP ⛔ contesta, ⛔ se cuenta: contra el stock viejo de GN es justo lo que esto evita.
     let merged;
-    try { merged = await libroEnErp(store, loc, [...byKey.values()]); } catch (e) { return res.status(503).json({ ok: false, error: `No pude leer el stock del ERP: ${e.message}` }); }
+    try { merged = await libroEnErp(store, loc, [...byKey.values()]); } catch (e) { return res.status(503).json({ ok: false, error: `No pude leer el stock de Areben Gestión: ${e.message}` }); }
     return res.status(200).json({ ok: true, store, loc, store_id: storeId, store_name: storeName, count: merged.length, from_vivo: dep.length, from_directo: fromDirecto, from_espejo: fromEspejo, rows: merged });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
