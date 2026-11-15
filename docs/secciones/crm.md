@@ -34,7 +34,9 @@ ERP. La elige `erp_corte` de BDI (`crmEnErp`, con el caché tolerante de la Caja
   las tablas (`venta`, `cliente`, `venta_gn`) con índice —la vista `espejo_motor.ventas` filtrada por
   cliente tarda 5 s— y su `test/crm-lectura-pg.mjs` exige que dé lo MISMO que la vista.
 - 🔑 **Los ids que ve el navegador no cambian**: un cliente de GN sigue con su número de GN (el
-  seguimiento del KV está atado a ése); uno nacido en el ERP lleva su `id_espejo` (≥ 1.000.000.000).
+  seguimiento del KV está atado a ése); uno nacido en el ERP lleva su `id_espejo`: **desde 704.001**, pegado al último de GN (703.036). Antes
+  arrancaba en 1.000.000.000 y el CRM mostraba «#1000015700» (Bruno 15-nov: «más cerca»). 🔴 El contador de GN
+  es compartido y sigue subiendo: un cliente de GN ≥ 704.000 (alta después del corte) la base lo rechaza.
 - 🔑 Lo que sólo sabía GN de su historia (fecha de venta, `channel_id`, el cliente que la historia no
   enganchó, ciudad/provincia) se copió UNA vez a tablas del ERP: motor `sql/083` + `bin/historia-gn.mjs`.
   Sin esa copia, el ERP da otra «última compra» en 2.225 ventas y pierde el modo Mayorista en 168.

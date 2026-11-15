@@ -68,7 +68,8 @@ import * as erpCrm from '../motor/crm/lectura.mjs';
 // 🔑 La fuente del ERP es del MOTOR (`motor/crm/lectura.mjs`): la forma de GN (ids, fecha, canal por número, cliente) es la de
 // sus vistas, y su test de Postgres exige que dé lo mismo. Acá ⛔ se reescribe ninguna regla de esas.
 // 🔑 Los ids que ve el navegador NO cambian: el cliente de GN sigue con su número de GN (el seguimiento del KV va atado a ése),
-// y el que nace en el ERP lleva su `id_espejo` (≥ 1.000.000.000, ⛔ choca con GN).
+// y el que nace en el ERP lleva su `id_espejo` (en BDI desde 704.001, pegado al último de GN, 703.036: motor sql/083,
+// con freno a un alta tardía en GN que chocaría).
 // 🔴 Sin saber si BDI cortó, TIRA (`cortesDeCaja` sin ninguna lectura buena): ⛔ se elige camino a ciegas.
 
 /** Las columnas que viajan de una venta: las de `COLUMNAS_VENTAS`, ⛔ más (el ERP trae `channel` para filtrar técnicas). */

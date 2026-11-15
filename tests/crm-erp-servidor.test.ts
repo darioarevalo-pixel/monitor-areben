@@ -17,7 +17,7 @@ vi.mock('../api/_erp-corte.js', () => ({
   conBase: async (store: string, fn: (db: unknown) => unknown) => (conexiones.push(store), fn({ falsa: true })),
 }))
 const llamadas: string[] = []
-const NUEVA = 1_000_000_123 // un cliente nacido en el ERP
+const NUEVA = 704_123 // un cliente nacido en el ERP (desde 704.001, motor sql/083)
 vi.mock('../motor/crm/lectura.mjs', () => ({
   ventasDelCrm: async (_db: unknown, marca: string, o: { canal: number | null; marcados: number[] }) => {
     llamadas.push(`ventasDelCrm ${marca} ${o.canal} [${o.marcados}]`)
