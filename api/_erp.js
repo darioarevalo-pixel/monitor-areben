@@ -34,7 +34,7 @@
  *   GET  ?recurso=erp&vista=cuenta-panel&gnId=…&tel=…&prueba=0|1      la cuenta del cliente del chat (panel de WhatsApp, BDI)
  *   POST { accion: 'anotar-whatsapp' | 'sacar-whatsapp', … }           las personas que compran por la empresa (panel)
  *   GET  ?vista=clientes-panel&q=… · POST { accion: 'cliente-nuevo-panel' }   «¿Es de un cliente que ya tenés?» / «Es nuevo»
- *   GET  ?vista=pedidos-panel&cliente=…&tel=… · pedido-panel&id=… · pedido-productos&id=…&q=… · preparados-sin-pagar   el pedido mayorista en el panel
+ *   GET  ?vista=pedidos-panel&cliente=…&tel=… · pedido-panel&id=… · pedido-productos&id=…&q=… · preparados-sin-pagar · pedidos-sin-cliente   el pedido mayorista en el panel
  *   POST { accion: 'pedido-entrar' | 'pedido-cambiar' | 'pedido-a-preparar' | 'pedido-anular', pedidoId, … }  (VENTA_MAYORISTA_REAL)
  *   POST { accion: 'poner-credito', marca, clienteId, credito, tope?, dias? }   marcar o sacar el crédito (sólo admin)
  *   POST { accion: 'poner-contacto', marca, clienteId, whatsapp?, email? }       cargar o corregir el contacto (sólo admin)
@@ -145,7 +145,7 @@ import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransfe
 import { listaDeProductos } from './_erp-productos.js'
 import { anotarWhatsappPanel, bcraDelPanel, clienteNuevoPanel, clientesDelPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, libroDePruebaDelPanel, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
 import { conFacturacion, enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, facturasDeClientePanel, padronDelPanel, partePedidoPanel } from './_erp-factura-mayorista.js'
-import { ACCIONES_PEDIDO, accionDePedido, pedidoDelPanel, pedidosDelPanel, preparadosSinPagarDelPanel, productosParaElPanel } from './_erp-pedido.js'
+import { ACCIONES_PEDIDO, accionDePedido, pedidoDelPanel, pedidosDelPanel, pedidosSinClienteDelPanel, preparadosSinPagarDelPanel, productosParaElPanel } from './_erp-pedido.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
 import { cobrosDelPeriodo, reintentarEntregasErp } from './_erp-cobros.js'
@@ -2100,6 +2100,10 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && req.query.vista === 'pedido-productos') {
       const r = await productosParaElPanel({ pedidoId: String(req.query.id || ''), q: String(req.query.q || ''), usuario: [perfil.user, perfil.email] }, { conMotor })
+      return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
+    }
+    if (req.method === 'GET' && req.query.vista === 'pedidos-sin-cliente') {
+      const r = await pedidosSinClienteDelPanel({ usuario: [perfil.user, perfil.email] }, { conMotor })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'preparados-sin-pagar') {

@@ -5,7 +5,7 @@ import { Button, Icono } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
 import { FranjaCuenta, HojaCargarPago, TarjetaCuenta, useCuentaPanel } from './CuentaCorriente'
-import { PreparadosSinPagar, TarjetaPedidos, usePedidosPanel } from './PedidosMayoristas'
+import { PedidosSinCliente, PreparadosSinPagar, TarjetaPedidos, usePedidosPanel } from './PedidosMayoristas'
 import { CalculadoraEnvio } from './CalculadoraEnvio'
 import { ProximoContacto, RayaEstado, estadoDeFicha } from './ProximoContacto'
 import { QueLeMando } from './QueLeMando'
@@ -1017,6 +1017,7 @@ function PanelInterno({
     return (
       <Envoltorio aviso={aviso}>
         {solapas}
+        <Aislado nombre="Falta el cliente"><PedidosSinCliente /></Aislado>
         <Aislado nombre="Preparados sin pagar"><PreparadosSinPagar /></Aislado>
         {kvListo ? (
           <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} onAgendar={agendarDesdeLista} puedeAbrirChat={enExtension} escritos={escritos} ultimos={ultimos} />

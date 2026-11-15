@@ -72,11 +72,13 @@ export async function pedidosDelPanel({ clienteId = '', tel = '', usuario = null
       const { numeroWhatsapp } = await import('../motor/venta/cliente.mjs')
       const delChat = numeroWhatsapp(wa)
       if (delChat) {
-        const { rows } = await pg.query(`select id::text, numero, recibido_en, total, unidades, contacto from pedido_mayorista
-          where marca = 'bdi' and venta_id is null and anulado_en is null and contacto ? 'telefono' and recibido_en > now() - make_interval(days => $1)
-          order by recibido_en desc limit 200`, [DIAS_SIN_ENTRAR])
+        // 15-nov (Darío): también los que ENTRARON a la ficha general «Pedido mayorista» (ya apartan) y esperan su cliente.
+        const { FICHA_SIN_CLIENTE } = await import('../motor/venta/cliente.mjs')
+        const { rows } = await pg.query(`select id::text, numero, recibido_en, total, unidades, contacto, venta_id is not null as apartado from pedido_mayorista
+          where marca = 'bdi' and anulado_en is null and (venta_id is null or cliente_id = $2) and contacto ? 'telefono' and recibido_en > now() - make_interval(days => $1)
+          order by recibido_en desc limit 200`, [DIAS_SIN_ENTRAR, FICHA_SIN_CLIENTE])
         sinEntrar = rows.filter((p) => numeroWhatsapp(p.contacto?.telefono) === delChat)
-          .map((p) => ({ id: p.id, numero: Number(p.numero), recibido_en: p.recibido_en, total: Number(p.total), unidades: Number(p.unidades), nombre: p.contacto?.nombre ?? null }))
+          .map((p) => ({ id: p.id, numero: Number(p.numero), recibido_en: p.recibido_en, total: Number(p.total), unidades: Number(p.unidades), nombre: p.contacto?.nombre ?? null, apartado: p.apartado }))
       }
     }
     return { prendido: true, escribir, pedidos, sinEntrar }
@@ -98,8 +100,9 @@ export async function pedidoDelPanel({ pedidoId = '', usuario = null }, deps) {
     const r = await fichaDePedidoMayorista(pg, { pedido_id: pedidoId })
     if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADO' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo leer el pedido.' }
     const n = await nombresDe(pg, r.lineas)
+    const { esFichaSinCliente } = await import('../motor/venta/cliente.mjs')
     return {
-      prendido: true, escribir, pedido: r.pedido, cambios: r.cambios,
+      prendido: true, escribir, pedido: { ...r.pedido, falta_cliente: esFichaSinCliente(r.pedido.cliente_id) }, cambios: r.cambios,
       lineas: r.lineas.map((l) => ({ ...l, nombre: n.producto.get(String(l.product_id)) ?? null, talle: l.size_id == null ? null : n.talle.get(`${l.product_id}:${l.size_id}`) ?? null })),
     }
   })
@@ -116,6 +119,21 @@ export async function preparadosSinPagarDelPanel({ usuario = null }, deps) {
     if (!(await hay064(pg))) return { prendido: true, pedidos: [], falta064: true }
     const { preparadosSinPagar } = await import('../motor/pedido/venta.mjs')
     const r = await preparadosSinPagar(pg, { empresa_id: 'areben', marca: 'bdi' })
+    return r.ok ? { prendido: true, pedidos: r.pedidos } : { status: 400, error: r.error?.mensaje ?? 'No se pudo leer la lista.' }
+  })
+}
+
+/**
+ * «Falta el cliente» (Hoy del panel, Darío 15-nov): los pedidos que entraron a la ficha general «Pedido mayorista» —apartan, pero
+ * ⛔ van a preparar— con el nombre y el teléfono que escribió el cliente en el catálogo. Se resuelven desde el chat de ese número.
+ * @param {{ usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
+ */
+export async function pedidosSinClienteDelPanel({ usuario = null }, deps) {
+  if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
+  return deps.conMotor('bdi', 'Falta el cliente', async (pg) => {
+    if (!(await hay064(pg))) return { prendido: true, pedidos: [], falta064: true }
+    const { pedidosSinCliente } = await import('../motor/pedido/venta.mjs')
+    const r = await pedidosSinCliente(pg, { marca: 'bdi' })
     return r.ok ? { prendido: true, pedidos: r.pedidos } : { status: 400, error: r.error?.mensaje ?? 'No se pudo leer la lista.' }
   })
 }
@@ -141,7 +159,7 @@ export async function productosParaElPanel({ pedidoId = '', q = '', usuario = nu
 
 /** El código del motor ⇒ el status de la puerta. */
 const statusDe = (codigo) => (codigo === 'NO_ENCONTRADO' ? 404
-  : ['ANULADO', 'EN_PREPARACION', 'SIN_ENTRAR', 'SIN_PRECIO', 'SIN_TALLE', 'SIN_RENGLONES', 'CAMBIO_DE_LLAVE', 'SIN_CUENTA_CORRIENTE', 'CONFLICTO_IDEMPOTENCIA'].includes(codigo) ? 409 : 400)
+  : ['ANULADO', 'EN_PREPARACION', 'SIN_ENTRAR', 'FALTA_CLIENTE', 'TIENE_PAGOS', 'SIN_PRECIO', 'SIN_TALLE', 'SIN_RENGLONES', 'CAMBIO_DE_LLAVE', 'SIN_CUENTA_CORRIENTE', 'CONFLICTO_IDEMPOTENCIA'].includes(codigo) ? 409 : 400)
 
 export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-preparar', 'pedido-anular']
 

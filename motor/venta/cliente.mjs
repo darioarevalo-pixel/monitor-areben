@@ -24,6 +24,21 @@ export function numeroWhatsapp(crudo) {
 }
 const texto = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
+/**
+ * 🔑 La ficha general «Pedido mayorista» (Darío/Bruno 15-nov): el pedido del catálogo cuyo número ⛔ es de UNA sola ficha entra
+ * igual acá y aparta el stock; después se pasa a su cliente (`entrarPedidoMayorista` con el cliente correcto). Una sola, con
+ * id FIJO (el mismo en cada base), la crea el motor la primera vez que hace falta. ⛔ se busca ni se le anota un número:
+ * nadie la elige a mano.
+ */
+export const FICHA_SIN_CLIENTE = '00000000-0000-4000-8000-00000000a001'
+export const NOMBRE_FICHA_SIN_CLIENTE = 'Pedido mayorista'
+export const esFichaSinCliente = (id) => String(id ?? '') === FICHA_SIN_CLIENTE
+/** La ficha general, creada si ⛔ está. @param {import('pg').ClientBase} db @param {string} empresa_id @returns {Promise<string>} */
+export async function fichaSinCliente(db, empresa_id) {
+  await q(db, 'insert into cliente (id, empresa_id, nombre) values ($1, $2, $3) on conflict (id) do nothing', [FICHA_SIN_CLIENTE, empresa_id, NOMBRE_FICHA_SIN_CLIENTE])
+  return FICHA_SIN_CLIENTE
+}
+
 /** DNI (7-8 dígitos) o CUIT (11, con su verificador). '' si ⛔ es ninguno. */
 export function docValido(doc) {
   const d = typeof doc === 'string' || typeof doc === 'number' ? String(doc).replace(/\D/g, '') : ''
@@ -193,6 +208,7 @@ export async function anotarWhatsapp(db, e) {
   if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién lo anota', 'usuario')
   const [c] = await q(db, 'select id::text, nombre from cliente where id::text = $1 and empresa_id = $2', [String(e.cliente_id ?? ''), e.empresa_id])
   if (!c) return falla('FALTA_CLIENTE', 'No está ese cliente', 'cliente_id')
+  if (esFichaSinCliente(c.id)) return falla('ENTRADA_INVALIDA', `«${NOMBRE_FICHA_SIN_CLIENTE}» es la ficha de los pedidos sin cliente: el número va a la ficha del cliente`, 'cliente_id')
   const nombre = texto(e.nombre)
   const [ya] = await q(db, `select w.id::text, w.cliente_id::text, c.nombre as cliente from cliente_whatsapp w join cliente c on c.id = w.cliente_id
     where w.empresa_id = $1 and w.whatsapp = $2 and w.activo`, [e.empresa_id, wa])
@@ -234,8 +250,8 @@ export async function buscarClientes(db, e) {
   const limite = Math.min(Math.max(Number(e.limite) || 10, 1), 50)
   const soloNumeros = /^[\d.\s-]+$/.test(t)
   const clientes = soloNumeros
-    ? await q(db, `select ${COLUMNAS} from cliente where empresa_id = $1 and doc like $2 order by doc limit $3`, [e.empresa_id, `${t.replace(/\D/g, '')}%`, limite])
-    : await q(db, `select ${COLUMNAS} from cliente where empresa_id = $1 and lower(nombre) like $2 order by nombre limit $3`,
+    ? await q(db, `select ${COLUMNAS} from cliente where empresa_id = $1 and doc like $2 and id <> '${FICHA_SIN_CLIENTE}' order by doc limit $3`, [e.empresa_id, `${t.replace(/\D/g, '')}%`, limite])
+    : await q(db, `select ${COLUMNAS} from cliente where empresa_id = $1 and lower(nombre) like $2 and id <> '${FICHA_SIN_CLIENTE}' order by nombre limit $3`,
       [e.empresa_id, `%${t.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%`, limite])
   return { ok: true, clientes }
 }

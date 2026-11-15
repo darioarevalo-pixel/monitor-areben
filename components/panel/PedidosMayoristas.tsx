@@ -14,8 +14,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Field, Input, Modal, Notice } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import {
-  anotarWhatsappPanel, anularPedidoPanel, buscarClientesPanel, buscarProductosPedido, cambiarPedidoPanel, clienteNuevoPanel, entrarPedidoPanel, leerPedidoPanel, leerPedidosPanel, leerPreparadosSinPagar, mandarAPrepararPanel,
-  type ClienteDelPanel, type EtapaPedido, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel,
+  anotarWhatsappPanel, anularPedidoPanel, buscarClientesPanel, buscarProductosPedido, cambiarPedidoPanel, clienteNuevoPanel, entrarPedidoPanel, leerPedidoPanel, leerPedidosPanel, leerPedidosSinCliente, leerPreparadosSinPagar, mandarAPrepararPanel,
+  type ClienteDelPanel, type EtapaPedido, type PedidoSinCliente, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel,
 } from '@/lib/erp/cliente'
 import { HojaCargarPago, useCuentaPrendida, type CuentaConCliente } from './CuentaCorriente'
 import { FacturarParte, FacturarPedido, LETRA, descargarFactura, numeroComprobante } from './FacturasCliente'
@@ -75,7 +75,7 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
     setEntrando(pedidoId)
     try {
       await entrarPedidoPanel({ pedidoId, clienteId, personaId })
-      decir('Pedido entrado: el stock queda reservado.')
+      decir(pedidos.sinEntrar.find((x) => x.id === pedidoId)?.apartado ? 'Listo: el pedido pasó a este cliente. Las fundas siguen apartadas.' : 'Pedido entrado: el stock queda reservado.')
       onCambio()
     } catch (e) {
       decir(e instanceof Error ? e.message : 'No se pudo entrar el pedido.', true)
@@ -93,10 +93,12 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
         <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: font.sm, padding: '4px 0' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <b>Pedido {codigoPedido(p.numero)}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.recibido_en)} · {p.unidades} u · {plata(p.total)}</span>
-            <div style={{ fontSize: font.xs, color: color.mut2 }}>Llegó con este número{p.nombre ? ` · «${p.nombre}»` : ''} · sin entrar</div>
+            <div style={{ fontSize: font.xs, color: p.apartado ? color.dangerInk : color.mut2 }}>
+              {p.apartado ? <><b>Falta el cliente</b> · las fundas ya están apartadas</> : 'sin entrar'} · llegó con este número{p.nombre ? ` · «${p.nombre}»` : ''}
+            </div>
           </div>
-          <Button size="sm" variant="outline" disabled={!pedidos.escribir || !clienteId || entrando === p.id} title={pedidos.escribir ? undefined : APAGADO} onClick={() => void entrar(p.id)}>
-            {entrando === p.id ? 'Entrando…' : 'Entrar'}
+          <Button size="sm" variant="outline" disabled={!pedidos.escribir || !clienteId || entrando === p.id} title={pedidos.escribir ? (clienteId ? undefined : 'Primero elegí o creá el cliente de este número') : APAGADO} onClick={() => void entrar(p.id)}>
+            {entrando === p.id ? (p.apartado ? 'Pasando…' : 'Entrando…') : (p.apartado ? 'Pasar a este cliente' : 'Entrar')}
           </Button>
         </div>
       ))}
@@ -185,7 +187,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
                 ...ficha.lineas.filter((l) => l.size_id != null).map((l) => ({ productId: l.product_id, sizeId: l.size_id as number, cantidad: cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad })),
                 ...agregados.map((a) => ({ productId: a.product_id, sizeId: a.size_id, cantidad: cantidades[a.k] ?? 0 })).filter((a) => a.cantidad > 0),
               ]), 'Cambio guardado.')}>Guardar</Button>
-          : p?.etapa === 'pedido' && <Button variant="solid" tone="brand" disabled={!ficha.escribir || ocupado} onClick={() => void hacer(() => mandarAPrepararPanel(pedidoId), 'Enviado a preparar.')}>Enviar a preparar</Button>}
+          : p?.etapa === 'pedido' && <Button variant="solid" tone="brand" disabled={!ficha.escribir || ocupado || !!p.falta_cliente} title={p.falta_cliente ? 'Falta el cliente' : undefined} onClick={() => void hacer(() => mandarAPrepararPanel(pedidoId), 'Enviado a preparar.')}>Enviar a preparar</Button>}
       </>)}>
       {error && <Notice tone="danger">{error}</Notice>}
       {!ficha && !error && <div style={{ fontSize: font.sm, color: color.mut2 }}>Cargando…</div>}
@@ -200,6 +202,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
           {cuenta && p.venta_id && p.pago && p.pago.falta > 0 && p.etapa !== 'anulado' && (
             <div><Button size="sm" variant="outline" tone="success" onClick={() => setPagando(true)}>$ Cargar pago</Button></div>
           )}
+          {p.falta_cliente && p.etapa !== 'anulado' && <Notice tone="danger"><b>Falta el cliente.</b> El pedido entró a «Pedido mayorista» y las fundas ya están apartadas. Para mandarlo a preparar, pasalo a su cliente desde el chat de su número{p.contacto?.telefono ? ` (${p.contacto.telefono})` : ''}.</Notice>}
           {!ficha.escribir && <Notice tone="info">{APAGADO}</Notice>}
           {ficha.escribir && !p.editable && p.etapa !== 'anulado' && <Notice tone="info">El depósito ya empezó a prepararlo: no se cambia.</Notice>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -437,6 +440,37 @@ export function PreparadosSinPagar() {
           <b style={{ color: color.dangerInk, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{plata(p.debe)}</b>
         </div>
       ))}
+    </section>
+  )
+}
+
+/**
+ * «Falta el cliente» (Hoy del panel, Darío 15-nov): los pedidos que entraron a la ficha general «Pedido mayorista» porque el número
+ * ⛔ era de un solo cliente. Ya apartan las fundas, pero ⛔ van a preparar hasta pasarlos a su cliente desde el chat de ese número.
+ * Vacío ⇒ ⛔ se dibuja.
+ */
+export function PedidosSinCliente() {
+  const prendido = useCuentaPrendida()
+  const [lista, setLista] = useState<PedidoSinCliente[]>([])
+  useEffect(() => {
+    if (!prendido) return
+    let vivo = true
+    leerPedidosSinCliente().then((r) => { if (vivo) setLista(r.prendido ? r.pedidos : []) }).catch(() => { if (vivo) setLista([]) })
+    return () => { vivo = false }
+  }, [prendido])
+  if (!lista.length) return null
+  return (
+    <section style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: `${space[2]}px ${space[3]}px`, margin: `${space[2]}px ${space[2]}px 0` }}>
+      <div style={{ ...ROTULO, marginBottom: 6 }}>Falta el cliente</div>
+      {lista.map((p) => (
+        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: font.sm, padding: '3px 0' }}>
+          <div style={{ minWidth: 0 }}>
+            <b>{p.nombre ?? 'Sin nombre'}</b> <span style={{ color: color.mut2 }}>· {p.telefono ?? 'sin teléfono'} · pedido {codigoPedido(p.numero)} · {diaMes(p.recibido_en)} · {p.unidades} u</span>
+          </div>
+          <b style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{plata(p.total)}</b>
+        </div>
+      ))}
+      <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 4 }}>Las fundas ya están apartadas. Abrí el chat de ese número y pasá el pedido a su cliente.</div>
     </section>
   )
 }

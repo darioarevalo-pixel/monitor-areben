@@ -24,7 +24,7 @@ import { redondeoDe } from '../venta/redondeo-db.mjs'
 import { pendienteDeVentas } from '../cuenta/cuenta.mjs'
 import { creditoDe } from '../cuenta/libro.mjs'
 import { leerCortes, ventaMayoristaReal } from '../llave-corte.mjs'
-import { clientePorWhatsapp } from '../venta/cliente.mjs'
+import { clientePorWhatsapp, esFichaSinCliente, FICHA_SIN_CLIENTE, fichaSinCliente, NOMBRE_FICHA_SIN_CLIENTE } from '../venta/cliente.mjs'
 
 const q = async (db, sql, p = []) => (await db.query(sql, p)).rows
 const pesos = (x) => Math.round(Number(x) * 100) / 100
@@ -165,14 +165,19 @@ const foto = (p) => ({ total: Number(p.total), unidades: Number(p.unidades), lin
  * @param {import('pg').ClientBase} db
  * @param {{ pedido_id: string, cliente_id: string, persona_id?: string|null, usuario: string }} e  @param {{ env?: object }} [op]
  */
-export async function entrarPedidoMayorista(db, e, { env = process.env } = {}) {
+export async function entrarPedidoMayorista(db, e, { env = process.env, sinCliente = false } = {}) {
   const usuario = texto(e?.usuario)
   if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién lo hace', 'usuario')
   const p = await leerPedido(db, e?.pedido_id)
   if (!p) return falla('NO_ENCONTRADO', 'No está ese pedido', 'pedido_id')
+  // 15-nov (Darío): el que entró a «Pedido mayorista» se PASA a su cliente con el mismo verbo («Entrar» desde el chat).
+  if (p.venta_id && esFichaSinCliente(p.cliente_id) && !p.anulado_en && UUID.test(String(e.cliente_id ?? '')) && !esFichaSinCliente(e.cliente_id)) {
+    return pasarACliente(db, p, e, usuario, env)
+  }
   if (p.venta_id) return { ok: true, ya: true, pedido: { id: p.id, numero: p.numero }, venta_id: p.venta_id }
   if (p.anulado_en) return falla('ANULADO', `El pedido ${p.numero} está anulado`)
   if (!UUID.test(String(e.cliente_id ?? ''))) return falla('FALTA_CLIENTE', 'Falta el cliente', 'cliente_id')
+  if (esFichaSinCliente(e.cliente_id) && !sinCliente) return falla('ENTRADA_INVALIDA', `«${NOMBRE_FICHA_SIN_CLIENTE}» ⛔ se elige a mano: elegí el cliente del pedido`, 'cliente_id')
   const [cli] = await q(db, 'select id::text from cliente where id = $1 and empresa_id = $2', [e.cliente_id, p.empresa_id])
   if (!cli) return falla('FALTA_CLIENTE', 'No está ese cliente', 'cliente_id')
   if (e.persona_id != null) {
@@ -195,20 +200,59 @@ export async function entrarPedidoMayorista(db, e, { env = process.env } = {}) {
 }
 
 /**
+ * Pasar a su cliente un pedido que entró a la ficha general «Pedido mayorista» (Darío 15-nov). La venta se REEMPLAZA por la
+ * misma con el cliente nuevo (`reemplazarVenta`: la reserva vuelve y se vuelve a tomar en la misma transacción ⇒ el stock
+ * queda igual). ⛔ si el depósito ya empezó, ni si ya tiene pagos cargados a la ficha general (le quedarían a favor a ella).
+ */
+async function pasarACliente(db, p, e, usuario, env) {
+  if (p.preparacion_en) return falla('EN_PREPARACION', `El depósito ya empezó a armar el pedido ${p.numero}: no se cambia`)
+  const [cli] = await q(db, 'select id::text, nombre from cliente where id = $1 and empresa_id = $2', [e.cliente_id, p.empresa_id])
+  if (!cli) return falla('FALTA_CLIENTE', 'No está ese cliente', 'cliente_id')
+  if (e.persona_id != null) {
+    const [w] = UUID.test(String(e.persona_id)) ? await q(db, 'select cliente_id::text from cliente_whatsapp where id = $1', [e.persona_id]) : []
+    if (!w || w.cliente_id !== cli.id) return falla('ENTRADA_INVALIDA', 'Esa persona no es de ese cliente', 'persona_id')
+  }
+  const { pendientes } = await pendienteDeVentas(db, { venta_ids: [p.venta_id] })
+  if (Math.abs(Number(pendientes?.[p.venta_id] ?? 0) - p.total) > 0.01) {
+    return falla('TIENE_PAGOS', `El pedido ${p.numero} ya tiene pagos cargados en «${NOMBRE_FICHA_SIN_CLIENTE}»: no se pasa de cliente`)
+  }
+  const [vieja] = await q(db, 'select prueba from venta where id = $1', [p.venta_id])
+  const real = ventaMayoristaReal(p.marca, await leerCortes(db), env)
+  if (real === vieja.prueba) return falla('CAMBIO_DE_LLAVE', `El pedido ${p.numero} entró ${vieja.prueba ? 'de prueba' : 'real'} y la llave cambió: se anula y se vuelve a entrar`)
+  const cuenta = await cuentaCorrienteDe(db, p.marca)
+  if (!cuenta) return falla('SIN_CUENTA_CORRIENTE', `${p.marca} no tiene la cuenta «Cuenta corriente» (sql/025)`)
+  const [{ n }] = await q(db, `select count(*)::int as n from venta where origen = 'mayorista' and (origen_ref = $1 or origen_ref like $2)`, [origenRefPedido(p), `${origenRefPedido(p)}:%`])
+  const nueva = ventaDePedido({ pedido: p, lineas: p.lineas, total: p.total, cliente_id: cli.id, cuenta, usuario, real, n: n + 1 })
+  const r = await reemplazarVenta(db, { venta_id: p.venta_id, motivo: `Pedido ${p.numero}: pasa de «${NOMBRE_FICHA_SIN_CLIENTE}» a ${cli.nombre} (${usuario})`, usuario, nueva })
+  if (!r.ok) return r
+  await enTransaccion(db, async () => {
+    await q(db, 'update pedido_mayorista set venta_id = $2, cliente_id = $3, persona_id = $4, editado_en = now() where id = $1', [p.id, r.venta.id, cli.id, e.persona_id ?? null])
+    // El motivo `cambio` (la check de la 064): lo que cambió es el CLIENTE, el resto queda igual.
+    await cambio(db, p, 'cambio', usuario, { ...foto(p), cliente: NOMBRE_FICHA_SIN_CLIENTE }, { ...foto(p), cliente: cli.nombre, cliente_id: cli.id })
+  })
+  return { ok: true, ya: false, paso_de_cliente: true, pedido: { id: p.id, numero: p.numero }, venta_id: r.venta.id, venta: r.venta, avisos: r.avisos ?? [] }
+}
+
+/**
  * El pedido del catálogo ENTRA SOLO cuando se sabe de quién es (Darío §1: «todos los pedidos con ese número entran solos a ese
- * cliente»; Bruno 30-oct: «entra y RESERVA»). Sólo desde el corte: antes la venta la registra la copia de GN. Un número que ⛔ se
- * conoce, o con dos fichas, queda «sin entrar» y lo decide Darío en el panel (⛔ se adivina a quién le pertenece).
- * Nunca tira por el dato del cliente: el pedido ya está guardado.
+ * cliente»; Bruno 30-oct: «entra y RESERVA»). Sólo desde el corte: antes la venta la registra la copia de GN. 🔄 15-nov (Darío/
+ * Bruno): un número que ⛔ se conoce, con dos fichas o mal escrito ENTRA IGUAL a la ficha general «Pedido mayorista» y aparta
+ * (`sin_cliente: true`, con el `motivo`); Darío lo pasa a su cliente en el panel (⛔ se adivina a quién le pertenece) y hasta
+ * entonces ⛔ va a preparar. Nunca tira por el dato del cliente: el pedido ya está guardado.
  * @param {import('pg').ClientBase} db  @param {{ pedido_id: string, telefono?: string|null }} e  @param {{ env?: object }} [op]
- * @returns {Promise<{ entro: boolean, motivo?: string, venta_id?: string }>}
+ * @returns {Promise<{ entro: boolean, sin_cliente?: boolean, motivo?: string, venta_id?: string }>}
  */
 export async function entrarSiSeConoce(db, e, { env = process.env } = {}) {
   const [p] = await q(db, 'select empresa_id, marca from pedido_mayorista where id = $1', [e?.pedido_id])
   if (!p) return { entro: false, motivo: 'no_encontrado' }
   if (!ventaMayoristaReal(p.marca, await leerCortes(db), env)) return { entro: false, motivo: 'sin_corte' }
   const r = await clientePorWhatsapp(db, { empresa_id: p.empresa_id, whatsapp: e.telefono })
-  if (!r.ok) return { entro: false, motivo: 'numero_invalido' }
-  if (r.clientes.length !== 1) return { entro: false, motivo: r.clientes.length ? 'varias_fichas' : 'numero_desconocido' }
+  if (!r.ok || r.clientes.length !== 1) {
+    // 15-nov (Darío/Bruno): ⛔ se queda afuera: entra a «Pedido mayorista» y aparta; el cliente se elige después en el panel.
+    const motivo = !r.ok ? 'numero_invalido' : r.clientes.length ? 'varias_fichas' : 'numero_desconocido'
+    const general = await entrarPedidoMayorista(db, { pedido_id: e.pedido_id, cliente_id: await fichaSinCliente(db, p.empresa_id), persona_id: null, usuario: 'catálogo' }, { env, sinCliente: true })
+    return general.ok ? { entro: true, sin_cliente: true, motivo, venta_id: general.venta_id } : { entro: false, motivo: general.error?.codigo ?? 'no_entro' }
+  }
   const entro = await entrarPedidoMayorista(db, { pedido_id: e.pedido_id, cliente_id: r.clientes[0].id, persona_id: r.persona?.id ?? null, usuario: 'catálogo' }, { env })
   return entro.ok ? { entro: true, venta_id: entro.venta_id } : { entro: false, motivo: entro.error?.codigo ?? 'no_entro' }
 }
@@ -273,6 +317,7 @@ export async function mandarAPreparar(db, e) {
     if (p.anulado_en) return falla('ANULADO', `El pedido ${p.numero} está anulado`)
     if (!p.venta_id) return falla('SIN_ENTRAR', `El pedido ${p.numero} todavía no entró al ERP`)
     if (p.a_preparar_en) return { ok: true, ya: true, pedido: { id: p.id, numero: p.numero }, a_preparar_en: p.a_preparar_en }
+    if (esFichaSinCliente(p.cliente_id)) return falla('FALTA_CLIENTE', `Falta el cliente: el pedido ${p.numero} está en «${NOMBRE_FICHA_SIN_CLIENTE}». Pasalo a su cliente antes de mandarlo a preparar`)
     const [u] = await q(db, `update pedido_mayorista set a_preparar_en = now(), a_preparar_por = $2 where id = $1 returning a_preparar_en`, [p.id, usuario])
     await cambio(db, p, 'a_preparar', usuario, foto(p))
     return { ok: true, ya: false, pedido: { id: p.id, numero: p.numero }, a_preparar_en: u.a_preparar_en }
@@ -528,6 +573,18 @@ export async function preparadosSinPagar(db, e) {
       id: p.id, numero: p.numero, cliente_id: p.cliente_id, cliente: p.cliente, preparado_en: p.preparado_en, total: p.total, debe: pagos.get(p.id).pago.falta,
     })),
   }
+}
+
+/**
+ * Los pedidos que entraron a «Pedido mayorista» y esperan su cliente (Darío 15-nov, «Falta el cliente» en el panel), con el
+ * nombre y el teléfono que escribió el cliente en el catálogo. Los anulados ⛔.
+ * @param {import('pg').ClientBase} db @param {{ marca: string }} e
+ */
+export async function pedidosSinCliente(db, e) {
+  const filas = await q(db, `select id::text, numero, recibido_en, total, unidades, contacto from pedido_mayorista
+    where marca = $1 and cliente_id = $2 and venta_id is not null and anulado_en is null order by recibido_en desc limit 200`, [e?.marca, FICHA_SIN_CLIENTE])
+  return { ok: true, pedidos: filas.map((p) => ({ id: p.id, numero: Number(p.numero), recibido_en: p.recibido_en, total: Number(p.total), unidades: Number(p.unidades),
+    nombre: p.contacto?.nombre ?? null, telefono: p.contacto?.telefono ?? null })) }
 }
 
 /** Las palabras de una búsqueda, sin tildes ni comodines de `ilike` (⛔ más de 5). */

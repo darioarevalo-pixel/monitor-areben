@@ -833,7 +833,8 @@ export type PedidoDelCliente = {
   id: string; numero: number; recibido_en: string; etapa: EtapaPedido; total: number; unidades: number; persona: string | null; venta_id: string | null
   pago?: PagoPedido; cuenta_habilitada?: boolean; zona?: 'despacho' | 'pendiente_pago'
 }
-export type PedidoSinEntrar = { id: string; numero: number; recibido_en: string; total: number; unidades: number; nombre: string | null }
+/** `apartado`: ya entró a la ficha general «Pedido mayorista» (aparta el stock) y falta pasarlo a su cliente (Darío 15-nov). */
+export type PedidoSinEntrar = { id: string; numero: number; recibido_en: string; total: number; unidades: number; nombre: string | null; apartado?: boolean }
 export type PedidosPanel =
   | { prendido: false }
   | { prendido: true; escribir: boolean; pedidos: PedidoDelCliente[]; sinEntrar: PedidoSinEntrar[]; falta064?: boolean }
@@ -841,7 +842,7 @@ export type RenglonPedido = { product_id: number; size_id: number | null; cantid
 export type CambioPedido = { motivo: string; antes: unknown; despues: unknown; usuario: string | null; cuando: string }
 export type FichaPedido = {
   prendido: true; escribir: boolean
-  pedido: PedidoDelCliente & { editable: boolean; cliente_id: string | null; persona: { id: string; nombre: string | null; whatsapp: string; activo: boolean } | null; a_preparar_por: string | null }
+  pedido: PedidoDelCliente & { editable: boolean; cliente_id: string | null; /** En la ficha general «Pedido mayorista»: ⛔ va a preparar. */ falta_cliente?: boolean; contacto?: { nombre?: string | null; telefono?: string | null } | null; persona: { id: string; nombre: string | null; whatsapp: string; activo: boolean } | null; a_preparar_por: string | null }
   lineas: RenglonPedido[]; cambios: CambioPedido[]
   /** En qué quedó la facturación de su venta (sin venta, `undefined`; si la base de facturas ⛔ contestó, `null`). */
   facturacion?: FacturacionPedido | null
@@ -862,6 +863,9 @@ export type ProductoParaPedido = {
 export const buscarProductosPedido = (pedidoId: string, q: string) =>
   pedir<{ prendido: false } | { prendido: true; productos: ProductoParaPedido[] }>(null, `&vista=pedido-productos&marca=bdi&id=${encodeURIComponent(pedidoId)}&q=${encodeURIComponent(q.slice(0, 80))}&nc=${Date.now()}`, 'No se pudo buscar el producto.')
 export type PreparadoSinPagar = { id: string; numero: number; cliente_id: string; cliente: string; preparado_en: string; total: number; debe: number }
+export type PedidoSinCliente = { id: string; numero: number; recibido_en: string; total: number; unidades: number; nombre: string | null; telefono: string | null }
+export const leerPedidosSinCliente = () =>
+  pedir<{ prendido: false } | { prendido: true; pedidos: PedidoSinCliente[]; falta064?: boolean }>(null, `&vista=pedidos-sin-cliente&marca=bdi&nc=${Date.now()}`, 'No se pudo leer «Falta el cliente».')
 export const leerPreparadosSinPagar = () =>
   pedir<{ prendido: false } | { prendido: true; pedidos: PreparadoSinPagar[]; falta064?: boolean }>(null, `&vista=preparados-sin-pagar&marca=bdi&nc=${Date.now()}`, 'No se pudo leer «Preparados sin pagar».')
 type RespuestaPedido = { ok: true; ya: boolean; sinCambios: boolean; avisarDeposito: boolean; ventaId: string | null }
