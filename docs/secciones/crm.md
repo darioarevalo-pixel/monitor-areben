@@ -19,9 +19,26 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
 - Servidor: `api/_crm.js`, por la puerta `api/datos?recurso=crm`. Cinco acciones: padrón (sin
   `action`), `detalles`, `ventas`, `panel` y `lista` (nombre + teléfono + total de un puñado de
   ids, para la lista del día del panel).
-- Datos: Supabase `clientes` / `ventas` / `venta_detalles` (**bdi-only por esquema**: esas tablas
-  no existen en Zattia) + cuatro claves del KV de bdi-catalogo: `crmseg`, `crmtel`, `crmleads` y
-  `mensajes` (esta última es un ARRAY bajo `{bank}`, no un mapa).
+- Datos: **desde el corte de BDI, el ERP** (ver abajo); antes, Supabase `clientes` / `ventas` /
+  `venta_detalles` (**bdi-only por esquema**: esas tablas no existen en Zattia) + cuatro claves del
+  KV de bdi-catalogo: `crmseg`, `crmtel`, `crmleads` y `mensajes` (esta última es un ARRAY bajo
+  `{bank}`, no un mapa).
+
+## 🔴 De dónde lee: el ERP desde el corte de BDI (15-nov-2026)
+
+Bruno, 15-nov: «hay que pasar todo al ERP, porque si no perdemos todo; a Darío le tiene que andar, y no
+podemos depender de los espejos». `api/_crm.js` le pide cada cosa a una **fuente** con los mismos verbos
+(`ventasCrm`, `ventasDeClientes`, `detalles`, `clientes`, `telefonos`, `porNombre`): el espejo de GN o el
+ERP. La elige `erp_corte` de BDI (`crmEnErp`, con el caché tolerante de la Caja), ⛔ una variable.
+- La fuente del ERP es del **motor**: `motor/crm/lectura.mjs` (se trae con `npm run traer-motor`). Lee
+  las tablas (`venta`, `cliente`, `venta_gn`) con índice —la vista `espejo_motor.ventas` filtrada por
+  cliente tarda 5 s— y su `test/crm-lectura-pg.mjs` exige que dé lo MISMO que la vista.
+- 🔑 **Los ids que ve el navegador no cambian**: un cliente de GN sigue con su número de GN (el
+  seguimiento del KV está atado a ése); uno nacido en el ERP lleva su `id_espejo` (≥ 1.000.000.000).
+- 🔑 Lo que sólo sabía GN de su historia (fecha de venta, `channel_id`, el cliente que la historia no
+  enganchó, ciudad/provincia) se copió UNA vez a tablas del ERP: motor `sql/083` + `bin/historia-gn.mjs`.
+  Sin esa copia, el ERP da otra «última compra» en 2.225 ventas y pierde el modo Mayorista en 168.
+- 🔴 Sin saber si BDI cortó, **tira** (⛔ elige camino a ciegas). Tests: `tests/crm-erp-servidor.test.ts`.
 - Extensión de Chrome: `extension/` (no se despliega; se carga a mano en el navegador).
 - Tests: `tests/crm-*.test.ts`. El del panel es `tests/crm-panel.test.ts`.
 

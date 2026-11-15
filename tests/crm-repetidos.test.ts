@@ -1,15 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { clientesConCompras } from '../api/_crm.js'
 
-/** Un supabase de mentira: sólo lo que usa `clientesConCompras`. */
+/** Una fuente de mentira (espejo o ERP, da igual): sólo lo que usa `clientesConCompras`. */
 function falso(filas: Record<string, unknown>[]) {
-  const q = {
-    select: () => q,
-    in: (_c: string, ids: number[]) => ({ ...q, _ids: ids }),
-    order: () => q,
-    range: () => Promise.resolve({ data: filas, error: null }),
-  }
-  return { from: () => q }
+  return { ventasDeClientes: async () => filas }
 }
 
 describe('clientes repetidos con el mismo número', () => {

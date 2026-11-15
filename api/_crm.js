@@ -53,6 +53,108 @@ import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
 import { buscarPorTelefono, cola, indexarTelefonos } from '../lib/crm/telefono.core.js';
 import { esVentaTecnica } from '../lib/etl/tecnica.core.js';
+import { lineaEnErp } from '../lib/erp/corte.core.js';
+import { cortesDeCaja } from './_caja-corte.js';
+import { conBase } from './_erp-corte.js';
+import * as erpCrm from '../motor/crm/lectura.mjs';
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// DE DÓNDE LEE: el espejo de GN hasta el corte de BDI, el ERP desde el corte (15-nov-2026)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//
+// Bruno, 15-nov: «hay que pasar todo al ERP, porque si no perdemos todo; a Darío le tiene que andar, y no podemos depender de
+// los espejos». Cada acción pide sus datos a una FUENTE con los mismos verbos; la que contesta la elige `erp_corte` (la misma
+// tabla que la Caja, con su caché tolerante: `cortesDeCaja`), ⛔ una variable que haya que acordarse de tocar.
+// 🔑 La fuente del ERP es del MOTOR (`motor/crm/lectura.mjs`): la forma de GN (ids, fecha, canal por número, cliente) es la de
+// sus vistas, y su test de Postgres exige que dé lo mismo. Acá ⛔ se reescribe ninguna regla de esas.
+// 🔑 Los ids que ve el navegador NO cambian: el cliente de GN sigue con su número de GN (el seguimiento del KV va atado a ése),
+// y el que nace en el ERP lleva su `id_espejo` (≥ 1.000.000.000, ⛔ choca con GN).
+// 🔴 Sin saber si BDI cortó, TIRA (`cortesDeCaja` sin ninguna lectura buena): ⛔ se elige camino a ciegas.
+
+/** Las columnas que viajan de una venta: las de `COLUMNAS_VENTAS`, ⛔ más (el ERP trae `channel` para filtrar técnicas). */
+const soloColumnasVenta = (v) => ({ id: v.id, date_sale: v.date_sale, total_price: v.total_price, client_id: v.client_id, channel_id: v.channel_id, sale_state: v.sale_state });
+
+/** Pagina una consulta de supabase-js armada por `armar(desde, hasta)` hasta que vuelva incompleta. */
+async function todasLasPaginas(armar) {
+  const filas = [];
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data, error } = await armar(desde, desde + PAGINA - 1);
+    if (error) throw new Error(error.message);
+    filas.push(...(data || []));
+    if ((data || []).length < PAGINA) break;
+  }
+  return filas;
+}
+
+/** La fuente de siempre: el espejo de GN en Supabase. */
+function fuenteEspejo(supabase) {
+  return {
+    tipo: 'espejo',
+    ventasCrm: ({ canal, marcados }) => ventasEspejo(supabase, canal, marcados),
+    async ventasDeClientes(ids, { canales } = {}) {
+      const filas = [];
+      for (let i = 0; i < ids.length; i += LOTE) {
+        const lote = ids.slice(i, i + LOTE);
+        filas.push(...(await todasLasPaginas((a, b) => {
+          let q = supabase.from('ventas').select(COLUMNAS_VENTAS).in('client_id', lote);
+          if (canales) q = q.in('channel_id', canales);
+          return q.order('date_sale', { ascending: false }).order('id', { ascending: false }).range(a, b);
+        })));
+      }
+      return filas;
+    },
+    async detalles(saleIds) {
+      const filas = [];
+      for (let i = 0; i < saleIds.length; i += LOTE) {
+        const lote = saleIds.slice(i, i + LOTE);
+        filas.push(...(await todasLasPaginas((a, b) => supabase.from('venta_detalles').select(COLUMNAS_DETALLE).in('sale_id', lote).order('sale_id').range(a, b))));
+      }
+      return filas;
+    },
+    async clientes(ids) {
+      const porId = new Map();
+      const lotes = [];
+      for (let i = 0; i < ids.length; i += LOTE) lotes.push(ids.slice(i, i + LOTE));
+      for (let i = 0; i < lotes.length; i += EN_VUELO) {
+        const tanda = await Promise.all(lotes.slice(i, i + EN_VUELO).map((l) => supabase.from('clientes').select(COLUMNAS).in('id', l)));
+        for (const { data, error } of tanda) {
+          if (error) throw new Error(error.message);
+          for (const c of data || []) porId.set(c.id, c);
+        }
+      }
+      return [...porId.values()];
+    },
+    telefonos: () => telefonosEspejo(supabase),
+    async porNombre(patrones, tope) {
+      let consulta = supabase.from('clientes').select('id, name, city, phone');
+      for (const p of patrones) consulta = consulta.ilike('name', p);
+      const { data, error } = await consulta.order('name').limit(tope);
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+  };
+}
+
+/** La fuente desde el corte: el ERP, con la lectura del motor. `db` es la conexión de la base de BDI. */
+function fuenteErp(db) {
+  return {
+    tipo: 'erp',
+    ventasCrm: ({ canal, marcados }) => erpCrm.ventasDelCrm(db, MARCA, { canal, marcados }),
+    ventasDeClientes: (ids, { canales } = {}) => erpCrm.ventasDeClientes(db, MARCA, ids, { canales: canales || null }),
+    detalles: (saleIds) => erpCrm.detallesDeVentas(db, MARCA, saleIds),
+    clientes: (ids) => erpCrm.clientesPorId(db, ids),
+    telefonos: () => erpCrm.telefonosDelPadron(db),
+    porNombre: (patrones, tope) => erpCrm.clientesPorNombre(db, patrones, tope),
+  };
+}
+
+/** ¿BDI ya cortó? Inyectable para los tests. */
+export async function crmEnErp({ cortes = cortesDeCaja } = {}) {
+  return lineaEnErp(await cortes(MARCA), MARCA);
+}
+
+/** Techo de cada consulta al ERP: «todas las ventas» son ~18.000 filas (4 s medidos el 15-nov). */
+const TECHO_ERP_MS = 20_000;
 
 // El select del CRM, palabra por palabra el de `lib/crm/datos.ts` (SEL_CLIENTES). Un campo de menos
 // y el agregado computa otra cosa sin un solo error en consola.
@@ -155,32 +257,31 @@ async function paginar(supabase, aplicarFiltro) {
  * acá: es lógica del ETL, la comparten otras pantallas y el filtro tiene que correr sobre la unión
  * —`porMarcados` trae al cliente ★ sin filtro de canal, así que arrastra técnicas.
  */
-async function ventasDelCrm(supabase, body, res) {
+async function ventasEspejo(supabase, canal, flagged) {
+  if (canal == null) return paginar(supabase, (q) => q.not('client_id', 'is', null));
+
+  const porCanal = await paginar(supabase, (q) => q.eq('channel_id', canal).not('client_id', 'is', null));
+
+  const porMarcados = [];
+  for (let i = 0; i < flagged.length; i += LOTE) {
+    const lote = flagged.slice(i, i + LOTE);
+    porMarcados.push(...(await paginar(supabase, (q) => q.in('client_id', lote).not('client_id', 'is', null))));
+  }
+
+  const porId = new Map();
+  for (const v of porCanal.concat(porMarcados)) porId.set(v.id, v);
+  return [...porId.values()];
+}
+
+async function ventasDelCrm(fuente, body, res) {
   const modo = String(body.modo || 'all');
   // El modo se concatena en el filtro de PostgREST: o es `all` o es un número, no hay tercera.
   if (modo !== 'all' && !/^\d+$/.test(modo)) {
     return res.status(400).json({ ok: false, error: 'modo tiene que ser "all" o un id de canal numérico' });
   }
-
-  let filas;
-  if (modo === 'all') {
-    filas = await paginar(supabase, (q) => q.not('client_id', 'is', null));
-  } else {
-    const crudos = Array.isArray(body.flagged) ? body.flagged : [];
-    const flagged = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
-
-    const porCanal = await paginar(supabase, (q) => q.eq('channel_id', modo).not('client_id', 'is', null));
-
-    const porMarcados = [];
-    for (let i = 0; i < flagged.length; i += LOTE) {
-      const lote = flagged.slice(i, i + LOTE);
-      porMarcados.push(...(await paginar(supabase, (q) => q.in('client_id', lote).not('client_id', 'is', null))));
-    }
-
-    const porId = new Map();
-    for (const v of porCanal.concat(porMarcados)) porId.set(v.id, v);
-    filas = [...porId.values()];
-  }
+  const crudos = Array.isArray(body.flagged) ? body.flagged : [];
+  const flagged = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  const filas = (await fuente.ventasCrm({ canal: modo === 'all' ? null : Number(modo), marcados: flagged })).map(soloColumnasVenta);
 
   const cuerpo = JSON.stringify({ ok: true, ventas: filas });
   // 🔴 **De las tres respuestas de esta puerta, ésta es la que menos aire tiene.** Medido el
@@ -236,10 +337,10 @@ const TTL_INDICE = 6 * 60 * 60 * 1000;
 // renglones.
 const VENTAS_CON_DETALLE = 20;
 
-let indiceTel = null;
-let indiceVence = 0;
-// Si dos chats se abren juntos, el segundo espera al índice del primero en vez de armar otro.
-let indiceEnVuelo = null;
+// 🔑 Uno por fuente: el día del corte, el índice que se armó del espejo ⛔ sirve para el ERP (y al revés).
+/** @type {Record<string, { indice: any, vence: number, enVuelo: Promise<any> | null }>} */
+const indices = {};
+const indiceDe = (tipo) => (indices[tipo] ||= { indice: null, vence: 0, enVuelo: null });
 
 /**
  * El padrón de teléfonos, en páginas de a `EN_VUELO`.
@@ -248,7 +349,7 @@ let indiceEnVuelo = null;
  * encadenadas se pagan 13 idas y vueltas seguidas, y eso es lo que hacía esperar al primer chat
  * después de un rato. Se piden de a tandas y se corta cuando una tanda vuelve incompleta.
  */
-async function armarIndice(supabase) {
+async function telefonosEspejo(supabase) {
   const filas = [];
   const pagina = (n) =>
     supabase
@@ -269,51 +370,38 @@ async function armarIndice(supabase) {
     }
     if (corta) break;
   }
-  return indexarTelefonos(filas);
+  return filas;
 }
 
-async function indiceDeTelefonos(supabase, ahora) {
-  if (indiceTel && ahora < indiceVence) return indiceTel;
-  if (!indiceEnVuelo) {
-    indiceEnVuelo = (async () => {
+async function indiceDeTelefonos(fuente, ahora) {
+  const c = indiceDe(fuente.tipo);
+  if (c.indice && ahora < c.vence) return c.indice;
+  if (!c.enVuelo) {
+    c.enVuelo = (async () => {
       try {
-        indiceTel = await armarIndice(supabase);
-        indiceVence = ahora + TTL_INDICE;
-        return indiceTel;
+        c.indice = indexarTelefonos(await fuente.telefonos());
+        c.vence = ahora + TTL_INDICE;
+        return c.indice;
       } finally {
-        indiceEnVuelo = null;
+        c.enVuelo = null;
       }
     })();
   }
-  return indiceEnVuelo;
+  return c.enVuelo;
 }
 
 /** De estos ids, cuáles tienen al menos una venta (sin contar las técnicas). Son un puñado de ids. */
-export async function clientesConCompras(supabase, ids) {
-  const { data, error } = await supabase
-    .from('ventas')
-    .select(COLUMNAS_VENTAS)
-    .in('client_id', ids)
-    .order('id', { ascending: false })
-    .range(0, PAGINA - 1);
-  if (error) throw new Error(error.message);
-  return [...new Set((data || []).filter((v) => !esVentaTecnica(v)).map((v) => v.client_id))];
+export async function clientesConCompras(fuente, ids) {
+  const ventas = await fuente.ventasDeClientes(ids);
+  return [...new Set(ventas.filter((v) => !esVentaTecnica(v)).map((v) => v.client_id))];
 }
 
 /** Las ventas de UN cliente, sin las técnicas. Son pocas: el que más tiene anda por 60. */
-async function ventasDelCliente(supabase, id) {
-  const { data, error } = await supabase
-    .from('ventas')
-    .select(COLUMNAS_VENTAS)
-    .eq('client_id', id)
-    .order('date_sale', { ascending: false })
-    .order('id', { ascending: false })
-    .range(0, PAGINA - 1);
-  if (error) throw new Error(error.message);
+async function ventasDelCliente(fuente, id) {
   // El mismo filtro que hace la sección Clientes en el navegador (`datos.ts`): los clientes
   // internos de Gestión Nube —"Sesión de fotos", "Falla", "Cambio"— tienen `client_id` como
   // cualquier persona, y sin esto entran como compras de $0.
-  return (data || []).filter((v) => !esVentaTecnica(v));
+  return (await fuente.ventasDeClientes([id])).filter((v) => !esVentaTecnica(v)).map(soloColumnasVenta);
 }
 
 /**
@@ -324,33 +412,15 @@ async function ventasDelCliente(supabase, id) {
  * es el mismo código que usa la ficha grande: acá no se recalcula nada, para que las dos pantallas
  * no puedan decir números distintos.
  */
-async function fichaDelPanel(supabase, id) {
+async function fichaDelPanel(fuente, id) {
   // Las dos consultas van juntas: ninguna necesita el resultado de la otra, y el panel se rearma
   // en cada chat. Encadenadas se pagaba una ida y vuelta de más por cliente, siempre.
-  const [ficha, ventas] = await Promise.all([
-    supabase.from('clientes').select(COLUMNAS).eq('id', id).limit(1),
-    ventasDelCliente(supabase, id),
-  ]);
-  if (ficha.error) throw new Error(ficha.error.message);
-  const cliente = (ficha.data || [])[0] || null;
+  const [fichas, ventas] = await Promise.all([fuente.clientes([id]), ventasDelCliente(fuente, id)]);
+  const cliente = fichas[0] || null;
   if (!cliente) return { encontrado: false };
 
   const ids = ventas.slice(0, VENTAS_CON_DETALLE).map((v) => v.id);
-
-  let detalles = [];
-  if (ids.length) {
-    for (let desde = 0; ; desde += PAGINA) {
-      const { data, error: e2 } = await supabase
-        .from('venta_detalles')
-        .select(COLUMNAS_DETALLE)
-        .in('sale_id', ids)
-        .order('sale_id')
-        .range(desde, desde + PAGINA - 1);
-      if (e2) throw new Error(e2.message);
-      detalles.push(...(data || []));
-      if ((data || []).length < PAGINA) break;
-    }
-  }
+  const detalles = ids.length ? await fuente.detalles(ids) : [];
   return { encontrado: true, cliente, ventas, detalles };
 }
 
@@ -370,19 +440,19 @@ async function fichaDelPanel(supabase, id) {
  * 🔑 **Sin esto, "tarda 6 segundos" no se puede investigar**: del lado del navegador todo es una
  * sola espera. Son tres números y se miden igual que se responde.
  */
-async function panelPorTelefono(supabase, body, res) {
+async function panelPorTelefono(fuente, body, res) {
   const t0 = Date.now();
   const idPedido = Number(body.clienteId);
   if (Number.isInteger(idPedido) && idPedido > 0) {
-    const ficha = await fichaDelPanel(supabase, idPedido);
+    const ficha = await fichaDelPanel(fuente, idPedido);
     return res.status(200).json({ ok: true, via: 'id', ms: { indice: 0, ficha: Date.now() - t0 }, ...ficha });
   }
 
   const tel = String(body.tel || '');
   if (!tel) return res.status(400).json({ ok: false, error: 'falta tel (o clienteId)' });
 
-  const habiaIndice = !!(indiceTel && Date.now() < indiceVence);
-  const indice = await indiceDeTelefonos(supabase, Date.now());
+  const habiaIndice = !!(indiceDe(fuente.tipo).indice && Date.now() < indiceDe(fuente.tipo).vence);
+  const indice = await indiceDeTelefonos(fuente, Date.now());
   const tIndice = Date.now() - t0;
   const { ids, via } = buscarPorTelefono(indice, tel);
 
@@ -397,16 +467,14 @@ async function panelPorTelefono(supabase, body, res) {
   // Si compraron dos o más, sigue preguntando: ahí sí puede ser otra persona.
   let elegido = ids.length === 1 ? ids[0] : null;
   if (ids.length > 1) {
-    const conCompras = await clientesConCompras(supabase, ids);
+    const conCompras = await clientesConCompras(fuente, ids);
     if (conCompras.length === 1) elegido = conCompras[0];
     else {
-      const { data, error } = await supabase.from('clientes').select(COLUMNAS).in('id', ids);
-      if (error) throw new Error(error.message);
-      return res.status(200).json({ ok: true, encontrado: false, via, candidatos: data || [], ms: ms() });
+      return res.status(200).json({ ok: true, encontrado: false, via, candidatos: await fuente.clientes(ids), ms: ms() });
     }
   }
 
-  const ficha = await fichaDelPanel(supabase, elegido);
+  const ficha = await fichaDelPanel(fuente, elegido);
   return res.status(200).json({ ok: true, via, ms: ms(), ...ficha });
 }
 
@@ -419,10 +487,10 @@ async function panelPorTelefono(supabase, body, res) {
  * fichas, así que la lista y el chat dicen lo mismo.
  */
 const TOPE_TELS = 500;
-async function telsDeClientes(supabase, body, res) {
+async function telsDeClientes(fuente, body, res) {
   const tels = [...new Set((Array.isArray(body.tels) ? body.tels : []).map((t) => String(t || '')).filter(Boolean))].slice(0, TOPE_TELS);
   if (!tels.length) return res.status(200).json({ ok: true, tels: [] });
-  const indice = await indiceDeTelefonos(supabase, Date.now());
+  const indice = await indiceDeTelefonos(fuente, Date.now());
   // Exacto y por cola, juntos: si el número exacto cae en un alta sin compras, la cola puede
   // encontrar la que sí compró.
   const porTel = tels.map((t) => {
@@ -433,7 +501,7 @@ async function telsDeClientes(supabase, body, res) {
   if (!ids.length) return res.status(200).json({ ok: true, tels: [] });
   const compraron = new Set();
   for (let i = 0; i < ids.length; i += 100) {
-    for (const id of await clientesConCompras(supabase, ids.slice(i, i + 100))) compraron.add(id);
+    for (const id of await clientesConCompras(fuente, ids.slice(i, i + 100))) compraron.add(id);
   }
   return res.status(200).json({ ok: true, tels: porTel.filter((x) => x.ids.some((id) => compraron.has(id))).map((x) => x.t) });
 }
@@ -451,7 +519,7 @@ async function telsDeClientes(supabase, body, res) {
  * las ventas de ~90 clientes, no las 27.990, y se pagina igual — el corte de 1.000 filas de
  * PostgREST muerde con menos clientes de los que parece (el que más tiene anda por 60 ventas).
  */
-async function listaDelPanel(supabase, body, res) {
+async function listaDelPanel(fuente, body, res) {
   const crudos = Array.isArray(body.ids) ? body.ids : [];
   // Mismo saneo que el resto del archivo: estos ids se concatenan en el `in.(…)` de PostgREST.
   const ids = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
@@ -464,8 +532,7 @@ async function listaDelPanel(supabase, body, res) {
     });
   }
 
-  const { data: clientes, error } = await supabase.from('clientes').select('id, name, phone').in('id', ids);
-  if (error) throw new Error(error.message);
+  const clientes = (await fuente.clientes(ids)).map((c) => ({ id: c.id, name: c.name, phone: c.phone }));
 
   // 🔑 **El total es la parte cara y no siempre hace falta.** Sumarlo obliga a recorrer las ventas
   // de cada uno de los ids; con la lista del día (~90) no se nota, pero el filtro 🔥 del panel pide
@@ -480,20 +547,10 @@ async function listaDelPanel(supabase, body, res) {
   // ("compró hace 18 días") porque es lo que decide a quién se le escribe primero.
   const totales = new Map();
   const ultimas = new Map();
-  for (let desde = 0; ; desde += PAGINA) {
-    const { data, error: e2 } = await supabase
-      .from('ventas')
-      .select('client_id, total_price, date_sale')
-      .in('client_id', ids)
-      .order('id', { ascending: true })
-      .range(desde, desde + PAGINA - 1);
-    if (e2) throw new Error(e2.message);
-    for (const v of data || []) {
-      totales.set(v.client_id, (totales.get(v.client_id) || 0) + (parseFloat(v.total_price) || 0));
-      const f = typeof v.date_sale === 'string' ? v.date_sale.slice(0, 10) : null;
-      if (f && (!ultimas.get(v.client_id) || f > ultimas.get(v.client_id))) ultimas.set(v.client_id, f);
-    }
-    if ((data || []).length < PAGINA) break;
+  for (const v of await fuente.ventasDeClientes(ids)) {
+    totales.set(v.client_id, (totales.get(v.client_id) || 0) + (parseFloat(v.total_price) || 0));
+    const f = typeof v.date_sale === 'string' ? v.date_sale.slice(0, 10) : null;
+    if (f && (!ultimas.get(v.client_id) || f > ultimas.get(v.client_id))) ultimas.set(v.client_id, f);
   }
 
   return res.status(200).json({
@@ -582,10 +639,9 @@ export function patronBusqueda(q) {
  * ⚠️ `ilike` con el patrón como PARÁMETRO de supabase-js, no concatenado: el texto lo escribe una
  * persona y termina en la query string de PostgREST. Los `%` y `_` que traiga se escapan.
  */
-async function buscarClientes(supabase, body, res) {
+async function buscarClientes(fuente, body, res) {
   const q = String(body.q || '').trim();
   if (q.length < 2) return res.status(200).json({ ok: true, clientes: [] });
-
 
   // Los que coinciden por nombre. Se piden de más porque después se filtra por "compró".
   //
@@ -593,30 +649,60 @@ async function buscarClientes(supabase, body, res) {
   // encontraba a Franco Ortiz). Con el texto entero como un solo patrón, "Ortiz Franco" o "Franco
   // D. Ortiz" quedaban afuera.
   const palabras = q.split(/\s+/).filter((p) => p.length >= 2);
-  let consulta = supabase.from('clientes').select('id, name, city, phone');
-  for (const p of palabras.length ? palabras : [q]) consulta = consulta.ilike('name', patronBusqueda(p));
-  const { data: candidatos, error } = await consulta.order('name').limit(TOPE_CANDIDATOS);
-  if (error) throw new Error(error.message);
-  if (!(candidatos || []).length) return res.status(200).json({ ok: true, clientes: [] });
+  const candidatos = await fuente.porNombre((palabras.length ? palabras : [q]).map(patronBusqueda), TOPE_CANDIDATOS);
+  if (!candidatos.length) return res.status(200).json({ ok: true, clientes: [] });
 
   // ¿Cuáles de ésos compraron por el canal mayorista? Es lo que los hace clientes del CRM.
+  // 🔴 Paginado (lo hace la fuente): con cientos de candidatos las ventas pasan las 1.000 filas y el
+  // corte de Supabase dejaba afuera, en silencio, a clientes que sí compraron.
   const ids = candidatos.map((c) => c.id);
-  // 🔴 Paginado: con cientos de candidatos las ventas pasan las 1.000 filas y el corte de
-  // Supabase dejaba afuera, en silencio, a clientes que sí compraron.
-  const compraron = new Set();
-  for (let desde = 0; ; desde += PAGINA) {
-    const { data: ventas, error: e2 } = await supabase
-      .from('ventas')
-      .select('client_id')
-      .in('client_id', ids)
-      .in('channel_id', CANALES_CLIENTE)
-      .order('id')
-      .range(desde, desde + PAGINA - 1);
-    if (e2) throw new Error(e2.message);
-    for (const v of ventas || []) compraron.add(v.client_id);
-    if ((ventas || []).length < PAGINA) break;
-  }
+  const compraron = new Set((await fuente.ventasDeClientes(ids, { canales: CANALES_CLIENTE })).map((v) => v.client_id));
   return res.status(200).json({ ok: true, clientes: candidatos.filter((c) => compraron.has(c.id)).slice(0, TOPE_BUSQUEDA) });
+}
+
+/** Las acciones, sobre la fuente que toque. Sin `action` se contesta el padrón, que es como nació. */
+async function atender(fuente, body, res) {
+  const accion = String(body.action || '');
+  const detalles = accion === 'detalles';
+
+  // ── La ficha de UN cliente para el panel de WhatsApp. Tampoco lleva `ids`. ────────────────────
+  if (accion === 'panel') return panelPorTelefono(fuente, body, res);
+  // ── La lista del día del panel: nombre + teléfono + total de un puñado de ids. ───────────────
+  if (accion === 'lista') return listaDelPanel(fuente, body, res);
+  // ── Qué teléfonos de prospectos ya son de un cliente que compró. ─────────────────────────────
+  if (accion === 'telsClientes') return telsDeClientes(fuente, body, res);
+  // ── Buscar un cliente por nombre, para engancharle un número nuevo desde el panel. ───────────
+  if (accion === 'buscar') return buscarClientes(fuente, body, res);
+  // ── Las ventas del CRM (escalón 5). No lleva `ids`: el filtro es el modo del select. ──────────
+  if (accion === 'ventas') return ventasDelCrm(fuente, body, res);
+
+  const crudos = Array.isArray(body.ids) ? body.ids : null;
+  if (!crudos) {
+    return res.status(400).json({ error: `falta ids (una lista de ${detalles ? 'sale_id' : 'client_id'})` });
+  }
+
+  // Sólo enteros. No es paranoia de tipos: estos ids se concatenan en el `in.(…)` de PostgREST, y
+  // ahí cualquier cosa que no sea un número es una inyección en la query string.
+  const ids = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length) return res.status(200).json(detalles ? { ok: true, detalles: [] } : { ok: true, clientes: [] });
+
+  // ── Las líneas con plata de esas ventas. ─────────────────────────────────────────────────────
+  //
+  // 🔴 **Acá sí hace falta paginar, y en el padrón no** (lo hace la fuente del espejo). Una venta tiene
+  // tantas líneas como artículos y el corte de 1.000 filas de PostgREST **también aplica con
+  // `supabase-js`** —medido: un `.limit(20000)` devuelve 1.000—, así que sin el `range` un pedido
+  // grande aparecería con menos artículos de los que tuvo.
+  if (detalles) return res.status(200).json({ ok: true, detalles: await fuente.detalles(ids) });
+
+  const cuerpo = JSON.stringify({ ok: true, clientes: await fuente.clientes(ids) });
+  if (cuerpo.length > TOPE_RESPUESTA) {
+    return res.status(500).json({
+      ok: false,
+      error: `El padrón ya no entra en una respuesta (${(cuerpo.length / 1024 / 1024).toFixed(1)} MB contra un techo de 4,5). Hay que paginar api/_crm.js.`,
+    });
+  }
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  return res.status(200).send(cuerpo);
 }
 
 export default async function handler(req, res) {
@@ -632,121 +718,14 @@ export default async function handler(req, res) {
   }
 
   const body = req.body || {};
-  const accion = String(body.action || '');
-  const detalles = accion === 'detalles';
-
-  const url = process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co';
-  const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
-  if (!key) return res.status(500).json({ error: 'Falta la clave de Supabase de BDI en el entorno.' });
-  const supabase = createClient(url, key);
-
-  // ── La ficha de UN cliente para el panel de WhatsApp. Tampoco lleva `ids`. ────────────────────
-  if (accion === 'panel') {
-    try {
-      return await panelPorTelefono(supabase, body, res);
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  }
-
-  // ── La lista del día del panel: nombre + teléfono + total de un puñado de ids. ───────────────
-  if (accion === 'lista') {
-    try {
-      return await listaDelPanel(supabase, body, res);
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  }
-
-  // ── Qué teléfonos de prospectos ya son de un cliente que compró. ─────────────────────────────
-  if (accion === 'telsClientes') {
-    try {
-      return await telsDeClientes(supabase, body, res);
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  }
-
-  // ── Buscar un cliente por nombre, para engancharle un número nuevo desde el panel. ───────────
-  if (accion === 'buscar') {
-    try {
-      return await buscarClientes(supabase, body, res);
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  }
-
-  // ── Las ventas del CRM (escalón 5). No lleva `ids`: el filtro es el modo del select. ──────────
-  if (accion === 'ventas') {
-    try {
-      return await ventasDelCrm(supabase, body, res);
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  }
-
-  const crudos = Array.isArray(body.ids) ? body.ids : null;
-  if (!crudos) {
-    return res.status(400).json({ error: `falta ids (una lista de ${detalles ? 'sale_id' : 'client_id'})` });
-  }
-
-  // Sólo enteros. No es paranoia de tipos: estos ids se concatenan en el `in.(…)` de PostgREST, y
-  // ahí cualquier cosa que no sea un número es una inyección en la query string.
-  const ids = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
-  if (!ids.length) return res.status(200).json(detalles ? { ok: true, detalles: [] } : { ok: true, clientes: [] });
-
   try {
-    const lotes = [];
-    for (let i = 0; i < ids.length; i += LOTE) lotes.push(ids.slice(i, i + LOTE));
+    // Desde el corte de BDI, el ERP (ver «DE DÓNDE LEE», arriba). Una sola conexión para toda la acción.
+    if (await crmEnErp()) return await conBase(MARCA, (db) => atender(fuenteErp(db), body, res), TECHO_ERP_MS);
 
-    // ── Las líneas con plata de esas ventas. ─────────────────────────────────────────────────
-    //
-    // 🔴 **Acá sí hace falta paginar, y en el padrón no.** Un lote de 500 `client_id` devuelve
-    // como mucho 500 clientes, así que el corte de 1.000 filas de PostgREST nunca llega a
-    // morder. Una venta, en cambio, tiene tantas líneas como artículos: 500 sale_ids son ~570
-    // renglones de promedio pero no hay ningún tope. Y el corte **también aplica con
-    // `supabase-js`** —medido: un `.limit(20000)` devuelve 1.000—, así que sin el `range` la
-    // pérdida sería silenciosa: un pedido grande aparecería con menos artículos de los que tuvo.
-    if (detalles) {
-      const filas = [];
-      for (const lote of lotes) {
-        for (let desde = 0; ; desde += PAGINA) {
-          const { data, error } = await supabase
-            .from('venta_detalles')
-            .select(COLUMNAS_DETALLE)
-            .in('sale_id', lote)
-            .order('sale_id')
-            .range(desde, desde + PAGINA - 1);
-          if (error) throw new Error(error.message);
-          filas.push(...(data || []));
-          if ((data || []).length < PAGINA) break;
-        }
-      }
-      return res.status(200).json({ ok: true, detalles: filas });
-    }
-
-    // Por id, no un array a secas: un id repetido entre lotes no puede pasar (ya vienen únicos),
-    // pero el mapa además deja la respuesta estable para el `Record` que arma el cliente.
-    const porId = new Map();
-    for (let i = 0; i < lotes.length; i += EN_VUELO) {
-      const tanda = await Promise.all(
-        lotes.slice(i, i + EN_VUELO).map((l) => supabase.from('clientes').select(COLUMNAS).in('id', l)),
-      );
-      for (const { data, error } of tanda) {
-        if (error) throw new Error(error.message);
-        for (const c of data || []) porId.set(c.id, c);
-      }
-    }
-
-    const cuerpo = JSON.stringify({ ok: true, clientes: [...porId.values()] });
-    if (cuerpo.length > TOPE_RESPUESTA) {
-      return res.status(500).json({
-        ok: false,
-        error: `El padrón ya no entra en una respuesta (${(cuerpo.length / 1024 / 1024).toFixed(1)} MB contra un techo de 4,5). Hay que paginar api/_crm.js.`,
-      });
-    }
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    return res.status(200).send(cuerpo);
+    const url = process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co';
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+    if (!key) return res.status(500).json({ error: 'Falta la clave de Supabase de BDI en el entorno.' });
+    return await atender(fuenteEspejo(createClient(url, key)), body, res);
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
   }

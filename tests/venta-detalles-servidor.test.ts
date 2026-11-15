@@ -42,6 +42,9 @@ vi.mock('@supabase/supabase-js', () => ({
   }),
 }))
 
+// BDI sin corte: este archivo prueba el camino del ESPEJO (el del ERP, en `tests/crm-erp-servidor.test.ts`).
+vi.mock('../api/_caja-corte.js', () => ({ cortesDeCaja: async () => ({}) }))
+
 function resFalso() {
   const r = {
     code: 0 as number,
