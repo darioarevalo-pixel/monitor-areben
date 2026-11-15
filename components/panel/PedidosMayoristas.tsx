@@ -202,7 +202,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
           {cuenta && p.venta_id && p.pago && p.pago.falta > 0 && p.etapa !== 'anulado' && (
             <div><Button size="sm" variant="outline" tone="success" onClick={() => setPagando(true)}>$ Cargar pago</Button></div>
           )}
-          {p.falta_cliente && p.etapa !== 'anulado' && <Notice tone="danger"><b>Falta el cliente.</b> El pedido entró a «Pedido mayorista» y las fundas ya están apartadas. Para mandarlo a preparar, pasalo a su cliente desde el chat de su número{p.contacto?.telefono ? ` (${p.contacto.telefono})` : ''}.</Notice>}
+          {p.falta_cliente && p.etapa !== 'anulado' && <Notice tone="danger"><b>Falta el cliente.</b> El pedido entró a «Pedido mayorista» y las fundas ya están apartadas. Para mandarlo a preparar, pasalo a su cliente desde «Falta el cliente», en Hoy, o desde el chat de su número{p.contacto?.telefono ? ` (${p.contacto.telefono})` : ''}.</Notice>}
           {!ficha.escribir && <Notice tone="info">{APAGADO}</Notice>}
           {ficha.escribir && !p.editable && p.etapa !== 'anulado' && <Notice tone="info">El depósito ya empezó a prepararlo: no se cambia.</Notice>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -301,8 +301,10 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
  * elegir la ficha anota el número en ella y desde ahí sus pedidos entran solos a ese cliente. «Es nuevo» crea la ficha con
  * nombre + CUIT/DNI (Bruno 31-oct) — detrás de la llave de escribir hasta el corte de BDI.
  */
-export function ElegirCliente({ tel, persona, escribir, decir, onCambio }: {
+export function ElegirCliente({ tel, persona, escribir, decir, onCambio, onElegido }: {
   tel: string; persona: string | null; escribir: boolean; decir: (txt: string, mal?: boolean) => void; onCambio: () => void
+  /** Después de anotar el número (o crear la ficha): lo que sigue con ese cliente —«Falta el cliente» le pasa el pedido—; su texto reemplaza al aviso. */
+  onElegido?: (c: ClienteDelPanel) => Promise<string>
 }) {
   const [quien, setQuien] = useState(persona ?? '')
   const [q, setQ] = useState('')
@@ -331,11 +333,11 @@ export function ElegirCliente({ tel, persona, escribir, decir, onCambio }: {
   }
   const elegir = (c: ClienteDelPanel) => void hacer(async () => {
     await anotarWhatsappPanel({ clienteId: c.id, whatsapp: tel, nombre: quien.trim() || undefined })
-    return `Listo: este número entra solo a ${c.nombre}.`
+    return onElegido ? onElegido(c) : `Listo: este número entra solo a ${c.nombre}.`
   })
   const crear = () => void hacer(async () => {
     const r = await clienteNuevoPanel({ nombre: nombre.trim(), doc: doc.trim(), whatsapp: tel, persona: quien.trim() || undefined })
-    return `Listo: ${r.cliente.nombre} está creado y este número entra solo ahí.`
+    return onElegido ? onElegido(r.cliente) : `Listo: ${r.cliente.nombre} está creado y este número entra solo ahí.`
   })
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, border: `1px solid ${color.line}`, borderRadius: radius.md, padding: space[2], marginBottom: 6 }}>
@@ -446,31 +448,49 @@ export function PreparadosSinPagar() {
 
 /**
  * «Falta el cliente» (Hoy del panel, Darío 15-nov): los pedidos que entraron a la ficha general «Pedido mayorista» porque el número
- * ⛔ era de un solo cliente. Ya apartan las fundas, pero ⛔ van a preparar hasta pasarlos a su cliente desde el chat de ese número.
+ * ⛔ era de un solo cliente. Ya apartan las fundas, pero ⛔ van a preparar hasta pasarlos a su cliente. «Pasar a un cliente» lo
+ * hace desde acá, SIN chat (Bruno 15-nov: el número del pedido puede ⛔ tener chat): elegir o crear la ficha le anota el número
+ * —sus próximos pedidos entran solos— y le pasa el pedido (stock igual). Desde el chat de ese número sigue pudiéndose.
  * Vacío ⇒ ⛔ se dibuja.
  */
 export function PedidosSinCliente() {
   const prendido = useCuentaPrendida()
   const [lista, setLista] = useState<PedidoSinCliente[]>([])
+  const [abierto, setAbierto] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<{ txt: string; mal: boolean } | null>(null)
+  const [vuelta, setVuelta] = useState(0)
   useEffect(() => {
     if (!prendido) return
     let vivo = true
     leerPedidosSinCliente().then((r) => { if (vivo) setLista(r.prendido ? r.pedidos : []) }).catch(() => { if (vivo) setLista([]) })
     return () => { vivo = false }
-  }, [prendido])
-  if (!lista.length) return null
+  }, [prendido, vuelta])
+  if (!lista.length && !aviso) return null
   return (
     <section style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: `${space[2]}px ${space[3]}px`, margin: `${space[2]}px ${space[2]}px 0` }}>
       <div style={{ ...ROTULO, marginBottom: 6 }}>Falta el cliente</div>
+      {aviso && <Notice tone={aviso.mal ? 'danger' : 'success'}>{aviso.txt}</Notice>}
       {lista.map((p) => (
-        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: font.sm, padding: '3px 0' }}>
-          <div style={{ minWidth: 0 }}>
-            <b>{p.nombre ?? 'Sin nombre'}</b> <span style={{ color: color.mut2 }}>· {p.telefono ?? 'sin teléfono'} · pedido {codigoPedido(p.numero)} · {diaMes(p.recibido_en)} · {p.unidades} u</span>
+        <div key={p.id} style={{ padding: '3px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: font.sm }}>
+            <div style={{ minWidth: 0 }}>
+              <b>{p.nombre ?? 'Sin nombre'}</b> <span style={{ color: color.mut2 }}>· {p.telefono ?? 'sin teléfono'} · pedido {codigoPedido(p.numero)} · {diaMes(p.recibido_en)} · {p.unidades} u</span>
+            </div>
+            <b style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{plata(p.total)}</b>
+            {p.telefono && abierto !== p.id && <Button size="sm" variant="outline" onClick={() => { setAviso(null); setAbierto(p.id) }}>Pasar a un cliente</Button>}
           </div>
-          <b style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{plata(p.total)}</b>
+          {p.telefono && abierto === p.id && (<>
+            <ElegirCliente tel={p.telefono} persona={p.nombre} escribir decir={(txt, mal = false) => setAviso({ txt, mal })}
+              onCambio={() => { setAbierto(null); setVuelta((v) => v + 1) }}
+              onElegido={async (c) => {
+                await entrarPedidoPanel({ pedidoId: p.id, clienteId: c.id })
+                return `Listo: el pedido ${codigoPedido(p.numero)} pasó a ${c.nombre}. Las fundas siguen apartadas y los próximos pedidos de este número entran solos.`
+              }} />
+            <Button size="sm" variant="ghost" onClick={() => setAbierto(null)}>Cancelar</Button>
+          </>)}
         </div>
       ))}
-      <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 4 }}>Las fundas ya están apartadas. Abrí el chat de ese número y pasá el pedido a su cliente.</div>
+      {lista.length > 0 && <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 4 }}>Las fundas ya están apartadas. Pasá cada pedido a su cliente: acá o desde el chat de ese número.</div>}
     </section>
   )
 }

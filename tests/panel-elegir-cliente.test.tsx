@@ -11,12 +11,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const cliente = vi.hoisted(() => ({
   buscarClientesPanel: vi.fn(), anotarWhatsappPanel: vi.fn(), clienteNuevoPanel: vi.fn(),
   leerPedidoPanel: vi.fn(), buscarProductosPedido: vi.fn(), cambiarPedidoPanel: vi.fn(), mandarAPrepararPanel: vi.fn(),
-  anularPedidoPanel: vi.fn(), entrarPedidoPanel: vi.fn(), leerPedidosPanel: vi.fn(), leerPreparadosSinPagar: vi.fn(),
+  anularPedidoPanel: vi.fn(), entrarPedidoPanel: vi.fn(), leerPedidosPanel: vi.fn(), leerPreparadosSinPagar: vi.fn(), leerPedidosSinCliente: vi.fn(),
 }))
 vi.mock('@/lib/erp/cliente', () => cliente)
 vi.mock('@/components/panel/CuentaCorriente', () => ({ useCuentaPrendida: () => true }))
 
-import { ElegirCliente } from '@/components/panel/PedidosMayoristas'
+import { ElegirCliente, PedidosSinCliente } from '@/components/panel/PedidosMayoristas'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const TEL = '5493411234567'
@@ -96,5 +96,52 @@ describe('«¿Es de un cliente que ya tenés?»', () => {
     await esperar()
     expect(document.body.textContent).toContain('Ese documento ya es de Celulares Rosario')
     expect(onCambio).not.toHaveBeenCalled()
+  })
+})
+
+describe('«Falta el cliente» sin chat (Bruno 15-nov: el número del pedido puede ⛔ tener chat)', () => {
+  const PEDIDO = { id: 'p1', numero: 111, recibido_en: '2026-11-15T21:32:32.482Z', total: 4900, unidades: 1, nombre: 'Roberto', telefono: TEL }
+  const montarLista = async () => { await act(async () => { root.render(<PedidosSinCliente />) }); await esperar() }
+  beforeEach(() => {
+    cliente.leerPedidosSinCliente.mockResolvedValueOnce({ prendido: true, pedidos: [PEDIDO] }).mockResolvedValue({ prendido: true, pedidos: [] })
+    cliente.entrarPedidoPanel.mockResolvedValue({ ok: true, ya: false, sinCambios: false, avisarDeposito: false, ventaId: 'v2' })
+  })
+
+  it('elegir un cliente desde la lista le anota el número Y le pasa el pedido', async () => {
+    await montarLista()
+    await act(async () => { boton('Pasar a un cliente').click() })
+    expect(inputs()[0].value).toBe('Roberto')
+    await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el cliente"]')!, 'celu')
+    await esperar(350)
+    await act(async () => { boton(/Celulares Rosario · 20123456786/).click() })
+    await esperar()
+    expect(cliente.anotarWhatsappPanel).toHaveBeenCalledWith({ clienteId: 'u1', whatsapp: TEL, nombre: 'Roberto' })
+    expect(cliente.entrarPedidoPanel).toHaveBeenCalledWith({ pedidoId: 'p1', clienteId: 'u1' })
+    expect(cliente.leerPedidosSinCliente).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).toContain('pasó a Celulares Rosario')
+  })
+
+  it('crear el cliente desde la lista también le pasa el pedido', async () => {
+    await montarLista()
+    await act(async () => { boton('Pasar a un cliente').click() })
+    await act(async () => { boton('Es nuevo').click() })
+    const [, nombre, doc] = inputs()
+    await escribir(nombre, 'Fundas Norte')
+    await escribir(doc, '30-71850818-1')
+    await act(async () => { boton('Crear cliente').click() })
+    await esperar()
+    expect(cliente.entrarPedidoPanel).toHaveBeenCalledWith({ pedidoId: 'p1', clienteId: 'n1' })
+  })
+
+  it('si pasar el pedido falla, se ve el error y el pedido sigue en la lista', async () => {
+    cliente.entrarPedidoPanel.mockRejectedValue(new Error('El pedido ya tiene pagos'))
+    await montarLista()
+    await act(async () => { boton('Pasar a un cliente').click() })
+    await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el cliente"]')!, 'celu')
+    await esperar(350)
+    await act(async () => { boton(/Celulares Rosario · 20123456786/).click() })
+    await esperar()
+    expect(document.body.textContent).toContain('El pedido ya tiene pagos')
+    expect(cliente.leerPedidosSinCliente).toHaveBeenCalledTimes(1)
   })
 })
