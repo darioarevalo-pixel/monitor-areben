@@ -115,8 +115,8 @@ export function mensajeDeLaCuenta(cuenta: CuentaConCliente): string | null {
  * La tarjeta de la cuenta (Darío 15-nov): SÓLO cuando debe —al día no hay más bloques—, con las compras que deben (la más
  * vieja primero) y los últimos pagos. «Enviar saldo» pasó a «Lo que sigue»; BCRA, Facturas y Quién compra, a «Más del cliente».
  */
-export function TarjetaCuenta({ cuenta }: { cuenta: CuentaConCliente }) {
-  const pendientes = [...cuenta.estado.pendientes].sort((a, b) => a.fecha.localeCompare(b.fecha))
+export function TarjetaCuenta({ cuenta, sinRefs }: { cuenta: CuentaConCliente; /** Las deudas de pedidos abiertos: se ven en el pedido. */ sinRefs?: Set<string> }) {
+  const pendientes = [...cuenta.estado.pendientes].filter((p) => !sinRefs?.has(p.ref)).sort((a, b) => a.fecha.localeCompare(b.fecha))
   if (!pendientes.length) return null
   return (
     <section style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: `${space[2]}px ${space[3]}px ${space[3]}px`, margin: `0 ${space[2]}px ${space[2]}px` }}>

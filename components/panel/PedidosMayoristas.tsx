@@ -146,6 +146,11 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
   )
 }
 
+/** Las referencias del libro («venta:<id>») de los pedidos abiertos: su deuda se ve en el pedido, ⛔ se repite como compra. */
+export function refsDePedidosAbiertos(pedidos: Extract<PedidosPanel, { prendido: true }> | null): Set<string> {
+  return new Set((pedidos?.pedidos ?? []).filter((p) => p.etapa !== 'despachado' && p.etapa !== 'anulado').flatMap((p) => (p.venta_id ? [p.venta_id, `venta:${p.venta_id}`] : [])))
+}
+
 type Sigue = { k: string; tono: 'rojo' | 'ambar'; titulo: string; detalle: string; mensaje?: { label: string; texto: string } | null }
 
 /**
@@ -160,13 +165,13 @@ export function loQueSigue(pedidos: Extract<PedidosPanel, { prendido: true }> | 
   }
   const msj = cuenta ? mensajeDeLaCuenta(cuenta) : null
   for (const p of pedidos?.pedidos ?? []) {
-    if (p.etapa === 'preparado' && p.pago && p.pago.falta > 0 && !p.cuenta_habilitada) {
+    // Con crédito sale a Despacho igual: ⛔ es «armado sin pagar» (zona del pedido; sin zona, el crédito del pedido).
+    if (p.etapa === 'preparado' && p.pago && p.pago.falta > 0 && (p.zona ? p.zona === 'pendiente_pago' : !p.cuenta_habilitada)) {
       out.push({ k: `ps-${p.id}`, tono: 'ambar', titulo: `${codigoPedido(p.numero)} armado, sin pagar`, detalle: `${p.unidades} u · falta ${plata(p.pago.falta)}`, mensaje: msj ? { label: 'Pedir pago', texto: msj } : null })
     }
   }
   // Las compras que deben y ⛔ son de un pedido abierto (ésas ya están arriba o en la tarjeta de Pedidos).
-  const abiertas = new Set((pedidos?.pedidos ?? []).filter((p) => p.etapa !== 'despachado' && p.etapa !== 'anulado').flatMap((p) => (p.venta_id ? [p.venta_id, `venta:${p.venta_id}`] : [])))
-  // (la referencia del libro es «venta:<id>»)
+  const abiertas = refsDePedidosAbiertos(pedidos)
   const viejas = (cuenta?.estado.pendientes ?? []).filter((x) => x.pendiente > 0.5 && !abiertas.has(x.ref)).sort((a, b) => b.dias - a.dias)
   for (const v of viejas) {
     out.push({ k: `cv-${v.ref}`, tono: 'rojo', titulo: `Debe ${plata(v.pendiente)} hace ${v.dias} días`, detalle: v.monto > v.pendiente ? `pagó ${plata(v.monto - v.pendiente)} de ${plata(v.monto)}` : `compra del ${v.fecha.slice(8, 10)}/${v.fecha.slice(5, 7)}`, mensaje: msj ? { label: 'Enviar saldo', texto: msj } : null })

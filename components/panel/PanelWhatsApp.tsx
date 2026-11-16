@@ -5,7 +5,7 @@ import { Button, Icono } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
 import { FranjaCuenta, HojaCargarPago, MasDelCliente, TarjetaCuenta, useCuentaPanel } from './CuentaCorriente'
-import { LoQueSigue, loQueSigue, PedidosSinCliente, PreparadosSinPagar, TarjetaPedidos, usePedidosPanel } from './PedidosMayoristas'
+import { LoQueSigue, loQueSigue, PedidosSinCliente, refsDePedidosAbiertos, PreparadosSinPagar, TarjetaPedidos, usePedidosPanel } from './PedidosMayoristas'
 import { CalculadoraEnvio } from './CalculadoraEnvio'
 import { ProximoContacto, RayaEstado, estadoDeFicha } from './ProximoContacto'
 import { QueLeMando } from './QueLeMando'
@@ -1323,7 +1323,7 @@ function PanelInterno({
         <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} despacho={seg.despacho || ''} />
         {cuenta && (
           <Aislado nombre="Cuenta corriente">
-            <TarjetaCuenta cuenta={cuenta} />
+            <TarjetaCuenta cuenta={cuenta} sinRefs={refsDePedidosAbiertos(pedidosErp)} />
             {cargandoPago && (
               <HojaCargarPago
                 cuenta={cuenta}
