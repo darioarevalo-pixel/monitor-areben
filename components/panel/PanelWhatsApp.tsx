@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Icono } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
-import { FranjaCuenta, HojaCargarPago, MasDelCliente, TarjetaCuenta, useCuentaPanel } from './CuentaCorriente'
+import { FranjaCuenta, HojaCargarPago, MasDelCliente, TarjetaCuenta, useCuentaPanel, useCuentaPrendida } from './CuentaCorriente'
 import { LoQueSigue, loQueSigue, refsDePedidosAbiertos, TarjetaPedidos, usePedidosPanel } from './PedidosMayoristas'
 import { CalculadoraEnvio } from './CalculadoraEnvio'
 import { ProximoContacto, RayaEstado, estadoDeFicha } from './ProximoContacto'
@@ -569,14 +569,21 @@ export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
   // abrir (y después cada tanto), y no tiene que perderse porque en ese momento no había ficha.
   const { comunidad, aviso: avisoComunidad } = useComunidad()
   const { escritos, ultimos } = useEscritosHoy()
+  const conPedidoErp = useCuentaPrendida()
 
   return (
     <>
       <PanelInterno tel={telChat} nombreChat={nombreChat} pedido={pedido} setPedido={setPedido} comunidad={comunidad} avisoComunidad={avisoComunidad} escritos={escritos} ultimos={ultimos} />
-      {/* `key` = el chat: al pasar a otro cliente la cuenta arranca vacía. */}
-      <Aislado nombre="Calculadora">
-        <CalculadoraEnvio key={telChat || ''} />
-      </Aislado>
+      {/*
+        La calculadora Pedido + Envío de abajo SE VA para quien ya ve el pedido del ERP (Darío 15-nov: «pasa adentro del
+        pedido»): el envío se anota en la hoja del pedido y «💬 Total» lo copia con el envío. Sin el pedido del ERP sigue.
+        `key` = el chat: al pasar a otro cliente la cuenta arranca vacía.
+      */}
+      {!conPedidoErp && (
+        <Aislado nombre="Calculadora">
+          <CalculadoraEnvio key={telChat || ''} />
+        </Aislado>
+      )}
     </>
   )
 }
