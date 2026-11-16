@@ -13,7 +13,7 @@
  */
 import { LINEAS, baseDe, errorDe, leerAccion, textoDeAviso } from '../lib/erp/salida.core.js'
 
-const SIN_TABLA = 'La salida con vuelta todavía no está en la base del motor (migración 048).'
+const SIN_TABLA = 'La salida con vuelta todavía no está disponible: falta actualizar la base (048).'
 const motor = () => import('../motor/stock/salida.mjs')
 const conAvisos = (r) => (r.avisos || []).map((a) => ({ ...a, texto: textoDeAviso(a) }))
 

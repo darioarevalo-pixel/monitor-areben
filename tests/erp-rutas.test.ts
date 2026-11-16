@@ -18,7 +18,7 @@ describe('leerRutaDePantalla', () => {
     const err = (b: object, marca = 'zattia') => leerRutaDePantalla(b, { marca, lineas: marca === 'zattia' ? lineas : ['bdi'] }).error
     expect(err({ linea: 'stunned', canal: 'local', medio: 'efectivo' }, 'bdi')).toBe('Línea inválida')
     expect(err({ canal: 'web', medio: 'efectivo' })).toBe('Canal inválido')
-    expect(err({ canal: 'local', medio: 'saldo' })).toBe('Medio inválido')
+    expect(err({ canal: 'local', medio: 'saldo' })).toBe('Falta la forma de pago')
     expect(err({ canal: 'local', medio: 'efectivo', cuenta_real_id: "1; drop" })).toBe('Cuenta inválida')
   })
   it('un `desde` viaja sólo si viene', () => {

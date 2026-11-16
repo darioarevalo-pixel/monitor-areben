@@ -112,7 +112,7 @@ export function EnviarStockTN({ tienda, alTerminar }: { tienda: TiendaErp; alTer
         <div style={{ minWidth: 0, flex: '1 1 320px' }}>
           <div style={{ fontWeight: 700, color: color.ink }}>Enviar el stock a Tienda Nube · {nombre}</div>
           <div style={{ fontSize: font.sm, color: color.mut }}>
-            Areben Gestión le pone a cada variante de la tienda su stock (sus depósitos, menos lo apartado por pedidos sin pagar). Va la tienda entera.
+            Areben Gestión le pone a cada variante de la tienda su stock (sus depósitos, menos lo reservado por pedidos sin pagar). Va la tienda entera.
             {' '}{deVerdad ? 'Además se envía solo cada vez que cambia el stock de Areben Gestión.' : `Hasta el corte de ${nombre} es una prueba: calcula y no toca la tienda.`}
           </div>
         </div>

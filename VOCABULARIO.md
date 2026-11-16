@@ -1,6 +1,6 @@
 # VOCABULARIO — el glosario compartido de MAKETA y el monitor
 
-Versión: 2026-11-03
+Versión: 2026-11-15
 
 🔑 **Este archivo es el MISMO en los dos repos** (`areben-marketing` y `monitor-areben`), byte a
 byte. Si cambia acá, se copia allá en el mismo día y sube la `Versión:` de arriba. Cada repo tiene
@@ -344,41 +344,47 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 
 | se dice | ⛔ no se dice | app | dónde | por qué / desde |
 |---|---|---|---|---|
-| `caja` (abrir, cerrar, cajas anteriores) | `turno` · `turnos` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct-2026: la cajera abre y cierra **la caja** |
+| `caja` (abrir, cerrar, cajas anteriores) | `turno` · `turnos` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` · `components/erp` · `lib/erp` · `lib/nav.ts` · `lib/nav.datos.ts` | Bruno, 12-oct-2026: la cajera abre y cierra **la caja** |
 | `oferta` · `productos en oferta` | `feria` · `ferias` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct: «feria» es un nombre COMERCIAL de una campaña, ⛔ una regla de la caja |
 | `ingreso` · `+ Ingreso` | `aporte` · `aportes` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct: «+ Salida» y «+ Ingreso» |
-| `Validar transferencia` · `Transferencia pendiente` | `Confirmar transferencia` · `Validando` | monitor | `components/caja` · `lib/caja` | Bruno, 12-oct; 13-oct: «validar» se entiende como el paso intermedio |
+| `Validar transferencia` · `Transferencia pendiente` | `Confirmar transferencia` · `Validando` · `por verificar` · `falta verificar` | monitor | `components/caja` · `lib/caja` · `components/erp` · `lib/erp` | Bruno, 12-oct; 13-oct: «validar» se entiende como el paso intermedio |
 | `Ingresos de mercadería` (lo que entró por una orden de compra; Bruno 30-oct: «Ingresos» solo se confunde con el `+ Ingreso` de plata de la Caja) | `Recepciones` · `Recepción` | monitor | `components/erp` · `lib/erp` | Bruno, 20-oct: «en vez de recepciones, pondría ingresos así se entiende» (la pestaña de Stock del ERP; la dirección sigue `/erp/stock/recepciones`) |
 | `Actualizar Ingresos` (el botón de ERP › Stock › Ingresos de mercadería: lee los productos de la app Ingresos) · `Listo` (el ERP ya lo tiene) · `Pendiente` (falta, se elige y se importa) | `Sincronizar Ingresos` | monitor | `components/erp` | Bruno, 3-nov: «boton de actualizar ingresos, ves lo nuevo, te aparece lo viejo como ya listo, y lo que no esta te aparece como pendiente» |
-| `Contraentrega` (la forma de pago: el cadete cobra al entregar) | `a cobrar en la entrega` · `Cobrar en la entrega` | monitor | `components/erp` · `lib/erp` | Bruno, 20-oct: «¿contraentrega te parece?» (contrato §20 del motor) |
-| `producto` · `productos` | `prenda` · `prendas` | monitor | `components/erp` · `lib/erp` · `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 26-oct: el ERP vende productos, no sólo ropa (diseno.md §9). 10-nov, también la Caja: «no es prendas, es productos» (BDI vende fundas) |
+| `Contraentrega` (la forma de pago: el cadete cobra al entregar) | `a cobrar en la entrega` · `Cobrar en la entrega` · `Cobrado al entregar` | monitor | `components/erp` · `lib/erp` | Bruno, 20-oct: «¿contraentrega te parece?» (contrato §20 del motor) |
+| `producto` · `productos` | `prenda` · `prendas` | monitor | `components/erp` · `lib/erp` · `api/_erp*` · `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 26-oct: el ERP vende productos, no sólo ropa (diseno.md §9). 10-nov, también la Caja: «no es prendas, es productos» (BDI vende fundas) |
 | `variante` · `variantes` | `talle` · `talles` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: la variante puede ser talle, color o medida |
 | `Físico` (lo que hay en el local y el depósito) | `En estantería` · `estantería` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
-| `Reservado` (lo que ya tiene dueño) | `En pedidos` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
+| `Reservado` (lo que ya tiene dueño) | `En pedidos` · `Con pedidos` · `apartad*` · `retenid*` · `retiene` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
 | `movimientos de stock` · `Areben Gestión` | `libro` · `el libro` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: «libro» es jerga de quien lo construyó |
 | `código` | `SKU` · `SKUs` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
-| `Tienda Nube` · `Gestión Nube` · `Mercado Libre` | `TN` · `GN` · `ML` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: sin siglas en pantalla |
+| `Tienda Nube` · `Gestión Nube` · `Mercado Libre` | `TN` · `GN` · `ML` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Bruno, 26-oct: sin siglas en pantalla |
 | `Caja` | `Caja (POS)` · `POS` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
-| `Ingreso de plata` · `Salida de plata` (los resúmenes y filtros de ERP › Cobros) | `Entró` · `Salió` · `Entró plata` · `Salió plata` | monitor | `components/erp/ventas/CobrosErp.tsx` · `lib/erp/cobros.core.js` | Bruno, 9-nov: «le falta vocabulario a entró y salió» |
+| `Ingreso de plata` · `Salida de plata` (los resúmenes y filtros de ERP › Cobros) | `Entró` · `Salió` · `Entró plata` · `Salió plata` · `Entró a` · `Salió de` | monitor | `components/erp/ventas/CobrosErp.tsx` · `lib/erp/cobros.core.js` · `components/erp/Facturacion.tsx` | Bruno, 9-nov: «le falta vocabulario a entró y salió» |
 | `Ingresos y ajustes` | `Conteos y ajustes` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
-| `forma de pago` · `formas de pago` | `medio de cobro` · `medios de cobro` · `medio de pago` · `medios de pago` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct-2026: «forma de pago está perfecto» (eran tres palabras para lo mismo) |
+| `forma de pago` · `formas de pago` | `medio de cobro` · `medios de cobro` · `medio de pago` · `medios de pago` · `medio` · `medios` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Bruno, 30-oct-2026: «forma de pago está perfecto» (eran tres palabras para lo mismo) |
 | `Cobros` | `Cobranzas` | monitor | `components/erp` · `lib/erp` · `components/cobranzas` · `lib/cobranzas` · `lib/nav.datos.ts` | Bruno, 30-oct: Cobros en el ERP y en el monitor (la sección del monitor, 30-oct tanda 3) |
-| `preparar` · `preparada` · `sin preparar` | `armar` · `armada` · `armadas` · `sin armar` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: en Ventas ya decía «preparar»; las transferencias decían «armar» |
+| `preparar` · `preparada` · `sin preparar` | `arm*` · `sin armar` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: en Ventas ya decía «preparar»; las transferencias decían «armar» |
 | `Movido a la hora de la foto` · el nombre de cada lado (`Areben Gestión`, `Tienda Nube`, `Mercado Libre`, `Gestión Nube`) | `En vuelo` · `Nuestro` · `Ellos` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: en Diferencias no se entendía contra quién se compara |
-| `Con falla` | `Fallado` · `Fallada` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct |
-| `¿A qué cuenta va?` · `La plata llega en` · `Descuento o recargo` | `Rutas` · `Ruta` · `ruta` · `rutas` · `Regla de cobro` | monitor | `components/erp/RutasCobro.tsx` · `components/erp/TiraConfiguracion.tsx` · `components/erp/CuentasYEstructura.tsx` · `components/erp/ventas/FormasDePago.tsx` · `components/erp/ventas/GastosErp.tsx` · `components/erp/ventas/CobrosErp.tsx` · `components/erp/ventas/VentanasVenta.tsx` · `components/erp/clientes/FichaCuenta.tsx` · `components/erp/ventas/FichaVenta.tsx` · `lib/erp/estructura.core.js` · `lib/erp/gastos.core.js` | Bruno, 30-oct (tanda 3, dibujado): la ruta de cobro se nombra por lo que hace. «Ruta» sigue siendo «De → A» en Transferencias |
-| `Ver visitas y compromisos ↗` | `Ver en PRM` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: sin siglas en pantalla |
+| `Con falla` | `fallad*` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct |
+| `¿A qué cuenta va?` · `La plata llega en` · `Descuento o recargo` | `Rutas` · `Ruta` · `ruta` · `rutas` · `Regla de cobro` | monitor | `components/erp/RutasCobro.tsx` · `components/erp/TiraConfiguracion.tsx` · `components/erp/CuentasYEstructura.tsx` · `components/erp/ventas/FormasDePago.tsx` · `components/erp/ventas/GastosErp.tsx` · `components/erp/ventas/CobrosErp.tsx` · `components/erp/ventas/VentanasVenta.tsx` · `components/erp/clientes/FichaCuenta.tsx` · `components/erp/ventas/FichaVenta.tsx` · `lib/erp/estructura.core.js` · `lib/erp/gastos.core.js` · `lib/erp/rutas.core.js` · `api/_erp-rutas.js` | Bruno, 30-oct (tanda 3, dibujado): la ruta de cobro se nombra por lo que hace. «Ruta» sigue siendo «De → A» en Transferencias |
+| `Ver visitas y compromisos ↗` | `Ver en PRM` · `Abrir PRM` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: sin siglas en pantalla |
 | `Productos` · `Clientes` (los grupos del menú del ERP) | `Productos y precios` · `Clientes y proveedores` | monitor | `components/erp/Erp.tsx` | Bruno, 30-oct: grupos cortos |
 | `Se factura cuando se pague` | `Sin factura: todavía no es una venta` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: decir qué pasa, no qué no es |
 | `Sin promo` (la cuenta del crédito sin cuotas ni promo) | `Normal` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct |
 | `producto sin código` | `Producto suelto` · `producto suelto` | monitor | `components/erp` · `lib/erp` | Bruno, 30-oct: «suelto» se confundía con «fuera de un pack» |
 | `Caja Z-0040` · `Código de la caja` · `Revisar` · `Verificado` (el arqueo de caja) | `Código del sobre` · `Abrir el sobre` · `Tiene que haber en el sobre` · `Llegó bien` · `Llegó con diferencia` | monitor | `components/erp/ventas/CajasErp.tsx` · `lib/erp/cajas.core.js` | Bruno, 30-oct: «Caja Z-0040» y «en vez de contado, verificado»; el sobre se REVISA billete por billete (el «Contado» de la cajera, en El efectivo, sigue) |
 | `En cartera` · `Depositado` · `Acreditado` · `Rechazado` (los estados del cheque recibido; `Anulado` si se cargó mal) | `Rebotado` · `Cobrado` | monitor | `components/erp/ventas/ChequesErp.tsx` · `lib/erp/cheque.core.js` | Bruno, 10-nov: «cuatro estados», la cartera completa (sesión cheques) |
-| `Nueva venta` · `Guardar venta` (la venta a mano del ERP, fuera de la Caja) | `Cargar venta` | monitor | `components/erp` · `lib/erp` | Bruno, 10-nov: «en vez de cargar venta sería nueva venta» |
+| `Nueva venta` · `Guardar venta` (la venta a mano del ERP, fuera de la Caja) | `Cargar venta` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Bruno, 10-nov: «en vez de cargar venta sería nueva venta» |
 | `Areben Gestión` (el sistema: «a Areben Gestión», «de Areben Gestión»; las direcciones `/erp/…`, el dominio, las tablas y los nombres del código siguen igual) | `ERP` | monitor | `components` · `app` · `lib` · `api` | Bruno, 14-nov-2026: ERP es la función, no el nombre (pedido de Ger del 8-nov) |
 | `Envío` (lo que PAGA el cliente, en el pedido) · `Transporte` · `Incluir el envío` (la casilla al facturar) · `Envío: sin factura` | `Costo de envío` (eso es lo que el envío NOS cuesta: Gastos) · `Facturar el envío` · `sin facturar a propósito` | monitor | `components/panel` | Bruno, 15-nov-2026: el envío dentro del pedido mayorista (pedido de Darío) |
 | `(opcional)` en el rótulo del campo que se puede dejar vacío (y la ayuda, en `hint`) | `(si lo tenés)` · `(si la tenés)` | monitor | `components` | Bruno, 15-nov-2026: «campo opcional», como el resto de las pantallas |
-| (nada: el estado se dice en palabras: «todavía no disponible», «modo de prueba de ARCA») | `motor` · `sesión A` · `espejo` · `homologación` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: jerga de la construcción, ⛔ en pantalla |
+| `Nota de crédito` · `Notas de crédito` (A o B) | `NC` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Bruno, 26-oct-2026: sin siglas en pantalla (fila del 15-nov: «NC» seguía en Facturación) |
+| (nada: el estado se dice en palabras: «todavía no disponible», «modo de prueba de ARCA») | `motor` · `sesión A` · `espejo` · `homologación` · `ambiente de prueba` · `este ambiente` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Bruno, 26-oct: jerga de la construcción, ⛔ en pantalla |
+
+🔑 **15-nov-2026 · raíces y prefijos** (Bruno: *«lo creo y no lo cuido»*). La frase exacta dejaba pasar las
+flexiones («Armándose», «fallados», «el medio») y las carpetas angostas dejaban vivos los errores de `api/`, el
+menú y la vista de Cajas. ⇒ una palabra con `*` es una RAÍZ (`arm*` = armar, armada, arman…) y una ruta con `*`
+es un PREFIJO (`api/_erp*`). **Una fila nueva nace con raíz y con `api/`**, ⛔ con la frase de hoy sola.
 
 ⚠️ **Las excepciones van en el test, con su motivo, y se vacían solas**: un nombre que viene de otro
 sistema y se muestra tal cual (la cuenta «Feria TC» de Gestión Nube) ⛔ es una palabra de la Caja. Si

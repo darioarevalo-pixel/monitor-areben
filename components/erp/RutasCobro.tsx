@@ -39,7 +39,7 @@ type Editando = { fila: FilaDeRuta; cuenta: string; tasa: string; dias: string; 
 
 const COLUMNAS: ColumnaLista[] = [
   { key: 'canal', titulo: 'Canal', ancho: '120px', movil: 'chico' },
-  { key: 'medio', titulo: 'Medio', ancho: '130px', movil: 'titulo' },
+  { key: 'medio', titulo: 'Forma de pago', ancho: '130px', movil: 'titulo' },
   { key: 'cuenta', titulo: 'Va a la cuenta', ancho: 'minmax(230px, 1.6fr)', movil: 'chico' },
   { key: 'factura', titulo: 'Se factura', ancho: '96px', movil: 'oculta' },
   { key: 'tasa', titulo: 'Comisión', ancho: '90px', derecha: true, movil: 'dato' },
@@ -50,7 +50,7 @@ const COLUMNAS_CAMBIOS: ColumnaLista[] = [
   { key: 'puesta', titulo: 'Cuándo', ancho: '104px', movil: 'chico' },
   { key: 'por', titulo: 'Quién', ancho: '130px', movil: 'oculta' },
   { key: 'canal', titulo: 'Canal', ancho: '120px', movil: 'chico' },
-  { key: 'medio', titulo: 'Medio', ancho: '130px', movil: 'titulo' },
+  { key: 'medio', titulo: 'Forma de pago', ancho: '130px', movil: 'titulo' },
   { key: 'cuenta', titulo: 'Va a la cuenta', ancho: 'minmax(230px, 1.6fr)', movil: 'chico' },
   { key: 'vale', titulo: 'Vale desde', ancho: '104px', movil: 'oculta' },
 ]
@@ -189,7 +189,7 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <TiraConfiguracion activa="rutas" ir={ir} />
       <p style={{ margin: 0, color: color.mut }}>
-        A qué cuenta va la plata de cada forma de pago. En el local se elige sólo el medio; el descuento sale de las reglas de ese medio.
+        A qué cuenta va la plata de cada forma de pago. En el local se elige sólo la forma de pago; el descuento sale de sus reglas.
         Un cambio vale desde ese momento: lo cobrado antes no se toca.
       </p>
       <Notice tone="neutral">
@@ -205,7 +205,7 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
         <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
           <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-            <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar una forma de pago" placeholder="Canal, medio o cuenta" />
+            <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar una forma de pago" placeholder="Canal, forma de pago o cuenta" />
           </div>
           {enCambios
             ? <ListaTrabajo columnas={COLUMNAS_CAMBIOS} filas={cambios} claveDe={(h) => h.id} celda={celdaCambio} etiquetaFila={(h) => `el cambio de ${NOMBRE_MEDIO[h.medio]} en ${nombreCanal(h.canal)}`} vacio={<div style={{ padding: space[6] }}><EmptyState title="Ningún cambio todavía." /></div>} />

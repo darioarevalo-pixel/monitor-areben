@@ -35,7 +35,7 @@ const tnIdDe = (v) => (v.origen === 'tn' ? String(v.origen_ref || '').split(':')
 
 /** «B 0005-00012351» como lo imprime ARCA; la de homologación dice «(prueba)». */
 export function numeroDeFactura(f) {
-  const letra = { 1: 'A', 6: 'B', 3: 'NC A', 8: 'NC B' }[f.tipo] ?? String(f.tipo)
+  const letra = { 1: 'A', 6: 'B', 3: 'Nota de crédito A', 8: 'Nota de crédito B' }[f.tipo] ?? String(f.tipo)
   const n = `${letra} ${String(f.pto_vta).padStart(4, '0')}-${String(f.numero ?? '').padStart(8, '0')}`
   return f.ambiente === 'produccion' ? n : `${n} (prueba)`
 }
@@ -65,7 +65,7 @@ async function deAfuera(sb, ventas) {
     }),
     enTandas(tnNumeros, async (t) => {
       const { data, error } = await sb.from('ventas').select('id, number, client_name, tn_order').in('tn_order', t)
-      if (error) throw new Error(`ventas (TN): ${error.message}`)
+      if (error) throw new Error(`ventas de Tienda Nube: ${error.message}`)
       return data
     }),
     enTandas(tnIds, async (t) => {
@@ -258,14 +258,14 @@ export async function queSabeElMotor() {
   }
 }
 
-export const ESPERA_AL_MOTOR = 'Todavía no está en el motor del monitor (contrato §16, sesión A): se prende cuando se publique.'
+export const ESPERA_AL_MOTOR = 'Todavía no está disponible: se prende cuando se publique.'
 
 const PG_DE_MARCA = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
 
 /** La conexión del motor de la marca (como `conMotor` de `api/_erp.js`): sin la variable, 409 dicho. */
 async function conPg(marca, fn) {
   const conexion = process.env[PG_DE_MARCA[marca]]
-  if (!conexion) return { status: 409, error: 'Falta la conexión del motor en Vercel.' }
+  if (!conexion) return { status: 409, error: 'Areben Gestión todavía no está conectado en este servidor.' }
   const { default: pg } = await import('pg')
   const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: 5000, statement_timeout: 15000 })
   try {
@@ -280,7 +280,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** El texto de un error del motor para la pantalla (el código va entre paréntesis para quien lo reporte). */
 // Lo que el motor rechaza por la ENTRADA (p. ej. «Cheque» sin sus datos) es 400, como lo que frena el handler antes; lo demás, 409.
-const errorDe = (e) => ({ status: e.codigo === 'NO_ENCONTRADA' ? 404 : e.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: `${e.mensaje || 'El motor no lo aceptó.'} (${e.codigo})` })
+const errorDe = (e) => ({ status: e.codigo === 'NO_ENCONTRADA' ? 404 : e.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: `${e.mensaje || 'Areben Gestión no lo aceptó.'} (${e.codigo})` })
 
 /** Editar lo que ⛔ mueve stock ni plata (contrato §16): cliente, vendedor, entrega, datos para facturar. */
 export async function editarVentaErp({ marca, body, usuario }, deps = {}) {
@@ -338,7 +338,7 @@ export async function corregirMedioErp({ marca, body, usuario }, deps = {}) {
   const motivo = String(body?.motivo ?? '').trim()
   if (!motivo) return { status: 400, error: 'Escribí el motivo.' }
   const medio = String(body?.medio ?? '').trim()
-  if (!medio) return { status: 400, error: 'Elegí el medio de cobro.' }
+  if (!medio) return { status: 400, error: 'Elegí la forma de pago.' }
   if (body?.pagoId != null && body.pagoId !== '' && !UUID.test(String(body.pagoId))) return { status: 400, error: 'Cobro inválido' }
   const m = deps.correccionMedio || await moduloDelMotor('correccion-medio')
   if (typeof m?.corregirMedioCobro !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }

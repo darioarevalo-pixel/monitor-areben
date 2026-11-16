@@ -110,8 +110,8 @@ describe('la ficha y las ventanas', () => {
       await montar()
       await clic(filaDe('#293').querySelectorAll('[role="cell"]')[3])
       const aside = document.querySelector('aside[aria-label="Ficha de la venta #293"]')!
-      expect(aside.textContent).toContain('Cobrado al entregarTransferencia · Ger')
-      expect(aside.textContent).toContain('falta verificar que entró')
+      expect(aside.textContent).toContain('ContraentregaTransferencia · Ger')
+      expect(aside.textContent).toContain('falta validar que entró')
     } finally { delete extra.cobroEnEntrega }
   })
 

@@ -68,7 +68,7 @@ describe('la lista de stock', () => {
     expect(boton(/^Sin stock en el Local/).textContent).toContain('1')
     expect(todo()).toContain('9 u') // disponible: 6 + 3
     expect(todo()).toMatch(/Negativos0ninguna/)
-    expect(todo()).toContain('1 apartadas por pedidos sin pagar')
+    expect(todo()).toContain('1 reservadas por pedidos sin pagar')
     expect(filaDe('TOP SAHARA').textContent).toContain('Venta · 19/10 10:25')
     await clic(boton(/^Sin stock en el Local/))
     expect(host.querySelector('[role="table"]')!.textContent).not.toContain('TOP SAHARA')

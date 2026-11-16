@@ -15,7 +15,7 @@
 import { LINEAS, baseDe, errorDe, leerAccion, textoDeAviso } from '../lib/erp/transferencia-doc.core.js'
 import { conFaltoArmar } from '../lib/erp/transferencias-doc.core.js'
 
-const SIN_TABLA = 'Las transferencias como documento todavía no están en la base del motor (migración 034).'
+const SIN_TABLA = 'Las transferencias como documento todavía no están disponibles: falta actualizar la base (034).'
 const motor = () => import('../motor/stock/transferencia.mjs')
 const conAvisos = (r) => (r.avisos || []).map((a) => ({ ...a, texto: textoDeAviso(a) }))
 

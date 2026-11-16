@@ -60,7 +60,7 @@ export async function cobrosDelPeriodo({ marca, linea, desde, hasta, prueba = fa
     const totales = {}
     for (const { id: linea, empresa_id } of lineas) {
       const r = await cobrosDe(pg, { empresa_id, marca: linea, desde, hasta, prueba })
-      if (!r.ok) return { status: r.error?.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: r.error?.mensaje ?? 'El motor no devolvió los cobros.' }
+      if (!r.ok) return { status: r.error?.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: r.error?.mensaje ?? 'Areben Gestión no devolvió los cobros.' }
       cobros.push(...r.cobros.map((c) => ({ ...c, linea })))
       totales[linea] = r.totales
       if (con032) contraentregas.push(...(await contraentregasAbiertas(pg, { empresa_id, marca: linea, prueba })).abiertas.map((a) => ({ ...a, linea })))
@@ -90,7 +90,7 @@ export async function reintentarEntregasErp({ marca, linea }, deps) {
   const { reintentarEntregas } = await import('../motor/tn/entrega.mjs')
   return deps.conMotor(marca, 'El reintento de las entregas', async (pg) => {
     const [{ hay }] = (await pg.query(`select to_regclass('public.entrega_cobro') is not null as hay`)).rows
-    if (!hay) return { status: 409, error: 'Las entregas de Logística todavía no están en la base del motor (migración 039).' }
+    if (!hay) return { status: 409, error: 'Las entregas de Logística todavía no están disponibles: falta actualizar la base (039).' }
     let revisadas = 0
     let registradas = 0
     /** @type {{ id: string, linea: string, motivo: string | null }[]} */

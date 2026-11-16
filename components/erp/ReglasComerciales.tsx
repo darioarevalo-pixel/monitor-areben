@@ -300,7 +300,7 @@ export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void
         <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
           <VistasLista vistas={VISTAS_REGLAS} valor={enVista} conteo={conteo} onCambio={setVista} />
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-            <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las reglas" placeholder="Regla, medio o campaña" />
+            <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las reglas" placeholder="Regla, forma de pago o campaña" />
           </div>
           {deAgenda && <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Las promos bancarias se cargan en la Agenda: acá sólo se ven.</div>}
           <ListaTrabajo
@@ -505,7 +505,7 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
   const nombreCampania = (id: string) => datos.campanias.find((c) => c.id === id)?.nombre ?? id
 
   return (
-    <SectionCard title="Simulador" subtitle="Armá una venta y mirá cuánto se cobra con cada forma de pago y qué regla lo decide. El precio de campaña lo pone el servidor.">
+    <SectionCard title="Simulador" subtitle="Probá una venta y mirá cuánto se cobra con cada forma de pago y qué regla lo decide. El precio de campaña lo pone el servidor.">
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <Field label="Buscar producto" hint="código o nombre"><Input value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && texto.trim()) void buscar() }} /></Field>
         <Button onClick={buscar} disabled={!texto.trim() || trabajando}>Buscar</Button>

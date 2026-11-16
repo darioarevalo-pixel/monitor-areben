@@ -518,7 +518,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   exhib: 'Recorrido con lector para verificar qué está colgado en el local.',
   'mapa-local': 'Qué va en cada perchero del salón y cuánto entra.',
   'ubicaciones-local': 'En qué estante del depósito de atrás del local está cada producto.',
-  caja: 'El turno de la caja del local: abrirlo con el fondo, contar los billetes y cerrarlo. Se cobra en el POS, con «Abrir POS».',
+  caja: 'La caja del local: abrirla con el fondo, contar los billetes y cerrarlo. Se cobra en el POS, con «Abrir POS».',
   erp: 'En construcción, sólo para administradores: lo que va a reemplazar a Gestión Nube. Facturación: el tope del mes, lo ya facturado y las ventas sin factura, que se facturan con ARCA.',
   'pagos-recibidos': 'Los pagos que entraron hoy a la cuenta de Mercado Pago del local. Se entrega la compra cuando el pago aparece acá, no por lo que muestra el teléfono de la clienta.',
   conteo: 'Conteo de fundas por escaneo, agrupado por modelo de celular. Cerrás un modelo y ajusta contra el stock vivo de GN.',

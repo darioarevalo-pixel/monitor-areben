@@ -199,7 +199,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <ChipEstado mapa={ESTADO} k={f.estadoKey} />
-          {f.entregadoSinCobrar && <span title="Tienda Nube lo cerró sin que se cobrara: ya no retiene stock" style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>entregado</span>}
+          {f.entregadoSinCobrar && <span title="Tienda Nube lo cerró sin que se cobrara: ya no reserva stock" style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>entregado</span>}
           {f.paraCancelar && <span title={`Entró hace ${f.dias} días y sigue sin pagar: hay que cancelarlo en Tienda Nube`} style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>para cancelar</span>}
           {viejo && !f.entregadoSinCobrar && !f.paraCancelar && <span title={`Entró hace ${f.dias} días y sigue sin pagar`} style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-warning-ink)', whiteSpace: 'nowrap' }}>{f.dias} días</span>}
         </span>

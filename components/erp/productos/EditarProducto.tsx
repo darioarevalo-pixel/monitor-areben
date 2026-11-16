@@ -54,7 +54,7 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
     if (nombre.trim() !== fila.nombre) cambios.nombre = nombre.trim()
     if ((vacioANull(categoria) ?? null) !== (fila.categoria ?? null)) cambios.categoria = vacioANull(categoria)
     if (!Object.keys(cambios).length) { onError('No cambiaste nada del producto.'); return }
-    if (cambios.nombre === '') { onError('El nombre no puede quedar vacía.'); return }
+    if (cambios.nombre === '') { onError('El nombre no puede quedar vacío.'); return }
     const filas: [string, string][] = []
     if ('nombre' in cambios) filas.push(['Nombre', `${fila.nombre} → ${cambios.nombre}`])
     if ('categoria' in cambios) filas.push(['Categoría', `${fila.categoria ?? 'Sin categoría'} → ${cambios.categoria ?? 'Sin categoría'}`])

@@ -33,7 +33,7 @@ export async function cortesDe(db) {
     const { rows } = await db.query(SQL_CORTES)
     return cortesDeFilas(rows)
   } catch (e) {
-    if (e && e.code === '42P01') throw new Error('Falta la tabla erp_corte (motor sql/063): no se sabe qué línea ya está en Areben Gestión.')
+    if (e && e.code === '42P01') throw new Error('Falta actualizar la base (063): no se sabe qué marca ya está en Areben Gestión.')
     throw e
   }
 }

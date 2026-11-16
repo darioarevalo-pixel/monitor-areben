@@ -113,7 +113,7 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
     if (k === 'para') return num(f.paraTienda, true)
     if (k === 'tn') return num(f.tn, true)
     if (k === 'gn') return <span style={{ color: f.gn != null && f.gn !== f.paraTienda ? 'var(--mo-warning-ink)' : color.mut }}>{f.gn ?? '—'}</span>
-    if (k === 'ped') return f.enPedidos ? <span style={{ color: 'var(--mo-warning-ink)' }} title="Apartadas por pedidos de Tienda Nube sin pagar">{f.enPedidos}</span> : <span style={{ color: color.mut2 }}>—</span>
+    if (k === 'ped') return f.enPedidos ? <span style={{ color: 'var(--mo-warning-ink)' }} title="Reservadas por pedidos de Tienda Nube sin pagar">{f.enPedidos}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'dif') {
       if (!f.diferencia) return <span style={{ color: color.mut2 }}>—</span>
       return <span style={{ fontWeight: 700, color: f.diferencia > 0 ? 'var(--mo-danger-ink)' : 'var(--mo-warning-ink)' }} title={f.diferencia > 0 ? 'La tienda muestra de más: se puede vender sin tenerlo' : 'La tienda muestra de menos: se deja de vender'}>{f.diferencia > 0 ? `+${f.diferencia}` : f.diferencia}</span>
@@ -128,7 +128,7 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
   const tnLeida = leidas.length ? cuandoCorto(leidas.map(([, l]) => l).sort()[0]) : '—'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Por variante: lo que la tienda tendría que mostrar según Areben Gestión (sus depósitos, menos lo apartado por pedidos sin pagar) contra lo que muestra. Arranca con las que no coinciden.</p>
+      <p style={{ margin: 0, color: color.mut }}>Por variante: lo que la tienda tendría que mostrar según Areben Gestión (sus depósitos, menos lo reservado por pedidos sin pagar) contra lo que muestra. Arranca con las que no coinciden.</p>
       {sinGn
         ? <Notice tone="neutral">{TIENDA[tiendaEnvio]} ya vive en Areben Gestión: el stock de la tienda lo manda Areben Gestión. Si no coinciden, el arreglo es <b>enviar el stock de Areben Gestión</b> a la tienda (abajo).</Notice>
         : <Notice tone="warning">Hasta el corte de cada tienda, su stock lo manda <b>Gestión Nube</b>: si Gestión Nube y la tienda coinciden y Areben Gestión no, lo que hay que mirar es Areben Gestión. Después del corte, el arreglo es <b>enviar el stock de Areben Gestión</b> a la tienda (abajo).</Notice>}

@@ -288,7 +288,7 @@ describe('el servidor: lo que ⛔ está en el motor se frena con el motivo', () 
   })
   it('los textos: el número de factura y lo editado', () => {
     expect(numeroDeFactura({ tipo: 6, pto_vta: 5, numero: 12351, ambiente: 'produccion' })).toBe('B 0005-00012351')
-    expect(numeroDeFactura({ tipo: 8, pto_vta: 2, numero: 3, ambiente: 'homologacion' })).toBe('NC B 0002-00000003 (prueba)')
+    expect(numeroDeFactura({ tipo: 8, pto_vta: 2, numero: 3, ambiente: 'homologacion' })).toBe('Nota de crédito B 0002-00000003 (prueba)')
     expect(textoDeCampo('entrega', { tipo: 'envio', direccion: 'Mitre 123' })).toBe('Envío · Mitre 123')
     expect(textoDeCampo('cliente', null)).toBe('—')
   })

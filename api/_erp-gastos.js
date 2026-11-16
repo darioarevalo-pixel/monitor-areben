@@ -20,7 +20,7 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/
 const TIPOS = ['comision', 'impuesto', 'otro', 'plataforma', 'envio']
 const cero = () => ({ comision: 0, impuesto: 0, otro: 0, plataforma: 0, envio: 0 })
 const pesos = (x) => Math.round(x * 100) / 100
-const errorDe = (r) => ({ status: r.error?.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: r.error?.mensaje ?? 'El motor no lo aceptó.' })
+const errorDe = (r) => ({ status: r.error?.codigo === 'ENTRADA_INVALIDA' ? 400 : 409, error: r.error?.mensaje ?? 'Areben Gestión no lo aceptó.' })
 
 /**
  * @param {{ marca: string, linea?: string, desde: string, hasta: string, prueba?: boolean }} p

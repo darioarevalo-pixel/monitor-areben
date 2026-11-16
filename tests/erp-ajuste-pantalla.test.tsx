@@ -169,7 +169,7 @@ describe('Ingresos y ajustes', () => {
     expect(aprobarAjuste).toHaveBeenCalledWith('zattia', pendiente.id)
     await click(boton('Descartar'))
     expect(boton('Descartar A-7').disabled).toBe(true)
-    escribir(host.querySelector('input[placeholder="Ej.: se cargó otro variante"]') as HTMLInputElement, 'otro variante')
+    escribir(host.querySelector('input[placeholder="Ej.: se cargó otra variante"]') as HTMLInputElement, 'otro variante')
     await act(async () => {})
     await click(boton('Descartar A-7'))
     expect(descartarAjuste).toHaveBeenCalledWith('zattia', pendiente.id, 'otro variante')

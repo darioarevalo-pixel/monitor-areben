@@ -224,7 +224,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      {!enTarea && <SectionCard title="Ingresos y ajustes" subtitle="Lo que ingresa o sale del stock fuera de una venta: fallados, canjes, regalos, lo que apareció. Nada se borra: un ajuste equivocado se arregla con otro.">
+      {!enTarea && <SectionCard title="Ingresos y ajustes" subtitle="Lo que ingresa o sale del stock fuera de una venta: productos con falla, canjes, regalos, lo que apareció. Nada se borra: un ajuste equivocado se arregla con otro.">
         <div style={{ display: 'flex', gap: space[3], alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <span />
           {ajusta && datos && !borrador && <Button onClick={() => setBorrador({ deposito: DEPOSITOS[base][0], sentido: null, motivo: '', detalle: '', renglones: [] })}>Nuevo ajuste</Button>}
@@ -355,7 +355,7 @@ export function AjustesStock({ pedida = null, alContar, enErp = false }: { pedid
               {descartando?.id === a.id ? (
                 <>
                   <Field label="Por qué se descarta">
-                    <Input value={descartando.motivo} onChange={(e) => setDescartando({ id: a.id, motivo: e.target.value })} placeholder="Ej.: se cargó otro variante" />
+                    <Input value={descartando.motivo} onChange={(e) => setDescartando({ id: a.id, motivo: e.target.value })} placeholder="Ej.: se cargó otra variante" />
                   </Field>
                   <Button size="sm" variant="outline" tone="danger" disabled={trabajando || descartando.motivo.trim().length < 3} onClick={() => resolver(a, false)}>Descartar A-{a.numero}</Button>
                 </>

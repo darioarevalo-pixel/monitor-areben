@@ -75,7 +75,7 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
   })
 
   const menu: AccionMenu[] = [
-    { key: 'repo', label: 'Transferir en el monitor ↗', icono: 'abrir', onClick: () => window.open('/reposicion', '_blank', 'noopener'), hint: 'Las transferencias se arman y se reciben escaneando en Reposición.' },
+    { key: 'repo', label: 'Transferir en el monitor ↗', icono: 'abrir', onClick: () => window.open('/reposicion', '_blank', 'noopener'), hint: 'Las transferencias se preparan y se reciben escaneando en Reposición.' },
     { key: 'etiq', label: 'Etiquetas en el monitor ↗', icono: 'abrir', onClick: () => window.open('/etiquetas', '_blank', 'noopener') },
   ]
   const h3: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
