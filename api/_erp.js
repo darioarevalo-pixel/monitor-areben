@@ -35,7 +35,7 @@
  *   POST { accion: 'anotar-whatsapp' | 'sacar-whatsapp', … }           las personas que compran por la empresa (panel)
  *   GET  ?vista=clientes-panel&q=… · POST { accion: 'cliente-nuevo-panel' }   «¿Es de un cliente que ya tenés?» / «Es nuevo»
  *   GET  ?vista=pedidos-panel&cliente=…&tel=… · pedido-panel&id=… · pedido-productos&id=…&q=… · preparados-sin-pagar · pedidos-sin-cliente   el pedido mayorista en el panel
- *   POST { accion: 'pedido-entrar' | 'pedido-cambiar' | 'pedido-a-preparar' | 'pedido-anular', pedidoId, … }  (VENTA_MAYORISTA_REAL)
+ *   POST { accion: 'pedido-entrar' | 'pedido-cambiar' | 'pedido-a-preparar' | 'pedido-anular' | 'pedido-envio', pedidoId, … }  (VENTA_MAYORISTA_REAL)
  *   POST { accion: 'poner-credito', marca, clienteId, credito, tope?, dias? }   marcar o sacar el crédito (sólo admin)
  *   POST { accion: 'poner-contacto', marca, clienteId, whatsapp?, email? }       cargar o corregir el contacto (sólo admin)
  *   GET  ?recurso=erp&vista=inicio-resultado&marca=bdi|zattia[&mes=AAAA-MM]   Inicio: vendido, costo y margen del mes, o de uno de antes (`api/_erp-inicio.js`)
@@ -115,7 +115,7 @@ import { configPg } from '../lib/pg.core.js'
 import { armarFicha, cambiadasDe, devolucionDeFicha, cobroDelCambio, diferenciaDeCambio, diferenciaDeCambioSuelto, filaDeVenta, leerAnular, leerBusqueda, leerCambiar, listaEnGN, rangoDeDias, textoDelMotor } from '../lib/erp/venta.core.js'
 import { marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { anotarAnuladaDelErp } from '../lib/caja/anulada-erp.core.js'
-import { NC_DESDE_LA_VENTA, armarFacturaDelCambio, claveDeFactura, esDeVentaPropia, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
+import { NC_DESDE_LA_VENTA, envioDeVenta, totalAFacturar, armarFacturaDelCambio, claveDeFactura, esDeVentaPropia, clavesDeFactura, distintaDeLaPedida, leerFacturar, mesDeVenta, opcionDeCondicion, puedeFacturar, puedeFacturarCambio, puedeHacerNC, renglonesDeVenta } from '../lib/erp/factura.core.js'
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { feriaDeCampanias, reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
 import { cortesDeCaja } from './_caja-corte.js'
@@ -529,8 +529,8 @@ async function nombresDeVariantes(b, productos) {
 }
 
 /** Número y renglones de las ventas PROPIAS facturadas (por su uuid), de `venta_ficha`. */
-async function renglonesPropios(b, marca, ids, { numeros, detalles, lineas }) {
-  const fichas = await leerTodo(b, 'venta_ficha', (q) => q.select('id, marca, numero, tipo, total, lineas, detalle').in('id', ids))
+async function renglonesPropios(b, marca, ids, { numeros, detalles, lineas, facturado = new Map() }) {
+  const fichas = await leerTodo(b, 'venta_ficha', (q) => q.select('id, marca, numero, tipo, origen, total, lineas, detalle').in('id', ids))
   const nombres = await nombresDeVariantes(b, fichas.flatMap((f) => (f.lineas || []).map((l) => l.product_id)))
   for (const f of fichas) {
     numeros.set(claveVenta(marca, f.id), String(f.detalle?.gn_number ?? f.numero))
@@ -538,7 +538,10 @@ async function renglonesPropios(b, marca, ids, { numeros, detalles, lineas }) {
     // Un CAMBIO tiene DOS comprobantes con su clave (la NC de lo devuelto y la factura de lo nuevo): sus líneas ⛔ suman
     // ninguno de los dos ⇒ sin detalle, el PDF lleva un renglón por el total de cada uno.
     if (f.tipo === 'cambio') continue
-    detalles.set(claveVenta(marca, f.id), renglonesDeVenta(f, nombres))
+    // El pedido facturado SIN el envío (Bruno 15-nov): la factura es por menos que la venta ⇒ sus renglones, sin el envío.
+    const fac = facturado.get(String(f.id))
+    const sinEnvio = !!envioDeVenta(f) && fac != null && Math.round(fac * 100) < Math.round(Number(f.total) * 100)
+    detalles.set(claveVenta(marca, f.id), renglonesDeVenta(f, nombres, { sinEnvio }))
   }
 }
 
@@ -580,7 +583,8 @@ export async function facturasDelMes(mes) {
     const ids = todas.filter((id) => /^\d+$/.test(id))
     // Las de mayoristas por PARTE o LIBRES (`venta:parte:…`, `libre:…`) traen sus renglones en la fila (`renglonesGuardados`).
     const propias = todas.filter((id) => !/^\d+$/.test(id) && !id.includes(':'))
-    if (propias.length) await renglonesPropios(b, marca, propias, { numeros, detalles, lineas })
+    const facturado = new Map(facturas.filter((f) => f.marca === marca && [CBTE.FACTURA_A, CBTE.FACTURA_B].includes(Number(f.tipo))).map((f) => [String(f.venta_id), Number(f.total)]))
+    if (propias.length) await renglonesPropios(b, marca, propias, { numeros, detalles, lineas, facturado })
     // La línea de cada factura (30-oct): la de su venta. Las de GN por sus renglones; las propias, `venta_ficha.marca`.
     if (marca === 'zattia') for (const [id, l] of await lineasDeVentasGN(b, ids)) lineas.set(claveVenta(marca, id), l)
     for (let i = 0; i < ids.length; i += 300) {
@@ -1124,7 +1128,7 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
       const hoy = diaArgentino(Date.now())
       const r = await facturarLote({
         arca, repo, ambiente, marca, ptoVta, tipo: p.tipo,
-        comprobantes: [{ ventaId: clave, mes: mesDeVenta(f.ocurrida_en), tipo: p.tipo, fecha: hoy, total: Number(f.total), receptor: p.receptor }],
+        comprobantes: [{ ventaId: clave, mes: mesDeVenta(f.ocurrida_en), tipo: p.tipo, fecha: hoy, total: totalAFacturar(f, { sinEnvio: !!deps.sinEnvio }), receptor: p.receptor }],
         reglas: { umbralIdentificar: UMBRAL_IDENTIFICAR, hoy },
         lote: globalThis.crypto.randomUUID(), usuario,
       })
@@ -1143,7 +1147,9 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
       ? await guardarFichaA(db, { venta: f, doc: p.receptor.docNro, condicionIva: p.receptor.condicionIva, ...p.cliente })
       : { receptor: await receptorDeFicha(db, { empresaId: f.empresa_id, factura }), sinFicha: null }
     const nombres = await nombresDeVariantes(b, (f.lineas || []).map((l) => l.product_id))
-    return { ok: true, yaEstaba: !!ya, sinAtar, sinFicha, factura: filaParaPdf(factura, { numero: f.detalle?.gn_number ?? f.numero, renglones: renglonesDeVenta(f, nombres), receptor }) }
+    // Los renglones salen de lo que se FACTURÓ (una ya hecha sin el envío se reimprime sin él).
+    const sinEnvio = !!envioDeVenta(f) && Math.round(Number(factura.total) * 100) < Math.round(Number(f.total) * 100)
+    return { ok: true, yaEstaba: !!ya, sinAtar, sinFicha, factura: filaParaPdf(factura, { numero: f.detalle?.gn_number ?? f.numero, renglones: renglonesDeVenta(f, nombres, { sinEnvio }), receptor }) }
   })
 }
 

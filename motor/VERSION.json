@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "381687398da5cd7680bd76b9d3d67515bb155012",
-  "traido_en": "2026-11-16T00:54:05.722Z",
+  "commit": "e0414192fd52ab7a0940bcf7424c7769b038d6c4",
+  "traido_en": "2026-11-16T01:28:34.967Z",
   "archivos": {
     "alerta.mjs": "8c4ea3f813cdd8d8644e9ed0a426d7c6202618971249eca0b41f780e40d904f6",
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
@@ -39,7 +39,7 @@
     "ml/orden.mjs": "d326aa82f21fefded84824dd0f64a40e217a614a18f1408163c95a8005585f39",
     "ml/stock.mjs": "909e7e0316030c267113776018f8de2f2afc73d394c983d513ad9d7419c0385f",
     "ml/venta.mjs": "6fea98481c82b9c071234780931a2ddab379f4677b3ac25a9bdaf6262fce1a9f",
-    "pedido/venta.mjs": "5d414edac256a6cefffb12a7afd66f9538349a39edd61851f63e6dfe42fd2cea",
+    "pedido/venta.mjs": "6642f24154f907a3b6d7a7200c3a9324295fc5e81cb076808301ceb5c1ad96c6",
     "stock/ajuste.mjs": "2a6d7a017fe41a8043d228321ba00e1c15ec83071b10925dcffbe3ddb8d637c1",
     "stock/deposito.mjs": "1e0d9b5cc483f673264d072d8a1c866709347b8cd604b1745a056a86efce8b25",
     "stock/interruptores.mjs": "aa08ed1ff19812949617eddd01af87c08d907434256ea84258368173e715bb58",

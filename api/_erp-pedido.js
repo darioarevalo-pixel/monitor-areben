@@ -161,12 +161,15 @@ export async function productosParaElPanel({ pedidoId = '', q = '', usuario = nu
 const statusDe = (codigo) => (codigo === 'NO_ENCONTRADO' ? 404
   : ['ANULADO', 'EN_PREPARACION', 'SIN_ENTRAR', 'FALTA_CLIENTE', 'TIENE_PAGOS', 'SIN_PRECIO', 'SIN_TALLE', 'SIN_RENGLONES', 'CAMBIO_DE_LLAVE', 'SIN_CUENTA_CORRIENTE', 'CONFLICTO_IDEMPOTENCIA'].includes(codigo) ? 409 : 400)
 
-export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-preparar', 'pedido-anular']
+export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-preparar', 'pedido-anular', 'pedido-envio']
 
 /**
- * Entrar al ERP, cambiar, mandar a preparar y anular. Doble llave: el panel Y `VENTA_MAYORISTA_REAL`.
+ * Entrar al ERP, cambiar, mandar a preparar, anular y poner el ENVÍO. Doble llave: el panel Y `VENTA_MAYORISTA_REAL`.
+ * `pedido-envio` (Darío 15-nov, sql/084): `{ pedidoId, envio, transporte? }` — el envío que paga el cliente en origen (EM) se suma al
+ * total; `envio` vacío o 0 lo saca. 🔴 Con el pedido FACTURADO (entera o alguna parte) ⛔: cambiaría el total de una venta ya
+ * facturada. Eso lo ve esta puerta (las facturas viven en `facturas`, ⛔ en el motor).
  * @param {{ accion: string, body: any, usuario: string|null, quien?: any }} p
- * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, puedeAnular?: boolean }} deps
+ * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, puedeAnular?: boolean, facturacion?: (ventaId: string, total: number) => Promise<{ entera: any, partes: number }|null> }} deps
  */
 export async function accionDePedido({ accion, body, usuario, quien = usuario }, deps) {
   if (!ACCIONES_PEDIDO.includes(accion)) return { status: 400, error: 'Acción desconocida' }
@@ -189,6 +192,22 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
     } else if (accion === 'pedido-cambiar') {
       if (!Array.isArray(body.lineas)) return { status: 400, error: 'Faltan los renglones' }
       r = await pv.cambiarPedidoMayorista(pg, { pedido_id, lineas: body.lineas.map((l) => ({ product_id: Number(l?.productId), size_id: Number(l?.sizeId), cantidad: Number(l?.cantidad) })), usuario })
+    } else if (accion === 'pedido-envio') {
+      const crudo = body.envio == null || String(body.envio).trim() === '' ? null : Number(body.envio)
+      if (crudo != null && (!Number.isFinite(crudo) || crudo < 0)) return { status: 400, error: 'El envío es un monto en pesos' }
+      const ficha = await pv.fichaDePedidoMayorista(pg, { pedido_id })
+      if (ficha.ok && ficha.pedido.venta_id) {
+        const leer = deps.facturacion || (async (ventaId, total) => {
+          const { facturacionDeVenta } = await import('./_erp-factura-mayorista.js')
+          const { ambienteSeguro } = await import('./_erp.js')
+          const { baseFacturacion } = await import('./_facturacion.js')
+          const { ambiente } = ambienteSeguro()
+          return ambiente ? facturacionDeVenta(baseFacturacion(), { ambiente, ventaId, total }) : null
+        })
+        const fac = await leer(String(ficha.pedido.venta_id), Number(ficha.pedido.total))
+        if (fac?.entera || fac?.partes > 0) return { status: 409, error: 'El pedido ya tiene factura: el envío no se cambia.' }
+      }
+      r = await pv.ponerEnvioPedido(pg, { pedido_id, envio: crudo, transporte: body.transporte == null ? null : String(body.transporte), usuario })
     } else if (accion === 'pedido-a-preparar') {
       r = await pv.mandarAPreparar(pg, { pedido_id, usuario })
     } else {

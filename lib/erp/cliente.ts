@@ -809,7 +809,7 @@ export const enviarFacturaPanel = (p: { clienteId: string; facturaId: string; pa
 export const facturaLibrePanel = (p: { clienteId: string; renglones: Array<{ descripcion: string; cantidad: number; unitario: number }>; doc?: string; condicion?: string; razonSocial?: string; domicilio?: string }) =>
   pedir<{ ok: true; factura: FacturaDelPanel }>(post({ accion: 'factura-libre-panel', marca: 'bdi', ...p }), '', 'No se pudo hacer la factura.')
 /** «Facturar» desde la hoja del pedido: la factura ENTERA de su venta, a la ficha del pedido. 409 con `falta` ⇒ pedir los datos fiscales. */
-export const facturarPedidoPanel = (p: { pedidoId: string; doc?: string; condicion?: string; razonSocial?: string; domicilio?: string }) =>
+export const facturarPedidoPanel = (p: { pedidoId: string; /** «Incluir el envío» (Bruno 15-nov): `false` factura sin él. */ incluirEnvio?: boolean; doc?: string; condicion?: string; razonSocial?: string; domicilio?: string }) =>
   pedir<{ ok: true; yaEstaba: boolean; factura: FacturaDelPanel }>(post({ accion: 'facturar-pedido-panel', marca: 'bdi', ...p }), '', 'No se pudo hacer la factura.')
 /** Un renglón de una PARTE: `clave` = la variante de la venta (con ella se descuenta de lo que queda); sin clave, escrito a mano. */
 export type RenglonParte = { clave?: string | null; descripcion: string; cantidad: number; unitario: number; importe?: number }
@@ -842,7 +842,7 @@ export type RenglonPedido = { product_id: number; size_id: number | null; cantid
 export type CambioPedido = { motivo: string; antes: unknown; despues: unknown; usuario: string | null; cuando: string }
 export type FichaPedido = {
   prendido: true; escribir: boolean
-  pedido: PedidoDelCliente & { editable: boolean; cliente_id: string | null; /** En la ficha general «Pedido mayorista»: ⛔ va a preparar. */ falta_cliente?: boolean; contacto?: { nombre?: string | null; telefono?: string | null } | null; persona: { id: string; nombre: string | null; whatsapp: string; activo: boolean } | null; a_preparar_por: string | null }
+  pedido: PedidoDelCliente & { editable: boolean; cliente_id: string | null; /** El envío que paga el cliente en origen (sql/084): va dentro de `total`. */ envio?: number | null; transporte?: string | null; /** En la ficha general «Pedido mayorista»: ⛔ va a preparar. */ falta_cliente?: boolean; contacto?: { nombre?: string | null; telefono?: string | null } | null; persona: { id: string; nombre: string | null; whatsapp: string; activo: boolean } | null; a_preparar_por: string | null }
   lineas: RenglonPedido[]; cambios: CambioPedido[]
   /** En qué quedó la facturación de su venta (sin venta, `undefined`; si la base de facturas ⛔ contestó, `null`). */
   facturacion?: FacturacionPedido | null
@@ -875,6 +875,9 @@ export const cambiarPedidoPanel = (pedidoId: string, lineas: Array<{ productId: 
   pedir<RespuestaPedido>(post({ accion: 'pedido-cambiar', marca: 'bdi', pedidoId, lineas }), '', 'No se pudo guardar el cambio.')
 export const mandarAPrepararPanel = (pedidoId: string) =>
   pedir<RespuestaPedido>(post({ accion: 'pedido-a-preparar', marca: 'bdi', pedidoId }), '', 'No se pudo mandar a preparar.')
+/** El envío del pedido (Darío 15-nov): lo que paga el cliente en origen (EM) se suma al total. `envio` null o 0 lo saca. */
+export const ponerEnvioPedidoPanel = (pedidoId: string, envio: number | null, transporte?: string | null) =>
+  pedir<RespuestaPedido>(post({ accion: 'pedido-envio', marca: 'bdi', pedidoId, envio, transporte: transporte ?? null }), '', 'No se pudo guardar el envío.')
 export const anularPedidoPanel = (pedidoId: string, motivo: string) =>
   pedir<RespuestaPedido>(post({ accion: 'pedido-anular', marca: 'bdi', pedidoId, motivo }), '', 'No se pudo anular el pedido.')
 /** Cargar o corregir el WhatsApp / mail de un cliente (sólo admin). El motor valida el número; ⛔ borra un dato que no mandás. */

@@ -169,7 +169,8 @@ export async function conFacturacion(r, deps = {}) {
  * que la Caja (`facturarVentaPropia`: candado, «ya tiene factura», frena con partes), con el receptor de la ficha y la fila
  * marcada `clase: 'venta'` + `cliente_id` (así sale en «Facturas» de la tarjeta y se manda por mail). Sin datos fiscales se
  * piden en el mismo paso y se guardan en la MISMA ficha (`ponerFiscalCliente`).
- * `body`: `{ pedidoId, doc?, condicion?, razonSocial?, domicilio? }`.
+ * `body`: `{ pedidoId, incluirEnvio?, doc?, condicion?, razonSocial?, domicilio? }`. 🔑 Con envío en el pedido (sql/084 del motor),
+ * `incluirEnvio: false` (casilla «Incluir el envío» destildada, Bruno 15-nov) factura el total SIN el envío; por defecto va.
  * @param {{ body: any, usuario: string|null, quien?: any }} p
  * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, arca?: any, repo?: any, sb?: any, b?: any, leerPedido?: Function, buscarFactura?: Function, tienePartes?: Function }} deps
  */
@@ -200,6 +201,7 @@ export async function facturarPedidoPanel({ body, usuario, quien = usuario }, de
     const ventaId = String(p.venta_id)
     const repo = deps.repo || repoFacturas(sb)
     const hecha = await facturarVentaPropia({ marca: 'bdi', body: { ventaId }, usuario }, {
+      sinEnvio: body?.incluirEnvio === false && Number(p.envio) > 0,
       db: pg, sb, arca: deps.arca, b: deps.b, buscarFactura: deps.buscarFactura, tienePartes: deps.tienePartes,
       repo: { ...repo, reservar: (filas) => repo.reservar(filas.map((f) => ({ ...f, clase: 'venta', cliente_id: ficha.id }))) },
       pedida: { ventaId, tipo: rec.tipo, receptor: rec.receptor },

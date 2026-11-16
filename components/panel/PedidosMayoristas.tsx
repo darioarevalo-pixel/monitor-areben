@@ -346,6 +346,12 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
             <span>Total{cambiado ? ' (se recalcula al guardar)' : ''}</span><b>{plata(p.total)}</b>
           </div>
+          {p.envio != null && p.envio > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.sm, color: color.mut2 }}>
+              <span>Envío{p.transporte ? ` (${p.transporte})` : ''}{ficha.facturacion?.entera && ficha.facturacion.entera.total < p.total ? ': sin factura' : ''}</span>
+              <span>{plata(p.envio)}</span>
+            </div>
+          )}
           {p.venta_id && ficha.facturacion && (ficha.facturacion.entera ? (
             <div style={{ fontSize: font.sm, color: color.successInk }}>
               Facturado ✓ · {LETRA[ficha.facturacion.entera.tipo] ?? ''} {numeroComprobante(ficha.facturacion.entera)}
@@ -382,7 +388,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
         </div>
       )}
       {facturando && p?.cliente_id && (
-        <FacturarPedido pedidoId={pedidoId} clienteId={p.cliente_id} total={p.total} preparado={p.etapa === 'preparado' || p.etapa === 'despachado'}
+        <FacturarPedido pedidoId={pedidoId} clienteId={p.cliente_id} total={p.total} envio={p.envio ?? null} preparado={p.etapa === 'preparado' || p.etapa === 'despachado'}
           onCerrar={() => setFacturando(false)}
           onHecha={async (f, yaEstaba) => {
             setFacturando(false)

@@ -247,8 +247,8 @@ function CamposFiscales({ fiscal, f }: { fiscal: FiscalDelPanel; f: ReturnType<t
  * «Facturar» desde la HOJA DEL PEDIDO (Darío §5): la factura ENTERA de su venta, por el total del pedido como está ahora,
  * a la ficha del pedido. Si faltan datos fiscales se piden acá mismo. Al salir, baja el PDF.
  */
-export function FacturarPedido({ pedidoId, clienteId, total, preparado, onCerrar, onHecha }: {
-  pedidoId: string; clienteId: string; total: number; preparado: boolean; onCerrar: () => void; onHecha: (f: FacturaDelPanel, yaEstaba: boolean) => void | Promise<void>
+export function FacturarPedido({ pedidoId, clienteId, total, envio = null, preparado, onCerrar, onHecha }: {
+  pedidoId: string; /** El envío del pedido (sql/084), dentro de `total`. */ envio?: number | null; clienteId: string; total: number; preparado: boolean; onCerrar: () => void; onHecha: (f: FacturaDelPanel, yaEstaba: boolean) => void | Promise<void>
 }) {
   const [fiscal, setFiscal] = useState<FiscalDelPanel | null>(null)
   const [error, setError] = useState('')
@@ -263,21 +263,25 @@ export function FacturarPedido({ pedidoId, clienteId, total, preparado, onCerrar
     <Modal abierto onCerrar={onCerrar} titulo="Facturar el pedido" pie={!fiscal ? <Button variant="outline" onClick={onCerrar}>Cancelar</Button> : undefined}>
       {!fiscal && !error && <div style={{ fontSize: font.sm, color: color.mut2 }}>Cargando…</div>}
       {!fiscal && error && <Notice tone="danger">{error}</Notice>}
-      {fiscal && <FormFacturarPedido pedidoId={pedidoId} fiscal={fiscal} total={total} preparado={preparado} onCerrar={onCerrar} onHecha={onHecha} />}
+      {fiscal && <FormFacturarPedido pedidoId={pedidoId} fiscal={fiscal} total={total} envio={envio} preparado={preparado} onCerrar={onCerrar} onHecha={onHecha} />}
     </Modal>
   )
 }
 
-function FormFacturarPedido({ pedidoId, fiscal, total, preparado, onCerrar, onHecha }: {
-  pedidoId: string; fiscal: FiscalDelPanel; total: number; preparado: boolean; onCerrar: () => void; onHecha: (f: FacturaDelPanel, yaEstaba: boolean) => void | Promise<void>
+function FormFacturarPedido({ pedidoId, fiscal, total, envio = null, preparado, onCerrar, onHecha }: {
+  pedidoId: string; fiscal: FiscalDelPanel; total: number; envio?: number | null; preparado: boolean; onCerrar: () => void; onHecha: (f: FacturaDelPanel, yaEstaba: boolean) => void | Promise<void>
 }) {
   const fis = useDatosFiscales(fiscal)
   const [error, setError] = useState('')
   const [enviando, setEnviando] = useState(false)
+  // «Incluir el envío» (Bruno 15-nov): tildada de entrada; destildada, la factura sale por el total sin el envío.
+  const conEnvio = envio != null && envio > 0
+  const [incluirEnvio, setIncluirEnvio] = useState(true)
+  const aFacturar = conEnvio && !incluirEnvio ? Math.round((total - envio) * 100) / 100 : total
   async function hacer() {
     setEnviando(true); setError('')
     try {
-      const r = await facturarPedidoPanel({ pedidoId, ...fis.cuerpo() })
+      const r = await facturarPedidoPanel({ pedidoId, ...(conEnvio ? { incluirEnvio } : {}), ...fis.cuerpo() })
       await onHecha(r.factura, r.yaEstaba)
     } catch (e) {
       if ((e as { datos?: { falta?: boolean } }).datos?.falta) fis.setPedirDatos(true)
@@ -287,12 +291,18 @@ function FormFacturarPedido({ pedidoId, fiscal, total, preparado, onCerrar, onHe
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ fontSize: font.md, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>Total del pedido {plata(total)}</div>
+      {conEnvio && (
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: font.sm }}>
+          <input type="checkbox" checked={incluirEnvio} onChange={(e) => setIncluirEnvio(e.target.checked)} />
+          Incluir el envío ({plata(envio)})
+        </label>
+      )}
       {!preparado && <Notice tone="info">El pedido todavía no está preparado. Si en el depósito falta algo, primero se corrige el pedido y después se factura.</Notice>}
       <CamposFiscales fiscal={fiscal} f={fis} />
       {error && <Notice tone="danger">{error}</Notice>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-        <Button tone="brand" onClick={hacer} disabled={enviando || !(total > 0)}>{enviando ? 'Pidiendo el CAE…' : `Facturar ${plata(total)}`}</Button>
+        <Button tone="brand" onClick={hacer} disabled={enviando || !(aFacturar > 0)}>{enviando ? 'Pidiendo el CAE…' : `Facturar ${plata(aFacturar)}`}</Button>
       </div>
     </div>
   )
