@@ -59,7 +59,7 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
 
   it('sin la sql/064 en la base: vacío, ⛔ rompe el panel', async () => {
     const r = await pedidosDelPanel({ clienteId: C }, { conMotor: conMotor(base({ 'information_schema.columns': [{ hay: false }] })), prendido: true, escribir: true })
-    expect(r).toEqual({ prendido: true, escribir: false, pedidos: [], sinEntrar: [], falta064: true })
+    expect(r).toEqual({ prendido: true, escribir: false, pedidos: [], sinEntrar: [], deGn: [], falta064: true })
     expect(pv.pedidosMayoristasDe).not.toHaveBeenCalled()
   })
 
@@ -70,8 +70,36 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
       { id: 'y', numero: '8', recibido_en: '2026-10-29', total: '500', unidades: '1', contacto: { telefono: '351 999 9999' } },
     ] })
     const r = await pedidosDelPanel({ clienteId: C, tel: '5493411234567' }, { conMotor: conMotor(db), prendido: true, escribir: false })
-    expect(r).toEqual({ prendido: true, escribir: false, pedidos: [{ id: 'a', numero: 3 }], sinEntrar: [{ id: 'x', numero: 9, recibido_en: '2026-10-30', total: 1000, unidades: 2, nombre: 'Rodrigo' }] })
+    expect(r).toEqual({ prendido: true, escribir: false, pedidos: [{ id: 'a', numero: 3 }], sinEntrar: [{ id: 'x', numero: 9, recibido_en: '2026-10-30', total: 1000, unidades: 2, nombre: 'Rodrigo' }], deGn: [] })
     expect(pv.pedidosMayoristasDe.mock.calls[0][1]).toEqual({ cliente_id: C, limite: 30 })
+  })
+
+  it('los VENDIDOS POR GN (antes del corte) ⛔ quedan «sin entrar»: van aparte con su número de GN, por el cliente de su venta de GN o por el número (Darío 16-nov, pedido 91 = GN 33311)', async () => {
+    pv.pedidosMayoristasDe.mockResolvedValue({ ok: true, pedidos: [] })
+    const sqls: string[] = []
+    const filas: Record<string, unknown[]> = {
+      ...CON064,
+      'join venta v': [{ id: 'g1', numero: '91', recibido_en: '2026-11-06', total: '161600', unidades: '37', gn_number: '33311' }],
+      'from pedido_mayorista': [
+        { id: 'g1', numero: '91', recibido_en: '2026-11-06', total: '161600', unidades: '37', contacto: { telefono: '3413788292' }, apartado: false, gn_number: '33311' },
+        { id: 'g2', numero: '95', recibido_en: '2026-11-10', total: '5000', unidades: '2', contacto: { telefono: '3413788292' }, apartado: false, gn_number: '33518' },
+        { id: 'n1', numero: '111', recibido_en: '2026-11-15', total: '900', unidades: '1', contacto: { telefono: '3413788292', nombre: 'Fede' }, apartado: false, gn_number: null },
+      ],
+    }
+    const db = { query: async (sql: string) => { sqls.push(sql); const k = Object.keys(filas).find((x) => sql.includes(x)); return { rows: k ? filas[k] : [] } } }
+    const r = await pedidosDelPanel({ clienteId: C, tel: '5493413788292' }, { conMotor: conMotor(db), prendido: true, escribir: true })
+    expect(r).toMatchObject({
+      sinEntrar: [{ id: 'n1', numero: 111 }],
+      deGn: [{ id: 'g2', numero: 95, gn_number: '33518' }, { id: 'g1', numero: 91, total: 161600, unidades: 37, gn_number: '33311' }],
+    })
+    expect((r as { deGn: unknown[] }).deGn).toHaveLength(2) // el 91 por las dos vías ⇒ una vez
+    expect(sqls.find((x) => x.includes('join venta v'))).toMatch(/v\.origen = 'gn'/)
+  })
+
+  it('«Entrar» un vendido por GN: el freno del motor sale como 409', async () => {
+    pv.entrarPedidoMayorista.mockResolvedValue({ ok: false, error: { codigo: 'VENDIDO_EN_GN', mensaje: 'El pedido 91 ya se vendió por Gestión Nube (venta 33311): no se entra de nuevo' } })
+    const r = await accionDePedido({ accion: 'pedido-entrar', body: { pedidoId: P, clienteId: C }, usuario: 'dario' }, { conMotor: conMotor(base({})), prendido: true, escribir: true })
+    expect(r).toEqual({ status: 409, error: 'El pedido 91 ya se vendió por Gestión Nube (venta 33311): no se entra de nuevo' })
   })
 
   it('«Agregar producto»: escondido como la ficha; menos de 2 letras ⛔ abre la base; lo demás lo contesta el motor', async () => {

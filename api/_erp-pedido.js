@@ -57,9 +57,9 @@ export async function pedidosDelPanel({ clienteId = '', tel = '', usuario = null
   const cli = UUID.test(String(clienteId)) ? String(clienteId) : null
   const wa = String(tel || '').replace(/\D/g, '').slice(0, 20)
   const escribir = deps.escribir ?? (await escribirPrendido())
-  if (!cli && !wa) return { prendido: true, escribir, pedidos: [], sinEntrar: [] }
+  if (!cli && !wa) return { prendido: true, escribir, pedidos: [], sinEntrar: [], deGn: [] }
   return deps.conMotor('bdi', 'Los pedidos del cliente', async (pg) => {
-    if (!(await hay064(pg))) return { prendido: true, escribir: false, pedidos: [], sinEntrar: [], falta064: true }
+    if (!(await hay064(pg))) return { prendido: true, escribir: false, pedidos: [], sinEntrar: [], deGn: [], falta064: true }
     const pv = await import('../motor/pedido/venta.mjs')
     let pedidos = []
     if (cli) {
@@ -68,20 +68,33 @@ export async function pedidosDelPanel({ clienteId = '', tel = '', usuario = null
       pedidos = r.pedidos
     }
     let sinEntrar = []
+    /** Los VENDIDOS POR GN (antes del corte): mismo pedido que su venta de GN ⇒ ⛔ «Entrar» (Darío 16-nov: pedido 91 = GN 33311). */
+    const deGn = new Map()
+    const aGn = (p) => deGn.set(p.id, { id: p.id, numero: Number(p.numero), recibido_en: p.recibido_en, total: Number(p.total), unidades: Number(p.unidades), gn_number: String(p.gn_number) })
+    if (cli) {
+      // Por el cliente de su venta de GN (la copia del ERP, `origen = 'gn'`): el pedido del catálogo ⛔ tiene cliente propio.
+      const { rows } = await pg.query(`select p.id::text, p.numero, p.recibido_en, p.total, p.unidades, coalesce(p.gn_number, p.gn_sale_id::text) as gn_number
+        from pedido_mayorista p join venta v on v.gn_sale_id = p.gn_sale_id and v.origen = 'gn' and v.marca = p.marca
+        where p.marca = 'bdi' and p.anulado_en is null and p.venta_id is null and p.gn_sale_id is not null and v.cliente_id = $1
+          and p.recibido_en > now() - make_interval(days => $2) order by p.recibido_en desc limit 50`, [cli, DIAS_SIN_ENTRAR])
+      for (const p of rows) if (p.gn_number != null) aGn(p)
+    }
     if (wa) {
       const { numeroWhatsapp } = await import('../motor/venta/cliente.mjs')
       const delChat = numeroWhatsapp(wa)
       if (delChat) {
         // 15-nov (Darío): también los que ENTRARON a la ficha general «Pedido mayorista» (ya apartan) y esperan su cliente.
         const { FICHA_SIN_CLIENTE } = await import('../motor/venta/cliente.mjs')
-        const { rows } = await pg.query(`select id::text, numero, recibido_en, total, unidades, contacto, venta_id is not null as apartado from pedido_mayorista
+        const { rows } = await pg.query(`select id::text, numero, recibido_en, total, unidades, contacto, venta_id is not null as apartado, coalesce(gn_number, gn_sale_id::text) as gn_number from pedido_mayorista
           where marca = 'bdi' and anulado_en is null and (venta_id is null or cliente_id = $2) and contacto ? 'telefono' and recibido_en > now() - make_interval(days => $1)
           order by recibido_en desc limit 200`, [DIAS_SIN_ENTRAR, FICHA_SIN_CLIENTE])
-        sinEntrar = rows.filter((p) => numeroWhatsapp(p.contacto?.telefono) === delChat)
+        const delNumero = rows.filter((p) => numeroWhatsapp(p.contacto?.telefono) === delChat)
+        for (const p of delNumero) if (p.gn_number != null && !p.apartado) aGn(p)
+        sinEntrar = delNumero.filter((p) => p.gn_number == null || p.apartado)
           .map((p) => ({ id: p.id, numero: Number(p.numero), recibido_en: p.recibido_en, total: Number(p.total), unidades: Number(p.unidades), nombre: p.contacto?.nombre ?? null, apartado: p.apartado }))
       }
     }
-    return { prendido: true, escribir, pedidos, sinEntrar }
+    return { prendido: true, escribir, pedidos, sinEntrar, deGn: [...deGn.values()].sort((a, b) => String(b.recibido_en).localeCompare(String(a.recibido_en))) }
   })
 }
 
@@ -159,7 +172,7 @@ export async function productosParaElPanel({ pedidoId = '', q = '', usuario = nu
 
 /** El código del motor ⇒ el status de la puerta. */
 const statusDe = (codigo) => (codigo === 'NO_ENCONTRADO' ? 404
-  : ['ANULADO', 'EN_PREPARACION', 'SIN_ENTRAR', 'FALTA_CLIENTE', 'TIENE_PAGOS', 'SIN_PRECIO', 'SIN_TALLE', 'SIN_RENGLONES', 'CAMBIO_DE_LLAVE', 'SIN_CUENTA_CORRIENTE', 'CONFLICTO_IDEMPOTENCIA'].includes(codigo) ? 409 : 400)
+  : ['ANULADO', 'VENDIDO_EN_GN', 'EN_PREPARACION', 'SIN_ENTRAR', 'FALTA_CLIENTE', 'TIENE_PAGOS', 'SIN_PRECIO', 'SIN_TALLE', 'SIN_RENGLONES', 'CAMBIO_DE_LLAVE', 'SIN_CUENTA_CORRIENTE', 'CONFLICTO_IDEMPOTENCIA'].includes(codigo) ? 409 : 400)
 
 export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-preparar', 'pedido-anular', 'pedido-envio']
 

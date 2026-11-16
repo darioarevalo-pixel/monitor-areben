@@ -41,18 +41,26 @@ import {
  * Sin pedidos en curso no se dibuja nada: es lo normal y no hace falta anunciarlo. Un error sí se
  * ve, en un renglón, para que «no aparece» no se lea como «no tiene pedidos».
  */
-export function PedidosLogistica({ clienteId, tel, despacho }: { clienteId: number | null; tel: string | null; despacho?: string }) {
+export function PedidosLogistica({ clienteId, tel, despacho, onLeidos }: {
+  clienteId: number | null; tel: string | null; despacho?: string
+  /** Lo que contestó Logística (para que la tarjeta de Pedidos muestre el estado de los vendidos por GN). */
+  onLeidos?: (pedidos: PedidoLogistica[]) => void
+}) {
   // Lo que llegó va con a quién era: al cambiar de chat no se ve un instante el pedido del anterior.
   const clave = `${clienteId ?? ''}|${tel ?? ''}`
   const [llegado, setLlegado] = useState<{ clave: string; r: Resultado<PedidoLogistica[]> } | null>(null)
   useEffect(() => {
     let vivo = true
     if (!clienteId && !tel) return
-    pedidosDelCliente(clienteId, tel).then((r) => vivo && setLlegado({ clave: `${clienteId ?? ''}|${tel ?? ''}`, r }))
+    pedidosDelCliente(clienteId, tel).then((r) => {
+      if (!vivo) return
+      setLlegado({ clave: `${clienteId ?? ''}|${tel ?? ''}`, r })
+      if (r.t === 'ok') onLeidos?.(r.datos)
+    })
     return () => {
       vivo = false
     }
-  }, [clienteId, tel])
+  }, [clienteId, tel, onLeidos])
 
   // Lo que usó la vez anterior sale sólo de la lista de pendientes: se pide si algún pedido no tiene
   // forma de entrega, para dejar marcada esa opción.
