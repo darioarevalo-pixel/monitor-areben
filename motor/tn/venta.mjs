@@ -86,8 +86,9 @@ export function cuentaDeGateway(tienda, gateway, cuentas) {
  *   descontó y el alineo del corte copió ese stock ⇒ bajaría dos veces (revisión 10-nov). Un booleano vale para todos.
  * @returns {{ registrar: any[], anular: Array<{ venta_id: string, motivo: string, numero: number }>, saltadas: Record<string, number[]>, ya: number }}
  */
-export function planVentasTN({ tienda, ordenes, indice, cuentas, ya, real = false }) {
+export function planVentasTN({ tienda, ordenes, indice, cuentas, ya, real = false, porArmado }) {
   if (!TIENDAS[tienda]) throw new Error(`tienda desconocida: ${tienda}`)
+  if (typeof porArmado !== 'function') throw new Error('planVentasTN: falta `porArmado` (¿el pedido es de después del corte?)')
   const variante = varianteDeLineaTN(indice)
   const registrar = []
   const anular = []
@@ -130,7 +131,9 @@ export function planVentasTN({ tienda, ordenes, indice, cuentas, ya, real = fals
       ...(o.cliente_id ? { cliente_id: String(o.cliente_id) } : {}),
       lineas, subtotal, total,
       pagos: [{ cuenta: cuenta.id, monto: total, tipo_pago: tipoDePagoTN(o.medio), ...(o.cuotas ? { cuotas: Number(o.cuotas) } : {}) }],
-      detalle: { tn: { numero: Number(o.numero), tn_id: Number(o.tn_id), gateway: o.gateway, medio: o.medio, ...(/^multiple$/i.test(o.gateway || '') ? { pago_multiple: true } : {}), envio: pesos(o.envio || 0), descuento: pesos(o.descuento || 0) } },
+      detalle: { tn: { numero: Number(o.numero), tn_id: Number(o.tn_id), gateway: o.gateway, medio: o.medio, ...(/^multiple$/i.test(o.gateway || '') ? { pago_multiple: true } : {}), envio: pesos(o.envio || 0), descuento: pesos(o.descuento || 0) },
+        // 🔑 Bruno 16-nov: después del corte el libro lo mueve el ARMADO del pedido, ⛔ el pago (`lib/tn/armado.mjs`).
+        ...(porArmado(o) ? { stock_por_armado: true } : {}) },
     })
   }
   return { registrar, anular, saltadas, ya: yaEstan }

@@ -6,7 +6,7 @@ describe('armarPedidosSinPagar', () => {
   const ahora = Date.parse('2026-10-14T21:00:00Z')
   const o = (tn_id: number, extra = {}) => ({ tienda: 'zattia', tn_id, numero: tn_id + 1000, creada_en: '2026-10-10T12:00:00Z', status: 'open', payment_status: 'pending', medio: 'transfer', gateway: 'offline', total: '1000.50', ...extra })
   it('sólo abiertos sin pagar (la regla del motor: authorized ⛔), del más viejo al más nuevo, con prendas y link al admin', () => {
-    const r = armarPedidosSinPagar({
+    const r = armarPedidosSinPagar({ cortes: {},
       ordenes: [o(1, { creada_en: '2026-10-13T12:00:00Z' }), o(2), o(3, { payment_status: 'paid' }), o(4, { status: 'cancelled' }), o(5, { payment_status: 'partially_refunded' }), o(6, { tienda: 'stunned', payment_status: 'pending' }), o(7, { payment_status: 'authorized' }), o(8, { payment_status: 'paid', pagada_en: null })],
       lineas: [{ tienda: 'zattia', tn_id: 2, nombre: 'Remera', sku: 'Z1', cantidad: 2 }, { tienda: 'zattia', tn_id: 1, nombre: null, sku: 'Z2', cantidad: 1 }],
       ahora,
@@ -18,7 +18,7 @@ describe('armarPedidosSinPagar', () => {
   })
   it('para cancelar (Bruno, 3-nov): sin pagar desde los 15 días, borde incluido; ni antes, ni entregado, ni pagado', () => {
     const creada = (dias: number) => new Date(ahora - dias * 86_400_000).toISOString()
-    const r = armarPedidosSinPagar({
+    const r = armarPedidosSinPagar({ cortes: {},
       ordenes: [o(1, { creada_en: creada(14.9) }), o(2, { creada_en: creada(15) }), o(3, { creada_en: creada(40), status: 'closed' }), o(4, { creada_en: creada(40), payment_status: 'paid' })],
       lineas: [], ahora,
     })
@@ -26,7 +26,7 @@ describe('armarPedidosSinPagar', () => {
   })
   it('entregado sin cobrar (Bruno, 19-oct): el CERRADO sin pago sigue, marcado, y ⛔ suma unidades retenidas', async () => {
     const { STATUS_POR_COBRAR } = await import('../lib/erp/pedidos-tn.core.js')
-    const r = armarPedidosSinPagar({
+    const r = armarPedidosSinPagar({ cortes: {},
       ordenes: [o(1), o(2, { status: 'closed' }), o(3, { status: 'closed', payment_status: 'paid' }), o(4, { status: 'closed', payment_status: 'refunded' })],
       lineas: [{ tienda: 'zattia', tn_id: 1, nombre: 'A', sku: 'Z1', cantidad: 1 }, { tienda: 'zattia', tn_id: 2, nombre: 'B', sku: 'Z2', cantidad: 3 }],
       ahora,
@@ -48,15 +48,24 @@ describe('armarPedidosSinPagar', () => {
     const cobros = [{ venta_id: 91, monto: '5400.00' }, { venta_id: 93, monto: '1000.50' }, { venta_id: 94, monto: '500' }, { venta_id: 96, monto: '12990' }]
     const set = cobradosEnGN({ entregados, ventasGN, cobros })
     expect([...set].sort()).toEqual(['zattia/1', 'zattia/6'])
-    const r = armarPedidosSinPagar({ ordenes: [...entregados, o(5)], lineas: [], ahora, cobradosGN: set })
+    const r = armarPedidosSinPagar({ cortes: {}, ordenes: [...entregados, o(5)], lineas: [], ahora, cobradosGN: set })
     expect(r.pedidos.map((p) => p.tnId).sort()).toEqual(['2', '3', '4', '5'])
     // un ABIERTO sin pagar ⛔ sale aunque el set lo nombre: la regla es sólo para el entregado
-    expect(armarPedidosSinPagar({ ordenes: [o(5)], lineas: [], ahora, cobradosGN: new Set(['zattia/5']) }).pedidos).toHaveLength(1)
+    expect(armarPedidosSinPagar({ cortes: {}, ordenes: [o(5)], lineas: [], ahora, cobradosGN: new Set(['zattia/5']) }).pedidos).toHaveLength(1)
   })
   it('authorized es PAGADO (Bruno, 15-oct): ⛔ aparece, y el handler lo excluye al leer', async () => {
     const { NO_SIN_PAGAR } = await import('../lib/erp/pedidos-tn.core.js')
-    expect(armarPedidosSinPagar({ ordenes: [o(1, { payment_status: 'authorized' })], lineas: [], ahora }).pedidos).toEqual([])
+    expect(armarPedidosSinPagar({ cortes: {}, ordenes: [o(1, { payment_status: 'authorized' })], lineas: [], ahora }).pedidos).toEqual([])
     expect(NO_SIN_PAGAR).toEqual(expect.arrayContaining(['authorized', 'paid', 'partially_paid', 'refunded', 'voided', 'partially_refunded']))
     expect(NO_SIN_PAGAR).not.toContain('pending')
+  })
+  it('PARA DESARMAR (Bruno 16-nov): después del corte, abierto, pago anulado y preparado ⇒ en la lista, marcado, ⛔ retiene ni se cobra; antes del corte ⛔', () => {
+    const cortes = { zattia: '2026-10-11T00:00:00Z' }
+    const r = armarPedidosSinPagar({ cortes, ahora, lineas: [{ tienda: 'zattia', tn_id: 1, nombre: 'A', sku: 'Z1', cantidad: 2 }],
+      ordenes: [o(1, { creada_en: '2026-10-12T12:00:00Z', payment_status: 'voided', envio_estado: 'READY_FOR_PICKUP' }), o(2, { creada_en: '2026-10-10T12:00:00Z', payment_status: 'voided', envio_estado: 'READY_FOR_PICKUP' }),
+        o(3, { creada_en: '2026-10-12T12:00:00Z', payment_status: 'voided', envio_estado: 'UNPACKED' })] })
+    expect(r.pedidos.map((p) => [p.tnId, p.paraDesarmar, p.paraCancelar])).toEqual([['1', true, false]])
+    expect(r.porTienda).toEqual({ zattia: { pedidos: 1, unidades: 0, total: 0 } })
+    expect(() => armarPedidosSinPagar({ ordenes: [], lineas: [], ahora } as never)).toThrow(/cortes/)
   })
 })

@@ -170,7 +170,10 @@ export async function leerPedidosWeb(sobre, ahora, store = STORE) {
     for (const o of lista) porNumero.set(o.number, o)
     noLeidas += ordenesSinLeer(d, lista.length)
   }
-  const pedidos = pedidosSinArmar([...porNumero.values()], ahora)
+  // El corte de la tienda (`erp_corte`): desde ahí la funda baja del libro al PREPARAR, ⛔ al pagar (Bruno 16-nov).
+  // Stunned tiene su Tienda Nube pero vive en la base de Zattia (`docs/lineas.md`): el corte se lee de ahí, con su línea.
+  const cortes = await cortesDeCaja(store === 'stunned' ? 'zattia' : store)
+  const pedidos = pedidosSinArmar([...porNumero.values()], ahora, { corte: cortes[store] ?? null })
   const datos = { pedidos, porSku: indicePorSku(pedidos), noLeidas, leidoEn: new Date(ahora).toISOString() }
   cachePedidos = { en: ahora, store, datos }
   return datos

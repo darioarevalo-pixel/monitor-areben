@@ -28,8 +28,10 @@ export function nivelDe(niveles, depositos) {
  * @param {Map<string, number>} p.gn     nivel de GN (inventario) por 'pid:sid:deposito'
  * @param {Map<string, number>} [p.reservado] 'pid:sid' → unidades de los pedidos de TN sin pagar que siguen abiertos,
  *   vencidos o no (`reservasTN`): TN ya las apartó ⇒ el motor empuja el libro MENOS eso (si no, se venden dos veces).
+ * @param {Map<string, number>} [p.enBolsas] 'pid:sid' → unidades EN BOLSAS (pedido cancelado y armado, después del corte:
+ *   `cargarEnBolsas` de `lib/tn/armado.mjs`). Fuera del libro hasta que se desarme, pero se pueden vender ⇒ SUMAN (Bruno 16-nov).
  */
-export function planStockTN({ tienda, productos, indice, libro, gn, reservado = new Map() }) {
+export function planStockTN({ tienda, productos, indice, libro, gn, reservado = new Map(), enBolsas = new Map() }) {
   const deps = DEPOSITOS_TN[tienda]
   if (!deps) throw new Error(`tienda desconocida: ${tienda}`)
   const variante = varianteDeLineaTN(indice)
@@ -48,7 +50,7 @@ export function planStockTN({ tienda, productos, indice, libro, gn, reservado = 
       if (!vistas.has(k)) vistas.set(k, [])
       vistas.get(k).push(tv)
       const tn = Number(tv.stock)
-      const l = Math.max(0, deLibro(v.product_id, v.size_id) - (reservado.get(k) || 0))
+      const l = Math.max(0, deLibro(v.product_id, v.size_id) + (enBolsas.get(k) || 0) - (reservado.get(k) || 0))
       const g = deGN(v.product_id, v.size_id)
       if (tn === g) cuenta.tn_igual_gn++
       if (l === tn) cuenta.libro_igual_tn++

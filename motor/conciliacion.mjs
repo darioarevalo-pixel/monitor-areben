@@ -155,7 +155,7 @@ const nombreTN = (p) => (p?.name && typeof p.name === 'object' ? p.name.es ?? Ob
  * `cuenta.comparadas` = variantes del ERP (⛔ de TN: un SKU repetido en TN es UNA) ⇒ el % es `cierran / comparadas`.
  * @returns {{ cuenta: object, filas: Array }}
  */
-export function conciliarStockTN({ tienda, productos, indice, libro, gn, cortes, ahora = new Date(), reservado = new Map() }) {
+export function conciliarStockTN({ tienda, productos, indice, libro, gn, cortes, ahora = new Date(), reservado = new Map(), enBolsas = new Map() }) {
   const deps = DEPOSITOS_TN[tienda]
   if (!deps) throw new Error(`tienda desconocida: ${tienda}`)
   // 🔴 Una tienda que ya CORTÓ: GN ⛔ es testigo (se quedó donde estaba) ⇒ compararlo sólo da falso rojo. TN contra el libro.
@@ -185,7 +185,8 @@ export function conciliarStockTN({ tienda, productos, indice, libro, gn, cortes,
       vistas.set(clave, otras)
       cuenta.comparadas++
       const res = reservado.get(clave) || 0
-      const l = Math.max(0, deLibro(v.product_id, v.size_id) - res)
+      // Lo EN BOLSAS (cancelado y armado, Bruno 16-nov) se puede vender: suma, como en `planStockTN`.
+      const l = Math.max(0, deLibro(v.product_id, v.size_id) + (enBolsas.get(clave) || 0) - res)
       const g = sinGn ? null : deGN(v.product_id, v.size_id)
       const clase = sinGn
         ? (tn === l ? null : 'tn_distinto')

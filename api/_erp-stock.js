@@ -15,7 +15,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
-import { armarFilasStock, reservadoPorVariante } from '../lib/erp/stock-lista.core.js'
+import { armarFilasStock, reservaDePedidos } from '../lib/erp/stock-lista.core.js'
 import { armarComparacion } from '../lib/erp/comparacion.core.js'
 import { SQL_CORTES, cortesDeFilas } from '../lib/erp/corte.core.js'
 import { armarMovimiento } from '../lib/erp/movimientos.core.js'
@@ -42,27 +42,64 @@ function leerInventario(marca) {
 }
 
 /**
+ * Lo que el Stock necesita de los pedidos de TN para el Reservado y lo En bolsas (Bruno 16-nov): los ABIERTOS (cualquier pago:
+ * después del corte el pagado sin preparar también reserva), los CANCELADOS de después del corte, sus renglones, el libro de
+ * cada pedido cancelado (`tn_pedido_libro`, motor sql/086) y los cortes. La regla la aplica `reservaDePedidos` (la del motor).
+ * Sin la vista (base sin la 086) ⇒ en bolsas vacío, dicho en `sinBolsas`.
+ * @returns {Promise<{ ordenes: any[], lineas: any[], netos: any[], cortes: Record<string, string>, leidaEn: string | null, sinBolsas?: true }>}
+ */
+export async function pedidosParaStock({ marca }) {
+  const { url, key } = cfgDeMarca(marca)
+  const b = createClient(url, key)
+  const COLS = 'tienda, tn_id, numero, status, payment_status, pagada_en, creada_en, envio_estado'
+  const { data: filasCorte, error: eCorte } = await b.from('erp_corte').select('linea, instante')
+  if (eCorte) throw new Error(`erp_corte: ${eCorte.message}`)
+  const cortes = Object.fromEntries((filasCorte || []).map((c) => [c.linea, new Date(c.instante).toISOString()]))
+  const desde = Object.values(cortes).sort()[0] ?? null
+  const [abiertas, canceladas, lecturas] = await Promise.all([
+    leerTodo(b, 'tn_orden', (x) => x.select(COLS).eq('status', 'open').order('tn_id')),
+    desde ? leerTodo(b, 'tn_orden', (x) => x.select(COLS).eq('status', 'cancelled').gt('creada_en', desde).order('tn_id')) : [],
+    b.from('tn_lectura').select('tienda, leida_en').order('leida_en', { ascending: false }).limit(1),
+  ])
+  const ordenes = [...abiertas, ...canceladas]
+  const ids = ordenes.map((o) => o.tn_id)
+  const lineas = []
+  for (let i = 0; i < ids.length; i += 200) {
+    lineas.push(...await leerTodo(b, 'tn_orden_linea', (x) => x.select('tienda, tn_id, sku, cantidad').in('tn_id', ids.slice(i, i + 200)).order('tn_id').order('linea_id')))
+  }
+  let netos = [], sinBolsas
+  const idsCanc = canceladas.map((o) => String(o.tn_id))
+  for (let i = 0; i < idsCanc.length; i += 200) {
+    const { data, error } = await b.from('tn_pedido_libro').select('tienda, tn_id, product_id, size_id, neto').in('tn_id', idsCanc.slice(i, i + 200))
+    if (error) { sinBolsas = true; netos = []; break }
+    netos.push(...(data || []))
+  }
+  const [lectura] = lecturas.data || []
+  return { ordenes, lineas, netos, cortes, leidaEn: lectura?.leida_en ?? null, ...(sinBolsas ? { sinBolsas } : {}) }
+}
+
+/**
  * @param {{ marca: string }} p
- * @param {{ conMotor: Function, pedidosSinPagar: Function, leerInventario?: Function }} deps
+ * @param {{ conMotor: Function, pedidosParaStock: Function, leerInventario?: Function }} deps
  */
 export async function listaDeStock({ marca }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const [libro, inventario, pedidos] = await Promise.all([
     deps.conMotor(marca, 'El stock de Areben Gestión', (pg) => libroSumado(pg)),
     (deps.leerInventario ?? leerInventario)(marca),
-    deps.pedidosSinPagar({ marca }),
+    deps.pedidosParaStock({ marca }),
   ])
   if (libro.status) return libro
-  const { reservado, sinVariante } = reservadoPorVariante(pedidos.pedidos || [], inventario)
+  const { reservado, enBolsas, sinVariante, sinVariantePorTienda } = reservaDePedidos({ ...pedidos, inventario })
   return {
-    filas: armarFilasStock({ marca, niveles: libro.niveles, ultimos: libro.ultimos, inventario, reservado }),
+    filas: armarFilasStock({ marca, niveles: libro.niveles, ultimos: libro.ultimos, inventario, reservado, enBolsas }),
     libroHasta: libro.hasta,
     pedidosLeidosEn: pedidos.leidaEn ?? null,
-    pedidos: (pedidos.pedidos || []).length,
+    pedidos: pedidos.ordenes.length,
     sinVariante,
     // El aviso es de la tienda que se mira (30-oct): cada pedido sabe de qué tienda es.
-    sinVariantePorTienda: Object.fromEntries([...new Set((pedidos.pedidos || []).map((p) => p.tienda).filter(Boolean))]
-      .map((t) => [t, reservadoPorVariante((pedidos.pedidos || []).filter((p) => p.tienda === t), inventario).sinVariante])),
+    sinVariantePorTienda,
+    ...(pedidos.sinBolsas ? { sinBolsas: true } : {}),
   }
 }
 
@@ -190,7 +227,7 @@ async function tiendaNube(pg) {
 
 /**
  * @param {{ marca: string }} p
- * @param {{ conMotor: Function, pedidosSinPagar: Function, leerInventario?: Function }} deps
+ * @param {{ conMotor: Function, pedidosParaStock: Function, leerInventario?: Function }} deps
  */
 export async function comparacionConTiendas({ marca }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
@@ -198,12 +235,12 @@ export async function comparacionConTiendas({ marca }, deps) {
     deps.conMotor(marca, 'El stock de Areben Gestión', (pg) => libroSumado(pg)),
     deps.conMotor(marca, 'Lo publicado en Tienda Nube', (pg) => tiendaNube(pg)),
     (deps.leerInventario ?? leerInventario)(marca),
-    deps.pedidosSinPagar({ marca }),
+    deps.pedidosParaStock({ marca }),
   ])
   if (libro.status) return libro
   if (tienda.status) return tienda
-  const { reservado } = reservadoPorVariante(pedidos.pedidos || [], inventario)
-  const filas = armarFilasStock({ marca, niveles: libro.niveles, ultimos: libro.ultimos, inventario, reservado })
+  const { reservado, enBolsas } = reservaDePedidos({ ...pedidos, inventario })
+  const filas = armarFilasStock({ marca, niveles: libro.niveles, ultimos: libro.ultimos, inventario, reservado, enBolsas })
   const r = armarComparacion({ marca, filas, inventario, tn: tienda.tn, cortes: tienda.cortes })
   return { filas: r.filas, sinLimite: r.sinLimite, tnLeidas: tienda.leidas, ml: tienda.ml, libroHasta: libro.hasta, pedidosLeidosEn: pedidos.leidaEn ?? null }
 }

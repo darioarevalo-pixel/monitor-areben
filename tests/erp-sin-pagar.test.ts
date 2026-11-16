@@ -37,7 +37,7 @@ describe('los pedidos sin pagar que lee el servidor', () => {
       { tienda: 'zattia', tn_id: 2, numero: 11, creada_en: '2026-10-20T11:00:00Z', status: 'open', payment_status: 'pending', total: '200', estado: 'pedido' },
       { tienda: 'zattia', tn_id: 3, numero: 12, creada_en: '2026-10-20T12:00:00Z', status: 'open', payment_status: 'pending', total: '300' },
     ]
-    const r = armarPedidosSinPagar({ ordenes, lineas: [], ahora: Date.parse('2026-10-21T00:00:00Z') }) as { pedidos: { numero: number; estado: string | null }[] }
+    const r = armarPedidosSinPagar({ ordenes, lineas: [], cortes: {}, ahora: Date.parse('2026-10-21T00:00:00Z') }) as { pedidos: { numero: number; estado: string | null }[] }
     expect(r.pedidos.map((p) => [p.numero, p.estado])).toEqual([[10, 'a_preparar'], [11, 'pedido'], [12, null]])
   })
 })

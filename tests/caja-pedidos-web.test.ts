@@ -205,8 +205,8 @@ const todas = Object.values(O) as unknown as Parameters<typeof pedidosSinArmar>[
 describe('caja · pedidos web sin armar', () => {
   it('sin armar = POR EMPAQUETAR (`unpacked`) y ⛔ cancelada, pagada o SIN PAGAR (marcada aparte)', () => {
     expect(estaSinArmar(O.pendientePago)).toBe(true)
-    expect(pedidosSinArmar([O.pendientePago] as never, AHORA)[0].sinPagar).toBe(true)
-    expect(pedidosSinArmar([O.sinArmar] as never, AHORA)[0].sinPagar).toBe(false)
+    expect(pedidosSinArmar([O.pendientePago] as never, AHORA, { corte: null })[0].sinPagar).toBe(true)
+    expect(pedidosSinArmar([O.sinArmar] as never, AHORA, { corte: null })[0].sinPagar).toBe(false)
     expect(estaSinArmar(O.sinArmar)).toBe(true)
     expect(estaSinArmar(O.vieja)).toBe(true)
   })
@@ -223,7 +223,7 @@ describe('caja · pedidos web sin armar', () => {
   })
 
   it('del más viejo al más nuevo, con las horas desde que se pagó', () => {
-    const p = pedidosSinArmar(todas, AHORA)
+    const p = pedidosSinArmar(todas, AHORA, { corte: null })
     // La #7158 (sin pagar, 4-oct 01:34) ⛔ tiene `pagado_en`: ordena por la fecha de la orden.
     expect(p.map((x) => x.numero)).toEqual([6984, 7153, 7158])
     const aixa = p.find((x) => x.numero === 7153)!
@@ -233,7 +233,7 @@ describe('caja · pedidos web sin armar', () => {
 
   it('las líneas sin SKU se CUENTAN (⛔ se esconden) y ⛔ entran al índice', () => {
     // La #6966 real ya estaba empaquetada: se la pone por empaquetar para tener líneas sin SKU.
-    const p = pedidosSinArmar([{ ...O.conSinSku, envio_estado: 'unpacked' }] as never, AHORA)
+    const p = pedidosSinArmar([{ ...O.conSinSku, envio_estado: 'unpacked' }] as never, AHORA, { corte: null })
     expect(p.find((x) => x.numero === 6966)!.sinSku).toBe(2)
     expect(Object.keys(indicePorSku(p))).not.toContain('')
   })
@@ -243,7 +243,7 @@ describe('caja · pedidos web sin armar', () => {
       { numero: 1, prendas: [{ sku: 'A-1', cantidad: 1 }, { sku: 'A-1', cantidad: 2 }] },
       { numero: 2, prendas: [{ sku: 'A-1', cantidad: 1 }] },
     ] as never)
-    expect(por['A-1']).toEqual([{ numero: 1, cantidad: 3, sinPagar: false }, { numero: 2, cantidad: 1, sinPagar: false }])
+    expect(por['A-1']).toEqual([{ numero: 1, cantidad: 3, sinPagar: false, reserva: false }, { numero: 2, cantidad: 1, sinPagar: false, reserva: false }])
   })
 
   it('sin la hora de ahora ⛔ calcula (⛔ Date.now() adentro)', () => {
@@ -252,7 +252,7 @@ describe('caja · pedidos web sin armar', () => {
 })
 
 describe('caja · el aviso del renglón', () => {
-  const porSku = indicePorSku(pedidosSinArmar(todas, AHORA))
+  const porSku = indicePorSku(pedidosSinArmar(todas, AHORA, { corte: null }))
 
   it('el AIXA Rojo con 1 libre en el Local: está separada, lo libre alcanza', () => {
     const a = avisoDeRenglon({ sku: 'RVE-0022-RO', local: 1, deposito: 0, enCarrito: 1, porSku })
@@ -339,6 +339,18 @@ describe('stockSinReservasWeb: desde el corte, el pedido sin pagar ⛔ bajó del
   })
   it('en la caja del evento ⛔ se resta: TN ⛔ vende de ahí', () => {
     expect(stockSinReservasWeb({ ...base, enEvento: true, stock: { local: 1, deposito: 0, fuente: 'erp' }, porSku: sinPagar })).toEqual({ local: 1, deposito: 0 })
+  })
+  it('🔑 Bruno 16-nov: DESPUÉS del corte lo pagado sin preparar todavía está en el estante (baja al preparar) ⇒ SÍ se resta', () => {
+    const pagadoPost = { 'STU-1': [{ numero: 7, cantidad: 1, sinPagar: false, reserva: true }] }
+    expect(stockSinReservasWeb({ ...base, stock: { local: 1, deposito: 0, fuente: 'erp' }, porSku: pagadoPost })).toEqual({ local: 0, deposito: 0 })
+  })
+  it('pedidosSinArmar marca `reserva` con la regla del motor: después del corte, pagado o no; antes, sólo lo sin pagar; sin corte dicho, TIRA', () => {
+    const orden = (estado_pago: string) => ({ number: 7, estado_pago, envio_estado: 'unpacked', fecha: '2026-11-15T16:16:05Z', pagado_en: estado_pago === 'paid' ? '2026-11-15T16:17:25Z' : null, products: [{ sku: 'STU-1', quantity: 1 }] })
+    const post = { corte: '2026-11-14T16:12:57.801Z' }
+    expect(pedidosSinArmar([orden('paid'), orden('pending')] as never, AHORA, post).map((p) => p.reserva)).toEqual([true, true])
+    // Del más viejo al más nuevo: el sin pagar (desde las 16:16) va antes que el pagado (16:17).
+    expect(pedidosSinArmar([orden('paid'), orden('pending')] as never, AHORA, { corte: null }).map((p) => [p.sinPagar, p.reserva])).toEqual([[true, true], [false, false]])
+    expect(() => pedidosSinArmar([] as never, AHORA)).toThrow(/corte/)
   })
   it('una prenda que ⛔ está en ningún pedido queda igual', () => {
     expect(stockSinReservasWeb({ ...base, sku: 'OTRA', stock: { local: 1, deposito: 0, fuente: 'erp' }, porSku: sinPagar })).toEqual({ local: 1, deposito: 0 })

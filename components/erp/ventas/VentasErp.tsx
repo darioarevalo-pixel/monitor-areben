@@ -201,7 +201,8 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           <ChipEstado mapa={ESTADO} k={f.estadoKey} />
           {f.entregadoSinCobrar && <span title="Tienda Nube lo cerró sin que se cobrara: ya no reserva stock" style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>entregado</span>}
           {f.paraCancelar && <span title={`Entró hace ${f.dias} días y sigue sin pagar: hay que cancelarlo en Tienda Nube`} style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>para cancelar</span>}
-          {viejo && !f.entregadoSinCobrar && !f.paraCancelar && <span title={`Entró hace ${f.dias} días y sigue sin pagar`} style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-warning-ink)', whiteSpace: 'nowrap' }}>{f.dias} días</span>}
+          {f.paraDesarmar && <span title="El pago se anuló y el pedido ya estaba preparado: está en una bolsa. Desarmarlo o cancelarlo en Tienda Nube" style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>para desarmar</span>}
+          {viejo && !f.entregadoSinCobrar && !f.paraCancelar && !f.paraDesarmar && <span title={`Entró hace ${f.dias} días y sigue sin pagar`} style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-warning-ink)', whiteSpace: 'nowrap' }}>{f.dias} días</span>}
         </span>
       )
     }

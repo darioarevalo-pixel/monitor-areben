@@ -48,7 +48,7 @@ async function delMotor(pg, { costos }) {
 
 /**
  * @param {{ marca: string, costos: boolean }} p `costos`: ¿el perfil ve costos? (`puedeErp(…, 'costos')`). OBLIGATORIO: sin él ⛔ hay lista.
- * @param {{ conMotor: Function, pedidosSinPagar: Function, leerInventario?: Function, leerLiquidaciones?: (marca: string) => Promise<Array<Record<string, unknown>>> }} deps
+ * @param {{ conMotor: Function, pedidosParaStock: Function, leerInventario?: Function, leerLiquidaciones?: (marca: string) => Promise<Array<Record<string, unknown>>> }} deps
  */
 export async function listaDeProductos({ marca, costos }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }

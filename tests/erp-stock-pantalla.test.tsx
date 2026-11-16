@@ -68,7 +68,7 @@ describe('la lista de stock', () => {
     expect(boton(/^Sin stock en el Local/).textContent).toContain('1')
     expect(todo()).toContain('9 u') // disponible: 6 + 3
     expect(todo()).toMatch(/Negativos0ninguna/)
-    expect(todo()).toContain('1 reservadas por pedidos sin pagar')
+    expect(todo()).toContain('1 reservadas por pedidos sin preparar')
     expect(filaDe('TOP SAHARA').textContent).toContain('Venta · 19/10 10:25')
     await clic(boton(/^Sin stock en el Local/))
     expect(host.querySelector('[role="table"]')!.textContent).not.toContain('TOP SAHARA')
@@ -107,17 +107,17 @@ describe('la lista de stock', () => {
 
   it('el producto pedida desde Diferencias abre su ficha sola, con lo apartado de su fila', async () => {
     await montar({ marca: 'zattia', producto: '1', talle: '1' })
-    expect(fichaAbierta()!.textContent).toContain('1 sin pagar')
+    expect(fichaAbierta()!.textContent).toContain('1 sin preparar')
   })
 
   it('ocultar una columna queda guardado para ese usuario', async () => {
     await montar()
-    await clic(boton(/^Columnas · 8 de 12/))
+    await clic(boton(/^Columnas · 9 de 13/))
     await clic(document.getElementById('col-est')!)
     expect(host.querySelector('[role="row"]')!.textContent).not.toContain('Físico')
     act(() => root?.unmount()); root = null; host.remove()
     await montar()
     expect(host.querySelector('[role="row"]')!.textContent).not.toContain('Físico')
-    expect(boton(/^Columnas · 7 de 12/)).toBeTruthy()
+    expect(boton(/^Columnas · 8 de 13/)).toBeTruthy()
   })
 })

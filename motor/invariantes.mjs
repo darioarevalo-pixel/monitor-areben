@@ -14,7 +14,8 @@
 const T = { venta: 'venta', linea: 'venta_linea', anulacion: 'venta_anulacion', pendiente: 'venta_vuelta_pendiente', variante: 'variante', deposito: 'deposito', transferencia: 'stock_transferencia', transferenciaRenglon: 'stock_transferencia_renglon', cheque: 'cheque', chequeEvento: 'cheque_evento', factura: 'venta_factura' }
 
 /** Una venta que mueve stock en el libro (`mueveStock` de lib/venta/armar.mjs): propia, ⛔ de prueba, ⛔ reflejada por GN. */
-const VENTA_QUE_MUEVE = `not v.prueba and v.gn_sale_id is null and coalesce(v.detalle->>'gn_sale_id', '') = '' and v.origen <> 'gn'`
+// La venta de TN de después del corte ⛔ mueve: lo mueve el armado del pedido (`detalle.stock_por_armado`, Bruno 16-nov).
+const VENTA_QUE_MUEVE = `not v.prueba and v.gn_sale_id is null and coalesce(v.detalle->>'gn_sale_id', '') = '' and v.origen <> 'gn' and coalesce(v.detalle->>'stock_por_armado', '') <> 'true'`
 const TIPOS_DE_VENTA = `('venta', 'cambio_entra', 'cambio_sale')`
 
 /**
