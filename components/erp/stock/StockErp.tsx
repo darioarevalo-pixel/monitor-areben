@@ -49,8 +49,8 @@ const u = (n: number) => `${n.toLocaleString('es-AR')} u`
 function bajarCsv(filas: FilaStock[], marca: MarcaErp, titulos: Record<string, [string, ...unknown[]]>) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
   const deps = Object.keys(filas[0]?.deps ?? {})
-  const renglones = [['Producto', 'Variante', 'código', 'Disponible', 'Físico', ...deps.map((d) => titulos[`dep:${d}`]?.[0] ?? d), 'Reservado', 'Gestión Nube', 'Línea'].map(c).join(';')]
-  for (const f of filas) renglones.push([f.nombre, f.talleNombre, f.sku, f.disponible, f.estanteria, ...deps.map((d) => f.deps[d]), f.enPedidos, f.gn ?? '', LINEA[f.linea] ?? f.linea].map(c).join(';'))
+  const renglones = [['Producto', 'Variante', 'código', 'Disponible', 'Físico', ...deps.map((d) => titulos[`dep:${d}`]?.[0] ?? d), 'Reservado', 'En bolsas', 'Gestión Nube', 'Línea'].map(c).join(';')]
+  for (const f of filas) renglones.push([f.nombre, f.talleNombre, f.sku, f.disponible, f.estanteria, ...deps.map((d) => f.deps[d]), f.enPedidos, f.enBolsas, f.gn ?? '', LINEA[f.linea] ?? f.linea].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
   a.href = url
@@ -125,7 +125,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
   const angosta = usePantallaAngosta()
   const columnas = (angosta ? prefs.orden : prefs.visibles).map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
-    return { key: k, titulo, ancho, ordena, derecha: ['disp', 'est', 'ped', 'gn'].includes(k) || k.startsWith('dep:'), movil: movilDe(k) }
+    return { key: k, titulo, ancho, ordena, derecha: ['disp', 'est', 'ped', 'bol', 'gn'].includes(k) || k.startsWith('dep:'), movil: movilDe(k) }
   })
   const numero = (n: number, fuerte = false) => <span style={{ fontWeight: fuerte ? 700 : 500, color: n < 0 ? 'var(--mo-danger-ink)' : n === 0 ? color.mut2 : color.ink }}>{n}</span>
 
@@ -136,7 +136,8 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
     if (k === 'disp') return <BarraNivel n={f.disponible}>{numero(f.disponible, true)}</BarraNivel>
     if (k === 'est') return numero(f.estanteria)
     if (k.startsWith('dep:')) return numero(f.deps[k.slice(4)] ?? 0)
-    if (k === 'ped') return f.enPedidos ? <span style={{ color: 'var(--mo-warning-ink)' }} title="Reservadas por pedidos de Tienda Nube sin pagar">{f.enPedidos}</span> : <span style={{ color: color.mut2 }}>—</span>
+    if (k === 'ped') return f.enPedidos ? <span style={{ color: 'var(--mo-warning-ink)' }} title="Reservadas por pedidos de Tienda Nube sin preparar">{f.enPedidos}</span> : <span style={{ color: color.mut2 }}>—</span>
+    if (k === 'bol') return f.enBolsas ? <span style={{ color: color.ink2 }} title="De pedidos cancelados que se prepararon y todavía no se desarmaron: no están en el Físico, pero se pueden vender">{f.enBolsas}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'gn') return <span style={{ color: f.gn != null && f.gn !== f.estanteria ? 'var(--mo-warning-ink)' : color.mut }} title={f.gn != null && f.gn !== f.estanteria ? 'Gestión Nube dice otro número que Areben Gestión' : undefined}>{f.gn ?? '—'}</span>
     if (k === 'ult') return f.ultimo ? <span style={{ color: color.mut }} title={f.ultimo.ref ?? undefined}>{(NOMBRE_TIPO as Record<string, string>)[f.ultimo.tipo] ?? f.ultimo.tipo} · {cuandoCorto(f.ultimo.cuando)}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'linea') return <span style={{ color: color.ink2 }}>{LINEA[f.linea] ?? f.linea}</span>
@@ -169,7 +170,8 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Disponible" valor={u(res.disponible)} oscuro nota="lo que se puede vender" />
-        <TileResumen titulo="Físico" valor={u(res.estanteria)} nota={res.enPedidos ? `${res.enPedidos.toLocaleString('es-AR')} reservadas por pedidos sin pagar` : 'ninguna reservada por pedidos'} />
+        <TileResumen titulo="Físico" valor={u(res.estanteria)} nota={res.enPedidos ? `${res.enPedidos.toLocaleString('es-AR')} reservadas por pedidos sin preparar` : 'ninguna reservada por pedidos'} />
+        {res.enBolsas > 0 && <TileResumen titulo="En bolsas" valor={u(res.enBolsas)} nota="pedidos cancelados para desarmar: se pueden vender" />}
         {/* Los negativos se cuentan sobre todo lo buscado (⛔ sólo la vista): si no, el número no es el de la vista «Negativos». */}
         <TileResumen tono={tonoDeConteo(conteo.neg)} titulo="Negativos" valor={(conteo.neg ?? 0).toLocaleString('es-AR')} nota={conteo.neg ? 'para revisar' : 'ninguna'} />
         <TileResumen titulo="Productos" valor={res.prendas.toLocaleString('es-AR')} nota={nombreVista.toLowerCase()} />

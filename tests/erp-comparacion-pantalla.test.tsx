@@ -12,7 +12,7 @@ import type { FilaComparacion } from '@/lib/erp/cliente'
  */
 const fila = (id: string, sku: string, deps: Record<string, number>, linea = 'zattia') => ({
   id, producto: id.split('/')[0], talle: id.split('/')[1], nombre: `TOP ${id}`, talleNombre: 'S', sku, barcode: null,
-  linea, deps, estanteria: 0, enPedidos: 0, disponible: 0, gn: null, negativo: false, ultimo: null,
+  linea, deps, estanteria: 0, enPedidos: 0, enBolsas: 0, disponible: 0, gn: null, negativo: false, ultimo: null,
 })
 const FILAS = armarComparacion({
   cortes: { stunned: '2026-10-28T23:00:00Z' }, marca: 'zattia',

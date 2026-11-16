@@ -50,7 +50,14 @@ COSTADO (por depósito ERP contra GN + historial con lo que quedó). 🔑 Palabr
 **libro de stock** (`stock_movimiento`, la SUMA: es inmutable) · **en pedidos** = lo que apartan los pedidos de TN SIN
 PAGAR (cruce por SKU con `inventario`; el libro ⛔ los descontó) · **disponible** = estantería − pedidos, el número que
 manda. 🔴 La reserva del motor (`reservasTN`) además VENCE a las 72 h; mientras GN viva eso es seco ⇒ acá cuentan todos
-los sin pagar abiertos. El libro se suma POR PG (`conMotor`; sin la conexión, 409 dicho en pantalla) en `api/_erp-stock.js`
+los sin pagar abiertos.
+🔑 **16-nov (Bruno, escrito): después del corte la funda se mueve por el PREPARADO, ⛔ por el pago.** Reservado = la regla del
+motor (`esReservaTN` con el corte de la tienda, `reservaDePedidos`): abierto, ⛔ devuelto, que todavía ⛔ se preparó —pagado o
+no—; lo preparado ya bajó del Físico (lo escribe el motor, `lib/tn/armado.mjs`). **En bolsas** (columna, vista y tarjeta) = pedido
+CANCELADO que se había preparado y ⛔ se desarmó: ⛔ está en el Físico pero se puede vender ⇒ **Disponible = Físico + En bolsas −
+Reservado** (lo mismo que se manda a TN, y lo que usa la Comparación). Las unidades salen del libro del pedido (`tn_pedido_libro`,
+motor sql/086); sin la vista, en bolsas vacío (`sinBolsas`). «Para desarmar» en Ventas › Sin pagar = abierto, pago anulado y
+preparado (después del corte). Los lee `pedidosParaStock` (`api/_erp-stock.js`). El libro se suma POR PG (`conMotor`; sin la conexión, 409 dicho en pantalla) en `api/_erp-stock.js`
 (`vista=stock-lista`); núcleo `lib/erp/stock-lista.core.js` (`tests/erp-stock-lista.test.ts`, pantalla en
 `tests/erp-stock-pantalla.test.tsx`). Se dibujan de a 300 filas (la lista ⛔ es virtual). «Ajustar» (fila y ficha) lleva
 la prenda a «Nuevo ajuste» de Conteos y ajustes (`AjustesStock` › `pedida`); transferir y etiquetas, al monitor (↗).

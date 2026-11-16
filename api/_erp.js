@@ -109,6 +109,7 @@ import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { armarConciliacion, TIENDAS as TIENDAS_CONCILIACION } from '../lib/erp/conciliacion.core.js'
 import { entradaInvalida } from '../lib/erp/entrada.core.js'
 import { NO_SIN_PAGAR, STATUS_POR_COBRAR, armarPedidosSinPagar, cobradosEnGN } from '../lib/erp/pedidos-tn.core.js'
+import { ARMADO, DEVUELTA } from '../motor/venta/pago-tn.mjs'
 import { esEntregadoSinCobrarTN } from '../motor/venta/pago-tn.mjs'
 import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto, sinCostos } from '../lib/erp/precio.core.js'
 import { configPg } from '../lib/pg.core.js'
@@ -141,7 +142,7 @@ import { ACCIONES as ACCIONES_SALIDA } from '../lib/erp/salida.core.js'
 import { accionDeCatalogo, historialDeProducto } from './_erp-catalogo.js'
 import { ACCIONES as ACCIONES_CATALOGO } from '../lib/erp/catalogo-edicion.core.js'
 import { anularPagoCuentaErp, cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
-import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias } from './_erp-stock.js'
+import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias, pedidosParaStock } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
 import { anotarWhatsappPanel, bcraDelPanel, clienteNuevoPanel, clientesDelPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, libroDePruebaDelPanel, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
 import { conFacturacion, enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, facturasDeClientePanel, padronDelPanel, partePedidoPanel } from './_erp-factura-mayorista.js'
@@ -1690,8 +1691,19 @@ export async function pedidosSinPagar({ marca }) {
   const leerOrdenes = (cols) => leerTodo(b, 'tn_orden', (x) => x.select(cols)
     .in('status', STATUS_POR_COBRAR).not('payment_status', 'in', `(${NO_SIN_PAGAR.join(',')})`).order('creada_en'))
   // Con la sql/059 del motor la orden apunta la ficha del comprador (`cliente_id`); sin ella (otra base, antes de aplicarla), como antes.
-  const COLS = 'tienda, tn_id, numero, creada_en, status, payment_status, medio, gateway, total, estado'
-  const ordenes = await leerOrdenes(`${COLS}, cliente_id`).catch(() => leerOrdenes(COLS))
+  const COLS = 'tienda, tn_id, numero, creada_en, status, payment_status, medio, gateway, total, estado, envio_estado'
+  // 🔑 Bruno 16-nov: «PARA DESARMAR» = después del corte, abierto, con el pago anulado o devuelto y PREPARADO. ⛔ es sin pagar
+  // (el pago se anuló), pero la funda está en una bolsa: se lista con su marca para que alguien lo desarme o lo cancele.
+  const { data: filasCorte } = await b.from('erp_corte').select('linea, instante')
+  const cortes = Object.fromEntries((filasCorte || []).map((c) => [c.linea, new Date(c.instante).toISOString()]))
+  const desdeCorte = Object.values(cortes).sort()[0] ?? null
+  const leerParaDesarmar = (cols) => (desdeCorte ? leerTodo(b, 'tn_orden', (x) => x.select(cols).eq('status', 'open')
+    .in('payment_status', [...DEVUELTA]).in('envio_estado', [...ARMADO]).gt('creada_en', desdeCorte).order('creada_en')) : Promise.resolve([]))
+  const [porCobrar, paraDesarmar] = await Promise.all([
+    leerOrdenes(`${COLS}, cliente_id`).catch(() => leerOrdenes(COLS)),
+    leerParaDesarmar(`${COLS}, cliente_id`).catch(() => leerParaDesarmar(COLS)),
+  ])
+  const ordenes = [...porCobrar, ...paraDesarmar]
   const t0 = Date.now(), tiempos = {}
   const marcar = (k) => { tiempos[k] = Date.now() - t0 }
   marcar('ped_ordenes')
@@ -1729,7 +1741,7 @@ export async function pedidosSinPagar({ marca }) {
   ])
   const [lectura] = lecturas.data || []
   marcar('ped_base')
-  const armado = armarPedidosSinPagar({ ordenes, lineas, ahora: Date.now(), cobradosGN })
+  const armado = armarPedidosSinPagar({ ordenes, lineas, ahora: Date.now(), cobradosGN, cortes })
   const deFicha = new Map(ordenes.filter((o) => o.cliente_id && fichas.get(o.cliente_id)).map((o) => [`${o.tienda}/${o.tn_id}`, fichas.get(o.cliente_id)]))
   const sinFicha = armado.pedidos.filter((p) => !deFicha.has(`${p.tienda}/${p.tnId}`))
   const nombres = await compradoresTn(sinFicha)
@@ -2014,7 +2026,7 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'comparacion') {
-      const r = await comparacionConTiendas({ marca: String(req.query.marca || '') }, { conMotor, pedidosSinPagar })
+      const r = await comparacionConTiendas({ marca: String(req.query.marca || '') }, { conMotor, pedidosParaStock })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'cargar-venta') {
@@ -2065,7 +2077,7 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && req.query.vista === 'productos-lista') {
       const marca = String(req.query.marca || '')
-      const r = await listaDeProductos({ marca, costos: puedeErp(perfil, marca, 'costos') }, { conMotor, pedidosSinPagar, leerLiquidaciones })
+      const r = await listaDeProductos({ marca, costos: puedeErp(perfil, marca, 'costos') }, { conMotor, pedidosParaStock, leerLiquidaciones })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'GET' && req.query.vista === 'inicio-resultado') {
@@ -2172,7 +2184,7 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (req.method === 'GET' && req.query.vista === 'stock-lista') {
-      const r = await listaDeStock({ marca: String(req.query.marca || '') }, { conMotor, pedidosSinPagar })
+      const r = await listaDeStock({ marca: String(req.query.marca || '') }, { conMotor, pedidosParaStock })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'ventas-lista') {

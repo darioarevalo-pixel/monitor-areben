@@ -72,7 +72,7 @@ describe('listaDeProductos (el servidor)', () => {
         return { rows: [] }
       },
     }),
-    pedidosSinPagar: async () => ({ pedidos: [] }),
+    pedidosParaStock: async () => ({ ordenes: [], lineas: [], netos: [], cortes: {}, leidaEn: null }),
     leerInventario: async () => [],
   })
   it('sin costos ⛔ lee `costo_vigente` y la respuesta ⛔ trae costo', async () => {

@@ -5,7 +5,7 @@ import { comparacionConTiendas } from '../api/_erp-stock.js'
 // Filas de Stock (`armarFilasStock`) con la forma medida el 20-oct en BDI.
 const fila = (id: string, sku: string | null, deps: Record<string, number>, enPedidos = 0, extra: object = {}) => ({
   id, producto: id.split('/')[0], talle: id.split('/')[1], nombre: `Funda ${id}`, talleNombre: 'iPhone 15', sku, barcode: null,
-  linea: 'bdi', deps, estanteria: 0, enPedidos, disponible: 0, gn: null, negativo: false, ultimo: null, ...extra,
+  linea: 'bdi', deps, estanteria: 0, enPedidos, enBolsas: 0, disponible: 0, gn: null, negativo: false, ultimo: null, ...extra,
 })
 const inv = (id: string, store: string, n: number) => ({ product_id: id.split('/')[0], size_id: id.split('/')[1], store_name: store, available_quantity: n })
 /** Los cortes de hoy (10-nov): sólo Stunned. */
@@ -93,8 +93,8 @@ describe('vistas, resumen y orden', () => {
 
 describe('comparacionConTiendas', () => {
   it('marca inválida ⇒ 400; sin conexión al motor ⇒ el 409 del motor', async () => {
-    expect(await comparacionConTiendas({ marca: 'x' }, { conMotor: async () => ({}), pedidosSinPagar: async () => ({}) })).toMatchObject({ status: 400 })
-    const r = await comparacionConTiendas({ marca: 'bdi' }, { conMotor: async () => ({ status: 409, error: 'sin conexión' }), pedidosSinPagar: async () => ({ pedidos: [] }), leerInventario: async () => [] })
+    expect(await comparacionConTiendas({ marca: 'x' }, { conMotor: async () => ({}), pedidosParaStock: async () => ({}) })).toMatchObject({ status: 400 })
+    const r = await comparacionConTiendas({ marca: 'bdi' }, { conMotor: async () => ({ status: 409, error: 'sin conexión' }), pedidosParaStock: async () => ({ ordenes: [], lineas: [], netos: [], cortes: {}, leidaEn: null }), leerInventario: async () => [] })
     expect(r).toMatchObject({ status: 409 })
   })
 })

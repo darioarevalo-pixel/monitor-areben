@@ -58,7 +58,9 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
   // El libro de la ficha es el de recién (la lista puede ser de hace un rato): manda para la estantería.
   const estanteria = s ? s.depositos.reduce((a, d) => a + d.libro, 0) : f?.estanteria ?? null
   const enPedidos = f?.enPedidos ?? 0
-  const disponible = estanteria == null ? null : estanteria - enPedidos
+  // Lo EN BOLSAS (cancelado y preparado, sin desarmar) ⛔ está en el Físico pero se puede vender (Bruno 16-nov).
+  const enBolsas = f?.enBolsas ?? 0
+  const disponible = estanteria == null ? null : estanteria + enBolsas - enPedidos
   // Sin fila (abierta desde la búsqueda global) la línea sale del SKU: en Zattia ⛔ alcanza con la marca (Zattia o Stunned) y «Ajustar» quedaba apagado.
   const linea = f?.linea ?? (s ? lineaDe(marca, sku) : null)
   const local = s?.depositos.find((d) => d.deposito === 'local')?.libro ?? f?.deps.local ?? 0
@@ -111,7 +113,8 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
 
       <DatosFicha>
         <DatoFicha titulo="Físico">{estanteria ?? '…'}</DatoFicha>
-        <DatoFicha titulo="Reservado">{enPedidos ? `${enPedidos} sin pagar` : '—'}</DatoFicha>
+        <DatoFicha titulo="Reservado">{enPedidos ? `${enPedidos} sin preparar` : '—'}</DatoFicha>
+        {enBolsas > 0 && <DatoFicha titulo="En bolsas">{`${enBolsas} para desarmar`}</DatoFicha>}
         <DatoFicha titulo="código">{sku ?? '—'}</DatoFicha>
         <DatoFicha titulo="Código">{barcode ?? '—'}</DatoFicha>
         {linea && <DatoFicha titulo="Línea">{LINEA[linea] ?? linea}</DatoFicha>}

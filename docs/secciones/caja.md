@@ -314,7 +314,7 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   retirar), éstos marcados aparte —«(sin pagar)», y «Reservada» si todos lo son— (Bruno, 4-oct). ⛔ «pagada + abierta»: medido el 4-oct,
   daba 34 y 28 ya estaban empaquetadas esperando retiro. Se leen del audit de bdi-catalogo en 3 tramos
   de 3 días (corta en 200 por pedido) y lo que ⛔ llegó se dice. Caché de 60 s por instancia.
-- 🔴 **Desde el corte, lo SIN PAGAR ⛔ bajó del libro** (es reserva): `stockSinReservasWeb` se lo resta antes del aviso, al Local en Zattia y Stunned y al Depósito en BDI; lo de abajo vale con GN.
+- 🔴 **Desde el corte, lo SIN PREPARAR ⛔ bajó del libro** (es reserva; Bruno 16-nov: la funda baja al PREPARAR, ⛔ al pagar): cada pedido lleva `reserva` (`esReservaTN` del motor con el corte de la tienda, `pedidosSinArmar`) y `stockSinReservasWeb` se lo resta antes del aviso, al Local en Zattia y Stunned y al Depósito en BDI; lo de abajo vale con GN.
 - 🔑 **Sin token de GN** se frena sólo lo que va a GN (`enviar`, `confirmar`): lo del ERP cobra igual. Formas de pago: con todas las líneas cortadas y GN sin contestar, valen las cuentas de las reglas.
 - 🔴 **El stock del Local YA descontó el pedido web**: cada orden de TN entra a GN como venta del Local
   (4 de 4 pagados y 7 de 7 sin pagar, medido), y el Depósito ⛔ lo toca. Tres avisos (Bruno, 4-oct):

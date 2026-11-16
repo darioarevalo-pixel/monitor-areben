@@ -511,6 +511,8 @@ export type FilaVentaLista = {
   entregadoSinCobrar?: boolean
   /** Sin pagar y pasado el plazo: hay que cancelarlo en Tienda Nube. Sigue reteniendo hasta que se cancele. */
   paraCancelar?: boolean
+  /** Abierto, con el pago anulado y ya preparado (después del corte): está en una bolsa, hay que desarmarlo o cancelarlo. */
+  paraDesarmar?: boolean
 }
 export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean; corregir?: boolean; corregirMedio?: boolean }
 export const leerListaDeVentas = (marca: MarcaErp, desde: string, hasta: string, linea: '' | 'zattia' | 'stunned' = '') =>
@@ -566,7 +568,7 @@ export type FilaStock = {
   linea: string
   /** Lo que dice el libro en cada depósito de la base. */
   deps: Record<string, number>
-  estanteria: number; enPedidos: number; disponible: number; gn: number | null; negativo: boolean
+  estanteria: number; enPedidos: number; enBolsas: number; disponible: number; gn: number | null; negativo: boolean
   ultimo: { tipo: string; origen: string; ref: string | null; cuando: string } | null
 }
 export type ListaDeStock = { filas: FilaStock[]; libroHasta: string | null; pedidosLeidosEn: string | null; pedidos: number; sinVariante: number; sinVariantePorTienda?: Record<string, number> }
