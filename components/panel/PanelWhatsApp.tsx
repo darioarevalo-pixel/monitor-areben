@@ -1283,6 +1283,14 @@ function PanelInterno({
     !((c.proximo_contacto || '') > hoyFicha)
 
   const estadoFicha = estadoDeFicha(c.proximo_contacto, hoyFicha, faltaFecha)
+  /**
+   * El chat abierto ES de este cliente salvo que la ficha se haya abierto desde la lista (`pedido`): ahí WhatsApp todavía puede
+   * estar en el chat anterior. 🔴 Darío, 16-nov (Lara Arosteguy): `via === 'id'` no alcanzaba para saberlo — también es 'id'
+   * cuando el chat se reconoce por el número vinculado a mano (crm:tel), y entonces la ficha ignoraba el número del chat:
+   * decía «No está en la comunidad» y no ofrecía sumarlo a «Quién compra».
+   */
+  const telChatDeLaFicha = pedido ? null : telNorm
+  const telsCliente = telsDelCliente(telChatDeLaFicha, c.phone, cuenta?.personas)
   const telFicha = pedido?.tel || c.phone || ''
   // Con un pedido abierto que debe, el pago va en ESE pedido y ⛔ se repite arriba (Darío 15-nov: cada botón una sola vez).
   const pedidoQueDebe = !!pedidosErp?.pedidos.some((p) => p.etapa !== 'anulado' && p.etapa !== 'despachado' && !!p.pago && p.pago.falta > 0)
@@ -1303,7 +1311,7 @@ function PanelInterno({
               key={`qlm-${c.id}`}
               sabe={{
                 esCliente: (c.ventas || []).length > 0,
-                enComunidad: enComunidadDe(comunidad, telsDelCliente(via === 'id' ? null : telNorm, c.phone, cuenta?.personas)),
+                enComunidad: enComunidadDe(comunidad, telsCliente),
                 perfil: seg.perfil || null,
               }}
               tels={via === 'id' ? [c.phone || ''] : [telNorm, c.phone || '']}
@@ -1359,7 +1367,7 @@ function PanelInterno({
         </div>
         {/* Los dos números: el del chat es el que está en la comunidad, pero si la ficha se abrió
             desde la lista, el chat todavía puede ser el anterior. */}
-        <MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={telsDelCliente(via === 'id' ? null : telNorm, c.phone, cuenta?.personas)} telFicha={c.phone} />
+        <MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={telsCliente} telFicha={c.phone} />
 
         {via === 'cola' && (
           <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: radius.sm, padding: '4px 8px' }}>
@@ -1429,7 +1437,7 @@ function PanelInterno({
         {/* «Más del cliente» plegado (Darío 15-nov): Quién compra, Facturas y BCRA. */}
         {cuenta && (
           <Aislado nombre="Más del cliente">
-            <MasDelCliente key={`mas-${cuenta.cliente.id}`} cuenta={cuenta} telChat={via === 'id' ? null : telNorm || null} decir={decir} onCambio={releerCuenta} />
+            <MasDelCliente key={`mas-${cuenta.cliente.id}`} cuenta={cuenta} telChat={telChatDeLaFicha || null} decir={decir} onCambio={releerCuenta} />
           </Aislado>
         )}
 
