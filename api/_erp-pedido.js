@@ -72,10 +72,12 @@ export async function pedidosDelPanel({ clienteId = '', tel = '', usuario = null
       const { numeroWhatsapp } = await import('../motor/venta/cliente.mjs')
       const delChat = numeroWhatsapp(wa)
       if (delChat) {
+        // 16-nov (Darío): ⛔ los que se hicieron en GN (`gn_sale_id`): ya son venta de GN y siguen por Logística; «Entrar» los
+        // vendía otra vez (pedido 91, Federico Colome).
         // 15-nov (Darío): también los que ENTRARON a la ficha general «Pedido mayorista» (ya apartan) y esperan su cliente.
         const { FICHA_SIN_CLIENTE } = await import('../motor/venta/cliente.mjs')
         const { rows } = await pg.query(`select id::text, numero, recibido_en, total, unidades, contacto, venta_id is not null as apartado from pedido_mayorista
-          where marca = 'bdi' and anulado_en is null and (venta_id is null or cliente_id = $2) and contacto ? 'telefono' and recibido_en > now() - make_interval(days => $1)
+          where marca = 'bdi' and anulado_en is null and gn_sale_id is null and (venta_id is null or cliente_id = $2) and contacto ? 'telefono' and recibido_en > now() - make_interval(days => $1)
           order by recibido_en desc limit 200`, [DIAS_SIN_ENTRAR, FICHA_SIN_CLIENTE])
         sinEntrar = rows.filter((p) => numeroWhatsapp(p.contacto?.telefono) === delChat)
           .map((p) => ({ id: p.id, numero: Number(p.numero), recibido_en: p.recibido_en, total: Number(p.total), unidades: Number(p.unidades), nombre: p.contacto?.nombre ?? null, apartado: p.apartado }))
