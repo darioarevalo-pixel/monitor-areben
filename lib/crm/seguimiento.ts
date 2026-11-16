@@ -79,6 +79,26 @@ export const escribiHoy = (crmSeg: MapaSeguimiento, id: number | string, dias: n
   return conPatch(crmSeg, id, { ultimo_contacto: hoy, proximo_manual: diaHabil(addDiasISO(hoy, dias)) })
 }
 
+/** Una fecha que la compra corrió: `de` es la guardada al leer, `a` la nueva. */
+export type Corrida = { id: number; de: string; a: string }
+
+/**
+ * Guarda las fechas que corrió una compra (ver `fechaCorridaPorCompra` en core.ts).
+ *
+ * 🔑 **Sólo si la fecha guardada sigue siendo la que se leyó.** Si alguien la cambió mientras tanto
+ * (en otra pantalla, a mano), gana lo de la persona y ésta no se toca. Tampoco crea entradas: sólo
+ * corre fechas que ya existían. No toca `ultimo_contacto`: comprar no es que le hayas escrito.
+ */
+export function correrPorCompra(crmSeg: MapaSeguimiento, corridas: Corrida[]): MapaSeguimiento {
+  let out = crmSeg
+  for (const { id, de, a } of corridas) {
+    const s = out[String(id)]
+    if (!s || (s.proximo_manual || '') !== de || !(a > de)) continue
+    out = { ...out, [String(id)]: { ...s, proximo_manual: a } }
+  }
+  return out
+}
+
 /**
  * La fecha elegida en el calendario. También pasa por `diaHabil`: la regla es del dato, no del
  * botón — un sábado agendado a mano se pierde igual que uno calculado.

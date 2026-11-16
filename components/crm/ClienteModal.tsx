@@ -160,7 +160,7 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
     proxLinea = (
       <>
         <span style={{ color: col, fontWeight: 600 }}><Punto col={col} /> {fmtFecha(c.proximo_contacto)} ({rel})</span>
-        <span style={{ color: color.mut2 }}>{manualActivo ? ' · fijado a mano' : ' · automático'}</span>
+        <span style={{ color: color.mut2 }}>{c.proximo_contacto !== seg.proximo_manual ? ' · corrida por la compra' : manualActivo ? ' · fijado a mano' : ' · automático'}</span>
       </>
     )
   }

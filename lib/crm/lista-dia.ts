@@ -73,7 +73,11 @@ export type FilaListaDia = {
  * se puso a mano** (la cadencia salió el 24-ago-2026; el porqué está en `estadoSeguimiento`).
  */
 function estadoDe(s: MapaSeguimiento[string], today: Date): { proximo: string | null; dias: number | null; estado: EstadoSeg } {
-  const proximo: string | null = s.proximo_manual || null
+  return estadoDeFecha(s.proximo_manual || null, today)
+}
+
+/** Lo mismo, desde la fecha sola: la usa la Agenda cuando una compra corrió la fecha. */
+export function estadoDeFecha(proximo: string | null, today: Date): { proximo: string | null; dias: number | null; estado: EstadoSeg } {
   if (!proximo) return { proximo: null, dias: null, estado: 'none' }
   // `proximo` ya se sabe no vacío: `diasHasta` sólo devuelve null cuando no hay fecha.
   const dias = diasHasta(proximo, today) as number
@@ -90,7 +94,7 @@ function estadoDe(s: MapaSeguimiento[string], today: Date): { proximo: string | 
  * ⚠️ `pendiente` sigue contando por si alguna entrada vieja lo trae, pero desde que salió la
  * cadencia **no se produce más**: sin fecha, el cliente es `none` y no está en la lista.
  */
-const yaVence = (e: EstadoSeg) => e === 'vencido' || e === 'pendiente'
+export const yaVence = (e: EstadoSeg) => e === 'vencido' || e === 'pendiente'
 
 /**
  * Las filas del KV. `soloVencidos` es la diferencia entre las dos cosas que hace esta pantalla:
