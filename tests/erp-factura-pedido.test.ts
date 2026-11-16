@@ -38,19 +38,19 @@ function repoFalso() {
     async resolver(id: string, cambios: Record<string, unknown>) { const f = filas.find((x) => x.id === id); if (f) Object.assign(f, cambios) },
   }
 }
-function pgFalso(ficha: Record<string, unknown>, sqls: string[]) {
+function pgFalso(ficha: Record<string, unknown>, sqls: string[], v: Record<string, unknown> = venta) {
   return {
     async query(sql: string) {
       sqls.push(sql)
       if (/from cliente where id/.test(sql)) return { rows: [ficha] }
-      if (/from venta_ficha/.test(sql)) return { rows: [venta] }
+      if (/from venta_ficha/.test(sql)) return { rows: [v] }
       return { rows: [] }
     },
   }
 }
-const correr = (ficha: Record<string, unknown>, body: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
+const correr = (ficha: Record<string, unknown>, body: Record<string, unknown>, extra: Record<string, unknown> = {}, v: Record<string, unknown> = venta) => {
   const arca = arcaFalso(), repo = repoFalso(), sqls: string[] = []
-  const pg = pgFalso(ficha, sqls)
+  const pg = pgFalso(ficha, sqls, v)
   const r = facturarPedidoPanel({ body: { pedidoId: PEDIDO, ...body }, usuario: 'test' }, {
     conMotor: (_m: string, _q: string, fn: (pg: unknown) => unknown) => fn(pg), prendido: true, escribir: true,
     arca, repo, sb: {}, b: {}, leerPedido: async () => ({ ok: true, pedido }), buscarFactura: async () => null, tienePartes: async () => false,
@@ -94,6 +94,35 @@ describe('facturarPedidoPanel', () => {
     const { r, sqls } = correr({}, {}, { escribir: false })
     expect(await r).toMatchObject({ status: 409 })
     expect(sqls).toEqual([])
+  })
+})
+
+describe('facturarPedidoPanel con ENVÍO (Darío/Bruno 15-nov)', () => {
+  // La base de la marca: los nombres de las prendas (una consulta encadenada que termina en `range`).
+  const cadena = { select: () => cadena, in: () => cadena, order: () => cadena, range: async () => ({ data: [{ product_id: 1, size_id: 10, product_name: 'Funda', size_name: 'U' }], error: null }) }
+  const b = { from: () => cadena }
+  const ficha = { id: CLIENTE, empresa_id: 'e1', doc: CUIT, nombre: 'X', razon_social: 'X SA', condicion_iva: 1, domicilio: 'Rosario' }
+  const conEnvio = { ...venta, origen: 'mayorista', total: 88500, lineas: [{ product_id: 1, size_id: 10, cantidad: 1, importe: 84000 }], detalle: { envio: 4500, transporte: 'EM', ajuste: 0 } }
+  const pedidoConEnvio = { ...pedido, total: 88500, envio: 4500, transporte: 'EM' }
+  const leerPedido = async () => ({ ok: true, pedido: pedidoConEnvio })
+  it('«Incluir el envío» tildada (o sin decir) ⇒ por el total, con el renglón «Envío (EM)»', async () => {
+    const { r, arca } = correr(ficha, {}, { leerPedido, b }, conEnvio)
+    const out = await r as { factura: { total: number; renglones: Array<{ descripcion: string; importe: number }> } }
+    expect(arca.emitidos.map((e) => e.total)).toEqual([88500])
+    expect(out.factura.renglones.map((x) => [x.descripcion, x.importe])).toContainEqual(['Envío (EM)', 4500])
+    expect(out.factura.renglones.reduce((a, x) => a + x.importe, 0)).toBe(88500)
+  })
+  it('destildada ⇒ por el total SIN el envío, y el PDF ⛔ lo lleva', async () => {
+    const { r, arca } = correr(ficha, { incluirEnvio: false }, { leerPedido, b }, conEnvio)
+    const out = await r as { factura: { total: number; renglones: Array<{ descripcion: string; importe: number }> } }
+    expect(arca.emitidos.map((e) => e.total)).toEqual([84000])
+    expect(out.factura.renglones.some((x) => /Envío/.test(x.descripcion))).toBe(false)
+    expect(out.factura.renglones.reduce((a, x) => a + x.importe, 0)).toBe(84000)
+  })
+  it('sin envío en el pedido, `incluirEnvio: false` ⛔ cambia nada', async () => {
+    const { r, arca } = correr(ficha, { incluirEnvio: false }, {})
+    await r
+    expect(arca.emitidos.map((e) => e.total)).toEqual([84000])
   })
 })
 

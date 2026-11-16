@@ -11,7 +11,7 @@ const pv = {
   ventaMayoristaRealEn: vi.fn((m: string, env: Record<string, string>) => String(env.VENTA_MAYORISTA_REAL ?? '').split(',').includes(m)),
   pedidosMayoristasDe: vi.fn(), fichaDePedidoMayorista: vi.fn(), preparadosSinPagar: vi.fn(),
   entrarPedidoMayorista: vi.fn(), cambiarPedidoMayorista: vi.fn(), mandarAPreparar: vi.fn(), anularPedidoDelErp: vi.fn(),
-  productosParaPedido: vi.fn(),
+  productosParaPedido: vi.fn(), ponerEnvioPedido: vi.fn(),
 }
 vi.mock('../motor/pedido/venta.mjs', () => pv)
 
@@ -111,6 +111,26 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
     await accionDePedido({ accion: 'pedido-anular', body: { pedidoId: P, motivo: 'no lo quiere' }, usuario: 'darío' }, dep)
     expect(pv.anularPedidoDelErp.mock.calls[0][1]).toEqual({ pedido_id: P, motivo: 'no lo quiere', usuario: 'darío' })
     expect(await accionDePedido({ accion: 'pedido-a-preparar', body: { pedidoId: P }, usuario: null }, dep)).toMatchObject({ status: 400 })
+  })
+
+  it('el ENVÍO (Darío 15-nov): llega al motor con quién lo pone; con el pedido FACTURADO ⛔ (cambiaría una venta facturada)', async () => {
+    const ficha = { ok: true, pedido: { venta_id: 'v1', total: 88500 } }
+    pv.fichaDePedidoMayorista.mockResolvedValue(ficha)
+    pv.ponerEnvioPedido.mockReset().mockResolvedValue({ ok: true, sin_cambios: false, venta_id: 'v2' })
+    const dep = (fac: { entera: unknown; partes: number } | null) => ({ conMotor: conMotor(base(CON064)), prendido: true, escribir: true, facturacion: async () => fac })
+    expect(await accionDePedido({ accion: 'pedido-envio', body: { pedidoId: P, envio: 4500, transporte: 'EM' }, usuario: 'darío' }, dep({ entera: null, partes: 0 })))
+      .toEqual({ ok: true, ya: false, sinCambios: false, avisarDeposito: false, ventaId: 'v2' })
+    expect(pv.ponerEnvioPedido.mock.calls[0][1]).toEqual({ pedido_id: P, envio: 4500, transporte: 'EM', usuario: 'darío' })
+    // vacío ⇒ se saca (null); negativo ⇒ 400 sin llamar al motor
+    await accionDePedido({ accion: 'pedido-envio', body: { pedidoId: P, envio: '' }, usuario: 'darío' }, dep(null))
+    expect(pv.ponerEnvioPedido.mock.calls[1][1]).toMatchObject({ envio: null })
+    expect(await accionDePedido({ accion: 'pedido-envio', body: { pedidoId: P, envio: -5 }, usuario: 'darío' }, dep(null))).toMatchObject({ status: 400 })
+    for (const fac of [{ entera: { id: 'f1' }, partes: 0 }, { entera: null, partes: 1 }]) {
+      expect(await accionDePedido({ accion: 'pedido-envio', body: { pedidoId: P, envio: 100 }, usuario: 'darío' }, dep(fac))).toEqual({ status: 409, error: 'El pedido ya tiene factura: el envío no se cambia.' })
+    }
+    expect(pv.ponerEnvioPedido).toHaveBeenCalledTimes(2)
+    expect(permisoErpDe({ method: 'POST', accion: 'pedido-envio' })).toBe('cobrar')
+    expect(entradaInvalida({ method: 'POST', body: { accion: 'pedido-envio', marca: 'bdi', pedidoId: P, envio: 4500 } })).toBeNull()
   })
 
   it('anular: sólo Darío y Bruno (puedeAnular) y con motivo (Darío 15-nov)', async () => {

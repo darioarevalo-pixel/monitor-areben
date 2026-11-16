@@ -102,6 +102,16 @@ describe('puedeFacturar', () => {
 
 describe('renglonesDeVenta', () => {
   const nombres = new Map([['1/10', { nombre: 'Remera', talle: 'M' }]])
+  it('el ENVÍO del pedido mayorista va en su renglón; sin él (`sinEnvio`) ⛔ va y los renglones suman lo facturado', () => {
+    const f = { origen: 'mayorista', total: 34500, lineas: [{ product_id: 1, size_id: 10, cantidad: 2, importe: 30000 }], detalle: { envio: 4500, transporte: 'EM' } }
+    expect(renglonesDeVenta(f, nombres)).toEqual([
+      { descripcion: 'Remera - M', cantidad: 2, unitario: 15000, importe: 30000 },
+      { descripcion: 'Envío (EM)', cantidad: 1, unitario: 4500, importe: 4500 },
+    ])
+    expect(renglonesDeVenta(f, nombres, { sinEnvio: true })).toEqual([{ descripcion: 'Remera - M', cantidad: 2, unitario: 15000, importe: 30000 }])
+    // Una venta que ⛔ es del pedido mayorista (TN guarda su envío en `detalle.tn`) ⛔ cambia.
+    expect(renglonesDeVenta({ ...f, origen: 'tn' }, nombres).map((x: { descripcion: string }) => x.descripcion)).toEqual(['Remera - M', 'Recargo'])
+  })
   it('las prendas y el descuento de la forma de pago aparte: suman lo facturado', () => {
     const r = renglonesDeVenta({ total: 25500, lineas: [{ product_id: 1, size_id: 10, cantidad: 2, importe: 30000 }] }, nombres)
     expect(r).toEqual([

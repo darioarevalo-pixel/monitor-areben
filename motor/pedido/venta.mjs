@@ -109,6 +109,9 @@ export const mismasLineas = (a, b) => {
   return f(a) === f(b)
 }
 
+/** El envío que paga el cliente (sql/084): un monto > 0 o 0. */
+export const envioDe = (p) => (p?.envio != null && Number(p.envio) > 0 ? pesos(p.envio) : 0)
+
 /**
  * La venta del pedido para `registrarVenta` / `reemplazarVenta`. Puro.
  * @param {{ pedido: object, lineas: any[], total: number, cliente_id: string, cuenta: string, usuario: string, real: boolean, n?: number }} p
@@ -118,12 +121,15 @@ export function ventaDePedido({ pedido, lineas, total, cliente_id, cuenta, usuar
     descuento: 0, rebaja: 0, importe: pesos(Number(l.precio) * Number(l.cantidad)) }))
   const subtotal = pesos(ls.reduce((s, l) => s + l.importe, 0))
   const t = pesos(total)
+  // El envío (sql/084) va DENTRO del total, como en la venta de TN (`detalle.envio`); el ajuste es sólo el del redondeo.
+  const envio = envioDe(pedido)
+  const conEnvio = envio ? { envio, ...(texto(pedido.transporte) ? { transporte: texto(pedido.transporte) } : {}) } : {}
   return {
     origen: 'mayorista', origen_ref: origenRefPedido(pedido, n), marca: pedido.marca, canal: 'mayorista',
     deposito: pedido.deposito ?? DEPOSITO_MAYORISTA[pedido.marca], usuario, prueba: !real,
     ocurrida_en: new Date(pedido.recibido_en).toISOString(), cliente_id, lineas: ls, subtotal, total: t,
     pagos: [{ cuenta, monto: t }], autoriza: { motivo: 'pedido', usuario },
-    detalle: { pedido_mayorista: pedido.id, pedido_numero: Number(pedido.numero), ajuste: pesos(t - subtotal) },
+    detalle: { pedido_mayorista: pedido.id, pedido_numero: Number(pedido.numero), ajuste: pesos(t - envio - subtotal), ...conEnvio },
   }
 }
 
@@ -284,7 +290,8 @@ export async function cambiarPedidoMayorista(db, e, { env = process.env } = {}) 
   if (!c.ok) return c
   if (mismasLineas(c.lineas, p.lineas)) return { ok: true, sin_cambios: true, pedido: { id: p.id, numero: p.numero }, venta_id: p.venta_id }
   const totalCatalogo = pesos(c.lineas.reduce((s, l) => s + l.precio * l.cantidad, 0))
-  const total = redondear(totalCatalogo, await redondeoDe(db, { marca: p.marca, canal: 'mayorista' }))
+  // El envío (sql/084) ⛔ se redondea: va aparte, sumado.
+  const total = pesos(redondear(totalCatalogo, await redondeoDe(db, { marca: p.marca, canal: 'mayorista' })) + envioDe(p))
   const unidades = c.lineas.reduce((s, l) => s + l.cantidad, 0)
   const [{ n }] = await q(db, `select count(*)::int as n from venta where origen = 'mayorista' and (origen_ref = $1 or origen_ref like $2)`, [origenRefPedido(p), `${origenRefPedido(p)}:%`])
   const [vieja] = await q(db, 'select cliente_id::text, prueba from venta where id = $1', [p.venta_id])
@@ -302,6 +309,46 @@ export async function cambiarPedidoMayorista(db, e, { env = process.env } = {}) 
     await cambio(db, p, 'cambio', usuario, foto(p), despues)
   })
   return { ok: true, sin_cambios: false, pedido: { id: p.id, numero: p.numero, total, unidades }, venta_id: r.venta.id, avisar_deposito: !!p.a_preparar_en, avisos: r.avisos ?? [] }
+}
+
+/**
+ * El ENVÍO del pedido (Darío 15-nov, sql/084): lo que paga el cliente por el envío en ORIGEN (sale por EM) y con qué transporte.
+ * Se suma al total del pedido y de su venta ⇒ el pago de pedido + envío en UNA transferencia cierra justo (⛔ queda a favor).
+ * `envio` null o 0 ⇒ se saca. 🔑 Se puede con el depósito armando o ya despachado: ⛔ toca los productos (`reemplazarVenta` con las
+ * MISMAS líneas: el stock vuelve y sale igual, y el pago imputado sigue al pedido). ⛔ con el pedido FACTURADO: eso lo frena el monitor,
+ * que es el que ve las facturas. Queda quién lo puso (`envio`). Lo mismo otra vez ⇒ `sin_cambios`.
+ * @param {import('pg').ClientBase} db @param {{ pedido_id: string, envio: number|null, transporte?: string|null, usuario: string }} e
+ */
+export async function ponerEnvioPedido(db, e, { env = process.env } = {}) {
+  const usuario = texto(e?.usuario)
+  if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién lo pone', 'usuario')
+  const crudo = e?.envio == null || e.envio === '' ? 0 : Number(e.envio)
+  if (!Number.isFinite(crudo) || crudo < 0) return falla('ENTRADA_INVALIDA', 'El envío es un monto en pesos', 'envio')
+  const envio = pesos(crudo)
+  const transporte = envio > 0 ? texto(e?.transporte) : null
+  if (transporte && transporte.length > 80) return falla('ENTRADA_INVALIDA', 'El transporte va en pocas palabras', 'transporte')
+  const p = await leerPedido(db, e?.pedido_id)
+  if (!p) return falla('NO_ENCONTRADO', 'No está ese pedido', 'pedido_id')
+  if (p.anulado_en) return falla('ANULADO', `El pedido ${p.numero} está anulado`)
+  if (!p.venta_id) return falla('SIN_ENTRAR', `El pedido ${p.numero} todavía no entró al ERP`)
+  const antes = envioDe(p)
+  if (antes === envio && (texto(p.transporte) ?? null) === transporte) return { ok: true, sin_cambios: true, pedido: { id: p.id, numero: p.numero, total: p.total }, venta_id: p.venta_id }
+  const total = pesos(p.total - antes + envio)
+  const [{ n }] = await q(db, `select count(*)::int as n from venta where origen = 'mayorista' and (origen_ref = $1 or origen_ref like $2)`, [origenRefPedido(p), `${origenRefPedido(p)}:%`])
+  const [vieja] = await q(db, 'select cliente_id::text, prueba from venta where id = $1', [p.venta_id])
+  const cuenta = await cuentaCorrienteDe(db, p.marca)
+  if (!cuenta) return falla('SIN_CUENTA_CORRIENTE', `${p.marca} no tiene la cuenta «Cuenta corriente» (sql/025)`)
+  const real = ventaMayoristaReal(p.marca, await leerCortes(db), env)
+  if (real === vieja.prueba) return falla('CAMBIO_DE_LLAVE', `El pedido ${p.numero} entró ${vieja.prueba ? 'de prueba' : 'real'} y la llave cambió: se anula y se vuelve a entrar`)
+  const nueva = ventaDePedido({ pedido: { ...p, envio: envio || null, transporte }, lineas: p.lineas, total, cliente_id: vieja.cliente_id, cuenta, usuario, real, n: n + 1 })
+  const r = await reemplazarVenta(db, { venta_id: p.venta_id, motivo: `Pedido ${p.numero}: envío puesto por ${usuario}`, usuario, nueva })
+  if (!r.ok) return r
+  await enTransaccion(db, async () => {
+    await q(db, `update pedido_mayorista set envio = $2, transporte = $3, total = $4, venta_id = $5, editado_en = now() where id = $1`,
+      [p.id, envio || null, transporte, total, r.venta.id])
+    await cambio(db, p, 'envio', usuario, { total: p.total, envio: antes || null, transporte: texto(p.transporte) }, { total, envio: envio || null, transporte })
+  })
+  return { ok: true, sin_cambios: false, pedido: { id: p.id, numero: p.numero, total, envio: envio || null, transporte }, venta_id: r.venta.id }
 }
 
 /**
@@ -531,6 +578,7 @@ export async function fichaDePedidoMayorista(db, e) {
     pedido: {
       id: p.id, numero: p.numero, marca: p.marca, origen: p.origen, recibido_en: p.recibido_en, etapa: etapaDe(p), editable: !p.anulado_en && !p.preparacion_en,
       total: p.total, unidades: Number(p.unidades), deposito, cliente_id: p.cliente_id, venta_id: p.venta_id, contacto: p.contacto ?? null,
+      envio: envioDe(p) || null, transporte: texto(p.transporte),
       persona: persona ?? null, a_preparar_en: p.a_preparar_en, a_preparar_por: p.a_preparar_por,
       preparacion_en: p.preparacion_en, preparado_en: p.preparado_en, despachado_en: p.despachado_en, anulado_en: p.anulado_en,
       ...(pago ?? {}),
