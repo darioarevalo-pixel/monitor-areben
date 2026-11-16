@@ -355,7 +355,7 @@ export function ElegirCliente({ tel, persona, escribir, decir, onCambio, onElegi
         <div><Button size="sm" variant="ghost" disabled={!escribir} title={escribir ? undefined : 'Los clientes nuevos se cargan desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.'} onClick={() => setNuevo(true)}>Es nuevo</Button></div>
       </>) : (<>
         <Field label="Nombre del cliente (la empresa)"><Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Celulares Rosario" /></Field>
-        <Field label="CUIT o DNI (si lo tenés)"><Input value={doc} onChange={(e) => setDoc(e.target.value)} inputMode="numeric" placeholder="30-71850818-1" /></Field>
+        <Field label="CUIT o DNI (opcional)" hint="Si no lo tenés ahora, se completa al facturar."><Input value={doc} onChange={(e) => setDoc(e.target.value)} inputMode="numeric" placeholder="30-71850818-1" /></Field>
         <div style={{ display: 'flex', gap: 6 }}>
           <Button size="sm" variant="outline" onClick={() => setNuevo(false)}>Cancelar</Button>
           <Button size="sm" variant="solid" tone="brand" disabled={!nombre.trim() || ocupado} onClick={crear}>Crear cliente</Button>

@@ -376,6 +376,7 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `En cartera` · `Depositado` · `Acreditado` · `Rechazado` (los estados del cheque recibido; `Anulado` si se cargó mal) | `Rebotado` · `Cobrado` | monitor | `components/erp/ventas/ChequesErp.tsx` · `lib/erp/cheque.core.js` | Bruno, 10-nov: «cuatro estados», la cartera completa (sesión cheques) |
 | `Nueva venta` · `Guardar venta` (la venta a mano del ERP, fuera de la Caja) | `Cargar venta` | monitor | `components/erp` · `lib/erp` | Bruno, 10-nov: «en vez de cargar venta sería nueva venta» |
 | `Areben Gestión` (el sistema: «a Areben Gestión», «de Areben Gestión»; las direcciones `/erp/…`, el dominio, las tablas y los nombres del código siguen igual) | `ERP` | monitor | `components` · `app` · `lib` · `api` | Bruno, 14-nov-2026: ERP es la función, no el nombre (pedido de Ger del 8-nov) |
+| `(opcional)` en el rótulo del campo que se puede dejar vacío (y la ayuda, en `hint`) | `(si lo tenés)` · `(si la tenés)` | monitor | `components` | Bruno, 15-nov-2026: «campo opcional», como el resto de las pantallas |
 | (nada: el estado se dice en palabras: «todavía no disponible», «modo de prueba de ARCA») | `motor` · `sesión A` · `espejo` · `homologación` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: jerga de la construcción, ⛔ en pantalla |
 
 ⚠️ **Las excepciones van en el test, con su motivo, y se vacían solas**: un nombre que viene de otro
