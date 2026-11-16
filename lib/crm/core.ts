@@ -38,6 +38,7 @@ import type {
 } from './tipos'
 
 import { normalizeArgPhone as normalizeArgPhoneJs } from './telefono.core.js'
+import { ritmoDeCompra } from './ritmo'
 
 // ── Constantes de negocio (index.html:13105-13113) ───────────────────────────
 export const CADENCIA_DIAS: Record<string, number> = { semanal: 7, quincenal: 15, mensual: 30 }
@@ -155,10 +156,54 @@ export function esDescartado(id: number | string, crmSeg: MapaSeguimiento): bool
   return !!(s && s.descartado)
 }
 
+/** El plazo cuando todavía no se sabe cada cuánto compra (menos de 3 compras): un mes. */
+export const PLAZO_SIN_RITMO = 30
+
+/** La fecha más nueva de estas ventas (`YYYY-MM-DD`), o null. */
+export function ultimaCompra(ventas: FilaVenta[]): string | null {
+  let u: string | null = null
+  for (const v of ventas || []) {
+    const f = typeof v.date_sale === 'string' ? v.date_sale.slice(0, 10) : ''
+    if (/^\d{4}-\d{2}-\d{2}$/.test(f) && (!u || f > u)) u = f
+  }
+  return u
+}
+
+/**
+ * 🛒 **La compra corre la fecha del próximo contacto** (Darío, 15-nov-2026).
+ *
+ * Antes la fecha sólo la movía una persona, y un cliente que compró hace 17 días seguía
+ * «Atrasado 88 días» porque nadie la había tocado. Ahora:
+ *
+ * - **Compró el día que tocaba o después** (la fecha ya había llegado): la fecha pasa a
+ *   *día de la compra + cada cuánto compra* (`ritmoDeCompra`; si no hay ritmo, `PLAZO_SIN_RITMO`),
+ *   corrida al día hábil.
+ * - **La fecha todavía no había llegado cuando compró** (una puesta a propósito, ej. avisarle de un
+ *   ingreso): se respeta. Es la excepción que pidió Darío.
+ * - **Sin fecha**: no se inventa una. «Sin fecha» es una decisión, no un hueco.
+ *
+ * 🔑 **Se calcula al leer, no se guarda.** El KV no se toca: es una cuenta sobre la fecha guardada
+ * y las compras, la misma en la ficha, la Agenda y Clientes. Al poner una fecha a mano después de
+ * la compra, esa queda más adelante que la compra y vuelve a mandar ella.
+ *
+ * Devuelve la fecha nueva, o null si no hay que correrla.
+ */
+export function fechaCorridaPorCompra(guardada: string | null | undefined, ventas: FilaVenta[], today: Date): string | null {
+  const fecha = String(guardada || '').slice(0, 10)
+  if (!fecha) return null
+  const u = ultimaCompra(ventas)
+  if (!u || fecha > u) return null
+  const cada = ritmoDeCompra(ventas, today)?.cadaDias || PLAZO_SIN_RITMO
+  const nueva = diaHabil(addDiasISO(u, cada))
+  return nueva > fecha ? nueva : null
+}
+
 /**
  * estadoSeguimiento (13293).
  *
- * **El próximo contacto es la fecha que se puso a mano. Punto.**
+ * **El próximo contacto es la fecha que se puso a mano** — salvo que el cliente haya comprado
+ * cuando esa fecha ya había llegado: ahí la corre la compra (`fechaCorridaPorCompra`, 15-nov-2026;
+ * hace falta pasarle las `ventas`).
  *
  * 🔴 **Hasta el 24-ago-2026 había una segunda regla: la cadencia sobre el último contacto.**
  * Se sacó, y la razón es que no hacía nada. Medido sobre los 771 clientes reales ese día:
@@ -176,10 +221,12 @@ export function esDescartado(id: number | string, crmSeg: MapaSeguimiento): bool
  * ⚠️ `cadencia` se sigue devolviendo tal como está guardado —no se borra nada del KV— pero no
  * entra en ninguna cuenta.
  */
-export function estadoSeguimiento(id: number | string, crmSeg: MapaSeguimiento, today: Date): Seg {
+export function estadoSeguimiento(id: number | string, crmSeg: MapaSeguimiento, today: Date, ventas?: FilaVenta[]): Seg {
   const s = crmSeg[String(id)] || {}
   const notas: Nota[] = Array.isArray(s.notas) ? s.notas : []
-  const proximo: string | null = s.proximo_manual || null
+  const guardada: string | null = s.proximo_manual || null
+  // La compra corre la fecha (Darío, 15-nov-2026): ver `fechaCorridaPorCompra`.
+  const proximo: string | null = (ventas && fechaCorridaPorCompra(guardada, ventas, today)) || guardada
   if (!proximo) return { cadencia: '', ultimo: s.ultimo_contacto || null, proximo: null, estado: 'none', dias: null, notas }
   // `proximo` ya se sabe no vacío: `diasHasta` sólo devuelve null cuando no hay fecha.
   const dias = diasHasta(proximo, today) as number
@@ -387,7 +434,7 @@ export function calcularAgregado({ ventas, clientes, crmSeg, crmTelOverride, tod
     const dias = diasDesde(e.last_sale, today)
     const diasFirst = diasDesde(e.first_sale, today)
     const avg = e.total_sales > 0 ? e.total_amount / e.total_sales : 0
-    const seg = estadoSeguimiento(e.id, crmSeg, today)
+    const seg = estadoSeguimiento(e.id, crmSeg, today, e.ventas)
     result.push({
       id: e.id,
       name: cliente.name || 'Cliente #' + e.id,

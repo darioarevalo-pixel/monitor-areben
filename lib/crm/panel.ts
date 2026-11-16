@@ -20,8 +20,9 @@
 
 import { apiFetch } from '../api-fetch'
 import { guardarMapa, leerMapa } from '../kv/cliente'
-import { TANDA_FRIOS, TEMPERATURA_DEFAULT, calcularAgregado, estadoSeguimiento, normalizeArgPhone, resumenCompras, segmentoCliente } from './core'
-import { friosDelDia, grupoUrgencia, hechosHoy, listaDelDia, porTemperatura, type FilaListaDia, type VistaTemp } from './lista-dia'
+import { TANDA_FRIOS, TEMPERATURA_DEFAULT, calcularAgregado, estadoSeguimiento, fechaCorridaPorCompra, normalizeArgPhone, resumenCompras, segmentoCliente, urgenciaFecha } from './core'
+import type { Corrida } from './seguimiento'
+import { estadoDeFecha, friosDelDia, grupoUrgencia, hechosHoy, listaDelDia, porTemperatura, TOPE_LISTA, yaVence, type FilaListaDia, type VistaTemp } from './lista-dia'
 import { telDelChat } from './telefono.core.js'
 import type {
   ClienteCRM,
@@ -204,11 +205,11 @@ export type FilaAgenda = {
   ultimaCompra: string | null
 }
 
-type ClienteLista = { id: number; name: string; phone: string; total_amount: number; ultima_compra?: string | null }
+type ClienteLista = { id: number; name: string; phone: string; total_amount: number; ultima_compra?: string | null; compras?: string[] }
 type RespuestaLista = { ok?: boolean; clientes?: ClienteLista[]; error?: string }
 
 export type ResultadoAgenda =
-  | { ok: true; lista: FilaAgenda[]; frios: FilaAgenda[]; hechos: FilaAgenda[] }
+  | { ok: true; lista: FilaAgenda[]; frios: FilaAgenda[]; hechos: FilaAgenda[]; corridas: Corrida[] }
   | { ok: false; motivo: string }
 
 /**
@@ -321,6 +322,30 @@ function armarFila(f: FilaListaDia, datos: Datos): FilaAgenda | null {
 }
 
 /**
+ * 🛒 La compra corre la fecha (Darío, 15-nov-2026). La lista se arma con el KV, que no sabe de
+ * compras; con los días de compra que trae el servidor se aplica la MISMA regla que la ficha y
+ * Clientes (`fechaCorridaPorCompra`). Devuelve la fila corregida y, si la fecha se corrió, la
+ * corrida para guardarla.
+ */
+function conCompra(f: FilaListaDia, datos: Datos, today: Date): { f: FilaListaDia; corrida: Corrida | null } {
+  const dias = datos.get(f.id)?.compras
+  if (!f.proximo || !dias?.length) return { f, corrida: null }
+  const ventas: FilaVenta[] = dias.map((d, i) => ({ id: i + 1, date_sale: d, total_price: 0, client_id: f.id, channel_id: null, sale_state: null }))
+  const a = fechaCorridaPorCompra(f.proximo, ventas, today)
+  if (!a) return { f, corrida: null }
+  return { f: { ...f, ...estadoDeFecha(a, today) }, corrida: { id: f.id, de: f.proximo, a } }
+}
+
+/** Aplica `conCompra` a una tanda y junta las corridas. */
+function corregir(filas: FilaListaDia[], datos: Datos, today: Date, corridas: Map<number, Corrida>): FilaListaDia[] {
+  return filas.map((x) => {
+    const r = conCompra(x, datos, today)
+    if (r.corrida) corridas.set(r.corrida.id, r.corrida)
+    return r.f
+  })
+}
+
+/**
  * La lista del día del panel: quiénes hay que contactar, en orden, con nombre y teléfono.
  *
  * 🔑 **Dos pasos, y el orden importa.** Primero se decide QUIÉN entra, con el KV solo
@@ -333,28 +358,36 @@ function armarFila(f: FilaListaDia, datos: Datos): FilaAgenda | null {
  * "(sin nombre)" sería ofrecer contactar a alguien que no existe.
  */
 export async function traerAgenda(crmSeg: MapaSeguimiento, today: Date): Promise<ResultadoAgenda> {
-  const tibios = listaDelDia(crmSeg, today)
+  // 🛒 TODOS los que vencen, no los primeros 25: la compra puede sacar a varios de la cola y el
+  // corte se hace recién después. Los fríos ya venían enteros.
+  const tibiosTodos = listaDelDia(crmSeg, today, Infinity)
   const friosCrudos = friosDelDia(crmSeg, today)
   // Los de "Hechos hoy" viajan en el mismo pedido: son pocos (lo que se trabajó en el día) y
   // pedirlos aparte sería una segunda vuelta al servidor para una lista que nace plegada.
   const hechosCrudos = hechosHoy(crmSeg, today)
-  const ids = [...new Set([...tibios, ...friosCrudos, ...hechosCrudos].map((f) => f.id))]
-  if (!ids.length) return { ok: true, lista: [], frios: [], hechos: [] }
+  const ids = [...new Set([...tibiosTodos, ...friosCrudos, ...hechosCrudos].map((f) => f.id))]
+  if (!ids.length) return { ok: true, lista: [], frios: [], hechos: [], corridas: [] }
 
   const r = await pedirDatos(ids)
   if (!r.ok) return r
 
-  const lista = tibios.map((f) => armarFila(f, r.datos)).filter((f): f is FilaAgenda => !!f)
+  const corridas = new Map<number, Corrida>()
+  const tibios = corregir(tibiosTodos, r.datos, today, corridas).filter((f) => yaVence(f.estado))
+  const lista = tibios
+    .map((f) => armarFila(f, r.datos))
+    .filter((f): f is FilaAgenda => !!f)
+    .slice(0, TOPE_LISTA)
   // Los fríos SÍ salen por lo que compraron, igual que en la sección, y recién acá se cortan:
   // el total lo trajo el servidor, no estaba en el KV.
-  const frios = friosCrudos
+  const frios = corregir(friosCrudos, r.datos, today, corridas)
+    .filter((f) => yaVence(f.estado))
     .map((f) => armarFila(f, r.datos))
     .filter((f): f is FilaAgenda => !!f)
     .sort((a, b) => b.total - a.total)
     .slice(0, TANDA_FRIOS)
-  const hechos = hechosCrudos.map((f) => armarFila(f, r.datos)).filter((f): f is FilaAgenda => !!f)
+  const hechos = corregir(hechosCrudos, r.datos, today, corridas).map((f) => armarFila(f, r.datos)).filter((f): f is FilaAgenda => !!f)
 
-  return { ok: true, lista, frios, hechos }
+  return { ok: true, lista, frios, hechos, corridas: [...corridas.values()] }
 }
 
 /**
@@ -373,20 +406,26 @@ export async function traerPorFiltro(
   crmSeg: MapaSeguimiento,
   today: Date,
   filtro: VistaTemp | 'todos',
-): Promise<{ ok: true; filas: FilaAgenda[] } | { ok: false; motivo: string }> {
+): Promise<{ ok: true; filas: FilaAgenda[]; corridas: Corrida[] } | { ok: false; motivo: string }> {
   const crudas = porTemperatura(crmSeg, today, filtro)
-  if (!crudas.length) return { ok: true, filas: [] }
+  if (!crudas.length) return { ok: true, filas: [], corridas: [] }
 
   const porTotal = filtro === 'frio'
-  const r = await pedirDatos(crudas.map((f) => f.id), porTotal)
+  // 🛒 Siempre con las compras (15-nov-2026): sin ellas la fecha no se puede correr y el mismo
+  // cliente diría «atrasado» acá y «agendado» en la ficha.
+  const r = await pedirDatos(crudas.map((f) => f.id))
   if (!r.ok) return r
 
-  const filas = crudas.map((f) => armarFila(f, r.datos)).filter((f): f is FilaAgenda => !!f)
+  const corridas = new Map<number, Corrida>()
+  const filas = corregir(crudas, r.datos, today, corridas)
+    .sort((a, b) => grupoUrgencia(a.estado) - grupoUrgencia(b.estado) || urgenciaFecha(a.dias) - urgenciaFecha(b.dias) || a.id - b.id)
+    .map((f) => armarFila(f, r.datos))
+    .filter((f): f is FilaAgenda => !!f)
   // Los 🧊 salen por lo que compraron, pero **sin mezclar los escalones**: el que vence sigue
   // arriba del que está al día. Sin eso, un frío agendado para dentro de un mes le pasaría por
   // encima a uno vencido sólo por haber comprado más.
   if (porTotal) filas.sort((a, b) => grupoUrgencia(a.estado) - grupoUrgencia(b.estado) || b.total - a.total)
-  return { ok: true, filas }
+  return { ok: true, filas, corridas: [...corridas.values()] }
 }
 
 // ── Enganchar un número a un cliente que ya existe ───────────────────────────

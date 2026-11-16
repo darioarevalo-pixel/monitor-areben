@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import { Button, Icono } from '@/components/ui'
 import { SOBRE_OSCURO } from './oscuro'
@@ -9,7 +9,7 @@ import { buscarClientesPorNombre, telefonoDeCliente, telsQueSonClientes, traerAg
 import { telDelChat } from '@/lib/crm/telefono.core.js'
 import { contarCola, contarPorTipo, vistaDe, type FiltroPanel, type VistaTemp } from '@/lib/crm/lista-dia'
 import { diasHasta } from '@/lib/crm/core'
-import { hoyISO } from '@/lib/crm/seguimiento'
+import { hoyISO, type Corrida } from '@/lib/crm/seguimiento'
 import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
@@ -1178,6 +1178,7 @@ export function AgendaDelDia({
   puedeAbrirChat,
   escritos,
   ultimos,
+  onCorrerPorCompra,
 }: {
   crmSeg: MapaSeguimiento
   crmLeads: MapaLeads
@@ -1187,6 +1188,8 @@ export function AgendaDelDia({
   onVerFicha: (id: number, tel: string) => void
   /** Pone la fecha desde «Falta la fecha», sin abrir la ficha. `false` = no se guardó. */
   onAgendar: Agendar
+  /** 🛒 Guarda, sin avisar, las fechas que corrió una compra (ver `traerAgenda`). */
+  onCorrerPorCompra?: (corridas: Corrida[]) => void
   puedeAbrirChat: boolean
   /** A quién le escribiste hoy según WhatsApp Web. Sin extensión llega vacío. */
   escritos?: EscritosHoy
@@ -1195,7 +1198,7 @@ export function AgendaDelDia({
 }) {
   return (
     <EscritosCtx.Provider value={escritos || SIN_ESCRITOS}>
-      <Agenda crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={onAbrirChat} onVerFicha={onVerFicha} onAgendar={onAgendar} puedeAbrirChat={puedeAbrirChat} ultimos={ultimos ?? null} />
+      <Agenda crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={onAbrirChat} onVerFicha={onVerFicha} onAgendar={onAgendar} puedeAbrirChat={puedeAbrirChat} ultimos={ultimos ?? null} onCorrerPorCompra={onCorrerPorCompra} />
     </EscritosCtx.Provider>
   )
 }
@@ -1211,6 +1214,7 @@ function Agenda({
   onAgendar,
   puedeAbrirChat,
   ultimos,
+  onCorrerPorCompra,
 }: {
   crmSeg: MapaSeguimiento
   crmLeads: MapaLeads
@@ -1220,6 +1224,7 @@ function Agenda({
   onAgendar: Agendar
   puedeAbrirChat: boolean
   ultimos: UltimosMios | null
+  onCorrerPorCompra?: (corridas: Corrida[]) => void
 }) {
   const escritos = useContext(EscritosCtx)
   const catalogo = usePedidosCatalogo()
@@ -1299,14 +1304,32 @@ function Agenda({
     return () => window.removeEventListener('scroll', alMover)
   }, [])
 
+  /**
+   * 🛒 Las fechas que corrió una compra se guardan, para que los números de arriba (que salen del
+   * KV) digan lo mismo que la lista. Cada una se intenta UNA vez por panel abierto: si el guardado
+   * falla, la lista igual la muestra corrida y no se reintenta en cada recarga.
+   */
+  const corridasPedidas = useRef(new Set<string>())
+  const guardarCorridas = useCallback(
+    (cs: Corrida[]) => {
+      const nuevas = cs.filter((c) => !corridasPedidas.current.has(`${c.id}:${c.de}:${c.a}`))
+      if (!nuevas.length || !onCorrerPorCompra) return
+      for (const c of nuevas) corridasPedidas.current.add(`${c.id}:${c.de}:${c.a}`)
+      onCorrerPorCompra(nuevas)
+    },
+    [onCorrerPorCompra],
+  )
+
   const pedir = useCallback(async () => {
     if (filtro === 'trabajo') {
       const r = await traerAgenda(crmSeg, today)
+      if (r.ok) guardarCorridas(r.corridas)
       return r.ok ? ({ t: 'trabajo', lista: r.lista, frios: r.frios, hechos: r.hechos } as const) : ({ t: 'error', motivo: r.motivo } as const)
     }
     const r = await traerPorFiltro(crmSeg, today, filtro)
+    if (r.ok) guardarCorridas(r.corridas)
     return r.ok ? ({ t: 'filtro', filas: r.filas } as const) : ({ t: 'error', motivo: r.motivo } as const)
-  }, [crmSeg, today, filtro])
+  }, [crmSeg, today, filtro, guardarCorridas])
 
   // Se recarga cuando cambia el mapa de seguimiento: al registrar un contacto en la ficha, el que
   // se acaba de atender tiene que salir de la lista sin que haya que refrescar nada. Y cuando

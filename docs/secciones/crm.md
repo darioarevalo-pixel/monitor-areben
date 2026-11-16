@@ -684,6 +684,18 @@ Sacada de **las tres fórmulas** (`estadoSeguimiento`, `estadoDe` de lista-dia, 
 - `LeadsDelDia` le ponía una cadencia semanal por atrás para que "Hablé hoy" agendara algo; ahora
   usa `escribiHoyLead(…, 7)`, que era lo que esa cadencia terminaba haciendo.
 
+### 🛒 La compra corre la fecha (Darío, 15-nov-2026) — `fechaCorridaPorCompra` en `lib/crm/core.ts`
+
+Un cliente que compró hace 17 días seguía «Atrasado 88 días». Regla, una sola para ficha, Agenda y Clientes:
+
+- Compró el día de la fecha o después ⇒ fecha = compra + ritmo (sin ritmo, `PLAZO_SIN_RITMO` = 30), al día hábil.
+- La fecha todavía no había llegado cuando compró ⇒ **se respeta** (la puesta a propósito, ej. avisar un ingreso).
+- Sin fecha ⇒ no se inventa.
+- 🔑 **Se calcula al leer** (`estadoSeguimiento` con `ventas`). La Agenda, que arma la lista sólo con el KV, recibe
+  los días de compra de `action:'lista'` (`compras`) y **guarda** lo que corrió (`correrPorCompra`, sin aviso, sólo si
+  la fecha guardada sigue igual a la leída) para que los números de arriba (`contarCola`, del KV) no mientan.
+- ⚠️ Por eso los filtros por tipo piden siempre los totales/compras (antes, sólo los 🧊).
+
 ### En su lugar: la sugerencia calculada (`lib/crm/ritmo.ts`)
 
 *"Que sea todo manual, con sugerencias de en cuánto tiempo recontactar."* La diferencia es de dónde

@@ -26,6 +26,7 @@ import { filaDeGuardado, type Fila } from '@/lib/crm/guardado-al-instante'
 import { armarFicha } from '@/lib/crm/panel'
 import {
   agregarNota,
+  correrPorCompra,
   cumplirPendiente,
   escribiHoy,
   hoyISO,
@@ -36,6 +37,7 @@ import {
   setPerfil,
   setProximoManual,
   setTenerEnCuenta,
+  type Corrida,
 } from '@/lib/crm/seguimiento'
 import {
   agregarNota as agregarNotaLead,
@@ -907,6 +909,15 @@ function PanelInterno({
   )
 
   /**
+   * 🛒 Las fechas que corrió una compra, vistas por la Agenda (Darío, 15-nov-2026). Por la misma fila
+   * que todo lo demás y **sin aviso**: no es algo que hizo la persona. `correrPorCompra` sólo toca
+   * la fecha si sigue siendo la que se leyó.
+   */
+  const correrDesdeLista = useCallback((corridas: Corrida[]) => {
+    void filaSeg.current?.encolar((m) => correrPorCompra(m, corridas))
+  }, [])
+
+  /**
    * Abrir el chat de alguien de la lista.
    *
    * ⚠️ **Esto no navega nada por su cuenta**: acá adentro corre el monitor en un iframe del side
@@ -1018,7 +1029,7 @@ function PanelInterno({
         <Aislado nombre="Sin cliente"><PedidosSinCliente /></Aislado>
         <Aislado nombre="Preparados sin pagar"><PreparadosSinPagar /></Aislado>
         {kvListo ? (
-          <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} onAgendar={agendarDesdeLista} puedeAbrirChat={enExtension} escritos={escritos} ultimos={ultimos} />
+          <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} onAgendar={agendarDesdeLista} onCorrerPorCompra={correrDesdeLista} puedeAbrirChat={enExtension} escritos={escritos} ultimos={ultimos} />
         ) : (
           <Cargando />
         )}
