@@ -81,6 +81,9 @@ export async function gastosComerciales(db, { empresa_id, marca, desde, hasta, p
    where v.origen = 'tn' and v.empresa_id = $1 and v.marca = $2 and v.prueba = $3 and v.estado = 'confirmada' and ${diaVenta} between $4::date and $5::date
    group by 1`, p) : []
   // sql/068: lo que ML se queda de cada orden de una venta confirmada (⛔ una tasa: cambia por mes). Suma a la comisión.
+  // 🔴 Desde el 15-nov (Bruno: «como TN») la venta de ML lleva esa comisión en su PAGO (`detalle.ml.comision_en_pago`) ⇒ ya está en
+  // `auto`: de las órdenes sale SÓLO la de las ventas sin esa marca (las de antes), o se contaría dos veces. Por la MARCA, ⛔ por
+  // «el pago tiene comisión»: un pago puede traer la de su ruta (tasa) además de la de ML.
   const [{ hay_ml }] = await q(db, `select exists (select 1 from information_schema.columns where table_schema = current_schema()
     and table_name = 'ml_orden' and column_name = 'comision') as hay_ml`)
   const deMl = hay_ml ? await q(db, `select to_char(${diaVenta}, 'YYYY-MM') as mes, coalesce(sum(o.comision), 0)::float as monto,
@@ -88,6 +91,7 @@ export async function gastosComerciales(db, { empresa_id, marca, desde, hasta, p
     from venta v cross join lateral jsonb_array_elements_text(v.detalle->'ml'->'ordenes') as r(orden)
     left join ml_orden o on o.orden_id = r.orden::bigint
    where v.origen = 'ml' and v.empresa_id = $1 and v.marca = $2 and v.prueba = $3 and v.estado = 'confirmada' and ${diaVenta} between $4::date and $5::date
+     and coalesce(v.detalle->'ml'->>'comision_en_pago', 'false') <> 'true'
    group by 1`, p) : []
   const manual = await q(db, `select to_char(fecha, 'YYYY-MM') as mes, tipo, sum(monto)::float as monto
     from gasto where empresa_id = $1 and marca = $2 and prueba = $3 and fecha between $4::date and $5::date group by 1, 2`, p)

@@ -162,7 +162,8 @@ const centavos = (x) => Math.round(x * 100) / 100
  * La COMISIÓN sale de `tasa_cobro` (concepto `medio`, por tipo y cuotas, sql/061) y, si ⛔ hay, de la tasa de la ruta. El
  * COSTO DE PLATAFORMA (concepto `plataforma`, lo que se queda TN) va APARTE en `costo_plataforma`: ⛔ se suma a la comisión
  * (Bruno, 30-oct: el resultado ⛔ oculta ningún gasto). Con Pago Nube es 0 (TN ⛔ lo cobra); sin tasa cargada, null.
- * @param {{ monto: number, elegida?: string|null, tipo_pago?: string|null, cuotas?: number|null }} pago
+ * @param {{ monto: number, elegida?: string|null, tipo_pago?: string|null, cuotas?: number|null, comision?: number|null }} pago  `comision`: la REAL
+ *   que informa la plataforma (Mercado Libre); manda sobre la tasa.
  * @param {{ medio: string, nombre?: string }} cuenta  la `cuenta_cobro` del pago
  * @param {{ marca: string, canal: string, en: Date|string }} venta
  * @param {{ rutas: any[], cuentasReales: Array<{ id: string, activa: boolean }>, tasas?: any[] }} conf
@@ -189,7 +190,8 @@ export function cobroReal(pago, cuenta, venta, conf) {
   const donde = { marca: venta.marca, canal: venta.canal, medio, tipo: tipo_pago, cuotas, en: venta.en }
   const deMedio = medio ? tasaVigente(conf.tasas ?? [], { ...donde, concepto: 'medio' }) : null
   const tasa = deMedio ? Number(deMedio.tasa) : ruta && ruta.tasa != null ? Number(ruta.tasa) : null
-  const comision = tasa != null && pago.monto > 0 ? centavos(pago.monto * tasa / 100) : null
+  // La comisión REAL que trae el pago (Mercado Libre, sql/068) manda sobre la tasa: es lo que se cobró, ⛔ una estimación.
+  const comision = pago.comision != null ? centavos(Number(pago.comision)) : tasa != null && pago.monto > 0 ? centavos(pago.monto * tasa / 100) : null
   const dePlataforma = medio ? tasaVigente(conf.tasas ?? [], { ...donde, concepto: 'plataforma' }) : null
   // 🔑 Pago Nube ⇒ TN ⛔ cobra plataforma (Bruno, 6-nov: «si es pago nube, no cobra tienda nube, pero sí cobra la comisión de pago
   // nube») ⇒ 0, ⛔ null: se SABE que es 0. Una fila `plataforma` para pagonube manda igual (si TN algún día la cobra, se carga la tasa).

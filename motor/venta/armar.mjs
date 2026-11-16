@@ -59,7 +59,7 @@ function validarLineas(lineas, campo) {
  * queda DEBIENDO, la cuenta «Cuenta corriente» (§15, sql/025). `usa_entrega`: lo que cobra el CADETE al entregar,
  * la cuenta «Contraentrega» (§20, sql/032; ⛔ pide cliente).
  */
-function validarPagos(pagos, conf, marca, total, { base = null } = {}) {
+function validarPagos(pagos, conf, marca, total, { base = null, comisionConocida = false } = {}) {
   if (!Array.isArray(pagos)) return { error: fallo('ENTRADA_INVALIDA', 'Faltan los pagos', 'pagos') }
   const filas = [], cuentas = []
   let usa_saldo = 0, usa_cuenta = 0, usa_entrega = 0
@@ -87,8 +87,16 @@ function validarPagos(pagos, conf, marca, total, { base = null } = {}) {
     if (tipo_pago != null && !TIPOS_PAGO.includes(tipo_pago)) return { error: fallo('ENTRADA_INVALIDA', `Tipo de pago desconocido: ${tipo_pago}`, `pagos[${i}].tipo_pago`) }
     const cuotas = p.cuotas == null || p.cuotas === '' ? null : num(p.cuotas)
     if (cuotas != null && !(Number.isInteger(cuotas) && cuotas >= 1 && cuotas <= 24)) return { error: fallo('ENTRADA_INVALIDA', 'Las cuotas van de 1 a 24', `pagos[${i}].cuotas`) }
+    // 🔑 La comisión REAL que informa la plataforma (Mercado Libre: `sale_fee`, sql/068; Bruno 15-nov). Sólo la trae la venta
+    // de ML (`comisionConocida`); en las demás la calcula la ruta (`cobroReal`) y ⛔ se acepta de afuera.
+    let comision = null
+    if (p.comision != null) {
+      if (!comisionConocida) return { error: fallo('ENTRADA_INVALIDA', 'La comisión del cobro la pone la ruta de gerencia', `pagos[${i}].comision`) }
+      comision = num(p.comision)
+      if (!(Number.isFinite(comision) && comision >= 0 && comision <= f.monto)) return { error: fallo('ENTRADA_INVALIDA', 'La comisión va de 0 al monto del pago', `pagos[${i}].comision`) }
+    }
     filas.push(f)
-    cuentas.push({ cuenta, elegida: p.cuenta_real ?? null, tipo_pago, cuotas })
+    cuentas.push({ cuenta, elegida: p.cuenta_real ?? null, tipo_pago, cuotas, comision })
   }
   const suma = filas.reduce((s, p) => s + p.monto, 0)
   if (base != null) {
@@ -107,8 +115,8 @@ function validarPagos(pagos, conf, marca, total, { base = null } = {}) {
 function pagosConCuenta(p, conf, venta) {
   const pagos = []
   for (const [i, f] of p.filas.entries()) {
-    const { cuenta, elegida, tipo_pago, cuotas } = p.cuentas[i]
-    const r = cobroReal({ monto: f.monto, elegida, tipo_pago, cuotas }, cuenta, { marca: venta.marca, canal: venta.canal, en: venta.ocurrida_en }, conf)
+    const { cuenta, elegida, tipo_pago, cuotas, comision } = p.cuentas[i]
+    const r = cobroReal({ monto: f.monto, elegida, tipo_pago, cuotas, comision }, cuenta, { marca: venta.marca, canal: venta.canal, en: venta.ocurrida_en }, conf)
     if (!r.ok) return { error: fallo(r.codigo, r.mensaje, `pagos[${i}].cuenta_real`) }
     pagos.push({ id: randomUUID(), venta_id: venta.id, ...f, ...r.cobro })
   }
@@ -194,7 +202,7 @@ export function armarVenta(e, conf, { ahora = new Date() } = {}) {
   if (!Number.isFinite(subtotal) || !Number.isFinite(total)) return fallo('ENTRADA_INVALIDA', 'Faltan el subtotal y el total', 'total')
   const sumaLineas = e.lineas.reduce((s, l) => s + pesos(l.importe), 0)
   if (!cierra(sumaLineas, subtotal)) return fallo('TOTAL_NO_CIERRA', `Las prendas suman ${pesos(sumaLineas)} y el subtotal es ${subtotal}`, 'subtotal')
-  const p = validarPagos(e.pagos, conf, e.marca, total)
+  const p = validarPagos(e.pagos, conf, e.marca, total, { comisionConocida: e.origen === 'ml' })
   if (p.error) return p.error
 
   const venta = {
