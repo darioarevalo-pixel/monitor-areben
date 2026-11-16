@@ -15,6 +15,7 @@ import {
 } from '@/lib/erp/cliente'
 import { parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { ResumenBcra } from './Bcra'
+import { Pliegue } from './Pliegue'
 
 /** El PDF (jsPDF + QR) se carga recién al pedirlo: ⛔ entra al paquete del panel. */
 export const descargarFactura = async (f: FacturaDelPanel) => (await import('@/lib/arca/factura-pdf')).descargarFactura(f)
@@ -27,7 +28,8 @@ const CONDICIONES: Array<[string, string]> = [['ri', 'Responsable inscripto'], [
 type Renglon = { descripcion: string; cantidad: string; unitario: string }
 const VACIO: Renglon = { descripcion: '', cantidad: '1', unitario: '' }
 
-export function FacturasCliente({ clienteId, decir }: { clienteId: string; decir: (t: string) => void }) {
+/** `plegado`: adentro de «Más del cliente» (Darío 15-nov) se ve un renglón «Facturas · N ›» y se abre al tocar. */
+export function FacturasCliente({ clienteId, decir, plegado }: { clienteId: string; decir: (t: string) => void; plegado?: { abierto: boolean; onTocar: () => void } }) {
   const [datos, setDatos] = useState<{ ambiente: string; fiscal: FiscalDelPanel; facturas: FacturaDelPanel[]; sinMigrar?: string } | null>(null)
   const [error, setError] = useState('')
   const [abierta, setAbierta] = useState(false)
@@ -44,10 +46,11 @@ export function FacturasCliente({ clienteId, decir }: { clienteId: string; decir
   }, [clienteId, vuelta])
 
   if (!datos && !error) return null
-  return (
-    <div style={{ borderTop: `1px solid ${color.line2}`, marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <div style={ROTULO}>Facturas</div>
+  const n = datos?.facturas.length ?? 0
+  const cuerpo = (
+    <div style={plegado ? { display: 'flex', flexDirection: 'column', gap: 4 } : { borderTop: `1px solid ${color.line2}`, marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', justifyContent: plegado ? 'flex-end' : 'space-between', alignItems: 'center', gap: 8 }}>
+        {!plegado && <div style={ROTULO}>Facturas</div>}
         {datos && !datos.sinMigrar && (
           <Button size="sm" variant="outline" onClick={() => setAbierta(true)} style={{ height: 'auto' }}>Hacer factura libre</Button>
         )}
@@ -75,6 +78,10 @@ export function FacturasCliente({ clienteId, decir }: { clienteId: string; decir
           onHecha={async (f) => { setAbierta(false); decir(`Factura ${LETRA[f.tipo] ?? ''} ${numeroComprobante(f)} hecha.`); cargar(); await descargarFactura(f).catch(() => {}) }} />
       )}
     </div>
+  )
+  if (!plegado) return cuerpo
+  return (
+    <Pliegue titulo="Facturas" cantidad={error ? '—' : n ? String(n) : 'ninguna'} abierto={plegado.abierto} onTocar={plegado.onTocar}>{cuerpo}</Pliegue>
   )
 }
 

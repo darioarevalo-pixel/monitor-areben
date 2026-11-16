@@ -180,9 +180,6 @@ function estadoDeFila(d: number | null): { txt: string; tono: 'neutro' | 'nuestr
 /** A quién le escribiste hoy. Va por contexto para no pasarlo por las siete listas de `Fila`. */
 const EscritosCtx = createContext<EscritosHoy>(new Set())
 
-/** La temperatura, chica y al lado del nombre. "Sin marcar" no dibuja nada: era ruido en 341 filas. */
-const EMOJI_TEMP: Record<VistaTemp, string> = { caliente: '🔥', templado: '🟡', frio: '🧊', sin_marcar: '' }
-
 /**
  * Un renglón: **el nombre abre la ficha y el botón verde abre el chat** (Darío, 15-oct-2026).
  *
@@ -201,7 +198,6 @@ function Fila({ it, onAbrir, onFicha, hecho }: { it: Item; onAbrir: (id: number,
   // Un prospecto se encuentra por teléfono (`id: 0`): sin teléfono no hay ficha que abrir.
   const sinFicha = it.prospecto && sinTel
   const est = estadoDeFila(it.dias)
-  const emoji = it.vista ? EMOJI_TEMP[it.vista] : ''
   /**
    * La rayita de la izquierda, con el color de la ficha (rediseño del 19-oct-2026): rojo lo que hay
    * que resolver, amarillo hoy, verde hecho. El atrasado de pocos días queda sin raya, por la misma
@@ -229,11 +225,6 @@ function Fila({ it, onAbrir, onFicha, hecho }: { it: Item; onAbrir: (id: number,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {emoji && (
-            <span title={it.vista ? TEMP_UI[it.vista].txt : undefined} style={{ fontSize: 11, lineHeight: 1 }}>
-              {emoji}
-            </span>
-          )}
           <span style={{ fontSize: font.md, fontWeight: 700, color: color.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {it.nombre}
           </span>
@@ -326,7 +317,6 @@ function FilaFaltaFecha({ it, onAbrir, onFicha, onAgendar }: { it: Item; onAbrir
   const [guardando, setGuardando] = useState(false)
   const sinTel = !it.telefono
   const sinFicha = it.prospecto && sinTel
-  const emoji = it.vista ? EMOJI_TEMP[it.vista] : ''
   const elegir = async (cuando: { dias: number } | { fecha: string }) => {
     if (guardando) return
     setGuardando(true)
@@ -345,11 +335,6 @@ function FilaFaltaFecha({ it, onAbrir, onFicha, onAgendar }: { it: Item; onAbrir
           title="Ver la ficha"
           style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '100%', height: 'auto', background: 'none', border: 0, padding: 0, font: 'inherit', textAlign: 'left', cursor: sinFicha ? 'default' : 'pointer' }}
         >
-          {emoji && (
-            <span title={it.vista ? TEMP_UI[it.vista].txt : undefined} style={{ fontSize: 11, lineHeight: 1 }}>
-              {emoji}
-            </span>
-          )}
           <span style={{ fontSize: font.md, fontWeight: 700, color: color.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nombre}</span>
         </button>
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 5, fontSize: font.xs, color: color.mut2 }}>
@@ -1001,10 +986,6 @@ function Filtros({
 }) {
   const chips: Array<{ k: FiltroPanel; txt: string; n?: number }> = [
     { k: 'trabajo', txt: 'Lista del día' },
-    { k: 'caliente', txt: '🔥', n: conteos.caliente },
-    { k: 'templado', txt: '🟡', n: conteos.templado },
-    { k: 'sin_marcar', txt: '⚪', n: conteos.sin_marcar },
-    { k: 'frio', txt: '🧊', n: conteos.frio },
     { k: 'todos', txt: 'Todos', n: conteos.todos },
   ]
   return (

@@ -11,13 +11,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, Field, Input, Modal, Notice } from '@/components/ui'
+import { Button, CopyButton, Field, Input, Modal, Notice } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import {
   anotarWhatsappPanel, anularPedidoPanel, buscarClientesPanel, buscarProductosPedido, cambiarPedidoPanel, clienteNuevoPanel, entrarPedidoPanel, leerPedidoPanel, leerPedidosPanel, leerPedidosSinCliente, leerPreparadosSinPagar, mandarAPrepararPanel,
-  type ClienteDelPanel, type EtapaPedido, type PedidoSinCliente, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel,
+  type ClienteDelPanel, type EtapaPedido, type PedidoDelCliente, type PedidoSinCliente, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel,
 } from '@/lib/erp/cliente'
-import { HojaCargarPago, useCuentaPrendida, type CuentaConCliente } from './CuentaCorriente'
+import { HojaCargarPago, mensajeDeLaCuenta, useCuentaPrendida, type CuentaConCliente } from './CuentaCorriente'
 import { FacturarParte, FacturarPedido, LETRA, descargarFactura, numeroComprobante } from './FacturasCliente'
 import { codigoPedido } from '@/lib/erp/codigos.core.js'
 import { esAprobador } from '@/lib/reposicion/armado.core.js'
@@ -71,7 +71,13 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
 }) {
   const [abierto, setAbierto] = useState<string | null>(null)
   const [entrando, setEntrando] = useState<string | null>(null)
+  const [pagando, setPagando] = useState<{ ventaId: string; numero: number; falta: number } | null>(null)
+  const [enviando, setEnviando] = useState<string | null>(null)
   if (!pedidos.pedidos.length && !pedidos.sinEntrar.length) return null
+  const aPreparacion = async (p: PedidoDelCliente) => {
+    setEnviando(p.id)
+    try { await mandarAPrepararPanel(p.id); decir('Enviado a preparación.'); onCambio() } catch (e) { decir(e instanceof Error ? e.message : 'No se pudo enviar a preparación.', true) } finally { setEnviando(null) }
+  }
   const entrar = async (pedidoId: string) => {
     if (!clienteId) return
     setEntrando(pedidoId)
@@ -104,19 +110,116 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
           </Button>
         </div>
       ))}
-      {pedidos.pedidos.map((p) => (
-        <button key={p.id} type="button" onClick={() => setAbierto(p.id)}
-          style={{ display: 'flex', width: '100%', height: 'auto', alignItems: 'center', gap: 8, textAlign: 'left', background: 'none', border: 0, borderTop: `1px solid ${color.line2}`, padding: '6px 0', cursor: 'pointer', fontSize: font.sm, color: 'inherit' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <b>Pedido {codigoPedido(p.numero)}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.recibido_en)}{p.persona ? ` · pidió ${p.persona}` : ''}</span>
-            <div style={{ fontSize: font.xs, color: color.mut2 }}>{ETAPA[p.etapa]} · {p.unidades} u · {plata(p.total)}</div>
+      {pedidos.pedidos.map((p) => {
+        const debe = !!p.pago && p.pago.falta > 0 && p.etapa !== 'anulado'
+        const pagar = debe && !!cuenta && !!p.venta_id
+        const enviar = p.etapa === 'pedido' && pedidos.escribir
+        return (
+          <div key={p.id} style={{ borderTop: `1px solid ${color.line2}`, padding: '7px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button type="button" onClick={() => setAbierto(p.id)}
+                style={{ flex: 1, minWidth: 0, height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: 0, cursor: 'pointer', fontSize: font.sm, color: 'inherit' }}>
+                <b>Pedido {codigoPedido(p.numero)}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.recibido_en)}{p.persona ? ` · ${p.persona}` : ''}</span>
+                <div style={{ fontSize: font.xs, color: color.mut2 }}>
+                  {p.unidades} u · {plata(p.total)}{p.etapa === 'anulado' ? ' · Anulado' : p.pago ? <> · <b style={{ color: tonoPago(p.pago) }}>{textoPago(p.pago).toLowerCase()}</b></> : ''}
+                </div>
+              </button>
+              {pagar
+                ? <Button size="sm" variant="solid" tone="brand" onClick={() => setPagando({ ventaId: p.venta_id as string, numero: p.numero, falta: (p.pago as PagoPedido).falta })}>$ Cargar pago</Button>
+                : enviar && <Button size="sm" variant="solid" tone="success" disabled={enviando === p.id} onClick={() => void aPreparacion(p)}>Enviar a preparación</Button>}
+            </div>
+            {pagar && enviar && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 5 }}>
+                <Button size="sm" variant="outline" disabled={enviando === p.id} onClick={() => void aPreparacion(p)}>Enviar a preparación</Button>
+              </div>
+            )}
+            {p.etapa !== 'anulado' && <BarraDePasos p={p} />}
           </div>
-          {p.pago && p.etapa !== 'anulado' && <b style={{ fontSize: font.xs, color: tonoPago(p.pago), whiteSpace: 'nowrap' }}>{textoPago(p.pago)}</b>}
-        </button>
-      ))}
+        )
+      })}
       {!pedidos.escribir && <div style={{ fontSize: 11, color: color.mut2, marginTop: 6 }}>{APAGADO}</div>}
       {abierto && <HojaPedido pedidoId={abierto} cuenta={cuenta} onCerrar={() => setAbierto(null)} onHecho={(t) => { decir(t); onCambio() }} />}
+      {pagando && cuenta && (
+        <HojaCargarPago cuenta={cuenta} pedido={pagando} onCerrar={() => setPagando(null)} onHecho={(t) => { setPagando(null); decir(t); onCambio() }} />
+      )}
     </section>
+  )
+}
+
+type Sigue = { k: string; tono: 'rojo' | 'ambar'; titulo: string; detalle: string; mensaje?: { label: string; texto: string } | null }
+
+/**
+ * Lo que hay que hacer con este cliente, en orden (Darío 15-nov): 1) pedido sin cliente, 2) armado sin pagar, 3) debe una compra
+ * vieja (la de más días primero). Sin botones de pedido: ésos están en la tarjeta de Pedidos (cada botón una sola vez); acá sólo
+ * el mensaje para el cliente.
+ */
+export function loQueSigue(pedidos: Extract<PedidosPanel, { prendido: true }> | null, cuenta: CuentaConCliente | null): Sigue[] {
+  const out: Sigue[] = []
+  for (const p of pedidos?.sinEntrar ?? []) {
+    if (p.apartado) out.push({ k: `sc-${p.id}`, tono: 'rojo', titulo: 'Sin cliente', detalle: `${codigoPedido(p.numero)} · ${p.unidades} u · ${plata(p.total)}` })
+  }
+  const msj = cuenta ? mensajeDeLaCuenta(cuenta) : null
+  for (const p of pedidos?.pedidos ?? []) {
+    if (p.etapa === 'preparado' && p.pago && p.pago.falta > 0 && !p.cuenta_habilitada) {
+      out.push({ k: `ps-${p.id}`, tono: 'ambar', titulo: `${codigoPedido(p.numero)} armado, sin pagar`, detalle: `${p.unidades} u · falta ${plata(p.pago.falta)}`, mensaje: msj ? { label: 'Pedir pago', texto: msj } : null })
+    }
+  }
+  // Las compras que deben y ⛔ son de un pedido abierto (ésas ya están arriba o en la tarjeta de Pedidos).
+  const abiertas = new Set((pedidos?.pedidos ?? []).filter((p) => p.etapa !== 'despachado' && p.etapa !== 'anulado').flatMap((p) => (p.venta_id ? [p.venta_id, `venta:${p.venta_id}`] : [])))
+  // (la referencia del libro es «venta:<id>»)
+  const viejas = (cuenta?.estado.pendientes ?? []).filter((x) => x.pendiente > 0.5 && !abiertas.has(x.ref)).sort((a, b) => b.dias - a.dias)
+  for (const v of viejas) {
+    out.push({ k: `cv-${v.ref}`, tono: 'rojo', titulo: `Debe ${plata(v.pendiente)} hace ${v.dias} días`, detalle: v.monto > v.pendiente ? `pagó ${plata(v.monto - v.pendiente)} de ${plata(v.monto)}` : `compra del ${v.fecha.slice(8, 10)}/${v.fecha.slice(5, 7)}`, mensaje: msj ? { label: 'Enviar saldo', texto: msj } : null })
+  }
+  return out
+}
+
+/** El recuadro «Lo que sigue», debajo del encabezado: muestra uno y «+N más». Vacío ⇒ ⛔ se dibuja. */
+export function LoQueSigue({ items }: { items: Sigue[] }) {
+  const [todos, setTodos] = useState(false)
+  if (!items.length) return null
+  const vista = todos ? items : items.slice(0, 1)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: `0 ${space[2]}px ${space[2]}px` }}>
+      {vista.map((it) => {
+        const rojo = it.tono === 'rojo'
+        return (
+          <div key={it.k} style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: radius.lg, padding: '8px 12px', border: `1px solid ${rojo ? color.dangerBorder : color.warningBorder}`, background: rojo ? color.dangerBg : color.warningBg, color: rojo ? color.dangerInk : color.warningInk }}>
+            <div style={{ flex: 1, minWidth: 0, fontSize: font.sm }}><b style={{ display: 'block' }}>{it.titulo}</b>{it.detalle}</div>
+            {it.mensaje && <CopyButton getText={() => it.mensaje!.texto} label={it.mensaje.label} copiedLabel="✓ Copiado" iconLeft="💬" />}
+          </div>
+        )
+      })}
+      {items.length > 1 && (
+        <button type="button" onClick={() => setTodos((t) => !t)} style={{ alignSelf: 'flex-start', height: 'auto', background: 'none', border: 0, padding: 0, cursor: 'pointer', fontSize: font.xs, color: color.brand }}>
+          {todos ? 'Ver menos' : `+${items.length - 1} más`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+const PASOS = ['Pedido', 'Pago', 'Preparación', 'Despacho'] as const
+
+/** Qué pasos están hechos: Pedido siempre; Pago si pagó; Preparación si ya está armado; Despacho si salió. */
+export function pasosDe(p: Pick<PedidoDelCliente, 'etapa' | 'pago'>): boolean[] {
+  const armado = p.etapa === 'preparado' || p.etapa === 'despachado'
+  return [true, p.pago?.estado === 'pagado', armado, p.etapa === 'despachado']
+}
+
+/** La barra Pedido · Pago · Preparación · Despacho (Darío 15-nov): verde lo hecho, índigo el primero que falta. */
+function BarraDePasos({ p }: { p: PedidoDelCliente }) {
+  const hechos = pasosDe(p)
+  const actual = hechos.indexOf(false)
+  return (
+    <div aria-label={`Pasos: ${PASOS.map((t, i) => `${t} ${hechos[i] ? 'hecho' : 'falta'}`).join(', ')}`}>
+      <div style={{ display: 'flex', gap: 3, marginTop: 6 }}>
+        {PASOS.map((t, i) => <i key={t} style={{ flex: 1, height: 4, borderRadius: 3, background: hechos[i] ? color.success : i === actual ? color.brand : color.bg2 }} />)}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: color.mut2, marginTop: 3 }}>
+        {PASOS.map((t) => <span key={t}>{t}</span>)}
+      </div>
+    </div>
   )
 }
 

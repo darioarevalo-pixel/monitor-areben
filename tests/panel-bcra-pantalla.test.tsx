@@ -34,12 +34,14 @@ afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); docum
 const boton = (t: string) => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim().startsWith(t)) as HTMLButtonElement | undefined
 
 async function montar() {
-  const { TarjetaCuenta } = await import('@/components/panel/CuentaCorriente')
+  // Desde el 15-nov la situación crediticia vive plegada en «Más del cliente»: se abre tocando el renglón.
+  const { MasDelCliente } = await import('@/components/panel/CuentaCorriente')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<TarjetaCuenta cuenta={cuenta} telChat={null} decir={() => {}} onCambio={() => {}} />) })
+  await act(async () => { root = createRoot(host); root.render(<MasDelCliente cuenta={cuenta} telChat={null} decir={() => {}} onCambio={() => {}} />) })
+  await act(async () => { boton('Situación crediticia')!.click() })
 }
 
-describe('Situación crediticia en la tarjeta de cuenta (pantalla)', () => {
+describe('Situación crediticia en «Más del cliente» (pantalla)', () => {
   it('⛔ consulta sola; al apretar pide la ficha y muestra situación, deuda en pesos, cheques y el mes', async () => {
     leerBcraPanel.mockResolvedValue({
       prendido: true, cuit: '30718508181', ok: true, denominacion: 'AREBEN COMERCIAL S. R. L.', periodo: '202609', peor: 1, deuda: 28_527_000,

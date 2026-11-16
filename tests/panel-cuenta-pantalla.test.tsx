@@ -109,13 +109,22 @@ describe('Cargar pago desde el panel (pantalla)', () => {
     expect(onHecho).toHaveBeenCalledTimes(1)
   })
 
-  it('la tarjeta: «Enviar saldo», quién compra, anotar el número del chat con quién es y sacar a alguien', async () => {
+  it('la tarjeta: sólo cuando debe, con lo que debe y los últimos pagos (Darío 15-nov)', async () => {
     const { TarjetaCuenta } = await import('@/components/panel/CuentaCorriente')
+    host = document.createElement('div'); document.body.appendChild(host)
+    await act(async () => { root = createRoot(host); root.render(<TarjetaCuenta cuenta={cuenta} />) })
+    expect(document.body.textContent).toContain('Cuenta corriente')
+    expect(document.body.textContent).not.toContain('Un pago cancela')
+    await act(async () => { root!.render(<TarjetaCuenta cuenta={{ ...cuenta, estado: { ...cuenta.estado, pendientes: [] } }} />) })
+    expect(document.body.textContent).toBe('')
+  })
+
+  it('«Más del cliente»: quién compra se abre solo con un número sin anotar; anotar y sacar', async () => {
+    const { MasDelCliente } = await import('@/components/panel/CuentaCorriente')
     const decir = vi.fn()
     const onCambio = vi.fn()
     host = document.createElement('div'); document.body.appendChild(host)
-    await act(async () => { root = createRoot(host); root.render(<TarjetaCuenta cuenta={cuenta} telChat="5493415550000" decir={decir} onCambio={onCambio} />) })
-    expect(boton('💬')?.textContent).toContain('Enviar saldo')
+    await act(async () => { root = createRoot(host); root.render(<MasDelCliente cuenta={cuenta} telChat="5493415550000" decir={decir} onCambio={onCambio} />) })
     expect(document.body.textContent).toContain('Rodrigo, gerente · …1234')
     await poner(document.querySelector('input[placeholder^="¿Quién es?"]') as HTMLInputElement, 'Juan')
     await act(async () => { boton('Agregar este número')!.click() })
@@ -126,13 +135,13 @@ describe('Cargar pago desde el panel (pantalla)', () => {
     expect(sacar).toHaveBeenCalledWith('w1')
   })
 
-  it('el número del chat ya anotado ⛔ se ofrece de nuevo; sin chat (ficha abierta desde la lista), tampoco', async () => {
-    const { TarjetaCuenta } = await import('@/components/panel/CuentaCorriente')
+  it('el número del chat ya anotado: quién compra queda plegado y ⛔ se ofrece de nuevo; sin chat, tampoco', async () => {
+    const { MasDelCliente } = await import('@/components/panel/CuentaCorriente')
     host = document.createElement('div'); document.body.appendChild(host)
-    await act(async () => { root = createRoot(host); root.render(<TarjetaCuenta cuenta={{ ...cuenta, delChat: { id: 'w1', nombre: 'Rodrigo, gerente' } }} telChat="5493874401234" decir={() => {}} onCambio={() => {}} />) })
+    await act(async () => { root = createRoot(host); root.render(<MasDelCliente cuenta={{ ...cuenta, delChat: { id: 'w1', nombre: 'Rodrigo, gerente' } }} telChat="5493874401234" decir={() => {}} onCambio={() => {}} />) })
+    expect(document.body.textContent).not.toContain('Rodrigo, gerente · …1234')
+    await act(async () => { boton('Quién compra')!.click() })
     expect(document.body.textContent).toContain('· este chat')
-    expect(boton('Agregar este número')).toBeUndefined()
-    await act(async () => { root!.render(<TarjetaCuenta cuenta={cuenta} telChat={null} decir={() => {}} onCambio={() => {}} />) })
     expect(boton('Agregar este número')).toBeUndefined()
   })
 })

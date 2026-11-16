@@ -4,16 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Icono } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
-import { FranjaCuenta, HojaCargarPago, TarjetaCuenta, useCuentaPanel } from './CuentaCorriente'
-import { PedidosSinCliente, PreparadosSinPagar, TarjetaPedidos, usePedidosPanel } from './PedidosMayoristas'
+import { FranjaCuenta, HojaCargarPago, MasDelCliente, TarjetaCuenta, useCuentaPanel } from './CuentaCorriente'
+import { LoQueSigue, loQueSigue, PedidosSinCliente, PreparadosSinPagar, TarjetaPedidos, usePedidosPanel } from './PedidosMayoristas'
 import { CalculadoraEnvio } from './CalculadoraEnvio'
 import { ProximoContacto, RayaEstado, estadoDeFicha } from './ProximoContacto'
 import { QueLeMando } from './QueLeMando'
 import { SOBRE_OSCURO } from './oscuro'
 import type { QuienPaga } from './NuevoCompromiso'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
-import { TEMP_UI, vistaTemp } from '@/components/crm/temperatura'
-import { addDiasISO, diaHabil, PLAZOS_DIAS, siguienteTemperatura } from '@/lib/crm/core'
+import { addDiasISO, diaHabil, PLAZOS_DIAS } from '@/lib/crm/core'
 import { ritmoDeCompra } from '@/lib/crm/ritmo'
 import {
   buscarClientesPorNombre,
@@ -36,7 +35,6 @@ import {
   setPendiente,
   setPerfil,
   setProximoManual,
-  setTemperatura,
   setTenerEnCuenta,
 } from '@/lib/crm/seguimiento'
 import {
@@ -1205,7 +1203,6 @@ function PanelInterno({
   // ── La ficha ───────────────────────────────────────────────────────────────
   const { cliente: c, compras, via } = estado.ficha
   const seg = crmSeg[String(c.id)] || {}
-  const t = TEMP_UI[vistaTemp(c)]
   const notas = c.notas || []
   // Las ventas ya están en la ficha: la sugerencia no le pide nada más al servidor.
   const ritmo = ritmoDeCompra(c.ventas || [], today)
@@ -1219,6 +1216,9 @@ function PanelInterno({
 
   const estadoFicha = estadoDeFicha(c.proximo_contacto, hoyFicha, faltaFecha)
   const telFicha = pedido?.tel || c.phone || ''
+  // Con un pedido abierto que debe, el pago va en ESE pedido y ⛔ se repite arriba (Darío 15-nov: cada botón una sola vez).
+  const pedidoQueDebe = !!pedidosErp?.pedidos.some((p) => p.etapa !== 'anulado' && p.etapa !== 'despachado' && !!p.pago && p.pago.falta > 0)
+  const sigue = loQueSigue(pedidosErp, cuenta)
 
   return (
     <Envoltorio
@@ -1260,19 +1260,8 @@ function PanelInterno({
       <Encabezado>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
           <div style={{ minWidth: 0, fontSize: 18, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}>{c.name || `#${c.id}`}</div>
+          {/* Sin la temperatura («Sin marcar»): Darío no la usa (15-nov). */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
-            {/*
-              La temperatura sin pintar (rediseño del 19-oct-2026): el rojo quedó sólo para
-              «atrasado», y un 🔥 rojo arriba con un «Atrasado» rojo abajo eran dos cosas con el
-              mismo color.
-            */}
-            <button
-              onClick={() => mutar((m) => setTemperatura(m, c.id, siguienteTemperatura(c.temperatura)), 'Listo')}
-              title={`${t.txt} — ${t.ayuda}`}
-              style={{ cursor: 'pointer', height: 26, fontSize: 11, fontWeight: 600, padding: '0 9px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${color.line}`, background: color.bg2, color: color.ink }}
-            >
-              {t.txt}
-            </button>
             <BotonAbrirChat tel={telFicha} chatAbierto={telNorm} onAbrir={() => abrirChat(c.id, telFicha)} onYaEsta={() => decir('Ya estás en su chat')} />
           </div>
         </div>
@@ -1317,17 +1306,24 @@ function PanelInterno({
         </div>
         {cuenta && (
           <Aislado nombre="Cuenta corriente">
-            <FranjaCuenta cuenta={cuenta} onCargar={() => setCargandoPago(true)} />
+            <FranjaCuenta cuenta={cuenta} onCargar={pedidoQueDebe ? null : () => setCargandoPago(true)} />
           </Aislado>
         )}
       </Encabezado>
 
       <div style={{ paddingTop: space[2] }}>
+        {/* «Lo que sigue» (Darío 15-nov): lo urgente de este cliente, uno a la vista y «+N más». */}
+        <LoQueSigue key={`sigue-${c.id}`} items={sigue} />
+        {pedidosErp && (
+          <Aislado nombre="Pedidos de Areben Gestión">
+            <TarjetaPedidos pedidos={pedidosErp} clienteId={cuenta?.cliente.id ?? null} personaId={cuenta?.delChat?.id ?? null} tel={quien?.telefono ?? null} cuenta={cuenta} decir={decir} onCambio={() => { releerPedidos(); releerCuenta() }} />
+          </Aislado>
+        )}
         {/* Los pedidos en curso en Logística (22-oct-2026): sin pedidos no se dibuja. */}
         <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} despacho={seg.despacho || ''} />
         {cuenta && (
           <Aislado nombre="Cuenta corriente">
-            <TarjetaCuenta cuenta={cuenta} telChat={via === 'id' ? null : telNorm || null} decir={decir} onCambio={releerCuenta} />
+            <TarjetaCuenta cuenta={cuenta} />
             {cargandoPago && (
               <HojaCargarPago
                 cuenta={cuenta}
@@ -1335,11 +1331,6 @@ function PanelInterno({
                 onHecho={(t) => { setCargandoPago(false); decir(t); releerCuenta() }}
               />
             )}
-          </Aislado>
-        )}
-        {pedidosErp && (
-          <Aislado nombre="Pedidos de Areben Gestión">
-            <TarjetaPedidos pedidos={pedidosErp} clienteId={cuenta?.cliente.id ?? null} personaId={cuenta?.delChat?.id ?? null} tel={quien?.telefono ?? null} cuenta={cuenta} decir={decir} onCambio={() => { releerPedidos(); releerCuenta() }} />
           </Aislado>
         )}
         {/*
@@ -1366,6 +1357,13 @@ function PanelInterno({
         />
 
         <UltimaCompra key={`compra-${c.id}`} ultima={compras.ultima} />
+
+        {/* «Más del cliente» plegado (Darío 15-nov): Quién compra, Facturas y BCRA. */}
+        {cuenta && (
+          <Aislado nombre="Más del cliente">
+            <MasDelCliente key={`mas-${cuenta.cliente.id}`} cuenta={cuenta} telChat={via === 'id' ? null : telNorm || null} decir={decir} onCambio={releerCuenta} />
+          </Aislado>
+        )}
 
         <div style={{ padding: `0 ${space[3]}px ${space[3]}px` }}>
           <a href="/clientes" target="_blank" rel="noreferrer" style={{ fontSize: font.sm, color: color.brand, textDecoration: 'none' }}>

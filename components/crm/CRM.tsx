@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import { useCRM } from './useCRM'
-import { TEMP_UI, vistaTemp } from './temperatura'
 import { Leads } from './Leads'
 import { LeadsDelDia } from './LeadsDelDia'
 import { Metricas } from './Metricas'
@@ -10,7 +9,7 @@ import { MapaLocales } from './MapaLocales'
 import { ClienteModal } from './ClienteModal'
 import { GuiaTrabajo, type AccionGuia } from './GuiaTrabajo'
 import { BancoMensajes } from './BancoMensajes'
-import { FILTROS_POR_DIA, TANDA_FRIOS, contarKpis, contarPorDia, filtrarOrdenar, normalizeArgPhone, siguienteTemperatura } from '@/lib/crm/core'
+import { FILTROS_POR_DIA, TANDA_FRIOS, contarKpis, contarPorDia, filtrarOrdenar, normalizeArgPhone } from '@/lib/crm/core'
 import { feriadosDe, proximoHabil } from '@/lib/crm/agenda.core.js'
 import { sumarDias } from '@/lib/calendario/fechas.core.js'
 import {
@@ -92,7 +91,7 @@ type FilaProps = {
   onTemperatura: (id: number, val: Temperatura) => void
 }
 
-function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPagina, onTemperatura }: FilaProps) {
+function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPagina }: FilaProps) {
   const esMayorista = !!seg.es_mayorista
   // Con la lista de la comunidad cargada, lo que se muestra es el dato real (y no se toca a mano).
   const segunLista = c.en_comunidad === true || c.en_comunidad === false
@@ -171,26 +170,7 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
         </button>
         )}
       </Td>
-      <Td align="center">
-        {(() => {
-          const t = TEMP_UI[vistaTemp(c)]
-          return (
-            <button
-              // Mismo trato que el botón de Difusión: el stopPropagation va adentro del
-              // onClick (en captura mataría el propio click del botón). Lo único a evitar
-              // es que el clic abra además la ficha del cliente.
-              onClick={(e) => {
-                e.stopPropagation()
-                onTemperatura(c.id, siguienteTemperatura(c.temperatura))
-              }}
-              title={`${t.txt} — ${t.ayuda}`}
-              style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${t.bd}`, background: t.bg, color: t.fg }}
-            >
-              {t.txt}
-            </button>
-          )
-        })()}
-      </Td>
+      {/* Sin «Cómo viene» (la temperatura, «Sin marcar»): Darío no la usa (15-nov). */}
       {/* La columna de acciones existe SOLO mirando descartados: sacado el botón de
           WhatsApp, lo único que queda acá es Reactivar. Si se dejara fija, en el uso
           normal sería una columna vacía. */}
@@ -482,7 +462,6 @@ export function CRM() {
                   <Th onClick={() => ordenarPor('proximo')}>Próximo contacto</Th>
                   <Th>Última nota</Th>
                   <Th align="center">Comunidad</Th>
-                  <Th align="center">Cómo viene</Th>
                   {verDescartados && <Th />}
                 </Tr>
               </THead>

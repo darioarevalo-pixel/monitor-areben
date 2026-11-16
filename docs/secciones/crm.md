@@ -93,6 +93,13 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
   - **«Sin cliente»** (Hoy, Darío 15-nov; antes «Falta el cliente»): el pedido que entró a la ficha general «Pedido mayorista».
     «Elegir cliente» anota el número y le pasa el pedido, sin chat; tocar el pedido abre su hoja. Textos de Darío: sin pie,
     ⛔ aviso al terminar y ⛔ se habla de fundas «apartadas» en el panel (`tests/panel-elegir-cliente.test.tsx`).
+  - **La ficha con el ERP** (Darío 15-nov, página https://claude.ai/artifact/XiTbXCnZ4RqBs6Gog2Ea9m): saldo en UNA línea con el
+    crédito al lado (`FranjaCuenta`, «Sin crédito» / «Con crédito · hasta $X · N días»); «$ Cargar pago» arriba SÓLO sin pedido
+    abierto que deba (cada botón una sola vez). Abajo, en orden: «Lo que sigue» (`loQueSigue`: sin cliente → armado sin pagar →
+    compra vieja, uno a la vista y «+N más»), Pedidos con barra Pedido·Pago·Preparación·Despacho y el botón del paso, Logística,
+    la cuenta (sólo si debe), notas, última compra y «Más del cliente» plegado (Quién compra se abre solo con número sin anotar).
+    Sin la temperatura («Sin marcar»): sale de la ficha, de los filtros de la Agenda y de la columna «Cómo viene» del CRM
+    (el dato queda: los 🧊 Fríos del CRM lo siguen leyendo). `tests/panel-ficha-lo-que-sigue.test.ts`.
   - 🔴 **Anular un pedido = sólo Darío y Bruno**, con motivo, chico al final de la hoja (Darío 15-nov). El servidor lo frena con
     `esAprobador` (`lib/reposicion/armado.core.js`, admin + nombre) → 403; la pantalla esconde el botón al resto.
 - **Situación crediticia** (Bruno 31-oct, «sumalo»): en la tarjeta de cuenta, «Ver situación en el BCRA» consulta la

@@ -18,16 +18,17 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Button, CopyButton, Field, Input, Modal, Notice, Select } from '@/components/ui'
+import { Button, Field, Input, Modal, Notice, Select } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import { CampoCuentaReal } from '@/components/erp/ventas/CampoCuentaReal'
 import { pideCuentaReal } from '@/lib/erp/cobro-destino.core.js'
 import { useChequeDelCobro } from '@/components/erp/ventas/CamposCheque'
 import { anotarWhatsappPanel, cobrarCuentaErp, leerBcraPanel, leerCuentaPanel, leerCuentasCorrientes, sacarWhatsappPanel, type BcraDelPanel, type CuentaDelMotor, type CuentaPanel } from '@/lib/erp/cliente'
-import { mensajeDeSaldo, repartirPago, textoSaldo } from '@/lib/erp/cuenta-panel.core.js'
+import { mensajeDeSaldo, repartirPago } from '@/lib/erp/cuenta-panel.core.js'
 import { ResumenBcra } from './Bcra'
 import { ConsultaCuit } from './ConsultaCuit'
 import { FacturasCliente } from './FacturasCliente'
+import { Pliegue } from './Pliegue'
 import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 
@@ -77,67 +78,98 @@ export function useCuentaPanel(gnId: number | null, tel: string | null): { cuent
   return { cuenta, releer }
 }
 
-/** La franja del encabezado oscuro: el saldo y «$ Cargar pago». Va abajo de los números (Pedidos · Total · Último). */
-export function FranjaCuenta({ cuenta, onCargar }: { cuenta: CuentaConCliente; onCargar: () => void }) {
-  const { saldo, pendientes } = cuenta.estado
-  const vieja = pendientes.reduce((m, p) => Math.max(m, p.dias), 0)
+/** «Sin crédito» · «Con crédito · hasta $X · N días» (Darío 15-nov; el crédito se marca en ERP › Clientes). */
+export function textoCredito(c: CuentaConCliente['credito']): string {
+  if (!c?.credito) return 'Sin crédito'
+  return ['Con crédito', c.tope != null ? `hasta ${plata(c.tope)}` : null, c.dias ? `${c.dias} días` : null].filter(Boolean).join(' · ')
+}
+
+/**
+ * El saldo en UNA línea, abajo de los números (Pedidos · Total · Último), con el crédito al lado (Darío 15-nov: «Saldo» en vez de
+ * «Cuenta corriente»). «$ Cargar pago» va acá SÓLO sin un pedido abierto que deba: con pedido, el pago va en el pedido
+ * (cada botón una sola vez) ⇒ `onCargar = null`.
+ */
+export function FranjaCuenta({ cuenta, onCargar }: { cuenta: CuentaConCliente; onCargar: (() => void) | null }) {
+  const { saldo } = cuenta.estado
+  const conCredito = !!cuenta.credito?.credito
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: space[2], marginTop: 8, padding: '7px 10px', borderRadius: radius.md, background: color.bg2, border: `1px solid ${color.line}` }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 10, color: color.mut2, textTransform: 'uppercase', letterSpacing: 0.3 }}>Cuenta corriente{cuenta.prueba ? ' · de prueba' : ''}</div>
-        <div style={{ fontSize: font.md, fontWeight: 700, lineHeight: 1.2, color: saldo > 0 ? color.dangerInk : color.successInk, fontVariantNumeric: 'tabular-nums' }}>{textoSaldo(saldo, plata)}</div>
-        <div style={{ fontSize: font.xs, color: color.mut2 }}>{saldo > 0 ? `debe · la más vieja hace ${vieja} días` : 'no debe nada'}</div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: space[2], marginTop: 8 }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 8px', fontSize: font.sm, color: color.mut }}>
+        <span>Saldo{cuenta.prueba ? ' (prueba)' : ''} · <b style={{ color: saldo > 0 ? color.dangerInk : color.successInk, fontVariantNumeric: 'tabular-nums' }}>{saldo > 0 ? `debe ${plata(saldo)}` : saldo < 0 ? `${plata(-saldo)} a favor` : 'al día'}</b></span>
+        <span style={{ fontSize: 11, fontWeight: 600, borderRadius: 999, padding: '1px 8px', border: `1px solid ${conCredito ? color.brand : color.line}`, color: conCredito ? color.brand : color.mut2, whiteSpace: 'nowrap' }}>{textoCredito(cuenta.credito)}</span>
       </div>
-      <Button size="sm" variant="solid" tone="brand" onClick={onCargar}>$ Cargar pago</Button>
+      {onCargar && <Button size="sm" variant="solid" tone="brand" onClick={onCargar}>$ Cargar pago</Button>}
     </div>
   )
 }
 
 const ROTULO = { fontSize: font.xs, fontWeight: 700, letterSpacing: 0.4, color: color.mut2, textTransform: 'uppercase' } as const
 
-/**
- * La tarjeta de abajo: las compras que deben (la más vieja primero), los últimos pagos, «Enviar saldo» (pedido de Darío §6)
- * y quién compra por esta empresa (§1).
- */
-export function TarjetaCuenta({ cuenta, telChat, decir, onCambio }: {
-  cuenta: CuentaConCliente; telChat: string | null; decir: (txt: string, mal?: boolean) => void; onCambio: () => void
-}) {
+/** El mensaje de «💬 Enviar saldo» / «💬 Pedir pago» de esta cuenta (`null` = no debe ni tiene a favor). */
+export function mensajeDeLaCuenta(cuenta: CuentaConCliente): string | null {
   const pendientes = [...cuenta.estado.pendientes].sort((a, b) => a.fecha.localeCompare(b.fecha))
-  const mensaje = mensajeDeSaldo({ nombre: cuenta.cliente.nombre, saldo: cuenta.estado.saldo, pendientes }, plata)
+  return mensajeDeSaldo({ nombre: cuenta.cliente.nombre, saldo: cuenta.estado.saldo, pendientes }, plata)
+}
+
+/**
+ * La tarjeta de la cuenta (Darío 15-nov): SÓLO cuando debe —al día no hay más bloques—, con las compras que deben (la más
+ * vieja primero) y los últimos pagos. «Enviar saldo» pasó a «Lo que sigue»; BCRA, Facturas y Quién compra, a «Más del cliente».
+ */
+export function TarjetaCuenta({ cuenta }: { cuenta: CuentaConCliente }) {
+  const pendientes = [...cuenta.estado.pendientes].sort((a, b) => a.fecha.localeCompare(b.fecha))
+  if (!pendientes.length) return null
   return (
     <section style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: `${space[2]}px ${space[3]}px ${space[3]}px`, margin: `0 ${space[2]}px ${space[2]}px` }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-        <div style={ROTULO}>Cuenta corriente</div>
-        {mensaje && <CopyButton getText={() => mensaje} label="Enviar saldo" copiedLabel="✓ Copiado, pegalo en el chat" iconLeft="💬" />}
+      <div style={{ ...ROTULO, marginBottom: 6 }}>Cuenta corriente</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {pendientes.map((p) => (
+          <div key={p.ref} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: font.sm }}>
+            <div style={{ minWidth: 0 }}>
+              <b>{p.nombre || 'Compra'}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.fecha)} · hace {p.dias} días</span>
+              <div style={{ fontSize: font.xs, color: color.mut2 }}>total {plata(p.monto)}{p.monto > p.pendiente ? ` · pagó ${plata(p.monto - p.pendiente)}` : ''}</div>
+            </div>
+            <b style={{ color: color.dangerInk, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{plata(p.pendiente)}</b>
+          </div>
+        ))}
       </div>
-      {pendientes.length ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {pendientes.map((p) => (
-            <div key={p.ref} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: font.sm }}>
-              <div style={{ minWidth: 0 }}>
-                <b>{p.nombre || 'Compra'}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.fecha)} · hace {p.dias} días</span>
-                <div style={{ fontSize: font.xs, color: color.mut2 }}>total {plata(p.monto)}{p.monto > p.pendiente ? ` · pagó ${plata(p.monto - p.pendiente)}` : ''}</div>
-              </div>
-              <b style={{ color: color.dangerInk, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{plata(p.pendiente)}</b>
+      {cuenta.pagos.length > 0 && (
+        <div style={{ borderTop: `1px solid ${color.line2}`, marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={ROTULO}>Últimos pagos</div>
+          {cuenta.pagos.map((p, i) => (
+            <div key={`${p.fecha}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.sm }}>
+              <span>{diaMes(p.fecha)}{p.detalle ? ` · ${p.detalle}` : ''}</span>
+              <b style={{ fontVariantNumeric: 'tabular-nums' }}>{plata(p.monto)}</b>
             </div>
           ))}
         </div>
-      ) : (
-        <div style={{ fontSize: font.sm, color: color.mut2 }}>No debe ninguna compra.</div>
       )}
-      <div style={{ borderTop: `1px solid ${color.line2}`, marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ fontSize: font.xs, fontWeight: 700, letterSpacing: 0.4, color: color.mut2, textTransform: 'uppercase' }}>Últimos pagos</div>
-        {cuenta.pagos.length ? cuenta.pagos.map((p, i) => (
-          <div key={`${p.fecha}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.sm }}>
-            <span>{diaMes(p.fecha)}{p.detalle ? ` · ${p.detalle}` : ''}</span>
-            <b style={{ fontVariantNumeric: 'tabular-nums' }}>{plata(p.monto)}</b>
-          </div>
-        )) : <div style={{ fontSize: font.sm, color: color.mut2 }}>Todavía no hay pagos.</div>}
-      </div>
-      <div style={{ fontSize: 11, color: color.mut2, marginTop: 6 }}>Un pago cancela primero la compra más vieja.</div>
-      <SituacionBcra key={cuenta.cliente.id} clienteId={cuenta.cliente.id} />
-      <FacturasCliente key={`f-${cuenta.cliente.id}`} clienteId={cuenta.cliente.id} decir={decir} />
-      {cuenta.personas && <QuienCompra cuenta={cuenta} telChat={telChat} decir={decir} onCambio={onCambio} />}
+    </section>
+  )
+}
+
+/**
+ * «Más del cliente» (Darío 15-nov): Quién compra, Facturas y Situación crediticia plegados, con la cantidad. Quién compra se abre
+ * solo si escribe un número que ⛔ está anotado (para anotarlo ahí mismo).
+ */
+export function MasDelCliente({ cuenta, telChat, decir, onCambio }: {
+  cuenta: CuentaConCliente; telChat: string | null; decir: (txt: string, mal?: boolean) => void; onCambio: () => void
+}) {
+  const sinAnotar = !!telChat && !!cuenta.personas && !cuenta.delChat
+  const [abierto, setAbierto] = useState<'quien' | 'facturas' | 'bcra' | null>(sinAnotar ? 'quien' : null)
+  const tocar = (k: 'quien' | 'facturas' | 'bcra') => setAbierto((a) => (a === k ? null : k))
+  const n = cuenta.personas?.length ?? 0
+  return (
+    <section style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: `${space[2]}px ${space[3]}px 2px`, margin: `0 ${space[2]}px ${space[2]}px` }}>
+      <div style={{ ...ROTULO, marginBottom: 4 }}>Más del cliente</div>
+      {cuenta.personas && (
+        <Pliegue titulo="Quién compra" cantidad={n ? `${n} ${n === 1 ? 'número' : 'números'}` : 'ninguno anotado'} abierto={abierto === 'quien'} onTocar={() => tocar('quien')}>
+          <QuienCompra cuenta={cuenta} telChat={telChat} decir={decir} onCambio={onCambio} />
+        </Pliegue>
+      )}
+      <FacturasCliente key={`f-${cuenta.cliente.id}`} clienteId={cuenta.cliente.id} decir={decir} plegado={{ abierto: abierto === 'facturas', onTocar: () => tocar('facturas') }} />
+      <Pliegue titulo="Situación crediticia (BCRA)" cantidad="consultar" abierto={abierto === 'bcra'} onTocar={() => tocar('bcra')}>
+        <SituacionBcra key={cuenta.cliente.id} clienteId={cuenta.cliente.id} />
+      </Pliegue>
     </section>
   )
 }
@@ -155,9 +187,8 @@ function SituacionBcra({ clienteId }: { clienteId: string }) {
     try { setR(await leerBcraPanel(clienteId)) } catch (e) { setR(null); setError(e instanceof Error ? e.message : 'No se pudo consultar el BCRA.') }
   }
   return (
-    <div style={{ borderTop: `1px solid ${color.line2}`, marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <div style={ROTULO}>Situación crediticia</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button size="sm" variant="ghost" style={{ height: 'auto' }} onClick={() => setOtro(true)}>Consultar un CUIT</Button>
       </div>
       {r === null
@@ -185,8 +216,7 @@ function QuienCompra({ cuenta, telChat, decir, onCambio }: {
     try { decir(await f()); onCambio() } catch (e) { decir(e instanceof Error ? e.message : 'No se pudo.', true) } finally { setTrabajando(false) }
   }
   return (
-    <div style={{ borderTop: `1px solid ${color.line2}`, marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={ROTULO}>Quién compra</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {personas.length ? personas.map((p) => (
         <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: font.sm, gap: 8 }}>
           <span>{p.nombre || 'Sin nombre'} <span style={{ color: color.mut2 }}>· {fin(p.whatsapp)}{cuenta.delChat?.id === p.id ? ' · este chat' : ''}</span></span>
