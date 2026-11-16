@@ -69,7 +69,12 @@ jobs:
         run: npm test
 
       # Va último porque es el más lento.
+      # `next build` vuelve a chequear los tipos de TODO el proyecto, en su propio proceso: el mismo tope que el Typecheck.
+      # Sin esto se caía DESPUÉS de «Compiled successfully» con «heap out of memory» (16-nov: main 03:18 y 03:29, PR #63),
+      # a veces sí y a veces no con el mismo commit ⇒ Verificar rojo ⇒ Publicar frenado por «Repository rule violations».
       - name: Build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: npm run build
 
   # La copia del motor (`motor/`) tiene que ser de `main` de areben-motor (auditoría 20-oct). Job aparte: pide red y un
