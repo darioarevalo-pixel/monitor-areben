@@ -166,7 +166,7 @@ export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-pre
 /**
  * Entrar al ERP, cambiar, mandar a preparar y anular. Doble llave: el panel Y `VENTA_MAYORISTA_REAL`.
  * @param {{ accion: string, body: any, usuario: string|null, quien?: any }} p
- * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean }} deps
+ * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, puedeAnular?: boolean }} deps
  */
 export async function accionDePedido({ accion, body, usuario, quien = usuario }, deps) {
   if (!ACCIONES_PEDIDO.includes(accion)) return { status: 400, error: 'Acción desconocida' }
@@ -174,6 +174,11 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
   if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Los pedidos se manejan desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.' }
   if (!UUID.test(String(body?.pedidoId || ''))) return { status: 400, error: 'Falta el pedido' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
+  // Anular: sólo Darío y Bruno, con motivo (Darío 15-nov). El que llama dice si el perfil es uno de los dos (`esAprobador`).
+  if (accion === 'pedido-anular') {
+    if (!deps.puedeAnular) return { status: 403, error: 'Anular un pedido es sólo de Darío y Bruno.' }
+    if (!String(body.motivo ?? '').trim()) return { status: 400, error: 'Falta el motivo' }
+  }
   return deps.conMotor('bdi', 'El pedido', async (pg) => {
     const pv = await import('../motor/pedido/venta.mjs')
     const pedido_id = String(body.pedidoId)

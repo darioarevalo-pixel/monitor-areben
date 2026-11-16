@@ -90,6 +90,11 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
     igual» lo manda sabiendo. 🔴 **Tolerancia $1.000** (Bruno 31-oct): faltando eso o menos el pedido se ve «Pagado» y va a
     «Despacho», pero ⛔ se perdona: la diferencia SIGUE en la cuenta. «A dónde fue la plata»: ⏸️ a futuro, con las deudas de
     proveedores (`tests/pedido-cargar-pago.test.tsx`, `tests/panel-cuenta-pantalla.test.tsx`).
+  - **«Sin cliente»** (Hoy, Darío 15-nov; antes «Falta el cliente»): el pedido que entró a la ficha general «Pedido mayorista».
+    «Elegir cliente» anota el número y le pasa el pedido, sin chat; tocar el pedido abre su hoja. Textos de Darío: sin pie,
+    ⛔ aviso al terminar y ⛔ se habla de fundas «apartadas» en el panel (`tests/panel-elegir-cliente.test.tsx`).
+  - 🔴 **Anular un pedido = sólo Darío y Bruno**, con motivo, chico al final de la hoja (Darío 15-nov). El servidor lo frena con
+    `esAprobador` (`lib/reposicion/armado.core.js`, admin + nombre) → 403; la pantalla esconde el botón al resto.
 - **Situación crediticia** (Bruno 31-oct, «sumalo»): en la tarjeta de cuenta, «Ver situación en el BCRA» consulta la
   Central de Deudores PÚBLICA del BCRA (sin clave, gratis; `lib/erp/bcra.core.js` + `situacionBcra`/`bcraDelPanel` de
   `api/_erp-clientes.js`, vista `bcra-panel`, permiso `cuentas`, misma llave del panel). Situación por banco, deuda, 12 meses

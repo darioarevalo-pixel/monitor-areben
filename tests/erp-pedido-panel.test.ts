@@ -99,7 +99,7 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
 
   it('las acciones llaman al motor con quién lo hace; los frenos del motor salen como 409', async () => {
     const db = base(CON064)
-    const dep = { conMotor: conMotor(db), prendido: true, escribir: true }
+    const dep = { conMotor: conMotor(db), prendido: true, escribir: true, puedeAnular: true }
     pv.entrarPedidoMayorista.mockResolvedValue({ ok: true, ya: false, venta_id: 'v1' })
     expect(await accionDePedido({ accion: 'pedido-entrar', body: { pedidoId: P, clienteId: C, personaId: 'nada' }, usuario: 'darío' }, dep)).toEqual({ ok: true, ya: false, sinCambios: false, avisarDeposito: false, ventaId: 'v1' })
     expect(pv.entrarPedidoMayorista.mock.calls[0][1]).toEqual({ pedido_id: P, cliente_id: C, persona_id: null, usuario: 'darío' })
@@ -111,6 +111,14 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
     await accionDePedido({ accion: 'pedido-anular', body: { pedidoId: P, motivo: 'no lo quiere' }, usuario: 'darío' }, dep)
     expect(pv.anularPedidoDelErp.mock.calls[0][1]).toEqual({ pedido_id: P, motivo: 'no lo quiere', usuario: 'darío' })
     expect(await accionDePedido({ accion: 'pedido-a-preparar', body: { pedidoId: P }, usuario: null }, dep)).toMatchObject({ status: 400 })
+  })
+
+  it('anular: sólo Darío y Bruno (puedeAnular) y con motivo (Darío 15-nov)', async () => {
+    const dep = { conMotor: conMotor(base(CON064)), prendido: true, escribir: true }
+    pv.anularPedidoDelErp.mockReset()
+    expect(await accionDePedido({ accion: 'pedido-anular', body: { pedidoId: P, motivo: 'no lo quiere' }, usuario: 'ger' }, dep)).toMatchObject({ status: 403 })
+    expect(await accionDePedido({ accion: 'pedido-anular', body: { pedidoId: P, motivo: '  ' }, usuario: 'darío' }, { ...dep, puedeAnular: true })).toMatchObject({ status: 400 })
+    expect(pv.anularPedidoDelErp).not.toHaveBeenCalled()
   })
 
   it('la puerta: vistas y acciones nombradas con su forma; leer = cuentas, escribir = cobrar', () => {

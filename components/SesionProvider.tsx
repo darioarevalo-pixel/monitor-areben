@@ -191,3 +191,8 @@ export function useSesion(): Ctx {
   if (!c) throw new Error('useSesion tiene que usarse dentro de <SesionProvider>')
   return c
 }
+
+/** El perfil sin exigir el proveedor: `null` afuera de <SesionProvider> (pantallas sueltas y sus tests). */
+export function usePerfilOpcional(): Perfil | null {
+  return useContext(SesionCtx)?.perfil ?? null
+}

@@ -145,6 +145,7 @@ import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransfe
 import { listaDeProductos } from './_erp-productos.js'
 import { anotarWhatsappPanel, bcraDelPanel, clienteNuevoPanel, clientesDelPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, libroDePruebaDelPanel, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
 import { conFacturacion, enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, facturasDeClientePanel, padronDelPanel, partePedidoPanel } from './_erp-factura-mayorista.js'
+import { esAprobador } from '../lib/reposicion/armado.core.js'
 import { ACCIONES_PEDIDO, accionDePedido, pedidoDelPanel, pedidosDelPanel, pedidosSinClienteDelPanel, preparadosSinPagarDelPanel, productosParaElPanel } from './_erp-pedido.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
@@ -2111,7 +2112,7 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'POST' && ACCIONES_PEDIDO.includes(body.accion)) {
-      const r = await accionDePedido({ accion: body.accion, body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor })
+      const r = await accionDePedido({ accion: body.accion, body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor, puedeAnular: esAprobador(perfil) })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     // La facturación de mayoristas desde el panel (pedido de Darío §5): la factura LIBRE y las facturas de la ficha.

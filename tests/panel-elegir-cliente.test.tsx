@@ -99,7 +99,7 @@ describe('«¿Es de un cliente que ya tenés?»', () => {
   })
 })
 
-describe('«Falta el cliente» sin chat (Bruno 15-nov: el número del pedido puede ⛔ tener chat)', () => {
+describe('«Sin cliente» sin chat (Bruno 15-nov: el número del pedido puede ⛔ tener chat)', () => {
   const PEDIDO = { id: 'p1', numero: 111, recibido_en: '2026-11-15T21:32:32.482Z', total: 4900, unidades: 1, nombre: 'Roberto', telefono: TEL }
   const montarLista = async () => { await act(async () => { root.render(<PedidosSinCliente />) }); await esperar() }
   beforeEach(() => {
@@ -109,7 +109,7 @@ describe('«Falta el cliente» sin chat (Bruno 15-nov: el número del pedido pue
 
   it('elegir un cliente desde la lista le anota el número Y le pasa el pedido', async () => {
     await montarLista()
-    await act(async () => { boton('Pasar a un cliente').click() })
+    await act(async () => { boton('Elegir cliente').click() })
     expect(inputs()[0].value).toBe('Roberto')
     await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el cliente"]')!, 'celu')
     await esperar(350)
@@ -118,12 +118,27 @@ describe('«Falta el cliente» sin chat (Bruno 15-nov: el número del pedido pue
     expect(cliente.anotarWhatsappPanel).toHaveBeenCalledWith({ clienteId: 'u1', whatsapp: TEL, nombre: 'Roberto' })
     expect(cliente.entrarPedidoPanel).toHaveBeenCalledWith({ pedidoId: 'p1', clienteId: 'u1' })
     expect(cliente.leerPedidosSinCliente).toHaveBeenCalledTimes(2)
-    expect(document.body.textContent).toContain('pasó a Celulares Rosario')
+    // Darío 15-nov: sin aviso al terminar — el pedido sale de la lista y pasa solo a su cliente.
+    expect(document.body.textContent).toBe('')
+  })
+
+  it('textos: «Sin cliente», sin pie y ⛔ se habla de fundas apartadas (Darío 15-nov)', async () => {
+    await montarLista()
+    const txt = document.body.textContent ?? ''
+    expect(txt).toContain('Sin cliente')
+    expect(txt).not.toMatch(/apartad|Falta el cliente|Pasá cada pedido/)
+  })
+
+  it('tocar el pedido abre su hoja', async () => {
+    cliente.leerPedidoPanel.mockReturnValue(new Promise(() => {}))
+    await montarLista()
+    await act(async () => { (document.querySelector('button[aria-label^="Ver el pedido"]') as HTMLButtonElement).click() })
+    expect(cliente.leerPedidoPanel).toHaveBeenCalledWith('p1')
   })
 
   it('crear el cliente desde la lista también le pasa el pedido', async () => {
     await montarLista()
-    await act(async () => { boton('Pasar a un cliente').click() })
+    await act(async () => { boton('Elegir cliente').click() })
     await act(async () => { boton('Es nuevo').click() })
     const [, nombre, doc] = inputs()
     await escribir(nombre, 'Fundas Norte')
@@ -136,7 +151,7 @@ describe('«Falta el cliente» sin chat (Bruno 15-nov: el número del pedido pue
   it('si pasar el pedido falla, se ve el error y el pedido sigue en la lista', async () => {
     cliente.entrarPedidoPanel.mockRejectedValue(new Error('El pedido ya tiene pagos'))
     await montarLista()
-    await act(async () => { boton('Pasar a un cliente').click() })
+    await act(async () => { boton('Elegir cliente').click() })
     await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el cliente"]')!, 'celu')
     await esperar(350)
     await act(async () => { boton(/Celulares Rosario · 20123456786/).click() })
