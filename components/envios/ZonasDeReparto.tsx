@@ -26,6 +26,7 @@ import {
 } from '@/components/ui'
 import { borrarZona, guardarZona, importarZonas } from '@/lib/envios/cliente'
 import { useZonas } from './useEnvios'
+import { LOCALES, LOCALIDADES_FIJAS, TRAMOS_ROSARIO } from '@/lib/envios/tarifa.core.js'
 import type { PlanDeImportacion, Turno, ZonaDeReparto } from '@/lib/envios/tipos'
 
 /**
@@ -73,6 +74,7 @@ export function ZonasDeReparto({ activa }: { activa: boolean }) {
   if (!zonas.length) {
     return (
       <div style={{ display: 'grid', gap: space[4] }}>
+        <TarifaDelCadete />
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Button variant="outline" onClick={() => setImportando(true)}>
             Importar el mapa
@@ -94,6 +96,11 @@ export function ZonasDeReparto({ activa }: { activa: boolean }) {
 
   return (
     <div style={{ display: 'grid', gap: space[4] }}>
+      <TarifaDelCadete />
+      <Notice tone="warning">
+        Desde el 15-nov el precio que se propone sale de la tarifa de arriba, no de estas zonas. De las zonas sólo
+        cuenta «NO VAMOS»: una dirección que cae ahí sigue sin precio.
+      </Notice>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[3] }}>
         <span style={{ fontSize: font.sm, color: color.mut2 }}>
           {zonas.length} zonas · el dibujo se cambia en el mapa, el precio acá
@@ -525,6 +532,62 @@ function Linea({ titulo, n, children }: { titulo: string; n: number; children: R
       <ul style={{ margin: `${space[1]}px 0 0`, paddingLeft: space[5], fontSize: font.sm, color: color.mut2 }}>
         {children}
       </ul>
+    </div>
+  )
+}
+
+/**
+ * **La tarifa del cadete, a la vista.** Sale de `lib/envios/tarifa.core.js` —la MISMA tabla que usa el
+ * servidor para proponer—, así que lo que se lee acá es lo que se cobra. Cambiarla es cambiar ese
+ * archivo y deployar (15-nov-2026: el cartel de Jorge).
+ */
+function TarifaDelCadete() {
+  const km = (n: number) => String(n).replace('.', ',')
+  return (
+    <div style={{ display: 'grid', gap: space[3], gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+      <TableWrap>
+        <THead>
+          <Tr>
+            <Th>Rosario, km por calle</Th>
+            <Th align="right" width={110}>
+              Precio
+            </Th>
+          </Tr>
+        </THead>
+        <TBody>
+          {TRAMOS_ROSARIO.map((t, i) => (
+            <Tr key={t.hasta}>
+              <Td>
+                {i === 0 ? 0 : km(TRAMOS_ROSARIO[i - 1].hasta + 0.1)} a {km(t.hasta)} km
+              </Td>
+              <Td align="right">{formatMoney(t.precio)}</Td>
+            </Tr>
+          ))}
+        </TBody>
+      </TableWrap>
+      <TableWrap>
+        <THead>
+          <Tr>
+            <Th>Afuera de Rosario</Th>
+            <Th align="right" width={110}>
+              Precio
+            </Th>
+          </Tr>
+        </THead>
+        <TBody>
+          {LOCALIDADES_FIJAS.map((l) => (
+            <Tr key={l.localidad}>
+              <Td>{l.localidad}</Td>
+              <Td align="right">{formatMoney(l.precio)}</Td>
+            </Tr>
+          ))}
+        </TBody>
+      </TableWrap>
+      <div style={{ fontSize: font.sm, color: color.mut2, gridColumn: '1 / -1' }}>
+        Los km se miden por calle desde el local de cada marca (Zattia: {LOCALES.zattia.direccion} · BDI:{' '}
+        {LOCALES.bdi.direccion}). Más de 14 km, otra localidad o sin respuesta del ruteador: no se propone precio y se
+        escribe a mano.
+      </div>
     </div>
   )
 }

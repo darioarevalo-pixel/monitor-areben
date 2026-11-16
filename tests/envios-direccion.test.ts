@@ -352,18 +352,27 @@ describe('puntoDeGeoref — el candado, segunda mitad: lo que contestó, ¿es ex
   })
 })
 
-describe('sugerenciaDePunto — sólo `sugerido` trae precio', () => {
-  it('con punto preciso adentro de una zona, propone el precio CON el nombre', () => {
-    const s = sugerenciaDePunto(respuesta('RICCHIERI 1152, Rosario, Santa Fe', -32.9464, -60.6639, 1152), ZONAS)
-    expect(s).toMatchObject({ estado: 'sugerido', precio: 4500 })
-    // 🔑 El nombre viaja al lado del número: "$4.500" solo no se puede revisar de un vistazo.
-    expect(s.zona?.nombre).toBe('Zona 7')
+describe('sugerenciaDePunto — sólo `sugerido` trae precio (tarifa del 15-nov)', () => {
+  it('Rosario con km: propone la franja CON los km en el nombre', () => {
+    const s = sugerenciaDePunto(respuesta('RICCHIERI 1152, Rosario, Santa Fe', -32.9464, -60.6639, 1152), ZONAS, 3.4)
+    expect(s).toMatchObject({ estado: 'sugerido', precio: 5500, km: 3.4 })
+    // 🔑 Lo que viaja al lado del número es de dónde sale: «$5.500» solo no se revisa.
+    expect(s.zona?.nombre).toBe('Rosario · 3,4 km')
   })
 
-  it('🔴 con el punto de la calle entera NO propone nada, aunque caiga adentro de la zona', () => {
-    // El punto de "Cafferata" cae afuera de la caja de este test, así que se le da uno que cae
-    // ADENTRO: lo que lo frena tiene que ser la falta de altura, no la geometría.
-    const s = sugerenciaDePunto(respuesta('CAFFERATA, Rosario, Santa Fe', -32.9464, -60.6639, null), ZONAS)
+  it('🔴 Rosario SIN km (el ruteador no contestó): no hay precio, ⛔ ni uno de línea recta', () => {
+    const s = sugerenciaDePunto(respuesta('RICCHIERI 1152, Rosario, Santa Fe', -32.9464, -60.6639, 1152), ZONAS, null)
+    expect(s).toMatchObject({ estado: 'sin_km', precio: null })
+  })
+
+  it('🔴 la zona de servicio vieja YA NO pone precio: el punto adentro de «Zona 7» cobra por km', () => {
+    const s = sugerenciaDePunto(respuesta('RICCHIERI 1152, Rosario, Santa Fe', -32.9464, -60.6639, 1152), ZONAS, 1.2)
+    expect(s.precio).toBe(5000)
+    expect(s.precio).not.toBe(4500)
+  })
+
+  it('🔴 con el punto de la calle entera NO propone nada, aunque tenga km', () => {
+    const s = sugerenciaDePunto(respuesta('CAFFERATA, Rosario, Santa Fe', -32.9464, -60.6639, null), ZONAS, 2)
     expect(s.estado).toBe('punto_impreciso')
     expect(s.precio).toBeNull()
   })
@@ -372,19 +381,24 @@ describe('sugerenciaDePunto — sólo `sugerido` trae precio', () => {
     expect(sugerenciaDePunto(null, ZONAS)).toMatchObject({ estado: 'no_ubicada', precio: null })
   })
 
-  it('afuera del mapa es `sin_zona`, no un precio por defecto', () => {
-    const s = sugerenciaDePunto(respuesta('X 100, Pérez, Santa Fe', -32.99, -60.77, 100), ZONAS)
+  it('Pérez va con su precio FIJO, sin km', () => {
+    const s = sugerenciaDePunto(respuesta('X 100, Rosario, Santa Fe', -32.99, -60.77, 100, 'Pérez'), ZONAS)
+    expect(s).toMatchObject({ estado: 'sugerido', precio: 10000 })
+    expect(s.zona?.nombre).toBe('Pérez')
+  })
+
+  it('una localidad que el cartel no nombra (Roldán) es `sin_zona`, no un precio por defecto', () => {
+    const s = sugerenciaDePunto(respuesta('TUCUMAN 963, San Lorenzo, Santa Fe', -32.9021, -60.9115, 963, 'Roldán', 'San Lorenzo'), ZONAS, 20)
     expect(s).toMatchObject({ estado: 'sin_zona', precio: null })
   })
 
-  it('empatadas que cobran distinto: `ambigua`, sin precio y con los dos nombres', () => {
-    const dos = [
+  it('🔴 la EXCLUSIÓN gana sobre la tarifa', () => {
+    const conNoVamos = [
       ...ZONAS,
-      { id: 'z2', nombre: 'Zona 8', tipo: 'servicio', precio: 6000, prioridad: 1, coordinar: false, poligono: cuadrado(-60.72, -32.98, -60.63, -32.93) },
+      { id: 'x', nombre: 'Barrio X', tipo: 'exclusion', precio: null, prioridad: 1, coordinar: false, poligono: cuadrado(-60.67, -32.95, -60.66, -32.94) },
     ]
-    const s = sugerenciaDePunto(respuesta('RICCHIERI 1152, Rosario, Santa Fe', -32.9464, -60.6639, 1152), dos)
-    expect(s).toMatchObject({ estado: 'ambigua', precio: null })
-    expect(s.zonas).toEqual(['Zona 7', 'Zona 8'])
+    const s = sugerenciaDePunto(respuesta('RICCHIERI 1152, Rosario, Santa Fe', -32.9464, -60.6639, 1152), conNoVamos, 2)
+    expect(s).toMatchObject({ estado: 'no_vamos', precio: null })
   })
 })
 

@@ -314,7 +314,7 @@ export function Envios() {
             // Va última y es de otra frecuencia: las otras tres se abren todos los días, ésta cuando
             // cambian los precios. Pero es de Envíos —quien cotiza es quien mira el mapa— y una
             // sección propia en el menú costaría los dos espejos de permisos por una pantalla mensual.
-            { key: 'zonas', label: 'Zonas y precios', hint: 'El mapa de reparto: en qué zona cae cada dirección y cuánto sale.' },
+            { key: 'zonas', label: 'Zonas y precios', hint: 'La tarifa del cadete (por km en Rosario, fija por localidad afuera) y las zonas a las que no vamos.' },
           ]}
         />
         {pestania === 'dia' || pestania === 'pendientes' ? (
@@ -933,7 +933,7 @@ function SugerirPrecios({
       disabled={pidiendo}
       onClick={() => void pedir()}
       data-guia="envios.sugerir"
-      {...dice('Busca cada dirección en el mapa y propone el precio de la zona. No guarda nada: cada uno se confirma con «usar».')}
+      {...dice('Busca cada dirección y propone la tarifa del cadete: por km por calle en Rosario, fija por localidad afuera. No guarda nada: cada uno se confirma con «usar».')}
     >
       {pidiendo ? 'Preguntándole al mapa…' : `Sugerir todos (${sinPrecio.length})`}
     </Button>
@@ -980,7 +980,7 @@ function CotizarDireccion({ marca, onCargar, onCerrar }: { marca: Marca | null; 
   async function cotizar() {
     setPidiendo(true)
     try {
-      setCotizacion(await cotizarDireccion({ direccion, localidad, cp }))
+      setCotizacion(await cotizarDireccion({ direccion, localidad, cp, marca }))
     } catch (e) {
       setCotizacion(null)
       toast.error(e instanceof Error ? e.message : 'No se pudo cotizar la dirección.')
@@ -1038,8 +1038,8 @@ function CotizarDireccion({ marca, onCargar, onCerrar }: { marca: Marca | null; 
       </div>
 
       <div style={{ marginTop: space[2], color: color.mut, fontSize: font.base }}>
-        Busca la dirección en el mapa y dice el precio de la zona. <strong>No guarda nada</strong>: si se
-        recarga la pantalla, el número se fue.
+        Busca la dirección y dice la tarifa del cadete: en Rosario por km por calle desde el local, afuera
+        por localidad. <strong>No guarda nada</strong>: si se recarga la pantalla, el número se fue.
       </div>
 
       {cotizacion ? (
@@ -1674,7 +1674,7 @@ function Cotizar({
           onGuardado={onGuardado}
         />
         {!original && !sugerencia ? (
-          <Button size="sm" variant="outline" tone="brand" disabled={pidiendo} iconLeft={<Icono nombre="pesos" />} onClick={() => void sugerir()} data-guia="envios.sugerir.fila" {...dice('Sugerir el precio: busca la dirección en el mapa y propone el de la zona. No guarda nada.')} />
+          <Button size="sm" variant="outline" tone="brand" disabled={pidiendo} iconLeft={<Icono nombre="pesos" />} onClick={() => void sugerir()} data-guia="envios.sugerir.fila" {...dice('Sugerir el precio: busca la dirección y propone la tarifa del cadete. No guarda nada.')} />
         ) : null}
       </div>
       {pidiendo ? <span style={{ fontSize: font.sm, color: color.mut }}>Preguntándole al mapa…</span> : null}
