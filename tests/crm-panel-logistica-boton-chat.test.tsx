@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const panel = vi.hoisted(() => ({ telefonoDeCliente: vi.fn() }))
 vi.mock('@/lib/crm/panel', async (original) => ({ ...(await original<typeof import('@/lib/crm/panel')>()), ...panel }))
 
-import { FilaLogistica } from '@/components/panel/AgendaDelDia'
+import { FilaLogistica } from '@/components/panel/PedidosDelDia'
 import type { PendienteLogistica } from '@/lib/crm/logistica'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true

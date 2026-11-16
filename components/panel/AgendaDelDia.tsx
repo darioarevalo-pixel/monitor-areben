@@ -2,22 +2,16 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { color, font, radius, space } from '@/components/ui/tokens'
-import { Button, Icono } from '@/components/ui'
+import { Icono } from '@/components/ui'
 import { SOBRE_OSCURO } from './oscuro'
 import { TEMP_UI } from '@/components/crm/temperatura'
-import { buscarClientesPorNombre, telefonoDeCliente, telsQueSonClientes, traerAgenda, traerPorFiltro, type FilaAgenda } from '@/lib/crm/panel'
-import { telDelChat } from '@/lib/crm/telefono.core.js'
+import { buscarClientesPorNombre, telsQueSonClientes, traerAgenda, traerPorFiltro, type FilaAgenda } from '@/lib/crm/panel'
 import { contarCola, contarPorTipo, vistaDe, type FiltroPanel, type VistaTemp } from '@/lib/crm/lista-dia'
 import { diasHasta } from '@/lib/crm/core'
 import { hoyISO, type Corrida } from '@/lib/crm/seguimiento'
 import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 import { indexarEscritos, leEscribisteHoy, type EscritosHoy } from '@/lib/crm/escritos'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
-import { armarFilasPedidos, claveContacto, leerContactados, linksDePedidos, marcarContactado, mensajeLink, traerPedidosCatalogo, type FilaPedido, type LinkPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
-import { tomar } from '@/lib/crm/precarga'
-import { copiarAlPortapapeles } from '@/lib/portapapeles'
-import { enGrupoDeposito, estadoDeposito, faltanUnidades, pasoPanel, pendientesLogistica, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
-import { mostrar as plata } from '@/lib/compromisos/core'
 
 /**
  * "Hoy" — la lista del día adentro del panel de WhatsApp.
@@ -461,458 +455,6 @@ function Grupo({
   )
 }
 
-/**
- * Los pedidos del catálogo de hoy y ayer (Darío, 20-oct-2026). Ver `lib/crm/pedidos-catalogo.ts`.
- *
- * 🔑 Se pide al montar y cada 2 minutos mientras el panel está abierto. Lo último que llegó queda
- * en `memoriaPedidos`, afuera del componente: volver de la ficha no lo deja en blanco.
- */
-const CADA_PEDIDOS_MS = 2 * 60_000
-const memoriaPedidos: { r: ResultadoCatalogo | null } = { r: null }
-
-function usePedidosCatalogo(): ResultadoCatalogo | null {
-  const [r, setR] = useState<ResultadoCatalogo | null>(memoriaPedidos.r)
-  useEffect(() => {
-    let vivo = true
-    let primera = true
-    const pedir = async () => {
-      // La primera, la que `precargarPanel` ya largó al abrir el panel (`lib/crm/precarga.ts`).
-      const x = primera ? await tomar('catalogo', traerPedidosCatalogo, (y) => y.t === 'ok') : await traerPedidosCatalogo()
-      primera = false
-      // Un error pasajero no borra lo que ya se estaba viendo.
-      if (x.t === 'error' && memoriaPedidos.r?.t === 'ok') return
-      memoriaPedidos.r = x
-      if (vivo) setR(x)
-    }
-    pedir()
-    const id = setInterval(pedir, CADA_PEDIDOS_MS)
-    return () => {
-      vivo = false
-      clearInterval(id)
-    }
-  }, [])
-  return r
-}
-
-/**
- * Los pedidos tildados «Contactado» a mano. Se leen con los pedidos (al montar y cada 2 minutos),
- * así lo que se tildó en otra compu aparece solo. Si una lectura falla, queda lo último que se vio.
- */
-const memoriaContactados: { s: Set<string> | null } = { s: null }
-
-function useContactados(): [Set<string> | null, (clave: string, marcado: boolean) => Promise<boolean>] {
-  const [s, setS] = useState<Set<string> | null>(memoriaContactados.s)
-  useEffect(() => {
-    let vivo = true
-    let primera = true
-    const pedir = async () => {
-      const x = primera ? await tomar('contactados', leerContactados, (y) => !!y) : await leerContactados()
-      primera = false
-      if (!x) return
-      memoriaContactados.s = x
-      if (vivo) setS(x)
-    }
-    pedir()
-    const id = setInterval(pedir, CADA_PEDIDOS_MS)
-    return () => {
-      vivo = false
-      clearInterval(id)
-    }
-  }, [])
-  const tildar = useCallback(async (clave: string, marcado: boolean) => {
-    // Se ve al instante; si el servidor no lo guarda, vuelve a como estaba.
-    const antes = memoriaContactados.s
-    const ya = new Set(antes || [])
-    if (marcado) ya.add(clave)
-    else ya.delete(clave)
-    memoriaContactados.s = ya
-    setS(ya)
-    const r = await marcarContactado(clave, marcado)
-    memoriaContactados.s = r || antes
-    setS(memoriaContactados.s)
-    return !!r
-  }, [])
-  return [s, tildar]
-}
-
-/**
- * Copiar el link del pedido con su total (Darío, 26-oct-2026: «gente que a veces no guarda los
- * links»). Cuadrado como el ✓ y el de WhatsApp; el ✓ verde dura un momento y sólo sale si copió de
- * verdad.
- */
-function BotonLink({ l }: { l: LinkPedido }) {
-  const [copiado, setCopiado] = useState<boolean | null>(null)
-  const copiar = async () => {
-    const ok = await copiarAlPortapapeles(mensajeLink(l, plata))
-    setCopiado(ok)
-    setTimeout(() => setCopiado(null), 1400)
-  }
-  return (
-    <button
-      type="button"
-      onClick={copiar}
-      title={copiado === false ? 'No se pudo copiar' : copiado ? 'Copiado: pegalo en el chat' : `Copiar el link del pedido (total ${plata(l.total)})`}
-      aria-label="Copiar el link del pedido"
-      style={{ width: 32, minWidth: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', borderRadius: radius.md, border: `1px solid ${copiado ? color.success : color.line}`, background: copiado ? color.successBg : color.bg2, color: copiado ? color.successInk : color.ink, fontSize: 14, cursor: 'pointer' }}
-    >
-      {copiado ? '✓' : copiado === false ? '!' : '🔗'}
-    </button>
-  )
-}
-
-/**
- * Un pedido, en dos renglones como Logística (diseño del 25-oct-2026): el nombre, y abajo
- * 🟧 «Pendiente · Contactar · $total» o 🟩 «Contactado». Sin hora ni unidades: poco texto.
- *
- * El ✓ lo tilda a mano: le escribieron desde otro número que el del pedido y WhatsApp no lo une. Lo
- * que vio WhatsApp queda con el ✓ apagado, para no desmarcarlo sin querer.
- */
-function FilaDePedido({
-  p,
-  onAbrir,
-  onFicha,
-  onTildar,
-}: {
-  p: FilaPedido
-  onAbrir: (id: number, tel: string) => void
-  onFicha: (id: number, tel: string) => void
-  onTildar: (p: FilaPedido) => void
-}) {
-  const sinTel = !p.telefono
-  const nombre = p.cliente || 'Sin nombre'
-  const soloAuto = p.auto && !p.marcado
-  return (
-    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, background: color.surface, opacity: p.hablado ? 0.62 : 1 }}>
-      <button
-        type="button"
-        disabled={sinTel}
-        onClick={() => onFicha(0, p.telefono)}
-        title="Ver la ficha"
-        style={{ display: 'block', flex: 1, minWidth: 0, height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: `${space[2]}px 0 ${space[2]}px ${MARGEN}px`, cursor: sinTel ? 'default' : 'pointer', font: 'inherit' }}
-      >
-        <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</div>
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 4, fontSize: font.xs, color: color.mut, fontVariantNumeric: 'tabular-nums' }}>
-          {p.hablado ? <Chapa tono="hecho">Contactado</Chapa> : <Chapa tono="espera">Pendiente</Chapa>}
-          {!p.hablado && <span>Contactar</span>}
-          <span style={{ color: color.mut2 }}>
-            {p.hablado ? '' : '· '}
-            {plata(p.total)}
-          </span>
-        </div>
-      </button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
-        {p.link && <BotonLink l={{ link: p.link, total: p.total }} />}
-        <button
-          type="button"
-          disabled={soloAuto}
-          aria-pressed={p.hablado}
-          onClick={() => onTildar(p)}
-          title={soloAuto ? 'Le escribiste por WhatsApp' : p.marcado ? 'Desmarcar' : 'Marcar como contactado'}
-          aria-label={p.marcado ? `Desmarcar a ${nombre}` : `Marcar a ${nombre} como contactado`}
-          style={{
-            width: 32,
-            minWidth: 32,
-            height: 32,
-            padding: 0,
-            display: 'grid',
-            placeItems: 'center',
-            borderRadius: radius.md,
-            border: `1px solid ${p.hablado ? color.success : color.line}`,
-            background: p.hablado ? color.successBg : color.bg2,
-            color: p.hablado ? color.successInk : color.mut2,
-            fontSize: 15,
-            fontWeight: 700,
-            cursor: soloAuto ? 'default' : 'pointer',
-            opacity: soloAuto ? 0.55 : 1,
-          }}
-        >
-          ✓
-        </button>
-        <button
-          type="button"
-          disabled={sinTel}
-          onClick={() => onAbrir(0, p.telefono)}
-          title="Abrir el chat"
-          aria-label={`Abrir el chat de ${nombre}`}
-          style={{ width: 32, minWidth: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', borderRadius: radius.md, border: 0, background: color.whatsapp, color: color.sideActiveInk, cursor: 'pointer' }}
-        >
-          <Icono nombre="whatsapp" size={16} />
-        </button>
-      </div>
-    </div>
-  )
-}
-
-/**
- * «Pedidos nuevos» (antes «Pidieron hoy y ayer»), arriba de todo en «Hoy». Sin permiso no se
- * dibuja. Los pendientes arriba; los contactados, plegados al final. El número cuenta sólo lo
- * pendiente. ⛔ Sin carritos (Darío, 25-oct-2026): casi nunca traen nombre ni teléfono; vuelven
- * cuando los clientes entren al catálogo con su usuario.
- */
-function GrupoPedidos({
-  r,
-  pedidos,
-  abierto,
-  onToggle,
-  onAbrir,
-  onFicha,
-  onTildar,
-}: {
-  r: ResultadoCatalogo | null
-  pedidos: FilaPedido[]
-  abierto: boolean
-  onToggle: () => void
-  onAbrir: (id: number, tel: string) => void
-  onFicha: (id: number, tel: string) => void
-  onTildar: (p: FilaPedido) => void
-}) {
-  const [contactadosAbierto, setContactadosAbierto] = useState(false)
-  if (!r || r.t === 'sin-permiso') return null
-  const pendientes = pedidos.filter((p) => !p.hablado)
-  const contactados = pedidos.filter((p) => p.hablado)
-  return (
-    <Grupo titulo="Pedidos nuevos" cuantas={pendientes.length} abierto={abierto} onToggle={onToggle}>
-      {r.t === 'error' && <Aclaracion>No pude traer los pedidos del catálogo. {r.motivo}</Aclaracion>}
-      {pendientes.map((p) => (
-        <FilaDePedido key={p.key} p={p} onAbrir={onAbrir} onFicha={onFicha} onTildar={onTildar} />
-      ))}
-      {r.t === 'ok' && !pedidos.length && <Aclaracion>Todavía no entró ningún pedido.</Aclaracion>}
-      {r.t === 'ok' && pedidos.length > 0 && !pendientes.length && <Aclaracion>Contactaste a todos.</Aclaracion>}
-      {contactados.length > 0 && (
-        <>
-          <button
-            type="button"
-            aria-expanded={contactadosAbierto}
-            onClick={() => setContactadosAbierto((v) => !v)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: 'auto', background: color.surface, border: 0, borderTop: `1px solid ${color.line2}`, padding: `${space[2]}px ${MARGEN}px`, fontSize: font.sm, fontWeight: 600, color: color.mut, textAlign: 'left', cursor: 'pointer' }}
-          >
-            {contactadosAbierto ? '▾' : '▸'} Contactados · {contactados.length}
-          </button>
-          {contactadosAbierto && contactados.map((p) => <FilaDePedido key={p.key} p={p} onAbrir={onAbrir} onFicha={onFicha} onTildar={onTildar} />)}
-        </>
-      )}
-    </Grupo>
-  )
-}
-
-/**
- * Los pedidos de Logística con algún paso pendiente (Darío, 22-oct-2026): forma de entrega, datos,
- * etiqueta o seguimiento. Como los del catálogo, se piden al montar y cada 2 minutos.
- */
-type ResultadoLogistica = Resultado<{ count: number; by_step: Record<string, number>; orders: PendienteLogistica[] }>
-const memoriaLogistica: { r: ResultadoLogistica | null } = { r: null }
-
-function usePendientesLogistica(): { r: ResultadoLogistica | null; actualizar: () => void; actualizando: boolean } {
-  const [r, setR] = useState<ResultadoLogistica | null>(memoriaLogistica.r)
-  const [actualizando, setActualizando] = useState(false)
-  /**
-   * «↻ Actualizar» (Darío, 25-oct-2026): consultar en el momento, sin esperar los 2 minutos — lo que
-   * puede apurar es un pedido que acaba de entrar a Logística. Igual que el refresco solo, un error
-   * no borra lo que ya se veía.
-   */
-  const actualizar = useCallback(async () => {
-    setActualizando(true)
-    const x = await pendientesLogistica()
-    setActualizando(false)
-    if (x.t === 'error' && memoriaLogistica.r?.t === 'ok') return
-    memoriaLogistica.r = x
-    setR(x)
-  }, [])
-  useEffect(() => {
-    let vivo = true
-    let primera = true
-    const pedir = async () => {
-      const x = primera ? await tomar('logistica', pendientesLogistica, (y) => y.t === 'ok') : await pendientesLogistica()
-      primera = false
-      if (x.t === 'error' && memoriaLogistica.r?.t === 'ok') return
-      memoriaLogistica.r = x
-      if (vivo) setR(x)
-    }
-    pedir()
-    const id = setInterval(pedir, CADA_PEDIDOS_MS)
-    return () => {
-      vivo = false
-      clearInterval(id)
-    }
-  }, [])
-  return { r, actualizar, actualizando }
-}
-
-/**
- * Un pedido pendiente, en dos renglones (diseño del 24-oct-2026): el nombre y el estado en una
- * etiqueta de color. 🟧 «Pendiente» = te toca elegir la forma de entrega (un EM sin número también) ·
- * 🟩 «Preparado» = despachar (o entregar, en etiqueta libre) · ⬜ depósito. El nombre abre la ficha y
- * el verde, el chat.
- */
-export function FilaLogistica({
-  p,
-  onAbrir,
-  onFicha,
-  apagada,
-  link,
-}: {
-  p: PendienteLogistica
-  onAbrir: (id: number, tel: string) => void
-  onFicha: (id: number, tel: string) => void
-  apagada?: boolean
-  link?: LinkPedido
-}) {
-  const id = Number(p.gn_client_id) || 0
-  const telPedido = telDelChat(p.client_phone)
-  // 🔴 Logística puede traer el pedido sin teléfono (Darío, 3-nov-2026: el botón verde no hacía nada).
-  // Se lo busca en la ficha del cliente; `null` = todavía buscando.
-  const [telFicha, setTelFicha] = useState<string | null>(null)
-  useEffect(() => {
-    if (telPedido || !id) return
-    let vivo = true
-    telefonoDeCliente(id).then((t) => vivo && setTelFicha(t))
-    return () => {
-      vivo = false
-    }
-  }, [telPedido, id])
-  const tel = telPedido || telFicha || ''
-  const buscandoTel = !telPedido && !!id && telFicha === null
-  const paso = pasoPanel(p)
-  const faltan = faltanUnidades(p)
-  const chip = (tono: 'warning' | 'success' | 'neutral', txt: string) => (
-    <span
-      style={{
-        fontSize: 11,
-        fontWeight: 600,
-        padding: '2px 9px',
-        borderRadius: 999,
-        whiteSpace: 'nowrap',
-        border: `1px solid ${tono === 'warning' ? color.warningBorder : tono === 'success' ? 'transparent' : color.line}`,
-        background: tono === 'warning' ? color.warningBg : tono === 'success' ? color.successBg : color.bg2,
-        color: tono === 'warning' ? color.warningInk : tono === 'success' ? color.successInk : color.mut,
-      }}
-    >
-      {txt}
-    </span>
-  )
-  return (
-    <div style={{ display: 'flex', alignItems: 'stretch', borderTop: `1px solid ${color.line2}`, background: color.surface, opacity: apagada ? 0.62 : 1 }}>
-      <button
-        type="button"
-        disabled={!id && !tel}
-        onClick={() => onFicha(id, tel)}
-        title="Ver la ficha"
-        style={{ display: 'block', flex: 1, minWidth: 0, height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: `${space[2]}px 0 ${space[2]}px ${MARGEN}px`, cursor: 'pointer', font: 'inherit' }}
-      >
-        <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.client_name || 'Sin nombre'}</div>
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 4, fontSize: font.xs, color: color.mut }}>
-          {apagada ? (
-            chip('neutral', estadoDeposito(p))
-          ) : paso === 'despachar' ? (
-            <>
-              {chip('success', 'Preparado')}
-              {p.dispatch_option?.code === 2 ? 'Entregar' : 'Despachar'}
-              {faltan > 0 && <span style={{ color: color.warningInk, fontWeight: 600 }}>· faltan {faltan}</span>}
-            </>
-          ) : (
-            <>
-              {chip('warning', 'Pendiente')}
-              Forma de entrega
-            </>
-          )}
-        </div>
-      </button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: `0 ${MARGEN}px 0 ${space[2]}px` }}>
-        {link && <BotonLink l={link} />}
-        <button
-          type="button"
-          disabled={!tel}
-          onClick={() => onAbrir(id, tel)}
-          title={tel ? 'Abrir el chat' : buscandoTel ? 'Buscando el teléfono…' : 'No tiene teléfono cargado, así que no puedo abrir el chat'}
-          aria-label={`Abrir el chat de ${p.client_name}`}
-          style={{ width: 32, minWidth: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', borderRadius: radius.md, border: tel ? 0 : `1px solid ${color.line2}`, background: tel ? color.whatsapp : 'none', color: tel ? color.sideActiveInk : color.mut2, cursor: tel ? 'pointer' : 'default', opacity: tel ? 1 : 0.5 }}
-        >
-          <Icono nombre="whatsapp" size={16} />
-        </button>
-      </div>
-    </div>
-  )
-}
-
-/**
- * «Pendientes en Logística», debajo de los pedidos del catálogo. Sin pendientes no se dibuja. Lo
- * tuyo arriba; lo que espera al depósito, plegado en «En depósito · N».
- */
-/** Los links del catálogo de los pedidos en Logística. Se piden de nuevo sólo si cambian los números. */
-function useLinksLogistica(orders: PendienteLogistica[]): Record<string, LinkPedido> {
-  const numeros = orders.map((p) => p.gn_number || '').filter(Boolean).sort().join(',')
-  const [links, setLinks] = useState<Record<string, LinkPedido>>({})
-  useEffect(() => {
-    if (!numeros) return
-    let vivo = true
-    linksDePedidos(numeros.split(',')).then((l) => vivo && setLinks(l))
-    return () => {
-      vivo = false
-    }
-  }, [numeros])
-  return links
-}
-
-function GrupoLogistica({
-  r,
-  onActualizar,
-  actualizando,
-  abierto,
-  onToggle,
-  onAbrir,
-  onFicha,
-}: {
-  r: ResultadoLogistica | null
-  onActualizar: () => void
-  actualizando: boolean
-  abierto: boolean
-  onToggle: () => void
-  onAbrir: (id: number, tel: string) => void
-  onFicha: (id: number, tel: string) => void
-}) {
-  const [depositoAbierto, setDepositoAbierto] = useState(false)
-  const links = useLinksLogistica(r && r.t === 'ok' ? r.datos.orders : [])
-  // 🔑 Vacío también se ve (con 0): si no, el «↻ Actualizar» desaparecía justo cuando se lo busca,
-  // esperando que entre un pedido.
-  if (!r || r.t === 'sin-permiso') return null
-  const todos = r.t === 'ok' ? r.datos.orders : []
-  const mios = todos.filter((p) => !enGrupoDeposito(p))
-  const deposito = todos.filter(enGrupoDeposito)
-  // El número cuenta sólo lo tuyo: 0 = de tu parte está todo hecho.
-  return (
-    <Grupo
-      titulo="Pendientes en Logística"
-      cuantas={mios.length}
-      abierto={abierto}
-      onToggle={onToggle}
-      accion={
-        <Button size="sm" variant="ghost" disabled={actualizando} title="Consultar Logística ahora, sin esperar el refresco de cada 2 minutos" onClick={onActualizar}>
-          {actualizando ? 'Actualizando…' : '↻ Actualizar'}
-        </Button>
-      }
-    >
-      {r.t === 'error' && <Aclaracion>No pude traer los pedidos de Logística. {r.motivo}</Aclaracion>}
-      {mios.map((p) => (
-        <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} link={p.gn_number ? links[p.gn_number.replace(/\D/g, '')] : undefined} />
-      ))}
-      {r.t === 'ok' && !mios.length && <Aclaracion>De tu parte no hay nada pendiente.</Aclaracion>}
-      {deposito.length > 0 && (
-        <>
-          <button
-            type="button"
-            aria-expanded={depositoAbierto}
-            onClick={() => setDepositoAbierto((v) => !v)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: 'auto', background: color.surface, border: 0, borderTop: `1px solid ${color.line2}`, padding: `${space[2]}px ${MARGEN}px`, fontSize: font.sm, fontWeight: 600, color: color.mut, textAlign: 'left', cursor: 'pointer' }}
-          >
-            {depositoAbierto ? '▾' : '▸'} En depósito · {deposito.length}
-          </button>
-          {depositoAbierto && deposito.map((p) => <FilaLogistica key={p.id} p={p} onAbrir={onAbrir} onFicha={onFicha} apagada link={p.gn_number ? links[p.gn_number.replace(/\D/g, '')] : undefined} />)}
-        </>
-      )}
-    </Grupo>
-  )
-}
-
 /** Un renglón gris adentro de un grupo: vacío, o el aviso de que hay más de lo que se ve. */
 function Aclaracion({ children }: { children: React.ReactNode }) {
   return <div style={{ padding: `${space[1]}px ${MARGEN}px ${space[3]}px`, fontSize: font.xs, color: color.mut2 }}>{children}</div>
@@ -924,7 +466,7 @@ function Aclaracion({ children }: { children: React.ReactNode }) {
  * 🔑 **Es lo que la lista no tenía: una forma de ver que avanza.** Antes el que atendía a alguien
  * lo veía desaparecer y subir al siguiente, y la pantalla quedaba igual. Ahora "Hechos" sube.
  */
-function Resumen({ hoy, atrasados, hechos, pedidos }: { hoy: number; atrasados: number; hechos: number; pedidos?: number | null }) {
+function Resumen({ hoy, atrasados, hechos }: { hoy: number; atrasados: number; hechos: number }) {
   // En azul noche, como el encabezado de la ficha (rediseño del 19-oct-2026), y cada número con el
   // color de su estado: amarillo hoy, rojo atrasado, verde hecho.
   const celda = (n: number, txt: string, tono: string) => (
@@ -935,8 +477,6 @@ function Resumen({ hoy, atrasados, hechos, pedidos }: { hoy: number; atrasados: 
   )
   return (
     <div style={{ ...SOBRE_OSCURO, display: 'flex', gap: space[2], padding: `${space[3]}px ${MARGEN}px` }}>
-      {/* Sólo si el catálogo contestó: a quien no es admin no se le muestra un 0 que no es cierto. */}
-      {pedidos != null && celda(pedidos, 'Pedidos sin contactar', color.brand)}
       {celda(hoy, 'Para hoy', color.warningInk)}
       {celda(atrasados, 'Atrasados', color.dangerInk)}
       {celda(hechos, 'Hechos hoy', color.successInk)}
@@ -1177,9 +717,14 @@ export function AgendaDelDia({
   onAgendar,
   puedeAbrirChat,
   escritos,
-  ultimos,
   onCorrerPorCompra,
+  activa = true,
+  onPendientes,
 }: {
+  /** `false` = montada pero escondida detrás de la solapa «Pedidos»: ⛔ mueve la barra. */
+  activa?: boolean
+  /** Falta la fecha + Para hoy + Atrasados (lo que se ve): el número de la solapa «Agenda». */
+  onPendientes?: (n: number) => void
   crmSeg: MapaSeguimiento
   crmLeads: MapaLeads
   today: Date
@@ -1193,17 +738,23 @@ export function AgendaDelDia({
   puedeAbrirChat: boolean
   /** A quién le escribiste hoy según WhatsApp Web. Sin extensión llega vacío. */
   escritos?: EscritosHoy
-  /** La hora de tu último mensaje en cada chat desde ayer. `null` con una extensión anterior a la 0.10.0. */
-  ultimos?: UltimosMios | null
 }) {
   return (
     <EscritosCtx.Provider value={escritos || SIN_ESCRITOS}>
-      <Agenda crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={onAbrirChat} onVerFicha={onVerFicha} onAgendar={onAgendar} puedeAbrirChat={puedeAbrirChat} ultimos={ultimos ?? null} onCorrerPorCompra={onCorrerPorCompra} />
+      <Agenda crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={onAbrirChat} onVerFicha={onVerFicha} onAgendar={onAgendar} puedeAbrirChat={puedeAbrirChat} onCorrerPorCompra={onCorrerPorCompra} activa={activa} onPendientes={onPendientes} />
     </EscritosCtx.Provider>
   )
 }
 
 const SIN_ESCRITOS: EscritosHoy = new Set()
+
+/** Le pasa a la solapa su número. Va como componente porque la cuenta sale DESPUÉS de los cortes de «cargando». */
+function Informar({ n, onPendientes }: { n: number; onPendientes?: (n: number) => void }) {
+  useEffect(() => {
+    onPendientes?.(n)
+  }, [n, onPendientes])
+  return null
+}
 
 function Agenda({
   crmSeg,
@@ -1213,9 +764,12 @@ function Agenda({
   onVerFicha,
   onAgendar,
   puedeAbrirChat,
-  ultimos,
   onCorrerPorCompra,
+  activa,
+  onPendientes,
 }: {
+  activa: boolean
+  onPendientes?: (n: number) => void
   crmSeg: MapaSeguimiento
   crmLeads: MapaLeads
   today: Date
@@ -1223,25 +777,9 @@ function Agenda({
   onVerFicha: (id: number, tel: string) => void
   onAgendar: Agendar
   puedeAbrirChat: boolean
-  ultimos: UltimosMios | null
   onCorrerPorCompra?: (corridas: Corrida[]) => void
 }) {
   const escritos = useContext(EscritosCtx)
-  const catalogo = usePedidosCatalogo()
-  const [contactados, tildarContactado] = useContactados()
-  const filasPedidos = useMemo(
-    () => (catalogo?.t === 'ok' ? armarFilasPedidos(catalogo.datos.pedidos, false, today, ultimos, escritos, contactados) : []),
-    [catalogo, today, ultimos, escritos, contactados],
-  )
-  const pedidosSinHablar = catalogo?.t === 'ok' ? filasPedidos.filter((p) => !p.hablado).length : null
-  const [avisoTilde, setAvisoTilde] = useState('')
-  const onTildar = (p: FilaPedido) => {
-    setAvisoTilde('')
-    tildarContactado(claveContacto(p), !p.marcado).then((ok) => {
-      if (!ok) setAvisoTilde('No se pudo guardar el ✓. Probá de nuevo.')
-    })
-  }
-
   const [filtro, setFiltro] = useState<FiltroPanel>(memoria.filtro)
   const [mostrar, setMostrar] = useState(memoria.mostrar)
   const [estado, setEstado] = useState<EstadoAgenda>(memoria.estado)
@@ -1255,33 +793,6 @@ function Agenda({
    */
   const [abiertos, setAbiertos] = useState<Record<string, boolean>>(memoria.abiertos)
   const alternar = (k: string) => setAbiertos((a) => ({ ...a, [k]: !a[k] }))
-  // El grupo de los pedidos: nace abierto, y si `memoria` viene de antes de existir, también.
-  const grupoPedidos = (
-    <>
-    <GrupoPedidos
-      r={catalogo}
-      pedidos={filasPedidos}
-      onTildar={onTildar}
-      abierto={abiertos.pedidos !== false}
-      onToggle={() => setAbiertos((a) => ({ ...a, pedidos: a.pedidos === false }))}
-      onAbrir={onAbrirChat}
-      onFicha={onVerFicha}
-    />
-    {avisoTilde && <Aclaracion>{avisoTilde}</Aclaracion>}
-    </>
-  )
-  const { r: logistica, actualizar: actualizarLogistica, actualizando: actualizandoLogistica } = usePendientesLogistica()
-  const grupoLogistica = (
-    <GrupoLogistica
-      r={logistica}
-      onActualizar={actualizarLogistica}
-      actualizando={actualizandoLogistica}
-      abierto={abiertos.logistica !== false}
-      onToggle={() => setAbiertos((a) => ({ ...a, logistica: a.logistica === false }))}
-      onAbrir={onAbrirChat}
-      onFicha={onVerFicha}
-    />
-  )
   const [mostrarAtrasados, setMostrarAtrasados] = useState(memoria.mostrarAtrasados)
 
   // Lo que se ve queda guardado para la próxima vez que se monte (ver `memoria`).
@@ -1295,14 +806,16 @@ function Agenda({
 
   // Volver a la solapa deja la lista donde estaba, no arriba de todo. El panel corre en su propio
   // iframe, así que la barra es la de la ventana.
+  // 🔑 Escondida (mirando «Pedidos») queda montada para el número de la solapa, pero ⛔ toca la barra.
   useEffect(() => {
+    if (!activa) return
     if (memoria.scroll) requestAnimationFrame(() => window.scrollTo(0, memoria.scroll))
     const alMover = () => {
       memoria.scroll = window.scrollY
     }
     window.addEventListener('scroll', alMover, { passive: true })
     return () => window.removeEventListener('scroll', alMover)
-  }, [])
+  }, [activa])
 
   /**
    * 🛒 Las fechas que corrió una compra se guardan, para que los números de arriba (que salen del
@@ -1532,11 +1045,10 @@ function Agenda({
   if (!faltaFecha.length && !paraHoy.length && !atrasados.length && !sinFecha.length && !frios.length && !hechosItems.length)
     return (
       <div>
-        {pedidosSinHablar != null && <Resumen hoy={0} atrasados={0} hechos={0} pedidos={pedidosSinHablar} />}
+        <Informar n={0} onPendientes={onPendientes} />
+        <Resumen hoy={0} atrasados={0} hechos={0} />
         {cabecera}
         {avisoExtension}
-        {grupoPedidos}
-        {grupoLogistica}
         <div style={{ padding: space[3], fontSize: font.sm, color: color.mut }}>
           No hay nadie para contactar hoy. Cuando venza el próximo, aparece acá.
         </div>
@@ -1545,11 +1057,10 @@ function Agenda({
 
   return (
     <div>
-      <Resumen hoy={totalHoy} atrasados={totalAtrasados} hechos={hechosItems.length} pedidos={pedidosSinHablar} />
+      <Informar n={faltaFecha.length + totalHoy + totalAtrasados} onPendientes={onPendientes} />
+      <Resumen hoy={totalHoy} atrasados={totalAtrasados} hechos={hechosItems.length} />
       {cabecera}
       {avisoExtension}
-      {grupoPedidos}
-      {grupoLogistica}
 
       {faltaFecha.length > 0 && (
         <Grupo titulo="Falta la fecha" rojo cuantas={faltaFecha.length} abierto={abiertos.falta !== false} onToggle={() => setAbiertos((a) => ({ ...a, falta: a.falta === false }))}>

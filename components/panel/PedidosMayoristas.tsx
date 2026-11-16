@@ -24,6 +24,8 @@ import { FacturarParte, FacturarPedido, LETRA, descargarFactura, numeroComproban
 import { codigoPedido } from '@/lib/erp/codigos.core.js'
 import { esAprobador } from '@/lib/reposicion/armado.core.js'
 import { usePerfilOpcional } from '@/components/SesionProvider'
+import { copiarAlPortapapeles } from '@/lib/portapapeles'
+import { Bloque, BotonPaso, Cuando, Paso, Renglon } from './pasos-pedido'
 
 const plata = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 const diaMes = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -586,44 +588,53 @@ function BuscarProducto({ pedidoId, onElegir, onCerrar }: { pedidoId: string; on
 const MOTIVO: Record<string, string> = { cambio: 'cambió el pedido', anulado: 'lo anuló', a_preparar: 'lo envió a preparar', edicion: 'Gestión Nube lo editó', borrado: 'Gestión Nube lo borró' }
 
 /**
- * «Preparados sin pagar» (Hoy del panel, Darío §3): los pedidos listos de clientes SIN cuenta corriente que deben, con cuánto
- * deben y hace cuánto están listos — para salir a buscar esos pagos. Vacío ⇒ ⛔ se dibuja. Se llena cuando Logística avise
- * que un pedido quedó preparado (con Ger).
+ * «Retenidos» (antes «Preparados sin pagar»; solapa Pedidos, Darío 15-nov): los pedidos listos de clientes SIN cuenta corriente
+ * que deben, con cuánto deben y hace cuánto están listos — para salir a buscar esos pagos. Tocar el pedido abre su hoja;
+ * «💬 Cobrar» copia el mensaje. Vacío ⇒ ⛔ se dibuja. `onCuantos` le pasa a la solapa cuántos son y cuánta plata.
  */
-export function PreparadosSinPagar() {
+export function mensajeCobrar(p: Pick<PreparadoSinPagar, 'numero' | 'debe'>): string {
+  return `Hola! Tu pedido ${codigoPedido(p.numero)} ya esta listo. Para despacharlo falta el pago de ${plata(p.debe)}`
+}
+
+export function PreparadosSinPagar({ onCuantos }: { onCuantos?: (n: number, plata: number) => void } = {}) {
   const prendido = useCuentaPrendida()
-  const [lista, setLista] = useState<Array<PreparadoSinPagar & { dias: number }>>([])
+  const [lista, setLista] = useState<PreparadoSinPagar[]>([])
+  const [hoja, setHoja] = useState<string | null>(null)
+  const [vuelta, setVuelta] = useState(0)
+  const [copiado, setCopiado] = useState<string | null>(null)
   useEffect(() => {
     if (!prendido) return
     let vivo = true
-    leerPreparadosSinPagar().then((r) => {
-      const ahora = Date.now()
-      if (vivo) setLista(r.prendido ? r.pedidos.map((p) => ({ ...p, dias: Math.max(0, Math.floor((ahora - new Date(p.preparado_en).getTime()) / 86_400_000)) })) : [])
-    }).catch(() => { if (vivo) setLista([]) })
+    leerPreparadosSinPagar().then((r) => { if (vivo) setLista(r.prendido ? r.pedidos : []) }).catch(() => { if (vivo) setLista([]) })
     return () => { vivo = false }
-  }, [prendido])
+  }, [prendido, vuelta])
+  useEffect(() => { onCuantos?.(lista.length, lista.reduce((a, p) => a + p.debe, 0)) }, [lista, onCuantos])
   if (!lista.length) return null
+  const cobrar = async (p: PreparadoSinPagar) => {
+    const ok = await copiarAlPortapapeles(mensajeCobrar(p))
+    setCopiado(ok ? p.id : null)
+    if (ok) setTimeout(() => setCopiado(null), 1400)
+  }
   return (
-    <section style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: `${space[2]}px ${space[3]}px`, margin: `${space[2]}px ${space[2]}px 0` }}>
-      <div style={{ ...ROTULO, marginBottom: 6 }}>Preparados sin pagar</div>
+    <Bloque titulo="Retenidos" tono="rojo" detalle={`${lista.length} · ${plata(lista.reduce((a, p) => a + p.debe, 0))}`}>
       {lista.map((p) => (
-        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: font.sm, padding: '3px 0' }}>
-          <div style={{ minWidth: 0 }}><b>{p.cliente}</b> <span style={{ color: color.mut2 }}>· pedido {codigoPedido(p.numero)} · listo hace {p.dias} días</span></div>
-          <b style={{ color: color.dangerInk, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{plata(p.debe)}</b>
-        </div>
+        <Renglon key={p.id} nombre={p.cliente} onTocar={() => setHoja(p.id)} tituloTocar="Ver el pedido"
+          detalle={<>{codigoPedido(p.numero)} · {plata(p.debe)} · <Cuando iso={p.preparado_en} /></>}
+          botones={<BotonPaso onClick={() => cobrar(p)} title="Copiar el mensaje para cobrarle">{copiado === p.id ? '✓ Copiado' : '💬 Cobrar'}</BotonPaso>} />
       ))}
-    </section>
+      {hoja && <HojaPedido pedidoId={hoja} onCerrar={() => setHoja(null)} onHecho={() => setVuelta((v) => v + 1)} />}
+    </Bloque>
   )
 }
 
 /**
- * «Sin cliente» (Hoy del panel, Darío 15-nov): los pedidos que entraron a la ficha general «Pedido mayorista» porque el número
- * ⛔ era de un solo cliente. ⛔ Van a preparación hasta elegir su cliente. «Elegir cliente» lo hace desde acá, SIN chat (Bruno
- * 15-nov: el número del pedido puede ⛔ tener chat): elegir o crear la ficha le anota el número —sus próximos pedidos entran
- * solos— y le pasa el pedido. Tocar el pedido abre su hoja. Textos (Darío 15-nov): sin pie, ⛔ aviso al terminar (el pedido
- * pasa solo a su cliente y sale de acá) y ⛔ se habla de fundas «apartadas». Vacío ⇒ ⛔ se dibuja.
+ * «Sin cliente» (solapa Pedidos, primer paso de «Nuevos», Darío 15-nov): los pedidos que entraron a la ficha general «Pedido
+ * mayorista» porque el número ⛔ era de un solo cliente. ⛔ Van a preparación hasta elegir su cliente. «Elegir cliente» lo hace
+ * desde acá, SIN chat (Bruno 15-nov: el número del pedido puede ⛔ tener chat): elegir o crear la ficha le anota el número —sus
+ * próximos pedidos entran solos— y le pasa el pedido. Tocar el pedido abre su hoja. Textos (Darío 15-nov): sin pie, ⛔ aviso al
+ * terminar (el pedido pasa solo a su cliente y sale de acá) y ⛔ se habla de fundas «apartadas». Vacío ⇒ ⛔ se dibuja.
  */
-export function PedidosSinCliente() {
+export function PedidosSinCliente({ onCuantos }: { onCuantos?: (n: number, plata: number) => void } = {}) {
   const prendido = useCuentaPrendida()
   const [lista, setLista] = useState<PedidoSinCliente[]>([])
   const [abierto, setAbierto] = useState<string | null>(null)
@@ -635,29 +646,24 @@ export function PedidosSinCliente() {
     leerPedidosSinCliente().then((r) => { if (vivo) setLista(r.prendido ? r.pedidos : []) }).catch(() => { if (vivo) setLista([]) })
     return () => { vivo = false }
   }, [prendido, vuelta])
-  if (!lista.length) return null
+  useEffect(() => { onCuantos?.(lista.length, lista.reduce((a, p) => a + p.total, 0)) }, [lista, onCuantos])
   return (
-    <section style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: `${space[2]}px ${space[3]}px`, margin: `${space[2]}px ${space[2]}px 0` }}>
-      <div style={{ ...ROTULO, marginBottom: 6 }}>Sin cliente</div>
+    <Paso titulo="Sin cliente" tono="rojo" cuantos={lista.length}>
       {lista.map((p) => (
-        <div key={p.id} style={{ padding: '3px 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: font.sm }}>
-            <button type="button" onClick={() => setHoja(p.id)} aria-label={`Ver el pedido ${codigoPedido(p.numero)}`}
-              style={{ flex: 1, minWidth: 0, height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: 0, cursor: 'pointer', fontSize: font.sm, color: 'inherit' }}>
-              <b>{p.nombre ?? 'Sin nombre'}</b> <span style={{ color: color.mut2 }}>· {p.telefono ?? 'sin teléfono'} · {codigoPedido(p.numero)} · {diaMes(p.recibido_en)} · {p.unidades} u</span>
-            </button>
-            <b style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{plata(p.total)}</b>
-            {p.telefono && abierto !== p.id && <Button size="sm" variant="outline" onClick={() => setAbierto(p.id)}>Elegir cliente</Button>}
-          </div>
-          {p.telefono && abierto === p.id && (<>
+        <div key={p.id}>
+          <Renglon nombre={<>{p.nombre ?? 'Sin nombre'}{p.telefono ? <span style={{ fontWeight: 400, color: color.mut }}> · {p.telefono}</span> : null}</>}
+            onTocar={() => setHoja(p.id)} tituloTocar={`Ver el pedido ${codigoPedido(p.numero)}`}
+            detalle={<>{codigoPedido(p.numero)} · {plata(p.total)} · {p.unidades} u · <Cuando iso={p.recibido_en} /></>}
+            botones={p.telefono && abierto !== p.id ? <BotonPaso solido onClick={() => setAbierto(p.id)}>Elegir cliente</BotonPaso> : undefined} />
+          {p.telefono && abierto === p.id && (<div style={{ padding: `0 ${space[3]}px ${space[2]}px` }}>
             <ElegirCliente tel={p.telefono} persona={p.nombre} escribir decir={() => {}}
               onCambio={() => { setAbierto(null); setVuelta((v) => v + 1) }}
               onElegido={async (c) => { await entrarPedidoPanel({ pedidoId: p.id, clienteId: c.id }); return '' }} />
             <Button size="sm" variant="ghost" onClick={() => setAbierto(null)}>Cancelar</Button>
-          </>)}
+          </div>)}
         </div>
       ))}
       {hoja && <HojaPedido pedidoId={hoja} onCerrar={() => setHoja(null)} onHecho={() => setVuelta((v) => v + 1)} />}
-    </section>
+    </Paso>
   )
 }

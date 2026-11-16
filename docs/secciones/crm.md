@@ -10,8 +10,8 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
 - Pantalla: `components/crm/` (`CRM.tsx` la tabla, `ClienteModal.tsx` la ficha, `Leads.tsx`,
   `LeadsDelDia.tsx` el bloque de leads arriba de la lista del día, `BancoMensajes.tsx` la ventana
   de los textos de WhatsApp, `Metricas.tsx`, `GuiaTrabajo.tsx`, `useCRM.ts` la carga).
-- Panel: `components/panel/PanelWhatsApp.tsx` (dos solapas: Cliente y Hoy) +
-  `components/panel/AgendaDelDia.tsx` (la lista del día) + `lib/crm/panel.ts` +
+- Panel: `components/panel/PanelWhatsApp.tsx` (cuatro solapas desde el 15-nov: Cliente · Pedidos · Agenda · Pagos) +
+  `components/panel/PedidosDelDia.tsx` (Pedidos) + `components/panel/AgendaDelDia.tsx` (Agenda, la lista del día) + `lib/crm/panel.ts` +
   `lib/crm/lista-dia.ts` (quién entra en la lista, con el KV solo). La ruta la resuelve la
   catch-all (`app/[[...seccion]]/page.tsx`, rama `esPanel`), **no** es un archivo de ruta propio.
 - Dominio: `lib/crm/` — `core.ts` (agregado RFM + las dos etapas del día), `seguimiento.ts` (las
@@ -1430,3 +1430,20 @@ número que muestra la pantalla (el del pedido si se llegó desde Logística; si
 `GET /api/puente/adelantos` del dashboard suma `saldos` (nóminas PENDIENTE: neto menos todos sus pagos)
 y lo muestra `SaldosSueldos` (`components/panel/AdelantosEmpleados.tsx`). ⛔ Los empleados BLANCO
 quedan afuera de `empleados` y `saldos`: se pagan siempre desde la cuenta de la empresa.
+
+# ✅ 15-nov-2026 — «Hoy» se parte en Pedidos y Agenda (Darío, página F9adDHTnQkLiZH6Z3DuMJD)
+
+- Cuatro solapas, cada una con su número: **Cliente · Pedidos · Agenda · Pagos**. Sin chat arranca en **Pedidos**.
+  Pedidos y Agenda quedan **las dos montadas** mientras se mira una (la otra con `hidden`), así las dos tienen número;
+  ⚠️ la escondida ⛔ toca la barra (`activa` en `AgendaDelDia`, que guarda dónde quedó la lista).
+- **Pedidos** (`PedidosDelDia.tsx`, piezas en `pasos-pedido.tsx`): bloques Nuevos (Sin cliente → Sin pago) · Retenidos ·
+  Entregas (Armando · Despachar · Retiro · Seguimiento, de Logística con `pasoEntrega`). Un color por paso, lo de más de
+  un día en rojo. ⛔ Sin grupo «Contactados»: «Sin contactar» primero, y el ✓ sólo si WhatsApp Web ⛔ vio que le escribiste.
+  El número cuenta lo que te necesita: ⛔ Armando ni lo contactado. «Retenidos» = el viejo «Preparados sin pagar», con
+  «💬 Cobrar» que copia el mensaje (`mensajeCobrar`).
+- **Agenda**: lo de siempre, sin los pedidos; arriba Para hoy · Atrasados · Hechos. Número = Falta la fecha + Para hoy +
+  Atrasados (lo que se ve).
+- ⏭️ **Del lado del ERP (Bruno)**: una lista de todos los pedidos abiertos + cerrados de 60 días con su pago y crédito. Con
+  eso entran el buscador (nombre, teléfono, M-1192; «💬 Estado» y «🔗 Pedido»), «Pagados» (para enviar a preparación),
+  «Sin pago» leído del ERP (hoy son los pedidos del catálogo de hoy y ayer, que ⛔ saben si pagaron) y «Cerrados hoy N de M».
+  Los botones del paso en Entregas (Despachado, Entregado, Etiqueta) siguen en la ficha.

@@ -5,7 +5,7 @@ import { Button, Icono } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
 import { FranjaCuenta, HojaCargarPago, MasDelCliente, TarjetaCuenta, useCuentaPanel } from './CuentaCorriente'
-import { LoQueSigue, loQueSigue, PedidosSinCliente, refsDePedidosAbiertos, PreparadosSinPagar, TarjetaPedidos, usePedidosPanel } from './PedidosMayoristas'
+import { LoQueSigue, loQueSigue, refsDePedidosAbiertos, TarjetaPedidos, usePedidosPanel } from './PedidosMayoristas'
 import { CalculadoraEnvio } from './CalculadoraEnvio'
 import { ProximoContacto, RayaEstado, estadoDeFicha } from './ProximoContacto'
 import { QueLeMando } from './QueLeMando'
@@ -57,6 +57,7 @@ import {
   type MapaLeads,
 } from '@/lib/crm/leads'
 import { AgendaDelDia } from './AgendaDelDia'
+import { PedidosDelDia } from './PedidosDelDia'
 import { PedidosLogistica } from './PedidosLogistica'
 import { useComunidad, type AvisoComunidad, type Comunidad } from './useComunidad'
 import { useHoy } from './useHoy'
@@ -622,7 +623,13 @@ function PanelInterno({
    * saldo del dashboard y los compromisos — que es exactamente el error que dejó la ficha sin abrir
    * el 3-sep-2026 (ver `Aislado.tsx`).
    */
-  const [solapa, setSolapa] = useState<'cliente' | 'hoy' | 'pagos'>(tel ? 'cliente' : 'hoy')
+  const [solapa, setSolapa] = useState<'cliente' | 'pedidos' | 'agenda' | 'pagos'>(tel ? 'cliente' : 'pedidos')
+  /**
+   * El número de cada solapa (Darío 15-nov): lo que te necesita. Lo informan Pedidos y Agenda mientras están montadas; mirando
+   * Cliente o Pagos queda el último que se vio. `null` = todavía no se contó (⛔ se muestra un 0 que no es cierto).
+   */
+  const [pendPedidos, setPendPedidos] = useState<number | null>(null)
+  const [pendAgenda, setPendAgenda] = useState<number | null>(null)
   /**
    * ¿Corre adentro del panel de la extensión? Estar embebido es la única forma de saberlo desde
    * acá: el contenedor es de otro origen (`chrome-extension://…`) y no se puede leer. Alcanza —lo
@@ -996,17 +1003,27 @@ function PanelInterno({
   const solapas = (
     <div style={{ display: 'flex', borderBottom: `1px solid ${color.sideBg}`, background: color.sideBg, position: 'sticky', top: 0, zIndex: 3 }}>
       {([
-        ['cliente', 'Cliente'],
-        ['hoy', 'Hoy'],
-        ['pagos', 'Pagos'],
-      ] as const).map(([k, txt]) => (
+        ['cliente', 'Cliente', null],
+        ['pedidos', 'Pedidos', pendPedidos],
+        ['agenda', 'Agenda', pendAgenda],
+        ['pagos', 'Pagos', null],
+      ] as const).map(([k, txt, n]) => (
         <button
           key={k}
           type="button"
-          onClick={() => setSolapa(k)}
+          onClick={() => {
+            setSolapa(k)
+            // Saliendo de Agenda, después de que suelte la barra (guarda dónde quedó); Agenda vuelve sola a donde estaba.
+            if (k !== solapa && k !== 'agenda')
+              requestAnimationFrame(() => {
+                try {
+                  window.scrollTo(0, 0)
+                } catch {}
+              })
+          }}
           style={{
             flex: 1,
-            padding: '7px 4px',
+            padding: '7px 2px',
             fontSize: font.xs,
             fontWeight: 700,
             cursor: 'pointer',
@@ -1014,25 +1031,38 @@ function PanelInterno({
             borderBottom: `2px solid ${solapa === k ? color.sideAccent : 'transparent'}`,
             background: 'none',
             color: solapa === k ? color.sideActiveInk : color.sideInk2,
+            whiteSpace: 'nowrap',
           }}
         >
           {txt}
+          {n ? (
+            <span style={{ display: 'inline-block', marginLeft: 4, minWidth: 18, padding: '0 5px', borderRadius: 999, background: color.brandSolid, color: color.sideActiveInk, fontSize: 10.5, lineHeight: '16px', verticalAlign: 1, fontVariantNumeric: 'tabular-nums' }}>{n}</span>
+          ) : null}
         </button>
       ))}
     </div>
   )
 
-  if (solapa === 'hoy')
+  /**
+   * 🔑 Pedidos y Agenda (antes, juntas en «Hoy») quedan las DOS montadas mientras se mira una de ellas: así cada solapa tiene
+   * su número sin esperar a que la toquen. La escondida ⛔ toca la barra (`activa`).
+   */
+  if (solapa === 'pedidos' || solapa === 'agenda')
     return (
       <Envoltorio aviso={aviso}>
         {solapas}
-        <Aislado nombre="Sin cliente"><PedidosSinCliente /></Aislado>
-        <Aislado nombre="Preparados sin pagar"><PreparadosSinPagar /></Aislado>
-        {kvListo ? (
-          <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} onAgendar={agendarDesdeLista} onCorrerPorCompra={correrDesdeLista} puedeAbrirChat={enExtension} escritos={escritos} ultimos={ultimos} />
-        ) : (
-          <Cargando />
-        )}
+        <div hidden={solapa !== 'pedidos'}>
+          <Aislado nombre="Pedidos">
+            <PedidosDelDia today={today} escritos={escritos} ultimos={ultimos} onAbrirChat={abrirChat} onVerFicha={verFicha} puedeAbrirChat={enExtension} onPendientes={setPendPedidos} />
+          </Aislado>
+        </div>
+        <div hidden={solapa !== 'agenda'}>
+          {kvListo ? (
+            <AgendaDelDia activa={solapa === 'agenda'} onPendientes={setPendAgenda} crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} onVerFicha={verFicha} onAgendar={agendarDesdeLista} onCorrerPorCompra={correrDesdeLista} puedeAbrirChat={enExtension} escritos={escritos} />
+          ) : (
+            <Cargando />
+          )}
+        </div>
       </Envoltorio>
     )
 
@@ -1065,7 +1095,7 @@ function PanelInterno({
     return (
       <Envoltorio>
         {solapas}
-        <Vacio texto="Abrí el chat de una persona para ver su ficha, o mirá la lista en “Hoy”." />
+        <Vacio texto="Abrí el chat de una persona para ver su ficha, o mirá «Pedidos» o «Agenda»." />
       </Envoltorio>
     )
   if (estado.t === 'cargando') return <Envoltorio>{solapas}<Cargando /></Envoltorio>

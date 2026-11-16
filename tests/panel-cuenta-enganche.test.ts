@@ -20,7 +20,10 @@ describe('la cuenta corriente sigue enganchada en el panel (escondida, ⛔ sacad
     expect(panel).toMatch(/from '\.\/PedidosMayoristas'/)
     expect(panel).toMatch(/usePedidosPanel\(/)
     expect(panel).toContain('<TarjetaPedidos')
-    expect(panel).toContain('<PreparadosSinPagar />')
+    // Desde el 15-nov «Retenidos» y «Sin cliente» viven en la solapa Pedidos (`PedidosDelDia.tsx`).
+    const pedidos = readFileSync('components/panel/PedidosDelDia.tsx', 'utf8')
+    expect(panel).toContain('<PedidosDelDia')
+    for (const pieza of ['<PreparadosSinPagar', '<PedidosSinCliente']) expect(pedidos).toContain(pieza)
   })
   it('Pagos: el segmento «Cuentas» detrás del interruptor', () => {
     expect(pagos).toMatch(/from '\.\/CuentaCorriente'/)
