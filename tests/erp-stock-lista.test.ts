@@ -67,6 +67,15 @@ describe('reservadoPorVariante', () => {
     expect(r.reservado.get('1/1')).toBe(3)
     expect(r.sinVariante).toBe(3)
   })
+
+  it('el pedido ya ENTREGADO sin cobrar ⛔ aparta: la prenda ya se fue (Darío 15-nov, Clear Premium 17 Pro Max en −3)', () => {
+    const r = reservadoPorVariante([
+      { entregadoSinCobrar: true, prendas: [{ sku: 'TOP-1-1', cantidad: 3 }, { sku: 'NO-EXISTE', cantidad: 1 }] },
+      { entregadoSinCobrar: false, prendas: [{ sku: 'TOP-1-1', cantidad: 1 }] },
+    ], INVENTARIO)
+    expect(r.reservado.get('1/1')).toBe(1)
+    expect(r.sinVariante).toBe(0)
+  })
 })
 
 describe('las columnas', () => {
