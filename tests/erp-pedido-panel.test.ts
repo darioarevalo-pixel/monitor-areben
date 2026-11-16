@@ -63,6 +63,16 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
     expect(pv.pedidosMayoristasDe).not.toHaveBeenCalled()
   })
 
+  it('los pedidos hechos en GN (`gn_sale_id`) NO salen como «sin entrar»: ya son venta de GN (pedido 91, 16-nov)', async () => {
+    const sqls: string[] = []
+    const db = { query: async (sql: string) => { sqls.push(sql); return { rows: sql.includes('information_schema.columns') ? [{ hay: true }] : [] } } }
+    const fila = { id: 'g', numero: '91', recibido_en: '2026-11-06', total: '1', unidades: '1', contacto: { telefono: '0341 15 123-4567' }, apartado: false, gn_number: '33311' }
+    db.query = async (sql: string) => { sqls.push(sql); return { rows: sql.includes('information_schema.columns') ? [{ hay: true }] : sql.includes('from pedido_mayorista') ? [fila] : [] } }
+    const r = await pedidosDelPanel({ clienteId: '', tel: '5493411234567' }, { conMotor: conMotor(db), prendido: true, escribir: true })
+    expect(r).toMatchObject({ sinEntrar: [], deGn: [{ id: 'g', gn_number: '33311' }] })
+    expect(sqls.find((x) => x.includes('from pedido_mayorista'))).toContain('gn_sale_id')
+  })
+
   it('los pedidos del cliente y los SIN ENTRAR que llegaron con el número del chat (escrito de otra forma)', async () => {
     pv.pedidosMayoristasDe.mockResolvedValue({ ok: true, pedidos: [{ id: 'a', numero: 3 }] })
     const db = base({ ...CON064, 'from pedido_mayorista': [
