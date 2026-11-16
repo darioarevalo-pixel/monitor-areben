@@ -317,9 +317,11 @@ export async function cotizarDireccion(d: {
   direccion: string
   localidad: string
   cp?: string
+  /** De qué local sale la moto: los km de Rosario se miden desde ahí. */
+  marca?: Marca | null
 }): Promise<CotizacionSuelta> {
   const r = await postear<{ cotizacion: CotizacionSuelta }>(
-    { action: 'zonas-cotizar', direccion: d.direccion, localidad: d.localidad, cp: d.cp || '' },
+    { action: 'zonas-cotizar', direccion: d.direccion, localidad: d.localidad, cp: d.cp || '', marca: d.marca || null },
     'No se pudo cotizar la dirección.',
   )
   return r.cotizacion

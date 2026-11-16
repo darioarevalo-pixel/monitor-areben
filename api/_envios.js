@@ -51,7 +51,9 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { venceElProximoPrimero } from '../lib/envios/portal.core.js';
 import { CAMPOS_ZONA, planDeImportacion, validarZona } from '../lib/envios/zonas.core.js';
-import { consultaDe, motivoDeSugerencia, pedidosDelReintento, sugerenciaDePunto } from '../lib/envios/direccion.core.js';
+import { consultaDe, motivoDeSugerencia, pedidosDelReintento, puntoDeGeoref, sugerenciaDePunto } from '../lib/envios/direccion.core.js';
+import { esPorKm, kmLeido, localDe } from '../lib/envios/tarifa.core.js';
+import { metrosPorCalle } from './_osrm.js';
 import { geocodificarEnEscalera } from './_georef.js';
 import { marcasConAcceso, permisoErpDe, puedeErp } from '../lib/permisos.core.js';
 import { anularVentaDeEnvio, seguirVenta } from './_envios-venta.js';
@@ -187,9 +189,27 @@ async function cotizarPuntos(aPreguntar, zonas) {
     }
   }
 
+  // 🔑 **Los km por calle, una consulta por LOCAL** (no una por envío): sólo los puntos precisos de
+  // Rosario, que son los únicos que se cobran por distancia. OSRM caído ⇒ `null` ⇒ `sin_km`, se tipea.
+  const kmDe = new Map();
+  const porLocal = new Map();
+  for (const p of aPreguntar) {
+    const punto = puntoDeGeoref((puntos.get(p.clave) || {}).resultado);
+    if (!punto || !punto.preciso || !esPorKm(punto.localidad)) continue;
+    const local = localDe(p.marca);
+    if (!porLocal.has(local)) porLocal.set(local, []);
+    porLocal.get(local).push({ clave: p.clave, lat: punto.lat, lng: punto.lng });
+  }
+  await Promise.all(
+    [...porLocal].map(async ([local, lista]) => {
+      const metros = await metrosPorCalle(local, lista);
+      lista.forEach((d, i) => kmDe.set(d.clave, kmLeido(metros[i])));
+    }),
+  );
+
   return aPreguntar.map((p) => {
     const hallazgo = puntos.get(p.clave) || {};
-    const s = sugerenciaDePunto(hallazgo.resultado, zonas);
+    const s = sugerenciaDePunto(hallazgo.resultado, zonas, kmDe.has(p.clave) ? kmDe.get(p.clave) : null);
     return { clave: p.clave, ...s, motivo: motivoDeSugerencia(s.estado), consulta: hallazgo.usada };
   });
 }
@@ -848,11 +868,8 @@ export default async function handler(req, res) {
       const { data: mapa, error: errZonas } = await supabase.from('envios_zonas').select(CAMPOS_ZONA);
       if (errZonas) throw new Error(errZonas.message);
       const zonas = mapa || [];
-      // Sin esto, `precioSugerido` contesta `sin_zona` para todo y el panel le diría «fuera del
-      // mapa» a una dirección del centro de Rosario.
-      if (!zonas.length) {
-        return res.status(400).json({ error: 'Todavía no hay zonas cargadas: importá el mapa desde «Zonas y precios».' });
-      }
+      // Desde el 15-nov-2026 las zonas sólo aportan la EXCLUSIÓN: el precio es la tarifa
+      // (`lib/envios/tarifa.core.js`), así que un mapa vacío ya no frena la cotización.
 
       // El candado, igual que en la bandeja: el `cp` va SIEMPRE, porque es la segunda señal con la
       // que se caza la localidad que miente. Dejarlo afuera no rompe nada — afloja en silencio.
@@ -868,7 +885,7 @@ export default async function handler(req, res) {
       // `provincia` es constante de verdad: la moto reparte en Santa Fe. Una localidad de otra
       // provincia tiene que salir sin ubicar, que es la respuesta correcta.
       const [cotizada] = await cotizarPuntos(
-        [{ clave: 'suelta', intentos: c.intentos, localidad: c.localidad, reintento: c.reintento, provincia: 'Santa Fe' }],
+        [{ clave: 'suelta', marca: b.marca === 'bdi' ? 'bdi' : 'zattia', intentos: c.intentos, localidad: c.localidad, reintento: c.reintento, provincia: 'Santa Fe' }],
         zonas,
       );
       const { clave, ...cotizacion } = cotizada;
@@ -896,16 +913,15 @@ export default async function handler(req, res) {
       // la lee como "no hay CP" y afloja **sin que falle nada**. Es exactamente lo que pasó con
       // `cobrado`, que el portal escribía y ninguna pantalla veía.
       const [env, zon] = await Promise.all([
-        supabase.from('envios_reparto').select('id, direccion, localidad, cp').in('id', ids),
+        supabase.from('envios_reparto').select('id, store, direccion, localidad, cp').in('id', ids),
         supabase.from('envios_zonas').select(CAMPOS_ZONA),
       ]);
       if (env.error) throw new Error(env.error.message);
       if (zon.error) throw new Error(zon.error.message);
 
       const zonas = zon.data || [];
-      if (!zonas.length) {
-        return res.status(400).json({ error: 'Todavía no hay zonas cargadas: importá el mapa desde «Zonas y precios».' });
-      }
+      // Desde el 15-nov-2026 las zonas sólo aportan la EXCLUSIÓN: el precio es la tarifa
+      // (`lib/envios/tarifa.core.js`), así que un mapa vacío ya no frena la cotización.
 
       // Primera mitad del candado: las que ni se preguntan quedan resueltas acá y no gastan consulta.
       const sugerencias = [];
@@ -918,7 +934,7 @@ export default async function handler(req, res) {
         }
         // `provincia` es obligatoria en `geocodificarEnEscalera` desde que el PRM también lo llama
         // (para locales de CABA). Acá es constante de verdad: la moto reparte en Santa Fe.
-        aPreguntar.push({ clave: e.id, intentos: c.intentos, localidad: c.localidad, reintento: c.reintento, provincia: 'Santa Fe' });
+        aPreguntar.push({ clave: e.id, marca: e.store, intentos: c.intentos, localidad: c.localidad, reintento: c.reintento, provincia: 'Santa Fe' });
       }
 
       // Las dos vueltas —y sobre todo su orden— viven en `cotizarPuntos`, arriba: es lo único que

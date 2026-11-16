@@ -347,6 +347,8 @@ export type EstadoDeSugerencia =
   | 'localidad_dudosa'
   | 'no_ubicada'
   | 'punto_impreciso'
+  | 'sin_km'
+  | 'muy_lejos'
 
 /**
  * **El precio que el mapa propone para una fila de la bandeja.** No es un dato guardado: se calcula
@@ -359,6 +361,8 @@ export type SugerenciaDePrecio = {
   zona: { id: string; nombre: string; coordinar: boolean } | null
   /** Los nombres de todas las zonas que contienen el punto: con `ambigua`, cuáles son las dos. */
   zonas?: string[]
+  /** Km por calle desde el local (sólo Rosario, que se cobra por distancia). */
+  km?: number | null
   motivo: string | null
   /** Cómo se lo escribió Georef y qué contestó. Es lo que deja entender una propuesta rara. */
   consulta?: string | null

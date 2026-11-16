@@ -124,8 +124,12 @@ describe('🔴 la acción `zonas-cotizar` del handler', () => {
     expect(bloque).not.toMatch(/direccion[^\n]*\.slice\(0,/)
   })
 
-  it('🔴 sin zonas cargadas avisa, en vez de decir «fuera del mapa» a todo Rosario', () => {
-    expect(bloque).toContain('Todavía no hay zonas cargadas')
+  it('🔑 sin zonas cargadas ya NO frena (15-nov): el precio es la tarifa, las zonas sólo excluyen', () => {
+    expect(bloque).not.toContain('Todavía no hay zonas cargadas')
+  })
+
+  it('🔴 la cotización suelta manda la MARCA: los km de Rosario se miden desde su local', () => {
+    expect(bloque).toMatch(/marca: b\.marca === 'bdi'/)
   })
 
   it('🔴 el motivo se arma con los dos nombres puestos', () => {
