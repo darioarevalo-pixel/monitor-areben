@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * «¿Es de un cliente que ya tenés?» en la tarjeta Pedidos (Darío §1): el verbo entero desde la pantalla. Elegir una ficha
- * anota el número del chat con quién es; «Es nuevo» (nombre + CUIT/DNI, Bruno 31-oct) está apagado sin la llave de escribir
+ * anota el número del chat con quién es; «Es nuevo» (nombre; CUIT/DNI opcional, Darío/Bruno 15-nov) está apagado sin la llave de escribir
  * y, prendido, manda nombre, documento, número y persona.
  */
 const cliente = vi.hoisted(() => ({
@@ -71,13 +71,23 @@ describe('«¿Es de un cliente que ya tenés?»', () => {
     expect(boton('Es nuevo').disabled).toBe(true)
   })
 
-  it('«Es nuevo» con la llave: nombre + CUIT/DNI obligatorios, y manda número y persona', async () => {
+  it('«Es nuevo» sin CUIT/DNI (Darío 15-nov): alcanza con el nombre, y manda número y persona', async () => {
     await montar(true)
     await act(async () => { boton('Es nuevo').click() })
     expect(boton('Crear cliente').disabled).toBe(true)
+    const [, nombre] = inputs()
+    await escribir(nombre, 'Fundas Norte')
+    expect(boton('Crear cliente').disabled).toBe(false)
+    await act(async () => { boton('Crear cliente').click() })
+    await esperar()
+    expect(cliente.clienteNuevoPanel).toHaveBeenCalledWith({ nombre: 'Fundas Norte', doc: '', whatsapp: TEL, persona: 'Rodrigo' })
+  })
+
+  it('«Es nuevo» con la llave y el CUIT/DNI cargado: lo manda', async () => {
+    await montar(true)
+    await act(async () => { boton('Es nuevo').click() })
     const [, nombre, doc] = inputs()
     await escribir(nombre, 'Fundas Norte')
-    expect(boton('Crear cliente').disabled).toBe(true)
     await escribir(doc, '30-71850818-1')
     await act(async () => { boton('Crear cliente').click() })
     await esperar()

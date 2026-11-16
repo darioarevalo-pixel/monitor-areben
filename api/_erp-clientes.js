@@ -407,9 +407,11 @@ export async function clientesDelPanel({ q = '', usuario = null }, deps) {
 }
 
 /**
- * «Es nuevo» (Darío §1; Bruno 31-oct: NOMBRE + CUIT/DNI obligatorio, el alta de siempre): la ficha nueva y el número del chat
- * anotado en ella, juntos (o ninguno). Un documento que YA tiene ficha ⛔ la renombra (`guardarCliente` pisa el nombre): 409
- * con esa ficha, para elegirla. 🔴 Detrás de la llave de ESCRIBIR (`VENTA_MAYORISTA_REAL`): mientras GN viva, la copia de GN da
+ * «Es nuevo» (Darío §1): la ficha nueva y el número del chat anotado en ella, juntos (o ninguno). 🔑 El CUIT/DNI es OPCIONAL
+ * (Darío/Bruno 15-nov; antes, obligatorio desde el 31-oct): sin documento la ficha nace sólo con el nombre (`crearClienteSinDoc`)
+ * y el documento se completa al facturar en la MISMA ficha; lo que evita la repetida es el número, que es de una sola ficha
+ * (`anotarWhatsapp` ⇒ YA_ANOTADO, y se deshace todo). Con documento, como siempre: uno que YA tiene ficha ⛔ la renombra
+ * (`guardarCliente` pisa el nombre) ⇒ 409 con esa ficha, para elegirla. 🔴 Detrás de la llave de ESCRIBIR (`VENTA_MAYORISTA_REAL`): mientras GN viva, la copia de GN da
  * de alta a sus clientes por su id de GN, sin documento ⇒ una ficha con CUIT hecha acá quedaría repetida.
  * @param {{ body: any, usuario: string|null, quien?: any }} p @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean }} deps
  */
@@ -421,22 +423,25 @@ export async function clienteNuevoPanel({ body, usuario, quien = usuario }, deps
   const nombre = String(body?.nombre ?? '').trim()
   if (!nombre) return { status: 400, error: 'Falta el nombre del cliente' }
   return deps.conMotor('bdi', 'Cliente nuevo', async (pg) => {
-    const { anotarWhatsapp, docValido, guardarCliente, numeroWhatsapp } = await import('../motor/venta/cliente.mjs')
-    const doc = docValido(body?.doc)
-    if (!doc) return { status: 400, error: 'El documento es un DNI (7 u 8 números) o un CUIT válido (11)' }
+    const { anotarWhatsapp, crearClienteSinDoc, docValido, guardarCliente, numeroWhatsapp } = await import('../motor/venta/cliente.mjs')
+    const crudo = String(body?.doc ?? '').trim()
+    const doc = crudo ? docValido(crudo) : null
+    if (crudo && !doc) return { status: 400, error: 'El documento es un DNI (7 u 8 números) o un CUIT válido (11)' }
     if (!numeroWhatsapp(body?.whatsapp)) return { status: 400, error: 'Falta el número del chat' }
     const [m] = (await pg.query(`select empresa_id from marca where id = 'bdi'`)).rows
     if (!m) return { status: 409, error: 'La marca no está en la base del motor.' }
-    const [ya] = (await pg.query('select id::text, nombre from cliente where empresa_id = $1 and doc = $2', [m.empresa_id, doc])).rows
-    if (ya) return { status: 409, error: `Ese documento ya es de ${ya.nombre}: buscalo y elegilo.`, existe: ya }
+    if (doc) {
+      const [ya] = (await pg.query('select id::text, nombre from cliente where empresa_id = $1 and doc = $2', [m.empresa_id, doc])).rows
+      if (ya) return { status: 409, error: `Ese documento ya es de ${ya.nombre}: buscalo y elegilo.`, existe: ya }
+    }
     await pg.query('begin')
     try {
-      const c = await guardarCliente(pg, { empresa_id: m.empresa_id, doc, nombre })
+      const c = doc ? await guardarCliente(pg, { empresa_id: m.empresa_id, doc, nombre }) : await crearClienteSinDoc(pg, { empresa_id: m.empresa_id, nombre })
       if (!c.ok) { await pg.query('rollback'); return { status: 400, error: c.error?.mensaje ?? 'No se pudo cargar el cliente.' } }
       const w = await anotarWhatsapp(pg, { empresa_id: m.empresa_id, cliente_id: String(c.cliente.id), whatsapp: String(body.whatsapp), nombre: body.persona, usuario })
       if (!w.ok) { await pg.query('rollback'); return { status: w.error?.codigo === 'YA_ANOTADO' ? 409 : 400, error: w.error?.mensaje ?? 'No se pudo anotar el número.' } }
       await pg.query('commit')
-      return { ok: true, cliente: { id: String(c.cliente.id), nombre: c.cliente.nombre, doc }, persona: w.persona }
+      return { ok: true, cliente: { id: String(c.cliente.id), nombre: c.cliente.nombre, doc: doc ?? null }, persona: w.persona }
     } catch (e) {
       await pg.query('rollback').catch(() => {})
       throw e

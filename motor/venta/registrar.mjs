@@ -618,4 +618,4 @@ export async function vincularFactura(db, e) {
 }
 
 // La ficha de la clienta (§11) viaja por la misma puerta: `import { guardarCliente } from 'areben-motor/venta'`.
-export { buscarClientes, guardarCliente, ponerContactoCliente, ponerFiscalCliente } from './cliente.mjs'
+export { buscarClientes, crearClienteSinDoc, guardarCliente, ponerContactoCliente, ponerFiscalCliente } from './cliente.mjs'

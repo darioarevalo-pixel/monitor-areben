@@ -4,11 +4,11 @@ import { permisoErpDe } from '@/lib/permisos.core.js'
 
 /**
  * Pedido mayorista de un número que el ERP ⛔ conoce (pedido de Darío §1, plan «BDI directo al ERP» paso 3): «¿Es de un
- * cliente que ya tenés?» busca fichas CON id; «Es nuevo» crea la ficha (nombre + CUIT/DNI, Bruno 31-oct) y le anota el
+ * cliente que ya tenés?» busca fichas CON id; «Es nuevo» crea la ficha (nombre; CUIT/DNI opcional, Darío/Bruno 15-nov) y le anota el
  * número, TODO O NADA. 🔴 Un documento que ya tiene ficha ⛔ la renombra, y crear va detrás de la llave de escribir.
  */
 const mc = vi.hoisted(() => ({
-  buscarClientes: vi.fn(), guardarCliente: vi.fn(), anotarWhatsapp: vi.fn(),
+  buscarClientes: vi.fn(), guardarCliente: vi.fn(), crearClienteSinDoc: vi.fn(), anotarWhatsapp: vi.fn(),
   docValido: (d: string) => { const x = String(d ?? '').replace(/\D/g, ''); return x.length === 8 || x.length === 11 ? x : '' },
   numeroWhatsapp: (w: string) => (String(w ?? '').replace(/\D/g, '').length >= 10 ? String(w).replace(/\D/g, '') : null),
 }))
@@ -80,6 +80,26 @@ describe('Pedido de un número desconocido en el panel', () => {
     db = base(MARCA)
     r = await clienteNuevoPanel({ body, usuario: 'bruno' }, { conMotor: conMotor(db), prendido: true, escribir: true })
     expect(r).toEqual({ status: 409, error: 'Ese número ya es de Otra' })
+    expect(db.sqls.filter((x) => ['begin', 'commit', 'rollback'].includes(x))).toEqual(['begin', 'rollback'])
+  })
+  it('crear SIN documento (Darío 15-nov): nace sólo con el nombre, ⛔ busca por documento, y el número va en la misma transacción', async () => {
+    mc.crearClienteSinDoc.mockResolvedValue({ ok: true, cliente: { id: 'n2', nombre: 'Kiosco Nuevo' } })
+    mc.anotarWhatsapp.mockResolvedValue({ ok: true, persona: { id: 'w2' }, ya_estaba: false })
+    for (const doc of [undefined, '', '   ']) {
+      mc.guardarCliente.mockClear()
+      const db = base(MARCA)
+      const r2 = await clienteNuevoPanel({ body: { ...body, nombre: 'Kiosco Nuevo', doc }, usuario: 'bruno' }, { conMotor: conMotor(db), prendido: true, escribir: true })
+      expect(r2).toMatchObject({ ok: true, cliente: { id: 'n2', nombre: 'Kiosco Nuevo', doc: null } })
+      expect(mc.guardarCliente).not.toHaveBeenCalled()
+      expect(db.sqls.some((x) => x.includes('and doc ='))).toBe(false)
+      expect(db.sqls.filter((x) => ['begin', 'commit', 'rollback'].includes(x))).toEqual(['begin', 'commit'])
+    }
+    expect(mc.crearClienteSinDoc.mock.calls[0][1]).toEqual({ empresa_id: 'areben', nombre: 'Kiosco Nuevo' })
+    // El número ya es de otra ficha ⇒ se deshace la ficha nueva (lo que evita la repetida sin documento).
+    mc.anotarWhatsapp.mockResolvedValue({ ok: false, error: { codigo: 'YA_ANOTADO', mensaje: 'Ese número ya es de Otra' } })
+    const db = base(MARCA)
+    expect(await clienteNuevoPanel({ body: { ...body, doc: '' }, usuario: 'bruno' }, { conMotor: conMotor(db), prendido: true, escribir: true }))
+      .toEqual({ status: 409, error: 'Ese número ya es de Otra' })
     expect(db.sqls.filter((x) => ['begin', 'commit', 'rollback'].includes(x))).toEqual(['begin', 'rollback'])
   })
 })

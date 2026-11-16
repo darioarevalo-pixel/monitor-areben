@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "d989260a19fca2d7b533b5533a717f0a08a7bf38",
-  "traido_en": "2026-11-15T16:01:58.911Z",
+  "commit": "381687398da5cd7680bd76b9d3d67515bb155012",
+  "traido_en": "2026-11-16T00:54:05.722Z",
   "archivos": {
     "alerta.mjs": "8c4ea3f813cdd8d8644e9ed0a426d7c6202618971249eca0b41f780e40d904f6",
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
@@ -62,7 +62,7 @@
     "tn/vinculo-db.mjs": "5a1a3deab44d7da433f5c3d809715fb6b434766d9e420b7ce446f38c6713d460",
     "tn/vinculo.mjs": "cde453304aff70dd1493ee5d47c77945cf9ccfbff73d408b45df359e44d65eef",
     "venta/armar.mjs": "3363db813c9b35dfc21d081c76590fab730cdee4ecb2b56e491b49c7439dbb45",
-    "venta/cliente.mjs": "fb6d9136be987710f270683571e94eca6614f0f45fc54ea71cf08420d1cb5b52",
+    "venta/cliente.mjs": "d342d390dc9f194393b15b9f0dbef1c98771603462eb01ec66d78fcad34cf8dd",
     "venta/cobros.mjs": "420381f86a92784e67cd3b82aa1771edea1a597b67037da14e77ad0bdbb0800b",
     "venta/contraentrega.mjs": "896e2e4f7897d12c42690b5cce8ac7d34325b614a6423264e00830a6b8ab3c20",
     "venta/correccion-medio.mjs": "bb807c70917352cebaf5399a01c2eb6e9232abd67f5d158ef4469a20303ad4f9",
@@ -77,7 +77,7 @@
     "venta/proveedor.mjs": "bdbfde6aa0749296f5ddc6723dfb3856ce9596ef75a75fac7b2715479dd6f061",
     "venta/redondeo-db.mjs": "56ef4b54d3159b5f62db3c6743c77c5fabe722a30a7c215f1bbb9b3302582c9e",
     "venta/redondeo.mjs": "5e06ed407a5aa5e5dc32f7bfdaff3d61d48b14f78a79bb0e8a8a448f68a22a13",
-    "venta/registrar.mjs": "f5ac502a28333d46b857431829a593ef4914abdab4fffdf1d37bc7b6247d345f",
+    "venta/registrar.mjs": "6f5485cd1b768fe00828721f30f9baefd151e8945c129c97852659a21d6d28b5",
     "venta/reglas-db.mjs": "b8d0bf468b3bd5f8bcb966367139025f7c17f0383201a2fc8e4519af9aa6ef50",
     "venta/reglas.mjs": "c356d1743ce274a52b77c11628e4510510e3661360fcb5f18efcca66f5540ad4"
   }
