@@ -419,7 +419,22 @@ function enComunidadDe(comunidad: Comunidad | null, tels: (string | null | undef
   return r.some((x) => x === true)
 }
 
-function MarcaComunidad({ comunidad, aviso, tels }: { comunidad: Comunidad | null; aviso: AvisoComunidad; tels: (string | null | undefined)[] }) {
+/**
+ * Los números de un cliente para buscarlo en la comunidad: el del chat (si la ficha se abrió desde el chat), el cargado en
+ * la ficha y los de «Quién compra» del ERP. 🔴 Darío, 16-nov (Lara Arosteguy): abierta desde el buscador, la ficha miraba
+ * sólo el número cargado —que ya no tenía WhatsApp— y decía «No está en la comunidad» estando con el número vinculado.
+ */
+function telsDelCliente(telChat: string | null, telFicha: string | null | undefined, personas: { whatsapp: string }[] | null | undefined): string[] {
+  return [telChat, telFicha, ...(personas ?? []).map((p) => p.whatsapp)].filter((t): t is string => !!t)
+}
+
+function MarcaComunidad({ comunidad, aviso, tels, telFicha }: {
+  comunidad: Comunidad | null
+  aviso: AvisoComunidad
+  tels: (string | null | undefined)[]
+  /** El número cargado en la ficha: si está en la comunidad con OTRO, se dice con cuál. */
+  telFicha?: string | null
+}) {
   if (!comunidad) {
     if (aviso === 'sin-cargar') return <Chip>Para ver si está en la comunidad, abrí la comunidad una vez en WhatsApp</Chip>
     return null
@@ -427,6 +442,8 @@ function MarcaComunidad({ comunidad, aviso, tels }: { comunidad: Comunidad | nul
   const respuestas = tels.map((t) => estaEnComunidad(comunidad.indice, t))
   if (respuestas.every((r) => r === null)) return null
   const esta = respuestas.some((r) => r === true)
+  const fichaEsta = telFicha != null && estaEnComunidad(comunidad.indice, telFicha) === true
+  const conOtro = esta && telFicha != null && !fichaEsta ? normalizeArgPhone(tels[respuestas.indexOf(true)] || '').slice(-10) : ''
   const cuando = comunidad.enVivo ? 'recién leída de WhatsApp' : `lista de ${antiguedadFoto(comunidad.actualizado)}`
   return (
     // 🔑 Va en el encabezado, abajo del nombre, y con color propio (verde / rojo). Como etiqueta
@@ -445,7 +462,7 @@ function MarcaComunidad({ comunidad, aviso, tels }: { comunidad: Comunidad | nul
         color: esta ? color.successInk : color.dangerInk,
       }}
     >
-      {esta ? '✅ Está en la comunidad' : '✕ No está en la comunidad'}
+      {esta ? `✅ Está en la comunidad${conOtro ? ` · con el ${conOtro}` : ''}` : '✕ No está en la comunidad'}
     </div>
   )
 }
@@ -1286,7 +1303,7 @@ function PanelInterno({
               key={`qlm-${c.id}`}
               sabe={{
                 esCliente: (c.ventas || []).length > 0,
-                enComunidad: enComunidadDe(comunidad, via === 'id' ? [c.phone] : [telNorm, c.phone]),
+                enComunidad: enComunidadDe(comunidad, telsDelCliente(via === 'id' ? null : telNorm, c.phone, cuenta?.personas)),
                 perfil: seg.perfil || null,
               }}
               tels={via === 'id' ? [c.phone || ''] : [telNorm, c.phone || '']}
@@ -1342,7 +1359,7 @@ function PanelInterno({
         </div>
         {/* Los dos números: el del chat es el que está en la comunidad, pero si la ficha se abrió
             desde la lista, el chat todavía puede ser el anterior. */}
-        <MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={via === 'id' ? [c.phone] : [telNorm, c.phone]} />
+        <MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={telsDelCliente(via === 'id' ? null : telNorm, c.phone, cuenta?.personas)} telFicha={c.phone} />
 
         {via === 'cola' && (
           <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: radius.sm, padding: '4px 8px' }}>
