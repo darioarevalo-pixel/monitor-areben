@@ -1,6 +1,7 @@
 /**
  * Una orden de Mercado Libre (`GET /orders/search`) → filas de `ml_orden` y `ml_orden_linea`, y el armado
- * por PACK para el cruce. Puro. ⛔ Se guarda nada del comprador.
+ * por PACK para el cruce. Puro. Del comprador se guarda SÓLO su id de ML y el nombre para su ficha (sql/085, Bruno 15-nov):
+ * ⛔ mail, teléfono ni dirección.
  *
  * 🔑 GN hace UNA venta por pack («Importado de MercadoLibre - Pack: N»); una orden suelta (sin carrito) ⛔ tiene
  * pack ⇒ su clave es el id de la orden (supuesto: se confirma en el primer cruce, cae en `sin_venta` si no).
@@ -25,7 +26,26 @@ export function filaDeOrdenML(o) {
     pagado: plata(o.paid_amount),
     cancelacion: o.cancel_detail?.code ?? null,
     comision: comisionDeOrden(o),
+    comprador_id: idComprador(o),
   }
+}
+
+const idComprador = (o) => {
+  const id = Number(o?.buyer?.id)
+  return Number.isSafeInteger(id) && id > 0 ? id : null
+}
+const limpio = (v) => (typeof v === 'string' && v.trim() ? v.trim().replace(/\s+/g, ' ').slice(0, 120) : null)
+
+/**
+ * El comprador de una orden para su ficha (sql/085): el id de ML y el nombre (`first_name last_name`; sin nombre, el apodo).
+ * Sin id ⇒ null (⛔ hay con qué reconocerlo la próxima vez).
+ */
+export function compradorDeOrdenML(o) {
+  const ml_id = idComprador(o)
+  if (!ml_id) return null
+  const b = o.buyer || {}
+  const nombre = limpio([limpio(b.first_name), limpio(b.last_name)].filter(Boolean).join(' ')) ?? limpio(b.nickname) ?? `Comprador ML ${ml_id}`
+  return { ml_id, nombre }
 }
 
 /** sql/068: lo que ML se queda de la orden (`sale_fee` es por unidad). Un renglón sin el dato ⇒ null, ⛔ un número que afirma de menos. */

@@ -5,7 +5,8 @@
  * Copia lo que hace GN hoy, MEDIDO el 30-oct contra las ventas de GN con `ml_pack` de 30 días (13 de 13):
  *   - UNA venta por PACK (`claveGN`: el pack o, sin carrito, la orden), y nace cuando todas sus órdenes vivas están PAGAS;
  *   - total = la suma de `total_amount` de esas órdenes (13/13 iguales; `paid_amount` trae el envío y ⛔ se usa);
- *   - sale del Depósito Minorista (`DEPOSITO_ONLINE.bdi`), canal Mercado Libre, cobra en la cuenta «Mercado Libre».
+ *   - sale del Depósito Minorista (`DEPOSITO_ONLINE.bdi`), canal Mercado Libre, cobra en la cuenta «Mercado Libre»;
+ *   - el pago lleva la comisión REAL de ML (sql/068) y la venta la ficha del comprador (sql/085), como TN (Bruno, 15-nov).
  * Un pack que se cae entero (todas sus órdenes canceladas) después de la venta ⇒ se anula.
  *
  * ⛔ se registra a medias: si una línea no tiene variante (seller_sku que ⛔ cruza) o falta la cuenta, el pack se SALTA y
@@ -91,12 +92,19 @@ export function planVentasML({ ordenes, indice, cuentas, ya, real = false }) {
     if (Math.abs(subtotal - total) > 0.01) { saltar('total_distinto', clave); continue }
     if (!cuenta) { saltar('cuenta_desconocida', clave); continue }
     const fecha = vivas.map((o) => o.cerrada_en || o.creada_en).filter(Boolean).map((d) => new Date(d).toISOString()).sort().at(-1)
+    // 🔑 Bruno, 15-nov: «como TN» ⇒ lo que ML se queda (`sale_fee`, sql/068) va en el PAGO, como la comisión de MP en TN. Es la
+    // REAL de cada orden, ⛔ una tasa. Si a una orden le falta el dato, ⛔ va (un número que afirma de menos): queda null.
+    const comision = vivas.every((o) => o.comision != null) ? pesos(vivas.reduce((s, o) => s + Number(o.comision), 0)) : null
+    // La ficha del comprador (sql/085), si la orden ya la tiene. Un pack es de UN comprador.
+    const cliente = vivas.find((o) => o.cliente_id)?.cliente_id ?? null
 
     registrar.push({
       origen: 'ml', origen_ref: ref, marca: 'bdi', canal: 'ml', deposito: DEPOSITO_ONLINE.bdi,
       usuario: 'mercado-libre', prueba: !(typeof real === 'function' ? real(fecha ?? new Date().toISOString()) : real), ...(fecha ? { ocurrida_en: fecha } : {}),
-      lineas, subtotal, total, pagos: [{ cuenta: cuenta.id, monto: total }],
-      detalle: { ml: { pack: clave, ordenes: vivas.map((o) => String(o.orden_id)), medio: vivas[0].medio ?? null } },
+      ...(cliente ? { cliente_id: String(cliente) } : {}),
+      lineas, subtotal, total, pagos: [{ cuenta: cuenta.id, monto: total, ...(comision != null ? { comision } : {}) }],
+      // `comision_en_pago`: Gastos ⛔ la vuelve a sumar desde las órdenes (`lib/gasto/gasto.mjs`).
+      detalle: { ml: { pack: clave, ordenes: vivas.map((o) => String(o.orden_id)), medio: vivas[0].medio ?? null, ...(comision != null ? { comision_en_pago: true } : {}) } },
     })
   }
   return { registrar, anular, saltadas, ya: yaEstan }
