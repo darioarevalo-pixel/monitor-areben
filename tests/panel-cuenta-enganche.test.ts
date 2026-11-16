@@ -27,6 +27,12 @@ describe('la cuenta corriente sigue enganchada en el panel (escondida, ⛔ sacad
     expect(panel).not.toContain('CalculadoraEnvio')
     for (const pieza of ['<PreparadosSinPagar', '<PedidosSinCliente']) expect(pedidos).toContain(pieza)
   })
+  it('Número nuevo ↔ «Quién compra» (Darío 16-nov): el enganche anota también en el ERP y ofrece al cliente que ya lo tiene', () => {
+    expect(panel).toMatch(/await anotarEnQuienCompra\(/)
+    expect(panel).toMatch(/useClienteQueCompraConEsteNumero\(tel\)/)
+    // Anotar va ANTES de releer la ficha: si no, la cuenta no lo muestra como «este chat».
+    expect(panel.indexOf('await anotarEnQuienCompra(')).toBeLessThan(panel.indexOf('await buscarFicha({ clienteId: cliente.id }'))
+  })
   it('Pagos: el segmento «Cuentas» detrás del interruptor', () => {
     expect(pagos).toMatch(/from '\.\/CuentaCorriente'/)
     expect(pagos).toMatch(/useCuentaPrendida\(\)/)

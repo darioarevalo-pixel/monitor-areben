@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Icono } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
-import { FranjaCuenta, HojaCargarPago, MasDelCliente, TarjetaCuenta, useCuentaPanel } from './CuentaCorriente'
+import { anotarEnQuienCompra, FranjaCuenta, HojaCargarPago, MasDelCliente, TarjetaCuenta, useClienteQueCompraConEsteNumero, useCuentaPanel } from './CuentaCorriente'
 import { LoQueSigue, loQueSigue, refsDePedidosAbiertos, TarjetaPedidos, usePedidosPanel } from './PedidosMayoristas'
 import { ProximoContacto, RayaEstado, estadoDeFicha } from './ProximoContacto'
 import { QueLeMando } from './QueLeMando'
@@ -1220,11 +1220,14 @@ function PanelInterno({
             // Se recarga la ficha por id: el número ya quedó guardado, pero el índice del servidor
             // se rearma cada 6 h, así que buscar por teléfono todavía no lo encontraría.
             setEstado({ t: 'cargando' })
+            // 🔑 Y queda también en «Quién compra» del ERP (Darío 16-nov): un solo toque y los pedidos de este número entran
+            // solos a ese cliente. Va ANTES de releer la ficha, para que la cuenta ya lo muestre como «este chat».
+            const enErp = await anotarEnQuienCompra(cliente.id, pedido ? telDelChat(pedido.tel) || pedido.tel : telNorm, pedido ? '' : nombreChat)
             const r = await buscarFicha({ clienteId: cliente.id }, kv.current.seg, today)
             if (!vivo.current) return
             if (r.estado === 'encontrado') setEstado({ t: 'ficha', ficha: r.ficha, crudo: r.crudo })
             else setEstado({ t: 'desconocido' })
-            decir(`Listo: este número ahora abre la ficha de ${cliente.name || 'ese cliente'}`)
+            decir(`Listo: este número ahora abre la ficha de ${cliente.name || 'ese cliente'}.${enErp ? ' ' + enErp : ''}`)
           }}
           guardarLead={(fn) => filaLeads.current?.encolar(fn) ?? Promise.resolve({ ok: false, motivo: 'El panel todavía está cargando.' })}
           onGuardado={(lead) => {
@@ -2119,6 +2122,9 @@ function NumeroNuevo({
 }) {
   const [camino, setCamino] = useState<'elegir' | 'cliente' | 'lead'>('elegir')
   const sugeridos = useSugeridosPorNombre(nombreAgendado)
+  /** Ya anotado en «Quién compra» de un cliente del ERP (Darío 16-nov): se ofrece buscarlo con su nombre ya puesto. */
+  const compraPor = useClienteQueCompraConEsteNumero(tel)
+  const [buscarCon, setBuscarCon] = useState('')
   const [enganchando, setEnganchando] = useState(false)
 
   const enganchar = async (c: FilaCliente) => {
@@ -2135,7 +2141,7 @@ function NumeroNuevo({
 
   if (camino === 'lead') return <NuevoLead tel={tel} onGuardado={onGuardado} guardarLead={guardarLead} onError={onError} onVolver={() => setCamino('elegir')} />
   if (camino === 'cliente')
-    return <VincularCliente tel={tel} onVinculado={onVinculado} onError={onError} onVolver={() => setCamino('elegir')} />
+    return <VincularCliente tel={tel} inicial={buscarCon} onVinculado={onVinculado} onError={onError} onVolver={() => { setBuscarCon(''); setCamino('elegir') }} />
 
   return (
     <div style={{ padding: space[3] }}>
@@ -2153,6 +2159,17 @@ function NumeroNuevo({
         mismo nombre con que compra. El nombre SUGIERE; engancha sólo el toque de Darío — elegir solo
         anotaría notas y fechas en la ficha de otra persona cuando el nombre se repite.
       */}
+      {compraPor && (
+        <div style={{ border: `1px solid ${color.successBorder}`, background: color.successBg, borderRadius: radius.sm, padding: 10, marginBottom: 12 }}>
+          <div style={{ fontSize: font.sm, fontWeight: 700, color: color.successInk, marginBottom: 2 }}>Compra por {compraPor}</div>
+          <div style={{ fontSize: font.xs, color: color.mut, marginBottom: 8 }}>
+            Está en «Quién compra» de ese cliente. Elegilo y este número va a abrir su ficha.
+          </div>
+          <Button variant="outline" fullWidth style={{ justifyContent: 'flex-start', background: color.bg }} onClick={() => { setBuscarCon(compraPor); setCamino('cliente') }}>
+            Buscar a {compraPor}
+          </Button>
+        </div>
+      )}
       {sugeridos.length > 0 && (
         <div style={{ border: `1px solid ${color.successBorder}`, background: color.successBg, borderRadius: radius.sm, padding: 10, marginBottom: 12 }}>
           <div style={{ fontSize: font.sm, fontWeight: 700, color: color.successInk, marginBottom: 2 }}>
@@ -2180,7 +2197,7 @@ function NumeroNuevo({
       )}
 
       <Button variant="outline" fullWidth style={{ marginBottom: 8, justifyContent: 'flex-start' }} onClick={() => setCamino('cliente')}>
-        Ya es cliente mío, cambió de número
+        Ya es cliente mío (otro número)
       </Button>
       <Button variant="outline" fullWidth style={{ marginBottom: 8, justifyContent: 'flex-start' }} onClick={() => setCamino('lead')}>
         Es alguien nuevo, guardarlo como lead
@@ -2233,16 +2250,19 @@ function useSugeridosPorNombre(nombre: string): FilaCliente[] {
  */
 function VincularCliente({
   tel,
+  inicial = '',
   onVinculado,
   onError,
   onVolver,
 }: {
   tel: string
+  /** Con qué arranca el buscador (el nombre del cliente de «Quién compra», si se llegó desde ahí). */
+  inicial?: string
   onVinculado: (cliente: FilaCliente) => void
   onError: (t: string) => void
   onVolver: () => void
 }) {
-  const [q, setQ] = useState('')
+  const [q, setQ] = useState(inicial)
   /** Lo último que contestó el servidor, CON la consulta que lo pidió. */
   const [resultados, setResultados] = useState<{ q: string; filas: FilaCliente[] } | null>(null)
   const [guardando, setGuardando] = useState(false)

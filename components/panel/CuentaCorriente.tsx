@@ -78,6 +78,42 @@ export function useCuentaPanel(gnId: number | null, tel: string | null): { cuent
   return { cuenta, releer }
 }
 
+/**
+ * Al enganchar un número nuevo a un cliente del CRM («Ya es cliente mío»), anotarlo también en «Quién compra» del ERP
+ * (Darío 16-nov): así los pedidos que haga ese número entran solos a ese cliente, sin cargarlo dos veces.
+ * Devuelve el texto para el aviso, o null si no hubo nada que hacer (panel apagado, cliente sin ERP o ya anotado).
+ * ⛔ Nunca tira: el enganche del CRM ya quedó hecho y no se deshace por esto.
+ */
+export async function anotarEnQuienCompra(gnId: number, tel: string, nombre?: string): Promise<string | null> {
+  try {
+    if (!gnId || !tel || !(await preguntarPrendido())) return null
+    const r = await leerCuentaPanel({ gnId, tel, prueba: LIBRO_DE_PRUEBA })
+    if (!('hoy' in r) || r.delChat) return null
+    await anotarWhatsappPanel({ clienteId: r.cliente.id, whatsapp: tel, nombre: nombre?.trim() || undefined })
+    return `También quedó en «Quién compra» de ${r.cliente.nombre}: sus pedidos entran solos.`
+  } catch {
+    return 'Quedó en la ficha, pero no se pudo sumar a «Quién compra». Agregalo desde «Más del cliente».'
+  }
+}
+
+/**
+ * ¿Este número desconocido ya está en «Quién compra» de algún cliente del ERP? (Darío 16-nov: cargó a Lore en Joel y el
+ * panel igual decía «Número nuevo»). Devuelve el nombre del cliente, para ofrecerlo; null si no está o no se sabe.
+ */
+export function useClienteQueCompraConEsteNumero(tel: string): string | null {
+  const prendido = useCuentaPrendida()
+  const [res, setRes] = useState<{ tel: string; nombre: string | null } | null>(null)
+  useEffect(() => {
+    if (!prendido || !tel) return
+    let vivo = true
+    leerCuentaPanel({ tel, prueba: LIBRO_DE_PRUEBA })
+      .then((r) => { if (vivo) setRes({ tel, nombre: 'hoy' in r && r.delChat ? r.cliente.nombre : null }) })
+      .catch(() => { if (vivo) setRes({ tel, nombre: null }) })
+    return () => { vivo = false }
+  }, [prendido, tel])
+  return res && res.tel === tel ? res.nombre : null
+}
+
 /** «Sin crédito» · «Con crédito · hasta $X · N días» (Darío 15-nov; el crédito se marca en ERP › Clientes). */
 export function textoCredito(c: CuentaConCliente['credito']): string {
   if (!c?.credito) return 'Sin crédito'

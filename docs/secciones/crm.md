@@ -85,6 +85,10 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
     facturar en la misma ficha. Ficha y número juntos o ninguno (`cliente-nuevo-panel`): sin documento, lo que evita la
     repetida es el número (de una sola ficha ⇒ YA_ANOTADO ⇒ se deshace). 🔴 Un documento que ya tiene ficha ⇒ 409 (⛔ se
     renombra: `guardarCliente` pisa el nombre). 🔴 «Es nuevo» va detrás de `VENTA_MAYORISTA_REAL`.
+  - **Número nuevo ↔ «Quién compra»** (Darío 16-nov): «Ya es cliente mío (otro número)» engancha en el CRM (`crm:tel`) Y
+    anota el número en «Quién compra» del ERP (`anotarEnQuienCompra`, antes de releer la ficha; ⛔ tira: si falla, avisa). Y al
+    revés: un número que ya está en «Quién compra» y el CRM no conoce muestra «Compra por X» con el buscador ya cargado (engancha
+    sólo el toque de Darío). Ojo: la cuenta se busca por `gn_client_id`; un cliente nacido en el ERP (id ≥ 704.001) ⛔ la encuentra.
   - **Pagos del pedido** (Darío §4): «$ Cargar pago» en la hoja del pedido abre la MISMA hoja de la cuenta, con lo que falta y
     `imputar` a ese pedido; lo que sobra va a lo más viejo y recién sin deuda queda a favor (regla del 18-oct). **N° de
     operación** opcional: si otro pago vivo ya lo usa, el motor contesta OPERACION_REPETIDA, la hoja dice cuál y «Cargar
