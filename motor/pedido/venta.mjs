@@ -182,6 +182,8 @@ export async function entrarPedidoMayorista(db, e, { env = process.env, sinClien
   }
   if (p.venta_id) return { ok: true, ya: true, pedido: { id: p.id, numero: p.numero }, venta_id: p.venta_id }
   if (p.anulado_en) return falla('ANULADO', `El pedido ${p.numero} está anulado`)
+  // 16-nov (Darío): el pedido que ya se vendió POR GN (antes del corte) ⛔ entra: sería la misma venta dos veces (pedido 91 = GN 33311).
+  if (p.gn_sale_id != null) return falla('VENDIDO_EN_GN', `El pedido ${p.numero} ya se vendió por Gestión Nube (venta ${p.gn_number ?? p.gn_sale_id}): no se entra de nuevo`)
   if (!UUID.test(String(e.cliente_id ?? ''))) return falla('FALTA_CLIENTE', 'Falta el cliente', 'cliente_id')
   if (esFichaSinCliente(e.cliente_id) && !sinCliente) return falla('ENTRADA_INVALIDA', `«${NOMBRE_FICHA_SIN_CLIENTE}» ⛔ se elige a mano: elegí el cliente del pedido`, 'cliente_id')
   const [cli] = await q(db, 'select id::text from cliente where id = $1 and empresa_id = $2', [e.cliente_id, p.empresa_id])

@@ -67,8 +67,10 @@ const APAGADO = 'Los pedidos se manejan desde acá el día que BDI pasa a Areben
  * La tarjeta «Pedidos»: los entrados al ERP (el más nuevo primero) y los que llegaron con el número del chat y todavía no
  * entraron. Tocar uno abre la hoja.
  */
-export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = null, decir, onCambio }: {
+export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = null, logistica = null, decir, onCambio }: {
   pedidos: Extract<PedidosPanel, { prendido: true }>; clienteId: string | null; personaId: string | null; tel: string | null
+  /** El estado en Logística de los pedidos en curso, por número de GN (`null` = todavía no llegó): para los vendidos por GN. */
+  logistica?: Map<string, string> | null
   /** La cuenta del cliente: con ella la hoja del pedido deja «Cargar pago» (Darío §4). */
   cuenta?: CuentaConCliente | null
   decir: (txt: string, mal?: boolean) => void; onCambio: () => void
@@ -77,7 +79,8 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
   const [entrando, setEntrando] = useState<string | null>(null)
   const [pagando, setPagando] = useState<{ ventaId: string; numero: number; falta: number } | null>(null)
   const [enviando, setEnviando] = useState<string | null>(null)
-  if (!pedidos.pedidos.length && !pedidos.sinEntrar.length) return null
+  const deGn = pedidos.deGn ?? []
+  if (!pedidos.pedidos.length && !pedidos.sinEntrar.length && !deGn.length) return null
   const aPreparacion = async (p: PedidoDelCliente) => {
     setEnviando(p.id)
     try { await mandarAPrepararPanel(p.id); decir('Enviado a preparación.'); onCambio() } catch (e) { decir(e instanceof Error ? e.message : 'No se pudo enviar a preparación.', true) } finally { setEnviando(null) }
@@ -112,6 +115,14 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
           <Button size="sm" variant="outline" disabled={!pedidos.escribir || !clienteId || entrando === p.id} title={pedidos.escribir ? (clienteId ? undefined : 'Primero elegí o creá el cliente de este número') : APAGADO} onClick={() => void entrar(p.id)}>
             {entrando === p.id ? (p.apartado ? 'Pasando…' : 'Entrando…') : (p.apartado ? 'Pasar a este cliente' : 'Entrar')}
           </Button>
+        </div>
+      ))}
+      {deGn.map((p) => (
+        <div key={p.id} style={{ fontSize: font.sm, padding: '4px 0' }}>
+          <b>Pedido {codigoPedido(p.numero)}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.recibido_en)} · {p.unidades} u · {plata(p.total)}</span>
+          <div style={{ fontSize: font.xs, color: color.mut2 }}>
+            Vendido por GN #{p.gn_number}{logistica ? ` · ${logistica.has(p.gn_number) ? `Logística: ${logistica.get(p.gn_number)}` : 'no está en curso en Logística'}` : ''}
+          </div>
         </div>
       ))}
       {pedidos.pedidos.map((p) => {

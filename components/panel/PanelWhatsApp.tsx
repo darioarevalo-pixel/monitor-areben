@@ -153,7 +153,7 @@ function useEscritosHoy(): { escritos: EscritosHoy; ultimos: UltimosMios | null 
 export { telDelChat }
 import { leerMapa } from '@/lib/kv/cliente'
 import { tomar } from '@/lib/crm/precarga'
-import { adelantarPedidos } from '@/lib/crm/logistica'
+import { adelantarPedidos, type PedidoLogistica } from '@/lib/crm/logistica'
 import type { FilaCliente, FilaDetalle, MapaSeguimiento, MapaTelefonos, Nota } from '@/lib/crm/tipos'
 
 /**
@@ -994,6 +994,11 @@ function PanelInterno({
   const [cargandoPago, setCargandoPago] = useState(false)
   // Los pedidos mayoristas del ERP (paso 3 del plan, `PedidosMayoristas.tsx`): escondidos detrás del mismo interruptor.
   const { pedidos: pedidosErp, releer: releerPedidos } = usePedidosPanel(cuenta?.cliente.id ?? null, quien?.telefono ?? null)
+  // El estado en Logística de los vendidos por GN (Darío 16-nov): lo trae la tarjeta de Logística; va con el chat que lo pidió.
+  const [logisticaGn, setLogisticaGn] = useState<{ tel: string; m: Map<string, string> } | null>(null)
+  const alLeerLogistica = useCallback((ps: PedidoLogistica[]) => {
+    setLogisticaGn({ tel: telNorm, m: new Map(ps.filter((p) => p.gn_number).map((p) => [String(p.gn_number), p.status.label])) })
+  }, [telNorm])
 
   const solapas = (
     <div style={{ display: 'flex', borderBottom: `1px solid ${color.sideBg}`, background: color.sideBg, position: 'sticky', top: 0, zIndex: 3 }}>
@@ -1352,11 +1357,11 @@ function PanelInterno({
         <LoQueSigue key={`sigue-${c.id}`} items={sigue} />
         {pedidosErp && (
           <Aislado nombre="Pedidos de Areben Gestión">
-            <TarjetaPedidos pedidos={pedidosErp} clienteId={cuenta?.cliente.id ?? null} personaId={cuenta?.delChat?.id ?? null} tel={quien?.telefono ?? null} cuenta={cuenta} decir={decir} onCambio={() => { releerPedidos(); releerCuenta() }} />
+            <TarjetaPedidos pedidos={pedidosErp} clienteId={cuenta?.cliente.id ?? null} personaId={cuenta?.delChat?.id ?? null} tel={quien?.telefono ?? null} cuenta={cuenta} logistica={logisticaGn?.tel === telNorm ? logisticaGn.m : null} decir={decir} onCambio={() => { releerPedidos(); releerCuenta() }} />
           </Aislado>
         )}
         {/* Los pedidos en curso en Logística (22-oct-2026): sin pedidos no se dibuja. */}
-        <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} despacho={seg.despacho || ''} />
+        <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} despacho={seg.despacho || ''} onLeidos={alLeerLogistica} />
         {cuenta && (
           <Aislado nombre="Cuenta corriente">
             <TarjetaCuenta cuenta={cuenta} sinRefs={refsDePedidosAbiertos(pedidosErp)} />

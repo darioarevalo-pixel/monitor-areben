@@ -835,9 +835,11 @@ export type PedidoDelCliente = {
 }
 /** `apartado`: ya entró a la ficha general «Pedido mayorista» (aparta el stock) y falta pasarlo a su cliente (Darío 15-nov). */
 export type PedidoSinEntrar = { id: string; numero: number; recibido_en: string; total: number; unidades: number; nombre: string | null; apartado?: boolean }
+/** Un pedido del catálogo que ya se VENDIÓ POR GN antes del corte (Darío 16-nov): ⛔ se entra, sólo se ve con su número de GN. */
+export type PedidoDeGn = { id: string; numero: number; recibido_en: string; total: number; unidades: number; gn_number: string }
 export type PedidosPanel =
   | { prendido: false }
-  | { prendido: true; escribir: boolean; pedidos: PedidoDelCliente[]; sinEntrar: PedidoSinEntrar[]; falta064?: boolean }
+  | { prendido: true; escribir: boolean; pedidos: PedidoDelCliente[]; sinEntrar: PedidoSinEntrar[]; deGn?: PedidoDeGn[]; falta064?: boolean }
 export type RenglonPedido = { product_id: number; size_id: number | null; cantidad: number; precio: number; stock: number | null; nombre: string | null; talle: string | null }
 export type CambioPedido = { motivo: string; antes: unknown; despues: unknown; usuario: string | null; cuando: string }
 export type FichaPedido = {
