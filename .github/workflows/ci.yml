@@ -46,6 +46,10 @@ jobs:
         run: npm ci
 
       - name: Typecheck
+        # El proyecto entero ya está al borde del tope de memoria por defecto de Node: medido 15-nov, main se queda sin memoria
+        # con 1,6 GB y el CI cayó dos veces seguidas por eso («heap out of memory», exit 134) sin ningún error de tipos.
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: npm run typecheck
 
       - name: Lint
