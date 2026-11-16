@@ -160,7 +160,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     ...(puedeErp('facturar-venta') && ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
     ...(puedeErp('facturar-venta') && !fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura', fila.id) }] : []),
     ...(puede.corregir && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
-    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir forma de pago…', icono: 'pesos' as const, hint: 'Pagó con otro medio que el que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
+    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir forma de pago…', icono: 'pesos' as const, hint: 'Pagó con otra forma de pago que la que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
     ...(puedeErp('anular') ? [{ key: 'anular', label: 'Anular…', icono: 'anular' as const, tone: 'danger' as const, disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) }] : []),
   ]
   // 📱 En el celular los botones de arriba bajan al pie: la principal es cobrar; lo demás, al «⋯».
@@ -206,9 +206,9 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
 
       {esPedido ? (
         <>
-          {fila.entregadoSinCobrar && <Notice tone="danger"><b>Entregado sin cobrar</b>: Tienda Nube lo cerró sin que se registrara el pago. Ya no retiene stock; queda acá hasta que se cobre o se cancele.</Notice>}
-          {fila.paraCancelar && <Notice tone="danger"><b>Para cancelar</b>: lleva {fila.dias} días sin pagar. Hay que cancelarlo en Tienda Nube. Los productos siguen retenidos hasta que se cancele.</Notice>}
-          <Notice tone="warning">Pedido de Tienda Nube <b>sin pagar</b>: todavía no es una venta{fila.entregadoSinCobrar ? '' : ' y tiene los productos retenidos'}. Pasa a venta solo cuando Tienda Nube avisa que se pagó. Se cobra en Cobros del monitor (transferencia o efectivo) o se cancela en Tienda Nube.</Notice>
+          {fila.entregadoSinCobrar && <Notice tone="danger"><b>Entregado sin cobrar</b>: Tienda Nube lo cerró sin que se registrara el pago. Ya no reserva stock; queda acá hasta que se cobre o se cancele.</Notice>}
+          {fila.paraCancelar && <Notice tone="danger"><b>Para cancelar</b>: lleva {fila.dias} días sin pagar. Hay que cancelarlo en Tienda Nube. Los productos siguen reservados hasta que se cancele.</Notice>}
+          <Notice tone="warning">Pedido de Tienda Nube <b>sin pagar</b>: todavía no es una venta{fila.entregadoSinCobrar ? '' : ' y tiene los productos reservados'}. Pasa a venta solo cuando Tienda Nube avisa que se pagó. Se cobra en Cobros del monitor (transferencia o efectivo) o se cancela en Tienda Nube.</Notice>
           <DatosFicha>
             <DatoFicha titulo="Entró">{`${cuandoCorto(fila.pedidoEn)}${fila.dias != null ? ` · ${fila.dias === 0 ? 'hoy' : fila.dias === 1 ? 'hace 1 día' : `hace ${fila.dias} días`}` : ''}`}</DatoFicha>
             <DatoFicha titulo="Eligió pagar con">{fila.medio ?? '—'}</DatoFicha>
@@ -216,7 +216,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           </DatosFicha>
           {!!fila.prendas?.length && (
             <section>
-              <h3 style={h3}>{fila.entregadoSinCobrar ? 'Productos' : 'Productos retenidos'}{fila.unidades != null && ` · ${fila.unidades}`}</h3>
+              <h3 style={h3}>{fila.entregadoSinCobrar ? 'Productos' : 'Productos reservados'}{fila.unidades != null && ` · ${fila.unidades}`}</h3>
               {fila.prendas.map((x, i) => (
                 <div key={`${x.sku ?? x.nombre}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], padding: '10px 0', borderBottom: `1px solid ${color.bg2}` }}>
                   <div style={{ minWidth: 0 }}>
@@ -240,7 +240,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             <DesarmeVenta marca={marca} ficha={ficha} refVenta={fila.ref} onListo={onCambio} />
           )}
 
-          {extra?.cobroEnEntrega?.porVerificar && <Notice tone="warning">Lo cobró Logística al entregar con <b>transferencia</b>: falta verificar que entró. Se cruza en el monitor, en Pagos recibidos.</Notice>}
+          {extra?.cobroEnEntrega?.porVerificar && <Notice tone="warning">Lo cobró Logística al entregar con <b>transferencia</b>: falta validar que entró. Se cruza en el monitor, en Pagos recibidos.</Notice>}
           <DatosFicha>
             <DatoFicha titulo="Origen">{fila.origenTexto}</DatoFicha>
             <DatoFicha titulo="Factura">{fila.factura ? `${fila.factura.numero}${fila.factura.de === 'gn' ? ' (GN)' : ''}` : 'Sin factura'}</DatoFicha>
@@ -249,7 +249,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             <DatoFicha titulo="Canal">{NOMBRE_CANAL[v!.canal as keyof typeof NOMBRE_CANAL] ?? v!.canal}</DatoFicha>
             <DatoFicha titulo="Línea">{LINEA[v!.marca] ?? v!.marca}</DatoFicha>
             {extra?.entrega && <DatoFicha titulo="Entrega">{[ENTREGA[extra.entrega.tipo], extra.entrega.direccion].filter(Boolean).join(' · ')}</DatoFicha>}
-            {extra?.cobroEnEntrega && <DatoFicha titulo="Cobrado al entregar">{[extra.cobroEnEntrega.formaPago ? COBRO_EN_ENTREGA[extra.cobroEnEntrega.formaPago] : null, extra.cobroEnEntrega.entrego, extra.cobroEnEntrega.fecha ? cuandoCorto(extra.cobroEnEntrega.fecha) : null].filter(Boolean).join(' · ')}</DatoFicha>}
+            {extra?.cobroEnEntrega && <DatoFicha titulo="Contraentrega">{[extra.cobroEnEntrega.formaPago ? COBRO_EN_ENTREGA[extra.cobroEnEntrega.formaPago] : null, extra.cobroEnEntrega.entrego, extra.cobroEnEntrega.fecha ? cuandoCorto(extra.cobroEnEntrega.fecha) : null].filter(Boolean).join(' · ')}</DatoFicha>}
             {extra?.gnNumero && <DatoFicha titulo="En Gestión Nube">{`venta ${extra.gnNumero}`}</DatoFicha>}
           </DatosFicha>
 
@@ -314,7 +314,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
               <div role="radiogroup" aria-label="Cómo se devuelve lo pagado" style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
                 <span style={{ fontSize: font.sm, color: color.mut }}>Lo pagado · elegí cómo vuelve</span>
                 {([
-                  ['plata', `Devolver la plata · ${plata(dev.pagadoEnPlata)}`, `Por el mismo medio con que pagó (${ficha!.pagos.filter((p) => p.medio !== 'cuenta' && p.medio !== 'saldo').map((p) => p.cuenta ?? p.medio).join(', ')}).`],
+                  ['plata', `Devolver la plata · ${plata(dev.pagadoEnPlata)}`, `Por la misma forma de pago con que pagó (${ficha!.pagos.filter((p) => p.medio !== 'cuenta' && p.medio !== 'saldo').map((p) => p.cuenta ?? p.medio).join(', ')}).`],
                   ['saldo', `Dejar saldo a favor · ${plata(dev.aLista)}`, 'A precio de lista, para usar en otra compra.'],
                 ] as const).map(([k, t, d]) => (
                   <button
@@ -363,7 +363,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         abierto={medioAbierto} onCerrar={() => setMedioAbierto(false)} titulo={`Corregir la forma de pago de la venta ${fila.ref}`}
         pie={<>
           <Button variant="outline" onClick={() => setMedioAbierto(false)}>Cancelar</Button>
-          <Button disabled={trabajando || !medioNuevo || faltaCuenta || motivoMedio.trim().length < MOTIVO_MINIMO} onClick={() => void confirmarMedio()}>Corregir medio</Button>
+          <Button disabled={trabajando || !medioNuevo || faltaCuenta || motivoMedio.trim().length < MOTIVO_MINIMO} onClick={() => void confirmarMedio()}>Corregir forma de pago</Button>
         </>}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[3], marginBottom: space[3] }}>
@@ -373,12 +373,12 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           </Notice>
           <Field label="Con qué pagó de verdad" required>
             <Select value={medioNuevo} onChange={(e) => { setMedioNuevo(e.target.value); setCuentaReal('') }}>
-              <option value="">Elegí el medio…</option>
+              <option value="">Elegí la forma de pago…</option>
               {MEDIOS_CORREGIR.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
             </Select>
           </Field>
           {medioNuevo && cuentasReales.length > 0 && (
-            <Field label="Adónde entró la plata" required hint={deLaRuta?.cuenta_real_id ? 'La que dice Areben Gestión › Cuentas para este medio. Elegí otra sólo si fue a otra cuenta.' : 'Este medio no tiene una cuenta fija en Areben Gestión › Cuentas: elegí cuál.'}>
+            <Field label="Adónde entró la plata" required hint={deLaRuta?.cuenta_real_id ? 'La que dice Configuración › ¿A qué cuenta va? para esta forma de pago. Elegí otra sólo si fue a otra cuenta.' : 'Esta forma de pago no tiene una cuenta fija en Configuración › ¿A qué cuenta va?: elegí cuál.'}>
               <Select value={cuentaReal} onChange={(e) => setCuentaReal(e.target.value)}>
                 <option value="">{deLaRuta?.cuenta_real_id ? `${nombreReal(deLaRuta.cuenta_real_id) ?? 'La de la forma de pago'} (la de siempre)` : 'Elegí la cuenta…'}</option>
                 {cuentasReales.filter((c) => c.id !== deLaRuta?.cuenta_real_id).map((c) => <option key={c.id} value={c.id}>{nombreReal(c.id)}{deLaRuta?.cuenta_real_id ? ' (excepción)' : ''}</option>)}

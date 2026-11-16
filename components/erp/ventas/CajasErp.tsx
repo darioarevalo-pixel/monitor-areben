@@ -198,7 +198,7 @@ export function CajasErp() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Cada turno de la Caja: quién abrió y cerró, el efectivo que tenía que haber, lo que se contó y la diferencia. Abrir, contar y cerrar se hace en la Caja. En el arqueo de caja se revisa el sobre de cada cierre, billete por billete.</p>
+      <p style={{ margin: 0, color: color.mut }}>Cada caja del período: quién abrió y cerró, el efectivo que tenía que haber, lo que se contó y la diferencia. Abrir, contar y cerrar se hace en la Caja. En el arqueo de caja se revisa el sobre de cada cierre, billete por billete.</p>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {arqueoNo && <Notice tone="warning">{arqueoNo}</Notice>}
       {admin && !arqueoNo && (
@@ -212,9 +212,9 @@ export function CajasErp() {
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo={NOMBRE[marca]} valor={abiertaFila ? 'Abierta' : cargando ? '…' : 'Cerrada'} oscuro
-          nota={abiertaFila ? `desde ${cuandoCorto(abiertaFila.abiertoEn)} · ${abiertaFila.abiertoPor ?? 'sin dato'}` : 'sin turno abierto en el período'} />
+          nota={abiertaFila ? `desde ${cuandoCorto(abiertaFila.abiertoEn)} · ${abiertaFila.abiertoPor ?? 'sin dato'}` : 'sin caja abierta en el período'} />
         <TileResumen titulo="Efectivo esperado ahora" valor={!abiertaFila ? '—' : enVivo?.esperado != null ? pesos(enVivo.esperado) : enVivo?.error ? 'Sin dato' : 'Calculando…'}
-          nota={!abiertaFila ? 'no hay caja abierta' : enVivo?.error ? 'la Caja no contestó' : enVivo?.ventas != null ? `${enVivo.ventas} ventas en el turno` : 'lo calcula la Caja'} />
+          nota={!abiertaFila ? 'no hay caja abierta' : enVivo?.error ? 'la Caja no contestó' : enVivo?.ventas != null ? `${enVivo.ventas} ventas en esta caja` : 'lo calcula la Caja'} />
         <TileResumen titulo={`Diferencias · ${nombrePeriodo.toLowerCase()}`} valor={res.cierres ? conSigno(res.diferencia) : '—'}
           nota={res.cierres ? `faltó ${pesos(Math.abs(res.falto))} · sobró ${pesos(res.sobro)} · en ${res.cierres} cierres` : 'sin cierres en el período'} />
         <TileResumen tono={tonoDeConteo(res.conDiferencia)} titulo="Cierres con diferencia" valor={res.conDiferencia.toLocaleString('es-AR')} nota={`de ${res.cierres} cierres`} />
@@ -237,15 +237,15 @@ export function CajasErp() {
         </div>
         <ListaTrabajo
           columnas={columnas} filas={filas} claveDe={(f) => f.id} celda={celda} orden={orden} onOrden={setOrden}
-          activa={fichaFila?.id ?? null} onAbrir={(f) => abrir(f)} etiquetaFila={(f) => `el turno del ${cuandoCorto(f.abiertoEn)}`}
-          vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={VACIO[vista] ?? 'No hubo turnos en el período.'} /></div> : null}
+          activa={fichaFila?.id ?? null} onAbrir={(f) => abrir(f)} etiquetaFila={(f) => `la caja del ${cuandoCorto(f.abiertoEn)}`}
+          vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={VACIO[vista] ?? 'No hubo cajas en el período.'} /></div> : null}
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo las cajas…' : `${filas.length.toLocaleString('es-AR')} turnos`} · la diferencia es la del cierre: + sobró, − faltó · se cuenta sólo el efectivo
+          {cargando && !datos ? 'Leyendo las cajas…' : `${filas.length.toLocaleString('es-AR')} cajas`} · la diferencia es la del cierre: + sobró, − faltó · se cuenta sólo el efectivo
         </div>
       </div>
 
-      <FichaCostado abierta={!!fichaFila} onCerrar={() => { setFicha(null); setRevisar(null) }} etiqueta={revisando ? 'Revisión de la caja' : 'Ficha del turno de la caja'}
+      <FichaCostado abierta={!!fichaFila} onCerrar={() => { setFicha(null); setRevisar(null) }} etiqueta={revisando ? 'Revisión de la caja' : 'Ficha de la caja'}
         titulo={!fichaFila ? '' : revisando ? `Revisión · ${fichaFila.codigo ? `Caja ${fichaFila.codigo}` : NOMBRE[marca]}` : `${NOMBRE[marca]} · ${cuandoCorto(fichaFila.abiertoEn)}${fichaFila.codigo ? ` · ${fichaFila.codigo}` : ''}`}>
         {fichaFila && revisando && <RevisionDeLaCaja key={fichaFila.id} f={fichaFila} marca={marca} onGuardado={alArquear} onVolver={() => setRevisar(null)} />}
         {fichaFila && !revisando && (
@@ -265,7 +265,7 @@ export function CajasErp() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${color.line}`, fontWeight: 700 }}><span>Esperado</span><MoneyText value={fichaFila.efectivo.esperado} /></div>
                 {fichaFila.contado != null && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span>Contado</span><MoneyText value={fichaFila.contado} /></div>}
               </div>
-            ) : <Notice tone="neutral">{fichaFila.abierta ? 'El turno sigue abierto: el cierre se ve cuando la Caja cierre.' : 'Este cierre no guardó el detalle del efectivo.'}</Notice>}
+            ) : <Notice tone="neutral">{fichaFila.abierta ? 'La caja sigue abierta: el cierre se ve cuando se cierre.' : 'Este cierre no guardó el detalle del efectivo.'}</Notice>}
             {fichaFila.porForma.length > 0 && (
               <div>
                 <h3 style={{ margin: '0 0 8px', fontSize: font.md }}>Por forma de pago</h3>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import ts from 'typescript'
 
 /**
@@ -58,7 +58,16 @@ const EXCEPCIONES: Array<{ archivo: string; frase: string; motivo: string }> = [
   { archivo: 'lib/erp/ventas-lista.core.js', frase: 'tn:', motivo: 'id interno de una fila' },
 ]
 
+/**
+ * 🔑 15-nov-2026: un `*` al final de una ruta de la fila es un PREFIJO (`api/_erp*` = todos los `api/_erp….js`):
+ * los errores que ve la persona salen de `api/`, y las filas que miraban sólo `components/erp` + `lib/erp` los dejaban vivos.
+ */
 function* archivos(p: string): Generator<string> {
+  if (p.endsWith('*')) {
+    const dir = dirname(p), pre = basename(p).slice(0, -1)
+    if (existsSync(dir)) for (const f of readdirSync(dir)) if (f.startsWith(pre)) yield* archivos(join(dir, f))
+    return
+  }
   if (!existsSync(p)) return
   if (statSync(p).isFile()) {
     if (/\.(tsx?|jsx?|mjs)$/.test(p)) yield p
@@ -82,7 +91,9 @@ function textos(archivo: string): string[] {
     ts.forEachChild(n, ver)
   }
   ver(sf)
-  return out.map((t) => t.replace(/\s+/g, ' ').trim()).filter(esFrase)
+  // 🔑 15-nov: ⛔ el SQL (`select … medio …`, listas de columnas) ni la marca de un log (`[erp] …`): no los lee una persona.
+  const noSeLee = (t: string) => /^\s*(select|insert|update|delete|with)\b/i.test(t) || /^\[[\w-]+\]/.test(t) || /^[a-z_]+(:[a-z_]+)?( \([a-z_]+\))?(, ?[a-z_:]+( \([a-z_]+\))?)+$/.test(t)
+  return out.map((t) => t.replace(/\s+/g, ' ').trim()).filter((t) => esFrase(t) && !noSeLee(t))
 }
 
 const escapar = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -95,7 +106,7 @@ describe('VOCABULARIO §5 · los términos del negocio', () => {
     for (const f of lista) {
       expect(f.prohibidas.length, `«${f.dice}»: sin palabras prohibidas`).toBeGreaterThan(0)
       expect(f.donde.length, `«${f.dice}»: sin carpetas`).toBeGreaterThan(0)
-      for (const d of f.donde) expect(existsSync(join(RAIZ, d)), `«${f.dice}»: ${d} ⛔ existe`).toBe(true)
+      for (const d of f.donde) expect([...archivos(join(RAIZ, d))].length, `«${f.dice}»: ${d} ⛔ existe`).toBeGreaterThan(0)
     }
   })
 
@@ -104,7 +115,10 @@ describe('VOCABULARIO §5 · los términos del negocio', () => {
       // Bordes: ⛔ adentro de un nombre de código (`pos-turno`, `turno_id`, `&turno=`, `.turno`).
       // Una SIGLA (`ERP`, `TN`) se busca en mayúsculas: en minúscula es código (`/erp/…`, `[erp]`, `erp:<id>`, `erp.arebensrl.com`).
       const sigla = f.prohibidas.every((p) => p === p.toUpperCase())
-      const re = new RegExp(`(^|[^\\p{L}_.&?=-])(${f.prohibidas.map(escapar).join('|')})(?![\\p{L}_=-])`, sigla ? 'u' : 'iu')
+      // 🔑 15-nov: un `*` al final de la palabra es una RAÍZ (`arm*` = armar, armada, Armándose, arman…): la frase exacta
+      // dejaba pasar todas las flexiones que nadie había escrito en la fila.
+      const patron = (p: string) => (p.endsWith('*') ? `${escapar(p.slice(0, -1))}\\p{L}*` : escapar(p))
+      const re = new RegExp(`(^|[^\\p{L}_.&?=-])(${f.prohibidas.map(patron).join('|')})(?![\\p{L}_=-])`, sigla ? 'u' : 'iu')
       const malas: string[] = []
       let leidas = 0
       for (const d of f.donde)
@@ -117,6 +131,8 @@ describe('VOCABULARIO §5 · los términos del negocio', () => {
         }
       // El piso: si el parser dejara de encontrar texto, esto daría verde mirando nada.
       expect(leidas).toBeGreaterThan(20)
+      // `TERMINOS_LISTA=1` imprime la lista entera (el diff de vitest la corta en 10).
+      if (process.env.TERMINOS_LISTA) console.log(`## ${f.dice}\n${malas.join('\n')}`)
       expect(malas).toEqual([])
     })
   }

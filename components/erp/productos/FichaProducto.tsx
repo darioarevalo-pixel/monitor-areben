@@ -248,7 +248,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
                 <div key={v.talle} role="row" style={{ display: 'contents' }}>
                   <span role="cell" style={celda} title={v.sku ?? undefined}>{v.talleNombre}<div style={{ fontSize: font.sm, color: color.mut }}>{v.sku ?? 'sin código'}{!v.barcode && ' · sin código'}</div></span>
                   {deps.map((d) => <span key={d} role="cell" style={{ ...celda, textAlign: 'right', color: (v.deps[d] ?? 0) < 0 ? 'var(--mo-danger-ink)' : (v.deps[d] ?? 0) === 0 ? color.mut2 : color.ink }}>{v.deps[d] ?? 0}</span>)}
-                  <span role="cell" style={{ ...celda, textAlign: 'right', fontWeight: weight.bold, color: v.disponible < 0 ? 'var(--mo-danger-ink)' : v.disponible === 0 ? 'var(--mo-warning-ink)' : color.ink }} title={v.enPedidos ? `${v.enPedidos} apartadas por pedidos sin pagar` : undefined}>{v.disponible}</span>
+                  <span role="cell" style={{ ...celda, textAlign: 'right', fontWeight: weight.bold, color: v.disponible < 0 ? 'var(--mo-danger-ink)' : v.disponible === 0 ? 'var(--mo-warning-ink)' : color.ink }} title={v.enPedidos ? `${v.enPedidos} reservadas por pedidos sin pagar` : undefined}>{v.disponible}</span>
                 </div>
               ))}
             </div>

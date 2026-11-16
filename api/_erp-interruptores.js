@@ -61,8 +61,8 @@ export async function ponerInterruptorErp({ body, usuario }, { conMotor }) {
   try {
     r = await conMotor(stunned ? 'zattia' : marca, 'Los interruptores', (db) => ponerInterruptor(db, { linea: marca, clave: body.clave, valor: body.valor, usuario }))
   } catch (e) {
-    if (e?.code === '42P01') return { status: 409, error: 'Los interruptores todavía no están en la base del motor (migración 035).' }
-    if (e?.code === '23514') return { status: 409, error: 'Esa configuración todavía no está en la base del motor (migración 040).' }
+    if (e?.code === '42P01') return { status: 409, error: 'Los interruptores todavía no están disponibles: falta actualizar la base (035).' }
+    if (e?.code === '23514') return { status: 409, error: 'Esa configuración todavía no está disponible: falta actualizar la base (040).' }
     throw e
   }
   if (r && r.status) return r

@@ -43,7 +43,7 @@ const COLUMNAS_SIN: ColumnaLista[] = [
   { key: 'nro', titulo: 'Venta', ancho: '84px', movil: 'chico' },
   { key: 'cliente', titulo: 'Cliente', ancho: 'minmax(180px, 1.6fr)', ordena: true, movil: 'titulo' },
   { key: 'fecha', titulo: 'Último cobro', ancho: '104px', ordena: true, movil: 'chico' },
-  { key: 'cuentas', titulo: 'Entró a', ancho: 'minmax(180px, 1.4fr)', movil: 'oculta' },
+  { key: 'cuentas', titulo: 'Cuentas', ancho: 'minmax(180px, 1.4fr)', movil: 'oculta' },
   { key: 'total', titulo: 'A facturar', ancho: '128px', derecha: true, ordena: true, movil: 'dato' },
 ]
 const COLUMNAS_FACT: ColumnaLista[] = [
@@ -52,7 +52,7 @@ const COLUMNAS_FACT: ColumnaLista[] = [
   { key: 'nro', titulo: 'Venta', ancho: '84px', movil: 'oculta' },
   { key: 'cliente', titulo: 'Cliente', ancho: 'minmax(170px, 1.4fr)', ordena: true, movil: 'titulo' },
   { key: 'cae', titulo: 'CAE', ancho: '140px', movil: 'oculta' },
-  { key: 'de', titulo: 'Salió de', ancho: '150px', movil: 'oculta' },
+  { key: 'de', titulo: 'Emitida en', ancho: '150px', movil: 'oculta' },
   { key: 'total', titulo: 'Total', ancho: '128px', derecha: true, ordena: true, movil: 'dato' },
 ]
 
@@ -142,7 +142,7 @@ export function Facturacion() {
   async function mandar() {
     if (!datos || !elegidasDeMarca.length || freno) return
     const ok = await confirmar({
-      titulo: prueba ? 'Facturar en el ambiente de prueba' : 'Facturar con ARCA',
+      titulo: prueba ? 'Facturar en el modo de prueba de ARCA' : 'Facturar con ARCA',
       mensaje: (
         <div>
           <ConfirmDetalle label="Marca" valor={NOMBRE_MARCA[tienda]} />
@@ -177,7 +177,7 @@ export function Facturacion() {
   async function anularConNC(f: FacturaEmitida) {
     const deVerdad = f.ambiente === 'produccion'
     const ok = await confirmar({
-      titulo: deVerdad ? 'Nota de crédito con ARCA' : 'Nota de crédito en el ambiente de prueba',
+      titulo: deVerdad ? 'Nota de crédito con ARCA' : 'Nota de crédito en el modo de prueba de ARCA',
       mensaje: (
         <div>
           <ConfirmDetalle label="Anula la factura" valor={numeroComprobante(f)} />
@@ -211,7 +211,7 @@ export function Facturacion() {
     if (!(monto > 0)) { setError('Poné un importe mayor a 0.'); return }
     const deVerdad = f.ambiente === 'produccion'
     const ok = await confirmar({
-      titulo: deVerdad ? 'Nota de débito con ARCA' : 'Nota de débito en el ambiente de prueba',
+      titulo: deVerdad ? 'Nota de débito con ARCA' : 'Nota de débito en el modo de prueba de ARCA',
       mensaje: (
         <div>
           <ConfirmDetalle label="Se suma a la factura" valor={numeroComprobante(f)} />
@@ -291,7 +291,7 @@ export function Facturacion() {
     if (k === 'de') {
       if (f.de === 'gn') return <ChipEstado mapa={{ x: [f.estado && f.estado !== 'APROBADO' ? 'warning' : 'neutral', `Gestión Nube${f.estado && f.estado !== 'APROBADO' ? ` · ${f.estado.toLowerCase()}` : ''}`] }} k="x" />
       const anulada = f.vista === 'facturas' && conNC.has(`${marca}:${f.ventaId}`)
-      return <ChipEstado mapa={{ x: anulada ? ['danger', 'Areben Gestión · anulada con NC'] : ['success', f.emitida?.ambiente === 'produccion' ? 'Areben Gestión' : 'Areben Gestión · de prueba'] }} k="x" />
+      return <ChipEstado mapa={{ x: anulada ? ['danger', 'Areben Gestión · anulada con nota de crédito'] : ['success', f.emitida?.ambiente === 'produccion' ? 'Areben Gestión' : 'Areben Gestión · de prueba'] }} k="x" />
     }
     if (k === 'total') return <span style={{ fontWeight: 600, color: f.total < 0 ? 'var(--mo-danger-ink)' : color.ink, fontVariantNumeric: 'tabular-nums' }}>{f.total < 0 ? `− ${pesos(-f.total)}` : pesos(f.total)}</span>
     return null
@@ -345,7 +345,7 @@ export function Facturacion() {
       {datos && (
         <>
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-            <TileResumen oscuro titulo="Tope del mes de Areben" valor={pesosCortos(datos.techo)} nota={datos.estado === 'cerrado' ? 'fijo desde el cierre · las dos marcas' : 'lo que entró a cuentas de Areben, las dos marcas; cambia hasta cerrar el mes'} />
+            <TileResumen oscuro titulo="Tope del mes de Areben" valor={pesosCortos(datos.techo)} nota={datos.estado === 'cerrado' ? 'fijo desde el cierre · las dos marcas' : 'lo cobrado en cuentas de Areben, las dos marcas; cambia hasta cerrar el mes'} />
             <TileResumen titulo="Facturado" valor={pesosCortos(datos.facturado)} nota={`${pctTope != null ? `${pctTope} % del tope · ` : ''}Gestión Nube ${pesosCortos(datos.facturadoGN)} · Areben Gestión ${pesosCortos(datos.facturadoMonitor)}`} />
             <TileResumen titulo="Pendiente de facturar" valor={pesosCortos(datos.pendiente)} nota={datos.pendiente < 0 ? 'se facturó de más' : 'las dos marcas'} />
             <TileResumen tono={tonoDeConteo(grupos.sin.length)} titulo={`Sin factura en ${NOMBRE_MARCA[tienda]}`} valor={grupos.sin.length.toLocaleString('es-AR')} nota={`ventas · ${pesosCortos(sumaSin)}`} />
@@ -364,7 +364,7 @@ export function Facturacion() {
             </div>
             {enVista === 'sin' && (
               <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>
-                Cobradas este mes en cuentas de Areben y sin factura de Gestión Nube ni de Areben Gestión. «A facturar» es lo que entró a esas cuentas, no el total de la venta.
+                Cobradas este mes en cuentas de Areben y sin factura de Gestión Nube ni de Areben Gestión. «A facturar» es lo cobrado en esas cuentas, no el total de la venta.
               </div>
             )}
             {enVista === 'notas' && !facturas && (

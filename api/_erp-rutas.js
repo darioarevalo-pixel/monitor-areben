@@ -13,7 +13,7 @@ import { avisoDeRuta, filasDeRutas, leerRutaDePantalla } from '../lib/erp/rutas.
 import { marcasDe } from '../lib/erp/reglas.core.js'
 
 const MARCAS = ['bdi', 'zattia']
-const SIN_TABLA = 'Las cuentas de cobro todavía no están en la base del motor (migraciones 019 y 020).'
+const SIN_TABLA = 'Las cuentas todavía no están disponibles: falta actualizar la base (019 y 020).'
 const STATUS = { DESDE_PASADO: 400, ENTRADA_INVALIDA: 400, CANAL_DESCONOCIDO: 400, MARCA_DESCONOCIDA: 400, CUENTA_REAL_DESCONOCIDA: 400, RUTA_REPETIDA: 409 }
 const motor = () => Promise.all([import('../motor/cuentas/rutas.mjs'), import('../motor/venta/reglas-db.mjs')])
 const hayRutas = async (pg) => (await pg.query(`select to_regclass('public.ruta_cobro') is not null as hay`)).rows[0].hay
@@ -46,7 +46,7 @@ export async function ponerRutaErp({ marca, body, usuario }, deps) {
   const l = leerRutaDePantalla(body, { marca, lineas: marcasDe(marca) })
   if (l.error) return { status: 400, error: l.error, campo: l.campo ?? null }
   const [rutas, db] = await motor()
-  return deps.conMotor(marca, 'Poner la ruta', async (pg) => {
+  return deps.conMotor(marca, 'Elegir a qué cuenta va', async (pg) => {
     if (!(await hayRutas(pg))) return { status: 409, error: SIN_TABLA }
     const r = await rutas.ponerRuta(pg, { ...l.ruta, usuario: usuario || 'admin' })
     if (!r.ok) return { status: STATUS[r.error.codigo] || 400, error: r.error.mensaje, campo: r.error.campo ?? null }

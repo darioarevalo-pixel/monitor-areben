@@ -209,7 +209,7 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <SectionCard title={`Factura · ${NOMBRE_MARCA[tienda] ?? tienda}`} subtitle="La factura que pide la clienta en el mostrador: buscá la venta y elegí A o B.">
-        {sinCortar && <Notice tone="warning">Hasta el corte de esta marca la factura real del local sale de Gestión Nube: acá sólo sale en el ambiente de prueba de ARCA.</Notice>}
+        {sinCortar && <Notice tone="warning">Hasta el corte de esta marca la factura real del local sale de Gestión Nube: acá sólo sale en el modo de prueba de ARCA.</Notice>}
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="#123, nombre, DNI o mail" />
@@ -230,9 +230,9 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
       {cambioHecho && (
         <Notice tone="success" onClose={() => setCambioHecho(null)}>
           {cambioHecho.yaEstaban ? 'El cambio ya estaba facturado' : 'Cambio facturado'}:{' '}
-          {[cambioHecho.nc && `NC ${numeroComprobante(cambioHecho.nc)}`, cambioHecho.factura && `factura ${numeroComprobante(cambioHecho.factura)}`].filter(Boolean).join(' y ')}
+          {[cambioHecho.nc && `nota de crédito ${numeroComprobante(cambioHecho.nc)}`, cambioHecho.factura && `factura ${numeroComprobante(cambioHecho.factura)}`].filter(Boolean).join(' y ')}
           {(cambioHecho.nc ?? cambioHecho.factura)?.ambiente !== 'produccion' && ' (de prueba, sin validez fiscal)'}.{' '}
-          {cambioHecho.nc && <Button variant="outline" disabled={trabajando} onClick={() => void bajar(cambioHecho.nc!)}>Descargar NC</Button>}{' '}
+          {cambioHecho.nc && <Button variant="outline" disabled={trabajando} onClick={() => void bajar(cambioHecho.nc!)}>Descargar la nota de crédito</Button>}{' '}
           {cambioHecho.factura && <Button variant="outline" disabled={trabajando} onClick={() => void bajar(cambioHecho.factura!)}>Descargar factura</Button>}
         </Notice>
       )}
@@ -290,7 +290,7 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
               </p>
               {planCambio && (
                 <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', marginTop: space[2] }}>
-                  {planCambio.nc > 0 && <span>NC {planCambio.clase}: <MoneyText value={planCambio.nc} />{planCambio.ncYa && ' (ya está)'}</span>}
+                  {planCambio.nc > 0 && <span>Nota de crédito {planCambio.clase}: <MoneyText value={planCambio.nc} />{planCambio.ncYa && ' (ya está)'}</span>}
                   {planCambio.factura > 0 && <span>Factura {planCambio.clase}: <MoneyText value={planCambio.factura} />{planCambio.facturaYa && ' (ya está)'}</span>}
                   <Button disabled={trabajando} onClick={() => void facturarElCambio()}>
                     {(planCambio.ncYa || !planCambio.nc) && (planCambio.facturaYa || !planCambio.factura) ? 'Traer los comprobantes' : 'Facturar el cambio'}

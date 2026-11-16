@@ -24,7 +24,7 @@ export async function imprimirResumenDeFila(marca: MarcaErp, fila: FilaCuenta, p
   if (!w) return 'El navegador bloqueó la ventana del resumen: permitila para este sitio.'
   try {
     w.document.title = 'Resumen de cuenta'
-    w.document.body.textContent = 'Armando el resumen…'
+    w.document.body.textContent = 'Preparando el resumen…'
     const s = await leerCuentaDeCliente(marca, { clienteId: fila.clienteId, linea: fila.linea, prueba })
     imprimirResumenCon(w, fila, prueba, s)
     return null

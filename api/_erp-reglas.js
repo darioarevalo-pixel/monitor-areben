@@ -23,7 +23,7 @@ import { marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { compararConCaja, copiaParaCaja, leerReglaDePantalla, leerSimulacion, marcasDe, queNoCobraLaCaja } from '../lib/erp/reglas.core.js'
 
 const MARCAS = ['bdi', 'zattia']
-const SIN_TABLA = 'Las reglas todavía no están en esta base (falta la migración 016 del motor).'
+const SIN_TABLA = 'Las reglas todavía no están disponibles: falta actualizar la base (016).'
 
 const motor = () => Promise.all([import('../motor/venta/reglas.mjs'), import('../motor/venta/reglas-db.mjs')])
 
@@ -154,7 +154,7 @@ export async function simularReglasErp({ marca, body }, deps) {
       const n = r.producto ? Number(r.producto) : null
       const deCampania = n && precioCampania.has(n) ? precioCampania.get(n) : null
       return {
-        product_id: n || 0, nombre: r.nombre || 'Prenda', cantidad: r.cantidad,
+        product_id: n || 0, nombre: r.nombre || 'Producto', cantidad: r.cantidad,
         precio: deCampania ?? r.precio, precioCargado: r.precio, precioDeCampania: deCampania,
         campanias: n ? enCampania.get(n) || [] : r.campanias, categorias: r.categorias, ...(r.linea ? { linea: r.linea } : {}),
       }

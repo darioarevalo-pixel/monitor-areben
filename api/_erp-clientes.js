@@ -173,7 +173,7 @@ export async function cuentasDeLaMarca({ marca, linea = marca === 'bdi' ? 'bdi' 
       empresas = (await pg.query('select distinct empresa_id from cliente')).rows.map((r) => r.empresa_id)
       ;[{ n: otroLibro }] = (await pg.query('select count(distinct cliente_id)::int as n from cuenta_movimiento where prueba = $1 and marca = any($2)', [!prueba, lineas])).rows
     } catch {
-      return { status: 409, error: 'El motor de esta marca todavía no tiene cuenta corriente (falta la 025).' }
+      return { status: 409, error: 'Esta marca todavía no tiene cuenta corriente: falta actualizar la base (025).' }
     }
     const { cuentasCorrientes } = await import('../motor/cuenta/cuenta.mjs')
     const cuentas = []
@@ -181,7 +181,7 @@ export async function cuentasDeLaMarca({ marca, linea = marca === 'bdi' ? 'bdi' 
     for (const empresa_id of empresas) {
       for (const linea of lineas) {
         const r = await cuentasCorrientes(pg, { empresa_id, marca: linea, prueba })
-        if (!r.ok) return { status: 409, error: r.error?.mensaje ?? 'El motor no devolvió la cuenta corriente.' }
+        if (!r.ok) return { status: 409, error: r.error?.mensaje ?? 'Areben Gestión no devolvió la cuenta corriente.' }
         hoy = r.hoy
         cuentas.push(...r.cuentas.map((c) => ({ ...c, linea })))
       }
@@ -399,7 +399,7 @@ export async function clientesDelPanel({ q = '', usuario = null }, deps) {
   return deps.conMotor('bdi', 'Buscar el cliente', async (pg) => {
     const { buscarClientes } = await import('../motor/venta/cliente.mjs')
     const [m] = (await pg.query(`select empresa_id from marca where id = 'bdi'`)).rows
-    if (!m) return { status: 409, error: 'La marca no está en la base del motor.' }
+    if (!m) return { status: 409, error: 'La marca no está en Areben Gestión.' }
     const r = await buscarClientes(pg, { empresa_id: m.empresa_id, texto, limite: 8 })
     if (!r.ok) return { status: 400, error: r.error?.mensaje ?? 'No se pudo buscar.' }
     return { prendido: true, clientes: r.clientes.map((c) => ({ id: String(c.id), nombre: c.nombre, doc: c.doc ?? null })) }
@@ -429,7 +429,7 @@ export async function clienteNuevoPanel({ body, usuario, quien = usuario }, deps
     if (crudo && !doc) return { status: 400, error: 'El documento es un DNI (7 u 8 números) o un CUIT válido (11)' }
     if (!numeroWhatsapp(body?.whatsapp)) return { status: 400, error: 'Falta el número del chat' }
     const [m] = (await pg.query(`select empresa_id from marca where id = 'bdi'`)).rows
-    if (!m) return { status: 409, error: 'La marca no está en la base del motor.' }
+    if (!m) return { status: 409, error: 'La marca no está en Areben Gestión.' }
     if (doc) {
       const [ya] = (await pg.query('select id::text, nombre from cliente where empresa_id = $1 and doc = $2', [m.empresa_id, doc])).rows
       if (ya) return { status: 409, error: `Ese documento ya es de ${ya.nombre}: buscalo y elegilo.`, existe: ya }

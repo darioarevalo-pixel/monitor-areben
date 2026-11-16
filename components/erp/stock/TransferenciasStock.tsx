@@ -43,7 +43,7 @@ const atras = (hoy: string, n: number) => new Date(Date.parse(`${hoy}T12:00:00Z`
 /** Lo que dice «En el ERP»: lo que anotó el libro, o por qué ⛔ (anterior al libro, cancelada). */
 function enElErp(f: FilaTransferencia, libroDesde: string | null) {
   if (f.estado === 'cancelado' || !f.enviadas) return { texto: '—', ok: true, ayuda: undefined }
-  if (!f.enLibro && libroDesde && f.creada < libroDesde) return { texto: 'antes de Areben Gestión', ok: true, ayuda: `Areben Gestión de Areben Gestión arranca el ${cuandoCorto(libroDesde)}` }
+  if (!f.enLibro && libroDesde && f.creada < libroDesde) return { texto: 'antes de Areben Gestión', ok: true, ayuda: `Areben Gestión arranca el ${cuandoCorto(libroDesde)}` }
   return { texto: u(f.enLibro ?? 0), ok: f.enLibro === f.enviadas, ayuda: f.enLibro === f.enviadas ? 'Areben Gestión la anotó entera' : `Areben Gestión anotó ${f.enLibro ?? 0} de ${f.enviadas}` }
 }
 
@@ -135,7 +135,7 @@ export function TransferenciasStock() {
   const acciones = (f: FilaTransferencia) => {
     const menu: AccionMenu[] = [
       { key: 'ficha', label: 'Abrir la transferencia', icono: 'abrir', onClick: () => setFicha(f) },
-      { key: 'repo', label: 'Abrir Reposición en el monitor ↗', icono: 'abrir', onClick: abrirReposicion, hint: 'Las transferencias se arman y se mandan escaneando en Reposición.' },
+      { key: 'repo', label: 'Abrir Reposición en el monitor ↗', icono: 'abrir', onClick: abrirReposicion, hint: 'Las transferencias se preparan y se mandan escaneando en Reposición.' },
     ]
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones de la transferencia ${f.numero ?? ''}`} vertical alinear="izquierda" />
   }
@@ -143,7 +143,7 @@ export function TransferenciasStock() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
-        <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Cada transferencia entre el depósito y el local, con el paso en que está. Se arman y se mandan en Reposición.</p>
+        <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Cada transferencia entre el depósito y el local, con el paso en que está. Se preparan y se mandan en Reposición.</p>
         <Button disabled={!filas.length} onClick={() => bajarCsv(filas, marca)}>Exportar</Button>
         <Button variant="outline" onClick={abrirReposicion}>Abrir Reposición en el monitor ↗</Button>
       </div>
@@ -158,7 +158,7 @@ export function TransferenciasStock() {
       {datos?.cortado && <Notice tone="warning">Se ven las {datos.filas.length.toLocaleString('es-AR')} más nuevas.</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-        <TileResumen titulo="Abiertas" valor={res.abiertas.toLocaleString('es-AR')} oscuro nota="en borrador, armándose o yendo" />
+        <TileResumen titulo="Abiertas" valor={res.abiertas.toLocaleString('es-AR')} oscuro nota="en borrador, preparándose o en camino" />
         <TileResumen titulo="En camino" valor={u(res.enCamino)} nota="preparadas o enviándose" />
         <TileResumen titulo="Transferidas este mes" valor={res.hechasMes.toLocaleString('es-AR')} nota={res.conFaltantes ? `${res.conFaltantes} con faltantes` : 'sin faltantes'} />
         <TileResumen titulo="Productos movidos" valor={u(res.movidas)} nota="este mes" />
@@ -200,7 +200,7 @@ export function TransferenciasStock() {
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo las transferencias…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {libroDesde && <> · Areben Gestión de Areben Gestión arranca el {cuandoCorto(libroDesde)}</>}
+          {libroDesde && <> · Areben Gestión arranca el {cuandoCorto(libroDesde)}</>}
         </div>
       </div>
 

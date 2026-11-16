@@ -41,7 +41,7 @@ export async function datosParaCargar({ marca }, deps) {
   // contra las cuentas de Stunned (mismos `gn_cuenta_id`). Sin esto, Stunned —la única línea que ya vende por el ERP— quedaba sin las
   // cuatro formas de pago y con CG en «Más» (leído en prod el 10-nov).
   for (const l of LINEAS[marca]) reglas[l] = deps.reglasDeCaja ? await deps.reglasDeCaja(CAJA_DE_LINEA[l] ?? l).catch(() => null) : null
-  return deps.conMotor(marca, 'Cargar venta', async (pg) => {
+  return deps.conMotor(marca, 'Nueva venta', async (pg) => {
     const cuentas = (await pg.query(
       `select id::text, nombre, medio, marca, gn_cuenta_id from cuenta_cobro where marca = any($1) and activa and medio not in ('saldo', 'cheque') order by marca, nombre`,
       [LINEAS[marca]])).rows
@@ -92,11 +92,11 @@ export function entradaManual(b, marca, usuario, { cortes, ahora = new Date() })
   if (corregir && motivo.length < 3) return { error: 'Escribí por qué se carga ahora.' }
   if (corregir && !b.ocurrida_en) return { error: 'Falta cuándo fue la venta.' }
   const prendas = Array.isArray(b.lineas) ? b.lineas : []
-  if (!prendas.length) return { error: 'Agregá al menos una prenda.' }
+  if (!prendas.length) return { error: 'Agregá al menos un producto.' }
   for (const l of prendas) {
     const cantidad = Number(l.cantidad)
-    if (!Number.isInteger(cantidad) || cantidad <= 0) return { error: 'Cada prenda lleva una cantidad entera mayor a 0.' }
-    if (!(pesos(l.precio) >= 0)) return { error: 'Cada prenda lleva un precio.' }
+    if (!Number.isInteger(cantidad) || cantidad <= 0) return { error: 'Cada producto lleva una cantidad entera mayor a 0.' }
+    if (!(pesos(l.precio) >= 0)) return { error: 'Cada producto lleva un precio.' }
   }
   // 🔑 La cuenta la rearma el SERVIDOR con lo elegido (precio de lista, descuento %, % de la forma de pago), ⛔ los montos del navegador.
   // Un pago sin `base` ni `porcentaje` (la forma vieja, `monto`) paga ese monto tal cual.

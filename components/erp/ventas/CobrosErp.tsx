@@ -50,7 +50,7 @@ const diaCorto = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
 
 function bajarCsv(filas: FilaCobro[], marca: MarcaErp, desde: string, hasta: string) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Cuándo', 'Qué', 'Cliente', 'Medio', 'Cuenta', 'Entra a', 'Monto', 'Quién', 'Comisión', 'Se acredita', 'Anulado', 'Línea'].map(c).join(';')]
+  const renglones = [['Cuándo', 'Qué', 'Cliente', 'Forma de pago', 'Cuenta', 'Entra a', 'Monto', 'Quién', 'Comisión', 'Se acredita', 'Anulado', 'Línea'].map(c).join(';')]
   for (const f of filas) {
     renglones.push([cuandoCorto(f.cuando), f.que, f.cliente, f.medioTexto, f.cuenta, f.entraA, String(f.monto).replace('.', ','), f.quien,
       f.comision == null ? '' : String(f.comision).replace('.', ','), f.acreditaEl, f.anulado ? 'sí' : '', LINEA[f.linea] ?? f.linea].map(c).join(';'))
@@ -193,7 +193,7 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
             : <>En este período hay {datos.otroLibro.toLocaleString('es-AR')} cobros <b>de prueba</b>, que no se suman acá. <Button variant="outline" onClick={() => setPrueba(true)}>Ver los de prueba</Button></>}
         </Notice>
       )}
-      <Notice tone="neutral">Todavía no están <b>Por validar</b> (lo que llegó a Mercado Pago) ni <b>Cobros masivos</b>: los está armando Areben Gestión. Un cobro a cuenta se registra desde Clientes › Cuenta corriente o desde la venta.</Notice>
+      <Notice tone="neutral">Todavía no están <b>Por validar</b> (lo que llegó a Mercado Pago) ni <b>Cobros masivos</b>: todavía no están disponibles. Un cobro a cuenta se registra desde Clientes › Cuenta corriente o desde la venta.</Notice>
       {res.sinCobrar > 0 && vista !== 'sin_cobrar' && (
         <Notice tone="warning">
           Hay <b>{res.sinCobrar.toLocaleString('es-AR')} {res.sinCobrar === 1 ? 'entrega' : 'entregas'} sin cobrar en Areben Gestión</b>, desde el {diaCorto(diaArgentino(Date.parse(res.sinCobrarDesde ?? '')))}: Logística las entregó y Areben Gestión no pudo anotar el cobro. <Button variant="outline" onClick={() => setVista('sin_cobrar')}>Verlas</Button>
@@ -211,7 +211,7 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
       </div>
       {medios.length > 0 && (
         <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', fontSize: font.sm, color: color.mut }}>
-          <span style={{ fontWeight: weight.medium, color: color.ink2 }}>Por medio:</span>
+          <span style={{ fontWeight: weight.medium, color: color.ink2 }}>Por forma de pago:</span>
           {medios.map((m) => <span key={m.medio}>{m.nombre} <b style={{ color: color.ink, fontVariantNumeric: 'tabular-nums' }}>{$(m.monto)}</b></span>)}
         </div>
       )}
@@ -219,13 +219,13 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en los cobros" placeholder="Nº de venta, cliente, medio, cuenta o quién" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en los cobros" placeholder="Nº de venta, cliente, forma de pago, cuenta o quién" />
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
             {periodos.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
           </Select>
-          <Select aria-label="Medio" style={ANCHO_SELECT} value={medio} onChange={(e) => setMedio(e.target.value)}>
-            <option value="">Todos los medios</option>
-            {mediosDelPeriodo.map((m) => <option key={m} value={m}>{m === 'sin_medio' ? 'Sin medio' : (MEDIO[m] ?? m)}</option>)}
+          <Select aria-label="Forma de pago" style={ANCHO_SELECT} value={medio} onChange={(e) => setMedio(e.target.value)}>
+            <option value="">Todas las formas de pago</option>
+            {mediosDelPeriodo.map((m) => <option key={m} value={m}>{m === 'sin_medio' ? 'Sin forma de pago' : (MEDIO[m] ?? m)}</option>)}
           </Select>
           <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
@@ -241,7 +241,7 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `el cobro ${f.que}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay cobros con ese número, cliente, medio o persona.' : vista === 'sin_cobrar' ? 'No hay entregas sin cobrar.' : `No hay cobros ${libro} ${vista === 'todos' ? '' : 'de esta vista '}${nombrePeriodo === 'hoy' || nombrePeriodo === 'ayer' ? nombrePeriodo : `en ${nombrePeriodo}`}.`} />
+              <EmptyState title={q ? 'No hay cobros con ese número, cliente, forma de pago o persona.' : vista === 'sin_cobrar' ? 'No hay entregas sin cobrar.' : `No hay cobros ${libro} ${vista === 'todos' ? '' : 'de esta vista '}${nombrePeriodo === 'hoy' || nombrePeriodo === 'ayer' ? nombrePeriodo : `en ${nombrePeriodo}`}.`} />
               {periodo !== 'mes' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setPeriodo('mes')}>Ver este mes</Button></div>}
             </div>
           ) : null}
@@ -268,13 +268,13 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
             {ficha.anulado && <Notice tone="neutral">{ficha.origen === 'pago_a_cuenta' ? 'Este pago a cuenta se dio vuelta.' : 'La venta está anulada.'}</Notice>}
             {ficha.clase === 'a_cuenta' && <Notice tone="warning">Quedó debiendo: no es plata que ingresó. Se cobra desde Clientes › Cuenta corriente.</Notice>}
             {ficha.clase === 'sin_cobrar' && <Notice tone="warning">Logística entregó este pedido y Areben Gestión no pudo anotar el cobro. La entrega no se frena nunca por esto: queda anotada y se reintenta cuando se arregla lo que faltaba. <b>Por qué:</b> {ficha.motivo}</Notice>}
-            {ficha.clase === 'sin_cobrar' && ficha.medio === 'transferencia' && <Notice tone="neutral">Fue una transferencia: cuando el cobro se anote va a quedar «por verificar» hasta cruzarla en Pagos recibidos.</Notice>}
-            {ficha.clase === 'entrega' && <Notice tone="warning">Contraentrega: lo cobra el cadete al entregar y todavía no ingresó. Se cierra cuando Envíos marca el envío entregado (eso todavía no está conectado: lo está armando Areben Gestión).</Notice>}
+            {ficha.clase === 'sin_cobrar' && ficha.medio === 'transferencia' && <Notice tone="neutral">Fue una transferencia: cuando el cobro se anote va a quedar como «Transferencia pendiente» hasta cruzarla en Pagos recibidos.</Notice>}
+            {ficha.clase === 'entrega' && <Notice tone="warning">Contraentrega: lo cobra el cadete al entregar y todavía no ingresó. Se cierra cuando Envíos marca el envío entregado (eso todavía no está disponible).</Notice>}
             {ficha.clase === 'sin_cobrar' ? (
               <DatosFicha>
                 <DatoFicha titulo="Entregada">{cuandoCorto(ficha.cuando)}</DatoFicha>
                 <DatoFicha titulo="Entregó">{ficha.quien ?? '—'}</DatoFicha>
-                <DatoFicha titulo="Cobró en mano">{ficha.medioTexto}</DatoFicha>
+                <DatoFicha titulo="Contraentrega">{ficha.medioTexto}</DatoFicha>
                 <DatoFicha titulo="Monto que dijo Logística">{ficha.montoDicho ? <b style={{ fontVariantNumeric: 'tabular-nums' }}>{$exacto(ficha.monto)}</b> : '—'}</DatoFicha>
                 <DatoFicha titulo="Último intento">{ficha.intentoEn ? cuandoCorto(ficha.intentoEn) : '—'}{(ficha.intentos ?? 1) > 1 ? ` · ${ficha.intentos} intentos` : ''}</DatoFicha>
                 <DatoFicha titulo="Línea">{LINEA[ficha.linea] ?? ficha.linea}</DatoFicha>
@@ -285,7 +285,7 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
               <DatoFicha titulo="Monto"><b style={{ fontVariantNumeric: 'tabular-nums' }}>{$exacto(ficha.monto)}</b></DatoFicha>
               <DatoFicha titulo={ficha.clase === 'entrega' ? 'En la calle desde' : 'Cuándo'}>{cuandoCorto(ficha.cuando)}</DatoFicha>
               <DatoFicha titulo="Cliente">{ficha.cliente ?? '—'}</DatoFicha>
-              <DatoFicha titulo="Medio">{ficha.medioTexto}</DatoFicha>
+              <DatoFicha titulo="Forma de pago">{ficha.medioTexto}</DatoFicha>
               <DatoFicha titulo="Cuenta">{ficha.cuenta}</DatoFicha>
               <DatoFicha titulo="Entra a">{ficha.entraA ?? '—'}</DatoFicha>
               <DatoFicha titulo="Comisión">{ficha.comision == null ? '—' : $exacto(ficha.comision)}</DatoFicha>

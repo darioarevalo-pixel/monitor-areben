@@ -12,7 +12,7 @@
  * ⛔ Mercado Libre (el empuje es un workflow a mano de Actions, `ml-stock.yml`) ni Gestión Nube (⛔ hay escritura de stock a GN).
  */
 const TIENDAS = ['bdi', 'zattia', 'stunned']
-const errorDe = (r) => ({ status: r.error?.codigo === 'TIENDA' || r.error?.codigo === 'USUARIO' ? 400 : 409, error: r.error?.mensaje ?? 'El motor no lo aceptó.' })
+const errorDe = (r) => ({ status: r.error?.codigo === 'TIENDA' || r.error?.codigo === 'USUARIO' ? 400 : 409, error: r.error?.mensaje ?? 'Areben Gestión no lo aceptó.' })
 
 /** Lo que la pantalla necesita de cada empuje (el resultado del trabajo, ⛔ el evento crudo). */
 export function aEmpuje(e) {

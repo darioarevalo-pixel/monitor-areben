@@ -204,6 +204,6 @@ describe('el CAMBIO facturado: NC por lo devuelto + factura por lo nuevo', () =>
     expect(puedeFacturarCambio({ ...c, total: 0 }, original, { ambiente: 'homologacion', facturaOriginal: null })).toMatch(/no se cobró nada/)
     expect(puedeFacturarCambio(c, original, { ambiente: 'produccion', facturaOriginal: { ...facturaOriginal, ambiente: 'produccion' } })).toMatch(/PRUEBA/)
     expect(puedeFacturarCambio(c, original, { ambiente: 'produccion', facturaOriginal })).toMatch(/PRUEBA/)
-    expect(puedeFacturarCambio({ ...c, prueba: false }, original, { ambiente: 'produccion', facturaOriginal })).toMatch(/no está autorizada en este ambiente/)
+    expect(puedeFacturarCambio({ ...c, prueba: false }, original, { ambiente: 'produccion', facturaOriginal })).toMatch(/no está autorizada en este modo de ARCA/)
   })
 })

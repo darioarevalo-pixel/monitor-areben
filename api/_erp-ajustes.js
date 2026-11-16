@@ -14,7 +14,7 @@
 import { LINEAS, armarAContar, baseDe, filaDeAjuste, leerCrearAjuste, textoDeAviso } from '../lib/erp/ajuste.core.js'
 import { textoDelMotor } from '../lib/erp/venta.core.js'
 
-const SIN_TABLA = 'Los ajustes todavía no están en la base del motor (migración 026).'
+const SIN_TABLA = 'Los ajustes todavía no están disponibles: falta actualizar la base (026).'
 const STATUS = { ENTRADA_INVALIDA: 400, QUEDA_NEGATIVO: 409, SIN_DIFERENCIAS: 409, YA_RESUELTO: 409, NO_ENCONTRADO: 404 }
 const motor = () => import('../motor/stock/ajuste.mjs')
 /** Lo que el motor dice en palabras del motor («libro», «aplicado», `local`), dicho como en la pantalla. */

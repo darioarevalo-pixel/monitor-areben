@@ -17,7 +17,7 @@ import { errorDeAlta, errorDeEdicion, idDeToken, resultadoDePrueba } from '../li
 const importar = () => import('../motor/ext/tokens.mjs')
 const catalogo = () => import('../motor/ext/contrato.mjs')
 const QUE = 'Los tokens'
-const sinTabla = { status: 409, error: 'Los tokens todavía no están en la base del motor (migración 071).' }
+const sinTabla = { status: 409, error: 'Los tokens todavía no están disponibles: falta actualizar la base (071).' }
 
 async function conTabla(conMotor, fn) {
   try {

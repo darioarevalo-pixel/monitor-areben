@@ -45,7 +45,7 @@ const leerFicha = async (pg, clienteId) =>
  */
 async function completarFicha(pg, ficha, datos) {
   const m = await import('../motor/venta/cliente.mjs')
-  if (typeof m.ponerFiscalCliente !== 'function') return { status: 409, error: 'Falta traer el motor con los datos fiscales de la ficha.' }
+  if (typeof m.ponerFiscalCliente !== 'function') return { status: 409, error: 'Falta actualizar Areben Gestión con los datos fiscales de la ficha.' }
   const r = await m.ponerFiscalCliente(pg, {
     empresa_id: ficha.empresa_id, cliente_id: ficha.id, doc: datos.doc || undefined, condicion_iva: datos.condicionIva,
     razon_social: datos.razonSocial || undefined, domicilio: datos.domicilio || undefined,
@@ -236,7 +236,7 @@ export async function facturasDeVentaParte(sb, { ambiente, clave, claves }) {
   const acreditado = new Map()
   if (ids.length) {
     const nc = await sb.from('facturas').select('asociado_id, total').in('asociado_id', ids).in('tipo', NCS).neq('estado', 'rechazada')
-    if (nc.error) throw new Error(`facturas (NC de las partes): ${nc.error.message}`)
+    if (nc.error) throw new Error(`facturas (notas de crédito de las partes): ${nc.error.message}`)
     for (const n of nc.data || []) acreditado.set(String(n.asociado_id), (acreditado.get(String(n.asociado_id)) || 0) + cts(n.total))
   }
   return {
@@ -384,7 +384,7 @@ export async function enviarFacturaPanel({ body, quien = null }, deps) {
   const ambiente = deps.ambiente || (() => { const a = ambienteSeguro(); return a.ambiente })()
   if (!ambiente) return { status: 409, error: ambienteSeguro().error }
   if (ambiente !== 'produccion' && !para.endsWith(CASILLA_INTERNA)) {
-    return { status: 409, error: `Es una factura de PRUEBA (homologación de ARCA): sólo se manda a una casilla ${CASILLA_INTERNA}.` }
+    return { status: 409, error: `Es una factura de prueba (modo de prueba de ARCA): sólo se manda a una casilla ${CASILLA_INTERNA}.` }
   }
 
   const sb = deps.sb || baseFacturacion()

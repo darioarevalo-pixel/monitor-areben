@@ -18,10 +18,10 @@ describe('leerAccion', () => {
     expect(leer({ accion: 'salida-crear', linea: 'xx', tipo: 'foto', ref: 'a', renglones: [] }).error).toBe('Línea inválida')
     expect(leer({ accion: 'salida-crear', linea: 'bdi', tipo: 'regalo', ref: 'a', renglones: [] }).error).toMatch(/tipo/)
     expect(leer({ accion: 'salida-crear', linea: 'bdi', tipo: 'foto', ref: ' ', renglones: [] }).error).toMatch(/solicitud/)
-    expect(leer({ accion: 'salida-crear', linea: 'bdi', tipo: 'foto', ref: 'a', renglones: 'x' }).error).toMatch(/mal armados/)
+    expect(leer({ accion: 'salida-crear', linea: 'bdi', tipo: 'foto', ref: 'a', renglones: 'x' }).error).toMatch(/llegó incompleta/)
     expect(leer({ accion: 'salida-devolver', linea: 'bdi', salidaId: 'no' }).error).toBe('Falta la salida')
-    expect(leer({ accion: 'salida-devolver', linea: 'bdi', salidaId: ID, renglones: [{ n: 'x' }] }).error).toMatch(/mal armados/)
-    expect(leer({ accion: 'salida-devolver', linea: 'bdi', salidaId: ID, renglones: [{ n: 1, cantidad: 1.5 }] }).error).toMatch(/mal armados/)
+    expect(leer({ accion: 'salida-devolver', linea: 'bdi', salidaId: ID, renglones: [{ n: 'x' }] }).error).toMatch(/llegó incompleta/)
+    expect(leer({ accion: 'salida-devolver', linea: 'bdi', salidaId: ID, renglones: [{ n: 1, cantidad: 1.5 }] }).error).toMatch(/llegó incompleta/)
     expect(leer({ accion: 'otra', linea: 'bdi', salidaId: ID }).error).toBe('Acción desconocida')
   })
   it('devolver y cerrar leen sólo sus números; cancelar lleva el motivo', () => {

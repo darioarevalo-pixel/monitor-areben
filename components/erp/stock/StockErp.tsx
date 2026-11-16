@@ -136,7 +136,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
     if (k === 'disp') return <BarraNivel n={f.disponible}>{numero(f.disponible, true)}</BarraNivel>
     if (k === 'est') return numero(f.estanteria)
     if (k.startsWith('dep:')) return numero(f.deps[k.slice(4)] ?? 0)
-    if (k === 'ped') return f.enPedidos ? <span style={{ color: 'var(--mo-warning-ink)' }} title="Apartadas por pedidos de Tienda Nube sin pagar">{f.enPedidos}</span> : <span style={{ color: color.mut2 }}>—</span>
+    if (k === 'ped') return f.enPedidos ? <span style={{ color: 'var(--mo-warning-ink)' }} title="Reservadas por pedidos de Tienda Nube sin pagar">{f.enPedidos}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'gn') return <span style={{ color: f.gn != null && f.gn !== f.estanteria ? 'var(--mo-warning-ink)' : color.mut }} title={f.gn != null && f.gn !== f.estanteria ? 'Gestión Nube dice otro número que Areben Gestión' : undefined}>{f.gn ?? '—'}</span>
     if (k === 'ult') return f.ultimo ? <span style={{ color: color.mut }} title={f.ultimo.ref ?? undefined}>{(NOMBRE_TIPO as Record<string, string>)[f.ultimo.tipo] ?? f.ultimo.tipo} · {cuandoCorto(f.ultimo.cuando)}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'linea') return <span style={{ color: color.ink2 }}>{LINEA[f.linea] ?? f.linea}</span>
@@ -169,7 +169,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Disponible" valor={u(res.disponible)} oscuro nota="lo que se puede vender" />
-        <TileResumen titulo="Físico" valor={u(res.estanteria)} nota={res.enPedidos ? `${res.enPedidos.toLocaleString('es-AR')} apartadas por pedidos sin pagar` : 'ninguna apartada por pedidos'} />
+        <TileResumen titulo="Físico" valor={u(res.estanteria)} nota={res.enPedidos ? `${res.enPedidos.toLocaleString('es-AR')} reservadas por pedidos sin pagar` : 'ninguna reservada por pedidos'} />
         {/* Los negativos se cuentan sobre todo lo buscado (⛔ sólo la vista): si no, el número no es el de la vista «Negativos». */}
         <TileResumen tono={tonoDeConteo(conteo.neg)} titulo="Negativos" valor={(conteo.neg ?? 0).toLocaleString('es-AR')} nota={conteo.neg ? 'para revisar' : 'ninguna'} />
         <TileResumen titulo="Productos" valor={res.prendas.toLocaleString('es-AR')} nota={nombreVista.toLowerCase()} />

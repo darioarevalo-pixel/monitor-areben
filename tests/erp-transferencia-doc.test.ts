@@ -22,8 +22,8 @@ describe('leerAccion', () => {
     expect((leer({ accion: 'transferencia-crear', linea: 'xx', desde: 'a', hacia: 'b' })).error).toBe('Línea inválida')
     expect((leer({ accion: 'transferencia-crear', linea: 'bdi', desde: 'a' })).error).toMatch(/de dónde sale/)
     expect((leer({ accion: 'transferencia-enviar', linea: 'bdi', transferenciaId: 'no' })).error).toBe('Falta la transferencia')
-    expect((leer({ accion: 'transferencia-armar', linea: 'bdi', transferenciaId: ID, renglones: 'x' })).error).toMatch(/mal armados/)
-    expect((leer({ accion: 'transferencia-armar', linea: 'bdi', transferenciaId: ID, renglones: [null] })).error).toMatch(/mal armados/)
+    expect((leer({ accion: 'transferencia-armar', linea: 'bdi', transferenciaId: ID, renglones: 'x' })).error).toMatch(/llegó incompleta/)
+    expect((leer({ accion: 'transferencia-armar', linea: 'bdi', transferenciaId: ID, renglones: [null] })).error).toMatch(/llegó incompleta/)
     expect((leer({ accion: 'otra', linea: 'bdi', transferenciaId: ID })).error).toBe('Acción desconocida')
   })
   it('enviar acepta el id de Gestión Nube; cancelar lleva el motivo', () => {

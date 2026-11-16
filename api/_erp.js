@@ -398,7 +398,7 @@ export async function notaDeCredito({ facturaId, usuario, desdeVenta = false }, 
     if (e) throw new Error(`facturas: ${e.message}`)
     return data
   })()
-  if (!f || f.ambiente !== ambiente) return { status: 404, error: 'La factura no existe en este ambiente.' }
+  if (!f || f.ambiente !== ambiente) return { status: 404, error: 'La factura no está en este modo de ARCA (prueba o real).' }
   if (f.estado !== 'autorizada') return { status: 409, error: 'Sólo una factura autorizada (con CAE) lleva nota de crédito.' }
   if (!desdeVenta && esDeVentaPropia(f.venta_id)) return { status: 409, error: NC_DESDE_LA_VENTA }
   // Una NOTA DE DÉBITO también se acredita (un error en la ND se corrige así): la NC la asocia a ELLA y sale por su importe.
@@ -452,7 +452,7 @@ export async function notaDeDebito({ facturaId, monto, usuario }, deps = {}) {
     if (e) throw new Error(`facturas: ${e.message}`)
     return data
   })()
-  if (!f || f.ambiente !== ambiente) return { status: 404, error: 'La factura no existe en este ambiente.' }
+  if (!f || f.ambiente !== ambiente) return { status: 404, error: 'La factura no está en este modo de ARCA (prueba o real).' }
   if (f.estado !== 'autorizada') return { status: 409, error: 'Sólo una factura autorizada (con CAE) lleva nota de débito.' }
   if (esDeVentaPropia(f.venta_id)) return { status: 409, error: 'La nota de débito de una venta de Areben Gestión todavía no se hace desde acá.' }
   const tipo = { [CBTE.FACTURA_A]: CBTE.ND_A, [CBTE.FACTURA_B]: CBTE.ND_B }[f.tipo]
@@ -646,7 +646,7 @@ export async function stockDePrenda({ marca, q, producto, talle }) {
     }
     return { variantes: [...porVariante.values()].slice(0, 60), cortado: porVariante.size > 60 }
   }
-  if (!/^\d+$/.test(String(producto)) || !/^\d+$/.test(String(talle))) return { status: 400, error: 'Prenda inválida' }
+  if (!/^\d+$/.test(String(producto)) || !/^\d+$/.test(String(talle))) return { status: 400, error: 'Falta un dato del producto' }
   const [movs, gn] = await Promise.all([
     leerTodo(b, 'stock_movimiento', (x) => x.select('id, deposito, cantidad, tipo, origen, origen_ref, ocurrido_en, linea, detalle')
       .eq('product_id', producto).eq('size_id', talle).order('id')),
@@ -815,7 +815,7 @@ async function leerLiquidaciones(marca) {
 /** Abre la conexión del motor de la marca, corre `fn(db, motor)` y la cierra. Sin la variable: 409, dicho. */
 async function conMotor(marca, que, fn) {
   const conexion = process.env[PG_DE_MARCA[marca]]
-  if (!conexion) return { status: 409, error: `${que} todavía no está conectado: falta la conexión del motor en Vercel.` }
+  if (!conexion) return { status: 409, error: `${que} todavía no está disponible: Areben Gestión no está conectado en este servidor.` }
   const [{ default: pg }, motor] = await Promise.all([import('pg'), import('../motor/venta/registrar.mjs')])
   const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: 5000, statement_timeout: 15000 })
   try {
@@ -888,7 +888,7 @@ export async function saldoDeClienta({ marca: base, doc, prueba = true, linea = 
   // La ficha es UNA por empresa y documento (§11): sin la empresa, dos empresas en la misma base harían
   // que `maybeSingle` falle con dos filas, o que el saldo saliera de la ficha de la otra.
   const empresa = await empresaDeMarca(sb, marca)
-  if (!empresa) return { status: 409, error: `La marca ${marca} no está en el motor de esta base.` }
+  if (!empresa) return { status: 409, error: `La marca ${marca} no está en Areben Gestión.` }
   const cl = await sb.from('cliente').select('id, nombre').eq('empresa_id', empresa).eq('doc', d).maybeSingle()
   if (cl.error) throw new Error(`cliente: ${cl.error.message}`)
   if (!cl.data) return { cliente: null, saldo: 0 }
@@ -987,7 +987,7 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
     // El saldo a favor paga con la cuenta «Saldo a favor» del motor (va por uuid: ⛔ tiene cuenta en GN).
     if (cobrado.pagos.some((p) => p.cuenta === 'saldo')) {
       const [cs] = (await db.query(`select id from cuenta_cobro where marca = $1 and medio = 'saldo'`, [marcaVenta])).rows
-      if (!cs) return { status: 409, error: 'Falta la cuenta «Saldo a favor» en Areben Gestión (sql/007 del motor).' }
+      if (!cs) return { status: 409, error: 'Falta la cuenta «Saldo a favor» en Areben Gestión (falta actualizar la base: 007).' }
       cobrado = { ...cobrado, pagos: cobrado.pagos.map((p) => (p.cuenta === 'saldo' ? { ...p, cuenta: cs.id } : p)) }
     }
     const r = await registrarCambio(db, {
@@ -1098,7 +1098,7 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
     const clave = f ? claveDeFactura(f) : null
     let ya = null
     for (const k of f ? clavesDeFactura(f) : []) if ((ya = await buscar(k))) break
-    if (body?.reimprimir && !ya) return { status: 404, error: 'No se encontró la factura de esta venta en este ambiente.' }
+    if (body?.reimprimir && !ya) return { status: 404, error: 'No se encontró la factura de esta venta en este modo de ARCA (prueba o real).' }
     if (ya && !body?.reimprimir) {
       const otra = distintaDeLaPedida(ya, p)
       if (otra) return { status: 409, error: otra }
@@ -1113,7 +1113,7 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
       // La factura que GN ya le hizo (la cajera la facturó en el POS de GN) también cuenta.
       const gn = await b.from('ventas_factura_gn').select('venta_id').eq('venta_id', clave).limit(1)
       if (gn.error) throw new Error(`ventas_factura_gn: ${gn.error.message}`)
-      if (gn.data.length) return { status: 409, error: 'Esa venta ya está facturada en GN.' }
+      if (gn.data.length) return { status: 409, error: 'Esa venta ya está facturada en Gestión Nube.' }
     }
 
     let factura = ya
@@ -1135,7 +1135,7 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
         if (!factura) return { status: 409, error: r.noSalen[0].motivos.join(' · ') }
       } else factura = r.autorizadas[0]
     }
-    if (factura.estado !== 'autorizada') return { status: 409, error: 'Esa venta tiene una factura a medio pedir: probá de nuevo en un minuto.' }
+    if (factura.estado !== 'autorizada') return { status: 409, error: 'La factura de esa venta todavía se está pidiendo: probá de nuevo en un minuto.' }
     const sinAtar = await atarFactura(db, { venta: f, facturaId: factura.id, tipo: 'factura' })
     const { receptor, sinFicha } = deps.receptorPdf
       ? { receptor: deps.receptorPdf, sinFicha: null }
@@ -1205,7 +1205,7 @@ export async function clientasDeLaCaja({ marca, q, linea = '' }, deps = {}) {
   const correr = deps.db ? (fn) => fn(deps.db, deps.motor) : (fn) => conMotor(marca, 'Buscar clientas', fn)
   return correr(async (db, { buscarClientes }) => {
     const [m] = (await db.query('select empresa_id from marca where id = $1', [marca])).rows
-    if (!m) return { status: 409, error: 'La marca no está en la base del motor.' }
+    if (!m) return { status: 409, error: 'La marca no está en Areben Gestión.' }
     const porLinea = !!l && marca !== 'bdi'
     const r = await buscarClientes(db, { empresa_id: m.empresa_id, texto: String(q ?? ''), limite: porLinea ? 50 : 8 })
     if (!r.ok) return errorDelMotor(r)
@@ -1327,7 +1327,7 @@ export async function facturarCambio({ marca, body, usuario }, deps = {}) {
           asociado: { tipo: Number(facturaOriginal.tipo), ptoVta: Number(facturaOriginal.pto_vta), numero: Number(facturaOriginal.numero), fecha: facturaOriginal.fecha },
         })
         if (e.error) return { status: 409, error: `La nota de crédito no salió: ${e.error}` }
-        if (e.fila.estado !== 'autorizada') return { status: 409, error: 'La nota de crédito del cambio está a medio pedir: probá de nuevo en un minuto.' }
+        if (e.fila.estado !== 'autorizada') return { status: 409, error: 'La nota de crédito del cambio todavía se está pidiendo: probá de nuevo en un minuto.' }
         nc = filaParaPdf(e.fila, { numero, renglones: plan.nc.renglones })
         const sin = await atarFactura(db, { venta: original, facturaId: e.fila.id, tipo: 'nc' })
         if (sin) avisos.push(sin)
@@ -1335,7 +1335,7 @@ export async function facturarCambio({ marca, body, usuario }, deps = {}) {
       if (plan.factura) {
         const e = await emitir(facturaYa, tipos.factura, { mes: mesDeVenta(cambio.ocurrida_en), total: plan.factura.total })
         if (e.error) return { status: 409, error: `${nc ? 'Salió la nota de crédito, pero la factura de lo nuevo no: ' : 'La factura de lo nuevo no salió: '}${e.error}` }
-        if (e.fila.estado !== 'autorizada') return { status: 409, error: 'La factura del cambio está a medio pedir: probá de nuevo en un minuto.' }
+        if (e.fila.estado !== 'autorizada') return { status: 409, error: 'La factura del cambio todavía se está pidiendo: probá de nuevo en un minuto.' }
         factura = filaParaPdf(e.fila, { numero, renglones: plan.factura.renglones })
         const sin = await atarFactura(db, { venta: cambio, facturaId: e.fila.id, tipo: 'factura' })
         if (sin) avisos.push(sin)
@@ -1585,7 +1585,7 @@ export async function cargarPrecioCosto({ marca, body, usuario }, deps = {}) {
   const b = deps.b || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
   const inv = await b.from('inventario').select('sku').eq('product_id', c.producto)
   if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
-  if (!inv.data.length) return { status: 404, error: 'El producto no está en el espejo de GN.' }
+  if (!inv.data.length) return { status: 404, error: 'El producto no está en la copia de Gestión Nube.' }
   const linea = lineaDelProducto(marca, inv.data.map((x) => x.sku))
   const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'Cargar precios', fn)
   return correr(async (db) => {
@@ -1614,7 +1614,7 @@ export async function soltarPrecioDeLista({ marca, body, usuario }, deps = {}) {
   const b = deps.b || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
   const inv = await b.from('inventario').select('sku').eq('product_id', c.producto)
   if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
-  if (!inv.data.length) return { status: 404, error: 'El producto no está en el espejo de GN.' }
+  if (!inv.data.length) return { status: 404, error: 'El producto no está en la copia de Gestión Nube.' }
   const linea = lineaDelProducto(marca, inv.data.map((x) => x.sku))
   const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'Cargar precios', fn)
   return correr(async (db) => {

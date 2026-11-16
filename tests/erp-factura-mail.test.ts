@@ -52,7 +52,7 @@ describe('enviarFacturaPanel', () => {
   it('una de PRUEBA (homologación) sólo a una casilla de la empresa', async () => {
     const fila = { ...FILA, ambiente: 'homologacion' }
     const a = deps({ ambiente: 'homologacion', sb: sbCon([fila]) })
-    expect(await enviarFacturaPanel({ body: body() }, a.d)).toMatchObject({ status: 409, error: expect.stringMatching(/PRUEBA/) })
+    expect(await enviarFacturaPanel({ body: body() }, a.d)).toMatchObject({ status: 409, error: expect.stringMatching(/factura de prueba/) })
     expect(a.enviados).toHaveLength(0)
     const b = deps({ ambiente: 'homologacion', sb: sbCon([fila]) })
     expect(await enviarFacturaPanel({ body: body({ para: 'bruno@arebensrl.com' }) }, b.d)).toMatchObject({ ok: true })
