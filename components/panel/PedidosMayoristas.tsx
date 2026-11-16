@@ -14,10 +14,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, CopyButton, Field, Input, Modal, Notice } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import {
-  anotarWhatsappPanel, anularPedidoPanel, buscarClientesPanel, buscarProductosPedido, cambiarPedidoPanel, clienteNuevoPanel, entrarPedidoPanel, leerPedidoPanel, leerPedidosPanel, leerPedidosSinCliente, leerPreparadosSinPagar, mandarAPrepararPanel,
+  anotarWhatsappPanel, anularPedidoPanel, ponerEnvioPedidoPanel, buscarClientesPanel, buscarProductosPedido, cambiarPedidoPanel, clienteNuevoPanel, entrarPedidoPanel, leerPedidoPanel, leerPedidosPanel, leerPedidosSinCliente, leerPreparadosSinPagar, mandarAPrepararPanel,
   type ClienteDelPanel, type EtapaPedido, type PedidoDelCliente, type PedidoSinCliente, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel,
 } from '@/lib/erp/cliente'
 import { HojaCargarPago, mensajeDeLaCuenta, useCuentaPrendida, type CuentaConCliente } from './CuentaCorriente'
+import { mensajeTotal } from './CalculadoraEnvio'
+import { escribirMonto, parsearMonto } from '@/lib/compromisos/core'
 import { FacturarParte, FacturarPedido, LETRA, descargarFactura, numeroComprobante } from './FacturasCliente'
 import { codigoPedido } from '@/lib/erp/codigos.core.js'
 import { esAprobador } from '@/lib/reposicion/armado.core.js'
@@ -228,6 +230,51 @@ function BarraDePasos({ p }: { p: PedidoDelCliente }) {
   )
 }
 
+/** Los transportes del envío pagado en origen (EM). */
+const TRANSPORTES = ['Andreani', 'Correo Argentino']
+
+/**
+ * El envío del pedido (Darío 15-nov): lo que paga el cliente en origen (EM) va en el pedido y se suma al total, así el pago
+ * cierra justo. Vacío o 0 lo saca. ⛔ se cambia con el pedido facturado (el servidor frena igual).
+ */
+function EnvioDelPedido({ envio, transporte, sinFactura, cambiar, guardar }: {
+  envio: number | null; transporte: string | null; sinFactura: boolean; cambiar: boolean
+  guardar: (envio: number | null, transporte: string | null) => Promise<void>
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const [monto, setMonto] = useState('')
+  const [trans, setTrans] = useState<string | null>(null)
+  const hay = envio != null && envio > 0
+  const abrir = () => { setMonto(hay ? escribirMonto(envio as number) : ''); setTrans(transporte); setAbierto(true) }
+  const n = monto.trim() ? parsearMonto(monto) : 0
+  const valido = Number.isFinite(n) && n >= 0
+  if (!hay && !cambiar) return null
+  if (abierto) return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
+      <Field label="Envío"><Input inputMode="decimal" autoFocus value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="$" /></Field>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {TRANSPORTES.map((t) => (
+          <Button key={t} size="sm" variant={trans === t ? 'solid' : 'outline'} tone={trans === t ? 'brand' : undefined} onClick={() => setTrans(trans === t ? null : t)}>{t}</Button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <Button size="sm" variant="outline" onClick={() => setAbierto(false)}>Cancelar</Button>
+        {hay && <Button size="sm" variant="ghost" tone="danger" onClick={() => void guardar(null, null).then(() => setAbierto(false))}>Sacar</Button>}
+        <Button size="sm" variant="solid" tone="brand" disabled={!valido || n <= 0} onClick={() => void guardar(n, trans).then(() => setAbierto(false))}>Guardar</Button>
+      </div>
+    </div>
+  )
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
+      <span>Envío{transporte && hay ? ` (${transporte})` : ''}{sinFactura ? ': sin factura' : ''}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {cambiar && <Button size="sm" variant="outline" onClick={abrir}>{hay ? 'Cambiar' : '+ Envío'}</Button>}
+        {hay && <span>{plata(envio as number)}</span>}
+      </span>
+    </div>
+  )
+}
+
 /**
  * La hoja del pedido (Darío §2): los productos con el stock real al lado, cambiar cantidades (0 = se saca), agregar productos
  * (buscador del catálogo, precio de la lista mayorista), quién cambió qué, «Enviar a preparar» y anular. ⛔ se toca cuando el depósito ya empezó a escanear.
@@ -343,15 +390,19 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
           {puede && (buscando
             ? <BuscarProducto pedidoId={pedidoId} onElegir={agregar} onCerrar={() => setBuscando(false)} />
             : <div><Button size="sm" variant="outline" onClick={() => setBuscando(true)}>Agregar producto</Button></div>)}
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
-            <span>Total{cambiado ? ' (se recalcula al guardar)' : ''}</span><b>{plata(p.total)}</b>
-          </div>
-          {p.envio != null && p.envio > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.sm, color: color.mut2 }}>
-              <span>Envío{p.transporte ? ` (${p.transporte})` : ''}{ficha.facturacion?.entera && ficha.facturacion.entera.total < p.total ? ': sin factura' : ''}</span>
-              <span>{plata(p.envio)}</span>
-            </div>
+          {p.etapa !== 'anulado' && (
+            <EnvioDelPedido envio={p.envio ?? null} transporte={p.transporte ?? null}
+              sinFactura={!!ficha.facturacion?.entera && ficha.facturacion.entera.total < p.total}
+              cambiar={ficha.escribir && !cambiado && !ocupado && !(ficha.facturacion?.entera || (ficha.facturacion?.partes ?? 0) > 0)}
+              guardar={(envio, transporte) => hacer(() => ponerEnvioPedidoPanel(pedidoId, envio, transporte), envio ? 'Envío guardado.' : 'Envío sacado.')} />
           )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
+            <span>Total{cambiado ? ' (se recalcula al guardar)' : ''}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {!cambiado && p.envio != null && p.envio > 0 && p.etapa !== 'anulado' && <CopyButton getText={() => mensajeTotal(p.total)} label="Total" copiedLabel="✓ Copiado" iconLeft="💬" />}
+              <b>{plata(p.total)}</b>
+            </span>
+          </div>
           {p.venta_id && ficha.facturacion && (ficha.facturacion.entera ? (
             <div style={{ fontSize: font.sm, color: color.successInk }}>
               Facturado ✓ · {LETRA[ficha.facturacion.entera.tipo] ?? ''} {numeroComprobante(ficha.facturacion.entera)}
