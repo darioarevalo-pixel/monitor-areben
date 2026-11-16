@@ -81,9 +81,10 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
     «Guardar» (`tests/pedido-agregar-producto.test.tsx`). ⛔ el buscador de la Caja: lee el espejo de GN y no trae ese precio.
   - **Número desconocido** (Darío §1): con pedidos «sin entrar» y el chat sin cliente, la tarjeta pregunta «¿Es de un cliente
     que ya tenés?» — buscar (`clientes-panel`, fichas CON id) y elegir anota el número con quién es (`anotar-whatsapp`).
-    «Es nuevo» = **nombre + CUIT/DNI** (Bruno 31-oct), ficha y número juntos o ninguno (`cliente-nuevo-panel`). 🔴 Un
-    documento que ya tiene ficha ⇒ 409 (⛔ se renombra: `guardarCliente` pisa el nombre). 🔴 «Es nuevo» va detrás de
-    `VENTA_MAYORISTA_REAL`: mientras GN viva, la copia de GN da de alta por id de GN sin documento ⇒ quedaría repetida.
+    «Es nuevo» = **nombre; el CUIT/DNI es OPCIONAL** (Darío/Bruno 15-nov; era obligatorio desde el 31-oct) y se completa al
+    facturar en la misma ficha. Ficha y número juntos o ninguno (`cliente-nuevo-panel`): sin documento, lo que evita la
+    repetida es el número (de una sola ficha ⇒ YA_ANOTADO ⇒ se deshace). 🔴 Un documento que ya tiene ficha ⇒ 409 (⛔ se
+    renombra: `guardarCliente` pisa el nombre). 🔴 «Es nuevo» va detrás de `VENTA_MAYORISTA_REAL`.
   - **Pagos del pedido** (Darío §4): «$ Cargar pago» en la hoja del pedido abre la MISMA hoja de la cuenta, con lo que falta y
     `imputar` a ese pedido; lo que sobra va a lo más viejo y recién sin deuda queda a favor (regla del 18-oct). **N° de
     operación** opcional: si otro pago vivo ya lo usa, el motor contesta OPERACION_REPETIDA, la hoja dice cuál y «Cargar

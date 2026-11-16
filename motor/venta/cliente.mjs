@@ -106,6 +106,23 @@ export async function guardarClienteGN(db, e) {
 }
 
 /**
+ * La ficha NUEVA sin documento (Darío/Bruno 15-nov): el cliente que escribe por primera vez se carga con el nombre y el CUIT/DNI se
+ * completa después, al facturar (`ponerFiscalCliente`). 🔑 SIEMPRE crea: sin documento ⛔ hay con qué reconocer una ficha que ya
+ * existe ⇒ lo que evita la repetida es el NÚMERO del chat que se le anota en la misma transacción (`anotarWhatsapp`: un número
+ * activo es de una sola ficha). ⛔ Reemplaza a `guardarCliente`: el que trae documento sigue yendo por ahí.
+ * @param {import('pg').ClientBase} db
+ * @param {{ empresa_id: string, nombre: string }} e
+ */
+export async function crearClienteSinDoc(db, e) {
+  const nombre = texto(e?.nombre)
+  if (!nombre) return falla('FALTA_CLIENTE', 'Falta el nombre del cliente', 'nombre')
+  const [emp] = await q(db, 'select id from empresa where id = $1', [e.empresa_id])
+  if (!emp) return falla('ENTRADA_INVALIDA', 'No está esa empresa', 'empresa_id')
+  const [r] = await q(db, `insert into cliente (empresa_id, nombre) values ($1, $2) returning ${COLUMNAS}`, [e.empresa_id, nombre])
+  return { ok: true, cliente: r }
+}
+
+/**
  * El WhatsApp / mail de un cliente POR SU `id` (la cuenta corriente trae `clienteId`; las mayoristas de GN ⛔ tienen documento).
  * 🔑 El único verbo que PONE contacto sin pasar por el documento. Lo que viene con dato pisa, ⛔ borra (un campo ausente no se
  * toca) y el WhatsApp ⛔ se adivina: se normaliza a 549 + 10 dígitos o se rechaza (un número mal armado le escribe a OTRA persona).

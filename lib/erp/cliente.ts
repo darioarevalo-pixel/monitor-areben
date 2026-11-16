@@ -820,7 +820,7 @@ export const proponerPartePanel = (p: { pedidoId: string; monto?: number; precio
 export const emitirPartePanel = (p: { pedidoId: string; renglones: RenglonParte[]; doc?: string; condicion?: string; razonSocial?: string; domicilio?: string }) =>
   pedir<{ ok: true; total: number; facturado: number; queda: number; factura: FacturaDelPanel }>(post({ accion: 'parte-pedido-panel', marca: 'bdi', paso: 'emitir', ...p }), '', 'No se pudo hacer la factura.')
 /** «Es nuevo»: la ficha (nombre + CUIT/DNI) y el número del chat anotado en ella. 409 con `existe` si el documento ya tiene ficha. */
-export const clienteNuevoPanel = (p: { nombre: string; doc: string; whatsapp: string; persona?: string }) =>
+export const clienteNuevoPanel = (p: { nombre: string; doc?: string; whatsapp: string; persona?: string }) =>
   pedir<{ ok: true; cliente: ClienteDelPanel }>(post({ accion: 'cliente-nuevo-panel', marca: 'bdi', ...p }), '', 'No se pudo cargar el cliente.')
 export const sacarWhatsappPanel = (id: string) =>
   pedir<{ ok: true; sacado: boolean }>(post({ accion: 'sacar-whatsapp', marca: 'bdi', id }), '', 'No se pudo sacar el número.')

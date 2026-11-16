@@ -412,7 +412,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
 /**
  * «¿Es de un cliente que ya tenés?» (Darío §1): un pedido llegó con un número que el ERP ⛔ conoce. Se pregunta UNA vez:
  * elegir la ficha anota el número en ella y desde ahí sus pedidos entran solos a ese cliente. «Es nuevo» crea la ficha con
- * nombre + CUIT/DNI (Bruno 31-oct) — detrás de la llave de escribir hasta el corte de BDI.
+ * el nombre; el CUIT/DNI es opcional y se completa al facturar (Darío/Bruno 15-nov) — detrás de la llave de escribir.
  */
 export function ElegirCliente({ tel, persona, escribir, decir, onCambio, onElegido }: {
   tel: string; persona: string | null; escribir: boolean; decir: (txt: string, mal?: boolean) => void; onCambio: () => void
@@ -468,10 +468,10 @@ export function ElegirCliente({ tel, persona, escribir, decir, onCambio, onElegi
         <div><Button size="sm" variant="ghost" disabled={!escribir} title={escribir ? undefined : 'Los clientes nuevos se cargan desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.'} onClick={() => setNuevo(true)}>Es nuevo</Button></div>
       </>) : (<>
         <Field label="Nombre del cliente (la empresa)"><Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Celulares Rosario" /></Field>
-        <Field label="CUIT o DNI"><Input value={doc} onChange={(e) => setDoc(e.target.value)} inputMode="numeric" placeholder="30-71850818-1" /></Field>
+        <Field label="CUIT o DNI (opcional)" hint="Si no lo tenés ahora, se completa al facturar."><Input value={doc} onChange={(e) => setDoc(e.target.value)} inputMode="numeric" placeholder="30-71850818-1" /></Field>
         <div style={{ display: 'flex', gap: 6 }}>
           <Button size="sm" variant="outline" onClick={() => setNuevo(false)}>Cancelar</Button>
-          <Button size="sm" variant="solid" tone="brand" disabled={!nombre.trim() || !doc.trim() || ocupado} onClick={crear}>Crear cliente</Button>
+          <Button size="sm" variant="solid" tone="brand" disabled={!nombre.trim() || ocupado} onClick={crear}>Crear cliente</Button>
         </div>
       </>)}
     </div>
