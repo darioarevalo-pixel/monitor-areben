@@ -112,7 +112,8 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   useEffect(() => {
     let vivo = true
     const r = rangoDePeriodo(periodo, diaArgentino(Date.now()))
-    leerListaDeVentas(marca, r.desde, r.hasta, linea)
+    // La primera lectura toma la que Inicio ya tiene en vuelo; la de después de guardar algo (`vuelta` > 0) pide una nueva.
+    leerListaDeVentas(marca, r.desde, r.hasta, linea, { reusar: vuelta === 0 })
       .then((d) => {
         if (!vivo) return
         setDatos({ filas: d.filas, puede: d.puede, tnLeidaEn: d.tnLeidaEn ?? null, clave })
@@ -136,7 +137,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
       })
       .catch((e) => { if (vivo) { setError(e instanceof Error ? e.message : 'No se pudieron leer las ventas.'); setDatos((x) => (x ? { ...x, clave } : x)) } })
     return () => { vivo = false }
-  }, [marca, linea, periodo, clave, periodos])
+  }, [marca, linea, periodo, clave, periodos, vuelta])
   const cargar = () => setVuelta((n) => n + 1)
   const cargando = datos?.clave !== clave
 

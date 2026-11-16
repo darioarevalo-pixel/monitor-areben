@@ -19,12 +19,15 @@ const MARCAS = ['bdi', 'zattia']
 const TANDA = 300
 const DIA = /^\d{4}-\d{2}-\d{2}$/
 
-/** De a tandas (un `in` largo ⛔ entra en la URL de PostgREST). */
+/**
+ * De a tandas (un `in` largo ⛔ entra en la URL de PostgREST), TODAS A LA VEZ: la base de BDI está lejos de la función
+ * (Oregón ↔ Virginia, ~70 ms por viaje) y en serie 962 ids eran 4 viajes uno detrás de otro (16-nov). Mismo orden de salida.
+ */
 async function enTandas(ids, fn) {
-  const out = []
   const unicos = [...new Set(ids.filter((x) => x != null && x !== ''))]
-  for (let i = 0; i < unicos.length; i += TANDA) out.push(...await fn(unicos.slice(i, i + TANDA)))
-  return out
+  const tandas = []
+  for (let i = 0; i < unicos.length; i += TANDA) tandas.push(unicos.slice(i, i + TANDA))
+  return (await Promise.all(tandas.map(fn))).flat()
 }
 
 const gnIdDe = (v) => {
@@ -57,7 +60,9 @@ async function facturasDelErp(ids) {
 async function deAfuera(sb, ventas) {
   const tnIds = ventas.map(tnIdDe).filter(Boolean)
   const tnNumeros = ventas.map((v) => v.detalle?.tn?.numero).filter((x) => x != null).map(String)
-  const [gnPorId, gnPorTn, ordenes] = await Promise.all([
+  // Todo lo que ⛔ depende de otra lectura va A LA PAR (16-nov: en serie eran ~12 viajes, +2,3 s en BDI). Sólo la factura
+  // de GN espera: necesita el id del espejo.
+  const [gnPorId, gnPorTn, ordenes, erp, filasPedido, filasMl] = await Promise.all([
     enTandas(ventas.map(gnIdDe), async (t) => {
       const { data, error } = await sb.from('ventas').select('id, number, client_name, sale_state').in('id', t)
       if (error) throw new Error(`ventas: ${error.message}`)
@@ -73,6 +78,18 @@ async function deAfuera(sb, ventas) {
       if (error) throw new Error(`tn_orden: ${error.message}`)
       return data
     }),
+    facturasDelErp(ventas.flatMap((v) => (v.facturas || []).map((f) => f.factura_id))),
+    // La etapa del pedido mayorista. Si la tabla ⛔ responde (Zattia ⛔ vende mayorista), la lista sigue sin ella.
+    enTandas(ventas.filter((v) => v.origen === 'mayorista' && !v.prueba).map((v) => String(v.id)), async (t) => {
+      const { data, error } = await sb.from('pedido_mayorista').select('venta_id, a_preparar_en, preparacion_en, preparado_en, despachado_en, anulado_en').in('venta_id', t)
+      return error ? [] : data
+    }),
+    // Mercado Libre: el estado lo publica Logística (`GET /orders`, canal `mercadolibre`) y el motor lo guarda en `logistica_pedido`;
+    // su `external_id` es el PACK (medido 14-nov: venta 2038 ⇔ pack 2000016018734109). Si la tabla ⛔ responde, la lista sigue sin él.
+    enTandas([...new Set(ventas.filter((v) => v.origen === 'ml').flatMap(clavesMl))], async (t) => {
+      const { data, error } = await sb.from('logistica_pedido').select('negocio, external_id, estado').eq('canal', 'mercadolibre').in('external_id', t)
+      return error ? [] : data
+    }),
   ])
   const gn = new Map(gnPorId.map((g) => [String(g.id), g]))
   const porTn = new Map(gnPorTn.map((g) => [String(g.tn_order), g]))
@@ -85,19 +102,7 @@ async function deAfuera(sb, ventas) {
     return data
   })
   const facGn = new Map(facturasGn.map((f) => [String(f.venta_id), f]))
-  const erp = await facturasDelErp(ventas.flatMap((v) => (v.facturas || []).map((f) => f.factura_id)))
-  // La etapa del pedido mayorista. Si la tabla ⛔ responde (Zattia ⛔ vende mayorista), la lista sigue sin ella.
-  const filasPedido = await enTandas(ventas.filter((v) => v.origen === 'mayorista' && !v.prueba).map((v) => String(v.id)), async (t) => {
-    const { data, error } = await sb.from('pedido_mayorista').select('venta_id, a_preparar_en, preparacion_en, preparado_en, despachado_en, anulado_en').in('venta_id', t)
-    return error ? [] : data
-  })
   const pedidos = new Map(filasPedido.map((p) => [String(p.venta_id), p]))
-  // Mercado Libre: el estado lo publica Logística (`GET /orders`, canal `mercadolibre`) y el motor lo guarda en `logistica_pedido`;
-  // su `external_id` es el PACK (medido 14-nov: venta 2038 ⇔ pack 2000016018734109). Si la tabla ⛔ responde, la lista sigue sin él.
-  const filasMl = await enTandas([...new Set(ventas.filter((v) => v.origen === 'ml').flatMap(clavesMl))], async (t) => {
-    const { data, error } = await sb.from('logistica_pedido').select('negocio, external_id, estado').eq('canal', 'mercadolibre').in('external_id', t)
-    return error ? [] : data
-  })
   const ml = new Map(filasMl.map((l) => [`${l.negocio}:${l.external_id}`, l.estado]))
   const deMl = (v) => clavesMl(v).map((k) => ml.get(`${v.marca}:${k}`)).find(Boolean) ?? null
   return { pedido: (v) => etapaDePedido(pedidos.get(String(v.id))), ml: deMl, deVenta, orden: (v) => orden.get(tnIdDe(v)) || null, facGn: (g) => (g ? facGn.get(String(g.id)) || null : null), erp }
@@ -198,14 +203,18 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
   const numeros = new Map(ventas.map((v) => [v.id, v.numero]))
   const faltan = ventas.map((v) => v.venta_original_id).filter((id) => id && !numeros.has(id))
   for (const o of await enTandas(faltan, async (t) => (await sb.from('venta').select('id, numero').in('id', t)).data || [])) numeros.set(o.id, o.numero)
-  const a = { ...await deAfuera(sb, ventas), vueltas }
-  marcar('afuera')
-  const puede = await queSabeElMotor()
+  // Lo de afuera y el saldo van A LA PAR (16-nov): uno lee PostgREST y el otro la base directa, ⛔ dependen entre sí.
+  // `afuera` y `saldos` quedan marcados cuando termina CADA uno (desde el principio, como los demás tramos).
   // El saldo REAL (§16): sólo de las que dejaron algo a cuenta (las demás ⛔ deben nada: Σ pagos = total).
   const aCuenta = ventas.filter((v) => (v.pagos || []).some((p) => p.medio === 'cuenta')).map((v) => v.id)
-  const pendientes = puede.cobrar && aCuenta.length && !deps.sb ? await leerPendientes(marca, aCuenta) : {}
+  const queSabe = queSabeElMotor()
+  const [afuera, puede, pendientes] = await Promise.all([
+    deAfuera(sb, ventas).then((x) => { marcar('afuera'); return x }),
+    queSabe,
+    queSabe.then((p) => (p.cobrar && aCuenta.length && !deps.sb ? leerPendientes(marca, aCuenta) : {})).then((x) => { marcar('saldos'); return x }),
+  ])
+  const a = { ...afuera, vueltas }
   for (const v of ventas) if (v.id in pendientes) v.pendiente = pendientes[v.id]
-  marcar('saldos')
   // Una venta de TN sin nombre ni del ERP ni de GN (Stunned no tiene GN detrás) ⛔ queda «sin nombre» para siempre: se lee de TN EN VIVO,
   // como el pedido sin pagar (Bruno, 26-oct). Desde la sql/059 del motor la venta `tn` nace con la ficha del comprador ⇒ esto
   // queda para las que todavía ⛔ la tienen.

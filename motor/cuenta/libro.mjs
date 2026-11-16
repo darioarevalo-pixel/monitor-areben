@@ -37,6 +37,23 @@ export async function filasDeMarca(db, { empresa_id, marca, prueba }) {
     where m.empresa_id = $1 and m.marca = $2 and m.prueba = $3 order by m.ocurrida_en, m.creado_en`, [empresa_id, marca, prueba])
 }
 
+/**
+ * Las filas del libro de VARIOS clientes en una consulta (la lista de Ventas: ⛔ 2 consultas por cliente). Mismas columnas
+ * que `filasDe` más `cliente_id`, `marca` y `prueba`, en el mismo orden; quien llama las separa por (cliente, marca, prueba).
+ */
+export async function filasDeClientes(db, cliente_ids) {
+  return q(db, `select m.cliente_id::text, m.marca, m.prueba, m.tipo, m.ref, m.monto, to_char(m.ocurrida_en ${AR}, 'YYYY-MM-DD') as fecha, m.detalle->'imputar' as imputar, m.detalle->>'pedido' as pedido,
+      case when m.tipo = 'compra' then 'Venta ' || v.numero when m.tipo = 'pago' then coalesce(c.nombre, '') when m.tipo = 'apertura' then 'Saldo de apertura' else '' end as detalle
+    from cuenta_movimiento m left join venta v on v.id = m.venta_id left join cuenta_cobro c on c.id = m.cuenta_cobro_id
+    where m.cliente_id = any($1::uuid[]) order by m.ocurrida_en, m.creado_en`, [cliente_ids])
+}
+
+/** El crédito vigente de VARIOS clientes: `Map(cliente_id → crédito)` (sólo los que alguna vez lo tuvieron marcado). */
+export async function creditosDeClientes(db, cliente_ids) {
+  const filas = await q(db, `select cliente_id::text, credito, tope::float, dias, usuario as puesto_por, creado_en as puesto_en from credito_vigente where cliente_id = any($1::uuid[])`, [cliente_ids])
+  return new Map(filas.map(({ cliente_id, ...k }) => [cliente_id, k]))
+}
+
 /** El crédito vigente de cada cliente de la empresa que alguna vez lo tuvo marcado: `Map(cliente_id → crédito)`. */
 export async function creditosDe(db, empresa_id) {
   const filas = await q(db, `select k.cliente_id::text, k.credito, k.tope::float, k.dias, k.usuario as puesto_por, k.creado_en as puesto_en

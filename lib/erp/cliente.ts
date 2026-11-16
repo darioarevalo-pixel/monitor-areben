@@ -57,6 +57,21 @@ async function pedir<T>(init: RequestInit | null, query: string, fallo: string):
   return j as T
 }
 
+/**
+ * Las listas pesadas (ventas, stock, productos) que piden a la vez Inicio, el menú y la sección: con `reusar`, si ya hay
+ * UNA EN VUELO con la misma consulta se espera esa, ⛔ se pide otra (16-nov: de Inicio a Ventas se pedía la lista de BDI
+ * entera de nuevo, ~10 s, compitiendo con la primera). Sólo la que está en vuelo: lo ya leído ⛔ se reusa, así una lectura
+ * después de guardar algo nunca trae lo de antes. Sin `reusar` (la relectura tras una acción) siempre pide una nueva.
+ */
+const enVuelo = new Map<string, Promise<unknown>>()
+function compartida<T>(consulta: string, reusar: boolean, leer: () => Promise<T>): Promise<T> {
+  const ya = reusar ? enVuelo.get(consulta) : undefined
+  if (ya) return ya as Promise<T>
+  const p: Promise<T> = leer().finally(() => { if (enVuelo.get(consulta) === p) enVuelo.delete(consulta) })
+  enVuelo.set(consulta, p)
+  return p
+}
+
 const post = (body: Record<string, unknown>) => ({
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recurso: 'erp', ...body }),
 })
@@ -515,8 +530,10 @@ export type FilaVentaLista = {
   paraDesarmar?: boolean
 }
 export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean; corregir?: boolean; corregirMedio?: boolean }
-export const leerListaDeVentas = (marca: MarcaErp, desde: string, hasta: string, linea: '' | 'zattia' | 'stunned' = '') =>
-  pedir<{ filas: FilaVentaLista[]; desde: string; hasta: string; puede: QueSabeElMotor; tnLeidaEn?: string | null }>(null, `&vista=ventas-lista&marca=${marca}&desde=${desde}&hasta=${hasta}${linea ? `&linea=${linea}` : ''}&nc=${Date.now()}`, 'No se pudieron leer las ventas.')
+export const leerListaDeVentas = (marca: MarcaErp, desde: string, hasta: string, linea: '' | 'zattia' | 'stunned' = '', { reusar = false } = {}) => {
+  const consulta = `&vista=ventas-lista&marca=${marca}&desde=${desde}&hasta=${hasta}${linea ? `&linea=${linea}` : ''}`
+  return compartida(consulta, reusar, () => pedir<{ filas: FilaVentaLista[]; desde: string; hasta: string; puede: QueSabeElMotor; tnLeidaEn?: string | null }>(null, `${consulta}&nc=${Date.now()}`, 'No se pudieron leer las ventas.'))
+}
 
 export type ExtraDeVenta = {
   clienteGn: string | null; gnNumero: string | null; gnEstado: string | null; clienteId: string | null
@@ -572,8 +589,8 @@ export type FilaStock = {
   ultimo: { tipo: string; origen: string; ref: string | null; cuando: string } | null
 }
 export type ListaDeStock = { filas: FilaStock[]; libroHasta: string | null; pedidosLeidosEn: string | null; pedidos: number; sinVariante: number; sinVariantePorTienda?: Record<string, number> }
-export const leerListaDeStock = (marca: MarcaErp) =>
-  pedir<ListaDeStock>(null, `&vista=stock-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el stock.')
+export const leerListaDeStock = (marca: MarcaErp, { reusar = false } = {}) =>
+  compartida(`&vista=stock-lista&marca=${marca}`, reusar, () => pedir<ListaDeStock>(null, `&vista=stock-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el stock.'))
 
 // ── ERP › Stock › Comparación con TN y ML (`api/_erp-stock.js`, núcleo `lib/erp/comparacion.core.js`) ──
 export type FilaComparacion = {
@@ -618,8 +635,8 @@ export type ListaDeProductos = {
   /** ¿Vino el costo? (`puedeErp(…, 'costos')`): sin él, la pantalla ⛔ muestra columna ni vista «Sin costo». */
   costos: boolean
 }
-export const leerListaDeProductos = (marca: MarcaErp) =>
-  pedir<ListaDeProductos>(null, `&vista=productos-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los productos.')
+export const leerListaDeProductos = (marca: MarcaErp, { reusar = false } = {}) =>
+  compartida(`&vista=productos-lista&marca=${marca}`, reusar, () => pedir<ListaDeProductos>(null, `&vista=productos-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los productos.'))
 
 // ── ERP › Stock › Movimientos (lista de REGISTRO del libro; `api/_erp-stock.js`, núcleo `lib/erp/movimientos.core.js`) ──
 export type FilaMovimiento = {

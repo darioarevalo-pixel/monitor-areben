@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "c5e6587b3a985d4117f2bfe34ed1b5a24327ff95",
-  "traido_en": "2026-11-16T03:24:03.532Z",
+  "commit": "63777a07caf7b39a5a6101ae810b6f5cdbaa4f49",
+  "traido_en": "2026-11-16T12:02:21.211Z",
   "archivos": {
     "alerta.mjs": "8c4ea3f813cdd8d8644e9ed0a426d7c6202618971249eca0b41f780e40d904f6",
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
@@ -24,8 +24,8 @@
     "crm/lectura.mjs": "63231873da21baa92286082e0e437210ac0fbfc91f72fcc0e0764458b47b0e1f",
     "cuenta/cheque.mjs": "fc7b96f60a3efeb9545b81109219f9f1992656329fc9e2a1041cccf868986e54",
     "cuenta/cuenta.core.mjs": "6cfc619c9445013b42720379d62ffb4d77f563b9d742ca64eac24bb585a6e9ad",
-    "cuenta/cuenta.mjs": "1a6ab3b7910c5d39efef5ad422e5e8ebd4b79eaffa77005839895cfd84b98291",
-    "cuenta/libro.mjs": "d7bedac7b1acb334e85a943102b49025c57f6ecbff0376519d704c07bc08bc2c",
+    "cuenta/cuenta.mjs": "5485096d4ed7c4ebc5a5749145ce9e97658dce336d7a5a2fd36b355f3ab89069",
+    "cuenta/libro.mjs": "283b8c3c63635c28f312a37487813cb95e071b40bff79ff22a5d687dbd20a385",
     "cuentas/cuentas.mjs": "69988976cf28b0988a5d989e7edaab2f3c3c27c7c494939938ae459dae67f225",
     "cuentas/rutas.mjs": "cb4b905a7488b4b71c40c2dfe8102e3d29bb2100aa30ec92dcf210e78028e3b3",
     "db.mjs": "01c415367a1f3373a2d71ba9c4d7d61d5231a51867213cd702abea22b562d98c",

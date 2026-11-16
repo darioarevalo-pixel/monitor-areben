@@ -10,7 +10,7 @@
  * abren su transacción (`db` conectado y sin transacción, como `registrarVenta`).
  */
 import { estado, frena, mayor, movimientosDeLibro } from './cuenta.core.mjs'
-import { creditoDe, creditosDe, cuentaBloqueada, filasDe, filasDeMarca, hoyAR, insertarFila } from './libro.mjs'
+import { creditoDe, creditosDe, creditosDeClientes, cuentaBloqueada, filasDe, filasDeClientes, filasDeMarca, hoyAR, insertarFila } from './libro.mjs'
 import { cuentaDe as cuentaDeCobro } from '../venta/armar.mjs'
 import { leerConf } from '../venta/registrar.mjs'
 import { cobroReal } from '../cuentas/cuentas.mjs'
@@ -131,10 +131,17 @@ export async function pendienteDeVentas(db, { venta_ids, hoy = null }) {
   const pendientes = Object.fromEntries(venta_ids.map((v) => [v, 0]))
   if (!venta_ids.length) return { ok: true, pendientes }
   const cuentas = await q(db, `select distinct cliente_id::text, marca, prueba from cuenta_movimiento where venta_id = any($1::uuid[])`, [venta_ids])
+  if (!cuentas.length) return { ok: true, pendientes }
   const dia = hoy ?? await hoyAR(db)
+  // Todas las cuentas en 2 consultas (⛔ 2 por cliente: la base de BDI está lejos de la función y cada viaje cuesta ~70 ms).
+  const clientes = [...new Set(cuentas.map((k) => k.cliente_id))]
+  const creditos = await creditosDeClientes(db, clientes)
+  const clave = (f) => `${f.cliente_id}|${f.marca}|${f.prueba}`
+  const filasPor = new Map(cuentas.map((k) => [clave(k), []]))
+  for (const f of await filasDeClientes(db, clientes)) filasPor.get(clave(f))?.push(f)
   for (const k of cuentas) {
-    const credito = await creditoDe(db, k.cliente_id)
-    const { pendientes: p } = estado({ movs: movimientosDeLibro(await filasDe(db, k)), credito, hoy: dia })
+    const credito = creditos.get(k.cliente_id) ?? null
+    const { pendientes: p } = estado({ movs: movimientosDeLibro(filasPor.get(clave(k))), credito, hoy: dia })
     for (const x of p) {
       const id = x.ref.replace(/^venta:/, '')
       if (id in pendientes) pendientes[id] = x.pendiente

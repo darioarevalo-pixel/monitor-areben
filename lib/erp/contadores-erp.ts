@@ -47,9 +47,9 @@ export function useContadoresErp(marca: MarcaErp, linea: LineaErp): ContadoresEr
       if (vivo) setC({ marca, crudo: { ...crudo } })
     }
     // Si una lista no se lee, ese contador no aparece (⛔ un número inventado): el menú sigue igual.
-    leerListaDeStock(marca).then((d) => { crudo.filasStock = d.filas; poner() }).catch(() => {})
+    leerListaDeStock(marca, { reusar: true }).then((d) => { crudo.filasStock = d.filas; poner() }).catch(() => {})
     // Sin `costos` el servidor ⛔ manda el costo ⇒ ⛔ hay «productos sin costo» que contar: ese contador ⛔ aparece.
-    leerListaDeProductos(marca).then((d) => { if (d.costos) { crudo.filasProductos = d.filas; poner() } }).catch(() => {})
+    leerListaDeProductos(marca, { reusar: true }).then((d) => { if (d.costos) { crudo.filasProductos = d.filas; poner() } }).catch(() => {})
     return () => { vivo = false }
   }, [marca])
   // Lo recién leído, o lo guardado de esa marca (al volver de otra sección no se relee): ⛔ el de la otra marca.

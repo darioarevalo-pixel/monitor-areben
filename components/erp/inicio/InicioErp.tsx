@@ -127,9 +127,9 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
     const fallo = (e: unknown) => (e instanceof Error ? e.message : 'No se pudo leer.')
     const poner = (k: 'ventas' | 'stock' | 'productos', v: Conteo | Crudo) => vivo && setConteos((c) => ({ ...(c.marca === marca ? c : { marca, ventas: null, stock: null, productos: null }), [k]: v }))
     const r = rangoDePeriodo('mes', diaArgentino(Date.now()))
-    leerListaDeVentas(marca, r.desde, r.hasta).then((d) => poner('ventas', { filas: d.filas })).catch((e) => poner('ventas', fallo(e)))
-    leerListaDeStock(marca).then((d) => poner('stock', { filas: d.filas })).catch((e) => poner('stock', fallo(e)))
-    leerListaDeProductos(marca).then((d) => poner('productos', { filas: d.filas })).catch((e) => poner('productos', fallo(e)))
+    leerListaDeVentas(marca, r.desde, r.hasta, '', { reusar: true }).then((d) => poner('ventas', { filas: d.filas })).catch((e) => poner('ventas', fallo(e)))
+    leerListaDeStock(marca, { reusar: true }).then((d) => poner('stock', { filas: d.filas })).catch((e) => poner('stock', fallo(e)))
+    leerListaDeProductos(marca, { reusar: true }).then((d) => poner('productos', { filas: d.filas })).catch((e) => poner('productos', fallo(e)))
     return () => { vivo = false }
   }, [marca])
 
