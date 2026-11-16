@@ -76,7 +76,7 @@ describe('traerPorFiltro · pide de a tandas', () => {
     expect(r.ok && r.filas[0].total).toBe(400)
   })
 
-  it('🔑 para los que NO son fríos no pide los totales: es la parte cara y no se muestra', async () => {
+  it('🛒 también los que NO son fríos piden las compras: sin ellas la fecha no se corre', async () => {
     const pedidos: Array<boolean | undefined> = []
     vi.stubGlobal('fetch', (_u: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
@@ -90,7 +90,8 @@ describe('traerPorFiltro · pide de a tandas', () => {
 
     const calientes: MapaSeguimiento = { 1: seg({ proximo_manual: '2026-08-20', temperatura: 'caliente' }) }
     await traerPorFiltro(calientes, HOY, 'caliente')
-    expect(pedidos).toEqual([false])
+    // 🛒 Desde el 15-nov-2026 SÍ: con las compras la fecha se corre igual que en la ficha.
+    expect(pedidos).toEqual([true])
   })
 
   it('si un pedido falla, falla entero: media lista es peor que un error', async () => {

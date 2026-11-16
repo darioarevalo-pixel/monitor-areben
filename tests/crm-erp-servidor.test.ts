@@ -85,7 +85,7 @@ describe('api/_crm.js con BDI cortado: lee del ERP', () => {
   })
   it('lista del día: total y última compra del ERP', async () => {
     const res = await llamar({ action: 'lista', ids: [NUEVA] })
-    expect(res.body?.clientes).toEqual([{ id: NUEVA, name: 'Nueva del ERP', phone: '5493412222222', total_amount: 250000, ultima_compra: '2026-11-15' }])
+    expect(res.body?.clientes).toEqual([{ id: NUEVA, name: 'Nueva del ERP', phone: '5493412222222', total_amount: 250000, ultima_compra: '2026-11-15', compras: ['2026-11-15'] }])
   })
   it('buscar por nombre: candidatos del ERP, filtrados por canal Mayorista o Whatsapp', async () => {
     const res = await llamar({ action: 'buscar', q: 'nueva erp' })

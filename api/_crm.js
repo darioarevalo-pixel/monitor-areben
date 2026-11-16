@@ -520,6 +520,9 @@ async function telsDeClientes(fuente, body, res) {
  * las ventas de ~90 clientes, no las 27.990, y se pagina igual — el corte de 1.000 filas de
  * PostgREST muerde con menos clientes de los que parece (el que más tiene anda por 60 ventas).
  */
+/** Cuántos días de compra viajan por cliente en `lista` (para el ritmo). */
+const DIAS_DE_COMPRA = 24;
+
 async function listaDelPanel(fuente, body, res) {
   const crudos = Array.isArray(body.ids) ? body.ids : [];
   // Mismo saneo que el resto del archivo: estos ids se concatenan en el `in.(…)` de PostgREST.
@@ -546,12 +549,20 @@ async function listaDelPanel(fuente, body, res) {
   // El total comprado, para que la tanda de fríos salga en el mismo orden que en la sección.
   // 🔑 Y la última compra, que viaja gratis: son las mismas filas. La fila del panel la muestra
   // ("compró hace 18 días") porque es lo que decide a quién se le escribe primero.
+  // 🛒 Y los días en que compró (15-nov-2026): con eso el panel corre la fecha del próximo contacto
+  // cuando el cliente compró (`fechaCorridaPorCompra` en lib/crm/core.ts necesita el ritmo, no sólo
+  // la última). Sólo las más nuevas: el ritmo es la mediana de los intervalos y alcanza con éstas.
   const totales = new Map();
   const ultimas = new Map();
+  const dias = new Map();
   for (const v of await fuente.ventasDeClientes(ids)) {
     totales.set(v.client_id, (totales.get(v.client_id) || 0) + (parseFloat(v.total_price) || 0));
     const f = typeof v.date_sale === 'string' ? v.date_sale.slice(0, 10) : null;
     if (f && (!ultimas.get(v.client_id) || f > ultimas.get(v.client_id))) ultimas.set(v.client_id, f);
+    if (f && !esVentaTecnica(v)) {
+      if (!dias.has(v.client_id)) dias.set(v.client_id, new Set());
+      dias.get(v.client_id).add(f);
+    }
   }
 
   return res.status(200).json({
@@ -560,6 +571,7 @@ async function listaDelPanel(fuente, body, res) {
       ...c,
       total_amount: totales.get(c.id) || 0,
       ultima_compra: ultimas.get(c.id) || null,
+      compras: [...(dias.get(c.id) || [])].sort().reverse().slice(0, DIAS_DE_COMPRA),
     })),
   });
 }

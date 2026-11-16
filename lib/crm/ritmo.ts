@@ -22,6 +22,10 @@
  * ⚠️ **Sugiere, no decide.** Devuelve un número para poner en un botón; quién elige es el que está
  * hablando. Que el sistema mueva fechas solo es cómo se pierde la confianza en lo que dice la
  * pantalla.
+ *
+ * 🛒 **Excepción, pedida por Darío el 15-nov-2026:** cuando el cliente COMPRA, la fecha que ya
+ * había llegado se corre sola con este ritmo (`fechaCorridaPorCompra` en core.ts). La compra es un
+ * hecho, no una suposición; una fecha que todavía no llegó se respeta.
  */
 
 import type { FilaVenta } from './tipos'
