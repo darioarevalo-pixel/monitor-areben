@@ -1163,6 +1163,22 @@ function PanelInterno({
       </Envoltorio>
     )
 
+  /**
+   * Después de enganchar un número a un cliente del CRM (desde «Número nuevo» o desde la ficha de un lead).
+   * Se recarga la ficha por id: el número ya quedó guardado, pero el índice del servidor se rearma cada 6 h, así que buscar
+   * por teléfono todavía no lo encontraría. 🔑 Y queda también en «Quién compra» del ERP (Darío 16-nov): los pedidos de este
+   * número entran solos a ese cliente. Va ANTES de releer la ficha, para que la cuenta ya lo muestre como «este chat».
+   */
+  const alVincular = async (cliente: FilaCliente, tel: string, nombre: string) => {
+    setEstado({ t: 'cargando' })
+    const enErp = await anotarEnQuienCompra(cliente.id, tel, nombre)
+    const r = await buscarFicha({ clienteId: cliente.id }, kv.current.seg, today)
+    if (!vivo.current) return
+    if (r.estado === 'encontrado') setEstado({ t: 'ficha', ficha: r.ficha, crudo: r.crudo })
+    else setEstado({ t: 'desconocido' })
+    decir(`Listo: este número ahora abre la ficha de ${cliente.name || 'ese cliente'}.${enErp ? ' ' + enErp : ''}`)
+  }
+
   if (estado.t === 'lead') {
     const lead = estado.lead
     return (
@@ -1197,6 +1213,9 @@ function PanelInterno({
           onMutar={(fn, exito) => mutarLead(lead.id, fn, exito)}
           botonChat={<BotonAbrirChat tel={lead.telefono || ''} chatAbierto={telNorm} onAbrir={() => abrirChat(0, lead.telefono || '')} onYaEsta={() => decir('Ya estás en su chat')} />}
           marcaComunidad={<MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={[telNorm, lead.telefono || '']} />}
+          telChat={pedido ? '' : telNorm || telDelChat(lead.telefono)}
+          onVinculado={(cliente) => alVincular(cliente, pedido ? '' : telNorm || telDelChat(lead.telefono), lead.nombre || '')}
+          onError={(txt) => decir(txt, true)}
         />
       </Envoltorio>
     )
@@ -1216,19 +1235,7 @@ function PanelInterno({
           nombreAgendado={pedido ? '' : nombreChat}
           marcaComunidad={<MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={[pedido ? telDelChat(pedido.tel) || pedido.tel : telNorm]} />}
           onCobranza={() => setSolapa('pagos')}
-          onVinculado={async (cliente) => {
-            // Se recarga la ficha por id: el número ya quedó guardado, pero el índice del servidor
-            // se rearma cada 6 h, así que buscar por teléfono todavía no lo encontraría.
-            setEstado({ t: 'cargando' })
-            // 🔑 Y queda también en «Quién compra» del ERP (Darío 16-nov): un solo toque y los pedidos de este número entran
-            // solos a ese cliente. Va ANTES de releer la ficha, para que la cuenta ya lo muestre como «este chat».
-            const enErp = await anotarEnQuienCompra(cliente.id, pedido ? telDelChat(pedido.tel) || pedido.tel : telNorm, pedido ? '' : nombreChat)
-            const r = await buscarFicha({ clienteId: cliente.id }, kv.current.seg, today)
-            if (!vivo.current) return
-            if (r.estado === 'encontrado') setEstado({ t: 'ficha', ficha: r.ficha, crudo: r.crudo })
-            else setEstado({ t: 'desconocido' })
-            decir(`Listo: este número ahora abre la ficha de ${cliente.name || 'ese cliente'}.${enErp ? ' ' + enErp : ''}`)
-          }}
+          onVinculado={(cliente) => alVincular(cliente, pedido ? telDelChat(pedido.tel) || pedido.tel : telNorm, pedido ? '' : nombreChat)}
           guardarLead={(fn) => filaLeads.current?.encolar(fn) ?? Promise.resolve({ ok: false, motivo: 'El panel todavía está cargando.' })}
           onGuardado={(lead) => {
             // 🔑 Se queda en la ficha del prospecto recién creado, no en un cartel de "listo".
@@ -1928,13 +1935,28 @@ function FichaLead({
   onMutar,
   marcaComunidad,
   botonChat,
+  telChat,
+  onVinculado,
+  onError,
 }: {
   lead: Lead
   onMutar: (fn: (m: MapaLeads) => MapaLeads, exito: string) => Promise<boolean>
   marcaComunidad: React.ReactNode
   botonChat: React.ReactNode
+  /** El número del chat, para engancharlo a un cliente que ya existe. Vacío ⇒ ⛔ se ofrece (se llegó desde un pedido). */
+  telChat: string
+  onVinculado: (cliente: FilaCliente) => void
+  onError: (t: string) => void
 }) {
   const notas = Array.isArray(lead.notas) ? lead.notas : []
+  /**
+   * 🔑 Un prospecto que en realidad compra por un cliente que ya tenemos (Darío 16-nov: «Valentina - De parte de Tomas
+   * Scozzina» estaba cargada como lead). Enganchar el número al cliente hace que el chat abra SU ficha (el panel mira el
+   * enganche antes que los leads); el lead queda como estaba.
+   */
+  const [vinculando, setVinculando] = useState(false)
+  if (vinculando && telChat)
+    return <VincularCliente tel={telChat} onVinculado={onVinculado} onError={onError} onVolver={() => setVinculando(false)} />
 
   return (
     <div>
@@ -2012,6 +2034,13 @@ function FichaLead({
         </div>
       </Bloque>
 
+      {telChat && (
+        <div style={{ padding: `0 ${space[3]}px ${space[2]}px` }}>
+          <Button variant="outline" fullWidth style={{ justifyContent: 'flex-start' }} onClick={() => setVinculando(true)}>
+            Compra por un cliente que ya tengo
+          </Button>
+        </div>
+      )}
       <div style={{ padding: `0 ${space[3]}px ${space[3]}px` }}>
         <a href="/clientes" target="_blank" rel="noreferrer" style={{ fontSize: font.sm, color: color.brand, textDecoration: 'none' }}>
           Verlo en Leads ↗
