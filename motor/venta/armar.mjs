@@ -150,6 +150,9 @@ const filaDeLinea = (venta_id, l, n, signo, extra = {}) => ({
   linea_origen_id: null, ...extra,
 })
 
+/** La venta de TN de después del corte: su stock lo mueve el armado del pedido (`detalle.stock_por_armado`, `planVentasTN`). */
+export const porArmado = (v) => !!v && v.detalle?.stock_por_armado === true
+
 /**
  * ¿La venta mueve el stock del libro DESDE EL MOTOR? ⛔ si es de prueba, y ⛔ si GN también la tiene (`gn_sale_id` en la
  * columna o en `detalle`): mientras GN viva, el libro la cuenta por GN (fuentes `caja`/`gn`) ⇒ si el motor también
@@ -160,6 +163,8 @@ const filaDeLinea = (venta_id, l, n, signo, extra = {}) => ({
  */
 export function mueveStock(v) {
   if (!v || v.prueba) return false
+  // 🔑 Bruno 16-nov: la venta de TN de DESPUÉS del corte ⛔ mueve el libro: lo mueve el ARMADO (`lib/tn/armado.mjs`).
+  if (porArmado(v)) return false
   if (v.gn_sale_id != null) return false
   const g = v.detalle && v.detalle.gn_sale_id
   return !(g != null && g !== '')
@@ -173,6 +178,7 @@ export function mueveStock(v) {
  * `sigueGN`: la anulación que COPIA una de GN (`bin/mayorista`) ⛔ suma nunca: la prenda ya la devolvió GN.
  */
 export function vuelveAlAnular(v, { corte = false, sigueGN = false } = {}) {
+  if (porArmado(v)) return false // la funda vuelve por el DESARME (`lib/tn/armado.mjs`), ⛔ por la anulación
   if (mueveStock(v)) return true
   return !!v && !v.prueba && corte && !sigueGN
 }
