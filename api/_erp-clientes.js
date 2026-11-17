@@ -441,6 +441,12 @@ export async function clienteNuevoPanel({ body, usuario, quien = usuario }, deps
       const w = await anotarWhatsapp(pg, { empresa_id: m.empresa_id, cliente_id: String(c.cliente.id), whatsapp: String(body.whatsapp), nombre: body.persona, usuario })
       if (!w.ok) { await pg.query('rollback'); return { status: w.error?.codigo === 'YA_ANOTADO' ? 409 : 400, error: w.error?.mensaje ?? 'No se pudo anotar el número.' } }
       await pg.query('commit')
+      // El número del chat es también el WhatsApp de la ficha: es el que Logística recibe con el pedido (Darío 17-nov,
+      // Lucila Reales quedó sin él). Después del commit: si falla, la ficha ya quedó creada igual.
+      try {
+        const { ponerContactoCliente } = await import('../motor/venta/cliente.mjs')
+        await ponerContactoCliente(pg, { empresa_id: m.empresa_id, cliente_id: String(c.cliente.id), whatsapp: String(body.whatsapp) })
+      } catch (e) { console.warn('[erp-clientes] cliente nuevo sin WhatsApp en la ficha:', e?.message) }
       return { ok: true, cliente: { id: String(c.cliente.id), nombre: c.cliente.nombre, doc: doc ?? null }, persona: w.persona }
     } catch (e) {
       await pg.query('rollback').catch(() => {})

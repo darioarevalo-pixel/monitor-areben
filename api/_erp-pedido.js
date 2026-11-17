@@ -268,6 +268,28 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
       r = await pv.anularPedidoDelErp(pg, { pedido_id, motivo: String(body.motivo ?? ''), usuario })
     }
     if (!r.ok) return { status: statusDe(r.error?.codigo), error: r.error?.mensaje ?? 'No se pudo.' }
+    if (accion === 'pedido-entrar' || accion === 'pedido-a-preparar') await whatsappDesdeElPedido(pg, pedido_id)
     return { ok: true, ya: !!r.ya, sinCambios: !!r.sin_cambios, avisarDeposito: !!r.avisar_deposito, ventaId: r.venta_id ?? null }
   })
+}
+
+/**
+ * El cliente sin WhatsApp en su ficha toma el del pedido (el teléfono de la nota del catálogo). Darío 17-nov: Lucila Reales
+ * se cargó nueva sin número y su pedido llegó a Logística sin teléfono ni cliente. ⛔ pisa uno que ya tenga; ⛔ frena nada:
+ * si falla, el pedido ya quedó hecho.
+ * @param {import('pg').ClientBase} pg @param {string} pedido_id
+ */
+export async function whatsappDesdeElPedido(pg, pedido_id) {
+  try {
+    const [p] = (await pg.query(`select c.empresa_id, c.id::text as cliente_id, p.contacto->>'telefono' as telefono
+      from pedido_mayorista p join cliente c on c.id = p.cliente_id
+      where p.id = $1 and nullif(trim(coalesce(c.whatsapp, '')), '') is null`, [pedido_id])).rows
+    if (!p?.telefono) return
+    const { esFichaSinCliente } = await import('../motor/venta/cliente.mjs')
+    if (esFichaSinCliente(p.cliente_id)) return // la ficha general «Pedido mayorista» ⛔ es de nadie
+    const { ponerContactoCliente } = await import('../motor/venta/cliente.mjs')
+    await ponerContactoCliente(pg, { empresa_id: p.empresa_id, cliente_id: p.cliente_id, whatsapp: p.telefono })
+  } catch (e) {
+    console.warn('[erp-pedido] no se pudo completar el WhatsApp del cliente desde el pedido:', e?.message)
+  }
 }
