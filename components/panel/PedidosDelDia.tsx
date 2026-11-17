@@ -28,6 +28,7 @@ import { armarFilasPedidos, claveContacto, leerContactados, linksDePedidos, marc
 import { tomar } from '@/lib/crm/precarga'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
 import { enGrupoDeposito, estadoDeposito, faltanUnidades, formaCorta, pasoPanel, pendientesLogistica, TRANSPORTE, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
+import { leerEstadoPedidos, type EstadoPedidoPanel } from '@/lib/erp/cliente'
 import { PedidosSinCliente, PreparadosSinPagar } from './PedidosMayoristas'
 import { Bloque, Cuando, Paso, Renglon, plataPedido as plata } from './pasos-pedido'
 
@@ -62,6 +63,46 @@ function usePedidosCatalogo(): ResultadoCatalogo | null {
     }
   }, [])
   return r
+}
+
+/**
+ * El estado en el ERP de los pedidos de «Sin pago» (Darío 17-nov: Lucila Reales pagó y seguía ahí; «imaginate que recibo 20
+ * pedidos, me ocupa toda la vista»). Se pide cuando cambian los números y cada 2 minutos. Si falla, queda lo último que se vio
+ * (y sin nada, la lista se ve entera, como antes).
+ */
+const memoriaEstados: { m: Record<string, EstadoPedidoPanel> } = { m: {} }
+
+function useEstadoPedidos(numeros: number[]): Record<string, EstadoPedidoPanel> {
+  const [m, setM] = useState(memoriaEstados.m)
+  const clave = numeros.join(',')
+  useEffect(() => {
+    if (!clave) return
+    let vivo = true
+    const pedir = async () => {
+      try {
+        const r = await leerEstadoPedidos(clave.split(',').map(Number))
+        if (!r.prendido) return
+        memoriaEstados.m = { ...memoriaEstados.m, ...r.estados }
+        if (vivo) setM(memoriaEstados.m)
+      } catch {}
+    }
+    pedir()
+    const id = setInterval(pedir, CADA_PEDIDOS_MS)
+    return () => {
+      vivo = false
+      clearInterval(id)
+    }
+  }, [clave])
+  return m
+}
+
+/**
+ * ¿Sigue esperando el pago? ⛔ si ya está pago, anulado, o todavía sin cliente (ése se ve arriba, en «Sin cliente»). Un pago
+ * a medias sigue en la lista. Sin estado del ERP (pedido viejo de GN, o la lectura falló) ⇒ sigue, como antes.
+ */
+export function esperaPago(e: EstadoPedidoPanel | undefined): boolean {
+  if (!e) return true
+  return !(e.anulado || e.sinCliente || e.pago === 'pagado')
 }
 
 /**
@@ -220,6 +261,7 @@ function FilaSinPago({ p, onAbrir, onFicha, onTildar }: { p: FilaPedido; onAbrir
   return (
     <Renglon
       nombre={nombre}
+      chico={p.hablado}
       onTocar={p.telefono ? () => onFicha(0, p.telefono) : undefined}
       tituloTocar="Ver la ficha"
       detalle={<>{!p.hablado && <SinContactar />}{plata(p.total)} · <Cuando iso={p.fecha} /></>}
@@ -322,9 +364,17 @@ export function PedidosDelDia({
 }) {
   const catalogo = usePedidosCatalogo()
   const [contactados, tildarContactado] = useContactados()
+  const numeros = useMemo(
+    () => (catalogo?.t === 'ok' ? [...new Set(catalogo.datos.pedidos.map((p) => Number(p.id)).filter((n) => Number.isSafeInteger(n) && n > 0))].sort((a, b) => a - b) : []),
+    [catalogo],
+  )
+  const estados = useEstadoPedidos(numeros)
+  // Sólo los que esperan el pago (Darío 17-nov): el pagado sale solo; el ya contactado queda chico, abajo.
   const filas = useMemo(
-    () => (catalogo?.t === 'ok' ? armarFilasPedidos(catalogo.datos.pedidos, false, today, ultimos ?? null, escritos ?? new Set(), contactados) : []),
-    [catalogo, today, ultimos, escritos, contactados],
+    () => (catalogo?.t === 'ok'
+      ? armarFilasPedidos(catalogo.datos.pedidos.filter((p) => esperaPago(estados[String(Number(p.id))])), false, today, ultimos ?? null, escritos ?? new Set(), contactados)
+      : []),
+    [catalogo, estados, today, ultimos, escritos, contactados],
   )
   const [avisoTilde, setAvisoTilde] = useState('')
   const onTildar = (p: FilaPedido) => {

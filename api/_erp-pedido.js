@@ -154,6 +154,45 @@ export async function pedidosSinClienteDelPanel({ usuario = null }, deps) {
 }
 
 /**
+ * El estado de los pedidos del catálogo de «Sin pago» (Darío 17-nov: Lucila Reales pagó y seguía ahí; con 20 pedidos la lista
+ * se llena de lo ya resuelto). Por NÚMERO del ERP —el id con que el catálogo guarda el pedido nacido en el ERP—, sólo los
+ * nacidos en el ERP (⛔ los importados de GN, que repiten números chicos). Contesta, por número: si ya está PAGO (o con
+ * cuenta corriente, que no espera el pago), si está ANULADO y si todavía está en la ficha «Pedido mayorista» (ése se ve en
+ * «Sin cliente»). Es lectura: la misma llave que la ficha. Sin la sql/064, vacío.
+ * @param {{ numeros?: string, usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
+ */
+export async function estadoDePedidosDelPanel({ numeros = '', usuario = null }, deps) {
+  if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
+  const lista = [...new Set(String(numeros).split(',').map((x) => Number(x)).filter((x) => Number.isSafeInteger(x) && x > 0))].slice(0, 200)
+  if (!lista.length) return { prendido: true, estados: {} }
+  return deps.conMotor('bdi', 'El estado de los pedidos', async (pg) => {
+    if (!(await hay064(pg))) return { prendido: true, estados: {}, falta064: true }
+    const { estadoDePago } = await import('../motor/pedido/venta.mjs')
+    const { pendienteDeVentas } = await import('../motor/cuenta/cuenta.mjs')
+    const { creditoDe } = await import('../motor/cuenta/libro.mjs')
+    const { esFichaSinCliente } = await import('../motor/venta/cliente.mjs')
+    const { rows } = await pg.query(`select numero, total, venta_id::text, cliente_id::text, anulado_en is not null as anulado from pedido_mayorista
+      where marca = 'bdi' and gn_sale_id is null and numero = any($1::bigint[])`, [lista])
+    const ventas = rows.filter((p) => p.venta_id && !p.anulado).map((p) => p.venta_id)
+    const { pendientes } = ventas.length ? await pendienteDeVentas(pg, { venta_ids: ventas }) : { pendientes: {} }
+    const creditos = new Map()
+    const estados = {}
+    for (const p of rows) {
+      const sinCliente = !p.cliente_id || esFichaSinCliente(p.cliente_id)
+      let pago = null
+      let cuenta = false
+      if (p.venta_id && !p.anulado && !sinCliente) {
+        pago = estadoDePago({ total: Number(p.total), pendiente: pendientes[p.venta_id] ?? 0 }).estado
+        if (!creditos.has(p.cliente_id)) creditos.set(p.cliente_id, (await creditoDe(pg, p.cliente_id))?.credito === true)
+        cuenta = creditos.get(p.cliente_id)
+      }
+      estados[String(p.numero)] = { pago, cuenta, anulado: !!p.anulado, sinCliente }
+    }
+    return { prendido: true, estados }
+  })
+}
+
+/**
  * «Agregar producto» en la hoja (Darío §2): el catálogo de la marca del pedido por nombre, SKU o código, con la variante, el
  * stock del depósito del pedido y el precio de la lista mayorista (el mismo que va a cobrar el cambio). Sin precio ⇒ `precio:
  * null` y la pantalla ⛔ deja agregarlo. Es lectura: la misma llave que la ficha.

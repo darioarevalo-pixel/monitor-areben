@@ -16,7 +16,8 @@ import { leEscribisteHoy, type EscritosHoy } from './escritos'
 const API = 'https://bdi-catalogo.vercel.app/api/pedido?panel=1'
 
 /** `link`: el que recibió el cliente al confirmar (sólo pedidos, no carritos). */
-export type PedidoCatalogo = { fecha: string; cliente: string; telefono: string; total: number; unidades: number; link?: string }
+/** `id`: el número del pedido (el del ERP desde el corte de BDI; antes, el de GN). Los carritos no tienen. */
+export type PedidoCatalogo = { id?: number | string | null; fecha: string; cliente: string; telefono: string; total: number; unidades: number; link?: string }
 
 export type DatosCatalogo = { pedidos: PedidoCatalogo[]; carritos: PedidoCatalogo[] }
 

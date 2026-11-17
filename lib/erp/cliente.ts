@@ -887,6 +887,10 @@ export type PreparadoSinPagar = { id: string; numero: number; cliente_id: string
 export type PedidoSinCliente = { id: string; numero: number; recibido_en: string; total: number; unidades: number; nombre: string | null; telefono: string | null }
 export const leerPedidosSinCliente = () =>
   pedir<{ prendido: false } | { prendido: true; pedidos: PedidoSinCliente[]; falta064?: boolean }>(null, `&vista=pedidos-sin-cliente&marca=bdi&nc=${Date.now()}`, 'No se pudo leer «Falta el cliente».')
+/** El estado de un pedido de «Sin pago», por número del ERP (Darío 17-nov): pago, anulado o todavía sin cliente. */
+export type EstadoPedidoPanel = { pago: 'pagado' | 'parcial' | 'sin_pagar' | null; cuenta: boolean; anulado: boolean; sinCliente: boolean }
+export const leerEstadoPedidos = (numeros: number[]) =>
+  pedir<{ prendido: false } | { prendido: true; estados: Record<string, EstadoPedidoPanel>; falta064?: boolean }>(null, `&vista=estado-pedidos-panel&marca=bdi&numeros=${numeros.slice(0, 200).join(',')}&nc=${Date.now()}`, 'No se pudo leer el estado de los pedidos.')
 export const leerPreparadosSinPagar = () =>
   pedir<{ prendido: false } | { prendido: true; pedidos: PreparadoSinPagar[]; falta064?: boolean }>(null, `&vista=preparados-sin-pagar&marca=bdi&nc=${Date.now()}`, 'No se pudo leer «Preparados sin pagar».')
 type RespuestaPedido = { ok: true; ya: boolean; sinCambios: boolean; avisarDeposito: boolean; ventaId: string | null }

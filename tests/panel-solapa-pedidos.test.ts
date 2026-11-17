@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { pasoEntrega } from '@/components/panel/PedidosDelDia'
+import { esperaPago, pasoEntrega } from '@/components/panel/PedidosDelDia'
+import { estadoDePedidosDelPanel } from '@/api/_erp-pedido.js'
 import { mensajeCobrar } from '@/components/panel/PedidosMayoristas'
 import { hace } from '@/components/panel/pasos-pedido'
 import type { PendienteLogistica } from '@/lib/crm/logistica'
@@ -34,5 +35,34 @@ describe('textos', () => {
     expect(hace(new Date(2026, 10, 15, 8).toISOString(), ahora)).toEqual({ txt: 'hoy', dias: 0 })
     expect(hace(new Date(2026, 10, 14, 23).toISOString(), ahora)).toEqual({ txt: 'ayer', dias: 1 })
     expect(hace(new Date(2026, 10, 12, 10).toISOString(), ahora)).toEqual({ txt: 'hace 3 días', dias: 3 })
+  })
+})
+
+/** «Sin pago» (Darío 17-nov, Lucila Reales): sólo lo que de verdad espera el pago. */
+describe('esperaPago', () => {
+  const e = (x: object) => ({ pago: 'sin_pagar', cuenta: false, anulado: false, sinCliente: false, ...x }) as never
+  it('pagado, anulado o todavía sin cliente: sale de «Sin pago»', () => {
+    expect(esperaPago(e({ pago: 'pagado' }))).toBe(false)
+    expect(esperaPago(e({ anulado: true, pago: null }))).toBe(false)
+    expect(esperaPago(e({ sinCliente: true, pago: null }))).toBe(false)
+  })
+  it('sin pagar o pagado a medias: sigue', () => {
+    expect(esperaPago(e({}))).toBe(true)
+    expect(esperaPago(e({ pago: 'parcial' }))).toBe(true)
+  })
+  it('sin estado del ERP (pedido viejo de GN, o la lectura falló): sigue, como antes', () => {
+    expect(esperaPago(undefined)).toBe(true)
+  })
+})
+
+describe('estadoDePedidosDelPanel', () => {
+  it('sin números válidos no consulta la base', async () => {
+    let consulto = false
+    const r = await estadoDePedidosDelPanel({ numeros: 'x,,-3' }, { prendido: true, conMotor: async () => { consulto = true; return {} } })
+    expect(r).toEqual({ prendido: true, estados: {} })
+    expect(consulto).toBe(false)
+  })
+  it('con el panel apagado no contesta nada', async () => {
+    expect(await estadoDePedidosDelPanel({ numeros: '112' }, { prendido: false, conMotor: async () => ({}) })).toEqual({ prendido: false })
   })
 })

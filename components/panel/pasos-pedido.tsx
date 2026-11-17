@@ -79,19 +79,19 @@ export function Paso({ titulo, tono, cuantos, children }: { titulo: string; tono
 /**
  * Un renglón: el nombre arriba, el detalle abajo (tocar abre la hoja o la ficha) y a la derecha los botones del paso.
  */
-export function Renglon({ nombre, detalle, onTocar, tituloTocar, botones }: { nombre: React.ReactNode; detalle?: React.ReactNode; onTocar?: () => void; /** El título y el nombre accesible del toque («Ver el pedido M-0111»). */ tituloTocar?: string; botones?: React.ReactNode }) {
+export function Renglon({ nombre, detalle, onTocar, tituloTocar, botones, chico }: { nombre: React.ReactNode; detalle?: React.ReactNode; onTocar?: () => void; /** El título y el nombre accesible del toque («Ver el pedido M-0111»). */ tituloTocar?: string; botones?: React.ReactNode; /** Un solo renglón, más chico y gris (Darío 17-nov: lo ya hecho no ocupa la vista). */ chico?: boolean }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', borderTop: `1px solid ${color.line2}`, background: color.surface }}>
+    <div style={{ display: 'flex', alignItems: 'center', borderTop: `1px solid ${color.line2}`, background: chico ? color.bg2 : color.surface }}>
       <button
         type="button"
         disabled={!onTocar}
         onClick={onTocar}
         title={tituloTocar}
         aria-label={tituloTocar}
-        style={{ display: 'block', flex: 1, minWidth: 0, height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: `${space[2]}px 0 ${space[2]}px ${MARGEN_PASO}px`, cursor: onTocar ? 'pointer' : 'default', font: 'inherit', color: 'inherit' }}
+        style={{ display: chico ? 'flex' : 'block', alignItems: 'baseline', gap: 8, flex: 1, minWidth: 0, height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: chico ? `${space[1]}px 0 ${space[1]}px ${MARGEN_PASO}px` : `${space[2]}px 0 ${space[2]}px ${MARGEN_PASO}px`, cursor: onTocar ? 'pointer' : 'default', font: 'inherit', color: 'inherit' }}
       >
-        <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</div>
-        {detalle && <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5, marginTop: 3, fontSize: font.xs, color: color.mut, fontVariantNumeric: 'tabular-nums' }}>{detalle}</div>}
+        <div style={{ fontSize: chico ? font.sm : font.md, fontWeight: chico ? 600 : 700, color: chico ? color.mut : color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flexShrink: 1 }}>{nombre}</div>
+        {detalle && <div style={{ display: 'flex', alignItems: 'center', flexWrap: chico ? 'nowrap' : 'wrap', whiteSpace: 'nowrap', flexShrink: 0, gap: 5, marginTop: chico ? 0 : 3, fontSize: font.xs, color: color.mut, fontVariantNumeric: 'tabular-nums' }}>{detalle}</div>}
       </button>
       {botones && <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: `0 ${MARGEN_PASO}px 0 ${space[2]}px` }}>{botones}</div>}
     </div>
