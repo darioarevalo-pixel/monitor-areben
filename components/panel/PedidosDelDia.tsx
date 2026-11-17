@@ -428,7 +428,8 @@ export function PedidosDelDia({
           </Paso>
           {avisoTilde && <Aclaracion>{avisoTilde}</Aclaracion>}
           {catalogo?.t === 'error' && <Aclaracion>No pude traer los pedidos del catálogo. {catalogo.motivo}</Aclaracion>}
-          {catalogo?.t === 'ok' && !nuevos && <Aclaracion>Todavía no entró ningún pedido.</Aclaracion>}
+          {/* «Todavía no entró…» sólo si de verdad no entró ninguno: con todos pagos ⛔ dice nada (Darío 17-nov). */}
+          {catalogo?.t === 'ok' && !nuevos && !catalogo.datos.pedidos.length && <Aclaracion>Todavía no entró ningún pedido.</Aclaracion>}
         </Bloque>
       )}
 
