@@ -68,6 +68,14 @@ describe('la propuesta', () => {
     expect(g.find((x) => x.pid === '2')?.sobra).toBe(2)
     expect(g.find((x) => x.pid === '4')).toBeUndefined()
   })
+
+  it('🔑 «Todo el local» ofrece todo lo que hay, aunque no sobre: la ropa de invierno (Darío, 17-nov-2026)', () => {
+    const g = propuesta(filas, { '2_38': 3 }, undefined, undefined, true)
+    // TOP ZOE M no sobraba (0) y tiene 2 en el local: ahora entra entera.
+    expect(g.find((x) => x.pid === '1')?.variantes.map((v) => [v.f.it.sid, v.sobra])).toEqual([['M', 2], ['S', 4]])
+    // Lo ya pedido se sigue descontando: JEAN MOM tiene 7 en el local, 3 ya pedidas.
+    expect(g.find((x) => x.pid === '2')?.sobra).toBe(4)
+  })
 })
 
 describe('la bolsa', () => {

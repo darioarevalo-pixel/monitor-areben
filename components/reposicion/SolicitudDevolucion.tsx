@@ -97,6 +97,7 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
   const [cant, setCant] = useState<Record<string, number>>({})
   const [abiertos, setAbiertos] = useState<Record<string, boolean>>({})
   const [buscar, setBuscar] = useState('')
+  const [todo, setTodo] = useState(false)
   const [cerrar, setCerrar] = useState(false)
 
   useEffect(() => {
@@ -119,7 +120,7 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
     [borrador, enLocal, armado, stockViejo],
   )
   const vendidasProd = useMemo(() => (vv ? vendidasPorProducto(vv) : undefined), [vv])
-  const grupos = useMemo(() => propuesta(filas, yaPedido, vendidasProd, bdi ? grupoBdi : undefined), [filas, yaPedido, vendidasProd, bdi])
+  const grupos = useMemo(() => propuesta(filas, yaPedido, vendidasProd, bdi ? grupoBdi : undefined, todo), [filas, yaPedido, vendidasProd, bdi, todo])
   // Lo elegido sigue elegido aunque el buscador lo esconda: el filtro es sólo de la tabla.
   const visibles = useMemo(() => filtrarPropuesta(grupos, buscar), [grupos, buscar])
   const bolsaDe = (g: { pid: string; name: string; sku?: string }) => !bdi && conBolsa(g, bolsaProd)
@@ -203,8 +204,20 @@ export function SolicitudDevolucion({ linea, rotulo, filas, vv, tnDe, armado, st
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
                 <span style={{ fontSize: font.md, color: color.ink2 }}>
-                  <b>{totalSobra}</b> {art.plural} {bdi ? 'vuelven al depósito' : 'sobran en el local'} · {grupos.length} productos
+                  <b>{totalSobra}</b> {art.plural} {todo ? 'en el local' : bdi ? 'vuelven al depósito' : 'sobran en el local'} · {grupos.length} productos
                 </span>
+                <Tabs
+                  value={todo ? 'todo' : 'sobra'}
+                  onChange={(k) => {
+                    setTodo(k === 'todo')
+                    setSel({})
+                    setCant({})
+                  }}
+                  items={[
+                    { key: 'sobra', label: bdi ? 'Lista' : 'Lo que sobra' },
+                    { key: 'todo', label: 'Todo el local' },
+                  ]}
+                />
                 <input className="mo-input" type="search" value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar producto o código…" aria-label="Buscar producto o código" style={{ width: 240 }} />
                 <span style={{ marginLeft: 'auto', fontSize: font.md, color: color.ink2 }}>
                   {elegidos.length > 0 && (

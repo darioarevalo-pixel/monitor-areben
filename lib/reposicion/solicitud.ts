@@ -88,7 +88,7 @@ export function vendidasPorProducto(vv: Record<string, number>): Record<string, 
  * solicitud (confirmada o enviada) y todavía no se descontó del stock: no se propone dos veces.
  * `vendidasProd` = `vendidasPorProducto(vv)`; sin él, se suman las de `filas` (sólo talles con stock).
  */
-export function propuesta(filas: FilaVentas[], yaPedido: Record<string, number> = {}, vendidasProd?: Record<string, number>, prioridadDe?: (pid: string) => Prioridad | null): GrupoPropuesta[] {
+export function propuesta(filas: FilaVentas[], yaPedido: Record<string, number> = {}, vendidasProd?: Record<string, number>, prioridadDe?: (pid: string) => Prioridad | null, todoElLocal = false): GrupoPropuesta[] {
   const desdeFilas = new Map<string, number>()
   for (const f of filas) desdeFilas.set(f.it.pid, (desdeFilas.get(f.it.pid) || 0) + (f.d.vendidas || 0))
   const vendidasDe = (pid: string) => (vendidasProd ? vendidasProd[pid] || 0 : desdeFilas.get(pid) || 0)
@@ -102,7 +102,9 @@ export function propuesta(filas: FilaVentas[], yaPedido: Record<string, number> 
   }
   const grupos = new Map<string, GrupoPropuesta>()
   for (const f of filas) {
-    const sobra = f.d.devolver - (yaPedido[f.it.vid] || 0)
+    // «Todo el local» (Darío, 17-nov-2026): para elegir a mano lo que no sobra (la ropa de invierno),
+    // se ofrece todo lo que hay en el local, no sólo lo que supera el stock ideal.
+    const sobra = (todoElLocal ? Math.max(f.d.devolver, f.it.local || 0) : f.d.devolver) - (yaPedido[f.it.vid] || 0)
     if (sobra <= 0) continue
     let g = grupos.get(f.it.pid)
     if (!g) {
