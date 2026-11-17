@@ -1924,12 +1924,17 @@ const ALTO_SOLAPAS = 31
 function Envoltorio({ children, aviso, pie }: { children: React.ReactNode; aviso?: { txt: string; mal?: boolean } | null; pie?: React.ReactNode }) {
   return (
     <div style={{ background: color.bg, color: color.ink, minHeight: '100vh', fontSize: font.sm, display: 'flex', flexDirection: 'column' }}>
+      {/* Flota ENCIMA de la ficha: ⛔ la empuja al aparecer ni la sube al irse (Darío 17-nov: «hace muchos movimientos»). */}
       {aviso && (
         <div
+          role="status"
           style={{
-            position: 'sticky',
+            position: 'fixed',
             top: ALTO_SOLAPAS,
-            zIndex: 2,
+            left: 0,
+            right: 0,
+            zIndex: 5,
+            boxShadow: '0 2px 6px rgba(0,0,0,.08)',
             padding: '6px 12px',
             fontSize: font.xs,
             fontWeight: 600,
