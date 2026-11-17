@@ -41,8 +41,13 @@ import {
  * Sin pedidos en curso no se dibuja nada: es lo normal y no hace falta anunciarlo. Un error sí se
  * ve, en un renglón, para que «no aparece» no se lea como «no tiene pedidos».
  */
-export function PedidosLogistica({ clienteId, tel, despacho, onLeidos }: {
+export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos = '' }: {
   clienteId: number | null; tel: string | null; despacho?: string
+  /**
+   * Los códigos («M-0112,M-0113») de sus pedidos abiertos en el ERP: si por cliente y teléfono no aparece nada, se buscan
+   * en los pendientes de Logística por código (Darío 17-nov: el de Lucila llegó a Logística sin teléfono ni cliente).
+   */
+  codigos?: string
   /** Lo que contestó Logística (para que la tarjeta de Pedidos muestre el estado de los vendidos por GN). */
   onLeidos?: (pedidos: PedidoLogistica[]) => void
 }) {
@@ -52,15 +57,22 @@ export function PedidosLogistica({ clienteId, tel, despacho, onLeidos }: {
   useEffect(() => {
     let vivo = true
     if (!clienteId && !tel) return
-    pedidosDelCliente(clienteId, tel).then((r) => {
+    const deEsta = `${clienteId ?? ''}|${tel ?? ''}`
+    pedidosDelCliente(clienteId, tel).then(async (r) => {
       if (!vivo) return
-      setLlegado({ clave: `${clienteId ?? ''}|${tel ?? ''}`, r })
+      const buscados = codigos ? codigos.split(',') : []
+      if (r.t === 'ok' && !r.datos.length && buscados.length) {
+        const x = await pendientesLogistica()
+        if (!vivo) return
+        if (x.t === 'ok') r = { t: 'ok', datos: x.datos.orders.filter((o) => buscados.includes(String(o.gn_number ?? '').trim())) }
+      }
+      setLlegado({ clave: deEsta, r })
       if (r.t === 'ok') onLeidos?.(r.datos)
     })
     return () => {
       vivo = false
     }
-  }, [clienteId, tel, onLeidos])
+  }, [clienteId, tel, onLeidos, codigos])
 
   // Lo que usó la vez anterior sale sólo de la lista de pendientes: se pide si algún pedido no tiene
   // forma de entrega, para dejar marcada esa opción.

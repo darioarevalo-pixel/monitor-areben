@@ -10,7 +10,7 @@
  * (el día del corte de BDI): hasta entonces el pedido se maneja en Gestión Nube y el servidor contesta 409.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, CopyButton, Field, Input, Modal, Notice } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import {
@@ -49,13 +49,16 @@ export function usePedidosPanel(clienteId: string | null, tel: string | null): {
   const prendido = useCuentaPrendida()
   const [pedidos, setPedidos] = useState<Extract<PedidosPanel, { prendido: true }> | null>(null)
   const [vuelta, setVuelta] = useState(0)
+  // Igual que la cuenta: con el mismo número, lo visto queda hasta que llega lo nuevo (⛔ se vacía al llegar el id del cliente).
+  const telVisto = useRef(tel)
   useEffect(() => {
+    if (telVisto.current !== tel) { telVisto.current = tel; setPedidos(null) }
     if (!prendido || (!clienteId && !tel)) return
     let vivo = true
     leerPedidosPanel({ clienteId, tel })
       .then((r) => { if (vivo) setPedidos(r.prendido ? r : null) })
-      .catch(() => { if (vivo) setPedidos(null) })
-    return () => { vivo = false; setPedidos(null) }
+      .catch(() => {})
+    return () => { vivo = false }
   }, [prendido, clienteId, tel, vuelta])
   const releer = useCallback(() => setVuelta((v) => v + 1), [])
   return { pedidos, releer }

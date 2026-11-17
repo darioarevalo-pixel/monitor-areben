@@ -171,7 +171,7 @@ export async function estadoDePedidosDelPanel({ numeros = '', usuario = null }, 
     const { pendienteDeVentas } = await import('../motor/cuenta/cuenta.mjs')
     const { creditoDe } = await import('../motor/cuenta/libro.mjs')
     const { esFichaSinCliente } = await import('../motor/venta/cliente.mjs')
-    const { rows } = await pg.query(`select numero, total, venta_id::text, cliente_id::text, anulado_en is not null as anulado from pedido_mayorista
+    const { rows } = await pg.query(`select numero, total, venta_id::text, cliente_id::text, anulado_en is not null as anulado, contacto->>'telefono' as telefono from pedido_mayorista
       where marca = 'bdi' and gn_sale_id is null and numero = any($1::bigint[])`, [lista])
     const ventas = rows.filter((p) => p.venta_id && !p.anulado).map((p) => p.venta_id)
     const { pendientes } = ventas.length ? await pendienteDeVentas(pg, { venta_ids: ventas }) : { pendientes: {} }
@@ -186,7 +186,7 @@ export async function estadoDePedidosDelPanel({ numeros = '', usuario = null }, 
         if (!creditos.has(p.cliente_id)) creditos.set(p.cliente_id, (await creditoDe(pg, p.cliente_id))?.credito === true)
         cuenta = creditos.get(p.cliente_id)
       }
-      estados[String(p.numero)] = { pago, cuenta, anulado: !!p.anulado, sinCliente }
+      estados[String(p.numero)] = { pago, cuenta, anulado: !!p.anulado, sinCliente, telefono: p.telefono || null }
     }
     return { prendido: true, estados }
   })

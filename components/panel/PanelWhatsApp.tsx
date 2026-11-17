@@ -58,6 +58,7 @@ import {
 import { AgendaDelDia } from './AgendaDelDia'
 import { PedidosDelDia } from './PedidosDelDia'
 import { PedidosLogistica } from './PedidosLogistica'
+import { codigoPedido } from '@/lib/erp/codigos.core.js'
 import { useComunidad, type AvisoComunidad, type Comunidad } from './useComunidad'
 import { useHoy } from './useHoy'
 import { antiguedadFoto, estaEnComunidad } from '@/lib/crm/comunidad'
@@ -1012,10 +1013,17 @@ function PanelInterno({
    * `PANEL_CUENTA_CORRIENTE` ⇒ apagada, `cuenta` es null y el panel queda igual a hoy. Ver `CuentaCorriente.tsx`.
    */
   const quien = quienPaga(estado, telNorm, pedido)
-  const { cuenta, releer: releerCuenta } = useCuentaPanel(quien?.tipo === 'erp' ? quien.id : null, quien?.telefono ?? null)
+  // Mientras llega la ficha del CRM, la cuenta y los pedidos ya se piden con el número del chat (Darío 17-nov: tardaba
+  // mucho; antes esperaban a la ficha). Cuando llega, se completa con su id sin vaciar lo que ya se ve.
+  const telCuenta = quien?.telefono ?? (estado.t === 'cargando' && !pedido ? telNorm || null : null)
+  const { cuenta, releer: releerCuenta } = useCuentaPanel(quien?.tipo === 'erp' ? quien.id : null, telCuenta)
   const [cargandoPago, setCargandoPago] = useState(false)
   // Los pedidos mayoristas del ERP (paso 3 del plan, `PedidosMayoristas.tsx`): escondidos detrás del mismo interruptor.
-  const { pedidos: pedidosErp, releer: releerPedidos } = usePedidosPanel(cuenta?.cliente.id ?? null, quien?.telefono ?? null)
+  const { pedidos: pedidosErp, releer: releerPedidos } = usePedidosPanel(cuenta?.cliente.id ?? null, telCuenta)
+  const codigosAbiertos = useMemo(
+    () => (pedidosErp?.pedidos ?? []).filter((p) => p.etapa !== 'despachado' && p.etapa !== 'anulado' && p.etapa !== 'sin_entrar').map((p) => codigoPedido(p.numero)).join(','),
+    [pedidosErp],
+  )
   // El estado en Logística de los vendidos por GN (Darío 16-nov): lo trae la tarjeta de Logística; va con el chat que lo pidió.
   const [logisticaGn, setLogisticaGn] = useState<{ tel: string; m: Map<string, string> } | null>(null)
   const alLeerLogistica = useCallback((ps: PedidoLogistica[]) => {
@@ -1401,7 +1409,7 @@ function PanelInterno({
           </Aislado>
         )}
         {/* Los pedidos en curso en Logística (22-oct-2026): sin pedidos no se dibuja. */}
-        <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} despacho={seg.despacho || ''} onLeidos={alLeerLogistica} />
+        <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} despacho={seg.despacho || ''} onLeidos={alLeerLogistica} codigos={codigosAbiertos} />
         {cuenta && (
           <Aislado nombre="Cuenta corriente">
             <TarjetaCuenta cuenta={cuenta} sinRefs={refsDePedidosAbiertos(pedidosErp)} />

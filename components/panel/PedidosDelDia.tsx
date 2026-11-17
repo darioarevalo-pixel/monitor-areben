@@ -28,7 +28,7 @@ import { armarFilasPedidos, claveContacto, leerContactados, linksDePedidos, marc
 import { tomar } from '@/lib/crm/precarga'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
 import { enGrupoDeposito, estadoDeposito, faltanUnidades, formaCorta, pasoPanel, pendientesLogistica, TRANSPORTE, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
-import { leerEstadoPedidos, type EstadoPedidoPanel } from '@/lib/erp/cliente'
+import { escrituras, leerEstadoPedidos, PEDIDOS_CAMBIARON, type EstadoPedidoPanel } from '@/lib/erp/cliente'
 import { PedidosSinCliente, PreparadosSinPagar } from './PedidosMayoristas'
 import { Bloque, Cuando, Paso, Renglon, plataPedido as plata } from './pasos-pedido'
 
@@ -70,30 +70,43 @@ function usePedidosCatalogo(): ResultadoCatalogo | null {
  * pedidos, me ocupa toda la vista»). Se pide cuando cambian los números y cada 2 minutos. Si falla, queda lo último que se vio
  * (y sin nada, la lista se ve entera, como antes).
  */
-const memoriaEstados: { m: Record<string, EstadoPedidoPanel> } = { m: {} }
+const memoriaEstados: { m: Record<string, EstadoPedidoPanel>; leido: number } = { m: {}, leido: 0 }
 
-function useEstadoPedidos(numeros: number[]): Record<string, EstadoPedidoPanel> {
+/**
+ * `listo` = lo que hay ya es posterior al último cambio guardado desde el panel (o la lectura falló: se ve todo, como antes).
+ * Mientras no, «Sin pago» ⛔ muestra lo viejo: un pedido recién pagado no vuelve a aparecer como sin pagar (Darío 17-nov).
+ * Un pago o un «Enviar a preparación» hecho en la ficha avisa (`PEDIDOS_CAMBIARON`) y se vuelve a pedir en el acto.
+ */
+function useEstadoPedidos(numeros: number[]): { estados: Record<string, EstadoPedidoPanel>; listo: boolean } {
   const [m, setM] = useState(memoriaEstados.m)
+  const [listo, setListo] = useState(() => memoriaEstados.leido > escrituras.ultima)
   const clave = numeros.join(',')
   useEffect(() => {
     if (!clave) return
     let vivo = true
     const pedir = async () => {
+      const desde = Date.now()
       try {
         const r = await leerEstadoPedidos(clave.split(',').map(Number))
-        if (!r.prendido) return
-        memoriaEstados.m = { ...memoriaEstados.m, ...r.estados }
-        if (vivo) setM(memoriaEstados.m)
+        if (r.prendido) {
+          memoriaEstados.m = { ...memoriaEstados.m, ...r.estados }
+          memoriaEstados.leido = desde
+          if (vivo) setM(memoriaEstados.m)
+        }
       } catch {}
+      if (vivo) setListo(true)
     }
     pedir()
     const id = setInterval(pedir, CADA_PEDIDOS_MS)
+    const alCambiar = () => { if (vivo) { setListo(false); void pedir() } }
+    window.addEventListener(PEDIDOS_CAMBIARON, alCambiar)
     return () => {
       vivo = false
       clearInterval(id)
+      window.removeEventListener(PEDIDOS_CAMBIARON, alCambiar)
     }
   }, [clave])
-  return m
+  return { estados: m, listo }
 }
 
 /**
@@ -314,9 +327,16 @@ function detalleEntrega(p: PendienteLogistica, paso: PasoEntrega): React.ReactNo
  * Un pedido de Entregas. 🔴 Logística puede traerlo sin teléfono (Darío, 3-nov-2026: el botón verde no hacía nada): se lo
  * busca en la ficha del cliente.
  */
-export function FilaLogistica({ p, onAbrir, onFicha, link, paso = pasoEntrega(p) }: { p: PendienteLogistica; onAbrir: (id: number, tel: string) => void; onFicha: (id: number, tel: string) => void; link?: LinkPedido; paso?: PasoEntrega }) {
+/** «M-0112» ⇒ 112: el número del pedido nacido en el ERP (los de GN son sólo dígitos). */
+export const numeroErp = (gn: string | null | undefined): number | null => {
+  const m = /^M-0*(\d+)$/.exec(String(gn ?? '').trim())
+  return m ? Number(m[1]) : null
+}
+
+export function FilaLogistica({ p, onAbrir, onFicha, link, paso = pasoEntrega(p), telErp = null }: { p: PendienteLogistica; onAbrir: (id: number, tel: string) => void; onFicha: (id: number, tel: string) => void; link?: LinkPedido; paso?: PasoEntrega; /** El del pedido en el ERP: Logística a veces lo manda sin teléfono (Lucila, 17-nov). */ telErp?: string | null }) {
   const id = Number(p.gn_client_id) || 0
-  const telPedido = telDelChat(p.client_phone)
+  // Logística a veces deja vacío el del cliente y lo trae en el envío (Trickssi, 17-nov); si tampoco, el del pedido del ERP.
+  const telPedido = telDelChat(p.client_phone) || telDelChat(p.shipping?.phone ?? null) || telDelChat(telErp)
   const [telFicha, setTelFicha] = useState<string | null>(null)
   useEffect(() => {
     if (telPedido || !id) return
@@ -364,17 +384,23 @@ export function PedidosDelDia({
 }) {
   const catalogo = usePedidosCatalogo()
   const [contactados, tildarContactado] = useContactados()
+  const { r: logistica, actualizar, actualizando } = usePendientesLogistica()
+  const ordenes = useMemo(() => (logistica?.t === 'ok' ? logistica.datos.orders : []), [logistica])
+  // Los del catálogo + los de Entregas nacidos en el ERP (de éstos sólo se usa el teléfono).
   const numeros = useMemo(
-    () => (catalogo?.t === 'ok' ? [...new Set(catalogo.datos.pedidos.map((p) => Number(p.id)).filter((n) => Number.isSafeInteger(n) && n > 0))].sort((a, b) => a - b) : []),
-    [catalogo],
+    () => [...new Set([
+      ...(catalogo?.t === 'ok' ? catalogo.datos.pedidos.map((p) => Number(p.id)) : []),
+      ...ordenes.map((o) => numeroErp(o.gn_number) ?? 0),
+    ].filter((n) => Number.isSafeInteger(n) && n > 0))].sort((a, b) => a - b),
+    [catalogo, ordenes],
   )
-  const estados = useEstadoPedidos(numeros)
+  const { estados, listo: estadosListos } = useEstadoPedidos(numeros)
   // Sólo los que esperan el pago (Darío 17-nov): el pagado sale solo; el ya contactado queda chico, abajo.
   const filas = useMemo(
-    () => (catalogo?.t === 'ok'
+    () => (catalogo?.t === 'ok' && estadosListos
       ? armarFilasPedidos(catalogo.datos.pedidos.filter((p) => esperaPago(estados[String(Number(p.id))])), false, today, ultimos ?? null, escritos ?? new Set(), contactados)
       : []),
-    [catalogo, estados, today, ultimos, escritos, contactados],
+    [catalogo, estados, estadosListos, today, ultimos, escritos, contactados],
   )
   const [avisoTilde, setAvisoTilde] = useState('')
   const onTildar = (p: FilaPedido) => {
@@ -389,8 +415,6 @@ export function PedidosDelDia({
   const alSinCliente = useCallback((n: number, p: number) => setSinCliente({ n, plata: p }), [])
   const alRetenidos = useCallback((n: number) => setRetenidos(n), [])
 
-  const { r: logistica, actualizar, actualizando } = usePendientesLogistica()
-  const ordenes = useMemo(() => (logistica?.t === 'ok' ? logistica.datos.orders : []), [logistica])
   const links = useLinksLogistica(ordenes)
   const porPaso = useMemo(() => {
     const g: Record<PasoEntrega, PendienteLogistica[]> = { armando: [], despachar: [], retiro: [], seguimiento: [] }
@@ -409,7 +433,7 @@ export function PedidosDelDia({
   const plataNuevos = sinCliente.plata + filas.reduce((a, p) => a + p.total, 0)
   const enEntregas = ordenes.length
   const linkDe = (p: PendienteLogistica) => (p.gn_number ? links[p.gn_number.replace(/\D/g, '')] : undefined)
-  const fila = (p: PendienteLogistica, paso: PasoEntrega) => <FilaLogistica key={p.id} p={p} paso={paso} onAbrir={onAbrirChat} onFicha={onVerFicha} link={linkDe(p)} />
+  const fila = (p: PendienteLogistica, paso: PasoEntrega) => <FilaLogistica key={p.id} p={p} paso={paso} onAbrir={onAbrirChat} onFicha={onVerFicha} link={linkDe(p)} telErp={estados[String(numeroErp(p.gn_number))]?.telefono ?? null} />
   const armandoVisibles = verArmando ? porPaso.armando : porPaso.armando.slice(0, VISIBLES_ARMANDO)
 
   return (

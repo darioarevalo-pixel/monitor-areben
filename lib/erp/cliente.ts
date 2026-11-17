@@ -50,10 +50,21 @@ export type ResultadoLote = {
   sinAtar?: string[]
 }
 
+/**
+ * Cuándo se guardó algo por última vez desde el panel (pago, enviar a preparación, entrar un pedido…). Las listas de
+ * «Pedidos» la miran para no mostrar lo leído ANTES de ese cambio (Darío 17-nov: Ana y Lucila pagas seguían en «Sin pago»).
+ */
+export const PEDIDOS_CAMBIARON = 'panel:pedidos-cambiaron'
+export const escrituras = { ultima: 0 }
+
 async function pedir<T>(init: RequestInit | null, query: string, fallo: string): Promise<T> {
   const r = await apiFetch(`/api/datos?recurso=erp${query}`, init || undefined)
   const j = await r.json().catch(() => null)
   if (!r.ok) throw Object.assign(new Error((j && j.error) || fallo), { codigo: (j && j.codigo) as string | undefined, datos: j })
+  if (init && typeof window !== 'undefined') {
+    escrituras.ultima = Date.now()
+    try { window.dispatchEvent(new Event(PEDIDOS_CAMBIARON)) } catch {}
+  }
   return j as T
 }
 
@@ -888,7 +899,7 @@ export type PedidoSinCliente = { id: string; numero: number; recibido_en: string
 export const leerPedidosSinCliente = () =>
   pedir<{ prendido: false } | { prendido: true; pedidos: PedidoSinCliente[]; falta064?: boolean }>(null, `&vista=pedidos-sin-cliente&marca=bdi&nc=${Date.now()}`, 'No se pudo leer «Falta el cliente».')
 /** El estado de un pedido de «Sin pago», por número del ERP (Darío 17-nov): pago, anulado o todavía sin cliente. */
-export type EstadoPedidoPanel = { pago: 'pagado' | 'parcial' | 'sin_pagar' | null; cuenta: boolean; anulado: boolean; sinCliente: boolean }
+export type EstadoPedidoPanel = { pago: 'pagado' | 'parcial' | 'sin_pagar' | null; cuenta: boolean; anulado: boolean; sinCliente: boolean; /** El del pedido, para el WhatsApp de Entregas cuando Logística no lo trae. */ telefono?: string | null }
 export const leerEstadoPedidos = (numeros: number[]) =>
   pedir<{ prendido: false } | { prendido: true; estados: Record<string, EstadoPedidoPanel>; falta064?: boolean }>(null, `&vista=estado-pedidos-panel&marca=bdi&numeros=${numeros.slice(0, 200).join(',')}&nc=${Date.now()}`, 'No se pudo leer el estado de los pedidos.')
 export const leerPreparadosSinPagar = () =>

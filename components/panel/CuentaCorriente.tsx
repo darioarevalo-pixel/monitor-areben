@@ -17,7 +17,7 @@
  * más vieja; la vista previa (`repartirPago`) sólo lo dibuja antes de confirmar.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import { CampoCuentaReal } from '@/components/erp/ventas/CampoCuentaReal'
@@ -66,13 +66,17 @@ export function useCuentaPanel(gnId: number | null, tel: string | null): { cuent
   const prendido = useCuentaPrendida()
   const [cuenta, setCuenta] = useState<CuentaConCliente | null>(null)
   const [vuelta, setVuelta] = useState(0)
+  // Lo que se ve queda mientras se vuelve a pedir para el MISMO número (llegó el id de GN, o «releer»): ⛔ parpadea ni
+  // se vacía. Otro número ⇒ se borra en el acto, para no ver la cuenta del chat anterior.
+  const telVisto = useRef(tel)
   useEffect(() => {
+    if (telVisto.current !== tel) { telVisto.current = tel; setCuenta(null) }
     if (!prendido || (!gnId && !tel)) return
     let vivo = true
     leerCuentaPanel({ gnId, tel, prueba: LIBRO_DE_PRUEBA })
       .then((r) => { if (vivo) setCuenta('hoy' in r ? r : null) })
-      .catch(() => { if (vivo) setCuenta(null) })
-    return () => { vivo = false; setCuenta(null) }
+      .catch(() => {})
+    return () => { vivo = false }
   }, [prendido, gnId, tel, vuelta])
   const releer = useCallback(() => setVuelta((v) => v + 1), [])
   return { cuenta, releer }
