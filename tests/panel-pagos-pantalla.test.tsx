@@ -241,11 +241,18 @@ describe('quienPaga', () => {
     })
   })
 
-  it('🔑 si la ficha se pidió POR ID manda el teléfono de la ficha, no el del chat abierto', () => {
+  it('🔑 si la ficha se abrió DESDE UNA LISTA manda el teléfono de esa fila (o el de la ficha), no el del chat abierto', () => {
     // Es el salto desde una fila de Pagos: el chat que quedó abierto puede ser el de otra persona.
-    const r = quienPaga(ficha('id', '3624667485'), '5491100000000')
+    const r = quienPaga(ficha('id', '3624667485'), '5491100000000', { tel: '' })
     expect(r).toMatchObject({ tipo: 'erp', id: 77 })
     expect(r?.telefono).not.toBe('5491100000000')
+    expect(quienPaga(ficha('id', ''), '5491100000000', { tel: '3624667485' })?.telefono).toBe('5493624667485')
+  })
+
+  it('🔴 Lucila Reales (17-nov): reconocida por el número vinculado a mano (via id) y SIN teléfono en la ficha ⇒ viaja el del chat', () => {
+    // Cliente nuevo del ERP: sin número de Gestión Nube ni teléfono en la ficha. Antes no viajaba nada y la ficha no
+    // mostraba ni el saldo ni el pedido.
+    expect(quienPaga(ficha('id', ''), '5493834063111')?.telefono).toBe('5493834063111')
   })
 
   it('sin chat ni ficha no hay a quién pedirle', () => {

@@ -476,18 +476,23 @@ function MarcaComunidad({ comunidad, aviso, tels, telFicha }: {
  * desconocido era perder justo el momento en que la cobranza se decide (lo levantó Darío usándolo).
  *
  * ⚠️ **Cuál teléfono viaja no es un detalle**: es la llave con la que después se reengancha la
- * compromiso. Cuando la ficha se resolvió POR ID (`via: 'id'` — se saltó acá desde una fila, o se
- * eligió entre dos candidatos) el número del chat abierto puede ser el de otra persona, así que en
- * ese caso manda el teléfono de la ficha. Si no, manda el del chat, que es con el que se anotó.
+ * compromiso. Cuando la ficha se abrió DESDE UNA LISTA (`desdeLista` = el `pedido` del panel: una fila de
+ * Pagos, Agenda o Pedidos) el chat abierto todavía puede ser el de otra persona, así que manda el teléfono
+ * de esa fila o el de la ficha. Si no, manda el del chat, que es con el que se anotó.
+ * 🔴 Darío, 17-nov (Lucila Reales): antes se miraba `via === 'id'`, que TAMBIÉN es 'id' cuando el chat se
+ * reconoce por el número vinculado a mano (crm:tel) o se eligió entre candidatos. Con un cliente nuevo del
+ * ERP (sin número de Gestión Nube ni teléfono en la ficha) no viajaba ningún teléfono y la ficha no
+ * mostraba ni el saldo ni el pedido. Es el mismo arreglo que 3576bff1 (Lara Arosteguy) hizo en la comunidad.
  */
-export function quienPaga(estado: Estado, telNorm: string): QuienPaga | null {
+export function quienPaga(estado: Estado, telNorm: string, desdeLista: { tel: string } | null = null): QuienPaga | null {
   if (estado.t === 'ficha') {
     const telFicha = normalizeArgPhone(estado.ficha.cliente.phone || '') || null
+    const telLista = desdeLista ? telDelChat(desdeLista.tel) || null : null
     return {
       tipo: 'erp',
       id: estado.ficha.cliente.id,
       nombre: estado.ficha.cliente.name,
-      telefono: estado.ficha.via === 'id' ? telFicha : telNorm || telFicha,
+      telefono: desdeLista ? telLista || telFicha : telNorm || telFicha,
     }
   }
   // Un prospecto ya cargado que compra es exactamente el mismo caso: se sabe el nombre y el
@@ -1006,7 +1011,7 @@ function PanelInterno({
    * La cuenta corriente del cliente del chat (plan «BDI directo al ERP», 30-oct): ESCONDIDA detrás de
    * `PANEL_CUENTA_CORRIENTE` ⇒ apagada, `cuenta` es null y el panel queda igual a hoy. Ver `CuentaCorriente.tsx`.
    */
-  const quien = quienPaga(estado, telNorm)
+  const quien = quienPaga(estado, telNorm, pedido)
   const { cuenta, releer: releerCuenta } = useCuentaPanel(quien?.tipo === 'erp' ? quien.id : null, quien?.telefono ?? null)
   const [cargandoPago, setCargandoPago] = useState(false)
   // Los pedidos mayoristas del ERP (paso 3 del plan, `PedidosMayoristas.tsx`): escondidos detrás del mismo interruptor.
@@ -1098,7 +1103,7 @@ function PanelInterno({
         {solapas}
         <Aislado nombre="Pagos">
           <Pagos
-            cliente={quienPaga(estado, telNorm)}
+            cliente={quienPaga(estado, telNorm, pedido)}
             buscandoCliente={estado.t === 'cargando' && !!(telNorm || pedido)}
             onIrAlCliente={irAlCliente}
           />
