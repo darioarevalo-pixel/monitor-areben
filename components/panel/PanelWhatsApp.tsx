@@ -1388,11 +1388,7 @@ function PanelInterno({
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-          <Dato k="Pedidos" v={String(c.total_sales)} />
-          <Dato k="Total" v={fmtMonto(c.total_amount)} />
-          <Dato k="Último" v={c.dias_ultimo === null ? '—' : c.dias_ultimo === 0 ? 'hoy' : `hace ${c.dias_ultimo}d`} />
-        </div>
+        {/* Sin los recuadros Pedidos · Total · Último (Darío 17-nov): repetían «Última compra» y no los usa. */}
         {cuenta && (
           <Aislado nombre="Cuenta corriente">
             <FranjaCuenta cuenta={cuenta} onCargar={pedidoQueDebe ? null : () => setCargandoPago(true)} />
@@ -1905,14 +1901,6 @@ function Notas({ notas, onGuardar, extra }: { notas: Nota[]; onGuardar: (texto: 
 }
 
 /** Un número del encabezado: el valor manda, la etiqueta acompaña. */
-function Dato({ k, v }: { k: string; v: string }) {
-  return (
-    <div style={{ flex: 1, minWidth: 0, background: color.bg2, borderRadius: radius.md, padding: '5px 8px' }}>
-      <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div>
-      <div style={{ fontSize: 10, color: color.mut2, textTransform: 'uppercase', letterSpacing: 0.3 }}>{k}</div>
-    </div>
-  )
-}
 
 /** Alto de la fila de pestañas: el aviso se pega justo debajo, sin taparlas. */
 const ALTO_SOLAPAS = 31
