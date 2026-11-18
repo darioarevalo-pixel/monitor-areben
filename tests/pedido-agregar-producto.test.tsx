@@ -114,4 +114,19 @@ describe('«Agregar producto» en la hoja del pedido', () => {
     expect(document.body.textContent).not.toContain('agregado')
     expect(botones().some((b) => b.textContent?.trim() === 'Guardar')).toBe(false)
   })
+
+  it('el total cambia en el momento, con el redondeo mayorista (Darío 18-nov)', async () => {
+    act(() => root.unmount())
+    cliente.leerPedidoPanel.mockResolvedValue({ ...ficha, redondeo: { paso: 100, modo: 'cercano' } })
+    root = createRoot(caja)
+    await act(async () => { root.render(<HojaPedido pedidoId={P} onCerrar={() => {}} onHecho={() => {}} />) })
+    await esperar()
+    await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="Uno más"]')!.click() })
+    expect(document.body.textContent).toMatch(/Total \(sin guardar\).*1\.500/)
+    await act(async () => { boton('Agregar producto').click() })
+    await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!, 'funda')
+    await esperar(350)
+    await act(async () => { boton(/iPhone 15 · stock 4/).click() })
+    expect(document.body.textContent).toMatch(/2\.800/) // 1.500 + 1.250 = 2.750 → al $100 más cercano
+  })
 })

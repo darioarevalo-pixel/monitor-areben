@@ -24,6 +24,7 @@ import { mensajeTotal } from './CalculadoraEnvio'
 import { escribirMonto, parsearMonto } from '@/lib/compromisos/core'
 import { FacturarParte, FacturarPedido, LETRA, descargarFactura, numeroComprobante } from './FacturasCliente'
 import { codigoPedido } from '@/lib/erp/codigos.core.js'
+import { redondear as redondearTotal } from '@/motor/venta/redondeo.mjs'
 import { esAprobador } from '@/lib/reposicion/armado.core.js'
 import { usePerfilOpcional } from '@/components/SesionProvider'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
@@ -327,6 +328,15 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
 
   const cambiado = useMemo(() => !!ficha && (ficha.lineas.some((l) => cantidades[`${l.product_id}:${l.size_id}`] !== l.cantidad)
     || agregados.some((a) => (cantidades[a.k] ?? 0) > 0)), [ficha, cantidades, agregados])
+  /** El total mientras se cambia (Darío 18-nov): renglones × precio, el redondeo mayorista y el envío, como al guardar. */
+  const totalAhora = (() => {
+    if (!ficha) return 0
+    if (!cambiado) return ficha.pedido.total
+    const productos = ficha.lineas.reduce((s, l) => s + l.precio * (cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad), 0)
+      + agregados.reduce((s, a) => s + a.precio * (cantidades[a.k] ?? 0), 0)
+    const envio = ficha.pedido.envio != null && ficha.pedido.envio > 0 ? ficha.pedido.envio : 0
+    return redondearTotal(productos, ficha.redondeo ?? null) + envio
+  })()
   /** Elegir una variante del buscador: si ya está en el pedido (o recién agregada), una más; si no, un renglón nuevo con 1. */
   const agregar = (prod: ProductoParaPedido, v: ProductoParaPedido['variantes'][number]) => {
     const k = `${prod.product_id}:${v.size_id}`
@@ -415,10 +425,10 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
               guardar={(envio, transporte) => hacer(() => ponerEnvioPedidoPanel(pedidoId, envio, transporte), envio ? 'Envío guardado.' : 'Envío sacado.')} />
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
-            <span>Total{cambiado ? ' (se recalcula al guardar)' : ''}</span>
+            <span>Total{cambiado ? ' (sin guardar)' : ''}</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {!cambiado && p.envio != null && p.envio > 0 && p.etapa !== 'anulado' && <CopyButton getText={() => mensajeTotal(p.total)} label="Total" copiedLabel="✓ Copiado" iconLeft="💬" />}
-              <b>{plata(p.total)}</b>
+              <b>{plata(totalAhora)}</b>
             </span>
           </div>
           {p.venta_id && ficha.facturacion && (ficha.facturacion.entera ? (

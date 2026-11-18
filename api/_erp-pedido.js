@@ -120,8 +120,11 @@ export async function pedidoDelPanel({ pedidoId = '', usuario = null }, deps) {
     if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADO' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo leer el pedido.' }
     const n = await nombresDe(pg, r.lineas)
     const { esFichaSinCliente } = await import('../motor/venta/cliente.mjs')
+    // Para el total en el momento (Darío 18-nov): el mismo redondeo que aplica el cambio al guardar.
+    const { redondeoDe } = await import('../motor/venta/redondeo-db.mjs')
+    const redondeo = await redondeoDe(pg, { marca: r.pedido.marca ?? 'bdi', canal: 'mayorista' }).catch(() => null)
     return {
-      prendido: true, escribir, pedido: { ...r.pedido, falta_cliente: esFichaSinCliente(r.pedido.cliente_id) }, cambios: r.cambios,
+      prendido: true, escribir, redondeo: redondeo ? { paso: Number(redondeo.paso), modo: redondeo.modo } : null, pedido: { ...r.pedido, falta_cliente: esFichaSinCliente(r.pedido.cliente_id) }, cambios: r.cambios,
       lineas: r.lineas.map((l) => ({ ...l, nombre: n.producto.get(String(l.product_id)) ?? null, talle: l.size_id == null ? null : n.talle.get(`${l.product_id}:${l.size_id}`) ?? null })),
     }
   })

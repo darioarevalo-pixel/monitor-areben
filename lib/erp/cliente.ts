@@ -874,6 +874,7 @@ export type RenglonPedido = { product_id: number; size_id: number | null; cantid
 export type CambioPedido = { motivo: string; antes: unknown; despues: unknown; usuario: string | null; cuando: string }
 export type FichaPedido = {
   prendido: true; escribir: boolean
+  /** El redondeo del total mayorista (el mismo del motor al guardar), para mostrar el total en el momento. */ redondeo?: { paso: number; modo: string } | null
   pedido: PedidoDelCliente & { editable: boolean; cliente_id: string | null; /** El envío que paga el cliente en origen (sql/084): va dentro de `total`. */ envio?: number | null; transporte?: string | null; /** En la ficha general «Pedido mayorista»: ⛔ va a preparar. */ falta_cliente?: boolean; contacto?: { nombre?: string | null; telefono?: string | null } | null; persona: { id: string; nombre: string | null; whatsapp: string; activo: boolean } | null; a_preparar_por: string | null }
   lineas: RenglonPedido[]; cambios: CambioPedido[]
   /** En qué quedó la facturación de su venta (sin venta, `undefined`; si la base de facturas ⛔ contestó, `null`). */
