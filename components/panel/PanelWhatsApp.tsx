@@ -23,6 +23,7 @@ import {
 import { guardarConRelectura, guardarLeadsConRelectura } from '@/lib/crm/persistencia'
 import { filaDeGuardado, type Fila } from '@/lib/crm/guardado-al-instante'
 import { armarFicha } from '@/lib/crm/panel'
+import type { TipoCompra } from '@/lib/crm/tipo-compra'
 import {
   agregarNota,
   correrPorCompra,
@@ -464,6 +465,35 @@ function MarcaComunidad({ comunidad, aviso, tels, telFicha }: {
       }}
     >
       {esta ? `✅ Está en la comunidad${conOtro ? ` · con el ${conOtro}` : ''}` : '✕ No está en la comunidad'}
+    </div>
+  )
+}
+
+/**
+ * «Compra pack» / «A veces pack» / «Compra suelto» (Darío 18-nov-2026): para saber a quién ofrecerle los packs.
+ * Sale de sus compras mayoristas (ver `lib/crm/tipo-compra.ts`). Con pocas compras no se muestra.
+ */
+function MarcaTipoCompra({ t }: { t: TipoCompra | null }) {
+  if (!t) return null
+  const texto = t.tipo === 'pack' ? '📦 Compra pack' : t.tipo === 'a-veces' ? '📦 A veces pack' : 'Compra suelto'
+  const fuerte = t.tipo === 'pack'
+  return (
+    <div
+      title={`En ${t.disenosCurva} de ${t.disenos} diseños llevó 6 o más modelos (${t.pct}% de sus ${t.fundas} fundas)`}
+      style={{
+        display: 'inline-block',
+        marginTop: 6,
+        marginLeft: 6,
+        fontSize: font.sm,
+        fontWeight: 700,
+        padding: '4px 10px',
+        borderRadius: 999,
+        border: `1px solid ${fuerte ? color.brandBorder : color.line}`,
+        background: fuerte ? color.brandBg : color.bg2,
+        color: fuerte ? color.brand : color.mut,
+      }}
+    >
+      {texto}
     </div>
   )
 }
@@ -1376,6 +1406,7 @@ function PanelInterno({
         {/* Los dos números: el del chat es el que está en la comunidad, pero si la ficha se abrió
             desde la lista, el chat todavía puede ser el anterior. */}
         <MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={telsCliente} telFicha={c.phone} />
+        <MarcaTipoCompra t={estado.ficha.tipoCompra} />
 
         {via === 'cola' && (
           <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: radius.sm, padding: '4px 8px' }}>

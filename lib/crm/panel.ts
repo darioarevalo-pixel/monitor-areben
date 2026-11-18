@@ -20,6 +20,7 @@
 
 import { apiFetch } from '../api-fetch'
 import { guardarMapa, leerMapa } from '../kv/cliente'
+import { tipoDeCompra, type TipoCompra } from './tipo-compra'
 import { TANDA_FRIOS, TEMPERATURA_DEFAULT, calcularAgregado, estadoSeguimiento, fechaCorridaPorCompra, normalizeArgPhone, resumenCompras, segmentoCliente, urgenciaFecha } from './core'
 import type { Corrida } from './seguimiento'
 import { estadoDeFecha, friosDelDia, grupoUrgencia, hechosHoy, listaDelDia, porTemperatura, TOPE_LISTA, yaVence, type FilaListaDia, type VistaTemp } from './lista-dia'
@@ -60,6 +61,8 @@ export type FichaPanel = {
   cliente: ClienteCRM
   segmento: Segmento
   compras: ResumenCompras
+  /** «Compra pack» / «suelto», de sus compras mayoristas (ver `tipo-compra.ts`). */
+  tipoCompra: TipoCompra | null
   via: ViaCruce
 }
 
@@ -179,6 +182,7 @@ export function armarFicha(d: RespuestaPanel, crmSeg: MapaSeguimiento, today: Da
     cliente: agregado,
     segmento: segmentoCliente(agregado),
     compras: resumenCompras(ventas, detalles),
+    tipoCompra: tipoDeCompra(ventas, detalles, today),
     via: d.via || '',
   }
 }

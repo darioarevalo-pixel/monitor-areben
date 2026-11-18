@@ -43,6 +43,8 @@ ERP. La elige `erp_corte` de BDI (`crmEnErp`, con el caché tolerante de la Caja
 - 🔴 Sin saber si BDI cortó, **tira** (⛔ elige camino a ciegas). Tests: `tests/crm-erp-servidor.test.ts`.
 - Extensión de Chrome: `extension/` (no se despliega; se carga a mano en el navegador).
 - Tests: `tests/crm-*.test.ts`. El del panel es `tests/crm-panel.test.ts`.
+- «📦 Compra pack / A veces pack / Compra suelto» en la ficha (Darío 18-nov-2026): `lib/crm/tipo-compra.ts`, sale de las ventas
+  y detalles que ya trae la ficha (canal 10 y 8, últimos 150 días, solo las 20 compras con detalle). Se calcula en el navegador, ⛔ no se guarda.
 
 ## ⛔ Lo que comparte con otras secciones
 
