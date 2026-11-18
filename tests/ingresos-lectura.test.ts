@@ -1,7 +1,7 @@
 // La traducción de la API de Ingresos a la forma del aviso, contra el normalizador real: es lo que garantiza que una OC
 // leída se guarde igual que una avisada. Y el handler: autorización, marcas sin token, seco, y que una falla ⛔ avance.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { aProcesar, aReleer, contadasDe, desdeDe, eventoDeOc, idDeEvento, idDeRelectura, LECTURA_DESDE, mismaForma, RELECTURA_MAX } from '@/lib/recepciones/lectura.core.js'
+import { aProcesar, aReleer, contadasDe, desdeDe, eventoDeOc, idDeEvento, idDeRelectura, LECTURA_DESDE, mismaForma, posicionesQueCambian, seGuardaSinDuplicar, esFrenadaPorForma, RELECTURA_MAX } from '@/lib/recepciones/lectura.core.js'
 import { normalizarEvento } from '@/lib/recepciones/webhook.core.js'
 
 const linea = (id: number, o: Record<string, unknown> = {}) => ({
@@ -82,6 +82,47 @@ describe('mismaForma: lo que se relee ⛔ duplica stock', () => {
     expect(mismaForma([r('A'), r('B')], [r('B'), r('A')])).toBe(false)
   })
 })
+
+describe('seGuardaSinDuplicar: la OC que cambió se pisa sólo si lo que cambia ⛔ sumó en el libro', () => {
+  const r = (sku: string | null) => ({ sku, codigo_barras: null })
+  it('el renglón guardado sin SKU que después vino con SKU (OC-3057) cambia de posición', () => {
+    expect(posicionesQueCambian([r('A'), r(null), r('B')], [r('A'), r('C'), r('B')])).toEqual([1])
+  })
+  it('renglones nuevos al final ⛔ cambian nada; uno que ya ⛔ está, sí', () => {
+    expect(posicionesQueCambian([r('A')], [r('A'), r('B')])).toEqual([])
+    expect(posicionesQueCambian([r('A'), r('B')], [r('A')])).toEqual([1])
+  })
+  it('sin movimiento en esas posiciones se guarda; con movimiento, ⛔', () => {
+    const g = [r('A'), r(null), r('RMI-0056')]; const l = [r('A'), r('C'), r('RMI-0056-NG'), r('D')]
+    expect(seGuardaSinDuplicar(g, l, new Set([0]))).toBe(true)
+    expect(seGuardaSinDuplicar(g, l, new Set([0, 2]))).toBe(false)
+  })
+  it('si el libro ⛔ contestó, el freno de siempre', () => {
+    expect(seGuardaSinDuplicar([r(null)], [r('C')], null)).toBe(false)
+    expect(seGuardaSinDuplicar([r('A')], [r('A')], null)).toBe(true)
+  })
+  it('sólo la frenada por forma se reintenta', () => {
+    expect(esFrenadaPorForma({ estado: 'ignorado', error: 'cambió de forma: 2 renglones' })).toBe(true)
+    expect(esFrenadaPorForma({ estado: 'ignorado', error: 'no aplica: otro tipo' })).toBe(false)
+    expect(esFrenadaPorForma({ estado: 'procesado', error: null })).toBe(false)
+  })
+})
+
+let libro: { orden: number }[] | Error = []
+const consultas: unknown[][] = []
+vi.mock('pg', () => ({
+  default: {
+    Client: class {
+      async connect() {}
+      async query(sql: string, params: unknown[]) {
+        consultas.push([sql, params])
+        if (libro instanceof Error) throw libro
+        return { rows: sql.includes('stock_movimiento') ? libro : [] }
+      }
+      async end() {}
+    },
+  },
+}))
 
 const procesar = vi.fn()
 const anotar = vi.fn()
@@ -200,6 +241,30 @@ describe('el handler', () => {
     expect(anotar.mock.calls[0][0]).toMatchObject({ estado: 'ignorado', webhook_id: 'api:zattia:3050:2026-10-29T12:06:07.717723Z' })
     expect(r.code).toBe(200)
     expect(JSON.stringify(r.body)).toContain('para no duplicar stock')
+  })
+  it('cambió de forma pero lo que cambia ⛔ sumó en el libro: se guarda (OC-3057 de Zattia)', async () => {
+    vi.stubEnv('DATABASE_URL_ZATTIA', 'postgres://u:p@h:5432/z')
+    libro = [{ orden: 0 }]; consultas.length = 0
+    guardadas = [{ sku: 'S-10', codigo_barras: 'B-10' }, { sku: '', codigo_barras: '' }]
+    await llamar()
+    expect(procesar).toHaveBeenCalledTimes(1)
+    expect(consultas.find((c) => String(c[0]).includes('stock_movimiento'))?.[1]).toEqual(['zattia:3050:%'])
+  })
+  it('cambió de forma y esa posición ya sumó en el libro: ⛔ se guarda', async () => {
+    vi.stubEnv('DATABASE_URL_ZATTIA', 'postgres://u:p@h:5432/z')
+    libro = [{ orden: 0 }, { orden: 1 }]
+    guardadas = [{ sku: 'S-10', codigo_barras: 'B-10' }, { sku: 'S-99', codigo_barras: 'B-99' }]
+    await llamar()
+    expect(procesar).not.toHaveBeenCalled()
+    expect(anotar.mock.calls[0][0]).toMatchObject({ estado: 'ignorado' })
+  })
+  it('si el libro ⛔ contesta, queda frenada', async () => {
+    vi.stubEnv('DATABASE_URL_ZATTIA', 'postgres://u:p@h:5432/z')
+    libro = new Error('caída')
+    guardadas = [{ sku: 'S-10', codigo_barras: 'B-10' }, { sku: '', codigo_barras: '' }]
+    await llamar()
+    expect(procesar).not.toHaveBeenCalled()
+    libro = []
   })
   it('una OC ya guardada con los mismos renglones se vuelve a guardar: el libro ajusta el conteo', async () => {
     guardadas = [{ sku: 'S-10', codigo_barras: 'B-10' }, { sku: 'S-11', codigo_barras: 'B-11' }]

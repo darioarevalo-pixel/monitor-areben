@@ -5,6 +5,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { normalizarEvento } from '../lib/recepciones/webhook.core.js'
 import { leerEspejo, productoDeLinea } from '../lib/recepciones/espejo.core.js'
+import { esFrenadaPorForma } from '../lib/recepciones/lectura.core.js'
 import { CAMPO, preguntaDeOc } from '../lib/agenda/pregunta-ingreso.core.js'
 import { filaDeLocalSembrado, nuevoIdDeLocal } from '../lib/prm/sembrado.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
@@ -151,8 +152,11 @@ export async function procesarEvento({ sb, idEvento, payload, enviadoEn = null }
     // Un evento que ya está y quedó en `error` SÍ se vuelve a procesar: si no, un reintento del
     // emisor —que es justo lo que arreglaría una caída de la base— chocaría con la fila del intento
     // fallido y se contestaría 200 dejándolo perdido para siempre.
-    const { data: previo } = await sb.from('recepcion_evento').select('estado').eq('webhook_id', idEvento).maybeSingle()
-    if (previo && previo.estado !== 'error') {
+    //
+    // Y una frenada por forma (`esFrenadaPorForma`) también: la lectura la vuelve a mandar recién cuando el libro dice que pisarla ⛔
+    // duplica stock. Sin esto quedaba «repetida» para siempre (OC-3057/3059/3061/3062 de Zattia, 17-nov).
+    const { data: previo } = await sb.from('recepcion_evento').select('estado, error').eq('webhook_id', idEvento).maybeSingle()
+    if (previo && previo.estado !== 'error' && !esFrenadaPorForma(previo)) {
       return { repetido: true }
     }
 

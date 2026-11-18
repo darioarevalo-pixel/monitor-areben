@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { cfgDelMonitor } from './_recepciones-base.js'
 import { procesarEvento } from './_recepciones-procesar.js'
-import { aProcesar, aReleer, contadasDe, desdeDe, eventoDeOc, idDeEvento, idDeRelectura, mismaForma, RELECTURA_DIAS } from '../lib/recepciones/lectura.core.js'
+import { aProcesar, aReleer, contadasDe, desdeDe, eventoDeOc, idDeEvento, idDeRelectura, seGuardaSinDuplicar, RELECTURA_DIAS } from '../lib/recepciones/lectura.core.js'
 import { normalizarEvento } from '../lib/recepciones/webhook.core.js'
 import { configPg } from '../lib/pg.core.js'
 import { refrescarStockDeCorte } from './_erp-stock-corte.js'
@@ -76,7 +76,35 @@ async function renglonesGuardados(sb, store, ocId) {
   return data || []
 }
 
-/** La OC que cambió de forma ⛔ se guarda (ver `mismaForma`): queda anotada, y como `ignorado` ⛔ se vuelve a pedir. */
+/**
+ * Las posiciones de esa OC que ya sumaron stock en el libro de su marca (clave `<store>:<oc>:<orden>:…`, ver `lib/fuentes/recepciones.mjs` del motor).
+ * Sin base o con un tropiezo ⇒ `null`, y la OC que cambió de forma queda frenada como siempre.
+ */
+async function posicionesConStock(store, ocId) {
+  let db
+  try {
+    db = await abrirBase(store)
+    if (!db) return null
+    const { rows } = await db.query(
+      `select distinct split_part(clave, ':', 3)::int as orden from stock_movimiento where origen = 'recepcion' and clave like $1`,
+      [`${store}:${Number(ocId)}:%`],
+    )
+    return new Set(rows.map((r) => Number(r.orden)))
+  } catch (e) {
+    console.error(`[ingresos-lectura] ${store} OC ${ocId}: el libro no contestó (${e.message}); queda frenada`)
+    return null
+  } finally {
+    await db?.end().catch(() => {})
+  }
+}
+
+/** Si la OC ya guardada se puede pisar: misma forma, o lo que cambia ⛔ había sumado en el libro (`seGuardaSinDuplicar`). */
+async function seGuarda(store, ocId, guardadas, lineas) {
+  if (seGuardaSinDuplicar(guardadas, lineas, null)) return true
+  return seGuardaSinDuplicar(guardadas, lineas, await posicionesConStock(store, ocId))
+}
+
+/** La OC que cambió de forma y pisarla duplicaría ⛔ se guarda (ver `seGuardaSinDuplicar`): queda anotada, y como `ignorado` ⛔ se vuelve a pedir. */
 async function anotarFrenada(sb, { store, oc, idEvento, payload, motivo }) {
   const { error } = await sb.from('recepcion_evento').upsert({
     webhook_id: idEvento, tipo: payload.type, store, oc_id: oc.id, payload, estado: 'ignorado', error: motivo,
@@ -105,7 +133,7 @@ async function leerMarca({ sb, store, token, seco, hasta }) {
     const payload = eventoDeOc(oc)
     const guardadas = await renglonesGuardados(sb, store, oc.id)
     const norm = normalizarEvento(payload)
-    if (guardadas.length && norm.ok && !mismaForma(guardadas, norm.lineas)) {
+    if (guardadas.length && norm.ok && !(await seGuarda(store, oc.id, guardadas, norm.lineas))) {
       const motivo = `cambió de forma: ${guardadas.length} renglones guardados, ${norm.lineas.length} en Ingresos o con otro SKU. Se deja como estaba, para no duplicar stock.`
       await anotarFrenada(sb, { store, oc, idEvento, payload, motivo })
       salida.frenadas.push({ oc: oc.code, motivo })
@@ -139,7 +167,7 @@ async function leerMarca({ sb, store, token, seco, hasta }) {
     const payload = eventoDeOc(oc)
     const norm = normalizarEvento(payload)
     const guardadas = await renglonesGuardados(sb, store, oc.id)
-    if (guardadas.length && norm.ok && !mismaForma(guardadas, norm.lineas)) {
+    if (guardadas.length && norm.ok && !(await seGuarda(store, oc.id, guardadas, norm.lineas))) {
       await anotarFrenada(sb, { store, oc, idEvento, payload, motivo: `cambió de forma: ${guardadas.length} renglones guardados, ${norm.lineas.length} en Ingresos o con otro SKU. Se deja como estaba, para no duplicar stock.` })
       salida.frenadas.push({ oc: oc.code })
       continue
@@ -184,15 +212,22 @@ async function aMirarDeNuevo(sb, store, vistas) {
 }
 
 /**
- * Las OC que cambiaron y ⛔ se guardaron (`mismaForma`), de los últimos días: el aviso. Se relee cada vuelta porque la lectura se anota entera: sin esto la alerta se cerraría a los 5 min.
+ * Las OC que cambiaron y ⛔ se guardaron (`seGuardaSinDuplicar`), de los últimos días: el aviso. Se relee cada vuelta porque la lectura se anota entera: sin esto la alerta se cerraría a los 5 min.
  * ⛔ se pudo cambiar la clave a id de línea sin riesgo de duplicar (ver el PENDIENTES): queda frenada, y alguien la mira.
  */
 const DIAS_AVISO_FRENADA = 14
 async function frenadasDe(sb, store) {
   const desde = new Date(Date.now() - DIAS_AVISO_FRENADA * 864e5).toISOString()
-  const { data, error } = await sb.from('recepcion_evento').select('oc_id, payload').eq('store', store).eq('estado', 'ignorado').like('error', 'cambió de forma%').gte('recibido_en', desde)
+  const { data, error } = await sb.from('recepcion_evento').select('oc_id, payload, recibido_en').eq('store', store).eq('estado', 'ignorado').like('error', 'cambió de forma%').gte('recibido_en', desde)
   if (error) throw new Error(`recepcion_evento: ${error.message}`)
-  return [...new Set((data || []).map((e) => e.payload?.data?.orden_compra?.label ?? `#${e.oc_id}`))]
+  if (!data?.length) return []
+  // La OC que se volvió a guardar DESPUÉS de frenarse ya ⛔ está frenada: si no, el aviso seguiría 14 días por las frenadas viejas.
+  const refs = [...new Set(data.map((e) => `${store}:${e.oc_id}`))]
+  const { data: guardadas, error: e2 } = await sb.from('recepcion_oc').select('id, actualizado_en').in('id', refs)
+  if (e2) throw new Error(`recepcion_oc: ${e2.message}`)
+  const guardadaEn = new Map((guardadas || []).map((o) => [o.id, Date.parse(o.actualizado_en || '') || 0]))
+  const siguen = data.filter((e) => Date.parse(e.recibido_en || '') > (guardadaEn.get(`${store}:${e.oc_id}`) ?? 0))
+  return [...new Set(siguen.map((e) => e.payload?.data?.orden_compra?.label ?? `#${e.oc_id}`))]
 }
 
 /** La base del motor de una marca. Sin la variable ⇒ `null`. */
