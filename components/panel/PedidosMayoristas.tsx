@@ -50,9 +50,14 @@ export function textoPago(p: PagoPedido): string {
 const tonoPago = (p: PagoPedido) => (p.estado === 'pagado' ? color.successInk : color.dangerInk)
 
 /** Los pedidos del cliente del chat; `null` = apagado o cargando (⛔ se dibuja nada). */
-export function usePedidosPanel(clienteId: string | null, tel: string | null): { pedidos: Extract<PedidosPanel, { prendido: true }> | null; releer: () => void } {
+export function usePedidosPanel(clienteId: string | null, tel: string | null): {
+  pedidos: Extract<PedidosPanel, { prendido: true }> | null; releer: () => void
+  /** Ya llegaron los pedidos de ESTE cliente (⛔ los de antes de saber quién es): hasta entonces la cuenta ⛔ muestra sus compras sueltas. */
+  listos: boolean
+} {
   const prendido = useCuentaPrendida()
   const [pedidos, setPedidos] = useState<Extract<PedidosPanel, { prendido: true }> | null>(null)
+  const [para, setPara] = useState<string | null>(null)
   const [vuelta, setVuelta] = useState(0)
   // Igual que la cuenta: con el mismo número, lo visto queda hasta que llega lo nuevo (⛔ se vacía al llegar el id del cliente).
   const telVisto = useRef(tel)
@@ -61,12 +66,12 @@ export function usePedidosPanel(clienteId: string | null, tel: string | null): {
     if (!prendido || (!clienteId && !tel)) return
     let vivo = true
     leerPedidosPanel({ clienteId, tel })
-      .then((r) => { if (vivo) setPedidos(r.prendido ? r : null) })
-      .catch(() => {})
+      .then((r) => { if (vivo) { setPedidos(r.prendido ? r : null); setPara(clienteId) } })
+      .catch(() => { if (vivo) setPara(clienteId) })
     return () => { vivo = false }
   }, [prendido, clienteId, tel, vuelta])
   const releer = useCallback(() => setVuelta((v) => v + 1), [])
-  return { pedidos, releer }
+  return { pedidos, releer, listos: !prendido || (!!clienteId && para === clienteId) }
 }
 
 const APAGADO = 'Los pedidos se manejan desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.'

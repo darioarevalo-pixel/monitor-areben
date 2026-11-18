@@ -1050,7 +1050,17 @@ function PanelInterno({
   const { cuenta, releer: releerCuenta } = useCuentaPanel(quien?.tipo === 'erp' ? quien.id : null, telCuenta)
   const [cargandoPago, setCargandoPago] = useState(false)
   // Los pedidos mayoristas del ERP (paso 3 del plan, `PedidosMayoristas.tsx`): escondidos detrás del mismo interruptor.
-  const { pedidos: pedidosErp, releer: releerPedidos } = usePedidosPanel(cuenta?.cliente.id ?? null, telCuenta)
+  const { pedidos: pedidosErp, releer: releerPedidos, listos: pedidosListos } = usePedidosPanel(cuenta?.cliente.id ?? null, telCuenta)
+  // La cuenta cambió (otra compra o pago: p. ej. un pedido pasado a este cliente desde «Sin cliente») ⇒ los pedidos también.
+  // Darío 18-nov (Manuel Gomez, M-0119): la cuenta ya lo debía y los pedidos seguían los de antes ⇒ se veía como «Venta 33857».
+  const huellaCuenta = cuenta ? `${cuenta.cliente.id}|${cuenta.estado.saldo}|${cuenta.estado.pendientes.map((p) => p.ref).join(',')}` : ''
+  const huellaVista = useRef(huellaCuenta)
+  useEffect(() => {
+    const antes = huellaVista.current
+    huellaVista.current = huellaCuenta
+    // Sólo cuando cambia para el MISMO cliente (la primera lectura ya trae sus pedidos).
+    if (antes && huellaCuenta && antes !== huellaCuenta && antes.split('|')[0] === huellaCuenta.split('|')[0]) releerPedidos()
+  }, [huellaCuenta, releerPedidos])
   const codigosAbiertos = useMemo(
     () => (pedidosErp?.pedidos ?? []).filter((p) => p.etapa !== 'despachado' && p.etapa !== 'anulado' && p.etapa !== 'sin_entrar').map((p) => codigoPedido(p.numero)).join(','),
     [pedidosErp],
@@ -1342,7 +1352,9 @@ function PanelInterno({
   // Con pedido que debe, el pago va en el pedido; PERO si debe algo aparte (saldo viejo, otras compras), «$ Cargar pago» del
   // saldo sigue: paga lo más viejo primero (Darío 18-nov, María de la Paz: saldo viejo $215.950 + 2 pedidos, sin botón).
   const pedidoQueDebe = debenPedidos > 0 && !((cuenta?.estado.saldo ?? 0) > debenPedidos + 1)
-  const sigue = loQueSigue(pedidosErp, cuenta)
+  // Hasta que llegan SUS pedidos, la deuda de un pedido ⛔ se muestra suelta como «Venta N» (Darío 18-nov, Manuel Gomez M-0119:
+  // los primeros segundos se veía la compra en la cuenta y parecía que el pedido no estaba).
+  const sigue = loQueSigue(pedidosErp, pedidosListos ? cuenta : null)
 
   return (
     <Envoltorio
@@ -1431,7 +1443,7 @@ function PanelInterno({
         </div>
         {cuenta && (
           <Aislado nombre="Cuenta corriente">
-            <FranjaCuenta cuenta={cuenta} onCargar={pedidoQueDebe ? null : () => setCargandoPago(true)} />
+            <FranjaCuenta cuenta={cuenta} onCargar={pedidoQueDebe || !pedidosListos ? null : () => setCargandoPago(true)} />
           </Aislado>
         )}
       </Encabezado>
@@ -1450,7 +1462,7 @@ function PanelInterno({
         </ConHuecosLogistica>
         {cuenta && (
           <Aislado nombre="Cuenta corriente">
-            <TarjetaCuenta cuenta={cuenta} sinRefs={refsDePedidosAbiertos(pedidosErp)} />
+            {pedidosListos && <TarjetaCuenta cuenta={cuenta} sinRefs={refsDePedidosAbiertos(pedidosErp)} />}
             {cargandoPago && (
               <HojaCargarPago
                 cuenta={cuenta}
