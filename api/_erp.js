@@ -104,7 +104,8 @@ import { claveVenta, resumenDelMes, ventasParaFacturar } from '../motor/arca/mes
 import { SQL_CUENTAS_SIN_PLATA, SQL_FICHAS_ERP, SQL_PAGOS_A_CUENTA_ERP, cobrosDeVentasErp } from '../lib/erp/facturacion-erp.core.js'
 import { POR_PEDIDO, facturarLote } from '../motor/arca/lote.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
-import { depositoDe, stockDeVariante } from '../lib/erp/stock.core.js'
+import { stockDeVariante } from '../lib/erp/stock.core.js'
+import { TOPE_FILAS, pedidoDeBusqueda, prendasEncontradas } from '../lib/erp/buscar-prenda.core.js'
 import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
 import { armarConciliacion, TIENDAS as TIENDAS_CONCILIACION } from '../lib/erp/conciliacion.core.js'
 import { entradaInvalida } from '../lib/erp/entrada.core.js'
@@ -631,25 +632,18 @@ export async function stockDePrenda({ marca, q, producto, talle }) {
   const { url, key } = cfgDeMarca(marca)
   const b = createClient(url, key)
   if (!producto) {
-    const t = String(q || '').trim()
-    if (t.length < 3) return { status: 400, error: 'Escribí al menos 3 letras o números.' }
-    const like = `%${t.replace(/[%_,()]/g, ' ')}%`
+    // Por PALABRAS y con tope de PRODUCTOS (`lib/erp/buscar-prenda.core.js`): la frase pegada y el tope de 60 talles escondían
+    // «TEMPLADO 9D PREMIUM» (Bruno 16-nov). La base filtra grueso (SKU, código o la palabra más larga); el resto, el núcleo.
+    const pedido = pedidoDeBusqueda(q)
+    if (!pedido) return { status: 400, error: 'Escribí al menos 3 letras o números.' }
+    const o = [`sku.ilike.${pedido.like}`, `barcode.eq.${pedido.codigo}`]
+    if (pedido.palabra) o.push(`product_name.ilike.${pedido.palabra}`, `size_name.ilike.${pedido.palabra}`)
     const { data, error } = await b.from('inventario')
       .select('product_id, product_name, size_id, size_name, sku, barcode, store_name, available_quantity')
-      .or(`sku.ilike.${like},barcode.eq.${t.replace(/[,()]/g, '')},product_name.ilike.${like}`)
-      .order('product_name').order('size_name').limit(400)
+      .or(o.join(','))
+      .order('product_name').order('size_name').limit(TOPE_FILAS)
     if (error) throw new Error(`inventario: ${error.message}`)
-    const porVariante = new Map()
-    for (const r of data) {
-      const k = `${r.product_id}/${r.size_id}`
-      const v = porVariante.get(k) || { producto: String(r.product_id), talle: String(r.size_id), nombre: r.product_name, talleNombre: r.size_name, sku: r.sku, barcode: r.barcode, gn: 0, porDeposito: {} }
-      v.gn += Number(r.available_quantity || 0)
-      // Por depósito (Nueva venta muestra el stock del lugar de donde sale): el del espejo, por `depositoDe`.
-      const d = depositoDe(marca, r.store_name)
-      if (d) v.porDeposito[d] = (v.porDeposito[d] || 0) + Number(r.available_quantity || 0)
-      porVariante.set(k, v)
-    }
-    return { variantes: [...porVariante.values()].slice(0, 60), cortado: porVariante.size > 60 }
+    return prendasEncontradas(data, pedido, marca)
   }
   if (!/^\d+$/.test(String(producto)) || !/^\d+$/.test(String(talle))) return { status: 400, error: 'Falta un dato del producto' }
   const [movs, gn] = await Promise.all([
