@@ -38,6 +38,33 @@ const pendKey = (marca: string) => 'monitor_ubi_pend_' + marca
 const espera = (ms: number) => new Promise((res) => setTimeout(res, ms))
 /** Intentos por tanda de guardado (1 vuelta + 2 reintentos de lo que falló). */
 const RONDAS = 3
+/** Productos que se guardan a la vez cuando la línea ya está en Areben Gestión (GN, en cambio, va de a uno con pausa). */
+const A_LA_VEZ_ERP = 6
+
+/**
+ * Corre `fn` sobre cada item: en Areben Gestión de a `A_LA_VEZ_ERP` y sin pausa; en GN de a uno con `pausaGN` ms entre
+ * productos (GN acepta 60 llamadas por minuto). `alTerminar` recibe cuántos van, para la barra de progreso.
+ */
+async function recorrer<T>(items: T[], enErp: boolean, pausaGN: number, fn: (item: T) => Promise<void>, alTerminar: (hechos: number) => void) {
+  let hechos = 0
+  if (!enErp) {
+    for (const it of items) {
+      await fn(it)
+      alTerminar(++hechos)
+      await espera(pausaGN)
+    }
+    return
+  }
+  let sig = 0
+  const trabajador = async () => {
+    while (sig < items.length) {
+      const it = items[sig++]
+      await fn(it)
+      alTerminar(++hechos)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(A_LA_VEZ_ERP, items.length) }, trabajador))
+}
 
 type Filtro = 'todos' | 'sin' | 'reparar'
 
@@ -205,9 +232,9 @@ export function Ubicaciones() {
       // Sin reset por ronda a propósito: un error que NO se reintenta (sin variantes) pasa
       // por la ronda 1 y no vuelve a aparecer. Si se limpiara acá, el cartel final podría
       // contar ese fallo y quedarse sin motivo que mostrar.
-      for (let i = 0; i < porHacer.length; i++) {
-        const p = porHacer[i]
-        setProgreso({ hechos: i, total: porHacer.length })
+      const total = porHacer.length
+      setProgreso({ hechos: 0, total })
+      await recorrer(porHacer, enErp, 250, async (p) => {
         const valor = (cambios[String(p.product_id)] || '').trim()
         const r = await guardarObservacion(marca, p.product_id, cambios[String(p.product_id)])
         if (r.ok) {
@@ -216,12 +243,12 @@ export function Ubicaciones() {
           ultimoError = r.error || 'desconocido'
           if (r.reintentable) fallaron.push(p) // insistir no arregla "no tiene variantes acá"
         }
-        await espera(250) // pausa entre productos (no saturar GN)
-      }
+      }, (hechos) => setProgreso({ hechos, total }))
       porHacer = fallaron
       // Aire antes de la ronda siguiente. GN cuenta 60 llamadas por MINUTO: con 1 s de pausa la
       // ronda 2 chocaba contra el mismo freno y quedaban sin guardar (19-oct, «6 no se pudieron»).
-      if (porHacer.length && ronda < RONDAS) await espera(15000 * ronda)
+      // Areben Gestión no tiene ese freno: alcanza con un respiro corto.
+      if (porHacer.length && ronda < RONDAS) await espera(enErp ? 2000 * ronda : 15000 * ronda)
     }
     setReintento(0)
     const hechos = exitosos.length
@@ -298,17 +325,15 @@ export function Ubicaciones() {
     let hechos = 0
     let err = 0
     let primerError = ''
-    for (let i = 0; i < aReparar.length; i++) {
-      const p = aReparar[i]
-      setProgreso({ hechos: i, total: aReparar.length })
+    setProgreso({ hechos: 0, total: aReparar.length })
+    await recorrer(aReparar, enErp, 300, async (p) => {
       const r = await guardarObservacion(marca, p.product_id, p.actual)
       if (r.ok) hechos++
       else {
         err++
         if (!primerError) primerError = r.error || 'desconocido'
       }
-      await espera(300)
-    }
+    }, (n) => setProgreso({ hechos: n, total: aReparar.length }))
     setReparando(false)
     setProgreso(null)
     recargar() // recargar para reflejar el estado real
