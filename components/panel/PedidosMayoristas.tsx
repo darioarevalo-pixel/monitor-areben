@@ -341,11 +341,23 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
     return redondearTotal(productos, ficha.redondeo ?? null) + envio
   })()
   /** Elegir una variante del buscador: si ya está en el pedido (o recién agregada), una más; si no, un renglón nuevo con 1. */
-  const agregar = (prod: ProductoParaPedido, v: ProductoParaPedido['variantes'][number]) => {
-    const k = `${prod.product_id}:${v.size_id}`
-    const ya = ficha?.lineas.some((l) => `${l.product_id}:${l.size_id}` === k) || agregados.some((a) => a.k === k)
-    if (!ya && prod.precio != null) setAgregados((as) => [...as, { k, product_id: prod.product_id, size_id: v.size_id, nombre: prod.nombre, talle: v.talle, precio: prod.precio as number, stock: v.stock }])
-    setCantidades((c) => ({ ...c, [k]: (c[k] ?? 0) + 1 }))
+  /** Lo elegido en el buscador, de una (Darío 18-nov: filas con cantidad): si ya está en el pedido suma; si no, renglón nuevo. */
+  const agregar = (elegidos: Elegido[]) => {
+    const nuevos: Agregado[] = []
+    for (const { prod, v } of elegidos) {
+      const k = `${prod.product_id}:${v.size_id}`
+      const ya = ficha?.lineas.some((l) => `${l.product_id}:${l.size_id}` === k) || agregados.some((a) => a.k === k) || nuevos.some((a) => a.k === k)
+      if (!ya && prod.precio != null) nuevos.push({ k, product_id: prod.product_id, size_id: v.size_id, nombre: prod.nombre, talle: v.talle, precio: prod.precio, stock: v.stock })
+    }
+    setAgregados((as) => [...as, ...nuevos])
+    setCantidades((c) => {
+      const out = { ...c }
+      for (const { prod, v, cantidad } of elegidos) {
+        const k = `${prod.product_id}:${v.size_id}`
+        out[k] = (out[k] ?? ficha?.lineas.find((l) => `${l.product_id}:${l.size_id}` === k)?.cantidad ?? 0) + cantidad
+      }
+      return out
+    })
     setBuscando(false)
   }
   const hacer = async (fn: () => Promise<{ avisarDeposito?: boolean; sinCambios?: boolean; ficha?: FichaPedido }>, ok: string, que = 'guardar') => {
@@ -576,10 +588,14 @@ type Agregado = { k: string; product_id: number; size_id: number; nombre: string
  * El buscador de «Agregar producto»: el catálogo de la marca del pedido por nombre, SKU o código, cada variante con su stock
  * y el precio mayorista. Un producto SIN precio mayorista se ve pero ⛔ se agrega (el motor contestaría «sin precio»).
  */
-function BuscarProducto({ pedidoId, onElegir, onCerrar }: { pedidoId: string; onElegir: (p: ProductoParaPedido, v: ProductoParaPedido['variantes'][number]) => void; onCerrar: () => void }) {
+type Elegido = { prod: ProductoParaPedido; v: ProductoParaPedido['variantes'][number]; cantidad: number }
+
+function BuscarProducto({ pedidoId, onElegir, onCerrar }: { pedidoId: string; onElegir: (elegidos: Elegido[]) => void; onCerrar: () => void }) {
   const [q, setQ] = useState('')
   const [lista, setLista] = useState<ProductoParaPedido[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Cuántas de cada talle (Darío 18-nov: filas, para cargar varios de una). Sobrevive a otra búsqueda. */
+  const [pedir, setPedir] = useState<Record<string, Elegido>>({})
   useEffect(() => {
     const t = q.trim()
     if (t.length < 2) return
@@ -593,6 +609,10 @@ function BuscarProducto({ pedidoId, onElegir, onCerrar }: { pedidoId: string; on
   }, [pedidoId, q])
   // Con menos de 2 letras ⛔ se muestra la lista vieja.
   const vista = q.trim().length < 2 ? null : lista
+  const poner = (prod: ProductoParaPedido, v: ProductoParaPedido['variantes'][number], n: number) =>
+    setPedir((m) => ({ ...m, [`${prod.product_id}:${v.size_id}`]: { prod, v, cantidad: Math.max(0, Math.min(9999, Math.floor(n) || 0)) } }))
+  const elegidos = Object.values(pedir).filter((e) => e.cantidad > 0)
+  const unidades = elegidos.reduce((a, e) => a + e.cantidad, 0)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, border: `1px solid ${color.line}`, borderRadius: radius.md, padding: space[2] }}>
       <div style={{ display: 'flex', gap: 6 }}>
@@ -604,16 +624,29 @@ function BuscarProducto({ pedidoId, onElegir, onCerrar }: { pedidoId: string; on
       {vista?.map((p) => (
         <div key={p.product_id} style={{ fontSize: font.sm }}>
           <b>{p.nombre}</b> <span style={{ fontSize: font.xs, color: p.precio == null ? color.dangerInk : color.mut2 }}>{p.precio == null ? '· sin precio mayorista: no se puede agregar' : `· ${plata(p.precio)} c/u`}</span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
-            {p.variantes.map((v) => (
-              <Button key={v.size_id} size="sm" variant="outline" disabled={p.precio == null} onClick={() => onElegir(p, v)}
-                title={v.en_pedido ? 'Ya está en el pedido: suma uno' : undefined}>
-                {v.talle ?? 'Única'} · stock {v.stock}{v.en_pedido ? ' · ya está' : ''}
-              </Button>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', marginTop: 3 }}>
+            {p.variantes.map((v) => {
+              const n = pedir[`${p.product_id}:${v.size_id}`]?.cantidad ?? 0
+              const nombre = v.talle ?? 'Única'
+              return (
+                <div key={v.size_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', borderTop: `1px solid ${color.line2}` }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {nombre} <span style={{ fontSize: font.xs, color: v.stock <= 0 ? color.dangerInk : color.mut2 }}>· stock {v.stock}{v.en_pedido ? ' · ya está' : ''}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Button size="sm" variant="outline" aria-label={`Uno menos de ${nombre}`} disabled={p.precio == null || n <= 0} onClick={() => poner(p, v, n - 1)}>−</Button>
+                    <Input value={n ? String(n) : ''} inputMode="numeric" placeholder="0" aria-label={`Cantidad de ${nombre}`} disabled={p.precio == null}
+                      onChange={(e) => poner(p, v, Number(e.target.value.replace(/\D/g, '')))} onFocus={(e) => e.target.select()}
+                      style={{ width: 48, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }} />
+                    <Button size="sm" variant="outline" aria-label={`Uno más de ${nombre}`} disabled={p.precio == null} onClick={() => poner(p, v, n + 1)}>+</Button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       ))}
+      {unidades > 0 && <div><Button size="sm" variant="solid" tone="brand" onClick={() => onElegir(elegidos)}>Agregar {unidades} u.</Button></div>}
     </div>
   )
 }

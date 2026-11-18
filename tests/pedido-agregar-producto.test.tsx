@@ -49,6 +49,17 @@ const boton = (txt: string | RegExp) => {
   if (!b) throw new Error(`No está el botón «${txt}»: ${botones().map((x) => x.textContent).join(' | ')}`)
   return b
 }
+/** La fila del buscador (talle · stock) cuyo texto coincide: sus botones − / + y su casillero. */
+const fila = (txt: RegExp) => {
+  // En orden del documento el padre va antes que el hijo: la última que coincide es la fila misma.
+  const f = [...document.querySelectorAll<HTMLDivElement>('div')].filter((d) => d.querySelectorAll('input[aria-label^="Cantidad de"]').length === 1 && txt.test(d.textContent ?? ''))
+  if (!f.length) throw new Error(`No está la fila ${txt}`)
+  return f[f.length - 1]
+}
+const sumar = async (txt: RegExp, veces = 1) => {
+  for (let i = 0; i < veces; i++) await act(async () => { fila(txt).querySelector<HTMLButtonElement>('button[aria-label^="Uno más de"]')!.click() })
+}
+const confirmarAgregar = async () => { await act(async () => { boton(/^Agregar \d+ u\.$/).click() }) }
 const esperar = async (ms = 0) => { await act(async () => { await new Promise((r) => setTimeout(r, ms)) }) }
 const escribir = async (input: HTMLInputElement, valor: string) => {
   await act(async () => {
@@ -82,8 +93,9 @@ describe('«Agregar producto» en la hoja del pedido', () => {
     await esperar(350)
     expect(cliente.buscarProductosPedido).toHaveBeenCalledWith(P, 'funda')
     expect(document.body.textContent).toContain('sin precio mayorista: no se puede agregar')
-    expect(boton(/iPhone 15 · stock 9/).disabled).toBe(true)
-    await act(async () => { boton(/iPhone 15 · stock 4/).click() })
+    expect(fila(/stock 9/).querySelector<HTMLButtonElement>('button[aria-label^="Uno más de"]')!.disabled).toBe(true)
+    await sumar(/stock 4/)
+    await confirmarAgregar()
     expect(document.body.textContent).toContain('Funda Cargo')
     expect(document.body.textContent).toContain('agregado')
     await act(async () => { boton('Guardar').click() })
@@ -98,7 +110,8 @@ describe('«Agregar producto» en la hoja del pedido', () => {
     await act(async () => { boton('Agregar producto').click() })
     await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!, 'mom')
     await esperar(350)
-    await act(async () => { boton(/ya está/).click() })
+    await sumar(/ya está/)
+    await confirmarAgregar()
     await act(async () => { boton('Guardar').click() })
     await esperar()
     expect(cliente.cambiarPedidoPanel).toHaveBeenCalledWith(P, [{ productId: 1, sizeId: 10, cantidad: 3 }])
@@ -108,7 +121,8 @@ describe('«Agregar producto» en la hoja del pedido', () => {
     await act(async () => { boton('Agregar producto').click() })
     await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!, 'cargo')
     await esperar(350)
-    await act(async () => { boton(/iPhone 15 · stock 4/).click() })
+    await sumar(/stock 4/)
+    await confirmarAgregar()
     const menos = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="Uno menos"]')]
     await act(async () => { menos[1].click() })
     expect(document.body.textContent).not.toContain('agregado')
@@ -126,7 +140,20 @@ describe('«Agregar producto» en la hoja del pedido', () => {
     await act(async () => { boton('Agregar producto').click() })
     await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!, 'funda')
     await esperar(350)
-    await act(async () => { boton(/iPhone 15 · stock 4/).click() })
+    await sumar(/stock 4/)
+    await confirmarAgregar()
     expect(document.body.textContent).toMatch(/2\.800/) // 1.500 + 1.250 = 2.750 → al $100 más cercano
+  })
+
+  it('filas con cantidad (Darío 18-nov): varios talles y varias unidades de una, escribiendo o con +', async () => {
+    await act(async () => { boton('Agregar producto').click() })
+    await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!, 'funda')
+    await esperar(350)
+    await escribir(fila(/stock 4/).querySelector<HTMLInputElement>('input')!, '12')
+    await sumar(/ya está/, 3)
+    await confirmarAgregar()
+    await act(async () => { boton('Guardar').click() })
+    await esperar()
+    expect(cliente.cambiarPedidoPanel).toHaveBeenCalledWith(P, [{ productId: 1, sizeId: 10, cantidad: 5 }, { productId: 3, sizeId: 30, cantidad: 12 }])
   })
 })
