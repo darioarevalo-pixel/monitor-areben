@@ -70,7 +70,7 @@ import { lineaDelProducto } from '../lib/erp/precio.core.js';
 import { estadoDePedidos, hayQueRepedir, marcaDelPedido, vaPorErp } from '../lib/liquidacion/erp.core.js';
 import { lineasEnErp } from '../lib/erp/corte.core.js';
 import { cortesDeCaja } from './_caja-corte.js';
-import { eventosDePrecio, lineasDe, lineasDeCampanias, pedirAlErp, pedirRelectura } from './_liquidacion-erp.js';
+import { eventosDePrecio, lineasDe, lineasDeCampanias, minoristaDelErp, pedirAlErp, pedirRelectura } from './_liquidacion-erp.js';
 // El diseño de la etiqueta de la campaña: qué va debajo del precio y de qué tamaño. Lista blanca,
 // porque esto se DIBUJA en un PDF y un objeto crudo del navegador se ve recién en la Zebra.
 import { etiquetaDeCampania } from '../lib/liquidacion/etiqueta.core.js';
@@ -550,6 +550,12 @@ export default async function handler(req, res) {
       // 🔑 **`leidoEn` va SIEMPRE**: sin él, una cola vacía porque está todo hecho se ve igual que
       // una cola vacía porque la consulta se rompió.
       return res.status(200).json({ ok: true, ...cola, sellos, stock, rotulos, fpCaja, fpCajaError, leidoEn: ahora });
+    }
+
+    // 🔑 `&minorista=1`: el precio de Areben Gestión de las líneas ya cortadas (ver `minoristaDelErp`). 🔴 Si ⛔ se puede leer,
+    // la pantalla lo dice y ⛔ imprime: la etiqueta de una línea cortada con el precio de TN puede decir otro número que la Caja.
+    if (vistaEtiquetas && String(req.query.minorista || '') === '1') {
+      return res.status(200).json({ ok: true, ...(await minoristaDelErp(store)), leidoEn: new Date().toISOString() });
     }
 
     if (vistaEtiquetas) {

@@ -26,6 +26,14 @@ es sólo de la pestaña de Precio: va detrás de cualquiera de las dos que dicen
 
 ## ⛔ Lo que comparte con otras secciones
 
+- 🔴 **Desde el 18-nov-2026, en las líneas CORTADAS (BDI, Stunned) el precio sale de Areben Gestión, ⛔ de Tienda Nube**
+  (Bruno: la etiqueta dice lo que cobra la Caja). `?etiquetas=1&minorista=1` → `minoristaDelErp` (`api/_liquidacion-erp.js`, lista
+  blanca `pid`/`local`/`online`) → `conPreciosDelErp` (`lib/etiquetas/core.ts`): Minorista = lo que se cobra (ya sigue a la
+  oferta); `online` mayor ⇒ tachado. Un producto de esas líneas sin Minorista sale **sin precio**, ⛔ cae al de TN. Zattia sigue
+  con TN hasta su corte. Por qué: desde el corte el producto nuevo nace en el ERP (huérfano para el ETL) y a veces ⛔ está en TN.
+  ⚠️ **Exhibición sigue con el precio de Tienda Nube** (recorre el catálogo de TN): en BDI/Stunned puede discrepar y ⛔ ve lo
+  que no está en TN — pendiente.
+
 - **El armado de Reposición imprime con estos dibujos** (12-oct-2026, `components/reposicion/EtiquetasArmado.tsx`):
   precio + formas de pago, precio rebajado, información de producto y la de campaña. Por eso
   `FP_DEFAULT` / `claveFormasDePago` viven en `lib/etiquetas/tipos.ts` y `dibujoDeCampania` en
