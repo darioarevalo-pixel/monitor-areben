@@ -32,9 +32,13 @@ export async function escribirPrendido(env = process.env, { cortes = () => corte
   }
 }
 
+// La migración no se deshace: confirmada una vez, no se vuelve a preguntar (una ida a la base menos por pedido, 18-nov).
+let hay064Visto = false
 async function hay064(pg) {
+  if (hay064Visto) return true
   const { rows: [r] } = await pg.query(`select exists (select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'pedido_mayorista' and column_name = 'venta_id') as hay`)
+  if (r.hay) hay064Visto = true
   return r.hay
 }
 

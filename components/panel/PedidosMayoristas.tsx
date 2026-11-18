@@ -11,6 +11,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { adelantarPedidoPanel, tomarPedidoPanel } from '@/lib/erp/pedido-adelantado'
+import { enviarMedicion, marca } from '@/lib/medir'
 import { Button, CopyButton, Field, Input, Modal, Notice } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import {
@@ -83,6 +85,11 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
   // Sólo lo que pide algo (Darío 17-nov: «es molesto»): ⛔ los vendidos por GN ni los ya pagos y enviados a preparar —eso
   // ya lo dice «Última compra»—. Queda lo que falta entrar, pagar o enviar a preparación.
   const conAlgo = pedidos.pedidos.filter((p) => p.etapa !== 'anulado' && ((!!p.pago && p.pago.falta > 0) || (p.etapa === 'pedido' && pedidos.escribir)))
+  // ⚡ Los pedidos sin terminar se traen ya: al tocarlo, la hoja abre al instante (Darío 18-nov: tardaba 3 s).
+  const abiertos = conAlgo.slice(0, 3).map((p) => p.id).join(',')
+  useEffect(() => {
+    for (const id of abiertos ? abiertos.split(',') : []) adelantarPedidoPanel(id)
+  }, [abiertos])
   if (!conAlgo.length && !pedidos.sinEntrar.length) return null
   const aPreparacion = async (p: PedidoDelCliente) => {
     setEnviando(p.id)
@@ -303,9 +310,12 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
   const [vuelta, setVuelta] = useState(0)
   useEffect(() => {
     let vivo = true
-    leerPedidoPanel(pedidoId)
+    // La primera vez, la que la ficha ya trajo (`adelantarPedidoPanel`); después de un cambio, siempre al servidor.
+    const t0 = marca()
+    ;(vuelta === 0 ? tomarPedidoPanel(pedidoId) : leerPedidoPanel(pedidoId))
       .then((r) => {
         if (!vivo) return
+        if (vuelta === 0) enviarMedicion('hoja-pedido', t0, {}, `hoja-${pedidoId}-${t0}`)
         if (!r.prendido) { setError('La cuenta corriente del panel está apagada.'); return }
         setFicha(r)
         setCantidades(Object.fromEntries(r.lineas.map((l) => [`${l.product_id}:${l.size_id}`, l.cantidad])))

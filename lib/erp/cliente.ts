@@ -887,6 +887,7 @@ export const leerPedidosPanel = (p: { clienteId?: string | null; tel?: string | 
   pedir<PedidosPanel>(null, `&vista=pedidos-panel&marca=bdi&cliente=${p.clienteId ?? ''}&tel=${String(p.tel ?? '').replace(/\D/g, '').slice(0, 20)}&nc=${Date.now()}`, 'No se pudieron leer los pedidos.')
 export const leerPedidoPanel = (id: string) =>
   pedir<FichaPedido | { prendido: false }>(null, `&vista=pedido-panel&marca=bdi&id=${encodeURIComponent(id)}&nc=${Date.now()}`, 'No se pudo leer el pedido.')
+
 /** «Agregar producto» en la hoja: cada producto con el precio mayorista (null = sin cargar ⇒ ⛔ se agrega) y sus variantes. */
 export type ProductoParaPedido = {
   product_id: number; nombre: string; precio: number | null
