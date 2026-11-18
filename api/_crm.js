@@ -49,6 +49,7 @@
 // Van 500. La diferencia son 1,6 s una vez por carga de pantalla; el otro camino se rompe solo el
 // día que los ids pasen a siete dígitos, y ese modo de falla es un 414 que nadie va a saber leer.
 import { createClient } from '@supabase/supabase-js';
+import { list, put } from '@vercel/blob';
 import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
 import { buscarPorTelefono, cola, indexarTelefonos } from '../lib/crm/telefono.core.js';
@@ -718,6 +719,34 @@ async function atender(fuente, body, res) {
   return res.status(200).send(cuerpo);
 }
 
+/**
+ * **Los tiempos del panel, medidos donde se usan** (Darío 18-nov: «Pedidos tarda 15 s adentro de WhatsApp»; afuera,
+ * 1–3 s). La sesión del panel de la extensión es aparte y no se puede abrir desde otra pestaña: el panel manda lo que
+ * midió (`lib/medir.ts`) y queda en un Blob con las últimas 60. `mediciones` las devuelve. Sólo tiempos y nombres de
+ * pedidos al servidor: nada de clientes.
+ */
+const MEDICIONES = 'diagnostico/panel-tiempos.json';
+async function medicionesPanel(body, perfil, res) {
+  const token = process.env.BLOB_READ_WRITE_TOKEN ? { token: process.env.BLOB_READ_WRITE_TOKEN } : {};
+  const leer = async () => {
+    const { blobs } = await list({ prefix: MEDICIONES, limit: 1, ...token });
+    if (!blobs.length) return [];
+    const r = await fetch(`${blobs[0].url}?v=${Date.now()}`, { cache: 'no-store' });
+    const d = await r.json().catch(() => null);
+    return Array.isArray(d) ? d : [];
+  };
+  try {
+    if (body.action === 'mediciones') return res.status(200).json({ ok: true, mediciones: await leer() });
+    const m = body.medicion && typeof body.medicion === 'object' ? body.medicion : null;
+    if (!m || JSON.stringify(m).length > 20_000) return res.status(400).json({ error: 'medición inválida' });
+    const lista = [...(await leer()), { ...m, quien: perfil?.name || '', cuando: new Date().toISOString() }].slice(-60);
+    await put(MEDICIONES, JSON.stringify(lista), { access: 'public', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true, cacheControlMaxAge: 60, ...token });
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
 
@@ -731,6 +760,8 @@ export default async function handler(req, res) {
   }
 
   const body = req.body || {};
+  // ── Tiempos del panel medidos adentro de WhatsApp (18-nov, velocidad). Sin base: un Blob con los últimos. ──
+  if (body.action === 'medicion' || body.action === 'mediciones') return medicionesPanel(body, perfil, res);
   try {
     // Desde el corte de BDI, el ERP (ver «DE DÓNDE LEE», arriba). Una sola conexión para toda la acción.
     if (await crmEnErp()) return await conBase(MARCA, (db) => atender(fuenteErp(db), body, res), TECHO_ERP_MS);

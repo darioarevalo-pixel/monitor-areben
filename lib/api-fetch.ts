@@ -37,6 +37,7 @@ import {
   leerSesionFirmada,
 } from './sesion'
 import { tokenRenovado } from './identidad'
+import { anotarPedido } from './medir'
 
 let pidiendoPass: Promise<void> | null = null
 
@@ -96,7 +97,11 @@ async function authHeader(conSesion: boolean): Promise<string | null> {
 /** Propia = relativa (`/api/...`): las de bdi-catalogo y `crear-venta` van con URL absoluta. */
 const esPropia = (url: string) => url.startsWith('/') && !url.startsWith('//')
 
-async function fetchConAuth(url: string, opts: RequestInit): Promise<Response> {
+function fetchConAuth(url: string, opts: RequestInit): Promise<Response> {
+  return anotarPedido(url, opts.body, () => fetchConAuth0(url, opts))
+}
+
+async function fetchConAuth0(url: string, opts: RequestInit): Promise<Response> {
   const propia = esPropia(url)
   const auth = await authHeader(propia)
   const headers = new Headers(opts.headers || {})

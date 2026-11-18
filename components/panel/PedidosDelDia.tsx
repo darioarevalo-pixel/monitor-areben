@@ -26,6 +26,7 @@ import { telDelChat } from '@/lib/crm/telefono.core.js'
 import { type EscritosHoy } from '@/lib/crm/escritos'
 import { armarFilasPedidos, claveContacto, leerContactados, linksDePedidos, marcarContactado, mensajeLink, traerPedidosCatalogo, type FilaPedido, type LinkPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
 import { tomar } from '@/lib/crm/precarga'
+import { enviarMedicion, marca } from '@/lib/medir'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
 import { enGrupoDeposito, estadoDeposito, faltanUnidades, formaCorta, pasoPanel, pendientesLogistica, TRANSPORTE, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
 import { escrituras, leerEstadoPedidos, PEDIDOS_CAMBIARON, type EstadoPedidoPanel } from '@/lib/erp/cliente'
@@ -416,6 +417,18 @@ export function PedidosDelDia({
   const alRetenidos = useCallback((n: number) => setRetenidos(n), [])
 
   const links = useLinksLogistica(ordenes)
+
+  // ⏱️ Cuánto tarda en aparecer, medido adentro de WhatsApp (Darío 18-nov: ~15 s). Ver `lib/medir.ts`.
+  const [desde] = useState(marca)
+  const [hitos] = useState(() => new Map<string, number>())
+  useEffect(() => {
+    if (logistica && !hitos.has('entregas')) hitos.set('entregas', Math.round(marca() - desde))
+    if (catalogo && !hitos.has('catalogo')) hitos.set('catalogo', Math.round(marca() - desde))
+  }, [logistica, catalogo, hitos, desde])
+  const todo = !!logistica && !!catalogo && estadosListos
+  useEffect(() => {
+    if (todo) enviarMedicion('pedidos', desde, { hitos: Object.fromEntries(hitos) }, `pedidos-${desde}`)
+  }, [todo, desde, hitos])
   const porPaso = useMemo(() => {
     const g: Record<PasoEntrega, PendienteLogistica[]> = { armando: [], despachar: [], retiro: [], seguimiento: [] }
     for (const o of ordenes) g[pasoEntrega(o)].push(o)

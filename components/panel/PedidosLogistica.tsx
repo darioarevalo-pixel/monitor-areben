@@ -27,6 +27,7 @@ import {
   type PendienteLogistica,
   type Resultado,
 } from '@/lib/crm/logistica'
+import { enviarMedicion, marca } from '@/lib/medir'
 
 /**
  * Los pedidos del cliente que están en curso en Logística, en la ficha del chat (Darío, 22-oct-2026:
@@ -53,11 +54,13 @@ export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos =
 }) {
   // Lo que llegó va con a quién era: al cambiar de chat no se ve un instante el pedido del anterior.
   const clave = `${clienteId ?? ''}|${tel ?? ''}`
+  const [montada] = useState(marca)
   const [llegado, setLlegado] = useState<{ clave: string; r: Resultado<PedidoLogistica[]> } | null>(null)
   useEffect(() => {
     let vivo = true
     if (!clienteId && !tel) return
     const deEsta = `${clienteId ?? ''}|${tel ?? ''}`
+    const t0 = marca()
     pedidosDelCliente(clienteId, tel).then(async (r) => {
       if (!vivo) return
       const buscados = codigos ? codigos.split(',') : []
@@ -68,11 +71,13 @@ export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos =
       }
       setLlegado({ clave: deEsta, r })
       if (r.t === 'ok') onLeidos?.(r.datos)
+      // ⏱️ Darío 18-nov: ~7 s adentro de WhatsApp. Desde que se montó la ficha y desde que salió esta búsqueda.
+      enviarMedicion('ficha-logistica', montada, { buscando: Math.round(marca() - t0), codigos: buscados.length, hay: r.t === 'ok' ? r.datos.length : r.t }, `ficha-${deEsta}-${codigos}`)
     })
     return () => {
       vivo = false
     }
-  }, [clienteId, tel, onLeidos, codigos])
+  }, [clienteId, tel, onLeidos, codigos, montada])
 
   // Lo que usó la vez anterior sale sólo de la lista de pendientes: se pide si algún pedido no tiene
   // forma de entrega, para dejar marcada esa opción.
