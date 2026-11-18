@@ -11,7 +11,7 @@ import { crearClienteGN } from './lib/gn-fetch.mjs';
 import { revisarCostos, sinCostoSiNoSeVe } from './lib/costos-espejo.mjs';
 import { registrarCambiosDeStock } from './lib/stock-cambios.mjs';
 import { esDeLineas } from '../lib/erp/inventario-espejo.core.js';
-import { lineasCortadasDe } from './lib/lineas-cortadas.mjs';
+import { gnApagadoPara, lineasCortadasDe } from './lib/lineas-cortadas.mjs';
 import { guardarFotoDelDia } from './lib/stock-foto.mjs';
 
 /** Ver el comentario gemelo en sync-diario.js: lo que falló sin frenar el sync. */
@@ -40,12 +40,24 @@ loadEnv();
 const SUPABASE_URL = process.env.ZATTIA_SUPABASE_URL;
 const SUPABASE_KEY = process.env.ZATTIA_SUPABASE_SERVICE_KEY || process.env.ZATTIA_SUPABASE_KEY;
 const GN_TOKEN     = process.env.GN_TOKEN_ZATTIA;
-if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
-  console.error('Faltan variables de entorno: ZATTIA_SUPABASE_URL, ZATTIA_SUPABASE_KEY, GN_TOKEN_ZATTIA');
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error('Faltan variables de entorno: ZATTIA_SUPABASE_URL, ZATTIA_SUPABASE_KEY');
   process.exit(1);
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// 🔑 Pasado el corte de Zattia Y de Stunned (+ un día de gracia: `gnSeSaltea`, lib/erp/corte.core.js) GN ⛔ tiene nada de esta
+// base: el stock y las ventas los copian del libro los dos pasos siguientes del workflow. Se saltea SÓLO lo de GN; las vistas
+// se refrescan igual. ⛔ apagar el workflow: lleva esos dos pasos (Zattia + Stunned). Va ANTES de pedir el token: la baja del
+// 24-nov puede sacarlo. 🔴 Sin poder leer los cortes, rojo (⛔ adivina).
+let gnApagado;
+try { gnApagado = await gnApagadoPara('zattia'); }
+catch (e) { console.error(`ERROR: no se pudo leer erp_corte: ${e.message}`); process.exit(1); }
+if (!gnApagado && !GN_TOKEN) {
+  console.error('Falta GN_TOKEN_ZATTIA (Zattia todavía lee GN: ver erp_corte).');
+  process.exit(1);
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -53,7 +65,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 // copia propia que **no reintentaba los errores de red**: su `fetch` estaba pelado, sin try/catch,
 // así que un `fetch failed` mataba el sync diario de Zattia entero mientras el de BDI —con el
 // mismo código, arreglado sólo de aquel lado— sobrevivía.
-const { fetchAllPages } = crearClienteGN({ token: GN_TOKEN, pausaPagina: 400 });
+// Con GN apagado ⛔ se arma (sin token, `crearClienteGN` tira): `main` va a `soloVistas` y nadie lo llama.
+const { fetchAllPages } = gnApagado ? { fetchAllPages: null } : crearClienteGN({ token: GN_TOKEN, pausaPagina: 400 });
 
 // ── Sync functions ────────────────────────────────────────────────────────────
 
@@ -330,7 +343,21 @@ async function syncVentas(fromDate) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+/** Zattia ya vive entera en el ERP: sólo las vistas (Ventas mensuales). Lo de GN ⛔ se lee. */
+async function soloVistas() {
+  console.log('=== Sincronización diaria — Zattia ===');
+  console.log('Zattia y Stunned ya viven enteras en Areben Gestión: GN ⛔ se lee (stock y ventas: los pasos siguientes, del libro).');
+  console.log('\n[vistas] Refrescando vistas materializadas...');
+  const vistas = await refrescarVistas(supabase);
+  console.log(`Vistas: ${vistas.ok.length}/${vistas.ok.length + vistas.fallaron.length} al día`);
+  if (vistas.fallaron.length) {
+    for (const f of vistas.fallaron) console.error(`  - vista ${f.vista}: ${f.error}`);
+    process.exit(1);
+  }
+}
+
 async function main() {
+  if (gnApagado) return soloVistas();
   const today = new Date().toISOString().substring(0, 10);
   const lastSync = await leerEstado(supabase, SYNC_KEY);
 

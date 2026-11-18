@@ -123,8 +123,10 @@ describe('conteo-deposito · flujo completo Next vs legacy extraído', () => {
   it('calcularAjuste (Next) === loop de ajuste (legacy) sobre el mismo state+vivo', () => {
     const pv = calcularAjuste(products, state, vivo, 'Deposito Minorista', 'bdi', 1_700_000_000_000)
     const leg = ajusteLegacy(products as unknown[], state, vivo as Record<string, unknown>, 'Deposito Minorista')
-    // Mismas filas de ajuste (mismo orden, mismos campos), mismos "missing" y contadores.
-    expect(pv.rows).toEqual(leg.rows)
+    // Mismas filas de ajuste (mismo orden, mismos campos), mismos "missing" y contadores. La variante (`product_id`/`size_id`) es
+    // lo único que se agregó (18-nov: `partirExcel` encuentra por ella la prenda del ERP sin `inventory_id`); ⛔ va al Excel.
+    expect(pv.rows.map(({ product_id: _p, size_id: _s, ...r }) => r)).toEqual(leg.rows)
+    expect(pv.rows.every((r) => r.product_id != null && r.size_id != null)).toBe(true)
     expect(pv.missing).toEqual(leg.missing)
     expect(pv.resumen.mas).toBe(leg.mas)
     expect(pv.resumen.menos).toBe(leg.menos)

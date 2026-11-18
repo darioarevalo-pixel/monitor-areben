@@ -28,7 +28,7 @@ const prodVacio = (): EstadoDeProd => ({ estado: 'sin_iniciar', contado: {}, sna
 // Se re-exporta acá para no cambiar los imports de conteo-deposito/-estandar.
 export { ordenarModelo } from '../reposicion/grupos'
 import { ordenarModelo } from '../reposicion/grupos'
-import { grandes, partirExcel, UMBRAL_AVISO_CONTEO } from '../erp/conteo-erp.core.js'
+import { ajustableEnVivo, grandes, partirExcel, UMBRAL_AVISO_CONTEO } from '../erp/conteo-erp.core.js'
 import { ETIQUETA_LINEA } from '../lineas.core.js'
 
 /** Agrupa las filas reales del vivo en productos con sus variantes. Port de conteoDepInit @11648-11655. */
@@ -193,14 +193,16 @@ export function calcularAjuste(
       const dif = st?.dif ? st.dif[v.vid] : 0
       if (!dif) return
       const live = vivo[v.vid]
-      if (!live || live.inventory_id == null || v.inventory_id == null) {
+      if (!live || !ajustableEnVivo(live, v)) {
         missing.push({ prod: p.name, size: v.size })
         return
       }
       const stockVivo = Number(live.available_quantity) || 0
       const nuevo = stockVivo + dif
       rows.push({
-        inventory_id: live.inventory_id,
+        inventory_id: live.inventory_id ?? null,
+        product_id: live.product_id,
+        size_id: live.size_id,
         product_code: live.product_code || '',
         producto: p.name,
         variante: v.size,
@@ -241,8 +243,11 @@ export function calcularAjuste(
 export function separarYaAjustados(pv: Preview): Preview {
   const ya = pv.rows.filter((r) => r.contado != null && r.vivo === r.contado)
   if (!ya.length) return { ...pv, yaAjustados: [] }
-  const ids = new Set(ya.map((r) => String(r.inventory_id)))
-  const rows = pv.rows.filter((r) => !ids.has(String(r.inventory_id)))
+  // Por variante (una del ERP puede ⛔ tener `inventory_id`: con `String(null)` se llevaba a TODAS las del ERP).
+  const clave = (r: FilaAjuste) => (r.product_id != null ? `v:${r.product_id}:${r.size_id}` : `i:${r.inventory_id}`)
+  const yaClaves = new Set(ya.map(clave))
+  const ids = new Set(ya.filter((r) => r.inventory_id != null).map((r) => String(r.inventory_id)))
+  const rows = pv.rows.filter((r) => !yaClaves.has(clave(r)))
   const registro = pv.registro.map((x) => (x.inventory_id != null && ids.has(String(x.inventory_id)) ? { ...x, nuevo_stock: x.vivo_aplicado } : x))
   const resumen: ResumenAjuste = {
     ...pv.resumen,
@@ -267,7 +272,7 @@ export const ANCHOS_AJUSTE = [12, 14, 30, 26, 18, 16, 11, 11]
 /** El array-of-arrays del Excel de ajuste (header + una fila por diferencia). BYTE-FIEL a conteoDepConfirmar @11960-11962. */
 export function aoaAjuste(rows: FilaAjuste[]): (string | number)[][] {
   const aoa: (string | number)[][] = [[...HEADER_AJUSTE]]
-  rows.forEach((r) => aoa.push([r.inventory_id, r.product_code || '', r.producto, r.variante, r.ubicacion, r.barcode || '', r.vivo, r.nuevo]))
+  rows.forEach((r) => aoa.push([r.inventory_id ?? '', r.product_code || '', r.producto, r.variante, r.ubicacion, r.barcode || '', r.vivo, r.nuevo]))
   return aoa
 }
 

@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
 import { registrarCambiosDeStock } from './lib/stock-cambios.mjs';
 import { esDeLineas } from '../lib/erp/inventario-espejo.core.js';
-import { lineasCortadasDe } from './lib/lineas-cortadas.mjs';
+import { gnApagadoPara, lineasCortadasDe } from './lib/lineas-cortadas.mjs';
 
 const STORE = (process.env.INPUT_STORE || process.argv[2] || 'bdi').toLowerCase();
 
@@ -19,6 +19,16 @@ const CFG = STORE === 'zattia'
       key:   process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY,
       token: process.env.GN_TOKEN,
     };
+
+// Pasado el corte de TODAS las líneas de la base (Zattia: 21-nov, baja de GN el 24) el stock y los productos los escribe el
+// LIBRO (paso «Stock del ERP al espejo»): GN ⛔ se lee (`gnSeSaltea`, lib/erp/corte.core.js). Antes de pedir el token: después
+// de la baja puede no estar.
+if (STORE === 'bdi' || STORE === 'zattia') {
+  if (await gnApagadoPara(STORE)) {
+    console.log(`${STORE} ya vive entera en Areben Gestión: GN ⛔ se lee (el stock lo copia el paso siguiente, del libro).`);
+    process.exit(0);
+  }
+}
 
 if (!CFG.url || !CFG.key || !CFG.token) {
   console.error(`Faltan credenciales para ${STORE} (Supabase URL/KEY o GN token).`);

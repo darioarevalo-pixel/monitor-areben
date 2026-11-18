@@ -91,3 +91,28 @@ describe('traerVentasDeHoy: también las de Areben Gestión', () => {
     await expect(traerVentasDelErp({}, 'zattia')).rejects.toThrow(/DATABASE_URL_ZATTIA/)
   })
 })
+
+describe('traerVentasDeHoy: pasada la baja de GN de la base (`gnSeSaltea`)', () => {
+  beforeEach(() => { cortes = {} })
+  const sbVacio = { from: () => ({ upsert: async () => ({ error: null }) }) }
+  it('Zattia y Stunned cortadas hace más de un día ⇒ ⛔ pide GN, trae las del ERP', async () => {
+    cortes = { stunned: '2026-10-28T23:40:00Z', zattia: '2026-11-21T16:00:00Z' }
+    const gn = await import('../api/_gn.js')
+    const espia = vi.spyOn(gn, 'gnFetch')
+    const { traerVentasDeHoy } = await import('../api/_ventas-hoy.js')
+    const r = await traerVentasDeHoy(sbVacio, 'zattia', Date.parse('2026-11-24T15:00:00Z'), { erp: async () => ({ ventas: 7, detalles: 9, sacadas: 0, freno: null }) })
+    expect(r).toMatchObject({ ok: true, ventas: 0, erp: { ventas: 7 }, gn: false })
+    expect(espia).not.toHaveBeenCalled()
+    espia.mockRestore()
+  })
+  it('BDI cortada, pero su mayorista sigue en GN ⇒ GN se sigue pidiendo', async () => {
+    cortes = { bdi: '2026-11-14T16:12:00Z' }
+    const gn = await import('../api/_gn.js')
+    const espia = vi.spyOn(gn, 'gnFetch')
+    const { traerVentasDeHoy } = await import('../api/_ventas-hoy.js')
+    const r = await traerVentasDeHoy(sbVacio, 'bdi', Date.parse('2026-11-24T15:00:00Z'), { erp: async () => null })
+    expect(r).toMatchObject({ ok: true })
+    expect(espia).toHaveBeenCalled()
+    espia.mockRestore()
+  })
+})

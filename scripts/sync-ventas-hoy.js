@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
+import { gnApagadoPara } from './lib/lineas-cortadas.mjs';
 
 function loadEnv() {
   try {
@@ -48,6 +49,14 @@ function fechaAR(offsetDias = 0) {
 }
 const HASTA = fechaAR(0);                                  // hoy (AR)
 const DESDE = process.env.SYNC_FROM_DATE || fechaAR(-1);   // ayer (AR), por las dudas de la medianoche
+
+// Pasado el corte de TODAS las líneas de la base (Zattia: 21-nov, baja de GN el 24) GN ⛔ tiene ventas nuevas: se saltea y
+// sigue el paso «Ventas del ERP al espejo» (`gnSeSaltea`, lib/erp/corte.core.js). Va ANTES de pedir el token: después de la
+// baja puede no estar.
+if (await gnApagadoPara(STORE)) {
+  console.log(`=== Sync ventas recientes — ${STORE.toUpperCase()} ===\n${STORE} ya vive entera en Areben Gestión: GN ⛔ se lee (las ventas las copia el paso siguiente).`);
+  process.exit(0);
+}
 
 if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
   console.error(`Faltan credenciales para ${STORE} (Supabase URL/KEY o GN token).`);

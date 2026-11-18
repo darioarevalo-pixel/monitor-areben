@@ -13,6 +13,7 @@
 import type { FilaVivo } from '../inventario-vivo/tipos'
 import type { ConteoHistorial, FilaAjuste } from '../conteo-deposito/tipos'
 import { matchModelo } from '../etl/modelos'
+import { ajustableEnVivo } from '../erp/conteo-erp.core.js'
 import { ordenarModelo } from '../reposicion/grupos'
 import type { FallasState, FundaVar, FundasState, LbDetalleConteo, LbPreview, LbResumen, LecturaFallida, ModeloGrupo } from './tipos'
 
@@ -218,12 +219,14 @@ export function calcularAjusteModelo(
       nuevo_stock: nuevo,
     })
     if (dif === 0) return
-    if (!live || live.inventory_id == null || v.inventory_id == null) {
+    if (!live || !ajustableEnVivo(live, v)) {
       missing.push({ prod: v.producto, size: v.talle })
       return
     }
     rows.push({
-      inventory_id: live.inventory_id,
+      inventory_id: live.inventory_id ?? null,
+      product_id: live.product_id,
+      size_id: live.size_id,
       product_code: live.product_code || '',
       producto: v.producto,
       variante: v.talle,

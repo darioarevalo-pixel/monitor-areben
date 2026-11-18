@@ -23,7 +23,7 @@
 import { guardarVentasBatch } from '../scripts/lib/ventas-espejo.mjs';
 import { dormir, GN_BASE, GN_TOKENS, gnFetch, PAUSA_GN } from './_gn.js';
 import { configPg } from '../lib/pg.core.js';
-import { lineasEnErp } from '../lib/erp/corte.core.js';
+import { GN_SIGUE_DESPUES_DEL_CORTE, gnSeSaltea, lineasEnErp } from '../lib/erp/corte.core.js';
 import { copiarVentasErp } from '../scripts/lib/erp-ventas-copia.mjs';
 import { cortesDeCaja } from './_caja-corte.js';
 import { PG_DE_STORE } from './_erp-corte.js';
@@ -89,6 +89,20 @@ export function ventanaVentasHoy(ahoraMs) {
  * quién llama, y una guarda a medias es peor que ninguna.
  */
 export async function traerVentasDeHoy(supabase, store, ahoraMs, deps = { erp: traerVentasDelErp }) {
+  // 🔑 Pasado el corte de TODAS las líneas de la base (`gnSeSaltea`: Zattia 21-nov, baja de GN el 24) GN ⛔ tiene ventas de hoy:
+  // se trae SÓLO lo del ERP. 🔴 Antes pedía GN primero y, con GN dado de baja, el 502 ⛔ dejaba copiar las del ERP.
+  let gnApagado = false;
+  if (!GN_SIGUE_DESPUES_DEL_CORTE.includes(store)) {
+    try { gnApagado = gnSeSaltea(await cortesDeCaja(store), store, new Date(ahoraMs)); }
+    catch (e) { return { ok: false, status: 503, error: `No pude leer el corte de Areben Gestión: ${String((e && e.message) || e).slice(0, 200)}` }; }
+  }
+  if (gnApagado) {
+    let erp = null;
+    try { erp = await deps.erp(supabase, store); }
+    catch (e) { return { ok: false, status: 502, error: `No se trajeron las de Areben Gestión: ${String((e && e.message) || e).slice(0, 200)}` }; }
+    return { ok: true, truncado: false, ventas: 0, detalles: 0, clientes: 0, erp, gn: false };
+  }
+
   const token = GN_TOKENS[store];
   if (!token) return { ok: false, status: 500, error: `Falta el token de Gestión Nube de ${store} en el servidor.` };
 

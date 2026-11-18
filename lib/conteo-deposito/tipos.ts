@@ -33,7 +33,11 @@ export type CdepState = Record<string, EstadoDeProd>
 
 /** Una fila del ajuste (una variante con diferencia). */
 export type FilaAjuste = {
-  inventory_id: number | string
+  /** `null` en una variante de una línea en el ERP sin fila en GN (nacida en el ERP, o después de la baja de GN): va al ERP, ⛔ al Excel. */
+  inventory_id: number | string | null
+  /** La variante: con esto `partirExcel` la encuentra en el vivo aunque ⛔ tenga `inventory_id`. */
+  product_id?: number | string
+  size_id?: number | string
   product_code: string
   producto: string
   variante: string

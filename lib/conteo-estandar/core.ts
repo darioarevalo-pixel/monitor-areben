@@ -8,6 +8,7 @@
 
 import { esStunned } from '../lineas'
 import { claveDe } from '../ubicaciones-local/core.core.js'
+import { ajustableEnVivo } from '../erp/conteo-erp.core.js'
 import type { FilaVivo } from '../inventario-vivo/tipos'
 import type { ConteoHistorial } from '../conteo-deposito/tipos'
 import type { CeDetalleConteo, CeEstadoProd, CeFilaAjuste, CePreview, CeProducto, CeResumen, CeState, Linea } from './tipos'
@@ -154,16 +155,21 @@ export function calcularAjuste(
       // (o sea, el espejo estaba al día). Antes se descartaba siempre, y en el Local de Zattia la
       // lectura completa no llega a todo: 52 talles de Tops quedaron afuera (27-sep-2026).
       const sisCongelado = st?.snap ? st.snap[v.vid] : undefined
+      // Una prenda de una línea en el ERP (`fuente: 'erp'`) siempre: su «sistema» es el libro (`ajustableEnVivo`).
       const confiable =
-        !!live && live.inventory_id != null && (v.inventory_id != null || (sisCongelado != null && Number(live.available_quantity) === Number(sisCongelado)))
-      if (!confiable || !live || live.inventory_id == null) {
+        !!live &&
+        (live.fuente === 'erp' ||
+          (live.inventory_id != null && (v.inventory_id != null || (sisCongelado != null && Number(live.available_quantity) === Number(sisCongelado)))))
+      if (!confiable || !live || !ajustableEnVivo(live)) {
         missing.push({ prod: p.name, size: v.size })
         return
       }
       const stockVivo = Number(live.available_quantity) || 0
       const nuevo = stockVivo + dif
       rows.push({
-        inventory_id: live.inventory_id,
+        inventory_id: live.inventory_id ?? null,
+        product_id: live.product_id,
+        size_id: live.size_id,
         product_code: live.product_code || '',
         producto: p.name,
         variante: v.size,

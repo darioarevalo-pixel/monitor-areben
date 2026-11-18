@@ -303,7 +303,7 @@ export function ConteoEstandar() {
         p.variants.forEach((v) => {
           const dif = state[String(p.pid)]?.dif?.[v.vid]
           const live = vivo[v.vid]
-          if (dif && (!live || live.inventory_id == null)) faltan.add(String(p.pid))
+          if (dif && (!live || (live.inventory_id == null && live.fuente !== 'erp'))) faltan.add(String(p.pid))
         }),
       )
       if (faltan.size) {

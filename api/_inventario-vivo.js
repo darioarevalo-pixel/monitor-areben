@@ -7,6 +7,8 @@ import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 import { puedeContar } from '../lib/permisos.core.js';
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js';
 import { libroEnErp } from './_conteo-erp.js';
+import { conBase, cortesDe } from './_erp-corte.js';
+import { GN_SIGUE_DESPUES_DEL_CORTE, gnSeSaltea } from '../lib/erp/corte.core.js';
 
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
 
@@ -23,14 +25,20 @@ function _sbCfg(store) {
   return { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY };
 }
 // Lee del espejo TODAS las variantes de una ubicación (paginado y ordenado → estable, completo).
-async function fetchEspejo(store, storeName) {
+// `estricto`: un error TIRA en vez de devolver lo juntado (sin GN, el espejo es la ÚNICA lista: cortada sería un conteo con
+// prendas de menos, callado).
+async function fetchEspejo(store, storeName, { estricto = false } = {}) {
   const { url, key } = _sbCfg(store);
-  if (!url || !key || !storeName) return [];
+  if (!url || !key || !storeName) { if (estricto) throw new Error(`Falta el espejo de ${store} en el entorno.`); return []; }
   const out = []; let offset = 0; const PAGE = 1000;
   while (true) {
     const q = `${url.replace(/\/$/, '')}/rest/v1/inventario?select=product_id,product_name,size_id,size_name,sku,barcode,available_quantity,store_name&store_name=eq.${encodeURIComponent(storeName)}&order=product_id.asc,size_id.asc&limit=${PAGE}&offset=${offset}`;
     let d;
-    try { const r = await fetch(q, { headers: { apikey: key, Authorization: 'Bearer ' + key } }); if (!r.ok) break; d = await r.json(); } catch { break; }
+    try {
+      const r = await fetch(q, { headers: { apikey: key, Authorization: 'Bearer ' + key } });
+      if (!r.ok) { if (estricto) throw new Error(`el espejo contestó ${r.status}`); break; }
+      d = await r.json();
+    } catch (e) { if (estricto) throw e; break; }
     if (!Array.isArray(d) || !d.length) break;
     out.push(...d);
     if (d.length < PAGE) break;
@@ -122,7 +130,6 @@ export default async function handler(req, res) {
   const storeId = loc === 'local' ? LOCAL_STORE_ID[store] : DEPOSITO_STORE_ID[store];
   const token = TOKENS[store];
   if (!storeId) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
-  if (!token) return res.status(500).json({ error: `Falta el token de GN para ${store} en el entorno.` });
 
   // 🔴 Tener sesión no es tener permiso, y hasta el 13-ago-2026 acá terminaba el control: con
   // cualquier cuenta válida se bajaba el inventario VIVO completo —producto, variante, código y
@@ -136,12 +143,34 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Ver el stock vivo pide acceso a alguna pantalla de conteo de esta marca.' });
   }
 
+  // 🔑 SIN GN (`gnSeSaltea`, lib/erp/corte.core.js): pasado el corte de TODAS las líneas de la base (Zattia: 21-nov, baja de GN el
+  // 24) GN ⛔ se lee. La lista sale del espejo —que desde el corte lo escribe el LIBRO— y el «sistema» de cada prenda, del libro
+  // (`libroEnErp`). 🔴 Antes pedía la lista entera a GN sin mirar el corte: sin token, 500 en los conteos de Zattia Y Stunned.
+  const pidsQ = String(req.query.pids || '').split(',').map(x => x.trim()).filter(x => /^\d+$/.test(x)).slice(0, 200);
+  let gnApagado = false;
+  if (!GN_SIGUE_DESPUES_DEL_CORTE.includes(store)) {
+    try { gnApagado = await conBase(store, async (db) => gnSeSaltea(await cortesDe(db), store)); }
+    catch (e) { return res.status(503).json({ ok: false, error: `No pude leer el stock de Areben Gestión: ${e.message}` }); }
+  }
+  if (gnApagado) {
+    const espejoName = MIRROR_STORE_NAME[store] && MIRROR_STORE_NAME[store][loc];
+    try {
+      const pids = new Set(pidsQ);
+      const esp = (await fetchEspejo(store, espejoName, { estricto: true })).filter(m => !pids.size || pids.has(String(m.product_id)));
+      const rows = esp.map(m => ({ inventory_id: null, product_id: m.product_id, product_name: m.product_name || null, product_code: null, size_id: m.size_id, size_name: m.size_name || null, store_name: m.store_name || espejoName, sku: m.sku || null, barcode: m.barcode || null, available_quantity: m.available_quantity ?? 0, fuente: 'espejo' }));
+      const merged = await libroEnErp(store, loc, rows);
+      return res.status(200).json({ ok: true, store, loc, store_id: storeId, store_name: espejoName, count: merged.length, from_vivo: 0, from_directo: 0, from_espejo: rows.length, pendientes: [], rows: merged });
+    } catch (e) {
+      return res.status(503).json({ ok: false, error: `No pude leer el stock de Areben Gestión: ${e.message}` });
+    }
+  }
+  if (!token) return res.status(500).json({ error: `Falta el token de GN para ${store} en el entorno.` });
+
   // 🔑 MODO PUNTUAL (`?pids=1,2,3`): sólo esos productos, consulta por consulta — la que GN contesta
   // bien. Lo usa el ajuste de los conteos para confirmar lo que la lectura completa no llegó a
   // traer: en el Local de Zattia la lista entera no entra en el presupuesto y el relleno de 9 s no
   // alcanzaba (conteo de Tops, 27-sep-2026: 52 talles quedaron "sin confirmar"). Devuelve lo que
   // llegó a leer en ~22 s y `pendientes` con lo que no, para que el cliente pida la tanda siguiente.
-  const pidsQ = String(req.query.pids || '').split(',').map(x => x.trim()).filter(x => /^\d+$/.test(x)).slice(0, 200);
   if (pidsQ.length) {
     const inicio = Date.now();
     const rows = [];
