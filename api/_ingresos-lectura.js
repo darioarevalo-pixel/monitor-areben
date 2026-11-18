@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { cfgDelMonitor } from './_recepciones-base.js'
 import { procesarEvento } from './_recepciones-procesar.js'
-import { aProcesar, aReleer, contadasDe, desdeDe, eventoDeOc, idDeEvento, idDeRelectura, seGuardaSinDuplicar, RELECTURA_DIAS } from '../lib/recepciones/lectura.core.js'
+import { aProcesar, aReleer, contadasDe, desdeDe, esFrenadaPorForma, eventoDeOc, idDeEvento, idDeRelectura, seGuardaSinDuplicar, RELECTURA_DIAS } from '../lib/recepciones/lectura.core.js'
 import { normalizarEvento } from '../lib/recepciones/webhook.core.js'
 import { configPg } from '../lib/pg.core.js'
 import { refrescarStockDeCorte } from './_erp-stock-corte.js'
@@ -65,9 +65,11 @@ async function ultimoLeido(sb, store) {
 
 async function yaProcesados(sb, ids) {
   if (!ids.length) return new Set()
-  const { data, error } = await sb.from('recepcion_evento').select('webhook_id, estado').in('webhook_id', ids)
+  const { data, error } = await sb.from('recepcion_evento').select('webhook_id, estado, error').in('webhook_id', ids)
   if (error) throw new Error(`recepcion_evento: ${error.message}`)
-  return new Set((data || []).filter((f) => f.estado !== 'error').map((f) => f.webhook_id))
+  // 🔴 Una frenada por forma se vuelve a intentar: el libro puede decir que ya ⛔ duplica. Sin esto, la OC que sigue en el listado
+  // (su `updated_at` es posterior al último procesado) ⛔ entra nunca: la relectura la saltea por estar vista (OC-3059/3061/3062, 17-nov).
+  return new Set((data || []).filter((f) => f.estado !== 'error' && !esFrenadaPorForma(f)).map((f) => f.webhook_id))
 }
 
 async function renglonesGuardados(sb, store, ocId) {

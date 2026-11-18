@@ -126,7 +126,7 @@ vi.mock('pg', () => ({
 
 const procesar = vi.fn()
 const anotar = vi.fn()
-let eventos: { webhook_id: string; estado: string }[] = []
+let eventos: { webhook_id: string; estado: string; error?: string }[] = []
 let guardadas: { sku: string; codigo_barras: string }[] = []
 let ocs: Record<string, unknown>[] = []
 vi.mock('@/api/_recepciones-procesar.js', () => ({ procesarEvento: (x: unknown) => procesar(x) }))
@@ -233,6 +233,19 @@ describe('el handler', () => {
     eventos = [{ webhook_id: 'api:zattia:3050:2026-10-29T12:06:07Z', estado: 'error' }]
     await llamar()
     expect(procesar).toHaveBeenCalledTimes(1)
+  })
+  it('una frenada por forma que sigue en el listado se vuelve a pedir; si el libro lo deja, entra (OC-3059/3061/3062)', async () => {
+    vi.stubEnv('DATABASE_URL_ZATTIA', 'postgres://u:p@h:5432/z')
+    libro = [{ orden: 0 }]
+    eventos = [{ webhook_id: 'api:zattia:3050:2026-10-29T12:06:07Z', estado: 'ignorado', error: 'cambió de forma: 2 renglones guardados' }]
+    guardadas = [{ sku: 'S-10', codigo_barras: 'B-10' }, { sku: '', codigo_barras: '' }]
+    await llamar()
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/purchase-orders/3050'))).toBe(true)
+    expect(procesar).toHaveBeenCalledTimes(1)
+    eventos = [{ webhook_id: 'api:zattia:3050:2026-10-29T12:06:07Z', estado: 'ignorado', error: 'no aplica' }]
+    procesar.mockClear()
+    await llamar()
+    expect(procesar).not.toHaveBeenCalled()
   })
   it('una OC ya guardada que cambió de forma ⛔ se pisa, y queda anotada para no volver a pedirla', async () => {
     guardadas = [{ sku: 'S-10', codigo_barras: 'B-10' }, { sku: 'S-99', codigo_barras: 'B-99' }, { sku: 'S-11', codigo_barras: 'B-11' }]
