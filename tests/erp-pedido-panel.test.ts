@@ -128,7 +128,7 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
     // con el precio de la tienda en cada talle (sin regla especial: el de lista) y sin pack
     expect(await productosParaElPanel({ pedidoId: P, q: '  funda '.padEnd(200, 'x') }, { conMotor: conMotor(base({})), prendido: true })).toEqual({
       prendido: true, tienda: true,
-      productos: [{ ...productos[0], pack: null, soloPack: false, variantes: [{ ...productos[0].variantes[0], precio: 900, tipo: 'lista' }] }],
+      productos: [{ ...productos[0], pack: null, soloPack: false, promo: null, variantes: [{ ...productos[0].variantes[0], precio: 900, tipo: 'lista' }] }],
     })
     expect(pv.productosParaPedido.mock.calls[0][1].q).toHaveLength(80)
     pv.productosParaPedido.mockResolvedValue({ ok: false, error: { codigo: 'NO_ENCONTRADO', mensaje: 'No está ese pedido' } })

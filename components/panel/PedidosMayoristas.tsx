@@ -350,15 +350,15 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
     if (!ficha) return null
     const sueltos = [
       ...ficha.lineas.filter((l) => !enPackOriginal.has(String(l.product_id)))
-        .map((l) => ({ base: l.base ?? l.precio, tipo: l.tipo ?? 'fijo', cantidad: cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad })),
-      ...agregados.map((a) => ({ base: a.precio, tipo: a.tipo, cantidad: cantidades[a.k] ?? 0 })),
+        .map((l) => ({ base: l.base ?? l.precio, tipo: l.tipo ?? 'fijo', promo: l.promo ?? null, cantidad: cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad })),
+      ...agregados.map((a) => ({ base: a.precio, tipo: a.tipo, promo: a.promo, cantidad: cantidades[a.k] ?? 0 })),
       ...Object.entries(packs).map(([id, n]) => ({ base: packInfo[id]?.pack.precio ?? 0, tipo: 'pack', cantidad: n * (packInfo[id]?.pack.fundas ?? 0) })),
     ].filter((r) => r.cantidad > 0)
     if (!ficha.tienda) {
       const sub = sueltos.reduce((a, r) => a + r.base * r.cantidad, 0)
-      return { subtotal: sub, total: sub, descuento: 0, pct: 0, proximo: null as null | { pct: number; falta: number } }
+      return { subtotal: sub, total: sub, descuento: 0, pct: 0, conPromo: false, proximo: null as null | { pct: number; falta: number } }
     }
-    return cuentaDelPedido({ escala: ficha.tienda.escala }, sueltos)
+    return cuentaDelPedido({ escala: ficha.tienda.escala, promos: ficha.tienda.promos ?? [] }, sueltos)
   })()
   const envioDelPedido = ficha?.pedido.envio != null && ficha.pedido.envio > 0 ? ficha.pedido.envio : 0
   const totalAhora = !ficha || !cuentaTienda ? 0 : !cambiado ? ficha.pedido.total : redondearTotal(cuentaTienda.total, ficha.redondeo ?? null) + envioDelPedido
@@ -370,7 +370,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
       const ya = ficha?.lineas.some((l) => `${l.product_id}:${l.size_id}` === k) || agregados.some((a) => a.k === k) || nuevos.some((a) => a.k === k)
       const deTienda = v.precio ?? prod.precio
       const final = precio ?? deTienda
-      if (!ya && final != null) nuevos.push({ k, product_id: prod.product_id, size_id: v.size_id, nombre: prod.nombre, talle: v.talle, precio: final, tipo: precio != null ? 'fijo' : (v.tipo ?? 'lista'), aMano: precio != null, stock: v.stock })
+      if (!ya && final != null) nuevos.push({ k, product_id: prod.product_id, size_id: v.size_id, nombre: prod.nombre, talle: v.talle, precio: final, tipo: precio != null ? 'fijo' : (v.tipo ?? 'lista'), promo: prod.promo ?? null, aMano: precio != null, stock: v.stock })
     }
     setAgregados((as) => [...as, ...nuevos])
     setCantidades((c) => {
@@ -461,7 +461,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
           {cuentaTienda && cuentaTienda.descuento > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Productos</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{plata(cuentaTienda.subtotal)}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: color.successInk, fontWeight: 600 }}><span>Descuento {cuentaTienda.pct}%</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>−{plata(cuentaTienda.descuento)}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: color.successInk, fontWeight: 600 }}><span>Descuento{cuentaTienda.pct && !cuentaTienda.conPromo ? ` ${cuentaTienda.pct}%` : ''}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>−{plata(cuentaTienda.descuento)}</span></div>
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
@@ -471,6 +471,15 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
               <b>{plata(totalAhora)}</b>
             </span>
           </div>
+          {/* El total guardado ⛔ coincide con la cuenta de la tienda (ej. un cambio viejo le sacó una promo, #121 18-nov): se rehace con los mismos renglones. */}
+          {puede && !cambiado && ficha.tienda && cuentaTienda && Math.abs(redondearTotal(cuentaTienda.total, ficha.redondeo ?? null) + envioDelPedido - p.total) > 1 && (
+            <Notice tone="warning">
+              Con los precios de la tienda el total es {plata(redondearTotal(cuentaTienda.total, ficha.redondeo ?? null) + envioDelPedido)}.{' '}
+              <Button size="sm" variant="outline" disabled={ocupado} onClick={() => void hacer(() => cambiarPedidoPanel(pedidoId,
+                ficha.lineas.filter((l) => l.size_id != null && !enPackOriginal.has(String(l.product_id))).map((l) => ({ productId: l.product_id, sizeId: l.size_id as number, cantidad: l.cantidad })),
+                [...enPackOriginal].map((id) => ({ productId: Number(id), packs: packs[id] ?? 0 }))), 'Precios actualizados.')}>Actualizar precios</Button>
+            </Notice>
+          )}
           {cuentaTienda?.proximo && p.etapa !== 'anulado' && (
             <div style={{ fontSize: font.xs, color: color.mut2 }}>Faltan <b style={{ color: color.ink2 }}>{plata(cuentaTienda.proximo.falta)}</b> para el {cuentaTienda.proximo.pct}%</div>
           )}
@@ -606,7 +615,7 @@ export function ElegirCliente({ tel, persona, escribir, decir, onCambio, onElegi
   )
 }
 
-type Agregado = { k: string; product_id: number; size_id: number; nombre: string; talle: string | null; precio: number; tipo: TipoPrecio; /** Precio a mano (Darío). */ aMano: boolean; stock: number }
+type Agregado = { k: string; product_id: number; size_id: number; nombre: string; talle: string | null; precio: number; tipo: TipoPrecio; promo: string | null; /** Precio a mano (Darío). */ aMano: boolean; stock: number }
 
 /** La marca del precio (Darío 18-nov): una palabra. Lo de lista ⛔ lleva. */
 function MarcaPrecio({ tipo }: { tipo?: TipoPrecio }) {

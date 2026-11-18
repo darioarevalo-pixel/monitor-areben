@@ -13,7 +13,7 @@
  */
 import { panelAbierto } from './_erp-clientes.js'
 import { cortesDeCaja } from './_caja-corte.js'
-import { cuentaDelPedido, packDe, packsEnRenglones, precioDeTienda, renglonGuardado, soloPack } from '../lib/erp/precio-tienda.core.js'
+import { cuentaDelPedido, packDe, packsEnRenglones, precioDeTienda, promoDe, renglonGuardado, soloPack } from '../lib/erp/precio-tienda.core.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /** Los pedidos SIN ENTRAR que se buscan por el teléfono del chat: los de los últimos días (el catálogo manda el teléfono escrito a mano). */
@@ -138,18 +138,20 @@ async function leerReglas(deps, fresco = false) {
  * Lo que la cuenta de la tienda necesita de cada producto (Areben Gestión): precio de la lista mayorista, costo vigente
  * (para la oferta por margen) y sus talles.
  * @param {import('pg').ClientBase} pg @param {string} marca @param {number[]} ids
- * @returns {Promise<Map<string, { lista: number|null, costo: number|null, variantes: Array<{ size_id: number, talle: string|null }> }>>}
+ * @returns {Promise<Map<string, { lista: number|null, costo: number|null, categoria: string|null, variantes: Array<{ size_id: number, talle: string|null }> }>>}
  */
 export async function datosDeProductos(pg, marca, ids) {
   const unicos = [...new Set(ids.map(Number).filter((x) => x > 0))]
   const m = new Map()
   if (!unicos.length) return m
-  const [pre, cos, tal] = await Promise.all([
+  const [pre, cos, tal, cat] = await Promise.all([
     pg.query(`select product_id::text, precio from precio_lista where marca = $1 and lista = 'mayorista' and product_id = any($2::bigint[]) and precio is not null`, [marca, unicos]).then((r) => r.rows),
     pg.query(`select product_id::text, costo from costo_vigente where marca = $1 and product_id = any($2::bigint[])`, [marca, unicos]).then((r) => r.rows).catch(() => []),
     pg.query(`select product_id::text, size_id, talle from variante where product_id = any($1::bigint[]) and activa`, [unicos]).then((r) => r.rows),
+    pg.query(`select id::text, categoria from producto where id = any($1::bigint[])`, [unicos]).then((r) => r.rows).catch(() => []),
   ])
-  for (const id of unicos) m.set(String(id), { lista: null, costo: null, variantes: [] })
+  for (const id of unicos) m.set(String(id), { lista: null, costo: null, categoria: null, variantes: [] })
+  for (const r of cat) if (m.has(r.id)) m.get(r.id).categoria = r.categoria ?? null
   for (const r of pre) m.get(r.product_id).lista = Number(r.precio)
   for (const r of cos) if (m.has(r.product_id)) m.get(r.product_id).costo = Number(r.costo)
   for (const r of tal) m.get(r.product_id)?.variantes.push({ size_id: Number(r.size_id), talle: r.talle })
@@ -166,7 +168,7 @@ async function tiendaDeLaFicha(pg, marca, lineas, reglas) {
   const conTipo = lineas.map((l) => {
     const d = datos.get(String(l.product_id))
     const g = renglonGuardado(reglas, { product_id: l.product_id, size_id: l.size_id, lista: d?.lista ?? null, costo: d?.costo ?? null }, l.precio)
-    return { ...l, tipo: g.tipo, base: g.base }
+    return { ...l, tipo: g.tipo, base: g.base, promo: promoDe(reglas, l.product_id, d?.categoria ?? null) }
   })
   const packs = {}
   for (const [id, d] of datos) {
@@ -176,7 +178,7 @@ async function tiendaDeLaFicha(pg, marca, lineas, reglas) {
     const en = enPack.length ? packsEnRenglones(pack, enPack) : 0
     if (en != null) packs[id] = { ...pack, enPedido: en }
   }
-  return { lineas: conTipo, tienda: { escala: reglas.escala, packs } }
+  return { lineas: conTipo, tienda: { escala: reglas.escala, promos: (reglas.promos || []).map((x) => ({ id: x.id, pct: x.pct, desde: x.desde })), packs } }
 }
 
 /**
@@ -297,7 +299,7 @@ export async function productosParaElPanel({ pedidoId = '', q = '', usuario = nu
       productos: r.productos.map((p) => {
         const d = datos.get(String(p.product_id))
         const variantes = p.variantes.map((v) => ({ ...v, ...precioDeTienda(R, { product_id: p.product_id, size_id: v.size_id, lista: p.precio, costo: d?.costo ?? null }) }))
-        return { ...p, variantes, pack: packDe(R, p.product_id, p.variantes), soloPack: soloPack(R, p.product_id) }
+        return { ...p, variantes, pack: packDe(R, p.product_id, p.variantes), soloPack: soloPack(R, p.product_id), promo: promoDe(R, p.product_id, d?.categoria ?? null) }
       }),
     }
   })
@@ -409,7 +411,8 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
  */
 export function preciosDelCambio({ actuales, lineas, packs = [], reglas: R, datos, precioManual = false }) {
   const k = (pid, sid) => `${Number(pid)}:${Number(sid)}`
-  const info = (pid) => datos.get(String(pid)) ?? { lista: null, costo: null, variantes: [] }
+  const info = (pid) => datos.get(String(pid)) ?? { lista: null, costo: null, categoria: null, variantes: [] }
+  const promo = (pid) => promoDe(R, pid, info(pid).categoria ?? null)
   const guardados = new Map(actuales.map((l) => {
     const d = info(l.product_id)
     return [k(l.product_id, l.size_id), { ...renglonGuardado(R, { product_id: l.product_id, size_id: l.size_id, lista: d.lista, costo: d.costo }, l.precio), product_id: Number(l.product_id), cantidad: Number(l.cantidad) }]
@@ -448,7 +451,7 @@ export function preciosDelCambio({ actuales, lineas, packs = [], reglas: R, dato
     const aMano = l?.precio == null || l.precio === '' ? null : Number(l.precio)
     if (g) {
       if (aMano != null) return { status: 400, error: 'El precio a mano va sólo en lo que se agrega.' }
-      renglones.push({ product_id: pid, size_id: sid, cantidad, base: g.base, tipo: g.tipo })
+      renglones.push({ product_id: pid, size_id: sid, cantidad, base: g.base, tipo: g.tipo, promo: promo(pid) })
       continue
     }
     if (aMano != null) {
@@ -463,7 +466,7 @@ export function preciosDelCambio({ actuales, lineas, packs = [], reglas: R, dato
     const t = precioDeTienda(R, { product_id: pid, size_id: sid, lista: d.lista, costo: d.costo })
     if (t.precio == null) return { status: 409, error: `El producto ${pid} no tiene precio mayorista cargado` }
     if (t.tipo === 'pack' && packDe(R, pid, d.variantes)) return { status: 409, error: 'Ese diseño se vende sólo en pack.' }
-    renglones.push({ product_id: pid, size_id: sid, cantidad, base: t.precio, tipo: t.tipo })
+    renglones.push({ product_id: pid, size_id: sid, cantidad, base: t.precio, tipo: t.tipo, promo: promo(pid) })
   }
   if (!renglones.length) return { status: 409, error: 'El pedido quedaría vacío: para eso se anula' }
   const cuenta = cuentaDelPedido(R, renglones)

@@ -100,3 +100,22 @@ describe('los precios de un cambio (la puerta decide)', () => {
     expect('status' in r ? r : r.deltaPacks).toEqual([['5', -1]])
   })
 })
+
+describe('la promo por cantidad (smartwatch y auriculares, 10% desde 10 u.)', () => {
+  const RP = reglasDeTienda({ config: { updatedAt: 'x', descuentos: { escala: [{ desde: 1000000, pct: 5 }], promos: [{ id: 'p1', nombre: 'smartwatch y auriculares', categorias: ['SMARTWATCH', 'AURICULARES'], productos: [], desde: 10, pct: 10, activo: true }] }, lotes: { productos: { 5: { precio: 3990, activo: true, porLote: { 'iPhone 15': 2, 'iPhone 16': 3 } } } } } })
+  const datos = new Map([
+    ['12', { lista: 16990, costo: 9000, categoria: 'SMARTWATCH', variantes: [{ size_id: 1, talle: 'NEGRO' }] }],
+    ['13', { lista: 5490, costo: 2000, categoria: 'AURICULARES', variantes: [{ size_id: 2, talle: 'Única' }] }],
+    ['5', { lista: 4990, costo: 2400, categoria: 'FUNDAS', variantes: T5 }],
+  ])
+  it('pedido #121 (18-nov): agregar un pack ⛔ le saca el 10% que ya tenían los smartwatch del catálogo', () => {
+    const actuales = [{ product_id: 12, size_id: 1, cantidad: 8, precio: 15291 }, { product_id: 13, size_id: 2, cantidad: 2, precio: 4941 }]
+    const r = preciosDelCambio({ actuales, lineas: [{ productId: 12, sizeId: 1, cantidad: 8 }, { productId: 13, sizeId: 2, cantidad: 2 }], packs: [{ productId: 5, packs: 1 }], reglas: RP, datos })
+    expect('status' in r ? r : r.pedidas.filter((l) => l.product_id !== 5).map((l) => l.precio)).toEqual([15291, 4941])
+  })
+  it('con menos de 10 unidades de la promo, vuelve a lista', () => {
+    const actuales = [{ product_id: 12, size_id: 1, cantidad: 8, precio: 15291 }, { product_id: 13, size_id: 2, cantidad: 2, precio: 4941 }]
+    const r = preciosDelCambio({ actuales, lineas: [{ productId: 12, sizeId: 1, cantidad: 7 }, { productId: 13, sizeId: 2, cantidad: 2 }], reglas: RP, datos })
+    expect('status' in r ? r : r.pedidas.map((l) => l.precio)).toEqual([16990, 5490])
+  })
+})

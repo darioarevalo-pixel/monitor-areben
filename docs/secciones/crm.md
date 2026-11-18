@@ -100,7 +100,8 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
     precio salvo lo regular, que recalcula el %. Precio a mano: sólo Darío (`esDario`), sólo en lo nuevo. El motor respeta
     el `precio` que le llega (areben-motor 804c692). Packs vendidos ⇒ `lotes:vendidos` del catálogo por
     `POST /api/config?accion=packs-panel` con `PANEL_LLAVE_CATALOGO` (en los DOS proyectos de Vercel); sin llave guarda y
-    avisa. ⛔ Promos por cantidad (categorías de TN) no se aplican en el panel. Si la tienda ⛔ contesta, guardar da 503.
+    avisa. Promos por cantidad (`descuentos.promos`, por `producto.categoria`) también: 🔴 sin ellas, el 18-nov un cambio le
+    sacó el 10% a los smartwatch de un pedido del catálogo (#121). Si la tienda ⛔ contesta, guardar da 503.
   - **Pagos del pedido** (Darío §4): «$ Cargar pago» en la hoja del pedido abre la MISMA hoja de la cuenta, con lo que falta y
     `imputar` a ese pedido; lo que sobra va a lo más viejo y recién sin deuda queda a favor (regla del 18-oct). **N° de
     operación** opcional: si otro pago vivo ya lo usa, el motor contesta OPERACION_REPETIDA, la hoja dice cuál y «Cargar

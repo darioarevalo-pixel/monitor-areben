@@ -881,10 +881,10 @@ export type PedidosPanel =
   | { prendido: true; escribir: boolean; pedidos: PedidoDelCliente[]; sinEntrar: PedidoSinEntrar[]; deGn?: PedidoDeGn[]; falta064?: boolean }
 /** Qué es el precio de un renglón para la tienda (Darío 18-nov): lista y modelo llevan el descuento por monto; oferta, pack y fijo, no. */
 export type TipoPrecio = 'lista' | 'modelo' | 'oferta' | 'pack' | 'fijo'
-export type RenglonPedido = { product_id: number; size_id: number | null; cantidad: number; precio: number; stock: number | null; nombre: string | null; talle: string | null; tipo?: TipoPrecio; /** El precio sin el descuento por monto. */ base?: number }
+export type RenglonPedido = { product_id: number; size_id: number | null; cantidad: number; precio: number; stock: number | null; nombre: string | null; talle: string | null; tipo?: TipoPrecio; /** El precio sin el descuento por monto. */ base?: number; /** La promo por cantidad que lo incluye. */ promo?: string | null }
 /** El pack de un diseño (Marketing › Lotes): precio por funda, qué lleva de cada modelo y cuántos quedan a la venta (null = sin tope). */
 export type PackTienda = { precio: number; fundas: number; modelos: Array<{ size_id: number; talle: string; cantidad: number; stock: number | null }>; quedan: number | null; alcanza: number | null; soloPack: boolean; sinSueltas: boolean }
-export type TiendaDeLaHoja = { escala: Array<{ desde: number; pct: number }>; packs: Record<string, PackTienda & { enPedido: number }> }
+export type TiendaDeLaHoja = { escala: Array<{ desde: number; pct: number }>; promos?: Array<{ id: string; pct: number; desde: number }>; packs: Record<string, PackTienda & { enPedido: number }> }
 export type CambioPedido = { motivo: string; antes: unknown; despues: unknown; usuario: string | null; cuando: string }
 export type FichaPedido = {
   prendido: true; escribir: boolean
@@ -909,7 +909,7 @@ export const leerPedidoPanel = (id: string) =>
 export type ProductoParaPedido = {
   product_id: number; nombre: string; precio: number | null
   variantes: Array<{ size_id: number; talle: string | null; sku: string | null; stock: number; en_pedido: boolean; /** El de la tienda (Darío 18-nov). */ precio?: number | null; tipo?: TipoPrecio }>
-  pack?: PackTienda | null; soloPack?: boolean
+  pack?: PackTienda | null; soloPack?: boolean; promo?: string | null
 }
 export const buscarProductosPedido = (pedidoId: string, q: string) =>
   pedir<{ prendido: false } | { prendido: true; productos: ProductoParaPedido[]; tienda?: boolean }>(null, `&vista=pedido-productos&marca=bdi&id=${encodeURIComponent(pedidoId)}&q=${encodeURIComponent(q.slice(0, 80))}&nc=${Date.now()}`, 'No se pudo buscar el producto.')
