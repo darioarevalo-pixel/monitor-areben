@@ -118,3 +118,55 @@ export async function guardarTiposDeIngreso(db, { proveedores, escribir = false 
   }
   return { leidos: lista.length, cambian: c.cambian, sin_cruce: c.sin_cruce }
 }
+
+/** El precio de venta que publica Ingresos (`list_price`; `cash_price` vale lo mismo en los 269 de BDI, medido 18-nov). */
+export const CAMPO_PRECIO = 'list_price'
+
+/**
+ * 🔑 **El MINORISTA del producto nuevo sale de Ingresos, UNA vez** (Bruno, 18-nov). Desde el corte el producto nace en el ERP
+ * (`importarElegidos` ⛔ trae precio) y ⛔ pasa por GN ni, a veces, por TN ⇒ entraba sin precio y la Caja ⛔ lo podía cobrar.
+ * - 🔴 **Sólo al producto SIN Minorista** (`precio_lista` `local` vacío), como el costo: ⛔ se pisa uno que ya está. En
+ *   Ingresos el precio SIGUE al costo para mantener el margen (Darío lo vio al sumarle la factura de Santi) y 41 productos de
+ *   BDI tienen ahí el precio de junio ⇒ seguirlo movería el precio del local sin que nadie lo decida.
+ * - Sólo lo FIRME: el mismo `cost_confirmed_at` que pide el costo (`costoFirme` con este campo). Un SKU en dos productos
+ *   nuestros o dos precios distintos para uno nuestro ⛔ se cargan (el cruce es el de `planCostos`).
+ * - Va como `fuente = 'carga'` con `usuario = 'ingresos-api'`: después se cambia sólo en Areben Gestión › Precios.
+ * @param {import('pg').ClientBase} db la base de la marca, sin transacción abierta
+ * @param {{ marca: 'bdi'|'zattia', costos: any[], productos: any[], escribir?: boolean, usuario?: string, campo?: string }} o
+ */
+export async function cargarPreciosDeIngresos(db, { marca, costos, productos, escribir = false, usuario = 'ingresos-api', campo = CAMPO_PRECIO }) {
+  if (!['bdi', 'zattia'].includes(marca)) throw new Error(`marca inválida: ${marca}`)
+  const skus = [...new Set(productos.flatMap((p) => (p.variants ?? []).map((x) => String(x?.sku ?? '').trim().toUpperCase()).filter(Boolean)))]
+  const variantes = skus.length
+    ? await q(db, `select upper(trim(v.sku)) as sku, v.product_id, p.empresa_id from variante v
+        join producto p on p.empresa_id = v.empresa_id and p.id = v.product_id where p.marca = $1 and upper(trim(v.sku)) = any($2::text[])`, [marca, skus])
+    : []
+  const { cargar, sin_cruce, ...plan } = planCostos({ costos, productos, variantes, campo })
+  const r = { campo, sin_confirmar: plan.sin_confirmar, sin_valor: plan.sin_valor, invalidos: plan.invalidos, distintos: plan.distintos.length,
+    sku_compartido: plan.sku_compartido.length, sin_cruce: sin_cruce.length, productos: cargar.length, ya_tienen: 0, sin_minorista: 0, muestra: [] }
+  await db.query('begin')
+  try {
+    await db.query(`select pg_advisory_xact_lock(hashtext('precio-ingresos'))`)
+    const ids = cargar.map((x) => x.product_id)
+    const tienen = new Set((ids.length ? await q(db, `select distinct product_id from precio_lista
+      where marca = $1 and lista = 'local' and precio is not null and product_id = any($2::bigint[])`, [marca, ids]) : []).map((f) => String(f.product_id)))
+    const filas = []
+    for (const x of cargar) {
+      if (tienen.has(String(x.product_id))) { r.ya_tienen++; continue }
+      r.sin_minorista++
+      if (r.muestra.length < 20) r.muestra.push({ product_id: Number(x.product_id), precio: x.costo })
+      filas.push({ empresa_id: x.empresa_id, product_id: x.product_id, precio: x.costo, motivo: `Ingresos: producto ${x.ingresos_id}, ${campo}, confirmado ${x.confirmado_en}` })
+    }
+    if (filas.length) {
+      await db.query(`insert into producto_precio (empresa_id, marca, product_id, lista, precio, usuario, motivo, fuente)
+        select f.empresa_id, $1, f.product_id, 'local', f.precio, $2, f.motivo, 'carga'
+        from jsonb_to_recordset($3::jsonb) as f(empresa_id text, product_id bigint, precio numeric, motivo text)`,
+      [marca, usuario, JSON.stringify(filas)])
+    }
+    await db.query(escribir ? 'commit' : 'rollback')
+  } catch (e) {
+    await db.query('rollback').catch(() => {})
+    throw e
+  }
+  return { ...r, escribio: escribir }
+}

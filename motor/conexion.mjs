@@ -3,7 +3,7 @@
  * sql/074) y la vuelta de costos. Lo corre el monitor, que es quien tiene los tokens (`api/_ingresos-lectura.js`).
  * 🔴 El token va sólo en la cabecera: ⛔ se sigue una redirección (se lo llevaría a otro host) y ⛔ aparece en ningún error.
  */
-import { cargarCostosDeIngresos, guardarTiposDeIngreso } from './costo-ingresos.mjs'
+import { cargarCostosDeIngresos, cargarPreciosDeIngresos, guardarTiposDeIngreso } from './costo-ingresos.mjs'
 import { candidatos, importarElegidos, skusDeOcSinCruzar, variantesDelErp } from './catalogo-ingresos.mjs'
 import { leerCortes, productoIngresosManda, pruebaIngresos } from './llave-corte.mjs'
 
@@ -92,7 +92,7 @@ export async function correrCostos({ control, db, negocio, token, manda, seco = 
   try {
     const t = await mirarToken(negocio, o)
     vence = t.vence
-    const salida = { manda, seco, vence, tipos: null, costos: null }
+    const salida = { manda, seco, vence, tipos: null, costos: null, precios: null }
     if (t.permisos.includes('suppliers:read')) salida.tipos = await guardarTiposDeIngreso(db, { proveedores: await listarExt('/suppliers', o), escribir: !seco })
     if (!t.permisos.includes(PERMISO_COSTOS)) {
       const detalle = `El token ⛔ tiene el permiso ${PERMISO_COSTOS}.`
@@ -105,6 +105,10 @@ export async function correrCostos({ control, db, negocio, token, manda, seco = 
       const productos = await productosDe([...new Set(costos.map((c) => Number(c.product_id)))], o)
       const { sin_cruce, ...r } = await cargarCostosDeIngresos(db, { marca: negocio, costos, productos, escribir: manda && !seco })
       salida.costos = { ...r, sin_cruce: sin_cruce.length }
+      // 🔑 El Minorista del producto nuevo (Bruno, 18-nov), sólo donde la línea ya cortó: antes del corte el precio lo copia GN.
+      // Con la línea sin cortar corre en SECO (cuenta qué cargaría, ⛔ escribe).
+      const preciosMandan = productoIngresosManda(negocio, await leerCortes(db), process.env, ahora)
+      salida.precios = { manda: preciosMandan, ...(await cargarPreciosDeIngresos(db, { marca: negocio, costos, productos, escribir: manda && !seco && preciosMandan })) }
     }
     await anotar({ ok: true, status: 200, vence, resumen: salida })
     return salida
