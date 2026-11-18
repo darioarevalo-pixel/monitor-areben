@@ -37,7 +37,8 @@ type Prefs = { orden: string[]; visibles: string[] }
 const MOVIL: Record<string, MovilColumna> = { p: 'titulo', cant: 'dato', h: 'chico', tipo: 'chico', dep: 'chico' }
 
 const LINEA = NOMBRE_LINEA as Record<string, string>
-const DEPOSITOS: Record<MarcaErp, string[]> = { zattia: ['local', 'deposito'], bdi: ['local', 'deposito_minorista', 'deposito_mayorista'] }
+// Depósito mayorista APAGADO (Darío 18-nov): viene del sistema viejo, nunca se usó en el ERP y elegirlo por error «perdía» mercadería.
+const DEPOSITOS: Record<MarcaErp, string[]> = { zattia: ['local', 'deposito'], bdi: ['local', 'deposito_minorista'] }
 /** Cuántas filas se dibujan de una (la lista ⛔ es virtual). */
 const DE_A = 300
 const u = (n: number) => `${n.toLocaleString('es-AR')} u`

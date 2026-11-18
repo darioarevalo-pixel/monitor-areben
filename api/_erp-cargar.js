@@ -24,7 +24,8 @@ const MARCAS = ['bdi', 'zattia']
 const LINEAS = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] }
 /** La Caja que vende cada línea, si ⛔ es la suya. */
 const CAJA_DE_LINEA = { stunned: 'zattia' }
-const DEPOSITOS = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
+// Depósito mayorista APAGADO (Darío 18-nov): viene del sistema viejo, nunca se usó en el ERP y elegirlo por error «perdía» mercadería.
+const DEPOSITOS = { bdi: ['local', 'deposito_minorista'], zattia: ['local', 'deposito'] }
 const pesos = (x) => Math.round(Number(x) * 100) / 100
 /** Los frenos de la venta A CUENTA que se saltan con el PIN de un admin (motor `frena`): la pantalla pide el PIN recién cuando llega uno. */
 export const FRENOS_DE_CUENTA = ['SIN_CREDITO', 'ATRASADO', 'SUPERA_TOPE']

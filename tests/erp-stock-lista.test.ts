@@ -98,9 +98,17 @@ describe('reservaDePedidos (la regla del motor, Bruno 16-nov)', () => {
   })
 })
 
+describe('el depósito mayorista apagado (Darío 18-nov)', () => {
+  it('sus negativos viejos ⛔ suman ni marcan la fila', () => {
+    const [f] = armarFilasStock({ marca: 'bdi', niveles: [niv(9, 90, 'deposito_minorista', 3, 'bdi'), niv(9, 90, 'deposito_mayorista', -1, 'bdi')], ultimos: [], inventario: [] })
+    expect(f).toMatchObject({ estanteria: 3, disponible: 3, negativo: false })
+    expect(Object.keys(f.deps)).toEqual(['local', 'deposito_minorista'])
+  })
+})
+
 describe('las columnas', () => {
   it('cada base con sus depósitos; las fijas no se ocultan', () => {
-    expect(Object.keys(columnasDe('bdi')).filter((k) => k.startsWith('dep:'))).toEqual(['dep:local', 'dep:deposito_minorista', 'dep:deposito_mayorista'])
+    expect(Object.keys(columnasDe('bdi')).filter((k) => k.startsWith('dep:'))).toEqual(['dep:local', 'dep:deposito_minorista'])
     const p = normalizarPrefs('zattia', null)
     expect(p.visibles).toEqual(['p', 't', 'disp', 'est', 'dep:local', 'dep:deposito', 'ped', 'bol', 'ult'])
     expect(alternarColumna('zattia', p, 'disp')).toBe(p)

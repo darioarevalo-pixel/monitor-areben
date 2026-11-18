@@ -34,7 +34,8 @@ import { deLaTienda, useTiendaErp } from '@/lib/erp/linea-erp'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import type { AlContar } from './ListasJuntas'
 
-const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minorista', 'deposito_mayorista'], zattia: ['local', 'deposito'] }
+// Depósito mayorista APAGADO (Darío 18-nov): viene del sistema viejo, nunca se usó en el ERP y elegirlo por error «perdía» mercadería.
+const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minorista'], zattia: ['local', 'deposito'] }
 /** Los motivos que se cargan a mano: el conteo entra solo desde el monitor (⛔ va en el menú). */
 export const MOTIVOS_A_MANO = MOTIVOS.filter((m) => m.key !== 'conteo')
 /** El mismo porqué que da el servidor (`api/_erp-ajustes.js`), antes de guardar. */

@@ -24,6 +24,7 @@ describe('ERP › Cargar venta: la entrada del motor (§19)', () => {
     expect(e({ linea: 'stunned' }, 'bdi')).toMatch(/Línea/)
     expect(e({ origen_ref: '' })).toMatch(/clave/)
     expect(e({ deposito: 'deposito_mayorista' })).toMatch(/sale/)
+    expect(e({ deposito: 'deposito_mayorista', linea: 'bdi' }, 'bdi')).toMatch(/sale/) // apagado (Darío 18-nov)
     expect(e({ lineas: [] })).toMatch(/producto/)
     expect(e({ lineas: [{ ...ok.lineas[0], cantidad: 1.5 }] })).toMatch(/cantidad/)
     expect(e({ pagos: [{ cuenta: 'x', monto: 10 }] })).toMatch(/no suma/)
