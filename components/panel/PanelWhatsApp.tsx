@@ -1054,6 +1054,11 @@ function PanelInterno({
     () => (pedidosErp?.pedidos ?? []).filter((p) => p.etapa !== 'despachado' && p.etapa !== 'anulado' && p.etapa !== 'sin_entrar').map((p) => codigoPedido(p.numero)).join(','),
     [pedidosErp],
   )
+  // Los ya mandados a preparar: si en Logística todavía no se ven, la ficha los busca sola (Darío 18-nov).
+  const numerosEnviados = useMemo(
+    () => (pedidosErp?.pedidos ?? []).filter((p) => p.etapa === 'a_preparar' || p.etapa === 'en_preparacion' || p.etapa === 'preparado').map((p) => String(p.numero)).join(','),
+    [pedidosErp],
+  )
 
   const solapas = (
     <div style={{ display: 'flex', borderBottom: `1px solid ${color.sideBg}`, background: color.sideBg, position: 'sticky', top: 0, zIndex: 3 }}>
@@ -1435,7 +1440,7 @@ function PanelInterno({
           </Aislado>
         )}
         {/* Los pedidos en curso en Logística (22-oct-2026): sin pedidos no se dibuja. */}
-        <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} despacho={seg.despacho || ''} codigos={codigosAbiertos} />
+        <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} despacho={seg.despacho || ''} codigos={codigosAbiertos} enviados={numerosEnviados} />
         {cuenta && (
           <Aislado nombre="Cuenta corriente">
             <TarjetaCuenta cuenta={cuenta} sinRefs={refsDePedidosAbiertos(pedidosErp)} />

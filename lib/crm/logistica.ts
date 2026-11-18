@@ -239,6 +239,20 @@ async function cargar<T>(cuerpo: Record<string, unknown>): Promise<{ ok: true; d
   }
 }
 
+export type Traido = { t: 'llego'; pedido: PedidoLogistica } | { t: 'todavia' } | { t: 'ignorado'; motivo: string } | { t: 'error'; motivo: string }
+
+/**
+ * «Traelo ya» (Ger 18-nov): Logística relee el pedido del ERP en el momento. `numero` es el del ERP (113 de M-0113).
+ * 404 = el ERP todavía no lo tiene en «A preparar» (o Logística no lo leyó): se vuelve a probar. `ignored` = Logística no
+ * lo carga y dice por qué (por ejemplo, el ERP lo anuló).
+ */
+export async function traerPedido(numero: number): Promise<Traido> {
+  const r = await cargar<{ result?: string | null; detail?: string | null; pedido?: PedidoLogistica }>({ action: 'traer', numero })
+  if (!r.ok) return r.status === 404 || r.status === 502 || r.status === 0 ? { t: 'todavia' } : { t: 'error', motivo: r.motivo }
+  if (r.d.result === 'ignored') return { t: 'ignorado', motivo: r.d.detail || 'Logística no lo cargó.' }
+  return r.d.pedido ? { t: 'llego', pedido: r.d.pedido } : { t: 'todavia' }
+}
+
 /** Lee el mensaje del cliente con la IA de Logística. No guarda nada. */
 export async function leerMensaje(text: string): Promise<{ t: 'ok'; carrier: string | null; shipping: Envio } | { t: 'error'; motivo: string }> {
   const r = await cargar<{ carrier?: string | null; shipping?: Envio }>({ action: 'interpretar', text })

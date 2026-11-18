@@ -235,6 +235,31 @@ describe('api/_logistica.js', () => {
     expect((await llamar({ action: 'pendientes' })).code).toBe(200)
   })
 
+  it('«traelo ya»: lo puede pedir cualquiera que mira, y vuelve la ficha mayorista', async () => {
+    expect(rutaDe({ action: 'traer', numero: '113/../me' }).error).toBeTruthy()
+    vi.mocked(esAdmin).mockReturnValue(false)
+    vi.stubEnv('LOGISTICA_TOKEN', 'lgk_secreto')
+    const f = vi.fn(async (url: string) =>
+      url.endsWith('/orders/wholesale/113/refresh')
+        ? new Response(JSON.stringify({ result: 'created', order: { id: 905 } }), { status: 200 })
+        : new Response(JSON.stringify({ id: 905, gn_number: 'M-0113' }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', f)
+    const res = await llamar({ action: 'traer', numero: 113 })
+    expect(f).toHaveBeenNthCalledWith(1, 'https://logistica.arebensrl.com/api/ext/v1/orders/wholesale/113/refresh', expect.objectContaining({ method: 'POST' }))
+    expect(f).toHaveBeenNthCalledWith(2, 'https://logistica.arebensrl.com/api/ext/v1/mayorista/pedidos/905', expect.anything())
+    expect(res.code).toBe(200)
+    expect(res.cuerpo).toEqual({ result: 'created', pedido: { id: 905, gn_number: 'M-0113' } })
+  })
+
+  it('«traelo ya»: ignorado dice por qué, y 404 vuelve 404', async () => {
+    vi.stubEnv('LOGISTICA_TOKEN', 'lgk_secreto')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ result: 'ignored', detail: 'El ERP lo anuló.', order: null }), { status: 200 })))
+    expect((await llamar({ action: 'traer', numero: 113 })).cuerpo).toEqual({ result: 'ignored', detail: 'El ERP lo anuló.' })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ detail: 'No está en A preparar.' }), { status: 404 })))
+    expect((await llamar({ action: 'traer', numero: 113 })).code).toBe(404)
+  })
+
   it('el 409 vuelve tal cual, con el pedido como quedó', async () => {
     vi.stubEnv('LOGISTICA_TOKEN', 'lgk_secreto')
     const cuerpo = { detail: 'El pedido cambió.', conflicts: [{ field: 'dispatch_option', expected: null, current: 1 }], order: { id: 604 } }

@@ -20,6 +20,8 @@ import {
   type Envio,
   pedidosDelCliente,
   pendientesRecientes,
+  traerPedido,
+  ESTADOS_CERRADOS,
   LISTO,
   TRANSPORTE,
   type Catalogos,
@@ -28,6 +30,12 @@ import {
   type Resultado,
 } from '@/lib/crm/logistica'
 import { enviarMedicion, marca } from '@/lib/medir'
+import { codigoPedido } from '@/lib/erp/codigos.core.js'
+import { Button } from '@/components/ui'
+
+/** Cada cuánto y hasta cuándo la ficha mira sola si llegó a Logística lo que se mandó a preparar (Darío 18-nov). */
+const CADA_MS = 5_000
+const VUELTAS = 12
 
 /**
  * Los pedidos del cliente que están en curso en Logística, en la ficha del chat (Darío, 22-oct-2026:
@@ -42,13 +50,18 @@ import { enviarMedicion, marca } from '@/lib/medir'
  * Sin pedidos en curso no se dibuja nada: es lo normal y no hace falta anunciarlo. Un error sí se
  * ve, en un renglón, para que «no aparece» no se lea como «no tiene pedidos».
  */
-export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos = '' }: {
+export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos = '', enviados = '' }: {
   clienteId: number | null; tel: string | null; despacho?: string
   /**
    * Los códigos («M-0112,M-0113») de sus pedidos abiertos en el ERP: si por cliente y teléfono no aparece nada, se buscan
    * en los pendientes de Logística por código (Darío 17-nov: el de Lucila llegó a Logística sin teléfono ni cliente).
    */
   codigos?: string
+  /**
+   * Los números del ERP («113,116») de sus pedidos ya mandados a preparar. Los que todavía no se ven acá se le piden a
+   * Logística en el momento y otra vez cada 5 s durante un minuto (Darío 18-nov: «nunca va a aparecer si no toco nada»).
+   */
+  enviados?: string
   /** Lo que contestó Logística (para que la tarjeta de Pedidos muestre el estado de los vendidos por GN). */
   onLeidos?: (pedidos: PedidoLogistica[]) => void
 }) {
@@ -130,8 +143,61 @@ export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos =
   const r0 = llegado?.clave === clave ? llegado.r : null
   const r: Resultado<PedidoLogistica[]> | null =
     r0 && r0.t === 'ok' && cambios.clave === clave
-      ? { t: 'ok', datos: r0.datos.filter((p) => !cambios.quitados.includes(p.id)).map((p) => cambios.nuevos.find((n) => n.id === p.id) ?? p) }
+      ? {
+          t: 'ok',
+          datos: [
+            ...r0.datos.map((p) => cambios.nuevos.find((n) => n.id === p.id) ?? p),
+            // Los que trajo «Llegando a Logística…» van al final.
+            ...cambios.nuevos.filter((n) => !r0.datos.some((p) => p.id === n.id)),
+          ].filter((p) => !cambios.quitados.includes(p.id)),
+        }
       : r0
+
+  // ⏳ Mandados a preparar que acá todavía no se ven. Los que Logística no carga (anulado, ya cerrado) dejan de buscarse.
+  const [descartados, setDescartados] = useState<{ clave: string; nums: string[]; avisos: string[] }>({ clave: '', nums: [], avisos: [] })
+  const desc: { nums: string[]; avisos: string[] } = descartados.clave === clave ? descartados : { nums: [], avisos: [] }
+  const vistos = r?.t === 'ok' ? new Set(r.datos.map((p) => String(p.gn_number ?? '').trim())) : null
+  const faltan = vistos ? (enviados ? enviados.split(',') : []).filter((n) => !vistos.has(codigoPedido(n)) && !desc.nums.includes(n)) : []
+  const faltanKey = faltan.join(',')
+  const [espera, setEspera] = useState<{ clave: string; nums: string; agotada: boolean; vuelta: number }>({ clave: '', nums: '', agotada: false, vuelta: 0 })
+  const agotada = espera.clave === clave && espera.nums === faltanKey && espera.agotada
+  const vuelta = espera.clave === clave ? espera.vuelta : 0
+  useEffect(() => {
+    if (!faltanKey) return
+    let vivo = true
+    let vueltas = 0
+    let t: ReturnType<typeof setTimeout> | undefined
+    const mirar = async () => {
+      const nums = faltanKey.split(',')
+      const rs = await Promise.all(nums.map((n) => traerPedido(Number(n))))
+      if (!vivo) return
+      const fuera: string[] = []
+      const avisos: string[] = []
+      rs.forEach((x, i) => {
+        // El que llegó deja de buscarse aunque su número en Logística venga escrito distinto.
+        if (x.t === 'llego') {
+          if (!ESTADOS_CERRADOS.includes(x.pedido.status?.code)) reemplazar(x.pedido)
+          fuera.push(nums[i])
+        }
+        else if (x.t === 'ignorado') {
+          fuera.push(nums[i])
+          avisos.push(`${codigoPedido(nums[i])}: ${x.motivo}`)
+        }
+      })
+      if (fuera.length) setDescartados((d) => ({ clave, nums: [...(d.clave === clave ? d.nums : []), ...fuera], avisos: [...(d.clave === clave ? d.avisos : []), ...avisos] }))
+      if (fuera.length === nums.length) return
+      vueltas++
+      if (vueltas >= VUELTAS) setEspera((e) => ({ clave, nums: faltanKey, agotada: true, vuelta: e.clave === clave ? e.vuelta : 0 }))
+      else t = setTimeout(() => void mirar(), CADA_MS)
+    }
+    void mirar()
+    return () => {
+      vivo = false
+      clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `reemplazar` cambia en cada dibujo; lo que manda es qué falta.
+  }, [faltanKey, clave, vuelta])
+
   if (!r || r.t === 'sin-permiso') return null
   if (r.t === 'error')
     return (
@@ -139,7 +205,7 @@ export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos =
         <div style={{ fontSize: font.xs, color: color.mut2 }}>Logística: {r.motivo}</div>
       </Caja>
     )
-  if (!r.datos.length) return null
+  if (!r.datos.length && !faltan.length && !desc.avisos.length) return null
   return (
     <Caja>
       <div style={{ fontSize: font.xs, fontWeight: 700, letterSpacing: 0.4, color: color.mut2, textTransform: 'uppercase', marginBottom: 6 }}>
@@ -147,6 +213,19 @@ export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos =
       </div>
       {r.datos.map((p, i) => (
         <Pedido key={p.id} p={p} primero={i === 0} sugerencia={sugerencias.get(p.id) ?? null} despacho={despacho} onCambio={reemplazar} onSale={quitar} />
+      ))}
+      {faltan.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: font.sm, color: color.mut2, padding: '4px 0' }}>
+          <span>{faltan.map((n) => codigoPedido(n)).join(', ')} · {agotada ? 'Todavía no llegó a Logística' : 'Llegando a Logística…'}</span>
+          {agotada && (
+            <Button size="sm" variant="soft" onClick={() => setEspera((e) => ({ clave, nums: '', agotada: false, vuelta: (e.clave === clave ? e.vuelta : 0) + 1 }))}>
+              Volver a mirar
+            </Button>
+          )}
+        </div>
+      )}
+      {desc.avisos.map((a) => (
+        <div key={a} style={{ fontSize: font.xs, color: color.mut2, padding: '2px 0' }}>{a}</div>
       ))}
     </Caja>
   )

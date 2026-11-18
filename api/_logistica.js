@@ -7,6 +7,8 @@
 //   POST { recurso:'logistica', action:'cliente', clienteId }   → GET /mayorista/clientes/{id}/pedidos
 //   POST { recurso:'logistica', action:'telefono', tel }        → GET /mayorista/pedidos?telefono=
 //   POST { recurso:'logistica', action:'pendientes' }           → GET /mayorista/pendientes
+//   POST { recurso:'logistica', action:'traer', numero }        → POST /orders/wholesale/{numero}/refresh
+//                                                  + GET /mayorista/pedidos/{id} (vuelve `{ result, pedido }`)
 //   POST { recurso:'logistica', action:'entrega', id, dispatch_option, carrier?, expected }
 //                                                               → PATCH /mayorista/pedidos/{id}
 //   POST { recurso:'logistica', action:'em', id, em, expected:{em} } → PATCH /mayorista/pedidos/{id}
@@ -127,6 +129,13 @@ export function rutaDe(body) {
     if (tel.length < 8 || tel.length > 15) return { error: 'Falta el teléfono.' };
     return { ruta: `/mayorista/pedidos?telefono=${tel}` };
   }
+  // «Traelo ya» (Ger 18-nov): Logística relee el pedido en el ERP en ~2 s en vez de esperar su vuelta de ~14 s. `numero`
+  // es el del ERP (113 de M-0113). ⛔ cambia nada del pedido: lo puede pedir cualquiera que mira (permiso orders:read).
+  if (accion === 'traer') {
+    const n = String(body.numero ?? '');
+    if (!/^\d{1,12}$/.test(n)) return { error: 'Falta el pedido.' };
+    return { ruta: `/orders/wholesale/${n}/refresh`, metodo: 'POST', lectura: true, traer: true };
+  }
   if (accion === 'entrega') return entrega(body);
   // En EM lo único que se carga es su número: los datos los pone Envío Nube (Darío, 22-oct-2026).
   if (accion === 'em') {
@@ -162,7 +171,7 @@ export function rutaDe(body) {
     if (vio.error) return { error: vio.error };
     return { ruta: `/mayorista/pedidos/${id}/etiqueta`, metodo: 'POST', cuerpo: { ...datos.cuerpo, expected: vio.cuerpo } };
   }
-  return { error: 'acción inválida (usá me, catalogos, cliente, telefono, pendientes, entrega, em, despachar, interpretar, vista-previa o etiqueta)' };
+  return { error: 'acción inválida (usá me, catalogos, cliente, telefono, pendientes, traer, entrega, em, despachar, interpretar, vista-previa o etiqueta)' };
 }
 
 const opcion = (v) => (v === null ? null : Number.isInteger(v) && v >= 1 && v <= 9 ? v : undefined);
@@ -235,9 +244,9 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'No tenés acceso a Clientes.' });
   }
 
-  const { ruta, metodo = 'GET', cuerpo, imagen, error } = rutaDe(req.body);
+  const { ruta, metodo = 'GET', cuerpo, imagen, lectura, traer, error } = rutaDe(req.body);
   if (error) return res.status(400).json({ error });
-  if (metodo !== 'GET' && !esAdmin(perfil)) {
+  if (metodo !== 'GET' && !lectura && !esAdmin(perfil)) {
     return res.status(403).json({ error: 'Cargar en Logística es sólo de administradores.' });
   }
 
@@ -261,6 +270,18 @@ export default async function handler(req, res) {
     if (!r.ok) {
       const detalle = datos && typeof datos.detail === 'string' ? datos.detail : `Logística contestó ${r.status}.`;
       return res.status(r.status).json({ ...(datos || {}), error: detalle });
+    }
+    // Lo que vuelve del «traelo ya» es el pedido como lo ve Logística en general: la ficha necesita el mayorista.
+    if (traer) {
+      const result = datos?.result ?? null;
+      const id = datos?.order?.id;
+      if (result === 'ignored' || id == null || !/^\d{1,12}$/.test(String(id))) return res.status(200).json({ result, detail: datos?.detail ?? null });
+      const u = await fetch(`${BASE}/mayorista/pedidos/${id}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(ESPERA_MS),
+      });
+      if (!u.ok) return res.status(502).json({ error: `Logística contestó ${u.status}.` });
+      return res.status(200).json({ result, pedido: await u.json() });
     }
     if (ruta === '/mayorista/pendientes' && datos) {
       const consultar = async (id) => {
