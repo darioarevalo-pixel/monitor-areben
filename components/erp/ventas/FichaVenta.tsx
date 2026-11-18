@@ -23,6 +23,7 @@ import { MOTIVO_MINIMO, NOMBRE_CANAL } from '@/lib/erp/venta.core.js'
 import { textoDeVuelta } from '@/lib/erp/desarme.core.js'
 import { rutaVigente } from '@/motor/cuentas/cuentas.mjs'
 import { DesarmeVenta } from './DesarmeVenta'
+import { CorregirProductos } from './CorregirProductos'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 
 /** Los medios en que entra plata (`MEDIOS_COBRO` del motor, `correccion-medio.mjs`), con el nombre de la pantalla. */
@@ -48,6 +49,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const [error, setError] = useState<string | null>(null)
   const [anulando, setAnulando] = useState(accionInicial === 'anular')
   const [corrigiendo, setCorrigiendo] = useState(false)
+  const [corrigiendoProductos, setCorrigiendoProductos] = useState(false)
   // Corregir el MEDIO (29-oct, Bruno: lo hace el local): eligió «Efectivo» en Tienda Nube y pagó con tarjeta ⇒ el cierre de la
   // Caja esperaría ese efectivo. ⛔ Mueve plata ni cambia el monto: cambia por dónde entró.
   const [medioAbierto, setMedioAbierto] = useState(false)
@@ -160,6 +162,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     ...(puedeErp('facturar-venta') && ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
     ...(puedeErp('facturar-venta') && !fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura', fila.id) }] : []),
     ...(puede.corregir && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
+    ...(puede.corregirProductos && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' && !['tn', 'ml', 'mayorista'].includes(fila.origen) ? [{ key: 'productos', label: 'Corregir productos…', icono: 'lapiz' as const, hint: 'Se cargó otro producto o cantidad: la venta sigue con el mismo número.', onClick: () => setCorrigiendoProductos(true) }] : []),
     ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir forma de pago…', icono: 'pesos' as const, hint: 'Pagó con otra forma de pago que la que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
     ...(puedeErp('anular') ? [{ key: 'anular', label: 'Anular…', icono: 'anular' as const, tone: 'danger' as const, disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) }] : []),
   ]
@@ -269,8 +272,8 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             {ficha.lineas.map((l) => (
               <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], padding: '10px 0', borderBottom: `1px solid ${color.bg2}` }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: weight.semibold }}>{l.nombre ?? `Producto ${l.producto}`}{l.devuelta && <span style={{ marginLeft: 6, color: 'var(--mo-warning-ink)', fontSize: font.sm }}>devuelta</span>}</div>
-                  <div style={{ fontSize: font.sm, color: color.mut }}>Variante {l.talleNombre ?? l.talle} · {l.cantidad} u.{l.sku ? ` · ${l.sku}` : ''}{l.descuento || l.rebaja ? ` · desc. ${plata(l.descuento + l.rebaja)}` : ''}</div>
+                  <div style={{ fontWeight: weight.semibold }}>{l.nombre ?? `Producto ${l.producto}`}{l.devuelta && <span style={{ marginLeft: 6, color: 'var(--mo-warning-ink)', fontSize: font.sm }}>devuelta</span>}{l.agregada && <span style={{ marginLeft: 6, color: 'var(--mo-warning-ink)', fontSize: font.sm }}>agregada al corregir</span>}</div>
+                  <div style={{ fontSize: font.sm, color: color.mut }}>Variante {l.talleNombre ?? l.talle} · {l.cantidad} u.{l.cantidadOriginal != null ? ` (eran ${l.cantidadOriginal})` : ''}{l.sku ? ` · ${l.sku}` : ''}{l.descuento || l.rebaja ? ` · desc. ${plata(l.descuento + l.rebaja)}` : ''}</div>
                 </div>
                 <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{plata(l.importe)}</span>
               </div>
@@ -286,9 +289,9 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
 
           {!!corr?.correcciones.length && (
             <Notice tone={corr.diferencia === 0 ? 'neutral' : 'warning'}>
-              <b>Precio corregido</b>: total {plata(corr.total ?? v!.total)} · cobrado {plata(corr.cobrado ?? 0)}.{' '}
+              <b>Venta corregida</b>: total {plata(corr.total ?? v!.total)}{v?.totalOriginal != null && v.totalOriginal !== (corr.total ?? v.total) ? ` (era ${plata(v.totalOriginal)})` : ''} · cobrado {plata(corr.cobrado ?? 0)}.{' '}
               {corr.diferencia > 0 ? `Faltan cobrar ${plata(corr.diferencia)}.` : corr.diferencia < 0 ? `Sobran ${plata(-corr.diferencia)}: hay que devolverlos.` : 'Lo cobrado coincide.'}{' '}
-              Los productos de arriba muestran el precio original; la plata no se movió sola.
+              La plata no se movió sola; el detalle de cada corrección está en el historial.
             </Notice>
           )}
 
@@ -360,6 +363,10 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={motivoPrecio} onChange={(e) => setMotivoPrecio(e.target.value)} />
         </Field>
       </Modal>
+      {ficha && corrigiendoProductos && (
+        <CorregirProductos marca={marca} fila={fila} ficha={ficha} abierto={corrigiendoProductos} onCerrar={() => setCorrigiendoProductos(false)}
+          onListo={(aviso) => { setCorrigiendoProductos(false); onCambio(aviso) }} />
+      )}
       <Modal
         abierto={medioAbierto} onCerrar={() => setMedioAbierto(false)} titulo={`Corregir la forma de pago de la venta ${fila.ref}`}
         pie={<>

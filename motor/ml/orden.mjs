@@ -1,11 +1,13 @@
 /**
  * Una orden de Mercado Libre (`GET /orders/search`) → filas de `ml_orden` y `ml_orden_linea`, y el armado
- * por PACK para el cruce. Puro. Del comprador se guarda SÓLO su id de ML y el nombre para su ficha (sql/085, Bruno 15-nov):
- * ⛔ mail, teléfono ni dirección.
+ * por PACK para el cruce. Puro. Del comprador se guarda SÓLO su id de ML, el nombre y el DNI para su ficha (sql/085, Bruno 15-nov;
+ * DNI 18-nov): ⛔ mail, teléfono ni dirección.
  *
  * 🔑 GN hace UNA venta por pack («Importado de MercadoLibre - Pack: N»); una orden suelta (sin carrito) ⛔ tiene
  * pack ⇒ su clave es el id de la orden (supuesto: se confirma en el primer cruce, cae en `sin_venta` si no).
  */
+import { docValido } from '../venta/cliente.mjs'
+
 const plata = (v) => (v == null || v === '' ? null : Math.round(Number(v) * 100) / 100)
 const instante = (v) => (v ? new Date(v).toISOString() : null)
 
@@ -38,14 +40,17 @@ const limpio = (v) => (typeof v === 'string' && v.trim() ? v.trim().replace(/\s+
 
 /**
  * El comprador de una orden para su ficha (sql/085): el id de ML y el nombre (`first_name last_name`; sin nombre, el apodo).
- * Sin id ⇒ null (⛔ hay con qué reconocerlo la próxima vez).
+ * Sin id ⇒ null (⛔ hay con qué reconocerlo la próxima vez). `doc` = DNI/CUIT válido de `billing_info` (`buyer.doc`), o null.
+ * 🔴 `GET /orders/search` trae SÓLO `id` y `nickname` del comprador (medido 17-nov): el nombre viene de `GET /orders/{id}`
+ * (`ordenesConComprador`). `apodo` va aparte para que la ficha que nació con el apodo tome el nombre después.
  */
 export function compradorDeOrdenML(o) {
   const ml_id = idComprador(o)
   if (!ml_id) return null
   const b = o.buyer || {}
-  const nombre = limpio([limpio(b.first_name), limpio(b.last_name)].filter(Boolean).join(' ')) ?? limpio(b.nickname) ?? `Comprador ML ${ml_id}`
-  return { ml_id, nombre }
+  const apodo = limpio(b.nickname)
+  const nombre = limpio([limpio(b.first_name), limpio(b.last_name)].filter(Boolean).join(' ')) ?? apodo ?? `Comprador ML ${ml_id}`
+  return { ml_id, nombre, apodo, doc: docValido(b.doc) || null }
 }
 
 /** sql/068: lo que ML se queda de la orden (`sale_fee` es por unidad). Un renglón sin el dato ⇒ null, ⛔ un número que afirma de menos. */

@@ -7,6 +7,10 @@
  *
  * `db` conectado y sin transacción. Devuelven `{ ok: true, … }` o `{ ok: false, error: { codigo, mensaje, campo? } }`.
  */
+import { randomUUID } from 'node:crypto'
+import { movimientoDe, mueveStock } from './armar.mjs'
+import { costosDe } from './costo.mjs'
+
 const q = async (db, sql, p = []) => (await db.query(sql, p)).rows
 const falla = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo, mensaje, campo } : { codigo, mensaje } })
 const UUID = /^[0-9a-f-]{36}$/i
@@ -96,13 +100,155 @@ export async function correccionesDe(db, { venta_id }) {
   if (!UUID.test(String(venta_id ?? ''))) return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id')
   const [v] = await q(db, 'select total::float as total from venta where id = $1', [venta_id])
   if (!v) return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id')
-  const correcciones = await q(db, `select k.id::text, k.motivo, k.usuario, k.creada_en, k.total_antes::float, k.total_despues::float, k.cobrado::float, k.diferencia::float,
+  const correcciones = await q(db, `select k.id::text, coalesce(to_jsonb(k)->>'tipo', 'precio') as tipo, k.motivo, k.usuario, k.creada_en, k.total_antes::float, k.total_despues::float, k.cobrado::float, k.diferencia::float,
       (select coalesce(json_agg(json_build_object('n', l.n, 'precio_antes', cl.precio_antes::float, 'precio_despues', cl.precio_despues::float) order by l.n), '[]')
         from venta_correccion_linea cl join venta_linea l on l.id = cl.venta_linea_id where cl.correccion_id = k.id) as lineas
     from venta_correccion k where k.venta_id = $1 order by k.creada_en, k.id`, [venta_id])
+  for (const k of correcciones) if (k.tipo === 'productos') k.renglones = await renglonesDe(db, k.id)
   const [{ cobrado }] = await q(db, 'select coalesce(sum(monto), 0)::float as cobrado from venta_pago where venta_id = $1', [venta_id])
   const total = correcciones.length ? correcciones.at(-1).total_despues : v.total
   return { ok: true, correcciones, total, cobrado: pesos(cobrado), diferencia: pesos(total - cobrado) }
 }
+
+/**
+ * CORREGIR LOS PRODUCTOS de una venta ya hecha, CON EL MISMO NÚMERO (sql/088; Bruno 16/18-nov, la #33748 de BDI cargada con
+ * TEMPLADO 9D en vez de 9D PREMIUM). La venta y sus líneas ⛔ se editan: se AGREGAN líneas —
+ *   · `sacar: [{ linea_id, cantidad }]` ⇒ una línea NEGATIVA que apunta a la original (`linea_origen_id`), al precio vigente;
+ *   · `agregar: [{ product_id, size_id, cantidad, precio }]` ⇒ una línea nueva (precio UNITARIO).
+ * Cada una con su movimiento del libro en el DEPÓSITO DE LA VENTA (`movimientoDe`, la misma clave que cualquier línea) ⇒ lo
+ * que se saca vuelve al estante, lo que se agrega sale, y las reglas de la noche cierran igual. Una venta de prueba ⛔ mueve.
+ * El total nuevo se compara con lo COBRADO y la diferencia queda guardada y a la vista (como `corregirPrecio`: ⛔ mueve plata).
+ * Frena lo mismo que el precio (anulada, cambio, factura, ya cambiada) y además: la de TN/ML (se corrige en su plataforma),
+ * la mayorista y la que dejó algo a cuenta (fase 2: la cuenta corriente), y la de GN (su stock lo movió GN).
+ * `ref` (opcional): la misma en la misma venta devuelve la misma corrección (el «Guardar» dos veces).
+ * @param {import('pg').ClientBase} db
+ * @param {{ venta_id: string, motivo: string, usuario: string, ref?: string,
+ *   sacar?: { linea_id: string, cantidad: number }[], agregar?: { product_id: number, size_id: number, cantidad: number, precio: number }[] }} e
+ */
+export async function corregirProductos(db, e) {
+  if (!UUID.test(String(e?.venta_id ?? ''))) return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id')
+  const motivo = texto(e.motivo)
+  if (!motivo) return falla('ENTRADA_INVALIDA', 'Falta el motivo', 'motivo')
+  const usuario = texto(e.usuario)
+  if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién corrige', 'usuario')
+  const ref = e.ref == null ? null : texto(String(e.ref))
+  const sacar = Array.isArray(e.sacar) ? e.sacar : []
+  const agregar = Array.isArray(e.agregar) ? e.agregar : []
+  if (!sacar.length && !agregar.length) return falla('SIN_CAMBIO', 'No hay nada que sacar ni agregar')
+  for (const [i, s] of sacar.entries()) {
+    if (!UUID.test(String(s?.linea_id ?? ''))) return falla('ENTRADA_INVALIDA', 'Falta cuál línea', `sacar[${i}].linea_id`)
+    if (!(Number.isInteger(s.cantidad) && s.cantidad > 0)) return falla('ENTRADA_INVALIDA', 'La cantidad es un entero mayor que 0', `sacar[${i}].cantidad`)
+  }
+  for (const [i, a] of agregar.entries()) {
+    if (!(Number.isSafeInteger(a?.product_id) && a.product_id > 0 && Number.isSafeInteger(a?.size_id) && a.size_id >= 0)) return falla('ENTRADA_INVALIDA', 'Falta el producto', `agregar[${i}]`)
+    if (!(Number.isInteger(a.cantidad) && a.cantidad > 0)) return falla('ENTRADA_INVALIDA', 'La cantidad es un entero mayor que 0', `agregar[${i}].cantidad`)
+    const precio = Number(a.precio)
+    if (!Number.isFinite(precio) || precio < 0) return falla('ENTRADA_INVALIDA', 'El precio es un número desde 0', `agregar[${i}].precio`)
+  }
+  await db.query('begin')
+  try {
+    const r = await productosDentro(db, { venta_id: e.venta_id, motivo, usuario, ref, sacar, agregar })
+    await db.query(r.ok ? 'commit' : 'rollback')
+    return r
+  } catch (x) {
+    await db.query('rollback').catch(() => {})
+    throw x
+  }
+}
+
+async function productosDentro(db, { venta_id, motivo, usuario, ref, sacar, agregar }) {
+  const [v] = await q(db, 'select * from venta where id = $1 for update', [venta_id])
+  if (!v) return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id')
+  if (ref) {
+    const [ya] = await q(db, 'select id::text from venta_correccion where venta_id = $1 and ref = $2', [v.id, ref])
+    if (ya) return { ok: true, ya_existia: true, correccion: await unaCorreccion(db, ya.id) }
+  }
+  if (v.estado === 'anulada') return falla('ANULADA', `La venta ${v.numero} está anulada`)
+  if (v.tipo !== 'venta') return falla('ES_CAMBIO', `La ${v.numero} es un cambio: se corrige la venta original`)
+  const [f] = await q(db, 'select 1 from venta_factura where venta_id = $1 limit 1', [v.id])
+  if (f) return falla('FACTURADA', `La venta ${v.numero} ya tiene factura: se corrige con una nota de crédito`)
+  const [c] = await q(db, `select exists (select 1 from venta where venta_original_id = $1 and estado = 'confirmada') as hay`, [v.id])
+  if (c.hay) return falla('CON_CAMBIO', `La venta ${v.numero} ya tuvo un cambio: los productos ya no se corrigen acá`)
+  if (v.origen === 'tn' || v.origen === 'ml') return falla('DE_LA_TIENDA', `La venta ${v.numero} es de ${v.origen === 'tn' ? 'Tienda Nube' : 'Mercado Libre'}: se corrige el pedido allá`)
+  if (v.origen === 'mayorista') return falla('ES_MAYORISTA', `La venta ${v.numero} es mayorista: el pedido se cambia desde el panel`)
+  const [cta] = await q(db, `select exists (select 1 from cuenta_movimiento where ref = $1) as hay`, [`venta:${v.id}`]).catch(() => [{ hay: false }])
+  if (cta.hay) return falla('A_CUENTA', `La venta ${v.numero} dejó algo a cuenta: todavía no se corrige acá`)
+  if (!v.prueba && !mueveStock(v)) return falla('NO_MUEVE_STOCK', `El stock de la venta ${v.numero} lo movió Gestión Nube: no se corrige acá`)
+
+  const lineas = await q(db, `select l.id::text as id, l.n, l.product_id::text, l.size_id::text, l.sku, l.barcode, l.cantidad, l.costo_unitario::float, l.costo_fuente,
+      coalesce(c.precio_despues, l.precio)::float as precio, coalesce(c.importe_despues, l.importe)::float as importe,
+      coalesce((select -sum(d.cantidad) from venta_linea d join venta x on x.id = d.venta_id
+        where d.linea_origen_id = l.id and x.estado = 'confirmada'), 0)::int as sacado
+    from venta_linea l
+    left join lateral (select cl.precio_despues, cl.importe_despues from venta_correccion_linea cl join venta_correccion k on k.id = cl.correccion_id
+      where cl.venta_linea_id = l.id order by k.creada_en desc, k.id desc limit 1) c on true
+    where l.venta_id = $1 order by l.n`, [v.id])
+  const nuevas = []
+  const pedidoPorLinea = new Map()
+  for (const [i, s] of sacar.entries()) {
+    const l = lineas.find((x) => x.id === String(s.linea_id).toLowerCase())
+    if (!l || l.cantidad <= 0) return falla('NO_ENCONTRADA', 'Esa línea no es de la venta', `sacar[${i}].linea_id`)
+    const ya = (pedidoPorLinea.get(l.id) || 0) + s.cantidad
+    if (ya + l.sacado > l.cantidad) return falla('DE_MAS', `De ${l.sku || 'esa línea'} quedan ${l.cantidad - l.sacado - (ya - s.cantidad)}`, `sacar[${i}].cantidad`)
+    pedidoPorLinea.set(l.id, ya)
+    const unitario = pesos(l.importe / l.cantidad)
+    nuevas.push({ product_id: Number(l.product_id), size_id: Number(l.size_id), sku: l.sku, barcode: l.barcode, cantidad: -s.cantidad,
+      precio: pesos(l.precio), importe: -pesos(unitario * s.cantidad), linea_origen_id: l.id, costo_unitario: l.costo_unitario, costo_fuente: l.costo_fuente })
+  }
+  if (agregar.length) {
+    const vars = await q(db, `select va.product_id::text, va.size_id::text, va.sku, va.barcode from variante va join producto p on p.empresa_id = va.empresa_id and p.id = va.product_id
+      where va.empresa_id = $1 and p.marca = $2 and (va.product_id, va.size_id) in (select * from unnest($3::bigint[], $4::bigint[]))`,
+    [v.empresa_id, v.marca, agregar.map((a) => a.product_id), agregar.map((a) => a.size_id)])
+    const costos = await costosDe(db, [...new Set(agregar.map((a) => a.product_id))])
+    for (const [i, a] of agregar.entries()) {
+      const va = vars.find((x) => x.product_id === String(a.product_id) && x.size_id === String(a.size_id))
+      if (!va) return falla('NO_ENCONTRADA', `El producto ${a.product_id}/${a.size_id} no es de ${v.marca}`, `agregar[${i}]`)
+      const costo = costos.get(a.product_id)
+      nuevas.push({ product_id: a.product_id, size_id: a.size_id, sku: va.sku, barcode: va.barcode, cantidad: a.cantidad,
+        precio: pesos(a.precio), importe: pesos(a.precio * a.cantidad), linea_origen_id: null,
+        costo_unitario: costo ? costo.costo : null, costo_fuente: costo ? costo.fuente : null })
+    }
+  }
+  const [ult] = await q(db, 'select total_despues::float as t from venta_correccion where venta_id = $1 order by creada_en desc, id desc limit 1', [v.id])
+  const totalAntes = pesos(ult ? ult.t : v.total)
+  const totalDespues = pesos(totalAntes + nuevas.reduce((s, x) => s + x.importe, 0))
+  if (totalDespues < 0) return falla('ENTRADA_INVALIDA', 'El total no puede quedar en negativo', 'sacar')
+  const [{ cobrado }] = await q(db, 'select coalesce(sum(monto), 0)::float as cobrado from venta_pago where venta_id = $1', [v.id])
+  const diferencia = pesos(totalDespues - cobrado)
+  const [k] = await q(db, `insert into venta_correccion (empresa_id, marca, venta_id, motivo, total_antes, total_despues, cobrado, diferencia, prueba, usuario, tipo, ref)
+    values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'productos', $11) returning id::text`,
+  [v.empresa_id, v.marca, v.id, motivo, totalAntes, totalDespues, pesos(cobrado), diferencia, v.prueba, usuario, ref])
+  const ultimoN = lineas.reduce((m, l) => Math.max(m, Number(l.n)), 0)
+  const filas = nuevas.map((x, i) => ({ id: randomUUID(), venta_id: v.id, n: ultimoN + i + 1, product_id: x.product_id, size_id: x.size_id,
+    sku: x.sku ?? null, barcode: x.barcode ?? null, cantidad: x.cantidad, precio: x.precio, descuento: 0, rebaja: 0, importe: x.importe,
+    costo_unitario: x.costo_unitario ?? null, costo_fuente: x.costo_fuente ?? null, linea_origen_id: x.linea_origen_id }))
+  await db.query('insert into venta_linea select * from jsonb_populate_recordset(null::venta_linea, $1::jsonb)', [JSON.stringify(filas)])
+  await db.query('insert into venta_correccion_renglon (venta_linea_id, correccion_id) select unnest($1::uuid[]), $2', [filas.map((x) => x.id), k.id])
+  // El libro: la prenda se movió AHORA (⛔ el día de la venta), en el depósito de la venta. La de prueba ⛔ mueve.
+  const ahora = new Date().toISOString()
+  const movimientos = v.prueba ? [] : filas.map((l) => ({ ...movimientoDe(v, l, 'venta'), ocurrido_en: ahora, detalle: { venta_numero: Number(v.numero), correccion: k.id } }))
+  if (movimientos.length) {
+    await db.query(`insert into stock_movimiento (linea, product_id, size_id, sku, barcode, deposito, cantidad, tipo, origen, clave, origen_ref, ocurrido_en, hora_exacta, grupo, detalle)
+      select linea, product_id, size_id, sku, barcode, deposito, cantidad, tipo, origen, clave, origen_ref, ocurrido_en, hora_exacta, grupo, detalle
+      from jsonb_populate_recordset(null::stock_movimiento, $1::jsonb)`, [JSON.stringify(movimientos)])
+  }
+  // Aviso (⛔ freno, como la venta): lo que se agrega y el libro del depósito ⛔ tiene.
+  const avisos = []
+  for (const l of filas.filter((x) => x.cantidad > 0)) {
+    const [s] = await q(db, 'select coalesce(sum(cantidad), 0)::int as nivel from stock_movimiento where linea = $1 and product_id = $2 and size_id = $3 and deposito = $4', [v.marca, l.product_id, l.size_id, v.deposito])
+    if (s.nivel < 0) avisos.push({ codigo: 'SIN_STOCK_EN_LIBRO', product_id: l.product_id, size_id: l.size_id, sku: l.sku, nivel: s.nivel })
+  }
+  return { ok: true, ya_existia: false, correccion: await unaCorreccion(db, k.id), movimientos: movimientos.length, avisos }
+}
+
+/** Una corrección con sus líneas (de precio o de productos), como la devuelve `correccionesDe`. */
+async function unaCorreccion(db, id) {
+  const [k] = await q(db, `select k.id::text, k.venta_id::text, v.numero, k.tipo, k.motivo, k.usuario, k.creada_en, k.total_antes::float, k.total_despues::float,
+      k.cobrado::float, k.diferencia::float from venta_correccion k join venta v on v.id = k.venta_id where k.id = $1`, [id])
+  return { ...k, numero: Number(k.numero), renglones: await renglonesDe(db, id) }
+}
+
+const renglonesDe = (db, correccionId) => q(db, `select l.id::text as linea_id, l.n, l.product_id::text, l.size_id::text, l.sku, l.cantidad, l.precio::float, l.importe::float,
+    l.linea_origen_id::text from venta_correccion_renglon r join venta_linea l on l.id = r.venta_linea_id where r.correccion_id = $1 order by l.n`, [correccionId])
 
 export { vigentes as lineasVigentes }
